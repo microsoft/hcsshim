@@ -18,6 +18,7 @@ type CreateProcessParams struct {
 	StdInPipe, StdOutPipe, StdErrPipe string
 	Environment                       map[string]string
 	EmulateConsole                    bool
+	ConsoleSize                       [2]int
 }
 
 // CreateProcessInComputeSystem starts a process in a container. This is invoked, for example,
@@ -43,6 +44,12 @@ func CreateProcessInComputeSystem(id string, params CreateProcessParams) (proces
 		err = fmt.Errorf(title+" - Failed conversion of id %s to pointer %s", id, err)
 		logrus.Error(err)
 		return 0, err
+	}
+
+	// If we are not emulating a console, ignore any console size passed to us
+	if !params.EmulateConsole {
+		params.ConsoleSize[0] = 0
+		params.ConsoleSize[1] = 0
 	}
 
 	paramsJson, err := json.Marshal(params)
