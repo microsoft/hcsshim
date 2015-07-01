@@ -36,6 +36,8 @@ const (
 	procCreateSandboxLayer = "CreateSandboxLayer"
 	procPrepareLayer       = "PrepareLayer"
 	procUnprepareLayer     = "UnprepareLayer"
+	procExportLayer        = "ExportLayer"
+	procImportLayer        = "ImportLayer"
 )
 
 // loadAndFind finds a procedure in the DLL. Note we do NOT do lazy loading as
