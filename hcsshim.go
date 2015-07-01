@@ -21,6 +21,7 @@ const (
 	procCreateProcessInComputeSystem    = "CreateProcessInComputeSystem"
 	procWaitForProcessInComputeSystem   = "WaitForProcessInComputeSystem"
 	procShutdownComputeSystem           = "ShutdownComputeSystem"
+	procTerminateComputeSystem          = "TerminateComputeSystem"
 	procTerminateProcessInComputeSystem = "TerminateProcessInComputeSystem"
 	procResizeConsoleInComputeSystem    = "ResizeConsoleInComputeSystem"
 
