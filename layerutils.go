@@ -74,7 +74,7 @@ typedef struct _WC_LAYER_DESCRIPTOR {
 } WC_LAYER_DESCRIPTOR, *PWC_LAYER_DESCRIPTOR;
 */
 type WC_LAYER_DESCRIPTOR struct {
-	LayerId guid
+	LayerId GUID
 	Flags   uint32
 	Pathp   *uint16
 }
@@ -86,7 +86,7 @@ func layerPathsToDescriptors(parentLayerPaths []string) ([]WC_LAYER_DESCRIPTOR, 
 	for i := 0; i < len(parentLayerPaths); i++ {
 		// Create a layer descriptor, using the folder path
 		// as the source for a GUID LayerId
-		g := newGuid(parentLayerPaths[i])
+		g := NewGUID(parentLayerPaths[i])
 
 		p, err := syscall.UTF16PtrFromString(parentLayerPaths[i])
 		if err != nil {
