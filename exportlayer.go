@@ -13,7 +13,7 @@ func ExportLayer(info DriverInfo, layerId string, exportFolderPath string, paren
 	logrus.Debugf(title+"flavour %d layerId %s folder %s", info.Flavour, layerId, exportFolderPath)
 
 	// Load the DLL and get a handle to the procedure we need
-	dll, proc, err := loadAndFind(procPrepareLayer)
+	dll, proc, err := loadAndFind(procExportLayer)
 	if dll != nil {
 		defer dll.Release()
 	}
