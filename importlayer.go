@@ -13,7 +13,7 @@ func ImportLayer(info DriverInfo, layerId string, importFolderPath string, paren
 	logrus.Debugf(title+"flavour %d layerId %s folder %s", info.Flavour, layerId, importFolderPath)
 
 	// Load the DLL and get a handle to the procedure we need
-	dll, proc, err := loadAndFind(procPrepareLayer)
+	dll, proc, err := loadAndFind(procImportLayer)
 	if dll != nil {
 		defer dll.Release()
 	}
