@@ -39,6 +39,7 @@ const (
 	procExportLayer         = "ExportLayer"
 	procImportLayer         = "ImportLayer"
 	procGetSharedBaseImages = "GetBaseImages"
+	procNameToGuid          = "NameToGuid"
 
 	// Name of the standard OLE dll
 	oleDLLName = "Ole32.dll"
