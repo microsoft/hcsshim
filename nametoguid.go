@@ -30,7 +30,7 @@ func NameToGuid(name string) (id GUID, err error) {
 	}
 
 	// Call the procedure itself.
-	logrus.Debugf("Calling proc (1)")
+	logrus.Debugf("Calling proc")
 	r1, _, _ := proc.Call(
 		uintptr(unsafe.Pointer(namep)),
 		uintptr(unsafe.Pointer(&id)))
