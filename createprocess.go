@@ -55,7 +55,7 @@ func (p *pipe) Read(b []byte) (int, error) {
 		if err == syscall.ERROR_BROKEN_PIPE {
 			return 0, io.EOF
 		}
-        return 0, err
+		return 0, err
 	}
 	return int(read), nil
 }
