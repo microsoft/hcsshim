@@ -41,6 +41,9 @@ const (
 	procGetSharedBaseImages = "GetBaseImages"
 	procNameToGuid          = "NameToGuid"
 
+	// Network related functions in the shim dll
+	procHNSCall = "HNSCall"
+
 	// Name of the standard OLE dll
 	oleDLLName = "Ole32.dll"
 
