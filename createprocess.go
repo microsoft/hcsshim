@@ -3,7 +3,6 @@ package hcsshim
 import (
 	"encoding/json"
 	"io"
-	"runtime"
 	"syscall"
 
 	"github.com/Sirupsen/logrus"
@@ -18,48 +17,6 @@ type CreateProcessParams struct {
 	Environment      map[string]string
 	EmulateConsole   bool
 	ConsoleSize      [2]int
-}
-
-// pipe struct used for the stdin/stdout/stderr pipes
-type pipe struct {
-	handle syscall.Handle
-}
-
-func makePipe(h syscall.Handle) *pipe {
-	p := &pipe{h}
-	runtime.SetFinalizer(p, (*pipe).closeHandle)
-	return p
-}
-
-func (p *pipe) closeHandle() {
-	if p.handle != 0 {
-		syscall.CloseHandle(p.handle)
-		p.handle = 0
-	}
-}
-
-func (p *pipe) Close() error {
-	p.closeHandle()
-	runtime.SetFinalizer(p, nil)
-	return nil
-}
-
-func (p *pipe) Read(b []byte) (int, error) {
-	// syscall.Read returns 0, nil on ERROR_BROKEN_PIPE, but for
-	// our purposes this should indicate EOF. This may be a go bug.
-	var read uint32
-	err := syscall.ReadFile(p.handle, b, &read, nil)
-	if err != nil {
-		if err == syscall.ERROR_BROKEN_PIPE {
-			return 0, io.EOF
-		}
-		return 0, err
-	}
-	return int(read), nil
-}
-
-func (p *pipe) Write(b []byte) (int, error) {
-	return syscall.Write(p.handle, b)
 }
 
 // CreateProcessInComputeSystem starts a process in a container. This is invoked, for example,
@@ -113,13 +70,16 @@ func CreateProcessInComputeSystem(id string, useStdin bool, useStdout bool, useS
 	)
 
 	if useStdin {
-		stdin = makePipe(stdinHandle)
+		stdin, err = makeWin32File(stdinHandle)
 	}
-	if useStdout {
-		stdout = makePipe(stdoutHandle)
+	if useStdout && err == nil {
+		stdout, err = makeWin32File(stdoutHandle)
 	}
-	if useStderr {
-		stderr = makePipe(stderrHandle)
+	if useStderr && err == nil {
+		stderr, err = makeWin32File(stderrHandle)
+	}
+	if err != nil {
+		return 0, nil, nil, nil, 0xFFFFFFFF, err
 	}
 
 	logrus.Debugf(title+" - succeeded id=%s params=%s pid=%d", id, paramsJson, pid)
