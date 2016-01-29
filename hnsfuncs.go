@@ -68,10 +68,12 @@ type hnsResponse struct {
 }
 
 func hnsCall(method, path, request string, returnResponse interface{}) error {
-	response, err := funcWithReturnString(procHNSCall, method, path, request)
+	var responseBuffer *uint16
+	err := _hnsCall(method, path, request, &responseBuffer)
 	if err != nil {
-		return err
+		return makeError(err, "hnsCall ", "")
 	}
+	response := convertAndFreeCoTaskMemString(responseBuffer)
 
 	hnsresponse := &hnsResponse{}
 	if err = json.Unmarshal([]byte(response), &hnsresponse); err != nil {
