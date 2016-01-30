@@ -324,6 +324,7 @@ type Fn struct {
 	Params      []*Param
 	Rets        *Rets
 	PrintTrace  bool
+	confirmproc bool
 	dllname     string
 	dllfuncname string
 	src         string
@@ -451,6 +452,10 @@ func newFn(s string) (*Fn, error) {
 	default:
 		return nil, errors.New("Could not extract dll name from \"" + f.src + "\"")
 	}
+	if f.dllfuncname[len(f.dllfuncname)-1] == '?' {
+		f.confirmproc = true
+		f.dllfuncname = f.dllfuncname[0 : len(f.dllfuncname)-1]
+	}
 	return f, nil
 }
 
@@ -468,6 +473,10 @@ func (f *Fn) DLLFuncName() string {
 		return f.Name
 	}
 	return f.dllfuncname
+}
+
+func (f *Fn) ConfirmProc() bool {
+	return f.confirmproc
 }
 
 // ParamList returns source code for function f parameters.
@@ -759,8 +768,7 @@ func {{.Name}}({{.ParamList}}) {{template "results" .}}{
 
 {{define "funcbody"}}
 func {{.HelperName}}({{.HelperParamList}}) {{template "results" .}}{
-{{template "tmpvars" .}}	{{template "syscallcheck" .}}
-{{template "syscall" .}}
+{{template "tmpvars" .}}	{{template "syscallcheck" .}}{{template "syscall" .}}
 {{template "seterror" .}}{{template "printtrace" .}}	return
 }
 {{end}}
@@ -773,8 +781,8 @@ func {{.HelperName}}({{.HelperParamList}}) {{template "results" .}}{
 
 {{define "results"}}{{if .Rets.List}}{{.Rets.List}} {{end}}{{end}}
 
-{{define "syscallcheck"}}{{if .Rets.List}}if _perr := proc{{.DLLFuncName}}.Find(); _perr != nil {
-    return _perr
+{{define "syscallcheck"}}{{if .ConfirmProc}}if {{.Rets.ErrorVarName}} = proc{{.DLLFuncName}}.Find(); {{.Rets.ErrorVarName}} != nil {
+    return
 }
 {{end}}{{end}}
 
