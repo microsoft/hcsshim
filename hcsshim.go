@@ -57,16 +57,15 @@ type HcsError struct {
 	Err   error
 }
 
-func makeError(err error, title, rest string) *HcsError {
-	if hr, ok := err.(syscall.Errno); ok {
-		// Convert the HRESULT to a Win32 error code so that it better matches
-		// error codes returned from go and other packages.
-		err = syscall.Errno(win32FromHresult(uint32(hr)))
+func makeError(err error, title, rest string) error {
+	// Pass through DLL errors directly since they do not originate from HCS.
+	if _, ok := err.(*syscall.DLLError); ok {
+		return err
 	}
 	return &HcsError{title, rest, err}
 }
 
-func makeErrorf(err error, title, format string, a ...interface{}) *HcsError {
+func makeErrorf(err error, title, format string, a ...interface{}) error {
 	return makeError(err, title, fmt.Sprintf(format, a...))
 }
 
@@ -75,12 +74,12 @@ func win32FromError(err error) uint32 {
 		return win32FromError(herr.Err)
 	}
 	if code, ok := err.(syscall.Errno); ok {
-		return win32FromHresult(uint32(code))
+		return uint32(code)
 	}
 	return uint32(ERROR_GEN_FAILURE)
 }
 
-func win32FromHresult(hr uint32) uint32 {
+func win32FromHresult(hr uintptr) uintptr {
 	if hr&0x1fff0000 == 0x00070000 {
 		return hr & 0xffff
 	}
@@ -88,7 +87,18 @@ func win32FromHresult(hr uint32) uint32 {
 }
 
 func (e *HcsError) Error() string {
-	return fmt.Sprintf("%s- Win32 API call returned error r1=0x%x err=%s%s", e.title, win32FromError(e.Err), e.Err, e.rest)
+	s := e.title
+	if len(s) > 0 && s[len(s)-1] != ' ' {
+		s += " "
+	}
+	s += fmt.Sprintf("failed in Win32: %s (0x%x)", e.Err, win32FromError(e.Err))
+	if e.rest != "" {
+		if e.rest[0] != ' ' {
+			s += " "
+		}
+		s += e.rest
+	}
+	return s
 }
 
 func convertAndFreeCoTaskMemString(buffer *uint16) string {
