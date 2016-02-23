@@ -28,6 +28,16 @@ import (
 //sys prepareLayer(info *driverInfo, id string, descriptors []WC_LAYER_DESCRIPTOR) (hr error) = vmcompute.PrepareLayer?
 //sys unprepareLayer(info *driverInfo, id string) (hr error) = vmcompute.UnprepareLayer?
 
+//sys importLayerBegin(info *driverInfo, id string, descriptors []WC_LAYER_DESCRIPTOR, context *uintptr) (hr error) = vmcompute.ImportLayerBegin?
+//sys importLayerNext(context uintptr, fileName string, fileInfo *winio.FileBasicInfo) (hr error) = vmcompute.ImportLayerNext?
+//sys importLayerWrite(context uintptr, buffer []byte) (hr error) = vmcompute.ImportLayerWrite?
+//sys importLayerEnd(context uintptr) (hr error) = vmcompute.ImportLayerEnd?
+
+//sys exportLayerBegin(info *driverInfo, id string, descriptors []WC_LAYER_DESCRIPTOR, context *uintptr) (hr error) = vmcompute.ExportLayerBegin?
+//sys exportLayerNext(context uintptr, fileName **uint16, fileInfo *winio.FileBasicInfo, fileSize *int64, deleted *uint32) (hr error) = vmcompute.ExportLayerNext?
+//sys exportLayerRead(context uintptr, buffer []byte, bytesRead *uint32) (hr error) = vmcompute.ExportLayerRead?
+//sys exportLayerEnd(context uintptr) (hr error) = vmcompute.ExportLayerEnd?
+
 //sys createComputeSystem(id string, configuration string) (hr error) = vmcompute.CreateComputeSystem?
 //sys createProcessWithStdHandlesInComputeSystem(id string, paramsJson string, pid *uint32, stdin *syscall.Handle, stdout *syscall.Handle, stderr *syscall.Handle) (hr error) = vmcompute.CreateProcessWithStdHandlesInComputeSystem?
 //sys resizeConsoleInComputeSystem(id string, pid uint32, height uint16, width uint16, flags uint32) (hr error) = vmcompute.ResizeConsoleInComputeSystem?
