@@ -2,7 +2,11 @@
 
 package hcsshim
 
-import "unsafe"
+import (
+	"unsafe"
+
+	"github.com/Microsoft/go-winio"
+)
 import "syscall"
 
 var _ unsafe.Pointer
@@ -26,6 +30,14 @@ var (
 	procNameToGuid                                 = modvmcompute.NewProc("NameToGuid")
 	procPrepareLayer                               = modvmcompute.NewProc("PrepareLayer")
 	procUnprepareLayer                             = modvmcompute.NewProc("UnprepareLayer")
+	procImportLayerBegin                           = modvmcompute.NewProc("ImportLayerBegin")
+	procImportLayerNext                            = modvmcompute.NewProc("ImportLayerNext")
+	procImportLayerWrite                           = modvmcompute.NewProc("ImportLayerWrite")
+	procImportLayerEnd                             = modvmcompute.NewProc("ImportLayerEnd")
+	procExportLayerBegin                           = modvmcompute.NewProc("ExportLayerBegin")
+	procExportLayerNext                            = modvmcompute.NewProc("ExportLayerNext")
+	procExportLayerRead                            = modvmcompute.NewProc("ExportLayerRead")
+	procExportLayerEnd                             = modvmcompute.NewProc("ExportLayerEnd")
 	procCreateComputeSystem                        = modvmcompute.NewProc("CreateComputeSystem")
 	procCreateProcessWithStdHandlesInComputeSystem = modvmcompute.NewProc("CreateProcessWithStdHandlesInComputeSystem")
 	procResizeConsoleInComputeSystem               = modvmcompute.NewProc("ResizeConsoleInComputeSystem")
@@ -352,6 +364,137 @@ func _unprepareLayer(info *driverInfo, id *uint16) (hr error) {
 		return
 	}
 	r0, _, _ := syscall.Syscall(procUnprepareLayer.Addr(), 2, uintptr(unsafe.Pointer(info)), uintptr(unsafe.Pointer(id)), 0)
+	if int32(r0) < 0 {
+		hr = syscall.Errno(win32FromHresult(r0))
+	}
+	return
+}
+
+func importLayerBegin(info *driverInfo, id string, descriptors []WC_LAYER_DESCRIPTOR, context *uintptr) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(id)
+	if hr != nil {
+		return
+	}
+	return _importLayerBegin(info, _p0, descriptors, context)
+}
+
+func _importLayerBegin(info *driverInfo, id *uint16, descriptors []WC_LAYER_DESCRIPTOR, context *uintptr) (hr error) {
+	var _p1 *WC_LAYER_DESCRIPTOR
+	if len(descriptors) > 0 {
+		_p1 = &descriptors[0]
+	}
+	if hr = procImportLayerBegin.Find(); hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall6(procImportLayerBegin.Addr(), 5, uintptr(unsafe.Pointer(info)), uintptr(unsafe.Pointer(id)), uintptr(unsafe.Pointer(_p1)), uintptr(len(descriptors)), uintptr(unsafe.Pointer(context)), 0)
+	if int32(r0) < 0 {
+		hr = syscall.Errno(win32FromHresult(r0))
+	}
+	return
+}
+
+func importLayerNext(context uintptr, fileName string, fileInfo *winio.FileBasicInfo) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(fileName)
+	if hr != nil {
+		return
+	}
+	return _importLayerNext(context, _p0, fileInfo)
+}
+
+func _importLayerNext(context uintptr, fileName *uint16, fileInfo *winio.FileBasicInfo) (hr error) {
+	if hr = procImportLayerNext.Find(); hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procImportLayerNext.Addr(), 3, uintptr(context), uintptr(unsafe.Pointer(fileName)), uintptr(unsafe.Pointer(fileInfo)))
+	if int32(r0) < 0 {
+		hr = syscall.Errno(win32FromHresult(r0))
+	}
+	return
+}
+
+func importLayerWrite(context uintptr, buffer []byte) (hr error) {
+	var _p0 *byte
+	if len(buffer) > 0 {
+		_p0 = &buffer[0]
+	}
+	if hr = procImportLayerWrite.Find(); hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procImportLayerWrite.Addr(), 3, uintptr(context), uintptr(unsafe.Pointer(_p0)), uintptr(len(buffer)))
+	if int32(r0) < 0 {
+		hr = syscall.Errno(win32FromHresult(r0))
+	}
+	return
+}
+
+func importLayerEnd(context uintptr) (hr error) {
+	if hr = procImportLayerEnd.Find(); hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procImportLayerEnd.Addr(), 1, uintptr(context), 0, 0)
+	if int32(r0) < 0 {
+		hr = syscall.Errno(win32FromHresult(r0))
+	}
+	return
+}
+
+func exportLayerBegin(info *driverInfo, id string, descriptors []WC_LAYER_DESCRIPTOR, context *uintptr) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(id)
+	if hr != nil {
+		return
+	}
+	return _exportLayerBegin(info, _p0, descriptors, context)
+}
+
+func _exportLayerBegin(info *driverInfo, id *uint16, descriptors []WC_LAYER_DESCRIPTOR, context *uintptr) (hr error) {
+	var _p1 *WC_LAYER_DESCRIPTOR
+	if len(descriptors) > 0 {
+		_p1 = &descriptors[0]
+	}
+	if hr = procExportLayerBegin.Find(); hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall6(procExportLayerBegin.Addr(), 5, uintptr(unsafe.Pointer(info)), uintptr(unsafe.Pointer(id)), uintptr(unsafe.Pointer(_p1)), uintptr(len(descriptors)), uintptr(unsafe.Pointer(context)), 0)
+	if int32(r0) < 0 {
+		hr = syscall.Errno(win32FromHresult(r0))
+	}
+	return
+}
+
+func exportLayerNext(context uintptr, fileName **uint16, fileInfo *winio.FileBasicInfo, fileSize *int64, deleted *uint32) (hr error) {
+	if hr = procExportLayerNext.Find(); hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall6(procExportLayerNext.Addr(), 5, uintptr(context), uintptr(unsafe.Pointer(fileName)), uintptr(unsafe.Pointer(fileInfo)), uintptr(unsafe.Pointer(fileSize)), uintptr(unsafe.Pointer(deleted)), 0)
+	if int32(r0) < 0 {
+		hr = syscall.Errno(win32FromHresult(r0))
+	}
+	return
+}
+
+func exportLayerRead(context uintptr, buffer []byte, bytesRead *uint32) (hr error) {
+	var _p0 *byte
+	if len(buffer) > 0 {
+		_p0 = &buffer[0]
+	}
+	if hr = procExportLayerRead.Find(); hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall6(procExportLayerRead.Addr(), 4, uintptr(context), uintptr(unsafe.Pointer(_p0)), uintptr(len(buffer)), uintptr(unsafe.Pointer(bytesRead)), 0, 0)
+	if int32(r0) < 0 {
+		hr = syscall.Errno(win32FromHresult(r0))
+	}
+	return
+}
+
+func exportLayerEnd(context uintptr) (hr error) {
+	if hr = procExportLayerEnd.Find(); hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procExportLayerEnd.Addr(), 1, uintptr(context), 0, 0)
 	if int32(r0) < 0 {
 		hr = syscall.Errno(win32FromHresult(r0))
 	}

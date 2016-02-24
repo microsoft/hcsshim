@@ -4,12 +4,16 @@
 	"Deps": [
 		{
 			"ImportPath": "github.com/Microsoft/go-winio",
-			"Rev": "2b085935f02c272e7a1855df6f8fe03029ffcadd"
+			"Rev": "c40bf24f405ab3cc8e1383542d474e813332de6d"
 		},
 		{
 			"ImportPath": "github.com/Sirupsen/logrus",
 			"Comment": "v0.8.2-18-gb34dae6",
 			"Rev": "b34dae6f7a63515a593f4b2291d0424c59678830"
+		},
+		{
+			"ImportPath": "golang.org/x/sys/windows/registry",
+			"Rev": "50c6bc5e4292a1d4e65c6e9be5f53be28bcbe28e"
 		}
 	]
 }
