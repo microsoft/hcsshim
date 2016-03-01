@@ -7,40 +7,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 
 	"github.com/Microsoft/go-winio"
-	"golang.org/x/sys/windows/registry"
 )
 
 var errorIterationCanceled = errors.New("")
-
-func isTP4() bool {
-	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows NT\CurrentVersion`, registry.QUERY_VALUE)
-	if err != nil {
-		return false
-	}
-	defer k.Close()
-
-	s, _, err := k.GetStringValue("BuildLab")
-	if err != nil {
-		return false
-	}
-	parts := strings.Split(s, ".")
-	if len(parts) < 1 {
-		return false
-	}
-	var val int
-	if val, err = strconv.Atoi(parts[0]); err != nil {
-		return false
-	}
-	if val < 14250 {
-		return true
-	}
-	return false
-}
 
 func openFileOrDir(path string, mode uint32, createDisposition uint32) (file *os.File, err error) {
 	winPath, err := syscall.UTF16FromString(path)
@@ -78,7 +51,7 @@ func NewLegacyLayerReader(root string) *LegacyLayerReader {
 		root:        root,
 		result:      make(chan *fileEntry),
 		proceed:     make(chan bool),
-		isTP4Format: isTP4(),
+		isTP4Format: IsTP4(),
 	}
 	go r.walk()
 	return r
@@ -321,7 +294,7 @@ type LegacyLayerWriter struct {
 func NewLegacyLayerWriter(root string) *LegacyLayerWriter {
 	return &LegacyLayerWriter{
 		root:        root,
-		isTP4Format: isTP4(),
+		isTP4Format: IsTP4(),
 	}
 }
 
