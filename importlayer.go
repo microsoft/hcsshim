@@ -118,11 +118,12 @@ type legacyLayerWriterWrapper struct {
 func (r *legacyLayerWriterWrapper) Close() error {
 	err := r.LegacyLayerWriter.Close()
 	if err == nil {
+		var fullPath string
 		// Use the original path here because ImportLayer does not support long paths for the source in TP5.
 		// But do use a long path for the destination to work around another bug with directories
 		// with MAX_PATH - 12 < length < MAX_PATH.
 		info := r.info
-		fullPath, err := makeLongAbsPath(filepath.Join(info.HomeDir, r.layerId))
+		fullPath, err = makeLongAbsPath(filepath.Join(info.HomeDir, r.layerId))
 		if err == nil {
 			info.HomeDir = ""
 			err = ImportLayer(info, fullPath, r.path, r.parentLayerPaths)
