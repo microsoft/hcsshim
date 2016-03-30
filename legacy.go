@@ -16,17 +16,7 @@ import (
 var errorIterationCanceled = errors.New("")
 
 func openFileOrDir(path string, mode uint32, createDisposition uint32) (file *os.File, err error) {
-	winPath, err := syscall.UTF16FromString(path)
-	if err != nil {
-		return
-	}
-	h, err := syscall.CreateFile(&winPath[0], mode, syscall.FILE_SHARE_READ, nil, createDisposition, syscall.FILE_FLAG_BACKUP_SEMANTICS, 0)
-	if err != nil {
-		err = &os.PathError{"open", path, err}
-		return
-	}
-	file = os.NewFile(uintptr(h), path)
-	return
+	return winio.OpenForBackup(path, mode, syscall.FILE_SHARE_READ, createDisposition)
 }
 
 func makeLongAbsPath(path string) (string, error) {
@@ -400,6 +390,10 @@ func (w *LegacyLayerWriter) Add(name string, fileInfo *winio.FileBasicInfo) erro
 	w.currentFile = f
 	f = nil
 	return nil
+}
+
+func (w *LegacyLayerWriter) AddLink(name string, target string) error {
+	return errors.New("hard links not supported with legacy writer")
 }
 
 func (w *LegacyLayerWriter) Remove(name string) error {
