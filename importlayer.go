@@ -122,7 +122,7 @@ func (w *FilterLayerWriter) Close() (err error) {
 }
 
 type legacyLayerWriterWrapper struct {
-	*LegacyLayerWriter
+	*legacyLayerWriter
 	info             DriverInfo
 	layerID          string
 	path             string
@@ -130,7 +130,7 @@ type legacyLayerWriterWrapper struct {
 }
 
 func (r *legacyLayerWriterWrapper) Close() error {
-	err := r.LegacyLayerWriter.Close()
+	err := r.legacyLayerWriter.Close()
 	if err == nil {
 		var fullPath string
 		// Use the original path here because ImportLayer does not support long paths for the source in TP5.
@@ -164,7 +164,7 @@ func NewLayerWriter(info DriverInfo, layerID string, parentLayerPaths []string) 
 			return nil, err
 		}
 		return &legacyLayerWriterWrapper{
-			LegacyLayerWriter: NewLegacyLayerWriter(path),
+			legacyLayerWriter: newLegacyLayerWriter(path),
 			info:              info,
 			layerID:           layerID,
 			path:              path,
