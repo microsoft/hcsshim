@@ -1,15 +1,16 @@
 {
 	"ImportPath": "github.com/Microsoft/hcsshim",
-	"GoVersion": "go1.5",
+	"GoVersion": "go1.6",
 	"Deps": [
 		{
 			"ImportPath": "github.com/Microsoft/go-winio",
-			"Rev": "c40bf24f405ab3cc8e1383542d474e813332de6d"
+			"Comment": "v0.3.0",
+			"Rev": "9e60d867bdf06f14e699afbba4cb21717cc0ea6e"
 		},
 		{
 			"ImportPath": "github.com/Sirupsen/logrus",
-			"Comment": "v0.8.2-18-gb34dae6",
-			"Rev": "b34dae6f7a63515a593f4b2291d0424c59678830"
+			"Comment": "v0.9.0",
+			"Rev": "be52937128b38f1d99787bb476c789e2af1147f1"
 		}
 	]
 }
