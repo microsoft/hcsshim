@@ -47,7 +47,6 @@ type containerProperties struct {
 func CreateContainer(id string, c *ContainerConfig) (Container, error) {
 	operation := "CreateContainer"
 	title := "HCSShim::" + operation
-	logrus.Debugf(title+" id=%s", id)
 
 	container := &container{
 		id: id,
@@ -59,6 +58,7 @@ func CreateContainer(id string, c *ContainerConfig) (Container, error) {
 	}
 
 	configuration := string(configurationb)
+	logrus.Debugf(title+" id=%s config=%s", id, configuration)
 
 	var (
 		handle      hcsSystem
@@ -340,7 +340,6 @@ func (container *container) Resume() error {
 func (container *container) CreateProcess(c *ProcessConfig) (Process, error) {
 	operation := "CreateProcess"
 	title := "HCSShim::Container::" + operation
-	logrus.Debugf(title+" id=%s", container.id)
 	var (
 		processInfo   hcsProcessInformation
 		processHandle hcsProcess
@@ -359,6 +358,7 @@ func (container *container) CreateProcess(c *ProcessConfig) (Process, error) {
 	}
 
 	configuration := string(configurationb)
+	logrus.Debugf(title+" id=%s config=%s", container.id, configuration)
 
 	err = hcsCreateProcess(container.handle, configuration, &processInfo, &processHandle, &resultp)
 	err = processHcsResult(err, resultp)
