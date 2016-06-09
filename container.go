@@ -18,6 +18,8 @@ var (
 	ErrTimeout = errors.New("hcsshim: timeout waiting for notification")
 )
 
+const pendingUpdatesQuery = `{ "PropertyTypes" : ["PendingUpdates"]}`
+
 type ContainerError struct {
 	Container *container
 	Operation string
@@ -273,12 +275,12 @@ func (container *container) hcsWait(timeout uint32) (bool, error) {
 	return waitForSingleObject(exitEvent, timeout)
 }
 
-func (container *container) properties() (*containerProperties, error) {
+func (container *container) properties(query string) (*containerProperties, error) {
 	var (
 		resultp     *uint16
 		propertiesp *uint16
 	)
-	err := hcsGetComputeSystemProperties(container.handle, "", &propertiesp, &resultp)
+	err := hcsGetComputeSystemProperties(container.handle, query, &propertiesp, &resultp)
 	err = processHcsResult(err, resultp)
 	if err != nil {
 		return nil, err
@@ -302,7 +304,7 @@ func (container *container) HasPendingUpdates() (bool, error) {
 	operation := "HasPendingUpdates"
 	title := "HCSShim::Container::" + operation
 	logrus.Debugf(title+" id=%s", container.id)
-	properties, err := container.properties()
+	properties, err := container.properties(pendingUpdatesQuery)
 	if err != nil {
 		err := &ContainerError{Container: container, Operation: operation, Err: err}
 		logrus.Error(err)
