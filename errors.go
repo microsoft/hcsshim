@@ -9,6 +9,12 @@ import (
 )
 
 var (
+	// ErrComputeSystemDoesNotExist is an error returned when the compute system being operated on no longer exists
+	ErrComputeSystemDoesNotExist = syscall.Errno(0xc037010e)
+
+	// ErrElementNotFound is an error returned when the object being referenced does not exist
+	ErrElementNotFound = syscall.Errno(0x490)
+
 	// ErrHandleClose is an error returned when the handle generating the notification being waited on has been closed
 	ErrHandleClose = errors.New("hcsshim: the handle generating this notification has been closed")
 
@@ -56,8 +62,10 @@ type ContainerError struct {
 }
 
 func isKnownError(err error) bool {
-	// Don't wrap errors created in hcsshim
-	if err == ErrHandleClose ||
+	// Don't wrap known errors
+	if err == ErrComputeSystemDoesNotExist ||
+		err == ErrElementNotFound ||
+		err == ErrHandleClose ||
 		err == ErrInvalidNotificationType ||
 		err == ErrInvalidProcessState ||
 		err == ErrTimeout ||
