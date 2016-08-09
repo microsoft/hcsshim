@@ -41,6 +41,12 @@ var (
 
 	// ErrVmcomputeOperationPending is an error encountered when the operation is being completed asynchronously
 	ErrVmcomputeOperationPending = syscall.Errno(0xC0370103)
+
+	// ErrVmcomputeOperationInvalidState is an error encountered when the compute system is not in a valid state for the requested operation
+	ErrVmcomputeOperationInvalidState = syscall.Errno(0xc0370105)
+
+	// ErrProcNotFound is an error encountered when the the process cannot be found
+	ErrProcNotFound = syscall.Errno(0x7f)
 )
 
 // ProcessError is an error encountered in HCS during an operation on a Process object
@@ -137,11 +143,12 @@ func makeProcessError(process *process, operation string, extraInfo string, err 
 // IsNotExist checks if an error is caused by the Container or Process not existing.
 // Note: Currently, ErrElementNotFound can mean that a Process has either
 // already exited, or does not exist. Both IsAlreadyStopped and IsNotExist
-// will currently return true when the error is ErrElementNotFound.
+// will currently return true when the error is ErrElementNotFound or ErrProcNotFound.
 func IsNotExist(err error) bool {
 	err = getInnerError(err)
 	return err == ErrComputeSystemDoesNotExist ||
-		err == ErrElementNotFound
+		err == ErrElementNotFound ||
+		err == ErrProcNotFound
 }
 
 // IsPending returns a boolean indicating whether the error is that
@@ -162,11 +169,12 @@ func IsTimeout(err error) bool {
 // a Container or Process being already stopped.
 // Note: Currently, ErrElementNotFound can mean that a Process has either
 // already exited, or does not exist. Both IsAlreadyStopped and IsNotExist
-// will currently return true when the error is ErrElementNotFound.
+// will currently return true when the error is ErrElementNotFound or ErrProcNotFound.
 func IsAlreadyStopped(err error) bool {
 	err = getInnerError(err)
 	return err == ErrVmcomputeAlreadyStopped ||
-		err == ErrElementNotFound
+		err == ErrElementNotFound ||
+		err == ErrProcNotFound
 }
 
 func getInnerError(err error) error {
