@@ -436,8 +436,10 @@ func (container *container) OpenProcess(pid int) (Process, error) {
 		container: container,
 	}
 
-	if err := process.registerCallback(); err != nil {
-		return nil, makeContainerError(container, operation, "", err)
+	if hcsCallbacksSupported {
+		if err := process.registerCallback(); err != nil {
+			return nil, makeContainerError(container, operation, "", err)
+		}
 	}
 
 	logrus.Debugf(title+" succeeded id=%s processid=%s", container.id, process.processID)
