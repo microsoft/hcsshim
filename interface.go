@@ -25,9 +25,11 @@ type Layer struct {
 }
 
 type MappedDir struct {
-	HostPath      string
-	ContainerPath string
-	ReadOnly      bool
+	HostPath         string
+	ContainerPath    string
+	ReadOnly         bool
+	BandwidthMaximum uint64
+	IOPSMaximum      uint64
 }
 
 type HvRuntime struct {
