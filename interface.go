@@ -16,7 +16,7 @@ type ProcessConfig struct {
 	CreateStdInPipe  bool
 	CreateStdOutPipe bool
 	CreateStdErrPipe bool
-	ConsoleSize      [2]int
+	ConsoleSize      [2]uint
 }
 
 type Layer struct {
