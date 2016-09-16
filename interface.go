@@ -33,8 +33,7 @@ type MappedDir struct {
 }
 
 type HvRuntime struct {
-	ImagePath    string `json:",omitempty"`
-	SkipTemplate bool   `json:",omitempty"`
+	ImagePath string `json:",omitempty"`
 }
 
 // ContainerConfig is used as both the input of CreateContainer
