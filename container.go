@@ -3,6 +3,7 @@ package hcsshim
 import (
 	"encoding/json"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
@@ -20,6 +21,7 @@ const (
 )
 
 type container struct {
+	handleLock     sync.RWMutex
 	handle         hcsSystem
 	id             string
 	callbackNumber uintptr
@@ -171,9 +173,15 @@ func OpenContainer(id string) (Container, error) {
 
 // Start synchronously starts the container.
 func (container *container) Start() error {
+	container.handleLock.RLock()
+	defer container.handleLock.RUnlock()
 	operation := "Start"
 	title := "HCSShim::Container::" + operation
 	logrus.Debugf(title+" id=%s", container.id)
+
+	if container.handle == 0 {
+		return makeContainerError(container, operation, "", ErrInvalidHandle)
+	}
 
 	var resultp *uint16
 	err := hcsStartComputeSystemTP5(container.handle, nil, &resultp)
@@ -189,9 +197,15 @@ func (container *container) Start() error {
 // Shutdown requests a container shutdown, if IsPending() on the error returned is true,
 // it may not actually be shut down until Wait() succeeds.
 func (container *container) Shutdown() error {
+	container.handleLock.RLock()
+	defer container.handleLock.RUnlock()
 	operation := "Shutdown"
 	title := "HCSShim::Container::" + operation
 	logrus.Debugf(title+" id=%s", container.id)
+
+	if container.handle == 0 {
+		return makeContainerError(container, operation, "", ErrInvalidHandle)
+	}
 
 	var resultp *uint16
 	err := hcsShutdownComputeSystemTP5(container.handle, nil, &resultp)
@@ -207,9 +221,15 @@ func (container *container) Shutdown() error {
 // Terminate requests a container terminate, if IsPending() on the error returned is true,
 // it may not actually be shut down until Wait() succeeds.
 func (container *container) Terminate() error {
+	container.handleLock.RLock()
+	defer container.handleLock.RUnlock()
 	operation := "Terminate"
 	title := "HCSShim::Container::" + operation
 	logrus.Debugf(title+" id=%s", container.id)
+
+	if container.handle == 0 {
+		return makeContainerError(container, operation, "", ErrInvalidHandle)
+	}
 
 	var resultp *uint16
 	err := hcsTerminateComputeSystemTP5(container.handle, nil, &resultp)
@@ -314,9 +334,16 @@ func (container *container) properties(query string) (*containerProperties, erro
 
 // HasPendingUpdates returns true if the container has updates pending to install
 func (container *container) HasPendingUpdates() (bool, error) {
+	container.handleLock.RLock()
+	defer container.handleLock.RUnlock()
 	operation := "HasPendingUpdates"
 	title := "HCSShim::Container::" + operation
 	logrus.Debugf(title+" id=%s", container.id)
+
+	if container.handle == 0 {
+		return false, makeContainerError(container, operation, "", ErrInvalidHandle)
+	}
+
 	properties, err := container.properties(pendingUpdatesQuery)
 	if err != nil {
 		return false, makeContainerError(container, operation, "", err)
@@ -328,9 +355,16 @@ func (container *container) HasPendingUpdates() (bool, error) {
 
 // Statistics returns statistics for the container
 func (container *container) Statistics() (Statistics, error) {
+	container.handleLock.RLock()
+	defer container.handleLock.RUnlock()
 	operation := "Statistics"
 	title := "HCSShim::Container::" + operation
 	logrus.Debugf(title+" id=%s", container.id)
+
+	if container.handle == 0 {
+		return Statistics{}, makeContainerError(container, operation, "", ErrInvalidHandle)
+	}
+
 	properties, err := container.properties(statisticsQuery)
 	if err != nil {
 		return Statistics{}, makeContainerError(container, operation, "", err)
@@ -342,9 +376,16 @@ func (container *container) Statistics() (Statistics, error) {
 
 // ProcessList returns an array of ProcessListItems for the container
 func (container *container) ProcessList() ([]ProcessListItem, error) {
+	container.handleLock.RLock()
+	defer container.handleLock.RUnlock()
 	operation := "ProcessList"
 	title := "HCSShim::Container::" + operation
 	logrus.Debugf(title+" id=%s", container.id)
+
+	if container.handle == 0 {
+		return nil, makeContainerError(container, operation, "", ErrInvalidHandle)
+	}
+
 	properties, err := container.properties(processListQuery)
 	if err != nil {
 		return nil, makeContainerError(container, operation, "", err)
@@ -356,9 +397,15 @@ func (container *container) ProcessList() ([]ProcessListItem, error) {
 
 // Pause pauses the execution of the container. This feature is not enabled in TP5.
 func (container *container) Pause() error {
+	container.handleLock.RLock()
+	defer container.handleLock.RUnlock()
 	operation := "Pause"
 	title := "HCSShim::Container::" + operation
 	logrus.Debugf(title+" id=%s", container.id)
+
+	if container.handle == 0 {
+		return makeContainerError(container, operation, "", ErrInvalidHandle)
+	}
 
 	var resultp *uint16
 	err := hcsPauseComputeSystemTP5(container.handle, nil, &resultp)
@@ -373,13 +420,17 @@ func (container *container) Pause() error {
 
 // Resume resumes the execution of the container. This feature is not enabled in TP5.
 func (container *container) Resume() error {
+	container.handleLock.RLock()
+	defer container.handleLock.RUnlock()
 	operation := "Resume"
 	title := "HCSShim::Container::" + operation
 	logrus.Debugf(title+" id=%s", container.id)
-	var (
-		resultp *uint16
-	)
 
+	if container.handle == 0 {
+		return makeContainerError(container, operation, "", ErrInvalidHandle)
+	}
+
+	var resultp *uint16
 	err := hcsResumeComputeSystemTP5(container.handle, nil, &resultp)
 	err = processAsyncHcsResult(err, resultp, container.callbackNumber, hcsNotificationSystemResumeCompleted, &defaultTimeout)
 	if err != nil {
@@ -392,6 +443,8 @@ func (container *container) Resume() error {
 
 // CreateProcess launches a new process within the container.
 func (container *container) CreateProcess(c *ProcessConfig) (Process, error) {
+	container.handleLock.RLock()
+	defer container.handleLock.RUnlock()
 	operation := "CreateProcess"
 	title := "HCSShim::Container::" + operation
 	var (
@@ -399,6 +452,10 @@ func (container *container) CreateProcess(c *ProcessConfig) (Process, error) {
 		processHandle hcsProcess
 		resultp       *uint16
 	)
+
+	if container.handle == 0 {
+		return nil, makeContainerError(container, operation, "", ErrInvalidHandle)
+	}
 
 	// If we are not emulating a console, ignore any console size passed to us
 	if !c.EmulateConsole {
@@ -444,6 +501,8 @@ func (container *container) CreateProcess(c *ProcessConfig) (Process, error) {
 
 // OpenProcess gets an interface to an existing process within the container.
 func (container *container) OpenProcess(pid int) (Process, error) {
+	container.handleLock.RLock()
+	defer container.handleLock.RUnlock()
 	operation := "OpenProcess"
 	title := "HCSShim::Container::" + operation
 	logrus.Debugf(title+" id=%s, processid=%d", container.id, pid)
@@ -451,6 +510,10 @@ func (container *container) OpenProcess(pid int) (Process, error) {
 		processHandle hcsProcess
 		resultp       *uint16
 	)
+
+	if container.handle == 0 {
+		return nil, makeContainerError(container, operation, "", ErrInvalidHandle)
+	}
 
 	err := hcsOpenProcess(container.handle, uint32(pid), &processHandle, &resultp)
 	err = processHcsResult(err, resultp)
@@ -477,6 +540,8 @@ func (container *container) OpenProcess(pid int) (Process, error) {
 
 // Close cleans up any state associated with the container but does not terminate or wait for it.
 func (container *container) Close() error {
+	container.handleLock.Lock()
+	defer container.handleLock.Unlock()
 	operation := "Close"
 	title := "HCSShim::Container::" + operation
 	logrus.Debugf(title+" id=%s", container.id)
