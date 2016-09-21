@@ -162,6 +162,10 @@ func (process *process) ExitCode() (int, error) {
 		return 0, makeProcessError(process, operation, "", ErrInvalidProcessState)
 	}
 
+	if properties.LastWaitResult != 0 {
+		return 0, makeProcessError(process, operation, "", syscall.Errno(properties.LastWaitResult))
+	}
+
 	logrus.Debugf(title+" succeeded processid=%d exitCode=%d", process.processID, properties.ExitCode)
 	return int(properties.ExitCode), nil
 }
