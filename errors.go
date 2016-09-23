@@ -83,8 +83,13 @@ func (e *ContainerError) Error() string {
 		s += " encountered an error during " + e.Operation
 	}
 
-	if e.Err != nil {
-		s += fmt.Sprintf(" failed in Win32: %s (0x%x)", e.Err, win32FromError(e.Err))
+	switch e.Err.(type) {
+	case nil:
+		break
+	case syscall.Errno:
+		s += fmt.Sprintf(": failure in a Windows system call: %s (0x%x)", e.Err, win32FromError(e.Err))
+	default:
+		s += fmt.Sprintf(": %s", e.Err.Error())
 	}
 
 	if e.ExtraInfo != "" {
@@ -119,16 +124,16 @@ func (e *ProcessError) Error() string {
 	}
 
 	if e.Operation != "" {
-		s += " " + e.Operation
+		s += " encountered an error during " + e.Operation
 	}
 
 	switch e.Err.(type) {
 	case nil:
 		break
 	case syscall.Errno:
-		s += fmt.Sprintf(" failed in Win32: %s (0x%x)", e.Err, win32FromError(e.Err))
+		s += fmt.Sprintf(": failure in a Windows system call: %s (0x%x)", e.Err, win32FromError(e.Err))
 	default:
-		s += fmt.Sprintf(" failed: %s", e.Err.Error())
+		s += fmt.Sprintf(": %s", e.Err.Error())
 	}
 
 	return s
