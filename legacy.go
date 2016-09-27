@@ -16,6 +16,13 @@ import (
 
 var errorIterationCanceled = errors.New("")
 
+var mutatedUtilityVMFiles = map[string]bool{
+	`EFI\Microsoft\Boot\BCD`:      true,
+	`EFI\Microsoft\Boot\BCD.LOG`:  true,
+	`EFI\Microsoft\Boot\BCD.LOG1`: true,
+	`EFI\Microsoft\Boot\BCD.LOG2`: true,
+}
+
 func openFileOrDir(path string, mode uint32, createDisposition uint32) (file *os.File, err error) {
 	return winio.OpenForBackup(path, mode, syscall.FILE_SHARE_READ, createDisposition)
 }
@@ -49,17 +56,15 @@ type legacyLayerReader struct {
 	proceed      chan bool
 	currentFile  *os.File
 	backupReader *winio.BackupFileReader
-	isTP4Format  bool
 }
 
 // newLegacyLayerReader returns a new LayerReader that can read the Windows
-// TP4 transport format from disk.
+// container layer transport format from disk.
 func newLegacyLayerReader(root string) *legacyLayerReader {
 	r := &legacyLayerReader{
-		root:        root,
-		result:      make(chan *fileEntry),
-		proceed:     make(chan bool),
-		isTP4Format: IsTP4(),
+		root:    root,
+		result:  make(chan *fileEntry),
+		proceed: make(chan bool),
 	}
 	go r.walk()
 	return r
@@ -251,17 +256,14 @@ func (r *legacyLayerReader) Next() (path string, size int64, fileInfo *winio.Fil
 		fileInfo.LastAccessTime = fileInfo.LastWriteTime
 
 	} else {
-		beginning := int64(0)
-		if !r.isTP4Format {
-			// In TP5, the file attributes were added before the backup stream
-			var attr uint32
-			err = binary.Read(f, binary.LittleEndian, &attr)
-			if err != nil {
-				return
-			}
-			fileInfo.FileAttributes = uintptr(attr)
-			beginning = 4
+		// The file attributes are written before the backup stream.
+		var attr uint32
+		err = binary.Read(f, binary.LittleEndian, &attr)
+		if err != nil {
+			return
 		}
+		fileInfo.FileAttributes = uintptr(attr)
+		beginning := int64(4)
 
 		// Find the accurate file size.
 		if !fe.fi.IsDir() {
@@ -303,19 +305,23 @@ func (r *legacyLayerReader) Close() error {
 
 type legacyLayerWriter struct {
 	root         string
+	parentRoot   string
+	destRoot     string
 	currentFile  *os.File
 	backupWriter *winio.BackupFileWriter
 	tombstones   []string
-	isTP4Format  bool
 	pathFixed    bool
+	HasUtilityVM bool
+	uvmDi        []dirInfo
 }
 
-// newLegacyLayerWriter returns a LayerWriter that can write the TP4 transport format
-// to disk.
-func newLegacyLayerWriter(root string) *legacyLayerWriter {
+// newLegacyLayerWriter returns a LayerWriter that can write the contaler layer
+// transport format to disk.
+func newLegacyLayerWriter(root string, parentRoot string, destRoot string) *legacyLayerWriter {
 	return &legacyLayerWriter{
-		root:        root,
-		isTP4Format: IsTP4(),
+		root:       root,
+		parentRoot: parentRoot,
+		destRoot:   destRoot,
 	}
 }
 
@@ -325,8 +331,37 @@ func (w *legacyLayerWriter) init() error {
 		if err != nil {
 			return err
 		}
+		parentPath, err := makeLongAbsPath(w.parentRoot)
+		if err != nil {
+			return err
+		}
+		destPath, err := makeLongAbsPath(w.destRoot)
+		if err != nil {
+			return err
+		}
 		w.root = path
+		w.parentRoot = parentPath
+		w.destRoot = destPath
 		w.pathFixed = true
+	}
+	return nil
+}
+
+func (w *legacyLayerWriter) initUtilityVM() error {
+	if !w.HasUtilityVM {
+		err := os.Mkdir(filepath.Join(w.destRoot, `UtilityVM`), 0)
+		if err != nil {
+			return err
+		}
+		// Server 2016 does not support multiple layers for the utility VM, so
+		// clone the utility VM from the parent layer into this layer. Use hard
+		// links to avoid unnecessary copying, since most of the files are
+		// immutable.
+		err = cloneTree(filepath.Join(w.parentRoot, `UtilityVM\Files`), filepath.Join(w.destRoot, `UtilityVM\Files`), mutatedUtilityVMFiles)
+		if err != nil {
+			return fmt.Errorf("cloning the parent utility VM image failed: %s", err)
+		}
+		w.HasUtilityVM = true
 	}
 	return nil
 }
@@ -342,15 +377,153 @@ func (w *legacyLayerWriter) reset() {
 	}
 }
 
+// copyFileWithMetadata copies a file using the backup/restore APIs in order to preserve metadata
+func copyFileWithMetadata(srcPath, destPath string, isDir bool) (fileInfo *winio.FileBasicInfo, err error) {
+	createDisposition := uint32(syscall.CREATE_NEW)
+	if isDir {
+		err = os.Mkdir(destPath, 0)
+		if err != nil {
+			return nil, err
+		}
+		createDisposition = syscall.OPEN_EXISTING
+	}
+
+	src, err := openFileOrDir(srcPath, syscall.GENERIC_READ|winio.ACCESS_SYSTEM_SECURITY, syscall.OPEN_EXISTING)
+	if err != nil {
+		return nil, err
+	}
+	defer src.Close()
+	srcr := winio.NewBackupFileReader(src, true)
+	defer srcr.Close()
+
+	fileInfo, err = winio.GetFileBasicInfo(src)
+	if err != nil {
+		return nil, err
+	}
+
+	dest, err := openFileOrDir(destPath, syscall.GENERIC_READ|syscall.GENERIC_WRITE|winio.WRITE_DAC|winio.WRITE_OWNER|winio.ACCESS_SYSTEM_SECURITY, createDisposition)
+	if err != nil {
+		return nil, err
+	}
+	defer dest.Close()
+
+	err = winio.SetFileBasicInfo(dest, fileInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	destw := winio.NewBackupFileWriter(dest, true)
+	defer func() {
+		cerr := destw.Close()
+		if err == nil {
+			err = cerr
+		}
+	}()
+
+	_, err = io.Copy(destw, srcr)
+	if err != nil {
+		return nil, err
+	}
+
+	return fileInfo, nil
+}
+
+// cloneTree clones a directory tree using hard links. It skips hard links for
+// the file names in the provided map and just copies those files.
+func cloneTree(srcPath, destPath string, mutatedFiles map[string]bool) error {
+	var di []dirInfo
+	err := filepath.Walk(srcPath, func(srcFilePath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(srcPath, srcFilePath)
+		if err != nil {
+			return err
+		}
+		destFilePath := filepath.Join(destPath, relPath)
+
+		// Directories, reparse points, and files that will be mutated during
+		// utility VM import must be copied. All other files can be hard linked.
+		isReparsePoint := info.Sys().(*syscall.Win32FileAttributeData).FileAttributes&syscall.FILE_ATTRIBUTE_REPARSE_POINT != 0
+		if info.IsDir() || isReparsePoint || mutatedFiles[relPath] {
+			fi, err := copyFileWithMetadata(srcFilePath, destFilePath, info.IsDir())
+			if err != nil {
+				return err
+			}
+			if info.IsDir() && !isReparsePoint {
+				di = append(di, dirInfo{path: destFilePath, fileInfo: *fi})
+			}
+		} else {
+			err = os.Link(srcFilePath, destFilePath)
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	return reapplyDirectoryTimes(di)
+}
+
 func (w *legacyLayerWriter) Add(name string, fileInfo *winio.FileBasicInfo) error {
 	w.reset()
 	err := w.init()
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(w.root, name)
 
-	createDisposition := uint32(syscall.CREATE_NEW)
+	if name == `UtilityVM` {
+		return w.initUtilityVM()
+	}
+
+	if strings.HasPrefix(name, `UtilityVM\`) {
+		if !w.HasUtilityVM {
+			return errors.New("missing UtilityVM directory")
+		}
+		if !strings.HasPrefix(name, `UtilityVM\Files\`) && name != `UtilityVM\Files` {
+			return errors.New("invalid UtilityVM layer")
+		}
+		path := filepath.Join(w.destRoot, name)
+		createDisposition := uint32(syscall.OPEN_EXISTING)
+		if (fileInfo.FileAttributes & syscall.FILE_ATTRIBUTE_DIRECTORY) != 0 {
+			w.uvmDi = append(w.uvmDi, dirInfo{path: path, fileInfo: *fileInfo})
+		} else {
+			// Overwrite any existing hard link.
+			err = os.Remove(path)
+			if err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			createDisposition = syscall.CREATE_NEW
+		}
+
+		f, err := openFileOrDir(path, syscall.GENERIC_READ|syscall.GENERIC_WRITE|winio.WRITE_DAC|winio.WRITE_OWNER|winio.ACCESS_SYSTEM_SECURITY, createDisposition)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if f != nil {
+				f.Close()
+				os.Remove(path)
+			}
+		}()
+
+		err = winio.SetFileBasicInfo(f, fileInfo)
+		if err != nil {
+			return err
+		}
+
+		w.backupWriter = winio.NewBackupFileWriter(f, true)
+		w.currentFile = f
+		f = nil
+		return nil
+	}
+
+	path := filepath.Join(w.root, name)
 	if (fileInfo.FileAttributes & syscall.FILE_ATTRIBUTE_DIRECTORY) != 0 {
 		err := os.Mkdir(path, 0)
 		if err != nil {
@@ -359,7 +532,7 @@ func (w *legacyLayerWriter) Add(name string, fileInfo *winio.FileBasicInfo) erro
 		path += ".$wcidirs$"
 	}
 
-	f, err := openFileOrDir(path, syscall.GENERIC_READ|syscall.GENERIC_WRITE, createDisposition)
+	f, err := openFileOrDir(path, syscall.GENERIC_READ|syscall.GENERIC_WRITE, syscall.CREATE_NEW)
 	if err != nil {
 		return err
 	}
@@ -380,12 +553,10 @@ func (w *legacyLayerWriter) Add(name string, fileInfo *winio.FileBasicInfo) erro
 	if strings.HasPrefix(name, `Hives\`) {
 		w.backupWriter = winio.NewBackupFileWriter(f, false)
 	} else {
-		if !w.isTP4Format {
-			// In TP5, the file attributes were added to the header
-			err = binary.Write(f, binary.LittleEndian, uint32(fileInfo.FileAttributes))
-			if err != nil {
-				return err
-			}
+		// The file attributes are written before the stream.
+		err = binary.Write(f, binary.LittleEndian, uint32(fileInfo.FileAttributes))
+		if err != nil {
+			return err
 		}
 	}
 
@@ -399,10 +570,28 @@ func (w *legacyLayerWriter) AddLink(name string, target string) error {
 }
 
 func (w *legacyLayerWriter) Remove(name string) error {
-	if !strings.HasPrefix(name, `Files\`) {
+	if strings.HasPrefix(name, `Files\`) {
+		w.tombstones = append(w.tombstones, name[len(`Files\`):])
+	} else if strings.HasPrefix(name, `UtilityVM\Files\`) {
+		err := w.initUtilityVM()
+		if err != nil {
+			return err
+		}
+		// Make sure the path exists; os.RemoveAll will not fail if the file is
+		// already gone, and this needs to be a fatal error for diagnostics
+		// purposes.
+		path := filepath.Join(w.destRoot, name)
+		if _, err := os.Stat(path); err != nil {
+			return err
+		}
+		err = os.RemoveAll(path)
+		if err != nil {
+			return err
+		}
+	} else {
 		return fmt.Errorf("invalid tombstone %s", name)
 	}
-	w.tombstones = append(w.tombstones, name[len(`Files\`):])
+
 	return nil
 }
 
@@ -433,6 +622,12 @@ func (w *legacyLayerWriter) Close() error {
 	}
 	for _, t := range w.tombstones {
 		_, err = tf.Write([]byte(filepath.Join(`\`, t) + "\n"))
+		if err != nil {
+			return err
+		}
+	}
+	if w.HasUtilityVM {
+		err = reapplyDirectoryTimes(w.uvmDi)
 		if err != nil {
 			return err
 		}
