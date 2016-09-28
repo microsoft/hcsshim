@@ -303,9 +303,13 @@ func (r *legacyLayerReader) Close() error {
 	return nil
 }
 
+type pendingLink struct {
+	Path, Target string
+}
+
 type legacyLayerWriter struct {
 	root         string
-	parentRoot   string
+	parentRoots  []string
 	destRoot     string
 	currentFile  *os.File
 	backupWriter *winio.BackupFileWriter
@@ -313,15 +317,18 @@ type legacyLayerWriter struct {
 	pathFixed    bool
 	HasUtilityVM bool
 	uvmDi        []dirInfo
+	addedFiles   map[string]bool
+	PendingLinks []pendingLink
 }
 
 // newLegacyLayerWriter returns a LayerWriter that can write the contaler layer
 // transport format to disk.
-func newLegacyLayerWriter(root string, parentRoot string, destRoot string) *legacyLayerWriter {
+func newLegacyLayerWriter(root string, parentRoots []string, destRoot string) *legacyLayerWriter {
 	return &legacyLayerWriter{
-		root:       root,
-		parentRoot: parentRoot,
-		destRoot:   destRoot,
+		root:        root,
+		parentRoots: parentRoots,
+		destRoot:    destRoot,
+		addedFiles:  make(map[string]bool),
 	}
 }
 
@@ -331,16 +338,17 @@ func (w *legacyLayerWriter) init() error {
 		if err != nil {
 			return err
 		}
-		parentPath, err := makeLongAbsPath(w.parentRoot)
-		if err != nil {
-			return err
+		for i, p := range w.parentRoots {
+			w.parentRoots[i], err = makeLongAbsPath(p)
+			if err != nil {
+				return err
+			}
 		}
 		destPath, err := makeLongAbsPath(w.destRoot)
 		if err != nil {
 			return err
 		}
 		w.root = path
-		w.parentRoot = parentPath
 		w.destRoot = destPath
 		w.pathFixed = true
 	}
@@ -357,7 +365,7 @@ func (w *legacyLayerWriter) initUtilityVM() error {
 		// clone the utility VM from the parent layer into this layer. Use hard
 		// links to avoid unnecessary copying, since most of the files are
 		// immutable.
-		err = cloneTree(filepath.Join(w.parentRoot, `UtilityVM\Files`), filepath.Join(w.destRoot, `UtilityVM\Files`), mutatedUtilityVMFiles)
+		err = cloneTree(filepath.Join(w.parentRoots[0], `UtilityVM\Files`), filepath.Join(w.destRoot, `UtilityVM\Files`), mutatedUtilityVMFiles)
 		if err != nil {
 			return fmt.Errorf("cloning the parent utility VM image failed: %s", err)
 		}
@@ -519,6 +527,7 @@ func (w *legacyLayerWriter) Add(name string, fileInfo *winio.FileBasicInfo) erro
 
 		w.backupWriter = winio.NewBackupFileWriter(f, true)
 		w.currentFile = f
+		w.addedFiles[name] = true
 		f = nil
 		return nil
 	}
@@ -561,12 +570,64 @@ func (w *legacyLayerWriter) Add(name string, fileInfo *winio.FileBasicInfo) erro
 	}
 
 	w.currentFile = f
+	w.addedFiles[name] = true
 	f = nil
 	return nil
 }
 
 func (w *legacyLayerWriter) AddLink(name string, target string) error {
-	return errors.New("hard links not supported with legacy writer")
+	w.reset()
+	err := w.init()
+	if err != nil {
+		return err
+	}
+
+	var requiredPrefix string
+	var roots []string
+	if prefix := `Files\`; strings.HasPrefix(name, prefix) {
+		requiredPrefix = prefix
+		// Look for cross-layer hard link targets in the parent layers, since
+		// nothing is in the destination path yet.
+		roots = w.parentRoots
+	} else if prefix := `UtilityVM\Files\`; strings.HasPrefix(name, prefix) {
+		requiredPrefix = prefix
+		// Since the utility VM is fully cloned into the destination path
+		// already, look for cross-layer hard link targets directly in the
+		// destination path.
+		roots = []string{w.destRoot}
+	}
+
+	if requiredPrefix == "" || !strings.HasPrefix(target, requiredPrefix) {
+		return errors.New("invalid hard link in layer")
+	}
+
+	// Find to try the target of the link in a previously added file. If that
+	// fails, search in parent layers.
+	var selectedRoot string
+	if _, ok := w.addedFiles[target]; ok {
+		selectedRoot = w.destRoot
+	} else {
+		for _, r := range roots {
+			if _, err = os.Stat(filepath.Join(r, target)); err != nil {
+				if !os.IsNotExist(err) {
+					return err
+				}
+			} else {
+				selectedRoot = r
+				break
+			}
+		}
+		if selectedRoot == "" {
+			return fmt.Errorf("failed to find link target for '%s' -> '%s'", name, target)
+		}
+	}
+	// The link can't be written until after the ImportLayer call.
+	w.PendingLinks = append(w.PendingLinks, pendingLink{
+		Path:   filepath.Join(w.destRoot, name),
+		Target: filepath.Join(selectedRoot, target),
+	})
+	w.addedFiles[name] = true
+	return nil
 }
 
 func (w *legacyLayerWriter) Remove(name string) error {
