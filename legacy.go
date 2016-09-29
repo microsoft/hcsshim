@@ -469,6 +469,11 @@ func cloneTree(srcPath, destPath string, mutatedFiles map[string]bool) error {
 			}
 		}
 
+		// Don't recurse on reparse points.
+		if info.IsDir() && isReparsePoint {
+			return filepath.SkipDir
+		}
+
 		return nil
 	})
 	if err != nil {
