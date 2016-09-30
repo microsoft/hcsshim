@@ -499,7 +499,28 @@ func (w *legacyLayerWriter) Add(name string, fileInfo *winio.FileBasicInfo) erro
 		path := filepath.Join(w.destRoot, name)
 		createDisposition := uint32(syscall.OPEN_EXISTING)
 		if (fileInfo.FileAttributes & syscall.FILE_ATTRIBUTE_DIRECTORY) != 0 {
-			w.uvmDi = append(w.uvmDi, dirInfo{path: path, fileInfo: *fileInfo})
+			st, err := os.Stat(path)
+			if err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			if st != nil {
+				// Delete the existing file/directory if it is not the same type as this direcetory.
+				existingAttr := st.Sys().(*syscall.Win32FileAttributeData).FileAttributes
+				if (uint32(fileInfo.FileAttributes)^existingAttr)&(syscall.FILE_ATTRIBUTE_DIRECTORY|syscall.FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+					if err = os.RemoveAll(path); err != nil {
+						return err
+					}
+					st = nil
+				}
+			}
+			if st == nil {
+				if err = os.Mkdir(path, 0); err != nil {
+					return err
+				}
+			}
+			if fileInfo.FileAttributes&syscall.FILE_ATTRIBUTE_REPARSE_POINT == 0 {
+				w.uvmDi = append(w.uvmDi, dirInfo{path: path, fileInfo: *fileInfo})
+			}
 		} else {
 			// Overwrite any existing hard link.
 			err = os.Remove(path)
