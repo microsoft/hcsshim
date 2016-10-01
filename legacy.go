@@ -504,12 +504,12 @@ func (w *legacyLayerWriter) Add(name string, fileInfo *winio.FileBasicInfo) erro
 		path := filepath.Join(w.destRoot, name)
 		createDisposition := uint32(syscall.OPEN_EXISTING)
 		if (fileInfo.FileAttributes & syscall.FILE_ATTRIBUTE_DIRECTORY) != 0 {
-			st, err := os.Stat(path)
+			st, err := os.Lstat(path)
 			if err != nil && !os.IsNotExist(err) {
 				return err
 			}
 			if st != nil {
-				// Delete the existing file/directory if it is not the same type as this direcetory.
+				// Delete the existing file/directory if it is not the same type as this directory.
 				existingAttr := st.Sys().(*syscall.Win32FileAttributeData).FileAttributes
 				if (uint32(fileInfo.FileAttributes)^existingAttr)&(syscall.FILE_ATTRIBUTE_DIRECTORY|syscall.FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
 					if err = os.RemoveAll(path); err != nil {
@@ -634,7 +634,7 @@ func (w *legacyLayerWriter) AddLink(name string, target string) error {
 		selectedRoot = w.destRoot
 	} else {
 		for _, r := range roots {
-			if _, err = os.Stat(filepath.Join(r, target)); err != nil {
+			if _, err = os.Lstat(filepath.Join(r, target)); err != nil {
 				if !os.IsNotExist(err) {
 					return err
 				}
@@ -668,7 +668,7 @@ func (w *legacyLayerWriter) Remove(name string) error {
 		// already gone, and this needs to be a fatal error for diagnostics
 		// purposes.
 		path := filepath.Join(w.destRoot, name)
-		if _, err := os.Stat(path); err != nil {
+		if _, err := os.Lstat(path); err != nil {
 			return err
 		}
 		err = os.RemoveAll(path)
