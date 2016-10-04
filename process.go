@@ -93,16 +93,9 @@ func (process *process) Wait() error {
 	title := "HCSShim::Process::" + operation
 	logrus.Debugf(title+" processid=%d", process.processID)
 
-	if hcsCallbacksSupported {
-		err := waitForNotification(process.callbackNumber, hcsNotificationProcessExited, nil)
-		if err != nil {
-			return makeProcessError(process, operation, "", err)
-		}
-	} else {
-		_, err := process.waitTimeoutInternal(syscall.INFINITE)
-		if err != nil {
-			return makeProcessError(process, operation, "", err)
-		}
+	err := waitForNotification(process.callbackNumber, hcsNotificationProcessExited, nil)
+	if err != nil {
+		return makeProcessError(process, operation, "", err)
 	}
 
 	logrus.Debugf(title+" succeeded processid=%d", process.processID)
@@ -116,42 +109,13 @@ func (process *process) WaitTimeout(timeout time.Duration) error {
 	title := "HCSShim::Process::" + operation
 	logrus.Debugf(title+" processid=%d", process.processID)
 
-	if hcsCallbacksSupported {
-		err := waitForNotification(process.callbackNumber, hcsNotificationProcessExited, &timeout)
-		if err != nil {
-			return makeProcessError(process, operation, "", err)
-		}
-	} else {
-		finished, err := waitTimeoutHelper(process, timeout)
-		if !finished {
-			err = ErrTimeout
-		}
-		if err != nil {
-			return makeProcessError(process, operation, "", err)
-		}
+	err := waitForNotification(process.callbackNumber, hcsNotificationProcessExited, &timeout)
+	if err != nil {
+		return makeProcessError(process, operation, "", err)
 	}
 
 	logrus.Debugf(title+" succeeded processid=%d", process.processID)
 	return nil
-}
-
-func (process *process) hcsWait(timeout uint32) (bool, error) {
-	var (
-		resultp   *uint16
-		exitEvent syscall.Handle
-	)
-	err := hcsCreateProcessWait(process.handle, &exitEvent, &resultp)
-	err = processHcsResult(err, resultp)
-	if err != nil {
-		return false, err
-	}
-	defer syscall.CloseHandle(exitEvent)
-
-	return waitForSingleObject(exitEvent, timeout)
-}
-
-func (process *process) waitTimeoutInternal(timeout uint32) (bool, error) {
-	return waitTimeoutInternalHelper(process, timeout)
 }
 
 // ExitCode returns the exit code of the process. The process must have
@@ -348,10 +312,8 @@ func (process *process) Close() error {
 		return nil
 	}
 
-	if hcsCallbacksSupported {
-		if err := process.unregisterCallback(); err != nil {
-			return makeProcessError(process, operation, "", err)
-		}
+	if err := process.unregisterCallback(); err != nil {
+		return makeProcessError(process, operation, "", err)
 	}
 
 	if err := hcsCloseProcess(process.handle); err != nil {
