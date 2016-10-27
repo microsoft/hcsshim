@@ -175,7 +175,7 @@ func (container *container) Start() error {
 	logrus.Debugf(title+" id=%s", container.id)
 
 	if container.handle == 0 {
-		return makeContainerError(container, operation, "", ErrInvalidHandle)
+		return makeContainerError(container, operation, "", ErrAlreadyClosed)
 	}
 
 	var resultp *uint16
@@ -199,7 +199,7 @@ func (container *container) Shutdown() error {
 	logrus.Debugf(title+" id=%s", container.id)
 
 	if container.handle == 0 {
-		return makeContainerError(container, operation, "", ErrInvalidHandle)
+		return makeContainerError(container, operation, "", ErrAlreadyClosed)
 	}
 
 	var resultp *uint16
@@ -223,7 +223,7 @@ func (container *container) Terminate() error {
 	logrus.Debugf(title+" id=%s", container.id)
 
 	if container.handle == 0 {
-		return makeContainerError(container, operation, "", ErrInvalidHandle)
+		return makeContainerError(container, operation, "", ErrAlreadyClosed)
 	}
 
 	var resultp *uint16
@@ -299,7 +299,7 @@ func (container *container) HasPendingUpdates() (bool, error) {
 	logrus.Debugf(title+" id=%s", container.id)
 
 	if container.handle == 0 {
-		return false, makeContainerError(container, operation, "", ErrInvalidHandle)
+		return false, makeContainerError(container, operation, "", ErrAlreadyClosed)
 	}
 
 	properties, err := container.properties(pendingUpdatesQuery)
@@ -320,7 +320,7 @@ func (container *container) Statistics() (Statistics, error) {
 	logrus.Debugf(title+" id=%s", container.id)
 
 	if container.handle == 0 {
-		return Statistics{}, makeContainerError(container, operation, "", ErrInvalidHandle)
+		return Statistics{}, makeContainerError(container, operation, "", ErrAlreadyClosed)
 	}
 
 	properties, err := container.properties(statisticsQuery)
@@ -341,7 +341,7 @@ func (container *container) ProcessList() ([]ProcessListItem, error) {
 	logrus.Debugf(title+" id=%s", container.id)
 
 	if container.handle == 0 {
-		return nil, makeContainerError(container, operation, "", ErrInvalidHandle)
+		return nil, makeContainerError(container, operation, "", ErrAlreadyClosed)
 	}
 
 	properties, err := container.properties(processListQuery)
@@ -362,7 +362,7 @@ func (container *container) Pause() error {
 	logrus.Debugf(title+" id=%s", container.id)
 
 	if container.handle == 0 {
-		return makeContainerError(container, operation, "", ErrInvalidHandle)
+		return makeContainerError(container, operation, "", ErrAlreadyClosed)
 	}
 
 	var resultp *uint16
@@ -385,7 +385,7 @@ func (container *container) Resume() error {
 	logrus.Debugf(title+" id=%s", container.id)
 
 	if container.handle == 0 {
-		return makeContainerError(container, operation, "", ErrInvalidHandle)
+		return makeContainerError(container, operation, "", ErrAlreadyClosed)
 	}
 
 	var resultp *uint16
@@ -412,7 +412,7 @@ func (container *container) CreateProcess(c *ProcessConfig) (Process, error) {
 	)
 
 	if container.handle == 0 {
-		return nil, makeContainerError(container, operation, "", ErrInvalidHandle)
+		return nil, makeContainerError(container, operation, "", ErrAlreadyClosed)
 	}
 
 	// If we are not emulating a console, ignore any console size passed to us
@@ -468,7 +468,7 @@ func (container *container) OpenProcess(pid int) (Process, error) {
 	)
 
 	if container.handle == 0 {
-		return nil, makeContainerError(container, operation, "", ErrInvalidHandle)
+		return nil, makeContainerError(container, operation, "", ErrAlreadyClosed)
 	}
 
 	err := hcsOpenProcess(container.handle, uint32(pid), &processHandle, &resultp)
