@@ -161,6 +161,10 @@ func OpenContainer(id string) (Container, error) {
 
 	container.handle = handle
 
+	if err := container.registerCallback(); err != nil {
+		return nil, makeContainerError(container, operation, "", err)
+	}
+
 	logrus.Debugf(title+" succeeded id=%s handle=%d", id, handle)
 	runtime.SetFinalizer(container, closeContainer)
 	return container, nil
