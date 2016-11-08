@@ -27,7 +27,7 @@ type container struct {
 	callbackNumber uintptr
 }
 
-type containerProperties struct {
+type ContainerProperties struct {
 	ID                string `json:"Id"`
 	Name              string
 	SystemType        string
@@ -35,6 +35,8 @@ type containerProperties struct {
 	SiloGUID          string            `json:"SiloGuid,omitempty"`
 	IsDummy           bool              `json:",omitempty"`
 	RuntimeID         string            `json:"RuntimeId,omitempty"`
+	IsRuntimeTemplate bool              `json:",omitempty"`
+	RuntimeImagePath  string            `json:",omitempty"`
 	Stopped           bool              `json:",omitempty"`
 	ExitType          string            `json:",omitempty"`
 	AreUpdatesPending bool              `json:",omitempty"`
@@ -164,6 +166,38 @@ func OpenContainer(id string) (Container, error) {
 	logrus.Debugf(title+" succeeded id=%s handle=%d", id, handle)
 	runtime.SetFinalizer(container, closeContainer)
 	return container, nil
+}
+
+// GetContainers gets a list of the containers on the system that match the query
+func GetContainers(q ComputeSystemQuery) ([]ContainerProperties, error) {
+	operation := "GetContainers"
+	title := "HCSShim::" + operation
+
+	queryb, err := json.Marshal(q)
+	if err != nil {
+		return nil, err
+	}
+
+	query := string(queryb)
+	logrus.Debugf(title+" query=%s", query)
+
+	var (
+		resultp         *uint16
+		computeSystemsp *uint16
+	)
+	err = hcsEnumerateComputeSystems(query, &computeSystemsp, &resultp)
+	err = processHcsResult(err, resultp)
+	if computeSystemsp == nil {
+		return nil, ErrUnexpectedValue
+	}
+	computeSystemsRaw := convertAndFreeCoTaskMemBytes(computeSystemsp)
+	computeSystems := []ContainerProperties{}
+	if err := json.Unmarshal(computeSystemsRaw, &computeSystems); err != nil {
+		return nil, err
+	}
+
+	logrus.Debugf(title + " succeeded")
+	return computeSystems, nil
 }
 
 // Start synchronously starts the container.
