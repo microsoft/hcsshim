@@ -3,6 +3,7 @@ package hcsshim
 import (
 	"encoding/json"
 	"io"
+	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -321,6 +322,7 @@ func (process *process) Close() error {
 	}
 
 	process.handle = 0
+	runtime.SetFinalizer(process, nil)
 
 	logrus.Debugf(title+" succeeded processid=%d", process.processID)
 	return nil

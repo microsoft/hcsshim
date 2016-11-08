@@ -553,6 +553,7 @@ func (container *container) Close() error {
 	}
 
 	container.handle = 0
+	runtime.SetFinalizer(container, nil)
 
 	logrus.Debugf(title+" succeeded id=%s", container.id)
 	return nil
