@@ -10,6 +10,7 @@ import (
 type ProcessConfig struct {
 	ApplicationName  string
 	CommandLine      string
+	User             string
 	WorkingDirectory string
 	Environment      map[string]string
 	EmulateConsole   bool
