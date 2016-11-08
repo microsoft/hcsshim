@@ -67,6 +67,13 @@ type ContainerConfig struct {
 	AllowUnqualifiedDNSQuery bool        // True to allow unqualified DNS name resolution
 }
 
+type ComputeSystemQuery struct {
+	IDs    []string `json:"Ids,omitempty"`
+	Types  []string `json:",omitempty"`
+	Names  []string `json:",omitempty"`
+	Owners []string `json:",omitempty"`
+}
+
 // Container represents a created (but not necessarily running) container.
 type Container interface {
 	// Start synchronously starts the container.
