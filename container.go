@@ -27,6 +27,7 @@ type container struct {
 	callbackNumber uintptr
 }
 
+// ContainerProperties holds the properties for a container and the processes running in that container
 type ContainerProperties struct {
 	ID                string `json:"Id"`
 	Name              string
