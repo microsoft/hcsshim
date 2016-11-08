@@ -79,7 +79,7 @@ type HNSEndpoint struct {
 	DNSServerList      string            `json:",omitempty"`
 	GatewayAddress     string            `json:",omitempty"`
 	EnableInternalDNS  bool              `json:",omitempty"`
-	DisableICS         bool              `json:",omitempty"`
+	DisableICC         bool              `json:",omitempty"`
 	PrefixLength       uint8             `json:",omitempty"`
 	IsRemoteEndpoint   bool              `json:",omitempty"`
 }
