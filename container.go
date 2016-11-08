@@ -302,7 +302,7 @@ func (container *container) WaitTimeout(timeout time.Duration) error {
 	return nil
 }
 
-func (container *container) properties(query string) (*containerProperties, error) {
+func (container *container) properties(query string) (*ContainerProperties, error) {
 	var (
 		resultp     *uint16
 		propertiesp *uint16
@@ -317,7 +317,7 @@ func (container *container) properties(query string) (*containerProperties, erro
 		return nil, ErrUnexpectedValue
 	}
 	propertiesRaw := convertAndFreeCoTaskMemBytes(propertiesp)
-	properties := &containerProperties{}
+	properties := &ContainerProperties{}
 	if err := json.Unmarshal(propertiesRaw, properties); err != nil {
 		return nil, err
 	}
