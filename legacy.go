@@ -559,7 +559,8 @@ func (w *legacyLayerWriter) Add(name string, fileInfo *winio.FileBasicInfo) erro
 	}
 
 	path := filepath.Join(w.root, name)
-	if (fileInfo.FileAttributes & syscall.FILE_ATTRIBUTE_DIRECTORY) != 0 {
+	isDir := (fileInfo.FileAttributes & syscall.FILE_ATTRIBUTE_DIRECTORY) != 0
+	if isDir {
 		err := os.Mkdir(path, 0)
 		if err != nil {
 			return err
@@ -585,14 +586,15 @@ func (w *legacyLayerWriter) Add(name string, fileInfo *winio.FileBasicInfo) erro
 		return err
 	}
 
-	if strings.HasPrefix(name, `Hives\`) {
-		w.backupWriter = winio.NewBackupFileWriter(f, false)
-	} else {
+	if isDir || strings.HasPrefix(name, `Files\`) {
 		// The file attributes are written before the stream.
 		err = binary.Write(f, binary.LittleEndian, uint32(fileInfo.FileAttributes))
 		if err != nil {
 			return err
 		}
+	} else {
+		// Write an ordinary file.
+		w.backupWriter = winio.NewBackupFileWriter(f, false)
 	}
 
 	w.currentFile = f
