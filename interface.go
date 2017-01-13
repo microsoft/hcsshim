@@ -62,11 +62,11 @@ type ContainerConfig struct {
 	SandboxPath                string      `json:",omitempty"` // Location of unmounted sandbox. Used by Hyper-V containers only. Format %root%\windowsfilter
 	HvPartition                bool        // True if it a Hyper-V Container
 	EndpointList               []string    // List of networking endpoints to be attached to container
-	NetworkSharedContainerName string      // Name (ID) of the container that we will share the network stack with.
-	ReuseEndpoint              bool        // True, if the container shares/reuses endpoints from another container
+	NetworkSharedContainerName string      // Name (ID) of the container that we will share the network stack with.	
 	HvRuntime                  *HvRuntime  `json:",omitempty"` // Hyper-V container settings. Used by Hyper-V containers only. Format ImagePath=%root%\BaseLayerID\UtilityVM
 	Servicing                  bool        // True if this container is for servicing
 	AllowUnqualifiedDNSQuery   bool        // True to allow unqualified DNS name resolution
+  DNSSearchList              string      `json:",omitempty"` // Comma seperated list of DNS suffixes to use for name resolution
 }
 
 type ComputeSystemQuery struct {
