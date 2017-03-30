@@ -105,6 +105,27 @@ type ProcessListItem struct {
 	UserTime100ns                uint64    `json:",omitempty"`
 }
 
+// Type of Request Support in ModifySystem
+type RequestType string
+
+// Type of Resource Support in ModifySystem
+type ResourceType string
+
+// RequestType const
+const (
+	Add     RequestType  = "Add"
+	Remove  RequestType  = "Remove"
+	Network ResourceType = "Network"
+)
+
+// ResourceModificationRequestResponse is the structure used to send request to the container to modify the system
+// Supported resource types are Network and Request Types are Add/Remove
+type ResourceModificationRequestResponse struct {
+	Resource ResourceType `json:"ResourceType"`
+	Data     string       `json:"Settings"`
+	Request  RequestType  `json:"RequestType,omitempty"`
+}
+
 // createContainerAdditionalJSON is read from the environment at initialisation
 // time. It allows an environment variable to define additional JSON which
 // is merged in the CreateContainer call to HCS.
@@ -696,5 +717,34 @@ func (container *container) unregisterCallback() error {
 
 	handle = 0
 
+	return nil
+}
+
+// Modifies the System by sending a request to HCS
+func (container *container) Modify(config *ResourceModificationRequestResponse) error {
+	container.handleLock.RLock()
+	defer container.handleLock.RUnlock()
+	operation := "Modify"
+	title := "HCSShim::Container::" + operation
+
+	if container.handle == 0 {
+		return makeContainerError(container, operation, "", ErrAlreadyClosed)
+	}
+
+	requestJSON, err := json.Marshal(config)
+	if err != nil {
+		return err
+	}
+
+	requestString := string(requestJSON)
+	logrus.Debugf(title+" id=%s request=%s", container.id, requestString)
+
+	var resultp *uint16
+	err = hcsModifyComputeSystem(container.handle, requestString, &resultp)
+	err = processHcsResult(err, resultp)
+	if err != nil {
+		return makeContainerError(container, operation, "", err)
+	}
+	logrus.Debugf(title+" succeeded id=%s", container.id)
 	return nil
 }
