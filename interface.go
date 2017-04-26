@@ -71,8 +71,8 @@ type ContainerConfig struct {
 	Layers                      []Layer             // List of storage layers. Required for Windows Server and Hyper-V Containers. Format ID=GUID;Path=%root%\windowsfilter\layerID
 	Credentials                 string              `json:",omitempty"` // Credentials information
 	ProcessorCount              uint32              `json:",omitempty"` // Number of processors to assign to the container.
-	ProcessorWeight             uint64              `json:",omitempty"` // CPU Shares 0..10000 on Windows; where 0 will be omitted and HCS will default.
-	ProcessorMaximum            int64               `json:",omitempty"` // CPU maximum usage percent 1..100
+	ProcessorWeight             uint64              `json:",omitempty"` // CPU shares (relative weight to other containers with cpu shares). Range is from 1 to 10000. A value of 0 results in default shares.
+	ProcessorMaximum            int64               `json:",omitempty"` // Specifies the portion of processor cycles that this container can use as a percentage times 100. Range is from 1 to 10000. A value of 0 results in no limit.
 	StorageIOPSMaximum          uint64              `json:",omitempty"` // Maximum Storage IOPS
 	StorageBandwidthMaximum     uint64              `json:",omitempty"` // Maximum Storage Bandwidth in bytes per second
 	StorageSandboxSize          uint64              `json:",omitempty"` // Size in bytes that the container system drive should be expanded to if smaller
