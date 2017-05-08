@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -206,7 +205,6 @@ func createContainerWithJSON(id string, c *ContainerConfig, additionalJSON strin
 	}
 
 	logrus.Debugf(title+" succeeded id=%s handle=%d", id, container.handle)
-	runtime.SetFinalizer(container, closeContainer)
 	return container, nil
 }
 
@@ -264,7 +262,6 @@ func OpenContainer(id string) (Container, error) {
 	}
 
 	logrus.Debugf(title+" succeeded id=%s handle=%d", id, handle)
-	runtime.SetFinalizer(container, closeContainer)
 	return container, nil
 }
 
@@ -589,7 +586,6 @@ func (container *container) CreateProcess(c *ProcessConfig) (Process, error) {
 	}
 
 	logrus.Debugf(title+" succeeded id=%s processid=%s", container.id, process.processID)
-	runtime.SetFinalizer(process, closeProcess)
 	return process, nil
 }
 
@@ -626,7 +622,6 @@ func (container *container) OpenProcess(pid int) (Process, error) {
 	}
 
 	logrus.Debugf(title+" succeeded id=%s processid=%s", container.id, process.processID)
-	runtime.SetFinalizer(process, closeProcess)
 	return process, nil
 }
 
@@ -652,15 +647,9 @@ func (container *container) Close() error {
 	}
 
 	container.handle = 0
-	runtime.SetFinalizer(container, nil)
 
 	logrus.Debugf(title+" succeeded id=%s", container.id)
 	return nil
-}
-
-// closeContainer wraps container.Close for use by a finalizer
-func closeContainer(container *container) {
-	container.Close()
 }
 
 func (container *container) registerCallback() error {
