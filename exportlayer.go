@@ -43,6 +43,7 @@ func ExportLayer(info DriverInfo, layerId string, exportFolderPath string, paren
 	return nil
 }
 
+//go:generate counterfeiter . LayerReader
 type LayerReader interface {
 	Next() (string, int64, *winio.FileBasicInfo, error)
 	Read(b []byte) (int, error)

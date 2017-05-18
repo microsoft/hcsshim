@@ -77,6 +77,7 @@ type ComputeSystemQuery struct {
 }
 
 // Container represents a created (but not necessarily running) container.
+//go:generate counterfeiter . Container
 type Container interface {
 	// Start synchronously starts the container.
 	Start() error
@@ -123,6 +124,7 @@ type Container interface {
 }
 
 // Process represents a running or exited process.
+//go:generate counterfeiter . Process
 type Process interface {
 	// Pid returns the process ID of the process within the container.
 	Pid() int

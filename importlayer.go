@@ -43,6 +43,7 @@ func ImportLayer(info DriverInfo, layerID string, importFolderPath string, paren
 }
 
 // LayerWriter is an interface that supports writing a new container image layer.
+//go:generate counterfeiter . LayerWriter
 type LayerWriter interface {
 	// Add adds a file to the layer with given metadata.
 	Add(name string, fileInfo *winio.FileBasicInfo) error
