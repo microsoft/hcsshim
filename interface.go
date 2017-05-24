@@ -59,7 +59,6 @@ type ContainerConfig struct {
 	MemoryMaximumInMB          int64       `json:",omitempty"` // Maximum memory available to the container in Megabytes
 	HostName                   string      // Hostname
 	MappedDirectories          []MappedDir // List of mapped directories (volumes/mounts)
-	SandboxPath                string      `json:",omitempty"` // Location of unmounted sandbox. Used by Hyper-V containers only. Format %root%\windowsfilter
 	HvPartition                bool        // True if it a Hyper-V Container
 	EndpointList               []string    // List of networking endpoints to be attached to container
 	NetworkSharedContainerName string      `json:",omitempty"` // Name (ID) of the container that we will share the network stack with.
