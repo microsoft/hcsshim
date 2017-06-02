@@ -47,7 +47,6 @@ type ContainerConfig struct {
 	SystemType                  string      // HCS requires this to be hard-coded to "Container"
 	Name                        string      // Name of the container. We use the docker ID.
 	Owner                       string      `json:",omitempty"` // The management platform that created this container
-	IsDummy                     bool        `json:",omitempty"` // Used for development purposes.
 	VolumePath                  string      `json:",omitempty"` // Windows volume path for scratch space. Used by Windows Server Containers only. Format \\?\\Volume{GUID}
 	IgnoreFlushesDuringBoot     bool        `json:",omitempty"` // Optimization hint for container startup in Windows
 	LayerFolderPath             string      `json:",omitempty"` // Where the layer folders are located. Used by Windows Server Containers only. Format  %root%\windowsfilter\containerID
