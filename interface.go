@@ -9,18 +9,18 @@ import (
 // ProcessConfig is used as both the input of Container.CreateProcess
 // and to convert the parameters to JSON for passing onto the HCS
 type ProcessConfig struct {
-	ApplicationName   string
-	CommandLine       string
-	User              string
-	WorkingDirectory  string
-	Environment       map[string]string
-	EmulateConsole    bool
-	CreateStdInPipe   bool
-	CreateStdOutPipe  bool
-	CreateStdErrPipe  bool
-	ConsoleSize       [2]uint          `json:",omitempty"`
-	CreateInUtilityVm bool             `json:",omitempty"` // Used by Linux Containers on Windows
-	OCISpecification  *json.RawMessage `json:",omitempty"` // Used by Linux Containers on Windows
+	ApplicationName   string            `json:",omitempty"`
+	CommandLine       string            `json:",omitempty"`
+	User              string            `json:",omitempty"`
+	WorkingDirectory  string            `json:",omitempty"`
+	Environment       map[string]string `json:",omitempty"`
+	EmulateConsole    bool              `json:",omitempty"`
+	CreateStdInPipe   bool              `json:",omitempty"`
+	CreateStdOutPipe  bool              `json:",omitempty"`
+	CreateStdErrPipe  bool              `json:",omitempty"`
+	ConsoleSize       [2]uint           `json:",omitempty"`
+	CreateInUtilityVm bool              `json:",omitempty"` // Used by Linux Containers on Windows
+	OCISpecification  *json.RawMessage  `json:",omitempty"` // Used by Linux Containers on Windows
 }
 
 type Layer struct {
