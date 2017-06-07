@@ -37,8 +37,10 @@ type MappedDir struct {
 }
 
 type HvRuntime struct {
-	ImagePath    string `json:",omitempty"`
-	SkipTemplate bool   `json:",omitempty"`
+	ImagePath       string `json:",omitempty"`
+	SkipTemplate    bool   `json:",omitempty"`
+	LinuxInitrdPath string `json:",omitempty"` // Host path to an initrd image for starting a Linux utility VM
+	LinuxKernelPath string `json:",omitempty"` // Host path to kernel for starting a Linux utility VM
 }
 
 type MappedVirtualDisk struct {
