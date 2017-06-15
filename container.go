@@ -584,7 +584,7 @@ func (container *container) CreateProcess(c *ProcessConfig) (Process, error) {
 		return nil, makeContainerError(container, operation, "", err)
 	}
 
-	logrus.Debugf(title+" succeeded id=%s processid=%s", container.id, process.processID)
+	logrus.Debugf(title+" succeeded id=%s processid=%d", container.id, process.processID)
 	return process, nil
 }
 
