@@ -11,6 +11,7 @@ import (
 type ProcessConfig struct {
 	ApplicationName   string            `json:",omitempty"`
 	CommandLine       string            `json:",omitempty"`
+	CommandArgs       []string          `json:",omitempty"` // Used by Linux Containers on Windows
 	User              string            `json:",omitempty"`
 	WorkingDirectory  string            `json:",omitempty"`
 	Environment       map[string]string `json:",omitempty"`
