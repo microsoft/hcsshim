@@ -1,0 +1,24 @@
+Instructions for getting Hyper-V vsock patch.
+
+git config --global user.name "yourname"
+git config --global user.email youremailaddress 
+ 
+git remote add -f dexuan-github https://github.com/dcui/linux.git
+ 
+git cherry-pick c248b14174e1337c1461f9b13a573ad90a136e1c
+git cherry-pick 008d8d8bc0c86473a8549a365bee9a479243e412
+git cherry-pick 4713066c11b2396eafd2873cbed7bdd72d1571eb
+git cherry-pick 1df677b35ff010d0def33f5420773015815cf843
+git cherry-pick 3476be340d2ff777609fca3e763da0292acbfc45
+git cherry-pick b5566b1b6e5cb19b381590587f841f950caabe4d
+git cherry-pick 6f1aa69011356ff95ed6c57400095e5f2d9eb900
+git cherry-pick 2fac74605d2db862caaaf4890239b57095fba832
+git cherry-pick 2e307800c6a01cd789afe34eccbcabf384959b3f
+git cherry-pick 83c8635b893bbc0b5b329c632cea0382d5479763
+ 
+git cherry-pick 29e6c6204845176c78c7840377a72389d188563c
+git cherry-pick 6172aa1bbfb66a9e0b0da0f162f0e91c129e3c94
+git cherry-pick 24ff598cdf98290b25805219eff78336bc08e5ab
+git cherry-pick 9a00fd7c4ad9c5d1da39c3c44328145fe063ceed
+git cherry-pick a463eaf963aa5a1a27260eb91d543c07a7b1d5a7
+git cherry-pick 2a57ec595ad33c659cb333f0c022da35652c5b31
