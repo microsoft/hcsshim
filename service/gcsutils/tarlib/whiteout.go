@@ -18,7 +18,7 @@ func CalcWhiteoutSize(hdr *tar.Header, f fs.Filesystem, format archive.WhiteoutF
 	case archive.OverlayWhiteoutFormat:
 		return calcOverlaySize(hdr, f)
 	default:
-		return false, fmt.Errorf("unkown whiteout format: %d\n", err)
+		return false, fmt.Errorf("unkown whiteout format: %d", err)
 	}
 }
 
