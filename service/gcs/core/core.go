@@ -30,7 +30,7 @@ type StdioSet struct {
 // containers. However, it is also easily mocked out for testing.
 type Core interface {
 	CreateContainer(id string,
-		info prot.VmHostedContainerSettings) error
+		info prot.VMHostedContainerSettings) error
 
 	ExecProcess(id string,
 		info prot.ProcessParameters,

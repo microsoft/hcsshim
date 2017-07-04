@@ -17,6 +17,7 @@ type mockReadWriteCloser struct {
 	*bytes.Buffer
 }
 
+// NewMockReadWriteCloser returns a *mockReadWriteCloser over an empty buffer.
 func NewMockReadWriteCloser() *mockReadWriteCloser {
 	return &mockReadWriteCloser{Buffer: new(bytes.Buffer)}
 }
@@ -34,6 +35,8 @@ type mockProcessExitState struct {
 	exitCode int
 }
 
+// NewProcessExitState returns a *mockProcessExitState with the given exit
+// code.
 func NewProcessExitState(exitCode int) *mockProcessExitState {
 	return &mockProcessExitState{exitCode: exitCode}
 }
@@ -249,6 +252,7 @@ type mockOS struct {
 	CurrentNamespace oslayer.Namespace
 }
 
+// NewOS returns a *mockOS, which mocks out operating system functionality.
 func NewOS() *mockOS {
 	return &mockOS{
 		CurrentNamespace: newNamespace(),

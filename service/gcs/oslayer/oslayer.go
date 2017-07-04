@@ -9,6 +9,8 @@ import (
 	"syscall"
 )
 
+// Signal represents signals which may be sent to processes, such as SIGKILl or
+// SIGTERM.
 type Signal int
 
 const (

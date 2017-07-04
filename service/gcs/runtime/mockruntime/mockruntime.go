@@ -13,6 +13,7 @@ import (
 // the container runtime.
 type mockRuntime struct{}
 
+// NewRuntime constructs a new mockRuntime with the default settings.
 func NewRuntime() *mockRuntime {
 	return &mockRuntime{}
 }

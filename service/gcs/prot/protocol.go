@@ -33,89 +33,91 @@ const (
 	messageVersionShift = 0
 )
 
-// The type of the message.
+// MessageType is the type of the message.
 type MessageType uint32
 
 const (
-	MT_None         = 0
-	MT_Request      = 0x10000000
-	MT_Response     = 0x20000000
-	MT_Notification = 0x30000000
+	MtNone         = 0
+	MtRequest      = 0x10000000
+	MtResponse     = 0x20000000
+	MtNotification = 0x30000000
 )
 
-// Categories allow splitting the identifier namespace to easily route similar
-// messages for common processing.
+// MessageCategory allows splitting the identifier namespace to easily route
+// similar messages for common processing.
 type MessageCategory uint32
 
 const (
-	MC_None          = 0
-	MC_ComputeSystem = 0x00100000
+	McNone          = 0
+	McComputeSystem = 0x00100000
 )
 
 // GetResponseIdentifier returns the response version of the given request
 // identifier. So, for example, an input of ComputeSystemCreate_v1 would result
 // in an output of ComputeSystemResponseCreate_v1.
 func GetResponseIdentifier(identifier MessageIdentifier) MessageIdentifier {
-	return MessageIdentifier(MT_Response | (uint32(identifier) & ^uint32(messageTypeMask)))
+	return MessageIdentifier(MtResponse | (uint32(identifier) & ^uint32(messageTypeMask)))
 }
 
-// The MessageIdentifiers type describes the Type field of a MessageHeader
-// struct.
+// MessageIdentifier describes the Type field of a MessageHeader struct.
 type MessageIdentifier uint32
 
 const (
-	MI_None = 0
+	MiNone = 0
 
 	// ComputeSystem requests.
-	ComputeSystemCreate_v1           = 0x10100101
-	ComputeSystemStart_v1            = 0x10100201
-	ComputeSystemShutdownGraceful_v1 = 0x10100301
-	ComputeSystemShutdownForced_v1   = 0x10100401
-	ComputeSystemExecuteProcess_v1   = 0x10100501
-	ComputeSystemWaitForProcess_v1   = 0x10100601
-	ComputeSystemTerminateProcess_v1 = 0x10100701
-	ComputeSystemResizeConsole_v1    = 0x10100801
-	ComputeSystemGetProperties_v1    = 0x10100901
-	ComputeSystemModifySettings_v1   = 0x10100a01
+	ComputeSystemCreateV1           = 0x10100101
+	ComputeSystemStartV1            = 0x10100201
+	ComputeSystemShutdownGracefulV1 = 0x10100301
+	ComputeSystemShutdownForcedV1   = 0x10100401
+	ComputeSystemExecuteProcessV1   = 0x10100501
+	ComputeSystemWaitForProcessV1   = 0x10100601
+	ComputeSystemTerminateProcessV1 = 0x10100701
+	ComputeSystemResizeConsoleV1    = 0x10100801
+	ComputeSystemGetPropertiesV1    = 0x10100901
+	ComputeSystemModifySettingsV1   = 0x10100a01
 
 	// ComputeSystem responses.
-	ComputeSystemResponseCreate_v1           = 0x20100101
-	ComputeSystemResponseStart_v1            = 0x20100201
-	ComputeSystemResponseShutdownGraceful_v1 = 0x20100301
-	ComputeSystemResponseShutdownForced_v1   = 0x20100401
-	ComputeSystemResponseExecuteProcess_v1   = 0x20100501
-	ComputeSystemResponseWaitForProcess_v1   = 0x20100601
-	ComputeSystemResponseTerminateProcess_v1 = 0x20100701
-	ComputeSystemResponseResizeConsole_v1    = 0x20100801
-	ComputeSystemResponseGetProperties_v1    = 0x20100901
-	ComputeSystemResponseModifySettings_v1   = 0x20100a01
+	ComputeSystemResponseCreateV1           = 0x20100101
+	ComputeSystemResponseStartV1            = 0x20100201
+	ComputeSystemResponseShutdownGracefulV1 = 0x20100301
+	ComputeSystemResponseShutdownForcedV1   = 0x20100401
+	ComputeSystemResponseExecuteProcessV1   = 0x20100501
+	ComputeSystemResponseWaitForProcessV1   = 0x20100601
+	ComputeSystemResponseTerminateProcessV1 = 0x20100701
+	ComputeSystemResponseResizeConsoleV1    = 0x20100801
+	ComputeSystemResponseGetPropertiesV1    = 0x20100901
+	ComputeSystemResponseModifySettingsV1   = 0x20100a01
 
 	// ComputeSystem notifications.
-	ComputeSystemNotification_v1 = 0x30100101
+	ComputeSystemNotificationV1 = 0x30100101
 )
 
-// SequenceIds are used to correlate requests and responses.
-type SequenceId uint64
+// SequenceID is used to correlate requests and responses.
+type SequenceID uint64
 
 // MessageHeader is the common header present in all communications messages.
 type MessageHeader struct {
 	Type MessageIdentifier
 	Size uint32
-	Id   SequenceId
+	ID   SequenceID
 }
 
+// MessageHeaderSize is the size in bytes of the MessageHeader struct.
 const MessageHeaderSize = 16
 
 /////////////////////////////////////////////////////
 
 // Protocol version.
 const (
-	PV_Invalid = 0
-	PV_V1      = 1
-	PV_V2      = 2
-	PV_V3      = 3
+	PvInvalid = 0
+	PvV1      = 1
+	PvV2      = 2
+	PvV3      = 3
 )
 
+// ProtocolSupport specifies the protocol versions to be used for HCS-GCS
+// communication.
 type ProtocolSupport struct {
 	MinimumVersion         string `json:",omitempty"`
 	MaximumVersion         string `json:",omitempty"`
@@ -123,43 +125,55 @@ type ProtocolSupport struct {
 	MaximumProtocolVersion uint32
 }
 
+// MessageBase is the base type embedded in all messages sent from the HCS to
+// the GCS, as well as ContainerNotification which is sent from GCS to HCS.
 type MessageBase struct {
-	ContainerId string
-	ActivityId  string
+	ContainerID string `json:"ContainerId"`
+	ActivityID  string `json:"ActivityId"`
 }
 
+// ContainerCreate is the message from the HCS specifying to create a container
+// in the utility VM. This message won't actually create a Linux container
+// inside the utility VM, but will set up the infrustructure needed to start
+// one once the container's initial process is executed.
 type ContainerCreate struct {
 	*MessageBase
 	ContainerConfig   string
 	SupportedVersions ProtocolSupport `json:",omitempty"`
 }
 
+// NotificationType defines a type of notification to be sent back to the HCS.
 type NotificationType string
 
 const (
-	NT_None           = NotificationType("None")
-	NT_GracefulExit   = NotificationType("GracefulExit")
-	NT_ForcedExit     = NotificationType("ForcedExit")
-	NT_UnexpectedExit = NotificationType("UnexpectedExit")
-	NT_Reboot         = NotificationType("Reboot")
-	NT_Constructed    = NotificationType("Constructed")
-	NT_Started        = NotificationType("Started")
-	NT_Paused         = NotificationType("Paused")
-	NT_Unknown        = NotificationType("Unknown")
+	NtNone           = NotificationType("None")
+	NtGracefulExit   = NotificationType("GracefulExit")
+	NtForcedExit     = NotificationType("ForcedExit")
+	NtUnexpectedExit = NotificationType("UnexpectedExit")
+	NtReboot         = NotificationType("Reboot")
+	NtConstructed    = NotificationType("Constructed")
+	NtStarted        = NotificationType("Started")
+	NtPaused         = NotificationType("Paused")
+	NtUnknown        = NotificationType("Unknown")
 )
 
+// ActiveOperation defines an operation to be associated with a notification
+// sent back to the HCS.
 type ActiveOperation string
 
 const (
-	AO_None      = ActiveOperation("None")
-	AO_Construct = ActiveOperation("Construct")
-	AO_Start     = ActiveOperation("Start")
-	AO_Pause     = ActiveOperation("Pause")
-	AO_Resume    = ActiveOperation("Resume")
-	AO_Shutdown  = ActiveOperation("Shutdown")
-	AO_Terminate = ActiveOperation("Terminate")
+	AoNone      = ActiveOperation("None")
+	AoConstruct = ActiveOperation("Construct")
+	AoStart     = ActiveOperation("Start")
+	AoPause     = ActiveOperation("Pause")
+	AoResume    = ActiveOperation("Resume")
+	AoShutdown  = ActiveOperation("Shutdown")
+	AoTerminate = ActiveOperation("Terminate")
 )
 
+// ContainerNotification is a message sent from the GCS to the HCS to indicate
+// some kind of event. At the moment, it is only used for container exit
+// notifications.
 type ContainerNotification struct {
 	*MessageBase
 	Type       NotificationType
@@ -168,91 +182,119 @@ type ContainerNotification struct {
 	ResultInfo string `json:",omitempty"`
 }
 
+// ExecuteProcessVsockStdioRelaySettings defines the port numbers for each
+// stdio socket for a process.
 type ExecuteProcessVsockStdioRelaySettings struct {
 	StdIn  uint32 `json:",omitempty"`
 	StdOut uint32 `json:",omitempty"`
 	StdErr uint32 `json:",omitempty"`
 }
 
+// ExecuteProcessSettings defines the settings for a single process to be
+// executed either inside or outside the container namespace.
 type ExecuteProcessSettings struct {
 	ProcessParameters       string
 	VsockStdioRelaySettings ExecuteProcessVsockStdioRelaySettings
 }
 
+// ContainerExecuteProcess is the message from the HCS specifying to execute a
+// process either inside or outside the container namespace.
 type ContainerExecuteProcess struct {
 	*MessageBase
 	Settings ExecuteProcessSettings
 }
 
+// ContainerResizeConsole is the message from the HCS specifying to change the
+// console size for the given process.
 type ContainerResizeConsole struct {
 	*MessageBase
-	ProcessId uint32
+	ProcessID uint32 `json:"ProcessId"`
 	Height    uint16
 	Width     uint16
 }
 
+// ContainerWaitForProcess is the message from the HCS specifying to wait until
+// the given process exits. After receiving this message, the corresponding
+// response should not be sent until the process has exited.
 type ContainerWaitForProcess struct {
 	*MessageBase
-	ProcessId uint32
+	ProcessID uint32 `json:"ProcessId"`
 	// TimeoutInMs is currently ignored, since timeouts are handled on the host
 	// side.
 	TimeoutInMs uint32
 }
 
+// ContainerTerminateProcess is the message from the HCS specifying to kill the
+// given process.
 type ContainerTerminateProcess struct {
 	*MessageBase
-	ProcessId uint32
+	ProcessID uint32 `json:"ProcessId"`
 }
 
+// ContainerGetProperties is the message from the HCS requesting certain
+// properties of the container, such as a list of its processes.
 type ContainerGetProperties struct {
 	*MessageBase
 	Query string
 }
 
+// PropertyType is the type of property, such as memory or virtual disk, which
+// is to be modified for the container.
 type PropertyType string
 
 const (
-	PT_Memory                      = PropertyType("Memory")
-	PT_CpuGroup                    = PropertyType("CpuGroup")
-	PT_Statistics                  = PropertyType("Statistics")
-	PT_ProcessList                 = PropertyType("ProcessList")
-	PT_PendingUpdates              = PropertyType("PendingUpdates")
-	PT_TerminateOnLastHandleClosed = PropertyType("TerminateOnLastHandleClosed")
-	PT_MappedDirectory             = PropertyType("MappedDirectory")
-	PT_SystemGUID                  = PropertyType("SystemGUID")
-	PT_Network                     = PropertyType("Network")
-	PT_MappedPipe                  = PropertyType("MappedPipe")
-	PT_MappedVirtualDisk           = PropertyType("MappedVirtualDisk")
+	PtMemory                      = PropertyType("Memory")
+	PtCPUGroup                    = PropertyType("CpuGroup")
+	PtStatistics                  = PropertyType("Statistics")
+	PtProcessList                 = PropertyType("ProcessList")
+	PtPendingUpdates              = PropertyType("PendingUpdates")
+	PtTerminateOnLastHandleClosed = PropertyType("TerminateOnLastHandleClosed")
+	PtMappedDirectory             = PropertyType("MappedDirectory")
+	PtSystemGUID                  = PropertyType("SystemGUID")
+	PtNetwork                     = PropertyType("Network")
+	PtMappedPipe                  = PropertyType("MappedPipe")
+	PtMappedVirtualDisk           = PropertyType("MappedVirtualDisk")
 )
 
+// RequestType is the type of operation to perform on a given property type.
 type RequestType string
 
 const (
-	RT_Add    = RequestType("Add")
-	RT_Remove = RequestType("Remove")
-	RT_Update = RequestType("Update")
+	RtAdd    = RequestType("Add")
+	RtRemove = RequestType("Remove")
+	RtUpdate = RequestType("Update")
 )
 
-// The Settings field of ResourceModificationRequestResponse could be of many
-// different types. So, in order to handle this on the GCS side, the Settings
-// field is a struct which "inherits" from all the types it could represent.
-// That way, when it's unmarshaled, ResourceType is checked and only the
-// relevant fields are filled in.
+// ResourceModificationSettings contains the configuration specified for a
+// given container setting. The Settings field of
+// ResourceModificationRequestResponse could be of many different types. So, in
+// order to handle this on the GCS side, the Settings field is a struct which
+// embeds all the types it could represent.  That way, when it's unmarshaled,
+// ResourceType is checked and only the relevant fields are filled in.
 type ResourceModificationSettings struct {
 	*MappedVirtualDisk
 }
 
+// ResourceModificationRequestResponse details a container resource which
+// should be modified, how, and with what parameters.
 type ResourceModificationRequestResponse struct {
 	ResourceType PropertyType
 	RequestType  RequestType `json:",omitempty"`
 	Settings     interface{} `json:",omitempty"`
 }
 
+// ContainerModifySettings is the message from the HCS specifying how a certain
+// container resource should be modified.
 type ContainerModifySettings struct {
 	*MessageBase
 	Request ResourceModificationRequestResponse
 }
 
+// UnmarshalContainerModifySettings unmarshals the given bytes into a
+// ContainerModifySettings message. This function is required because types
+// such as ResourceModificationSettings which have multiple types embedded
+// (where a given field name may be in multiple of the embedded types) are not
+// properly unmarshaled by the json package without some extra logic.
 func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error) {
 	// Unmarshal the message.
 	var request ContainerModifySettings
@@ -264,16 +306,16 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 
 	// Fill in default fields.
 	if request.Request.ResourceType == "" {
-		request.Request.ResourceType = PT_Memory
+		request.Request.ResourceType = PtMemory
 	}
 	if request.Request.RequestType == "" {
-		request.Request.RequestType = RT_Add
+		request.Request.RequestType = RtAdd
 	}
 
 	// Fill in the ResourceType-specific fields.
 	settings := ResourceModificationSettings{}
 	switch request.Request.ResourceType {
-	case PT_MappedVirtualDisk:
+	case PtMappedVirtualDisk:
 		settings.MappedVirtualDisk = &MappedVirtualDisk{}
 		if err := json.Unmarshal(rawSettings, settings.MappedVirtualDisk); err != nil {
 			return nil, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDisk")
@@ -286,6 +328,9 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 	return &request, nil
 }
 
+// ErrorRecord represents a single error to be reported back to the HCS. It
+// allows for specifying information about the source of the error, as well as
+// an error message.
 type ErrorRecord struct {
 	Result       int32
 	Message      string
@@ -295,53 +340,72 @@ type ErrorRecord struct {
 	FunctionName string `json:",omitempty"`
 }
 
+// MessageResponseBase is the base type embedded in all messages sent from the
+// GCS to the HCS except for ContainerNotification.
 type MessageResponseBase struct {
 	Result       int32
-	ActivityId   string
+	ActivityID   string        `json:"ActivityId"`
 	ErrorRecords []ErrorRecord `json:",omitempty"`
 }
 
+// ContainerCreateResponse is the message to the HCS responding to a
+// ContainerCreate message. It serves a protocol negotiation function as well,
+// returning protocol version information to the HCS.
 type ContainerCreateResponse struct {
 	*MessageResponseBase
 	SelectedVersion         string `json:",omitempty"`
 	SelectedProtocolVersion uint32
 }
 
+// ContainerExecuteProcessResponse is the message to the HCS responding to a
+// ContainerExecuteProcess message. It provides back the process's pid.
 type ContainerExecuteProcessResponse struct {
 	*MessageResponseBase
-	ProcessId uint32
+	ProcessID uint32 `json:"ProcessId"`
 }
 
+// ContainerWaitForProcessResponse is the message to the HCS responding to a
+// ContainerWaitForProcess message. It is only sent when the process has
+// exited.
 type ContainerWaitForProcessResponse struct {
 	*MessageResponseBase
 	ExitCode uint32
 }
 
+// ContainerGetPropertiesResponse is the message to the HCS responding to a
+// ContainerGetProperties message. It contains a string representing the
+// properties requested.
 type ContainerGetPropertiesResponse struct {
 	*MessageResponseBase
 	Properties string
 }
 
 /* types added on to the current official protocol types */
+
+// Layer represents a filesystem layer for a container.
 type Layer struct {
 	// Path is in this case the identifier (such as the SCSI number) of the
 	// layer device.
 	Path string
 }
 
+// NetworkAdapter represents a network interface and its associated
+// configuration.
 type NetworkAdapter struct {
-	AdapterInstanceId  string
+	AdapterInstanceID  string `json:"AdapterInstanceId"`
 	FirewallEnabled    bool
 	NatEnabled         bool
 	MacAddress         string `json:",omitempty"`
-	AllocatedIpAddress string `json:",omitempty"`
-	HostIpAddress      string `json:",omitempty"`
-	HostIpPrefixLength uint8  `json:",omitempty"`
-	HostDnsServerList  string `json:",omitempty"`
-	HostDnsSuffix      string `json:",omitempty"`
+	AllocatedIPAddress string `json:"AllocatedIpAddress,omitempty"`
+	HostIPAddress      string `json:"HostIpAddress,omitempty"`
+	HostIPPrefixLength uint8  `json:"HostIpPrefixLength,omitempty"`
+	HostDNSServerList  string `json:"HostDnsServerList,omitempty"`
+	HostDNSSuffix      string `json:"HostDnsSuffix,omitempty"`
 	EnableLowMetric    bool   `json:",omitempty"`
 }
 
+// MappedVirtualDisk represents a disk on the host which is mapped into a
+// directory in the guest.
 type MappedVirtualDisk struct {
 	ContainerPath     string
 	Lun               uint8 `json:",omitempty"`
@@ -349,7 +413,9 @@ type MappedVirtualDisk struct {
 	ReadOnly          bool  `json:",omitempty"`
 }
 
-type VmHostedContainerSettings struct {
+// VMHostedContainerSettings is the set of settings used to specify the initial
+// configuration of a container.
+type VMHostedContainerSettings struct {
 	Layers []Layer
 	// SandboxDataPath is in this case the identifier (such as the SCSI number)
 	// of the sandbox device.

@@ -24,6 +24,8 @@ type realProcessExitState struct {
 	state *os.ProcessState
 }
 
+// NewProcessExitState returns a *realProcessExitState wrapping the given
+// *os.ProcessState.
 func NewProcessExitState(state *os.ProcessState) *realProcessExitState {
 	return &realProcessExitState{state: state}
 }
@@ -239,6 +241,8 @@ func (n *realNamespace) Close() error {
 
 type realOS struct{}
 
+// NewOS returns a *realOS OS interface implementation which calls into actual
+// system OS functionality.
 func NewOS() *realOS {
 	return &realOS{}
 }
@@ -297,9 +301,8 @@ func (o *realOS) PathExists(name string) (bool, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
-		} else {
-			return false, errors.WithStack(err)
 		}
+		return false, errors.WithStack(err)
 	}
 	return true, nil
 }
@@ -311,12 +314,10 @@ func (o *realOS) PathIsMounted(name string) (bool, error) {
 		_, ok := err.(*exec.ExitError)
 		if ok {
 			return false, nil
-		} else {
-			return false, errors.WithStack(err)
 		}
-	} else {
-		return true, err
+		return false, errors.WithStack(err)
 	}
+	return true, err
 }
 func (o *realOS) Link(oldname, newname string) error {
 	if err := os.Link(oldname, newname); err != nil {
@@ -371,7 +372,7 @@ func (o *realOS) AddRoute(route oslayer.Route) error {
 	}
 	return nil
 }
-func (os *realOS) AddGatewayRoute(gw oslayer.Addr, link oslayer.Link, metric int) error {
+func (o *realOS) AddGatewayRoute(gw oslayer.Addr, link oslayer.Link, metric int) error {
 	out, err := exec.Command("route", "add", "default", "gw", gw.IP().String(), "dev", link.Name(), "metric", strconv.Itoa(metric)).CombinedOutput()
 	if err != nil {
 		return errors.Errorf("%s", out)

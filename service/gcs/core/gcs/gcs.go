@@ -125,7 +125,7 @@ func (e *processCacheEntry) AddExitHook(hook func(oslayer.ProcessExitState)) {
 // CreateContainer creates all the infrastructure for a container, including
 // setting up layers and networking, and then starts up its init process in a
 // suspended state waiting for a call to StartContainer.
-func (c *gcsCore) CreateContainer(id string, settings prot.VmHostedContainerSettings) error {
+func (c *gcsCore) CreateContainer(id string, settings prot.VMHostedContainerSettings) error {
 	c.containerCacheMutex.Lock()
 	defer c.containerCacheMutex.Unlock()
 
@@ -152,7 +152,7 @@ func (c *gcsCore) CreateContainer(id string, settings prot.VmHostedContainerSett
 	// Set up networking.
 	for _, adapter := range settings.NetworkAdapters {
 		if err := c.configureNetworkAdapter(adapter); err != nil {
-			return errors.Wrapf(err, "failed to configure network adapter %s", adapter.AdapterInstanceId)
+			return errors.Wrapf(err, "failed to configure network adapter %s", adapter.AdapterInstanceID)
 		}
 		containerEntry.AddNetworkAdapter(adapter)
 	}
@@ -528,9 +528,9 @@ func (c *gcsCore) ModifySettings(id string, request prot.ResourceModificationReq
 	}
 
 	switch request.RequestType {
-	case prot.RT_Add:
-		if request.ResourceType != prot.PT_MappedVirtualDisk {
-			return errors.Errorf("only the resource type \"%s\" is currently supported for request type \"%s\"", prot.PT_MappedVirtualDisk, request.RequestType)
+	case prot.RtAdd:
+		if request.ResourceType != prot.PtMappedVirtualDisk {
+			return errors.Errorf("only the resource type \"%s\" is currently supported for request type \"%s\"", prot.PtMappedVirtualDisk, request.RequestType)
 		}
 		containerEntry := c.containerCache[id]
 		settings, ok := request.Settings.(prot.ResourceModificationSettings)
@@ -540,9 +540,9 @@ func (c *gcsCore) ModifySettings(id string, request prot.ResourceModificationReq
 		if err := c.setupMappedVirtualDisks(id, []prot.MappedVirtualDisk{*settings.MappedVirtualDisk}, containerEntry); err != nil {
 			return errors.Wrapf(err, "failed to hot add mapped virtual disk for container %s", id)
 		}
-	case prot.RT_Remove:
-		if request.ResourceType != prot.PT_MappedVirtualDisk {
-			return errors.Errorf("only the resource type \"%s\" is currently supported for request type \"%s\"", prot.PT_MappedVirtualDisk, request.RequestType)
+	case prot.RtRemove:
+		if request.ResourceType != prot.PtMappedVirtualDisk {
+			return errors.Errorf("only the resource type \"%s\" is currently supported for request type \"%s\"", prot.PtMappedVirtualDisk, request.RequestType)
 		}
 		containerEntry := c.containerCache[id]
 		settings, ok := request.Settings.(prot.ResourceModificationSettings)
