@@ -572,9 +572,13 @@ var _ = Describe("GCS", func() {
 				externalParams                       prot.ProcessParameters
 				fullStdioSet                         *stdio.ConnectionSet
 				mappedVirtualDisk                    prot.MappedVirtualDisk
-				modificationRequest                  prot.ResourceModificationRequestResponse
-				modificationRequestSameLun           prot.ResourceModificationRequestResponse
-				modificationRequestRemove            prot.ResourceModificationRequestResponse
+				mappedDirectory                      prot.MappedDirectory
+				diskModificationRequest              prot.ResourceModificationRequestResponse
+				diskModificationRequestSameLun       prot.ResourceModificationRequestResponse
+				diskModificationRequestRemove        prot.ResourceModificationRequestResponse
+				dirModificationRequest               prot.ResourceModificationRequestResponse
+				dirModificationRequestSamePort       prot.ResourceModificationRequestResponse
+				dirModificationRequestRemove         prot.ResourceModificationRequestResponse
 				err                                  error
 			)
 			BeforeEach(func() {
@@ -673,29 +677,54 @@ var _ = Describe("GCS", func() {
 					CreateInUtilityVM: true,
 					ReadOnly:          false,
 				}
+				mappedDirectory = prot.MappedDirectory{
+					ContainerPath:     "abcdefghijklmnopqrstuvwxyz",
+					CreateInUtilityVM: true,
+					ReadOnly:          false,
+					Port:              5,
+				}
 
-				modificationRequest = prot.ResourceModificationRequestResponse{
+				diskModificationRequest = prot.ResourceModificationRequestResponse{
 					ResourceType: prot.PtMappedVirtualDisk,
 					RequestType:  prot.RtAdd,
 					Settings:     prot.ResourceModificationSettings{MappedVirtualDisk: &mappedVirtualDisk},
 				}
-
 				diskSameLun := prot.MappedVirtualDisk{
 					ContainerPath:     "/path/inside/container",
 					Lun:               4,
 					CreateInUtilityVM: true,
 					ReadOnly:          false,
 				}
-				modificationRequestSameLun = prot.ResourceModificationRequestResponse{
+				diskModificationRequestSameLun = prot.ResourceModificationRequestResponse{
 					ResourceType: prot.PtMappedVirtualDisk,
 					RequestType:  prot.RtAdd,
 					Settings:     prot.ResourceModificationSettings{MappedVirtualDisk: &diskSameLun},
 				}
-
-				modificationRequestRemove = prot.ResourceModificationRequestResponse{
+				diskModificationRequestRemove = prot.ResourceModificationRequestResponse{
 					ResourceType: prot.PtMappedVirtualDisk,
 					RequestType:  prot.RtRemove,
 					Settings:     prot.ResourceModificationSettings{MappedVirtualDisk: &mappedVirtualDisk},
+				}
+				dirModificationRequest = prot.ResourceModificationRequestResponse{
+					ResourceType: prot.PtMappedDirectory,
+					RequestType:  prot.RtAdd,
+					Settings:     prot.ResourceModificationSettings{MappedDirectory: &mappedDirectory},
+				}
+				dirSamePort := prot.MappedDirectory{
+					ContainerPath:     "abcdefghijklmnopqrstuvwxyz",
+					CreateInUtilityVM: true,
+					ReadOnly:          false,
+					Port:              4,
+				}
+				dirModificationRequestSamePort = prot.ResourceModificationRequestResponse{
+					ResourceType: prot.PtMappedDirectory,
+					RequestType:  prot.RtAdd,
+					Settings:     prot.ResourceModificationSettings{MappedDirectory: &dirSamePort},
+				}
+				dirModificationRequestRemove = prot.ResourceModificationRequestResponse{
+					ResourceType: prot.PtMappedDirectory,
+					RequestType:  prot.RtRemove,
+					Settings:     prot.ResourceModificationSettings{MappedDirectory: &mappedDirectory},
 				}
 			})
 			Describe("calling CreateContainer", func() {
@@ -885,7 +914,7 @@ var _ = Describe("GCS", func() {
 						BeforeEach(func() {
 							err = coreint.CreateContainer(containerID, createSettings)
 							Expect(err).NotTo(HaveOccurred())
-							err = coreint.ModifySettings(containerID, modificationRequestSameLun)
+							err = coreint.ModifySettings(containerID, diskModificationRequestSameLun)
 						})
 						It("should produce an error", func() {
 							Expect(err).To(HaveOccurred())
@@ -893,7 +922,7 @@ var _ = Describe("GCS", func() {
 					})
 					Context("the lun is not already in use", func() {
 						JustBeforeEach(func() {
-							err = coreint.ModifySettings(containerID, modificationRequest)
+							err = coreint.ModifySettings(containerID, diskModificationRequest)
 						})
 						Context("the container has already been created", func() {
 							BeforeEach(func() {
@@ -916,7 +945,7 @@ var _ = Describe("GCS", func() {
 						BeforeEach(func() {
 							err = coreint.CreateContainer(containerID, createSettings)
 							Expect(err).NotTo(HaveOccurred())
-							err = coreint.ModifySettings(containerID, modificationRequestRemove)
+							err = coreint.ModifySettings(containerID, diskModificationRequestRemove)
 						})
 						It("should produce an error", func() {
 							Expect(err).To(HaveOccurred())
@@ -924,13 +953,78 @@ var _ = Describe("GCS", func() {
 					})
 					Context("the disk has been added", func() {
 						JustBeforeEach(func() {
-							err = coreint.ModifySettings(containerID, modificationRequestRemove)
+							err = coreint.ModifySettings(containerID, diskModificationRequestRemove)
 						})
 						Context("the container has already been created", func() {
 							BeforeEach(func() {
 								err = coreint.CreateContainer(containerID, createSettings)
 								Expect(err).NotTo(HaveOccurred())
 								coreint.containerCache[containerID].AddMappedVirtualDisk(mappedVirtualDisk)
+							})
+							It("should not produce an error", func() {
+								Expect(err).NotTo(HaveOccurred())
+							})
+						})
+						Context("the container has not already been created", func() {
+							It("should produce an error", func() {
+								Expect(err).To(HaveOccurred())
+							})
+						})
+					})
+				})
+				Context("adding a mapped directory", func() {
+					Context("the port is already in use", func() {
+						BeforeEach(func() {
+							err = coreint.CreateContainer(containerID, createSettings)
+							Expect(err).NotTo(HaveOccurred())
+							err = coreint.ModifySettings(containerID, dirModificationRequestSamePort)
+							Expect(err).NotTo(HaveOccurred())
+							err = coreint.ModifySettings(containerID, dirModificationRequestSamePort)
+						})
+						It("should produce an error", func() {
+							Expect(err).To(HaveOccurred())
+						})
+					})
+					Context("the port is not already in use", func() {
+						JustBeforeEach(func() {
+							err = coreint.ModifySettings(containerID, dirModificationRequest)
+						})
+						Context("the container has already been created", func() {
+							BeforeEach(func() {
+								err = coreint.CreateContainer(containerID, createSettings)
+								Expect(err).NotTo(HaveOccurred())
+							})
+							It("should not produce an error", func() {
+								Expect(err).NotTo(HaveOccurred())
+							})
+						})
+						Context("the container has not already been created", func() {
+							It("should produce an error", func() {
+								Expect(err).To(HaveOccurred())
+							})
+						})
+					})
+				})
+				Context("removing a mapped directory", func() {
+					Context("the directory has not been added", func() {
+						BeforeEach(func() {
+							err = coreint.CreateContainer(containerID, createSettings)
+							Expect(err).NotTo(HaveOccurred())
+							err = coreint.ModifySettings(containerID, dirModificationRequestRemove)
+						})
+						It("should produce an error", func() {
+							Expect(err).To(HaveOccurred())
+						})
+					})
+					Context("the directory has been added", func() {
+						JustBeforeEach(func() {
+							err = coreint.ModifySettings(containerID, dirModificationRequestRemove)
+						})
+						Context("the container has already been created", func() {
+							BeforeEach(func() {
+								err = coreint.CreateContainer(containerID, createSettings)
+								Expect(err).NotTo(HaveOccurred())
+								coreint.containerCache[containerID].AddMappedDirectory(mappedDirectory)
 							})
 							It("should not produce an error", func() {
 								Expect(err).NotTo(HaveOccurred())
