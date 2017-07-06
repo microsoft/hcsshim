@@ -5,7 +5,7 @@ Open Guest Compute Service is an Linux open source project to further the develo
 
 # Getting Started
 
-  [How to build GCS binaries](https://github.com/Microsoft/opengcs/docs/gcsbuildinstructions.md/)
+  [How to build GCS binaries](./docs/gcsbuildinstructions.md/)
 
 # Contributing
 
