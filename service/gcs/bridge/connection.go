@@ -15,12 +15,15 @@ const (
 	commandPort uint32 = 0x40000000
 )
 
+// StdioConnSet holds a transport.Connection for each stdio stream for a
+// process.
 type StdioConnSet struct {
 	In  transport.Connection
 	Out transport.Connection
 	Err transport.Connection
 }
 
+// Close closes each stdio Connection in the StdioConnSet.
 func (s *StdioConnSet) Close() error {
 	var err error
 	if s.In != nil {
@@ -68,12 +71,12 @@ func readMessage(conn transport.Connection) ([]byte, *prot.MessageHeader, error)
 	return b, header, nil
 }
 
-// sendMessageBytes sends a header with the given messageType and messageId, and a
+// sendMessageBytes sends a header with the given messageType and messageID, and a
 // message body with the given str as content, to conn.
-func sendMessageBytes(conn transport.Connection, messageType prot.MessageIdentifier, messageId prot.SequenceId, b []byte) error {
+func sendMessageBytes(conn transport.Connection, messageType prot.MessageIdentifier, messageID prot.SequenceID, b []byte) error {
 	header := prot.MessageHeader{
 		Type: messageType,
-		Id:   messageId,
+		ID:   messageID,
 		Size: uint32(len(b) + prot.MessageHeaderSize),
 	}
 	if err := binary.Write(conn, binary.LittleEndian, &header); err != nil {
@@ -89,8 +92,8 @@ func sendMessageBytes(conn transport.Connection, messageType prot.MessageIdentif
 
 // sendResponseBytes behaves the same as sendMessageBytes, except it converts
 // messageType to its response version before sending.
-func sendResponseBytes(conn transport.Connection, messageType prot.MessageIdentifier, messageId prot.SequenceId, b []byte) error {
-	return sendMessageBytes(conn, prot.GetResponseIdentifier(messageType), messageId, b)
+func sendResponseBytes(conn transport.Connection, messageType prot.MessageIdentifier, messageID prot.SequenceID, b []byte) error {
+	return sendMessageBytes(conn, prot.GetResponseIdentifier(messageType), messageID, b)
 }
 
 // createAndConnectStdio returns new transport.Connection structs, one for each

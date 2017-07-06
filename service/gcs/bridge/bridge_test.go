@@ -93,7 +93,7 @@ var _ = Describe("Bridge", func() {
 	}
 	AssertActivityIDCorrect := func() {
 		It("should respond with the correct activity ID", func() {
-			Expect(responseBase.ActivityId).To(Equal(activityID))
+			Expect(responseBase.ActivityID).To(Equal(activityID))
 		})
 	}
 
@@ -101,10 +101,10 @@ var _ = Describe("Bridge", func() {
 		var (
 			response       prot.ContainerCreateResponse
 			createCallArgs mockcore.CreateContainerCall
-			settings       prot.VmHostedContainerSettings
+			settings       prot.VMHostedContainerSettings
 		)
 		BeforeEach(func() {
-			messageType = prot.ComputeSystemCreate_v1
+			messageType = prot.ComputeSystemCreateV1
 		})
 		JustBeforeEach(func() {
 			err := json.Unmarshal([]byte(responseString), &response)
@@ -114,7 +114,7 @@ var _ = Describe("Bridge", func() {
 		})
 		Context("the message is normal ASCII", func() {
 			BeforeEach(func() {
-				settings = prot.VmHostedContainerSettings{
+				settings = prot.VMHostedContainerSettings{
 					Layers:          []prot.Layer{prot.Layer{Path: "0"}, prot.Layer{Path: "1"}, prot.Layer{Path: "2"}},
 					SandboxDataPath: "3",
 					MappedVirtualDisks: []prot.MappedVirtualDisk{
@@ -127,14 +127,14 @@ var _ = Describe("Bridge", func() {
 					},
 					NetworkAdapters: []prot.NetworkAdapter{
 						prot.NetworkAdapter{
-							AdapterInstanceId:  "00000000-0000-0000-0000-000000000000",
+							AdapterInstanceID:  "00000000-0000-0000-0000-000000000000",
 							FirewallEnabled:    false,
 							NatEnabled:         true,
-							AllocatedIpAddress: "192.168.0.0",
-							HostIpAddress:      "192.168.0.1",
-							HostIpPrefixLength: 16,
-							HostDnsServerList:  "0.0.0.0 1.1.1.1 8.8.8.8",
-							HostDnsSuffix:      "microsoft.com",
+							AllocatedIPAddress: "192.168.0.0",
+							HostIPAddress:      "192.168.0.1",
+							HostIPPrefixLength: 16,
+							HostDNSServerList:  "0.0.0.0 1.1.1.1 8.8.8.8",
+							HostDNSSuffix:      "microsoft.com",
 							EnableLowMetric:    true,
 						},
 					},
@@ -143,15 +143,15 @@ var _ = Describe("Bridge", func() {
 				Expect(err).NotTo(HaveOccurred())
 				message = prot.ContainerCreate{
 					MessageBase: &prot.MessageBase{
-						ContainerId: containerID,
-						ActivityId:  activityID,
+						ContainerID: containerID,
+						ActivityID:  activityID,
 					},
 					ContainerConfig: string(settingsBytes),
 					SupportedVersions: prot.ProtocolSupport{
 						MinimumVersion:         "V3",
 						MaximumVersion:         "V3",
-						MinimumProtocolVersion: prot.PV_V3,
-						MaximumProtocolVersion: prot.PV_V3,
+						MinimumProtocolVersion: prot.PvV3,
+						MaximumProtocolVersion: prot.PvV3,
 					},
 				}
 			})
@@ -159,7 +159,7 @@ var _ = Describe("Bridge", func() {
 			AssertActivityIDCorrect()
 			It("should respond with the correct values", func() {
 				Expect(response.SelectedVersion).To(BeEmpty())
-				Expect(response.SelectedProtocolVersion).To(Equal(uint32(prot.PV_V3)))
+				Expect(response.SelectedProtocolVersion).To(Equal(uint32(prot.PvV3)))
 			})
 			It("should have received the correct values", func() {
 				Expect(createCallArgs.ID).To(Equal(containerID))
@@ -184,10 +184,10 @@ var _ = Describe("Bridge", func() {
 					Expect(err).NotTo(HaveOccurred())
 				}, testTimeout)
 				It("should respond with the correct values", func() {
-					Expect(notification.ContainerId).To(Equal(containerID))
-					Expect(notification.ActivityId).To(Equal(activityID))
-					Expect(notification.Type).To(Equal(prot.NT_UnexpectedExit))
-					Expect(notification.Operation).To(Equal(prot.AO_None))
+					Expect(notification.ContainerID).To(Equal(containerID))
+					Expect(notification.ActivityID).To(Equal(activityID))
+					Expect(notification.Type).To(Equal(prot.NtUnexpectedExit))
+					Expect(notification.Operation).To(Equal(prot.AoNone))
 					Expect(notification.Result).To(Equal(int32(102)))
 					Expect(notification.ResultInfo).To(BeEmpty())
 				})
@@ -203,7 +203,7 @@ var _ = Describe("Bridge", func() {
 			params        prot.ProcessParameters
 		)
 		BeforeEach(func() {
-			messageType = prot.ComputeSystemExecuteProcess_v1
+			messageType = prot.ComputeSystemExecuteProcessV1
 		})
 		JustBeforeEach(func() {
 			err := json.Unmarshal([]byte(responseString), &response)
@@ -285,8 +285,8 @@ var _ = Describe("Bridge", func() {
 					}
 					message = prot.ContainerExecuteProcess{
 						MessageBase: &prot.MessageBase{
-							ContainerId: containerID,
-							ActivityId:  activityID,
+							ContainerID: containerID,
+							ActivityID:  activityID,
 						},
 						Settings: prot.ExecuteProcessSettings{
 							ProcessParameters:       string(paramsBytes),
@@ -297,7 +297,7 @@ var _ = Describe("Bridge", func() {
 				AssertNoResponseErrors()
 				AssertActivityIDCorrect()
 				It("should respond with the correct values", func() {
-					Expect(response.ProcessId).To(Equal(uint32(101)))
+					Expect(response.ProcessID).To(Equal(uint32(101)))
 				})
 				It("should have received the correct values", func() {
 					Expect(callArgs.ID).To(Equal(containerID))
@@ -317,7 +317,7 @@ var _ = Describe("Bridge", func() {
 			params        prot.ProcessParameters
 		)
 		BeforeEach(func() {
-			messageType = prot.ComputeSystemExecuteProcess_v1
+			messageType = prot.ComputeSystemExecuteProcessV1
 		})
 		JustBeforeEach(func() {
 			err := json.Unmarshal([]byte(responseString), &response)
@@ -359,8 +359,8 @@ var _ = Describe("Bridge", func() {
 					}
 					message = prot.ContainerExecuteProcess{
 						MessageBase: &prot.MessageBase{
-							ContainerId: containerID,
-							ActivityId:  activityID,
+							ContainerID: containerID,
+							ActivityID:  activityID,
 						},
 						Settings: prot.ExecuteProcessSettings{
 							ProcessParameters:       string(paramsBytes),
@@ -371,7 +371,7 @@ var _ = Describe("Bridge", func() {
 				AssertNoResponseErrors()
 				AssertActivityIDCorrect()
 				It("should respond with the correct values", func() {
-					Expect(response.ProcessId).To(Equal(uint32(101)))
+					Expect(response.ProcessID).To(Equal(uint32(101)))
 				})
 				It("should have received the correct values", func() {
 					Expect(callArgs.Params).To(Equal(params))
@@ -388,7 +388,7 @@ var _ = Describe("Bridge", func() {
 			callArgs mockcore.SignalContainerCall
 		)
 		BeforeEach(func() {
-			messageType = prot.ComputeSystemShutdownForced_v1
+			messageType = prot.ComputeSystemShutdownForcedV1
 		})
 		JustBeforeEach(func() {
 			err := json.Unmarshal([]byte(responseString), &response)
@@ -399,8 +399,8 @@ var _ = Describe("Bridge", func() {
 		Context("the message is normal ASCII", func() {
 			BeforeEach(func() {
 				message = prot.MessageBase{
-					ContainerId: containerID,
-					ActivityId:  activityID,
+					ContainerID: containerID,
+					ActivityID:  activityID,
 				}
 			})
 			AssertNoResponseErrors()
@@ -418,7 +418,7 @@ var _ = Describe("Bridge", func() {
 			callArgs mockcore.SignalContainerCall
 		)
 		BeforeEach(func() {
-			messageType = prot.ComputeSystemShutdownGraceful_v1
+			messageType = prot.ComputeSystemShutdownGracefulV1
 		})
 		JustBeforeEach(func() {
 			err := json.Unmarshal([]byte(responseString), &response)
@@ -429,8 +429,8 @@ var _ = Describe("Bridge", func() {
 		Context("the message is normal ASCII", func() {
 			BeforeEach(func() {
 				message = prot.MessageBase{
-					ContainerId: containerID,
-					ActivityId:  activityID,
+					ContainerID: containerID,
+					ActivityID:  activityID,
 				}
 			})
 			AssertNoResponseErrors()
@@ -448,7 +448,7 @@ var _ = Describe("Bridge", func() {
 			callArgs mockcore.TerminateProcessCall
 		)
 		BeforeEach(func() {
-			messageType = prot.ComputeSystemTerminateProcess_v1
+			messageType = prot.ComputeSystemTerminateProcessV1
 		})
 		JustBeforeEach(func() {
 			err := json.Unmarshal([]byte(responseString), &response)
@@ -460,10 +460,10 @@ var _ = Describe("Bridge", func() {
 			BeforeEach(func() {
 				message = prot.ContainerTerminateProcess{
 					MessageBase: &prot.MessageBase{
-						ContainerId: containerID,
-						ActivityId:  activityID,
+						ContainerID: containerID,
+						ActivityID:  activityID,
 					},
-					ProcessId: processID,
+					ProcessID: processID,
 				}
 			})
 			AssertNoResponseErrors()
@@ -480,7 +480,7 @@ var _ = Describe("Bridge", func() {
 			callArgs mockcore.ListProcessesCall
 		)
 		BeforeEach(func() {
-			messageType = prot.ComputeSystemGetProperties_v1
+			messageType = prot.ComputeSystemGetPropertiesV1
 		})
 		JustBeforeEach(func() {
 			err := json.Unmarshal([]byte(responseString), &response)
@@ -492,8 +492,8 @@ var _ = Describe("Bridge", func() {
 			BeforeEach(func() {
 				message = prot.ContainerGetProperties{
 					MessageBase: &prot.MessageBase{
-						ContainerId: containerID,
-						ActivityId:  activityID,
+						ContainerID: containerID,
+						ActivityID:  activityID,
 					},
 				}
 			})
@@ -523,7 +523,7 @@ var _ = Describe("Bridge", func() {
 			callArgs mockcore.RegisterProcessExitHookCall
 		)
 		BeforeEach(func() {
-			messageType = prot.ComputeSystemWaitForProcess_v1
+			messageType = prot.ComputeSystemWaitForProcessV1
 		})
 		JustBeforeEach(func() {
 			err := json.Unmarshal([]byte(responseString), &response)
@@ -535,10 +535,10 @@ var _ = Describe("Bridge", func() {
 			BeforeEach(func() {
 				message = prot.ContainerWaitForProcess{
 					MessageBase: &prot.MessageBase{
-						ContainerId: containerID,
-						ActivityId:  activityID,
+						ContainerID: containerID,
+						ActivityID:  activityID,
 					},
-					ProcessId:   101,
+					ProcessID:   101,
 					TimeoutInMs: 1000,
 				}
 			})
@@ -559,7 +559,7 @@ var _ = Describe("Bridge", func() {
 			//callArgs mockcore.ResizeConsoleCall
 		)
 		BeforeEach(func() {
-			messageType = prot.ComputeSystemResizeConsole_v1
+			messageType = prot.ComputeSystemResizeConsoleV1
 		})
 		JustBeforeEach(func() {
 			err := json.Unmarshal([]byte(responseString), &response)
@@ -571,10 +571,10 @@ var _ = Describe("Bridge", func() {
 			BeforeEach(func() {
 				message = prot.ContainerResizeConsole{
 					MessageBase: &prot.MessageBase{
-						ContainerId: containerID,
-						ActivityId:  activityID,
+						ContainerID: containerID,
+						ActivityID:  activityID,
 					},
-					ProcessId: 101,
+					ProcessID: 101,
 					Height:    30,
 					Width:     72,
 				}
@@ -598,7 +598,7 @@ var _ = Describe("Bridge", func() {
 			unsupportedModificationRequest prot.ResourceModificationRequestResponse
 		)
 		BeforeEach(func() {
-			messageType = prot.ComputeSystemModifySettings_v1
+			messageType = prot.ComputeSystemModifySettingsV1
 		})
 		JustBeforeEach(func() {
 			err := json.Unmarshal([]byte(responseString), &response)
@@ -615,8 +615,8 @@ var _ = Describe("Bridge", func() {
 					ReadOnly:          false,
 				}
 				modificationRequest = prot.ResourceModificationRequestResponse{
-					ResourceType: prot.PT_MappedVirtualDisk,
-					RequestType:  prot.RT_Add,
+					ResourceType: prot.PtMappedVirtualDisk,
+					RequestType:  prot.RtAdd,
 					Settings:     prot.ResourceModificationSettings{MappedVirtualDisk: &disk},
 				}
 				defaultModificationRequest = prot.ResourceModificationRequestResponse{
@@ -625,8 +625,8 @@ var _ = Describe("Bridge", func() {
 					Settings:     prot.ResourceModificationSettings{MappedVirtualDisk: &disk},
 				}
 				unsupportedModificationRequest = prot.ResourceModificationRequestResponse{
-					ResourceType: prot.PT_Memory,
-					RequestType:  prot.RT_Add,
+					ResourceType: prot.PtMemory,
+					RequestType:  prot.RtAdd,
 					Settings:     prot.ResourceModificationSettings{MappedVirtualDisk: &disk},
 				}
 			})
@@ -634,8 +634,8 @@ var _ = Describe("Bridge", func() {
 				BeforeEach(func() {
 					message = prot.ContainerModifySettings{
 						MessageBase: &prot.MessageBase{
-							ContainerId: containerID,
-							ActivityId:  activityID,
+							ContainerID: containerID,
+							ActivityID:  activityID,
 						},
 						Request: modificationRequest,
 					}
@@ -651,8 +651,8 @@ var _ = Describe("Bridge", func() {
 				BeforeEach(func() {
 					message = prot.ContainerModifySettings{
 						MessageBase: &prot.MessageBase{
-							ContainerId: containerID,
-							ActivityId:  activityID,
+							ContainerID: containerID,
+							ActivityID:  activityID,
 						},
 						Request: defaultModificationRequest,
 					}
@@ -664,8 +664,8 @@ var _ = Describe("Bridge", func() {
 				BeforeEach(func() {
 					message = prot.ContainerModifySettings{
 						MessageBase: &prot.MessageBase{
-							ContainerId: containerID,
-							ActivityId:  activityID,
+							ContainerID: containerID,
+							ActivityID:  activityID,
 						},
 						Request: unsupportedModificationRequest,
 					}
@@ -677,8 +677,8 @@ var _ = Describe("Bridge", func() {
 	})
 })
 
-func serverSendString(conn transport.Connection, messageType prot.MessageIdentifier, messageId prot.SequenceId, str string) error {
-	if err := serverSendHeader(conn, messageType, messageId, len(str)); err != nil {
+func serverSendString(conn transport.Connection, messageType prot.MessageIdentifier, messageID prot.SequenceID, str string) error {
+	if err := serverSendHeader(conn, messageType, messageID, len(str)); err != nil {
 		return err
 	}
 	if err := serverSendMessage(conn, str); err != nil {
@@ -687,10 +687,10 @@ func serverSendString(conn transport.Connection, messageType prot.MessageIdentif
 	return nil
 }
 
-func serverSendHeader(conn transport.Connection, messageType prot.MessageIdentifier, messageId prot.SequenceId, size int) error {
+func serverSendHeader(conn transport.Connection, messageType prot.MessageIdentifier, messageID prot.SequenceID, size int) error {
 	header := prot.MessageHeader{}
 	header.Type = messageType
-	header.Id = messageId
+	header.ID = messageID
 	header.Size = uint32(size + prot.MessageHeaderSize)
 	var bytesToSend bytes.Buffer
 	if err := binary.Write(&bytesToSend, binary.LittleEndian, &header); err != nil {

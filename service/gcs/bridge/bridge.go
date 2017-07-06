@@ -88,44 +88,44 @@ func (b *bridge) loop() error {
 		// response object.
 		var response interface{}
 		switch header.Type {
-		case prot.ComputeSystemCreate_v1:
-			utils.LogMsg("received from HCS: ComputeSystemCreate_v1")
+		case prot.ComputeSystemCreateV1:
+			utils.LogMsg("received from HCS: ComputeSystemCreateV1")
 			response, err = b.createContainer(message)
 			if err != nil {
 				b.outputError(err)
 			}
-		case prot.ComputeSystemExecuteProcess_v1:
-			utils.LogMsg("received from HCS: ComputeSystemExecuteProcess_v1")
+		case prot.ComputeSystemExecuteProcessV1:
+			utils.LogMsg("received from HCS: ComputeSystemExecuteProcessV1")
 			response, err = b.execProcess(message)
 			if err != nil {
 				b.outputError(err)
 			}
-		case prot.ComputeSystemShutdownForced_v1:
-			utils.LogMsg("received from HCS: ComputeSystemShutdownForced_v1")
+		case prot.ComputeSystemShutdownForcedV1:
+			utils.LogMsg("received from HCS: ComputeSystemShutdownForcedV1")
 			response, err = b.killContainer(message)
 			if err != nil {
 				b.outputError(err)
 			}
-		case prot.ComputeSystemShutdownGraceful_v1:
-			utils.LogMsg("received from HCS: ComputeSystemShutdownGraceful_v1")
+		case prot.ComputeSystemShutdownGracefulV1:
+			utils.LogMsg("received from HCS: ComputeSystemShutdownGracefulV1")
 			response, err = b.shutdownContainer(message)
 			if err != nil {
 				logrus.Error(err)
 			}
-		case prot.ComputeSystemTerminateProcess_v1:
-			utils.LogMsg("received from HCS: ComputeSystemTerminateProcess_v1")
+		case prot.ComputeSystemTerminateProcessV1:
+			utils.LogMsg("received from HCS: ComputeSystemTerminateProcessV1")
 			response, err = b.terminateProcess(message)
 			if err != nil {
 				b.outputError(err)
 			}
-		case prot.ComputeSystemGetProperties_v1:
-			utils.LogMsg("received from HCS: ComputeSystemGetProperties_v1")
+		case prot.ComputeSystemGetPropertiesV1:
+			utils.LogMsg("received from HCS: ComputeSystemGetPropertiesV1")
 			response, err = b.listProcesses(message)
 			if err != nil {
 				b.outputError(err)
 			}
-		case prot.ComputeSystemWaitForProcess_v1:
-			utils.LogMsg("received from HCS: ComputeSystemWaitForProcess_v1")
+		case prot.ComputeSystemWaitForProcessV1:
+			utils.LogMsg("received from HCS: ComputeSystemWaitForProcessV1")
 			response, err = b.waitOnProcess(message, header)
 			if err != nil {
 				b.outputError(err)
@@ -134,14 +134,14 @@ func (b *bridge) loop() error {
 				// exited.
 				response = nil
 			}
-		case prot.ComputeSystemResizeConsole_v1:
-			utils.LogMsg("received from HCS: ComputeSystemResizeConsole_v1")
+		case prot.ComputeSystemResizeConsoleV1:
+			utils.LogMsg("received from HCS: ComputeSystemResizeConsoleV1")
 			response, err = b.resizeConsole(message)
 			if err != nil {
 				b.outputError(err)
 			}
-		case prot.ComputeSystemModifySettings_v1:
-			utils.LogMsg("received from HCS: ComputeSystemModifySettings_v1")
+		case prot.ComputeSystemModifySettingsV1:
+			utils.LogMsg("received from HCS: ComputeSystemModifySettingsV1")
 			response, err = b.modifySettings(message)
 			if err != nil {
 				b.outputError(err)
@@ -185,22 +185,22 @@ func (b *bridge) createContainer(message []byte) (*prot.ContainerCreateResponse,
 	if err := json.Unmarshal(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", message)
 	}
-	response.ActivityId = request.ActivityId
+	response.ActivityID = request.ActivityID
 
 	// The request contains a JSON string field which is equivalent to a
 	// CreateContainerInfo struct.
-	var settings prot.VmHostedContainerSettings
+	var settings prot.VMHostedContainerSettings
 	if err := json.Unmarshal([]byte(request.ContainerConfig), &settings); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for ContainerConfig \"%s\"", request.ContainerConfig)
 	}
 
-	id := request.ContainerId
+	id := request.ContainerID
 	if err := b.coreint.CreateContainer(id, settings); err != nil {
 		return response, err
 	}
 
 	exitHook := func(state oslayer.ProcessExitState) {
-		if err := b.sendExitNotification(id, response.ActivityId, state); err != nil {
+		if err := b.sendExitNotification(id, response.ActivityID, state); err != nil {
 			b.outputError(err)
 		}
 	}
@@ -208,7 +208,7 @@ func (b *bridge) createContainer(message []byte) (*prot.ContainerCreateResponse,
 		return response, err
 	}
 
-	response.SelectedProtocolVersion = prot.PV_V3
+	response.SelectedProtocolVersion = prot.PvV3
 	return response, nil
 }
 
@@ -232,8 +232,8 @@ func (b *bridge) execProcess(message []byte) (*prot.ContainerExecuteProcessRespo
 		return b.runExternalProcess(message)
 	}
 
-	response.ActivityId = request.ActivityId
-	id := request.ContainerId
+	response.ActivityID = request.ActivityID
+	id := request.ContainerID
 
 	conns, err := createAndConnectStdio(b.tport, params, request.Settings.VsockStdioRelaySettings)
 	if err != nil {
@@ -264,7 +264,7 @@ func (b *bridge) execProcess(message []byte) (*prot.ContainerExecuteProcessRespo
 		}
 	}
 
-	response.ProcessId = uint32(pid)
+	response.ProcessID = uint32(pid)
 	return response, nil
 }
 
@@ -274,9 +274,9 @@ func (b *bridge) killContainer(message []byte) (*prot.MessageResponseBase, error
 	if err := json.Unmarshal(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
-	response.ActivityId = request.ActivityId
+	response.ActivityID = request.ActivityID
 
-	if err := b.coreint.SignalContainer(request.ContainerId, oslayer.SIGKILL); err != nil {
+	if err := b.coreint.SignalContainer(request.ContainerID, oslayer.SIGKILL); err != nil {
 		return response, err
 	}
 
@@ -289,9 +289,9 @@ func (b *bridge) shutdownContainer(message []byte) (*prot.MessageResponseBase, e
 	if err := json.Unmarshal(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
-	response.ActivityId = request.ActivityId
+	response.ActivityID = request.ActivityID
 
-	if err := b.coreint.SignalContainer(request.ContainerId, oslayer.SIGTERM); err != nil {
+	if err := b.coreint.SignalContainer(request.ContainerID, oslayer.SIGTERM); err != nil {
 		return response, err
 	}
 
@@ -304,9 +304,9 @@ func (b *bridge) terminateProcess(message []byte) (*prot.MessageResponseBase, er
 	if err := json.Unmarshal(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
-	response.ActivityId = request.ActivityId
+	response.ActivityID = request.ActivityID
 
-	if err := b.coreint.TerminateProcess(int(request.ProcessId)); err != nil {
+	if err := b.coreint.TerminateProcess(int(request.ProcessID)); err != nil {
 		return response, err
 	}
 
@@ -319,19 +319,19 @@ func (b *bridge) listProcesses(message []byte) (*prot.ContainerGetPropertiesResp
 	if err := json.Unmarshal(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
-	response.ActivityId = request.ActivityId
-	id := request.ContainerId
+	response.ActivityID = request.ActivityID
+	id := request.ContainerID
 
 	processes, err := b.coreint.ListProcesses(id)
 	if err != nil {
 		return response, err
 	}
 
-	processJson, err := json.Marshal(processes)
+	processJSON, err := json.Marshal(processes)
 	if err != nil {
 		return response, errors.Wrapf(err, "failed to marshal processes into JSON: %v", processes)
 	}
-	response.Properties = string(processJson)
+	response.Properties = string(processJSON)
 	return response, nil
 }
 
@@ -341,7 +341,7 @@ func (b *bridge) runExternalProcess(message []byte) (*prot.ContainerExecuteProce
 	if err := json.Unmarshal(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
-	response.ActivityId = request.ActivityId
+	response.ActivityID = request.ActivityID
 
 	// The request contains a JSON string field which is equivalent to a
 	// RunExternalProcessInfo struct.
@@ -364,7 +364,7 @@ func (b *bridge) runExternalProcess(message []byte) (*prot.ContainerExecuteProce
 		return response, err
 	}
 
-	response.ProcessId = uint32(pid)
+	response.ProcessID = uint32(pid)
 	return response, nil
 }
 
@@ -374,7 +374,7 @@ func (b *bridge) waitOnProcess(message []byte, header *prot.MessageHeader) (*pro
 	if err := json.Unmarshal(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
-	response.ActivityId = request.ActivityId
+	response.ActivityID = request.ActivityID
 
 	exitHook := func(state oslayer.ProcessExitState) {
 		response.ExitCode = uint32(state.ExitCode())
@@ -382,7 +382,7 @@ func (b *bridge) waitOnProcess(message []byte, header *prot.MessageHeader) (*pro
 			b.outputError(errors.Wrapf(err, "failed to send process exit response \"%v\"", response))
 		}
 	}
-	if err := b.coreint.RegisterProcessExitHook(int(request.ProcessId), exitHook); err != nil {
+	if err := b.coreint.RegisterProcessExitHook(int(request.ProcessID), exitHook); err != nil {
 		return response, err
 	}
 
@@ -397,7 +397,7 @@ func (b *bridge) resizeConsole(message []byte) (*prot.MessageResponseBase, error
 	if err := json.Unmarshal(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
-	response.ActivityId = request.ActivityId
+	response.ActivityID = request.ActivityID
 
 	// NOP
 
@@ -410,9 +410,9 @@ func (b *bridge) modifySettings(message []byte) (*prot.MessageResponseBase, erro
 	if err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
-	response.ActivityId = request.ActivityId
+	response.ActivityID = request.ActivityID
 
-	if err := b.coreint.ModifySettings(request.ContainerId, request.Request); err != nil {
+	if err := b.coreint.ModifySettings(request.ContainerID, request.Request); err != nil {
 		return response, err
 	}
 
@@ -422,7 +422,7 @@ func (b *bridge) modifySettings(message []byte) (*prot.MessageResponseBase, erro
 // newResponseBase returns a MessageResponseBase with a default value.
 func newResponseBase() *prot.MessageResponseBase {
 	response := &prot.MessageResponseBase{
-		ActivityId: "00000000-0000-0000-0000-000000000000",
+		ActivityID: "00000000-0000-0000-0000-000000000000",
 	}
 	return response
 }
@@ -476,7 +476,7 @@ func (b *bridge) sendResponse(response interface{}, header *prot.MessageHeader) 
 	utils.LogMsg("response sent to HCS")
 	b.writeLock.Lock()
 	defer b.writeLock.Unlock()
-	if err := sendResponseBytes(b.commandConn, header.Type, header.Id, responseBytes); err != nil {
+	if err := sendResponseBytes(b.commandConn, header.Type, header.ID, responseBytes); err != nil {
 		return err
 	}
 	return nil
@@ -485,15 +485,15 @@ func (b *bridge) sendResponse(response interface{}, header *prot.MessageHeader) 
 // sendExitNotification sends a notification to the HCS when the container with
 // ID=id exits. An oslayer.ProcessExitState parameter is given with the exit
 // state of the process.
-func (b *bridge) sendExitNotification(id string, activityId string, state oslayer.ProcessExitState) error {
+func (b *bridge) sendExitNotification(id string, activityID string, state oslayer.ProcessExitState) error {
 	result := state.ExitCode()
 	notification := prot.ContainerNotification{
 		MessageBase: &prot.MessageBase{
-			ContainerId: id,
-			ActivityId:  activityId,
+			ContainerID: id,
+			ActivityID:  activityID,
 		},
-		Type:       prot.NT_UnexpectedExit, // TODO: Support different exit types.
-		Operation:  prot.AO_None,
+		Type:       prot.NtUnexpectedExit, // TODO: Support different exit types.
+		Operation:  prot.AoNone,
 		Result:     int32(result),
 		ResultInfo: "",
 	}
@@ -503,7 +503,7 @@ func (b *bridge) sendExitNotification(id string, activityId string, state oslaye
 	}
 	b.writeLock.Lock()
 	defer b.writeLock.Unlock()
-	if err := sendMessageBytes(b.commandConn, prot.ComputeSystemNotification_v1, 0, notificationBytes); err != nil {
+	if err := sendMessageBytes(b.commandConn, prot.ComputeSystemNotificationV1, 0, notificationBytes); err != nil {
 		return err
 	}
 	return nil

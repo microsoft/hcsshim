@@ -566,8 +566,8 @@ var _ = Describe("GCS", func() {
 				coreint                              *gcsCore
 				containerID                          string
 				processID                            int
-				createSettings                       prot.VmHostedContainerSettings
-				createSettingsCreateInUtilityVMFalse prot.VmHostedContainerSettings
+				createSettings                       prot.VMHostedContainerSettings
+				createSettingsCreateInUtilityVMFalse prot.VMHostedContainerSettings
 				initialExecParams                    prot.ProcessParameters
 				nonInitialExecParams                 prot.ProcessParameters
 				externalParams                       prot.ProcessParameters
@@ -584,7 +584,7 @@ var _ = Describe("GCS", func() {
 				coreint = NewGCSCore(rtime, os)
 				containerID = "01234567-89ab-cdef-0123-456789abcdef"
 				processID = 101
-				createSettings = prot.VmHostedContainerSettings{
+				createSettings = prot.VMHostedContainerSettings{
 					Layers:          []prot.Layer{prot.Layer{Path: "0"}, prot.Layer{Path: "1"}, prot.Layer{Path: "2"}},
 					SandboxDataPath: "3",
 					MappedVirtualDisks: []prot.MappedVirtualDisk{
@@ -597,19 +597,19 @@ var _ = Describe("GCS", func() {
 					},
 					NetworkAdapters: []prot.NetworkAdapter{
 						prot.NetworkAdapter{
-							AdapterInstanceId:  "00000000-0000-0000-0000-000000000000",
+							AdapterInstanceID:  "00000000-0000-0000-0000-000000000000",
 							FirewallEnabled:    false,
 							NatEnabled:         true,
-							AllocatedIpAddress: "192.168.0.0",
-							HostIpAddress:      "192.168.0.1",
-							HostIpPrefixLength: 16,
-							HostDnsServerList:  "0.0.0.0 1.1.1.1 8.8.8.8",
-							HostDnsSuffix:      "microsoft.com",
+							AllocatedIPAddress: "192.168.0.0",
+							HostIPAddress:      "192.168.0.1",
+							HostIPPrefixLength: 16,
+							HostDNSServerList:  "0.0.0.0 1.1.1.1 8.8.8.8",
+							HostDNSSuffix:      "microsoft.com",
 							EnableLowMetric:    true,
 						},
 					},
 				}
-				createSettingsCreateInUtilityVMFalse = prot.VmHostedContainerSettings{
+				createSettingsCreateInUtilityVMFalse = prot.VMHostedContainerSettings{
 					Layers:          []prot.Layer{prot.Layer{Path: "0"}, prot.Layer{Path: "1"}, prot.Layer{Path: "2"}},
 					SandboxDataPath: "3",
 					MappedVirtualDisks: []prot.MappedVirtualDisk{
@@ -622,14 +622,14 @@ var _ = Describe("GCS", func() {
 					},
 					NetworkAdapters: []prot.NetworkAdapter{
 						prot.NetworkAdapter{
-							AdapterInstanceId:  "00000000-0000-0000-0000-000000000000",
+							AdapterInstanceID:  "00000000-0000-0000-0000-000000000000",
 							FirewallEnabled:    false,
 							NatEnabled:         true,
-							AllocatedIpAddress: "192.168.0.0",
-							HostIpAddress:      "192.168.0.1",
-							HostIpPrefixLength: 16,
-							HostDnsServerList:  "0.0.0.0 1.1.1.1 8.8.8.8",
-							HostDnsSuffix:      "microsoft.com",
+							AllocatedIPAddress: "192.168.0.0",
+							HostIPAddress:      "192.168.0.1",
+							HostIPPrefixLength: 16,
+							HostDNSServerList:  "0.0.0.0 1.1.1.1 8.8.8.8",
+							HostDNSSuffix:      "microsoft.com",
 							EnableLowMetric:    true,
 						},
 					},
@@ -676,8 +676,8 @@ var _ = Describe("GCS", func() {
 				}
 
 				modificationRequest = prot.ResourceModificationRequestResponse{
-					ResourceType: prot.PT_MappedVirtualDisk,
-					RequestType:  prot.RT_Add,
+					ResourceType: prot.PtMappedVirtualDisk,
+					RequestType:  prot.RtAdd,
 					Settings:     prot.ResourceModificationSettings{MappedVirtualDisk: &mappedVirtualDisk},
 				}
 
@@ -688,14 +688,14 @@ var _ = Describe("GCS", func() {
 					ReadOnly:          false,
 				}
 				modificationRequestSameLun = prot.ResourceModificationRequestResponse{
-					ResourceType: prot.PT_MappedVirtualDisk,
-					RequestType:  prot.RT_Add,
+					ResourceType: prot.PtMappedVirtualDisk,
+					RequestType:  prot.RtAdd,
 					Settings:     prot.ResourceModificationSettings{MappedVirtualDisk: &diskSameLun},
 				}
 
 				modificationRequestRemove = prot.ResourceModificationRequestResponse{
-					ResourceType: prot.PT_MappedVirtualDisk,
-					RequestType:  prot.RT_Remove,
+					ResourceType: prot.PtMappedVirtualDisk,
+					RequestType:  prot.RtRemove,
 					Settings:     prot.ResourceModificationSettings{MappedVirtualDisk: &mappedVirtualDisk},
 				}
 			})

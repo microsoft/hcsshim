@@ -25,6 +25,8 @@ var gcsUsage = func() {
 	fmt.Fprintf(os.Stderr, "    %s -loglevel=none \n", os.Args[0])
 }
 
+// ProcessCommandlineOptions parses the command line options and uses them to
+// set the appropriate settings.
 func ProcessCommandlineOptions() error {
 	var logLevelPtr = flag.String("loglevel", "verbose", "logging level: either none or verbose")
 	var logFilePtr = flag.String("logfile", "stdout", "logging target: a file name or stdout")
@@ -40,6 +42,7 @@ func ProcessCommandlineOptions() error {
 	return nil
 }
 
+// SetLoggingOptions sets the options used for logging in the GCS.
 func SetLoggingOptions(level string, file string) error {
 	loglevel = level
 	logfile := file
@@ -64,6 +67,7 @@ func SetLoggingOptions(level string, file string) error {
 	return nil
 }
 
+// LogMsg writes the given message to the log location.
 func LogMsg(message string) {
 	switch loglevel {
 	case "verbose":
@@ -78,6 +82,8 @@ func LogMsg(message string) {
 	}
 }
 
+// LogMsgf writes the gives message (using a format string with parameters) to
+// the log location.
 func LogMsgf(format string, a ...interface{}) {
 	var buffer bytes.Buffer
 	fmt.Fprintf(&buffer, format, a...)

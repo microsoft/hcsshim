@@ -41,16 +41,16 @@ var _ = Describe("Storage", func() {
 
 	Describe("getting the container paths", func() {
 		var (
-			validId string
+			validID string
 		)
 		BeforeEach(func() {
-			validId = "abcdef-ghi"
+			validID = "abcdef-ghi"
 		})
 
 		Describe("getting the container storage path", func() {
 			Context("when the ID is a valid string", func() {
 				It("should return the correct path", func() {
-					Expect(coreint.getContainerStoragePath(validId)).To(Equal("/mnt/gcs/abcdef-ghi"))
+					Expect(coreint.getContainerStoragePath(validID)).To(Equal("/mnt/gcs/abcdef-ghi"))
 				})
 			})
 		})
@@ -58,7 +58,7 @@ var _ = Describe("Storage", func() {
 		Describe("getting the unioning paths", func() {
 			Context("when the ID is a valid string", func() {
 				It("should return the correct paths", func() {
-					layerPrefix, scratchPath, workdirPath, rootfsPath := coreint.getUnioningPaths(validId)
+					layerPrefix, scratchPath, workdirPath, rootfsPath := coreint.getUnioningPaths(validID)
 					Expect(layerPrefix).To(Equal("/mnt/gcs/abcdef-ghi/layer"))
 					Expect(scratchPath).To(Equal("/mnt/gcs/abcdef-ghi/scratch"))
 					Expect(workdirPath).To(Equal("/mnt/gcs/abcdef-ghi/scratch/work"))
@@ -70,7 +70,7 @@ var _ = Describe("Storage", func() {
 		Describe("getting the config path", func() {
 			Context("when the ID is a valid string", func() {
 				It("should return the correct path", func() {
-					Expect(coreint.getConfigPath(validId)).To(Equal("/mnt/gcs/abcdef-ghi/config.json"))
+					Expect(coreint.getConfigPath(validID)).To(Equal("/mnt/gcs/abcdef-ghi/config.json"))
 				})
 			})
 		})

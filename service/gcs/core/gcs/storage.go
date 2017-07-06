@@ -124,8 +124,8 @@ func (c *gcsCore) mountMappedVirtualDisks(disks []prot.MappedVirtualDisk, device
 		if err := c.OS.MkdirAll(mountedPath, 0700); err != nil {
 			return errors.Wrapf(err, "failed to create directory for mapped virtual disk %s", disk.ContainerPath)
 		}
-		var mountOptions uintptr = 0
-		var data string = ""
+		var mountOptions uintptr
+		var data string
 		if disk.ReadOnly {
 			mountOptions |= syscall.MS_RDONLY
 			data += "noload"
@@ -213,7 +213,7 @@ func (c *gcsCore) mountLayers(id string, scratchDevice string, layers []string) 
 	layerPaths[len(layerPaths)-1] = baseFilesPath
 
 	// Mount the layers into a union filesystem.
-	var mountOptions uintptr = 0
+	var mountOptions uintptr
 	if err := c.OS.MkdirAll(baseFilesPath, 0700); err != nil {
 		return errors.Wrapf(err, "failed to create directory for base files %s", baseFilesPath)
 	}

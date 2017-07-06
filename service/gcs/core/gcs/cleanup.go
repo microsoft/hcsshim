@@ -11,7 +11,7 @@ import (
 // given ID.
 // This function expects containerCacheMutex to be locked on entry.
 func (c *gcsCore) CleanupContainer(id string) error {
-	var errToReturn error = nil
+	var errToReturn error
 	if err := c.forceDeleteContainer(id); err != nil {
 		logrus.Warn(err)
 		if errToReturn == nil {

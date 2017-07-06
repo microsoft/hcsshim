@@ -381,9 +381,8 @@ func (r *runcRuntime) pathExists(pathToCheck string) (bool, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
-		} else {
-			return false, errors.Wrapf(err, "failed call to Stat for path %s", pathToCheck)
 		}
+		return false, errors.Wrapf(err, "failed call to Stat for path %s", pathToCheck)
 	}
 	return true, nil
 }

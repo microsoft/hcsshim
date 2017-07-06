@@ -35,7 +35,7 @@ func getBundlePath() (string, error) {
 }
 
 func cleanupContainers(rtime *runcRuntime) error {
-	var errToReturn error = nil
+	var errToReturn error
 	if err := attemptKillAndDeleteAllContainers(rtime); err != nil {
 		io.WriteString(GinkgoWriter, err.Error())
 		if errToReturn == nil {
@@ -61,7 +61,7 @@ func cleanupContainers(rtime *runcRuntime) error {
 }
 
 func attemptKillAndDeleteAllContainers(rtime *runcRuntime) error {
-	var errToReturn error = nil
+	var errToReturn error
 	states, err := rtime.ListContainerStates()
 	if err != nil {
 		return err
@@ -126,7 +126,7 @@ func removeSubdirs(parentDir string) error {
 	if err != nil {
 		return err
 	}
-	var errToReturn error = nil
+	var errToReturn error
 	for _, item := range contents {
 		itemPath := filepath.Join(parentDir, item)
 		info, err := os.Stat(itemPath)
