@@ -1,15 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"flag"
 	"io"
 	"io/ioutil"
 	"os"
 	"time"
 
+	"github.com/Microsoft/opengcs/service/gcsutils/gcstools/commoncli"
+	"github.com/Microsoft/opengcs/service/libs/commonutils"
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/symlink"
 )
@@ -68,6 +71,21 @@ func getTarOpts(r io.Reader) (*archive.TarOptions, error) {
 	if err := json.Unmarshal(rawJSON, &opts); err != nil {
 		return nil, err
 	}
+
+	// Write the file for testing.
+	b := &bytes.Buffer{}
+	if err := binary.Write(b, binary.BigEndian, size); err != nil {
+		return nil, err
+	}
+
+	if _, err := b.Write(rawJSON); err != nil {
+		return nil, err
+	}
+
+	if err := ioutil.WriteFile("/tmp/test.data", b.Bytes(), 0644); err != nil {
+		return nil, err
+	}
+
 	return &opts, nil
 }
 
@@ -122,17 +140,20 @@ func extractArchive() error {
 		return InvalidParams
 	}
 
+	utils.LogMsg("extrachArchive(): Getting opts struct from stdin\n")
 	opts, err := getTarOpts(os.Stdin)
 	if err != nil {
-		fmt.Println(err)
+		utils.LogMsgf("extractArchive(): Failed to get opts struct: %s\n", err)
 		return err
 	}
 
+	utils.LogMsgf("extractArchive(): Untar %s with opts %+v\n", os.Args[2], opts)
 	if err := archive.Untar(os.Stdin, os.Args[2], opts); err != nil {
-		fmt.Println(err)
+		utils.LogMsgf("extractArchive(): failed to untar: %s\n", err)
 		return err
 	}
 
+	utils.LogMsgf("extractArchive(): sucess!!!\n")
 	return nil
 }
 
@@ -141,34 +162,46 @@ func archivePath() error {
 		return InvalidParams
 	}
 
-	rawJSON, err := ioutil.ReadAll(os.Stdin)
+	utils.LogMsg("archivePath(): Getting opts struct from stdin\n")
+	opts, err := getTarOpts(os.Stdin)
 	if err != nil {
+		utils.LogMsgf("archivePath(): unmarshal failure: %s\n", err)
 		return err
 	}
 
-	var opts archive.TarOptions
-	if err := json.Unmarshal(rawJSON, &opts); err != nil {
-		return err
-	}
-
-	r, err := archive.TarWithOptions(os.Args[2], &opts)
+	utils.LogMsgf("archivePath(): Path=%s Tar=%+v\n", os.Args[2], opts)
+	r, err := archive.TarWithOptions(os.Args[2], opts)
 	if err != nil {
+		utils.LogMsgf("archivePath(): tar on path %s failed: %s", os.Args[2], err)
 		return err
 	}
 
+	utils.LogMsg("archivePath(): Copying reader to stdout")
 	if _, err := io.Copy(os.Stdout, r); err != nil {
+		utils.LogMsgf("archivePath(): Copying teader failed: %s\n", err)
 		return err
 	}
+
+	utils.LogMsg("archivePath(): success!!!\n")
 	return nil
 }
 
 func remotefs() error {
+	logArgs := commoncli.SetFlagsForLogging()
+	flag.Parse()
+
+	err := commoncli.SetupLogging(logArgs...)
+	if err != nil {
+		return err
+	}
+
 	if len(os.Args) < 2 {
 		return UnknownCommandErr
 	}
 
 	command := os.Args[1]
 
+	utils.LogMsgf("remotefs(): got command %s\n", command)
 	switch command {
 	case "stat":
 		return stat()
