@@ -12,6 +12,7 @@ var commands = map[string]func(){
 	"createSandbox": createSandboxMain,
 	"exportSandbox": exportSandboxMain,
 	"netnscfg":      netnsConfigMain,
+	"remotefs":      remotefsMain,
 }
 
 func main() {

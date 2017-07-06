@@ -8,11 +8,15 @@ GO_PACKAGES=\
 	./gcsutils/gcstools
 
 GCS_TOOLS=\
-	tar2vhd \
+    tar2vhd \
 	vhd2tar \
 	createSandbox \
 	exportSandbox \
+<<<<<<< HEAD
 	netnscfg
+=======
+	remotefs
+>>>>>>> Implemented remotefs
 
 GO_FLAGS=-pkgdir "$(WORKDIR)/pkg"
 
