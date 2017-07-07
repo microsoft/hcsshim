@@ -16,22 +16,6 @@ import (
 func SocketMode(m string) {
 }
 
-// VsockAddr represents the address of a vsock end point.
-type VsockAddr struct {
-	CID  uint32
-	Port uint32
-}
-
-// Network returns the network type for a VsockAddr
-func (a VsockAddr) Network() string {
-	return "vsock"
-}
-
-// String returns a string representation of a VsockAddr
-func (a VsockAddr) String() string {
-	return fmt.Sprintf("%08x.%08x", a.CID, a.Port)
-}
-
 // Convert a generic unix.Sockaddr to a VsockAddr
 func sockaddrToVsock(sa unix.Sockaddr) *VsockAddr {
 	switch sa := sa.(type) {
@@ -43,7 +27,7 @@ func sockaddrToVsock(sa unix.Sockaddr) *VsockAddr {
 
 // Dial connects to the CID.Port via virtio sockets
 func Dial(cid, port uint32) (Conn, error) {
-	fd, err := syscall.Socket(unix.AF_VSOCK, syscall.SOCK_STREAM, 0)
+	fd, err := syscall.Socket(unix.AF_VSOCK, syscall.SOCK_STREAM|syscall.SOCK_CLOEXEC, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +48,7 @@ func Dial(cid, port uint32) (Conn, error) {
 
 // Listen returns a net.Listener which can accept connections on the given port
 func Listen(cid, port uint32) (net.Listener, error) {
-	fd, err := syscall.Socket(unix.AF_VSOCK, syscall.SOCK_STREAM, 0)
+	fd, err := syscall.Socket(unix.AF_VSOCK, syscall.SOCK_STREAM|syscall.SOCK_CLOEXEC, 0)
 	if err != nil {
 		return nil, err
 	}
