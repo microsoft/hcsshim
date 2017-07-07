@@ -32,6 +32,8 @@ func (e *Ext4Fs) InitSizeContext() error {
 	return nil
 }
 
+// CalcRegFileSize calculates the space taken by the given regular file on a ext4
+// file system with extent trees.
 func (e *Ext4Fs) CalcRegFileSize(fileName string, fileSize uint64) error {
 	// 1 directory entry
 	// 1 inode
@@ -44,6 +46,8 @@ func (e *Ext4Fs) CalcRegFileSize(fileName string, fileSize uint64) error {
 	return nil
 }
 
+// CalcDirSize calculates the space taken by the given directory on a ext4
+// file system with hash tree directories enabled.
 func (e *Ext4Fs) CalcDirSize(dirName string) error {
 	// 1 directory entry for parent.
 	// 1 inode with 2 directory entries ("." & ".." as data
@@ -52,6 +56,8 @@ func (e *Ext4Fs) CalcDirSize(dirName string) error {
 	return nil
 }
 
+// CalcSymlinkSize calculates the space taken by a symlink taking account for
+// inline symlinks.
 func (e *Ext4Fs) CalcSymlinkSize(srcName string, dstName string) error {
 	e.addInode()
 	if len(dstName) > 60 {
@@ -61,37 +67,45 @@ func (e *Ext4Fs) CalcSymlinkSize(srcName string, dstName string) error {
 	return nil
 }
 
+// CalcHardlinkSize calculates the space taken by a hardlink.
 func (e *Ext4Fs) CalcHardlinkSize(srcName string, dstName string) error {
 	// 1 directory entry (No additional inode)
 	e.totalSize += e.BlockSize
 	return nil
 }
 
+// CalcCharDeviceSize calculates the space taken by a char device.
 func (e *Ext4Fs) CalcCharDeviceSize(devName string, major uint64, minor uint64) error {
 	e.addInode()
 	return nil
 }
 
+// CalcBlockDeviceSize calculates the space taken by a block device.
 func (e *Ext4Fs) CalcBlockDeviceSize(devName string, major uint64, minor uint64) error {
 	e.addInode()
 	return nil
 }
 
+// CalcFIFOPipeSize calculates the space taken by a fifo pipe.
 func (e *Ext4Fs) CalcFIFOPipeSize(pipeName string) error {
 	e.addInode()
 	return nil
 }
 
+// CalcSocketSize calculates the space taken by a socket.
 func (e *Ext4Fs) CalcSocketSize(sockName string) error {
 	e.addInode()
 	return nil
 }
 
+// CalcAddExAttrSize calculates the space taken by extended attributes.
 func (e *Ext4Fs) CalcAddExAttrSize(fileName string, attr string, data []byte, flags int) error {
 	// Since xattr are stored in the inode, we don't use any more space
 	return nil
 }
 
+// FinalizeSizeContext should be after all of the CalcXSize methods are done.
+// It does some final size adjustments.
 func (e *Ext4Fs) FinalizeSizeContext() error {
 	// Final adjustments to the size + inode
 	// There are more metadata like Inode Table, block table.
@@ -106,15 +120,18 @@ func (e *Ext4Fs) FinalizeSizeContext() error {
 	return nil
 }
 
+// GetSizeInfo returns the size of the ext4 file system after the size context is finalized.
 func (e *Ext4Fs) GetSizeInfo() FilesystemSizeInfo {
 	return FilesystemSizeInfo{NumInodes: e.numInodes, TotalSize: e.totalSize}
 }
 
+// CleanupSizeContext frees any resources needed by the ext4 file system
 func (e *Ext4Fs) CleanupSizeContext() error {
 	// No resources need to be freed
 	return nil
 }
 
+// MakeFileSystem writes an ext4 filesystem to the given file after the size context is finalized.
 func (e *Ext4Fs) MakeFileSystem(file *os.File) error {
 	blockSize := strconv.FormatUint(e.BlockSize, 10)
 	inodeSize := strconv.FormatUint(e.InodeSize, 10)
@@ -138,6 +155,8 @@ func (e *Ext4Fs) MakeFileSystem(file *os.File) error {
 	return err
 }
 
+// MakeBasicFileSystem just creates an empty file system on the given file using
+// the default settings.
 func (e *Ext4Fs) MakeBasicFileSystem(file *os.File) error {
 	return exec.Command("mkfs.ext4", file.Name(), "-F").Run()
 }

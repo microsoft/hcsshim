@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+// CalcWhiteoutSize calculates the size taken by a possible whiteout file on the file system.
+// It returns true if the given file was actually a whiteout file and false otherwise.
 func CalcWhiteoutSize(hdr *tar.Header, f fs.Filesystem, format archive.WhiteoutFormat) (bool, error) {
 	var err error
 

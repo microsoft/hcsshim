@@ -114,6 +114,9 @@ func createEmptyDisk(in io.Reader,
 	return sizeInfo.TotalSize, nil
 }
 
+// CreateTarDisk creates a file system image from the input tarstream with the
+// given parameters and writes the image to the output file. It also returns
+// the size of the image.
 func CreateTarDisk(in io.Reader,
 	f fs.Filesystem,
 	options *archive.TarOptions,

@@ -7,10 +7,10 @@ import (
 )
 
 var commands = map[string]func(){
-	"tar2vhd":       tar2vhd_main,
-	"vhd2tar":       vhd2tar_main,
-	"createSandbox": createSandbox_main,
-	"exportSandbox": exportSandbox_main,
+	"tar2vhd":       tar2vhdMain,
+	"vhd2tar":       vhd2tarMain,
+	"createSandbox": createSandboxMain,
+	"exportSandbox": exportSandboxMain,
 }
 
 func main() {
@@ -26,7 +26,7 @@ func main() {
 	// Unknown command
 	fmt.Fprintf(os.Stderr, "unknown command: %s\n", cmd)
 	fmt.Fprintf(os.Stderr, "known commands:\n")
-	for k, _ := range commands {
+	for k := range commands {
 		fmt.Fprintf(os.Stderr, "\t%s\n", k)
 	}
 	os.Exit(127)

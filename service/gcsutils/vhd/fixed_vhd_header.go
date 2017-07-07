@@ -9,39 +9,38 @@ import (
 )
 
 // Constants for the VHD header
-const CookieMagic = 0x636f6e6563746978 // "conectix" as 64 bit big endian number
-const FeatureMask = 0x2
-const FileFormatVersionMagic = 0x00010000
-const FixedDataOffset = 0xFFFFFFFFFFFFFFFF
-const CreatorApplicationMagic = 0x77696e20 // "win " as 4 bit big endian number. It's win<SPACE>
-const CreatorVersionMagic = 0x000a0000
-const CreatorHostOSMagic = 0x5769326b // "wi2k" as 4 bit big endian number
+const cookieMagic = 0x636f6e6563746978 // "conectix" as 64 bit big endian number
+const featureMask = 0x2
+const fileFormatVersionMagic = 0x00010000
+const fixedDataOffset = 0xFFFFFFFFFFFFFFFF
+const creatorApplicationMagic = 0x77696e20 // "win " as 4 bit big endian number. It's win<SPACE>
+const creatorVersionMagic = 0x000a0000
+const creatorHostOSMagic = 0x5769326b // "wi2k" as 4 bit big endian number
 
 // DiskType Constants
 // DiskType = 1, 5, 6 are deprecated
-const DiskTypeNone = 0
-const DiskTypeFixed = 2
-const DiskTypeDynamic = 3
-const DiskTypeDifferencing = 4
+const diskTypeNone = 0
+const diskTypeFixed = 2
+const diskTypeDynamic = 3
+const diskTypeDifferencing = 4
 
 // Saved state constants
-const SaveStateYes = 1
-const SaveStateNo = 0
+const saveStateYes = 1
+const saveStateNo = 0
 
 // Consts for the CHS calculation
 const sectorBytes = 512
 const cMax = 65535
 const hMax = 16
 const sMax = 255
-const MaxCHS = cMax * hMax * sMax * sectorBytes
+const maxCHS = cMax * hMax * sMax * sectorBytes
 
 // Variables for time stamp
-const TimeStart = "00 Jan 01 00:00 UTC"
+const timeStart = "00 Jan 01 00:00 UTC"
 
 var oldTime time.Time
 
-// FixedVHDHeader is the footer for a fixed VHD
-type FixedVHDHeader struct {
+type fixedVHDHeader struct {
 	Cookie             uint64
 	Features           uint32
 	FileFormatVersion  uint32
@@ -60,13 +59,13 @@ type FixedVHDHeader struct {
 	Reserved           [427]uint8
 }
 
-const FixedVHDHeaderSize int64 = 512
+const fixedVHDHeaderSize int64 = 512
 
 func init() {
-	oldTime, _ = time.Parse(time.RFC822, TimeStart)
+	oldTime, _ = time.Parse(time.RFC822, timeStart)
 }
 
-func NewFixedVHDHeader(size uint64) (*FixedVHDHeader, error) {
+func newFixedVHDHeader(size uint64) (*fixedVHDHeader, error) {
 	header := newBasicFixedVHDHeader()
 
 	timestamp := calculateTimeStamp()
@@ -81,7 +80,7 @@ func NewFixedVHDHeader(size uint64) (*FixedVHDHeader, error) {
 	}
 	header.DiskGeometry = chs
 
-	header.DiskType = DiskTypeFixed
+	header.DiskType = diskTypeFixed
 
 	id, err := generateUUID()
 	if err != nil {
@@ -97,7 +96,8 @@ func NewFixedVHDHeader(size uint64) (*FixedVHDHeader, error) {
 	return header, nil
 }
 
-func (hdr *FixedVHDHeader) Bytes() ([]byte, error) {
+// Bytes serializes the VHD header into a byte slice.
+func (hdr *fixedVHDHeader) Bytes() ([]byte, error) {
 	b := &bytes.Buffer{}
 	if err := binary.Write(b, binary.BigEndian, hdr); err != nil {
 		return nil, err
@@ -105,15 +105,15 @@ func (hdr *FixedVHDHeader) Bytes() ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-func newBasicFixedVHDHeader() *FixedVHDHeader {
-	return &FixedVHDHeader{
-		Cookie:             CookieMagic,
-		Features:           FeatureMask,
-		FileFormatVersion:  FileFormatVersionMagic,
-		DataOffset:         FixedDataOffset,
-		CreatorApplication: CreatorApplicationMagic,
-		CreatorVersion:     CreatorVersionMagic,
-		CreatorHostOS:      CreatorHostOSMagic,
+func newBasicFixedVHDHeader() *fixedVHDHeader {
+	return &fixedVHDHeader{
+		Cookie:             cookieMagic,
+		Features:           featureMask,
+		FileFormatVersion:  fileFormatVersionMagic,
+		DataOffset:         fixedDataOffset,
+		CreatorApplication: creatorApplicationMagic,
+		CreatorVersion:     creatorVersionMagic,
+		CreatorHostOS:      creatorHostOSMagic,
 	}
 }
 
@@ -123,8 +123,8 @@ func calculateCHS(totalSize uint64) (uint32, error) {
 	}
 
 	totalSectors := totalSize / sectorBytes
-	if totalSectors > MaxCHS {
-		totalSectors = MaxCHS
+	if totalSectors > maxCHS {
+		totalSectors = maxCHS
 	}
 
 	var sectorsPerTrack uint64
@@ -157,7 +157,7 @@ func calculateCHS(totalSize uint64) (uint32, error) {
 
 	// Sanity check
 	if cylinders > cMax || heads > hMax || sectorsPerTrack > sMax {
-		return 0, fmt.Errorf("invalid size value. Must be less than %d", MaxCHS)
+		return 0, fmt.Errorf("invalid size value. Must be less than %d", maxCHS)
 	}
 
 	// Now the values into a single big endian int.
@@ -168,7 +168,7 @@ func calculateCHS(totalSize uint64) (uint32, error) {
 	return res, nil
 }
 
-func calculateCheckSum(header *FixedVHDHeader) (uint32, error) {
+func calculateCheckSum(header *fixedVHDHeader) (uint32, error) {
 	oldchk := header.Checksum
 	header.Checksum = 0
 
