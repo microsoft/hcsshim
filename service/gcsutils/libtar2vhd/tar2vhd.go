@@ -15,13 +15,16 @@ import (
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
 )
 
+// Options contains the configuration parameters that get passed to the tar2vhd library.
 type Options struct {
-	TarOpts       *archive.TarOptions
-	Filesystem    fs.Filesystem
-	Converter     vhd.Converter
-	TempDirectory string
+	TarOpts       *archive.TarOptions // Docker's archive.TarOptions struct
+	Filesystem    fs.Filesystem       // Interface for type of filesystem
+	Converter     vhd.Converter       // Interface for type of whiteout file
+	TempDirectory string              // Temp directory used for the conversions
 }
 
+// Tar2VHD takes in a tarstream and outputs a vhd containing the files. It also
+// returns the size of the outputted VHD file.
 func Tar2VHD(in io.Reader, out io.Writer, options *Options) (int64, error) {
 	utils.LogMsg("creating a temp file for VHD")
 
@@ -58,6 +61,8 @@ func Tar2VHD(in io.Reader, out io.Writer, options *Options) (int64, error) {
 	return diskSize, nil
 }
 
+// VHD2Tar takes in a vhd and outputs a tar stream containing the files in the
+// vhd. It also returns the size of the tar stream.
 func VHD2Tar(in io.Reader, out io.Writer, options *Options) (int64, error) {
 	// First write the VHD to disk. We want random access for some vhd operations
 	vhdFile, err := ioutil.TempFile(options.TempDirectory, "vhd")
@@ -98,6 +103,8 @@ func VHD2Tar(in io.Reader, out io.Writer, options *Options) (int64, error) {
 	return tarSize, nil
 }
 
+// VHDX2Tar takes in a folder (can be mounted from an attached VHDX) and returns a tar stream
+// containing the contents of the folder. It also returns the size of the tar stream.
 func VHDX2Tar(mntPath string, out io.Writer, options *Options) (int64, error) {
 	// The actual files are located in <mnt_path>/upper
 	readerResult, err := archive.TarWithOptions(filepath.Join(mntPath, "upper"), options.TarOpts)

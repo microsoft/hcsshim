@@ -12,14 +12,11 @@ type Converter interface {
 	ConvertFromVHD(f *os.File) error
 }
 
-type fixedVHDConverter struct{}
-
-func NewFixedVHDConverter() Converter {
-	return fixedVHDConverter{}
-}
+// FixedVHDConverter converts a disk image to a fixed VHD (not VHDX)
+type FixedVHDConverter struct{}
 
 // ConvertToVHD Implementation for converting disk image to a fixed VHD
-func (fixedVHDConverter) ConvertToVHD(f *os.File) error {
+func (FixedVHDConverter) ConvertToVHD(f *os.File) error {
 	info, err := f.Stat()
 	if err != nil {
 		utils.LogMsgf("[ConvertToVHD] f.Stat failed with %s", err)
@@ -28,7 +25,7 @@ func (fixedVHDConverter) ConvertToVHD(f *os.File) error {
 
 	utils.LogMsgf("[ConvertToVHD] NewFixedVHDHeader with size = %d", uint64(info.Size()))
 
-	hdr, err := NewFixedVHDHeader(uint64(info.Size()))
+	hdr, err := newFixedVHDHeader(uint64(info.Size()))
 	if err != nil {
 		utils.LogMsgf("[ConvertToVHD] NewFixedVHDHeader with %s", err)
 		return err
@@ -48,17 +45,17 @@ func (fixedVHDConverter) ConvertToVHD(f *os.File) error {
 }
 
 // ConvertFromVHD converts a fixed VHD to a normal disk image.
-func (fixedVHDConverter) ConvertFromVHD(f *os.File) error {
+func (FixedVHDConverter) ConvertFromVHD(f *os.File) error {
 	info, err := f.Stat()
 	if err != nil {
 		return err
 	}
 
-	if info.Size() < FixedVHDHeaderSize {
+	if info.Size() < fixedVHDHeaderSize {
 		return fmt.Errorf("invalid input file: %s", f.Name())
 	}
 
-	if err := f.Truncate(info.Size() - FixedVHDHeaderSize); err != nil {
+	if err := f.Truncate(info.Size() - fixedVHDHeaderSize); err != nil {
 		return err
 	}
 	return nil

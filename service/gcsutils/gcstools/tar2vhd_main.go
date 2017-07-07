@@ -34,7 +34,7 @@ func tar2vhd() error {
 	return nil
 }
 
-func tar2vhd_main() {
+func tar2vhdMain() {
 	if err := tar2vhd(); err != nil {
 		os.Exit(1)
 	}

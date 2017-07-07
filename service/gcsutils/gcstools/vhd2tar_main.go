@@ -32,7 +32,7 @@ func vhd2tar() error {
 	return nil
 }
 
-func vhd2tar_main() {
+func vhd2tarMain() {
 	if err := vhd2tar(); err != nil {
 		os.Exit(1)
 	}

@@ -14,6 +14,8 @@ import (
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
 )
 
+// SetFlagsForTar2VHDLib creates the command line flags for the tar2vhd/vhd2tar
+// functions.
 func SetFlagsForTar2VHDLib() []*string {
 	filesystem := flag.String("fs", "ext4", "Filesystem format: ext4")
 	whiteout := flag.String("whiteout", "overlay", "Whiteout format: aufs, overlay")
@@ -22,6 +24,7 @@ func SetFlagsForTar2VHDLib() []*string {
 	return []*string{filesystem, whiteout, vhdFormat, tempDirectory}
 }
 
+// SetupTar2VHDLibOptions converts the command line flags to libtar2vhd.Options.
 func SetupTar2VHDLibOptions(args ...*string) (*libtar2vhd.Options, error) {
 	if len(args) < 4 {
 		return nil, fmt.Errorf("Mistmatched arguments for tar2vhd")
@@ -57,19 +60,21 @@ func SetupTar2VHDLibOptions(args ...*string) (*libtar2vhd.Options, error) {
 	options := &libtar2vhd.Options{
 		TarOpts:       &archive.TarOptions{WhiteoutFormat: format},
 		Filesystem:    &fs.Ext4Fs{BlockSize: 4096, InodeSize: 256},
-		Converter:     vhd.NewFixedVHDConverter(),
+		Converter:     vhd.FixedVHDConverter{},
 		TempDirectory: tmpdir,
 	}
 
 	return options, nil
 }
 
+// SetFlagsForLogging sets the command line flags for logging.
 func SetFlagsForLogging() []*string {
 	basename := filepath.Base(os.Args[0]) + ".log"
 	loggingLocation := flag.String("logfile", filepath.Join("/tmp", basename), "logging file location")
 	return []*string{loggingLocation}
 }
 
+// SetupLogging creates the logger from the command line parameters.
 func SetupLogging(args ...*string) error {
 	if len(args) < 1 {
 		return fmt.Errorf("Invalid log params")

@@ -9,6 +9,7 @@ import (
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
 )
 
+// PreBuiltSandboxFile is the default location for the sandbox file.
 const PreBuiltSandboxFile = "/root/integration/prebuildSandbox.vhdx"
 
 func createSandbox() error {
@@ -37,7 +38,7 @@ func createSandbox() error {
 	return nil
 }
 
-func createSandbox_main() {
+func createSandboxMain() {
 	if err := createSandbox(); err != nil {
 		os.Exit(1)
 	}

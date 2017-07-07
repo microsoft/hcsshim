@@ -47,7 +47,7 @@ func exportSandbox() error {
 	return nil
 }
 
-func exportSandbox_main() {
+func exportSandboxMain() {
 	if err := exportSandbox(); err != nil {
 		os.Exit(1)
 	}
