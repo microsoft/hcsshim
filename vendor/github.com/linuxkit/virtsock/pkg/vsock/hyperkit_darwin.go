@@ -27,14 +27,13 @@ var (
 // ("hyperkit:/path") or Docker for Mac mode ("docker"). This function
 // must be called before using the vsock bindings.
 func SocketMode(socketMode string) {
+	connectPath = filepath.Join(socketPath, "connect")
+	socketFmt = "%08x.%08x"
+
 	if strings.HasPrefix(socketMode, "hyperkit:") {
 		socketPath = socketMode[len("hyperkit:"):]
-		connectPath = filepath.Join(socketPath, "connect")
-		socketFmt = "%08x.%08x"
 	} else if socketMode == "docker" {
 		socketPath = filepath.Join(os.Getenv("HOME"), "/Library/Containers/com.docker.docker/Data")
-		connectPath = filepath.Join(socketPath, "@connect")
-		socketFmt = "*%08x.%08x"
 	} else {
 		log.Fatalln("Unknown socket mode: ", socketMode)
 	}

@@ -12,6 +12,7 @@
 package vsock
 
 import (
+	"fmt"
 	"net"
 )
 
@@ -23,6 +24,22 @@ const (
 	// CIDHost is the reserved CID for the host system
 	CIDHost = 2
 )
+
+// VsockAddr represents the address of a vsock end point.
+type VsockAddr struct {
+	CID  uint32
+	Port uint32
+}
+
+// Network returns the network type for a VsockAddr
+func (a VsockAddr) Network() string {
+	return "vsock"
+}
+
+// String returns a string representation of a VsockAddr
+func (a VsockAddr) String() string {
+	return fmt.Sprintf("%08x.%08x", a.CID, a.Port)
+}
 
 // Conn is a vsock connection which supports half-close.
 type Conn interface {
