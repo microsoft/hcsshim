@@ -118,12 +118,9 @@
 		},
 		{
 			"checksumSHA1": "gMvxdRRwh9lrEElBYXtcH/ODD38=",
-			"origin": "github.com/jstarks/virtsock/pkg/vsock",
 			"path": "github.com/linuxkit/virtsock/pkg/vsock",
-			"revision": "8673ecb0ac8910dd64e91bc042fbf4b2377f2358",
-			"revisionTime": "2017-07-07T00:40:52Z",
-			"version": "vsock_cloexec",
-			"versionExact": "vsock_cloexec"
+			"revision": "298d0178dbea9b267e90112c02bad8835ecf5d63",
+			"revisionTime": "2017-07-07T14:03:26Z"
 		},
 		{
 			"checksumSHA1": "3yckDt/xIreJZ/spvI+MvHOCmcY=",
