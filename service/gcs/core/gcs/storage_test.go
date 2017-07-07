@@ -225,17 +225,9 @@ var _ = Describe("Storage", func() {
 			err = ioutil.WriteFile("layer2", layer2FileContents, 0)
 			Expect(err).NotTo(HaveOccurred())
 		})
-		SetupLoopbacks := func(scratch string, layers []string) {
-			if scratch != "" {
-				out, err := exec.Command("losetup", "/dev/loop0", scratch).CombinedOutput()
-				if err != nil {
-					// Provide some extra information to the error.
-					err = fmt.Errorf("%s: %s", out, err)
-					Expect(err).NotTo(HaveOccurred())
-				}
-			}
+		SetupLoopbacks := func(layers []string) {
 			for i, layer := range layers {
-				out, err := exec.Command("losetup", fmt.Sprintf("/dev/loop%d", i+1), layer).CombinedOutput()
+				out, err := exec.Command("losetup", fmt.Sprintf("/dev/loop%d", i), layer).CombinedOutput()
 				if err != nil {
 					// Provide some extra information to the error.
 					err = fmt.Errorf("%s: %s", out, err)
@@ -243,9 +235,9 @@ var _ = Describe("Storage", func() {
 				}
 			}
 		}
-		UnsetupLoopbacks := func(loopbackNumbers []int) {
-			for _, num := range loopbackNumbers {
-				out, err := exec.Command("losetup", "-d", fmt.Sprintf("/dev/loop%d", num)).CombinedOutput()
+		UnsetupLoopbacks := func(numLoopbacks int) {
+			for i := 0; i < numLoopbacks; i++ {
+				out, err := exec.Command("losetup", "-d", fmt.Sprintf("/dev/loop%d", i)).CombinedOutput()
 				if err != nil {
 					// Provide some extra information to the error.
 					err = fmt.Errorf("%s: %s", out, err)
@@ -261,10 +253,10 @@ var _ = Describe("Storage", func() {
 		}
 		Context("using three basic layers", func() {
 			BeforeEach(func() {
-				SetupLoopbacks("scratch", []string{"layer1", "layer2", "layer3"})
+				SetupLoopbacks([]string{"scratch", "layer1", "layer2", "layer3"})
 			})
 			AfterEach(func() {
-				UnsetupLoopbacks([]int{0, 1, 2, 3})
+				UnsetupLoopbacks(4)
 				// Make sure to clean up in case the test fails halfway
 				// through.
 				coreint.unmountLayers(containerID)
@@ -361,14 +353,14 @@ var _ = Describe("Storage", func() {
 		})
 		Context("with no scratch device", func() {
 			BeforeEach(func() {
-				SetupLoopbacks("", []string{"layer1", "layer2", "layer3"})
+				SetupLoopbacks([]string{"layer1", "layer2", "layer3"})
 			})
 			AfterEach(func() {
-				UnsetupLoopbacks([]int{1, 2, 3})
+				UnsetupLoopbacks(3)
 			})
 			It("should behave properly", func() {
 				// Mount the layers.
-				err = coreint.mountLayers(containerID, "", []string{"loop1", "loop2", "loop3"})
+				err = coreint.mountLayers(containerID, "", []string{"loop0", "loop1", "loop2"})
 				Expect(err).NotTo(HaveOccurred())
 
 				containerPath := filepath.Join("/mnt", "gcs", containerID)
@@ -449,10 +441,10 @@ var _ = Describe("Storage", func() {
 		})
 		Context("with no layers", func() {
 			BeforeEach(func() {
-				SetupLoopbacks("scratch", []string{})
+				SetupLoopbacks([]string{"scratch"})
 			})
 			AfterEach(func() {
-				UnsetupLoopbacks([]int{0})
+				UnsetupLoopbacks(1)
 			})
 			It("should behave properly", func() {
 				// Mount the layers.
@@ -537,10 +529,10 @@ var _ = Describe("Storage", func() {
 		})
 		Context("with no scratch device or layers", func() {
 			BeforeEach(func() {
-				SetupLoopbacks("", []string{})
+				SetupLoopbacks([]string{})
 			})
 			AfterEach(func() {
-				UnsetupLoopbacks([]int{})
+				UnsetupLoopbacks(0)
 			})
 			It("should behave properly", func() {
 				// Mount the layers.
@@ -632,7 +624,7 @@ var _ = Describe("Storage", func() {
 					disk2      prot.MappedVirtualDisk
 				)
 				BeforeEach(func() {
-					SetupLoopbacks("", []string{"layer1", "layer2"})
+					SetupLoopbacks([]string{"layer1", "layer2"})
 					coreint.containerCache[containerID] = newContainerCacheEntry(containerID)
 					layer1Path = "/mnt/test/layer1"
 					layer2Path = "/mnt/test/layer2"
@@ -650,7 +642,7 @@ var _ = Describe("Storage", func() {
 					}
 				})
 				AfterEach(func() {
-					UnsetupLoopbacks([]int{1, 2})
+					UnsetupLoopbacks(2)
 					// Make sure to clean up in case the test fails halfway
 					// through.
 					err = coreint.unmountMappedVirtualDisks([]prot.MappedVirtualDisk{disk1, disk2})
@@ -666,7 +658,7 @@ var _ = Describe("Storage", func() {
 					Expect(err).NotTo(HaveOccurred())
 					err = coreint.containerCache[containerID].AddMappedVirtualDisk(disk2)
 					Expect(err).NotTo(HaveOccurred())
-					err = coreint.mountMappedVirtualDisks([]prot.MappedVirtualDisk{disk1, disk2}, []string{"loop1", "loop2"})
+					err = coreint.mountMappedVirtualDisks([]prot.MappedVirtualDisk{disk1, disk2}, []string{"loop0", "loop1"})
 					Expect(err).NotTo(HaveOccurred())
 
 					// Check the state of layer1.
@@ -714,13 +706,13 @@ var _ = Describe("Storage", func() {
 					layer2Path string
 				)
 				BeforeEach(func() {
-					SetupLoopbacks("", []string{"layer1", "layer2"})
+					SetupLoopbacks([]string{"layer1", "layer2"})
 					coreint.containerCache[containerID] = newContainerCacheEntry(containerID)
 					layer1Path = "/mnt/test/layer1"
 					layer2Path = "/mnt/test/layer2"
 				})
 				AfterEach(func() {
-					UnsetupLoopbacks([]int{1, 2})
+					UnsetupLoopbacks(2)
 					// Make sure to clean up in case the test fails halfway
 					// through.
 					err = os.RemoveAll(layer1Path)
