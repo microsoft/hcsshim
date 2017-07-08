@@ -2,13 +2,14 @@ package runc
 
 import (
 	"fmt"
-	"github.com/Sirupsen/logrus"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"syscall"
 	"unsafe"
+
+	"github.com/Sirupsen/logrus"
 
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fifo"
@@ -30,12 +31,16 @@ type ioSet struct {
 }
 
 // GetStdioPipes returns the stdio pipes used by the given process.
-func (r *runcRuntime) GetStdioPipes(id string, pid int) (*runtime.StdioPipes, error) {
-	processDir := r.getProcessDir(id, pid)
+func (c *container) GetStdioPipes() (*runtime.StdioPipes, error) {
+	return c.init.GetStdioPipes()
+}
 
+// GetStdioPipes returns the stdio pipes used by the given process.
+func (p *process) GetStdioPipes() (*runtime.StdioPipes, error) {
+	processDir := p.c.r.getProcessDir(p.c.id, p.pid)
 	stdinPath := filepath.Join(processDir, "in")
 	var stdin io.WriteCloser
-	stdinPathExists, err := r.pathExists(stdinPath)
+	stdinPathExists, err := p.c.r.pathExists(stdinPath)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +53,7 @@ func (r *runcRuntime) GetStdioPipes(id string, pid int) (*runtime.StdioPipes, er
 
 	stdoutPath := filepath.Join(processDir, "out")
 	var stdout io.ReadCloser
-	stdoutPathExists, err := r.pathExists(stdoutPath)
+	stdoutPathExists, err := p.c.r.pathExists(stdoutPath)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +66,7 @@ func (r *runcRuntime) GetStdioPipes(id string, pid int) (*runtime.StdioPipes, er
 
 	stderrPath := filepath.Join(processDir, "err")
 	var stderr io.ReadCloser
-	stderrPathExists, err := r.pathExists(stderrPath)
+	stderrPathExists, err := p.c.r.pathExists(stderrPath)
 	if err != nil {
 		return nil, err
 	}

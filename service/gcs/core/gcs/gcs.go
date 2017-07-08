@@ -77,6 +77,7 @@ type containerCacheEntry struct {
 	ExitHooks          []func(oslayer.ProcessExitState)
 	MappedVirtualDisks map[uint8]prot.MappedVirtualDisk
 	NetworkAdapters    []prot.NetworkAdapter
+	container          runtime.Container
 }
 
 func newContainerCacheEntry(id string) *containerCacheEntry {
@@ -122,6 +123,13 @@ func (e *processCacheEntry) AddExitHook(hook func(oslayer.ProcessExitState)) {
 	e.ExitHooks = append(e.ExitHooks, hook)
 }
 
+func (c *gcsCore) getContainer(id string) *containerCacheEntry {
+	if entry, ok := c.containerCache[id]; ok {
+		return entry
+	}
+	return nil
+}
+
 // CreateContainer creates all the infrastructure for a container, including
 // setting up layers and networking, and then starts up its init process in a
 // suspended state waiting for a call to StartContainer.
@@ -129,7 +137,7 @@ func (c *gcsCore) CreateContainer(id string, settings prot.VMHostedContainerSett
 	c.containerCacheMutex.Lock()
 	defer c.containerCacheMutex.Unlock()
 
-	if _, ok := c.containerCache[id]; ok {
+	if c.getContainer(id) != nil {
 		return errors.WithStack(gcserr.NewContainerExistsError(id))
 	}
 
@@ -164,15 +172,17 @@ func (c *gcsCore) CreateContainer(id string, settings prot.VMHostedContainerSett
 
 // ExecProcess executes a new process in the container. It forwards the
 // process's stdio through the members of the core.StdioSet provided.
-func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet *core.StdioSet) (pid int, err error) {
+func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet *core.StdioSet) (int, error) {
 	c.containerCacheMutex.Lock()
 	defer c.containerCacheMutex.Unlock()
 
-	containerEntry, ok := c.containerCache[id]
-	if !ok {
+	containerEntry := c.getContainer(id)
+	if containerEntry == nil {
 		return -1, errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
 	}
 	processEntry := newProcessCacheEntry()
+
+	var p runtime.Process
 
 	stdioOptions := runtime.StdioOptions{
 		CreateIn:  params.CreateStdInPipe,
@@ -185,30 +195,33 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 			return -1, err
 		}
 
-		pid, err = c.Rtime.CreateContainer(id, c.getContainerStoragePath(id), stdioOptions)
+		container, err := c.Rtime.CreateContainer(id, c.getContainerStoragePath(id), stdioOptions)
 		if err != nil {
 			return -1, err
 		}
 
+		containerEntry.container = container
+		p = container
+
 		// Move the container's network adapters into its namespace.
 		for _, adapter := range containerEntry.NetworkAdapters {
-			if err := c.moveAdapterIntoNamespace(id, adapter); err != nil {
+			if err := c.moveAdapterIntoNamespace(container, adapter); err != nil {
 				return -1, err
 			}
 		}
 
 		go func() {
-			state, err := c.Rtime.WaitOnContainer(id)
+			state, err := container.Wait()
 			c.containerCacheMutex.Lock()
 			if err != nil {
 				logrus.Error(err)
-				if err := c.CleanupContainer(id); err != nil {
+				if err := c.cleanupContainer(containerEntry); err != nil {
 					logrus.Error(err)
 				}
 			}
-			utils.LogMsgf("container init process %d exited with exit status %d", pid, state.ExitCode())
+			utils.LogMsgf("container init process %d exited with exit status %d", p.Pid(), state.ExitCode())
 
-			if err := c.CleanupContainer(id); err != nil {
+			if err := c.cleanupContainer(containerEntry); err != nil {
 				logrus.Error(err)
 			}
 			c.containerCacheMutex.Unlock()
@@ -228,7 +241,7 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 			c.containerCacheMutex.Unlock()
 		}()
 
-		if err := c.Rtime.StartContainer(id); err != nil {
+		if err := container.Start(); err != nil {
 			return -1, err
 		}
 	} else {
@@ -236,16 +249,17 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 		if err != nil {
 			return -1, err
 		}
-		pid, err = c.Rtime.ExecProcess(id, ociProcess, stdioOptions)
+		p, err = containerEntry.container.ExecProcess(ociProcess, stdioOptions)
 		if err != nil {
 			return -1, err
 		}
+
 		go func() {
-			state, err := c.Rtime.WaitOnProcess(id, pid)
+			state, err := p.Wait()
 			if err != nil {
 				logrus.Error(err)
 			}
-			utils.LogMsgf("container process %d exited with exit status %d", pid, state.ExitCode())
+			utils.LogMsgf("container process %d exited with exit status %d", p.Pid(), state.ExitCode())
 
 			// Close stdin.
 			// TODO: Remove this conditional when stdio forwarding for non-terminal processes is fixed.
@@ -264,14 +278,14 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 				hook(state)
 			}
 			c.processCacheMutex.Unlock()
-			if err := c.Rtime.DeleteProcess(id, pid); err != nil {
+			if err := p.Delete(); err != nil {
 				logrus.Error(err)
 			}
 		}()
 	}
 
 	// Connect the container's stdio to the stdio pipes.
-	if err := c.setupStdioPipes(id, pid, stdioSet); err != nil {
+	if err := c.setupStdioPipes(p, stdioSet); err != nil {
 		return -1, err
 	}
 
@@ -288,10 +302,10 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 	// apply to the old process no longer makes sense, so since the old
 	// process's pid has been reused, its cache entry can also be reused.  This
 	// applies to external processes as well.
-	c.processCache[pid] = processEntry
+	c.processCache[p.Pid()] = processEntry
 	c.processCacheMutex.Unlock()
-	containerEntry.AddProcess(pid)
-	return pid, nil
+	containerEntry.AddProcess(p.Pid())
+	return p.Pid(), nil
 }
 
 // SignalContainer sends the specified signal to the container's init process.
@@ -299,13 +313,17 @@ func (c *gcsCore) SignalContainer(id string, signal oslayer.Signal) error {
 	c.containerCacheMutex.Lock()
 	defer c.containerCacheMutex.Unlock()
 
-	if _, ok := c.containerCache[id]; !ok {
+	containerEntry := c.getContainer(id)
+	if containerEntry == nil {
 		return errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
 	}
 
-	if err := c.Rtime.KillContainer(id, signal); err != nil {
-		return err
+	if containerEntry.container != nil {
+		if err := containerEntry.container.Kill(signal); err != nil {
+			return err
+		}
 	}
+
 	return nil
 }
 
@@ -359,11 +377,16 @@ func (c *gcsCore) ListProcesses(id string) ([]runtime.ContainerProcessState, err
 	c.containerCacheMutex.Lock()
 	defer c.containerCacheMutex.Unlock()
 
-	if _, ok := c.containerCache[id]; !ok {
+	containerEntry := c.getContainer(id)
+	if containerEntry == nil {
 		return nil, errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
 	}
 
-	processes, err := c.Rtime.GetAllContainerProcesses(id)
+	if containerEntry.container == nil {
+		return nil, nil
+	}
+
+	processes, err := containerEntry.container.GetAllProcesses()
 	if err != nil {
 		return nil, err
 	}
@@ -523,7 +546,8 @@ func (c *gcsCore) ModifySettings(id string, request prot.ResourceModificationReq
 	c.containerCacheMutex.Lock()
 	defer c.containerCacheMutex.Unlock()
 
-	if _, ok := c.containerCache[id]; !ok {
+	containerEntry := c.getContainer(id)
+	if containerEntry == nil {
 		return errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
 	}
 
@@ -532,7 +556,6 @@ func (c *gcsCore) ModifySettings(id string, request prot.ResourceModificationReq
 		if request.ResourceType != prot.PtMappedVirtualDisk {
 			return errors.Errorf("only the resource type \"%s\" is currently supported for request type \"%s\"", prot.PtMappedVirtualDisk, request.RequestType)
 		}
-		containerEntry := c.containerCache[id]
 		settings, ok := request.Settings.(prot.ResourceModificationSettings)
 		if !ok {
 			return errors.New("the request's settings are not of type ResourceModificationSettings")
@@ -544,7 +567,6 @@ func (c *gcsCore) ModifySettings(id string, request prot.ResourceModificationReq
 		if request.ResourceType != prot.PtMappedVirtualDisk {
 			return errors.Errorf("only the resource type \"%s\" is currently supported for request type \"%s\"", prot.PtMappedVirtualDisk, request.RequestType)
 		}
-		containerEntry := c.containerCache[id]
 		settings, ok := request.Settings.(prot.ResourceModificationSettings)
 		if !ok {
 			return errors.New("the request's settings are not of type ResourceModificationSettings")
@@ -567,8 +589,8 @@ func (c *gcsCore) RegisterContainerExitHook(id string, exitHook func(oslayer.Pro
 	c.containerCacheMutex.Lock()
 	defer c.containerCacheMutex.Unlock()
 
-	entry, ok := c.containerCache[id]
-	if !ok {
+	entry := c.getContainer(id)
+	if entry == nil {
 		return errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
 	}
 
@@ -618,8 +640,8 @@ func (c *gcsCore) RegisterProcessExitHook(pid int, exitHook func(oslayer.Process
 
 // setupStdioPipes begins copying data between each stdioSet reader/writer and
 // the container's stdio pipes.
-func (c *gcsCore) setupStdioPipes(id string, pid int, stdioSet *core.StdioSet) error {
-	pipes, err := c.Rtime.GetStdioPipes(id, pid)
+func (c *gcsCore) setupStdioPipes(p runtime.Process, stdioSet *core.StdioSet) error {
+	pipes, err := p.GetStdioPipes()
 	if err != nil {
 		return err
 	}

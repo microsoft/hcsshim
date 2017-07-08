@@ -52,6 +52,4 @@ type Core interface {
 		onExit func(oslayer.ProcessExitState)) error
 	RegisterProcessExitHook(pid int,
 		onExit func(oslayer.ProcessExitState)) error
-
-	CleanupContainer(id string) error
 }

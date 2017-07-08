@@ -12,6 +12,7 @@ import (
 
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
+	"github.com/Microsoft/opengcs/service/gcs/runtime"
 )
 
 // instanceIDToName converts from the given instance ID (a GUID generated on
@@ -174,7 +175,7 @@ func (c *gcsCore) generateResolvConfFile(adapter prot.NetworkAdapter) error {
 
 // moveAdapterIntoNamespace moves the given network adapter into the namespace
 // of the container with the given ID.
-func (c *gcsCore) moveAdapterIntoNamespace(id string, adapter prot.NetworkAdapter) error {
+func (c *gcsCore) moveAdapterIntoNamespace(container runtime.Container, adapter prot.NetworkAdapter) error {
 	// Get the root namespace, which should be the GCS's current namespace.
 	rootNamespace, err := c.OS.GetCurrentNamespace()
 	if err != nil {
@@ -183,13 +184,9 @@ func (c *gcsCore) moveAdapterIntoNamespace(id string, adapter prot.NetworkAdapte
 	defer rootNamespace.Close()
 
 	// Get namespace information for the container process.
-	containerPid, err := c.Rtime.GetInitPid(id)
+	containerNamespace, err := c.OS.GetNamespaceFromPid(container.Pid())
 	if err != nil {
-		return errors.Wrapf(err, "failed to get the init process pid for container %s", id)
-	}
-	containerNamespace, err := c.OS.GetNamespaceFromPid(containerPid)
-	if err != nil {
-		return errors.Wrapf(err, "failed to get the namespace of process %d", containerPid)
+		return errors.Wrapf(err, "failed to get the namespace of process %d", container.Pid())
 	}
 	defer containerNamespace.Close()
 
@@ -213,7 +210,7 @@ func (c *gcsCore) moveAdapterIntoNamespace(id string, adapter prot.NetworkAdapte
 		return errors.Wrapf(err, "failed to set the link to new namespace for adapter %s", adapter.AdapterInstanceID)
 	}
 	if err := c.OS.SetCurrentNamespace(containerNamespace); err != nil {
-		return errors.Wrapf(err, "failed to set the namespace to the container namespace for container %s", id)
+		return errors.Wrapf(err, "failed to set the namespace to the container namespace for container %s", container.ID())
 	}
 
 	// Configure the interface with its original configuration.

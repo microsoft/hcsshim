@@ -21,7 +21,7 @@ var _ = Describe("Utils", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 	AfterEach(func() {
-		err = cleanupContainers(rtime)
+		err = cleanupContainers(rtime, nil)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
