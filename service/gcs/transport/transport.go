@@ -4,6 +4,7 @@ package transport
 
 import (
 	"io"
+	"os"
 )
 
 // Transport is the interface defining a method of transporting data in a
@@ -23,4 +24,5 @@ type Connection interface {
 	io.ReadWriteCloser
 	CloseRead() error
 	CloseWrite() error
+	File() (*os.File, error)
 }

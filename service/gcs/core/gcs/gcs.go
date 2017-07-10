@@ -375,29 +375,6 @@ func (c *gcsCore) ListProcesses(id string) ([]runtime.ContainerProcessState, err
 // This can be used for things like debugging or diagnosing the utility VM's
 // state.
 func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *core.StdioSet) (pid int, err error) {
-	stdioOptions := runtime.StdioOptions{
-		CreateIn:  params.CreateStdInPipe,
-		CreateOut: params.CreateStdOutPipe,
-		CreateErr: params.CreateStdErrPipe,
-	}
-	var master io.ReadWriteCloser
-	var console oslayer.File
-	emulateConsole := params.EmulateConsole
-	if emulateConsole {
-		// Allocate a console for the process.
-		// TODO: Should I duplicate the NewConsole functionality outside of
-		// runc to make for better separation between gcscore and runtime?
-		var consolePath string
-		master, consolePath, err = runc.NewConsole()
-		if err != nil {
-			return -1, errors.Wrap(err, "failed to create console for external process")
-		}
-		console, err = c.OS.OpenFile(consolePath, os.O_RDWR, 0777)
-		if err != nil {
-			return -1, errors.Wrap(err, "failed to open console file for external process")
-		}
-	}
-
 	ociProcess, err := processParametersToOCI(params)
 	if err != nil {
 		return -1, err
@@ -407,18 +384,34 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *co
 	cmd.SetEnv(ociProcess.Env)
 
 	var wg sync.WaitGroup
-	if emulateConsole {
+	var fileIn, fileOut, fileErr *os.File
+	var master io.ReadWriteCloser
+	if params.EmulateConsole {
+		// Allocate a console for the process.
+		// TODO: Should I duplicate the NewConsole functionality outside of
+		// runc to make for better separation between gcscore and runtime?
+		var consolePath string
+		master, consolePath, err = runc.NewConsole()
+		if err != nil {
+			return -1, errors.Wrap(err, "failed to create console for external process")
+		}
+		console, err := c.OS.OpenFile(consolePath, os.O_RDWR, 0777)
+		if err != nil {
+			return -1, errors.Wrap(err, "failed to open console file for external process")
+		}
+		defer console.Close()
+
 		// Begin copying data to and from the console.
 		// In order to ensure master is closed only after it's done being read
 		// from and written to, a sync.WaitGroup is used.
-		if stdioOptions.CreateIn {
+		if stdioSet.In != nil {
 			wg.Add(1)
 			go func() {
 				io.Copy(master, stdioSet.In)
 				wg.Done()
 			}()
 		}
-		if stdioOptions.CreateOut {
+		if stdioSet.Out != nil {
 			wg.Add(1)
 			go func() {
 				io.Copy(stdioSet.Out, master)
@@ -430,26 +423,36 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *co
 		cmd.SetStdout(console)
 		cmd.SetStderr(console)
 	} else {
-		if stdioOptions.CreateIn {
-			// Stdin uses cmd.StdinPipe() instead of cmd.Stdin because cmd.Wait()
-			// waits for cmd.Stdin to return EOF. We can only guarantee an EOF by
-			// closing the pipe after the process exits.
-			cmdStdin, err := cmd.StdinPipe()
+		// Get the underlying files for each stdio socket and use them directly
+		// for the stdio fds for the new process. Close these files as soon as
+		// the process is launched so that only the child process has open
+		// descriptors to these sockets.
+		if stdioSet.In != nil {
+			fileIn, err = stdioSet.In.File()
 			if err != nil {
-				return -1, errors.Wrap(err, "failed to get stdin pipe for command")
+				return -1, errors.Wrap(err, "failed to dup stdin socket for command")
 			}
-			wg.Add(1)
-			go func() {
-				io.Copy(cmdStdin, stdioSet.In)
-				cmdStdin.Close() // Notify the process that there is no more input.
-				wg.Done()
-			}()
+			defer fileIn.Close()
+			defer stdioSet.In.Close()
+			cmd.SetStdin(fileIn)
 		}
-		if stdioOptions.CreateOut {
-			cmd.SetStdout(stdioSet.Out)
+		if stdioSet.Out != nil {
+			fileOut, err = stdioSet.Out.File()
+			if err != nil {
+				return -1, errors.Wrap(err, "failed to dup stdout socket for command")
+			}
+			defer fileOut.Close()
+			defer stdioSet.Out.Close()
+			cmd.SetStdout(fileOut)
 		}
-		if stdioOptions.CreateErr {
-			cmd.SetStderr(stdioSet.Err)
+		if stdioSet.Err != nil {
+			fileErr, err = stdioSet.Err.File()
+			if err != nil {
+				return -1, errors.Wrap(err, "failed to dup stderr socket for command")
+			}
+			defer fileErr.Close()
+			defer stdioSet.Err.Close()
+			cmd.SetStderr(fileErr)
 		}
 	}
 	if err := cmd.Start(); err != nil {
@@ -468,35 +471,29 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *co
 		}
 		utils.LogMsgf("external process %d exited with exit status %d", cmd.Process().Pid(), cmd.ExitState().ExitCode())
 
-		// Close stdin so that the copying goroutine is safely unblocked; this is necessary
-		// because the host expects stdin to be closed before it will report process
-		// exit back to the client, and the client expects the process notification before
-		// it will close its side of stdin (which io.Copy is waiting on in the copying goroutine).
-		if stdioSet.In != nil {
-			if err := stdioSet.In.CloseRead(); err != nil {
-				logrus.Errorf("failed call to CloseRead for external process stdin: %v: %s", ociProcess.Args, err)
-			}
-		}
-
-		// Close the console slave file to unblock IO to the console master file.
-		if console != nil {
-			console.Close()
-		}
-
-		// Wait for all users of stdioSet and master to finish before closing them.
-		wg.Wait()
-
 		if master != nil {
+			// Close stdin so that the copying goroutine is safely unblocked; this is necessary
+			// because the host expects stdin to be closed before it will report process
+			// exit back to the client, and the client expects the process notification before
+			// it will close its side of stdin (which io.Copy is waiting on in the copying goroutine).
+			if stdioSet.In != nil {
+				if err := stdioSet.In.CloseRead(); err != nil {
+					logrus.Errorf("failed call to CloseRead for external process stdin: %v: %s", ociProcess.Args, err)
+				}
+			}
+
+			// Wait for all users of stdioSet and master to finish before closing them.
+			wg.Wait()
 			master.Close()
-		}
-		if stdioSet.In != nil {
-			stdioSet.In.Close()
-		}
-		if stdioSet.Out != nil {
-			stdioSet.Out.Close()
-		}
-		if stdioSet.Err != nil {
-			stdioSet.Err.Close()
+			if stdioSet.In != nil {
+				stdioSet.In.Close()
+			}
+			if stdioSet.Out != nil {
+				stdioSet.Out.Close()
+			}
+			if stdioSet.Err != nil {
+				stdioSet.Err.Close()
+			}
 		}
 
 		// Run exit hooks for the process.
