@@ -19,6 +19,7 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer/realos"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
+	"github.com/Microsoft/opengcs/service/libs/commonutils"
 )
 
 const (
@@ -442,7 +443,7 @@ func (r *runcRuntime) hasTerminal(bundlePath string) (bool, error) {
 	}
 	defer configFile.Close()
 	var config oci.Spec
-	if err := json.NewDecoder(configFile).Decode(&config); err != nil {
+	if err := utils.DecodeJSONWithHresult(configFile, &config); err != nil {
 		return false, errors.Wrap(err, "failed to decode config file as JSON")
 	}
 	return config.Process.Terminal, nil
@@ -462,7 +463,7 @@ func (c *container) runExecCommand(processDef oci.Process, stdioOptions runtime.
 	}
 	defer f.Close()
 	if err := json.NewEncoder(f).Encode(processDef); err != nil {
-		return nil, errors.Wrap(err, "failed to decode JSON from process.json file")
+		return nil, errors.Wrap(err, "failed to encode JSON into process.json file")
 	}
 
 	args := []string{"exec"}
