@@ -413,6 +413,7 @@ func (r *runcRuntime) hasTerminal(bundlePath string) (bool, error) {
 	if err != nil {
 		return false, errors.Wrapf(err, "failed to open config file %s", filepath.Join(bundlePath, "config.json"))
 	}
+	defer configFile.Close()
 	var config oci.Spec
 	if err := json.NewDecoder(configFile).Decode(&config); err != nil {
 		return false, errors.Wrap(err, "failed to decode config file as JSON")
@@ -432,6 +433,7 @@ func (r *runcRuntime) runExecCommand(id string, process oci.Process, stdioOption
 	if err != nil {
 		return -1, errors.Wrapf(err, "failed to create process.json file at %s", filepath.Join(tempProcessDir, "process.json"))
 	}
+	defer f.Close()
 	if err := json.NewEncoder(f).Encode(process); err != nil {
 		return -1, errors.Wrap(err, "failed to decode JSON from process.json file")
 	}
