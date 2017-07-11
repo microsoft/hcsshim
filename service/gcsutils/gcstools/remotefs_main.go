@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/Microsoft/opengcs/service/gcsutils/gcstools/commoncli"
@@ -186,6 +187,18 @@ func archivePath() error {
 	return nil
 }
 
+func mkdirall() error {
+	if len(os.Args) < 4 {
+		return InvalidParams
+	}
+
+	perm, err := strconv.ParseUint(os.Args[3], 8, 32)
+	if err != nil {
+		return err
+	}
+	return os.MkdirAll(os.Args[2], os.FileMode(perm))
+}
+
 func remotefs() error {
 	logArgs := commoncli.SetFlagsForLogging()
 	flag.Parse()
@@ -213,6 +226,8 @@ func remotefs() error {
 		return archivePath()
 	case "extractarchive":
 		return extractArchive()
+	case "mkdirall":
+		return mkdirall()
 	}
 	return UnknownCommandErr
 }
