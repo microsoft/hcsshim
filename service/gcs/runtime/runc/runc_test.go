@@ -34,9 +34,9 @@ func getBundlePath() (string, error) {
 	return filepath.Join(cwd, "testbundle"), nil
 }
 
-func cleanupContainers(rtime *runcRuntime) error {
+func cleanupContainers(rtime *runcRuntime, containers []runtime.Container) error {
 	var errToReturn error
-	if err := attemptKillAndDeleteAllContainers(rtime); err != nil {
+	if err := attemptKillAndDeleteAllContainers(containers); err != nil {
 		io.WriteString(GinkgoWriter, err.Error())
 		if errToReturn == nil {
 			errToReturn = err
@@ -60,51 +60,50 @@ func cleanupContainers(rtime *runcRuntime) error {
 	return errToReturn
 }
 
-func attemptKillAndDeleteAllContainers(rtime *runcRuntime) error {
+func attemptKillAndDeleteAllContainers(containers []runtime.Container) error {
 	var errToReturn error
-	states, err := rtime.ListContainerStates()
-	if err != nil {
-		return err
-	}
-	for _, state := range states {
-		status := state.Status
-		if status == "paused" {
-			if err := rtime.ResumeContainer(state.ID); err != nil {
-				io.WriteString(GinkgoWriter, err.Error())
-				if errToReturn == nil {
-					errToReturn = err
-				}
-			}
-			status = "running"
-		}
-		if status == "running" {
-			if err := rtime.KillContainer(state.ID, oslayer.SIGKILL); err != nil {
-				io.WriteString(GinkgoWriter, err.Error())
-				if errToReturn == nil {
-					errToReturn = err
-				}
-			}
-			if _, err := rtime.WaitOnContainer(state.ID); err != nil {
-				io.WriteString(GinkgoWriter, err.Error())
-				if errToReturn == nil {
-					errToReturn = err
-				}
-			}
-		} else if status == "created" {
-			go func() {
-				if _, err := rtime.WaitOnContainer(state.ID); err != nil {
+	for _, c := range containers {
+		if state, err := c.GetState(); err == nil {
+			status := state.Status
+			if status == "paused" {
+				if err := c.Resume(); err != nil {
 					io.WriteString(GinkgoWriter, err.Error())
+					if errToReturn == nil {
+						errToReturn = err
+					}
 				}
-			}()
-		}
-		if err := rtime.DeleteContainer(state.ID); err != nil {
-			io.WriteString(GinkgoWriter, err.Error())
-			if errToReturn == nil {
-				errToReturn = err
+				status = "running"
+			}
+			if status == "running" {
+				if err := c.Kill(oslayer.SIGKILL); err != nil {
+					io.WriteString(GinkgoWriter, err.Error())
+					if errToReturn == nil {
+						errToReturn = err
+					}
+				}
+				if _, err := c.Wait(); err != nil {
+					io.WriteString(GinkgoWriter, err.Error())
+					if errToReturn == nil {
+						errToReturn = err
+					}
+				}
+			} else if status == "created" {
+				go func() {
+					if _, err := c.Wait(); err != nil {
+						io.WriteString(GinkgoWriter, err.Error())
+					}
+				}()
+			}
+			if err := c.Delete(); err != nil {
+				io.WriteString(GinkgoWriter, err.Error())
+				if errToReturn == nil {
+					errToReturn = err
+				}
 			}
 		}
 	}
 
+	containers = nil
 	return errToReturn
 }
 
@@ -150,9 +149,10 @@ func removeSubdirs(parentDir string) error {
 
 var _ = Describe("runC", func() {
 	var (
-		rtime  *runcRuntime
-		bundle string
-		err    error
+		rtime      *runcRuntime
+		bundle     string
+		err        error
+		containers []runtime.Container
 
 		createAllStdioOptions runtime.StdioOptions
 	)
@@ -170,16 +170,20 @@ var _ = Describe("runC", func() {
 		}
 	})
 	AfterEach(func() {
-		err = cleanupContainers(rtime)
+		err = cleanupContainers(rtime, containers)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	Describe("creating a container", func() {
 		var (
 			id string
+			c  runtime.Container
 		)
 		JustBeforeEach(func() {
-			_, err = rtime.CreateContainer(id, bundle, createAllStdioOptions)
+			c, err = rtime.CreateContainer(id, bundle, createAllStdioOptions)
+			if err == nil {
+				containers = append(containers, c)
+			}
 		})
 		Context("using a valid ID", func() {
 			for _, _id := range containerIds {
@@ -189,7 +193,7 @@ var _ = Describe("runC", func() {
 						Expect(err).NotTo(HaveOccurred())
 					})
 					It("should put the container in the \"created\" state", func() {
-						container, err := rtime.GetContainerState(id)
+						container, err := c.GetState()
 						Expect(err).NotTo(HaveOccurred())
 						Expect(container.Status).To(Equal("created"))
 					})
@@ -211,20 +215,26 @@ var _ = Describe("runC", func() {
 	for _, id := range containerIds {
 		Context(fmt.Sprintf("using ID %s", id), func() {
 			Describe("performing post-Create operations", func() {
+				var (
+					c runtime.Container
+				)
 				JustBeforeEach(func() {
-					_, err = rtime.CreateContainer(id, bundle, createAllStdioOptions)
+					c, err = rtime.CreateContainer(id, bundle, createAllStdioOptions)
+					if err == nil {
+						containers = append(containers, c)
+					}
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				Describe("starting a container", func() {
 					JustBeforeEach(func() {
-						err = rtime.StartContainer(id)
+						err = c.Start()
 					})
 					It("should not produce an error", func() {
 						Expect(err).NotTo(HaveOccurred())
 					})
 					It("should put the container in the \"running\" state", func() {
-						container, err := rtime.GetContainerState(id)
+						container, err := c.GetState()
 						Expect(err).NotTo(HaveOccurred())
 						Expect(container.Status).To(Equal("running"))
 					})
@@ -250,19 +260,19 @@ var _ = Describe("runC", func() {
 						}
 					})
 					JustBeforeEach(func() {
-						err = rtime.StartContainer(id)
+						err = c.Start()
 						Expect(err).NotTo(HaveOccurred())
 					})
 
 					Describe("executing a process in a container", func() {
 						JustBeforeEach(func() {
-							_, err = rtime.ExecProcess(id, longSleepProcess, createAllStdioOptions)
+							_, err = c.ExecProcess(longSleepProcess, createAllStdioOptions)
 						})
 						It("should not have produced an error", func() {
 							Expect(err).NotTo(HaveOccurred())
 						})
 						It("should have created another process in the container", func() {
-							processes, err := rtime.GetRunningContainerProcesses(id)
+							processes, err := c.GetRunningProcesses()
 							Expect(err).NotTo(HaveOccurred())
 							Expect(processes).To(HaveLen(2))
 						})
@@ -270,7 +280,7 @@ var _ = Describe("runC", func() {
 
 					Describe("killing a container", func() {
 						JustBeforeEach(func() {
-							err = rtime.KillContainer(id, oslayer.SIGKILL)
+							err = c.Kill(oslayer.SIGKILL)
 						})
 						It("should not produce an error", func() {
 							Expect(err).NotTo(HaveOccurred())
@@ -278,9 +288,9 @@ var _ = Describe("runC", func() {
 						It("should put the container in the \"stopped\" state", func(done Done) {
 							defer close(done)
 
-							_, err = rtime.WaitOnContainer(id)
+							_, err = c.Wait()
 							Expect(err).NotTo(HaveOccurred())
-							container, err := rtime.GetContainerState(id)
+							container, err := c.GetState()
 							Expect(err).NotTo(HaveOccurred())
 							Expect(container.Status).To(Equal("stopped"))
 						}, 2) // Test fails if it takes longer than 2 seconds.
@@ -290,12 +300,12 @@ var _ = Describe("runC", func() {
 						JustBeforeEach(func(done Done) {
 							defer close(done)
 
-							err = rtime.KillContainer(id, oslayer.SIGKILL)
+							err = c.Kill(oslayer.SIGKILL)
 							Expect(err).NotTo(HaveOccurred())
-							_, err = rtime.WaitOnContainer(id)
+							_, err = c.Wait()
 							Expect(err).NotTo(HaveOccurred())
 
-							err = rtime.DeleteContainer(id)
+							err = c.Delete()
 						}, 2) // Test fails if it takes longer than 2 seconds.
 						It("should not produce an error", func() {
 							Expect(err).NotTo(HaveOccurred())
@@ -304,41 +314,41 @@ var _ = Describe("runC", func() {
 							states, err := rtime.ListContainerStates()
 							Expect(err).NotTo(HaveOccurred())
 							Expect(states).To(HaveLen(0))
-							_, err = rtime.GetContainerState(id)
+							_, err = c.GetState()
 							Expect(err).To(HaveOccurred())
 						})
 					})
 
 					Describe("deleting a process", func() {
 						var (
-							pid int
+							p runtime.Process
 						)
 						JustBeforeEach(func(done Done) {
 							defer close(done)
 
-							pid, err = rtime.ExecProcess(id, shortSleepProcess, createAllStdioOptions)
+							p, err = c.ExecProcess(shortSleepProcess, createAllStdioOptions)
 							Expect(err).NotTo(HaveOccurred())
-							_, err = rtime.WaitOnProcess(id, pid)
+							_, err = p.Wait()
 							Expect(err).NotTo(HaveOccurred())
-							err = rtime.DeleteProcess(id, pid)
+							err = p.Delete()
 						}, 2) // Test fails if it takes longer than 2 seconds.
 						It("should not produce an error", func() {
 							Expect(err).NotTo(HaveOccurred())
 						})
 						It("should delete the process", func() {
-							Expect(rtime.getProcessDir(id, pid)).NotTo(BeADirectory())
+							Expect(rtime.getProcessDir(id, p.Pid())).NotTo(BeADirectory())
 						})
 					})
 
 					Describe("pausing a container", func() {
 						JustBeforeEach(func() {
-							err = rtime.PauseContainer(id)
+							err = c.Pause()
 						})
 						It("should not produce an error", func() {
 							Expect(err).NotTo(HaveOccurred())
 						})
 						It("should put the container in the \"paused\" state", func() {
-							container, err := rtime.GetContainerState(id)
+							container, err := c.GetState()
 							Expect(err).NotTo(HaveOccurred())
 							Expect(container.Status).To(Equal("paused"))
 						})
@@ -346,15 +356,15 @@ var _ = Describe("runC", func() {
 
 					Describe("resuming a container", func() {
 						JustBeforeEach(func() {
-							err = rtime.PauseContainer(id)
+							err = c.Pause()
 							Expect(err).NotTo(HaveOccurred())
-							err = rtime.ResumeContainer(id)
+							err = c.Resume()
 						})
 						It("should not produce an error", func() {
 							Expect(err).NotTo(HaveOccurred())
 						})
 						It("should put the container in the \"running\" state", func() {
-							container, err := rtime.GetContainerState(id)
+							container, err := c.GetState()
 							Expect(err).NotTo(HaveOccurred())
 							Expect(container.Status).To(Equal("running"))
 						})
@@ -362,19 +372,19 @@ var _ = Describe("runC", func() {
 
 					Describe("getting running container processes", func() {
 						var (
-							pid       int
+							p         runtime.Process
 							processes []runtime.ContainerProcessState
 						)
 						JustBeforeEach(func(done Done) {
 							defer close(done)
 
-							_, err = rtime.ExecProcess(id, longSleepProcess, createAllStdioOptions)
+							_, err = c.ExecProcess(longSleepProcess, createAllStdioOptions)
 							Expect(err).NotTo(HaveOccurred())
-							pid, err = rtime.ExecProcess(id, shortSleepProcess, createAllStdioOptions)
+							p, err = c.ExecProcess(shortSleepProcess, createAllStdioOptions)
 							Expect(err).NotTo(HaveOccurred())
-							_, err = rtime.WaitOnProcess(id, pid)
+							_, err = p.Wait()
 							Expect(err).NotTo(HaveOccurred())
-							processes, err = rtime.GetRunningContainerProcesses(id)
+							processes, err = c.GetRunningProcesses()
 						}, 2) // Test fails if it takes longer than 2 seconds.
 						It("should not produce an error", func() {
 							Expect(err).NotTo(HaveOccurred())
