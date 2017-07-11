@@ -53,5 +53,5 @@ func (c *MockConnection) CloseWrite() error {
 
 // File returns a file that can be used to read/write to the connection.
 func (c *MockConnection) File() (*os.File, error) {
-	return nil, errors.New("not supported")
+	return nil, errors.New("not implemented")
 }
