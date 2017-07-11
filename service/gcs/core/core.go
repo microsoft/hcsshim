@@ -4,6 +4,7 @@ package core
 
 import (
 	"io"
+	"os"
 
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
@@ -15,6 +16,7 @@ type StdioPipe interface {
 	io.ReadWriteCloser
 	CloseRead() error
 	CloseWrite() error
+	File() (*os.File, error)
 }
 
 // StdioSet is a structure defining the readers and writers the Core

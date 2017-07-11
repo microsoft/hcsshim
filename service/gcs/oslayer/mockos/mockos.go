@@ -3,6 +3,7 @@ package mockos
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net"
 	"os"
@@ -29,6 +30,9 @@ func (c *mockReadWriteCloser) CloseRead() error {
 }
 func (c *mockReadWriteCloser) CloseWrite() error {
 	return nil
+}
+func (c *mockReadWriteCloser) File() (*os.File, error) {
+	return nil, errors.New("not implemented")
 }
 
 type mockProcessExitState struct {

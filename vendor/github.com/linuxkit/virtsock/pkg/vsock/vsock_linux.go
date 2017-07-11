@@ -1,4 +1,5 @@
 // Bindings to the Linux hues interface to VM sockets.
+
 package vsock
 
 import (
@@ -157,4 +158,14 @@ func (v *VsockConn) SetReadDeadline(t time.Time) error {
 // SetWriteDeadline sets the deadline for future Write calls
 func (v *VsockConn) SetWriteDeadline(t time.Time) error {
 	return nil // FIXME
+}
+
+// File duplicates the underlying socket descriptor and returns it.
+func (v *VsockConn) File() (*os.File, error) {
+	// This is equivalent to dup(2) but creates the new fd with CLOEXEC already set.
+	r0, _, e1 := syscall.Syscall(syscall.SYS_FCNTL, uintptr(v.vsock.Fd()), syscall.F_DUPFD_CLOEXEC, 0)
+	if e1 != 0 {
+		return nil, os.NewSyscallError("fcntl", e1)
+	}
+	return os.NewFile(r0, v.vsock.Name()), nil
 }

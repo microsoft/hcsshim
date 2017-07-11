@@ -14,6 +14,7 @@ package vsock
 import (
 	"fmt"
 	"net"
+	"os"
 )
 
 const (
@@ -46,4 +47,5 @@ type Conn interface {
 	net.Conn
 	CloseRead() error
 	CloseWrite() error
+	File() (*os.File, error)
 }

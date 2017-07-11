@@ -1,6 +1,10 @@
 package transport
 
-import "io"
+import (
+	"errors"
+	"io"
+	"os"
+)
 
 // MockTransport is a mock implementation of Transport.
 type MockTransport struct {
@@ -45,4 +49,9 @@ func (c *MockConnection) CloseRead() error {
 // CloseWrite closes the write channel.
 func (c *MockConnection) CloseWrite() error {
 	return c.PipeWriter.Close()
+}
+
+// File returns a file that can be used to read/write to the connection.
+func (c *MockConnection) File() (*os.File, error) {
+	return nil, errors.New("not implemented")
 }
