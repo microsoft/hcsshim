@@ -163,6 +163,8 @@ var _ = Describe("runC", func() {
 		bundle, err = getBundlePath()
 		Expect(err).NotTo(HaveOccurred())
 
+		containers = nil
+
 		createAllStdioOptions = runtime.StdioOptions{
 			CreateIn:  true,
 			CreateOut: true,
