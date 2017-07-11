@@ -13,44 +13,54 @@ import (
 // the container runtime.
 type mockRuntime struct{}
 
+var _ runtime.Runtime = &mockRuntime{}
+
 // NewRuntime constructs a new mockRuntime with the default settings.
 func NewRuntime() *mockRuntime {
 	return &mockRuntime{}
 }
 
-func (r *mockRuntime) CreateContainer(id string, bundlePath string, stdioOptions runtime.StdioOptions) (pid int, err error) {
-	return 101, nil
+type container struct {
+	id string
 }
 
-func (r *mockRuntime) StartContainer(id string) error {
+func (r *mockRuntime) CreateContainer(id string, bundlePath string, stdioOptions runtime.StdioOptions) (c runtime.Container, err error) {
+	return &container{id: id}, nil
+}
+
+func (c *container) Start() error {
 	return nil
 }
 
-func (r *mockRuntime) ExecProcess(id string, process oci.Process, stdioOptions runtime.StdioOptions) (pid int, err error) {
-	return 101, nil
+func (c *container) ID() string {
+	return c.id
 }
 
-func (r *mockRuntime) KillContainer(id string, signal oslayer.Signal) error {
+func (c *container) Pid() int {
+	return 101
+}
+
+func (c *container) ExecProcess(process oci.Process, stdioOptions runtime.StdioOptions) (p runtime.Process, err error) {
+	return &container{}, nil
+}
+
+func (c *container) Kill(signal oslayer.Signal) error {
 	return nil
 }
 
-func (r *mockRuntime) DeleteContainer(id string) error {
+func (c *container) Delete() error {
 	return nil
 }
 
-func (r *mockRuntime) DeleteProcess(id string, pid int) error {
+func (c *container) Pause() error {
 	return nil
 }
 
-func (r *mockRuntime) PauseContainer(id string) error {
+func (c *container) Resume() error {
 	return nil
 }
 
-func (r *mockRuntime) ResumeContainer(id string) error {
-	return nil
-}
-
-func (r *mockRuntime) GetContainerState(id string) (*runtime.ContainerState, error) {
+func (c *container) GetState() (*runtime.ContainerState, error) {
 	state := &runtime.ContainerState{
 		OCIVersion: "v1",
 		ID:         "abcdef",
@@ -63,7 +73,7 @@ func (r *mockRuntime) GetContainerState(id string) (*runtime.ContainerState, err
 	return state, nil
 }
 
-func (r *mockRuntime) ContainerExists(id string) (bool, error) {
+func (c *container) Exists() (bool, error) {
 	return true, nil
 }
 
@@ -82,7 +92,7 @@ func (r *mockRuntime) ListContainerStates() ([]runtime.ContainerState, error) {
 	return states, nil
 }
 
-func (r *mockRuntime) GetRunningContainerProcesses(id string) ([]runtime.ContainerProcessState, error) {
+func (c *container) GetRunningProcesses() ([]runtime.ContainerProcessState, error) {
 	states := []runtime.ContainerProcessState{
 		runtime.ContainerProcessState{
 			Pid:              123,
@@ -94,7 +104,7 @@ func (r *mockRuntime) GetRunningContainerProcesses(id string) ([]runtime.Contain
 	return states, nil
 }
 
-func (r *mockRuntime) GetAllContainerProcesses(id string) ([]runtime.ContainerProcessState, error) {
+func (c *container) GetAllProcesses() ([]runtime.ContainerProcessState, error) {
 	states := []runtime.ContainerProcessState{
 		runtime.ContainerProcessState{
 			Pid:              123,
@@ -106,20 +116,11 @@ func (r *mockRuntime) GetAllContainerProcesses(id string) ([]runtime.ContainerPr
 	return states, nil
 }
 
-func (r *mockRuntime) WaitOnProcess(id string, pid int) (oslayer.ProcessExitState, error) {
+func (c *container) Wait() (oslayer.ProcessExitState, error) {
 	state := mockos.NewProcessExitState(123)
 	return state, nil
 }
 
-func (r *mockRuntime) WaitOnContainer(id string) (oslayer.ProcessExitState, error) {
-	state := mockos.NewProcessExitState(123)
-	return state, nil
-}
-
-func (r *mockRuntime) GetInitPid(id string) (pid int, err error) {
-	return 123, nil
-}
-
-func (r *mockRuntime) GetStdioPipes(id string, pid int) (*runtime.StdioPipes, error) {
+func (c *container) GetStdioPipes() (*runtime.StdioPipes, error) {
 	return &runtime.StdioPipes{}, nil
 }

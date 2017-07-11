@@ -45,25 +45,32 @@ type StdioPipes struct {
 	Err io.ReadCloser
 }
 
+// Process is an interface to manipulate process state.
+type Process interface {
+	Wait() (oslayer.ProcessExitState, error)
+	Pid() int
+	Delete() error
+	GetStdioPipes() (*StdioPipes, error)
+}
+
+// Container is an interface to manipulate container state.
+type Container interface {
+	Process
+	ID() string
+	Exists() (bool, error)
+	Start() error
+	ExecProcess(process oci.Process, stdioOptions StdioOptions) (p Process, err error)
+	Kill(signal oslayer.Signal) error
+	Pause() error
+	Resume() error
+	GetState() (*ContainerState, error)
+	GetRunningProcesses() ([]ContainerProcessState, error)
+	GetAllProcesses() ([]ContainerProcessState, error)
+}
+
 // Runtime is the interface defining commands over an OCI container runtime,
 // such as runC.
 type Runtime interface {
-	CreateContainer(id string, bundlePath string, stdioOptions StdioOptions) (pid int, err error)
-	StartContainer(id string) error
-	ExecProcess(id string, process oci.Process, stdioOptions StdioOptions) (pid int, err error)
-	KillContainer(id string, signal oslayer.Signal) error
-	DeleteContainer(id string) error
-	DeleteProcess(id string, pid int) error
-	PauseContainer(id string) error
-	ResumeContainer(id string) error
-	GetContainerState(id string) (*ContainerState, error)
-	ContainerExists(id string) (bool, error)
+	CreateContainer(id string, bundlePath string, stdioOptions StdioOptions) (c Container, err error)
 	ListContainerStates() ([]ContainerState, error)
-	GetRunningContainerProcesses(id string) ([]ContainerProcessState, error)
-	GetAllContainerProcesses(id string) ([]ContainerProcessState, error)
-	WaitOnProcess(id string, pid int) (oslayer.ProcessExitState, error)
-	WaitOnContainer(id string) (oslayer.ProcessExitState, error)
-
-	GetInitPid(id string) (pid int, err error)
-	GetStdioPipes(id string, pid int) (*StdioPipes, error)
 }

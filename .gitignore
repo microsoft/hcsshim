@@ -15,3 +15,4 @@
 
 # Ignore gcs bin directory
 service/bin/
+service/pkg/

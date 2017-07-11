@@ -163,8 +163,3 @@ func (c *MockCore) RegisterProcessExitHook(pid int, exitHook func(oslayer.Proces
 	exitHook(mockos.NewProcessExitState(103))
 	return nil
 }
-
-// CleanupContainer returns a nil error.
-func (c *MockCore) CleanupContainer(id string) error {
-	return nil
-}

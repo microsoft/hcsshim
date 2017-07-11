@@ -22,12 +22,6 @@ func (r *runcRuntime) readPidFile(pidFile string) (pid int, err error) {
 	return pid, nil
 }
 
-// GetInitPid gets the init process's pid for runcRuntime.
-func (r *runcRuntime) GetInitPid(id string) (pid int, err error) {
-	containerDir := r.getContainerDir(id)
-	return r.readPidFile(filepath.Join(containerDir, initPidFilename))
-}
-
 // cleanupContainer cleans up any state left behind by the container.
 func (r *runcRuntime) cleanupContainer(id string) error {
 	containerDir := r.getContainerDir(id)
