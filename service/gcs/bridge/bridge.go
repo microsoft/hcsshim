@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/Microsoft/opengcs/service/gcs/core"
+	gcserr "github.com/Microsoft/opengcs/service/gcs/errors"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
@@ -182,7 +183,7 @@ func (b *bridge) loop() error {
 func (b *bridge) createContainer(message []byte) (*prot.ContainerCreateResponse, error) {
 	response := &prot.ContainerCreateResponse{MessageResponseBase: newResponseBase()}
 	var request prot.ContainerCreate
-	if err := json.Unmarshal(message, &request); err != nil {
+	if err := utils.UnmarshalJSONWithHresult(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", message)
 	}
 	response.ActivityID = request.ActivityID
@@ -190,7 +191,7 @@ func (b *bridge) createContainer(message []byte) (*prot.ContainerCreateResponse,
 	// The request contains a JSON string field which is equivalent to a
 	// CreateContainerInfo struct.
 	var settings prot.VMHostedContainerSettings
-	if err := json.Unmarshal([]byte(request.ContainerConfig), &settings); err != nil {
+	if err := utils.UnmarshalJSONWithHresult([]byte(request.ContainerConfig), &settings); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for ContainerConfig \"%s\"", request.ContainerConfig)
 	}
 
@@ -215,13 +216,13 @@ func (b *bridge) createContainer(message []byte) (*prot.ContainerCreateResponse,
 func (b *bridge) execProcess(message []byte) (*prot.ContainerExecuteProcessResponse, error) {
 	response := &prot.ContainerExecuteProcessResponse{MessageResponseBase: newResponseBase()}
 	var request prot.ContainerExecuteProcess
-	if err := json.Unmarshal(message, &request); err != nil {
+	if err := utils.UnmarshalJSONWithHresult(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
 	// The request contains a JSON string field which is equivalent to an
 	// ExecuteProcessInfo struct.
 	var params prot.ProcessParameters
-	if err := json.Unmarshal([]byte(request.Settings.ProcessParameters), &params); err != nil {
+	if err := utils.UnmarshalJSONWithHresult([]byte(request.Settings.ProcessParameters), &params); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for ProcessParameters \"%s\"", request.Settings.ProcessParameters)
 	}
 
@@ -271,7 +272,7 @@ func (b *bridge) execProcess(message []byte) (*prot.ContainerExecuteProcessRespo
 func (b *bridge) killContainer(message []byte) (*prot.MessageResponseBase, error) {
 	response := newResponseBase()
 	var request prot.MessageBase
-	if err := json.Unmarshal(message, &request); err != nil {
+	if err := utils.UnmarshalJSONWithHresult(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
 	response.ActivityID = request.ActivityID
@@ -286,7 +287,7 @@ func (b *bridge) killContainer(message []byte) (*prot.MessageResponseBase, error
 func (b *bridge) shutdownContainer(message []byte) (*prot.MessageResponseBase, error) {
 	response := newResponseBase()
 	var request prot.MessageBase
-	if err := json.Unmarshal(message, &request); err != nil {
+	if err := utils.UnmarshalJSONWithHresult(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
 	response.ActivityID = request.ActivityID
@@ -301,7 +302,7 @@ func (b *bridge) shutdownContainer(message []byte) (*prot.MessageResponseBase, e
 func (b *bridge) terminateProcess(message []byte) (*prot.MessageResponseBase, error) {
 	response := newResponseBase()
 	var request prot.ContainerTerminateProcess
-	if err := json.Unmarshal(message, &request); err != nil {
+	if err := utils.UnmarshalJSONWithHresult(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
 	response.ActivityID = request.ActivityID
@@ -316,7 +317,7 @@ func (b *bridge) terminateProcess(message []byte) (*prot.MessageResponseBase, er
 func (b *bridge) listProcesses(message []byte) (*prot.ContainerGetPropertiesResponse, error) {
 	response := &prot.ContainerGetPropertiesResponse{MessageResponseBase: newResponseBase()}
 	var request prot.ContainerGetProperties
-	if err := json.Unmarshal(message, &request); err != nil {
+	if err := utils.UnmarshalJSONWithHresult(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
 	response.ActivityID = request.ActivityID
@@ -338,7 +339,7 @@ func (b *bridge) listProcesses(message []byte) (*prot.ContainerGetPropertiesResp
 func (b *bridge) runExternalProcess(message []byte) (*prot.ContainerExecuteProcessResponse, error) {
 	response := &prot.ContainerExecuteProcessResponse{MessageResponseBase: newResponseBase()}
 	var request prot.ContainerExecuteProcess
-	if err := json.Unmarshal(message, &request); err != nil {
+	if err := utils.UnmarshalJSONWithHresult(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
 	response.ActivityID = request.ActivityID
@@ -346,7 +347,7 @@ func (b *bridge) runExternalProcess(message []byte) (*prot.ContainerExecuteProce
 	// The request contains a JSON string field which is equivalent to a
 	// RunExternalProcessInfo struct.
 	var params prot.ProcessParameters
-	if err := json.Unmarshal([]byte(request.Settings.ProcessParameters), &params); err != nil {
+	if err := utils.UnmarshalJSONWithHresult([]byte(request.Settings.ProcessParameters), &params); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for ProcessParameters \"%s\"", request.Settings.ProcessParameters)
 	}
 
@@ -371,7 +372,7 @@ func (b *bridge) runExternalProcess(message []byte) (*prot.ContainerExecuteProce
 func (b *bridge) waitOnProcess(message []byte, header *prot.MessageHeader) (*prot.ContainerWaitForProcessResponse, error) {
 	response := &prot.ContainerWaitForProcessResponse{MessageResponseBase: newResponseBase()}
 	var request prot.ContainerWaitForProcess
-	if err := json.Unmarshal(message, &request); err != nil {
+	if err := utils.UnmarshalJSONWithHresult(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
 	response.ActivityID = request.ActivityID
@@ -394,7 +395,7 @@ func (b *bridge) waitOnProcess(message []byte, header *prot.MessageHeader) (*pro
 func (b *bridge) resizeConsole(message []byte) (*prot.MessageResponseBase, error) {
 	response := newResponseBase()
 	var request prot.ContainerResizeConsole
-	if err := json.Unmarshal(message, &request); err != nil {
+	if err := utils.UnmarshalJSONWithHresult(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
 	response.ActivityID = request.ActivityID
@@ -430,19 +431,14 @@ func newResponseBase() *prot.MessageResponseBase {
 // setErrorForResponseBase modifies the passed-in MessageResponseBase to
 // contain information pertaining to the given error.
 func (b *bridge) setErrorForResponseBase(response *prot.MessageResponseBase, errForResponse error) {
-	// stackTracer must be defined to access the stack trace of the error. I'm
-	// not totally sure why it isn't just exported by the errors package.
-	type stackTracer interface {
-		StackTrace() errors.StackTrace
-	}
 	errorMessage := errForResponse.Error()
 	fileName := ""
 	lineNumber := -1
 	functionName := ""
-	if errForResponse, ok := errForResponse.(stackTracer); ok {
-		frames := errForResponse.StackTrace()
+	if serr, ok := errForResponse.(gcserr.StackTracer); ok {
+		frames := serr.StackTrace()
 		bottomFrame := frames[0]
-		errorMessage = fmt.Sprintf("%+v", errForResponse)
+		errorMessage = fmt.Sprintf("%+v", serr)
 		fileName = fmt.Sprintf("%s", bottomFrame)
 		lineNumberStr := fmt.Sprintf("%d", bottomFrame)
 		var err error
@@ -453,9 +449,14 @@ func (b *bridge) setErrorForResponseBase(response *prot.MessageResponseBase, err
 		}
 		functionName = fmt.Sprintf("%n", bottomFrame)
 	}
-	response.Result = -2147467259
+	hresult, err := gcserr.GetHresult(errForResponse)
+	if err != nil {
+		// Default to using the generic failure HRESULT.
+		hresult = gcserr.HrFail
+	}
+	response.Result = int32(hresult)
 	newRecord := prot.ErrorRecord{
-		Result:       -2147467259,
+		Result:       int32(hresult),
 		Message:      errorMessage,
 		ModuleName:   "gcs",
 		FileName:     fileName,

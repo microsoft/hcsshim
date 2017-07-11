@@ -8,6 +8,8 @@ import (
 
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+
+	"github.com/Microsoft/opengcs/service/libs/commonutils"
 )
 
 //////////// Code for the Message Header ////////////
@@ -300,7 +302,7 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 	var request ContainerModifySettings
 	var rawSettings json.RawMessage
 	request.Request.Settings = &rawSettings
-	if err := json.Unmarshal(b, &request); err != nil {
+	if err := utils.UnmarshalJSONWithHresult(b, &request); err != nil {
 		return nil, errors.WithStack(err)
 	}
 
@@ -317,7 +319,7 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 	switch request.Request.ResourceType {
 	case PtMappedVirtualDisk:
 		settings.MappedVirtualDisk = &MappedVirtualDisk{}
-		if err := json.Unmarshal(rawSettings, settings.MappedVirtualDisk); err != nil {
+		if err := utils.UnmarshalJSONWithHresult(rawSettings, settings.MappedVirtualDisk); err != nil {
 			return nil, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDisk")
 		}
 		request.Request.Settings = settings
