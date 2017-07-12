@@ -7,6 +7,7 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer/mockos"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
+	"github.com/Microsoft/opengcs/service/gcs/stdio"
 )
 
 // mockRuntime is an implementation of the Runtime interface which uses runC as
@@ -24,7 +25,7 @@ type container struct {
 	id string
 }
 
-func (r *mockRuntime) CreateContainer(id string, bundlePath string, stdioOptions runtime.StdioOptions) (c runtime.Container, err error) {
+func (r *mockRuntime) CreateContainer(id string, bundlePath string, stdioSet *stdio.ConnectionSet) (c runtime.Container, err error) {
 	return &container{id: id}, nil
 }
 
@@ -40,7 +41,7 @@ func (c *container) Pid() int {
 	return 101
 }
 
-func (c *container) ExecProcess(process oci.Process, stdioOptions runtime.StdioOptions) (p runtime.Process, err error) {
+func (c *container) ExecProcess(process oci.Process, stdioSet *stdio.ConnectionSet) (p runtime.Process, err error) {
 	return &container{}, nil
 }
 
@@ -119,8 +120,4 @@ func (c *container) GetAllProcesses() ([]runtime.ContainerProcessState, error) {
 func (c *container) Wait() (oslayer.ProcessExitState, error) {
 	state := mockos.NewProcessExitState(123)
 	return state, nil
-}
-
-func (c *container) GetStdioPipes() (*runtime.StdioPipes, error) {
-	return &runtime.StdioPipes{}, nil
 }

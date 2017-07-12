@@ -236,33 +236,14 @@ func (b *bridge) execProcess(message []byte) (*prot.ContainerExecuteProcessRespo
 	response.ActivityID = request.ActivityID
 	id := request.ContainerID
 
-	conns, err := createAndConnectStdio(b.tport, params, request.Settings.VsockStdioRelaySettings)
+	stdioSet, err := createAndConnectStdio(b.tport, params, request.Settings.VsockStdioRelaySettings)
 	if err != nil {
 		return response, err
-	}
-	stdioSet := &core.StdioSet{
-		In:  conns.In,
-		Out: conns.Out,
-		Err: conns.Err,
 	}
 	pid, err := b.coreint.ExecProcess(id, params, stdioSet)
 	if err != nil {
+		stdioSet.Close() // stdioSet will be eventually closed by coreint on success
 		return response, err
-	}
-
-	// Close Connections on exit, but only for container processes without a
-	// terminal.
-	// TODO: Continue working on this so container processes without a terminal
-	// properly write everything to stdio as well.
-	if !params.EmulateConsole {
-		exitHook := func(state oslayer.ProcessExitState) {
-			if err := conns.Close(); err != nil {
-				b.outputError(errors.Wrap(err, "failed to close Connections"))
-			}
-		}
-		if err := b.coreint.RegisterProcessExitHook(pid, exitHook); err != nil {
-			return response, err
-		}
 	}
 
 	response.ProcessID = uint32(pid)
@@ -351,17 +332,13 @@ func (b *bridge) runExternalProcess(message []byte) (*prot.ContainerExecuteProce
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for ProcessParameters \"%s\"", request.Settings.ProcessParameters)
 	}
 
-	conns, err := createAndConnectStdio(b.tport, params, request.Settings.VsockStdioRelaySettings)
+	stdioSet, err := createAndConnectStdio(b.tport, params, request.Settings.VsockStdioRelaySettings)
 	if err != nil {
 		return response, err
 	}
-	stdioSet := &core.StdioSet{
-		In:  conns.In,
-		Out: conns.Out,
-		Err: conns.Err,
-	}
 	pid, err := b.coreint.RunExternalProcess(params, stdioSet)
 	if err != nil {
+		stdioSet.Close() // stdioSet will be eventually closed by coreint on success
 		return response, err
 	}
 

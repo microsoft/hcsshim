@@ -5,47 +5,17 @@ import (
 
 	"github.com/pkg/errors"
 
+	"io"
+
 	"github.com/Microsoft/opengcs/service/gcs/prot"
+	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
-	"io"
 )
 
 const (
 	commandPort uint32 = 0x40000000
 )
-
-// StdioConnSet holds a transport.Connection for each stdio stream for a
-// process.
-type StdioConnSet struct {
-	In  transport.Connection
-	Out transport.Connection
-	Err transport.Connection
-}
-
-// Close closes each stdio Connection in the StdioConnSet.
-func (s *StdioConnSet) Close() error {
-	var err error
-	if s.In != nil {
-		if cerr := s.In.CloseRead(); err == nil {
-			err = errors.Wrap(cerr, "failed CloseRead on stdin")
-		}
-		if cerr := s.In.Close(); err == nil {
-			err = errors.Wrap(cerr, "failed Close on stdin")
-		}
-	}
-	if s.Out != nil {
-		if cerr := s.Out.Close(); err == nil {
-			err = errors.Wrap(cerr, "failed Close on stdout")
-		}
-	}
-	if s.Err != nil {
-		if cerr := s.Err.Close(); err == nil {
-			err = errors.Wrap(cerr, "failed Close on stderr")
-		}
-	}
-	return err
-}
 
 func (b *bridge) createAndConnectCommandConn() (transport.Connection, error) {
 	conn, err := b.tport.Dial(commandPort)
@@ -100,28 +70,30 @@ func sendResponseBytes(conn transport.Connection, messageType prot.MessageIdenti
 // stdio pipe to be used. If CreateStd*Pipe for a given pipe is false, the
 // given Connection is set to nil. After creating each transport.Connection, it
 // calls Connect on it.
-func createAndConnectStdio(tport transport.Transport, params prot.ProcessParameters, settings prot.ExecuteProcessVsockStdioRelaySettings) (*StdioConnSet, error) {
-	var err error
-	var stdin transport.Connection
+func createAndConnectStdio(tport transport.Transport, params prot.ProcessParameters, settings prot.ExecuteProcessVsockStdioRelaySettings) (s *stdio.ConnectionSet, err error) {
+	s = &stdio.ConnectionSet{}
+	defer func() {
+		if err != nil {
+			s.Close()
+		}
+	}()
 	if params.CreateStdInPipe {
-		stdin, err = tport.Dial(settings.StdIn)
+		s.In, err = tport.Dial(settings.StdIn)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed creating stdin Connection")
 		}
 	}
-	var stdout transport.Connection
 	if params.CreateStdOutPipe {
-		stdout, err = tport.Dial(settings.StdOut)
+		s.Out, err = tport.Dial(settings.StdOut)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed creating stdout Connection")
 		}
 	}
-	var stderr transport.Connection
 	if params.CreateStdErrPipe {
-		stderr, err = tport.Dial(settings.StdErr)
+		s.Err, err = tport.Dial(settings.StdErr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed creating stderr Connection")
 		}
 	}
-	return &StdioConnSet{In: stdin, Out: stdout, Err: stderr}, nil
+	return s, nil
 }

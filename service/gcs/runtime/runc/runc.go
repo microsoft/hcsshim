@@ -5,13 +5,13 @@ package runc
 import (
 	"encoding/json"
 	"io/ioutil"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/Sirupsen/logrus"
 	containerdsys "github.com/docker/containerd/sys"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -19,6 +19,7 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer/realos"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
+	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
 )
 
@@ -50,8 +51,9 @@ func (c *container) Pid() int {
 }
 
 type process struct {
-	c   *container
-	pid int
+	c     *container
+	pid   int
+	relay *stdio.TtyRelay
 }
 
 func (p *process) Pid() int {
@@ -85,8 +87,8 @@ func (r *runcRuntime) initialize() error {
 // bundlePath.
 // bundlePath should be a path to an OCI bundle containing a config.json file
 // and a rootfs for the container.
-func (r *runcRuntime) CreateContainer(id string, bundlePath string, stdioOptions runtime.StdioOptions) (c runtime.Container, err error) {
-	c, err = r.runCreateCommand(id, bundlePath, stdioOptions)
+func (r *runcRuntime) CreateContainer(id string, bundlePath string, stdioSet *stdio.ConnectionSet) (c runtime.Container, err error) {
+	c, err = r.runCreateCommand(id, bundlePath, stdioSet)
 	if err != nil {
 		return nil, err
 	}
@@ -108,8 +110,8 @@ func (c *container) Start() error {
 
 // ExecProcess executes a new process, represented as an OCI process struct,
 // inside an already-running container.
-func (c *container) ExecProcess(process oci.Process, stdioOptions runtime.StdioOptions) (p runtime.Process, err error) {
-	p, err = c.runExecCommand(process, stdioOptions)
+func (c *container) ExecProcess(process oci.Process, stdioSet *stdio.ConnectionSet) (p runtime.Process, err error) {
+	p, err = c.runExecCommand(process, stdioSet)
 	if err != nil {
 		return nil, err
 	}
@@ -376,7 +378,11 @@ func (r *runcRuntime) waitOnProcess(pid int) (oslayer.ProcessExitState, error) {
 }
 
 func (p *process) Wait() (oslayer.ProcessExitState, error) {
-	return p.c.r.waitOnProcess(p.pid)
+	state, err := p.c.r.waitOnProcess(p.pid)
+	if p.relay != nil {
+		p.relay.Wait()
+	}
+	return state, err
 }
 
 // Wait waits on every non-init process in the container, and then
@@ -403,7 +409,7 @@ func (c *container) Wait() (oslayer.ProcessExitState, error) {
 }
 
 // runCreateCommand sets up the arguments for calling runc create.
-func (r *runcRuntime) runCreateCommand(id string, bundlePath string, stdioOptions runtime.StdioOptions) (runtime.Container, error) {
+func (r *runcRuntime) runCreateCommand(id string, bundlePath string, stdioSet *stdio.ConnectionSet) (runtime.Container, error) {
 	c := &container{r: r, id: id}
 	if err := r.makeContainerDir(id); err != nil {
 		return nil, err
@@ -419,7 +425,7 @@ func (r *runcRuntime) runCreateCommand(id string, bundlePath string, stdioOption
 		return nil, err
 	}
 	args := []string{"create", "-b", bundlePath, "--no-pivot"}
-	p, err := c.startProcess(tempProcessDir, hasTerminal, stdioOptions, args...)
+	p, err := c.startProcess(tempProcessDir, hasTerminal, stdioSet, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -450,7 +456,7 @@ func (r *runcRuntime) hasTerminal(bundlePath string) (bool, error) {
 }
 
 // runExecCommand sets up the arguments for calling runc exec.
-func (c *container) runExecCommand(processDef oci.Process, stdioOptions runtime.StdioOptions) (p runtime.Process, err error) {
+func (c *container) runExecCommand(processDef oci.Process, stdioSet *stdio.ConnectionSet) (p runtime.Process, err error) {
 	// Create a temporary random directory to store the process's files.
 	tempProcessDir, err := ioutil.TempDir(containerFilesDir, c.id)
 	if err != nil {
@@ -468,13 +474,13 @@ func (c *container) runExecCommand(processDef oci.Process, stdioOptions runtime.
 
 	args := []string{"exec"}
 	args = append(args, "-d", "--process", filepath.Join(tempProcessDir, "process.json"))
-	return c.startProcess(tempProcessDir, processDef.Terminal, stdioOptions, args...)
+	return c.startProcess(tempProcessDir, processDef.Terminal, stdioSet, args...)
 }
 
 // startProcess performs the operations necessary to start a container process
 // and properly handle its stdio.
 // This function is used by both CreateContainer and ExecProcess.
-func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioOptions runtime.StdioOptions, initialArgs ...string) (p *process, err error) {
+func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioSet *stdio.ConnectionSet, initialArgs ...string) (p *process, err error) {
 	args := initialArgs
 
 	if err := containerdsys.SetSubreaper(1); err != nil {
@@ -486,41 +492,52 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioO
 
 	args = append(args, "--pid-file", filepath.Join(tempProcessDir, "pid"))
 
-	var cmdStdin *os.File
-	var cmdStdout *os.File
-	var cmdStderr *os.File
+	var sockListener *net.UnixListener
 	if hasTerminal {
-		sockListener, consoleSockPath, err := c.r.createConsoleSocket(tempProcessDir)
+		var consoleSockPath string
+		sockListener, consoleSockPath, err = c.r.createConsoleSocket(tempProcessDir)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "failed to create console socket for container %s", c.id)
 		}
+		defer sockListener.Close()
 		args = append(args, "--console-socket", consoleSockPath)
-		// setupIOForTerminal blocks, so it needs to run in a separate go
-		// routine.
-		go func() {
-			if err := c.r.setupIOForTerminal(tempProcessDir, stdioOptions, sockListener); err != nil {
-				logrus.Error(err)
-			}
-		}()
-
-	} else {
-		ioSet, err := c.r.setupIOWithoutTerminal(c.id, tempProcessDir, stdioOptions)
-		if err != nil {
-			return nil, err
-		}
-		cmdStdin = ioSet.InR
-		cmdStdout = ioSet.OutW
-		cmdStderr = ioSet.ErrW
 	}
 	args = append(args, c.id)
 
 	cmd := exec.Command(runcPath, args...)
-	cmd.Stdin = cmdStdin
-	cmd.Stdout = cmdStdout
-	cmd.Stderr = cmdStderr
+	if !hasTerminal {
+		fileSet, err := stdioSet.Files()
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to get files for connection set for container %s", c.id)
+		}
+		defer fileSet.Close()
+		defer stdioSet.Close()
+		cmd.Stdin = fileSet.In
+		cmd.Stdout = fileSet.Out
+		cmd.Stderr = fileSet.Err
+	}
 	if err := cmd.Start(); err != nil {
 		return nil, errors.Wrapf(err, "failed to start runc create/exec call for container %s", c.id)
 	}
+
+	var relay *stdio.TtyRelay
+	if hasTerminal {
+		var master *os.File
+		master, err = c.r.getMasterFromSocket(sockListener)
+		if err != nil {
+			cmd.Process.Kill()
+			cmd.Wait()
+			return nil, errors.Wrapf(err, "failed to get pty master for process in container %s", c.id)
+		}
+		// Keep master open for the relay unless there is an error.
+		defer func() {
+			if err != nil {
+				master.Close()
+			}
+		}()
+		relay = stdioSet.NewTtyRelay(master)
+	}
+
 	if err := cmd.Wait(); err != nil {
 		return nil, errors.Wrapf(err, "failed to wait on runc create/exec call for container %s", c.id)
 	}
@@ -533,5 +550,9 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioO
 	if err := os.Rename(tempProcessDir, c.r.getProcessDir(c.id, pid)); err != nil {
 		return nil, err
 	}
-	return &process{c: c, pid: pid}, nil
+
+	if relay != nil {
+		relay.Start()
+	}
+	return &process{c: c, pid: pid, relay: relay}, nil
 }
