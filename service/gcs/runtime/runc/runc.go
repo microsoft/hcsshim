@@ -397,7 +397,10 @@ func (c *container) Wait() (oslayer.ProcessExitState, error) {
 	for _, process := range processes {
 		// Only wait on non-init processes that were created with exec.
 		if process.Pid != c.init.pid && process.CreatedByRuntime {
-			// TODO: Should we check for errors here?
+			// FUTURE-jstarks: Consider waiting on the child process's relays
+			// as well (as in p.Wait()). This may not matter as long as the relays
+			// finish "soon" after Wait() returns since HCS expects the stdio
+			// connections to close before container shutdown can complete.
 			c.r.waitOnProcess(process.Pid)
 		}
 	}

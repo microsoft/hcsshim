@@ -2,15 +2,13 @@ package bridge
 
 import (
 	"encoding/binary"
-
-	"github.com/pkg/errors"
-
 	"io"
 
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -66,11 +64,10 @@ func sendResponseBytes(conn transport.Connection, messageType prot.MessageIdenti
 	return sendMessageBytes(conn, prot.GetResponseIdentifier(messageType), messageID, b)
 }
 
-// createAndConnectStdio returns new transport.Connection structs, one for each
+// connectStdio returns new transport.Connection instances, one for each
 // stdio pipe to be used. If CreateStd*Pipe for a given pipe is false, the
-// given Connection is set to nil. After creating each transport.Connection, it
-// calls Connect on it.
-func createAndConnectStdio(tport transport.Transport, params prot.ProcessParameters, settings prot.ExecuteProcessVsockStdioRelaySettings) (s *stdio.ConnectionSet, err error) {
+// given Connection is set to nil.
+func connectStdio(tport transport.Transport, params prot.ProcessParameters, settings prot.ExecuteProcessVsockStdioRelaySettings) (s *stdio.ConnectionSet, err error) {
 	s = &stdio.ConnectionSet{}
 	defer func() {
 		if err != nil {

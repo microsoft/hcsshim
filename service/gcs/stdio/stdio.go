@@ -45,7 +45,7 @@ type FileSet struct {
 	In, Out, Err *os.File
 }
 
-// Close closes all the FIleSet handles.
+// Close closes all the FileSet handles.
 func (fs *FileSet) Close() error {
 	var err error
 	if fs.In != nil {
@@ -136,7 +136,8 @@ func (r *TtyRelay) Start() {
 	}
 }
 
-// Wait waits for the relaying to finish.
+// Wait waits for the relaying to finish and closes the associated
+// files and connections.
 func (r *TtyRelay) Wait() {
 	// Close stdin so that the copying goroutine is safely unblocked; this is necessary
 	// because the host expects stdin to be closed before it will report process

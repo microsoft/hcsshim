@@ -236,7 +236,7 @@ func (b *bridge) execProcess(message []byte) (*prot.ContainerExecuteProcessRespo
 	response.ActivityID = request.ActivityID
 	id := request.ContainerID
 
-	stdioSet, err := createAndConnectStdio(b.tport, params, request.Settings.VsockStdioRelaySettings)
+	stdioSet, err := connectStdio(b.tport, params, request.Settings.VsockStdioRelaySettings)
 	if err != nil {
 		return response, err
 	}
@@ -332,7 +332,7 @@ func (b *bridge) runExternalProcess(message []byte) (*prot.ContainerExecuteProce
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for ProcessParameters \"%s\"", request.Settings.ProcessParameters)
 	}
 
-	stdioSet, err := createAndConnectStdio(b.tport, params, request.Settings.VsockStdioRelaySettings)
+	stdioSet, err := connectStdio(b.tport, params, request.Settings.VsockStdioRelaySettings)
 	if err != nil {
 		return response, err
 	}
