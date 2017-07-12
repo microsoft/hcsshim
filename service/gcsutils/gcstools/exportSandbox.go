@@ -8,7 +8,7 @@ import (
 
 	"github.com/Microsoft/opengcs/service/gcsutils/gcstools/commoncli"
 	"github.com/Microsoft/opengcs/service/gcsutils/libtar2vhd"
-	"github.com/Microsoft/opengcs/service/libs/commonutils"
+	"github.com/Sirupsen/logrus"
 )
 
 func exportSandbox() error {
@@ -23,25 +23,25 @@ func exportSandbox() error {
 
 	options, err := commoncli.SetupTar2VHDLibOptions(tar2vhdArgs...)
 	if err != nil {
-		utils.LogMsgf("error: %s. Please use -h for params\n", err)
+		logrus.Infof("error: %s. Please use -h for params\n", err)
 		return err
 	}
 
 	if *mntPath == "" {
 		err = fmt.Errorf("path is required")
-		utils.LogMsgf("error: %s. Please use -h for params\n", err)
+		logrus.Infof("error: %s. Please use -h for params\n", err)
 		return err
 	}
 
 	absPath, err := filepath.Abs(*mntPath)
 	if err != nil {
-		utils.LogMsgf("error: %s. Could not get abs\n", err)
+		logrus.Infof("error: %s. Could not get abs\n", err)
 		return err
 	}
 
-	utils.LogMsgf("converted: Packing %s\n", absPath)
+	logrus.Infof("converted: Packing %s\n", absPath)
 	if _, err = libtar2vhd.VHDX2Tar(absPath, os.Stdout, options); err != nil {
-		utils.LogMsgf("failed to pack files: %s\n", err)
+		logrus.Infof("failed to pack files: %s\n", err)
 		return err
 	}
 	return nil

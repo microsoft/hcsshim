@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/Microsoft/opengcs/service/gcsutils/gcstools/commoncli"
-	"github.com/Microsoft/opengcs/service/libs/commonutils"
+	"github.com/Sirupsen/logrus"
 )
 
 // PreBuiltSandboxFile is the default location for the sandbox file.
@@ -22,16 +22,16 @@ func createSandbox() error {
 		return err
 	}
 
-	utils.LogMsgf("got location=%s and size=%d\n", sandboxLocation, *size)
+	logrus.Infof("got location=%s and size=%d\n", sandboxLocation, *size)
 	file, err := os.Open(*sandboxLocation)
 	if err != nil {
-		utils.LogMsgf("error opening %s: %s\n", *sandboxLocation, err)
+		logrus.Infof("error opening %s: %s\n", *sandboxLocation, err)
 		return err
 	}
 	defer file.Close()
 
 	if _, err = io.Copy(os.Stdout, file); err != nil {
-		utils.LogMsgf("error copying %s: %s", *sandboxLocation, err)
+		logrus.Infof("error copying %s: %s", *sandboxLocation, err)
 		return err
 	}
 

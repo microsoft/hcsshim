@@ -6,7 +6,7 @@ import (
 
 	"github.com/Microsoft/opengcs/service/gcsutils/gcstools/commoncli"
 	"github.com/Microsoft/opengcs/service/gcsutils/libtar2vhd"
-	"github.com/Microsoft/opengcs/service/libs/commonutils"
+	"github.com/Sirupsen/logrus"
 )
 
 func tar2vhd() error {
@@ -16,19 +16,19 @@ func tar2vhd() error {
 
 	options, err := commoncli.SetupTar2VHDLibOptions(tar2vhdArgs...)
 	if err != nil {
-		utils.LogMsgf("error: %s. Please use -h for params\n", err)
+		logrus.Infof("error: %s. Please use -h for params\n", err)
 		return err
 	}
 
 	err = commoncli.SetupLogging(logArgs...)
 	if err != nil {
-		utils.LogMsgf("error: %s. Please useu-h for params\n", err)
+		logrus.Infof("error: %s. Please useu-h for params\n", err)
 		return err
 	}
 
 	_, err = libtar2vhd.Tar2VHD(os.Stdin, os.Stdout, options)
 	if err != nil {
-		utils.LogMsgf("svmutilsMain failed with %s\n", err)
+		logrus.Infof("svmutilsMain failed with %s\n", err)
 		return err
 	}
 	return nil

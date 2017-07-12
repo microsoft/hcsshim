@@ -1,5 +1,5 @@
 /gcs
 /runtime/runc/testbundle/rootfs/
 /runtime/runc/testbundle/.ip
-gcslog.txt
+gcs.log
 

@@ -7,12 +7,12 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/pkg/archive"
 
 	"github.com/Microsoft/opengcs/service/gcsutils/fs"
 	"github.com/Microsoft/opengcs/service/gcsutils/tarlib"
 	"github.com/Microsoft/opengcs/service/gcsutils/vhd"
-	"github.com/Microsoft/opengcs/service/libs/commonutils"
 )
 
 // Options contains the configuration parameters that get passed to the tar2vhd library.
@@ -26,7 +26,7 @@ type Options struct {
 // Tar2VHD takes in a tarstream and outputs a vhd containing the files. It also
 // returns the size of the outputted VHD file.
 func Tar2VHD(in io.Reader, out io.Writer, options *Options) (int64, error) {
-	utils.LogMsg("creating a temp file for VHD")
+	logrus.Info("creating a temp file for VHD")
 
 	// Create a VHD file
 	vhdFile, err := ioutil.TempFile(options.TempDirectory, "vhd")
@@ -37,7 +37,7 @@ func Tar2VHD(in io.Reader, out io.Writer, options *Options) (int64, error) {
 	defer os.Remove(vhdFile.Name())
 	defer vhdFile.Close()
 
-	utils.LogMsg("create Tar disk")
+	logrus.Info("create Tar disk")
 	// Write Tar file to vhd
 	if _, err := tarlib.CreateTarDisk(in,
 		options.Filesystem,
@@ -47,17 +47,17 @@ func Tar2VHD(in io.Reader, out io.Writer, options *Options) (int64, error) {
 		return 0, err
 	}
 
-	utils.LogMsg("convert to VHD")
+	logrus.Info("convert to VHD")
 	if err := options.Converter.ConvertToVHD(vhdFile); err != nil {
 		return 0, err
 	}
 
-	utils.LogMsg("send to std out pipe")
+	logrus.Info("send to std out pipe")
 	diskSize, err := io.Copy(out, vhdFile)
 	if err != nil {
 		return 0, err
 	}
-	utils.LogMsgf("leaving Tar2VHD: VHD disk size:%d", diskSize)
+	logrus.Infof("leaving Tar2VHD: VHD disk size:%d", diskSize)
 	return diskSize, nil
 }
 
