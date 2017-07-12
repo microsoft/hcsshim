@@ -1,14 +1,16 @@
-From 5b1cbb12216438c8c8e05c44f1e036eb184aef20 Mon Sep 17 00:00:00 2001
+From 78422de836ee3f76f42e0c93b657869f5e7103b3 Mon Sep 17 00:00:00 2001
 From: Cheng-mean Liu <soccerl@microsoft.com>
-Date: Fri, 30 Jun 2017 16:14:03 -0700
-Subject: [PATCH] lower the minimum PMEM size
+Date: Tue, 11 Jul 2017 16:58:26 -0700
+Subject: [PATCH] NVDIMM: reducded ND_MIN_NAMESPACE_SIZE from 4MB to 4KB (page
+ size)
 
+Signed-off-by: Cheng-mean Liu <soccerl@microsoft.com>
 ---
  include/uapi/linux/ndctl.h | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/include/uapi/linux/ndctl.h b/include/uapi/linux/ndctl.h
-index ede5c6a..6f17246 100644
+index ede5c6a..4776082 100644
 --- a/include/uapi/linux/ndctl.h
 +++ b/include/uapi/linux/ndctl.h
 @@ -259,7 +259,7 @@ enum nd_driver_flags {
@@ -16,7 +18,7 @@ index ede5c6a..6f17246 100644
  
  enum {
 -	ND_MIN_NAMESPACE_SIZE = 0x00400000,
-+	ND_MIN_NAMESPACE_SIZE = 0x00040000, // 256 KB
++	ND_MIN_NAMESPACE_SIZE = 0x00001000,
  };
  
  enum ars_masks {
