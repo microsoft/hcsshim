@@ -21,7 +21,7 @@ import (
 const (
 	// baseFilesPath is the path in the utility VM containing all the files
 	// that will be used as the base layer for containers.
-	baseFilesPath = "/mnt/base/"
+	baseFilesPath = "/tmp/base/"
 
 	// deviceLookupTimeout is the amount of time before deviceIDToName will
 	// give up trying to look up the device name from its ID.
@@ -341,7 +341,7 @@ func (c *gcsCore) writeConfigFile(id string, config oci.Spec) error {
 }
 
 func (c *gcsCore) getStorageRootPath() string {
-	return "/mnt/gcs"
+	return "/tmp/gcs"
 }
 
 // getContainerStoragePath returns the path where the GCS stores files on disk
