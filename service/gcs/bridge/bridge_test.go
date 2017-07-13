@@ -55,7 +55,7 @@ var _ = Describe("Bridge", func() {
 	JustBeforeEach(func(done Done) {
 		defer close(done)
 
-		b := NewBridge(tport, coreint, false)
+		b := NewBridge(tport, coreint)
 		go func() {
 			defer GinkgoRecover()
 			b.CommandLoop()

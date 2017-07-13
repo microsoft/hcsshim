@@ -26,9 +26,6 @@ type bridge struct {
 	// coreint is the Core interface used by the bridge.
 	coreint core.Core
 
-	// printErrors is true if the bridge should print errors which occur.
-	printErrors bool
-
 	// commandConn is the Connection the bridge receives commands (such as
 	// ComputeSystemCreate) over.
 	commandConn transport.Connection
@@ -41,18 +38,10 @@ type bridge struct {
 
 // NewBridge produces a new bridge struct using the given Transport and Core
 // interfaces.
-func NewBridge(tport transport.Transport, coreint core.Core, printErrors bool) *bridge {
+func NewBridge(tport transport.Transport, coreint core.Core) *bridge {
 	return &bridge{
-		tport:       tport,
-		coreint:     coreint,
-		printErrors: printErrors,
-	}
-}
-
-// outputError writes out the given error.
-func (b *bridge) outputError(err error) {
-	if b.printErrors {
-		logrus.Error(err)
+		tport:   tport,
+		coreint: coreint,
 	}
 }
 
@@ -61,7 +50,7 @@ func (b *bridge) outputError(err error) {
 // to the HCS, and repeats.
 func (b *bridge) CommandLoop() {
 	if err := b.loop(); err != nil {
-		b.outputError(err)
+		logrus.Error(err)
 	}
 }
 
@@ -92,19 +81,19 @@ func (b *bridge) loop() error {
 			logrus.Info("received from HCS: ComputeSystemCreateV1")
 			response, err = b.createContainer(message)
 			if err != nil {
-				b.outputError(err)
+				logrus.Error(err)
 			}
 		case prot.ComputeSystemExecuteProcessV1:
 			logrus.Info("received from HCS: ComputeSystemExecuteProcessV1")
 			response, err = b.execProcess(message)
 			if err != nil {
-				b.outputError(err)
+				logrus.Error(err)
 			}
 		case prot.ComputeSystemShutdownForcedV1:
 			logrus.Info("received from HCS: ComputeSystemShutdownForcedV1")
 			response, err = b.killContainer(message)
 			if err != nil {
-				b.outputError(err)
+				logrus.Error(err)
 			}
 		case prot.ComputeSystemShutdownGracefulV1:
 			logrus.Info("received from HCS: ComputeSystemShutdownGracefulV1")
@@ -116,19 +105,19 @@ func (b *bridge) loop() error {
 			logrus.Info("received from HCS: ComputeSystemTerminateProcessV1")
 			response, err = b.terminateProcess(message)
 			if err != nil {
-				b.outputError(err)
+				logrus.Error(err)
 			}
 		case prot.ComputeSystemGetPropertiesV1:
 			logrus.Info("received from HCS: ComputeSystemGetPropertiesV1")
 			response, err = b.listProcesses(message)
 			if err != nil {
-				b.outputError(err)
+				logrus.Error(err)
 			}
 		case prot.ComputeSystemWaitForProcessV1:
 			logrus.Info("received from HCS: ComputeSystemWaitForProcessV1")
 			response, err = b.waitOnProcess(message, header)
 			if err != nil {
-				b.outputError(err)
+				logrus.Error(err)
 			} else {
 				// If no error occurred, don't respond until the process has
 				// exited.
@@ -138,17 +127,17 @@ func (b *bridge) loop() error {
 			logrus.Info("received from HCS: ComputeSystemResizeConsoleV1")
 			response, err = b.resizeConsole(message)
 			if err != nil {
-				b.outputError(err)
+				logrus.Error(err)
 			}
 		case prot.ComputeSystemModifySettingsV1:
 			logrus.Info("received from HCS: ComputeSystemModifySettingsV1")
 			response, err = b.modifySettings(message)
 			if err != nil {
-				b.outputError(err)
+				logrus.Error(err)
 			}
 		default:
 			// TODO: Should a response be returned in this case?
-			b.outputError(errors.Errorf("received invalid header type code from HCS: 0x%x", header.Type))
+			logrus.Error(errors.Errorf("received invalid header type code from HCS: 0x%x", header.Type))
 		}
 
 		// Set the error fields on the response if an error was encountered.
@@ -201,7 +190,7 @@ func (b *bridge) createContainer(message []byte) (*prot.ContainerCreateResponse,
 
 	exitHook := func(state oslayer.ProcessExitState) {
 		if err := b.sendExitNotification(id, response.ActivityID, state); err != nil {
-			b.outputError(err)
+			logrus.Error(err)
 		}
 	}
 	if err := b.coreint.RegisterContainerExitHook(id, exitHook); err != nil {
@@ -356,7 +345,7 @@ func (b *bridge) waitOnProcess(message []byte, header *prot.MessageHeader) (*pro
 	exitHook := func(state oslayer.ProcessExitState) {
 		response.ExitCode = uint32(state.ExitCode())
 		if err := b.sendResponse(response, header); err != nil {
-			b.outputError(errors.Wrapf(err, "failed to send process exit response \"%v\"", response))
+			logrus.Error(errors.Wrapf(err, "failed to send process exit response \"%v\"", response))
 		}
 	}
 	if err := b.coreint.RegisterProcessExitHook(int(request.ProcessID), exitHook); err != nil {
@@ -420,7 +409,7 @@ func (b *bridge) setErrorForResponseBase(response *prot.MessageResponseBase, err
 		var err error
 		lineNumber, err = strconv.Atoi(lineNumberStr)
 		if err != nil {
-			b.outputError(errors.Wrapf(err, "failed to parse \"%s\" as line number of error, using -1 instead", lineNumberStr))
+			logrus.Error(errors.Wrapf(err, "failed to parse \"%s\" as line number of error, using -1 instead", lineNumberStr))
 			lineNumber = -1
 		}
 		functionName = fmt.Sprintf("%n", bottomFrame)

@@ -56,6 +56,6 @@ func main() {
 	}
 	os := realos.NewOS()
 	coreint := gcs.NewGCSCore(rtime, os)
-	b := bridge.NewBridge(tport, coreint, true)
+	b := bridge.NewBridge(tport, coreint)
 	b.CommandLoop()
 }
