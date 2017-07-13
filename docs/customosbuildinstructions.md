@@ -81,7 +81,7 @@ Here are the expected contents of each subdirectory /file
        /lib/x86_64-linux-gnu/libuuid.so.1
        /lib/modules
 
-7. **/bin** : binaries in this subdir are categorised into three groups
+7. **/bin** : binaries in this subdir are categorised into four groups
         
     - [GCS binaries](gcsbuildinstructions.md/)
 
@@ -104,6 +104,12 @@ Here are the expected contents of each subdirectory /file
              /bin/ip
              /bin/iproute
              /bin/hostname
+
+    - Required binaires: utilities used by docker
+
+             /bin/ls
+             /bin/cat
+             /bin/test
 
     - Debugging tools: mostly from busybox tool set
        
