@@ -52,7 +52,7 @@ Here are the expected contents of each subdirectory /file
          
          /root/integration/prebuildSandbox.vhdx
 
-         Note: this vhdx file could be found in opengcs/kernelconfig/4.11
+         Note: this vhdx file is located under opengcs/kernelconfig/4.11 
 
 4. **/sbin** : 
     - /sbin/runc  
