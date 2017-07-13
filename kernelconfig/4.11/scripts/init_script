@@ -20,6 +20,6 @@ mount -t tmpfs shm /dev/shm
 
 # Run gcs in the background
 cd /bin
-./gcs  -loglevel=verbose -logfile=/tmp/gcslog.txt &
+./gcs  -loglevel=verbose -logfile=/tmp/gcs.log &
 cd -
 sh
