@@ -5,10 +5,9 @@ package runtime
 import (
 	"io"
 
-	oci "github.com/opencontainers/runtime-spec/specs-go"
-
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 // ContainerState gives information about a container created by a Runtime.

@@ -8,15 +8,14 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/Sirupsen/logrus"
-	"github.com/pkg/errors"
-
 	"github.com/Microsoft/opengcs/service/gcs/core"
 	gcserr "github.com/Microsoft/opengcs/service/gcs/errors"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
+	"github.com/Sirupsen/logrus"
+	"github.com/pkg/errors"
 )
 
 // bridge defines the bridge client in the GCS.

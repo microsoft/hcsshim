@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Sirupsen/logrus"
-
 	"github.com/Microsoft/opengcs/service/gcs/bridge"
 	"github.com/Microsoft/opengcs/service/gcs/core/gcs"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer/realos"
 	"github.com/Microsoft/opengcs/service/gcs/runtime/runc"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
+	"github.com/Sirupsen/logrus"
 )
 
 func main() {

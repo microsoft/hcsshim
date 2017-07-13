@@ -11,16 +11,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Sirupsen/logrus"
-	shellwords "github.com/mattn/go-shellwords"
-	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
-
 	gcserr "github.com/Microsoft/opengcs/service/gcs/errors"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
+	"github.com/Sirupsen/logrus"
+	shellwords "github.com/mattn/go-shellwords"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
 )
 
 const (

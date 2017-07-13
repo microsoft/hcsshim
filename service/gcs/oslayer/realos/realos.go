@@ -11,11 +11,10 @@ import (
 	"strconv"
 	"syscall"
 
+	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
-
-	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 )
 
 // realProcessExitState represents an oslayer.ProcessExitState which uses an

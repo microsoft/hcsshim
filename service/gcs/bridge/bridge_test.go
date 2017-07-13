@@ -6,16 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-	oci "github.com/opencontainers/runtime-spec/specs-go"
-
 	"github.com/Microsoft/opengcs/service/gcs/core/mockcore"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer/mockos"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 const (

@@ -1,10 +1,10 @@
 package errors
 
 import (
+	"testing"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	"testing"
 )
 
 func TestErrors(t *testing.T) {

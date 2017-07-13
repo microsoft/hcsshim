@@ -12,7 +12,6 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/oslayer/realos"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime/runc"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
