@@ -419,6 +419,7 @@ type MappedVirtualDisk struct {
 	Lun               uint8 `json:",omitempty"`
 	CreateInUtilityVM bool  `json:",omitempty"`
 	ReadOnly          bool  `json:",omitempty"`
+	AttachOnly        bool  `json:",omitempty"`
 }
 
 // MappedDirectory represents a directory on the host which is mapped to a
