@@ -12,6 +12,7 @@ import (
 
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
+	"github.com/Microsoft/opengcs/service/gcs/stdio"
 )
 
 // globals for the whole test suite
@@ -153,8 +154,6 @@ var _ = Describe("runC", func() {
 		bundle     string
 		err        error
 		containers []runtime.Container
-
-		createAllStdioOptions runtime.StdioOptions
 	)
 
 	BeforeEach(func() {
@@ -162,14 +161,7 @@ var _ = Describe("runC", func() {
 		Expect(err).NotTo(HaveOccurred())
 		bundle, err = getBundlePath()
 		Expect(err).NotTo(HaveOccurred())
-
 		containers = nil
-
-		createAllStdioOptions = runtime.StdioOptions{
-			CreateIn:  true,
-			CreateOut: true,
-			CreateErr: true,
-		}
 	})
 	AfterEach(func() {
 		err = cleanupContainers(rtime, containers)
@@ -182,7 +174,7 @@ var _ = Describe("runC", func() {
 			c  runtime.Container
 		)
 		JustBeforeEach(func() {
-			c, err = rtime.CreateContainer(id, bundle, createAllStdioOptions)
+			c, err = rtime.CreateContainer(id, bundle, &stdio.ConnectionSet{})
 			if err == nil {
 				containers = append(containers, c)
 			}
@@ -221,7 +213,7 @@ var _ = Describe("runC", func() {
 					c runtime.Container
 				)
 				JustBeforeEach(func() {
-					c, err = rtime.CreateContainer(id, bundle, createAllStdioOptions)
+					c, err = rtime.CreateContainer(id, bundle, &stdio.ConnectionSet{})
 					if err == nil {
 						containers = append(containers, c)
 					}
@@ -268,7 +260,7 @@ var _ = Describe("runC", func() {
 
 					Describe("executing a process in a container", func() {
 						JustBeforeEach(func() {
-							_, err = c.ExecProcess(longSleepProcess, createAllStdioOptions)
+							_, err = c.ExecProcess(longSleepProcess, &stdio.ConnectionSet{})
 						})
 						It("should not have produced an error", func() {
 							Expect(err).NotTo(HaveOccurred())
@@ -328,7 +320,7 @@ var _ = Describe("runC", func() {
 						JustBeforeEach(func(done Done) {
 							defer close(done)
 
-							p, err = c.ExecProcess(shortSleepProcess, createAllStdioOptions)
+							p, err = c.ExecProcess(shortSleepProcess, &stdio.ConnectionSet{})
 							Expect(err).NotTo(HaveOccurred())
 							_, err = p.Wait()
 							Expect(err).NotTo(HaveOccurred())
@@ -380,9 +372,9 @@ var _ = Describe("runC", func() {
 						JustBeforeEach(func(done Done) {
 							defer close(done)
 
-							_, err = c.ExecProcess(longSleepProcess, createAllStdioOptions)
+							_, err = c.ExecProcess(longSleepProcess, &stdio.ConnectionSet{})
 							Expect(err).NotTo(HaveOccurred())
-							p, err = c.ExecProcess(shortSleepProcess, createAllStdioOptions)
+							p, err = c.ExecProcess(shortSleepProcess, &stdio.ConnectionSet{})
 							Expect(err).NotTo(HaveOccurred())
 							_, err = p.Wait()
 							Expect(err).NotTo(HaveOccurred())

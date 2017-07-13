@@ -8,6 +8,7 @@ import (
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
+	"github.com/Microsoft/opengcs/service/gcs/stdio"
 )
 
 // ContainerState gives information about a container created by a Runtime.
@@ -30,13 +31,6 @@ type ContainerProcessState struct {
 	IsZombie         bool
 }
 
-// StdioOptions specify how the runtime should handle stdio for the process.
-type StdioOptions struct {
-	CreateIn  bool
-	CreateOut bool
-	CreateErr bool
-}
-
 // StdioPipes contain the interfaces for reading from and writing to a
 // process's stdio.
 type StdioPipes struct {
@@ -50,7 +44,6 @@ type Process interface {
 	Wait() (oslayer.ProcessExitState, error)
 	Pid() int
 	Delete() error
-	GetStdioPipes() (*StdioPipes, error)
 }
 
 // Container is an interface to manipulate container state.
@@ -59,7 +52,7 @@ type Container interface {
 	ID() string
 	Exists() (bool, error)
 	Start() error
-	ExecProcess(process oci.Process, stdioOptions StdioOptions) (p Process, err error)
+	ExecProcess(process oci.Process, stdioSet *stdio.ConnectionSet) (p Process, err error)
 	Kill(signal oslayer.Signal) error
 	Pause() error
 	Resume() error
@@ -71,6 +64,6 @@ type Container interface {
 // Runtime is the interface defining commands over an OCI container runtime,
 // such as runC.
 type Runtime interface {
-	CreateContainer(id string, bundlePath string, stdioOptions StdioOptions) (c Container, err error)
+	CreateContainer(id string, bundlePath string, stdioSet *stdio.ConnectionSet) (c Container, err error)
 	ListContainerStates() ([]ContainerState, error)
 }

@@ -7,12 +7,12 @@ import (
 	. "github.com/onsi/gomega"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 
-	"github.com/Microsoft/opengcs/service/gcs/core"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer/mockos"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/runtime/mockruntime"
+	"github.com/Microsoft/opengcs/service/gcs/stdio"
 )
 
 var _ = Describe("GCS", func() {
@@ -571,7 +571,7 @@ var _ = Describe("GCS", func() {
 				initialExecParams                    prot.ProcessParameters
 				nonInitialExecParams                 prot.ProcessParameters
 				externalParams                       prot.ProcessParameters
-				fullStdioSet                         *core.StdioSet
+				fullStdioSet                         *stdio.ConnectionSet
 				mappedVirtualDisk                    prot.MappedVirtualDisk
 				modificationRequest                  prot.ResourceModificationRequestResponse
 				modificationRequestSameLun           prot.ResourceModificationRequestResponse
@@ -662,7 +662,7 @@ var _ = Describe("GCS", func() {
 					IsExternal:       true,
 					OCISpecification: oci.Spec{},
 				}
-				fullStdioSet = &core.StdioSet{
+				fullStdioSet = &stdio.ConnectionSet{
 					In:  mockos.NewMockReadWriteCloser(),
 					Out: mockos.NewMockReadWriteCloser(),
 					Err: mockos.NewMockReadWriteCloser(),
