@@ -109,7 +109,7 @@ var _ = Describe("Utils", func() {
 					actualDir   string
 				)
 				BeforeEach(func() {
-					expectedDir = "/var/lib/gcsrunc/" + id + "/123"
+					expectedDir = "/var/run/gcsrunc/" + id + "/123"
 				})
 				JustBeforeEach(func() {
 					actualDir = rtime.getProcessDir(id, 123)
@@ -129,7 +129,7 @@ var _ = Describe("Utils", func() {
 					actualDir   string
 				)
 				BeforeEach(func() {
-					expectedDir = "/var/lib/gcsrunc/" + id
+					expectedDir = "/var/run/gcsrunc/" + id
 				})
 				JustBeforeEach(func() {
 					actualDir = rtime.getContainerDir(id)
@@ -147,7 +147,7 @@ var _ = Describe("Utils", func() {
 			actualPath   string
 		)
 		BeforeEach(func() {
-			expectedPath = "/var/lib/gcsrunc/log.log"
+			expectedPath = "/var/run/gcsrunc/log.log"
 		})
 		JustBeforeEach(func() {
 			actualPath = rtime.getLogPath()
