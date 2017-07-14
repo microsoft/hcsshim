@@ -25,7 +25,7 @@ import (
 
 const (
 	runcPath          = "/sbin/runc"
-	containerFilesDir = "/var/lib/gcsrunc"
+	containerFilesDir = "/var/run/gcsrunc"
 	initPidFilename   = "initpid"
 )
 
