@@ -452,7 +452,7 @@ func (r *runcRuntime) hasTerminal(bundlePath string) (bool, error) {
 	}
 	defer configFile.Close()
 	var config oci.Spec
-	if err := utils.DecodeJSONWithHresult(configFile, &config); err != nil {
+	if err := commonutils.DecodeJSONWithHresult(configFile, &config); err != nil {
 		return false, errors.Wrap(err, "failed to decode config file as JSON")
 	}
 	return config.Process.Terminal, nil

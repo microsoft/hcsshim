@@ -6,12 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/pkg/archive"
 
 	"github.com/Microsoft/opengcs/service/gcsutils/fs"
 	"github.com/Microsoft/opengcs/service/gcsutils/libtar2vhd"
 	"github.com/Microsoft/opengcs/service/gcsutils/vhd"
-	"github.com/Microsoft/opengcs/service/libs/commonutils"
 )
 
 // SetFlagsForTar2VHDLib creates the command line flags for the tar2vhd/vhd2tar
@@ -79,6 +79,14 @@ func SetupLogging(args ...*string) error {
 	if len(args) < 1 {
 		return fmt.Errorf("Invalid log params")
 	}
-	utils.SetLoggingOptions("verbose", *args[0])
+
+	logrus.SetLevel(logrus.InfoLevel)
+
+	outputTarget, err := os.OpenFile(*args[0], os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+	if err != nil {
+		return err
+	}
+
+	logrus.SetOutput(outputTarget)
 	return nil
 }

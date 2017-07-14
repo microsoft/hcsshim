@@ -90,43 +90,43 @@ func (b *bridge) loop() error {
 		var response interface{}
 		switch header.Type {
 		case prot.ComputeSystemCreateV1:
-			utils.LogMsg("received from HCS: ComputeSystemCreateV1")
+			logrus.Info("received from HCS: ComputeSystemCreateV1")
 			response, err = b.createContainer(message)
 			if err != nil {
 				b.outputError(err)
 			}
 		case prot.ComputeSystemExecuteProcessV1:
-			utils.LogMsg("received from HCS: ComputeSystemExecuteProcessV1")
+			logrus.Info("received from HCS: ComputeSystemExecuteProcessV1")
 			response, err = b.execProcess(message)
 			if err != nil {
 				b.outputError(err)
 			}
 		case prot.ComputeSystemShutdownForcedV1:
-			utils.LogMsg("received from HCS: ComputeSystemShutdownForcedV1")
+			logrus.Info("received from HCS: ComputeSystemShutdownForcedV1")
 			response, err = b.killContainer(message)
 			if err != nil {
 				b.outputError(err)
 			}
 		case prot.ComputeSystemShutdownGracefulV1:
-			utils.LogMsg("received from HCS: ComputeSystemShutdownGracefulV1")
+			logrus.Info("received from HCS: ComputeSystemShutdownGracefulV1")
 			response, err = b.shutdownContainer(message)
 			if err != nil {
 				logrus.Error(err)
 			}
 		case prot.ComputeSystemTerminateProcessV1:
-			utils.LogMsg("received from HCS: ComputeSystemTerminateProcessV1")
+			logrus.Info("received from HCS: ComputeSystemTerminateProcessV1")
 			response, err = b.terminateProcess(message)
 			if err != nil {
 				b.outputError(err)
 			}
 		case prot.ComputeSystemGetPropertiesV1:
-			utils.LogMsg("received from HCS: ComputeSystemGetPropertiesV1")
+			logrus.Info("received from HCS: ComputeSystemGetPropertiesV1")
 			response, err = b.listProcesses(message)
 			if err != nil {
 				b.outputError(err)
 			}
 		case prot.ComputeSystemWaitForProcessV1:
-			utils.LogMsg("received from HCS: ComputeSystemWaitForProcessV1")
+			logrus.Info("received from HCS: ComputeSystemWaitForProcessV1")
 			response, err = b.waitOnProcess(message, header)
 			if err != nil {
 				b.outputError(err)
@@ -136,13 +136,13 @@ func (b *bridge) loop() error {
 				response = nil
 			}
 		case prot.ComputeSystemResizeConsoleV1:
-			utils.LogMsg("received from HCS: ComputeSystemResizeConsoleV1")
+			logrus.Info("received from HCS: ComputeSystemResizeConsoleV1")
 			response, err = b.resizeConsole(message)
 			if err != nil {
 				b.outputError(err)
 			}
 		case prot.ComputeSystemModifySettingsV1:
-			utils.LogMsg("received from HCS: ComputeSystemModifySettingsV1")
+			logrus.Info("received from HCS: ComputeSystemModifySettingsV1")
 			response, err = b.modifySettings(message)
 			if err != nil {
 				b.outputError(err)
@@ -183,7 +183,7 @@ func (b *bridge) loop() error {
 func (b *bridge) createContainer(message []byte) (*prot.ContainerCreateResponse, error) {
 	response := &prot.ContainerCreateResponse{MessageResponseBase: newResponseBase()}
 	var request prot.ContainerCreate
-	if err := utils.UnmarshalJSONWithHresult(message, &request); err != nil {
+	if err := commonutils.UnmarshalJSONWithHresult(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", message)
 	}
 	response.ActivityID = request.ActivityID
@@ -191,7 +191,7 @@ func (b *bridge) createContainer(message []byte) (*prot.ContainerCreateResponse,
 	// The request contains a JSON string field which is equivalent to a
 	// CreateContainerInfo struct.
 	var settings prot.VMHostedContainerSettings
-	if err := utils.UnmarshalJSONWithHresult([]byte(request.ContainerConfig), &settings); err != nil {
+	if err := commonutils.UnmarshalJSONWithHresult([]byte(request.ContainerConfig), &settings); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for ContainerConfig \"%s\"", request.ContainerConfig)
 	}
 
@@ -216,13 +216,13 @@ func (b *bridge) createContainer(message []byte) (*prot.ContainerCreateResponse,
 func (b *bridge) execProcess(message []byte) (*prot.ContainerExecuteProcessResponse, error) {
 	response := &prot.ContainerExecuteProcessResponse{MessageResponseBase: newResponseBase()}
 	var request prot.ContainerExecuteProcess
-	if err := utils.UnmarshalJSONWithHresult(message, &request); err != nil {
+	if err := commonutils.UnmarshalJSONWithHresult(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
 	// The request contains a JSON string field which is equivalent to an
 	// ExecuteProcessInfo struct.
 	var params prot.ProcessParameters
-	if err := utils.UnmarshalJSONWithHresult([]byte(request.Settings.ProcessParameters), &params); err != nil {
+	if err := commonutils.UnmarshalJSONWithHresult([]byte(request.Settings.ProcessParameters), &params); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for ProcessParameters \"%s\"", request.Settings.ProcessParameters)
 	}
 
@@ -253,7 +253,7 @@ func (b *bridge) execProcess(message []byte) (*prot.ContainerExecuteProcessRespo
 func (b *bridge) killContainer(message []byte) (*prot.MessageResponseBase, error) {
 	response := newResponseBase()
 	var request prot.MessageBase
-	if err := utils.UnmarshalJSONWithHresult(message, &request); err != nil {
+	if err := commonutils.UnmarshalJSONWithHresult(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
 	response.ActivityID = request.ActivityID
@@ -268,7 +268,7 @@ func (b *bridge) killContainer(message []byte) (*prot.MessageResponseBase, error
 func (b *bridge) shutdownContainer(message []byte) (*prot.MessageResponseBase, error) {
 	response := newResponseBase()
 	var request prot.MessageBase
-	if err := utils.UnmarshalJSONWithHresult(message, &request); err != nil {
+	if err := commonutils.UnmarshalJSONWithHresult(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
 	response.ActivityID = request.ActivityID
@@ -283,7 +283,7 @@ func (b *bridge) shutdownContainer(message []byte) (*prot.MessageResponseBase, e
 func (b *bridge) terminateProcess(message []byte) (*prot.MessageResponseBase, error) {
 	response := newResponseBase()
 	var request prot.ContainerTerminateProcess
-	if err := utils.UnmarshalJSONWithHresult(message, &request); err != nil {
+	if err := commonutils.UnmarshalJSONWithHresult(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
 	response.ActivityID = request.ActivityID
@@ -298,7 +298,7 @@ func (b *bridge) terminateProcess(message []byte) (*prot.MessageResponseBase, er
 func (b *bridge) listProcesses(message []byte) (*prot.ContainerGetPropertiesResponse, error) {
 	response := &prot.ContainerGetPropertiesResponse{MessageResponseBase: newResponseBase()}
 	var request prot.ContainerGetProperties
-	if err := utils.UnmarshalJSONWithHresult(message, &request); err != nil {
+	if err := commonutils.UnmarshalJSONWithHresult(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
 	response.ActivityID = request.ActivityID
@@ -320,7 +320,7 @@ func (b *bridge) listProcesses(message []byte) (*prot.ContainerGetPropertiesResp
 func (b *bridge) runExternalProcess(message []byte) (*prot.ContainerExecuteProcessResponse, error) {
 	response := &prot.ContainerExecuteProcessResponse{MessageResponseBase: newResponseBase()}
 	var request prot.ContainerExecuteProcess
-	if err := utils.UnmarshalJSONWithHresult(message, &request); err != nil {
+	if err := commonutils.UnmarshalJSONWithHresult(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
 	response.ActivityID = request.ActivityID
@@ -328,7 +328,7 @@ func (b *bridge) runExternalProcess(message []byte) (*prot.ContainerExecuteProce
 	// The request contains a JSON string field which is equivalent to a
 	// RunExternalProcessInfo struct.
 	var params prot.ProcessParameters
-	if err := utils.UnmarshalJSONWithHresult([]byte(request.Settings.ProcessParameters), &params); err != nil {
+	if err := commonutils.UnmarshalJSONWithHresult([]byte(request.Settings.ProcessParameters), &params); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for ProcessParameters \"%s\"", request.Settings.ProcessParameters)
 	}
 
@@ -349,7 +349,7 @@ func (b *bridge) runExternalProcess(message []byte) (*prot.ContainerExecuteProce
 func (b *bridge) waitOnProcess(message []byte, header *prot.MessageHeader) (*prot.ContainerWaitForProcessResponse, error) {
 	response := &prot.ContainerWaitForProcessResponse{MessageResponseBase: newResponseBase()}
 	var request prot.ContainerWaitForProcess
-	if err := utils.UnmarshalJSONWithHresult(message, &request); err != nil {
+	if err := commonutils.UnmarshalJSONWithHresult(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
 	response.ActivityID = request.ActivityID
@@ -372,7 +372,7 @@ func (b *bridge) waitOnProcess(message []byte, header *prot.MessageHeader) (*pro
 func (b *bridge) resizeConsole(message []byte) (*prot.MessageResponseBase, error) {
 	response := newResponseBase()
 	var request prot.ContainerResizeConsole
-	if err := utils.UnmarshalJSONWithHresult(message, &request); err != nil {
+	if err := commonutils.UnmarshalJSONWithHresult(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
 	response.ActivityID = request.ActivityID
@@ -450,8 +450,8 @@ func (b *bridge) sendResponse(response interface{}, header *prot.MessageHeader) 
 	if err != nil {
 		return errors.Wrapf(err, "failed to marshal JSON for response \"%v\"", response)
 	}
-	//utils.LogMsgf("response sent to HCS (contents:%s)", responseBytes)
-	utils.LogMsg("response sent to HCS")
+	//logrus.Infof("response sent to HCS (contents:%s)", responseBytes)
+	logrus.Info("response sent to HCS")
 	b.writeLock.Lock()
 	defer b.writeLock.Unlock()
 	if err := sendResponseBytes(b.commandConn, header.Type, header.ID, responseBytes); err != nil {

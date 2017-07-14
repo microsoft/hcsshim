@@ -2,8 +2,9 @@ package vhd
 
 import (
 	"fmt"
-	"github.com/Microsoft/opengcs/service/libs/commonutils"
 	"os"
+
+	"github.com/Sirupsen/logrus"
 )
 
 // Converter converts a disk image to and from a VHD format.
@@ -19,26 +20,26 @@ type FixedVHDConverter struct{}
 func (FixedVHDConverter) ConvertToVHD(f *os.File) error {
 	info, err := f.Stat()
 	if err != nil {
-		utils.LogMsgf("[ConvertToVHD] f.Stat failed with %s", err)
+		logrus.Infof("[ConvertToVHD] f.Stat failed with %s", err)
 		return err
 	}
 
-	utils.LogMsgf("[ConvertToVHD] NewFixedVHDHeader with size = %d", uint64(info.Size()))
+	logrus.Infof("[ConvertToVHD] NewFixedVHDHeader with size = %d", uint64(info.Size()))
 
 	hdr, err := newFixedVHDHeader(uint64(info.Size()))
 	if err != nil {
-		utils.LogMsgf("[ConvertToVHD] NewFixedVHDHeader with %s", err)
+		logrus.Infof("[ConvertToVHD] NewFixedVHDHeader with %s", err)
 		return err
 	}
 
 	hdrBytes, err := hdr.Bytes()
 	if err != nil {
-		utils.LogMsgf("[ConvertToVHD] hdr.Bytes with %s", err)
+		logrus.Infof("[ConvertToVHD] hdr.Bytes with %s", err)
 		return err
 	}
 
 	if _, err := f.WriteAt(hdrBytes, info.Size()); err != nil {
-		utils.LogMsgf("[ConvertToVHD] f.WriteAt with %s", err)
+		logrus.Infof("[ConvertToVHD] f.WriteAt with %s", err)
 		return err
 	}
 	return nil

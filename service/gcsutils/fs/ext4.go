@@ -5,7 +5,7 @@ import (
 	"os/exec"
 	"strconv"
 
-	"github.com/Microsoft/opengcs/service/libs/commonutils"
+	"github.com/Sirupsen/logrus"
 )
 
 // Ext4Fs implements the Filesystem interface for ext4.
@@ -137,7 +137,7 @@ func (e *Ext4Fs) MakeFileSystem(file *os.File) error {
 	blockSize := strconv.FormatUint(e.BlockSize, 10)
 	inodeSize := strconv.FormatUint(e.InodeSize, 10)
 	numInodes := strconv.FormatUint(e.numInodes, 10)
-	utils.LogMsgf("making file system with: bs=%d is=%d numi=%d size=%d\n",
+	logrus.Infof("making file system with: bs=%d is=%d numi=%d size=%d\n",
 		e.BlockSize, e.InodeSize, e.numInodes, e.totalSize)
 
 	err := exec.Command(
@@ -150,7 +150,7 @@ func (e *Ext4Fs) MakeFileSystem(file *os.File) error {
 		file.Name()).Run()
 
 	if err != nil {
-		utils.LogMsgf("running mkfs.ext4 failed with ... (%s)", err)
+		logrus.Infof("running mkfs.ext4 failed with ... (%s)", err)
 	}
 
 	return err

@@ -21,7 +21,6 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
-	"github.com/Microsoft/opengcs/service/libs/commonutils"
 )
 
 const (
@@ -212,7 +211,7 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 					logrus.Error(err)
 				}
 			}
-			utils.LogMsgf("container init process %d exited with exit status %d", p.Pid(), state.ExitCode())
+			logrus.Infof("container init process %d exited with exit status %d", p.Pid(), state.ExitCode())
 
 			if err := c.cleanupContainer(containerEntry); err != nil {
 				logrus.Error(err)
@@ -252,7 +251,7 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 			if err != nil {
 				logrus.Error(err)
 			}
-			utils.LogMsgf("container process %d exited with exit status %d", p.Pid(), state.ExitCode())
+			logrus.Infof("container process %d exited with exit status %d", p.Pid(), state.ExitCode())
 
 			c.processCacheMutex.Lock()
 			processEntry.ExitStatus = state
@@ -439,7 +438,7 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *st
 			// important.
 			logrus.Error(errors.Wrap(err, "failed call to Wait for external process"))
 		}
-		utils.LogMsgf("external process %d exited with exit status %d", cmd.Process().Pid(), cmd.ExitState().ExitCode())
+		logrus.Infof("external process %d exited with exit status %d", cmd.Process().Pid(), cmd.ExitState().ExitCode())
 
 		if relay != nil {
 			relay.Wait()

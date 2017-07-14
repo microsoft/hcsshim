@@ -15,7 +15,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/Microsoft/opengcs/service/gcs/prot"
-	"github.com/Microsoft/opengcs/service/libs/commonutils"
+	"github.com/Sirupsen/logrus"
 )
 
 const (
@@ -185,17 +185,17 @@ func (c *gcsCore) unmountMappedVirtualDisks(disks []prot.MappedVirtualDisk) erro
 func (c *gcsCore) mountLayers(id string, scratchDevice string, layers []string) error {
 	layerPrefix, scratchPath, workdirPath, rootfsPath := c.getUnioningPaths(id)
 
-	utils.LogMsgf("layerPrefix=%s\n", layerPrefix)
-	utils.LogMsgf("scratchPath:%s\n", scratchPath)
-	utils.LogMsgf("workdirPath=%s\n", workdirPath)
-	utils.LogMsgf("rootfsPath=%s\n", rootfsPath)
+	logrus.Infof("layerPrefix=%s\n", layerPrefix)
+	logrus.Infof("scratchPath:%s\n", scratchPath)
+	logrus.Infof("workdirPath=%s\n", workdirPath)
+	logrus.Infof("rootfsPath=%s\n", rootfsPath)
 
 	// Mount the layer devices.
 	layerPaths := make([]string, len(layers)+1)
 	for i, device := range layers {
 		devicePath := filepath.Join("/dev", device)
 		layerPath := fmt.Sprintf("%s%d", layerPrefix, i)
-		utils.LogMsgf("layerPath: %s\n", layerPath)
+		logrus.Infof("layerPath: %s\n", layerPath)
 		if err := c.OS.MkdirAll(layerPath, 0700); err != nil {
 			return errors.Wrapf(err, "failed to create directory for layer %s", layerPath)
 		}

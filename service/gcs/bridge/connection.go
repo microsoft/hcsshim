@@ -4,11 +4,12 @@ import (
 	"encoding/binary"
 	"io"
 
+	"github.com/Sirupsen/logrus"
+	"github.com/pkg/errors"
+
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
-	"github.com/Microsoft/opengcs/service/libs/commonutils"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -20,7 +21,7 @@ func (b *bridge) createAndConnectCommandConn() (transport.Connection, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed creating the command Connection")
 	}
-	utils.LogMsg("successfully connected to the HCS via HyperV_Socket\n")
+	logrus.Info("successfully connected to the HCS via HyperV_Socket\n")
 	return conn, nil
 }
 
@@ -35,7 +36,7 @@ func readMessage(conn transport.Connection) ([]byte, *prot.MessageHeader, error)
 	if _, err := io.ReadFull(conn, b); err != nil {
 		return nil, nil, errors.Wrap(err, "failed reading message payload")
 	}
-	utils.LogMsgf("READ: %s\n", b)
+	logrus.Infof("READ: %s\n", b)
 	return b, header, nil
 }
 
@@ -54,7 +55,7 @@ func sendMessageBytes(conn transport.Connection, messageType prot.MessageIdentif
 	if _, err := conn.Write(b); err != nil {
 		return errors.Wrap(err, "failed writing message payload")
 	}
-	utils.LogMsgf("SENT: %s\n", b)
+	logrus.Infof("SENT: %s\n", b)
 	return nil
 }
 

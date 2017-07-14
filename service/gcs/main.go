@@ -1,10 +1,11 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"os"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/pkg/errors"
 
 	"github.com/Microsoft/opengcs/service/gcs/bridge"
 	"github.com/Microsoft/opengcs/service/gcs/core/gcs"
@@ -15,21 +16,40 @@ import (
 )
 
 func main() {
-	// parse command line parameters and init logger
-	if err := utils.ProcessCommandlineOptions(); err != nil {
-		logrus.Fatalf("%+v", err)
+	logLevel := flag.String("loglevel", "warning", "Logging Level: debug, info, warning, error.")
+	logFile := flag.String("logFile", "", "Logging Target: An optional file name/path. Omit for console output.")
+
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "\nUsage of %s:\n", os.Args[0])
+		flag.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "Examples:\n")
+		fmt.Fprintf(os.Stderr, "    %s -loglevel=debug -logfile=gcs.log (default)\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "    %s -loglevel=info -logfile=stdout\n", os.Args[0])
 	}
 
-	// Set logrus output file.
-	// TODO: Consolidate all logs into one file, probably with logrus.
-	const logFilePath = "/tmp/logrus.log"
-	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY, 0600)
+	flag.Parse()
+
+	// Use a file instead of stdout
+	if *logFile != "" {
+		logFileHandle, err := os.OpenFile(*logFile, os.O_CREATE|os.O_WRONLY, 0600)
+		if err != nil {
+			logrus.Fatalf("failed to create log file %s", *logFile)
+		}
+		logrus.SetOutput(logFileHandle)
+	}
+
+	level, err := logrus.ParseLevel(*logLevel)
 	if err != nil {
-		logrus.Fatalf("%+v", errors.Errorf("failed to create log file %s", logFilePath))
+		logrus.Fatal(err)
 	}
-	logrus.SetOutput(logFile)
 
-	utils.LogMsg("GCS started")
+	if level == logrus.DebugLevel {
+		logrus.AddHook(commonutils.NewStackHook(logrus.AllLevels))
+	}
+
+	logrus.SetLevel(level)
+
+	logrus.Info("GCS started")
 	tport := &transport.VsockTransport{}
 	rtime, err := runc.NewRuntime()
 	if err != nil {

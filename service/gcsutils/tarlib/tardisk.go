@@ -3,15 +3,16 @@ package tarlib
 import (
 	"archive/tar"
 	"fmt"
-	"github.com/Microsoft/opengcs/service/gcsutils/fs"
-	"github.com/Microsoft/opengcs/service/libs/commonutils"
-	"github.com/docker/docker/pkg/archive"
 	"io"
 	"io/ioutil"
 	"math"
 	"os"
 	"os/exec"
 	"path"
+
+	"github.com/Microsoft/opengcs/service/gcsutils/fs"
+	"github.com/Sirupsen/logrus"
+	"github.com/docker/docker/pkg/archive"
 )
 
 func createEmptyDisk(in io.Reader,
@@ -20,14 +21,14 @@ func createEmptyDisk(in io.Reader,
 	options *archive.TarOptions,
 	disk *os.File) (uint64, error) {
 
-	utils.LogMsg("entering createEmptyDisk")
+	logrus.Info("entering createEmptyDisk")
 
 	inTar := tar.NewReader(in)
 	outTar := tar.NewWriter(out)
 	defer outTar.Close()
 
 	// First, determine the size of the tar file.
-	utils.LogMsg("determine the size of the tar file")
+	logrus.Info("determine the size of the tar file")
 
 	if err := f.InitSizeContext(); err != nil {
 		return 0, err
@@ -40,7 +41,7 @@ func createEmptyDisk(in io.Reader,
 	for {
 		hdr, err := inTar.Next()
 		if err == io.EOF {
-			utils.LogMsg("EOF file read")
+			logrus.Info("EOF file read")
 			break
 		} else if err != nil {
 			return 0, err
@@ -88,7 +89,7 @@ func createEmptyDisk(in io.Reader,
 		}
 		totalBytesRecieved += bytesWritten
 	}
-	utils.LogMsgf("totalBytesRecieved = %d", totalBytesRecieved)
+	logrus.Infof("totalBytesRecieved = %d", totalBytesRecieved)
 	if err := f.FinalizeSizeContext(); err != nil {
 		return 0, err
 	}
@@ -104,7 +105,7 @@ func createEmptyDisk(in io.Reader,
 	}
 
 	if err := f.MakeFileSystem(disk); err != nil {
-		utils.LogMsgf("f.MakeFileSystem failed with %s", err)
+		logrus.Infof("f.MakeFileSystem failed with %s", err)
 		return 0, err
 	}
 
@@ -123,7 +124,7 @@ func CreateTarDisk(in io.Reader,
 	tmpdir string,
 	disk *os.File) (uint64, error) {
 
-	utils.LogMsg("entering CreateTarDisk")
+	logrus.Info("entering CreateTarDisk")
 
 	mntFolder, err := ioutil.TempDir(tmpdir, "mnt")
 	if err != nil {
@@ -142,13 +143,13 @@ func CreateTarDisk(in io.Reader,
 
 	diskSize, err := createEmptyDisk(in, tmpFile, f, options, disk)
 	if err != nil {
-		utils.LogMsgf("calling createEmptyDisk failed with %s", err)
+		logrus.Infof("calling createEmptyDisk failed with %s", err)
 		return 0, err
 	}
 
 	// Mount the disk and remove the lost+found folder that might appear from mkfs
 	if err := exec.Command("mount", "-o", "loop", disk.Name(), mntFolder).Run(); err != nil {
-		utils.LogMsgf("failed mount -o loop %s", err)
+		logrus.Infof("failed mount -o loop %s", err)
 		return 0, err
 	}
 	defer exec.Command("umount", mntFolder).Run()
