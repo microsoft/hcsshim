@@ -117,6 +117,13 @@ func cleanupRuncState() error {
 }
 
 func removeSubdirs(parentDir string) error {
+	if _, err := os.Stat(parentDir); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		} else {
+			return err
+		}
+	}
 	dir, err := os.Open(parentDir)
 	if err != nil {
 		return err

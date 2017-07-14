@@ -40,7 +40,7 @@ var _ = Describe("Storage", func() {
 		Describe("getting the container storage path", func() {
 			Context("when the ID is a valid string", func() {
 				It("should return the correct path", func() {
-					Expect(coreint.getContainerStoragePath(validID)).To(Equal("/mnt/gcs/abcdef-ghi"))
+					Expect(coreint.getContainerStoragePath(validID)).To(Equal("/tmp/gcs/abcdef-ghi"))
 				})
 			})
 		})
@@ -49,10 +49,10 @@ var _ = Describe("Storage", func() {
 			Context("when the ID is a valid string", func() {
 				It("should return the correct paths", func() {
 					layerPrefix, scratchPath, workdirPath, rootfsPath := coreint.getUnioningPaths(validID)
-					Expect(layerPrefix).To(Equal("/mnt/gcs/abcdef-ghi/layer"))
-					Expect(scratchPath).To(Equal("/mnt/gcs/abcdef-ghi/scratch"))
-					Expect(workdirPath).To(Equal("/mnt/gcs/abcdef-ghi/scratch/work"))
-					Expect(rootfsPath).To(Equal("/mnt/gcs/abcdef-ghi/rootfs"))
+					Expect(layerPrefix).To(Equal("/tmp/gcs/abcdef-ghi/layer"))
+					Expect(scratchPath).To(Equal("/tmp/gcs/abcdef-ghi/scratch"))
+					Expect(workdirPath).To(Equal("/tmp/gcs/abcdef-ghi/scratch/work"))
+					Expect(rootfsPath).To(Equal("/tmp/gcs/abcdef-ghi/rootfs"))
 				})
 			})
 		})
@@ -60,7 +60,7 @@ var _ = Describe("Storage", func() {
 		Describe("getting the config path", func() {
 			Context("when the ID is a valid string", func() {
 				It("should return the correct path", func() {
-					Expect(coreint.getConfigPath(validID)).To(Equal("/mnt/gcs/abcdef-ghi/config.json"))
+					Expect(coreint.getConfigPath(validID)).To(Equal("/tmp/gcs/abcdef-ghi/config.json"))
 				})
 			})
 		})
@@ -334,7 +334,7 @@ var _ = Describe("Storage", func() {
 				err = coreint.mountLayers(containerID, "loop0", []string{"loop1", "loop2", "loop3"})
 				Expect(err).NotTo(HaveOccurred())
 
-				containerPath := filepath.Join("/mnt", "gcs", containerID)
+				containerPath := filepath.Join("/tmp", "gcs", containerID)
 
 				// Check the state of rootfs.
 				rootfsPath := filepath.Join(containerPath, "rootfs")
@@ -436,7 +436,7 @@ var _ = Describe("Storage", func() {
 				err = coreint.mountLayers(containerID, "", []string{"loop0", "loop1", "loop2"})
 				Expect(err).NotTo(HaveOccurred())
 
-				containerPath := filepath.Join("/mnt", "gcs", containerID)
+				containerPath := filepath.Join("/tmp", "gcs", containerID)
 
 				// Check the state of rootfs.
 				rootfsPath := filepath.Join(containerPath, "rootfs")
@@ -530,7 +530,7 @@ var _ = Describe("Storage", func() {
 				err = coreint.mountLayers(containerID, "loop0", []string{})
 				Expect(err).NotTo(HaveOccurred())
 
-				containerPath := filepath.Join("/mnt", "gcs", containerID)
+				containerPath := filepath.Join("/tmp", "gcs", containerID)
 
 				// Check the state of rootfs.
 				rootfsPath := filepath.Join(containerPath, "rootfs")
@@ -624,7 +624,7 @@ var _ = Describe("Storage", func() {
 				err = coreint.mountLayers(containerID, "", []string{})
 				Expect(err).NotTo(HaveOccurred())
 
-				containerPath := filepath.Join("/mnt", "gcs", containerID)
+				containerPath := filepath.Join("/tmp", "gcs", containerID)
 
 				// Check the state of rootfs.
 				rootfsPath := filepath.Join(containerPath, "rootfs")
