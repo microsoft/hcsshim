@@ -1,10 +1,11 @@
 package fs
 
 import (
-	"github.com/Microsoft/opengcs/service/libs/commonutils"
 	"os"
 	"os/exec"
 	"strconv"
+
+	"github.com/Microsoft/opengcs/service/libs/commonutils"
 )
 
 // Ext4Fs implements the Filesystem interface for ext4.
@@ -142,11 +143,11 @@ func (e *Ext4Fs) MakeFileSystem(file *os.File) error {
 	err := exec.Command(
 		"mkfs.ext4",
 		"-O", "^has_journal,^resize_inode",
-		file.Name(),
 		"-N", numInodes,
 		"-b", blockSize,
 		"-I", inodeSize,
-		"-F").Run()
+		"-F",
+		file.Name()).Run()
 
 	if err != nil {
 		utils.LogMsgf("running mkfs.ext4 failed with ... (%s)", err)
@@ -158,7 +159,7 @@ func (e *Ext4Fs) MakeFileSystem(file *os.File) error {
 // MakeBasicFileSystem just creates an empty file system on the given file using
 // the default settings.
 func (e *Ext4Fs) MakeBasicFileSystem(file *os.File) error {
-	return exec.Command("mkfs.ext4", file.Name(), "-F").Run()
+	return exec.Command("mkfs.ext4", "-F", file.Name()).Run()
 }
 
 func maxU64(x, y uint64) uint64 {
