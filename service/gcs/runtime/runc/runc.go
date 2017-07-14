@@ -515,9 +515,15 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioS
 		}
 		defer fileSet.Close()
 		defer stdioSet.Close()
-		cmd.Stdin = fileSet.In
-		cmd.Stdout = fileSet.Out
-		cmd.Stderr = fileSet.Err
+		if fileSet.In != nil {
+			cmd.Stdin = fileSet.In
+		}
+		if fileSet.Out != nil {
+			cmd.Stdout = fileSet.Out
+		}
+		if fileSet.Err != nil {
+			cmd.Stderr = fileSet.Err
+		}
 	}
 	if err := cmd.Start(); err != nil {
 		return nil, errors.Wrapf(err, "failed to start runc create/exec call for container %s", c.id)
