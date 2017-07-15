@@ -20,7 +20,7 @@ func SetFlagsForTar2VHDLib() []*string {
 	filesystem := flag.String("fs", "ext4", "Filesystem format: ext4")
 	whiteout := flag.String("whiteout", "overlay", "Whiteout format: aufs, overlay")
 	vhdFormat := flag.String("vhd", "fixed", "VHD format: fixed")
-	tempDirectory := flag.String("tmpdir", "/mnt/gcs/LinuxServiceVM/scratch", "Temp directory for intermediate files.")
+	tempDirectory := flag.String("tmpdir", "/tmp/gcs/LinuxServiceVM/scratch", "Temp directory for intermediate files.")
 	return []*string{filesystem, whiteout, vhdFormat, tempDirectory}
 }
 
@@ -82,7 +82,7 @@ func SetupLogging(args ...*string) error {
 
 	logrus.SetLevel(logrus.InfoLevel)
 
-	outputTarget, err := os.OpenFile(*args[0], os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+	outputTarget, err := os.OpenFile(*args[0], os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
 	}
