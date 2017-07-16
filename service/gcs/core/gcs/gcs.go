@@ -146,11 +146,11 @@ func (c *gcsCore) CreateContainer(id string, settings prot.VMHostedContainerSett
 	}
 
 	// Set up layers.
-	scratchDevice, layers, err := c.getLayerDevices(settings.SandboxDataPath, settings.Layers)
+	scratch, layers, err := c.getLayerMounts(settings.SandboxDataPath, settings.Layers)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get layer devices for container %s", id)
 	}
-	if err := c.mountLayers(id, scratchDevice, layers); err != nil {
+	if err := c.mountLayers(id, scratch, layers); err != nil {
 		return errors.Wrapf(err, "failed to mount layers for container %s", id)
 	}
 
@@ -565,11 +565,11 @@ func (c *gcsCore) RegisterProcessExitHook(pid int, exitHook func(oslayer.Process
 // It then adds them to the container's cache entry.
 // This function expects containerCacheMutex to be locked on entry.
 func (c *gcsCore) setupMappedVirtualDisks(id string, disks []prot.MappedVirtualDisk, containerEntry *containerCacheEntry) error {
-	devices, err := c.getMappedVirtualDiskDevices(disks)
+	mounts, err := c.getMappedVirtualDiskMounts(disks)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get mapped virtual disk devices for container %s", id)
 	}
-	if err := c.mountMappedVirtualDisks(disks, devices); err != nil {
+	if err := c.mountMappedVirtualDisks(disks, mounts); err != nil {
 		return errors.Wrapf(err, "failed to mount mapped virtual disks for container %s", id)
 	}
 	for _, disk := range disks {
