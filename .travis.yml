@@ -1,0 +1,19 @@
+language: go
+
+go:
+- 1.8
+
+matrix:
+  include:
+    - os: linux
+
+sudo: required
+
+addons:
+  apt:
+    packages:
+      - runc
+
+script: 
+      - cd service && make 
+
