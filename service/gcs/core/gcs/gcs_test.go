@@ -947,8 +947,8 @@ var _ = Describe("GCS", func() {
 							Expect(err).NotTo(HaveOccurred())
 							err = coreint.ModifySettings(containerID, diskModificationRequestRemove)
 						})
-						It("should produce an error", func() {
-							Expect(err).To(HaveOccurred())
+						It("should not produce an error", func() {
+							Expect(err).NotTo(HaveOccurred())
 						})
 					})
 					Context("the disk has been added", func() {
@@ -1012,8 +1012,8 @@ var _ = Describe("GCS", func() {
 							Expect(err).NotTo(HaveOccurred())
 							err = coreint.ModifySettings(containerID, dirModificationRequestRemove)
 						})
-						It("should produce an error", func() {
-							Expect(err).To(HaveOccurred())
+						It("should not produce an error", func() {
+							Expect(err).NotTo(HaveOccurred())
 						})
 					})
 					Context("the directory has been added", func() {

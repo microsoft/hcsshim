@@ -100,12 +100,12 @@ func (e *containerCacheEntry) AddMappedVirtualDisk(disk prot.MappedVirtualDisk) 
 	e.MappedVirtualDisks[disk.Lun] = disk
 	return nil
 }
-func (e *containerCacheEntry) RemoveMappedVirtualDisk(disk prot.MappedVirtualDisk) error {
+func (e *containerCacheEntry) RemoveMappedVirtualDisk(disk prot.MappedVirtualDisk) {
 	if _, ok := e.MappedVirtualDisks[disk.Lun]; !ok {
-		return errors.Errorf("a mapped virtual disk with lun %d is not attached to container %s", disk.Lun, e.ID)
+		logrus.Warnf("attempt to remove virtual disk with lun %d which is not attached to container %s", disk.Lun, e.ID)
+		return
 	}
 	delete(e.MappedVirtualDisks, disk.Lun)
-	return nil
 }
 func (e *containerCacheEntry) AddMappedDirectory(dir prot.MappedDirectory) error {
 	if _, ok := e.MappedDirectories[dir.Port]; ok {
@@ -114,12 +114,12 @@ func (e *containerCacheEntry) AddMappedDirectory(dir prot.MappedDirectory) error
 	e.MappedDirectories[dir.Port] = dir
 	return nil
 }
-func (e *containerCacheEntry) RemoveMappedDirectory(dir prot.MappedDirectory) error {
+func (e *containerCacheEntry) RemoveMappedDirectory(dir prot.MappedDirectory) {
 	if _, ok := e.MappedDirectories[dir.Port]; !ok {
-		return errors.Errorf("a mapped directory with port %d is not attached to container %s", dir.Port, e.ID)
+		logrus.Warnf("attempt to remove mapped directory with port %d which is not attached to container %s", dir.Port, e.ID)
+		return
 	}
 	delete(e.MappedDirectories, dir.Port)
-	return nil
 }
 
 // processCacheEntry stores cached information for a single process.
@@ -632,9 +632,7 @@ func (c *gcsCore) removeMappedVirtualDisks(id string, disks []prot.MappedVirtual
 		return errors.Wrapf(err, "failed to mount mapped virtual disks for container %s", id)
 	}
 	for _, disk := range disks {
-		if err := containerEntry.RemoveMappedVirtualDisk(disk); err != nil {
-			return err
-		}
+		containerEntry.RemoveMappedVirtualDisk(disk)
 	}
 	return nil
 }
@@ -648,9 +646,7 @@ func (c *gcsCore) removeMappedDirectories(id string, dirs []prot.MappedDirectory
 		return errors.Wrapf(err, "failed to mount mapped directories for container %s", id)
 	}
 	for _, dir := range dirs {
-		if err := containerEntry.RemoveMappedDirectory(dir); err != nil {
-			return err
-		}
+		containerEntry.RemoveMappedDirectory(dir)
 	}
 	return nil
 }
