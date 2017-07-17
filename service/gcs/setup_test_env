@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# Set the working directory to the script's directory
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")"; pwd -P)
+cd $script_dir
+
+# Generate busybox rootfs directory for runC tests
+rootfs=runtime/runc/testbundle/rootfs
+mkdir $rootfs
+sudo docker export $(sudo docker create busybox) | tar -C $rootfs -xvf - > /dev/null
