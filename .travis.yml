@@ -1,0 +1,14 @@
+language: go
+
+go:
+- 1.8
+
+matrix:
+  include:
+    - os: linux
+
+sudo: required
+
+script: 
+      - cd service && make 
+
