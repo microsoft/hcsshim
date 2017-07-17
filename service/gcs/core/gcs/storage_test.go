@@ -177,7 +177,7 @@ var _ = Describe("Storage", func() {
 		})
 		Context("the source is mounted", func() {
 			BeforeEach(func() {
-				err := syscall.Mount(mountSource, mountTarget, "ext4", syscall.MS_BIND, "")
+				err := syscall.Mount(mountSource, mountTarget, defaultFileSystem, syscall.MS_BIND, "")
 				Expect(err).NotTo(HaveOccurred())
 			})
 			AfterEach(func() {
@@ -287,6 +287,15 @@ var _ = Describe("Storage", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(actualContents)).To(Equal(expectedContents))
 		}
+		scratchSpec := &mountSpec{
+			Source:     "loop0",
+			FileSystem: defaultFileSystem,
+		}
+		layerSpecs := []*mountSpec{
+			{Source: "loop1", FileSystem: defaultFileSystem, Flags: syscall.MS_RDONLY, Options: []string{mountOptionNoLoad}},
+			{Source: "loop2", FileSystem: defaultFileSystem, Flags: syscall.MS_RDONLY, Options: []string{mountOptionNoLoad}},
+			{Source: "loop3", FileSystem: defaultFileSystem, Flags: syscall.MS_RDONLY, Options: []string{mountOptionNoLoad}},
+		}
 		Context("using three basic layers", func() {
 			var (
 				layers []string
@@ -331,7 +340,7 @@ var _ = Describe("Storage", func() {
 			})
 			It("should behave properly", func() {
 				// Mount the layers.
-				err = coreint.mountLayers(containerID, "loop0", []string{"loop1", "loop2", "loop3"})
+				err = coreint.mountLayers(containerID, scratchSpec, layerSpecs)
 				Expect(err).NotTo(HaveOccurred())
 
 				containerPath := filepath.Join("/tmp", "gcs", containerID)
@@ -433,7 +442,7 @@ var _ = Describe("Storage", func() {
 			})
 			It("should behave properly", func() {
 				// Mount the layers.
-				err = coreint.mountLayers(containerID, "", []string{"loop0", "loop1", "loop2"})
+				err = coreint.mountLayers(containerID, nil, layerSpecs)
 				Expect(err).NotTo(HaveOccurred())
 
 				containerPath := filepath.Join("/tmp", "gcs", containerID)
@@ -527,7 +536,7 @@ var _ = Describe("Storage", func() {
 			})
 			It("should behave properly", func() {
 				// Mount the layers.
-				err = coreint.mountLayers(containerID, "loop0", []string{})
+				err = coreint.mountLayers(containerID, scratchSpec, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				containerPath := filepath.Join("/tmp", "gcs", containerID)
@@ -621,7 +630,7 @@ var _ = Describe("Storage", func() {
 			})
 			It("should behave properly", func() {
 				// Mount the layers.
-				err = coreint.mountLayers(containerID, "", []string{})
+				err = coreint.mountLayers(containerID, nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				containerPath := filepath.Join("/tmp", "gcs", containerID)
@@ -747,7 +756,11 @@ var _ = Describe("Storage", func() {
 					Expect(err).NotTo(HaveOccurred())
 					err = coreint.containerCache[containerID].AddMappedVirtualDisk(disk2)
 					Expect(err).NotTo(HaveOccurred())
-					err = coreint.mountMappedVirtualDisks([]prot.MappedVirtualDisk{disk1, disk2}, []string{"loop0", "loop1"})
+					ms := []*mountSpec{
+						{Source: "loop0", FileSystem: defaultFileSystem, Flags: syscall.MS_RDONLY},
+						{Source: "loop1", FileSystem: defaultFileSystem},
+					}
+					err = coreint.mountMappedVirtualDisks([]prot.MappedVirtualDisk{disk1, disk2}, ms)
 					Expect(err).NotTo(HaveOccurred())
 
 					// Check the state of layer1.
@@ -833,9 +846,11 @@ var _ = Describe("Storage", func() {
 					Expect(err).NotTo(HaveOccurred())
 
 					// Mount the disks.
-					err = coreint.mountMappedVirtualDisks([]prot.MappedVirtualDisk{disk1}, []string{"loop1"})
+					ms1 := []*mountSpec{{Source: "loop0", FileSystem: defaultFileSystem, Flags: syscall.MS_RDONLY}}
+					ms2 := []*mountSpec{{Source: "loop1", FileSystem: defaultFileSystem}}
+					err = coreint.mountMappedVirtualDisks([]prot.MappedVirtualDisk{disk1}, ms1)
 					Expect(err).To(HaveOccurred())
-					err = coreint.mountMappedVirtualDisks([]prot.MappedVirtualDisk{disk2}, []string{"loop2"})
+					err = coreint.mountMappedVirtualDisks([]prot.MappedVirtualDisk{disk2}, ms2)
 					Expect(err).To(HaveOccurred())
 				})
 			})
@@ -865,7 +880,8 @@ var _ = Describe("Storage", func() {
 					Expect(err).NotTo(HaveOccurred())
 
 					// Mount the disks.
-					err = coreint.mountMappedVirtualDisks([]prot.MappedVirtualDisk{disk}, []string{"fakeloop"})
+					ms := []*mountSpec{{Source: "fakeloop"}}
+					err = coreint.mountMappedVirtualDisks([]prot.MappedVirtualDisk{disk}, ms)
 					Expect(err).To(HaveOccurred())
 				})
 			})

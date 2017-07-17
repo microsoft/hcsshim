@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,6 +14,7 @@ import (
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 
+	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Sirupsen/logrus"
 )
@@ -40,10 +40,25 @@ type mountSpec struct {
 	Options    []string
 }
 
+const (
+	// From mount(8): Don't load the journal on mounting.  Note that if the
+	// filesystem was not unmounted cleanly, skipping the journal replay will
+	// lead to the filesystem containing inconsistencies that can lead to any
+	// number of problems.
+	mountOptionNoLoad = "noload"
+	// Enable DAX mode. This turns off the local cache for the file system and
+	// accesses the storage directly from host memory, reducing memory use
+	// and increasing sharing across VMs. Only supported on vPMEM devices.
+	mountOptionDax = "dax"
+
+	// For now the file system is hard-coded
+	defaultFileSystem = "ext4"
+)
+
 // Mount mounts the file system to the specified target.
-func (ms *mountSpec) Mount(target string) error {
+func (ms *mountSpec) Mount(osl oslayer.OS, target string) error {
 	options := strings.Join(ms.Options, ",")
-	err := syscall.Mount(ms.Source, target, ms.FileSystem, ms.Flags, options)
+	err := osl.Mount(ms.Source, target, ms.FileSystem, ms.Flags, options)
 	if err != nil {
 		return errors.Wrapf(err, "mount %s %s %s %x %s", ms.Source, target, ms.FileSystem, ms.Flags, options)
 	}
@@ -54,31 +69,31 @@ func (ms *mountSpec) Mount(target string) error {
 func (c *gcsCore) getLayerMounts(scratch string, layers []prot.Layer) (scratchMount *mountSpec, layerMounts []*mountSpec, err error) {
 	layerMounts = make([]*mountSpec, len(layers))
 	for i, layer := range layers {
-		deviceName, pmem, err := deviceIDToName(layer.Path)
+		deviceName, pmem, err := deviceIDToName(c.OS, layer.Path)
 		if err != nil {
 			return nil, nil, err
 		}
-		options := []string{"noload"}
+		options := []string{mountOptionNoLoad}
 		if pmem {
 			// PMEM devices support DAX and should use it
-			options = append(options, "dax")
+			options = append(options, mountOptionDax)
 		}
 		layerMounts[i] = &mountSpec{
 			Source:     deviceName,
-			FileSystem: "ext4",
+			FileSystem: defaultFileSystem,
 			Flags:      syscall.MS_RDONLY,
 			Options:    options,
 		}
 	}
 	// An empty scratch value indicates no scratch space is to be attached.
 	if scratch != "" {
-		scratchDevice, _, err := deviceIDToName(scratch)
+		scratchDevice, _, err := deviceIDToName(c.OS, scratch)
 		if err != nil {
 			return nil, nil, err
 		}
 		scratchMount = &mountSpec{
 			Source:     scratchDevice,
-			FileSystem: "ext4",
+			FileSystem: defaultFileSystem,
 		}
 	}
 
@@ -90,7 +105,7 @@ func (c *gcsCore) getLayerMounts(scratch string, layers []prot.Layer) (scratchMo
 func (c *gcsCore) getMappedVirtualDiskMounts(disks []prot.MappedVirtualDisk) ([]*mountSpec, error) {
 	devices := make([]*mountSpec, len(disks))
 	for i, disk := range disks {
-		device, err := scsiLunToName(int(disk.Lun))
+		device, err := scsiLunToName(c.OS, disk.Lun)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to get device name for mapped virtual disk %s, lun %d", disk.ContainerPath, disk.Lun)
 		}
@@ -98,11 +113,11 @@ func (c *gcsCore) getMappedVirtualDiskMounts(disks []prot.MappedVirtualDisk) ([]
 		var options []string
 		if disk.ReadOnly {
 			flags |= syscall.MS_RDONLY
-			options = append(options, "noload")
+			options = append(options, mountOptionNoLoad)
 		}
 		devices[i] = &mountSpec{
 			Source:     device,
-			FileSystem: "ext4",
+			FileSystem: defaultFileSystem,
 			Flags:      flags,
 			Options:    options,
 		}
@@ -112,7 +127,7 @@ func (c *gcsCore) getMappedVirtualDiskMounts(disks []prot.MappedVirtualDisk) ([]
 
 // scsiLunToName finds the SCSI device with the given LUN. This assumes
 // only one SCSI controller.
-func scsiLunToName(lun int) (string, error) {
+func scsiLunToName(osl oslayer.OS, lun uint8) (string, error) {
 	scsiID := fmt.Sprintf("0:0:0:%d", lun)
 
 	// Query for the device name up until the timeout.
@@ -122,7 +137,7 @@ func scsiLunToName(lun int) (string, error) {
 		// Devices matching the given SCSI code should each have a subdirectory
 		// under /sys/bus/scsi/devices/<scsiID>/block.
 		var err error
-		deviceNames, err = ioutil.ReadDir(filepath.Join("/sys", "bus", "scsi", "devices", scsiID, "block"))
+		deviceNames, err = osl.ReadDir(filepath.Join("/sys/bus/scsi/devices", scsiID, "block"))
 		if err != nil {
 			currentTime := time.Now()
 			elapsedTime := currentTime.Sub(startTime)
@@ -141,14 +156,13 @@ func scsiLunToName(lun int) (string, error) {
 	if len(deviceNames) > 1 {
 		return "", errors.Errorf("more than one block device could match SCSI ID \"%s\"", scsiID)
 	}
-	return "/dev/" + deviceNames[0].Name(), nil
-
+	return filepath.Join("/dev", deviceNames[0].Name()), nil
 }
 
 // deviceIDToName converts a device ID (scsi:<lun> or pmem:<device#> to a
 // device name (/dev/sd? or /dev/pmem?).
 // For temporary compatibility, this also accepts just <lun> for SCSI devices.
-func deviceIDToName(id string) (device string, pmem bool, err error) {
+func deviceIDToName(osl oslayer.OS, id string) (device string, pmem bool, err error) {
 	const (
 		pmemPrefix = "pmem:"
 		scsiPrefix = "scsi:"
@@ -164,7 +178,7 @@ func deviceIDToName(id string) (device string, pmem bool, err error) {
 	}
 
 	if lun, err := strconv.ParseInt(lunStr, 10, 8); err == nil {
-		name, err := scsiLunToName(int(lun))
+		name, err := scsiLunToName(osl, uint8(lun))
 		return name, false, err
 	}
 
@@ -197,7 +211,7 @@ func (c *gcsCore) mountMappedVirtualDisks(disks []prot.MappedVirtualDisk, mounts
 		// before the timeout.
 		startTime := time.Now()
 		for {
-			err := mount.Mount(mountedPath)
+			err := mount.Mount(c.OS, mountedPath)
 			if err != nil {
 				currentTime := time.Now()
 				elapsedTime := currentTime.Sub(startTime)
@@ -255,7 +269,7 @@ func (c *gcsCore) mountLayers(id string, scratchMount *mountSpec, layers []*moun
 		if err := c.OS.MkdirAll(layerPath, 0700); err != nil {
 			return errors.Wrapf(err, "failed to create directory for layer %s", layerPath)
 		}
-		if err := layer.Mount(layerPath); err != nil {
+		if err := layer.Mount(c.OS, layerPath); err != nil {
 			return errors.Wrapf(err, "failed to mount layer directory %s", layerPath)
 		}
 		layerPaths[i] = layerPath
@@ -277,7 +291,7 @@ func (c *gcsCore) mountLayers(id string, scratchMount *mountSpec, layers []*moun
 		return errors.Wrapf(err, "failed to create directory for scratch space %s", scratchPath)
 	}
 	if scratchMount != nil {
-		if err := scratchMount.Mount(scratchPath); err != nil {
+		if err := scratchMount.Mount(c.OS, scratchPath); err != nil {
 			return errors.Wrapf(err, "failed to mount scratch directory %s", scratchPath)
 		}
 	} else {
