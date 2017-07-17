@@ -11,12 +11,11 @@ import (
 	"syscall"
 	"time"
 
-	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
-
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Sirupsen/logrus"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
 )
 
 const (

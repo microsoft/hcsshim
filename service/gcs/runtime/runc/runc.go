@@ -12,15 +12,14 @@ import (
 	"strconv"
 	"strings"
 
-	containerdsys "github.com/docker/containerd/sys"
-	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
-
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer/realos"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
+	containerdsys "github.com/docker/containerd/sys"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
 )
 
 const (

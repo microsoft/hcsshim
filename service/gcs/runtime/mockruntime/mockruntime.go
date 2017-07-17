@@ -2,12 +2,11 @@
 package mockruntime
 
 import (
-	oci "github.com/opencontainers/runtime-spec/specs-go"
-
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer/mockos"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 // mockRuntime is an implementation of the Runtime interface which uses runC as
