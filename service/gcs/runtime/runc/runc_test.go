@@ -6,13 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-	oci "github.com/opencontainers/runtime-spec/specs-go"
-
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 // globals for the whole test suite

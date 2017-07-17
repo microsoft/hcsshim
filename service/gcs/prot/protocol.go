@@ -6,10 +6,9 @@ package prot
 import (
 	"encoding/json"
 
+	"github.com/Microsoft/opengcs/service/libs/commonutils"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
-
-	"github.com/Microsoft/opengcs/service/libs/commonutils"
 )
 
 //////////// Code for the Message Header ////////////

@@ -8,11 +8,10 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/pkg/errors"
-
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
+	"github.com/pkg/errors"
 )
 
 // instanceIDToName converts from the given instance ID (a GUID generated on
