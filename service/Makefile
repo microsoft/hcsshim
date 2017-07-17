@@ -11,7 +11,8 @@ GCS_TOOLS=\
 	tar2vhd \
 	vhd2tar \
 	createSandbox \
-	exportSandbox
+	exportSandbox \
+	netnscfg
 
 GO_FLAGS=-pkgdir "$(WORKDIR)/pkg"
 

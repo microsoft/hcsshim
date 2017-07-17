@@ -11,6 +11,7 @@ var commands = map[string]func(){
 	"vhd2tar":       vhd2tarMain,
 	"createSandbox": createSandboxMain,
 	"exportSandbox": exportSandboxMain,
+	"netnscfg":      netnsConfigMain,
 }
 
 func main() {
