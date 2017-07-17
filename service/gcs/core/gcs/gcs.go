@@ -7,6 +7,7 @@ package gcs
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -153,12 +154,23 @@ func (c *gcsCore) CreateContainer(id string, settings prot.VMHostedContainerSett
 		return errors.Wrapf(err, "failed to mount layers for container %s", id)
 	}
 
-	// Set up networking.
+	// Stash network adapters away
 	for _, adapter := range settings.NetworkAdapters {
-		if err := c.configureNetworkAdapter(adapter); err != nil {
-			return errors.Wrapf(err, "failed to configure network adapter %s", adapter.AdapterInstanceID)
-		}
 		containerEntry.AddNetworkAdapter(adapter)
+	}
+	// Create the directory that will contain the resolv.conf file.
+	//
+	// TODO(rn): This isn't quite right but works. Basically, when
+	// we do the network config in ExecProcess() the overlay for
+	// the rootfs has already been created. When we then write
+	// /etc/resolv.conf to the base layer it won't show up unless
+	// /etc exists when the overlay is created. This is a bit
+	// problematic as we basically later write to a what is
+	// supposed to be read-only layer in the overlay...  Ideally,
+	// dockerd would pass a runc config with a bind mount for
+	// /etc/resolv.conf like it does on unix.
+	if err := c.OS.MkdirAll(filepath.Join(baseFilesPath, "etc"), 0700); err != nil {
+		return errors.Wrapf(err, "failed to create resolv.conf directory")
 	}
 
 	c.containerCache[id] = containerEntry
@@ -194,9 +206,9 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 		containerEntry.container = container
 		p = container
 
-		// Move the container's network adapters into its namespace.
+		// Configure network adapters in the namespace.
 		for _, adapter := range containerEntry.NetworkAdapters {
-			if err := c.moveAdapterIntoNamespace(container, adapter); err != nil {
+			if err := c.configureAdapterInNamespace(container, adapter); err != nil {
 				return -1, err
 			}
 		}
