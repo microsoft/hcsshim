@@ -5,7 +5,7 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")"; pwd -P)
 cd $script_dir
 
 # Install ginkgo
-go get -u github.com/onsi/ginkgo/ginkgo
+go get github.com/onsi/ginkgo/ginkgo
 
 # Install runc
 go get -d github.com/opencontainers/runc

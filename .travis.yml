@@ -1,14 +1,20 @@
 language: go
 
 go:
-- 1.8
+  - 1.8.3
 
 matrix:
   include:
     - os: linux
+      dist: trusty
 
 sudo: required
 
-script: 
-      - cd service && make 
+services:
+  - docker
 
+install: ./service/gcs/setup_test_env
+
+script:
+  - cd service && make
+  - cd gcs && sudo env "PATH=$PATH" ginkgo -r -race -keepGoing
