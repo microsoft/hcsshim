@@ -68,7 +68,7 @@ func (c *gcsCore) configureAdapterInNamespace(container runtime.Container, adapt
 // method in the future.
 func (c *gcsCore) generateResolvConfFile(resolvPath string, adapter prot.NetworkAdapter) error {
 	fileContents := ""
-	nameservers := strings.Split(adapter.HostDNSServerList, " ")
+	nameservers := strings.Split(adapter.HostDNSServerList, ",")
 	for i, server := range nameservers {
 		// Limit number of nameservers to 3.
 		if i >= 3 {
@@ -78,7 +78,7 @@ func (c *gcsCore) generateResolvConfFile(resolvPath string, adapter prot.Network
 	}
 	fileContents += fmt.Sprintf("search %s\n", adapter.HostDNSSuffix)
 
-	file, err := c.OS.OpenFile(resolvPath, os.O_CREATE|os.O_WRONLY, 0700)
+	file, err := c.OS.OpenFile(resolvPath, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return errors.Wrapf(err, "failed to create resolv.conf file for adapter %s", adapter.AdapterInstanceID)
 	}
