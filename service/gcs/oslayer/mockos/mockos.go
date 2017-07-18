@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"net"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -153,114 +152,12 @@ func (i *mockFileInfo) Sys() interface{} {
 	return i.sys
 }
 
-type mockNetworkInterface struct {
-	link    oslayer.Link
-	addr    oslayer.Addr
-	gateway oslayer.Route
-}
-
-func (i *mockNetworkInterface) Link() oslayer.Link {
-	return i.link
-}
-func (i *mockNetworkInterface) Addr() oslayer.Addr {
-	return i.addr
-}
-func (i *mockNetworkInterface) Gateway() oslayer.Route {
-	return i.gateway
-}
-
-type mockLink struct {
-	name  string
-	index int
-	addrs []oslayer.Addr
-}
-
-func newLink(name string, index int, addrs []oslayer.Addr) *mockLink {
-	return &mockLink{
-		name:  name,
-		index: index,
-		addrs: addrs,
-	}
-}
-func (l *mockLink) Name() string {
-	return l.name
-}
-func (l *mockLink) Index() int {
-	return l.index
-}
-func (l *mockLink) SetUp() error {
-	return nil
-}
-func (l *mockLink) SetDown() error {
-	return nil
-}
-func (l *mockLink) SetNamespace(namespace oslayer.Namespace) error {
-	return nil
-}
-func (l *mockLink) Addrs(family int) ([]oslayer.Addr, error) {
-	return l.addrs, nil
-}
-func (l *mockLink) AddAddr(addr oslayer.Addr) error {
-	l.addrs = append(l.addrs, addr)
-	return nil
-}
-func (l *mockLink) GatewayRoutes(family int) ([]oslayer.Route, error) {
-	return []oslayer.Route{
-		newRoute(newAddr()),
-	}, nil
-}
-
-type mockAddr struct{}
-
-func newAddr() *mockAddr {
-	return &mockAddr{}
-}
-func (a *mockAddr) IP() net.IP {
-	return net.ParseIP("0.0.0.0")
-}
-func (a *mockAddr) String() string {
-	return ""
-}
-
-type mockRoute struct {
-	gw     oslayer.Addr
-	metric int
-}
-
-func newRoute(gw oslayer.Addr) *mockRoute {
-	return &mockRoute{gw: gw}
-}
-func (r *mockRoute) Gw() oslayer.Addr {
-	return r.gw
-}
-func (r *mockRoute) Metric() int {
-	return r.metric
-}
-func (r *mockRoute) SetMetric(metric int) {
-	r.metric = metric
-}
-func (r *mockRoute) LinkIndex() int {
-	return 0
-}
-
-type mockNamespace struct{}
-
-func newNamespace() *mockNamespace {
-	return &mockNamespace{}
-}
-func (n *mockNamespace) Close() error {
-	return nil
-}
-
 type mockOS struct {
-	CurrentNamespace oslayer.Namespace
 }
 
 // NewOS returns a *mockOS, which mocks out operating system functionality.
 func NewOS() *mockOS {
-	return &mockOS{
-		CurrentNamespace: newNamespace(),
-	}
+	return &mockOS{}
 }
 
 // Filesystem
@@ -299,36 +196,6 @@ func (o *mockOS) PathIsMounted(name string) (bool, error) {
 }
 func (o *mockOS) Link(oldname, newname string) error {
 	return nil
-}
-
-// Networking
-func (o *mockOS) GetLinkByName(name string) (oslayer.Link, error) {
-	return newLink(name, 0, []oslayer.Addr{newAddr()}), nil
-}
-func (o *mockOS) GetLinkByIndex(index int) (oslayer.Link, error) {
-	return newLink("", index, []oslayer.Addr{newAddr()}), nil
-}
-func (o *mockOS) GetCurrentNamespace() (oslayer.Namespace, error) {
-	return o.CurrentNamespace, nil
-}
-func (o *mockOS) SetCurrentNamespace(namespace oslayer.Namespace) error {
-	o.CurrentNamespace = namespace
-	return nil
-}
-func (o *mockOS) GetNamespaceFromPid(pid int) (oslayer.Namespace, error) {
-	return newNamespace(), nil
-}
-func (o *mockOS) NewRoute(scope uint8, linkIndex int, gateway oslayer.Addr) oslayer.Route {
-	return newRoute(gateway)
-}
-func (o *mockOS) AddRoute(route oslayer.Route) error {
-	return nil
-}
-func (o *mockOS) AddGatewayRoute(gw oslayer.Addr, link oslayer.Link, metric int) error {
-	return nil
-}
-func (o *mockOS) ParseAddr(s string) (oslayer.Addr, error) {
-	return newAddr(), nil
 }
 
 // Processes
