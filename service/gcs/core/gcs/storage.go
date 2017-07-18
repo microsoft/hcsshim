@@ -59,7 +59,7 @@ func (ms *mountSpec) Mount(osl oslayer.OS, target string) error {
 	options := strings.Join(ms.Options, ",")
 	err := osl.Mount(ms.Source, target, ms.FileSystem, ms.Flags, options)
 	if err != nil {
-		return errors.Wrapf(err, "mount %s %s %s %x %s", ms.Source, target, ms.FileSystem, ms.Flags, options)
+		return errors.Wrapf(err, "mount %s %s %s 0x%x %s", ms.Source, target, ms.FileSystem, ms.Flags, options)
 	}
 	return nil
 }

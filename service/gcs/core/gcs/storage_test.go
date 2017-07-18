@@ -286,18 +286,11 @@ var _ = Describe("Storage", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(actualContents)).To(Equal(expectedContents))
 		}
-		scratchSpec := &mountSpec{
-			Source:     "loop0",
-			FileSystem: defaultFileSystem,
-		}
-		layerSpecs := []*mountSpec{
-			{Source: "loop1", FileSystem: defaultFileSystem, Flags: syscall.MS_RDONLY, Options: []string{mountOptionNoLoad}},
-			{Source: "loop2", FileSystem: defaultFileSystem, Flags: syscall.MS_RDONLY, Options: []string{mountOptionNoLoad}},
-			{Source: "loop3", FileSystem: defaultFileSystem, Flags: syscall.MS_RDONLY, Options: []string{mountOptionNoLoad}},
-		}
 		Context("using three basic layers", func() {
 			var (
-				layers []string
+				layers      []string
+				scratchSpec *mountSpec
+				layerSpecs  []*mountSpec
 			)
 			BeforeEach(func() {
 				// This test's file contents are as follows:
@@ -328,6 +321,15 @@ var _ = Describe("Storage", func() {
 				files := []map[string]string{map[string]string{}, layer1Files, layer2Files, layer3Files}
 				GenerateLayers(layers, files)
 				SetupLoopbacks(layers)
+				scratchSpec = &mountSpec{
+					Source:     "/dev/loop0",
+					FileSystem: defaultFileSystem,
+				}
+				layerSpecs = []*mountSpec{
+					{Source: "/dev/loop1", FileSystem: defaultFileSystem, Flags: syscall.MS_RDONLY, Options: []string{mountOptionNoLoad}},
+					{Source: "/dev/loop2", FileSystem: defaultFileSystem, Flags: syscall.MS_RDONLY, Options: []string{mountOptionNoLoad}},
+					{Source: "/dev/loop3", FileSystem: defaultFileSystem, Flags: syscall.MS_RDONLY, Options: []string{mountOptionNoLoad}},
+				}
 			})
 			AfterEach(func() {
 				UnsetupLoopbacks(4)
@@ -428,12 +430,18 @@ var _ = Describe("Storage", func() {
 		})
 		Context("with no scratch device", func() {
 			var (
-				layers []string
+				layers     []string
+				layerSpecs []*mountSpec
 			)
 			BeforeEach(func() {
 				layers = []string{"layer1", "layer2", "layer3"}
 				GenerateLayers(layers, nil)
 				SetupLoopbacks(layers)
+				layerSpecs = []*mountSpec{
+					{Source: "/dev/loop0", FileSystem: defaultFileSystem, Flags: syscall.MS_RDONLY, Options: []string{mountOptionNoLoad}},
+					{Source: "/dev/loop1", FileSystem: defaultFileSystem, Flags: syscall.MS_RDONLY, Options: []string{mountOptionNoLoad}},
+					{Source: "/dev/loop2", FileSystem: defaultFileSystem, Flags: syscall.MS_RDONLY, Options: []string{mountOptionNoLoad}},
+				}
 			})
 			AfterEach(func() {
 				UnsetupLoopbacks(3)
@@ -522,12 +530,17 @@ var _ = Describe("Storage", func() {
 		})
 		Context("with no layers", func() {
 			var (
-				layers []string
+				layers      []string
+				scratchSpec *mountSpec
 			)
 			BeforeEach(func() {
 				layers = []string{"scratch"}
 				GenerateLayers(layers, nil)
 				SetupLoopbacks(layers)
+				scratchSpec = &mountSpec{
+					Source:     "/dev/loop0",
+					FileSystem: defaultFileSystem,
+				}
 			})
 			AfterEach(func() {
 				UnsetupLoopbacks(1)
@@ -756,8 +769,8 @@ var _ = Describe("Storage", func() {
 					err = coreint.containerCache[containerID].AddMappedVirtualDisk(disk2)
 					Expect(err).NotTo(HaveOccurred())
 					ms := []*mountSpec{
-						{Source: "loop0", FileSystem: defaultFileSystem, Flags: syscall.MS_RDONLY},
-						{Source: "loop1", FileSystem: defaultFileSystem},
+						{Source: "/dev/loop0", FileSystem: defaultFileSystem, Flags: syscall.MS_RDONLY},
+						{Source: "/dev/loop1", FileSystem: defaultFileSystem},
 					}
 					err = coreint.mountMappedVirtualDisks([]prot.MappedVirtualDisk{disk1, disk2}, ms)
 					Expect(err).NotTo(HaveOccurred())
@@ -845,8 +858,8 @@ var _ = Describe("Storage", func() {
 					Expect(err).NotTo(HaveOccurred())
 
 					// Mount the disks.
-					ms1 := []*mountSpec{{Source: "loop0", FileSystem: defaultFileSystem, Flags: syscall.MS_RDONLY}}
-					ms2 := []*mountSpec{{Source: "loop1", FileSystem: defaultFileSystem}}
+					ms1 := []*mountSpec{{Source: "/dev/loop0", FileSystem: defaultFileSystem, Flags: syscall.MS_RDONLY}}
+					ms2 := []*mountSpec{{Source: "/dev/loop1", FileSystem: defaultFileSystem}}
 					err = coreint.mountMappedVirtualDisks([]prot.MappedVirtualDisk{disk1}, ms1)
 					Expect(err).To(HaveOccurred())
 					err = coreint.mountMappedVirtualDisks([]prot.MappedVirtualDisk{disk2}, ms2)
@@ -879,7 +892,7 @@ var _ = Describe("Storage", func() {
 					Expect(err).NotTo(HaveOccurred())
 
 					// Mount the disks.
-					ms := []*mountSpec{{Source: "fakeloop"}}
+					ms := []*mountSpec{{Source: "/dev/fakeloop"}}
 					err = coreint.mountMappedVirtualDisks([]prot.MappedVirtualDisk{disk}, ms)
 					Expect(err).To(HaveOccurred())
 				})
