@@ -244,7 +244,7 @@ var _ = Describe("Storage", func() {
 				}
 
 				// Give it an ext4 filesystem.
-				out, err = exec.Command("mkfs.ext4", layer).CombinedOutput()
+				out, err = exec.Command("mkfs.ext4", "-F", layer).CombinedOutput()
 				if err != nil {
 					// Provide some extra information to the error.
 					err = fmt.Errorf("%s: %s", out, err)
