@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Sirupsen/logrus"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
@@ -35,51 +36,102 @@ const (
 	mappedDiskMountTimeout = time.Second * 2
 )
 
-// getLayerDevices turns a list of SCSI codes (0-0, 0-1, etc.) into a list of
-// the devices (sda, sdb, etc.) that they correspond to.
-func (c *gcsCore) getLayerDevices(scratch string, layers []prot.Layer) (scratchDevice string, layerDevices []string, err error) {
-	layerDevices = make([]string, len(layers))
-	for i, layer := range layers {
-		deviceID := layer.Path
-		deviceName, err := c.deviceIDToName(deviceID)
-		if err != nil {
-			return "", nil, err
-		}
-		layerDevices[i] = deviceName
-	}
-	// An empty scratch value indicates no scratch space is to be attached.
-	if scratch == "" {
-		scratchDevice = ""
-	} else {
-		scratchDevice, err = c.deviceIDToName(scratch)
-		if err != nil {
-			return "", nil, err
-		}
-	}
-
-	return scratchDevice, layerDevices, nil
+type mountSpec struct {
+	Source     string
+	FileSystem string
+	Flags      uintptr
+	Options    []string
 }
 
-// getMappedVirtualDiskDevices uses the Lun values in the given disks to
-// retrieve their associated device names.
-func (c *gcsCore) getMappedVirtualDiskDevices(disks []prot.MappedVirtualDisk) ([]string, error) {
-	devices := make([]string, len(disks))
+const (
+	// From mount(8): Don't load the journal on mounting.  Note that if the
+	// filesystem was not unmounted cleanly, skipping the journal replay will
+	// lead to the filesystem containing inconsistencies that can lead to any
+	// number of problems.
+	mountOptionNoLoad = "noload"
+	// Enable DAX mode. This turns off the local cache for the file system and
+	// accesses the storage directly from host memory, reducing memory use
+	// and increasing sharing across VMs. Only supported on vPMEM devices.
+	mountOptionDax = "dax"
+
+	// For now the file system is hard-coded
+	defaultFileSystem = "ext4"
+)
+
+// Mount mounts the file system to the specified target.
+func (ms *mountSpec) Mount(osl oslayer.OS, target string) error {
+	options := strings.Join(ms.Options, ",")
+	err := osl.Mount(ms.Source, target, ms.FileSystem, ms.Flags, options)
+	if err != nil {
+		return errors.Wrapf(err, "mount %s %s %s 0x%x %s", ms.Source, target, ms.FileSystem, ms.Flags, options)
+	}
+	return nil
+}
+
+// getLayerMounts computes the mount specs for the scratch and layers.
+func (c *gcsCore) getLayerMounts(scratch string, layers []prot.Layer) (scratchMount *mountSpec, layerMounts []*mountSpec, err error) {
+	layerMounts = make([]*mountSpec, len(layers))
+	for i, layer := range layers {
+		deviceName, pmem, err := deviceIDToName(c.OS, layer.Path)
+		if err != nil {
+			return nil, nil, err
+		}
+		options := []string{mountOptionNoLoad}
+		if pmem {
+			// PMEM devices support DAX and should use it
+			options = append(options, mountOptionDax)
+		}
+		layerMounts[i] = &mountSpec{
+			Source:     deviceName,
+			FileSystem: defaultFileSystem,
+			Flags:      syscall.MS_RDONLY,
+			Options:    options,
+		}
+	}
+	// An empty scratch value indicates no scratch space is to be attached.
+	if scratch != "" {
+		scratchDevice, _, err := deviceIDToName(c.OS, scratch)
+		if err != nil {
+			return nil, nil, err
+		}
+		scratchMount = &mountSpec{
+			Source:     scratchDevice,
+			FileSystem: defaultFileSystem,
+		}
+	}
+
+	return scratchMount, layerMounts, nil
+}
+
+// getMappedVirtualDiskMounts uses the Lun values in the given disks to
+// retrieve their associated mount spec.
+func (c *gcsCore) getMappedVirtualDiskMounts(disks []prot.MappedVirtualDisk) ([]*mountSpec, error) {
+	devices := make([]*mountSpec, len(disks))
 	for i, disk := range disks {
-		device, err := c.deviceIDToName(strconv.Itoa(int(disk.Lun)))
+		device, err := scsiLunToName(c.OS, disk.Lun)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to get device name for mapped virtual disk %s, lun %d", disk.ContainerPath, disk.Lun)
 		}
-		devices[i] = device
+		flags := uintptr(0)
+		var options []string
+		if disk.ReadOnly {
+			flags |= syscall.MS_RDONLY
+			options = append(options, mountOptionNoLoad)
+		}
+		devices[i] = &mountSpec{
+			Source:     device,
+			FileSystem: defaultFileSystem,
+			Flags:      flags,
+			Options:    options,
+		}
 	}
 	return devices, nil
 }
 
-// deviceIDToName converts from a SCSI location (0, 1, etc.) to a device (sda,
-// sdb, etc.).
-// NOTE: While this function currently works with SCSI codes, it will
-// eventually be reimplemented to use vSCM codes.
-func (c *gcsCore) deviceIDToName(deviceID string) (string, error) {
-	scsiID := fmt.Sprintf("0:0:0:%s", deviceID)
+// scsiLunToName finds the SCSI device with the given LUN. This assumes
+// only one SCSI controller.
+func scsiLunToName(osl oslayer.OS, lun uint8) (string, error) {
+	scsiID := fmt.Sprintf("0:0:0:%d", lun)
 
 	// Query for the device name up until the timeout.
 	var deviceNames []os.FileInfo
@@ -88,7 +140,7 @@ func (c *gcsCore) deviceIDToName(deviceID string) (string, error) {
 		// Devices matching the given SCSI code should each have a subdirectory
 		// under /sys/bus/scsi/devices/<scsiID>/block.
 		var err error
-		deviceNames, err = c.OS.ReadDir(filepath.Join("/sys", "bus", "scsi", "devices", scsiID, "block"))
+		deviceNames, err = osl.ReadDir(filepath.Join("/sys/bus/scsi/devices", scsiID, "block"))
 		if err != nil {
 			currentTime := time.Now()
 			elapsedTime := currentTime.Sub(startTime)
@@ -107,31 +159,50 @@ func (c *gcsCore) deviceIDToName(deviceID string) (string, error) {
 	if len(deviceNames) > 1 {
 		return "", errors.Errorf("more than one block device could match SCSI ID \"%s\"", scsiID)
 	}
-	return deviceNames[0].Name(), nil
+	return filepath.Join("/dev", deviceNames[0].Name()), nil
+}
+
+// deviceIDToName converts a device ID (scsi:<lun> or pmem:<device#> to a
+// device name (/dev/sd? or /dev/pmem?).
+// For temporary compatibility, this also accepts just <lun> for SCSI devices.
+func deviceIDToName(osl oslayer.OS, id string) (device string, pmem bool, err error) {
+	const (
+		pmemPrefix = "pmem:"
+		scsiPrefix = "scsi:"
+	)
+
+	if strings.HasPrefix(id, pmemPrefix) {
+		return "/dev/pmem" + id[len(pmemPrefix):], true, nil
+	}
+
+	lunStr := id
+	if strings.HasPrefix(id, scsiPrefix) {
+		lunStr = id[len(scsiPrefix):]
+	}
+
+	if lun, err := strconv.ParseInt(lunStr, 10, 8); err == nil {
+		name, err := scsiLunToName(osl, uint8(lun))
+		return name, false, err
+	}
+
+	return "", false, errors.Errorf("unknown device ID %s", id)
 }
 
 // mountMappedVirtualDisks mounts the given disks to the given directories,
 // with the given options. The device names of each disk are given in a
 // parallel slice.
-func (c *gcsCore) mountMappedVirtualDisks(disks []prot.MappedVirtualDisk, devices []string) error {
-	if len(disks) != len(devices) {
-		return errors.Errorf("disk and device slices were of different sizes. disks: %d, devices: %d", len(disks), len(devices))
+func (c *gcsCore) mountMappedVirtualDisks(disks []prot.MappedVirtualDisk, mounts []*mountSpec) error {
+	if len(disks) != len(mounts) {
+		return errors.Errorf("disk and device slices were of different sizes. disks: %d, mounts: %d", len(disks), len(mounts))
 	}
 	for i, disk := range disks {
 		if !disk.CreateInUtilityVM {
 			return errors.New("we do not currently support mapping virtual disks inside the container namespace")
 		}
-		device := devices[i]
-		devicePath := filepath.Join("/dev", device)
+		mount := mounts[i]
 		mountedPath := disk.ContainerPath
 		if err := c.OS.MkdirAll(mountedPath, 0700); err != nil {
 			return errors.Wrapf(err, "failed to create directory for mapped virtual disk %s", disk.ContainerPath)
-		}
-		var mountOptions uintptr
-		var data string
-		if disk.ReadOnly {
-			mountOptions |= syscall.MS_RDONLY
-			data += "noload"
 		}
 
 		// Attempt mounting multiple times up until the given timout. This is
@@ -143,12 +214,12 @@ func (c *gcsCore) mountMappedVirtualDisks(disks []prot.MappedVirtualDisk, device
 		// before the timeout.
 		startTime := time.Now()
 		for {
-			err := c.OS.Mount(devicePath, mountedPath, "ext4", mountOptions, data)
+			err := mount.Mount(c.OS, mountedPath)
 			if err != nil {
 				currentTime := time.Now()
 				elapsedTime := currentTime.Sub(startTime)
 				if elapsedTime > mappedDiskMountTimeout {
-					return errors.Wrapf(err, "failed to mount directory %s for mapped virtual disk device %s", disk.ContainerPath, devicePath)
+					return errors.Wrapf(err, "failed to mount directory %s for mapped virtual disk device %s", disk.ContainerPath, mount.Source)
 				}
 			} else {
 				break
@@ -230,7 +301,7 @@ func (c *gcsCore) unmountMappedDirectories(dirs []prot.MappedDirectory) error {
 // union filesystem in the given order.
 // These mountpoints are all stored under a directory reserved for the container
 // with the given ID.
-func (c *gcsCore) mountLayers(id string, scratchDevice string, layers []string) error {
+func (c *gcsCore) mountLayers(id string, scratchMount *mountSpec, layers []*mountSpec) error {
 	layerPrefix, scratchPath, workdirPath, rootfsPath := c.getUnioningPaths(id)
 
 	logrus.Infof("layerPrefix=%s\n", layerPrefix)
@@ -240,14 +311,13 @@ func (c *gcsCore) mountLayers(id string, scratchDevice string, layers []string) 
 
 	// Mount the layer devices.
 	layerPaths := make([]string, len(layers)+1)
-	for i, device := range layers {
-		devicePath := filepath.Join("/dev", device)
+	for i, layer := range layers {
 		layerPath := fmt.Sprintf("%s%d", layerPrefix, i)
 		logrus.Infof("layerPath: %s\n", layerPath)
 		if err := c.OS.MkdirAll(layerPath, 0700); err != nil {
 			return errors.Wrapf(err, "failed to create directory for layer %s", layerPath)
 		}
-		if err := c.OS.Mount(devicePath, layerPath, "ext4", syscall.MS_RDONLY, "noload"); err != nil {
+		if err := layer.Mount(c.OS, layerPath); err != nil {
 			return errors.Wrapf(err, "failed to mount layer directory %s", layerPath)
 		}
 		layerPaths[i] = layerPath
@@ -268,8 +338,8 @@ func (c *gcsCore) mountLayers(id string, scratchDevice string, layers []string) 
 	if err := c.OS.MkdirAll(scratchPath, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create directory for scratch space %s", scratchPath)
 	}
-	if scratchDevice != "" {
-		if err := c.OS.Mount(filepath.Join("/dev", scratchDevice), scratchPath, "ext4", 0, ""); err != nil {
+	if scratchMount != nil {
+		if err := scratchMount.Mount(c.OS, scratchPath); err != nil {
 			return errors.Wrapf(err, "failed to mount scratch directory %s", scratchPath)
 		}
 	} else {
