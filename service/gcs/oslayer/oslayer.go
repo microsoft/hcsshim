@@ -1,10 +1,9 @@
 // Package oslayer defines the interface between the GCS and operating system
-// functionality such as filesystem access and networking.
+// functionality such as filesystem access.
 package oslayer
 
 import (
 	"io"
-	"net"
 	"os"
 	"syscall"
 )
@@ -56,37 +55,6 @@ type Cmd interface {
 	CombinedOutput() ([]byte, error)
 }
 
-// Link is an interface describing a network link.
-type Link interface {
-	Name() string
-	Index() int
-	SetUp() error
-	SetDown() error
-	SetNamespace(namespace Namespace) error
-	Addrs(family int) ([]Addr, error)
-	AddAddr(addr Addr) error
-	GatewayRoutes(family int) ([]Route, error)
-}
-
-// Addr is an interface describing a network address.
-type Addr interface {
-	IP() net.IP
-	String() string
-}
-
-// Route is an interface describing a network route.
-type Route interface {
-	Gw() Addr
-	Metric() int
-	SetMetric(metric int)
-	LinkIndex() int
-}
-
-// Namespace is an interface describing a network namespace.
-type Namespace interface {
-	io.Closer
-}
-
 // OS is the interface describing operations that can be performed on and by
 // the operating system, such as filesystem access and networking.
 type OS interface {
@@ -102,17 +70,6 @@ type OS interface {
 	PathExists(name string) (bool, error)
 	PathIsMounted(name string) (bool, error)
 	Link(oldname, newname string) error
-
-	// Networking
-	GetLinkByName(name string) (Link, error)
-	GetLinkByIndex(index int) (Link, error)
-	GetCurrentNamespace() (Namespace, error)
-	SetCurrentNamespace(namespace Namespace) error
-	GetNamespaceFromPid(pid int) (Namespace, error)
-	NewRoute(scope uint8, linkIndex int, gateway Addr) Route
-	AddRoute(route Route) error
-	AddGatewayRoute(gw Addr, link Link, metric int) error
-	ParseAddr(s string) (Addr, error)
 
 	// Processes
 	Kill(pid int, sig syscall.Signal) error
