@@ -94,8 +94,9 @@ Here are the expected contents of each subdirectory /file
             /bin/tar2vhd
             /bin/exportSandbox
             /bin/createSandbox
+            /bin/netnscfg
 
-            Note : exportSandbox, createSandbox, vhd2tar, and tar2vhd  are actually hard links to the file gcstools
+            Note : exportSandbox, createSandbox, vhd2tar, tar2vhd, and netnscfg are actually hard links to the file gcstools
 
     - Required binaires: utilities used by gcs
 

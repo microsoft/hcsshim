@@ -32,5 +32,5 @@
 
     eg: On a successful build, you would get the following binaries
     root@ubuntu:~/golang/src/github.com/Microsoft/opengcs/service# ls  bin
-    createSandbox  exportSandbox  gcs  gcstools  tar2vhd  vhd2tar
+    createSandbox  exportSandbox  gcs  gcstools  tar2vhd  vhd2tar netnscfg
 
