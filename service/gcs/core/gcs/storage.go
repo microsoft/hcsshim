@@ -216,7 +216,7 @@ func (c *gcsCore) mountLayers(id string, scratchDevice string, layers []string) 
 	if err := c.OS.MkdirAll(baseFilesPath, 0700); err != nil {
 		return errors.Wrapf(err, "failed to create directory for base files %s", baseFilesPath)
 	}
-	if err := c.OS.MkdirAll(scratchPath, 0700); err != nil {
+	if err := c.OS.MkdirAll(scratchPath, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create directory for scratch space %s", scratchPath)
 	}
 	if scratchDevice != "" {
@@ -229,13 +229,13 @@ func (c *gcsCore) mountLayers(id string, scratchDevice string, layers []string) 
 		mountOptions |= syscall.O_RDONLY
 	}
 	upperDir := filepath.Join(scratchPath, "upper")
-	if err := c.OS.MkdirAll(upperDir, 0700); err != nil {
+	if err := c.OS.MkdirAll(upperDir, 0755); err != nil {
 		return errors.Wrap(err, "failed to create upper directory in scratch space")
 	}
-	if err := c.OS.MkdirAll(workdirPath, 0700); err != nil {
+	if err := c.OS.MkdirAll(workdirPath, 0755); err != nil {
 		return errors.Wrap(err, "failed to create workdir in scratch space")
 	}
-	if err := c.OS.MkdirAll(rootfsPath, 0700); err != nil {
+	if err := c.OS.MkdirAll(rootfsPath, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create directory for container root filesystem %s", rootfsPath)
 	}
 	lowerdir := strings.Join(layerPaths, ":")
