@@ -54,8 +54,8 @@ const (
 )
 
 // GetResponseIdentifier returns the response version of the given request
-// identifier. So, for example, an input of ComputeSystemCreate_v1 would result
-// in an output of ComputeSystemResponseCreate_v1.
+// identifier. So, for example, an input of ComputeSystemCreateV1 would result
+// in an output of ComputeSystemResponseCreateV1.
 func GetResponseIdentifier(identifier MessageIdentifier) MessageIdentifier {
 	return MessageIdentifier(MtResponse | (uint32(identifier) & ^uint32(messageTypeMask)))
 }
@@ -274,6 +274,7 @@ const (
 // ResourceType is checked and only the relevant fields are filled in.
 type ResourceModificationSettings struct {
 	*MappedVirtualDisk
+	*MappedDirectory
 }
 
 // ResourceModificationRequestResponse details a container resource which
@@ -320,6 +321,12 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 		settings.MappedVirtualDisk = &MappedVirtualDisk{}
 		if err := commonutils.UnmarshalJSONWithHresult(rawSettings, settings.MappedVirtualDisk); err != nil {
 			return nil, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDisk")
+		}
+		request.Request.Settings = settings
+	case PtMappedDirectory:
+		settings.MappedDirectory = &MappedDirectory{}
+		if err := json.Unmarshal(rawSettings, settings.MappedDirectory); err != nil {
+			return nil, errors.Wrap(err, "failed to unmarshal settings as MappedDirectory")
 		}
 		request.Request.Settings = settings
 	default:
@@ -414,6 +421,15 @@ type MappedVirtualDisk struct {
 	ReadOnly          bool  `json:",omitempty"`
 }
 
+// MappedDirectory represents a directory on the host which is mapped to a
+// directory on the guest through a technology such as Plan9.
+type MappedDirectory struct {
+	ContainerPath     string
+	CreateInUtilityVM bool   `json:",omitempty"`
+	ReadOnly          bool   `json:",omitempty"`
+	Port              uint32 `json:",omitempty"`
+}
+
 // VMHostedContainerSettings is the set of settings used to specify the initial
 // configuration of a container.
 type VMHostedContainerSettings struct {
@@ -422,6 +438,7 @@ type VMHostedContainerSettings struct {
 	// of the sandbox device.
 	SandboxDataPath    string
 	MappedVirtualDisks []MappedVirtualDisk
+	MappedDirectories  []MappedDirectory
 	NetworkAdapters    []NetworkAdapter `json:",omitempty"`
 }
 

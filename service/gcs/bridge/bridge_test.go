@@ -21,6 +21,21 @@ const (
 	testTimeout = 5
 )
 
+// TestResourceModificationSettings is a duplicate of
+// prot.ResourceModificationSettings where each field is given explicitly
+// rather than being inherited from embedded types. This allows the test code
+// to easily construct a JSON string for the message without running into the
+// Go JSON marshaller's inability to marshal field names which were inherited
+// from multiple embedded types.
+type TestResourceModificationSettings struct {
+	ContainerPath     string
+	Lun               uint8  `json:",omitempty"`
+	CreateInUtilityVM bool   `json:",omitempty"`
+	ReadOnly          bool   `json:",omitempty"`
+	AttachOnly        bool   `json:",omitempty"`
+	Port              uint32 `json:",omitempty"`
+}
+
 var _ = Describe("Bridge", func() {
 	var (
 		connChannel    chan *transport.MockConnection
@@ -590,11 +605,12 @@ var _ = Describe("Bridge", func() {
 
 	Describe("calling modifySettings", func() {
 		var (
-			response                       prot.MessageResponseBase
-			callArgs                       mockcore.ModifySettingsCall
-			modificationRequest            prot.ResourceModificationRequestResponse
-			defaultModificationRequest     prot.ResourceModificationRequestResponse
-			unsupportedModificationRequest prot.ResourceModificationRequestResponse
+			response                             prot.MessageResponseBase
+			callArgs                             mockcore.ModifySettingsCall
+			modificationRequest                  prot.ResourceModificationRequestResponse
+			modificationRequestToSend            prot.ResourceModificationRequestResponse
+			defaultModificationRequestToSend     prot.ResourceModificationRequestResponse
+			unsupportedModificationRequestToSend prot.ResourceModificationRequestResponse
 		)
 		BeforeEach(func() {
 			messageType = prot.ComputeSystemModifySettingsV1
@@ -618,15 +634,41 @@ var _ = Describe("Bridge", func() {
 					RequestType:  prot.RtAdd,
 					Settings:     prot.ResourceModificationSettings{MappedVirtualDisk: &disk},
 				}
-				defaultModificationRequest = prot.ResourceModificationRequestResponse{
+
+				// The "ToSend" modification requests are created using
+				// TestResourceModificationSettings, which means they can be
+				// safely marshalled into JSON and sent without running into
+				// the JSON marshaller's problem with ambiguous field names
+				// from embedded types.
+				modificationRequestToSend = prot.ResourceModificationRequestResponse{
+					ResourceType: prot.PtMappedVirtualDisk,
+					RequestType:  prot.RtAdd,
+					Settings: TestResourceModificationSettings{
+						ContainerPath:     disk.ContainerPath,
+						Lun:               disk.Lun,
+						CreateInUtilityVM: disk.CreateInUtilityVM,
+						ReadOnly:          disk.ReadOnly,
+					},
+				}
+				defaultModificationRequestToSend = prot.ResourceModificationRequestResponse{
 					ResourceType: "",
 					RequestType:  "",
-					Settings:     prot.ResourceModificationSettings{MappedVirtualDisk: &disk},
+					Settings: TestResourceModificationSettings{
+						ContainerPath:     disk.ContainerPath,
+						Lun:               disk.Lun,
+						CreateInUtilityVM: disk.CreateInUtilityVM,
+						ReadOnly:          disk.ReadOnly,
+					},
 				}
-				unsupportedModificationRequest = prot.ResourceModificationRequestResponse{
+				unsupportedModificationRequestToSend = prot.ResourceModificationRequestResponse{
 					ResourceType: prot.PtMemory,
 					RequestType:  prot.RtAdd,
-					Settings:     prot.ResourceModificationSettings{MappedVirtualDisk: &disk},
+					Settings: TestResourceModificationSettings{
+						ContainerPath:     disk.ContainerPath,
+						Lun:               disk.Lun,
+						CreateInUtilityVM: disk.CreateInUtilityVM,
+						ReadOnly:          disk.ReadOnly,
+					},
 				}
 			})
 			Context("using non-empty ResourceType and RequestType", func() {
@@ -636,7 +678,7 @@ var _ = Describe("Bridge", func() {
 							ContainerID: containerID,
 							ActivityID:  activityID,
 						},
-						Request: modificationRequest,
+						Request: modificationRequestToSend,
 					}
 				})
 				AssertNoResponseErrors()
@@ -653,7 +695,7 @@ var _ = Describe("Bridge", func() {
 							ContainerID: containerID,
 							ActivityID:  activityID,
 						},
-						Request: defaultModificationRequest,
+						Request: defaultModificationRequestToSend,
 					}
 				})
 				AssertResponseErrors("invalid ResourceType Memory")
@@ -666,7 +708,7 @@ var _ = Describe("Bridge", func() {
 							ContainerID: containerID,
 							ActivityID:  activityID,
 						},
-						Request: unsupportedModificationRequest,
+						Request: unsupportedModificationRequestToSend,
 					}
 				})
 				AssertResponseErrors("invalid ResourceType Memory")

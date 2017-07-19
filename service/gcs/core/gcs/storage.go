@@ -22,6 +22,10 @@ const (
 	// that will be used as the base layer for containers.
 	baseFilesPath = "/tmp/base/"
 
+	// mappedDirectoryPrefix is the directory under which all mapped
+	// directories are mounted.
+	mappedDirectoryPrefix = "/tmp"
+
 	// deviceLookupTimeout is the amount of time before deviceIDToName will
 	// give up trying to look up the device name from its ID.
 	deviceLookupTimeout = time.Second * 2
@@ -171,6 +175,51 @@ func (c *gcsCore) unmountMappedVirtualDisks(disks []prot.MappedVirtualDisk) erro
 		if exists && mounted {
 			if err := c.OS.Unmount(dir, 0); err != nil {
 				return errors.Wrapf(err, "failed to unmount mapped virtual disk path %s", dir)
+			}
+		}
+	}
+	return nil
+}
+
+// mountMappedDirectories mounts the given mapped directories using a Plan9
+// filesystem with the given options.
+func (c *gcsCore) mountMappedDirectories(dirs []prot.MappedDirectory) error {
+	for _, dir := range dirs {
+		if !dir.CreateInUtilityVM {
+			return errors.New("we do not currently support mapping directories inside the container namespace")
+		}
+		mountedPath := filepath.Join(mappedDirectoryPrefix, dir.ContainerPath)
+		if err := c.OS.MkdirAll(mountedPath, 0700); err != nil {
+			return errors.Wrapf(err, "failed to create directory for mapped directory %s", mountedPath)
+		}
+		var mountOptions uintptr = 0
+		var data string = fmt.Sprintf("trans=vsock,port=%d", dir.Port)
+		if dir.ReadOnly {
+			mountOptions |= syscall.MS_RDONLY
+			data += ",noload"
+		}
+		if err := c.OS.Mount(dir.ContainerPath, mountedPath, "9p", mountOptions, data); err != nil {
+			return errors.Wrapf(err, "failed to mount directory for mapped directory %s", mountedPath)
+		}
+	}
+	return nil
+}
+
+// unmountMappedDirectories unmounts the given container's mapped directories.
+func (c *gcsCore) unmountMappedDirectories(dirs []prot.MappedDirectory) error {
+	for _, dir := range dirs {
+		mountedPath := filepath.Join(mappedDirectoryPrefix, dir.ContainerPath)
+		exists, err := c.OS.PathExists(mountedPath)
+		if err != nil {
+			return errors.Wrapf(err, "failed to determine if mapped directory path exists %s", mountedPath)
+		}
+		mounted, err := c.OS.PathIsMounted(mountedPath)
+		if err != nil {
+			return errors.Wrapf(err, "failed to determine if mapped directory path is mounted %s", mountedPath)
+		}
+		if exists && mounted {
+			if err := c.OS.Unmount(mountedPath, 0); err != nil {
+				return errors.Wrapf(err, "failed to unmount mapped directory path %s", mountedPath)
 			}
 		}
 	}

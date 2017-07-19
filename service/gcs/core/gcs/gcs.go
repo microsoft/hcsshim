@@ -73,6 +73,7 @@ type containerCacheEntry struct {
 	Processes          []int
 	ExitHooks          []func(oslayer.ProcessExitState)
 	MappedVirtualDisks map[uint8]prot.MappedVirtualDisk
+	MappedDirectories  map[uint32]prot.MappedDirectory
 	NetworkAdapters    []prot.NetworkAdapter
 	container          runtime.Container
 }
@@ -81,6 +82,7 @@ func newContainerCacheEntry(id string) *containerCacheEntry {
 	return &containerCacheEntry{
 		ID:                 id,
 		MappedVirtualDisks: make(map[uint8]prot.MappedVirtualDisk),
+		MappedDirectories:  make(map[uint32]prot.MappedDirectory),
 	}
 }
 func (e *containerCacheEntry) AddExitHook(hook func(oslayer.ProcessExitState)) {
@@ -99,12 +101,26 @@ func (e *containerCacheEntry) AddMappedVirtualDisk(disk prot.MappedVirtualDisk) 
 	e.MappedVirtualDisks[disk.Lun] = disk
 	return nil
 }
-func (e *containerCacheEntry) RemoveMappedVirtualDisk(disk prot.MappedVirtualDisk) error {
+func (e *containerCacheEntry) RemoveMappedVirtualDisk(disk prot.MappedVirtualDisk) {
 	if _, ok := e.MappedVirtualDisks[disk.Lun]; !ok {
-		return errors.Errorf("a mapped virtual disk with lun %d is not attached to container %s", disk.Lun, e.ID)
+		logrus.Warnf("attempt to remove virtual disk with lun %d which is not attached to container %s", disk.Lun, e.ID)
+		return
 	}
 	delete(e.MappedVirtualDisks, disk.Lun)
+}
+func (e *containerCacheEntry) AddMappedDirectory(dir prot.MappedDirectory) error {
+	if _, ok := e.MappedDirectories[dir.Port]; ok {
+		return errors.Errorf("a mapped directory with port %d is already attached to container %s", dir.Port, e.ID)
+	}
+	e.MappedDirectories[dir.Port] = dir
 	return nil
+}
+func (e *containerCacheEntry) RemoveMappedDirectory(dir prot.MappedDirectory) {
+	if _, ok := e.MappedDirectories[dir.Port]; !ok {
+		logrus.Warnf("attempt to remove mapped directory with port %d which is not attached to container %s", dir.Port, e.ID)
+		return
+	}
+	delete(e.MappedDirectories, dir.Port)
 }
 
 // processCacheEntry stores cached information for a single process.
@@ -143,6 +159,10 @@ func (c *gcsCore) CreateContainer(id string, settings prot.VMHostedContainerSett
 	// Set up mapped virtual disks.
 	if err := c.setupMappedVirtualDisks(id, settings.MappedVirtualDisks, containerEntry); err != nil {
 		return errors.Wrapf(err, "failed to set up mapped virtual disks during create for container %s", id)
+	}
+	// Set up mapped directories.
+	if err := c.setupMappedDirectories(id, settings.MappedDirectories, containerEntry); err != nil {
+		return errors.Wrapf(err, "failed to set up mapped directories during create for container %s", id)
 	}
 
 	// Set up layers.
@@ -484,31 +504,39 @@ func (c *gcsCore) ModifySettings(id string, request prot.ResourceModificationReq
 		return errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
 	}
 
+	settings, ok := request.Settings.(prot.ResourceModificationSettings)
+	if !ok {
+		return errors.New("the request's settings are not of type ResourceModificationSettings")
+	}
 	switch request.RequestType {
 	case prot.RtAdd:
-		if request.ResourceType != prot.PtMappedVirtualDisk {
-			return errors.Errorf("only the resource type \"%s\" is currently supported for request type \"%s\"", prot.PtMappedVirtualDisk, request.RequestType)
-		}
-		settings, ok := request.Settings.(prot.ResourceModificationSettings)
-		if !ok {
-			return errors.New("the request's settings are not of type ResourceModificationSettings")
-		}
-		if err := c.setupMappedVirtualDisks(id, []prot.MappedVirtualDisk{*settings.MappedVirtualDisk}, containerEntry); err != nil {
-			return errors.Wrapf(err, "failed to hot add mapped virtual disk for container %s", id)
+		switch request.ResourceType {
+		case prot.PtMappedVirtualDisk:
+			if err := c.setupMappedVirtualDisks(id, []prot.MappedVirtualDisk{*settings.MappedVirtualDisk}, containerEntry); err != nil {
+				return errors.Wrapf(err, "failed to hot add mapped virtual disk for container %s", id)
+			}
+		case prot.PtMappedDirectory:
+			if err := c.setupMappedDirectories(id, []prot.MappedDirectory{*settings.MappedDirectory}, containerEntry); err != nil {
+				return errors.Wrapf(err, "failed to hot add mapped directory for container %s", id)
+			}
+		default:
+			return errors.Errorf("the resource type \"%s\" is not supported for request type \"%s\"", request.ResourceType, request.RequestType)
 		}
 	case prot.RtRemove:
-		if request.ResourceType != prot.PtMappedVirtualDisk {
-			return errors.Errorf("only the resource type \"%s\" is currently supported for request type \"%s\"", prot.PtMappedVirtualDisk, request.RequestType)
-		}
-		settings, ok := request.Settings.(prot.ResourceModificationSettings)
-		if !ok {
-			return errors.New("the request's settings are not of type ResourceModificationSettings")
-		}
-		if err := c.removeMappedVirtualDisks(id, []prot.MappedVirtualDisk{*settings.MappedVirtualDisk}, containerEntry); err != nil {
-			return errors.Wrapf(err, "failed to hot remove mapped virtual disk for container %s", id)
+		switch request.ResourceType {
+		case prot.PtMappedVirtualDisk:
+			if err := c.removeMappedVirtualDisks(id, []prot.MappedVirtualDisk{*settings.MappedVirtualDisk}, containerEntry); err != nil {
+				return errors.Wrapf(err, "failed to hot remove mapped virtual disk for container %s", id)
+			}
+		case prot.PtMappedDirectory:
+			if err := c.removeMappedDirectories(id, []prot.MappedDirectory{*settings.MappedDirectory}, containerEntry); err != nil {
+				return errors.Wrapf(err, "failed to hot remove mapped directory for container %s", id)
+			}
+		default:
+			return errors.Errorf("the resource type \"%s\" is not supported for request type \"%s\"", request.ResourceType, request.RequestType)
 		}
 	default:
-		return errors.Errorf("the request type \"%s\" is not yet supported", request.RequestType)
+		return errors.Errorf("the request type \"%s\" is not supported", request.RequestType)
 	}
 
 	return nil
@@ -591,6 +619,22 @@ func (c *gcsCore) setupMappedVirtualDisks(id string, disks []prot.MappedVirtualD
 	return nil
 }
 
+// setupMappedDirectories is a helper function which calls into the functions
+// in storage.go to set up a set of mapped directories for a given container.
+// It then adds them to the container's cache entry.
+// This function expects containerCacheMutex to be locked on entry.
+func (c *gcsCore) setupMappedDirectories(id string, dirs []prot.MappedDirectory, containerEntry *containerCacheEntry) error {
+	if err := c.mountMappedDirectories(dirs); err != nil {
+		return errors.Wrapf(err, "failed to mount mapped directories for container %s", id)
+	}
+	for _, dir := range dirs {
+		if err := containerEntry.AddMappedDirectory(dir); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // removeMappedVirtualDisks is a helper function which calls into the functions
 // in storage.go to unmount a set of mapped virtual disks for a given
 // container. It then removes them from the container's cache entry.
@@ -600,9 +644,21 @@ func (c *gcsCore) removeMappedVirtualDisks(id string, disks []prot.MappedVirtual
 		return errors.Wrapf(err, "failed to mount mapped virtual disks for container %s", id)
 	}
 	for _, disk := range disks {
-		if err := containerEntry.RemoveMappedVirtualDisk(disk); err != nil {
-			return err
-		}
+		containerEntry.RemoveMappedVirtualDisk(disk)
+	}
+	return nil
+}
+
+// removeMappedDirectories is a helper function which calls into the functions
+// in storage.go to unmount a set of mapped directories for a given container.
+// It then removes them from the container's cache entry.
+// This function expects containerCacheMutex to be locked on entry.
+func (c *gcsCore) removeMappedDirectories(id string, dirs []prot.MappedDirectory, containerEntry *containerCacheEntry) error {
+	if err := c.unmountMappedDirectories(dirs); err != nil {
+		return errors.Wrapf(err, "failed to mount mapped directories for container %s", id)
+	}
+	for _, dir := range dirs {
+		containerEntry.RemoveMappedDirectory(dir)
 	}
 	return nil
 }
