@@ -4,6 +4,16 @@
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")"; pwd -P)
 cd $script_dir
 
+# Install ginkgo
+go get github.com/onsi/ginkgo/ginkgo
+
+# Install runc
+go get -d github.com/opencontainers/runc
+cd $GOPATH/src/github.com/opencontainers/runc
+git checkout 992a5be178a62e026f4069f443c6164912adbf09
+go install github.com/opencontainers/runc
+cd $script_dir
+
 # Generate busybox rootfs directory for runC tests
 rootfs=runtime/runc/testbundle/rootfs
 mkdir $rootfs
