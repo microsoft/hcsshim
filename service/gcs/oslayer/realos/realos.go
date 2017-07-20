@@ -3,10 +3,12 @@
 package realos
 
 import (
+	"bufio"
 	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
@@ -193,17 +195,22 @@ func (o *realOS) PathExists(name string) (bool, error) {
 	return true, nil
 }
 func (o *realOS) PathIsMounted(name string) (bool, error) {
-	// mountpoint has exit status 0 if the mountpoint exists, 1 if not or if
-	// encountering some other error.
-	err := exec.Command("mountpoint", "-q", name).Run()
+	mountinfoFile, err := os.Open("/proc/self/mountinfo")
 	if err != nil {
-		_, ok := err.(*exec.ExitError)
-		if ok {
-			return false, nil
-		}
 		return false, errors.WithStack(err)
 	}
-	return true, err
+	defer mountinfoFile.Close()
+
+	scanner := bufio.NewScanner(mountinfoFile)
+	for scanner.Scan() {
+		tokens := strings.Fields(scanner.Text())
+		dir1 := tokens[3]
+		dir2 := tokens[4]
+		if name == dir1 || name == dir2 {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 func (o *realOS) Link(oldname, newname string) error {
 	if err := os.Link(oldname, newname); err != nil {

@@ -2,6 +2,8 @@
 package mockruntime
 
 import (
+	"sync"
+
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer/mockos"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
@@ -11,21 +13,25 @@ import (
 
 // mockRuntime is an implementation of the Runtime interface which uses runC as
 // the container runtime.
-type mockRuntime struct{}
+type mockRuntime struct {
+	killed *sync.Cond
+}
 
 var _ runtime.Runtime = &mockRuntime{}
 
 // NewRuntime constructs a new mockRuntime with the default settings.
 func NewRuntime() *mockRuntime {
-	return &mockRuntime{}
+	var lock sync.Mutex
+	return &mockRuntime{killed: sync.NewCond(&lock)}
 }
 
 type container struct {
 	id string
+	r  *mockRuntime
 }
 
 func (r *mockRuntime) CreateContainer(id string, bundlePath string, stdioSet *stdio.ConnectionSet) (c runtime.Container, err error) {
-	return &container{id: id}, nil
+	return &container{id: id, r: r}, nil
 }
 
 func (c *container) Start() error {
@@ -41,10 +47,13 @@ func (c *container) Pid() int {
 }
 
 func (c *container) ExecProcess(process oci.Process, stdioSet *stdio.ConnectionSet) (p runtime.Process, err error) {
-	return &container{}, nil
+	return c, nil
 }
 
 func (c *container) Kill(signal oslayer.Signal) error {
+	c.r.killed.L.Lock()
+	defer c.r.killed.L.Unlock()
+	c.r.killed.Broadcast()
 	return nil
 }
 
@@ -117,6 +126,9 @@ func (c *container) GetAllProcesses() ([]runtime.ContainerProcessState, error) {
 }
 
 func (c *container) Wait() (oslayer.ProcessExitState, error) {
+	c.r.killed.L.Lock()
+	defer c.r.killed.L.Unlock()
+	c.r.killed.Wait()
 	state := mockos.NewProcessExitState(123)
 	return state, nil
 }
