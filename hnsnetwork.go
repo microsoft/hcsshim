@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 // Subnet is assoicated with a network and represents a list
@@ -37,7 +37,7 @@ type HNSNetwork struct {
 	DNSServerList        string            `json:",omitempty"`
 	DNSServerCompartment uint32            `json:",omitempty"`
 	ManagementIP         string            `json:",omitempty"`
-	AutomaticDNS         bool              `json:",omitempty"`  
+	AutomaticDNS         bool              `json:",omitempty"`
 }
 
 type hnsNetworkResponse struct {
