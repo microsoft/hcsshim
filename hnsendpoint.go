@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 // HNSEndpoint represents a network endpoint in HNS
