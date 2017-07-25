@@ -49,9 +49,10 @@ var _ = Describe("Bridge", func() {
 			responseString string
 			responseBase   *prot.MessageResponseBase
 
-			containerID string
-			processID   uint32
-			activityID  string
+			containerID    string
+			processID      uint32
+			activityID     string
+			iterationCount uint32
 		)
 
 		BeforeEach(func() {
@@ -63,7 +64,8 @@ var _ = Describe("Bridge", func() {
 
 			containerID = "01234567-89ab-cdef-0123-456789abcdef"
 			processID = 101
-			activityID = "00000000-0000-0000-0000-000000000000"
+			activityID = fmt.Sprintf("00000000-0000-0000-0000-%012d", iterationCount)
+			iterationCount++
 		})
 		// Enforce a timeout on all communications with the bridge, so that
 		// situations like infinite loops or infinite blocks on the Connection will
