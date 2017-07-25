@@ -81,7 +81,6 @@ var _ = Describe("Bridge", func() {
 			messageBytes, err := json.Marshal(message)
 			Expect(err).NotTo(HaveOccurred())
 			messageString := string(messageBytes)
-
 			err = serverSendString(commandConn, messageType, 0, messageString)
 			Expect(err).NotTo(HaveOccurred())
 			responseString, responseHeader, err = serverReadString(commandConn)
@@ -123,6 +122,7 @@ var _ = Describe("Bridge", func() {
 				messageType = prot.ComputeSystemCreateV1
 			})
 			JustBeforeEach(func() {
+				response = prot.ContainerCreateResponse{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = response.MessageResponseBase
@@ -196,6 +196,7 @@ var _ = Describe("Bridge", func() {
 						}()
 						notificationString, _, err := serverReadString(commandConn)
 						Expect(err).NotTo(HaveOccurred())
+						notification = prot.ContainerNotification{}
 						err = json.Unmarshal([]byte(notificationString), &notification)
 						Expect(err).NotTo(HaveOccurred())
 					}, testTimeout)
@@ -222,6 +223,7 @@ var _ = Describe("Bridge", func() {
 				messageType = prot.ComputeSystemExecuteProcessV1
 			})
 			JustBeforeEach(func() {
+				response = prot.ContainerExecuteProcessResponse{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = response.MessageResponseBase
@@ -336,6 +338,7 @@ var _ = Describe("Bridge", func() {
 				messageType = prot.ComputeSystemExecuteProcessV1
 			})
 			JustBeforeEach(func() {
+				response = prot.ContainerExecuteProcessResponse{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = response.MessageResponseBase
@@ -407,6 +410,7 @@ var _ = Describe("Bridge", func() {
 				messageType = prot.ComputeSystemShutdownForcedV1
 			})
 			JustBeforeEach(func() {
+				response = prot.MessageResponseBase{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = &response
@@ -437,6 +441,7 @@ var _ = Describe("Bridge", func() {
 				messageType = prot.ComputeSystemShutdownGracefulV1
 			})
 			JustBeforeEach(func() {
+				response = prot.MessageResponseBase{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = &response
@@ -467,6 +472,7 @@ var _ = Describe("Bridge", func() {
 				messageType = prot.ComputeSystemTerminateProcessV1
 			})
 			JustBeforeEach(func() {
+				response = prot.MessageResponseBase{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = &response
@@ -499,6 +505,7 @@ var _ = Describe("Bridge", func() {
 				messageType = prot.ComputeSystemGetPropertiesV1
 			})
 			JustBeforeEach(func() {
+				response = prot.ContainerGetPropertiesResponse{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = response.MessageResponseBase
@@ -542,6 +549,7 @@ var _ = Describe("Bridge", func() {
 				messageType = prot.ComputeSystemWaitForProcessV1
 			})
 			JustBeforeEach(func() {
+				response = prot.ContainerWaitForProcessResponse{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = response.MessageResponseBase
@@ -578,6 +586,7 @@ var _ = Describe("Bridge", func() {
 				messageType = prot.ComputeSystemResizeConsoleV1
 			})
 			JustBeforeEach(func() {
+				response = prot.MessageResponseBase{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = &response
@@ -618,6 +627,7 @@ var _ = Describe("Bridge", func() {
 				messageType = prot.ComputeSystemModifySettingsV1
 			})
 			JustBeforeEach(func() {
+				response = prot.MessageResponseBase{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = &response
@@ -773,6 +783,7 @@ func serverReadString(conn transport.Connection) (str string, header *prot.Messa
 		return "", nil, err
 	}
 	message, err := serverReadMessage(conn, int(header.Size))
+
 	if err != nil {
 		return "", nil, err
 	}
