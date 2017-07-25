@@ -306,6 +306,10 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 		return nil, errors.WithStack(err)
 	}
 
+	if request.Request.RequestType == "" {
+		request.Request.RequestType = RtAdd
+	}
+
 	// Fill in the ResourceType-specific fields.
 	settings := ResourceModificationSettings{}
 	switch request.Request.ResourceType {

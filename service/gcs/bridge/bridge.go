@@ -373,13 +373,14 @@ func (b *bridge) resizeConsole(message []byte) (*prot.MessageResponseBase, error
 func (b *bridge) modifySettings(message []byte) (*prot.MessageResponseBase, error) {
 	response := newResponseBase()
 
+	// We do a high level deserialization of just the base message (container/activity id) as early as possible
+	// so that we can add tracking even if deserialization fails for a lower level later.
 	var base prot.MessageBase
-	err := json.Unmarshal(message, &base)
+	err := commonutils.UnmarshalJSONWithHresult(message, &base)
 	if err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
 
-	// Assign the activity id as early as possible so failures will track the state.
 	response.ActivityID = base.ActivityID
 
 	request, err := prot.UnmarshalContainerModifySettings(message)
