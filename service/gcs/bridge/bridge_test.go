@@ -622,6 +622,7 @@ var _ = Describe("Bridge", func() {
 				modificationRequestToSend            prot.ResourceModificationRequestResponse
 				defaultModificationRequestToSend     prot.ResourceModificationRequestResponse
 				unsupportedModificationRequestToSend prot.ResourceModificationRequestResponse
+				modificationRequestToSendAttachOnly  prot.ResourceModificationRequestResponse
 			)
 			BeforeEach(func() {
 				messageType = prot.ComputeSystemModifySettingsV1
@@ -682,6 +683,16 @@ var _ = Describe("Bridge", func() {
 							ReadOnly:          disk.ReadOnly,
 						},
 					}
+					modificationRequestToSendAttachOnly = prot.ResourceModificationRequestResponse{
+						ResourceType: prot.PtMappedVirtualDisk,
+						RequestType:  prot.RtAdd,
+						Settings: TestResourceModificationSettings{
+							ContainerPath:     disk.ContainerPath,
+							Lun:               disk.Lun,
+							CreateInUtilityVM: disk.CreateInUtilityVM,
+							AttachOnly:        true,
+						},
+					}
 				})
 				Context("using non-empty ResourceType and RequestType", func() {
 					BeforeEach(func() {
@@ -725,6 +736,19 @@ var _ = Describe("Bridge", func() {
 					})
 					AssertResponseErrors("invalid ResourceType 'Memory'")
 					AssertActivityIDCorrect()
+				})
+				Context("using AttachOnly true", func() {
+					BeforeEach(func() {
+						message = prot.ContainerModifySettings{
+							MessageBase: &prot.MessageBase{
+								ContainerID: containerID,
+								ActivityID:  activityID,
+							},
+							Request: modificationRequestToSendAttachOnly,
+						}
+					})
+					AssertActivityIDCorrect()
+					AssertNoResponseErrors()
 				})
 			})
 		})
