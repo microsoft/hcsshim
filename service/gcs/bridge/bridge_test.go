@@ -89,7 +89,8 @@ var _ = Describe("Bridge", func() {
 		}, testTimeout)
 		AfterEach(func() {
 			close(connChannel)
-			commandConn.Close()
+			err := commandConn.Close()
+			Expect(err).NotTo(HaveOccurred())
 		})
 
 		AssertNoResponseErrors := func() {
@@ -699,7 +700,7 @@ var _ = Describe("Bridge", func() {
 							Request: defaultModificationRequestToSend,
 						}
 					})
-					AssertResponseErrors("invalid ResourceType Memory")
+					AssertResponseErrors("invalid ResourceType ''")
 					AssertActivityIDCorrect()
 				})
 				Context("using an unsupported ResourceType", func() {
@@ -712,7 +713,7 @@ var _ = Describe("Bridge", func() {
 							Request: unsupportedModificationRequestToSend,
 						}
 					})
-					AssertResponseErrors("invalid ResourceType Memory")
+					AssertResponseErrors("invalid ResourceType 'Memory'")
 					AssertActivityIDCorrect()
 				})
 			})

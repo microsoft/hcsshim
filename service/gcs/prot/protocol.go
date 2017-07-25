@@ -306,14 +306,6 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 		return nil, errors.WithStack(err)
 	}
 
-	// Fill in default fields.
-	if request.Request.ResourceType == "" {
-		request.Request.ResourceType = PtMemory
-	}
-	if request.Request.RequestType == "" {
-		request.Request.RequestType = RtAdd
-	}
-
 	// Fill in the ResourceType-specific fields.
 	settings := ResourceModificationSettings{}
 	switch request.Request.ResourceType {
@@ -325,12 +317,12 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 		request.Request.Settings = settings
 	case PtMappedDirectory:
 		settings.MappedDirectory = &MappedDirectory{}
-		if err := json.Unmarshal(rawSettings, settings.MappedDirectory); err != nil {
+		if err := commonutils.UnmarshalJSONWithHresult(rawSettings, settings.MappedDirectory); err != nil {
 			return nil, errors.Wrap(err, "failed to unmarshal settings as MappedDirectory")
 		}
 		request.Request.Settings = settings
 	default:
-		return nil, errors.Errorf("invalid ResourceType %s", request.Request.ResourceType)
+		return nil, errors.Errorf("invalid ResourceType '%s'", request.Request.ResourceType)
 	}
 
 	return &request, nil
