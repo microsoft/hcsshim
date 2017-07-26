@@ -23,10 +23,6 @@ const (
 	// that will be used as the base layer for containers.
 	baseFilesPath = "/tmp/base/"
 
-	// mappedDirectoryPrefix is the directory under which all mapped
-	// directories are mounted.
-	mappedDirectoryPrefix = "/tmp"
-
 	// deviceLookupTimeout is the amount of time before deviceIDToName will
 	// give up trying to look up the device name from its ID.
 	deviceLookupTimeout = time.Second * 2
@@ -266,7 +262,7 @@ func (c *gcsCore) mountMappedDirectories(dirs []prot.MappedDirectory) error {
 		if !dir.CreateInUtilityVM {
 			return errors.New("we do not currently support mapping directories inside the container namespace")
 		}
-		mountedPath := filepath.Join(mappedDirectoryPrefix, dir.ContainerPath)
+		mountedPath := dir.ContainerPath
 		if err := c.OS.MkdirAll(mountedPath, 0700); err != nil {
 			return errors.Wrapf(err, "failed to create directory for mapped directory %s", mountedPath)
 		}
@@ -286,7 +282,7 @@ func (c *gcsCore) mountMappedDirectories(dirs []prot.MappedDirectory) error {
 // unmountMappedDirectories unmounts the given container's mapped directories.
 func (c *gcsCore) unmountMappedDirectories(dirs []prot.MappedDirectory) error {
 	for _, dir := range dirs {
-		mountedPath := filepath.Join(mappedDirectoryPrefix, dir.ContainerPath)
+		mountedPath := dir.ContainerPath
 		exists, err := c.OS.PathExists(mountedPath)
 		if err != nil {
 			return errors.Wrapf(err, "failed to determine if mapped directory path exists %s", mountedPath)
