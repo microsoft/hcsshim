@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"syscall"
 
 	"github.com/Microsoft/opengcs/service/gcs/core/mockcore"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
@@ -465,35 +466,39 @@ var _ = Describe("Bridge", func() {
 			})
 		})
 
-		Describe("calling terminateProcess", func() {
+		Describe("calling signalProcess", func() {
 			var (
 				response prot.MessageResponseBase
-				callArgs mockcore.TerminateProcessCall
+				callArgs mockcore.SignalProcessCall
+				options  prot.SignalProcessOptions
 			)
 			BeforeEach(func() {
-				messageType = prot.ComputeSystemTerminateProcessV1
+				messageType = prot.ComputeSystemSignalProcessV1
+				options = prot.SignalProcessOptions{Signal: int32(syscall.SIGKILL)}
 			})
 			JustBeforeEach(func() {
 				response = prot.MessageResponseBase{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = &response
-				callArgs = coreint.LastTerminateProcess
+				callArgs = coreint.LastSignalProcess
 			})
 			Context("the message is normal ASCII", func() {
 				BeforeEach(func() {
-					message = prot.ContainerTerminateProcess{
+					message = prot.ContainerSignalProcess{
 						MessageBase: &prot.MessageBase{
 							ContainerID: containerID,
 							ActivityID:  activityID,
 						},
 						ProcessID: processID,
+						Options:   options,
 					}
 				})
 				AssertNoResponseErrors()
 				AssertActivityIDCorrect()
 				It("should receive the correct values", func() {
 					Expect(callArgs.Pid).To(Equal(int(processID)))
+					Expect(callArgs.Options).To(Equal(options))
 				})
 			})
 		})

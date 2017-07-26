@@ -28,9 +28,10 @@ type SignalContainerCall struct {
 	Signal oslayer.Signal
 }
 
-// TerminateProcessCall captures the arguments of TerminateProcess.
-type TerminateProcessCall struct {
-	Pid int
+// SignalProcessCall captures the arguments of SignalProcess.
+type SignalProcessCall struct {
+	Pid     int
+	Options prot.SignalProcessOptions
 }
 
 // ListProcessesCall captures the arguments of ListProcesses.
@@ -71,7 +72,7 @@ type MockCore struct {
 	LastCreateContainer           CreateContainerCall
 	LastExecProcess               ExecProcessCall
 	LastSignalContainer           SignalContainerCall
-	LastTerminateProcess          TerminateProcessCall
+	LastSignalProcess             SignalProcessCall
 	LastListProcesses             ListProcessesCall
 	LastRunExternalProcess        RunExternalProcessCall
 	LastModifySettings            ModifySettingsCall
@@ -104,9 +105,12 @@ func (c *MockCore) SignalContainer(id string, signal oslayer.Signal) error {
 	return nil
 }
 
-// TerminateProcess captures its arguments and returns a nil error.
-func (c *MockCore) TerminateProcess(pid int) error {
-	c.LastTerminateProcess = TerminateProcessCall{Pid: pid}
+// SignalProcess captures its arguments and returns a nil error.
+func (c *MockCore) SignalProcess(pid int, options prot.SignalProcessOptions) error {
+	c.LastSignalProcess = SignalProcessCall{
+		Pid:     pid,
+		Options: options,
+	}
 	return nil
 }
 

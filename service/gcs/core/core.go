@@ -16,7 +16,7 @@ type Core interface {
 	CreateContainer(id string, info prot.VMHostedContainerSettings) error
 	ExecProcess(id string, info prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (pid int, err error)
 	SignalContainer(id string, signal oslayer.Signal) error
-	TerminateProcess(pid int) error
+	SignalProcess(pid int, options prot.SignalProcessOptions) error
 	ListProcesses(id string) ([]runtime.ContainerProcessState, error)
 	RunExternalProcess(info prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (pid int, err error)
 	ModifySettings(id string, request prot.ResourceModificationRequestResponse) error
