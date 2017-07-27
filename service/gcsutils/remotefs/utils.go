@@ -5,71 +5,46 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"io"
-	"os"
-
 	"io/ioutil"
+	"os"
+	"syscall"
 
 	"github.com/docker/docker/pkg/archive"
 )
 
 // ReadError is an utility function that reads a serialized error from the given reader
 // and deserializes it.
-func ReadError(in io.Reader) error {
+func ReadError(in io.Reader) (*ExportedError, error) {
 	b, err := ioutil.ReadAll(in)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// No error
 	if len(b) == 0 {
-		return nil
+		return nil, nil
 	}
 
-	var raw json.RawMessage
-	exportedErr := &ExportedError{
-		Err: &raw,
-	}
-	if err := json.Unmarshal(b, exportedErr); err != nil {
-		return err
+	var exportedErr ExportedError
+	if err := json.Unmarshal(b, &exportedErr); err != nil {
+		return nil, err
 	}
 
-	switch exportedErr.ErrType {
-	case PathError:
-		err = &os.PathError{}
-	case LinkError:
-		err = &os.LinkError{}
-	case SyscallError:
-		err = &os.SyscallError{}
-	case GenericErrorString:
-		err = &ErrorString{}
-	default:
-		err = nil
-	}
-
-	// If none of the cases match, then json was invalid
-	if err == nil {
-		return ErrInvalid
-	}
-
-	if err1 := json.Unmarshal([]byte(raw), err); err1 != nil {
-		return err1
-	}
-	return err
+	return &exportedErr, nil
 }
 
-// fixStringError fixes some of the string errors returned by the remote fs, so that they
-// can be compared with the errors in docker. For example, if the error returned has the
-// same string as os.ErrExist, the function will return os.ErrExist.
-func fixStringError(err *ErrorString) error {
-	// Since Go will compare the pointers instead of the value, we compare the strings.
-	if err.Error() == os.ErrExist.Error() {
-		return os.ErrExist
-	} else if err.Error() == os.ErrNotExist.Error() {
+// ExportedToError will convert a ExportedError to an error. It will try to match
+// the error to any existing known error like os.ErrNotExist. Otherwise, it will just
+// return an implementation of the error interface.
+func ExportedToError(ee *ExportedError) error {
+	if ee.Error() == os.ErrNotExist.Error() {
 		return os.ErrNotExist
-	} else if err.Error() == os.ErrPermission.Error() {
+	} else if ee.Error() == os.ErrExist.Error() {
+		return os.ErrExist
+	} else if ee.Error() == os.ErrPermission.Error() {
 		return os.ErrPermission
 	}
-	return err
+	return ee
 }
 
 // WriteError is an utility function that serializes the error
@@ -78,29 +53,27 @@ func WriteError(err error, out io.Writer) error {
 	if err == nil {
 		return nil
 	}
-
 	err = fixOSError(err)
 
-	var errType string
-	switch err.(type) {
+	var errno int
+	switch typedError := err.(type) {
 	case *os.PathError:
-		errType = PathError
+		if se, ok := typedError.Err.(syscall.Errno); ok {
+			errno = int(se)
+		}
 	case *os.LinkError:
-		errType = LinkError
+		if se, ok := typedError.Err.(syscall.Errno); ok {
+			errno = int(se)
+		}
 	case *os.SyscallError:
-		errType = SyscallError
-	default:
-		// We wrap the error in the ErrorString struct because the underlying
-		// struct that implements the error might not have been exported. For
-		// example, the errors created from errors.New and fmt.Errorf don't
-		// export the struct, so json.Marshal will ignore it.
-		errType = GenericErrorString
-		err = &ErrorString{err.Error()}
+		if se, ok := typedError.Err.(syscall.Errno); ok {
+			errno = int(se)
+		}
 	}
 
 	exportedError := &ExportedError{
-		ErrType: errType,
-		Err:     err,
+		ErrString: err.Error(),
+		ErrNum:    errno,
 	}
 
 	b, err1 := json.Marshal(exportedError)
@@ -134,12 +107,12 @@ func fixOSError(err error) error {
 // ReadTarOptions reads from the specified reader and deserializes an archive.TarOptions struct.
 func ReadTarOptions(r io.Reader) (*archive.TarOptions, error) {
 	var size uint64
-	if err := binary.Read(os.Stdin, binary.BigEndian, &size); err != nil {
+	if err := binary.Read(r, binary.BigEndian, &size); err != nil {
 		return nil, err
 	}
 
 	rawJSON := make([]byte, size)
-	if _, err := io.ReadFull(os.Stdin, rawJSON); err != nil {
+	if _, err := io.ReadFull(r, rawJSON); err != nil {
 		return nil, err
 	}
 

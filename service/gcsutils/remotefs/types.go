@@ -5,26 +5,15 @@ import (
 	"time"
 )
 
-const (
-	PathError          = "PathError"
-	LinkError          = "LinkError"
-	SyscallError       = "SyscallError"
-	GenericErrorString = "GenericErrorString"
-)
-
-// ErrorString is a trivial implementation of the error interface.
-type ErrorString struct {
-	Err string
-}
-
-func (e *ErrorString) Error() string {
-	return e.Err
-}
-
 // ExportedError is the serialized version of the a Go error.
+// It also provides a trivial implementation of the error interface.
 type ExportedError struct {
-	ErrType string
-	Err     interface{}
+	ErrString string
+	ErrNum    int `json:"omitempty"`
+}
+
+func (ee *ExportedError) Error() string {
+	return ee.ErrString
 }
 
 // FileInfo is the stat struct returned by the remotefs system. It
