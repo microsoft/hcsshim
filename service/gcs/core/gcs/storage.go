@@ -196,35 +196,38 @@ func (c *gcsCore) mountMappedVirtualDisks(disks []prot.MappedVirtualDisk, mounts
 		return errors.Errorf("disk and device slices were of different sizes. disks: %d, mounts: %d", len(disks), len(mounts))
 	}
 	for i, disk := range disks {
-		if !disk.CreateInUtilityVM {
-			return errors.New("we do not currently support mapping virtual disks inside the container namespace")
-		}
-		mount := mounts[i]
-		mountedPath := disk.ContainerPath
-		if err := c.OS.MkdirAll(mountedPath, 0700); err != nil {
-			return errors.Wrapf(err, "failed to create directory for mapped virtual disk %s", disk.ContainerPath)
-		}
-
-		// Attempt mounting multiple times up until the given timout. This is
-		// necessary because there is a span of time between when the device
-		// name becomes available under /sys/bus/scsi and when it appears under
-		// /dev. Once it appears under /dev, there is still a span of time
-		// before it becomes mountable. Retrying mount should succeed in
-		// mounting the device as long as it becomes mountable under /dev
-		// before the timeout.
-		startTime := time.Now()
-		for {
-			err := mount.Mount(c.OS, mountedPath)
-			if err != nil {
-				currentTime := time.Now()
-				elapsedTime := currentTime.Sub(startTime)
-				if elapsedTime > mappedDiskMountTimeout {
-					return errors.Wrapf(err, "failed to mount directory %s for mapped virtual disk device %s", disk.ContainerPath, mount.Source)
-				}
-			} else {
-				break
+		// Don't mount the disk if AttachOnly is specified.
+		if !disk.AttachOnly {
+			if !disk.CreateInUtilityVM {
+				return errors.New("we do not currently support mapping virtual disks inside the container namespace")
 			}
-			time.Sleep(time.Millisecond * 10)
+			mount := mounts[i]
+			mountedPath := disk.ContainerPath
+			if err := c.OS.MkdirAll(mountedPath, 0700); err != nil {
+				return errors.Wrapf(err, "failed to create directory for mapped virtual disk %s", disk.ContainerPath)
+			}
+
+			// Attempt mounting multiple times up until the given timout. This is
+			// necessary because there is a span of time between when the device
+			// name becomes available under /sys/bus/scsi and when it appears under
+			// /dev. Once it appears under /dev, there is still a span of time
+			// before it becomes mountable. Retrying mount should succeed in
+			// mounting the device as long as it becomes mountable under /dev
+			// before the timeout.
+			startTime := time.Now()
+			for {
+				err := mount.Mount(c.OS, mountedPath)
+				if err != nil {
+					currentTime := time.Now()
+					elapsedTime := currentTime.Sub(startTime)
+					if elapsedTime > mappedDiskMountTimeout {
+						return errors.Wrapf(err, "failed to mount directory %s for mapped virtual disk device %s", disk.ContainerPath, mount.Source)
+					}
+				} else {
+					break
+				}
+				time.Sleep(time.Millisecond * 10)
+			}
 		}
 	}
 	return nil
@@ -234,18 +237,22 @@ func (c *gcsCore) mountMappedVirtualDisks(disks []prot.MappedVirtualDisk, mounts
 // directories.
 func (c *gcsCore) unmountMappedVirtualDisks(disks []prot.MappedVirtualDisk) error {
 	for _, disk := range disks {
-		dir := disk.ContainerPath
-		exists, err := c.OS.PathExists(dir)
-		if err != nil {
-			return errors.Wrapf(err, "failed to determine if mapped virtual disk path exists %s", dir)
-		}
-		mounted, err := c.OS.PathIsMounted(dir)
-		if err != nil {
-			return errors.Wrapf(err, "failed to determine if mapped virtual disk path is mounted %s", dir)
-		}
-		if exists && mounted {
-			if err := c.OS.Unmount(dir, 0); err != nil {
-				return errors.Wrapf(err, "failed to unmount mapped virtual disk path %s", dir)
+		// If the disk was specified AttachOnly, it shouldn't have been mounted
+		// in the first place.
+		if !disk.AttachOnly {
+			dir := disk.ContainerPath
+			exists, err := c.OS.PathExists(dir)
+			if err != nil {
+				return errors.Wrapf(err, "failed to determine if mapped virtual disk path exists %s", dir)
+			}
+			mounted, err := c.OS.PathIsMounted(dir)
+			if err != nil {
+				return errors.Wrapf(err, "failed to determine if mapped virtual disk path is mounted %s", dir)
+			}
+			if exists && mounted {
+				if err := c.OS.Unmount(dir, 0); err != nil {
+					return errors.Wrapf(err, "failed to unmount mapped virtual disk path %s", dir)
+				}
 			}
 		}
 	}

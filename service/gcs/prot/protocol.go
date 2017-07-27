@@ -306,10 +306,6 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 		return nil, errors.WithStack(err)
 	}
 
-	// Fill in default fields.
-	if request.Request.ResourceType == "" {
-		request.Request.ResourceType = PtMemory
-	}
 	if request.Request.RequestType == "" {
 		request.Request.RequestType = RtAdd
 	}
@@ -325,12 +321,12 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 		request.Request.Settings = settings
 	case PtMappedDirectory:
 		settings.MappedDirectory = &MappedDirectory{}
-		if err := json.Unmarshal(rawSettings, settings.MappedDirectory); err != nil {
+		if err := commonutils.UnmarshalJSONWithHresult(rawSettings, settings.MappedDirectory); err != nil {
 			return nil, errors.Wrap(err, "failed to unmarshal settings as MappedDirectory")
 		}
 		request.Request.Settings = settings
 	default:
-		return nil, errors.Errorf("invalid ResourceType %s", request.Request.ResourceType)
+		return nil, errors.Errorf("invalid ResourceType '%s'", request.Request.ResourceType)
 	}
 
 	return &request, nil
@@ -419,6 +415,7 @@ type MappedVirtualDisk struct {
 	Lun               uint8 `json:",omitempty"`
 	CreateInUtilityVM bool  `json:",omitempty"`
 	ReadOnly          bool  `json:",omitempty"`
+	AttachOnly        bool  `json:",omitempty"`
 }
 
 // MappedDirectory represents a directory on the host which is mapped to a

@@ -49,9 +49,10 @@ var _ = Describe("Bridge", func() {
 			responseString string
 			responseBase   *prot.MessageResponseBase
 
-			containerID string
-			processID   uint32
-			activityID  string
+			containerID    string
+			processID      uint32
+			activityID     string
+			iterationCount uint32
 		)
 
 		BeforeEach(func() {
@@ -63,7 +64,8 @@ var _ = Describe("Bridge", func() {
 
 			containerID = "01234567-89ab-cdef-0123-456789abcdef"
 			processID = 101
-			activityID = "00000000-0000-0000-0000-000000000000"
+			activityID = fmt.Sprintf("00000000-0000-0000-0000-%012d", iterationCount)
+			iterationCount++
 		})
 		// Enforce a timeout on all communications with the bridge, so that
 		// situations like infinite loops or infinite blocks on the Connection will
@@ -81,7 +83,6 @@ var _ = Describe("Bridge", func() {
 			messageBytes, err := json.Marshal(message)
 			Expect(err).NotTo(HaveOccurred())
 			messageString := string(messageBytes)
-
 			err = serverSendString(commandConn, messageType, 0, messageString)
 			Expect(err).NotTo(HaveOccurred())
 			responseString, responseHeader, err = serverReadString(commandConn)
@@ -89,7 +90,8 @@ var _ = Describe("Bridge", func() {
 		}, testTimeout)
 		AfterEach(func() {
 			close(connChannel)
-			commandConn.Close()
+			err := commandConn.Close()
+			Expect(err).NotTo(HaveOccurred())
 		})
 
 		AssertNoResponseErrors := func() {
@@ -122,6 +124,7 @@ var _ = Describe("Bridge", func() {
 				messageType = prot.ComputeSystemCreateV1
 			})
 			JustBeforeEach(func() {
+				response = prot.ContainerCreateResponse{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = response.MessageResponseBase
@@ -195,6 +198,7 @@ var _ = Describe("Bridge", func() {
 						}()
 						notificationString, _, err := serverReadString(commandConn)
 						Expect(err).NotTo(HaveOccurred())
+						notification = prot.ContainerNotification{}
 						err = json.Unmarshal([]byte(notificationString), &notification)
 						Expect(err).NotTo(HaveOccurred())
 					}, testTimeout)
@@ -221,6 +225,7 @@ var _ = Describe("Bridge", func() {
 				messageType = prot.ComputeSystemExecuteProcessV1
 			})
 			JustBeforeEach(func() {
+				response = prot.ContainerExecuteProcessResponse{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = response.MessageResponseBase
@@ -335,6 +340,7 @@ var _ = Describe("Bridge", func() {
 				messageType = prot.ComputeSystemExecuteProcessV1
 			})
 			JustBeforeEach(func() {
+				response = prot.ContainerExecuteProcessResponse{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = response.MessageResponseBase
@@ -406,6 +412,7 @@ var _ = Describe("Bridge", func() {
 				messageType = prot.ComputeSystemShutdownForcedV1
 			})
 			JustBeforeEach(func() {
+				response = prot.MessageResponseBase{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = &response
@@ -436,6 +443,7 @@ var _ = Describe("Bridge", func() {
 				messageType = prot.ComputeSystemShutdownGracefulV1
 			})
 			JustBeforeEach(func() {
+				response = prot.MessageResponseBase{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = &response
@@ -466,6 +474,7 @@ var _ = Describe("Bridge", func() {
 				messageType = prot.ComputeSystemTerminateProcessV1
 			})
 			JustBeforeEach(func() {
+				response = prot.MessageResponseBase{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = &response
@@ -498,6 +507,7 @@ var _ = Describe("Bridge", func() {
 				messageType = prot.ComputeSystemGetPropertiesV1
 			})
 			JustBeforeEach(func() {
+				response = prot.ContainerGetPropertiesResponse{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = response.MessageResponseBase
@@ -541,6 +551,7 @@ var _ = Describe("Bridge", func() {
 				messageType = prot.ComputeSystemWaitForProcessV1
 			})
 			JustBeforeEach(func() {
+				response = prot.ContainerWaitForProcessResponse{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = response.MessageResponseBase
@@ -577,6 +588,7 @@ var _ = Describe("Bridge", func() {
 				messageType = prot.ComputeSystemResizeConsoleV1
 			})
 			JustBeforeEach(func() {
+				response = prot.MessageResponseBase{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = &response
@@ -612,11 +624,13 @@ var _ = Describe("Bridge", func() {
 				modificationRequestToSend            prot.ResourceModificationRequestResponse
 				defaultModificationRequestToSend     prot.ResourceModificationRequestResponse
 				unsupportedModificationRequestToSend prot.ResourceModificationRequestResponse
+				modificationRequestToSendAttachOnly  prot.ResourceModificationRequestResponse
 			)
 			BeforeEach(func() {
 				messageType = prot.ComputeSystemModifySettingsV1
 			})
 			JustBeforeEach(func() {
+				response = prot.MessageResponseBase{}
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = &response
@@ -671,6 +685,16 @@ var _ = Describe("Bridge", func() {
 							ReadOnly:          disk.ReadOnly,
 						},
 					}
+					modificationRequestToSendAttachOnly = prot.ResourceModificationRequestResponse{
+						ResourceType: prot.PtMappedVirtualDisk,
+						RequestType:  prot.RtAdd,
+						Settings: TestResourceModificationSettings{
+							ContainerPath:     disk.ContainerPath,
+							Lun:               disk.Lun,
+							CreateInUtilityVM: disk.CreateInUtilityVM,
+							AttachOnly:        true,
+						},
+					}
 				})
 				Context("using non-empty ResourceType and RequestType", func() {
 					BeforeEach(func() {
@@ -699,7 +723,7 @@ var _ = Describe("Bridge", func() {
 							Request: defaultModificationRequestToSend,
 						}
 					})
-					AssertResponseErrors("invalid ResourceType Memory")
+					AssertResponseErrors("invalid ResourceType ''")
 					AssertActivityIDCorrect()
 				})
 				Context("using an unsupported ResourceType", func() {
@@ -712,8 +736,21 @@ var _ = Describe("Bridge", func() {
 							Request: unsupportedModificationRequestToSend,
 						}
 					})
-					AssertResponseErrors("invalid ResourceType Memory")
+					AssertResponseErrors("invalid ResourceType 'Memory'")
 					AssertActivityIDCorrect()
+				})
+				Context("using AttachOnly true", func() {
+					BeforeEach(func() {
+						message = prot.ContainerModifySettings{
+							MessageBase: &prot.MessageBase{
+								ContainerID: containerID,
+								ActivityID:  activityID,
+							},
+							Request: modificationRequestToSendAttachOnly,
+						}
+					})
+					AssertActivityIDCorrect()
+					AssertNoResponseErrors()
 				})
 			})
 		})
@@ -772,6 +809,7 @@ func serverReadString(conn transport.Connection) (str string, header *prot.Messa
 		return "", nil, err
 	}
 	message, err := serverReadMessage(conn, int(header.Size))
+
 	if err != nil {
 		return "", nil, err
 	}
