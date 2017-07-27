@@ -20,23 +20,41 @@ func ReadError(in io.Reader) error {
 		return err
 	}
 
-	var exportedErr ExportedError
-	if err := json.Unmarshal(b, &exportedErr); err != nil {
+	// No error
+	if len(b) == 0 {
+		return nil
+	}
+
+	var raw json.RawMessage
+	exportedErr := &ExportedError{
+		Err: &raw,
+	}
+	if err := json.Unmarshal(b, exportedErr); err != nil {
 		return err
 	}
 
 	switch exportedErr.ErrType {
 	case PathError:
-		return exportedErr.PathError
+		err = &os.PathError{}
 	case LinkError:
-		return exportedErr.LinkError
+		err = &os.LinkError{}
 	case SyscallError:
-		return exportedErr.SyscallError
+		err = &os.SyscallError{}
 	case GenericErrorString:
-		return fixStringError(exportedErr.ErrorString)
+		err = &ErrorString{}
+	default:
+		err = nil
 	}
-	// If none of the cases match, then the remotefs process succeeded, so return nil
-	return nil
+
+	// If none of the cases match, then json was invalid
+	if err == nil {
+		return ErrInvalid
+	}
+
+	if err1 := json.Unmarshal([]byte(raw), err); err1 != nil {
+		return err1
+	}
+	return err
 }
 
 // fixStringError fixes some of the string errors returned by the remote fs, so that they
@@ -57,29 +75,35 @@ func fixStringError(err *ErrorString) error {
 // WriteError is an utility function that serializes the error
 // and writes it to the output writer.
 func WriteError(err error, out io.Writer) error {
+	if err == nil {
+		return nil
+	}
+
 	err = fixOSError(err)
 
-	var exportedErr = &ExportedError{}
-	switch errWithType := err.(type) {
+	var errType string
+	switch err.(type) {
 	case *os.PathError:
-		exportedErr.ErrType = PathError
-		exportedErr.PathError = errWithType
+		errType = PathError
 	case *os.LinkError:
-		exportedErr.ErrType = LinkError
-		exportedErr.LinkError = errWithType
+		errType = LinkError
 	case *os.SyscallError:
-		exportedErr.ErrType = SyscallError
-		exportedErr.SyscallError = errWithType
+		errType = SyscallError
 	default:
 		// We wrap the error in the ErrorString struct because the underlying
 		// struct that implements the error might not have been exported. For
 		// example, the errors created from errors.New and fmt.Errorf don't
 		// export the struct, so json.Marshal will ignore it.
-		exportedErr.ErrType = GenericErrorString
-		exportedErr.ErrorString = &ErrorString{err.Error()}
+		errType = GenericErrorString
+		err = &ErrorString{err.Error()}
 	}
 
-	b, err1 := json.Marshal(exportedErr)
+	exportedError := &ExportedError{
+		ErrType: errType,
+		Err:     err,
+	}
+
+	b, err1 := json.Marshal(exportedError)
 	if err1 != nil {
 		return err1
 	}

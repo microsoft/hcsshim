@@ -24,10 +24,7 @@ func (e *ErrorString) Error() string {
 // ExportedError is the serialized version of the a Go error.
 type ExportedError struct {
 	ErrType string
-	*os.PathError
-	*os.LinkError
-	*os.SyscallError
-	*ErrorString
+	Err     interface{}
 }
 
 // FileInfo is the stat struct returned by the remotefs system. It
