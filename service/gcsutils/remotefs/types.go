@@ -22,7 +22,7 @@ type FileInfo struct {
 	NameVar    string
 	SizeVar    int64
 	ModeVar    os.FileMode
-	ModTimeVar time.Time
+	ModTimeVar int64 // Serialization of time.Time breaks in travis, so use an int
 	IsDirVar   bool
 }
 
@@ -31,6 +31,6 @@ var _ os.FileInfo = &FileInfo{}
 func (f *FileInfo) Name() string       { return f.NameVar }
 func (f *FileInfo) Size() int64        { return f.SizeVar }
 func (f *FileInfo) Mode() os.FileMode  { return f.ModeVar }
-func (f *FileInfo) ModTime() time.Time { return f.ModTimeVar }
+func (f *FileInfo) ModTime() time.Time { return time.Unix(0, f.ModTimeVar) }
 func (f *FileInfo) IsDir() bool        { return f.IsDirVar }
 func (f *FileInfo) Sys() interface{}   { return nil }

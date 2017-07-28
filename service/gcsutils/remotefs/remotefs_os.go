@@ -57,7 +57,7 @@ func stat(in io.Reader, out io.Writer, args []string, statfunc func(string) (os.
 		NameVar:    fi.Name(),
 		SizeVar:    fi.Size(),
 		ModeVar:    fi.Mode(),
-		ModTimeVar: fi.ModTime(),
+		ModTimeVar: fi.ModTime().UnixNano(),
 		IsDirVar:   fi.IsDir(),
 	}
 
