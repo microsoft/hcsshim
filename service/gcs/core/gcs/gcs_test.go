@@ -2,6 +2,7 @@ package gcs
 
 import (
 	"fmt"
+	"syscall"
 
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer/mockos"
@@ -845,9 +846,15 @@ var _ = Describe("GCS", func() {
 					})
 				})
 			})
-			Describe("calling TerminateProcess", func() {
+			Describe("calling SignalProcess", func() {
+				var (
+					sigkillOptions prot.SignalProcessOptions
+				)
+				BeforeEach(func() {
+					sigkillOptions = prot.SignalProcessOptions{Signal: int32(syscall.SIGKILL)}
+				})
 				JustBeforeEach(func() {
-					err = coreint.TerminateProcess(processID)
+					err = coreint.SignalProcess(processID, sigkillOptions)
 				})
 				Context("the process has already been created", func() {
 					BeforeEach(func() {

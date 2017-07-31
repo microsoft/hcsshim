@@ -101,9 +101,9 @@ func (b *bridge) loop() error {
 			if err != nil {
 				logrus.Error(err)
 			}
-		case prot.ComputeSystemTerminateProcessV1:
-			logrus.Info("received from HCS: ComputeSystemTerminateProcessV1")
-			response, err = b.terminateProcess(message)
+		case prot.ComputeSystemSignalProcessV1:
+			logrus.Info("received from HCS: ComputeSystemSignalProcessV1")
+			response, err = b.signalProcess(message)
 			if err != nil {
 				logrus.Error(err)
 			}
@@ -268,15 +268,15 @@ func (b *bridge) shutdownContainer(message []byte) (*prot.MessageResponseBase, e
 	return response, nil
 }
 
-func (b *bridge) terminateProcess(message []byte) (*prot.MessageResponseBase, error) {
+func (b *bridge) signalProcess(message []byte) (*prot.MessageResponseBase, error) {
 	response := newResponseBase()
-	var request prot.ContainerTerminateProcess
+	var request prot.ContainerSignalProcess
 	if err := commonutils.UnmarshalJSONWithHresult(message, &request); err != nil {
 		return response, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", message)
 	}
 	response.ActivityID = request.ActivityID
 
-	if err := b.coreint.TerminateProcess(int(request.ProcessID)); err != nil {
+	if err := b.coreint.SignalProcess(int(request.ProcessID), request.Options); err != nil {
 		return response, err
 	}
 

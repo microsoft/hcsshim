@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"sync"
 	"syscall"
-	"time"
 
 	gcserr "github.com/Microsoft/opengcs/service/gcs/errors"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
@@ -21,10 +20,6 @@ import (
 	shellwords "github.com/mattn/go-shellwords"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
-)
-
-const (
-	terminateProcessTimeout = time.Second * 10
 )
 
 // gcsCore is an implementation of the Core interface, defining the
@@ -334,9 +329,8 @@ func (c *gcsCore) SignalContainer(id string, signal oslayer.Signal) error {
 	return nil
 }
 
-// TerminateProcess sends a SIGTERM signal to the given process. If it does not
-// exit after a timeout, it then sends a SIGKILL.
-func (c *gcsCore) TerminateProcess(pid int) error {
+// SignalProcess sends the signal specified in options to the given process.
+func (c *gcsCore) SignalProcess(pid int, options prot.SignalProcessOptions) error {
 	c.processCacheMutex.Lock()
 	c.externalProcessCacheMutex.Lock()
 	if _, ok := c.processCache[pid]; !ok {
@@ -349,31 +343,18 @@ func (c *gcsCore) TerminateProcess(pid int) error {
 	c.processCacheMutex.Unlock()
 	c.externalProcessCacheMutex.Unlock()
 
-	// First, send the process a SIGTERM. If it doesn't exit before the
-	// specified timeout, send it a SIGKILL.
-	exitedChannel := make(chan bool, 1)
-	exitHook := func(state oslayer.ProcessExitState) {
-		exitedChannel <- true
+	// Interpret signal value 0 as SIGKILL.
+	// TODO: Remove this special casing when we are not worried about breaking
+	// older Windows builds which don't support sending signals.
+	var signal syscall.Signal
+	if options.Signal == 0 {
+		signal = syscall.SIGKILL
+	} else {
+		signal = syscall.Signal(options.Signal)
 	}
-	if err := c.RegisterProcessExitHook(pid, exitHook); err != nil {
-		return errors.Wrapf(err, "failed to register exit hook during call to TerminateProcess for process %d", pid)
-	}
-	if err := c.OS.Kill(pid, syscall.SIGTERM); err != nil {
-		return errors.Wrapf(err, "failed call to kill on process %d", pid)
-	}
-	select {
-	case <-exitedChannel: // Do nothing.
-	case <-time.After(terminateProcessTimeout):
-		// If the timeout is exceeded, kill the process with SIGKILL.
-		// TODO: Properly handle the race condition between the process exiting
-		// and Kill being called, so that the error doesn't need to be ignored.
-		// This can be done by waiting on processes without hanging, locking on
-		// the waits, and setting a flag to indicate that the process has
-		// exited. Then, this code can lock on the same lock, and check if the
-		// process has exited or not before calling Kill.
-		if err := c.OS.Kill(pid, syscall.SIGKILL); err != nil {
-			logrus.Error(err)
-		}
+
+	if err := c.OS.Kill(pid, signal); err != nil {
+		return errors.Wrapf(err, "failed call to kill on process %d with signal %d", pid, options.Signal)
 	}
 
 	return nil

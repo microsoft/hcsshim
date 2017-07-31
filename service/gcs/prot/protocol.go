@@ -73,7 +73,7 @@ const (
 	ComputeSystemShutdownForcedV1   = 0x10100401
 	ComputeSystemExecuteProcessV1   = 0x10100501
 	ComputeSystemWaitForProcessV1   = 0x10100601
-	ComputeSystemTerminateProcessV1 = 0x10100701
+	ComputeSystemSignalProcessV1    = 0x10100701
 	ComputeSystemResizeConsoleV1    = 0x10100801
 	ComputeSystemGetPropertiesV1    = 0x10100901
 	ComputeSystemModifySettingsV1   = 0x10100a01
@@ -85,7 +85,7 @@ const (
 	ComputeSystemResponseShutdownForcedV1   = 0x20100401
 	ComputeSystemResponseExecuteProcessV1   = 0x20100501
 	ComputeSystemResponseWaitForProcessV1   = 0x20100601
-	ComputeSystemResponseTerminateProcessV1 = 0x20100701
+	ComputeSystemResponseSignalProcessV1    = 0x20100701
 	ComputeSystemResponseResizeConsoleV1    = 0x20100801
 	ComputeSystemResponseGetPropertiesV1    = 0x20100901
 	ComputeSystemResponseModifySettingsV1   = 0x20100a01
@@ -225,11 +225,12 @@ type ContainerWaitForProcess struct {
 	TimeoutInMs uint32
 }
 
-// ContainerTerminateProcess is the message from the HCS specifying to kill the
-// given process.
-type ContainerTerminateProcess struct {
+// ContainerSignalProcess is the message from the HCS specifying to send a
+// signal to the given process.
+type ContainerSignalProcess struct {
 	*MessageBase
-	ProcessID uint32 `json:"ProcessId"`
+	ProcessID uint32               `json:"ProcessId"`
+	Options   SignalProcessOptions `json:",omitempty"`
 }
 
 // ContainerGetProperties is the message from the HCS requesting certain
@@ -473,4 +474,9 @@ type ProcessParameters struct {
 	// be specified. Otherwise, it must be left blank and the other fields must
 	// be specified.
 	OCISpecification oci.Spec `json:"OciSpecification,omitempty"`
+}
+
+// SignalProcessOptions represents the options for signaling a process.
+type SignalProcessOptions struct {
+	Signal int32
 }
