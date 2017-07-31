@@ -276,7 +276,7 @@ func (b *bridge) signalProcess(message []byte) (*prot.MessageResponseBase, error
 	}
 	response.ActivityID = request.ActivityID
 
-	if err := b.coreint.SignalProcess(int(request.ProcessID), request.Options); err != nil {
+	if err := b.coreint.SignalProcess(request.ContainerID, int(request.ProcessID), request.Options); err != nil {
 		return response, err
 	}
 
@@ -348,15 +348,13 @@ func (b *bridge) waitOnProcess(message []byte, header *prot.MessageHeader) (*pro
 			logrus.Error(errors.Wrapf(err, "failed to send process exit response \"%v\"", response))
 		}
 	}
-	if err := b.coreint.RegisterProcessExitHook(int(request.ProcessID), exitHook); err != nil {
+	if err := b.coreint.RegisterProcessExitHook(request.ContainerID, int(request.ProcessID), exitHook); err != nil {
 		return response, err
 	}
 
 	return response, nil
 }
 
-// resizeConsole is currently a nop until the functionality is implemented.
-// TODO: Tests still need to be written when it's no longer a nop.
 func (b *bridge) resizeConsole(message []byte) (*prot.MessageResponseBase, error) {
 	response := newResponseBase()
 	var request prot.ContainerResizeConsole
@@ -365,7 +363,9 @@ func (b *bridge) resizeConsole(message []byte) (*prot.MessageResponseBase, error
 	}
 	response.ActivityID = request.ActivityID
 
-	// NOP
+	if err := b.coreint.ResizeConsole(request.ContainerID, int(request.ProcessID), request.Height, request.Width); err != nil {
+		return response, err
+	}
 
 	return response, nil
 }

@@ -16,10 +16,11 @@ type Core interface {
 	CreateContainer(id string, info prot.VMHostedContainerSettings) error
 	ExecProcess(id string, info prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (pid int, err error)
 	SignalContainer(id string, signal oslayer.Signal) error
-	SignalProcess(pid int, options prot.SignalProcessOptions) error
+	SignalProcess(id string, pid int, options prot.SignalProcessOptions) error
 	ListProcesses(id string) ([]runtime.ContainerProcessState, error)
 	RunExternalProcess(info prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (pid int, err error)
 	ModifySettings(id string, request prot.ResourceModificationRequestResponse) error
 	RegisterContainerExitHook(id string, onExit func(oslayer.ProcessExitState)) error
-	RegisterProcessExitHook(pid int, onExit func(oslayer.ProcessExitState)) error
+	RegisterProcessExitHook(id string, pid int, onExit func(oslayer.ProcessExitState)) error
+	ResizeConsole(id string, pid int, height, width uint16) error
 }

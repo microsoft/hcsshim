@@ -4,6 +4,7 @@ package runtime
 
 import (
 	"io"
+	"os"
 
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
@@ -43,6 +44,7 @@ type Process interface {
 	Wait() (oslayer.ProcessExitState, error)
 	Pid() int
 	Delete() error
+	Console() *os.File
 }
 
 // Container is an interface to manipulate container state.
