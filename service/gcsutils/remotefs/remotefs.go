@@ -13,10 +13,26 @@ var ErrInvalid = errors.New("invalid arguments")
 // from args. The output of the function will be serialized and written to out.
 type Func func(stdin io.Reader, stdout io.Writer, args []string) error
 
+// RemotefsCmd is the name of the remotefs meta command
+const RemotefsCmd = "remotefs"
+
+// Name of the commands when called from the cli context (remotefs <CMD> ...)
 const (
 	StatCmd           = "stat"
 	LstatCmd          = "lstat"
+	ReadlinkCmd       = "readlink"
+	MkdirCmd          = "mkdir"
 	MkdirAllCmd       = "mkdirall"
+	RemoveCmd         = "remove"
+	RemoveAllCmd      = "removeall"
+	LinkCmd           = "link"
+	SymlinkCmd        = "symlink"
+	LchmodCmd         = "lchmod"
+	LchownCmd         = "lchown"
+	MknodCmd          = "mknod"
+	MkfifoCmd         = "mkfifo"
+	ReadFileCmd       = "readfile"
+	WriteFileCmd      = "writefile"
 	ResolvePathCmd    = "resolvepath"
 	ExtractArchiveCmd = "extractarchive"
 	ArchivePathCmd    = "archivepath"
@@ -28,7 +44,19 @@ const (
 var Commands = map[string]Func{
 	StatCmd:           Stat,
 	LstatCmd:          Lstat,
+	ReadlinkCmd:       Readlink,
+	MkdirCmd:          Mkdir,
 	MkdirAllCmd:       MkdirAll,
+	RemoveCmd:         Remove,
+	RemoveAllCmd:      RemoveAll,
+	LinkCmd:           Link,
+	SymlinkCmd:        Symlink,
+	LchmodCmd:         Lchmod,
+	LchownCmd:         Lchown,
+	MknodCmd:          Mknod,
+	MkfifoCmd:         Mkfifo,
+	ReadFileCmd:       ReadFile,
+	WriteFileCmd:      WriteFile,
 	ResolvePathCmd:    ResolvePath,
 	ExtractArchiveCmd: ExtractArchive,
 	ArchivePathCmd:    ArchivePath,
