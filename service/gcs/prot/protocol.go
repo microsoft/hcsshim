@@ -335,10 +335,11 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 
 // ErrorRecord represents a single error to be reported back to the HCS. It
 // allows for specifying information about the source of the error, as well as
-// an error message.
+// an error message and stack trace.
 type ErrorRecord struct {
 	Result       int32
 	Message      string
+	StackTrace   string `json:",omitempty"`
 	ModuleName   string
 	FileName     string
 	Line         uint32

@@ -70,6 +70,33 @@ type StackTracer interface {
 	StackTrace() errors.StackTrace
 }
 
+// BaseStackTrace gets the earliest errors.StackTrace in the given error's
+// cause stack. This will be the stack trace which reaches closest to the
+// error's actual origin. It returns nil if no stack trace is found in the
+// cause stack.
+func BaseStackTrace(e error) errors.StackTrace {
+	type causer interface {
+		Cause() error
+	}
+	cause := e
+	var tracer StackTracer
+	for cause != nil {
+		serr, ok := cause.(StackTracer)
+		if ok {
+			tracer = serr
+		}
+		cerr, ok := cause.(causer)
+		if !ok {
+			break
+		}
+		cause = cerr.Cause()
+	}
+	if tracer == nil {
+		return nil
+	}
+	return tracer.StackTrace()
+}
+
 type baseHresultError struct {
 	hresult Hresult
 }

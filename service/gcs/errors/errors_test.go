@@ -23,6 +23,57 @@ type stackTraceCauseError interface {
 
 var _ = Describe("Errors", func() {
 	Describe("unittests", func() {
+		Describe("getting the base stack trace", func() {
+			Context("only one error in cause stack", func() {
+				var (
+					e          error
+					stackTrace errors.StackTrace
+				)
+				BeforeEach(func() {
+					e = errors.New("test")
+					stackTrace = BaseStackTrace(e)
+				})
+				It("should return the same stack trace as the single error", func() {
+					se, ok := e.(StackTracer)
+					Expect(ok).To(BeTrue())
+					Expect(stackTrace).To(Equal(se.StackTrace()))
+				})
+			})
+			Context("multiple StackTracers in cause stack", func() {
+				var (
+					e1         error
+					e2         error
+					e3         error
+					e4         error
+					stackTrace errors.StackTrace
+				)
+				BeforeEach(func() {
+					e1 = fmt.Errorf("test")
+					e2 = errors.WithStack(e1)
+					e3 = errors.WithStack(e2)
+					e4 = errors.WithMessage(e3, "test2")
+					stackTrace = BaseStackTrace(e4)
+				})
+				It("should return the same stack trace as the bottom-most StackTracer", func() {
+					se, ok := e2.(StackTracer)
+					Expect(ok).To(BeTrue())
+					Expect(stackTrace).To(Equal(se.StackTrace()))
+				})
+			})
+			Context("no StackTracers in cause stack", func() {
+				var (
+					e          error
+					stackTrace errors.StackTrace
+				)
+				BeforeEach(func() {
+					e = fmt.Errorf("test")
+					stackTrace = BaseStackTrace(e)
+				})
+				It("should return nil", func() {
+					Expect(stackTrace).To(BeNil())
+				})
+			})
+		})
 		Describe("constructing HRESULT errors", func() {
 			Context("with no wrapped error", func() {
 				var (
