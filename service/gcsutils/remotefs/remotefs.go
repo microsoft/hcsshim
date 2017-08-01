@@ -33,6 +33,7 @@ const (
 	MkfifoCmd         = "mkfifo"
 	ReadFileCmd       = "readfile"
 	WriteFileCmd      = "writefile"
+	ReadDirCmd        = "readdir"
 	ResolvePathCmd    = "resolvepath"
 	ExtractArchiveCmd = "extractarchive"
 	ArchivePathCmd    = "archivepath"
@@ -57,6 +58,7 @@ var Commands = map[string]Func{
 	MkfifoCmd:         Mkfifo,
 	ReadFileCmd:       ReadFile,
 	WriteFileCmd:      WriteFile,
+	ReadDirCmd:        ReadDir,
 	ResolvePathCmd:    ResolvePath,
 	ExtractArchiveCmd: ExtractArchive,
 	ArchivePathCmd:    ArchivePath,

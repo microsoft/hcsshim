@@ -9,7 +9,7 @@ import (
 // It also provides a trivial implementation of the error interface.
 type ExportedError struct {
 	ErrString string
-	ErrNum    int `json:"omitempty"`
+	ErrNum    int `json:",omitempty"`
 }
 
 func (ee *ExportedError) Error() string {
