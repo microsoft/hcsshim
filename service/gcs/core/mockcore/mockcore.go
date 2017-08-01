@@ -67,7 +67,6 @@ type RegisterProcessExitHookCall struct {
 
 // ResizeConsoleCall captures the arguments of ResizeConsole
 type ResizeConsoleCall struct {
-	ID     string
 	Pid    int
 	Height uint16
 	Width  uint16
@@ -115,7 +114,7 @@ func (c *MockCore) SignalContainer(id string, signal oslayer.Signal) error {
 }
 
 // SignalProcess captures its arguments and returns a nil error.
-func (c *MockCore) SignalProcess(id string, pid int, options prot.SignalProcessOptions) error {
+func (c *MockCore) SignalProcess(pid int, options prot.SignalProcessOptions) error {
 	c.LastSignalProcess = SignalProcessCall{
 		Pid:     pid,
 		Options: options,
@@ -168,7 +167,7 @@ func (c *MockCore) RegisterContainerExitHook(id string, exitHook func(oslayer.Pr
 
 // RegisterProcessExitHook captures its arguments, runs the given exit hook on
 // a process exit state with exit code 103, and returns a nil error.
-func (c *MockCore) RegisterProcessExitHook(id string, pid int, exitHook func(oslayer.ProcessExitState)) error {
+func (c *MockCore) RegisterProcessExitHook(pid int, exitHook func(oslayer.ProcessExitState)) error {
 	c.LastRegisterProcessExitHook = RegisterProcessExitHookCall{
 		Pid:      pid,
 		ExitHook: exitHook,
@@ -178,9 +177,8 @@ func (c *MockCore) RegisterProcessExitHook(id string, pid int, exitHook func(osl
 }
 
 // ResizeConsole captures its arguments and returns a nil error.
-func (c *MockCore) ResizeConsole(id string, pid int, height, width uint16) error {
+func (c *MockCore) ResizeConsole(pid int, height, width uint16) error {
 	c.LastResizeConsole = ResizeConsoleCall{
-		ID:     id,
 		Pid:    pid,
 		Height: height,
 		Width:  width,

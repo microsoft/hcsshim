@@ -536,8 +536,8 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioS
 	}
 
 	var relay *stdio.TtyRelay
-	var master *os.File
 	if hasTerminal {
+		var master *os.File
 		master, err = c.r.getMasterFromSocket(sockListener)
 		if err != nil {
 			cmd.Process.Kill()

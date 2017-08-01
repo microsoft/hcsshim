@@ -614,30 +614,9 @@ var _ = Describe("Bridge", func() {
 				AssertNoResponseErrors()
 				AssertActivityIDCorrect()
 				It("should receive the correct values", func() {
-					Expect(callArgs.ID).To(Equal(containerID))
 					Expect(callArgs.Pid).To(Equal(101))
 					Expect(callArgs.Height).To(Equal(uint16(30)))
 					Expect(callArgs.Width).To(Equal(uint16(72)))
-				})
-			})
-			Context("the message is normal ASCII no containerid", func() {
-				BeforeEach(func() {
-					message = prot.ContainerResizeConsole{
-						MessageBase: &prot.MessageBase{
-							ActivityID: activityID,
-						},
-						ProcessID: 102,
-						Height:    80,
-						Width:     80,
-					}
-				})
-				AssertNoResponseErrors()
-				AssertActivityIDCorrect()
-				It("should receive the correct values", func() {
-					Expect(callArgs.ID).To(Equal(""))
-					Expect(callArgs.Pid).To(Equal(102))
-					Expect(callArgs.Height).To(Equal(uint16(80)))
-					Expect(callArgs.Width).To(Equal(uint16(80)))
 				})
 			})
 		})

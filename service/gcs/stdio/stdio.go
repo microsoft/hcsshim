@@ -4,15 +4,10 @@ import (
 	"io"
 	"os"
 	"sync"
-	"sync/atomic"
-	"syscall"
-	"unsafe"
 
 	"github.com/Microsoft/opengcs/service/gcs/transport"
 	"github.com/sirupsen/logrus"
 	"github.com/pkg/errors"
-
-	"golang.org/x/sys/unix"
 )
 
 // ConnectionSet is a structure defining the readers and writers the Core
@@ -111,31 +106,22 @@ func (s *ConnectionSet) NewTtyRelay(pty *os.File) *TtyRelay {
 
 // TtyRelay relays IO between a set of stdio connections and a master PTY file.
 type TtyRelay struct {
-	closing int32
-	wg      sync.WaitGroup
-	s       *ConnectionSet
-	pty     *os.File
+	m      sync.Mutex
+	closed bool
+	wg     sync.WaitGroup
+	s      *ConnectionSet
+	pty    *os.File
 }
 
 // ResizeConsole sends the appropriate resize to a pTTY FD
 func (r *TtyRelay) ResizeConsole(height, width uint16) error {
-	type consoleSize struct {
-		Height uint16
-		Width  uint16
-		x      uint16
-		y      uint16
-	}
+	r.m.Lock()
+	defer r.m.Unlock()
 
-	r.wg.Add(1)
-	defer r.wg.Done()
-	if atomic.LoadInt32(&r.closing) != 0 {
+	if r.closed {
 		return errors.New("error resizing console pty is closed")
 	}
-
-	if _, _, err := syscall.Syscall(syscall.SYS_IOCTL, r.pty.Fd(), uintptr(unix.TIOCSWINSZ), uintptr(unsafe.Pointer(&consoleSize{Height: height, Width: width}))); err != 0 {
-		return err
-	}
-	return nil
+	return ResizeConsole(r.pty, height, width)
 }
 
 // Start starts the relay operation. The caller must call Wait to wait
@@ -179,12 +165,10 @@ func (r *TtyRelay) Wait() {
 	// Wait for all users of stdioSet and master to finish before closing them.
 	r.wg.Wait()
 
-	// Given the expected use of wait we cannot increment closing before calling r.wg.Wait()
-	// or all calls to ResizeConsole would fail. However, by calling it after there is a very
-	// small window that ResizeConsole could still get an invalid Fd. We call wait again to
-	// enusure that no ResizeConsole call came in before actualling closing the pty.
-	atomic.StoreInt32(&r.closing, 1)
-	r.wg.Wait()
+	r.m.Lock()
+	defer r.m.Unlock()
+
 	r.pty.Close()
+	r.closed = true
 	r.s.Close()
 }
