@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/Microsoft/hcsshim"
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 // Mode is the operational mode, both requested, and actual after verification
@@ -160,8 +160,8 @@ func (config *Config) GenerateDefault(options []string) error {
 	return nil
 }
 
-// validate validates a Config structure for starting a utility VM.
-func (config *Config) validate() error {
+// Validate validates a Config structure for starting a utility VM.
+func (config *Config) Validate() error {
 	config.ActualMode = ModeActualError
 
 	if config.RequestedMode == ModeRequestVhdx && config.Vhdx == "" {
@@ -222,7 +222,7 @@ func (config *Config) validate() error {
 func (config *Config) StartUtilityVM() error {
 	logrus.Debugf("opengcs: StartUtilityVM: %+v", config)
 
-	if err := config.validate(); err != nil {
+	if err := config.Validate(); err != nil {
 		return err
 	}
 
