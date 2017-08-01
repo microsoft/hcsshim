@@ -854,7 +854,7 @@ var _ = Describe("GCS", func() {
 					sigkillOptions = prot.SignalProcessOptions{Signal: int32(syscall.SIGKILL)}
 				})
 				JustBeforeEach(func() {
-					err = coreint.SignalProcess(processID, sigkillOptions)
+					err = coreint.SignalProcess(containerID, processID, sigkillOptions)
 				})
 				Context("the process has already been created", func() {
 					BeforeEach(func() {
@@ -1069,7 +1069,7 @@ var _ = Describe("GCS", func() {
 					pid int
 				)
 				JustBeforeEach(func() {
-					err = coreint.RegisterProcessExitHook(pid, func(oslayer.ProcessExitState) {})
+					err = coreint.RegisterProcessExitHook(containerID, pid, func(oslayer.ProcessExitState) {})
 				})
 				Context("the container has already been created", func() {
 					BeforeEach(func() {

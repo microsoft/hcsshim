@@ -587,7 +587,7 @@ var _ = Describe("Bridge", func() {
 		Describe("calling resizeConsole", func() {
 			var (
 				response prot.MessageResponseBase
-				//callArgs mockcore.ResizeConsoleCall
+				callArgs mockcore.ResizeConsoleCall
 			)
 			BeforeEach(func() {
 				messageType = prot.ComputeSystemResizeConsoleV1
@@ -597,7 +597,7 @@ var _ = Describe("Bridge", func() {
 				err := json.Unmarshal([]byte(responseString), &response)
 				Expect(err).NotTo(HaveOccurred())
 				responseBase = &response
-				//callArgs = coreint.LastResizeConsole
+				callArgs = coreint.LastResizeConsole
 			})
 			Context("the message is normal ASCII", func() {
 				BeforeEach(func() {
@@ -613,10 +613,31 @@ var _ = Describe("Bridge", func() {
 				})
 				AssertNoResponseErrors()
 				AssertActivityIDCorrect()
-				// TODO: Add tests on callArgs when resizing the console is
-				// implemented.
 				It("should receive the correct values", func() {
-					//e.g. Expect(callArgs.Pid).To(Equal(101))
+					Expect(callArgs.ID).To(Equal(containerID))
+					Expect(callArgs.Pid).To(Equal(101))
+					Expect(callArgs.Height).To(Equal(uint16(30)))
+					Expect(callArgs.Width).To(Equal(uint16(72)))
+				})
+			})
+			Context("the message is normal ASCII no containerid", func() {
+				BeforeEach(func() {
+					message = prot.ContainerResizeConsole{
+						MessageBase: &prot.MessageBase{
+							ActivityID: activityID,
+						},
+						ProcessID: 102,
+						Height:    80,
+						Width:     80,
+					}
+				})
+				AssertNoResponseErrors()
+				AssertActivityIDCorrect()
+				It("should receive the correct values", func() {
+					Expect(callArgs.ID).To(Equal(""))
+					Expect(callArgs.Pid).To(Equal(102))
+					Expect(callArgs.Height).To(Equal(uint16(80)))
+					Expect(callArgs.Width).To(Equal(uint16(80)))
 				})
 			})
 		})
