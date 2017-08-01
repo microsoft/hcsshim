@@ -17,4 +17,5 @@ install: ./service/gcs/setup_test_env
 
 script:
   - cd service && make
+  - go test ./gcsutils/...
   - cd gcs && sudo env "PATH=$PATH" ginkgo -r -race -keepGoing

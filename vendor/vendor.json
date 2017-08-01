@@ -69,6 +69,12 @@
 			"revisionTime": "2017-06-21T19:07:54Z"
 		},
 		{
+			"checksumSHA1": "in35phlKVTKugF0FNvpzs3cRUFU=",
+			"path": "github.com/docker/docker/pkg/symlink",
+			"revision": "795a2fdbcb31fdc80ed5bb1fc8bf01e44b1a961d",
+			"revisionTime": "2017-06-21T19:07:54Z"
+		},
+		{
 			"checksumSHA1": "/CvjahgOjrBHbnt0rSDRzlMpVwY=",
 			"path": "github.com/docker/docker/pkg/system",
 			"revision": "795a2fdbcb31fdc80ed5bb1fc8bf01e44b1a961d",
@@ -347,10 +353,10 @@
 			"revisionTime": "2017-06-20T20:31:43Z"
 		},
 		{
-			"checksumSHA1": "Tkb1hBdBWeO7SGjixS2Hm48F6+s=",
+			"checksumSHA1": "VaLblxoJ2agFfwIq/UYLUi9KAfk=",
 			"path": "golang.org/x/sys/unix",
-			"revision": "fb4cac33e3196ff7f507ab9b2d2a44b0142f5b5a",
-			"revisionTime": "2017-06-14T06:48:48Z"
+			"revision": "85d149506305e7abe0aca5ad5ac4b1fce82ccd11",
+			"revisionTime": "2017-07-21T10:18:19Z"
 		},
 		{
 			"checksumSHA1": "GUzvy5+6gTwjQ2PaXxjHfbqjOVw=",
@@ -453,6 +459,11 @@
 			"path": "gopkg.in/yaml.v2",
 			"revision": "cd8b52f8269e0feb286dfeef29f8fe4d5b397e0b",
 			"revisionTime": "2017-04-07T17:21:22Z"
+		},
+		{
+			"path": "https://github.com/docker/docker/pkg/symlink",
+			"revision": "2d41c047c83e09a6d61d464906feb2a2f3c52aa4",
+			"version": "2d41c047c83e09a6d61d464906feb2a2f3c52aa4"
 		}
 	],
 	"rootPath": "github.com/Microsoft/opengcs"
