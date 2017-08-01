@@ -118,7 +118,7 @@ func (e *containerCacheEntry) RemoveMappedDirectory(dir prot.MappedDirectory) {
 type processCacheEntry struct {
 	ExitStatus oslayer.ProcessExitState
 	ExitHooks  []func(oslayer.ProcessExitState)
-	Master     *os.File
+	Tty        *stdio.TtyRelay
 }
 
 func newProcessCacheEntry() *processCacheEntry {
@@ -219,7 +219,7 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 
 		containerEntry.container = container
 		p = container
-		processEntry.Master = p.Console()
+		processEntry.Tty = p.Tty()
 
 		// Configure network adapters in the namespace.
 		for _, adapter := range containerEntry.NetworkAdapters {
@@ -267,7 +267,7 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 		if err != nil {
 			return -1, err
 		}
-		processEntry.Master = p.Console()
+		processEntry.Tty = p.Tty()
 
 		go func() {
 			state, err := p.Wait()
@@ -403,10 +403,10 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *st
 	cmd.SetEnv(ociProcess.Env)
 
 	var relay *stdio.TtyRelay
-	var master *os.File
 	if params.EmulateConsole {
 		// Allocate a console for the process.
 		var (
+			master      *os.File
 			consolePath string
 		)
 		master, consolePath, err = stdio.NewConsole()
@@ -449,7 +449,7 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *st
 	}
 
 	processEntry := newProcessCacheEntry()
-	processEntry.Master = master
+	processEntry.Tty = relay
 	go func() {
 		if err := cmd.Wait(); err != nil {
 			// TODO: When cmd is a shell, and last command in the shell
@@ -629,11 +629,11 @@ func (c *gcsCore) ResizeConsole(id string, pid int, height, width uint16) error 
 		c.containerCacheMutex.Unlock()
 	}
 
-	if err := stdio.ResizeConsole(p.Master, height, width); err != nil {
-		return errors.Wrapf(err, "failed to resize console for pid: %d", pid)
+	if p.Tty == nil {
+		return fmt.Errorf("pid: %d, is not a tty and cannot be resized", pid)
 	}
 
-	return nil
+	return p.Tty.ResizeConsole(height, width)
 }
 
 // setupMappedVirtualDisks is a helper function which calls into the functions

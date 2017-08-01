@@ -48,23 +48,22 @@ func (c *container) Pid() int {
 	return c.init.Pid()
 }
 
-func (c *container) Console() *os.File {
-	return c.init.master
+func (c *container) Tty() *stdio.TtyRelay {
+	return c.init.relay
 }
 
 type process struct {
-	c      *container
-	pid    int
-	relay  *stdio.TtyRelay
-	master *os.File
+	c     *container
+	pid   int
+	relay *stdio.TtyRelay
 }
 
 func (p *process) Pid() int {
 	return p.pid
 }
 
-func (p *process) Console() *os.File {
-	return p.master
+func (p *process) Tty() *stdio.TtyRelay {
+	return p.relay
 }
 
 // NewRuntime instantiates a new runcRuntime struct.
@@ -570,5 +569,5 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioS
 	if relay != nil {
 		relay.Start()
 	}
-	return &process{c: c, pid: pid, relay: relay, master: master}, nil
+	return &process{c: c, pid: pid, relay: relay}, nil
 }

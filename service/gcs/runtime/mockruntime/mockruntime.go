@@ -2,7 +2,6 @@
 package mockruntime
 
 import (
-	"os"
 	"sync"
 
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
@@ -47,7 +46,7 @@ func (c *container) Pid() int {
 	return 101
 }
 
-func (c *container) Console() *os.File {
+func (c *container) Tty() *stdio.TtyRelay {
 	return nil
 }
 

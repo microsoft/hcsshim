@@ -4,10 +4,15 @@ import (
 	"io"
 	"os"
 	"sync"
+	"sync/atomic"
+	"syscall"
+	"unsafe"
 
 	"github.com/Microsoft/opengcs/service/gcs/transport"
 	"github.com/sirupsen/logrus"
 	"github.com/pkg/errors"
+
+	"golang.org/x/sys/unix"
 )
 
 // ConnectionSet is a structure defining the readers and writers the Core
@@ -100,15 +105,37 @@ func (s *ConnectionSet) Files() (_ *FileSet, err error) {
 }
 
 // NewTtyRelay returns a new TTY relay for a given master PTY file.
-func (s *ConnectionSet) NewTtyRelay(pty io.ReadWriteCloser) *TtyRelay {
+func (s *ConnectionSet) NewTtyRelay(pty *os.File) *TtyRelay {
 	return &TtyRelay{s: s, pty: pty}
 }
 
 // TtyRelay relays IO between a set of stdio connections and a master PTY file.
 type TtyRelay struct {
-	wg  sync.WaitGroup
-	s   *ConnectionSet
-	pty io.ReadWriteCloser
+	closing int32
+	wg      sync.WaitGroup
+	s       *ConnectionSet
+	pty     *os.File
+}
+
+// ResizeConsole sends the appropriate resize to a pTTY FD
+func (r *TtyRelay) ResizeConsole(height, width uint16) error {
+	type consoleSize struct {
+		Height uint16
+		Width  uint16
+		x      uint16
+		y      uint16
+	}
+
+	r.wg.Add(1)
+	defer r.wg.Done()
+	if atomic.LoadInt32(&r.closing) != 0 {
+		return errors.New("error resizing console pty is closed")
+	}
+
+	if _, _, err := syscall.Syscall(syscall.SYS_IOCTL, r.pty.Fd(), uintptr(unix.TIOCSWINSZ), uintptr(unsafe.Pointer(&consoleSize{Height: height, Width: width}))); err != 0 {
+		return err
+	}
+	return nil
 }
 
 // Start starts the relay operation. The caller must call Wait to wait
@@ -150,6 +177,13 @@ func (r *TtyRelay) Wait() {
 	}
 
 	// Wait for all users of stdioSet and master to finish before closing them.
+	r.wg.Wait()
+
+	// Given the expected use of wait we cannot increment closing before calling r.wg.Wait()
+	// or all calls to ResizeConsole would fail. However, by calling it after there is a very
+	// small window that ResizeConsole could still get an invalid Fd. We call wait again to
+	// enusure that no ResizeConsole call came in before actualling closing the pty.
+	atomic.StoreInt32(&r.closing, 1)
 	r.wg.Wait()
 	r.pty.Close()
 	r.s.Close()
