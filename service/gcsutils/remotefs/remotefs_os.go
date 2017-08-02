@@ -54,7 +54,6 @@ func stat(in io.Reader, out io.Writer, args []string, statfunc func(string) (os.
 	if _, err := out.Write(buf); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -287,6 +286,53 @@ func WriteFile(in io.Reader, out io.Writer, args []string) error {
 	defer f.Close()
 
 	if _, err := io.Copy(f, in); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ReadDir works like *os.File.Readdir but instead writes the result to a writer
+// Args:
+//  - args[0] = path
+//  - args[1] = number of directory entries to return. If <= 0, return all entries in directory
+func ReadDir(in io.Reader, out io.Writer, args []string) error {
+	if len(args) < 2 {
+		return ErrInvalid
+	}
+
+	n, err := strconv.ParseInt(args[1], 10, 32)
+	if err != nil {
+		return err
+	}
+
+	f, err := os.Open(args[0])
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	infos, err := f.Readdir(int(n))
+	if err != nil {
+		return err
+	}
+
+	fileInfos := make([]FileInfo, len(infos))
+	for i := range infos {
+		fileInfos[i] = FileInfo{
+			NameVar:    infos[i].Name(),
+			SizeVar:    infos[i].Size(),
+			ModeVar:    infos[i].Mode(),
+			ModTimeVar: infos[i].ModTime().UnixNano(),
+			IsDirVar:   infos[i].IsDir(),
+		}
+	}
+
+	buf, err := json.Marshal(fileInfos)
+	if err != nil {
+		return err
+	}
+
+	if _, err := out.Write(buf); err != nil {
 		return err
 	}
 	return nil
