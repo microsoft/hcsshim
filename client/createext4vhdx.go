@@ -11,7 +11,7 @@ import (
 
 	winio "github.com/Microsoft/go-winio/vhd"
 	//	"github.com/Microsoft/hcsshim"
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 // dismount is a simple utility function wrapping a conditional HotRemove. It would
