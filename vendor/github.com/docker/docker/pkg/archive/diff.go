@@ -10,10 +10,10 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/pkg/pools"
 	"github.com/docker/docker/pkg/system"
+	"github.com/sirupsen/logrus"
 )
 
 // UnpackLayer unpack `layer` to a `dest`. The stream `layer` can be
@@ -84,7 +84,7 @@ func UnpackLayer(dest string, layer io.Reader, options *TarOptions) (size int64,
 			parentPath := filepath.Join(dest, parent)
 
 			if _, err := os.Lstat(parentPath); err != nil && os.IsNotExist(err) {
-				err = system.MkdirAll(parentPath, 0600)
+				err = system.MkdirAll(parentPath, 0600, "")
 				if err != nil {
 					return 0, err
 				}
