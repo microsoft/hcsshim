@@ -9,12 +9,6 @@
 			"revisionTime": "2017-05-24T00:36:31Z"
 		},
 		{
-			"checksumSHA1": "EvYPZZxTimcW/GITEz8x7UkW+6E=",
-			"path": "github.com/Sirupsen/logrus",
-			"revision": "3d4380f53a34dcdc95f0c1db702615992b38d9a4",
-			"revisionTime": "2017-06-20T14:45:10Z"
-		},
-		{
 			"checksumSHA1": "NiGzxaGjrwCVu8myufBV40NGzHI=",
 			"path": "github.com/docker/containerd/sys",
 			"revision": "26183b3a69a36f426785cdefe1bc9e8e233596d1",
