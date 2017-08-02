@@ -299,6 +299,12 @@
 			"revisionTime": "2017-05-05T04:36:39Z"
 		},
 		{
+			"checksumSHA1": "I5DMrLM0FpmvG81tAWZ3zoydBIo=",
+			"path": "github.com/sirupsen/logrus",
+			"revision": "181d419aa9e2223811b824e8f0b4af96f9ba9302",
+			"revisionTime": "2017-07-28T07:42:14Z"
+		},
+		{
 			"checksumSHA1": "IMWH3PS0Zp3xdfmVe34ar+kMl6Q=",
 			"path": "github.com/tonistiigi/fifo",
 			"revision": "69b99525e472735860a5269b75af1970142b3062",
