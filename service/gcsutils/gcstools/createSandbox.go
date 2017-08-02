@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/Microsoft/opengcs/service/gcsutils/gcstools/commoncli"
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 // PreBuiltSandboxFile is the default location for the sandbox file.

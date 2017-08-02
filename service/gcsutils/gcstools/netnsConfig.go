@@ -20,7 +20,7 @@ import (
 	"runtime"
 
 	"github.com/Microsoft/opengcs/service/gcs/prot"
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 )

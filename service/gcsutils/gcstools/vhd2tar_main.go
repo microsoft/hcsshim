@@ -6,7 +6,7 @@ import (
 
 	"github.com/Microsoft/opengcs/service/gcsutils/gcstools/commoncli"
 	"github.com/Microsoft/opengcs/service/gcsutils/libtar2vhd"
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 func vhd2tar() error {
