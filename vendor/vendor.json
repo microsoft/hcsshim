@@ -329,6 +329,12 @@
 			"revisionTime": "2017-02-14T06:09:35Z"
 		},
 		{
+			"checksumSHA1": "+WzOFwhDdPcz5PYt7imWl71ekZY=",
+			"path": "golang.org/x/crypto/ssh/terminal",
+			"revision": "358f15eacb587b056fc93273b930314a5cda12fe",
+			"revisionTime": "2017-08-01T06:20:35Z"
+		},
+		{
 			"checksumSHA1": "Y+HGqEkYM15ir+J93MEaHdyFy0c=",
 			"path": "golang.org/x/net/context",
 			"revision": "057a25b06247e0c51ba15d8ae475feb2fcb72164",
