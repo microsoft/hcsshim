@@ -10,7 +10,6 @@ GO_PACKAGES=\
 GCS_TOOLS=\
 	tar2vhd \
 	vhd2tar \
-	createSandbox \
 	exportSandbox \
 	netnscfg \
 	remotefs

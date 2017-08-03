@@ -26,8 +26,6 @@
 ./mnt
 ./sys
 ./root
-./root/integration
-./root/integration/prebuildSandbox.vhdx
 ./init
 ./bin
 ./bin/depmod
@@ -398,7 +396,6 @@
 ./bin/printenv
 ./bin/exportSandbox
 ./bin/mpstat
-./bin/createSandbox
 ./bin/sync
 ./bin/mkfs.ext4
 ./bin/tftp

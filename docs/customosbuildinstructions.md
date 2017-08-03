@@ -48,11 +48,7 @@ Here are the expected contents of each subdirectory /file
 2. **/init** 
    This is the [init script file](../kernelconfig/4.11/scripts/init_script)
 
-3. **/root** : this is the home directory of the root account. At this moment, it contains a sandbox file with a prebuilt empty ext4 fs for supporting Service VM operations
-         
-         /root/integration/prebuildSandbox.vhdx
-
-         Note: this vhdx file is located under opengcs/kernelconfig/4.11 
+3. **/root** : this is the home directory of the root account. 
 
 4. **/sbin** : 
     - /sbin/runc  
@@ -93,10 +89,8 @@ Here are the expected contents of each subdirectory /file
             /bin/vhd2tar
             /bin/tar2vhd
             /bin/exportSandbox
-            /bin/createSandbox
-            /bin/netnscfg
 
-            Note : exportSandbox, createSandbox, vhd2tar, tar2vhd, and netnscfg are actually hard links to the file gcstools
+            Note : exportSandbox, vhd2tar and tar2vhd are actually hard links to the file gcstools
 
     - Required binaires: utilities used by gcs
 
