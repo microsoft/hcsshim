@@ -242,6 +242,36 @@ func Mkfifo(in io.Reader, out io.Writer, args []string) error {
 	return unix.Mkfifo(args[0], uint32(perm))
 }
 
+// OpenFile works like os.OpenFile. Since the GCS process calling structure
+// does not enable us to keep state, OpenFile doesn't return a handle to the file.
+// Instead, use this function as a permission check and then call ReadFile
+// or WriteFile to retrieve or overwrite a file.
+// Args:
+//  - args[0] = path
+//  - args[1] = flag in base 10
+//  - args[2] = permission mode in octal (like 0755)
+func OpenFile(in io.Reader, out io.Writer, args []string) error {
+	if len(args) < 3 {
+		return ErrInvalid
+	}
+
+	flag, err := strconv.ParseInt(args[1], 10, 32)
+	if err != nil {
+		return err
+	}
+
+	perm, err := strconv.ParseUint(args[2], 8, 32)
+	if err != nil {
+		return err
+	}
+
+	f, err := os.OpenFile(args[0], int(flag), os.FileMode(perm))
+	if err != nil {
+		return err
+	}
+	return f.Close()
+}
+
 // ReadFile works like ioutil.ReadFile but instead writes the file to a writer
 // Args:
 //  - args[0] = path

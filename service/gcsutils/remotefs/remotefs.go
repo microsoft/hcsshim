@@ -31,6 +31,7 @@ const (
 	LchownCmd         = "lchown"
 	MknodCmd          = "mknod"
 	MkfifoCmd         = "mkfifo"
+	OpenFileCmd       = "openfile"
 	ReadFileCmd       = "readfile"
 	WriteFileCmd      = "writefile"
 	ReadDirCmd        = "readdir"
@@ -56,6 +57,7 @@ var Commands = map[string]Func{
 	LchownCmd:         Lchown,
 	MknodCmd:          Mknod,
 	MkfifoCmd:         Mkfifo,
+	OpenFileCmd:       OpenFile,
 	ReadFileCmd:       ReadFile,
 	WriteFileCmd:      WriteFile,
 	ReadDirCmd:        ReadDir,
