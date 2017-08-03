@@ -89,8 +89,10 @@ Here are the expected contents of each subdirectory /file
             /bin/vhd2tar
             /bin/tar2vhd
             /bin/exportSandbox
+            /bin/remotefs
+            /bin/netnscfg
 
-            Note : exportSandbox, vhd2tar and tar2vhd are actually hard links to the file gcstools
+            Note : exportSandbox, vhd2tar, tar2vhd, remotefs and netnscfg are actually hard links to the /bin/gcstools
 
     - Required binaires: utilities used by gcs
 
