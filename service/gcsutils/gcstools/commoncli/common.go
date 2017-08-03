@@ -20,7 +20,7 @@ func SetFlagsForTar2VHDLib() []*string {
 	filesystem := flag.String("fs", "ext4", "Filesystem format: ext4")
 	whiteout := flag.String("whiteout", "overlay", "Whiteout format: aufs, overlay")
 	vhdFormat := flag.String("vhd", "fixed", "VHD format: fixed")
-	tempDirectory := flag.String("tmpdir", "/tmp/gcs/LinuxServiceVM/scratch", "Temp directory for intermediate files.")
+	tempDirectory := flag.String("tmpdir", "/tmp/scratch", "Temp directory for intermediate files.")
 	return []*string{filesystem, whiteout, vhdFormat, tempDirectory}
 }
 
