@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"syscall"
 
 	"github.com/docker/docker/pkg/archive"
@@ -145,4 +146,10 @@ func WriteTarOptions(w io.Writer, opts *archive.TarOptions) error {
 	}
 
 	return nil
+}
+
+// Sync syncs the filesystem so that all writes buffered in the kernel are flushed
+// to disk.
+func Sync() error {
+	return exec.Command("sync").Run()
 }

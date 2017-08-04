@@ -103,7 +103,11 @@ func mkdir(in io.Reader, out io.Writer, args []string, mkdirFunc func(string, os
 	if err != nil {
 		return err
 	}
-	return mkdirFunc(args[0], os.FileMode(perm))
+
+	if err := mkdirFunc(args[0], os.FileMode(perm)); err != nil {
+		return err
+	}
+	return Sync()
 }
 
 // Remove works like os.Remove
@@ -124,7 +128,11 @@ func remove(in io.Reader, out io.Writer, args []string, removefunc func(string) 
 	if len(args) < 1 {
 		return ErrInvalid
 	}
-	return removefunc(args[0])
+
+	if err := removefunc(args[0]); err != nil {
+		return err
+	}
+	return Sync()
 }
 
 // Link works like os.Link
@@ -171,7 +179,11 @@ func Lchmod(in io.Reader, out io.Writer, args []string) error {
 			return err
 		}
 	}
-	return unix.Fchmodat(0, path, uint32(perm), unix.AT_SYMLINK_NOFOLLOW)
+
+	if err := unix.Fchmodat(0, path, uint32(perm), unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		return err
+	}
+	return Sync()
 }
 
 // Lchown works like os.Lchown
@@ -193,7 +205,11 @@ func Lchown(in io.Reader, out io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
-	return os.Lchown(args[0], int(uid), int(gid))
+
+	if err := os.Lchown(args[0], int(uid), int(gid)); err != nil {
+		return err
+	}
+	return Sync()
 }
 
 // Mknod works like syscall.Mknod
@@ -223,7 +239,10 @@ func Mknod(in io.Reader, out io.Writer, args []string) error {
 	}
 
 	dev := unix.Mkdev(uint32(major), uint32(minor))
-	return unix.Mknod(args[0], uint32(perm), int(dev))
+	if err := unix.Mknod(args[0], uint32(perm), int(dev)); err != nil {
+		return err
+	}
+	return Sync()
 }
 
 // Mkfifo creates a FIFO special file with the given path name and permissions
@@ -239,7 +258,11 @@ func Mkfifo(in io.Reader, out io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
-	return unix.Mkfifo(args[0], uint32(perm))
+
+	if err := unix.Mkfifo(args[0], uint32(perm)); err != nil {
+		return err
+	}
+	return Sync()
 }
 
 // OpenFile works like os.OpenFile. Since the GCS process calling structure
@@ -269,7 +292,11 @@ func OpenFile(in io.Reader, out io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
-	return f.Close()
+
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return Sync()
 }
 
 // ReadFile works like ioutil.ReadFile but instead writes the file to a writer
@@ -318,7 +345,7 @@ func WriteFile(in io.Reader, out io.Writer, args []string) error {
 	if _, err := io.Copy(f, in); err != nil {
 		return err
 	}
-	return nil
+	return Sync()
 }
 
 // ReadDir works like *os.File.Readdir but instead writes the result to a writer
