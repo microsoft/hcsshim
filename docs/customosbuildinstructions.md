@@ -84,15 +84,15 @@ Here are the expected contents of each subdirectory /file
         
     - [GCS binaries](gcsbuildinstructions.md/)
 
+            /bin/exportSandbox
             /bin/gcs
             /bin/gcstools
-            /bin/vhd2tar
-            /bin/tar2vhd
-            /bin/exportSandbox
-            /bin/remotefs
             /bin/netnscfg
+            /bin/remotefs
+            /bin/tar2vhd
+            /bin/vhd2tar
 
-            Note : exportSandbox, vhd2tar, tar2vhd, remotefs and netnscfg are actually hard links to the /bin/gcstools
+            Note : exportSandbox, vhd2tar, tar2vhd, remotefs, and netnscfg are actually hard links to the "gcstools' file
 
     - Required binaires: utilities used by gcs
 
