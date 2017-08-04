@@ -13,9 +13,9 @@ import (
 
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
-	"github.com/sirupsen/logrus"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -319,7 +319,7 @@ func (c *gcsCore) mountLayers(id string, scratchMount *mountSpec, layers []*moun
 		if err := layer.Mount(c.OS, layerPath); err != nil {
 			return errors.Wrapf(err, "failed to mount layer directory %s", layerPath)
 		}
-		layerPaths[i] = layerPath
+		layerPaths[i+1] = layerPath
 	}
 	// TODO: The base path code may be temporary until a more permanent DNS
 	// solution is reached.
@@ -327,7 +327,7 @@ func (c *gcsCore) mountLayers(id string, scratchMount *mountSpec, layers []*moun
 	// mounting will fail when no layer devices are attached. There should
 	// always be at least one layer, even if it's empty, to prevent this
 	// from happening.
-	layerPaths[len(layerPaths)-1] = baseFilesPath
+	layerPaths[0] = baseFilesPath
 
 	// Mount the layers into a union filesystem.
 	var mountOptions uintptr
