@@ -16,10 +16,10 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
-	"github.com/sirupsen/logrus"
 	shellwords "github.com/mattn/go-shellwords"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 // gcsCore is an implementation of the Core interface, defining the
@@ -38,9 +38,8 @@ type gcsCore struct {
 	containerCache map[string]*containerCacheEntry
 
 	processCacheMutex sync.RWMutex
-	// externalProcessCache stores information about external processes which
-	// persists between calls into the gcsCore. It is structured as a map from
-	// pid to cache entry.
+	// processCache stores information about processes which persists between calls
+	// into the gcsCore. It is structured as a map from pid to cache entry.
 	processCache map[int]*processCacheEntry
 }
 
