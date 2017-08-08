@@ -242,14 +242,14 @@ var _ = Describe("runC", func() {
 
 				Describe("performing post-Start operations", func() {
 					var (
-						longSleepProcess  oci.Process
+						shProcess         oci.Process
 						shortSleepProcess oci.Process
 					)
 					BeforeEach(func() {
-						longSleepProcess = oci.Process{
-							Terminal: false,
+						shProcess = oci.Process{
+							Terminal: true,
 							Cwd:      "/",
-							Args:     []string{"sleep", "100"},
+							Args:     []string{"sh"},
 							Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
 						}
 						shortSleepProcess = oci.Process{
@@ -266,7 +266,7 @@ var _ = Describe("runC", func() {
 
 					Describe("executing a process in a container", func() {
 						JustBeforeEach(func() {
-							_, err = c.ExecProcess(longSleepProcess, &stdio.ConnectionSet{})
+							_, err = c.ExecProcess(shProcess, &stdio.ConnectionSet{})
 						})
 						It("should not have produced an error", func() {
 							Expect(err).NotTo(HaveOccurred())
@@ -378,7 +378,7 @@ var _ = Describe("runC", func() {
 						JustBeforeEach(func(done Done) {
 							defer close(done)
 
-							_, err = c.ExecProcess(longSleepProcess, &stdio.ConnectionSet{})
+							_, err = c.ExecProcess(shProcess, &stdio.ConnectionSet{})
 							Expect(err).NotTo(HaveOccurred())
 							p, err = c.ExecProcess(shortSleepProcess, &stdio.ConnectionSet{})
 							Expect(err).NotTo(HaveOccurred())
