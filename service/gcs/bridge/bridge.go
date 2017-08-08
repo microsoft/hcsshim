@@ -407,13 +407,13 @@ func newResponseBase() *prot.MessageResponseBase {
 // contain information pertaining to the given error.
 func (b *bridge) setErrorForResponseBase(response *prot.MessageResponseBase, errForResponse error) {
 	errorMessage := errForResponse.Error()
+	stackString := ""
 	fileName := ""
 	lineNumber := -1
 	functionName := ""
-	if serr, ok := errForResponse.(gcserr.StackTracer); ok {
-		frames := serr.StackTrace()
-		bottomFrame := frames[0]
-		errorMessage = fmt.Sprintf("%+v", serr)
+	if stack := gcserr.BaseStackTrace(errForResponse); stack != nil {
+		bottomFrame := stack[0]
+		stackString = fmt.Sprintf("%+v", stack)
 		fileName = fmt.Sprintf("%s", bottomFrame)
 		lineNumberStr := fmt.Sprintf("%d", bottomFrame)
 		var err error
@@ -433,6 +433,7 @@ func (b *bridge) setErrorForResponseBase(response *prot.MessageResponseBase, err
 	newRecord := prot.ErrorRecord{
 		Result:       int32(hresult),
 		Message:      errorMessage,
+		StackTrace:   stackString,
 		ModuleName:   "gcs",
 		FileName:     fileName,
 		Line:         uint32(lineNumber),
