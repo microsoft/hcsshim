@@ -514,6 +514,7 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioS
 	args = append(args, c.id)
 
 	cmd := exec.Command("runc", args...)
+
 	if !hasTerminal {
 		fileSet, err := stdioSet.Files()
 		if err != nil {
@@ -531,8 +532,9 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioS
 			cmd.Stderr = fileSet.Err
 		}
 	}
-	if err := cmd.Start(); err != nil {
-		return nil, errors.Wrapf(err, "failed to start runc create/exec call for container %s", c.id)
+
+	if err := cmd.Run(); err != nil {
+		return nil, errors.Wrapf(err, "failed to run runc create/exec call for container %s", c.id)
 	}
 
 	var relay *stdio.TtyRelay
@@ -541,7 +543,6 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioS
 		master, err = c.r.getMasterFromSocket(sockListener)
 		if err != nil {
 			cmd.Process.Kill()
-			cmd.Wait()
 			return nil, errors.Wrapf(err, "failed to get pty master for process in container %s", c.id)
 		}
 		// Keep master open for the relay unless there is an error.
@@ -551,10 +552,6 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioS
 			}
 		}()
 		relay = stdioSet.NewTtyRelay(master)
-	}
-
-	if err := cmd.Wait(); err != nil {
-		return nil, errors.Wrapf(err, "failed to wait on runc create/exec call for container %s", c.id)
 	}
 
 	// Rename the process's directory to its pid.
