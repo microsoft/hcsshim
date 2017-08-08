@@ -46,6 +46,10 @@ func (c *container) Pid() int {
 	return 101
 }
 
+func (c *container) Tty() *stdio.TtyRelay {
+	return nil
+}
+
 func (c *container) ExecProcess(process oci.Process, stdioSet *stdio.ConnectionSet) (p runtime.Process, err error) {
 	return c, nil
 }

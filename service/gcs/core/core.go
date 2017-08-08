@@ -22,4 +22,5 @@ type Core interface {
 	ModifySettings(id string, request prot.ResourceModificationRequestResponse) error
 	RegisterContainerExitHook(id string, onExit func(oslayer.ProcessExitState)) error
 	RegisterProcessExitHook(pid int, onExit func(oslayer.ProcessExitState)) error
+	ResizeConsole(pid int, height, width uint16) error
 }

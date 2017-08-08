@@ -7,6 +7,7 @@ import (
 	"unsafe"
 
 	"github.com/pkg/errors"
+	"golang.org/x/sys/unix"
 )
 
 // NewConsole allocates a new console and returns the File for its master and
@@ -31,6 +32,19 @@ func NewConsole() (*os.File, string, error) {
 		return nil, "", errors.Wrap(err, "failed to change ownership on the slave pseudoterminal file")
 	}
 	return master, console, nil
+}
+
+// ResizeConsole sends the appropriate resize to a pTTY FD
+// Synchronization of pty should be handled in the callers context.
+func ResizeConsole(pty *os.File, height, width uint16) error {
+	type consoleSize struct {
+		Height uint16
+		Width  uint16
+		x      uint16
+		y      uint16
+	}
+
+	return ioctl(pty.Fd(), uintptr(unix.TIOCSWINSZ), uintptr(unsafe.Pointer(&consoleSize{Height: height, Width: width})))
 }
 
 func ioctl(fd uintptr, flag, data uintptr) error {

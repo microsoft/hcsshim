@@ -355,8 +355,6 @@ func (b *bridge) waitOnProcess(message []byte, header *prot.MessageHeader) (*pro
 	return response, nil
 }
 
-// resizeConsole is currently a nop until the functionality is implemented.
-// TODO: Tests still need to be written when it's no longer a nop.
 func (b *bridge) resizeConsole(message []byte) (*prot.MessageResponseBase, error) {
 	response := newResponseBase()
 	var request prot.ContainerResizeConsole
@@ -365,7 +363,9 @@ func (b *bridge) resizeConsole(message []byte) (*prot.MessageResponseBase, error
 	}
 	response.ActivityID = request.ActivityID
 
-	// NOP
+	if err := b.coreint.ResizeConsole(int(request.ProcessID), request.Height, request.Width); err != nil {
+		return response, err
+	}
 
 	return response, nil
 }

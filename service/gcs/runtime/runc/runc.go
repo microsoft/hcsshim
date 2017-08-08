@@ -48,6 +48,10 @@ func (c *container) Pid() int {
 	return c.init.Pid()
 }
 
+func (c *container) Tty() *stdio.TtyRelay {
+	return c.init.relay
+}
+
 type process struct {
 	c     *container
 	pid   int
@@ -56,6 +60,10 @@ type process struct {
 
 func (p *process) Pid() int {
 	return p.pid
+}
+
+func (p *process) Tty() *stdio.TtyRelay {
+	return p.relay
 }
 
 // NewRuntime instantiates a new runcRuntime struct.

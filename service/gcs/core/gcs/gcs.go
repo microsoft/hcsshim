@@ -16,10 +16,10 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
-	"github.com/sirupsen/logrus"
 	shellwords "github.com/mattn/go-shellwords"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 // gcsCore is an implementation of the Core interface, defining the
@@ -38,26 +38,18 @@ type gcsCore struct {
 	containerCache map[string]*containerCacheEntry
 
 	processCacheMutex sync.RWMutex
-	// processCache stores information about processes which persists between
-	// calls into the gcsCore. It is structured as a map from pid to cache
-	// entry.
+	// processCache stores information about processes which persists between calls
+	// into the gcsCore. It is structured as a map from pid to cache entry.
 	processCache map[int]*processCacheEntry
-
-	externalProcessCacheMutex sync.RWMutex
-	// externalProcessCache stores information about external processes which
-	// persists between calls into the gcsCore. It is structured as a map from
-	// pid to cache entry.
-	externalProcessCache map[int]*processCacheEntry
 }
 
 // NewGCSCore creates a new gcsCore struct initialized with the given Runtime.
 func NewGCSCore(rtime runtime.Runtime, os oslayer.OS) *gcsCore {
 	return &gcsCore{
-		Rtime:                rtime,
-		OS:                   os,
-		containerCache:       make(map[string]*containerCacheEntry),
-		processCache:         make(map[int]*processCacheEntry),
-		externalProcessCache: make(map[int]*processCacheEntry),
+		Rtime:          rtime,
+		OS:             os,
+		containerCache: make(map[string]*containerCacheEntry),
+		processCache:   make(map[int]*processCacheEntry),
 	}
 }
 
@@ -65,12 +57,12 @@ func NewGCSCore(rtime runtime.Runtime, os oslayer.OS) *gcsCore {
 type containerCacheEntry struct {
 	ID                 string
 	ExitStatus         oslayer.ProcessExitState
-	Processes          []int
 	ExitHooks          []func(oslayer.ProcessExitState)
 	MappedVirtualDisks map[uint8]prot.MappedVirtualDisk
 	MappedDirectories  map[uint32]prot.MappedDirectory
 	NetworkAdapters    []prot.NetworkAdapter
 	container          runtime.Container
+	hasRunInitProcess  bool
 }
 
 func newContainerCacheEntry(id string) *containerCacheEntry {
@@ -82,9 +74,6 @@ func newContainerCacheEntry(id string) *containerCacheEntry {
 }
 func (e *containerCacheEntry) AddExitHook(hook func(oslayer.ProcessExitState)) {
 	e.ExitHooks = append(e.ExitHooks, hook)
-}
-func (e *containerCacheEntry) AddProcess(pid int) {
-	e.Processes = append(e.Processes, pid)
 }
 func (e *containerCacheEntry) AddNetworkAdapter(adapter prot.NetworkAdapter) {
 	e.NetworkAdapters = append(e.NetworkAdapters, adapter)
@@ -120,12 +109,14 @@ func (e *containerCacheEntry) RemoveMappedDirectory(dir prot.MappedDirectory) {
 
 // processCacheEntry stores cached information for a single process.
 type processCacheEntry struct {
-	ExitStatus oslayer.ProcessExitState
-	ExitHooks  []func(oslayer.ProcessExitState)
+	ExitStatus  oslayer.ProcessExitState
+	ExitHooks   []func(oslayer.ProcessExitState)
+	Tty         *stdio.TtyRelay
+	ContainerID string // If "" a host process otherwise a container process.
 }
 
-func newProcessCacheEntry() *processCacheEntry {
-	return &processCacheEntry{}
+func newProcessCacheEntry(containerID string) *processCacheEntry {
+	return &processCacheEntry{ContainerID: containerID}
 }
 func (e *processCacheEntry) AddExitHook(hook func(oslayer.ProcessExitState)) {
 	e.ExitHooks = append(e.ExitHooks, hook)
@@ -203,12 +194,11 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 	if containerEntry == nil {
 		return -1, errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
 	}
-	processEntry := newProcessCacheEntry()
+	processEntry := newProcessCacheEntry(id)
 
 	var p runtime.Process
-
-	isInitProcess := len(containerEntry.Processes) == 0
-	if isInitProcess {
+	if !containerEntry.hasRunInitProcess {
+		containerEntry.hasRunInitProcess = true
 		if err := c.writeConfigFile(id, params.OCISpecification); err != nil {
 			return -1, err
 		}
@@ -220,6 +210,7 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 
 		containerEntry.container = container
 		p = container
+		processEntry.Tty = p.Tty()
 
 		// Configure network adapters in the namespace.
 		for _, adapter := range containerEntry.NetworkAdapters {
@@ -271,6 +262,7 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 		if err != nil {
 			return -1, err
 		}
+		processEntry.Tty = p.Tty()
 
 		go func() {
 			state, err := p.Wait()
@@ -306,7 +298,6 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 	// applies to external processes as well.
 	c.processCache[p.Pid()] = processEntry
 	c.processCacheMutex.Unlock()
-	containerEntry.AddProcess(p.Pid())
 	return p.Pid(), nil
 }
 
@@ -332,16 +323,11 @@ func (c *gcsCore) SignalContainer(id string, signal oslayer.Signal) error {
 // SignalProcess sends the signal specified in options to the given process.
 func (c *gcsCore) SignalProcess(pid int, options prot.SignalProcessOptions) error {
 	c.processCacheMutex.Lock()
-	c.externalProcessCacheMutex.Lock()
 	if _, ok := c.processCache[pid]; !ok {
-		if _, ok := c.externalProcessCache[pid]; !ok {
-			c.processCacheMutex.Unlock()
-			c.externalProcessCacheMutex.Unlock()
-			return errors.WithStack(gcserr.NewProcessDoesNotExistError(pid))
-		}
+		c.processCacheMutex.Unlock()
+		return errors.WithStack(gcserr.NewProcessDoesNotExistError(pid))
 	}
 	c.processCacheMutex.Unlock()
-	c.externalProcessCacheMutex.Unlock()
 
 	// Interpret signal value 0 as SIGKILL.
 	// TODO: Remove this special casing when we are not worried about breaking
@@ -398,8 +384,8 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *st
 	if params.EmulateConsole {
 		// Allocate a console for the process.
 		var (
-			consolePath string
 			master      *os.File
+			consolePath string
 		)
 		master, consolePath, err = stdio.NewConsole()
 		if err != nil {
@@ -440,7 +426,8 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *st
 		relay.Start()
 	}
 
-	processEntry := newProcessCacheEntry()
+	processEntry := newProcessCacheEntry("")
+	processEntry.Tty = relay
 	go func() {
 		if err := cmd.Wait(); err != nil {
 			// TODO: When cmd is a shell, and last command in the shell
@@ -458,18 +445,18 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *st
 
 		// Run exit hooks for the process.
 		state := cmd.ExitState()
-		c.externalProcessCacheMutex.Lock()
+		c.processCacheMutex.Lock()
 		processEntry.ExitStatus = state
 		for _, hook := range processEntry.ExitHooks {
 			hook(state)
 		}
-		c.externalProcessCacheMutex.Unlock()
+		c.processCacheMutex.Unlock()
 	}()
 
 	pid = cmd.Process().Pid()
-	c.externalProcessCacheMutex.Lock()
-	c.externalProcessCache[pid] = processEntry
-	c.externalProcessCacheMutex.Unlock()
+	c.processCacheMutex.Lock()
+	c.processCache[pid] = processEntry
+	c.processCacheMutex.Unlock()
 	return pid, nil
 }
 
@@ -556,17 +543,11 @@ func (c *gcsCore) RegisterContainerExitHook(id string, exitHook func(oslayer.Pro
 func (c *gcsCore) RegisterProcessExitHook(pid int, exitHook func(oslayer.ProcessExitState)) error {
 	c.processCacheMutex.Lock()
 	defer c.processCacheMutex.Unlock()
-	c.externalProcessCacheMutex.Lock()
-	defer c.externalProcessCacheMutex.Unlock()
 
 	var entry *processCacheEntry
 	var ok bool
-	entry, ok = c.processCache[pid]
-	if !ok {
-		entry, ok = c.externalProcessCache[pid]
-		if !ok {
-			return errors.WithStack(gcserr.NewProcessDoesNotExistError(pid))
-		}
+	if entry, ok = c.processCache[pid]; !ok {
+		return errors.WithStack(gcserr.NewProcessDoesNotExistError(pid))
 	}
 
 	exitStatus := entry.ExitStatus
@@ -578,6 +559,23 @@ func (c *gcsCore) RegisterProcessExitHook(pid int, exitHook func(oslayer.Process
 		entry.AddExitHook(exitHook)
 	}
 	return nil
+}
+
+func (c *gcsCore) ResizeConsole(pid int, height, width uint16) error {
+	c.processCacheMutex.Lock()
+	var p *processCacheEntry
+	var ok bool
+	if p, ok = c.processCache[pid]; !ok {
+		c.processCacheMutex.Unlock()
+		return errors.WithStack(gcserr.NewProcessDoesNotExistError(pid))
+	}
+	c.processCacheMutex.Unlock()
+
+	if p.Tty == nil {
+		return fmt.Errorf("pid: %d, is not a tty and cannot be resized", pid)
+	}
+
+	return p.Tty.ResizeConsole(height, width)
 }
 
 // setupMappedVirtualDisks is a helper function which calls into the functions

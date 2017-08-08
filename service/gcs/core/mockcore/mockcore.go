@@ -65,6 +65,13 @@ type RegisterProcessExitHookCall struct {
 	ExitHook func(oslayer.ProcessExitState)
 }
 
+// ResizeConsoleCall captures the arguments of ResizeConsole
+type ResizeConsoleCall struct {
+	Pid    int
+	Height uint16
+	Width  uint16
+}
+
 // MockCore serves as an argument capture mechanism which implements the Core
 // interface. Arguments passed to one of its methods are stored to be queried
 // later.
@@ -78,6 +85,7 @@ type MockCore struct {
 	LastModifySettings            ModifySettingsCall
 	LastRegisterContainerExitHook RegisterContainerExitHookCall
 	LastRegisterProcessExitHook   RegisterProcessExitHookCall
+	LastResizeConsole             ResizeConsoleCall
 }
 
 // CreateContainer captures its arguments and returns a nil error.
@@ -165,5 +173,16 @@ func (c *MockCore) RegisterProcessExitHook(pid int, exitHook func(oslayer.Proces
 		ExitHook: exitHook,
 	}
 	exitHook(mockos.NewProcessExitState(103))
+	return nil
+}
+
+// ResizeConsole captures its arguments and returns a nil error.
+func (c *MockCore) ResizeConsole(pid int, height, width uint16) error {
+	c.LastResizeConsole = ResizeConsoleCall{
+		Pid:    pid,
+		Height: height,
+		Width:  width,
+	}
+
 	return nil
 }

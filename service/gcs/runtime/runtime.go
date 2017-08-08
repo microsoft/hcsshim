@@ -43,6 +43,7 @@ type Process interface {
 	Wait() (oslayer.ProcessExitState, error)
 	Pid() int
 	Delete() error
+	Tty() *stdio.TtyRelay
 }
 
 // Container is an interface to manipulate container state.

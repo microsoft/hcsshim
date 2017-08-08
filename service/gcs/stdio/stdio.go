@@ -100,15 +100,28 @@ func (s *ConnectionSet) Files() (_ *FileSet, err error) {
 }
 
 // NewTtyRelay returns a new TTY relay for a given master PTY file.
-func (s *ConnectionSet) NewTtyRelay(pty io.ReadWriteCloser) *TtyRelay {
+func (s *ConnectionSet) NewTtyRelay(pty *os.File) *TtyRelay {
 	return &TtyRelay{s: s, pty: pty}
 }
 
 // TtyRelay relays IO between a set of stdio connections and a master PTY file.
 type TtyRelay struct {
-	wg  sync.WaitGroup
-	s   *ConnectionSet
-	pty io.ReadWriteCloser
+	m      sync.Mutex
+	closed bool
+	wg     sync.WaitGroup
+	s      *ConnectionSet
+	pty    *os.File
+}
+
+// ResizeConsole sends the appropriate resize to a pTTY FD
+func (r *TtyRelay) ResizeConsole(height, width uint16) error {
+	r.m.Lock()
+	defer r.m.Unlock()
+
+	if r.closed {
+		return errors.New("error resizing console pty is closed")
+	}
+	return ResizeConsole(r.pty, height, width)
 }
 
 // Start starts the relay operation. The caller must call Wait to wait
@@ -151,6 +164,11 @@ func (r *TtyRelay) Wait() {
 
 	// Wait for all users of stdioSet and master to finish before closing them.
 	r.wg.Wait()
+
+	r.m.Lock()
+	defer r.m.Unlock()
+
 	r.pty.Close()
+	r.closed = true
 	r.s.Close()
 }
