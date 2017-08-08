@@ -15,24 +15,20 @@ import (
 )
 
 // globals for the whole test suite
-var containerIds = []string{"a",
+var containerIds = []string{
+	"a",
 	"b",
 	"aaaab",
-	"abcdef"}
-var invalidContainerIds = []string{"\"",
+	"abcdef",
+}
+var invalidContainerIds = []string{
+	"\"",
 	"~`!@#$%^&*()[{]}',<.>/?=+\\|;:-_",
-	"~`!@#$%^&*()[{]}'\",<.>/?=+\\|;:-_"}
+	"~`!@#$%^&*()[{]}'\",<.>/?=+\\|;:-_",
+}
 var allContainerIds = append(containerIds, invalidContainerIds...)
 
 var runcStateDir = "/var/run/runc"
-
-func getBundlePath() (string, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(cwd, "testbundle"), nil
-}
 
 func cleanupContainers(rtime *runcRuntime, containers []runtime.Container) error {
 	var errToReturn error
@@ -157,21 +153,40 @@ func removeSubdirs(parentDir string) error {
 var _ = Describe("runC", func() {
 	var (
 		rtime      *runcRuntime
-		bundle     string
-		err        error
+		cwd        string
+		bundlePath string
+		configFile string
 		containers []runtime.Container
+		err        error
 	)
 
 	BeforeEach(func() {
+		var err error
 		rtime, err = NewRuntime()
 		Expect(err).NotTo(HaveOccurred())
-		bundle, err = getBundlePath()
+
+		cwd, err = os.Getwd()
 		Expect(err).NotTo(HaveOccurred())
+
+		bundlePath = filepath.Join(cwd, "testbundle")
 		containers = nil
 	})
-	AfterEach(func() {
-		err = cleanupContainers(rtime, containers)
+	JustBeforeEach(func() {
+		// Link the given config file into the test bundle.
+		err = os.Symlink(filepath.Join(cwd, configFile), filepath.Join(bundlePath, "config.json"))
 		Expect(err).NotTo(HaveOccurred())
+	})
+	AfterEach(func() {
+		var cerr error
+		err := cleanupContainers(rtime, containers)
+		if err != nil {
+			cerr = err
+		}
+		err = os.Remove(filepath.Join(bundlePath, "config.json"))
+		if err != nil && cerr == nil {
+			cerr = err
+		}
+		Expect(cerr).NotTo(HaveOccurred())
 	})
 
 	Describe("creating a container", func() {
@@ -180,7 +195,7 @@ var _ = Describe("runC", func() {
 			c  runtime.Container
 		)
 		JustBeforeEach(func() {
-			c, err = rtime.CreateContainer(id, bundle, &stdio.ConnectionSet{})
+			c, err = rtime.CreateContainer(id, bundlePath, &stdio.ConnectionSet{})
 			if err == nil {
 				containers = append(containers, c)
 			}
@@ -189,13 +204,18 @@ var _ = Describe("runC", func() {
 			for _, _id := range containerIds {
 				Context(fmt.Sprintf("using ID %s", _id), func() {
 					BeforeEach(func() { id = _id })
-					It("should not have produced an error", func() {
-						Expect(err).NotTo(HaveOccurred())
-					})
-					It("should put the container in the \"created\" state", func() {
-						container, err := c.GetState()
-						Expect(err).NotTo(HaveOccurred())
-						Expect(container.Status).To(Equal("created"))
+					Context("using an sh init process", func() {
+						BeforeEach(func() {
+							configFile = "sh_config.json"
+						})
+						It("should not have produced an error", func() {
+							Expect(err).NotTo(HaveOccurred())
+						})
+						It("should put the container in the \"created\" state", func() {
+							container, err := c.GetState()
+							Expect(err).NotTo(HaveOccurred())
+							Expect(container.Status).To(Equal("created"))
+						})
 					})
 				})
 			}
@@ -218,8 +238,12 @@ var _ = Describe("runC", func() {
 				var (
 					c runtime.Container
 				)
+				BeforeEach(func() {
+					// Default to using sh_config.json.
+					configFile = "sh_config.json"
+				})
 				JustBeforeEach(func() {
-					c, err = rtime.CreateContainer(id, bundle, &stdio.ConnectionSet{})
+					c, err = rtime.CreateContainer(id, bundlePath, &stdio.ConnectionSet{})
 					if err == nil {
 						containers = append(containers, c)
 					}
