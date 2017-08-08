@@ -52,7 +52,7 @@ func ExtractArchive(in io.Reader, out io.Writer, args []string) error {
 	if err := archive.Untar(in, args[0], opts); err != nil {
 		return err
 	}
-	return Sync()
+	return nil
 }
 
 // ArchivePath archives the given directory and writes it to out.

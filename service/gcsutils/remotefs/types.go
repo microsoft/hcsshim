@@ -46,3 +46,17 @@ func (f *FileInfo) IsDir() bool { return f.IsDirVar }
 
 // Sys provides an interface to a FileInfo structure
 func (f *FileInfo) Sys() interface{} { return nil }
+
+// FileHeader is a header for remote *os.File operations for remotefs.OpenFile
+type FileHeader struct {
+	Cmd  uint32
+	Size uint64
+}
+
+const (
+	Read      uint32 = iota // Read request command
+	Write                   // Write request command
+	Close                   // Close request command
+	CmdOK                   // CmdOK is a response meaning request succeeded
+	CmdFailed               // CmdFailed is a response meaning request failed.
+)

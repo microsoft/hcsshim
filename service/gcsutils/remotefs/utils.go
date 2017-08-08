@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"syscall"
 
 	"github.com/docker/docker/pkg/archive"
@@ -148,8 +147,22 @@ func WriteTarOptions(w io.Writer, opts *archive.TarOptions) error {
 	return nil
 }
 
-// Sync syncs the filesystem so that all writes buffered in the kernel are flushed
-// to disk.
-func Sync() error {
-	return exec.Command("sync").Run()
+// ReadFileHeader reads from r and returns a deserialized FileHeader
+func ReadFileHeader(r io.Reader) (*FileHeader, error) {
+	hdr := &FileHeader{}
+	if err := binary.Read(r, binary.BigEndian, hdr); err != nil {
+		return nil, err
+	}
+	return hdr, nil
+}
+
+// WriteFileHeader serializes a FileHeader and writes it to w, along with any extra data
+func WriteFileHeader(w io.Writer, hdr *FileHeader, extraData []byte) error {
+	if err := binary.Write(w, binary.BigEndian, hdr); err != nil {
+		return err
+	}
+	if _, err := w.Write(extraData); err != nil {
+		return err
+	}
+	return nil
 }

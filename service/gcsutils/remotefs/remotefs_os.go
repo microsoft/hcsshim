@@ -103,11 +103,7 @@ func mkdir(in io.Reader, out io.Writer, args []string, mkdirFunc func(string, os
 	if err != nil {
 		return err
 	}
-
-	if err := mkdirFunc(args[0], os.FileMode(perm)); err != nil {
-		return err
-	}
-	return Sync()
+	return mkdirFunc(args[0], os.FileMode(perm))
 }
 
 // Remove works like os.Remove
@@ -128,11 +124,7 @@ func remove(in io.Reader, out io.Writer, args []string, removefunc func(string) 
 	if len(args) < 1 {
 		return ErrInvalid
 	}
-
-	if err := removefunc(args[0]); err != nil {
-		return err
-	}
-	return Sync()
+	return removefunc(args[0])
 }
 
 // Link works like os.Link
@@ -179,11 +171,7 @@ func Lchmod(in io.Reader, out io.Writer, args []string) error {
 			return err
 		}
 	}
-
-	if err := unix.Fchmodat(0, path, uint32(perm), unix.AT_SYMLINK_NOFOLLOW); err != nil {
-		return err
-	}
-	return Sync()
+	return unix.Fchmodat(0, path, uint32(perm), unix.AT_SYMLINK_NOFOLLOW)
 }
 
 // Lchown works like os.Lchown
@@ -205,11 +193,7 @@ func Lchown(in io.Reader, out io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
-
-	if err := os.Lchown(args[0], int(uid), int(gid)); err != nil {
-		return err
-	}
-	return Sync()
+	return os.Lchown(args[0], int(uid), int(gid))
 }
 
 // Mknod works like syscall.Mknod
@@ -239,10 +223,7 @@ func Mknod(in io.Reader, out io.Writer, args []string) error {
 	}
 
 	dev := unix.Mkdev(uint32(major), uint32(minor))
-	if err := unix.Mknod(args[0], uint32(perm), int(dev)); err != nil {
-		return err
-	}
-	return Sync()
+	return unix.Mknod(args[0], uint32(perm), int(dev))
 }
 
 // Mkfifo creates a FIFO special file with the given path name and permissions
@@ -258,22 +239,24 @@ func Mkfifo(in io.Reader, out io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
-
-	if err := unix.Mkfifo(args[0], uint32(perm)); err != nil {
-		return err
-	}
-	return Sync()
+	return unix.Mkfifo(args[0], uint32(perm))
 }
 
-// OpenFile works like os.OpenFile. Since the GCS process calling structure
-// does not enable us to keep state, OpenFile doesn't return a handle to the file.
-// Instead, use this function as a permission check and then call ReadFile
-// or WriteFile to retrieve or overwrite a file.
+// OpenFile works like os.OpenFile. To manage the file pointer state,
+// this function acts as a single file "file server" with Read/Write/Close
+// being serialized control codes from in.
 // Args:
 //  - args[0] = path
 //  - args[1] = flag in base 10
 //  - args[2] = permission mode in octal (like 0755)
-func OpenFile(in io.Reader, out io.Writer, args []string) error {
+func OpenFile(in io.Reader, out io.Writer, args []string) (err error) {
+	defer func() {
+		if err != nil {
+			// error code will be serialized by the caller, so don't write it here
+			WriteFileHeader(out, &FileHeader{Cmd: CmdFailed}, nil)
+		}
+	}()
+
 	if len(args) < 3 {
 		return ErrInvalid
 	}
@@ -293,10 +276,51 @@ func OpenFile(in io.Reader, out io.Writer, args []string) error {
 		return err
 	}
 
-	if err := f.Close(); err != nil {
+	// Signal the client that OpenFile succeeded
+	if err := WriteFileHeader(out, &FileHeader{Cmd: CmdOK}, nil); err != nil {
 		return err
 	}
-	return Sync()
+
+	for {
+		hdr, err := ReadFileHeader(in)
+		if err != nil {
+			return err
+		}
+
+		var buf []byte
+		switch hdr.Cmd {
+		case Read:
+			buf = make([]byte, hdr.Size, hdr.Size)
+			n, err := f.Read(buf)
+			if err != nil {
+				return err
+			}
+			buf = buf[:n]
+		case Write:
+			if _, err := io.CopyN(f, in, int64(hdr.Size)); err != nil {
+				return err
+			}
+		case Close:
+			if err := f.Close(); err != nil {
+				return err
+			}
+		default:
+			return ErrUnknown
+		}
+
+		retHdr := &FileHeader{
+			Cmd:  CmdOK,
+			Size: uint64(len(buf)),
+		}
+		if err := WriteFileHeader(out, retHdr, buf); err != nil {
+			return err
+		}
+
+		if hdr.Cmd == Close {
+			break
+		}
+	}
+	return nil
 }
 
 // ReadFile works like ioutil.ReadFile but instead writes the file to a writer
@@ -345,7 +369,7 @@ func WriteFile(in io.Reader, out io.Writer, args []string) error {
 	if _, err := io.Copy(f, in); err != nil {
 		return err
 	}
-	return Sync()
+	return nil
 }
 
 // ReadDir works like *os.File.Readdir but instead writes the result to a writer

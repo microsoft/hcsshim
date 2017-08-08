@@ -1,19 +1,15 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 
 	"github.com/Microsoft/opengcs/service/gcsutils/remotefs"
 )
 
-// ErrUnknown is returned for an unknown remotefs command
-var ErrUnknown = errors.New("unkown command")
-
 func remotefsHandler() error {
 	if len(os.Args) < 2 {
-		return ErrUnknown
+		return remotefs.ErrUnknown
 	}
 
 	command := os.Args[1]
@@ -33,7 +29,7 @@ func remotefsHandler() error {
 	for k := range remotefs.Commands {
 		fmt.Fprintf(os.Stderr, "\t%s\n", k)
 	}
-	return ErrUnknown
+	return remotefs.ErrUnknown
 }
 
 func remotefsMain() {

@@ -8,6 +8,9 @@ import (
 // ErrInvalid is returned if the parameters are invalid
 var ErrInvalid = errors.New("invalid arguments")
 
+// ErrUnknown is returned for an unknown remotefs command
+var ErrUnknown = errors.New("unkown command")
+
 // Func is the function definition for a generic remote fs function
 // The input to the function is any serialized structs / data from in and the string slice
 // from args. The output of the function will be serialized and written to out.
