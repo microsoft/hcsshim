@@ -289,7 +289,7 @@ var _ = Describe("runC", func() {
 						})
 						Context("using an empty ConnectionSet", func() {
 							BeforeEach(func() {
-								connSet = emptyConnSetClient
+								connSet = fullConnSetClient
 							})
 							It("should not have produced an error", func() {
 								Expect(err).NotTo(HaveOccurred())
@@ -365,6 +365,7 @@ var _ = Describe("runC", func() {
 				Describe("performing post-Start operations", func() {
 					var (
 						shProcess         oci.Process
+						catProcess        oci.Process
 						shortSleepProcess oci.Process
 						connSet           *stdio.ConnectionSet
 					)
@@ -373,6 +374,12 @@ var _ = Describe("runC", func() {
 							Terminal: true,
 							Cwd:      "/",
 							Args:     []string{"sh"},
+							Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
+						}
+						catProcess = oci.Process{
+							Terminal: false,
+							Cwd:      "/",
+							Args:     []string{"cat"},
 							Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
 						}
 						shortSleepProcess = oci.Process{
@@ -388,12 +395,16 @@ var _ = Describe("runC", func() {
 					})
 
 					Describe("executing a process in a container", func() {
+						var (
+							process oci.Process
+						)
 						JustBeforeEach(func() {
-							_, err = c.ExecProcess(shProcess, connSet)
+							_, err = c.ExecProcess(process, connSet)
 						})
 						Context("using an empty ConnectionSet", func() {
 							BeforeEach(func() {
 								connSet = emptyConnSetClient
+								process = shProcess
 							})
 							It("should not have produced an error", func() {
 								Expect(err).NotTo(HaveOccurred())
@@ -407,13 +418,31 @@ var _ = Describe("runC", func() {
 								BeforeEach(func() {
 									connSet = fullConnSetClient
 								})
-								It("should not have produced an error", func() {
-									Expect(err).NotTo(HaveOccurred())
+								Context("using an sh process", func() {
+									BeforeEach(func() {
+										process = shProcess
+									})
+									It("should not have produced an error", func() {
+										Expect(err).NotTo(HaveOccurred())
+									})
+									It("should have created another process in the container", func() {
+										processes, err := c.GetRunningProcesses()
+										Expect(err).NotTo(HaveOccurred())
+										Expect(processes).To(HaveLen(2))
+									})
 								})
-								It("should have created another process in the container", func() {
-									processes, err := c.GetRunningProcesses()
-									Expect(err).NotTo(HaveOccurred())
-									Expect(processes).To(HaveLen(2))
+								Context("using a cat process", func() {
+									BeforeEach(func() {
+										process = catProcess
+									})
+									It("should not have produced an error", func() {
+										Expect(err).NotTo(HaveOccurred())
+									})
+									It("should have created another process in the container", func() {
+										processes, err := c.GetRunningProcesses()
+										Expect(err).NotTo(HaveOccurred())
+										Expect(processes).To(HaveLen(2))
+									})
 								})
 							})
 						})
@@ -545,6 +574,8 @@ var _ = Describe("runC", func() {
 							Expect(err).NotTo(HaveOccurred())
 							p, err = c.ExecProcess(shortSleepProcess, emptyConnSetClient)
 							Expect(err).NotTo(HaveOccurred())
+							_, err = c.ExecProcess(catProcess, fullConnSetClient)
+							Expect(err).NotTo(HaveOccurred())
 							_, err = p.Wait()
 							Expect(err).NotTo(HaveOccurred())
 							processes, err = c.GetRunningProcesses()
@@ -552,8 +583,8 @@ var _ = Describe("runC", func() {
 						It("should not produce an error", func() {
 							Expect(err).NotTo(HaveOccurred())
 						})
-						It("should only have 2 processes remaining running", func() {
-							Expect(processes).To(HaveLen(2))
+						It("should only have 3 processes remaining running", func() {
+							Expect(processes).To(HaveLen(3))
 						})
 					})
 				})
