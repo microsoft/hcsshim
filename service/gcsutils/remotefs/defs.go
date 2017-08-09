@@ -1,9 +1,43 @@
 package remotefs
 
 import (
+	"errors"
 	"os"
 	"time"
 )
+
+// RemotefsCmd is the name of the remotefs meta command
+const RemotefsCmd = "remotefs"
+
+// Name of the commands when called from the cli context (remotefs <CMD> ...)
+const (
+	StatCmd           = "stat"
+	LstatCmd          = "lstat"
+	ReadlinkCmd       = "readlink"
+	MkdirCmd          = "mkdir"
+	MkdirAllCmd       = "mkdirall"
+	RemoveCmd         = "remove"
+	RemoveAllCmd      = "removeall"
+	LinkCmd           = "link"
+	SymlinkCmd        = "symlink"
+	LchmodCmd         = "lchmod"
+	LchownCmd         = "lchown"
+	MknodCmd          = "mknod"
+	MkfifoCmd         = "mkfifo"
+	OpenFileCmd       = "openfile"
+	ReadFileCmd       = "readfile"
+	WriteFileCmd      = "writefile"
+	ReadDirCmd        = "readdir"
+	ResolvePathCmd    = "resolvepath"
+	ExtractArchiveCmd = "extractarchive"
+	ArchivePathCmd    = "archivepath"
+)
+
+// ErrInvalid is returned if the parameters are invalid
+var ErrInvalid = errors.New("invalid arguments")
+
+// ErrUnknown is returned for an unknown remotefs command
+var ErrUnknown = errors.New("unkown command")
 
 // ExportedError is the serialized version of the a Go error.
 // It also provides a trivial implementation of the error interface.
