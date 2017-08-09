@@ -283,6 +283,37 @@ var _ = Describe("runC", func() {
 							})
 						})
 					})
+					Context("using a cat init process", func() {
+						BeforeEach(func() {
+							configFile = "cat_config.json"
+						})
+						Context("using an empty ConnectionSet", func() {
+							BeforeEach(func() {
+								connSet = emptyConnSetClient
+							})
+							It("should not have produced an error", func() {
+								Expect(err).NotTo(HaveOccurred())
+							})
+							It("should put the container in the \"created\" state", func() {
+								container, err := c.GetState()
+								Expect(err).NotTo(HaveOccurred())
+								Expect(container.Status).To(Equal("created"))
+							})
+						})
+						Context("using a full ConnectionSet", func() {
+							BeforeEach(func() {
+								connSet = fullConnSetClient
+							})
+							It("should not have produced an error", func() {
+								Expect(err).NotTo(HaveOccurred())
+							})
+							It("should put the container in the \"created\" state", func() {
+								container, err := c.GetState()
+								Expect(err).NotTo(HaveOccurred())
+								Expect(container.Status).To(Equal("created"))
+							})
+						})
+					})
 				})
 			}
 		})
@@ -392,18 +423,40 @@ var _ = Describe("runC", func() {
 						JustBeforeEach(func() {
 							err = c.Kill(oslayer.SIGKILL)
 						})
-						It("should not produce an error", func() {
-							Expect(err).NotTo(HaveOccurred())
-						})
-						It("should put the container in the \"stopped\" state", func(done Done) {
-							defer close(done)
+						Context("using an sh init process", func() {
+							BeforeEach(func() {
+								configFile = "sh_config.json"
+							})
+							It("should not produce an error", func() {
+								Expect(err).NotTo(HaveOccurred())
+							})
+							It("should put the container in the \"stopped\" state", func(done Done) {
+								defer close(done)
 
-							_, err = c.Wait()
-							Expect(err).NotTo(HaveOccurred())
-							container, err := c.GetState()
-							Expect(err).NotTo(HaveOccurred())
-							Expect(container.Status).To(Equal("stopped"))
-						}, 2) // Test fails if it takes longer than 2 seconds.
+								_, err = c.Wait()
+								Expect(err).NotTo(HaveOccurred())
+								container, err := c.GetState()
+								Expect(err).NotTo(HaveOccurred())
+								Expect(container.Status).To(Equal("stopped"))
+							}, 2) // Test fails if it takes longer than 2 seconds.
+						})
+						Context("using a cat init process", func() {
+							BeforeEach(func() {
+								configFile = "cat_config.json"
+							})
+							It("should not produce an error", func() {
+								Expect(err).NotTo(HaveOccurred())
+							})
+							It("should put the container in the \"stopped\" state", func(done Done) {
+								defer close(done)
+
+								_, err = c.Wait()
+								Expect(err).NotTo(HaveOccurred())
+								container, err := c.GetState()
+								Expect(err).NotTo(HaveOccurred())
+								Expect(container.Status).To(Equal("stopped"))
+							}, 2) // Test fails if it takes longer than 2 seconds.
+						})
 					})
 
 					Describe("deleting a container", func() {
