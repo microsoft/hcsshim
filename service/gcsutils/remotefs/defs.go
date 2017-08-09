@@ -90,7 +90,14 @@ type FileHeader struct {
 const (
 	Read      uint32 = iota // Read request command
 	Write                   // Write request command
+	Seek                    // Seek request command
 	Close                   // Close request command
 	CmdOK                   // CmdOK is a response meaning request succeeded
 	CmdFailed               // CmdFailed is a response meaning request failed.
 )
+
+// SeekHeader is header for the Seek operation for remotefs.OpenFile
+type SeekHeader struct {
+	Offset int64
+	Whence int32
+}

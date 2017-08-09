@@ -1,6 +1,8 @@
 package remotefs
 
 import (
+	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"io"
 	"os"
@@ -333,6 +335,20 @@ func OpenFile(in io.Reader, out io.Writer, args []string) (err error) {
 			if _, err := io.CopyN(f, in, int64(hdr.Size)); err != nil {
 				return err
 			}
+		case Seek:
+			seekHdr := &SeekHeader{}
+			if err := binary.Read(in, binary.BigEndian, seekHdr); err != nil {
+				return err
+			}
+			res, err := f.Seek(seekHdr.Offset, int(seekHdr.Whence))
+			if err != nil {
+				return err
+			}
+			buffer := &bytes.Buffer{}
+			if err := binary.Write(buffer, binary.BigEndian, res); err != nil {
+				return err
+			}
+			buf = buffer.Bytes()
 		case Close:
 			if err := f.Close(); err != nil {
 				return err
