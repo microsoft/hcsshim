@@ -9,6 +9,7 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
+	"github.com/Microsoft/opengcs/service/gcs/transport"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
@@ -29,6 +30,44 @@ var invalidContainerIds = []string{
 var allContainerIds = append(containerIds, invalidContainerIds...)
 
 var runcStateDir = "/var/run/runc"
+
+func newTestConnectionSet(in, out, err bool) (clientSet *stdio.ConnectionSet, serverSet *stdio.ConnectionSet) {
+	clientSet = &stdio.ConnectionSet{}
+	serverSet = &stdio.ConnectionSet{}
+
+	connChannel := make(chan *transport.MockConnection, 16)
+	tport := &transport.MockTransport{Channel: connChannel}
+
+	if in {
+		clientConn, err := tport.Dial(0)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(clientConn).NotTo(BeNil())
+		serverConn := <-connChannel
+		Expect(serverConn).NotTo(BeNil())
+		clientSet.In = clientConn
+		serverSet.In = serverConn
+	}
+	if out {
+		clientConn, err := tport.Dial(0)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(clientConn).NotTo(BeNil())
+		serverConn := <-connChannel
+		Expect(serverConn).NotTo(BeNil())
+		clientSet.Out = clientConn
+		serverSet.Out = serverConn
+	}
+	if err {
+		clientConn, err := tport.Dial(0)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(clientConn).NotTo(BeNil())
+		serverConn := <-connChannel
+		Expect(serverConn).NotTo(BeNil())
+		clientSet.Err = clientConn
+		serverSet.Err = serverConn
+	}
+
+	return clientSet, serverSet
+}
 
 func cleanupContainers(rtime *runcRuntime, containers []runtime.Container) error {
 	var errToReturn error
@@ -152,12 +191,16 @@ func removeSubdirs(parentDir string) error {
 
 var _ = Describe("runC", func() {
 	var (
-		rtime      *runcRuntime
-		cwd        string
-		bundlePath string
-		configFile string
-		containers []runtime.Container
-		err        error
+		rtime              *runcRuntime
+		cwd                string
+		bundlePath         string
+		configFile         string
+		emptyConnSetClient *stdio.ConnectionSet
+		fullConnSetClient  *stdio.ConnectionSet
+		emptyConnSetServer *stdio.ConnectionSet
+		fullConnSetServer  *stdio.ConnectionSet
+		containers         []runtime.Container
+		err                error
 	)
 
 	BeforeEach(func() {
@@ -169,6 +212,10 @@ var _ = Describe("runC", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		bundlePath = filepath.Join(cwd, "testbundle")
+
+		emptyConnSetClient, emptyConnSetServer = newTestConnectionSet(false, false, false)
+		fullConnSetClient, fullConnSetServer = newTestConnectionSet(true, true, true)
+
 		containers = nil
 	})
 	JustBeforeEach(func() {
@@ -191,11 +238,12 @@ var _ = Describe("runC", func() {
 
 	Describe("creating a container", func() {
 		var (
-			id string
-			c  runtime.Container
+			id      string
+			connSet *stdio.ConnectionSet
+			c       runtime.Container
 		)
 		JustBeforeEach(func() {
-			c, err = rtime.CreateContainer(id, bundlePath, &stdio.ConnectionSet{})
+			c, err = rtime.CreateContainer(id, bundlePath, connSet)
 			if err == nil {
 				containers = append(containers, c)
 			}
@@ -208,13 +256,31 @@ var _ = Describe("runC", func() {
 						BeforeEach(func() {
 							configFile = "sh_config.json"
 						})
-						It("should not have produced an error", func() {
-							Expect(err).NotTo(HaveOccurred())
+						Context("using an empty ConnectionSet", func() {
+							BeforeEach(func() {
+								connSet = emptyConnSetClient
+							})
+							It("should not have produced an error", func() {
+								Expect(err).NotTo(HaveOccurred())
+							})
+							It("should put the container in the \"created\" state", func() {
+								container, err := c.GetState()
+								Expect(err).NotTo(HaveOccurred())
+								Expect(container.Status).To(Equal("created"))
+							})
 						})
-						It("should put the container in the \"created\" state", func() {
-							container, err := c.GetState()
-							Expect(err).NotTo(HaveOccurred())
-							Expect(container.Status).To(Equal("created"))
+						Context("using a full ConnectionSet", func() {
+							BeforeEach(func() {
+								connSet = fullConnSetClient
+							})
+							It("should not have produced an error", func() {
+								Expect(err).NotTo(HaveOccurred())
+							})
+							It("should put the container in the \"created\" state", func() {
+								container, err := c.GetState()
+								Expect(err).NotTo(HaveOccurred())
+								Expect(container.Status).To(Equal("created"))
+							})
 						})
 					})
 				})
@@ -243,7 +309,8 @@ var _ = Describe("runC", func() {
 					configFile = "sh_config.json"
 				})
 				JustBeforeEach(func() {
-					c, err = rtime.CreateContainer(id, bundlePath, &stdio.ConnectionSet{})
+					// Default to using fullConnSetClient.
+					c, err = rtime.CreateContainer(id, bundlePath, fullConnSetClient)
 					if err == nil {
 						containers = append(containers, c)
 					}
@@ -268,6 +335,7 @@ var _ = Describe("runC", func() {
 					var (
 						shProcess         oci.Process
 						shortSleepProcess oci.Process
+						connSet           *stdio.ConnectionSet
 					)
 					BeforeEach(func() {
 						shProcess = oci.Process{
@@ -290,15 +358,33 @@ var _ = Describe("runC", func() {
 
 					Describe("executing a process in a container", func() {
 						JustBeforeEach(func() {
-							_, err = c.ExecProcess(shProcess, &stdio.ConnectionSet{})
+							_, err = c.ExecProcess(shProcess, connSet)
 						})
-						It("should not have produced an error", func() {
-							Expect(err).NotTo(HaveOccurred())
-						})
-						It("should have created another process in the container", func() {
-							processes, err := c.GetRunningProcesses()
-							Expect(err).NotTo(HaveOccurred())
-							Expect(processes).To(HaveLen(2))
+						Context("using an empty ConnectionSet", func() {
+							BeforeEach(func() {
+								connSet = emptyConnSetClient
+							})
+							It("should not have produced an error", func() {
+								Expect(err).NotTo(HaveOccurred())
+							})
+							It("should have created another process in the container", func() {
+								processes, err := c.GetRunningProcesses()
+								Expect(err).NotTo(HaveOccurred())
+								Expect(processes).To(HaveLen(2))
+							})
+							Context("using a full ConnectionSet", func() {
+								BeforeEach(func() {
+									connSet = fullConnSetClient
+								})
+								It("should not have produced an error", func() {
+									Expect(err).NotTo(HaveOccurred())
+								})
+								It("should have created another process in the container", func() {
+									processes, err := c.GetRunningProcesses()
+									Expect(err).NotTo(HaveOccurred())
+									Expect(processes).To(HaveLen(2))
+								})
+							})
 						})
 					})
 
@@ -350,7 +436,7 @@ var _ = Describe("runC", func() {
 						JustBeforeEach(func(done Done) {
 							defer close(done)
 
-							p, err = c.ExecProcess(shortSleepProcess, &stdio.ConnectionSet{})
+							p, err = c.ExecProcess(shortSleepProcess, emptyConnSetClient)
 							Expect(err).NotTo(HaveOccurred())
 							_, err = p.Wait()
 							Expect(err).NotTo(HaveOccurred())
@@ -402,9 +488,9 @@ var _ = Describe("runC", func() {
 						JustBeforeEach(func(done Done) {
 							defer close(done)
 
-							_, err = c.ExecProcess(shProcess, &stdio.ConnectionSet{})
+							_, err = c.ExecProcess(shProcess, emptyConnSetClient)
 							Expect(err).NotTo(HaveOccurred())
-							p, err = c.ExecProcess(shortSleepProcess, &stdio.ConnectionSet{})
+							p, err = c.ExecProcess(shortSleepProcess, emptyConnSetClient)
 							Expect(err).NotTo(HaveOccurred())
 							_, err = p.Wait()
 							Expect(err).NotTo(HaveOccurred())
