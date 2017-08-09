@@ -1,6 +1,7 @@
 package runc
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -225,14 +226,17 @@ var _ = Describe("runC", func() {
 	})
 	AfterEach(func() {
 		var cerr error
+
 		err := cleanupContainers(rtime, containers)
 		if err != nil {
 			cerr = err
 		}
+
 		err = os.Remove(filepath.Join(bundlePath, "config.json"))
 		if err != nil && cerr == nil {
 			cerr = err
 		}
+
 		Expect(cerr).NotTo(HaveOccurred())
 	})
 
@@ -333,15 +337,18 @@ var _ = Describe("runC", func() {
 		Context(fmt.Sprintf("using ID %s", id), func() {
 			Describe("performing post-Create operations", func() {
 				var (
-					c runtime.Container
+					c                 runtime.Container
+					initConnSetClient *stdio.ConnectionSet
+					initConnSetServer *stdio.ConnectionSet
 				)
 				BeforeEach(func() {
-					// Default to using sh_config.json.
+					// Default to using sh_config.json and a full ConnectionSet.
 					configFile = "sh_config.json"
+					initConnSetClient, initConnSetServer = newTestConnectionSet(true, true, true)
 				})
 				JustBeforeEach(func() {
 					// Default to using fullConnSetClient.
-					c, err = rtime.CreateContainer(id, bundlePath, fullConnSetClient)
+					c, err = rtime.CreateContainer(id, bundlePath, initConnSetClient)
 					if err == nil {
 						containers = append(containers, c)
 					}
@@ -352,13 +359,61 @@ var _ = Describe("runC", func() {
 					JustBeforeEach(func() {
 						err = c.Start()
 					})
-					It("should not produce an error", func() {
-						Expect(err).NotTo(HaveOccurred())
+					Context("using an sh init process", func() {
+						var (
+							outputString  string
+							outputString2 string
+						)
+						BeforeEach(func() {
+							configFile = "sh_config.json"
+						})
+						JustBeforeEach(func() {
+							_, err := io.WriteString(initConnSetServer.In, "whoami\n")
+							Expect(err).NotTo(HaveOccurred())
+							scanner := bufio.NewScanner(initConnSetServer.Out)
+							scanner.Scan()
+							outputString = scanner.Text()
+							scanner.Scan()
+							outputString2 = scanner.Text()
+						})
+						It("should not produce an error", func() {
+							Expect(err).NotTo(HaveOccurred())
+						})
+						It("should put the container in the \"running\" state", func() {
+							container, err := c.GetState()
+							Expect(err).NotTo(HaveOccurred())
+							Expect(container.Status).To(Equal("running"))
+						})
+						It("should respond properly to stdio", func() {
+							Expect(outputString).To(Equal("/ # whoami"))
+							Expect(outputString2).To(Equal("root"))
+						})
 					})
-					It("should put the container in the \"running\" state", func() {
-						container, err := c.GetState()
-						Expect(err).NotTo(HaveOccurred())
-						Expect(container.Status).To(Equal("running"))
+					Context("using a cat init process", func() {
+						var (
+							outputString string
+						)
+						BeforeEach(func() {
+							configFile = "cat_config.json"
+						})
+						JustBeforeEach(func() {
+							_, err := io.WriteString(initConnSetServer.In, "test\n")
+							Expect(err).NotTo(HaveOccurred())
+							scanner := bufio.NewScanner(initConnSetServer.Out)
+							scanner.Scan()
+							outputString = scanner.Text()
+						})
+						It("should not produce an error", func() {
+							Expect(err).NotTo(HaveOccurred())
+						})
+						It("should put the container in the \"running\" state", func() {
+							container, err := c.GetState()
+							Expect(err).NotTo(HaveOccurred())
+							Expect(container.Status).To(Equal("running"))
+						})
+						It("should respond properly to stdio", func() {
+							Expect(outputString).To(Equal("test"))
+						})
 					})
 				})
 
@@ -367,7 +422,8 @@ var _ = Describe("runC", func() {
 						shProcess         oci.Process
 						catProcess        oci.Process
 						shortSleepProcess oci.Process
-						connSet           *stdio.ConnectionSet
+						connSetClient     *stdio.ConnectionSet
+						connSetServer     *stdio.ConnectionSet
 					)
 					BeforeEach(func() {
 						shProcess = oci.Process{
@@ -399,11 +455,12 @@ var _ = Describe("runC", func() {
 							process oci.Process
 						)
 						JustBeforeEach(func() {
-							_, err = c.ExecProcess(process, connSet)
+							_, err = c.ExecProcess(process, connSetClient)
 						})
 						Context("using an empty ConnectionSet", func() {
 							BeforeEach(func() {
-								connSet = emptyConnSetClient
+								connSetClient = emptyConnSetClient
+								connSetServer = emptyConnSetServer
 								process = shProcess
 							})
 							It("should not have produced an error", func() {
@@ -414,35 +471,66 @@ var _ = Describe("runC", func() {
 								Expect(err).NotTo(HaveOccurred())
 								Expect(processes).To(HaveLen(2))
 							})
-							Context("using a full ConnectionSet", func() {
+						})
+						Context("using a full ConnectionSet", func() {
+							BeforeEach(func() {
+								connSetClient = fullConnSetClient
+								connSetServer = fullConnSetServer
+							})
+							Context("using an sh process", func() {
+								var (
+									outputString  string
+									outputString2 string
+								)
 								BeforeEach(func() {
-									connSet = fullConnSetClient
+									process = shProcess
 								})
-								Context("using an sh process", func() {
-									BeforeEach(func() {
-										process = shProcess
-									})
-									It("should not have produced an error", func() {
-										Expect(err).NotTo(HaveOccurred())
-									})
-									It("should have created another process in the container", func() {
-										processes, err := c.GetRunningProcesses()
-										Expect(err).NotTo(HaveOccurred())
-										Expect(processes).To(HaveLen(2))
-									})
+								JustBeforeEach(func() {
+									_, err := io.WriteString(connSetServer.In, "whoami\n")
+									Expect(err).NotTo(HaveOccurred())
+									scanner := bufio.NewScanner(connSetServer.Out)
+									scanner.Scan()
+									outputString = scanner.Text()
+									scanner.Scan()
+									outputString2 = scanner.Text()
 								})
-								Context("using a cat process", func() {
-									BeforeEach(func() {
-										process = catProcess
-									})
-									It("should not have produced an error", func() {
-										Expect(err).NotTo(HaveOccurred())
-									})
-									It("should have created another process in the container", func() {
-										processes, err := c.GetRunningProcesses()
-										Expect(err).NotTo(HaveOccurred())
-										Expect(processes).To(HaveLen(2))
-									})
+								It("should not have produced an error", func() {
+									Expect(err).NotTo(HaveOccurred())
+								})
+								It("should have created another process in the container", func() {
+									processes, err := c.GetRunningProcesses()
+									Expect(err).NotTo(HaveOccurred())
+									Expect(processes).To(HaveLen(2))
+								})
+								It("should respond properly to stdio", func() {
+									Expect(outputString).To(Equal("/ # whoami"))
+									Expect(outputString2).To(Equal("root"))
+								})
+							})
+							Context("using a cat process", func() {
+								var (
+									outputString string
+								)
+								BeforeEach(func() {
+									process = catProcess
+								})
+								JustBeforeEach(func() {
+									_, err := io.WriteString(connSetServer.In, "test\n")
+									Expect(err).NotTo(HaveOccurred())
+									scanner := bufio.NewScanner(connSetServer.Out)
+									scanner.Scan()
+									outputString = scanner.Text()
+								})
+								It("should not have produced an error", func() {
+									Expect(err).NotTo(HaveOccurred())
+								})
+								It("should have created another process in the container", func() {
+									processes, err := c.GetRunningProcesses()
+									Expect(err).NotTo(HaveOccurred())
+									Expect(processes).To(HaveLen(2))
+								})
+								It("should respond properly to stdio", func() {
+									Expect(outputString).To(Equal("test"))
 								})
 							})
 						})
