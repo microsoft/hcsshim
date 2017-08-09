@@ -9,9 +9,9 @@ A LCOW custom Linux OS image was divided into two parts: a Linux kernel module a
 
 - Have your 4.11 kernel source tree ready
 
-- Apply additional [4.11 patches](../kernelconfig/4.11/patches_readme.md) to your 4.11 kernel source tree 
+- Apply additional [4.11 patches](../kernel/patches_readme.md) to your 4.11 kernel source tree
 
-- Use the recommended [Kconfig](../kernelconfig/4.11/kconfig_for_4_11/) to include all LCOW necessary kernel components
+- Use the recommended [Kconfig](../kernel/kernel_config-4.11.x) to include all LCOW necessary kernel components
 
 - Build your kernel 
 
@@ -21,7 +21,7 @@ A LCOW custom Linux OS image was divided into two parts: a Linux kernel module a
 
 ## How to construct user-mode components
 
-The expected user mode directory structure is required to constructed as follows: [See the complete user-mode file list](../kernelconfig/4.11/completeUsermodeFileLists.md/)
+The expected user mode directory structure is required to constructed as follows: [See the complete user-mode file list](../kernel/completeUsermodeFileLists.md)
 
 Under the / directory, it should have the following subdirectories:
 
@@ -46,7 +46,7 @@ Here are the expected contents of each subdirectory /file
 1. Subdirectories with **empty** contents:  /tmp /proc /dev /run /etc /usr /mnt /sys 
 
 2. **/init** 
-   This is the [init script file](../kernelconfig/4.11/scripts/init_script)
+   This is the [init script file](../kernel/scripts/init_script)
 
 3. **/root** : this is the home directory of the root account. 
 
@@ -82,7 +82,7 @@ Here are the expected contents of each subdirectory /file
 
 7. **/bin** : binaries in this subdir are categorised into four groups
         
-    - [GCS binaries](gcsbuildinstructions.md/)
+    - [GCS binaries](gcsbuildinstructions.md)
 
             /bin/exportSandbox
             /bin/gcs
