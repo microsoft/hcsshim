@@ -9,7 +9,7 @@ A LCOW custom Linux OS image was divided into two parts: a Linux kernel module a
 
 - Have your 4.11 kernel source tree ready
 
-- Apply additional [4.11 patches](../kernel/patches_readme.md) to your 4.11 kernel source tree
+- Apply additional [4.11 patches](../kernel/README.md) to your 4.11 kernel source tree
 
 - Use the recommended [Kconfig](../kernel/kernel_config-4.11.x) to include all LCOW necessary kernel components
 
