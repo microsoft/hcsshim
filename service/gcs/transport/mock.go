@@ -1,9 +1,11 @@
 package transport
 
 import (
-	"errors"
-	"io"
+	"net"
 	"os"
+	"syscall"
+
+	"github.com/pkg/errors"
 )
 
 // MockTransport is a mock implementation of Transport.
@@ -14,44 +16,55 @@ type MockTransport struct {
 }
 
 // Dial ignores the port, and returns a MockTransport struct.
-func (t *MockTransport) Dial(_ uint32) (Connection, error) {
-	csr, csw := io.Pipe()
-	scr, scw := io.Pipe()
+func (t *MockTransport) Dial(_ uint32) (_ Connection, err error) {
+	var fds [2]int
+	var serverFile *os.File
+	var clientFile *os.File
+	var serverConn net.Conn
+	var clientConn net.Conn
+	defer func() {
+		if err != nil {
+			syscall.Close(fds[0])
+			syscall.Close(fds[1])
+			serverFile.Close()
+			clientFile.Close()
+			serverConn.Close()
+			clientConn.Close()
+		}
+	}()
+
+	fds, err = syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed call to Socketpair for unix sockets")
+	}
+	serverFile = os.NewFile(uintptr(fds[0]), "")
+	clientFile = os.NewFile(uintptr(fds[1]), "")
+	serverConn, err = net.FileConn(serverFile)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create mock server connection")
+	}
+	clientConn, err = net.FileConn(clientFile)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create mock client connection")
+	}
+	serverUnixConn, ok := serverConn.(*net.UnixConn)
+	if !ok {
+		return nil, errors.New("server connection was not a unix socket")
+	}
+	clientUnixConn, ok := clientConn.(*net.UnixConn)
+	if !ok {
+		return nil, errors.New("client connection was not a unix socket")
+	}
+
 	t.Channel <- &MockConnection{
-		PipeReader: csr,
-		PipeWriter: scw,
+		UnixConn: serverUnixConn,
 	}
 	return &MockConnection{
-		PipeReader: scr,
-		PipeWriter: csw,
+		UnixConn: clientUnixConn,
 	}, nil
 }
 
 // MockConnection is a mock implementation of Connection.
 type MockConnection struct {
-	*io.PipeReader
-	*io.PipeWriter
-}
-
-// Close marks the connection as closed, and closes the read and write
-// channels.
-func (c *MockConnection) Close() error {
-	c.PipeReader.Close()
-	c.PipeWriter.Close()
-	return nil
-}
-
-// CloseRead closes the read channel.
-func (c *MockConnection) CloseRead() error {
-	return c.PipeReader.Close()
-}
-
-// CloseWrite closes the write channel.
-func (c *MockConnection) CloseWrite() error {
-	return c.PipeWriter.Close()
-}
-
-// File returns a file that can be used to read/write to the connection.
-func (c *MockConnection) File() (*os.File, error) {
-	return nil, errors.New("not implemented")
+	*net.UnixConn
 }
