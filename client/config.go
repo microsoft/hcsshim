@@ -93,10 +93,10 @@ func ParseOptions(options []string) (Options, error) {
 			case "lcow.timeout":
 				var err error
 				if rOpts.TimeoutSeconds, err = strconv.Atoi(opt[1]); err != nil {
-					return rOpts, fmt.Errorf("opengcstimeoutsecs option could not be interpreted as an integer")
+					return rOpts, fmt.Errorf("lcow.timeout option could not be interpreted as an integer")
 				}
 				if rOpts.TimeoutSeconds < 0 {
-					return rOpts, fmt.Errorf("opengcstimeoutsecs option cannot be negative")
+					return rOpts, fmt.Errorf("lcow.timeout option cannot be negative")
 				}
 			}
 		}
