@@ -12,6 +12,7 @@ type ExportedError struct {
 	ErrNum    int `json:",omitempty"`
 }
 
+// Error returns an error string
 func (ee *ExportedError) Error() string {
 	return ee.ErrString
 }
@@ -28,9 +29,20 @@ type FileInfo struct {
 
 var _ os.FileInfo = &FileInfo{}
 
-func (f *FileInfo) Name() string       { return f.NameVar }
-func (f *FileInfo) Size() int64        { return f.SizeVar }
-func (f *FileInfo) Mode() os.FileMode  { return f.ModeVar }
+// Name returns the filename from a FileInfo structure
+func (f *FileInfo) Name() string { return f.NameVar }
+
+// Size returns the size from a FileInfo structure
+func (f *FileInfo) Size() int64 { return f.SizeVar }
+
+// Mode returns the mode from a FileInfo structure
+func (f *FileInfo) Mode() os.FileMode { return f.ModeVar }
+
+// ModTime returns the modification time from a FileInfo structure
 func (f *FileInfo) ModTime() time.Time { return time.Unix(0, f.ModTimeVar) }
-func (f *FileInfo) IsDir() bool        { return f.IsDirVar }
-func (f *FileInfo) Sys() interface{}   { return nil }
+
+// IsDir returns the is-directory indicator from a FileInfo structure
+func (f *FileInfo) IsDir() bool { return f.IsDirVar }
+
+// Sys provides an interface to a FileInfo structure
+func (f *FileInfo) Sys() interface{} { return nil }
