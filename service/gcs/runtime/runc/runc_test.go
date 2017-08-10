@@ -415,12 +415,37 @@ var _ = Describe("runC", func() {
 							Expect(outputString).To(Equal("test"))
 						})
 					})
+					Context("using an init process which outputs to stderr", func() {
+						var (
+							outputString string
+						)
+						BeforeEach(func() {
+							configFile = "err_config.json"
+						})
+						JustBeforeEach(func() {
+							scanner := bufio.NewScanner(initConnSetServer.Err)
+							scanner.Scan()
+							outputString = scanner.Text()
+						})
+						It("should not produce an error", func() {
+							Expect(err).NotTo(HaveOccurred())
+						})
+						It("should put the container in the \"running\" state", func() {
+							container, err := c.GetState()
+							Expect(err).NotTo(HaveOccurred())
+							Expect(container.Status).To(Equal("running"))
+						})
+						It("should respond properly to stdio", func() {
+							Expect(outputString).To(Equal("testerr"))
+						})
+					})
 				})
 
 				Describe("performing post-Start operations", func() {
 					var (
 						shProcess         oci.Process
 						catProcess        oci.Process
+						errProcess        oci.Process
 						shortSleepProcess oci.Process
 						connSetClient     *stdio.ConnectionSet
 						connSetServer     *stdio.ConnectionSet
@@ -436,6 +461,12 @@ var _ = Describe("runC", func() {
 							Terminal: false,
 							Cwd:      "/",
 							Args:     []string{"cat"},
+							Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
+						}
+						errProcess = oci.Process{
+							Terminal: false,
+							Cwd:      "/",
+							Args:     []string{"ls", "fake directory"},
 							Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
 						}
 						shortSleepProcess = oci.Process{
@@ -531,6 +562,25 @@ var _ = Describe("runC", func() {
 								})
 								It("should respond properly to stdio", func() {
 									Expect(outputString).To(Equal("test"))
+								})
+							})
+							Context("using a process which outputs to stderr", func() {
+								var (
+									outputString string
+								)
+								BeforeEach(func() {
+									process = errProcess
+								})
+								JustBeforeEach(func() {
+									scanner := bufio.NewScanner(connSetServer.Err)
+									scanner.Scan()
+									outputString = scanner.Text()
+								})
+								It("should not have produced an error", func() {
+									Expect(err).NotTo(HaveOccurred())
+								})
+								It("should respond properly to stdio", func() {
+									Expect(outputString).To(Equal("ls: fake directory: No such file or directory"))
 								})
 							})
 						})
