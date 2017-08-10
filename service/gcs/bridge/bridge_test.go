@@ -40,6 +40,7 @@ type TestResourceModificationSettings struct {
 var _ = Describe("Bridge", func() {
 	Describe("unittests", func() {
 		var (
+			bridge         *bridge
 			connChannel    chan *transport.MockConnection
 			tport          *transport.MockTransport
 			coreint        *mockcore.MockCore
@@ -61,7 +62,7 @@ var _ = Describe("Bridge", func() {
 			// from the channel on the test side.
 			connChannel = make(chan *transport.MockConnection, 16)
 			tport = &transport.MockTransport{Channel: connChannel}
-			coreint = &mockcore.MockCore{}
+			coreint = &mockcore.MockCore{Behavior: mockcore.Success}
 
 			containerID = "01234567-89ab-cdef-0123-456789abcdef"
 			processID = 101
@@ -74,10 +75,10 @@ var _ = Describe("Bridge", func() {
 		JustBeforeEach(func(done Done) {
 			defer close(done)
 
-			b := NewBridge(tport, coreint)
+			bridge = NewBridge(tport, coreint)
 			go func() {
 				defer GinkgoRecover()
-				b.CommandLoop()
+				bridge.CommandLoop()
 			}()
 			commandConn = <-connChannel
 			Expect(commandConn).NotTo(BeNil())
@@ -112,6 +113,15 @@ var _ = Describe("Bridge", func() {
 		AssertActivityIDCorrect := func() {
 			It("should respond with the correct activity ID", func() {
 				Expect(responseBase.ActivityID).To(Equal(activityID))
+			})
+		}
+		TestErrorResponse := func() {
+			Context("error produced by core", func() {
+				BeforeEach(func() {
+					coreint.Behavior = mockcore.Error
+				})
+				AssertResponseErrors("")
+				AssertActivityIDCorrect()
 			})
 		}
 
@@ -171,44 +181,47 @@ var _ = Describe("Bridge", func() {
 				responseBase = response.MessageResponseBase
 				createCallArgs = coreint.LastCreateContainer
 			})
-			AssertNoResponseErrors()
-			AssertActivityIDCorrect()
-			It("should respond with the correct values", func() {
-				Expect(response.SelectedVersion).To(BeEmpty())
-				Expect(response.SelectedProtocolVersion).To(Equal(uint32(prot.PvV3)))
-			})
-			It("should have received the correct values", func() {
-				Expect(createCallArgs.ID).To(Equal(containerID))
-				Expect(createCallArgs.Settings).To(Equal(settings))
-			})
-			Describe("sending the exit notification", func() {
-				var (
-					notification     prot.ContainerNotification
-					registerCallArgs mockcore.RegisterContainerExitHookCall
-				)
-				JustBeforeEach(func(done Done) {
-					defer close(done)
-
-					registerCallArgs = coreint.LastRegisterContainerExitHook
-					go func() {
-						defer GinkgoRecover()
-						registerCallArgs.ExitHook(mockos.NewProcessExitState(102))
-					}()
-					notificationString, _, err := serverReadString(commandConn)
-					Expect(err).NotTo(HaveOccurred())
-					notification = prot.ContainerNotification{}
-					err = json.Unmarshal([]byte(notificationString), &notification)
-					Expect(err).NotTo(HaveOccurred())
-				}, testTimeout)
+			Context("no error produced by core", func() {
+				AssertNoResponseErrors()
+				AssertActivityIDCorrect()
 				It("should respond with the correct values", func() {
-					Expect(notification.ContainerID).To(Equal(containerID))
-					Expect(notification.ActivityID).To(Equal(activityID))
-					Expect(notification.Type).To(Equal(prot.NtUnexpectedExit))
-					Expect(notification.Operation).To(Equal(prot.AoNone))
-					Expect(notification.Result).To(Equal(int32(102)))
-					Expect(notification.ResultInfo).To(BeEmpty())
+					Expect(response.SelectedVersion).To(BeEmpty())
+					Expect(response.SelectedProtocolVersion).To(Equal(uint32(prot.PvV3)))
+				})
+				It("should have received the correct values", func() {
+					Expect(createCallArgs.ID).To(Equal(containerID))
+					Expect(createCallArgs.Settings).To(Equal(settings))
+				})
+				Describe("sending the exit notification", func() {
+					var (
+						notification     prot.ContainerNotification
+						registerCallArgs mockcore.RegisterContainerExitHookCall
+					)
+					JustBeforeEach(func(done Done) {
+						defer close(done)
+
+						registerCallArgs = coreint.LastRegisterContainerExitHook
+						go func() {
+							defer GinkgoRecover()
+							registerCallArgs.ExitHook(mockos.NewProcessExitState(102))
+						}()
+						notificationString, _, err := serverReadString(commandConn)
+						Expect(err).NotTo(HaveOccurred())
+						notification = prot.ContainerNotification{}
+						err = json.Unmarshal([]byte(notificationString), &notification)
+						Expect(err).NotTo(HaveOccurred())
+					}, testTimeout)
+					It("should respond with the correct values", func() {
+						Expect(notification.ContainerID).To(Equal(containerID))
+						Expect(notification.ActivityID).To(Equal(activityID))
+						Expect(notification.Type).To(Equal(prot.NtUnexpectedExit))
+						Expect(notification.Operation).To(Equal(prot.AoNone))
+						Expect(notification.Result).To(Equal(int32(102)))
+						Expect(notification.ResultInfo).To(BeEmpty())
+					})
 				})
 			})
+			TestErrorResponse()
 		})
 
 		Describe("calling execProcess", func() {
@@ -311,17 +324,20 @@ var _ = Describe("Bridge", func() {
 							},
 						}
 					})
-					AssertNoResponseErrors()
-					AssertActivityIDCorrect()
-					It("should respond with the correct values", func() {
-						Expect(response.ProcessID).To(Equal(uint32(101)))
+					Context("no error produced by core", func() {
+						AssertNoResponseErrors()
+						AssertActivityIDCorrect()
+						It("should respond with the correct values", func() {
+							Expect(response.ProcessID).To(Equal(uint32(101)))
+						})
+						It("should have received the correct values", func() {
+							Expect(callArgs.ID).To(Equal(containerID))
+							Expect(callArgs.Params).To(Equal(params))
+							// TODO: How to test this? Do we want to?
+							//Expect(callArgs.StdioSet).To(Equal(stdioSet))
+						})
 					})
-					It("should have received the correct values", func() {
-						Expect(callArgs.ID).To(Equal(containerID))
-						Expect(callArgs.Params).To(Equal(params))
-						// TODO: How to test this? Do we want to?
-						//Expect(callArgs.StdioSet).To(Equal(stdioSet))
-					})
+					TestErrorResponse()
 				})
 			}
 		})
@@ -386,16 +402,19 @@ var _ = Describe("Bridge", func() {
 							},
 						}
 					})
-					AssertNoResponseErrors()
-					AssertActivityIDCorrect()
-					It("should respond with the correct values", func() {
-						Expect(response.ProcessID).To(Equal(uint32(101)))
+					Context("no error produced by core", func() {
+						AssertNoResponseErrors()
+						AssertActivityIDCorrect()
+						It("should respond with the correct values", func() {
+							Expect(response.ProcessID).To(Equal(uint32(101)))
+						})
+						It("should have received the correct values", func() {
+							Expect(callArgs.Params).To(Equal(params))
+							// TODO: How to test this? Do we want to?
+							//Expect(callArgs.StdioSet).To(Equal(stdioSet))
+						})
 					})
-					It("should have received the correct values", func() {
-						Expect(callArgs.Params).To(Equal(params))
-						// TODO: How to test this? Do we want to?
-						//Expect(callArgs.StdioSet).To(Equal(stdioSet))
-					})
+					TestErrorResponse()
 				})
 			}
 		})
@@ -419,12 +438,15 @@ var _ = Describe("Bridge", func() {
 				responseBase = &response
 				callArgs = coreint.LastSignalContainer
 			})
-			AssertNoResponseErrors()
-			AssertActivityIDCorrect()
-			It("should receive the correct values", func() {
-				Expect(callArgs.ID).To(Equal(containerID))
-				Expect(callArgs.Signal).To(Equal(oslayer.SIGKILL))
+			Context("no error produced by core", func() {
+				AssertNoResponseErrors()
+				AssertActivityIDCorrect()
+				It("should receive the correct values", func() {
+					Expect(callArgs.ID).To(Equal(containerID))
+					Expect(callArgs.Signal).To(Equal(oslayer.SIGKILL))
+				})
 			})
+			TestErrorResponse()
 		})
 
 		Describe("calling shutdownContainer", func() {
@@ -446,12 +468,15 @@ var _ = Describe("Bridge", func() {
 				responseBase = &response
 				callArgs = coreint.LastSignalContainer
 			})
-			AssertNoResponseErrors()
-			AssertActivityIDCorrect()
-			It("should receive the correct values", func() {
-				Expect(callArgs.ID).To(Equal(containerID))
-				Expect(callArgs.Signal).To(Equal(oslayer.SIGTERM))
+			Context("no error produced by core", func() {
+				AssertNoResponseErrors()
+				AssertActivityIDCorrect()
+				It("should receive the correct values", func() {
+					Expect(callArgs.ID).To(Equal(containerID))
+					Expect(callArgs.Signal).To(Equal(oslayer.SIGTERM))
+				})
 			})
+			TestErrorResponse()
 		})
 
 		Describe("calling signalProcess", func() {
@@ -479,12 +504,15 @@ var _ = Describe("Bridge", func() {
 				responseBase = &response
 				callArgs = coreint.LastSignalProcess
 			})
-			AssertNoResponseErrors()
-			AssertActivityIDCorrect()
-			It("should receive the correct values", func() {
-				Expect(callArgs.Pid).To(Equal(int(processID)))
-				Expect(callArgs.Options).To(Equal(options))
+			Context("no error produced by core", func() {
+				AssertNoResponseErrors()
+				AssertActivityIDCorrect()
+				It("should receive the correct values", func() {
+					Expect(callArgs.Pid).To(Equal(int(processID)))
+					Expect(callArgs.Options).To(Equal(options))
+				})
 			})
+			TestErrorResponse()
 		})
 
 		Describe("calling listProcesses", func() {
@@ -508,23 +536,26 @@ var _ = Describe("Bridge", func() {
 				responseBase = response.MessageResponseBase
 				callArgs = coreint.LastListProcesses
 			})
-			AssertNoResponseErrors()
-			AssertActivityIDCorrect()
-			It("should respond with the correct values", func() {
-				var states []runtime.ContainerProcessState
-				err := json.Unmarshal([]byte(response.Properties), &states)
-				Expect(err).NotTo(HaveOccurred())
-				expectedState := runtime.ContainerProcessState{
-					Pid:              101,
-					Command:          []string{"sh", "-c", "testexe"},
-					CreatedByRuntime: true,
-					IsZombie:         true,
-				}
-				Expect(states).To(Equal([]runtime.ContainerProcessState{expectedState}))
+			Context("no error produced by core", func() {
+				AssertNoResponseErrors()
+				AssertActivityIDCorrect()
+				It("should respond with the correct values", func() {
+					var states []runtime.ContainerProcessState
+					err := json.Unmarshal([]byte(response.Properties), &states)
+					Expect(err).NotTo(HaveOccurred())
+					expectedState := runtime.ContainerProcessState{
+						Pid:              101,
+						Command:          []string{"sh", "-c", "testexe"},
+						CreatedByRuntime: true,
+						IsZombie:         true,
+					}
+					Expect(states).To(Equal([]runtime.ContainerProcessState{expectedState}))
+				})
+				It("should have received the correct values", func() {
+					Expect(callArgs.ID).To(Equal(containerID))
+				})
 			})
-			It("should have received the correct values", func() {
-				Expect(callArgs.ID).To(Equal(containerID))
-			})
+			TestErrorResponse()
 		})
 
 		Describe("calling waitOnProcess", func() {
@@ -550,14 +581,17 @@ var _ = Describe("Bridge", func() {
 				responseBase = response.MessageResponseBase
 				callArgs = coreint.LastRegisterProcessExitHook
 			})
-			AssertNoResponseErrors()
-			AssertActivityIDCorrect()
-			It("should respond with the correct values", func() {
-				Expect(response.ExitCode).To(Equal(uint32(103)))
+			Context("no error produced by core", func() {
+				AssertNoResponseErrors()
+				AssertActivityIDCorrect()
+				It("should respond with the correct values", func() {
+					Expect(response.ExitCode).To(Equal(uint32(103)))
+				})
+				It("should have received the correct values", func() {
+					Expect(callArgs.Pid).To(Equal(101))
+				})
 			})
-			It("should have received the correct values", func() {
-				Expect(callArgs.Pid).To(Equal(101))
-			})
+			TestErrorResponse()
 		})
 
 		Describe("calling resizeConsole", func() {
@@ -584,13 +618,16 @@ var _ = Describe("Bridge", func() {
 				responseBase = &response
 				callArgs = coreint.LastResizeConsole
 			})
-			AssertNoResponseErrors()
-			AssertActivityIDCorrect()
-			It("should receive the correct values", func() {
-				Expect(callArgs.Pid).To(Equal(101))
-				Expect(callArgs.Height).To(Equal(uint16(30)))
-				Expect(callArgs.Width).To(Equal(uint16(72)))
+			Context("no error produced by core", func() {
+				AssertNoResponseErrors()
+				AssertActivityIDCorrect()
+				It("should receive the correct values", func() {
+					Expect(callArgs.Pid).To(Equal(101))
+					Expect(callArgs.Height).To(Equal(uint16(30)))
+					Expect(callArgs.Width).To(Equal(uint16(72)))
+				})
 			})
+			TestErrorResponse()
 		})
 
 		Describe("calling modifySettings", func() {
@@ -680,12 +717,15 @@ var _ = Describe("Bridge", func() {
 						Request: modificationRequestToSend,
 					}
 				})
-				AssertNoResponseErrors()
-				AssertActivityIDCorrect()
-				It("should receive the correct values", func() {
-					Expect(callArgs.ID).To(Equal(containerID))
-					Expect(callArgs.Request).To(Equal(modificationRequest))
+				Context("no error produced by core", func() {
+					AssertNoResponseErrors()
+					AssertActivityIDCorrect()
+					It("should receive the correct values", func() {
+						Expect(callArgs.ID).To(Equal(containerID))
+						Expect(callArgs.Request).To(Equal(modificationRequest))
+					})
 				})
+				TestErrorResponse()
 			})
 			Context("using empty ResourceType and RequestType", func() {
 				BeforeEach(func() {

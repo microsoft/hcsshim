@@ -7,6 +7,17 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
+	"github.com/pkg/errors"
+)
+
+// Behavior describes the behavior of the mock core when a method is called.
+type Behavior int
+
+const (
+	// Success specifies method calls should succeed.
+	Success = iota
+	// Error specifies method calls should return an error.
+	Error
 )
 
 // CreateContainerCall captures the arguments of CreateContainer.
@@ -76,6 +87,7 @@ type ResizeConsoleCall struct {
 // interface. Arguments passed to one of its methods are stored to be queried
 // later.
 type MockCore struct {
+	Behavior                      Behavior
 	LastCreateContainer           CreateContainerCall
 	LastExecProcess               ExecProcessCall
 	LastSignalContainer           SignalContainerCall
@@ -88,43 +100,54 @@ type MockCore struct {
 	LastResizeConsole             ResizeConsoleCall
 }
 
-// CreateContainer captures its arguments and returns a nil error.
+// behaviorResulout produces the correct result given the MockCore's Behavior.
+func (c *MockCore) behaviorResult() error {
+	switch c.Behavior {
+	case Success:
+		return nil
+	case Error:
+		return errors.New("mockcore error")
+	default:
+		return nil
+	}
+}
+
+// CreateContainer captures its arguments.
 func (c *MockCore) CreateContainer(id string, settings prot.VMHostedContainerSettings) error {
 	c.LastCreateContainer = CreateContainerCall{
 		ID:       id,
 		Settings: settings,
 	}
-	return nil
+	return c.behaviorResult()
 }
 
-// ExecProcess captures its arguments and returns pid 101 and a nil error.
+// ExecProcess captures its arguments and returns pid 101.
 func (c *MockCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (pid int, err error) {
 	c.LastExecProcess = ExecProcessCall{
 		ID:       id,
 		Params:   params,
 		StdioSet: stdioSet,
 	}
-	return 101, nil
+	return 101, c.behaviorResult()
 }
 
-// SignalContainer captures its arguments and returns a nil error.
+// SignalContainer captures its arguments.
 func (c *MockCore) SignalContainer(id string, signal oslayer.Signal) error {
 	c.LastSignalContainer = SignalContainerCall{ID: id, Signal: signal}
-	return nil
+	return c.behaviorResult()
 }
 
-// SignalProcess captures its arguments and returns a nil error.
+// SignalProcess captures its arguments.
 func (c *MockCore) SignalProcess(pid int, options prot.SignalProcessOptions) error {
 	c.LastSignalProcess = SignalProcessCall{
 		Pid:     pid,
 		Options: options,
 	}
-	return nil
+	return c.behaviorResult()
 }
 
 // ListProcesses captures its arguments. It then returns a process with pid
-// 101, command "sh -c testexe", CreatedByRuntime true, and IsZombie true, as
-// well as a nil error.
+// 101, command "sh -c testexe", CreatedByRuntime true, and IsZombie true.
 func (c *MockCore) ListProcesses(id string) ([]runtime.ContainerProcessState, error) {
 	c.LastListProcesses = ListProcessesCall{ID: id}
 	return []runtime.ContainerProcessState{
@@ -134,55 +157,56 @@ func (c *MockCore) ListProcesses(id string) ([]runtime.ContainerProcessState, er
 			CreatedByRuntime: true,
 			IsZombie:         true,
 		},
-	}, nil
+	}, c.behaviorResult()
 }
 
-// RunExternalProcess captures its arguments and returns pid 101 and a nil
-// error.
+// RunExternalProcess captures its arguments and returns pid 101.
 func (c *MockCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (pid int, err error) {
 	c.LastRunExternalProcess = RunExternalProcessCall{
 		Params:   params,
 		StdioSet: stdioSet,
 	}
-	return 101, nil
+	return 101, c.behaviorResult()
 }
 
-// ModifySettings captures its arguments and returns a nil error.
+// ModifySettings captures its arguments.
 func (c *MockCore) ModifySettings(id string, request prot.ResourceModificationRequestResponse) error {
 	c.LastModifySettings = ModifySettingsCall{
 		ID:      id,
 		Request: request,
 	}
-	return nil
+	return c.behaviorResult()
 }
 
-// RegisterContainerExitHook captures its arguments and returns a nil error.
+// RegisterContainerExitHook captures its arguments.
 func (c *MockCore) RegisterContainerExitHook(id string, exitHook func(oslayer.ProcessExitState)) error {
 	c.LastRegisterContainerExitHook = RegisterContainerExitHookCall{
 		ID:       id,
 		ExitHook: exitHook,
 	}
-	return nil
+	return c.behaviorResult()
 }
 
-// RegisterProcessExitHook captures its arguments, runs the given exit hook on
-// a process exit state with exit code 103, and returns a nil error.
+// RegisterProcessExitHook captures its arguments and runs the given exit hook
+// on a process exit state with exit code 103.
 func (c *MockCore) RegisterProcessExitHook(pid int, exitHook func(oslayer.ProcessExitState)) error {
 	c.LastRegisterProcessExitHook = RegisterProcessExitHookCall{
 		Pid:      pid,
 		ExitHook: exitHook,
 	}
-	exitHook(mockos.NewProcessExitState(103))
-	return nil
+	err := c.behaviorResult()
+	if err == nil {
+		go exitHook(mockos.NewProcessExitState(103))
+	}
+	return err
 }
 
-// ResizeConsole captures its arguments and returns a nil error.
+// ResizeConsole captures its arguments.
 func (c *MockCore) ResizeConsole(pid int, height, width uint16) error {
 	c.LastResizeConsole = ResizeConsoleCall{
 		Pid:    pid,
 		Height: height,
 		Width:  width,
 	}
-
-	return nil
+	return c.behaviorResult()
 }
