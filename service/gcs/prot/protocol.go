@@ -147,15 +147,24 @@ type ContainerCreate struct {
 type NotificationType string
 
 const (
-	NtNone           = NotificationType("None")
-	NtGracefulExit   = NotificationType("GracefulExit")
-	NtForcedExit     = NotificationType("ForcedExit")
+	// NtNone indicates nothing to be sent back to the HCS
+	NtNone = NotificationType("None")
+	// NtGracefulExit indicates a graceful exit notification to be sent back to the HCS
+	NtGracefulExit = NotificationType("GracefulExit")
+	// NtForcedExit indicates a forced exit notification to be sent back to the HCS
+	NtForcedExit = NotificationType("ForcedExit")
+	// NtUnexpectedExit indicates an unexpected exit notification to be sent back to the HCS
 	NtUnexpectedExit = NotificationType("UnexpectedExit")
-	NtReboot         = NotificationType("Reboot")
-	NtConstructed    = NotificationType("Constructed")
-	NtStarted        = NotificationType("Started")
-	NtPaused         = NotificationType("Paused")
-	NtUnknown        = NotificationType("Unknown")
+	// NtReboot indicates a reboot notification to be sent back to the HCS
+	NtReboot = NotificationType("Reboot")
+	// NtConstructed indicates a constructed notification to be sent back to the HCS
+	NtConstructed = NotificationType("Constructed")
+	// NtStarted indicates a started notification to be sent back to the HCS
+	NtStarted = NotificationType("Started")
+	// NtPaused indicates a paused notification to be sent back to the HCS
+	NtPaused = NotificationType("Paused")
+	// NtUnknown indicates an unknown notification to be sent back to the HCS
+	NtUnknown = NotificationType("Unknown")
 )
 
 // ActiveOperation defines an operation to be associated with a notification
@@ -163,12 +172,19 @@ const (
 type ActiveOperation string
 
 const (
-	AoNone      = ActiveOperation("None")
+	// AoNone indicates no active operation
+	AoNone = ActiveOperation("None")
+	// AoConstruct indicates a construct active operation
 	AoConstruct = ActiveOperation("Construct")
-	AoStart     = ActiveOperation("Start")
-	AoPause     = ActiveOperation("Pause")
-	AoResume    = ActiveOperation("Resume")
-	AoShutdown  = ActiveOperation("Shutdown")
+	// AoStart indicates a start active operation
+	AoStart = ActiveOperation("Start")
+	// AoPause indicates a pause active operation
+	AoPause = ActiveOperation("Pause")
+	// AoResume indicates a resume active operation
+	AoResume = ActiveOperation("Resume")
+	// AoShutdown indicates a shutdown active operation
+	AoShutdown = ActiveOperation("Shutdown")
+	// AoTerminate indicates a terminate active operation
 	AoTerminate = ActiveOperation("Terminate")
 )
 
@@ -245,25 +261,39 @@ type ContainerGetProperties struct {
 type PropertyType string
 
 const (
-	PtMemory                      = PropertyType("Memory")
-	PtCPUGroup                    = PropertyType("CpuGroup")
-	PtStatistics                  = PropertyType("Statistics")
-	PtProcessList                 = PropertyType("ProcessList")
-	PtPendingUpdates              = PropertyType("PendingUpdates")
+	// PtMemory is the property type for memory
+	PtMemory = PropertyType("Memory")
+	// PtCPUGroup is the property type for CPU group
+	PtCPUGroup = PropertyType("CpuGroup")
+	// PtStatistics is the property type for statistics
+	PtStatistics = PropertyType("Statistics")
+	// PtProcessList is the property type for a process list
+	PtProcessList = PropertyType("ProcessList")
+	// PtPendingUpdates is the property type for determining if there are pending updates
+	PtPendingUpdates = PropertyType("PendingUpdates")
+	// PtTerminateOnLastHandleClosed is the property type for exiting when the last handle is closed
 	PtTerminateOnLastHandleClosed = PropertyType("TerminateOnLastHandleClosed")
-	PtMappedDirectory             = PropertyType("MappedDirectory")
-	PtSystemGUID                  = PropertyType("SystemGUID")
-	PtNetwork                     = PropertyType("Network")
-	PtMappedPipe                  = PropertyType("MappedPipe")
-	PtMappedVirtualDisk           = PropertyType("MappedVirtualDisk")
+	// PtMappedDirectory is the property type for mapped directories
+	PtMappedDirectory = PropertyType("MappedDirectory")
+	// PtSystemGUID is the property type for the system GUID
+	PtSystemGUID = PropertyType("SystemGUID")
+	// PtNetwork is the property type for networking
+	PtNetwork = PropertyType("Network")
+	// PtMappedPipe is the property type for mapped pipes
+	PtMappedPipe = PropertyType("MappedPipe")
+	// PtMappedVirtualDisk is the property type for mapped virtual disks
+	PtMappedVirtualDisk = PropertyType("MappedVirtualDisk")
 )
 
 // RequestType is the type of operation to perform on a given property type.
 type RequestType string
 
 const (
-	RtAdd    = RequestType("Add")
+	// RtAdd is the "Add" request type of operation
+	RtAdd = RequestType("Add")
+	// RtRemove is the "Remove" request type of operation
 	RtRemove = RequestType("Remove")
+	// RtUpdate is the "Update" request type of operation
 	RtUpdate = RequestType("Update")
 )
 
