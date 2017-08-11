@@ -175,7 +175,7 @@ func (c *gcsCore) CreateContainer(id string, settings prot.VMHostedContainerSett
 	// supposed to be read-only layer in the overlay...  Ideally,
 	// dockerd would pass a runc config with a bind mount for
 	// /etc/resolv.conf like it does on unix.
-	if err := c.OS.MkdirAll(filepath.Join(baseFilesPath, "etc"), 0700); err != nil {
+	if err := c.OS.MkdirAll(filepath.Join(baseFilesPath, "etc"), 0755); err != nil {
 		return errors.Wrapf(err, "failed to create resolv.conf directory")
 	}
 
