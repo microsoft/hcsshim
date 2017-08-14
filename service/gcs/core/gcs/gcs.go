@@ -56,13 +56,13 @@ func NewGCSCore(rtime runtime.Runtime, os oslayer.OS) *gcsCore {
 // containerCacheEntry stores cached information for a single container.
 type containerCacheEntry struct {
 	ID                 string
-	ExitStatus         oslayer.ProcessExitState
-	ExitHooks          []func(oslayer.ProcessExitState)
 	MappedVirtualDisks map[uint8]prot.MappedVirtualDisk
 	MappedDirectories  map[uint32]prot.MappedDirectory
 	NetworkAdapters    []prot.NetworkAdapter
 	container          runtime.Container
 	hasRunInitProcess  bool
+	exitWg             sync.WaitGroup
+	exitCode           int
 }
 
 func newContainerCacheEntry(id string) *containerCacheEntry {
@@ -70,10 +70,8 @@ func newContainerCacheEntry(id string) *containerCacheEntry {
 		ID:                 id,
 		MappedVirtualDisks: make(map[uint8]prot.MappedVirtualDisk),
 		MappedDirectories:  make(map[uint32]prot.MappedDirectory),
+		exitCode:           -1,
 	}
-}
-func (e *containerCacheEntry) AddExitHook(hook func(oslayer.ProcessExitState)) {
-	e.ExitHooks = append(e.ExitHooks, hook)
 }
 func (e *containerCacheEntry) AddNetworkAdapter(adapter prot.NetworkAdapter) {
 	e.NetworkAdapters = append(e.NetworkAdapters, adapter)
@@ -109,17 +107,14 @@ func (e *containerCacheEntry) RemoveMappedDirectory(dir prot.MappedDirectory) {
 
 // processCacheEntry stores cached information for a single process.
 type processCacheEntry struct {
-	ExitStatus  oslayer.ProcessExitState
-	ExitHooks   []func(oslayer.ProcessExitState)
 	Tty         *stdio.TtyRelay
 	ContainerID string // If "" a host process otherwise a container process.
+	exitWg      sync.WaitGroup
+	exitCode    int
 }
 
 func newProcessCacheEntry(containerID string) *processCacheEntry {
-	return &processCacheEntry{ContainerID: containerID}
-}
-func (e *processCacheEntry) AddExitHook(hook func(oslayer.ProcessExitState)) {
-	e.ExitHooks = append(e.ExitHooks, hook)
+	return &processCacheEntry{ContainerID: containerID, exitCode: -1}
 }
 
 func (c *gcsCore) getContainer(id string) *containerCacheEntry {
@@ -141,6 +136,10 @@ func (c *gcsCore) CreateContainer(id string, settings prot.VMHostedContainerSett
 	}
 
 	containerEntry := newContainerCacheEntry(id)
+	// We must add it here because we begin the wait for the init process before
+	// returning to the HCS. This is safe if failures occur because we dont add to the
+	// containerCache
+	containerEntry.exitWg.Add(1)
 
 	// Set up mapped virtual disks.
 	if err := c.setupMappedVirtualDisks(id, settings.MappedVirtualDisks, containerEntry); err != nil {
@@ -200,21 +199,25 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 	if !containerEntry.hasRunInitProcess {
 		containerEntry.hasRunInitProcess = true
 		if err := c.writeConfigFile(id, params.OCISpecification); err != nil {
+			containerEntry.exitWg.Done()
 			return -1, err
 		}
 
 		container, err := c.Rtime.CreateContainer(id, c.getContainerStoragePath(id), stdioSet)
 		if err != nil {
+			containerEntry.exitWg.Done()
 			return -1, err
 		}
 
 		containerEntry.container = container
 		p = container
+		processEntry.exitWg.Add(1)
 		processEntry.Tty = p.Tty()
 
 		// Configure network adapters in the namespace.
 		for _, adapter := range containerEntry.NetworkAdapters {
 			if err := c.configureAdapterInNamespace(container, adapter); err != nil {
+				containerEntry.exitWg.Done()
 				return -1, err
 			}
 		}
@@ -228,24 +231,26 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 					logrus.Error(err)
 				}
 			}
-			logrus.Infof("container init process %d exited with exit status %d", p.Pid(), state.ExitCode())
+			exitCode := state.ExitCode()
+			logrus.Infof("container init process %d exited with exit status %d", p.Pid(), exitCode)
 
 			if err := c.cleanupContainer(containerEntry); err != nil {
 				logrus.Error(err)
 			}
 			c.containerCacheMutex.Unlock()
 
-			c.processCacheMutex.Lock()
-			processEntry.ExitStatus = state
-			for _, hook := range processEntry.ExitHooks {
-				hook(state)
-			}
-			c.processCacheMutex.Unlock()
+			// We are the only writer. Safe to do without a lock
+			processEntry.exitCode = exitCode
+			processEntry.exitWg.Done()
+
+			// We are the only writer. Safe to do without a lock
+			containerEntry.exitCode = exitCode
+			containerEntry.exitWg.Done()
+
 			c.containerCacheMutex.Lock()
-			containerEntry.ExitStatus = state
-			for _, hook := range containerEntry.ExitHooks {
-				hook(state)
-			}
+			// This is safe because the init process WaitContainer has already
+			// been initiated and thus removing from the map will not remove its
+			// reference to the actual cacheEntry
 			delete(c.containerCache, id)
 			c.containerCacheMutex.Unlock()
 		}()
@@ -262,6 +267,7 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 		if err != nil {
 			return -1, err
 		}
+		processEntry.exitWg.Add(1)
 		processEntry.Tty = p.Tty()
 
 		go func() {
@@ -269,14 +275,12 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 			if err != nil {
 				logrus.Error(err)
 			}
-			logrus.Infof("container process %d exited with exit status %d", p.Pid(), state.ExitCode())
+			exitCode := state.ExitCode()
+			logrus.Infof("container process %d exited with exit status %d", p.Pid(), exitCode)
 
-			c.processCacheMutex.Lock()
-			processEntry.ExitStatus = state
-			for _, hook := range processEntry.ExitHooks {
-				hook(state)
-			}
-			c.processCacheMutex.Unlock()
+			processEntry.exitCode = exitCode
+			processEntry.exitWg.Done()
+
 			if err := p.Delete(); err != nil {
 				logrus.Error(err)
 			}
@@ -427,6 +431,7 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *st
 	}
 
 	processEntry := newProcessCacheEntry("")
+	processEntry.exitWg.Add(1)
 	processEntry.Tty = relay
 	go func() {
 		if err := cmd.Wait(); err != nil {
@@ -437,20 +442,16 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *st
 			// important.
 			logrus.Error(errors.Wrap(err, "failed call to Wait for external process"))
 		}
-		logrus.Infof("external process %d exited with exit status %d", cmd.Process().Pid(), cmd.ExitState().ExitCode())
+		exitCode := cmd.ExitState().ExitCode()
+		logrus.Infof("external process %d exited with exit status %d", cmd.Process().Pid(), exitCode)
 
 		if relay != nil {
 			relay.Wait()
 		}
 
-		// Run exit hooks for the process.
-		state := cmd.ExitState()
-		c.processCacheMutex.Lock()
-		processEntry.ExitStatus = state
-		for _, hook := range processEntry.ExitHooks {
-			hook(state)
-		}
-		c.processCacheMutex.Unlock()
+		// We are the only writer safe to do without a lock.
+		processEntry.exitCode = exitCode
+		processEntry.exitWg.Done()
 	}()
 
 	pid = cmd.Process().Pid()
@@ -510,57 +511,6 @@ func (c *gcsCore) ModifySettings(id string, request prot.ResourceModificationReq
 	return nil
 }
 
-// RegisterContainerExitHook registers an exit hook on the container with the
-// given ID. When the container exits, the given exit function will be called.
-// If the container has already exited, the function will be called
-// immediately.  A container may have multiple exit hooks registered for it.
-func (c *gcsCore) RegisterContainerExitHook(id string, exitHook func(oslayer.ProcessExitState)) error {
-	c.containerCacheMutex.Lock()
-	defer c.containerCacheMutex.Unlock()
-
-	entry := c.getContainer(id)
-	if entry == nil {
-		return errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
-	}
-
-	exitStatus := entry.ExitStatus
-	// If the container has already exited, run the hook immediately.
-	// Otherwise, add it to the container's hook list.
-	if exitStatus != nil {
-		exitHook(exitStatus)
-	} else {
-		entry.AddExitHook(exitHook)
-	}
-	return nil
-}
-
-// RegisterProcessExitHook registers an exit hook on the process with the given
-// pid. When the process exits, the given exit function will be called. if the
-// process has already exited, the function will be called immediately. A
-// process may have multiple exit hooks registered for it.
-// This function works for both processes that are running in a container, and
-// ones that are running externally to a container.
-func (c *gcsCore) RegisterProcessExitHook(pid int, exitHook func(oslayer.ProcessExitState)) error {
-	c.processCacheMutex.Lock()
-	defer c.processCacheMutex.Unlock()
-
-	var entry *processCacheEntry
-	var ok bool
-	if entry, ok = c.processCache[pid]; !ok {
-		return errors.WithStack(gcserr.NewProcessDoesNotExistError(pid))
-	}
-
-	exitStatus := entry.ExitStatus
-	// If the process has already exited, run the hook immediately.  Otherwise,
-	// add it to the process's hook list.
-	if exitStatus != nil {
-		exitHook(exitStatus)
-	} else {
-		entry.AddExitHook(exitHook)
-	}
-	return nil
-}
-
 func (c *gcsCore) ResizeConsole(pid int, height, width uint16) error {
 	c.processCacheMutex.Lock()
 	var p *processCacheEntry
@@ -576,6 +526,34 @@ func (c *gcsCore) ResizeConsole(pid int, height, width uint16) error {
 	}
 
 	return p.Tty.ResizeConsole(height, width)
+}
+
+// WaitContainer waits for a container to complete and returns its exit code.
+func (c *gcsCore) WaitContainer(id string) (int, error) {
+	c.containerCacheMutex.Lock()
+	entry := c.getContainer(id)
+	if entry == nil {
+		c.containerCacheMutex.Unlock()
+		return -1, errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
+	}
+	c.containerCacheMutex.Unlock()
+
+	entry.exitWg.Wait()
+	return entry.exitCode, nil
+}
+
+// WaitProcess waits for a process to complete and returns its exit code.
+func (c *gcsCore) WaitProcess(pid int) (int, error) {
+	c.processCacheMutex.Lock()
+	entry, ok := c.processCache[pid]
+	if !ok {
+		c.processCacheMutex.Unlock()
+		return -1, errors.WithStack(gcserr.NewProcessDoesNotExistError(pid))
+	}
+	c.processCacheMutex.Unlock()
+
+	entry.exitWg.Wait()
+	return entry.exitCode, nil
 }
 
 // setupMappedVirtualDisks is a helper function which calls into the functions

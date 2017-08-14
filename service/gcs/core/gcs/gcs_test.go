@@ -1045,12 +1045,20 @@ var _ = Describe("GCS", func() {
 					})
 				})
 			})
-			Describe("calling RegisterContainerExitHook", func() {
+			Describe("calling wait container", func() {
+				var (
+					exitCode int
+				)
 				JustBeforeEach(func() {
-					err = coreint.RegisterContainerExitHook(containerID, func(oslayer.ProcessExitState) {})
+					exitCode, err = coreint.WaitContainer(containerID)
 				})
-				Context("the container has already been created", func() {
-					BeforeEach(func() {
+				Context("container does not exist", func() {
+					It("should produce errors", func() {
+						Expect(err).To(HaveOccurred())
+					})
+				})
+				Context("container does exist", func() {
+					JustBeforeEach(func() {
 						err = coreint.CreateContainer(containerID, createSettings)
 						Expect(err).NotTo(HaveOccurred())
 					})
@@ -1058,42 +1066,38 @@ var _ = Describe("GCS", func() {
 						Expect(err).NotTo(HaveOccurred())
 					})
 				})
-				Context("the container has not already been created", func() {
-					It("should produce an error", func() {
-						Expect(err).To(HaveOccurred())
-					})
-				})
 			})
-			Describe("calling RegisterProcessExitHook", func() {
+			Describe("calling wait process", func() {
 				var (
-					pid int
+					pid      int
+					exitCode int
 				)
 				JustBeforeEach(func() {
-					err = coreint.RegisterProcessExitHook(pid, func(oslayer.ProcessExitState) {})
+					exitCode, err = coreint.WaitProcess(pid)
 				})
-				Context("the container has already been created", func() {
-					BeforeEach(func() {
-						err = coreint.CreateContainer(containerID, createSettings)
-						Expect(err).NotTo(HaveOccurred())
-					})
-					Context("the process has already been started", func() {
-						BeforeEach(func() {
-							pid, err = coreint.ExecProcess(containerID, initialExecParams, fullStdioSet)
-							Expect(err).NotTo(HaveOccurred())
-						})
-						It("should not produce an error", func() {
-							Expect(err).NotTo(HaveOccurred())
-						})
-					})
-					Context("the process has not already been started", func() {
-						It("should produce an error", func() {
-							Expect(err).To(HaveOccurred())
-						})
-					})
-				})
-				Context("the container has not already been created", func() {
+				Context("process does not exist", func() {
 					It("should produce an error", func() {
 						Expect(err).To(HaveOccurred())
+					})
+				})
+				Context("process does exist", func() {
+					JustBeforeEach(func() {
+						pid, err = coreint.RunExternalProcess(externalParams, fullStdioSet)
+						Expect(err).NotTo(HaveOccurred())
+					})
+					It("should not produce an error", func() {
+						Expect(err).NotTo(HaveOccurred())
+					})
+				})
+				Context("is a container process", func() {
+					JustBeforeEach(func() {
+						err = coreint.CreateContainer(containerID, createSettings)
+						Expect(err).NotTo(HaveOccurred())
+						pid, err = coreint.ExecProcess(containerID, initialExecParams, fullStdioSet)
+						Expect(err).NotTo(HaveOccurred())
+					})
+					It("should not produce an error", func() {
+						Expect(err).NotTo(HaveOccurred())
 					})
 				})
 			})
