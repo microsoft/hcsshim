@@ -4,12 +4,11 @@ import (
 	"encoding/binary"
 	"io"
 
-	"github.com/sirupsen/logrus"
-	"github.com/pkg/errors"
-
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -68,30 +67,30 @@ func sendResponseBytes(conn transport.Connection, messageType prot.MessageIdenti
 // connectStdio returns new transport.Connection instances, one for each
 // stdio pipe to be used. If CreateStd*Pipe for a given pipe is false, the
 // given Connection is set to nil.
-func connectStdio(tport transport.Transport, params prot.ProcessParameters, settings prot.ExecuteProcessVsockStdioRelaySettings) (s *stdio.ConnectionSet, err error) {
-	s = &stdio.ConnectionSet{}
+func connectStdio(tport transport.Transport, params prot.ProcessParameters, settings prot.ExecuteProcessVsockStdioRelaySettings) (_ *stdio.ConnectionSet, err error) {
+	connSet := &stdio.ConnectionSet{}
 	defer func() {
 		if err != nil {
-			s.Close()
+			connSet.Close()
 		}
 	}()
 	if params.CreateStdInPipe {
-		s.In, err = tport.Dial(settings.StdIn)
+		connSet.In, err = tport.Dial(settings.StdIn)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed creating stdin Connection")
 		}
 	}
 	if params.CreateStdOutPipe {
-		s.Out, err = tport.Dial(settings.StdOut)
+		connSet.Out, err = tport.Dial(settings.StdOut)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed creating stdout Connection")
 		}
 	}
 	if params.CreateStdErrPipe {
-		s.Err, err = tport.Dial(settings.StdErr)
+		connSet.Err, err = tport.Dial(settings.StdErr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed creating stderr Connection")
 		}
 	}
-	return s, nil
+	return connSet, nil
 }
