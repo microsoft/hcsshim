@@ -256,9 +256,9 @@ var _ = Describe("runC", func() {
 			for _, _id := range containerIds {
 				Context(fmt.Sprintf("using ID %s", _id), func() {
 					BeforeEach(func() { id = _id })
-					Context("using an sh init process", func() {
+					Context("using a sleep init process", func() {
 						BeforeEach(func() {
-							configFile = "sh_config.json"
+							configFile = "sleep_config.json"
 						})
 						Context("using an empty ConnectionSet", func() {
 							BeforeEach(func() {
@@ -287,11 +287,11 @@ var _ = Describe("runC", func() {
 							})
 						})
 					})
-					Context("using a cat init process", func() {
+					Context("using an sh init process", func() {
 						BeforeEach(func() {
-							configFile = "cat_config.json"
+							configFile = "sh_config.json"
 						})
-						Context("using an empty ConnectionSet", func() {
+						Context("using a full ConnectionSet", func() {
 							BeforeEach(func() {
 								connSet = fullConnSetClient
 							})
@@ -303,6 +303,11 @@ var _ = Describe("runC", func() {
 								Expect(err).NotTo(HaveOccurred())
 								Expect(container.Status).To(Equal("created"))
 							})
+						})
+					})
+					Context("using a cat init process", func() {
+						BeforeEach(func() {
+							configFile = "cat_config.json"
 						})
 						Context("using a full ConnectionSet", func() {
 							BeforeEach(func() {
@@ -447,6 +452,7 @@ var _ = Describe("runC", func() {
 						catProcess        oci.Process
 						errProcess        oci.Process
 						shortSleepProcess oci.Process
+						longSleepProcess  oci.Process
 						connSetClient     *stdio.ConnectionSet
 						connSetServer     *stdio.ConnectionSet
 					)
@@ -475,6 +481,12 @@ var _ = Describe("runC", func() {
 							Args:     []string{"sleep", "0.1"},
 							Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
 						}
+						longSleepProcess = oci.Process{
+							Terminal: false,
+							Cwd:      "/",
+							Args:     []string{"sleep", "1000"},
+							Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
+						}
 					})
 					JustBeforeEach(func() {
 						err = c.Start()
@@ -492,7 +504,7 @@ var _ = Describe("runC", func() {
 							BeforeEach(func() {
 								connSetClient = emptyConnSetClient
 								connSetServer = emptyConnSetServer
-								process = shProcess
+								process = longSleepProcess
 							})
 							It("should not have produced an error", func() {
 								Expect(err).NotTo(HaveOccurred())
@@ -708,7 +720,7 @@ var _ = Describe("runC", func() {
 						JustBeforeEach(func(done Done) {
 							defer close(done)
 
-							_, err = c.ExecProcess(shProcess, emptyConnSetClient)
+							_, err = c.ExecProcess(shProcess, fullConnSetClient)
 							Expect(err).NotTo(HaveOccurred())
 							p, err = c.ExecProcess(shortSleepProcess, emptyConnSetClient)
 							Expect(err).NotTo(HaveOccurred())
