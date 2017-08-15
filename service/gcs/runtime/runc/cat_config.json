@@ -15,7 +15,7 @@
 			"gid": 0
 		},
 		"args": [
-			"sleep", "100"
+			"cat"
 		],
 		"env": [
 			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",

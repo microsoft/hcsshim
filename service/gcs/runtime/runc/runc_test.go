@@ -1,6 +1,7 @@
 package runc
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -9,29 +10,64 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
+	"github.com/Microsoft/opengcs/service/gcs/transport"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 // globals for the whole test suite
-var containerIds = []string{"a",
+var containerIds = []string{
+	"a",
 	"b",
 	"aaaab",
-	"abcdef"}
-var invalidContainerIds = []string{"\"",
+	"abcdef",
+}
+var invalidContainerIds = []string{
+	"\"",
 	"~`!@#$%^&*()[{]}',<.>/?=+\\|;:-_",
-	"~`!@#$%^&*()[{]}'\",<.>/?=+\\|;:-_"}
+	"~`!@#$%^&*()[{]}'\",<.>/?=+\\|;:-_",
+}
 var allContainerIds = append(containerIds, invalidContainerIds...)
 
 var runcStateDir = "/var/run/runc"
 
-func getBundlePath() (string, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", err
+func newTestConnectionSet(in, out, err bool) (clientSet *stdio.ConnectionSet, serverSet *stdio.ConnectionSet) {
+	clientSet = &stdio.ConnectionSet{}
+	serverSet = &stdio.ConnectionSet{}
+
+	connChannel := make(chan *transport.MockConnection, 16)
+	tport := &transport.MockTransport{Channel: connChannel}
+
+	if in {
+		clientConn, err := tport.Dial(0)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(clientConn).NotTo(BeNil())
+		serverConn := <-connChannel
+		Expect(serverConn).NotTo(BeNil())
+		clientSet.In = clientConn
+		serverSet.In = serverConn
 	}
-	return filepath.Join(cwd, "testbundle"), nil
+	if out {
+		clientConn, err := tport.Dial(0)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(clientConn).NotTo(BeNil())
+		serverConn := <-connChannel
+		Expect(serverConn).NotTo(BeNil())
+		clientSet.Out = clientConn
+		serverSet.Out = serverConn
+	}
+	if err {
+		clientConn, err := tport.Dial(0)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(clientConn).NotTo(BeNil())
+		serverConn := <-connChannel
+		Expect(serverConn).NotTo(BeNil())
+		clientSet.Err = clientConn
+		serverSet.Err = serverConn
+	}
+
+	return clientSet, serverSet
 }
 
 func cleanupContainers(rtime *runcRuntime, containers []runtime.Container) error {
@@ -156,31 +192,62 @@ func removeSubdirs(parentDir string) error {
 
 var _ = Describe("runC", func() {
 	var (
-		rtime      *runcRuntime
-		bundle     string
-		err        error
-		containers []runtime.Container
+		rtime              *runcRuntime
+		cwd                string
+		bundlePath         string
+		configFile         string
+		emptyConnSetClient *stdio.ConnectionSet
+		fullConnSetClient  *stdio.ConnectionSet
+		emptyConnSetServer *stdio.ConnectionSet
+		fullConnSetServer  *stdio.ConnectionSet
+		containers         []runtime.Container
+		err                error
 	)
 
 	BeforeEach(func() {
+		var err error
 		rtime, err = NewRuntime()
 		Expect(err).NotTo(HaveOccurred())
-		bundle, err = getBundlePath()
+
+		cwd, err = os.Getwd()
 		Expect(err).NotTo(HaveOccurred())
+
+		bundlePath = filepath.Join(cwd, "testbundle")
+
+		emptyConnSetClient, emptyConnSetServer = newTestConnectionSet(false, false, false)
+		fullConnSetClient, fullConnSetServer = newTestConnectionSet(true, true, true)
+
 		containers = nil
 	})
-	AfterEach(func() {
-		err = cleanupContainers(rtime, containers)
+	JustBeforeEach(func() {
+		// Link the given config file into the test bundle.
+		err = os.Symlink(filepath.Join(cwd, configFile), filepath.Join(bundlePath, "config.json"))
 		Expect(err).NotTo(HaveOccurred())
+	})
+	AfterEach(func() {
+		var cerr error
+
+		err := cleanupContainers(rtime, containers)
+		if err != nil {
+			cerr = err
+		}
+
+		err = os.Remove(filepath.Join(bundlePath, "config.json"))
+		if err != nil && cerr == nil {
+			cerr = err
+		}
+
+		Expect(cerr).NotTo(HaveOccurred())
 	})
 
 	Describe("creating a container", func() {
 		var (
-			id string
-			c  runtime.Container
+			id      string
+			connSet *stdio.ConnectionSet
+			c       runtime.Container
 		)
 		JustBeforeEach(func() {
-			c, err = rtime.CreateContainer(id, bundle, &stdio.ConnectionSet{})
+			c, err = rtime.CreateContainer(id, bundlePath, connSet)
 			if err == nil {
 				containers = append(containers, c)
 			}
@@ -189,13 +256,72 @@ var _ = Describe("runC", func() {
 			for _, _id := range containerIds {
 				Context(fmt.Sprintf("using ID %s", _id), func() {
 					BeforeEach(func() { id = _id })
-					It("should not have produced an error", func() {
-						Expect(err).NotTo(HaveOccurred())
+					Context("using a sleep init process", func() {
+						BeforeEach(func() {
+							configFile = "sleep_config.json"
+						})
+						Context("using an empty ConnectionSet", func() {
+							BeforeEach(func() {
+								connSet = emptyConnSetClient
+							})
+							It("should not have produced an error", func() {
+								Expect(err).NotTo(HaveOccurred())
+							})
+							It("should put the container in the \"created\" state", func() {
+								container, err := c.GetState()
+								Expect(err).NotTo(HaveOccurred())
+								Expect(container.Status).To(Equal("created"))
+							})
+						})
+						Context("using a full ConnectionSet", func() {
+							BeforeEach(func() {
+								connSet = fullConnSetClient
+							})
+							It("should not have produced an error", func() {
+								Expect(err).NotTo(HaveOccurred())
+							})
+							It("should put the container in the \"created\" state", func() {
+								container, err := c.GetState()
+								Expect(err).NotTo(HaveOccurred())
+								Expect(container.Status).To(Equal("created"))
+							})
+						})
 					})
-					It("should put the container in the \"created\" state", func() {
-						container, err := c.GetState()
-						Expect(err).NotTo(HaveOccurred())
-						Expect(container.Status).To(Equal("created"))
+					Context("using an sh init process", func() {
+						BeforeEach(func() {
+							configFile = "sh_config.json"
+						})
+						Context("using a full ConnectionSet", func() {
+							BeforeEach(func() {
+								connSet = fullConnSetClient
+							})
+							It("should not have produced an error", func() {
+								Expect(err).NotTo(HaveOccurred())
+							})
+							It("should put the container in the \"created\" state", func() {
+								container, err := c.GetState()
+								Expect(err).NotTo(HaveOccurred())
+								Expect(container.Status).To(Equal("created"))
+							})
+						})
+					})
+					Context("using a cat init process", func() {
+						BeforeEach(func() {
+							configFile = "cat_config.json"
+						})
+						Context("using a full ConnectionSet", func() {
+							BeforeEach(func() {
+								connSet = fullConnSetClient
+							})
+							It("should not have produced an error", func() {
+								Expect(err).NotTo(HaveOccurred())
+							})
+							It("should put the container in the \"created\" state", func() {
+								container, err := c.GetState()
+								Expect(err).NotTo(HaveOccurred())
+								Expect(container.Status).To(Equal("created"))
+							})
+						})
 					})
 				})
 			}
@@ -216,10 +342,18 @@ var _ = Describe("runC", func() {
 		Context(fmt.Sprintf("using ID %s", id), func() {
 			Describe("performing post-Create operations", func() {
 				var (
-					c runtime.Container
+					c                 runtime.Container
+					initConnSetClient *stdio.ConnectionSet
+					initConnSetServer *stdio.ConnectionSet
 				)
+				BeforeEach(func() {
+					// Default to using sh_config.json and a full ConnectionSet.
+					configFile = "sh_config.json"
+					initConnSetClient, initConnSetServer = newTestConnectionSet(true, true, true)
+				})
 				JustBeforeEach(func() {
-					c, err = rtime.CreateContainer(id, bundle, &stdio.ConnectionSet{})
+					// Default to using fullConnSetClient.
+					c, err = rtime.CreateContainer(id, bundlePath, initConnSetClient)
 					if err == nil {
 						containers = append(containers, c)
 					}
@@ -230,32 +364,127 @@ var _ = Describe("runC", func() {
 					JustBeforeEach(func() {
 						err = c.Start()
 					})
-					It("should not produce an error", func() {
-						Expect(err).NotTo(HaveOccurred())
+					Context("using an sh init process", func() {
+						var (
+							outputString  string
+							outputString2 string
+						)
+						BeforeEach(func() {
+							configFile = "sh_config.json"
+						})
+						JustBeforeEach(func() {
+							_, err := io.WriteString(initConnSetServer.In, "whoami\n")
+							Expect(err).NotTo(HaveOccurred())
+							scanner := bufio.NewScanner(initConnSetServer.Out)
+							scanner.Scan()
+							outputString = scanner.Text()
+							scanner.Scan()
+							outputString2 = scanner.Text()
+						})
+						It("should not produce an error", func() {
+							Expect(err).NotTo(HaveOccurred())
+						})
+						It("should put the container in the \"running\" state", func() {
+							container, err := c.GetState()
+							Expect(err).NotTo(HaveOccurred())
+							Expect(container.Status).To(Equal("running"))
+						})
+						It("should respond properly to stdio", func() {
+							Expect(outputString).To(Equal("/ # whoami"))
+							Expect(outputString2).To(Equal("root"))
+						})
 					})
-					It("should put the container in the \"running\" state", func() {
-						container, err := c.GetState()
-						Expect(err).NotTo(HaveOccurred())
-						Expect(container.Status).To(Equal("running"))
+					Context("using a cat init process", func() {
+						var (
+							outputString string
+						)
+						BeforeEach(func() {
+							configFile = "cat_config.json"
+						})
+						JustBeforeEach(func() {
+							_, err := io.WriteString(initConnSetServer.In, "test\n")
+							Expect(err).NotTo(HaveOccurred())
+							scanner := bufio.NewScanner(initConnSetServer.Out)
+							scanner.Scan()
+							outputString = scanner.Text()
+						})
+						It("should not produce an error", func() {
+							Expect(err).NotTo(HaveOccurred())
+						})
+						It("should put the container in the \"running\" state", func() {
+							container, err := c.GetState()
+							Expect(err).NotTo(HaveOccurred())
+							Expect(container.Status).To(Equal("running"))
+						})
+						It("should respond properly to stdio", func() {
+							Expect(outputString).To(Equal("test"))
+						})
+					})
+					Context("using an init process which outputs to stderr", func() {
+						var (
+							outputString string
+						)
+						BeforeEach(func() {
+							configFile = "err_config.json"
+						})
+						JustBeforeEach(func() {
+							scanner := bufio.NewScanner(initConnSetServer.Err)
+							scanner.Scan()
+							outputString = scanner.Text()
+						})
+						It("should not produce an error", func() {
+							Expect(err).NotTo(HaveOccurred())
+						})
+						It("should put the container in the \"running\" state", func() {
+							container, err := c.GetState()
+							Expect(err).NotTo(HaveOccurred())
+							Expect(container.Status).To(Equal("running"))
+						})
+						It("should respond properly to stdio", func() {
+							Expect(outputString).To(Equal("testerr"))
+						})
 					})
 				})
 
 				Describe("performing post-Start operations", func() {
 					var (
-						longSleepProcess  oci.Process
+						shProcess         oci.Process
+						catProcess        oci.Process
+						errProcess        oci.Process
 						shortSleepProcess oci.Process
+						longSleepProcess  oci.Process
+						connSetClient     *stdio.ConnectionSet
+						connSetServer     *stdio.ConnectionSet
 					)
 					BeforeEach(func() {
-						longSleepProcess = oci.Process{
+						shProcess = oci.Process{
+							Terminal: true,
+							Cwd:      "/",
+							Args:     []string{"sh"},
+							Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
+						}
+						catProcess = oci.Process{
 							Terminal: false,
 							Cwd:      "/",
-							Args:     []string{"sleep", "100"},
+							Args:     []string{"cat"},
+							Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
+						}
+						errProcess = oci.Process{
+							Terminal: false,
+							Cwd:      "/",
+							Args:     []string{"ls", "fake directory"},
 							Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
 						}
 						shortSleepProcess = oci.Process{
 							Terminal: false,
 							Cwd:      "/",
 							Args:     []string{"sleep", "0.1"},
+							Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
+						}
+						longSleepProcess = oci.Process{
+							Terminal: false,
+							Cwd:      "/",
+							Args:     []string{"sleep", "1000"},
 							Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
 						}
 					})
@@ -265,16 +494,107 @@ var _ = Describe("runC", func() {
 					})
 
 					Describe("executing a process in a container", func() {
+						var (
+							process oci.Process
+						)
 						JustBeforeEach(func() {
-							_, err = c.ExecProcess(longSleepProcess, &stdio.ConnectionSet{})
+							_, err = c.ExecProcess(process, connSetClient)
 						})
-						It("should not have produced an error", func() {
-							Expect(err).NotTo(HaveOccurred())
+						Context("using an empty ConnectionSet", func() {
+							BeforeEach(func() {
+								connSetClient = emptyConnSetClient
+								connSetServer = emptyConnSetServer
+								process = longSleepProcess
+							})
+							It("should not have produced an error", func() {
+								Expect(err).NotTo(HaveOccurred())
+							})
+							It("should have created another process in the container", func() {
+								processes, err := c.GetRunningProcesses()
+								Expect(err).NotTo(HaveOccurred())
+								Expect(processes).To(HaveLen(2))
+							})
 						})
-						It("should have created another process in the container", func() {
-							processes, err := c.GetRunningProcesses()
-							Expect(err).NotTo(HaveOccurred())
-							Expect(processes).To(HaveLen(2))
+						Context("using a full ConnectionSet", func() {
+							BeforeEach(func() {
+								connSetClient = fullConnSetClient
+								connSetServer = fullConnSetServer
+							})
+							Context("using an sh process", func() {
+								var (
+									outputString  string
+									outputString2 string
+								)
+								BeforeEach(func() {
+									process = shProcess
+								})
+								JustBeforeEach(func() {
+									_, err := io.WriteString(connSetServer.In, "whoami\n")
+									Expect(err).NotTo(HaveOccurred())
+									scanner := bufio.NewScanner(connSetServer.Out)
+									scanner.Scan()
+									outputString = scanner.Text()
+									scanner.Scan()
+									outputString2 = scanner.Text()
+								})
+								It("should not have produced an error", func() {
+									Expect(err).NotTo(HaveOccurred())
+								})
+								It("should have created another process in the container", func() {
+									processes, err := c.GetRunningProcesses()
+									Expect(err).NotTo(HaveOccurred())
+									Expect(processes).To(HaveLen(2))
+								})
+								It("should respond properly to stdio", func() {
+									Expect(outputString).To(Equal("/ # whoami"))
+									Expect(outputString2).To(Equal("root"))
+								})
+							})
+							Context("using a cat process", func() {
+								var (
+									outputString string
+								)
+								BeforeEach(func() {
+									process = catProcess
+								})
+								JustBeforeEach(func() {
+									_, err := io.WriteString(connSetServer.In, "test\n")
+									Expect(err).NotTo(HaveOccurred())
+									scanner := bufio.NewScanner(connSetServer.Out)
+									scanner.Scan()
+									outputString = scanner.Text()
+								})
+								It("should not have produced an error", func() {
+									Expect(err).NotTo(HaveOccurred())
+								})
+								It("should have created another process in the container", func() {
+									processes, err := c.GetRunningProcesses()
+									Expect(err).NotTo(HaveOccurred())
+									Expect(processes).To(HaveLen(2))
+								})
+								It("should respond properly to stdio", func() {
+									Expect(outputString).To(Equal("test"))
+								})
+							})
+							Context("using a process which outputs to stderr", func() {
+								var (
+									outputString string
+								)
+								BeforeEach(func() {
+									process = errProcess
+								})
+								JustBeforeEach(func() {
+									scanner := bufio.NewScanner(connSetServer.Err)
+									scanner.Scan()
+									outputString = scanner.Text()
+								})
+								It("should not have produced an error", func() {
+									Expect(err).NotTo(HaveOccurred())
+								})
+								It("should respond properly to stdio", func() {
+									Expect(outputString).To(Equal("ls: fake directory: No such file or directory"))
+								})
+							})
 						})
 					})
 
@@ -282,18 +602,40 @@ var _ = Describe("runC", func() {
 						JustBeforeEach(func() {
 							err = c.Kill(oslayer.SIGKILL)
 						})
-						It("should not produce an error", func() {
-							Expect(err).NotTo(HaveOccurred())
-						})
-						It("should put the container in the \"stopped\" state", func(done Done) {
-							defer close(done)
+						Context("using an sh init process", func() {
+							BeforeEach(func() {
+								configFile = "sh_config.json"
+							})
+							It("should not produce an error", func() {
+								Expect(err).NotTo(HaveOccurred())
+							})
+							It("should put the container in the \"stopped\" state", func(done Done) {
+								defer close(done)
 
-							_, err = c.Wait()
-							Expect(err).NotTo(HaveOccurred())
-							container, err := c.GetState()
-							Expect(err).NotTo(HaveOccurred())
-							Expect(container.Status).To(Equal("stopped"))
-						}, 2) // Test fails if it takes longer than 2 seconds.
+								_, err = c.Wait()
+								Expect(err).NotTo(HaveOccurred())
+								container, err := c.GetState()
+								Expect(err).NotTo(HaveOccurred())
+								Expect(container.Status).To(Equal("stopped"))
+							}, 2) // Test fails if it takes longer than 2 seconds.
+						})
+						Context("using a cat init process", func() {
+							BeforeEach(func() {
+								configFile = "cat_config.json"
+							})
+							It("should not produce an error", func() {
+								Expect(err).NotTo(HaveOccurred())
+							})
+							It("should put the container in the \"stopped\" state", func(done Done) {
+								defer close(done)
+
+								_, err = c.Wait()
+								Expect(err).NotTo(HaveOccurred())
+								container, err := c.GetState()
+								Expect(err).NotTo(HaveOccurred())
+								Expect(container.Status).To(Equal("stopped"))
+							}, 2) // Test fails if it takes longer than 2 seconds.
+						})
 					})
 
 					Describe("deleting a container", func() {
@@ -326,7 +668,7 @@ var _ = Describe("runC", func() {
 						JustBeforeEach(func(done Done) {
 							defer close(done)
 
-							p, err = c.ExecProcess(shortSleepProcess, &stdio.ConnectionSet{})
+							p, err = c.ExecProcess(shortSleepProcess, emptyConnSetClient)
 							Expect(err).NotTo(HaveOccurred())
 							_, err = p.Wait()
 							Expect(err).NotTo(HaveOccurred())
@@ -378,9 +720,11 @@ var _ = Describe("runC", func() {
 						JustBeforeEach(func(done Done) {
 							defer close(done)
 
-							_, err = c.ExecProcess(longSleepProcess, &stdio.ConnectionSet{})
+							_, err = c.ExecProcess(shProcess, fullConnSetClient)
 							Expect(err).NotTo(HaveOccurred())
-							p, err = c.ExecProcess(shortSleepProcess, &stdio.ConnectionSet{})
+							p, err = c.ExecProcess(shortSleepProcess, emptyConnSetClient)
+							Expect(err).NotTo(HaveOccurred())
+							_, err = c.ExecProcess(catProcess, fullConnSetClient)
 							Expect(err).NotTo(HaveOccurred())
 							_, err = p.Wait()
 							Expect(err).NotTo(HaveOccurred())
@@ -389,8 +733,8 @@ var _ = Describe("runC", func() {
 						It("should not produce an error", func() {
 							Expect(err).NotTo(HaveOccurred())
 						})
-						It("should only have 2 processes remaining running", func() {
-							Expect(processes).To(HaveLen(2))
+						It("should only have 3 processes remaining running", func() {
+							Expect(processes).To(HaveLen(3))
 						})
 					})
 				})

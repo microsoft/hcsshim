@@ -16,5 +16,5 @@ cd $script_dir
 
 # Generate busybox rootfs directory for runC tests
 rootfs=runtime/runc/testbundle/rootfs
-mkdir $rootfs
+mkdir --parents $rootfs
 sudo docker export $(sudo docker create busybox) | tar -C $rootfs -xvf - > /dev/null
