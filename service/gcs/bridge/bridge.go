@@ -23,7 +23,7 @@ import (
 // NotSupported represents the default handler logic for an unmatched
 // request type sent from the bridge.
 func NotSupported(w ResponseWriter, r *Request) {
-	w.Error(gcserr.WrapHresult(errors.Errorf("bridge: function not supported, header type: 0x%x", r.Header.Type), gcserr.HrNotImpl))
+	w.Error("", gcserr.WrapHresult(errors.Errorf("bridge: function not supported, header type: 0x%x", r.Header.Type), gcserr.HrNotImpl))
 }
 
 // NotSupportedHandler creates a default HandlerFunc out of
@@ -119,8 +119,10 @@ type ResponseWriter interface {
 	Header() *prot.MessageHeader
 	// Write a successful response message.
 	Write(interface{})
-	// Error writes the provided error as a response to the message.
-	Error(error)
+	// Error writes the provided error as a response to the message correlated
+	// with the activity ID passed. If the activity ID is the empty string it
+	// will be translated to an empty guid.
+	Error(string, error)
 }
 
 type bridgeResponse struct {
@@ -143,8 +145,12 @@ func (w *requestResponseWriter) Write(r interface{}) {
 	w.respWritten = true
 }
 
-func (w *requestResponseWriter) Error(err error) {
-	resp := &prot.MessageResponseBase{}
+func (w *requestResponseWriter) Error(activityID string, err error) {
+	if activityID == "" {
+		activityID = "00000000-0000-0000-0000-000000000000"
+	}
+
+	resp := &prot.MessageResponseBase{ActivityID: activityID}
 	setErrorForResponseBase(resp, err)
 	w.Write(resp)
 }
@@ -310,29 +316,32 @@ func (b *Bridge) PublishNotification(n *prot.ContainerNotification) {
 }
 
 func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
-	response := &prot.ContainerCreateResponse{MessageResponseBase: newResponseBase()}
 	var request prot.ContainerCreate
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		w.Error(errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message))
+		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message))
 		return
 	}
-	response.ActivityID = request.ActivityID
 
 	// The request contains a JSON string field which is equivalent to a
 	// CreateContainerInfo struct.
 	var settings prot.VMHostedContainerSettings
 	if err := commonutils.UnmarshalJSONWithHresult([]byte(request.ContainerConfig), &settings); err != nil {
-		w.Error(errors.Wrapf(err, "failed to unmarshal JSON for ContainerConfig \"%s\"", request.ContainerConfig))
+		w.Error(request.ActivityID, errors.Wrapf(err, "failed to unmarshal JSON for ContainerConfig \"%s\"", request.ContainerConfig))
 		return
 	}
 
 	id := request.ContainerID
 	if err := b.coreint.CreateContainer(id, settings); err != nil {
-		w.Error(err)
+		w.Error(request.ActivityID, err)
 		return
 	}
 
-	response.SelectedProtocolVersion = prot.PvV3
+	response := &prot.ContainerCreateResponse{
+		MessageResponseBase: &prot.MessageResponseBase{
+			ActivityID: request.ActivityID,
+		},
+		SelectedProtocolVersion: prot.PvV3,
+	}
 	w.Write(response)
 
 	go func() {
@@ -356,226 +365,178 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 }
 
 func (b *Bridge) execProcess(w ResponseWriter, r *Request) {
-	response := &prot.ContainerExecuteProcessResponse{MessageResponseBase: newResponseBase()}
 	var request prot.ContainerExecuteProcess
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		w.Error(errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
+		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
 		return
 	}
+
 	// The request contains a JSON string field which is equivalent to an
 	// ExecuteProcessInfo struct.
 	var params prot.ProcessParameters
 	if err := commonutils.UnmarshalJSONWithHresult([]byte(request.Settings.ProcessParameters), &params); err != nil {
-		w.Error(errors.Wrapf(err, "failed to unmarshal JSON for ProcessParameters \"%s\"", request.Settings.ProcessParameters))
+		w.Error(request.ActivityID, errors.Wrapf(err, "failed to unmarshal JSON for ProcessParameters \"%s\"", request.Settings.ProcessParameters))
 		return
 	}
-
-	// The same message type is used both to execute a process in a container,
-	// and to execute a process in the utility VM itself. This field in the
-	// message determines which operation is performed.
-	if params.IsExternal {
-		b.runExternalProcess(w, r)
-		return
-	}
-
-	response.ActivityID = request.ActivityID
-	id := request.ContainerID
 
 	stdioSet, err := connectStdio(b.Transport, params, request.Settings.VsockStdioRelaySettings)
 	if err != nil {
-		w.Error(err)
+		w.Error(request.ActivityID, err)
 		return
 	}
-	pid, err := b.coreint.ExecProcess(id, params, stdioSet)
+	var pid int
+	if params.IsExternal {
+		pid, err = b.coreint.RunExternalProcess(params, stdioSet)
+	} else {
+		pid, err = b.coreint.ExecProcess(request.ContainerID, params, stdioSet)
+	}
+
 	if err != nil {
 		stdioSet.Close() // stdioSet will be eventually closed by coreint on success
-		w.Error(err)
+		w.Error(request.ActivityID, err)
 		return
 	}
 
-	response.ProcessID = uint32(pid)
+	response := &prot.ContainerExecuteProcessResponse{
+		MessageResponseBase: &prot.MessageResponseBase{
+			ActivityID: request.ActivityID,
+		},
+		ProcessID: uint32(pid),
+	}
 	w.Write(response)
 }
 
 func (b *Bridge) killContainer(w ResponseWriter, r *Request) {
-	response := newResponseBase()
-	var request prot.MessageBase
-	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		w.Error(errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
-		return
-	}
-	response.ActivityID = request.ActivityID
-
-	if err := b.coreint.SignalContainer(request.ContainerID, oslayer.SIGKILL); err != nil {
-		w.Error(err)
-		return
-	}
-
-	w.Write(response)
+	b.signalContainer(w, r, oslayer.SIGKILL)
 }
 
 func (b *Bridge) shutdownContainer(w ResponseWriter, r *Request) {
-	response := newResponseBase()
+	b.signalContainer(w, r, oslayer.SIGTERM)
+}
+
+// signalContainer is not a handler func. This is because the actual signal is
+// implied based on the message type.
+func (b *Bridge) signalContainer(w ResponseWriter, r *Request, signal oslayer.Signal) {
 	var request prot.MessageBase
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		w.Error(errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
-		return
-	}
-	response.ActivityID = request.ActivityID
-
-	if err := b.coreint.SignalContainer(request.ContainerID, oslayer.SIGTERM); err != nil {
-		w.Error(err)
+		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
 		return
 	}
 
+	if err := b.coreint.SignalContainer(request.ContainerID, signal); err != nil {
+		w.Error(request.ActivityID, err)
+		return
+	}
+
+	response := &prot.MessageResponseBase{
+		ActivityID: request.ActivityID,
+	}
 	w.Write(response)
 }
 
 func (b *Bridge) signalProcess(w ResponseWriter, r *Request) {
-	response := newResponseBase()
 	var request prot.ContainerSignalProcess
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		w.Error(errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
+		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
 		return
 	}
-	response.ActivityID = request.ActivityID
 
 	if err := b.coreint.SignalProcess(int(request.ProcessID), request.Options); err != nil {
-		w.Error(err)
+		w.Error(request.ActivityID, err)
 		return
 	}
 
+	response := &prot.MessageResponseBase{
+		ActivityID: request.ActivityID,
+	}
 	w.Write(response)
 }
 
 func (b *Bridge) listProcesses(w ResponseWriter, r *Request) {
-	response := &prot.ContainerGetPropertiesResponse{MessageResponseBase: newResponseBase()}
 	var request prot.ContainerGetProperties
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		w.Error(errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
+		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
 		return
 	}
-	response.ActivityID = request.ActivityID
 	id := request.ContainerID
 
 	processes, err := b.coreint.ListProcesses(id)
 	if err != nil {
-		w.Error(err)
+		w.Error(request.ActivityID, err)
 		return
 	}
 
 	processJSON, err := json.Marshal(processes)
 	if err != nil {
-		w.Error(errors.Wrapf(err, "failed to marshal processes into JSON: %v", processes))
-		return
-	}
-	response.Properties = string(processJSON)
-	w.Write(response)
-}
-
-func (b *Bridge) runExternalProcess(w ResponseWriter, r *Request) {
-	response := &prot.ContainerExecuteProcessResponse{MessageResponseBase: newResponseBase()}
-	var request prot.ContainerExecuteProcess
-	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		w.Error(errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
-		return
-	}
-	response.ActivityID = request.ActivityID
-
-	// The request contains a JSON string field which is equivalent to a
-	// RunExternalProcessInfo struct.
-	var params prot.ProcessParameters
-	if err := commonutils.UnmarshalJSONWithHresult([]byte(request.Settings.ProcessParameters), &params); err != nil {
-		w.Error(errors.Wrapf(err, "failed to unmarshal JSON for ProcessParameters \"%s\"", request.Settings.ProcessParameters))
+		w.Error(request.ActivityID, errors.Wrapf(err, "failed to marshal processes into JSON: %v", processes))
 		return
 	}
 
-	stdioSet, err := connectStdio(b.Transport, params, request.Settings.VsockStdioRelaySettings)
-	if err != nil {
-		w.Error(err)
-		return
+	response := &prot.ContainerGetPropertiesResponse{
+		MessageResponseBase: &prot.MessageResponseBase{
+			ActivityID: request.ActivityID,
+		},
+		Properties: string(processJSON),
 	}
-	pid, err := b.coreint.RunExternalProcess(params, stdioSet)
-	if err != nil {
-		stdioSet.Close() // stdioSet will be eventually closed by coreint on success
-		w.Error(err)
-		return
-	}
-
-	response.ProcessID = uint32(pid)
 	w.Write(response)
 }
 
 func (b *Bridge) waitOnProcess(w ResponseWriter, r *Request) {
-	response := &prot.ContainerWaitForProcessResponse{MessageResponseBase: newResponseBase()}
 	var request prot.ContainerWaitForProcess
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		w.Error(errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
+		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
 		return
 	}
-	response.ActivityID = request.ActivityID
 
 	exitCode, err := b.coreint.WaitProcess(int(request.ProcessID))
 	if err != nil {
-		w.Error(err)
+		w.Error(request.ActivityID, err)
 		return
 	}
 
-	response.ExitCode = uint32(exitCode)
+	response := &prot.ContainerWaitForProcessResponse{
+		MessageResponseBase: &prot.MessageResponseBase{
+			ActivityID: request.ActivityID,
+		},
+		ExitCode: uint32(exitCode),
+	}
 	w.Write(response)
 }
 
 func (b *Bridge) resizeConsole(w ResponseWriter, r *Request) {
-	response := newResponseBase()
 	var request prot.ContainerResizeConsole
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		w.Error(errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
+		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
 		return
 	}
-	response.ActivityID = request.ActivityID
 
 	if err := b.coreint.ResizeConsole(int(request.ProcessID), request.Height, request.Width); err != nil {
-		w.Error(err)
+		w.Error(request.ActivityID, err)
 		return
 	}
 
+	response := &prot.MessageResponseBase{
+		ActivityID: request.ActivityID,
+	}
 	w.Write(response)
 }
 
 func (b *Bridge) modifySettings(w ResponseWriter, r *Request) {
-	response := newResponseBase()
-
-	// We do a high level deserialization of just the base message (container/activity id) as early as possible
-	// so that we can add tracking even if deserialization fails for a lower level later.
-	var base prot.MessageBase
-	err := commonutils.UnmarshalJSONWithHresult(r.Message, &base)
-	if err != nil {
-		w.Error(errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
-		return
-	}
-
-	response.ActivityID = base.ActivityID
-
 	request, err := prot.UnmarshalContainerModifySettings(r.Message)
 	if err != nil {
-		w.Error(errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
+		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
 		return
 	}
 
 	if err := b.coreint.ModifySettings(request.ContainerID, request.Request); err != nil {
-		w.Error(err)
+		w.Error(request.ActivityID, err)
 		return
 	}
 
-	w.Write(response)
-}
-
-// newResponseBase returns a MessageResponseBase with a default value.
-func newResponseBase() *prot.MessageResponseBase {
 	response := &prot.MessageResponseBase{
-		ActivityID: "00000000-0000-0000-0000-000000000000",
+		ActivityID: request.ActivityID,
 	}
-	return response
+	w.Write(response)
 }
 
 // setErrorForResponseBase modifies the passed-in MessageResponseBase to

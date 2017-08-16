@@ -335,17 +335,6 @@ const (
 	RtUpdate = RequestType("Update")
 )
 
-// ResourceModificationSettings contains the configuration specified for a given
-// container setting. The Settings field of ResourceModificationRequestResponse
-// could be of many different types. So, in order to handle this on the GCS
-// side, the Settings field is a struct which embeds all the types it could
-// represent.  That way, when it's unmarshaled, ResourceType is checked and only
-// the relevant fields are filled in.
-type ResourceModificationSettings struct {
-	*MappedVirtualDisk
-	*MappedDirectory
-}
-
 // ResourceModificationRequestResponse details a container resource which should
 // be modified, how, and with what parameters.
 type ResourceModificationRequestResponse struct {
@@ -362,10 +351,9 @@ type ContainerModifySettings struct {
 }
 
 // UnmarshalContainerModifySettings unmarshals the given bytes into a
-// ContainerModifySettings message. This function is required because types such
-// as ResourceModificationSettings which have multiple types embedded (where a
-// given field name may be in multiple of the embedded types) are not properly
-// unmarshaled by the json package without some extra logic.
+// ContainerModifySettings message. This function is required because properties
+// such as `Settings` can be of many types identified by the `ResourceType` and
+// require dynamic unmarshalling.
 func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error) {
 	// Unmarshal the message.
 	var request ContainerModifySettings
@@ -380,20 +368,19 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 	}
 
 	// Fill in the ResourceType-specific fields.
-	settings := ResourceModificationSettings{}
 	switch request.Request.ResourceType {
 	case PtMappedVirtualDisk:
-		settings.MappedVirtualDisk = &MappedVirtualDisk{}
-		if err := commonutils.UnmarshalJSONWithHresult(rawSettings, settings.MappedVirtualDisk); err != nil {
+		mvd := &MappedVirtualDisk{}
+		if err := commonutils.UnmarshalJSONWithHresult(rawSettings, mvd); err != nil {
 			return nil, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDisk")
 		}
-		request.Request.Settings = settings
+		request.Request.Settings = mvd
 	case PtMappedDirectory:
-		settings.MappedDirectory = &MappedDirectory{}
-		if err := commonutils.UnmarshalJSONWithHresult(rawSettings, settings.MappedDirectory); err != nil {
+		md := &MappedDirectory{}
+		if err := commonutils.UnmarshalJSONWithHresult(rawSettings, md); err != nil {
 			return nil, errors.Wrap(err, "failed to unmarshal settings as MappedDirectory")
 		}
-		request.Request.Settings = settings
+		request.Request.Settings = md
 	default:
 		return nil, errors.Errorf("invalid ResourceType '%s'", request.Request.ResourceType)
 	}

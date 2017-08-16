@@ -689,7 +689,7 @@ var _ = Describe("GCS", func() {
 				diskModificationRequest = prot.ResourceModificationRequestResponse{
 					ResourceType: prot.PtMappedVirtualDisk,
 					RequestType:  prot.RtAdd,
-					Settings:     prot.ResourceModificationSettings{MappedVirtualDisk: &mappedVirtualDisk},
+					Settings:     &mappedVirtualDisk,
 				}
 				diskSameLun := prot.MappedVirtualDisk{
 					ContainerPath:     "/path/inside/container",
@@ -700,17 +700,17 @@ var _ = Describe("GCS", func() {
 				diskModificationRequestSameLun = prot.ResourceModificationRequestResponse{
 					ResourceType: prot.PtMappedVirtualDisk,
 					RequestType:  prot.RtAdd,
-					Settings:     prot.ResourceModificationSettings{MappedVirtualDisk: &diskSameLun},
+					Settings:     &diskSameLun,
 				}
 				diskModificationRequestRemove = prot.ResourceModificationRequestResponse{
 					ResourceType: prot.PtMappedVirtualDisk,
 					RequestType:  prot.RtRemove,
-					Settings:     prot.ResourceModificationSettings{MappedVirtualDisk: &mappedVirtualDisk},
+					Settings:     &mappedVirtualDisk,
 				}
 				dirModificationRequest = prot.ResourceModificationRequestResponse{
 					ResourceType: prot.PtMappedDirectory,
 					RequestType:  prot.RtAdd,
-					Settings:     prot.ResourceModificationSettings{MappedDirectory: &mappedDirectory},
+					Settings:     &mappedDirectory,
 				}
 				dirSamePort := prot.MappedDirectory{
 					ContainerPath:     "abcdefghijklmnopqrstuvwxyz",
@@ -721,12 +721,12 @@ var _ = Describe("GCS", func() {
 				dirModificationRequestSamePort = prot.ResourceModificationRequestResponse{
 					ResourceType: prot.PtMappedDirectory,
 					RequestType:  prot.RtAdd,
-					Settings:     prot.ResourceModificationSettings{MappedDirectory: &dirSamePort},
+					Settings:     &dirSamePort,
 				}
 				dirModificationRequestRemove = prot.ResourceModificationRequestResponse{
 					ResourceType: prot.PtMappedDirectory,
 					RequestType:  prot.RtRemove,
-					Settings:     prot.ResourceModificationSettings{MappedDirectory: &mappedDirectory},
+					Settings:     &mappedDirectory,
 				}
 			})
 			Describe("calling CreateContainer", func() {

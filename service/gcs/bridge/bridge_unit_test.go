@@ -495,22 +495,22 @@ func Test_Bridge_ListenAndServe_CorrectHandler_Success(t *testing.T) {
 	resizeFn := func(w ResponseWriter, r *Request) {
 		// Verify the request is as expected.
 		if r.Header.Type != prot.ComputeSystemResizeConsoleV1 {
-			w.Error(errors.New("bridge_test: wrong request type"))
+			w.Error("", errors.New("bridge_test: wrong request type"))
 			return
 		}
 		if r.Header.ID != prot.SequenceID(1) {
-			w.Error(errors.New("bridge_test: wrong sequence id"))
+			w.Error("", errors.New("bridge_test: wrong sequence id"))
 			return
 		}
 
 		rBody := prot.ContainerResizeConsole{}
 
 		if err := json.Unmarshal(r.Message, &rBody); err != nil {
-			w.Error(errors.New("failed to unmarshal body"))
+			w.Error("", errors.New("failed to unmarshal body"))
 			return
 		}
 		if message.ContainerID != rBody.ContainerID {
-			w.Error(errors.New("containerID of source and handler func not equal"))
+			w.Error("", errors.New("containerID of source and handler func not equal"))
 			return
 		}
 

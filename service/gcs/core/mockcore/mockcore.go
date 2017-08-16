@@ -2,6 +2,8 @@
 package mockcore
 
 import (
+	"sync"
+
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
@@ -17,6 +19,9 @@ const (
 	Success = iota
 	// Error specifies method calls should return an error.
 	Error
+	// SingleSuccess specifies that the first method call should succeed and additional
+	// calls should return an error.
+	SingleSuccess
 )
 
 // CreateContainerCall captures the arguments of CreateContainer.
@@ -82,7 +87,7 @@ type WaitProcessCall struct {
 // interface. Arguments passed to one of its methods are stored to be queried
 // later.
 type MockCore struct {
-	Behavior                      Behavior
+	Behavior               Behavior
 	LastCreateContainer    CreateContainerCall
 	LastExecProcess        ExecProcessCall
 	LastSignalContainer    SignalContainerCall
@@ -93,6 +98,7 @@ type MockCore struct {
 	LastResizeConsole      ResizeConsoleCall
 	LastWaitContainer      WaitContainerCall
 	LastWaitProcess        WaitProcessCall
+	WaitContainerWg        sync.WaitGroup
 }
 
 // behaviorResulout produces the correct result given the MockCore's Behavior.
@@ -102,6 +108,9 @@ func (c *MockCore) behaviorResult() error {
 		return nil
 	case Error:
 		return errors.New("mockcore error")
+	case SingleSuccess:
+		c.Behavior = Error
+		return nil
 	default:
 		return nil
 	}
@@ -186,15 +195,16 @@ func (c *MockCore) ResizeConsole(pid int, height, width uint16) error {
 // WaitContainer captures its arguments and returns a nil error.
 func (c *MockCore) WaitContainer(id string) (int, error) {
 	c.LastWaitContainer = WaitContainerCall{
-		ID = id,
+		ID: id,
 	}
+	c.WaitContainerWg.Done()
 	return -1, c.behaviorResult()
 }
 
 // WaitProcess captures its arguments and returns a nil error.
 func (c *MockCore) WaitProcess(pid int) (int, error) {
 	c.LastWaitProcess = WaitProcessCall{
-		Pid = pid,
+		Pid: pid,
 	}
 	return -1, c.behaviorResult()
 }
