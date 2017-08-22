@@ -49,13 +49,14 @@ func (c *container) Pid() int {
 }
 
 func (c *container) Tty() *stdio.TtyRelay {
-	return c.init.relay
+	return c.init.ttyRelay
 }
 
 type process struct {
-	c     *container
-	pid   int
-	relay *stdio.TtyRelay
+	c         *container
+	pid       int
+	ttyRelay  *stdio.TtyRelay
+	pipeRelay *stdio.PipeRelay
 }
 
 func (p *process) Pid() int {
@@ -63,7 +64,7 @@ func (p *process) Pid() int {
 }
 
 func (p *process) Tty() *stdio.TtyRelay {
-	return p.relay
+	return p.ttyRelay
 }
 
 // NewRuntime instantiates a new runcRuntime struct.
@@ -385,8 +386,11 @@ func (r *runcRuntime) waitOnProcess(pid int) (oslayer.ProcessExitState, error) {
 
 func (p *process) Wait() (oslayer.ProcessExitState, error) {
 	state, err := p.c.r.waitOnProcess(p.pid)
-	if p.relay != nil {
-		p.relay.Wait()
+	if p.ttyRelay != nil {
+		p.ttyRelay.Wait()
+	}
+	if p.pipeRelay != nil {
+		p.pipeRelay.Wait()
 	}
 	return state, err
 }
@@ -515,13 +519,17 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioS
 
 	cmd := exec.Command("runc", args...)
 
+	var pipeRelay *stdio.PipeRelay
 	if !hasTerminal {
-		fileSet, err := stdioSet.Files()
+		pipeRelay, err = stdioSet.NewPipeRelay()
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to create a pipe relay connection set for container %s", c.id)
+		}
+		fileSet, err := pipeRelay.Files()
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to get files for connection set for container %s", c.id)
 		}
 		defer fileSet.Close()
-		defer stdioSet.Close()
 		if fileSet.In != nil {
 			cmd.Stdin = fileSet.In
 		}
@@ -537,7 +545,7 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioS
 		return nil, errors.Wrapf(err, "failed to run runc create/exec call for container %s", c.id)
 	}
 
-	var relay *stdio.TtyRelay
+	var ttyRelay *stdio.TtyRelay
 	if hasTerminal {
 		var master *os.File
 		master, err = c.r.getMasterFromSocket(sockListener)
@@ -551,7 +559,7 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioS
 				master.Close()
 			}
 		}()
-		relay = stdioSet.NewTtyRelay(master)
+		ttyRelay = stdioSet.NewTtyRelay(master)
 	}
 
 	// Rename the process's directory to its pid.
@@ -563,8 +571,11 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioS
 		return nil, err
 	}
 
-	if relay != nil {
-		relay.Start()
+	if ttyRelay != nil {
+		ttyRelay.Start()
 	}
-	return &process{c: c, pid: pid, relay: relay}, nil
+	if pipeRelay != nil {
+		pipeRelay.Start()
+	}
+	return &process{c: c, pid: pid, ttyRelay: ttyRelay, pipeRelay: pipeRelay}, nil
 }
