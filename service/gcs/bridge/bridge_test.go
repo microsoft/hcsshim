@@ -40,6 +40,7 @@ type TestResourceModificationSettings struct {
 var _ = Describe("Bridge", func() {
 	Describe("unittests", func() {
 		var (
+			bridge         *bridge
 			connChannel    chan *transport.MockConnection
 			tport          *transport.MockTransport
 			coreint        *mockcore.MockCore
@@ -61,7 +62,7 @@ var _ = Describe("Bridge", func() {
 			// from the channel on the test side.
 			connChannel = make(chan *transport.MockConnection, 16)
 			tport = &transport.MockTransport{Channel: connChannel}
-			coreint = &mockcore.MockCore{}
+			coreint = &mockcore.MockCore{Behavior: mockcore.Success}
 
 			containerID = "01234567-89ab-cdef-0123-456789abcdef"
 			processID = 101
@@ -74,10 +75,10 @@ var _ = Describe("Bridge", func() {
 		JustBeforeEach(func(done Done) {
 			defer close(done)
 
-			b := NewBridge(tport, coreint)
+			bridge = NewBridge(tport, coreint)
 			go func() {
 				defer GinkgoRecover()
-				b.CommandLoop()
+				bridge.CommandLoop()
 			}()
 			commandConn = <-connChannel
 			Expect(commandConn).NotTo(BeNil())
@@ -114,6 +115,15 @@ var _ = Describe("Bridge", func() {
 				Expect(responseBase.ActivityID).To(Equal(activityID))
 			})
 		}
+		TestErrorResponse := func() {
+			Context("error produced by core", func() {
+				BeforeEach(func() {
+					coreint.Behavior = mockcore.Error
+				})
+				AssertResponseErrors("")
+				AssertActivityIDCorrect()
+			})
+		}
 
 		Describe("calling createContainer", func() {
 			var (
@@ -123,6 +133,46 @@ var _ = Describe("Bridge", func() {
 			)
 			BeforeEach(func() {
 				messageType = prot.ComputeSystemCreateV1
+				settings = prot.VMHostedContainerSettings{
+					Layers:          []prot.Layer{prot.Layer{Path: "0"}, prot.Layer{Path: "1"}, prot.Layer{Path: "2"}},
+					SandboxDataPath: "3",
+					MappedVirtualDisks: []prot.MappedVirtualDisk{
+						prot.MappedVirtualDisk{
+							ContainerPath:     "/path/inside/container",
+							Lun:               4,
+							CreateInUtilityVM: true,
+							ReadOnly:          false,
+						},
+					},
+					NetworkAdapters: []prot.NetworkAdapter{
+						prot.NetworkAdapter{
+							AdapterInstanceID:  "00000000-0000-0000-0000-000000000000",
+							FirewallEnabled:    false,
+							NatEnabled:         true,
+							AllocatedIPAddress: "192.168.0.0",
+							HostIPAddress:      "192.168.0.1",
+							HostIPPrefixLength: 16,
+							HostDNSServerList:  "0.0.0.0 1.1.1.1 8.8.8.8",
+							HostDNSSuffix:      "microsoft.com",
+							EnableLowMetric:    true,
+						},
+					},
+				}
+				settingsBytes, err := json.Marshal(settings)
+				Expect(err).NotTo(HaveOccurred())
+				message = prot.ContainerCreate{
+					MessageBase: &prot.MessageBase{
+						ContainerID: containerID,
+						ActivityID:  activityID,
+					},
+					ContainerConfig: string(settingsBytes),
+					SupportedVersions: prot.ProtocolSupport{
+						MinimumVersion:         "V3",
+						MaximumVersion:         "V3",
+						MinimumProtocolVersion: prot.PvV3,
+						MaximumProtocolVersion: prot.PvV3,
+					},
+				}
 			})
 			JustBeforeEach(func() {
 				response = prot.ContainerCreateResponse{}
@@ -131,49 +181,7 @@ var _ = Describe("Bridge", func() {
 				responseBase = response.MessageResponseBase
 				createCallArgs = coreint.LastCreateContainer
 			})
-			Context("the message is normal ASCII", func() {
-				BeforeEach(func() {
-					settings = prot.VMHostedContainerSettings{
-						Layers:          []prot.Layer{prot.Layer{Path: "0"}, prot.Layer{Path: "1"}, prot.Layer{Path: "2"}},
-						SandboxDataPath: "3",
-						MappedVirtualDisks: []prot.MappedVirtualDisk{
-							prot.MappedVirtualDisk{
-								ContainerPath:     "/path/inside/container",
-								Lun:               4,
-								CreateInUtilityVM: true,
-								ReadOnly:          false,
-							},
-						},
-						NetworkAdapters: []prot.NetworkAdapter{
-							prot.NetworkAdapter{
-								AdapterInstanceID:  "00000000-0000-0000-0000-000000000000",
-								FirewallEnabled:    false,
-								NatEnabled:         true,
-								AllocatedIPAddress: "192.168.0.0",
-								HostIPAddress:      "192.168.0.1",
-								HostIPPrefixLength: 16,
-								HostDNSServerList:  "0.0.0.0 1.1.1.1 8.8.8.8",
-								HostDNSSuffix:      "microsoft.com",
-								EnableLowMetric:    true,
-							},
-						},
-					}
-					settingsBytes, err := json.Marshal(settings)
-					Expect(err).NotTo(HaveOccurred())
-					message = prot.ContainerCreate{
-						MessageBase: &prot.MessageBase{
-							ContainerID: containerID,
-							ActivityID:  activityID,
-						},
-						ContainerConfig: string(settingsBytes),
-						SupportedVersions: prot.ProtocolSupport{
-							MinimumVersion:         "V3",
-							MaximumVersion:         "V3",
-							MinimumProtocolVersion: prot.PvV3,
-							MaximumProtocolVersion: prot.PvV3,
-						},
-					}
-				})
+			Context("no error produced by core", func() {
 				AssertNoResponseErrors()
 				AssertActivityIDCorrect()
 				It("should respond with the correct values", func() {
@@ -213,6 +221,7 @@ var _ = Describe("Bridge", func() {
 					})
 				})
 			})
+			TestErrorResponse()
 		})
 
 		Describe("calling execProcess", func() {
@@ -315,17 +324,20 @@ var _ = Describe("Bridge", func() {
 							},
 						}
 					})
-					AssertNoResponseErrors()
-					AssertActivityIDCorrect()
-					It("should respond with the correct values", func() {
-						Expect(response.ProcessID).To(Equal(uint32(101)))
+					Context("no error produced by core", func() {
+						AssertNoResponseErrors()
+						AssertActivityIDCorrect()
+						It("should respond with the correct values", func() {
+							Expect(response.ProcessID).To(Equal(uint32(101)))
+						})
+						It("should have received the correct values", func() {
+							Expect(callArgs.ID).To(Equal(containerID))
+							Expect(callArgs.Params).To(Equal(params))
+							// TODO: How to test this? Do we want to?
+							//Expect(callArgs.StdioSet).To(Equal(stdioSet))
+						})
 					})
-					It("should have received the correct values", func() {
-						Expect(callArgs.ID).To(Equal(containerID))
-						Expect(callArgs.Params).To(Equal(params))
-						// TODO: How to test this? Do we want to?
-						//Expect(callArgs.StdioSet).To(Equal(stdioSet))
-					})
+					TestErrorResponse()
 				})
 			}
 		})
@@ -390,16 +402,19 @@ var _ = Describe("Bridge", func() {
 							},
 						}
 					})
-					AssertNoResponseErrors()
-					AssertActivityIDCorrect()
-					It("should respond with the correct values", func() {
-						Expect(response.ProcessID).To(Equal(uint32(101)))
+					Context("no error produced by core", func() {
+						AssertNoResponseErrors()
+						AssertActivityIDCorrect()
+						It("should respond with the correct values", func() {
+							Expect(response.ProcessID).To(Equal(uint32(101)))
+						})
+						It("should have received the correct values", func() {
+							Expect(callArgs.Params).To(Equal(params))
+							// TODO: How to test this? Do we want to?
+							//Expect(callArgs.StdioSet).To(Equal(stdioSet))
+						})
 					})
-					It("should have received the correct values", func() {
-						Expect(callArgs.Params).To(Equal(params))
-						// TODO: How to test this? Do we want to?
-						//Expect(callArgs.StdioSet).To(Equal(stdioSet))
-					})
+					TestErrorResponse()
 				})
 			}
 		})
@@ -411,6 +426,10 @@ var _ = Describe("Bridge", func() {
 			)
 			BeforeEach(func() {
 				messageType = prot.ComputeSystemShutdownForcedV1
+				message = prot.MessageBase{
+					ContainerID: containerID,
+					ActivityID:  activityID,
+				}
 			})
 			JustBeforeEach(func() {
 				response = prot.MessageResponseBase{}
@@ -419,13 +438,7 @@ var _ = Describe("Bridge", func() {
 				responseBase = &response
 				callArgs = coreint.LastSignalContainer
 			})
-			Context("the message is normal ASCII", func() {
-				BeforeEach(func() {
-					message = prot.MessageBase{
-						ContainerID: containerID,
-						ActivityID:  activityID,
-					}
-				})
+			Context("no error produced by core", func() {
 				AssertNoResponseErrors()
 				AssertActivityIDCorrect()
 				It("should receive the correct values", func() {
@@ -433,6 +446,7 @@ var _ = Describe("Bridge", func() {
 					Expect(callArgs.Signal).To(Equal(oslayer.SIGKILL))
 				})
 			})
+			TestErrorResponse()
 		})
 
 		Describe("calling shutdownContainer", func() {
@@ -442,6 +456,10 @@ var _ = Describe("Bridge", func() {
 			)
 			BeforeEach(func() {
 				messageType = prot.ComputeSystemShutdownGracefulV1
+				message = prot.MessageBase{
+					ContainerID: containerID,
+					ActivityID:  activityID,
+				}
 			})
 			JustBeforeEach(func() {
 				response = prot.MessageResponseBase{}
@@ -450,13 +468,7 @@ var _ = Describe("Bridge", func() {
 				responseBase = &response
 				callArgs = coreint.LastSignalContainer
 			})
-			Context("the message is normal ASCII", func() {
-				BeforeEach(func() {
-					message = prot.MessageBase{
-						ContainerID: containerID,
-						ActivityID:  activityID,
-					}
-				})
+			Context("no error produced by core", func() {
 				AssertNoResponseErrors()
 				AssertActivityIDCorrect()
 				It("should receive the correct values", func() {
@@ -464,6 +476,7 @@ var _ = Describe("Bridge", func() {
 					Expect(callArgs.Signal).To(Equal(oslayer.SIGTERM))
 				})
 			})
+			TestErrorResponse()
 		})
 
 		Describe("calling signalProcess", func() {
@@ -474,6 +487,14 @@ var _ = Describe("Bridge", func() {
 			)
 			BeforeEach(func() {
 				messageType = prot.ComputeSystemSignalProcessV1
+				message = prot.ContainerSignalProcess{
+					MessageBase: &prot.MessageBase{
+						ContainerID: containerID,
+						ActivityID:  activityID,
+					},
+					ProcessID: processID,
+					Options:   options,
+				}
 				options = prot.SignalProcessOptions{Signal: int32(syscall.SIGKILL)}
 			})
 			JustBeforeEach(func() {
@@ -483,17 +504,7 @@ var _ = Describe("Bridge", func() {
 				responseBase = &response
 				callArgs = coreint.LastSignalProcess
 			})
-			Context("the message is normal ASCII", func() {
-				BeforeEach(func() {
-					message = prot.ContainerSignalProcess{
-						MessageBase: &prot.MessageBase{
-							ContainerID: containerID,
-							ActivityID:  activityID,
-						},
-						ProcessID: processID,
-						Options:   options,
-					}
-				})
+			Context("no error produced by core", func() {
 				AssertNoResponseErrors()
 				AssertActivityIDCorrect()
 				It("should receive the correct values", func() {
@@ -501,6 +512,7 @@ var _ = Describe("Bridge", func() {
 					Expect(callArgs.Options).To(Equal(options))
 				})
 			})
+			TestErrorResponse()
 		})
 
 		Describe("calling listProcesses", func() {
@@ -510,6 +522,12 @@ var _ = Describe("Bridge", func() {
 			)
 			BeforeEach(func() {
 				messageType = prot.ComputeSystemGetPropertiesV1
+				message = prot.ContainerGetProperties{
+					MessageBase: &prot.MessageBase{
+						ContainerID: containerID,
+						ActivityID:  activityID,
+					},
+				}
 			})
 			JustBeforeEach(func() {
 				response = prot.ContainerGetPropertiesResponse{}
@@ -518,15 +536,7 @@ var _ = Describe("Bridge", func() {
 				responseBase = response.MessageResponseBase
 				callArgs = coreint.LastListProcesses
 			})
-			Context("the message is normal ASCII", func() {
-				BeforeEach(func() {
-					message = prot.ContainerGetProperties{
-						MessageBase: &prot.MessageBase{
-							ContainerID: containerID,
-							ActivityID:  activityID,
-						},
-					}
-				})
+			Context("no error produced by core", func() {
 				AssertNoResponseErrors()
 				AssertActivityIDCorrect()
 				It("should respond with the correct values", func() {
@@ -545,6 +555,7 @@ var _ = Describe("Bridge", func() {
 					Expect(callArgs.ID).To(Equal(containerID))
 				})
 			})
+			TestErrorResponse()
 		})
 
 		Describe("calling waitOnProcess", func() {
@@ -554,6 +565,14 @@ var _ = Describe("Bridge", func() {
 			)
 			BeforeEach(func() {
 				messageType = prot.ComputeSystemWaitForProcessV1
+				message = prot.ContainerWaitForProcess{
+					MessageBase: &prot.MessageBase{
+						ContainerID: containerID,
+						ActivityID:  activityID,
+					},
+					ProcessID:   101,
+					TimeoutInMs: 1000,
+				}
 			})
 			JustBeforeEach(func() {
 				response = prot.ContainerWaitForProcessResponse{}
@@ -562,17 +581,7 @@ var _ = Describe("Bridge", func() {
 				responseBase = response.MessageResponseBase
 				callArgs = coreint.LastRegisterProcessExitHook
 			})
-			Context("the message is normal ASCII", func() {
-				BeforeEach(func() {
-					message = prot.ContainerWaitForProcess{
-						MessageBase: &prot.MessageBase{
-							ContainerID: containerID,
-							ActivityID:  activityID,
-						},
-						ProcessID:   101,
-						TimeoutInMs: 1000,
-					}
-				})
+			Context("no error produced by core", func() {
 				AssertNoResponseErrors()
 				AssertActivityIDCorrect()
 				It("should respond with the correct values", func() {
@@ -582,6 +591,7 @@ var _ = Describe("Bridge", func() {
 					Expect(callArgs.Pid).To(Equal(101))
 				})
 			})
+			TestErrorResponse()
 		})
 
 		Describe("calling resizeConsole", func() {
@@ -591,6 +601,15 @@ var _ = Describe("Bridge", func() {
 			)
 			BeforeEach(func() {
 				messageType = prot.ComputeSystemResizeConsoleV1
+				message = prot.ContainerResizeConsole{
+					MessageBase: &prot.MessageBase{
+						ContainerID: containerID,
+						ActivityID:  activityID,
+					},
+					ProcessID: 101,
+					Height:    30,
+					Width:     72,
+				}
 			})
 			JustBeforeEach(func() {
 				response = prot.MessageResponseBase{}
@@ -599,18 +618,7 @@ var _ = Describe("Bridge", func() {
 				responseBase = &response
 				callArgs = coreint.LastResizeConsole
 			})
-			Context("the message is normal ASCII", func() {
-				BeforeEach(func() {
-					message = prot.ContainerResizeConsole{
-						MessageBase: &prot.MessageBase{
-							ContainerID: containerID,
-							ActivityID:  activityID,
-						},
-						ProcessID: 101,
-						Height:    30,
-						Width:     72,
-					}
-				})
+			Context("no error produced by core", func() {
 				AssertNoResponseErrors()
 				AssertActivityIDCorrect()
 				It("should receive the correct values", func() {
@@ -619,6 +627,7 @@ var _ = Describe("Bridge", func() {
 					Expect(callArgs.Width).To(Equal(uint16(72)))
 				})
 			})
+			TestErrorResponse()
 		})
 
 		Describe("calling modifySettings", func() {
@@ -633,6 +642,63 @@ var _ = Describe("Bridge", func() {
 			)
 			BeforeEach(func() {
 				messageType = prot.ComputeSystemModifySettingsV1
+				disk := prot.MappedVirtualDisk{
+					ContainerPath:     "/path/inside/container",
+					Lun:               4,
+					CreateInUtilityVM: true,
+					ReadOnly:          false,
+				}
+				modificationRequest = prot.ResourceModificationRequestResponse{
+					ResourceType: prot.PtMappedVirtualDisk,
+					RequestType:  prot.RtAdd,
+					Settings:     prot.ResourceModificationSettings{MappedVirtualDisk: &disk},
+				}
+
+				// The "ToSend" modification requests are created using
+				// TestResourceModificationSettings, which means they can be
+				// safely marshalled into JSON and sent without running into
+				// the JSON marshaller's problem with ambiguous field names
+				// from embedded types.
+				modificationRequestToSend = prot.ResourceModificationRequestResponse{
+					ResourceType: prot.PtMappedVirtualDisk,
+					RequestType:  prot.RtAdd,
+					Settings: TestResourceModificationSettings{
+						ContainerPath:     disk.ContainerPath,
+						Lun:               disk.Lun,
+						CreateInUtilityVM: disk.CreateInUtilityVM,
+						ReadOnly:          disk.ReadOnly,
+					},
+				}
+				defaultModificationRequestToSend = prot.ResourceModificationRequestResponse{
+					ResourceType: "",
+					RequestType:  "",
+					Settings: TestResourceModificationSettings{
+						ContainerPath:     disk.ContainerPath,
+						Lun:               disk.Lun,
+						CreateInUtilityVM: disk.CreateInUtilityVM,
+						ReadOnly:          disk.ReadOnly,
+					},
+				}
+				unsupportedModificationRequestToSend = prot.ResourceModificationRequestResponse{
+					ResourceType: prot.PtMemory,
+					RequestType:  prot.RtAdd,
+					Settings: TestResourceModificationSettings{
+						ContainerPath:     disk.ContainerPath,
+						Lun:               disk.Lun,
+						CreateInUtilityVM: disk.CreateInUtilityVM,
+						ReadOnly:          disk.ReadOnly,
+					},
+				}
+				modificationRequestToSendAttachOnly = prot.ResourceModificationRequestResponse{
+					ResourceType: prot.PtMappedVirtualDisk,
+					RequestType:  prot.RtAdd,
+					Settings: TestResourceModificationSettings{
+						ContainerPath:     disk.ContainerPath,
+						Lun:               disk.Lun,
+						CreateInUtilityVM: disk.CreateInUtilityVM,
+						AttachOnly:        true,
+					},
+				}
 			})
 			JustBeforeEach(func() {
 				response = prot.MessageResponseBase{}
@@ -641,76 +707,17 @@ var _ = Describe("Bridge", func() {
 				responseBase = &response
 				callArgs = coreint.LastModifySettings
 			})
-			Context("the message is normal ASCII", func() {
+			Context("using non-empty ResourceType and RequestType", func() {
 				BeforeEach(func() {
-					disk := prot.MappedVirtualDisk{
-						ContainerPath:     "/path/inside/container",
-						Lun:               4,
-						CreateInUtilityVM: true,
-						ReadOnly:          false,
-					}
-					modificationRequest = prot.ResourceModificationRequestResponse{
-						ResourceType: prot.PtMappedVirtualDisk,
-						RequestType:  prot.RtAdd,
-						Settings:     prot.ResourceModificationSettings{MappedVirtualDisk: &disk},
-					}
-
-					// The "ToSend" modification requests are created using
-					// TestResourceModificationSettings, which means they can be
-					// safely marshalled into JSON and sent without running into
-					// the JSON marshaller's problem with ambiguous field names
-					// from embedded types.
-					modificationRequestToSend = prot.ResourceModificationRequestResponse{
-						ResourceType: prot.PtMappedVirtualDisk,
-						RequestType:  prot.RtAdd,
-						Settings: TestResourceModificationSettings{
-							ContainerPath:     disk.ContainerPath,
-							Lun:               disk.Lun,
-							CreateInUtilityVM: disk.CreateInUtilityVM,
-							ReadOnly:          disk.ReadOnly,
+					message = prot.ContainerModifySettings{
+						MessageBase: &prot.MessageBase{
+							ContainerID: containerID,
+							ActivityID:  activityID,
 						},
-					}
-					defaultModificationRequestToSend = prot.ResourceModificationRequestResponse{
-						ResourceType: "",
-						RequestType:  "",
-						Settings: TestResourceModificationSettings{
-							ContainerPath:     disk.ContainerPath,
-							Lun:               disk.Lun,
-							CreateInUtilityVM: disk.CreateInUtilityVM,
-							ReadOnly:          disk.ReadOnly,
-						},
-					}
-					unsupportedModificationRequestToSend = prot.ResourceModificationRequestResponse{
-						ResourceType: prot.PtMemory,
-						RequestType:  prot.RtAdd,
-						Settings: TestResourceModificationSettings{
-							ContainerPath:     disk.ContainerPath,
-							Lun:               disk.Lun,
-							CreateInUtilityVM: disk.CreateInUtilityVM,
-							ReadOnly:          disk.ReadOnly,
-						},
-					}
-					modificationRequestToSendAttachOnly = prot.ResourceModificationRequestResponse{
-						ResourceType: prot.PtMappedVirtualDisk,
-						RequestType:  prot.RtAdd,
-						Settings: TestResourceModificationSettings{
-							ContainerPath:     disk.ContainerPath,
-							Lun:               disk.Lun,
-							CreateInUtilityVM: disk.CreateInUtilityVM,
-							AttachOnly:        true,
-						},
+						Request: modificationRequestToSend,
 					}
 				})
-				Context("using non-empty ResourceType and RequestType", func() {
-					BeforeEach(func() {
-						message = prot.ContainerModifySettings{
-							MessageBase: &prot.MessageBase{
-								ContainerID: containerID,
-								ActivityID:  activityID,
-							},
-							Request: modificationRequestToSend,
-						}
-					})
+				Context("no error produced by core", func() {
 					AssertNoResponseErrors()
 					AssertActivityIDCorrect()
 					It("should receive the correct values", func() {
@@ -718,45 +725,46 @@ var _ = Describe("Bridge", func() {
 						Expect(callArgs.Request).To(Equal(modificationRequest))
 					})
 				})
-				Context("using empty ResourceType and RequestType", func() {
-					BeforeEach(func() {
-						message = prot.ContainerModifySettings{
-							MessageBase: &prot.MessageBase{
-								ContainerID: containerID,
-								ActivityID:  activityID,
-							},
-							Request: defaultModificationRequestToSend,
-						}
-					})
-					AssertResponseErrors("invalid ResourceType ''")
-					AssertActivityIDCorrect()
+				TestErrorResponse()
+			})
+			Context("using empty ResourceType and RequestType", func() {
+				BeforeEach(func() {
+					message = prot.ContainerModifySettings{
+						MessageBase: &prot.MessageBase{
+							ContainerID: containerID,
+							ActivityID:  activityID,
+						},
+						Request: defaultModificationRequestToSend,
+					}
 				})
-				Context("using an unsupported ResourceType", func() {
-					BeforeEach(func() {
-						message = prot.ContainerModifySettings{
-							MessageBase: &prot.MessageBase{
-								ContainerID: containerID,
-								ActivityID:  activityID,
-							},
-							Request: unsupportedModificationRequestToSend,
-						}
-					})
-					AssertResponseErrors("invalid ResourceType 'Memory'")
-					AssertActivityIDCorrect()
+				AssertResponseErrors("invalid ResourceType ''")
+				AssertActivityIDCorrect()
+			})
+			Context("using an unsupported ResourceType", func() {
+				BeforeEach(func() {
+					message = prot.ContainerModifySettings{
+						MessageBase: &prot.MessageBase{
+							ContainerID: containerID,
+							ActivityID:  activityID,
+						},
+						Request: unsupportedModificationRequestToSend,
+					}
 				})
-				Context("using AttachOnly true", func() {
-					BeforeEach(func() {
-						message = prot.ContainerModifySettings{
-							MessageBase: &prot.MessageBase{
-								ContainerID: containerID,
-								ActivityID:  activityID,
-							},
-							Request: modificationRequestToSendAttachOnly,
-						}
-					})
-					AssertActivityIDCorrect()
-					AssertNoResponseErrors()
+				AssertResponseErrors("invalid ResourceType 'Memory'")
+				AssertActivityIDCorrect()
+			})
+			Context("using AttachOnly true", func() {
+				BeforeEach(func() {
+					message = prot.ContainerModifySettings{
+						MessageBase: &prot.MessageBase{
+							ContainerID: containerID,
+							ActivityID:  activityID,
+						},
+						Request: modificationRequestToSendAttachOnly,
+					}
 				})
+				AssertActivityIDCorrect()
+				AssertNoResponseErrors()
 			})
 		})
 	})
