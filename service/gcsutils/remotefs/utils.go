@@ -146,3 +146,23 @@ func WriteTarOptions(w io.Writer, opts *archive.TarOptions) error {
 
 	return nil
 }
+
+// ReadFileHeader reads from r and returns a deserialized FileHeader
+func ReadFileHeader(r io.Reader) (*FileHeader, error) {
+	hdr := &FileHeader{}
+	if err := binary.Read(r, binary.BigEndian, hdr); err != nil {
+		return nil, err
+	}
+	return hdr, nil
+}
+
+// WriteFileHeader serializes a FileHeader and writes it to w, along with any extra data
+func WriteFileHeader(w io.Writer, hdr *FileHeader, extraData []byte) error {
+	if err := binary.Write(w, binary.BigEndian, hdr); err != nil {
+		return err
+	}
+	if _, err := w.Write(extraData); err != nil {
+		return err
+	}
+	return nil
+}
