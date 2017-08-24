@@ -11,8 +11,8 @@ import (
 	"path"
 
 	"github.com/Microsoft/opengcs/service/gcsutils/fs"
-	"github.com/sirupsen/logrus"
 	"github.com/docker/docker/pkg/archive"
+	"github.com/sirupsen/logrus"
 )
 
 func createEmptyDisk(in io.Reader,
@@ -148,7 +148,7 @@ func CreateTarDisk(in io.Reader,
 	}
 
 	// Mount the disk and remove the lost+found folder that might appear from mkfs
-	if err := exec.Command("mount", "-o", "loop", disk.Name(), mntFolder).Run(); err != nil {
+	if err := exec.Command("mount", "-t", "ext4", "-o", "loop", disk.Name(), mntFolder).Run(); err != nil {
 		logrus.Infof("failed mount -o loop %s", err)
 		return 0, err
 	}
