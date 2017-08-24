@@ -438,6 +438,7 @@ type NetworkAdapter struct {
 	HostDNSServerList  string `json:"HostDnsServerList,omitempty"`
 	HostDNSSuffix      string `json:"HostDnsSuffix,omitempty"`
 	EnableLowMetric    bool   `json:",omitempty"`
+	EncapOverhead      uint16 `json:",omitempty"`
 }
 
 // MappedVirtualDisk represents a disk on the host which is mapped into a
