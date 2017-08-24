@@ -7,8 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/sirupsen/logrus"
 	"github.com/docker/docker/pkg/archive"
+	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/opengcs/service/gcsutils/fs"
 	"github.com/Microsoft/opengcs/service/gcsutils/tarlib"
@@ -86,7 +86,7 @@ func VHD2Tar(in io.Reader, out io.Writer, options *Options) (int64, error) {
 	}
 	defer os.RemoveAll(mntFolder)
 
-	if err := exec.Command("mount", "-o", "loop", vhdFile.Name(), mntFolder).Run(); err != nil {
+	if err := exec.Command("mount", "-t", "ext4", "-o", "loop", vhdFile.Name(), mntFolder).Run(); err != nil {
 		return 0, err
 	}
 	defer exec.Command("umount", mntFolder).Run()
