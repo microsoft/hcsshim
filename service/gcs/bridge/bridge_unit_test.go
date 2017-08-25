@@ -91,6 +91,20 @@ func TestBridgeMux_HandleFunc_NilHandleFunc_Panic(t *testing.T) {
 	m.HandleFunc(prot.ComputeSystemCreateV1, nil)
 }
 
+func TestBridgeMux_HandleFunc_NilMap_Panic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("The code did not panic on nil handler")
+		}
+	}()
+
+	hIn := func(ResponseWriter, *Request) {
+	}
+
+	m := &Mux{} // Caller didn't use NewBridgeMux (not supported).
+	m.HandleFunc(prot.ComputeSystemCreateV1, hIn)
+}
+
 func Test_Bridge_Mux_HandleFunc_Succeeds(t *testing.T) {
 	var set bool
 	hIn := func(ResponseWriter, *Request) {

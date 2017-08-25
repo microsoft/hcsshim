@@ -66,10 +66,6 @@ func (mux *Mux) Handle(id prot.MessageIdentifier, handler Handler) {
 		panic("bridge: nil handler")
 	}
 
-	if mux.m == nil {
-		panic("bridge: nil handler map, likely didn't call NewBridgeMux")
-	}
-
 	if _, ok := mux.m[id]; ok {
 		logrus.Infof("bridge: overwriting bridge handler for type: 0x%x", id)
 	}
@@ -93,10 +89,6 @@ func (mux *Mux) Handler(r *Request) Handler {
 
 	if r == nil {
 		panic("bridge: nil request to handler")
-	}
-
-	if mux.m == nil {
-		return NotSupportedHandler()
 	}
 
 	var h Handler
