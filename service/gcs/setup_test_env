@@ -10,7 +10,7 @@ go get github.com/onsi/ginkgo/ginkgo
 # Install runc
 go get -d github.com/opencontainers/runc
 cd $GOPATH/src/github.com/opencontainers/runc
-git checkout 992a5be178a62e026f4069f443c6164912adbf09
+git checkout 882d8eaba6682179e397c78d5a40e45fa4d571ce
 go install github.com/opencontainers/runc
 cd $script_dir
 

@@ -643,7 +643,7 @@ func (c *gcsCore) removeMappedDirectories(id string, dirs []prot.MappedDirectory
 }
 
 // processParametersToOCI converts the given ProcessParameters struct into an
-// oci.Process struct for OCI version 1.0.0-rc5-dev. Since ProcessParameters
+// oci.Process struct for OCI version 1.0.0. Since ProcessParameters
 // doesn't include various fields which are available in oci.Process, default
 // values for these fields are chosen.
 func processParametersToOCI(params prot.ProcessParameters) (oci.Process, error) {
@@ -733,8 +733,8 @@ func processParametersToOCI(params prot.ProcessParameters) (oci.Process, error) 
 				"CAP_NET_RAW",
 			},
 		},
-		Rlimits: []oci.LinuxRlimit{
-			oci.LinuxRlimit{Type: "RLIMIT_NOFILE", Hard: 1024, Soft: 1024},
+		Rlimits: []oci.POSIXRlimit{
+			oci.POSIXRlimit{Type: "RLIMIT_NOFILE", Hard: 1024, Soft: 1024},
 		},
 		NoNewPrivileges: true,
 	}, nil

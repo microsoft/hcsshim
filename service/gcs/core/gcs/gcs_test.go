@@ -115,8 +115,8 @@ var _ = Describe("GCS", func() {
 								"CAP_NET_RAW",
 							},
 						},
-						Rlimits: []oci.LinuxRlimit{
-							oci.LinuxRlimit{Type: "RLIMIT_NOFILE", Hard: 1024, Soft: 1024},
+						Rlimits: []oci.POSIXRlimit{
+							oci.POSIXRlimit{Type: "RLIMIT_NOFILE", Hard: 1024, Soft: 1024},
 						},
 						NoNewPrivileges: true,
 					}))
@@ -213,8 +213,8 @@ var _ = Describe("GCS", func() {
 								"CAP_NET_RAW",
 							},
 						},
-						Rlimits: []oci.LinuxRlimit{
-							oci.LinuxRlimit{Type: "RLIMIT_NOFILE", Hard: 1024, Soft: 1024},
+						Rlimits: []oci.POSIXRlimit{
+							oci.POSIXRlimit{Type: "RLIMIT_NOFILE", Hard: 1024, Soft: 1024},
 						},
 						NoNewPrivileges: true,
 					}))
@@ -311,8 +311,8 @@ var _ = Describe("GCS", func() {
 								"CAP_NET_RAW",
 							},
 						},
-						Rlimits: []oci.LinuxRlimit{
-							oci.LinuxRlimit{Type: "RLIMIT_NOFILE", Hard: 1024, Soft: 1024},
+						Rlimits: []oci.POSIXRlimit{
+							oci.POSIXRlimit{Type: "RLIMIT_NOFILE", Hard: 1024, Soft: 1024},
 						},
 						NoNewPrivileges: true,
 					}))

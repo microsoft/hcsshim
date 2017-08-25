@@ -267,21 +267,20 @@ var _ = Describe("Bridge", func() {
 							CreateStdErrPipe: true,
 							IsExternal:       false,
 							OCISpecification: oci.Spec{
-								Version:  "1.0.0-rc5-dev",
-								Platform: oci.Platform{OS: "linux", Arch: "amd64"},
-								Process: oci.Process{
+								Version:  "1.0.0",
+								Process: &oci.Process{
 									Terminal:        true,
 									User:            oci.User{UID: 1001, GID: 1001, AdditionalGids: []uint32{0, 1, 2}},
 									Args:            []string{"sh", "-c", "testexe"},
 									Env:             []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "TERM=xterm"},
 									Cwd:             "/bin",
 									Capabilities:    &oci.LinuxCapabilities{Bounding: []string{"CAP_AUDIT_WRITE", "CAP_KILL", "CAP_NET_BIND_SERVICE"}},
-									Rlimits:         []oci.LinuxRlimit{oci.LinuxRlimit{Type: "RLIMIT_NOFILE", Hard: 1024, Soft: 1024}},
+									Rlimits:         []oci.POSIXRlimit{oci.POSIXRlimit{Type: "RLIMIT_NOFILE", Hard: 1024, Soft: 1024}},
 									NoNewPrivileges: true,
 									ApparmorProfile: "testing",
 									SelinuxLabel:    "testing",
 								},
-								Root:     oci.Root{Path: "rootfs", Readonly: true},
+								Root:     &oci.Root{Path: "rootfs", Readonly: true},
 								Hostname: "test",
 								Mounts:   []oci.Mount{oci.Mount{Destination: "/dev", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid"}}},
 								Hooks: &oci.Hooks{

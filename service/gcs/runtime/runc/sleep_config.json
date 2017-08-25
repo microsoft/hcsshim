@@ -1,5 +1,5 @@
 {
-	"ociVersion": "1.0.0-rc5",
+	"ociVersion": "1.0.0",
 	"platform": {
 		"os": "linux",
 		"arch": "amd64"
