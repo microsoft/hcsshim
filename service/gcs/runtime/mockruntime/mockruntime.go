@@ -20,7 +20,7 @@ type mockRuntime struct {
 var _ runtime.Runtime = &mockRuntime{}
 
 // NewRuntime constructs a new mockRuntime with the default settings.
-func NewRuntime() *mockRuntime {
+func NewRuntime() runtime.Runtime {
 	var lock sync.Mutex
 	return &mockRuntime{killed: sync.NewCond(&lock)}
 }

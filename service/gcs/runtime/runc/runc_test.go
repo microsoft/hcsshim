@@ -70,7 +70,7 @@ func newTestConnectionSet(in, out, err bool) (clientSet *stdio.ConnectionSet, se
 	return clientSet, serverSet
 }
 
-func cleanupContainers(rtime *runcRuntime, containers []runtime.Container) error {
+func cleanupContainers(containers []runtime.Container) error {
 	var errToReturn error
 	if err := attemptKillAndDeleteAllContainers(containers); err != nil {
 		io.WriteString(GinkgoWriter, err.Error())
@@ -155,9 +155,8 @@ func removeSubdirs(parentDir string) error {
 	if _, err := os.Stat(parentDir); err != nil {
 		if os.IsNotExist(err) {
 			return nil
-		} else {
-			return err
 		}
+		return err
 	}
 	dir, err := os.Open(parentDir)
 	if err != nil {
@@ -192,7 +191,7 @@ func removeSubdirs(parentDir string) error {
 
 var _ = Describe("runC", func() {
 	var (
-		rtime              *runcRuntime
+		rtime              runtime.Runtime
 		cwd                string
 		bundlePath         string
 		configFile         string
@@ -227,7 +226,7 @@ var _ = Describe("runC", func() {
 	AfterEach(func() {
 		var cerr error
 
-		err := cleanupContainers(rtime, containers)
+		err := cleanupContainers(containers)
 		if err != nil {
 			cerr = err
 		}
@@ -678,7 +677,8 @@ var _ = Describe("runC", func() {
 							Expect(err).NotTo(HaveOccurred())
 						})
 						It("should delete the process", func() {
-							Expect(rtime.getProcessDir(id, p.Pid())).NotTo(BeADirectory())
+							rt := rtime.(*runcRuntime)
+							Expect(rt.getProcessDir(id, p.Pid())).NotTo(BeADirectory())
 						})
 					})
 

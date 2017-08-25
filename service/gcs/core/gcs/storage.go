@@ -263,8 +263,8 @@ func (c *gcsCore) mountMappedDirectories(dirs []prot.MappedDirectory) error {
 		if err := c.OS.MkdirAll(dir.ContainerPath, 0700); err != nil {
 			return errors.Wrapf(err, "failed to create directory for mapped directory %s", dir.ContainerPath)
 		}
-		var mountOptions uintptr = 0
-		var data string = fmt.Sprintf("trans=vsock,port=%d", dir.Port)
+		var mountOptions uintptr
+		data := fmt.Sprintf("trans=vsock,port=%d", dir.Port)
 		if dir.ReadOnly {
 			mountOptions |= syscall.MS_RDONLY
 			data += ",noload"

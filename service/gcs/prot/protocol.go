@@ -38,9 +38,14 @@ const (
 type MessageType uint32
 
 const (
-	MtNone         = 0
-	MtRequest      = 0x10000000
-	MtResponse     = 0x20000000
+	// MtNone is the default MessageHeader.Type.
+	MtNone = 0
+	// MtRequest is the MessageHeader.Type when a request is recieved.
+	MtRequest = 0x10000000
+	// MtResponse is the MessageHeader.Type used to send a response.
+	MtResponse = 0x20000000
+	// MtNotification is the MessageHeader.Type used to send a notification not
+	// initiated by a request.
 	MtNotification = 0x30000000
 )
 
@@ -49,7 +54,9 @@ const (
 type MessageCategory uint32
 
 const (
-	McNone          = 0
+	// McNone is the default category.
+	McNone = 0
+	// McComputeSystem is the category to define message types for compute systems.
 	McComputeSystem = 0x00100000
 )
 
@@ -64,33 +71,52 @@ func GetResponseIdentifier(identifier MessageIdentifier) MessageIdentifier {
 type MessageIdentifier uint32
 
 const (
+	// MiNone is the unknown identifier.
 	MiNone = 0
 
-	// ComputeSystem requests.
-	ComputeSystemCreateV1           = 0x10100101
-	ComputeSystemStartV1            = 0x10100201
+	// ComputeSystemCreateV1 is the create container request.
+	ComputeSystemCreateV1 = 0x10100101
+	// ComputeSystemStartV1 is the start container request.
+	ComputeSystemStartV1 = 0x10100201
+	// ComputeSystemShutdownGracefulV1 is the graceful shutdown container request.
 	ComputeSystemShutdownGracefulV1 = 0x10100301
-	ComputeSystemShutdownForcedV1   = 0x10100401
-	ComputeSystemExecuteProcessV1   = 0x10100501
-	ComputeSystemWaitForProcessV1   = 0x10100601
-	ComputeSystemSignalProcessV1    = 0x10100701
-	ComputeSystemResizeConsoleV1    = 0x10100801
-	ComputeSystemGetPropertiesV1    = 0x10100901
-	ComputeSystemModifySettingsV1   = 0x10100a01
+	// ComputeSystemShutdownForcedV1 is the forceful shutdown container request.
+	ComputeSystemShutdownForcedV1 = 0x10100401
+	// ComputeSystemExecuteProcessV1 is the execute process request.
+	ComputeSystemExecuteProcessV1 = 0x10100501
+	// ComputeSystemWaitForProcessV1 is the wait for process exit request.
+	ComputeSystemWaitForProcessV1 = 0x10100601
+	// ComputeSystemSignalProcessV1 is the signal process request.
+	ComputeSystemSignalProcessV1 = 0x10100701
+	// ComputeSystemResizeConsoleV1 is the resize console tty request.
+	ComputeSystemResizeConsoleV1 = 0x10100801
+	// ComputeSystemGetPropertiesV1 is the list process properties request.
+	ComputeSystemGetPropertiesV1 = 0x10100901
+	// ComputeSystemModifySettingsV1 is the modify container request.
+	ComputeSystemModifySettingsV1 = 0x10100a01
 
-	// ComputeSystem responses.
-	ComputeSystemResponseCreateV1           = 0x20100101
-	ComputeSystemResponseStartV1            = 0x20100201
+	// ComputeSystemResponseCreateV1 is the create container response.
+	ComputeSystemResponseCreateV1 = 0x20100101
+	// ComputeSystemResponseStartV1 is the start container response.
+	ComputeSystemResponseStartV1 = 0x20100201
+	// ComputeSystemResponseShutdownGracefulV1 is the graceful shutdown container response.
 	ComputeSystemResponseShutdownGracefulV1 = 0x20100301
-	ComputeSystemResponseShutdownForcedV1   = 0x20100401
-	ComputeSystemResponseExecuteProcessV1   = 0x20100501
-	ComputeSystemResponseWaitForProcessV1   = 0x20100601
-	ComputeSystemResponseSignalProcessV1    = 0x20100701
-	ComputeSystemResponseResizeConsoleV1    = 0x20100801
-	ComputeSystemResponseGetPropertiesV1    = 0x20100901
-	ComputeSystemResponseModifySettingsV1   = 0x20100a01
+	// ComputeSystemResponseShutdownForcedV1 is the forceful shutdown container response.
+	ComputeSystemResponseShutdownForcedV1 = 0x20100401
+	// ComputeSystemResponseExecuteProcessV1 is the execute process response.
+	ComputeSystemResponseExecuteProcessV1 = 0x20100501
+	// ComputeSystemResponseWaitForProcessV1 is the wait for process exit response.
+	ComputeSystemResponseWaitForProcessV1 = 0x20100601
+	// ComputeSystemResponseSignalProcessV1 is the signal process response.
+	ComputeSystemResponseSignalProcessV1 = 0x20100701
+	// ComputeSystemResponseResizeConsoleV1 is the resize console tty response.
+	ComputeSystemResponseResizeConsoleV1 = 0x20100801
+	// ComputeSystemResponseGetPropertiesV1 is the list process properties response.
+	ComputeSystemResponseGetPropertiesV1 = 0x20100901
+	// ComputeSystemResponseModifySettingsV1 is the modify container response.
+	ComputeSystemResponseModifySettingsV1 = 0x20100a01
 
-	// ComputeSystem notifications.
+	// ComputeSystemNotificationV1 is the notification identifier.
 	ComputeSystemNotificationV1 = 0x30100101
 )
 

@@ -8,12 +8,14 @@ import (
 	"syscall"
 )
 
-// Signal represents signals which may be sent to processes, such as SIGKILl or
+// Signal represents signals which may be sent to processes, such as SIGKILL or
 // SIGTERM.
 type Signal int
 
 const (
+	// SIGKILL defines the Signal for a non-ignorable exit.
 	SIGKILL = Signal(syscall.SIGKILL)
+	// SIGTERM defines the Signal for an exit request.
 	SIGTERM = Signal(syscall.SIGTERM)
 )
 

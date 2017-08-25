@@ -67,7 +67,7 @@ func (p *process) Tty() *stdio.TtyRelay {
 }
 
 // NewRuntime instantiates a new runcRuntime struct.
-func NewRuntime() (*runcRuntime, error) {
+func NewRuntime() (runtime.Runtime, error) {
 	rtime := &runcRuntime{}
 	if err := rtime.initialize(); err != nil {
 		return nil, err
