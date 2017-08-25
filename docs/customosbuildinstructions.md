@@ -13,11 +13,11 @@ A LCOW custom Linux OS image was divided into two parts: a Linux kernel module a
 
 - Use the recommended [Kconfig](../kernel/kernel_config-4.11.x) to include all LCOW necessary kernel components
 
-- Build your kernel 
+- Build your kernel
 
 
     Note:  The key delta between the upsteam default setting and above kconfig is in the area of ACPI/NIFT/NVDIMM/OverlyFS/9pFS/Vsock/HyerpV settings, which were set to be built-in instead of modules.
-           The Kconfig above is still a work in process in terms of trimming any unnecessary components from the kernel image.  
+           The Kconfig above is still a work in process in terms of trimming any unnecessary components from the kernel image.
 
 ## How to construct user-mode components
 
@@ -25,47 +25,51 @@ The expected user mode directory structure is required to constructed as follows
 
 Under the / directory, it should have the following subdirectories:
 
-- /tmp 
-- /proc 
-- /bin 
-- /dev 
-- /run 
-- /etc 
-- /usr 
-- /mnt 
-- /sys    
+- /tmp
+- /proc
+- /bin
+- /dev
+- /run
+- /etc
+- /usr
+- /mnt
+- /sys
 
-- /init 
-- /root 
-- /sbin 
-- /lib64 
-- /lib      
+- /init
+- /root
+- /sbin
+- /lib64
+- /lib
 
 Here are the expected contents of each subdirectory /file
-     
-1. Subdirectories with **empty** contents:  /tmp /proc /dev /run /etc /usr /mnt /sys 
 
-2. **/init** 
+1. Subdirectories with **empty** contents:  /tmp /proc /dev /run /etc /usr /mnt /sys
+
+2. **/init**
    This is the [init script file](../kernel/scripts/init_script)
 
-3. **/root** : this is the home directory of the root account. 
+3. **/root** : this is the home directory of the root account.
 
-4. **/sbin** : 
-    - /sbin/runc  
+4. **/sbin** :
+    - /sbin/runc
 
-              Note:this is the "runc" binary for hosting the container execution environment. 
-              It needs to be the following release
-              runc version 1.0.0-rc3
-              commit: 992a5be178a62e026f4069f443c6164912adbf09
-              spec: 1.0.0-rc5
+              Note:this is the "runc" binary for hosting the container execution environment.
+
+              `runc -v` (where `runc` was installed using `go get`, `go install`, or `go build`) should output the following:
+                  runc version spec: 1.0.0
+
+              `runc -v` (where `runc` was installed using the Makefile in the runc repo) should output the following:
+                  runc version 1.0.0-rc4+dev
+                  commit: 3f2f8b84a77f73d38244dd690525642a72156c64
+                  spec: 1.0.0
 
     - /sbin/[udhcpc_config.script](https://github.com/mirror/busybox/blob/master/examples/udhcp/simple.script)
-    
+
 5. **/lib64** :
 
        /lib64/ld-linux-x86-64.so.2
 
-6. **/lib** : 
+6. **/lib** :
 
        /lib/x86_64-linux-gnu
        /lib/x86_64-linux-gnu/libe2p.so.2
@@ -81,7 +85,7 @@ Here are the expected contents of each subdirectory /file
        /lib/modules
 
 7. **/bin** : binaries in this subdir are categorised into four groups
-        
+
     - [GCS binaries](gcsbuildinstructions.md)
 
             /bin/exportSandbox
@@ -114,13 +118,10 @@ Here are the expected contents of each subdirectory /file
              /bin/test
 
     - Debugging tools: mostly from busybox tool set
-       
+
 
 # Supported LCOW custom Linux OS packaging formats
 
-A LCOW custom Linux OS could be packaged into two different supported formats: 
+A LCOW custom Linux OS could be packaged into two different supported formats:
 - Kernel + Initrd: vmlinuz and initrd.img
 - VHD: a VHDx file
-
-
-
