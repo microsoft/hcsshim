@@ -135,8 +135,8 @@ func (c *container) Kill(signal oslayer.Signal) error {
 	return nil
 }
 
-// Delete deletes any state created for the container by either this
-// wrapper or runC itself.
+// Delete deletes any state created for the container by either this wrapper or
+// runC itself.
 func (c *container) Delete() error {
 	logPath := c.r.getLogPath()
 	cmd := exec.Command("runc", "--log", logPath, "delete", c.id)
@@ -150,8 +150,8 @@ func (c *container) Delete() error {
 	return nil
 }
 
-// Delete deletes any state created for the process by either this
-// wrapper or runC itself.
+// Delete deletes any state created for the process by either this wrapper or
+// runC itself.
 func (p *process) Delete() error {
 	if err := p.c.r.cleanupProcess(p.c.id, p.pid); err != nil {
 		return err
@@ -231,8 +231,8 @@ func (r *runcRuntime) ListContainerStates() ([]runtime.ContainerState, error) {
 	return states, nil
 }
 
-// GetRunningProcesses gets only the running processes associated with
-// the given container. This excludes zombie processes.
+// GetRunningProcesses gets only the running processes associated with the given
+// container. This excludes zombie processes.
 func (c *container) GetRunningProcesses() ([]runtime.ContainerProcessState, error) {
 	pids, err := c.r.getRunningPids(c.id)
 	if err != nil {
@@ -271,8 +271,8 @@ func (c *container) GetRunningProcesses() ([]runtime.ContainerProcessState, erro
 	return c.r.pidMapToProcessStates(pidMap), nil
 }
 
-// GetAllProcesses gets all processes associated with the given
-// container, including both running and zombie processes.
+// GetAllProcesses gets all processes associated with the given container,
+// including both running and zombie processes.
 func (c *container) GetAllProcesses() ([]runtime.ContainerProcessState, error) {
 	runningPids, err := c.r.getRunningPids(c.id)
 	if err != nil {
@@ -280,8 +280,8 @@ func (c *container) GetAllProcesses() ([]runtime.ContainerProcessState, error) {
 	}
 
 	pidMap := map[int]*runtime.ContainerProcessState{}
-	// Initialize all processes with a pid and command, leaving
-	// CreatedByRuntime and IsZombie at the default value of false.
+	// Initialize all processes with a pid and command, leaving CreatedByRuntime
+	// and IsZombie at the default value of false.
 	for _, pid := range runningPids {
 		command, err := c.r.getProcessCommand(pid)
 		if err != nil {
@@ -295,8 +295,7 @@ func (c *container) GetAllProcesses() ([]runtime.ContainerProcessState, error) {
 		return nil, errors.Wrapf(err, "failed to read the contents of container directory %s", filepath.Join(containerFilesDir, c.id))
 	}
 	// Loop over every process state directory. Since these processes have
-	// process state directories, CreatedByRuntime will be true for all of
-	// them.
+	// process state directories, CreatedByRuntime will be true for all of them.
 	for _, processDir := range processDirs {
 		if processDir.Name() != initPidFilename {
 			pid, err := strconv.Atoi(processDir.Name())
@@ -304,13 +303,13 @@ func (c *container) GetAllProcesses() ([]runtime.ContainerProcessState, error) {
 				return nil, errors.Wrapf(err, "failed to parse string \"%s\" into pid", processDir.Name())
 			}
 			if c.r.processExists(pid) {
-				// If the process exists in /proc and is in the pidMap, it must be
-				// a running non-zombie.
+				// If the process exists in /proc and is in the pidMap, it must
+				// be a running non-zombie.
 				if _, ok := pidMap[pid]; ok {
 					pidMap[pid].CreatedByRuntime = true
 				} else {
-					// Otherwise, since it's in /proc but not running, it must be a
-					// zombie.
+					// Otherwise, since it's in /proc but not running, it must
+					// be a zombie.
 					command, err := c.r.getProcessCommand(pid)
 					if err != nil {
 						return nil, err
@@ -340,12 +339,11 @@ func (r *runcRuntime) getRunningPids(id string) ([]int, error) {
 	return pids, nil
 }
 
-// getProcessCommand gets the command line command and arguments for the
-// process with the given pid.
+// getProcessCommand gets the command line command and arguments for the process
+// with the given pid.
 func (r *runcRuntime) getProcessCommand(pid int) ([]string, error) {
-	// Get the contents of the process's cmdline file.
-	// This file is formatted with a null character after every argument.
-	// e.g. "ping\0google.com\0"
+	// Get the contents of the process's cmdline file. This file is formatted
+	// with a null character after every argument. e.g. "ping google.com "
 	data, err := ioutil.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "cmdline"))
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to read cmdline file for process %d", pid)
@@ -369,8 +367,7 @@ func (r *runcRuntime) pidMapToProcessStates(pidMap map[int]*runtime.ContainerPro
 
 // waitOnProcess waits for the process to exit, and returns its
 // oslayer.ProcessExitState containing exit information.
-// TODO: We might want to give more options for this, such as specifying
-// WNOHANG.
+// TODO: We might want to give more options for this, such as specifying WNOHANG.
 func (r *runcRuntime) waitOnProcess(pid int) (oslayer.ProcessExitState, error) {
 	process, err := os.FindProcess(pid)
 	if err != nil {
@@ -391,10 +388,9 @@ func (p *process) Wait() (oslayer.ProcessExitState, error) {
 	return state, err
 }
 
-// Wait waits on every non-init process in the container, and then
-// performs a final wait on the init process.
-// The oslayer.ProcessExitState returned is the state acquired from waiting on
-// the init process.
+// Wait waits on every non-init process in the container, and then performs a
+// final wait on the init process. The oslayer.ProcessExitState returned is the
+// state acquired from waiting on the init process.
 func (c *container) Wait() (oslayer.ProcessExitState, error) {
 	processes, err := c.GetAllProcesses()
 	if err != nil {
@@ -403,8 +399,8 @@ func (c *container) Wait() (oslayer.ProcessExitState, error) {
 	for _, process := range processes {
 		// Only wait on non-init processes that were created with exec.
 		if process.Pid != c.init.pid && process.CreatedByRuntime {
-			// FUTURE-jstarks: Consider waiting on the child process's relays
-			// as well (as in p.Wait()). This may not matter as long as the relays
+			// FUTURE-jstarks: Consider waiting on the child process's relays as
+			// well (as in p.Wait()). This may not matter as long as the relays
 			// finish "soon" after Wait() returns since HCS expects the stdio
 			// connections to close before container shutdown can complete.
 			c.r.waitOnProcess(process.Pid)
@@ -487,8 +483,8 @@ func (c *container) runExecCommand(processDef oci.Process, stdioSet *stdio.Conne
 }
 
 // startProcess performs the operations necessary to start a container process
-// and properly handle its stdio.
-// This function is used by both CreateContainer and ExecProcess.
+// and properly handle its stdio. This function is used by both CreateContainer
+// and ExecProcess.
 func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioSet *stdio.ConnectionSet, initialArgs ...string) (p *process, err error) {
 	args := initialArgs
 

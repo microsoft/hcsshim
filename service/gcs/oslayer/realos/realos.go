@@ -21,7 +21,7 @@ type realProcessExitState struct {
 	state *os.ProcessState
 }
 
-// NewProcessExitState returns a oslayer.ProcessExitState wrapping the given
+// NewProcessExitState returns an oslayer.ProcessExitState wrapping the given
 // *os.ProcessState.
 func NewProcessExitState(state *os.ProcessState) oslayer.ProcessExitState {
 	return &realProcessExitState{state: state}
@@ -129,8 +129,8 @@ func (c *realCmd) CombinedOutput() ([]byte, error) {
 
 type realOS struct{}
 
-// NewOS returns a *realOS OS interface implementation which calls into actual
-// system OS functionality.
+// NewOS returns an oslayer.OS implementation which calls into actual system OS
+// functionality.
 func NewOS() oslayer.OS {
 	return &realOS{}
 }

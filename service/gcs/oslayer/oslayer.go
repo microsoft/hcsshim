@@ -20,9 +20,9 @@ const (
 )
 
 // ProcessExitState is an interface describing the state of a process after it
-// exits. Since os.ProcessState structs can only be obtained by an actual
-// exited process, this interface can be mocked out for testing purposes to
-// provide fake exit states.
+// exits. Since os.ProcessState structs can only be obtained by an actual exited
+// process, this interface can be mocked out for testing purposes to provide
+// fake exit states.
 type ProcessExitState interface {
 	ExitCode() int
 }
@@ -57,8 +57,8 @@ type Cmd interface {
 	CombinedOutput() ([]byte, error)
 }
 
-// OS is the interface describing operations that can be performed on and by
-// the operating system, such as filesystem access and networking.
+// OS is the interface describing operations that can be performed on and by the
+// operating system, such as filesystem access and networking.
 type OS interface {
 	// Filesystem
 	OpenFile(name string, flag int, perm os.FileMode) (File, error)

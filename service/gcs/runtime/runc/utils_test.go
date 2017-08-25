@@ -6,7 +6,6 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -18,8 +17,7 @@ var _ = Describe("Utils", func() {
 	)
 
 	BeforeEach(func() {
-		var rt runtime.Runtime
-		rt, err = NewRuntime()
+		rt, err := NewRuntime()
 		rtime = rt.(*runcRuntime)
 		Expect(err).NotTo(HaveOccurred())
 	})

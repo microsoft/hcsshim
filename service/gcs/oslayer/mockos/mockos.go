@@ -39,8 +39,7 @@ type mockProcessExitState struct {
 	exitCode int
 }
 
-// NewProcessExitState returns a mockProcessExitState with the given exit
-// code.
+// NewProcessExitState returns a mockProcessExitState with the given exit code.
 func NewProcessExitState(exitCode int) oslayer.ProcessExitState {
 	return &mockProcessExitState{exitCode: exitCode}
 }
