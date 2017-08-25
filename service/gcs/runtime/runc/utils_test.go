@@ -17,11 +17,12 @@ var _ = Describe("Utils", func() {
 	)
 
 	BeforeEach(func() {
-		rtime, err = NewRuntime()
+		rt, err := NewRuntime()
+		rtime = rt.(*runcRuntime)
 		Expect(err).NotTo(HaveOccurred())
 	})
 	AfterEach(func() {
-		err = cleanupContainers(rtime, nil)
+		err = cleanupContainers(nil)
 		Expect(err).NotTo(HaveOccurred())
 	})
 

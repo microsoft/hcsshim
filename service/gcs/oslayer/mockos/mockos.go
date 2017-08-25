@@ -11,14 +11,15 @@ import (
 	"time"
 
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
+	"github.com/Microsoft/opengcs/service/gcs/transport"
 )
 
 type mockReadWriteCloser struct {
 	*bytes.Buffer
 }
 
-// NewMockReadWriteCloser returns a *mockReadWriteCloser over an empty buffer.
-func NewMockReadWriteCloser() *mockReadWriteCloser {
+// NewMockReadWriteCloser returns a mockReadWriteCloser over an empty buffer.
+func NewMockReadWriteCloser() transport.Connection {
 	return &mockReadWriteCloser{Buffer: new(bytes.Buffer)}
 }
 func (c *mockReadWriteCloser) Close() error {
@@ -38,9 +39,8 @@ type mockProcessExitState struct {
 	exitCode int
 }
 
-// NewProcessExitState returns a *mockProcessExitState with the given exit
-// code.
-func NewProcessExitState(exitCode int) *mockProcessExitState {
+// NewProcessExitState returns a mockProcessExitState with the given exit code.
+func NewProcessExitState(exitCode int) oslayer.ProcessExitState {
 	return &mockProcessExitState{exitCode: exitCode}
 }
 func (s *mockProcessExitState) ExitCode() int {
@@ -155,8 +155,8 @@ func (i *mockFileInfo) Sys() interface{} {
 type mockOS struct {
 }
 
-// NewOS returns a *mockOS, which mocks out operating system functionality.
-func NewOS() *mockOS {
+// NewOS returns a mockOS, which mocks out operating system functionality.
+func NewOS() oslayer.OS {
 	return &mockOS{}
 }
 
