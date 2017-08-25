@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
@@ -110,6 +111,7 @@ func attemptKillAndDeleteAllContainers(containers []runtime.Container) error {
 				}
 				status = "running"
 			}
+			wg := sync.WaitGroup{}
 			if status == "running" {
 				if err := c.Kill(oslayer.SIGKILL); err != nil {
 					io.WriteString(GinkgoWriter, err.Error())
@@ -124,10 +126,12 @@ func attemptKillAndDeleteAllContainers(containers []runtime.Container) error {
 					}
 				}
 			} else if status == "created" {
+				wg.Add(1)
 				go func() {
 					if _, err := c.Wait(); err != nil {
 						io.WriteString(GinkgoWriter, err.Error())
 					}
+					wg.Done()
 				}()
 			}
 			if err := c.Delete(); err != nil {
@@ -136,6 +140,7 @@ func attemptKillAndDeleteAllContainers(containers []runtime.Container) error {
 					errToReturn = err
 				}
 			}
+			wg.Wait()
 		}
 	}
 
