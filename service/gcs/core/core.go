@@ -20,7 +20,7 @@ type Core interface {
 	ListProcesses(id string) ([]runtime.ContainerProcessState, error)
 	RunExternalProcess(info prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (pid int, err error)
 	ModifySettings(id string, request prot.ResourceModificationRequestResponse) error
-	RegisterContainerExitHook(id string, onExit func(oslayer.ProcessExitState)) error
-	RegisterProcessExitHook(pid int, onExit func(oslayer.ProcessExitState)) error
 	ResizeConsole(pid int, height, width uint16) error
+	WaitContainer(id string) (int, error)
+	WaitProcess(pid int) (int, error)
 }
