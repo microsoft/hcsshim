@@ -56,9 +56,14 @@ func (t *MockTransport) Dial(_ uint32) (_ Connection, err error) {
 		return nil, errors.New("client connection was not a unix socket")
 	}
 
-	t.Channel <- &MockConnection{
-		UnixConn: serverUnixConn,
+	if t.Channel != nil {
+		t.Channel <- &MockConnection{
+			UnixConn: serverUnixConn,
+		}
+	} else {
+		serverUnixConn.Close()
 	}
+
 	return &MockConnection{
 		UnixConn: clientUnixConn,
 	}, nil

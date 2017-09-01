@@ -12,6 +12,7 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/oslayer/realos"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime/runc"
+	"github.com/Microsoft/opengcs/service/gcs/transport"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -25,7 +26,7 @@ var _ = Describe("Storage", func() {
 		rtime, err := runc.NewRuntime()
 		Expect(err).NotTo(HaveOccurred())
 		os := realos.NewOS()
-		coreint = NewGCSCore(rtime, os)
+		coreint = NewGCSCore(rtime, os, &transport.MockTransport{})
 	})
 
 	Describe("getting the container paths", func() {

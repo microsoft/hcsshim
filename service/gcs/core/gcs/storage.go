@@ -253,25 +253,34 @@ func (c *gcsCore) unmountMappedVirtualDisks(disks []prot.MappedVirtualDisk) erro
 	return nil
 }
 
-// mountMappedDirectories mounts the given mapped directories using a Plan9
+// mountMappedDirectory mounts the given mapped directory using a Plan9
 // filesystem with the given options.
-func (c *gcsCore) mountMappedDirectories(dirs []prot.MappedDirectory) error {
-	for _, dir := range dirs {
-		if !dir.CreateInUtilityVM {
-			return errors.New("we do not currently support mapping directories inside the container namespace")
-		}
-		if err := c.OS.MkdirAll(dir.ContainerPath, 0700); err != nil {
-			return errors.Wrapf(err, "failed to create directory for mapped directory %s", dir.ContainerPath)
-		}
-		var mountOptions uintptr
-		data := fmt.Sprintf("trans=vsock,port=%d", dir.Port)
-		if dir.ReadOnly {
-			mountOptions |= syscall.MS_RDONLY
-			data += ",noload"
-		}
-		if err := c.OS.Mount(dir.ContainerPath, dir.ContainerPath, "9p", mountOptions, data); err != nil {
-			return errors.Wrapf(err, "failed to mount directory for mapped directory %s", dir.ContainerPath)
-		}
+func (c *gcsCore) mountMappedDirectory(dir *prot.MappedDirectory) error {
+	if !dir.CreateInUtilityVM {
+		return errors.New("we do not currently support mapping directories inside the container namespace")
+	}
+	if err := c.OS.MkdirAll(dir.ContainerPath, 0700); err != nil {
+		return errors.Wrapf(err, "failed to create directory for mapped directory %s", dir.ContainerPath)
+	}
+	conn, err := c.vsock.Dial(dir.Port)
+	if err != nil {
+		return errors.Wrapf(err, "could not connect to plan9 server for %s", dir.ContainerPath)
+	}
+	f, err := conn.File()
+	conn.Close()
+	if err != nil {
+		return errors.Wrapf(err, "could not get file for plan9 connection for %s", dir.ContainerPath)
+	}
+	defer f.Close()
+
+	var mountOptions uintptr
+	data := fmt.Sprintf("trans=fd,rfdno=%d,wfdno=%d", f.Fd(), f.Fd())
+	if dir.ReadOnly {
+		mountOptions |= syscall.MS_RDONLY
+		data += ",noload"
+	}
+	if err := c.OS.Mount(dir.ContainerPath, dir.ContainerPath, "9p", mountOptions, data); err != nil {
+		return errors.Wrapf(err, "failed to mount directory for mapped directory %s", dir.ContainerPath)
 	}
 	return nil
 }
