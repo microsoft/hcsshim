@@ -59,6 +59,7 @@ git cherry-pick 1b91aa6d0e745d9765e3d90058928829f0b0bd40
 git cherry-pick 531389d1dc73e2be3ee5dbf2091b6f5e74d9764c
 git cherry-pick c49aced6328557e6c1f5cf6f58e1fae96fb58fa0
 git cherry-pick 651dae7de6c6f066c08845ec7335bfb231d5eabe
+git cherry-pick e37da6e7a52ea60825ca676e0c59fe5e4ecd89d6
 ```
 
 Another way to get the patches is to download them from the following list and
@@ -81,6 +82,7 @@ apply them in the same order:
 15. https://github.com/dcui/linux/commit/531389d1dc73e2be3ee5dbf2091b6f5e74d9764c.patch
 16. https://github.com/dcui/linux/commit/c49aced6328557e6c1f5cf6f58e1fae96fb58fa0.patch
 17. https://github.com/dcui/linux/commit/651dae7de6c6f066c08845ec7335bfb231d5eabe.patch
+18. https://github.com/dcui/linux/commit/e37da6e7a52ea60825ca676e0c59fe5e4ecd89d6.patch
 
 ### Patches structure
 
