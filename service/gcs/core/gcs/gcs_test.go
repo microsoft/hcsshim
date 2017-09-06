@@ -10,6 +10,7 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/runtime/mockruntime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
+	"github.com/Microsoft/opengcs/service/gcs/transport"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
@@ -585,7 +586,7 @@ var _ = Describe("GCS", func() {
 			BeforeEach(func() {
 				rtime := mockruntime.NewRuntime()
 				os := mockos.NewOS()
-				coreint = NewGCSCore(rtime, os)
+				coreint = NewGCSCore(rtime, os, &transport.MockTransport{})
 				containerID = "01234567-89ab-cdef-0123-456789abcdef"
 				processID = 101
 				createSettings = prot.VMHostedContainerSettings{

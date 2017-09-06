@@ -55,7 +55,7 @@ func main() {
 		logrus.Fatalf("%+v", err)
 	}
 	os := realos.NewOS()
-	coreint := gcs.NewGCSCore(rtime, os)
+	coreint := gcs.NewGCSCore(rtime, os, tport)
 	mux := bridge.NewBridgeMux()
 	b := bridge.Bridge{
 		Transport: tport,

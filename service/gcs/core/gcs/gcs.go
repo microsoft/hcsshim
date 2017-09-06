@@ -16,6 +16,7 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
+	"github.com/Microsoft/opengcs/service/gcs/transport"
 	shellwords "github.com/mattn/go-shellwords"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -31,6 +32,9 @@ type gcsCore struct {
 	// OS is the OS interface used by the GCS core.
 	OS oslayer.OS
 
+	// vsock is the transport used to connect to plan9 servers.
+	vsock transport.Transport
+
 	containerCacheMutex sync.RWMutex
 	// containerCache stores information about containers which persists
 	// between calls into the gcsCore. It is structured as a map from container
@@ -44,10 +48,11 @@ type gcsCore struct {
 }
 
 // NewGCSCore creates a new gcsCore struct initialized with the given Runtime.
-func NewGCSCore(rtime runtime.Runtime, os oslayer.OS) *gcsCore {
+func NewGCSCore(rtime runtime.Runtime, os oslayer.OS, vsock transport.Transport) *gcsCore {
 	return &gcsCore{
 		Rtime:          rtime,
 		OS:             os,
+		vsock:          vsock,
 		containerCache: make(map[string]*containerCacheEntry),
 		processCache:   make(map[int]*processCacheEntry),
 	}
@@ -581,8 +586,10 @@ func (c *gcsCore) setupMappedVirtualDisks(id string, disks []prot.MappedVirtualD
 // It then adds them to the container's cache entry.
 // This function expects containerCacheMutex to be locked on entry.
 func (c *gcsCore) setupMappedDirectories(id string, dirs []prot.MappedDirectory, containerEntry *containerCacheEntry) error {
-	if err := c.mountMappedDirectories(dirs); err != nil {
-		return errors.Wrapf(err, "failed to mount mapped directories for container %s", id)
+	for _, dir := range dirs {
+		if err := c.mountMappedDirectory(&dir); err != nil {
+			return errors.Wrapf(err, "failed to mount mapped directory %s for container %s", dir.ContainerPath, id)
+		}
 	}
 	for _, dir := range dirs {
 		if err := containerEntry.AddMappedDirectory(dir); err != nil {
