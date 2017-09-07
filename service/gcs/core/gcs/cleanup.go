@@ -30,14 +30,23 @@ func (c *gcsCore) cleanupContainer(containerEntry *containerCacheEntry) error {
 			errToReturn = err
 		}
 	}
-
+	directoryMap := containerEntry.MappedDirectories
+	directories := make([]prot.MappedDirectory, 0, len(directoryMap))
+	for _, directory := range directoryMap {
+		directories = append(directories, directory)
+	}
+	if err := c.unmountMappedDirectories(directories); err != nil {
+		logrus.Warn(err)
+		if errToReturn == nil {
+			errToReturn = err
+		}
+	}
 	if err := c.unmountLayers(containerEntry.ID); err != nil {
 		logrus.Warn(err)
 		if errToReturn == nil {
 			errToReturn = err
 		}
 	}
-
 	if err := c.destroyContainerStorage(containerEntry.ID); err != nil {
 		logrus.Warn(err)
 		if errToReturn == nil {
