@@ -478,39 +478,43 @@ func (c *gcsCore) ModifySettings(id string, request prot.ResourceModificationReq
 		return errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
 	}
 
-	settings, ok := request.Settings.(prot.ResourceModificationSettings)
-	if !ok {
-		return errors.New("the request's settings are not of type ResourceModificationSettings")
-	}
-	switch request.RequestType {
-	case prot.RtAdd:
-		switch request.ResourceType {
-		case prot.PtMappedVirtualDisk:
-			if err := c.setupMappedVirtualDisks(id, []prot.MappedVirtualDisk{*settings.MappedVirtualDisk}, containerEntry); err != nil {
+	switch request.ResourceType {
+	case prot.PtMappedVirtualDisk:
+		mvd, ok := request.Settings.(*prot.MappedVirtualDisk)
+		if !ok {
+			return errors.New("the request's settings are not of type MappedVirtualDisk")
+		}
+		switch request.RequestType {
+		case prot.RtAdd:
+			if err := c.setupMappedVirtualDisks(id, []prot.MappedVirtualDisk{*mvd}, containerEntry); err != nil {
 				return errors.Wrapf(err, "failed to hot add mapped virtual disk for container %s", id)
 			}
-		case prot.PtMappedDirectory:
-			if err := c.setupMappedDirectories(id, []prot.MappedDirectory{*settings.MappedDirectory}, containerEntry); err != nil {
-				return errors.Wrapf(err, "failed to hot add mapped directory for container %s", id)
-			}
-		default:
-			return errors.Errorf("the resource type \"%s\" is not supported for request type \"%s\"", request.ResourceType, request.RequestType)
-		}
-	case prot.RtRemove:
-		switch request.ResourceType {
-		case prot.PtMappedVirtualDisk:
-			if err := c.removeMappedVirtualDisks(id, []prot.MappedVirtualDisk{*settings.MappedVirtualDisk}, containerEntry); err != nil {
+		case prot.RtRemove:
+			if err := c.removeMappedVirtualDisks(id, []prot.MappedVirtualDisk{*mvd}, containerEntry); err != nil {
 				return errors.Wrapf(err, "failed to hot remove mapped virtual disk for container %s", id)
 			}
-		case prot.PtMappedDirectory:
-			if err := c.removeMappedDirectories(id, []prot.MappedDirectory{*settings.MappedDirectory}, containerEntry); err != nil {
+		default:
+			return errors.Errorf("the request type \"%s\" is not supported for resource type \"%s\"", request.RequestType, request.ResourceType)
+		}
+	case prot.PtMappedDirectory:
+		md, ok := request.Settings.(*prot.MappedDirectory)
+		if !ok {
+			return errors.New("the request's settings are not of type MappedDirectory")
+		}
+		switch request.RequestType {
+		case prot.RtAdd:
+			if err := c.setupMappedDirectories(id, []prot.MappedDirectory{*md}, containerEntry); err != nil {
+				return errors.Wrapf(err, "failed to hot add mapped directory for container %s", id)
+			}
+		case prot.RtRemove:
+			if err := c.removeMappedDirectories(id, []prot.MappedDirectory{*md}, containerEntry); err != nil {
 				return errors.Wrapf(err, "failed to hot remove mapped directory for container %s", id)
 			}
 		default:
-			return errors.Errorf("the resource type \"%s\" is not supported for request type \"%s\"", request.ResourceType, request.RequestType)
+			return errors.Errorf("the request type \"%s\" is not supported for resource type \"%s\"", request.RequestType, request.ResourceType)
 		}
 	default:
-		return errors.Errorf("the request type \"%s\" is not supported", request.RequestType)
+		return errors.Errorf("the resource type \"%s\" is not supported", request.ResourceType)
 	}
 
 	return nil
