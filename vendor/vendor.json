@@ -81,10 +81,10 @@
 			"revisionTime": "2017-01-27T09:51:30Z"
 		},
 		{
-			"checksumSHA1": "u0yZ272VVX6SV4jTRsfGubqzCtU=",
+			"checksumSHA1": "C+iol054pXHMVmUhwspOYJLMOD8=",
 			"path": "github.com/linuxkit/virtsock/pkg/vsock",
-			"revision": "06e97e8056a494135d7d9fa6b25b7e592508cee0",
-			"revisionTime": "2017-07-10T20:42:22Z"
+			"revision": "cce5df4cc3fbd5966290ae44f43b407205d4a2e4",
+			"revisionTime": "2017-09-14T10:10:08Z"
 		},
 		{
 			"checksumSHA1": "3yckDt/xIreJZ/spvI+MvHOCmcY=",

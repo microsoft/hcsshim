@@ -3,13 +3,13 @@
 package vsock
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"os"
 	"syscall"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -30,7 +30,7 @@ func sockaddrToVsock(sa unix.Sockaddr) *VsockAddr {
 func Dial(cid, port uint32) (Conn, error) {
 	fd, err := syscall.Socket(unix.AF_VSOCK, syscall.SOCK_STREAM|syscall.SOCK_CLOEXEC, 0)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Failed to create AF_VSOCK socket")
 	}
 	sa := &unix.SockaddrVM{CID: cid, Port: port}
 	// Retry connect in a loop if EINTR is encountered.
@@ -39,8 +39,7 @@ func Dial(cid, port uint32) (Conn, error) {
 			if errno, ok := err.(syscall.Errno); ok && errno == syscall.EINTR {
 				continue
 			}
-			return nil, errors.New(fmt.Sprintf(
-				"failed connect() to %08x.%08x: %s", cid, port, err))
+			return nil, errors.Wrapf(err, "failed connect() to %08x.%08x", cid, port)
 		}
 		break
 	}
@@ -56,13 +55,12 @@ func Listen(cid, port uint32) (net.Listener, error) {
 
 	sa := &unix.SockaddrVM{CID: cid, Port: port}
 	if err = unix.Bind(fd, sa); err != nil {
-		return nil, errors.New(fmt.Sprintf(
-			"failed bind() to %08x.%08x: %s", cid, port, err))
+		return nil, errors.Wrapf(err, "bind() to %08x.%08x failed", cid, port)
 	}
 
 	err = syscall.Listen(fd, syscall.SOMAXCONN)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "listen() on %08x.%08x failed", cid, port)
 	}
 	return &vsockListener{fd, VsockAddr{cid, port}}, nil
 }
