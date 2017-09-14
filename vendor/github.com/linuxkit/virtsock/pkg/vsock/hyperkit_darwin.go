@@ -15,6 +15,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 var (
@@ -43,10 +45,10 @@ func SocketMode(socketMode string) {
 func Dial(cid, port uint32) (Conn, error) {
 	c, err := net.DialUnix("unix", nil, &net.UnixAddr{connectPath, "unix"})
 	if err != nil {
-		return c, err
+		return c, errors.Wrapf(err, "failed to dial on %s", connectPath)
 	}
 	if _, err := fmt.Fprintf(c, "%08x.%08x\n", cid, port); err != nil {
-		return c, fmt.Errorf("Failed to write dest (%08x.%08x) to %s", cid, port, connectPath)
+		return c, errors.Wrapf(err, "Failed to write dest (%08x.%08x) to %s", cid, port, connectPath)
 	}
 	return c, nil
 }
