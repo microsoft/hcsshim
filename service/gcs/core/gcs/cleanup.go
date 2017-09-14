@@ -47,11 +47,18 @@ func (c *gcsCore) cleanupContainer(containerEntry *containerCacheEntry) error {
 			errToReturn = err
 		}
 	}
-	if err := c.destroyContainerStorage(containerEntry.ID); err != nil {
-		logrus.Warn(err)
-		if errToReturn == nil {
-			errToReturn = err
+
+	// We only do cleanup if unmounting succeeds.
+	if errToReturn == nil {
+		if err := c.destroyContainerStorage(containerEntry.ID); err != nil {
+			logrus.Warn(err)
+			if errToReturn == nil {
+				errToReturn = err
+			}
 		}
+	} else {
+		logrus.Warnf("Failed to unmount storage for container (%s). Will not delete!", containerEntry.ID)
+		logrus.Warn(errToReturn)
 	}
 
 	return errToReturn
