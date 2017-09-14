@@ -2,9 +2,11 @@ package transport
 
 import (
 	"fmt"
+	"syscall"
 	"time"
 
 	"github.com/linuxkit/virtsock/pkg/vsock"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -25,17 +27,22 @@ func (t *VsockTransport) Dial(port uint32) (Connection, error) {
 	// HACK: Remove loop when vsock bugs are fixed!
 	// Retry 10 times because vsock.Dial can return connection time out
 	// due to some underlying kernel bug.
+	logrus.Infof("vsock Dial port (%d)", port)
 	for i := 0; i < 10; i++ {
-		logrus.Infof("vsock Dial port (%d)", port)
 		conn, err := vsock.Dial(vmaddrCidHost, port)
 		if err == nil {
 			logrus.Infof("vsock Connect port (%d)", port)
 			return conn, nil
 		}
-
-		// The virtsock wrapper eats up the syscall error, so we can't distinguish ETIMEDOUT from
-		// other errors, so just sleep and try again
-		time.Sleep(100 * time.Millisecond)
+		// If the error was ETIMEDOUT retry, otherwise fail.
+		cause := errors.Cause(err)
+		if errno, ok := cause.(syscall.Errno); ok && errno == syscall.ETIMEDOUT {
+			logrus.Infof("vsock Connect port (%d) timed out, re-trying", port)
+			time.Sleep(100 * time.Millisecond)
+			continue
+		} else {
+			return nil, errors.Wrapf(err, "vsock Dial port (%d) failed", port)
+		}
 	}
 	return nil, fmt.Errorf("failed connecting the VsockConnection: can't connect after 10 attempts")
 }
