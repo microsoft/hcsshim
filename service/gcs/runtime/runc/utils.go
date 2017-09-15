@@ -61,9 +61,23 @@ func (r *runcRuntime) makeContainerDir(id string) error {
 	return nil
 }
 
+// getLogDir gets the path to the runc logs directory.
+func (r *runcRuntime) getLogDir(id string) string {
+	return filepath.Join(r.runcLogBasePath, id)
+}
+
+// makeLogDir creates the runc logs directory if it doesnt exist.
+func (r *runcRuntime) makeLogDir(id string) error {
+	dir := r.getLogDir(id)
+	if err := os.MkdirAll(dir, os.ModeDir); err != nil {
+		return errors.Wrapf(err, "failed making runc log directory for container %s", id)
+	}
+	return nil
+}
+
 // getLogPath returns the path to the log file used by the runC wrapper.
-func (r *runcRuntime) getLogPath() string {
-	return filepath.Join(containerFilesDir, "log.log")
+func (r *runcRuntime) getLogPath(id string) string {
+	return filepath.Join(r.getLogDir(id), "runc.log")
 }
 
 // processExists returns true if the given process exists in /proc, false if

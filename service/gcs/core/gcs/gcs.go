@@ -46,16 +46,20 @@ type gcsCore struct {
 	// processCache stores information about processes which persists between calls
 	// into the gcsCore. It is structured as a map from pid to cache entry.
 	processCache map[int]*processCacheEntry
+
+	// baseStoragePath is the path where all container storage should be nested.
+	baseStoragePath string
 }
 
 // NewGCSCore creates a new gcsCore struct initialized with the given Runtime.
-func NewGCSCore(rtime runtime.Runtime, os oslayer.OS, vsock transport.Transport) core.Core {
+func NewGCSCore(basePath string, rtime runtime.Runtime, os oslayer.OS, vsock transport.Transport) core.Core {
 	return &gcsCore{
-		Rtime:          rtime,
-		OS:             os,
-		vsock:          vsock,
-		containerCache: make(map[string]*containerCacheEntry),
-		processCache:   make(map[int]*processCacheEntry),
+		baseStoragePath: basePath,
+		Rtime:           rtime,
+		OS:              os,
+		vsock:           vsock,
+		containerCache:  make(map[string]*containerCacheEntry),
+		processCache:    make(map[int]*processCacheEntry),
 	}
 }
 

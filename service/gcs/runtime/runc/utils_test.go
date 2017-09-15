@@ -17,7 +17,7 @@ var _ = Describe("Utils", func() {
 	)
 
 	BeforeEach(func() {
-		rt, err := NewRuntime()
+		rt, err := NewRuntime("/tmp/gcs")
 		rtime = rt.(*runcRuntime)
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -147,11 +147,12 @@ var _ = Describe("Utils", func() {
 			expectedPath string
 			actualPath   string
 		)
+		id := "atestid"
 		BeforeEach(func() {
-			expectedPath = "/var/run/gcsrunc/log.log"
+			expectedPath = "/tmp/gcs/" + id + "/runc.log"
 		})
 		JustBeforeEach(func() {
-			actualPath = rtime.getLogPath()
+			actualPath = rtime.getLogPath(id)
 		})
 		It("should return the correct log path", func() {
 			Expect(actualPath).To(Equal(expectedPath))
