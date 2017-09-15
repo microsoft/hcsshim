@@ -6,18 +6,28 @@ A LCOW custom Linux OS image was divided into two parts: a Linux kernel module a
 
 
 ## How to build custom kernel module
+Here you will find the steps to build a custom kernel for the
+Linux Hyper-V container on Windows (**LCOW**). To build the full image,
+please follow the instructions:
 
-- Have your 4.11 kernel source tree ready
+- Have your kernel source tree ready
 
-- Apply additional [4.11 patches](../kernel/README.md) to your 4.11 kernel source tree
+- Apply additional LCOW patches to your kernel source tree
 
-- Use the recommended [Kconfig](../kernel/kernel_config-4.11.x) to include all LCOW necessary kernel components
+- Use the matching recommended [Kconfig](../kernel) to include all LCOW necessary kernel components
+
+    Note:  The key delta between the upsteam default setting and above kconfig is in the area of ACPI/NIFT/NVDIMM/OverlyFS/Vsock/HyerpV settings, which were set to be built-in instead of modules.
+           The Kconfig above is still a work in process in terms of trimming any unnecessary components from the kernel image.
 
 - Build your kernel
 
+ Cuttently supported Linux kenerl versions:
 
-    Note:  The key delta between the upsteam default setting and above kconfig is in the area of ACPI/NIFT/NVDIMM/OverlyFS/9pFS/Vsock/HyerpV settings, which were set to be built-in instead of modules.
-           The Kconfig above is still a work in process in terms of trimming any unnecessary components from the kernel image.
+ - [How to build 4.11.x based kernel](../kernel/patches-4.11.x)
+    
+ - [How to build 4.12.x based kernel](../kernel/patches-4.12.x)
+
+
 
 ## How to construct user-mode components
 
