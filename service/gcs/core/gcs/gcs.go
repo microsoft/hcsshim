@@ -11,6 +11,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/Microsoft/opengcs/service/gcs/core"
 	gcserr "github.com/Microsoft/opengcs/service/gcs/errors"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
@@ -48,7 +49,7 @@ type gcsCore struct {
 }
 
 // NewGCSCore creates a new gcsCore struct initialized with the given Runtime.
-func NewGCSCore(rtime runtime.Runtime, os oslayer.OS, vsock transport.Transport) *gcsCore {
+func NewGCSCore(rtime runtime.Runtime, os oslayer.OS, vsock transport.Transport) core.Core {
 	return &gcsCore{
 		Rtime:          rtime,
 		OS:             os,
