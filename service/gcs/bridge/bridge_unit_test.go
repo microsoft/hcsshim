@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	gcserr "github.com/Microsoft/opengcs/service/gcs/errors"
+	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
 	"github.com/pkg/errors"
