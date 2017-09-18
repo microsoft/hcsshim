@@ -26,7 +26,8 @@ var _ = Describe("Storage", func() {
 		rtime, err := runc.NewRuntime()
 		Expect(err).NotTo(HaveOccurred())
 		os := realos.NewOS()
-		coreint = NewGCSCore(rtime, os, &transport.MockTransport{})
+		cint := NewGCSCore(rtime, os, &transport.MockTransport{})
+		coreint = cint.(*gcsCore)
 	})
 
 	Describe("getting the container paths", func() {
