@@ -12,7 +12,7 @@ import (
 	"syscall"
 
 	"github.com/Microsoft/opengcs/service/gcs/core"
-	gcserr "github.com/Microsoft/opengcs/service/gcs/errors"
+	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
