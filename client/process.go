@@ -136,7 +136,8 @@ func (config *Config) DebugGCS() {
 		cmd += debugCommand("ls -l /tmp/gcs/*")
 		cmd += debugCommand("cat /tmp/gcs/*/config.json")
 		cmd += debugCommand("ls -lR /var/run/gcsrunc")
-		cmd += debugCommand("cat /var/run/gcsrunc/log.log")
+		cmd += debugCommand("cat /tmp/gcs/global-runc.log")
+		cmd += debugCommand("cat /tmp/gcs/*/runc.log")
 		cmd += debugCommand("ps -ef")
 		cmd += `"`
 	}

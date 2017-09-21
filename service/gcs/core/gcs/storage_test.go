@@ -23,10 +23,10 @@ var _ = Describe("Storage", func() {
 	)
 
 	BeforeEach(func() {
-		rtime, err := runc.NewRuntime()
+		rtime, err := runc.NewRuntime("/tmp/gcs")
 		Expect(err).NotTo(HaveOccurred())
 		os := realos.NewOS()
-		cint := NewGCSCore(rtime, os, &transport.MockTransport{})
+		cint := NewGCSCore("/tmp/gcs", rtime, os, &transport.MockTransport{})
 		coreint = cint.(*gcsCore)
 	})
 

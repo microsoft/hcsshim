@@ -30,6 +30,7 @@ const (
 // runcRuntime is an implementation of the Runtime interface which uses runC as
 // the container runtime.
 type runcRuntime struct {
+	runcLogBasePath string
 }
 
 var _ runtime.Runtime = &runcRuntime{}
@@ -68,8 +69,9 @@ func (p *process) Tty() *stdio.TtyRelay {
 }
 
 // NewRuntime instantiates a new runcRuntime struct.
-func NewRuntime() (runtime.Runtime, error) {
-	rtime := &runcRuntime{}
+func NewRuntime(logBasePath string) (runtime.Runtime, error) {
+
+	rtime := &runcRuntime{runcLogBasePath: logBasePath}
 	if err := rtime.initialize(); err != nil {
 		return nil, err
 	}
@@ -78,15 +80,19 @@ func NewRuntime() (runtime.Runtime, error) {
 
 // initialize sets up any state necessary for the runcRuntime to function.
 func (r *runcRuntime) initialize() error {
-	exists, err := r.pathExists(containerFilesDir)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		if err := os.MkdirAll(containerFilesDir, 0700); err != nil {
-			return errors.Wrapf(err, "failed making runC container files directory %s", containerFilesDir)
+	paths := [2]string{containerFilesDir, r.runcLogBasePath}
+	for _, p := range paths {
+		exists, err := r.pathExists(p)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			if err := os.MkdirAll(p, 0700); err != nil {
+				return errors.Wrapf(err, "failed making runC container files directory %s", p)
+			}
 		}
 	}
+
 	return nil
 }
 
@@ -105,7 +111,7 @@ func (r *runcRuntime) CreateContainer(id string, bundlePath string, stdioSet *st
 // Start unblocks the container's init process created by the call to
 // CreateContainer.
 func (c *container) Start() error {
-	logPath := c.r.getLogPath()
+	logPath := c.r.getLogPath(c.id)
 	cmd := exec.Command("runc", "--log", logPath, "start", c.id)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -127,7 +133,7 @@ func (c *container) ExecProcess(process oci.Process, stdioSet *stdio.ConnectionS
 
 // Kill sends the specified signal to the container's init process.
 func (c *container) Kill(signal oslayer.Signal) error {
-	logPath := c.r.getLogPath()
+	logPath := c.r.getLogPath(c.id)
 	cmd := exec.Command("runc", "--log", logPath, "kill", c.id, strconv.Itoa(int(signal)))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -139,7 +145,7 @@ func (c *container) Kill(signal oslayer.Signal) error {
 // Delete deletes any state created for the container by either this wrapper or
 // runC itself.
 func (c *container) Delete() error {
-	logPath := c.r.getLogPath()
+	logPath := c.r.getLogPath(c.id)
 	cmd := exec.Command("runc", "--log", logPath, "delete", c.id)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -162,7 +168,7 @@ func (p *process) Delete() error {
 
 // Pause suspends all processes running in the container.
 func (c *container) Pause() error {
-	logPath := c.r.getLogPath()
+	logPath := c.r.getLogPath(c.id)
 	cmd := exec.Command("runc", "--log", logPath, "pause", c.id)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -173,7 +179,7 @@ func (c *container) Pause() error {
 
 // Resume unsuspends processes running in the container.
 func (c *container) Resume() error {
-	logPath := c.r.getLogPath()
+	logPath := c.r.getLogPath(c.id)
 	cmd := exec.Command("runc", "--log", logPath, "resume", c.id)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -184,7 +190,7 @@ func (c *container) Resume() error {
 
 // GetState returns information about the given container.
 func (c *container) GetState() (*runtime.ContainerState, error) {
-	logPath := c.r.getLogPath()
+	logPath := c.r.getLogPath(c.id)
 	cmd := exec.Command("runc", "--log", logPath, "state", c.id)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -219,7 +225,7 @@ func (c *container) Exists() (bool, error) {
 // ListContainerStates returns ContainerState structs for all existing
 // containers, whether they're running or not.
 func (r *runcRuntime) ListContainerStates() ([]runtime.ContainerState, error) {
-	logPath := r.getLogPath()
+	logPath := filepath.Join(r.runcLogBasePath, "global-runc.log")
 	cmd := exec.Command("runc", "--log", logPath, "list", "-f", "json")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -327,7 +333,7 @@ func (c *container) GetAllProcesses() ([]runtime.ContainerProcessState, error) {
 // getRunningPids gets the pids of all processes which runC recognizes as
 // running.
 func (r *runcRuntime) getRunningPids(id string) ([]int, error) {
-	logPath := r.getLogPath()
+	logPath := r.getLogPath(id)
 	cmd := exec.Command("runc", "--log", logPath, "ps", "-f", "json", id)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -495,8 +501,11 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioS
 	if err := containerdsys.SetSubreaper(1); err != nil {
 		return nil, errors.Wrapf(err, "failed to set process as subreaper for process in container %s", c.id)
 	}
+	if err := c.r.makeLogDir(c.id); err != nil {
+		return nil, err
+	}
 
-	logPath := c.r.getLogPath()
+	logPath := c.r.getLogPath(c.id)
 	args = append([]string{"--log", logPath}, args...)
 
 	args = append(args, "--pid-file", filepath.Join(tempProcessDir, "pid"))

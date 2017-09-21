@@ -210,7 +210,7 @@ var _ = Describe("runC", func() {
 
 	BeforeEach(func() {
 		var err error
-		rtime, err = NewRuntime()
+		rtime, err = NewRuntime("/tmp/gcs")
 		Expect(err).NotTo(HaveOccurred())
 
 		cwd, err = os.Getwd()

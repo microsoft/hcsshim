@@ -48,14 +48,16 @@ func main() {
 
 	logrus.SetLevel(level)
 
+	baseLogPath := "/tmp/gcs"
+
 	logrus.Info("GCS started")
 	tport := &transport.VsockTransport{}
-	rtime, err := runc.NewRuntime()
+	rtime, err := runc.NewRuntime(baseLogPath)
 	if err != nil {
 		logrus.Fatalf("%+v", err)
 	}
 	os := realos.NewOS()
-	coreint := gcs.NewGCSCore(rtime, os, tport)
+	coreint := gcs.NewGCSCore(baseLogPath, rtime, os, tport)
 	mux := bridge.NewBridgeMux()
 	b := bridge.Bridge{
 		Transport: tport,

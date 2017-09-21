@@ -466,14 +466,10 @@ func (c *gcsCore) writeConfigFile(id string, config oci.Spec) error {
 	return nil
 }
 
-func (c *gcsCore) getStorageRootPath() string {
-	return "/tmp/gcs"
-}
-
 // getContainerStoragePath returns the path where the GCS stores files on disk
 // for the container with the given ID.
 func (c *gcsCore) getContainerStoragePath(id string) string {
-	return filepath.Join(c.getStorageRootPath(), id)
+	return filepath.Join(c.baseStoragePath, id)
 }
 
 // getUnioningPaths returns paths that will be used in the union filesystem for
