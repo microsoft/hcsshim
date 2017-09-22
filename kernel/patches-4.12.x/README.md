@@ -44,6 +44,8 @@ git cherry-pick -x 7592de58cbf8d199d721503385c20a02743425a9
 git cherry-pick -x 02d07a9dcdb042f33248fd3aeb1e5c2eca6d3d49
 git cherry-pick -x f315dfcf9c3b4b32f43a21664762cbacd8f05d6a
 git cherry-pick -x d6f7158fdbac10f9935a506451e3d54d2d50a7c7
+git cherry-pick -x c15d7f606f813b8d1f1ce02979929fd875da228b
+git cherry-pick -x b6ffb4393fb266711b37ed056487665d8650f31a
 
 ```
 
@@ -67,7 +69,8 @@ apply them in the same order:
 15. https://github.com/dcui/linux/commit/02d07a9dcdb042f33248fd3aeb1e5c2eca6d3d49.patch
 16. https://github.com/dcui/linux/commit/f315dfcf9c3b4b32f43a21664762cbacd8f05d6a.patch
 17. https://github.com/dcui/linux/commit/d6f7158fdbac10f9935a506451e3d54d2d50a7c7.patch
-
+18. https://github.com/dcui/linux/commit/c15d7f606f813b8d1f1ce02979929fd875da228b.patch
+19. https://github.com/dcui/linux/commit/b6ffb4393fb266711b37ed056487665d8650f31a.patch
 
 ## 3. Patch for "ext4: fix fault handling when mounted with -o dax,ro"
 
