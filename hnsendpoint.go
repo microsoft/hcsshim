@@ -192,14 +192,16 @@ func (endpoint *HNSEndpoint) ContainerHotDetach(containerID string) error {
 	return modifyNetworkEndpoint(containerID, endpoint.Id, Remove)
 }
 
-// ApplyPolicy applies a set of ACL Policies on the Endpoint. This will
-// overwrite any existing policies which were previously applied
-func (endpoint *HNSEndpoint) ApplyACLPolicy(policies []*ACLPolicy) error {
+// ApplyPolicy applies a set of ACL Policies on the Endpoint
+func (endpoint *HNSEndpoint) ApplyACLPolicy(policies ...*ACLPolicy) error {
 	operation := "ApplyACLPolicy"
 	title := "HCSShim::HNSEndpoint::" + operation
 	logrus.Debugf(title+" id=%s", endpoint.Id)
 
 	for _, policy := range policies {
+		if policy == nil {
+			continue
+		}
 		jsonString, err := json.Marshal(policy)
 		if err != nil {
 			return err
