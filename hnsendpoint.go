@@ -192,7 +192,7 @@ func (endpoint *HNSEndpoint) ContainerHotDetach(containerID string) error {
 	return modifyNetworkEndpoint(containerID, endpoint.Id, Remove)
 }
 
-// ApplyPolicy applies a set of ACL Policies on the Endpoint
+// ApplyACLPolicy applies a set of ACL Policies on the Endpoint
 func (endpoint *HNSEndpoint) ApplyACLPolicy(policies ...*ACLPolicy) error {
 	operation := "ApplyACLPolicy"
 	title := "HCSShim::HNSEndpoint::" + operation
