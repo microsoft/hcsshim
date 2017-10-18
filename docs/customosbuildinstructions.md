@@ -21,10 +21,10 @@ please follow the instructions:
 
 - Build your kernel
 
- Cuttently supported Linux kenerl versions:
+ Currently supported Linux kernel versions:
 
  - [How to build 4.11.x based kernel](../kernel/patches-4.11.x)
-    
+
  - [How to build 4.12.x based kernel](../kernel/patches-4.12.x)
 
 
