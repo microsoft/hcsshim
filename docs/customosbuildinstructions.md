@@ -123,8 +123,10 @@ Here are the expected contents of each subdirectory /file
 
     - Required binaires: utilities used by docker
 
-             /bin/ls
              /bin/cat
+             /bin/kill
+             /bin/ls
+             /bin/pidof
              /bin/test
 
     - Debugging tools: mostly from busybox tool set
