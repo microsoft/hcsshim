@@ -2,7 +2,6 @@ package hcsshim
 
 import (
 	"encoding/json"
-	"fmt"
 	"net"
 
 	"github.com/sirupsen/logrus"
@@ -135,7 +134,7 @@ func GetHNSEndpointByName(endpointName string) (*HNSEndpoint, error) {
 			return &hnsEndpoint, nil
 		}
 	}
-	return nil, fmt.Errorf("Endpoint %v not found", endpointName)
+	return nil, EndpointNotFoundError{EndpointName: endpointName}
 }
 
 // Create Endpoint by sending EndpointRequest to HNS. TODO: Create a separate HNS interface to place all these methods
