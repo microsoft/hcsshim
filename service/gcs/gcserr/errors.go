@@ -23,6 +23,8 @@ const (
 	HrFail = Hresult(-2147467259) // 0x80004005
 	// HrAccessDenied is the HRESULT for access denied to a resource.
 	HrAccessDenied = Hresult(-2147024891) // 0x80070005
+	// HvVmcomputeTimeout is the HRESULT for operations that timed out.
+	HvVmcomputeTimeout = Hresult(-1070137079) // 0xC0370109
 	// HrVmcomputeInvalidJSON is the HRESULT for failing to unmarshal a json
 	// string.
 	HrVmcomputeInvalidJSON = Hresult(-1070137075) // 0xC037010D

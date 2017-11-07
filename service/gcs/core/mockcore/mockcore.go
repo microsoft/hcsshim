@@ -193,18 +193,18 @@ func (c *MockCore) ResizeConsole(pid int, height, width uint16) error {
 }
 
 // WaitContainer captures its arguments and returns a nil error.
-func (c *MockCore) WaitContainer(id string) (int, error) {
+func (c *MockCore) WaitContainer(id string) (func() int, error) {
 	c.LastWaitContainer = WaitContainerCall{
 		ID: id,
 	}
 	c.WaitContainerWg.Done()
-	return -1, c.behaviorResult()
+	return func() { return -1 }, c.behaviorResult()
 }
 
 // WaitProcess captures its arguments and returns a nil error.
-func (c *MockCore) WaitProcess(pid int) (int, error) {
+func (c *MockCore) WaitProcess(pid int) (func() int, error) {
 	c.LastWaitProcess = WaitProcessCall{
 		Pid: pid,
 	}
-	return -1, c.behaviorResult()
+	return func() { return -1 }, c.behaviorResult()
 }

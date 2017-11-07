@@ -9,6 +9,7 @@ import (
 	"io"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/Microsoft/opengcs/service/gcs/core"
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
@@ -244,7 +245,8 @@ func (b *Bridge) ListenAndServe() (conerr error) {
 				requestErrChan <- errors.Wrap(err, "bridge: failed reading message payload")
 				continue
 			}
-			logrus.Infof("bridge: read message '%s'\n", message)
+			logrus.Infof("bridge: read message type: %v", header.Type)
+			logrus.Infof("bridge: read message '%s'", message)
 			requestChan <- &Request{header, message}
 		}
 	}()
@@ -342,14 +344,14 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 		},
 		SelectedProtocolVersion: prot.PvV3,
 	}
-	w.Write(response)
+
+	exitCodeFn, err := b.coreint.WaitContainer(id)
+	if err != nil {
+		w.Error(request.ActivityID, err)
+	}
 
 	go func() {
-		exitCode, err := b.coreint.WaitContainer(id)
-		if err != nil {
-			logrus.Error(err)
-			return
-		}
+		exitCode := exitCodeFn()
 		notification := &prot.ContainerNotification{
 			MessageBase: &prot.MessageBase{
 				ContainerID: id,
@@ -362,6 +364,8 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 		}
 		b.PublishNotification(notification)
 	}()
+
+	w.Write(response)
 }
 
 func (b *Bridge) execProcess(w ResponseWriter, r *Request) {
@@ -488,19 +492,29 @@ func (b *Bridge) waitOnProcess(w ResponseWriter, r *Request) {
 		return
 	}
 
-	exitCode, err := b.coreint.WaitProcess(int(request.ProcessID))
+	exitCodeFn, err := b.coreint.WaitProcess(int(request.ProcessID))
 	if err != nil {
 		w.Error(request.ActivityID, err)
 		return
 	}
 
-	response := &prot.ContainerWaitForProcessResponse{
-		MessageResponseBase: &prot.MessageResponseBase{
-			ActivityID: request.ActivityID,
-		},
-		ExitCode: uint32(exitCode),
+	exitCodeChan := make(chan int, 1)
+	go func() {
+		exitCodeChan <- exitCodeFn()
+	}()
+
+	select {
+	case exitCode := <-exitCodeChan:
+		response := &prot.ContainerWaitForProcessResponse{
+			MessageResponseBase: &prot.MessageResponseBase{
+				ActivityID: request.ActivityID,
+			},
+			ExitCode: uint32(exitCode),
+		}
+		w.Write(response)
+	case <-time.After(time.Duration(request.TimeoutInMs) * time.Millisecond):
+		w.Error(request.ActivityID, gcserr.NewHresultError(gcserr.HvVmcomputeTimeout))
 	}
-	w.Write(response)
 }
 
 func (b *Bridge) resizeConsole(w ResponseWriter, r *Request) {
