@@ -492,16 +492,12 @@ func (b *Bridge) waitOnProcess(w ResponseWriter, r *Request) {
 		return
 	}
 
-	exitCodeFn, err := b.coreint.WaitProcess(int(request.ProcessID))
+	exitCodeChan, doneChan, err := b.coreint.WaitProcess(int(request.ProcessID))
 	if err != nil {
 		w.Error(request.ActivityID, err)
 		return
 	}
-
-	exitCodeChan := make(chan int, 1)
-	go func() {
-		exitCodeChan <- exitCodeFn()
-	}()
+	defer close(doneChan)
 
 	select {
 	case exitCode := <-exitCodeChan:
@@ -515,6 +511,9 @@ func (b *Bridge) waitOnProcess(w ResponseWriter, r *Request) {
 	case <-time.After(time.Duration(request.TimeoutInMs) * time.Millisecond):
 		w.Error(request.ActivityID, gcserr.NewHresultError(gcserr.HvVmcomputeTimeout))
 	}
+
+	// If we timed out or if we got the exit code. Acknowledge we no longer want to wait.
+	doneChan <- true
 }
 
 func (b *Bridge) resizeConsole(w ResponseWriter, r *Request) {

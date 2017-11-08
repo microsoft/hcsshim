@@ -116,19 +116,27 @@ func (e *containerCacheEntry) RemoveMappedDirectory(dir prot.MappedDirectory) {
 
 // processCacheEntry stores cached information for a single process.
 type processCacheEntry struct {
-	syncRoot sync.Mutex
-	Tty      *stdio.TtyRelay
-	// Signaled when the process itself has exited.
-	exitWg   sync.WaitGroup
-	exitCode int
-	// Used to track the number of writers that need to finish
-	// before the container can be marked as exited.
-	writersWg     sync.WaitGroup
-	writersCalled bool
 	// Set to true only when this process is a container init process that is
 	// associated with a container exited notification and needs to have the
 	// writers tracked.
 	isInitProcess bool
+	Tty           *stdio.TtyRelay
+
+	// Signaled when the process itself has exited.
+	exitWg sync.WaitGroup
+	// The exitCode set prior to signaling the exitWg
+	exitCode int
+
+	// Used to allow addtion/removal to the writersWg after an initial wait has
+	// already been issued. It is not safe to call Add/Done without holding this
+	// lock.
+	writersSyncRoot sync.Mutex
+	// Used to track the number of writers that need to finish
+	// before the container can be marked as exited.
+	writersWg sync.WaitGroup
+	// Used to track the 1st caller to the writersWg that successfully
+	// acknowledges it wrote the exit response.
+	writersCalled bool
 }
 
 func (c *gcsCore) getContainer(id string) *containerCacheEntry {
@@ -579,40 +587,77 @@ func (c *gcsCore) WaitContainer(id string) (func() int, error) {
 	return f, nil
 }
 
-// WaitProcess returns a function that can be used to successfully wait for a
-// process exit code. On error the pid was not a valid pid.
-func (c *gcsCore) WaitProcess(pid int) (func() int, error) {
+// WaitProcess returns a channel that can be used to wait for the process exit
+// code and a channel that can be used to signal when the waiter has processed
+// the code fully or decided to stop waiting.
+//
+// The second channel must be signaled in either case to keep the wait counts in
+// sync.
+//
+// On error the pid was not a valid pid and no channels will be returned.
+func (c *gcsCore) WaitProcess(pid int) (chan int, chan bool, error) {
 	c.processCacheMutex.Lock()
 	entry, ok := c.processCache[pid]
 	if !ok {
 		c.processCacheMutex.Unlock()
-		return nil, errors.WithStack(gcserr.NewProcessDoesNotExistError(pid))
+		return nil, nil, errors.WithStack(gcserr.NewProcessDoesNotExistError(pid))
 	}
 	c.processCacheMutex.Unlock()
 
-	// Safe to do without lock because this is a write once variable at creation.
+	// If we are an init process waiter increment our count for this waiter.
 	if entry.isInitProcess {
-		// We only `Add` to the writers lock for the 2nd..Nth waiters because we
-		// added the 1st writer at creation to ensure that the container exited
-		// notification wasn't written until at least one `WaitProcess` was called.
-		entry.syncRoot.Lock()
-		if entry.writersCalled {
-			entry.writersWg.Add(1)
-		} else {
-			entry.writersCalled = true
-		}
-		entry.syncRoot.Unlock()
+		entry.writersSyncRoot.Lock()
+		entry.writersWg.Add(1)
+		entry.writersSyncRoot.Unlock()
 	}
 
-	f := func() int {
-		entry.exitWg.Wait()
-		if entry.isInitProcess {
-			entry.writersWg.Done()
-		}
-		return entry.exitCode
-	}
+	exitCodeChan := make(chan int, 1)
+	doneChan := make(chan bool)
 
-	return f, nil
+	go func() {
+		bgExitCodeChan := make(chan int, 1)
+		go func() {
+			entry.exitWg.Wait()
+			bgExitCodeChan <- entry.exitCode
+		}()
+
+		// Wait for the exit code or the caller to stop waiting.
+		select {
+		case exitCode := <-bgExitCodeChan:
+			// We got an exit code tell our caller.
+			exitCodeChan <- exitCode
+
+			// Wait for the caller to tell us they have issued the write and
+			// release the writers count.
+			select {
+			case <-doneChan:
+				if entry.isInitProcess {
+					entry.writersSyncRoot.Lock()
+					// Decrement this waiter
+					entry.writersWg.Done()
+					if !entry.writersCalled {
+						// Decrement the container exited waiter now that we
+						// know we have successfully written at least 1
+						// WaitProcess on the init process.
+						entry.writersCalled = true
+						entry.writersWg.Done()
+					}
+					entry.writersSyncRoot.Unlock()
+				}
+			}
+		case <-doneChan:
+			// This case means that the waiter decided to stop waiting before
+			// the process had an exit code. In this case we need to cleanup
+			// just our waiter because the no response was written.
+			if entry.isInitProcess {
+				entry.writersSyncRoot.Lock()
+				entry.writersWg.Done()
+				entry.writersSyncRoot.Unlock()
+			}
+		}
+	}()
+
+	return exitCodeChan, doneChan, nil
 }
 
 // setupMappedVirtualDisks is a helper function which calls into the functions

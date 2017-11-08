@@ -198,13 +198,13 @@ func (c *MockCore) WaitContainer(id string) (func() int, error) {
 		ID: id,
 	}
 	c.WaitContainerWg.Done()
-	return func() { return -1 }, c.behaviorResult()
+	return func() int { return -1 }, c.behaviorResult()
 }
 
 // WaitProcess captures its arguments and returns a nil error.
-func (c *MockCore) WaitProcess(pid int) (func() int, error) {
+func (c *MockCore) WaitProcess(pid int) (chan int, chan bool, error) {
 	c.LastWaitProcess = WaitProcessCall{
 		Pid: pid,
 	}
-	return func() { return -1 }, c.behaviorResult()
+	return nil, nil, c.behaviorResult()
 }

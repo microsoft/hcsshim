@@ -1076,13 +1076,15 @@ var _ = Describe("GCS", func() {
 			Describe("calling wait process", func() {
 				var (
 					pid      int
-					exitCode int = -1
+					exitCode int
 				)
 				JustBeforeEach(func() {
-					var exitCodeFn func() int
-					exitCodeFn, err = coreint.WaitProcess(pid)
+					var exitCodeChan chan int
+					var doneChan chan bool
+					exitCodeChan, doneChan, err = coreint.WaitProcess(pid)
 					if err == nil {
-						exitCode = exitCodeFn()
+						exitCode = <-exitCodeChan
+						doneChan <- true
 					}
 				})
 				Context("process does not exist", func() {
