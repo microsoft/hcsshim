@@ -347,7 +347,7 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 
 	exitCodeFn, err := b.coreint.WaitContainer(id)
 	if err != nil {
-		w.Error(request.ActivityID, err)
+		logrus.Error(err)
 	}
 
 	go func() {

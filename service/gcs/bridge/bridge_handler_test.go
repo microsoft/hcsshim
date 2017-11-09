@@ -679,6 +679,34 @@ func Test_WaitOnProcess_CoreFails_Failure(t *testing.T) {
 	verifyActivityID(t, r.MessageBase, rw)
 }
 
+func Test_WaitOnProcess_CoreSucceeds_Timeout_Error(t *testing.T) {
+	r := &prot.ContainerWaitForProcess{
+		MessageBase: newMessageBase(),
+		ProcessID:   20,
+		TimeoutInMs: 10,
+	}
+
+	req, rw := setupRequestResponse(t, prot.ComputeSystemWaitForProcessV1, r)
+
+	mc := &mockcore.MockCore{Behavior: mockcore.Success}
+	mc.LastWaitProcessReturnContext = &mockcore.WaitProcessReturnContext{
+		ExitCodeChan: make(chan int, 1),
+		DoneChan:     make(chan bool, 1),
+	}
+
+	// Do not write the exit code so that the timeout occurs.
+
+	tb := &Bridge{coreint: mc}
+	tb.waitOnProcess(rw, req)
+
+	verifyResponseError(t, rw)
+	verifyActivityID(t, r.MessageBase, rw)
+
+	// Verify that the caller bridge calls done in the timeout case
+	// to acknowledge the response.
+	<-mc.LastWaitProcessReturnContext.DoneChan
+}
+
 func Test_WaitOnProcess_CoreSucceeds_Success(t *testing.T) {
 	r := &prot.ContainerWaitForProcess{
 		MessageBase: newMessageBase(),
@@ -688,6 +716,14 @@ func Test_WaitOnProcess_CoreSucceeds_Success(t *testing.T) {
 	req, rw := setupRequestResponse(t, prot.ComputeSystemWaitForProcessV1, r)
 
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
+	mc.LastWaitProcessReturnContext = &mockcore.WaitProcessReturnContext{
+		ExitCodeChan: make(chan int, 1),
+		DoneChan:     make(chan bool, 1),
+	}
+
+	// Immediately write the exit code so the waitOnProcess doesnt block.
+	mc.LastWaitProcessReturnContext.ExitCodeChan <- 2980
+
 	tb := &Bridge{coreint: mc}
 	tb.waitOnProcess(rw, req)
 
@@ -695,6 +731,9 @@ func Test_WaitOnProcess_CoreSucceeds_Success(t *testing.T) {
 	if uint32(mc.LastWaitProcess.Pid) != r.ProcessID {
 		t.Fatal("last wait process did not have same pid")
 	}
+	// Verify that the caller bridge calls done in the success case
+	// to acknowledge the exit code response.
+	<-mc.LastWaitProcessReturnContext.DoneChan
 }
 
 func Test_ResizeConsole_InvalidJson_Failure(t *testing.T) {
