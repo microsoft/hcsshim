@@ -154,5 +154,5 @@ func (config *Config) DebugGCS() {
 	if proc != nil {
 		proc.WaitTimeout(time.Duration(int(time.Second) * 30))
 	}
-	logrus.Debugf("GCS Debugging:\n%s\n\nEnd GCS Debugging\n", strings.TrimSpace(out.String()))
+	logrus.Debugf("GCS Debugging:\n%s\n\nEnd GCS Debugging", strings.TrimSpace(out.String()))
 }

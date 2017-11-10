@@ -16,19 +16,19 @@ func tar2vhd() error {
 
 	options, err := commoncli.SetupTar2VHDLibOptions(tar2vhdArgs...)
 	if err != nil {
-		logrus.Infof("error: %s. Please use -h for params\n", err)
+		logrus.Infof("error: %s. Please use -h for params", err)
 		return err
 	}
 
 	err = commoncli.SetupLogging(logArgs...)
 	if err != nil {
-		logrus.Infof("error: %s. Please useu-h for params\n", err)
+		logrus.Infof("error: %s. Please useu-h for params", err)
 		return err
 	}
 
 	_, err = libtar2vhd.Tar2VHD(os.Stdin, os.Stdout, options)
 	if err != nil {
-		logrus.Infof("svmutilsMain failed with %s\n", err)
+		logrus.Infof("svmutilsMain failed with %s", err)
 		return err
 	}
 	return nil
