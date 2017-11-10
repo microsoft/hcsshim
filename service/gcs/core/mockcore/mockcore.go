@@ -83,22 +83,29 @@ type WaitProcessCall struct {
 	Pid int
 }
 
+// WaitProcessReturnContext captures the return context of a WaitProcess call.
+type WaitProcessReturnContext struct {
+	ExitCodeChan chan int
+	DoneChan     chan bool
+}
+
 // MockCore serves as an argument capture mechanism which implements the Core
 // interface. Arguments passed to one of its methods are stored to be queried
 // later.
 type MockCore struct {
-	Behavior               Behavior
-	LastCreateContainer    CreateContainerCall
-	LastExecProcess        ExecProcessCall
-	LastSignalContainer    SignalContainerCall
-	LastSignalProcess      SignalProcessCall
-	LastListProcesses      ListProcessesCall
-	LastRunExternalProcess RunExternalProcessCall
-	LastModifySettings     ModifySettingsCall
-	LastResizeConsole      ResizeConsoleCall
-	LastWaitContainer      WaitContainerCall
-	LastWaitProcess        WaitProcessCall
-	WaitContainerWg        sync.WaitGroup
+	Behavior                     Behavior
+	LastCreateContainer          CreateContainerCall
+	LastExecProcess              ExecProcessCall
+	LastSignalContainer          SignalContainerCall
+	LastSignalProcess            SignalProcessCall
+	LastListProcesses            ListProcessesCall
+	LastRunExternalProcess       RunExternalProcessCall
+	LastModifySettings           ModifySettingsCall
+	LastResizeConsole            ResizeConsoleCall
+	LastWaitContainer            WaitContainerCall
+	LastWaitProcess              WaitProcessCall
+	LastWaitProcessReturnContext *WaitProcessReturnContext
+	WaitContainerWg              sync.WaitGroup
 }
 
 // behaviorResulout produces the correct result given the MockCore's Behavior.
@@ -193,18 +200,25 @@ func (c *MockCore) ResizeConsole(pid int, height, width uint16) error {
 }
 
 // WaitContainer captures its arguments and returns a nil error.
-func (c *MockCore) WaitContainer(id string) (int, error) {
+func (c *MockCore) WaitContainer(id string) (func() int, error) {
 	c.LastWaitContainer = WaitContainerCall{
 		ID: id,
 	}
 	c.WaitContainerWg.Done()
-	return -1, c.behaviorResult()
+	return func() int { return -1 }, c.behaviorResult()
 }
 
 // WaitProcess captures its arguments and returns a nil error.
-func (c *MockCore) WaitProcess(pid int) (int, error) {
+func (c *MockCore) WaitProcess(pid int) (chan int, chan bool, error) {
 	c.LastWaitProcess = WaitProcessCall{
 		Pid: pid,
 	}
-	return -1, c.behaviorResult()
+
+	// All the tests to create one on their own but if one doesnt
+	// exit make a default one.
+	if c.LastWaitProcessReturnContext == nil {
+		c.LastWaitProcessReturnContext = &WaitProcessReturnContext{}
+	}
+
+	return c.LastWaitProcessReturnContext.ExitCodeChan, c.LastWaitProcessReturnContext.DoneChan, c.behaviorResult()
 }
