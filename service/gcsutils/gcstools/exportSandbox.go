@@ -23,25 +23,25 @@ func exportSandbox() error {
 
 	options, err := commoncli.SetupTar2VHDLibOptions(tar2vhdArgs...)
 	if err != nil {
-		logrus.Infof("error: %s. Please use -h for params\n", err)
+		logrus.Infof("error: %s. Please use -h for params", err)
 		return err
 	}
 
 	if *mntPath == "" {
 		err = fmt.Errorf("path is required")
-		logrus.Infof("error: %s. Please use -h for params\n", err)
+		logrus.Infof("error: %s. Please use -h for params", err)
 		return err
 	}
 
 	absPath, err := filepath.Abs(*mntPath)
 	if err != nil {
-		logrus.Infof("error: %s. Could not get abs\n", err)
+		logrus.Infof("error: %s. Could not get abs", err)
 		return err
 	}
 
-	logrus.Infof("converted: Packing %s\n", absPath)
+	logrus.Infof("converted: Packing %s", absPath)
 	if _, err = libtar2vhd.VHDX2Tar(absPath, os.Stdout, options); err != nil {
-		logrus.Infof("failed to pack files: %s\n", err)
+		logrus.Infof("failed to pack files: %s", err)
 		return err
 	}
 	return nil

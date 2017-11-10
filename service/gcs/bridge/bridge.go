@@ -218,7 +218,7 @@ func (b *Bridge) ListenAndServe() (conerr error) {
 	if err != nil {
 		return errors.Wrap(err, "bridge: failed creating the command Connection")
 	}
-	logrus.Info("bridge: successfully connected to the HCS via HyperV_Socket\n")
+	logrus.Info("bridge: successfully connected to the HCS via HyperV_Socket")
 
 	requestChan := make(chan *Request)
 	requestErrChan := make(chan error)
@@ -263,7 +263,7 @@ func (b *Bridge) ListenAndServe() (conerr error) {
 				}
 				b.Handler.ServeMsg(wr, r)
 				if !wr.respWritten {
-					logrus.Errorf("bridge: request: ID: 0x%x, Type: %d failed to write a response.\n", r.Header.ID, r.Header.Type)
+					logrus.Errorf("bridge: request: ID: 0x%x, Type: %d failed to write a response.", r.Header.ID, r.Header.Type)
 				}
 			}(req)
 		}
@@ -286,7 +286,7 @@ func (b *Bridge) ListenAndServe() (conerr error) {
 				responseErrChan <- errors.Wrap(err, "bridge: failed writing message payload")
 				continue
 			}
-			logrus.Infof("bridge: response sent: '%s' to HCS\n", responseBytes)
+			logrus.Infof("bridge: response sent: '%s' to HCS", responseBytes)
 		}
 	}()
 	// If we get any errors. We return from Listen and shutdown the bridge connection.

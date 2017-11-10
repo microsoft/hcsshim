@@ -312,16 +312,16 @@ func (c *gcsCore) unmountMappedDirectories(dirs []prot.MappedDirectory) error {
 func (c *gcsCore) mountLayers(id string, scratchMount *mountSpec, layers []*mountSpec) error {
 	layerPrefix, scratchPath, workdirPath, rootfsPath := c.getUnioningPaths(id)
 
-	logrus.Infof("layerPrefix=%s\n", layerPrefix)
-	logrus.Infof("scratchPath:%s\n", scratchPath)
-	logrus.Infof("workdirPath=%s\n", workdirPath)
-	logrus.Infof("rootfsPath=%s\n", rootfsPath)
+	logrus.Infof("layerPrefix=%s", layerPrefix)
+	logrus.Infof("scratchPath:%s", scratchPath)
+	logrus.Infof("workdirPath=%s", workdirPath)
+	logrus.Infof("rootfsPath=%s", rootfsPath)
 
 	// Mount the layer devices.
 	layerPaths := make([]string, len(layers)+1)
 	for i, layer := range layers {
 		layerPath := fmt.Sprintf("%s%d", layerPrefix, i)
-		logrus.Infof("layerPath: %s\n", layerPath)
+		logrus.Infof("layerPath: %s", layerPath)
 		if err := c.OS.MkdirAll(layerPath, 0700); err != nil {
 			return errors.Wrapf(err, "failed to create directory for layer %s", layerPath)
 		}

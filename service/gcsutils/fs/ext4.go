@@ -137,7 +137,7 @@ func (e *Ext4Fs) MakeFileSystem(file *os.File) error {
 	blockSize := strconv.FormatUint(e.BlockSize, 10)
 	inodeSize := strconv.FormatUint(e.InodeSize, 10)
 	numInodes := strconv.FormatUint(e.numInodes, 10)
-	logrus.Infof("making file system with: bs=%d is=%d numi=%d size=%d\n",
+	logrus.Infof("making file system with: bs=%d is=%d numi=%d size=%d",
 		e.BlockSize, e.InodeSize, e.numInodes, e.totalSize)
 
 	err := exec.Command(
