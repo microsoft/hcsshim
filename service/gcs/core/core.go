@@ -21,6 +21,6 @@ type Core interface {
 	RunExternalProcess(info prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (pid int, err error)
 	ModifySettings(id string, request prot.ResourceModificationRequestResponse) error
 	ResizeConsole(pid int, height, width uint16) error
-	WaitContainer(id string) (int, error)
-	WaitProcess(pid int) (int, error)
+	WaitContainer(id string) (func() int, error)
+	WaitProcess(pid int) (chan int, chan bool, error)
 }

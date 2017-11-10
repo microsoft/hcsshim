@@ -1049,10 +1049,14 @@ var _ = Describe("GCS", func() {
 			})
 			Describe("calling wait container", func() {
 				var (
-					exitCode int
+					exitCode int = -1
 				)
 				JustBeforeEach(func() {
-					exitCode, err = coreint.WaitContainer(containerID)
+					var exitCodeFn func() int
+					exitCodeFn, err = coreint.WaitContainer(containerID)
+					if err == nil {
+						exitCode = exitCodeFn()
+					}
 				})
 				Context("container does not exist", func() {
 					It("should produce errors", func() {
@@ -1075,7 +1079,13 @@ var _ = Describe("GCS", func() {
 					exitCode int
 				)
 				JustBeforeEach(func() {
-					exitCode, err = coreint.WaitProcess(pid)
+					var exitCodeChan chan int
+					var doneChan chan bool
+					exitCodeChan, doneChan, err = coreint.WaitProcess(pid)
+					if err == nil {
+						exitCode = <-exitCodeChan
+						doneChan <- true
+					}
 				})
 				Context("process does not exist", func() {
 					It("should produce an error", func() {
