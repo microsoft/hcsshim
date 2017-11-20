@@ -129,6 +129,21 @@ func netnsConfig() error {
 		// Set gateway
 		if a.HostIPAddress != "" {
 			gw := net.ParseIP(a.HostIPAddress)
+
+			if !addr.Contains(gw) {
+				// In the case that a gw is not part of the subnet we are setting gw for,
+				// a new addr containing this gw address need to be added into the link to avoid getting
+				// unreachable error when adding this out-of-subnet gw route
+				log.Infof("gw is outside of the subnet: Configure %s in %d with: %s/%d gw=%s\n",
+					   *ifStr, *nspid, a.AllocatedIPAddress, a.HostIPPrefixLength, a.HostIPAddress)
+				addr2 := &net.IPNet{
+						IP: net.ParseIP(a.HostIPAddress),
+						Mask: net.CIDRMask(24, 32)} // This assumes/hardcodes IPv4
+				ipAddr2 := &netlink.Addr{IPNet: addr2, Label: ""}
+				if err := netlink.AddrAdd(link, ipAddr2); err != nil {
+					return fmt.Errorf("netlink.AddrAdd(%#v, %#v) failed: %v", link, ipAddr2, err)
+				}
+			}
 			route := netlink.Route{
 				Scope:     netlink.SCOPE_UNIVERSE,
 				LinkIndex: link.Attrs().Index,
