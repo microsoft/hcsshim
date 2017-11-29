@@ -54,6 +54,7 @@ func main() {
 	logrus.SetLevel(level)
 
 	baseLogPath := "/tmp/gcs"
+	baseStoragePath := "/tmp"
 
 	// Setup the ability to dump the go stacks if the process is signaled.
 	sigChan := make(chan os.Signal, 1)
@@ -109,7 +110,7 @@ func main() {
 		logrus.Fatalf("%+v", err)
 	}
 	os := realos.NewOS()
-	coreint := gcs.NewGCSCore(baseLogPath, rtime, os, tport)
+	coreint := gcs.NewGCSCore(baseLogPath, baseStoragePath, rtime, os, tport)
 	mux := bridge.NewBridgeMux()
 	b := bridge.Bridge{
 		Transport: tport,

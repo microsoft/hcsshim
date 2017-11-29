@@ -586,7 +586,7 @@ var _ = Describe("GCS", func() {
 			BeforeEach(func() {
 				rtime := mockruntime.NewRuntime("/tmp/gcs")
 				os := mockos.NewOS()
-				cint := NewGCSCore("/tmp/gcs", rtime, os, &transport.MockTransport{})
+				cint := NewGCSCore("/tmp/gcs", "/tmp", rtime, os, &transport.MockTransport{})
 				coreint = cint.(*gcsCore)
 				containerID = "01234567-89ab-cdef-0123-456789abcdef"
 				processID = 101

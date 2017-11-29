@@ -6,6 +6,7 @@ package gcs
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -47,14 +48,71 @@ type gcsCore struct {
 	// into the gcsCore. It is structured as a map from pid to cache entry.
 	processCache map[int]*processCacheEntry
 
+	// baseLogPath is the path where all container logs should be nested.
+	baseLogPath string
+
 	// baseStoragePath is the path where all container storage should be nested.
 	baseStoragePath string
+
+	// containerIndexMutex is to lock access to the containerIndex slice
+	containerIndexMutex sync.Mutex
+
+	// containerIndex is a slice that tracks the index that the container was
+	// created in based on its array location and is aggressively reused when a
+	// location is no longer needed.
+	containerIndex []string
+}
+
+// getOrAddContainerIndex gets the index that a container was already inserted
+// at or inserts the container at the next available index. This method will
+// panic of 255+ containers.
+func (c *gcsCore) getOrAddContainerIndex(id string) uint8 {
+	c.containerIndexMutex.Lock()
+	defer c.containerIndexMutex.Unlock()
+
+	len := len(c.containerIndex)
+	insertAt := len
+	for i := 0; i < len; i++ {
+		if c.containerIndex[i] == "" && i <= insertAt {
+			insertAt = i
+		} else if c.containerIndex[i] == id {
+			// We already have inserted this id. Return its index.
+			return uint8(i)
+		}
+	}
+
+	if insertAt > math.MaxUint8 {
+		panic("Maximum number of container indexes hit")
+	}
+
+	if insertAt < len {
+		c.containerIndex[insertAt] = id
+	} else {
+		c.containerIndex = append(c.containerIndex, id)
+	}
+
+	return uint8(insertAt)
+}
+
+// removeContainerIndex removes a container index in the list. This is safe to
+// call multiple times as it does not affect the list if not found.
+func (c *gcsCore) removeContainerIndex(id string) {
+	c.containerIndexMutex.Lock()
+	defer c.containerIndexMutex.Unlock()
+
+	for i := 0; i < len(c.containerIndex); i++ {
+		if c.containerIndex[i] == id {
+			c.containerIndex[i] = ""
+			return
+		}
+	}
 }
 
 // NewGCSCore creates a new gcsCore struct initialized with the given Runtime.
-func NewGCSCore(basePath string, rtime runtime.Runtime, os oslayer.OS, vsock transport.Transport) core.Core {
+func NewGCSCore(baseLogPath, baseStoragePath string, rtime runtime.Runtime, os oslayer.OS, vsock transport.Transport) core.Core {
 	return &gcsCore{
-		baseStoragePath: basePath,
+		baseLogPath:     baseLogPath,
+		baseStoragePath: baseStoragePath,
 		Rtime:           rtime,
 		OS:              os,
 		vsock:           vsock,
@@ -65,7 +123,10 @@ func NewGCSCore(basePath string, rtime runtime.Runtime, os oslayer.OS, vsock tra
 
 // containerCacheEntry stores cached information for a single container.
 type containerCacheEntry struct {
-	ID                 string
+	ID string
+	// Index is the shortened storage location index for this container. It
+	// represents the index in which this container was given on create.
+	Index              uint8
 	MappedVirtualDisks map[uint8]prot.MappedVirtualDisk
 	MappedDirectories  map[uint32]prot.MappedDirectory
 	NetworkAdapters    []prot.NetworkAdapter
@@ -177,7 +238,8 @@ func (c *gcsCore) CreateContainer(id string, settings prot.VMHostedContainerSett
 	if err != nil {
 		return errors.Wrapf(err, "failed to get layer devices for container %s", id)
 	}
-	if err := c.mountLayers(id, scratch, layers); err != nil {
+	containerEntry.Index = c.getOrAddContainerIndex(id)
+	if err := c.mountLayers(containerEntry.Index, scratch, layers); err != nil {
 		return errors.Wrapf(err, "failed to mount layers for container %s", id)
 	}
 
@@ -225,13 +287,13 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 	var pid int
 	if !containerEntry.hasRunInitProcess {
 		containerEntry.hasRunInitProcess = true
-		if err := c.writeConfigFile(id, params.OCISpecification); err != nil {
+		if err := c.writeConfigFile(containerEntry.Index, id, params.OCISpecification); err != nil {
 			// Early exit. Cleanup our waiter since we never got a process.
 			containerEntry.initProcess.writersWg.Done()
 			return -1, err
 		}
 
-		container, err := c.Rtime.CreateContainer(id, c.getContainerStoragePath(id), stdioSet)
+		container, err := c.Rtime.CreateContainer(id, c.getContainerStoragePath(containerEntry.Index), stdioSet)
 		if err != nil {
 			// Early exit. Cleanup our waiter since we never got a process.
 			containerEntry.initProcess.writersWg.Done()
@@ -254,13 +316,12 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 
 		go func() {
 			var exitCode int
+			// If we fail to cleanup the container we cannot reuse the storage location.
+			leakContainerIndex := false
 			state, err := container.Wait()
 			c.containerCacheMutex.Lock()
 			if err != nil {
 				logrus.Error(err)
-				if err := c.cleanupContainer(containerEntry); err != nil {
-					logrus.Error(err)
-				}
 				exitCode = -1
 			} else {
 				exitCode = state.ExitCode()
@@ -269,12 +330,17 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 
 			if err := c.cleanupContainer(containerEntry); err != nil {
 				logrus.Error(err)
+				leakContainerIndex = true
 			}
 			c.containerCacheMutex.Unlock()
 
 			// We are the only writer. Safe to do without a lock
 			containerEntry.initProcess.exitCode = exitCode
 			containerEntry.initProcess.exitWg.Done()
+
+			if !leakContainerIndex {
+				c.removeContainerIndex(id)
+			}
 
 			c.containerCacheMutex.Lock()
 			// This is safe because the init process WaitContainer has already
