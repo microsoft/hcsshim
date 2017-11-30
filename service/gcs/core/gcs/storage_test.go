@@ -3,11 +3,11 @@ package gcs
 import (
 	"fmt"
 	"io/ioutil"
-	"math"
 	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -34,10 +34,10 @@ var _ = Describe("Storage", func() {
 
 	Describe("getting the container paths", func() {
 		var (
-			validIndex uint8
+			validIndex uint32
 		)
 		BeforeEach(func() {
-			validIndex = uint8(rand.Uint32() % math.MaxUint8)
+			validIndex = rand.Uint32()
 		})
 
 		Describe("getting the container storage path", func() {
@@ -199,12 +199,12 @@ var _ = Describe("Storage", func() {
 	Describe("mounting and unmounting layers", func() {
 		var (
 			containerID    string
-			containerIndex uint8
+			containerIndex uint32
 			err            error
 		)
 		BeforeEach(func() {
 			containerID = "abcdef-ghi"
-			containerIndex = uint8(rand.Uint32() % math.MaxUint8)
+			containerIndex = rand.Uint32()
 		})
 		SetupLoopbacks := func(layers []string) {
 			for i, layer := range layers {
@@ -342,7 +342,7 @@ var _ = Describe("Storage", func() {
 				// Make sure to clean up in case the test fails halfway
 				// through.
 				coreint.unmountLayers(containerIndex)
-				coreint.destroyContainerStorage(containerIndex, containerID)
+				coreint.destroyContainerStorage(containerIndex)
 				DestroyLayers(layers)
 			})
 			It("should behave properly", func() {
@@ -350,7 +350,7 @@ var _ = Describe("Storage", func() {
 				err = coreint.mountLayers(containerIndex, scratchSpec, layerSpecs)
 				Expect(err).NotTo(HaveOccurred())
 
-				containerPath := filepath.Join("/tmp", string(containerIndex))
+				containerPath := filepath.Join("/tmp", strconv.FormatUint(uint64(containerIndex), 10))
 
 				// Check the state of rootfs.
 				rootfsPath := filepath.Join(containerPath, "rootfs")
@@ -427,7 +427,7 @@ var _ = Describe("Storage", func() {
 				Expect(mounted).To(BeFalse())
 
 				// Detroy the layers.
-				err = coreint.destroyContainerStorage(containerIndex, containerID)
+				err = coreint.destroyContainerStorage(containerIndex)
 				Expect(err).NotTo(HaveOccurred())
 				exists, err = coreint.OS.PathExists(containerPath)
 				Expect(err).NotTo(HaveOccurred())
@@ -458,7 +458,7 @@ var _ = Describe("Storage", func() {
 				err = coreint.mountLayers(containerIndex, nil, layerSpecs)
 				Expect(err).NotTo(HaveOccurred())
 
-				containerPath := filepath.Join("/tmp", string(containerIndex))
+				containerPath := filepath.Join("/tmp", strconv.FormatUint(uint64(containerIndex), 10))
 
 				// Check the state of rootfs.
 				rootfsPath := filepath.Join(containerPath, "rootfs")
@@ -527,7 +527,7 @@ var _ = Describe("Storage", func() {
 				Expect(mounted).To(BeFalse())
 
 				// Detroy the layers.
-				err = coreint.destroyContainerStorage(containerIndex, containerID)
+				err = coreint.destroyContainerStorage(containerIndex)
 				Expect(err).NotTo(HaveOccurred())
 				exists, err = coreint.OS.PathExists(containerPath)
 				Expect(err).NotTo(HaveOccurred())
@@ -557,7 +557,7 @@ var _ = Describe("Storage", func() {
 				err = coreint.mountLayers(containerIndex, scratchSpec, nil)
 				Expect(err).NotTo(HaveOccurred())
 
-				containerPath := filepath.Join("/tmp", string(containerIndex))
+				containerPath := filepath.Join("/tmp", strconv.FormatUint(uint64(containerIndex), 10))
 
 				// Check the state of rootfs.
 				rootfsPath := filepath.Join(containerPath, "rootfs")
@@ -626,7 +626,7 @@ var _ = Describe("Storage", func() {
 				Expect(mounted).To(BeFalse())
 
 				// Detroy the layers.
-				err = coreint.destroyContainerStorage(containerIndex, containerID)
+				err = coreint.destroyContainerStorage(containerIndex)
 				Expect(err).NotTo(HaveOccurred())
 				exists, err = coreint.OS.PathExists(containerPath)
 				Expect(err).NotTo(HaveOccurred())
@@ -651,7 +651,7 @@ var _ = Describe("Storage", func() {
 				err = coreint.mountLayers(containerIndex, nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 
-				containerPath := filepath.Join("/tmp", string(containerIndex))
+				containerPath := filepath.Join("/tmp", strconv.FormatUint(uint64(containerIndex), 10))
 
 				// Check the state of rootfs.
 				rootfsPath := filepath.Join(containerPath, "rootfs")
@@ -720,7 +720,7 @@ var _ = Describe("Storage", func() {
 				Expect(mounted).To(BeFalse())
 
 				// Detroy the layers.
-				err = coreint.destroyContainerStorage(containerIndex, containerID)
+				err = coreint.destroyContainerStorage(containerIndex)
 				Expect(err).NotTo(HaveOccurred())
 				exists, err = coreint.OS.PathExists(containerPath)
 				Expect(err).NotTo(HaveOccurred())

@@ -65,11 +65,15 @@ type gcsCore struct {
 
 // getOrAddContainerIndex gets the index that a container was already inserted
 // at or inserts the container at the next available index. This method will
-// panic of 255+ containers.
-func (c *gcsCore) getOrAddContainerIndex(id string) uint8 {
+// return an error if no available indexes could be found.
+func (c *gcsCore) getOrAddContainerIndex(id string) (uint32, error) {
 	c.containerIndexMutex.Lock()
 	defer c.containerIndexMutex.Unlock()
 
+	// len() returns int32 so we cannot index a value greater than that size.
+	// And we know that given index range {0, MaxInt32 - 1} that if there are no
+	// slots and a maximum slice size insertAt will be MaxInt32 at the end of
+	// the loop.
 	len := len(c.containerIndex)
 	insertAt := len
 	for i := 0; i < len; i++ {
@@ -77,12 +81,12 @@ func (c *gcsCore) getOrAddContainerIndex(id string) uint8 {
 			insertAt = i
 		} else if c.containerIndex[i] == id {
 			// We already have inserted this id. Return its index.
-			return uint8(i)
+			return uint32(i), nil
 		}
 	}
 
-	if insertAt > math.MaxUint8 {
-		panic("Maximum number of container indexes hit")
+	if insertAt == math.MaxInt32 {
+		return 0, fmt.Errorf("Maximum number (%d) of container indexes hit", math.MaxInt32)
 	}
 
 	if insertAt < len {
@@ -91,7 +95,21 @@ func (c *gcsCore) getOrAddContainerIndex(id string) uint8 {
 		c.containerIndex = append(c.containerIndex, id)
 	}
 
-	return uint8(insertAt)
+	return uint32(insertAt), nil
+}
+
+// getContainerIDFromIndex gets the ID of the container registered at a given
+// index. If the index is larger than the known ID's or a valid index that does
+// not have a registered ID it returns "".
+func (c *gcsCore) getContainerIDFromIndex(index uint32) string {
+	c.containerIndexMutex.Lock()
+	defer c.containerIndexMutex.Unlock()
+
+	if int(index) < len(c.containerIndex) {
+		return c.containerIndex[index]
+	}
+
+	return ""
 }
 
 // removeContainerIndex removes a container index in the list. This is safe to
@@ -126,7 +144,7 @@ type containerCacheEntry struct {
 	ID string
 	// Index is the shortened storage location index for this container. It
 	// represents the index in which this container was given on create.
-	Index              uint8
+	Index              uint32
 	MappedVirtualDisks map[uint8]prot.MappedVirtualDisk
 	MappedDirectories  map[uint32]prot.MappedDirectory
 	NetworkAdapters    []prot.NetworkAdapter
@@ -238,7 +256,11 @@ func (c *gcsCore) CreateContainer(id string, settings prot.VMHostedContainerSett
 	if err != nil {
 		return errors.Wrapf(err, "failed to get layer devices for container %s", id)
 	}
-	containerEntry.Index = c.getOrAddContainerIndex(id)
+	containerEntry.Index, err = c.getOrAddContainerIndex(id)
+	if err != nil {
+		return errors.Wrap(err, "failed to get a valid container index")
+	}
+
 	if err := c.mountLayers(containerEntry.Index, scratch, layers); err != nil {
 		return errors.Wrapf(err, "failed to mount layers for container %s", id)
 	}
@@ -287,7 +309,7 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 	var pid int
 	if !containerEntry.hasRunInitProcess {
 		containerEntry.hasRunInitProcess = true
-		if err := c.writeConfigFile(containerEntry.Index, id, params.OCISpecification); err != nil {
+		if err := c.writeConfigFile(containerEntry.Index, params.OCISpecification); err != nil {
 			// Early exit. Cleanup our waiter since we never got a process.
 			containerEntry.initProcess.writersWg.Done()
 			return -1, err
