@@ -41,7 +41,7 @@ func (c *gcsCore) cleanupContainer(containerEntry *containerCacheEntry) error {
 			errToReturn = err
 		}
 	}
-	if err := c.unmountLayers(containerEntry.ID); err != nil {
+	if err := c.unmountLayers(containerEntry.Index); err != nil {
 		logrus.Warn(err)
 		if errToReturn == nil {
 			errToReturn = err
@@ -50,7 +50,7 @@ func (c *gcsCore) cleanupContainer(containerEntry *containerCacheEntry) error {
 
 	// We only do cleanup if unmounting succeeds.
 	if errToReturn == nil {
-		if err := c.destroyContainerStorage(containerEntry.ID); err != nil {
+		if err := c.destroyContainerStorage(containerEntry.Index); err != nil {
 			logrus.Warn(err)
 			if errToReturn == nil {
 				errToReturn = err

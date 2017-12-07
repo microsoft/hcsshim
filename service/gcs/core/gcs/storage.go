@@ -308,9 +308,9 @@ func (c *gcsCore) unmountMappedDirectories(dirs []prot.MappedDirectory) error {
 // mountLayers mounts each device into a mountpoint, and then layers them into a
 // union filesystem in the given order.
 // These mountpoints are all stored under a directory reserved for the container
-// with the given ID.
-func (c *gcsCore) mountLayers(id string, scratchMount *mountSpec, layers []*mountSpec) error {
-	layerPrefix, scratchPath, workdirPath, rootfsPath := c.getUnioningPaths(id)
+// with the given index.
+func (c *gcsCore) mountLayers(index uint32, scratchMount *mountSpec, layers []*mountSpec) error {
+	layerPrefix, scratchPath, workdirPath, rootfsPath := c.getUnioningPaths(index)
 
 	logrus.Infof("layerPrefix=%s", layerPrefix)
 	logrus.Infof("scratchPath:%s", scratchPath)
@@ -320,7 +320,7 @@ func (c *gcsCore) mountLayers(id string, scratchMount *mountSpec, layers []*moun
 	// Mount the layer devices.
 	layerPaths := make([]string, len(layers)+1)
 	for i, layer := range layers {
-		layerPath := fmt.Sprintf("%s%d", layerPrefix, i)
+		layerPath := filepath.Join(layerPrefix, strconv.Itoa(i))
 		logrus.Infof("layerPath: %s", layerPath)
 		if err := c.OS.MkdirAll(layerPath, 0700); err != nil {
 			return errors.Wrapf(err, "failed to create directory for layer %s", layerPath)
@@ -376,57 +376,44 @@ func (c *gcsCore) mountLayers(id string, scratchMount *mountSpec, layers []*moun
 
 // unmountLayers unmounts the union filesystem for the container with the given
 // ID, as well as any devices whose mountpoints were layers in that filesystem.
-func (c *gcsCore) unmountLayers(id string) error {
-	layerPrefix, scratchPath, _, rootfsPath := c.getUnioningPaths(id)
+func (c *gcsCore) unmountLayers(index uint32) error {
+	layerPrefix, scratchPath, _, rootfsPath := c.getUnioningPaths(index)
+
+	cleanup := func(pathFriendlyName, path string) error {
+		exists, err := c.OS.PathExists(path)
+		if err != nil {
+			return errors.Wrapf(err, "failed to determine if container %s path exists %s", pathFriendlyName, rootfsPath)
+		}
+		mounted, err := c.OS.PathIsMounted(path)
+		if err != nil {
+			return errors.Wrapf(err, "failed to determine if container %s path is mounted %s", pathFriendlyName, rootfsPath)
+		}
+		if exists && mounted {
+			if err := c.OS.Unmount(path, 0); err != nil {
+				return errors.Wrapf(err, "failed to unmount container %s %s", pathFriendlyName, rootfsPath)
+			}
+		}
+		return nil
+	}
 
 	// clean up rootfsPath operations
-	exists, err := c.OS.PathExists(rootfsPath)
-	if err != nil {
-		return errors.Wrapf(err, "failed to determine if container root filesystem path exists %s", rootfsPath)
-	}
-	mounted, err := c.OS.PathIsMounted(rootfsPath)
-	if err != nil {
-		return errors.Wrapf(err, "failed to determine if container root filesystem path is mounted %s", rootfsPath)
-	}
-	if exists && mounted {
-		if err := c.OS.Unmount(rootfsPath, 0); err != nil {
-			return errors.Wrapf(err, "failed to unmount container root filesystem %s", rootfsPath)
-		}
+	if err := cleanup("root filesytem", rootfsPath); err != nil {
+		return err
 	}
 
 	// clean up scratchPath operations
-	exists, err = c.OS.PathExists(scratchPath)
-	if err != nil {
-		return errors.Wrapf(err, "failed to determine if scratch path exists %s", scratchPath)
-	}
-	mounted, err = c.OS.PathIsMounted(scratchPath)
-	if err != nil {
-		return errors.Wrapf(err, "failed to determine if scratch path is mounted %s", scratchPath)
-	}
-	if exists && mounted {
-		if err := c.OS.Unmount(scratchPath, 0); err != nil {
-			return errors.Wrapf(err, "failed to unmount scratch path %s", scratchPath)
-		}
+	if err := cleanup("scratch", scratchPath); err != nil {
+		return err
 	}
 
 	// Clean up layer path operations
-	layerPaths, err := filepath.Glob(layerPrefix + "*")
+	layerPaths, err := filepath.Glob(filepath.Join(layerPrefix, "*"))
 	if err != nil {
 		return errors.Wrap(err, "failed to get layer paths using Glob")
 	}
 	for _, layerPath := range layerPaths {
-		exists, err = c.OS.PathExists(layerPath)
-		if err != nil {
-			return errors.Wrapf(err, "failed to determine if layer path exists %s", layerPath)
-		}
-		mounted, err = c.OS.PathIsMounted(layerPath)
-		if err != nil {
-			return errors.Wrapf(err, "failed to determine if layer path is mounted %s", layerPath)
-		}
-		if exists && mounted {
-			if err := c.OS.Unmount(layerPath, 0); err != nil {
-				return errors.Wrapf(err, "failed to unmount layer path %s", layerPath)
-			}
+		if err := cleanup("layer", layerPath); err != nil {
+			return err
 		}
 	}
 
@@ -437,46 +424,46 @@ func (c *gcsCore) unmountLayers(id string) error {
 // container with the given ID.
 // These files include directories used for mountpoints in the union filesystem
 // and config files.
-func (c *gcsCore) destroyContainerStorage(id string) error {
-	if err := c.OS.RemoveAll(c.getContainerStoragePath(id)); err != nil {
-		return errors.Wrapf(err, "failed to remove container storage path for container %s", id)
+func (c *gcsCore) destroyContainerStorage(index uint32) error {
+	if err := c.OS.RemoveAll(c.getContainerStoragePath(index)); err != nil {
+		return errors.Wrapf(err, "failed to remove container storage path for container %s", c.getContainerIDFromIndex(index))
 	}
 	return nil
 }
 
 // writeConfigFile writes the given oci.Spec to disk so that it can be consumed
 // by an OCI runtime.
-func (c *gcsCore) writeConfigFile(id string, config oci.Spec) error {
-	configPath := c.getConfigPath(id)
+func (c *gcsCore) writeConfigFile(index uint32, config oci.Spec) error {
+	configPath := c.getConfigPath(index)
 	if err := c.OS.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
-		return errors.Wrapf(err, "failed to create config file directory for container %s", id)
+		return errors.Wrapf(err, "failed to create config file directory for container %s", c.getContainerIDFromIndex(index))
 	}
 	configFile, err := c.OS.Create(configPath)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create config file for container %s", id)
+		return errors.Wrapf(err, "failed to create config file for container %s", c.getContainerIDFromIndex(index))
 	}
 	defer configFile.Close()
 	writer := bufio.NewWriter(configFile)
 	if err := json.NewEncoder(writer).Encode(config); err != nil {
-		return errors.Wrapf(err, "failed to write contents of config file for container %s", id)
+		return errors.Wrapf(err, "failed to write contents of config file for container %s", c.getContainerIDFromIndex(index))
 	}
 	if err := writer.Flush(); err != nil {
-		return errors.Wrapf(err, "failed to flush to config file for container %s", id)
+		return errors.Wrapf(err, "failed to flush to config file for container %s", c.getContainerIDFromIndex(index))
 	}
 	return nil
 }
 
 // getContainerStoragePath returns the path where the GCS stores files on disk
-// for the container with the given ID.
-func (c *gcsCore) getContainerStoragePath(id string) string {
-	return filepath.Join(c.baseStoragePath, id)
+// for the container with the given index.
+func (c *gcsCore) getContainerStoragePath(index uint32) string {
+	return filepath.Join(c.baseStoragePath, strconv.FormatUint(uint64(index), 10))
 }
 
 // getUnioningPaths returns paths that will be used in the union filesystem for
-// the container with the given ID.
-func (c *gcsCore) getUnioningPaths(id string) (layerPrefix string, scratchPath string, workdirPath string, rootfsPath string) {
-	mountPath := c.getContainerStoragePath(id)
-	layerPrefix = filepath.Join(mountPath, "layer")
+// the container with the given index.
+func (c *gcsCore) getUnioningPaths(index uint32) (layerPrefix string, scratchPath string, workdirPath string, rootfsPath string) {
+	mountPath := c.getContainerStoragePath(index)
+	layerPrefix = mountPath
 	scratchPath = filepath.Join(mountPath, "scratch")
 	workdirPath = filepath.Join(mountPath, "scratch", "work")
 	rootfsPath = filepath.Join(mountPath, "rootfs")
@@ -484,6 +471,6 @@ func (c *gcsCore) getUnioningPaths(id string) (layerPrefix string, scratchPath s
 }
 
 // getConfigPath returns the path to the container's config file.
-func (c *gcsCore) getConfigPath(id string) string {
-	return filepath.Join(c.getContainerStoragePath(id), "config.json")
+func (c *gcsCore) getConfigPath(index uint32) string {
+	return filepath.Join(c.getContainerStoragePath(index), "config.json")
 }
