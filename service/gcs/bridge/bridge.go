@@ -228,6 +228,9 @@ func (b *Bridge) AssignHandlers(mux *Mux, gcs core.Core) {
 	mux.HandleFunc(prot.ComputeSystemWaitForProcessV1, prot.PvV3, b.waitOnProcess)
 	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, prot.PvV3, b.resizeConsole)
 	mux.HandleFunc(prot.ComputeSystemModifySettingsV1, prot.PvV3, b.modifySettings)
+
+	// v4 specific handlers
+	mux.HandleFunc(prot.ComputeSystemStartV1, prot.PvV4, b.startContainer)
 }
 
 // ListenAndServe connects to the bridge transport, listens for
@@ -426,6 +429,20 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 
 	// Set our protocol selected version before return.
 	b.protVer = prot.PvV3
+	w.Write(response)
+}
+
+func (b *Bridge) startContainer(w ResponseWriter, r *Request) {
+	// This is just a noop, but needs to be handled so that an error isn't
+	// returned to the HCS.
+	var request prot.MessageBase
+	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
+		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
+		return
+	}
+	response := &prot.MessageResponseBase{
+		ActivityID: request.ActivityID,
+	}
 	w.Write(response)
 }
 
