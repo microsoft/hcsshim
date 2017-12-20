@@ -21,6 +21,11 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// The capabilities of this GCS.
+var capabilities = prot.GcsCapabilities{
+	SendInitialCreateMessage: false,
+}
+
 // NotSupported represents the default handler logic for an unmatched
 // request type sent from the bridge.
 func NotSupported(w ResponseWriter, r *Request) {
@@ -50,16 +55,16 @@ func (f HandlerFunc) ServeMsg(w ResponseWriter, r *Request) {
 // following the bridge protocol.
 type Mux struct {
 	mu sync.Mutex
-	m  map[prot.MessageIdentifier]Handler
+	m  map[prot.MessageIdentifier]map[prot.ProtocolVersion]Handler
 }
 
 // NewBridgeMux creates a default bridge multiplexer.
 func NewBridgeMux() *Mux {
-	return &Mux{m: make(map[prot.MessageIdentifier]Handler)}
+	return &Mux{m: make(map[prot.MessageIdentifier]map[prot.ProtocolVersion]Handler)}
 }
 
-// Handle registers the handler for the given message id.
-func (mux *Mux) Handle(id prot.MessageIdentifier, handler Handler) {
+// Handle registers the handler for the given message id and protocol version.
+func (mux *Mux) Handle(id prot.MessageIdentifier, ver prot.ProtocolVersion, handler Handler) {
 	mux.mu.Lock()
 	defer mux.mu.Unlock()
 
@@ -67,20 +72,24 @@ func (mux *Mux) Handle(id prot.MessageIdentifier, handler Handler) {
 		panic("bridge: nil handler")
 	}
 
-	if _, ok := mux.m[id]; ok {
-		logrus.Infof("bridge: overwriting bridge handler for type: 0x%x", id)
+	if _, ok := mux.m[id]; !ok {
+		mux.m[id] = make(map[prot.ProtocolVersion]Handler)
 	}
 
-	mux.m[id] = handler
+	if _, ok := mux.m[id][ver]; ok {
+		logrus.Infof("bridge: overwriting bridge handler for type: 0x%x, version: %v", id, ver)
+	}
+
+	mux.m[id][ver] = handler
 }
 
-// HandleFunc registers the handler function for the given message id.
-func (mux *Mux) HandleFunc(id prot.MessageIdentifier, handler func(ResponseWriter, *Request)) {
+// HandleFunc registers the handler function for the given message id and protocol version.
+func (mux *Mux) HandleFunc(id prot.MessageIdentifier, ver prot.ProtocolVersion, handler func(ResponseWriter, *Request)) {
 	if handler == nil {
 		panic("bridge: nil handler func")
 	}
 
-	mux.Handle(id, HandlerFunc(handler))
+	mux.Handle(id, ver, HandlerFunc(handler))
 }
 
 // Handler returns the handler to use for the given request type.
@@ -92,9 +101,14 @@ func (mux *Mux) Handler(r *Request) Handler {
 		panic("bridge: nil request to handler")
 	}
 
-	var h Handler
+	var m map[prot.ProtocolVersion]Handler
 	var ok bool
-	if h, ok = mux.m[r.Header.Type]; !ok {
+	if m, ok = mux.m[r.Header.Type]; !ok {
+		return NotSupportedHandler()
+	}
+
+	var h Handler
+	if h, ok = m[r.Version]; !ok {
 		return NotSupportedHandler()
 	}
 
@@ -112,6 +126,7 @@ func (mux *Mux) ServeMsg(w ResponseWriter, r *Request) {
 type Request struct {
 	Header  *prot.MessageHeader
 	Message []byte
+	Version prot.ProtocolVersion
 }
 
 // ResponseWriter is the dispatcher used to construct the Bridge response.
@@ -189,6 +204,8 @@ type Bridge struct {
 
 	// testing hook to close the bridge ListenAndServe() method.
 	quitChan chan bool
+
+	protVer prot.ProtocolVersion
 }
 
 // AssignHandlers creates and assigns the appropriate bridge
@@ -196,15 +213,21 @@ type Bridge struct {
 // to `gcs` for handling.
 func (b *Bridge) AssignHandlers(mux *Mux, gcs core.Core) {
 	b.coreint = gcs
-	mux.HandleFunc(prot.ComputeSystemCreateV1, b.createContainer)
-	mux.HandleFunc(prot.ComputeSystemExecuteProcessV1, b.execProcess)
-	mux.HandleFunc(prot.ComputeSystemShutdownForcedV1, b.killContainer)
-	mux.HandleFunc(prot.ComputeSystemShutdownGracefulV1, b.shutdownContainer)
-	mux.HandleFunc(prot.ComputeSystemSignalProcessV1, b.signalProcess)
-	mux.HandleFunc(prot.ComputeSystemGetPropertiesV1, b.listProcesses)
-	mux.HandleFunc(prot.ComputeSystemWaitForProcessV1, b.waitOnProcess)
-	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, b.resizeConsole)
-	mux.HandleFunc(prot.ComputeSystemModifySettingsV1, b.modifySettings)
+
+	// These are PvInvalid because they will be called previous to any protocol
+	// negotiation so they respond only when the protocols are not known.
+	mux.HandleFunc(prot.ComputeSystemNegotiateProtocolV1, prot.PvInvalid, b.negotiateProtocol)
+	mux.HandleFunc(prot.ComputeSystemCreateV1, prot.PvInvalid, b.createContainer)
+
+	// v3 specific handlers
+	mux.HandleFunc(prot.ComputeSystemExecuteProcessV1, prot.PvV3, b.execProcess)
+	mux.HandleFunc(prot.ComputeSystemShutdownForcedV1, prot.PvV3, b.killContainer)
+	mux.HandleFunc(prot.ComputeSystemShutdownGracefulV1, prot.PvV3, b.shutdownContainer)
+	mux.HandleFunc(prot.ComputeSystemSignalProcessV1, prot.PvV3, b.signalProcess)
+	mux.HandleFunc(prot.ComputeSystemGetPropertiesV1, prot.PvV3, b.listProcesses)
+	mux.HandleFunc(prot.ComputeSystemWaitForProcessV1, prot.PvV3, b.waitOnProcess)
+	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, prot.PvV3, b.resizeConsole)
+	mux.HandleFunc(prot.ComputeSystemModifySettingsV1, prot.PvV3, b.modifySettings)
 }
 
 // ListenAndServe connects to the bridge transport, listens for
@@ -247,7 +270,7 @@ func (b *Bridge) ListenAndServe() (conerr error) {
 			}
 			logrus.Infof("bridge: read message type: %v", header.Type)
 			logrus.Infof("bridge: read message '%s'", message)
-			requestChan <- &Request{header, message}
+			requestChan <- &Request{header, message, b.protVer}
 		}
 	}()
 	// Process each bridge request async and create the response writer.
@@ -317,7 +340,44 @@ func (b *Bridge) PublishNotification(n *prot.ContainerNotification) {
 	b.responseChan <- resp
 }
 
+func (b *Bridge) negotiateProtocol(w ResponseWriter, r *Request) {
+	if r.Version != prot.PvInvalid {
+		logrus.Errorf("bridge: Message Type: %v was called more than once.", r.Header.Type)
+		w.Error("", gcserr.NewHresultError(gcserr.HrVmcomputeProtocolError))
+		return
+	}
+
+	var request prot.NegotiateProtocol
+	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
+		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message))
+		return
+	}
+
+	if 4 < request.MinimumVersion.Major || 4 > request.MaximumVersion.Major {
+		w.Error(request.ActivityID, gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion))
+		return
+	}
+
+	response := &prot.NegotiateProtocolResponse{
+		MessageResponseBase: &prot.MessageResponseBase{
+			ActivityID: request.ActivityID,
+		},
+		Version:      prot.Version{Major: 4, Minor: 0, Patch: 0, Metadata: ""},
+		Capabilities: capabilities,
+	}
+
+	// Set our protocol selected version before return.
+	b.protVer = prot.PvV4
+	w.Write(response)
+}
+
 func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
+	if r.Version != prot.PvInvalid {
+		logrus.Errorf("bridge: Message Type: %v was called more than once.", r.Header.Type)
+		w.Error("", gcserr.NewHresultError(gcserr.HrVmcomputeProtocolError))
+		return
+	}
+
 	var request prot.ContainerCreate
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message))
@@ -342,7 +402,7 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 		MessageResponseBase: &prot.MessageResponseBase{
 			ActivityID: request.ActivityID,
 		},
-		SelectedProtocolVersion: prot.PvV3,
+		SelectedProtocolVersion: uint32(prot.PvV3),
 	}
 
 	exitCodeFn, err := b.coreint.WaitContainer(id)
@@ -365,10 +425,17 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 		b.PublishNotification(notification)
 	}()
 
+	// Set our protocol selected version before return.
+	b.protVer = prot.PvV3
 	w.Write(response)
 }
 
 func (b *Bridge) execProcess(w ResponseWriter, r *Request) {
+	if r.Version != prot.PvV3 {
+		w.Error("", gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion))
+		return
+	}
+
 	var request prot.ContainerExecuteProcess
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
@@ -421,6 +488,11 @@ func (b *Bridge) shutdownContainer(w ResponseWriter, r *Request) {
 // signalContainer is not a handler func. This is because the actual signal is
 // implied based on the message type.
 func (b *Bridge) signalContainer(w ResponseWriter, r *Request, signal oslayer.Signal) {
+	if r.Version != prot.PvV3 {
+		w.Error("", gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion))
+		return
+	}
+
 	var request prot.MessageBase
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
@@ -439,6 +511,11 @@ func (b *Bridge) signalContainer(w ResponseWriter, r *Request, signal oslayer.Si
 }
 
 func (b *Bridge) signalProcess(w ResponseWriter, r *Request) {
+	if r.Version != prot.PvV3 {
+		w.Error("", gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion))
+		return
+	}
+
 	var request prot.ContainerSignalProcess
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
@@ -457,6 +534,11 @@ func (b *Bridge) signalProcess(w ResponseWriter, r *Request) {
 }
 
 func (b *Bridge) listProcesses(w ResponseWriter, r *Request) {
+	if r.Version != prot.PvV3 {
+		w.Error("", gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion))
+		return
+	}
+
 	var request prot.ContainerGetProperties
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
@@ -486,6 +568,11 @@ func (b *Bridge) listProcesses(w ResponseWriter, r *Request) {
 }
 
 func (b *Bridge) waitOnProcess(w ResponseWriter, r *Request) {
+	if r.Version != prot.PvV3 {
+		w.Error("", gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion))
+		return
+	}
+
 	var request prot.ContainerWaitForProcess
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
@@ -517,6 +604,11 @@ func (b *Bridge) waitOnProcess(w ResponseWriter, r *Request) {
 }
 
 func (b *Bridge) resizeConsole(w ResponseWriter, r *Request) {
+	if r.Version != prot.PvV3 {
+		w.Error("", gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion))
+		return
+	}
+
 	var request prot.ContainerResizeConsole
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
@@ -535,6 +627,11 @@ func (b *Bridge) resizeConsole(w ResponseWriter, r *Request) {
 }
 
 func (b *Bridge) modifySettings(w ResponseWriter, r *Request) {
+	if r.Version != prot.PvV3 {
+		w.Error("", gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion))
+		return
+	}
+
 	request, err := prot.UnmarshalContainerModifySettings(r.Message)
 	if err != nil {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))

@@ -96,6 +96,8 @@ const (
 	ComputeSystemGetPropertiesV1 = 0x10100901
 	// ComputeSystemModifySettingsV1 is the modify container request.
 	ComputeSystemModifySettingsV1 = 0x10100a01
+	// ComputeSystemNegotiateProtocolV1 is the protocol negotiation request.
+	ComputeSystemNegotiateProtocolV1 = 0x10100b01
 
 	// ComputeSystemResponseCreateV1 is the create container response.
 	ComputeSystemResponseCreateV1 = 0x20100101
@@ -121,6 +123,9 @@ const (
 	ComputeSystemResponseGetPropertiesV1 = 0x20100901
 	// ComputeSystemResponseModifySettingsV1 is the modify container response.
 	ComputeSystemResponseModifySettingsV1 = 0x20100a01
+	// ComputeSystemResponseNegotiateProtocolV1 is the protocol negotiation
+	// response.
+	ComputeSystemResponseNegotiateProtocolV1 = 0x20100b01
 
 	// ComputeSystemNotificationV1 is the notification identifier.
 	ComputeSystemNotificationV1 = 0x30100101
@@ -141,12 +146,15 @@ const MessageHeaderSize = 16
 
 /////////////////////////////////////////////////////
 
-// Protocol version.
+// ProtocolVersion is a type for the seclected HCS<->GCS protocol version of
+// messages
+type ProtocolVersion uint32
+
+// Protocol versions.
 const (
-	PvInvalid = 0
-	PvV1      = 1
-	PvV2      = 2
-	PvV3      = 3
+	PvInvalid ProtocolVersion = 0
+	PvV3      ProtocolVersion = 3
+	PvV4      ProtocolVersion = 4
 )
 
 // ProtocolSupport specifies the protocol versions to be used for HCS-GCS
@@ -158,11 +166,33 @@ type ProtocolSupport struct {
 	MaximumProtocolVersion uint32
 }
 
+// GcsCapabilities specifies the abilities and scenarios supported by this GCS.
+type GcsCapabilities struct {
+	SendInitialCreateMessage bool
+}
+
+// Version is the struct sent to identify the protocol version of the HCS-GCS
+// communication protocol.
+type Version struct {
+	Major    uint32
+	Minor    uint32
+	Patch    uint32 `json:",omitempty"`
+	Metadata string `json:",omitempty"`
+}
+
 // MessageBase is the base type embedded in all messages sent from the HCS to
 // the GCS, as well as ContainerNotification which is sent from GCS to HCS.
 type MessageBase struct {
 	ContainerID string `json:"ContainerId"`
 	ActivityID  string `json:"ActivityId"`
+}
+
+// NegotiateProtocol is the message from the HCS used to determine the protocol
+// version that will be used for future communication.
+type NegotiateProtocol struct {
+	*MessageBase
+	MinimumVersion Version
+	MaximumVersion Version
 }
 
 // ContainerCreate is the message from the HCS specifying to create a container
@@ -409,9 +439,19 @@ type MessageResponseBase struct {
 	ErrorRecords []ErrorRecord `json:",omitempty"`
 }
 
+// NegotiateProtocolResponse is the message to the HCS responding to a
+// NegotiateProtocol message. It specifies the prefered protocol version and
+// available capabilities of the GCS.
+type NegotiateProtocolResponse struct {
+	*MessageResponseBase
+	Version      Version
+	Capabilities GcsCapabilities
+}
+
 // ContainerCreateResponse is the message to the HCS responding to a
-// ContainerCreate message. It serves a protocol negotiation function as well,
-// returning protocol version information to the HCS.
+// ContainerCreate message. It serves a protocol negotiation function as well
+// for protocol versions 3 and lower, returning protocol version information to
+// the HCS.
 type ContainerCreateResponse struct {
 	*MessageResponseBase
 	SelectedVersion         string `json:",omitempty"`
