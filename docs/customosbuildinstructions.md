@@ -33,27 +33,27 @@ please follow the instructions:
 
 The expected user mode directory structure is required to constructed as follows: [See the complete user-mode file list](../kernel/completeUsermodeFileLists.md)
 
-Under the / directory, it should have the following subdirectories:
+Under the `/` directory, it should have the following subdirectories:
 
-- /tmp
-- /proc
-- /bin
-- /dev
-- /run
-- /etc
-- /usr
-- /mnt
-- /sys
+- `/tmp`
+- `/proc`
+- `/bin`
+- `/dev`
+- `/run`
+- `/etc`
+- `/usr`
+- `/mnt`
+- `/sys`
 
-- /init
-- /root
-- /sbin
-- /lib64
-- /lib
+- `/init`
+- `/root`
+- `/sbin`
+- `/lib64`
+- `/lib`
 
 Here are the expected contents of each subdirectory /file
 
-1. Subdirectories with **empty** contents:  /tmp /proc /dev /run /etc /usr /mnt /sys
+1. Subdirectories with **empty** contents:  `/tmp` `/proc` `/dev` `/run` `/etc` `/usr` `/mnt` `/sys
 
 2. **/init**
    This is the [init script file](../kernel/scripts/init_script)
