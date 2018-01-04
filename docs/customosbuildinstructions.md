@@ -53,7 +53,7 @@ Under the `/` directory, it should have the following subdirectories:
 
 Here are the expected contents of each subdirectory /file
 
-1. Subdirectories with **empty** contents:  `/tmp` `/proc` `/dev` `/run` `/etc` `/usr` `/mnt` `/sys
+1. Subdirectories with **empty** contents:  `/tmp` `/proc` `/dev` `/run` `/etc` `/usr` `/mnt` `/sys`
 
 2. **/init**
    This is the [init script file](../kernel/scripts/init_script)
