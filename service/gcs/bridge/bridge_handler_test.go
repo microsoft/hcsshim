@@ -152,6 +152,83 @@ func newMessageBase() *prot.MessageBase {
 	return base
 }
 
+func Test_NegotiateProtocol_DuplicateCall_Failure(t *testing.T) {
+	req, rw := setupRequestResponse(t, prot.ComputeSystemNegotiateProtocolV1, prot.PvInvalid, nil)
+
+	tb := new(Bridge)
+	tb.negotiateProtocol(rw, req)
+
+	verifyResponseJSONError(t, rw)
+	verifyActivityIDEmptyGUID(t, rw)
+}
+
+func Test_NegotiateProtocol_InvalidJson_Failure(t *testing.T) {
+	req, rw := setupRequestResponse(t, prot.ComputeSystemNegotiateProtocolV1, prot.PvInvalid, nil)
+
+	tb := new(Bridge)
+	tb.negotiateProtocol(rw, req)
+
+	verifyResponseJSONError(t, rw)
+	verifyActivityIDEmptyGUID(t, rw)
+}
+
+func Test_NegotiateProtocol_InvalidRange_Low_Failure(t *testing.T) {
+	r := &prot.NegotiateProtocol{
+		MessageBase:    newMessageBase(),
+		MinimumVersion: prot.Version{Major: 3},
+		MaximumVersion: prot.Version{Major: 3},
+	}
+
+	req, rw := setupRequestResponse(t, prot.ComputeSystemNegotiateProtocolV1, prot.PvInvalid, r)
+
+	tb := new(Bridge)
+	tb.negotiateProtocol(rw, req)
+
+	verifyResponseError(t, rw)
+	verifyActivityID(t, r.MessageBase, rw)
+}
+
+func Test_NegotiateProtocol_InvalidRange_High_Failure(t *testing.T) {
+	r := &prot.NegotiateProtocol{
+		MessageBase:    newMessageBase(),
+		MinimumVersion: prot.Version{Major: uint32(prot.PvMax) + 1},
+		MaximumVersion: prot.Version{Major: uint32(prot.PvMax) + 1},
+	}
+
+	req, rw := setupRequestResponse(t, prot.ComputeSystemNegotiateProtocolV1, prot.PvInvalid, r)
+
+	tb := new(Bridge)
+	tb.negotiateProtocol(rw, req)
+
+	verifyResponseError(t, rw)
+	verifyActivityID(t, r.MessageBase, rw)
+}
+
+func Test_NegotiateProtocol_ValidRange_Success(t *testing.T) {
+	r := &prot.NegotiateProtocol{
+		MessageBase:    newMessageBase(),
+		MinimumVersion: prot.Version{Major: 4},
+		MaximumVersion: prot.Version{Major: uint32(prot.PvMax) + 1},
+	}
+
+	req, rw := setupRequestResponse(t, prot.ComputeSystemNegotiateProtocolV1, prot.PvInvalid, r)
+
+	tb := new(Bridge)
+	tb.negotiateProtocol(rw, req)
+
+	verifyResponseSuccess(t, rw)
+	verifyActivityID(t, r.MessageBase, rw)
+
+	resp := rw.response.(*prot.NegotiateProtocolResponse)
+	if resp.Version.Major != uint32(prot.PvMax) {
+		t.Errorf("Invalid version number selected for response: %v", resp.Version.Major)
+	}
+	// verify that the bridge global was updated
+	if tb.protVer != prot.PvMax {
+		t.Error("The global bridge protocol version was not updated after a call to negotiate protocol")
+	}
+}
+
 func Test_CreateContainer_InvalidJson_Failure(t *testing.T) {
 	req, rw := setupRequestResponse(t, prot.ComputeSystemCreateV1, prot.PvInvalid, nil)
 
@@ -301,6 +378,10 @@ func Test_CreateContainer_Success_WaitContainer_Success(t *testing.T) {
 	}
 	if !reflect.DeepEqual(hs, mc.LastCreateContainer.Settings) {
 		t.Fatal("last create container did not have equal settings structs")
+	}
+	// verify that the bridge global was updated
+	if b.protVer != prot.PvV3 {
+		t.Error("The global bridge protocol version was not updated after a call to create container")
 	}
 
 	mc.WaitContainerWg.Wait()

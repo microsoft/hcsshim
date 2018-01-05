@@ -155,6 +155,7 @@ const (
 	PvInvalid ProtocolVersion = 0
 	PvV3      ProtocolVersion = 3
 	PvV4      ProtocolVersion = 4
+	PvMax     ProtocolVersion = PvV4
 )
 
 // ProtocolSupport specifies the protocol versions to be used for HCS-GCS

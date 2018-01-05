@@ -340,6 +340,8 @@ func (b *Bridge) PublishNotification(n *prot.ContainerNotification) {
 	b.responseChan <- resp
 }
 
+// negotiateProtocol was introduced in v4 so will not be called
+// with a minimum lower than that.
 func (b *Bridge) negotiateProtocol(w ResponseWriter, r *Request) {
 	if r.Version != prot.PvInvalid {
 		logrus.Errorf("bridge: Message Type: %v was called more than once.", r.Header.Type)
@@ -353,21 +355,30 @@ func (b *Bridge) negotiateProtocol(w ResponseWriter, r *Request) {
 		return
 	}
 
-	if 4 < request.MinimumVersion.Major || 4 > request.MaximumVersion.Major {
+	if request.MaximumVersion.Major < uint32(prot.PvV4) || uint32(prot.PvMax) < request.MinimumVersion.Major {
 		w.Error(request.ActivityID, gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion))
 		return
 	}
+
+	min := func(x, y uint32) uint32 {
+		if x < y {
+			return x
+		}
+		return y
+	}
+
+	major := min(uint32(prot.PvMax), request.MaximumVersion.Major)
 
 	response := &prot.NegotiateProtocolResponse{
 		MessageResponseBase: &prot.MessageResponseBase{
 			ActivityID: request.ActivityID,
 		},
-		Version:      prot.Version{Major: 4, Minor: 0, Patch: 0, Metadata: ""},
+		Version:      prot.Version{Major: major, Minor: 0, Patch: 0, Metadata: ""},
 		Capabilities: capabilities,
 	}
 
 	// Set our protocol selected version before return.
-	b.protVer = prot.PvV4
+	b.protVer = prot.ProtocolVersion(major)
 	w.Write(response)
 }
 
@@ -431,11 +442,6 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 }
 
 func (b *Bridge) execProcess(w ResponseWriter, r *Request) {
-	if r.Version != prot.PvV3 {
-		w.Error("", gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion))
-		return
-	}
-
 	var request prot.ContainerExecuteProcess
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
@@ -488,11 +494,6 @@ func (b *Bridge) shutdownContainer(w ResponseWriter, r *Request) {
 // signalContainer is not a handler func. This is because the actual signal is
 // implied based on the message type.
 func (b *Bridge) signalContainer(w ResponseWriter, r *Request, signal oslayer.Signal) {
-	if r.Version != prot.PvV3 {
-		w.Error("", gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion))
-		return
-	}
-
 	var request prot.MessageBase
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
@@ -511,11 +512,6 @@ func (b *Bridge) signalContainer(w ResponseWriter, r *Request, signal oslayer.Si
 }
 
 func (b *Bridge) signalProcess(w ResponseWriter, r *Request) {
-	if r.Version != prot.PvV3 {
-		w.Error("", gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion))
-		return
-	}
-
 	var request prot.ContainerSignalProcess
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
@@ -534,11 +530,6 @@ func (b *Bridge) signalProcess(w ResponseWriter, r *Request) {
 }
 
 func (b *Bridge) listProcesses(w ResponseWriter, r *Request) {
-	if r.Version != prot.PvV3 {
-		w.Error("", gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion))
-		return
-	}
-
 	var request prot.ContainerGetProperties
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
@@ -568,11 +559,6 @@ func (b *Bridge) listProcesses(w ResponseWriter, r *Request) {
 }
 
 func (b *Bridge) waitOnProcess(w ResponseWriter, r *Request) {
-	if r.Version != prot.PvV3 {
-		w.Error("", gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion))
-		return
-	}
-
 	var request prot.ContainerWaitForProcess
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
@@ -604,11 +590,6 @@ func (b *Bridge) waitOnProcess(w ResponseWriter, r *Request) {
 }
 
 func (b *Bridge) resizeConsole(w ResponseWriter, r *Request) {
-	if r.Version != prot.PvV3 {
-		w.Error("", gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion))
-		return
-	}
-
 	var request prot.ContainerResizeConsole
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
@@ -627,11 +608,6 @@ func (b *Bridge) resizeConsole(w ResponseWriter, r *Request) {
 }
 
 func (b *Bridge) modifySettings(w ResponseWriter, r *Request) {
-	if r.Version != prot.PvV3 {
-		w.Error("", gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion))
-		return
-	}
-
 	request, err := prot.UnmarshalContainerModifySettings(r.Message)
 	if err != nil {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
