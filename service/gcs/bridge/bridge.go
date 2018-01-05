@@ -343,12 +343,6 @@ func (b *Bridge) PublishNotification(n *prot.ContainerNotification) {
 // negotiateProtocol was introduced in v4 so will not be called
 // with a minimum lower than that.
 func (b *Bridge) negotiateProtocol(w ResponseWriter, r *Request) {
-	if r.Version != prot.PvInvalid {
-		logrus.Errorf("bridge: Message Type: %v was called more than once.", r.Header.Type)
-		w.Error("", gcserr.NewHresultError(gcserr.HrVmcomputeProtocolError))
-		return
-	}
-
 	var request prot.NegotiateProtocol
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message))
@@ -383,12 +377,6 @@ func (b *Bridge) negotiateProtocol(w ResponseWriter, r *Request) {
 }
 
 func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
-	if r.Version != prot.PvInvalid {
-		logrus.Errorf("bridge: Message Type: %v was called more than once.", r.Header.Type)
-		w.Error("", gcserr.NewHresultError(gcserr.HrVmcomputeProtocolError))
-		return
-	}
-
 	var request prot.ContainerCreate
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message))
