@@ -46,7 +46,7 @@ func TestBridgeMux_Handle_NilHandler_Panic(t *testing.T) {
 	}()
 
 	m := NewBridgeMux()
-	m.Handle(prot.ComputeSystemCreateV1, nil)
+	m.Handle(prot.ComputeSystemCreateV1, prot.PvInvalid, nil)
 }
 
 func TestBridgeMux_Handle_NilMap_Panic(t *testing.T) {
@@ -58,17 +58,22 @@ func TestBridgeMux_Handle_NilMap_Panic(t *testing.T) {
 
 	m := &Mux{} // Caller didn't use NewBridgeMux (not supported).
 	th := &thandler{}
-	m.Handle(prot.ComputeSystemCreateV1, th)
+	m.Handle(prot.ComputeSystemCreateV1, prot.PvInvalid, th)
 }
 
 func Test_Bridge_Mux_Handle_Succeeds(t *testing.T) {
 	th := &thandler{}
 	m := NewBridgeMux()
-	m.Handle(prot.ComputeSystemCreateV1, th)
+	m.Handle(prot.ComputeSystemCreateV1, prot.PvInvalid, th)
+
+	var verMap map[prot.ProtocolVersion]Handler
+	var ok bool
+	if verMap, ok = m.m[prot.ComputeSystemCreateV1]; !ok {
+		t.Error("The handler type map not successfully added.")
+	}
 
 	var hOut Handler
-	var ok bool
-	if hOut, ok = m.m[prot.ComputeSystemCreateV1]; !ok {
+	if hOut, ok = verMap[prot.PvInvalid]; !ok {
 		t.Error("The handler was not successfully added.")
 	}
 
@@ -88,7 +93,7 @@ func TestBridgeMux_HandleFunc_NilHandleFunc_Panic(t *testing.T) {
 	}()
 
 	m := NewBridgeMux()
-	m.HandleFunc(prot.ComputeSystemCreateV1, nil)
+	m.HandleFunc(prot.ComputeSystemCreateV1, prot.PvInvalid, nil)
 }
 
 func TestBridgeMux_HandleFunc_NilMap_Panic(t *testing.T) {
@@ -102,7 +107,7 @@ func TestBridgeMux_HandleFunc_NilMap_Panic(t *testing.T) {
 	}
 
 	m := &Mux{} // Caller didn't use NewBridgeMux (not supported).
-	m.HandleFunc(prot.ComputeSystemCreateV1, hIn)
+	m.HandleFunc(prot.ComputeSystemCreateV1, prot.PvInvalid, hIn)
 }
 
 func Test_Bridge_Mux_HandleFunc_Succeeds(t *testing.T) {
@@ -112,11 +117,16 @@ func Test_Bridge_Mux_HandleFunc_Succeeds(t *testing.T) {
 	}
 
 	m := NewBridgeMux()
-	m.HandleFunc(prot.ComputeSystemCreateV1, hIn)
+	m.HandleFunc(prot.ComputeSystemCreateV1, prot.PvInvalid, hIn)
+
+	var verMap map[prot.ProtocolVersion]Handler
+	var ok bool
+	if verMap, ok = m.m[prot.ComputeSystemCreateV1]; !ok {
+		t.Error("The handler type map not successfully added.")
+	}
 
 	var hOut Handler
-	var ok bool
-	if hOut, ok = m.m[prot.ComputeSystemCreateV1]; !ok {
+	if hOut, ok = verMap[prot.PvInvalid]; !ok {
 		t.Error("The handler was not successfully added.")
 	}
 
@@ -141,7 +151,7 @@ func Test_Bridge_Mux_Handler_NilRequest_Panic(t *testing.T) {
 	}
 
 	m := NewBridgeMux()
-	m.HandleFunc(prot.ComputeSystemCreateV1, hIn)
+	m.HandleFunc(prot.ComputeSystemCreateV1, prot.PvInvalid, hIn)
 	m.Handler(nil)
 }
 
@@ -199,7 +209,7 @@ func Test_Bridge_Mux_Handler_Added_NotMatched(t *testing.T) {
 	th := &thandler{}
 
 	// Add at least one handler for a different request type.
-	m.Handle(prot.ComputeSystemCreateV1, th)
+	m.Handle(prot.ComputeSystemCreateV1, prot.PvInvalid, th)
 
 	req := &Request{
 		Header: &prot.MessageHeader{
@@ -232,7 +242,7 @@ func Test_Bridge_Mux_Handler_Success(t *testing.T) {
 	m := NewBridgeMux()
 	th := &thandler{}
 
-	m.Handle(prot.ComputeSystemCreateV1, th)
+	m.Handle(prot.ComputeSystemCreateV1, prot.PvInvalid, th)
 
 	req := &Request{
 		Header: &prot.MessageHeader{
@@ -290,7 +300,7 @@ func Test_Bridge_Mux_ServeMsg_Added_NotMatched(t *testing.T) {
 	th := &thandler{}
 
 	// Add at least one handler for a different request type.
-	m.Handle(prot.ComputeSystemCreateV1, th)
+	m.Handle(prot.ComputeSystemCreateV1, prot.PvInvalid, th)
 
 	req := &Request{
 		Header: &prot.MessageHeader{
@@ -323,7 +333,7 @@ func Test_Bridge_Mux_ServeMsg_Success(t *testing.T) {
 	m := NewBridgeMux()
 	th := &thandler{}
 
-	m.Handle(prot.ComputeSystemCreateV1, th)
+	m.Handle(prot.ComputeSystemCreateV1, prot.PvInvalid, th)
 
 	req := &Request{
 		Header: &prot.MessageHeader{
@@ -520,10 +530,11 @@ func Test_Bridge_ListenAndServe_CorrectHandler_Success(t *testing.T) {
 		}
 		w.Write(response)
 	}
-	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, resizeFn)
+	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, prot.PvV3, resizeFn)
 	b := &Bridge{
 		Transport: mt,
 		Handler:   mux,
+		protVer:   prot.PvV3,
 	}
 
 	go func() {
@@ -551,7 +562,6 @@ func Test_Bridge_ListenAndServe_CorrectHandler_Success(t *testing.T) {
 		t.Error("Failed to unmarshal response body from server")
 		return
 	}
-
 	// Verify.
 	if header.Type != prot.ComputeSystemResponseResizeConsoleV1 {
 		t.Error("response header was not resize console response.")
@@ -595,12 +605,13 @@ func Test_Bridge_ListenAndServe_HandlersAreAsync_Success(t *testing.T) {
 		// Allow the first to proceed.
 		orderWg.Done()
 	}
-	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, firstFn)
-	mux.HandleFunc(prot.ComputeSystemCreateV1, secondFn)
+	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, prot.PvV3, firstFn)
+	mux.HandleFunc(prot.ComputeSystemModifySettingsV1, prot.PvV3, secondFn)
 
 	b := &Bridge{
 		Transport: mt,
 		Handler:   mux,
+		protVer:   prot.PvV3,
 	}
 
 	go func() {
@@ -618,7 +629,7 @@ func Test_Bridge_ListenAndServe_HandlersAreAsync_Success(t *testing.T) {
 		t.Error("Failed to send first message to server")
 		return
 	}
-	if err := serverSend(clientConnection, prot.ComputeSystemCreateV1, prot.SequenceID(1), nil); err != nil {
+	if err := serverSend(clientConnection, prot.ComputeSystemModifySettingsV1, prot.SequenceID(1), nil); err != nil {
 		t.Error("Failed to send second message to server")
 		return
 	}
@@ -634,7 +645,7 @@ func Test_Bridge_ListenAndServe_HandlersAreAsync_Success(t *testing.T) {
 		return
 	}
 	// headerFirst should match the 2nd request.
-	if headerFirst.Type != prot.ComputeSystemResponseCreateV1 {
+	if headerFirst.Type != prot.ComputeSystemResponseModifySettingsV1 {
 		t.Error("Incorrect response type for 2nd request")
 	}
 	if headerFirst.ID != prot.SequenceID(1) {
