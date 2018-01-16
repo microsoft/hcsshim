@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 var commands = map[string]func(){
@@ -17,6 +19,7 @@ var commands = map[string]func(){
 func main() {
 	cmd := filepath.Base(os.Args[0])
 	if mainFunc, ok := commands[cmd]; ok {
+		defer writePanicLog()
 		mainFunc()
 
 		// The called program might have exited to return a custom return code.
@@ -31,4 +34,16 @@ func main() {
 		fmt.Fprintf(os.Stderr, "\t%s\n", k)
 	}
 	os.Exit(127)
+}
+
+// Very basic panic log writer that dumps the stack to file
+func writePanicLog() {
+	recover()
+	var logger *log.Logger
+	f, _ := os.Create(fmt.Sprintf("/tmp/paniclog.%s.%d", filepath.Base(os.Args[0]), os.Getpid()))
+	logger = log.New(f, "", log.LstdFlags)
+	buf := make([]byte, 1<<16)
+	runtime.Stack(buf, true)
+	logger.Printf("%s", buf)
+	os.Exit(1)
 }
