@@ -1,20 +1,31 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 
+	"github.com/Microsoft/opengcs/service/gcsutils/gcstools/commoncli"
 	"github.com/Microsoft/opengcs/service/gcsutils/remotefs"
+	"github.com/sirupsen/logrus"
 )
 
 func remotefsHandler() error {
-	if len(os.Args) < 2 {
+	logArgs := commoncli.SetFlagsForLogging()
+	flag.Parse()
+
+	if err := commoncli.SetupLogging(logArgs...); err != nil {
+		logrus.Infof("error: %s. Use --help for supported flags", err)
+		return err
+	}
+
+	if len(flag.Args()) < 2 {
 		return remotefs.ErrUnknown
 	}
 
-	command := os.Args[1]
+	command := flag.Args()[0]
 	if cmd, ok := remotefs.Commands[command]; ok {
-		cmdErr := cmd(os.Stdin, os.Stdout, os.Args[2:])
+		cmdErr := cmd(os.Stdin, os.Stdout, flag.Args()[1:])
 
 		// Write the cmdErr to stderr, so that the client can handle it.
 		if err := remotefs.WriteError(cmdErr, os.Stderr); err != nil {

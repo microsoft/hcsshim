@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
-	"github.com/sirupsen/logrus"
 	"github.com/docker/docker/pkg/archive"
+	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/opengcs/service/gcsutils/fs"
 	"github.com/Microsoft/opengcs/service/gcsutils/libtar2vhd"
@@ -70,8 +71,9 @@ func SetupTar2VHDLibOptions(args ...*string) (*libtar2vhd.Options, error) {
 // SetFlagsForLogging sets the command line flags for logging.
 func SetFlagsForLogging() []*string {
 	basename := filepath.Base(os.Args[0]) + ".log"
-	loggingLocation := flag.String("logfile", filepath.Join("/tmp", basename), "logging file location")
-	return []*string{loggingLocation}
+	logFile := flag.String("logfile", filepath.Join("/tmp", basename), "logging file location")
+	logLevel := flag.String("loglevel", "debug", "Logging Level: debug, info, warning, error, fatal, panic.")
+	return []*string{logFile, logLevel}
 }
 
 // SetupLogging creates the logger from the command line parameters.
@@ -79,10 +81,26 @@ func SetupLogging(args ...*string) error {
 	if len(args) < 1 {
 		return fmt.Errorf("Invalid log params")
 	}
+	level, err := logrus.ParseLevel(*args[1])
+	if err != nil {
+		logrus.Fatal(err)
+		return err
+	}
+	logrus.SetLevel(level)
 
-	logrus.SetLevel(logrus.InfoLevel)
+	// Add the sub-command to the filename for remotefs. This is really ugly :(
+	// Done to allow mixing both fixed args that remotefs expects for back-compat,
+	// along with flags. Prior to this change, remotefs didn't accept flags at all,
+	// and did no logging. Unfortunately, there are circumstances where two distinct
+	// remotefs commands can execute simultaneously, so we need separate logfiles.
+	filename := *args[0]
+	if os.Args[0] == "remotefs" {
+		if len(flag.Args()[0]) > 1 {
+			filename = strings.Replace(filename, "remotefs", fmt.Sprintf("remotefs.%s", flag.Args()[0]), 1)
+		}
+	}
 
-	outputTarget, err := os.OpenFile(*args[0], os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+	outputTarget, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
 	}
