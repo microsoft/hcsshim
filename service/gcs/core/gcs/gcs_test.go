@@ -7,7 +7,6 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer/mockos"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
-	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/runtime/mockruntime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
@@ -884,20 +883,62 @@ var _ = Describe("GCS", func() {
 					})
 				})
 			})
-			Describe("calling ListProcesses", func() {
+			Describe("calling GetProperties", func() {
 				var (
-					processes []runtime.ContainerProcessState
+					properties *prot.Properties
+					query      string
 				)
 				JustBeforeEach(func() {
-					processes, err = coreint.ListProcesses(containerID)
+					properties, err = coreint.GetProperties(containerID, query)
 				})
 				Context("the container has already been created", func() {
 					BeforeEach(func() {
 						err = coreint.CreateContainer(containerID, createSettings)
 						Expect(err).NotTo(HaveOccurred())
 					})
-					It("should not produce an error", func() {
-						Expect(err).NotTo(HaveOccurred())
+					Context("a process has been executed", func() {
+						BeforeEach(func() {
+							_, err = coreint.ExecProcess(containerID, initialExecParams, fullStdioSet)
+							Expect(err).NotTo(HaveOccurred())
+						})
+						Context("using an empty query", func() {
+							It("should not produce an error", func() {
+								Expect(err).NotTo(HaveOccurred())
+							})
+							It("should not return any processes", func() {
+								Expect(properties).NotTo(BeNil())
+								Expect(properties.ProcessList).To(BeEmpty())
+							})
+						})
+						Context("using a process list query", func() {
+							BeforeEach(func() {
+								query = "{\"PropertyTypes\":[\"ProcessList\"]}"
+							})
+							It("should not produce an error", func() {
+								Expect(err).NotTo(HaveOccurred())
+							})
+							It("should return a process with pid 123", func() {
+								Expect(properties).NotTo(BeNil())
+								Expect(properties.ProcessList).To(HaveLen(1))
+								Expect(properties.ProcessList[0].ProcessID).To(Equal(uint32(123)))
+							})
+						})
+						Context("using an invalid JSON query", func() {
+							BeforeEach(func() {
+								query = "{"
+							})
+							It("should produce an error", func() {
+								Expect(err).To(HaveOccurred())
+							})
+						})
+					})
+					Context("no process has been executed", func() {
+						It("should not produce an error", func() {
+							Expect(err).NotTo(HaveOccurred())
+						})
+						It("should return a nil properties", func() {
+							Expect(properties).To(BeNil())
+						})
 					})
 				})
 				Context("the container has not already been created", func() {
