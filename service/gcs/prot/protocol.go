@@ -536,3 +536,18 @@ type ProcessParameters struct {
 type SignalProcessOptions struct {
 	Signal int32
 }
+
+// ProcessDetails represents information about a given process.
+type ProcessDetails struct {
+	ProcessID uint32 `json:"ProcessId"`
+}
+
+// PropertyQuery is a query to specify which properties are requested.
+type PropertyQuery struct {
+	PropertyTypes []PropertyType `json:",omitempty"`
+}
+
+// Properties represents the properties of a compute system.
+type Properties struct {
+	ProcessList []ProcessDetails `json:",omitempty"`
+}

@@ -201,7 +201,7 @@ func (b *Bridge) AssignHandlers(mux *Mux, gcs core.Core) {
 	mux.HandleFunc(prot.ComputeSystemShutdownForcedV1, b.killContainer)
 	mux.HandleFunc(prot.ComputeSystemShutdownGracefulV1, b.shutdownContainer)
 	mux.HandleFunc(prot.ComputeSystemSignalProcessV1, b.signalProcess)
-	mux.HandleFunc(prot.ComputeSystemGetPropertiesV1, b.listProcesses)
+	mux.HandleFunc(prot.ComputeSystemGetPropertiesV1, b.getProperties)
 	mux.HandleFunc(prot.ComputeSystemWaitForProcessV1, b.waitOnProcess)
 	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, b.resizeConsole)
 	mux.HandleFunc(prot.ComputeSystemModifySettingsV1, b.modifySettings)
@@ -456,7 +456,7 @@ func (b *Bridge) signalProcess(w ResponseWriter, r *Request) {
 	w.Write(response)
 }
 
-func (b *Bridge) listProcesses(w ResponseWriter, r *Request) {
+func (b *Bridge) getProperties(w ResponseWriter, r *Request) {
 	var request prot.ContainerGetProperties
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
@@ -464,15 +464,15 @@ func (b *Bridge) listProcesses(w ResponseWriter, r *Request) {
 	}
 	id := request.ContainerID
 
-	processes, err := b.coreint.ListProcesses(id)
+	properties, err := b.coreint.GetProperties(id, request.Query)
 	if err != nil {
 		w.Error(request.ActivityID, err)
 		return
 	}
 
-	processJSON, err := json.Marshal(processes)
+	propertyJSON, err := json.Marshal(properties)
 	if err != nil {
-		w.Error(request.ActivityID, errors.Wrapf(err, "failed to marshal processes into JSON: %v", processes))
+		w.Error(request.ActivityID, errors.Wrapf(err, "failed to marshal properties into JSON: %v", properties))
 		return
 	}
 
@@ -480,7 +480,7 @@ func (b *Bridge) listProcesses(w ResponseWriter, r *Request) {
 		MessageResponseBase: &prot.MessageResponseBase{
 			ActivityID: request.ActivityID,
 		},
-		Properties: string(processJSON),
+		Properties: string(propertyJSON),
 	}
 	w.Write(response)
 }
