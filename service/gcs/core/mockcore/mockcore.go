@@ -6,7 +6,6 @@ import (
 
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
-	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	"github.com/pkg/errors"
 )
@@ -49,9 +48,10 @@ type SignalProcessCall struct {
 	Options prot.SignalProcessOptions
 }
 
-// ListProcessesCall captures the arguments of ListProcesses.
-type ListProcessesCall struct {
-	ID string
+// GetPropertiesCall captures the arguments of GetProperties.
+type GetPropertiesCall struct {
+	ID    string
+	Query string
 }
 
 // RunExternalProcessCall captures the arguments of RunExternalProcess.
@@ -98,7 +98,7 @@ type MockCore struct {
 	LastExecProcess              ExecProcessCall
 	LastSignalContainer          SignalContainerCall
 	LastSignalProcess            SignalProcessCall
-	LastListProcesses            ListProcessesCall
+	LastGetProperties            GetPropertiesCall
 	LastRunExternalProcess       RunExternalProcessCall
 	LastModifySettings           ModifySettingsCall
 	LastResizeConsole            ResizeConsoleCall
@@ -157,17 +157,12 @@ func (c *MockCore) SignalProcess(pid int, options prot.SignalProcessOptions) err
 	return c.behaviorResult()
 }
 
-// ListProcesses captures its arguments. It then returns a process with pid
-// 101, command "sh -c testexe", CreatedByRuntime true, and IsZombie true.
-func (c *MockCore) ListProcesses(id string) ([]runtime.ContainerProcessState, error) {
-	c.LastListProcesses = ListProcessesCall{ID: id}
-	return []runtime.ContainerProcessState{
-		runtime.ContainerProcessState{
-			Pid:              101,
-			Command:          []string{"sh", "-c", "testexe"},
-			CreatedByRuntime: true,
-			IsZombie:         true,
-		},
+// GetProperties captures its arguments. It then returns a properties with a
+// process with pid 101.
+func (c *MockCore) GetProperties(id string, query string) (*prot.Properties, error) {
+	c.LastGetProperties = GetPropertiesCall{ID: id, Query: query}
+	return &prot.Properties{
+		ProcessList: []prot.ProcessDetails{prot.ProcessDetails{ProcessID: 101}},
 	}, c.behaviorResult()
 }
 

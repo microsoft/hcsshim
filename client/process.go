@@ -134,6 +134,7 @@ func (config *Config) DebugGCS() {
 		cmd += debugCommand("ls -l /tmp")
 		cmd += debugCommand("cat /tmp/gcs.log")
 		cmd += debugCommand("cat /tmp/gcs/gcs-stacks*")
+		cmd += debugCommand("cat /tmp/gcs/paniclog*")
 		cmd += debugCommand("ls -l /tmp/gcs")
 		cmd += debugCommand("ls -l /tmp/gcs/*")
 		cmd += debugCommand("cat /tmp/gcs/*/config.json")

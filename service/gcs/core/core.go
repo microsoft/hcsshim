@@ -5,7 +5,6 @@ package core
 import (
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
-	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
 )
 
@@ -17,7 +16,7 @@ type Core interface {
 	ExecProcess(id string, info prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (pid int, err error)
 	SignalContainer(id string, signal oslayer.Signal) error
 	SignalProcess(pid int, options prot.SignalProcessOptions) error
-	ListProcesses(id string) ([]runtime.ContainerProcessState, error)
+	GetProperties(id string, query string) (*prot.Properties, error)
 	RunExternalProcess(info prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (pid int, err error)
 	ModifySettings(id string, request prot.ResourceModificationRequestResponse) error
 	ResizeConsole(pid int, height, width uint16) error

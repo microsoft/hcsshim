@@ -5,6 +5,7 @@
 package gcs
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -473,8 +474,8 @@ func (c *gcsCore) SignalProcess(pid int, options prot.SignalProcessOptions) erro
 	return nil
 }
 
-// ListProcesses returns all container processes, even zombies.
-func (c *gcsCore) ListProcesses(id string) ([]runtime.ContainerProcessState, error) {
+// GetProperties returns the properties of the compute system.
+func (c *gcsCore) GetProperties(id string, query string) (*prot.Properties, error) {
 	c.containerCacheMutex.Lock()
 	defer c.containerCacheMutex.Unlock()
 
@@ -482,16 +483,34 @@ func (c *gcsCore) ListProcesses(id string) ([]runtime.ContainerProcessState, err
 	if containerEntry == nil {
 		return nil, errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
 	}
-
 	if containerEntry.container == nil {
 		return nil, nil
 	}
 
-	processes, err := containerEntry.container.GetAllProcesses()
-	if err != nil {
-		return nil, err
+	var queryObj prot.PropertyQuery
+	if len(query) != 0 {
+		if err := json.Unmarshal([]byte(query), &queryObj); err != nil {
+			e := gcserr.WrapHresult(err, gcserr.HrVmcomputeInvalidJSON)
+			return nil, errors.Wrapf(e, "The query could not be unmarshaled: '%s'", query)
+		}
 	}
-	return processes, nil
+
+	var properties prot.Properties
+	for _, property := range queryObj.PropertyTypes {
+		if property == prot.PtProcessList {
+			processes, err := containerEntry.container.GetAllProcesses()
+			if err != nil {
+				return nil, err
+			}
+			processDetails := make([]prot.ProcessDetails, len(processes))
+			for i, p := range processes {
+				processDetails[i] = prot.ProcessDetails{ProcessID: uint32(p.Pid)}
+			}
+			properties.ProcessList = processDetails
+		}
+	}
+
+	return &properties, nil
 }
 
 // RunExternalProcess runs a process in the utility VM outside of a container's

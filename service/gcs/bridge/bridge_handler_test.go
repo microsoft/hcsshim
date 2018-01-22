@@ -728,9 +728,68 @@ func Test_SignalProcess_CoreSucceeds_Success(t *testing.T) {
 	}
 }
 
-//
-// TODO: List Processes tests.
-//
+func Test_GetProperties_InvalidJson_Failure(t *testing.T) {
+	req, rw := setupRequestResponse(t, prot.ComputeSystemGetPropertiesV1, nil)
+
+	tb := new(Bridge)
+	tb.getProperties(rw, req)
+
+	verifyResponseJSONError(t, rw)
+	verifyActivityIDEmptyGUID(t, rw)
+}
+
+func Test_GetProperties_CoreFails_Failure(t *testing.T) {
+	r := &prot.ContainerGetProperties{
+		MessageBase: newMessageBase(),
+		Query:       "",
+	}
+
+	req, rw := setupRequestResponse(t, prot.ComputeSystemGetPropertiesV1, r)
+
+	tb := &Bridge{
+		coreint: &mockcore.MockCore{
+			Behavior: mockcore.Error,
+		},
+	}
+	tb.getProperties(rw, req)
+
+	verifyResponseError(t, rw)
+	verifyActivityID(t, r.MessageBase, rw)
+}
+
+func Test_GetProperties_CoreSucceeds_Success(t *testing.T) {
+	r := &prot.ContainerGetProperties{
+		MessageBase: newMessageBase(),
+		Query:       "{\"PropertyTypes\":[\"ProcessList\"]}",
+	}
+
+	req, rw := setupRequestResponse(t, prot.ComputeSystemGetPropertiesV1, r)
+
+	mc := &mockcore.MockCore{Behavior: mockcore.Success}
+	tb := &Bridge{coreint: mc}
+	tb.getProperties(rw, req)
+
+	verifyResponseSuccess(t, rw)
+	verifyActivityID(t, r.MessageBase, rw)
+	if mc.LastGetProperties.ID != r.ContainerID {
+		t.Fatal("last get properties did not have the same container ID")
+	}
+	response, ok := rw.response.(*prot.ContainerGetPropertiesResponse)
+	if !ok {
+		t.Fatalf("get properties returned the wrong response type: %T", rw.response)
+	}
+
+	var properties prot.Properties
+	json.Unmarshal([]byte(response.Properties), &properties)
+	numProcesses := len(properties.ProcessList)
+	if numProcesses != 1 {
+		t.Fatalf("get properties returned an incorrect number of processes: %d", numProcesses)
+	}
+	pid := properties.ProcessList[0].ProcessID
+	if pid != 101 {
+		t.Fatalf("get properties returned a process with an incorrect pid: %d", pid)
+	}
+}
 
 func Test_WaitOnProcess_InvalidJson_Failure(t *testing.T) {
 	req, rw := setupRequestResponse(t, prot.ComputeSystemWaitForProcessV1, prot.PvV3, nil)
