@@ -729,7 +729,7 @@ func Test_SignalProcess_CoreSucceeds_Success(t *testing.T) {
 }
 
 func Test_GetProperties_InvalidJson_Failure(t *testing.T) {
-	req, rw := setupRequestResponse(t, prot.ComputeSystemGetPropertiesV1, nil)
+	req, rw := setupRequestResponse(t, prot.ComputeSystemGetPropertiesV1, prot.PvV3, nil)
 
 	tb := new(Bridge)
 	tb.getProperties(rw, req)
@@ -744,7 +744,7 @@ func Test_GetProperties_CoreFails_Failure(t *testing.T) {
 		Query:       "",
 	}
 
-	req, rw := setupRequestResponse(t, prot.ComputeSystemGetPropertiesV1, r)
+	req, rw := setupRequestResponse(t, prot.ComputeSystemGetPropertiesV1, prot.PvV3, r)
 
 	tb := &Bridge{
 		coreint: &mockcore.MockCore{
@@ -763,7 +763,7 @@ func Test_GetProperties_CoreSucceeds_Success(t *testing.T) {
 		Query:       "{\"PropertyTypes\":[\"ProcessList\"]}",
 	}
 
-	req, rw := setupRequestResponse(t, prot.ComputeSystemGetPropertiesV1, r)
+	req, rw := setupRequestResponse(t, prot.ComputeSystemGetPropertiesV1, prot.PvV3, r)
 
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
 	tb := &Bridge{coreint: mc}
