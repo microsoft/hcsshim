@@ -393,6 +393,29 @@ func Test_CreateContainer_Success_WaitContainer_Success(t *testing.T) {
 	publishWg.Wait()
 }
 
+func Test_StartContainer_InvalidJson_Failure(t *testing.T) {
+	req, rw := setupRequestResponse(t, prot.ComputeSystemStartV1, prot.PvV4, nil)
+
+	b := new(Bridge)
+	b.startContainer(rw, req)
+
+	verifyResponseJSONError(t, rw)
+	verifyActivityIDEmptyGUID(t, rw)
+}
+
+func Test_StartContainer_Success(t *testing.T) {
+	r := newMessageBase()
+	req, rw := setupRequestResponse(t, prot.ComputeSystemStartV1, prot.PvV4, r)
+
+	b := new(Bridge)
+	b.responseChan = make(chan bridgeResponse)
+	defer close(b.responseChan)
+
+	b.startContainer(rw, req)
+	verifyResponseSuccess(t, rw)
+	verifyActivityID(t, r, rw)
+}
+
 func Test_ExecProcess_InvalidJson_Failure(t *testing.T) {
 	req, rw := setupRequestResponse(t, prot.ComputeSystemExecuteProcessV1, prot.PvV3, nil)
 
