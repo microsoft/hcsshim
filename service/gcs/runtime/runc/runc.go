@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -439,6 +440,21 @@ func (r *runcRuntime) runCreateCommand(id string, bundlePath string, stdioSet *s
 	if err != nil {
 		return nil, err
 	}
+
+	bf, err := os.Open(path.Join(bundlePath, "config.json"))
+	if err == nil {
+		defer bf.Close()
+
+		var bundleSpec *oci.Spec
+		if err := json.NewDecoder(bf).Decode(&bundleSpec); err == nil {
+			if bundleSpec.Process.Cwd != "/" {
+				cwd := path.Join(bundlePath, "rootfs", bundleSpec.Process.Cwd)
+				_ = os.MkdirAll(cwd, 0755)
+				// Intentionally ignore the error.
+			}
+		}
+	}
+
 	args := []string{"create", "-b", bundlePath, "--no-pivot"}
 	p, err := c.startProcess(tempProcessDir, hasTerminal, stdioSet, args...)
 	if err != nil {
