@@ -26,16 +26,16 @@ var capabilities = prot.GcsCapabilities{
 	SendInitialCreateMessage: false,
 }
 
-// NotSupported represents the default handler logic for an unmatched
-// request type sent from the bridge.
-func NotSupported(w ResponseWriter, r *Request) {
-	w.Error("", gcserr.WrapHresult(errors.Errorf("bridge: function not supported, header type: 0x%x", r.Header.Type), gcserr.HrNotImpl))
+// UnknownMessage represents the default handler logic for an unmatched request
+// type sent from the bridge.
+func UnknownMessage(w ResponseWriter, r *Request) {
+	w.Error("", gcserr.WrapHresult(errors.Errorf("bridge: function not supported, header type: 0x%x", r.Header.Type), gcserr.HrVmcomputeUnknownMessage))
 }
 
-// NotSupportedHandler creates a default HandlerFunc out of
-// the NotSupported handler logic.
-func NotSupportedHandler() Handler {
-	return HandlerFunc(NotSupported)
+// UnknownMessageHandler creates a default HandlerFunc out of the
+// UnknownMessage handler logic.
+func UnknownMessageHandler() Handler {
+	return HandlerFunc(UnknownMessage)
 }
 
 // Handler responds to a bridge request.
@@ -104,12 +104,12 @@ func (mux *Mux) Handler(r *Request) Handler {
 	var m map[prot.ProtocolVersion]Handler
 	var ok bool
 	if m, ok = mux.m[r.Header.Type]; !ok {
-		return NotSupportedHandler()
+		return UnknownMessageHandler()
 	}
 
 	var h Handler
 	if h, ok = m[r.Version]; !ok {
-		return NotSupportedHandler()
+		return UnknownMessageHandler()
 	}
 
 	return h

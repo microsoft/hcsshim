@@ -155,14 +155,14 @@ func Test_Bridge_Mux_Handler_NilRequest_Panic(t *testing.T) {
 	m.Handler(nil)
 }
 
-func verifyResponseIsDeaultHandler(t *testing.T, i interface{}) {
+func verifyResponseIsDefaultHandler(t *testing.T, i interface{}) {
 	if i == nil {
 		t.Error("The response is nil")
 		return
 	}
 
 	base := i.(*prot.MessageResponseBase)
-	if base.Result != int32(gcserr.HrNotImpl) {
+	if base.Result != int32(gcserr.HrVmcomputeUnknownMessage) {
 		t.Error("The default handler did not set a -1 error result.")
 	}
 	if len(base.ErrorRecords) != 1 {
@@ -194,7 +194,7 @@ func Test_Bridge_Mux_Handler_NotAdded_Default(t *testing.T) {
 
 	select {
 	case resp := <-respChan:
-		verifyResponseIsDeaultHandler(t, resp.response)
+		verifyResponseIsDefaultHandler(t, resp.response)
 	default:
 		t.Error("The deafult handler returned no writes.")
 	}
@@ -228,7 +228,7 @@ func Test_Bridge_Mux_Handler_Added_NotMatched(t *testing.T) {
 
 	select {
 	case resp := <-respChan:
-		verifyResponseIsDeaultHandler(t, resp.response)
+		verifyResponseIsDefaultHandler(t, resp.response)
 	default:
 		t.Error("The deafult handler returned no writes.")
 	}
@@ -285,7 +285,7 @@ func Test_Bridge_Mux_ServeMsg_NotAdded_Default(t *testing.T) {
 
 	select {
 	case resp := <-respChan:
-		verifyResponseIsDeaultHandler(t, resp.response)
+		verifyResponseIsDefaultHandler(t, resp.response)
 	default:
 		t.Error("The deafult handler returned no writes.")
 	}
@@ -319,7 +319,7 @@ func Test_Bridge_Mux_ServeMsg_Added_NotMatched(t *testing.T) {
 
 	select {
 	case resp := <-respChan:
-		verifyResponseIsDeaultHandler(t, resp.response)
+		verifyResponseIsDefaultHandler(t, resp.response)
 	default:
 		t.Error("The deafult handler returned no writes.")
 	}
@@ -434,7 +434,7 @@ func serverRead(conn transport.Connection) (*prot.MessageHeader, []byte, error) 
 	return header, message, nil
 }
 
-func Test_Bridge_ListenAndServe_NotSupportedHandler_Success(t *testing.T) {
+func Test_Bridge_ListenAndServe_UnknownMessageHandler_Success(t *testing.T) {
 	// Turn off logging so as not to spam output.
 	logrus.SetOutput(ioutil.Discard)
 
@@ -444,7 +444,7 @@ func Test_Bridge_ListenAndServe_NotSupportedHandler_Success(t *testing.T) {
 
 	b := &Bridge{
 		Transport: mt,
-		Handler:   NotSupportedHandler(),
+		Handler:   UnknownMessageHandler(),
 	}
 
 	go func() {
@@ -485,7 +485,7 @@ func Test_Bridge_ListenAndServe_NotSupportedHandler_Success(t *testing.T) {
 	if header.ID != prot.SequenceID(1) {
 		t.Error("Response header had wrong sequence id")
 	}
-	verifyResponseIsDeaultHandler(t, response)
+	verifyResponseIsDefaultHandler(t, response)
 }
 
 func Test_Bridge_ListenAndServe_CorrectHandler_Success(t *testing.T) {

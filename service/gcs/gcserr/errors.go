@@ -34,6 +34,9 @@ const (
 	// HrVmcomputeUnsupportedProtocolVersion is the HRESULT for an invalid
 	// protocol version range specified at negotiation.
 	HrVmcomputeUnsupportedProtocolVersion = Hresult(-1070137076) // 0xC037010C
+	// HrVmcomputeUnknownMessage is the HRESULT for unknown message types sent
+	// from the HCS.
+	HrVmcomputeUnknownMessage = Hresult(-1070137077) // 0xC037010B
 )
 
 type containerExistsError struct {
