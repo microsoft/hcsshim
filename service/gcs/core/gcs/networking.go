@@ -10,8 +10,8 @@ import (
 
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
-	"github.com/sirupsen/logrus"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 // configureAdapterInNamespace moves a given adapter into a network
@@ -68,15 +68,24 @@ func (c *gcsCore) configureAdapterInNamespace(container runtime.Container, adapt
 // method in the future.
 func (c *gcsCore) generateResolvConfFile(resolvPath string, adapter prot.NetworkAdapter) error {
 	fileContents := ""
-	nameservers := strings.Split(adapter.HostDNSServerList, ",")
+
+	split := func(r rune) bool {
+		return r == ',' || r == ' '
+	}
+
+	nameservers := strings.FieldsFunc(adapter.HostDNSServerList, split)
 	for i, server := range nameservers {
 		// Limit number of nameservers to 3.
 		if i >= 3 {
 			break
 		}
+
 		fileContents += fmt.Sprintf("nameserver %s\n", server)
 	}
-	fileContents += fmt.Sprintf("search %s\n", adapter.HostDNSSuffix)
+
+	if adapter.HostDNSSuffix != "" {
+		fileContents += fmt.Sprintf("search %s\n", adapter.HostDNSSuffix)
+	}
 
 	file, err := c.OS.OpenFile(resolvPath, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
