@@ -548,10 +548,14 @@ func (b *Bridge) getProperties(w ResponseWriter, r *Request) {
 		return
 	}
 
-	propertyJSON, err := json.Marshal(properties)
-	if err != nil {
-		w.Error(request.ActivityID, errors.Wrapf(err, "failed to marshal properties into JSON: %v", properties))
-		return
+	propertyJSON := []byte("{}")
+	if properties != nil {
+		var err error
+		propertyJSON, err = json.Marshal(properties)
+		if err != nil {
+			w.Error(request.ActivityID, errors.Wrapf(err, "failed to marshal properties into JSON: %v", properties))
+			return
+		}
 	}
 
 	response := &prot.ContainerGetPropertiesResponse{
