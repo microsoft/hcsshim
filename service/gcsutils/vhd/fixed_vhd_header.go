@@ -33,7 +33,7 @@ const sectorBytes = 512
 const cMax = 65535
 const hMax = 16
 const sMax = 255
-const maxCHS = cMax * hMax * sMax * sectorBytes
+const maxCHS uint64 = cMax * hMax * sMax * sectorBytes
 
 // Variables for time stamp
 const timeStart = "00 Jan 01 00:00 UTC"
