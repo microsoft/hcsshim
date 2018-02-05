@@ -169,7 +169,17 @@ type ProtocolSupport struct {
 
 // GcsCapabilities specifies the abilities and scenarios supported by this GCS.
 type GcsCapabilities struct {
-	SendInitialCreateMessage bool
+	// True if a create message should be sent for the hosting system itself.
+	SendHostCreateMessage bool `json:",omitempty"`
+	// True if a start message should be sent for the hosting system itself. If
+	// SendHostCreateMessage is false, a start message will not be sent either.
+	SendHostStartMessage bool `json:",omitempty"`
+	// True if an HVSocket ModifySettings request should be sent immediately
+	// after the create/start messages are sent (if they're sent at all). This
+	// ModifySettings request would be to configure the local and parent
+	// Hyper-V socket addresses of the VM, and would have a RequestType of
+	// Update.
+	HVSocketConfigOnStartup bool `json:"HvSocketConfigOnStartup,omitempty"`
 }
 
 // Version is the struct sent to identify the protocol version of the HCS-GCS

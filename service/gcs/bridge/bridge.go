@@ -23,7 +23,9 @@ import (
 
 // The capabilities of this GCS.
 var capabilities = prot.GcsCapabilities{
-	SendInitialCreateMessage: false,
+	SendHostCreateMessage:   false,
+	SendHostStartMessage:    false,
+	HVSocketConfigOnStartup: false,
 }
 
 // UnknownMessage represents the default handler logic for an unmatched request
