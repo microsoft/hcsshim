@@ -352,7 +352,7 @@ func (b *Bridge) negotiateProtocol(w ResponseWriter, r *Request) {
 		return
 	}
 
-	if request.MaximumVersion.Major < uint32(prot.PvV4) || uint32(prot.PvMax) < request.MinimumVersion.Major {
+	if request.MaximumVersion < uint32(prot.PvV4) || uint32(prot.PvMax) < request.MinimumVersion {
 		w.Error(request.ActivityID, gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion))
 		return
 	}
@@ -364,13 +364,13 @@ func (b *Bridge) negotiateProtocol(w ResponseWriter, r *Request) {
 		return y
 	}
 
-	major := min(uint32(prot.PvMax), request.MaximumVersion.Major)
+	major := min(uint32(prot.PvMax), request.MaximumVersion)
 
 	response := &prot.NegotiateProtocolResponse{
 		MessageResponseBase: &prot.MessageResponseBase{
 			ActivityID: request.ActivityID,
 		},
-		Version:      prot.Version{Major: major, Minor: 0, Patch: 0, Metadata: ""},
+		Version:      major,
 		Capabilities: capabilities,
 	}
 
