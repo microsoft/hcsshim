@@ -182,15 +182,6 @@ type GcsCapabilities struct {
 	HVSocketConfigOnStartup bool `json:"HvSocketConfigOnStartup,omitempty"`
 }
 
-// Version is the struct sent to identify the protocol version of the HCS-GCS
-// communication protocol.
-type Version struct {
-	Major    uint32
-	Minor    uint32
-	Patch    uint32 `json:",omitempty"`
-	Metadata string `json:",omitempty"`
-}
-
 // MessageBase is the base type embedded in all messages sent from the HCS to
 // the GCS, as well as ContainerNotification which is sent from GCS to HCS.
 type MessageBase struct {
@@ -202,8 +193,8 @@ type MessageBase struct {
 // version that will be used for future communication.
 type NegotiateProtocol struct {
 	*MessageBase
-	MinimumVersion Version
-	MaximumVersion Version
+	MinimumVersion uint32
+	MaximumVersion uint32
 }
 
 // ContainerCreate is the message from the HCS specifying to create a container
@@ -455,7 +446,7 @@ type MessageResponseBase struct {
 // available capabilities of the GCS.
 type NegotiateProtocolResponse struct {
 	*MessageResponseBase
-	Version      Version
+	Version      uint32
 	Capabilities GcsCapabilities
 }
 

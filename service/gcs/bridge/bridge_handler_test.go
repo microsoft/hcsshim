@@ -175,8 +175,8 @@ func Test_NegotiateProtocol_InvalidJson_Failure(t *testing.T) {
 func Test_NegotiateProtocol_InvalidRange_Low_Failure(t *testing.T) {
 	r := &prot.NegotiateProtocol{
 		MessageBase:    newMessageBase(),
-		MinimumVersion: prot.Version{Major: 3},
-		MaximumVersion: prot.Version{Major: 3},
+		MinimumVersion: 3,
+		MaximumVersion: 3,
 	}
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemNegotiateProtocolV1, prot.PvInvalid, r)
@@ -191,8 +191,8 @@ func Test_NegotiateProtocol_InvalidRange_Low_Failure(t *testing.T) {
 func Test_NegotiateProtocol_InvalidRange_High_Failure(t *testing.T) {
 	r := &prot.NegotiateProtocol{
 		MessageBase:    newMessageBase(),
-		MinimumVersion: prot.Version{Major: uint32(prot.PvMax) + 1},
-		MaximumVersion: prot.Version{Major: uint32(prot.PvMax) + 1},
+		MinimumVersion: uint32(prot.PvMax) + 1,
+		MaximumVersion: uint32(prot.PvMax) + 1,
 	}
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemNegotiateProtocolV1, prot.PvInvalid, r)
@@ -207,8 +207,8 @@ func Test_NegotiateProtocol_InvalidRange_High_Failure(t *testing.T) {
 func Test_NegotiateProtocol_ValidRange_Success(t *testing.T) {
 	r := &prot.NegotiateProtocol{
 		MessageBase:    newMessageBase(),
-		MinimumVersion: prot.Version{Major: 4},
-		MaximumVersion: prot.Version{Major: uint32(prot.PvMax) + 1},
+		MinimumVersion: 4,
+		MaximumVersion: uint32(prot.PvMax) + 1,
 	}
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemNegotiateProtocolV1, prot.PvInvalid, r)
@@ -220,8 +220,8 @@ func Test_NegotiateProtocol_ValidRange_Success(t *testing.T) {
 	verifyActivityID(t, r.MessageBase, rw)
 
 	resp := rw.response.(*prot.NegotiateProtocolResponse)
-	if resp.Version.Major != uint32(prot.PvMax) {
-		t.Errorf("Invalid version number selected for response: %v", resp.Version.Major)
+	if resp.Version != uint32(prot.PvMax) {
+		t.Errorf("Invalid version number selected for response: %v", resp.Version)
 	}
 	// verify that the bridge global was updated
 	if tb.protVer != prot.PvMax {
