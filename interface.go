@@ -87,7 +87,6 @@ type ContainerConfig struct {
 	NetworkSharedContainerName  string              `json:",omitempty"` // Name (ID) of the container that we will share the network stack with.
 	EndpointList                []string            `json:",omitempty"` // List of networking endpoints to be attached to container
 	HvRuntime                   *HvRuntime          `json:",omitempty"` // Hyper-V container settings. Used by Hyper-V containers only. Format ImagePath=%root%\BaseLayerID\UtilityVM
-	Servicing                   bool                `json:",omitempty"` // True if this container is for servicing
 	AllowUnqualifiedDNSQuery    bool                `json:",omitempty"` // True to allow unqualified DNS name resolution
 	DNSSearchList               string              `json:",omitempty"` // Comma seperated list of DNS suffixes to use for name resolution
 	ContainerType               string              `json:",omitempty"` // "Linux" for Linux containers on Windows. Omitted otherwise.
@@ -125,9 +124,6 @@ type Container interface {
 
 	// Resume resumes the execution of a container.
 	Resume() error
-
-	// HasPendingUpdates returns true if the container has updates pending to install.
-	HasPendingUpdates() (bool, error)
 
 	// Statistics returns statistics for a container.
 	Statistics() (Statistics, error)
