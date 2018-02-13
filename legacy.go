@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -339,27 +340,29 @@ type pendingLink struct {
 }
 
 type legacyLayerWriter struct {
-	root         string
-	parentRoots  []string
-	destRoot     string
-	currentFile  *os.File
-	backupWriter *winio.BackupFileWriter
-	tombstones   []string
-	pathFixed    bool
-	HasUtilityVM bool
-	uvmDi        []dirInfo
-	addedFiles   map[string]bool
-	PendingLinks []pendingLink
+	root                  string
+	parentRoots           []string
+	destRoot              string
+	currentFile           *os.File
+	backupWriter          *winio.BackupFileWriter
+	tombstones            []string
+	utilityVMPendingLinks map[string]pendingLink
+	pathFixed             bool
+	HasUtilityVM          bool
+	uvmDi                 []dirInfo
+	addedFiles            map[string]bool
+	PendingLinks          []pendingLink
 }
 
 // newLegacyLayerWriter returns a LayerWriter that can write the contaler layer
 // transport format to disk.
 func newLegacyLayerWriter(root string, parentRoots []string, destRoot string) *legacyLayerWriter {
 	return &legacyLayerWriter{
-		root:        root,
-		parentRoots: parentRoots,
-		destRoot:    destRoot,
-		addedFiles:  make(map[string]bool),
+		root:                  root,
+		parentRoots:           parentRoots,
+		destRoot:              destRoot,
+		addedFiles:            make(map[string]bool),
+		utilityVMPendingLinks: make(map[string]pendingLink),
 	}
 }
 
@@ -396,7 +399,9 @@ func (w *legacyLayerWriter) initUtilityVM() error {
 		// clone the utility VM from the parent layer into this layer. Use hard
 		// links to avoid unnecessary copying, since most of the files are
 		// immutable.
-		err = cloneTree(filepath.Join(w.parentRoots[0], utilityVMFilesPath), filepath.Join(w.destRoot, utilityVMFilesPath), mutatedUtilityVMFiles)
+		src := filepath.Join(w.parentRoots[0], utilityVMFilesPath)
+		dst := filepath.Join(w.destRoot, utilityVMFilesPath)
+		err = w.cloneTree(src, dst, mutatedUtilityVMFiles)
 		if err != nil {
 			return fmt.Errorf("cloning the parent utility VM image failed: %s", err)
 		}
@@ -467,9 +472,10 @@ func copyFileWithMetadata(srcPath, destPath string, isDir bool) (fileInfo *winio
 	return fileInfo, nil
 }
 
-// cloneTree clones a directory tree using hard links. It skips hard links for
-// the file names in the provided map and just copies those files.
-func cloneTree(srcPath, destPath string, mutatedFiles map[string]bool) error {
+// cloneTree clones a directory tree using delayed hard links.
+// It skips hard links for the file names in the provided map
+// and just copies those files.
+func (w *legacyLayerWriter) cloneTree(srcPath, destPath string, mutatedFiles map[string]bool) error {
 	var di []dirInfo
 	err := filepath.Walk(srcPath, func(srcFilePath string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -500,9 +506,10 @@ func cloneTree(srcPath, destPath string, mutatedFiles map[string]bool) error {
 				di = append(di, dirInfo{path: destFilePath, fileInfo: *fi})
 			}
 		} else {
-			err = os.Link(srcFilePath, destFilePath)
-			if err != nil {
-				return err
+			key := relativePathToKey(path.Join(utilityVMFilesPath, relPath))
+			w.utilityVMPendingLinks[key] = pendingLink{
+				Path:   destFilePath,
+				Target: srcFilePath,
 			}
 		}
 
@@ -566,9 +573,11 @@ func (w *legacyLayerWriter) Add(name string, fileInfo *winio.FileBasicInfo) erro
 			}
 		} else {
 			// Overwrite any existing hard link.
-			err = os.Remove(path)
-			if err != nil && !os.IsNotExist(err) {
-				return err
+			key := relativePathToKey(name)
+			if _, ok := w.utilityVMPendingLinks[key]; ok {
+				delete(w.utilityVMPendingLinks, key)
+			} else if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("failed to remove hardlink prior to add: %s", err)
 			}
 			createDisposition = syscall.CREATE_NEW
 		}
@@ -651,14 +660,7 @@ func (w *legacyLayerWriter) AddLink(name string, target string) error {
 		// Look for cross-layer hard link targets in the parent layers, since
 		// nothing is in the destination path yet.
 		roots = w.parentRoots
-	} else if hasPathPrefix(target, utilityVMFilesPath) {
-		// Since the utility VM is fully cloned into the destination path
-		// already, look for cross-layer hard link targets directly in the
-		// destination path.
-		roots = []string{w.destRoot}
-	}
-
-	if roots == nil || (!hasPathPrefix(name, filesPath) && !hasPathPrefix(name, utilityVMFilesPath)) {
+	} else if !hasPathPrefix(name, utilityVMFilesPath) {
 		return errors.New("invalid hard link in layer")
 	}
 
@@ -666,6 +668,8 @@ func (w *legacyLayerWriter) AddLink(name string, target string) error {
 	// fails, search in parent layers.
 	var selectedRoot string
 	if _, ok := w.addedFiles[target]; ok {
+		selectedRoot = w.destRoot
+	} else if _, ok := w.utilityVMPendingLinks[relativePathToKey(target)]; ok {
 		selectedRoot = w.destRoot
 	} else {
 		for _, r := range roots {
@@ -688,6 +692,12 @@ func (w *legacyLayerWriter) AddLink(name string, target string) error {
 		Target: filepath.Join(selectedRoot, target),
 	})
 	w.addedFiles[name] = true
+
+	key := relativePathToKey(name)
+	if _, ok := w.utilityVMPendingLinks[key]; ok {
+		delete(w.utilityVMPendingLinks, key)
+	}
+
 	return nil
 }
 
@@ -703,12 +713,17 @@ func (w *legacyLayerWriter) Remove(name string) error {
 		// already gone, and this needs to be a fatal error for diagnostics
 		// purposes.
 		path := filepath.Join(w.destRoot, name)
-		if _, err := os.Lstat(path); err != nil {
-			return err
-		}
-		err = os.RemoveAll(path)
-		if err != nil {
-			return err
+		key := relativePathToKey(name)
+		if _, ok := w.utilityVMPendingLinks[key]; ok {
+			delete(w.utilityVMPendingLinks, key)
+		} else {
+			if _, err := os.Lstat(path); err != nil {
+				return err
+			}
+			err = os.RemoveAll(path)
+			if err != nil {
+				return err
+			}
 		}
 	} else {
 		return fmt.Errorf("invalid tombstone %s", name)
@@ -749,10 +764,20 @@ func (w *legacyLayerWriter) Close() error {
 		}
 	}
 	if w.HasUtilityVM {
+		for _, link := range w.utilityVMPendingLinks {
+			if err := os.Link(link.Target, link.Path); err != nil {
+				return err
+			}
+		}
+
 		err = reapplyDirectoryTimes(w.uvmDi)
 		if err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func relativePathToKey(relPath string) string {
+	return filepath.ToSlash(strings.ToLower(relPath))
 }
