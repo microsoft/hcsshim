@@ -545,7 +545,21 @@ func (b *Bridge) modifySettings(w ResponseWriter, r *Request) {
 		return
 	}
 
-	if err := b.coreint.ModifySettings(request.ContainerID, request.Request); err != nil {
+	var requestToUse prot.ResourceModificationRequestResponse
+	if request.Request != nil {
+		requestToUse = *request.Request
+	} else if request.V2Request != nil {
+		// This conversion is temporary. We should support V2 requests
+		// independently in the future.
+		requestToUse.ResourceType = prot.PropertyType(request.V2Request.ResourceType)
+		requestToUse.RequestType = prot.RequestType(request.V2Request.RequestType)
+		requestToUse.Settings = request.V2Request.Settings
+	} else {
+		w.Error(request.ActivityID, errors.New("neither Request nor v2Request was specified"))
+		return
+	}
+
+	if err := b.coreint.ModifySettings(request.ContainerID, requestToUse); err != nil {
 		w.Error(request.ActivityID, err)
 		return
 	}
