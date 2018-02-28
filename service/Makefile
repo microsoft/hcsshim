@@ -20,7 +20,7 @@ all: gobins
 
 gobins:
 	(cd $(WORKDIR) && GOBIN="$(BINDIR)" CGO_ENABLED=0 go install $(GO_FLAGS) $(GO_PACKAGES))
-	(cd $(BINDIR) && $(foreach tool,$(GCS_TOOLS), ln -f "gcstools" "$(tool)";))
+	(cd $(BINDIR) && $(foreach tool,$(GCS_TOOLS), ln -f -s "gcstools" "$(tool)";))
 
 clean:
 	rm -f "$(BINDIR)/"*
