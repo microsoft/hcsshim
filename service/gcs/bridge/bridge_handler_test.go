@@ -1066,7 +1066,7 @@ func Test_ModifySettings_V2_Success(t *testing.T) {
 		},
 	}
 
-	req, rw := setupRequestResponse(t, prot.ComputeSystemModifySettingsV1, r)
+	req, rw := setupRequestResponse(t, prot.ComputeSystemModifySettingsV1, prot.PvV3, r)
 
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
 	tb := &Bridge{
@@ -1107,7 +1107,7 @@ func Test_ModifySettings_BothV1V2_Success(t *testing.T) {
 		},
 	}
 
-	req, rw := setupRequestResponse(t, prot.ComputeSystemModifySettingsV1, r)
+	req, rw := setupRequestResponse(t, prot.ComputeSystemModifySettingsV1, prot.PvV3, r)
 
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
 	tb := &Bridge{
@@ -1130,7 +1130,7 @@ func Test_ModifySettings_NeitherV1V2_Fails(t *testing.T) {
 		MessageBase: newMessageBase(),
 	}
 
-	req, rw := setupRequestResponse(t, prot.ComputeSystemModifySettingsV1, r)
+	req, rw := setupRequestResponse(t, prot.ComputeSystemModifySettingsV1, prot.PvV3, r)
 
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
 	tb := &Bridge{
