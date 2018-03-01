@@ -90,6 +90,9 @@ func verifyResponseWriteCount(t *testing.T, rw *testResponseWriter) {
 
 func verifyResponseError(t *testing.T, rw *testResponseWriter) {
 	verifyResponseWriteCount(t, rw)
+	if rw.response != nil {
+		t.Fatal("response wrote a response not an error")
+	}
 	if rw.err == nil {
 		t.Fatal("response did not write an error")
 	}
@@ -104,6 +107,9 @@ func verifyResponseJSONError(t *testing.T, rw *testResponseWriter) {
 
 func verifyResponseSuccess(t *testing.T, rw *testResponseWriter) {
 	verifyResponseWriteCount(t, rw)
+	if rw.err != nil {
+		t.Fatal("response was an error response")
+	}
 	if rw.response == nil {
 		t.Fatal("response was a success but no message was included")
 	}
