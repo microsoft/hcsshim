@@ -14,7 +14,7 @@ GCS_TOOLS=\
 	netnscfg \
 	remotefs
 
-GO_FLAGS=-pkgdir "$(WORKDIR)/pkg"
+GO_FLAGS=-pkgdir "$(WORKDIR)/pkg" -ldflags "-s -w"
 
 all: gobins
 

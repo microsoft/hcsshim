@@ -91,6 +91,9 @@ func verifyResponseWriteCount(t *testing.T, rw *testResponseWriter) {
 
 func verifyResponseError(t *testing.T, rw *testResponseWriter) {
 	verifyResponseWriteCount(t, rw)
+	if rw.response != nil {
+		t.Fatal("response wrote a response not an error")
+	}
 	if rw.err == nil {
 		t.Fatal("response did not write an error")
 	}
@@ -105,6 +108,9 @@ func verifyResponseJSONError(t *testing.T, rw *testResponseWriter) {
 
 func verifyResponseSuccess(t *testing.T, rw *testResponseWriter) {
 	verifyResponseWriteCount(t, rw)
+	if rw.err != nil {
+		t.Fatal("response was an error response")
+	}
 	if rw.response == nil {
 		t.Fatal("response was a success but no message was included")
 	}
@@ -828,6 +834,7 @@ func Test_WaitOnProcess_CoreFails_Failure(t *testing.T) {
 	r := &prot.ContainerWaitForProcess{
 		MessageBase: newMessageBase(),
 		ProcessID:   20,
+		TimeoutInMs: 1000,
 	}
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemWaitForProcessV1, prot.PvV3, r)
@@ -875,6 +882,7 @@ func Test_WaitOnProcess_CoreSucceeds_Success(t *testing.T) {
 	r := &prot.ContainerWaitForProcess{
 		MessageBase: newMessageBase(),
 		ProcessID:   20,
+		TimeoutInMs: 1000,
 	}
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemWaitForProcessV1, prot.PvV3, r)

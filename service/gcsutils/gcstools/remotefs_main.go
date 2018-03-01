@@ -29,9 +29,10 @@ func remotefsHandler() error {
 
 		// Write the cmdErr to stderr, so that the client can handle it.
 		if err := remotefs.WriteError(cmdErr, os.Stderr); err != nil {
+			logrus.Errorf("failed to send error %v to stderr: %v", cmdErr, err)
 			return err
 		}
-
+		logrus.Infof("sent '%v' back to stderr", cmdErr)
 		return nil
 	}
 
@@ -45,6 +46,7 @@ func remotefsHandler() error {
 
 func remotefsMain() {
 	if err := remotefsHandler(); err != nil {
+		logrus.Errorf("error in remotefsHandler: %v", err)
 		os.Exit(1)
 	}
 	os.Exit(0)
