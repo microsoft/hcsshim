@@ -729,6 +729,7 @@ func Test_WaitOnProcess_CoreFails_Failure(t *testing.T) {
 	r := &prot.ContainerWaitForProcess{
 		MessageBase: newMessageBase(),
 		ProcessID:   20,
+		TimeoutInMs: 1000,
 	}
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemWaitForProcessV1, r)
@@ -776,6 +777,7 @@ func Test_WaitOnProcess_CoreSucceeds_Success(t *testing.T) {
 	r := &prot.ContainerWaitForProcess{
 		MessageBase: newMessageBase(),
 		ProcessID:   20,
+		TimeoutInMs: 1000,
 	}
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemWaitForProcessV1, r)
