@@ -131,6 +131,11 @@ Here are the expected contents of each subdirectory /file
 
     - Debugging tools: mostly from busybox tool set
 
+7. **/** :
+
+    - /gcs.commit Optional file containing the commit id of Microsoft/opengcs
+
+ 
 
 # Supported LCOW custom Linux OS packaging formats
 
