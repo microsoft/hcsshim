@@ -12,9 +12,9 @@
 #   copy c:\initrd\initrd.img "c:\Program Files\Linux Containers"
 #   <Restart the docker daemon to pick up the new initrd>
 
-FROM linuxkit/runc:7b15b00b4e3507d62e3ed8d44dfe650561cd35ff AS runc
+FROM linuxkit/runc:7c39a68490a12cde830e1922f171c451fb08e731 AS runc
 
-FROM linuxkit/alpine:585174df463ba33e6c0e2050a29a0d9e942d56cb
+FROM linuxkit/alpine:b1a36f0dd41e60142dd84dab7cd333ce7da1d1f8
 ENV GOPATH=/go PATH=$PATH:/go/bin
 RUN \
     # Create all the directories
