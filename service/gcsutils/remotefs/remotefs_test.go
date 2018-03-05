@@ -85,7 +85,7 @@ func testError(input error, expectedExported *ExportedError, t *testing.T) {
 	}
 
 	if exported == nil {
-		t.Errorf("failed: got nil error instead of %+v", expectedExported)
+		t.Error("failed: got nil error instead of %+v", expectedExported)
 	}
 
 	if *exported != *expectedExported {
