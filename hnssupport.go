@@ -20,7 +20,7 @@ func GetHNSSupportedFeatures() HNSSupportedFeatures {
 
 	globals, err := GetHNSGlobals()
 	if err != nil {
-		// Expected on pre-17060 builds, all features will be false/unsupported
+		// Expected on pre-1804 builds, all features will be false/unsupported
 		logrus.Debugf("Unable to obtain HNS globals: %s", err)
 		return hnsFeatures
 	}
