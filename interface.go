@@ -6,6 +6,30 @@ import (
 	"time"
 )
 
+// RegistryKey is used to specify registry key name
+type RegistryKey struct {
+	Hive     string
+	Name     string
+	Volatile bool `json:",omitempty"`
+}
+
+// RegistryKey is used to specify registry key name
+type RegistryValue struct {
+	Key         RegistryKey
+	Name        string
+	Type        string
+	StringValue string  `json:",omitempty"`
+	BinaryValue []byte  `json:",omitempty"`
+	DWordValue  *uint32 `json:",omitempty"`
+	QWordValue  *uint64 `json:",omitempty"`
+	CustomType  *uint32 `json:",omitempty"`
+}
+
+type RegistryChanges struct {
+	AddValues  []RegistryValue `json:",omitempty"`
+	DeleteKeys []RegistryValue `json:",omitempty"`
+}
+
 // ProcessConfig is used as both the input of Container.CreateProcess
 // and to convert the parameters to JSON for passing onto the HCS
 type ProcessConfig struct {
@@ -93,6 +117,7 @@ type ContainerConfig struct {
 	ContainerType               string              `json:",omitempty"` // "Linux" for Linux containers on Windows. Omitted otherwise.
 	TerminateOnLastHandleClosed bool                `json:",omitempty"` // Should HCS terminate the container once all handles have been closed
 	MappedVirtualDisks          []MappedVirtualDisk `json:",omitempty"` // Array of virtual disks to mount at start
+	RegistryChanges             *RegistryChanges    `json:",omitempty"` // Registry changes to be applied to the container
 }
 
 type ComputeSystemQuery struct {
