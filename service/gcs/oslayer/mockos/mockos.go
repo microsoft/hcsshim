@@ -188,6 +188,9 @@ func (o *mockOS) Mount(source string, target string, fstype string, flags uintpt
 func (o *mockOS) Unmount(target string, flags int) (err error) {
 	return nil
 }
+func (o *mockOS) UnplugSCSIDisk(scsiID string) (err error) {
+	return nil
+}
 func (o *mockOS) PathExists(name string) (bool, error) {
 	return true, nil
 }
