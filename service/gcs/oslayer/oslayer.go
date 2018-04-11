@@ -69,6 +69,7 @@ type OS interface {
 	ReadDir(dirname string) ([]os.FileInfo, error)
 	Mount(source string, target string, fstype string, flags uintptr, data string) (err error)
 	Unmount(target string, flags int) (err error)
+	UnplugSCSIDisk(scsiID string) (err error)
 	PathExists(name string) (bool, error)
 	PathIsMounted(name string) (bool, error)
 	Link(oldname, newname string) error

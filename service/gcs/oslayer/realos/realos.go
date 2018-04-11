@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -180,6 +181,18 @@ func (o *realOS) Mount(source string, target string, fstype string, flags uintpt
 }
 func (o *realOS) Unmount(target string, flags int) (err error) {
 	if err := syscall.Unmount(target, flags); err != nil {
+		return errors.WithStack(err)
+	}
+	return nil
+}
+func (o *realOS) UnplugSCSIDisk(scsiID string) (err error) {
+	f, err := os.OpenFile(filepath.Join("/sys/bus/scsi/devices", scsiID, "delete"), os.O_WRONLY, 0644)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	defer f.Close()
+
+	if _, err := f.Write([]byte("1\n")); err != nil {
 		return errors.WithStack(err)
 	}
 	return nil

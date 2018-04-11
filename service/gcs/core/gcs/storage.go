@@ -253,6 +253,18 @@ func (c *gcsCore) unmountMappedVirtualDisks(disks []prot.MappedVirtualDisk) erro
 	return nil
 }
 
+// unplugMappedVirtualDisks tells the OS that the mapped virtual disks will be removed soon, allowing the OS to perform some cleanup before the unplug event.
+// This assumes only one SCSI controller.
+func (c *gcsCore) unplugMappedVirtualDisks(disks []prot.MappedVirtualDisk) error {
+	for _, disk := range disks {
+		scsiID := fmt.Sprintf("0:0:0:%d", disk.Lun)
+		if err := c.OS.UnplugSCSIDisk(scsiID); err != nil {
+			return errors.Wrapf(err, "failed to unplug %s", scsiID)
+		}
+	}
+	return nil
+}
+
 // mountMappedDirectory mounts the given mapped directory using a Plan9
 // filesystem with the given options.
 func (c *gcsCore) mountMappedDirectory(dir *prot.MappedDirectory) error {

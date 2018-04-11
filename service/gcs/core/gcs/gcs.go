@@ -813,6 +813,9 @@ func (c *gcsCore) removeMappedVirtualDisks(id string, disks []prot.MappedVirtual
 	if err := c.unmountMappedVirtualDisks(disks); err != nil {
 		return errors.Wrapf(err, "failed to mount mapped virtual disks for container %s", id)
 	}
+	if err := c.unplugMappedVirtualDisks(disks); err != nil {
+		return errors.Wrapf(err, "failed to unplug mapped virtual disks for container %s", id)
+	}
 	for _, disk := range disks {
 		containerEntry.RemoveMappedVirtualDisk(disk)
 	}
