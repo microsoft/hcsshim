@@ -2,6 +2,7 @@ package hcsshim
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -317,14 +318,59 @@ func removeAllRelative(path string, root *os.File) error {
 	}
 	fileAttributes := fi.Sys().(*syscall.Win32FileAttributeData).FileAttributes
 	if fileAttributes&syscall.FILE_ATTRIBUTE_DIRECTORY == 0 || fileAttributes&syscall.FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-		// If this is a reparse point, it can't have children. Be paranoid and
-		// don't trust RemoveAll to do the right thing.
-		return removeRelative(path, root)
+		// If this is a reparse point, it can't have children. Simple remove will do.
+		err := removeRelative(path, root)
+		if err == nil || os.IsNotExist(err) {
+			return nil
+		}
+		return err
 	}
 
-	// RemoveAll should handle removing directories that contain reparse
-	// points.
-	return os.RemoveAll(filepath.Join(root.Name(), path))
+	// It is necessary to use os.Open as Readdirnames does not work with
+	// openRelative. This is safe because the above lstatrelative fails
+	// if the target is outside the root, and we know this is not a
+	// symlink from the above FILE_ATTRIBUTE_REPARSE_POINT check.
+	fd, err := os.Open(filepath.Join(root.Name(), path))
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Race. It was deleted between the Lstat and Open.
+			// Return nil per RemoveAll's docs.
+			return nil
+		}
+		return err
+	}
+
+	// Remove contents & return first error.
+	for {
+		names, err1 := fd.Readdirnames(100)
+		for _, name := range names {
+			err1 := removeAllRelative(path+string(os.PathSeparator)+name, root)
+			if err == nil {
+				err = err1
+			}
+		}
+		if err1 == io.EOF {
+			break
+		}
+		// If Readdirnames returned an error, use it.
+		if err == nil {
+			err = err1
+		}
+		if len(names) == 0 {
+			break
+		}
+	}
+	fd.Close()
+
+	// Remove directory.
+	err1 := removeRelative(path, root)
+	if err1 == nil || os.IsNotExist(err1) {
+		return nil
+	}
+	if err == nil {
+		err = err1
+	}
+	return err
 }
 
 // mkdirRelative creates a directory relative to a root, failing if any
