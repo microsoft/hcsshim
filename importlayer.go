@@ -142,7 +142,7 @@ func (r *legacyLayerWriterWrapper) Close() error {
 		return err
 	}
 	for _, name := range r.Tombstones {
-		if err = removeRelative(name, r.destRoot); err != nil {
+		if err = removeRelative(name, r.destRoot); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 	}
