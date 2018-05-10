@@ -16,7 +16,6 @@ var (
 )
 
 const (
-	pendingUpdatesQuery    = `{ "PropertyTypes" : ["PendingUpdates"]}`
 	statisticsQuery        = `{ "PropertyTypes" : ["Statistics"]}`
 	processListQuery       = `{ "PropertyTypes" : ["ProcessList"]}`
 	mappedVirtualDiskQuery = `{ "PropertyTypes" : ["MappedVirtualDisk"]}`
@@ -41,7 +40,6 @@ type ContainerProperties struct {
 	RuntimeImagePath             string                              `json:",omitempty"`
 	Stopped                      bool                                `json:",omitempty"`
 	ExitType                     string                              `json:",omitempty"`
-	AreUpdatesPending            bool                                `json:",omitempty"`
 	ObRoot                       string                              `json:",omitempty"`
 	Statistics                   Statistics                          `json:",omitempty"`
 	ProcessList                  []ProcessListItem                   `json:",omitempty"`
@@ -435,27 +433,6 @@ func (container *container) properties(query string) (*ContainerProperties, erro
 		return nil, err
 	}
 	return properties, nil
-}
-
-// HasPendingUpdates returns true if the container has updates pending to install
-func (container *container) HasPendingUpdates() (bool, error) {
-	container.handleLock.RLock()
-	defer container.handleLock.RUnlock()
-	operation := "HasPendingUpdates"
-	title := "HCSShim::Container::" + operation
-	logrus.Debugf(title+" id=%s", container.id)
-
-	if container.handle == 0 {
-		return false, makeContainerError(container, operation, "", ErrAlreadyClosed)
-	}
-
-	properties, err := container.properties(pendingUpdatesQuery)
-	if err != nil {
-		return false, makeContainerError(container, operation, "", err)
-	}
-
-	logrus.Debugf(title+" succeeded id=%s", container.id)
-	return properties.AreUpdatesPending, nil
 }
 
 // Statistics returns statistics for the container
