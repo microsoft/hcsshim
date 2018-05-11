@@ -6,8 +6,6 @@ It is primarily used in the [Moby Project](https://github.com/moby/moby), but it
 
 ## Contributing
 
----------------
-
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a
 Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
 the rights to use your contribution. For details, visit https://cla.microsoft.com.
@@ -22,15 +20,11 @@ contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additio
 
 ## Dependencies
 
----------------
-
 This project requires Golang 1.7 or newer to build.
 
-For system requirements to run this project, see the Microsoft docs on [Windows Container requirements](https://docs.microsoft.com/en-us/virtualization/windowscontainers/deploy-containers/system-requirements)
+For system requirements to run this project, see the Microsoft docs on [Windows Container requirements](https://docs.microsoft.com/en-us/virtualization/windowscontainers/deploy-containers/system-requirements).
 
 ## Reporting Security Issues
-
----------------
 
 Security issues and bugs should be reported privately, via email, to the Microsoft Security
 Response Center (MSRC) at [secure@microsoft.com](mailto:secure@microsoft.com). You should
