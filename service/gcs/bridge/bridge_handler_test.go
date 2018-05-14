@@ -979,7 +979,7 @@ func Test_ModifySettings_InvalidJson_Failure(t *testing.T) {
 func Test_ModifySettings_VirtualDisk_InvalidSettingsJson_Failure(t *testing.T) {
 	r := &prot.ContainerModifySettings{
 		MessageBase: newMessageBase(),
-		Request: &prot.ResourceModificationRequestResponse{
+		Request: prot.ResourceModificationRequestResponse{
 			ResourceType: prot.PtMappedVirtualDisk,
 		},
 	}
@@ -996,7 +996,7 @@ func Test_ModifySettings_VirtualDisk_InvalidSettingsJson_Failure(t *testing.T) {
 func Test_ModifySettings_MappedDirectory_InvalidSettingsJson_Failure(t *testing.T) {
 	r := &prot.ContainerModifySettings{
 		MessageBase: newMessageBase(),
-		Request: &prot.ResourceModificationRequestResponse{
+		Request: prot.ResourceModificationRequestResponse{
 			ResourceType: prot.PtMappedDirectory,
 		},
 	}
@@ -1013,7 +1013,7 @@ func Test_ModifySettings_MappedDirectory_InvalidSettingsJson_Failure(t *testing.
 func Test_ModifySettings_CoreFails_Failure(t *testing.T) {
 	r := &prot.ContainerModifySettings{
 		MessageBase: newMessageBase(),
-		Request: &prot.ResourceModificationRequestResponse{
+		Request: prot.ResourceModificationRequestResponse{
 			ResourceType: prot.PtMappedDirectory,
 			Settings:     &prot.MappedDirectory{}, // Default values.
 		},
@@ -1035,7 +1035,7 @@ func Test_ModifySettings_CoreFails_Failure(t *testing.T) {
 func Test_ModifySettings_CoreSucceeds_Success(t *testing.T) {
 	r := &prot.ContainerModifySettings{
 		MessageBase: newMessageBase(),
-		Request: &prot.ResourceModificationRequestResponse{
+		Request: prot.ResourceModificationRequestResponse{
 			ResourceType: prot.PtMappedDirectory,
 			RequestType:  prot.RtAdd,
 			Settings: &prot.MappedDirectory{
@@ -1057,10 +1057,11 @@ func Test_ModifySettings_CoreSucceeds_Success(t *testing.T) {
 	if r.ContainerID != mc.LastModifySettings.ID {
 		t.Fatal("last modify settings did not have the same container ID")
 	}
-	if !reflect.DeepEqual(r.Request, &mc.LastModifySettings.Request) {
+	if !reflect.DeepEqual(r.Request, mc.LastModifySettings.Request) {
 		t.Fatal("last modify settings did not have equal requests struct")
 	}
 }
+<<<<<<< HEAD
 
 func Test_ModifySettings_V2_Success(t *testing.T) {
 	r := &prot.ContainerModifySettings{
@@ -1149,3 +1150,5 @@ func Test_ModifySettings_NeitherV1V2_Fails(t *testing.T) {
 	verifyResponseError(t, rw)
 	verifyActivityID(t, r.MessageBase, rw)
 }
+=======
+>>>>>>> origin/master

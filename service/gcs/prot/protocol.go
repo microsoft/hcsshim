@@ -375,71 +375,11 @@ type ResourceModificationRequestResponse struct {
 	Settings     interface{} `json:",omitempty"`
 }
 
-// ModifyResourceType is the type of resource, such as memory or virtual disk,
-// which is to be modified for the container. This is the V2 schema equivalent
-// of PropertyType.
-type ModifyResourceType string
-
-const (
-	// MrtMemory is the modify resource type for memory
-	MrtMemory = ModifyResourceType("Memory")
-	// MrtCPUGroup is the modify resource type for CPU group
-	MrtCPUGroup = ModifyResourceType("CpuGroup")
-	// MrtMappedDirectory is the modify resource type for mapped directories
-	MrtMappedDirectory = ModifyResourceType("MappedDirectory")
-	// MrtMappedPipe is the modify resource type for mapped pipes
-	MrtMappedPipe = ModifyResourceType("MappedPipe")
-	// MrtMappedVirtualDisk is the modify resource type for mapped virtual
-	// disks
-	MrtMappedVirtualDisk = ModifyResourceType("MappedVirtualDisk")
-	// MrtNetwork is the modify resource type for networking
-	MrtNetwork = ModifyResourceType("Network")
-	// MrtVSMBShare is the modify resource type for VSMB shares
-	MrtVSMBShare = ModifyResourceType("VSmbShare")
-	// MrtPlan9Share is the modify resource type for Plan9 shares
-	MrtPlan9Share = ModifyResourceType("Plan9Share")
-	// MrtCombinedLayers is the modify resource type for combined layers
-	MrtCombinedLayers = ModifyResourceType("CombinedLayers")
-	// MrtHVSocket is the modify resource type for Hyper-V sockets
-	MrtHVSocket = ModifyResourceType("HvSocket")
-	// MrtSharedMemoryRegion is the modify resource type for shared memory
-	// regions
-	MrtSharedMemoryRegion = ModifyResourceType("SharedMemoryRegion")
-	// MrtVPMemDevice is the modify resource type for VPMem devices
-	MrtVPMemDevice = ModifyResourceType("VPMemDevice")
-	// MrtGPU is the modify resource type for GPUs
-	MrtGPU = ModifyResourceType("Gpu")
-)
-
-// ModifyRequestType is the type of operation to perform on a given modify
-// resource type. This is the V2 schema equivalent of RequestType.
-type ModifyRequestType string
-
-const (
-	// MreqtAdd is the "Add" modify request type
-	MreqtAdd = ModifyRequestType("Add")
-	// MreqtRemove is the "Remove" modify request type
-	MreqtRemove = ModifyRequestType("Remove")
-	// MreqtUpdate is the "Update" modify request type
-	MreqtUpdate = ModifyRequestType("Update")
-)
-
-// ModifySettingRequest details a container resource which should be modified,
-// how, and with what parameters. This is the V2 schema equivalent of
-// ResourceModificationRequestResponse.
-type ModifySettingRequest struct {
-	ResourceURI  string             `json:"ResourceUri,omitempty"`
-	ResourceType ModifyResourceType `json:",omitempty"`
-	RequestType  ModifyRequestType  `json:",omitempty"`
-	Settings     interface{}        `json:",omitempty"`
-}
-
 // ContainerModifySettings is the message from the HCS specifying how a certain
 // container resource should be modified.
 type ContainerModifySettings struct {
 	*MessageBase
-	Request   *ResourceModificationRequestResponse
-	V2Request *ModifySettingRequest `json:"v2Request"`
+	Request ResourceModificationRequestResponse
 }
 
 // UnmarshalContainerModifySettings unmarshals the given bytes into a
@@ -450,61 +390,31 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 	// Unmarshal the message.
 	var request ContainerModifySettings
 	var rawSettings json.RawMessage
-	var v2RawSettings json.RawMessage
-	request.Request = &ResourceModificationRequestResponse{}
 	request.Request.Settings = &rawSettings
-	request.V2Request = &ModifySettingRequest{}
-	request.V2Request.Settings = &v2RawSettings
 	if err := commonutils.UnmarshalJSONWithHresult(b, &request); err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	if request.Request != nil {
-		if request.Request.RequestType == "" {
-			request.Request.RequestType = RtAdd
-		}
-
-		// Fill in the ResourceType-specific fields.
-		switch request.Request.ResourceType {
-		case PtMappedVirtualDisk:
-			mvd := &MappedVirtualDisk{}
-			if err := commonutils.UnmarshalJSONWithHresult(rawSettings, mvd); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDisk")
-			}
-			request.Request.Settings = mvd
-		case PtMappedDirectory:
-			md := &MappedDirectory{}
-			if err := commonutils.UnmarshalJSONWithHresult(rawSettings, md); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedDirectory")
-			}
-			request.Request.Settings = md
-		default:
-			return nil, errors.Errorf("invalid ResourceType '%s'", request.Request.ResourceType)
-		}
+	if request.Request.RequestType == "" {
+		request.Request.RequestType = RtAdd
 	}
 
-	if request.V2Request != nil {
-		if request.V2Request.RequestType == "" {
-			request.V2Request.RequestType = MreqtAdd
+	// Fill in the ResourceType-specific fields.
+	switch request.Request.ResourceType {
+	case PtMappedVirtualDisk:
+		mvd := &MappedVirtualDisk{}
+		if err := commonutils.UnmarshalJSONWithHresult(rawSettings, mvd); err != nil {
+			return nil, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDisk")
 		}
-
-		// Fill in the ResourceType-specific fields.
-		switch request.V2Request.ResourceType {
-		case MrtMappedVirtualDisk:
-			mvd := &MappedVirtualDisk{}
-			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, mvd); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDisk")
-			}
-			request.V2Request.Settings = mvd
-		case MrtMappedDirectory:
-			md := &MappedDirectory{}
-			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, md); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedDirectory")
-			}
-			request.V2Request.Settings = md
-		default:
-			return nil, errors.Errorf("invalid ResourceType '%s'", request.V2Request.ResourceType)
+		request.Request.Settings = mvd
+	case PtMappedDirectory:
+		md := &MappedDirectory{}
+		if err := commonutils.UnmarshalJSONWithHresult(rawSettings, md); err != nil {
+			return nil, errors.Wrap(err, "failed to unmarshal settings as MappedDirectory")
 		}
+		request.Request.Settings = md
+	default:
+		return nil, errors.Errorf("invalid ResourceType '%s'", request.Request.ResourceType)
 	}
 
 	return &request, nil
