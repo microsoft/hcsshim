@@ -1,4 +1,4 @@
-package wclayer
+package ociwclayer
 
 import (
 	"bufio"
