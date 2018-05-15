@@ -9,7 +9,7 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/appargs"
-	"github.com/Microsoft/hcsshim/oci/wclayer"
+	"github.com/Microsoft/hcsshim/internal/ociwclayer"
 	"github.com/urfave/cli"
 )
 
@@ -56,7 +56,7 @@ var importCommand = cli.Command{
 		if err != nil {
 			return err
 		}
-		_, err = wclayer.ImportLayer(r, path, layers)
+		_, err = ociwclayer.ImportLayer(r, path, layers)
 		return err
 	},
 }

@@ -1,6 +1,6 @@
-// Package wclayer provides functions for importing and exporting Windows
+// Package ociwclayer provides functions for importing and exporting Windows
 // container layers from and to their OCI tar representation.
-package wclayer
+package ociwclayer
 
 import (
 	"io"
