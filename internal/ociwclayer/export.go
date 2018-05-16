@@ -9,7 +9,6 @@ import (
 	"github.com/Microsoft/go-winio/archive/tar"
 	"github.com/Microsoft/go-winio/backuptar"
 	"github.com/Microsoft/hcsshim"
-	"github.com/docker/docker/pkg/archive"
 )
 
 var driverInfo = hcsshim.DriverInfo{}
@@ -63,7 +62,7 @@ func writeTarFromLayer(r hcsshim.LayerReader, w io.Writer) error {
 		if fileInfo == nil {
 			// Write a whiteout file.
 			hdr := &tar.Header{
-				Name: filepath.ToSlash(filepath.Join(filepath.Dir(name), archive.WhiteoutPrefix+filepath.Base(name))),
+				Name: filepath.ToSlash(filepath.Join(filepath.Dir(name), whiteoutPrefix+filepath.Base(name))),
 			}
 			err := t.WriteHeader(hdr)
 			if err != nil {
