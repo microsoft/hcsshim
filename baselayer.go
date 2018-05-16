@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/hcsshim/internal/safefile"
 )
 
 type baseLayerWriter struct {
@@ -29,7 +30,7 @@ type dirInfo struct {
 func reapplyDirectoryTimes(root *os.File, dis []dirInfo) error {
 	for i := range dis {
 		di := &dis[len(dis)-i-1] // reverse order: process child directories first
-		f, err := openRelative(di.path, root, syscall.GENERIC_READ|syscall.GENERIC_WRITE, syscall.FILE_SHARE_READ, _FILE_OPEN, _FILE_DIRECTORY_FILE)
+		f, err := safefile.OpenRelative(di.path, root, syscall.GENERIC_READ|syscall.GENERIC_WRITE, syscall.FILE_SHARE_READ, safefile.FILE_OPEN, safefile.FILE_DIRECTORY_FILE)
 		if err != nil {
 			return err
 		}
@@ -84,16 +85,16 @@ func (w *baseLayerWriter) Add(name string, fileInfo *winio.FileBasicInfo) (err e
 
 	extraFlags := uint32(0)
 	if fileInfo.FileAttributes&syscall.FILE_ATTRIBUTE_DIRECTORY != 0 {
-		extraFlags |= _FILE_DIRECTORY_FILE
+		extraFlags |= safefile.FILE_DIRECTORY_FILE
 		if fileInfo.FileAttributes&syscall.FILE_ATTRIBUTE_REPARSE_POINT == 0 {
 			w.dirInfo = append(w.dirInfo, dirInfo{name, *fileInfo})
 		}
 	}
 
 	mode := uint32(syscall.GENERIC_READ | syscall.GENERIC_WRITE | winio.WRITE_DAC | winio.WRITE_OWNER | winio.ACCESS_SYSTEM_SECURITY)
-	f, err = openRelative(name, w.root, mode, syscall.FILE_SHARE_READ, _FILE_CREATE, extraFlags)
+	f, err = safefile.OpenRelative(name, w.root, mode, syscall.FILE_SHARE_READ, safefile.FILE_CREATE, extraFlags)
 	if err != nil {
-		return makeError(err, "Failed to openRelative", name)
+		return makeError(err, "Failed to safefile.OpenRelative", name)
 	}
 
 	err = winio.SetFileBasicInfo(f, fileInfo)
@@ -119,7 +120,7 @@ func (w *baseLayerWriter) AddLink(name string, target string) (err error) {
 		return err
 	}
 
-	return linkRelative(target, w.root, name, w.root)
+	return safefile.LinkRelative(target, w.root, name, w.root)
 }
 
 func (w *baseLayerWriter) Remove(name string) error {
@@ -157,7 +158,7 @@ func (w *baseLayerWriter) Close() error {
 		}
 
 		if w.hasUtilityVM {
-			err := ensureNotReparsePointRelative("UtilityVM", w.root)
+			err := safefile.EnsureNotReparsePointRelative("UtilityVM", w.root)
 			if err != nil {
 				return err
 			}
