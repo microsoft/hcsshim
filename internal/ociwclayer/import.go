@@ -12,8 +12,9 @@ import (
 	"github.com/Microsoft/go-winio/archive/tar"
 	"github.com/Microsoft/go-winio/backuptar"
 	"github.com/Microsoft/hcsshim"
-	"github.com/docker/docker/pkg/archive"
 )
+
+const whiteoutPrefix = ".wh."
 
 var (
 	// mutatedFiles is a list of files that are mutated by the import process
@@ -61,8 +62,8 @@ func writeLayerFromTar(r io.Reader, w hcsshim.LayerWriter, root string) (int64, 
 	buf := bufio.NewWriter(nil)
 	for err == nil {
 		base := path.Base(hdr.Name)
-		if strings.HasPrefix(base, archive.WhiteoutPrefix) {
-			name := path.Join(path.Dir(hdr.Name), base[len(archive.WhiteoutPrefix):])
+		if strings.HasPrefix(base, whiteoutPrefix) {
+			name := path.Join(path.Dir(hdr.Name), base[len(whiteoutPrefix):])
 			err = w.Remove(filepath.FromSlash(name))
 			if err != nil {
 				return 0, err
