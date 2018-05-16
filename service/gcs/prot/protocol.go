@@ -428,10 +428,10 @@ const (
 // how, and with what parameters. This is the V2 schema equivalent of
 // ResourceModificationRequestResponse.
 type ModifySettingRequest struct {
-	ResourceURI  string             `json:"ResourceUri,omitempty"`
-	ResourceType ModifyResourceType `json:",omitempty"`
-	RequestType  ModifyRequestType  `json:",omitempty"`
-	Settings     interface{}        `json:",omitempty"`
+	ResourceURI    string             `json:"ResourceUri,omitempty"`
+	ResourceType   ModifyResourceType `json:",omitempty"`
+	RequestType    ModifyRequestType  `json:",omitempty"`
+	HostedSettings interface{}        `json:",omitempty"`
 }
 
 // ContainerModifySettings is the message from the HCS specifying how a certain
@@ -454,7 +454,7 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 	request.Request = &ResourceModificationRequestResponse{}
 	request.Request.Settings = &rawSettings
 	request.V2Request = &ModifySettingRequest{}
-	request.V2Request.Settings = &v2RawSettings
+	request.V2Request.HostedSettings = &v2RawSettings
 	if err := commonutils.UnmarshalJSONWithHresult(b, &request); err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -493,15 +493,21 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 		case MrtMappedVirtualDisk:
 			mvd := &MappedVirtualDisk{}
 			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, mvd); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDisk")
+				return nil, errors.Wrap(err, "failed to unmarshal hosted settings as MappedVirtualDisk")
 			}
-			request.V2Request.Settings = mvd
+			request.V2Request.HostedSettings = mvd
 		case MrtMappedDirectory:
 			md := &MappedDirectory{}
 			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, md); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedDirectory")
+				return nil, errors.Wrap(err, "failed to unmarshal hosted settings as MappedDirectory")
 			}
-			request.V2Request.Settings = md
+			request.V2Request.HostedSettings = md
+		case MrtVPMemDevice:
+			vpd := &MappedVPMemController{}
+			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, vpd); err != nil {
+				return nil, errors.Wrap(err, "failed to unmarshal hosted settings as VPMemDevice")
+			}
+			request.V2Request.HostedSettings = vpd
 		default:
 			return nil, errors.Errorf("invalid ResourceType '%s'", request.V2Request.ResourceType)
 		}
@@ -614,6 +620,12 @@ type MappedDirectory struct {
 	CreateInUtilityVM bool   `json:",omitempty"`
 	ReadOnly          bool   `json:",omitempty"`
 	Port              uint32 `json:",omitempty"`
+}
+
+// MappedVPMemController represents a set of mapped VPMem index/path pairs.
+// Something like 0: /tmp/0/0 means map PMEM0 to /tmp/0/0
+type MappedVPMemController struct {
+	MappedDevices map[string]string
 }
 
 // VMHostedContainerSettings is the set of settings used to specify the initial

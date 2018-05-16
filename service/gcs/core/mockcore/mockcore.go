@@ -63,7 +63,13 @@ type RunExternalProcessCall struct {
 // ModifySettingsCall captures the arguments of ModifySettings.
 type ModifySettingsCall struct {
 	ID      string
-	Request prot.ResourceModificationRequestResponse
+	Request *prot.ResourceModificationRequestResponse
+}
+
+// ModifySettingsCallV2 captures the arguments of ModifySettings.
+type ModifySettingsCallV2 struct {
+	ID      string
+	Request *prot.ModifySettingRequest
 }
 
 // ResizeConsoleCall captures the arguments of ResizeConsole
@@ -101,6 +107,7 @@ type MockCore struct {
 	LastGetProperties            GetPropertiesCall
 	LastRunExternalProcess       RunExternalProcessCall
 	LastModifySettings           ModifySettingsCall
+	LastModifySettingsV2         ModifySettingsCallV2
 	LastResizeConsole            ResizeConsoleCall
 	LastWaitContainer            WaitContainerCall
 	LastWaitProcess              WaitProcessCall
@@ -176,8 +183,17 @@ func (c *MockCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *s
 }
 
 // ModifySettings captures its arguments.
-func (c *MockCore) ModifySettings(id string, request prot.ResourceModificationRequestResponse) error {
+func (c *MockCore) ModifySettings(id string, request *prot.ResourceModificationRequestResponse) error {
 	c.LastModifySettings = ModifySettingsCall{
+		ID:      id,
+		Request: request,
+	}
+	return c.behaviorResult()
+}
+
+// ModifySettingsV2 captures its arguments.
+func (c *MockCore) ModifySettingsV2(id string, request *prot.ModifySettingRequest) error {
+	c.LastModifySettingsV2 = ModifySettingsCallV2{
 		ID:      id,
 		Request: request,
 	}

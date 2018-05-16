@@ -18,7 +18,8 @@ type Core interface {
 	SignalProcess(pid int, options prot.SignalProcessOptions) error
 	GetProperties(id string, query string) (*prot.Properties, error)
 	RunExternalProcess(info prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (pid int, err error)
-	ModifySettings(id string, request prot.ResourceModificationRequestResponse) error
+	ModifySettings(id string, request *prot.ResourceModificationRequestResponse) error
+	ModifySettingsV2(id string, request *prot.ModifySettingRequest) error
 	ResizeConsole(pid int, height, width uint16) error
 	WaitContainer(id string) (func() int, error)
 	WaitProcess(pid int) (chan int, chan bool, error)

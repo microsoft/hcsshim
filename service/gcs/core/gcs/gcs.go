@@ -606,7 +606,7 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *st
 // ModifySettings takes the given request and performs the modification it
 // specifies. At the moment, this function only supports the request types Add
 // and Remove, both for the resource type MappedVirtualDisk.
-func (c *gcsCore) ModifySettings(id string, request prot.ResourceModificationRequestResponse) error {
+func (c *gcsCore) ModifySettings(id string, request *prot.ResourceModificationRequestResponse) error {
 	c.containerCacheMutex.Lock()
 	defer c.containerCacheMutex.Unlock()
 
@@ -646,6 +646,77 @@ func (c *gcsCore) ModifySettings(id string, request prot.ResourceModificationReq
 		case prot.RtRemove:
 			if err := c.removeMappedDirectories(id, []prot.MappedDirectory{*md}, containerEntry); err != nil {
 				return errors.Wrapf(err, "failed to hot remove mapped directory for container %s", id)
+			}
+		default:
+			return errors.Errorf("the request type \"%s\" is not supported for resource type \"%s\"", request.RequestType, request.ResourceType)
+		}
+	default:
+		return errors.Errorf("the resource type \"%s\" is not supported", request.ResourceType)
+	}
+
+	return nil
+}
+
+// ModifySettings takes the given request and performs the modification it
+// specifies. At the moment, this function only supports the request types Add
+// and Remove, both for the resource type MappedVirtualDisk.
+func (c *gcsCore) ModifySettingsV2(id string, request *prot.ModifySettingRequest) error {
+	c.containerCacheMutex.Lock()
+	defer c.containerCacheMutex.Unlock()
+
+	containerEntry := c.getContainer(id)
+	if containerEntry == nil {
+		return errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
+	}
+
+	switch request.ResourceType {
+	case prot.MrtMappedVirtualDisk:
+		mvd, ok := request.HostedSettings.(*prot.MappedVirtualDisk)
+		if !ok {
+			return errors.New("the request's hosted settings are not of type MappedVirtualDisk")
+		}
+		switch request.RequestType {
+		case prot.MreqtAdd:
+			if err := c.setupMappedVirtualDisks(id, []prot.MappedVirtualDisk{*mvd}, containerEntry); err != nil {
+				return errors.Wrapf(err, "failed to hot add mapped virtual disk for container %s", id)
+			}
+		case prot.MreqtRemove:
+			if err := c.removeMappedVirtualDisks(id, []prot.MappedVirtualDisk{*mvd}, containerEntry); err != nil {
+				return errors.Wrapf(err, "failed to hot remove mapped virtual disk for container %s", id)
+			}
+		default:
+			return errors.Errorf("the request type \"%s\" is not supported for resource type \"%s\"", request.RequestType, request.ResourceType)
+		}
+	case prot.MrtMappedDirectory:
+		md, ok := request.HostedSettings.(*prot.MappedDirectory)
+		if !ok {
+			return errors.New("the request's hosted settings are not of type MappedDirectory")
+		}
+		switch request.RequestType {
+		case prot.MreqtAdd:
+			if err := c.setupMappedDirectories(id, []prot.MappedDirectory{*md}, containerEntry); err != nil {
+				return errors.Wrapf(err, "failed to hot add mapped directory for container %s", id)
+			}
+		case prot.MreqtRemove:
+			if err := c.removeMappedDirectories(id, []prot.MappedDirectory{*md}, containerEntry); err != nil {
+				return errors.Wrapf(err, "failed to hot remove mapped directory for container %s", id)
+			}
+		default:
+			return errors.Errorf("the request type \"%s\" is not supported for resource type \"%s\"", request.RequestType, request.ResourceType)
+		}
+	case prot.MrtVPMemDevice:
+		vpd, ok := request.HostedSettings.(*prot.MappedVPMemController)
+		if !ok {
+			return errors.New("the request's hosted settings are not of type MappedDirectory")
+		}
+		switch request.RequestType {
+		case prot.MreqtAdd:
+			if err := c.setupVPMemLayerMounts(vpd); err != nil {
+				return errors.Wrapf(err, "failed to hot add a VPMem device for container %s", id)
+			}
+		case prot.MreqtRemove:
+			if err := c.removeVPMemLayerMounts(vpd); err != nil {
+				return errors.Wrapf(err, "failed to hot add a VPMem device for container %s", id)
 			}
 		default:
 			return errors.Errorf("the request type \"%s\" is not supported for resource type \"%s\"", request.RequestType, request.ResourceType)
@@ -805,6 +876,28 @@ func (c *gcsCore) setupMappedDirectories(id string, dirs []prot.MappedDirectory,
 	return nil
 }
 
+// setupVPMemLayerMounts is a helper functions which calls into the functions in
+// storage.go to setup pmem devices and mount them to a folder specified by the
+// caller.
+//
+// This function does not track the lifetime of the mounts as it can be outside
+// the lifetime of any single container. It is the responsibility of the
+// management stack to remove any mounts it desires.
+func (c *gcsCore) setupVPMemLayerMounts(m *prot.MappedVPMemController) error {
+	for index, dir := range m.MappedDevices {
+		ms := &mountSpec{
+			Source:     "/dev/pmem" + index,
+			FileSystem: defaultFileSystem,
+			Flags:      syscall.MS_RDONLY,
+			Options:    []string{mountOptionNoLoad, mountOptionDax},
+		}
+		if err := c.mountLayer(dir, ms); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // removeMappedVirtualDisks is a helper function which calls into the functions
 // in storage.go to unmount a set of mapped virtual disks for a given
 // container. It then removes them from the container's cache entry.
@@ -832,6 +925,17 @@ func (c *gcsCore) removeMappedDirectories(id string, dirs []prot.MappedDirectory
 	}
 	for _, dir := range dirs {
 		containerEntry.RemoveMappedDirectory(dir)
+	}
+	return nil
+}
+
+// removeVPMemLayerMounts is a helper functions which calls into the functions in
+// storage.go to remove any mounted VPMem layers.
+func (c *gcsCore) removeVPMemLayerMounts(m *prot.MappedVPMemController) error {
+	for _, dir := range m.MappedDevices {
+		if err := c.unmountLayer(dir); err != nil {
+			return err
+		}
 	}
 	return nil
 }

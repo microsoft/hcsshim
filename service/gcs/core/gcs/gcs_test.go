@@ -964,7 +964,7 @@ var _ = Describe("GCS", func() {
 						BeforeEach(func() {
 							err = coreint.CreateContainer(containerID, createSettings)
 							Expect(err).NotTo(HaveOccurred())
-							err = coreint.ModifySettings(containerID, diskModificationRequestSameLun)
+							err = coreint.ModifySettings(containerID, &diskModificationRequestSameLun)
 						})
 						It("should produce an error", func() {
 							Expect(err).To(HaveOccurred())
@@ -972,7 +972,7 @@ var _ = Describe("GCS", func() {
 					})
 					Context("the lun is not already in use", func() {
 						JustBeforeEach(func() {
-							err = coreint.ModifySettings(containerID, diskModificationRequest)
+							err = coreint.ModifySettings(containerID, &diskModificationRequest)
 						})
 						Context("the container has already been created", func() {
 							BeforeEach(func() {
@@ -995,7 +995,7 @@ var _ = Describe("GCS", func() {
 						BeforeEach(func() {
 							err = coreint.CreateContainer(containerID, createSettings)
 							Expect(err).NotTo(HaveOccurred())
-							err = coreint.ModifySettings(containerID, diskModificationRequestRemove)
+							err = coreint.ModifySettings(containerID, &diskModificationRequestRemove)
 						})
 						It("should not produce an error", func() {
 							Expect(err).NotTo(HaveOccurred())
@@ -1003,7 +1003,7 @@ var _ = Describe("GCS", func() {
 					})
 					Context("the disk has been added", func() {
 						JustBeforeEach(func() {
-							err = coreint.ModifySettings(containerID, diskModificationRequestRemove)
+							err = coreint.ModifySettings(containerID, &diskModificationRequestRemove)
 						})
 						Context("the container has already been created", func() {
 							BeforeEach(func() {
@@ -1027,9 +1027,9 @@ var _ = Describe("GCS", func() {
 						BeforeEach(func() {
 							err = coreint.CreateContainer(containerID, createSettings)
 							Expect(err).NotTo(HaveOccurred())
-							err = coreint.ModifySettings(containerID, dirModificationRequestSamePort)
+							err = coreint.ModifySettings(containerID, &dirModificationRequestSamePort)
 							Expect(err).NotTo(HaveOccurred())
-							err = coreint.ModifySettings(containerID, dirModificationRequestSamePort)
+							err = coreint.ModifySettings(containerID, &dirModificationRequestSamePort)
 						})
 						It("should produce an error", func() {
 							Expect(err).To(HaveOccurred())
@@ -1037,7 +1037,7 @@ var _ = Describe("GCS", func() {
 					})
 					Context("the port is not already in use", func() {
 						JustBeforeEach(func() {
-							err = coreint.ModifySettings(containerID, dirModificationRequest)
+							err = coreint.ModifySettings(containerID, &dirModificationRequest)
 						})
 						Context("the container has already been created", func() {
 							BeforeEach(func() {
@@ -1060,7 +1060,7 @@ var _ = Describe("GCS", func() {
 						BeforeEach(func() {
 							err = coreint.CreateContainer(containerID, createSettings)
 							Expect(err).NotTo(HaveOccurred())
-							err = coreint.ModifySettings(containerID, dirModificationRequestRemove)
+							err = coreint.ModifySettings(containerID, &dirModificationRequestRemove)
 						})
 						It("should not produce an error", func() {
 							Expect(err).NotTo(HaveOccurred())
@@ -1068,7 +1068,7 @@ var _ = Describe("GCS", func() {
 					})
 					Context("the directory has been added", func() {
 						JustBeforeEach(func() {
-							err = coreint.ModifySettings(containerID, dirModificationRequestRemove)
+							err = coreint.ModifySettings(containerID, &dirModificationRequestRemove)
 						})
 						Context("the container has already been created", func() {
 							BeforeEach(func() {

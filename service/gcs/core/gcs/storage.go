@@ -317,6 +317,34 @@ func (c *gcsCore) unmountMappedDirectories(dirs []prot.MappedDirectory) error {
 	return nil
 }
 
+// mountLayer mounts the layer spec at location
+func (c *gcsCore) mountLayer(location string, layer *mountSpec) error {
+	logrus.Infof("mounting layer at path: %s", location)
+	if err := c.OS.MkdirAll(location, 0700); err != nil {
+		return errors.Wrapf(err, "failed to create directory for layer '%s'", location)
+	}
+	if err := layer.Mount(c.OS, location); err != nil {
+		return errors.Wrapf(err, "failed to mount layer directory %s", location)
+	}
+	return nil
+}
+
+// unmountLayer dismounts a mounted path at location
+func (c *gcsCore) unmountLayer(location string) error {
+	if exists, err := c.OS.PathExists(location); err != nil {
+		return errors.Wrapf(err, "failed to determine if directory path exists '%s'", location)
+	} else if exists {
+		if mounted, err := c.OS.PathIsMounted(location); err != nil {
+			return errors.Wrapf(err, "failed to determine if directory path is mounted %s", location)
+		} else if mounted {
+			if err := c.OS.Unmount(location, 0); err != nil {
+				return errors.Wrapf(err, "failed to unmount mounted directory path '%s'", location)
+			}
+		}
+	}
+	return nil
+}
+
 // mountLayers mounts each device into a mountpoint, and then layers them into a
 // union filesystem in the given order.
 // These mountpoints are all stored under a directory reserved for the container
