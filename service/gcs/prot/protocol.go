@@ -431,6 +431,7 @@ type ModifySettingRequest struct {
 	ResourceURI    string             `json:"ResourceUri,omitempty"`
 	ResourceType   ModifyResourceType `json:",omitempty"`
 	RequestType    ModifyRequestType  `json:",omitempty"`
+	Settings       interface{}        `json:",omitempty"`
 	HostedSettings interface{}        `json:",omitempty"`
 }
 
@@ -495,13 +496,16 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, mvd); err != nil {
 				return nil, errors.Wrap(err, "failed to unmarshal hosted settings as MappedVirtualDisk")
 			}
-			request.V2Request.HostedSettings = mvd
+			// V2 removed CreateInUtilityVM because this is always true for this
+			// type of modify. Fake that here.
+			mvd.CreateInUtilityVM = true
+			request.V2Request.Settings = mvd
 		case MrtMappedDirectory:
 			md := &MappedDirectory{}
 			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, md); err != nil {
 				return nil, errors.Wrap(err, "failed to unmarshal hosted settings as MappedDirectory")
 			}
-			request.V2Request.HostedSettings = md
+			request.V2Request.Settings = md
 		case MrtVPMemDevice:
 			vpd := &MappedVPMemController{}
 			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, vpd); err != nil {
@@ -606,11 +610,12 @@ type NetworkAdapter struct {
 // MappedVirtualDisk represents a disk on the host which is mapped into a
 // directory in the guest.
 type MappedVirtualDisk struct {
-	ContainerPath     string
-	Lun               uint8 `json:",omitempty"`
-	CreateInUtilityVM bool  `json:",omitempty"`
-	ReadOnly          bool  `json:",omitempty"`
-	AttachOnly        bool  `json:",omitempty"`
+	ContainerPath string
+	Lun           uint8 `json:",omitempty"`
+	// CreateInUtilityVM is only supported for V1 schema containers
+	CreateInUtilityVM bool `json:",omitempty"`
+	ReadOnly          bool `json:",omitempty"`
+	AttachOnly        bool `json:",omitempty"`
 }
 
 // MappedDirectory represents a directory on the host which is mapped to a

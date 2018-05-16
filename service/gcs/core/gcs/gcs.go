@@ -671,7 +671,7 @@ func (c *gcsCore) ModifySettingsV2(id string, request *prot.ModifySettingRequest
 
 	switch request.ResourceType {
 	case prot.MrtMappedVirtualDisk:
-		mvd, ok := request.HostedSettings.(*prot.MappedVirtualDisk)
+		mvd, ok := request.Settings.(*prot.MappedVirtualDisk)
 		if !ok {
 			return errors.New("the request's hosted settings are not of type MappedVirtualDisk")
 		}
@@ -688,7 +688,7 @@ func (c *gcsCore) ModifySettingsV2(id string, request *prot.ModifySettingRequest
 			return errors.Errorf("the request type \"%s\" is not supported for resource type \"%s\"", request.RequestType, request.ResourceType)
 		}
 	case prot.MrtMappedDirectory:
-		md, ok := request.HostedSettings.(*prot.MappedDirectory)
+		md, ok := request.Settings.(*prot.MappedDirectory)
 		if !ok {
 			return errors.New("the request's hosted settings are not of type MappedDirectory")
 		}
