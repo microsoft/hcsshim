@@ -4,6 +4,7 @@ package appargs
 
 import (
 	"errors"
+	"strconv"
 
 	"github.com/urfave/cli"
 )
@@ -12,34 +13,59 @@ import (
 // arguments consumed or -1 on error.
 type Validator = func([]string) int
 
-// Required is a validator for a single required parameter.
-func Required(args []string) int {
+// String is a validator for strings.
+func String(args []string) int {
 	if len(args) == 0 {
 		return -1
 	}
 	return 1
 }
 
-// Required is a validator for a single required parameter that must not be
-// empty.
-func RequiredNonEmpty(args []string) int {
+// NonEmptyString is a validator for non-empty strings.
+func NonEmptyString(args []string) int {
 	if len(args) == 0 || args[0] == "" {
 		return -1
 	}
 	return 1
 }
 
-// Optional is a validator for an optional parameter.
-func Optional(args []string) int {
-	if len(args) == 0 {
-		return 0
+// Int returns a validator for integers.
+func Int(base int, min int, max int) Validator {
+	return func(args []string) int {
+		if len(args) == 0 {
+			return -1
+		}
+		i, err := strconv.ParseInt(args[0], base, 0)
+		if err != nil || int(i) < min || int(i) > max {
+			return -1
+		}
+		return 1
 	}
-	return 1
 }
 
-// Rest is a validator that consumes the rest of the arguments without validation.
-func Rest(args []string) int {
-	return len(args)
+// Optional returns a validator that treats an argument as optional.
+func Optional(v Validator) Validator {
+	return func(args []string) int {
+		if len(args) == 0 {
+			return 0
+		}
+		return v(args)
+	}
+}
+
+// Rest returns a validator that validates each of the remaining arguments.
+func Rest(v Validator) Validator {
+	return func(args []string) int {
+		count := len(args)
+		for len(args) != 0 {
+			n := v(args)
+			if n < 0 {
+				return n
+			}
+			args = args[n:]
+		}
+		return count
+	}
 }
 
 // ErrInvalidUsage is returned when there is a validation error.
