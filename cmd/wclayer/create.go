@@ -18,7 +18,7 @@ var createCommand = cli.Command{
 		},
 	},
 	ArgsUsage: "<layer path>",
-	Before:    appargs.Validate(appargs.Required),
+	Before:    appargs.Validate(appargs.NonEmptyString),
 	Action: func(context *cli.Context) error {
 		path, err := filepath.Abs(context.Args().First())
 		if err != nil {

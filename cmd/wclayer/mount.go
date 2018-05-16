@@ -68,7 +68,7 @@ var unmountCommand = cli.Command{
 	Name:      "unmount",
 	Usage:     "unmounts a sandbox",
 	ArgsUsage: "<layer path>",
-	Before:    appargs.Validate(appargs.Required),
+	Before:    appargs.Validate(appargs.NonEmptyString),
 	Action: func(context *cli.Context) (err error) {
 		path, err := filepath.Abs(context.Args().First())
 		if err != nil {
