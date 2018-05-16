@@ -1,4 +1,4 @@
-package hcsshim
+package safefile
 
 import (
 	"errors"
@@ -10,8 +10,12 @@ import (
 	"unicode/utf16"
 	"unsafe"
 
+	"github.com/Microsoft/hcsshim/internal/longpath"
+
 	winio "github.com/Microsoft/go-winio"
 )
+
+//go:generate go run $GOROOT\src\syscall\mksyscall_windows.go -output zsyscall_windows.go safeopen.go
 
 //sys ntCreateFile(handle *uintptr, accessMask uint32, oa *objectAttributes, iosb *ioStatusBlock, allocationSize *uint64, fileAttributes uint32, shareAccess uint32, createDisposition uint32, createOptions uint32, eaBuffer *byte, eaLength uint32) (status uint32) = ntdll.NtCreateFile
 //sys ntSetInformationFile(handle uintptr, iosb *ioStatusBlock, information uintptr, length uint32, class uint32) (status uint32) = ntdll.NtSetInformationFile
@@ -53,28 +57,28 @@ const (
 	_FileLinkInformation          = 11
 	_FileDispositionInformationEx = 64
 
-	_FILE_READ_ATTRIBUTES  = 0x0080
-	_FILE_WRITE_ATTRIBUTES = 0x0100
-	_DELETE                = 0x10000
+	FILE_READ_ATTRIBUTES  = 0x0080
+	FILE_WRITE_ATTRIBUTES = 0x0100
+	DELETE                = 0x10000
 
-	_FILE_OPEN   = 1
-	_FILE_CREATE = 2
+	FILE_OPEN   = 1
+	FILE_CREATE = 2
 
-	_FILE_DIRECTORY_FILE          = 0x00000001
-	_FILE_SYNCHRONOUS_IO_NONALERT = 0x00000020
-	_FILE_DELETE_ON_CLOSE         = 0x00001000
-	_FILE_OPEN_FOR_BACKUP_INTENT  = 0x00004000
-	_FILE_OPEN_REPARSE_POINT      = 0x00200000
+	FILE_DIRECTORY_FILE          = 0x00000001
+	FILE_SYNCHRONOUS_IO_NONALERT = 0x00000020
+	FILE_DELETE_ON_CLOSE         = 0x00001000
+	FILE_OPEN_FOR_BACKUP_INTENT  = 0x00004000
+	FILE_OPEN_REPARSE_POINT      = 0x00200000
 
-	_FILE_DISPOSITION_DELETE = 0x00000001
+	FILE_DISPOSITION_DELETE = 0x00000001
 
 	_OBJ_DONT_REPARSE = 0x1000
 
 	_STATUS_REPARSE_POINT_ENCOUNTERED = 0xC000050B
 )
 
-func openRoot(path string) (*os.File, error) {
-	longpath, err := makeLongAbsPath(path)
+func OpenRoot(path string) (*os.File, error) {
+	longpath, err := longpath.LongAbs(path)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +145,7 @@ func openRelativeInternal(path string, root *os.File, accessMask uint32, shareFl
 		0,
 		shareFlags,
 		createDisposition,
-		_FILE_OPEN_FOR_BACKUP_INTENT|_FILE_SYNCHRONOUS_IO_NONALERT|flags,
+		FILE_OPEN_FOR_BACKUP_INTENT|FILE_SYNCHRONOUS_IO_NONALERT|flags,
 		nil,
 		0,
 	)
@@ -149,7 +153,7 @@ func openRelativeInternal(path string, root *os.File, accessMask uint32, shareFl
 		return nil, rtlNtStatusToDosError(status)
 	}
 
-	fullPath, err := makeLongAbsPath(filepath.Join(root.Name(), path))
+	fullPath, err := longpath.LongAbs(filepath.Join(root.Name(), path))
 	if err != nil {
 		syscall.Close(syscall.Handle(h))
 		return nil, err
@@ -158,9 +162,9 @@ func openRelativeInternal(path string, root *os.File, accessMask uint32, shareFl
 	return os.NewFile(h, fullPath), nil
 }
 
-// openRelative opens a relative path from the given root, failing if
+// OpenRelative opens a relative path from the given root, failing if
 // any of the intermediate path components are reparse points.
-func openRelative(path string, root *os.File, accessMask uint32, shareFlags uint32, createDisposition uint32, flags uint32) (*os.File, error) {
+func OpenRelative(path string, root *os.File, accessMask uint32, shareFlags uint32, createDisposition uint32, flags uint32) (*os.File, error) {
 	f, err := openRelativeInternal(path, root, accessMask, shareFlags, createDisposition, flags)
 	if err != nil {
 		err = &os.PathError{Op: "open", Path: filepath.Join(root.Name(), path), Err: err}
@@ -168,17 +172,17 @@ func openRelative(path string, root *os.File, accessMask uint32, shareFlags uint
 	return f, err
 }
 
-// linkRelative creates a hard link from oldname to newname (relative to oldroot
+// LinkRelative creates a hard link from oldname to newname (relative to oldroot
 // and newroot), failing if any of the intermediate path components are reparse
 // points.
-func linkRelative(oldname string, oldroot *os.File, newname string, newroot *os.File) error {
+func LinkRelative(oldname string, oldroot *os.File, newname string, newroot *os.File) error {
 	// Open the old file.
 	oldf, err := openRelativeInternal(
 		oldname,
 		oldroot,
 		syscall.FILE_WRITE_ATTRIBUTES,
 		syscall.FILE_SHARE_READ|syscall.FILE_SHARE_WRITE|syscall.FILE_SHARE_DELETE,
-		_FILE_OPEN,
+		FILE_OPEN,
 		0,
 	)
 	if err != nil {
@@ -195,8 +199,8 @@ func linkRelative(oldname string, oldroot *os.File, newname string, newroot *os.
 			newroot,
 			syscall.GENERIC_READ,
 			syscall.FILE_SHARE_READ|syscall.FILE_SHARE_WRITE|syscall.FILE_SHARE_DELETE,
-			_FILE_OPEN,
-			_FILE_DIRECTORY_FILE)
+			FILE_OPEN,
+			FILE_DIRECTORY_FILE)
 		if err != nil {
 			return &os.LinkError{Op: "link", Old: oldf.Name(), New: filepath.Join(newroot.Name(), newname), Err: err}
 		}
@@ -248,7 +252,7 @@ func linkRelative(oldname string, oldroot *os.File, newname string, newroot *os.
 
 // deleteOnClose marks a file to be deleted when the handle is closed.
 func deleteOnClose(f *os.File) error {
-	disposition := fileDispositionInformationEx{Flags: _FILE_DISPOSITION_DELETE}
+	disposition := fileDispositionInformationEx{Flags: FILE_DISPOSITION_DELETE}
 	var iosb ioStatusBlock
 	status := ntSetInformationFile(
 		f.Fd(),
@@ -281,16 +285,16 @@ func clearReadOnly(f *os.File) error {
 	return winio.SetFileBasicInfo(f, &sbi)
 }
 
-// removeRelative removes a file or directory relative to a root, failing if any
+// RemoveRelative removes a file or directory relative to a root, failing if any
 // intermediate path components are reparse points.
-func removeRelative(path string, root *os.File) error {
+func RemoveRelative(path string, root *os.File) error {
 	f, err := openRelativeInternal(
 		path,
 		root,
-		_FILE_READ_ATTRIBUTES|_FILE_WRITE_ATTRIBUTES|_DELETE,
+		FILE_READ_ATTRIBUTES|FILE_WRITE_ATTRIBUTES|DELETE,
 		syscall.FILE_SHARE_READ|syscall.FILE_SHARE_WRITE|syscall.FILE_SHARE_DELETE,
-		_FILE_OPEN,
-		_FILE_OPEN_REPARSE_POINT)
+		FILE_OPEN,
+		FILE_OPEN_REPARSE_POINT)
 	if err == nil {
 		defer f.Close()
 		err = deleteOnClose(f)
@@ -306,10 +310,10 @@ func removeRelative(path string, root *os.File) error {
 	return nil
 }
 
-// removeAllRelative removes a directory tree relative to a root, failing if any
+// RemoveAllRelative removes a directory tree relative to a root, failing if any
 // intermediate path components are reparse points.
-func removeAllRelative(path string, root *os.File) error {
-	fi, err := lstatRelative(path, root)
+func RemoveAllRelative(path string, root *os.File) error {
+	fi, err := LstatRelative(path, root)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -319,7 +323,7 @@ func removeAllRelative(path string, root *os.File) error {
 	fileAttributes := fi.Sys().(*syscall.Win32FileAttributeData).FileAttributes
 	if fileAttributes&syscall.FILE_ATTRIBUTE_DIRECTORY == 0 || fileAttributes&syscall.FILE_ATTRIBUTE_REPARSE_POINT != 0 {
 		// If this is a reparse point, it can't have children. Simple remove will do.
-		err := removeRelative(path, root)
+		err := RemoveRelative(path, root)
 		if err == nil || os.IsNotExist(err) {
 			return nil
 		}
@@ -327,7 +331,7 @@ func removeAllRelative(path string, root *os.File) error {
 	}
 
 	// It is necessary to use os.Open as Readdirnames does not work with
-	// openRelative. This is safe because the above lstatrelative fails
+	// OpenRelative. This is safe because the above lstatrelative fails
 	// if the target is outside the root, and we know this is not a
 	// symlink from the above FILE_ATTRIBUTE_REPARSE_POINT check.
 	fd, err := os.Open(filepath.Join(root.Name(), path))
@@ -344,7 +348,7 @@ func removeAllRelative(path string, root *os.File) error {
 	for {
 		names, err1 := fd.Readdirnames(100)
 		for _, name := range names {
-			err1 := removeAllRelative(path+string(os.PathSeparator)+name, root)
+			err1 := RemoveAllRelative(path+string(os.PathSeparator)+name, root)
 			if err == nil {
 				err = err1
 			}
@@ -363,7 +367,7 @@ func removeAllRelative(path string, root *os.File) error {
 	fd.Close()
 
 	// Remove directory.
-	err1 := removeRelative(path, root)
+	err1 := RemoveRelative(path, root)
 	if err1 == nil || os.IsNotExist(err1) {
 		return nil
 	}
@@ -373,16 +377,16 @@ func removeAllRelative(path string, root *os.File) error {
 	return err
 }
 
-// mkdirRelative creates a directory relative to a root, failing if any
+// MkdirRelative creates a directory relative to a root, failing if any
 // intermediate path components are reparse points.
-func mkdirRelative(path string, root *os.File) error {
+func MkdirRelative(path string, root *os.File) error {
 	f, err := openRelativeInternal(
 		path,
 		root,
 		0,
 		syscall.FILE_SHARE_READ|syscall.FILE_SHARE_WRITE|syscall.FILE_SHARE_DELETE,
-		_FILE_CREATE,
-		_FILE_DIRECTORY_FILE)
+		FILE_CREATE,
+		FILE_DIRECTORY_FILE)
 	if err == nil {
 		f.Close()
 	} else {
@@ -391,16 +395,16 @@ func mkdirRelative(path string, root *os.File) error {
 	return err
 }
 
-// lstatRelative performs a stat operation on a file relative to a root, failing
+// LstatRelative performs a stat operation on a file relative to a root, failing
 // if any intermediate path components are reparse points.
-func lstatRelative(path string, root *os.File) (os.FileInfo, error) {
+func LstatRelative(path string, root *os.File) (os.FileInfo, error) {
 	f, err := openRelativeInternal(
 		path,
 		root,
-		_FILE_READ_ATTRIBUTES,
+		FILE_READ_ATTRIBUTES,
 		syscall.FILE_SHARE_READ|syscall.FILE_SHARE_WRITE|syscall.FILE_SHARE_DELETE,
-		_FILE_OPEN,
-		_FILE_OPEN_REPARSE_POINT)
+		FILE_OPEN,
+		FILE_OPEN_REPARSE_POINT)
 	if err != nil {
 		return nil, &os.PathError{Op: "stat", Path: filepath.Join(root.Name(), path), Err: err}
 	}
@@ -408,16 +412,16 @@ func lstatRelative(path string, root *os.File) (os.FileInfo, error) {
 	return f.Stat()
 }
 
-// ensureNotReparsePointRelative validates that a given file (relative to a
+// EnsureNotReparsePointRelative validates that a given file (relative to a
 // root) and all intermediate path components are not a reparse points.
-func ensureNotReparsePointRelative(path string, root *os.File) error {
+func EnsureNotReparsePointRelative(path string, root *os.File) error {
 	// Perform an open with OBJ_DONT_REPARSE but without specifying FILE_OPEN_REPARSE_POINT.
-	f, err := openRelative(
+	f, err := OpenRelative(
 		path,
 		root,
 		0,
 		syscall.FILE_SHARE_READ|syscall.FILE_SHARE_WRITE|syscall.FILE_SHARE_DELETE,
-		_FILE_OPEN,
+		FILE_OPEN,
 		0)
 	if err != nil {
 		return err

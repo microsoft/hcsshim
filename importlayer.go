@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/hcsshim/internal/safefile"
 	"github.com/sirupsen/logrus"
 )
 
@@ -142,22 +143,22 @@ func (r *legacyLayerWriterWrapper) Close() error {
 		return err
 	}
 	for _, name := range r.Tombstones {
-		if err = removeRelative(name, r.destRoot); err != nil && !os.IsNotExist(err) {
+		if err = safefile.RemoveRelative(name, r.destRoot); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 	}
 	// Add any hard links that were collected.
 	for _, lnk := range r.PendingLinks {
-		if err = removeRelative(lnk.Path, r.destRoot); err != nil && !os.IsNotExist(err) {
+		if err = safefile.RemoveRelative(lnk.Path, r.destRoot); err != nil && !os.IsNotExist(err) {
 			return err
 		}
-		if err = linkRelative(lnk.Target, lnk.TargetRoot, lnk.Path, r.destRoot); err != nil {
+		if err = safefile.LinkRelative(lnk.Target, lnk.TargetRoot, lnk.Path, r.destRoot); err != nil {
 			return err
 		}
 	}
 	// Prepare the utility VM for use if one is present in the layer.
 	if r.HasUtilityVM {
-		err := ensureNotReparsePointRelative("UtilityVM", r.destRoot)
+		err := safefile.EnsureNotReparsePointRelative("UtilityVM", r.destRoot)
 		if err != nil {
 			return err
 		}
@@ -175,7 +176,7 @@ func (r *legacyLayerWriterWrapper) Close() error {
 func NewLayerWriter(info DriverInfo, layerID string, parentLayerPaths []string) (LayerWriter, error) {
 	if len(parentLayerPaths) == 0 {
 		// This is a base layer. It gets imported differently.
-		f, err := openRoot(filepath.Join(info.HomeDir, layerID))
+		f, err := safefile.OpenRoot(filepath.Join(info.HomeDir, layerID))
 		if err != nil {
 			return nil, err
 		}

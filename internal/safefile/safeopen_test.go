@@ -1,4 +1,4 @@
-package hcsshim
+package safefile
 
 import (
 	"io/ioutil"
@@ -15,7 +15,7 @@ func tempRoot() (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	f, err := openRoot(name)
+	f, err := OpenRoot(name)
 	if err != nil {
 		os.Remove(name)
 		return nil, err
@@ -39,14 +39,14 @@ func TestOpenRelative(t *testing.T) {
 	defer root.Close()
 
 	// Create a file
-	f, err := openRelative("foo", root, 0, syscall.FILE_SHARE_READ, _FILE_CREATE, 0)
+	f, err := OpenRelative("foo", root, 0, syscall.FILE_SHARE_READ, FILE_CREATE, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	f.Close()
 
 	// Create a directory
-	err = mkdirRelative("dir", root)
+	err = MkdirRelative("dir", root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,34 +71,34 @@ func TestOpenRelative(t *testing.T) {
 	}
 
 	// Make sure opens cannot happen through the symlink
-	f, err = openRelative("dsymlink/foo", root, 0, syscall.FILE_SHARE_READ, _FILE_CREATE, 0)
+	f, err = OpenRelative("dsymlink/foo", root, 0, syscall.FILE_SHARE_READ, FILE_CREATE, 0)
 	if err == nil {
 		f.Close()
 		t.Fatal("created file in wrong tree!")
 	}
 	t.Log(err)
 
-	// Check again using ensureNotReparsePointRelative
-	err = ensureNotReparsePointRelative("dsymlink", root)
+	// Check again using EnsureNotReparsePointRelative
+	err = EnsureNotReparsePointRelative("dsymlink", root)
 	if err == nil {
 		t.Fatal("reparse check should have failed")
 	}
 	t.Log(err)
 
 	// Make sure links work
-	err = linkRelative("foo", root, "hardlink", root)
+	err = LinkRelative("foo", root, "hardlink", root)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Even inside directories
-	err = linkRelative("foo", root, "dir/bar", root)
+	err = LinkRelative("foo", root, "dir/bar", root)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Make sure links cannot happen through the symlink
-	err = linkRelative("foo", root, "dsymlink/hardlink", root)
+	err = LinkRelative("foo", root, "dsymlink/hardlink", root)
 	if err == nil {
 		f.Close()
 		t.Fatal("created link in wrong tree!")
@@ -106,7 +106,7 @@ func TestOpenRelative(t *testing.T) {
 	t.Log(err)
 
 	// In either direction
-	err = linkRelative("dsymlink/badfile", root, "bar", root)
+	err = LinkRelative("dsymlink/badfile", root, "bar", root)
 	if err == nil {
 		f.Close()
 		t.Fatal("created link in wrong tree!")
@@ -114,19 +114,19 @@ func TestOpenRelative(t *testing.T) {
 	t.Log(err)
 
 	// Make sure remove cannot happen through the symlink
-	err = removeRelative("symlink/badfile", root)
+	err = RemoveRelative("symlink/badfile", root)
 	if err == nil {
 		t.Fatal("remove in wrong tree!")
 	}
 
 	// Remove the symlink
-	err = removeAllRelative("symlink", root)
+	err = RemoveAllRelative("symlink", root)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Make sure it's not possible to escape with .. (NT doesn't support .. at the kernel level)
-	f, err = openRelative("..", root, syscall.GENERIC_READ, syscall.FILE_SHARE_READ, _FILE_OPEN, 0)
+	f, err = OpenRelative("..", root, syscall.GENERIC_READ, syscall.FILE_SHARE_READ, FILE_OPEN, 0)
 	if err == nil {
 		t.Fatal("escaped the directory")
 	}
@@ -161,7 +161,7 @@ func TestRemoveRelativeReadOnly(t *testing.T) {
 	}
 	f.Close()
 
-	err = removeRelative("foo", root)
+	err = RemoveRelative("foo", root)
 	if err != nil {
 		t.Fatal(err)
 	}
