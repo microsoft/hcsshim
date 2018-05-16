@@ -1,4 +1,4 @@
-package hcsshim
+package wclayer
 
 // This file contains utility functions to support storage (graph) related
 // functionality.

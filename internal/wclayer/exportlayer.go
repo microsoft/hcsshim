@@ -1,4 +1,4 @@
-package hcsshim
+package wclayer
 
 import (
 	"io"
@@ -7,6 +7,8 @@ import (
 	"syscall"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/hcsshim/internal/hcserror"
+	"github.com/Microsoft/hcsshim/internal/interop"
 	"github.com/sirupsen/logrus"
 )
 
@@ -34,7 +36,7 @@ func ExportLayer(info DriverInfo, layerId string, exportFolderPath string, paren
 
 	err = exportLayer(&infop, layerId, exportFolderPath, layers)
 	if err != nil {
-		err = makeErrorf(err, title, "layerId=%s flavour=%d folder=%s", layerId, info.Flavour, exportFolderPath)
+		err = hcserror.Errorf(err, title, "layerId=%s flavour=%d folder=%s", layerId, info.Flavour, exportFolderPath)
 		logrus.Error(err)
 		return err
 	}
@@ -69,11 +71,11 @@ func (r *FilterLayerReader) Next() (string, int64, *winio.FileBasicInfo, error) 
 		if err == syscall.ERROR_NO_MORE_FILES {
 			err = io.EOF
 		} else {
-			err = makeError(err, "ExportLayerNext", "")
+			err = hcserror.New(err, "ExportLayerNext", "")
 		}
 		return "", 0, nil, err
 	}
-	fileName := convertAndFreeCoTaskMemString(fileNamep)
+	fileName := interop.ConvertAndFreeCoTaskMemString(fileNamep)
 	if deleted != 0 {
 		fileInfo = nil
 	}
@@ -88,7 +90,7 @@ func (r *FilterLayerReader) Read(b []byte) (int, error) {
 	var bytesRead uint32
 	err := exportLayerRead(r.context, b, &bytesRead)
 	if err != nil {
-		return 0, makeError(err, "ExportLayerRead", "")
+		return 0, hcserror.New(err, "ExportLayerRead", "")
 	}
 	if bytesRead == 0 {
 		return 0, io.EOF
@@ -103,7 +105,7 @@ func (r *FilterLayerReader) Close() (err error) {
 	if r.context != 0 {
 		err = exportLayerEnd(r.context)
 		if err != nil {
-			err = makeError(err, "ExportLayerEnd", "")
+			err = hcserror.New(err, "ExportLayerEnd", "")
 		}
 		r.context = 0
 	}
@@ -140,7 +142,7 @@ func NewLayerReader(info DriverInfo, layerID string, parentLayerPaths []string) 
 	r := &FilterLayerReader{}
 	err = exportLayerBegin(&infop, layerID, layers, &r.context)
 	if err != nil {
-		return nil, makeError(err, "ExportLayerBegin", "")
+		return nil, hcserror.New(err, "ExportLayerBegin", "")
 	}
 	return r, err
 }

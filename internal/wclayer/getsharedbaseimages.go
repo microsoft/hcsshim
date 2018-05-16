@@ -1,6 +1,10 @@
-package hcsshim
+package wclayer
 
-import "github.com/sirupsen/logrus"
+import (
+	"github.com/Microsoft/hcsshim/internal/hcserror"
+	"github.com/Microsoft/hcsshim/internal/interop"
+	"github.com/sirupsen/logrus"
+)
 
 // GetSharedBaseImages will enumerate the images stored in the common central
 // image store and return descriptive info about those images for the purpose
@@ -12,11 +16,11 @@ func GetSharedBaseImages() (imageData string, err error) {
 	var buffer *uint16
 	err = getBaseImages(&buffer)
 	if err != nil {
-		err = makeError(err, title, "")
+		err = hcserror.New(err, title, "")
 		logrus.Error(err)
 		return
 	}
-	imageData = convertAndFreeCoTaskMemString(buffer)
+	imageData = interop.ConvertAndFreeCoTaskMemString(buffer)
 	logrus.Debugf(title+" - succeeded output=%s", imageData)
 	return
 }

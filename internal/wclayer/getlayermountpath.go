@@ -1,8 +1,9 @@
-package hcsshim
+package wclayer
 
 import (
 	"syscall"
 
+	"github.com/Microsoft/hcsshim/internal/hcserror"
 	"github.com/sirupsen/logrus"
 )
 
@@ -28,7 +29,7 @@ func GetLayerMountPath(info DriverInfo, id string) (string, error) {
 	logrus.Debugf("Calling proc (1)")
 	err = getLayerMountPath(&infop, id, &mountPathLength, nil)
 	if err != nil {
-		err = makeErrorf(err, title, "(first call) id=%s flavour=%d", id, info.Flavour)
+		err = hcserror.Errorf(err, title, "(first call) id=%s flavour=%d", id, info.Flavour)
 		logrus.Error(err)
 		return "", err
 	}
@@ -44,7 +45,7 @@ func GetLayerMountPath(info DriverInfo, id string) (string, error) {
 	logrus.Debugf("Calling proc (2)")
 	err = getLayerMountPath(&infop, id, &mountPathLength, &mountPathp[0])
 	if err != nil {
-		err = makeErrorf(err, title, "(second call) id=%s flavour=%d", id, info.Flavour)
+		err = hcserror.Errorf(err, title, "(second call) id=%s flavour=%d", id, info.Flavour)
 		logrus.Error(err)
 		return "", err
 	}

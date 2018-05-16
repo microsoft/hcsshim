@@ -1,6 +1,9 @@
-package hcsshim
+package wclayer
 
-import "github.com/sirupsen/logrus"
+import (
+	"github.com/Microsoft/hcsshim/internal/hcserror"
+	"github.com/sirupsen/logrus"
+)
 
 // LayerExists will return true if a layer with the given id exists and is known
 // to the system.
@@ -20,7 +23,7 @@ func LayerExists(info DriverInfo, id string) (bool, error) {
 
 	err = layerExists(&infop, id, &exists)
 	if err != nil {
-		err = makeErrorf(err, title, "id=%s flavour=%d", id, info.Flavour)
+		err = hcserror.Errorf(err, title, "id=%s flavour=%d", id, info.Flavour)
 		logrus.Error(err)
 		return false, err
 	}

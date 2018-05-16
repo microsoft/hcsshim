@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"syscall"
+
+	"github.com/Microsoft/hcsshim/internal/hcserror"
 )
 
 var (
@@ -123,7 +125,7 @@ func (e *ContainerError) Error() string {
 	case nil:
 		break
 	case syscall.Errno:
-		s += fmt.Sprintf(": failure in a Windows system call: %s (0x%x)", e.Err, win32FromError(e.Err))
+		s += fmt.Sprintf(": failure in a Windows system call: %s (0x%x)", e.Err, hcserror.Win32FromError(e.Err))
 	default:
 		s += fmt.Sprintf(": %s", e.Err.Error())
 	}
@@ -167,7 +169,7 @@ func (e *ProcessError) Error() string {
 	case nil:
 		break
 	case syscall.Errno:
-		s += fmt.Sprintf(": failure in a Windows system call: %s (0x%x)", e.Err, win32FromError(e.Err))
+		s += fmt.Sprintf(": failure in a Windows system call: %s (0x%x)", e.Err, hcserror.Win32FromError(e.Err))
 	default:
 		s += fmt.Sprintf(": %s", e.Err.Error())
 	}

@@ -3,6 +3,8 @@ package hcsshim
 import (
 	"sync"
 	"syscall"
+
+	"github.com/Microsoft/hcsshim/internal/interop"
 )
 
 var (
@@ -62,7 +64,7 @@ func closeChannels(channels notificationChannels) {
 func notificationWatcher(notificationType hcsNotification, callbackNumber uintptr, notificationStatus uintptr, notificationData *uint16) uintptr {
 	var result error
 	if int32(notificationStatus) < 0 {
-		result = syscall.Errno(win32FromHresult(notificationStatus))
+		result = interop.Win32FromHresult(notificationStatus)
 	}
 
 	callbackMapLock.RLock()

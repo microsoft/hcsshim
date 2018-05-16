@@ -1,6 +1,9 @@
-package hcsshim
+package wclayer
 
-import "github.com/sirupsen/logrus"
+import (
+	"github.com/Microsoft/hcsshim/internal/hcserror"
+	"github.com/sirupsen/logrus"
+)
 
 // ActivateLayer will find the layer with the given id and mount it's filesystem.
 // For a read/write layer, the mounted filesystem will appear as a volume on the
@@ -18,7 +21,7 @@ func ActivateLayer(info DriverInfo, id string) error {
 
 	err = activateLayer(&infop, id)
 	if err != nil {
-		err = makeErrorf(err, title, "id=%s flavour=%d", id, info.Flavour)
+		err = hcserror.Errorf(err, title, "id=%s flavour=%d", id, info.Flavour)
 		logrus.Error(err)
 		return err
 	}
