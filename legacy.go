@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -349,6 +350,7 @@ type legacyLayerWriter struct {
 	destRoot        *os.File
 	parentRoots     []*os.File
 	currentFile     *os.File
+	bufWriter       *bufio.Writer
 	currentFileName string
 	currentFileRoot *os.File
 	backupWriter    *winio.BackupFileWriter
@@ -388,6 +390,7 @@ func newLegacyLayerWriter(root string, parentRoots []string, destRoot string) (w
 		}
 		w.parentRoots = append(w.parentRoots, f)
 	}
+	w.bufWriter = bufio.NewWriterSize(ioutil.Discard, 65536)
 	return
 }
 
@@ -426,6 +429,11 @@ func (w *legacyLayerWriter) initUtilityVM() error {
 }
 
 func (w *legacyLayerWriter) reset() error {
+	err := w.bufWriter.Flush()
+	if err != nil {
+		return err
+	}
+	w.bufWriter.Reset(ioutil.Discard)
 	if w.currentIsDir {
 		r := w.currentFile
 		br := winio.NewBackupStreamReader(r)
@@ -661,6 +669,7 @@ func (w *legacyLayerWriter) Add(name string, fileInfo *winio.FileBasicInfo) erro
 		}
 
 		w.backupWriter = winio.NewBackupFileWriter(f, true)
+		w.bufWriter.Reset(w.backupWriter)
 		w.currentFile = f
 		w.currentFileName = name
 		w.currentFileRoot = w.destRoot
@@ -699,10 +708,13 @@ func (w *legacyLayerWriter) Add(name string, fileInfo *winio.FileBasicInfo) erro
 
 	if hasPathPrefix(name, hivesPath) {
 		w.backupWriter = winio.NewBackupFileWriter(f, false)
+		w.bufWriter.Reset(w.backupWriter)
 	} else {
+		w.bufWriter.Reset(f)
 		// The file attributes are written before the stream.
-		err = binary.Write(f, binary.LittleEndian, uint32(fileInfo.FileAttributes))
+		err = binary.Write(w.bufWriter, binary.LittleEndian, uint32(fileInfo.FileAttributes))
 		if err != nil {
+			w.bufWriter.Reset(ioutil.Discard)
 			return err
 		}
 	}
@@ -795,13 +807,10 @@ func (w *legacyLayerWriter) Remove(name string) error {
 }
 
 func (w *legacyLayerWriter) Write(b []byte) (int, error) {
-	if w.backupWriter == nil {
-		if w.currentFile == nil {
-			return 0, errors.New("closed")
-		}
-		return w.currentFile.Write(b)
+	if w.backupWriter == nil && w.currentFile == nil {
+		return 0, errors.New("closed")
 	}
-	return w.backupWriter.Write(b)
+	return w.bufWriter.Write(b)
 }
 
 func (w *legacyLayerWriter) Close() error {
