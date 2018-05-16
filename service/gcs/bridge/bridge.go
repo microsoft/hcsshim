@@ -233,6 +233,15 @@ func (b *Bridge) AssignHandlers(mux *Mux, gcs core.Core) {
 
 	// v4 specific handlers
 	mux.HandleFunc(prot.ComputeSystemStartV1, prot.PvV4, b.startContainer)
+	mux.HandleFunc(prot.ComputeSystemCreateV1, prot.PvV4, b.createContainer)
+	mux.HandleFunc(prot.ComputeSystemExecuteProcessV1, prot.PvV4, b.execProcess)
+	mux.HandleFunc(prot.ComputeSystemShutdownForcedV1, prot.PvV4, b.killContainer)
+	mux.HandleFunc(prot.ComputeSystemShutdownGracefulV1, prot.PvV4, b.shutdownContainer)
+	mux.HandleFunc(prot.ComputeSystemSignalProcessV1, prot.PvV4, b.signalProcess)
+	mux.HandleFunc(prot.ComputeSystemGetPropertiesV1, prot.PvV4, b.getProperties)
+	mux.HandleFunc(prot.ComputeSystemWaitForProcessV1, prot.PvV4, b.waitOnProcess)
+	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, prot.PvV4, b.resizeConsole)
+	mux.HandleFunc(prot.ComputeSystemModifySettingsV1, prot.PvV4, b.modifySettings)
 }
 
 // ListenAndServe connects to the bridge transport, listens for
@@ -406,7 +415,13 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 		MessageResponseBase: &prot.MessageResponseBase{
 			ActivityID: request.ActivityID,
 		},
-		SelectedProtocolVersion: uint32(prot.PvV3),
+	}
+
+	// The dispatcher will set all PvV4+ before the call to createContainer via
+	// the negotiateProtocol. For all PvV3- the version was included in the
+	// response message.
+	if b.protVer == prot.PvInvalid {
+		response.SelectedProtocolVersion = uint32(prot.PvV3)
 	}
 
 	exitCodeFn, err := b.coreint.WaitContainer(id)
@@ -430,7 +445,9 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 	}()
 
 	// Set our protocol selected version before return.
-	b.protVer = prot.PvV3
+	if b.protVer == prot.PvInvalid {
+		b.protVer = prot.PvV3
+	}
 	w.Write(response)
 }
 
