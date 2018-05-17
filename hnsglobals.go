@@ -10,7 +10,7 @@ type HNSVersion struct {
 }
 
 var (
-	HNSVersion1804 = HNSVersion{Major: 7, Minor: 2}
+	HNSVersion1803 = HNSVersion{Major: 7, Minor: 2}
 )
 
 func GetHNSGlobals() (*HNSGlobals, error) {

@@ -20,16 +20,16 @@ func GetHNSSupportedFeatures() HNSSupportedFeatures {
 
 	globals, err := GetHNSGlobals()
 	if err != nil {
-		// Expected on pre-1804 builds, all features will be false/unsupported
+		// Expected on pre-1803 builds, all features will be false/unsupported
 		logrus.Debugf("Unable to obtain HNS globals: %s", err)
 		return hnsFeatures
 	}
 
 	hnsFeatures.Acl = HNSAclFeatures{
-		AclAddressLists:       isHNSFeatureSupported(globals.Version, HNSVersion1804),
-		AclNoHostRulePriority: isHNSFeatureSupported(globals.Version, HNSVersion1804),
-		AclPortRanges:         isHNSFeatureSupported(globals.Version, HNSVersion1804),
-		AclRuleId:             isHNSFeatureSupported(globals.Version, HNSVersion1804),
+		AclAddressLists:       isHNSFeatureSupported(globals.Version, HNSVersion1803),
+		AclNoHostRulePriority: isHNSFeatureSupported(globals.Version, HNSVersion1803),
+		AclPortRanges:         isHNSFeatureSupported(globals.Version, HNSVersion1803),
+		AclRuleId:             isHNSFeatureSupported(globals.Version, HNSVersion1803),
 	}
 
 	return hnsFeatures
