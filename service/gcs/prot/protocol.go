@@ -428,11 +428,14 @@ const (
 // how, and with what parameters. This is the V2 schema equivalent of
 // ResourceModificationRequestResponse.
 type ModifySettingRequest struct {
-	ResourceURI    string             `json:"ResourceUri,omitempty"`
-	ResourceType   ModifyResourceType `json:",omitempty"`
-	RequestType    ModifyRequestType  `json:",omitempty"`
-	Settings       interface{}        `json:",omitempty"`
-	HostedSettings interface{}        `json:",omitempty"`
+	ResourceURI  string             `json:"ResourceUri,omitempty"`
+	ResourceType ModifyResourceType `json:",omitempty"`
+	RequestType  ModifyRequestType  `json:",omitempty"`
+	Settings     interface{}        `json:",omitempty"`
+	// TODO: This is a bug that its on the interface. It is only here to support
+	// VPMem which shipped in RS4 marshaling to the wrong field. This has since
+	// been fixed in RS5 so both places need to be checked.
+	HostedSettings interface{} `json:",omitempty"`
 }
 
 // ContainerModifySettings is the message from the HCS specifying how a certain
@@ -452,10 +455,12 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 	var request ContainerModifySettings
 	var rawSettings json.RawMessage
 	var v2RawSettings json.RawMessage
+	var v2RawHostedSettings json.RawMessage
 	request.Request = &ResourceModificationRequestResponse{}
 	request.Request.Settings = &rawSettings
 	request.V2Request = &ModifySettingRequest{}
-	request.V2Request.HostedSettings = &v2RawSettings
+	request.V2Request.Settings = &v2RawSettings
+	request.V2Request.HostedSettings = &v2RawHostedSettings
 	if err := commonutils.UnmarshalJSONWithHresult(b, &request); err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -494,7 +499,7 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 		case MrtMappedVirtualDisk:
 			mvd := &MappedVirtualDisk{}
 			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, mvd); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal hosted settings as MappedVirtualDisk")
+				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDisk")
 			}
 			// V2 removed CreateInUtilityVM because this is always true for this
 			// type of modify. Fake that here.
@@ -503,15 +508,22 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 		case MrtMappedDirectory:
 			md := &MappedDirectory{}
 			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, md); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal hosted settings as MappedDirectory")
+				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedDirectory")
 			}
 			request.V2Request.Settings = md
 		case MrtVPMemDevice:
 			vpd := &MappedVPMemController{}
-			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, vpd); err != nil {
+			// TODO: RS5 bug fix to move this to .Settings like all other modify requests.
+			if err := commonutils.UnmarshalJSONWithHresult(v2RawHostedSettings, vpd); err != nil {
 				return nil, errors.Wrap(err, "failed to unmarshal hosted settings as VPMemDevice")
 			}
-			request.V2Request.HostedSettings = vpd
+			request.V2Request.Settings = vpd
+		case MrtCombinedLayers:
+			cl := &CombinedLayers{}
+			if err := commonutils.UnmarshalJSONWithHresult(v2RawHostedSettings, cl); err != nil {
+				return nil, errors.Wrap(err, "failed to unmarshal settings as CombinedLayers")
+			}
+			request.V2Request.Settings = cl
 		default:
 			return nil, errors.Errorf("invalid ResourceType '%s'", request.V2Request.ResourceType)
 		}
@@ -589,6 +601,14 @@ type Layer struct {
 	// Path is in this case the identifier (such as the SCSI number) of the
 	// layer device.
 	Path string
+}
+
+// CombinedLayers is a modify type that corresponds to MrtCombinedLayers
+// request.
+type CombinedLayers struct {
+	Layers            []Layer `json:",omitempty"`
+	ScratchPath       string  `json:",omitempty"`
+	ContainerRootPath string
 }
 
 // NetworkAdapter represents a network interface and its associated

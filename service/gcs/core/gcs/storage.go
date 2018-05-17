@@ -350,10 +350,11 @@ func (c *gcsCore) unmountLayer(location string) error {
 // These mountpoints are all stored under a directory reserved for the container
 // with the given index.
 func (c *gcsCore) mountLayers(index uint32, scratchMount *mountSpec, layers []*mountSpec) error {
-	layerPrefix, scratchPath, workdirPath, rootfsPath := c.getUnioningPaths(index)
+	layerPrefix, scratchPath, upperdirPath, workdirPath, rootfsPath := c.getUnioningPaths(index)
 
 	logrus.Infof("layerPrefix=%s", layerPrefix)
 	logrus.Infof("scratchPath:%s", scratchPath)
+	logrus.Infof("upperdirPath:%s", upperdirPath)
 	logrus.Infof("workdirPath=%s", workdirPath)
 	logrus.Infof("rootfsPath=%s", rootfsPath)
 
@@ -395,8 +396,11 @@ func (c *gcsCore) mountLayers(index uint32, scratchMount *mountSpec, layers []*m
 		// readonly.
 		mountOptions |= syscall.O_RDONLY
 	}
-	upperDir := filepath.Join(scratchPath, "upper")
-	if err := c.OS.MkdirAll(upperDir, 0755); err != nil {
+	return c.mountOverlay(layerPaths, upperdirPath, workdirPath, rootfsPath, mountOptions)
+}
+
+func (c *gcsCore) mountOverlay(layerPaths []string, upperdirPath, workdirPath, rootfsPath string, mountOptions uintptr) error {
+	if err := c.OS.MkdirAll(upperdirPath, 0755); err != nil {
 		return errors.Wrap(err, "failed to create upper directory in scratch space")
 	}
 	if err := c.OS.MkdirAll(workdirPath, 0755); err != nil {
@@ -406,18 +410,17 @@ func (c *gcsCore) mountLayers(index uint32, scratchMount *mountSpec, layers []*m
 		return errors.Wrapf(err, "failed to create directory for container root filesystem %s", rootfsPath)
 	}
 	lowerdir := strings.Join(layerPaths, ":")
-	options := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lowerdir, upperDir, workdirPath)
+	options := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lowerdir, upperdirPath, workdirPath)
 	if err := c.OS.Mount("overlay", rootfsPath, "overlay", mountOptions, options); err != nil {
 		return errors.Wrapf(err, "failed to mount container root filesystem using overlayfs %s", rootfsPath)
 	}
-
 	return nil
 }
 
 // unmountLayers unmounts the union filesystem for the container with the given
 // ID, as well as any devices whose mountpoints were layers in that filesystem.
 func (c *gcsCore) unmountLayers(index uint32) error {
-	layerPrefix, scratchPath, _, rootfsPath := c.getUnioningPaths(index)
+	layerPrefix, scratchPath, _, _, rootfsPath := c.getUnioningPaths(index)
 
 	cleanup := func(pathFriendlyName, path string) error {
 		exists, err := c.OS.PathExists(path)
@@ -501,12 +504,28 @@ func (c *gcsCore) getContainerStoragePath(index uint32) string {
 
 // getUnioningPaths returns paths that will be used in the union filesystem for
 // the container with the given index.
-func (c *gcsCore) getUnioningPaths(index uint32) (layerPrefix string, scratchPath string, workdirPath string, rootfsPath string) {
+func (c *gcsCore) getUnioningPaths(index uint32) (layerPrefix string, scratchPath string, upperdirPath string, workdirPath string, rootfsPath string) {
 	mountPath := c.getContainerStoragePath(index)
 	layerPrefix = mountPath
-	scratchPath = filepath.Join(mountPath, "scratch")
-	workdirPath = filepath.Join(mountPath, "scratch", "work")
-	rootfsPath = filepath.Join(mountPath, "rootfs")
+	scratchPath, upperdirPath, workdirPath, rootfsPath = c.getUnioningPathsWithBase(mountPath, "")
+	return
+}
+
+// getUnioningPathsWithBase returns paths that will be used in the union
+// filesystem for from a given basePath. If baseScratch is empty all scratch
+// locations will be rooted under basePath otherwise they will be rooted at
+// baseScratch.
+func (c *gcsCore) getUnioningPathsWithBase(basePath, baseScratch string) (scratchPath string, upperdirPath string, workdirPath string, rootfsPath string) {
+	if baseScratch == "" {
+		scratchPath = filepath.Join(basePath, "scratch")
+		upperdirPath = filepath.Join(basePath, "scratch", "upper")
+		workdirPath = filepath.Join(basePath, "scratch", "work")
+	} else {
+		scratchPath = baseScratch
+		upperdirPath = filepath.Join(baseScratch, "upper")
+		workdirPath = filepath.Join(baseScratch, "work")
+	}
+	rootfsPath = filepath.Join(basePath, "rootfs")
 	return
 }
 

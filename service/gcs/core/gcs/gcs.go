@@ -705,7 +705,7 @@ func (c *gcsCore) ModifySettingsV2(id string, request *prot.ModifySettingRequest
 			return errors.Errorf("the request type \"%s\" is not supported for resource type \"%s\"", request.RequestType, request.ResourceType)
 		}
 	case prot.MrtVPMemDevice:
-		vpd, ok := request.HostedSettings.(*prot.MappedVPMemController)
+		vpd, ok := request.Settings.(*prot.MappedVPMemController)
 		if !ok {
 			return errors.New("the request's hosted settings are not of type MappedDirectory")
 		}
@@ -716,7 +716,24 @@ func (c *gcsCore) ModifySettingsV2(id string, request *prot.ModifySettingRequest
 			}
 		case prot.MreqtRemove:
 			if err := c.removeVPMemLayerMounts(vpd); err != nil {
-				return errors.Wrapf(err, "failed to hot add a VPMem device for container %s", id)
+				return errors.Wrapf(err, "failed to hot remove a VPMem device for container %s", id)
+			}
+		default:
+			return errors.Errorf("the request type \"%s\" is not supported for resource type \"%s\"", request.RequestType, request.ResourceType)
+		}
+	case prot.MrtCombinedLayers:
+		cl, ok := request.Settings.(*prot.CombinedLayers)
+		if !ok {
+			return errors.New("the request's hosted settings are not of type CombinedLayers")
+		}
+		switch request.RequestType {
+		case prot.MreqtAdd:
+			if err := c.setupCombinedLayers(cl); err != nil {
+				return errors.Wrapf(err, "failed to hot add combined layers for container %s", id)
+			}
+		case prot.MreqtRemove:
+			if err := c.removeCombinedLayers(cl); err != nil {
+				return errors.Wrapf(err, "failed to hot remove combined layers for container %s", id)
 			}
 		default:
 			return errors.Errorf("the request type \"%s\" is not supported for resource type \"%s\"", request.RequestType, request.ResourceType)
@@ -893,6 +910,56 @@ func (c *gcsCore) setupVPMemLayerMounts(m *prot.MappedVPMemController) error {
 		}
 		if err := c.mountLayer(dir, ms); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func (c *gcsCore) setupCombinedLayers(m *prot.CombinedLayers) error {
+	if m.ContainerRootPath == "" {
+		return errors.New("cannot combine layers with empty ContainerRootPath")
+	}
+	if err := c.OS.MkdirAll(m.ContainerRootPath, 0700); err != nil {
+		return errors.Wrapf(err, "failed to create ContainerRootPath directory '%s'", m.ContainerRootPath)
+	}
+
+	layerPaths := make([]string, len(m.Layers)+1)
+	for i, layer := range m.Layers {
+		layerPaths[i+1] = layer.Path
+	}
+	// TODO: The base path code may be temporary until a more permanent DNS
+	// solution is reached.
+	// NOTE: This should probably still always be kept, because otherwise
+	// mounting will fail when no layer devices are attached. There should
+	// always be at least one layer, even if it's empty, to prevent this
+	// from happening.
+	layerPaths[0] = baseFilesPath
+
+	var mountOptions uintptr
+	if m.ScratchPath == "" {
+		// The user did not pass a scratch path. Mount overlay as readonly.
+		mountOptions |= syscall.O_RDONLY
+	}
+
+	_, upperdirPath, workdirPath, rootfsPath := c.getUnioningPathsWithBase(m.ContainerRootPath, m.ScratchPath)
+	return c.mountOverlay(layerPaths, upperdirPath, workdirPath, rootfsPath, mountOptions)
+}
+
+func (c *gcsCore) removeCombinedLayers(m *prot.CombinedLayers) error {
+	if m.ContainerRootPath == "" {
+		return errors.New("cannot remove combined layers with empty ContainerRootPath")
+	}
+
+	_, _, _, rootfsPath := c.getUnioningPathsWithBase(m.ContainerRootPath, "")
+	if exists, err := c.OS.PathExists(rootfsPath); err != nil {
+		return errors.Wrapf(err, "failed to determine if combined layer path '%s' exists", rootfsPath)
+	} else if exists {
+		if mounted, err := c.OS.PathIsMounted(rootfsPath); err != nil {
+			return errors.Wrapf(err, "failed to determine if combined layer path '%s' is mounted", rootfsPath)
+		} else if mounted {
+			if err := c.OS.Unmount(rootfsPath, 0); err != nil {
+				return errors.Wrapf(err, "failed to unmount combined layer path '%s'", rootfsPath)
+			}
 		}
 	}
 	return nil
