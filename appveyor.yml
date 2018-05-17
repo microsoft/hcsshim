@@ -1,13 +1,17 @@
 version: 0.1.{build}
+
+image: Visual Studio 2017
+
 clone_folder: c:\gopath\src\github.com\Microsoft\hcsshim
 
 environment:
   GOPATH: c:\gopath
-  PATH: C:\mingw-w64\x86_64-7.3.0-posix-seh-rt_v5-rev0\mingw64\bin;%PATH%
+  PATH: C:\mingw-w64\x86_64-7.2.0-posix-seh-rt_v5-rev1\mingw64\bin;%PATH%
 
 build_script:
   - go get -v -t ./...
   - go build ./cmd/wclayer
+  - go test -v ./... -tags admin
 
 artifacts:
   - path: 'wclayer.exe'
