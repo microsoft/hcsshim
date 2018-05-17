@@ -7,3 +7,7 @@ environment:
 
 build_script:
   - go get -v -t ./...
+  - go build ./cmd/wclayer
+
+artifacts:
+  - path: 'wclayer.exe'
