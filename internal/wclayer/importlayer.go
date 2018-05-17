@@ -1,4 +1,4 @@
-package hcsshim
+package wclayer
 
 import (
 	"errors"
@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/hcsshim/internal/hcserror"
 	"github.com/Microsoft/hcsshim/internal/safefile"
 	"github.com/sirupsen/logrus"
 )
@@ -34,7 +35,7 @@ func ImportLayer(info DriverInfo, layerID string, importFolderPath string, paren
 
 	err = importLayer(&infop, layerID, importFolderPath, layers)
 	if err != nil {
-		err = makeErrorf(err, title, "layerId=%s flavour=%d folder=%s", layerID, info.Flavour, importFolderPath)
+		err = hcserror.Errorf(err, title, "layerId=%s flavour=%d folder=%s", layerID, info.Flavour, importFolderPath)
 		logrus.Error(err)
 		return err
 	}
@@ -74,7 +75,7 @@ func (w *FilterLayerWriter) Add(name string, fileInfo *winio.FileBasicInfo) erro
 	}
 	err := importLayerNext(w.context, name, fileInfo)
 	if err != nil {
-		return makeError(err, "ImportLayerNext", "")
+		return hcserror.New(err, "ImportLayerNext", "")
 	}
 	return nil
 }
@@ -93,7 +94,7 @@ func (w *FilterLayerWriter) Remove(name string) error {
 	}
 	err := importLayerNext(w.context, name, nil)
 	if err != nil {
-		return makeError(err, "ImportLayerNext", "")
+		return hcserror.New(err, "ImportLayerNext", "")
 	}
 	return nil
 }
@@ -102,7 +103,7 @@ func (w *FilterLayerWriter) Remove(name string) error {
 func (w *FilterLayerWriter) Write(b []byte) (int, error) {
 	err := importLayerWrite(w.context, b)
 	if err != nil {
-		err = makeError(err, "ImportLayerWrite", "")
+		err = hcserror.New(err, "ImportLayerWrite", "")
 		return 0, err
 	}
 	return len(b), err
@@ -114,7 +115,7 @@ func (w *FilterLayerWriter) Close() (err error) {
 	if w.context != 0 {
 		err = importLayerEnd(w.context)
 		if err != nil {
-			err = makeError(err, "ImportLayerEnd", "")
+			err = hcserror.New(err, "ImportLayerEnd", "")
 		}
 		w.context = 0
 	}
@@ -217,7 +218,7 @@ func NewLayerWriter(info DriverInfo, layerID string, parentLayerPaths []string) 
 	w := &FilterLayerWriter{}
 	err = importLayerBegin(&infop, layerID, layers, &w.context)
 	if err != nil {
-		return nil, makeError(err, "ImportLayerStart", "")
+		return nil, hcserror.New(err, "ImportLayerStart", "")
 	}
 	return w, nil
 }

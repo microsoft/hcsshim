@@ -1,6 +1,9 @@
-package hcsshim
+package wclayer
 
-import "github.com/sirupsen/logrus"
+import (
+	"github.com/Microsoft/hcsshim/internal/hcserror"
+	"github.com/sirupsen/logrus"
+)
 
 // CreateSandboxLayer creates and populates new read-write layer for use by a container.
 // This requires both the id of the direct parent layer, as well as the full list
@@ -25,7 +28,7 @@ func CreateSandboxLayer(info DriverInfo, layerId, parentId string, parentLayerPa
 
 	err = createSandboxLayer(&infop, layerId, parentId, layers)
 	if err != nil {
-		err = makeErrorf(err, title, "layerId=%s parentId=%s", layerId, parentId)
+		err = hcserror.Errorf(err, title, "layerId=%s parentId=%s", layerId, parentId)
 		logrus.Error(err)
 		return err
 	}

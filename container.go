@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/interop"
 	"github.com/sirupsen/logrus"
 )
 
@@ -303,7 +304,7 @@ func GetContainers(q ComputeSystemQuery) ([]ContainerProperties, error) {
 	if computeSystemsp == nil {
 		return nil, ErrUnexpectedValue
 	}
-	computeSystemsRaw := convertAndFreeCoTaskMemBytes(computeSystemsp)
+	computeSystemsRaw := interop.ConvertAndFreeCoTaskMemBytes(computeSystemsp)
 	computeSystems := []ContainerProperties{}
 	if err := json.Unmarshal(computeSystemsRaw, &computeSystems); err != nil {
 		return nil, err
@@ -429,7 +430,7 @@ func (container *container) properties(query string) (*ContainerProperties, erro
 	if propertiesp == nil {
 		return nil, ErrUnexpectedValue
 	}
-	propertiesRaw := convertAndFreeCoTaskMemBytes(propertiesp)
+	propertiesRaw := interop.ConvertAndFreeCoTaskMemBytes(propertiesp)
 	properties := &ContainerProperties{}
 	if err := json.Unmarshal(propertiesRaw, properties); err != nil {
 		return nil, err

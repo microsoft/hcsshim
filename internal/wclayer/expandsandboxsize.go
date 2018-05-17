@@ -1,6 +1,9 @@
-package hcsshim
+package wclayer
 
-import "github.com/sirupsen/logrus"
+import (
+	"github.com/Microsoft/hcsshim/internal/hcserror"
+	"github.com/sirupsen/logrus"
+)
 
 // ExpandSandboxSize expands the size of a layer to at least size bytes.
 func ExpandSandboxSize(info DriverInfo, layerId string, size uint64) error {
@@ -16,7 +19,7 @@ func ExpandSandboxSize(info DriverInfo, layerId string, size uint64) error {
 
 	err = expandSandboxSize(&infop, layerId, size)
 	if err != nil {
-		err = makeErrorf(err, title, "layerId=%s  size=%d", layerId, size)
+		err = hcserror.Errorf(err, title, "layerId=%s  size=%d", layerId, size)
 		logrus.Error(err)
 		return err
 	}

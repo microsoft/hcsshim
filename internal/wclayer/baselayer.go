@@ -1,4 +1,4 @@
-package hcsshim
+package wclayer
 
 import (
 	"errors"
@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/hcsshim/internal/hcserror"
 	"github.com/Microsoft/hcsshim/internal/safefile"
 )
 
@@ -94,12 +95,12 @@ func (w *baseLayerWriter) Add(name string, fileInfo *winio.FileBasicInfo) (err e
 	mode := uint32(syscall.GENERIC_READ | syscall.GENERIC_WRITE | winio.WRITE_DAC | winio.WRITE_OWNER | winio.ACCESS_SYSTEM_SECURITY)
 	f, err = safefile.OpenRelative(name, w.root, mode, syscall.FILE_SHARE_READ, safefile.FILE_CREATE, extraFlags)
 	if err != nil {
-		return makeError(err, "Failed to safefile.OpenRelative", name)
+		return hcserror.New(err, "Failed to safefile.OpenRelative", name)
 	}
 
 	err = winio.SetFileBasicInfo(f, fileInfo)
 	if err != nil {
-		return makeError(err, "Failed to SetFileBasicInfo", name)
+		return hcserror.New(err, "Failed to SetFileBasicInfo", name)
 	}
 
 	w.f = f

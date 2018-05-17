@@ -1,6 +1,9 @@
-package hcsshim
+package wclayer
 
-import "github.com/sirupsen/logrus"
+import (
+	"github.com/Microsoft/hcsshim/internal/hcserror"
+	"github.com/sirupsen/logrus"
+)
 
 // UnprepareLayer disables the filesystem filter for the read-write layer with
 // the given id.
@@ -17,7 +20,7 @@ func UnprepareLayer(info DriverInfo, layerId string) error {
 
 	err = unprepareLayer(&infop, layerId)
 	if err != nil {
-		err = makeErrorf(err, title, "layerId=%s flavour=%d", layerId, info.Flavour)
+		err = hcserror.Errorf(err, title, "layerId=%s flavour=%d", layerId, info.Flavour)
 		logrus.Error(err)
 		return err
 	}

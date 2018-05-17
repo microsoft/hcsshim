@@ -1,4 +1,4 @@
-package hcsshim
+package wclayer
 
 import (
 	"crypto/sha1"

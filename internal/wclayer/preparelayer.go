@@ -1,8 +1,9 @@
-package hcsshim
+package wclayer
 
 import (
 	"sync"
 
+	"github.com/Microsoft/hcsshim/internal/hcserror"
 	"github.com/sirupsen/logrus"
 )
 
@@ -36,7 +37,7 @@ func PrepareLayer(info DriverInfo, layerId string, parentLayerPaths []string) er
 	defer prepareLayerLock.Unlock()
 	err = prepareLayer(&infop, layerId, layers)
 	if err != nil {
-		err = makeErrorf(err, title, "layerId=%s flavour=%d", layerId, info.Flavour)
+		err = hcserror.Errorf(err, title, "layerId=%s flavour=%d", layerId, info.Flavour)
 		logrus.Error(err)
 		return err
 	}

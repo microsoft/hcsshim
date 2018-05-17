@@ -1,6 +1,9 @@
-package hcsshim
+package wclayer
 
-import "github.com/sirupsen/logrus"
+import (
+	"github.com/Microsoft/hcsshim/internal/hcserror"
+	"github.com/sirupsen/logrus"
+)
 
 // CreateLayer creates a new, empty, read-only layer on the filesystem based on
 // the parent layer provided.
@@ -17,7 +20,7 @@ func CreateLayer(info DriverInfo, id, parent string) error {
 
 	err = createLayer(&infop, id, parent)
 	if err != nil {
-		err = makeErrorf(err, title, "id=%s parent=%s flavour=%d", id, parent, info.Flavour)
+		err = hcserror.Errorf(err, title, "id=%s parent=%s flavour=%d", id, parent, info.Flavour)
 		logrus.Error(err)
 		return err
 	}
