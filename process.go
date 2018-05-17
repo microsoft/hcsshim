@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/interop"
 	"github.com/sirupsen/logrus"
 )
 
@@ -204,7 +205,7 @@ func (process *process) properties() (*processStatus, error) {
 	if propertiesp == nil {
 		return nil, ErrUnexpectedValue
 	}
-	propertiesRaw := convertAndFreeCoTaskMemBytes(propertiesp)
+	propertiesRaw := interop.ConvertAndFreeCoTaskMemBytes(propertiesp)
 
 	properties := &processStatus{}
 	if err := json.Unmarshal(propertiesRaw, properties); err != nil {
