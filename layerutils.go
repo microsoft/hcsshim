@@ -27,6 +27,9 @@ type DriverInfo struct {
 	HomeDir string
 }
 
+// FilterDriver is the Flavour constant for the Windows Filter Driver
+const FilterDriver = 1
+
 type driverInfo struct {
 	Flavour  int
 	HomeDirp *uint16
