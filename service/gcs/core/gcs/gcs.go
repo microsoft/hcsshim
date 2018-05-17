@@ -26,6 +26,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const uvmContainerID = "00000000-0000-0000-0000-000000000000"
+
 // gcsCore is an implementation of the Core interface, defining the
 // functionality of the GCS.
 type gcsCore struct {
@@ -431,17 +433,25 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 
 // SignalContainer sends the specified signal to the container's init process.
 func (c *gcsCore) SignalContainer(id string, signal oslayer.Signal) error {
-	c.containerCacheMutex.Lock()
-	defer c.containerCacheMutex.Unlock()
+	if id == uvmContainerID {
+		// We are asking to shutdown the UVM itself.
+		if signal != oslayer.SIGTERM {
+			logrus.Errorf("invalid signal %d sent to uvm. Will shutdown anyway.", signal)
+		}
+		c.OS.Shutdown()
+	} else {
+		c.containerCacheMutex.Lock()
+		defer c.containerCacheMutex.Unlock()
 
-	containerEntry := c.getContainer(id)
-	if containerEntry == nil {
-		return errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
-	}
+		containerEntry := c.getContainer(id)
+		if containerEntry == nil {
+			return errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
+		}
 
-	if containerEntry.container != nil {
-		if err := containerEntry.container.Kill(signal); err != nil {
-			return err
+		if containerEntry.container != nil {
+			if err := containerEntry.container.Kill(signal); err != nil {
+				return err
+			}
 		}
 	}
 

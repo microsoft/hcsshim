@@ -231,6 +231,9 @@ func (o *realOS) Link(oldname, newname string) error {
 	}
 	return nil
 }
+func (o *realOS) Shutdown() error {
+	return syscall.Reboot(syscall.LINUX_REBOOT_MAGIC1 | syscall.LINUX_REBOOT_MAGIC2 | syscall.LINUX_REBOOT_CMD_POWER_OFF)
+}
 
 // Processes
 func (o *realOS) Kill(pid int, sig syscall.Signal) error {

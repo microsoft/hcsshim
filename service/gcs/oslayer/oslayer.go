@@ -73,6 +73,7 @@ type OS interface {
 	PathExists(name string) (bool, error)
 	PathIsMounted(name string) (bool, error)
 	Link(oldname, newname string) error
+	Shutdown() error
 
 	// Processes
 	Kill(pid int, sig syscall.Signal) error
