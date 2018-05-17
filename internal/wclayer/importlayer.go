@@ -16,9 +16,9 @@ import (
 // that into a layer with the id layerId.  Note that in order to correctly populate
 // the layer and interperet the transport format, all parent layers must already
 // be present on the system at the paths provided in parentLayerPaths.
-func ImportLayer(info DriverInfo, layerID string, importFolderPath string, parentLayerPaths []string) error {
+func ImportLayer(path string, importFolderPath string, parentLayerPaths []string) error {
 	title := "hcsshim::ImportLayer "
-	logrus.Debugf(title+"flavour %d layerId %s folder %s", info.Flavour, layerID, importFolderPath)
+	logrus.Debugf(title+"path %s folder %s", path, importFolderPath)
 
 	// Generate layer descriptors
 	layers, err := layerPathsToDescriptors(parentLayerPaths)
@@ -26,21 +26,14 @@ func ImportLayer(info DriverInfo, layerID string, importFolderPath string, paren
 		return err
 	}
 
-	// Convert info to API calling convention
-	infop, err := convertDriverInfo(info)
+	err = importLayer(&stdDriverInfo, path, importFolderPath, layers)
 	if err != nil {
+		err = hcserror.Errorf(err, title, "path=%s folder=%s", path, importFolderPath)
 		logrus.Error(err)
 		return err
 	}
 
-	err = importLayer(&infop, layerID, importFolderPath, layers)
-	if err != nil {
-		err = hcserror.Errorf(err, title, "layerId=%s flavour=%d folder=%s", layerID, info.Flavour, importFolderPath)
-		logrus.Error(err)
-		return err
-	}
-
-	logrus.Debugf(title+"succeeded flavour=%d layerId=%s folder=%s", info.Flavour, layerID, importFolderPath)
+	logrus.Debugf(title+"succeeded path=%s folder=%s", path, importFolderPath)
 	return nil
 }
 
@@ -124,8 +117,6 @@ func (w *FilterLayerWriter) Close() (err error) {
 
 type legacyLayerWriterWrapper struct {
 	*legacyLayerWriter
-	info             DriverInfo
-	layerID          string
 	path             string
 	parentLayerPaths []string
 }
@@ -138,9 +129,7 @@ func (r *legacyLayerWriterWrapper) Close() error {
 		return err
 	}
 
-	info := r.info
-	info.HomeDir = ""
-	if err = ImportLayer(info, r.destRoot.Name(), r.path, r.parentLayerPaths); err != nil {
+	if err = ImportLayer(r.destRoot.Name(), r.path, r.parentLayerPaths); err != nil {
 		return err
 	}
 	for _, name := range r.Tombstones {
@@ -174,10 +163,10 @@ func (r *legacyLayerWriterWrapper) Close() error {
 // NewLayerWriter returns a new layer writer for creating a layer on disk.
 // The caller must have taken the SeBackupPrivilege and SeRestorePrivilege privileges
 // to call this and any methods on the resulting LayerWriter.
-func NewLayerWriter(info DriverInfo, layerID string, parentLayerPaths []string) (LayerWriter, error) {
+func NewLayerWriter(path string, parentLayerPaths []string) (LayerWriter, error) {
 	if len(parentLayerPaths) == 0 {
 		// This is a base layer. It gets imported differently.
-		f, err := safefile.OpenRoot(filepath.Join(info.HomeDir, layerID))
+		f, err := safefile.OpenRoot(path)
 		if err != nil {
 			return nil, err
 		}
@@ -189,19 +178,17 @@ func NewLayerWriter(info DriverInfo, layerID string, parentLayerPaths []string) 
 	if procImportLayerBegin.Find() != nil {
 		// The new layer reader is not available on this Windows build. Fall back to the
 		// legacy export code path.
-		path, err := ioutil.TempDir("", "hcs")
+		importPath, err := ioutil.TempDir("", "hcs")
 		if err != nil {
 			return nil, err
 		}
-		w, err := newLegacyLayerWriter(path, parentLayerPaths, filepath.Join(info.HomeDir, layerID))
+		w, err := newLegacyLayerWriter(importPath, parentLayerPaths, path)
 		if err != nil {
 			return nil, err
 		}
 		return &legacyLayerWriterWrapper{
 			legacyLayerWriter: w,
-			info:              info,
-			layerID:           layerID,
-			path:              path,
+			path:              importPath,
 			parentLayerPaths:  parentLayerPaths,
 		}, nil
 	}
@@ -210,13 +197,8 @@ func NewLayerWriter(info DriverInfo, layerID string, parentLayerPaths []string) 
 		return nil, err
 	}
 
-	infop, err := convertDriverInfo(info)
-	if err != nil {
-		return nil, err
-	}
-
 	w := &FilterLayerWriter{}
-	err = importLayerBegin(&infop, layerID, layers, &w.context)
+	err = importLayerBegin(&stdDriverInfo, path, layers, &w.context)
 	if err != nil {
 		return nil, hcserror.New(err, "ImportLayerStart", "")
 	}

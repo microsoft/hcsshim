@@ -17,9 +17,9 @@ import (
 // format includes any metadata required for later importing the layer (using
 // ImportLayer), and requires the full list of parent layer paths in order to
 // perform the export.
-func ExportLayer(info DriverInfo, layerId string, exportFolderPath string, parentLayerPaths []string) error {
+func ExportLayer(path string, exportFolderPath string, parentLayerPaths []string) error {
 	title := "hcsshim::ExportLayer "
-	logrus.Debugf(title+"flavour %d layerId %s folder %s", info.Flavour, layerId, exportFolderPath)
+	logrus.Debugf(title+"path %s folder %s", path, exportFolderPath)
 
 	// Generate layer descriptors
 	layers, err := layerPathsToDescriptors(parentLayerPaths)
@@ -27,21 +27,14 @@ func ExportLayer(info DriverInfo, layerId string, exportFolderPath string, paren
 		return err
 	}
 
-	// Convert info to API calling convention
-	infop, err := convertDriverInfo(info)
+	err = exportLayer(&stdDriverInfo, path, exportFolderPath, layers)
 	if err != nil {
+		err = hcserror.Errorf(err, title, "path=%s folder=%s", path, exportFolderPath)
 		logrus.Error(err)
 		return err
 	}
 
-	err = exportLayer(&infop, layerId, exportFolderPath, layers)
-	if err != nil {
-		err = hcserror.Errorf(err, title, "layerId=%s flavour=%d folder=%s", layerId, info.Flavour, exportFolderPath)
-		logrus.Error(err)
-		return err
-	}
-
-	logrus.Debugf(title+"succeeded flavour=%d layerId=%s folder=%s", info.Flavour, layerId, exportFolderPath)
+	logrus.Debugf(title+"succeeded path=%s folder=%s", path, exportFolderPath)
 	return nil
 }
 
@@ -115,32 +108,28 @@ func (r *FilterLayerReader) Close() (err error) {
 // NewLayerReader returns a new layer reader for reading the contents of an on-disk layer.
 // The caller must have taken the SeBackupPrivilege privilege
 // to call this and any methods on the resulting LayerReader.
-func NewLayerReader(info DriverInfo, layerID string, parentLayerPaths []string) (LayerReader, error) {
+func NewLayerReader(path string, parentLayerPaths []string) (LayerReader, error) {
 	if procExportLayerBegin.Find() != nil {
 		// The new layer reader is not available on this Windows build. Fall back to the
 		// legacy export code path.
-		path, err := ioutil.TempDir("", "hcs")
+		exportPath, err := ioutil.TempDir("", "hcs")
 		if err != nil {
 			return nil, err
 		}
-		err = ExportLayer(info, layerID, path, parentLayerPaths)
+		err = ExportLayer(path, exportPath, parentLayerPaths)
 		if err != nil {
-			os.RemoveAll(path)
+			os.RemoveAll(exportPath)
 			return nil, err
 		}
-		return &legacyLayerReaderWrapper{newLegacyLayerReader(path)}, nil
+		return &legacyLayerReaderWrapper{newLegacyLayerReader(exportPath)}, nil
 	}
 
 	layers, err := layerPathsToDescriptors(parentLayerPaths)
 	if err != nil {
 		return nil, err
 	}
-	infop, err := convertDriverInfo(info)
-	if err != nil {
-		return nil, err
-	}
 	r := &FilterLayerReader{}
-	err = exportLayerBegin(&infop, layerID, layers, &r.context)
+	err = exportLayerBegin(&stdDriverInfo, path, layers, &r.context)
 	if err != nil {
 		return nil, hcserror.New(err, "ExportLayerBegin", "")
 	}

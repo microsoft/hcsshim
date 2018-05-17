@@ -22,28 +22,16 @@ struct DriverInfo {
     LPCWSTR HomeDir;
 };
 */
-type DriverInfo struct {
-	Flavour int
-	HomeDir string
-}
 
 type driverInfo struct {
 	Flavour  int
 	HomeDirp *uint16
 }
 
-func convertDriverInfo(info DriverInfo) (driverInfo, error) {
-	homedirp, err := syscall.UTF16PtrFromString(info.HomeDir)
-	if err != nil {
-		logrus.Debugf("Failed conversion of home to pointer for driver info: %s", err.Error())
-		return driverInfo{}, err
-	}
-
-	return driverInfo{
-		Flavour:  info.Flavour,
-		HomeDirp: homedirp,
-	}, nil
-}
+var (
+	utf16EmptyString uint16
+	stdDriverInfo    = driverInfo{1, &utf16EmptyString}
+)
 
 /* To pass into syscall, we need a struct matching the following:
 typedef struct _WC_LAYER_DESCRIPTOR {

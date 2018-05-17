@@ -142,29 +142,24 @@ func _createLayer(info *driverInfo, id *uint16, parent *uint16) (hr error) {
 	return
 }
 
-func createSandboxLayer(info *driverInfo, id string, parent string, descriptors []WC_LAYER_DESCRIPTOR) (hr error) {
+func createSandboxLayer(info *driverInfo, id string, parent uintptr, descriptors []WC_LAYER_DESCRIPTOR) (hr error) {
 	var _p0 *uint16
 	_p0, hr = syscall.UTF16PtrFromString(id)
 	if hr != nil {
 		return
 	}
-	var _p1 *uint16
-	_p1, hr = syscall.UTF16PtrFromString(parent)
-	if hr != nil {
-		return
-	}
-	return _createSandboxLayer(info, _p0, _p1, descriptors)
+	return _createSandboxLayer(info, _p0, parent, descriptors)
 }
 
-func _createSandboxLayer(info *driverInfo, id *uint16, parent *uint16, descriptors []WC_LAYER_DESCRIPTOR) (hr error) {
-	var _p2 *WC_LAYER_DESCRIPTOR
+func _createSandboxLayer(info *driverInfo, id *uint16, parent uintptr, descriptors []WC_LAYER_DESCRIPTOR) (hr error) {
+	var _p1 *WC_LAYER_DESCRIPTOR
 	if len(descriptors) > 0 {
-		_p2 = &descriptors[0]
+		_p1 = &descriptors[0]
 	}
 	if hr = procCreateSandboxLayer.Find(); hr != nil {
 		return
 	}
-	r0, _, _ := syscall.Syscall6(procCreateSandboxLayer.Addr(), 5, uintptr(unsafe.Pointer(info)), uintptr(unsafe.Pointer(id)), uintptr(unsafe.Pointer(parent)), uintptr(unsafe.Pointer(_p2)), uintptr(len(descriptors)), 0)
+	r0, _, _ := syscall.Syscall6(procCreateSandboxLayer.Addr(), 5, uintptr(unsafe.Pointer(info)), uintptr(unsafe.Pointer(id)), uintptr(parent), uintptr(unsafe.Pointer(_p1)), uintptr(len(descriptors)), 0)
 	if int32(r0) < 0 {
 		hr = interop.Win32FromHresult(r0)
 	}

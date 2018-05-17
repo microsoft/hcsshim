@@ -6,24 +6,17 @@ import (
 )
 
 // ExpandSandboxSize expands the size of a layer to at least size bytes.
-func ExpandSandboxSize(info DriverInfo, layerId string, size uint64) error {
+func ExpandSandboxSize(path string, size uint64) error {
 	title := "hcsshim::ExpandSandboxSize "
-	logrus.Debugf(title+"layerId=%s size=%d", layerId, size)
+	logrus.Debugf(title+"path=%s size=%d", path, size)
 
-	// Convert info to API calling convention
-	infop, err := convertDriverInfo(info)
+	err := expandSandboxSize(&stdDriverInfo, path, size)
 	if err != nil {
+		err = hcserror.Errorf(err, title, "path=%s size=%d", path, size)
 		logrus.Error(err)
 		return err
 	}
 
-	err = expandSandboxSize(&infop, layerId, size)
-	if err != nil {
-		err = hcserror.Errorf(err, title, "layerId=%s  size=%d", layerId, size)
-		logrus.Error(err)
-		return err
-	}
-
-	logrus.Debugf(title+"- succeeded layerId=%s size=%d", layerId, size)
+	logrus.Debugf(title+"- succeeded path=%s size=%d", path, size)
 	return nil
 }

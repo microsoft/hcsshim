@@ -9,9 +9,9 @@ import (
 // This requires both the id of the direct parent layer, as well as the full list
 // of paths to all parent layers up to the base (and including the direct parent
 // whose id was provided).
-func CreateSandboxLayer(info DriverInfo, layerId, parentId string, parentLayerPaths []string) error {
+func CreateSandboxLayer(path string, parentLayerPaths []string) error {
 	title := "hcsshim::CreateSandboxLayer "
-	logrus.Debugf(title+"layerId %s parentId %s", layerId, parentId)
+	logrus.Debugf(title+"path %s", path)
 
 	// Generate layer descriptors
 	layers, err := layerPathsToDescriptors(parentLayerPaths)
@@ -19,20 +19,13 @@ func CreateSandboxLayer(info DriverInfo, layerId, parentId string, parentLayerPa
 		return err
 	}
 
-	// Convert info to API calling convention
-	infop, err := convertDriverInfo(info)
+	err = createSandboxLayer(&stdDriverInfo, path, 0, layers)
 	if err != nil {
+		err = hcserror.Errorf(err, title, "path=%s", path)
 		logrus.Error(err)
 		return err
 	}
 
-	err = createSandboxLayer(&infop, layerId, parentId, layers)
-	if err != nil {
-		err = hcserror.Errorf(err, title, "layerId=%s parentId=%s", layerId, parentId)
-		logrus.Error(err)
-		return err
-	}
-
-	logrus.Debugf(title+"- succeeded layerId=%s parentId=%s", layerId, parentId)
+	logrus.Debugf(title+"- succeeded path=%s", path)
 	return nil
 }

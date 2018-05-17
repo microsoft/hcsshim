@@ -7,24 +7,17 @@ import (
 
 // CreateLayer creates a new, empty, read-only layer on the filesystem based on
 // the parent layer provided.
-func CreateLayer(info DriverInfo, id, parent string) error {
+func CreateLayer(path, parent string) error {
 	title := "hcsshim::CreateLayer "
-	logrus.Debugf(title+"Flavour %d ID %s parent %s", info.Flavour, id, parent)
+	logrus.Debugf(title+"Flavour %d ID %s parent %s", path, parent)
 
-	// Convert info to API calling convention
-	infop, err := convertDriverInfo(info)
+	err := createLayer(&stdDriverInfo, path, parent)
 	if err != nil {
+		err = hcserror.Errorf(err, title, "path=%s parent=%s flavour=%d", path, parent)
 		logrus.Error(err)
 		return err
 	}
 
-	err = createLayer(&infop, id, parent)
-	if err != nil {
-		err = hcserror.Errorf(err, title, "id=%s parent=%s flavour=%d", id, parent, info.Flavour)
-		logrus.Error(err)
-		return err
-	}
-
-	logrus.Debugf(title+" - succeeded id=%s parent=%s flavour=%d", id, parent, info.Flavour)
+	logrus.Debugf(title+" - succeeded path=%s parent=%s flavour=%d", path, parent)
 	return nil
 }
