@@ -76,13 +76,17 @@ const (
 
 type ACLPolicy struct {
 	Type            PolicyType `json:"Type"`
+	Id              string     `json:"Id,omitempty"`
 	Protocol        uint16
+	Protocols       string `json:"Protocols,omitempty"`
 	InternalPort    uint16
 	Action          ActionType
 	Direction       DirectionType
 	LocalAddresses  string
 	RemoteAddresses string
+	LocalPorts      string `json:"LocalPorts,omitempty"`
 	LocalPort       uint16
+	RemotePorts     string `json:"RemotePorts,omitempty"`
 	RemotePort      uint16
 	RuleType        RuleType `json:"RuleType,omitempty"`
 	Priority        uint16
