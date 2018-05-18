@@ -1,7 +1,10 @@
 package hcsshim
 
 import (
+	"crypto/sha1"
 	"path/filepath"
+
+	"github.com/Microsoft/hcsshim/internal/guid"
 
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 )
@@ -63,13 +66,23 @@ type DriverInfo struct {
 
 type FilterLayerReader = wclayer.FilterLayerReader
 type FilterLayerWriter = wclayer.FilterLayerWriter
-type GUID = wclayer.GUID
+
+type GUID [16]byte
 
 func NameToGuid(name string) (id GUID, err error) {
-	return wclayer.NameToGuid(name)
+	g, err := wclayer.NameToGuid(name)
+	return GUID(g), err
 }
+
 func NewGUID(source string) *GUID {
-	return wclayer.NewGUID(source)
+	h := sha1.Sum([]byte(source))
+	var g GUID
+	copy(g[0:], h[0:16])
+	return &g
+}
+
+func (g *GUID) ToString() string {
+	return (guid.GUID)(*g).String()
 }
 
 type LayerReader = wclayer.LayerReader

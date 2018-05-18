@@ -335,7 +335,7 @@ func _layerExists(info *driverInfo, id *uint16, exists *uint32) (hr error) {
 	return
 }
 
-func nameToGuid(name string, guid *GUID) (hr error) {
+func nameToGuid(name string, guid *_guid) (hr error) {
 	var _p0 *uint16
 	_p0, hr = syscall.UTF16PtrFromString(name)
 	if hr != nil {
@@ -344,7 +344,7 @@ func nameToGuid(name string, guid *GUID) (hr error) {
 	return _nameToGuid(_p0, guid)
 }
 
-func _nameToGuid(name *uint16, guid *GUID) (hr error) {
+func _nameToGuid(name *uint16, guid *_guid) (hr error) {
 	if hr = procNameToGuid.Find(); hr != nil {
 		return
 	}
