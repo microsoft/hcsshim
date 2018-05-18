@@ -7,13 +7,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/schema1"
 )
 
-const (
-	pendingUpdatesQuery    = `{ "PropertyTypes" : ["PendingUpdates"]}`
-	statisticsQuery        = `{ "PropertyTypes" : ["Statistics"]}`
-	processListQuery       = `{ "PropertyTypes" : ["ProcessList"]}`
-	mappedVirtualDiskQuery = `{ "PropertyTypes" : ["MappedVirtualDisk"]}`
-)
-
 // ContainerProperties holds the properties for a container and the processes running in that container
 type ContainerProperties = schema1.ContainerProperties
 
@@ -54,7 +47,6 @@ const (
 // ResourceModificationRequestResponse is the structure used to send request to the container to modify the system
 // Supported resource types are Network and Request Types are Add/Remove
 type ResourceModificationRequestResponse = schema1.ResourceModificationRequestResponse
-
 
 type container struct {
 	system *hcs.System
@@ -121,17 +113,12 @@ func (container *container) Resume() error {
 
 // HasPendingUpdates returns true if the container has updates pending to install
 func (container *container) HasPendingUpdates() (bool, error) {
-	properties, err := container.system.Properties(pendingUpdatesQuery)
-	if err != nil {
-		return false, convertSystemError(err, container)
-	}
-
-	return properties.AreUpdatesPending, nil
+	return false, nil
 }
 
 // Statistics returns statistics for the container
 func (container *container) Statistics() (Statistics, error) {
-	properties, err := container.system.Properties(statisticsQuery)
+	properties, err := container.system.Properties(schema1.PropertyTypeStatistics)
 	if err != nil {
 		return Statistics{}, convertSystemError(err, container)
 	}
@@ -141,7 +128,7 @@ func (container *container) Statistics() (Statistics, error) {
 
 // ProcessList returns an array of ProcessListItems for the container
 func (container *container) ProcessList() ([]ProcessListItem, error) {
-	properties, err := container.system.Properties(processListQuery)
+	properties, err := container.system.Properties(schema1.PropertyTypeProcessList)
 	if err != nil {
 		return nil, convertSystemError(err, container)
 	}
@@ -179,7 +166,7 @@ func (container *container) ProcessList() ([]ProcessListItem, error) {
 //   }
 //}
 func (container *container) MappedVirtualDisks() (map[int]MappedVirtualDiskController, error) {
-	properties, err := container.system.Properties(mappedVirtualDiskQuery)
+	properties, err := container.system.Properties(schema1.PropertyTypeMappedVirtualDisk)
 	if err != nil {
 		return nil, convertSystemError(err, container)
 	}
