@@ -60,7 +60,7 @@ func getDefaultLinuxSpec(t *testing.T) *specs.Spec {
 //	t.Skip("for now")
 //	cacheDir := createTempDir(t)
 //	cacheFile := filepath.Join(cacheDir, "cache.vhdx")
-//	uvm, err := CreateContainerEx(&CreateOptionsEx{Spec: getDefaultLinuxSpec(t)})
+//	uvm, err := CreateContainer(&CreateOptions{Spec: getDefaultLinuxSpec(t)})
 //	if err != nil {
 //		t.Fatalf("Failed create: %s", err)
 //	}
@@ -122,7 +122,7 @@ func TestV1XenonLCOW(t *testing.T) {
 
 	spec := getDefaultLinuxSpec(t)
 	//	spec.Windows.LayerFolders = append(layersAlpine, tempDir)
-	c, err := CreateContainerEx(&CreateOptionsEx{
+	c, err := CreateContainer(&CreateOptions{
 		Id:            "TextV1XenonLCOW",
 		SchemaVersion: schemaversion.SchemaV10(),
 		Spec:          spec,
@@ -190,7 +190,7 @@ func TestV2XenonLCOW(t *testing.T) {
 
 	spec := getDefaultLinuxSpec(t)
 	spec.Windows.LayerFolders = append(layersAlpine, containerScratchDir)
-	hostedContainer, err := CreateContainerEx(&CreateOptionsEx{
+	hostedContainer, err := CreateContainer(&CreateOptions{
 		Id:            "TextV2XenonLCOW",
 		SchemaVersion: schemaversion.SchemaV20(),
 		Spec:          spec,

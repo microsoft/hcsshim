@@ -454,7 +454,7 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 	}
 
 	// Create the container without starting it.
-	opts := &hcsoci.CreateOptionsEx{
+	opts := &hcsoci.CreateOptions{
 		Id:            c.ID,
 		Spec:          c.Spec,
 		HostingSystem: vm,
@@ -470,7 +470,7 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 		*/
 	}
 	logrus.Infof("creating container %s (VM: '%s')", c.ID, vmid)
-	hc, err := hcsoci.CreateContainerEx(opts)
+	hc, err := hcsoci.CreateContainer(opts)
 	if err != nil {
 		return err
 	}
