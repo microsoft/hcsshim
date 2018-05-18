@@ -1,4 +1,4 @@
-package hcsshim
+package hns
 
 import (
 	"encoding/json"

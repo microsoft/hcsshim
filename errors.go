@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"syscall"
 
+	"github.com/Microsoft/hcsshim/internal/hns"
+
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcserror"
 )
@@ -74,21 +76,8 @@ var (
 	ErrPlatformNotSupported = hcs.ErrPlatformNotSupported
 )
 
-type EndpointNotFoundError struct {
-	EndpointName string
-}
-
-func (e EndpointNotFoundError) Error() string {
-	return fmt.Sprintf("Endpoint %s not found", e.EndpointName)
-}
-
-type NetworkNotFoundError struct {
-	NetworkName string
-}
-
-func (e NetworkNotFoundError) Error() string {
-	return fmt.Sprintf("Network %s not found", e.NetworkName)
-}
+type EndpointNotFoundError = hns.EndpointNotFoundError
+type NetworkNotFoundError = hns.NetworkNotFoundError
 
 // ProcessError is an error encountered in HCS during an operation on a Process object
 type ProcessError struct {
