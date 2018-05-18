@@ -1,6 +1,7 @@
 package wclayer
 
 import (
+	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcserror"
 	"github.com/sirupsen/logrus"
 )
@@ -8,7 +9,7 @@ import (
 // NameToGuid converts the given string into a GUID using the algorithm in the
 // Host Compute Service, ensuring GUIDs generated with the same string are common
 // across all clients.
-func NameToGuid(name string) (id GUID, err error) {
+func NameToGuid(name string) (id guid.GUID, err error) {
 	title := "hcsshim::NameToGuid "
 	logrus.Debugf(title+"Name %s", name)
 

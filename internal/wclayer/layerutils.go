@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/sirupsen/logrus"
 )
 
@@ -63,7 +64,7 @@ typedef struct _WC_LAYER_DESCRIPTOR {
 } WC_LAYER_DESCRIPTOR, *PWC_LAYER_DESCRIPTOR;
 */
 type WC_LAYER_DESCRIPTOR struct {
-	LayerId GUID
+	LayerId guid.GUID
 	Flags   uint32
 	Pathp   *uint16
 }
