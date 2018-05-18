@@ -27,7 +27,7 @@ func TestV1XenonWCOW(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LocateWCOWUVMFolderFromLayerFolders failed %s", err)
 	}
-	c, err := CreateContainerEx(&CreateOptionsEx{
+	c, err := CreateContainer(&CreateOptions{
 		Id:            "TestV1XenonWCOW",
 		SchemaVersion: schemaversion.SchemaV10(),
 		Spec: &specs.Spec{
@@ -51,7 +51,7 @@ func TestV1XenonWCOWNoUVMPath(t *testing.T) {
 	tempDir := createWCOWTempDirWithSandbox(t)
 	defer os.RemoveAll(tempDir)
 
-	c, err := CreateContainerEx(&CreateOptionsEx{
+	c, err := CreateContainer(&CreateOptions{
 		Id:            "TestV1XenonWCOWNoUVMPath",
 		Owner:         "unit-test",
 		SchemaVersion: schemaversion.SchemaV10(),
@@ -77,7 +77,7 @@ func TestV1XenonMultipleBaseLayersNoUVMPath(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	layers := layersBusybox
-	c, err := CreateContainerEx(&CreateOptionsEx{
+	c, err := CreateContainer(&CreateOptions{
 		Id:            "TestV1XenonWCOW",
 		SchemaVersion: schemaversion.SchemaV10(),
 		Spec: &specs.Spec{
@@ -116,7 +116,7 @@ func TestV1XenonWCOWSingleMappedDirectory(t *testing.T) {
 	tempDir := createWCOWTempDirWithSandbox(t)
 	defer os.RemoveAll(tempDir)
 
-	hostedContainer, err := CreateContainerEx(&CreateOptionsEx{
+	hostedContainer, err := CreateContainer(&CreateOptions{
 		Id:            "TestV1XenonWCOWSingleMappedDirectory",
 		SchemaVersion: schemaversion.SchemaV10(),
 		Spec: &specs.Spec{
@@ -155,12 +155,12 @@ func TestV2XenonWCOW(t *testing.T) {
 	containerScratchDir := createWCOWTempDirWithSandbox(t)
 	defer os.RemoveAll(containerScratchDir)
 	layerFolders := append(layersNanoserver, containerScratchDir)
-	hostedContainer, err := CreateContainerEx(&CreateOptionsEx{
+	hostedContainer, err := CreateContainer(&CreateOptions{
 		HostingSystem: uvm,
 		Spec:          &specs.Spec{Windows: &specs.Windows{LayerFolders: layerFolders}},
 	})
 	if err != nil {
-		t.Fatalf("CreateContainerEx failed: %s", err)
+		t.Fatalf("CreateContainer failed: %s", err)
 	}
 	defer UnmountContainerLayers(layerFolders, uvm, UnmountOperationAll)
 
@@ -185,13 +185,13 @@ func TestV2XenonWCOWContainerSandboxFolderDoesNotExist(t *testing.T) {
 	defer os.RemoveAll(containerScratchDir) // As auto-created
 
 	layerFolders := append(layersBusybox, containerScratchDir)
-	hostedContainer, err := CreateContainerEx(&CreateOptionsEx{
+	hostedContainer, err := CreateContainer(&CreateOptions{
 		Id:            "container",
 		HostingSystem: uvm,
 		Spec:          &specs.Spec{Windows: &specs.Windows{LayerFolders: layerFolders}},
 	})
 	if err != nil {
-		t.Fatalf("CreateContainerEx failed: %s", err)
+		t.Fatalf("CreateContainer failed: %s", err)
 	}
 	defer UnmountContainerLayers(layerFolders, uvm, UnmountOperationAll)
 
@@ -216,14 +216,14 @@ func TestV2XenonWCOWTwoContainers(t *testing.T) {
 	firstContainerScratchDir := createWCOWTempDirWithSandbox(t)
 	defer os.RemoveAll(firstContainerScratchDir)
 	firstLayerFolders := append(layersNanoserver, firstContainerScratchDir)
-	firstHostedContainer, err := CreateContainerEx(&CreateOptionsEx{
+	firstHostedContainer, err := CreateContainer(&CreateOptions{
 		Id:            "FirstContainer",
 		HostingSystem: uvm,
 		SchemaVersion: schemaversion.SchemaV20(),
 		Spec:          &specs.Spec{Windows: &specs.Windows{LayerFolders: firstLayerFolders}},
 	})
 	if err != nil {
-		t.Fatalf("CreateContainerEx failed: %s", err)
+		t.Fatalf("CreateContainer failed: %s", err)
 	}
 	defer UnmountContainerLayers(firstLayerFolders, uvm, UnmountOperationAll)
 
@@ -231,14 +231,14 @@ func TestV2XenonWCOWTwoContainers(t *testing.T) {
 	secondContainerScratchDir := createWCOWTempDirWithSandbox(t)
 	defer os.RemoveAll(firstContainerScratchDir)
 	secondLayerFolders := append(layersNanoserver, secondContainerScratchDir)
-	secondHostedContainer, err := CreateContainerEx(&CreateOptionsEx{
+	secondHostedContainer, err := CreateContainer(&CreateOptions{
 		Id:            "SecondContainer",
 		HostingSystem: uvm,
 		SchemaVersion: schemaversion.SchemaV20(),
 		Spec:          &specs.Spec{Windows: &specs.Windows{LayerFolders: secondLayerFolders}},
 	})
 	if err != nil {
-		t.Fatalf("CreateContainerEx failed: %s", err)
+		t.Fatalf("CreateContainer failed: %s", err)
 	}
 	defer UnmountContainerLayers(secondLayerFolders, uvm, UnmountOperationAll)
 
@@ -266,7 +266,7 @@ func TestV2XenonWCOWTwoContainers(t *testing.T) {
 //	}
 //	defer os.RemoveAll(uvmScratchDir)
 
-//	uvm, err := CreateContainerEx(&CreateOptionsEx{
+//	uvm, err := CreateContainer(&CreateOptions{
 //		Id:              uvmID,
 //		Owner:           "unit-test",
 //		SchemaVersion:   SchemaV20(),
@@ -306,7 +306,7 @@ func TestV2XenonWCOWTwoContainers(t *testing.T) {
 
 //	// Create the first container
 //	defer os.RemoveAll(containerScratchDir)
-//	xenon, err := CreateContainerEx(&CreateOptionsEx{
+//	xenon, err := CreateContainer(&CreateOptions{
 //		Id:            "container",
 //		Owner:         "unit-test",
 //		HostingSystem: uvm,
@@ -314,7 +314,7 @@ func TestV2XenonWCOWTwoContainers(t *testing.T) {
 //		Spec:          &specs.Spec{Windows: &specs.Windows{}}, // No layerfolders as we mounted them ourself.
 //	})
 //	if err != nil {
-//		t.Fatalf("CreateContainerEx failed: %s", err)
+//		t.Fatalf("CreateContainer failed: %s", err)
 //	}
 
 //	// Start/stop the first container
@@ -332,7 +332,7 @@ func TestV2XenonWCOWTwoContainers(t *testing.T) {
 //	}
 
 //	// Create an identical second container and verify it works too.
-//	xenon2, err := CreateContainerEx(&CreateOptionsEx{
+//	xenon2, err := CreateContainer(&CreateOptions{
 //		Id:            "container",
 //		Owner:         "unit-test",
 //		HostingSystem: uvm,
@@ -341,7 +341,7 @@ func TestV2XenonWCOWTwoContainers(t *testing.T) {
 //		MountedLayers: mountedLayers,
 //	})
 //	if err != nil {
-//		t.Fatalf("CreateContainerEx failed: %s", err)
+//		t.Fatalf("CreateContainer failed: %s", err)
 //	}
 //	startContainer(t, xenon2)
 //	runCommand(t, xenon2, "cmd /s /c echo TestV2XenonWCOWAfterRemount", `c:\`, "TestV2XenonWCOWAfterRemount")
@@ -362,14 +362,14 @@ func TestV2XenonWCOWCreateLots(t *testing.T) {
 		containerScratchDir := createWCOWTempDirWithSandbox(t)
 		defer os.RemoveAll(containerScratchDir)
 		layerFolders := append(layersNanoserver, containerScratchDir)
-		hostedContainer, err := CreateContainerEx(&CreateOptionsEx{
+		hostedContainer, err := CreateContainer(&CreateOptions{
 			Id:            fmt.Sprintf("container%d", i),
 			HostingSystem: uvm,
 			SchemaVersion: schemaversion.SchemaV20(),
 			Spec:          &specs.Spec{Windows: &specs.Windows{LayerFolders: layerFolders}},
 		})
 		if err != nil {
-			t.Fatalf("CreateContainerEx failed: %s", err)
+			t.Fatalf("CreateContainer failed: %s", err)
 		}
 		defer hostedContainer.Terminate()
 		defer UnmountContainerLayers(layerFolders, uvm, UnmountOperationAll)
@@ -426,13 +426,13 @@ func TestV2XenonWCOWMultiLayer(t *testing.T) {
 
 	// Create the container. Note that this will auto-mount for us.
 	containerLayers := append(layersBusybox, containerScratchDir)
-	xenon, err := CreateContainerEx(&CreateOptionsEx{
+	xenon, err := CreateContainer(&CreateOptions{
 		Id:            "container",
 		HostingSystem: uvm,
 		Spec:          &specs.Spec{Windows: &specs.Windows{LayerFolders: containerLayers}},
 	})
 	if err != nil {
-		t.Fatalf("CreateContainerEx failed: %s", err)
+		t.Fatalf("CreateContainer failed: %s", err)
 	}
 
 	// Start/stop the container
@@ -469,7 +469,7 @@ func TestV2XenonWCOWSingleMappedDirectory(t *testing.T) {
 	f, err := os.OpenFile(filepath.Join(source, "foo.txt"), os.O_RDWR|os.O_CREATE, 0755)
 	f.Close()
 
-	hostedContainer, err := CreateContainerEx(&CreateOptionsEx{
+	hostedContainer, err := CreateContainer(&CreateOptions{
 		HostingSystem: uvm,
 		Spec: &specs.Spec{
 			Windows: &specs.Windows{LayerFolders: layerFolders},
@@ -477,7 +477,7 @@ func TestV2XenonWCOWSingleMappedDirectory(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("CreateContainerEx failed: %s", err)
+		t.Fatalf("CreateContainer failed: %s", err)
 	}
 	defer UnmountContainerLayers(layerFolders, uvm, UnmountOperationAll)
 

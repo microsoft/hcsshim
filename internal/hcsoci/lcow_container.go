@@ -13,7 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func createLCOWContainer(coi *createOptionsExInternal) (*hcs.System, error) {
+func createLCOWContainer(coi *createOptionsInternal) (*hcs.System, error) {
 
 	sandboxFolder := coi.Spec.Windows.LayerFolders[len(coi.Spec.Windows.LayerFolders)-1]
 	logrus.Debugf("hcsshim::createLCOWContainer Sandbox folder: %s", sandboxFolder)

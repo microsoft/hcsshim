@@ -17,7 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func createWCOWContainer(coi *createOptionsExInternal) (*hcs.System, error) {
+func createWCOWContainer(coi *createOptionsInternal) (*hcs.System, error) {
 
 	sandboxFolder := coi.Spec.Windows.LayerFolders[len(coi.Spec.Windows.LayerFolders)-1]
 	logrus.Debugf("hcsshim::createWCOWContainer Sandbox folder: %s", sandboxFolder)
@@ -103,7 +103,7 @@ func createWCOWContainer(coi *createOptionsExInternal) (*hcs.System, error) {
 	return hcs.CreateComputeSystem(coi.actualId, hcsDocument, "")
 }
 
-func undoMountOnFailure(coi *createOptionsExInternal, origSpecRoot *specs.Root, weMountedStorage bool, vsmbMountsAddedByUs []string, currentError error) error {
+func undoMountOnFailure(coi *createOptionsInternal, origSpecRoot *specs.Root, weMountedStorage bool, vsmbMountsAddedByUs []string, currentError error) error {
 	logrus.Debugf("hcsshim::undoMountOnFailure Unwinding container layers")
 	retError := currentError
 	if weMountedStorage {

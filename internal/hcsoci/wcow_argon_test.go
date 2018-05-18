@@ -28,7 +28,7 @@ func TestV1Argon(t *testing.T) {
 	}
 	defer UnmountContainerLayers(layers, nil, UnmountOperationAll)
 
-	c, err := CreateContainerEx(&CreateOptionsEx{
+	c, err := CreateContainer(&CreateOptions{
 		SchemaVersion: schemaversion.SchemaV10(),
 		Id:            "TestV1Argon",
 		Owner:         "unit-test",
@@ -55,7 +55,7 @@ func TestV1ArgonAutoMount(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	layers := append(layersBusybox, tempDir)
-	c, err := CreateContainerEx(&CreateOptionsEx{
+	c, err := CreateContainer(&CreateOptions{
 		Id:            "TestV1ArgonAutoMount",
 		SchemaVersion: schemaversion.SchemaV10(),
 		Spec:          &specs.Spec{Windows: &specs.Windows{LayerFolders: layers}},
@@ -80,7 +80,7 @@ func TestV1ArgonMultipleBaseLayersAutoMount(t *testing.T) {
 	defer os.RemoveAll(containerScratchDir) // As auto-created
 
 	layers := append(layersBusybox, containerScratchDir)
-	c, err := CreateContainerEx(&CreateOptionsEx{
+	c, err := CreateContainer(&CreateOptions{
 		Id:            "TestV1ArgonMultipleBaseLayersAutoMount",
 		SchemaVersion: schemaversion.SchemaV10(),
 		Spec:          &specs.Spec{Windows: &specs.Windows{LayerFolders: layers}},
@@ -113,7 +113,7 @@ func TestV1ArgonSingleMappedDirectory(t *testing.T) {
 	f, err := os.OpenFile(filepath.Join(source, "foo.txt"), os.O_RDWR|os.O_CREATE, 0755)
 	f.Close()
 
-	c, err := CreateContainerEx(&CreateOptionsEx{
+	c, err := CreateContainer(&CreateOptions{
 		SchemaVersion: schemaversion.SchemaV10(),
 		Spec: &specs.Spec{
 			Windows: &specs.Windows{LayerFolders: layers},
@@ -149,7 +149,7 @@ func TestV2Argon(t *testing.T) {
 	}
 	defer UnmountContainerLayers(layers, nil, UnmountOperationAll)
 
-	c, err := CreateContainerEx(&CreateOptionsEx{
+	c, err := CreateContainer(&CreateOptions{
 		SchemaVersion: schemaversion.SchemaV20(),
 		Spec: &specs.Spec{
 			Hostname: "mickey",
@@ -180,7 +180,7 @@ func TestV2ArgonMultipleBaseLayers(t *testing.T) {
 	}
 	defer UnmountContainerLayers(layers, nil, UnmountOperationAll)
 
-	c, err := CreateContainerEx(&CreateOptionsEx{
+	c, err := CreateContainer(&CreateOptions{
 		SchemaVersion: schemaversion.SchemaV20(),
 		Id:            "TestV2ArgonMultipleBaseLayers",
 		Spec: &specs.Spec{
@@ -208,7 +208,7 @@ func TestV2ArgonAutoMountMultipleBaseLayers(t *testing.T) {
 
 	layers := append(layersBusybox, containerScratchDir)
 
-	c, err := CreateContainerEx(&CreateOptionsEx{
+	c, err := CreateContainer(&CreateOptions{
 		SchemaVersion: schemaversion.SchemaV20(),
 		Id:            "TestV2ArgonAutoMountMultipleBaseLayers",
 		Spec:          &specs.Spec{Windows: &specs.Windows{LayerFolders: layers}},
@@ -241,7 +241,7 @@ func TestV2ArgonSingleMappedDirectory(t *testing.T) {
 	f, err := os.OpenFile(filepath.Join(source, "foo.txt"), os.O_RDWR|os.O_CREATE, 0755)
 	f.Close()
 
-	c, err := CreateContainerEx(&CreateOptionsEx{
+	c, err := CreateContainer(&CreateOptions{
 		SchemaVersion: schemaversion.SchemaV20(),
 		Spec: &specs.Spec{
 			Windows: &specs.Windows{LayerFolders: layers},

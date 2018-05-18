@@ -30,7 +30,7 @@ import (
 )
 
 const (
-// HCSOPTION_ constants are string values which can be added in the RuntimeOptions of a call to CreateContainerEx.
+// HCSOPTION_ constants are string values which can be added in the RuntimeOptions of a call to CreateContainer.
 //HCSOPTION_WCOW_V2_UVM_MEMORY_OVERHEAD = "hcs.wcow.v2.uvm.additional.memory" // WCOW: v2 schema MB of memory to add to WCOW UVM when calculating resources. Defaults to 256MB
 //HCSOPTION_LCOW_GLOBALMODE     = "lcow.globalmode"     // LCOW: Utility VM lifetime. Presence of this causes global mode which is insecure, but more efficient. Default is non-global
 //HCSOPTION_LCOW_SANDBOXSIZE_GB = "lcow.sandboxsize.gb" // LCOW: Size of sandbox in GB
@@ -38,12 +38,12 @@ const (
 
 )
 
-// CreateOptionsEx are the set of fields used to call CreateContainerEx().
+// CreateOptions are the set of fields used to call CreateContainer().
 // Note: In the spec, the LayerFolders must be arranged in the same way in which
 // moby configures them: layern, layern-1,...,layer2,layer1,sandbox
 // where layer1 is the base read-only layer, layern is the top-most read-only
 // layer, and sandbox is the RW layer. This is for historical reasons only.
-type CreateOptionsEx struct {
+type CreateOptions struct {
 
 	// Common parameters
 	Id            string                       // Identifier for the container
@@ -61,8 +61,8 @@ type CreateOptionsEx struct {
 
 // createOptionsInternal is the set of user-supplied create options, but includes internal
 // fields for processing the request once user-supplied stuff has been validated.
-type createOptionsExInternal struct {
-	*CreateOptionsEx
+type createOptionsInternal struct {
+	*CreateOptions
 
 	actualSchemaVersion *schemaversion.SchemaVersion // Calculated based on Windows build and optional caller-supplied override
 	actualId            string                       // Identifier for the container
@@ -74,14 +74,14 @@ type createOptionsExInternal struct {
 	actualInitrdFile string // LCOW initrd file
 }
 
-// CreateContainerEx creates a container. It can cope with a  wide variety of
+// CreateContainer creates a container. It can cope with a  wide variety of
 // scenarios, including v1 HCS schema calls, as well as more complex v2 HCS schema
 // calls.
-func CreateContainerEx(createOptions *CreateOptionsEx) (*hcs.System, error) {
-	logrus.Debugf("hcsshim::CreateContainerEx options: %+v", createOptions)
+func CreateContainer(createOptions *CreateOptions) (*hcs.System, error) {
+	logrus.Debugf("hcsshim::CreateContainer options: %+v", createOptions)
 
-	coi := &createOptionsExInternal{
-		CreateOptionsEx:  createOptions,
+	coi := &createOptionsInternal{
+		CreateOptions:    createOptions,
 		actualId:         createOptions.Id,
 		actualOwner:      createOptions.Owner,
 		actualKirdPath:   createOptions.KirdPath,
@@ -120,7 +120,7 @@ func CreateContainerEx(createOptions *CreateOptionsEx) (*hcs.System, error) {
 		*/
 	} else {
 		coi.actualSchemaVersion = schemaversion.DetermineSchemaVersion(coi.SchemaVersion)
-		logrus.Debugf("hcsshim::CreateContainerEx using schema %s", coi.actualSchemaVersion.String())
+		logrus.Debugf("hcsshim::CreateContainer using schema %s", coi.actualSchemaVersion.String())
 	}
 
 	if coi.Spec.Linux != nil {
@@ -128,11 +128,11 @@ func CreateContainerEx(createOptions *CreateOptionsEx) (*hcs.System, error) {
 			return nil, fmt.Errorf("containerSpec 'Windows' field must container layer folders for a Linux container")
 		}
 		if coi.actualSchemaVersion.IsV10() {
-			logrus.Debugf("hcsshim::CreateContainerEx createLCOWv1")
+			logrus.Debugf("hcsshim::CreateContainer createLCOWv1")
 			//return createLCOWv1(coi)
 			return nil, errors.New("not supported")
 		} else {
-			logrus.Debugf("hcsshim::CreateContainerEx createLCOWContainer")
+			logrus.Debugf("hcsshim::CreateContainer createLCOWContainer")
 			return createLCOWContainer(coi)
 		}
 	}
@@ -145,7 +145,7 @@ func CreateContainerEx(createOptions *CreateOptionsEx) (*hcs.System, error) {
 // a container, both hosted and process isolated. It can create both v1 and v2
 // schema, WCOW and LCOW. The containers storage should have been mounted already.
 
-func createHCSContainerDocument(coi *createOptionsExInternal, operatingSystem string) (interface{}, error) {
+func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem string) (interface{}, error) {
 	logrus.Debugf("hcsshim: CreateHCSContainerDocument")
 	// TODO: Make this safe if exported so no null pointer dereferences.
 

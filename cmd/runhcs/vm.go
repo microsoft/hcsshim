@@ -130,7 +130,7 @@ type vmRequest struct {
 
 func startVM(id string, spec *specs.Spec) (*hcs.System, error) {
 	/* DISABLED
-	vm, err := hcsshim.CreateContainerEx(&hcsshim.CreateOptionsEx{
+	vm, err := hcsshim.CreateContainer(&hcsshim.CreateOptions{
 		Id:              vmID(id),
 		AsHostingSystem: true,
 		Spec:            spec,
