@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/interop"
+	"github.com/Microsoft/hcsshim/internal/mergemaps"
 	"github.com/Microsoft/hcsshim/internal/schema1"
 	"github.com/sirupsen/logrus"
 )
@@ -76,7 +77,7 @@ func createContainerWithJSON(id string, c *schema1.ContainerConfig, additionalJS
 			return nil, fmt.Errorf("failed to unmarshal %s: %s", additionalJSON, err)
 		}
 
-		mergedMap := mergeMaps(additionalMap, configurationMap)
+		mergedMap := mergemaps.Merge(additionalMap, configurationMap)
 		mergedJSON, err := json.Marshal(mergedMap)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal merged configuration map %+v: %s", mergedMap, err)
@@ -111,33 +112,6 @@ func createContainerWithJSON(id string, c *schema1.ContainerConfig, additionalJS
 
 	logrus.Debugf(title+" succeeded id=%s handle=%d", id, container.handle)
 	return container, nil
-}
-
-// mergeMaps recursively merges map `fromMap` into map `ToMap`. Any pre-existing values
-// in ToMap are overwritten. Values in fromMap are added to ToMap.
-// From http://stackoverflow.com/questions/40491438/merging-two-json-strings-in-golang
-func mergeMaps(fromMap, ToMap interface{}) interface{} {
-	switch fromMap := fromMap.(type) {
-	case map[string]interface{}:
-		ToMap, ok := ToMap.(map[string]interface{})
-		if !ok {
-			return fromMap
-		}
-		for keyToMap, valueToMap := range ToMap {
-			if valueFromMap, ok := fromMap[keyToMap]; ok {
-				fromMap[keyToMap] = mergeMaps(valueFromMap, valueToMap)
-			} else {
-				fromMap[keyToMap] = valueToMap
-			}
-		}
-	case nil:
-		// merge(nil, map[string]interface{...}) -> map[string]interface{...}
-		ToMap, ok := ToMap.(map[string]interface{})
-		if ok {
-			return ToMap
-		}
-	}
-	return fromMap
 }
 
 // OpenContainer opens an existing container by ID.
