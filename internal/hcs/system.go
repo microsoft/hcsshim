@@ -25,51 +25,41 @@ type System struct {
 	callbackNumber uintptr
 }
 
-// createContainerAdditionalJSON is read from the environment at initialisation
+// createComputeSystemAdditionalJSON is read from the environment at initialisation
 // time. It allows an environment variable to define additional JSON which
-// is merged in the CreateContainer call to HCS.
-var createContainerAdditionalJSON string
+// is merged in the CreateComputeSystem call to HCS.
+var createComputeSystemAdditionalJSON string
 
 func init() {
-	createContainerAdditionalJSON = os.Getenv("HCSSHIM_CREATECONTAINER_ADDITIONALJSON")
+	createComputeSystemAdditionalJSON = os.Getenv("HCSSHIM_CREATECOMPUTESYSTEM_ADDITIONALJSON")
 }
 
-// CreateContainer creates a new container with the given configuration but does not start it.
-func CreateContainer(id string, c *schema1.ContainerConfig) (*System, error) {
-	return createContainerWithJSON(id, c, "")
-}
-
-// CreateContainerWithJSON creates a new container with the given configuration but does not start it.
-// It is identical to CreateContainer except that optional additional JSON can be merged before passing to HCS.
-func CreateContainerWithJSON(id string, c *schema1.ContainerConfig, additionalJSON string) (*System, error) {
-	return createContainerWithJSON(id, c, additionalJSON)
-}
-
-func createContainerWithJSON(id string, c *schema1.ContainerConfig, additionalJSON string) (*System, error) {
-	operation := "CreateContainer"
+// CreateComputeSystem creates a new compute system with the given configuration but does not start it.
+func CreateComputeSystem(id string, hcsDocumentInterface interface{}, additionalJSON string) (*System, error) {
+	operation := "CreateComputeSystem"
 	title := "HCSShim::" + operation
 
-	container := &System{
+	computeSystem := &System{
 		ID: id,
 	}
 
-	configurationb, err := json.Marshal(c)
+	hcsDocumentB, err := json.Marshal(hcsDocumentInterface)
 	if err != nil {
 		return nil, err
 	}
 
-	configuration := string(configurationb)
-	logrus.Debugf(title+" id=%s config=%s", id, configuration)
+	hcsDocument := string(hcsDocumentB)
+	logrus.Debugf(title+" id=%s config=%s", id, hcsDocument)
 
 	// Merge any additional JSON. Priority is given to what is passed in explicitly,
 	// falling back to what's set in the environment.
-	if additionalJSON == "" && createContainerAdditionalJSON != "" {
-		additionalJSON = createContainerAdditionalJSON
+	if additionalJSON == "" && createComputeSystemAdditionalJSON != "" {
+		additionalJSON = createComputeSystemAdditionalJSON
 	}
 	if additionalJSON != "" {
-		configurationMap := map[string]interface{}{}
-		if err := json.Unmarshal([]byte(configuration), &configurationMap); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal %s: %s", configuration, err)
+		hcsDocumentMap := map[string]interface{}{}
+		if err := json.Unmarshal([]byte(hcsDocument), &hcsDocumentMap); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal %s: %s", hcsDocument, err)
 		}
 
 		additionalMap := map[string]interface{}{}
@@ -77,50 +67,50 @@ func createContainerWithJSON(id string, c *schema1.ContainerConfig, additionalJS
 			return nil, fmt.Errorf("failed to unmarshal %s: %s", additionalJSON, err)
 		}
 
-		mergedMap := mergemaps.Merge(additionalMap, configurationMap)
+		mergedMap := mergemaps.Merge(additionalMap, hcsDocumentMap)
 		mergedJSON, err := json.Marshal(mergedMap)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal merged configuration map %+v: %s", mergedMap, err)
 		}
 
-		configuration = string(mergedJSON)
-		logrus.Debugf(title+" id=%s merged config=%s", id, configuration)
+		hcsDocument = string(mergedJSON)
+		logrus.Debugf(title+" id=%s merged config=%s", id, hcsDocument)
 	}
 
 	var (
 		resultp  *uint16
 		identity syscall.Handle
 	)
-	createError := hcsCreateComputeSystem(id, configuration, identity, &container.handle, &resultp)
+	createError := hcsCreateComputeSystem(id, hcsDocument, identity, &computeSystem.handle, &resultp)
 
 	if createError == nil || IsPending(createError) {
-		if err := container.registerCallback(); err != nil {
-			// Terminate the container if it still exists. We're okay to ignore a failure here.
-			container.Terminate()
-			return nil, makeSystemError(container, operation, "", err)
+		if err := computeSystem.registerCallback(); err != nil {
+			// Terminate the computeSystem if it still exists. We're okay to ignore a failure here.
+			computeSystem.Terminate()
+			return nil, makeSystemError(computeSystem, operation, "", err)
 		}
 	}
 
-	err = processAsyncHcsResult(createError, resultp, container.callbackNumber, hcsNotificationSystemCreateCompleted, &defaultTimeout)
+	err = processAsyncHcsResult(createError, resultp, computeSystem.callbackNumber, hcsNotificationSystemCreateCompleted, &defaultTimeout)
 	if err != nil {
 		if err == ErrTimeout {
-			// Terminate the container if it still exists. We're okay to ignore a failure here.
-			container.Terminate()
+			// Terminate the compute system if it still exists. We're okay to ignore a failure here.
+			computeSystem.Terminate()
 		}
-		return nil, makeSystemError(container, operation, configuration, err)
+		return nil, makeSystemError(computeSystem, operation, hcsDocument, err)
 	}
 
-	logrus.Debugf(title+" succeeded id=%s handle=%d", id, container.handle)
-	return container, nil
+	logrus.Debugf(title+" succeeded id=%s handle=%d", id, computeSystem.handle)
+	return computeSystem, nil
 }
 
-// OpenContainer opens an existing container by ID.
-func OpenContainer(id string) (*System, error) {
-	operation := "OpenContainer"
+// OpenComputeSystem opens an existing compute system by ID.
+func OpenComputeSystem(id string) (*System, error) {
+	operation := "OpenComputeSystem"
 	title := "HCSShim::" + operation
 	logrus.Debugf(title+" id=%s", id)
 
-	container := &System{
+	computeSystem := &System{
 		ID: id,
 	}
 
@@ -131,22 +121,22 @@ func OpenContainer(id string) (*System, error) {
 	err := hcsOpenComputeSystem(id, &handle, &resultp)
 	err = processHcsResult(err, resultp)
 	if err != nil {
-		return nil, makeSystemError(container, operation, "", err)
+		return nil, makeSystemError(computeSystem, operation, "", err)
 	}
 
-	container.handle = handle
+	computeSystem.handle = handle
 
-	if err := container.registerCallback(); err != nil {
-		return nil, makeSystemError(container, operation, "", err)
+	if err := computeSystem.registerCallback(); err != nil {
+		return nil, makeSystemError(computeSystem, operation, "", err)
 	}
 
 	logrus.Debugf(title+" succeeded id=%s handle=%d", id, handle)
-	return container, nil
+	return computeSystem, nil
 }
 
-// GetContainers gets a list of the containers on the system that match the query
-func GetContainers(q schema1.ComputeSystemQuery) ([]schema1.ContainerProperties, error) {
-	operation := "GetContainers"
+// GetComputeSystems gets a list of the compute systems on the system that match the query
+func GetComputeSystems(q schema1.ComputeSystemQuery) ([]schema1.ContainerProperties, error) {
+	operation := "GetComputeSystems"
 	title := "HCSShim::" + operation
 
 	queryb, err := json.Marshal(q)
@@ -180,116 +170,116 @@ func GetContainers(q schema1.ComputeSystemQuery) ([]schema1.ContainerProperties,
 	return computeSystems, nil
 }
 
-// Start synchronously starts the container.
-func (container *System) Start() error {
-	container.handleLock.RLock()
-	defer container.handleLock.RUnlock()
+// Start synchronously starts the computeSystem.
+func (computeSystem *System) Start() error {
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 	operation := "Start"
-	title := "HCSShim::Container::" + operation
-	logrus.Debugf(title+" id=%s", container.ID)
+	title := "HCSShim::ComputeSystem::" + operation
+	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
-	if container.handle == 0 {
-		return makeSystemError(container, operation, "", ErrAlreadyClosed)
+	if computeSystem.handle == 0 {
+		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed)
 	}
 
 	var resultp *uint16
-	err := hcsStartComputeSystem(container.handle, "", &resultp)
-	err = processAsyncHcsResult(err, resultp, container.callbackNumber, hcsNotificationSystemStartCompleted, &defaultTimeout)
+	err := hcsStartComputeSystem(computeSystem.handle, "", &resultp)
+	err = processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemStartCompleted, &defaultTimeout)
 	if err != nil {
-		return makeSystemError(container, operation, "", err)
+		return makeSystemError(computeSystem, operation, "", err)
 	}
 
-	logrus.Debugf(title+" succeeded id=%s", container.ID)
+	logrus.Debugf(title+" succeeded id=%s", computeSystem.ID)
 	return nil
 }
 
-// Shutdown requests a container shutdown, if IsPending() on the error returned is true,
+// Shutdown requests a compute system shutdown, if IsPending() on the error returned is true,
 // it may not actually be shut down until Wait() succeeds.
-func (container *System) Shutdown() error {
-	container.handleLock.RLock()
-	defer container.handleLock.RUnlock()
+func (computeSystem *System) Shutdown() error {
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 	operation := "Shutdown"
-	title := "HCSShim::Container::" + operation
-	logrus.Debugf(title+" id=%s", container.ID)
+	title := "HCSShim::ComputeSystem::" + operation
+	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
-	if container.handle == 0 {
-		return makeSystemError(container, operation, "", ErrAlreadyClosed)
+	if computeSystem.handle == 0 {
+		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed)
 	}
 
 	var resultp *uint16
-	err := hcsShutdownComputeSystem(container.handle, "", &resultp)
+	err := hcsShutdownComputeSystem(computeSystem.handle, "", &resultp)
 	err = processHcsResult(err, resultp)
 	if err != nil {
-		return makeSystemError(container, operation, "", err)
+		return makeSystemError(computeSystem, operation, "", err)
 	}
 
-	logrus.Debugf(title+" succeeded id=%s", container.ID)
+	logrus.Debugf(title+" succeeded id=%s", computeSystem.ID)
 	return nil
 }
 
-// Terminate requests a container terminate, if IsPending() on the error returned is true,
+// Terminate requests a compute system terminate, if IsPending() on the error returned is true,
 // it may not actually be shut down until Wait() succeeds.
-func (container *System) Terminate() error {
-	container.handleLock.RLock()
-	defer container.handleLock.RUnlock()
+func (computeSystem *System) Terminate() error {
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 	operation := "Terminate"
-	title := "HCSShim::Container::" + operation
-	logrus.Debugf(title+" id=%s", container.ID)
+	title := "HCSShim::ComputeSystem::" + operation
+	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
-	if container.handle == 0 {
-		return makeSystemError(container, operation, "", ErrAlreadyClosed)
+	if computeSystem.handle == 0 {
+		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed)
 	}
 
 	var resultp *uint16
-	err := hcsTerminateComputeSystem(container.handle, "", &resultp)
+	err := hcsTerminateComputeSystem(computeSystem.handle, "", &resultp)
 	err = processHcsResult(err, resultp)
 	if err != nil {
-		return makeSystemError(container, operation, "", err)
+		return makeSystemError(computeSystem, operation, "", err)
 	}
 
-	logrus.Debugf(title+" succeeded id=%s", container.ID)
+	logrus.Debugf(title+" succeeded id=%s", computeSystem.ID)
 	return nil
 }
 
-// Wait synchronously waits for the container to shutdown or terminate.
-func (container *System) Wait() error {
+// Wait synchronously waits for the compute system to shutdown or terminate.
+func (computeSystem *System) Wait() error {
 	operation := "Wait"
-	title := "HCSShim::Container::" + operation
-	logrus.Debugf(title+" id=%s", container.ID)
+	title := "HCSShim::ComputeSystem::" + operation
+	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
-	err := waitForNotification(container.callbackNumber, hcsNotificationSystemExited, nil)
+	err := waitForNotification(computeSystem.callbackNumber, hcsNotificationSystemExited, nil)
 	if err != nil {
-		return makeSystemError(container, operation, "", err)
+		return makeSystemError(computeSystem, operation, "", err)
 	}
 
-	logrus.Debugf(title+" succeeded id=%s", container.ID)
+	logrus.Debugf(title+" succeeded id=%s", computeSystem.ID)
 	return nil
 }
 
-// WaitTimeout synchronously waits for the container to terminate or the duration to elapse.
+// WaitTimeout synchronously waits for the compute system to terminate or the duration to elapse.
 // If the timeout expires, IsTimeout(err) == true
-func (container *System) WaitTimeout(timeout time.Duration) error {
+func (computeSystem *System) WaitTimeout(timeout time.Duration) error {
 	operation := "WaitTimeout"
-	title := "HCSShim::Container::" + operation
-	logrus.Debugf(title+" id=%s", container.ID)
+	title := "HCSShim::ComputeSystem::" + operation
+	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
-	err := waitForNotification(container.callbackNumber, hcsNotificationSystemExited, &timeout)
+	err := waitForNotification(computeSystem.callbackNumber, hcsNotificationSystemExited, &timeout)
 	if err != nil {
-		return makeSystemError(container, operation, "", err)
+		return makeSystemError(computeSystem, operation, "", err)
 	}
 
-	logrus.Debugf(title+" succeeded id=%s", container.ID)
+	logrus.Debugf(title+" succeeded id=%s", computeSystem.ID)
 	return nil
 }
 
-func (container *System) Properties(query string) (*schema1.ContainerProperties, error) {
-	container.handleLock.RLock()
-	defer container.handleLock.RUnlock()
+func (computeSystem *System) Properties(query string) (*schema1.ContainerProperties, error) {
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 	var (
 		resultp     *uint16
 		propertiesp *uint16
 	)
-	err := hcsGetComputeSystemProperties(container.handle, query, &propertiesp, &resultp)
+	err := hcsGetComputeSystemProperties(computeSystem.handle, query, &propertiesp, &resultp)
 	err = processHcsResult(err, resultp)
 	if err != nil {
 		return nil, err
@@ -306,66 +296,66 @@ func (container *System) Properties(query string) (*schema1.ContainerProperties,
 	return properties, nil
 }
 
-// Pause pauses the execution of the container. This feature is not enabled in TP5.
-func (container *System) Pause() error {
-	container.handleLock.RLock()
-	defer container.handleLock.RUnlock()
+// Pause pauses the execution of the computeSystem. This feature is not enabled in TP5.
+func (computeSystem *System) Pause() error {
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 	operation := "Pause"
-	title := "HCSShim::Container::" + operation
-	logrus.Debugf(title+" id=%s", container.ID)
+	title := "HCSShim::ComputeSystem::" + operation
+	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
-	if container.handle == 0 {
-		return makeSystemError(container, operation, "", ErrAlreadyClosed)
+	if computeSystem.handle == 0 {
+		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed)
 	}
 
 	var resultp *uint16
-	err := hcsPauseComputeSystem(container.handle, "", &resultp)
-	err = processAsyncHcsResult(err, resultp, container.callbackNumber, hcsNotificationSystemPauseCompleted, &defaultTimeout)
+	err := hcsPauseComputeSystem(computeSystem.handle, "", &resultp)
+	err = processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemPauseCompleted, &defaultTimeout)
 	if err != nil {
-		return makeSystemError(container, operation, "", err)
+		return makeSystemError(computeSystem, operation, "", err)
 	}
 
-	logrus.Debugf(title+" succeeded id=%s", container.ID)
+	logrus.Debugf(title+" succeeded id=%s", computeSystem.ID)
 	return nil
 }
 
-// Resume resumes the execution of the container. This feature is not enabled in TP5.
-func (container *System) Resume() error {
-	container.handleLock.RLock()
-	defer container.handleLock.RUnlock()
+// Resume resumes the execution of the computeSystem. This feature is not enabled in TP5.
+func (computeSystem *System) Resume() error {
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 	operation := "Resume"
-	title := "HCSShim::Container::" + operation
-	logrus.Debugf(title+" id=%s", container.ID)
+	title := "HCSShim::ComputeSystem::" + operation
+	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
-	if container.handle == 0 {
-		return makeSystemError(container, operation, "", ErrAlreadyClosed)
+	if computeSystem.handle == 0 {
+		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed)
 	}
 
 	var resultp *uint16
-	err := hcsResumeComputeSystem(container.handle, "", &resultp)
-	err = processAsyncHcsResult(err, resultp, container.callbackNumber, hcsNotificationSystemResumeCompleted, &defaultTimeout)
+	err := hcsResumeComputeSystem(computeSystem.handle, "", &resultp)
+	err = processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemResumeCompleted, &defaultTimeout)
 	if err != nil {
-		return makeSystemError(container, operation, "", err)
+		return makeSystemError(computeSystem, operation, "", err)
 	}
 
-	logrus.Debugf(title+" succeeded id=%s", container.ID)
+	logrus.Debugf(title+" succeeded id=%s", computeSystem.ID)
 	return nil
 }
 
-// CreateProcess launches a new process within the container.
-func (container *System) CreateProcess(c *schema1.ProcessConfig) (*Process, error) {
-	container.handleLock.RLock()
-	defer container.handleLock.RUnlock()
+// CreateProcess launches a new process within the computeSystem.
+func (computeSystem *System) CreateProcess(c *schema1.ProcessConfig) (*Process, error) {
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 	operation := "CreateProcess"
-	title := "HCSShim::Container::" + operation
+	title := "HCSShim::ComputeSystem::" + operation
 	var (
 		processInfo   hcsProcessInformation
 		processHandle hcsProcess
 		resultp       *uint16
 	)
 
-	if container.handle == 0 {
-		return nil, makeSystemError(container, operation, "", ErrAlreadyClosed)
+	if computeSystem.handle == 0 {
+		return nil, makeSystemError(computeSystem, operation, "", ErrAlreadyClosed)
 	}
 
 	// If we are not emulating a console, ignore any console size passed to us
@@ -376,22 +366,22 @@ func (container *System) CreateProcess(c *schema1.ProcessConfig) (*Process, erro
 
 	configurationb, err := json.Marshal(c)
 	if err != nil {
-		return nil, makeSystemError(container, operation, "", err)
+		return nil, makeSystemError(computeSystem, operation, "", err)
 	}
 
 	configuration := string(configurationb)
-	logrus.Debugf(title+" id=%s config=%s", container.ID, configuration)
+	logrus.Debugf(title+" id=%s config=%s", computeSystem.ID, configuration)
 
-	err = hcsCreateProcess(container.handle, configuration, &processInfo, &processHandle, &resultp)
+	err = hcsCreateProcess(computeSystem.handle, configuration, &processInfo, &processHandle, &resultp)
 	err = processHcsResult(err, resultp)
 	if err != nil {
-		return nil, makeSystemError(container, operation, configuration, err)
+		return nil, makeSystemError(computeSystem, operation, configuration, err)
 	}
 
 	process := &Process{
 		handle:    processHandle,
 		processID: int(processInfo.ProcessId),
-		system:    container,
+		system:    computeSystem,
 		cachedPipes: &cachedPipes{
 			stdIn:  processInfo.StdInput,
 			stdOut: processInfo.StdOutput,
@@ -400,77 +390,77 @@ func (container *System) CreateProcess(c *schema1.ProcessConfig) (*Process, erro
 	}
 
 	if err := process.registerCallback(); err != nil {
-		return nil, makeSystemError(container, operation, "", err)
+		return nil, makeSystemError(computeSystem, operation, "", err)
 	}
 
-	logrus.Debugf(title+" succeeded id=%s processid=%d", container.ID, process.processID)
+	logrus.Debugf(title+" succeeded id=%s processid=%d", computeSystem.ID, process.processID)
 	return process, nil
 }
 
-// OpenProcess gets an interface to an existing process within the container.
-func (container *System) OpenProcess(pid int) (*Process, error) {
-	container.handleLock.RLock()
-	defer container.handleLock.RUnlock()
+// OpenProcess gets an interface to an existing process within the computeSystem.
+func (computeSystem *System) OpenProcess(pid int) (*Process, error) {
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 	operation := "OpenProcess"
-	title := "HCSShim::Container::" + operation
-	logrus.Debugf(title+" id=%s, processid=%d", container.ID, pid)
+	title := "HCSShim::ComputeSystem::" + operation
+	logrus.Debugf(title+" id=%s, processid=%d", computeSystem.ID, pid)
 	var (
 		processHandle hcsProcess
 		resultp       *uint16
 	)
 
-	if container.handle == 0 {
-		return nil, makeSystemError(container, operation, "", ErrAlreadyClosed)
+	if computeSystem.handle == 0 {
+		return nil, makeSystemError(computeSystem, operation, "", ErrAlreadyClosed)
 	}
 
-	err := hcsOpenProcess(container.handle, uint32(pid), &processHandle, &resultp)
+	err := hcsOpenProcess(computeSystem.handle, uint32(pid), &processHandle, &resultp)
 	err = processHcsResult(err, resultp)
 	if err != nil {
-		return nil, makeSystemError(container, operation, "", err)
+		return nil, makeSystemError(computeSystem, operation, "", err)
 	}
 
 	process := &Process{
 		handle:    processHandle,
 		processID: pid,
-		system:    container,
+		system:    computeSystem,
 	}
 
 	if err := process.registerCallback(); err != nil {
-		return nil, makeSystemError(container, operation, "", err)
+		return nil, makeSystemError(computeSystem, operation, "", err)
 	}
 
-	logrus.Debugf(title+" succeeded id=%s processid=%s", container.ID, process.processID)
+	logrus.Debugf(title+" succeeded id=%s processid=%s", computeSystem.ID, process.processID)
 	return process, nil
 }
 
-// Close cleans up any state associated with the container but does not terminate or wait for it.
-func (container *System) Close() error {
-	container.handleLock.Lock()
-	defer container.handleLock.Unlock()
+// Close cleans up any state associated with the compute system but does not terminate or wait for it.
+func (computeSystem *System) Close() error {
+	computeSystem.handleLock.Lock()
+	defer computeSystem.handleLock.Unlock()
 	operation := "Close"
-	title := "HCSShim::Container::" + operation
-	logrus.Debugf(title+" id=%s", container.ID)
+	title := "HCSShim::ComputeSystem::" + operation
+	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
 	// Don't double free this
-	if container.handle == 0 {
+	if computeSystem.handle == 0 {
 		return nil
 	}
 
-	if err := container.unregisterCallback(); err != nil {
-		return makeSystemError(container, operation, "", err)
+	if err := computeSystem.unregisterCallback(); err != nil {
+		return makeSystemError(computeSystem, operation, "", err)
 	}
 
-	if err := hcsCloseComputeSystem(container.handle); err != nil {
-		return makeSystemError(container, operation, "", err)
+	if err := hcsCloseComputeSystem(computeSystem.handle); err != nil {
+		return makeSystemError(computeSystem, operation, "", err)
 	}
 
-	container.handle = 0
+	computeSystem.handle = 0
 
-	logrus.Debugf(title+" succeeded id=%s", container.ID)
+	logrus.Debugf(title+" succeeded id=%s", computeSystem.ID)
 	return nil
 }
 
-func (container *System) registerCallback() error {
+func (computeSystem *System) registerCallback() error {
 	context := &notifcationWatcherContext{
 		channels: newChannels(),
 	}
@@ -482,18 +472,18 @@ func (container *System) registerCallback() error {
 	callbackMapLock.Unlock()
 
 	var callbackHandle hcsCallback
-	err := hcsRegisterComputeSystemCallback(container.handle, notificationWatcherCallback, callbackNumber, &callbackHandle)
+	err := hcsRegisterComputeSystemCallback(computeSystem.handle, notificationWatcherCallback, callbackNumber, &callbackHandle)
 	if err != nil {
 		return err
 	}
 	context.handle = callbackHandle
-	container.callbackNumber = callbackNumber
+	computeSystem.callbackNumber = callbackNumber
 
 	return nil
 }
 
-func (container *System) unregisterCallback() error {
-	callbackNumber := container.callbackNumber
+func (computeSystem *System) unregisterCallback() error {
+	callbackNumber := computeSystem.callbackNumber
 
 	callbackMapLock.RLock()
 	context := callbackMap[callbackNumber]
@@ -528,14 +518,14 @@ func (container *System) unregisterCallback() error {
 }
 
 // Modifies the System by sending a request to HCS
-func (container *System) Modify(config interface{}) error {
-	container.handleLock.RLock()
-	defer container.handleLock.RUnlock()
+func (computeSystem *System) Modify(config interface{}) error {
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
 	operation := "Modify"
-	title := "HCSShim::Container::" + operation
+	title := "HCSShim::ComputeSystem::" + operation
 
-	if container.handle == 0 {
-		return makeSystemError(container, operation, "", ErrAlreadyClosed)
+	if computeSystem.handle == 0 {
+		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed)
 	}
 
 	requestJSON, err := json.Marshal(config)
@@ -544,14 +534,14 @@ func (container *System) Modify(config interface{}) error {
 	}
 
 	requestString := string(requestJSON)
-	logrus.Debugf(title+" id=%s request=%s", container.ID, requestString)
+	logrus.Debugf(title+" id=%s request=%s", computeSystem.ID, requestString)
 
 	var resultp *uint16
-	err = hcsModifyComputeSystem(container.handle, requestString, &resultp)
+	err = hcsModifyComputeSystem(computeSystem.handle, requestString, &resultp)
 	err = processHcsResult(err, resultp)
 	if err != nil {
-		return makeSystemError(container, operation, "", err)
+		return makeSystemError(computeSystem, operation, "", err)
 	}
-	logrus.Debugf(title+" succeeded id=%s", container.ID)
+	logrus.Debugf(title+" succeeded id=%s", computeSystem.ID)
 	return nil
 }
