@@ -298,6 +298,27 @@ func (c *gcsCore) CreateContainer(id string, settings prot.VMHostedContainerSett
 	return nil
 }
 
+func (c *gcsCore) CreateContainerV2(id string, settings prot.VMHostedContainerSettingsV2) error {
+	c.containerCacheMutex.Lock()
+	defer c.containerCacheMutex.Unlock()
+
+	if c.getContainer(id) != nil {
+		return errors.WithStack(gcserr.NewContainerExistsError(id))
+	}
+
+	containerEntry := newContainerCacheEntry(id)
+	// We need to only allow exited notifications when at least one WaitProcess
+	// call has been written. We increment the writers here which is safe even
+	// on failure because this entry will not be in the map on failure.
+	containerEntry.initProcess.writersWg.Add(1)
+
+	// TODO: Process settings.OciSpec
+
+	c.containerCache[id] = containerEntry
+
+	return nil
+}
+
 // ExecProcess executes a new process in the container. It forwards the
 // process's stdio through the members of the core.StdioSet provided.
 func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (int, error) {
@@ -955,6 +976,7 @@ func (c *gcsCore) removeCombinedLayers(m *prot.CombinedLayers) error {
 			if err := c.OS.Unmount(rootfsPath, 0); err != nil {
 				return errors.Wrapf(err, "failed to unmount combined layer path '%s'", rootfsPath)
 			}
+			// TODO: Should we be cleaning up the rootfs folder we created for the combined layers originally?
 		}
 	}
 	return nil

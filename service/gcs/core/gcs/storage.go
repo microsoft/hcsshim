@@ -248,6 +248,7 @@ func (c *gcsCore) unmountMappedVirtualDisks(disks []prot.MappedVirtualDisk) erro
 					return errors.Wrapf(err, "failed to unmount mapped virtual disk path %s", disk.ContainerPath)
 				}
 			}
+			// TODO: Should we be removing the folder that was originally created?
 		}
 	}
 	return nil
@@ -341,6 +342,7 @@ func (c *gcsCore) unmountLayer(location string) error {
 				return errors.Wrapf(err, "failed to unmount mounted directory path '%s'", location)
 			}
 		}
+		// TODO: Should we be removing the mount folder?
 	}
 	return nil
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -409,18 +410,48 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 		return
 	}
 
-	// The request contains a JSON string field which is equivalent to a
-	// CreateContainerInfo struct.
-	var settings prot.VMHostedContainerSettings
-	if err := commonutils.UnmarshalJSONWithHresult([]byte(request.ContainerConfig), &settings); err != nil {
-		w.Error(request.ActivityID, errors.Wrapf(err, "failed to unmarshal JSON for ContainerConfig \"%s\"", request.ContainerConfig))
-		return
+	wasV2Config := false
+	id := request.ContainerID
+	if b.protVer >= prot.PvV4 {
+		// First try to determine if this is actually a V2 schema.
+		var settingsV2 prot.VMHostedContainerSettingsV2
+		var rawSettings json.RawMessage
+		settingsV2.OciSpec = rawSettings
+		if err := commonutils.UnmarshalJSONWithHresult([]byte(request.ContainerConfig), &settingsV2); err != nil {
+			w.Error(request.ActivityID, errors.Wrapf(err, "failed to unmarshal JSON for ContainerConfig \"%s\"", request.ContainerConfig))
+			return
+		}
+
+		if settingsV2.SchemaVersion.Cmp(prot.SchemaVersion{Major: 2, Minor: 0}) >= 0 {
+			wasV2Config = true
+
+			// We have a V2 schema that was passed. Get the OciSpec
+			oci := &oci.Spec{}
+			if err := commonutils.UnmarshalJSONWithHresult(rawSettings, oci); err != nil {
+				w.Error(request.ActivityID, errors.Wrapf(err, "failed to unmarshal OciSpec ContainerConfig \"%s\"", request.ContainerConfig))
+				return
+			}
+			settingsV2.OciSpec = oci
+			if err := b.coreint.CreateContainerV2(id, settingsV2); err != nil {
+				w.Error(request.ActivityID, err)
+				return
+			}
+		}
 	}
 
-	id := request.ContainerID
-	if err := b.coreint.CreateContainer(id, settings); err != nil {
-		w.Error(request.ActivityID, err)
-		return
+	// If it wasnt a V2 config try to fall back.
+	if !wasV2Config {
+		// The request contains a JSON string field which is equivalent to a
+		// CreateContainerInfo struct.
+		var settings prot.VMHostedContainerSettings
+		if err := commonutils.UnmarshalJSONWithHresult([]byte(request.ContainerConfig), &settings); err != nil {
+			w.Error(request.ActivityID, errors.Wrapf(err, "failed to unmarshal JSON for ContainerConfig \"%s\"", request.ContainerConfig))
+			return
+		}
+		if err := b.coreint.CreateContainer(id, settings); err != nil {
+			w.Error(request.ActivityID, err)
+			return
+		}
 	}
 
 	response := &prot.ContainerCreateResponse{

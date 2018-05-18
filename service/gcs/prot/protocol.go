@@ -665,6 +665,40 @@ type VMHostedContainerSettings struct {
 	NetworkAdapters    []NetworkAdapter `json:",omitempty"`
 }
 
+// SchemaVersion defines the version of the schema that should be deserialized.
+type SchemaVersion struct {
+	Major uint32 `json:",omitempty"`
+	Minor uint32 `json:",omitempty"`
+}
+
+// Cmp compares s and v and returns:
+//
+// -1 if s <  v
+//  0 if s == v
+//  1 if s >  v
+func (s *SchemaVersion) Cmp(v SchemaVersion) int {
+	if s.Major == v.Major {
+		if s.Minor == v.Minor {
+			return 0
+		} else if s.Minor < v.Minor {
+			return -1
+		}
+		return 1
+	} else if s.Major < v.Major {
+		return -1
+	}
+	return 1
+}
+
+// VMHostedContainerSettingsV2 defines the portion of the
+// ContainerCreate.ContainerConfig that is sent via a V2 call. This correlates
+// to the 'HostedSystem' on the HCS side but rather than sending the 'Container'
+// field the Linux GCS accepts an oci.Spec directly.
+type VMHostedContainerSettingsV2 struct {
+	SchemaVersion SchemaVersion
+	OciSpec       interface{}
+}
+
 // ProcessParameters represents any process which may be started in the utility
 // VM. This covers three cases:
 // 1.) It is an external process, i.e. a process running inside the utility VM
