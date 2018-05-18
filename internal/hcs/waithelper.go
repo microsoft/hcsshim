@@ -6,13 +6,13 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func processAsyncHcsResult(err error, resultp *uint16, callbackNumber uintptr, expectedNotification hcsNotification, timeout *time.Duration) error {
-	err = processHcsResult(err, resultp)
+func processAsyncHcsResult(err error, resultp *uint16, callbackNumber uintptr, expectedNotification hcsNotification, timeout *time.Duration) ([]ErrorEvent, error) {
+	events := processHcsResult(resultp)
 	if IsPending(err) {
-		return waitForNotification(callbackNumber, expectedNotification, timeout)
+		return nil, waitForNotification(callbackNumber, expectedNotification, timeout)
 	}
 
-	return err
+	return events, err
 }
 
 func waitForNotification(callbackNumber uintptr, expectedNotification hcsNotification, timeout *time.Duration) error {

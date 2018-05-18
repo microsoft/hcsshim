@@ -96,6 +96,7 @@ type ProcessError struct {
 	Operation string
 	ExtraInfo string
 	Err       error
+	Events    []hcs.ErrorEvent
 }
 
 // ContainerError is an error encountered in HCS during an operation on a Container object
@@ -104,6 +105,7 @@ type ContainerError struct {
 	Operation string
 	ExtraInfo string
 	Err       error
+	Events    []hcs.ErrorEvent
 }
 
 func (e *ContainerError) Error() string {
@@ -128,6 +130,10 @@ func (e *ContainerError) Error() string {
 		s += fmt.Sprintf(": failure in a Windows system call: %s (0x%x)", e.Err, hcserror.Win32FromError(e.Err))
 	default:
 		s += fmt.Sprintf(": %s", e.Err.Error())
+	}
+
+	for _, ev := range e.Events {
+		s += "\n" + ev.String()
 	}
 
 	if e.ExtraInfo != "" {
@@ -174,6 +180,10 @@ func (e *ProcessError) Error() string {
 		s += fmt.Sprintf(": %s", e.Err.Error())
 	}
 
+	for _, ev := range e.Events {
+		s += "\n" + ev.String()
+	}
+
 	return s
 }
 
@@ -210,14 +220,12 @@ func IsAlreadyClosed(err error) bool {
 // the requested operation is being completed in the background.
 func IsPending(err error) bool {
 	return hcs.IsPending(getInnerError(err))
-
 }
 
 // IsTimeout returns a boolean indicating whether the error is caused by
 // a timeout waiting for the operation to complete.
 func IsTimeout(err error) bool {
 	return hcs.IsTimeout(getInnerError(err))
-
 }
 
 // IsAlreadyStopped returns a boolean indicating whether the error is caused by
@@ -227,7 +235,6 @@ func IsTimeout(err error) bool {
 // will currently return true when the error is ErrElementNotFound or ErrProcNotFound.
 func IsAlreadyStopped(err error) bool {
 	return hcs.IsAlreadyStopped(getInnerError(err))
-
 }
 
 // IsNotSupported returns a boolean indicating whether the error is caused by
@@ -253,14 +260,14 @@ func getInnerError(err error) error {
 
 func convertSystemError(err error, c *container) error {
 	if serr, ok := err.(*hcs.SystemError); ok {
-		return &ContainerError{Container: c, Operation: serr.Operation, ExtraInfo: serr.ExtraInfo, Err: serr.Err}
+		return &ContainerError{Container: c, Operation: serr.Op, ExtraInfo: serr.Extra, Err: serr.Err, Events: serr.Events}
 	}
 	return err
 }
 
 func convertProcessError(err error, p *process) error {
 	if perr, ok := err.(*hcs.ProcessError); ok {
-		return &ProcessError{Process: p, Operation: perr.Operation, ExtraInfo: perr.ExtraInfo, Err: perr.Err}
+		return &ProcessError{Process: p, Operation: perr.Op, Err: perr.Err, Events: perr.Events}
 	}
 	return err
 }

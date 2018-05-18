@@ -74,14 +74,14 @@ func (process *Process) Kill() error {
 	logrus.Debugf(title+" processid=%d", process.processID)
 
 	if process.handle == 0 {
-		return makeProcessError(process, operation, "", ErrAlreadyClosed)
+		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
 	var resultp *uint16
 	err := hcsTerminateProcess(process.handle, &resultp)
-	err = processHcsResult(err, resultp)
+	events := processHcsResult(resultp)
 	if err != nil {
-		return makeProcessError(process, operation, "", err)
+		return makeProcessError(process, operation, err, events)
 	}
 
 	logrus.Debugf(title+" succeeded processid=%d", process.processID)
@@ -96,7 +96,7 @@ func (process *Process) Wait() error {
 
 	err := waitForNotification(process.callbackNumber, hcsNotificationProcessExited, nil)
 	if err != nil {
-		return makeProcessError(process, operation, "", err)
+		return makeProcessError(process, operation, err, nil)
 	}
 
 	logrus.Debugf(title+" succeeded processid=%d", process.processID)
@@ -112,7 +112,7 @@ func (process *Process) WaitTimeout(timeout time.Duration) error {
 
 	err := waitForNotification(process.callbackNumber, hcsNotificationProcessExited, &timeout)
 	if err != nil {
-		return makeProcessError(process, operation, "", err)
+		return makeProcessError(process, operation, err, nil)
 	}
 
 	logrus.Debugf(title+" succeeded processid=%d", process.processID)
@@ -128,7 +128,7 @@ func (process *Process) ResizeConsole(width, height uint16) error {
 	logrus.Debugf(title+" processid=%d", process.processID)
 
 	if process.handle == 0 {
-		return makeProcessError(process, operation, "", ErrAlreadyClosed)
+		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
 	modifyRequest := processModifyRequest{
@@ -148,9 +148,9 @@ func (process *Process) ResizeConsole(width, height uint16) error {
 
 	var resultp *uint16
 	err = hcsModifyProcess(process.handle, modifyRequestStr, &resultp)
-	err = processHcsResult(err, resultp)
+	events := processHcsResult(resultp)
 	if err != nil {
-		return makeProcessError(process, operation, "", err)
+		return makeProcessError(process, operation, err, events)
 	}
 
 	logrus.Debugf(title+" succeeded processid=%d", process.processID)
@@ -165,7 +165,7 @@ func (process *Process) Properties() (*ProcessStatus, error) {
 	logrus.Debugf(title+" processid=%d", process.processID)
 
 	if process.handle == 0 {
-		return nil, makeProcessError(process, operation, "", ErrAlreadyClosed)
+		return nil, makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
 	var (
@@ -173,9 +173,9 @@ func (process *Process) Properties() (*ProcessStatus, error) {
 		propertiesp *uint16
 	)
 	err := hcsGetProcessProperties(process.handle, &propertiesp, &resultp)
-	err = processHcsResult(err, resultp)
+	events := processHcsResult(resultp)
 	if err != nil {
-		return nil, err
+		return nil, makeProcessError(process, operation, err, events)
 	}
 
 	if propertiesp == nil {
@@ -185,7 +185,7 @@ func (process *Process) Properties() (*ProcessStatus, error) {
 
 	properties := &ProcessStatus{}
 	if err := json.Unmarshal(propertiesRaw, properties); err != nil {
-		return nil, err
+		return nil, makeProcessError(process, operation, err, nil)
 	}
 
 	logrus.Debugf(title+" succeeded processid=%d, properties=%s", process.processID, propertiesRaw)
@@ -198,15 +198,15 @@ func (process *Process) ExitCode() (int, error) {
 	operation := "ExitCode"
 	properties, err := process.Properties()
 	if err != nil {
-		return 0, makeProcessError(process, operation, "", err)
+		return 0, makeProcessError(process, operation, err, nil)
 	}
 
 	if properties.Exited == false {
-		return 0, makeProcessError(process, operation, "", ErrInvalidProcessState)
+		return 0, makeProcessError(process, operation, ErrInvalidProcessState, nil)
 	}
 
 	if properties.LastWaitResult != 0 {
-		return 0, makeProcessError(process, operation, "", syscall.Errno(properties.LastWaitResult))
+		return 0, makeProcessError(process, operation, syscall.Errno(properties.LastWaitResult), nil)
 	}
 
 	return int(properties.ExitCode), nil
@@ -223,7 +223,7 @@ func (process *Process) Stdio() (io.WriteCloser, io.ReadCloser, io.ReadCloser, e
 	logrus.Debugf(title+" processid=%d", process.processID)
 
 	if process.handle == 0 {
-		return nil, nil, nil, makeProcessError(process, operation, "", ErrAlreadyClosed)
+		return nil, nil, nil, makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
 	var stdIn, stdOut, stdErr syscall.Handle
@@ -234,9 +234,9 @@ func (process *Process) Stdio() (io.WriteCloser, io.ReadCloser, io.ReadCloser, e
 			resultp     *uint16
 		)
 		err := hcsGetProcessInfo(process.handle, &processInfo, &resultp)
-		err = processHcsResult(err, resultp)
+		events := processHcsResult(resultp)
 		if err != nil {
-			return nil, nil, nil, makeProcessError(process, operation, "", err)
+			return nil, nil, nil, makeProcessError(process, operation, err, events)
 		}
 
 		stdIn, stdOut, stdErr = processInfo.StdInput, processInfo.StdOutput, processInfo.StdError
@@ -250,7 +250,7 @@ func (process *Process) Stdio() (io.WriteCloser, io.ReadCloser, io.ReadCloser, e
 
 	pipes, err := makeOpenFiles([]syscall.Handle{stdIn, stdOut, stdErr})
 	if err != nil {
-		return nil, nil, nil, makeProcessError(process, operation, "", err)
+		return nil, nil, nil, makeProcessError(process, operation, err, nil)
 	}
 
 	logrus.Debugf(title+" succeeded processid=%d", process.processID)
@@ -267,7 +267,7 @@ func (process *Process) CloseStdin() error {
 	logrus.Debugf(title+" processid=%d", process.processID)
 
 	if process.handle == 0 {
-		return makeProcessError(process, operation, "", ErrAlreadyClosed)
+		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
 	modifyRequest := processModifyRequest{
@@ -286,9 +286,9 @@ func (process *Process) CloseStdin() error {
 
 	var resultp *uint16
 	err = hcsModifyProcess(process.handle, modifyRequestStr, &resultp)
-	err = processHcsResult(err, resultp)
+	events := processHcsResult(resultp)
 	if err != nil {
-		return makeProcessError(process, operation, "", err)
+		return makeProcessError(process, operation, err, events)
 	}
 
 	logrus.Debugf(title+" succeeded processid=%d", process.processID)
@@ -310,11 +310,11 @@ func (process *Process) Close() error {
 	}
 
 	if err := process.unregisterCallback(); err != nil {
-		return makeProcessError(process, operation, "", err)
+		return makeProcessError(process, operation, err, nil)
 	}
 
 	if err := hcsCloseProcess(process.handle); err != nil {
-		return makeProcessError(process, operation, "", err)
+		return makeProcessError(process, operation, err, nil)
 	}
 
 	process.handle = 0

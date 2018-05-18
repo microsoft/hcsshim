@@ -85,19 +85,21 @@ func CreateComputeSystem(id string, hcsDocumentInterface interface{}, additional
 
 	if createError == nil || IsPending(createError) {
 		if err := computeSystem.registerCallback(); err != nil {
-			// Terminate the computeSystem if it still exists. We're okay to ignore a failure here.
+			// Terminate the compute system if it still exists. We're okay to
+			// ignore a failure here.
 			computeSystem.Terminate()
-			return nil, makeSystemError(computeSystem, operation, "", err)
+			return nil, makeSystemError(computeSystem, operation, "", err, nil)
 		}
 	}
 
-	err = processAsyncHcsResult(createError, resultp, computeSystem.callbackNumber, hcsNotificationSystemCreateCompleted, &defaultTimeout)
+	events, err := processAsyncHcsResult(createError, resultp, computeSystem.callbackNumber, hcsNotificationSystemCreateCompleted, &defaultTimeout)
 	if err != nil {
 		if err == ErrTimeout {
-			// Terminate the compute system if it still exists. We're okay to ignore a failure here.
+			// Terminate the compute system if it still exists. We're okay to
+			// ignore a failure here.
 			computeSystem.Terminate()
 		}
-		return nil, makeSystemError(computeSystem, operation, hcsDocument, err)
+		return nil, makeSystemError(computeSystem, operation, hcsDocument, err, events)
 	}
 
 	logrus.Debugf(title+" succeeded id=%s handle=%d", id, computeSystem.handle)
@@ -119,15 +121,15 @@ func OpenComputeSystem(id string) (*System, error) {
 		resultp *uint16
 	)
 	err := hcsOpenComputeSystem(id, &handle, &resultp)
-	err = processHcsResult(err, resultp)
+	events := processHcsResult(resultp)
 	if err != nil {
-		return nil, makeSystemError(computeSystem, operation, "", err)
+		return nil, makeSystemError(computeSystem, operation, "", err, events)
 	}
 
 	computeSystem.handle = handle
 
 	if err := computeSystem.registerCallback(); err != nil {
-		return nil, makeSystemError(computeSystem, operation, "", err)
+		return nil, makeSystemError(computeSystem, operation, "", err, nil)
 	}
 
 	logrus.Debugf(title+" succeeded id=%s handle=%d", id, handle)
@@ -152,9 +154,9 @@ func GetComputeSystems(q schema1.ComputeSystemQuery) ([]schema1.ContainerPropert
 		computeSystemsp *uint16
 	)
 	err = hcsEnumerateComputeSystems(query, &computeSystemsp, &resultp)
-	err = processHcsResult(err, resultp)
+	events := processHcsResult(resultp)
 	if err != nil {
-		return nil, err
+		return nil, &HcsError{Op: operation, Err: err, Events: events}
 	}
 
 	if computeSystemsp == nil {
@@ -179,14 +181,14 @@ func (computeSystem *System) Start() error {
 	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed)
+		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed, nil)
 	}
 
 	var resultp *uint16
 	err := hcsStartComputeSystem(computeSystem.handle, "", &resultp)
-	err = processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemStartCompleted, &defaultTimeout)
+	events, err := processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemStartCompleted, &defaultTimeout)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, "", err)
+		return makeSystemError(computeSystem, operation, "", err, events)
 	}
 
 	logrus.Debugf(title+" succeeded id=%s", computeSystem.ID)
@@ -203,14 +205,14 @@ func (computeSystem *System) Shutdown() error {
 	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed)
+		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed, nil)
 	}
 
 	var resultp *uint16
 	err := hcsShutdownComputeSystem(computeSystem.handle, "", &resultp)
-	err = processHcsResult(err, resultp)
+	events := processHcsResult(resultp)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, "", err)
+		return makeSystemError(computeSystem, operation, "", err, events)
 	}
 
 	logrus.Debugf(title+" succeeded id=%s", computeSystem.ID)
@@ -227,14 +229,14 @@ func (computeSystem *System) Terminate() error {
 	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed)
+		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed, nil)
 	}
 
 	var resultp *uint16
 	err := hcsTerminateComputeSystem(computeSystem.handle, "", &resultp)
-	err = processHcsResult(err, resultp)
+	events := processHcsResult(resultp)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, "", err)
+		return makeSystemError(computeSystem, operation, "", err, events)
 	}
 
 	logrus.Debugf(title+" succeeded id=%s", computeSystem.ID)
@@ -249,7 +251,7 @@ func (computeSystem *System) Wait() error {
 
 	err := waitForNotification(computeSystem.callbackNumber, hcsNotificationSystemExited, nil)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, "", err)
+		return makeSystemError(computeSystem, operation, "", err, nil)
 	}
 
 	logrus.Debugf(title+" succeeded id=%s", computeSystem.ID)
@@ -265,7 +267,7 @@ func (computeSystem *System) WaitTimeout(timeout time.Duration) error {
 
 	err := waitForNotification(computeSystem.callbackNumber, hcsNotificationSystemExited, &timeout)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, "", err)
+		return makeSystemError(computeSystem, operation, "", err, nil)
 	}
 
 	logrus.Debugf(title+" succeeded id=%s", computeSystem.ID)
@@ -280,9 +282,9 @@ func (computeSystem *System) Properties(query string) (*schema1.ContainerPropert
 		propertiesp *uint16
 	)
 	err := hcsGetComputeSystemProperties(computeSystem.handle, query, &propertiesp, &resultp)
-	err = processHcsResult(err, resultp)
+	events := processHcsResult(resultp)
 	if err != nil {
-		return nil, err
+		return nil, makeSystemError(computeSystem, "Properties", "", err, events)
 	}
 
 	if propertiesp == nil {
@@ -305,14 +307,14 @@ func (computeSystem *System) Pause() error {
 	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed)
+		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed, nil)
 	}
 
 	var resultp *uint16
 	err := hcsPauseComputeSystem(computeSystem.handle, "", &resultp)
-	err = processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemPauseCompleted, &defaultTimeout)
+	events, err := processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemPauseCompleted, &defaultTimeout)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, "", err)
+		return makeSystemError(computeSystem, operation, "", err, events)
 	}
 
 	logrus.Debugf(title+" succeeded id=%s", computeSystem.ID)
@@ -328,14 +330,14 @@ func (computeSystem *System) Resume() error {
 	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed)
+		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed, nil)
 	}
 
 	var resultp *uint16
 	err := hcsResumeComputeSystem(computeSystem.handle, "", &resultp)
-	err = processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemResumeCompleted, &defaultTimeout)
+	events, err := processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemResumeCompleted, &defaultTimeout)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, "", err)
+		return makeSystemError(computeSystem, operation, "", err, events)
 	}
 
 	logrus.Debugf(title+" succeeded id=%s", computeSystem.ID)
@@ -355,7 +357,7 @@ func (computeSystem *System) CreateProcess(c *schema1.ProcessConfig) (*Process, 
 	)
 
 	if computeSystem.handle == 0 {
-		return nil, makeSystemError(computeSystem, operation, "", ErrAlreadyClosed)
+		return nil, makeSystemError(computeSystem, operation, "", ErrAlreadyClosed, nil)
 	}
 
 	// If we are not emulating a console, ignore any console size passed to us
@@ -366,16 +368,16 @@ func (computeSystem *System) CreateProcess(c *schema1.ProcessConfig) (*Process, 
 
 	configurationb, err := json.Marshal(c)
 	if err != nil {
-		return nil, makeSystemError(computeSystem, operation, "", err)
+		return nil, makeSystemError(computeSystem, operation, "", err, nil)
 	}
 
 	configuration := string(configurationb)
 	logrus.Debugf(title+" id=%s config=%s", computeSystem.ID, configuration)
 
 	err = hcsCreateProcess(computeSystem.handle, configuration, &processInfo, &processHandle, &resultp)
-	err = processHcsResult(err, resultp)
+	events := processHcsResult(resultp)
 	if err != nil {
-		return nil, makeSystemError(computeSystem, operation, configuration, err)
+		return nil, makeSystemError(computeSystem, operation, configuration, err, events)
 	}
 
 	process := &Process{
@@ -390,7 +392,7 @@ func (computeSystem *System) CreateProcess(c *schema1.ProcessConfig) (*Process, 
 	}
 
 	if err := process.registerCallback(); err != nil {
-		return nil, makeSystemError(computeSystem, operation, "", err)
+		return nil, makeSystemError(computeSystem, operation, "", err, nil)
 	}
 
 	logrus.Debugf(title+" succeeded id=%s processid=%d", computeSystem.ID, process.processID)
@@ -410,13 +412,13 @@ func (computeSystem *System) OpenProcess(pid int) (*Process, error) {
 	)
 
 	if computeSystem.handle == 0 {
-		return nil, makeSystemError(computeSystem, operation, "", ErrAlreadyClosed)
+		return nil, makeSystemError(computeSystem, operation, "", ErrAlreadyClosed, nil)
 	}
 
 	err := hcsOpenProcess(computeSystem.handle, uint32(pid), &processHandle, &resultp)
-	err = processHcsResult(err, resultp)
+	events := processHcsResult(resultp)
 	if err != nil {
-		return nil, makeSystemError(computeSystem, operation, "", err)
+		return nil, makeSystemError(computeSystem, operation, "", err, events)
 	}
 
 	process := &Process{
@@ -426,7 +428,7 @@ func (computeSystem *System) OpenProcess(pid int) (*Process, error) {
 	}
 
 	if err := process.registerCallback(); err != nil {
-		return nil, makeSystemError(computeSystem, operation, "", err)
+		return nil, makeSystemError(computeSystem, operation, "", err, nil)
 	}
 
 	logrus.Debugf(title+" succeeded id=%s processid=%s", computeSystem.ID, process.processID)
@@ -447,11 +449,11 @@ func (computeSystem *System) Close() error {
 	}
 
 	if err := computeSystem.unregisterCallback(); err != nil {
-		return makeSystemError(computeSystem, operation, "", err)
+		return makeSystemError(computeSystem, operation, "", err, nil)
 	}
 
 	if err := hcsCloseComputeSystem(computeSystem.handle); err != nil {
-		return makeSystemError(computeSystem, operation, "", err)
+		return makeSystemError(computeSystem, operation, "", err, nil)
 	}
 
 	computeSystem.handle = 0
@@ -525,7 +527,7 @@ func (computeSystem *System) Modify(config interface{}) error {
 	title := "HCSShim::ComputeSystem::" + operation
 
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed)
+		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed, nil)
 	}
 
 	requestJSON, err := json.Marshal(config)
@@ -538,9 +540,9 @@ func (computeSystem *System) Modify(config interface{}) error {
 
 	var resultp *uint16
 	err = hcsModifyComputeSystem(computeSystem.handle, requestString, &resultp)
-	err = processHcsResult(err, resultp)
+	events := processHcsResult(resultp)
 	if err != nil {
-		return makeSystemError(computeSystem, operation, "", err)
+		return makeSystemError(computeSystem, operation, "", err, events)
 	}
 	logrus.Debugf(title+" succeeded id=%s", computeSystem.ID)
 	return nil

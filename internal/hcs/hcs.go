@@ -5,10 +5,6 @@ package hcs
 
 import (
 	"syscall"
-
-	"github.com/Microsoft/hcsshim/internal/hcserror"
-	"github.com/Microsoft/hcsshim/internal/interop"
-	"github.com/sirupsen/logrus"
 )
 
 //go:generate go run ../../mksyscall_windows.go -output zsyscall_windows.go hcs.go
@@ -38,8 +34,6 @@ import (
 //sys hcsRegisterProcessCallback(process hcsProcess, callback uintptr, context uintptr, callbackHandle *hcsCallback) (hr error) = vmcompute.HcsRegisterProcessCallback?
 //sys hcsUnregisterProcessCallback(callbackHandle hcsCallback) (hr error) = vmcompute.HcsUnregisterProcessCallback?
 
-type HcsError = hcserror.HcsError
-
 type hcsSystem syscall.Handle
 type hcsProcess syscall.Handle
 type hcsCallback syscall.Handle
@@ -50,12 +44,4 @@ type hcsProcessInformation struct {
 	StdInput  syscall.Handle
 	StdOutput syscall.Handle
 	StdError  syscall.Handle
-}
-
-func processHcsResult(err error, resultp *uint16) error {
-	if resultp != nil {
-		result := interop.ConvertAndFreeCoTaskMemString(resultp)
-		logrus.Debugf("Result: %s", result)
-	}
-	return err
 }
