@@ -1,11 +1,13 @@
 package hcs
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"syscall"
 
-	"github.com/Microsoft/hcsshim/internal/hcserror"
+	"github.com/Microsoft/hcsshim/internal/interop"
+	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -74,93 +76,134 @@ var (
 	ErrPlatformNotSupported = errors.New("unsupported platform request")
 )
 
+type ErrorEvent struct {
+	Message    string `json:"Message,omitempty"`    // Fully formated error message
+	StackTrace string `json:"StackTrace,omitempty"` // Stack trace in string form
+	Provider   string `json:"Provider,omitempty"`
+	EventID    uint16 `json:"EventId,omitempty"`
+	Flags      uint32 `json:"Flags,omitempty"`
+	Source     string `json:"Source,omitempty"`
+	//Data       []EventData `json:"Data,omitempty"`  // Omit this as HCS doesn't encode this well. It's more confusing to include. It is however logged in debug mode (see processHcsResult function)
+}
+
+type hcsResult struct {
+	Error        int32
+	ErrorMessage string
+	ErrorEvents  []ErrorEvent `json:"ErrorEvents,omitempty"`
+}
+
+func (ev *ErrorEvent) String() string {
+	evs := "[Event Detail: " + ev.Message
+	if ev.StackTrace != "" {
+		evs += " Stack Trace: " + ev.StackTrace
+	}
+	if ev.Provider != "" {
+		evs += " Provider: " + ev.Provider
+	}
+	if ev.EventID != 0 {
+		evs = fmt.Sprintf("%s EventID: %d", evs, ev.EventID)
+	}
+	if ev.Flags != 0 {
+		evs = fmt.Sprintf("%s flags: %d", evs, ev.Flags)
+	}
+	if ev.Source != "" {
+		evs += " Source: " + ev.Source
+	}
+	evs += "]"
+	return evs
+}
+
+func processHcsResult(resultp *uint16) []ErrorEvent {
+	if resultp != nil {
+		resultj := interop.ConvertAndFreeCoTaskMemString(resultp)
+		logrus.Debugf("Result: %s", resultj)
+		result := &hcsResult{}
+		if err := json.Unmarshal([]byte(resultj), result); err != nil {
+			logrus.Warnf("Could not unmarshal HCS result %s: %s", resultj, err)
+			return nil
+		}
+		return result.ErrorEvents
+	}
+	return nil
+}
+
+type HcsError struct {
+	Op     string
+	Err    error
+	Events []ErrorEvent
+}
+
+func (e *HcsError) Error() string {
+	s := e.Op + ": " + e.Err.Error()
+	for _, ev := range e.Events {
+		s += "\n" + ev.String()
+	}
+	return s
+}
+
 // ProcessError is an error encountered in HCS during an operation on a Process object
 type ProcessError struct {
-	SystemID  string
-	PID       int
-	Operation string
-	ExtraInfo string
-	Err       error
+	SystemID string
+	PID      int
+	Op       string
+	Err      error
+	Events   []ErrorEvent
 }
 
 // SystemError is an error encountered in HCS during an operation on a Container object
 type SystemError struct {
-	ID        string
-	Operation string
-	ExtraInfo string
-	Err       error
+	ID     string
+	Op     string
+	Err    error
+	Extra  string
+	Events []ErrorEvent
 }
 
 func (e *SystemError) Error() string {
-	if e == nil {
-		return "<nil>"
+	s := e.Op + " " + e.ID + ": " + e.Err.Error()
+	for _, ev := range e.Events {
+		s += "\n" + ev.String()
 	}
-
-	s := "system " + e.ID
-
-	if e.Operation != "" {
-		s += " encountered an error during " + e.Operation
+	if e.Extra != "" {
+		s += "\n(extra info: " + e.Extra + ")"
 	}
-
-	switch e.Err.(type) {
-	case nil:
-		break
-	case syscall.Errno:
-		s += fmt.Sprintf(": failure in a Windows system call: %s (0x%x)", e.Err, hcserror.Win32FromError(e.Err))
-	default:
-		s += fmt.Sprintf(": %s", e.Err.Error())
-	}
-
-	if e.ExtraInfo != "" {
-		s += " extra info: " + e.ExtraInfo
-	}
-
 	return s
 }
 
-func makeSystemError(system *System, operation string, extraInfo string, err error) error {
+func makeSystemError(system *System, op string, extra string, err error, events []ErrorEvent) error {
 	// Don't double wrap errors
 	if _, ok := err.(*SystemError); ok {
 		return err
 	}
-	serr := &SystemError{ID: system.ID, Operation: operation, ExtraInfo: extraInfo, Err: err}
-	return serr
+	return &SystemError{
+		ID:     system.ID,
+		Op:     op,
+		Extra:  extra,
+		Err:    err,
+		Events: events,
+	}
 }
 
 func (e *ProcessError) Error() string {
-	if e == nil {
-		return "<nil>"
+	s := fmt.Sprintf("%s %s:%d: %s", e.Op, e.SystemID, e.PID, e.Err.Error())
+	for _, ev := range e.Events {
+		s += "\n" + ev.String()
 	}
-
-	s := fmt.Sprintf("process %d", e.PID)
-
-	if e.SystemID != "" {
-		s += " in container " + e.SystemID
-	}
-
-	if e.Operation != "" {
-		s += " encountered an error during " + e.Operation
-	}
-
-	switch e.Err.(type) {
-	case nil:
-		break
-	case syscall.Errno:
-		s += fmt.Sprintf(": failure in a Windows system call: %s (0x%x)", e.Err, hcserror.Win32FromError(e.Err))
-	default:
-		s += fmt.Sprintf(": %s", e.Err.Error())
-	}
-
 	return s
 }
 
-func makeProcessError(process *Process, operation string, extraInfo string, err error) error {
+func makeProcessError(process *Process, op string, err error, events []ErrorEvent) error {
 	// Don't double wrap errors
 	if _, ok := err.(*ProcessError); ok {
 		return err
 	}
-	processError := &ProcessError{PID: process.processID, SystemID: process.system.ID, Operation: operation, ExtraInfo: extraInfo, Err: err}
-	return processError
+	return &ProcessError{
+		PID:      process.processID,
+		SystemID: process.system.ID,
+		Op:       op,
+		Err:      err,
+		Events:   events,
+	}
 }
 
 // IsNotExist checks if an error is caused by the Container or Process not existing.
@@ -225,6 +268,8 @@ func getInnerError(err error) error {
 	switch pe := err.(type) {
 	case nil:
 		return nil
+	case *HcsError:
+		err = pe.Err
 	case *SystemError:
 		err = pe.Err
 	case *ProcessError:
