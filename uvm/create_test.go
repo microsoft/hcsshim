@@ -1,3 +1,5 @@
+// +build needsdocker
+
 package uvm
 
 import (
@@ -94,6 +96,16 @@ func TestCreateLCOW(t *testing.T) {
 	}
 	_, err := Create(opts)
 	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCreateWCOWBadLayerFolders(t *testing.T) {
+	opts := &UVMOptions{
+		OperatingSystem: "windows",
+	}
+	_, err := Create(opts)
+	if err == nil || (err != nil && err.Error() != `at least 2 LayerFolders must be supplied`) {
 		t.Fatal(err)
 	}
 }

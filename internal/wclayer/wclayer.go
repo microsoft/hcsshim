@@ -32,4 +32,6 @@ import "github.com/Microsoft/hcsshim/internal/guid"
 //sys exportLayerRead(context uintptr, buffer []byte, bytesRead *uint32) (hr error) = vmcompute.ExportLayerRead?
 //sys exportLayerEnd(context uintptr) (hr error) = vmcompute.ExportLayerEnd?
 
+//sys grantVmAccess(vmid string, filepath string) (hr error) = vmcompute.GrantVmAccess?
+
 type _guid = guid.GUID

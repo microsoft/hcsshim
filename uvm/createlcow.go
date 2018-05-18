@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Microsoft/hcsshim/cpu"
+	"github.com/Microsoft/hcsshim/internal/cpu"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
@@ -36,7 +36,7 @@ func (uvm *UtilityVM) createLCOW(opts *UVMOptions) error {
 
 	memory := int32(1024)
 	processors := int32(2)
-	if cpu.Count() == 1 {
+	if cpu.NumCPU() == 1 {
 		processors = 1
 	}
 	if opts.Resources != nil {
@@ -50,7 +50,7 @@ func (uvm *UtilityVM) createLCOW(opts *UVMOptions) error {
 
 	scsi := make(map[string]schema2.VirtualMachinesResourcesStorageScsiV2)
 	scsi["0"] = schema2.VirtualMachinesResourcesStorageScsiV2{Attachments: make(map[string]schema2.VirtualMachinesResourcesStorageAttachmentV2)}
-	hcsDocumentV2 := &schema2.ComputeSystemV2{
+	hcsDocument := &schema2.ComputeSystemV2{
 		Owner:         uvm.owner,
 		SchemaVersion: schemaversion.SchemaV20(),
 		VirtualMachine: &schema2.VirtualMachineV2{
@@ -94,19 +94,19 @@ func (uvm *UtilityVM) createLCOW(opts *UVMOptions) error {
 	}
 
 	if opts.KernelDebugMode {
-		hcsDocumentV2.VirtualMachine.Chipset.UEFI.BootThis.OptionalData += " console=ttyS0,115200"
-		hcsDocumentV2.VirtualMachine.Devices.COMPorts = &schema2.VirtualMachinesResourcesComPortsV2{Port1: opts.KernelDebugComPortPipe}
-		hcsDocumentV2.VirtualMachine.Devices.Keyboard = &schema2.VirtualMachinesResourcesKeyboardV2{}
-		hcsDocumentV2.VirtualMachine.Devices.Mouse = &schema2.VirtualMachinesResourcesMouseV2{}
-		hcsDocumentV2.VirtualMachine.Devices.Rdp = &schema2.VirtualMachinesResourcesRdpV2{}
-		hcsDocumentV2.VirtualMachine.Devices.VideoMonitor = &schema2.VirtualMachinesResourcesVideoMonitorV2{}
+		hcsDocument.VirtualMachine.Chipset.UEFI.BootThis.OptionalData += " console=ttyS0,115200"
+		hcsDocument.VirtualMachine.Devices.COMPorts = &schema2.VirtualMachinesResourcesComPortsV2{Port1: opts.KernelDebugComPortPipe}
+		hcsDocument.VirtualMachine.Devices.Keyboard = &schema2.VirtualMachinesResourcesKeyboardV2{}
+		hcsDocument.VirtualMachine.Devices.Mouse = &schema2.VirtualMachinesResourcesMouseV2{}
+		hcsDocument.VirtualMachine.Devices.Rdp = &schema2.VirtualMachinesResourcesRdpV2{}
+		hcsDocument.VirtualMachine.Devices.VideoMonitor = &schema2.VirtualMachinesResourcesVideoMonitorV2{}
 	}
 
 	if opts.KernelBootOptions != "" {
-		hcsDocumentV2.VirtualMachine.Chipset.UEFI.BootThis.OptionalData = hcsDocumentV2.VirtualMachine.Chipset.UEFI.BootThis.OptionalData + fmt.Sprintf(" %s", opts.KernelBootOptions)
+		hcsDocument.VirtualMachine.Chipset.UEFI.BootThis.OptionalData = hcsDocument.VirtualMachine.Chipset.UEFI.BootThis.OptionalData + fmt.Sprintf(" %s", opts.KernelBootOptions)
 	}
 
-	hcsSystem, err := hcs.CreateComputeSystem(uvm.id, hcsDocumentV2, opts.AdditionHCSDocumentJSON)
+	hcsSystem, err := hcs.CreateComputeSystem(uvm.id, hcsDocument, opts.AdditionHCSDocumentJSON)
 	if err != nil {
 		logrus.Debugln("failed to create UVM: ", err)
 		return err

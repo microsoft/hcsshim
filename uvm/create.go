@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Microsoft/hcsshim/guid"
+	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/sirupsen/logrus"
 )
 
@@ -32,11 +32,7 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 
 	// Defaults if omitted by caller.
 	if uvm.id == "" {
-		g, err := guid.GenerateGUID()
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate GUID for Id: %s", err)
-		}
-		uvm.id = g.ToString()
+		uvm.id = guid.New().String()
 	}
 	if uvm.owner == "" {
 		uvm.owner = filepath.Base(os.Args[0])
