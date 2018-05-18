@@ -397,6 +397,18 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 		return
 	}
 
+	// TODO: Remove BUGBUG - There is an issue in the HCS that doesnt honor the capabilities to skip the first
+	// create message. So this will detect the case and skip it.
+	if b.protVer == prot.PvV4 && request.ContainerID == "00000000-0000-0000-0000-000000000000" {
+		logrus.Debug("bridge: received first create message when capabilities requested no send.")
+		w.Write(&prot.ContainerCreateResponse{
+			MessageResponseBase: &prot.MessageResponseBase{
+				ActivityID: request.ActivityID,
+			},
+		})
+		return
+	}
+
 	// The request contains a JSON string field which is equivalent to a
 	// CreateContainerInfo struct.
 	var settings prot.VMHostedContainerSettings
