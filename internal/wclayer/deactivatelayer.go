@@ -6,24 +6,17 @@ import (
 )
 
 // DeactivateLayer will dismount a layer that was mounted via ActivateLayer.
-func DeactivateLayer(info DriverInfo, id string) error {
+func DeactivateLayer(path string) error {
 	title := "hcsshim::DeactivateLayer "
-	logrus.Debugf(title+"Flavour %d ID %s", info.Flavour, id)
+	logrus.Debugf(title+"path %s", path)
 
-	// Convert info to API calling convention
-	infop, err := convertDriverInfo(info)
+	err := deactivateLayer(&stdDriverInfo, path)
 	if err != nil {
+		err = hcserror.Errorf(err, title, "path=%s", path)
 		logrus.Error(err)
 		return err
 	}
 
-	err = deactivateLayer(&infop, id)
-	if err != nil {
-		err = hcserror.Errorf(err, title, "id=%s flavour=%d", id, info.Flavour)
-		logrus.Error(err)
-		return err
-	}
-
-	logrus.Debugf(title+"succeeded flavour=%d id=%s", info.Flavour, id)
+	logrus.Debugf(title+"succeeded path=%s", path)
 	return nil
 }

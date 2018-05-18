@@ -6,25 +6,18 @@ import (
 )
 
 // DestroyLayer will remove the on-disk files representing the layer with the given
-// id, including that layer's containing folder, if any.
-func DestroyLayer(info DriverInfo, id string) error {
+// path, including that layer's containing folder, if any.
+func DestroyLayer(path string) error {
 	title := "hcsshim::DestroyLayer "
-	logrus.Debugf(title+"Flavour %d ID %s", info.Flavour, id)
+	logrus.Debugf(title+"path %s", path)
 
-	// Convert info to API calling convention
-	infop, err := convertDriverInfo(info)
+	err := destroyLayer(&stdDriverInfo, path)
 	if err != nil {
+		err = hcserror.Errorf(err, title, "path=%s", path)
 		logrus.Error(err)
 		return err
 	}
 
-	err = destroyLayer(&infop, id)
-	if err != nil {
-		err = hcserror.Errorf(err, title, "id=%s flavour=%d", id, info.Flavour)
-		logrus.Error(err)
-		return err
-	}
-
-	logrus.Debugf(title+"succeeded flavour=%d id=%s", info.Flavour, id)
+	logrus.Debugf(title+"succeeded path=%s", path)
 	return nil
 }

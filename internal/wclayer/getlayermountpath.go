@@ -7,29 +7,22 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// GetLayerMountPath will look for a mounted layer with the given id and return
+// GetLayerMountPath will look for a mounted layer with the given path and return
 // the path at which that layer can be accessed.  This path may be a volume path
 // if the layer is a mounted read-write layer, otherwise it is expected to be the
 // folder path at which the layer is stored.
-func GetLayerMountPath(info DriverInfo, id string) (string, error) {
+func GetLayerMountPath(path string) (string, error) {
 	title := "hcsshim::GetLayerMountPath "
-	logrus.Debugf(title+"Flavour %d ID %s", info.Flavour, id)
-
-	// Convert info to API calling convention
-	infop, err := convertDriverInfo(info)
-	if err != nil {
-		logrus.Error(err)
-		return "", err
-	}
+	logrus.Debugf(title+"path %s", path)
 
 	var mountPathLength uintptr
 	mountPathLength = 0
 
 	// Call the procedure itself.
 	logrus.Debugf("Calling proc (1)")
-	err = getLayerMountPath(&infop, id, &mountPathLength, nil)
+	err := getLayerMountPath(&stdDriverInfo, path, &mountPathLength, nil)
 	if err != nil {
-		err = hcserror.Errorf(err, title, "(first call) id=%s flavour=%d", id, info.Flavour)
+		err = hcserror.Errorf(err, title, "(first call) path=%s", path)
 		logrus.Error(err)
 		return "", err
 	}
@@ -43,14 +36,14 @@ func GetLayerMountPath(info DriverInfo, id string) (string, error) {
 
 	// Call the procedure again
 	logrus.Debugf("Calling proc (2)")
-	err = getLayerMountPath(&infop, id, &mountPathLength, &mountPathp[0])
+	err = getLayerMountPath(&stdDriverInfo, path, &mountPathLength, &mountPathp[0])
 	if err != nil {
-		err = hcserror.Errorf(err, title, "(second call) id=%s flavour=%d", id, info.Flavour)
+		err = hcserror.Errorf(err, title, "(second call) path=%s", path)
 		logrus.Error(err)
 		return "", err
 	}
 
-	path := syscall.UTF16ToString(mountPathp[0:])
-	logrus.Debugf(title+"succeeded flavour=%d id=%s path=%s", info.Flavour, id, path)
-	return path, nil
+	mountPath := syscall.UTF16ToString(mountPathp[0:])
+	logrus.Debugf(title+"succeeded path=%s mountPath=%s", path, mountPath)
+	return mountPath, nil
 }

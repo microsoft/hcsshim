@@ -7,24 +7,17 @@ import (
 
 // UnprepareLayer disables the filesystem filter for the read-write layer with
 // the given id.
-func UnprepareLayer(info DriverInfo, layerId string) error {
+func UnprepareLayer(path string) error {
 	title := "hcsshim::UnprepareLayer "
-	logrus.Debugf(title+"flavour %d layerId %s", info.Flavour, layerId)
+	logrus.Debugf(title+"path %s", path)
 
-	// Convert info to API calling convention
-	infop, err := convertDriverInfo(info)
+	err := unprepareLayer(&stdDriverInfo, path)
 	if err != nil {
+		err = hcserror.Errorf(err, title, "path=%s", path)
 		logrus.Error(err)
 		return err
 	}
 
-	err = unprepareLayer(&infop, layerId)
-	if err != nil {
-		err = hcserror.Errorf(err, title, "layerId=%s flavour=%d", layerId, info.Flavour)
-		logrus.Error(err)
-		return err
-	}
-
-	logrus.Debugf(title+"succeeded flavour %d layerId=%s", info.Flavour, layerId)
+	logrus.Debugf(title+"succeeded path=%s", path)
 	return nil
 }
