@@ -1,7 +1,6 @@
 package hcsshim
 
 import (
-	"os"
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
@@ -56,14 +55,6 @@ const (
 // Supported resource types are Network and Request Types are Add/Remove
 type ResourceModificationRequestResponse = schema1.ResourceModificationRequestResponse
 
-// createContainerAdditionalJSON is read from the environment at initialisation
-// time. It allows an environment variable to define additional JSON which
-// is merged in the CreateContainer call to HCS.
-var createContainerAdditionalJSON string
-
-func init() {
-	createContainerAdditionalJSON = os.Getenv("HCSSHIM_CREATECONTAINER_ADDITIONALJSON")
-}
 
 type container struct {
 	system *hcs.System
@@ -71,17 +62,7 @@ type container struct {
 
 // CreateContainer creates a new container with the given configuration but does not start it.
 func CreateContainer(id string, c *ContainerConfig) (Container, error) {
-	system, err := hcs.CreateContainer(id, c)
-	if err != nil {
-		return nil, err
-	}
-	return &container{system}, err
-}
-
-// CreateContainerWithJSON creates a new container with the given configuration but does not start it.
-// It is identical to CreateContainer except that optional additional JSON can be merged before passing to HCS.
-func CreateContainerWithJSON(id string, c *ContainerConfig, additionalJSON string) (Container, error) {
-	system, err := hcs.CreateContainerWithJSON(id, c, additionalJSON)
+	system, err := hcs.CreateComputeSystem(id, c, "")
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +71,7 @@ func CreateContainerWithJSON(id string, c *ContainerConfig, additionalJSON strin
 
 // OpenContainer opens an existing container by ID.
 func OpenContainer(id string) (Container, error) {
-	system, err := hcs.OpenContainer(id)
+	system, err := hcs.OpenComputeSystem(id)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +80,7 @@ func OpenContainer(id string) (Container, error) {
 
 // GetContainers gets a list of the containers on the system that match the query
 func GetContainers(q ComputeSystemQuery) ([]ContainerProperties, error) {
-	return hcs.GetContainers(q)
+	return hcs.GetComputeSystems(q)
 }
 
 // Start synchronously starts the container.
