@@ -274,14 +274,17 @@ func (computeSystem *System) WaitTimeout(timeout time.Duration) error {
 	return nil
 }
 
-func (computeSystem *System) Properties(query string) (*schema1.ContainerProperties, error) {
+func (computeSystem *System) Properties(types ...schema1.PropertyType) (*schema1.ContainerProperties, error) {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
-	var (
-		resultp     *uint16
-		propertiesp *uint16
-	)
-	err := hcsGetComputeSystemProperties(computeSystem.handle, query, &propertiesp, &resultp)
+
+	queryj, err := json.Marshal(schema1.PropertyQuery{types})
+	if err != nil {
+		return nil, makeSystemError(computeSystem, "Properties", "", err, nil)
+	}
+
+	var resultp, propertiesp *uint16
+	err = hcsGetComputeSystemProperties(computeSystem.handle, string(queryj), &propertiesp, &resultp)
 	events := processHcsResult(resultp)
 	if err != nil {
 		return nil, makeSystemError(computeSystem, "Properties", "", err, events)
@@ -293,7 +296,7 @@ func (computeSystem *System) Properties(query string) (*schema1.ContainerPropert
 	propertiesRaw := interop.ConvertAndFreeCoTaskMemBytes(propertiesp)
 	properties := &schema1.ContainerProperties{}
 	if err := json.Unmarshal(propertiesRaw, properties); err != nil {
-		return nil, err
+		return nil, makeSystemError(computeSystem, "Properties", "", err, nil)
 	}
 	return properties, nil
 }

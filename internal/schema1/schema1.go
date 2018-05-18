@@ -101,9 +101,22 @@ type ComputeSystemQuery struct {
 	Owners []string `json:",omitempty"`
 }
 
+type PropertyType string
+
+const (
+	PropertyTypeStatistics        PropertyType = "Statistics"
+	PropertyTypeProcessList                    = "ProcessList"
+	PropertyTypeMappedVirtualDisk              = "MappedVirtualDisk"
+)
+
+type PropertyQuery struct {
+	PropertyTypes []PropertyType `json:",omitempty"`
+}
+
 // ContainerProperties holds the properties for a container and the processes running in that container
 type ContainerProperties struct {
 	ID                           string `json:"Id"`
+	State                        string
 	Name                         string
 	SystemType                   string
 	Owner                        string
