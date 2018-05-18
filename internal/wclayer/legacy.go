@@ -565,12 +565,6 @@ func cloneTree(srcRoot *os.File, destRoot *os.File, subPath string, mutatedFiles
 			}
 		}
 
-		// Don't recurse on reparse points in go1.8 and older. Filepath.Walk
-		// handles this in go1.9 and newer.
-		if isDir && isReparsePoint && shouldSkipDirectoryReparse {
-			return filepath.SkipDir
-		}
-
 		return nil
 	})
 	if err != nil {
