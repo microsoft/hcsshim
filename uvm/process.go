@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/Microsoft/hcsshim/internal/copywithtimeout"
 	"github.com/Microsoft/hcsshim/internal/hcs"
@@ -99,15 +98,13 @@ func (uvm *UtilityVM) CreateProcess(opts *ProcessOptions) (*hcs.Process, *ByteCo
 		return nil, nil, fmt.Errorf("failed to get stdio pipes for process %+v: %s", processConfig, err)
 	}
 
-	// TODO: The timeouts on the following Copies
-
 	// Send the data into the process's stdin
 	if opts.Stdin != nil {
 		if copiedByteCounts.In, err = copywithtimeout.Copy(processStdin,
 			opts.Stdin,
 			opts.ByteCounts.In,
 			fmt.Sprintf("CreateProcessEx: to stdin of %q", commandLine),
-			time.Duration(4*time.Minute)); err != nil {
+			defaultTimeoutSeconds); err != nil {
 			return nil, nil, err
 		}
 
@@ -127,7 +124,7 @@ func (uvm *UtilityVM) CreateProcess(opts *ProcessOptions) (*hcs.Process, *ByteCo
 			processStdout,
 			opts.ByteCounts.Out,
 			fmt.Sprintf("CreateProcessEx: from stdout from %q", commandLine),
-			time.Duration(4*time.Minute)); err != nil {
+			defaultTimeoutSeconds); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -139,7 +136,7 @@ func (uvm *UtilityVM) CreateProcess(opts *ProcessOptions) (*hcs.Process, *ByteCo
 			processStderr,
 			opts.ByteCounts.Err,
 			fmt.Sprintf("CreateProcessEx: from stderr of %s", commandLine),
-			time.Duration(4*time.Minute)); err != nil {
+			defaultTimeoutSeconds); err != nil {
 			return nil, nil, err
 		}
 	}
