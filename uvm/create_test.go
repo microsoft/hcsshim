@@ -1,20 +1,21 @@
-// +build rs5
+// +build functional
 
 package uvm
 
 import (
+	//"os"
 	"testing"
 
 	"github.com/sirupsen/logrus"
 )
 
 func init() {
-	if os.Getenv("HCSSHIM_TEST_DEBUG") != "" {
-		logrus.SetLevel(logrus.DebugLevel)
-		logrus.SetFormatter(&logrus.TextFormatter{
-			FullTimestamp: true,
-		})
-	}
+	//if os.Getenv("HCSSHIM_TEST_DEBUG") != "" {
+	logrus.SetLevel(logrus.DebugLevel)
+	logrus.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp: true,
+	})
+	//}
 }
 
 func TestCreateBadOS(t *testing.T) {
@@ -46,6 +47,24 @@ func TestCreateLCOW(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestCreateLCOWScratch(t *testing.T) {
+	opts := &UVMOptions{
+		OperatingSystem: "linux",
+	}
+	uvm, err := Create(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer uvm.Terminate()
+	if err := uvm.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if err := uvm.CreateLCOWScratch(`c:\foo.vhdx`, DefaultLCOWScratchSizeGB, ""); err != nil {
+		t.Fatal(err)
+	}
+
 }
 
 func TestCreateWCOWBadLayerFolders(t *testing.T) {
