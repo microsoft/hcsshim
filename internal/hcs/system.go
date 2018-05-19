@@ -31,13 +31,13 @@ type System struct {
 var createComputeSystemAdditionalJSON string
 
 func init() {
-	createComputeSystemAdditionalJSON = os.Getenv("HCSSHIM_CREATECOMPUTESYSTEM_ADDITIONALJSON")
+	createComputeSystemAdditionalJSON = os.Getenv("hcsshim::_CREATECOMPUTESYSTEM_ADDITIONALJSON")
 }
 
 // CreateComputeSystem creates a new compute system with the given configuration but does not start it.
 func CreateComputeSystem(id string, hcsDocumentInterface interface{}, additionalJSON string) (*System, error) {
 	operation := "CreateComputeSystem"
-	title := "HCSShim::" + operation
+	title := "hcsshim::" + operation
 
 	computeSystem := &System{
 		ID: id,
@@ -109,7 +109,7 @@ func CreateComputeSystem(id string, hcsDocumentInterface interface{}, additional
 // OpenComputeSystem opens an existing compute system by ID.
 func OpenComputeSystem(id string) (*System, error) {
 	operation := "OpenComputeSystem"
-	title := "HCSShim::" + operation
+	title := "hcsshim::" + operation
 	logrus.Debugf(title+" id=%s", id)
 
 	computeSystem := &System{
@@ -139,7 +139,7 @@ func OpenComputeSystem(id string) (*System, error) {
 // GetComputeSystems gets a list of the compute systems on the system that match the query
 func GetComputeSystems(q schema1.ComputeSystemQuery) ([]schema1.ContainerProperties, error) {
 	operation := "GetComputeSystems"
-	title := "HCSShim::" + operation
+	title := "hcsshim::" + operation
 
 	queryb, err := json.Marshal(q)
 	if err != nil {
@@ -177,7 +177,7 @@ func (computeSystem *System) Start() error {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 	operation := "Start"
-	title := "HCSShim::ComputeSystem::" + operation
+	title := "hcsshim::ComputeSystem::" + operation
 	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
 	if computeSystem.handle == 0 {
@@ -201,7 +201,7 @@ func (computeSystem *System) Shutdown() error {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 	operation := "Shutdown"
-	title := "HCSShim::ComputeSystem::" + operation
+	title := "hcsshim::ComputeSystem::" + operation
 	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
 	if computeSystem.handle == 0 {
@@ -225,7 +225,7 @@ func (computeSystem *System) Terminate() error {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 	operation := "Terminate"
-	title := "HCSShim::ComputeSystem::" + operation
+	title := "hcsshim::ComputeSystem::" + operation
 	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
 	if computeSystem.handle == 0 {
@@ -246,7 +246,7 @@ func (computeSystem *System) Terminate() error {
 // Wait synchronously waits for the compute system to shutdown or terminate.
 func (computeSystem *System) Wait() error {
 	operation := "Wait"
-	title := "HCSShim::ComputeSystem::" + operation
+	title := "hcsshim::ComputeSystem::" + operation
 	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
 	err := waitForNotification(computeSystem.callbackNumber, hcsNotificationSystemExited, nil)
@@ -262,7 +262,7 @@ func (computeSystem *System) Wait() error {
 // If the timeout expires, IsTimeout(err) == true
 func (computeSystem *System) WaitTimeout(timeout time.Duration) error {
 	operation := "WaitTimeout"
-	title := "HCSShim::ComputeSystem::" + operation
+	title := "hcsshim::ComputeSystem::" + operation
 	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
 	err := waitForNotification(computeSystem.callbackNumber, hcsNotificationSystemExited, &timeout)
@@ -306,7 +306,7 @@ func (computeSystem *System) Pause() error {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 	operation := "Pause"
-	title := "HCSShim::ComputeSystem::" + operation
+	title := "hcsshim::ComputeSystem::" + operation
 	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
 	if computeSystem.handle == 0 {
@@ -329,7 +329,7 @@ func (computeSystem *System) Resume() error {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 	operation := "Resume"
-	title := "HCSShim::ComputeSystem::" + operation
+	title := "hcsshim::ComputeSystem::" + operation
 	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
 	if computeSystem.handle == 0 {
@@ -352,7 +352,7 @@ func (computeSystem *System) CreateProcess(c *schema1.ProcessConfig) (*Process, 
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 	operation := "CreateProcess"
-	title := "HCSShim::ComputeSystem::" + operation
+	title := "hcsshim::ComputeSystem::" + operation
 	var (
 		processInfo   hcsProcessInformation
 		processHandle hcsProcess
@@ -407,7 +407,7 @@ func (computeSystem *System) OpenProcess(pid int) (*Process, error) {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 	operation := "OpenProcess"
-	title := "HCSShim::ComputeSystem::" + operation
+	title := "hcsshim::ComputeSystem::" + operation
 	logrus.Debugf(title+" id=%s, processid=%d", computeSystem.ID, pid)
 	var (
 		processHandle hcsProcess
@@ -443,7 +443,7 @@ func (computeSystem *System) Close() error {
 	computeSystem.handleLock.Lock()
 	defer computeSystem.handleLock.Unlock()
 	operation := "Close"
-	title := "HCSShim::ComputeSystem::" + operation
+	title := "hcsshim::ComputeSystem::" + operation
 	logrus.Debugf(title+" id=%s", computeSystem.ID)
 
 	// Don't double free this
@@ -527,7 +527,7 @@ func (computeSystem *System) Modify(config interface{}) error {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 	operation := "Modify"
-	title := "HCSShim::ComputeSystem::" + operation
+	title := "hcsshim::ComputeSystem::" + operation
 
 	if computeSystem.handle == 0 {
 		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed, nil)
