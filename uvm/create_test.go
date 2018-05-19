@@ -1,4 +1,4 @@
-// +build needsdocker
+// +build windows
 
 package uvm
 
