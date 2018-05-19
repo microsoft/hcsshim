@@ -13,8 +13,29 @@ import (
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
+
+// UVMOptions are the set of options passed to Create() to create a utility vm.
+type UVMOptions struct {
+	Id                      string                  // Identifier for the uvm. Defaults to generated GUID.
+	Owner                   string                  // Specifies the owner. Defaults to executable name.
+	OperatingSystem         string                  // "windows" or "linux".
+	Resources               *specs.WindowsResources // Optional resources for the utility VM. Supports Memory.limit and CPU.Count only currently. // TODO consider extending?
+	AdditionHCSDocumentJSON string                  // Optional additional JSON to merge into the HCS document prior
+
+	// WCOW specific parameters
+	LayerFolders []string // Set of folders for base layers and sandbox. Ordered from top most read-only through base read-only layer, followed by sandbox
+
+	// LCOW specific parameters
+	KirdPath               string // Folder in which kernel and initrd reside. Defaults to \Program Files\Linux Containers
+	KernelFile             string // Filename under KirdPath for the kernel. Defaults to bootx64.efi
+	InitrdFile             string // Filename under KirdPath for the initrd image. Defaults to initrd.img
+	KernelBootOptions      string // Additional boot options for the kernel
+	KernelDebugMode        bool   // Configures the kernel in debug mode using sane defaults
+	KernelDebugComPortPipe string // If kernel is in debug mode, can override the pipe here. Defaults to `\\.\pipe\vmpipe`
+}
 
 // Create creates an HCS compute system representing a utility VM.
 //
