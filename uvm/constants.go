@@ -6,4 +6,6 @@ const (
 
 	// defaultLCOWVhdxBlockSizeMB is the block-size for the sandbox/scratch VHDx's this package can create.
 	defaultLCOWVhdxBlockSizeMB = 1
+
+	maxVPMEM = 128
 )

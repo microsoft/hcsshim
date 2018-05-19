@@ -31,7 +31,7 @@ type UtilityVM struct {
 	// VPMEM devices that are mapped into a Linux UVM
 	vpmemLocations struct {
 		sync.Mutex
-		hostPath [128]string // Limited by ACPI size.
+		hostPath [maxVPMEM]string // Limited by ACPI size.
 	}
 
 	// SCSI devices that are mapped into a Windows or Linux utility VM

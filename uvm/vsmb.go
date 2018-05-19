@@ -88,20 +88,19 @@ func (uvm *UtilityVM) removeVSMB(path string) error {
 }
 
 // GetVSMBGUID returns the GUID used to mount a VSMB share in a utility VM
-// TODO: Rename path to hostPath
-func (uvm *UtilityVM) GetVSMBGUID(path string) (string, error) {
+func (uvm *UtilityVM) GetVSMBGUID(hostPath string) (string, error) {
 	if uvm.vsmbShares.shares == nil {
 		return "", fmt.Errorf("no vsmbShares in utility VM!")
 	}
-	if path == "" {
-		return "", fmt.Errorf("no path passed to GetVSMBShareGUID")
+	if hostPath == "" {
+		return "", fmt.Errorf("no hostPath passed to GetVSMBShareGUID")
 	}
 	uvm.vsmbShares.Lock()
 	defer uvm.vsmbShares.Unlock()
-	path = strings.ToLower(path)
-	if _, ok := uvm.vsmbShares.shares[path]; !ok {
-		return "", fmt.Errorf("%s not found as VSMB share in %s", path, uvm.id)
+	hostPath = strings.ToLower(hostPath)
+	if _, ok := uvm.vsmbShares.shares[hostPath]; !ok {
+		return "", fmt.Errorf("%s not found as VSMB share in %s", hostPath, uvm.id)
 	}
-	logrus.Debugf("uvm::GetVSMBGUID Success %s id:%s guid:%s", path, uvm.id, uvm.vsmbShares.shares[path].guid)
-	return uvm.vsmbShares.shares[path].guid, nil
+	logrus.Debugf("uvm::GetVSMBGUID Success %s id:%s guid:%s", hostPath, uvm.id, uvm.vsmbShares.shares[hostPath].guid)
+	return uvm.vsmbShares.shares[hostPath].guid, nil
 }
