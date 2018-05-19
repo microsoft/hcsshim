@@ -72,22 +72,26 @@ type ProcessOptions struct {
 
 // Start synchronously starts the utility VM.
 func (uvm *UtilityVM) Start() error {
+	panic("start not implemented")
 	return nil
 }
 
 // Terminate requests a utility VM terminate. If IsPending() on the error returned is true,
 // it may not actually be shut down until Wait() succeeds.
 func (uvm *UtilityVM) Terminate() error {
+	panic("terminate not implemented")
 	return nil
 }
 
 // Waits synchronously waits for a utility VM to terminate.
 func (uvm *UtilityVM) Wait() error {
+	panic("Wait not implemented")
 	return nil
 }
 
 // Modifies the compute system by sending a request to HCS
 func (uvm *UtilityVM) Modify(hcsModificationDocument interface{}) error {
+	panic("Modify not implemented")
 	return nil
 }
 
@@ -97,5 +101,6 @@ func (uvm *UtilityVM) Modify(hcsModificationDocument interface{}) error {
 //
 // TODO: This could be removed as on LCOW as we could run a privileged container.
 func (uvm *UtilityVM) CreateProcess(opts *ProcessOptions) error {
+	panic("CreateProcess not implemented")
 	return nil
 }
