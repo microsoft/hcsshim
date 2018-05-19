@@ -10,20 +10,16 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/osversion"
-
-	"github.com/Microsoft/hcsshim/internal/wclayer"
-
 	"github.com/Microsoft/hcsshim/internal/cpu"
-
-	"github.com/Microsoft/hcsshim/internal/schema1"
-
 	"github.com/Microsoft/hcsshim/internal/guid"
-
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/osversion"
 	version "github.com/Microsoft/hcsshim/internal/osversion"
+	"github.com/Microsoft/hcsshim/internal/schema1"
 	hcsschemav2 "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
+	"github.com/Microsoft/hcsshim/internal/uvmfolder"
+	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/uvm"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
@@ -298,7 +294,7 @@ func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem stri
 				v1.HvRuntime = &schema1.HvRuntime{ImagePath: coi.Spec.Windows.HyperV.UtilityVMPath}
 			} else {
 				// Client was lazy. Let's locate it from the layer folders instead.
-				uvmImagePath, err := LocateWCOWUVMFolderFromLayerFolders(coi.Spec.Windows.LayerFolders)
+				uvmImagePath, err := uvmfolder.LocateUVMFolder(coi.Spec.Windows.LayerFolders)
 				if err != nil {
 					return nil, err
 				}
@@ -408,30 +404,4 @@ func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem stri
 	}
 
 	return v2, nil
-}
-
-// LocateWCOWUVMFolderFromLayerFolders searches a set of layer folders to determine the "uppermost"
-// layer which has a utility VM image. The order of the layers is (for historical) reasons
-// Read-only-layers followed by an optional read-write layer. The RO layers are in reverse
-// order so that the upper-most RO layer is at the start, and the base OS layer is the
-// end.
-func LocateWCOWUVMFolderFromLayerFolders(layerFolders []string) (string, error) {
-	var uvmFolder string
-	index := 0
-	for _, layerFolder := range layerFolders {
-		_, err := os.Stat(filepath.Join(layerFolder, `UtilityVM`))
-		if err == nil {
-			uvmFolder = layerFolder
-			break
-		}
-		if !os.IsNotExist(err) {
-			return "", err
-		}
-		index++
-	}
-	if uvmFolder == "" {
-		return "", fmt.Errorf("utility VM folder could not be found in layers")
-	}
-	logrus.Debugf("hcsshim::LocateWCOWUVMFolderFromLayerFolders Index %d of %d possibles (%s)", index, len(layerFolders), uvmFolder)
-	return uvmFolder, nil
 }
