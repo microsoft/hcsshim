@@ -70,7 +70,7 @@ func (process *Process) Kill() error {
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
 	operation := "Kill"
-	title := "HCSShim::Process::" + operation
+	title := "hcsshim::Process::" + operation
 	logrus.Debugf(title+" processid=%d", process.processID)
 
 	if process.handle == 0 {
@@ -91,7 +91,7 @@ func (process *Process) Kill() error {
 // Wait waits for the process to exit.
 func (process *Process) Wait() error {
 	operation := "Wait"
-	title := "HCSShim::Process::" + operation
+	title := "hcsshim::Process::" + operation
 	logrus.Debugf(title+" processid=%d", process.processID)
 
 	err := waitForNotification(process.callbackNumber, hcsNotificationProcessExited, nil)
@@ -107,7 +107,7 @@ func (process *Process) Wait() error {
 // false if timeout occurs.
 func (process *Process) WaitTimeout(timeout time.Duration) error {
 	operation := "WaitTimeout"
-	title := "HCSShim::Process::" + operation
+	title := "hcsshim::Process::" + operation
 	logrus.Debugf(title+" processid=%d", process.processID)
 
 	err := waitForNotification(process.callbackNumber, hcsNotificationProcessExited, &timeout)
@@ -124,7 +124,7 @@ func (process *Process) ResizeConsole(width, height uint16) error {
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
 	operation := "ResizeConsole"
-	title := "HCSShim::Process::" + operation
+	title := "hcsshim::Process::" + operation
 	logrus.Debugf(title+" processid=%d", process.processID)
 
 	if process.handle == 0 {
@@ -161,7 +161,7 @@ func (process *Process) Properties() (*ProcessStatus, error) {
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
 	operation := "Properties"
-	title := "HCSShim::Process::" + operation
+	title := "hcsshim::Process::" + operation
 	logrus.Debugf(title+" processid=%d", process.processID)
 
 	if process.handle == 0 {
@@ -219,7 +219,7 @@ func (process *Process) Stdio() (io.WriteCloser, io.ReadCloser, io.ReadCloser, e
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
 	operation := "Stdio"
-	title := "HCSShim::Process::" + operation
+	title := "hcsshim::Process::" + operation
 	logrus.Debugf(title+" processid=%d", process.processID)
 
 	if process.handle == 0 {
@@ -263,7 +263,7 @@ func (process *Process) CloseStdin() error {
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
 	operation := "CloseStdin"
-	title := "HCSShim::Process::" + operation
+	title := "hcsshim::Process::" + operation
 	logrus.Debugf(title+" processid=%d", process.processID)
 
 	if process.handle == 0 {
@@ -301,7 +301,7 @@ func (process *Process) Close() error {
 	process.handleLock.Lock()
 	defer process.handleLock.Unlock()
 	operation := "Close"
-	title := "HCSShim::Process::" + operation
+	title := "hcsshim::Process::" + operation
 	logrus.Debugf(title+" processid=%d", process.processID)
 
 	// Don't double free this
