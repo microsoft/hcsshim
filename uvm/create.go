@@ -189,8 +189,7 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 		}
 		hcsDocument.VirtualMachine.Devices.VirtualSMBShares[0].Path = opts.KirdPath
 		hcsDocument.VirtualMachine.Devices.VirtualSMBShares[0].Flags = schema2.VsmbFlagReadOnly | schema2.VsmbFlagShareRead | schema2.VsmbFlagCacheIO | schema2.VsmbFlagTakeBackupPrivilege // 0x17 (23 dec)
-		// TODO: Consider making this flexible. Effectively the number of unique read-only layers available in the UVM. LCOW max is 128 in the platform.
-		hcsDocument.VirtualMachine.Devices.VPMem = &schema2.VirtualMachinesResourcesStorageVpmemControllerV2{MaximumCount: 128}
+		hcsDocument.VirtualMachine.Devices.VPMem = &schema2.VirtualMachinesResourcesStorageVpmemControllerV2{MaximumCount: maxVPMEM}
 
 		if opts.KernelDebugMode {
 			hcsDocument.VirtualMachine.Chipset.UEFI.BootThis.OptionalData += " console=ttyS0,115200"

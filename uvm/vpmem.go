@@ -49,9 +49,6 @@ func (uvm *UtilityVM) findVPMEMAttachment(findThisHostPath string) (int, error) 
 // Returns the location(0..255) where the device is attached, and if exposed,
 // the container path which will be /tmp/vpmem<location>/ if no container path
 // is supplied, or the user supplied one if it is.
-//
-// TODO: Consider a structure here so that we can extend for future functionality without
-//       breaking the API surface.
 func (uvm *UtilityVM) AddVPMEM(hostPath string, containerPath string, expose bool) (int, string, error) {
 	location := -1
 	logrus.Debugf("uvm::AddVPMEM id:%s hostPath:%s containerPath:%s expose:%t", uvm.id, hostPath, containerPath, expose)
