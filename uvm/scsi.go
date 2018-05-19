@@ -67,56 +67,6 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, containerPath string) (int, int, 
 	}
 	logrus.Debugf("uvm::AddSCSI id:%s hostPath:%s containerPath:%s", uvm.id, hostPath, containerPath)
 
-	// Keep in case we do add v1 here.
-	//	if uvm.OperatingSystem == "linux" && uvm.SchemaVersion.IsV10() {
-	//		modification := &ResourceModificationRequestResponse{
-	//			Resource: "MappedVirtualDisk",
-	//			Data: MappedVirtualDisk{
-	//				HostPath:          hostPath,
-	//				ContainerPath:     containerPath,
-	//				CreateInUtilityVM: true,
-	//				AttachOnly:        (containerPath == ""),
-	//			},
-	//			Request: "Add",
-	//		}
-	//		if err := uvm.Modify(modification); err != nil {
-	//			return -1, -1, fmt.Errorf("uvm::AddSCSI: failed to modify utility VM configuration: %s", err)
-	//		}
-
-	//		// Get the list of mapped virtual disks to find the controller and LUN IDs
-	//		logrus.Debugf("uvm::AddSCSI: %s querying mapped virtual disks", hostPath)
-	//		mvdControllers, err := uvm.mappedVirtualDisks()
-	//		if err != nil {
-	//			return -1, -1, fmt.Errorf("failed to get mapped virtual disks: %s", err)
-	//		}
-
-	//		// Find our mapped disk from the list of all currently added.
-	//		for controllerNumber, controllerElement := range mvdControllers {
-	//			for diskNumber, diskElement := range controllerElement.MappedVirtualDisks {
-	//				if diskElement.HostPath == hostPath {
-	//					controller = controllerNumber
-	//					lun = diskNumber
-	//					break
-	//				}
-	//			}
-	//		}
-	//		if controller == -1 || lun == -1 {
-	//			// We're somewhat stuffed here. Can't remove it as we don't know the controller/lun
-	//			return -1, -1, fmt.Errorf("failed to find %s in mapped virtual disks after hot-adding", hostPath)
-	//		}
-
-	//		uvm.scsiLocations.Lock()
-	//		defer uvm.scsiLocations.Unlock()
-	//		if uvm.scsiLocations.hostPath[controller][lun] != "" {
-	//			uvm.removeSCSI(hostPath, controller, lun)
-	//			return -1, -1, fmt.Errorf("internal consistency error - %d:%d is in use by %s", controller, lun, hostPath)
-	//		}
-	//		uvm.scsiLocations.hostPath[controller][lun] = hostPath
-
-	//		logrus.Debugf("uvm::AddSCSI success id:%s hostPath:%s added at %d:%d sv:%s", uvm.id, hostPath, controller, lun, uvm.SchemaVersion.String())
-	//		return controller, lun, nil
-	//	}
-
 	var err error
 	controller, lun, err = uvm.allocateSCSI(hostPath)
 	if err != nil {
@@ -179,17 +129,6 @@ func (uvm *UtilityVM) removeSCSI(hostPath string, controller int, lun int) error
 	var scsiModification interface{}
 	logrus.Debugf("uvm::RemoveSCSI id:%s hostPath:%s", uvm.id, hostPath)
 
-	// Keep in case we do add v1 here.
-	//	if uvm.OperatingSystem == "linux" && uvm.SchemaVersion.IsV10() {
-	//		scsiModification = &ResourceModificationRequestResponse{
-	//			Resource: "MappedVirtualDisk",
-	//			Data: MappedVirtualDisk{
-	//				HostPath:          hostPath,
-	//				CreateInUtilityVM: true,
-	//			},
-	//			Request: "Remove",
-	//		}
-	//	} else {
 	scsiModification = &schema2.ModifySettingsRequestV2{
 		ResourceType: schema2.ResourceTypeMappedVirtualDisk,
 		RequestType:  schema2.RequestTypeRemove,
