@@ -1,9 +1,12 @@
 package hcsshim
 
 import (
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/mergemaps"
 	"github.com/Microsoft/hcsshim/internal/schema1"
 )
 
@@ -52,9 +55,23 @@ type container struct {
 	system *hcs.System
 }
 
+// createComputeSystemAdditionalJSON is read from the environment at initialisation
+// time. It allows an environment variable to define additional JSON which
+// is merged in the CreateComputeSystem call to HCS.
+var createContainerAdditionalJSON []byte
+
+func init() {
+	createContainerAdditionalJSON = ([]byte)(os.Getenv("HCSSHIM_CREATECONTAINER_ADDITIONALJSON"))
+}
+
 // CreateContainer creates a new container with the given configuration but does not start it.
 func CreateContainer(id string, c *ContainerConfig) (Container, error) {
-	system, err := hcs.CreateComputeSystem(id, c, "")
+	fullConfig, err := mergemaps.MergeJSON(c, createContainerAdditionalJSON)
+	if err != nil {
+		return nil, fmt.Errorf("failed to merge additional JSON '%s': %s", createContainerAdditionalJSON, err)
+	}
+
+	system, err := hcs.CreateComputeSystem(id, fullConfig)
 	if err != nil {
 		return nil, err
 	}
