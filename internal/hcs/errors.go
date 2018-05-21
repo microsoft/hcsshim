@@ -144,7 +144,7 @@ func (e *HcsError) Error() string {
 // ProcessError is an error encountered in HCS during an operation on a Process object
 type ProcessError struct {
 	SystemID string
-	PID      int
+	Pid      int
 	Op       string
 	Err      error
 	Events   []ErrorEvent
@@ -176,7 +176,7 @@ func makeSystemError(system *System, op string, extra string, err error, events 
 		return err
 	}
 	return &SystemError{
-		ID:     system.ID,
+		ID:     system.ID(),
 		Op:     op,
 		Extra:  extra,
 		Err:    err,
@@ -185,7 +185,7 @@ func makeSystemError(system *System, op string, extra string, err error, events 
 }
 
 func (e *ProcessError) Error() string {
-	s := fmt.Sprintf("%s %s:%d: %s", e.Op, e.SystemID, e.PID, e.Err.Error())
+	s := fmt.Sprintf("%s %s:%d: %s", e.Op, e.SystemID, e.Pid, e.Err.Error())
 	for _, ev := range e.Events {
 		s += "\n" + ev.String()
 	}
@@ -198,8 +198,8 @@ func makeProcessError(process *Process, op string, err error, events []ErrorEven
 		return err
 	}
 	return &ProcessError{
-		PID:      process.processID,
-		SystemID: process.system.ID,
+		Pid:      process.Pid(),
+		SystemID: process.SystemID(),
 		Op:       op,
 		Err:      err,
 		Events:   events,

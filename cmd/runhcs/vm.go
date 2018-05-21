@@ -1,5 +1,3 @@
-// +build uvm
-
 package main
 
 import (
@@ -13,8 +11,7 @@ import (
 
 	winio "github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/appargs"
-	"github.com/Microsoft/hcsshim/internal/hcs"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/Microsoft/hcsshim/uvm"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -39,14 +36,14 @@ var vmshimCommand = cli.Command{
 
 		id := context.Args().First()
 
-		specj, err := ioutil.ReadAll(os.Stdin)
+		optsj, err := ioutil.ReadAll(os.Stdin)
 		if err != nil {
 			return err
 		}
 		os.Stdin.Close()
 
-		spec := &specs.Spec{}
-		err = json.Unmarshal(specj, spec)
+		opts := &uvm.UVMOptions{}
+		err = json.Unmarshal(optsj, opts)
 		if err != nil {
 			return err
 		}
@@ -57,7 +54,7 @@ var vmshimCommand = cli.Command{
 			return err
 		}
 
-		vm, err := startVM(id, spec)
+		vm, err := startVM(id, opts)
 		if err != nil {
 			return err
 		}
@@ -128,29 +125,20 @@ type vmRequest struct {
 	Op vmRequestOp
 }
 
-func startVM(id string, spec *specs.Spec) (*hcs.System, error) {
-	/* DISABLED
-	vm, err := hcsshim.CreateContainer(&hcsshim.CreateOptions{
-		Id:              vmID(id),
-		AsHostingSystem: true,
-		Spec:            spec,
-		SchemaVersion:   hcsshim.SchemaV20(),
-	})
+func startVM(id string, opts *uvm.UVMOptions) (*uvm.UtilityVM, error) {
+	vm, err := uvm.Create(opts)
 	if err != nil {
 		return nil, err
 	}
 	err = vm.Start()
 	if err != nil {
-		vm.Terminate()
 		vm.Close()
 		return nil, err
 	}
 	return vm, nil
-	*/
-	return nil, nil
 }
 
-func processRequest(vm *hcs.System, pipe net.Conn) error {
+func processRequest(vm *uvm.UtilityVM, pipe net.Conn) error {
 	var req vmRequest
 	err := json.NewDecoder(pipe).Decode(&req)
 	if err != nil {

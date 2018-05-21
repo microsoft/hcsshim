@@ -109,8 +109,7 @@ func main() {
 		startCommand,
 		stateCommand,
 		// updateCommand,
-		/* DISABLED
-		vmshimCommand, */
+		vmshimCommand,
 	}
 	app.Before = func(context *cli.Context) error {
 		if context.GlobalBool("debug") {

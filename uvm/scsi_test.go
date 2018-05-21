@@ -26,7 +26,6 @@ import (
 	"testing"
 	"time"
 
-	///	"github.com/Microsoft/hcsshim"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"

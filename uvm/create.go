@@ -20,7 +20,7 @@ import (
 
 // UVMOptions are the set of options passed to Create() to create a utility vm.
 type UVMOptions struct {
-	Id                      string                  // Identifier for the uvm. Defaults to generated GUID.
+	ID                      string                  // Identifier for the uvm. Defaults to generated GUID.
 	Owner                   string                  // Specifies the owner. Defaults to executable name.
 	OperatingSystem         string                  // "windows" or "linux".
 	Resources               *specs.WindowsResources // Optional resources for the utility VM. Supports Memory.limit and CPU.Count only currently. // TODO consider extending?
@@ -49,7 +49,7 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 	logrus.Debugf("uvm::Create %+v", opts)
 
 	uvm := &UtilityVM{
-		id:              opts.Id,
+		id:              opts.ID,
 		owner:           opts.Owner,
 		operatingSystem: opts.OperatingSystem,
 	}
@@ -222,7 +222,22 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 		uvm.scsiLocations.hostPath[0][0] = attachments["0"].Path
 	}
 	return uvm, nil
+}
 
+// ID returns the ID of the VM's compute system.
+func (uvm *UtilityVM) ID() string {
+	return uvm.hcsSystem.ID()
+}
+
+// OS returns the operating system of the utility VM.
+func (uvm *UtilityVM) OS() string {
+	return uvm.operatingSystem
+}
+
+// Close terminates and releases resources associated with the utility VM.
+func (uvm *UtilityVM) Close() error {
+	uvm.Terminate()
+	return uvm.hcsSystem.Close()
 }
 
 // CreateWCOWSandbox is a helper to create a sandbox for a Windows utility VM

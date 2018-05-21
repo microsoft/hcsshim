@@ -219,13 +219,17 @@ func startVMShim(id, logFile string, spec *specs.Spec) (*os.Process, error) {
 		}
 		layers[i] = f
 	}
-	vmspec := &specs.Spec{
-		Windows: &specs.Windows{
-			LayerFolders: layers,
-			Resources:    spec.Windows.Resources,
-		},
+	os := "windows"
+	if spec.Linux != nil {
+		os = "linux"
 	}
-	return launchShim("vmshim", "", logFile, []string{id}, vmspec)
+	opts := &uvm.UVMOptions{
+		ID:              vmID(id),
+		OperatingSystem: os,
+		LayerFolders:    layers,
+		Resources:       spec.Windows.Resources,
+	}
+	return launchShim("vmshim", "", logFile, []string{id}, opts)
 }
 
 type containerConfig struct {
@@ -331,12 +335,10 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		// Call to the VM shim process to create the container. This is done so
 		// that the VM process can keep track of the VM's virtual hardware
 		// resource use.
-		/* DISABLED
 		err = issueVMRequest(sandboxID, cfg.ID, opCreateContainer)
 		if err != nil {
 			return nil, err
 		}
-		*/
 		c.hc, err = hcs.OpenComputeSystem(cfg.ID)
 		if err != nil {
 			return nil, err
@@ -373,18 +375,16 @@ func (c *container) forceUnmount(vm *uvm.UtilityVM, all bool) error {
 		return err
 	}
 
-	/* DISABLED
 	// Unmount any VSMB mounts for volume mappings
 	if all && vm != nil {
 		for len(c.vsmbMounts) != 0 {
 			mount := c.vsmbMounts[len(c.vsmbMounts)-1]
-			if err := hcsshim.RemoveVSMB(vm, mount); err != nil {
+			if err := vm.RemoveVSMB(mount); err != nil {
 				return err
 			}
 			c.vsmbMounts = c.vsmbMounts[:len(c.vsmbMounts)-1]
 		}
 	}
-	*/
 
 	// Remember that the unmount is complete.
 	return stateKey.Set(c.ID, "mount", false)
@@ -401,7 +401,6 @@ func (c *container) Unmount(all bool) error {
 	}
 	if mounted {
 		if c.VMIsolated {
-			/* DISABLED
 			op := opUnmountContainerDiskOnly
 			if all {
 				// The sandbox i
@@ -413,7 +412,6 @@ func (c *container) Unmount(all bool) error {
 				// already.
 				err = nil
 			}
-			*/
 		} else {
 			err = c.forceUnmount(nil, true)
 		}
@@ -455,7 +453,7 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 
 	// Create the container without starting it.
 	opts := &hcsoci.CreateOptions{
-		Id:            c.ID,
+		ID:            c.ID,
 		Spec:          c.Spec,
 		HostingSystem: vm,
 	}
@@ -465,9 +463,7 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 
 	vmid := ""
 	if vm != nil {
-		/* DISABLED
 		vmid = vm.ID()
-		*/
 	}
 	logrus.Infof("creating container %s (VM: '%s')", c.ID, vmid)
 	hc, err := hcsoci.CreateContainer(opts)
@@ -475,12 +471,10 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 		return err
 	}
 	if vm != nil {
-		/* DISABLED
 		// Track the VSMB mounts to unmount later
 		for _, m := range c.Spec.Mounts {
 			c.vsmbMounts = append(c.vsmbMounts, m.Source)
 		}
-		*/
 	}
 	c.hc = hc
 	return nil
@@ -591,14 +585,12 @@ func (c *container) Remove() error {
 	// Follow kata's example and delay tearing down the VM until the owning
 	// container is removed.
 	if c.IsSandbox && c.VMIsolated {
-		/* DISABLED
-		vm, err := hcsshim.OpenContainer(vmID(c.ID))
+		vm, err := hcs.OpenComputeSystem(vmID(c.ID))
 		if err == nil {
-			if err := vm.Terminate(); hcsshim.IsPending(err) {
+			if err := vm.Terminate(); hcs.IsPending(err) {
 				vm.Wait()
 			}
 		}
-		*/
 	}
 	return stateKey.Remove(c.ID)
 }

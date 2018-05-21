@@ -4,7 +4,9 @@ package hcsoci
 
 import (
 	"fmt"
+	"path/filepath"
 
+	hcsschemav2 "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/uvm"
 	"github.com/pkg/errors"
@@ -20,7 +22,7 @@ import (
 // v2:    Xenon WCOW: Returns a CombinedLayersV2 structure where ContainerRootPath is a folder
 //                    inside the utility VM which is a GUID mapping of the sandbox folder. Each
 //                    of the layers are the VSMB locations where the read-only layers are mounted.
-
+//
 // TODO Should this return a string or an object? More efficient as object, but requires more client work to marshall it again.
 func MountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{}, error) {
 	logrus.Debugln("hcsshim::MountContainerLayers", layerFolders)
@@ -56,12 +58,8 @@ func MountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 		return mountPath, nil
 	}
 
-	return nil, errors.New("not supported")
-
-	/*DISABLED
-
 	// V2 UVM
-	logrus.Debugf("hcsshim::MountContainerLayers Is a %s V2 UVM", uvm.OperatingSystem)
+	logrus.Debugf("hcsshim::MountContainerLayers Is a %s V2 UVM", uvm.OS())
 
 	// 	Add each read-only layers. For Windows, this is a VSMB share with the ResourceUri ending in
 	// a GUID based on the folder path. For Linux, this is a VPMEM device.
@@ -72,7 +70,7 @@ func MountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 
 	for _, layerPath := range layerFolders[:len(layerFolders)-1] {
 		var err error
-		if uvm.OperatingSystem == "windows" {
+		if uvm.OS() == "windows" {
 			err = uvm.AddVSMB(layerPath, hcsschemav2.VsmbFlagReadOnly|hcsschemav2.VsmbFlagPseudoOplocks|hcsschemav2.VsmbFlagTakeBackupPrivilege|hcsschemav2.VsmbFlagCacheIO|hcsschemav2.VsmbFlagShareRead)
 			if err == nil {
 				vsmbAdded = append(vsmbAdded, layerPath)
@@ -85,7 +83,7 @@ func MountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 		}
 		if err != nil {
 			// TODO Remove VPMEM too now. And in all call sites below
-			uvm.removeVSMBOnMountFailure(vsmbAdded)
+			removeVSMBOnMountFailure(uvm, vsmbAdded)
 			return nil, err
 		}
 
@@ -95,31 +93,31 @@ func MountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 	// 	GUID is based on the folder in which the sandbox is located. Therefore, it is critical that if two containers
 	// 	are created in the same utility VM, they have unique sandbox directories.
 	_, sandboxPath := filepath.Split(layerFolders[len(layerFolders)-1])
-	containerPathGUID, err := NameToGuid(sandboxPath)
+	containerPathGUID, err := wclayer.NameToGuid(sandboxPath)
 	if err != nil {
-		uvm.removeVSMBOnMountFailure(vsmbAdded)
+		removeVSMBOnMountFailure(uvm, vsmbAdded)
 		return nil, err
 	}
 	hostPath := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
 
 	// TODO: Different container path for linux
-	containerPath := fmt.Sprintf(`C:\%s`, containerPathGUID.ToString())
-	controller, lun, err := uvm.AddSCSI(hostPath, containerPath)
+	containerPath := fmt.Sprintf(`C:\%s`, containerPathGUID)
+	_, _, err = uvm.AddSCSI(hostPath, containerPath)
 	if err != nil {
-		uvm.removeVSMBOnMountFailure(vsmbAdded)
+		removeVSMBOnMountFailure(uvm, vsmbAdded)
 		return nil, err
 	}
 
 	// 	Load the filter at the C:\<GUID> location calculated above. We pass into this request each of the
 	// 	read-only layer folders.
 	combinedLayers := hcsschemav2.CombinedLayersV2{}
-	if uvm.OperatingSystem == "windows" {
+	if uvm.OS() == "windows" {
 		layers := []hcsschemav2.ContainersResourcesLayerV2{}
 		for _, vsmb := range vsmbAdded {
 			vsmbGUID, err := uvm.GetVSMBGUID(vsmb)
 			if err != nil {
-				uvm.removeVSMBOnMountFailure(vsmbAdded)
-				uvm.removeSCSIOnMountFailure(hostPath, controller, lun)
+				removeVSMBOnMountFailure(uvm, vsmbAdded)
+				removeSCSIOnMountFailure(uvm, hostPath)
 				return nil, err
 			}
 			layers = append(layers, hcsschemav2.ContainersResourcesLayerV2{
@@ -128,7 +126,7 @@ func MountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 			})
 		}
 		combinedLayers = hcsschemav2.CombinedLayersV2{
-			ContainerRootPath: fmt.Sprintf(`C:\%s`, containerPathGUID.ToString()),
+			ContainerRootPath: fmt.Sprintf(`C:\%s`, containerPathGUID),
 			Layers:            layers,
 		}
 		combinedLayersModification := &hcsschemav2.ModifySettingsRequestV2{
@@ -137,14 +135,13 @@ func MountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 			HostedSettings: combinedLayers,
 		}
 		if err := uvm.Modify(combinedLayersModification); err != nil {
-			uvm.removeVSMBOnMountFailure(vsmbAdded)
-			uvm.removeSCSIOnMountFailure(hostPath, controller, lun)
+			removeVSMBOnMountFailure(uvm, vsmbAdded)
+			removeSCSIOnMountFailure(uvm, hostPath)
 			return nil, err
 		}
 	}
 	logrus.Debugln("hcsshim::MountContainerLayers Succeeded")
 	return combinedLayers, nil
-	*/
 }
 
 // UnmountOperation is used when calling Unmount() to determine what type of unmount is
@@ -185,10 +182,6 @@ func UnmountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM, op Unmoun
 
 	// V2 Xenon
 
-	return errors.New("not supported")
-
-	/* DISABLED
-
 	// Base+Sandbox as a minimum. This is different to v1 which only requires the sandbox
 	if len(layerFolders) < 2 {
 		return fmt.Errorf("at least two layers are required for unmount")
@@ -217,34 +210,24 @@ func UnmountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM, op Unmoun
 		}
 
 		// Hot remove the sandbox from the SCSI controller
-		uvm.scsiLocations.Lock()
 		hostSandboxFile := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
-		controller, lun, err := uvm.findSCSIAttachment(hostSandboxFile)
-		if err != nil {
-			logrus.Warnf("sandbox %s is not attached to SCSI - cannot remove!", hostSandboxFile)
-		} else {
-			containerRootPath := fmt.Sprintf(`C:\%s`, containerPathGUID.String())
-			logrus.Debugf("hcsshim::UnmountContainerLayers SCSI %d:%d %s %s", controller, lun, containerRootPath, hostSandboxFile)
-			if err := uvm.removeSCSI(hostSandboxFile, controller, lun); err != nil {
-				e := fmt.Errorf("failed to remove SCSI %s: %s", hostSandboxFile, err)
-				logrus.Debugln(e)
-				if retError == nil {
-					retError = e
-				} else {
-					retError = errors.Wrapf(retError, e.Error())
-				}
+		containerRootPath := fmt.Sprintf(`C:\%s`, containerPathGUID.String())
+		logrus.Debugf("hcsshim::UnmountContainerLayers SCSI %s %s", containerRootPath, hostSandboxFile)
+		if err := uvm.RemoveSCSI(hostSandboxFile); err != nil {
+			e := fmt.Errorf("failed to remove SCSI %s: %s", hostSandboxFile, err)
+			logrus.Debugln(e)
+			if retError == nil {
+				retError = e
+			} else {
+				retError = errors.Wrapf(retError, e.Error())
 			}
 		}
-		uvm.scsiLocations.Unlock()
 	}
 
 	// Remove each of the read-only layers from VSMB. These's are ref-counted and
 	// only removed once the count drops to zero. This allows multiple containers
 	// to share layers.
 	if len(layerFolders) > 1 && (op&UnmountOperationVSMB) == UnmountOperationVSMB {
-		if uvm.vsmbShares.shares == nil {
-			uvm.vsmbShares.shares = make(map[string]vsmbShare)
-		}
 		for _, layerPath := range layerFolders[:len(layerFolders)-1] {
 			if e := uvm.RemoveVSMB(layerPath); e != nil {
 				logrus.Debugln(e)
@@ -260,17 +243,11 @@ func UnmountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM, op Unmoun
 	// TODO (possibly) Consider deleting the container directory in the utility VM
 
 	return retError
-	*/
 }
-
-/* DISABLED
 
 // removeVSMBOnMountFailure is a helper to roll-back any VSMB shares added to a utility VM on a failure path
 // The mutex must NOT be held when calling this function.
 func removeVSMBOnMountFailure(uvm *uvm.UtilityVM, toRemove []string) {
-	if len(toRemove) == 0 {
-		return
-	}
 	for _, vsmbShare := range toRemove {
 		if err := uvm.RemoveVSMB(vsmbShare); err != nil {
 			logrus.Warnf("Possibly leaked vsmbshare on error removal path: %s", err)
@@ -280,10 +257,8 @@ func removeVSMBOnMountFailure(uvm *uvm.UtilityVM, toRemove []string) {
 
 // removeSCSIOnMountFailure is a helper to roll-back a SCSI disk added to a utility VM on a failure path.
 // The mutex must NOT be held when calling this function.
-func removeSCSIOnMountFailure(uvm *uvm.UtilityVM, hostPath string, controller int, lun int) {
-	if err := uvm.RemoveSCSI(hostPath, controller, lun); err != nil {
+func removeSCSIOnMountFailure(uvm *uvm.UtilityVM, hostPath string) {
+	if err := uvm.RemoveSCSI(hostPath); err != nil {
 		logrus.Warnf("Possibly leaked SCSI disk on error removal path: %s", err)
 	}
 }
-
-*/

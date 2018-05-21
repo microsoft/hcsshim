@@ -10,7 +10,6 @@ import (
 // ContainerError is an error encountered in HCS
 type process struct {
 	p *hcs.Process
-	c *container
 }
 
 // Pid returns the process ID of the process within the container.

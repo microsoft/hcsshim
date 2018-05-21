@@ -86,5 +86,5 @@ func createLCOWContainer(coi *createOptionsInternal) (*hcs.System, error) {
 		return nil, err
 	}
 
-	return hcs.CreateComputeSystem(coi.actualId, hcsDocument)
+	return hcs.CreateComputeSystem(coi.actualID, hcsDocument)
 }
