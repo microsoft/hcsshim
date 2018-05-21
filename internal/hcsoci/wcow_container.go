@@ -100,7 +100,7 @@ func createWCOWContainer(coi *createOptionsInternal) (*hcs.System, error) {
 		return nil, err
 	}
 
-	return hcs.CreateComputeSystem(coi.actualId, hcsDocument, "")
+	return hcs.CreateComputeSystem(coi.actualId, hcsDocument)
 }
 
 func undoMountOnFailure(coi *createOptionsInternal, origSpecRoot *specs.Root, weMountedStorage bool, vsmbMountsAddedByUs []string, currentError error) error {

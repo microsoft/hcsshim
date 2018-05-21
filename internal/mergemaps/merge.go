@@ -1,5 +1,7 @@
 package mergemaps
 
+import "encoding/json"
+
 // Merge recursively merges map `fromMap` into map `ToMap`. Any pre-existing values
 // in ToMap are overwritten. Values in fromMap are added to ToMap.
 // From http://stackoverflow.com/questions/40491438/merging-two-json-strings-in-golang
@@ -25,4 +27,26 @@ func Merge(fromMap, ToMap interface{}) interface{} {
 		}
 	}
 	return fromMap
+}
+
+// MergeJSON merges the contents of a JSON string into an object representation,
+// returning a new object suitable for translating to JSON.
+func MergeJSON(object interface{}, additionalJSON []byte) (interface{}, error) {
+	if len(additionalJSON) == 0 {
+		return object, nil
+	}
+	objectJSON, err := json.Marshal(object)
+	if err != nil {
+		return nil, err
+	}
+	var objectMap, newMap map[string]interface{}
+	err = json.Unmarshal(objectJSON, &objectMap)
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal(additionalJSON, &newMap)
+	if err != nil {
+		return nil, err
+	}
+	return Merge(newMap, objectMap), nil
 }

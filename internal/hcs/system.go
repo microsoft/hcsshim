@@ -2,14 +2,11 @@ package hcs
 
 import (
 	"encoding/json"
-	"fmt"
-	"os"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/interop"
-	"github.com/Microsoft/hcsshim/internal/mergemaps"
 	"github.com/Microsoft/hcsshim/internal/schema1"
 	"github.com/sirupsen/logrus"
 )
@@ -25,17 +22,8 @@ type System struct {
 	callbackNumber uintptr
 }
 
-// createComputeSystemAdditionalJSON is read from the environment at initialisation
-// time. It allows an environment variable to define additional JSON which
-// is merged in the CreateComputeSystem call to HCS.
-var createComputeSystemAdditionalJSON string
-
-func init() {
-	createComputeSystemAdditionalJSON = os.Getenv("hcsshim::_CREATECOMPUTESYSTEM_ADDITIONALJSON")
-}
-
 // CreateComputeSystem creates a new compute system with the given configuration but does not start it.
-func CreateComputeSystem(id string, hcsDocumentInterface interface{}, additionalJSON string) (*System, error) {
+func CreateComputeSystem(id string, hcsDocumentInterface interface{}) (*System, error) {
 	operation := "CreateComputeSystem"
 	title := "hcsshim::" + operation
 
@@ -50,32 +38,6 @@ func CreateComputeSystem(id string, hcsDocumentInterface interface{}, additional
 
 	hcsDocument := string(hcsDocumentB)
 	logrus.Debugf(title+" id=%s config=%s", id, hcsDocument)
-
-	// Merge any additional JSON. Priority is given to what is passed in explicitly,
-	// falling back to what's set in the environment.
-	if additionalJSON == "" && createComputeSystemAdditionalJSON != "" {
-		additionalJSON = createComputeSystemAdditionalJSON
-	}
-	if additionalJSON != "" {
-		hcsDocumentMap := map[string]interface{}{}
-		if err := json.Unmarshal([]byte(hcsDocument), &hcsDocumentMap); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal %s: %s", hcsDocument, err)
-		}
-
-		additionalMap := map[string]interface{}{}
-		if err := json.Unmarshal([]byte(additionalJSON), &additionalMap); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal %s: %s", additionalJSON, err)
-		}
-
-		mergedMap := mergemaps.Merge(additionalMap, hcsDocumentMap)
-		mergedJSON, err := json.Marshal(mergedMap)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal merged configuration map %+v: %s", mergedMap, err)
-		}
-
-		hcsDocument = string(mergedJSON)
-		logrus.Debugf(title+" id=%s merged config=%s", id, hcsDocument)
-	}
 
 	var (
 		resultp  *uint16

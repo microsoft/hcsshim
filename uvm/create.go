@@ -9,6 +9,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cpu"
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/mergemaps"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
@@ -205,7 +206,12 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 		}
 	}
 
-	hcsSystem, err := hcs.CreateComputeSystem(uvm.id, hcsDocument, opts.AdditionHCSDocumentJSON)
+	fullDoc, err := mergemaps.MergeJSON(hcsDocument, ([]byte)(opts.AdditionHCSDocumentJSON))
+	if err != nil {
+		return nil, fmt.Errorf("failed to merge additional JSON '%s': %s", opts.AdditionHCSDocumentJSON, err)
+	}
+
+	hcsSystem, err := hcs.CreateComputeSystem(uvm.id, fullDoc)
 	if err != nil {
 		logrus.Debugln("failed to create UVM: ", err)
 		return nil, err
