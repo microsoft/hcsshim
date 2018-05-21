@@ -42,7 +42,7 @@ signal to the init process of the "ubuntu01" container:
 		}
 
 		var pid int
-		if err := stateKey.Get(id, "pid", &pid); err != nil {
+		if err := stateKey.Get(id, keyInitPid, &pid); err != nil {
 			return err
 		}
 

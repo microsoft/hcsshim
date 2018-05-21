@@ -198,11 +198,11 @@ func TestID(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	layers := append(layersNanoserver, tempDir)
-	mountPath, err := MountContainerLayers(layers, nil)
+	mountPath, err := mountContainerLayers(layers, nil)
 	if err != nil {
 		t.Fatalf("failed to mount container storage: %s", err)
 	}
-	defer UnmountContainerLayers(layers, nil, UnmountOperationAll)
+	defer unmountContainerLayers(layers, nil, unmountOperationAll)
 
 	c, err := CreateContainer(&CreateOptions{
 		Id:            "gruntbuggly",

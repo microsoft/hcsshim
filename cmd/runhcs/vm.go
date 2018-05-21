@@ -11,6 +11,7 @@ import (
 
 	winio "github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/appargs"
+	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/uvm"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -168,10 +169,13 @@ func processRequest(vm *uvm.UtilityVM, pipe net.Conn) error {
 		c = nil
 
 	case opUnmountContainer, opUnmountContainerDiskOnly:
-		err = c.forceUnmount(vm, req.Op == opUnmountContainer)
-		if err != nil {
-			return err
+		if c.resources != nil {
+			err := hcsoci.ReleaseResources(c.resources, vm, req.Op == opUnmountContainerDiskOnly)
+			if err != nil {
+				return err
+			}
 		}
+		c.resources = nil
 
 	default:
 		panic("unknown operation")

@@ -22,11 +22,11 @@ func TestV1Argon(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	layers := append(layersNanoserver, tempDir)
-	mountPath, err := MountContainerLayers(layers, nil)
+	mountPath, err := mountContainerLayers(layers, nil)
 	if err != nil {
 		t.Fatalf("failed to mount container storage: %s", err)
 	}
-	defer UnmountContainerLayers(layers, nil, UnmountOperationAll)
+	defer unmountContainerLayers(layers, nil, unmountOperationAll)
 
 	c, err := CreateContainer(&CreateOptions{
 		SchemaVersion: schemaversion.SchemaV10(),
@@ -63,7 +63,7 @@ func TestV1ArgonAutoMount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed create: %s", err)
 	}
-	defer UnmountContainerLayers(layers, nil, UnmountOperationAll)
+	defer unmountContainerLayers(layers, nil, unmountOperationAll)
 	startContainer(t, c)
 	runCommand(t, c, "cmd /s /c echo Hello", `c:\`, "Hello")
 	stopContainer(t, c)
@@ -88,7 +88,7 @@ func TestV1ArgonMultipleBaseLayersAutoMount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed create: %s", err)
 	}
-	defer UnmountContainerLayers(layers, nil, UnmountOperationAll)
+	defer unmountContainerLayers(layers, nil, unmountOperationAll)
 	startContainer(t, c)
 	runCommand(t, c, "cmd /s /c echo Hello", `c:\`, "Hello")
 	stopContainer(t, c)
@@ -123,7 +123,7 @@ func TestV1ArgonSingleMappedDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed create: %s", err)
 	}
-	defer UnmountContainerLayers(layers, nil, UnmountOperationAll)
+	defer unmountContainerLayers(layers, nil, unmountOperationAll)
 
 	startContainer(t, c)
 	runCommand(t, c, `cmd /s /c dir /b c:\foo`, `c:\`, "foo.txt")
@@ -143,11 +143,11 @@ func TestV2Argon(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	layers := append(layersNanoserver, tempDir)
-	mountPath, err := MountContainerLayers(layers, nil)
+	mountPath, err := mountContainerLayers(layers, nil)
 	if err != nil {
 		t.Fatalf("failed to mount container storage: %s", err)
 	}
-	defer UnmountContainerLayers(layers, nil, UnmountOperationAll)
+	defer unmountContainerLayers(layers, nil, unmountOperationAll)
 
 	c, err := CreateContainer(&CreateOptions{
 		SchemaVersion: schemaversion.SchemaV20(),
@@ -174,11 +174,11 @@ func TestV2ArgonMultipleBaseLayers(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	layers := append(layersBusybox, tempDir)
-	mountPath, err := MountContainerLayers(layers, nil)
+	mountPath, err := mountContainerLayers(layers, nil)
 	if err != nil {
 		t.Fatalf("failed to mount container storage: %s", err)
 	}
-	defer UnmountContainerLayers(layers, nil, UnmountOperationAll)
+	defer unmountContainerLayers(layers, nil, unmountOperationAll)
 
 	c, err := CreateContainer(&CreateOptions{
 		SchemaVersion: schemaversion.SchemaV20(),
@@ -216,7 +216,7 @@ func TestV2ArgonAutoMountMultipleBaseLayers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed create: %s", err)
 	}
-	defer UnmountContainerLayers(layers, nil, UnmountOperationAll)
+	defer unmountContainerLayers(layers, nil, unmountOperationAll)
 	startContainer(t, c)
 	runCommand(t, c, "cmd /s /c echo Hello", `c:\`, "Hello")
 	stopContainer(t, c)
@@ -251,7 +251,7 @@ func TestV2ArgonSingleMappedDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed create: %s", err)
 	}
-	defer UnmountContainerLayers(layers, nil, UnmountOperationAll)
+	defer unmountContainerLayers(layers, nil, unmountOperationAll)
 
 	startContainer(t, c)
 	runCommand(t, c, `cmd /s /c dir /b c:\foo`, `c:\`, "foo.txt")
