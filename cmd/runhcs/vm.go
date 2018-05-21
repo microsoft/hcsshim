@@ -34,8 +34,8 @@ var vmshimCommand = cli.Command{
 	Flags:  []cli.Flag{},
 	Before: appargs.Validate(argID),
 	Action: func(context *cli.Context) error {
-		// Stdout is not used.
-		os.Stdout.Close()
+		logrus.SetOutput(os.Stderr)
+		fatalWriter.Writer = os.Stdout
 
 		id := context.Args().First()
 
@@ -72,8 +72,8 @@ var vmshimCommand = cli.Command{
 
 		// Alert the parent process that initialization has completed
 		// successfully.
-		os.Stderr.Write(shimSuccess)
-		os.Stderr.Close()
+		os.Stdout.Write(shimSuccess)
+		os.Stdout.Close()
 		fatalWriter.Writer = ioutil.Discard
 
 		pipeCh := make(chan net.Conn)

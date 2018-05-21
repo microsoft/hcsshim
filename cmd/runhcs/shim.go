@@ -15,6 +15,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/schema1"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"golang.org/x/sys/windows"
 )
@@ -43,8 +44,8 @@ var shimCommand = cli.Command{
 	},
 	Before: appargs.Validate(argID),
 	Action: func(context *cli.Context) error {
-		// Stdout is not used.
-		os.Stdout.Close()
+		logrus.SetOutput(os.Stderr)
+		fatalWriter.Writer = os.Stdout
 
 		id := context.Args().First()
 		c, err := getContainer(id, true)
@@ -66,7 +67,7 @@ var shimCommand = cli.Command{
 		exec := context.Bool("exec")
 		terminateOnFailure := false
 
-		errorOut := io.WriteCloser(os.Stderr)
+		errorOut := io.WriteCloser(os.Stdout)
 
 		var spec *specs.Process
 

@@ -132,12 +132,15 @@ func launchShim(cmd, pidFile, logFile string, args []string, data interface{}) (
 		defer wdatap.Close()
 	}
 
-	attr := &os.ProcAttr{
-		Files: []*os.File{rdatap, nil, wp},
-	}
+	var log *os.File
 	fullargs := []string{os.Args[0]}
 	if logFile != "" {
-		fullargs = append(fullargs, "--log", logFile)
+		log, err = os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND|os.O_SYNC, 0666)
+		if err != nil {
+			return nil, err
+		}
+		defer log.Close()
+
 		fullargs = append(fullargs, "--log-format", logFormat)
 		if logrus.GetLevel() == logrus.DebugLevel {
 			fullargs = append(fullargs, "--debug")
@@ -145,6 +148,9 @@ func launchShim(cmd, pidFile, logFile string, args []string, data interface{}) (
 	}
 	fullargs = append(fullargs, cmd)
 	fullargs = append(fullargs, args...)
+	attr := &os.ProcAttr{
+		Files: []*os.File{rdatap, wp, log},
+	}
 	p, err := os.StartProcess(executable, fullargs, attr)
 	if err != nil {
 		return nil, err
