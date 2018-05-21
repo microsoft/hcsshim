@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"syscall"
 
@@ -704,69 +705,98 @@ func (c *gcsCore) ModifySettings(id string, request *prot.ResourceModificationRe
 func (c *gcsCore) ModifySettingsV2(id string, request *prot.ModifySettingRequest) error {
 	switch request.ResourceType {
 	case prot.MrtMappedVirtualDisk:
-		mvd, ok := request.Settings.(*prot.MappedVirtualDisk)
+		mvd, ok := request.Settings.(*prot.MappedVirtualDiskV2)
 		if !ok {
-			return errors.New("the request's hosted settings are not of type MappedVirtualDisk")
+			return errors.New("the request's hosted settings are not of type MappedVirtualDiskV2")
 		}
 		switch request.RequestType {
 		case prot.MreqtAdd:
-			if err := c.setupMappedVirtualDisks(id, []prot.MappedVirtualDisk{*mvd}); err != nil {
-				return errors.Wrapf(err, "failed to hot add mapped virtual disk for container %s", id)
+			scsiName, err := scsiControllerLunToName(c.OS, mvd.Controller, mvd.Lun)
+			if err != nil {
+				return errors.Wrapf(err, "failed to create MappedVirtualDiskV2")
+			}
+			ms := mountSpec{
+				Source:     scsiName,
+				FileSystem: defaultFileSystem,
+				Flags:      uintptr(0),
+			}
+			if mvd.ReadOnly {
+				ms.Flags |= syscall.MS_RDONLY
+				ms.Options = append(ms.Options, mountOptionNoLoad)
+			}
+			if mvd.MountPath != "" {
+				if err := c.OS.MkdirAll(mvd.MountPath, 0700); err != nil {
+					return errors.Wrapf(err, "failed to create directory for MappedVirtualDiskV2 %s", mvd.MountPath)
+				}
+				if err := ms.MountWithTimedRetry(c.OS, mvd.MountPath); err != nil {
+					return errors.Wrapf(err, "failed to mount directory for MappedVirtualDiskV2 %s", mvd.MountPath)
+				}
 			}
 		case prot.MreqtRemove:
-			if err := c.removeMappedVirtualDisks(id, []prot.MappedVirtualDisk{*mvd}); err != nil {
-				return errors.Wrapf(err, "failed to hot remove mapped virtual disk for container %s", id)
+			if mvd.MountPath != "" {
+				if err := c.unmountPath(mvd.MountPath, true); err != nil {
+					return errors.Wrapf(err, "failed to hot remove MappedVirtualDiskV2 path: '%s'", mvd.MountPath)
+				}
+			}
+			if err := c.OS.UnplugSCSIDisk(fmt.Sprintf("0:0:%d:%d", mvd.Controller, mvd.Lun)); err != nil {
+				return errors.Wrapf(err, "failed to eject MappedVirtualDiskV2 Controller:%d Lun:%d", mvd.Controller, mvd.Lun)
 			}
 		default:
 			return errors.Errorf("the request type \"%s\" is not supported for resource type \"%s\"", request.RequestType, request.ResourceType)
 		}
 	case prot.MrtMappedDirectory:
-		md, ok := request.Settings.(*prot.MappedDirectory)
+		md, ok := request.Settings.(*prot.MappedDirectoryV2)
 		if !ok {
-			return errors.New("the request's hosted settings are not of type MappedDirectory")
+			return errors.New("the request's hosted settings are not of type MappedDirectoryV2")
 		}
 		switch request.RequestType {
 		case prot.MreqtAdd:
-			if err := c.setupMappedDirectories(id, []prot.MappedDirectory{*md}); err != nil {
-				return errors.Wrapf(err, "failed to hot add mapped directory for container %s", id)
+			if err := c.mountPlan9Share(md.MountPath, md.ShareName, md.Port, md.ReadOnly); err != nil {
+				return errors.Wrapf(err, "failed to hot add MappedDirectoryV2")
 			}
 		case prot.MreqtRemove:
-			if err := c.removeMappedDirectories(id, []prot.MappedDirectory{*md}); err != nil {
-				return errors.Wrapf(err, "failed to hot remove mapped directory for container %s", id)
+			if err := c.unmountPath(md.MountPath, true); err != nil {
+				return errors.Wrapf(err, "failed to hot remove MappedDirectoryV2")
 			}
 		default:
 			return errors.Errorf("the request type \"%s\" is not supported for resource type \"%s\"", request.RequestType, request.ResourceType)
 		}
 	case prot.MrtVPMemDevice:
-		vpd, ok := request.Settings.(*prot.MappedVPMemController)
+		vpd, ok := request.Settings.(*prot.MappedVPMemDeviceV2)
 		if !ok {
-			return errors.New("the request's hosted settings are not of type MappedDirectory")
+			return errors.New("the request's hosted settings are not of type MappedVPMemDeviceV2")
 		}
 		switch request.RequestType {
 		case prot.MreqtAdd:
-			if err := c.setupVPMemLayerMounts(vpd); err != nil {
-				return errors.Wrapf(err, "failed to hot add a VPMem device for container %s", id)
+			ms := &mountSpec{
+				Source:     "/dev/pmem" + strconv.FormatUint(uint64(vpd.DeviceNumber), 10),
+				FileSystem: defaultFileSystem,
+				Flags:      syscall.MS_RDONLY,
+				Options:    []string{mountOptionNoLoad, mountOptionDax},
+			}
+			if err := c.mountLayer(vpd.MountPath, ms); err != nil {
+				return errors.Wrapf(err, "failed to hot add a MappedVPMemDeviceV2")
 			}
 		case prot.MreqtRemove:
-			if err := c.removeVPMemLayerMounts(vpd); err != nil {
-				return errors.Wrapf(err, "failed to hot remove a VPMem device for container %s", id)
+			if err := c.unmountPath(vpd.MountPath, true); err != nil {
+				return errors.Wrapf(err, "failed to hot remove a MappedVPMemDeviceV2")
 			}
 		default:
 			return errors.Errorf("the request type \"%s\" is not supported for resource type \"%s\"", request.RequestType, request.ResourceType)
 		}
 	case prot.MrtCombinedLayers:
-		cl, ok := request.Settings.(*prot.CombinedLayers)
+		cl, ok := request.Settings.(*prot.CombinedLayersV2)
 		if !ok {
-			return errors.New("the request's hosted settings are not of type CombinedLayers")
+			return errors.New("the request's hosted settings are not of type CombinedLayersV2")
 		}
 		switch request.RequestType {
 		case prot.MreqtAdd:
 			if err := c.setupCombinedLayers(cl); err != nil {
-				return errors.Wrapf(err, "failed to hot add combined layers for container %s", id)
+				return errors.Wrapf(err, "failed to hot add CombinedLayersV2")
 			}
 		case prot.MreqtRemove:
 			if err := c.removeCombinedLayers(cl); err != nil {
-				return errors.Wrapf(err, "failed to hot remove combined layers for container %s", id)
+				return errors.Wrapf(err, "failed to hot remove CombinedLayersV2")
 			}
 		default:
 			return errors.Errorf("the request type \"%s\" is not supported for resource type \"%s\"", request.RequestType, request.ResourceType)
@@ -909,36 +939,17 @@ func (c *gcsCore) setupMappedVirtualDisks(id string, disks []prot.MappedVirtualD
 // This function expects containerCacheMutex to be locked on entry.
 func (c *gcsCore) setupMappedDirectories(id string, dirs []prot.MappedDirectory) error {
 	for _, dir := range dirs {
-		if err := c.mountMappedDirectory(&dir); err != nil {
+		if !dir.CreateInUtilityVM {
+			return errors.New("we do not currently support mapping directories inside the container namespace")
+		}
+		if err := c.mountPlan9Share(dir.ContainerPath, "", dir.Port, dir.ReadOnly); err != nil {
 			return errors.Wrapf(err, "failed to mount mapped directory %s for container %s", dir.ContainerPath, id)
 		}
 	}
 	return nil
 }
 
-// setupVPMemLayerMounts is a helper functions which calls into the functions in
-// storage.go to setup pmem devices and mount them to a folder specified by the
-// caller.
-//
-// This function does not track the lifetime of the mounts as it can be outside
-// the lifetime of any single container. It is the responsibility of the
-// management stack to remove any mounts it desires.
-func (c *gcsCore) setupVPMemLayerMounts(m *prot.MappedVPMemController) error {
-	for index, dir := range m.MappedDevices {
-		ms := &mountSpec{
-			Source:     "/dev/pmem" + index,
-			FileSystem: defaultFileSystem,
-			Flags:      syscall.MS_RDONLY,
-			Options:    []string{mountOptionNoLoad, mountOptionDax},
-		}
-		if err := c.mountLayer(dir, ms); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (c *gcsCore) setupCombinedLayers(m *prot.CombinedLayers) error {
+func (c *gcsCore) setupCombinedLayers(m *prot.CombinedLayersV2) error {
 	if m.ContainerRootPath == "" {
 		return errors.New("cannot combine layers with empty ContainerRootPath")
 	}
@@ -961,24 +972,13 @@ func (c *gcsCore) setupCombinedLayers(m *prot.CombinedLayers) error {
 	return c.mountOverlay(layerPaths, upperdirPath, workdirPath, rootfsPath, mountOptions)
 }
 
-func (c *gcsCore) removeCombinedLayers(m *prot.CombinedLayers) error {
+func (c *gcsCore) removeCombinedLayers(m *prot.CombinedLayersV2) error {
 	if m.ContainerRootPath == "" {
 		return errors.New("cannot remove combined layers with empty ContainerRootPath")
 	}
 
 	_, _, _, rootfsPath := c.getUnioningPathsWithBase(m.ContainerRootPath, "")
-	if exists, err := c.OS.PathExists(rootfsPath); err != nil {
-		return errors.Wrapf(err, "failed to determine if combined layer path '%s' exists", rootfsPath)
-	} else if exists {
-		if mounted, err := c.OS.PathIsMounted(rootfsPath); err != nil {
-			return errors.Wrapf(err, "failed to determine if combined layer path '%s' is mounted", rootfsPath)
-		} else if mounted {
-			if err := c.OS.Unmount(rootfsPath, 0); err != nil {
-				return errors.Wrapf(err, "failed to unmount combined layer path '%s'", rootfsPath)
-			}
-			// TODO: Should we be cleaning up the rootfs folder we created for the combined layers originally?
-		}
-	}
+	c.unmountPath(rootfsPath, true)
 	return nil
 }
 
@@ -1003,17 +1003,6 @@ func (c *gcsCore) removeMappedVirtualDisks(id string, disks []prot.MappedVirtual
 func (c *gcsCore) removeMappedDirectories(id string, dirs []prot.MappedDirectory) error {
 	if err := c.unmountMappedDirectories(dirs); err != nil {
 		return errors.Wrapf(err, "failed to mount mapped directories for container %s", id)
-	}
-	return nil
-}
-
-// removeVPMemLayerMounts is a helper functions which calls into the functions in
-// storage.go to remove any mounted VPMem layers.
-func (c *gcsCore) removeVPMemLayerMounts(m *prot.MappedVPMemController) error {
-	for _, dir := range m.MappedDevices {
-		if err := c.unmountLayer(dir); err != nil {
-			return err
-		}
 	}
 	return nil
 }

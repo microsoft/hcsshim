@@ -497,31 +497,28 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 		// Fill in the ResourceType-specific fields.
 		switch request.V2Request.ResourceType {
 		case MrtMappedVirtualDisk:
-			mvd := &MappedVirtualDisk{}
+			mvd := &MappedVirtualDiskV2{}
 			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, mvd); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDisk")
+				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDiskV2")
 			}
-			// V2 removed CreateInUtilityVM because this is always true for this
-			// type of modify. Fake that here.
-			mvd.CreateInUtilityVM = true
 			request.V2Request.Settings = mvd
 		case MrtMappedDirectory:
-			md := &MappedDirectory{}
+			md := &MappedDirectoryV2{}
 			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, md); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedDirectory")
+				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedDirectoryV2")
 			}
 			request.V2Request.Settings = md
 		case MrtVPMemDevice:
-			vpd := &MappedVPMemController{}
+			vpd := &MappedVPMemDeviceV2{}
 			// TODO: RS5 bug fix to move this to .Settings like all other modify requests.
 			if err := commonutils.UnmarshalJSONWithHresult(v2RawHostedSettings, vpd); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal hosted settings as VPMemDevice")
+				return nil, errors.Wrap(err, "failed to unmarshal hosted settings as MappedVPMemDeviceV2")
 			}
 			request.V2Request.Settings = vpd
 		case MrtCombinedLayers:
-			cl := &CombinedLayers{}
+			cl := &CombinedLayersV2{}
 			if err := commonutils.UnmarshalJSONWithHresult(v2RawHostedSettings, cl); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal settings as CombinedLayers")
+				return nil, errors.Wrap(err, "failed to unmarshal settings as CombinedLayersV2")
 			}
 			request.V2Request.Settings = cl
 		default:
@@ -603,9 +600,9 @@ type Layer struct {
 	Path string
 }
 
-// CombinedLayers is a modify type that corresponds to MrtCombinedLayers
+// CombinedLayersV2 is a modify type that corresponds to MrtCombinedLayers
 // request.
-type CombinedLayers struct {
+type CombinedLayersV2 struct {
 	Layers            []Layer `json:",omitempty"`
 	ScratchPath       string  `json:",omitempty"`
 	ContainerRootPath string
@@ -630,12 +627,20 @@ type NetworkAdapter struct {
 // MappedVirtualDisk represents a disk on the host which is mapped into a
 // directory in the guest.
 type MappedVirtualDisk struct {
-	ContainerPath string
-	Lun           uint8 `json:",omitempty"`
-	// CreateInUtilityVM is only supported for V1 schema containers
-	CreateInUtilityVM bool `json:",omitempty"`
-	ReadOnly          bool `json:",omitempty"`
-	AttachOnly        bool `json:",omitempty"`
+	ContainerPath     string
+	Lun               uint8 `json:",omitempty"`
+	CreateInUtilityVM bool  `json:",omitempty"`
+	ReadOnly          bool  `json:",omitempty"`
+	AttachOnly        bool  `json:",omitempty"`
+}
+
+// MappedVirtualDiskV2 represents a disk on the host which is mapped into a
+// directory in the guest in the V2 schema.
+type MappedVirtualDiskV2 struct {
+	MountPath  string `json:",omitempty"`
+	Lun        uint8  `json:",omitempty"`
+	Controller uint8  `json:",omitempty"`
+	ReadOnly   bool   `json:",omitempty"`
 }
 
 // MappedDirectory represents a directory on the host which is mapped to a
@@ -647,10 +652,20 @@ type MappedDirectory struct {
 	Port              uint32 `json:",omitempty"`
 }
 
-// MappedVPMemController represents a set of mapped VPMem index/path pairs.
-// Something like 0: /tmp/0/0 means map PMEM0 to /tmp/0/0
-type MappedVPMemController struct {
-	MappedDevices map[string]string
+// MappedDirectoryV2 represents a directory on the host which is mapped to a
+// directory on the guest through Plan9 in the V2 schema.
+type MappedDirectoryV2 struct {
+	MountPath string `json:",omitempty"`
+	Port      uint32 `json:",omitempty"`
+	ShareName string `json:",omitempty"`
+	ReadOnly  bool   `json:",omitempty"`
+}
+
+// MappedVPMemDeviceV2 represents a VPMem device that is mapped into a guest
+// path in the V2 schema.
+type MappedVPMemDeviceV2 struct {
+	DeviceNumber uint32 `json:",omitempty"`
+	MountPath    string `json:",omitempty"`
 }
 
 // VMHostedContainerSettings is the set of settings used to specify the initial
@@ -696,7 +711,7 @@ func (s *SchemaVersion) Cmp(v SchemaVersion) int {
 // field the Linux GCS accepts an oci.Spec directly.
 type VMHostedContainerSettingsV2 struct {
 	SchemaVersion SchemaVersion
-	OciSpec       interface{}
+	OciSpec       interface{} `json:",omitempty"`
 }
 
 // ProcessParameters represents any process which may be started in the utility

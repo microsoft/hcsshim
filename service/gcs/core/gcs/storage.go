@@ -64,6 +64,30 @@ func (ms *mountSpec) Mount(osl oslayer.OS, target string) error {
 	return nil
 }
 
+// MountWithTimedRetry attempts mounting multiple times up until the given
+// timout. This is necessary because there is a span of time between when the
+// device name becomes available under /sys/bus/scsi and when it appears under
+// /dev. Once it appears under /dev, there is still a span of time before it
+// becomes mountable. Retrying mount should succeed in mounting the device as
+// long as it becomes mountable under /dev before the timeout.
+func (ms *mountSpec) MountWithTimedRetry(osl oslayer.OS, target string) error {
+	startTime := time.Now()
+	for {
+		err := ms.Mount(osl, target)
+		if err != nil {
+			currentTime := time.Now()
+			elapsedTime := currentTime.Sub(startTime)
+			if elapsedTime > mappedDiskMountTimeout {
+				return errors.Wrapf(err, "failed to mount directory %s for mapped virtual disk device %s", target, ms.Source)
+			}
+		} else {
+			break
+		}
+		time.Sleep(time.Millisecond * 10)
+	}
+	return nil
+}
+
 // getLayerMounts computes the mount specs for the scratch and layers.
 func (c *gcsCore) getLayerMounts(scratch string, layers []prot.Layer) (scratchMount *mountSpec, layerMounts []*mountSpec, err error) {
 	layerMounts = make([]*mountSpec, len(layers))
@@ -124,10 +148,10 @@ func (c *gcsCore) getMappedVirtualDiskMounts(disks []prot.MappedVirtualDisk) ([]
 	return devices, nil
 }
 
-// scsiLunToName finds the SCSI device with the given LUN. This assumes
+// scsiControllerLunToName finds the SCSI device with the given LUN. This assumes
 // only one SCSI controller.
-func scsiLunToName(osl oslayer.OS, lun uint8) (string, error) {
-	scsiID := fmt.Sprintf("0:0:0:%d", lun)
+func scsiControllerLunToName(osl oslayer.OS, controller, lun uint8) (string, error) {
+	scsiID := fmt.Sprintf("0:0:%d:%d", controller, lun)
 
 	// Query for the device name up until the timeout.
 	var deviceNames []os.FileInfo
@@ -156,6 +180,12 @@ func scsiLunToName(osl oslayer.OS, lun uint8) (string, error) {
 		return "", errors.Errorf("more than one block device could match SCSI ID \"%s\"", scsiID)
 	}
 	return filepath.Join("/dev", deviceNames[0].Name()), nil
+}
+
+// scsiLunToName finds the SCSI device with the given LUN. This assumes
+// only one SCSI controller.
+func scsiLunToName(osl oslayer.OS, lun uint8) (string, error) {
+	return scsiControllerLunToName(osl, 0, lun)
 }
 
 // deviceIDToName converts a device ID (scsi:<lun> or pmem:<device#> to a
@@ -202,27 +232,29 @@ func (c *gcsCore) mountMappedVirtualDisks(disks []prot.MappedVirtualDisk, mounts
 				return errors.Wrapf(err, "failed to create directory for mapped virtual disk %s", disk.ContainerPath)
 			}
 
-			// Attempt mounting multiple times up until the given timout. This is
-			// necessary because there is a span of time between when the device
-			// name becomes available under /sys/bus/scsi and when it appears under
-			// /dev. Once it appears under /dev, there is still a span of time
-			// before it becomes mountable. Retrying mount should succeed in
-			// mounting the device as long as it becomes mountable under /dev
-			// before the timeout.
-			startTime := time.Now()
-			for {
-				err := mount.Mount(c.OS, disk.ContainerPath)
-				if err != nil {
-					currentTime := time.Now()
-					elapsedTime := currentTime.Sub(startTime)
-					if elapsedTime > mappedDiskMountTimeout {
-						return errors.Wrapf(err, "failed to mount directory %s for mapped virtual disk device %s", disk.ContainerPath, mount.Source)
-					}
-				} else {
-					break
-				}
-				time.Sleep(time.Millisecond * 10)
+			if err := mount.MountWithTimedRetry(c.OS, disk.ContainerPath); err != nil {
+				return err
 			}
+		}
+	}
+	return nil
+}
+
+// unmountPath unmounts the target path if it exists and is a mount path. If
+// removeTarget this will remove the previously mounted folder.
+func (c *gcsCore) unmountPath(target string, removeTarget bool) error {
+	if exists, err := c.OS.PathExists(target); err != nil {
+		return errors.Wrapf(err, "failed to determine if path '%s' exists", target)
+	} else if exists {
+		if mounted, err := c.OS.PathIsMounted(target); err != nil {
+			return errors.Wrapf(err, "failed to determine if path '%s' is mounted", target)
+		} else if mounted {
+			if err := c.OS.Unmount(target, 0); err != nil {
+				return errors.Wrapf(err, "failed to unmount path '%s'", target)
+			}
+		}
+		if removeTarget {
+			return c.OS.RemoveAll(target)
 		}
 	}
 	return nil
@@ -235,20 +267,9 @@ func (c *gcsCore) unmountMappedVirtualDisks(disks []prot.MappedVirtualDisk) erro
 		// If the disk was specified AttachOnly, it shouldn't have been mounted
 		// in the first place.
 		if !disk.AttachOnly {
-			exists, err := c.OS.PathExists(disk.ContainerPath)
-			if err != nil {
-				return errors.Wrapf(err, "failed to determine if mapped virtual disk path exists %s", disk.ContainerPath)
+			if err := c.unmountPath(disk.ContainerPath, false); err != nil {
+				return err
 			}
-			mounted, err := c.OS.PathIsMounted(disk.ContainerPath)
-			if err != nil {
-				return errors.Wrapf(err, "failed to determine if mapped virtual disk path is mounted %s", disk.ContainerPath)
-			}
-			if exists && mounted {
-				if err := c.OS.Unmount(disk.ContainerPath, 0); err != nil {
-					return errors.Wrapf(err, "failed to unmount mapped virtual disk path %s", disk.ContainerPath)
-				}
-			}
-			// TODO: Should we be removing the folder that was originally created?
 		}
 	}
 	return nil
@@ -266,34 +287,31 @@ func (c *gcsCore) unplugMappedVirtualDisks(disks []prot.MappedVirtualDisk) error
 	return nil
 }
 
-// mountMappedDirectory mounts the given mapped directory using a Plan9
-// filesystem with the given options.
-func (c *gcsCore) mountMappedDirectory(dir *prot.MappedDirectory) error {
-	if !dir.CreateInUtilityVM {
-		return errors.New("we do not currently support mapping directories inside the container namespace")
+// mountPlan9Share mounts the given Plan9 share to the filesystem with the given
+// options.
+func (c *gcsCore) mountPlan9Share(mountPath, share string, port uint32, readonly bool) error {
+	if err := c.OS.MkdirAll(mountPath, 0700); err != nil {
+		return errors.Wrapf(err, "failed to create directory for mapped directory %s", mountPath)
 	}
-	if err := c.OS.MkdirAll(dir.ContainerPath, 0700); err != nil {
-		return errors.Wrapf(err, "failed to create directory for mapped directory %s", dir.ContainerPath)
-	}
-	conn, err := c.vsock.Dial(dir.Port)
+	conn, err := c.vsock.Dial(port)
 	if err != nil {
-		return errors.Wrapf(err, "could not connect to plan9 server for %s", dir.ContainerPath)
+		return errors.Wrapf(err, "could not connect to plan9 server for %s", mountPath)
 	}
 	f, err := conn.File()
 	conn.Close()
 	if err != nil {
-		return errors.Wrapf(err, "could not get file for plan9 connection for %s", dir.ContainerPath)
+		return errors.Wrapf(err, "could not get file for plan9 connection for %s", mountPath)
 	}
 	defer f.Close()
 
 	var mountOptions uintptr
 	data := fmt.Sprintf("trans=fd,rfdno=%d,wfdno=%d", f.Fd(), f.Fd())
-	if dir.ReadOnly {
+	if readonly {
 		mountOptions |= syscall.MS_RDONLY
 		data += ",noload"
 	}
-	if err := c.OS.Mount(dir.ContainerPath, dir.ContainerPath, "9p", mountOptions, data); err != nil {
-		return errors.Wrapf(err, "failed to mount directory for mapped directory %s", dir.ContainerPath)
+	if err := c.OS.Mount(mountPath, mountPath, "9p", mountOptions, data); err != nil {
+		return errors.Wrapf(err, "failed to mount directory for mapped directory %s", mountPath)
 	}
 	return nil
 }
@@ -301,18 +319,8 @@ func (c *gcsCore) mountMappedDirectory(dir *prot.MappedDirectory) error {
 // unmountMappedDirectories unmounts the given container's mapped directories.
 func (c *gcsCore) unmountMappedDirectories(dirs []prot.MappedDirectory) error {
 	for _, dir := range dirs {
-		exists, err := c.OS.PathExists(dir.ContainerPath)
-		if err != nil {
-			return errors.Wrapf(err, "failed to determine if mapped directory path exists %s", dir.ContainerPath)
-		}
-		mounted, err := c.OS.PathIsMounted(dir.ContainerPath)
-		if err != nil {
-			return errors.Wrapf(err, "failed to determine if mapped directory path is mounted %s", dir.ContainerPath)
-		}
-		if exists && mounted {
-			if err := c.OS.Unmount(dir.ContainerPath, 0); err != nil {
-				return errors.Wrapf(err, "failed to unmount mapped directory path %s", dir.ContainerPath)
-			}
+		if err := c.unmountPath(dir.ContainerPath, false); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -326,23 +334,6 @@ func (c *gcsCore) mountLayer(location string, layer *mountSpec) error {
 	}
 	if err := layer.Mount(c.OS, location); err != nil {
 		return errors.Wrapf(err, "failed to mount layer directory %s", location)
-	}
-	return nil
-}
-
-// unmountLayer dismounts a mounted path at location
-func (c *gcsCore) unmountLayer(location string) error {
-	if exists, err := c.OS.PathExists(location); err != nil {
-		return errors.Wrapf(err, "failed to determine if directory path exists '%s'", location)
-	} else if exists {
-		if mounted, err := c.OS.PathIsMounted(location); err != nil {
-			return errors.Wrapf(err, "failed to determine if directory path is mounted %s", location)
-		} else if mounted {
-			if err := c.OS.Unmount(location, 0); err != nil {
-				return errors.Wrapf(err, "failed to unmount mounted directory path '%s'", location)
-			}
-		}
-		// TODO: Should we be removing the mount folder?
 	}
 	return nil
 }
