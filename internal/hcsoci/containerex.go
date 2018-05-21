@@ -8,9 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/cpu"
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/osversion"
@@ -188,7 +188,7 @@ func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem stri
 			}
 			if coi.Spec.Windows.Resources.CPU.Count != nil {
 				cpuCount := *coi.Spec.Windows.Resources.CPU.Count
-				hostCPUCount := uint64(cpu.NumCPU())
+				hostCPUCount := uint64(runtime.NumCPU())
 				if cpuCount > hostCPUCount {
 					logrus.Warnf("Changing requested CPUCount of %d to current number of processors, %d", cpuCount, hostCPUCount)
 					cpuCount = hostCPUCount

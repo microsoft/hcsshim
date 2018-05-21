@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/Microsoft/hcsshim/internal/copyfile"
-	"github.com/Microsoft/hcsshim/internal/cpu"
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/mergemaps"
@@ -132,7 +132,7 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 
 	memory := int32(1024)
 	processors := int32(2)
-	if cpu.NumCPU() == 1 {
+	if runtime.NumCPU() == 1 {
 		processors = 1
 	}
 	if opts.Resources != nil {
