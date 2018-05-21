@@ -65,6 +65,11 @@ func (process *Process) Pid() int {
 	return process.processID
 }
 
+// SystemID returns the ID of the process's compute system.
+func (process *Process) SystemID() string {
+	return process.system.ID()
+}
+
 // Kill signals the process to terminate but does not wait for it to finish terminating.
 func (process *Process) Kill() error {
 	process.handleLock.RLock()

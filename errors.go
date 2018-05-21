@@ -106,7 +106,7 @@ func (e *ContainerError) Error() string {
 		return "unexpected nil container for error: " + e.Err.Error()
 	}
 
-	s := "container " + e.Container.system.ID
+	s := "container " + e.Container.system.ID()
 
 	if e.Operation != "" {
 		s += " encountered an error during " + e.Operation
@@ -150,12 +150,7 @@ func (e *ProcessError) Error() string {
 		return "Unexpected nil process for error: " + e.Err.Error()
 	}
 
-	s := fmt.Sprintf("process %d", e.Process.Pid())
-
-	if e.Process.c != nil {
-		s += " in container " + e.Process.c.system.ID
-	}
-
+	s := fmt.Sprintf("process %d in container %s", e.Process.p.Pid(), e.Process.p.SystemID())
 	if e.Operation != "" {
 		s += " encountered an error during " + e.Operation
 	}

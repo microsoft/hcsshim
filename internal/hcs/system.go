@@ -18,7 +18,7 @@ var (
 type System struct {
 	handleLock     sync.RWMutex
 	handle         hcsSystem
-	ID             string
+	id             string
 	callbackNumber uintptr
 }
 
@@ -28,7 +28,7 @@ func CreateComputeSystem(id string, hcsDocumentInterface interface{}) (*System, 
 	title := "hcsshim::" + operation
 
 	computeSystem := &System{
-		ID: id,
+		id: id,
 	}
 
 	hcsDocumentB, err := json.Marshal(hcsDocumentInterface)
@@ -75,7 +75,7 @@ func OpenComputeSystem(id string) (*System, error) {
 	logrus.Debugf(title+" id=%s", id)
 
 	computeSystem := &System{
-		ID: id,
+		id: id,
 	}
 
 	var (
@@ -155,6 +155,11 @@ func (computeSystem *System) Start() error {
 
 	logrus.Debugf(title+" succeeded id=%s", computeSystem.ID)
 	return nil
+}
+
+// ID returns the compute system's identifier.
+func (computeSystem *System) ID() string {
+	return computeSystem.id
 }
 
 // Shutdown requests a compute system shutdown, if IsPending() on the error returned is true,

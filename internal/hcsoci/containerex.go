@@ -42,7 +42,7 @@ const (
 type CreateOptions struct {
 
 	// Common parameters
-	Id            string                       // Identifier for the container
+	ID            string                       // Identifier for the container
 	Owner         string                       // Specifies the owner. Defaults to executable name.
 	Spec          *specs.Spec                  // Definition of the container or utility VM being created
 	SchemaVersion *schemaversion.SchemaVersion // Requested Schema Version. Defaults to v2 for RS5, v1 for RS1..RS4
@@ -61,7 +61,7 @@ type createOptionsInternal struct {
 	*CreateOptions
 
 	actualSchemaVersion *schemaversion.SchemaVersion // Calculated based on Windows build and optional caller-supplied override
-	actualId            string                       // Identifier for the container
+	actualID            string                       // Identifier for the container
 	actualOwner         string                       // Owner for the container
 
 	// These are v1 LCOW backwards-compatibility only
@@ -78,7 +78,7 @@ func CreateContainer(createOptions *CreateOptions) (*hcs.System, error) {
 
 	coi := &createOptionsInternal{
 		CreateOptions:    createOptions,
-		actualId:         createOptions.Id,
+		actualID:         createOptions.ID,
 		actualOwner:      createOptions.Owner,
 		actualKirdPath:   createOptions.KirdPath,
 		actualKernelFile: createOptions.KernelFile,
@@ -86,8 +86,8 @@ func CreateContainer(createOptions *CreateOptions) (*hcs.System, error) {
 	}
 
 	// Defaults if omitted by caller.
-	if coi.actualId == "" {
-		coi.actualId = guid.New().String()
+	if coi.actualID == "" {
+		coi.actualID = guid.New().String()
 	}
 	if coi.actualOwner == "" {
 		coi.actualOwner = filepath.Base(os.Args[0])
@@ -107,13 +107,8 @@ func CreateContainer(createOptions *CreateOptions) (*hcs.System, error) {
 	}
 
 	if coi.HostingSystem != nil {
-		/* DISABLED
 		// By definition, a hosting system can only be supplied for a v2 Xenon.
-		if coi.HostingSystem.SchemaVersion != nil && !coi.HostingSystem.SchemaVersion.IsV20() {
-			return nil, fmt.Errorf("supplied hosting system must be a v2 schema container")
-		}
-		coi.actualSchemaVersion = schemaversion.SchemaV20() //coi.HostingSystem.SchemaVersion()
-		*/
+		coi.actualSchemaVersion = schemaversion.SchemaV20()
 	} else {
 		coi.actualSchemaVersion = schemaversion.DetermineSchemaVersion(coi.SchemaVersion)
 		logrus.Debugf("hcsshim::CreateContainer using schema %s", coi.actualSchemaVersion.String())
@@ -127,10 +122,10 @@ func CreateContainer(createOptions *CreateOptions) (*hcs.System, error) {
 			logrus.Debugf("hcsshim::CreateContainer createLCOWv1")
 			//return createLCOWv1(coi)
 			return nil, errors.New("not supported")
-		} else {
-			logrus.Debugf("hcsshim::CreateContainer createLCOWContainer")
-			return createLCOWContainer(coi)
 		}
+
+		logrus.Debugf("hcsshim::CreateContainer createLCOWContainer")
+		return createLCOWContainer(coi)
 	}
 
 	// So it's a container.
@@ -159,7 +154,7 @@ func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem stri
 
 	v1 := &schema1.ContainerConfig{
 		SystemType:              "Container",
-		Name:                    coi.actualId,
+		Name:                    coi.actualID,
 		Owner:                   coi.actualOwner,
 		HvPartition:             false,
 		IgnoreFlushesDuringBoot: coi.Spec.Windows.IgnoreFlushesDuringBoot,
@@ -304,7 +299,6 @@ func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem stri
 			// Hosting system was supplied, so is v2 Xenon.
 			v2Container.Storage.Path = coi.Spec.Root.Path
 			// This is a little inefficient, but makes it MUCH easier for clients. Build the combinedLayers.Layers structure.
-			/* DISABLED
 			for _, layerFolder := range coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1] {
 				layerFolderVSMBGUID, err := coi.HostingSystem.GetVSMBGUID(layerFolder)
 				if err != nil {
@@ -316,7 +310,6 @@ func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem stri
 						Path: fmt.Sprintf(`\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\%s`, layerFolderVSMBGUID),
 					})
 			}
-			*/
 		}
 	}
 
@@ -355,7 +348,6 @@ func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem stri
 				if coi.HostingSystem == nil {
 					mdv2 = hcsschemav2.ContainersResourcesMappedDirectoryV2{HostPath: mount.Source, ContainerPath: mount.Destination, ReadOnly: false}
 				} else {
-					/* DISABLED
 					mountSourceVSMBGUID, err := coi.HostingSystem.GetVSMBGUID(mount.Source)
 					if err != nil {
 						return nil, err
@@ -364,7 +356,6 @@ func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem stri
 						HostPath:      fmt.Sprintf(`\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\%s`, mountSourceVSMBGUID),
 						ContainerPath: mount.Destination,
 						ReadOnly:      false}
-					*/
 				}
 				for _, o := range mount.Options {
 					if strings.ToLower(o) == "ro" {
@@ -390,9 +381,7 @@ func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem stri
 	if coi.HostingSystem == nil {
 		v2.Container = v2Container
 	} else {
-		/* DISABLED
-		v2.HostingSystemId = coi.HostingSystem.Id
-		*/
+		v2.HostingSystemId = coi.HostingSystem.ID()
 		v2.HostedSystem = &hcsschemav2.HostedSystemV2{
 			SchemaVersion: schemaversion.SchemaV20(),
 			Container:     v2Container,
