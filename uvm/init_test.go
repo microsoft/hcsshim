@@ -30,8 +30,10 @@ var (
 const lcowGlobalSVMID = "test.lcowglobalsvm"
 
 func init() {
-	logrus.SetLevel(logrus.DebugLevel)
-	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
+	if len(os.Getenv("HCSSHIM_FUNCTIONAL_TESTS_DEBUG")) > 0 {
+		logrus.SetLevel(logrus.DebugLevel)
+		logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
+	}
 	layersNanoserver = getLayers("microsoft/nanoserver:latest")
 	layersAlpine = getLayers("alpine")
 
