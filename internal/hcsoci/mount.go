@@ -109,7 +109,6 @@ func mountContainerLayers(layerFolders []string, innerID string, uvm *uvm.Utilit
 		}
 	}
 
-	var counter uint64
 	containerPath := ""
 	if uvm.OS() == "windows" {
 		containerPath = `C:\s` + innerID
@@ -162,7 +161,7 @@ func mountContainerLayers(layerFolders []string, innerID string, uvm *uvm.Utilit
 		layers = append(layers, schema2.ContainersResourcesLayerV2{Path: vpmem.uvmPath})
 	}
 	hostedSettings := schema2.CombinedLayersV2{
-		ContainerRootPath: fmt.Sprintf("/tmp/c%d", counter),
+		ContainerRootPath: "/tmp/c" + innerID,
 		Layers:            layers,
 		ScratchPath:       containerPath,
 	}

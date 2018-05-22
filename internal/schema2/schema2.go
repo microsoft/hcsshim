@@ -350,7 +350,7 @@ type ComputeSystemV2 struct {
 	Owner                             string                       `json:"Owner,omitempty"`
 	SchemaVersion                     *schemaversion.SchemaVersion `json:"SchemaVersion,omitempty"`
 	HostingSystemId                   string                       `json:"HostingSystemId,omitempty"`
-	HostedSystem                      *HostedSystemV2              `json:"HostedSystem,omitempty"`
+	HostedSystem                      interface{}                  `json:"HostedSystem,omitempty"`
 	Container                         *ContainerV2                 `json:"Container,omitempty"`
 	ShouldTerminateOnLastHandleClosed bool                         `json:"ShouldTerminateOnLastHandleClosed,omitempty"`
 	VirtualMachine                    *VirtualMachineV2            `json:"VirtualMachine,omitempty"`

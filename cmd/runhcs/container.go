@@ -285,6 +285,11 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		if sandbox.VMIsolated {
 			vmisolated = true
 		}
+	} else if cfg.Spec.Linux != nil {
+		vmisolated = true
+		isSandbox = true
+		sandboxID = cfg.ID
+		newvm = true
 	} else {
 		// Don't explicitly manage the VM for the container since this requires
 		// RS5.

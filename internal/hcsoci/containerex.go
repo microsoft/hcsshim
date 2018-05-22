@@ -202,7 +202,7 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 	return system, resources, err
 }
 
-func createLCOWSpec(coi *createOptionsInternal, resources *Resources) (*specs.Spec, error) {
+func createLCOWSpec(coi *createOptionsInternal) (*specs.Spec, error) {
 	// Remarshal the spec to perform a deep copy.
 	j, err := json.Marshal(coi.Spec)
 	if err != nil {
@@ -214,7 +214,7 @@ func createLCOWSpec(coi *createOptionsInternal, resources *Resources) (*specs.Sp
 		return nil, err
 	}
 
-	// Translate the mounts. The root has already been trnaslated in
+	// Translate the mounts. The root has already been translated in
 	// allocateLinuxResources.
 	/*
 		for i := range spec.Mounts {
@@ -508,9 +508,25 @@ func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem stri
 		v2.Container = v2Container
 	} else {
 		v2.HostingSystemId = coi.HostingSystem.ID()
-		v2.HostedSystem = &hcsschemav2.HostedSystemV2{
-			SchemaVersion: schemaversion.SchemaV20(),
-			Container:     v2Container,
+		if coi.HostingSystem.OS() == "windows" {
+			v2.HostedSystem = &hcsschemav2.HostedSystemV2{
+				SchemaVersion: schemaversion.SchemaV20(),
+				Container:     v2Container,
+			}
+		} else {
+			spec, err := createLCOWSpec(coi)
+			if err != nil {
+				return nil, err
+			}
+			v2.HostedSystem = &struct {
+				SchemaVersion        *schemaversion.SchemaVersion
+				OciSpecificationPath string
+				OciSpecification     *specs.Spec
+			}{
+				SchemaVersion:        schemaversion.SchemaV20(),
+				OciSpecificationPath: "/tmp/whatever",
+				OciSpecification:     spec,
+			}
 		}
 	}
 
