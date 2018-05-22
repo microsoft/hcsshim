@@ -222,7 +222,6 @@ type VirtualMachinesResourcesStorageScsiV2 struct {
 	ChannelInstanceGuid string                                                 `json:"ChannelInstanceGuid,omitempty"`
 }
 
-//
 type VirtualMachinesResourcesStorageVpmemDeviceV2 struct {
 	HostPath    string `json:"HostPath,omitempty"`
 	ReadOnly    bool   `json:"ReadOnly,omitempty"`
@@ -233,11 +232,6 @@ type VirtualMachinesResourcesStorageVpmemControllerV2 struct {
 	Devices          map[string]VirtualMachinesResourcesStorageVpmemDeviceV2 `json:"Devices,omitempty"`
 	MaximumCount     int32                                                   `json:"MaximumCount,omitempty"`
 	MaximumSizeBytes int32                                                   `json:"MaximumSizeBytes,omitempty"`
-}
-
-// This goes in the hosted settings of a VPMem device (hand-added JJH)
-type MappedVPMemController struct {
-	MappedDevices map[int]string `json:"MappedDevices,omitempty"`
 }
 
 type VirtualMachinesResourcesVideoMonitorV2 struct {
