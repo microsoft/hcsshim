@@ -56,40 +56,6 @@ func getDefaultLinuxSpec(t *testing.T) *specs.Spec {
 //	c.Terminate()
 //}
 
-//// Returns
-//// - Container object
-//// - Containers scratch file host-path (added on SCSI - use RemoveSCSI to remove)
-//func createV2LCOWUvm(t *testing.T, addScratch bool) (*UtilityVM, string) {
-//	uvmScratchDir, _ := createLCOWTempDirWithSandboxv2(t)
-//	//defer os.RemoveAll(uvmScratchDir)
-
-//	scratchFile := ""
-//	v2uvm := UtilityVM{
-//		Id:              "v2LCOWuvm",
-//		OperatingSystem: "linux",
-//	}
-//	if err := v2uvm.Create(); err != nil {
-//		t.Fatalf("Failed create: %s", err)
-//	}
-//
-//	startUVM(t, &v2uvm)
-//
-//	if addScratch {
-//		scratchFile = filepath.Join(uvmScratchDir, "sandbox.vhdx")
-//		if err := GrantVmAccess("uvm", scratchFile); err != nil {
-//			t.Fatalf("Failed grantvmaccess: %s", err)
-//		}
-//		controller, lun, err := v2uvm.AddSCSI(scratchFile, "/tmp/scratch")
-//		if err != nil {
-//			t.Fatalf("Failed to add UVM scratch: %s", err)
-//		}
-//		if controller != 0 || lun != 0 {
-//			t.Fatalf("expected 0:0")
-//		}
-//	}
-//	return &v2uvm, scratchFile
-//}
-
 func TestV2XenonLCOW(t *testing.T) {
 	cacheDir := createTempDir(t)
 	defer os.RemoveAll(cacheDir)
@@ -174,42 +140,3 @@ func TestV2XenonLCOW(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 }
-
-//// A v2 LCOW
-//func TestV2XenonLCOW(t *testing.T) {
-//	t.Skip("for now")
-//	v2uvm, v2uvmScratchFile := createV2LCOWUvm(t, false)
-//	if v2uvmScratchFile != "" {
-//		defer v2uvm.RemoveSCSI(v2uvmScratchFile)
-//		defer os.RemoveAll(filepath.Dir(v2uvmScratchFile))
-//	}
-//	defer v2uvm.Terminate()
-
-//	containerScratchDir, _ := createLCOWTempDirWithSandboxv2(t)
-//	defer os.RemoveAll(containerScratchDir)
-//	if err := GrantVmAccess(v2uvm.Id, filepath.Join(containerScratchDir, "sandbox.vhdx")); err != nil {
-//		t.Fatalf("Failed GrantVmAccess on sandbox.vhdx: %s", err)
-//	}
-
-//	spec := getDefaultLinuxSpec(t)
-//	spec.Windows.LayerFolders = append(layersAlpine, containerScratchDir)
-//	hostedContainer, err := CreateContainer(&CreateOptions{
-//		Id:            "TextV2XenonLCOW",
-//		SchemaVersion: schemaversion.SchemaV20(),
-//		Spec:          spec,
-//		HostingSystem: v2uvm,
-//	})
-//	if err != nil {
-//		t.Fatalf("Failed create: %s", err)
-//	}
-
-//	startContainer(t, hostedContainer)
-//	stopContainer(t, hostedContainer)
-
-//	//	pmid, uvmpath, err := AddVPMEM(v2uvm, filepath.Join(layersAlpine[0], "layer.vhd"), "", true)
-//	//	fmt.Println(pmid, uvmpath, err)
-//	//	RemoveVPMEM(v2uvm, filepath.Join(layersAlpine[0], "layer.vhd"))
-
-//	//	runCommand(t, v2uvm, "echo Hello", `/bin`, "Hello")
-//	terminateUtilityVM(t, v2uvm)
-//}
