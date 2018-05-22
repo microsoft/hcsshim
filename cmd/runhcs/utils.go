@@ -44,7 +44,7 @@ func createPidFile(path string, pid int) error {
 func safePipePath(name string) string {
 	// Use a pipe in the Administrators protected prefixed to prevent malicious
 	// squatting.
-	return fmt.Sprintf(`\\.\pipe\ProtectedPrefix\Administrators\runhcs-vmshim-%s`, url.PathEscape(name))
+	return `\\.\pipe\ProtectedPrefix\Administrators\` + url.PathEscape(name)
 }
 
 func closeWritePipe(pipe net.Conn) error {
