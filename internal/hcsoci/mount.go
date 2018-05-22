@@ -6,12 +6,17 @@ import (
 	"fmt"
 	"path/filepath"
 
-	hcsschemav2 "github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/uvm"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
+
+type vpMemEntry struct {
+	hostPath string
+	uvmPath  string
+}
 
 // mountContainerLayers is a helper for clients to hide all the complexity of layer mounting
 // Layer folder are in order: base, [rolayer1..rolayern,] sandbox
@@ -66,27 +71,31 @@ func mountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 	//
 	//  Each layer is ref-counted so that multiple containers in the same utility VM can share them.
 	var vsmbAdded []string
-	var vpmemAdded []string
+
+	var vpmemAdded []vpMemEntry
 
 	for _, layerPath := range layerFolders[:len(layerFolders)-1] {
 		var err error
 		if uvm.OS() == "windows" {
-			err = uvm.AddVSMB(layerPath, "", hcsschemav2.VsmbFlagReadOnly|hcsschemav2.VsmbFlagPseudoOplocks|hcsschemav2.VsmbFlagTakeBackupPrivilege|hcsschemav2.VsmbFlagCacheIO|hcsschemav2.VsmbFlagShareRead)
+			err = uvm.AddVSMB(layerPath, "", schema2.VsmbFlagReadOnly|schema2.VsmbFlagPseudoOplocks|schema2.VsmbFlagTakeBackupPrivilege|schema2.VsmbFlagCacheIO|schema2.VsmbFlagShareRead)
 			if err == nil {
 				vsmbAdded = append(vsmbAdded, layerPath)
 			}
 		} else {
-			_, _, err = uvm.AddVPMEM(filepath.Join(layerPath, "layer.vhd"), "", true) // ContainerPath calculated. Will be /tmp/vpmemN/
+			_, uvmPath, err := uvm.AddVPMEM(filepath.Join(layerPath, "layer.vhd"), "", true) // ContainerPath calculated. Will be /tmp/vN/
 			if err == nil {
-				vpmemAdded = append(vpmemAdded, layerPath)
+				vpmemAdded = append(vpmemAdded,
+					vpMemEntry{
+						hostPath: filepath.Join(layerPath, "layer.vhd"),
+						uvmPath:  uvmPath,
+					})
 			}
 		}
 		if err != nil {
-			// TODO Remove VPMEM too now. And in all call sites below
+			removeVPMEMOnMountFailure(uvm, vpmemAdded)
 			removeVSMBOnMountFailure(uvm, vsmbAdded)
 			return nil, err
 		}
-
 	}
 
 	// 	Add the sandbox at an unused SCSI location. The container path inside the utility VM will be C:\<GUID> where
@@ -95,53 +104,97 @@ func mountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 	_, sandboxPath := filepath.Split(layerFolders[len(layerFolders)-1])
 	containerPathGUID, err := wclayer.NameToGuid(sandboxPath)
 	if err != nil {
+		removeVPMEMOnMountFailure(uvm, vpmemAdded)
 		removeVSMBOnMountFailure(uvm, vsmbAdded)
 		return nil, err
 	}
 	hostPath := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
 
-	// TODO: Different container path for linux
-	containerPath := fmt.Sprintf(`C:\%s`, containerPathGUID)
+	// On Linux, we need to grant access to the sandbox
+	if uvm.OS() == "linux" {
+		if err := wclayer.GrantVmAccess(uvm.ID(), hostPath); err != nil {
+			removeVPMEMOnMountFailure(uvm, vpmemAdded)
+			removeVSMBOnMountFailure(uvm, vsmbAdded)
+			return nil, err
+		}
+	}
+
+	var counter uint64
+	containerPath := ""
+	if uvm.OS() == "windows" {
+		containerPath = fmt.Sprintf(`C:\%s`, containerPathGUID)
+	} else {
+		counter = uvm.ContainerCounter()
+		containerPath = fmt.Sprintf("/tmp/s%d", counter)
+	}
 	_, _, err = uvm.AddSCSI(hostPath, containerPath)
 	if err != nil {
+		removeVPMEMOnMountFailure(uvm, vpmemAdded)
 		removeVSMBOnMountFailure(uvm, vsmbAdded)
 		return nil, err
 	}
 
-	// 	Load the filter at the C:\<GUID> location calculated above. We pass into this request each of the
-	// 	read-only layer folders.
-	combinedLayers := hcsschemav2.CombinedLayersV2{}
 	if uvm.OS() == "windows" {
-		layers := []hcsschemav2.ContainersResourcesLayerV2{}
+		// 	Load the filter at the C:\<GUID> location calculated above. We pass into this request each of the
+		// 	read-only layer folders.
+		layers := []schema2.ContainersResourcesLayerV2{}
 		for _, vsmb := range vsmbAdded {
 			vsmbGUID, err := uvm.GetVSMBGUID(vsmb)
 			if err != nil {
+				removeVPMEMOnMountFailure(uvm, vpmemAdded)
 				removeVSMBOnMountFailure(uvm, vsmbAdded)
 				removeSCSIOnMountFailure(uvm, hostPath)
 				return nil, err
 			}
-			layers = append(layers, hcsschemav2.ContainersResourcesLayerV2{
+			layers = append(layers, schema2.ContainersResourcesLayerV2{
 				Id:   vsmbGUID,
 				Path: fmt.Sprintf(`\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\%s`, vsmbGUID),
 			})
 		}
-		combinedLayers = hcsschemav2.CombinedLayersV2{
+		hostedSettings := schema2.CombinedLayersV2{
 			ContainerRootPath: fmt.Sprintf(`C:\%s`, containerPathGUID),
 			Layers:            layers,
 		}
-		combinedLayersModification := &hcsschemav2.ModifySettingsRequestV2{
-			ResourceType:   hcsschemav2.ResourceTypeCombinedLayers,
-			RequestType:    hcsschemav2.RequestTypeAdd,
-			HostedSettings: combinedLayers,
+		combinedLayersModification := &schema2.ModifySettingsRequestV2{
+			ResourceType:   schema2.ResourceTypeCombinedLayers,
+			RequestType:    schema2.RequestTypeAdd,
+			HostedSettings: hostedSettings,
 		}
 		if err := uvm.Modify(combinedLayersModification); err != nil {
+			removeVPMEMOnMountFailure(uvm, vpmemAdded)
 			removeVSMBOnMountFailure(uvm, vsmbAdded)
 			removeSCSIOnMountFailure(uvm, hostPath)
 			return nil, err
+
 		}
+		logrus.Debugln("hcsshim::mountContainerLayers Succeeded")
+		return hostedSettings, nil
+
+	}
+
+	layers := []schema2.ContainersResourcesLayerV2{}
+	for _, vpmem := range vpmemAdded {
+		layers = append(layers, schema2.ContainersResourcesLayerV2{Path: vpmem.uvmPath})
+	}
+	hostedSettings := schema2.CombinedLayersV2{
+		ContainerRootPath: fmt.Sprintf("/tmp/c%d", counter),
+		Layers:            layers,
+		ScratchPath:       containerPath,
+	}
+	combinedLayersModification := &schema2.ModifySettingsRequestV2{
+		ResourceType:   schema2.ResourceTypeCombinedLayers,
+		RequestType:    schema2.RequestTypeAdd,
+		HostedSettings: hostedSettings,
+	}
+	if err := uvm.Modify(combinedLayersModification); err != nil {
+		removeVPMEMOnMountFailure(uvm, vpmemAdded)
+		removeVSMBOnMountFailure(uvm, vsmbAdded)
+		removeSCSIOnMountFailure(uvm, hostPath)
+		return nil, err
 	}
 	logrus.Debugln("hcsshim::mountContainerLayers Succeeded")
-	return combinedLayers, nil
+	return hostedSettings, nil
+
 }
 
 // unmountOperation is used when calling Unmount() to determine what type of unmount is
@@ -199,10 +252,10 @@ func unmountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM, op unmoun
 		} else {
 			containerRootPath := fmt.Sprintf(`C:\%s`, containerPathGUID.String())
 			logrus.Debugf("hcsshim::unmountContainerLayers CombinedLayers %s", containerRootPath)
-			combinedLayersModification := &hcsschemav2.ModifySettingsRequestV2{
-				ResourceType:   hcsschemav2.ResourceTypeCombinedLayers,
-				RequestType:    hcsschemav2.RequestTypeRemove,
-				HostedSettings: hcsschemav2.CombinedLayersV2{ContainerRootPath: containerRootPath},
+			combinedLayersModification := &schema2.ModifySettingsRequestV2{
+				ResourceType:   schema2.ResourceTypeCombinedLayers,
+				RequestType:    schema2.RequestTypeRemove,
+				HostedSettings: schema2.CombinedLayersV2{ContainerRootPath: containerRootPath},
 			}
 			if err := uvm.Modify(combinedLayersModification); err != nil {
 				logrus.Errorf(err.Error())
@@ -251,6 +304,16 @@ func removeVSMBOnMountFailure(uvm *uvm.UtilityVM, toRemove []string) {
 	for _, vsmbShare := range toRemove {
 		if err := uvm.RemoveVSMB(vsmbShare); err != nil {
 			logrus.Warnf("Possibly leaked vsmbshare on error removal path: %s", err)
+		}
+	}
+}
+
+// removeVPMEMOnMountFailure is a helper to roll-back any VPMEM devices added to a utility VM on a failure path
+// The mutex must NOT be held when calling this function.
+func removeVPMEMOnMountFailure(uvm *uvm.UtilityVM, toRemove []vpMemEntry) {
+	for _, vpmemDevice := range toRemove {
+		if err := uvm.RemoveVPMEM(vpmemDevice.hostPath); err != nil {
+			logrus.Warnf("Possibly leaked vpmemdevice on error removal path: %s", err)
 		}
 	}
 }

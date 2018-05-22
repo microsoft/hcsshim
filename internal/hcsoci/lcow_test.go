@@ -1,49 +1,26 @@
-// +build windows,functional
+// +build windows
+
+//,functional,lcow
+
+// To run: go test -v -tags "functional lcow"
 
 package hcsoci
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/schemaversion"
+	"github.com/Microsoft/hcsshim/uvm"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-// createLCOWTempDirWithSandboxv2 uses a v2 LCOW utility VM to create a blank
-// VHDX and format it ext4.
-func createLCOWTempDirWithSandboxv2(t *testing.T) (string, string) {
-	if lcowServiceContainerV2 == nil {
-		cacheSandboxDir = createTempDir(t)
-
-		lcowServiceContainerV2 = &UtilityVM{
-			Id:              "v2global",
-			OperatingSystem: "linux",
-			SchemaVersion:   schemaversion.SchemaV20(),
-		}
-
-		if err := lcowServiceContainerV2.Create(); err != nil {
-			t.Fatalf("Failed create: %s", err)
-		}
-
-		if err := lcowServiceContainerV2.Start(); err != nil {
-			t.Fatalf("Failed to start service container: %s", err)
-		}
-	}
-	tempDir := createTempDir(t)
-	cacheSandboxFile = filepath.Join(cacheSandboxDir, "sandbox.vhdx")
-	if err := lcowServiceContainerV2.CreateLCOWScratch(filepath.Join(tempDir, "sandbox.vhdx"), DefaultLCOWScratchSizeGB, cacheSandboxFile); err != nil {
-		t.Fatalf("failed to create EXT4 sandbox for LCOW test cases: %s", err)
-	}
-	return tempDir, filepath.Base(tempDir)
-}
-
 func getDefaultLinuxSpec(t *testing.T) *specs.Spec {
-	content, err := ioutil.ReadFile(`.\testassets\defaultlinuxspec.json`)
+	content, err := ioutil.ReadFile(`..\..\test\assets\defaultlinuxspec.json`)
 	if err != nil {
 		t.Fatalf("failed to read defaultlinuxspec.json: %s", err.Error())
 	}
@@ -54,159 +31,161 @@ func getDefaultLinuxSpec(t *testing.T) *specs.Spec {
 	return &spec
 }
 
-//// createLCOWTempDirWithSandbox uses an LCOW utility VM to create a blank
-//// VHDX and format it ext4.
-//func TestCreateLCOWScratch(t *testing.T) {
+//// A v1 LCOW
+//// TODO LCOW doesn't work currently
+//func TestV1XenonLCOW(t *testing.T) {
 //	t.Skip("for now")
-//	cacheDir := createTempDir(t)
-//	cacheFile := filepath.Join(cacheDir, "cache.vhdx")
-//	uvm, err := CreateContainer(&CreateOptions{Spec: getDefaultLinuxSpec(t)})
+//	tempDir, _ := createLCOWTempDirWithSandboxv2(t)
+//	defer os.RemoveAll(tempDir)
+
+//	spec := getDefaultLinuxSpec(t)
+//	//	spec.Windows.LayerFolders = append(layersAlpine, tempDir)
+//	c, err := CreateContainer(&CreateOptions{
+//		Id:            "TextV1XenonLCOW",
+//		SchemaVersion: schemaversion.SchemaV10(),
+//		Spec:          spec,
+//	})
 //	if err != nil {
 //		t.Fatalf("Failed create: %s", err)
 //	}
-//	defer uvm.Terminate()
-//	if err := uvm.Start(); err != nil {
-//		t.Fatalf("Failed to start service container: %s", err)
-//	}
 
-//	// 1: Default size, cache doesn't exist, but no UVM passed. Cannot be created
-//	err = CreateLCOWScratch(nil, filepath.Join(cacheDir, "default.vhdx"), DefaultLCOWScratchSizeGB, cacheFile)
-//	if err == nil {
-//		t.Fatalf("expected an error creating LCOW scratch")
-//	}
-//	if err.Error() != "cannot create scratch disk as cache is not present and no utility VM supplied" {
-//		t.Fatalf("Not expecting error %s", err)
-//	}
-
-//	// 2: Default size, no cache supplied and no UVM
-//	err = CreateLCOWScratch(nil, filepath.Join(cacheDir, "default.vhdx"), DefaultLCOWScratchSizeGB, "")
-//	if err == nil {
-//		t.Fatalf("expected an error creating LCOW scratch")
-//	}
-//	if err.Error() != "cannot create scratch disk as cache is not present and no utility VM supplied" {
-//		t.Fatalf("Not expecting error %s", err)
-//	}
-
-//	// 3: Default size. This should work and the cache should be created.
-//	err = CreateLCOWScratch(uvm, filepath.Join(cacheDir, "default.vhdx"), DefaultLCOWScratchSizeGB, cacheFile)
-//	if err != nil {
-//		t.Fatalf("should succeed creating default size cache file: %s", err)
-//	}
-//	if _, err = os.Stat(cacheFile); err != nil {
-//		t.Fatalf("failed to stat cache file after created: %s", err)
-//	}
-//	if _, err = os.Stat(filepath.Join(cacheDir, "default.vhdx")); err != nil {
-//		t.Fatalf("failed to stat default.vhdx after created: %s", err)
-//	}
-
-//	// 4: Non-defaultsize. This should work and the cache should be created.
-//	err = CreateLCOWScratch(uvm, filepath.Join(cacheDir, "nondefault.vhdx"), DefaultLCOWScratchSizeGB+1, cacheFile)
-//	if err != nil {
-//		t.Fatalf("should succeed creating default size cache file: %s", err)
-//	}
-//	if _, err = os.Stat(cacheFile); err != nil {
-//		t.Fatalf("failed to stat cache file after created: %s", err)
-//	}
-//	if _, err = os.Stat(filepath.Join(cacheDir, "nondefault.vhdx")); err != nil {
-//		t.Fatalf("failed to stat default.vhdx after created: %s", err)
-//	}
-
+//	startContainer(t, c)
+//	time.Sleep(5 * time.Second)
+//	runCommand(t, c, "echo Hello", `/bin`, "Hello")
+//	stopContainer(t, c)
+//	c.Terminate()
 //}
 
-// A v1 LCOW
-// TODO LCOW doesn't work currently
-func TestV1XenonLCOW(t *testing.T) {
-	t.Skip("for now")
-	tempDir, _ := createLCOWTempDirWithSandboxv2(t)
-	defer os.RemoveAll(tempDir)
+//// Returns
+//// - Container object
+//// - Containers scratch file host-path (added on SCSI - use RemoveSCSI to remove)
+//func createV2LCOWUvm(t *testing.T, addScratch bool) (*UtilityVM, string) {
+//	uvmScratchDir, _ := createLCOWTempDirWithSandboxv2(t)
+//	//defer os.RemoveAll(uvmScratchDir)
 
-	spec := getDefaultLinuxSpec(t)
-	//	spec.Windows.LayerFolders = append(layersAlpine, tempDir)
-	c, err := CreateContainer(&CreateOptions{
-		Id:            "TextV1XenonLCOW",
-		SchemaVersion: schemaversion.SchemaV10(),
-		Spec:          spec,
-	})
-	if err != nil {
-		t.Fatalf("Failed create: %s", err)
-	}
+//	scratchFile := ""
+//	v2uvm := UtilityVM{
+//		Id:              "v2LCOWuvm",
+//		OperatingSystem: "linux",
+//	}
+//	if err := v2uvm.Create(); err != nil {
+//		t.Fatalf("Failed create: %s", err)
+//	}
+//
+//	startUVM(t, &v2uvm)
+//
+//	if addScratch {
+//		scratchFile = filepath.Join(uvmScratchDir, "sandbox.vhdx")
+//		if err := GrantVmAccess("uvm", scratchFile); err != nil {
+//			t.Fatalf("Failed grantvmaccess: %s", err)
+//		}
+//		controller, lun, err := v2uvm.AddSCSI(scratchFile, "/tmp/scratch")
+//		if err != nil {
+//			t.Fatalf("Failed to add UVM scratch: %s", err)
+//		}
+//		if controller != 0 || lun != 0 {
+//			t.Fatalf("expected 0:0")
+//		}
+//	}
+//	return &v2uvm, scratchFile
+//}
 
-	startContainer(t, c)
-	time.Sleep(5 * time.Second)
-	runCommand(t, c, "echo Hello", `/bin`, "Hello")
-	stopContainer(t, c)
-	c.Terminate()
-}
-
-// Returns
-// - Container object
-// - Containers scratch file host-path (added on SCSI - use RemoveSCSI to remove)
-func createV2LCOWUvm(t *testing.T, addScratch bool) (*UtilityVM, string) {
-	uvmScratchDir, _ := createLCOWTempDirWithSandboxv2(t)
-	//defer os.RemoveAll(uvmScratchDir)
-
-	scratchFile := ""
-	v2uvm := UtilityVM{
-		Id:              "v2LCOWuvm",
-		OperatingSystem: "linux",
-	}
-	if err := v2uvm.Create(); err != nil {
-		t.Fatalf("Failed create: %s", err)
-	}
-
-	startUVM(t, &v2uvm)
-
-	if addScratch {
-		scratchFile = filepath.Join(uvmScratchDir, "sandbox.vhdx")
-		if err := GrantVmAccess("uvm", scratchFile); err != nil {
-			t.Fatalf("Failed grantvmaccess: %s", err)
-		}
-		controller, lun, err := v2uvm.AddSCSI(scratchFile, "/tmp/scratch")
-		if err != nil {
-			t.Fatalf("Failed to add UVM scratch: %s", err)
-		}
-		if controller != 0 || lun != 0 {
-			t.Fatalf("expected 0:0")
-		}
-	}
-	return &v2uvm, scratchFile
-}
-
-// A v2 LCOW
 func TestV2XenonLCOW(t *testing.T) {
-	t.Skip("for now")
-	v2uvm, v2uvmScratchFile := createV2LCOWUvm(t, false)
-	if v2uvmScratchFile != "" {
-		defer v2uvm.RemoveSCSI(v2uvmScratchFile)
-		defer os.RemoveAll(filepath.Dir(v2uvmScratchFile))
-	}
-	defer v2uvm.Terminate()
+	cacheDir := createTempDir(t)
+	defer os.RemoveAll(cacheDir)
+	cacheFile := filepath.Join(cacheDir, "cache.vhdx")
 
-	containerScratchDir, _ := createLCOWTempDirWithSandboxv2(t)
-	defer os.RemoveAll(containerScratchDir)
-	if err := GrantVmAccess(v2uvm.Id, filepath.Join(containerScratchDir, "sandbox.vhdx")); err != nil {
-		t.Fatalf("Failed GrantVmAccess on sandbox.vhdx: %s", err)
-	}
+	// This is what gets mounted into /tmp/scratch
+	uvmScratchDir := createTempDir(t)
+	defer os.RemoveAll(uvmScratchDir)
+	uvmScratchFile := filepath.Join(uvmScratchDir, "uvmscratch.vhdx")
 
-	spec := getDefaultLinuxSpec(t)
-	spec.Windows.LayerFolders = append(layersAlpine, containerScratchDir)
-	hostedContainer, err := CreateContainer(&CreateOptions{
-		Id:            "TextV2XenonLCOW",
-		SchemaVersion: schemaversion.SchemaV20(),
-		Spec:          spec,
-		HostingSystem: v2uvm,
-	})
+	// Sandbox for the first container
+	c1SandboxDir := createTempDir(t)
+	defer os.RemoveAll(c1SandboxDir)
+	c1SandboxFile := filepath.Join(c1SandboxDir, "sandbox.vhdx")
+
+	opts := &uvm.UVMOptions{
+		OperatingSystem: "linux",
+		ID:              "uvm",
+	}
+	lcowUVM, err := uvm.Create(opts)
 	if err != nil {
-		t.Fatalf("Failed create: %s", err)
+		t.Fatal(err)
+	}
+	if err := lcowUVM.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer lcowUVM.Terminate()
+
+	// Populate the cache and generate the scratch file for /tmp/scratch
+	if err := lcowUVM.CreateLCOWSandbox(uvmScratchFile, uvm.DefaultLCOWSandboxSizeGB, cacheFile, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := lcowUVM.AddSCSI(uvmScratchFile, `/tmp/scratch`); err != nil {
+		t.Fatal(err)
 	}
 
-	startContainer(t, hostedContainer)
-	stopContainer(t, hostedContainer)
+	// Now create the containers sandbox, populate a spec, create a container and start it.
+	if err := lcowUVM.CreateLCOWSandbox(c1SandboxFile, uvm.DefaultLCOWSandboxSizeGB, cacheFile, ""); err != nil {
+		t.Fatal(err)
+	}
+	c1Spec := getDefaultLinuxSpec(t)
+	c1Folders := append(layersAlpine, c1SandboxDir)
+	c1Spec.Windows.LayerFolders = c1Folders
+	c1Opts := &CreateOptions{
+		Spec:          c1Spec,
+		HostingSystem: lcowUVM,
+	}
 
-	//	pmid, uvmpath, err := AddVPMEM(v2uvm, filepath.Join(layersAlpine[0], "layer.vhd"), "", true)
-	//	fmt.Println(pmid, uvmpath, err)
-	//	RemoveVPMEM(v2uvm, filepath.Join(layersAlpine[0], "layer.vhd"))
+	c1, c1Resources, err := CreateContainer(c1Opts)
+	fmt.Println(c1, c1Resources, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	//	runCommand(t, v2uvm, "echo Hello", `/bin`, "Hello")
-	terminateUtilityVM(t, v2uvm)
+	//func mountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{}, error) {
+
+	time.Sleep(2 * time.Second)
+
+	fmt.Println("Yo!", c1SandboxFile)
 }
+
+//// A v2 LCOW
+//func TestV2XenonLCOW(t *testing.T) {
+//	t.Skip("for now")
+//	v2uvm, v2uvmScratchFile := createV2LCOWUvm(t, false)
+//	if v2uvmScratchFile != "" {
+//		defer v2uvm.RemoveSCSI(v2uvmScratchFile)
+//		defer os.RemoveAll(filepath.Dir(v2uvmScratchFile))
+//	}
+//	defer v2uvm.Terminate()
+
+//	containerScratchDir, _ := createLCOWTempDirWithSandboxv2(t)
+//	defer os.RemoveAll(containerScratchDir)
+//	if err := GrantVmAccess(v2uvm.Id, filepath.Join(containerScratchDir, "sandbox.vhdx")); err != nil {
+//		t.Fatalf("Failed GrantVmAccess on sandbox.vhdx: %s", err)
+//	}
+
+//	spec := getDefaultLinuxSpec(t)
+//	spec.Windows.LayerFolders = append(layersAlpine, containerScratchDir)
+//	hostedContainer, err := CreateContainer(&CreateOptions{
+//		Id:            "TextV2XenonLCOW",
+//		SchemaVersion: schemaversion.SchemaV20(),
+//		Spec:          spec,
+//		HostingSystem: v2uvm,
+//	})
+//	if err != nil {
+//		t.Fatalf("Failed create: %s", err)
+//	}
+
+//	startContainer(t, hostedContainer)
+//	stopContainer(t, hostedContainer)
+
+//	//	pmid, uvmpath, err := AddVPMEM(v2uvm, filepath.Join(layersAlpine[0], "layer.vhd"), "", true)
+//	//	fmt.Println(pmid, uvmpath, err)
+//	//	RemoveVPMEM(v2uvm, filepath.Join(layersAlpine[0], "layer.vhd"))
+
+//	//	runCommand(t, v2uvm, "echo Hello", `/bin`, "Hello")
+//	terminateUtilityVM(t, v2uvm)
+//}
