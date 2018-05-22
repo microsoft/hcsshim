@@ -81,7 +81,7 @@ func createWCOWContainer(coi *createOptionsInternal) (*hcs.System, error) {
 			//
 
 			// TODO: Read-only
-			err := coi.HostingSystem.AddVSMB(mount.Source, hcsschemav2.VsmbFlagReadOnly|hcsschemav2.VsmbFlagPseudoOplocks|hcsschemav2.VsmbFlagTakeBackupPrivilege|hcsschemav2.VsmbFlagCacheIO|hcsschemav2.VsmbFlagShareRead)
+			err := coi.HostingSystem.AddVSMB(mount.Source, "", hcsschemav2.VsmbFlagReadOnly|hcsschemav2.VsmbFlagPseudoOplocks|hcsschemav2.VsmbFlagTakeBackupPrivilege|hcsschemav2.VsmbFlagCacheIO|hcsschemav2.VsmbFlagShareRead)
 			if err != nil {
 				thisError := fmt.Errorf("failed to add VSMB share to utility VM for mount %+v: %s", mount, err)
 				thisError = undoMountOnFailure(coi, origSpecRoot, weMountedStorage, vsmbMountsAddedByUs, thisError)

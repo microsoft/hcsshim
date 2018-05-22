@@ -71,7 +71,7 @@ func MountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 	for _, layerPath := range layerFolders[:len(layerFolders)-1] {
 		var err error
 		if uvm.OS() == "windows" {
-			err = uvm.AddVSMB(layerPath, hcsschemav2.VsmbFlagReadOnly|hcsschemav2.VsmbFlagPseudoOplocks|hcsschemav2.VsmbFlagTakeBackupPrivilege|hcsschemav2.VsmbFlagCacheIO|hcsschemav2.VsmbFlagShareRead)
+			err = uvm.AddVSMB(layerPath, "", hcsschemav2.VsmbFlagReadOnly|hcsschemav2.VsmbFlagPseudoOplocks|hcsschemav2.VsmbFlagTakeBackupPrivilege|hcsschemav2.VsmbFlagCacheIO|hcsschemav2.VsmbFlagShareRead)
 			if err == nil {
 				vsmbAdded = append(vsmbAdded, layerPath)
 			}

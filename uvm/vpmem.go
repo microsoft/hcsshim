@@ -5,41 +5,41 @@ import (
 	"strconv"
 
 	"github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/hcsshim/uvm/schema"
 	"github.com/sirupsen/logrus"
 )
 
-// allocateVPMEM finds the next available VPMem slot
-func (uvm *UtilityVM) allocateVPMEM(hostPath string) (int, error) {
-	uvm.vpmemLocations.Lock()
-	defer uvm.vpmemLocations.Unlock()
-	for index, currentValue := range uvm.vpmemLocations.hostPath {
-		if currentValue == "" {
-			uvm.vpmemLocations.hostPath[index] = hostPath
-			logrus.Debugf("uvm::allocateVPMEM %d %q", index, hostPath)
-			return index, nil
+// TODO: Casing on the host path, same as VSMB
 
+// allocateVPMEM finds the next available VPMem slot. The lock MUST be held
+// when calling this function.
+func (uvm *UtilityVM) allocateVPMEM(hostPath string) (uint32, error) {
+	for index, vi := range uvm.vpmemDevices.vpmemInfo {
+		if vi.hostPath == "" {
+			vi.hostPath = hostPath
+			logrus.Debugf("uvm::allocateVPMEM %d %q", index, hostPath)
+			return uint32(index), nil
 		}
 	}
-	return -1, fmt.Errorf("no free VPMEM locations")
+	return 0, fmt.Errorf("no free VPMEM locations")
 }
 
-func (uvm *UtilityVM) deallocateVPMEM(location int) error {
-	uvm.vpmemLocations.Lock()
-	defer uvm.vpmemLocations.Unlock()
-	uvm.vpmemLocations.hostPath[location] = ""
+func (uvm *UtilityVM) deallocateVPMEM(deviceNumber uint32) error {
+	uvm.vpmemDevices.Lock()
+	defer uvm.vpmemDevices.Unlock()
+	uvm.vpmemDevices.vpmemInfo[deviceNumber] = vpmemInfo{}
 	return nil
 }
 
 // Lock must be held when calling this function
-func (uvm *UtilityVM) findVPMEMAttachment(findThisHostPath string) (int, error) {
-	for index, currentValue := range uvm.vpmemLocations.hostPath {
-		if currentValue == findThisHostPath {
-			logrus.Debugf("uvm::findVPMEMAttachment %d %s", index, findThisHostPath)
-			return index, nil
+func (uvm *UtilityVM) findVPMEMDevice(findThisHostPath string) (uint32, string, error) {
+	for deviceNumber, vi := range uvm.vpmemDevices.vpmemInfo {
+		if vi.hostPath == findThisHostPath {
+			logrus.Debugf("uvm::findVPMEMDeviceNumber %d %s", deviceNumber, findThisHostPath)
+			return uint32(deviceNumber), vi.uvmPath, nil
 		}
-
 	}
-	return -1, fmt.Errorf("%s is not attached to VPMEM", findThisHostPath)
+	return 0, "", fmt.Errorf("%s is not attached to VPMEM", findThisHostPath)
 }
 
 // AddVPMEM adds a VPMEM disk to a utility VM at the next available location.
@@ -49,84 +49,121 @@ func (uvm *UtilityVM) findVPMEMAttachment(findThisHostPath string) (int, error) 
 // Returns the location(0..255) where the device is attached, and if exposed,
 // the container path which will be /tmp/vpmem<location>/ if no container path
 // is supplied, or the user supplied one if it is.
-func (uvm *UtilityVM) AddVPMEM(hostPath string, containerPath string, expose bool) (int, string, error) {
-	location := -1
-	logrus.Debugf("uvm::AddVPMEM id:%s hostPath:%s containerPath:%s expose:%t", uvm.id, hostPath, containerPath, expose)
+func (uvm *UtilityVM) AddVPMEM(hostPath string, uvmPath string, expose bool) (uint32, string, error) {
+	if uvm.operatingSystem != "linux" {
+		return 0, "", errNotSupported
+	}
 
-	// BIG TODO: We need to store the hosted settings to so that on release we can tell GCS to flush.
+	logrus.Debugf("uvm::AddVPMEM id:%s hostPath:%s containerPath:%s expose:%t", uvm.id, hostPath, uvmPath, expose)
 
+	uvm.vpmemDevices.Lock()
+	defer uvm.vpmemDevices.Unlock()
+
+	var deviceNumber uint32
 	var err error
-	location, err = uvm.allocateVPMEM(hostPath)
+	currentUVMPath := ""
+
+	deviceNumber, currentUVMPath, err = uvm.findVPMEMDevice(hostPath)
 	if err != nil {
-		return -1, "", err
-	}
-	controller := schema2.VirtualMachinesResourcesStorageVpmemControllerV2{}
-	controller.Devices = make(map[string]schema2.VirtualMachinesResourcesStorageVpmemDeviceV2)
-	controller.Devices[strconv.Itoa(location)] = schema2.VirtualMachinesResourcesStorageVpmemDeviceV2{
-		HostPath:    hostPath,
-		ReadOnly:    true,
-		ImageFormat: "VHD1",
-	}
-
-	modification := &schema2.ModifySettingsRequestV2{
-		ResourceType: schema2.ResourceTypeVPMemDevice,
-		RequestType:  schema2.RequestTypeAdd,
-		Settings:     controller,
-	}
-
-	if expose {
-		if containerPath == "" {
-			containerPath = fmt.Sprintf("/tmp/vpmem%d", location)
+		// It doesn't exist, so we're going to allocate and hot-add it
+		deviceNumber, err = uvm.allocateVPMEM(hostPath)
+		if err != nil {
+			return 0, "", err
 		}
-		hostedSettings := schema2.MappedVPMemController{}
-		hostedSettings.MappedDevices = make(map[int]string)
-		hostedSettings.MappedDevices[location] = containerPath
-		modification.HostedSettings = hostedSettings
-	}
+		controller := schema2.VirtualMachinesResourcesStorageVpmemControllerV2{}
+		controller.Devices = make(map[string]schema2.VirtualMachinesResourcesStorageVpmemDeviceV2)
+		controller.Devices[strconv.Itoa(int(deviceNumber))] = schema2.VirtualMachinesResourcesStorageVpmemDeviceV2{
+			HostPath:    hostPath,
+			ReadOnly:    true,
+			ImageFormat: "VHD1",
+		}
 
-	if err := uvm.Modify(modification); err != nil {
-		uvm.deallocateVPMEM(location)
-		return -1, "", fmt.Errorf("uvm::AddVPMEM: failed to modify utility VM configuration: %s", err)
+		modification := &schema2.ModifySettingsRequestV2{
+			ResourceType: schema2.ResourceTypeVPMemDevice,
+			RequestType:  schema2.RequestTypeAdd,
+			Settings:     controller,
+			ResourceUri:  fmt.Sprintf("virtualmachine/devices/virtualpmemdevices/%d", deviceNumber),
+		}
+
+		if expose || uvmPath != "" {
+			if uvmPath == "" {
+				uvmPath = fmt.Sprintf("/tmp/vpmem%d", deviceNumber)
+			}
+			modification.HostedSettings = schema.LCOWMappedVPMemDevice{
+				DeviceNumber: deviceNumber,
+				MountPath:    uvmPath,
+			}
+		}
+		currentUVMPath = uvmPath
+
+		if err := uvm.Modify(modification); err != nil {
+			uvm.vpmemDevices.vpmemInfo[deviceNumber] = vpmemInfo{}
+			return 0, "", fmt.Errorf("uvm::AddVPMEM: failed to modify utility VM configuration: %s", err)
+		}
+
+		uvm.vpmemDevices.vpmemInfo[deviceNumber] = vpmemInfo{
+			hostPath: hostPath,
+			refCount: 1,
+			uvmPath:  uvmPath}
+
+		return deviceNumber, uvmPath, nil
+	} else {
+		pmemi := vpmemInfo{
+			hostPath: hostPath,
+			refCount: uvm.vpmemDevices.vpmemInfo[deviceNumber].refCount + 1,
+			uvmPath:  currentUVMPath}
+		uvm.vpmemDevices.vpmemInfo[deviceNumber] = pmemi
 	}
-	logrus.Debugf("uvm::AddVPMEM id:%s hostPath:%s added at %d", uvm.id, hostPath, location)
-	return location, containerPath, nil
+	logrus.Debugf("hcsshim::AddVPMEM id:%s Success %+v", uvm.id, uvm.vpmemDevices.vpmemInfo[deviceNumber])
+	return deviceNumber, currentUVMPath, nil
+
 }
 
 // RemoveVPMEM removes a VPMEM disk from a utility VM. As an external API, it
 // is "safe". Internal use can call removeVPMEM.
 func (uvm *UtilityVM) RemoveVPMEM(hostPath string) error {
-	uvm.vpmemLocations.Lock()
-	defer uvm.vpmemLocations.Unlock()
-
-	// Make sure is actually attached
-	location, err := uvm.findVPMEMAttachment(hostPath)
-	if err != nil {
-		return fmt.Errorf("cannot remove VPMEM %s as it is not attached to container %s: %s", hostPath, uvm.id, err)
+	if uvm.operatingSystem != "linux" {
+		return errNotSupported
 	}
 
-	if err := uvm.removeVPMEM(hostPath, location); err != nil {
-		return fmt.Errorf("failed to remove VPMEM %s from container %s: %s", hostPath, uvm.id, err)
+	uvm.vpmemDevices.Lock()
+	defer uvm.vpmemDevices.Unlock()
+
+	// Make sure is actually attached
+	deviceNumber, uvmPath, err := uvm.findVPMEMDevice(hostPath)
+	if err != nil {
+		return fmt.Errorf("cannot remove VPMEM %s as it is not attached to utility VM %s: %s", hostPath, uvm.id, err)
+	}
+
+	if err := uvm.removeVPMEM(hostPath, uvmPath, deviceNumber); err != nil {
+		return fmt.Errorf("failed to remove VPMEM %s from utility VM %s: %s", hostPath, uvm.id, err)
 	}
 	return nil
 }
 
 // removeVPMEM is the internally callable "unsafe" version of RemoveVPMEM. The mutex
 // MUST be held when calling this function.
-func (uvm *UtilityVM) removeVPMEM(hostPath string, location int) error {
+func (uvm *UtilityVM) removeVPMEM(hostPath string, uvmPath string, deviceNumber uint32) error {
 	logrus.Debugf("uvm::RemoveVPMEM id:%s hostPath:%s", uvm.id, hostPath)
 
-	vpmemModification := &schema2.ModifySettingsRequestV2{
-	//			ResourceType: schema2.ResourceTypeMappedVirtualDisk,
-	//			RequestType:  schema2.RequestTypeRemove,
-	//			ResourceUri:  fmt.Sprintf("VirtualMachine/Devices/SCSI/%d/%d", controller, lun),
+	// TODO: Add the refcounting the same as vsm
+	// TODO: Add the remoteType
 
+	modification := &schema2.ModifySettingsRequestV2{
+		ResourceType: schema2.ResourceTypeVPMemDevice,
+		RequestType:  schema2.RequestTypeRemove,
+		ResourceUri:  fmt.Sprintf("virtualmachine/devices/virtualpmemdevices/%d", deviceNumber),
 	}
 
-	panic("JJH not yet implemented")
-	if err := uvm.Modify(vpmemModification); err != nil {
+	modification.HostedSettings = schema.LCOWMappedVPMemDevice{
+		DeviceNumber: deviceNumber,
+		MountPath:    uvmPath,
+	}
+
+	if err := uvm.Modify(modification); err != nil {
 		return err
 	}
-	uvm.vpmemLocations.hostPath[location] = ""
-	logrus.Debugf("uvm::RemoveVPMEM: Success %s removed from %s %d", hostPath, uvm.id, location)
+	uvm.vpmemDevices.vpmemInfo[deviceNumber] = vpmemInfo{}
+	logrus.Debugf("uvm::RemoveVPMEM: Success %s removed from %s %d", hostPath, uvm.id, deviceNumber)
 	return nil
 }
