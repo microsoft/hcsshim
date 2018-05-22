@@ -10,6 +10,8 @@ import (
 
 type HcsError = hcserror.HcsError
 
+var errNotSupported = fmt.Errorf("not supported")
+
 // UtilityVMError is an error encountered in HCS during an operation on a UtilityVM object
 type UtilityVMError struct {
 	UtilityVM *UtilityVM

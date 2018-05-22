@@ -5,14 +5,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/cpu"
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
-	"github.com/Microsoft/hcsshim/internal/wclayer"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
@@ -46,6 +44,10 @@ type UVMOptions struct {
 //
 func Create(opts *UVMOptions) (*UtilityVM, error) {
 	logrus.Debugf("uvm::Create %+v", opts)
+
+	if opts == nil {
+		return nil, fmt.Errorf("no options supplied to create")
+	}
 
 	uvm := &UtilityVM{
 		id:              opts.Id,
@@ -213,24 +215,8 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 
 	uvm.hcsSystem = hcsSystem
 	if uvm.operatingSystem == "windows" {
-		uvm.scsiLocations.hostPath[0][0] = attachments["0"].Path
+		uvm.scsiLocations.scsiInfo[0][0].hostPath = attachments["0"].Path
 	}
 	return uvm, nil
 
-}
-
-// CreateWCOWSandbox is a helper to create a sandbox for a Windows utility VM
-// with permissions to the specified VM ID in a specified directory
-func CreateWCOWSandbox(imagePath, destDirectory, vmID string) error {
-	sourceSandbox := filepath.Join(imagePath, `UtilityVM\SystemTemplate.vhdx`)
-	targetSandbox := filepath.Join(destDirectory, "sandbox.vhdx")
-	logrus.Debugf("uvm::CreateWCOWSandbox %s from %s", targetSandbox, sourceSandbox)
-	if err := copyfile.CopyFile(sourceSandbox, targetSandbox, true); err != nil {
-		return err
-	}
-	if err := wclayer.GrantVmAccess(vmID, targetSandbox); err != nil {
-		// TODO: Delete the file?
-		return err
-	}
-	return nil
 }
