@@ -71,8 +71,8 @@ func mountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 	//
 	//  Each layer is ref-counted so that multiple containers in the same utility VM can share them.
 	var vsmbAdded []string
-
 	var vpmemAdded []vpMemEntry
+	attachedSCSIHostPath := ""
 
 	for _, layerPath := range layerFolders[:len(layerFolders)-1] {
 		var err error
@@ -92,8 +92,7 @@ func mountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 			}
 		}
 		if err != nil {
-			removeVPMEMOnMountFailure(uvm, vpmemAdded)
-			removeVSMBOnMountFailure(uvm, vsmbAdded)
+			cleanupOnMountFailure(uvm, vsmbAdded, vpmemAdded, attachedSCSIHostPath)
 			return nil, err
 		}
 	}
@@ -104,8 +103,7 @@ func mountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 	_, sandboxPath := filepath.Split(layerFolders[len(layerFolders)-1])
 	containerPathGUID, err := wclayer.NameToGuid(sandboxPath)
 	if err != nil {
-		removeVPMEMOnMountFailure(uvm, vpmemAdded)
-		removeVSMBOnMountFailure(uvm, vsmbAdded)
+		cleanupOnMountFailure(uvm, vsmbAdded, vpmemAdded, attachedSCSIHostPath)
 		return nil, err
 	}
 	hostPath := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
@@ -113,8 +111,7 @@ func mountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 	// On Linux, we need to grant access to the sandbox
 	if uvm.OS() == "linux" {
 		if err := wclayer.GrantVmAccess(uvm.ID(), hostPath); err != nil {
-			removeVPMEMOnMountFailure(uvm, vpmemAdded)
-			removeVSMBOnMountFailure(uvm, vsmbAdded)
+			cleanupOnMountFailure(uvm, vsmbAdded, vpmemAdded, attachedSCSIHostPath)
 			return nil, err
 		}
 	}
@@ -129,10 +126,10 @@ func mountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 	}
 	_, _, err = uvm.AddSCSI(hostPath, containerPath)
 	if err != nil {
-		removeVPMEMOnMountFailure(uvm, vpmemAdded)
-		removeVSMBOnMountFailure(uvm, vsmbAdded)
+		cleanupOnMountFailure(uvm, vsmbAdded, vpmemAdded, attachedSCSIHostPath)
 		return nil, err
 	}
+	attachedSCSIHostPath = hostPath
 
 	if uvm.OS() == "windows" {
 		// 	Load the filter at the C:\<GUID> location calculated above. We pass into this request each of the
@@ -141,9 +138,7 @@ func mountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 		for _, vsmb := range vsmbAdded {
 			vsmbGUID, err := uvm.GetVSMBGUID(vsmb)
 			if err != nil {
-				removeVPMEMOnMountFailure(uvm, vpmemAdded)
-				removeVSMBOnMountFailure(uvm, vsmbAdded)
-				removeSCSIOnMountFailure(uvm, hostPath)
+				cleanupOnMountFailure(uvm, vsmbAdded, vpmemAdded, attachedSCSIHostPath)
 				return nil, err
 			}
 			layers = append(layers, schema2.ContainersResourcesLayerV2{
@@ -161,9 +156,7 @@ func mountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 			HostedSettings: hostedSettings,
 		}
 		if err := uvm.Modify(combinedLayersModification); err != nil {
-			removeVPMEMOnMountFailure(uvm, vpmemAdded)
-			removeVSMBOnMountFailure(uvm, vsmbAdded)
-			removeSCSIOnMountFailure(uvm, hostPath)
+			cleanupOnMountFailure(uvm, vsmbAdded, vpmemAdded, attachedSCSIHostPath)
 			return nil, err
 
 		}
@@ -187,9 +180,7 @@ func mountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 		HostedSettings: hostedSettings,
 	}
 	if err := uvm.Modify(combinedLayersModification); err != nil {
-		removeVPMEMOnMountFailure(uvm, vpmemAdded)
-		removeVSMBOnMountFailure(uvm, vsmbAdded)
-		removeSCSIOnMountFailure(uvm, hostPath)
+		cleanupOnMountFailure(uvm, vsmbAdded, vpmemAdded, attachedSCSIHostPath)
 		return nil, err
 	}
 	logrus.Debugln("hcsshim::mountContainerLayers Succeeded")
@@ -298,30 +289,20 @@ func unmountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM, op unmoun
 	return retError
 }
 
-// removeVSMBOnMountFailure is a helper to roll-back any VSMB shares added to a utility VM on a failure path
-// The mutex must NOT be held when calling this function.
-func removeVSMBOnMountFailure(uvm *uvm.UtilityVM, toRemove []string) {
-	for _, vsmbShare := range toRemove {
+func cleanupOnMountFailure(uvm *uvm.UtilityVM, vsmbShares []string, vpmemDevices []vpMemEntry, scsiHostPath string) {
+	for _, vsmbShare := range vsmbShares {
 		if err := uvm.RemoveVSMB(vsmbShare); err != nil {
 			logrus.Warnf("Possibly leaked vsmbshare on error removal path: %s", err)
 		}
 	}
-}
-
-// removeVPMEMOnMountFailure is a helper to roll-back any VPMEM devices added to a utility VM on a failure path
-// The mutex must NOT be held when calling this function.
-func removeVPMEMOnMountFailure(uvm *uvm.UtilityVM, toRemove []vpMemEntry) {
-	for _, vpmemDevice := range toRemove {
+	for _, vpmemDevice := range vpmemDevices {
 		if err := uvm.RemoveVPMEM(vpmemDevice.hostPath); err != nil {
 			logrus.Warnf("Possibly leaked vpmemdevice on error removal path: %s", err)
 		}
 	}
-}
-
-// removeSCSIOnMountFailure is a helper to roll-back a SCSI disk added to a utility VM on a failure path.
-// The mutex must NOT be held when calling this function.
-func removeSCSIOnMountFailure(uvm *uvm.UtilityVM, hostPath string) {
-	if err := uvm.RemoveSCSI(hostPath); err != nil {
-		logrus.Warnf("Possibly leaked SCSI disk on error removal path: %s", err)
+	if scsiHostPath != "" {
+		if err := uvm.RemoveSCSI(scsiHostPath); err != nil {
+			logrus.Warnf("Possibly leaked SCSI disk on error removal path: %s", err)
+		}
 	}
 }

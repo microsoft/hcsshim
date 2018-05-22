@@ -105,6 +105,11 @@ func TestV2XenonLCOW(t *testing.T) {
 	defer os.RemoveAll(c1SandboxDir)
 	c1SandboxFile := filepath.Join(c1SandboxDir, "sandbox.vhdx")
 
+	// Sandbox for the second container
+	c2SandboxDir := createTempDir(t)
+	defer os.RemoveAll(c2SandboxDir)
+	c2SandboxFile := filepath.Join(c2SandboxDir, "sandbox.vhdx")
+
 	opts := &uvm.UVMOptions{
 		OperatingSystem: "linux",
 		ID:              "uvm",
@@ -126,29 +131,48 @@ func TestV2XenonLCOW(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Now create the containers sandbox, populate a spec, create a container and start it.
+	// Now create the first containers sandbox, populate a spec
 	if err := lcowUVM.CreateLCOWSandbox(c1SandboxFile, uvm.DefaultLCOWSandboxSizeGB, cacheFile, ""); err != nil {
 		t.Fatal(err)
 	}
 	c1Spec := getDefaultLinuxSpec(t)
 	c1Folders := append(layersAlpine, c1SandboxDir)
 	c1Spec.Windows.LayerFolders = c1Folders
+	c1Spec.Process = &specs.Process{Args: []string{"echo", "hello", "lcow", "container", "one"}}
 	c1Opts := &CreateOptions{
 		Spec:          c1Spec,
 		HostingSystem: lcowUVM,
 	}
 
+	// Now create the second containers sandbox, populate a spec
+	if err := lcowUVM.CreateLCOWSandbox(c2SandboxFile, uvm.DefaultLCOWSandboxSizeGB, cacheFile, ""); err != nil {
+		t.Fatal(err)
+	}
+	c2Spec := getDefaultLinuxSpec(t)
+	c2Folders := append(layersAlpine, c2SandboxDir)
+	c2Spec.Windows.LayerFolders = c2Folders
+	c2Spec.Process = &specs.Process{Args: []string{"echo", "hello", "lcow", "container", "two"}}
+	c2Opts := &CreateOptions{
+		Spec:          c2Spec,
+		HostingSystem: lcowUVM,
+	}
+
+	// Create the first container
 	c1, c1Resources, err := CreateContainer(c1Opts)
 	fmt.Println(c1, c1Resources, err)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	//func mountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{}, error) {
+	// Create the second container
+	c2, c2Resources, err := CreateContainer(c2Opts)
+	fmt.Println(c2, c2Resources, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	time.Sleep(2 * time.Second)
 
-	fmt.Println("Yo!", c1SandboxFile)
 }
 
 //// A v2 LCOW
