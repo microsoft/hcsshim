@@ -65,7 +65,7 @@ func TestAllocateSCSI(t *testing.T) {
 			}
 		}
 	}
-	if uvm.scsiLocations.scsiInfo[0][0].hostPath == "" {
+	if uvm.scsiLocations[0][0].hostPath == "" {
 		t.Fatalf("0:0 should still be taken")
 	}
 	c, l, _, err = uvm.findSCSIAttachment(filepath.Join(uvmScratchDir, `sandbox.vhdx`))
