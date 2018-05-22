@@ -221,7 +221,7 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 
 	uvm.hcsSystem = hcsSystem
 	if uvm.operatingSystem == "windows" {
-		uvm.scsiLocations.scsiInfo[0][0].hostPath = attachments["0"].Path
+		uvm.scsiLocations[0][0].hostPath = attachments["0"].Path
 	}
 	return uvm, nil
 }

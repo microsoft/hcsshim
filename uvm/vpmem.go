@@ -14,7 +14,7 @@ import (
 // allocateVPMEM finds the next available VPMem slot. The lock MUST be held
 // when calling this function.
 func (uvm *UtilityVM) allocateVPMEM(hostPath string) (uint32, error) {
-	for index, vi := range uvm.vpmemDevices.vpmemInfo {
+	for index, vi := range uvm.vpmemDevices {
 		if vi.hostPath == "" {
 			vi.hostPath = hostPath
 			logrus.Debugf("uvm::allocateVPMEM %d %q", index, hostPath)
@@ -25,15 +25,15 @@ func (uvm *UtilityVM) allocateVPMEM(hostPath string) (uint32, error) {
 }
 
 func (uvm *UtilityVM) deallocateVPMEM(deviceNumber uint32) error {
-	uvm.vpmemDevices.Lock()
-	defer uvm.vpmemDevices.Unlock()
-	uvm.vpmemDevices.vpmemInfo[deviceNumber] = vpmemInfo{}
+	uvm.m.Lock()
+	defer uvm.m.Unlock()
+	uvm.vpmemDevices[deviceNumber] = vpmemInfo{}
 	return nil
 }
 
 // Lock must be held when calling this function
 func (uvm *UtilityVM) findVPMEMDevice(findThisHostPath string) (uint32, string, error) {
-	for deviceNumber, vi := range uvm.vpmemDevices.vpmemInfo {
+	for deviceNumber, vi := range uvm.vpmemDevices {
 		if vi.hostPath == findThisHostPath {
 			logrus.Debugf("uvm::findVPMEMDeviceNumber %d %s", deviceNumber, findThisHostPath)
 			return uint32(deviceNumber), vi.uvmPath, nil
@@ -56,8 +56,8 @@ func (uvm *UtilityVM) AddVPMEM(hostPath string, uvmPath string, expose bool) (ui
 
 	logrus.Debugf("uvm::AddVPMEM id:%s hostPath:%s containerPath:%s expose:%t", uvm.id, hostPath, uvmPath, expose)
 
-	uvm.vpmemDevices.Lock()
-	defer uvm.vpmemDevices.Unlock()
+	uvm.m.Lock()
+	defer uvm.m.Unlock()
 
 	var deviceNumber uint32
 	var err error
@@ -97,11 +97,11 @@ func (uvm *UtilityVM) AddVPMEM(hostPath string, uvmPath string, expose bool) (ui
 		currentUVMPath = uvmPath
 
 		if err := uvm.Modify(modification); err != nil {
-			uvm.vpmemDevices.vpmemInfo[deviceNumber] = vpmemInfo{}
+			uvm.vpmemDevices[deviceNumber] = vpmemInfo{}
 			return 0, "", fmt.Errorf("uvm::AddVPMEM: failed to modify utility VM configuration: %s", err)
 		}
 
-		uvm.vpmemDevices.vpmemInfo[deviceNumber] = vpmemInfo{
+		uvm.vpmemDevices[deviceNumber] = vpmemInfo{
 			hostPath: hostPath,
 			refCount: 1,
 			uvmPath:  uvmPath}
@@ -110,11 +110,11 @@ func (uvm *UtilityVM) AddVPMEM(hostPath string, uvmPath string, expose bool) (ui
 	} else {
 		pmemi := vpmemInfo{
 			hostPath: hostPath,
-			refCount: uvm.vpmemDevices.vpmemInfo[deviceNumber].refCount + 1,
+			refCount: uvm.vpmemDevices[deviceNumber].refCount + 1,
 			uvmPath:  currentUVMPath}
-		uvm.vpmemDevices.vpmemInfo[deviceNumber] = pmemi
+		uvm.vpmemDevices[deviceNumber] = pmemi
 	}
-	logrus.Debugf("hcsshim::AddVPMEM id:%s Success %+v", uvm.id, uvm.vpmemDevices.vpmemInfo[deviceNumber])
+	logrus.Debugf("hcsshim::AddVPMEM id:%s Success %+v", uvm.id, uvm.vpmemDevices[deviceNumber])
 	return deviceNumber, currentUVMPath, nil
 
 }
@@ -126,8 +126,8 @@ func (uvm *UtilityVM) RemoveVPMEM(hostPath string) error {
 		return errNotSupported
 	}
 
-	uvm.vpmemDevices.Lock()
-	defer uvm.vpmemDevices.Unlock()
+	uvm.m.Lock()
+	defer uvm.m.Unlock()
 
 	// Make sure is actually attached
 	deviceNumber, uvmPath, err := uvm.findVPMEMDevice(hostPath)
@@ -163,7 +163,7 @@ func (uvm *UtilityVM) removeVPMEM(hostPath string, uvmPath string, deviceNumber 
 	if err := uvm.Modify(modification); err != nil {
 		return err
 	}
-	uvm.vpmemDevices.vpmemInfo[deviceNumber] = vpmemInfo{}
+	uvm.vpmemDevices[deviceNumber] = vpmemInfo{}
 	logrus.Debugf("uvm::RemoveVPMEM: Success %s removed from %s %d", hostPath, uvm.id, deviceNumber)
 	return nil
 }

@@ -11,12 +11,12 @@ import (
 // allocateSCSI finds the next available slot on the
 // SCSI controllers associated with a utility VM to use.
 func (uvm *UtilityVM) allocateSCSI(hostPath string) (int, int, error) {
-	uvm.scsiLocations.Lock()
-	defer uvm.scsiLocations.Unlock()
-	for controller, luns := range uvm.scsiLocations.scsiInfo {
+	uvm.m.Lock()
+	defer uvm.m.Unlock()
+	for controller, luns := range uvm.scsiLocations {
 		for lun, si := range luns {
 			if si.hostPath == "" {
-				uvm.scsiLocations.scsiInfo[controller][lun].hostPath = hostPath
+				uvm.scsiLocations[controller][lun].hostPath = hostPath
 				logrus.Debugf("uvm::allocateSCSI %d:%d %q", controller, lun, hostPath)
 				return controller, lun, nil
 
@@ -27,17 +27,17 @@ func (uvm *UtilityVM) allocateSCSI(hostPath string) (int, int, error) {
 }
 
 func (uvm *UtilityVM) deallocateSCSI(controller int, lun int) error {
-	uvm.scsiLocations.Lock()
-	defer uvm.scsiLocations.Unlock()
-	logrus.Debugf("uvm::deallocateSCSI %d:%d %+v", controller, lun, uvm.scsiLocations.scsiInfo[controller][lun])
-	uvm.scsiLocations.scsiInfo[controller][lun] = scsiInfo{}
+	uvm.m.Lock()
+	defer uvm.m.Unlock()
+	logrus.Debugf("uvm::deallocateSCSI %d:%d %+v", controller, lun, uvm.scsiLocations[controller][lun])
+	uvm.scsiLocations[controller][lun] = scsiInfo{}
 
 	return nil
 }
 
 // Lock must be held when calling this function
 func (uvm *UtilityVM) findSCSIAttachment(findThisHostPath string) (int, int, string, error) {
-	for controller, luns := range uvm.scsiLocations.scsiInfo {
+	for controller, luns := range uvm.scsiLocations {
 		for lun, si := range luns {
 			if si.hostPath == findThisHostPath {
 				logrus.Debugf("uvm::findSCSIAttachment %d:%d %+v", controller, lun, si)
@@ -123,8 +123,8 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int, error)
 // RemoveSCSI removes a SCSI disk from a utility VM. As an external API, it
 // is "safe". Internal use can call removeSCSI.
 func (uvm *UtilityVM) RemoveSCSI(hostPath string) error {
-	uvm.scsiLocations.Lock()
-	defer uvm.scsiLocations.Unlock()
+	uvm.m.Lock()
+	defer uvm.m.Unlock()
 
 	// Make sure is actually attached
 	controller, lun, uvmPath, err := uvm.findSCSIAttachment(hostPath)
@@ -159,7 +159,7 @@ func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int
 	if err := uvm.Modify(scsiModification); err != nil {
 		return err
 	}
-	uvm.scsiLocations.scsiInfo[controller][lun] = scsiInfo{}
+	uvm.scsiLocations[controller][lun] = scsiInfo{}
 	logrus.Debugf("uvm::RemoveSCSI: Success %s removed from %s %d:%d", hostPath, uvm.id, controller, lun)
 	return nil
 }
