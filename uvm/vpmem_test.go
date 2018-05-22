@@ -41,7 +41,7 @@ func TestVPMEM(t *testing.T) {
 	}
 
 	count := 0
-	for _, vi := range uvm.vpmemDevices.vpmemInfo {
+	for _, vi := range uvm.vpmemDevices {
 		if vi.hostPath != "" {
 			count++
 		}
@@ -76,7 +76,7 @@ func TestVPMEM(t *testing.T) {
 	}
 
 	count = 0
-	for _, vi := range uvm.vpmemDevices.vpmemInfo {
+	for _, vi := range uvm.vpmemDevices {
 		if vi.hostPath != "" {
 			count++
 		}

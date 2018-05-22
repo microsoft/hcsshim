@@ -25,17 +25,17 @@ func TestVSMBRO(t *testing.T) {
 			t.Fatalf("AddVSMB failed: %s", err)
 		}
 	}
-	if len(uvm.vsmbShares.vsmbInfo) != 1 {
+	if len(uvm.vsmbShares) != 1 {
 		t.Fatalf("Should only be one VSMB entry")
 	}
-	if _, ok := uvm.vsmbShares.vsmbInfo[dir]; ok {
+	if _, ok := uvm.vsmbShares[dir]; ok {
 		t.Fatalf("should not found as upper case")
 	}
-	if _, ok := uvm.vsmbShares.vsmbInfo[strings.ToLower(dir)]; !ok {
+	if _, ok := uvm.vsmbShares[strings.ToLower(dir)]; !ok {
 		t.Fatalf("not found!")
 	}
-	if uvm.vsmbShares.vsmbInfo[strings.ToLower(dir)].refCount != iterations {
-		t.Fatalf("iteration mismatch: %d %d", iterations, uvm.vsmbShares.vsmbInfo[strings.ToLower(dir)].refCount)
+	if uvm.vsmbShares[strings.ToLower(dir)].refCount != iterations {
+		t.Fatalf("iteration mismatch: %d %d", iterations, uvm.vsmbShares[strings.ToLower(dir)].refCount)
 	}
 
 	// Verify the GUID matches the internal data-structure
@@ -43,7 +43,7 @@ func TestVSMBRO(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to find guid")
 	}
-	if uvm.vsmbShares.vsmbInfo[strings.ToLower(dir)].guid != g {
+	if uvm.vsmbShares[strings.ToLower(dir)].guid != g {
 		t.Fatalf("guid from GetVSMBShareGUID doesn't match")
 	}
 
@@ -53,7 +53,7 @@ func TestVSMBRO(t *testing.T) {
 			t.Fatalf("RemoveVSMB failed: %s", err)
 		}
 	}
-	if len(uvm.vsmbShares.vsmbInfo) != 0 {
+	if len(uvm.vsmbShares) != 0 {
 		t.Fatalf("Should not be any vsmb entries remaining")
 	}
 
