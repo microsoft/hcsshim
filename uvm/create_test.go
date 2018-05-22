@@ -3,7 +3,6 @@
 package uvm
 
 import (
-	"os"
 	"testing"
 )
 

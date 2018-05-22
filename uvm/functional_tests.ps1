@@ -1,0 +1,1 @@
+go test -v -tags "functional create sandbox scsi vpmem vsmb"
