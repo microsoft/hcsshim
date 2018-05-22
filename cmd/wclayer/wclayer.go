@@ -10,6 +10,12 @@ import (
 	"github.com/urfave/cli"
 )
 
+// Add a manifest to get proper Windows version detection.
+//
+// goversioninfo can be installed with "go get github.com/josephspurrier/goversioninfo/cmd/goversioninfo"
+
+//go:generate goversioninfo -platform-specific
+
 var usage = `Windows Container layer utility
 
 wclayer is a command line tool for manipulating Windows Container
