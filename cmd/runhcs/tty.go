@@ -34,7 +34,7 @@ var resizeTtyCommand = cli.Command{
 
 		pid := context.Int("pid")
 		if pid == 0 {
-			if err := stateKey.Get(id, "pid", &pid); err != nil {
+			if err := stateKey.Get(id, keyInitPid, &pid); err != nil {
 				return err
 			}
 		}

@@ -42,11 +42,12 @@ func (err *NotFoundError) Error() string {
 }
 
 type NoStateError struct {
-	Id string
+	ID  string
+	Key string
 }
 
 func (err *NoStateError) Error() string {
-	return fmt.Sprintf("no state is present for ID '%s'", err.Id)
+	return fmt.Sprintf("state '%s' is not present for ID '%s'", err.Key, err.ID)
 }
 
 func createVolatileKey(k *Key, path string, access uint32) (newk *Key, openedExisting bool, err error) {
@@ -207,9 +208,9 @@ func (k *Key) set(id string, create bool, key string, state interface{}) error {
 	}
 	if err != nil {
 		if err == syscall.ERROR_FILE_NOT_FOUND {
-			return &NoStateError{id}
+			return &NoStateError{id, key}
 		}
-		return &os.PathError{Op: "RegSetValueEx", Path: sk.Name + ":state", Err: err}
+		return &os.PathError{Op: "RegSetValueEx", Path: sk.Name + ":" + key, Err: err}
 	}
 	return nil
 }
@@ -220,6 +221,22 @@ func (k *Key) Create(id, key string, state interface{}) error {
 
 func (k *Key) Set(id, key string, state interface{}) error {
 	return k.set(id, false, key, state)
+}
+
+func (k *Key) Clear(id, key string) error {
+	sk, err := k.openid(id)
+	if err != nil {
+		return err
+	}
+	defer sk.Close()
+	err = sk.DeleteValue(key)
+	if err != nil {
+		if err == syscall.ERROR_FILE_NOT_FOUND {
+			return &NoStateError{id, key}
+		}
+		return &os.PathError{Op: "RegDeleteValue", Path: sk.Name + ":" + key, Err: err}
+	}
+	return nil
 }
 
 func (k *Key) Get(id, key string, state interface{}) error {
@@ -254,7 +271,7 @@ func (k *Key) Get(id, key string, state interface{}) error {
 	}
 	if err != nil {
 		if err == syscall.ERROR_FILE_NOT_FOUND {
-			return &NoStateError{id}
+			return &NoStateError{id, key}
 		}
 		return &os.PathError{Op: "RegQueryValueEx", Path: sk.Name + ":" + key, Err: err}
 	}

@@ -13,7 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// MountContainerLayers is a helper for clients to hide all the complexity of layer mounting
+// mountContainerLayers is a helper for clients to hide all the complexity of layer mounting
 // Layer folder are in order: base, [rolayer1..rolayern,] sandbox
 // TODO: Extend for LCOW?
 //
@@ -24,8 +24,8 @@ import (
 //                    of the layers are the VSMB locations where the read-only layers are mounted.
 //
 // TODO Should this return a string or an object? More efficient as object, but requires more client work to marshall it again.
-func MountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{}, error) {
-	logrus.Debugln("hcsshim::MountContainerLayers", layerFolders)
+func mountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{}, error) {
+	logrus.Debugln("hcsshim::mountContainerLayers", layerFolders)
 
 	if uvm == nil {
 		if len(layerFolders) < 2 {
@@ -33,11 +33,11 @@ func MountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 		}
 		path := layerFolders[len(layerFolders)-1]
 		rest := layerFolders[:len(layerFolders)-1]
-		logrus.Debugln("hcsshim::MountContainerLayers ActivateLayer", path)
+		logrus.Debugln("hcsshim::mountContainerLayers ActivateLayer", path)
 		if err := wclayer.ActivateLayer(path); err != nil {
 			return nil, err
 		}
-		logrus.Debugln("hcsshim::MountContainerLayers Preparelayer", path, rest)
+		logrus.Debugln("hcsshim::mountContainerLayers Preparelayer", path, rest)
 		if err := wclayer.PrepareLayer(path, rest); err != nil {
 			if err2 := wclayer.DeactivateLayer(path); err2 != nil {
 				logrus.Warnf("Failed to Deactivate %s: %s", path, err)
@@ -59,7 +59,7 @@ func MountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 	}
 
 	// V2 UVM
-	logrus.Debugf("hcsshim::MountContainerLayers Is a %s V2 UVM", uvm.OS())
+	logrus.Debugf("hcsshim::mountContainerLayers Is a %s V2 UVM", uvm.OS())
 
 	// 	Add each read-only layers. For Windows, this is a VSMB share with the ResourceUri ending in
 	// a GUID based on the folder path. For Linux, this is a VPMEM device.
@@ -140,32 +140,32 @@ func MountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 			return nil, err
 		}
 	}
-	logrus.Debugln("hcsshim::MountContainerLayers Succeeded")
+	logrus.Debugln("hcsshim::mountContainerLayers Succeeded")
 	return combinedLayers, nil
 }
 
-// UnmountOperation is used when calling Unmount() to determine what type of unmount is
-// required. In V1 schema, this must be UnmountOperationAll. In V2, client can
+// unmountOperation is used when calling Unmount() to determine what type of unmount is
+// required. In V1 schema, this must be unmountOperationAll. In V2, client can
 // be more optimal and only unmount what they need which can be a minor performance
 // improvement (eg if you know only one container is running in a utility VM, and
 // the UVM is about to be torn down, there's no need to unmount the VSMB shares,
 // just SCSI to have a consistent file system).
-type UnmountOperation uint
+type unmountOperation uint
 
 const (
-	UnmountOperationSCSI = 0x01
-	UnmountOperationVSMB = 0x02
-	UnmountOperationAll  = UnmountOperationSCSI | UnmountOperationVSMB
+	unmountOperationSCSI unmountOperation = 0x01
+	unmountOperationVSMB                  = 0x02
+	unmountOperationAll                   = unmountOperationSCSI | unmountOperationVSMB
 )
 
-// UnmountContainerLayers is a helper for clients to hide all the complexity of layer unmounting
-func UnmountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM, op UnmountOperation) error {
-	logrus.Debugln("hcsshim::UnmountContainerLayers", layerFolders)
+// unmountContainerLayers is a helper for clients to hide all the complexity of layer unmounting
+func unmountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM, op unmountOperation) error {
+	logrus.Debugln("hcsshim::unmountContainerLayers", layerFolders)
 
 	if uvm == nil {
 		// Must be an argon - folders are mounted on the host
-		if op != UnmountOperationAll {
-			return fmt.Errorf("only operation supported for host-mounted folders is UnmountOperationAll")
+		if op != unmountOperationAll {
+			return fmt.Errorf("only operation supported for host-mounted folders is unmountOperationAll")
 		}
 		if len(layerFolders) < 1 {
 			return fmt.Errorf("need at least one layer for Unmount")
@@ -176,7 +176,7 @@ func UnmountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM, op Unmoun
 			return err
 		}
 		// TODO Should we try this anyway?
-		logrus.Debugln("hcsshim::UnmountContainerLayers DeactivateLayer", path)
+		logrus.Debugln("hcsshim::unmountContainerLayers DeactivateLayer", path)
 		return wclayer.DeactivateLayer(path)
 	}
 
@@ -190,7 +190,7 @@ func UnmountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM, op Unmoun
 	var retError error
 
 	// Unload the storage filter followed by the SCSI sandbox
-	if (op & UnmountOperationSCSI) == UnmountOperationSCSI {
+	if (op & unmountOperationSCSI) == unmountOperationSCSI {
 		// TODO BUGBUG - logic error if failed to NameToGUID as containerPathGUID is used later too
 		_, sandboxPath := filepath.Split(layerFolders[len(layerFolders)-1])
 		containerPathGUID, err := wclayer.NameToGuid(sandboxPath)
@@ -198,7 +198,7 @@ func UnmountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM, op Unmoun
 			logrus.Warnf("may leak a sandbox in %s as nametoguid failed: %s", err)
 		} else {
 			containerRootPath := fmt.Sprintf(`C:\%s`, containerPathGUID.String())
-			logrus.Debugf("hcsshim::UnmountContainerLayers CombinedLayers %s", containerRootPath)
+			logrus.Debugf("hcsshim::unmountContainerLayers CombinedLayers %s", containerRootPath)
 			combinedLayersModification := &hcsschemav2.ModifySettingsRequestV2{
 				ResourceType:   hcsschemav2.ResourceTypeCombinedLayers,
 				RequestType:    hcsschemav2.RequestTypeRemove,
@@ -212,7 +212,7 @@ func UnmountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM, op Unmoun
 		// Hot remove the sandbox from the SCSI controller
 		hostSandboxFile := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
 		containerRootPath := fmt.Sprintf(`C:\%s`, containerPathGUID.String())
-		logrus.Debugf("hcsshim::UnmountContainerLayers SCSI %s %s", containerRootPath, hostSandboxFile)
+		logrus.Debugf("hcsshim::unmountContainerLayers SCSI %s %s", containerRootPath, hostSandboxFile)
 		if err := uvm.RemoveSCSI(hostSandboxFile); err != nil {
 			e := fmt.Errorf("failed to remove SCSI %s: %s", hostSandboxFile, err)
 			logrus.Debugln(e)
@@ -227,7 +227,7 @@ func UnmountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM, op Unmoun
 	// Remove each of the read-only layers from VSMB. These's are ref-counted and
 	// only removed once the count drops to zero. This allows multiple containers
 	// to share layers.
-	if len(layerFolders) > 1 && (op&UnmountOperationVSMB) == UnmountOperationVSMB {
+	if len(layerFolders) > 1 && (op&unmountOperationVSMB) == unmountOperationVSMB {
 		for _, layerPath := range layerFolders[:len(layerFolders)-1] {
 			if e := uvm.RemoveVSMB(layerPath); e != nil {
 				logrus.Debugln(e)

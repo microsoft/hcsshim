@@ -162,7 +162,7 @@ func TestV2XenonWCOW(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateContainer failed: %s", err)
 	}
-	defer UnmountContainerLayers(layerFolders, uvm, UnmountOperationAll)
+	defer unmountContainerLayers(layerFolders, uvm, unmountOperationAll)
 
 	// Start/stop the container
 	startContainer(t, hostedContainer)
@@ -193,7 +193,7 @@ func TestV2XenonWCOWContainerSandboxFolderDoesNotExist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateContainer failed: %s", err)
 	}
-	defer UnmountContainerLayers(layerFolders, uvm, UnmountOperationAll)
+	defer unmountContainerLayers(layerFolders, uvm, unmountOperationAll)
 
 	// Start/stop the container
 	startContainer(t, hostedContainer)
@@ -225,7 +225,7 @@ func TestV2XenonWCOWTwoContainers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateContainer failed: %s", err)
 	}
-	defer UnmountContainerLayers(firstLayerFolders, uvm, UnmountOperationAll)
+	defer unmountContainerLayers(firstLayerFolders, uvm, unmountOperationAll)
 
 	// Second hosted container
 	secondContainerScratchDir := createWCOWTempDirWithSandbox(t)
@@ -240,7 +240,7 @@ func TestV2XenonWCOWTwoContainers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateContainer failed: %s", err)
 	}
-	defer UnmountContainerLayers(secondLayerFolders, uvm, UnmountOperationAll)
+	defer unmountContainerLayers(secondLayerFolders, uvm, unmountOperationAll)
 
 	startContainer(t, firstHostedContainer)
 	runCommand(t, firstHostedContainer, "cmd /s /c echo FirstContainer", `c:\`, "FirstContainer")
@@ -299,7 +299,7 @@ func TestV2XenonWCOWTwoContainers(t *testing.T) {
 //		Path:   combinedLayers.ContainerRootPath,
 //	}
 //	defer func() {
-//		if err := Unmount(layerFolders, uvm, SchemaV20(), UnmountOperationAll); err != nil {
+//		if err := Unmount(layerFolders, uvm, SchemaV20(), unmountOperationAll); err != nil {
 //			t.Fatalf("failed to unmount container storage: %s", err)
 //		}
 //	}()
@@ -324,7 +324,7 @@ func TestV2XenonWCOWTwoContainers(t *testing.T) {
 //	xenon.Terminate()
 
 //	// Now unmount and remount to exactly the same places
-//	if err := Unmount(layerFolders, uvm, SchemaV20(), UnmountOperationAll); err != nil {
+//	if err := Unmount(layerFolders, uvm, SchemaV20(), unmountOperationAll); err != nil {
 //		t.Fatalf("failed to unmount container storage: %s", err)
 //	}
 //	if _, err = Mount(layerFolders, uvm, SchemaV20()); err != nil {
@@ -372,7 +372,7 @@ func TestV2XenonWCOWCreateLots(t *testing.T) {
 			t.Fatalf("CreateContainer failed: %s", err)
 		}
 		defer hostedContainer.Terminate()
-		defer UnmountContainerLayers(layerFolders, uvm, UnmountOperationAll)
+		defer unmountContainerLayers(layerFolders, uvm, unmountOperationAll)
 	}
 
 	// TODO: Should check the internal structures here for VSMB and SCSI
@@ -441,7 +441,7 @@ func TestV2XenonWCOWMultiLayer(t *testing.T) {
 	stopContainer(t, xenon)
 	xenon.Terminate()
 	// TODO Move this to a defer function to fail if it fails.
-	if err := UnmountContainerLayers(containerLayers, uvm, UnmountOperationAll); err != nil {
+	if err := unmountContainerLayers(containerLayers, uvm, unmountOperationAll); err != nil {
 		t.Fatalf("unmount failed: %s", err)
 	}
 
@@ -479,7 +479,7 @@ func TestV2XenonWCOWSingleMappedDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateContainer failed: %s", err)
 	}
-	defer UnmountContainerLayers(layerFolders, uvm, UnmountOperationAll)
+	defer unmountContainerLayers(layerFolders, uvm, unmountOperationAll)
 
 	// TODO BUGBUG NEED TO UNMOUNT TO VSMB SHARE FOR THE CONTAINER
 

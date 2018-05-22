@@ -18,7 +18,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/regstate"
-	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/uvm"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -41,19 +40,24 @@ type persistedState struct {
 
 type containerStatus string
 
-var (
+const (
 	containerRunning containerStatus = "running"
 	containerStopped containerStatus = "stopped"
 	containerCreated containerStatus = "created"
 	containerPaused  containerStatus = "paused"
 	containerUnknown containerStatus = "unknown"
+
+	keyState     = "state"
+	keyResources = "resources"
+	keyShimPid   = "shim"
+	keyInitPid   = "pid"
 )
 
 type container struct {
 	persistedState
-	ShimPid    int
-	hc         *hcs.System
-	vsmbMounts []string
+	ShimPid   int
+	hc        *hcs.System
+	resources *hcsoci.Resources
 }
 
 func getErrorFromPipe(pipe io.Reader, p *os.Process) error {
@@ -312,7 +316,7 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 			SandboxID:  sandboxID,
 		},
 	}
-	err = stateKey.Create(cfg.ID, "state", &c.persistedState)
+	err = stateKey.Create(cfg.ID, keyState, &c.persistedState)
 	if err != nil {
 		return nil, err
 	}
@@ -349,6 +353,11 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		if err != nil {
 			return nil, err
 		}
+		err := stateKey.Set(c.ID, keyResources, c.resources)
+		if err != nil {
+			c.hc.Terminate()
+			return nil, err
+		}
 	}
 
 	// Create the shim process for the container.
@@ -363,60 +372,35 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 	return c, nil
 }
 
-func (c *container) forceUnmount(vm *uvm.UtilityVM, all bool) error {
-	// Unmount the container layers. Only the writable layer needs to be
-	// unmounted (in order to flush any filesystem changes) if the VM is about
-	// to terminate.
-	op := hcsoci.UnmountOperation(hcsoci.UnmountOperationSCSI)
-	if all {
-		op = hcsoci.UnmountOperationAll
-	}
-	if err := hcsoci.UnmountContainerLayers(c.Spec.Windows.LayerFolders, vm, op); err != nil {
-		return err
-	}
-
-	// Unmount any VSMB mounts for volume mappings
-	if all && vm != nil {
-		for len(c.vsmbMounts) != 0 {
-			mount := c.vsmbMounts[len(c.vsmbMounts)-1]
-			if err := vm.RemoveVSMB(mount); err != nil {
+func (c *container) Unmount(all bool) error {
+	if c.VMIsolated {
+		op := opUnmountContainerDiskOnly
+		if all {
+			op = opUnmountContainer
+		}
+		err := issueVMRequest(c.SandboxID, c.ID, op)
+		if err != nil && err != errNoVM {
+			return err
+		}
+	} else {
+		resources := &hcsoci.Resources{}
+		err := stateKey.Get(c.ID, keyResources, resources)
+		if err == nil {
+			err = hcsoci.ReleaseResources(resources, nil, false)
+			if err != nil {
+				stateKey.Set(c.ID, keyResources, resources)
 				return err
 			}
-			c.vsmbMounts = c.vsmbMounts[:len(c.vsmbMounts)-1]
-		}
-	}
 
-	// Remember that the unmount is complete.
-	return stateKey.Set(c.ID, "mount", false)
-}
-
-func (c *container) Unmount(all bool) error {
-	mounted := false
-	err := stateKey.Get(c.ID, "mount", &mounted)
-	if err != nil {
-		if _, ok := err.(*regstate.NoStateError); ok {
-			return nil
-		}
-		return err
-	}
-	if mounted {
-		if c.VMIsolated {
-			op := opUnmountContainerDiskOnly
-			if all {
-				// The sandbox i
-				op = opUnmountContainerDiskOnly
+			err = stateKey.Clear(c.ID, keyResources)
+			if err != nil {
+				return err
 			}
-			err = issueVMRequest(c.SandboxID, c.ID, op)
-			if err == errNoVM {
-				// The VM is not running, so the storage should be unmounted
-				// already.
-				err = nil
-			}
-		} else {
-			err = c.forceUnmount(nil, true)
+		} else if _, ok := err.(*regstate.NoStateError); !ok {
+			return err
 		}
 	}
-	return err
+	return nil
 }
 
 func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
@@ -424,38 +408,12 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 		return errors.New("container already created")
 	}
 
-	if c.Rootfs == "" && c.Spec.Windows != nil && (vm != nil || c.Spec.Windows.HyperV == nil) {
-		root, err := hcsoci.MountContainerLayers(c.Spec.Windows.LayerFolders, vm)
-		if err != nil {
-			return err
-		}
-		defer func() {
-			if err != nil {
-				if e := c.forceUnmount(vm, true); e != nil {
-					logrus.Error("failed to unwind mount for ", c.ID, ": ", e)
-				}
-			}
-		}()
-
-		err = stateKey.Set(c.ID, "mount", true)
-		if err != nil {
-			return err
-		}
-		if c.Spec.Root == nil {
-			c.Spec.Root = &specs.Root{}
-		}
-		if vm == nil {
-			c.Spec.Root.Path = root.(string)
-		} else {
-			c.Spec.Root.Path = root.(schema2.CombinedLayersV2).ContainerRootPath
-		}
-	}
-
 	// Create the container without starting it.
 	opts := &hcsoci.CreateOptions{
 		ID:            c.ID,
 		Spec:          c.Spec,
 		HostingSystem: vm,
+		SchemaVersion: schemaversion.SchemaV20(),
 	}
 	if vm != nil {
 		opts.SchemaVersion = schemaversion.SchemaV20()
@@ -466,17 +424,12 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 		vmid = vm.ID()
 	}
 	logrus.Infof("creating container %s (VM: '%s')", c.ID, vmid)
-	hc, err := hcsoci.CreateContainer(opts)
+	hc, resources, err := hcsoci.CreateContainer(opts)
 	if err != nil {
 		return err
 	}
-	if vm != nil {
-		// Track the VSMB mounts to unmount later
-		for _, m := range c.Spec.Mounts {
-			c.vsmbMounts = append(c.vsmbMounts, m.Source)
-		}
-	}
 	c.hc = hc
+	c.resources = resources
 	return nil
 }
 
@@ -494,7 +447,7 @@ func startContainerShim(c *container, pidFile, logFile string) error {
 	}()
 
 	c.ShimPid = shim.Pid
-	err = stateKey.Set(c.ID, "shim", shim.Pid)
+	err = stateKey.Set(c.ID, keyShimPid, shim.Pid)
 	if err != nil {
 		return err
 	}
@@ -548,11 +501,11 @@ func (c *container) Exec() error {
 
 func getContainer(id string, notStopped bool) (*container, error) {
 	var c container
-	err := stateKey.Get(id, "state", &c.persistedState)
+	err := stateKey.Get(id, keyState, &c.persistedState)
 	if err != nil {
 		return nil, err
 	}
-	err = stateKey.Get(id, "shim", &c.ShimPid)
+	err = stateKey.Get(id, keyShimPid, &c.ShimPid)
 	if err != nil {
 		if _, ok := err.(*regstate.NoStateError); !ok {
 			return nil, err

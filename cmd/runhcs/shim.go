@@ -103,7 +103,7 @@ var shimCommand = cli.Command{
 
 			// When this process exits, clear this process's pid in the registry.
 			defer func() {
-				stateKey.Set(id, "shim", 0)
+				stateKey.Set(id, keyShimPid, 0)
 			}()
 
 			defer func() {
@@ -196,7 +196,7 @@ var shimCommand = cli.Command{
 		}
 
 		if !exec {
-			err = stateKey.Set(c.ID, "pid", p.Pid())
+			err = stateKey.Set(c.ID, keyInitPid, p.Pid())
 			if err != nil {
 				return err
 			}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/osversion"
 	version "github.com/Microsoft/hcsshim/internal/osversion"
 	"github.com/Microsoft/hcsshim/internal/schema1"
@@ -68,12 +69,14 @@ type createOptionsInternal struct {
 	actualKirdPath   string // LCOW kernel/initrd path
 	actualKernelFile string // LCOW kernel file
 	actualInitrdFile string // LCOW initrd file
+
+	networkNamespace string
 }
 
 // CreateContainer creates a container. It can cope with a  wide variety of
 // scenarios, including v1 HCS schema calls, as well as more complex v2 HCS schema
 // calls.
-func CreateContainer(createOptions *CreateOptions) (*hcs.System, error) {
+func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources, err error) {
 	logrus.Debugf("hcsshim::CreateContainer options: %+v", createOptions)
 
 	coi := &createOptionsInternal{
@@ -103,7 +106,7 @@ func CreateContainer(createOptions *CreateOptions) (*hcs.System, error) {
 	}
 
 	if coi.Spec == nil {
-		return nil, fmt.Errorf("Spec must be supplied")
+		return nil, nil, fmt.Errorf("Spec must be supplied")
 	}
 
 	if coi.HostingSystem != nil {
@@ -114,22 +117,74 @@ func CreateContainer(createOptions *CreateOptions) (*hcs.System, error) {
 		logrus.Debugf("hcsshim::CreateContainer using schema %s", coi.actualSchemaVersion.String())
 	}
 
+	resources := &Resources{}
+	defer func() {
+		if err != nil {
+			ReleaseResources(resources, coi.HostingSystem, false)
+		}
+	}()
+
+	// Create a network namespace if necessary.
+	if coi.Spec.Windows != nil &&
+		coi.Spec.Windows.Network != nil &&
+		coi.actualSchemaVersion.IsV20() &&
+		coi.HostingSystem == nil {
+
+		netID, err := hns.CreateNamespace()
+		if err != nil {
+			return nil, nil, err
+		}
+		logrus.Infof("created network namespace %s for %s", netID, coi.ID)
+		resources.NetworkNamespace = netID
+		coi.networkNamespace = netID
+		if coi.Spec.Windows != nil && coi.Spec.Windows.Network != nil {
+			for _, endpoint := range coi.Spec.Windows.Network.EndpointList {
+				err = hns.AddNamespaceEndpoint(netID, endpoint)
+				if err != nil {
+					return nil, nil, err
+				}
+				logrus.Infof("added network endpoint %s to namespace %s", endpoint, netID)
+				resources.NetworkEndpoints = append(resources.NetworkEndpoints, endpoint)
+			}
+		}
+	}
+
+	var os string
 	if coi.Spec.Linux != nil {
 		if coi.Spec.Windows == nil {
-			return nil, fmt.Errorf("containerSpec 'Windows' field must container layer folders for a Linux container")
+			return nil, nil, fmt.Errorf("containerSpec 'Windows' field must container layer folders for a Linux container")
 		}
 		if coi.actualSchemaVersion.IsV10() {
 			logrus.Debugf("hcsshim::CreateContainer createLCOWv1")
 			//return createLCOWv1(coi)
-			return nil, errors.New("not supported")
+			return nil, nil, errors.New("not supported")
 		}
 
-		logrus.Debugf("hcsshim::CreateContainer createLCOWContainer")
-		return createLCOWContainer(coi)
+		logrus.Debugf("hcsshim::CreateContainer allocateLinuxResources")
+		err = allocateLinuxResources(coi, resources)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		os = "linux"
+	} else {
+		err = allocateWindowsResources(coi, resources)
+		if err != nil {
+			return nil, nil, err
+		}
+		os = "windows"
 	}
 
-	// So it's a container.
-	return createWCOWContainer(coi)
+	hcsDocument, err := createHCSContainerDocument(coi, os)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	system, err := hcs.CreateComputeSystem(coi.actualID, hcsDocument)
+	if err != nil {
+		return nil, nil, err
+	}
+	return system, resources, err
 }
 
 // createHCSContainerDocument creates a document suitable for calling HCS to create
@@ -232,7 +287,7 @@ func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem stri
 		v2Container.Networking = &hcsschemav2.ContainersResourcesNetworkingV2{}
 
 		v1.EndpointList = coi.Spec.Windows.Network.EndpointList
-		v2Container.Networking.NetworkAdapters = v1.EndpointList
+		v2Container.Networking.Namespace = coi.networkNamespace
 
 		v1.AllowUnqualifiedDNSQuery = coi.Spec.Windows.Network.AllowUnqualifiedDNSQuery
 		v2Container.Networking.AllowUnqualifiedDnsQuery = v1.AllowUnqualifiedDNSQuery
@@ -272,7 +327,7 @@ func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem stri
 			return nil, fmt.Errorf(`invalid container spec - Root.Path '%s' must be a volume GUID path in the format '\\?\Volume{GUID}\'`, coi.Spec.Root.Path)
 		}
 		if coi.Spec.Root.Path[len(coi.Spec.Root.Path)-1] != '\\' {
-			coi.Spec.Root.Path = fmt.Sprintf(`%s\`, coi.Spec.Root.Path) // Be nice to clients and make sure well-formed for back-compat
+			coi.Spec.Root.Path += `\` // Be nice to clients and make sure well-formed for back-compat
 		}
 		v1.VolumePath = coi.Spec.Root.Path[:len(coi.Spec.Root.Path)-1] // Strip the trailing backslash. Required for v1.
 		v2Container.Storage.Path = coi.Spec.Root.Path
