@@ -12,12 +12,13 @@ import (
 	"time"
 
 	"github.com/Microsoft/opengcs/service/gcs/core"
+	gcspkg "github.com/Microsoft/opengcs/service/gcs/core/gcs"
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
+	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
-	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -205,6 +206,8 @@ type Bridge struct {
 	// Core - TODO: Remove this and use the mux!
 	coreint core.Core
 
+	hostState *gcspkg.Host
+
 	// testing hook to close the bridge ListenAndServe() method.
 	quitChan chan bool
 
@@ -214,8 +217,9 @@ type Bridge struct {
 // AssignHandlers creates and assigns the appropriate bridge
 // events to be listen for and intercepted on `mux` before forwarding
 // to `gcs` for handling.
-func (b *Bridge) AssignHandlers(mux *Mux, gcs core.Core) {
+func (b *Bridge) AssignHandlers(mux *Mux, gcs core.Core, rtime runtime.Runtime) {
 	b.coreint = gcs
+	b.hostState = gcspkg.NewHost(rtime)
 
 	// These are PvInvalid because they will be called previous to any protocol
 	// negotiation so they respond only when the protocols are not known.
@@ -415,8 +419,6 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 	if b.protVer >= prot.PvV4 {
 		// First try to determine if this is actually a V2 schema.
 		var settingsV2 prot.VMHostedContainerSettingsV2
-		var rawSettings json.RawMessage
-		settingsV2.OciSpec = rawSettings
 		if err := commonutils.UnmarshalJSONWithHresult([]byte(request.ContainerConfig), &settingsV2); err != nil {
 			w.Error(request.ActivityID, errors.Wrapf(err, "failed to unmarshal JSON for ContainerConfig \"%s\"", request.ContainerConfig))
 			return
@@ -424,15 +426,7 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 
 		if settingsV2.SchemaVersion.Cmp(prot.SchemaVersion{Major: 2, Minor: 0}) >= 0 {
 			wasV2Config = true
-
-			// We have a V2 schema that was passed. Get the OciSpec
-			oci := &oci.Spec{}
-			if err := commonutils.UnmarshalJSONWithHresult(rawSettings, oci); err != nil {
-				w.Error(request.ActivityID, errors.Wrapf(err, "failed to unmarshal OciSpec ContainerConfig \"%s\"", request.ContainerConfig))
-				return
-			}
-			settingsV2.OciSpec = oci
-			if err := b.coreint.CreateContainerV2(id, settingsV2); err != nil {
+			if _, err := b.hostState.GetOrCreateContainer(id, &settingsV2); err != nil {
 				w.Error(request.ActivityID, err)
 				return
 			}
@@ -467,25 +461,28 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 		response.SelectedProtocolVersion = uint32(prot.PvV3)
 	}
 
-	exitCodeFn, err := b.coreint.WaitContainer(id)
-	if err != nil {
-		logrus.Error(err)
-	}
-
-	go func() {
-		exitCode := exitCodeFn()
-		notification := &prot.ContainerNotification{
-			MessageBase: &prot.MessageBase{
-				ContainerID: id,
-				ActivityID:  request.ActivityID,
-			},
-			Type:       prot.NtUnexpectedExit, // TODO: Support different exit types.
-			Operation:  prot.AoNone,
-			Result:     int32(exitCode),
-			ResultInfo: "",
+	if !wasV2Config {
+		// TODO: Add support for container exit notifications in V2.
+		exitCodeFn, err := b.coreint.WaitContainer(id)
+		if err != nil {
+			logrus.Error(err)
 		}
-		b.PublishNotification(notification)
-	}()
+
+		go func() {
+			exitCode := exitCodeFn()
+			notification := &prot.ContainerNotification{
+				MessageBase: &prot.MessageBase{
+					ContainerID: id,
+					ActivityID:  request.ActivityID,
+				},
+				Type:       prot.NtUnexpectedExit, // TODO: Support different exit types.
+				Operation:  prot.AoNone,
+				Result:     int32(exitCode),
+				ResultInfo: "",
+			}
+			b.PublishNotification(notification)
+		}()
+	}
 
 	// Set our protocol selected version before return.
 	if b.protVer == prot.PvInvalid {
@@ -531,6 +528,12 @@ func (b *Bridge) execProcess(w ResponseWriter, r *Request) {
 	var pid int
 	if params.IsExternal {
 		pid, err = b.coreint.RunExternalProcess(params, stdioSet)
+	} else if params.SchemaVersion.Cmp(prot.SchemaVersion{Major: 2, Minor: 0}) >= 0 {
+		var c *gcspkg.Container
+		c, err = b.hostState.GetContainer(request.ContainerID)
+		if err == nil {
+			pid, err = c.ExecProcess(params.OCIProcess, stdioSet)
+		}
 	} else {
 		pid, err = b.coreint.ExecProcess(request.ContainerID, params, stdioSet)
 	}

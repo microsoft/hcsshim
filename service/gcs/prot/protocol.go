@@ -710,8 +710,9 @@ func (s *SchemaVersion) Cmp(v SchemaVersion) int {
 // to the 'HostedSystem' on the HCS side but rather than sending the 'Container'
 // field the Linux GCS accepts an oci.Spec directly.
 type VMHostedContainerSettingsV2 struct {
-	SchemaVersion SchemaVersion
-	OciSpec       interface{} `json:",omitempty"`
+	SchemaVersion    SchemaVersion
+	OCIBundlePath    string    `json:"OciBundlePath,omitempty"`
+	OCISpecification *oci.Spec `json:"OciSpecification,omitempty"`
 }
 
 // ProcessParameters represents any process which may be started in the utility
@@ -725,6 +726,7 @@ type VMHostedContainerSettingsV2 struct {
 // In this case, don't specify the OCISpecification field, but specify all
 // other fields. This is the same as if it were an external process.
 type ProcessParameters struct {
+	SchemaVersion SchemaVersion
 	// CommandLine is a space separated list of command line parameters. For
 	// example, the command which sleeps for 100 seconds would be represented by
 	// the CommandLine string "sleep 100".
@@ -747,7 +749,9 @@ type ProcessParameters struct {
 	// If this is the first process created for this container, this field must
 	// be specified. Otherwise, it must be left blank and the other fields must
 	// be specified.
-	OCISpecification oci.Spec `json:"OciSpecification,omitempty"`
+	OCISpecification *oci.Spec `json:"OciSpecification,omitempty"`
+
+	OCIProcess *oci.Process `json:"OciProcess,omitempty"`
 }
 
 // SignalProcessOptions represents the options for signaling a process.

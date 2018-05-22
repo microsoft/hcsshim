@@ -106,6 +106,7 @@ func main() {
 	logrus.Info("GCS started")
 	tport := &transport.VsockTransport{}
 	rtime, err := runc.NewRuntime(baseLogPath)
+	runc.IsV2 = true
 	if err != nil {
 		logrus.Fatalf("%+v", err)
 	}
@@ -116,7 +117,7 @@ func main() {
 		Transport: tport,
 		Handler:   mux,
 	}
-	b.AssignHandlers(mux, coreint)
+	b.AssignHandlers(mux, coreint, rtime)
 	err = b.ListenAndServe()
 	if err != nil {
 		logrus.Fatal(err)

@@ -36,6 +36,8 @@ type runcRuntime struct {
 
 var _ runtime.Runtime = &runcRuntime{}
 
+var IsV2 = false
+
 type container struct {
 	r    *runcRuntime
 	id   string
@@ -112,6 +114,9 @@ func (r *runcRuntime) CreateContainer(id string, bundlePath string, stdioSet *st
 // Start unblocks the container's init process created by the call to
 // CreateContainer.
 func (c *container) Start() error {
+	if IsV2 && c.init.pipeRelay != nil {
+		c.init.pipeRelay.Start()
+	}
 	logPath := c.r.getLogPath(c.id)
 	cmd := exec.Command("runc", "--log", logPath, "start", c.id)
 	out, err := cmd.CombinedOutput()
@@ -595,7 +600,7 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioS
 	if ttyRelay != nil {
 		ttyRelay.Start()
 	}
-	if pipeRelay != nil {
+	if pipeRelay != nil && !IsV2 {
 		pipeRelay.Start()
 	}
 	return &process{c: c, pid: pid, ttyRelay: ttyRelay, pipeRelay: pipeRelay}, nil

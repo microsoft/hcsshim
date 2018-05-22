@@ -340,7 +340,7 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 	var pid int
 	if !containerEntry.hasRunInitProcess {
 		containerEntry.hasRunInitProcess = true
-		if err := c.writeConfigFile(containerEntry.Index, params.OCISpecification); err != nil {
+		if err := c.writeConfigFile(containerEntry.Index, *params.OCISpecification); err != nil {
 			// Early exit. Cleanup our waiter since we never got a process.
 			containerEntry.initProcess.writersWg.Done()
 			return -1, err
@@ -962,14 +962,18 @@ func (c *gcsCore) setupCombinedLayers(m *prot.CombinedLayersV2) error {
 		layerPaths[i] = layer.Path
 	}
 
+	var upperdirPath string
+	var workdirPath string
 	var mountOptions uintptr
 	if m.ScratchPath == "" {
 		// The user did not pass a scratch path. Mount overlay as readonly.
 		mountOptions |= syscall.O_RDONLY
+	} else {
+		upperdirPath = filepath.Join(m.ScratchPath, "upper")
+		workdirPath = filepath.Join(m.ScratchPath, "work")
 	}
 
-	_, upperdirPath, workdirPath, rootfsPath := c.getUnioningPathsWithBase(m.ContainerRootPath, m.ScratchPath)
-	return c.mountOverlay(layerPaths, upperdirPath, workdirPath, rootfsPath, mountOptions)
+	return c.mountOverlay(layerPaths, upperdirPath, workdirPath, m.ContainerRootPath, mountOptions)
 }
 
 func (c *gcsCore) removeCombinedLayers(m *prot.CombinedLayersV2) error {
@@ -977,8 +981,7 @@ func (c *gcsCore) removeCombinedLayers(m *prot.CombinedLayersV2) error {
 		return errors.New("cannot remove combined layers with empty ContainerRootPath")
 	}
 
-	_, _, _, rootfsPath := c.getUnioningPathsWithBase(m.ContainerRootPath, "")
-	c.unmountPath(rootfsPath, true)
+	c.unmountPath(m.ContainerRootPath, true)
 	return nil
 }
 

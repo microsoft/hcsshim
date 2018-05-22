@@ -393,17 +393,24 @@ func (c *gcsCore) mountLayers(index uint32, scratchMount *mountSpec, layers []*m
 }
 
 func (c *gcsCore) mountOverlay(layerPaths []string, upperdirPath, workdirPath, rootfsPath string, mountOptions uintptr) error {
-	if err := c.OS.MkdirAll(upperdirPath, 0755); err != nil {
-		return errors.Wrap(err, "failed to create upper directory in scratch space")
+	lowerdir := strings.Join(layerPaths, ":")
+	options := fmt.Sprintf("lowerdir=%s", lowerdir)
+
+	if upperdirPath != "" {
+		if err := c.OS.MkdirAll(upperdirPath, 0755); err != nil {
+			return errors.Wrap(err, "failed to create upper directory in scratch space")
+		}
+		options += ",upperdir=" + upperdirPath
 	}
-	if err := c.OS.MkdirAll(workdirPath, 0755); err != nil {
-		return errors.Wrap(err, "failed to create workdir in scratch space")
+	if workdirPath != "" {
+		if err := c.OS.MkdirAll(workdirPath, 0755); err != nil {
+			return errors.Wrap(err, "failed to create workdir in scratch space")
+		}
+		options += ",workdir=" + workdirPath
 	}
 	if err := c.OS.MkdirAll(rootfsPath, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create directory for container root filesystem %s", rootfsPath)
 	}
-	lowerdir := strings.Join(layerPaths, ":")
-	options := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lowerdir, upperdirPath, workdirPath)
 	if err := c.OS.Mount("overlay", rootfsPath, "overlay", mountOptions, options); err != nil {
 		return errors.Wrapf(err, "failed to mount container root filesystem using overlayfs %s", rootfsPath)
 	}
@@ -500,25 +507,10 @@ func (c *gcsCore) getContainerStoragePath(index uint32) string {
 func (c *gcsCore) getUnioningPaths(index uint32) (layerPrefix string, scratchPath string, upperdirPath string, workdirPath string, rootfsPath string) {
 	mountPath := c.getContainerStoragePath(index)
 	layerPrefix = mountPath
-	scratchPath, upperdirPath, workdirPath, rootfsPath = c.getUnioningPathsWithBase(mountPath, "")
-	return
-}
-
-// getUnioningPathsWithBase returns paths that will be used in the union
-// filesystem for from a given basePath. If baseScratch is empty all scratch
-// locations will be rooted under basePath otherwise they will be rooted at
-// baseScratch.
-func (c *gcsCore) getUnioningPathsWithBase(basePath, baseScratch string) (scratchPath string, upperdirPath string, workdirPath string, rootfsPath string) {
-	if baseScratch == "" {
-		scratchPath = filepath.Join(basePath, "scratch")
-		upperdirPath = filepath.Join(basePath, "scratch", "upper")
-		workdirPath = filepath.Join(basePath, "scratch", "work")
-	} else {
-		scratchPath = baseScratch
-		upperdirPath = filepath.Join(baseScratch, "upper")
-		workdirPath = filepath.Join(baseScratch, "work")
-	}
-	rootfsPath = filepath.Join(basePath, "rootfs")
+	scratchPath = filepath.Join(mountPath, "scratch")
+	upperdirPath = filepath.Join(mountPath, "scratch", "upper")
+	workdirPath = filepath.Join(mountPath, "scratch", "work")
+	rootfsPath = filepath.Join(mountPath, "rootfs")
 	return
 }
 
