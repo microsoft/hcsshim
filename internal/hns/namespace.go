@@ -16,18 +16,23 @@ type namespaceEndpointRequest struct {
 	ID string `json:"Id"`
 }
 
-type namespaceResource struct {
+type NamespaceResource struct {
+	Type string
+	Data json.RawMessage
+}
+
+type namespaceResourceRequest struct {
 	Type string
 	Data interface{}
 }
 
-type namespaceResponse struct {
+type Namespace struct {
 	ID           string
 	IsDefault    bool                `json:",omitempty"`
-	ResourceList []namespaceResource `json:",omitempty"`
+	ResourceList []NamespaceResource `json:",omitempty"`
 }
 
-func issueNamespaceRequest(id *string, method, subpath string, request interface{}) (*namespaceResponse, error) {
+func issueNamespaceRequest(id *string, method, subpath string, request interface{}) (*Namespace, error) {
 	var err error
 	hnspath := "/namespaces/"
 	if id != nil {
@@ -42,7 +47,7 @@ func issueNamespaceRequest(id *string, method, subpath string, request interface
 			return nil, err
 		}
 	}
-	var ns namespaceResponse
+	var ns Namespace
 	err = hnsCall(method, hnspath, string(reqJSON), &ns)
 	if err != nil {
 		if strings.Contains(err.Error(), "Element not found.") {
@@ -67,8 +72,27 @@ func RemoveNamespace(id string) error {
 	return err
 }
 
+func GetNamespaceEndpoints(id string) ([]string, error) {
+	ns, err := issueNamespaceRequest(&id, "GET", "", nil)
+	if err != nil {
+		return nil, err
+	}
+	var endpoints []string
+	for _, rsrc := range ns.ResourceList {
+		if rsrc.Type == "Endpoint" {
+			var endpoint namespaceEndpointRequest
+			err = json.Unmarshal(rsrc.Data, &endpoint)
+			if err != nil {
+				return nil, fmt.Errorf("unmarshal endpoint: %s", err)
+			}
+			endpoints = append(endpoints, endpoint.ID)
+		}
+	}
+	return endpoints, nil
+}
+
 func AddNamespaceEndpoint(id string, endpointID string) error {
-	resource := namespaceResource{
+	resource := namespaceResourceRequest{
 		Type: "Endpoint",
 		Data: namespaceEndpointRequest{endpointID},
 	}
@@ -77,7 +101,7 @@ func AddNamespaceEndpoint(id string, endpointID string) error {
 }
 
 func RemoveNamespaceEndpoint(id string, endpointID string) error {
-	resource := namespaceResource{
+	resource := namespaceResourceRequest{
 		Type: "Endpoint",
 		Data: namespaceEndpointRequest{endpointID},
 	}

@@ -311,6 +311,11 @@ type VirtualMachinesResourcesStorageVSmbShareV2 struct {
 	AutoCreateAlternateDataStreams []VirtualMachinesResourcesStorageVSmbAlternateDataStreamV2 `json:"AutoCreateAlternateDataStreams,omitempty"`
 }
 
+type VirtualMachinesResourcesNetworkNic struct {
+	EndpointID string `json:",omitempty"`
+	MacAddress string `json:",omitempty"`
+}
+
 // TODO - Remaining schema objects
 type VirtualMachinesDevicesV2 struct {
 	COMPorts *VirtualMachinesResourcesComPortsV2               `json:"COMPorts,omitempty"`
@@ -355,11 +360,11 @@ type ResourceType string
 type RequestType string
 
 type ModifySettingsRequestV2 struct {
-	ResourceUri    string       `json:ResourceUri,omitempty"`
-	ResourceType   ResourceType `json:ResourceType,omitempty"`
-	RequestType    RequestType  `json:RequestType,omitempty"`
-	Settings       interface{}  `json:Settings,omitempty"`
-	HostedSettings interface{}  `json:HostedSettings,omitempty"`
+	ResourceUri    string       `json:"ResourceUri,omitempty"`
+	ResourceType   ResourceType `json:"ResourceType,omitempty"`
+	RequestType    RequestType  `json:"RequestType,omitempty"`
+	Settings       interface{}  `json:"Settings,omitempty"`
+	HostedSettings interface{}  `json:"HostedSettings,omitempty"`
 }
 
 // ResourceType const

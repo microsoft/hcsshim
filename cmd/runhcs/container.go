@@ -18,7 +18,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/regstate"
-	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/uvm"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
@@ -28,14 +27,15 @@ import (
 var errContainerStopped = errors.New("container is stopped")
 
 type persistedState struct {
-	ID         string
-	SandboxID  string
-	Bundle     string
-	Created    time.Time
-	Rootfs     string
-	Spec       *specs.Spec
-	IsSandbox  bool
-	VMIsolated bool
+	ID             string
+	SandboxID      string
+	Bundle         string
+	Created        time.Time
+	Rootfs         string
+	Spec           *specs.Spec
+	IsSandbox      bool
+	VMIsolated     bool
+	RequestedNetNS string
 }
 
 type containerStatus string
@@ -51,6 +51,7 @@ const (
 	keyResources = "resources"
 	keyShimPid   = "shim"
 	keyInitPid   = "pid"
+	keyNetNS     = "netns"
 )
 
 type container struct {
@@ -300,10 +301,21 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		}
 	}
 
+	netNS := ""
 	if cfg.Spec.Windows != nil {
 		for i, f := range cfg.Spec.Windows.LayerFolders {
 			if !filepath.IsAbs(f) && !strings.HasPrefix(rootfs, `\\?\`) {
 				cfg.Spec.Windows.LayerFolders[i] = filepath.Join(cwd, f)
+			}
+		}
+
+		// Determine the network namespace to use.
+		if cfg.Spec.Windows.Network != nil && cfg.Spec.Windows.Network.NetworkSharedContainerName != "" {
+			err = stateKey.Get(cfg.Spec.Windows.Network.NetworkSharedContainerName, keyNetNS, &netNS)
+			if err != nil {
+				if _, ok := err.(*regstate.NoStateError); !ok {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -312,14 +324,15 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 	// command can clean everything up if something goes wrong.
 	c := &container{
 		persistedState: persistedState{
-			ID:         cfg.ID,
-			Bundle:     cwd,
-			Rootfs:     rootfs,
-			Created:    time.Now(),
-			Spec:       cfg.Spec,
-			VMIsolated: vmisolated,
-			IsSandbox:  isSandbox,
-			SandboxID:  sandboxID,
+			ID:             cfg.ID,
+			Bundle:         cwd,
+			Rootfs:         rootfs,
+			Created:        time.Now(),
+			Spec:           cfg.Spec,
+			VMIsolated:     vmisolated,
+			IsSandbox:      isSandbox,
+			SandboxID:      sandboxID,
+			RequestedNetNS: netNS,
 		},
 	}
 	err = stateKey.Create(cfg.ID, keyState, &c.persistedState)
@@ -359,11 +372,6 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		if err != nil {
 			return nil, err
 		}
-		err := stateKey.Set(c.ID, keyResources, c.resources)
-		if err != nil {
-			c.hc.Terminate()
-			return nil, err
-		}
 	}
 
 	// Create the shim process for the container.
@@ -378,6 +386,28 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 	return c, nil
 }
 
+func (c *container) unmountInHost(vm *uvm.UtilityVM, all bool) error {
+	resources := &hcsoci.Resources{}
+	err := stateKey.Get(c.ID, keyResources, resources)
+	if _, ok := err.(*regstate.NoStateError); ok {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	err = hcsoci.ReleaseResources(resources, vm, all)
+	if err != nil {
+		stateKey.Set(c.ID, keyResources, resources)
+		return err
+	}
+
+	err = stateKey.Clear(c.ID, keyResources)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c *container) Unmount(all bool) error {
 	if c.VMIsolated {
 		op := opUnmountContainerDiskOnly
@@ -389,22 +419,7 @@ func (c *container) Unmount(all bool) error {
 			return err
 		}
 	} else {
-		resources := &hcsoci.Resources{}
-		err := stateKey.Get(c.ID, keyResources, resources)
-		if err == nil {
-			err = hcsoci.ReleaseResources(resources, nil, false)
-			if err != nil {
-				stateKey.Set(c.ID, keyResources, resources)
-				return err
-			}
-
-			err = stateKey.Clear(c.ID, keyResources)
-			if err != nil {
-				return err
-			}
-		} else if _, ok := err.(*regstate.NoStateError); !ok {
-			return err
-		}
+		c.unmountInHost(nil, false)
 	}
 	return nil
 }
@@ -416,15 +431,11 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 
 	// Create the container without starting it.
 	opts := &hcsoci.CreateOptions{
-		ID:            c.ID,
-		Spec:          c.Spec,
-		HostingSystem: vm,
-		SchemaVersion: schemaversion.SchemaV20(),
+		ID:               c.ID,
+		Spec:             c.Spec,
+		HostingSystem:    vm,
+		NetworkNamespace: c.RequestedNetNS,
 	}
-	if vm != nil {
-		opts.SchemaVersion = schemaversion.SchemaV20()
-	}
-
 	vmid := ""
 	if vm != nil {
 		vmid = vm.ID()
@@ -434,8 +445,27 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err != nil {
+			hc.Terminate()
+			hc.Wait()
+			hcsoci.ReleaseResources(resources, vm, false)
+		}
+	}()
+
+	// Record the network namespace to support namespace sharing by container ID.
+	if resources.NetNS != "" {
+		err = stateKey.Set(c.ID, keyNetNS, resources.NetNS)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = stateKey.Set(c.ID, keyResources, resources)
+	if err != nil {
+		return err
+	}
 	c.hc = hc
-	c.resources = resources
 	return nil
 }
 

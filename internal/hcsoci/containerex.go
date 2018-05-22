@@ -13,7 +13,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
-	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/osversion"
 	version "github.com/Microsoft/hcsshim/internal/osversion"
 	"github.com/Microsoft/hcsshim/internal/schema1"
@@ -43,11 +42,12 @@ const (
 type CreateOptions struct {
 
 	// Common parameters
-	ID            string                       // Identifier for the container
-	Owner         string                       // Specifies the owner. Defaults to executable name.
-	Spec          *specs.Spec                  // Definition of the container or utility VM being created
-	SchemaVersion *schemaversion.SchemaVersion // Requested Schema Version. Defaults to v2 for RS5, v1 for RS1..RS4
-	HostingSystem *uvm.UtilityVM               // Utility or service VM in which the container is to be created.
+	ID               string                       // Identifier for the container
+	Owner            string                       // Specifies the owner. Defaults to executable name.
+	Spec             *specs.Spec                  // Definition of the container or utility VM being created
+	SchemaVersion    *schemaversion.SchemaVersion // Requested Schema Version. Defaults to v2 for RS5, v1 for RS1..RS4
+	HostingSystem    *uvm.UtilityVM               // Utility or service VM in which the container is to be created.
+	NetworkNamespace string                       // Host network namespace to use (overrides anything in the spec)
 
 	// These are v1 LCOW backwards-compatibility only.
 	KirdPath          string // Folder in which kernel and initrd reside. Defaults to \Program Files\Linux Containers
@@ -61,16 +61,16 @@ type CreateOptions struct {
 type createOptionsInternal struct {
 	*CreateOptions
 
-	actualSchemaVersion *schemaversion.SchemaVersion // Calculated based on Windows build and optional caller-supplied override
-	actualID            string                       // Identifier for the container
-	actualOwner         string                       // Owner for the container
+	actualSchemaVersion    *schemaversion.SchemaVersion // Calculated based on Windows build and optional caller-supplied override
+	actualID               string                       // Identifier for the container
+	actualOwner            string                       // Owner for the container
+	actualNetworkNamespace string
 
 	// These are v1 LCOW backwards-compatibility only
 	actualKirdPath   string // LCOW kernel/initrd path
 	actualKernelFile string // LCOW kernel file
 	actualInitrdFile string // LCOW initrd file
 
-	networkNamespace string
 }
 
 // CreateContainer creates a container. It can cope with a  wide variety of
@@ -127,25 +127,27 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 	// Create a network namespace if necessary.
 	if coi.Spec.Windows != nil &&
 		coi.Spec.Windows.Network != nil &&
-		coi.actualSchemaVersion.IsV20() &&
-		coi.HostingSystem == nil {
+		coi.actualSchemaVersion.IsV20() {
 
-		netID, err := hns.CreateNamespace()
-		if err != nil {
-			return nil, nil, err
-		}
-		logrus.Infof("created network namespace %s for %s", netID, coi.ID)
-		resources.NetworkNamespace = netID
-		coi.networkNamespace = netID
-		if coi.Spec.Windows != nil && coi.Spec.Windows.Network != nil {
-			for _, endpoint := range coi.Spec.Windows.Network.EndpointList {
-				err = hns.AddNamespaceEndpoint(netID, endpoint)
-				if err != nil {
-					return nil, nil, err
-				}
-				logrus.Infof("added network endpoint %s to namespace %s", endpoint, netID)
-				resources.NetworkEndpoints = append(resources.NetworkEndpoints, endpoint)
+		if coi.NetworkNamespace != "" {
+			resources.NetNS = coi.NetworkNamespace
+		} else {
+			err := createNetworkNamespace(coi, resources)
+			if err != nil {
+				return nil, nil, err
 			}
+		}
+		coi.actualNetworkNamespace = resources.NetNS
+		if coi.HostingSystem != nil {
+			endpoints, err := getNamespaceEndpoints(coi.actualNetworkNamespace)
+			if err != nil {
+				return nil, nil, err
+			}
+			err = coi.HostingSystem.AddNetNS(coi.actualNetworkNamespace, endpoints)
+			if err != nil {
+				return nil, nil, err
+			}
+			resources.AddedNetNSToVM = true
 		}
 	}
 
@@ -287,7 +289,7 @@ func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem stri
 		v2Container.Networking = &hcsschemav2.ContainersResourcesNetworkingV2{}
 
 		v1.EndpointList = coi.Spec.Windows.Network.EndpointList
-		v2Container.Networking.Namespace = coi.networkNamespace
+		v2Container.Networking.Namespace = coi.actualNetworkNamespace
 
 		v1.AllowUnqualifiedDNSQuery = coi.Spec.Windows.Network.AllowUnqualifiedDNSQuery
 		v2Container.Networking.AllowUnqualifiedDnsQuery = v1.AllowUnqualifiedDNSQuery

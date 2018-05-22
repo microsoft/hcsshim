@@ -11,7 +11,6 @@ import (
 
 	winio "github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/appargs"
-	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/uvm"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -104,7 +103,7 @@ var vmshimCommand = cli.Command{
 						ioutil.ReadAll(pipe)
 					}
 				} else {
-					logrus.Error("failed creating container in VM", err)
+					logrus.Error("failed creating container in VM: ", err)
 					fmt.Fprintf(pipe, "%v", err)
 				}
 				pipe.Close()
@@ -113,12 +112,12 @@ var vmshimCommand = cli.Command{
 	},
 }
 
-type vmRequestOp int
+type vmRequestOp string
 
 const (
-	opCreateContainer vmRequestOp = iota
-	opUnmountContainer
-	opUnmountContainerDiskOnly
+	opCreateContainer          vmRequestOp = "create"
+	opUnmountContainer         vmRequestOp = "unmount"
+	opUnmountContainerDiskOnly vmRequestOp = "unmount-disk"
 )
 
 type vmRequest struct {
@@ -145,6 +144,7 @@ func processRequest(vm *uvm.UtilityVM, pipe net.Conn) error {
 	if err != nil {
 		return err
 	}
+	logrus.Debug("received operation ", req.Op, " for ", req.ID)
 	c, err := getContainer(req.ID, false)
 	if err != nil {
 		return err
@@ -169,13 +169,10 @@ func processRequest(vm *uvm.UtilityVM, pipe net.Conn) error {
 		c = nil
 
 	case opUnmountContainer, opUnmountContainerDiskOnly:
-		if c.resources != nil {
-			err := hcsoci.ReleaseResources(c.resources, vm, req.Op == opUnmountContainerDiskOnly)
-			if err != nil {
-				return err
-			}
+		err = c.unmountInHost(vm, req.Op == opUnmountContainer)
+		if err != nil {
+			return err
 		}
-		c.resources = nil
 
 	default:
 		panic("unknown operation")

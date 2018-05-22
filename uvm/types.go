@@ -8,6 +8,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/hns"
 )
 
 //                    | WCOW | LCOW
@@ -38,8 +39,13 @@ type vpmemInfo struct {
 	refCount uint32
 }
 
+type nicInfo struct {
+	ID       guid.GUID
+	Endpoint *hns.HNSEndpoint
+}
+
 type namespaceInfo struct {
-	nics     []guid.GUID
+	nics     []nicInfo
 	refCount int
 }
 
@@ -62,4 +68,6 @@ type UtilityVM struct {
 	scsiLocations [4][64]scsiInfo // Hyper-V supports 4 controllers, 64 slots per controller. Limited to 1 controller for now though.
 
 	// TODO: Plan9 will need adding for LCOW. These are used for mapped directories
+
+	namespaces map[string]*namespaceInfo
 }
