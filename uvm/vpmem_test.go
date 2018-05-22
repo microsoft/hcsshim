@@ -33,7 +33,7 @@ func TestVPMEM(t *testing.T) {
 	}
 
 	for i := 0; i < int(iterations); i++ {
-		deviceNumber, uvmPath, err := uvm.AddVPMEM(filepath.Join(tempDir, "layer.vhd"), "/tmp/bar", true)
+		deviceNumber, uvmPath, err := uvm.AddVPMEM(filepath.Join(tempDir, "layer.vhd"), "", true)
 		if err != nil {
 			t.Fatalf("AddVPMEM failed: %s", err)
 		}
@@ -49,6 +49,7 @@ func TestVPMEM(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("Should only be one VPMEM entry %d", count)
 	}
+
 	//	if _, ok := uvm.vsmbShares.vsmbInfo[dir]; ok {
 	//		t.Fatalf("should not found as upper case")
 	//	}
@@ -81,8 +82,8 @@ func TestVPMEM(t *testing.T) {
 			count++
 		}
 	}
-	if count != 1 {
-		t.Fatalf("Should only zero VPMEM entries %d", count)
+	if count != 0 {
+		t.Fatalf("Should be zero VPMEM entries %d", count)
 	}
 
 	//	if len(uvm.vsmbShares.vsmbInfo) != 0 {

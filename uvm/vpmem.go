@@ -47,7 +47,7 @@ func (uvm *UtilityVM) findVPMEMDevice(findThisHostPath string) (uint32, string, 
 // This is only supported for v2 schema linux utility VMs
 //
 // Returns the location(0..255) where the device is attached, and if exposed,
-// the container path which will be /tmp/vpmem<location>/ if no container path
+// the container path which will be /tmp/v<location>/ if no container path
 // is supplied, or the user supplied one if it is.
 func (uvm *UtilityVM) AddVPMEM(hostPath string, uvmPath string, expose bool) (uint32, string, error) {
 	if uvm.operatingSystem != "linux" {
@@ -87,7 +87,7 @@ func (uvm *UtilityVM) AddVPMEM(hostPath string, uvmPath string, expose bool) (ui
 
 		if expose || uvmPath != "" {
 			if uvmPath == "" {
-				uvmPath = fmt.Sprintf("/tmp/vpmem%d", deviceNumber)
+				uvmPath = fmt.Sprintf("/tmp/v%d", deviceNumber)
 			}
 			modification.HostedSettings = schema.LCOWMappedVPMemDevice{
 				DeviceNumber: deviceNumber,
@@ -144,26 +144,29 @@ func (uvm *UtilityVM) RemoveVPMEM(hostPath string) error {
 // removeVPMEM is the internally callable "unsafe" version of RemoveVPMEM. The mutex
 // MUST be held when calling this function.
 func (uvm *UtilityVM) removeVPMEM(hostPath string, uvmPath string, deviceNumber uint32) error {
-	logrus.Debugf("uvm::RemoveVPMEM id:%s hostPath:%s", uvm.id, hostPath)
+	logrus.Debugf("uvm::RemoveVPMEM id:%s hostPath:%s device:%d", uvm.id, hostPath, deviceNumber)
 
-	// TODO: Add the refcounting the same as vsm
-	// TODO: Add the remoteType
+	if uvm.vpmemDevices[deviceNumber].refCount == 1 {
+		modification := &schema2.ModifySettingsRequestV2{
+			ResourceType: schema2.ResourceTypeVPMemDevice,
+			RequestType:  schema2.RequestTypeRemove,
+			ResourceUri:  fmt.Sprintf("virtualmachine/devices/virtualpmemdevices/%d", deviceNumber),
+		}
 
-	modification := &schema2.ModifySettingsRequestV2{
-		ResourceType: schema2.ResourceTypeVPMemDevice,
-		RequestType:  schema2.RequestTypeRemove,
-		ResourceUri:  fmt.Sprintf("virtualmachine/devices/virtualpmemdevices/%d", deviceNumber),
+		modification.HostedSettings = schema.LCOWMappedVPMemDevice{
+			DeviceNumber: deviceNumber,
+			MountPath:    uvmPath,
+		}
+
+		if err := uvm.Modify(modification); err != nil {
+			return err
+		}
+		uvm.vpmemDevices[deviceNumber] = vpmemInfo{}
+		logrus.Debugf("uvm::RemoveVPMEM: Success id:%s hostPath:%s device:%d", uvm.id, hostPath, deviceNumber)
+		return nil
 	}
-
-	modification.HostedSettings = schema.LCOWMappedVPMemDevice{
-		DeviceNumber: deviceNumber,
-		MountPath:    uvmPath,
-	}
-
-	if err := uvm.Modify(modification); err != nil {
-		return err
-	}
-	uvm.vpmemDevices[deviceNumber] = vpmemInfo{}
-	logrus.Debugf("uvm::RemoveVPMEM: Success %s removed from %s %d", hostPath, uvm.id, deviceNumber)
+	uvm.vpmemDevices[deviceNumber].refCount--
+	logrus.Debugf("uvm::RemoveVPMEM: Success id:%s hostPath:%s device:%d refCount:%d", uvm.id, hostPath, deviceNumber, uvm.vpmemDevices[deviceNumber].refCount)
 	return nil
+
 }
