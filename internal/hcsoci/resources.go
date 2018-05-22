@@ -9,31 +9,41 @@ import (
 )
 
 type Resources struct {
-	NetworkNamespace string
+	NetNS            string
 	NetworkEndpoints []string
 	Layers           []string
 	VSMBMounts       []string
+	CreatedNetNS     bool
+	AddedNetNSToVM   bool
 }
 
 func ReleaseResources(r *Resources, vm *uvm.UtilityVM, lastContainer bool) error {
-	if vm == nil && r.NetworkNamespace != "" {
+	if vm != nil && r.AddedNetNSToVM {
+		err := vm.RemoveNetNS(r.NetNS)
+		if err != nil {
+			logrus.Warn(err)
+		}
+		r.AddedNetNSToVM = false
+	}
+
+	if r.CreatedNetNS {
 		for len(r.NetworkEndpoints) != 0 {
 			endpoint := r.NetworkEndpoints[len(r.NetworkEndpoints)-1]
-			err := hns.RemoveNamespaceEndpoint(r.NetworkNamespace, endpoint)
+			err := hns.RemoveNamespaceEndpoint(r.NetNS, endpoint)
 			if err != nil {
 				if !os.IsNotExist(err) {
 					return err
 				}
-				logrus.Warnf("removing endpoint %s from namespace %s: does not exist", endpoint, r.NetworkNamespace)
+				logrus.Warnf("removing endpoint %s from namespace %s: does not exist", endpoint, r.NetNS)
 			}
 			r.NetworkEndpoints = r.NetworkEndpoints[:len(r.NetworkEndpoints)-1]
 		}
 		r.NetworkEndpoints = nil
-		err := hns.RemoveNamespace(r.NetworkNamespace)
+		err := hns.RemoveNamespace(r.NetNS)
 		if err != nil && !os.IsNotExist(err) {
 			return err
 		}
-		r.NetworkNamespace = ""
+		r.CreatedNetNS = false
 	}
 
 	if len(r.Layers) != 0 {
