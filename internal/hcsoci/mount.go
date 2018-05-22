@@ -29,7 +29,7 @@ type vpMemEntry struct {
 //                    of the layers are the VSMB locations where the read-only layers are mounted.
 //
 // TODO Should this return a string or an object? More efficient as object, but requires more client work to marshall it again.
-func mountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{}, error) {
+func mountContainerLayers(layerFolders []string, innerID string, uvm *uvm.UtilityVM) (interface{}, error) {
 	logrus.Debugln("hcsshim::mountContainerLayers", layerFolders)
 
 	if uvm == nil {
@@ -97,15 +97,8 @@ func mountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 		}
 	}
 
-	// 	Add the sandbox at an unused SCSI location. The container path inside the utility VM will be C:\<GUID> where
-	// 	GUID is based on the folder in which the sandbox is located. Therefore, it is critical that if two containers
-	// 	are created in the same utility VM, they have unique sandbox directories.
-	_, sandboxPath := filepath.Split(layerFolders[len(layerFolders)-1])
-	containerPathGUID, err := wclayer.NameToGuid(sandboxPath)
-	if err != nil {
-		cleanupOnMountFailure(uvm, vsmbAdded, vpmemAdded, attachedSCSIHostPath)
-		return nil, err
-	}
+	// Add the sandbox at an unused SCSI location. The container path inside the
+	// utility VM will be C:\<ID>.
 	hostPath := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
 
 	// On Linux, we need to grant access to the sandbox
@@ -119,12 +112,11 @@ func mountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 	var counter uint64
 	containerPath := ""
 	if uvm.OS() == "windows" {
-		containerPath = fmt.Sprintf(`C:\%s`, containerPathGUID)
+		containerPath = `C:\s` + innerID
 	} else {
-		counter = uvm.ContainerCounter()
-		containerPath = fmt.Sprintf("/tmp/s%d", counter)
+		containerPath = "/tmp/s" + innerID
 	}
-	_, _, err = uvm.AddSCSI(hostPath, containerPath)
+	_, _, err := uvm.AddSCSI(hostPath, containerPath)
 	if err != nil {
 		cleanupOnMountFailure(uvm, vsmbAdded, vpmemAdded, attachedSCSIHostPath)
 		return nil, err
@@ -132,7 +124,7 @@ func mountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 	attachedSCSIHostPath = hostPath
 
 	if uvm.OS() == "windows" {
-		// 	Load the filter at the C:\<GUID> location calculated above. We pass into this request each of the
+		// 	Load the filter at the C:\s<ID> location calculated above. We pass into this request each of the
 		// 	read-only layer folders.
 		layers := []schema2.ContainersResourcesLayerV2{}
 		for _, vsmb := range vsmbAdded {
@@ -147,7 +139,7 @@ func mountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM) (interface{
 			})
 		}
 		hostedSettings := schema2.CombinedLayersV2{
-			ContainerRootPath: fmt.Sprintf(`C:\%s`, containerPathGUID),
+			ContainerRootPath: containerPath,
 			Layers:            layers,
 		}
 		combinedLayersModification := &schema2.ModifySettingsRequestV2{
@@ -203,7 +195,7 @@ const (
 )
 
 // unmountContainerLayers is a helper for clients to hide all the complexity of layer unmounting
-func unmountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM, op unmountOperation) error {
+func unmountContainerLayers(layerFolders []string, innerID string, uvm *uvm.UtilityVM, op unmountOperation) error {
 	logrus.Debugln("hcsshim::unmountContainerLayers", layerFolders)
 
 	if uvm == nil {
@@ -235,27 +227,19 @@ func unmountContainerLayers(layerFolders []string, uvm *uvm.UtilityVM, op unmoun
 
 	// Unload the storage filter followed by the SCSI sandbox
 	if (op & unmountOperationSCSI) == unmountOperationSCSI {
-		// TODO BUGBUG - logic error if failed to NameToGUID as containerPathGUID is used later too
-		_, sandboxPath := filepath.Split(layerFolders[len(layerFolders)-1])
-		containerPathGUID, err := wclayer.NameToGuid(sandboxPath)
-		if err != nil {
-			logrus.Warnf("may leak a sandbox in %s as nametoguid failed: %s", err)
-		} else {
-			containerRootPath := fmt.Sprintf(`C:\%s`, containerPathGUID.String())
-			logrus.Debugf("hcsshim::unmountContainerLayers CombinedLayers %s", containerRootPath)
-			combinedLayersModification := &schema2.ModifySettingsRequestV2{
-				ResourceType:   schema2.ResourceTypeCombinedLayers,
-				RequestType:    schema2.RequestTypeRemove,
-				HostedSettings: schema2.CombinedLayersV2{ContainerRootPath: containerRootPath},
-			}
-			if err := uvm.Modify(combinedLayersModification); err != nil {
-				logrus.Errorf(err.Error())
-			}
+		containerRootPath := `C:\s` + innerID
+		logrus.Debugf("hcsshim::unmountContainerLayers CombinedLayers %s", containerRootPath)
+		combinedLayersModification := &schema2.ModifySettingsRequestV2{
+			ResourceType:   schema2.ResourceTypeCombinedLayers,
+			RequestType:    schema2.RequestTypeRemove,
+			HostedSettings: schema2.CombinedLayersV2{ContainerRootPath: containerRootPath},
+		}
+		if err := uvm.Modify(combinedLayersModification); err != nil {
+			logrus.Errorf(err.Error())
 		}
 
 		// Hot remove the sandbox from the SCSI controller
 		hostSandboxFile := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
-		containerRootPath := fmt.Sprintf(`C:\%s`, containerPathGUID.String())
 		logrus.Debugf("hcsshim::unmountContainerLayers SCSI %s %s", containerRootPath, hostSandboxFile)
 		if err := uvm.RemoveSCSI(hostSandboxFile); err != nil {
 			e := fmt.Errorf("failed to remove SCSI %s: %s", hostSandboxFile, err)

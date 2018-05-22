@@ -3,12 +3,14 @@
 package hcsoci
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/guid"
@@ -124,6 +126,10 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 		}
 	}()
 
+	if coi.HostingSystem != nil {
+		resources.InnerID = strconv.FormatUint(coi.HostingSystem.ContainerCounter(), 16)
+	}
+
 	// Create a network namespace if necessary.
 	if coi.Spec.Windows != nil &&
 		coi.Spec.Windows.Network != nil &&
@@ -194,6 +200,59 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 		return nil, nil, err
 	}
 	return system, resources, err
+}
+
+func createLCOWSpec(coi *createOptionsInternal, resources *Resources) (*specs.Spec, error) {
+	// Remarshal the spec to perform a deep copy.
+	j, err := json.Marshal(coi.Spec)
+	if err != nil {
+		return nil, err
+	}
+	spec := &specs.Spec{}
+	err = json.Unmarshal(j, spec)
+	if err != nil {
+		return nil, err
+	}
+
+	// Translate the mounts. The root has already been trnaslated in
+	// allocateLinuxResources.
+	/*
+		for i := range spec.Mounts {
+			spec.Mounts[i].Source = "???"
+			spec.Mounts[i].Destination = "???"
+		}
+	*/
+
+	// Linux containers don't care about Windows aspects of the spec
+	spec.Windows = nil
+
+	// Hooks are not supported (they should be run in the host)
+	spec.Hooks = nil
+
+	// Clear unsupported features
+	if spec.Linux.Resources != nil {
+		spec.Linux.Resources.Devices = nil
+		spec.Linux.Resources.Memory = nil
+		spec.Linux.Resources.Pids = nil
+		spec.Linux.Resources.BlockIO = nil
+		spec.Linux.Resources.HugepageLimits = nil
+		spec.Linux.Resources.Network = nil
+	}
+	spec.Linux.Seccomp = nil
+
+	// Clear any specified namespaces
+	var namespaces []specs.LinuxNamespace
+	for _, ns := range spec.Linux.Namespaces {
+		switch ns.Type {
+		case specs.NetworkNamespace:
+		default:
+			ns.Path = ""
+			namespaces = append(namespaces, ns)
+		}
+	}
+	spec.Linux.Namespaces = namespaces
+
+	return spec, nil
 }
 
 // createHCSContainerDocument creates a document suitable for calling HCS to create

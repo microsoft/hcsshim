@@ -156,7 +156,7 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 
 			ComputeTopology: &schema2.VirtualMachinesResourcesComputeTopologyV2{
 				Memory: &schema2.VirtualMachinesResourcesComputeMemoryV2{
-					Backing: "Virtual",
+					Backing: "Physical",
 					Startup: memory,
 				},
 				Processor: &schema2.VirtualMachinesResourcesComputeProcessorV2{
