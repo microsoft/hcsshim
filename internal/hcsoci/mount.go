@@ -188,9 +188,10 @@ func mountContainerLayers(layerFolders []string, innerID string, uvm *uvm.Utilit
 type unmountOperation uint
 
 const (
-	unmountOperationSCSI unmountOperation = 0x01
-	unmountOperationVSMB                  = 0x02
-	unmountOperationAll                   = unmountOperationSCSI | unmountOperationVSMB
+	unmountOperationSCSI  unmountOperation = 0x01
+	unmountOperationVSMB                   = 0x02
+	unmountOperationVPMEM                  = 0x04
+	unmountOperationAll                    = unmountOperationSCSI | unmountOperationVSMB | unmountOperationVPMEM
 )
 
 // unmountContainerLayers is a helper for clients to hide all the complexity of layer unmounting
@@ -254,9 +255,25 @@ func unmountContainerLayers(layerFolders []string, innerID string, uvm *uvm.Util
 	// Remove each of the read-only layers from VSMB. These's are ref-counted and
 	// only removed once the count drops to zero. This allows multiple containers
 	// to share layers.
-	if len(layerFolders) > 1 && (op&unmountOperationVSMB) == unmountOperationVSMB {
+	if uvm.OS() == "windows" && len(layerFolders) > 1 && (op&unmountOperationVSMB) == unmountOperationVSMB {
 		for _, layerPath := range layerFolders[:len(layerFolders)-1] {
 			if e := uvm.RemoveVSMB(layerPath); e != nil {
+				logrus.Debugln(e)
+				if retError == nil {
+					retError = e
+				} else {
+					retError = errors.Wrapf(retError, e.Error())
+				}
+			}
+		}
+	}
+
+	// Remove each of the read-only layers from VPMEM. These's are ref-counted and
+	// only removed once the count drops to zero. This allows multiple containers
+	// to share layers.
+	if uvm.OS() == "linux" && len(layerFolders) > 1 && (op&unmountOperationVPMEM) == unmountOperationVPMEM {
+		for _, layerPath := range layerFolders[:len(layerFolders)-1] {
+			if e := uvm.RemoveVPMEM(layerPath); e != nil {
 				logrus.Debugln(e)
 				if retError == nil {
 					retError = e
