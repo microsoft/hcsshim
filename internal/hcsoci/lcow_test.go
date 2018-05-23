@@ -1,6 +1,4 @@
-// +build windows
-
-//,functional,lcow
+// +build windows,functional,lcow
 
 // To run: go test -v -tags "functional lcow"
 
