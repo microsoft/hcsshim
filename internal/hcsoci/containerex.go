@@ -421,18 +421,17 @@ func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem stri
 		} else {
 			// Hosting system was supplied, so is v2 Xenon.
 			v2Container.Storage.Path = coi.Spec.Root.Path
-
 			if coi.HostingSystem.OS() == "windows" {
 				// This is a little inefficient, but makes it MUCH easier for clients. Build the combinedLayers.Layers structure.
 				for _, layerFolder := range coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1] {
-					layerFolderVSMBGUID, err := coi.HostingSystem.GetVSMBGUID(layerFolder)
+					layerFolderVSMBCounter, err := coi.HostingSystem.GetVSMBCounter(layerFolder)
 					if err != nil {
 						return nil, err
 					}
 					v2Container.Storage.Layers = append(v2Container.Storage.Layers,
 						hcsschemav2.ContainersResourcesLayerV2{
-							Id:   layerFolderVSMBGUID,
-							Path: fmt.Sprintf(`\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\%s`, layerFolderVSMBGUID),
+							Id:   fmt.Sprintf("%d", layerFolderVSMBCounter),
+							Path: fmt.Sprintf(`\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\%d`, layerFolderVSMBCounter),
 						})
 				}
 			}
@@ -474,12 +473,12 @@ func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem stri
 				if coi.HostingSystem == nil {
 					mdv2 = hcsschemav2.ContainersResourcesMappedDirectoryV2{HostPath: mount.Source, ContainerPath: mount.Destination, ReadOnly: false}
 				} else {
-					mountSourceVSMBGUID, err := coi.HostingSystem.GetVSMBGUID(mount.Source)
+					mountSourceVSMBCounter, err := coi.HostingSystem.GetVSMBCounter(mount.Source)
 					if err != nil {
 						return nil, err
 					}
 					mdv2 = hcsschemav2.ContainersResourcesMappedDirectoryV2{
-						HostPath:      fmt.Sprintf(`\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\%s`, mountSourceVSMBGUID),
+						HostPath:      fmt.Sprintf(`\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\%d`, mountSourceVSMBCounter),
 						ContainerPath: mount.Destination,
 						ReadOnly:      false}
 				}

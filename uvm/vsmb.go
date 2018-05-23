@@ -2,10 +2,8 @@ package uvm
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/sirupsen/logrus"
 )
 
@@ -16,28 +14,24 @@ func (uvm *UtilityVM) AddVSMB(hostPath string, uvmPath string, flags int32) erro
 		return errNotSupported
 	}
 
-	hostPath = strings.ToLower(hostPath)
 	logrus.Debugf("uvm::AddVSMB %s %s %d id:%s", hostPath, uvmPath, flags, uvm.id)
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 	if uvm.vsmbShares == nil {
-		uvm.vsmbShares = make(map[string]vsmbInfo)
+		uvm.vsmbShares = make(map[string]*vsmbInfo)
 	}
 	if _, ok := uvm.vsmbShares[hostPath]; !ok {
-		guid, err := wclayer.NameToGuid(hostPath)
-		if err != nil {
-			return err
-		}
+		uvm.vsmbCounter++
 
 		modification := &schema2.ModifySettingsRequestV2{
 			ResourceType: schema2.ResourceTypeVSmbShare,
 			RequestType:  schema2.RequestTypeAdd,
 			Settings: schema2.VirtualMachinesResourcesStorageVSmbShareV2{
-				Name:  guid.String(),
+				Name:  fmt.Sprintf("%d", uvm.vsmbCounter),
 				Flags: flags,
 				Path:  hostPath,
 			},
-			ResourceUri: fmt.Sprintf("virtualmachine/devices/virtualsmbshares/%s", guid.String()),
+			ResourceUri: fmt.Sprintf("virtualmachine/devices/virtualsmbshares/%d", uvm.vsmbCounter),
 		}
 
 		// TODO: Hosted settings to support mapped directories on Windows
@@ -48,16 +42,12 @@ func (uvm *UtilityVM) AddVSMB(hostPath string, uvmPath string, flags int32) erro
 		if err := uvm.Modify(modification); err != nil {
 			return err
 		}
-		uvm.vsmbShares[hostPath] = vsmbInfo{
-			guid:     guid.String(),
-			refCount: 1,
-			uvmPath:  uvmPath}
+		uvm.vsmbShares[hostPath] = &vsmbInfo{
+			idCounter: uvm.vsmbCounter,
+			refCount:  1,
+			uvmPath:   uvmPath}
 	} else {
-		smbi := vsmbInfo{
-			guid:     uvm.vsmbShares[hostPath].guid,
-			refCount: uvm.vsmbShares[hostPath].refCount + 1,
-			uvmPath:  uvm.vsmbShares[hostPath].uvmPath}
-		uvm.vsmbShares[hostPath] = smbi
+		uvm.vsmbShares[hostPath].refCount++
 	}
 	logrus.Debugf("hcsshim::AddVSMB Success %s: refcount=%d %+v", hostPath, uvm.vsmbShares[hostPath].refCount, uvm.vsmbShares[hostPath])
 	return nil
@@ -69,7 +59,6 @@ func (uvm *UtilityVM) RemoveVSMB(hostPath string) error {
 	if uvm.operatingSystem != "windows" {
 		return errNotSupported
 	}
-	hostPath = strings.ToLower(hostPath)
 	logrus.Debugf("uvm::RemoveVSMB %s id:%s", hostPath, uvm.id)
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
@@ -82,46 +71,39 @@ func (uvm *UtilityVM) RemoveVSMB(hostPath string) error {
 // removeVSMB is the internally callable "unsafe" version of RemoveVSMB. The mutex
 // MUST be held when calling this function.
 func (uvm *UtilityVM) removeVSMB(hostPath, uvmPath string) error {
-	hostPath = strings.ToLower(hostPath)
-	vi := vsmbInfo{
-		guid:     uvm.vsmbShares[hostPath].guid,
-		refCount: uvm.vsmbShares[hostPath].refCount - 1,
-		uvmPath:  uvm.vsmbShares[hostPath].uvmPath,
-	}
-	uvm.vsmbShares[hostPath] = vi
-	if vi.refCount > 0 {
-		logrus.Debugf("uvm::RemoveVSMB Success %s id:%s Ref-count now %d. It is still present in the utility VM", hostPath, uvm.id, vi.refCount)
+	uvm.vsmbShares[hostPath].refCount--
+	if uvm.vsmbShares[hostPath].refCount > 0 {
+		logrus.Debugf("uvm::RemoveVSMB Success %s id:%s Ref-count now %d. It is still present in the utility VM", hostPath, uvm.id, uvm.vsmbShares[hostPath].refCount)
 		return nil
 	}
 	logrus.Debugf("uvm::RemoveVSMB Zero ref-count, removing. %s id:%s", hostPath, uvm.id)
-	delete(uvm.vsmbShares, hostPath)
 	modification := &schema2.ModifySettingsRequestV2{
 		ResourceType: schema2.ResourceTypeVSmbShare,
 		RequestType:  schema2.RequestTypeRemove,
-		Settings:     schema2.VirtualMachinesResourcesStorageVSmbShareV2{Name: vi.guid}, // TODO Why is this required. Is it? Confirm.
-		ResourceUri:  fmt.Sprintf("virtualmachine/devices/virtualsmbshares/%s", vi.guid),
+		Settings:     schema2.VirtualMachinesResourcesStorageVSmbShareV2{Name: fmt.Sprintf("%d", uvm.vsmbShares[hostPath].idCounter)},
+		ResourceUri:  fmt.Sprintf("virtualmachine/devices/virtualsmbshares/%d", uvm.vsmbShares[hostPath].idCounter),
 	}
 	if err := uvm.Modify(modification); err != nil {
 		return fmt.Errorf("failed to remove vsmb share %s from %s: %s: %s", hostPath, uvm.id, modification, err)
 	}
+	delete(uvm.vsmbShares, hostPath)
 	logrus.Debugf("uvm::RemoveVSMB Success %s id:%s successfully removed from utility VM", hostPath, uvm.id)
 	return nil
 }
 
-// GetVSMBGUID returns the GUID used to mount a VSMB share in a utility VM
-func (uvm *UtilityVM) GetVSMBGUID(hostPath string) (string, error) {
+// GetVSMBCounter returns the counter used to mount a VSMB share in a utility VM
+func (uvm *UtilityVM) GetVSMBCounter(hostPath string) (uint64, error) {
 	if uvm.vsmbShares == nil {
-		return "", fmt.Errorf("no vsmbShares in utility VM!")
+		return 0, fmt.Errorf("no vsmbShares in utility VM!")
 	}
 	if hostPath == "" {
-		return "", fmt.Errorf("no hostPath passed to GetVSMBShareGUID")
+		return 0, fmt.Errorf("no hostPath passed to GetVSMBShareCounter")
 	}
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
-	hostPath = strings.ToLower(hostPath)
 	if _, ok := uvm.vsmbShares[hostPath]; !ok {
-		return "", fmt.Errorf("%s not found as VSMB share in %s", hostPath, uvm.id)
+		return 0, fmt.Errorf("%s not found as VSMB share in %s", hostPath, uvm.id)
 	}
-	logrus.Debugf("uvm::GetVSMBGUID Success %s id:%s guid:%s", hostPath, uvm.id, uvm.vsmbShares[hostPath].guid)
-	return uvm.vsmbShares[hostPath].guid, nil
+	logrus.Debugf("uvm::GetVSMBCounter Success %s id:%s counter:%d", hostPath, uvm.id, uvm.vsmbShares[hostPath].idCounter)
+	return uvm.vsmbShares[hostPath].idCounter, nil
 }
