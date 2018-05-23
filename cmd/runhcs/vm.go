@@ -185,7 +185,7 @@ var errNoVM = errors.New("the VM cannot be contacted")
 func issueVMRequest(vmid, id string, op vmRequestOp) error {
 	pipe, err := winio.DialPipe(vmPipePath(vmid), nil)
 	if err != nil {
-		if oerr, ok := err.(*net.OpError); ok && oerr.Err == syscall.ERROR_FILE_NOT_FOUND {
+		if perr, ok := err.(*os.PathError); ok && perr.Err == syscall.ERROR_FILE_NOT_FOUND {
 			return errNoVM
 		}
 		return err
