@@ -307,7 +307,7 @@ func (computeSystem *System) Resume() error {
 }
 
 // CreateProcess launches a new process within the computeSystem.
-func (computeSystem *System) CreateProcess(c *schema1.ProcessConfig) (*Process, error) {
+func (computeSystem *System) CreateProcess(c interface{}) (*Process, error) {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 	title := "hcsshim::ComputeSystem::CreateProcess ID=" + computeSystem.ID()
@@ -319,12 +319,6 @@ func (computeSystem *System) CreateProcess(c *schema1.ProcessConfig) (*Process, 
 
 	if computeSystem.handle == 0 {
 		return nil, makeSystemError(computeSystem, "CreateProcess", "", ErrAlreadyClosed, nil)
-	}
-
-	// If we are not emulating a console, ignore any console size passed to us
-	if !c.EmulateConsole {
-		c.ConsoleSize[0] = 0
-		c.ConsoleSize[1] = 0
 	}
 
 	configurationb, err := json.Marshal(c)
