@@ -6,8 +6,10 @@ import (
 	"os"
 	"path"
 	"sync"
+	"syscall"
 
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
+	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
@@ -128,9 +130,10 @@ func (h *Host) GetOrCreateContainer(id string, settings *prot.VMHostedContainerS
 			Out: outCon,
 			Err: errCon,
 		},
-		inCon:  inCon,
-		outCon: outCon,
-		errCon: errCon,
+		inCon:     inCon,
+		outCon:    outCon,
+		errCon:    errCon,
+		processes: make(map[uint32]*Process),
 	}
 	con, err := h.rtime.CreateContainer(id, settings.OCIBundlePath, c.initConnectionSet)
 	if err != nil {
@@ -146,6 +149,9 @@ type Container struct {
 	initProcess           *oci.Process
 	initConnectionSet     *stdio.ConnectionSet
 	inCon, outCon, errCon *delayedVsockConnection
+
+	processesMutex sync.Mutex
+	processes      map[uint32]*Process
 }
 
 func (c *Container) ExecProcess(process *oci.Process, stdioSet *stdio.ConnectionSet) (int, error) {
@@ -168,4 +174,30 @@ func (c *Container) ExecProcess(process *oci.Process, stdioSet *stdio.Connection
 		}
 		return p.Pid(), nil
 	}
+}
+
+func (c *Container) GetProcess(pid uint32) (*Process, error) {
+	c.processesMutex.Lock()
+	defer c.processesMutex.Unlock()
+
+	p, ok := c.processes[pid]
+	if !ok {
+		return nil, errors.WithStack(gcserr.NewProcessDoesNotExistError(int(pid)))
+	}
+	return p, nil
+}
+
+func (c *Container) Kill(signal oslayer.Signal) error {
+	return c.container.Kill(signal)
+}
+
+type Process struct {
+	pid int
+}
+
+func (p *Process) Kill(signal syscall.Signal) error {
+	if err := syscall.Kill(int(p.pid), signal); err != nil {
+		return errors.WithStack(err)
+	}
+	return nil
 }

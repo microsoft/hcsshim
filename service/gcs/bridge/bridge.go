@@ -9,6 +9,7 @@ import (
 	"io"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/Microsoft/opengcs/service/gcs/core"
@@ -570,9 +571,16 @@ func (b *Bridge) signalContainer(w ResponseWriter, r *Request, signal oslayer.Si
 		return
 	}
 
-	if err := b.coreint.SignalContainer(request.ContainerID, signal); err != nil {
-		w.Error(request.ActivityID, err)
-		return
+	// First see if this is a V2 Container.
+	if c, err := b.hostState.GetContainer(request.ContainerID); err == nil {
+		if err := c.Kill(signal); err != nil {
+			w.Error(request.ActivityID, err)
+		}
+	} else {
+		if err := b.coreint.SignalContainer(request.ContainerID, signal); err != nil {
+			w.Error(request.ActivityID, err)
+			return
+		}
 	}
 
 	response := &prot.MessageResponseBase{
@@ -588,9 +596,28 @@ func (b *Bridge) signalProcess(w ResponseWriter, r *Request) {
 		return
 	}
 
-	if err := b.coreint.SignalProcess(int(request.ProcessID), request.Options); err != nil {
-		w.Error(request.ActivityID, err)
-		return
+	// First see if this is a V2 Container.
+	if c, err := b.hostState.GetContainer(request.ContainerID); err == nil {
+		if p, err := c.GetProcess(request.ProcessID); err != nil {
+			w.Error(request.ActivityID, err)
+			return
+		} else {
+			var signal syscall.Signal
+			if request.Options.Signal == 0 {
+				signal = syscall.SIGKILL
+			} else {
+				signal = syscall.Signal(request.Options.Signal)
+			}
+			if err := p.Kill(signal); err != nil {
+				w.Error(request.ActivityID, err)
+				return
+			}
+		}
+	} else {
+		if err := b.coreint.SignalProcess(int(request.ProcessID), request.Options); err != nil {
+			w.Error(request.ActivityID, err)
+			return
+		}
 	}
 
 	response := &prot.MessageResponseBase{
