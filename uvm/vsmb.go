@@ -2,7 +2,6 @@ package uvm
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/schema2"
@@ -25,8 +24,7 @@ func (uvm *UtilityVM) AddVSMB(hostPath string, uvmPath string, flags int32) erro
 		uvm.vsmbShares = make(map[string]vsmbInfo)
 	}
 	if _, ok := uvm.vsmbShares[hostPath]; !ok {
-		_, filename := filepath.Split(hostPath)
-		guid, err := wclayer.NameToGuid(filename)
+		guid, err := wclayer.NameToGuid(hostPath)
 		if err != nil {
 			return err
 		}
@@ -100,7 +98,7 @@ func (uvm *UtilityVM) removeVSMB(hostPath, uvmPath string) error {
 	modification := &schema2.ModifySettingsRequestV2{
 		ResourceType: schema2.ResourceTypeVSmbShare,
 		RequestType:  schema2.RequestTypeRemove,
-		Settings:     schema2.VirtualMachinesResourcesStorageVSmbShareV2{Name: vi.guid},
+		Settings:     schema2.VirtualMachinesResourcesStorageVSmbShareV2{Name: vi.guid}, // TODO Why is this required. Is it? Confirm.
 		ResourceUri:  fmt.Sprintf("virtualmachine/devices/virtualsmbshares/%s", vi.guid),
 	}
 	if err := uvm.Modify(modification); err != nil {
