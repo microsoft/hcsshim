@@ -41,10 +41,10 @@ type vpmemInfo struct {
 
 // plan9Info is an internal structure used for ref-counting Plan9 shares mapped to a Linux utility VM.
 type plan9Info struct {
-	refCount uint32
-	guid     string // effectively a hash of the host path to use as a name and in the resource URI to uniquely identify it
-	uvmPath  string
-	port     int32 // Temporary. TODO Remove
+	refCount  uint32
+	idCounter uint64
+	uvmPath   string
+	port      int32 // Temporary. TODO Remove
 }
 type nicInfo struct {
 	ID       guid.GUID
@@ -75,8 +75,8 @@ type UtilityVM struct {
 	scsiLocations [4][64]scsiInfo // Hyper-V supports 4 controllers, 64 slots per controller. Limited to 1 controller for now though.
 
 	// Plan9 are directories mapped into a Linux utility VM
-	plan9Shares      map[string]plan9Info
-	plan9PortCounter int32 // TODO: This is needed as of 17676 as port numbers have to be unique. Can be removed once HCS/GCS are updated, and all go across port 9999.
+	plan9Shares  map[string]*plan9Info
+	plan9Counter uint64 // Each newly-added plan9 share has a counter used as its ID in the ResourceURI and for the name
 
 	// TODO: Plan9 will need adding for LCOW. These are used for mapped directories
 
