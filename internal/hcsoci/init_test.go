@@ -1,4 +1,4 @@
-//functional lcow
+// +build functional lcow
 
 package hcsoci
 
