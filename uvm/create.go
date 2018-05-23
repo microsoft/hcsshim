@@ -23,6 +23,7 @@ type UVMOptions struct {
 	OperatingSystem         string                  // "windows" or "linux".
 	Resources               *specs.WindowsResources // Optional resources for the utility VM. Supports Memory.limit and CPU.Count only currently. // TODO consider extending?
 	AdditionHCSDocumentJSON string                  // Optional additional JSON to merge into the HCS document prior
+	LockedMemory            bool
 
 	// WCOW specific parameters
 	LayerFolders []string // Set of folders for base layers and sandbox. Ordered from top most read-only through base read-only layer, followed by sandbox
@@ -143,6 +144,10 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 		}
 	}
 
+	backing := "Virtual"
+	if opts.LockedMemory {
+		backing = "Physical"
+	}
 	hcsDocument := &schema2.ComputeSystemV2{
 		Owner:         uvm.owner,
 		SchemaVersion: schemaversion.SchemaV20(),
@@ -153,7 +158,7 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 
 			ComputeTopology: &schema2.VirtualMachinesResourcesComputeTopologyV2{
 				Memory: &schema2.VirtualMachinesResourcesComputeMemoryV2{
-					Backing: "Virtual",
+					Backing: backing,
 					Startup: memory,
 				},
 				Processor: &schema2.VirtualMachinesResourcesComputeProcessorV2{

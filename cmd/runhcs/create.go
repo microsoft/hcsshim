@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/Microsoft/hcsshim/internal/appargs"
+	"github.com/Microsoft/hcsshim/uvm"
 	"github.com/urfave/cli"
 )
 
@@ -27,14 +28,18 @@ var createRunFlags = []cli.Flag{
 		Usage: "path to the log file for the launched VM shim process",
 	},
 	cli.StringFlag{
+		Name:  "host",
+		Value: "",
+		Usage: "host container whose VM this container should run in",
+	},
+	cli.StringFlag{
 		Name:  "vm-console",
 		Value: "",
 		Usage: `path to the pipe for the VM's console (e.g. \\.\pipe\debugpipe)`,
 	},
-	cli.StringFlag{
-		Name:  "host",
-		Value: "",
-		Usage: "host container whose VM this container should run in",
+	cli.BoolFlag{
+		Name:  "vm-locked-memory",
+		Usage: "create the hosting VM with locked memory",
 	},
 }
 
@@ -88,12 +93,15 @@ func containerConfigFromContext(context *cli.Context) (*containerConfig, error) 
 		return nil, err
 	}
 	return &containerConfig{
-		ID:            id,
-		PidFile:       pidFile,
-		ShimLogFile:   shimLog,
-		VMLogFile:     vmLog,
-		VMConsolePipe: context.String("vm-console"),
-		Spec:          spec,
-		HostID:        context.String("host"),
+		ID:          id,
+		PidFile:     pidFile,
+		ShimLogFile: shimLog,
+		VMLogFile:   vmLog,
+		HostID:      context.String("host"),
+		Spec:        spec,
+		VMOptions: uvm.UVMOptions{
+			ConsolePipe:  context.String("vm-console"),
+			LockedMemory: context.Bool("vm-locked-memory"),
+		},
 	}, nil
 }
