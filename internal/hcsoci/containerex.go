@@ -20,9 +20,9 @@ import (
 	"github.com/Microsoft/hcsshim/internal/schema1"
 	hcsschemav2 "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
+	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
-	"github.com/Microsoft/hcsshim/uvm"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
@@ -51,6 +51,13 @@ type CreateOptions struct {
 	HostingSystem    *uvm.UtilityVM               // Utility or service VM in which the container is to be created.
 	NetworkNamespace string                       // Host network namespace to use (overrides anything in the spec)
 
+	// This is an advanced debugging parameter. It allows for diagnosibility by leaving a containers
+	// resources allocated in case of a failure. Thus you would be able to use tools such as hcsdiag
+	// to look at the state of a utility VM to see what resources were allocated. Obviously the caller
+	// must a) not tear down the utility VM on failure (or pause in some way) and b) is responsible for
+	// performing the ReleaseResources() call themselves.
+	DoNotReleaseResourcesOnFailure bool
+
 	// These are v1 LCOW backwards-compatibility only.
 	KirdPath          string // Folder in which kernel and initrd reside. Defaults to \Program Files\Linux Containers
 	KernelFile        string // Filename under KirdPath for the kernel. Defaults to bootx64.efi
@@ -77,7 +84,10 @@ type createOptionsInternal struct {
 
 // CreateContainer creates a container. It can cope with a  wide variety of
 // scenarios, including v1 HCS schema calls, as well as more complex v2 HCS schema
-// calls.
+// calls. Note we always return the resources that have been allocated, even in the
+// case of an error. This provides support for the debugging option not to
+// release the resources on failure, so that the client can make the necessary
+// call to release resources that have been allocated as part of calling this function.
 func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources, err error) {
 	logrus.Debugf("hcsshim::CreateContainer options: %+v", createOptions)
 
@@ -122,7 +132,9 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 	resources := &Resources{}
 	defer func() {
 		if err != nil {
-			ReleaseResources(resources, coi.HostingSystem, true)
+			if !coi.DoNotReleaseResourcesOnFailure {
+				ReleaseResources(resources, coi.HostingSystem, true)
+			}
 		}
 	}()
 
@@ -145,18 +157,18 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 		} else {
 			err := createNetworkNamespace(coi, resources)
 			if err != nil {
-				return nil, nil, err
+				return nil, resources, err
 			}
 		}
 		coi.actualNetworkNamespace = resources.NetNS
 		if coi.HostingSystem != nil {
 			endpoints, err := getNamespaceEndpoints(coi.actualNetworkNamespace)
 			if err != nil {
-				return nil, nil, err
+				return nil, resources, err
 			}
 			err = coi.HostingSystem.AddNetNS(coi.actualNetworkNamespace, endpoints)
 			if err != nil {
-				return nil, nil, err
+				return nil, resources, err
 			}
 			resources.AddedNetNSToVM = true
 		}
@@ -168,34 +180,34 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 		if coi.actualSchemaVersion.IsV10() {
 			logrus.Debugf("hcsshim::CreateContainer createLCOWv1")
 			if coi.Spec.Windows == nil {
-				return nil, nil, fmt.Errorf("containerSpec 'Windows' field must container layer folders for a Linux container")
+				return nil, resources, fmt.Errorf("containerSpec 'Windows' field must container layer folders for a Linux container")
 			}
 			//return createLCOWv1(coi)
-			return nil, nil, errors.New("LCOW v1 not supported")
+			return nil, resources, errors.New("LCOW v1 not supported")
 		}
 
 		logrus.Debugf("hcsshim::CreateContainer allocateLinuxResources")
 		err = allocateLinuxResources(coi, resources)
 		if err != nil {
 			logrus.Debugf("failed to allocateLinuxResources %s", err)
-			return nil, nil, err
+			return nil, resources, err
 		}
 		hcsDocument, err = createLinuxContainerDocument(coi, resources.GuestRoot)
 		if err != nil {
 			logrus.Debugf("failed createHCSContainerDocument %s", err)
-			return nil, nil, err
+			return nil, resources, err
 		}
 	} else {
 		err = allocateWindowsResources(coi, resources)
 		if err != nil {
 			logrus.Debugf("failed to allocateWindowsResources %s", err)
-			return nil, nil, err
+			return nil, resources, err
 		}
 		logrus.Debugf("hcsshim::CreateContainer creating container document")
 		hcsDocument, err = createWindowsContainerDocument(coi)
 		if err != nil {
 			logrus.Debugf("failed createHCSContainerDocument %s", err)
-			return nil, nil, err
+			return nil, resources, err
 		}
 	}
 
@@ -203,7 +215,7 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 	system, err := hcs.CreateComputeSystem(coi.actualID, hcsDocument)
 	if err != nil {
 		logrus.Debugf("failed to CreateComputeSystem %s", err)
-		return nil, nil, err
+		return nil, resources, err
 	}
 	return system, resources, err
 }
@@ -273,6 +285,7 @@ func createLinuxContainerDocument(coi *createOptionsInternal, guestRoot string) 
 		return nil, err
 	}
 
+	logrus.Debugf("hcsshim::createLinuxContainerDoc: guestRoot:%s", guestRoot)
 	v2 := &hcsschemav2.ComputeSystemV2{
 		Owner:                             coi.actualOwner,
 		SchemaVersion:                     schemaversion.SchemaV20(),
@@ -410,7 +423,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 		return nil, fmt.Errorf(`invalid container spec - readonly is not supported for Windows containers`)
 	}
 
-	// Strip off the top-most RW/Sandbox layer as that's passed in separately to HCS for v1
+	// Strip off the top-most RW/scratch layer as that's passed in separately to HCS for v1
 	v1.LayerFolderPath = coi.Spec.Windows.LayerFolders[len(coi.Spec.Windows.LayerFolders)-1]
 
 	if (coi.actualSchemaVersion.IsV20() && coi.HostingSystem == nil) ||

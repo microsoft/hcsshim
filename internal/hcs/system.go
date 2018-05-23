@@ -488,6 +488,7 @@ func (computeSystem *System) Modify(config interface{}) error {
 	}
 
 	requestString := string(requestJSON)
+	logrus.Debugf(title + " " + requestString)
 
 	var resultp *uint16
 	err = hcsModifyComputeSystem(computeSystem.handle, requestString, &resultp)
@@ -495,6 +496,6 @@ func (computeSystem *System) Modify(config interface{}) error {
 	if err != nil {
 		return makeSystemError(computeSystem, "Modify", requestString, err, events)
 	}
-	logrus.Debugf(title + " succeeded " + requestString)
+	logrus.Debugf(title + " succeeded ")
 	return nil
 }

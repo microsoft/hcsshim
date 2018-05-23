@@ -9,8 +9,8 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/ospath"
 	"github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
-	"github.com/Microsoft/hcsshim/uvm"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -24,7 +24,6 @@ const upperPath = "upper"
 
 // mountContainerLayers is a helper for clients to hide all the complexity of layer mounting
 // Layer folder are in order: base, [rolayer1..rolayern,] sandbox
-// TODO: Extend for LCOW?
 //
 // v1/v2: Argon WCOW: Returns the mount path on the host as a volume GUID.
 // v1:    Xenon WCOW: Done internally in HCS, so no point calling doing anything here.
@@ -32,7 +31,6 @@ const upperPath = "upper"
 //                    inside the utility VM which is a GUID mapping of the sandbox folder. Each
 //                    of the layers are the VSMB locations where the read-only layers are mounted.
 //
-// TODO Should this return a string or an object? More efficient as object, but requires more client work to marshall it again.
 func mountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.UtilityVM) (interface{}, error) {
 	logrus.Debugln("hcsshim::mountContainerLayers", layerFolders)
 
@@ -113,6 +111,31 @@ func mountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 		}
 	}
 
+	// TODO: BUGBUG This is really confusing. "containerPath" (which is really
+	// the path inside the utilityVM) for the containers scratch space should be
+	// "scratch", not "upper".
+	//
+	// We currently have
+	//
+	// /run/gcs/c/1/rootfs
+	// /run/gcs/c/1/upper/upper
+	// /run/gcs/c/1/upper/work
+	//
+	// /dev/sda on /tmp/scratch type ext4 (rw,relatime,block_validity,delalloc,barrier,user_xattr,acl)
+	// /dev/pmem0 on /tmp/v0 type ext4 (ro,relatime,block_validity,delalloc,norecovery,barrier,dax,user_xattr,acl)
+	// /dev/sdb on /run/gcs/c/1/upper type ext4 (rw,relatime,block_validity,delalloc,barrier,user_xattr,acl)
+	// overlay on /run/gcs/c/1/rootfs type overlay (rw,relatime,lowerdir=/tmp/v0,upperdir=/run/gcs/c/1/upper/upper,workdir=/run/gcs/c/1/upper/work)
+	//
+	// It SHOULD be (just the amended bits)
+	//
+	// /run/gcs/c/1/scratch/upper
+	// /run/gcs/c/1/scratch/work
+	//
+	// /dev/sdb on /run/gcs/c/1/scratch type ext4 (rw,relatime,block_validity,delalloc,barrier,user_xattr,acl)
+	//                          ^^^^^^^
+	// overlay on /run/gcs/c/1/rootfs type overlay (rw,relatime,lowerdir=/tmp/v0,upperdir=/run/gcs/c/1/scratch/upper,workdir=/run/gcs/c/1/scratch/work)
+	//                                                                                                 ^^^^^^^                            ^^^^^^^
+
 	containerPath := ospath.Join(uvm.OS(), guestRoot, upperPath)
 	_, _, err := uvm.AddSCSI(hostPath, containerPath)
 	if err != nil {
@@ -187,7 +210,6 @@ const (
 // unmountContainerLayers is a helper for clients to hide all the complexity of layer unmounting
 func unmountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.UtilityVM, op unmountOperation) error {
 	logrus.Debugln("hcsshim::unmountContainerLayers", layerFolders)
-
 	if uvm == nil {
 		// Must be an argon - folders are mounted on the host
 		if op != unmountOperationAll {

@@ -1,15 +1,12 @@
-// +build windows
-
 package schemaversion
 
 import (
 	"testing"
 
+	_ "github.com/Microsoft/hcsshim/functional/manifest"
 	"github.com/Microsoft/hcsshim/internal/osversion"
-	_ "github.com/Microsoft/hcsshim/test/assets" // For manifest
 )
 
-// Note that the .syso file is required to manifest the test app
 func TestDetermineSchemaVersion(t *testing.T) {
 	osv := osversion.GetOSVersion()
 
@@ -27,10 +24,10 @@ func TestDetermineSchemaVersion(t *testing.T) {
 			t.Fatalf("expected requested v1")
 		}
 
-		if err := SchemaV20().isSupported(); err != nil {
+		if err := SchemaV20().IsSupported(); err != nil {
 			t.Fatalf("v2 expected to be supported")
 		}
-		if err := SchemaV10().isSupported(); err != nil {
+		if err := SchemaV10().IsSupported(); err != nil {
 			t.Fatalf("v1 expected to be supported")
 		}
 
@@ -49,10 +46,10 @@ func TestDetermineSchemaVersion(t *testing.T) {
 			t.Fatalf("expected requested v1")
 		}
 
-		if err := SchemaV20().isSupported(); err == nil {
+		if err := SchemaV20().IsSupported(); err == nil {
 			t.Fatalf("didn't expect v2 to be supported")
 		}
-		if err := SchemaV10().isSupported(); err != nil {
+		if err := SchemaV10().IsSupported(); err != nil {
 			t.Fatalf("v1 expected to be supported")
 		}
 	}

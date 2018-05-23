@@ -26,7 +26,7 @@ func SchemaV20() *SchemaVersion {
 }
 
 // isSupported determines if a given schema version is supported
-func (sv *SchemaVersion) isSupported() error {
+func (sv *SchemaVersion) IsSupported() error {
 	if sv.IsV10() {
 		return nil
 	}
@@ -75,7 +75,7 @@ func DetermineSchemaVersion(requestedSV *SchemaVersion) *SchemaVersion {
 		sv = SchemaV10() // TODO: When do we flip this to V2 for RS5? Answer - when functionally complete. Templating. CredSpecs. Networking. LCOW...
 	}
 	if requestedSV != nil {
-		if err := requestedSV.isSupported(); err == nil {
+		if err := requestedSV.IsSupported(); err == nil {
 			sv = requestedSV
 		} else {
 			logrus.Warnf("Ignoring unsupported requested schema version %+v", requestedSV)

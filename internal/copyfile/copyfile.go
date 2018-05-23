@@ -11,7 +11,7 @@ var (
 	procCopyFileW = modkernel32.NewProc("CopyFileW")
 )
 
-// CopyFile is a utility for copying a file - used for the LCOW sandbox cache.
+// CopyFile is a utility for copying a file - used for the LCOW scratch cache.
 // Uses CopyFileW win32 API for performance.
 func CopyFile(srcFile, destFile string, overwrite bool) error {
 	var bFailIfExists uint32 = 1

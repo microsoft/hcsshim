@@ -10,7 +10,7 @@ import (
 
 	winio "github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/appargs"
-	"github.com/Microsoft/hcsshim/uvm"
+	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
