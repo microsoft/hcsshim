@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -180,13 +179,19 @@ func processRequest(vm *uvm.UtilityVM, pipe net.Conn) error {
 	return nil
 }
 
-var errNoVM = errors.New("the VM cannot be contacted")
+type noVMError struct {
+	ID string
+}
+
+func (err *noVMError) Error() string {
+	return "VM " + err.ID + " cannot be contacted"
+}
 
 func issueVMRequest(vmid, id string, op vmRequestOp) error {
 	pipe, err := winio.DialPipe(vmPipePath(vmid), nil)
 	if err != nil {
-		if oerr, ok := err.(*net.OpError); ok && oerr.Err == syscall.ERROR_FILE_NOT_FOUND {
-			return errNoVM
+		if perr, ok := err.(*os.PathError); ok && perr.Err == syscall.ERROR_FILE_NOT_FOUND {
+			return &noVMError{vmid}
 		}
 		return err
 	}

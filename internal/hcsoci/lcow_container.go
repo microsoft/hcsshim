@@ -39,7 +39,7 @@ func allocateLinuxResources(coi *createOptionsInternal, resources *Resources) er
 	}
 	if coi.Spec.Root.Path == "" {
 		logrus.Debugln("hcsshim::allocateLinuxResources Auto-mounting storage")
-		mcl, err := mountContainerLayers(coi.Spec.Windows.LayerFolders, coi.HostingSystem)
+		mcl, err := mountContainerLayers(coi.Spec.Windows.LayerFolders, resources.InnerID, coi.HostingSystem)
 		if err != nil {
 			return fmt.Errorf("failed to auto-mount container storage: %s", err)
 		}

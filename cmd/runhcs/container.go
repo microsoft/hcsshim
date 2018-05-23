@@ -29,13 +29,13 @@ var errContainerStopped = errors.New("container is stopped")
 type persistedState struct {
 	ID             string
 	SandboxID      string
+	HostID         string
 	Bundle         string
 	Created        time.Time
 	Rootfs         string
 	Spec           *specs.Spec
-	IsSandbox      bool
-	VMIsolated     bool
 	RequestedNetNS string
+	IsHost         bool
 }
 
 type containerStatus string
@@ -218,36 +218,39 @@ func parseSandboxAnnotations(spec *specs.Spec) (string, bool) {
 	return "", false
 }
 
-func startVMShim(id, logFile string, spec *specs.Spec) (*os.Process, error) {
-	layers := make([]string, len(spec.Windows.LayerFolders))
-	for i, f := range spec.Windows.LayerFolders {
-		if i == len(spec.Windows.LayerFolders)-1 {
-			f = filepath.Join(f, "vm")
-			err := os.MkdirAll(f, 0)
-			if err != nil {
-				return nil, err
-			}
-		}
-		layers[i] = f
-	}
-	os := "windows"
-	if spec.Linux != nil {
-		os = "linux"
-	}
+func startVMShim(id, logFile string, consolePipe string, spec *specs.Spec) (*os.Process, error) {
 	opts := &uvm.UVMOptions{
-		ID:              vmID(id),
-		OperatingSystem: os,
-		LayerFolders:    layers,
-		Resources:       spec.Windows.Resources,
+		ID:          vmID(id),
+		Resources:   spec.Windows.Resources,
+		ConsolePipe: consolePipe,
+	}
+	if spec.Linux != nil {
+		opts.OperatingSystem = "linux"
+	} else {
+		opts.OperatingSystem = "windows"
+		layers := make([]string, len(spec.Windows.LayerFolders))
+		for i, f := range spec.Windows.LayerFolders {
+			if i == len(spec.Windows.LayerFolders)-1 {
+				f = filepath.Join(f, "vm")
+				err := os.MkdirAll(f, 0)
+				if err != nil {
+					return nil, err
+				}
+			}
+			layers[i] = f
+		}
+		opts.LayerFolders = layers
 	}
 	return launchShim("vmshim", "", logFile, []string{id}, opts)
 }
 
 type containerConfig struct {
 	ID                     string
+	HostID                 string
 	PidFile                string
 	ShimLogFile, VMLogFile string
 	Spec                   *specs.Spec
+	VMConsolePipe          string
 }
 
 func createContainer(cfg *containerConfig) (_ *container, err error) {
@@ -257,17 +260,13 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		return nil, err
 	}
 
-	sandboxID, isSandbox := parseSandboxAnnotations(cfg.Spec)
+	vmisolated := cfg.Spec.Linux != nil || (cfg.Spec.Windows != nil && cfg.Spec.Windows.HyperV != nil)
 
-	// Determine whether this container should be created in a VM.
-	newvm := false
-	vmisolated := cfg.Spec.Windows != nil && cfg.Spec.Windows.HyperV != nil
+	sandboxID, isSandbox := parseSandboxAnnotations(cfg.Spec)
+	hostID := cfg.HostID
 	if isSandbox {
 		if sandboxID != cfg.ID {
 			return nil, errors.New("sandbox ID must match ID")
-		}
-		if vmisolated {
-			newvm = true
 		}
 	} else if sandboxID != "" {
 		// Validate that the sandbox container exists.
@@ -276,19 +275,35 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 			return nil, err
 		}
 		defer sandbox.Close()
-		if !sandbox.IsSandbox {
+		if sandbox.SandboxID != sandboxID {
 			return nil, fmt.Errorf("container %s is not a sandbox", sandboxID)
 		}
-		if vmisolated && !sandbox.VMIsolated {
+		if hostID == "" {
+			// Use the sandbox's host.
+			hostID = sandbox.HostID
+		} else if sandbox.HostID == "" {
+			return nil, fmt.Errorf("sandbox container %s is not running in a VM host, but host %s was specified", sandboxID, hostID)
+		} else if hostID != sandbox.HostID {
+			return nil, fmt.Errorf("sandbox container %s has a different host %s from the requested host %s", sandboxID, sandbox.HostID, hostID)
+		}
+		if vmisolated && hostID == "" {
 			return nil, fmt.Errorf("container %s is not a VM isolated sandbox", sandboxID)
 		}
-		if sandbox.VMIsolated {
-			vmisolated = true
+	}
+
+	newvm := false
+	if hostID != "" {
+		host, err := getContainer(hostID, false)
+		if err != nil {
+			return nil, err
 		}
-	} else {
-		// Don't explicitly manage the VM for the container since this requires
-		// RS5.
-		vmisolated = false
+		defer host.Close()
+		if !host.IsHost {
+			return nil, fmt.Errorf("host container %s is not a VM host", hostID)
+		}
+	} else if vmisolated && (isSandbox || cfg.Spec.Linux != nil) {
+		hostID = cfg.ID
+		newvm = true
 	}
 
 	// Make absolute the paths in Root.Path and Windows.LayerFolders.
@@ -329,9 +344,9 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 			Rootfs:         rootfs,
 			Created:        time.Now(),
 			Spec:           cfg.Spec,
-			VMIsolated:     vmisolated,
-			IsSandbox:      isSandbox,
 			SandboxID:      sandboxID,
+			HostID:         hostID,
+			IsHost:         newvm,
 			RequestedNetNS: netNS,
 		},
 	}
@@ -347,18 +362,18 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 
 	// Start a VM if necessary.
 	if newvm {
-		shim, err := startVMShim(cfg.ID, cfg.VMLogFile, cfg.Spec)
+		shim, err := startVMShim(cfg.ID, cfg.VMLogFile, cfg.VMConsolePipe, cfg.Spec)
 		if err != nil {
 			return nil, err
 		}
 		shim.Release()
 	}
 
-	if vmisolated {
+	if hostID != "" {
 		// Call to the VM shim process to create the container. This is done so
 		// that the VM process can keep track of the VM's virtual hardware
 		// resource use.
-		err = issueVMRequest(sandboxID, cfg.ID, opCreateContainer)
+		err = issueVMRequest(hostID, cfg.ID, opCreateContainer)
 		if err != nil {
 			return nil, err
 		}
@@ -386,6 +401,10 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 	return c, nil
 }
 
+func (c *container) VMIsolated() bool {
+	return c.HostID != ""
+}
+
 func (c *container) unmountInHost(vm *uvm.UtilityVM, all bool) error {
 	resources := &hcsoci.Resources{}
 	err := stateKey.Get(c.ID, keyResources, resources)
@@ -409,14 +428,16 @@ func (c *container) unmountInHost(vm *uvm.UtilityVM, all bool) error {
 }
 
 func (c *container) Unmount(all bool) error {
-	if c.VMIsolated {
+	if c.VMIsolated() {
 		op := opUnmountContainerDiskOnly
 		if all {
 			op = opUnmountContainer
 		}
 		err := issueVMRequest(c.SandboxID, c.ID, op)
-		if err != nil && err != errNoVM {
-			return err
+		if err != nil {
+			if _, ok := err.(*noVMError); !ok {
+				return err
+			}
 		}
 	} else {
 		c.unmountInHost(nil, false)
@@ -566,14 +587,14 @@ func getContainer(id string, notStopped bool) (*container, error) {
 
 func (c *container) Remove() error {
 	// Unmount any layers or mapped volumes.
-	err := c.Unmount(!c.VMIsolated || !c.IsSandbox)
+	err := c.Unmount(!c.IsHost)
 	if err != nil {
 		return err
 	}
 
 	// Follow kata's example and delay tearing down the VM until the owning
 	// container is removed.
-	if c.IsSandbox && c.VMIsolated {
+	if c.IsHost {
 		vm, err := hcs.OpenComputeSystem(vmID(c.ID))
 		if err == nil {
 			if err := vm.Terminate(); hcs.IsPending(err) {

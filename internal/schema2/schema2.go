@@ -2,7 +2,9 @@
 
 package schema2
 
-import "github.com/Microsoft/hcsshim/internal/schemaversion"
+import (
+	"github.com/Microsoft/hcsshim/internal/schemaversion"
+)
 
 // This file contains the structures necessary to call the HCS in v2 schema format.
 // NOTE: The v2 schema is in flux and under development as at March 2018.
@@ -350,7 +352,7 @@ type ComputeSystemV2 struct {
 	Owner                             string                       `json:"Owner,omitempty"`
 	SchemaVersion                     *schemaversion.SchemaVersion `json:"SchemaVersion,omitempty"`
 	HostingSystemId                   string                       `json:"HostingSystemId,omitempty"`
-	HostedSystem                      *HostedSystemV2              `json:"HostedSystem,omitempty"`
+	HostedSystem                      interface{}                  `json:"HostedSystem,omitempty"`
 	Container                         *ContainerV2                 `json:"Container,omitempty"`
 	ShouldTerminateOnLastHandleClosed bool                         `json:"ShouldTerminateOnLastHandleClosed,omitempty"`
 	VirtualMachine                    *VirtualMachineV2            `json:"VirtualMachine,omitempty"`
@@ -404,4 +406,21 @@ type CombinedLayersV2 struct {
 	ContainerRootPath string                       `json:"ContainerRootPath,omitempty"`
 	Layers            []ContainersResourcesLayerV2 `json:"Layers,omitempty"`
 	ScratchPath       string                       `json:"ScratchPath,omitempty"`
+}
+
+type ProcessConfig struct {
+	SchemaVersion     *schemaversion.SchemaVersion
+	ApplicationName   string            `json:",omitempty"`
+	CommandLine       string            `json:",omitempty"`
+	CommandArgs       []string          `json:",omitempty"` // Used by Linux Containers on Windows
+	User              string            `json:",omitempty"`
+	WorkingDirectory  string            `json:",omitempty"`
+	Environment       map[string]string `json:",omitempty"`
+	EmulateConsole    bool              `json:",omitempty"`
+	CreateStdInPipe   bool              `json:",omitempty"`
+	CreateStdOutPipe  bool              `json:",omitempty"`
+	CreateStdErrPipe  bool              `json:",omitempty"`
+	ConsoleSize       [2]uint           `json:",omitempty"`
+	CreateInUtilityVm bool              `json:",omitempty"` // Used by Linux Containers on Windows
+	OCIProcess        interface{}       `json:"OciProcess,omitempty"`
 }

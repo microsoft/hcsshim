@@ -3,12 +3,14 @@
 package hcsoci
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/guid"
@@ -124,6 +126,10 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 		}
 	}()
 
+	if coi.HostingSystem != nil {
+		resources.InnerID = strconv.FormatUint(coi.HostingSystem.ContainerCounter(), 16)
+	}
+
 	// Create a network namespace if necessary.
 	if coi.Spec.Windows != nil &&
 		coi.Spec.Windows.Network != nil &&
@@ -152,6 +158,7 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 	}
 
 	var os string
+	logrus.Debugf("hcsshim::CreateContainer allocating resources")
 	if coi.Spec.Linux != nil {
 		if coi.Spec.Windows == nil {
 			return nil, nil, fmt.Errorf("containerSpec 'Windows' field must container layer folders for a Linux container")
@@ -159,12 +166,13 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 		if coi.actualSchemaVersion.IsV10() {
 			logrus.Debugf("hcsshim::CreateContainer createLCOWv1")
 			//return createLCOWv1(coi)
-			return nil, nil, errors.New("not supported")
+			return nil, nil, errors.New("LCOW v1 not supported")
 		}
 
 		logrus.Debugf("hcsshim::CreateContainer allocateLinuxResources")
 		err = allocateLinuxResources(coi, resources)
 		if err != nil {
+			logrus.Debugf("failed to allocateLinuxResources %s", err)
 			return nil, nil, err
 		}
 
@@ -172,21 +180,79 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 	} else {
 		err = allocateWindowsResources(coi, resources)
 		if err != nil {
+			logrus.Debugf("failed to allocateWindowsResources %s", err)
 			return nil, nil, err
 		}
 		os = "windows"
 	}
 
+	logrus.Debugf("hcsshim::CreateContainer creating container document")
 	hcsDocument, err := createHCSContainerDocument(coi, os)
 	if err != nil {
+		logrus.Debugf("failed createHCSContainerDocument %s", err)
 		return nil, nil, err
 	}
 
+	logrus.Debugf("hcsshim::CreateContainer creating compute system")
 	system, err := hcs.CreateComputeSystem(coi.actualID, hcsDocument)
 	if err != nil {
+		logrus.Debugf("failed to CreateComputeSystem %s", err)
 		return nil, nil, err
 	}
 	return system, resources, err
+}
+
+func createLCOWSpec(coi *createOptionsInternal) (*specs.Spec, error) {
+	// Remarshal the spec to perform a deep copy.
+	j, err := json.Marshal(coi.Spec)
+	if err != nil {
+		return nil, err
+	}
+	spec := &specs.Spec{}
+	err = json.Unmarshal(j, spec)
+	if err != nil {
+		return nil, err
+	}
+
+	// Translate the mounts. The root has already been translated in
+	// allocateLinuxResources.
+	/*
+		for i := range spec.Mounts {
+			spec.Mounts[i].Source = "???"
+			spec.Mounts[i].Destination = "???"
+		}
+	*/
+
+	// Linux containers don't care about Windows aspects of the spec
+	spec.Windows = nil
+
+	// Hooks are not supported (they should be run in the host)
+	spec.Hooks = nil
+
+	// Clear unsupported features
+	if spec.Linux.Resources != nil {
+		spec.Linux.Resources.Devices = nil
+		spec.Linux.Resources.Memory = nil
+		spec.Linux.Resources.Pids = nil
+		spec.Linux.Resources.BlockIO = nil
+		spec.Linux.Resources.HugepageLimits = nil
+		spec.Linux.Resources.Network = nil
+	}
+	spec.Linux.Seccomp = nil
+
+	// Clear any specified namespaces
+	var namespaces []specs.LinuxNamespace
+	for _, ns := range spec.Linux.Namespaces {
+		switch ns.Type {
+		case specs.NetworkNamespace:
+		default:
+			ns.Path = ""
+			namespaces = append(namespaces, ns)
+		}
+	}
+	spec.Linux.Namespaces = namespaces
+
+	return spec, nil
 }
 
 // createHCSContainerDocument creates a document suitable for calling HCS to create
@@ -355,17 +421,20 @@ func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem stri
 		} else {
 			// Hosting system was supplied, so is v2 Xenon.
 			v2Container.Storage.Path = coi.Spec.Root.Path
-			// This is a little inefficient, but makes it MUCH easier for clients. Build the combinedLayers.Layers structure.
-			for _, layerFolder := range coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1] {
-				layerFolderVSMBGUID, err := coi.HostingSystem.GetVSMBGUID(layerFolder)
-				if err != nil {
-					return nil, err
+
+			if coi.HostingSystem.OS() == "windows" {
+				// This is a little inefficient, but makes it MUCH easier for clients. Build the combinedLayers.Layers structure.
+				for _, layerFolder := range coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1] {
+					layerFolderVSMBGUID, err := coi.HostingSystem.GetVSMBGUID(layerFolder)
+					if err != nil {
+						return nil, err
+					}
+					v2Container.Storage.Layers = append(v2Container.Storage.Layers,
+						hcsschemav2.ContainersResourcesLayerV2{
+							Id:   layerFolderVSMBGUID,
+							Path: fmt.Sprintf(`\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\%s`, layerFolderVSMBGUID),
+						})
 				}
-				v2Container.Storage.Layers = append(v2Container.Storage.Layers,
-					hcsschemav2.ContainersResourcesLayerV2{
-						Id:   layerFolderVSMBGUID,
-						Path: fmt.Sprintf(`\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\%s`, layerFolderVSMBGUID),
-					})
 			}
 		}
 	}
@@ -439,9 +508,25 @@ func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem stri
 		v2.Container = v2Container
 	} else {
 		v2.HostingSystemId = coi.HostingSystem.ID()
-		v2.HostedSystem = &hcsschemav2.HostedSystemV2{
-			SchemaVersion: schemaversion.SchemaV20(),
-			Container:     v2Container,
+		if coi.HostingSystem.OS() == "windows" {
+			v2.HostedSystem = &hcsschemav2.HostedSystemV2{
+				SchemaVersion: schemaversion.SchemaV20(),
+				Container:     v2Container,
+			}
+		} else {
+			spec, err := createLCOWSpec(coi)
+			if err != nil {
+				return nil, err
+			}
+			v2.HostedSystem = &struct {
+				SchemaVersion    *schemaversion.SchemaVersion
+				OciBundlePath    string
+				OciSpecification *specs.Spec
+			}{
+				SchemaVersion:    schemaversion.SchemaV20(),
+				OciBundlePath:    "/tmp/whatever",
+				OciSpecification: spec,
+			}
 		}
 	}
 

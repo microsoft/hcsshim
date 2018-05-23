@@ -13,7 +13,8 @@ import (
 	winio "github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/Microsoft/hcsshim/internal/hcs"
-	"github.com/Microsoft/hcsshim/internal/schema1"
+	"github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -146,25 +147,22 @@ var shimCommand = cli.Command{
 			spec = c.Spec.Process
 		}
 
-		environment := make(map[string]string)
-		for _, v := range spec.Env {
-			s := strings.SplitN(v, "=", 2)
-			if len(s) == 2 && len(s[1]) > 0 {
-				environment[s[0]] = s[1]
-			}
-		}
-
 		// Create the process in the container.
-		pc := &schema1.ProcessConfig{
-			WorkingDirectory: spec.Cwd,
-			CreateStdInPipe:  stdin != nil,
-			CreateStdOutPipe: stdout != nil,
-			CreateStdErrPipe: stderr != nil,
-			EmulateConsole:   spec.Terminal,
-			Environment:      environment,
-		}
-
+		var pc *schema2.ProcessConfig
 		if c.Spec.Linux == nil {
+			environment := make(map[string]string)
+			for _, v := range spec.Env {
+				s := strings.SplitN(v, "=", 2)
+				if len(s) == 2 && len(s[1]) > 0 {
+					environment[s[0]] = s[1]
+				}
+			}
+			pc = &schema2.ProcessConfig{
+				SchemaVersion:    schemaversion.SchemaV20(),
+				WorkingDirectory: spec.Cwd,
+				EmulateConsole:   spec.Terminal,
+				Environment:      environment,
+			}
 			for i, arg := range spec.Args {
 				e := windows.EscapeArg(arg)
 				if i == 0 {
@@ -174,17 +172,17 @@ var shimCommand = cli.Command{
 				}
 			}
 		} else {
-			pc.CommandArgs = spec.Args
-			if !exec {
-				c.Spec.Process = spec
-				specj, err := json.Marshal(c.Spec)
-				if err != nil {
-					return err
-				}
-				specraw := json.RawMessage(specj)
-				pc.OCISpecification = &specraw
+			pc = &schema2.ProcessConfig{
+				SchemaVersion: schemaversion.SchemaV20(),
+			}
+			if exec {
+				pc.OCIProcess = spec
 			}
 		}
+
+		pc.CreateStdInPipe = stdin != nil
+		pc.CreateStdOutPipe = stdout != nil
+		pc.CreateStdErrPipe = stderr != nil
 
 		p, err := c.hc.CreateProcess(pc)
 		if err != nil {
