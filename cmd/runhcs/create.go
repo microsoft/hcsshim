@@ -47,6 +47,11 @@ command(s) that get executed on start, edit the args parameter of the spec. See
 			Value: "",
 			Usage: `path to the pipe for the VM's console (e.g. \\.\pipe\debugpipe)`,
 		},
+		cli.StringFlag{
+			Name:  "host",
+			Value: "",
+			Usage: "host container whose VM this container should run in",
+		},
 	},
 	Before: appargs.Validate(argID),
 	Action: func(context *cli.Context) error {
@@ -87,5 +92,6 @@ func containerConfigFromContext(context *cli.Context) (*containerConfig, error) 
 		VMLogFile:     vmLog,
 		VMConsolePipe: context.String("vm-console"),
 		Spec:          spec,
+		HostID:        context.String("host"),
 	}, nil
 }
