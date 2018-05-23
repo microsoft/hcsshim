@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/Microsoft/hcsshim/uvm/schema"
+	"github.com/Microsoft/hcsshim/uvm/lcowhostedsettings"
 	"github.com/sirupsen/logrus"
 )
 
@@ -89,7 +89,7 @@ func (uvm *UtilityVM) AddVPMEM(hostPath string, uvmPath string, expose bool) (ui
 			if uvmPath == "" {
 				uvmPath = fmt.Sprintf("/tmp/v%d", deviceNumber)
 			}
-			modification.HostedSettings = schema.LCOWMappedVPMemDevice{
+			modification.HostedSettings = lcowhostedsettings.MappedVPMemDevice{
 				DeviceNumber: deviceNumber,
 				MountPath:    uvmPath,
 			}
@@ -153,7 +153,7 @@ func (uvm *UtilityVM) removeVPMEM(hostPath string, uvmPath string, deviceNumber 
 			ResourceUri:  fmt.Sprintf("virtualmachine/devices/virtualpmemdevices/%d", deviceNumber),
 		}
 
-		modification.HostedSettings = schema.LCOWMappedVPMemDevice{
+		modification.HostedSettings = lcowhostedsettings.MappedVPMemDevice{
 			DeviceNumber: deviceNumber,
 			MountPath:    uvmPath,
 		}

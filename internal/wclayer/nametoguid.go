@@ -11,7 +11,6 @@ import (
 // across all clients.
 func NameToGuid(name string) (id guid.GUID, err error) {
 	title := "hcsshim::NameToGuid "
-	logrus.Debugf(title+"Name %s", name)
 
 	err = nameToGuid(name, &id)
 	if err != nil {
@@ -20,5 +19,6 @@ func NameToGuid(name string) (id guid.GUID, err error) {
 		return
 	}
 
+	logrus.Debugf(title+"name:%s guid:%s", name, id.String())
 	return
 }

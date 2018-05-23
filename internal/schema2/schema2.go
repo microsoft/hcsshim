@@ -282,6 +282,7 @@ type VirtualMachinesResourcesStorageVSmbAlternateDataStreamV2 struct {
 }
 
 const (
+	VsmbFlagNone                     = 0x00000000
 	VsmbFlagReadOnly                 = 0x00000001 // read-only shares
 	VsmbFlagShareRead                = 0x00000002 // convert exclusive access to shared read access
 	VsmbFlagCacheIO                  = 0x00000004 // all opens will use cached I/O
@@ -313,6 +314,22 @@ type VirtualMachinesResourcesStorageVSmbShareV2 struct {
 	AutoCreateAlternateDataStreams []VirtualMachinesResourcesStorageVSmbAlternateDataStreamV2 `json:"AutoCreateAlternateDataStreams,omitempty"`
 }
 
+const (
+	VPlan9FlagNone                 = 0x00000000
+	VPlan9FlagReadOnly             = 0x00000001 // read-only shares
+	VPlan9FlagUseTcpSocket         = 0x00000002 // used for test app
+	VPlan9FlagLinuxMetadata        = 0x00000004 // write Linux metadata
+	VPlan9FlagCaseSensitive        = 0x00000008 // create directories in case-sensitive mode
+	VPlan9FlagUseShareRootIdentity = 0x00000010 // Use the identity of the share root when opening
+)
+
+type VirtualMachinesResourcesStoragePlan9ShareV2 struct {
+	Name  string `json:"Name,omitempty"`
+	Path  string `json:"Path,omitempty"`
+	Port  int32  `json:"Port,omitempty"`
+	Flags string `json:"Flags,omitempty"`
+}
+
 type VirtualMachinesResourcesNetworkNic struct {
 	EndpointID string `json:",omitempty"`
 	MacAddress string `json:",omitempty"`
@@ -330,8 +347,8 @@ type VirtualMachinesDevicesV2 struct {
 	GuestInterface *VirtualMachinesResourcesGuestInterfaceV2 `json:"GuestInterface,omitempty"`
 	Rdp            *VirtualMachinesResourcesRdpV2            `json:"Rdp,omitempty"`
 	//	GuestCrashReporting *SchemaVirtualMachinesResourcesGuestCrashReporting    `json:"GuestCrashReporting,omitempty"`
-	VirtualSMBShares []VirtualMachinesResourcesStorageVSmbShareV2 `json:"VirtualSMBShares,omitempty"`
-	//	Plan9Shares         []SchemaVirtualMachinesResourcesStoragePlan9Share     `json:"Plan9Shares,omitempty"`
+	VirtualSMBShares []VirtualMachinesResourcesStorageVSmbShareV2  `json:"VirtualSMBShares,omitempty"`
+	Plan9Shares      []VirtualMachinesResourcesStoragePlan9ShareV2 `json:"Plan9Shares,omitempty"`
 	//	Licensing           *SchemaVirtualMachinesResourcesLicensing              `json:"Licensing,omitempty"`
 	//	Battery             *SchemaVirtualMachinesResourcesBattery                `json:"Battery,omitempty"`
 }

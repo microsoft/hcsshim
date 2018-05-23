@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/Microsoft/hcsshim/uvm/schema"
+	"github.com/Microsoft/hcsshim/uvm/lcowhostedsettings"
 	"github.com/sirupsen/logrus"
 )
 
@@ -100,7 +100,7 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int, error)
 		}
 
 	} else {
-		hostedSettings = schema.LCOWMappedVirtualDisk{
+		hostedSettings = lcowhostedsettings.MappedVirtualDisk{
 			MountPath:  uvmPath,
 			Lun:        uint8(lun),
 			Controller: uint8(controller),

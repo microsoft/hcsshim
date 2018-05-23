@@ -20,7 +20,7 @@ import (
 // vsmbInfo is an internal structure used for ref-counting VSMB shares mapped to a Windows utility VM.
 type vsmbInfo struct {
 	refCount uint32
-	guid     string
+	guid     string // effectively a hash of the host path to use as a name and in the resource URI to uniquely identify it
 	uvmPath  string
 }
 
@@ -39,6 +39,13 @@ type vpmemInfo struct {
 	refCount uint32
 }
 
+// plan9Info is an internal structure used for ref-counting Plan9 shares mapped to a Linux utility VM.
+type plan9Info struct {
+	refCount uint32
+	guid     string // effectively a hash of the host path to use as a name and in the resource URI to uniquely identify it
+	uvmPath  string
+	port     int32 // Temporary. TODO Remove
+}
 type nicInfo struct {
 	ID       guid.GUID
 	Endpoint *hns.HNSEndpoint
@@ -66,6 +73,10 @@ type UtilityVM struct {
 
 	// SCSI devices that are mapped into a Windows or Linux utility VM
 	scsiLocations [4][64]scsiInfo // Hyper-V supports 4 controllers, 64 slots per controller. Limited to 1 controller for now though.
+
+	// Plan9 are directories mapped into a Linux utility VM
+	plan9Shares      map[string]plan9Info
+	plan9PortCounter int32 // TODO: This is needed as of 17676 as port numbers have to be unique. Can be removed once HCS/GCS are updated, and all go across port 9999.
 
 	// TODO: Plan9 will need adding for LCOW. These are used for mapped directories
 

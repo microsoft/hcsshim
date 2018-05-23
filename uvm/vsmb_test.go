@@ -19,6 +19,7 @@ func TestVSMBRO(t *testing.T) {
 	defer uvm.Terminate()
 
 	dir := strings.ToUpper(createTempDir(t)) // Force upper-case
+	defer os.RemoveAll(dir)
 	var iterations uint32 = 64
 	for i := 0; i < int(iterations); i++ {
 		if err := uvm.AddVSMB(dir, "", schema2.VsmbFlagReadOnly|schema2.VsmbFlagPseudoOplocks|schema2.VsmbFlagTakeBackupPrivilege|schema2.VsmbFlagCacheIO|schema2.VsmbFlagShareRead); err != nil {
