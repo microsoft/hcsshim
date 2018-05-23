@@ -415,6 +415,7 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 		return
 	}
 
+	var exitCodeFn func() int
 	wasV2Config := false
 	id := request.ContainerID
 	if b.protVer >= prot.PvV4 {
@@ -427,9 +428,18 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 
 		if settingsV2.SchemaVersion.Cmp(prot.SchemaVersion{Major: 2, Minor: 0}) >= 0 {
 			wasV2Config = true
-			if _, err := b.hostState.GetOrCreateContainer(id, &settingsV2); err != nil {
+			c, err := b.hostState.GetOrCreateContainer(id, &settingsV2)
+			if err != nil {
 				w.Error(request.ActivityID, err)
 				return
+			}
+			exitCodeFn = func() int {
+				v2ExitFn := c.Wait()
+				exitCode, err := v2ExitFn()
+				if err != nil {
+					logrus.Error(err)
+				}
+				return exitCode
 			}
 		}
 	}
@@ -464,26 +474,27 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 
 	if !wasV2Config {
 		// TODO: Add support for container exit notifications in V2.
-		exitCodeFn, err := b.coreint.WaitContainer(id)
+		var err error
+		exitCodeFn, err = b.coreint.WaitContainer(id)
 		if err != nil {
 			logrus.Error(err)
 		}
-
-		go func() {
-			exitCode := exitCodeFn()
-			notification := &prot.ContainerNotification{
-				MessageBase: &prot.MessageBase{
-					ContainerID: id,
-					ActivityID:  request.ActivityID,
-				},
-				Type:       prot.NtUnexpectedExit, // TODO: Support different exit types.
-				Operation:  prot.AoNone,
-				Result:     int32(exitCode),
-				ResultInfo: "",
-			}
-			b.PublishNotification(notification)
-		}()
 	}
+
+	go func() {
+		exitCode := exitCodeFn()
+		notification := &prot.ContainerNotification{
+			MessageBase: &prot.MessageBase{
+				ContainerID: id,
+				ActivityID:  request.ActivityID,
+			},
+			Type:       prot.NtUnexpectedExit, // TODO: Support different exit types.
+			Operation:  prot.AoNone,
+			Result:     int32(exitCode),
+			ResultInfo: "",
+		}
+		b.PublishNotification(notification)
+	}()
 
 	// Set our protocol selected version before return.
 	if b.protVer == prot.PvInvalid {
@@ -666,10 +677,23 @@ func (b *Bridge) waitOnProcess(w ResponseWriter, r *Request) {
 		return
 	}
 
-	exitCodeChan, doneChan, err := b.coreint.WaitProcess(int(request.ProcessID))
-	if err != nil {
-		w.Error(request.ActivityID, err)
-		return
+	var exitCodeChan chan int
+	var doneChan chan bool
+
+	// First see if this is a V2 Container.
+	if c, err := b.hostState.GetContainer(request.ContainerID); err == nil {
+		p, err := c.GetProcess(request.ProcessID)
+		if err != nil {
+			w.Error(request.ActivityID, err)
+			return
+		}
+		exitCodeChan, doneChan = p.Wait()
+	} else {
+		exitCodeChan, doneChan, err = b.coreint.WaitProcess(int(request.ProcessID))
+		if err != nil {
+			w.Error(request.ActivityID, err)
+			return
+		}
 	}
 	defer close(doneChan)
 

@@ -166,13 +166,25 @@ func (c *Container) ExecProcess(process *oci.Process, stdioSet *stdio.Connection
 			c.errCon.actualConnection = stdioSet.Err
 		}
 		err := c.container.Start()
-		return c.container.Pid(), err
+		pid := c.container.Pid()
+		if err == nil {
+			// Kind of odd but track the container init process in its own map.
+			c.processesMutex.Lock()
+			c.processes[uint32(pid)] = &Process{process: c.container, pid: pid}
+			c.processesMutex.Unlock()
+		}
+
+		return pid, err
 	} else {
 		p, err := c.container.ExecProcess(*process, stdioSet)
 		if err != nil {
 			return -1, err
 		}
-		return p.Pid(), nil
+		pid := p.Pid()
+		c.processesMutex.Lock()
+		c.processes[uint32(pid)] = &Process{process: p, pid: pid}
+		c.processesMutex.Unlock()
+		return pid, nil
 	}
 }
 
@@ -191,8 +203,21 @@ func (c *Container) Kill(signal oslayer.Signal) error {
 	return c.container.Kill(signal)
 }
 
+func (c *Container) Wait() func() (int, error) {
+	f := func() (int, error) {
+		s, err := c.container.Wait()
+		if err != nil {
+			return -1, err
+		}
+		return s.ExitCode(), nil
+	}
+	return f
+}
+
 type Process struct {
-	pid int
+	process  runtime.Process
+	pid      int
+	exitCode *int
 }
 
 func (p *Process) Kill(signal syscall.Signal) error {
@@ -200,4 +225,35 @@ func (p *Process) Kill(signal syscall.Signal) error {
 		return errors.WithStack(err)
 	}
 	return nil
+}
+
+func (p *Process) Wait() (chan int, chan bool) {
+	exitCodeChan := make(chan int, 1)
+	doneChan := make(chan bool)
+
+	go func() {
+		bgExitCodeChan := make(chan int, 1)
+		go func() {
+			state, err := p.process.Wait()
+			if err != nil {
+				bgExitCodeChan <- -1
+			}
+			bgExitCodeChan <- state.ExitCode()
+		}()
+
+		// Wait for the exit code or the caller to stop waiting.
+		select {
+		case exitCode := <-bgExitCodeChan:
+			exitCodeChan <- exitCode
+
+			// The caller got the exit code. Wait for them to tell us they have
+			// issued the write
+			select {
+			case <-doneChan:
+			}
+
+		case <-doneChan:
+		}
+	}()
+	return exitCodeChan, doneChan
 }
