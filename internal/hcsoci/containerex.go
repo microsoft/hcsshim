@@ -519,13 +519,13 @@ func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem stri
 				return nil, err
 			}
 			v2.HostedSystem = &struct {
-				SchemaVersion        *schemaversion.SchemaVersion
-				OciSpecificationPath string
-				OciSpecification     *specs.Spec
+				SchemaVersion    *schemaversion.SchemaVersion
+				OciBundlePath    string
+				OciSpecification *specs.Spec
 			}{
-				SchemaVersion:        schemaversion.SchemaV20(),
-				OciSpecificationPath: "/tmp/whatever",
-				OciSpecification:     spec,
+				SchemaVersion:    schemaversion.SchemaV20(),
+				OciBundlePath:    "/tmp/whatever",
+				OciSpecification: spec,
 			}
 		}
 	}
