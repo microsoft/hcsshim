@@ -218,27 +218,28 @@ func parseSandboxAnnotations(spec *specs.Spec) (string, bool) {
 	return "", false
 }
 
-func startVMShim(id, logFile string, spec *specs.Spec) (*os.Process, error) {
-	layers := make([]string, len(spec.Windows.LayerFolders))
-	for i, f := range spec.Windows.LayerFolders {
-		if i == len(spec.Windows.LayerFolders)-1 {
-			f = filepath.Join(f, "vm")
-			err := os.MkdirAll(f, 0)
-			if err != nil {
-				return nil, err
-			}
-		}
-		layers[i] = f
-	}
-	os := "windows"
-	if spec.Linux != nil {
-		os = "linux"
-	}
+func startVMShim(id, logFile string, consolePipe string, spec *specs.Spec) (*os.Process, error) {
 	opts := &uvm.UVMOptions{
-		ID:              vmID(id),
-		OperatingSystem: os,
-		LayerFolders:    layers,
-		Resources:       spec.Windows.Resources,
+		ID:          vmID(id),
+		Resources:   spec.Windows.Resources,
+		ConsolePipe: consolePipe,
+	}
+	if spec.Linux != nil {
+		opts.OperatingSystem = "linux"
+	} else {
+		opts.OperatingSystem = "windows"
+		layers := make([]string, len(spec.Windows.LayerFolders))
+		for i, f := range spec.Windows.LayerFolders {
+			if i == len(spec.Windows.LayerFolders)-1 {
+				f = filepath.Join(f, "vm")
+				err := os.MkdirAll(f, 0)
+				if err != nil {
+					return nil, err
+				}
+			}
+			layers[i] = f
+		}
+		opts.LayerFolders = layers
 	}
 	return launchShim("vmshim", "", logFile, []string{id}, opts)
 }
@@ -248,6 +249,7 @@ type containerConfig struct {
 	PidFile                string
 	ShimLogFile, VMLogFile string
 	Spec                   *specs.Spec
+	VMConsolePipe          string
 }
 
 func createContainer(cfg *containerConfig) (_ *container, err error) {
@@ -352,7 +354,7 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 
 	// Start a VM if necessary.
 	if newvm {
-		shim, err := startVMShim(cfg.ID, cfg.VMLogFile, cfg.Spec)
+		shim, err := startVMShim(cfg.ID, cfg.VMLogFile, cfg.VMConsolePipe, cfg.Spec)
 		if err != nil {
 			return nil, err
 		}

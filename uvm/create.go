@@ -28,12 +28,12 @@ type UVMOptions struct {
 	LayerFolders []string // Set of folders for base layers and sandbox. Ordered from top most read-only through base read-only layer, followed by sandbox
 
 	// LCOW specific parameters
-	KirdPath               string // Folder in which kernel and initrd reside. Defaults to \Program Files\Linux Containers
-	KernelFile             string // Filename under KirdPath for the kernel. Defaults to bootx64.efi
-	InitrdFile             string // Filename under KirdPath for the initrd image. Defaults to initrd.img
-	KernelBootOptions      string // Additional boot options for the kernel
-	KernelDebugMode        bool   // Configures the kernel in debug mode using sane defaults
-	KernelDebugComPortPipe string // If kernel is in debug mode, can override the pipe here. Defaults to `\\.\pipe\vmpipe`
+	KirdPath              string // Folder in which kernel and initrd reside. Defaults to \Program Files\Linux Containers
+	KernelFile            string // Filename under KirdPath for the kernel. Defaults to bootx64.efi
+	InitrdFile            string // Filename under KirdPath for the initrd image. Defaults to initrd.img
+	KernelBootOptions     string // Additional boot options for the kernel
+	EnableGraphicsConsole bool   // If true, enable a graphics console for the utility VM
+	ConsolePipe           string // The named pipe path to use for the serial console.
 }
 
 // Create creates an HCS compute system representing a utility VM.
@@ -119,9 +119,6 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 		if opts.InitrdFile == "" {
 			opts.InitrdFile = "initrd.img"
 		}
-		if opts.KernelDebugComPortPipe == "" {
-			opts.KernelDebugComPortPipe = `\\.\pipe\vmpipe`
-		}
 		if _, err := os.Stat(filepath.Join(opts.KirdPath, opts.KernelFile)); os.IsNotExist(err) {
 			return nil, fmt.Errorf("kernel '%s' not found", filepath.Join(opts.KirdPath, opts.KernelFile))
 		}
@@ -194,11 +191,14 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 		hcsDocument.VirtualMachine.Devices.VirtualSMBShares[0].Flags = schema2.VsmbFlagReadOnly | schema2.VsmbFlagShareRead | schema2.VsmbFlagCacheIO | schema2.VsmbFlagTakeBackupPrivilege // 0x17 (23 dec)
 		hcsDocument.VirtualMachine.Devices.VPMem = &schema2.VirtualMachinesResourcesStorageVpmemControllerV2{MaximumCount: maxVPMEM}
 
-		if opts.KernelDebugMode {
+		if opts.ConsolePipe != "" {
 			hcsDocument.VirtualMachine.Chipset.UEFI.BootThis.OptionalData += " console=ttyS0,115200"
-			hcsDocument.VirtualMachine.Devices.COMPorts = &schema2.VirtualMachinesResourcesComPortsV2{Port1: opts.KernelDebugComPortPipe}
+			hcsDocument.VirtualMachine.Devices.COMPorts = &schema2.VirtualMachinesResourcesComPortsV2{Port1: opts.ConsolePipe}
+		}
+
+		if opts.EnableGraphicsConsole {
+			hcsDocument.VirtualMachine.Chipset.UEFI.BootThis.OptionalData += " console=tty"
 			hcsDocument.VirtualMachine.Devices.Keyboard = &schema2.VirtualMachinesResourcesKeyboardV2{}
-			hcsDocument.VirtualMachine.Devices.Mouse = &schema2.VirtualMachinesResourcesMouseV2{}
 			hcsDocument.VirtualMachine.Devices.Rdp = &schema2.VirtualMachinesResourcesRdpV2{}
 			hcsDocument.VirtualMachine.Devices.VideoMonitor = &schema2.VirtualMachinesResourcesVideoMonitorV2{}
 		}

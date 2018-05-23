@@ -42,36 +42,50 @@ command(s) that get executed on start, edit the args parameter of the spec. See
 			Value: "",
 			Usage: "path to the log file for the launched VM shim process",
 		},
+		cli.StringFlag{
+			Name:  "vm-console",
+			Value: "",
+			Usage: `path to the pipe for the VM's console (e.g. \\.\pipe\debugpipe)`,
+		},
 	},
 	Before: appargs.Validate(argID),
 	Action: func(context *cli.Context) error {
-		id := context.Args().First()
-		pidFile, err := absPathOrEmpty(context.String("pid-file"))
+		cfg, err := containerConfigFromContext(context)
 		if err != nil {
 			return err
 		}
-		shimLog, err := absPathOrEmpty(context.String("shim-log"))
-		if err != nil {
-			return err
-		}
-		vmLog, err := absPathOrEmpty(context.String("vm-log"))
-		if err != nil {
-			return err
-		}
-		spec, err := setupSpec(context)
-		if err != nil {
-			return err
-		}
-		_, err = createContainer(&containerConfig{
-			ID:          id,
-			PidFile:     pidFile,
-			ShimLogFile: shimLog,
-			VMLogFile:   vmLog,
-			Spec:        spec,
-		})
+		_, err = createContainer(cfg)
 		if err != nil {
 			return err
 		}
 		return nil
 	},
+}
+
+func containerConfigFromContext(context *cli.Context) (*containerConfig, error) {
+	id := context.Args().First()
+	pidFile, err := absPathOrEmpty(context.String("pid-file"))
+	if err != nil {
+		return nil, err
+	}
+	shimLog, err := absPathOrEmpty(context.String("shim-log"))
+	if err != nil {
+		return nil, err
+	}
+	vmLog, err := absPathOrEmpty(context.String("vm-log"))
+	if err != nil {
+		return nil, err
+	}
+	spec, err := setupSpec(context)
+	if err != nil {
+		return nil, err
+	}
+	return &containerConfig{
+		ID:            id,
+		PidFile:       pidFile,
+		ShimLogFile:   shimLog,
+		VMLogFile:     vmLog,
+		VMConsolePipe: context.String("vm-console"),
+		Spec:          spec,
+	}, nil
 }
