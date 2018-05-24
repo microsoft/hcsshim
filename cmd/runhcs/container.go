@@ -433,9 +433,11 @@ func (c *container) Unmount(all bool) error {
 		if all {
 			op = opUnmountContainer
 		}
-		err := issueVMRequest(c.SandboxID, c.ID, op)
+		err := issueVMRequest(c.HostID, c.ID, op)
 		if err != nil {
-			if _, ok := err.(*noVMError); !ok {
+			if _, ok := err.(*noVMError); ok {
+				logrus.Warnf("did not unmount resources for container %s because VM shim for %s could not be contacted", c.ID, c.HostID)
+			} else {
 				return err
 			}
 		}
@@ -470,7 +472,7 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 		if err != nil {
 			hc.Terminate()
 			hc.Wait()
-			hcsoci.ReleaseResources(resources, vm, false)
+			hcsoci.ReleaseResources(resources, vm, true)
 		}
 	}()
 

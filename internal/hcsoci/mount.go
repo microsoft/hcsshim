@@ -273,7 +273,7 @@ func unmountContainerLayers(layerFolders []string, innerID string, uvm *uvm.Util
 	// to share layers.
 	if uvm.OS() == "linux" && len(layerFolders) > 1 && (op&unmountOperationVPMEM) == unmountOperationVPMEM {
 		for _, layerPath := range layerFolders[:len(layerFolders)-1] {
-			if e := uvm.RemoveVPMEM(layerPath); e != nil {
+			if e := uvm.RemoveVPMEM(filepath.Join(layerPath, "layer.vhd")); e != nil {
 				logrus.Debugln(e)
 				if retError == nil {
 					retError = e
