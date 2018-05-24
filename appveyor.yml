@@ -11,7 +11,9 @@ environment:
 build_script:
   - go get -v -t ./...
   - go build ./cmd/wclayer
+  - go build ./cmd/runhcs
   - go test -v ./... -tags admin
 
 artifacts:
   - path: 'wclayer.exe'
+  - path: 'runhcs.exe'
