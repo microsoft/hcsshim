@@ -122,7 +122,7 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 	resources := &Resources{}
 	defer func() {
 		if err != nil {
-			ReleaseResources(resources, coi.HostingSystem, false)
+			ReleaseResources(resources, coi.HostingSystem, true)
 		}
 	}()
 

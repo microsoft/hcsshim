@@ -18,7 +18,7 @@ type Resources struct {
 	AddedNetNSToVM   bool
 }
 
-func ReleaseResources(r *Resources, vm *uvm.UtilityVM, lastContainer bool) error {
+func ReleaseResources(r *Resources, vm *uvm.UtilityVM, all bool) error {
 	if vm != nil && r.AddedNetNSToVM {
 		err := vm.RemoveNetNS(r.NetNS)
 		if err != nil {
@@ -48,9 +48,9 @@ func ReleaseResources(r *Resources, vm *uvm.UtilityVM, lastContainer bool) error
 	}
 
 	if len(r.Layers) != 0 {
-		op := unmountOperationAll
-		if vm != nil && lastContainer {
-			op = unmountOperationSCSI
+		op := unmountOperationSCSI
+		if vm == nil || all {
+			op = unmountOperationAll
 		}
 		err := unmountContainerLayers(r.Layers, r.InnerID, vm, op)
 		if err != nil {
@@ -59,7 +59,7 @@ func ReleaseResources(r *Resources, vm *uvm.UtilityVM, lastContainer bool) error
 		r.Layers = nil
 	}
 
-	if !lastContainer {
+	if all {
 		for len(r.VSMBMounts) != 0 {
 			mount := r.VSMBMounts[len(r.VSMBMounts)-1]
 			if err := vm.RemoveVSMB(mount); err != nil {
