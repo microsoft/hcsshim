@@ -14,6 +14,7 @@ type Resources struct {
 	NetworkEndpoints []string
 	Layers           []string
 	VSMBMounts       []string
+	Plan9Mounts      []string
 	CreatedNetNS     bool
 	AddedNetNSToVM   bool
 }
@@ -66,6 +67,14 @@ func ReleaseResources(r *Resources, vm *uvm.UtilityVM, all bool) error {
 				return err
 			}
 			r.VSMBMounts = r.VSMBMounts[:len(r.VSMBMounts)-1]
+		}
+
+		for len(r.Plan9Mounts) != 0 {
+			mount := r.Plan9Mounts[len(r.Plan9Mounts)-1]
+			if err := vm.RemovePlan9(mount); err != nil {
+				return err
+			}
+			r.Plan9Mounts = r.Plan9Mounts[:len(r.Plan9Mounts)-1]
 		}
 	}
 

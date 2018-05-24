@@ -157,14 +157,14 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 		}
 	}
 
-	var os string
+	var hcsDocument interface{}
 	logrus.Debugf("hcsshim::CreateContainer allocating resources")
 	if coi.Spec.Linux != nil {
-		if coi.Spec.Windows == nil {
-			return nil, nil, fmt.Errorf("containerSpec 'Windows' field must container layer folders for a Linux container")
-		}
 		if coi.actualSchemaVersion.IsV10() {
 			logrus.Debugf("hcsshim::CreateContainer createLCOWv1")
+			if coi.Spec.Windows == nil {
+				return nil, nil, fmt.Errorf("containerSpec 'Windows' field must container layer folders for a Linux container")
+			}
 			//return createLCOWv1(coi)
 			return nil, nil, errors.New("LCOW v1 not supported")
 		}
@@ -175,22 +175,23 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 			logrus.Debugf("failed to allocateLinuxResources %s", err)
 			return nil, nil, err
 		}
-
-		os = "linux"
+		hcsDocument, err = createLinuxContainerDocument(coi)
+		if err != nil {
+			logrus.Debugf("failed createHCSContainerDocument %s", err)
+			return nil, nil, err
+		}
 	} else {
 		err = allocateWindowsResources(coi, resources)
 		if err != nil {
 			logrus.Debugf("failed to allocateWindowsResources %s", err)
 			return nil, nil, err
 		}
-		os = "windows"
-	}
-
-	logrus.Debugf("hcsshim::CreateContainer creating container document")
-	hcsDocument, err := createHCSContainerDocument(coi, os)
-	if err != nil {
-		logrus.Debugf("failed createHCSContainerDocument %s", err)
-		return nil, nil, err
+		logrus.Debugf("hcsshim::CreateContainer creating container document")
+		hcsDocument, err = createWindowsContainerDocument(coi)
+		if err != nil {
+			logrus.Debugf("failed createHCSContainerDocument %s", err)
+			return nil, nil, err
+		}
 	}
 
 	logrus.Debugf("hcsshim::CreateContainer creating compute system")
@@ -255,17 +256,39 @@ func createLCOWSpec(coi *createOptionsInternal) (*specs.Spec, error) {
 	return spec, nil
 }
 
-// createHCSContainerDocument creates a document suitable for calling HCS to create
-// a container, both hosted and process isolated. It can create both v1 and v2
-// schema, WCOW and LCOW. The containers storage should have been mounted already.
+type linuxHostedSystem struct {
+	SchemaVersion    *schemaversion.SchemaVersion
+	OciBundlePath    string
+	OciSpecification *specs.Spec
+}
 
-func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem string) (interface{}, error) {
+func createLinuxContainerDocument(coi *createOptionsInternal) (interface{}, error) {
+	spec, err := createLCOWSpec(coi)
+	if err != nil {
+		return nil, err
+	}
+
+	v2 := &hcsschemav2.ComputeSystemV2{
+		Owner:                             coi.actualOwner,
+		SchemaVersion:                     schemaversion.SchemaV20(),
+		ShouldTerminateOnLastHandleClosed: true,
+		HostingSystemId:                   coi.HostingSystem.ID(),
+		HostedSystem: &linuxHostedSystem{
+			SchemaVersion:    schemaversion.SchemaV20(),
+			OciBundlePath:    "/tmp/whatever",
+			OciSpecification: spec,
+		},
+	}
+
+	return v2, nil
+}
+
+// createWindowsContainerDocument creates a document suitable for calling HCS to create
+// a container, both hosted and process isolated. It can create both v1 and v2
+// schema, WCOW only. The containers storage should have been mounted already.
+func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, error) {
 	logrus.Debugf("hcsshim: CreateHCSContainerDocument")
 	// TODO: Make this safe if exported so no null pointer dereferences.
-
-	if operatingSystem != "windows" && operatingSystem != "linux" {
-		return nil, fmt.Errorf("cannot create HCS container document - operating system %q not recognised", operatingSystem)
-	}
 
 	if coi.Spec == nil {
 		return nil, fmt.Errorf("cannot create HCS container document - OCI spec is missing")
@@ -370,17 +393,15 @@ func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem stri
 	}
 
 	//	// TODO V2 Credentials not in the schema yet.
-	if operatingSystem == "windows" {
-		if cs, ok := coi.Spec.Windows.CredentialSpec.(string); ok {
-			v1.Credentials = cs
-		}
+	if cs, ok := coi.Spec.Windows.CredentialSpec.(string); ok {
+		v1.Credentials = cs
 	}
 
 	if coi.Spec.Root == nil {
 		return nil, fmt.Errorf("spec is invalid - root isn't populated")
 	}
 
-	if operatingSystem == "windows" && coi.Spec.Root.Readonly {
+	if coi.Spec.Root.Readonly {
 		return nil, fmt.Errorf(`invalid container spec - readonly is not supported for Windows containers`)
 	}
 
@@ -458,74 +479,56 @@ func createHCSContainerDocument(coi *createOptionsInternal, operatingSystem stri
 		mdsv2 []hcsschemav2.ContainersResourcesMappedDirectoryV2
 		mpsv2 []hcsschemav2.ContainersResourcesMappedPipeV2
 	)
-	if operatingSystem == "windows" {
-		for _, mount := range coi.Spec.Mounts {
-			const pipePrefix = `\\.\pipe\`
-			if mount.Type != "" {
-				return nil, fmt.Errorf("invalid container spec - Mount.Type '%s' must not be set", mount.Type)
-			}
-			if strings.HasPrefix(mount.Destination, pipePrefix) {
-				mpsv1 = append(mpsv1, schema1.MappedPipe{HostPath: mount.Source, ContainerPipeName: mount.Destination[len(pipePrefix):]})
-				mpsv2 = append(mpsv2, hcsschemav2.ContainersResourcesMappedPipeV2{HostPath: mount.Source, ContainerPipeName: mount.Destination[len(pipePrefix):]})
+	for _, mount := range coi.Spec.Mounts {
+		const pipePrefix = `\\.\pipe\`
+		if mount.Type != "" {
+			return nil, fmt.Errorf("invalid container spec - Mount.Type '%s' must not be set", mount.Type)
+		}
+		if strings.HasPrefix(mount.Destination, pipePrefix) {
+			mpsv1 = append(mpsv1, schema1.MappedPipe{HostPath: mount.Source, ContainerPipeName: mount.Destination[len(pipePrefix):]})
+			mpsv2 = append(mpsv2, hcsschemav2.ContainersResourcesMappedPipeV2{HostPath: mount.Source, ContainerPipeName: mount.Destination[len(pipePrefix):]})
+		} else {
+			mdv1 := schema1.MappedDir{HostPath: mount.Source, ContainerPath: mount.Destination, ReadOnly: false}
+			var mdv2 hcsschemav2.ContainersResourcesMappedDirectoryV2
+			if coi.HostingSystem == nil {
+				mdv2 = hcsschemav2.ContainersResourcesMappedDirectoryV2{HostPath: mount.Source, ContainerPath: mount.Destination, ReadOnly: false}
 			} else {
-				mdv1 := schema1.MappedDir{HostPath: mount.Source, ContainerPath: mount.Destination, ReadOnly: false}
-				var mdv2 hcsschemav2.ContainersResourcesMappedDirectoryV2
-				if coi.HostingSystem == nil {
-					mdv2 = hcsschemav2.ContainersResourcesMappedDirectoryV2{HostPath: mount.Source, ContainerPath: mount.Destination, ReadOnly: false}
-				} else {
-					mountSourceVSMBCounter, err := coi.HostingSystem.GetVSMBCounter(mount.Source)
-					if err != nil {
-						return nil, err
-					}
-					mdv2 = hcsschemav2.ContainersResourcesMappedDirectoryV2{
-						HostPath:      fmt.Sprintf(`\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\%d`, mountSourceVSMBCounter),
-						ContainerPath: mount.Destination,
-						ReadOnly:      false}
+				mountSourceVSMBCounter, err := coi.HostingSystem.GetVSMBCounter(mount.Source)
+				if err != nil {
+					return nil, err
 				}
-				for _, o := range mount.Options {
-					if strings.ToLower(o) == "ro" {
-						mdv1.ReadOnly = true
-						mdv2.ReadOnly = true
-					}
-				}
-				mdsv1 = append(mdsv1, mdv1)
-				mdsv2 = append(mdsv2, mdv2)
+				mdv2 = hcsschemav2.ContainersResourcesMappedDirectoryV2{
+					HostPath:      fmt.Sprintf(`\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\%d`, mountSourceVSMBCounter),
+					ContainerPath: mount.Destination,
+					ReadOnly:      false}
 			}
+			for _, o := range mount.Options {
+				if strings.ToLower(o) == "ro" {
+					mdv1.ReadOnly = true
+					mdv2.ReadOnly = true
+				}
+			}
+			mdsv1 = append(mdsv1, mdv1)
+			mdsv2 = append(mdsv2, mdv2)
 		}
-
-		v1.MappedDirectories = mdsv1
-		v2Container.MappedDirectories = mdsv2
-		if len(mpsv1) > 0 && version.GetOSVersion().Build < osversion.RS3 {
-			return nil, fmt.Errorf("named pipe mounts are not supported on this version of Windows")
-		}
-		v1.MappedPipes = mpsv1
-		v2Container.MappedPipes = mpsv2
 	}
+
+	v1.MappedDirectories = mdsv1
+	v2Container.MappedDirectories = mdsv2
+	if len(mpsv1) > 0 && version.GetOSVersion().Build < osversion.RS3 {
+		return nil, fmt.Errorf("named pipe mounts are not supported on this version of Windows")
+	}
+	v1.MappedPipes = mpsv1
+	v2Container.MappedPipes = mpsv2
 
 	// Put the v2Container object as a HostedSystem for a Xenon, or directly in the schema for an Argon.
 	if coi.HostingSystem == nil {
 		v2.Container = v2Container
 	} else {
 		v2.HostingSystemId = coi.HostingSystem.ID()
-		if coi.HostingSystem.OS() == "windows" {
-			v2.HostedSystem = &hcsschemav2.HostedSystemV2{
-				SchemaVersion: schemaversion.SchemaV20(),
-				Container:     v2Container,
-			}
-		} else {
-			spec, err := createLCOWSpec(coi)
-			if err != nil {
-				return nil, err
-			}
-			v2.HostedSystem = &struct {
-				SchemaVersion    *schemaversion.SchemaVersion
-				OciBundlePath    string
-				OciSpecification *specs.Spec
-			}{
-				SchemaVersion:    schemaversion.SchemaV20(),
-				OciBundlePath:    "/tmp/whatever",
-				OciSpecification: spec,
-			}
+		v2.HostedSystem = &hcsschemav2.HostedSystemV2{
+			SchemaVersion: schemaversion.SchemaV20(),
+			Container:     v2Container,
 		}
 	}
 

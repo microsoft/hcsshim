@@ -221,9 +221,12 @@ func parseSandboxAnnotations(spec *specs.Spec) (string, bool) {
 func startVMShim(id, logFile string, consolePipe string, spec *specs.Spec) (*os.Process, error) {
 	opts := &uvm.UVMOptions{
 		ID:          vmID(id),
-		Resources:   spec.Windows.Resources,
 		ConsolePipe: consolePipe,
 	}
+	if spec.Windows != nil {
+		opts.Resources = spec.Windows.Resources
+	}
+
 	if spec.Linux != nil {
 		opts.OperatingSystem = "linux"
 	} else {
