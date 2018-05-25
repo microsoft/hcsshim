@@ -41,7 +41,7 @@ func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) 
 	}
 	if coi.Spec.Root.Path == "" && (coi.HostingSystem != nil || coi.Spec.Windows.HyperV == nil) {
 		logrus.Debugln("hcsshim::allocateWindowsResources Auto-mounting storage")
-		mcl, err := mountContainerLayers(coi.Spec.Windows.LayerFolders, resources.InnerID, coi.HostingSystem)
+		mcl, err := mountContainerLayers(coi.Spec.Windows.LayerFolders, resources.GuestRoot, coi.HostingSystem)
 		if err != nil {
 			return fmt.Errorf("failed to auto-mount container storage: %s", err)
 		}

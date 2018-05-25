@@ -6,6 +6,7 @@ package hcsoci
 
 import (
 	"fmt"
+	"path"
 	"strconv"
 
 	"github.com/Microsoft/hcsshim/internal/schema2"
@@ -13,13 +14,16 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const rootfsPath = "rootfs"
+const mountPathPrefix = "m"
+
 func allocateLinuxResources(coi *createOptionsInternal, resources *Resources) error {
 	if coi.Spec.Root == nil {
 		coi.Spec.Root = &specs.Root{}
 	}
 	if coi.Spec.Root.Path == "" {
 		logrus.Debugln("hcsshim::allocateLinuxResources Auto-mounting storage")
-		mcl, err := mountContainerLayers(coi.Spec.Windows.LayerFolders, resources.InnerID, coi.HostingSystem)
+		mcl, err := mountContainerLayers(coi.Spec.Windows.LayerFolders, resources.GuestRoot, coi.HostingSystem)
 		if err != nil {
 			return fmt.Errorf("failed to auto-mount container storage: %s", err)
 		}
@@ -31,7 +35,7 @@ func allocateLinuxResources(coi *createOptionsInternal, resources *Resources) er
 		resources.Layers = coi.Spec.Windows.LayerFolders
 	} else {
 		hostPath := coi.Spec.Root.Path
-		guestPath := "/tmp/c" + resources.InnerID
+		guestPath := path.Join(resources.GuestRoot, rootfsPath)
 		flags := int32(0)
 		if coi.Spec.Root.Readonly {
 			flags |= schema2.VPlan9FlagReadOnly
@@ -44,7 +48,7 @@ func allocateLinuxResources(coi *createOptionsInternal, resources *Resources) er
 		resources.Plan9Mounts = append(resources.Plan9Mounts, hostPath)
 	}
 
-	for _, mount := range coi.Spec.Mounts {
+	for i, mount := range coi.Spec.Mounts {
 		if mount.Type != "bind" {
 			continue
 		}
@@ -56,7 +60,7 @@ func allocateLinuxResources(coi *createOptionsInternal, resources *Resources) er
 			logrus.Debugf("hcsshim::allocateLinuxResources Hot-adding VPMEM share for OCI mount %+v", mount)
 
 			hostPath := mount.Source
-			guestPath := "/tmp/m" + strconv.FormatUint(coi.HostingSystem.ContainerCounter(), 16)
+			guestPath := path.Join(resources.GuestRoot, mountPathPrefix+strconv.Itoa(i))
 
 			// TODO: Read-only
 			var flags int32

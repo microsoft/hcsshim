@@ -9,7 +9,7 @@ import (
 )
 
 type Resources struct {
-	InnerID          string
+	GuestRoot        string
 	NetNS            string
 	NetworkEndpoints []string
 	Layers           []string
@@ -53,7 +53,7 @@ func ReleaseResources(r *Resources, vm *uvm.UtilityVM, all bool) error {
 		if vm == nil || all {
 			op = unmountOperationAll
 		}
-		err := unmountContainerLayers(r.Layers, r.InnerID, vm, op)
+		err := unmountContainerLayers(r.Layers, r.GuestRoot, vm, op)
 		if err != nil {
 			return err
 		}
