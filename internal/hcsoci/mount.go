@@ -127,14 +127,14 @@ func mountContainerLayers(layerFolders []string, innerID string, uvm *uvm.Utilit
 		// 	read-only layer folders.
 		layers := []schema2.ContainersResourcesLayerV2{}
 		for _, vsmb := range vsmbAdded {
-			vsmbCounter, err := uvm.GetVSMBCounter(vsmb)
+			vsmbGUID, err := uvm.GetVSMBGUID(vsmb)
 			if err != nil {
 				cleanupOnMountFailure(uvm, vsmbAdded, vpmemAdded, attachedSCSIHostPath)
 				return nil, err
 			}
 			layers = append(layers, schema2.ContainersResourcesLayerV2{
-				Id:   fmt.Sprintf("%d", vsmbCounter),
-				Path: fmt.Sprintf(`\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\%d`, vsmbCounter),
+				Id:   vsmbGUID,
+				Path: fmt.Sprintf(`\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\%s`, vsmbGUID),
 			})
 		}
 		hostedSettings := schema2.CombinedLayersV2{

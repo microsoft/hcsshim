@@ -19,9 +19,9 @@ import (
 
 // vsmbInfo is an internal structure used for ref-counting VSMB shares mapped to a Windows utility VM.
 type vsmbInfo struct {
-	refCount  uint32
-	idCounter uint64
-	uvmPath   string
+	refCount uint32
+	guid     string // effectively a hash of the host path to use as a name and in the resource URI to uniquely identify it
+	uvmPath  string
 }
 
 // scsiInfo is an internal structure used for determining what is mapped to a utility VM.
@@ -66,8 +66,7 @@ type UtilityVM struct {
 
 	// VSMB shares that are mapped into a Windows UVM. These are used for read-only
 	// layers and mapped directories
-	vsmbShares  map[string]*vsmbInfo
-	vsmbCounter uint64 // Each newly-added vsmb share has a counter used as its ID in the ResourceURI and for the name
+	vsmbShares map[string]vsmbInfo
 
 	// VPMEM devices that are mapped into a Linux UVM. These are used for read-only layers.
 	vpmemDevices [maxVPMEM]vpmemInfo // Limited by ACPI size.
