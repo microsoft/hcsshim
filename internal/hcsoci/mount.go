@@ -4,8 +4,10 @@ package hcsoci
 
 import (
 	"fmt"
+	"path"
 	"path/filepath"
 
+	"github.com/Microsoft/hcsshim/internal/ospath"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/uvm"
@@ -18,6 +20,8 @@ type vpMemEntry struct {
 	uvmPath  string
 }
 
+const upperPath = "upper"
+
 // mountContainerLayers is a helper for clients to hide all the complexity of layer mounting
 // Layer folder are in order: base, [rolayer1..rolayern,] sandbox
 // TODO: Extend for LCOW?
@@ -29,7 +33,7 @@ type vpMemEntry struct {
 //                    of the layers are the VSMB locations where the read-only layers are mounted.
 //
 // TODO Should this return a string or an object? More efficient as object, but requires more client work to marshall it again.
-func mountContainerLayers(layerFolders []string, innerID string, uvm *uvm.UtilityVM) (interface{}, error) {
+func mountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.UtilityVM) (interface{}, error) {
 	logrus.Debugln("hcsshim::mountContainerLayers", layerFolders)
 
 	if uvm == nil {
@@ -109,12 +113,7 @@ func mountContainerLayers(layerFolders []string, innerID string, uvm *uvm.Utilit
 		}
 	}
 
-	containerPath := ""
-	if uvm.OS() == "windows" {
-		containerPath = `C:\s` + innerID
-	} else {
-		containerPath = "/tmp/s" + innerID
-	}
+	containerPath := ospath.Join(uvm.OS(), guestRoot, upperPath)
 	_, _, err := uvm.AddSCSI(hostPath, containerPath)
 	if err != nil {
 		cleanupOnMountFailure(uvm, vsmbAdded, vpmemAdded, attachedSCSIHostPath)
@@ -161,7 +160,7 @@ func mountContainerLayers(layerFolders []string, innerID string, uvm *uvm.Utilit
 		layers = append(layers, schema2.ContainersResourcesLayerV2{Path: vpmem.uvmPath})
 	}
 	hostedSettings := schema2.CombinedLayersV2{
-		ContainerRootPath: "/tmp/c" + innerID,
+		ContainerRootPath: path.Join(guestRoot, rootfsPath),
 		Layers:            layers,
 		ScratchPath:       containerPath,
 	}
@@ -195,7 +194,7 @@ const (
 )
 
 // unmountContainerLayers is a helper for clients to hide all the complexity of layer unmounting
-func unmountContainerLayers(layerFolders []string, innerID string, uvm *uvm.UtilityVM, op unmountOperation) error {
+func unmountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.UtilityVM, op unmountOperation) error {
 	logrus.Debugln("hcsshim::unmountContainerLayers", layerFolders)
 
 	if uvm == nil {
@@ -227,7 +226,7 @@ func unmountContainerLayers(layerFolders []string, innerID string, uvm *uvm.Util
 
 	// Unload the storage filter followed by the SCSI sandbox
 	if (op & unmountOperationSCSI) == unmountOperationSCSI {
-		containerRootPath := `C:\s` + innerID
+		containerRootPath := ospath.Join(uvm.OS(), guestRoot, upperPath)
 		logrus.Debugf("hcsshim::unmountContainerLayers CombinedLayers %s", containerRootPath)
 		combinedLayersModification := &schema2.ModifySettingsRequestV2{
 			ResourceType:   schema2.ResourceTypeCombinedLayers,

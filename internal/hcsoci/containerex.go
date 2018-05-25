@@ -127,7 +127,12 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 	}()
 
 	if coi.HostingSystem != nil {
-		resources.InnerID = strconv.FormatUint(coi.HostingSystem.ContainerCounter(), 16)
+		n := coi.HostingSystem.ContainerCounter()
+		if coi.Spec.Linux != nil {
+			resources.GuestRoot = "/run/gcs/c/" + strconv.FormatUint(n, 16)
+		} else {
+			resources.GuestRoot = `C:\c\` + strconv.FormatUint(n, 16)
+		}
 	}
 
 	// Create a network namespace if necessary.
@@ -175,7 +180,7 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 			logrus.Debugf("failed to allocateLinuxResources %s", err)
 			return nil, nil, err
 		}
-		hcsDocument, err = createLinuxContainerDocument(coi)
+		hcsDocument, err = createLinuxContainerDocument(coi, resources.GuestRoot)
 		if err != nil {
 			logrus.Debugf("failed createHCSContainerDocument %s", err)
 			return nil, nil, err
@@ -262,7 +267,7 @@ type linuxHostedSystem struct {
 	OciSpecification *specs.Spec
 }
 
-func createLinuxContainerDocument(coi *createOptionsInternal) (interface{}, error) {
+func createLinuxContainerDocument(coi *createOptionsInternal, guestRoot string) (interface{}, error) {
 	spec, err := createLCOWSpec(coi)
 	if err != nil {
 		return nil, err
@@ -275,7 +280,7 @@ func createLinuxContainerDocument(coi *createOptionsInternal) (interface{}, erro
 		HostingSystemId:                   coi.HostingSystem.ID(),
 		HostedSystem: &linuxHostedSystem{
 			SchemaVersion:    schemaversion.SchemaV20(),
-			OciBundlePath:    "/tmp/whatever",
+			OciBundlePath:    guestRoot,
 			OciSpecification: spec,
 		},
 	}
@@ -494,12 +499,12 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 			if coi.HostingSystem == nil {
 				mdv2 = hcsschemav2.ContainersResourcesMappedDirectoryV2{HostPath: mount.Source, ContainerPath: mount.Destination, ReadOnly: false}
 			} else {
-					mountSourceVSMBGUID, err := coi.HostingSystem.GetVSMBGUID(mount.Source)
+				mountSourceVSMBGUID, err := coi.HostingSystem.GetVSMBGUID(mount.Source)
 				if err != nil {
 					return nil, err
 				}
 				mdv2 = hcsschemav2.ContainersResourcesMappedDirectoryV2{
-						HostPath:      fmt.Sprintf(`\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\%s`, mountSourceVSMBGUID),
+					HostPath:      fmt.Sprintf(`\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\%s`, mountSourceVSMBGUID),
 					ContainerPath: mount.Destination,
 					ReadOnly:      false}
 			}
