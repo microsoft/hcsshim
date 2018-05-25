@@ -39,7 +39,7 @@ func (uvm *UtilityVM) AddPlan9(hostPath string, uvmPath string, flags int32) err
 			HostedSettings: lcowhostedsettings.MappedDirectory{
 				MountPath: uvmPath,
 				Port:      int32(uvm.plan9Counter), // TODO: Temporary. Will all use a single port (9999)
-				ReadOnly:  (flags | schema2.VPlan9FlagReadOnly) == schema2.VPlan9FlagReadOnly,
+				ReadOnly:  (flags & schema2.VPlan9FlagReadOnly) == schema2.VPlan9FlagReadOnly,
 			},
 		}
 
