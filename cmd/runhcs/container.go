@@ -15,6 +15,7 @@ import (
 	"time"
 
 	winio "github.com/Microsoft/go-winio"
+	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/regstate"
@@ -36,6 +37,8 @@ type persistedState struct {
 	Spec           *specs.Spec
 	RequestedNetNS string
 	IsHost         bool
+	UniqueID       guid.GUID
+	HostUniqueID   guid.GUID
 }
 
 type containerStatus string
@@ -218,22 +221,22 @@ func parseSandboxAnnotations(spec *specs.Spec) (string, bool) {
 	return "", false
 }
 
-func startVMShim(id, logFile string, consolePipe string, spec *specs.Spec) (*os.Process, error) {
+func (c *container) startVMShim(logFile string, consolePipe string) (*os.Process, error) {
 	opts := &uvm.UVMOptions{
-		ID:          vmID(id),
+		ID:          vmID(c.ID),
 		ConsolePipe: consolePipe,
 	}
-	if spec.Windows != nil {
-		opts.Resources = spec.Windows.Resources
+	if c.Spec.Windows != nil {
+		opts.Resources = c.Spec.Windows.Resources
 	}
 
-	if spec.Linux != nil {
+	if c.Spec.Linux != nil {
 		opts.OperatingSystem = "linux"
 	} else {
 		opts.OperatingSystem = "windows"
-		layers := make([]string, len(spec.Windows.LayerFolders))
-		for i, f := range spec.Windows.LayerFolders {
-			if i == len(spec.Windows.LayerFolders)-1 {
+		layers := make([]string, len(c.Spec.Windows.LayerFolders))
+		for i, f := range c.Spec.Windows.LayerFolders {
+			if i == len(c.Spec.Windows.LayerFolders)-1 {
 				f = filepath.Join(f, "vm")
 				err := os.MkdirAll(f, 0)
 				if err != nil {
@@ -244,7 +247,7 @@ func startVMShim(id, logFile string, consolePipe string, spec *specs.Spec) (*os.
 		}
 		opts.LayerFolders = layers
 	}
-	return launchShim("vmshim", "", logFile, []string{id}, opts)
+	return launchShim("vmshim", "", logFile, []string{c.VMPipePath()}, opts)
 }
 
 type containerConfig struct {
@@ -294,7 +297,10 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		}
 	}
 
+	uniqueID := guid.New()
+
 	newvm := false
+	var hostUniqueID guid.GUID
 	if hostID != "" {
 		host, err := getContainer(hostID, false)
 		if err != nil {
@@ -304,9 +310,11 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		if !host.IsHost {
 			return nil, fmt.Errorf("host container %s is not a VM host", hostID)
 		}
+		hostUniqueID = host.UniqueID
 	} else if vmisolated && (isSandbox || cfg.Spec.Linux != nil) {
 		hostID = cfg.ID
 		newvm = true
+		hostUniqueID = uniqueID
 	}
 
 	// Make absolute the paths in Root.Path and Windows.LayerFolders.
@@ -351,6 +359,8 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 			HostID:         hostID,
 			IsHost:         newvm,
 			RequestedNetNS: netNS,
+			UniqueID:       uniqueID,
+			HostUniqueID:   hostUniqueID,
 		},
 	}
 	err = stateKey.Create(cfg.ID, keyState, &c.persistedState)
@@ -365,18 +375,18 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 
 	// Start a VM if necessary.
 	if newvm {
-		shim, err := startVMShim(cfg.ID, cfg.VMLogFile, cfg.VMConsolePipe, cfg.Spec)
+		shim, err := c.startVMShim(cfg.VMLogFile, cfg.VMConsolePipe)
 		if err != nil {
 			return nil, err
 		}
 		shim.Release()
 	}
 
-	if hostID != "" {
+	if c.HostID != "" {
 		// Call to the VM shim process to create the container. This is done so
 		// that the VM process can keep track of the VM's virtual hardware
 		// resource use.
-		err = issueVMRequest(hostID, cfg.ID, opCreateContainer)
+		err = c.issueVMRequest(opCreateContainer)
 		if err != nil {
 			return nil, err
 		}
@@ -402,6 +412,14 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 	}
 
 	return c, nil
+}
+
+func (c *container) ShimPipePath() string {
+	return safePipePath("runhcs-shim-" + c.UniqueID.String())
+}
+
+func (c *container) VMPipePath() string {
+	return safePipePath("runhcs-vm-" + c.HostUniqueID.String())
 }
 
 func (c *container) VMIsolated() bool {
@@ -436,7 +454,7 @@ func (c *container) Unmount(all bool) error {
 		if all {
 			op = opUnmountContainer
 		}
-		err := issueVMRequest(c.HostID, c.ID, op)
+		err := c.issueVMRequest(op)
 		if err != nil {
 			if _, ok := err.(*noVMError); ok {
 				logrus.Warnf("did not unmount resources for container %s because VM shim for %s could not be contacted", c.ID, c.HostID)
@@ -541,7 +559,7 @@ func (c *container) Exec() error {
 	}
 
 	// Alert the shim that the container is ready.
-	pipe, err := winio.DialPipe(containerPipePath(c.ID), nil)
+	pipe, err := winio.DialPipe(c.ShimPipePath(), nil)
 	if err != nil {
 		return err
 	}
