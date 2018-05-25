@@ -447,33 +447,24 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 		} else {
 			// Hosting system was supplied, so is v2 Xenon.
 			v2Container.Storage.Path = coi.Spec.Root.Path
-
 			if coi.HostingSystem.OS() == "windows" {
-				// This is a little inefficient, but makes it MUCH easier for clients. Build the combinedLayers.Layers structure.
-				for _, layerFolder := range coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1] {
-					layerFolderVSMBGUID, err := coi.HostingSystem.GetVSMBGUID(layerFolder)
-					if err != nil {
-						return nil, err
-					}
-					v2Container.Storage.Layers = append(v2Container.Storage.Layers,
-						hcsschemav2.ContainersResourcesLayerV2{
-							Id:   layerFolderVSMBGUID,
-							Path: fmt.Sprintf(`\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\%s`, layerFolderVSMBGUID),
-						})
+				layers, err := computeV2Layers(coi.HostingSystem, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1])
+				if err != nil {
+					return nil, err
 				}
+				v2Container.Storage.Layers = layers
 			}
 		}
 	}
 
 	if coi.HostingSystem == nil { // Argon v1 or v2
 		for _, layerPath := range coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1] {
-			_, filename := filepath.Split(layerPath)
-			g, err := wclayer.NameToGuid(filename)
+			layerID, err := wclayer.LayerID(layerPath)
 			if err != nil {
 				return nil, err
 			}
-			v1.Layers = append(v1.Layers, schema1.Layer{ID: g.String(), Path: layerPath})
-			v2Container.Storage.Layers = append(v2Container.Storage.Layers, hcsschemav2.ContainersResourcesLayerV2{Id: g.String(), Path: layerPath})
+			v1.Layers = append(v1.Layers, schema1.Layer{ID: layerID.String(), Path: layerPath})
+			v2Container.Storage.Layers = append(v2Container.Storage.Layers, hcsschemav2.ContainersResourcesLayerV2{Id: layerID.String(), Path: layerPath})
 		}
 	}
 
@@ -499,14 +490,15 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 			if coi.HostingSystem == nil {
 				mdv2 = hcsschemav2.ContainersResourcesMappedDirectoryV2{HostPath: mount.Source, ContainerPath: mount.Destination, ReadOnly: false}
 			} else {
-				mountSourceVSMBGUID, err := coi.HostingSystem.GetVSMBGUID(mount.Source)
+				guestPath, err := coi.HostingSystem.GetVSMBGuestPath(mount.Source)
 				if err != nil {
 					return nil, err
 				}
 				mdv2 = hcsschemav2.ContainersResourcesMappedDirectoryV2{
-					HostPath:      fmt.Sprintf(`\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\%s`, mountSourceVSMBGUID),
+					HostPath:      guestPath,
 					ContainerPath: mount.Destination,
-					ReadOnly:      false}
+					ReadOnly:      false,
+				}
 			}
 			for _, o := range mount.Options {
 				if strings.ToLower(o) == "ro" {

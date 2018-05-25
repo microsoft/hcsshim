@@ -4,7 +4,6 @@ package wclayer
 // functionality.
 
 import (
-	"path/filepath"
 	"syscall"
 
 	"github.com/Microsoft/hcsshim/internal/guid"
@@ -74,10 +73,7 @@ func layerPathsToDescriptors(parentLayerPaths []string) ([]WC_LAYER_DESCRIPTOR, 
 	var layers []WC_LAYER_DESCRIPTOR
 
 	for i := 0; i < len(parentLayerPaths); i++ {
-		// Create a layer descriptor, using the folder name
-		// as the source for a GUID LayerId
-		_, folderName := filepath.Split(parentLayerPaths[i])
-		g, err := NameToGuid(folderName)
+		g, err := LayerID(parentLayerPaths[i])
 		if err != nil {
 			logrus.Debugf("Failed to convert name to guid %s", err)
 			return nil, err

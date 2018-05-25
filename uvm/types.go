@@ -17,10 +17,10 @@ import (
 // Read-Only Layer    | VSMB | VPMEM
 // Mapped Directory   | VSMB | PLAN9
 
-// vsmbInfo is an internal structure used for ref-counting VSMB shares mapped to a Windows utility VM.
-type vsmbInfo struct {
+// vsmbShare is an internal structure used for ref-counting VSMB shares mapped to a Windows utility VM.
+type vsmbShare struct {
 	refCount uint32
-	guid     string // effectively a hash of the host path to use as a name and in the resource URI to uniquely identify it
+	name     string
 	uvmPath  string
 }
 
@@ -66,7 +66,8 @@ type UtilityVM struct {
 
 	// VSMB shares that are mapped into a Windows UVM. These are used for read-only
 	// layers and mapped directories
-	vsmbShares map[string]vsmbInfo
+	vsmbShares  map[string]*vsmbShare
+	vsmbCounter uint64 // Counter to generate a unique share name for each VSMB share.
 
 	// VPMEM devices that are mapped into a Linux UVM. These are used for read-only layers.
 	vpmemDevices [maxVPMEM]vpmemInfo // Limited by ACPI size.
