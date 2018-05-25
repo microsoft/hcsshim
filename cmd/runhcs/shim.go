@@ -91,8 +91,7 @@ var shimCommand = cli.Command{
 			os.Stdin.Close()
 
 			// Listen on the named pipe associated with this container.
-			pipePath := containerPipePath(id)
-			l, err := winio.ListenPipe(pipePath, nil)
+			l, err := winio.ListenPipe(c.ShimPipePath(), nil)
 			if err != nil {
 				return err
 			}

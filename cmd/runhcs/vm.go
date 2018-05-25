@@ -15,10 +15,6 @@ import (
 	"github.com/urfave/cli"
 )
 
-func vmPipePath(id string) string {
-	return safePipePath("runhcs-vmshim-" + id)
-}
-
 func vmID(id string) string {
 	return id + "@vm"
 }
@@ -33,7 +29,7 @@ var vmshimCommand = cli.Command{
 		logrus.SetOutput(os.Stderr)
 		fatalWriter.Writer = os.Stdout
 
-		id := context.Args().First()
+		pipePath := context.Args().First()
 
 		optsj, err := ioutil.ReadAll(os.Stdin)
 		if err != nil {
@@ -48,12 +44,12 @@ var vmshimCommand = cli.Command{
 		}
 
 		// Listen on the named pipe associated with this VM.
-		l, err := winio.ListenPipe(vmPipePath(id), &winio.PipeConfig{MessageMode: true})
+		l, err := winio.ListenPipe(pipePath, &winio.PipeConfig{MessageMode: true})
 		if err != nil {
 			return err
 		}
 
-		vm, err := startVM(id, opts)
+		vm, err := startVM(opts)
 		if err != nil {
 			return err
 		}
@@ -124,7 +120,7 @@ type vmRequest struct {
 	Op vmRequestOp
 }
 
-func startVM(id string, opts *uvm.UVMOptions) (*uvm.UtilityVM, error) {
+func startVM(opts *uvm.UVMOptions) (*uvm.UtilityVM, error) {
 	vm, err := uvm.Create(opts)
 	if err != nil {
 		return nil, err
@@ -187,17 +183,17 @@ func (err *noVMError) Error() string {
 	return "VM " + err.ID + " cannot be contacted"
 }
 
-func issueVMRequest(vmid, id string, op vmRequestOp) error {
-	pipe, err := winio.DialPipe(vmPipePath(vmid), nil)
+func (c *container) issueVMRequest(op vmRequestOp) error {
+	pipe, err := winio.DialPipe(c.VMPipePath(), nil)
 	if err != nil {
 		if perr, ok := err.(*os.PathError); ok && perr.Err == syscall.ERROR_FILE_NOT_FOUND {
-			return &noVMError{vmid}
+			return &noVMError{c.HostID}
 		}
 		return err
 	}
 	defer pipe.Close()
 	req := vmRequest{
-		ID: id,
+		ID: c.ID,
 		Op: op,
 	}
 	err = json.NewEncoder(pipe).Encode(&req)
