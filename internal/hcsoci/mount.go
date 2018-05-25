@@ -124,17 +124,10 @@ func mountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 	if uvm.OS() == "windows" {
 		// 	Load the filter at the C:\s<ID> location calculated above. We pass into this request each of the
 		// 	read-only layer folders.
-		layers := []schema2.ContainersResourcesLayerV2{}
-		for _, vsmb := range vsmbAdded {
-			vsmbGUID, err := uvm.GetVSMBGUID(vsmb)
-			if err != nil {
-				cleanupOnMountFailure(uvm, vsmbAdded, vpmemAdded, attachedSCSIHostPath)
-				return nil, err
-			}
-			layers = append(layers, schema2.ContainersResourcesLayerV2{
-				Id:   vsmbGUID,
-				Path: fmt.Sprintf(`\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\%s`, vsmbGUID),
-			})
+		layers, err := computeV2Layers(uvm, vsmbAdded)
+		if err != nil {
+			cleanupOnMountFailure(uvm, vsmbAdded, vpmemAdded, attachedSCSIHostPath)
+			return nil, err
 		}
 		hostedSettings := schema2.CombinedLayersV2{
 			ContainerRootPath: containerPath,
@@ -148,11 +141,9 @@ func mountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 		if err := uvm.Modify(combinedLayersModification); err != nil {
 			cleanupOnMountFailure(uvm, vsmbAdded, vpmemAdded, attachedSCSIHostPath)
 			return nil, err
-
 		}
 		logrus.Debugln("hcsshim::mountContainerLayers Succeeded")
 		return hostedSettings, nil
-
 	}
 
 	layers := []schema2.ContainersResourcesLayerV2{}
@@ -304,4 +295,22 @@ func cleanupOnMountFailure(uvm *uvm.UtilityVM, vsmbShares []string, vpmemDevices
 			logrus.Warnf("Possibly leaked SCSI disk on error removal path: %s", err)
 		}
 	}
+}
+
+func computeV2Layers(vm *uvm.UtilityVM, paths []string) (layers []schema2.ContainersResourcesLayerV2, err error) {
+	for _, path := range paths {
+		guestPath, err := vm.GetVSMBGuestPath(path)
+		if err != nil {
+			return nil, err
+		}
+		layerID, err := wclayer.LayerID(path)
+		if err != nil {
+			return nil, err
+		}
+		layers = append(layers, schema2.ContainersResourcesLayerV2{
+			Id:   layerID.String(),
+			Path: guestPath,
+		})
+	}
+	return layers, nil
 }

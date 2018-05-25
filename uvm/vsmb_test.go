@@ -6,19 +6,18 @@ package uvm
 
 import (
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/schema2"
 )
 
-// TestVSMBRO tests adding/removing VSMB Read-Only layers from a v2 Windows utility VM
-func TestVSMBRO(t *testing.T) {
+// TestVSMB tests adding/removing VSMB layers from a v2 Windows utility VM
+func TestVSMB(t *testing.T) {
 	uvm, uvmScratchDir := createWCOWUVM(t, layersNanoserver, "", nil)
 	defer os.RemoveAll(uvmScratchDir)
 	defer uvm.Terminate()
 
-	dir := strings.ToUpper(createTempDir(t)) // Force upper-case
+	dir := createTempDir(t)
 	defer os.RemoveAll(dir)
 	var iterations uint32 = 64
 	for i := 0; i < int(iterations); i++ {
@@ -29,23 +28,8 @@ func TestVSMBRO(t *testing.T) {
 	if len(uvm.vsmbShares) != 1 {
 		t.Fatalf("Should only be one VSMB entry")
 	}
-	if _, ok := uvm.vsmbShares[dir]; ok {
-		t.Fatalf("should not found as upper case")
-	}
-	if _, ok := uvm.vsmbShares[strings.ToLower(dir)]; !ok {
-		t.Fatalf("not found!")
-	}
-	if uvm.vsmbShares[strings.ToLower(dir)].refCount != iterations {
-		t.Fatalf("iteration mismatch: %d %d", iterations, uvm.vsmbShares[strings.ToLower(dir)].refCount)
-	}
-
-	// Verify the GUID matches the internal data-structure
-	g, err := uvm.GetVSMBGUID(dir)
-	if err != nil {
-		t.Fatalf("failed to find guid")
-	}
-	if uvm.vsmbShares[strings.ToLower(dir)].guid != g {
-		t.Fatalf("guid from GetVSMBShareGUID doesn't match")
+	if uvm.vsmbShares[dir].refCount != iterations {
+		t.Fatalf("iteration mismatch: %d %d %+v", iterations, uvm.vsmbShares[dir].refCount, uvm.vsmbShares[dir])
 	}
 
 	// Remove them all
@@ -57,7 +41,6 @@ func TestVSMBRO(t *testing.T) {
 	if len(uvm.vsmbShares) != 0 {
 		t.Fatalf("Should not be any vsmb entries remaining")
 	}
-
 }
 
 // TODO: VSMB for mapped directories
