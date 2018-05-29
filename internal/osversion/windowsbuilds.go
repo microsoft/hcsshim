@@ -7,4 +7,5 @@ const (
 	RS3 = 16299
 	RS4 = 17134
 	RS5 = 17659 // TODO Bump to final RS5 build
+
 )

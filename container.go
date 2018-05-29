@@ -133,7 +133,7 @@ func (container *container) HasPendingUpdates() (bool, error) {
 	return false, nil
 }
 
-// Statistics returns statistics for the container
+// Statistics returns statistics for the container. This is a legacy v1 call
 func (container *container) Statistics() (Statistics, error) {
 	properties, err := container.system.Properties(schema1.PropertyTypeStatistics)
 	if err != nil {
@@ -143,7 +143,7 @@ func (container *container) Statistics() (Statistics, error) {
 	return properties.Statistics, nil
 }
 
-// ProcessList returns an array of ProcessListItems for the container
+// ProcessList returns an array of ProcessListItems for the container. This is a legacy v1 call
 func (container *container) ProcessList() ([]ProcessListItem, error) {
 	properties, err := container.system.Properties(schema1.PropertyTypeProcessList)
 	if err != nil {
@@ -153,35 +153,7 @@ func (container *container) ProcessList() ([]ProcessListItem, error) {
 	return properties.ProcessList, nil
 }
 
-// MappedVirtualDisks returns a map of the controllers and the disks mapped
-// to a container.
-//
-// Example of JSON returned by the query.
-//{
-//   "Id":"1126e8d7d279c707a666972a15976371d365eaf622c02cea2c442b84f6f550a3_svm",
-//   "SystemType":"Container",
-//   "RuntimeOsType":"Linux",
-//   "RuntimeId":"00000000-0000-0000-0000-000000000000",
-//   "State":"Running",
-//   "MappedVirtualDiskControllers":{
-//      "0":{
-//         "MappedVirtualDisks":{
-//            "2":{
-//               "HostPath":"C:\\lcow\\lcow\\scratch\\1126e8d7d279c707a666972a15976371d365eaf622c02cea2c442b84f6f550a3.vhdx",
-//               "ContainerPath":"/mnt/gcs/LinuxServiceVM/scratch",
-//               "Lun":2,
-//               "CreateInUtilityVM":true
-//            },
-//            "3":{
-//               "HostPath":"C:\\lcow\\lcow\\1126e8d7d279c707a666972a15976371d365eaf622c02cea2c442b84f6f550a3\\sandbox.vhdx",
-//               "Lun":3,
-//               "CreateInUtilityVM":true,
-//               "AttachOnly":true
-//            }
-//         }
-//      }
-//   }
-//}
+// This is a legacy v1 call
 func (container *container) MappedVirtualDisks() (map[int]MappedVirtualDiskController, error) {
 	properties, err := container.system.Properties(schema1.PropertyTypeMappedVirtualDisk)
 	if err != nil {
