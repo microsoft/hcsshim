@@ -543,7 +543,11 @@ func (b *Bridge) execProcess(w ResponseWriter, r *Request) {
 		var c *gcspkg.Container
 		c, err = b.hostState.GetContainer(request.ContainerID)
 		if err == nil {
-			pid, err = c.ExecProcess(params.OCIProcess, stdioSet)
+			if params.OCIProcess == nil {
+				pid, err = c.Start(stdioSet)
+			} else {
+				pid, err = c.ExecProcess(params.OCIProcess, stdioSet)
+			}
 		}
 	} else {
 		pid, err = b.coreint.ExecProcess(request.ContainerID, params, stdioSet)

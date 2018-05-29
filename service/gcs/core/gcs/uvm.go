@@ -300,38 +300,38 @@ type Container struct {
 	processes      map[uint32]*Process
 }
 
-func (c *Container) ExecProcess(process *oci.Process, stdioSet *stdio.ConnectionSet) (int, error) {
-	if process == nil {
-		if stdioSet.In != nil {
-			c.inCon.actualConnection = stdioSet.In
-		}
-		if stdioSet.Out != nil {
-			c.outCon.actualConnection = stdioSet.Out
-		}
-		if stdioSet.Err != nil {
-			c.errCon.actualConnection = stdioSet.Err
-		}
-		err := c.container.Start()
-		pid := c.container.Pid()
-		if err == nil {
-			// Kind of odd but track the container init process in its own map.
-			c.processesMutex.Lock()
-			c.processes[uint32(pid)] = &Process{process: c.container, pid: pid}
-			c.processesMutex.Unlock()
-		}
-
-		return pid, err
-	} else {
-		p, err := c.container.ExecProcess(*process, stdioSet)
-		if err != nil {
-			return -1, err
-		}
-		pid := p.Pid()
-		c.processesMutex.Lock()
-		c.processes[uint32(pid)] = &Process{process: p, pid: pid}
-		c.processesMutex.Unlock()
-		return pid, nil
+func (c *Container) Start(stdioSet *stdio.ConnectionSet) (int, error) {
+	if stdioSet.In != nil {
+		c.inCon.actualConnection = stdioSet.In
 	}
+	if stdioSet.Out != nil {
+		c.outCon.actualConnection = stdioSet.Out
+	}
+	if stdioSet.Err != nil {
+		c.errCon.actualConnection = stdioSet.Err
+	}
+	err := c.container.Start()
+	pid := c.container.Pid()
+	if err == nil {
+		// Kind of odd but track the container init process in its own map.
+		c.processesMutex.Lock()
+		c.processes[uint32(pid)] = &Process{process: c.container, pid: pid}
+		c.processesMutex.Unlock()
+	}
+
+	return pid, err
+}
+
+func (c *Container) ExecProcess(process *oci.Process, stdioSet *stdio.ConnectionSet) (int, error) {
+	p, err := c.container.ExecProcess(*process, stdioSet)
+	if err != nil {
+		return -1, err
+	}
+	pid := p.Pid()
+	c.processesMutex.Lock()
+	c.processes[uint32(pid)] = &Process{process: p, pid: pid}
+	c.processesMutex.Unlock()
+	return pid, nil
 }
 
 func (c *Container) GetProcess(pid uint32) (*Process, error) {
