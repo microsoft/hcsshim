@@ -311,6 +311,9 @@ func mountPlan9Share(osl oslayer.OS, vsock transport.Transport, mountPath, share
 		mountOptions |= syscall.MS_RDONLY
 		data += ",noload"
 	}
+	if share != "" {
+		data += ",aname=" + share
+	}
 	if err := osl.Mount(mountPath, mountPath, "9p", mountOptions, data); err != nil {
 		return errors.Wrapf(err, "failed to mount directory for mapped directory %s", mountPath)
 	}
