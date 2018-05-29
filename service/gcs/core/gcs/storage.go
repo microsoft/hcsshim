@@ -13,6 +13,7 @@ import (
 
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
+	"github.com/Microsoft/opengcs/service/gcs/transport"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -242,19 +243,19 @@ func (c *gcsCore) mountMappedVirtualDisks(disks []prot.MappedVirtualDisk, mounts
 
 // unmountPath unmounts the target path if it exists and is a mount path. If
 // removeTarget this will remove the previously mounted folder.
-func (c *gcsCore) unmountPath(target string, removeTarget bool) error {
-	if exists, err := c.OS.PathExists(target); err != nil {
+func unmountPath(osl oslayer.OS, target string, removeTarget bool) error {
+	if exists, err := osl.PathExists(target); err != nil {
 		return errors.Wrapf(err, "failed to determine if path '%s' exists", target)
 	} else if exists {
-		if mounted, err := c.OS.PathIsMounted(target); err != nil {
+		if mounted, err := osl.PathIsMounted(target); err != nil {
 			return errors.Wrapf(err, "failed to determine if path '%s' is mounted", target)
 		} else if mounted {
-			if err := c.OS.Unmount(target, 0); err != nil {
+			if err := osl.Unmount(target, 0); err != nil {
 				return errors.Wrapf(err, "failed to unmount path '%s'", target)
 			}
 		}
 		if removeTarget {
-			return c.OS.RemoveAll(target)
+			return osl.RemoveAll(target)
 		}
 	}
 	return nil
@@ -267,7 +268,7 @@ func (c *gcsCore) unmountMappedVirtualDisks(disks []prot.MappedVirtualDisk) erro
 		// If the disk was specified AttachOnly, it shouldn't have been mounted
 		// in the first place.
 		if !disk.AttachOnly {
-			if err := c.unmountPath(disk.ContainerPath, false); err != nil {
+			if err := unmountPath(c.OS, disk.ContainerPath, false); err != nil {
 				return err
 			}
 		}
@@ -289,11 +290,11 @@ func (c *gcsCore) unplugMappedVirtualDisks(disks []prot.MappedVirtualDisk) error
 
 // mountPlan9Share mounts the given Plan9 share to the filesystem with the given
 // options.
-func (c *gcsCore) mountPlan9Share(mountPath, share string, port uint32, readonly bool) error {
-	if err := c.OS.MkdirAll(mountPath, 0700); err != nil {
+func mountPlan9Share(osl oslayer.OS, vsock transport.Transport, mountPath, share string, port uint32, readonly bool) error {
+	if err := osl.MkdirAll(mountPath, 0700); err != nil {
 		return errors.Wrapf(err, "failed to create directory for mapped directory %s", mountPath)
 	}
-	conn, err := c.vsock.Dial(port)
+	conn, err := vsock.Dial(port)
 	if err != nil {
 		return errors.Wrapf(err, "could not connect to plan9 server for %s", mountPath)
 	}
@@ -310,7 +311,7 @@ func (c *gcsCore) mountPlan9Share(mountPath, share string, port uint32, readonly
 		mountOptions |= syscall.MS_RDONLY
 		data += ",noload"
 	}
-	if err := c.OS.Mount(mountPath, mountPath, "9p", mountOptions, data); err != nil {
+	if err := osl.Mount(mountPath, mountPath, "9p", mountOptions, data); err != nil {
 		return errors.Wrapf(err, "failed to mount directory for mapped directory %s", mountPath)
 	}
 	return nil
@@ -319,7 +320,7 @@ func (c *gcsCore) mountPlan9Share(mountPath, share string, port uint32, readonly
 // unmountMappedDirectories unmounts the given container's mapped directories.
 func (c *gcsCore) unmountMappedDirectories(dirs []prot.MappedDirectory) error {
 	for _, dir := range dirs {
-		if err := c.unmountPath(dir.ContainerPath, false); err != nil {
+		if err := unmountPath(c.OS, dir.ContainerPath, false); err != nil {
 			return err
 		}
 	}
@@ -327,12 +328,12 @@ func (c *gcsCore) unmountMappedDirectories(dirs []prot.MappedDirectory) error {
 }
 
 // mountLayer mounts the layer spec at location
-func (c *gcsCore) mountLayer(location string, layer *mountSpec) error {
+func mountLayer(osl oslayer.OS, location string, layer *mountSpec) error {
 	logrus.Infof("mounting layer at path: %s", location)
-	if err := c.OS.MkdirAll(location, 0700); err != nil {
+	if err := osl.MkdirAll(location, 0700); err != nil {
 		return errors.Wrapf(err, "failed to create directory for layer '%s'", location)
 	}
-	if err := layer.Mount(c.OS, location); err != nil {
+	if err := layer.Mount(osl, location); err != nil {
 		return errors.Wrapf(err, "failed to mount layer directory %s", location)
 	}
 	return nil
@@ -389,29 +390,29 @@ func (c *gcsCore) mountLayers(index uint32, scratchMount *mountSpec, layers []*m
 		// readonly.
 		mountOptions |= syscall.O_RDONLY
 	}
-	return c.mountOverlay(layerPaths, upperdirPath, workdirPath, rootfsPath, mountOptions)
+	return mountOverlay(c.OS, layerPaths, upperdirPath, workdirPath, rootfsPath, mountOptions)
 }
 
-func (c *gcsCore) mountOverlay(layerPaths []string, upperdirPath, workdirPath, rootfsPath string, mountOptions uintptr) error {
+func mountOverlay(osl oslayer.OS, layerPaths []string, upperdirPath, workdirPath, rootfsPath string, mountOptions uintptr) error {
 	lowerdir := strings.Join(layerPaths, ":")
 	options := fmt.Sprintf("lowerdir=%s", lowerdir)
 
 	if upperdirPath != "" {
-		if err := c.OS.MkdirAll(upperdirPath, 0755); err != nil {
+		if err := osl.MkdirAll(upperdirPath, 0755); err != nil {
 			return errors.Wrap(err, "failed to create upper directory in scratch space")
 		}
 		options += ",upperdir=" + upperdirPath
 	}
 	if workdirPath != "" {
-		if err := c.OS.MkdirAll(workdirPath, 0755); err != nil {
+		if err := osl.MkdirAll(workdirPath, 0755); err != nil {
 			return errors.Wrap(err, "failed to create workdir in scratch space")
 		}
 		options += ",workdir=" + workdirPath
 	}
-	if err := c.OS.MkdirAll(rootfsPath, 0755); err != nil {
+	if err := osl.MkdirAll(rootfsPath, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create directory for container root filesystem %s", rootfsPath)
 	}
-	if err := c.OS.Mount("overlay", rootfsPath, "overlay", mountOptions, options); err != nil {
+	if err := osl.Mount("overlay", rootfsPath, "overlay", mountOptions, options); err != nil {
 		return errors.Wrapf(err, "failed to mount container root filesystem using overlayfs %s", rootfsPath)
 	}
 	return nil

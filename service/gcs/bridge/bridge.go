@@ -17,7 +17,6 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
-	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
 	"github.com/pkg/errors"
@@ -218,9 +217,9 @@ type Bridge struct {
 // AssignHandlers creates and assigns the appropriate bridge
 // events to be listen for and intercepted on `mux` before forwarding
 // to `gcs` for handling.
-func (b *Bridge) AssignHandlers(mux *Mux, gcs core.Core, rtime runtime.Runtime) {
+func (b *Bridge) AssignHandlers(mux *Mux, gcs core.Core, host *gcspkg.Host) {
 	b.coreint = gcs
-	b.hostState = gcspkg.NewHost(rtime)
+	b.hostState = host
 
 	// These are PvInvalid because they will be called previous to any protocol
 	// negotiation so they respond only when the protocols are not known.
@@ -582,10 +581,21 @@ func (b *Bridge) signalContainer(w ResponseWriter, r *Request, signal oslayer.Si
 		return
 	}
 
-	// First see if this is a V2 Container.
-	if c, err := b.hostState.GetContainer(request.ContainerID); err == nil {
+	// V2 added support for sending a signal to the host UVM itself. See if this is targeting
+	// the UVM and then see if its a V2 container ID before falling back to the V1 path.
+	if request.ContainerID == gcspkg.UVMContainerID {
+		// We are asking to shutdown the UVM itself.
+		if signal != oslayer.SIGTERM {
+			logrus.Errorf("invalid signal %d sent to uvm. Will shutdown anyway.", signal)
+		}
+		// This is a destructive call. We do not respond to the HCS
+		b.quitChan <- true
+		b.hostState.Shutdown()
+		return
+	} else if c, err := b.hostState.GetContainer(request.ContainerID); err == nil {
 		if err := c.Kill(signal); err != nil {
 			w.Error(request.ActivityID, err)
+			return
 		}
 	} else {
 		if err := b.coreint.SignalContainer(request.ContainerID, signal); err != nil {
@@ -745,7 +755,11 @@ func (b *Bridge) modifySettings(w ResponseWriter, r *Request) {
 			return
 		}
 	} else if request.V2Request != nil {
-		if err := b.coreint.ModifySettingsV2(request.ContainerID, request.V2Request); err != nil {
+		if request.ContainerID != gcspkg.UVMContainerID {
+			w.Error(request.ActivityID, errors.New("V2 Modify request not supported on anything but UVM"))
+			return
+		}
+		if err := b.hostState.ModifyHostSettings(request.V2Request); err != nil {
 			w.Error(request.ActivityID, err)
 			return
 		}

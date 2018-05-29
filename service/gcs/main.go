@@ -117,7 +117,8 @@ func main() {
 		Transport: tport,
 		Handler:   mux,
 	}
-	b.AssignHandlers(mux, coreint, rtime)
+	h := gcs.NewHost(rtime, os, tport)
+	b.AssignHandlers(mux, coreint, h)
 	err = b.ListenAndServe()
 	if err != nil {
 		logrus.Fatal(err)

@@ -10,7 +10,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"syscall"
 
@@ -26,8 +25,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
-
-const uvmContainerID = "00000000-0000-0000-0000-000000000000"
 
 // gcsCore is an implementation of the Core interface, defining the
 // functionality of the GCS.
@@ -299,27 +296,6 @@ func (c *gcsCore) CreateContainer(id string, settings prot.VMHostedContainerSett
 	return nil
 }
 
-func (c *gcsCore) CreateContainerV2(id string, settings prot.VMHostedContainerSettingsV2) error {
-	c.containerCacheMutex.Lock()
-	defer c.containerCacheMutex.Unlock()
-
-	if c.getContainer(id) != nil {
-		return errors.WithStack(gcserr.NewContainerExistsError(id))
-	}
-
-	containerEntry := newContainerCacheEntry(id)
-	// We need to only allow exited notifications when at least one WaitProcess
-	// call has been written. We increment the writers here which is safe even
-	// on failure because this entry will not be in the map on failure.
-	containerEntry.initProcess.writersWg.Add(1)
-
-	// TODO: Process settings.OciSpec
-
-	c.containerCache[id] = containerEntry
-
-	return nil
-}
-
 // ExecProcess executes a new process in the container. It forwards the
 // process's stdio through the members of the core.StdioSet provided.
 func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (int, error) {
@@ -461,25 +437,17 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 
 // SignalContainer sends the specified signal to the container's init process.
 func (c *gcsCore) SignalContainer(id string, signal oslayer.Signal) error {
-	if id == uvmContainerID {
-		// We are asking to shutdown the UVM itself.
-		if signal != oslayer.SIGTERM {
-			logrus.Errorf("invalid signal %d sent to uvm. Will shutdown anyway.", signal)
-		}
-		c.OS.Shutdown()
-	} else {
-		c.containerCacheMutex.Lock()
-		defer c.containerCacheMutex.Unlock()
+	c.containerCacheMutex.Lock()
+	defer c.containerCacheMutex.Unlock()
 
-		containerEntry := c.getContainer(id)
-		if containerEntry == nil {
-			return errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
-		}
+	containerEntry := c.getContainer(id)
+	if containerEntry == nil {
+		return errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
+	}
 
-		if containerEntry.container != nil {
-			if err := containerEntry.container.Kill(signal); err != nil {
-				return err
-			}
+	if containerEntry.container != nil {
+		if err := containerEntry.container.Kill(signal); err != nil {
+			return err
 		}
 	}
 
@@ -699,115 +667,6 @@ func (c *gcsCore) ModifySettings(id string, request *prot.ResourceModificationRe
 	return nil
 }
 
-// ModifySettings takes the given request and performs the modification it
-// specifies. At the moment, this function only supports the request types Add
-// and Remove, both for the resource type MappedVirtualDisk.
-func (c *gcsCore) ModifySettingsV2(id string, request *prot.ModifySettingRequest) error {
-	switch request.ResourceType {
-	case prot.MrtMappedVirtualDisk:
-		mvd, ok := request.Settings.(*prot.MappedVirtualDiskV2)
-		if !ok {
-			return errors.New("the request's hosted settings are not of type MappedVirtualDiskV2")
-		}
-		switch request.RequestType {
-		case prot.MreqtAdd:
-			scsiName, err := scsiControllerLunToName(c.OS, mvd.Controller, mvd.Lun)
-			if err != nil {
-				return errors.Wrapf(err, "failed to create MappedVirtualDiskV2")
-			}
-			ms := mountSpec{
-				Source:     scsiName,
-				FileSystem: defaultFileSystem,
-				Flags:      uintptr(0),
-			}
-			if mvd.ReadOnly {
-				ms.Flags |= syscall.MS_RDONLY
-				ms.Options = append(ms.Options, mountOptionNoLoad)
-			}
-			if mvd.MountPath != "" {
-				if err := c.OS.MkdirAll(mvd.MountPath, 0700); err != nil {
-					return errors.Wrapf(err, "failed to create directory for MappedVirtualDiskV2 %s", mvd.MountPath)
-				}
-				if err := ms.MountWithTimedRetry(c.OS, mvd.MountPath); err != nil {
-					return errors.Wrapf(err, "failed to mount directory for MappedVirtualDiskV2 %s", mvd.MountPath)
-				}
-			}
-		case prot.MreqtRemove:
-			if mvd.MountPath != "" {
-				if err := c.unmountPath(mvd.MountPath, true); err != nil {
-					return errors.Wrapf(err, "failed to hot remove MappedVirtualDiskV2 path: '%s'", mvd.MountPath)
-				}
-			}
-			if err := c.OS.UnplugSCSIDisk(fmt.Sprintf("0:0:%d:%d", mvd.Controller, mvd.Lun)); err != nil {
-				return errors.Wrapf(err, "failed to eject MappedVirtualDiskV2 Controller:%d Lun:%d", mvd.Controller, mvd.Lun)
-			}
-		default:
-			return errors.Errorf("the request type \"%s\" is not supported for resource type \"%s\"", request.RequestType, request.ResourceType)
-		}
-	case prot.MrtMappedDirectory:
-		md, ok := request.Settings.(*prot.MappedDirectoryV2)
-		if !ok {
-			return errors.New("the request's hosted settings are not of type MappedDirectoryV2")
-		}
-		switch request.RequestType {
-		case prot.MreqtAdd:
-			if err := c.mountPlan9Share(md.MountPath, md.ShareName, md.Port, md.ReadOnly); err != nil {
-				return errors.Wrapf(err, "failed to hot add MappedDirectoryV2")
-			}
-		case prot.MreqtRemove:
-			if err := c.unmountPath(md.MountPath, true); err != nil {
-				return errors.Wrapf(err, "failed to hot remove MappedDirectoryV2")
-			}
-		default:
-			return errors.Errorf("the request type \"%s\" is not supported for resource type \"%s\"", request.RequestType, request.ResourceType)
-		}
-	case prot.MrtVPMemDevice:
-		vpd, ok := request.Settings.(*prot.MappedVPMemDeviceV2)
-		if !ok {
-			return errors.New("the request's hosted settings are not of type MappedVPMemDeviceV2")
-		}
-		switch request.RequestType {
-		case prot.MreqtAdd:
-			ms := &mountSpec{
-				Source:     "/dev/pmem" + strconv.FormatUint(uint64(vpd.DeviceNumber), 10),
-				FileSystem: defaultFileSystem,
-				Flags:      syscall.MS_RDONLY,
-				Options:    []string{mountOptionNoLoad, mountOptionDax},
-			}
-			if err := c.mountLayer(vpd.MountPath, ms); err != nil {
-				return errors.Wrapf(err, "failed to hot add a MappedVPMemDeviceV2")
-			}
-		case prot.MreqtRemove:
-			if err := c.unmountPath(vpd.MountPath, true); err != nil {
-				return errors.Wrapf(err, "failed to hot remove a MappedVPMemDeviceV2")
-			}
-		default:
-			return errors.Errorf("the request type \"%s\" is not supported for resource type \"%s\"", request.RequestType, request.ResourceType)
-		}
-	case prot.MrtCombinedLayers:
-		cl, ok := request.Settings.(*prot.CombinedLayersV2)
-		if !ok {
-			return errors.New("the request's hosted settings are not of type CombinedLayersV2")
-		}
-		switch request.RequestType {
-		case prot.MreqtAdd:
-			if err := c.setupCombinedLayers(cl); err != nil {
-				return errors.Wrapf(err, "failed to hot add CombinedLayersV2")
-			}
-		case prot.MreqtRemove:
-			if err := c.removeCombinedLayers(cl); err != nil {
-				return errors.Wrapf(err, "failed to hot remove CombinedLayersV2")
-			}
-		default:
-			return errors.Errorf("the request type \"%s\" is not supported for resource type \"%s\"", request.RequestType, request.ResourceType)
-		}
-	default:
-		return errors.Errorf("the resource type \"%s\" is not supported", request.ResourceType)
-	}
-
-	return nil
-}
-
 func (c *gcsCore) ResizeConsole(pid int, height, width uint16) error {
 	c.processCacheMutex.Lock()
 	var p *processCacheEntry
@@ -942,46 +801,10 @@ func (c *gcsCore) setupMappedDirectories(id string, dirs []prot.MappedDirectory)
 		if !dir.CreateInUtilityVM {
 			return errors.New("we do not currently support mapping directories inside the container namespace")
 		}
-		if err := c.mountPlan9Share(dir.ContainerPath, "", dir.Port, dir.ReadOnly); err != nil {
+		if err := mountPlan9Share(c.OS, c.vsock, dir.ContainerPath, "", dir.Port, dir.ReadOnly); err != nil {
 			return errors.Wrapf(err, "failed to mount mapped directory %s for container %s", dir.ContainerPath, id)
 		}
 	}
-	return nil
-}
-
-func (c *gcsCore) setupCombinedLayers(m *prot.CombinedLayersV2) error {
-	if m.ContainerRootPath == "" {
-		return errors.New("cannot combine layers with empty ContainerRootPath")
-	}
-	if err := c.OS.MkdirAll(m.ContainerRootPath, 0700); err != nil {
-		return errors.Wrapf(err, "failed to create ContainerRootPath directory '%s'", m.ContainerRootPath)
-	}
-
-	layerPaths := make([]string, len(m.Layers))
-	for i, layer := range m.Layers {
-		layerPaths[i] = layer.Path
-	}
-
-	var upperdirPath string
-	var workdirPath string
-	var mountOptions uintptr
-	if m.ScratchPath == "" {
-		// The user did not pass a scratch path. Mount overlay as readonly.
-		mountOptions |= syscall.O_RDONLY
-	} else {
-		upperdirPath = filepath.Join(m.ScratchPath, "upper")
-		workdirPath = filepath.Join(m.ScratchPath, "work")
-	}
-
-	return c.mountOverlay(layerPaths, upperdirPath, workdirPath, m.ContainerRootPath, mountOptions)
-}
-
-func (c *gcsCore) removeCombinedLayers(m *prot.CombinedLayersV2) error {
-	if m.ContainerRootPath == "" {
-		return errors.New("cannot remove combined layers with empty ContainerRootPath")
-	}
-
-	c.unmountPath(m.ContainerRootPath, true)
 	return nil
 }
 

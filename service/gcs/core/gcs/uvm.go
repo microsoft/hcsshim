@@ -3,10 +3,15 @@ package gcs
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path"
+	"path/filepath"
+	"strconv"
 	"sync"
 	"syscall"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
@@ -17,6 +22,8 @@ import (
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
+
+const UVMContainerID = "00000000-0000-0000-0000-000000000000"
 
 type delayedVsockConnection struct {
 	actualConnection transport.Connection
@@ -71,10 +78,12 @@ type Host struct {
 
 	// Rtime is the Runtime interface used by the GCS core.
 	rtime runtime.Runtime
+	osl   oslayer.OS
+	vsock transport.Transport
 }
 
-func NewHost(rtime runtime.Runtime) *Host {
-	return &Host{rtime: rtime, containers: make(map[string]*Container)}
+func NewHost(rtime runtime.Runtime, osl oslayer.OS, vsock transport.Transport) *Host {
+	return &Host{rtime: rtime, osl: osl, vsock: vsock, containers: make(map[string]*Container)}
 }
 
 func (h *Host) getContainerLocked(id string) (*Container, error) {
@@ -103,11 +112,11 @@ func (h *Host) GetOrCreateContainer(id string, settings *prot.VMHostedContainerS
 
 	// Container doesnt exit. Create it here
 	// Create the BundlePath
-	if err := os.MkdirAll(settings.OCIBundlePath, 0700); err != nil {
+	if err := h.osl.MkdirAll(settings.OCIBundlePath, 0700); err != nil {
 		return nil, errors.Wrapf(err, "failed to create OCIBundlePath: '%s'", settings.OCIBundlePath)
 	}
 	configFile := path.Join(settings.OCIBundlePath, "config.json")
-	f, err := os.Create(configFile)
+	f, err := h.osl.Create(configFile)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create config.json at: '%s'", configFile)
 	}
@@ -142,6 +151,143 @@ func (h *Host) GetOrCreateContainer(id string, settings *prot.VMHostedContainerS
 	c.container = con
 	h.containers[id] = c
 	return c, nil
+}
+
+func (h *Host) ModifyHostSettings(settings *prot.ModifySettingRequest) error {
+	type modifyFunc func(interface{}) error
+
+	requestTypeFn := func(req prot.ModifyRequestType, setting interface{}, add, remove, update modifyFunc) error {
+		switch req {
+		case prot.MreqtAdd:
+			if add != nil {
+				return add(setting)
+			}
+			break
+		case prot.MreqtRemove:
+			if remove != nil {
+				return remove(setting)
+			}
+			break
+		case prot.MreqtUpdate:
+			if update != nil {
+				return update(setting)
+			}
+			break
+		}
+
+		return errors.Errorf("the RequestType \"%s\" is not supported", req)
+	}
+
+	var add modifyFunc
+	var remove modifyFunc
+	var update modifyFunc
+
+	switch settings.ResourceType {
+	case prot.MrtMappedVirtualDisk:
+		add = func(setting interface{}) error {
+			mvd := setting.(*prot.MappedVirtualDiskV2)
+			scsiName, err := scsiControllerLunToName(h.osl, mvd.Controller, mvd.Lun)
+			if err != nil {
+				return errors.Wrapf(err, "failed to create MappedVirtualDiskV2")
+			}
+			ms := mountSpec{
+				Source:     scsiName,
+				FileSystem: defaultFileSystem,
+				Flags:      uintptr(0),
+			}
+			if mvd.ReadOnly {
+				ms.Flags |= syscall.MS_RDONLY
+				ms.Options = append(ms.Options, mountOptionNoLoad)
+			}
+			if mvd.MountPath != "" {
+				if err := h.osl.MkdirAll(mvd.MountPath, 0700); err != nil {
+					return errors.Wrapf(err, "failed to create directory for MappedVirtualDiskV2 %s", mvd.MountPath)
+				}
+				if err := ms.MountWithTimedRetry(h.osl, mvd.MountPath); err != nil {
+					return errors.Wrapf(err, "failed to mount directory for MappedVirtualDiskV2 %s", mvd.MountPath)
+				}
+			}
+			return nil
+		}
+		remove = func(setting interface{}) error {
+			mvd := setting.(*prot.MappedVirtualDiskV2)
+			if mvd.MountPath != "" {
+				if err := unmountPath(h.osl, mvd.MountPath, true); err != nil {
+					return errors.Wrapf(err, "failed to hot remove MappedVirtualDiskV2 path: '%s'", mvd.MountPath)
+				}
+			}
+			return h.osl.UnplugSCSIDisk(fmt.Sprintf("0:0:%d:%d", mvd.Controller, mvd.Lun))
+		}
+	case prot.MrtMappedDirectory:
+		add = func(setting interface{}) error {
+			md := setting.(*prot.MappedDirectoryV2)
+			return mountPlan9Share(h.osl, h.vsock, md.MountPath, md.ShareName, md.Port, md.ReadOnly)
+		}
+		remove = func(setting interface{}) error {
+			md := setting.(*prot.MappedDirectoryV2)
+			return unmountPath(h.osl, md.MountPath, true)
+		}
+	case prot.MrtVPMemDevice:
+		add = func(setting interface{}) error {
+			vpd := setting.(*prot.MappedVPMemDeviceV2)
+			ms := &mountSpec{
+				Source:     "/dev/pmem" + strconv.FormatUint(uint64(vpd.DeviceNumber), 10),
+				FileSystem: defaultFileSystem,
+				Flags:      syscall.MS_RDONLY,
+				Options:    []string{mountOptionNoLoad, mountOptionDax},
+			}
+			return mountLayer(h.osl, vpd.MountPath, ms)
+		}
+		remove = func(setting interface{}) error {
+			vpd := setting.(*prot.MappedVPMemDeviceV2)
+			return unmountPath(h.osl, vpd.MountPath, true)
+		}
+	case prot.MrtCombinedLayers:
+		add = func(setting interface{}) error {
+			cl := setting.(*prot.CombinedLayersV2)
+			if cl.ContainerRootPath == "" {
+				return errors.New("cannot combine layers with empty ContainerRootPath")
+			}
+			if err := h.osl.MkdirAll(cl.ContainerRootPath, 0700); err != nil {
+				return errors.Wrapf(err, "failed to create ContainerRootPath directory '%s'", cl.ContainerRootPath)
+			}
+
+			layerPaths := make([]string, len(cl.Layers))
+			for i, layer := range cl.Layers {
+				layerPaths[i] = layer.Path
+			}
+
+			var upperdirPath string
+			var workdirPath string
+			var mountOptions uintptr
+			if cl.ScratchPath == "" {
+				// The user did not pass a scratch path. Mount overlay as readonly.
+				mountOptions |= syscall.O_RDONLY
+			} else {
+				upperdirPath = filepath.Join(cl.ScratchPath, "upper")
+				workdirPath = filepath.Join(cl.ScratchPath, "work")
+			}
+
+			return mountOverlay(h.osl, layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, mountOptions)
+		}
+		remove = func(setting interface{}) error {
+			cl := setting.(*prot.CombinedLayersV2)
+			return unmountPath(h.osl, cl.ContainerRootPath, true)
+		}
+	default:
+		return errors.Errorf("the resource type \"%s\" is not supported", settings.ResourceType)
+	}
+
+	if err := requestTypeFn(settings.RequestType, settings.Settings, add, remove, update); err != nil {
+		return errors.Wrapf(err, "Failed to modify ResourceType: \"%s\"", settings.ResourceType)
+	}
+	return nil
+}
+
+// Shutdown terminates this UVM. This is a destructive call and will destroy all
+// state that has not been cleaned before calling this function.
+func (h *Host) Shutdown() {
+	h.osl.Shutdown()
 }
 
 type Container struct {
@@ -236,7 +382,9 @@ func (p *Process) Wait() (chan int, chan bool) {
 		go func() {
 			state, err := p.process.Wait()
 			if err != nil {
+				logrus.Debugf("*Process.Wait on PID: %d, failed with error: %v", p.pid, err)
 				bgExitCodeChan <- -1
+				return
 			}
 			bgExitCodeChan <- state.ExitCode()
 		}()

@@ -29,12 +29,6 @@ type CreateContainerCall struct {
 	Settings prot.VMHostedContainerSettings
 }
 
-// CreateContainerV2Call captures the arguments of CreateContainerV2.
-type CreateContainerV2Call struct {
-	ID       string
-	Settings prot.VMHostedContainerSettingsV2
-}
-
 // ExecProcessCall captures the arguments of ExecProcess.
 type ExecProcessCall struct {
 	ID       string
@@ -72,12 +66,6 @@ type ModifySettingsCall struct {
 	Request *prot.ResourceModificationRequestResponse
 }
 
-// ModifySettingsCallV2 captures the arguments of ModifySettings.
-type ModifySettingsCallV2 struct {
-	ID      string
-	Request *prot.ModifySettingRequest
-}
-
 // ResizeConsoleCall captures the arguments of ResizeConsole
 type ResizeConsoleCall struct {
 	Pid    int
@@ -107,14 +95,12 @@ type WaitProcessReturnContext struct {
 type MockCore struct {
 	Behavior                     Behavior
 	LastCreateContainer          CreateContainerCall
-	LastCreateContainerV2        CreateContainerV2Call
 	LastExecProcess              ExecProcessCall
 	LastSignalContainer          SignalContainerCall
 	LastSignalProcess            SignalProcessCall
 	LastGetProperties            GetPropertiesCall
 	LastRunExternalProcess       RunExternalProcessCall
 	LastModifySettings           ModifySettingsCall
-	LastModifySettingsV2         ModifySettingsCallV2
 	LastResizeConsole            ResizeConsoleCall
 	LastWaitContainer            WaitContainerCall
 	LastWaitProcess              WaitProcessCall
@@ -140,15 +126,6 @@ func (c *MockCore) behaviorResult() error {
 // CreateContainer captures its arguments.
 func (c *MockCore) CreateContainer(id string, settings prot.VMHostedContainerSettings) error {
 	c.LastCreateContainer = CreateContainerCall{
-		ID:       id,
-		Settings: settings,
-	}
-	return c.behaviorResult()
-}
-
-// CreateContainerV2 captures its arguments.
-func (c *MockCore) CreateContainerV2(id string, settings prot.VMHostedContainerSettingsV2) error {
-	c.LastCreateContainerV2 = CreateContainerV2Call{
 		ID:       id,
 		Settings: settings,
 	}
@@ -201,15 +178,6 @@ func (c *MockCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *s
 // ModifySettings captures its arguments.
 func (c *MockCore) ModifySettings(id string, request *prot.ResourceModificationRequestResponse) error {
 	c.LastModifySettings = ModifySettingsCall{
-		ID:      id,
-		Request: request,
-	}
-	return c.behaviorResult()
-}
-
-// ModifySettingsV2 captures its arguments.
-func (c *MockCore) ModifySettingsV2(id string, request *prot.ModifySettingRequest) error {
-	c.LastModifySettingsV2 = ModifySettingsCallV2{
 		ID:      id,
 		Request: request,
 	}
