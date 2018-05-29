@@ -1,6 +1,6 @@
 <#
 .NOTES
-    Summary: Simple wrapper to build a local initrd.img from sources and optionally install it.
+    Summary: Simple wrapper to build a local initrd.img and rootfs.tar.gz from sources and optionally install it.
 
     License: See https://github.com/Microsoft/opengcs/blob/master/LICENSE
 
@@ -29,18 +29,20 @@ Try {
     if ( $LastExitCode -ne 0 ) {
         Throw "failed to build opengcs image"
     }
-    
-    Write-Host -ForegroundColor Yellow "INFO: Copying initrd.img from opengcs:latest image"
-    $d=New-TemporaryDirectory
+
+    $d=New-TemporaryDirectory    
+    Write-Host -ForegroundColor Yellow "INFO: Copying targets to $d"
     docker run --rm -v $d`:/out opengcs cp /initrd.img /out
     if ( $LastExitCode -ne 0 ) {
         Throw "failed to copy initrd.img to $d"
     }
-    $generated = "$d`\initrd.img"
-    $size=(Get-Item $generated).Length
-    Write-Host -ForegroundColor Yellow "INFO: Created $generated"
-    Write-Host -ForegroundColor Yellow "INFO: Size $size bytes"
-    
+    docker run --rm -v $d`:/out opengcs cp /rootfs.tar.gz /out
+    if ( $LastExitCode -ne 0 ) {
+        Throw "failed to copy rootfs.tar.gz to $d"
+    }
+
+	Write-Host -ForegroundColor Yellow "INFO: Use rootfs2vhd in Microsoft/hcsshim to make a rootfs VHD if needed"
+ 
     if ($Install) {
         if (Test-Path "C:\Program Files\Linux Containers\initrd.img" -PathType Leaf) {
             copy "C:\Program Files\Linux Containers\initrd.img" "C:\Program Files\Linux Containers\initrd.old"
