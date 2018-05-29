@@ -68,7 +68,7 @@ func allocateLinuxResources(coi *createOptionsInternal, resources *Resources) er
 			if err != nil {
 				return fmt.Errorf("adding plan9 mount %+v: %s", mount, err)
 			}
-			mount.Source = guestPath
+			coi.Spec.Mounts[i].Source = guestPath
 			resources.Plan9Mounts = append(resources.Plan9Mounts, hostPath)
 		}
 	}
