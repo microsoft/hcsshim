@@ -5,6 +5,7 @@ package prot
 
 import (
 	"encoding/json"
+	"strconv"
 
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
@@ -130,6 +131,62 @@ const (
 	// ComputeSystemNotificationV1 is the notification identifier.
 	ComputeSystemNotificationV1 = 0x30100101
 )
+
+// String returns the string representation of the message identifer.
+func (mi MessageIdentifier) String() string {
+	switch mi {
+	case MiNone:
+		return "None"
+	case ComputeSystemCreateV1:
+		return "ComputeSystemCreateV1"
+	case ComputeSystemStartV1:
+		return "ComputeSystemStartV1"
+	case ComputeSystemShutdownGracefulV1:
+		return "ComputeSystemShutdownGracefulV1"
+	case ComputeSystemShutdownForcedV1:
+		return "ComputeSystemShutdownForcedV1"
+	case ComputeSystemExecuteProcessV1:
+		return "ComputeSystemExecuteProcessV1"
+	case ComputeSystemWaitForProcessV1:
+		return "ComputeSystemWaitForProcessV1"
+	case ComputeSystemSignalProcessV1:
+		return "ComputeSystemSignalProcessV1"
+	case ComputeSystemResizeConsoleV1:
+		return "ComputeSystemResizeConsoleV1"
+	case ComputeSystemGetPropertiesV1:
+		return "ComputeSystemGetPropertiesV1"
+	case ComputeSystemModifySettingsV1:
+		return "ComputeSystemModifySettingsV1"
+	case ComputeSystemNegotiateProtocolV1:
+		return "ComputeSystemNegotiateProtocolV1"
+	case ComputeSystemResponseCreateV1:
+		return "ComputeSystemResponseCreateV1"
+	case ComputeSystemResponseStartV1:
+		return "ComputeSystemResponseStartV1"
+	case ComputeSystemResponseShutdownGracefulV1:
+		return "ComputeSystemResponseShutdownGracefulV1"
+	case ComputeSystemResponseShutdownForcedV1:
+		return "ComputeSystemResponseShutdownForcedV1"
+	case ComputeSystemResponseExecuteProcessV1:
+		return "ComputeSystemResponseExecuteProcessV1"
+	case ComputeSystemResponseWaitForProcessV1:
+		return "ComputeSystemResponseWaitForProcessV1"
+	case ComputeSystemResponseSignalProcessV1:
+		return "ComputeSystemResponseSignalProcessV1"
+	case ComputeSystemResponseResizeConsoleV1:
+		return "ComputeSystemResponseResizeConsoleV1"
+	case ComputeSystemResponseGetPropertiesV1:
+		return "ComputeSystemResponseGetPropertiesV1"
+	case ComputeSystemResponseModifySettingsV1:
+		return "ComputeSystemResponseModifySettingsV1"
+	case ComputeSystemResponseNegotiateProtocolV1:
+		return "ComputeSystemResponseNegotiateProtocolV1"
+	case ComputeSystemNotificationV1:
+		return "ComputeSystemNotificationV1"
+	default:
+		return strconv.FormatUint(uint64(mi), 10)
+	}
+}
 
 // SequenceID is used to correlate requests and responses.
 type SequenceID uint64

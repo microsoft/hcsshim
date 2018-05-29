@@ -34,7 +34,7 @@ var capabilities = prot.GcsCapabilities{
 // UnknownMessage represents the default handler logic for an unmatched request
 // type sent from the bridge.
 func UnknownMessage(w ResponseWriter, r *Request) {
-	w.Error("", gcserr.WrapHresult(errors.Errorf("bridge: function not supported, header type: 0x%x", r.Header.Type), gcserr.HrVmcomputeUnknownMessage))
+	w.Error("", gcserr.WrapHresult(errors.Errorf("bridge: function not supported, header type: %v", r.Header.Type), gcserr.HrVmcomputeUnknownMessage))
 }
 
 // UnknownMessageHandler creates a default HandlerFunc out of the
@@ -82,7 +82,7 @@ func (mux *Mux) Handle(id prot.MessageIdentifier, ver prot.ProtocolVersion, hand
 	}
 
 	if _, ok := mux.m[id][ver]; ok {
-		logrus.Infof("bridge: overwriting bridge handler for type: 0x%x, version: %v", id, ver)
+		logrus.Infof("bridge: overwriting bridge handler for type: %v, version: %v", id, ver)
 	}
 
 	mux.m[id][ver] = handler
@@ -306,7 +306,7 @@ func (b *Bridge) ListenAndServe() (conerr error) {
 				}
 				b.Handler.ServeMsg(wr, r)
 				if !wr.respWritten {
-					logrus.Errorf("bridge: request: ID: 0x%x, Type: %d failed to write a response.", r.Header.ID, r.Header.Type)
+					logrus.Errorf("bridge: request: ID: 0x%x, Type: %v failed to write a response.", r.Header.ID, r.Header.Type)
 				}
 			}(req)
 		}
