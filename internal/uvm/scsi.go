@@ -65,6 +65,10 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int, error)
 	}
 	logrus.Debugf("uvm::AddSCSI id:%s hostPath:%s uvmPath:%s", uvm.id, hostPath, uvmPath)
 
+	if uvm.scsiControllerCount == 0 {
+		return -1, -1, fmt.Errorf("cannot AddSCSI as the utility VM has no SCSI controller configured")
+	}
+
 	var err error
 	controller, lun, err = uvm.allocateSCSI(hostPath)
 	if err != nil {
@@ -125,6 +129,10 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int, error)
 func (uvm *UtilityVM) RemoveSCSI(hostPath string) error {
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
+
+	if uvm.scsiControllerCount == 0 {
+		return fmt.Errorf("cannot AddSCSI as the utility VM has no SCSI controller configured")
+	}
 
 	// Make sure is actually attached
 	controller, lun, uvmPath, err := uvm.findSCSIAttachment(hostPath)

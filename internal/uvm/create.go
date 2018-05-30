@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
@@ -12,8 +13,20 @@ import (
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
+	"github.com/Microsoft/hcsshim/internal/wclayer"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
+)
+
+type PreferredRootFSType int
+
+const (
+	PreferredRootFSTypeDefault = 0
+	PreferredRootFSTypeInitRd  = 1
+	PreferredRootFSTypeVHD     = 2
+
+	initrdFile = "initrd.img"
+	vhdFile    = "rootfs.vhd"
 )
 
 // UVMOptions are the set of options passed to Create() to create a utility vm.
@@ -28,12 +41,15 @@ type UVMOptions struct {
 	LayerFolders []string // Set of folders for base layers and scratch. Ordered from top most read-only through base read-only layer, followed by scratch
 
 	// LCOW specific parameters
-	KirdPath              string // Folder in which kernel and initrd reside. Defaults to \Program Files\Linux Containers
-	KernelFile            string // Filename under KirdPath for the kernel. Defaults to bootx64.efi
-	InitrdFile            string // Filename under KirdPath for the initrd image. Defaults to initrd.img
-	KernelBootOptions     string // Additional boot options for the kernel
-	EnableGraphicsConsole bool   // If true, enable a graphics console for the utility VM
-	ConsolePipe           string // The named pipe path to use for the serial console.
+	BootFilesPath         string              // Folder in which kernel and root file system reside. Defaults to \Program Files\Linux Containers
+	KernelFile            string              // Filename under BootFilesPath for the kernel. Defaults to bootx64.efi
+	RootFSFile            string              // Filename under BootFilesPath for the UVMs root file system. Defaults are initrd.img or rootfs.vhd.
+	PreferredRootFSType   PreferredRootFSType // Controls searching for the RootFSFile if omitted.
+	KernelBootOptions     string              // Additional boot options for the kernel
+	EnableGraphicsConsole bool                // If true, enable a graphics console for the utility VM
+	ConsolePipe           string              // The named pipe path to use for the serial console.  eg \\.\pipe\vmpipe
+	VPMemDeviceCount      int32               // Number of VPMem devices. Limit at 128. If booting UVM from VHD, device 0 is taken.
+	NoSCSI                bool                // The utility VM does not have any SCSI controllers. Useful in some service VM scenarios.
 }
 
 // Create creates an HCS compute system representing a utility VM.
@@ -73,6 +89,8 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 
 	attachments := make(map[string]schema2.VirtualMachinesResourcesStorageAttachmentV2)
 	scsi := make(map[string]schema2.VirtualMachinesResourcesStorageScsiV2)
+	uvm.scsiControllerCount = 1
+	var actualRootFSType PreferredRootFSType
 
 	if uvm.operatingSystem == "windows" {
 		if len(opts.LayerFolders) < 2 {
@@ -85,6 +103,11 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 			return nil, fmt.Errorf("failed to locate utility VM folder from layer folders: %s", err)
 		}
 
+		// TODO: BUGBUG Remove this. @jhowardmsft
+		//       It should be the responsiblity of the caller to do the creation and population.
+		//       - Update runhcs too (vm.go).
+		//       - Remove comment in function header
+		//       - Update tests that rely on this current behaviour.
 		// Create the RW scratch in the top-most layer folder, creating the folder if it doesn't already exist.
 		scratchFolder := opts.LayerFolders[len(opts.LayerFolders)-1]
 		logrus.Debugf("uvm::createWCOW scratch folder: %s", scratchFolder)
@@ -109,25 +132,82 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 			Path: filepath.Join(scratchFolder, "sandbox.vhdx"),
 			Type: "VirtualDisk",
 		}
+		scsi["0"] = schema2.VirtualMachinesResourcesStorageScsiV2{Attachments: attachments}
+		uvm.scsiLocations[0][0].hostPath = attachments["0"].Path
 	} else {
-		if opts.KirdPath == "" {
-			opts.KirdPath = filepath.Join(os.Getenv("ProgramFiles"), "Linux Containers")
+		if opts.VPMemDeviceCount > MaxVPMEM || opts.VPMemDeviceCount < 0 {
+			return nil, fmt.Errorf("vpmem device count must between 0 and %d", MaxVPMEM)
+		}
+		if opts.VPMemDeviceCount == 0 {
+			opts.VPMemDeviceCount = MaxVPMEM
+		}
+		uvm.vpmemMax = opts.VPMemDeviceCount
+
+		scsi["0"] = schema2.VirtualMachinesResourcesStorageScsiV2{Attachments: attachments}
+		if opts.NoSCSI {
+			uvm.scsiControllerCount = 0
+			scsi = nil
+		}
+		if opts.BootFilesPath == "" {
+			opts.BootFilesPath = filepath.Join(os.Getenv("ProgramFiles"), "Linux Containers")
 		}
 		if opts.KernelFile == "" {
 			opts.KernelFile = "bootx64.efi"
 		}
-		if opts.InitrdFile == "" {
-			opts.InitrdFile = "initrd.img"
+		if _, err := os.Stat(filepath.Join(opts.BootFilesPath, opts.KernelFile)); os.IsNotExist(err) {
+			return nil, fmt.Errorf("kernel '%s' not found", filepath.Join(opts.BootFilesPath, opts.KernelFile))
 		}
-		if _, err := os.Stat(filepath.Join(opts.KirdPath, opts.KernelFile)); os.IsNotExist(err) {
-			return nil, fmt.Errorf("kernel '%s' not found", filepath.Join(opts.KirdPath, opts.KernelFile))
-		}
-		if _, err := os.Stat(filepath.Join(opts.KirdPath, opts.InitrdFile)); os.IsNotExist(err) {
-			return nil, fmt.Errorf("initrd '%s' not found", filepath.Join(opts.KirdPath, opts.InitrdFile))
+
+		if opts.RootFSFile == "" {
+			initRdExists := false
+			if _, err := os.Stat(filepath.Join(opts.BootFilesPath, initrdFile)); err == nil {
+				initRdExists = true
+			}
+
+			vhdExists := false
+			if _, err := os.Stat(filepath.Join(opts.BootFilesPath, vhdFile)); err == nil {
+				vhdExists = true
+			}
+
+			if !initRdExists && !vhdExists {
+				return nil, fmt.Errorf("no root file system files found under %s", opts.BootFilesPath)
+			}
+
+			switch opts.PreferredRootFSType {
+
+			case PreferredRootFSTypeDefault, PreferredRootFSTypeInitRd:
+				if initRdExists {
+					opts.RootFSFile = initrdFile
+					actualRootFSType = PreferredRootFSTypeInitRd
+				} else if vhdExists {
+					opts.RootFSFile = vhdFile
+					actualRootFSType = PreferredRootFSTypeVHD
+				}
+
+			case PreferredRootFSTypeVHD:
+				if vhdExists {
+					opts.RootFSFile = vhdFile
+					actualRootFSType = PreferredRootFSTypeVHD
+				} else if initRdExists {
+					opts.RootFSFile = initrdFile
+					actualRootFSType = PreferredRootFSTypeInitRd
+				}
+			}
+
+		} else {
+			if _, err := os.Stat(filepath.Join(opts.BootFilesPath, opts.RootFSFile)); os.IsNotExist(err) {
+				return nil, fmt.Errorf("%s not found under %s", opts.RootFSFile, opts.BootFilesPath)
+			}
+
+			switch opts.PreferredRootFSType {
+			case PreferredRootFSTypeDefault, PreferredRootFSTypeInitRd:
+				actualRootFSType = PreferredRootFSTypeInitRd
+			default:
+				actualRootFSType = PreferredRootFSTypeVHD
+			}
+
 		}
 	}
-
-	scsi["0"] = schema2.VirtualMachinesResourcesStorageScsiV2{Attachments: attachments}
 
 	memory := int32(1024)
 	processors := int32(2)
@@ -170,25 +250,43 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 	}
 
 	if uvm.operatingSystem == "windows" {
-		hcsDocument.VirtualMachine.Chipset.UEFI.BootThis = &schema2.VirtualMachinesResourcesUefiBootEntryV2{
-			DevicePath: `\EFI\Microsoft\Boot\bootmgfw.efi`,
-			DiskNumber: 0,
-			UefiDevice: "VMBFS",
-		}
+		hcsDocument.VirtualMachine.Chipset.UEFI.BootThis = &schema2.VirtualMachinesResourcesUefiBootEntryV2{DevicePath: `\EFI\Microsoft\Boot\bootmgfw.efi`}
 		hcsDocument.VirtualMachine.ComputeTopology.Memory.DirectFileMappingMB = 1024 // Sensible default, but could be a tuning parameter somewhere
 		hcsDocument.VirtualMachine.Devices.VirtualSMBShares[0].Path = filepath.Join(uvmFolder, `UtilityVM\Files`)
 		hcsDocument.VirtualMachine.Devices.VirtualSMBShares[0].Flags = schema2.VsmbFlagReadOnly | schema2.VsmbFlagPseudoOplocks | schema2.VsmbFlagTakeBackupPrivilege | schema2.VsmbFlagCacheIO | schema2.VsmbFlagShareRead
 	} else {
 		hcsDocument.VirtualMachine.Devices.GuestInterface.BridgeFlags = 3 // TODO: Contants
+		hcsDocument.VirtualMachine.Devices.VirtualSMBShares[0].Path = opts.BootFilesPath
+		hcsDocument.VirtualMachine.Devices.VirtualSMBShares[0].Flags = schema2.VsmbFlagReadOnly | schema2.VsmbFlagShareRead | schema2.VsmbFlagCacheIO | schema2.VsmbFlagTakeBackupPrivilege // 0x17 (23 dec)
+		hcsDocument.VirtualMachine.Devices.VPMem = &schema2.VirtualMachinesResourcesStorageVpmemControllerV2{MaximumCount: opts.VPMemDeviceCount}
 		hcsDocument.VirtualMachine.Chipset.UEFI.BootThis = &schema2.VirtualMachinesResourcesUefiBootEntryV2{
 			DevicePath:   `\` + opts.KernelFile,
-			DiskNumber:   0,
-			UefiDevice:   "VMBFS",
-			OptionalData: `initrd=\` + opts.InitrdFile,
+			OptionalData: `initrd=\` + opts.RootFSFile,
 		}
-		hcsDocument.VirtualMachine.Devices.VirtualSMBShares[0].Path = opts.KirdPath
-		hcsDocument.VirtualMachine.Devices.VirtualSMBShares[0].Flags = schema2.VsmbFlagReadOnly | schema2.VsmbFlagShareRead | schema2.VsmbFlagCacheIO | schema2.VsmbFlagTakeBackupPrivilege // 0x17 (23 dec)
-		hcsDocument.VirtualMachine.Devices.VPMem = &schema2.VirtualMachinesResourcesStorageVpmemControllerV2{MaximumCount: MaxVPMEM}
+
+		// Support for VPMem VHD(X) booting rather than initrd..
+		if actualRootFSType == PreferredRootFSTypeVHD {
+			hcsDocument.VirtualMachine.Chipset.UEFI.BootThis.OptionalData = `root=/dev/pmem0 init=/init`
+			hcsDocument.VirtualMachine.Devices.VPMem.Devices = make(map[string]schema2.VirtualMachinesResourcesStorageVpmemDeviceV2)
+			imageFormat := "VHD1"
+			if strings.ToLower(filepath.Ext(opts.RootFSFile)) == "vhdx" {
+				imageFormat = "VHD2"
+			}
+			hcsDocument.VirtualMachine.Devices.VPMem.Devices["0"] = schema2.VirtualMachinesResourcesStorageVpmemDeviceV2{
+				HostPath:    filepath.Join(opts.BootFilesPath, opts.RootFSFile),
+				ReadOnly:    true,
+				ImageFormat: imageFormat,
+			}
+			if err := wclayer.GrantVmAccess(uvm.id, filepath.Join(opts.BootFilesPath, opts.RootFSFile)); err != nil {
+				return nil, fmt.Errorf("faied to grantvmaccess to %s: %s", filepath.Join(opts.BootFilesPath, opts.RootFSFile), err)
+			}
+			// Add to our internal structure
+			uvm.vpmemDevices[0] = vpmemInfo{
+				hostPath: opts.RootFSFile,
+				uvmPath:  "/",
+				refCount: 1,
+			}
+		}
 
 		if opts.ConsolePipe != "" {
 			hcsDocument.VirtualMachine.Chipset.UEFI.BootThis.OptionalData += " console=ttyS0,115200"
@@ -206,6 +304,8 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 			hcsDocument.VirtualMachine.Chipset.UEFI.BootThis.OptionalData = hcsDocument.VirtualMachine.Chipset.UEFI.BootThis.OptionalData + fmt.Sprintf(" %s", opts.KernelBootOptions)
 		}
 	}
+	hcsDocument.VirtualMachine.Chipset.UEFI.BootThis.DiskNumber = 0
+	hcsDocument.VirtualMachine.Chipset.UEFI.BootThis.UefiDevice = "VMBFS"
 
 	fullDoc, err := mergemaps.MergeJSON(hcsDocument, ([]byte)(opts.AdditionHCSDocumentJSON))
 	if err != nil {
@@ -219,9 +319,6 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 	}
 
 	uvm.hcsSystem = hcsSystem
-	if uvm.operatingSystem == "windows" {
-		uvm.scsiLocations[0][0].hostPath = attachments["0"].Path
-	}
 	return uvm, nil
 }
 

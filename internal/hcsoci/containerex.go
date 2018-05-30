@@ -48,12 +48,6 @@ type CreateOptions struct {
 	// must a) not tear down the utility VM on failure (or pause in some way) and b) is responsible for
 	// performing the ReleaseResources() call themselves.
 	DoNotReleaseResourcesOnFailure bool
-
-	// These are v1 LCOW backwards-compatibility only.
-	KirdPath          string // Folder in which kernel and initrd reside. Defaults to \Program Files\Linux Containers
-	KernelFile        string // Filename under KirdPath for the kernel. Defaults to bootx64.efi
-	InitrdFile        string // Filename under KirdPath for the initrd image. Defaults to initrd.img
-	KernelBootOptions string // Additional boot options for the kernel
 }
 
 // createOptionsInternal is the set of user-supplied create options, but includes internal
@@ -65,12 +59,6 @@ type createOptionsInternal struct {
 	actualID               string                       // Identifier for the container
 	actualOwner            string                       // Owner for the container
 	actualNetworkNamespace string
-
-	// These are v1 LCOW backwards-compatibility only
-	actualKirdPath   string // LCOW kernel/initrd path
-	actualKernelFile string // LCOW kernel file
-	actualInitrdFile string // LCOW initrd file
-
 }
 
 // CreateContainer creates a container. It can cope with a  wide variety of
@@ -83,12 +71,9 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 	logrus.Debugf("hcsshim::CreateContainer options: %+v", createOptions)
 
 	coi := &createOptionsInternal{
-		CreateOptions:    createOptions,
-		actualID:         createOptions.ID,
-		actualOwner:      createOptions.Owner,
-		actualKirdPath:   createOptions.KirdPath,
-		actualKernelFile: createOptions.KernelFile,
-		actualInitrdFile: createOptions.InitrdFile,
+		CreateOptions: createOptions,
+		actualID:      createOptions.ID,
+		actualOwner:   createOptions.Owner,
 	}
 
 	// Defaults if omitted by caller.
@@ -97,15 +82,6 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 	}
 	if coi.actualOwner == "" {
 		coi.actualOwner = filepath.Base(os.Args[0])
-	}
-	if coi.actualKirdPath == "" {
-		coi.actualKirdPath = filepath.Join(os.Getenv("ProgramFiles"), "Linux Containers")
-	}
-	if coi.actualKernelFile == "" {
-		coi.actualKernelFile = "bootx64.efi"
-	}
-	if coi.actualInitrdFile == "" {
-		coi.actualInitrdFile = "initrd.img"
 	}
 
 	if coi.Spec == nil {
@@ -173,7 +149,6 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 			if coi.Spec.Windows == nil {
 				return nil, resources, fmt.Errorf("containerSpec 'Windows' field must container layer folders for a Linux container")
 			}
-			//return createLCOWv1(coi)
 			return nil, resources, errors.New("LCOW v1 not supported")
 		}
 
