@@ -551,30 +551,41 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 			request.V2Request.RequestType = MreqtAdd
 		}
 
+		// Some of the RS4 messages were on the wrong JSON entry. Prefer
+		// settings here but support hosted settings until those fixes come in.
+		var settingsToUse json.RawMessage
+		if len(v2RawSettings) > 0 {
+			settingsToUse = v2RawSettings
+		} else if len(v2RawHostedSettings) > 0 {
+			settingsToUse = v2RawHostedSettings
+		} else {
+			return nil, errors.New("failed to unmarhsal Settings or HostedSettings for V2 modify request")
+		}
+
 		// Fill in the ResourceType-specific fields.
 		switch request.V2Request.ResourceType {
 		case MrtMappedVirtualDisk:
 			mvd := &MappedVirtualDiskV2{}
-			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, mvd); err != nil {
+			if err := commonutils.UnmarshalJSONWithHresult(settingsToUse, mvd); err != nil {
 				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDiskV2")
 			}
 			request.V2Request.Settings = mvd
 		case MrtMappedDirectory:
 			md := &MappedDirectoryV2{}
-			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, md); err != nil {
+			if err := commonutils.UnmarshalJSONWithHresult(settingsToUse, md); err != nil {
 				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedDirectoryV2")
 			}
 			request.V2Request.Settings = md
 		case MrtVPMemDevice:
 			vpd := &MappedVPMemDeviceV2{}
 			// TODO: RS5 bug fix to move this to .Settings like all other modify requests.
-			if err := commonutils.UnmarshalJSONWithHresult(v2RawHostedSettings, vpd); err != nil {
+			if err := commonutils.UnmarshalJSONWithHresult(settingsToUse, vpd); err != nil {
 				return nil, errors.Wrap(err, "failed to unmarshal hosted settings as MappedVPMemDeviceV2")
 			}
 			request.V2Request.Settings = vpd
 		case MrtCombinedLayers:
 			cl := &CombinedLayersV2{}
-			if err := commonutils.UnmarshalJSONWithHresult(v2RawHostedSettings, cl); err != nil {
+			if err := commonutils.UnmarshalJSONWithHresult(settingsToUse, cl); err != nil {
 				return nil, errors.Wrap(err, "failed to unmarshal settings as CombinedLayersV2")
 			}
 			request.V2Request.Settings = cl
