@@ -84,7 +84,8 @@ func mountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 				vsmbAdded = append(vsmbAdded, layerPath)
 			}
 		} else {
-			_, uvmPath, err := uvm.AddVPMEM(filepath.Join(layerPath, "layer.vhd"), "", true) // ContainerPath calculated. Will be /tmp/vN/
+			uvmPath := ""
+			_, uvmPath, err = uvm.AddVPMEM(filepath.Join(layerPath, "layer.vhd"), "", true) // ContainerPath calculated. Will be /tmp/vN/
 			if err == nil {
 				vpmemAdded = append(vpmemAdded,
 					vpMemEntry{
