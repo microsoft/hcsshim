@@ -44,6 +44,7 @@ type Process interface {
 	Pid() int
 	Delete() error
 	Tty() *stdio.TtyRelay
+	PipeRelay() *stdio.PipeRelay
 }
 
 // Container is an interface to manipulate container state.

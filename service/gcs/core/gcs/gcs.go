@@ -555,7 +555,7 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *st
 		}
 		defer console.Close()
 
-		relay = stdioSet.NewTtyRelay(master)
+		relay = stdio.NewTtyRelay(stdioSet, master)
 		cmd.SetStdin(console)
 		cmd.SetStdout(console)
 		cmd.SetStderr(console)
@@ -712,7 +712,7 @@ func (c *gcsCore) WaitContainer(id string) (func() int, error) {
 // sync.
 //
 // On error the pid was not a valid pid and no channels will be returned.
-func (c *gcsCore) WaitProcess(pid int) (chan int, chan bool, error) {
+func (c *gcsCore) WaitProcess(pid int) (<-chan int, chan<- bool, error) {
 	c.processCacheMutex.Lock()
 	entry, ok := c.processCache[pid]
 	if !ok {

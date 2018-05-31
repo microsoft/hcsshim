@@ -21,5 +21,5 @@ type Core interface {
 	ModifySettings(id string, request *prot.ResourceModificationRequestResponse) error
 	ResizeConsole(pid int, height, width uint16) error
 	WaitContainer(id string) (func() int, error)
-	WaitProcess(pid int) (chan int, chan bool, error)
+	WaitProcess(pid int) (<-chan int, chan<- bool, error)
 }

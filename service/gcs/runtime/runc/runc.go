@@ -36,8 +36,6 @@ type runcRuntime struct {
 
 var _ runtime.Runtime = &runcRuntime{}
 
-var IsV2 = false
-
 type container struct {
 	r    *runcRuntime
 	id   string
@@ -56,6 +54,10 @@ func (c *container) Tty() *stdio.TtyRelay {
 	return c.init.ttyRelay
 }
 
+func (c *container) PipeRelay() *stdio.PipeRelay {
+	return c.init.pipeRelay
+}
+
 type process struct {
 	c         *container
 	pid       int
@@ -69,6 +71,10 @@ func (p *process) Pid() int {
 
 func (p *process) Tty() *stdio.TtyRelay {
 	return p.ttyRelay
+}
+
+func (p *process) PipeRelay() *stdio.PipeRelay {
+	return p.pipeRelay
 }
 
 // NewRuntime instantiates a new runcRuntime struct.
@@ -114,9 +120,6 @@ func (r *runcRuntime) CreateContainer(id string, bundlePath string, stdioSet *st
 // Start unblocks the container's init process created by the call to
 // CreateContainer.
 func (c *container) Start() error {
-	if IsV2 && c.init.pipeRelay != nil {
-		c.init.pipeRelay.Start()
-	}
 	logPath := c.r.getLogPath(c.id)
 	cmd := exec.Command("runc", "--log", logPath, "start", c.id)
 	out, err := cmd.CombinedOutput()
@@ -515,7 +518,9 @@ func (c *container) runExecCommand(processDef oci.Process, stdioSet *stdio.Conne
 
 // startProcess performs the operations necessary to start a container process
 // and properly handle its stdio. This function is used by both CreateContainer
-// and ExecProcess.
+// and ExecProcess. For V2 container creation stdioSet will be nil, in this case
+// it is expected that the caller starts the relay previous to calling Start on
+// the container.
 func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioSet *stdio.ConnectionSet, initialArgs ...string) (p *process, err error) {
 	args := initialArgs
 
@@ -547,7 +552,7 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioS
 
 	var pipeRelay *stdio.PipeRelay
 	if !hasTerminal {
-		pipeRelay, err = stdioSet.NewPipeRelay()
+		pipeRelay, err = stdio.NewPipeRelay(stdioSet)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to create a pipe relay connection set for container %s", c.id)
 		}
@@ -585,7 +590,7 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioS
 				master.Close()
 			}
 		}()
-		ttyRelay = stdioSet.NewTtyRelay(master)
+		ttyRelay = stdio.NewTtyRelay(stdioSet, master)
 	}
 
 	// Rename the process's directory to its pid.
@@ -597,10 +602,10 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioS
 		return nil, err
 	}
 
-	if ttyRelay != nil {
+	if ttyRelay != nil && stdioSet != nil {
 		ttyRelay.Start()
 	}
-	if pipeRelay != nil && !IsV2 {
+	if pipeRelay != nil && stdioSet != nil {
 		pipeRelay.Start()
 	}
 	return &process{c: c, pid: pid, ttyRelay: ttyRelay, pipeRelay: pipeRelay}, nil

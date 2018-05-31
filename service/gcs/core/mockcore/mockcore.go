@@ -204,7 +204,7 @@ func (c *MockCore) WaitContainer(id string) (func() int, error) {
 }
 
 // WaitProcess captures its arguments and returns a nil error.
-func (c *MockCore) WaitProcess(pid int) (chan int, chan bool, error) {
+func (c *MockCore) WaitProcess(pid int) (<-chan int, chan<- bool, error) {
 	c.LastWaitProcess = WaitProcessCall{
 		Pid: pid,
 	}
