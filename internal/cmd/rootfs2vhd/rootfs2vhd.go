@@ -88,6 +88,7 @@ func rootfs2vhd(c *cli.Context) {
 		os.Exit(-1)
 	}
 
+	// TODO The right thing to do here is modify go-winio to be able to create this type of disk.
 	fmt.Printf("- Creating %s...\n", destFile)
 	if _, err := exec.Command(`powershell`, `-command`, fmt.Sprintf(`New-VHD %s -SizeBytes %dMB -fixed`, destFile, c.Int("s"))).Output(); err != nil {
 		fmt.Fprintf(os.Stderr, string(err.(*exec.ExitError).Stderr))

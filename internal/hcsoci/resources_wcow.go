@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
-	hcsschemav2 "github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
@@ -19,6 +20,7 @@ func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) 
 	scratchFolder := coi.Spec.Windows.LayerFolders[len(coi.Spec.Windows.LayerFolders)-1]
 	logrus.Debugf("hcsshim::allocateWindowsResources scratch folder: %s", scratchFolder)
 
+	// TODO: Remove this code for auto-creation. Make the caller responsible.
 	// Create the directory for the RW scratch layer if it doesn't exist
 	if _, err := os.Stat(scratchFolder); os.IsNotExist(err) {
 		logrus.Debugf("hcsshim::allocateWindowsResources container scratch folder does not exist so creating: %s ", scratchFolder)
@@ -36,45 +38,46 @@ func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) 
 		}
 	}
 
-	// Do we need to auto-mount on behalf of the end user?
 	if coi.Spec.Root == nil {
 		coi.Spec.Root = &specs.Root{}
 	}
 	if coi.Spec.Root.Path == "" && (coi.HostingSystem != nil || coi.Spec.Windows.HyperV == nil) {
-		logrus.Debugln("hcsshim::allocateWindowsResources Auto-mounting storage")
+		logrus.Debugln("hcsshim::allocateWindowsResources mounting storage")
 		mcl, err := mountContainerLayers(coi.Spec.Windows.LayerFolders, resources.GuestRoot, coi.HostingSystem)
 		if err != nil {
-			return fmt.Errorf("failed to auto-mount container storage: %s", err)
+			return fmt.Errorf("failed to mount container storage: %s", err)
 		}
 		if coi.HostingSystem == nil {
 			coi.Spec.Root.Path = mcl.(string) // Argon v1 or v2
 		} else {
-			coi.Spec.Root.Path = mcl.(hcsschemav2.CombinedLayersV2).ContainerRootPath // v2 Xenon WCOW
+			coi.Spec.Root.Path = mcl.(schema2.CombinedLayersV2).ContainerRootPath // v2 Xenon WCOW
 		}
 		resources.Layers = coi.Spec.Windows.LayerFolders
 	}
 
 	// Auto-mount the mounts. There's only something to do for v2 xenons. In argons and v1 xenon,
 	// it's done by the HCS directly.
+	//
+	// TODO. This is still completely wrong... For a follow-up PR @jhowardmsft
 	for _, mount := range coi.Spec.Mounts {
 		if mount.Destination == "" || mount.Source == "" {
 			return fmt.Errorf("invalid OCI spec - a mount must have both source and a destination: %+v", mount)
 		}
+		if mount.Type != "" {
+			return fmt.Errorf("invalid OCI spec - Type '%s' must not be set", mount.Type)
+		}
 
 		if coi.HostingSystem != nil {
 			logrus.Debugf("hcsshim::allocateWindowsResources Hot-adding VSMB share for OCI mount %+v", mount)
-			// Hot-add the VSMB shares to the utility VM
-			// TODO: What are the right flags. Asked swernli
-			//
-			// Answer: If readonly set, the following. If read-write, no flags.
-			//			::Schema::VirtualMachines::Resources::Storage::VSmbShareFlags::ReadOnly |
-			//::Schema::VirtualMachines::Resources::Storage::VSmbShareFlags::CacheIO |
-			//::Schema::VirtualMachines::Resources::Storage::VSmbShareFlags::ShareRead |
-			//::Schema::VirtualMachines::Resources::Storage::VSmbShareFlags::ForceLevelIIOplocks;
-			//
+			var flags int32 = schema2.VsmbFlagNone
+			for _, o := range mount.Options {
+				if strings.ToLower(o) == "ro" {
+					flags = schema2.VsmbFlagReadOnly | schema2.VsmbFlagCacheIO | schema2.VsmbFlagShareRead | schema2.VsmbFlagForceLevelIIOplocks
+					break
+				}
+			}
 
-			// TODO: Read-only
-			err := coi.HostingSystem.AddVSMB(mount.Source, "", hcsschemav2.VsmbFlagReadOnly|hcsschemav2.VsmbFlagPseudoOplocks|hcsschemav2.VsmbFlagTakeBackupPrivilege|hcsschemav2.VsmbFlagCacheIO|hcsschemav2.VsmbFlagShareRead)
+			err := coi.HostingSystem.AddVSMB(mount.Source, "", flags)
 			if err != nil {
 				return fmt.Errorf("failed to add VSMB share to utility VM for mount %+v: %s", mount, err)
 			}

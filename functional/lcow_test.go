@@ -23,40 +23,38 @@ import (
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-// TestLCOWUVMNoSCSISingleVPMem starts an LCOW utility VM without a SCSI controller and
-// only a single VPMem device. Uses initRD
-func TestLCOWUVMNoSCSISingleVPMem(t *testing.T) {
+// TestLCOWUVMNoSCSISingleVPMemInitrd starts an LCOW utility VM without a SCSI controller and
+// only a single VPMem device. Uses initrd.
+func TestLCOWUVMNoSCSISingleVPMemInitrd(t *testing.T) {
+	t.Skip("foo")
+	scsiCount := 0
 	opts := &uvm.UVMOptions{
-		OperatingSystem:  "linux",
-		ID:               "uvm",
-		VPMemDeviceCount: 1,
-		NoSCSI:           true,
+		OperatingSystem:     "linux",
+		ID:                  "uvm",
+		VPMemDeviceCount:    1,
+		SCSIControllerCount: &scsiCount,
 	}
-	lcowUVM, err := uvm.Create(opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := lcowUVM.Start(); err != nil {
-		t.Fatal(err)
-	}
-	defer lcowUVM.Terminate()
-	out, err := exec.Command(`hcsdiag`, `exec`, `-uvm`, lcowUVM.ID(), `dmesg`).Output()
-	if err != nil {
-		t.Fatal(string(err.(*exec.ExitError).Stderr))
-	}
-	t.Log(string(out))
+	testLCOWUVMNoSCSISingleVPMem(t, opts, `Command line: initrd=\initrd.img`)
 }
 
 // TestLCOWUVMNoSCSISingleVPMemVHD starts an LCOW utility VM without a SCSI controller and
 // only a single VPMem device. Uses VPMEM VHD
 func TestLCOWUVMNoSCSISingleVPMemVHD(t *testing.T) {
+	scsiCount := 0
+	var prfst uvm.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
 	opts := &uvm.UVMOptions{
 		OperatingSystem:     "linux",
 		ID:                  "uvm",
 		VPMemDeviceCount:    1,
-		NoSCSI:              true,
-		PreferredRootFSType: uvm.PreferredRootFSTypeVHD,
+		SCSIControllerCount: &scsiCount,
+		PreferredRootFSType: &prfst,
+		ConsolePipe:         `\\.\pipe\vmpipe`,
 	}
+	testLCOWUVMNoSCSISingleVPMem(t, opts, `Command line: root=/dev/pmem0 init=/init`)
+}
+
+func testLCOWUVMNoSCSISingleVPMem(t *testing.T, opts *uvm.UVMOptions, expected string) {
+	testutilities.RequiresBuild(t, osversion.RS5)
 	lcowUVM, err := uvm.Create(opts)
 	if err != nil {
 		t.Fatal(err)
@@ -64,12 +62,15 @@ func TestLCOWUVMNoSCSISingleVPMemVHD(t *testing.T) {
 	if err := lcowUVM.Start(); err != nil {
 		t.Fatal(err)
 	}
+	time.Sleep(2 * time.Minute)
 	defer lcowUVM.Terminate()
-	out, err := exec.Command(`hcsdiag`, `exec`, `-uvm`, lcowUVM.ID(), `dmesg`).Output()
+	out, err := exec.Command(`hcsdiag`, `exec`, `-uvm`, lcowUVM.ID(), `dmesg`).Output() // TODO: Move the CreateProcess.
 	if err != nil {
 		t.Fatal(string(err.(*exec.ExitError).Stderr))
 	}
-	t.Log(string(out))
+	if !strings.Contains(string(out), expected) {
+		t.Fatalf("Expected dmesg output to have %q: %s", expected, string(out))
+	}
 }
 
 // TestLCOWTimeUVMStartVHD starts/terminates a utility VM booting from VPMem-
@@ -93,7 +94,7 @@ func testLCOWTimeUVMStart(t *testing.T, rfsType uvm.PreferredRootFSType) {
 			OperatingSystem:     "linux",
 			ID:                  "uvm",
 			VPMemDeviceCount:    32,
-			PreferredRootFSType: rfsType,
+			PreferredRootFSType: &rfsType,
 		}
 		lcowUVM, err := uvm.Create(opts)
 		if err != nil {

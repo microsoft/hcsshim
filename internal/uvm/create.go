@@ -14,6 +14,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
+	"github.com/Microsoft/hcsshim/internal/wcow"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
@@ -21,9 +22,8 @@ import (
 type PreferredRootFSType int
 
 const (
-	PreferredRootFSTypeDefault = 0
-	PreferredRootFSTypeInitRd  = 1
-	PreferredRootFSTypeVHD     = 2
+	PreferredRootFSTypeInitRd = 0
+	PreferredRootFSTypeVHD    = 1
 
 	initrdFile = "initrd.img"
 	vhdFile    = "rootfs.vhd"
@@ -41,15 +41,15 @@ type UVMOptions struct {
 	LayerFolders []string // Set of folders for base layers and scratch. Ordered from top most read-only through base read-only layer, followed by scratch
 
 	// LCOW specific parameters
-	BootFilesPath         string              // Folder in which kernel and root file system reside. Defaults to \Program Files\Linux Containers
-	KernelFile            string              // Filename under BootFilesPath for the kernel. Defaults to bootx64.efi
-	RootFSFile            string              // Filename under BootFilesPath for the UVMs root file system. Defaults are initrd.img or rootfs.vhd.
-	PreferredRootFSType   PreferredRootFSType // Controls searching for the RootFSFile if omitted.
-	KernelBootOptions     string              // Additional boot options for the kernel
-	EnableGraphicsConsole bool                // If true, enable a graphics console for the utility VM
-	ConsolePipe           string              // The named pipe path to use for the serial console.  eg \\.\pipe\vmpipe
-	VPMemDeviceCount      int32               // Number of VPMem devices. Limit at 128. If booting UVM from VHD, device 0 is taken.
-	NoSCSI                bool                // The utility VM does not have any SCSI controllers. Useful in some service VM scenarios.
+	BootFilesPath         string               // Folder in which kernel and root file system reside. Defaults to \Program Files\Linux Containers
+	KernelFile            string               // Filename under BootFilesPath for the kernel. Defaults to bootx64.efi
+	RootFSFile            string               // Filename under BootFilesPath for the UVMs root file system. Defaults are initrd.img or rootfs.vhd.
+	PreferredRootFSType   *PreferredRootFSType // Controls searching for the RootFSFile.
+	KernelBootOptions     string               // Additional boot options for the kernel
+	EnableGraphicsConsole bool                 // If true, enable a graphics console for the utility VM
+	ConsolePipe           string               // The named pipe path to use for the serial console.  eg \\.\pipe\vmpipe
+	VPMemDeviceCount      int32                // Number of VPMem devices. Limit at 128. If booting UVM from VHD, device 0 is taken.
+	SCSIControllerCount   *int                 // The number of SCSI controllers. Defaults to 1 if omitted. Currently we only support 0 or 1.
 }
 
 // Create creates an HCS compute system representing a utility VM.
@@ -80,6 +80,7 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 	}
 
 	// Defaults if omitted by caller.
+	// TODO: Change this. Don't auto generate ID if omitted. Avoids the chicken-and-egg problem
 	if uvm.id == "" {
 		uvm.id = guid.New().String()
 	}
@@ -90,7 +91,7 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 	attachments := make(map[string]schema2.VirtualMachinesResourcesStorageAttachmentV2)
 	scsi := make(map[string]schema2.VirtualMachinesResourcesStorageScsiV2)
 	uvm.scsiControllerCount = 1
-	var actualRootFSType PreferredRootFSType
+	var actualRootFSType PreferredRootFSType = PreferredRootFSTypeInitRd // TODO Should we switch to VPMem/VHD as default?
 
 	if uvm.operatingSystem == "windows" {
 		if len(opts.LayerFolders) < 2 {
@@ -122,7 +123,7 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 
 		// Create sandbox.vhdx in the scratch folder based on the template, granting the correct permissions to it
 		if _, err := os.Stat(filepath.Join(scratchFolder, `sandbox.vhdx`)); os.IsNotExist(err) {
-			if err := CreateWCOWScratch(uvmFolder, scratchFolder, uvm.id); err != nil {
+			if err := wcow.CreateUVMScratch(uvmFolder, scratchFolder, uvm.id); err != nil {
 				return nil, fmt.Errorf("failed to create scratch: %s", err)
 			}
 		}
@@ -144,9 +145,15 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 		uvm.vpmemMax = opts.VPMemDeviceCount
 
 		scsi["0"] = schema2.VirtualMachinesResourcesStorageScsiV2{Attachments: attachments}
-		if opts.NoSCSI {
-			uvm.scsiControllerCount = 0
-			scsi = nil
+		uvm.scsiControllerCount = 1
+		if opts.SCSIControllerCount != nil {
+			if *opts.SCSIControllerCount < 0 || *opts.SCSIControllerCount > 1 {
+				return nil, fmt.Errorf("SCSI controller count must be 0 or 1") // Future extension here for up to 4
+			}
+			uvm.scsiControllerCount = *opts.SCSIControllerCount
+			if uvm.scsiControllerCount == 0 {
+				scsi = nil
+			}
 		}
 		if opts.BootFilesPath == "" {
 			opts.BootFilesPath = filepath.Join(os.Getenv("ProgramFiles"), "Linux Containers")
@@ -159,53 +166,38 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 		}
 
 		if opts.RootFSFile == "" {
-			initRdExists := false
-			if _, err := os.Stat(filepath.Join(opts.BootFilesPath, initrdFile)); err == nil {
-				initRdExists = true
-			}
-
-			vhdExists := false
-			if _, err := os.Stat(filepath.Join(opts.BootFilesPath, vhdFile)); err == nil {
-				vhdExists = true
-			}
-
-			if !initRdExists && !vhdExists {
-				return nil, fmt.Errorf("no root file system files found under %s", opts.BootFilesPath)
-			}
-
-			switch opts.PreferredRootFSType {
-
-			case PreferredRootFSTypeDefault, PreferredRootFSTypeInitRd:
-				if initRdExists {
-					opts.RootFSFile = initrdFile
-					actualRootFSType = PreferredRootFSTypeInitRd
-				} else if vhdExists {
-					opts.RootFSFile = vhdFile
-					actualRootFSType = PreferredRootFSTypeVHD
+			if opts.PreferredRootFSType != nil {
+				actualRootFSType = *opts.PreferredRootFSType
+				if actualRootFSType != PreferredRootFSTypeInitRd && actualRootFSType != PreferredRootFSTypeVHD {
+					return nil, fmt.Errorf("invalid PreferredRootFSType")
 				}
+			}
 
+			switch actualRootFSType {
+			case PreferredRootFSTypeInitRd:
+				if _, err := os.Stat(filepath.Join(opts.BootFilesPath, initrdFile)); os.IsNotExist(err) {
+					return nil, fmt.Errorf("initrd not found")
+				}
+				opts.RootFSFile = initrdFile
 			case PreferredRootFSTypeVHD:
-				if vhdExists {
-					opts.RootFSFile = vhdFile
-					actualRootFSType = PreferredRootFSTypeVHD
-				} else if initRdExists {
-					opts.RootFSFile = initrdFile
-					actualRootFSType = PreferredRootFSTypeInitRd
+				if _, err := os.Stat(filepath.Join(opts.BootFilesPath, vhdFile)); os.IsNotExist(err) {
+					return nil, fmt.Errorf("rootfs.vhd not found")
 				}
+				opts.RootFSFile = vhdFile
 			}
-
 		} else {
+			// Determine the root FS type by the extension of the explicitly supplied RootFSFile
 			if _, err := os.Stat(filepath.Join(opts.BootFilesPath, opts.RootFSFile)); os.IsNotExist(err) {
 				return nil, fmt.Errorf("%s not found under %s", opts.RootFSFile, opts.BootFilesPath)
 			}
-
-			switch opts.PreferredRootFSType {
-			case PreferredRootFSTypeDefault, PreferredRootFSTypeInitRd:
+			switch strings.ToLower(filepath.Ext(opts.RootFSFile)) {
+			case "vhd", "vhdx":
+				actualRootFSType = PreferredRootFSTypeVHD
+			case "img":
 				actualRootFSType = PreferredRootFSTypeInitRd
 			default:
-				actualRootFSType = PreferredRootFSTypeVHD
+				return nil, fmt.Errorf("unsupported filename extension for RootFSFile")
 			}
-
 		}
 	}
 
@@ -270,7 +262,7 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 			hcsDocument.VirtualMachine.Devices.VPMem.Devices = make(map[string]schema2.VirtualMachinesResourcesStorageVpmemDeviceV2)
 			imageFormat := "VHD1"
 			if strings.ToLower(filepath.Ext(opts.RootFSFile)) == "vhdx" {
-				imageFormat = "VHD2"
+				imageFormat = "Default" // Yeah, this is weird, but true.
 			}
 			hcsDocument.VirtualMachine.Devices.VPMem.Devices["0"] = schema2.VirtualMachinesResourcesStorageVpmemDeviceV2{
 				HostPath:    filepath.Join(opts.BootFilesPath, opts.RootFSFile),

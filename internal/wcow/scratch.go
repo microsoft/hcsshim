@@ -1,4 +1,4 @@
-package uvm
+package wcow
 
 import (
 	"os"
@@ -9,14 +9,12 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// TODO: This needs to move somewhere else.... CreateScratch for lcow is now in a separate package
-
-// CreateWCOWScratch is a helper to create a scratch for a Windows utility VM
+// CreateUVMScratch is a helper to create a scratch for a Windows utility VM
 // with permissions to the specified VM ID in a specified directory
-func CreateWCOWScratch(imagePath, destDirectory, vmID string) error {
+func CreateUVMScratch(imagePath, destDirectory, vmID string) error {
 	sourceScratch := filepath.Join(imagePath, `UtilityVM\SystemTemplate.vhdx`)
 	targetScratch := filepath.Join(destDirectory, "sandbox.vhdx")
-	logrus.Debugf("uvm::CreateWCOWScratch %s from %s", targetScratch, sourceScratch)
+	logrus.Debugf("uvm::CreateUVMScratch %s from %s", targetScratch, sourceScratch)
 	if err := copyfile.CopyFile(sourceScratch, targetScratch, true); err != nil {
 		return err
 	}
