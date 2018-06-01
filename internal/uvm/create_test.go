@@ -27,17 +27,6 @@ func TestCreateBadKirdPath(t *testing.T) {
 	}
 }
 
-// This is functional
-//func TestCreateLCOW(t *testing.T) {
-//	opts := &UVMOptions{
-//		OperatingSystem: "linux",
-//	}
-//	_, err := Create(opts)
-//	if err != nil {
-//		t.Fatal(err)
-//	}
-//}
-
 func TestCreateWCOWBadLayerFolders(t *testing.T) {
 	opts := &UVMOptions{
 		OperatingSystem: "windows",
