@@ -5,12 +5,12 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// CreateSandboxLayer creates and populates new read-write layer for use by a container.
+// CreateScratchLayer creates and populates new read-write layer for use by a container.
 // This requires both the id of the direct parent layer, as well as the full list
 // of paths to all parent layers up to the base (and including the direct parent
 // whose id was provided).
-func CreateSandboxLayer(path string, parentLayerPaths []string) error {
-	title := "hcsshim::CreateSandboxLayer "
+func CreateScratchLayer(path string, parentLayerPaths []string) error {
+	title := "hcsshim::CreateScratchLayer "
 	logrus.Debugf(title+"path %s", path)
 
 	// Generate layer descriptors

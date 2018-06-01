@@ -23,12 +23,12 @@ type vpMemEntry struct {
 const upperPath = "upper"
 
 // mountContainerLayers is a helper for clients to hide all the complexity of layer mounting
-// Layer folder are in order: base, [rolayer1..rolayern,] sandbox
+// Layer folder are in order: base, [rolayer1..rolayern,] scratch
 //
 // v1/v2: Argon WCOW: Returns the mount path on the host as a volume GUID.
 // v1:    Xenon WCOW: Done internally in HCS, so no point calling doing anything here.
 // v2:    Xenon WCOW: Returns a CombinedLayersV2 structure where ContainerRootPath is a folder
-//                    inside the utility VM which is a GUID mapping of the sandbox folder. Each
+//                    inside the utility VM which is a GUID mapping of the scratch folder. Each
 //                    of the layers are the VSMB locations where the read-only layers are mounted.
 //
 func mountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.UtilityVM) (interface{}, error) {
@@ -36,7 +36,7 @@ func mountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 
 	if uvm == nil {
 		if len(layerFolders) < 2 {
-			return nil, fmt.Errorf("need at least two layers - base and sandbox")
+			return nil, fmt.Errorf("need at least two layers - base and scratch")
 		}
 		path := layerFolders[len(layerFolders)-1]
 		rest := layerFolders[:len(layerFolders)-1]
@@ -100,11 +100,11 @@ func mountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 		}
 	}
 
-	// Add the sandbox at an unused SCSI location. The container path inside the
+	// Add the scratch at an unused SCSI location. The container path inside the
 	// utility VM will be C:\<ID>.
 	hostPath := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
 
-	// On Linux, we need to grant access to the sandbox
+	// On Linux, we need to grant access to the scratch
 	if uvm.OS() == "linux" {
 		if err := wclayer.GrantVmAccess(uvm.ID(), hostPath); err != nil {
 			cleanupOnMountFailure(uvm, vsmbAdded, vpmemAdded, attachedSCSIHostPath)
@@ -231,14 +231,14 @@ func unmountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Ut
 
 	// V2 Xenon
 
-	// Base+Sandbox as a minimum. This is different to v1 which only requires the sandbox
+	// Base+Scratch as a minimum. This is different to v1 which only requires the scratch
 	if len(layerFolders) < 2 {
 		return fmt.Errorf("at least two layers are required for unmount")
 	}
 
 	var retError error
 
-	// Unload the storage filter followed by the SCSI sandbox
+	// Unload the storage filter followed by the SCSI scratch
 	if (op & unmountOperationSCSI) == unmountOperationSCSI {
 		containerRootPath := ospath.Join(uvm.OS(), guestRoot, upperPath)
 		logrus.Debugf("hcsshim::unmountContainerLayers CombinedLayers %s", containerRootPath)
@@ -251,11 +251,11 @@ func unmountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Ut
 			logrus.Errorf(err.Error())
 		}
 
-		// Hot remove the sandbox from the SCSI controller
-		hostSandboxFile := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
-		logrus.Debugf("hcsshim::unmountContainerLayers SCSI %s %s", containerRootPath, hostSandboxFile)
-		if err := uvm.RemoveSCSI(hostSandboxFile); err != nil {
-			e := fmt.Errorf("failed to remove SCSI %s: %s", hostSandboxFile, err)
+		// Hot remove the scratch from the SCSI controller
+		hostScratchFile := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
+		logrus.Debugf("hcsshim::unmountContainerLayers SCSI %s %s", containerRootPath, hostScratchFile)
+		if err := uvm.RemoveSCSI(hostScratchFile); err != nil {
+			e := fmt.Errorf("failed to remove SCSI %s: %s", hostScratchFile, err)
 			logrus.Debugln(e)
 			if retError == nil {
 				retError = e
