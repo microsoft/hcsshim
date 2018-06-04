@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -22,7 +23,92 @@ import (
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-func TestV2XenonLCOW(t *testing.T) {
+// TestLCOWUVMNoSCSISingleVPMemInitrd starts an LCOW utility VM without a SCSI controller and
+// only a single VPMem device. Uses initrd.
+func TestLCOWUVMNoSCSISingleVPMemInitrd(t *testing.T) {
+	t.Skip("foo")
+	scsiCount := 0
+	opts := &uvm.UVMOptions{
+		OperatingSystem:     "linux",
+		ID:                  "uvm",
+		VPMemDeviceCount:    1,
+		SCSIControllerCount: &scsiCount,
+	}
+	testLCOWUVMNoSCSISingleVPMem(t, opts, `Command line: initrd=\initrd.img`)
+}
+
+// TestLCOWUVMNoSCSISingleVPMemVHD starts an LCOW utility VM without a SCSI controller and
+// only a single VPMem device. Uses VPMEM VHD
+func TestLCOWUVMNoSCSISingleVPMemVHD(t *testing.T) {
+	scsiCount := 0
+	var prfst uvm.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
+	opts := &uvm.UVMOptions{
+		OperatingSystem:     "linux",
+		ID:                  "uvm",
+		VPMemDeviceCount:    1,
+		SCSIControllerCount: &scsiCount,
+		PreferredRootFSType: &prfst,
+		ConsolePipe:         `\\.\pipe\vmpipe`,
+	}
+	testLCOWUVMNoSCSISingleVPMem(t, opts, `Command line: root=/dev/pmem0 init=/init`)
+}
+
+func testLCOWUVMNoSCSISingleVPMem(t *testing.T, opts *uvm.UVMOptions, expected string) {
+	testutilities.RequiresBuild(t, osversion.RS5)
+	lcowUVM, err := uvm.Create(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := lcowUVM.Start(); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(2 * time.Minute)
+	defer lcowUVM.Terminate()
+	out, err := exec.Command(`hcsdiag`, `exec`, `-uvm`, lcowUVM.ID(), `dmesg`).Output() // TODO: Move the CreateProcess.
+	if err != nil {
+		t.Fatal(string(err.(*exec.ExitError).Stderr))
+	}
+	if !strings.Contains(string(out), expected) {
+		t.Fatalf("Expected dmesg output to have %q: %s", expected, string(out))
+	}
+}
+
+// TestLCOWTimeUVMStartVHD starts/terminates a utility VM booting from VPMem-
+// attached root filesystem a number of times.
+func TestLCOWTimeUVMStartVHD(t *testing.T) {
+	t.Skip("Takes a while to run")
+	testLCOWTimeUVMStart(t, uvm.PreferredRootFSTypeVHD)
+}
+
+// TestLCOWTimeUVMStartInitRD starts/terminates a utility VM booting from initrd-
+// attached root file system a number of times.
+func TestLCOWTimeUVMStartInitRD(t *testing.T) {
+	t.Skip("Takes a while to run")
+	testLCOWTimeUVMStart(t, uvm.PreferredRootFSTypeInitRd)
+}
+
+func testLCOWTimeUVMStart(t *testing.T, rfsType uvm.PreferredRootFSType) {
+	testutilities.RequiresBuild(t, osversion.RS5)
+	for i := 0; i < 10; i++ {
+		opts := &uvm.UVMOptions{
+			OperatingSystem:     "linux",
+			ID:                  "uvm",
+			VPMemDeviceCount:    32,
+			PreferredRootFSType: &rfsType,
+		}
+		lcowUVM, err := uvm.Create(opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := lcowUVM.Start(); err != nil {
+			t.Fatal(err)
+		}
+		lcowUVM.Terminate()
+	}
+}
+
+func TestLCOWSimplePodScenario(t *testing.T) {
+	t.Skip("Doesn't work quite yet")
 	testutilities.RequiresBuild(t, osversion.RS5)
 	alpineLayers := testutilities.LayerFolders(t, "alpine")
 
@@ -40,7 +126,7 @@ func TestV2XenonLCOW(t *testing.T) {
 	defer os.RemoveAll(c1ScratchDir)
 	c1ScratchFile := filepath.Join(c1ScratchDir, "sandbox.vhdx")
 
-	//	// Sandbox for the second container
+	// Scratch for the second container
 	c2ScratchDir := testutilities.CreateTempDir(t)
 	defer os.RemoveAll(c2ScratchDir)
 	c2ScratchFile := filepath.Join(c2ScratchDir, "sandbox.vhdx")

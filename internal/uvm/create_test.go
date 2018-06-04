@@ -16,10 +16,10 @@ func TestCreateBadOS(t *testing.T) {
 	}
 }
 
-func TestCreateBadKirdPath(t *testing.T) {
+func TestCreateBadBootFilesPath(t *testing.T) {
 	opts := &UVMOptions{
 		OperatingSystem: "linux",
-		KirdPath:        `c:\does\not\exist\I\hope`,
+		BootFilesPath:   `c:\does\not\exist\I\hope`,
 	}
 	_, err := Create(opts)
 	if err == nil || (err != nil && err.Error() != `kernel 'c:\does\not\exist\I\hope\bootx64.efi' not found`) {

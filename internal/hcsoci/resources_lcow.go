@@ -22,10 +22,10 @@ func allocateLinuxResources(coi *createOptionsInternal, resources *Resources) er
 		coi.Spec.Root = &specs.Root{}
 	}
 	if coi.Spec.Root.Path == "" {
-		logrus.Debugln("hcsshim::allocateLinuxResources Auto-mounting storage")
+		logrus.Debugln("hcsshim::allocateLinuxResources mounting storage")
 		mcl, err := mountContainerLayers(coi.Spec.Windows.LayerFolders, resources.GuestRoot, coi.HostingSystem)
 		if err != nil {
-			return fmt.Errorf("failed to auto-mount container storage: %s", err)
+			return fmt.Errorf("failed to mount container storage: %s", err)
 		}
 		if coi.HostingSystem == nil {
 			coi.Spec.Root.Path = mcl.(string) // Argon v1 or v2
@@ -55,9 +55,12 @@ func allocateLinuxResources(coi *createOptionsInternal, resources *Resources) er
 		if mount.Destination == "" || mount.Source == "" {
 			return fmt.Errorf("invalid OCI spec - a mount must have both source and a destination: %+v", mount)
 		}
+		if mount.Type != "" {
+			return fmt.Errorf("invalid OCI spec - Type '%s' must not be set", mount.Type)
+		}
 
 		if coi.HostingSystem != nil {
-			logrus.Debugf("hcsshim::allocateLinuxResources Hot-adding VPMEM share for OCI mount %+v", mount)
+			logrus.Debugf("hcsshim::allocateLinuxResources Hot-adding Plan9 for OCI mount %+v", mount)
 
 			hostPath := mount.Source
 			guestPath := path.Join(resources.GuestRoot, mountPathPrefix+strconv.Itoa(i))

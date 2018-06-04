@@ -70,9 +70,11 @@ type UtilityVM struct {
 
 	// VPMEM devices that are mapped into a Linux UVM. These are used for read-only layers.
 	vpmemDevices [MaxVPMEM]vpmemInfo // Limited by ACPI size.
+	vpmemMax     int32               // Actual number of VPMem devices
 
 	// SCSI devices that are mapped into a Windows or Linux utility VM
-	scsiLocations [4][64]scsiInfo // Hyper-V supports 4 controllers, 64 slots per controller. Limited to 1 controller for now though.
+	scsiLocations       [4][64]scsiInfo // Hyper-V supports 4 controllers, 64 slots per controller. Limited to 1 controller for now though.
+	scsiControllerCount int             // Number of SCSI controllers in the utility VM
 
 	// Plan9 are directories mapped into a Linux utility VM
 	plan9Shares  map[string]*plan9Info
