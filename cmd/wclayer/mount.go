@@ -13,8 +13,8 @@ import (
 
 var mountCommand = cli.Command{
 	Name:      "mount",
-	Usage:     "mounts a sandbox",
-	ArgsUsage: "<sandbox path>",
+	Usage:     "mounts a scratch",
+	ArgsUsage: "<scratch path>",
 	Flags: []cli.Flag{
 		cli.StringSliceFlag{
 			Name:  "layer, l",
@@ -66,7 +66,7 @@ var mountCommand = cli.Command{
 
 var unmountCommand = cli.Command{
 	Name:      "unmount",
-	Usage:     "unmounts a sandbox",
+	Usage:     "unmounts a scratch",
 	ArgsUsage: "<layer path>",
 	Before:    appargs.Validate(appargs.NonEmptyString),
 	Action: func(context *cli.Context) (err error) {

@@ -11,7 +11,7 @@ import (
 )
 
 //                    | WCOW | LCOW
-// Container sandbox  | SCSI | SCSI
+// Container scratch  | SCSI | SCSI
 // Scratch space      | ---- | SCSI   // For file system utilities. /tmp/scratch
 // Read-Only Layer    | VSMB | VPMEM
 // Mapped Directory   | VSMB | PLAN9

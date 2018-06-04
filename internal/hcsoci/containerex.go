@@ -27,20 +27,11 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const (
-// HCSOPTION_ constants are string values which can be added in the RuntimeOptions of a call to CreateContainer.
-//HCSOPTION_WCOW_V2_UVM_MEMORY_OVERHEAD = "hcs.wcow.v2.uvm.additional.memory" // WCOW: v2 schema MB of memory to add to WCOW UVM when calculating resources. Defaults to 256MB
-//HCSOPTION_LCOW_GLOBALMODE     = "lcow.globalmode"     // LCOW: Utility VM lifetime. Presence of this causes global mode which is insecure, but more efficient. Default is non-global
-//HCSOPTION_LCOW_SANDBOXSIZE_GB = "lcow.sandboxsize.gb" // LCOW: Size of sandbox in GB
-//HCSOPTION_LCOW_TIMEOUT = "lcow.timeout" // LCOW: Timeout (seconds) waiting for utility VM operations to complete.
-
-)
-
 // CreateOptions are the set of fields used to call CreateContainer().
 // Note: In the spec, the LayerFolders must be arranged in the same way in which
-// moby configures them: layern, layern-1,...,layer2,layer1,sandbox
+// moby configures them: layern, layern-1,...,layer2,layer1,scratch
 // where layer1 is the base read-only layer, layern is the top-most read-only
-// layer, and sandbox is the RW layer. This is for historical reasons only.
+// layer, and scratch is the RW layer. This is for historical reasons only.
 type CreateOptions struct {
 
 	// Common parameters
@@ -324,7 +315,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 		IgnoreFlushesDuringBoot: coi.Spec.Windows.IgnoreFlushesDuringBoot,
 	}
 
-	// IgnoreFlushesDuringBoot is a property of the SCSI attachment for the sandbox. Set when it's hot-added to the utility VM
+	// IgnoreFlushesDuringBoot is a property of the SCSI attachment for the scratch. Set when it's hot-added to the utility VM
 	// ID is a property on the create call in V2 rather than part of the schema.
 	v2 := &hcsschemav2.ComputeSystemV2{
 		Owner:                             coi.actualOwner,

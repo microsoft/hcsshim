@@ -31,6 +31,6 @@ var createCommand = cli.Command{
 		}
 
 		di := driverInfo
-		return hcsshim.CreateSandboxLayer(di, path, layers[len(layers)-1], layers)
+		return hcsshim.CreateScratchLayer(di, path, layers[len(layers)-1], layers)
 	},
 }

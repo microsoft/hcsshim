@@ -16,21 +16,22 @@ import (
 )
 
 func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) error {
-	sandboxFolder := coi.Spec.Windows.LayerFolders[len(coi.Spec.Windows.LayerFolders)-1]
-	logrus.Debugf("hcsshim::allocateWindowsResources Sandbox folder: %s", sandboxFolder)
+	scratchFolder := coi.Spec.Windows.LayerFolders[len(coi.Spec.Windows.LayerFolders)-1]
+	logrus.Debugf("hcsshim::allocateWindowsResources scratch folder: %s", scratchFolder)
 
-	// Create the directory for the RW sandbox layer if it doesn't exist
-	if _, err := os.Stat(sandboxFolder); os.IsNotExist(err) {
-		logrus.Debugf("hcsshim::allocateWindowsResources container sandbox folder does not exist so creating: %s ", sandboxFolder)
-		if err := os.MkdirAll(sandboxFolder, 0777); err != nil {
-			return fmt.Errorf("failed to auto-create container sandbox folder %s: %s", sandboxFolder, err)
+	// Create the directory for the RW scratch layer if it doesn't exist
+	if _, err := os.Stat(scratchFolder); os.IsNotExist(err) {
+		logrus.Debugf("hcsshim::allocateWindowsResources container scratch folder does not exist so creating: %s ", scratchFolder)
+		if err := os.MkdirAll(scratchFolder, 0777); err != nil {
+			return fmt.Errorf("failed to auto-create container scratch folder %s: %s", scratchFolder, err)
 		}
 	}
 
-	// Create sandbox.vhdx if it doesn't exist in the sandbox folder
-	if _, err := os.Stat(filepath.Join(sandboxFolder, "sandbox.vhdx")); os.IsNotExist(err) {
-		logrus.Debugf("hcsshim::allocateWindowsResources container sandbox.vhdx does not exist so creating in %s ", sandboxFolder)
-		if err := wclayer.CreateSandboxLayer(sandboxFolder, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1]); err != nil {
+	// Create sandbox.vhdx if it doesn't exist in the scratch folder. It's called sandbox.vhdx
+	// rather than scratch.vhdx as in the v1 schema, it's hard-coded in HCS.
+	if _, err := os.Stat(filepath.Join(scratchFolder, "sandbox.vhdx")); os.IsNotExist(err) {
+		logrus.Debugf("hcsshim::allocateWindowsResources container sandbox.vhdx does not exist so creating in %s ", scratchFolder)
+		if err := wclayer.CreateScratchLayer(scratchFolder, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1]); err != nil {
 			return fmt.Errorf("failed to CreateSandboxLayer %s", err)
 		}
 	}
