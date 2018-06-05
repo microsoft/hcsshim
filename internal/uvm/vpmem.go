@@ -42,24 +42,23 @@ func (uvm *UtilityVM) findVPMEMDevice(findThisHostPath string) (uint32, string, 
 
 // AddVPMEM adds a VPMEM disk to a utility VM at the next available location.
 //
-// Returns the location(0..255) where the device is attached, and if exposed,
-// the container path which will be /tmp/v<location>/ if no container path
-// is supplied, or the user supplied one if it is.
-func (uvm *UtilityVM) AddVPMEM(hostPath string, uvmPath string, expose bool) (uint32, string, error) {
+// Returns the location(0..MaxVPMEM-1) where the device is attached, and if exposed,
+// the utility VM path which will be /tmp/p<location>//
+func (uvm *UtilityVM) AddVPMEM(hostPath string, expose bool) (uint32, string, error) {
 	if uvm.operatingSystem != "linux" {
 		return 0, "", errNotSupported
 	}
 
-	logrus.Debugf("uvm::AddVPMEM id:%s hostPath:%s containerPath:%s expose:%t", uvm.id, hostPath, uvmPath, expose)
+	logrus.Debugf("uvm::AddVPMEM id:%s hostPath:%s expose:%t", uvm.id, hostPath, expose)
 
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 
 	var deviceNumber uint32
 	var err error
-	currentUVMPath := ""
+	uvmPath := ""
 
-	deviceNumber, currentUVMPath, err = uvm.findVPMEMDevice(hostPath)
+	deviceNumber, uvmPath, err = uvm.findVPMEMDevice(hostPath)
 	if err != nil {
 		// It doesn't exist, so we're going to allocate and hot-add it
 		deviceNumber, err = uvm.allocateVPMEM(hostPath)
@@ -81,16 +80,13 @@ func (uvm *UtilityVM) AddVPMEM(hostPath string, uvmPath string, expose bool) (ui
 			ResourceUri:  fmt.Sprintf("virtualmachine/devices/virtualpmemdevices/%d", deviceNumber),
 		}
 
-		if expose || uvmPath != "" {
-			if uvmPath == "" {
-				uvmPath = fmt.Sprintf("/tmp/v%d", deviceNumber)
-			}
+		if expose {
+			uvmPath = fmt.Sprintf("/tmp/p%d", deviceNumber)
 			modification.HostedSettings = lcowhostedsettings.MappedVPMemDevice{
 				DeviceNumber: deviceNumber,
 				MountPath:    uvmPath,
 			}
 		}
-		currentUVMPath = uvmPath
 
 		if err := uvm.Modify(modification); err != nil {
 			uvm.vpmemDevices[deviceNumber] = vpmemInfo{}
@@ -101,17 +97,15 @@ func (uvm *UtilityVM) AddVPMEM(hostPath string, uvmPath string, expose bool) (ui
 			hostPath: hostPath,
 			refCount: 1,
 			uvmPath:  uvmPath}
-
-		return deviceNumber, uvmPath, nil
 	} else {
 		pmemi := vpmemInfo{
 			hostPath: hostPath,
 			refCount: uvm.vpmemDevices[deviceNumber].refCount + 1,
-			uvmPath:  currentUVMPath}
+			uvmPath:  uvmPath}
 		uvm.vpmemDevices[deviceNumber] = pmemi
 	}
 	logrus.Debugf("hcsshim::AddVPMEM id:%s Success %+v", uvm.id, uvm.vpmemDevices[deviceNumber])
-	return deviceNumber, currentUVMPath, nil
+	return deviceNumber, uvmPath, nil
 
 }
 

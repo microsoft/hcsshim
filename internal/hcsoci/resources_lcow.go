@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path"
 	"strconv"
+	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -23,7 +24,7 @@ func allocateLinuxResources(coi *createOptionsInternal, resources *Resources) er
 	}
 	if coi.Spec.Root.Path == "" {
 		logrus.Debugln("hcsshim::allocateLinuxResources mounting storage")
-		mcl, err := mountContainerLayers(coi.Spec.Windows.LayerFolders, resources.GuestRoot, coi.HostingSystem)
+		mcl, err := mountContainerLayers(coi.Spec.Windows.LayerFolders, resources.containerRootInUVM, coi.HostingSystem)
 		if err != nil {
 			return fmt.Errorf("failed to mount container storage: %s", err)
 		}
@@ -32,20 +33,22 @@ func allocateLinuxResources(coi *createOptionsInternal, resources *Resources) er
 		} else {
 			coi.Spec.Root.Path = mcl.(schema2.CombinedLayersV2).ContainerRootPath // v2 Xenon LCOW
 		}
-		resources.Layers = coi.Spec.Windows.LayerFolders
+		resources.layers = coi.Spec.Windows.LayerFolders
 	} else {
+		// This is the "Plan 9" root filesystem.
+		// TODO: We need a test for this. Ask @jstarks how you can even lay this out on Windows.
 		hostPath := coi.Spec.Root.Path
-		guestPath := path.Join(resources.GuestRoot, rootfsPath)
-		flags := int32(0)
+		uvmPathForContainersFileSystem := path.Join(resources.containerRootInUVM, rootfsPath)
+		var flags int32 = schema2.VPlan9FlagNone
 		if coi.Spec.Root.Readonly {
-			flags |= schema2.VPlan9FlagReadOnly
+			flags = schema2.VPlan9FlagReadOnly
 		}
-		err := coi.HostingSystem.AddPlan9(hostPath, guestPath, flags)
+		err := coi.HostingSystem.AddPlan9(hostPath, uvmPathForContainersFileSystem, flags)
 		if err != nil {
 			return fmt.Errorf("adding plan9 root: %s", err)
 		}
-		coi.Spec.Root.Path = guestPath
-		resources.Plan9Mounts = append(resources.Plan9Mounts, hostPath)
+		coi.Spec.Root.Path = uvmPathForContainersFileSystem
+		resources.plan9Mounts = append(resources.plan9Mounts, hostPath)
 	}
 
 	for i, mount := range coi.Spec.Mounts {
@@ -55,24 +58,26 @@ func allocateLinuxResources(coi *createOptionsInternal, resources *Resources) er
 		if mount.Destination == "" || mount.Source == "" {
 			return fmt.Errorf("invalid OCI spec - a mount must have both source and a destination: %+v", mount)
 		}
-		if mount.Type != "" {
-			return fmt.Errorf("invalid OCI spec - Type '%s' must not be set", mount.Type)
-		}
 
 		if coi.HostingSystem != nil {
 			logrus.Debugf("hcsshim::allocateLinuxResources Hot-adding Plan9 for OCI mount %+v", mount)
 
 			hostPath := mount.Source
-			guestPath := path.Join(resources.GuestRoot, mountPathPrefix+strconv.Itoa(i))
+			uvmPathForShare := path.Join(resources.containerRootInUVM, mountPathPrefix+strconv.Itoa(i))
 
-			// TODO: Read-only
-			var flags int32
-			err := coi.HostingSystem.AddPlan9(hostPath, guestPath, flags)
+			var flags int32 = schema2.VPlan9FlagNone
+			for _, o := range mount.Options {
+				if strings.ToLower(o) == "ro" {
+					flags = schema2.VPlan9FlagReadOnly
+					break
+				}
+			}
+			err := coi.HostingSystem.AddPlan9(hostPath, uvmPathForShare, flags)
 			if err != nil {
 				return fmt.Errorf("adding plan9 mount %+v: %s", mount, err)
 			}
-			coi.Spec.Mounts[i].Source = guestPath
-			resources.Plan9Mounts = append(resources.Plan9Mounts, hostPath)
+			coi.Spec.Mounts[i].Source = uvmPathForShare
+			resources.plan9Mounts = append(resources.plan9Mounts, hostPath)
 		}
 	}
 

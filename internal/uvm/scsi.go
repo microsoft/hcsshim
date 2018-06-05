@@ -10,14 +10,15 @@ import (
 
 // allocateSCSI finds the next available slot on the
 // SCSI controllers associated with a utility VM to use.
-func (uvm *UtilityVM) allocateSCSI(hostPath string) (int, int, error) {
+func (uvm *UtilityVM) allocateSCSI(hostPath string, uvmPath string) (int, int, error) {
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 	for controller, luns := range uvm.scsiLocations {
 		for lun, si := range luns {
 			if si.hostPath == "" {
 				uvm.scsiLocations[controller][lun].hostPath = hostPath
-				logrus.Debugf("uvm::allocateSCSI %d:%d %q", controller, lun, hostPath)
+				uvm.scsiLocations[controller][lun].uvmPath = uvmPath
+				logrus.Debugf("uvm::allocateSCSI %d:%d %q %q", controller, lun, hostPath, uvmPath)
 				return controller, lun, nil
 
 			}
@@ -70,7 +71,7 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int, error)
 	}
 
 	var err error
-	controller, lun, err = uvm.allocateSCSI(hostPath)
+	controller, lun, err = uvm.allocateSCSI(hostPath, uvmPath)
 	if err != nil {
 		return -1, -1, err
 	}

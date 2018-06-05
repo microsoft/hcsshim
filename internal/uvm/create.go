@@ -42,14 +42,15 @@ type UVMOptions struct {
 
 	// LCOW specific parameters
 	BootFilesPath         string               // Folder in which kernel and root file system reside. Defaults to \Program Files\Linux Containers
-	KernelFile            string               // Filename under BootFilesPath for the kernel. Defaults to bootx64.efi
-	RootFSFile            string               // Filename under BootFilesPath for the UVMs root file system. Defaults are initrd.img or rootfs.vhd.
+	KernelFile            string               // Filename under BootFilesPath for the kernel. Defaults to `kernel`
+	RootFSFile            string               // Filename under BootFilesPath for the UVMs root file system. Defaults are `initrd.img` or `rootfs.vhd`.
 	PreferredRootFSType   *PreferredRootFSType // Controls searching for the RootFSFile.
 	KernelBootOptions     string               // Additional boot options for the kernel
 	EnableGraphicsConsole bool                 // If true, enable a graphics console for the utility VM
 	ConsolePipe           string               // The named pipe path to use for the serial console.  eg \\.\pipe\vmpipe
-	VPMemDeviceCount      int32                // Number of VPMem devices. Limit at 128. If booting UVM from VHD, device 0 is taken.
-	SCSIControllerCount   *int                 // The number of SCSI controllers. Defaults to 1 if omitted. Currently we only support 0 or 1.
+	// TODO: Change this to *int32 where nil genuinely means none, not even a controller.
+	VPMemDeviceCount    int32 // Number of VPMem devices. Limit at 128. If booting UVM from VHD, device 0 is taken.
+	SCSIControllerCount *int  // The number of SCSI controllers. Defaults to 1 if omitted. Currently we only support 0 or 1.
 }
 
 // Create creates an HCS compute system representing a utility VM.
@@ -159,7 +160,7 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 			opts.BootFilesPath = filepath.Join(os.Getenv("ProgramFiles"), "Linux Containers")
 		}
 		if opts.KernelFile == "" {
-			opts.KernelFile = "bootx64.efi"
+			opts.KernelFile = "kernel"
 		}
 		if _, err := os.Stat(filepath.Join(opts.BootFilesPath, opts.KernelFile)); os.IsNotExist(err) {
 			return nil, fmt.Errorf("kernel '%s' not found", filepath.Join(opts.BootFilesPath, opts.KernelFile))
@@ -250,6 +251,7 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 		hcsDocument.VirtualMachine.Devices.GuestInterface.BridgeFlags = 3 // TODO: Contants
 		hcsDocument.VirtualMachine.Devices.VirtualSMBShares[0].Path = opts.BootFilesPath
 		hcsDocument.VirtualMachine.Devices.VirtualSMBShares[0].Flags = schema2.VsmbFlagReadOnly | schema2.VsmbFlagShareRead | schema2.VsmbFlagCacheIO | schema2.VsmbFlagTakeBackupPrivilege // 0x17 (23 dec)
+
 		hcsDocument.VirtualMachine.Devices.VPMem = &schema2.VirtualMachinesResourcesStorageVpmemControllerV2{MaximumCount: opts.VPMemDeviceCount}
 		hcsDocument.VirtualMachine.Chipset.UEFI.BootThis = &schema2.VirtualMachinesResourcesUefiBootEntryV2{
 			DevicePath:   `\` + opts.KernelFile,

@@ -41,9 +41,10 @@ func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) 
 	if coi.Spec.Root == nil {
 		coi.Spec.Root = &specs.Root{}
 	}
-	if coi.Spec.Root.Path == "" && (coi.HostingSystem != nil || coi.Spec.Windows.HyperV == nil) {
+
+	if coi.Spec.Root.Path == "" {
 		logrus.Debugln("hcsshim::allocateWindowsResources mounting storage")
-		mcl, err := mountContainerLayers(coi.Spec.Windows.LayerFolders, resources.GuestRoot, coi.HostingSystem)
+		mcl, err := mountContainerLayers(coi.Spec.Windows.LayerFolders, resources.containerRootInUVM, coi.HostingSystem)
 		if err != nil {
 			return fmt.Errorf("failed to mount container storage: %s", err)
 		}
@@ -52,13 +53,12 @@ func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) 
 		} else {
 			coi.Spec.Root.Path = mcl.(schema2.CombinedLayersV2).ContainerRootPath // v2 Xenon WCOW
 		}
-		resources.Layers = coi.Spec.Windows.LayerFolders
+		resources.layers = coi.Spec.Windows.LayerFolders
 	}
 
-	// Auto-mount the mounts. There's only something to do for v2 xenons. In argons and v1 xenon,
-	// it's done by the HCS directly.
-	//
-	// TODO. This is still completely wrong... For a follow-up PR @jhowardmsft
+	// Validate each of the mounts. If this is a V2 Xenon, we have to add them as
+	// VSMB shares to the utility VM. For V1 Xenon and Argons, there's nothing for
+	// us to do as it's done by HCS.
 	for _, mount := range coi.Spec.Mounts {
 		if mount.Destination == "" || mount.Source == "" {
 			return fmt.Errorf("invalid OCI spec - a mount must have both source and a destination: %+v", mount)
@@ -67,7 +67,7 @@ func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) 
 			return fmt.Errorf("invalid OCI spec - Type '%s' must not be set", mount.Type)
 		}
 
-		if coi.HostingSystem != nil {
+		if coi.HostingSystem != nil && coi.actualSchemaVersion.IsV20() {
 			logrus.Debugf("hcsshim::allocateWindowsResources Hot-adding VSMB share for OCI mount %+v", mount)
 			var flags int32 = schema2.VsmbFlagNone
 			for _, o := range mount.Options {
@@ -81,7 +81,7 @@ func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) 
 			if err != nil {
 				return fmt.Errorf("failed to add VSMB share to utility VM for mount %+v: %s", mount, err)
 			}
-			resources.VSMBMounts = append(resources.VSMBMounts, mount.Source)
+			resources.vsmbMounts = append(resources.vsmbMounts, mount.Source)
 		}
 	}
 

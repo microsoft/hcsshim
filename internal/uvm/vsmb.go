@@ -12,14 +12,15 @@ func (share *vsmbShare) GuestPath() string {
 	return `\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\` + share.name
 }
 
-// AddVSMB adds a VSMB share to a utility VM. Each VSMB share is ref-counted and
-// only added if it isn't already.
-func (uvm *UtilityVM) AddVSMB(hostPath string, uvmPath string, flags int32) error {
+// AddVSMB adds a VSMB share to a Windows utility VM. Each VSMB share is ref-counted and
+// only added if it isn't already. This is used for read-only layers, mapped directories
+// to a container, and for mapped pipes.
+func (uvm *UtilityVM) AddVSMB(hostPath string, hostedSettings interface{}, flags int32) error {
 	if uvm.operatingSystem != "windows" {
 		return errNotSupported
 	}
 
-	logrus.Debugf("uvm::AddVSMB %s %s %d id:%s", hostPath, uvmPath, flags, uvm.id)
+	logrus.Debugf("uvm::AddVSMB %s %+v %d id:%s", hostPath, hostedSettings, flags, uvm.id)
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 	if uvm.vsmbShares == nil {
@@ -41,17 +42,12 @@ func (uvm *UtilityVM) AddVSMB(hostPath string, uvmPath string, flags int32) erro
 			ResourceUri: fmt.Sprintf("virtualmachine/devices/virtualsmbshares/" + shareName),
 		}
 
-		// TODO: Hosted settings to support mapped directories on Windows
-		if uvmPath != "" {
-			panic("not yet implemented TODO TODO TODO - hostedSettings for VSMB")
-		}
-
 		if err := uvm.Modify(modification); err != nil {
 			return err
 		}
 		share = &vsmbShare{
-			name:    shareName,
-			uvmPath: uvmPath,
+			name:           shareName,
+			hostedSettings: hostedSettings,
 		}
 		uvm.vsmbShares[hostPath] = share
 	}
@@ -94,10 +90,10 @@ func (uvm *UtilityVM) RemoveVSMB(hostPath string) error {
 	return nil
 }
 
-// GetVSMBGuestPath returns the guest path of a VSMB mount.
-func (uvm *UtilityVM) GetVSMBGuestPath(hostPath string) (string, error) {
+// GetVSMBUvmPath returns the guest path of a VSMB mount.
+func (uvm *UtilityVM) GetVSMBUvmPath(hostPath string) (string, error) {
 	if hostPath == "" {
-		return "", fmt.Errorf("no hostPath passed to GetVSMBShareCounter")
+		return "", fmt.Errorf("no hostPath passed to GetVSMBUvmPath")
 	}
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
@@ -106,6 +102,6 @@ func (uvm *UtilityVM) GetVSMBGuestPath(hostPath string) (string, error) {
 		return "", fmt.Errorf("%s not found as VSMB share in %s", hostPath, uvm.id)
 	}
 	path := share.GuestPath()
-	logrus.Debugf("uvm::GetVSMBGuestPath Success %s id:%s path:%s", hostPath, uvm.id, path)
+	logrus.Debugf("uvm::GetVSMBUvmPath Success %s id:%s path:%s", hostPath, uvm.id, path)
 	return path, nil
 }
