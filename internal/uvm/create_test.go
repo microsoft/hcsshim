@@ -22,7 +22,7 @@ func TestCreateBadBootFilesPath(t *testing.T) {
 		BootFilesPath:   `c:\does\not\exist\I\hope`,
 	}
 	_, err := Create(opts)
-	if err == nil || (err != nil && err.Error() != `kernel 'c:\does\not\exist\I\hope\bootx64.efi' not found`) {
+	if err == nil || (err != nil && err.Error() != `kernel 'c:\does\not\exist\I\hope\kernel' not found`) {
 		t.Fatal(err)
 	}
 }

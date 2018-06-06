@@ -18,9 +18,9 @@ import (
 
 // vsmbShare is an internal structure used for ref-counting VSMB shares mapped to a Windows utility VM.
 type vsmbShare struct {
-	refCount uint32
-	name     string
-	uvmPath  string
+	refCount       uint32
+	name           string
+	hostedSettings interface{}
 }
 
 // scsiInfo is an internal structure used for determining what is mapped to a utility VM.

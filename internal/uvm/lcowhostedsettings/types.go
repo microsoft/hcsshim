@@ -1,6 +1,7 @@
 package lcowhostedsettings
 
 // Defines the schema for hosted settings passed to opengcs
+// TODO: These need omitempties
 
 // SCSI. Scratch space for remote file-system commands, or R/W layer for containers
 type MappedVirtualDisk struct {
@@ -21,5 +22,5 @@ type MappedDirectory struct {
 // Read-only layers over VPMem
 type MappedVPMemDevice struct {
 	DeviceNumber uint32
-	MountPath    string // /tmp/vN
+	MountPath    string // /tmp/pN
 }

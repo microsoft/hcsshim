@@ -11,15 +11,15 @@ func createNetworkNamespace(coi *createOptionsInternal, resources *Resources) er
 		return err
 	}
 	logrus.Infof("created network namespace %s for %s", netID, coi.ID)
-	resources.NetNS = netID
-	resources.CreatedNetNS = true
+	resources.netNS = netID
+	resources.createdNetNS = true
 	for _, endpointID := range coi.Spec.Windows.Network.EndpointList {
 		err = hns.AddNamespaceEndpoint(netID, endpointID)
 		if err != nil {
 			return err
 		}
 		logrus.Infof("added network endpoint %s to namespace %s", endpointID, netID)
-		resources.NetworkEndpoints = append(resources.NetworkEndpoints, endpointID)
+		resources.networkEndpoints = append(resources.networkEndpoints, endpointID)
 	}
 	return nil
 }

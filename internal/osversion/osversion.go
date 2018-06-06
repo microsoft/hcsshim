@@ -30,9 +30,9 @@ type osVersionInfoEx struct {
 	Reserve           byte
 }
 
-// GetOSVersion gets the operating system version on Windows.
+// Get gets the operating system version on Windows.
 // The calling application must be manifested to get the correct version information.
-func GetOSVersion() OSVersion {
+func Get() OSVersion {
 	var err error
 	osv := OSVersion{}
 	osv.Version, err = windows.GetVersion()

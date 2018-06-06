@@ -4,7 +4,6 @@ package functional
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,21 +16,18 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/internal/osversion"
-	"github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-// TestLCOWUVMNoSCSISingleVPMemInitrd starts an LCOW utility VM without a SCSI controller and
-// only a single VPMem device. Uses initrd.
-func TestLCOWUVMNoSCSISingleVPMemInitrd(t *testing.T) {
-	t.Skip("foo")
+// TestLCOWUVMNoSCSINoVPMemInitrd starts an LCOW utility VM without a SCSI controller and
+// no VPMem device. Uses initrd.
+func TestLCOWUVMNoSCSINoVPMemInitrd(t *testing.T) {
 	scsiCount := 0
+	var vpmemCount int32 = 0
 	opts := &uvm.UVMOptions{
 		OperatingSystem:     "linux",
 		ID:                  "uvm",
-		VPMemDeviceCount:    1,
+		VPMemDeviceCount:    &vpmemCount,
 		SCSIControllerCount: &scsiCount,
 	}
 	testLCOWUVMNoSCSISingleVPMem(t, opts, `Command line: initrd=\initrd.img`)
@@ -41,14 +37,15 @@ func TestLCOWUVMNoSCSISingleVPMemInitrd(t *testing.T) {
 // only a single VPMem device. Uses VPMEM VHD
 func TestLCOWUVMNoSCSISingleVPMemVHD(t *testing.T) {
 	scsiCount := 0
+	var vpmemCount int32 = 1
 	var prfst uvm.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
 	opts := &uvm.UVMOptions{
 		OperatingSystem:     "linux",
 		ID:                  "uvm",
-		VPMemDeviceCount:    1,
+		VPMemDeviceCount:    &vpmemCount,
 		SCSIControllerCount: &scsiCount,
 		PreferredRootFSType: &prfst,
-		ConsolePipe:         `\\.\pipe\vmpipe`,
+		//ConsolePipe:         `\\.\pipe\vmpipe`,
 	}
 	testLCOWUVMNoSCSISingleVPMem(t, opts, `Command line: root=/dev/pmem0 init=/init`)
 }
@@ -62,11 +59,11 @@ func testLCOWUVMNoSCSISingleVPMem(t *testing.T, opts *uvm.UVMOptions, expected s
 	if err := lcowUVM.Start(); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(2 * time.Minute)
+	//time.Sleep(2 * time.Minute)
 	defer lcowUVM.Terminate()
 	out, err := exec.Command(`hcsdiag`, `exec`, `-uvm`, lcowUVM.ID(), `dmesg`).Output() // TODO: Move the CreateProcess.
 	if err != nil {
-		t.Fatal(string(err.(*exec.ExitError).Stderr))
+		t.Fatal(string(err.(*exec.ExitError).Stderr)) // Need new initrd from Justin. Current will fasil "Unspecified error" on latest builds
 	}
 	if !strings.Contains(string(out), expected) {
 		t.Fatalf("Expected dmesg output to have %q: %s", expected, string(out))
@@ -89,11 +86,12 @@ func TestLCOWTimeUVMStartInitRD(t *testing.T) {
 
 func testLCOWTimeUVMStart(t *testing.T, rfsType uvm.PreferredRootFSType) {
 	testutilities.RequiresBuild(t, osversion.RS5)
+	var vpmemCount int32 = 32
 	for i := 0; i < 10; i++ {
 		opts := &uvm.UVMOptions{
 			OperatingSystem:     "linux",
 			ID:                  "uvm",
-			VPMemDeviceCount:    32,
+			VPMemDeviceCount:    &vpmemCount,
 			PreferredRootFSType: &rfsType,
 		}
 		lcowUVM, err := uvm.Create(opts)
@@ -108,7 +106,7 @@ func testLCOWTimeUVMStart(t *testing.T, rfsType uvm.PreferredRootFSType) {
 }
 
 func TestLCOWSimplePodScenario(t *testing.T) {
-	t.Skip("Doesn't work quite yet")
+	//t.Skip("Doesn't work quite yet")
 	testutilities.RequiresBuild(t, osversion.RS5)
 	alpineLayers := testutilities.LayerFolders(t, "alpine")
 
@@ -159,8 +157,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	c1Spec := testutilities.GetDefaultLinuxSpec(t)
 	c1Folders := append(alpineLayers, c1ScratchDir)
 	c1Spec.Windows.LayerFolders = c1Folders
-	//c1Spec.Process.Args = []string{"echo", "hello", "lcow", "container", "one"}
-	c1Spec.Process.Args = []string{"sleep", "120"}
+	c1Spec.Process.Args = []string{"echo", "hello", "lcow", "container", "one"}
 	c1Opts := &hcsoci.CreateOptions{
 		Spec:          c1Spec,
 		HostingSystem: lcowUVM,
@@ -189,67 +186,45 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Start them
+	// Start them. In the UVM, they'll be in the created state from runc's perspective after this.eg
+	/// # runc list
+	//ID                                     PID         STATUS      BUNDLE         CREATED                        OWNER
+	//3a724c2b-f389-5c71-0555-ebc6f5379b30   138         running     /run/gcs/c/1   2018-06-04T21:23:39.1253911Z   root
+	//7a8229a0-eb60-b515-55e7-d2dd63ffae75   158         created     /run/gcs/c/2   2018-06-04T21:23:39.4249048Z   root
 	if err := c1hcsSystem.Start(); err != nil {
 		t.Fatal(err)
 	}
+	defer hcsoci.ReleaseResources(c1Resources, lcowUVM, true)
+
 	if err := c2hcsSystem.Start(); err != nil {
 		t.Fatal(err)
 	}
+	defer hcsoci.ReleaseResources(c2Resources, lcowUVM, true)
 
-	// Run the init process defined in the original spec
-	runCommand(t, false, c2hcsSystem, nil, "hello lcow container one")
+	// Start the init process in each container and grab it's stdout comparing to expected
+	runInitProcess(t, c1hcsSystem, "hello lcow container one")
+	runInitProcess(t, c2hcsSystem, "hello lcow container two")
 
-	time.Sleep(3 * time.Minute)
-
-	hcsoci.ReleaseResources(c1Resources, lcowUVM, true)
-	hcsoci.ReleaseResources(c2Resources, lcowUVM, true)
 }
 
-// Helper to launch a process in it. At the
-// point of calling, the container must have been successfully created.
-// TODO Convert to CreateProcessEx using full OCI spec.
-func runCommand(t *testing.T, execProcess bool, hcssystem *hcs.System, ociProcessSpec *specs.Process, expectedOutput string) {
-	if hcssystem == nil {
-		t.Fatalf("hcssystem is nil")
-	}
-	computeSystem, err := hcs.OpenComputeSystem(hcssystem.ID())
+// Helper to run the init process in an LCOW container; verify it exits with exit
+// code 0; verify stderr is empty; check output is as expected.
+func runInitProcess(t *testing.T, s *hcs.System, expected string) {
+	var outB, errB bytes.Buffer
+	p, bc, err := lcow.CreateProcess(&lcow.ProcessOptions{
+		HCSSystem:   s,
+		Stdout:      &outB,
+		Stderr:      &errB,
+		CopyTimeout: 30 * time.Second,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	pc := &schema2.ProcessConfig{SchemaVersion: schemaversion.SchemaV20()}
-	if execProcess {
-		pc.OCIProcess = ociProcessSpec
-	}
-
-	p, err := computeSystem.CreateProcess(pc)
-
-	if err != nil {
-		t.Fatalf("Failed Create Process: %s", err)
-
-	}
 	defer p.Close()
-	if err := p.Wait(); err != nil {
-		t.Fatalf("Failed Wait Process: %s", err)
+	if bc.Err != 0 {
+		t.Fatalf("got %d bytes on stderr: %s", bc.Err, errB.String())
 	}
-	exitCode, err := p.ExitCode()
-	if err != nil {
-		t.Fatalf("Failed to obtain process exit code: %s", err)
-	}
-	fmt.Printf("ExitCode %d\n", exitCode)
-	if exitCode != 0 {
-		t.Fatalf("Non-zero exit code from process (%d)", exitCode)
-	}
-	_, o, _, err := p.Stdio()
-	if err != nil {
-		t.Fatalf("Failed to get Stdio handles for process: %s", err)
-	}
-	buf := new(bytes.Buffer)
-	buf.ReadFrom(o)
-	out := strings.TrimSpace(buf.String())
-	fmt.Printf("Got %s\n", out)
-	if out != expectedOutput {
-		t.Fatalf("Failed to get %q from process: %q", expectedOutput, out)
+	if strings.TrimSpace(outB.String()) != expected {
+		t.Fatalf("got %q (%d) expecting %q", outB.String(), bc.Out, expected)
 	}
 }

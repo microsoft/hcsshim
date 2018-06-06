@@ -15,10 +15,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -145,7 +148,7 @@ func rootfs2vhd(c *cli.Context) {
 	uvmCommand(lcowUVM, []string{"mkdir", "/target"})
 	uvmCommand(lcowUVM, []string{"mount", device, "/target"})
 	uvmCommand(lcowUVM, []string{"rm", "-rf", "/target/lost+found"})
-	uvmCommand(lcowUVM, []string{"sh", "-c", fmt.Sprintf(`cd /target; gzip -dc /fssource/%s | tar x`, filepath.Base(sourceRootFS))})
+	uvmCommand(lcowUVM, []string{"sh", "-c", fmt.Sprintf(`"cd /target; gzip -dc /fssource/%s | tar x"`, filepath.Base(sourceRootFS))})
 	fmt.Println("- Extract complete!")
 	fmt.Printf("\n%s\n", uvmCommand(lcowUVM, []string{"df", "/target"}))
 	possiblePause()
@@ -165,19 +168,38 @@ func rootfs2vhd(c *cli.Context) {
 }
 
 func uvmCommand(lcowUVM *uvm.UtilityVM, args []string) string {
-	args = append([]string{"hcsdiag", "exec", "-uvm", lcowUVM.ID()}, args...)
-	cmd := exec.Command(args[0], args[1:]...)
-	var o, e bytes.Buffer
-	cmd.Stdout = &o
-	cmd.Stderr = &e
-	err := cmd.Run()
+	timeout := 30 * time.Second
+	var outB, errB bytes.Buffer
+	p, _, err := lcow.CreateProcess(&lcow.ProcessOptions{
+		HCSSystem:         lcowUVM.ComputeSystem(),
+		CreateInUtilityVm: true,
+		CopyTimeout:       timeout,
+		Process:           &specs.Process{Args: args},
+		Stdout:            &outB,
+		Stderr:            &errB,
+	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%+v failed:\n%s\n%s)", args, err, e.String())
+		fmt.Fprintf(os.Stderr, "%+v failed:\n%s\n%s)", args, err, errB.String())
 		possiblePause()
 		lcowUVM.Terminate()
 		os.Exit(-1)
 	}
-	return o.String()
+	defer p.Close()
+	p.WaitTimeout(timeout)
+	ec, err := p.ExitCode()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%+v failed to get exit code:\n%s\n%s)", args, err, errB.String())
+		possiblePause()
+		lcowUVM.Terminate()
+		os.Exit(-1)
+	}
+	if ec != 0 {
+		fmt.Fprintf(os.Stderr, "%+v had non-zero exit code:\n%s)", args, errB.String())
+		possiblePause()
+		lcowUVM.Terminate()
+		os.Exit(-1)
+	}
+	return outB.String()
 }
 
 func possiblePause() {

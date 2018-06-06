@@ -8,7 +8,7 @@ import (
 )
 
 func TestDetermineSchemaVersion(t *testing.T) {
-	osv := osversion.GetOSVersion()
+	osv := osversion.Get()
 
 	if osv.Build >= osversion.RS5 {
 		if sv := DetermineSchemaVersion(nil); !sv.IsV10() { // TODO: Toggle this at some point so default is 2.0

@@ -27,10 +27,11 @@ func TarToVhd(lcowUVM *uvm.UtilityVM, targetVHDFile string, reader io.Reader) (i
 	defer outFile.Close()
 	// BUGBUG Delete the file on failure
 
-	tar2vhd, byteCounts, err := lcowUVM.CreateProcess(&uvm.ProcessOptions{
-		Process: &specs.Process{Args: []string{"tar2vhd"}},
-		Stdin:   reader,
-		Stdout:  outFile,
+	tar2vhd, byteCounts, err := CreateProcess(&ProcessOptions{
+		Process:           &specs.Process{Args: []string{"tar2vhd"}},
+		CreateInUtilityVm: true,
+		Stdin:             reader,
+		Stdout:            outFile,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to start tar2vhd for %s: %s", targetVHDFile, err)

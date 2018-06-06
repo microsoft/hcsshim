@@ -31,7 +31,7 @@ func (sv *SchemaVersion) IsSupported() error {
 		return nil
 	}
 	if sv.IsV20() {
-		if osversion.GetOSVersion().Build < osversion.RS5 {
+		if osversion.Get().Build < osversion.RS5 {
 			return fmt.Errorf("unsupported on this Windows build")
 		}
 		return nil
@@ -71,7 +71,7 @@ func (sv *SchemaVersion) String() string {
 // requested option.
 func DetermineSchemaVersion(requestedSV *SchemaVersion) *SchemaVersion {
 	sv := SchemaV10()
-	if osversion.GetOSVersion().Build >= osversion.RS5 {
+	if osversion.Get().Build >= osversion.RS5 {
 		sv = SchemaV10() // TODO: When do we flip this to V2 for RS5? Answer - when functionally complete. Templating. CredSpecs. Networking. LCOW...
 	}
 	if requestedSV != nil {

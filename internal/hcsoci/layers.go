@@ -20,7 +20,7 @@ type vpMemEntry struct {
 	uvmPath  string
 }
 
-const upperPath = "upper"
+const scratchPath = "scratch"
 
 // mountContainerLayers is a helper for clients to hide all the complexity of layer mounting
 // Layer folder are in order: base, [rolayer1..rolayern,] scratch
@@ -85,7 +85,7 @@ func mountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 			}
 		} else {
 			uvmPath := ""
-			_, uvmPath, err = uvm.AddVPMEM(filepath.Join(layerPath, "layer.vhd"), "", true) // ContainerPath calculated. Will be /tmp/vN/
+			_, uvmPath, err = uvm.AddVPMEM(filepath.Join(layerPath, "layer.vhd"), true) // UVM path is calculated. Will be /tmp/vN/
 			if err == nil {
 				vpmemAdded = append(vpmemAdded,
 					vpMemEntry{
@@ -112,33 +112,9 @@ func mountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 		}
 	}
 
-	// TODO: BUGBUG This is really confusing. "containerPath" (which is really
-	// the path inside the utilityVM) for the containers scratch space should be
-	// "scratch", not "upper".
-	//
-	// We currently have
-	//
-	// /run/gcs/c/1/rootfs
-	// /run/gcs/c/1/upper/upper
-	// /run/gcs/c/1/upper/work
-	//
-	// /dev/sda on /tmp/scratch type ext4 (rw,relatime,block_validity,delalloc,barrier,user_xattr,acl)
-	// /dev/pmem0 on /tmp/v0 type ext4 (ro,relatime,block_validity,delalloc,norecovery,barrier,dax,user_xattr,acl)
-	// /dev/sdb on /run/gcs/c/1/upper type ext4 (rw,relatime,block_validity,delalloc,barrier,user_xattr,acl)
-	// overlay on /run/gcs/c/1/rootfs type overlay (rw,relatime,lowerdir=/tmp/v0,upperdir=/run/gcs/c/1/upper/upper,workdir=/run/gcs/c/1/upper/work)
-	//
-	// It SHOULD be (just the amended bits)
-	//
-	// /run/gcs/c/1/scratch/upper
-	// /run/gcs/c/1/scratch/work
-	//
-	// /dev/sdb on /run/gcs/c/1/scratch type ext4 (rw,relatime,block_validity,delalloc,barrier,user_xattr,acl)
-	//                          ^^^^^^^
-	// overlay on /run/gcs/c/1/rootfs type overlay (rw,relatime,lowerdir=/tmp/v0,upperdir=/run/gcs/c/1/scratch/upper,workdir=/run/gcs/c/1/scratch/work)
-	//                                                                                                 ^^^^^^^                            ^^^^^^^
-
-	containerPath := ospath.Join(uvm.OS(), guestRoot, upperPath)
-	_, _, err := uvm.AddSCSI(hostPath, containerPath)
+	// BUGBUG Rename guestRoot better.
+	containerScratchPathInUVM := ospath.Join(uvm.OS(), guestRoot, scratchPath)
+	_, _, err := uvm.AddSCSI(hostPath, containerScratchPathInUVM)
 	if err != nil {
 		cleanupOnMountFailure(uvm, vsmbAdded, vpmemAdded, attachedSCSIHostPath)
 		return nil, err
@@ -154,7 +130,7 @@ func mountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 			return nil, err
 		}
 		hostedSettings := schema2.CombinedLayersV2{
-			ContainerRootPath: containerPath,
+			ContainerRootPath: containerScratchPathInUVM,
 			Layers:            layers,
 		}
 		combinedLayersModification := &schema2.ModifySettingsRequestV2{
@@ -170,6 +146,23 @@ func mountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 		return hostedSettings, nil
 	}
 
+	// This is the LCOW layout inside the utilityVM. NNN is the container "number"
+	// which increments for each container created in a utility VM.
+	//
+	// /run/gcs/c/NNN/config.json
+	// /run/gcs/c/NNN/rootfs
+	// /run/gcs/c/NNN/scratch/upper
+	// /run/gcs/c/NNN/scratch/work
+	//
+	// /dev/sda on /tmp/scratch type ext4 (rw,relatime,block_validity,delalloc,barrier,user_xattr,acl)
+	// /dev/pmem0 on /tmp/v0 type ext4 (ro,relatime,block_validity,delalloc,norecovery,barrier,dax,user_xattr,acl)
+	// /dev/sdb on /run/gcs/c/NNN/scratch type ext4 (rw,relatime,block_validity,delalloc,barrier,user_xattr,acl)
+	// overlay on /run/gcs/c/NNN/rootfs type overlay (rw,relatime,lowerdir=/tmp/v0,upperdir=/run/gcs/c/NNN/scratch/upper,workdir=/run/gcs/c/NNN/scratch/work)
+	//
+	// Where /dev/sda      is the scratch for utility VM itself
+	//       /dev/pmemX    are read-only layers for containers
+	//       /dev/sd(b...) are scratch spaces for each container
+
 	layers := []schema2.ContainersResourcesLayerV2{}
 	for _, vpmem := range vpmemAdded {
 		layers = append(layers, schema2.ContainersResourcesLayerV2{Path: vpmem.uvmPath})
@@ -177,7 +170,7 @@ func mountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 	hostedSettings := schema2.CombinedLayersV2{
 		ContainerRootPath: path.Join(guestRoot, rootfsPath),
 		Layers:            layers,
-		ScratchPath:       containerPath,
+		ScratchPath:       containerScratchPathInUVM,
 	}
 	combinedLayersModification := &schema2.ModifySettingsRequestV2{
 		ResourceType:   schema2.ResourceTypeCombinedLayers,
@@ -240,12 +233,12 @@ func unmountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Ut
 
 	// Unload the storage filter followed by the SCSI scratch
 	if (op & unmountOperationSCSI) == unmountOperationSCSI {
-		containerRootPath := ospath.Join(uvm.OS(), guestRoot, upperPath)
-		logrus.Debugf("hcsshim::unmountContainerLayers CombinedLayers %s", containerRootPath)
+		containerScratchPathInUVM := ospath.Join(uvm.OS(), guestRoot, scratchPath)
+		logrus.Debugf("hcsshim::unmountContainerLayers CombinedLayers %s", containerScratchPathInUVM)
 		combinedLayersModification := &schema2.ModifySettingsRequestV2{
 			ResourceType:   schema2.ResourceTypeCombinedLayers,
 			RequestType:    schema2.RequestTypeRemove,
-			HostedSettings: schema2.CombinedLayersV2{ContainerRootPath: containerRootPath},
+			HostedSettings: schema2.CombinedLayersV2{ContainerRootPath: containerScratchPathInUVM},
 		}
 		if err := uvm.Modify(combinedLayersModification); err != nil {
 			logrus.Errorf(err.Error())
@@ -253,7 +246,7 @@ func unmountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Ut
 
 		// Hot remove the scratch from the SCSI controller
 		hostScratchFile := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
-		logrus.Debugf("hcsshim::unmountContainerLayers SCSI %s %s", containerRootPath, hostScratchFile)
+		logrus.Debugf("hcsshim::unmountContainerLayers SCSI %s %s", containerScratchPathInUVM, hostScratchFile)
 		if err := uvm.RemoveSCSI(hostScratchFile); err != nil {
 			e := fmt.Errorf("failed to remove SCSI %s: %s", hostScratchFile, err)
 			logrus.Debugln(e)
@@ -322,7 +315,7 @@ func cleanupOnMountFailure(uvm *uvm.UtilityVM, vsmbShares []string, vpmemDevices
 
 func computeV2Layers(vm *uvm.UtilityVM, paths []string) (layers []schema2.ContainersResourcesLayerV2, err error) {
 	for _, path := range paths {
-		guestPath, err := vm.GetVSMBGuestPath(path)
+		uvmPath, err := vm.GetVSMBUvmPath(path)
 		if err != nil {
 			return nil, err
 		}
@@ -332,7 +325,7 @@ func computeV2Layers(vm *uvm.UtilityVM, paths []string) (layers []schema2.Contai
 		}
 		layers = append(layers, schema2.ContainersResourcesLayerV2{
 			Id:   layerID.String(),
-			Path: guestPath,
+			Path: uvmPath,
 		})
 	}
 	return layers, nil

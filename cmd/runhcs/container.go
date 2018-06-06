@@ -498,7 +498,7 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 	}()
 
 	// Record the network namespace to support namespace sharing by container ID.
-	if resources.NetNS != "" {
+	if resources.NetNS() != "" {
 		err = stateKey.Set(c.ID, keyNetNS, resources.NetNS)
 		if err != nil {
 			return err

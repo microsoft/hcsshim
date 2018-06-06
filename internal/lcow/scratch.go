@@ -24,6 +24,7 @@ const (
 	defaultVhdxBlockSizeMB = 1
 )
 
+// TODO" This shouldn't be here
 // defaultTimeoutSeconds is the default time to wait for various operations.
 // - Waiting for async notifications from HCS
 // - Waiting for processes to launch through
@@ -93,7 +94,12 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 
 	// Validate /sys/bus/scsi/devices/C:0:0:L exists as a directory
 	testdCommand := []string{"test", "-d", fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d", controller, lun)}
-	testdProc, _, err := lcowUVM.CreateProcess(&uvm.ProcessOptions{Process: &specs.Process{Args: testdCommand}})
+	testdProc, _, err := CreateProcess(&ProcessOptions{
+		HCSSystem:         lcowUVM.ComputeSystem(),
+		CreateInUtilityVm: true,
+		CopyTimeout:       defaultTimeoutSeconds,
+		Process:           &specs.Process{Args: testdCommand},
+	})
 	if err != nil {
 		lcowUVM.RemoveSCSI(destFile)
 		return fmt.Errorf("failed to run %+v following hot-add %s to utility VM: %s", testdCommand, destFile, err)
@@ -114,10 +120,14 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 	// Get the device from under the block subdirectory by doing a simple ls. This will come back as (eg) `sda`
 	var lsOutput bytes.Buffer
 	lsCommand := []string{"ls", fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d/block", controller, lun)}
-	lsProc, _, err := lcowUVM.CreateProcess(&uvm.ProcessOptions{
-		Process: &specs.Process{Args: lsCommand},
-		Stdout:  &lsOutput,
+	lsProc, _, err := CreateProcess(&ProcessOptions{
+		HCSSystem:         lcowUVM.ComputeSystem(),
+		CreateInUtilityVm: true,
+		CopyTimeout:       defaultTimeoutSeconds,
+		Process:           &specs.Process{Args: lsCommand},
+		Stdout:            &lsOutput,
 	})
+
 	if err != nil {
 		lcowUVM.RemoveSCSI(destFile)
 		return fmt.Errorf("failed to `%+v` following hot-add %s to utility VM: %s", lsCommand, destFile, err)
@@ -139,9 +149,12 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 	// Format it ext4
 	mkfsCommand := []string{"mkfs.ext4", "-q", "-E", "lazy_itable_init=1", "-O", `^has_journal,sparse_super2,uninit_bg,^resize_inode`, device}
 	var mkfsStderr bytes.Buffer
-	mkfsProc, _, err := lcowUVM.CreateProcess(&uvm.ProcessOptions{
-		Process: &specs.Process{Args: mkfsCommand},
-		Stderr:  &mkfsStderr,
+	mkfsProc, _, err := CreateProcess(&ProcessOptions{
+		HCSSystem:         lcowUVM.ComputeSystem(),
+		CreateInUtilityVm: true,
+		CopyTimeout:       defaultTimeoutSeconds,
+		Process:           &specs.Process{Args: mkfsCommand},
+		Stderr:            &mkfsStderr,
 	})
 	if err != nil {
 		lcowUVM.RemoveSCSI(destFile)
