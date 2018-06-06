@@ -19,15 +19,15 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvm"
 )
 
-// TestLCOWUVMNoSCSISingleVPMemInitrd starts an LCOW utility VM without a SCSI controller and
-// only a single VPMem device. Uses initrd.
-func TestLCOWUVMNoSCSISingleVPMemInitrd(t *testing.T) {
-	t.Skip("foo")
+// TestLCOWUVMNoSCSINoVPMemInitrd starts an LCOW utility VM without a SCSI controller and
+// no VPMem device. Uses initrd.
+func TestLCOWUVMNoSCSINoVPMemInitrd(t *testing.T) {
 	scsiCount := 0
+	var vpmemCount int32 = 0
 	opts := &uvm.UVMOptions{
 		OperatingSystem:     "linux",
 		ID:                  "uvm",
-		VPMemDeviceCount:    1,
+		VPMemDeviceCount:    &vpmemCount,
 		SCSIControllerCount: &scsiCount,
 	}
 	testLCOWUVMNoSCSISingleVPMem(t, opts, `Command line: initrd=\initrd.img`)
@@ -36,13 +36,13 @@ func TestLCOWUVMNoSCSISingleVPMemInitrd(t *testing.T) {
 // TestLCOWUVMNoSCSISingleVPMemVHD starts an LCOW utility VM without a SCSI controller and
 // only a single VPMem device. Uses VPMEM VHD
 func TestLCOWUVMNoSCSISingleVPMemVHD(t *testing.T) {
-	t.Skip("foo")
 	scsiCount := 0
+	var vpmemCount int32 = 1
 	var prfst uvm.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
 	opts := &uvm.UVMOptions{
 		OperatingSystem:     "linux",
 		ID:                  "uvm",
-		VPMemDeviceCount:    1,
+		VPMemDeviceCount:    &vpmemCount,
 		SCSIControllerCount: &scsiCount,
 		PreferredRootFSType: &prfst,
 		//ConsolePipe:         `\\.\pipe\vmpipe`,
@@ -86,11 +86,12 @@ func TestLCOWTimeUVMStartInitRD(t *testing.T) {
 
 func testLCOWTimeUVMStart(t *testing.T, rfsType uvm.PreferredRootFSType) {
 	testutilities.RequiresBuild(t, osversion.RS5)
+	var vpmemCount int32 = 32
 	for i := 0; i < 10; i++ {
 		opts := &uvm.UVMOptions{
 			OperatingSystem:     "linux",
 			ID:                  "uvm",
-			VPMemDeviceCount:    32,
+			VPMemDeviceCount:    &vpmemCount,
 			PreferredRootFSType: &rfsType,
 		}
 		lcowUVM, err := uvm.Create(opts)

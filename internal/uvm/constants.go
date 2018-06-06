@@ -11,7 +11,8 @@ const (
 	// defaultLCOWVhdxBlockSizeMB is the block-size for the scratch VHDx's this package can create.
 	defaultLCOWVhdxBlockSizeMB = 1
 
-	MaxVPMEM = 128
+	MaxVPMEM     = 128
+	DefaultVPMEM = 64
 
 	// TODO: These aren't actually used yet
 	// When removing devices from a utility VM.
