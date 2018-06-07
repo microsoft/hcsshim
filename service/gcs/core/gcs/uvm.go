@@ -22,8 +22,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+// UVMContainerID is the ContainerID that will be sent on any prot.MessageBase
+// for V2 where the specific message is targeted at the UVM itself.
 const UVMContainerID = "00000000-0000-0000-0000-000000000000"
 
+// Host is the structure tracking all UVM host state including all containers
+// and processes.
 type Host struct {
 	containersMutex sync.Mutex
 	containers      map[string]*Container
@@ -44,6 +48,21 @@ func (h *Host) getContainerLocked(id string) (*Container, error) {
 	} else {
 		return c, nil
 	}
+}
+
+func (h *Host) GetAllProcessPids() []uint32 {
+	h.containersMutex.Lock()
+	defer h.containersMutex.Unlock()
+
+	pids := make([]uint32, 0)
+	for _, c := range h.containers {
+		c.processesMutex.Lock()
+		for _, p := range c.processes {
+			pids = append(pids, p.pid)
+		}
+		c.processesMutex.Unlock()
+	}
+	return pids
 }
 
 func (h *Host) GetContainer(id string) (*Container, error) {

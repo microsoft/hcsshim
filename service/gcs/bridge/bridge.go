@@ -652,12 +652,25 @@ func (b *Bridge) getProperties(w ResponseWriter, r *Request) {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
 		return
 	}
-	id := request.ContainerID
 
-	properties, err := b.coreint.GetProperties(id, request.Query)
-	if err != nil {
-		w.Error(request.ActivityID, err)
-		return
+	var properties *prot.Properties
+	if request.ContainerID == gcspkg.UVMContainerID {
+		// We only ever supported querying the pid's in V1. Until we support more than that
+		// we can just return this same set in V2.
+		pids := b.hostState.GetAllProcessPids()
+		properties = &prot.Properties{
+			ProcessList: make([]prot.ProcessDetails, len(pids)),
+		}
+		for _, pid := range pids {
+			properties.ProcessList = append(properties.ProcessList, prot.ProcessDetails{ProcessID: pid})
+		}
+	} else {
+		var err error
+		properties, err = b.coreint.GetProperties(request.ContainerID, request.Query)
+		if err != nil {
+			w.Error(request.ActivityID, err)
+			return
+		}
 	}
 
 	propertyJSON := []byte("{}")
