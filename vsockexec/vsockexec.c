@@ -67,7 +67,7 @@ int main(int argc, char **argv)
     unsigned int ports[3] = {0};
     int sockets[3] = {-1, -1, -1};
     int c;
-    while ((c = getopt(argc, argv, "i:o:e:")) != -1) {
+    while ((c = getopt(argc, argv, "+i:o:e:")) != -1) {
         switch (c) {
         case 'i':
             ports[0] = strtoul(optarg, NULL, 10);
