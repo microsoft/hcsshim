@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -23,6 +24,7 @@ func main() {
 	logLevel := flag.String("loglevel", "debug", "Logging Level: debug, info, warning, error, fatal, panic.")
 	logFile := flag.String("logfile", "", "Logging Target: An optional file name/path. Omit for console output.")
 	logFormat := flag.String("log-format", "text", "Logging Format: text or json")
+	useInOutErr := flag.Bool("use-inouterr", false, "If true use stdin/stdout for bridge communication and stderr for logging")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "\nUsage of %s:\n", os.Args[0])
@@ -119,16 +121,32 @@ func main() {
 	if err != nil {
 		logrus.Fatalf("%+v", err)
 	}
-	os := realos.NewOS()
-	coreint := gcs.NewGCSCore(baseLogPath, baseStoragePath, rtime, os, tport)
+	ros := realos.NewOS()
+	coreint := gcs.NewGCSCore(baseLogPath, baseStoragePath, rtime, ros, tport)
 	mux := bridge.NewBridgeMux()
 	b := bridge.Bridge{
-		Transport: tport,
-		Handler:   mux,
+		Handler: mux,
 	}
-	h := gcs.NewHost(rtime, os, tport)
+	h := gcs.NewHost(rtime, ros, tport)
 	b.AssignHandlers(mux, coreint, h)
-	err = b.ListenAndServe()
+
+	var bridgeIn io.Reader
+	var bridgeOut io.Writer
+	if *useInOutErr {
+		bridgeIn = os.Stdin
+		bridgeOut = os.Stdout
+	} else {
+		const commandPort uint32 = 0x40000000
+		bridgeCon, err := tport.Dial(commandPort)
+		if err != nil {
+			logrus.Fatal(err)
+		}
+		bridgeIn = bridgeCon
+		bridgeOut = bridgeCon
+		logrus.Info("main: successfully connected to the HCS via HyperV_Socket")
+	}
+
+	err = b.ListenAndServe(bridgeIn, bridgeOut)
 	if err != nil {
 		logrus.Fatal(err)
 	}

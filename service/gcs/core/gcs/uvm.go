@@ -106,6 +106,7 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 	}
 	c = &Container{
 		id:        id,
+		vsock:     h.vsock,
 		spec:      settings.OCISpecification,
 		container: con,
 		processes: make(map[uint32]*Process),
@@ -255,7 +256,9 @@ func (h *Host) Shutdown() {
 }
 
 type Container struct {
-	id   string
+	id    string
+	vsock transport.Transport
+
 	spec *oci.Spec
 
 	container   runtime.Container
@@ -266,7 +269,11 @@ type Container struct {
 	processes      map[uint32]*Process
 }
 
-func (c *Container) Start(stdioSet *stdio.ConnectionSet) (int, error) {
+func (c *Container) Start(conSettings stdio.ConnectionSettings) (int, error) {
+	stdioSet, err := stdio.Connect(c.vsock, conSettings)
+	if err != nil {
+		return -1, err
+	}
 	if c.initProcess.spec.Terminal {
 		ttyr := c.container.Tty()
 		ttyr.ReplaceConnectionSet(stdioSet)
@@ -277,11 +284,19 @@ func (c *Container) Start(stdioSet *stdio.ConnectionSet) (int, error) {
 		pr.CloseUnusedPipes()
 		pr.Start()
 	}
-	err := c.container.Start()
+	err = c.container.Start()
+	if err != nil {
+		stdioSet.Close()
+	}
 	return int(c.initProcess.pid), err
 }
 
-func (c *Container) ExecProcess(process *oci.Process, stdioSet *stdio.ConnectionSet) (int, error) {
+func (c *Container) ExecProcess(process *oci.Process, conSettings stdio.ConnectionSettings) (int, error) {
+	stdioSet, err := stdio.Connect(c.vsock, conSettings)
+	if err != nil {
+		return -1, err
+	}
+
 	// Increment the waiters before the call so that WaitContainer cannot complete in a race
 	// with adding a new process. When the process exits it will decrement this count.
 	c.processesMutex.Lock()
@@ -294,6 +309,7 @@ func (c *Container) ExecProcess(process *oci.Process, stdioSet *stdio.Connection
 		c.processesMutex.Lock()
 		c.processesWg.Done()
 		c.processesMutex.Unlock()
+		stdioSet.Close()
 		return -1, err
 	}
 

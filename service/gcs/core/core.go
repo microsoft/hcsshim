@@ -13,11 +13,11 @@ import (
 // containers. However, it is also easily mocked out for testing.
 type Core interface {
 	CreateContainer(id string, info prot.VMHostedContainerSettings) error
-	ExecProcess(id string, info prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (pid int, err error)
+	ExecProcess(id string, info prot.ProcessParameters, conSettings stdio.ConnectionSettings) (pid int, err error)
 	SignalContainer(id string, signal oslayer.Signal) error
 	SignalProcess(pid int, options prot.SignalProcessOptions) error
 	GetProperties(id string, query string) (*prot.Properties, error)
-	RunExternalProcess(info prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (pid int, err error)
+	RunExternalProcess(info prot.ProcessParameters, conSettings stdio.ConnectionSettings) (pid int, err error)
 	ModifySettings(id string, request *prot.ResourceModificationRequestResponse) error
 	ResizeConsole(pid int, height, width uint16) error
 	WaitContainer(id string) (func() int, error)

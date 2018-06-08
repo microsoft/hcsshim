@@ -17,7 +17,7 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
-	"github.com/Microsoft/opengcs/service/gcs/transport"
+	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -189,15 +189,8 @@ func (w *requestResponseWriter) Error(activityID string, err error) {
 //    by a request from any client can be written to the bridge at any time
 //    in any order.
 type Bridge struct {
-	// Transport is the transport interface used by the bridge.
-	Transport transport.Transport
-
 	// Handler to invoke when messages are received.
 	Handler Handler
-
-	// commandConn is the Connection the bridge receives commands (such as
-	// ComputeSystemCreate) over.
-	commandConn transport.Connection
 
 	// responseChan is the response channel used for both request/response
 	// and publish notification workflows.
@@ -252,16 +245,7 @@ func (b *Bridge) AssignHandlers(mux *Mux, gcs core.Core, host *gcspkg.Host) {
 // ListenAndServe connects to the bridge transport, listens for
 // messages and dispatches the appropriate handlers to handle each
 // event in an asynchronous manner.
-func (b *Bridge) ListenAndServe() (conerr error) {
-	const commandPort uint32 = 0x40000000
-
-	var err error
-	b.commandConn, err = b.Transport.Dial(commandPort)
-	if err != nil {
-		return errors.Wrap(err, "bridge: failed creating the command Connection")
-	}
-	logrus.Info("bridge: successfully connected to the HCS via HyperV_Socket")
-
+func (b *Bridge) ListenAndServe(bridgeIn io.Reader, bridgeOut io.Writer) (conerr error) {
 	requestChan := make(chan *Request)
 	requestErrChan := make(chan error)
 	b.responseChan = make(chan bridgeResponse)
@@ -278,12 +262,12 @@ func (b *Bridge) ListenAndServe() (conerr error) {
 	go func() {
 		for {
 			header := &prot.MessageHeader{}
-			if err := binary.Read(b.commandConn, binary.LittleEndian, header); err != nil {
+			if err := binary.Read(bridgeIn, binary.LittleEndian, header); err != nil {
 				requestErrChan <- errors.Wrap(err, "bridge: failed reading message header")
 				continue
 			}
 			message := make([]byte, header.Size-prot.MessageHeaderSize)
-			if _, err := io.ReadFull(b.commandConn, message); err != nil {
+			if _, err := io.ReadFull(bridgeIn, message); err != nil {
 				requestErrChan <- errors.Wrap(err, "bridge: failed reading message payload")
 				continue
 			}
@@ -319,12 +303,12 @@ func (b *Bridge) ListenAndServe() (conerr error) {
 				continue
 			}
 			resp.header.Size = uint32(len(responseBytes) + prot.MessageHeaderSize)
-			if err := binary.Write(b.commandConn, binary.LittleEndian, resp.header); err != nil {
+			if err := binary.Write(bridgeOut, binary.LittleEndian, resp.header); err != nil {
 				responseErrChan <- errors.Wrap(err, "bridge: failed writing message header")
 				continue
 			}
 
-			if _, err := b.commandConn.Write(responseBytes); err != nil {
+			if _, err := bridgeOut.Write(responseBytes); err != nil {
 				responseErrChan <- errors.Wrap(err, "bridge: failed writing message payload")
 				continue
 			}
@@ -526,30 +510,36 @@ func (b *Bridge) execProcess(w ResponseWriter, r *Request) {
 		return
 	}
 
-	stdioSet, err := connectStdio(b.Transport, params, request.Settings.VsockStdioRelaySettings)
-	if err != nil {
-		w.Error(request.ActivityID, err)
-		return
+	var conSettings stdio.ConnectionSettings
+	if params.CreateStdInPipe {
+		conSettings.StdIn = &request.Settings.VsockStdioRelaySettings.StdIn
 	}
+	if params.CreateStdOutPipe {
+		conSettings.StdOut = &request.Settings.VsockStdioRelaySettings.StdOut
+	}
+	if params.CreateStdErrPipe {
+		conSettings.StdErr = &request.Settings.VsockStdioRelaySettings.StdErr
+	}
+
 	var pid int
+	var err error
 	if params.IsExternal {
-		pid, err = b.coreint.RunExternalProcess(params, stdioSet)
+		pid, err = b.coreint.RunExternalProcess(params, conSettings)
 	} else if params.SchemaVersion.Cmp(prot.SchemaVersion{Major: 2, Minor: 0}) >= 0 {
 		var c *gcspkg.Container
 		c, err = b.hostState.GetContainer(request.ContainerID)
 		if err == nil {
 			if params.OCIProcess == nil {
-				pid, err = c.Start(stdioSet)
+				pid, err = c.Start(conSettings)
 			} else {
-				pid, err = c.ExecProcess(params.OCIProcess, stdioSet)
+				pid, err = c.ExecProcess(params.OCIProcess, conSettings)
 			}
 		}
 	} else {
-		pid, err = b.coreint.ExecProcess(request.ContainerID, params, stdioSet)
+		pid, err = b.coreint.ExecProcess(request.ContainerID, params, conSettings)
 	}
 
 	if err != nil {
-		stdioSet.Close() // stdioSet will be eventually closed by coreint on success
 		w.Error(request.ActivityID, err)
 		return
 	}

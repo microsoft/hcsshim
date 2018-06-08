@@ -298,7 +298,17 @@ func (c *gcsCore) CreateContainer(id string, settings prot.VMHostedContainerSett
 
 // ExecProcess executes a new process in the container. It forwards the
 // process's stdio through the members of the core.StdioSet provided.
-func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (int, error) {
+func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, connection stdio.ConnectionSettings) (_ int, err error) {
+	stdioSet, err := stdio.Connect(c.vsock, connection)
+	if err != nil {
+		return -1, err
+	}
+	defer func() {
+		if err != nil {
+			stdioSet.Close()
+		}
+	}()
+
 	c.containerCacheMutex.Lock()
 	defer c.containerCacheMutex.Unlock()
 
@@ -523,7 +533,17 @@ func (c *gcsCore) GetProperties(id string, query string) (*prot.Properties, erro
 // namespace.
 // This can be used for things like debugging or diagnosing the utility VM's
 // state.
-func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (pid int, err error) {
+func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, conSettings stdio.ConnectionSettings) (pid int, err error) {
+	stdioSet, err := stdio.Connect(c.vsock, conSettings)
+	if err != nil {
+		return -1, err
+	}
+	defer func() {
+		if err != nil {
+			stdioSet.Close()
+		}
+	}()
+
 	ociProcess, err := processParametersToOCI(params)
 	if err != nil {
 		return -1, err
