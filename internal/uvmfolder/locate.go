@@ -30,6 +30,6 @@ func LocateUVMFolder(layerFolders []string) (string, error) {
 	if uvmFolder == "" {
 		return "", fmt.Errorf("utility VM folder could not be found in layers")
 	}
-	logrus.Debugf("hcsshim::LocateUVMFolder Index %d of %d possibles (%s)", index, len(layerFolders), uvmFolder)
+	logrus.Debugf("hcsshim::LocateUVMFolder At %d of %d: %s", index+1, len(layerFolders), uvmFolder)
 	return uvmFolder, nil
 }

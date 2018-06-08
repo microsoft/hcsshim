@@ -152,6 +152,8 @@ func rootfs2vhd(c *cli.Context) {
 	fmt.Println("- Extract complete!")
 	fmt.Printf("\n%s\n", uvmCommand(lcowUVM, []string{"df", "/target"}))
 	possiblePause()
+	uvmCommand(lcowUVM, []string{"sync", "-f"})
+	uvmCommand(lcowUVM, []string{"umount", device})
 
 	fmt.Println("- Removing SCSI disk...")
 	if err := lcowUVM.RemoveSCSI(destFile); err != nil {
