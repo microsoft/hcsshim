@@ -1,7 +1,7 @@
 # platform=linux
 #
 # John Howard Feb 2018. Based on github.com/linuxkit/lcow/pkg/init-lcow/Dockerfile
-# This Dockerfile builds initrd.img and rootfs.tar.gz from local opengcs sources. 
+# This Dockerfile builds initrd.img and rootfs.tar.gz from local opengcs sources.
 # It can be used on a Windows machine running in LCOW mode.
 #
 # Manual steps:
@@ -31,7 +31,7 @@ RUN \
     rm -rf /target/etc/apk /target/lib/apk /target/var/cache && \
     \
     # Install the build packages
-    apk add --no-cache build-base curl git go musl-dev && \
+    apk add --no-cache build-base curl git go musl-dev linux-headers && \
     \
     # Grab udhcpc_config.script
     curl -fSL "https://raw.githubusercontent.com/mirror/busybox/38d966943f5288bb1f2e7219f50a92753c730b14/examples/udhcp/simple.script" -o /target/sbin/udhcpc_config.script && \
@@ -43,6 +43,12 @@ ADD https://raw.githubusercontent.com/linuxkit/lcow/b17397d2a79e1f375e2dd3a03daf
 
 # Add the sources for opengcs
 COPY . /go/src/github.com/Microsoft/opengcs
+
+# Build vsockexec and add it to the target
+RUN mkdir -p /tmp/vsockexec && \
+    cd /tmp/vsockexec && \
+    make -f /go/src/github.com/Microsoft/opengcs/vsockexec/Makefile vsockexec && \
+    cp vsockexec /target/
 
 # Build the binaries and add them to the target
 RUN chmod 0755 /target/init && \
