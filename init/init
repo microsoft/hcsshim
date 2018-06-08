@@ -56,8 +56,12 @@ do
         esac
 done < /proc/cgroups
 
-# Run gcs in the background
-/bin/gcs  -loglevel=debug -logfile=/tmp/gcs.log &
+if [ $# -eq 0 ]; then
+        # Run gcs in the background
+        /bin/gcs -loglevel debug -logfile=/tmp/gcs.log &
 
-# Start shell so we can have access for debug
-sh
+        # Start shell so we can have access for debugging
+        sh
+else
+        exec "$@"
+fi
