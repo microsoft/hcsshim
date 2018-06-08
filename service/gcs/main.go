@@ -22,6 +22,7 @@ import (
 func main() {
 	logLevel := flag.String("loglevel", "debug", "Logging Level: debug, info, warning, error, fatal, panic.")
 	logFile := flag.String("logfile", "", "Logging Target: An optional file name/path. Omit for console output.")
+	logFormat := flag.String("log-format", "text", "Logging Format: text or json")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "\nUsage of %s:\n", os.Args[0])
@@ -35,11 +36,20 @@ func main() {
 
 	// Use a file instead of stdout
 	if *logFile != "" {
-		logFileHandle, err := os.OpenFile(*logFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+		logFileHandle, err := os.OpenFile(*logFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 		if err != nil {
 			logrus.Fatalf("failed to create log file %s", *logFile)
 		}
 		logrus.SetOutput(logFileHandle)
+	}
+
+	switch *logFormat {
+	case "text":
+		// retain logrus's default.
+	case "json":
+		logrus.SetFormatter(new(logrus.JSONFormatter))
+	default:
+		logrus.Fatalf("unknown log-format %q", *logFormat)
 	}
 
 	level, err := logrus.ParseLevel(*logLevel)
