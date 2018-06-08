@@ -216,7 +216,10 @@ var _ = Describe("runC", func() {
 		cwd, err = os.Getwd()
 		Expect(err).NotTo(HaveOccurred())
 
-		bundlePath = filepath.Join(cwd, "testbundle")
+		bundlePath = os.Getenv("GCS_TEST_BUNDLE")
+		if bundlePath == "" {
+			bundlePath = filepath.Join(cwd, "testbundle")
+		}
 
 		emptyConnSetClient, emptyConnSetServer = newTestConnectionSet(false, false, false)
 		fullConnSetClient, fullConnSetServer = newTestConnectionSet(true, true, true)
