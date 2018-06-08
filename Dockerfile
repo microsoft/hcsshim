@@ -38,9 +38,6 @@ RUN \
     chmod ugo+rx /target/sbin/udhcpc_config.script
 COPY --from=runc / /target/
 
-# Add the init script
-ADD https://raw.githubusercontent.com/linuxkit/lcow/b17397d2a79e1f375e2dd3a03daf34b39f8ee880/pkg/init-lcow/init /target/
-
 # Add the sources for opengcs
 COPY . /go/src/github.com/Microsoft/opengcs
 
@@ -51,7 +48,8 @@ RUN mkdir -p /tmp/vsockexec && \
     cp vsockexec /target/
 
 # Build the binaries and add them to the target
-RUN chmod 0755 /target/init && \
+RUN cp /go/src/github.com/Microsoft/opengcs/init/init /target/init && \
+    chmod 0755 /target/init && \
     cd /go/src/github.com/Microsoft/opengcs/service && \
 	make && \
 	cp -r bin /target && \
