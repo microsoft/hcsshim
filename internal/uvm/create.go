@@ -1,7 +1,9 @@
 package uvm
 
 import (
+	"encoding/binary"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -15,6 +17,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/internal/wcow"
+	"github.com/linuxkit/virtsock/pkg/hvsock"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
@@ -52,6 +55,8 @@ type UVMOptions struct {
 	SCSIControllerCount   *int                 // The number of SCSI controllers. Defaults to 1 if omitted. Currently we only support 0 or 1.
 }
 
+const linuxLogVsockPort = 109
+
 // Create creates an HCS compute system representing a utility VM.
 //
 // WCOW Notes:
@@ -59,7 +64,7 @@ type UVMOptions struct {
 //   - If the scratch folder does not contain `sandbox.vhdx` it will be created based on the system template located in the layer folders.
 //   - The scratch is always attached to SCSI 0:0
 //
-func Create(opts *UVMOptions) (*UtilityVM, error) {
+func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 	logrus.Debugf("uvm::Create %+v", opts)
 
 	if opts == nil {
@@ -215,47 +220,73 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 		}
 	}
 
-	hcsDocument := &schema2.ComputeSystemV2{
-		Owner:         uvm.owner,
-		SchemaVersion: schemaversion.SchemaV20(),
-		VirtualMachine: &schema2.VirtualMachineV2{
-			Chipset: &schema2.VirtualMachinesResourcesChipsetV2{
-				UEFI: &schema2.VirtualMachinesResourcesUefiV2{},
-			},
+	vm := &schema2.VirtualMachineV2{
+		Chipset: &schema2.VirtualMachinesResourcesChipsetV2{
+			UEFI: &schema2.VirtualMachinesResourcesUefiV2{},
+		},
 
-			ComputeTopology: &schema2.VirtualMachinesResourcesComputeTopologyV2{
-				Memory: &schema2.VirtualMachinesResourcesComputeMemoryV2{
-					Backing: "Virtual",
-					Startup: memory,
-				},
-				Processor: &schema2.VirtualMachinesResourcesComputeProcessorV2{
-					Count: processors,
-				},
+		ComputeTopology: &schema2.VirtualMachinesResourcesComputeTopologyV2{
+			Memory: &schema2.VirtualMachinesResourcesComputeMemoryV2{
+				Backing: "Virtual",
+				Startup: memory,
 			},
+			Processor: &schema2.VirtualMachinesResourcesComputeProcessorV2{
+				Count: processors,
+			},
+		},
 
-			Devices: &schema2.VirtualMachinesDevicesV2{
-				SCSI:             scsi,
-				VirtualSMBShares: []schema2.VirtualMachinesResourcesStorageVSmbShareV2{schema2.VirtualMachinesResourcesStorageVSmbShareV2{Name: "os"}},
-				GuestInterface:   &schema2.VirtualMachinesResourcesGuestInterfaceV2{ConnectToBridge: true},
+		Devices: &schema2.VirtualMachinesDevicesV2{
+			SCSI: scsi,
+			GuestInterface: &schema2.VirtualMachinesResourcesGuestInterfaceV2{
+				ConnectToBridge: true,
+				HvSocketConfig: &schema2.HvSocketHvSocketSystemConfigV2{
+					// Allow administrators and SYSTEM to bind to vsock sockets
+					// so that we can create a GCS log socket.
+					DefaultBindSecurityDescriptor: "D:P(A;;FA;;;SY)(A;;FA;;;BA)",
+				},
 			},
 		},
 	}
 
+	hcsDocument := &schema2.ComputeSystemV2{
+		Owner:          uvm.owner,
+		SchemaVersion:  schemaversion.SchemaV20(),
+		VirtualMachine: vm,
+	}
+
 	if uvm.operatingSystem == "windows" {
-		hcsDocument.VirtualMachine.Chipset.UEFI.BootThis = &schema2.VirtualMachinesResourcesUefiBootEntryV2{DevicePath: `\EFI\Microsoft\Boot\bootmgfw.efi`}
-		hcsDocument.VirtualMachine.ComputeTopology.Memory.DirectFileMappingMB = 1024 // Sensible default, but could be a tuning parameter somewhere
-		hcsDocument.VirtualMachine.Devices.VirtualSMBShares[0].Path = filepath.Join(uvmFolder, `UtilityVM\Files`)
-		hcsDocument.VirtualMachine.Devices.VirtualSMBShares[0].Flags = schema2.VsmbFlagReadOnly | schema2.VsmbFlagPseudoOplocks | schema2.VsmbFlagTakeBackupPrivilege | schema2.VsmbFlagCacheIO | schema2.VsmbFlagShareRead
-	} else {
-		hcsDocument.VirtualMachine.Devices.GuestInterface.BridgeFlags = 3 // TODO: Contants
-		hcsDocument.VirtualMachine.Devices.VirtualSMBShares[0].Path = opts.BootFilesPath
-		hcsDocument.VirtualMachine.Devices.VirtualSMBShares[0].Flags = schema2.VsmbFlagReadOnly | schema2.VsmbFlagShareRead | schema2.VsmbFlagCacheIO | schema2.VsmbFlagTakeBackupPrivilege // 0x17 (23 dec)
-		if uvm.vpmemMax > 0 {
-			hcsDocument.VirtualMachine.Devices.VPMem = &schema2.VirtualMachinesResourcesStorageVpmemControllerV2{MaximumCount: uvm.vpmemMax}
+		vm.Chipset.UEFI.BootThis = &schema2.VirtualMachinesResourcesUefiBootEntryV2{
+			DevicePath: `\EFI\Microsoft\Boot\bootmgfw.efi`,
+			UefiDevice: "VMBFS",
 		}
-		hcsDocument.VirtualMachine.Chipset.UEFI.BootThis = &schema2.VirtualMachinesResourcesUefiBootEntryV2{
-			DevicePath:   `\` + opts.KernelFile,
-			OptionalData: `initrd=\` + opts.RootFSFile,
+		vm.ComputeTopology.Memory.DirectFileMappingMB = 1024 // Sensible default, but could be a tuning parameter somewhere
+		vm.Devices.VirtualSMBShares = []schema2.VirtualMachinesResourcesStorageVSmbShareV2{
+			{
+				Name:  "os",
+				Path:  filepath.Join(uvmFolder, `UtilityVM\Files`),
+				Flags: schema2.VsmbFlagReadOnly | schema2.VsmbFlagPseudoOplocks | schema2.VsmbFlagTakeBackupPrivilege | schema2.VsmbFlagCacheIO | schema2.VsmbFlagShareRead,
+			},
+		}
+	} else {
+		vmDebugging := false
+		vm.Devices.GuestInterface.BridgeFlags = 3 // TODO: Contants
+		vm.Devices.VirtualSMBShares = []schema2.VirtualMachinesResourcesStorageVSmbShareV2{
+			{
+				Name:  "os",
+				Path:  opts.BootFilesPath,
+				Flags: schema2.VsmbFlagReadOnly | schema2.VsmbFlagShareRead | schema2.VsmbFlagCacheIO | schema2.VsmbFlagTakeBackupPrivilege, // 0x17 (23 dec)
+			},
+		}
+
+		if uvm.vpmemMax > 0 {
+			vm.Devices.VPMem = &schema2.VirtualMachinesResourcesStorageVpmemControllerV2{
+				MaximumCount: uvm.vpmemMax,
+			}
+		}
+
+		kernelArgs := "initrd=/" + opts.RootFSFile
+		if actualRootFSType == PreferredRootFSTypeVHD {
+			kernelArgs = "root=/dev/pmem0 init=/init"
 		}
 
 		// Support for VPMem VHD(X) booting rather than initrd..
@@ -263,16 +294,16 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 			if uvm.vpmemMax == 0 {
 				return nil, fmt.Errorf("PreferredRootFSTypeVHD requess at least one VPMem device")
 			}
-			hcsDocument.VirtualMachine.Chipset.UEFI.BootThis.OptionalData = `root=/dev/pmem0 init=/init`
-			hcsDocument.VirtualMachine.Devices.VPMem.Devices = make(map[string]schema2.VirtualMachinesResourcesStorageVpmemDeviceV2)
 			imageFormat := "VHD1"
 			if strings.ToLower(filepath.Ext(opts.RootFSFile)) == "vhdx" {
 				imageFormat = "Default" // Yeah, this is weird, but true.
 			}
-			hcsDocument.VirtualMachine.Devices.VPMem.Devices["0"] = schema2.VirtualMachinesResourcesStorageVpmemDeviceV2{
-				HostPath:    filepath.Join(opts.BootFilesPath, opts.RootFSFile),
-				ReadOnly:    true,
-				ImageFormat: imageFormat,
+			vm.Devices.VPMem.Devices = map[string]schema2.VirtualMachinesResourcesStorageVpmemDeviceV2{
+				"0": {
+					HostPath:    filepath.Join(opts.BootFilesPath, opts.RootFSFile),
+					ReadOnly:    true,
+					ImageFormat: imageFormat,
+				},
 			}
 			if err := wclayer.GrantVmAccess(uvm.id, filepath.Join(opts.BootFilesPath, opts.RootFSFile)); err != nil {
 				return nil, fmt.Errorf("faied to grantvmaccess to %s: %s", filepath.Join(opts.BootFilesPath, opts.RootFSFile), err)
@@ -286,23 +317,46 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 		}
 
 		if opts.ConsolePipe != "" {
-			hcsDocument.VirtualMachine.Chipset.UEFI.BootThis.OptionalData += " console=ttyS0,115200"
-			hcsDocument.VirtualMachine.Devices.COMPorts = &schema2.VirtualMachinesResourcesComPortsV2{Port1: opts.ConsolePipe}
+			vmDebugging = true
+			kernelArgs += " console=ttyS0,115200"
+			vm.Devices.COMPorts = &schema2.VirtualMachinesResourcesComPortsV2{Port1: opts.ConsolePipe}
 		}
 
 		if opts.EnableGraphicsConsole {
-			hcsDocument.VirtualMachine.Chipset.UEFI.BootThis.OptionalData += " console=tty"
-			hcsDocument.VirtualMachine.Devices.Keyboard = &schema2.VirtualMachinesResourcesKeyboardV2{}
-			hcsDocument.VirtualMachine.Devices.Rdp = &schema2.VirtualMachinesResourcesRdpV2{}
-			hcsDocument.VirtualMachine.Devices.VideoMonitor = &schema2.VirtualMachinesResourcesVideoMonitorV2{}
+			vmDebugging = true
+			kernelArgs += " console=tty"
+			vm.Devices.Keyboard = &schema2.VirtualMachinesResourcesKeyboardV2{}
+			vm.Devices.Rdp = &schema2.VirtualMachinesResourcesRdpV2{}
+			vm.Devices.VideoMonitor = &schema2.VirtualMachinesResourcesVideoMonitorV2{}
+		}
+
+		if !vmDebugging {
+			// Terminate the VM if there is a kernel panic.
+			kernelArgs += " panic=-1"
 		}
 
 		if opts.KernelBootOptions != "" {
-			hcsDocument.VirtualMachine.Chipset.UEFI.BootThis.OptionalData = hcsDocument.VirtualMachine.Chipset.UEFI.BootThis.OptionalData + fmt.Sprintf(" %s", opts.KernelBootOptions)
+			kernelArgs += " " + opts.KernelBootOptions
+		}
+
+		// Start GCS with stderr pointing to the vsock port created below in
+		// order to forward guest logs to logrus.
+		initArgs := fmt.Sprintf("/bin/vsockexec -e %d /bin/gcs -log-format json -loglevel %s",
+			linuxLogVsockPort,
+			logrus.StandardLogger().Level.String())
+
+		if vmDebugging {
+			// Launch a shell on the console.
+			initArgs = `sh -c "` + initArgs + ` & exec sh"`
+		}
+
+		kernelArgs += ` -- ` + initArgs
+		vm.Chipset.UEFI.BootThis = &schema2.VirtualMachinesResourcesUefiBootEntryV2{
+			DevicePath:   `\` + opts.KernelFile,
+			UefiDevice:   "VMBFS",
+			OptionalData: kernelArgs,
 		}
 	}
-	hcsDocument.VirtualMachine.Chipset.UEFI.BootThis.DiskNumber = 0
-	hcsDocument.VirtualMachine.Chipset.UEFI.BootThis.UefiDevice = "VMBFS"
 
 	fullDoc, err := mergemaps.MergeJSON(hcsDocument, ([]byte)(opts.AdditionHCSDocumentJSON))
 	if err != nil {
@@ -316,7 +370,35 @@ func Create(opts *UVMOptions) (*UtilityVM, error) {
 	}
 
 	uvm.hcsSystem = hcsSystem
+	defer func() {
+		if err != nil {
+			uvm.Close()
+		}
+	}()
+
+	if uvm.operatingSystem == "linux" {
+		// Create a socket that the GCS can send logrus log data to.
+		uvm.gcslog, err = uvm.listenVsock(linuxLogVsockPort)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return uvm, nil
+}
+
+func (uvm *UtilityVM) listenVsock(port uint32) (net.Listener, error) {
+	properties, err := uvm.hcsSystem.Properties()
+	if err != nil {
+		return nil, err
+	}
+	vmID, err := hvsock.GUIDFromString(properties.RuntimeID)
+	if err != nil {
+		return nil, err
+	}
+	serviceID, _ := hvsock.GUIDFromString("00000000-facb-11e6-bd58-64006a7986d3")
+	binary.LittleEndian.PutUint32(serviceID[0:4], port)
+	return hvsock.Listen(hvsock.Addr{VMID: vmID, ServiceID: serviceID})
 }
 
 // ID returns the ID of the VM's compute system.
@@ -332,5 +414,11 @@ func (uvm *UtilityVM) OS() string {
 // Close terminates and releases resources associated with the utility VM.
 func (uvm *UtilityVM) Close() error {
 	uvm.Terminate()
-	return uvm.hcsSystem.Close()
+	if uvm.gcslog != nil {
+		uvm.gcslog.Close()
+		uvm.gcslog = nil
+	}
+	err := uvm.hcsSystem.Close()
+	uvm.hcsSystem = nil
+	return err
 }

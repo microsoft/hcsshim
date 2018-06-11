@@ -3,6 +3,7 @@ package uvm
 // This package describes the external interface for utility VMs.
 
 import (
+	"net"
 	"sync"
 
 	"github.com/Microsoft/hcsshim/internal/guid"
@@ -81,4 +82,6 @@ type UtilityVM struct {
 	plan9Counter uint64 // Each newly-added plan9 share has a counter used as its ID in the ResourceURI and for the name
 
 	namespaces map[string]*namespaceInfo
+
+	gcslog net.Listener
 }
