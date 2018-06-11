@@ -130,8 +130,8 @@ func main() {
 	h := gcs.NewHost(rtime, ros, tport)
 	b.AssignHandlers(mux, coreint, h)
 
-	var bridgeIn io.Reader
-	var bridgeOut io.Writer
+	var bridgeIn io.ReadCloser
+	var bridgeOut io.WriteCloser
 	if *useInOutErr {
 		bridgeIn = os.Stdin
 		bridgeOut = os.Stdout
