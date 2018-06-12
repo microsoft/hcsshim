@@ -52,6 +52,7 @@ type Resources struct {
 	addedNetNSToVM bool
 }
 
+// TODO: Method on the resources?
 func ReleaseResources(r *Resources, vm *uvm.UtilityVM, all bool) error {
 	if vm != nil && r.addedNetNSToVM {
 		err := vm.RemoveNetNS(r.netNS)
@@ -82,11 +83,11 @@ func ReleaseResources(r *Resources, vm *uvm.UtilityVM, all bool) error {
 	}
 
 	if len(r.layers) != 0 {
-		op := unmountOperationSCSI
+		op := UnmountOperationSCSI
 		if vm == nil || all {
-			op = unmountOperationAll
+			op = UnmountOperationAll
 		}
-		err := unmountContainerLayers(r.layers, r.containerRootInUVM, vm, op)
+		err := UnmountContainerLayers(r.layers, r.containerRootInUVM, vm, op)
 		if err != nil {
 			return err
 		}

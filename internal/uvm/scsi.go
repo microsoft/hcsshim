@@ -96,7 +96,7 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int, error)
 	// HACK HACK HACK as lun in hosted settings is needed in this workaround	if uvmPath != "" {
 	var hostedSettings interface{}
 	if uvm.operatingSystem == "windows" {
-		hostedSettings = schema2.ContainersResourcesMappedDirectoryV2{
+		hostedSettings = schema2.ContainersResourcesMappedVirtualDiskV2{
 			ContainerPath:     uvmPath,
 			Lun:               uint8(lun),
 			AttachOnly:        (uvmPath == ""),
@@ -159,7 +159,7 @@ func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int
 	}
 	if uvmPath != "" {
 		// Include the HostedSettings so that the GCS ejects the disk cleanly
-		scsiModification.HostedSettings = schema2.ContainersResourcesMappedDirectoryV2{
+		scsiModification.HostedSettings = schema2.ContainersResourcesMappedVirtualDiskV2{
 			ContainerPath: uvmPath,
 			Lun:           uint8(lun),
 			// TODO: Controller: uint8(controller), // TODO NOT IN HCS API CURRENTLY

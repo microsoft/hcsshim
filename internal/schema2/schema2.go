@@ -41,6 +41,12 @@ type ContainersResourcesStorageV2 struct {
 }
 
 type ContainersResourcesMappedDirectoryV2 struct {
+	HostPath      string `json:"HostPath,omitempty"`
+	ContainerPath string `json:"ContainerPath,omitempty"`
+	ReadOnly      bool   `json:"ReadOnly,omitempty"`
+}
+
+type ContainersResourcesMappedVirtualDiskV2 struct {
 	HostPath          string `json:"HostPath,omitempty"`
 	ContainerPath     string `json:"ContainerPath,omitempty"`
 	ReadOnly          bool   `json:"ReadOnly,omitempty"`

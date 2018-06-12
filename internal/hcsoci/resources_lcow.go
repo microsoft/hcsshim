@@ -24,7 +24,7 @@ func allocateLinuxResources(coi *createOptionsInternal, resources *Resources) er
 	}
 	if coi.Spec.Root.Path == "" {
 		logrus.Debugln("hcsshim::allocateLinuxResources mounting storage")
-		mcl, err := mountContainerLayers(coi.Spec.Windows.LayerFolders, resources.containerRootInUVM, coi.HostingSystem)
+		mcl, err := MountContainerLayers(coi.Spec.Windows.LayerFolders, resources.containerRootInUVM, coi.HostingSystem)
 		if err != nil {
 			return fmt.Errorf("failed to mount container storage: %s", err)
 		}

@@ -31,7 +31,7 @@ const scratchPath = "scratch"
 //                    inside the utility VM which is a GUID mapping of the scratch folder. Each
 //                    of the layers are the VSMB locations where the read-only layers are mounted.
 //
-func mountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.UtilityVM) (interface{}, error) {
+func MountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.UtilityVM) (interface{}, error) {
 	logrus.Debugln("hcsshim::mountContainerLayers", layerFolders)
 
 	if uvm == nil {
@@ -186,27 +186,27 @@ func mountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 
 }
 
-// unmountOperation is used when calling Unmount() to determine what type of unmount is
+// UnmountOperation is used when calling Unmount() to determine what type of unmount is
 // required. In V1 schema, this must be unmountOperationAll. In V2, client can
 // be more optimal and only unmount what they need which can be a minor performance
 // improvement (eg if you know only one container is running in a utility VM, and
 // the UVM is about to be torn down, there's no need to unmount the VSMB shares,
 // just SCSI to have a consistent file system).
-type unmountOperation uint
+type UnmountOperation uint
 
 const (
-	unmountOperationSCSI  unmountOperation = 0x01
-	unmountOperationVSMB                   = 0x02
-	unmountOperationVPMEM                  = 0x04
-	unmountOperationAll                    = unmountOperationSCSI | unmountOperationVSMB | unmountOperationVPMEM
+	UnmountOperationSCSI  UnmountOperation = 0x01
+	UnmountOperationVSMB                   = 0x02
+	UnmountOperationVPMEM                  = 0x04
+	UnmountOperationAll                    = UnmountOperationSCSI | UnmountOperationVSMB | UnmountOperationVPMEM
 )
 
-// unmountContainerLayers is a helper for clients to hide all the complexity of layer unmounting
-func unmountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.UtilityVM, op unmountOperation) error {
+// UnmountContainerLayers is a helper for clients to hide all the complexity of layer unmounting
+func UnmountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.UtilityVM, op UnmountOperation) error {
 	logrus.Debugln("hcsshim::unmountContainerLayers", layerFolders)
 	if uvm == nil {
 		// Must be an argon - folders are mounted on the host
-		if op != unmountOperationAll {
+		if op != UnmountOperationAll {
 			return fmt.Errorf("only operation supported for host-mounted folders is unmountOperationAll")
 		}
 		if len(layerFolders) < 1 {
@@ -232,7 +232,7 @@ func unmountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Ut
 	var retError error
 
 	// Unload the storage filter followed by the SCSI scratch
-	if (op & unmountOperationSCSI) == unmountOperationSCSI {
+	if (op & UnmountOperationSCSI) == UnmountOperationSCSI {
 		containerScratchPathInUVM := ospath.Join(uvm.OS(), guestRoot, scratchPath)
 		logrus.Debugf("hcsshim::unmountContainerLayers CombinedLayers %s", containerScratchPathInUVM)
 		combinedLayersModification := &schema2.ModifySettingsRequestV2{
@@ -261,7 +261,7 @@ func unmountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Ut
 	// Remove each of the read-only layers from VSMB. These's are ref-counted and
 	// only removed once the count drops to zero. This allows multiple containers
 	// to share layers.
-	if uvm.OS() == "windows" && len(layerFolders) > 1 && (op&unmountOperationVSMB) == unmountOperationVSMB {
+	if uvm.OS() == "windows" && len(layerFolders) > 1 && (op&UnmountOperationVSMB) == UnmountOperationVSMB {
 		for _, layerPath := range layerFolders[:len(layerFolders)-1] {
 			if e := uvm.RemoveVSMB(layerPath); e != nil {
 				logrus.Debugln(e)
@@ -277,7 +277,7 @@ func unmountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Ut
 	// Remove each of the read-only layers from VPMEM. These's are ref-counted and
 	// only removed once the count drops to zero. This allows multiple containers
 	// to share layers.
-	if uvm.OS() == "linux" && len(layerFolders) > 1 && (op&unmountOperationVPMEM) == unmountOperationVPMEM {
+	if uvm.OS() == "linux" && len(layerFolders) > 1 && (op&UnmountOperationVPMEM) == UnmountOperationVPMEM {
 		for _, layerPath := range layerFolders[:len(layerFolders)-1] {
 			if e := uvm.RemoveVPMEM(filepath.Join(layerPath, "layer.vhd")); e != nil {
 				logrus.Debugln(e)

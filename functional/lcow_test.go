@@ -59,11 +59,10 @@ func testLCOWUVMNoSCSISingleVPMem(t *testing.T, opts *uvm.UVMOptions, expected s
 	if err := lcowUVM.Start(); err != nil {
 		t.Fatal(err)
 	}
-	//time.Sleep(2 * time.Minute)
 	defer lcowUVM.Terminate()
 	out, err := exec.Command(`hcsdiag`, `exec`, `-uvm`, lcowUVM.ID(), `dmesg`).Output() // TODO: Move the CreateProcess.
 	if err != nil {
-		t.Fatal(string(err.(*exec.ExitError).Stderr)) // Need new initrd from Justin. Current will fasil "Unspecified error" on latest builds
+		t.Fatal(string(err.(*exec.ExitError).Stderr))
 	}
 	if !strings.Contains(string(out), expected) {
 		t.Fatalf("Expected dmesg output to have %q: %s", expected, string(out))
@@ -106,7 +105,7 @@ func testLCOWTimeUVMStart(t *testing.T, rfsType uvm.PreferredRootFSType) {
 }
 
 func TestLCOWSimplePodScenario(t *testing.T) {
-	//t.Skip("Doesn't work quite yet")
+	t.Skip("Doesn't work quite yet")
 	testutilities.RequiresBuild(t, osversion.RS5)
 	alpineLayers := testutilities.LayerFolders(t, "alpine")
 

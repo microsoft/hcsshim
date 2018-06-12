@@ -147,6 +147,7 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 				return nil, fmt.Errorf("vpmem device count must between 0 and %d", MaxVPMEM)
 			}
 			uvm.vpmemMax = *opts.VPMemDeviceCount
+			logrus.Debugln("uvm::Create:: uvm.vpmemMax=", uvm.vpmemMax)
 		}
 
 		scsi["0"] = schema2.VirtualMachinesResourcesStorageScsiV2{Attachments: attachments}
@@ -159,6 +160,7 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 			if uvm.scsiControllerCount == 0 {
 				scsi = nil
 			}
+			logrus.Debugln("uvm::Create:: uvm.scsiControllerCount=", uvm.scsiControllerCount)
 		}
 		if opts.BootFilesPath == "" {
 			opts.BootFilesPath = filepath.Join(os.Getenv("ProgramFiles"), "Linux Containers")
