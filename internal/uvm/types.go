@@ -9,6 +9,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/Microsoft/hcsshim/internal/schemaversion"
 )
 
 //                    | WCOW | LCOW
@@ -52,8 +53,8 @@ type nicInfo struct {
 }
 
 type namespaceInfo struct {
-	nics     []nicInfo
-	refCount int
+	nics          []nicInfo
+	refCount      uint32
 }
 
 // UtilityVM is the object used by clients representing a utility VM
@@ -82,6 +83,8 @@ type UtilityVM struct {
 	plan9Counter uint64 // Each newly-added plan9 share has a counter used as its ID in the ResourceURI and for the name
 
 	namespaces map[string]*namespaceInfo
+
+	supportedSchema []*schemaversion.SchemaVersion
 
 	gcslog net.Listener
 }

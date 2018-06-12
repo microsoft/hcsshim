@@ -407,8 +407,9 @@ const (
 	ResourceTypeSharedMemoryRegion ResourceType = "SharedMemoryRegion"
 	ResourceTypeVPMemDevice        ResourceType = "VPMemDevice"
 	ResourceTypeGpu                ResourceType = "Gpu"
-	ResourceTypeCosIndex           ResourceType = "CosIndex" // v2.1
-	ResourceTypeRmid               ResourceType = "Rmid"     // v2.1
+	ResourceTypeCosIndex           ResourceType = "CosIndex"         // v2.1
+	ResourceTypeRmid               ResourceType = "Rmid"             // v2.1
+	ResourceTypeNetworkNamespace   ResourceType = "NetworkNamespace" // v2.1
 )
 
 // RequestType const
@@ -446,4 +447,27 @@ type ProcessConfig struct {
 	ConsoleSize       [2]uint           `json:",omitempty"`
 	CreateInUtilityVm bool              `json:",omitempty"` // Used by Linux Containers on Windows
 	OCIProcess        interface{}       `json:"OciProcess,omitempty"`
+}
+
+// Information about the guest.
+type GuestInterfaceInfo struct {
+	// Each schema version x.y stands for the range of versions a.b where a==x
+	// and b<=y. This list comes from the SupportedSchemaVersions field in
+	// GcsCapabilities.
+	SupportedSchemaVersions []*schemaversion.SchemaVersion
+	ProtocolVersion         uint32 `json:",omitempty"`
+}
+
+type PropertyType string
+
+const (
+	PropertyTypeGuestInterface PropertyType = "GuestInterface"
+)
+
+type PropertyQuery struct {
+	PropertyTypes []PropertyType `json:",omitempty"`
+}
+
+type SystemProperties struct {
+	GuestInterfaceInfo *GuestInterfaceInfo `json:",omitempty"`
 }

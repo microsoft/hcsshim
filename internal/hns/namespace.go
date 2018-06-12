@@ -67,6 +67,10 @@ func CreateNamespace() (string, error) {
 	return ns.ID, nil
 }
 
+func GetNamespace(id string) (*Namespace, error) {
+	return issueNamespaceRequest(&id, "GET", "", nil)
+}
+
 func RemoveNamespace(id string) error {
 	_, err := issueNamespaceRequest(&id, "DELETE", "", nil)
 	return err

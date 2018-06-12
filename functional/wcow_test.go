@@ -19,6 +19,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
+	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/wcow"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
@@ -111,7 +112,7 @@ import (
 //}
 //
 //
-// Sample v2 HCS document for Xenon (no networking)
+// Sample v2 HCS document for Xenon 
 //
 //{
 //    "Owner": "functional.test.exe",
@@ -169,6 +170,7 @@ import (
 //        }
 //    },
 //    "ShouldTerminateOnLastHandleClosed": true
+//    "NetworkNamespace" : <namespace id>
 //}
 
 // Helper to start a container.
@@ -691,6 +693,46 @@ func TestWCOWXenonOciV2(t *testing.T) {
 	if err := wcow.CreateUVMScratch(uvmImagePath, xenonOci2UVMScratchDir, xenonOci2UVMId); err != nil {
 		t.Fatalf("failed to create scratch: %s", err)
 	}
+	
+	network := &hcsshim.HNSNetwork{
+		Name: "GoTestNat",
+		Type: "NAT",
+	}
+	
+	endpoint := &hcsshim.HNSEndpoint{
+		Name: "TestEndpoint",
+	}
+	
+	namespace:= ""
+
+	defer func() {
+		if network.Id != "" {
+			network.Delete()
+		}
+		
+		if endpoint.Id != "" {
+			network.Delete()
+		}
+		if namespace != "" {
+			hns.RemoveNamespace(namespace)
+		}
+	}()
+
+	if network, err = network.Create(); err != nil {
+		t.Fatalf("failed to create network: %s", err)
+	}
+
+	if endpoint, err = network.CreateEndpoint(endpoint); err != nil {
+		t.Fatalf("failed to create endpoint: %s", err)
+	}
+
+	if namespace, err = hns.CreateNamespace(); err != nil {
+		t.Fatalf("failed to create network namespace: %s", err)
+	}
+
+	if err = hns.AddNamespaceEndpoint(namespace, endpoint.Id); err != nil {
+		t.Fatalf("failed to add endpoint to network namespace: %s", err)
+	}
 
 	xenonOci2UVM, err = uvm.Create(
 		&uvm.UVMOptions{
@@ -715,6 +757,7 @@ func TestWCOWXenonOciV2(t *testing.T) {
 			HostingSystem: xenonOci2UVM,
 			SchemaVersion: schemaversion.SchemaV20(),
 			Spec:          spec,
+			NetworkNamespace: namespace,
 		})
 	if err != nil {
 		t.Fatal(err)

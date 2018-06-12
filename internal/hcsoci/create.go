@@ -119,11 +119,7 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 		}
 		coi.actualNetworkNamespace = resources.netNS
 		if coi.HostingSystem != nil {
-			endpoints, err := getNamespaceEndpoints(coi.actualNetworkNamespace)
-			if err != nil {
-				return nil, resources, err
-			}
-			err = coi.HostingSystem.AddNetNS(coi.actualNetworkNamespace, endpoints)
+			err = coi.HostingSystem.AddNetNS(coi.actualNetworkNamespace)
 			if err != nil {
 				return nil, resources, err
 			}

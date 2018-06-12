@@ -8,6 +8,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/interop"
 	"github.com/Microsoft/hcsshim/internal/schema1"
+	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/sirupsen/logrus"
 )
 
@@ -235,29 +236,59 @@ func (computeSystem *System) WaitTimeout(timeout time.Duration) error {
 	return nil
 }
 
-func (computeSystem *System) Properties(types ...schema1.PropertyType) (*schema1.ContainerProperties, error) {
+func (computeSystem *System) properties(query []byte) ([]byte, error) {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
-	queryj, err := json.Marshal(schema1.PropertyQuery{types})
-	if err != nil {
-		return nil, makeSystemError(computeSystem, "Properties", "", err, nil)
-	}
-
 	var resultp, propertiesp *uint16
-	err = hcsGetComputeSystemProperties(computeSystem.handle, string(queryj), &propertiesp, &resultp)
+	err := hcsGetComputeSystemProperties(computeSystem.handle, string(query), &propertiesp, &resultp)
 	events := processHcsResult(resultp)
 	if err != nil {
-		return nil, makeSystemError(computeSystem, "Properties", "", err, events)
+		return nil, makeSystemError(computeSystem, "properties", "", err, events)
 	}
 
 	if propertiesp == nil {
 		return nil, ErrUnexpectedValue
 	}
+
 	propertiesRaw := interop.ConvertAndFreeCoTaskMemBytes(propertiesp)
+	return propertiesRaw, nil
+}
+
+//Properties Gets V1 properties for the system
+func (computeSystem *System) Properties(types ...schema1.PropertyType) (*schema1.ContainerProperties, error) {
+	queryj, err := json.Marshal(schema1.PropertyQuery{types})
+	if err != nil {
+		return nil, makeSystemError(computeSystem, "Properties", "", err, nil)
+	}
+
+	propertiesRaw, err := computeSystem.properties(queryj)
+	if err != nil {
+		return nil, err
+	}
+
 	properties := &schema1.ContainerProperties{}
 	if err := json.Unmarshal(propertiesRaw, properties); err != nil {
 		return nil, makeSystemError(computeSystem, "Properties", "", err, nil)
+	}
+	return properties, nil
+}
+
+//PropertiesV2 Gets V2 properties for the system
+func (computeSystem *System) PropertiesV2(types ...schema2.PropertyType) (*schema2.SystemProperties, error) {
+	queryj, err := json.Marshal(schema2.PropertyQuery{types})
+	if err != nil {
+		return nil, makeSystemError(computeSystem, "PropertiesV2", "", err, nil)
+	}
+
+	propertiesRaw, err := computeSystem.properties(queryj)
+	if err != nil {
+		return nil, err
+	}
+
+	properties := &schema2.SystemProperties{}
+	if err := json.Unmarshal(propertiesRaw, properties); err != nil {
+		return nil, makeSystemError(computeSystem, "PropertiesV2", "", err, nil)
 	}
 	return properties, nil
 }
