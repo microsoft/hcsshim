@@ -157,14 +157,23 @@ func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int
 		RequestType:  schema2.RequestTypeRemove,
 		ResourceUri:  fmt.Sprintf("VirtualMachine/Devices/SCSI/%d/%d", controller, lun),
 	}
-	if uvmPath != "" {
-		// Include the HostedSettings so that the GCS ejects the disk cleanly
+
+	// Include the HostedSettings so that the GCS ejects the disk cleanly
+	if uvm.operatingSystem == "windows" {
+		// Just an FYI, Windows doesn't support attach only, so ContainerPath will always be set
 		scsiModification.HostedSettings = schema2.ContainersResourcesMappedVirtualDiskV2{
 			ContainerPath: uvmPath,
 			Lun:           uint8(lun),
 			// TODO: Controller: uint8(controller), // TODO NOT IN HCS API CURRENTLY
 		}
+	} else {
+		scsiModification.HostedSettings = lcowhostedsettings.MappedVirtualDisk{
+			MountPath:  uvmPath, // May be blank in attach-only
+			Lun:        uint8(lun),
+			Controller: uint8(controller),
+		}
 	}
+
 	if err := uvm.Modify(scsiModification); err != nil {
 		return err
 	}
