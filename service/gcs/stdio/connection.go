@@ -29,13 +29,13 @@ func Connect(tport transport.Transport, settings ConnectionSettings) (_ *Connect
 			return nil, errors.Wrap(err, "failed creating stdin Connection")
 		}
 	}
-	if settings.StdIn != nil {
+	if settings.StdOut != nil {
 		connSet.Out, err = tport.Dial(*settings.StdOut)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed creating stdout Connection")
 		}
 	}
-	if settings.StdIn != nil {
+	if settings.StdErr != nil {
 		connSet.Err, err = tport.Dial(*settings.StdErr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed creating stderr Connection")
