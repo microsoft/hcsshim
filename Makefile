@@ -27,7 +27,7 @@ test:
 
 rootfs: .rootfs-done
 
-.rootfs-done: $(BASE) init/init bin/vsockexec bin/gcs bin/gcstools Makefile
+.rootfs-done: init/init bin/vsockexec bin/gcs bin/gcstools Makefile
 	rm -rf rootfs
 	mkdir -p rootfs/bin/
 	cp $(SRCROOT)/init/init rootfs/
@@ -40,7 +40,7 @@ rootfs: .rootfs-done
 	git -C $(SRCROOT) rev-parse --abbrev-ref HEAD > rootfs/gcs.branch
 	touch .rootfs-done
 
-out/rootfs.tar.gz: .rootfs-done
+out/rootfs.tar.gz: $(BASE) .rootfs-done
 	@mkdir -p out
 	# Append the added files to the base archive
 	bsdtar -C rootfs -zcf $@ @$(abspath $(BASE)) .
