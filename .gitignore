@@ -20,3 +20,9 @@ service/pkg/
 *.img
 *.vhd
 *.tar.gz
+
+# Make stuff
+.rootfs-done
+bin/*
+rootfs/*
+*.o
