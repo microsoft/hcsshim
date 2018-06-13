@@ -28,6 +28,16 @@ var capabilities = prot.GcsCapabilities{
 	SendHostCreateMessage:   false,
 	SendHostStartMessage:    false,
 	HVSocketConfigOnStartup: false,
+	SupportedSchemaVersions: []prot.SchemaVersion{
+		prot.SchemaVersion{
+			Major: 1,
+			Minor: 0,
+		},
+		prot.SchemaVersion{
+			Major: 2,
+			Minor: 1,
+		},
+	},
 }
 
 // UnknownMessage represents the default handler logic for an unmatched request
