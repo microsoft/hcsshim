@@ -237,6 +237,8 @@ type GcsCapabilities struct {
 	// Hyper-V socket addresses of the VM, and would have a RequestType of
 	// Update.
 	HVSocketConfigOnStartup bool `json:"HvSocketConfigOnStartup,omitempty"`
+
+	SupportedSchemaVersions []SchemaVersion `json:",omitempty"`
 }
 
 // MessageBase is the base type embedded in all messages sent from the HCS to
