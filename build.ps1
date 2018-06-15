@@ -40,6 +40,11 @@ Try {
 	if ([environment]::OSVersion.Version.Build -gt 17134) {
 		Write-Host -ForegroundColor Yellow "INFO: Generating rootfs.vhd"
 		pushd $d
+		Try {
+			Get-ComputeProcess -Id rootfs2vhd | Stop-ComputeProcess -Force
+		}
+		Catch [Exception] {
+		}
 		.\rootfs2vhd
 		popd
 		if ( $LastExitCode -ne 0 ) {
