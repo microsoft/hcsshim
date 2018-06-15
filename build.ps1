@@ -1,11 +1,11 @@
 <#
 .NOTES
-    Summary: Simple wrapper to build a local initrd.img, rootfs.tar.gz and rootfs.vhd from sources and optionally install it.
+    Summary: Simple wrapper to build a local initrd.img and rootfs.tar.gz from sources and optionally install it.
 
     License: See https://github.com/Microsoft/opengcs/blob/master/LICENSE
 
 .Parameter Install
-    Installs the built initrd.img and rootfs.vhd
+    Installs the built initrd.img
 
 #>
 
@@ -31,29 +31,13 @@ Try {
     }
 
     $d=New-TemporaryDirectory
-    Write-Host -ForegroundColor Yellow "INFO: Compiling GCS and rootfs2vhd binaries"
+    Write-Host -ForegroundColor Yellow "INFO: Copying targets to $d"
     docker run --rm -v $d`:/build/out opengcs
     if ( $LastExitCode -ne 0 ) {
         Throw "failed to build"
     }
 
-	if ([environment]::OSVersion.Version.Build -gt 17134) {
-		Write-Host -ForegroundColor Yellow "INFO: Generating rootfs.vhd"
-		pushd $d
-		Try {
-			Get-ComputeProcess -Id rootfs2vhd | Stop-ComputeProcess -Force
-		}
-		Catch [Exception] {
-		}
-		.\rootfs2vhd
-		popd
-		if ( $LastExitCode -ne 0 ) {
-			Write-Warning "failed to convert to rootfs to VHD. Ignoring while tool still in progress"
-		}
-	} else {
-		Write-Warning "Skipping conversion of root file system to VHD - requires RS5+"
-	}
-	
+	Write-Host -ForegroundColor Yellow "INFO: Use rootfs2vhd in Microsoft/hcsshim to make a rootfs VHD if needed"
 
     if ($Install) {
         if (Test-Path "C:\Program Files\Linux Containers\initrd.img" -PathType Leaf) {
@@ -61,19 +45,9 @@ Try {
             Write-Host -ForegroundColor Yellow "INFO: Backed up previous initrd.img to C:\Program Files\Linux Containers\initrd.old"
         }
         copy "$d`\initrd.img" "C:\Program Files\Linux Containers\initrd.img"
+        Write-Host -ForegroundColor Yellow "INFO: Restart the docker daemon to pick up the new image"
+    }
 
-        if (Test-Path "$d`\rootfs.vhd" -PathType Leaf) {
-			if (Test-Path "C:\Program Files\Linux Containers\rootfs.vhd" -PathType Leaf) {
-				copy "C:\Program Files\Linux Containers\rootfs.vhd" "C:\Program Files\Linux Containers\rootfs.old"
-				Write-Host -ForegroundColor Yellow "INFO: Backed up previous rootfs.vhd to C:\Program Files\Linux Containers\rootfs.old"
-			}
-			copy "$d`\rootfs.vhd" "C:\Program Files\Linux Containers\rootfs.vhd"
-		}
-
-        Write-Host -ForegroundColor Yellow "INFO: Restart the docker daemon to pick up the new filee"
-	}
-
-	Write-Host -ForegroundColor Yellow "INFO: Targets in $d"
 }
 Catch [Exception] {
     Throw $_
