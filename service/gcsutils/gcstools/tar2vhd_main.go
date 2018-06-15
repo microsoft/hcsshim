@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 
 	"github.com/Microsoft/opengcs/service/gcsutils/gcstools/commoncli"
@@ -36,6 +37,7 @@ func tar2vhd() error {
 
 func tar2vhdMain() {
 	if err := tar2vhd(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	os.Exit(0)
