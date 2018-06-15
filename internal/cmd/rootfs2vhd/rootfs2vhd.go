@@ -99,7 +99,11 @@ func rootfs2vhd(c *cli.Context) {
 	}
 
 	fmt.Println("- Creating an LCOW utility VM...")
-	lcowUVM, err := uvm.Create(&uvm.UVMOptions{OperatingSystem: "linux", ID: "rootfs2vhd"})
+	opts := &uvm.UVMOptions{OperatingSystem: "linux", ID: "rootfs2vhd"}
+	if debug {
+		opts.ConsolePipe = `\\.\pipe\vmpipe`
+	}
+	lcowUVM, err := uvm.Create(opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create utility VM: %s", err)
 		os.Exit(-1)
