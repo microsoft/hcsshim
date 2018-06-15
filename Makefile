@@ -49,6 +49,13 @@ out/initrd.img: out/rootfs.tar.gz
 	# Convert from the rootfs tar to newc cpio
 	bsdtar -zcf $@ --format newc @out/rootfs.tar.gz
 
+out/rootfs.vhd: out/rootfs.tar.gz bin/tar2vhd
+	@mkdir -p out
+	t=`mktemp` && zcat out/rootfs.tar.gz | bin/tar2vhd > "$$t" && mv $$t $@
+
+bin/tar2vhd: bin/gcstools
+	ln -s gcstools $@
+
 bin/gcs.always: always
 	@mkdir -p bin
 	$(GO_BUILD) -o $@ github.com/Microsoft/opengcs/service/gcs
