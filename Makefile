@@ -19,7 +19,7 @@ GCS_TOOLS=\
 
 .PHONY: all always rootfs test
 
-all: out/initrd.img out/rootfs.tar.gz
+all: out/initrd.img out/rootfs.tar.gz out/rootfs2vhd.exe
 
 test:
 	cd $(SRCROOT) && go test ./service/gcsutils/...
@@ -39,6 +39,7 @@ rootfs: .rootfs-done
 	git -C $(SRCROOT) rev-parse HEAD > rootfs/gcs.commit && \
 	git -C $(SRCROOT) rev-parse --abbrev-ref HEAD > rootfs/gcs.branch
 	touch .rootfs-done
+	ls -lR rootfs
 
 out/rootfs.tar.gz: $(BASE) .rootfs-done
 	@mkdir -p out
@@ -49,6 +50,11 @@ out/initrd.img: out/rootfs.tar.gz
 	# Convert from the rootfs tar to newc cpio
 	bsdtar -zcf $@ --format newc @out/rootfs.tar.gz
 
+out/rootfs2vhd.exe:
+	# Compile rootfs2vhd for Windows
+	env GOOS=windows GOARCH=amd64 go get -u github.com/Microsoft/hcsshim/internal/cmd/rootfs2vhd
+	cp /go/bin/windows_amd64/rootfs2vhd.exe out/
+	
 bin/gcs.always: always
 	@mkdir -p bin
 	$(GO_BUILD) -o $@ github.com/Microsoft/opengcs/service/gcs
