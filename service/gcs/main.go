@@ -15,7 +15,6 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/oslayer/realos"
 	"github.com/Microsoft/opengcs/service/gcs/runtime/runc"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
-	"github.com/Microsoft/opengcs/service/libs/commonutils"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )
@@ -57,10 +56,6 @@ func main() {
 	level, err := logrus.ParseLevel(*logLevel)
 	if err != nil {
 		logrus.Fatal(err)
-	}
-
-	if level == logrus.DebugLevel {
-		logrus.AddHook(commonutils.NewStackHook(logrus.AllLevels))
 	}
 
 	logrus.SetLevel(level)
