@@ -42,6 +42,7 @@ func forwardGcsLogs(l net.Listener) {
 		lvl := e.Data["level"]
 		delete(e.Data, "level")
 		e.Data["vm.time"] = e.Data["time"]
+		delete(e.Data, "time")
 		switch lvl {
 		case "debug":
 			e.Debug(msg)

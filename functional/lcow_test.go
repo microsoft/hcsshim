@@ -30,7 +30,7 @@ func TestLCOWUVMNoSCSINoVPMemInitrd(t *testing.T) {
 		VPMemDeviceCount:    &vpmemCount,
 		SCSIControllerCount: &scsiCount,
 	}
-	testLCOWUVMNoSCSISingleVPMem(t, opts, `Command line: initrd=\initrd.img`)
+	testLCOWUVMNoSCSISingleVPMem(t, opts, `Command line: initrd=/initrd.img`)
 }
 
 // TestLCOWUVMNoSCSISingleVPMemVHD starts an LCOW utility VM without a SCSI controller and
