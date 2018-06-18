@@ -148,8 +148,11 @@ func CreateTarDisk(in io.Reader,
 	}
 
 	// Mount the disk and remove the lost+found folder that might appear from mkfs
-	if err := exec.Command("mount", "-t", "ext4", "-o", "loop", disk.Name(), mntFolder).Run(); err != nil {
+	if _, err := exec.Command("mount", "-t", "ext4", "-o", "loop", disk.Name(), mntFolder).Output(); err != nil {
 		logrus.Infof("failed mount -o loop %s", err)
+		if ee, ok := err.(*exec.ExitError); ok {
+			return 0, fmt.Errorf("mount failed: %s: %s", err, ee.Stderr)
+		}
 		return 0, err
 	}
 	defer exec.Command("umount", mntFolder).Run()

@@ -31,7 +31,7 @@ RUN \
     rm -rf /target/etc/apk /target/lib/apk /target/var/cache && \
     \
     # Install the build packages
-    apk add --no-cache build-base curl git go musl-dev linux-headers libarchive-tools && \
+    apk add --no-cache build-base curl git go musl-dev linux-headers libarchive-tools e2fsprogs && \
     \
     # Grab udhcpc_config.script
     curl -fSL "https://raw.githubusercontent.com/mirror/busybox/38d966943f5288bb1f2e7219f50a92753c730b14/examples/udhcp/simple.script" -o /target/sbin/udhcpc_config.script && \
