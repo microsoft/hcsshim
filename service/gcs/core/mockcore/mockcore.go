@@ -31,9 +31,9 @@ type CreateContainerCall struct {
 
 // ExecProcessCall captures the arguments of ExecProcess.
 type ExecProcessCall struct {
-	ID       string
-	Params   prot.ProcessParameters
-	StdioSet *stdio.ConnectionSet
+	ID                 string
+	Params             prot.ProcessParameters
+	ConnectionSettings stdio.ConnectionSettings
 }
 
 // SignalContainerCall captures the arguments of SignalContainer.
@@ -56,8 +56,8 @@ type GetPropertiesCall struct {
 
 // RunExternalProcessCall captures the arguments of RunExternalProcess.
 type RunExternalProcessCall struct {
-	Params   prot.ProcessParameters
-	StdioSet *stdio.ConnectionSet
+	Params             prot.ProcessParameters
+	ConnectionSettings stdio.ConnectionSettings
 }
 
 // ModifySettingsCall captures the arguments of ModifySettings.
@@ -133,11 +133,11 @@ func (c *MockCore) CreateContainer(id string, settings prot.VMHostedContainerSet
 }
 
 // ExecProcess captures its arguments and returns pid 101.
-func (c *MockCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (pid int, err error) {
+func (c *MockCore) ExecProcess(id string, params prot.ProcessParameters, conSettings stdio.ConnectionSettings) (pid int, err error) {
 	c.LastExecProcess = ExecProcessCall{
-		ID:       id,
-		Params:   params,
-		StdioSet: stdioSet,
+		ID:                 id,
+		Params:             params,
+		ConnectionSettings: conSettings,
 	}
 	return 101, c.behaviorResult()
 }
@@ -167,10 +167,10 @@ func (c *MockCore) GetProperties(id string, query string) (*prot.Properties, err
 }
 
 // RunExternalProcess captures its arguments and returns pid 101.
-func (c *MockCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (pid int, err error) {
+func (c *MockCore) RunExternalProcess(params prot.ProcessParameters, conSettings stdio.ConnectionSettings) (pid int, err error) {
 	c.LastRunExternalProcess = RunExternalProcessCall{
-		Params:   params,
-		StdioSet: stdioSet,
+		Params:             params,
+		ConnectionSettings: conSettings,
 	}
 	return 101, c.behaviorResult()
 }

@@ -51,9 +51,10 @@ var _ = Describe("Storage", func() {
 		Describe("getting the unioning paths", func() {
 			Context("when the index is a valid location", func() {
 				It("should return the correct paths", func() {
-					layerPrefix, scratchPath, workdirPath, rootfsPath := coreint.getUnioningPaths(validIndex)
+					layerPrefix, scratchPath, upperdirPath, workdirPath, rootfsPath := coreint.getUnioningPaths(validIndex)
 					Expect(layerPrefix).To(Equal(fmt.Sprintf("/tmp/%d", validIndex)))
 					Expect(scratchPath).To(Equal(fmt.Sprintf("/tmp/%d/scratch", validIndex)))
+					Expect(upperdirPath).To(Equal(fmt.Sprintf("/tmp/%d/scratch/upper", validIndex)))
 					Expect(workdirPath).To(Equal(fmt.Sprintf("/tmp/%d/scratch/work", validIndex)))
 					Expect(rootfsPath).To(Equal(fmt.Sprintf("/tmp/%d/rootfs", validIndex)))
 				})

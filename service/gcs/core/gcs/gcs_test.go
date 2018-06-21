@@ -571,7 +571,7 @@ var _ = Describe("GCS", func() {
 				initialExecParams                    prot.ProcessParameters
 				nonInitialExecParams                 prot.ProcessParameters
 				externalParams                       prot.ProcessParameters
-				fullStdioSet                         *stdio.ConnectionSet
+				fullStdioSet                         stdio.ConnectionSettings
 				mappedVirtualDisk                    prot.MappedVirtualDisk
 				mappedDirectory                      prot.MappedDirectory
 				diskModificationRequest              prot.ResourceModificationRequestResponse
@@ -644,7 +644,7 @@ var _ = Describe("GCS", func() {
 					CreateStdOutPipe: true,
 					CreateStdErrPipe: true,
 					IsExternal:       false,
-					OCISpecification: oci.Spec{},
+					OCISpecification: &oci.Spec{},
 				}
 				nonInitialExecParams = prot.ProcessParameters{
 					CommandLine:      "cat file",
@@ -665,12 +665,13 @@ var _ = Describe("GCS", func() {
 					CreateStdOutPipe: true,
 					CreateStdErrPipe: true,
 					IsExternal:       true,
-					OCISpecification: oci.Spec{},
+					OCISpecification: &oci.Spec{},
 				}
-				fullStdioSet = &stdio.ConnectionSet{
-					In:  mockos.NewMockReadWriteCloser(),
-					Out: mockos.NewMockReadWriteCloser(),
-					Err: mockos.NewMockReadWriteCloser(),
+				var in, out, err uint32 = 0, 1, 2
+				fullStdioSet = stdio.ConnectionSettings{
+					StdIn:  &in,
+					StdOut: &out,
+					StdErr: &err,
 				}
 
 				mappedVirtualDisk = prot.MappedVirtualDisk{
@@ -1120,8 +1121,8 @@ var _ = Describe("GCS", func() {
 					exitCode int
 				)
 				JustBeforeEach(func() {
-					var exitCodeChan chan int
-					var doneChan chan bool
+					var exitCodeChan <-chan int
+					var doneChan chan<- bool
 					exitCodeChan, doneChan, err = coreint.WaitProcess(pid)
 					if err == nil {
 						exitCode = <-exitCodeChan

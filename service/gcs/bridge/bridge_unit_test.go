@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"io/ioutil"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -361,38 +362,7 @@ func (e *errorTransport) Dial(_ uint32) (transport.Connection, error) {
 	return nil, e.e
 }
 
-func Test_Bridge_ListenAndServe_NoTransport_Fails(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("The code did not panic on nil Transport")
-		}
-	}()
-
-	b := &Bridge{}
-	_ = b.ListenAndServe()
-}
-
-func Test_Bridge_ListenAndServe_TransportDial_Fails(t *testing.T) {
-	mt := &errorTransport{e: errors.New("Not implemented")}
-	b := &Bridge{Transport: mt}
-	err := b.ListenAndServe()
-	if err == nil {
-		t.Error("ListenAndServe should have failed on error transport dial")
-	}
-}
-
-func Test_Bridge_ListenAndServe_NoHandler_Fails(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("The code did not panic on nil Handler")
-		}
-	}()
-
-	b := &Bridge{}
-	_ = b.ListenAndServe()
-}
-
-func serverSend(conn transport.Connection, messageType prot.MessageIdentifier, messageID prot.SequenceID, i interface{}) error {
+func serverSend(conn io.Writer, messageType prot.MessageIdentifier, messageID prot.SequenceID, i interface{}) error {
 	body := make([]byte, 0)
 	if i != nil {
 		var err error
@@ -419,7 +389,7 @@ func serverSend(conn transport.Connection, messageType prot.MessageIdentifier, m
 	return nil
 }
 
-func serverRead(conn transport.Connection) (*prot.MessageHeader, []byte, error) {
+func serverRead(conn io.Reader) (*prot.MessageHeader, []byte, error) {
 	header := &prot.MessageHeader{}
 	// Read the header.
 	if err := binary.Read(conn, binary.LittleEndian, header); err != nil {
@@ -434,21 +404,53 @@ func serverRead(conn transport.Connection) (*prot.MessageHeader, []byte, error) 
 	return header, message, nil
 }
 
+type loopbackConnection struct {
+	// Format is client-read, server-write, server-read, client-write
+	pipes [4]*os.File
+}
+
+func (lc *loopbackConnection) close() {
+	for i := 3; i >= 0; i-- {
+		lc.pipes[i].Close()
+	}
+}
+
+func (lc *loopbackConnection) CRead() io.ReadCloser {
+	return lc.pipes[0]
+}
+
+func (lc *loopbackConnection) CWrite() io.WriteCloser {
+	return lc.pipes[3]
+}
+
+func (lc *loopbackConnection) SRead() io.ReadCloser {
+	return lc.pipes[2]
+}
+
+func (lc *loopbackConnection) SWrite() io.WriteCloser {
+	return lc.pipes[1]
+}
+
+func newLoopbackConnection() *loopbackConnection {
+	l := new(loopbackConnection)
+	l.pipes[0], l.pipes[1], _ = os.Pipe()
+	l.pipes[2], l.pipes[3], _ = os.Pipe()
+	return l
+}
+
 func Test_Bridge_ListenAndServe_UnknownMessageHandler_Success(t *testing.T) {
 	// Turn off logging so as not to spam output.
 	logrus.SetOutput(ioutil.Discard)
 
-	mtc := make(chan *transport.MockConnection)
-	defer close(mtc)
-	mt := &transport.MockTransport{Channel: mtc}
+	lc := newLoopbackConnection()
+	defer lc.close()
 
 	b := &Bridge{
-		Transport: mt,
-		Handler:   UnknownMessageHandler(),
+		Handler: UnknownMessageHandler(),
 	}
 
 	go func() {
-		if err := b.ListenAndServe(); err != nil {
+		if err := b.ListenAndServe(lc.SRead(), lc.SWrite()); err != nil {
 			t.Error(err)
 		}
 	}()
@@ -456,18 +458,17 @@ func Test_Bridge_ListenAndServe_UnknownMessageHandler_Success(t *testing.T) {
 		b.quitChan <- true
 	}()
 
-	clientConnection := <-mtc
 	message := &prot.ContainerResizeConsole{
 		MessageBase: &prot.MessageBase{
 			ContainerID: "01234567-89ab-cdef-0123-456789abcdef",
 			ActivityID:  "00000000-0000-0000-0000-000000000001",
 		},
 	}
-	if err := serverSend(clientConnection, prot.ComputeSystemResizeConsoleV1, prot.SequenceID(1), message); err != nil {
+	if err := serverSend(lc.CWrite(), prot.ComputeSystemResizeConsoleV1, prot.SequenceID(1), message); err != nil {
 		t.Error("Failed to send message to server")
 		return
 	}
-	header, body, err := serverRead(clientConnection)
+	header, body, err := serverRead(lc.CRead())
 	if err != nil {
 		t.Error("Failed to read message response from server")
 		return
@@ -492,9 +493,9 @@ func Test_Bridge_ListenAndServe_CorrectHandler_Success(t *testing.T) {
 	// Turn off logging so as not to spam output.
 	logrus.SetOutput(ioutil.Discard)
 
-	mtc := make(chan *transport.MockConnection)
-	defer close(mtc)
-	mt := &transport.MockTransport{Channel: mtc}
+	lc := newLoopbackConnection()
+	defer lc.close()
+
 	mux := NewBridgeMux()
 	message := &prot.ContainerResizeConsole{
 		MessageBase: &prot.MessageBase{
@@ -532,13 +533,12 @@ func Test_Bridge_ListenAndServe_CorrectHandler_Success(t *testing.T) {
 	}
 	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, prot.PvV3, resizeFn)
 	b := &Bridge{
-		Transport: mt,
-		Handler:   mux,
-		protVer:   prot.PvV3,
+		Handler: mux,
+		protVer: prot.PvV3,
 	}
 
 	go func() {
-		if err := b.ListenAndServe(); err != nil {
+		if err := b.ListenAndServe(lc.SRead(), lc.SWrite()); err != nil {
 			t.Error(err)
 		}
 	}()
@@ -546,13 +546,11 @@ func Test_Bridge_ListenAndServe_CorrectHandler_Success(t *testing.T) {
 		b.quitChan <- true
 	}()
 
-	clientConnection := <-mtc
-
-	if err := serverSend(clientConnection, prot.ComputeSystemResizeConsoleV1, prot.SequenceID(1), message); err != nil {
+	if err := serverSend(lc.CWrite(), prot.ComputeSystemResizeConsoleV1, prot.SequenceID(1), message); err != nil {
 		t.Error("Failed to send message to server")
 		return
 	}
-	header, body, err := serverRead(clientConnection)
+	header, body, err := serverRead(lc.CRead())
 	if err != nil {
 		t.Error("Failed to read message response from server")
 		return
@@ -581,9 +579,9 @@ func Test_Bridge_ListenAndServe_HandlersAreAsync_Success(t *testing.T) {
 	// Turn off logging so as not to spam output.
 	logrus.SetOutput(ioutil.Discard)
 
-	mtc := make(chan *transport.MockConnection)
-	defer close(mtc)
-	mt := &transport.MockTransport{Channel: mtc}
+	lc := newLoopbackConnection()
+	defer lc.close()
+
 	mux := NewBridgeMux()
 
 	orderWg := sync.WaitGroup{}
@@ -609,13 +607,12 @@ func Test_Bridge_ListenAndServe_HandlersAreAsync_Success(t *testing.T) {
 	mux.HandleFunc(prot.ComputeSystemModifySettingsV1, prot.PvV3, secondFn)
 
 	b := &Bridge{
-		Transport: mt,
-		Handler:   mux,
-		protVer:   prot.PvV3,
+		Handler: mux,
+		protVer: prot.PvV3,
 	}
 
 	go func() {
-		if err := b.ListenAndServe(); err != nil {
+		if err := b.ListenAndServe(lc.SRead(), lc.SWrite()); err != nil {
 			t.Error(err)
 		}
 	}()
@@ -623,23 +620,21 @@ func Test_Bridge_ListenAndServe_HandlersAreAsync_Success(t *testing.T) {
 		b.quitChan <- true
 	}()
 
-	clientConnection := <-mtc
-
-	if err := serverSend(clientConnection, prot.ComputeSystemResizeConsoleV1, prot.SequenceID(0), nil); err != nil {
+	if err := serverSend(lc.CWrite(), prot.ComputeSystemResizeConsoleV1, prot.SequenceID(0), nil); err != nil {
 		t.Error("Failed to send first message to server")
 		return
 	}
-	if err := serverSend(clientConnection, prot.ComputeSystemModifySettingsV1, prot.SequenceID(1), nil); err != nil {
+	if err := serverSend(lc.CWrite(), prot.ComputeSystemModifySettingsV1, prot.SequenceID(1), nil); err != nil {
 		t.Error("Failed to send second message to server")
 		return
 	}
 
-	headerFirst, _, errFirst := serverRead(clientConnection)
+	headerFirst, _, errFirst := serverRead(lc.CRead())
 	if errFirst != nil {
 		t.Error("Failed to read first response from server")
 		return
 	}
-	headerSecond, _, errSecond := serverRead(clientConnection)
+	headerSecond, _, errSecond := serverRead(lc.CRead())
 	if errSecond != nil {
 		t.Error("Failed to read first response from server")
 		return

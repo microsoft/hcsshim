@@ -2,7 +2,6 @@ package bridge
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"reflect"
@@ -11,10 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Microsoft/opengcs/service/gcs/core/gcs"
 	"github.com/Microsoft/opengcs/service/gcs/core/mockcore"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
-	"github.com/Microsoft/opengcs/service/gcs/transport"
 	"github.com/sirupsen/logrus"
 )
 
@@ -109,7 +108,7 @@ func verifyResponseJSONError(t *testing.T, rw *testResponseWriter) {
 func verifyResponseSuccess(t *testing.T, rw *testResponseWriter) {
 	verifyResponseWriteCount(t, rw)
 	if rw.err != nil {
-		t.Fatal("response was an error response")
+		t.Fatalf("response was an error response: %v", rw.err)
 	}
 	if rw.response == nil {
 		t.Fatal("response was a success but no message was included")
@@ -156,6 +155,12 @@ func newMessageBase() *prot.MessageBase {
 		ActivityID:  f(),
 	}
 	return base
+}
+
+func newMessageUVMBase() *prot.MessageBase {
+	b := newMessageBase()
+	b.ContainerID = gcs.UVMContainerID
+	return b
 }
 
 func Test_NegotiateProtocol_DuplicateCall_Failure(t *testing.T) {
@@ -449,49 +454,6 @@ func Test_ExecProcess_InvalidProcessParameters_Failure(t *testing.T) {
 	verifyActivityID(t, r.MessageBase, rw)
 }
 
-type failureTransport struct {
-	dialCount int
-}
-
-func (f *failureTransport) Dial(port uint32) (transport.Connection, error) {
-	f.dialCount++
-	return nil, fmt.Errorf("test failed to dial for port %d", port)
-}
-
-func Test_ExecProcess_ConnectFails_Failure(t *testing.T) {
-	pp := prot.ProcessParameters{
-		CreateStdInPipe:  true,
-		CreateStdOutPipe: true,
-		CreateStdErrPipe: true,
-	}
-	ppbytes, _ := json.Marshal(pp)
-	r := &prot.ContainerExecuteProcess{
-		MessageBase: newMessageBase(),
-		Settings: prot.ExecuteProcessSettings{
-			VsockStdioRelaySettings: prot.ExecuteProcessVsockStdioRelaySettings{
-				StdIn:  1,
-				StdOut: 2,
-				StdErr: 3,
-			},
-			ProcessParameters: string(ppbytes),
-		},
-	}
-
-	req, rw := setupRequestResponse(t, prot.ComputeSystemExecuteProcessV1, prot.PvV3, r)
-
-	ft := new(failureTransport)
-	tb := &Bridge{
-		Transport: ft,
-	}
-	tb.execProcess(rw, req)
-
-	verifyResponseError(t, rw)
-	verifyActivityID(t, r.MessageBase, rw)
-	if ft.dialCount != 1 {
-		t.Fatal("test dial count was not 1")
-	}
-}
-
 func Test_ExecProcess_External_CoreFails_Failure(t *testing.T) {
 	pp := prot.ProcessParameters{
 		IsExternal: true,
@@ -506,9 +468,7 @@ func Test_ExecProcess_External_CoreFails_Failure(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemExecuteProcessV1, prot.PvV3, r)
 
-	ft := new(failureTransport) // Should not be called since we want no pipes
 	tb := &Bridge{
-		Transport: ft,
 		coreint: &mockcore.MockCore{
 			Behavior: mockcore.Error,
 		},
@@ -517,9 +477,6 @@ func Test_ExecProcess_External_CoreFails_Failure(t *testing.T) {
 
 	verifyResponseError(t, rw)
 	verifyActivityID(t, r.MessageBase, rw)
-	if ft.dialCount != 0 {
-		t.Fatal("test dial count was not 0")
-	}
 }
 
 func Test_ExecProcess_External_CoreSucceeds_Success(t *testing.T) {
@@ -535,19 +492,14 @@ func Test_ExecProcess_External_CoreSucceeds_Success(t *testing.T) {
 	}
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemExecuteProcessV1, prot.PvV3, r)
-	ft := new(failureTransport) // Should not be called since we want no pipes
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
 	tb := &Bridge{
-		Transport: ft,
-		coreint:   mc,
+		coreint: mc,
 	}
 	tb.execProcess(rw, req)
 
 	verifyResponseSuccess(t, rw)
 	verifyActivityID(t, r.MessageBase, rw)
-	if ft.dialCount != 0 {
-		t.Fatal("test dial count was not 0")
-	}
 	if !reflect.DeepEqual(pp, mc.LastRunExternalProcess.Params) {
 		t.Fatal("last run external process did not have equal params structs")
 	}
@@ -563,9 +515,7 @@ func Test_ExecProcess_Container_CoreFails_Failure(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemExecuteProcessV1, prot.PvV3, r)
 
-	ft := new(failureTransport) // Should not be called since we want no pipes
 	tb := &Bridge{
-		Transport: ft,
 		coreint: &mockcore.MockCore{
 			Behavior: mockcore.Error,
 		},
@@ -574,9 +524,6 @@ func Test_ExecProcess_Container_CoreFails_Failure(t *testing.T) {
 
 	verifyResponseError(t, rw)
 	verifyActivityID(t, r.MessageBase, rw)
-	if ft.dialCount != 0 {
-		t.Fatal("test dial count was not 0")
-	}
 }
 
 func Test_ExecProcess_Container_CoreSucceeds_Success(t *testing.T) {
@@ -593,19 +540,14 @@ func Test_ExecProcess_Container_CoreSucceeds_Success(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemExecuteProcessV1, prot.PvV3, r)
 
-	ft := new(failureTransport) // Should not be called since we want no pipes
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
 	tb := &Bridge{
-		Transport: ft,
-		coreint:   mc,
+		coreint: mc,
 	}
 	tb.execProcess(rw, req)
 
 	verifyResponseSuccess(t, rw)
 	verifyActivityID(t, r.MessageBase, rw)
-	if ft.dialCount != 0 {
-		t.Fatal("test dial count was not 0")
-	}
 	if r.ContainerID != mc.LastExecProcess.ID {
 		t.Fatal("last exec process did not have the same container ID")
 	}
@@ -628,7 +570,9 @@ func Test_KillContainer_CoreFails_Failure(t *testing.T) {
 	r := newMessageBase()
 	req, rw := setupRequestResponse(t, prot.ComputeSystemShutdownForcedV1, prot.PvV3, r)
 
+	uvm := gcs.NewHost(nil, nil, nil)
 	tb := &Bridge{
+		hostState: uvm,
 		coreint: &mockcore.MockCore{
 			Behavior: mockcore.Error,
 		},
@@ -643,8 +587,9 @@ func Test_KillContainer_CoreSucceeds_Success(t *testing.T) {
 	r := newMessageBase()
 	req, rw := setupRequestResponse(t, prot.ComputeSystemShutdownForcedV1, prot.PvV3, r)
 
+	uvm := gcs.NewHost(nil, nil, nil)
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
-	tb := &Bridge{coreint: mc}
+	tb := &Bridge{hostState: uvm, coreint: mc}
 	tb.killContainer(rw, req)
 
 	verifyResponseSuccess(t, rw)
@@ -671,7 +616,9 @@ func Test_ShutdownContainer_CoreFails_Failure(t *testing.T) {
 	r := newMessageBase()
 	req, rw := setupRequestResponse(t, prot.ComputeSystemShutdownGracefulV1, prot.PvV3, r)
 
+	uvm := gcs.NewHost(nil, nil, nil)
 	tb := &Bridge{
+		hostState: uvm,
 		coreint: &mockcore.MockCore{
 			Behavior: mockcore.Error,
 		},
@@ -686,8 +633,9 @@ func Test_ShutdownContainer_CoreSucceeds_Success(t *testing.T) {
 	r := newMessageBase()
 	req, rw := setupRequestResponse(t, prot.ComputeSystemShutdownGracefulV1, prot.PvV3, r)
 
+	uvm := gcs.NewHost(nil, nil, nil)
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
-	tb := &Bridge{coreint: mc}
+	tb := &Bridge{hostState: uvm, coreint: mc}
 	tb.shutdownContainer(rw, req)
 
 	verifyResponseSuccess(t, rw)
@@ -721,7 +669,9 @@ func Test_SignalProcess_CoreFails_Failure(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemSignalProcessV1, prot.PvV3, r)
 
+	uvm := gcs.NewHost(nil, nil, nil)
 	tb := &Bridge{
+		hostState: uvm,
 		coreint: &mockcore.MockCore{
 			Behavior: mockcore.Error,
 		},
@@ -743,8 +693,9 @@ func Test_SignalProcess_CoreSucceeds_Success(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemSignalProcessV1, prot.PvV3, r)
 
+	uvm := gcs.NewHost(nil, nil, nil)
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
-	tb := &Bridge{coreint: mc}
+	tb := &Bridge{hostState: uvm, coreint: mc}
 	tb.signalProcess(rw, req)
 
 	verifyResponseSuccess(t, rw)
@@ -775,7 +726,9 @@ func Test_GetProperties_CoreFails_Failure(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemGetPropertiesV1, prot.PvV3, r)
 
+	uvm := gcs.NewHost(nil, nil, nil)
 	tb := &Bridge{
+		hostState: uvm,
 		coreint: &mockcore.MockCore{
 			Behavior: mockcore.Error,
 		},
@@ -794,8 +747,9 @@ func Test_GetProperties_CoreSucceeds_Success(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemGetPropertiesV1, prot.PvV3, r)
 
+	uvm := gcs.NewHost(nil, nil, nil)
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
-	tb := &Bridge{coreint: mc}
+	tb := &Bridge{hostState: uvm, coreint: mc}
 	tb.getProperties(rw, req)
 
 	verifyResponseSuccess(t, rw)
@@ -839,7 +793,9 @@ func Test_WaitOnProcess_CoreFails_Failure(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemWaitForProcessV1, prot.PvV3, r)
 
+	uvm := gcs.NewHost(nil, nil, nil)
 	tb := &Bridge{
+		hostState: uvm,
 		coreint: &mockcore.MockCore{
 			Behavior: mockcore.Error,
 		},
@@ -866,8 +822,8 @@ func Test_WaitOnProcess_CoreSucceeds_Timeout_Error(t *testing.T) {
 	}
 
 	// Do not write the exit code so that the timeout occurs.
-
-	tb := &Bridge{coreint: mc}
+	uvm := gcs.NewHost(nil, nil, nil)
+	tb := &Bridge{hostState: uvm, coreint: mc}
 	tb.waitOnProcess(rw, req)
 
 	verifyResponseError(t, rw)
@@ -896,7 +852,8 @@ func Test_WaitOnProcess_CoreSucceeds_Success(t *testing.T) {
 	// Immediately write the exit code so the waitOnProcess doesnt block.
 	mc.LastWaitProcessReturnContext.ExitCodeChan <- 2980
 
-	tb := &Bridge{coreint: mc}
+	uvm := gcs.NewHost(nil, nil, nil)
+	tb := &Bridge{hostState: uvm, coreint: mc}
 	tb.waitOnProcess(rw, req)
 
 	verifyResponseSuccess(t, rw)
@@ -1057,14 +1014,16 @@ func Test_ModifySettings_CoreSucceeds_Success(t *testing.T) {
 	if r.ContainerID != mc.LastModifySettings.ID {
 		t.Fatal("last modify settings did not have the same container ID")
 	}
-	if !reflect.DeepEqual(r.Request, &mc.LastModifySettings.Request) {
+	if !reflect.DeepEqual(r.Request, mc.LastModifySettings.Request) {
 		t.Fatal("last modify settings did not have equal requests struct")
 	}
 }
 
+/*
+// TODO: jterry75 - Enable V2 unit tests
 func Test_ModifySettings_V2_Success(t *testing.T) {
 	r := &prot.ContainerModifySettings{
-		MessageBase: newMessageBase(),
+		MessageBase: newMessageUVMBase(),
 		V2Request: &prot.ModifySettingRequest{
 			ResourceType: prot.MrtMappedDirectory,
 			RequestType:  prot.MreqtAdd,
@@ -1095,6 +1054,7 @@ func Test_ModifySettings_V2_Success(t *testing.T) {
 		t.Fatal("last modify settings did not have equal requests struct")
 	}
 }
+*/
 
 func Test_ModifySettings_BothV1V2_Success(t *testing.T) {
 	r := &prot.ContainerModifySettings{
@@ -1109,7 +1069,7 @@ func Test_ModifySettings_BothV1V2_Success(t *testing.T) {
 		V2Request: &prot.ModifySettingRequest{
 			ResourceType: prot.MrtMappedDirectory,
 			RequestType:  prot.MreqtAdd,
-			Settings: &prot.MappedDirectory{
+			Settings: &prot.MappedDirectoryV2{
 				ReadOnly: true,
 			},
 		},
@@ -1128,7 +1088,7 @@ func Test_ModifySettings_BothV1V2_Success(t *testing.T) {
 	if r.ContainerID != mc.LastModifySettings.ID {
 		t.Fatal("last modify settings did not have the same container ID")
 	}
-	if !reflect.DeepEqual(r.Request, &mc.LastModifySettings.Request) {
+	if !reflect.DeepEqual(r.Request, mc.LastModifySettings.Request) {
 		t.Fatal("last modify settings did not have equal requests struct")
 	}
 }

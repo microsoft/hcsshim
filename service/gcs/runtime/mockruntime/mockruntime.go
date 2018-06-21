@@ -50,6 +50,10 @@ func (c *container) Tty() *stdio.TtyRelay {
 	return nil
 }
 
+func (c *container) PipeRelay() *stdio.PipeRelay {
+	return nil
+}
+
 func (c *container) ExecProcess(process oci.Process, stdioSet *stdio.ConnectionSet) (p runtime.Process, err error) {
 	return c, nil
 }

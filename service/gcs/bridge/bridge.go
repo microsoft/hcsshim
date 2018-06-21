@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -212,8 +214,9 @@ type Bridge struct {
 
 	hostState *gcspkg.Host
 
-	// testing hook to close the bridge ListenAndServe() method.
 	quitChan chan bool
+	// hasQuitPending when != 0 will cause no more requests to be Read.
+	hasQuitPending uint32
 
 	protVer prot.ProtocolVersion
 }
@@ -256,36 +259,48 @@ func (b *Bridge) AssignHandlers(mux *Mux, gcs core.Core, host *gcspkg.Host) {
 // ListenAndServe connects to the bridge transport, listens for
 // messages and dispatches the appropriate handlers to handle each
 // event in an asynchronous manner.
-func (b *Bridge) ListenAndServe(bridgeIn io.Reader, bridgeOut io.Writer) (conerr error) {
+func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser) error {
 	requestChan := make(chan *Request)
 	requestErrChan := make(chan error)
 	b.responseChan = make(chan bridgeResponse)
 	responseErrChan := make(chan error)
 	b.quitChan = make(chan bool)
 
+	defer close(b.quitChan)
+	defer bridgeOut.Close()
+	defer close(responseErrChan)
+	defer close(b.responseChan)
 	defer close(requestChan)
 	defer close(requestErrChan)
-	defer close(b.responseChan)
-	defer close(responseErrChan)
-	defer close(b.quitChan)
+	defer bridgeIn.Close()
 
 	// Receive bridge requests and schedule them to be processed.
 	go func() {
+		var recverr error
 		for {
-			header := &prot.MessageHeader{}
-			if err := binary.Read(bridgeIn, binary.LittleEndian, header); err != nil {
-				requestErrChan <- errors.Wrap(err, "bridge: failed reading message header")
-				continue
+			if atomic.LoadUint32(&b.hasQuitPending) == 0 {
+				header := &prot.MessageHeader{}
+				if err := binary.Read(bridgeIn, binary.LittleEndian, header); err != nil {
+					if err == io.ErrUnexpectedEOF || err == os.ErrClosed {
+						break
+					}
+					recverr = errors.Wrap(err, "bridge: failed reading message header")
+					break
+				}
+				message := make([]byte, header.Size-prot.MessageHeaderSize)
+				if _, err := io.ReadFull(bridgeIn, message); err != nil {
+					if err == io.ErrUnexpectedEOF || err == os.ErrClosed {
+						break
+					}
+					recverr = errors.Wrap(err, "bridge: failed reading message payload")
+					break
+				}
+				logrus.Infof("bridge: read message type: %v", header.Type)
+				logrus.Infof("bridge: read message '%s'", message)
+				requestChan <- &Request{header, message, b.protVer}
 			}
-			message := make([]byte, header.Size-prot.MessageHeaderSize)
-			if _, err := io.ReadFull(bridgeIn, message); err != nil {
-				requestErrChan <- errors.Wrap(err, "bridge: failed reading message payload")
-				continue
-			}
-			logrus.Infof("bridge: read message type: %v", header.Type)
-			logrus.Infof("bridge: read message '%s'", message)
-			requestChan <- &Request{header, message, b.protVer}
 		}
+		requestErrChan <- recverr
 	}()
 	// Process each bridge request async and create the response writer.
 	go func() {
@@ -307,35 +322,53 @@ func (b *Bridge) ListenAndServe(bridgeIn io.Reader, bridgeOut io.Writer) (conerr
 	}()
 	// Process each bridge response sync. This channel is for request/response and publish workflows.
 	go func() {
+		var resperr error
 		for resp := range b.responseChan {
 			responseBytes, err := json.Marshal(resp.response)
 			if err != nil {
-				responseErrChan <- errors.Wrapf(err, "bridge: failed to marshal JSON for response \"%v\"", resp.response)
-				continue
+				resperr = errors.Wrapf(err, "bridge: failed to marshal JSON for response \"%v\"", resp.response)
+				break
 			}
 			resp.header.Size = uint32(len(responseBytes) + prot.MessageHeaderSize)
 			if err := binary.Write(bridgeOut, binary.LittleEndian, resp.header); err != nil {
-				responseErrChan <- errors.Wrap(err, "bridge: failed writing message header")
-				continue
+				resperr = errors.Wrap(err, "bridge: failed writing message header")
+				break
 			}
 
 			if _, err := bridgeOut.Write(responseBytes); err != nil {
-				responseErrChan <- errors.Wrap(err, "bridge: failed writing message payload")
-				continue
+				resperr = errors.Wrap(err, "bridge: failed writing message payload")
+				break
 			}
 			logrus.Infof("bridge: response sent: '%s' to HCS", responseBytes)
 		}
+		responseErrChan <- resperr
 	}()
-	// If we get any errors. We return from Listen and shutdown the bridge connection.
+
 	select {
-	case conerr = <-requestErrChan:
-		break
-	case conerr = <-responseErrChan:
-		break
+	case err := <-requestErrChan:
+		return err
+	case err := <-responseErrChan:
+		return err
 	case <-b.quitChan:
-		break
+		// The request loop needs to exit so that the teardown process begins.
+		// Set the request loop to stop processing new messages
+		atomic.StoreUint32(&b.hasQuitPending, 1)
+		// Wait for the request loop to process its last message. Its possible
+		// that if it lost the race with the hasQuitPending it could be stuck in
+		// a pending read from bridgeIn. Wait 2 seconds and kill the connection.
+		var err error
+		select {
+		case err = <-requestErrChan:
+		case <-time.After(time.Second * 5):
+			// Timeout expired first. Close the connection to unblock the read
+			if cerr := bridgeIn.Close(); cerr != nil {
+				err = errors.Wrap(cerr, "bridge: failed to close bridgeIn")
+			}
+			<-requestErrChan
+		}
+		<-responseErrChan
+		return err
 	}
-	return conerr
 }
 
 // PublishNotification writes a specific notification to the bridge.
