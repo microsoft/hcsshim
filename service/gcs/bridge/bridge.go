@@ -38,6 +38,7 @@ var capabilities = prot.GcsCapabilities{
 			Minor: 1,
 		},
 	},
+	RuntimeOsType: prot.OsTypeLinux,
 }
 
 // UnknownMessage represents the default handler logic for an unmatched request

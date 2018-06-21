@@ -224,6 +224,13 @@ type ProtocolSupport struct {
 	MaximumProtocolVersion uint32
 }
 
+// OsType defines the operating system type identifer of the guest hosting the
+// GCS.
+type OsType string
+
+// OsTypeLinux is the OS type the HCS expects for a Linux GCS
+const OsTypeLinux OsType = "Linux"
+
 // GcsCapabilities specifies the abilities and scenarios supported by this GCS.
 type GcsCapabilities struct {
 	// True if a create message should be sent for the hosting system itself.
@@ -239,6 +246,10 @@ type GcsCapabilities struct {
 	HVSocketConfigOnStartup bool `json:"HvSocketConfigOnStartup,omitempty"`
 
 	SupportedSchemaVersions []SchemaVersion `json:",omitempty"`
+
+	RuntimeOsType OsType `json:",omitempty"`
+
+	OtherCapabilities interface{} `json:",omitempty"`
 }
 
 // MessageBase is the base type embedded in all messages sent from the HCS to
