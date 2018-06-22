@@ -502,10 +502,6 @@ type ModifySettingRequest struct {
 	ResourceType ModifyResourceType `json:",omitempty"`
 	RequestType  ModifyRequestType  `json:",omitempty"`
 	Settings     interface{}        `json:",omitempty"`
-	// TODO: This is a bug that its on the interface. It is only here to support
-	// VPMem which shipped in RS4 marshaling to the wrong field. This has since
-	// been fixed in RS5 so both places need to be checked.
-	HostedSettings interface{} `json:",omitempty"`
 }
 
 // ContainerModifySettings is the message from the HCS specifying how a certain
@@ -525,12 +521,10 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 	var request ContainerModifySettings
 	var rawSettings json.RawMessage
 	var v2RawSettings json.RawMessage
-	var v2RawHostedSettings json.RawMessage
 	request.Request = &ResourceModificationRequestResponse{}
 	request.Request.Settings = &rawSettings
 	request.V2Request = &ModifySettingRequest{}
 	request.V2Request.Settings = &v2RawSettings
-	request.V2Request.HostedSettings = &v2RawHostedSettings
 	if err := commonutils.UnmarshalJSONWithHresult(b, &request); err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -564,14 +558,7 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 			request.V2Request.RequestType = MreqtAdd
 		}
 
-		// Some of the RS4 messages were on the wrong JSON entry. Prefer
-		// settings here but support hosted settings until those fixes come in.
-		var settingsToUse json.RawMessage
-		if len(v2RawSettings) > 0 {
-			settingsToUse = v2RawSettings
-		} else if len(v2RawHostedSettings) > 0 {
-			settingsToUse = v2RawHostedSettings
-		} else {
+		if len(v2RawSettings) <= 0 {
 			return nil, errors.New("failed to unmarhsal Settings or HostedSettings for V2 modify request")
 		}
 
@@ -579,26 +566,25 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 		switch request.V2Request.ResourceType {
 		case MrtMappedVirtualDisk:
 			mvd := &MappedVirtualDiskV2{}
-			if err := commonutils.UnmarshalJSONWithHresult(settingsToUse, mvd); err != nil {
+			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, mvd); err != nil {
 				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDiskV2")
 			}
 			request.V2Request.Settings = mvd
 		case MrtMappedDirectory:
 			md := &MappedDirectoryV2{}
-			if err := commonutils.UnmarshalJSONWithHresult(settingsToUse, md); err != nil {
+			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, md); err != nil {
 				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedDirectoryV2")
 			}
 			request.V2Request.Settings = md
 		case MrtVPMemDevice:
 			vpd := &MappedVPMemDeviceV2{}
-			// TODO: RS5 bug fix to move this to .Settings like all other modify requests.
-			if err := commonutils.UnmarshalJSONWithHresult(settingsToUse, vpd); err != nil {
+			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, vpd); err != nil {
 				return nil, errors.Wrap(err, "failed to unmarshal hosted settings as MappedVPMemDeviceV2")
 			}
 			request.V2Request.Settings = vpd
 		case MrtCombinedLayers:
 			cl := &CombinedLayersV2{}
-			if err := commonutils.UnmarshalJSONWithHresult(settingsToUse, cl); err != nil {
+			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, cl); err != nil {
 				return nil, errors.Wrap(err, "failed to unmarshal settings as CombinedLayersV2")
 			}
 			request.V2Request.Settings = cl

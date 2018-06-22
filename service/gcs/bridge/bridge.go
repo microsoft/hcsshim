@@ -209,9 +209,7 @@ type Bridge struct {
 	// and publish notification workflows.
 	responseChan chan bridgeResponse
 
-	// Core - TODO: Remove this and use the mux!
-	coreint core.Core
-
+	coreint   core.Core
 	hostState *gcspkg.Host
 
 	quitChan chan bool
@@ -430,18 +428,6 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 		return
 	}
 
-	// TODO: Remove BUGBUG - There is an issue in the HCS that doesnt honor the capabilities to skip the first
-	// create message. So this will detect the case and skip it.
-	if b.protVer == prot.PvV4 && request.ContainerID == "00000000-0000-0000-0000-000000000000" {
-		logrus.Debug("bridge: received first create message when capabilities requested no send.")
-		w.Write(&prot.ContainerCreateResponse{
-			MessageResponseBase: &prot.MessageResponseBase{
-				ActivityID: request.ActivityID,
-			},
-		})
-		return
-	}
-
 	var exitCodeFn func() int
 	wasV2Config := false
 	id := request.ContainerID
@@ -495,7 +481,6 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 	}
 
 	if !wasV2Config {
-		// TODO: Add support for container exit notifications in V2.
 		var err error
 		exitCodeFn, err = b.coreint.WaitContainer(id)
 		if err != nil {
