@@ -185,6 +185,7 @@ func (w *requestResponseWriter) Error(activityID string, err error) {
 
 	resp := &prot.MessageResponseBase{ActivityID: activityID}
 	setErrorForResponseBase(resp, err)
+	logrus.Errorf("requestResponseWriter::Error %s", err)
 	w.Write(resp)
 }
 
@@ -566,27 +567,43 @@ func (b *Bridge) execProcess(w ResponseWriter, r *Request) {
 	}
 
 	var pid int
+	// If this is the exec of the init process for V1 we need to return the
+	// error of the exec previous to any ContainerExited notification. So we
+	// signal when we are done writing to the bridge.
+	var execInitErrorDone chan<- struct{}
+
+	defer func() {
+		if execInitErrorDone != nil {
+			execInitErrorDone <- struct{}{}
+		}
+	}()
+
 	var err error
 	if params.IsExternal {
+		logrus.Debugf("bridge::execProcess: IsExternal Calling b.coreint.RunExternalProcess")
 		pid, err = b.coreint.RunExternalProcess(params, conSettings)
 	} else if params.SchemaVersion.Cmp(prot.SchemaVersion{Major: 2, Minor: 0}) >= 0 {
 		var c *gcspkg.Container
 		c, err = b.hostState.GetContainer(request.ContainerID)
 		if err == nil {
 			if params.OCIProcess == nil {
+				logrus.Debugf("bridge::execProcess: v2 starting container init process")
 				pid, err = c.Start(conSettings)
 			} else {
+				logrus.Debug("bridge::execProcess: v2 exec additional container process")
 				pid, err = c.ExecProcess(params.OCIProcess, conSettings)
 			}
 		}
 	} else {
-		pid, err = b.coreint.ExecProcess(request.ContainerID, params, conSettings)
+		logrus.Debug("bridge::execProcess: Calling b.coreint.ExecProcess")
+		pid, execInitErrorDone, err = b.coreint.ExecProcess(request.ContainerID, params, conSettings)
 	}
 
 	if err != nil {
 		w.Error(request.ActivityID, err)
 		return
 	}
+	logrus.Debugf("bridge::execProcess Success from running process or starting container")
 
 	response := &prot.ContainerExecuteProcessResponse{
 		MessageResponseBase: &prot.MessageResponseBase{

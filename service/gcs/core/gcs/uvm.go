@@ -292,6 +292,7 @@ func (c *Container) Start(conSettings stdio.ConnectionSettings) (int, error) {
 }
 
 func (c *Container) ExecProcess(process *oci.Process, conSettings stdio.ConnectionSettings) (int, error) {
+	logrus.Debugf("container::ExecProcess %+v", *process)
 	stdioSet, err := stdio.Connect(c.vsock, conSettings)
 	if err != nil {
 		return -1, err

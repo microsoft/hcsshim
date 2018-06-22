@@ -133,13 +133,13 @@ func (c *MockCore) CreateContainer(id string, settings prot.VMHostedContainerSet
 }
 
 // ExecProcess captures its arguments and returns pid 101.
-func (c *MockCore) ExecProcess(id string, params prot.ProcessParameters, conSettings stdio.ConnectionSettings) (pid int, err error) {
+func (c *MockCore) ExecProcess(id string, params prot.ProcessParameters, conSettings stdio.ConnectionSettings) (pid int, execInitErrorDone chan<- struct{}, err error) {
 	c.LastExecProcess = ExecProcessCall{
 		ID:                 id,
 		Params:             params,
 		ConnectionSettings: conSettings,
 	}
-	return 101, c.behaviorResult()
+	return 101, nil, c.behaviorResult()
 }
 
 // SignalContainer captures its arguments.
