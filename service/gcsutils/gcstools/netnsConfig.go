@@ -11,7 +11,6 @@ package main
 // output itself.
 
 import (
-	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"

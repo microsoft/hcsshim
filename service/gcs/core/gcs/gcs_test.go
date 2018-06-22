@@ -750,11 +750,17 @@ var _ = Describe("GCS", func() {
 			})
 			Describe("calling ExecProcess", func() {
 				var (
-					params prot.ProcessParameters
-					pid    int
+					params      prot.ProcessParameters
+					pid         int
+					errDoneChan chan<- struct{}
 				)
 				JustBeforeEach(func() {
-					pid, err = coreint.ExecProcess(containerID, params, fullStdioSet)
+					pid, errDoneChan, err = coreint.ExecProcess(containerID, params, fullStdioSet)
+				})
+				AfterEach(func() {
+					if errDoneChan != nil {
+						errDoneChan <- struct{}{}
+					}
 				})
 				Context("it is the initial process", func() {
 					BeforeEach(func() {
@@ -786,7 +792,7 @@ var _ = Describe("GCS", func() {
 						})
 						Context("the container already has an initial process in it", func() {
 							BeforeEach(func() {
-								pid, err = coreint.ExecProcess(containerID, initialExecParams, fullStdioSet)
+								pid, _, err = coreint.ExecProcess(containerID, initialExecParams, fullStdioSet)
 								Expect(err).NotTo(HaveOccurred())
 							})
 							It("should not produce an error", func() {
@@ -795,9 +801,7 @@ var _ = Describe("GCS", func() {
 						})
 						Context("the container does not already have an initial process in it", func() {
 							It("should produce an error", func() {
-								// TODO: Find a way to produce an error in this
-								// context, possibly.
-								//Expect(err).To(HaveOccurred())
+								Expect(err).To(HaveOccurred())
 							})
 						})
 					})
@@ -862,7 +866,7 @@ var _ = Describe("GCS", func() {
 					BeforeEach(func() {
 						err = coreint.CreateContainer(containerID, createSettings)
 						Expect(err).NotTo(HaveOccurred())
-						_, err = coreint.ExecProcess(containerID, initialExecParams, fullStdioSet)
+						_, _, err = coreint.ExecProcess(containerID, initialExecParams, fullStdioSet)
 						Expect(err).NotTo(HaveOccurred())
 					})
 					It("should not produce an error", func() {
@@ -899,7 +903,7 @@ var _ = Describe("GCS", func() {
 					})
 					Context("a process has been executed", func() {
 						BeforeEach(func() {
-							_, err = coreint.ExecProcess(containerID, initialExecParams, fullStdioSet)
+							_, _, err = coreint.ExecProcess(containerID, initialExecParams, fullStdioSet)
 							Expect(err).NotTo(HaveOccurred())
 						})
 						Context("using an empty query", func() {
@@ -961,16 +965,6 @@ var _ = Describe("GCS", func() {
 			})
 			Describe("calling ModifySettings", func() {
 				Context("adding a mapped virtual disk", func() {
-					Context("the lun is already in use", func() {
-						BeforeEach(func() {
-							err = coreint.CreateContainer(containerID, createSettings)
-							Expect(err).NotTo(HaveOccurred())
-							err = coreint.ModifySettings(containerID, &diskModificationRequestSameLun)
-						})
-						It("should produce an error", func() {
-							Expect(err).To(HaveOccurred())
-						})
-					})
 					Context("the lun is not already in use", func() {
 						JustBeforeEach(func() {
 							err = coreint.ModifySettings(containerID, &diskModificationRequest)
@@ -1024,18 +1018,6 @@ var _ = Describe("GCS", func() {
 					})
 				})
 				Context("adding a mapped directory", func() {
-					Context("the port is already in use", func() {
-						BeforeEach(func() {
-							err = coreint.CreateContainer(containerID, createSettings)
-							Expect(err).NotTo(HaveOccurred())
-							err = coreint.ModifySettings(containerID, &dirModificationRequestSamePort)
-							Expect(err).NotTo(HaveOccurred())
-							err = coreint.ModifySettings(containerID, &dirModificationRequestSamePort)
-						})
-						It("should produce an error", func() {
-							Expect(err).To(HaveOccurred())
-						})
-					})
 					Context("the port is not already in use", func() {
 						JustBeforeEach(func() {
 							err = coreint.ModifySettings(containerID, &dirModificationRequest)
@@ -1147,7 +1129,7 @@ var _ = Describe("GCS", func() {
 					JustBeforeEach(func() {
 						err = coreint.CreateContainer(containerID, createSettings)
 						Expect(err).NotTo(HaveOccurred())
-						pid, err = coreint.ExecProcess(containerID, initialExecParams, fullStdioSet)
+						pid, _, err = coreint.ExecProcess(containerID, initialExecParams, fullStdioSet)
 						Expect(err).NotTo(HaveOccurred())
 					})
 					It("should not produce an error", func() {

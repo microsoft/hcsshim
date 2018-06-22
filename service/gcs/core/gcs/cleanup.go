@@ -2,7 +2,6 @@ package gcs
 
 import (
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
-	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/sirupsen/logrus"
 )
@@ -19,26 +18,22 @@ func (c *gcsCore) cleanupContainer(containerEntry *containerCacheEntry) error {
 		}
 	}
 
-	diskMap := containerEntry.MappedVirtualDisks
-	disks := make([]prot.MappedVirtualDisk, 0, len(diskMap))
-	for _, disk := range diskMap {
-		disks = append(disks, disk)
-	}
-	if err := c.unmountMappedVirtualDisks(disks); err != nil {
-		logrus.Warn(err)
-		if errToReturn == nil {
-			errToReturn = err
+	for _, disk := range containerEntry.MappedVirtualDisks {
+		if !disk.AttachOnly {
+			if err := unmountPath(c.OS, disk.ContainerPath, false); err != nil {
+				logrus.Warn(err)
+				if errToReturn == nil {
+					errToReturn = err
+				}
+			}
 		}
 	}
-	directoryMap := containerEntry.MappedDirectories
-	directories := make([]prot.MappedDirectory, 0, len(directoryMap))
-	for _, directory := range directoryMap {
-		directories = append(directories, directory)
-	}
-	if err := c.unmountMappedDirectories(directories); err != nil {
-		logrus.Warn(err)
-		if errToReturn == nil {
-			errToReturn = err
+	for _, directory := range containerEntry.MappedDirectories {
+		if err := unmountPath(c.OS, directory.ContainerPath, false); err != nil {
+			logrus.Warn(err)
+			if errToReturn == nil {
+				errToReturn = err
+			}
 		}
 	}
 	if err := c.unmountLayers(containerEntry.Index); err != nil {

@@ -261,33 +261,6 @@ func unmountPath(osl oslayer.OS, target string, removeTarget bool) error {
 	return nil
 }
 
-// unmountMappedVirtualDisks unmounts the given container's mapped virtual disk
-// directories.
-func (c *gcsCore) unmountMappedVirtualDisks(disks []prot.MappedVirtualDisk) error {
-	for _, disk := range disks {
-		// If the disk was specified AttachOnly, it shouldn't have been mounted
-		// in the first place.
-		if !disk.AttachOnly {
-			if err := unmountPath(c.OS, disk.ContainerPath, false); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// unplugMappedVirtualDisks tells the OS that the mapped virtual disks will be removed soon, allowing the OS to perform some cleanup before the unplug event.
-// This assumes only one SCSI controller.
-func (c *gcsCore) unplugMappedVirtualDisks(disks []prot.MappedVirtualDisk) error {
-	for _, disk := range disks {
-		scsiID := fmt.Sprintf("0:0:0:%d", disk.Lun)
-		if err := c.OS.UnplugSCSIDisk(scsiID); err != nil {
-			return errors.Wrapf(err, "failed to unplug %s", scsiID)
-		}
-	}
-	return nil
-}
-
 // mountPlan9Share mounts the given Plan9 share to the filesystem with the given
 // options.
 func mountPlan9Share(osl oslayer.OS, vsock transport.Transport, mountPath, share string, port uint32, readonly bool) error {
@@ -316,16 +289,6 @@ func mountPlan9Share(osl oslayer.OS, vsock transport.Transport, mountPath, share
 	}
 	if err := osl.Mount(mountPath, mountPath, "9p", mountOptions, data); err != nil {
 		return errors.Wrapf(err, "failed to mount directory for mapped directory %s", mountPath)
-	}
-	return nil
-}
-
-// unmountMappedDirectories unmounts the given container's mapped directories.
-func (c *gcsCore) unmountMappedDirectories(dirs []prot.MappedDirectory) error {
-	for _, dir := range dirs {
-		if err := unmountPath(c.OS, dir.ContainerPath, false); err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -426,31 +389,14 @@ func mountOverlay(osl oslayer.OS, layerPaths []string, upperdirPath, workdirPath
 func (c *gcsCore) unmountLayers(index uint32) error {
 	layerPrefix, scratchPath, _, _, rootfsPath := c.getUnioningPaths(index)
 
-	cleanup := func(pathFriendlyName, path string) error {
-		exists, err := c.OS.PathExists(path)
-		if err != nil {
-			return errors.Wrapf(err, "failed to determine if container %s path exists %s", pathFriendlyName, rootfsPath)
-		}
-		mounted, err := c.OS.PathIsMounted(path)
-		if err != nil {
-			return errors.Wrapf(err, "failed to determine if container %s path is mounted %s", pathFriendlyName, rootfsPath)
-		}
-		if exists && mounted {
-			if err := c.OS.Unmount(path, 0); err != nil {
-				return errors.Wrapf(err, "failed to unmount container %s %s", pathFriendlyName, rootfsPath)
-			}
-		}
-		return nil
-	}
-
 	// clean up rootfsPath operations
-	if err := cleanup("root filesytem", rootfsPath); err != nil {
-		return err
+	if err := unmountPath(c.OS, rootfsPath, false); err != nil {
+		return errors.Wrap(err, "failed to unmount root filesytem")
 	}
 
 	// clean up scratchPath operations
-	if err := cleanup("scratch", scratchPath); err != nil {
-		return err
+	if err := unmountPath(c.OS, scratchPath, false); err != nil {
+		return errors.Wrap(err, "failed to unmount scratch")
 	}
 
 	// Clean up layer path operations
@@ -459,8 +405,8 @@ func (c *gcsCore) unmountLayers(index uint32) error {
 		return errors.Wrap(err, "failed to get layer paths using Glob")
 	}
 	for _, layerPath := range layerPaths {
-		if err := cleanup("layer", layerPath); err != nil {
-			return err
+		if err := unmountPath(c.OS, layerPath, false); err != nil {
+			return errors.Wrap(err, "failed to unmount layer")
 		}
 	}
 
@@ -480,7 +426,10 @@ func (c *gcsCore) destroyContainerStorage(index uint32) error {
 
 // writeConfigFile writes the given oci.Spec to disk so that it can be consumed
 // by an OCI runtime.
-func (c *gcsCore) writeConfigFile(index uint32, config oci.Spec) error {
+func (c *gcsCore) writeConfigFile(index uint32, config *oci.Spec) error {
+	if config == nil {
+		return errors.New("failed to write init process config file, no options specified")
+	}
 	configPath := c.getConfigPath(index)
 	if err := c.OS.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
 		return errors.Wrapf(err, "failed to create config file directory for container %s", c.getContainerIDFromIndex(index))
