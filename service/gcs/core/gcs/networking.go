@@ -33,6 +33,7 @@ func (c *gcsCore) configureAdapterInNamespace(container runtime.Container, adapt
 		"-nspid", fmt.Sprintf("%d", nspid),
 		"-cfg", string(cfg)).CombinedOutput()
 	if err != nil {
+		logrus.Debugf("netnscfg failed: %s (%s)", out, err)
 		return errors.Wrapf(err, "failed to configure network adapter %s: %s", adapter.AdapterInstanceID, out)
 	}
 	logrus.Debugf("netnscfg output:\n%s", out)
