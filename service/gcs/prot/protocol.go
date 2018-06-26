@@ -243,13 +243,13 @@ type GcsCapabilities struct {
 	// ModifySettings request would be to configure the local and parent
 	// Hyper-V socket addresses of the VM, and would have a RequestType of
 	// Update.
-	HVSocketConfigOnStartup bool `json:"HvSocketConfigOnStartup,omitempty"`
-
+	HVSocketConfigOnStartup bool            `json:"HvSocketConfigOnStartup,omitempty"`
 	SupportedSchemaVersions []SchemaVersion `json:",omitempty"`
-
-	RuntimeOsType OsType `json:",omitempty"`
-
-	OtherCapabilities interface{} `json:",omitempty"`
+	RuntimeOsType           OsType          `json:",omitempty"`
+	// GuestDefinedCapabilities define any JSON object that will be directly
+	// passed to a client of the HCS. This can be useful to pass runtime
+	// specific capabilities not tied to the platform itself.
+	GuestDefinedCapabilities interface{} `json:",omitempty"`
 }
 
 // MessageBase is the base type embedded in all messages sent from the HCS to
