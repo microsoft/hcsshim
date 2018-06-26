@@ -343,7 +343,7 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, connecti
 			close(execInitErrorDone)
 		}()
 		containerEntry.hasRunInitProcess = true
-		if err = c.writeConfigFile(containerEntry.Index, *params.OCISpecification); err != nil {
+		if err = c.writeConfigFile(containerEntry.Index, params.OCISpecification); err != nil {
 			// Early exit. Cleanup our waiter since we never got a process.
 			logrus.Debugf("-1 initprocess.writersWg [gcsCore::ExecProcess Error handling for writeConfigFile]")
 			containerEntry.initProcess.writersWg.Done()
@@ -681,8 +681,16 @@ func (c *gcsCore) ModifySettings(id string, request *prot.ResourceModificationRe
 			}
 			containerEntry.AddMappedVirtualDisk(*mvd)
 		case prot.RtRemove:
-			if err := c.removeMappedVirtualDisks(id, []prot.MappedVirtualDisk{*mvd}); err != nil {
-				return errors.Wrapf(err, "failed to hot remove mapped virtual disk for container %s", id)
+			// If the disk was specified AttachOnly, it shouldn't have been mounted
+			// in the first place.
+			if !mvd.AttachOnly {
+				if err := unmountPath(c.OS, mvd.ContainerPath, false); err != nil {
+					return errors.Wrapf(err, "failed to unmount mapped virtual disks for container %s", id)
+				}
+			}
+			scsiID := fmt.Sprintf("0:0:0:%d", mvd.Lun)
+			if err := c.OS.UnplugSCSIDisk(scsiID); err != nil {
+				return errors.Wrapf(err, "failed to unplug mapped virtual disks for container %s, scsi: %s", id, scsiID)
 			}
 			containerEntry.RemoveMappedVirtualDisk(*mvd)
 		default:
@@ -700,8 +708,8 @@ func (c *gcsCore) ModifySettings(id string, request *prot.ResourceModificationRe
 			}
 			containerEntry.AddMappedDirectory(*md)
 		case prot.RtRemove:
-			if err := c.removeMappedDirectories(id, []prot.MappedDirectory{*md}); err != nil {
-				return errors.Wrapf(err, "failed to hot remove mapped directory for container %s", id)
+			if err := unmountPath(c.OS, md.ContainerPath, false); err != nil {
+				return errors.Wrapf(err, "failed to mount mapped directories for container %s", id)
 			}
 			containerEntry.RemoveMappedDirectory(*md)
 		default:
@@ -859,31 +867,6 @@ func (c *gcsCore) setupMappedDirectories(id string, dirs []prot.MappedDirectory)
 		if err := mountPlan9Share(c.OS, c.vsock, dir.ContainerPath, "", dir.Port, dir.ReadOnly); err != nil {
 			return errors.Wrapf(err, "failed to mount mapped directory %s for container %s", dir.ContainerPath, id)
 		}
-	}
-	return nil
-}
-
-// removeMappedVirtualDisks is a helper function which calls into the functions
-// in storage.go to unmount a set of mapped virtual disks for a given
-// container. It then removes them from the container's cache entry.
-// This function expects containerCacheMutex to be locked on entry.
-func (c *gcsCore) removeMappedVirtualDisks(id string, disks []prot.MappedVirtualDisk) error {
-	if err := c.unmountMappedVirtualDisks(disks); err != nil {
-		return errors.Wrapf(err, "failed to mount mapped virtual disks for container %s", id)
-	}
-	if err := c.unplugMappedVirtualDisks(disks); err != nil {
-		return errors.Wrapf(err, "failed to unplug mapped virtual disks for container %s", id)
-	}
-	return nil
-}
-
-// removeMappedDirectories is a helper function which calls into the functions
-// in storage.go to unmount a set of mapped directories for a given container.
-// It then removes them from the container's cache entry.
-// This function expects containerCacheMutex to be locked on entry.
-func (c *gcsCore) removeMappedDirectories(id string, dirs []prot.MappedDirectory) error {
-	if err := c.unmountMappedDirectories(dirs); err != nil {
-		return errors.Wrapf(err, "failed to mount mapped directories for container %s", id)
 	}
 	return nil
 }
