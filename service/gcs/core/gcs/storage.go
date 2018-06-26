@@ -13,6 +13,7 @@ import (
 
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
+	"github.com/Microsoft/opengcs/service/gcs/transport"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -60,6 +61,30 @@ func (ms *mountSpec) Mount(osl oslayer.OS, target string) error {
 	err := osl.Mount(ms.Source, target, ms.FileSystem, ms.Flags, options)
 	if err != nil {
 		return errors.Wrapf(err, "mount %s %s %s 0x%x %s", ms.Source, target, ms.FileSystem, ms.Flags, options)
+	}
+	return nil
+}
+
+// MountWithTimedRetry attempts mounting multiple times up until the given
+// timout. This is necessary because there is a span of time between when the
+// device name becomes available under /sys/bus/scsi and when it appears under
+// /dev. Once it appears under /dev, there is still a span of time before it
+// becomes mountable. Retrying mount should succeed in mounting the device as
+// long as it becomes mountable under /dev before the timeout.
+func (ms *mountSpec) MountWithTimedRetry(osl oslayer.OS, target string) error {
+	startTime := time.Now()
+	for {
+		err := ms.Mount(osl, target)
+		if err != nil {
+			currentTime := time.Now()
+			elapsedTime := currentTime.Sub(startTime)
+			if elapsedTime > mappedDiskMountTimeout {
+				return errors.Wrapf(err, "failed to mount directory %s for mapped virtual disk device %s", target, ms.Source)
+			}
+		} else {
+			break
+		}
+		time.Sleep(time.Millisecond * 10)
 	}
 	return nil
 }
@@ -124,10 +149,10 @@ func (c *gcsCore) getMappedVirtualDiskMounts(disks []prot.MappedVirtualDisk) ([]
 	return devices, nil
 }
 
-// scsiLunToName finds the SCSI device with the given LUN. This assumes
+// scsiControllerLunToName finds the SCSI device with the given LUN. This assumes
 // only one SCSI controller.
-func scsiLunToName(osl oslayer.OS, lun uint8) (string, error) {
-	scsiID := fmt.Sprintf("0:0:0:%d", lun)
+func scsiControllerLunToName(osl oslayer.OS, controller, lun uint8) (string, error) {
+	scsiID := fmt.Sprintf("0:0:%d:%d", controller, lun)
 
 	// Query for the device name up until the timeout.
 	var deviceNames []os.FileInfo
@@ -156,6 +181,12 @@ func scsiLunToName(osl oslayer.OS, lun uint8) (string, error) {
 		return "", errors.Errorf("more than one block device could match SCSI ID \"%s\"", scsiID)
 	}
 	return filepath.Join("/dev", deviceNames[0].Name()), nil
+}
+
+// scsiLunToName finds the SCSI device with the given LUN. This assumes
+// only one SCSI controller.
+func scsiLunToName(osl oslayer.OS, lun uint8) (string, error) {
+	return scsiControllerLunToName(osl, 0, lun)
 }
 
 // deviceIDToName converts a device ID (scsi:<lun> or pmem:<device#> to a
@@ -202,117 +233,74 @@ func (c *gcsCore) mountMappedVirtualDisks(disks []prot.MappedVirtualDisk, mounts
 				return errors.Wrapf(err, "failed to create directory for mapped virtual disk %s", disk.ContainerPath)
 			}
 
-			// Attempt mounting multiple times up until the given timout. This is
-			// necessary because there is a span of time between when the device
-			// name becomes available under /sys/bus/scsi and when it appears under
-			// /dev. Once it appears under /dev, there is still a span of time
-			// before it becomes mountable. Retrying mount should succeed in
-			// mounting the device as long as it becomes mountable under /dev
-			// before the timeout.
-			startTime := time.Now()
-			for {
-				err := mount.Mount(c.OS, disk.ContainerPath)
-				if err != nil {
-					currentTime := time.Now()
-					elapsedTime := currentTime.Sub(startTime)
-					if elapsedTime > mappedDiskMountTimeout {
-						return errors.Wrapf(err, "failed to mount directory %s for mapped virtual disk device %s", disk.ContainerPath, mount.Source)
-					}
-				} else {
-					break
-				}
-				time.Sleep(time.Millisecond * 10)
+			if err := mount.MountWithTimedRetry(c.OS, disk.ContainerPath); err != nil {
+				return err
 			}
 		}
 	}
 	return nil
 }
 
-// unmountMappedVirtualDisks unmounts the given container's mapped virtual disk
-// directories.
-func (c *gcsCore) unmountMappedVirtualDisks(disks []prot.MappedVirtualDisk) error {
-	for _, disk := range disks {
-		// If the disk was specified AttachOnly, it shouldn't have been mounted
-		// in the first place.
-		if !disk.AttachOnly {
-			exists, err := c.OS.PathExists(disk.ContainerPath)
-			if err != nil {
-				return errors.Wrapf(err, "failed to determine if mapped virtual disk path exists %s", disk.ContainerPath)
+// unmountPath unmounts the target path if it exists and is a mount path. If
+// removeTarget this will remove the previously mounted folder.
+func unmountPath(osl oslayer.OS, target string, removeTarget bool) error {
+	if exists, err := osl.PathExists(target); err != nil {
+		return errors.Wrapf(err, "failed to determine if path '%s' exists", target)
+	} else if exists {
+		if mounted, err := osl.PathIsMounted(target); err != nil {
+			return errors.Wrapf(err, "failed to determine if path '%s' is mounted", target)
+		} else if mounted {
+			if err := osl.Unmount(target, 0); err != nil {
+				return errors.Wrapf(err, "failed to unmount path '%s'", target)
 			}
-			mounted, err := c.OS.PathIsMounted(disk.ContainerPath)
-			if err != nil {
-				return errors.Wrapf(err, "failed to determine if mapped virtual disk path is mounted %s", disk.ContainerPath)
-			}
-			if exists && mounted {
-				if err := c.OS.Unmount(disk.ContainerPath, 0); err != nil {
-					return errors.Wrapf(err, "failed to unmount mapped virtual disk path %s", disk.ContainerPath)
-				}
-			}
+		}
+		if removeTarget {
+			return osl.RemoveAll(target)
 		}
 	}
 	return nil
 }
 
-// unplugMappedVirtualDisks tells the OS that the mapped virtual disks will be removed soon, allowing the OS to perform some cleanup before the unplug event.
-// This assumes only one SCSI controller.
-func (c *gcsCore) unplugMappedVirtualDisks(disks []prot.MappedVirtualDisk) error {
-	for _, disk := range disks {
-		scsiID := fmt.Sprintf("0:0:0:%d", disk.Lun)
-		if err := c.OS.UnplugSCSIDisk(scsiID); err != nil {
-			return errors.Wrapf(err, "failed to unplug %s", scsiID)
-		}
+// mountPlan9Share mounts the given Plan9 share to the filesystem with the given
+// options.
+func mountPlan9Share(osl oslayer.OS, vsock transport.Transport, mountPath, share string, port uint32, readonly bool) error {
+	if err := osl.MkdirAll(mountPath, 0700); err != nil {
+		return errors.Wrapf(err, "failed to create directory for mapped directory %s", mountPath)
 	}
-	return nil
-}
-
-// mountMappedDirectory mounts the given mapped directory using a Plan9
-// filesystem with the given options.
-func (c *gcsCore) mountMappedDirectory(dir *prot.MappedDirectory) error {
-	if !dir.CreateInUtilityVM {
-		return errors.New("we do not currently support mapping directories inside the container namespace")
-	}
-	if err := c.OS.MkdirAll(dir.ContainerPath, 0700); err != nil {
-		return errors.Wrapf(err, "failed to create directory for mapped directory %s", dir.ContainerPath)
-	}
-	conn, err := c.vsock.Dial(dir.Port)
+	conn, err := vsock.Dial(port)
 	if err != nil {
-		return errors.Wrapf(err, "could not connect to plan9 server for %s", dir.ContainerPath)
+		return errors.Wrapf(err, "could not connect to plan9 server for %s", mountPath)
 	}
 	f, err := conn.File()
 	conn.Close()
 	if err != nil {
-		return errors.Wrapf(err, "could not get file for plan9 connection for %s", dir.ContainerPath)
+		return errors.Wrapf(err, "could not get file for plan9 connection for %s", mountPath)
 	}
 	defer f.Close()
 
 	var mountOptions uintptr
 	data := fmt.Sprintf("trans=fd,rfdno=%d,wfdno=%d", f.Fd(), f.Fd())
-	if dir.ReadOnly {
+	if readonly {
 		mountOptions |= syscall.MS_RDONLY
 		data += ",noload"
 	}
-	if err := c.OS.Mount(dir.ContainerPath, dir.ContainerPath, "9p", mountOptions, data); err != nil {
-		return errors.Wrapf(err, "failed to mount directory for mapped directory %s", dir.ContainerPath)
+	if share != "" {
+		data += ",aname=" + share
+	}
+	if err := osl.Mount(mountPath, mountPath, "9p", mountOptions, data); err != nil {
+		return errors.Wrapf(err, "failed to mount directory for mapped directory %s", mountPath)
 	}
 	return nil
 }
 
-// unmountMappedDirectories unmounts the given container's mapped directories.
-func (c *gcsCore) unmountMappedDirectories(dirs []prot.MappedDirectory) error {
-	for _, dir := range dirs {
-		exists, err := c.OS.PathExists(dir.ContainerPath)
-		if err != nil {
-			return errors.Wrapf(err, "failed to determine if mapped directory path exists %s", dir.ContainerPath)
-		}
-		mounted, err := c.OS.PathIsMounted(dir.ContainerPath)
-		if err != nil {
-			return errors.Wrapf(err, "failed to determine if mapped directory path is mounted %s", dir.ContainerPath)
-		}
-		if exists && mounted {
-			if err := c.OS.Unmount(dir.ContainerPath, 0); err != nil {
-				return errors.Wrapf(err, "failed to unmount mapped directory path %s", dir.ContainerPath)
-			}
-		}
+// mountLayer mounts the layer spec at location
+func mountLayer(osl oslayer.OS, location string, layer *mountSpec) error {
+	logrus.Infof("mounting layer at path: %s", location)
+	if err := osl.MkdirAll(location, 0700); err != nil {
+		return errors.Wrapf(err, "failed to create directory for layer '%s'", location)
+	}
+	if err := layer.Mount(osl, location); err != nil {
+		return errors.Wrapf(err, "failed to mount layer directory %s", location)
 	}
 	return nil
 }
@@ -322,10 +310,11 @@ func (c *gcsCore) unmountMappedDirectories(dirs []prot.MappedDirectory) error {
 // These mountpoints are all stored under a directory reserved for the container
 // with the given index.
 func (c *gcsCore) mountLayers(index uint32, scratchMount *mountSpec, layers []*mountSpec) error {
-	layerPrefix, scratchPath, workdirPath, rootfsPath := c.getUnioningPaths(index)
+	layerPrefix, scratchPath, upperdirPath, workdirPath, rootfsPath := c.getUnioningPaths(index)
 
 	logrus.Infof("layerPrefix=%s", layerPrefix)
 	logrus.Infof("scratchPath:%s", scratchPath)
+	logrus.Infof("upperdirPath:%s", upperdirPath)
 	logrus.Infof("workdirPath=%s", workdirPath)
 	logrus.Infof("rootfsPath=%s", rootfsPath)
 
@@ -367,55 +356,47 @@ func (c *gcsCore) mountLayers(index uint32, scratchMount *mountSpec, layers []*m
 		// readonly.
 		mountOptions |= syscall.O_RDONLY
 	}
-	upperDir := filepath.Join(scratchPath, "upper")
-	if err := c.OS.MkdirAll(upperDir, 0755); err != nil {
-		return errors.Wrap(err, "failed to create upper directory in scratch space")
+	return mountOverlay(c.OS, layerPaths, upperdirPath, workdirPath, rootfsPath, mountOptions)
+}
+
+func mountOverlay(osl oslayer.OS, layerPaths []string, upperdirPath, workdirPath, rootfsPath string, mountOptions uintptr) error {
+	lowerdir := strings.Join(layerPaths, ":")
+	options := fmt.Sprintf("lowerdir=%s", lowerdir)
+
+	if upperdirPath != "" {
+		if err := osl.MkdirAll(upperdirPath, 0755); err != nil {
+			return errors.Wrap(err, "failed to create upper directory in scratch space")
+		}
+		options += ",upperdir=" + upperdirPath
 	}
-	if err := c.OS.MkdirAll(workdirPath, 0755); err != nil {
-		return errors.Wrap(err, "failed to create workdir in scratch space")
+	if workdirPath != "" {
+		if err := osl.MkdirAll(workdirPath, 0755); err != nil {
+			return errors.Wrap(err, "failed to create workdir in scratch space")
+		}
+		options += ",workdir=" + workdirPath
 	}
-	if err := c.OS.MkdirAll(rootfsPath, 0755); err != nil {
+	if err := osl.MkdirAll(rootfsPath, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create directory for container root filesystem %s", rootfsPath)
 	}
-	lowerdir := strings.Join(layerPaths, ":")
-	options := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lowerdir, upperDir, workdirPath)
-	if err := c.OS.Mount("overlay", rootfsPath, "overlay", mountOptions, options); err != nil {
+	if err := osl.Mount("overlay", rootfsPath, "overlay", mountOptions, options); err != nil {
 		return errors.Wrapf(err, "failed to mount container root filesystem using overlayfs %s", rootfsPath)
 	}
-
 	return nil
 }
 
 // unmountLayers unmounts the union filesystem for the container with the given
 // ID, as well as any devices whose mountpoints were layers in that filesystem.
 func (c *gcsCore) unmountLayers(index uint32) error {
-	layerPrefix, scratchPath, _, rootfsPath := c.getUnioningPaths(index)
-
-	cleanup := func(pathFriendlyName, path string) error {
-		exists, err := c.OS.PathExists(path)
-		if err != nil {
-			return errors.Wrapf(err, "failed to determine if container %s path exists %s", pathFriendlyName, rootfsPath)
-		}
-		mounted, err := c.OS.PathIsMounted(path)
-		if err != nil {
-			return errors.Wrapf(err, "failed to determine if container %s path is mounted %s", pathFriendlyName, rootfsPath)
-		}
-		if exists && mounted {
-			if err := c.OS.Unmount(path, 0); err != nil {
-				return errors.Wrapf(err, "failed to unmount container %s %s", pathFriendlyName, rootfsPath)
-			}
-		}
-		return nil
-	}
+	layerPrefix, scratchPath, _, _, rootfsPath := c.getUnioningPaths(index)
 
 	// clean up rootfsPath operations
-	if err := cleanup("root filesytem", rootfsPath); err != nil {
-		return err
+	if err := unmountPath(c.OS, rootfsPath, false); err != nil {
+		return errors.Wrap(err, "failed to unmount root filesytem")
 	}
 
 	// clean up scratchPath operations
-	if err := cleanup("scratch", scratchPath); err != nil {
-		return err
+	if err := unmountPath(c.OS, scratchPath, false); err != nil {
+		return errors.Wrap(err, "failed to unmount scratch")
 	}
 
 	// Clean up layer path operations
@@ -424,8 +405,8 @@ func (c *gcsCore) unmountLayers(index uint32) error {
 		return errors.Wrap(err, "failed to get layer paths using Glob")
 	}
 	for _, layerPath := range layerPaths {
-		if err := cleanup("layer", layerPath); err != nil {
-			return err
+		if err := unmountPath(c.OS, layerPath, false); err != nil {
+			return errors.Wrap(err, "failed to unmount layer")
 		}
 	}
 
@@ -445,7 +426,10 @@ func (c *gcsCore) destroyContainerStorage(index uint32) error {
 
 // writeConfigFile writes the given oci.Spec to disk so that it can be consumed
 // by an OCI runtime.
-func (c *gcsCore) writeConfigFile(index uint32, config oci.Spec) error {
+func (c *gcsCore) writeConfigFile(index uint32, config *oci.Spec) error {
+	if config == nil {
+		return errors.New("failed to write init process config file, no options specified")
+	}
 	configPath := c.getConfigPath(index)
 	if err := c.OS.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
 		return errors.Wrapf(err, "failed to create config file directory for container %s", c.getContainerIDFromIndex(index))
@@ -473,10 +457,11 @@ func (c *gcsCore) getContainerStoragePath(index uint32) string {
 
 // getUnioningPaths returns paths that will be used in the union filesystem for
 // the container with the given index.
-func (c *gcsCore) getUnioningPaths(index uint32) (layerPrefix string, scratchPath string, workdirPath string, rootfsPath string) {
+func (c *gcsCore) getUnioningPaths(index uint32) (layerPrefix string, scratchPath string, upperdirPath string, workdirPath string, rootfsPath string) {
 	mountPath := c.getContainerStoragePath(index)
 	layerPrefix = mountPath
 	scratchPath = filepath.Join(mountPath, "scratch")
+	upperdirPath = filepath.Join(mountPath, "scratch", "upper")
 	workdirPath = filepath.Join(mountPath, "scratch", "work")
 	rootfsPath = filepath.Join(mountPath, "rootfs")
 	return

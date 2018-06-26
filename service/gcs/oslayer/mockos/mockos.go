@@ -200,6 +200,9 @@ func (o *mockOS) PathIsMounted(name string) (bool, error) {
 func (o *mockOS) Link(oldname, newname string) error {
 	return nil
 }
+func (o *mockOS) Shutdown() error {
+	return nil
+}
 
 // Processes
 func (o *mockOS) Kill(pid int, sig syscall.Signal) error {

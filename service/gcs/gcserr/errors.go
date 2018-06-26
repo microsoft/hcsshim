@@ -28,6 +28,15 @@ const (
 	// HrVmcomputeInvalidJSON is the HRESULT for failing to unmarshal a json
 	// string.
 	HrVmcomputeInvalidJSON = Hresult(-1070137075) // 0xC037010D
+	// HrVmcomputeProtocolError is the HRESULT for an invalid protocol
+	// request/response.
+	HrVmcomputeProtocolError = Hresult(-1070137071) // 0xC0370111
+	// HrVmcomputeUnsupportedProtocolVersion is the HRESULT for an invalid
+	// protocol version range specified at negotiation.
+	HrVmcomputeUnsupportedProtocolVersion = Hresult(-1070137076) // 0xC037010C
+	// HrVmcomputeUnknownMessage is the HRESULT for unknown message types sent
+	// from the HCS.
+	HrVmcomputeUnknownMessage = Hresult(-1070137077) // 0xC037010B
 )
 
 type containerExistsError struct {

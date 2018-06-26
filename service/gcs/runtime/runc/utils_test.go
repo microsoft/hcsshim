@@ -18,6 +18,7 @@ var _ = Describe("Utils", func() {
 
 	BeforeEach(func() {
 		rt, err := NewRuntime("/tmp/gcs")
+		Expect(err).NotTo(HaveOccurred())
 		rtime = rt.(*runcRuntime)
 		Expect(err).NotTo(HaveOccurred())
 	})

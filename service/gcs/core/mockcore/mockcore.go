@@ -31,9 +31,9 @@ type CreateContainerCall struct {
 
 // ExecProcessCall captures the arguments of ExecProcess.
 type ExecProcessCall struct {
-	ID       string
-	Params   prot.ProcessParameters
-	StdioSet *stdio.ConnectionSet
+	ID                 string
+	Params             prot.ProcessParameters
+	ConnectionSettings stdio.ConnectionSettings
 }
 
 // SignalContainerCall captures the arguments of SignalContainer.
@@ -56,14 +56,14 @@ type GetPropertiesCall struct {
 
 // RunExternalProcessCall captures the arguments of RunExternalProcess.
 type RunExternalProcessCall struct {
-	Params   prot.ProcessParameters
-	StdioSet *stdio.ConnectionSet
+	Params             prot.ProcessParameters
+	ConnectionSettings stdio.ConnectionSettings
 }
 
 // ModifySettingsCall captures the arguments of ModifySettings.
 type ModifySettingsCall struct {
 	ID      string
-	Request prot.ResourceModificationRequestResponse
+	Request *prot.ResourceModificationRequestResponse
 }
 
 // ResizeConsoleCall captures the arguments of ResizeConsole
@@ -133,13 +133,13 @@ func (c *MockCore) CreateContainer(id string, settings prot.VMHostedContainerSet
 }
 
 // ExecProcess captures its arguments and returns pid 101.
-func (c *MockCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (pid int, err error) {
+func (c *MockCore) ExecProcess(id string, params prot.ProcessParameters, conSettings stdio.ConnectionSettings) (pid int, execInitErrorDone chan<- struct{}, err error) {
 	c.LastExecProcess = ExecProcessCall{
-		ID:       id,
-		Params:   params,
-		StdioSet: stdioSet,
+		ID:                 id,
+		Params:             params,
+		ConnectionSettings: conSettings,
 	}
-	return 101, c.behaviorResult()
+	return 101, nil, c.behaviorResult()
 }
 
 // SignalContainer captures its arguments.
@@ -167,16 +167,16 @@ func (c *MockCore) GetProperties(id string, query string) (*prot.Properties, err
 }
 
 // RunExternalProcess captures its arguments and returns pid 101.
-func (c *MockCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (pid int, err error) {
+func (c *MockCore) RunExternalProcess(params prot.ProcessParameters, conSettings stdio.ConnectionSettings) (pid int, err error) {
 	c.LastRunExternalProcess = RunExternalProcessCall{
-		Params:   params,
-		StdioSet: stdioSet,
+		Params:             params,
+		ConnectionSettings: conSettings,
 	}
 	return 101, c.behaviorResult()
 }
 
 // ModifySettings captures its arguments.
-func (c *MockCore) ModifySettings(id string, request prot.ResourceModificationRequestResponse) error {
+func (c *MockCore) ModifySettings(id string, request *prot.ResourceModificationRequestResponse) error {
 	c.LastModifySettings = ModifySettingsCall{
 		ID:      id,
 		Request: request,
@@ -204,7 +204,7 @@ func (c *MockCore) WaitContainer(id string) (func() int, error) {
 }
 
 // WaitProcess captures its arguments and returns a nil error.
-func (c *MockCore) WaitProcess(pid int) (chan int, chan bool, error) {
+func (c *MockCore) WaitProcess(pid int) (<-chan int, chan<- bool, error) {
 	c.LastWaitProcess = WaitProcessCall{
 		Pid: pid,
 	}

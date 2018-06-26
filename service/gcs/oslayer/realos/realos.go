@@ -14,6 +14,7 @@ import (
 
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 // realProcessExitState represents an oslayer.ProcessExitState which uses an
@@ -175,6 +176,7 @@ func (o *realOS) ReadDir(dirname string) ([]os.FileInfo, error) {
 }
 func (o *realOS) Mount(source string, target string, fstype string, flags uintptr, data string) (err error) {
 	if err := syscall.Mount(source, target, fstype, flags, data); err != nil {
+		logrus.Debugf("Mount failed: source: %s, target: %s, fstype: %s, flags: %d, data: %s", source, target, fstype, flags, data)
 		return errors.WithStack(err)
 	}
 	return nil
@@ -230,6 +232,9 @@ func (o *realOS) Link(oldname, newname string) error {
 		return errors.WithStack(err)
 	}
 	return nil
+}
+func (o *realOS) Shutdown() error {
+	return syscall.Reboot(syscall.LINUX_REBOOT_MAGIC1 | syscall.LINUX_REBOOT_MAGIC2 | syscall.LINUX_REBOOT_CMD_POWER_OFF)
 }
 
 // Processes

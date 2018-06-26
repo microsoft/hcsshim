@@ -241,15 +241,22 @@ func (c *gcsCore) CreateContainer(id string, settings prot.VMHostedContainerSett
 	// We need to only allow exited notifications when at least one WaitProcess
 	// call has been written. We increment the writers here which is safe even
 	// on failure because this entry will not be in the map on failure.
+	logrus.Debugf("+1 initprocess.writersWg [gcsCore::CreateContainer]")
 	containerEntry.initProcess.writersWg.Add(1)
 
 	// Set up mapped virtual disks.
-	if err := c.setupMappedVirtualDisks(id, settings.MappedVirtualDisks, containerEntry); err != nil {
+	if err := c.setupMappedVirtualDisks(id, settings.MappedVirtualDisks); err != nil {
 		return errors.Wrapf(err, "failed to set up mapped virtual disks during create for container %s", id)
 	}
+	for _, disk := range settings.MappedVirtualDisks {
+		containerEntry.AddMappedVirtualDisk(disk)
+	}
 	// Set up mapped directories.
-	if err := c.setupMappedDirectories(id, settings.MappedDirectories, containerEntry); err != nil {
+	if err := c.setupMappedDirectories(id, settings.MappedDirectories); err != nil {
 		return errors.Wrapf(err, "failed to set up mapped directories during create for container %s", id)
+	}
+	for _, dir := range settings.MappedDirectories {
+		containerEntry.AddMappedDirectory(dir)
 	}
 
 	// Set up layers.
@@ -292,13 +299,24 @@ func (c *gcsCore) CreateContainer(id string, settings prot.VMHostedContainerSett
 
 // ExecProcess executes a new process in the container. It forwards the
 // process's stdio through the members of the core.StdioSet provided.
-func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (int, error) {
+func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, connection stdio.ConnectionSettings) (_ int, _ chan<- struct{}, err error) {
+	var stdioSet *stdio.ConnectionSet
+	stdioSet, err = stdio.Connect(c.vsock, connection)
+	if err != nil {
+		return -1, nil, err
+	}
+	defer func() {
+		if err != nil {
+			stdioSet.Close()
+		}
+	}()
+
 	c.containerCacheMutex.Lock()
 	defer c.containerCacheMutex.Unlock()
 
 	containerEntry := c.getContainer(id)
 	if containerEntry == nil {
-		return -1, errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
+		return -1, nil, gcserr.NewContainerDoesNotExistError(id)
 	}
 	var processEntry *processCacheEntry
 	if !containerEntry.hasRunInitProcess {
@@ -309,18 +327,36 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 
 	var pid int
 	if !containerEntry.hasRunInitProcess {
-		containerEntry.hasRunInitProcess = true
-		if err := c.writeConfigFile(containerEntry.Index, params.OCISpecification); err != nil {
-			// Early exit. Cleanup our waiter since we never got a process.
+		// Setup the error waiter
+		execInitErrorDone := make(chan struct{})
+		containerEntry.initProcess.writersSyncRoot.Lock()
+		containerEntry.initProcess.writersWg.Add(1)
+		containerEntry.initProcess.writersSyncRoot.Unlock()
+		logrus.Debugf("+1 initprocess.writersWg [gcsCore::ExecProcess]")
+		go func() {
+			// Wait for the caller to notify they have handled the error.
+			<-execInitErrorDone
+
+			// Remove our waiter.
+			logrus.Debugf("-1 initprocess.writersWg [gcsCore::ExecProcess goroutine]")
 			containerEntry.initProcess.writersWg.Done()
-			return -1, err
+			close(execInitErrorDone)
+		}()
+		containerEntry.hasRunInitProcess = true
+		if err = c.writeConfigFile(containerEntry.Index, params.OCISpecification); err != nil {
+			// Early exit. Cleanup our waiter since we never got a process.
+			logrus.Debugf("-1 initprocess.writersWg [gcsCore::ExecProcess Error handling for writeConfigFile]")
+			containerEntry.initProcess.writersWg.Done()
+			return -1, execInitErrorDone, err
 		}
 
-		container, err := c.Rtime.CreateContainer(id, c.getContainerStoragePath(containerEntry.Index), stdioSet)
+		var container runtime.Container
+		container, err = c.Rtime.CreateContainer(id, c.getContainerStoragePath(containerEntry.Index), stdioSet)
 		if err != nil {
 			// Early exit. Cleanup our waiter since we never got a process.
+			logrus.Debugf("-1 initprocess.writersWg [gcsCore::ExecProcess Error handling for CreateContainerStoragePath]")
 			containerEntry.initProcess.writersWg.Done()
-			return -1, err
+			return -1, execInitErrorDone, err
 		}
 
 		containerEntry.container = container
@@ -330,10 +366,11 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 
 		// Configure network adapters in the namespace.
 		for _, adapter := range containerEntry.NetworkAdapters {
-			if err := c.configureAdapterInNamespace(container, adapter); err != nil {
+			if err = c.configureAdapterInNamespace(container, adapter); err != nil {
 				// Early exit. Cleanup our waiter since our init process is invalid.
+				logrus.Debugf("-1 initprocess.writersWg [gcsCore::ExecProcess Error handling for configureAdapterInNamespace] %s", err)
 				containerEntry.initProcess.writersWg.Done()
-				return -1, err
+				return -1, execInitErrorDone, err
 			}
 		}
 
@@ -341,18 +378,18 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 			var exitCode int
 			// If we fail to cleanup the container we cannot reuse the storage location.
 			leakContainerIndex := false
-			state, err := container.Wait()
+			state, werr := container.Wait()
 			c.containerCacheMutex.Lock()
-			if err != nil {
-				logrus.Error(err)
+			if werr != nil {
+				logrus.Error(werr)
 				exitCode = -1
 			} else {
 				exitCode = state.ExitCode()
 			}
-			logrus.Infof("container init process %d exited with exit status %d", container.Pid(), exitCode)
+			logrus.Debugf("gcsCore::ExecProcess container init process %d exited with exit status %d", container.Pid(), exitCode)
 
-			if err := c.cleanupContainer(containerEntry); err != nil {
-				logrus.Error(err)
+			if werr := c.cleanupContainer(containerEntry); werr != nil {
+				logrus.Error(werr)
 				leakContainerIndex = true
 			}
 			c.containerCacheMutex.Unlock()
@@ -373,19 +410,21 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 			c.containerCacheMutex.Unlock()
 		}()
 
-		if err := container.Start(); err != nil {
+		if err = container.Start(); err != nil {
 			// Early exit. Cleanup our waiter since we never got a process.
 			containerEntry.initProcess.writersWg.Done()
-			return -1, err
+			return -1, execInitErrorDone, err
 		}
 	} else {
-		ociProcess, err := processParametersToOCI(params)
+		var ociProcess oci.Process
+		ociProcess, err = processParametersToOCI(params)
 		if err != nil {
-			return -1, err
+			return -1, nil, err
 		}
-		p, err := containerEntry.container.ExecProcess(ociProcess, stdioSet)
+		var p runtime.Process
+		p, err = containerEntry.container.ExecProcess(ociProcess, stdioSet)
 		if err != nil {
-			return -1, err
+			return -1, nil, err
 		}
 		pid = p.Pid()
 		processEntry.exitWg.Add(1)
@@ -393,9 +432,9 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 
 		go func() {
 			var exitCode int
-			state, err := p.Wait()
-			if err != nil {
-				logrus.Error(err)
+			state, werr := p.Wait()
+			if werr != nil {
+				logrus.Error(werr)
 				exitCode = -1
 			} else {
 				exitCode = state.ExitCode()
@@ -405,8 +444,8 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 			processEntry.exitCode = exitCode
 			processEntry.exitWg.Done()
 
-			if err := p.Delete(); err != nil {
-				logrus.Error(err)
+			if derr := p.Delete(); derr != nil {
+				logrus.Error(derr)
 			}
 		}()
 	}
@@ -426,7 +465,7 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, stdioSet
 	// applies to external processes as well.
 	c.processCache[pid] = processEntry
 	c.processCacheMutex.Unlock()
-	return pid, nil
+	return pid, nil, nil
 }
 
 // SignalContainer sends the specified signal to the container's init process.
@@ -517,8 +556,20 @@ func (c *gcsCore) GetProperties(id string, query string) (*prot.Properties, erro
 // namespace.
 // This can be used for things like debugging or diagnosing the utility VM's
 // state.
-func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *stdio.ConnectionSet) (pid int, err error) {
-	ociProcess, err := processParametersToOCI(params)
+func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, conSettings stdio.ConnectionSettings) (_ int, err error) {
+	var stdioSet *stdio.ConnectionSet
+	stdioSet, err = stdio.Connect(c.vsock, conSettings)
+	if err != nil {
+		return -1, err
+	}
+	defer func() {
+		if err != nil {
+			stdioSet.Close()
+		}
+	}()
+
+	var ociProcess oci.Process
+	ociProcess, err = processParametersToOCI(params)
 	if err != nil {
 		return -1, err
 	}
@@ -543,18 +594,20 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *st
 			}
 		}()
 
-		console, err := c.OS.OpenFile(consolePath, os.O_RDWR, 0777)
+		var console oslayer.File
+		console, err = c.OS.OpenFile(consolePath, os.O_RDWR, 0777)
 		if err != nil {
 			return -1, errors.Wrap(err, "failed to open console file for external process")
 		}
 		defer console.Close()
 
-		relay = stdioSet.NewTtyRelay(master)
+		relay = stdio.NewTtyRelay(stdioSet, master)
 		cmd.SetStdin(console)
 		cmd.SetStdout(console)
 		cmd.SetStderr(console)
 	} else {
-		fileSet, err := stdioSet.Files()
+		var fileSet *stdio.FileSet
+		fileSet, err = stdioSet.Files()
 		if err != nil {
 			return -1, errors.Wrap(err, "failed to set cmd stdio")
 		}
@@ -564,7 +617,7 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *st
 		cmd.SetStdout(fileSet.Out)
 		cmd.SetStderr(fileSet.Err)
 	}
-	if err := cmd.Start(); err != nil {
+	if err = cmd.Start(); err != nil {
 		return -1, errors.Wrap(err, "failed call to Start for external process")
 	}
 
@@ -576,13 +629,13 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *st
 	processEntry.exitWg.Add(1)
 	processEntry.Tty = relay
 	go func() {
-		if err := cmd.Wait(); err != nil {
+		if werr := cmd.Wait(); werr != nil {
 			// TODO: When cmd is a shell, and last command in the shell
 			// returned an error (e.g. typing a non-existing command gives
 			// error 127), Wait also returns an error. We should find a way to
 			// distinguish between these errors and ones which are actually
 			// important.
-			logrus.Error(errors.Wrap(err, "failed call to Wait for external process"))
+			logrus.Error(errors.Wrap(werr, "failed call to Wait for external process"))
 		}
 		exitCode := cmd.ExitState().ExitCode()
 		logrus.Infof("external process %d exited with exit status %d", cmd.Process().Pid(), exitCode)
@@ -596,7 +649,7 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *st
 		processEntry.exitWg.Done()
 	}()
 
-	pid = cmd.Process().Pid()
+	pid := cmd.Process().Pid()
 	c.processCacheMutex.Lock()
 	c.processCache[pid] = processEntry
 	c.processCacheMutex.Unlock()
@@ -606,7 +659,7 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, stdioSet *st
 // ModifySettings takes the given request and performs the modification it
 // specifies. At the moment, this function only supports the request types Add
 // and Remove, both for the resource type MappedVirtualDisk.
-func (c *gcsCore) ModifySettings(id string, request prot.ResourceModificationRequestResponse) error {
+func (c *gcsCore) ModifySettings(id string, request *prot.ResourceModificationRequestResponse) error {
 	c.containerCacheMutex.Lock()
 	defer c.containerCacheMutex.Unlock()
 
@@ -623,13 +676,23 @@ func (c *gcsCore) ModifySettings(id string, request prot.ResourceModificationReq
 		}
 		switch request.RequestType {
 		case prot.RtAdd:
-			if err := c.setupMappedVirtualDisks(id, []prot.MappedVirtualDisk{*mvd}, containerEntry); err != nil {
+			if err := c.setupMappedVirtualDisks(id, []prot.MappedVirtualDisk{*mvd}); err != nil {
 				return errors.Wrapf(err, "failed to hot add mapped virtual disk for container %s", id)
 			}
+			containerEntry.AddMappedVirtualDisk(*mvd)
 		case prot.RtRemove:
-			if err := c.removeMappedVirtualDisks(id, []prot.MappedVirtualDisk{*mvd}, containerEntry); err != nil {
-				return errors.Wrapf(err, "failed to hot remove mapped virtual disk for container %s", id)
+			// If the disk was specified AttachOnly, it shouldn't have been mounted
+			// in the first place.
+			if !mvd.AttachOnly {
+				if err := unmountPath(c.OS, mvd.ContainerPath, false); err != nil {
+					return errors.Wrapf(err, "failed to unmount mapped virtual disks for container %s", id)
+				}
 			}
+			scsiID := fmt.Sprintf("0:0:0:%d", mvd.Lun)
+			if err := c.OS.UnplugSCSIDisk(scsiID); err != nil {
+				return errors.Wrapf(err, "failed to unplug mapped virtual disks for container %s, scsi: %s", id, scsiID)
+			}
+			containerEntry.RemoveMappedVirtualDisk(*mvd)
 		default:
 			return errors.Errorf("the request type \"%s\" is not supported for resource type \"%s\"", request.RequestType, request.ResourceType)
 		}
@@ -640,13 +703,15 @@ func (c *gcsCore) ModifySettings(id string, request prot.ResourceModificationReq
 		}
 		switch request.RequestType {
 		case prot.RtAdd:
-			if err := c.setupMappedDirectories(id, []prot.MappedDirectory{*md}, containerEntry); err != nil {
+			if err := c.setupMappedDirectories(id, []prot.MappedDirectory{*md}); err != nil {
 				return errors.Wrapf(err, "failed to hot add mapped directory for container %s", id)
 			}
+			containerEntry.AddMappedDirectory(*md)
 		case prot.RtRemove:
-			if err := c.removeMappedDirectories(id, []prot.MappedDirectory{*md}, containerEntry); err != nil {
-				return errors.Wrapf(err, "failed to hot remove mapped directory for container %s", id)
+			if err := unmountPath(c.OS, md.ContainerPath, false); err != nil {
+				return errors.Wrapf(err, "failed to mount mapped directories for container %s", id)
 			}
+			containerEntry.RemoveMappedDirectory(*md)
 		default:
 			return errors.Errorf("the request type \"%s\" is not supported for resource type \"%s\"", request.RequestType, request.ResourceType)
 		}
@@ -687,7 +752,9 @@ func (c *gcsCore) WaitContainer(id string) (func() int, error) {
 	c.containerCacheMutex.Unlock()
 
 	f := func() int {
+		logrus.Debugf("gcscore::WaitContainer waiting on init process waitgroup")
 		entry.initProcess.writersWg.Wait()
+		logrus.Debugf("gcscore::WaitContainer init process waitgroup count has dropped to zero")
 		return entry.initProcess.exitCode
 	}
 
@@ -702,7 +769,7 @@ func (c *gcsCore) WaitContainer(id string) (func() int, error) {
 // sync.
 //
 // On error the pid was not a valid pid and no channels will be returned.
-func (c *gcsCore) WaitProcess(pid int) (chan int, chan bool, error) {
+func (c *gcsCore) WaitProcess(pid int) (<-chan int, chan<- bool, error) {
 	c.processCacheMutex.Lock()
 	entry, ok := c.processCache[pid]
 	if !ok {
@@ -714,6 +781,7 @@ func (c *gcsCore) WaitProcess(pid int) (chan int, chan bool, error) {
 	// If we are an init process waiter increment our count for this waiter.
 	if entry.isInitProcess {
 		entry.writersSyncRoot.Lock()
+		logrus.Debugf("gcscore::WaitProcess Incrementing waitgroup as isInitProcess")
 		entry.writersWg.Add(1)
 		entry.writersSyncRoot.Unlock()
 	}
@@ -731,6 +799,7 @@ func (c *gcsCore) WaitProcess(pid int) (chan int, chan bool, error) {
 		// Wait for the exit code or the caller to stop waiting.
 		select {
 		case exitCode := <-bgExitCodeChan:
+			logrus.Debugf("gcscore::WaitProcess got an exitCode %d", exitCode)
 			// We got an exit code tell our caller.
 			exitCodeChan <- exitCode
 
@@ -741,11 +810,13 @@ func (c *gcsCore) WaitProcess(pid int) (chan int, chan bool, error) {
 				if entry.isInitProcess {
 					entry.writersSyncRoot.Lock()
 					// Decrement this waiter
+					logrus.Debugf("-1 writersWg [gcsCore::WaitProcess] exitCode from bgExitCodeChan doneChan")
 					entry.writersWg.Done()
 					if !entry.writersCalled {
 						// Decrement the container exited waiter now that we
 						// know we have successfully written at least 1
 						// WaitProcess on the init process.
+						logrus.Debugf("-1 writersWg [gcsCore::WaitProcess] exitCode from bgExitCodeChan, !writersCalled")
 						entry.writersCalled = true
 						entry.writersWg.Done()
 					}
@@ -753,10 +824,12 @@ func (c *gcsCore) WaitProcess(pid int) (chan int, chan bool, error) {
 				}
 			}
 		case <-doneChan:
+			logrus.Debugf("gcscore::WaitProcess done channel")
 			// This case means that the waiter decided to stop waiting before
 			// the process had an exit code. In this case we need to cleanup
 			// just our waiter because the no response was written.
 			if entry.isInitProcess {
+				logrus.Debugf("-1 writersWg [gcsCore::WaitProcess] doneChan")
 				entry.writersSyncRoot.Lock()
 				entry.writersWg.Done()
 				entry.writersSyncRoot.Unlock()
@@ -771,18 +844,13 @@ func (c *gcsCore) WaitProcess(pid int) (chan int, chan bool, error) {
 // in storage.go to set up a set of mapped virtual disks for a given container.
 // It then adds them to the container's cache entry.
 // This function expects containerCacheMutex to be locked on entry.
-func (c *gcsCore) setupMappedVirtualDisks(id string, disks []prot.MappedVirtualDisk, containerEntry *containerCacheEntry) error {
+func (c *gcsCore) setupMappedVirtualDisks(id string, disks []prot.MappedVirtualDisk) error {
 	mounts, err := c.getMappedVirtualDiskMounts(disks)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get mapped virtual disk devices for container %s", id)
 	}
 	if err := c.mountMappedVirtualDisks(disks, mounts); err != nil {
 		return errors.Wrapf(err, "failed to mount mapped virtual disks for container %s", id)
-	}
-	for _, disk := range disks {
-		if err := containerEntry.AddMappedVirtualDisk(disk); err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -791,47 +859,14 @@ func (c *gcsCore) setupMappedVirtualDisks(id string, disks []prot.MappedVirtualD
 // in storage.go to set up a set of mapped directories for a given container.
 // It then adds them to the container's cache entry.
 // This function expects containerCacheMutex to be locked on entry.
-func (c *gcsCore) setupMappedDirectories(id string, dirs []prot.MappedDirectory, containerEntry *containerCacheEntry) error {
+func (c *gcsCore) setupMappedDirectories(id string, dirs []prot.MappedDirectory) error {
 	for _, dir := range dirs {
-		if err := c.mountMappedDirectory(&dir); err != nil {
+		if !dir.CreateInUtilityVM {
+			return errors.New("we do not currently support mapping directories inside the container namespace")
+		}
+		if err := mountPlan9Share(c.OS, c.vsock, dir.ContainerPath, "", dir.Port, dir.ReadOnly); err != nil {
 			return errors.Wrapf(err, "failed to mount mapped directory %s for container %s", dir.ContainerPath, id)
 		}
-	}
-	for _, dir := range dirs {
-		if err := containerEntry.AddMappedDirectory(dir); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// removeMappedVirtualDisks is a helper function which calls into the functions
-// in storage.go to unmount a set of mapped virtual disks for a given
-// container. It then removes them from the container's cache entry.
-// This function expects containerCacheMutex to be locked on entry.
-func (c *gcsCore) removeMappedVirtualDisks(id string, disks []prot.MappedVirtualDisk, containerEntry *containerCacheEntry) error {
-	if err := c.unmountMappedVirtualDisks(disks); err != nil {
-		return errors.Wrapf(err, "failed to mount mapped virtual disks for container %s", id)
-	}
-	if err := c.unplugMappedVirtualDisks(disks); err != nil {
-		return errors.Wrapf(err, "failed to unplug mapped virtual disks for container %s", id)
-	}
-	for _, disk := range disks {
-		containerEntry.RemoveMappedVirtualDisk(disk)
-	}
-	return nil
-}
-
-// removeMappedDirectories is a helper function which calls into the functions
-// in storage.go to unmount a set of mapped directories for a given container.
-// It then removes them from the container's cache entry.
-// This function expects containerCacheMutex to be locked on entry.
-func (c *gcsCore) removeMappedDirectories(id string, dirs []prot.MappedDirectory, containerEntry *containerCacheEntry) error {
-	if err := c.unmountMappedDirectories(dirs); err != nil {
-		return errors.Wrapf(err, "failed to mount mapped directories for container %s", id)
-	}
-	for _, dir := range dirs {
-		containerEntry.RemoveMappedDirectory(dir)
 	}
 	return nil
 }

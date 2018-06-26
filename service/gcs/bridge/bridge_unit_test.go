@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"io/ioutil"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -46,7 +47,7 @@ func TestBridgeMux_Handle_NilHandler_Panic(t *testing.T) {
 	}()
 
 	m := NewBridgeMux()
-	m.Handle(prot.ComputeSystemCreateV1, nil)
+	m.Handle(prot.ComputeSystemCreateV1, prot.PvInvalid, nil)
 }
 
 func TestBridgeMux_Handle_NilMap_Panic(t *testing.T) {
@@ -58,17 +59,22 @@ func TestBridgeMux_Handle_NilMap_Panic(t *testing.T) {
 
 	m := &Mux{} // Caller didn't use NewBridgeMux (not supported).
 	th := &thandler{}
-	m.Handle(prot.ComputeSystemCreateV1, th)
+	m.Handle(prot.ComputeSystemCreateV1, prot.PvInvalid, th)
 }
 
 func Test_Bridge_Mux_Handle_Succeeds(t *testing.T) {
 	th := &thandler{}
 	m := NewBridgeMux()
-	m.Handle(prot.ComputeSystemCreateV1, th)
+	m.Handle(prot.ComputeSystemCreateV1, prot.PvInvalid, th)
+
+	var verMap map[prot.ProtocolVersion]Handler
+	var ok bool
+	if verMap, ok = m.m[prot.ComputeSystemCreateV1]; !ok {
+		t.Error("The handler type map not successfully added.")
+	}
 
 	var hOut Handler
-	var ok bool
-	if hOut, ok = m.m[prot.ComputeSystemCreateV1]; !ok {
+	if hOut, ok = verMap[prot.PvInvalid]; !ok {
 		t.Error("The handler was not successfully added.")
 	}
 
@@ -88,7 +94,7 @@ func TestBridgeMux_HandleFunc_NilHandleFunc_Panic(t *testing.T) {
 	}()
 
 	m := NewBridgeMux()
-	m.HandleFunc(prot.ComputeSystemCreateV1, nil)
+	m.HandleFunc(prot.ComputeSystemCreateV1, prot.PvInvalid, nil)
 }
 
 func TestBridgeMux_HandleFunc_NilMap_Panic(t *testing.T) {
@@ -102,7 +108,7 @@ func TestBridgeMux_HandleFunc_NilMap_Panic(t *testing.T) {
 	}
 
 	m := &Mux{} // Caller didn't use NewBridgeMux (not supported).
-	m.HandleFunc(prot.ComputeSystemCreateV1, hIn)
+	m.HandleFunc(prot.ComputeSystemCreateV1, prot.PvInvalid, hIn)
 }
 
 func Test_Bridge_Mux_HandleFunc_Succeeds(t *testing.T) {
@@ -112,11 +118,16 @@ func Test_Bridge_Mux_HandleFunc_Succeeds(t *testing.T) {
 	}
 
 	m := NewBridgeMux()
-	m.HandleFunc(prot.ComputeSystemCreateV1, hIn)
+	m.HandleFunc(prot.ComputeSystemCreateV1, prot.PvInvalid, hIn)
+
+	var verMap map[prot.ProtocolVersion]Handler
+	var ok bool
+	if verMap, ok = m.m[prot.ComputeSystemCreateV1]; !ok {
+		t.Error("The handler type map not successfully added.")
+	}
 
 	var hOut Handler
-	var ok bool
-	if hOut, ok = m.m[prot.ComputeSystemCreateV1]; !ok {
+	if hOut, ok = verMap[prot.PvInvalid]; !ok {
 		t.Error("The handler was not successfully added.")
 	}
 
@@ -141,18 +152,18 @@ func Test_Bridge_Mux_Handler_NilRequest_Panic(t *testing.T) {
 	}
 
 	m := NewBridgeMux()
-	m.HandleFunc(prot.ComputeSystemCreateV1, hIn)
+	m.HandleFunc(prot.ComputeSystemCreateV1, prot.PvInvalid, hIn)
 	m.Handler(nil)
 }
 
-func verifyResponseIsDeaultHandler(t *testing.T, i interface{}) {
+func verifyResponseIsDefaultHandler(t *testing.T, i interface{}) {
 	if i == nil {
 		t.Error("The response is nil")
 		return
 	}
 
 	base := i.(*prot.MessageResponseBase)
-	if base.Result != int32(gcserr.HrNotImpl) {
+	if base.Result != int32(gcserr.HrVmcomputeUnknownMessage) {
 		t.Error("The default handler did not set a -1 error result.")
 	}
 	if len(base.ErrorRecords) != 1 {
@@ -184,7 +195,7 @@ func Test_Bridge_Mux_Handler_NotAdded_Default(t *testing.T) {
 
 	select {
 	case resp := <-respChan:
-		verifyResponseIsDeaultHandler(t, resp.response)
+		verifyResponseIsDefaultHandler(t, resp.response)
 	default:
 		t.Error("The deafult handler returned no writes.")
 	}
@@ -199,7 +210,7 @@ func Test_Bridge_Mux_Handler_Added_NotMatched(t *testing.T) {
 	th := &thandler{}
 
 	// Add at least one handler for a different request type.
-	m.Handle(prot.ComputeSystemCreateV1, th)
+	m.Handle(prot.ComputeSystemCreateV1, prot.PvInvalid, th)
 
 	req := &Request{
 		Header: &prot.MessageHeader{
@@ -218,7 +229,7 @@ func Test_Bridge_Mux_Handler_Added_NotMatched(t *testing.T) {
 
 	select {
 	case resp := <-respChan:
-		verifyResponseIsDeaultHandler(t, resp.response)
+		verifyResponseIsDefaultHandler(t, resp.response)
 	default:
 		t.Error("The deafult handler returned no writes.")
 	}
@@ -232,7 +243,7 @@ func Test_Bridge_Mux_Handler_Success(t *testing.T) {
 	m := NewBridgeMux()
 	th := &thandler{}
 
-	m.Handle(prot.ComputeSystemCreateV1, th)
+	m.Handle(prot.ComputeSystemCreateV1, prot.PvInvalid, th)
 
 	req := &Request{
 		Header: &prot.MessageHeader{
@@ -275,7 +286,7 @@ func Test_Bridge_Mux_ServeMsg_NotAdded_Default(t *testing.T) {
 
 	select {
 	case resp := <-respChan:
-		verifyResponseIsDeaultHandler(t, resp.response)
+		verifyResponseIsDefaultHandler(t, resp.response)
 	default:
 		t.Error("The deafult handler returned no writes.")
 	}
@@ -290,7 +301,7 @@ func Test_Bridge_Mux_ServeMsg_Added_NotMatched(t *testing.T) {
 	th := &thandler{}
 
 	// Add at least one handler for a different request type.
-	m.Handle(prot.ComputeSystemCreateV1, th)
+	m.Handle(prot.ComputeSystemCreateV1, prot.PvInvalid, th)
 
 	req := &Request{
 		Header: &prot.MessageHeader{
@@ -309,7 +320,7 @@ func Test_Bridge_Mux_ServeMsg_Added_NotMatched(t *testing.T) {
 
 	select {
 	case resp := <-respChan:
-		verifyResponseIsDeaultHandler(t, resp.response)
+		verifyResponseIsDefaultHandler(t, resp.response)
 	default:
 		t.Error("The deafult handler returned no writes.")
 	}
@@ -323,7 +334,7 @@ func Test_Bridge_Mux_ServeMsg_Success(t *testing.T) {
 	m := NewBridgeMux()
 	th := &thandler{}
 
-	m.Handle(prot.ComputeSystemCreateV1, th)
+	m.Handle(prot.ComputeSystemCreateV1, prot.PvInvalid, th)
 
 	req := &Request{
 		Header: &prot.MessageHeader{
@@ -351,38 +362,7 @@ func (e *errorTransport) Dial(_ uint32) (transport.Connection, error) {
 	return nil, e.e
 }
 
-func Test_Bridge_ListenAndServe_NoTransport_Fails(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("The code did not panic on nil Transport")
-		}
-	}()
-
-	b := &Bridge{}
-	_ = b.ListenAndServe()
-}
-
-func Test_Bridge_ListenAndServe_TransportDial_Fails(t *testing.T) {
-	mt := &errorTransport{e: errors.New("Not implemented")}
-	b := &Bridge{Transport: mt}
-	err := b.ListenAndServe()
-	if err == nil {
-		t.Error("ListenAndServe should have failed on error transport dial")
-	}
-}
-
-func Test_Bridge_ListenAndServe_NoHandler_Fails(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("The code did not panic on nil Handler")
-		}
-	}()
-
-	b := &Bridge{}
-	_ = b.ListenAndServe()
-}
-
-func serverSend(conn transport.Connection, messageType prot.MessageIdentifier, messageID prot.SequenceID, i interface{}) error {
+func serverSend(conn io.Writer, messageType prot.MessageIdentifier, messageID prot.SequenceID, i interface{}) error {
 	body := make([]byte, 0)
 	if i != nil {
 		var err error
@@ -409,7 +389,7 @@ func serverSend(conn transport.Connection, messageType prot.MessageIdentifier, m
 	return nil
 }
 
-func serverRead(conn transport.Connection) (*prot.MessageHeader, []byte, error) {
+func serverRead(conn io.Reader) (*prot.MessageHeader, []byte, error) {
 	header := &prot.MessageHeader{}
 	// Read the header.
 	if err := binary.Read(conn, binary.LittleEndian, header); err != nil {
@@ -424,21 +404,53 @@ func serverRead(conn transport.Connection) (*prot.MessageHeader, []byte, error) 
 	return header, message, nil
 }
 
-func Test_Bridge_ListenAndServe_NotSupportedHandler_Success(t *testing.T) {
+type loopbackConnection struct {
+	// Format is client-read, server-write, server-read, client-write
+	pipes [4]*os.File
+}
+
+func (lc *loopbackConnection) close() {
+	for i := 3; i >= 0; i-- {
+		lc.pipes[i].Close()
+	}
+}
+
+func (lc *loopbackConnection) CRead() io.ReadCloser {
+	return lc.pipes[0]
+}
+
+func (lc *loopbackConnection) CWrite() io.WriteCloser {
+	return lc.pipes[3]
+}
+
+func (lc *loopbackConnection) SRead() io.ReadCloser {
+	return lc.pipes[2]
+}
+
+func (lc *loopbackConnection) SWrite() io.WriteCloser {
+	return lc.pipes[1]
+}
+
+func newLoopbackConnection() *loopbackConnection {
+	l := new(loopbackConnection)
+	l.pipes[0], l.pipes[1], _ = os.Pipe()
+	l.pipes[2], l.pipes[3], _ = os.Pipe()
+	return l
+}
+
+func Test_Bridge_ListenAndServe_UnknownMessageHandler_Success(t *testing.T) {
 	// Turn off logging so as not to spam output.
 	logrus.SetOutput(ioutil.Discard)
 
-	mtc := make(chan *transport.MockConnection)
-	defer close(mtc)
-	mt := &transport.MockTransport{Channel: mtc}
+	lc := newLoopbackConnection()
+	defer lc.close()
 
 	b := &Bridge{
-		Transport: mt,
-		Handler:   NotSupportedHandler(),
+		Handler: UnknownMessageHandler(),
 	}
 
 	go func() {
-		if err := b.ListenAndServe(); err != nil {
+		if err := b.ListenAndServe(lc.SRead(), lc.SWrite()); err != nil {
 			t.Error(err)
 		}
 	}()
@@ -446,18 +458,17 @@ func Test_Bridge_ListenAndServe_NotSupportedHandler_Success(t *testing.T) {
 		b.quitChan <- true
 	}()
 
-	clientConnection := <-mtc
 	message := &prot.ContainerResizeConsole{
 		MessageBase: &prot.MessageBase{
 			ContainerID: "01234567-89ab-cdef-0123-456789abcdef",
 			ActivityID:  "00000000-0000-0000-0000-000000000001",
 		},
 	}
-	if err := serverSend(clientConnection, prot.ComputeSystemResizeConsoleV1, prot.SequenceID(1), message); err != nil {
+	if err := serverSend(lc.CWrite(), prot.ComputeSystemResizeConsoleV1, prot.SequenceID(1), message); err != nil {
 		t.Error("Failed to send message to server")
 		return
 	}
-	header, body, err := serverRead(clientConnection)
+	header, body, err := serverRead(lc.CRead())
 	if err != nil {
 		t.Error("Failed to read message response from server")
 		return
@@ -475,16 +486,16 @@ func Test_Bridge_ListenAndServe_NotSupportedHandler_Success(t *testing.T) {
 	if header.ID != prot.SequenceID(1) {
 		t.Error("Response header had wrong sequence id")
 	}
-	verifyResponseIsDeaultHandler(t, response)
+	verifyResponseIsDefaultHandler(t, response)
 }
 
 func Test_Bridge_ListenAndServe_CorrectHandler_Success(t *testing.T) {
 	// Turn off logging so as not to spam output.
 	logrus.SetOutput(ioutil.Discard)
 
-	mtc := make(chan *transport.MockConnection)
-	defer close(mtc)
-	mt := &transport.MockTransport{Channel: mtc}
+	lc := newLoopbackConnection()
+	defer lc.close()
+
 	mux := NewBridgeMux()
 	message := &prot.ContainerResizeConsole{
 		MessageBase: &prot.MessageBase{
@@ -520,14 +531,14 @@ func Test_Bridge_ListenAndServe_CorrectHandler_Success(t *testing.T) {
 		}
 		w.Write(response)
 	}
-	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, resizeFn)
+	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, prot.PvV3, resizeFn)
 	b := &Bridge{
-		Transport: mt,
-		Handler:   mux,
+		Handler: mux,
+		protVer: prot.PvV3,
 	}
 
 	go func() {
-		if err := b.ListenAndServe(); err != nil {
+		if err := b.ListenAndServe(lc.SRead(), lc.SWrite()); err != nil {
 			t.Error(err)
 		}
 	}()
@@ -535,13 +546,11 @@ func Test_Bridge_ListenAndServe_CorrectHandler_Success(t *testing.T) {
 		b.quitChan <- true
 	}()
 
-	clientConnection := <-mtc
-
-	if err := serverSend(clientConnection, prot.ComputeSystemResizeConsoleV1, prot.SequenceID(1), message); err != nil {
+	if err := serverSend(lc.CWrite(), prot.ComputeSystemResizeConsoleV1, prot.SequenceID(1), message); err != nil {
 		t.Error("Failed to send message to server")
 		return
 	}
-	header, body, err := serverRead(clientConnection)
+	header, body, err := serverRead(lc.CRead())
 	if err != nil {
 		t.Error("Failed to read message response from server")
 		return
@@ -551,7 +560,6 @@ func Test_Bridge_ListenAndServe_CorrectHandler_Success(t *testing.T) {
 		t.Error("Failed to unmarshal response body from server")
 		return
 	}
-
 	// Verify.
 	if header.Type != prot.ComputeSystemResponseResizeConsoleV1 {
 		t.Error("response header was not resize console response.")
@@ -571,9 +579,9 @@ func Test_Bridge_ListenAndServe_HandlersAreAsync_Success(t *testing.T) {
 	// Turn off logging so as not to spam output.
 	logrus.SetOutput(ioutil.Discard)
 
-	mtc := make(chan *transport.MockConnection)
-	defer close(mtc)
-	mt := &transport.MockTransport{Channel: mtc}
+	lc := newLoopbackConnection()
+	defer lc.close()
+
 	mux := NewBridgeMux()
 
 	orderWg := sync.WaitGroup{}
@@ -595,16 +603,16 @@ func Test_Bridge_ListenAndServe_HandlersAreAsync_Success(t *testing.T) {
 		// Allow the first to proceed.
 		orderWg.Done()
 	}
-	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, firstFn)
-	mux.HandleFunc(prot.ComputeSystemCreateV1, secondFn)
+	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, prot.PvV3, firstFn)
+	mux.HandleFunc(prot.ComputeSystemModifySettingsV1, prot.PvV3, secondFn)
 
 	b := &Bridge{
-		Transport: mt,
-		Handler:   mux,
+		Handler: mux,
+		protVer: prot.PvV3,
 	}
 
 	go func() {
-		if err := b.ListenAndServe(); err != nil {
+		if err := b.ListenAndServe(lc.SRead(), lc.SWrite()); err != nil {
 			t.Error(err)
 		}
 	}()
@@ -612,29 +620,27 @@ func Test_Bridge_ListenAndServe_HandlersAreAsync_Success(t *testing.T) {
 		b.quitChan <- true
 	}()
 
-	clientConnection := <-mtc
-
-	if err := serverSend(clientConnection, prot.ComputeSystemResizeConsoleV1, prot.SequenceID(0), nil); err != nil {
+	if err := serverSend(lc.CWrite(), prot.ComputeSystemResizeConsoleV1, prot.SequenceID(0), nil); err != nil {
 		t.Error("Failed to send first message to server")
 		return
 	}
-	if err := serverSend(clientConnection, prot.ComputeSystemCreateV1, prot.SequenceID(1), nil); err != nil {
+	if err := serverSend(lc.CWrite(), prot.ComputeSystemModifySettingsV1, prot.SequenceID(1), nil); err != nil {
 		t.Error("Failed to send second message to server")
 		return
 	}
 
-	headerFirst, _, errFirst := serverRead(clientConnection)
+	headerFirst, _, errFirst := serverRead(lc.CRead())
 	if errFirst != nil {
 		t.Error("Failed to read first response from server")
 		return
 	}
-	headerSecond, _, errSecond := serverRead(clientConnection)
+	headerSecond, _, errSecond := serverRead(lc.CRead())
 	if errSecond != nil {
 		t.Error("Failed to read first response from server")
 		return
 	}
 	// headerFirst should match the 2nd request.
-	if headerFirst.Type != prot.ComputeSystemResponseCreateV1 {
+	if headerFirst.Type != prot.ComputeSystemResponseModifySettingsV1 {
 		t.Error("Incorrect response type for 2nd request")
 	}
 	if headerFirst.ID != prot.SequenceID(1) {

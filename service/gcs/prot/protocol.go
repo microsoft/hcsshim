@@ -5,6 +5,7 @@ package prot
 
 import (
 	"encoding/json"
+	"strconv"
 
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
@@ -96,6 +97,8 @@ const (
 	ComputeSystemGetPropertiesV1 = 0x10100901
 	// ComputeSystemModifySettingsV1 is the modify container request.
 	ComputeSystemModifySettingsV1 = 0x10100a01
+	// ComputeSystemNegotiateProtocolV1 is the protocol negotiation request.
+	ComputeSystemNegotiateProtocolV1 = 0x10100b01
 
 	// ComputeSystemResponseCreateV1 is the create container response.
 	ComputeSystemResponseCreateV1 = 0x20100101
@@ -121,10 +124,69 @@ const (
 	ComputeSystemResponseGetPropertiesV1 = 0x20100901
 	// ComputeSystemResponseModifySettingsV1 is the modify container response.
 	ComputeSystemResponseModifySettingsV1 = 0x20100a01
+	// ComputeSystemResponseNegotiateProtocolV1 is the protocol negotiation
+	// response.
+	ComputeSystemResponseNegotiateProtocolV1 = 0x20100b01
 
 	// ComputeSystemNotificationV1 is the notification identifier.
 	ComputeSystemNotificationV1 = 0x30100101
 )
+
+// String returns the string representation of the message identifer.
+func (mi MessageIdentifier) String() string {
+	switch mi {
+	case MiNone:
+		return "None"
+	case ComputeSystemCreateV1:
+		return "ComputeSystemCreateV1"
+	case ComputeSystemStartV1:
+		return "ComputeSystemStartV1"
+	case ComputeSystemShutdownGracefulV1:
+		return "ComputeSystemShutdownGracefulV1"
+	case ComputeSystemShutdownForcedV1:
+		return "ComputeSystemShutdownForcedV1"
+	case ComputeSystemExecuteProcessV1:
+		return "ComputeSystemExecuteProcessV1"
+	case ComputeSystemWaitForProcessV1:
+		return "ComputeSystemWaitForProcessV1"
+	case ComputeSystemSignalProcessV1:
+		return "ComputeSystemSignalProcessV1"
+	case ComputeSystemResizeConsoleV1:
+		return "ComputeSystemResizeConsoleV1"
+	case ComputeSystemGetPropertiesV1:
+		return "ComputeSystemGetPropertiesV1"
+	case ComputeSystemModifySettingsV1:
+		return "ComputeSystemModifySettingsV1"
+	case ComputeSystemNegotiateProtocolV1:
+		return "ComputeSystemNegotiateProtocolV1"
+	case ComputeSystemResponseCreateV1:
+		return "ComputeSystemResponseCreateV1"
+	case ComputeSystemResponseStartV1:
+		return "ComputeSystemResponseStartV1"
+	case ComputeSystemResponseShutdownGracefulV1:
+		return "ComputeSystemResponseShutdownGracefulV1"
+	case ComputeSystemResponseShutdownForcedV1:
+		return "ComputeSystemResponseShutdownForcedV1"
+	case ComputeSystemResponseExecuteProcessV1:
+		return "ComputeSystemResponseExecuteProcessV1"
+	case ComputeSystemResponseWaitForProcessV1:
+		return "ComputeSystemResponseWaitForProcessV1"
+	case ComputeSystemResponseSignalProcessV1:
+		return "ComputeSystemResponseSignalProcessV1"
+	case ComputeSystemResponseResizeConsoleV1:
+		return "ComputeSystemResponseResizeConsoleV1"
+	case ComputeSystemResponseGetPropertiesV1:
+		return "ComputeSystemResponseGetPropertiesV1"
+	case ComputeSystemResponseModifySettingsV1:
+		return "ComputeSystemResponseModifySettingsV1"
+	case ComputeSystemResponseNegotiateProtocolV1:
+		return "ComputeSystemResponseNegotiateProtocolV1"
+	case ComputeSystemNotificationV1:
+		return "ComputeSystemNotificationV1"
+	default:
+		return strconv.FormatUint(uint64(mi), 10)
+	}
+}
 
 // SequenceID is used to correlate requests and responses.
 type SequenceID uint64
@@ -141,12 +203,16 @@ const MessageHeaderSize = 16
 
 /////////////////////////////////////////////////////
 
-// Protocol version.
+// ProtocolVersion is a type for the seclected HCS<->GCS protocol version of
+// messages
+type ProtocolVersion uint32
+
+// Protocol versions.
 const (
-	PvInvalid = 0
-	PvV1      = 1
-	PvV2      = 2
-	PvV3      = 3
+	PvInvalid ProtocolVersion = 0
+	PvV3      ProtocolVersion = 3
+	PvV4      ProtocolVersion = 4
+	PvMax     ProtocolVersion = PvV4
 )
 
 // ProtocolSupport specifies the protocol versions to be used for HCS-GCS
@@ -158,11 +224,47 @@ type ProtocolSupport struct {
 	MaximumProtocolVersion uint32
 }
 
+// OsType defines the operating system type identifer of the guest hosting the
+// GCS.
+type OsType string
+
+// OsTypeLinux is the OS type the HCS expects for a Linux GCS
+const OsTypeLinux OsType = "Linux"
+
+// GcsCapabilities specifies the abilities and scenarios supported by this GCS.
+type GcsCapabilities struct {
+	// True if a create message should be sent for the hosting system itself.
+	SendHostCreateMessage bool `json:",omitempty"`
+	// True if a start message should be sent for the hosting system itself. If
+	// SendHostCreateMessage is false, a start message will not be sent either.
+	SendHostStartMessage bool `json:",omitempty"`
+	// True if an HVSocket ModifySettings request should be sent immediately
+	// after the create/start messages are sent (if they're sent at all). This
+	// ModifySettings request would be to configure the local and parent
+	// Hyper-V socket addresses of the VM, and would have a RequestType of
+	// Update.
+	HVSocketConfigOnStartup bool            `json:"HvSocketConfigOnStartup,omitempty"`
+	SupportedSchemaVersions []SchemaVersion `json:",omitempty"`
+	RuntimeOsType           OsType          `json:",omitempty"`
+	// GuestDefinedCapabilities define any JSON object that will be directly
+	// passed to a client of the HCS. This can be useful to pass runtime
+	// specific capabilities not tied to the platform itself.
+	GuestDefinedCapabilities interface{} `json:",omitempty"`
+}
+
 // MessageBase is the base type embedded in all messages sent from the HCS to
 // the GCS, as well as ContainerNotification which is sent from GCS to HCS.
 type MessageBase struct {
 	ContainerID string `json:"ContainerId"`
 	ActivityID  string `json:"ActivityId"`
+}
+
+// NegotiateProtocol is the message from the HCS used to determine the protocol
+// version that will be used for future communication.
+type NegotiateProtocol struct {
+	*MessageBase
+	MinimumVersion uint32
+	MaximumVersion uint32
 }
 
 // ContainerCreate is the message from the HCS specifying to create a container
@@ -343,11 +445,71 @@ type ResourceModificationRequestResponse struct {
 	Settings     interface{} `json:",omitempty"`
 }
 
+// ModifyResourceType is the type of resource, such as memory or virtual disk,
+// which is to be modified for the container. This is the V2 schema equivalent
+// of PropertyType.
+type ModifyResourceType string
+
+const (
+	// MrtMemory is the modify resource type for memory
+	MrtMemory = ModifyResourceType("Memory")
+	// MrtCPUGroup is the modify resource type for CPU group
+	MrtCPUGroup = ModifyResourceType("CpuGroup")
+	// MrtMappedDirectory is the modify resource type for mapped directories
+	MrtMappedDirectory = ModifyResourceType("MappedDirectory")
+	// MrtMappedPipe is the modify resource type for mapped pipes
+	MrtMappedPipe = ModifyResourceType("MappedPipe")
+	// MrtMappedVirtualDisk is the modify resource type for mapped virtual
+	// disks
+	MrtMappedVirtualDisk = ModifyResourceType("MappedVirtualDisk")
+	// MrtNetwork is the modify resource type for networking
+	MrtNetwork = ModifyResourceType("Network")
+	// MrtVSMBShare is the modify resource type for VSMB shares
+	MrtVSMBShare = ModifyResourceType("VSmbShare")
+	// MrtPlan9Share is the modify resource type for Plan9 shares
+	MrtPlan9Share = ModifyResourceType("Plan9Share")
+	// MrtCombinedLayers is the modify resource type for combined layers
+	MrtCombinedLayers = ModifyResourceType("CombinedLayers")
+	// MrtHVSocket is the modify resource type for Hyper-V sockets
+	MrtHVSocket = ModifyResourceType("HvSocket")
+	// MrtSharedMemoryRegion is the modify resource type for shared memory
+	// regions
+	MrtSharedMemoryRegion = ModifyResourceType("SharedMemoryRegion")
+	// MrtVPMemDevice is the modify resource type for VPMem devices
+	MrtVPMemDevice = ModifyResourceType("VPMemDevice")
+	// MrtGPU is the modify resource type for GPUs
+	MrtGPU = ModifyResourceType("Gpu")
+)
+
+// ModifyRequestType is the type of operation to perform on a given modify
+// resource type. This is the V2 schema equivalent of RequestType.
+type ModifyRequestType string
+
+const (
+	// MreqtAdd is the "Add" modify request type
+	MreqtAdd = ModifyRequestType("Add")
+	// MreqtRemove is the "Remove" modify request type
+	MreqtRemove = ModifyRequestType("Remove")
+	// MreqtUpdate is the "Update" modify request type
+	MreqtUpdate = ModifyRequestType("Update")
+)
+
+// ModifySettingRequest details a container resource which should be modified,
+// how, and with what parameters. This is the V2 schema equivalent of
+// ResourceModificationRequestResponse.
+type ModifySettingRequest struct {
+	ResourceURI  string             `json:"ResourceUri,omitempty"`
+	ResourceType ModifyResourceType `json:",omitempty"`
+	RequestType  ModifyRequestType  `json:",omitempty"`
+	Settings     interface{}        `json:",omitempty"`
+}
+
 // ContainerModifySettings is the message from the HCS specifying how a certain
 // container resource should be modified.
 type ContainerModifySettings struct {
 	*MessageBase
-	Request ResourceModificationRequestResponse
+	Request   *ResourceModificationRequestResponse
+	V2Request *ModifySettingRequest `json:"v2Request"`
 }
 
 // UnmarshalContainerModifySettings unmarshals the given bytes into a
@@ -358,31 +520,77 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 	// Unmarshal the message.
 	var request ContainerModifySettings
 	var rawSettings json.RawMessage
+	var v2RawSettings json.RawMessage
+	request.Request = &ResourceModificationRequestResponse{}
 	request.Request.Settings = &rawSettings
+	request.V2Request = &ModifySettingRequest{}
+	request.V2Request.Settings = &v2RawSettings
 	if err := commonutils.UnmarshalJSONWithHresult(b, &request); err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	if request.Request.RequestType == "" {
-		request.Request.RequestType = RtAdd
+	if request.Request != nil {
+		if request.Request.RequestType == "" {
+			request.Request.RequestType = RtAdd
+		}
+
+		// Fill in the ResourceType-specific fields.
+		switch request.Request.ResourceType {
+		case PtMappedVirtualDisk:
+			mvd := &MappedVirtualDisk{}
+			if err := commonutils.UnmarshalJSONWithHresult(rawSettings, mvd); err != nil {
+				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDisk")
+			}
+			request.Request.Settings = mvd
+		case PtMappedDirectory:
+			md := &MappedDirectory{}
+			if err := commonutils.UnmarshalJSONWithHresult(rawSettings, md); err != nil {
+				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedDirectory")
+			}
+			request.Request.Settings = md
+		default:
+			return nil, errors.Errorf("invalid ResourceType '%s'", request.Request.ResourceType)
+		}
 	}
 
-	// Fill in the ResourceType-specific fields.
-	switch request.Request.ResourceType {
-	case PtMappedVirtualDisk:
-		mvd := &MappedVirtualDisk{}
-		if err := commonutils.UnmarshalJSONWithHresult(rawSettings, mvd); err != nil {
-			return nil, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDisk")
+	if request.V2Request != nil {
+		if request.V2Request.RequestType == "" {
+			request.V2Request.RequestType = MreqtAdd
 		}
-		request.Request.Settings = mvd
-	case PtMappedDirectory:
-		md := &MappedDirectory{}
-		if err := commonutils.UnmarshalJSONWithHresult(rawSettings, md); err != nil {
-			return nil, errors.Wrap(err, "failed to unmarshal settings as MappedDirectory")
+
+		if len(v2RawSettings) <= 0 {
+			return nil, errors.New("failed to unmarhsal Settings or HostedSettings for V2 modify request")
 		}
-		request.Request.Settings = md
-	default:
-		return nil, errors.Errorf("invalid ResourceType '%s'", request.Request.ResourceType)
+
+		// Fill in the ResourceType-specific fields.
+		switch request.V2Request.ResourceType {
+		case MrtMappedVirtualDisk:
+			mvd := &MappedVirtualDiskV2{}
+			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, mvd); err != nil {
+				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDiskV2")
+			}
+			request.V2Request.Settings = mvd
+		case MrtMappedDirectory:
+			md := &MappedDirectoryV2{}
+			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, md); err != nil {
+				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedDirectoryV2")
+			}
+			request.V2Request.Settings = md
+		case MrtVPMemDevice:
+			vpd := &MappedVPMemDeviceV2{}
+			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, vpd); err != nil {
+				return nil, errors.Wrap(err, "failed to unmarshal hosted settings as MappedVPMemDeviceV2")
+			}
+			request.V2Request.Settings = vpd
+		case MrtCombinedLayers:
+			cl := &CombinedLayersV2{}
+			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, cl); err != nil {
+				return nil, errors.Wrap(err, "failed to unmarshal settings as CombinedLayersV2")
+			}
+			request.V2Request.Settings = cl
+		default:
+			return nil, errors.Errorf("invalid ResourceType '%s'", request.V2Request.ResourceType)
+		}
 	}
 
 	return &request, nil
@@ -409,9 +617,19 @@ type MessageResponseBase struct {
 	ErrorRecords []ErrorRecord `json:",omitempty"`
 }
 
+// NegotiateProtocolResponse is the message to the HCS responding to a
+// NegotiateProtocol message. It specifies the prefered protocol version and
+// available capabilities of the GCS.
+type NegotiateProtocolResponse struct {
+	*MessageResponseBase
+	Version      uint32
+	Capabilities GcsCapabilities
+}
+
 // ContainerCreateResponse is the message to the HCS responding to a
-// ContainerCreate message. It serves a protocol negotiation function as well,
-// returning protocol version information to the HCS.
+// ContainerCreate message. It serves a protocol negotiation function as well
+// for protocol versions 3 and lower, returning protocol version information to
+// the HCS.
 type ContainerCreateResponse struct {
 	*MessageResponseBase
 	SelectedVersion         string `json:",omitempty"`
@@ -449,6 +667,14 @@ type Layer struct {
 	Path string
 }
 
+// CombinedLayersV2 is a modify type that corresponds to MrtCombinedLayers
+// request.
+type CombinedLayersV2 struct {
+	Layers            []Layer `json:",omitempty"`
+	ScratchPath       string  `json:",omitempty"`
+	ContainerRootPath string
+}
+
 // NetworkAdapter represents a network interface and its associated
 // configuration.
 type NetworkAdapter struct {
@@ -475,6 +701,15 @@ type MappedVirtualDisk struct {
 	AttachOnly        bool  `json:",omitempty"`
 }
 
+// MappedVirtualDiskV2 represents a disk on the host which is mapped into a
+// directory in the guest in the V2 schema.
+type MappedVirtualDiskV2 struct {
+	MountPath  string `json:",omitempty"`
+	Lun        uint8  `json:",omitempty"`
+	Controller uint8  `json:",omitempty"`
+	ReadOnly   bool   `json:",omitempty"`
+}
+
 // MappedDirectory represents a directory on the host which is mapped to a
 // directory on the guest through a technology such as Plan9.
 type MappedDirectory struct {
@@ -482,6 +717,22 @@ type MappedDirectory struct {
 	CreateInUtilityVM bool   `json:",omitempty"`
 	ReadOnly          bool   `json:",omitempty"`
 	Port              uint32 `json:",omitempty"`
+}
+
+// MappedDirectoryV2 represents a directory on the host which is mapped to a
+// directory on the guest through Plan9 in the V2 schema.
+type MappedDirectoryV2 struct {
+	MountPath string `json:",omitempty"`
+	Port      uint32 `json:",omitempty"`
+	ShareName string `json:",omitempty"`
+	ReadOnly  bool   `json:",omitempty"`
+}
+
+// MappedVPMemDeviceV2 represents a VPMem device that is mapped into a guest
+// path in the V2 schema.
+type MappedVPMemDeviceV2 struct {
+	DeviceNumber uint32 `json:",omitempty"`
+	MountPath    string `json:",omitempty"`
 }
 
 // VMHostedContainerSettings is the set of settings used to specify the initial
@@ -496,6 +747,41 @@ type VMHostedContainerSettings struct {
 	NetworkAdapters    []NetworkAdapter `json:",omitempty"`
 }
 
+// SchemaVersion defines the version of the schema that should be deserialized.
+type SchemaVersion struct {
+	Major uint32 `json:",omitempty"`
+	Minor uint32 `json:",omitempty"`
+}
+
+// Cmp compares s and v and returns:
+//
+// -1 if s <  v
+//  0 if s == v
+//  1 if s >  v
+func (s *SchemaVersion) Cmp(v SchemaVersion) int {
+	if s.Major == v.Major {
+		if s.Minor == v.Minor {
+			return 0
+		} else if s.Minor < v.Minor {
+			return -1
+		}
+		return 1
+	} else if s.Major < v.Major {
+		return -1
+	}
+	return 1
+}
+
+// VMHostedContainerSettingsV2 defines the portion of the
+// ContainerCreate.ContainerConfig that is sent via a V2 call. This correlates
+// to the 'HostedSystem' on the HCS side but rather than sending the 'Container'
+// field the Linux GCS accepts an oci.Spec directly.
+type VMHostedContainerSettingsV2 struct {
+	SchemaVersion    SchemaVersion
+	OCIBundlePath    string    `json:"OciBundlePath,omitempty"`
+	OCISpecification *oci.Spec `json:"OciSpecification,omitempty"`
+}
+
 // ProcessParameters represents any process which may be started in the utility
 // VM. This covers three cases:
 // 1.) It is an external process, i.e. a process running inside the utility VM
@@ -507,6 +793,7 @@ type VMHostedContainerSettings struct {
 // In this case, don't specify the OCISpecification field, but specify all
 // other fields. This is the same as if it were an external process.
 type ProcessParameters struct {
+	SchemaVersion SchemaVersion
 	// CommandLine is a space separated list of command line parameters. For
 	// example, the command which sleeps for 100 seconds would be represented by
 	// the CommandLine string "sleep 100".
@@ -529,7 +816,9 @@ type ProcessParameters struct {
 	// If this is the first process created for this container, this field must
 	// be specified. Otherwise, it must be left blank and the other fields must
 	// be specified.
-	OCISpecification oci.Spec `json:"OciSpecification,omitempty"`
+	OCISpecification *oci.Spec `json:"OciSpecification,omitempty"`
+
+	OCIProcess *oci.Process `json:"OciProcess,omitempty"`
 }
 
 // SignalProcessOptions represents the options for signaling a process.

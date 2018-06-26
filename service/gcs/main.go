@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -14,7 +15,6 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/oslayer/realos"
 	"github.com/Microsoft/opengcs/service/gcs/runtime/runc"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
-	"github.com/Microsoft/opengcs/service/libs/commonutils"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )
@@ -22,6 +22,8 @@ import (
 func main() {
 	logLevel := flag.String("loglevel", "debug", "Logging Level: debug, info, warning, error, fatal, panic.")
 	logFile := flag.String("logfile", "", "Logging Target: An optional file name/path. Omit for console output.")
+	logFormat := flag.String("log-format", "text", "Logging Format: text or json")
+	useInOutErr := flag.Bool("use-inouterr", false, "If true use stdin/stdout for bridge communication and stderr for logging")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "\nUsage of %s:\n", os.Args[0])
@@ -35,20 +37,25 @@ func main() {
 
 	// Use a file instead of stdout
 	if *logFile != "" {
-		logFileHandle, err := os.OpenFile(*logFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+		logFileHandle, err := os.OpenFile(*logFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 		if err != nil {
 			logrus.Fatalf("failed to create log file %s", *logFile)
 		}
 		logrus.SetOutput(logFileHandle)
 	}
 
+	switch *logFormat {
+	case "text":
+		// retain logrus's default.
+	case "json":
+		logrus.SetFormatter(new(logrus.JSONFormatter))
+	default:
+		logrus.Fatalf("unknown log-format %q", *logFormat)
+	}
+
 	level, err := logrus.ParseLevel(*logLevel)
 	if err != nil {
 		logrus.Fatal(err)
-	}
-
-	if level == logrus.DebugLevel {
-		logrus.AddHook(commonutils.NewStackHook(logrus.AllLevels))
 	}
 
 	logrus.SetLevel(level)
@@ -109,15 +116,32 @@ func main() {
 	if err != nil {
 		logrus.Fatalf("%+v", err)
 	}
-	os := realos.NewOS()
-	coreint := gcs.NewGCSCore(baseLogPath, baseStoragePath, rtime, os, tport)
+	ros := realos.NewOS()
+	coreint := gcs.NewGCSCore(baseLogPath, baseStoragePath, rtime, ros, tport)
 	mux := bridge.NewBridgeMux()
 	b := bridge.Bridge{
-		Transport: tport,
-		Handler:   mux,
+		Handler: mux,
 	}
-	b.AssignHandlers(mux, coreint)
-	err = b.ListenAndServe()
+	h := gcs.NewHost(rtime, ros, tport)
+	b.AssignHandlers(mux, coreint, h)
+
+	var bridgeIn io.ReadCloser
+	var bridgeOut io.WriteCloser
+	if *useInOutErr {
+		bridgeIn = os.Stdin
+		bridgeOut = os.Stdout
+	} else {
+		const commandPort uint32 = 0x40000000
+		bridgeCon, err := tport.Dial(commandPort)
+		if err != nil {
+			logrus.Fatal(err)
+		}
+		bridgeIn = bridgeCon
+		bridgeOut = bridgeCon
+		logrus.Info("main: successfully connected to the HCS via HyperV_Socket")
+	}
+
+	err = b.ListenAndServe(bridgeIn, bridgeOut)
 	if err != nil {
 		logrus.Fatal(err)
 	}

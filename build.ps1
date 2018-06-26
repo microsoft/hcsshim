@@ -5,7 +5,7 @@
     License: See https://github.com/Microsoft/opengcs/blob/master/LICENSE
 
 .Parameter Install
-    Installs the built initrd.img  
+    Installs the built initrd.img
 
 #>
 
@@ -30,19 +30,15 @@ Try {
         Throw "failed to build opengcs image"
     }
 
-    $d=New-TemporaryDirectory    
+    $d=New-TemporaryDirectory
     Write-Host -ForegroundColor Yellow "INFO: Copying targets to $d"
-    docker run --rm -v $d`:/out opengcs cp /initrd.img /out
+    docker run --rm -v $d`:/build/out opengcs
     if ( $LastExitCode -ne 0 ) {
-        Throw "failed to copy initrd.img to $d"
-    }
-    docker run --rm -v $d`:/out opengcs cp /rootfs.tar.gz /out
-    if ( $LastExitCode -ne 0 ) {
-        Throw "failed to copy rootfs.tar.gz to $d"
+        Throw "failed to build"
     }
 
 	Write-Host -ForegroundColor Yellow "INFO: Use rootfs2vhd in Microsoft/hcsshim to make a rootfs VHD if needed"
- 
+
     if ($Install) {
         if (Test-Path "C:\Program Files\Linux Containers\initrd.img" -PathType Leaf) {
             copy "C:\Program Files\Linux Containers\initrd.img" "C:\Program Files\Linux Containers\initrd.old"
@@ -51,7 +47,7 @@ Try {
         copy "$d`\initrd.img" "C:\Program Files\Linux Containers\initrd.img"
         Write-Host -ForegroundColor Yellow "INFO: Restart the docker daemon to pick up the new image"
     }
-	
+
 }
 Catch [Exception] {
     Throw $_

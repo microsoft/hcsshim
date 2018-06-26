@@ -99,8 +99,9 @@ func (s *ConnectionSet) Files() (_ *FileSet, err error) {
 	return fs, nil
 }
 
-// NewPipeRelay returns a new pipe relay wrapping the given connection stdin, stdout, stderr set.
-func (s *ConnectionSet) NewPipeRelay() (_ *PipeRelay, err error) {
+// NewPipeRelay returns a new pipe relay wrapping the given connection stdin,
+// stdout, stderr set. If s is nil will assume al stdin, stdout, stderr pipes.
+func NewPipeRelay(s *ConnectionSet) (_ *PipeRelay, err error) {
 	pr := &PipeRelay{s: s}
 	defer func() {
 		if err != nil {
@@ -108,19 +109,19 @@ func (s *ConnectionSet) NewPipeRelay() (_ *PipeRelay, err error) {
 		}
 	}()
 
-	if s.In != nil {
+	if s == nil || s.In != nil {
 		pr.pipes[0], pr.pipes[1], err = os.Pipe()
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create stdin pipe relay")
 		}
 	}
-	if s.Out != nil {
+	if s == nil || s.Out != nil {
 		pr.pipes[2], pr.pipes[3], err = os.Pipe()
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create stdout pipe relay")
 		}
 	}
-	if s.Err != nil {
+	if s == nil || s.Err != nil {
 		pr.pipes[4], pr.pipes[5], err = os.Pipe()
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create stderr pipe relay")
@@ -138,17 +139,23 @@ type PipeRelay struct {
 	pipes [6]*os.File
 }
 
+// ReplaceConnectionSet allows the caller to add a new destination set after
+// creating the relay. This can only be called previous to the call to Start.
+func (pr *PipeRelay) ReplaceConnectionSet(s *ConnectionSet) {
+	pr.s = s
+}
+
 // Files returns a FileSet with an os.File for each connection
 // in the connection set.
 func (pr *PipeRelay) Files() (*FileSet, error) {
 	fs := new(FileSet)
-	if pr.s.In != nil {
+	if pr.s == nil || pr.s.In != nil {
 		fs.In = pr.pipes[0]
 	}
-	if pr.s.Out != nil {
+	if pr.s == nil || pr.s.Out != nil {
 		fs.Out = pr.pipes[3]
 	}
-	if pr.s.Err != nil {
+	if pr.s == nil || pr.s.Err != nil {
 		fs.Err = pr.pipes[5]
 	}
 	return fs, nil
@@ -214,6 +221,29 @@ func (pr *PipeRelay) Wait() {
 	pr.s.Close()
 }
 
+// CloseUnusedPipes gives the caller the ability to close any pipes that do not
+// have a cooresponding entry on the ConnectionSet. This is to be used in
+// conjunction with NewPipeRelay where s is nil which wil open all pipes and
+// later calling ReplaceConnectionSet with the actual connections.
+func (pr *PipeRelay) CloseUnusedPipes() {
+	if pr.s == nil {
+		pr.closePipes()
+	} else {
+		if pr.s.In == nil {
+			// Write end of stdin
+			pr.pipes[1].Close()
+		}
+		if pr.s.Out == nil {
+			// Read end of stdout
+			pr.pipes[2].Close()
+		}
+		if pr.s.Err == nil {
+			// Read end of stderr
+			pr.pipes[4].Close()
+		}
+	}
+}
+
 func (pr *PipeRelay) closePipes() {
 	for i := 0; i < len(pr.pipes); i++ {
 		if pr.pipes[i] != nil {
@@ -226,7 +256,7 @@ func (pr *PipeRelay) closePipes() {
 }
 
 // NewTtyRelay returns a new TTY relay for a given master PTY file.
-func (s *ConnectionSet) NewTtyRelay(pty *os.File) *TtyRelay {
+func NewTtyRelay(s *ConnectionSet, pty *os.File) *TtyRelay {
 	return &TtyRelay{s: s, pty: pty}
 }
 
@@ -237,6 +267,12 @@ type TtyRelay struct {
 	wg     sync.WaitGroup
 	s      *ConnectionSet
 	pty    *os.File
+}
+
+// ReplaceConnectionSet allows the caller to add a new destination set after
+// creating the relay. This can only be called previous to the call to Start.
+func (r *TtyRelay) ReplaceConnectionSet(s *ConnectionSet) {
+	r.s = s
 }
 
 // ResizeConsole sends the appropriate resize to a pTTY FD
