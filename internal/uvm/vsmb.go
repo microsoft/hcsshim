@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/Microsoft/hcsshim/internal/requesttype"
+	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/sirupsen/logrus"
 )
@@ -15,12 +17,12 @@ func (share *vsmbShare) GuestPath() string {
 // AddVSMB adds a VSMB share to a Windows utility VM. Each VSMB share is ref-counted and
 // only added if it isn't already. This is used for read-only layers, mapped directories
 // to a container, and for mapped pipes.
-func (uvm *UtilityVM) AddVSMB(hostPath string, hostedSettings interface{}, flags int32) error {
+func (uvm *UtilityVM) AddVSMB(hostPath string, hostedSettings interface{}, options *hcsschema.VirtualSmbShareOptions) error {
 	if uvm.operatingSystem != "windows" {
 		return errNotSupported
 	}
 
-	logrus.Debugf("uvm::AddVSMB %s %+v %d id:%s", hostPath, hostedSettings, flags, uvm.id)
+	logrus.Debugf("uvm::AddVSMB %s %+v %+v id:%s", hostPath, hostedSettings, options, uvm.id)
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 	if uvm.vsmbShares == nil {
@@ -31,15 +33,15 @@ func (uvm *UtilityVM) AddVSMB(hostPath string, hostedSettings interface{}, flags
 		uvm.vsmbCounter++
 		shareName := "s" + strconv.FormatUint(uvm.vsmbCounter, 16)
 
-		modification := &schema2.ModifySettingsRequestV2{
-			ResourceType: schema2.ResourceTypeVSmbShare,
-			RequestType:  schema2.RequestTypeAdd,
-			Settings: schema2.VirtualMachinesResourcesStorageVSmbShareV2{
-				Name:  shareName,
-				Flags: flags,
-				Path:  hostPath,
+		modification := &hcsschema.ModifySettingRequest{
+			ResourceType: resourcetype.VSmbShare,
+			RequestType:  requesttype.Add,
+			Settings: hcsschema.VirtualSmbShare{
+				Name:    shareName,
+				Options: options,
+				Path:    hostPath,
 			},
-			ResourceUri: fmt.Sprintf("virtualmachine/devices/virtualsmbshares/" + shareName),
+			ResourcePath: fmt.Sprintf("virtualmachine/devices/virtualsmbshares/" + shareName),
 		}
 
 		if err := uvm.Modify(modification); err != nil {
@@ -76,11 +78,11 @@ func (uvm *UtilityVM) RemoveVSMB(hostPath string) error {
 		return nil
 	}
 	logrus.Debugf("uvm::RemoveVSMB Zero ref-count, removing. %s id:%s", hostPath, uvm.id)
-	modification := &schema2.ModifySettingsRequestV2{
-		ResourceType: schema2.ResourceTypeVSmbShare,
-		RequestType:  schema2.RequestTypeRemove,
-		Settings:     schema2.VirtualMachinesResourcesStorageVSmbShareV2{Name: share.name},
-		ResourceUri:  "virtualmachine/devices/virtualsmbshares/" + share.name,
+	modification := &hcsschema.ModifySettingRequest{
+		ResourceType: resourcetype.VSmbShare,
+		RequestType:  requesttype.Remove,
+		Settings:     hcsschema.VirtualSmbShare{Name: share.name},
+		ResourcePath: "virtualmachine/devices/virtualsmbshares/" + share.name,
 	}
 	if err := uvm.Modify(modification); err != nil {
 		return fmt.Errorf("failed to remove vsmb share %s from %s: %s: %s", hostPath, uvm.id, modification, err)

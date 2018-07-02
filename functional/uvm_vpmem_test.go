@@ -37,7 +37,7 @@ func TestVPMEM(t *testing.T) {
 	}
 
 	for i := 0; i < int(iterations); i++ {
-		deviceNumber, uvmPath, err := u.AddVPMEM(filepath.Join(tempDir, "layer.vhd"), "", true)
+		deviceNumber, uvmPath, err := u.AddVPMEM(filepath.Join(tempDir, "layer.vhd"), true)
 		if err != nil {
 			t.Fatalf("AddVPMEM failed: %s", err)
 		}

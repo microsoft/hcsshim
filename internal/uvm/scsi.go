@@ -3,14 +3,16 @@ package uvm
 import (
 	"fmt"
 
+	"github.com/Microsoft/hcsshim/internal/hostedsettings"
+	"github.com/Microsoft/hcsshim/internal/requesttype"
+	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/Microsoft/hcsshim/internal/uvm/lcowhostedsettings"
 	"github.com/sirupsen/logrus"
 )
 
 // allocateSCSI finds the next available slot on the
 // SCSI controllers associated with a utility VM to use.
-func (uvm *UtilityVM) allocateSCSI(hostPath string, uvmPath string) (int, int, error) {
+func (uvm *UtilityVM) allocateSCSI(hostPath string, uvmPath string) (int, int32, error) {
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 	for controller, luns := range uvm.scsiLocations {
@@ -19,7 +21,7 @@ func (uvm *UtilityVM) allocateSCSI(hostPath string, uvmPath string) (int, int, e
 				uvm.scsiLocations[controller][lun].hostPath = hostPath
 				uvm.scsiLocations[controller][lun].uvmPath = uvmPath
 				logrus.Debugf("uvm::allocateSCSI %d:%d %q %q", controller, lun, hostPath, uvmPath)
-				return controller, lun, nil
+				return controller, int32(lun), nil
 
 			}
 		}
@@ -27,7 +29,7 @@ func (uvm *UtilityVM) allocateSCSI(hostPath string, uvmPath string) (int, int, e
 	return -1, -1, fmt.Errorf("no free SCSI locations")
 }
 
-func (uvm *UtilityVM) deallocateSCSI(controller int, lun int) error {
+func (uvm *UtilityVM) deallocateSCSI(controller int, lun int32) error {
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 	logrus.Debugf("uvm::deallocateSCSI %d:%d %+v", controller, lun, uvm.scsiLocations[controller][lun])
@@ -37,12 +39,12 @@ func (uvm *UtilityVM) deallocateSCSI(controller int, lun int) error {
 }
 
 // Lock must be held when calling this function
-func (uvm *UtilityVM) findSCSIAttachment(findThisHostPath string) (int, int, string, error) {
+func (uvm *UtilityVM) findSCSIAttachment(findThisHostPath string) (int, int32, string, error) {
 	for controller, luns := range uvm.scsiLocations {
 		for lun, si := range luns {
 			if si.hostPath == findThisHostPath {
 				logrus.Debugf("uvm::findSCSIAttachment %d:%d %+v", controller, lun, si)
-				return controller, lun, si.uvmPath, nil
+				return controller, int32(lun), si.uvmPath, nil
 			}
 		}
 	}
@@ -58,9 +60,9 @@ func (uvm *UtilityVM) findSCSIAttachment(findThisHostPath string) (int, int, str
 // uvmPath is optional.
 //
 // Returns the controller ID (0..3) and LUN (0..63) where the disk is attached.
-func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int, error) {
+func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, error) {
 	controller := -1
-	lun := -1
+	var lun int32 = -1
 	if uvm == nil {
 		return -1, -1, fmt.Errorf("no utility VM passed to AddSCSI")
 	}
@@ -83,29 +85,28 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int, error)
 	}
 
 	// TODO: This is wrong. There's no way to hot-add a SCSI attachement currently. This is a HACK
-	SCSIModification := &schema2.ModifySettingsRequestV2{
-		ResourceType: schema2.ResourceTypeMappedVirtualDisk,
-		RequestType:  schema2.RequestTypeAdd,
-		Settings: schema2.VirtualMachinesResourcesStorageAttachmentV2{
-			Path: hostPath,
-			Type: "VirtualDisk",
+	SCSIModification := &hcsschema.ModifySettingRequest{
+		ResourceType: resourcetype.MappedVirtualDisk,
+		RequestType:  requesttype.Add,
+		Settings: hcsschema.Attachment{
+			Path:  hostPath,
+			Type_: "VirtualDisk",
 		},
-		ResourceUri: fmt.Sprintf("VirtualMachine/Devices/SCSI/%d/%d", controller, lun),
+		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/%d/%d", controller, lun),
 	}
 
 	// HACK HACK HACK as lun in hosted settings is needed in this workaround	if uvmPath != "" {
 	var hostedSettings interface{}
 	if uvm.operatingSystem == "windows" {
-		hostedSettings = schema2.ContainersResourcesMappedVirtualDiskV2{
-			ContainerPath:     uvmPath,
-			Lun:               uint8(lun),
-			AttachOnly:        (uvmPath == ""),
-			OverwriteIfExists: true,
+		hostedSettings = hcsschema.MappedVirtualDisk{
+			ContainerPath: uvmPath,
+			Lun:           lun,
+			AttachOnly:    (uvmPath == ""),
 			// TODO: Controller: uint8(controller), // TODO NOT IN HCS API CURRENTLY
 		}
 
 	} else {
-		hostedSettings = lcowhostedsettings.MappedVirtualDisk{
+		hostedSettings = hostedsettings.LCOWMappedVirtualDisk{
 			MountPath:  uvmPath,
 			Lun:        uint8(lun),
 			Controller: uint8(controller),
@@ -121,7 +122,7 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int, error)
 		return -1, -1, fmt.Errorf("uvm::AddSCSI: failed to modify utility VM configuration: %s", err)
 	}
 	logrus.Debugf("uvm::AddSCSI id:%s hostPath:%s added at %d:%d", uvm.id, hostPath, controller, lun)
-	return controller, lun, nil
+	return controller, int32(lun), nil
 
 }
 
@@ -150,24 +151,24 @@ func (uvm *UtilityVM) RemoveSCSI(hostPath string) error {
 
 // removeSCSI is the internally callable "unsafe" version of RemoveSCSI. The mutex
 // MUST be held when calling this function.
-func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int, lun int) error {
+func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int, lun int32) error {
 	logrus.Debugf("uvm::RemoveSCSI id:%s hostPath:%s", uvm.id, hostPath)
-	scsiModification := &schema2.ModifySettingsRequestV2{
-		ResourceType: schema2.ResourceTypeMappedVirtualDisk,
-		RequestType:  schema2.RequestTypeRemove,
-		ResourceUri:  fmt.Sprintf("VirtualMachine/Devices/SCSI/%d/%d", controller, lun),
+	scsiModification := &hcsschema.ModifySettingRequest{
+		ResourceType: resourcetype.MappedVirtualDisk,
+		RequestType:  requesttype.Remove,
+		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/%d/%d", controller, lun),
 	}
 
 	// Include the HostedSettings so that the GCS ejects the disk cleanly
 	if uvm.operatingSystem == "windows" {
 		// Just an FYI, Windows doesn't support attach only, so ContainerPath will always be set
-		scsiModification.HostedSettings = schema2.ContainersResourcesMappedVirtualDiskV2{
+		scsiModification.HostedSettings = hcsschema.MappedVirtualDisk{
 			ContainerPath: uvmPath,
-			Lun:           uint8(lun),
+			Lun:           lun,
 			// TODO: Controller: uint8(controller), // TODO NOT IN HCS API CURRENTLY
 		}
 	} else {
-		scsiModification.HostedSettings = lcowhostedsettings.MappedVirtualDisk{
+		scsiModification.HostedSettings = hostedsettings.LCOWMappedVirtualDisk{
 			MountPath:  uvmPath, // May be blank in attach-only
 			Lun:        uint8(lun),
 			Controller: uint8(controller),

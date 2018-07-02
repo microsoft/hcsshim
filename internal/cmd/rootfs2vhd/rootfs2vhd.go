@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/lcow"
-	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -112,7 +111,7 @@ func rootfs2vhd(c *cli.Context) {
 	}
 
 	fmt.Printf("- Adding %s as read-only...\n", filepath.Dir(sourceRootFS))
-	if err := lcowUVM.AddPlan9(filepath.Dir(sourceRootFS), `/fssource`, schema2.VPlan9FlagReadOnly); err != nil {
+	if err := lcowUVM.AddPlan9(filepath.Dir(sourceRootFS), `/fssource`, true); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to add %s: %s", filepath.Dir(sourceRootFS), err)
 		lcowUVM.Terminate()
 		lcowUVM.Wait()

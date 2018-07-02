@@ -6,6 +6,8 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/Microsoft/hcsshim/internal/requesttype"
+	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/sirupsen/logrus"
 )
@@ -69,15 +71,15 @@ func (uvm *UtilityVM) removeNamespaceNICs(ns *namespaceInfo) error {
 }
 
 func (uvm *UtilityVM) addNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
-	request := schema2.ModifySettingsRequestV2{
-		ResourceType: schema2.ResourceTypeNetwork,
-		RequestType:  schema2.RequestTypeAdd,
-		Settings: schema2.VirtualMachinesResourcesNetworkNic{
-			EndpointID: endpoint.Id,
+	request := hcsschema.ModifySettingRequest{
+		ResourceType: resourcetype.Network,
+		RequestType:  requesttype.Add,
+		Settings: hcsschema.NetworkAdapter{
+			EndpointId: endpoint.Id,
 			MacAddress: endpoint.MacAddress,
 		},
 		HostedSettings: endpoint,
-		ResourceUri:    path.Join("VirtualMachine/Devices/NIC", id.String()),
+		ResourcePath:   path.Join("VirtualMachine/Devices/NetworkAdapters", id.String()),
 	}
 	if err := uvm.Modify(&request); err != nil {
 		return err
@@ -86,14 +88,14 @@ func (uvm *UtilityVM) addNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
 }
 
 func (uvm *UtilityVM) removeNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
-	request := schema2.ModifySettingsRequestV2{
-		ResourceType: schema2.ResourceTypeNetwork,
-		RequestType:  schema2.RequestTypeRemove,
-		Settings: schema2.VirtualMachinesResourcesNetworkNic{
-			EndpointID: endpoint.Id,
+	request := hcsschema.ModifySettingRequest{
+		ResourceType: resourcetype.Network,
+		RequestType:  requesttype.Remove,
+		Settings: hcsschema.NetworkAdapter{
+			EndpointId: endpoint.Id,
 			MacAddress: endpoint.MacAddress,
 		},
-		ResourceUri: path.Join("VirtualMachine/Devices/NIC", id.String()),
+		ResourcePath: path.Join("VirtualMachine/Devices/NetworkAdapters", id.String()),
 	}
 	if err := uvm.Modify(&request); err != nil {
 		return err
