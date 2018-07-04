@@ -947,7 +947,7 @@ func Test_ModifySettings_VirtualDisk_InvalidSettingsJson_Failure(t *testing.T) {
 	tb.modifySettings(rw, req)
 
 	verifyResponseJSONError(t, rw)
-	verifyActivityIDEmptyGUID(t, rw)
+	verifyActivityID(t, r.MessageBase, rw)
 }
 
 func Test_ModifySettings_MappedDirectory_InvalidSettingsJson_Failure(t *testing.T) {
@@ -964,7 +964,7 @@ func Test_ModifySettings_MappedDirectory_InvalidSettingsJson_Failure(t *testing.
 	tb.modifySettings(rw, req)
 
 	verifyResponseJSONError(t, rw)
-	verifyActivityIDEmptyGUID(t, rw)
+	verifyActivityID(t, r.MessageBase, rw)
 }
 
 func Test_ModifySettings_CoreFails_Failure(t *testing.T) {
@@ -978,7 +978,9 @@ func Test_ModifySettings_CoreFails_Failure(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemModifySettingsV1, prot.PvV3, r)
 
+	uvm := gcs.NewHost(nil, nil, nil)
 	tb := &Bridge{
+		hostState: uvm,
 		coreint: &mockcore.MockCore{
 			Behavior: mockcore.Error,
 		},
@@ -1004,8 +1006,10 @@ func Test_ModifySettings_CoreSucceeds_Success(t *testing.T) {
 	req, rw := setupRequestResponse(t, prot.ComputeSystemModifySettingsV1, prot.PvV3, r)
 
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
+	uvm := gcs.NewHost(nil, nil, nil)
 	tb := &Bridge{
-		coreint: mc,
+		hostState: uvm,
+		coreint:   mc,
 	}
 	tb.modifySettings(rw, req)
 
@@ -1078,8 +1082,10 @@ func Test_ModifySettings_BothV1V2_Success(t *testing.T) {
 	req, rw := setupRequestResponse(t, prot.ComputeSystemModifySettingsV1, prot.PvV3, r)
 
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
+	uvm := gcs.NewHost(nil, nil, nil)
 	tb := &Bridge{
-		coreint: mc,
+		hostState: uvm,
+		coreint:   mc,
 	}
 	tb.modifySettings(rw, req)
 
