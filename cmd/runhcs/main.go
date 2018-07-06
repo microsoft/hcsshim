@@ -33,7 +33,7 @@ var logFormat string
 
 const (
 	specConfig = "config.json"
-	usage      = `Open Container Initiative runtime
+	usage      = `Open Container Initiative runtime for Windows
 
 runhcs is fork of runc modified to run on Windows with Hyper-V isolated containers.  It is a command line client for running applications packaged according to the Open Container Initiative (OCI) format and is a compliant implementation of the Open Container Initiative specification.
 
