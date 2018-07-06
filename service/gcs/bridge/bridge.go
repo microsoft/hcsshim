@@ -793,26 +793,25 @@ func (b *Bridge) resizeConsole(w ResponseWriter, r *Request) {
 func (b *Bridge) modifySettings(w ResponseWriter, r *Request) {
 	request, err := prot.UnmarshalContainerModifySettings(r.Message)
 	if err != nil {
-		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
+		aid := ""
+		if request != nil {
+			aid = request.ActivityID
+		}
+		w.Error(aid, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
 		return
 	}
 
-	if request.Request != nil {
-		if err := b.coreint.ModifySettings(request.ContainerID, request.Request); err != nil {
+	if request.ContainerID == gcspkg.UVMContainerID {
+		// V2 request
+		if err := b.hostState.ModifyHostSettings(request.Request.(*prot.ModifySettingRequest)); err != nil {
 			w.Error(request.ActivityID, err)
 			return
 		}
-	} else if request.V2Request != nil {
-		if request.ContainerID != gcspkg.UVMContainerID {
-			w.Error(request.ActivityID, errors.New("V2 Modify request not supported on anything but UVM"))
-			return
-		}
-		if err := b.hostState.ModifyHostSettings(request.V2Request); err != nil {
-			w.Error(request.ActivityID, err)
-			return
-		}
-	} else {
-		w.Error(request.ActivityID, errors.New("neither Request nor v2Request was specified"))
+	} else if _, err := b.hostState.GetContainer(request.ContainerID); err == nil {
+		w.Error(request.ActivityID, errors.New("V2 Modify request not supported on anything but UVM"))
+		return
+	} else if err := b.coreint.ModifySettings(request.ContainerID, request.Request.(*prot.ResourceModificationRequestResponse)); err != nil {
+		w.Error(request.ActivityID, err)
 		return
 	}
 

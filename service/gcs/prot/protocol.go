@@ -451,34 +451,15 @@ type ResourceModificationRequestResponse struct {
 type ModifyResourceType string
 
 const (
-	// MrtMemory is the modify resource type for memory
-	MrtMemory = ModifyResourceType("Memory")
-	// MrtCPUGroup is the modify resource type for CPU group
-	MrtCPUGroup = ModifyResourceType("CpuGroup")
 	// MrtMappedDirectory is the modify resource type for mapped directories
 	MrtMappedDirectory = ModifyResourceType("MappedDirectory")
-	// MrtMappedPipe is the modify resource type for mapped pipes
-	MrtMappedPipe = ModifyResourceType("MappedPipe")
 	// MrtMappedVirtualDisk is the modify resource type for mapped virtual
 	// disks
 	MrtMappedVirtualDisk = ModifyResourceType("MappedVirtualDisk")
-	// MrtNetwork is the modify resource type for networking
-	MrtNetwork = ModifyResourceType("Network")
-	// MrtVSMBShare is the modify resource type for VSMB shares
-	MrtVSMBShare = ModifyResourceType("VSmbShare")
-	// MrtPlan9Share is the modify resource type for Plan9 shares
-	MrtPlan9Share = ModifyResourceType("Plan9Share")
 	// MrtCombinedLayers is the modify resource type for combined layers
 	MrtCombinedLayers = ModifyResourceType("CombinedLayers")
-	// MrtHVSocket is the modify resource type for Hyper-V sockets
-	MrtHVSocket = ModifyResourceType("HvSocket")
-	// MrtSharedMemoryRegion is the modify resource type for shared memory
-	// regions
-	MrtSharedMemoryRegion = ModifyResourceType("SharedMemoryRegion")
 	// MrtVPMemDevice is the modify resource type for VPMem devices
 	MrtVPMemDevice = ModifyResourceType("VPMemDevice")
-	// MrtGPU is the modify resource type for GPUs
-	MrtGPU = ModifyResourceType("Gpu")
 )
 
 // ModifyRequestType is the type of operation to perform on a given modify
@@ -498,7 +479,6 @@ const (
 // how, and with what parameters. This is the V2 schema equivalent of
 // ResourceModificationRequestResponse.
 type ModifySettingRequest struct {
-	ResourceURI  string             `json:"ResourceUri,omitempty"`
 	ResourceType ModifyResourceType `json:",omitempty"`
 	RequestType  ModifyRequestType  `json:",omitempty"`
 	Settings     interface{}        `json:",omitempty"`
@@ -508,8 +488,14 @@ type ModifySettingRequest struct {
 // container resource should be modified.
 type ContainerModifySettings struct {
 	*MessageBase
-	Request   *ResourceModificationRequestResponse
-	V2Request *ModifySettingRequest `json:"v2Request"`
+	// For V1 (RS3) Request will contain a ResourceModificationRequestResponse.
+	// For V2 (RS4) V2Request will be set and Request will be nil. For V2 (RS5)
+	// Request will contain a ModifySettingRequest and V2Request is deprecated.
+	Request interface{}
+	// Private. UnmarshalContainerModifySettings will set Request to either a
+	// *ResourceModificationRequestResponse or a *ModifySettingRequest.
+	// TODO: JTERRY75 remove when RS4 is no longer supported for LCOW.
+	V2Request interface{} `json:"v2Request"`
 }
 
 // UnmarshalContainerModifySettings unmarshals the given bytes into a
@@ -519,80 +505,107 @@ type ContainerModifySettings struct {
 func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error) {
 	// Unmarshal the message.
 	var request ContainerModifySettings
-	var rawSettings json.RawMessage
-	var v2RawSettings json.RawMessage
-	request.Request = &ResourceModificationRequestResponse{}
-	request.Request.Settings = &rawSettings
-	request.V2Request = &ModifySettingRequest{}
-	request.V2Request.Settings = &v2RawSettings
+	var requestRawSettings json.RawMessage
+	var requestV2RawSettings json.RawMessage
+	request.Request = &requestRawSettings
+	request.V2Request = &requestV2RawSettings
 	if err := commonutils.UnmarshalJSONWithHresult(b, &request); err != nil {
-		return nil, errors.WithStack(err)
+		return nil, errors.Wrap(err, "failed to unmarshal ContainerModifySettings")
 	}
 
-	if request.Request != nil {
-		if request.Request.RequestType == "" {
-			request.Request.RequestType = RtAdd
+	isV2 := false
+
+	// RS3 or RS5
+	if len(requestRawSettings) > 0 {
+		// RS5
+		// TODO: JTERRY75 this will only work as long as we dont target a V2
+		// container and only do V2 UVM
+		if request.ContainerID == "00000000-0000-0000-0000-000000000000" {
+			isV2 = true
+		}
+	} else if len(requestV2RawSettings) > 0 {
+		// RS4
+		requestRawSettings = requestV2RawSettings
+		isV2 = true
+	} else {
+		return &request, errors.New("neither request.Request nor request.V2Request was passed")
+	}
+
+	if !isV2 {
+		var rmrr ResourceModificationRequestResponse
+		var rmrrRawSettings json.RawMessage
+		rmrr.Settings = &rmrrRawSettings
+		if err := commonutils.UnmarshalJSONWithHresult(requestRawSettings, &rmrr); err != nil {
+			return &request, errors.Wrap(err, "failed to unmarshal request.Settings as ResourceModificationRequestResponse")
+		}
+
+		if rmrr.RequestType == "" {
+			rmrr.RequestType = RtAdd
 		}
 
 		// Fill in the ResourceType-specific fields.
-		switch request.Request.ResourceType {
+		switch rmrr.ResourceType {
 		case PtMappedVirtualDisk:
 			mvd := &MappedVirtualDisk{}
-			if err := commonutils.UnmarshalJSONWithHresult(rawSettings, mvd); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDisk")
+			if err := commonutils.UnmarshalJSONWithHresult(rmrrRawSettings, mvd); err != nil {
+				return &request, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDisk")
 			}
-			request.Request.Settings = mvd
+			rmrr.Settings = mvd
 		case PtMappedDirectory:
 			md := &MappedDirectory{}
-			if err := commonutils.UnmarshalJSONWithHresult(rawSettings, md); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedDirectory")
+			if err := commonutils.UnmarshalJSONWithHresult(rmrrRawSettings, md); err != nil {
+				return &request, errors.Wrap(err, "failed to unmarshal settings as MappedDirectory")
 			}
-			request.Request.Settings = md
+			rmrr.Settings = md
 		default:
-			return nil, errors.Errorf("invalid ResourceType '%s'", request.Request.ResourceType)
+			return &request, errors.Errorf("invalid ResourceType '%s'", rmrr.ResourceType)
 		}
-	}
-
-	if request.V2Request != nil {
-		if request.V2Request.RequestType == "" {
-			request.V2Request.RequestType = MreqtAdd
+		request.Request = &rmrr
+	} else {
+		var msr ModifySettingRequest
+		var msrRawSettings json.RawMessage
+		msr.Settings = &msrRawSettings
+		if err := commonutils.UnmarshalJSONWithHresult(requestRawSettings, &msr); err != nil {
+			return &request, errors.Wrap(err, "failed to unmarshal request.Settings as ModifySettingRequest")
 		}
 
-		if len(v2RawSettings) <= 0 {
-			return nil, errors.New("failed to unmarhsal Settings or HostedSettings for V2 modify request")
+		if msr.RequestType == "" {
+			msr.RequestType = MreqtAdd
 		}
 
 		// Fill in the ResourceType-specific fields.
-		switch request.V2Request.ResourceType {
+		switch msr.ResourceType {
 		case MrtMappedVirtualDisk:
 			mvd := &MappedVirtualDiskV2{}
-			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, mvd); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDiskV2")
+			if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, mvd); err != nil {
+				return &request, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDiskV2")
 			}
-			request.V2Request.Settings = mvd
+			msr.Settings = mvd
 		case MrtMappedDirectory:
 			md := &MappedDirectoryV2{}
-			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, md); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal settings as MappedDirectoryV2")
+			if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, md); err != nil {
+				return &request, errors.Wrap(err, "failed to unmarshal settings as MappedDirectoryV2")
 			}
-			request.V2Request.Settings = md
+			msr.Settings = md
 		case MrtVPMemDevice:
 			vpd := &MappedVPMemDeviceV2{}
-			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, vpd); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal hosted settings as MappedVPMemDeviceV2")
+			if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, vpd); err != nil {
+				return &request, errors.Wrap(err, "failed to unmarshal hosted settings as MappedVPMemDeviceV2")
 			}
-			request.V2Request.Settings = vpd
+			msr.Settings = vpd
 		case MrtCombinedLayers:
 			cl := &CombinedLayersV2{}
-			if err := commonutils.UnmarshalJSONWithHresult(v2RawSettings, cl); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal settings as CombinedLayersV2")
+			if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, cl); err != nil {
+				return &request, errors.Wrap(err, "failed to unmarshal settings as CombinedLayersV2")
 			}
-			request.V2Request.Settings = cl
+			msr.Settings = cl
 		default:
-			return nil, errors.Errorf("invalid ResourceType '%s'", request.V2Request.ResourceType)
+			return &request, errors.Errorf("invalid ResourceType '%s'", msr.ResourceType)
 		}
+		request.Request = &msr
 	}
 
+	request.V2Request = nil
 	return &request, nil
 }
 
