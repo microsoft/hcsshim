@@ -35,7 +35,7 @@ const (
 	specConfig = "config.json"
 	usage      = `Open Container Initiative runtime for Windows
 
-runhcs is fork of runc modified to run containers on Windows, with or without Hyper-V isolation.  It is a command line client for running applications packaged according to the Open Container Initiative (OCI) format and is a compliant implementation of the Open Container Initiative specification.
+runhcs is a fork of runc, modified to run containers on Windows with or without Hyper-V isolation.  Like runc, it is a command line client for running applications packaged according to the Open Container Initiative (OCI) format.
 
 runhcs integrates with existing process supervisors to provide a production container runtime environment for applications. It can be used with your existing process monitoring tools and the container will be spawned as a direct child of the process supervisor.
 
