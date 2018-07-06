@@ -14,7 +14,7 @@ Where "<container-id>" is the name for the instance of the container to be
 paused. `,
 	Description: `The pause command suspends all processes in the instance of the container.
 
-Use runc list to identiy instances of containers and their current status.`,
+Use runhcs list to identify instances of containers and their current status.`,
 	Before: appargs.Validate(argID),
 	Action: func(context *cli.Context) error {
 		id := context.Args().First()
@@ -39,7 +39,7 @@ Where "<container-id>" is the name for the instance of the container to be
 resumed.`,
 	Description: `The resume command resumes all processes in the instance of the container.
 
-Use runc list to identiy instances of containers and their current status.`,
+Use runhcs list to identify instances of containers and their current status.`,
 	Before: appargs.Validate(argID),
 	Action: func(context *cli.Context) error {
 		id := context.Args().First()
