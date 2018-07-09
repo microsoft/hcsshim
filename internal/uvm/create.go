@@ -259,7 +259,7 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 	if uvm.operatingSystem == "windows" {
 		vm.Chipset.Uefi.BootThis = &hcsschema.UefiBootEntry{
 			DevicePath: `\EFI\Microsoft\Boot\bootmgfw.efi`,
-			DeviceType: "VMBFS",
+			DeviceType: "VmbFs",
 		}
 		vm.ComputeTopology.Memory.DirectFileMappingMB = 1024 // Sensible default, but could be a tuning parameter somewhere
 		vm.Devices.VirtualSmbShares = []hcsschema.VirtualSmbShare{
@@ -371,7 +371,7 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 		kernelArgs += ` -- ` + initArgs
 		vm.Chipset.Uefi.BootThis = &hcsschema.UefiBootEntry{
 			DevicePath:   `\` + opts.KernelFile,
-			DeviceType:   "VMBFS",
+			DeviceType:   "VmbFs",
 			OptionalData: kernelArgs,
 		}
 	}

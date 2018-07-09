@@ -18,4 +18,6 @@ type UefiBootEntry struct {
 	DiskNumber int32 `json:"DiskNumber,omitempty"`
 
 	OptionalData string `json:"OptionalData,omitempty"`
+
+	VmbFsRootPath string `json:"VmbFsRootPath,omitempty"`
 }

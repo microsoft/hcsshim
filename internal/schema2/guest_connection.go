@@ -9,13 +9,11 @@
 
 package hcsschema
 
-type GuestInterface struct {
+type GuestConnection struct {
 
-	ConnectToBridge bool `json:"ConnectToBridge,omitempty"`
-
+	//  Use Vsock rather than Hyper-V sockets to communicate with the guest service.
 	UseVsock bool `json:"UseVsock,omitempty"`
 
+	//  Don't disconnect the guest connection when pausing the virtual machine.
 	UseConnectedSuspend bool `json:"UseConnectedSuspend,omitempty"`
-
-	HvSocketConfig *HvSocketSystemConfig `json:"HvSocketConfig,omitempty"`
 }

@@ -20,5 +20,7 @@ type Plan9Share struct {
 
 	Port int32 `json:"Port,omitempty"`
 
-	Flags int32 `json:"Flags,omitempty"`
+	ReadOnly bool `json:"ReadOnly,omitempty"`
+
+	UseShareRootIdentity bool `json:"UseShareRootIdentity,omitempty"`
 }
