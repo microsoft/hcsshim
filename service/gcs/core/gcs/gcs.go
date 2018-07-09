@@ -475,7 +475,7 @@ func (c *gcsCore) SignalContainer(id string, signal oslayer.Signal) error {
 
 	containerEntry := c.getContainer(id)
 	if containerEntry == nil {
-		return errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
+		return gcserr.WrapHresult(errors.WithStack(gcserr.NewContainerDoesNotExistError(id)), gcserr.HrVmcomputeSystemAlreadyStopped)
 	}
 
 	if containerEntry.container != nil {
