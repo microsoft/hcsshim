@@ -33,34 +33,24 @@ var logFormat string
 
 const (
 	specConfig = "config.json"
-	usage      = `Open Container Initiative runtime
+	usage      = `Open Container Initiative runtime for Windows
 
-runc is a command line client for running applications packaged according to
-the Open Container Initiative (OCI) format and is a compliant implementation of the
-Open Container Initiative specification.
+runhcs is a fork of runc, modified to run containers on Windows with or without Hyper-V isolation.  Like runc, it is a command line client for running applications packaged according to the Open Container Initiative (OCI) format.
 
-runc integrates well with existing process supervisors to provide a production
-container runtime environment for applications. It can be used with your
-existing process monitoring tools and the container will be spawned as a
-direct child of the process supervisor.
+runhcs integrates with existing process supervisors to provide a production container runtime environment for applications. It can be used with your existing process monitoring tools and the container will be spawned as a direct child of the process supervisor.
 
-Containers are configured using bundles. A bundle for a container is a directory
-that includes a specification file named "` + specConfig + `" and a root filesystem.
-The root filesystem contains the contents of the container.
+Containers are configured using bundles. A bundle for a container is a directory that includes a specification file named "` + specConfig + `".  Bundle contents will depend on the container type.
 
 To start a new instance of a container:
 
-    # runc run [ -b bundle ] <container-id>
+    # runhcs run [ -b bundle ] <container-id>
 
-Where "<container-id>" is your name for the instance of the container that you
-are starting. The name you provide for the container instance must be unique on
-your host. Providing the bundle directory using "-b" is optional. The default
-value for "bundle" is the current directory.`
+Where "<container-id>" is your name for the instance of the container that you are starting. The name you provide for the container instance must be unique on your host. Providing the bundle directory using "-b" is optional. The default value for "bundle" is the current directory.`
 )
 
 func main() {
 	app := cli.NewApp()
-	app.Name = "runc"
+	app.Name = "runhcs"
 	app.Usage = usage
 
 	var v []string
