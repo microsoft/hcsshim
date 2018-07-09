@@ -10,7 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Microsoft/hcsshim/internal/hostedsettings"
 	"github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
@@ -51,7 +53,7 @@ func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) 
 		if coi.HostingSystem == nil {
 			coi.Spec.Root.Path = mcl.(string) // Argon v1 or v2
 		} else {
-			coi.Spec.Root.Path = mcl.(schema2.CombinedLayersV2).ContainerRootPath // v2 Xenon WCOW
+			coi.Spec.Root.Path = mcl.(hostedsettings.CombinedLayers).ContainerRootPath // v2 Xenon WCOW
 		}
 		resources.layers = coi.Spec.Windows.LayerFolders
 	}
@@ -67,17 +69,20 @@ func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) 
 			return fmt.Errorf("invalid OCI spec - Type '%s' must not be set", mount.Type)
 		}
 
-		if coi.HostingSystem != nil && coi.actualSchemaVersion.IsV20() {
+		if coi.HostingSystem != nil && schemaversion.IsV20(coi.actualSchemaVersion) {
 			logrus.Debugf("hcsshim::allocateWindowsResources Hot-adding VSMB share for OCI mount %+v", mount)
-			var flags int32 = schema2.VsmbFlagNone
+			options := &hcsschema.VirtualSmbShareOptions{}
 			for _, o := range mount.Options {
 				if strings.ToLower(o) == "ro" {
-					flags = schema2.VsmbFlagReadOnly | schema2.VsmbFlagCacheIO | schema2.VsmbFlagShareRead | schema2.VsmbFlagForceLevelIIOplocks
+					options.ReadOnly = true
+					options.CacheIo = true
+					options.ShareRead = true
+					options.ForceLevelIIOplocks = true
 					break
 				}
 			}
 
-			err := coi.HostingSystem.AddVSMB(mount.Source, "", flags)
+			err := coi.HostingSystem.AddVSMB(mount.Source, "", options)
 			if err != nil {
 				return fmt.Errorf("failed to add VSMB share to utility VM for mount %+v: %s", mount, err)
 			}

@@ -7,7 +7,10 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/Microsoft/hcsshim/internal/hostedsettings"
 	"github.com/Microsoft/hcsshim/internal/ospath"
+	"github.com/Microsoft/hcsshim/internal/requesttype"
+	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
@@ -79,7 +82,14 @@ func MountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 	for _, layerPath := range layerFolders[:len(layerFolders)-1] {
 		var err error
 		if uvm.OS() == "windows" {
-			err = uvm.AddVSMB(layerPath, "", schema2.VsmbFlagReadOnly|schema2.VsmbFlagPseudoOplocks|schema2.VsmbFlagTakeBackupPrivilege|schema2.VsmbFlagCacheIO|schema2.VsmbFlagShareRead)
+			options := &hcsschema.VirtualSmbShareOptions{
+				ReadOnly:            true,
+				PseudoOplocks:       true,
+				TakeBackupPrivilege: true,
+				CacheIo:             true,
+				ShareRead:           true,
+			}
+			err = uvm.AddVSMB(layerPath, "", options)
 			if err == nil {
 				vsmbAdded = append(vsmbAdded, layerPath)
 			}
@@ -129,13 +139,13 @@ func MountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 			cleanupOnMountFailure(uvm, vsmbAdded, vpmemAdded, attachedSCSIHostPath)
 			return nil, err
 		}
-		hostedSettings := schema2.CombinedLayersV2{
+		hostedSettings := hostedsettings.CombinedLayers{
 			ContainerRootPath: containerScratchPathInUVM,
 			Layers:            layers,
 		}
-		combinedLayersModification := &schema2.ModifySettingsRequestV2{
-			ResourceType:   schema2.ResourceTypeCombinedLayers,
-			RequestType:    schema2.RequestTypeAdd,
+		combinedLayersModification := &hcsschema.ModifySettingRequest{
+			ResourceType:   resourcetype.CombinedLayers,
+			RequestType:    requesttype.Add,
 			HostedSettings: hostedSettings,
 		}
 		if err := uvm.Modify(combinedLayersModification); err != nil {
@@ -163,18 +173,18 @@ func MountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 	//       /dev/pmemX    are read-only layers for containers
 	//       /dev/sd(b...) are scratch spaces for each container
 
-	layers := []schema2.ContainersResourcesLayerV2{}
+	layers := []hcsschema.Layer{}
 	for _, vpmem := range vpmemAdded {
-		layers = append(layers, schema2.ContainersResourcesLayerV2{Path: vpmem.uvmPath})
+		layers = append(layers, hcsschema.Layer{Path: vpmem.uvmPath})
 	}
-	hostedSettings := schema2.CombinedLayersV2{
+	hostedSettings := hostedsettings.CombinedLayers{
 		ContainerRootPath: path.Join(guestRoot, rootfsPath),
 		Layers:            layers,
 		ScratchPath:       containerScratchPathInUVM,
 	}
-	combinedLayersModification := &schema2.ModifySettingsRequestV2{
-		ResourceType:   schema2.ResourceTypeCombinedLayers,
-		RequestType:    schema2.RequestTypeAdd,
+	combinedLayersModification := &hcsschema.ModifySettingRequest{
+		ResourceType:   resourcetype.CombinedLayers,
+		RequestType:    requesttype.Add,
 		HostedSettings: hostedSettings,
 	}
 	if err := uvm.Modify(combinedLayersModification); err != nil {
@@ -235,10 +245,10 @@ func UnmountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Ut
 	if (op & UnmountOperationSCSI) == UnmountOperationSCSI {
 		containerScratchPathInUVM := ospath.Join(uvm.OS(), guestRoot, scratchPath)
 		logrus.Debugf("hcsshim::unmountContainerLayers CombinedLayers %s", containerScratchPathInUVM)
-		combinedLayersModification := &schema2.ModifySettingsRequestV2{
-			ResourceType:   schema2.ResourceTypeCombinedLayers,
-			RequestType:    schema2.RequestTypeRemove,
-			HostedSettings: schema2.CombinedLayersV2{ContainerRootPath: containerScratchPathInUVM},
+		combinedLayersModification := &hcsschema.ModifySettingRequest{
+			ResourceType:   resourcetype.CombinedLayers,
+			RequestType:    requesttype.Remove,
+			HostedSettings: hostedsettings.CombinedLayers{ContainerRootPath: containerScratchPathInUVM},
 		}
 		if err := uvm.Modify(combinedLayersModification); err != nil {
 			logrus.Errorf(err.Error())
@@ -313,7 +323,7 @@ func cleanupOnMountFailure(uvm *uvm.UtilityVM, vsmbShares []string, vpmemDevices
 	}
 }
 
-func computeV2Layers(vm *uvm.UtilityVM, paths []string) (layers []schema2.ContainersResourcesLayerV2, err error) {
+func computeV2Layers(vm *uvm.UtilityVM, paths []string) (layers []hcsschema.Layer, err error) {
 	for _, path := range paths {
 		uvmPath, err := vm.GetVSMBUvmPath(path)
 		if err != nil {
@@ -323,10 +333,7 @@ func computeV2Layers(vm *uvm.UtilityVM, paths []string) (layers []schema2.Contai
 		if err != nil {
 			return nil, err
 		}
-		layers = append(layers, schema2.ContainersResourcesLayerV2{
-			Id:   layerID.String(),
-			Path: uvmPath,
-		})
+		layers = append(layers, hcsschema.Layer{Id: layerID.String(), Path: uvmPath})
 	}
 	return layers, nil
 }

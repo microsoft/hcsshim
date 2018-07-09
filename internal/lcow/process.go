@@ -9,7 +9,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/copywithtimeout"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
@@ -84,13 +83,14 @@ func CreateProcess(opts *ProcessOptions) (*hcs.Process, *ByteCounts, error) {
 		}
 	}
 
-	processConfig := &schema2.ProcessConfig{
-		SchemaVersion:     schemaversion.SchemaV20(),
-		CreateStdInPipe:   (opts.Stdin != nil),
-		CreateStdOutPipe:  (opts.Stdout != nil),
-		CreateStdErrPipe:  (opts.Stderr != nil),
+	processConfig := &ProcessParameters{
+		ProcessParameters: hcsschema.ProcessParameters{
+			CreateStdInPipe:  (opts.Stdin != nil),
+			CreateStdOutPipe: (opts.Stdout != nil),
+			CreateStdErrPipe: (opts.Stderr != nil),
+			EmulateConsole:   false,
+		},
 		CreateInUtilityVm: opts.CreateInUtilityVm,
-		EmulateConsole:    false,
 	}
 
 	if opts.Process != nil {

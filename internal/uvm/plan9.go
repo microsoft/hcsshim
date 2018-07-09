@@ -3,14 +3,16 @@ package uvm
 import (
 	"fmt"
 
+	"github.com/Microsoft/hcsshim/internal/hostedsettings"
+	"github.com/Microsoft/hcsshim/internal/requesttype"
+	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/Microsoft/hcsshim/internal/uvm/lcowhostedsettings"
 	"github.com/sirupsen/logrus"
 )
 
 // AddPlan9 adds a Plan9 share to a utility VM. Each Plan9 share is ref-counted and
 // only added if it isn't already.
-func (uvm *UtilityVM) AddPlan9(hostPath string, uvmPath string, flags int32) error {
+func (uvm *UtilityVM) AddPlan9(hostPath string, uvmPath string, readOnly bool) error {
 	if uvm.operatingSystem != "linux" {
 		return errNotSupported
 	}
@@ -18,7 +20,7 @@ func (uvm *UtilityVM) AddPlan9(hostPath string, uvmPath string, flags int32) err
 		return fmt.Errorf("uvmPath must be passed to AddPlan9")
 	}
 
-	logrus.Debugf("uvm::AddPlan9 %s %s %d id:%s", hostPath, uvmPath, flags, uvm.id)
+	logrus.Debugf("uvm::AddPlan9 %s %s %t id:%s", hostPath, uvmPath, readOnly, uvm.id)
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 	if uvm.plan9Shares == nil {
@@ -27,19 +29,19 @@ func (uvm *UtilityVM) AddPlan9(hostPath string, uvmPath string, flags int32) err
 	if _, ok := uvm.plan9Shares[hostPath]; !ok {
 		uvm.plan9Counter++
 
-		modification := &schema2.ModifySettingsRequestV2{
-			ResourceType: schema2.ResourceTypePlan9Share,
-			RequestType:  schema2.RequestTypeAdd,
-			Settings: schema2.VirtualMachinesResourcesStoragePlan9ShareV2{
+		modification := &hcsschema.ModifySettingRequest{
+			ResourceType: resourcetype.Plan9Share,
+			RequestType:  requesttype.Add,
+			Settings: hcsschema.Plan9Share{
 				Name: fmt.Sprintf("%d", uvm.plan9Counter),
 				Path: hostPath,
 				Port: int32(uvm.plan9Counter), // TODO: Temporary. Will all use a single port (9999)
 			},
-			ResourceUri: fmt.Sprintf("virtualmachine/devices/plan9shares/%d", uvm.plan9Counter),
-			HostedSettings: lcowhostedsettings.MappedDirectory{
+			ResourcePath: fmt.Sprintf("virtualmachine/devices/plan9shares/%d", uvm.plan9Counter),
+			HostedSettings: hostedsettings.LCOWMappedDirectory{
 				MountPath: uvmPath,
 				Port:      int32(uvm.plan9Counter), // TODO: Temporary. Will all use a single port (9999)
-				ReadOnly:  (flags & schema2.VPlan9FlagReadOnly) == schema2.VPlan9FlagReadOnly,
+				ReadOnly:  readOnly,
 			},
 		}
 
@@ -83,15 +85,15 @@ func (uvm *UtilityVM) removePlan9(hostPath, uvmPath string) error {
 		return nil
 	}
 	logrus.Debugf("uvm::RemovePlan9 Zero ref-count, removing. %s id:%s", hostPath, uvm.id)
-	modification := &schema2.ModifySettingsRequestV2{
-		ResourceType: schema2.ResourceTypePlan9Share,
-		RequestType:  schema2.RequestTypeRemove,
-		Settings: schema2.VirtualMachinesResourcesStoragePlan9ShareV2{
+	modification := &hcsschema.ModifySettingRequest{
+		ResourceType: resourcetype.Plan9Share,
+		RequestType:  requesttype.Remove,
+		Settings: hcsschema.Plan9Share{
 			Name: fmt.Sprintf("%d", uvm.plan9Shares[hostPath].idCounter),
 			Port: uvm.plan9Shares[hostPath].port,
 		},
-		ResourceUri: fmt.Sprintf("virtualmachine/devices/plan9shares/%d", uvm.plan9Shares[hostPath].idCounter),
-		HostedSettings: lcowhostedsettings.MappedDirectory{
+		ResourcePath: fmt.Sprintf("virtualmachine/devices/plan9shares/%d", uvm.plan9Shares[hostPath].idCounter),
+		HostedSettings: hostedsettings.LCOWMappedDirectory{
 			MountPath: uvm.plan9Shares[hostPath].uvmPath,
 			Port:      uvm.plan9Shares[hostPath].port,
 		},

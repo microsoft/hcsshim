@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/hcsshim/internal/hostedsettings"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
@@ -31,7 +31,7 @@ func allocateLinuxResources(coi *createOptionsInternal, resources *Resources) er
 		if coi.HostingSystem == nil {
 			coi.Spec.Root.Path = mcl.(string) // Argon v1 or v2
 		} else {
-			coi.Spec.Root.Path = mcl.(schema2.CombinedLayersV2).ContainerRootPath // v2 Xenon LCOW
+			coi.Spec.Root.Path = mcl.(hostedsettings.CombinedLayers).ContainerRootPath // v2 Xenon LCOW
 		}
 		resources.layers = coi.Spec.Windows.LayerFolders
 	} else {
@@ -39,11 +39,7 @@ func allocateLinuxResources(coi *createOptionsInternal, resources *Resources) er
 		// TODO: We need a test for this. Ask @jstarks how you can even lay this out on Windows.
 		hostPath := coi.Spec.Root.Path
 		uvmPathForContainersFileSystem := path.Join(resources.containerRootInUVM, rootfsPath)
-		var flags int32 = schema2.VPlan9FlagNone
-		if coi.Spec.Root.Readonly {
-			flags = schema2.VPlan9FlagReadOnly
-		}
-		err := coi.HostingSystem.AddPlan9(hostPath, uvmPathForContainersFileSystem, flags)
+		err := coi.HostingSystem.AddPlan9(hostPath, uvmPathForContainersFileSystem, coi.Spec.Root.Readonly)
 		if err != nil {
 			return fmt.Errorf("adding plan9 root: %s", err)
 		}
@@ -65,14 +61,14 @@ func allocateLinuxResources(coi *createOptionsInternal, resources *Resources) er
 			hostPath := mount.Source
 			uvmPathForShare := path.Join(resources.containerRootInUVM, mountPathPrefix+strconv.Itoa(i))
 
-			var flags int32 = schema2.VPlan9FlagNone
+			readOnly := false
 			for _, o := range mount.Options {
 				if strings.ToLower(o) == "ro" {
-					flags = schema2.VPlan9FlagReadOnly
+					readOnly = true
 					break
 				}
 			}
-			err := coi.HostingSystem.AddPlan9(hostPath, uvmPathForShare, flags)
+			err := coi.HostingSystem.AddPlan9(hostPath, uvmPathForShare, readOnly)
 			if err != nil {
 				return fmt.Errorf("adding plan9 mount %+v: %s", mount, err)
 			}

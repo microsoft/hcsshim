@@ -11,6 +11,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -25,12 +26,12 @@ import (
 type CreateOptions struct {
 
 	// Common parameters
-	ID               string                       // Identifier for the container
-	Owner            string                       // Specifies the owner. Defaults to executable name.
-	Spec             *specs.Spec                  // Definition of the container or utility VM being created
-	SchemaVersion    *schemaversion.SchemaVersion // Requested Schema Version. Defaults to v2 for RS5, v1 for RS1..RS4
-	HostingSystem    *uvm.UtilityVM               // Utility or service VM in which the container is to be created.
-	NetworkNamespace string                       // Host network namespace to use (overrides anything in the spec)
+	ID               string             // Identifier for the container
+	Owner            string             // Specifies the owner. Defaults to executable name.
+	Spec             *specs.Spec        // Definition of the container or utility VM being created
+	SchemaVersion    *hcsschema.Version // Requested Schema Version. Defaults to v2 for RS5, v1 for RS1..RS4
+	HostingSystem    *uvm.UtilityVM     // Utility or service VM in which the container is to be created.
+	NetworkNamespace string             // Host network namespace to use (overrides anything in the spec)
 
 	// This is an advanced debugging parameter. It allows for diagnosibility by leaving a containers
 	// resources allocated in case of a failure. Thus you would be able to use tools such as hcsdiag
@@ -45,9 +46,9 @@ type CreateOptions struct {
 type createOptionsInternal struct {
 	*CreateOptions
 
-	actualSchemaVersion    *schemaversion.SchemaVersion // Calculated based on Windows build and optional caller-supplied override
-	actualID               string                       // Identifier for the container
-	actualOwner            string                       // Owner for the container
+	actualSchemaVersion    *hcsschema.Version // Calculated based on Windows build and optional caller-supplied override
+	actualID               string             // Identifier for the container
+	actualOwner            string             // Owner for the container
 	actualNetworkNamespace string
 }
 
@@ -83,7 +84,7 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 		coi.actualSchemaVersion = schemaversion.SchemaV20()
 	} else {
 		coi.actualSchemaVersion = schemaversion.DetermineSchemaVersion(coi.SchemaVersion)
-		logrus.Debugf("hcsshim::CreateContainer using schema %s", coi.actualSchemaVersion.String())
+		logrus.Debugf("hcsshim::CreateContainer using schema %s", schemaversion.String(coi.actualSchemaVersion))
 	}
 
 	resources := &Resources{}
@@ -107,7 +108,7 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 	// Create a network namespace if necessary.
 	if coi.Spec.Windows != nil &&
 		coi.Spec.Windows.Network != nil &&
-		coi.actualSchemaVersion.IsV20() {
+		schemaversion.IsV20(coi.actualSchemaVersion) {
 
 		if coi.NetworkNamespace != "" {
 			resources.netNS = coi.NetworkNamespace
@@ -134,7 +135,7 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 	var hcsDocument interface{}
 	logrus.Debugf("hcsshim::CreateContainer allocating resources")
 	if coi.Spec.Linux != nil {
-		if coi.actualSchemaVersion.IsV10() {
+		if schemaversion.IsV10(coi.actualSchemaVersion) {
 			return nil, resources, errors.New("LCOW v1 not supported")
 		}
 		logrus.Debugf("hcsshim::CreateContainer allocateLinuxResources")

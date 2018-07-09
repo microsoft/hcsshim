@@ -43,12 +43,12 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 
 	// IgnoreFlushesDuringBoot is a property of the SCSI attachment for the scratch. Set when it's hot-added to the utility VM
 	// ID is a property on the create call in V2 rather than part of the schema.
-	v2 := &schema2.ComputeSystemV2{
+	v2 := &hcsschema.ComputeSystem{
 		Owner:                             coi.actualOwner,
 		SchemaVersion:                     schemaversion.SchemaV20(),
 		ShouldTerminateOnLastHandleClosed: true,
 	}
-	v2Container := &schema2.ContainerV2{Storage: &schema2.ContainersResourcesStorageV2{}}
+	v2Container := &hcsschema.Container{Storage: &hcsschema.Storage{}}
 
 	// TODO: Still want to revisit this.
 	if coi.Spec.Windows.LayerFolders == nil || len(coi.Spec.Windows.LayerFolders) < 2 {
@@ -57,7 +57,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 
 	if coi.Spec.Hostname != "" {
 		v1.HostName = coi.Spec.Hostname
-		v2Container.GuestOS = &schema2.GuestOsV2{HostName: coi.Spec.Hostname}
+		v2Container.GuestOs = &hcsschema.GuestOs{HostName: coi.Spec.Hostname}
 	}
 
 	if coi.Spec.Windows.Resources != nil {
@@ -65,7 +65,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 			if coi.Spec.Windows.Resources.CPU.Count != nil ||
 				coi.Spec.Windows.Resources.CPU.Shares != nil ||
 				coi.Spec.Windows.Resources.CPU.Maximum != nil {
-				v2Container.Processor = &schema2.ContainersResourcesProcessorV2{}
+				v2Container.Processor = &hcsschema.Processor{}
 			}
 			if coi.Spec.Windows.Resources.CPU.Count != nil {
 				cpuCount := *coi.Spec.Windows.Resources.CPU.Count
@@ -75,42 +75,42 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 					cpuCount = hostCPUCount
 				}
 				v1.ProcessorCount = uint32(cpuCount)
-				v2Container.Processor.Count = v1.ProcessorCount
+				v2Container.Processor.Count = int32(cpuCount)
 			}
 			if coi.Spec.Windows.Resources.CPU.Shares != nil {
 				v1.ProcessorWeight = uint64(*coi.Spec.Windows.Resources.CPU.Shares)
-				v2Container.Processor.Weight = v1.ProcessorWeight
+				v2Container.Processor.Weight = int32(v1.ProcessorWeight)
 			}
 			if coi.Spec.Windows.Resources.CPU.Maximum != nil {
 				v1.ProcessorMaximum = int64(*coi.Spec.Windows.Resources.CPU.Maximum)
-				v2Container.Processor.Maximum = uint64(v1.ProcessorMaximum)
+				v2Container.Processor.MaximumPercentage = int32(v1.ProcessorMaximum)
 			}
 		}
 		if coi.Spec.Windows.Resources.Memory != nil {
 			if coi.Spec.Windows.Resources.Memory.Limit != nil {
 				v1.MemoryMaximumInMB = int64(*coi.Spec.Windows.Resources.Memory.Limit) / 1024 / 1024
-				v2Container.Memory = &schema2.ContainersResourcesMemoryV2{Maximum: uint64(v1.MemoryMaximumInMB)}
+				v2Container.Memory = &hcsschema.Memory{MaximumInMB: int32(v1.MemoryMaximumInMB)}
 
 			}
 		}
 		if coi.Spec.Windows.Resources.Storage != nil {
 			if coi.Spec.Windows.Resources.Storage.Bps != nil || coi.Spec.Windows.Resources.Storage.Iops != nil {
-				v2Container.Storage.StorageQoS = &schema2.ContainersResourcesStorageQoSV2{}
+				v2Container.Storage.QoS = &hcsschema.StorageQoS{}
 			}
 			if coi.Spec.Windows.Resources.Storage.Bps != nil {
 				v1.StorageBandwidthMaximum = *coi.Spec.Windows.Resources.Storage.Bps
-				v2Container.Storage.StorageQoS.BandwidthMaximum = *coi.Spec.Windows.Resources.Storage.Bps
+				v2Container.Storage.QoS.BandwidthMaximum = int32(v1.StorageBandwidthMaximum)
 			}
 			if coi.Spec.Windows.Resources.Storage.Iops != nil {
 				v1.StorageIOPSMaximum = *coi.Spec.Windows.Resources.Storage.Iops
-				v2Container.Storage.StorageQoS.IOPSMaximum = *coi.Spec.Windows.Resources.Storage.Iops
+				v2Container.Storage.QoS.IopsMaximum = int32(*coi.Spec.Windows.Resources.Storage.Iops)
 			}
 		}
 	}
 
 	// TODO V2 networking. Only partial at the moment. v2.Container.Networking.Namespace specifically
 	if coi.Spec.Windows.Network != nil {
-		v2Container.Networking = &schema2.ContainersResourcesNetworkingV2{}
+		v2Container.Networking = &hcsschema.Networking{}
 
 		v1.EndpointList = coi.Spec.Windows.Network.EndpointList
 		v2Container.Networking.Namespace = coi.actualNetworkNamespace
@@ -120,7 +120,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 
 		if coi.Spec.Windows.Network.DNSSearchList != nil {
 			v1.DNSSearchList = strings.Join(coi.Spec.Windows.Network.DNSSearchList, ",")
-			v2Container.Networking.DNSSearchList = v1.DNSSearchList
+			v2Container.Networking.DnsSearchList = v1.DNSSearchList
 		}
 
 		v1.NetworkSharedContainerName = coi.Spec.Windows.Network.NetworkSharedContainerName
@@ -143,8 +143,8 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 	// Strip off the top-most RW/scratch layer as that's passed in separately to HCS for v1
 	v1.LayerFolderPath = coi.Spec.Windows.LayerFolders[len(coi.Spec.Windows.LayerFolders)-1]
 
-	if (coi.actualSchemaVersion.IsV20() && coi.HostingSystem == nil) ||
-		(coi.actualSchemaVersion.IsV10() && coi.Spec.Windows.HyperV == nil) {
+	if (schemaversion.IsV20(coi.actualSchemaVersion) && coi.HostingSystem == nil) ||
+		(schemaversion.IsV10(coi.actualSchemaVersion) && coi.Spec.Windows.HyperV == nil) {
 		// Argon v1 or v2.
 		const volumeGUIDRegex = `^\\\\\?\\(Volume)\{{0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}\}\\$`
 		if _, err := regexp.MatchString(volumeGUIDRegex, coi.Spec.Root.Path); err != nil {
@@ -157,7 +157,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 		v2Container.Storage.Path = coi.Spec.Root.Path
 	} else {
 		// A hosting system was supplied, implying v2 Xenon; OR a v1 Xenon.
-		if coi.actualSchemaVersion.IsV10() {
+		if schemaversion.IsV10(coi.actualSchemaVersion) {
 			// V1 Xenon
 			v1.HvPartition = true
 			if coi.Spec == nil || coi.Spec.Windows == nil || coi.Spec.Windows.HyperV == nil { // Be resilient to nil de-reference
@@ -194,7 +194,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 				return nil, err
 			}
 			v1.Layers = append(v1.Layers, schema1.Layer{ID: layerID.String(), Path: layerPath})
-			v2Container.Storage.Layers = append(v2Container.Storage.Layers, schema2.ContainersResourcesLayerV2{Id: layerID.String(), Path: layerPath})
+			v2Container.Storage.Layers = append(v2Container.Storage.Layers, hcsschema.Layer{Id: layerID.String(), Path: layerPath})
 		}
 	}
 
@@ -203,8 +203,8 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 	var (
 		mdsv1 []schema1.MappedDir
 		mpsv1 []schema1.MappedPipe
-		mdsv2 []schema2.ContainersResourcesMappedDirectoryV2
-		mpsv2 []schema2.ContainersResourcesMappedPipeV2
+		mdsv2 []hcsschema.MappedDirectory
+		mpsv2 []hcsschema.MappedPipe
 	)
 	for _, mount := range coi.Spec.Mounts {
 		const pipePrefix = `\\.\pipe\`
@@ -213,7 +213,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 		}
 		if strings.HasPrefix(strings.ToLower(mount.Destination), pipePrefix) {
 			mpsv1 = append(mpsv1, schema1.MappedPipe{HostPath: mount.Source, ContainerPipeName: mount.Destination[len(pipePrefix):]})
-			mpsv2 = append(mpsv2, schema2.ContainersResourcesMappedPipeV2{HostPath: mount.Source, ContainerPipeName: mount.Destination[len(pipePrefix):]})
+			mpsv2 = append(mpsv2, hcsschema.MappedPipe{HostPath: mount.Source, ContainerPipeName: mount.Destination[len(pipePrefix):]})
 		} else {
 			readOnly := false
 			for _, o := range mount.Options {
@@ -222,7 +222,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 				}
 			}
 			mdv1 := schema1.MappedDir{HostPath: mount.Source, ContainerPath: mount.Destination, ReadOnly: readOnly}
-			mdv2 := schema2.ContainersResourcesMappedDirectoryV2{ContainerPath: mount.Destination, ReadOnly: readOnly}
+			mdv2 := hcsschema.MappedDirectory{ContainerPath: mount.Destination, ReadOnly: readOnly}
 			if coi.HostingSystem == nil {
 				mdv2.HostPath = mount.Source
 			} else {
@@ -250,13 +250,13 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 		v2.Container = v2Container
 	} else {
 		v2.HostingSystemId = coi.HostingSystem.ID()
-		v2.HostedSystem = &schema2.HostedSystemV2{
+		v2.HostedSystem = &hcsschema.HostedSystem{
 			SchemaVersion: schemaversion.SchemaV20(),
 			Container:     v2Container,
 		}
 	}
 
-	if coi.actualSchemaVersion.IsV10() {
+	if schemaversion.IsV10(coi.actualSchemaVersion) {
 		return v1, nil
 	}
 

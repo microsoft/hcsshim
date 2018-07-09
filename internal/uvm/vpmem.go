@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/Microsoft/hcsshim/internal/hostedsettings"
+	"github.com/Microsoft/hcsshim/internal/requesttype"
+	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/Microsoft/hcsshim/internal/uvm/lcowhostedsettings"
 	"github.com/sirupsen/logrus"
 )
 
@@ -65,24 +67,24 @@ func (uvm *UtilityVM) AddVPMEM(hostPath string, expose bool) (uint32, string, er
 		if err != nil {
 			return 0, "", err
 		}
-		controller := schema2.VirtualMachinesResourcesStorageVpmemControllerV2{}
-		controller.Devices = make(map[string]schema2.VirtualMachinesResourcesStorageVpmemDeviceV2)
-		controller.Devices[strconv.Itoa(int(deviceNumber))] = schema2.VirtualMachinesResourcesStorageVpmemDeviceV2{
+		controller := hcsschema.VirtualPMemController{}
+		controller.Devices = make(map[string]hcsschema.VirtualPMemDevice)
+		controller.Devices[strconv.Itoa(int(deviceNumber))] = hcsschema.VirtualPMemDevice{
 			HostPath:    hostPath,
 			ReadOnly:    true,
 			ImageFormat: "VHD1",
 		}
 
-		modification := &schema2.ModifySettingsRequestV2{
-			ResourceType: schema2.ResourceTypeVPMemDevice,
-			RequestType:  schema2.RequestTypeAdd,
+		modification := &hcsschema.ModifySettingRequest{
+			ResourceType: resourcetype.VPMemDevice,
+			RequestType:  requesttype.Add,
 			Settings:     controller,
-			ResourceUri:  fmt.Sprintf("virtualmachine/devices/virtualpmemdevices/%d", deviceNumber),
+			ResourcePath: fmt.Sprintf("virtualmachine/devices/virtualpmemdevices/%d", deviceNumber),
 		}
 
 		if expose {
 			uvmPath = fmt.Sprintf("/tmp/p%d", deviceNumber)
-			modification.HostedSettings = lcowhostedsettings.MappedVPMemDevice{
+			modification.HostedSettings = hostedsettings.LCOWMappedVPMemDevice{
 				DeviceNumber: deviceNumber,
 				MountPath:    uvmPath,
 			}
@@ -137,13 +139,13 @@ func (uvm *UtilityVM) removeVPMEM(hostPath string, uvmPath string, deviceNumber 
 	logrus.Debugf("uvm::RemoveVPMEM id:%s hostPath:%s device:%d", uvm.id, hostPath, deviceNumber)
 
 	if uvm.vpmemDevices[deviceNumber].refCount == 1 {
-		modification := &schema2.ModifySettingsRequestV2{
-			ResourceType: schema2.ResourceTypeVPMemDevice,
-			RequestType:  schema2.RequestTypeRemove,
-			ResourceUri:  fmt.Sprintf("virtualmachine/devices/virtualpmemdevices/%d", deviceNumber),
+		modification := &hcsschema.ModifySettingRequest{
+			ResourceType: resourcetype.VPMemDevice,
+			RequestType:  requesttype.Remove,
+			ResourcePath: fmt.Sprintf("virtualmachine/devices/virtualpmemdevices/%d", deviceNumber),
 		}
 
-		modification.HostedSettings = lcowhostedsettings.MappedVPMemDevice{
+		modification.HostedSettings = hostedsettings.LCOWMappedVPMemDevice{
 			DeviceNumber: deviceNumber,
 			MountPath:    uvmPath,
 		}

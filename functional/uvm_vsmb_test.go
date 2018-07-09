@@ -23,8 +23,15 @@ func TestVSMB(t *testing.T) {
 	dir := testutilities.CreateTempDir(t)
 	defer os.RemoveAll(dir)
 	var iterations uint32 = 64
+	options := &hcsschema.VirtualSmbShareOptions{
+		ReadOnly:            true,
+		PseudoOplocks:       true,
+		TakeBackupPrivilege: true,
+		CacheIo:             true,
+		ShareRead:           true,
+	}
 	for i := 0; i < int(iterations); i++ {
-		if err := uvm.AddVSMB(dir, "", schema2.VsmbFlagReadOnly|schema2.VsmbFlagPseudoOplocks|schema2.VsmbFlagTakeBackupPrivilege|schema2.VsmbFlagCacheIO|schema2.VsmbFlagShareRead); err != nil {
+		if err := uvm.AddVSMB(dir, "", options); err != nil {
 			t.Fatalf("AddVSMB failed: %s", err)
 		}
 	}

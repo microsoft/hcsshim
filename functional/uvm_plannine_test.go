@@ -12,7 +12,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/functional/utilities"
 	"github.com/Microsoft/hcsshim/internal/osversion"
-	"github.com/Microsoft/hcsshim/internal/schema2"
 )
 
 // TestPlan9 tests adding/removing Plan9 shares to/from a v2 Linux utility VM
@@ -28,7 +27,7 @@ func TestPlan9(t *testing.T) {
 	defer os.RemoveAll(dir)
 	var iterations uint32 = 64
 	for i := 0; i < int(iterations); i++ {
-		if err := uvm.AddPlan9(dir, fmt.Sprintf("/tmp/%s", filepath.Base(dir)), schema2.VPlan9FlagNone); err != nil {
+		if err := uvm.AddPlan9(dir, fmt.Sprintf("/tmp/%s", filepath.Base(dir)), false); err != nil {
 			t.Fatalf("AddPlan9 failed: %s", err)
 		}
 	}
