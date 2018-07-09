@@ -28,6 +28,9 @@ const (
 	// HrVmcomputeInvalidJSON is the HRESULT for failing to unmarshal a json
 	// string.
 	HrVmcomputeInvalidJSON = Hresult(-1070137075) // 0xC037010D
+	// HrVmcomputeSystemAlreadyStopped is the HRESULT for calling
+	// Shutdown/Terminate on a machine that is already in that state.
+	HrVmcomputeSystemAlreadyStopped = Hresult(-1070137072) // 0xC0370110
 	// HrVmcomputeProtocolError is the HRESULT for an invalid protocol
 	// request/response.
 	HrVmcomputeProtocolError = Hresult(-1070137071) // 0xC0370111
