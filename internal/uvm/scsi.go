@@ -95,27 +95,31 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/%d/%d", controller, lun),
 	}
 
-	// HACK HACK HACK as lun in hosted settings is needed in this workaround	if uvmPath != "" {
-	var hostedSettings interface{}
-	if uvm.operatingSystem == "windows" {
-		hostedSettings = hcsschema.MappedVirtualDisk{
-			ContainerPath: uvmPath,
-			Lun:           lun,
-			AttachOnly:    (uvmPath == ""),
-			// TODO: Controller: uint8(controller), // TODO NOT IN HCS API CURRENTLY
-		}
-
-	} else {
-		hostedSettings = hostedsettings.LCOWMappedVirtualDisk{
-			MountPath:  uvmPath,
-			Lun:        uint8(lun),
-			Controller: uint8(controller),
-			ReadOnly:   false,
+	if uvmPath != "" {
+		if uvm.operatingSystem == "windows" {
+			SCSIModification.GuestRequest = hostedsettings.GuestRequest{
+				ResourceType: resourcetype.MappedVirtualDisk,
+				RequestType:  requesttype.Add,
+				Settings: hcsschema.MappedVirtualDisk{
+					ContainerPath: uvmPath,
+					Lun:           lun,
+					AttachOnly:    (uvmPath == ""),
+					// TODO: Controller: uint8(controller), // TODO NOT IN HCS API CURRENTLY
+				},
+			}
+		} else {
+			SCSIModification.GuestRequest = hostedsettings.GuestRequest{
+				ResourceType: resourcetype.MappedVirtualDisk,
+				RequestType:  requesttype.Add,
+				Settings: hostedsettings.LCOWMappedVirtualDisk{
+					MountPath:  uvmPath,
+					Lun:        uint8(lun),
+					Controller: uint8(controller),
+					ReadOnly:   false,
+				},
+			}
 		}
 	}
-
-	SCSIModification.HostedSettings = hostedSettings
-	//}
 
 	if err := uvm.Modify(SCSIModification); err != nil {
 		uvm.deallocateSCSI(controller, lun)
@@ -162,16 +166,24 @@ func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int
 	// Include the HostedSettings so that the GCS ejects the disk cleanly
 	if uvm.operatingSystem == "windows" {
 		// Just an FYI, Windows doesn't support attach only, so ContainerPath will always be set
-		scsiModification.HostedSettings = hcsschema.MappedVirtualDisk{
-			ContainerPath: uvmPath,
-			Lun:           lun,
-			// TODO: Controller: uint8(controller), // TODO NOT IN HCS API CURRENTLY
+		scsiModification.GuestRequest = hostedsettings.GuestRequest{
+			ResourceType: resourcetype.MappedVirtualDisk,
+			RequestType:  requesttype.Remove,
+			Settings: hcsschema.MappedVirtualDisk{
+				ContainerPath: uvmPath,
+				Lun:           lun,
+				// TODO: Controller: uint8(controller), // TODO NOT IN HCS API CURRENTLY
+			},
 		}
 	} else {
-		scsiModification.HostedSettings = hostedsettings.LCOWMappedVirtualDisk{
-			MountPath:  uvmPath, // May be blank in attach-only
-			Lun:        uint8(lun),
-			Controller: uint8(controller),
+		scsiModification.GuestRequest = hostedsettings.GuestRequest{
+			ResourceType: resourcetype.MappedVirtualDisk,
+			RequestType:  requesttype.Remove,
+			Settings: hostedsettings.LCOWMappedVirtualDisk{
+				MountPath:  uvmPath, // May be blank in attach-only
+				Lun:        uint8(lun),
+				Controller: uint8(controller),
+			},
 		}
 	}
 

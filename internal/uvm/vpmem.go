@@ -84,9 +84,13 @@ func (uvm *UtilityVM) AddVPMEM(hostPath string, expose bool) (uint32, string, er
 
 		if expose {
 			uvmPath = fmt.Sprintf("/tmp/p%d", deviceNumber)
-			modification.HostedSettings = hostedsettings.LCOWMappedVPMemDevice{
-				DeviceNumber: deviceNumber,
-				MountPath:    uvmPath,
+			modification.GuestRequest = hostedsettings.GuestRequest{
+				ResourceType: resourcetype.VPMemDevice,
+				RequestType:  requesttype.Add,
+				Settings: hostedsettings.LCOWMappedVPMemDevice{
+					DeviceNumber: deviceNumber,
+					MountPath:    uvmPath,
+				},
 			}
 		}
 
@@ -145,9 +149,13 @@ func (uvm *UtilityVM) removeVPMEM(hostPath string, uvmPath string, deviceNumber 
 			ResourcePath: fmt.Sprintf("virtualmachine/devices/virtualpmemdevices/%d", deviceNumber),
 		}
 
-		modification.HostedSettings = hostedsettings.LCOWMappedVPMemDevice{
-			DeviceNumber: deviceNumber,
-			MountPath:    uvmPath,
+		modification.GuestRequest = hostedsettings.GuestRequest{
+			ResourceType: resourcetype.VPMemDevice,
+			RequestType:  requesttype.Remove,
+			Settings: hostedsettings.LCOWMappedVPMemDevice{
+				DeviceNumber: deviceNumber,
+				MountPath:    uvmPath,
+			},
 		}
 
 		if err := uvm.Modify(modification); err != nil {

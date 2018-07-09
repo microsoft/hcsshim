@@ -6,6 +6,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/Microsoft/hcsshim/internal/hostedsettings"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
@@ -78,8 +79,12 @@ func (uvm *UtilityVM) addNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
 			EndpointId: endpoint.Id,
 			MacAddress: endpoint.MacAddress,
 		},
-		HostedSettings: endpoint,
-		ResourcePath:   path.Join("VirtualMachine/Devices/NetworkAdapters", id.String()),
+		GuestRequest: hostedsettings.GuestRequest{
+			ResourceType: resourcetype.Network,
+			RequestType:  requesttype.Add,
+			Settings:     endpoint,
+		},
+		ResourcePath: path.Join("VirtualMachine/Devices/NetworkAdapters", id.String()),
 	}
 	if err := uvm.Modify(&request); err != nil {
 		return err

@@ -144,9 +144,13 @@ func MountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 			Layers:            layers,
 		}
 		combinedLayersModification := &hcsschema.ModifySettingRequest{
-			ResourceType:   resourcetype.CombinedLayers,
-			RequestType:    requesttype.Add,
-			HostedSettings: hostedSettings,
+			ResourceType: resourcetype.CombinedLayers,
+			RequestType:  requesttype.Add,
+			GuestRequest: hostedsettings.GuestRequest{
+				Settings:     hostedSettings,
+				ResourceType: resourcetype.CombinedLayers,
+				RequestType:  requesttype.Add,
+			},
 		}
 		if err := uvm.Modify(combinedLayersModification); err != nil {
 			cleanupOnMountFailure(uvm, vsmbAdded, vpmemAdded, attachedSCSIHostPath)
@@ -183,9 +187,13 @@ func MountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 		ScratchPath:       containerScratchPathInUVM,
 	}
 	combinedLayersModification := &hcsschema.ModifySettingRequest{
-		ResourceType:   resourcetype.CombinedLayers,
-		RequestType:    requesttype.Add,
-		HostedSettings: hostedSettings,
+		ResourceType: resourcetype.CombinedLayers,
+		RequestType:  requesttype.Add,
+		GuestRequest: hostedsettings.GuestRequest{
+			ResourceType: resourcetype.CombinedLayers,
+			RequestType:  requesttype.Add,
+			Settings:     hostedSettings,
+		},
 	}
 	if err := uvm.Modify(combinedLayersModification); err != nil {
 		cleanupOnMountFailure(uvm, vsmbAdded, vpmemAdded, attachedSCSIHostPath)
@@ -246,9 +254,13 @@ func UnmountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Ut
 		containerScratchPathInUVM := ospath.Join(uvm.OS(), guestRoot, scratchPath)
 		logrus.Debugf("hcsshim::unmountContainerLayers CombinedLayers %s", containerScratchPathInUVM)
 		combinedLayersModification := &hcsschema.ModifySettingRequest{
-			ResourceType:   resourcetype.CombinedLayers,
-			RequestType:    requesttype.Remove,
-			HostedSettings: hostedsettings.CombinedLayers{ContainerRootPath: containerScratchPathInUVM},
+			ResourceType: resourcetype.CombinedLayers,
+			RequestType:  requesttype.Remove,
+			GuestRequest: hostedsettings.GuestRequest{
+				ResourceType: resourcetype.CombinedLayers,
+				RequestType:  requesttype.Remove,
+				Settings:     hostedsettings.CombinedLayers{ContainerRootPath: containerScratchPathInUVM},
+			},
 		}
 		if err := uvm.Modify(combinedLayersModification); err != nil {
 			logrus.Errorf(err.Error())

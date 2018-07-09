@@ -43,3 +43,9 @@ type LCOWMappedVPMemDevice struct {
 	DeviceNumber uint32
 	MountPath    string // /tmp/pN
 }
+
+type GuestRequest struct {
+	RequestType  string
+	ResourceType string
+	Settings     interface{} `json:"Settings,omitempty"`
+}

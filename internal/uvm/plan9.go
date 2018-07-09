@@ -38,10 +38,14 @@ func (uvm *UtilityVM) AddPlan9(hostPath string, uvmPath string, readOnly bool) e
 				Port: int32(uvm.plan9Counter), // TODO: Temporary. Will all use a single port (9999)
 			},
 			ResourcePath: fmt.Sprintf("virtualmachine/devices/plan9shares/%d", uvm.plan9Counter),
-			HostedSettings: hostedsettings.LCOWMappedDirectory{
-				MountPath: uvmPath,
-				Port:      int32(uvm.plan9Counter), // TODO: Temporary. Will all use a single port (9999)
-				ReadOnly:  readOnly,
+			GuestRequest: hostedsettings.GuestRequest{
+				ResourceType: resourcetype.MappedDirectory,
+				RequestType:  requesttype.Add,
+				Settings: hostedsettings.LCOWMappedDirectory{
+					MountPath: uvmPath,
+					Port:      int32(uvm.plan9Counter), // TODO: Temporary. Will all use a single port (9999)
+					ReadOnly:  readOnly,
+				},
 			},
 		}
 
@@ -93,9 +97,13 @@ func (uvm *UtilityVM) removePlan9(hostPath, uvmPath string) error {
 			Port: uvm.plan9Shares[hostPath].port,
 		},
 		ResourcePath: fmt.Sprintf("virtualmachine/devices/plan9shares/%d", uvm.plan9Shares[hostPath].idCounter),
-		HostedSettings: hostedsettings.LCOWMappedDirectory{
-			MountPath: uvm.plan9Shares[hostPath].uvmPath,
-			Port:      uvm.plan9Shares[hostPath].port,
+		GuestRequest: hostedsettings.GuestRequest{
+			ResourceType: resourcetype.MappedDirectory,
+			RequestType:  requesttype.Remove,
+			Settings: hostedsettings.LCOWMappedDirectory{
+				MountPath: uvm.plan9Shares[hostPath].uvmPath,
+				Port:      uvm.plan9Shares[hostPath].port,
+			},
 		},
 	}
 	if err := uvm.Modify(modification); err != nil {
