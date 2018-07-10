@@ -15,7 +15,7 @@ func TestDetermineSchemaVersion(t *testing.T) {
 		if sv := DetermineSchemaVersion(nil); !IsV10(sv) { // TODO: Toggle this at some point so default is 2.0
 			t.Fatalf("expected v1")
 		}
-		if sv := DetermineSchemaVersion(SchemaV20()); !IsV20(sv) {
+		if sv := DetermineSchemaVersion(SchemaV21()); !IsV21(sv) {
 			t.Fatalf("expected requested v2")
 		}
 		if sv := DetermineSchemaVersion(SchemaV10()); !IsV10(sv) {
@@ -25,7 +25,7 @@ func TestDetermineSchemaVersion(t *testing.T) {
 			t.Fatalf("expected requested v1")
 		}
 
-		if err := IsSupported(SchemaV20()); err != nil {
+		if err := IsSupported(SchemaV21()); err != nil {
 			t.Fatalf("v2 expected to be supported")
 		}
 		if err := IsSupported(SchemaV10()); err != nil {
@@ -37,7 +37,7 @@ func TestDetermineSchemaVersion(t *testing.T) {
 			t.Fatalf("expected v1")
 		}
 		// Pre RS5 will downgrade to v1 even if request v2
-		if sv := DetermineSchemaVersion(SchemaV20()); !IsV10(sv) { // Logs a warning that 2.0 is ignored.
+		if sv := DetermineSchemaVersion(SchemaV21()); !IsV10(sv) { // Logs a warning that 2.0 is ignored.
 			t.Fatalf("expected requested v1")
 		}
 		if sv := DetermineSchemaVersion(SchemaV10()); !IsV10(sv) {
@@ -47,7 +47,7 @@ func TestDetermineSchemaVersion(t *testing.T) {
 			t.Fatalf("expected requested v1")
 		}
 
-		if err := IsSupported(SchemaV20()); err == nil {
+		if err := IsSupported(SchemaV21()); err == nil {
 			t.Fatalf("didn't expect v2 to be supported")
 		}
 		if err := IsSupported(SchemaV10()); err != nil {

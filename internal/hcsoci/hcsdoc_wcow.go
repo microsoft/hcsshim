@@ -45,7 +45,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 	// ID is a property on the create call in V2 rather than part of the schema.
 	v2 := &hcsschema.ComputeSystem{
 		Owner:                             coi.actualOwner,
-		SchemaVersion:                     schemaversion.SchemaV20(),
+		SchemaVersion:                     schemaversion.SchemaV21(),
 		ShouldTerminateOnLastHandleClosed: true,
 	}
 	v2Container := &hcsschema.Container{Storage: &hcsschema.Storage{}}
@@ -143,7 +143,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 	// Strip off the top-most RW/scratch layer as that's passed in separately to HCS for v1
 	v1.LayerFolderPath = coi.Spec.Windows.LayerFolders[len(coi.Spec.Windows.LayerFolders)-1]
 
-	if (schemaversion.IsV20(coi.actualSchemaVersion) && coi.HostingSystem == nil) ||
+	if (schemaversion.IsV21(coi.actualSchemaVersion) && coi.HostingSystem == nil) ||
 		(schemaversion.IsV10(coi.actualSchemaVersion) && coi.Spec.Windows.HyperV == nil) {
 		// Argon v1 or v2.
 		const volumeGUIDRegex = `^\\\\\?\\(Volume)\{{0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}\}\\$`
@@ -251,7 +251,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 	} else {
 		v2.HostingSystemId = coi.HostingSystem.ID()
 		v2.HostedSystem = &hcsschema.HostedSystem{
-			SchemaVersion: schemaversion.SchemaV20(),
+			SchemaVersion: schemaversion.SchemaV21(),
 			Container:     v2Container,
 		}
 	}

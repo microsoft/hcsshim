@@ -69,7 +69,7 @@ func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) 
 			return fmt.Errorf("invalid OCI spec - Type '%s' must not be set", mount.Type)
 		}
 
-		if coi.HostingSystem != nil && schemaversion.IsV20(coi.actualSchemaVersion) {
+		if coi.HostingSystem != nil && schemaversion.IsV21(coi.actualSchemaVersion) {
 			logrus.Debugf("hcsshim::allocateWindowsResources Hot-adding VSMB share for OCI mount %+v", mount)
 			options := &hcsschema.VirtualSmbShareOptions{}
 			for _, o := range mount.Options {

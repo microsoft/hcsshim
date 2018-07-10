@@ -72,7 +72,7 @@ func (uvm *UtilityVM) AddVPMEM(hostPath string, expose bool) (uint32, string, er
 		controller.Devices[strconv.Itoa(int(deviceNumber))] = hcsschema.VirtualPMemDevice{
 			HostPath:    hostPath,
 			ReadOnly:    true,
-			ImageFormat: "VHD1",
+			ImageFormat: "Vhd1",
 		}
 
 		modification := &hcsschema.ModifySettingRequest{

@@ -41,7 +41,7 @@ func (uvm *UtilityVM) AddVSMB(hostPath string, hostedSettings interface{}, optio
 				Options: options,
 				Path:    hostPath,
 			},
-			ResourcePath: fmt.Sprintf("virtualmachine/devices/virtualsmbshares/" + shareName),
+			ResourcePath: fmt.Sprintf("virtualmachine/devices/virtualsmb/shares/" + shareName),
 		}
 
 		if err := uvm.Modify(modification); err != nil {
@@ -82,7 +82,7 @@ func (uvm *UtilityVM) RemoveVSMB(hostPath string) error {
 		ResourceType: resourcetype.VSmbShare,
 		RequestType:  requesttype.Remove,
 		Settings:     hcsschema.VirtualSmbShare{Name: share.name},
-		ResourcePath: "virtualmachine/devices/virtualsmbshares/" + share.name,
+		ResourcePath: "virtualmachine/devices/virtualsmb/shares/" + share.name,
 	}
 	if err := uvm.Modify(modification); err != nil {
 		return fmt.Errorf("failed to remove vsmb share %s from %s: %s: %s", hostPath, uvm.id, modification, err)
