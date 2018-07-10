@@ -85,7 +85,7 @@ func (uvm *UtilityVM) RemoveVSMB(hostPath string) error {
 		ResourcePath: "virtualmachine/devices/virtualsmb/shares/" + share.name,
 	}
 	if err := uvm.Modify(modification); err != nil {
-		return fmt.Errorf("failed to remove vsmb share %s from %s: %s: %s", hostPath, uvm.id, modification, err)
+		return fmt.Errorf("failed to remove vsmb share %s from %s: %+v: %s", hostPath, uvm.id, modification, err)
 	}
 	logrus.Debugf("uvm::RemoveVSMB Success %s id:%s successfully removed from utility VM", hostPath, uvm.id)
 	delete(uvm.vsmbShares, hostPath)

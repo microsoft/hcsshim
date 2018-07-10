@@ -1,4 +1,4 @@
-//+build functional uvmscratch
+// +build functional uvmscratch
 
 package functional
 
