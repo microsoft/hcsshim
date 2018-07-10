@@ -314,9 +314,9 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 			if uvm.vpmemMax == 0 {
 				return nil, fmt.Errorf("PreferredRootFSTypeVHD requess at least one VPMem device")
 			}
-			imageFormat := "VHD1"
+			imageFormat := "Vhd1"
 			if strings.ToLower(filepath.Ext(opts.RootFSFile)) == "vhdx" {
-				imageFormat = "Default" // Yeah, this is weird, but true.
+				imageFormat = "Vhdx" // Yeah, this is weird, but true.
 			}
 			vm.Devices.VirtualPMem.Devices = map[string]hcsschema.VirtualPMemDevice{
 				"0": {
