@@ -237,7 +237,6 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 			},
 		},
 
-		// TODO: @jhowardmsft. Where is this now? ConnectToBridge: true,
 		Devices: &hcsschema.Devices{
 			Scsi: scsi,
 			HvSocket: &hcsschema.HvSocket2{
