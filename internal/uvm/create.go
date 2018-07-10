@@ -237,6 +237,8 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 			},
 		},
 
+		GuestConnection: &hcsschema.GuestConnection{},
+
 		Devices: &hcsschema.Devices{
 			Scsi: scsi,
 			HvSocket: &hcsschema.HvSocket2{
@@ -279,10 +281,8 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 		}
 	} else {
 		vmDebugging := false
-		vm.GuestConnection = &hcsschema.GuestConnection{
-			UseVsock:            true,
-			UseConnectedSuspend: true,
-		}
+		vm.GuestConnection.UseVsock = true
+		vm.GuestConnection.UseConnectedSuspend = true
 		vm.Devices.VirtualSmb = &hcsschema.VirtualSmb{
 			Shares: []hcsschema.VirtualSmbShare{
 				{
