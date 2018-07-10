@@ -806,7 +806,6 @@ type VMHostedContainerSettingsV2 struct {
 // In this case, don't specify the OCISpecification field, but specify all
 // other fields. This is the same as if it were an external process.
 type ProcessParameters struct {
-	SchemaVersion SchemaVersion
 	// CommandLine is a space separated list of command line parameters. For
 	// example, the command which sleeps for 100 seconds would be represented by
 	// the CommandLine string "sleep 100".

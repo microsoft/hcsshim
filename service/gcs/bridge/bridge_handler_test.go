@@ -515,7 +515,9 @@ func Test_ExecProcess_Container_CoreFails_Failure(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemExecuteProcessV1, prot.PvV3, r)
 
+	uvm := gcs.NewHost(nil, nil, nil)
 	tb := &Bridge{
+		hostState: uvm,
 		coreint: &mockcore.MockCore{
 			Behavior: mockcore.Error,
 		},
@@ -540,9 +542,11 @@ func Test_ExecProcess_Container_CoreSucceeds_Success(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemExecuteProcessV1, prot.PvV3, r)
 
+	uvm := gcs.NewHost(nil, nil, nil)
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
 	tb := &Bridge{
-		coreint: mc,
+		hostState: uvm,
+		coreint:   mc,
 	}
 	tb.execProcess(rw, req)
 

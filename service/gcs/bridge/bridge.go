@@ -440,7 +440,7 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 			return
 		}
 
-		if settingsV2.SchemaVersion.Cmp(prot.SchemaVersion{Major: 2, Minor: 0}) >= 0 {
+		if settingsV2.SchemaVersion.Cmp(prot.SchemaVersion{Major: 2, Minor: 1}) >= 0 {
 			wasV2Config = true
 			c, err := b.hostState.CreateContainer(id, &settingsV2)
 			if err != nil {
@@ -563,21 +563,19 @@ func (b *Bridge) execProcess(w ResponseWriter, r *Request) {
 		}
 	}()
 
+	var c *gcspkg.Container
 	var err error
 	if params.IsExternal {
 		logrus.Debugf("bridge::execProcess: IsExternal Calling b.coreint.RunExternalProcess")
 		pid, err = b.coreint.RunExternalProcess(params, conSettings)
-	} else if params.SchemaVersion.Cmp(prot.SchemaVersion{Major: 2, Minor: 0}) >= 0 {
-		var c *gcspkg.Container
-		c, err = b.hostState.GetContainer(request.ContainerID)
-		if err == nil {
-			if params.OCIProcess == nil {
-				logrus.Debugf("bridge::execProcess: v2 starting container init process")
-				pid, err = c.Start(conSettings)
-			} else {
-				logrus.Debug("bridge::execProcess: v2 exec additional container process")
-				pid, err = c.ExecProcess(params.OCIProcess, conSettings)
-			}
+	} else if c, err = b.hostState.GetContainer(request.ContainerID); err == nil {
+		// We found a V2 container. Treat this as a V2 process.
+		if params.OCIProcess == nil {
+			logrus.Debugf("bridge::execProcess: v2 starting container init process")
+			pid, err = c.Start(conSettings)
+		} else {
+			logrus.Debug("bridge::execProcess: v2 exec additional container process")
+			pid, err = c.ExecProcess(params.OCIProcess, conSettings)
 		}
 	} else {
 		logrus.Debug("bridge::execProcess: Calling b.coreint.ExecProcess")
