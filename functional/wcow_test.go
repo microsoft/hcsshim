@@ -4,6 +4,7 @@ package functional
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -355,7 +356,7 @@ func runHcsCommand(t *testing.T,
 
 // busybox is used as it has lots of layers. Exercises more code.
 // Also the commands are more flexible for verification
-const imageName = "busybox"
+const imageName = "busyboxw"
 
 // Creates two temp folders used for the mounts/mapped directories
 func createTestMounts(t *testing.T) (string, string) {
@@ -386,6 +387,8 @@ func TestWCOWArgonShim(t *testing.T) {
 
 	argonShimScratchDir := testutilities.CreateTempDir(t)
 	defer os.RemoveAll(argonShimScratchDir)
+	fmt.Println("Calling CreateSCratchLayer:", argonShimScratchDir)
+	fmt.Println("imageLayers:", imageLayers)
 	if err := wclayer.CreateScratchLayer(argonShimScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create argon scratch layer: %s", err)
 	}
