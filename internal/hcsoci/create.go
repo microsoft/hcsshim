@@ -81,7 +81,7 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 
 	if coi.HostingSystem != nil {
 		// By definition, a hosting system can only be supplied for a v2 Xenon.
-		coi.actualSchemaVersion = schemaversion.SchemaV20()
+		coi.actualSchemaVersion = schemaversion.SchemaV21()
 	} else {
 		coi.actualSchemaVersion = schemaversion.DetermineSchemaVersion(coi.SchemaVersion)
 		logrus.Debugf("hcsshim::CreateContainer using schema %s", schemaversion.String(coi.actualSchemaVersion))
@@ -108,7 +108,7 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 	// Create a network namespace if necessary.
 	if coi.Spec.Windows != nil &&
 		coi.Spec.Windows.Network != nil &&
-		schemaversion.IsV20(coi.actualSchemaVersion) {
+		schemaversion.IsV21(coi.actualSchemaVersion) {
 
 		if coi.NetworkNamespace != "" {
 			resources.netNS = coi.NetworkNamespace

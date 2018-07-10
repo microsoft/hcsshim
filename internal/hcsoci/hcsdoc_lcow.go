@@ -91,11 +91,11 @@ func createLinuxContainerDocument(coi *createOptionsInternal, guestRoot string) 
 	logrus.Debugf("hcsshim::createLinuxContainerDoc: guestRoot:%s", guestRoot)
 	v2 := &linuxComputeSystem{
 		Owner:                             coi.actualOwner,
-		SchemaVersion:                     schemaversion.SchemaV20(),
+		SchemaVersion:                     schemaversion.SchemaV21(),
 		ShouldTerminateOnLastHandleClosed: true,
 		HostingSystemId:                   coi.HostingSystem.ID(),
 		HostedSystem: &linuxHostedSystem{
-			SchemaVersion:    schemaversion.SchemaV20(),
+			SchemaVersion:    schemaversion.SchemaV21(),
 			OciBundlePath:    guestRoot,
 			OciSpecification: spec,
 		},

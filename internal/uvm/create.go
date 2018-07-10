@@ -251,7 +251,7 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 
 	hcsDocument := &hcsschema.ComputeSystem{
 		Owner:          uvm.owner,
-		SchemaVersion:  schemaversion.SchemaV20(),
+		SchemaVersion:  schemaversion.SchemaV21(),
 		VirtualMachine: vm,
 	}
 

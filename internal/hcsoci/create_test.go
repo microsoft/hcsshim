@@ -61,7 +61,7 @@ package hcsoci
 
 //	c, err := CreateContainer(&CreateOptions{
 //		Id:            "gruntbuggly",
-//		SchemaVersion: schemaversion.SchemaV20(),
+//		SchemaVersion: schemaversion.SchemaV21(),
 //		Spec: &specs.Spec{
 //			Windows: &specs.Windows{LayerFolders: layers},
 //			Root:    &specs.Root{Path: mountPath.(string)},

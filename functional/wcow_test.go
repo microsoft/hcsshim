@@ -634,7 +634,7 @@ func TestWCOWArgonOciV2(t *testing.T) {
 	argonOci2, argonOci2Resources, err = hcsoci.CreateContainer(
 		&hcsoci.CreateOptions{
 			ID:            "argonOci2",
-			SchemaVersion: schemaversion.SchemaV20(),
+			SchemaVersion: schemaversion.SchemaV21(),
 			Spec:          spec,
 		})
 	if err != nil {
@@ -713,7 +713,7 @@ func TestWCOWXenonOciV2(t *testing.T) {
 		&hcsoci.CreateOptions{
 			ID:            "xenonOci2",
 			HostingSystem: xenonOci2UVM,
-			SchemaVersion: schemaversion.SchemaV20(),
+			SchemaVersion: schemaversion.SchemaV21(),
 			Spec:          spec,
 		})
 	if err != nil {
