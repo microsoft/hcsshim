@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/Microsoft/hcsshim/functional/utilities"
 	"github.com/Microsoft/hcsshim/internal/osversion"
@@ -22,7 +21,9 @@ func TestSCSIAddRemoveLCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 	uvm := testutilities.CreateLCOWUVM(t, "TestAddRemoveSCSILCOW")
 	defer uvm.Terminate()
+
 	testSCSIAddRemove(t, uvm, `/`, "linux", []string{})
+
 }
 
 // TestSCSIAddRemoveWCOW validates adding and removing SCSI disks
@@ -89,7 +90,6 @@ func testSCSIAddRemove(t *testing.T, uvm *uvm.UtilityVM, pathPrefix string, oper
 	for i := 0; i < numDisks; i++ {
 		_, _, err := uvm.AddSCSI(disks[i], fmt.Sprintf(`%s%d`, pathPrefix, i))
 		if err != nil {
-			time.Sleep(10 * time.Minute)
 			t.Fatalf("failed to add scsi disk %d %s: %s", i, disks[i], err)
 		}
 	}

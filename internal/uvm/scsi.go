@@ -161,29 +161,31 @@ func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int
 		ResourceType: resourcetype.MappedVirtualDisk,
 		RequestType:  requesttype.Remove,
 		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/%d/%d", controller, lun),
+		Settings:     hcsschema.MappedVirtualDisk{}, // @jhowardmsft This should not be needed. Temporary workaround for https://microsoft.visualstudio.com/DefaultCollection/OS/_workitems/edit/18230871. Remove later TODO post 17113+fix
 	}
 
-	// Include the HostedSettings so that the GCS ejects the disk cleanly
-	if uvm.operatingSystem == "windows" {
-		// Just an FYI, Windows doesn't support attach only, so ContainerPath will always be set
-		scsiModification.GuestRequest = hostedsettings.GuestRequest{
-			ResourceType: resourcetype.MappedVirtualDisk,
-			RequestType:  requesttype.Remove,
-			Settings: hcsschema.MappedVirtualDisk{
-				ContainerPath: uvmPath,
-				Lun:           lun,
-				// TODO: Controller: uint8(controller), // TODO NOT IN HCS API CURRENTLY
-			},
-		}
-	} else {
-		scsiModification.GuestRequest = hostedsettings.GuestRequest{
-			ResourceType: resourcetype.MappedVirtualDisk,
-			RequestType:  requesttype.Remove,
-			Settings: hostedsettings.LCOWMappedVirtualDisk{
-				MountPath:  uvmPath, // May be blank in attach-only
-				Lun:        uint8(lun),
-				Controller: uint8(controller),
-			},
+	// Include the GuestRequest so that the GCS ejects the disk cleanly if the disk was attached/mounted
+	if uvmPath != "" {
+		if uvm.operatingSystem == "windows" {
+			scsiModification.GuestRequest = hostedsettings.GuestRequest{
+				ResourceType: resourcetype.MappedVirtualDisk,
+				RequestType:  requesttype.Remove,
+				Settings: hcsschema.MappedVirtualDisk{
+					ContainerPath: uvmPath,
+					Lun:           lun,
+					// TODO: Controller: uint8(controller), // TODO NOT IN HCS API CURRENTLY
+				},
+			}
+		} else {
+			scsiModification.GuestRequest = hostedsettings.GuestRequest{
+				ResourceType: resourcetype.MappedVirtualDisk,
+				RequestType:  requesttype.Remove,
+				Settings: hostedsettings.LCOWMappedVirtualDisk{
+					MountPath:  uvmPath, // May be blank in attach-only
+					Lun:        uint8(lun),
+					Controller: uint8(controller),
+				},
+			}
 		}
 	}
 
