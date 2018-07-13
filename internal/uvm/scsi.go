@@ -10,6 +10,15 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+var (
+	ErrNoAvailableLocation = fmt.Errorf("no available location")
+	ErrNotAttached         = fmt.Errorf("not attached")
+	ErrAlreadyAttached     = fmt.Errorf("already attached")
+	ErrNoSCSIControllers   = fmt.Errorf("no SCSI controllers configured for this utility VM")
+	ErrNoUvmParameter      = fmt.Errorf("invalid parameters - uvm parameter missing")
+	ErrTooManyAttachments  = fmt.Errorf("too many SCSI attachments")
+)
+
 // allocateSCSI finds the next available slot on the
 // SCSI controllers associated with a utility VM to use.
 func (uvm *UtilityVM) allocateSCSI(hostPath string, uvmPath string) (int, int32, error) {
@@ -26,7 +35,7 @@ func (uvm *UtilityVM) allocateSCSI(hostPath string, uvmPath string) (int, int32,
 			}
 		}
 	}
-	return -1, -1, fmt.Errorf("no free SCSI locations")
+	return -1, -1, ErrNoAvailableLocation
 }
 
 func (uvm *UtilityVM) deallocateSCSI(controller int, lun int32) error {
@@ -48,7 +57,7 @@ func (uvm *UtilityVM) findSCSIAttachment(findThisHostPath string) (int, int32, s
 			}
 		}
 	}
-	return -1, -1, "", fmt.Errorf("%s is not attached to SCSI", findThisHostPath)
+	return -1, -1, "", ErrNotAttached
 }
 
 // AddSCSI adds a SCSI disk to a utility VM at the next available location.
@@ -64,15 +73,22 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 	controller := -1
 	var lun int32 = -1
 	if uvm == nil {
-		return -1, -1, fmt.Errorf("no utility VM passed to AddSCSI")
+		return -1, -1, ErrNoUvmParameter
 	}
 	logrus.Debugf("uvm::AddSCSI id:%s hostPath:%s uvmPath:%s", uvm.id, hostPath, uvmPath)
 
 	if uvm.scsiControllerCount == 0 {
-		return -1, -1, fmt.Errorf("cannot AddSCSI as the utility VM has no SCSI controller configured")
+		return -1, -1, ErrNoSCSIControllers
 	}
 
-	var err error
+	uvm.m.Lock()
+	controller, lun, uvmPath, err := uvm.findSCSIAttachment(hostPath)
+	if err == nil {
+		uvm.m.Unlock()
+		return -1, -1, ErrAlreadyAttached
+	}
+	uvm.m.Unlock()
+
 	controller, lun, err = uvm.allocateSCSI(hostPath, uvmPath)
 	if err != nil {
 		return -1, -1, err
@@ -81,7 +97,7 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 	// TODO: Currently GCS doesn't support more than one SCSI controller. @jhowardmsft/@swernli. This will hopefully be fixed in GCS for RS5.
 	// It will also require the HostedSettings to be extended in the call below to include the controller as well as the LUN.
 	if controller > 0 {
-		return -1, -1, fmt.Errorf("too many SCSI attachments")
+		return -1, -1, ErrTooManyAttachments
 	}
 
 	// TODO: This is wrong. There's no way to hot-add a SCSI attachement currently. This is a HACK
@@ -137,13 +153,13 @@ func (uvm *UtilityVM) RemoveSCSI(hostPath string) error {
 	defer uvm.m.Unlock()
 
 	if uvm.scsiControllerCount == 0 {
-		return fmt.Errorf("cannot AddSCSI as the utility VM has no SCSI controller configured")
+		return ErrNoSCSIControllers
 	}
 
 	// Make sure is actually attached
 	controller, lun, uvmPath, err := uvm.findSCSIAttachment(hostPath)
 	if err != nil {
-		return fmt.Errorf("cannot remove SCSI disk %s as it is not attached to container %s: %s", hostPath, uvm.id, err)
+		return err
 	}
 
 	if err := uvm.removeSCSI(hostPath, uvmPath, controller, lun); err != nil {
