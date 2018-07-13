@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/Microsoft/hcsshim/internal/hostedsettings"
+	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
@@ -84,10 +84,10 @@ func (uvm *UtilityVM) AddVPMEM(hostPath string, expose bool) (uint32, string, er
 
 		if expose {
 			uvmPath = fmt.Sprintf("/tmp/p%d", deviceNumber)
-			modification.GuestRequest = hostedsettings.GuestRequest{
+			modification.GuestRequest = guestrequest.GuestRequest{
 				ResourceType: resourcetype.VPMemDevice,
 				RequestType:  requesttype.Add,
-				Settings: hostedsettings.LCOWMappedVPMemDevice{
+				Settings: guestrequest.LCOWMappedVPMemDevice{
 					DeviceNumber: deviceNumber,
 					MountPath:    uvmPath,
 				},
@@ -149,10 +149,10 @@ func (uvm *UtilityVM) removeVPMEM(hostPath string, uvmPath string, deviceNumber 
 			ResourcePath: fmt.Sprintf("virtualmachine/devices/virtualpmemdevices/%d", deviceNumber),
 		}
 
-		modification.GuestRequest = hostedsettings.GuestRequest{
+		modification.GuestRequest = guestrequest.GuestRequest{
 			ResourceType: resourcetype.VPMemDevice,
 			RequestType:  requesttype.Remove,
-			Settings: hostedsettings.LCOWMappedVPMemDevice{
+			Settings: guestrequest.LCOWMappedVPMemDevice{
 				DeviceNumber: deviceNumber,
 				MountPath:    uvmPath,
 			},

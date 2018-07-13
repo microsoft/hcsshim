@@ -1,4 +1,4 @@
-package hostedsettings
+package guestrequest
 
 import "github.com/Microsoft/hcsshim/internal/schema2"
 

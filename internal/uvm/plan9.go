@@ -3,7 +3,7 @@ package uvm
 import (
 	"fmt"
 
-	"github.com/Microsoft/hcsshim/internal/hostedsettings"
+	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
@@ -38,10 +38,10 @@ func (uvm *UtilityVM) AddPlan9(hostPath string, uvmPath string, readOnly bool) e
 				Port: int32(uvm.plan9Counter), // TODO: Temporary. Will all use a single port (9999)
 			},
 			ResourcePath: fmt.Sprintf("virtualmachine/devices/plan9/shares/%d", uvm.plan9Counter),
-			GuestRequest: hostedsettings.GuestRequest{
+			GuestRequest: guestrequest.GuestRequest{
 				ResourceType: resourcetype.MappedDirectory,
 				RequestType:  requesttype.Add,
-				Settings: hostedsettings.LCOWMappedDirectory{
+				Settings: guestrequest.LCOWMappedDirectory{
 					MountPath: uvmPath,
 					Port:      int32(uvm.plan9Counter), // TODO: Temporary. Will all use a single port (9999)
 					ReadOnly:  readOnly,
@@ -97,10 +97,10 @@ func (uvm *UtilityVM) removePlan9(hostPath, uvmPath string) error {
 			Port: uvm.plan9Shares[hostPath].port,
 		},
 		ResourcePath: fmt.Sprintf("virtualmachine/devices/plan9/shares/%d", uvm.plan9Shares[hostPath].idCounter),
-		GuestRequest: hostedsettings.GuestRequest{
+		GuestRequest: guestrequest.GuestRequest{
 			ResourceType: resourcetype.MappedDirectory,
 			RequestType:  requesttype.Remove,
-			Settings: hostedsettings.LCOWMappedDirectory{
+			Settings: guestrequest.LCOWMappedDirectory{
 				MountPath: uvm.plan9Shares[hostPath].uvmPath,
 				Port:      uvm.plan9Shares[hostPath].port,
 			},

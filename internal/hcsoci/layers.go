@@ -7,7 +7,7 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/Microsoft/hcsshim/internal/hostedsettings"
+	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/ospath"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	"github.com/Microsoft/hcsshim/internal/resourcetype"
@@ -139,15 +139,15 @@ func MountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 			cleanupOnMountFailure(uvm, vsmbAdded, vpmemAdded, attachedSCSIHostPath)
 			return nil, err
 		}
-		hostedSettings := hostedsettings.CombinedLayers{
+		guestRequest := guestrequest.CombinedLayers{
 			ContainerRootPath: containerScratchPathInUVM,
 			Layers:            layers,
 		}
 		combinedLayersModification := &hcsschema.ModifySettingRequest{
 			ResourceType: resourcetype.CombinedLayers,
 			RequestType:  requesttype.Add,
-			GuestRequest: hostedsettings.GuestRequest{
-				Settings:     hostedSettings,
+			GuestRequest: guestrequest.GuestRequest{
+				Settings:     guestRequest,
 				ResourceType: resourcetype.CombinedLayers,
 				RequestType:  requesttype.Add,
 			},
@@ -157,7 +157,7 @@ func MountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 			return nil, err
 		}
 		logrus.Debugln("hcsshim::mountContainerLayers Succeeded")
-		return hostedSettings, nil
+		return guestRequest, nil
 	}
 
 	// This is the LCOW layout inside the utilityVM. NNN is the container "number"
@@ -181,7 +181,7 @@ func MountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 	for _, vpmem := range vpmemAdded {
 		layers = append(layers, hcsschema.Layer{Path: vpmem.uvmPath})
 	}
-	hostedSettings := hostedsettings.CombinedLayers{
+	guestRequest := guestrequest.CombinedLayers{
 		ContainerRootPath: path.Join(guestRoot, rootfsPath),
 		Layers:            layers,
 		ScratchPath:       containerScratchPathInUVM,
@@ -189,10 +189,10 @@ func MountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 	combinedLayersModification := &hcsschema.ModifySettingRequest{
 		ResourceType: resourcetype.CombinedLayers,
 		RequestType:  requesttype.Add,
-		GuestRequest: hostedsettings.GuestRequest{
+		GuestRequest: guestrequest.GuestRequest{
 			ResourceType: resourcetype.CombinedLayers,
 			RequestType:  requesttype.Add,
-			Settings:     hostedSettings,
+			Settings:     guestRequest,
 		},
 	}
 	if err := uvm.Modify(combinedLayersModification); err != nil {
@@ -200,7 +200,7 @@ func MountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 		return nil, err
 	}
 	logrus.Debugln("hcsshim::mountContainerLayers Succeeded")
-	return hostedSettings, nil
+	return guestRequest, nil
 
 }
 
@@ -256,10 +256,10 @@ func UnmountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Ut
 		combinedLayersModification := &hcsschema.ModifySettingRequest{
 			ResourceType: resourcetype.CombinedLayers,
 			RequestType:  requesttype.Remove,
-			GuestRequest: hostedsettings.GuestRequest{
+			GuestRequest: guestrequest.GuestRequest{
 				ResourceType: resourcetype.CombinedLayers,
 				RequestType:  requesttype.Remove,
-				Settings:     hostedsettings.CombinedLayers{ContainerRootPath: containerScratchPathInUVM},
+				Settings:     guestrequest.CombinedLayers{ContainerRootPath: containerScratchPathInUVM},
 			},
 		}
 		if err := uvm.Modify(combinedLayersModification); err != nil {

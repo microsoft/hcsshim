@@ -17,12 +17,12 @@ func (share *vsmbShare) GuestPath() string {
 // AddVSMB adds a VSMB share to a Windows utility VM. Each VSMB share is ref-counted and
 // only added if it isn't already. This is used for read-only layers, mapped directories
 // to a container, and for mapped pipes.
-func (uvm *UtilityVM) AddVSMB(hostPath string, hostedSettings interface{}, options *hcsschema.VirtualSmbShareOptions) error {
+func (uvm *UtilityVM) AddVSMB(hostPath string, guestRequest interface{}, options *hcsschema.VirtualSmbShareOptions) error {
 	if uvm.operatingSystem != "windows" {
 		return errNotSupported
 	}
 
-	logrus.Debugf("uvm::AddVSMB %s %+v %+v id:%s", hostPath, hostedSettings, options, uvm.id)
+	logrus.Debugf("uvm::AddVSMB %s %+v %+v id:%s", hostPath, guestRequest, options, uvm.id)
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 	if uvm.vsmbShares == nil {
@@ -48,8 +48,8 @@ func (uvm *UtilityVM) AddVSMB(hostPath string, hostedSettings interface{}, optio
 			return err
 		}
 		share = &vsmbShare{
-			name:           shareName,
-			hostedSettings: hostedSettings,
+			name:         shareName,
+			guestRequest: guestRequest,
 		}
 		uvm.vsmbShares[hostPath] = share
 	}

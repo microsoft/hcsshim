@@ -3,7 +3,7 @@ package uvm
 import (
 	"fmt"
 
-	"github.com/Microsoft/hcsshim/internal/hostedsettings"
+	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
@@ -95,7 +95,7 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 	}
 
 	// TODO: Currently GCS doesn't support more than one SCSI controller. @jhowardmsft/@swernli. This will hopefully be fixed in GCS for RS5.
-	// It will also require the HostedSettings to be extended in the call below to include the controller as well as the LUN.
+	// It will also require the GuestRequest to be extended in the call below to include the controller as well as the LUN.
 	if controller > 0 {
 		return -1, -1, ErrTooManyAttachments
 	}
@@ -113,7 +113,7 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 
 	if uvmPath != "" {
 		if uvm.operatingSystem == "windows" {
-			SCSIModification.GuestRequest = hostedsettings.GuestRequest{
+			SCSIModification.GuestRequest = guestrequest.GuestRequest{
 				ResourceType: resourcetype.MappedVirtualDisk,
 				RequestType:  requesttype.Add,
 				Settings: hcsschema.MappedVirtualDisk{
@@ -124,10 +124,10 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 				},
 			}
 		} else {
-			SCSIModification.GuestRequest = hostedsettings.GuestRequest{
+			SCSIModification.GuestRequest = guestrequest.GuestRequest{
 				ResourceType: resourcetype.MappedVirtualDisk,
 				RequestType:  requesttype.Add,
-				Settings: hostedsettings.LCOWMappedVirtualDisk{
+				Settings: guestrequest.LCOWMappedVirtualDisk{
 					MountPath:  uvmPath,
 					Lun:        uint8(lun),
 					Controller: uint8(controller),
@@ -183,7 +183,7 @@ func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int
 	// Include the GuestRequest so that the GCS ejects the disk cleanly if the disk was attached/mounted
 	if uvmPath != "" {
 		if uvm.operatingSystem == "windows" {
-			scsiModification.GuestRequest = hostedsettings.GuestRequest{
+			scsiModification.GuestRequest = guestrequest.GuestRequest{
 				ResourceType: resourcetype.MappedVirtualDisk,
 				RequestType:  requesttype.Remove,
 				Settings: hcsschema.MappedVirtualDisk{
@@ -193,10 +193,10 @@ func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int
 				},
 			}
 		} else {
-			scsiModification.GuestRequest = hostedsettings.GuestRequest{
+			scsiModification.GuestRequest = guestrequest.GuestRequest{
 				ResourceType: resourcetype.MappedVirtualDisk,
 				RequestType:  requesttype.Remove,
-				Settings: hostedsettings.LCOWMappedVirtualDisk{
+				Settings: guestrequest.LCOWMappedVirtualDisk{
 					MountPath:  uvmPath, // May be blank in attach-only
 					Lun:        uint8(lun),
 					Controller: uint8(controller),
