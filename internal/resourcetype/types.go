@@ -1,7 +1,7 @@
 package resourcetype
 
 // These are constants for v2 schema modify requests. These are temporary and
-// may be removed from HCS ModifySettingRequest (previously ModifySettingsRequest)
+// may be removed from HCS ModifySettingRequest.
 
 // ResourceType const
 const (

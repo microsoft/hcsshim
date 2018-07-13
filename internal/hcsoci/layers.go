@@ -144,8 +144,6 @@ func MountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 			Layers:            layers,
 		}
 		combinedLayersModification := &hcsschema.ModifySettingRequest{
-			ResourceType: resourcetype.CombinedLayers,
-			RequestType:  requesttype.Add,
 			GuestRequest: guestrequest.GuestRequest{
 				Settings:     guestRequest,
 				ResourceType: resourcetype.CombinedLayers,
@@ -187,8 +185,6 @@ func MountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 		ScratchPath:       containerScratchPathInUVM,
 	}
 	combinedLayersModification := &hcsschema.ModifySettingRequest{
-		ResourceType: resourcetype.CombinedLayers,
-		RequestType:  requesttype.Add,
 		GuestRequest: guestrequest.GuestRequest{
 			ResourceType: resourcetype.CombinedLayers,
 			RequestType:  requesttype.Add,
@@ -254,8 +250,6 @@ func UnmountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Ut
 		containerScratchPathInUVM := ospath.Join(uvm.OS(), guestRoot, scratchPath)
 		logrus.Debugf("hcsshim::unmountContainerLayers CombinedLayers %s", containerScratchPathInUVM)
 		combinedLayersModification := &hcsschema.ModifySettingRequest{
-			ResourceType: resourcetype.CombinedLayers,
-			RequestType:  requesttype.Remove,
 			GuestRequest: guestrequest.GuestRequest{
 				ResourceType: resourcetype.CombinedLayers,
 				RequestType:  requesttype.Remove,
