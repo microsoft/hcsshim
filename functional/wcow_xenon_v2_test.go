@@ -73,7 +73,7 @@ package functional
 //	firstHostedContainer, err := CreateContainer(&CreateOptions{
 //		Id:            "FirstContainer",
 //		HostingSystem: uvm,
-//		SchemaVersion: schemaversion.SchemaV20(),
+//		SchemaVersion: schemaversion.SchemaV21(),
 //		Spec:          &specs.Spec{Windows: &specs.Windows{LayerFolders: firstLayerFolders}},
 //	})
 //	if err != nil {
@@ -88,7 +88,7 @@ package functional
 //	secondHostedContainer, err := CreateContainer(&CreateOptions{
 //		Id:            "SecondContainer",
 //		HostingSystem: uvm,
-//		SchemaVersion: schemaversion.SchemaV20(),
+//		SchemaVersion: schemaversion.SchemaV21(),
 //		Spec:          &specs.Spec{Windows: &specs.Windows{LayerFolders: secondLayerFolders}},
 //	})
 //	if err != nil {
@@ -122,7 +122,7 @@ package functional
 //		hostedContainer, err := CreateContainer(&CreateOptions{
 //			Id:            fmt.Sprintf("container%d", i),
 //			HostingSystem: uvm,
-//			SchemaVersion: schemaversion.SchemaV20(),
+//			SchemaVersion: schemaversion.SchemaV21(),
 //			Spec:          &specs.Spec{Windows: &specs.Windows{LayerFolders: layerFolders}},
 //		})
 //		if err != nil {

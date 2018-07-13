@@ -3,11 +3,20 @@ package uvm
 import (
 	"fmt"
 
-	"github.com/Microsoft/hcsshim/internal/hostedsettings"
+	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/sirupsen/logrus"
+)
+
+var (
+	ErrNoAvailableLocation = fmt.Errorf("no available location")
+	ErrNotAttached         = fmt.Errorf("not attached")
+	ErrAlreadyAttached     = fmt.Errorf("already attached")
+	ErrNoSCSIControllers   = fmt.Errorf("no SCSI controllers configured for this utility VM")
+	ErrNoUvmParameter      = fmt.Errorf("invalid parameters - uvm parameter missing")
+	ErrTooManyAttachments  = fmt.Errorf("too many SCSI attachments")
 )
 
 // allocateSCSI finds the next available slot on the
@@ -26,7 +35,7 @@ func (uvm *UtilityVM) allocateSCSI(hostPath string, uvmPath string) (int, int32,
 			}
 		}
 	}
-	return -1, -1, fmt.Errorf("no free SCSI locations")
+	return -1, -1, ErrNoAvailableLocation
 }
 
 func (uvm *UtilityVM) deallocateSCSI(controller int, lun int32) error {
@@ -48,7 +57,7 @@ func (uvm *UtilityVM) findSCSIAttachment(findThisHostPath string) (int, int32, s
 			}
 		}
 	}
-	return -1, -1, "", fmt.Errorf("%s is not attached to SCSI", findThisHostPath)
+	return -1, -1, "", ErrNotAttached
 }
 
 // AddSCSI adds a SCSI disk to a utility VM at the next available location.
@@ -64,24 +73,31 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 	controller := -1
 	var lun int32 = -1
 	if uvm == nil {
-		return -1, -1, fmt.Errorf("no utility VM passed to AddSCSI")
+		return -1, -1, ErrNoUvmParameter
 	}
 	logrus.Debugf("uvm::AddSCSI id:%s hostPath:%s uvmPath:%s", uvm.id, hostPath, uvmPath)
 
 	if uvm.scsiControllerCount == 0 {
-		return -1, -1, fmt.Errorf("cannot AddSCSI as the utility VM has no SCSI controller configured")
+		return -1, -1, ErrNoSCSIControllers
 	}
 
-	var err error
+	uvm.m.Lock()
+	controller, lun, uvmPath, err := uvm.findSCSIAttachment(hostPath)
+	if err == nil {
+		uvm.m.Unlock()
+		return -1, -1, ErrAlreadyAttached
+	}
+	uvm.m.Unlock()
+
 	controller, lun, err = uvm.allocateSCSI(hostPath, uvmPath)
 	if err != nil {
 		return -1, -1, err
 	}
 
 	// TODO: Currently GCS doesn't support more than one SCSI controller. @jhowardmsft/@swernli. This will hopefully be fixed in GCS for RS5.
-	// It will also require the HostedSettings to be extended in the call below to include the controller as well as the LUN.
+	// It will also require the GuestRequest to be extended in the call below to include the controller as well as the LUN.
 	if controller > 0 {
-		return -1, -1, fmt.Errorf("too many SCSI attachments")
+		return -1, -1, ErrTooManyAttachments
 	}
 
 	// TODO: This is wrong. There's no way to hot-add a SCSI attachement currently. This is a HACK
@@ -95,27 +111,31 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/%d/%d", controller, lun),
 	}
 
-	// HACK HACK HACK as lun in hosted settings is needed in this workaround	if uvmPath != "" {
-	var hostedSettings interface{}
-	if uvm.operatingSystem == "windows" {
-		hostedSettings = hcsschema.MappedVirtualDisk{
-			ContainerPath: uvmPath,
-			Lun:           lun,
-			AttachOnly:    (uvmPath == ""),
-			// TODO: Controller: uint8(controller), // TODO NOT IN HCS API CURRENTLY
-		}
-
-	} else {
-		hostedSettings = hostedsettings.LCOWMappedVirtualDisk{
-			MountPath:  uvmPath,
-			Lun:        uint8(lun),
-			Controller: uint8(controller),
-			ReadOnly:   false,
+	if uvmPath != "" {
+		if uvm.operatingSystem == "windows" {
+			SCSIModification.GuestRequest = guestrequest.GuestRequest{
+				ResourceType: guestrequest.ResourceTypeMappedVirtualDisk,
+				RequestType:  requesttype.Add,
+				Settings: hcsschema.MappedVirtualDisk{
+					ContainerPath: uvmPath,
+					Lun:           lun,
+					AttachOnly:    (uvmPath == ""),
+					// TODO: Controller: uint8(controller), // TODO NOT IN HCS API CURRENTLY
+				},
+			}
+		} else {
+			SCSIModification.GuestRequest = guestrequest.GuestRequest{
+				ResourceType: guestrequest.ResourceTypeMappedVirtualDisk,
+				RequestType:  requesttype.Add,
+				Settings: guestrequest.LCOWMappedVirtualDisk{
+					MountPath:  uvmPath,
+					Lun:        uint8(lun),
+					Controller: uint8(controller),
+					ReadOnly:   false,
+				},
+			}
 		}
 	}
-
-	SCSIModification.HostedSettings = hostedSettings
-	//}
 
 	if err := uvm.Modify(SCSIModification); err != nil {
 		uvm.deallocateSCSI(controller, lun)
@@ -133,13 +153,13 @@ func (uvm *UtilityVM) RemoveSCSI(hostPath string) error {
 	defer uvm.m.Unlock()
 
 	if uvm.scsiControllerCount == 0 {
-		return fmt.Errorf("cannot AddSCSI as the utility VM has no SCSI controller configured")
+		return ErrNoSCSIControllers
 	}
 
 	// Make sure is actually attached
 	controller, lun, uvmPath, err := uvm.findSCSIAttachment(hostPath)
 	if err != nil {
-		return fmt.Errorf("cannot remove SCSI disk %s as it is not attached to container %s: %s", hostPath, uvm.id, err)
+		return err
 	}
 
 	if err := uvm.removeSCSI(hostPath, uvmPath, controller, lun); err != nil {
@@ -157,21 +177,31 @@ func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int
 		ResourceType: resourcetype.MappedVirtualDisk,
 		RequestType:  requesttype.Remove,
 		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/%d/%d", controller, lun),
+		Settings:     hcsschema.MappedVirtualDisk{}, // @jhowardmsft This should not be needed. Temporary workaround for https://microsoft.visualstudio.com/DefaultCollection/OS/_workitems/edit/18230871. Remove later TODO post 17113+fix
 	}
 
-	// Include the HostedSettings so that the GCS ejects the disk cleanly
-	if uvm.operatingSystem == "windows" {
-		// Just an FYI, Windows doesn't support attach only, so ContainerPath will always be set
-		scsiModification.HostedSettings = hcsschema.MappedVirtualDisk{
-			ContainerPath: uvmPath,
-			Lun:           lun,
-			// TODO: Controller: uint8(controller), // TODO NOT IN HCS API CURRENTLY
-		}
-	} else {
-		scsiModification.HostedSettings = hostedsettings.LCOWMappedVirtualDisk{
-			MountPath:  uvmPath, // May be blank in attach-only
-			Lun:        uint8(lun),
-			Controller: uint8(controller),
+	// Include the GuestRequest so that the GCS ejects the disk cleanly if the disk was attached/mounted
+	if uvmPath != "" {
+		if uvm.operatingSystem == "windows" {
+			scsiModification.GuestRequest = guestrequest.GuestRequest{
+				ResourceType: guestrequest.ResourceTypeMappedVirtualDisk,
+				RequestType:  requesttype.Remove,
+				Settings: hcsschema.MappedVirtualDisk{
+					ContainerPath: uvmPath,
+					Lun:           lun,
+					// TODO: Controller: uint8(controller), // TODO NOT IN HCS API CURRENTLY
+				},
+			}
+		} else {
+			scsiModification.GuestRequest = guestrequest.GuestRequest{
+				ResourceType: guestrequest.ResourceTypeMappedVirtualDisk,
+				RequestType:  requesttype.Remove,
+				Settings: guestrequest.LCOWMappedVirtualDisk{
+					MountPath:  uvmPath, // May be blank in attach-only
+					Lun:        uint8(lun),
+					Controller: uint8(controller),
+				},
+			}
 		}
 	}
 

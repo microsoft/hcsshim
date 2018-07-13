@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/hostedsettings"
+	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
@@ -53,7 +53,7 @@ func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) 
 		if coi.HostingSystem == nil {
 			coi.Spec.Root.Path = mcl.(string) // Argon v1 or v2
 		} else {
-			coi.Spec.Root.Path = mcl.(hostedsettings.CombinedLayers).ContainerRootPath // v2 Xenon WCOW
+			coi.Spec.Root.Path = mcl.(guestrequest.CombinedLayers).ContainerRootPath // v2 Xenon WCOW
 		}
 		resources.layers = coi.Spec.Windows.LayerFolders
 	}
@@ -69,7 +69,7 @@ func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) 
 			return fmt.Errorf("invalid OCI spec - Type '%s' must not be set", mount.Type)
 		}
 
-		if coi.HostingSystem != nil && schemaversion.IsV20(coi.actualSchemaVersion) {
+		if coi.HostingSystem != nil && schemaversion.IsV21(coi.actualSchemaVersion) {
 			logrus.Debugf("hcsshim::allocateWindowsResources Hot-adding VSMB share for OCI mount %+v", mount)
 			options := &hcsschema.VirtualSmbShareOptions{}
 			for _, o := range mount.Options {

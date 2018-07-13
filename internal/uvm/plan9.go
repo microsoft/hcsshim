@@ -3,7 +3,7 @@ package uvm
 import (
 	"fmt"
 
-	"github.com/Microsoft/hcsshim/internal/hostedsettings"
+	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
@@ -37,11 +37,15 @@ func (uvm *UtilityVM) AddPlan9(hostPath string, uvmPath string, readOnly bool) e
 				Path: hostPath,
 				Port: int32(uvm.plan9Counter), // TODO: Temporary. Will all use a single port (9999)
 			},
-			ResourcePath: fmt.Sprintf("virtualmachine/devices/plan9shares/%d", uvm.plan9Counter),
-			HostedSettings: hostedsettings.LCOWMappedDirectory{
-				MountPath: uvmPath,
-				Port:      int32(uvm.plan9Counter), // TODO: Temporary. Will all use a single port (9999)
-				ReadOnly:  readOnly,
+			ResourcePath: fmt.Sprintf("virtualmachine/devices/plan9/shares/%d", uvm.plan9Counter),
+			GuestRequest: guestrequest.GuestRequest{
+				ResourceType: guestrequest.ResourceTypeMappedDirectory,
+				RequestType:  requesttype.Add,
+				Settings: guestrequest.LCOWMappedDirectory{
+					MountPath: uvmPath,
+					Port:      int32(uvm.plan9Counter), // TODO: Temporary. Will all use a single port (9999)
+					ReadOnly:  readOnly,
+				},
 			},
 		}
 
@@ -92,10 +96,14 @@ func (uvm *UtilityVM) removePlan9(hostPath, uvmPath string) error {
 			Name: fmt.Sprintf("%d", uvm.plan9Shares[hostPath].idCounter),
 			Port: uvm.plan9Shares[hostPath].port,
 		},
-		ResourcePath: fmt.Sprintf("virtualmachine/devices/plan9shares/%d", uvm.plan9Shares[hostPath].idCounter),
-		HostedSettings: hostedsettings.LCOWMappedDirectory{
-			MountPath: uvm.plan9Shares[hostPath].uvmPath,
-			Port:      uvm.plan9Shares[hostPath].port,
+		ResourcePath: fmt.Sprintf("virtualmachine/devices/plan9/shares/%d", uvm.plan9Shares[hostPath].idCounter),
+		GuestRequest: guestrequest.GuestRequest{
+			ResourceType: guestrequest.ResourceTypeMappedDirectory,
+			RequestType:  requesttype.Remove,
+			Settings: guestrequest.LCOWMappedDirectory{
+				MountPath: uvm.plan9Shares[hostPath].uvmPath,
+				Port:      uvm.plan9Shares[hostPath].port,
+			},
 		},
 	}
 	if err := uvm.Modify(modification); err != nil {

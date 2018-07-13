@@ -16,9 +16,9 @@ func SchemaV10() *hcsschema.Version {
 	return &hcsschema.Version{Major: 1, Minor: 0}
 }
 
-// SchemaV20 makes it easy for callers to get a v2.0 schema version object
-func SchemaV20() *hcsschema.Version {
-	return &hcsschema.Version{Major: 2, Minor: 0}
+// SchemaV21 makes it easy for callers to get a v2.1 schema version object
+func SchemaV21() *hcsschema.Version {
+	return &hcsschema.Version{Major: 2, Minor: 1}
 }
 
 // isSupported determines if a given schema version is supported
@@ -26,7 +26,7 @@ func IsSupported(sv *hcsschema.Version) error {
 	if IsV10(sv) {
 		return nil
 	}
-	if IsV20(sv) {
+	if IsV21(sv) {
 		if osversion.Get().Build < osversion.RS5 {
 			return fmt.Errorf("unsupported on this Windows build")
 		}
@@ -44,11 +44,11 @@ func IsV10(sv *hcsschema.Version) bool {
 	return false
 }
 
-// IsV20 determines if a given schema version object is 2.0. This was introduced in
+// IsV21 determines if a given schema version object is 2.0. This was introduced in
 // RS4, but not fully implemented. Recommended for applications using HCS in RS5
 // onwards.
-func IsV20(sv *hcsschema.Version) bool {
-	if sv.Major == 2 && sv.Minor == 0 {
+func IsV21(sv *hcsschema.Version) bool {
+	if sv.Major == 2 && sv.Minor == 1 {
 		return true
 	}
 	return false

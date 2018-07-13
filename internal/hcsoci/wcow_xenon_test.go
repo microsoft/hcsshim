@@ -93,7 +93,7 @@ package hcsoci
 //	firstHostedContainer, err := CreateContainer(&CreateOptions{
 //		Id:            "FirstContainer",
 //		HostingSystem: uvm,
-//		SchemaVersion: schemaversion.SchemaV20(),
+//		SchemaVersion: schemaversion.SchemaV21(),
 //		Spec:          &specs.Spec{Windows: &specs.Windows{LayerFolders: firstLayerFolders}},
 //	})
 //	if err != nil {
@@ -108,7 +108,7 @@ package hcsoci
 //	secondHostedContainer, err := CreateContainer(&CreateOptions{
 //		Id:            "SecondContainer",
 //		HostingSystem: uvm,
-//		SchemaVersion: schemaversion.SchemaV20(),
+//		SchemaVersion: schemaversion.SchemaV21(),
 //		Spec:          &specs.Spec{Windows: &specs.Windows{LayerFolders: secondLayerFolders}},
 //	})
 //	if err != nil {
@@ -143,7 +143,7 @@ package hcsoci
 ////	uvm, err := CreateContainer(&CreateOptions{
 ////		Id:              uvmID,
 ////		Owner:           "unit-test",
-////		SchemaVersion:   SchemaV20(),
+////		SchemaVersion:   SchemaV21(),
 ////		IsHostingSystem: true,
 ////		Spec: &specs.Spec{
 ////			Windows: &specs.Windows{
@@ -163,7 +163,7 @@ package hcsoci
 ////	// Mount the containers storage in the utility VM
 ////	containerScratchDir := createWCOWTempDirWithSandbox(t)
 ////	layerFolders := append(layersNanoserver, containerScratchDir)
-////	cls, err := Mount(layerFolders, uvm, SchemaV20())
+////	cls, err := Mount(layerFolders, uvm, SchemaV21())
 ////	if err != nil {
 ////		t.Fatalf("failed to mount container storage: %s", err)
 ////	}
@@ -173,7 +173,7 @@ package hcsoci
 ////		Path:   combinedLayers.ContainerRootPath,
 ////	}
 ////	defer func() {
-////		if err := Unmount(layerFolders, uvm, SchemaV20(), unmountOperationAll); err != nil {
+////		if err := Unmount(layerFolders, uvm, SchemaV21(), unmountOperationAll); err != nil {
 ////			t.Fatalf("failed to unmount container storage: %s", err)
 ////		}
 ////	}()
@@ -184,7 +184,7 @@ package hcsoci
 ////		Id:            "container",
 ////		Owner:         "unit-test",
 ////		HostingSystem: uvm,
-////		SchemaVersion: SchemaV20(),
+////		SchemaVersion: SchemaV21(),
 ////		Spec:          &specs.Spec{Windows: &specs.Windows{}}, // No layerfolders as we mounted them ourself.
 ////	})
 ////	if err != nil {
@@ -198,10 +198,10 @@ package hcsoci
 ////	xenon.Terminate()
 
 ////	// Now unmount and remount to exactly the same places
-////	if err := Unmount(layerFolders, uvm, SchemaV20(), unmountOperationAll); err != nil {
+////	if err := Unmount(layerFolders, uvm, SchemaV21(), unmountOperationAll); err != nil {
 ////		t.Fatalf("failed to unmount container storage: %s", err)
 ////	}
-////	if _, err = Mount(layerFolders, uvm, SchemaV20()); err != nil {
+////	if _, err = Mount(layerFolders, uvm, SchemaV21()); err != nil {
 ////		t.Fatalf("failed to mount container storage: %s", err)
 ////	}
 
@@ -210,7 +210,7 @@ package hcsoci
 ////		Id:            "container",
 ////		Owner:         "unit-test",
 ////		HostingSystem: uvm,
-////		SchemaVersion: SchemaV20(),
+////		SchemaVersion: SchemaV21(),
 ////		Spec:          &specs.Spec{Windows: &specs.Windows{LayerFolders: layerFolders}},
 ////		MountedLayers: mountedLayers,
 ////	})
@@ -239,7 +239,7 @@ package hcsoci
 //		hostedContainer, err := CreateContainer(&CreateOptions{
 //			Id:            fmt.Sprintf("container%d", i),
 //			HostingSystem: uvm,
-//			SchemaVersion: schemaversion.SchemaV20(),
+//			SchemaVersion: schemaversion.SchemaV21(),
 //			Spec:          &specs.Spec{Windows: &specs.Windows{LayerFolders: layerFolders}},
 //		})
 //		if err != nil {

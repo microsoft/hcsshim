@@ -93,28 +93,39 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 	logrus.Debugf("hcsshim::CreateLCOWScratch: %s at C=%d L=%d", destFile, controller, lun)
 
 	// Validate /sys/bus/scsi/devices/C:0:0:L exists as a directory
-	testdCommand := []string{"test", "-d", fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d", controller, lun)}
-	testdProc, _, err := CreateProcess(&ProcessOptions{
-		HCSSystem:         lcowUVM.ComputeSystem(),
-		CreateInUtilityVm: true,
-		CopyTimeout:       defaultTimeoutSeconds,
-		Process:           &specs.Process{Args: testdCommand},
-	})
-	if err != nil {
-		lcowUVM.RemoveSCSI(destFile)
-		return fmt.Errorf("failed to run %+v following hot-add %s to utility VM: %s", testdCommand, destFile, err)
-	}
-	defer testdProc.Close()
 
-	testdProc.WaitTimeout(defaultTimeoutSeconds)
-	testdExitCode, err := testdProc.ExitCode()
-	if err != nil {
-		lcowUVM.RemoveSCSI(destFile)
-		return fmt.Errorf("failed to get exit code from from %+v following hot-add %s to utility VM: %s", testdCommand, destFile, err)
-	}
-	if testdExitCode != 0 {
-		lcowUVM.RemoveSCSI(destFile)
-		return fmt.Errorf("`%+v` return non-zero exit code (%d) following hot-add %s to utility VM", testdCommand, testdExitCode, destFile)
+	startTime := time.Now()
+	for {
+		testdCommand := []string{"test", "-d", fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d", controller, lun)}
+		testdProc, _, err := CreateProcess(&ProcessOptions{
+			HCSSystem:         lcowUVM.ComputeSystem(),
+			CreateInUtilityVm: true,
+			CopyTimeout:       defaultTimeoutSeconds,
+			Process:           &specs.Process{Args: testdCommand},
+		})
+		if err != nil {
+			lcowUVM.RemoveSCSI(destFile)
+			return fmt.Errorf("failed to run %+v following hot-add %s to utility VM: %s", testdCommand, destFile, err)
+		}
+		defer testdProc.Close()
+
+		testdProc.WaitTimeout(defaultTimeoutSeconds)
+		testdExitCode, err := testdProc.ExitCode()
+		if err != nil {
+			lcowUVM.RemoveSCSI(destFile)
+			return fmt.Errorf("failed to get exit code from from %+v following hot-add %s to utility VM: %s", testdCommand, destFile, err)
+		}
+		if testdExitCode != 0 {
+			currentTime := time.Now()
+			elapsedTime := currentTime.Sub(startTime)
+			if elapsedTime > 5*time.Second {
+				lcowUVM.RemoveSCSI(destFile)
+				return fmt.Errorf("`%+v` return non-zero exit code (%d) following hot-add %s to utility VM", testdCommand, testdExitCode, destFile)
+			}
+		} else {
+			break
+		}
+		time.Sleep(time.Millisecond * 10)
 	}
 
 	// Get the device from under the block subdirectory by doing a simple ls. This will come back as (eg) `sda`

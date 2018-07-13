@@ -237,10 +237,11 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 			},
 		},
 
+		GuestConnection: &hcsschema.GuestConnection{},
+
 		Devices: &hcsschema.Devices{
 			Scsi: scsi,
-			GuestInterface: &hcsschema.GuestInterface{
-				ConnectToBridge: true,
+			HvSocket: &hcsschema.HvSocket2{
 				HvSocketConfig: &hcsschema.HvSocketSystemConfig{
 					// Allow administrators and SYSTEM to bind to vsock sockets
 					// so that we can create a GCS log socket.
@@ -252,42 +253,47 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 
 	hcsDocument := &hcsschema.ComputeSystem{
 		Owner:          uvm.owner,
-		SchemaVersion:  schemaversion.SchemaV20(),
+		SchemaVersion:  schemaversion.SchemaV21(),
 		VirtualMachine: vm,
 	}
 
 	if uvm.operatingSystem == "windows" {
 		vm.Chipset.Uefi.BootThis = &hcsschema.UefiBootEntry{
 			DevicePath: `\EFI\Microsoft\Boot\bootmgfw.efi`,
-			DeviceType: "VMBFS",
+			DeviceType: "VmbFs",
 		}
 		vm.ComputeTopology.Memory.DirectFileMappingMB = 1024 // Sensible default, but could be a tuning parameter somewhere
-		vm.Devices.VirtualSmbShares = []hcsschema.VirtualSmbShare{
-			{
-				Name: "os",
-				Path: filepath.Join(uvmFolder, `UtilityVM\Files`),
-				Options: &hcsschema.VirtualSmbShareOptions{
-					ReadOnly:            true,
-					PseudoOplocks:       true,
-					TakeBackupPrivilege: true,
-					CacheIo:             true,
-					ShareRead:           true,
+
+		vm.Devices.VirtualSmb = &hcsschema.VirtualSmb{
+			Shares: []hcsschema.VirtualSmbShare{
+				{
+					Name: "os",
+					Path: filepath.Join(uvmFolder, `UtilityVM\Files`),
+					Options: &hcsschema.VirtualSmbShareOptions{
+						ReadOnly:            true,
+						PseudoOplocks:       true,
+						TakeBackupPrivilege: true,
+						CacheIo:             true,
+						ShareRead:           true,
+					},
 				},
 			},
 		}
 	} else {
 		vmDebugging := false
-		vm.Devices.GuestInterface.UseVsock = true
-		vm.Devices.GuestInterface.UseConnectedSuspend = true
-		vm.Devices.VirtualSmbShares = []hcsschema.VirtualSmbShare{
-			{
-				Name: "os",
-				Path: opts.BootFilesPath,
-				Options: &hcsschema.VirtualSmbShareOptions{
-					ReadOnly:            true,
-					TakeBackupPrivilege: true,
-					CacheIo:             true,
-					ShareRead:           true,
+		vm.GuestConnection.UseVsock = true
+		vm.GuestConnection.UseConnectedSuspend = true
+		vm.Devices.VirtualSmb = &hcsschema.VirtualSmb{
+			Shares: []hcsschema.VirtualSmbShare{
+				{
+					Name: "os",
+					Path: opts.BootFilesPath,
+					Options: &hcsschema.VirtualSmbShareOptions{
+						ReadOnly:            true,
+						TakeBackupPrivilege: true,
+						CacheIo:             true,
+						ShareRead:           true,
+					},
 				},
 			},
 		}
@@ -308,9 +314,9 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 			if uvm.vpmemMax == 0 {
 				return nil, fmt.Errorf("PreferredRootFSTypeVHD requess at least one VPMem device")
 			}
-			imageFormat := "VHD1"
+			imageFormat := "Vhd1"
 			if strings.ToLower(filepath.Ext(opts.RootFSFile)) == "vhdx" {
-				imageFormat = "Default" // Yeah, this is weird, but true.
+				imageFormat = "Vhdx"
 			}
 			vm.Devices.VirtualPMem.Devices = map[string]hcsschema.VirtualPMemDevice{
 				"0": {
@@ -371,7 +377,7 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 		kernelArgs += ` -- ` + initArgs
 		vm.Chipset.Uefi.BootThis = &hcsschema.UefiBootEntry{
 			DevicePath:   `\` + opts.KernelFile,
-			DeviceType:   "VMBFS",
+			DeviceType:   "VmbFs",
 			OptionalData: kernelArgs,
 		}
 	}

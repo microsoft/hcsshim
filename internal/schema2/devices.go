@@ -25,15 +25,15 @@ type Devices struct {
 
 	Mouse *Mouse `json:"Mouse,omitempty"`
 
-	GuestInterface *GuestInterface `json:"GuestInterface,omitempty"`
+	HvSocket *HvSocket2 `json:"HvSocket,omitempty"`
 
 	EnhancedModeVideo *EnhancedModeVideo `json:"EnhancedModeVideo,omitempty"`
 
 	GuestCrashReporting *GuestCrashReporting `json:"GuestCrashReporting,omitempty"`
 
-	VirtualSmbShares []VirtualSmbShare `json:"VirtualSmbShares,omitempty"`
+	VirtualSmb *VirtualSmb `json:"VirtualSmb,omitempty"`
 
-	Plan9Shares []Plan9Share `json:"Plan9Shares,omitempty"`
+	Plan9 *Plan9 `json:"Plan9,omitempty"`
 
 	Battery *Battery `json:"Battery,omitempty"`
 

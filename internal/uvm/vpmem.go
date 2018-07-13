@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/Microsoft/hcsshim/internal/hostedsettings"
+	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
@@ -72,7 +72,7 @@ func (uvm *UtilityVM) AddVPMEM(hostPath string, expose bool) (uint32, string, er
 		controller.Devices[strconv.Itoa(int(deviceNumber))] = hcsschema.VirtualPMemDevice{
 			HostPath:    hostPath,
 			ReadOnly:    true,
-			ImageFormat: "VHD1",
+			ImageFormat: "Vhd1",
 		}
 
 		modification := &hcsschema.ModifySettingRequest{
@@ -84,9 +84,13 @@ func (uvm *UtilityVM) AddVPMEM(hostPath string, expose bool) (uint32, string, er
 
 		if expose {
 			uvmPath = fmt.Sprintf("/tmp/p%d", deviceNumber)
-			modification.HostedSettings = hostedsettings.LCOWMappedVPMemDevice{
-				DeviceNumber: deviceNumber,
-				MountPath:    uvmPath,
+			modification.GuestRequest = guestrequest.GuestRequest{
+				ResourceType: guestrequest.ResourceTypeVPMemDevice,
+				RequestType:  requesttype.Add,
+				Settings: guestrequest.LCOWMappedVPMemDevice{
+					DeviceNumber: deviceNumber,
+					MountPath:    uvmPath,
+				},
 			}
 		}
 
@@ -145,9 +149,13 @@ func (uvm *UtilityVM) removeVPMEM(hostPath string, uvmPath string, deviceNumber 
 			ResourcePath: fmt.Sprintf("virtualmachine/devices/virtualpmemdevices/%d", deviceNumber),
 		}
 
-		modification.HostedSettings = hostedsettings.LCOWMappedVPMemDevice{
-			DeviceNumber: deviceNumber,
-			MountPath:    uvmPath,
+		modification.GuestRequest = guestrequest.GuestRequest{
+			ResourceType: guestrequest.ResourceTypeVPMemDevice,
+			RequestType:  requesttype.Remove,
+			Settings: guestrequest.LCOWMappedVPMemDevice{
+				DeviceNumber: deviceNumber,
+				MountPath:    uvmPath,
+			},
 		}
 
 		if err := uvm.Modify(modification); err != nil {

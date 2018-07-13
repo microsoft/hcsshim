@@ -30,7 +30,7 @@ func TestLCOWUVMNoSCSINoVPMemInitrd(t *testing.T) {
 		VPMemDeviceCount:    &vpmemCount,
 		SCSIControllerCount: &scsiCount,
 	}
-	testLCOWUVMNoSCSISingleVPMem(t, opts, `Command line: initrd=\initrd.img`)
+	testLCOWUVMNoSCSISingleVPMem(t, opts, `Command line: initrd=/initrd.img`)
 }
 
 // TestLCOWUVMNoSCSISingleVPMemVHD starts an LCOW utility VM without a SCSI controller and
@@ -72,21 +72,19 @@ func testLCOWUVMNoSCSISingleVPMem(t *testing.T, opts *uvm.UVMOptions, expected s
 // TestLCOWTimeUVMStartVHD starts/terminates a utility VM booting from VPMem-
 // attached root filesystem a number of times.
 func TestLCOWTimeUVMStartVHD(t *testing.T) {
-	t.Skip("Takes a while to run")
 	testLCOWTimeUVMStart(t, uvm.PreferredRootFSTypeVHD)
 }
 
 // TestLCOWTimeUVMStartInitRD starts/terminates a utility VM booting from initrd-
 // attached root file system a number of times.
 func TestLCOWTimeUVMStartInitRD(t *testing.T) {
-	t.Skip("Takes a while to run")
 	testLCOWTimeUVMStart(t, uvm.PreferredRootFSTypeInitRd)
 }
 
 func testLCOWTimeUVMStart(t *testing.T, rfsType uvm.PreferredRootFSType) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 	var vpmemCount int32 = 32
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 3; i++ {
 		opts := &uvm.UVMOptions{
 			OperatingSystem:     "linux",
 			ID:                  "uvm",

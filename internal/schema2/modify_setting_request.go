@@ -18,5 +18,5 @@ type ModifySettingRequest struct {
 
 	Settings interface{} `json:"Settings,omitempty"` // NOTE: Swagger generated as *interface{}. Locally updated
 
-	HostedSettings interface{} `json:"HostedSettings,omitempty"` // NOTE: Swagger generated as *interface{}. Locally updated
+	GuestRequest interface{} `json:"GuestRequest,omitempty"` // NOTE: Swagger generated as *interface{}. Locally updated
 }

@@ -150,7 +150,7 @@ package hcsoci
 //	defer unmountContainerLayers(layers, nil, unmountOperationAll)
 
 //	c, err := CreateContainer(&CreateOptions{
-//		SchemaVersion: schemaversion.SchemaV20(),
+//		SchemaVersion: schemaversion.SchemaV21(),
 //		Spec: &specs.Spec{
 //			Hostname: "mickey",
 //			Windows:  &specs.Windows{LayerFolders: layers},
@@ -181,7 +181,7 @@ package hcsoci
 //	defer unmountContainerLayers(layers, nil, unmountOperationAll)
 
 //	c, err := CreateContainer(&CreateOptions{
-//		SchemaVersion: schemaversion.SchemaV20(),
+//		SchemaVersion: schemaversion.SchemaV21(),
 //		Id:            "TestV2ArgonMultipleBaseLayers",
 //		Spec: &specs.Spec{
 //			Windows: &specs.Windows{LayerFolders: layers},
@@ -209,7 +209,7 @@ package hcsoci
 //	layers := append(layersBusybox, containerScratchDir)
 
 //	c, err := CreateContainer(&CreateOptions{
-//		SchemaVersion: schemaversion.SchemaV20(),
+//		SchemaVersion: schemaversion.SchemaV21(),
 //		Id:            "TestV2ArgonAutoMountMultipleBaseLayers",
 //		Spec:          &specs.Spec{Windows: &specs.Windows{LayerFolders: layers}},
 //	})
@@ -242,7 +242,7 @@ package hcsoci
 //	f.Close()
 
 //	c, err := CreateContainer(&CreateOptions{
-//		SchemaVersion: schemaversion.SchemaV20(),
+//		SchemaVersion: schemaversion.SchemaV21(),
 //		Spec: &specs.Spec{
 //			Windows: &specs.Windows{LayerFolders: layers},
 //			Mounts:  []specs.Mount{mount},

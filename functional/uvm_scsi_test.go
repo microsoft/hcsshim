@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/Microsoft/hcsshim/functional/utilities"
 	"github.com/Microsoft/hcsshim/internal/osversion"
@@ -20,9 +19,11 @@ import (
 // negative testing so that a disk can't be attached twice.
 func TestSCSIAddRemoveLCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	uvm := testutilities.CreateLCOWUVM(t, "TestAddRemoveSCSILCOW")
-	defer uvm.Terminate()
-	testSCSIAddRemove(t, uvm, `/`, "linux", []string{})
+	u := testutilities.CreateLCOWUVM(t, "TestAddRemoveSCSILCOW")
+	defer u.Terminate()
+
+	testSCSIAddRemove(t, u, `/`, "linux", []string{})
+
 }
 
 // TestSCSIAddRemoveWCOW validates adding and removing SCSI disks
@@ -32,14 +33,14 @@ func TestSCSIAddRemoveWCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 	imageName := "microsoft/nanoserver"
 	layers := testutilities.LayerFolders(t, imageName)
-	uvm, uvmScratchDir := testutilities.CreateWCOWUVM(t, layers, "", nil)
+	u, uvmScratchDir := testutilities.CreateWCOWUVM(t, layers, "", nil)
 	defer os.RemoveAll(uvmScratchDir)
-	defer uvm.Terminate()
+	defer u.Terminate()
 
-	testSCSIAddRemove(t, uvm, `c:\`, "windows", layers)
+	testSCSIAddRemove(t, u, `c:\`, "windows", layers)
 }
 
-func testSCSIAddRemove(t *testing.T, uvm *uvm.UtilityVM, pathPrefix string, operatingSystem string, wcowImageLayerFolders []string) {
+func testSCSIAddRemove(t *testing.T, u *uvm.UtilityVM, pathPrefix string, operatingSystem string, wcowImageLayerFolders []string) {
 	numDisks := 63 // Windows: 63 as the UVM scratch is at 0:0
 	if operatingSystem == "linux" {
 		numDisks++ //
@@ -52,7 +53,7 @@ func testSCSIAddRemove(t *testing.T, uvm *uvm.UtilityVM, pathPrefix string, oper
 		if operatingSystem == "windows" {
 			tempDir = testutilities.CreateWCOWBlankRWLayer(t, wcowImageLayerFolders)
 		} else {
-			tempDir = testutilities.CreateLCOWBlankRWLayer(t, uvm.ID())
+			tempDir = testutilities.CreateLCOWBlankRWLayer(t, u.ID())
 		}
 		defer os.RemoveAll(tempDir)
 		disks[i] = filepath.Join(tempDir, `sandbox.vhdx`)
@@ -61,7 +62,7 @@ func testSCSIAddRemove(t *testing.T, uvm *uvm.UtilityVM, pathPrefix string, oper
 	// Add each of the disks to the utility VM. Attach-only, no container path
 	logrus.Debugln("First - adding in attach-only")
 	for i := 0; i < numDisks; i++ {
-		_, _, err := uvm.AddSCSI(disks[i], "")
+		_, _, err := u.AddSCSI(disks[i], "")
 		if err != nil {
 			t.Fatalf("failed to add scsi disk %d %s: %s", i, disks[i], err)
 		}
@@ -70,16 +71,19 @@ func testSCSIAddRemove(t *testing.T, uvm *uvm.UtilityVM, pathPrefix string, oper
 	// Try to re-add. These should all fail.
 	logrus.Debugln("Next - trying to re-add")
 	for i := 0; i < numDisks; i++ {
-		_, _, err := uvm.AddSCSI(disks[i], "")
+		_, _, err := u.AddSCSI(disks[i], "")
 		if err == nil {
 			t.Fatalf("should not be able to re-add the same SCSI disk!")
+		}
+		if err != uvm.ErrAlreadyAttached {
+			t.Fatalf("expecting %s, got %s", uvm.ErrAlreadyAttached, err)
 		}
 	}
 
 	// Remove them all
 	logrus.Debugln("Removing them all")
 	for i := 0; i < numDisks; i++ {
-		if err := uvm.RemoveSCSI(disks[i]); err != nil {
+		if err := u.RemoveSCSI(disks[i]); err != nil {
 			t.Fatalf("expected success: %s", err)
 		}
 	}
@@ -87,9 +91,8 @@ func testSCSIAddRemove(t *testing.T, uvm *uvm.UtilityVM, pathPrefix string, oper
 	// Now re-add but providing a container path
 	logrus.Debugln("Next - re-adding with a container path")
 	for i := 0; i < numDisks; i++ {
-		_, _, err := uvm.AddSCSI(disks[i], fmt.Sprintf(`%s%d`, pathPrefix, i))
+		_, _, err := u.AddSCSI(disks[i], fmt.Sprintf(`%s%d`, pathPrefix, i))
 		if err != nil {
-			time.Sleep(10 * time.Minute)
 			t.Fatalf("failed to add scsi disk %d %s: %s", i, disks[i], err)
 		}
 	}
@@ -97,16 +100,19 @@ func testSCSIAddRemove(t *testing.T, uvm *uvm.UtilityVM, pathPrefix string, oper
 	// Try to re-add. These should all fail.
 	logrus.Debugln("Next - trying to re-add")
 	for i := 0; i < numDisks; i++ {
-		_, _, err := uvm.AddSCSI(disks[i], fmt.Sprintf(`%s%d`, pathPrefix, i))
+		_, _, err := u.AddSCSI(disks[i], fmt.Sprintf(`%s%d`, pathPrefix, i))
 		if err == nil {
 			t.Fatalf("should not be able to re-add the same SCSI disk!")
+		}
+		if err != uvm.ErrAlreadyAttached {
+			t.Fatalf("expecting %s, got %s", uvm.ErrAlreadyAttached, err)
 		}
 	}
 
 	// Remove them all
 	logrus.Debugln("Next - Removing them")
 	for i := 0; i < numDisks; i++ {
-		if err := uvm.RemoveSCSI(disks[i]); err != nil {
+		if err := u.RemoveSCSI(disks[i]); err != nil {
 			t.Fatalf("expected success: %s", err)
 		}
 	}

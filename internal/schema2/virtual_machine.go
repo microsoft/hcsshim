@@ -24,4 +24,6 @@ type VirtualMachine struct {
 	RestoreState *RestoreState `json:"RestoreState,omitempty"`
 
 	RegistryChanges *RegistryChanges `json:"RegistryChanges,omitempty"`
+
+	GuestConnection *GuestConnection `json:"GuestConnection,omitempty"`
 }

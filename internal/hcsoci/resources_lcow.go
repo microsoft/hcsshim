@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/hostedsettings"
+	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
@@ -31,7 +31,7 @@ func allocateLinuxResources(coi *createOptionsInternal, resources *Resources) er
 		if coi.HostingSystem == nil {
 			coi.Spec.Root.Path = mcl.(string) // Argon v1 or v2
 		} else {
-			coi.Spec.Root.Path = mcl.(hostedsettings.CombinedLayers).ContainerRootPath // v2 Xenon LCOW
+			coi.Spec.Root.Path = mcl.(guestrequest.CombinedLayers).ContainerRootPath // v2 Xenon LCOW
 		}
 		resources.layers = coi.Spec.Windows.LayerFolders
 	} else {
