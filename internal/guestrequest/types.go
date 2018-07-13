@@ -44,8 +44,22 @@ type LCOWMappedVPMemDevice struct {
 	MountPath    string // /tmp/pN
 }
 
+type ResourceType string
+
+const (
+	// These are constants for v2 schema modify guest requests. These are
+	// seperate from as defined in resourcetype/types.go as host and guest
+	// resource types may be different.
+	ResourceTypeMappedDirectory   ResourceType = "MappedDirectory"
+	ResourceTypeMappedVirtualDisk ResourceType = "MappedVirtualDisk"
+	ResourceTypeNetwork           ResourceType = "Network"
+	ResourceTypeCombinedLayers    ResourceType = "CombinedLayers"
+	ResourceTypeVPMemDevice       ResourceType = "VPMemDevice"
+)
+
+// GuestRequest is for modify commands passed to the guest.
 type GuestRequest struct {
 	RequestType  string
-	ResourceType string
+	ResourceType ResourceType
 	Settings     interface{} `json:"Settings,omitempty"`
 }

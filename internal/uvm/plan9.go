@@ -39,7 +39,7 @@ func (uvm *UtilityVM) AddPlan9(hostPath string, uvmPath string, readOnly bool) e
 			},
 			ResourcePath: fmt.Sprintf("virtualmachine/devices/plan9/shares/%d", uvm.plan9Counter),
 			GuestRequest: guestrequest.GuestRequest{
-				ResourceType: resourcetype.MappedDirectory,
+				ResourceType: guestrequest.ResourceTypeMappedDirectory,
 				RequestType:  requesttype.Add,
 				Settings: guestrequest.LCOWMappedDirectory{
 					MountPath: uvmPath,
@@ -98,7 +98,7 @@ func (uvm *UtilityVM) removePlan9(hostPath, uvmPath string) error {
 		},
 		ResourcePath: fmt.Sprintf("virtualmachine/devices/plan9/shares/%d", uvm.plan9Shares[hostPath].idCounter),
 		GuestRequest: guestrequest.GuestRequest{
-			ResourceType: resourcetype.MappedDirectory,
+			ResourceType: guestrequest.ResourceTypeMappedDirectory,
 			RequestType:  requesttype.Remove,
 			Settings: guestrequest.LCOWMappedDirectory{
 				MountPath: uvm.plan9Shares[hostPath].uvmPath,

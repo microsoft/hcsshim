@@ -10,7 +10,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/ospath"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
-	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
@@ -146,7 +145,7 @@ func MountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 		combinedLayersModification := &hcsschema.ModifySettingRequest{
 			GuestRequest: guestrequest.GuestRequest{
 				Settings:     guestRequest,
-				ResourceType: resourcetype.CombinedLayers,
+				ResourceType: guestrequest.ResourceTypeCombinedLayers,
 				RequestType:  requesttype.Add,
 			},
 		}
@@ -186,7 +185,7 @@ func MountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 	}
 	combinedLayersModification := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.GuestRequest{
-			ResourceType: resourcetype.CombinedLayers,
+			ResourceType: guestrequest.ResourceTypeCombinedLayers,
 			RequestType:  requesttype.Add,
 			Settings:     guestRequest,
 		},
@@ -251,7 +250,7 @@ func UnmountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Ut
 		logrus.Debugf("hcsshim::unmountContainerLayers CombinedLayers %s", containerScratchPathInUVM)
 		combinedLayersModification := &hcsschema.ModifySettingRequest{
 			GuestRequest: guestrequest.GuestRequest{
-				ResourceType: resourcetype.CombinedLayers,
+				ResourceType: guestrequest.ResourceTypeCombinedLayers,
 				RequestType:  requesttype.Remove,
 				Settings:     guestrequest.CombinedLayers{ContainerRootPath: containerScratchPathInUVM},
 			},

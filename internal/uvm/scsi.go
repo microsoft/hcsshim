@@ -114,7 +114,7 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 	if uvmPath != "" {
 		if uvm.operatingSystem == "windows" {
 			SCSIModification.GuestRequest = guestrequest.GuestRequest{
-				ResourceType: resourcetype.MappedVirtualDisk,
+				ResourceType: guestrequest.ResourceTypeMappedVirtualDisk,
 				RequestType:  requesttype.Add,
 				Settings: hcsschema.MappedVirtualDisk{
 					ContainerPath: uvmPath,
@@ -125,7 +125,7 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 			}
 		} else {
 			SCSIModification.GuestRequest = guestrequest.GuestRequest{
-				ResourceType: resourcetype.MappedVirtualDisk,
+				ResourceType: guestrequest.ResourceTypeMappedVirtualDisk,
 				RequestType:  requesttype.Add,
 				Settings: guestrequest.LCOWMappedVirtualDisk{
 					MountPath:  uvmPath,
@@ -184,7 +184,7 @@ func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int
 	if uvmPath != "" {
 		if uvm.operatingSystem == "windows" {
 			scsiModification.GuestRequest = guestrequest.GuestRequest{
-				ResourceType: resourcetype.MappedVirtualDisk,
+				ResourceType: guestrequest.ResourceTypeMappedVirtualDisk,
 				RequestType:  requesttype.Remove,
 				Settings: hcsschema.MappedVirtualDisk{
 					ContainerPath: uvmPath,
@@ -194,7 +194,7 @@ func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int
 			}
 		} else {
 			scsiModification.GuestRequest = guestrequest.GuestRequest{
-				ResourceType: resourcetype.MappedVirtualDisk,
+				ResourceType: guestrequest.ResourceTypeMappedVirtualDisk,
 				RequestType:  requesttype.Remove,
 				Settings: guestrequest.LCOWMappedVirtualDisk{
 					MountPath:  uvmPath, // May be blank in attach-only

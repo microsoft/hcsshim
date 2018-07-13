@@ -85,7 +85,7 @@ func (uvm *UtilityVM) AddVPMEM(hostPath string, expose bool) (uint32, string, er
 		if expose {
 			uvmPath = fmt.Sprintf("/tmp/p%d", deviceNumber)
 			modification.GuestRequest = guestrequest.GuestRequest{
-				ResourceType: resourcetype.VPMemDevice,
+				ResourceType: guestrequest.ResourceTypeVPMemDevice,
 				RequestType:  requesttype.Add,
 				Settings: guestrequest.LCOWMappedVPMemDevice{
 					DeviceNumber: deviceNumber,
@@ -150,7 +150,7 @@ func (uvm *UtilityVM) removeVPMEM(hostPath string, uvmPath string, deviceNumber 
 		}
 
 		modification.GuestRequest = guestrequest.GuestRequest{
-			ResourceType: resourcetype.VPMemDevice,
+			ResourceType: guestrequest.ResourceTypeVPMemDevice,
 			RequestType:  requesttype.Remove,
 			Settings: guestrequest.LCOWMappedVPMemDevice{
 				DeviceNumber: deviceNumber,

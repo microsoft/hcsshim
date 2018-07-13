@@ -80,7 +80,7 @@ func (uvm *UtilityVM) addNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
 			MacAddress: endpoint.MacAddress,
 		},
 		GuestRequest: guestrequest.GuestRequest{
-			ResourceType: resourcetype.Network,
+			ResourceType: guestrequest.ResourceTypeNetwork,
 			RequestType:  requesttype.Add,
 			Settings:     endpoint,
 		},
