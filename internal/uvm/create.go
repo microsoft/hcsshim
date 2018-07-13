@@ -316,7 +316,7 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 			}
 			imageFormat := "Vhd1"
 			if strings.ToLower(filepath.Ext(opts.RootFSFile)) == "vhdx" {
-				imageFormat = "Vhdx" // Yeah, this is weird, but true.
+				imageFormat = "Vhdx"
 			}
 			vm.Devices.VirtualPMem.Devices = map[string]hcsschema.VirtualPMemDevice{
 				"0": {
