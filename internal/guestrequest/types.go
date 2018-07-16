@@ -30,6 +30,16 @@ type LCOWMappedVirtualDisk struct {
 	ReadOnly   bool
 }
 
+//-type MappedVirtualDisk struct {
+//-	ContainerPath string `json:"ContainerPath,omitempty"`
+//-
+//-	Lun int32 `json:"Lun,omitempty"`
+//-
+//-	//  If `true' then not mapped to the ContainerPath.
+//-	AttachOnly bool `json:"AttachOnly,omitempty"`
+//+	Regions []SharedMemoryRegion `json:"Regions,omitempty"`
+// }
+
 // Plan 9.
 type LCOWMappedDirectory struct {
 	MountPath string
@@ -47,9 +57,7 @@ type LCOWMappedVPMemDevice struct {
 type ResourceType string
 
 const (
-	// These are constants for v2 schema modify guest requests. These are
-	// seperate from as defined in resourcetype/types.go as host and guest
-	// resource types may be different.
+	// These are constants for v2 schema modify guest requests.
 	ResourceTypeMappedDirectory   ResourceType = "MappedDirectory"
 	ResourceTypeMappedVirtualDisk ResourceType = "MappedVirtualDisk"
 	ResourceTypeNetwork           ResourceType = "Network"

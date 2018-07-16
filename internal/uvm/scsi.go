@@ -5,7 +5,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
-	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/sirupsen/logrus"
 )
@@ -102,8 +101,7 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 
 	// TODO: This is wrong. There's no way to hot-add a SCSI attachement currently. This is a HACK
 	SCSIModification := &hcsschema.ModifySettingRequest{
-		ResourceType: resourcetype.MappedVirtualDisk,
-		RequestType:  requesttype.Add,
+		RequestType: requesttype.Add,
 		Settings: hcsschema.Attachment{
 			Path:  hostPath,
 			Type_: "VirtualDisk",
@@ -174,10 +172,8 @@ func (uvm *UtilityVM) RemoveSCSI(hostPath string) error {
 func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int, lun int32) error {
 	logrus.Debugf("uvm::RemoveSCSI id:%s hostPath:%s", uvm.id, hostPath)
 	scsiModification := &hcsschema.ModifySettingRequest{
-		ResourceType: resourcetype.MappedVirtualDisk,
 		RequestType:  requesttype.Remove,
 		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/%d/Attachments/%d", controller, lun),
-		Settings:     hcsschema.MappedVirtualDisk{}, // @jhowardmsft This should not be needed. Temporary workaround for https://microsoft.visualstudio.com/DefaultCollection/OS/_workitems/edit/18230871. Remove later TODO post 17113+fix
 	}
 
 	// Include the GuestRequest so that the GCS ejects the disk cleanly if the disk was attached/mounted

@@ -5,7 +5,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
-	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/sirupsen/logrus"
 )
@@ -30,8 +29,7 @@ func (uvm *UtilityVM) AddPlan9(hostPath string, uvmPath string, readOnly bool) e
 		uvm.plan9Counter++
 
 		modification := &hcsschema.ModifySettingRequest{
-			ResourceType: resourcetype.Plan9Share,
-			RequestType:  requesttype.Add,
+			RequestType: requesttype.Add,
 			Settings: hcsschema.Plan9Share{
 				Name: fmt.Sprintf("%d", uvm.plan9Counter),
 				Path: hostPath,
@@ -90,8 +88,7 @@ func (uvm *UtilityVM) removePlan9(hostPath, uvmPath string) error {
 	}
 	logrus.Debugf("uvm::RemovePlan9 Zero ref-count, removing. %s id:%s", hostPath, uvm.id)
 	modification := &hcsschema.ModifySettingRequest{
-		ResourceType: resourcetype.Plan9Share,
-		RequestType:  requesttype.Remove,
+		RequestType: requesttype.Remove,
 		Settings: hcsschema.Plan9Share{
 			Name: fmt.Sprintf("%d", uvm.plan9Shares[hostPath].idCounter),
 			Port: uvm.plan9Shares[hostPath].port,

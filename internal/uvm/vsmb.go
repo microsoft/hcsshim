@@ -5,7 +5,6 @@ import (
 	"strconv"
 
 	"github.com/Microsoft/hcsshim/internal/requesttype"
-	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/sirupsen/logrus"
 )
@@ -34,8 +33,7 @@ func (uvm *UtilityVM) AddVSMB(hostPath string, guestRequest interface{}, options
 		shareName := "s" + strconv.FormatUint(uvm.vsmbCounter, 16)
 
 		modification := &hcsschema.ModifySettingRequest{
-			ResourceType: resourcetype.VSmbShare,
-			RequestType:  requesttype.Add,
+			RequestType: requesttype.Add,
 			Settings: hcsschema.VirtualSmbShare{
 				Name:    shareName,
 				Options: options,
@@ -79,7 +77,6 @@ func (uvm *UtilityVM) RemoveVSMB(hostPath string) error {
 	}
 	logrus.Debugf("uvm::RemoveVSMB Zero ref-count, removing. %s id:%s", hostPath, uvm.id)
 	modification := &hcsschema.ModifySettingRequest{
-		ResourceType: resourcetype.VSmbShare,
 		RequestType:  requesttype.Remove,
 		Settings:     hcsschema.VirtualSmbShare{Name: share.name},
 		ResourcePath: "VirtualMachine/Devices/VirtualSmb/Shares/" + share.name,
