@@ -114,7 +114,7 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 			SCSIModification.GuestRequest = guestrequest.GuestRequest{
 				ResourceType: guestrequest.ResourceTypeMappedVirtualDisk,
 				RequestType:  requesttype.Add,
-				Settings: hcsschema.MappedVirtualDisk{
+				Settings: guestrequest.WCOWMappedVirtualDisk{
 					ContainerPath: uvmPath,
 					Lun:           lun,
 					AttachOnly:    (uvmPath == ""),
@@ -182,7 +182,7 @@ func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int
 			scsiModification.GuestRequest = guestrequest.GuestRequest{
 				ResourceType: guestrequest.ResourceTypeMappedVirtualDisk,
 				RequestType:  requesttype.Remove,
-				Settings: hcsschema.MappedVirtualDisk{
+				Settings: guestrequest.WCOWMappedVirtualDisk{
 					ContainerPath: uvmPath,
 					Lun:           lun,
 					// TODO: Controller: uint8(controller), // TODO NOT IN HCS API CURRENTLY
