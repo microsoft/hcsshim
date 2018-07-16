@@ -6,4 +6,5 @@ package requesttype
 const (
 	Add    = "Add"
 	Remove = "Remove"
+	PreAdd = "PreAdd" // For networking
 )
