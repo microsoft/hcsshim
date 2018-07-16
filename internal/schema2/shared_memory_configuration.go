@@ -9,12 +9,7 @@
 
 package hcsschema
 
-type MappedVirtualDisk struct {
+type SharedMemoryConfiguration struct {
 
-	ContainerPath string `json:"ContainerPath,omitempty"`
-
-	Lun int32 `json:"Lun,omitempty"`
-
-	//  If `true' then not mapped to the ContainerPath.
-	AttachOnly bool `json:"AttachOnly,omitempty"`
+	Regions []SharedMemoryRegion `json:"Regions,omitempty"`
 }
