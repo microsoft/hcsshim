@@ -108,7 +108,7 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 			Path:  hostPath,
 			Type_: "VirtualDisk",
 		},
-		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/%d/%d", controller, lun),
+		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/%d/Attachments/%d", controller, lun),
 	}
 
 	if uvmPath != "" {
@@ -176,7 +176,7 @@ func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int
 	scsiModification := &hcsschema.ModifySettingRequest{
 		ResourceType: resourcetype.MappedVirtualDisk,
 		RequestType:  requesttype.Remove,
-		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/%d/%d", controller, lun),
+		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/%d/Attachments/%d", controller, lun),
 		Settings:     hcsschema.MappedVirtualDisk{}, // @jhowardmsft This should not be needed. Temporary workaround for https://microsoft.visualstudio.com/DefaultCollection/OS/_workitems/edit/18230871. Remove later TODO post 17113+fix
 	}
 
