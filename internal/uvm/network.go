@@ -71,34 +71,85 @@ func (uvm *UtilityVM) removeNamespaceNICs(ns *namespaceInfo) error {
 }
 
 func (uvm *UtilityVM) addNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
+
+	// First a pre-add. This is a guest-only request and is only done on Windows.
+	if uvm.operatingSystem == "windows" {
+		preAddRequest := hcsschema.ModifySettingRequest{
+			GuestRequest: guestrequest.GuestRequest{
+				ResourceType: guestrequest.ResourceTypeNetwork,
+				RequestType:  requesttype.Add,
+				Settings: guestrequest.NetworkModifyRequest{
+					AdapterInstanceId: id.String(),
+					RequestType:       requesttype.PreAdd,
+					Settings:          endpoint,
+				},
+			},
+		}
+		if err := uvm.Modify(&preAddRequest); err != nil {
+			return err
+		}
+	}
+
+	// Then the Add itself
 	request := hcsschema.ModifySettingRequest{
-		RequestType: requesttype.Add,
+		RequestType:  requesttype.Add,
+		ResourcePath: path.Join("VirtualMachine/Devices/NetworkAdapters", id.String()),
 		Settings: hcsschema.NetworkAdapter{
 			EndpointId: endpoint.Id,
 			MacAddress: endpoint.MacAddress,
 		},
-		GuestRequest: guestrequest.GuestRequest{
+	}
+
+	if uvm.operatingSystem == "windows" {
+		request.GuestRequest = guestrequest.GuestRequest{
+			ResourceType: guestrequest.ResourceTypeNetwork,
+			RequestType:  requesttype.Add,
+			Settings: guestrequest.NetworkModifyRequest{
+				AdapterInstanceId: id.String(),
+				RequestType:       requesttype.Add,
+			},
+		}
+	} else {
+		request.GuestRequest = guestrequest.GuestRequest{
 			ResourceType: guestrequest.ResourceTypeNetwork,
 			RequestType:  requesttype.Add,
 			Settings:     endpoint,
-		},
-		ResourcePath: path.Join("VirtualMachine/Devices/NetworkAdapters", id.String()),
+		}
 	}
+
 	if err := uvm.Modify(&request); err != nil {
 		return err
 	}
+
 	return nil
 }
 
 func (uvm *UtilityVM) removeNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
 	request := hcsschema.ModifySettingRequest{
-		RequestType: requesttype.Remove,
+		RequestType:  requesttype.Remove,
+		ResourcePath: path.Join("VirtualMachine/Devices/NetworkAdapters", id.String()),
 		Settings: hcsschema.NetworkAdapter{
 			EndpointId: endpoint.Id,
 			MacAddress: endpoint.MacAddress,
 		},
-		ResourcePath: path.Join("VirtualMachine/Devices/NetworkAdapters", id.String()),
 	}
+
+	if uvm.operatingSystem == "windows" {
+		request.GuestRequest = hcsschema.ModifySettingRequest{
+			RequestType: requesttype.Remove,
+			Settings: guestrequest.NetworkModifyRequest{
+				AdapterInstanceId: id.String(),
+				RequestType:       requesttype.Remove,
+			},
+		}
+	} else {
+		request.GuestRequest = guestrequest.GuestRequest{
+			ResourceType: guestrequest.ResourceTypeNetwork,
+			RequestType:  requesttype.Remove,
+			Settings:     endpoint,
+		}
+	}
+
 	if err := uvm.Modify(&request); err != nil {
 		return err
 	}

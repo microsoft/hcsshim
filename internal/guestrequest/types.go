@@ -66,3 +66,10 @@ type GuestRequest struct {
 	ResourceType ResourceType
 	Settings     interface{} `json:"Settings,omitempty"`
 }
+
+// BUGBUG - This should be in v2 schema. @jhowardmsft. Maybe in next swagger refresh
+type NetworkModifyRequest struct {
+	AdapterInstanceId string
+	RequestType       string
+	Settings          interface{}
+}
