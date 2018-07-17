@@ -38,4 +38,6 @@ type Devices struct {
 	Battery *Battery `json:"Battery,omitempty"`
 
 	FlexibleIov map[string]FlexibleIoDevice `json:"FlexibleIov,omitempty"`
+
+	SharedMemory *SharedMemoryConfiguration `json:"SharedMemory,omitempty"`
 }

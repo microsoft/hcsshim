@@ -5,7 +5,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
-	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/sirupsen/logrus"
 )
@@ -30,14 +29,13 @@ func (uvm *UtilityVM) AddPlan9(hostPath string, uvmPath string, readOnly bool) e
 		uvm.plan9Counter++
 
 		modification := &hcsschema.ModifySettingRequest{
-			ResourceType: resourcetype.Plan9Share,
-			RequestType:  requesttype.Add,
+			RequestType: requesttype.Add,
 			Settings: hcsschema.Plan9Share{
 				Name: fmt.Sprintf("%d", uvm.plan9Counter),
 				Path: hostPath,
 				Port: int32(uvm.plan9Counter), // TODO: Temporary. Will all use a single port (9999)
 			},
-			ResourcePath: fmt.Sprintf("virtualmachine/devices/plan9/shares/%d", uvm.plan9Counter),
+			ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Plan9/Shares/%d", uvm.plan9Counter),
 			GuestRequest: guestrequest.GuestRequest{
 				ResourceType: guestrequest.ResourceTypeMappedDirectory,
 				RequestType:  requesttype.Add,
@@ -90,13 +88,12 @@ func (uvm *UtilityVM) removePlan9(hostPath, uvmPath string) error {
 	}
 	logrus.Debugf("uvm::RemovePlan9 Zero ref-count, removing. %s id:%s", hostPath, uvm.id)
 	modification := &hcsschema.ModifySettingRequest{
-		ResourceType: resourcetype.Plan9Share,
-		RequestType:  requesttype.Remove,
+		RequestType: requesttype.Remove,
 		Settings: hcsschema.Plan9Share{
 			Name: fmt.Sprintf("%d", uvm.plan9Shares[hostPath].idCounter),
 			Port: uvm.plan9Shares[hostPath].port,
 		},
-		ResourcePath: fmt.Sprintf("virtualmachine/devices/plan9/shares/%d", uvm.plan9Shares[hostPath].idCounter),
+		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Plan9/Shares/%d", uvm.plan9Shares[hostPath].idCounter),
 		GuestRequest: guestrequest.GuestRequest{
 			ResourceType: guestrequest.ResourceTypeMappedDirectory,
 			RequestType:  requesttype.Remove,

@@ -8,7 +8,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
-	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/sirupsen/logrus"
 )
@@ -73,8 +72,7 @@ func (uvm *UtilityVM) removeNamespaceNICs(ns *namespaceInfo) error {
 
 func (uvm *UtilityVM) addNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
 	request := hcsschema.ModifySettingRequest{
-		ResourceType: resourcetype.Network,
-		RequestType:  requesttype.Add,
+		RequestType: requesttype.Add,
 		Settings: hcsschema.NetworkAdapter{
 			EndpointId: endpoint.Id,
 			MacAddress: endpoint.MacAddress,
@@ -94,8 +92,7 @@ func (uvm *UtilityVM) addNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
 
 func (uvm *UtilityVM) removeNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
 	request := hcsschema.ModifySettingRequest{
-		ResourceType: resourcetype.Network,
-		RequestType:  requesttype.Remove,
+		RequestType: requesttype.Remove,
 		Settings: hcsschema.NetworkAdapter{
 			EndpointId: endpoint.Id,
 			MacAddress: endpoint.MacAddress,

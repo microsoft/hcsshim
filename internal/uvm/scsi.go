@@ -5,7 +5,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
-	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/sirupsen/logrus"
 )
@@ -102,13 +101,12 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 
 	// TODO: This is wrong. There's no way to hot-add a SCSI attachement currently. This is a HACK
 	SCSIModification := &hcsschema.ModifySettingRequest{
-		ResourceType: resourcetype.MappedVirtualDisk,
-		RequestType:  requesttype.Add,
+		RequestType: requesttype.Add,
 		Settings: hcsschema.Attachment{
 			Path:  hostPath,
 			Type_: "VirtualDisk",
 		},
-		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/%d/%d", controller, lun),
+		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/%d/Attachments/%d", controller, lun),
 	}
 
 	if uvmPath != "" {
@@ -116,7 +114,7 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 			SCSIModification.GuestRequest = guestrequest.GuestRequest{
 				ResourceType: guestrequest.ResourceTypeMappedVirtualDisk,
 				RequestType:  requesttype.Add,
-				Settings: hcsschema.MappedVirtualDisk{
+				Settings: guestrequest.WCOWMappedVirtualDisk{
 					ContainerPath: uvmPath,
 					Lun:           lun,
 					AttachOnly:    (uvmPath == ""),
@@ -174,10 +172,8 @@ func (uvm *UtilityVM) RemoveSCSI(hostPath string) error {
 func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int, lun int32) error {
 	logrus.Debugf("uvm::RemoveSCSI id:%s hostPath:%s", uvm.id, hostPath)
 	scsiModification := &hcsschema.ModifySettingRequest{
-		ResourceType: resourcetype.MappedVirtualDisk,
 		RequestType:  requesttype.Remove,
-		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/%d/%d", controller, lun),
-		Settings:     hcsschema.MappedVirtualDisk{}, // @jhowardmsft This should not be needed. Temporary workaround for https://microsoft.visualstudio.com/DefaultCollection/OS/_workitems/edit/18230871. Remove later TODO post 17113+fix
+		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/%d/Attachments/%d", controller, lun),
 	}
 
 	// Include the GuestRequest so that the GCS ejects the disk cleanly if the disk was attached/mounted
@@ -186,7 +182,7 @@ func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int
 			scsiModification.GuestRequest = guestrequest.GuestRequest{
 				ResourceType: guestrequest.ResourceTypeMappedVirtualDisk,
 				RequestType:  requesttype.Remove,
-				Settings: hcsschema.MappedVirtualDisk{
+				Settings: guestrequest.WCOWMappedVirtualDisk{
 					ContainerPath: uvmPath,
 					Lun:           lun,
 					// TODO: Controller: uint8(controller), // TODO NOT IN HCS API CURRENTLY

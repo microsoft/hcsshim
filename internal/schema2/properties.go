@@ -23,13 +23,7 @@ type Properties struct {
 
 	ObRoot string `json:"ObRoot,omitempty"`
 
-	IsDummy bool `json:"IsDummy,omitempty"`
-
 	RuntimeId string `json:"RuntimeId,omitempty"`
-
-	RuntimeImagePath string `json:"RuntimeImagePath,omitempty"`
-
-	IsRuntimeTemplate bool `json:"IsRuntimeTemplate,omitempty"`
 
 	RuntimeTemplateId string `json:"RuntimeTemplateId,omitempty"`
 
@@ -57,7 +51,7 @@ type Properties struct {
 
 	SharedMemoryRegionInfo []SharedMemoryRegionInfo `json:"SharedMemoryRegionInfo,omitempty"`
 
-	GuestInterfaceInfo *GuestInterfaceInfo `json:"GuestInterfaceInfo,omitempty"`
+	GuestConnectionInfo *GuestConnectionInfo `json:"GuestConnectionInfo,omitempty"`
 
 	Silo *SiloProperties `json:"Silo,omitempty"`
 
@@ -66,7 +60,4 @@ type Properties struct {
 	Rmid int32 `json:"Rmid,omitempty"`
 
 	CacheStats *CacheQueryStatsResponse `json:"CacheStats,omitempty"`
-
-	//   Controller # -> list of disks on that controller. For Argons, the controller number is synthetic and has no bearing. 
-	MappedVirtualDiskControllers map[string]MappedVirtualDiskController `json:"MappedVirtualDiskControllers,omitempty"`
 }

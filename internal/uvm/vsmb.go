@@ -5,7 +5,6 @@ import (
 	"strconv"
 
 	"github.com/Microsoft/hcsshim/internal/requesttype"
-	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/sirupsen/logrus"
 )
@@ -34,14 +33,13 @@ func (uvm *UtilityVM) AddVSMB(hostPath string, guestRequest interface{}, options
 		shareName := "s" + strconv.FormatUint(uvm.vsmbCounter, 16)
 
 		modification := &hcsschema.ModifySettingRequest{
-			ResourceType: resourcetype.VSmbShare,
-			RequestType:  requesttype.Add,
+			RequestType: requesttype.Add,
 			Settings: hcsschema.VirtualSmbShare{
 				Name:    shareName,
 				Options: options,
 				Path:    hostPath,
 			},
-			ResourcePath: fmt.Sprintf("virtualmachine/devices/virtualsmb/shares/" + shareName),
+			ResourcePath: fmt.Sprintf("VirtualMachine/Devices/VirtualSmb/Shares/" + shareName),
 		}
 
 		if err := uvm.Modify(modification); err != nil {
@@ -79,10 +77,9 @@ func (uvm *UtilityVM) RemoveVSMB(hostPath string) error {
 	}
 	logrus.Debugf("uvm::RemoveVSMB Zero ref-count, removing. %s id:%s", hostPath, uvm.id)
 	modification := &hcsschema.ModifySettingRequest{
-		ResourceType: resourcetype.VSmbShare,
 		RequestType:  requesttype.Remove,
 		Settings:     hcsschema.VirtualSmbShare{Name: share.name},
-		ResourcePath: "virtualmachine/devices/virtualsmb/shares/" + share.name,
+		ResourcePath: "VirtualMachine/Devices/VirtualSmb/Shares/" + share.name,
 	}
 	if err := uvm.Modify(modification); err != nil {
 		return fmt.Errorf("failed to remove vsmb share %s from %s: %+v: %s", hostPath, uvm.id, modification, err)

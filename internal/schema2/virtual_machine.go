@@ -11,8 +11,6 @@ package hcsschema
 
 type VirtualMachine struct {
 
-	StopOnReset bool `json:"StopOnReset,omitempty"`
-
 	Chipset *Chipset `json:"Chipset,omitempty"`
 
 	ComputeTopology *Topology `json:"ComputeTopology,omitempty"`

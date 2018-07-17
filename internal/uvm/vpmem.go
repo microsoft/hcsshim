@@ -6,7 +6,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
-	"github.com/Microsoft/hcsshim/internal/resourcetype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/sirupsen/logrus"
 )
@@ -76,10 +75,9 @@ func (uvm *UtilityVM) AddVPMEM(hostPath string, expose bool) (uint32, string, er
 		}
 
 		modification := &hcsschema.ModifySettingRequest{
-			ResourceType: resourcetype.VPMemDevice,
 			RequestType:  requesttype.Add,
 			Settings:     controller,
-			ResourcePath: fmt.Sprintf("virtualmachine/devices/virtualpmemdevices/%d", deviceNumber),
+			ResourcePath: fmt.Sprintf("VirtualMachine/Devices/VirtualPMem/%d", deviceNumber),
 		}
 
 		if expose {
@@ -144,9 +142,8 @@ func (uvm *UtilityVM) removeVPMEM(hostPath string, uvmPath string, deviceNumber 
 
 	if uvm.vpmemDevices[deviceNumber].refCount == 1 {
 		modification := &hcsschema.ModifySettingRequest{
-			ResourceType: resourcetype.VPMemDevice,
 			RequestType:  requesttype.Remove,
-			ResourcePath: fmt.Sprintf("virtualmachine/devices/virtualpmemdevices/%d", deviceNumber),
+			ResourcePath: fmt.Sprintf("VirtualMachine/Devices/VirtualPMem/%d", deviceNumber),
 		}
 
 		modification.GuestRequest = guestrequest.GuestRequest{

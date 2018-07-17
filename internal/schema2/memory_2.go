@@ -11,7 +11,7 @@ package hcsschema
 
 type Memory2 struct {
 
-	InitialSizeInMB int32 `json:"InitialSizeInMB,omitempty"`
+	SizeInMB int32 `json:"SizeInMB,omitempty"`
 
 	Backing string `json:"Backing,omitempty"`
 
@@ -22,6 +22,4 @@ type Memory2 struct {
 	DirectFileMappingMB int64 `json:"DirectFileMappingMB,omitempty"`
 
 	EnableEpf bool `json:"EnableEpf,omitempty"`
-
-	Regions []SharedMemoryRegion `json:"Regions,omitempty"`
 }
