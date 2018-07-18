@@ -29,7 +29,8 @@ func (uvm *UtilityVM) allocateSCSI(hostPath string, uvmPath string) (int, int32,
 				uvm.scsiLocations[controller][lun].hostPath = hostPath
 				uvm.scsiLocations[controller][lun].uvmPath = uvmPath
 				logrus.Debugf("uvm::allocateSCSI %d:%d %q %q", controller, lun, hostPath, uvmPath)
-				return controller, int32(lun), nil
+				// TODO: Remove `+ 1` on next line when VSO #18313454 is fixed. @jhowardmsft. Temporary workaround only.
+				return controller, int32(lun + 1), nil
 
 			}
 		}
@@ -171,6 +172,7 @@ func (uvm *UtilityVM) RemoveSCSI(hostPath string) error {
 // MUST be held when calling this function.
 func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int, lun int32) error {
 	logrus.Debugf("uvm::RemoveSCSI id:%s hostPath:%s", uvm.id, hostPath)
+	lun++ // TODO: Remove when VSO #18313454 is fixed. @jhowardmsft. Temporary workaround only.
 	scsiModification := &hcsschema.ModifySettingRequest{
 		RequestType:  requesttype.Remove,
 		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/%d/Attachments/%d", controller, lun),
