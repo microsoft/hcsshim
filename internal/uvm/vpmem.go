@@ -77,7 +77,7 @@ func (uvm *UtilityVM) AddVPMEM(hostPath string, expose bool) (uint32, string, er
 		modification := &hcsschema.ModifySettingRequest{
 			RequestType:  requesttype.Add,
 			Settings:     controller,
-			ResourcePath: fmt.Sprintf("VirtualMachine/Devices/VirtualPMem/%d", deviceNumber),
+			ResourcePath: fmt.Sprintf("VirtualMachine/Devices/VirtualPMem"),
 		}
 
 		if expose {
@@ -143,15 +143,14 @@ func (uvm *UtilityVM) removeVPMEM(hostPath string, uvmPath string, deviceNumber 
 	if uvm.vpmemDevices[deviceNumber].refCount == 1 {
 		modification := &hcsschema.ModifySettingRequest{
 			RequestType:  requesttype.Remove,
-			ResourcePath: fmt.Sprintf("VirtualMachine/Devices/VirtualPMem/%d", deviceNumber),
-		}
-
-		modification.GuestRequest = guestrequest.GuestRequest{
-			ResourceType: guestrequest.ResourceTypeVPMemDevice,
-			RequestType:  requesttype.Remove,
-			Settings: guestrequest.LCOWMappedVPMemDevice{
-				DeviceNumber: deviceNumber,
-				MountPath:    uvmPath,
+			ResourcePath: fmt.Sprintf("VirtualMachine/Devices/VirtualPMem"),
+			GuestRequest: guestrequest.GuestRequest{
+				ResourceType: guestrequest.ResourceTypeVPMemDevice,
+				RequestType:  requesttype.Remove,
+				Settings: guestrequest.LCOWMappedVPMemDevice{
+					DeviceNumber: deviceNumber,
+					MountPath:    uvmPath,
+				},
 			},
 		}
 
