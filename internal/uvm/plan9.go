@@ -35,7 +35,7 @@ func (uvm *UtilityVM) AddPlan9(hostPath string, uvmPath string, readOnly bool) e
 				Path: hostPath,
 				Port: int32(uvm.plan9Counter), // TODO: Temporary. Will all use a single port (9999)
 			},
-			ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Plan9/Shares/%d", uvm.plan9Counter),
+			ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Plan9/Shares"),
 			GuestRequest: guestrequest.GuestRequest{
 				ResourceType: guestrequest.ResourceTypeMappedDirectory,
 				RequestType:  requesttype.Add,
@@ -93,7 +93,7 @@ func (uvm *UtilityVM) removePlan9(hostPath, uvmPath string) error {
 			Name: fmt.Sprintf("%d", uvm.plan9Shares[hostPath].idCounter),
 			Port: uvm.plan9Shares[hostPath].port,
 		},
-		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Plan9/Shares/%d", uvm.plan9Shares[hostPath].idCounter),
+		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Plan9/Shares"),
 		GuestRequest: guestrequest.GuestRequest{
 			ResourceType: guestrequest.ResourceTypeMappedDirectory,
 			RequestType:  requesttype.Remove,
