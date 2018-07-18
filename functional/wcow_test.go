@@ -557,7 +557,7 @@ func TestWCOWArgonOciV1(t *testing.T) {
 
 // Xenon through HCSOCI interface (v1)
 func TestWCOWXenonOciV1(t *testing.T) {
-	imageLayers := testutilities.LayerFolders(t, "busybox")
+	imageLayers := testutilities.LayerFolders(t, imageName)
 	xenonOci1Mounted := false
 
 	xenonOci1ScratchDir := testutilities.CreateTempDir(t)
