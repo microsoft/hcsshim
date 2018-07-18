@@ -70,8 +70,6 @@ func (uvm *UtilityVM) findSCSIAttachment(findThisHostPath string) (int, int32, s
 //
 // Returns the controller ID (0..3) and LUN (0..63) where the disk is attached.
 func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, error) {
-	controller := -1
-	var lun int32 = -1
 	if uvm == nil {
 		return -1, -1, ErrNoUvmParameter
 	}
@@ -82,20 +80,18 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 	}
 
 	uvm.m.Lock()
-	controller, lun, uvmPath, err := uvm.findSCSIAttachment(hostPath)
-	if err == nil {
+	if _, _, _, err := uvm.findSCSIAttachment(hostPath); err == nil {
 		uvm.m.Unlock()
 		return -1, -1, ErrAlreadyAttached
 	}
 	uvm.m.Unlock()
 
-	controller, lun, err = uvm.allocateSCSI(hostPath, uvmPath)
+	controller, lun, err := uvm.allocateSCSI(hostPath, uvmPath)
 	if err != nil {
 		return -1, -1, err
 	}
 
-	// TODO: Currently GCS doesn't support more than one SCSI controller. @jhowardmsft/@swernli. This will hopefully be fixed in GCS for RS5.
-	// It will also require the GuestRequest to be extended in the call below to include the controller as well as the LUN.
+	// TODO: Can remove this check hopefully post RS5 if 19H1 supports multiple controllers
 	if controller > 0 {
 		return -1, -1, ErrTooManyAttachments
 	}
@@ -118,7 +114,7 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 					ContainerPath: uvmPath,
 					Lun:           lun,
 					AttachOnly:    (uvmPath == ""),
-					// TODO: Controller: uint8(controller), // TODO NOT IN HCS API CURRENTLY
+					// TODO: Controller: uint8(controller), // Post RS5. Not in platform currently.
 				},
 			}
 		} else {
