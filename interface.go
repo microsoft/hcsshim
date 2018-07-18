@@ -62,6 +62,14 @@ type MappedVirtualDisk struct {
 	AttachOnly        bool   `json:",omitempty:`
 }
 
+// AssignedDevice represents a device that has been directly assigned to a container
+//
+// NOTE: Support added in RS5
+type AssignedDevice struct {
+	//  InterfaceClassGUID of the device to assign to container.
+	InterfaceClassGUID string `json:"InterfaceClassGuid,omitempty"`
+}
+
 // ContainerConfig is used as both the input of CreateContainer
 // and to convert the parameters to JSON for passing onto the HCS
 type ContainerConfig struct {
@@ -93,6 +101,7 @@ type ContainerConfig struct {
 	ContainerType               string              `json:",omitempty"` // "Linux" for Linux containers on Windows. Omitted otherwise.
 	TerminateOnLastHandleClosed bool                `json:",omitempty"` // Should HCS terminate the container once all handles have been closed
 	MappedVirtualDisks          []MappedVirtualDisk `json:",omitempty"` // Array of virtual disks to mount at start
+	AssignedDevices             []AssignedDevice    `json:",omitempty"` // Array of devices to assign. NOTE: Support added in RS5
 }
 
 type ComputeSystemQuery struct {
