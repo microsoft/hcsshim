@@ -99,7 +99,6 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 		return -1, -1, ErrTooManyAttachments
 	}
 
-	// TODO: This is wrong. There's no way to hot-add a SCSI attachement currently. This is a HACK
 	SCSIModification := &hcsschema.ModifySettingRequest{
 		RequestType: requesttype.Add,
 		Settings: hcsschema.Attachment{
