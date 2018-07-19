@@ -387,8 +387,6 @@ func TestWCOWArgonShim(t *testing.T) {
 
 	argonShimScratchDir := testutilities.CreateTempDir(t)
 	defer os.RemoveAll(argonShimScratchDir)
-	fmt.Println("Calling CreateSCratchLayer:", argonShimScratchDir)
-	fmt.Println("imageLayers:", imageLayers)
 	if err := wclayer.CreateScratchLayer(argonShimScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create argon scratch layer: %s", err)
 	}
