@@ -2,7 +2,6 @@ package uvm
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
@@ -66,18 +65,15 @@ func (uvm *UtilityVM) AddVPMEM(hostPath string, expose bool) (uint32, string, er
 		if err != nil {
 			return 0, "", err
 		}
-		controller := hcsschema.VirtualPMemController{}
-		controller.Devices = make(map[string]hcsschema.VirtualPMemDevice)
-		controller.Devices[strconv.Itoa(int(deviceNumber))] = hcsschema.VirtualPMemDevice{
-			HostPath:    hostPath,
-			ReadOnly:    true,
-			ImageFormat: "Vhd1",
-		}
 
 		modification := &hcsschema.ModifySettingRequest{
-			RequestType:  requesttype.Add,
-			Settings:     controller,
-			ResourcePath: fmt.Sprintf("VirtualMachine/Devices/VirtualPMem"),
+			RequestType: requesttype.Add,
+			Settings: hcsschema.VirtualPMemDevice{
+				HostPath:    hostPath,
+				ReadOnly:    true,
+				ImageFormat: "Vhd1",
+			},
+			ResourcePath: fmt.Sprintf("VirtualMachine/Devices/VirtualPMem/Devices/%d", deviceNumber),
 		}
 
 		if expose {
@@ -143,7 +139,7 @@ func (uvm *UtilityVM) removeVPMEM(hostPath string, uvmPath string, deviceNumber 
 	if uvm.vpmemDevices[deviceNumber].refCount == 1 {
 		modification := &hcsschema.ModifySettingRequest{
 			RequestType:  requesttype.Remove,
-			ResourcePath: fmt.Sprintf("VirtualMachine/Devices/VirtualPMem"),
+			ResourcePath: fmt.Sprintf("VirtualMachine/Devices/VirtualPMem/Devices/%d", deviceNumber),
 			GuestRequest: guestrequest.GuestRequest{
 				ResourceType: guestrequest.ResourceTypeVPMemDevice,
 				RequestType:  requesttype.Remove,
