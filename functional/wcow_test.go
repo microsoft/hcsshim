@@ -4,7 +4,6 @@ package functional
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"

@@ -11,5 +11,5 @@ package hcsschema
 
 type Memory struct {
 
-	MaximumInMB int32 `json:"MaximumInMB,omitempty"`
+	SizeInMB int32 `json:"SizeInMB,omitempty"`
 }

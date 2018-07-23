@@ -262,9 +262,8 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 			DevicePath: `\EFI\Microsoft\Boot\bootmgfw.efi`,
 			DeviceType: "VmbFs",
 		}
-		vm.ComputeTopology.Memory.DirectFileMappingMB = 1024 // Sensible default, but could be a tuning parameter somewhere
-
 		vm.Devices.VirtualSmb = &hcsschema.VirtualSmb{
+			DirectFileMappingInMB: 1024, // Sensible default, but could be a tuning parameter somewhere
 			Shares: []hcsschema.VirtualSmbShare{
 				{
 					Name: "os",

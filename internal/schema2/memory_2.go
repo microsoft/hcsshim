@@ -19,7 +19,5 @@ type Memory2 struct {
 
 	EnableColdHint bool `json:"EnableColdHint,omitempty"`
 
-	DirectFileMappingMB int64 `json:"DirectFileMappingMB,omitempty"`
-
 	EnableEpf bool `json:"EnableEpf,omitempty"`
 }
