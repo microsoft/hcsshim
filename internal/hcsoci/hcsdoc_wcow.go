@@ -89,7 +89,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 		if coi.Spec.Windows.Resources.Memory != nil {
 			if coi.Spec.Windows.Resources.Memory.Limit != nil {
 				v1.MemoryMaximumInMB = int64(*coi.Spec.Windows.Resources.Memory.Limit) / 1024 / 1024
-				v2Container.Memory = &hcsschema.Memory{MaximumInMB: int32(v1.MemoryMaximumInMB)}
+				v2Container.Memory = &hcsschema.Memory{SizeInMB: int32(v1.MemoryMaximumInMB)}
 
 			}
 		}
