@@ -12,4 +12,6 @@ package hcsschema
 type VirtualSmb struct {
 
 	Shares []VirtualSmbShare `json:"Shares,omitempty"`
+
+	DirectFileMappingInMB int64 `json:"DirectFileMappingInMB,omitempty"`
 }
