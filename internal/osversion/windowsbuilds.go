@@ -6,6 +6,6 @@ const (
 	RS1 = 14393
 	RS3 = 16299
 	RS4 = 17134
-	RS5 = 17718 // TODO Bump to final RS5 build
+	RS5 = 17724 // TODO Bump to final RS5 build
 
 )

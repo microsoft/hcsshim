@@ -69,7 +69,8 @@ type UtilityVM struct {
 	vsmbShares  map[string]*vsmbShare
 	vsmbCounter uint64 // Counter to generate a unique share name for each VSMB share.
 
-	// VPMEM devices that are mapped into a Linux UVM. These are used for read-only layers.
+	// VPMEM devices that are mapped into a Linux UVM. These are used for read-only layers, or for
+	// booting from VHD.
 	vpmemDevices [MaxVPMEM]vpmemInfo // Limited by ACPI size.
 	vpmemMax     int32               // Actual number of VPMem devices
 

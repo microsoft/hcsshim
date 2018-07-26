@@ -10,16 +10,13 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/interop"
 	"github.com/Microsoft/hcsshim/internal/schema1"
+	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/sirupsen/logrus"
 )
 
-var (
-	defaultTimeout = time.Minute * 4
-
-	// currentContainerStarts is used to limit the number of concurrent container
-	// starts.
-	currentContainerStarts containerStarts
-)
+// currentContainerStarts is used to limit the number of concurrent container
+// starts.
+var currentContainerStarts containerStarts
 
 type containerStarts struct {
 	maxParallel int
@@ -77,7 +74,7 @@ func CreateComputeSystem(id string, hcsDocumentInterface interface{}) (*System, 
 		}
 	}
 
-	events, err := processAsyncHcsResult(createError, resultp, computeSystem.callbackNumber, hcsNotificationSystemCreateCompleted, &defaultTimeout)
+	events, err := processAsyncHcsResult(createError, resultp, computeSystem.callbackNumber, hcsNotificationSystemCreateCompleted, &timeout.Duration)
 	if err != nil {
 		if err == ErrTimeout {
 			// Terminate the compute system if it still exists. We're okay to
@@ -196,7 +193,7 @@ func (computeSystem *System) Start() error {
 
 	var resultp *uint16
 	err := hcsStartComputeSystem(computeSystem.handle, "", &resultp)
-	events, err := processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemStartCompleted, &defaultTimeout)
+	events, err := processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemStartCompleted, &timeout.Duration)
 	if err != nil {
 		return makeSystemError(computeSystem, "Start", "", err, events)
 	}
@@ -324,7 +321,7 @@ func (computeSystem *System) Pause() error {
 
 	var resultp *uint16
 	err := hcsPauseComputeSystem(computeSystem.handle, "", &resultp)
-	events, err := processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemPauseCompleted, &defaultTimeout)
+	events, err := processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemPauseCompleted, &timeout.Duration)
 	if err != nil {
 		return makeSystemError(computeSystem, "Pause", "", err, events)
 	}
@@ -346,7 +343,7 @@ func (computeSystem *System) Resume() error {
 
 	var resultp *uint16
 	err := hcsResumeComputeSystem(computeSystem.handle, "", &resultp)
-	events, err := processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemResumeCompleted, &defaultTimeout)
+	events, err := processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemResumeCompleted, &timeout.Duration)
 	if err != nil {
 		return makeSystemError(computeSystem, "Resume", "", err, events)
 	}

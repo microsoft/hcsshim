@@ -10,28 +10,12 @@ import (
 
 	"github.com/Microsoft/go-winio/vhd"
 	"github.com/Microsoft/hcsshim/internal/copyfile"
+	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
-
-const (
-	// DefaultScratchSizeGB is the size of the default LCOW scratch disk in GB
-	DefaultScratchSizeGB = 20
-
-	// defaultVhdxBlockSizeMB is the block-size for the scratch VHDx's this package can create.
-	defaultVhdxBlockSizeMB = 1
-)
-
-// TODO" This shouldn't be here
-// defaultTimeoutSeconds is the default time to wait for various operations.
-// - Waiting for async notifications from HCS
-// - Waiting for processes to launch through
-// - Waiting to copy data to/from a launched processes stdio pipes.
-// This can be overridden through HCS_TIMEOUT_SECONDS
-// TODO Tidy up comment above.
-var defaultTimeoutSeconds = time.Second * 60 * 4
 
 // CreateScratch uses a utility VM to create an empty scratch disk of a requested size.
 // It has a caching capability. If the cacheFile exists, and the request is for a default
@@ -100,7 +84,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		testdProc, _, err := CreateProcess(&ProcessOptions{
 			HCSSystem:         lcowUVM.ComputeSystem(),
 			CreateInUtilityVm: true,
-			CopyTimeout:       defaultTimeoutSeconds,
+			CopyTimeout:       timeout.Duration,
 			Process:           &specs.Process{Args: testdCommand},
 		})
 		if err != nil {
@@ -109,7 +93,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		}
 		defer testdProc.Close()
 
-		testdProc.WaitTimeout(defaultTimeoutSeconds)
+		testdProc.WaitTimeout(timeout.Duration)
 		testdExitCode, err := testdProc.ExitCode()
 		if err != nil {
 			lcowUVM.RemoveSCSI(destFile)
@@ -134,7 +118,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 	lsProc, _, err := CreateProcess(&ProcessOptions{
 		HCSSystem:         lcowUVM.ComputeSystem(),
 		CreateInUtilityVm: true,
-		CopyTimeout:       defaultTimeoutSeconds,
+		CopyTimeout:       timeout.Duration,
 		Process:           &specs.Process{Args: lsCommand},
 		Stdout:            &lsOutput,
 	})
@@ -144,7 +128,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		return fmt.Errorf("failed to `%+v` following hot-add %s to utility VM: %s", lsCommand, destFile, err)
 	}
 	defer lsProc.Close()
-	lsProc.WaitTimeout(defaultTimeoutSeconds)
+	lsProc.WaitTimeout(timeout.Duration)
 	lsExitCode, err := lsProc.ExitCode()
 	if err != nil {
 		lcowUVM.RemoveSCSI(destFile)
@@ -163,7 +147,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 	mkfsProc, _, err := CreateProcess(&ProcessOptions{
 		HCSSystem:         lcowUVM.ComputeSystem(),
 		CreateInUtilityVm: true,
-		CopyTimeout:       defaultTimeoutSeconds,
+		CopyTimeout:       timeout.Duration,
 		Process:           &specs.Process{Args: mkfsCommand},
 		Stderr:            &mkfsStderr,
 	})
@@ -172,7 +156,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		return fmt.Errorf("failed to `%+v` following hot-add %s to utility VM: %s", mkfsCommand, destFile, err)
 	}
 	defer mkfsProc.Close()
-	mkfsProc.WaitTimeout(defaultTimeoutSeconds)
+	mkfsProc.WaitTimeout(timeout.Duration)
 	mkfsExitCode, err := mkfsProc.ExitCode()
 	if err != nil {
 		lcowUVM.RemoveSCSI(destFile)

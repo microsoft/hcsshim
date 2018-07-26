@@ -19,15 +19,14 @@ type CombinedLayers struct {
 	ScratchPath       string            `json:"ScratchPath,omitempty"`
 }
 
-// Defines the schema for hosted settings passed to opengcs
-// TODO: These need omitempties
+// Defines the schema for hosted settings passed to GCS and/or OpenGCS
 
 // SCSI. Scratch space for remote file-system commands, or R/W layer for containers
 type LCOWMappedVirtualDisk struct {
-	MountPath  string // /tmp/scratch for an LCOW utility VM being used as a service VM
-	Lun        uint8
-	Controller uint8
-	ReadOnly   bool
+	MountPath  string `json:"MountPath,omitempty"` // /tmp/scratch for an LCOW utility VM being used as a service VM
+	Lun        uint8  `json:"Lun,omitempty"`
+	Controller uint8  `json:"Controller,omitempty"`
+	ReadOnly   bool   `json:"ReadOnly,omitempty"`
 }
 
 type WCOWMappedVirtualDisk struct {
@@ -37,16 +36,16 @@ type WCOWMappedVirtualDisk struct {
 }
 
 type LCOWMappedDirectory struct {
-	MountPath string
-	Port      int32
-	ShareName string // If empty not using ANames (not currently supported)
-	ReadOnly  bool
+	MountPath string `json:"MountPath,omitempty"`
+	Port      int32  `json:"Port,omitempty"`
+	ShareName string `json:"ShareName,omitempty"` // If empty not using ANames (not currently supported)
+	ReadOnly  bool   `json:"ReadOnly,omitempty"`
 }
 
 // Read-only layers over VPMem
 type LCOWMappedVPMemDevice struct {
-	DeviceNumber uint32
-	MountPath    string // /tmp/pN
+	DeviceNumber uint32 `json:"DeviceNumber,omitempty"`
+	MountPath    string `json:"MountPath,omitempty"` // /tmp/pN
 }
 
 type ResourceType string
@@ -62,14 +61,13 @@ const (
 
 // GuestRequest is for modify commands passed to the guest.
 type GuestRequest struct {
-	RequestType  string
-	ResourceType ResourceType
-	Settings     interface{} `json:"Settings,omitempty"`
+	RequestType  string       `json:"RequestType,omitempty"`
+	ResourceType ResourceType `json:"ResourceType,omitempty"`
+	Settings     interface{}  `json:"Settings,omitempty"`
 }
 
-// BUGBUG - This should be in v2 schema. @jhowardmsft. Maybe in next swagger refresh
 type NetworkModifyRequest struct {
-	AdapterInstanceId string
-	RequestType       string
-	Settings          interface{}
+	AdapterInstanceId string      `json:"AdapterInstanceId,omitempty"`
+	RequestType       string      `json:"RequestType,omitempty"`
+	Settings          interface{} `json:"Settings,omitempty"`
 }
