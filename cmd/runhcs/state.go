@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/urfave/cli"
@@ -25,7 +26,10 @@ instance of a container.`,
 		}
 		status, err := c.Status()
 		if err != nil {
-			return err
+			if !strings.Contains(err.Error(), "operation is not valid in the current state") {
+				return err
+			}
+			status = containerUnknown
 		}
 		cs := containerState{
 			Version:        c.Spec.Version,
