@@ -36,7 +36,7 @@ Try {
     # Add SYS_ADMIN and loop device access (device group 7) to allow loopback
     # mounting for creating rootfs.vhd. --privileged would also be sufficient
     # but is not currently supported in LCOW.
-    docker run --cap-add SYS_ADMIN --device-group-rule="c 7:* rmw" --rm -v $d`:/build/out opengcs sh -c 'make -f $SRC/Makefile all out/rootfs.vhd'
+    docker run --cap-add SYS_ADMIN --device-cgroup-rule="c 7:* rmw" --rm -v $d`:/build/out opengcs sh -c 'make -f $SRC/Makefile all out/rootfs.vhd'
     if ( $LastExitCode -ne 0 ) {
         Throw "failed to build"
     }
