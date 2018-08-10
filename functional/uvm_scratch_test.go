@@ -10,7 +10,6 @@ import (
 	"github.com/Microsoft/hcsshim/functional/utilities"
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/internal/osversion"
-	"github.com/Microsoft/hcsshim/internal/uvm"
 )
 
 func TestScratchCreateLCOW(t *testing.T) {
@@ -25,7 +24,7 @@ func TestScratchCreateLCOW(t *testing.T) {
 	destOne := filepath.Join(tempDir, "destone.vhdx")
 	destTwo := filepath.Join(tempDir, "desttwo.vhdx")
 
-	if err := lcow.CreateScratch(firstUVM, destOne, uvm.DefaultLCOWScratchSizeGB, cacheFile, ""); err != nil {
+	if err := lcow.CreateScratch(firstUVM, destOne, lcow.DefaultScratchSizeGB, cacheFile, ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(destOne); err != nil {
@@ -39,7 +38,7 @@ func TestScratchCreateLCOW(t *testing.T) {
 	defer targetUVM.Terminate()
 
 	// A non-cached create
-	if err := lcow.CreateScratch(firstUVM, destTwo, uvm.DefaultLCOWScratchSizeGB, cacheFile, targetUVM.ID()); err != nil {
+	if err := lcow.CreateScratch(firstUVM, destTwo, lcow.DefaultScratchSizeGB, cacheFile, targetUVM.ID()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -71,7 +70,7 @@ func TestScratchCreateLCOW(t *testing.T) {
 //	}
 
 //	// 1: Default size, cache doesn't exist, but no UVM passed. Cannot be created
-//	err = CreateLCOWScratch(nil, filepath.Join(cacheDir, "default.vhdx"), DefaultLCOWScratchSizeGB, cacheFile)
+//	err = CreateLCOWScratch(nil, filepath.Join(cacheDir, "default.vhdx"), lcow.DefaultScratchSizeGB, cacheFile)
 //	if err == nil {
 //		t.Fatalf("expected an error creating LCOW scratch")
 //	}
@@ -80,7 +79,7 @@ func TestScratchCreateLCOW(t *testing.T) {
 //	}
 
 //	// 2: Default size, no cache supplied and no UVM
-//	err = CreateLCOWScratch(nil, filepath.Join(cacheDir, "default.vhdx"), DefaultLCOWScratchSizeGB, "")
+//	err = CreateLCOWScratch(nil, filepath.Join(cacheDir, "default.vhdx"), lcow.DefaultScratchSizeGB, "")
 //	if err == nil {
 //		t.Fatalf("expected an error creating LCOW scratch")
 //	}
@@ -89,7 +88,7 @@ func TestScratchCreateLCOW(t *testing.T) {
 //	}
 
 //	// 3: Default size. This should work and the cache should be created.
-//	err = CreateLCOWScratch(uvm, filepath.Join(cacheDir, "default.vhdx"), DefaultLCOWScratchSizeGB, cacheFile)
+//	err = CreateLCOWScratch(uvm, filepath.Join(cacheDir, "default.vhdx"), lcow.DefaultScratchSizeGB, cacheFile)
 //	if err != nil {
 //		t.Fatalf("should succeed creating default size cache file: %s", err)
 //	}
@@ -101,7 +100,7 @@ func TestScratchCreateLCOW(t *testing.T) {
 //	}
 
 //	// 4: Non-defaultsize. This should work and the cache should be created.
-//	err = CreateLCOWScratch(uvm, filepath.Join(cacheDir, "nondefault.vhdx"), DefaultLCOWScratchSizeGB+1, cacheFile)
+//	err = CreateLCOWScratch(uvm, filepath.Join(cacheDir, "nondefault.vhdx"), lcow.DefaultScratchSizeGB+1, cacheFile)
 //	if err != nil {
 //		t.Fatalf("should succeed creating default size cache file: %s", err)
 //	}

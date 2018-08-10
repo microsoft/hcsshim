@@ -90,7 +90,7 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 		return -1, -1, err
 	}
 
-	// TODO: Can remove this check hopefully post RS5 if 19H1 supports multiple controllers
+	// Note: Can remove this check post-RS5 if multiple controllers are supported
 	if controller > 0 {
 		return -1, -1, ErrTooManyAttachments
 	}
@@ -113,7 +113,6 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 					ContainerPath: uvmPath,
 					Lun:           lun,
 					AttachOnly:    (uvmPath == ""),
-					// TODO: Controller: uint8(controller), // Post RS5. Not in platform currently.
 				},
 			}
 		} else {
@@ -180,7 +179,6 @@ func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int
 				Settings: guestrequest.WCOWMappedVirtualDisk{
 					ContainerPath: uvmPath,
 					Lun:           lun,
-					// TODO: Controller: uint8(controller), // TODO NOT IN HCS API CURRENTLY
 				},
 			}
 		} else {

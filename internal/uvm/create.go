@@ -51,7 +51,7 @@ type UVMOptions struct {
 	KernelBootOptions     string               // Additional boot options for the kernel
 	EnableGraphicsConsole bool                 // If true, enable a graphics console for the utility VM
 	ConsolePipe           string               // The named pipe path to use for the serial console.  eg \\.\pipe\vmpipe
-	VPMemDeviceCount      *int32               // Number of VPMem devices. Limit at 128. If booting UVM from VHD, device 0 is taken.
+	VPMemDeviceCount      *int32               // Number of VPMem devices. Limit at 128. If booting UVM from VHD, device 0 is taken. LCOW Only.
 	SCSIControllerCount   *int                 // The number of SCSI controllers. Defaults to 1 if omitted. Currently we only support 0 or 1.
 }
 
@@ -101,6 +101,9 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 	if uvm.operatingSystem == "windows" {
 		if len(opts.LayerFolders) < 2 {
 			return nil, fmt.Errorf("at least 2 LayerFolders must be supplied")
+		}
+		if opts.VPMemDeviceCount != nil {
+			return nil, fmt.Errorf("cannot specify VPMemDeviceCount for Windows utility VMs")
 		}
 
 		var err error
