@@ -2,6 +2,8 @@ package hcs
 
 import (
 	"encoding/json"
+	"os"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -13,7 +15,28 @@ import (
 
 var (
 	defaultTimeout = time.Minute * 4
+
+	// currentContainerStarts is used to limit the number of concurrent container
+	// starts.
+	currentContainerStarts containerStarts
 )
+
+type containerStarts struct {
+	maxParallel int
+	inProgress  int
+	sync.Mutex
+}
+
+func init() {
+	mpsS := os.Getenv("HCSSHIM_MAX_PARALLEL_START")
+	if len(mpsS) > 0 {
+		mpsI, err := strconv.Atoi(mpsS)
+		if err != nil || mpsI < 0 {
+			return
+		}
+		currentContainerStarts.maxParallel = mpsI
+	}
+}
 
 type System struct {
 	handleLock     sync.RWMutex
@@ -143,6 +166,32 @@ func (computeSystem *System) Start() error {
 
 	if computeSystem.handle == 0 {
 		return makeSystemError(computeSystem, "Start", "", ErrAlreadyClosed, nil)
+	}
+
+	// This is a very simple backoff-retry loop to limit the number
+	// of parallel container starts if environment variable
+	// HCSSHIM_MAX_PARALLEL_START is set to a positive integer.
+	// It should generally only be used as a workaround to various
+	// platform issues that exist between RS1 and RS4 as of Aug 2018
+	if currentContainerStarts.maxParallel > 0 {
+		for {
+			currentContainerStarts.Lock()
+			if currentContainerStarts.inProgress < currentContainerStarts.maxParallel {
+				currentContainerStarts.inProgress++
+				currentContainerStarts.Unlock()
+				break
+			}
+			if currentContainerStarts.inProgress == currentContainerStarts.maxParallel {
+				currentContainerStarts.Unlock()
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
+		// Make sure we decrement the count when we are done.
+		defer func() {
+			currentContainerStarts.Lock()
+			currentContainerStarts.inProgress--
+			currentContainerStarts.Unlock()
+		}()
 	}
 
 	var resultp *uint16
