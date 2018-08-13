@@ -4,12 +4,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Microsoft/hcsshim/internal/osversion"
-	gcsclient "github.com/Microsoft/opengcs/client"
-
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
+	"github.com/Microsoft/hcsshim/internal/osversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	gcsclient "github.com/Microsoft/opengcs/client"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 )

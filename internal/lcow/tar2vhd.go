@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -28,10 +29,12 @@ func TarToVhd(lcowUVM *uvm.UtilityVM, targetVHDFile string, reader io.Reader) (i
 	// BUGBUG Delete the file on failure
 
 	tar2vhd, byteCounts, err := CreateProcess(&ProcessOptions{
+		HCSSystem:         lcowUVM.ComputeSystem(),
 		Process:           &specs.Process{Args: []string{"tar2vhd"}},
 		CreateInUtilityVm: true,
 		Stdin:             reader,
 		Stdout:            outFile,
+		CopyTimeout:       2 * time.Minute,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to start tar2vhd for %s: %s", targetVHDFile, err)

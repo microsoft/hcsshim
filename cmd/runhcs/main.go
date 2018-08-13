@@ -105,6 +105,7 @@ func main() {
 		shimCommand,
 		startCommand,
 		stateCommand,
+		tarToVhdCommand,
 		// updateCommand,
 		vmshimCommand,
 	}
