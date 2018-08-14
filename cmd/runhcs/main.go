@@ -91,6 +91,7 @@ func main() {
 	}
 	app.Commands = []cli.Command{
 		createCommand,
+		createScratchCommand,
 		deleteCommand,
 		// eventsCommand,
 		execCommand,
