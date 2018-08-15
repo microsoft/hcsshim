@@ -416,7 +416,7 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, connecti
 			return -1, execInitErrorDone, err
 		}
 	} else {
-		var ociProcess oci.Process
+		var ociProcess *oci.Process
 		ociProcess, err = processParametersToOCI(params)
 		if err != nil {
 			return -1, nil, err
@@ -568,7 +568,7 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, conSettings 
 		}
 	}()
 
-	var ociProcess oci.Process
+	var ociProcess *oci.Process
 	ociProcess, err = processParametersToOCI(params)
 	if err != nil {
 		return -1, err
@@ -875,18 +875,22 @@ func (c *gcsCore) setupMappedDirectories(id string, dirs []prot.MappedDirectory)
 // oci.Process struct for OCI version 1.0.0. Since ProcessParameters
 // doesn't include various fields which are available in oci.Process, default
 // values for these fields are chosen.
-func processParametersToOCI(params prot.ProcessParameters) (oci.Process, error) {
+func processParametersToOCI(params prot.ProcessParameters) (*oci.Process, error) {
+	if params.OCIProcess != nil {
+		return params.OCIProcess, nil
+	}
+
 	var args []string
 	if len(params.CommandArgs) == 0 {
 		var err error
 		args, err = processParamCommandLineToOCIArgs(params.CommandLine)
 		if err != nil {
-			return oci.Process{}, err
+			return new(oci.Process), err
 		}
 	} else {
 		args = params.CommandArgs
 	}
-	return oci.Process{
+	return &oci.Process{
 		Args:     args,
 		Cwd:      params.WorkingDirectory,
 		Env:      processParamEnvToOCIEnv(params.Environment),

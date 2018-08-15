@@ -304,7 +304,7 @@ func (c *Container) ExecProcess(process *oci.Process, conSettings stdio.Connecti
 	c.processesWg.Add(1)
 	c.processesMutex.Unlock()
 
-	p, err := c.container.ExecProcess(*process, stdioSet)
+	p, err := c.container.ExecProcess(process, stdioSet)
 	if err != nil {
 		// We failed to exec any process. Remove our early count increment.
 		c.processesMutex.Lock()

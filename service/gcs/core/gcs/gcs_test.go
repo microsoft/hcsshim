@@ -33,7 +33,7 @@ var _ = Describe("GCS", func() {
 		Describe("calling processParametersToOCI", func() {
 			var (
 				params  prot.ProcessParameters
-				process oci.Process
+				process *oci.Process
 			)
 			JustBeforeEach(func() {
 				process, err = processParametersToOCI(params)
@@ -44,7 +44,7 @@ var _ = Describe("GCS", func() {
 				})
 				AssertNoError()
 				It("should output an oci.Process with non-defaulted fields zeroed", func() {
-					Expect(process).To(Equal(oci.Process{
+					Expect(*process).To(Equal(oci.Process{
 						Args: []string{},
 						Env:  []string{},
 						User: oci.User{UID: 0, GID: 0},
@@ -139,7 +139,7 @@ var _ = Describe("GCS", func() {
 				})
 				AssertNoError()
 				It("should output an oci.Process which matches the input values", func() {
-					Expect(process).To(Equal(oci.Process{
+					Expect(*process).To(Equal(oci.Process{
 						Args:     []string{"sh", "-c", "sleep", "20"},
 						Cwd:      "/home/user/work",
 						Env:      []string{"PATH=/this/is/my/path"},
@@ -237,7 +237,7 @@ var _ = Describe("GCS", func() {
 				})
 				AssertNoError()
 				It("should output an oci.Process which matches the input values", func() {
-					Expect(process).To(Equal(oci.Process{
+					Expect(*process).To(Equal(oci.Process{
 						Args:     []string{"sh", "-c", "sleep", "20"},
 						Cwd:      "/home/user/work",
 						Env:      []string{"PATH=/this/is/my/path"},
