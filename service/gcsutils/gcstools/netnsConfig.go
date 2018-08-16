@@ -181,7 +181,7 @@ func netnsConfig() error {
 		defer close(done)
 
 		select {
-		case <-time.After(time.Duration(30 * time.Second)):
+		case <-time.After(30 * time.Second):
 			var cos string
 			co, err := cmd.CombinedOutput() // In case it has written something
 			if err != nil {
