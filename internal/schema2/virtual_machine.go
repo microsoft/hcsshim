@@ -23,5 +23,7 @@ type VirtualMachine struct {
 
 	RegistryChanges *RegistryChanges `json:"RegistryChanges,omitempty"`
 
+	StorageQoS *StorageQoS `json:"StorageQoS,omitempty"`
+
 	GuestConnection *GuestConnection `json:"GuestConnection,omitempty"`
 }

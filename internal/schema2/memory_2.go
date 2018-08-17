@@ -13,7 +13,7 @@ type Memory2 struct {
 
 	SizeInMB int32 `json:"SizeInMB,omitempty"`
 
-	Backing string `json:"Backing,omitempty"`
+	AllowOvercommit bool `json:"AllowOvercommit,omitempty"`
 
 	EnableHotHint bool `json:"EnableHotHint,omitempty"`
 
