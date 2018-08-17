@@ -91,6 +91,7 @@ func main() {
 	}
 	app.Commands = []cli.Command{
 		createCommand,
+		createScratchCommand,
 		deleteCommand,
 		// eventsCommand,
 		execCommand,
@@ -104,6 +105,7 @@ func main() {
 		shimCommand,
 		startCommand,
 		stateCommand,
+		tarToVhdCommand,
 		// updateCommand,
 		vmshimCommand,
 	}
