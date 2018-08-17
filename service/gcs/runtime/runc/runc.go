@@ -132,7 +132,7 @@ func (c *container) Start() error {
 
 // ExecProcess executes a new process, represented as an OCI process struct,
 // inside an already-running container.
-func (c *container) ExecProcess(process oci.Process, stdioSet *stdio.ConnectionSet) (p runtime.Process, err error) {
+func (c *container) ExecProcess(process *oci.Process, stdioSet *stdio.ConnectionSet) (p runtime.Process, err error) {
 	p, err = c.runExecCommand(process, stdioSet)
 	if err != nil {
 		return nil, err
@@ -495,7 +495,7 @@ func (r *runcRuntime) hasTerminal(bundlePath string) (bool, error) {
 }
 
 // runExecCommand sets up the arguments for calling runc exec.
-func (c *container) runExecCommand(processDef oci.Process, stdioSet *stdio.ConnectionSet) (p runtime.Process, err error) {
+func (c *container) runExecCommand(processDef *oci.Process, stdioSet *stdio.ConnectionSet) (p runtime.Process, err error) {
 	// Create a temporary random directory to store the process's files.
 	tempProcessDir, err := ioutil.TempDir(containerFilesDir, c.id)
 	if err != nil {

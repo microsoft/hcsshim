@@ -566,7 +566,10 @@ func (b *Bridge) execProcess(w ResponseWriter, r *Request) {
 	var c *gcspkg.Container
 	var err error
 	if params.IsExternal {
-		logrus.Debugf("bridge::execProcess: IsExternal Calling b.coreint.RunExternalProcess")
+		logrus.Debugf("bridge::execProcess: IsExternal: calling b.coreint.RunExternalProcess")
+		pid, err = b.coreint.RunExternalProcess(params, conSettings)
+	} else if request.ContainerID == gcspkg.UVMContainerID {
+		logrus.Debugf("bridge::execProcess: UVMContainerID: calling b.coreint.RunExternalProcess")
 		pid, err = b.coreint.RunExternalProcess(params, conSettings)
 	} else if c, err = b.hostState.GetContainer(request.ContainerID); err == nil {
 		// We found a V2 container. Treat this as a V2 process.

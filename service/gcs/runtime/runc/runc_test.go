@@ -455,40 +455,40 @@ var _ = Describe("runC", func() {
 
 				Describe("performing post-Start operations", func() {
 					var (
-						shProcess         oci.Process
-						catProcess        oci.Process
-						errProcess        oci.Process
-						shortSleepProcess oci.Process
-						longSleepProcess  oci.Process
+						shProcess         *oci.Process
+						catProcess        *oci.Process
+						errProcess        *oci.Process
+						shortSleepProcess *oci.Process
+						longSleepProcess  *oci.Process
 						connSetClient     *stdio.ConnectionSet
 						connSetServer     *stdio.ConnectionSet
 					)
 					BeforeEach(func() {
-						shProcess = oci.Process{
+						shProcess = &oci.Process{
 							Terminal: true,
 							Cwd:      "/",
 							Args:     []string{"sh"},
 							Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
 						}
-						catProcess = oci.Process{
+						catProcess = &oci.Process{
 							Terminal: false,
 							Cwd:      "/",
 							Args:     []string{"cat"},
 							Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
 						}
-						errProcess = oci.Process{
+						errProcess = &oci.Process{
 							Terminal: false,
 							Cwd:      "/",
 							Args:     []string{"ls", "fake directory"},
 							Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
 						}
-						shortSleepProcess = oci.Process{
+						shortSleepProcess = &oci.Process{
 							Terminal: false,
 							Cwd:      "/",
 							Args:     []string{"sleep", "0.1"},
 							Env:      []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
 						}
-						longSleepProcess = oci.Process{
+						longSleepProcess = &oci.Process{
 							Terminal: false,
 							Cwd:      "/",
 							Args:     []string{"sleep", "1000"},
@@ -502,7 +502,7 @@ var _ = Describe("runC", func() {
 
 					Describe("executing a process in a container", func() {
 						var (
-							process oci.Process
+							process *oci.Process
 						)
 						JustBeforeEach(func() {
 							_, err = c.ExecProcess(process, connSetClient)

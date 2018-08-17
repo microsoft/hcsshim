@@ -53,7 +53,7 @@ type Container interface {
 	ID() string
 	Exists() (bool, error)
 	Start() error
-	ExecProcess(process oci.Process, stdioSet *stdio.ConnectionSet) (p Process, err error)
+	ExecProcess(process *oci.Process, stdioSet *stdio.ConnectionSet) (p Process, err error)
 	Kill(signal oslayer.Signal) error
 	Pause() error
 	Resume() error
