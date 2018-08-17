@@ -112,7 +112,6 @@ func (uvm *UtilityVM) AddSCSI(hostPath string, uvmPath string) (int, int32, erro
 				Settings: guestrequest.WCOWMappedVirtualDisk{
 					ContainerPath: uvmPath,
 					Lun:           lun,
-					AttachOnly:    (uvmPath == ""),
 				},
 			}
 		} else {
