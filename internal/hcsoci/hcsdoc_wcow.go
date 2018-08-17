@@ -83,7 +83,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 			}
 			if coi.Spec.Windows.Resources.CPU.Maximum != nil {
 				v1.ProcessorMaximum = int64(*coi.Spec.Windows.Resources.CPU.Maximum)
-				v2Container.Processor.MaximumPercentage = int32(v1.ProcessorMaximum)
+				v2Container.Processor.Maximum = int32(v1.ProcessorMaximum)
 			}
 		}
 		if coi.Spec.Windows.Resources.Memory != nil {

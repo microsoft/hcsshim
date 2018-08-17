@@ -13,7 +13,7 @@ type Processor struct {
 
 	Count int32 `json:"Count,omitempty"`
 
-	MaximumPercentage int32 `json:"MaximumPercentage,omitempty"`
+	Maximum int32 `json:"Maximum,omitempty"`
 
 	Weight int32 `json:"Weight,omitempty"`
 }
