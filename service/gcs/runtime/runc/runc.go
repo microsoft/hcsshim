@@ -146,7 +146,9 @@ func (c *container) Kill(signal oslayer.Signal) error {
 	cmd := exec.Command("runc", "--log", logPath, "kill", c.id, strconv.Itoa(int(signal)))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return errors.Wrapf(err, "runc kill failed with: %s", out)
+		if !strings.Contains(err.Error(), "os: process already finished") {
+			return errors.Wrapf(err, "runc kill failed with: %s", out)
+		}
 	}
 	return nil
 }
