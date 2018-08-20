@@ -35,6 +35,8 @@ type MappedDir struct {
 	BandwidthMaximum  uint64
 	IOPSMaximum       uint64
 	CreateInUtilityVM bool
+	// LinuxMetadata - Support added in 1803/RS4+.
+	LinuxMetadata bool `json:",omitempty"`
 }
 
 type MappedPipe struct {
@@ -59,8 +61,6 @@ type MappedVirtualDisk struct {
 	ReadOnly          bool   `json:",omitempty"`
 	Cache             string `json:",omitempty"` // "" (Unspecified); "Disabled"; "Enabled"; "Private"; "PrivateAllowSharing"
 	AttachOnly        bool   `json:",omitempty:`
-	// LinuxMetadata - Support added in 1803/RS4+.
-	LinuxMetadata bool `json:",omitempty"`
 }
 
 // AssignedDevice represents a device that has been directly assigned to a container
