@@ -84,7 +84,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		testdProc, _, err := CreateProcess(&ProcessOptions{
 			HCSSystem:         lcowUVM.ComputeSystem(),
 			CreateInUtilityVm: true,
-			CopyTimeout:       timeout.Duration,
+			CopyTimeout:       timeout.ExternalCommandToStart,
 			Process:           &specs.Process{Args: testdCommand},
 		})
 		if err != nil {
@@ -93,7 +93,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		}
 		defer testdProc.Close()
 
-		testdProc.WaitTimeout(timeout.Duration)
+		testdProc.WaitTimeout(timeout.ExternalCommandToComplete)
 		testdExitCode, err := testdProc.ExitCode()
 		if err != nil {
 			lcowUVM.RemoveSCSI(destFile)
@@ -102,7 +102,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		if testdExitCode != 0 {
 			currentTime := time.Now()
 			elapsedTime := currentTime.Sub(startTime)
-			if elapsedTime > 5*time.Second {
+			if elapsedTime > timeout.TestDRetryLoop {
 				lcowUVM.RemoveSCSI(destFile)
 				return fmt.Errorf("`%+v` return non-zero exit code (%d) following hot-add %s to utility VM", testdCommand, testdExitCode, destFile)
 			}
@@ -118,7 +118,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 	lsProc, _, err := CreateProcess(&ProcessOptions{
 		HCSSystem:         lcowUVM.ComputeSystem(),
 		CreateInUtilityVm: true,
-		CopyTimeout:       timeout.Duration,
+		CopyTimeout:       timeout.ExternalCommandToStart,
 		Process:           &specs.Process{Args: lsCommand},
 		Stdout:            &lsOutput,
 	})
@@ -128,7 +128,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		return fmt.Errorf("failed to `%+v` following hot-add %s to utility VM: %s", lsCommand, destFile, err)
 	}
 	defer lsProc.Close()
-	lsProc.WaitTimeout(timeout.Duration)
+	lsProc.WaitTimeout(timeout.ExternalCommandToComplete)
 	lsExitCode, err := lsProc.ExitCode()
 	if err != nil {
 		lcowUVM.RemoveSCSI(destFile)
@@ -147,7 +147,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 	mkfsProc, _, err := CreateProcess(&ProcessOptions{
 		HCSSystem:         lcowUVM.ComputeSystem(),
 		CreateInUtilityVm: true,
-		CopyTimeout:       timeout.Duration,
+		CopyTimeout:       timeout.ExternalCommandToStart,
 		Process:           &specs.Process{Args: mkfsCommand},
 		Stderr:            &mkfsStderr,
 	})
@@ -156,7 +156,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		return fmt.Errorf("failed to `%+v` following hot-add %s to utility VM: %s", mkfsCommand, destFile, err)
 	}
 	defer mkfsProc.Close()
-	mkfsProc.WaitTimeout(timeout.Duration)
+	mkfsProc.WaitTimeout(timeout.ExternalCommandToComplete)
 	mkfsExitCode, err := mkfsProc.ExitCode()
 	if err != nil {
 		lcowUVM.RemoveSCSI(destFile)
