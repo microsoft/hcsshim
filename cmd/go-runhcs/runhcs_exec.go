@@ -11,6 +11,8 @@ import (
 // ExecOpts is set of options that can be used with the Exec command.
 type ExecOpts struct {
 	runc.IO
+	// Detach from the container's process.
+	Detach bool
 	// PidFile is the path to the file to write the process id to.
 	PidFile string
 	// ShimLog is the path to the log file for the launched shim process.
@@ -19,6 +21,9 @@ type ExecOpts struct {
 
 func (opt *ExecOpts) args() ([]string, error) {
 	var out []string
+	if opt.Detach {
+		out = append(out, "--detach")
+	}
 	if opt.PidFile != "" {
 		abs, err := filepath.Abs(opt.PidFile)
 		if err != nil {
