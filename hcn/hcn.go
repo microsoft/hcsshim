@@ -11,7 +11,7 @@ import (
 )
 
 // hns flag imports "github.com/Microsoft/hcsshim/internal/guid"
-//go:generate go run ../mksyscall_windows.go -output zsyscall_windows.go -hns hns.go
+//go:generate go run ../mksyscall_windows.go -output zsyscall_windows.go -hns hcn.go
 
 /// HNS V1 API
 
