@@ -96,7 +96,7 @@ func HcnCreateTestNamespace() (*HostComputeNamespace, error) {
 	return namespace.Create()
 }
 
-func HcnCreateAclsAllowIn() (*EndpointPolicy, error) {
+func HcnCreateAcls() ([]EndpointPolicy, error) {
 	in := AclPolicySetting{
 		Protocols:       "6",
 		Action:          "Allow",
@@ -113,12 +113,33 @@ func HcnCreateAclsAllowIn() (*EndpointPolicy, error) {
 	if err != nil {
 		return nil, err
 	}
-	endpointPolicy := EndpointPolicy{
+	inPolicy := EndpointPolicy{
 		Type:     "ACL",
 		Settings: rawJSON,
 	}
 
-	return &endpointPolicy, nil
+	out := AclPolicySetting{
+		Protocols:       "6",
+		Action:          "Allow",
+		Direction:       "Out",
+		LocalAddresses:  "192.168.100.0/24,10.0.0.21",
+		RemoteAddresses: "192.168.100.0/24,10.0.0.21",
+		LocalPorts:      "80,8080",
+		RemotePorts:     "80,8080",
+		RuleType:        "Switch",
+		Priority:        200,
+	}
+
+	rawJSON, err = json.Marshal(out)
+	if err != nil {
+		return nil, err
+	}
+	outPolicy := EndpointPolicy{
+		Type:     "ACL",
+		Settings: rawJSON,
+	}
+
+	return []EndpointPolicy{inPolicy, outPolicy}, nil
 }
 
 func HcnCreateTestLoadBalancer(endpoint *HostComputeEndpoint) (*HostComputeLoadBalancer, error) {

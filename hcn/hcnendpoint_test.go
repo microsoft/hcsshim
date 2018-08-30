@@ -218,16 +218,16 @@ func TestApplyPolicyOnEndpoint(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	acls, err := HcnCreateAclsAllowIn()
+	endpointPolicyList, err := HcnCreateAcls()
 	if err != nil {
 		t.Error(err)
 	}
-	jsonString, err := json.Marshal(acls)
+	jsonString, err := json.Marshal(endpointPolicyList)
 	if err != nil {
 		t.Error(err)
 	}
 	fmt.Printf("ACLS JSON:\n%s \n", jsonString)
-	err = Endpoint.ApplyPolicy(*acls)
+	err = Endpoint.ApplyPolicy(endpointPolicyList)
 	if err != nil {
 		t.Error(err)
 	}
@@ -259,7 +259,7 @@ func TestModifyEndpointSettings(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	endpointPolicy, err := HcnCreateAclsAllowIn()
+	endpointPolicy, err := HcnCreateAcls()
 	if err != nil {
 		t.Error(err)
 	}
