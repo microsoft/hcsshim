@@ -1,5 +1,3 @@
-// +build functional
-
 package hcsshimtest
 
 import (
