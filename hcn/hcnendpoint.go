@@ -1,4 +1,4 @@
-package hcnshim
+package hcn
 
 import (
 	"encoding/json"
@@ -14,7 +14,7 @@ type IpConfig struct {
 	PrefixLength uint8  `json:",omitempty"`
 }
 
-// HostComputeEndpoint represents a network endpoint in HNS
+// HostComputeEndpoint represents a network endpoint
 type HostComputeEndpoint struct {
 	Id                   string           `json:"ID,omitempty"`
 	Name                 string           `json:",omitempty"`
@@ -32,12 +32,15 @@ type HostComputeEndpoint struct {
 // ModifyEndpointSettingRequest is the structure used to send request to modify an endpoint.
 // Used to update policy/port on an endpoint.
 type ModifyEndpointSettingRequest struct {
-	ResourceType string         `json:",omitempty"` // Policy, Port
-	RequestType  string         `json:",omitempty"` // Add, Remove, Update, Refresh
-	Settings     EndpointPolicy `json:",omitempty"`
+	ResourceType string          `json:",omitempty"` // Policy, Port
+	RequestType  string          `json:",omitempty"` // Add, Remove, Update, Refresh
+	Settings     json.RawMessage `json:",omitempty"`
 }
 
 func getEndpoint(endpointGuid guid.GUID, query string) (*HostComputeEndpoint, error) {
+	if err := V2ApiSupported(); err != nil {
+		return nil, err
+	}
 	// Open endpoint.
 	var (
 		endpointHandle   hcnEndpoint
@@ -68,6 +71,9 @@ func getEndpoint(endpointGuid guid.GUID, query string) (*HostComputeEndpoint, er
 }
 
 func enumerateEndpoints(query string) ([]HostComputeEndpoint, error) {
+	if err := V2ApiSupported(); err != nil {
+		return nil, err
+	}
 	// Enumerate all Endpoint Guids
 	var (
 		resultBuffer   *uint16
@@ -97,6 +103,9 @@ func enumerateEndpoints(query string) ([]HostComputeEndpoint, error) {
 }
 
 func createEndpoint(networkId string, endpointSettings string) (*HostComputeEndpoint, error) {
+	if err := V2ApiSupported(); err != nil {
+		return nil, err
+	}
 	networkGuid := guid.FromString(networkId)
 	// Open network.
 	var networkHandle hcnNetwork
@@ -143,6 +152,9 @@ func createEndpoint(networkId string, endpointSettings string) (*HostComputeEndp
 }
 
 func modifyEndpoint(endpointId string, settings string) (*HostComputeEndpoint, error) {
+	if err := V2ApiSupported(); err != nil {
+		return nil, err
+	}
 	endpointGuid := guid.FromString(endpointId)
 	// Open endpoint
 	var (
@@ -184,6 +196,9 @@ func modifyEndpoint(endpointId string, settings string) (*HostComputeEndpoint, e
 }
 
 func deleteEndpoint(endpointId string) error {
+	if err := V2ApiSupported(); err != nil {
+		return err
+	}
 	endpointGuid := guid.FromString(endpointId)
 	var resultBuffer *uint16
 	hr := hcnDeleteEndpoint(&endpointGuid, &resultBuffer)
@@ -193,29 +208,24 @@ func deleteEndpoint(endpointId string) error {
 	return nil
 }
 
-// ListEndpoints makes a HNS call to list all available endpoints.
+// ListEndpoints makes a call to list all available endpoints.
 func ListEndpoints() ([]HostComputeEndpoint, error) {
-	if err := HnsV2ApiSupported(); err != nil {
-		return nil, err
-	}
 	hcnQuery := QuerySchema(2)
-	query, err := json.Marshal(hcnQuery)
-	if err != nil {
-		return nil, err
-	}
-	endpoints, err := enumerateEndpoints(string(query))
+	endpoints, err := ListEndpointsQuery(hcnQuery)
 	if err != nil {
 		return nil, err
 	}
 	return endpoints, nil
 }
 
-// ListEndpointsQuery makes a HNS call to query the list of available endpoints.
-func ListEndpointsQuery(query string) ([]HostComputeEndpoint, error) {
-	if err := HnsV2ApiSupported(); err != nil {
+// ListEndpointsQuery makes a call to query the list of available endpoints.
+func ListEndpointsQuery(query HostComputeQuery) ([]HostComputeEndpoint, error) {
+	queryJson, err := json.Marshal(query)
+	if err != nil {
 		return nil, err
 	}
-	endpoints, err := enumerateEndpoints(query)
+
+	endpoints, err := enumerateEndpoints(string(queryJson))
 	if err != nil {
 		return nil, err
 	}
@@ -224,9 +234,6 @@ func ListEndpointsQuery(query string) ([]HostComputeEndpoint, error) {
 
 // ListEndpointsOfNetwork queries the list of endpoints on a network.
 func ListEndpointsOfNetwork(networkId string) ([]HostComputeEndpoint, error) {
-	if err := HnsV2ApiSupported(); err != nil {
-		return nil, err
-	}
 	hcnQuery := QuerySchema(2)
 	// TODO: Once query can convert schema, change to {HostComputeNetwork:networkId}
 	mapA := map[string]string{"VirtualNetwork": networkId}
@@ -235,22 +242,12 @@ func ListEndpointsOfNetwork(networkId string) ([]HostComputeEndpoint, error) {
 		return nil, err
 	}
 	hcnQuery.Filter = string(filter)
-	query, err := json.Marshal(hcnQuery)
-	if err != nil {
-		return nil, err
-	}
-	endpoints, err := enumerateEndpoints(string(query))
-	if err != nil {
-		return nil, err
-	}
-	return endpoints, nil
+
+	return ListEndpointsQuery(hcnQuery)
 }
 
 // GetEndpointByID returns an endpoint specified by Id
 func GetEndpointByID(endpointId string) (*HostComputeEndpoint, error) {
-	if err := HnsV2ApiSupported(); err != nil {
-		return nil, err
-	}
 	hcnQuery := QuerySchema(2)
 	mapA := map[string]string{"ID": endpointId}
 	filter, err := json.Marshal(mapA)
@@ -258,11 +255,8 @@ func GetEndpointByID(endpointId string) (*HostComputeEndpoint, error) {
 		return nil, err
 	}
 	hcnQuery.Filter = string(filter)
-	query, err := json.Marshal(hcnQuery)
-	if err != nil {
-		return nil, err
-	}
-	endpoints, err := enumerateEndpoints(string(query))
+
+	endpoints, err := ListEndpointsQuery(hcnQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -274,9 +268,6 @@ func GetEndpointByID(endpointId string) (*HostComputeEndpoint, error) {
 
 // GetEndpointByName returns an endpoint specified by Name
 func GetEndpointByName(endpointName string) (*HostComputeEndpoint, error) {
-	if err := HnsV2ApiSupported(); err != nil {
-		return nil, err
-	}
 	hcnQuery := QuerySchema(2)
 	mapA := map[string]string{"Name": endpointName}
 	filter, err := json.Marshal(mapA)
@@ -284,11 +275,8 @@ func GetEndpointByName(endpointName string) (*HostComputeEndpoint, error) {
 		return nil, err
 	}
 	hcnQuery.Filter = string(filter)
-	query, err := json.Marshal(hcnQuery)
-	if err != nil {
-		return nil, err
-	}
-	endpoints, err := enumerateEndpoints(string(query))
+
+	endpoints, err := ListEndpointsQuery(hcnQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -300,10 +288,7 @@ func GetEndpointByName(endpointName string) (*HostComputeEndpoint, error) {
 
 // Create Endpoint.
 func (endpoint *HostComputeEndpoint) Create() (*HostComputeEndpoint, error) {
-	if err := HnsV2ApiSupported(); err != nil {
-		return nil, err
-	}
-	logrus.Debugf("hcsshim::HostComputeEndpoint::Create id=%s", endpoint.Id)
+	logrus.Debugf("hcn::HostComputeEndpoint::Create id=%s", endpoint.Id)
 
 	jsonString, err := json.Marshal(endpoint)
 	if err != nil {
@@ -319,10 +304,7 @@ func (endpoint *HostComputeEndpoint) Create() (*HostComputeEndpoint, error) {
 
 // Delete Endpoint.
 func (endpoint *HostComputeEndpoint) Delete() (*HostComputeEndpoint, error) {
-	if err := HnsV2ApiSupported(); err != nil {
-		return nil, err
-	}
-	logrus.Debugf("hcsshim::HostComputeEndpoint::Delete id=%s", endpoint.Id)
+	logrus.Debugf("hcn::HostComputeEndpoint::Delete id=%s", endpoint.Id)
 
 	if err := deleteEndpoint(endpoint.Id); err != nil {
 		return nil, err
@@ -332,10 +314,7 @@ func (endpoint *HostComputeEndpoint) Delete() (*HostComputeEndpoint, error) {
 
 // ModifyEndpointSettings updates the Port/Policy of an Endpoint.
 func ModifyEndpointSettings(endpointId string, request *ModifyEndpointSettingRequest) error {
-	if err := HnsV2ApiSupported(); err != nil {
-		return err
-	}
-	logrus.Debugf("hcsshim::HostComputeEndpoint::ModifyEndpointSettings id=%s", endpointId)
+	logrus.Debugf("hcn::HostComputeEndpoint::ModifyEndpointSettings id=%s", endpointId)
 
 	endpointSettingsRequest, err := json.Marshal(request)
 	if err != nil {
@@ -350,14 +329,17 @@ func ModifyEndpointSettings(endpointId string, request *ModifyEndpointSettingReq
 }
 
 // ApplyPolicy applies a Policy (ex: ACL) on the Endpoint.
-func (endpoint *HostComputeEndpoint) ApplyPolicy(endpointPolicy *EndpointPolicy) error {
-	// Endpoint::ModifyEndpointSettings() will check for API support.
-	logrus.Debugf("hcsshim::HostComputeEndpoint::ApplyPolicy id=%s", endpoint.Id)
+func (endpoint *HostComputeEndpoint) ApplyPolicy(endpointPolicy EndpointPolicy) error {
+	logrus.Debugf("hcn::HostComputeEndpoint::ApplyPolicy id=%s", endpoint.Id)
 
+	settingsJson, err := json.Marshal(endpointPolicy)
+	if err != nil {
+		return err
+	}
 	requestMessage := &ModifyEndpointSettingRequest{
 		ResourceType: "Policy",
 		RequestType:  "Update",
-		Settings:     *endpointPolicy,
+		Settings:     settingsJson,
 	}
 
 	return ModifyEndpointSettings(endpoint.Id, requestMessage)

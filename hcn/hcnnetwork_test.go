@@ -1,11 +1,11 @@
-package hcsshimtest
+// +build integration
+
+package hcn
 
 import (
 	"encoding/json"
 	"fmt"
 	"testing"
-
-	"github.com/Microsoft/hcsshim"
 )
 
 func TestCreateDeleteNetwork(t *testing.T) {
@@ -29,7 +29,7 @@ func TestGetNetworkByName(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	network, err = hcsshim.GetNetworkByName(network.Name)
+	network, err = GetNetworkByName(network.Name)
 	if err != nil {
 		t.Error(err)
 	}
@@ -47,7 +47,7 @@ func TestGetNetworkById(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	network, err = hcsshim.GetNetworkByID(network.Id)
+	network, err = GetNetworkByID(network.Id)
 	if err != nil {
 		t.Error(err)
 	}
@@ -61,7 +61,7 @@ func TestGetNetworkById(t *testing.T) {
 }
 
 func TestListNetwork(t *testing.T) {
-	_, err := hcsshim.ListNetworks()
+	_, err := ListNetworks()
 	if err != nil {
 		t.Error(err)
 	}

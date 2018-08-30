@@ -1,11 +1,11 @@
-package hcsshimtest
+// +build integration
+
+package hcn
 
 import (
 	"encoding/json"
 	"fmt"
 	"testing"
-
-	"github.com/Microsoft/hcsshim"
 )
 
 func TestCreateDeleteLoadBalancer(t *testing.T) {
@@ -54,7 +54,7 @@ func TestGetLoadBalancerById(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	foundLB, err := hcsshim.GetLoadBalancerByID(loadBalancer.Id)
+	foundLB, err := GetLoadBalancerByID(loadBalancer.Id)
 	if err != nil {
 		t.Error(err)
 	}
@@ -76,7 +76,7 @@ func TestGetLoadBalancerById(t *testing.T) {
 }
 
 func TestListLoadBalancer(t *testing.T) {
-	_, err := hcsshim.ListLoadBalancers()
+	_, err := ListLoadBalancers()
 	if err != nil {
 		t.Error(err)
 	}
@@ -134,7 +134,7 @@ func TestLoadBalancerAddRemoveEndpoint(t *testing.T) {
 	}
 }
 
-func TestAddHcnLoadBalancer(t *testing.T) {
+func TestAddLoadBalancer(t *testing.T) {
 	network, err := HcnCreateTestNetwork()
 	if err != nil {
 		t.Error(err)
@@ -144,11 +144,11 @@ func TestAddHcnLoadBalancer(t *testing.T) {
 		t.Error(err)
 	}
 
-	loadBalancer, err := hcsshim.AddHcnLoadBalancer([]hcsshim.HostComputeEndpoint{*endpoint}, false, "10.0.0.1", []string{"1.1.1.2", "1.1.1.3"}, 6, 8080, 80)
+	loadBalancer, err := AddLoadBalancer([]HostComputeEndpoint{*endpoint}, false, "10.0.0.1", []string{"1.1.1.2", "1.1.1.3"}, 6, 8080, 80)
 	if err != nil {
 		t.Error(err)
 	}
-	foundLB, err := hcsshim.GetLoadBalancerByID(loadBalancer.Id)
+	foundLB, err := GetLoadBalancerByID(loadBalancer.Id)
 	if err != nil {
 		t.Error(err)
 	}

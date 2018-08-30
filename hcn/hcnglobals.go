@@ -1,4 +1,4 @@
-package hcnshim
+package hcn
 
 import (
 	"encoding/json"
@@ -9,33 +9,33 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// HNSGlobals are all global properties of the HNS Service.
-type HNSGlobals struct {
-	Version HNSVersion `json:"Version"`
+// Globals are all global properties of the HCN Service.
+type Globals struct {
+	Version Version `json:"Version"`
 }
 
-// HNSVersion is the HNS Service version.
-type HNSVersion struct {
+// Version is the HCN Service version.
+type Version struct {
 	Major int `json:"Major"`
 	Minor int `json:"Minor"`
 }
 
 var (
 	// HNSVersion1803 added ACL functionality.
-	HNSVersion1803 = HNSVersion{Major: 7, Minor: 2}
-	// HNSV2ApiSupport added support for the V2 Api/Schema
-	HNSV2ApiSupport = HNSVersion{Major: 9, Minor: 1}
+	HNSVersion1803 = Version{Major: 7, Minor: 2}
+	// V2ApiSupport allows the use of V2 Api calls and V2 Schema.
+	V2ApiSupport = Version{Major: 9, Minor: 1}
 )
 
-// GetHNSGlobals returns the global properties of the HNS Service.
-func GetHNSGlobals() (*HNSGlobals, error) {
-	var version HNSVersion
+// GetGlobals returns the global properties of the HCN Service.
+func GetGlobals() (*Globals, error) {
+	var version Version
 	err := hnsCall("GET", "/globals/version", "", &version)
 	if err != nil {
 		return nil, err
 	}
 
-	globals := &HNSGlobals{
+	globals := &Globals{
 		Version: version,
 	}
 

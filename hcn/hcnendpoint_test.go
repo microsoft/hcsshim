@@ -1,11 +1,11 @@
-package hcsshimtest
+// +build integration
+
+package hcn
 
 import (
 	"encoding/json"
 	"fmt"
 	"testing"
-
-	"github.com/Microsoft/hcsshim"
 )
 
 func TestCreateDeleteEndpoint(t *testing.T) {
@@ -43,7 +43,7 @@ func TestGetEndpointById(t *testing.T) {
 		t.Error(err)
 	}
 
-	foundEndpoint, err := hcsshim.GetEndpointByID(Endpoint.Id)
+	foundEndpoint, err := GetEndpointByID(Endpoint.Id)
 	if err != nil {
 		t.Error(err)
 	}
@@ -71,7 +71,7 @@ func TestGetEndpointByName(t *testing.T) {
 		t.Error(err)
 	}
 
-	foundEndpoint, err := hcsshim.GetEndpointByName(Endpoint.Name)
+	foundEndpoint, err := GetEndpointByName(Endpoint.Name)
 	if err != nil {
 		t.Error(err)
 	}
@@ -99,7 +99,7 @@ func TestListEndpoints(t *testing.T) {
 		t.Error(err)
 	}
 
-	foundEndpoints, err := hcsshim.ListEndpoints()
+	foundEndpoints, err := ListEndpoints()
 	if err != nil {
 		t.Error(err)
 	}
@@ -127,7 +127,7 @@ func TestListEndpointsOfNetwork(t *testing.T) {
 		t.Error(err)
 	}
 
-	foundEndpoints, err := hcsshim.ListEndpointsOfNetwork(network.Id)
+	foundEndpoints, err := ListEndpointsOfNetwork(network.Id)
 	if err != nil {
 		t.Error(err)
 	}
@@ -227,12 +227,12 @@ func TestApplyPolicyOnEndpoint(t *testing.T) {
 		t.Error(err)
 	}
 	fmt.Printf("ACLS JSON:\n%s \n", jsonString)
-	err = Endpoint.ApplyPolicy(acls)
+	err = Endpoint.ApplyPolicy(*acls)
 	if err != nil {
 		t.Error(err)
 	}
 
-	foundEndpoint, err := hcsshim.GetEndpointByName(Endpoint.Name)
+	foundEndpoint, err := GetEndpointByName(Endpoint.Name)
 	if err != nil {
 		t.Error(err)
 	}
@@ -263,19 +263,23 @@ func TestModifyEndpointSettings(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-
-	requestMessage := &hcsshim.ModifyEndpointSettingRequest{
-		ResourceType: "Policy",
-		RequestType:  "Update",
-		Settings:     *endpointPolicy,
-	}
-
-	err = hcsshim.ModifyEndpointSettings(endpoint.Id, requestMessage)
+	settingsJson, err := json.Marshal(endpointPolicy)
 	if err != nil {
 		t.Error(err)
 	}
 
-	foundEndpoint, err := hcsshim.GetEndpointByName(endpoint.Name)
+	requestMessage := &ModifyEndpointSettingRequest{
+		ResourceType: "Policy",
+		RequestType:  "Update",
+		Settings:     settingsJson,
+	}
+
+	err = ModifyEndpointSettings(endpoint.Id, requestMessage)
+	if err != nil {
+		t.Error(err)
+	}
+
+	foundEndpoint, err := GetEndpointByName(endpoint.Name)
 	if err != nil {
 		t.Error(err)
 	}

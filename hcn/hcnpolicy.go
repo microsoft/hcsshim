@@ -1,4 +1,4 @@
-package hcnshim
+package hcn
 
 import "encoding/json"
 
@@ -7,17 +7,18 @@ type EndpointPolicyType string
 
 // EndpointPolicyType const
 const (
-	PortMapping         EndpointPolicyType = "PortMapping"
-	ACL                 EndpointPolicyType = "ACL"
-	QOS                 EndpointPolicyType = "QOS"
-	L2Driver            EndpointPolicyType = "L2Driver"
-	OutBoundNAT         EndpointPolicyType = "OutBoundNAT"
-	SDNRoute            EndpointPolicyType = "SDNRoute"
-	L4Proxy             EndpointPolicyType = "L4Proxy"
-	ProviderAddress     EndpointPolicyType = "ProviderAddress"
-	PortName            EndpointPolicyType = "PortName"
-	EncapOverhead       EndpointPolicyType = "EncapOverhead"
-	InterfaceConstraint EndpointPolicyType = "InterfaceConstraint"
+	PortMapping   EndpointPolicyType = "PortMapping"
+	ACL           EndpointPolicyType = "ACL"
+	QOS           EndpointPolicyType = "QOS"
+	L2Driver      EndpointPolicyType = "L2Driver"
+	OutBoundNAT   EndpointPolicyType = "OutBoundNAT"
+	SDNRoute      EndpointPolicyType = "SDNRoute"
+	L4Proxy       EndpointPolicyType = "L4Proxy"
+	PortName      EndpointPolicyType = "PortName"
+	EncapOverhead EndpointPolicyType = "EncapOverhead"
+	// Endpoint and Network have InterfaceConstraint and ProviderAddress
+	NetworkProviderAddress     EndpointPolicyType = "ProviderAddress"
+	NetworkInterfaceConstraint EndpointPolicyType = "InterfaceConstraint"
 )
 
 // EndpointPolicy is a collection of Policy settings for an Endpoint.
@@ -31,14 +32,13 @@ type NetworkPolicyType string
 
 // NetworkPolicyType const
 const (
-	SourceMacAddress NetworkPolicyType = "SourceMacAddress"
-	NetAdapterName   NetworkPolicyType = "NetAdapterName"
-	VSwitchExtension NetworkPolicyType = "VSwitchExtension"
-	DrMacAddress     NetworkPolicyType = "DrMacAddress"
-	AutomaticDNS     NetworkPolicyType = "AutomaticDNS"
-	// Endpoint has InterfaceConstraint and ProviderAddress
-	NetworkInterfaceConstraint NetworkPolicyType = "InterfaceConstraint"
-	NetworkProviderAddress     NetworkPolicyType = "ProviderAddress"
+	SourceMacAddress    NetworkPolicyType = "SourceMacAddress"
+	NetAdapterName      NetworkPolicyType = "NetAdapterName"
+	VSwitchExtension    NetworkPolicyType = "VSwitchExtension"
+	DrMacAddress        NetworkPolicyType = "DrMacAddress"
+	AutomaticDNS        NetworkPolicyType = "AutomaticDNS"
+	InterfaceConstraint NetworkPolicyType = "InterfaceConstraint"
+	ProviderAddress     NetworkPolicyType = "ProviderAddress"
 )
 
 // NetworkPolicy is a collection of Policy settings for a Network.

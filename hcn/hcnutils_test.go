@@ -1,14 +1,14 @@
-package hcsshimtest
+// +build integration
+
+package hcn
 
 import (
 	"encoding/json"
-
-	"github.com/Microsoft/hcsshim"
 )
 
 func cleanup() {
 	// Delete test network (if exists)
-	testNetwork, err := hcsshim.GetNetworkByName(NatTestNetworkName)
+	testNetwork, err := GetNetworkByName(NatTestNetworkName)
 	if err != nil {
 		return
 	}
@@ -20,27 +20,27 @@ func cleanup() {
 	}
 }
 
-func HcnCreateTestNetwork() (*hcsshim.HostComputeNetwork, error) {
+func HcnCreateTestNetwork() (*HostComputeNetwork, error) {
 	cleanup()
-	network := &hcsshim.HostComputeNetwork{
+	network := &HostComputeNetwork{
 		Type: "NAT",
 		Name: NatTestNetworkName,
-		MacPool: hcsshim.HcnMacPool{
-			Ranges: []hcsshim.MacRange{
-				hcsshim.MacRange{
+		MacPool: MacPool{
+			Ranges: []MacRange{
+				MacRange{
 					StartMacAddress: "00-15-5D-52-C0-00",
 					EndMacAddress:   "00-15-5D-52-CF-FF",
 				},
 			},
 		},
-		Ipams: []hcsshim.Ipam{
-			hcsshim.Ipam{
+		Ipams: []Ipam{
+			Ipam{
 				Type: "Static",
-				Subnets: []hcsshim.HcnSubnet{
-					hcsshim.HcnSubnet{
+				Subnets: []Subnet{
+					Subnet{
 						IpAddressPrefix: "192.168.100.0/24",
-						Routes: []hcsshim.HcnRoute{
-							hcsshim.HcnRoute{
+						Routes: []Route{
+							Route{
 								NextHop:           "192.168.100.1",
 								DestinationPrefix: "0.0.0.0",
 							},
@@ -49,7 +49,7 @@ func HcnCreateTestNetwork() (*hcsshim.HostComputeNetwork, error) {
 				},
 			},
 		},
-		SchemaVersion: hcsshim.SchemaVersion{
+		SchemaVersion: SchemaVersion{
 			Major: 2,
 			Minor: 0,
 		},
@@ -58,10 +58,10 @@ func HcnCreateTestNetwork() (*hcsshim.HostComputeNetwork, error) {
 	return network.Create()
 }
 
-func HcnCreateTestEndpoint(network *hcsshim.HostComputeNetwork) (*hcsshim.HostComputeEndpoint, error) {
-	Endpoint := &hcsshim.HostComputeEndpoint{
+func HcnCreateTestEndpoint(network *HostComputeNetwork) (*HostComputeEndpoint, error) {
+	Endpoint := &HostComputeEndpoint{
 		Name: NatTestEndpointName,
-		SchemaVersion: hcsshim.SchemaVersion{
+		SchemaVersion: SchemaVersion{
 			Major: 2,
 			Minor: 0,
 		},
@@ -70,11 +70,11 @@ func HcnCreateTestEndpoint(network *hcsshim.HostComputeNetwork) (*hcsshim.HostCo
 	return network.CreateEndpoint(Endpoint)
 }
 
-func HcnCreateTestEndpointWithNamespace(network *hcsshim.HostComputeNetwork, namespace *hcsshim.HostComputeNamespace) (*hcsshim.HostComputeEndpoint, error) {
-	Endpoint := &hcsshim.HostComputeEndpoint{
+func HcnCreateTestEndpointWithNamespace(network *HostComputeNetwork, namespace *HostComputeNamespace) (*HostComputeEndpoint, error) {
+	Endpoint := &HostComputeEndpoint{
 		Name:                 NatTestEndpointName,
 		HostComputeNamespace: namespace.Id,
-		SchemaVersion: hcsshim.SchemaVersion{
+		SchemaVersion: SchemaVersion{
 			Major: 2,
 			Minor: 0,
 		},
@@ -83,11 +83,11 @@ func HcnCreateTestEndpointWithNamespace(network *hcsshim.HostComputeNetwork, nam
 	return network.CreateEndpoint(Endpoint)
 }
 
-func HcnCreateTestNamespace() (*hcsshim.HostComputeNamespace, error) {
-	namespace := &hcsshim.HostComputeNamespace{
+func HcnCreateTestNamespace() (*HostComputeNamespace, error) {
+	namespace := &HostComputeNamespace{
 		Type:        "HostDefault",
 		NamespaceId: 5,
-		SchemaVersion: hcsshim.SchemaVersion{
+		SchemaVersion: SchemaVersion{
 			Major: 2,
 			Minor: 0,
 		},
@@ -96,9 +96,9 @@ func HcnCreateTestNamespace() (*hcsshim.HostComputeNamespace, error) {
 	return namespace.Create()
 }
 
-func HcnCreateAclsAllowIn() (*hcsshim.EndpointPolicy, error) {
-	in := hcsshim.AclPolicySetting{
-		Protocols:       "6,17",
+func HcnCreateAclsAllowIn() (*EndpointPolicy, error) {
+	in := AclPolicySetting{
+		Protocols:       "6",
 		Action:          "Allow",
 		Direction:       "In",
 		LocalAddresses:  "192.168.100.0/24,10.0.0.21",
@@ -113,7 +113,7 @@ func HcnCreateAclsAllowIn() (*hcsshim.EndpointPolicy, error) {
 	if err != nil {
 		return nil, err
 	}
-	endpointPolicy := hcsshim.EndpointPolicy{
+	endpointPolicy := EndpointPolicy{
 		Type:     "ACL",
 		Settings: rawJSON,
 	}
@@ -121,19 +121,19 @@ func HcnCreateAclsAllowIn() (*hcsshim.EndpointPolicy, error) {
 	return &endpointPolicy, nil
 }
 
-func HcnCreateTestLoadBalancer(endpoint *hcsshim.HostComputeEndpoint) (*hcsshim.HostComputeLoadBalancer, error) {
-	loadBalancer := &hcsshim.HostComputeLoadBalancer{
+func HcnCreateTestLoadBalancer(endpoint *HostComputeEndpoint) (*HostComputeLoadBalancer, error) {
+	loadBalancer := &HostComputeLoadBalancer{
 		HostComputeEndpoints: []string{endpoint.Id},
 		SourceVIP:            "10.0.0.1",
-		PortMappings: []hcsshim.LoadBalancerPortMapping{
-			hcsshim.LoadBalancerPortMapping{
+		PortMappings: []LoadBalancerPortMapping{
+			LoadBalancerPortMapping{
 				Protocol:     6, // TCP
 				InternalPort: 8080,
 				ExternalPort: 8090,
 			},
 		},
 		FrontendVIPs: []string{"1.1.1.2", "1.1.1.3"},
-		SchemaVersion: hcsshim.SchemaVersion{
+		SchemaVersion: SchemaVersion{
 			Major: 2,
 			Minor: 0,
 		},

@@ -1,11 +1,11 @@
-package hcsshimtest
+// +build integration
+
+package hcn
 
 import (
 	"encoding/json"
 	"fmt"
 	"testing"
-
-	"github.com/Microsoft/hcsshim"
 )
 
 func TestCreateDeleteNamespace(t *testing.T) {
@@ -32,7 +32,7 @@ func TestGetNamespaceById(t *testing.T) {
 		t.Error(err)
 	}
 
-	foundNamespace, err := hcsshim.GetNamespaceByID(namespace.Id)
+	foundNamespace, err := GetNamespaceByID(namespace.Id)
 	if err != nil {
 		t.Error(err)
 	}
@@ -52,7 +52,7 @@ func TestListNamespaces(t *testing.T) {
 		t.Error(err)
 	}
 
-	foundNamespaces, err := hcsshim.ListNamespaces()
+	foundNamespaces, err := ListNamespaces()
 	if err != nil {
 		t.Error(err)
 	}
@@ -84,7 +84,7 @@ func TestGetNamespaceEndpointIds(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	foundEndpoints, err := hcsshim.GetNamespaceEndpointIds(namespace.Id)
+	foundEndpoints, err := GetNamespaceEndpointIds(namespace.Id)
 	if err != nil {
 		t.Error(err)
 	}
@@ -116,7 +116,7 @@ func TestGetNamespaceContainers(t *testing.T) {
 		t.Error(err)
 	}
 
-	foundEndpoints, err := hcsshim.GetNamespaceContainerIds(namespace.Id)
+	foundEndpoints, err := GetNamespaceContainerIds(namespace.Id)
 	if err != nil {
 		t.Error(err)
 	}
@@ -144,18 +144,18 @@ func TestAddRemoveNamespaceEndpoint(t *testing.T) {
 		t.Error(err)
 	}
 
-	err = hcsshim.AddNamespaceEndpoint(namespace.Id, endpoint.Id)
+	err = AddNamespaceEndpoint(namespace.Id, endpoint.Id)
 	if err != nil {
 		t.Error(err)
 	}
-	foundEndpoints, err := hcsshim.GetNamespaceEndpointIds(namespace.Id)
+	foundEndpoints, err := GetNamespaceEndpointIds(namespace.Id)
 	if err != nil {
 		t.Error(err)
 	}
 	if len(foundEndpoints) == 0 {
 		t.Errorf("No Endpoint found")
 	}
-	err = hcsshim.RemoveNamespaceEndpoint(namespace.Id, endpoint.Id)
+	err = RemoveNamespaceEndpoint(namespace.Id, endpoint.Id)
 	if err != nil {
 		t.Error(err)
 	}
@@ -193,24 +193,24 @@ func TestModifyNamespaceSettings(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	requestMessage := &hcsshim.ModifyNamespaceSettingRequest{
+	requestMessage := &ModifyNamespaceSettingRequest{
 		ResourceType: "Endpoint",
 		RequestType:  "Add",
 		Settings:     settingsJson,
 	}
 
-	err = hcsshim.ModifyNamespaceSettings(namespace.Id, requestMessage)
+	err = ModifyNamespaceSettings(namespace.Id, requestMessage)
 	if err != nil {
 		t.Error(err)
 	}
-	foundEndpoints, err := hcsshim.GetNamespaceEndpointIds(namespace.Id)
+	foundEndpoints, err := GetNamespaceEndpointIds(namespace.Id)
 	if err != nil {
 		t.Error(err)
 	}
 	if len(foundEndpoints) == 0 {
 		t.Errorf("No Endpoint found")
 	}
-	err = hcsshim.RemoveNamespaceEndpoint(namespace.Id, endpoint.Id)
+	err = RemoveNamespaceEndpoint(namespace.Id, endpoint.Id)
 	if err != nil {
 		t.Error(err)
 	}

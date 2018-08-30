@@ -1,15 +1,15 @@
-package hcsshimtest
+// +build integration
+
+package hcn
 
 import (
 	"encoding/json"
 	"fmt"
 	"testing"
-
-	"github.com/Microsoft/hcsshim"
 )
 
 func TestSupport(t *testing.T) {
-	supportedFeatures := hcsshim.GetHcnSupportedFeatures()
+	supportedFeatures := GetSupportedFeatures()
 	jsonString, err := json.Marshal(supportedFeatures)
 	if err != nil {
 		t.Error(err)

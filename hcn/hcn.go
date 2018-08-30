@@ -1,7 +1,6 @@
-// Shim for the Host Networking Service (HNS) to manage networking for Windows Server
-// containers and Hyper-V containers. In RS5 HNS was renamed to Host Compute Networking (HCN).
-
-package hcnshim
+// Package hcn is a shim for the Host Compute Networking (HCN) service, which manages networking for Windows Server
+// containers and Hyper-V containers. Previous to RS5, HCN was referred to as Host Networking Service (HNS).
+package hcn
 
 import (
 	"fmt"
@@ -12,7 +11,7 @@ import (
 )
 
 // hns flag imports "github.com/Microsoft/hcsshim/internal/guid"
-//go:generate go run ../../mksyscall_windows.go -output zsyscall_windows.go -hns hns.go
+//go:generate go run ../mksyscall_windows.go -output zsyscall_windows.go -hns hns.go
 
 /// HNS V1 API
 
@@ -93,7 +92,7 @@ func CheckForErrors(methodName string, hr error, resultBuffer *uint16) error {
 	return nil
 }
 
-// SchemaVersion for HNS Objects/Queries.
+// SchemaVersion for HCN Objects/Queries.
 type SchemaVersion struct {
 	Major uint32 `json:",omitempty"`
 	Minor uint32 `json:",omitempty"`
@@ -105,14 +104,14 @@ func (s *SchemaVersion) MarshalJSON() ([]byte, error) {
 	return []byte(jsonString), nil
 }
 
-// HostComputeQuery is the format for HNS queries.
+// HostComputeQuery is the format for HCN queries.
 type HostComputeQuery struct {
 	SchemaVersion SchemaVersion `json:""`
 	Flags         uint32        `json:",omitempty"` // 0: None, 1: Detailed
 	Filter        string        `json:",omitempty"`
 }
 
-// QuerySchema generates HNS Query.
+// QuerySchema generates HCN Query.
 // Passed into get/enumerate calls to filter results.
 func QuerySchema(version int) HostComputeQuery {
 	var query HostComputeQuery
@@ -133,11 +132,11 @@ func platformDoesNotSupportError(featureName string) error {
 	return fmt.Errorf("Platform does not support feature %s", featureName)
 }
 
-// HnsV2ApiSupported returns an error if the HNS version does not support the V2 Apis.
-func HnsV2ApiSupported() error {
-	supported := GetHNSSupportedFeatures()
+// V2ApiSupported returns an error if the HCN version does not support the V2 Apis.
+func V2ApiSupported() error {
+	supported := GetSupportedFeatures()
 	if supported.Api.V2 {
 		return nil
 	}
-	return platformDoesNotSupportError("Hns V2 Api/Schema")
+	return platformDoesNotSupportError("V2 Api/Schema")
 }

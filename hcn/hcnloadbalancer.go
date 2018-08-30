@@ -1,4 +1,4 @@
-package hcnshim
+package hcn
 
 import (
 	"encoding/json"
@@ -27,6 +27,9 @@ type HostComputeLoadBalancer struct {
 }
 
 func getLoadBalancer(loadBalancerGuid guid.GUID, query string) (*HostComputeLoadBalancer, error) {
+	if err := V2ApiSupported(); err != nil {
+		return nil, err
+	}
 	// Open loadBalancer.
 	var (
 		loadBalancerHandle hcnLoadBalancer
@@ -57,6 +60,9 @@ func getLoadBalancer(loadBalancerGuid guid.GUID, query string) (*HostComputeLoad
 }
 
 func enumerateLoadBalancers(query string) ([]HostComputeLoadBalancer, error) {
+	if err := V2ApiSupported(); err != nil {
+		return nil, err
+	}
 	// Enumerate all LoadBalancer Guids
 	var (
 		resultBuffer       *uint16
@@ -85,6 +91,9 @@ func enumerateLoadBalancers(query string) ([]HostComputeLoadBalancer, error) {
 }
 
 func createLoadBalancer(settings string) (*HostComputeLoadBalancer, error) {
+	if err := V2ApiSupported(); err != nil {
+		return nil, err
+	}
 	// Create new loadBalancer.
 	var (
 		loadBalancerHandle hcnLoadBalancer
@@ -121,6 +130,9 @@ func createLoadBalancer(settings string) (*HostComputeLoadBalancer, error) {
 }
 
 func modifyLoadBalancer(loadBalancerId string, settings string) (*HostComputeLoadBalancer, error) {
+	if err := V2ApiSupported(); err != nil {
+		return nil, err
+	}
 	loadBalancerGuid := guid.FromString(loadBalancerId)
 	// Open loadBalancer.
 	var (
@@ -162,6 +174,9 @@ func modifyLoadBalancer(loadBalancerId string, settings string) (*HostComputeLoa
 }
 
 func deleteLoadBalancer(loadBalancerId string) error {
+	if err := V2ApiSupported(); err != nil {
+		return err
+	}
 	loadBalancerGuid := guid.FromString(loadBalancerId)
 	var resultBuffer *uint16
 	hr := hcnDeleteLoadBalancer(&loadBalancerGuid, &resultBuffer)
@@ -171,29 +186,24 @@ func deleteLoadBalancer(loadBalancerId string) error {
 	return nil
 }
 
-// ListLoadBalancers makes a HNS call to list all available loadBalancers.
+// ListLoadBalancers makes a call to list all available loadBalancers.
 func ListLoadBalancers() ([]HostComputeLoadBalancer, error) {
-	if err := HnsV2ApiSupported(); err != nil {
-		return nil, err
-	}
 	hcnQuery := QuerySchema(2)
-	query, err := json.Marshal(hcnQuery)
-	if err != nil {
-		return nil, err
-	}
-	loadBalancers, err := enumerateLoadBalancers(string(query))
+	loadBalancers, err := ListLoadBalancersQuery(hcnQuery)
 	if err != nil {
 		return nil, err
 	}
 	return loadBalancers, nil
 }
 
-// ListLoadBalancersQuery makes a HNS call to query the list of available loadBalancers.
-func ListLoadBalancersQuery(query string) ([]HostComputeLoadBalancer, error) {
-	if err := HnsV2ApiSupported(); err != nil {
+// ListLoadBalancersQuery makes a call to query the list of available loadBalancers.
+func ListLoadBalancersQuery(query HostComputeQuery) ([]HostComputeLoadBalancer, error) {
+	queryJson, err := json.Marshal(query)
+	if err != nil {
 		return nil, err
 	}
-	loadBalancers, err := enumerateLoadBalancers(query)
+
+	loadBalancers, err := enumerateLoadBalancers(string(queryJson))
 	if err != nil {
 		return nil, err
 	}
@@ -202,9 +212,6 @@ func ListLoadBalancersQuery(query string) ([]HostComputeLoadBalancer, error) {
 
 // GetLoadBalancerByID returns the LoadBalancer specified by Id.
 func GetLoadBalancerByID(loadBalancerId string) (*HostComputeLoadBalancer, error) {
-	if err := HnsV2ApiSupported(); err != nil {
-		return nil, err
-	}
 	hcnQuery := QuerySchema(2)
 	mapA := map[string]string{"ID": loadBalancerId}
 	filter, err := json.Marshal(mapA)
@@ -212,11 +219,8 @@ func GetLoadBalancerByID(loadBalancerId string) (*HostComputeLoadBalancer, error
 		return nil, err
 	}
 	hcnQuery.Filter = string(filter)
-	query, err := json.Marshal(hcnQuery)
-	if err != nil {
-		return nil, err
-	}
-	loadBalancers, err := enumerateLoadBalancers(string(query))
+
+	loadBalancers, err := ListLoadBalancersQuery(hcnQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -228,10 +232,7 @@ func GetLoadBalancerByID(loadBalancerId string) (*HostComputeLoadBalancer, error
 
 // Create LoadBalancer.
 func (loadBalancer *HostComputeLoadBalancer) Create() (*HostComputeLoadBalancer, error) {
-	if err := HnsV2ApiSupported(); err != nil {
-		return nil, err
-	}
-	logrus.Debugf("hcsshim::HostComputeLoadBalancer::Create id=%s", loadBalancer.Id)
+	logrus.Debugf("hcn::HostComputeLoadBalancer::Create id=%s", loadBalancer.Id)
 
 	jsonString, err := json.Marshal(loadBalancer)
 	if err != nil {
@@ -247,10 +248,7 @@ func (loadBalancer *HostComputeLoadBalancer) Create() (*HostComputeLoadBalancer,
 
 // Delete LoadBalancer.
 func (loadBalancer *HostComputeLoadBalancer) Delete() (*HostComputeLoadBalancer, error) {
-	if err := HnsV2ApiSupported(); err != nil {
-		return nil, err
-	}
-	logrus.Debugf("hcsshim::HostComputeLoadBalancer::Delete id=%s", loadBalancer.Id)
+	logrus.Debugf("hcn::HostComputeLoadBalancer::Delete id=%s", loadBalancer.Id)
 
 	if err := deleteLoadBalancer(loadBalancer.Id); err != nil {
 		return nil, err
@@ -260,10 +258,7 @@ func (loadBalancer *HostComputeLoadBalancer) Delete() (*HostComputeLoadBalancer,
 
 // AddEndpoint add an endpoint to a LoadBalancer
 func (loadBalancer *HostComputeLoadBalancer) AddEndpoint(endpoint *HostComputeEndpoint) (*HostComputeLoadBalancer, error) {
-	if err := HnsV2ApiSupported(); err != nil {
-		return nil, err
-	}
-	logrus.Debugf("hcsshim::HostComputeLoadBalancer::AddEndpoint loadBalancer=%s endpoint=%s", loadBalancer.Id, endpoint.Id)
+	logrus.Debugf("hcn::HostComputeLoadBalancer::AddEndpoint loadBalancer=%s endpoint=%s", loadBalancer.Id, endpoint.Id)
 
 	_, err := loadBalancer.Delete()
 	if err != nil {
@@ -278,10 +273,7 @@ func (loadBalancer *HostComputeLoadBalancer) AddEndpoint(endpoint *HostComputeEn
 
 // RemoveEndpoint removes an endpoint from a LoadBalancer
 func (loadBalancer *HostComputeLoadBalancer) RemoveEndpoint(endpoint *HostComputeEndpoint) (*HostComputeLoadBalancer, error) {
-	if err := HnsV2ApiSupported(); err != nil {
-		return nil, err
-	}
-	logrus.Debugf("hcsshim::HostComputeLoadBalancer::RemoveEndpoint loadBalancer=%s endpoint=%s", loadBalancer.Id, endpoint.Id)
+	logrus.Debugf("hcn::HostComputeLoadBalancer::RemoveEndpoint loadBalancer=%s endpoint=%s", loadBalancer.Id, endpoint.Id)
 
 	_, err := loadBalancer.Delete()
 	if err != nil {
@@ -302,10 +294,7 @@ func (loadBalancer *HostComputeLoadBalancer) RemoveEndpoint(endpoint *HostComput
 
 // AddLoadBalancer for the specified endpoints
 func AddLoadBalancer(endpoints []HostComputeEndpoint, isILB bool, sourceVIP string, frontendVIPs []string, protocol uint16, internalPort uint16, externalPort uint16) (*HostComputeLoadBalancer, error) {
-	if err := HnsV2ApiSupported(); err != nil {
-		return nil, err
-	}
-	logrus.Debugf("hcsshim::HostComputeLoadBalancer::AddLoadBalancer endpointId=%v, isILB=%v, sourceVIP=%s, frontendVIPs=%v, protocol=%v, internalPort=%v, externalPort=%v", endpoints, isILB, sourceVIP, frontendVIPs, protocol, internalPort, externalPort)
+	logrus.Debugf("hcn::HostComputeLoadBalancer::AddLoadBalancer endpointId=%v, isILB=%v, sourceVIP=%s, frontendVIPs=%v, protocol=%v, internalPort=%v, externalPort=%v", endpoints, isILB, sourceVIP, frontendVIPs, protocol, internalPort, externalPort)
 
 	var portMappingFlags uint32
 	portMappingFlags = 0

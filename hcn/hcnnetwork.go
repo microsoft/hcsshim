@@ -1,4 +1,4 @@
-package hcnshim
+package hcn
 
 import (
 	"encoding/json"
@@ -48,7 +48,7 @@ type Dns struct {
 	Options    []string `json:",omitempty"`
 }
 
-// HostComputeNetwork represents a network in HNS
+// HostComputeNetwork represents a network
 type HostComputeNetwork struct {
 	Id            string          `json:"ID,omitempty"`
 	Name          string          `json:",omitempty"`
@@ -62,6 +62,9 @@ type HostComputeNetwork struct {
 }
 
 func getNetwork(networkGuid guid.GUID, query string) (*HostComputeNetwork, error) {
+	if err := V2ApiSupported(); err != nil {
+		return nil, err
+	}
 	// Open network.
 	var (
 		networkHandle    hcnNetwork
@@ -92,6 +95,9 @@ func getNetwork(networkGuid guid.GUID, query string) (*HostComputeNetwork, error
 }
 
 func enumerateNetworks(query string) ([]HostComputeNetwork, error) {
+	if err := V2ApiSupported(); err != nil {
+		return nil, err
+	}
 	// Enumerate all Network Guids
 	var (
 		resultBuffer  *uint16
@@ -120,6 +126,9 @@ func enumerateNetworks(query string) ([]HostComputeNetwork, error) {
 }
 
 func createNetwork(settings string) (*HostComputeNetwork, error) {
+	if err := V2ApiSupported(); err != nil {
+		return nil, err
+	}
 	// Create new network.
 	var (
 		networkHandle    hcnNetwork
@@ -156,6 +165,9 @@ func createNetwork(settings string) (*HostComputeNetwork, error) {
 }
 
 func modifyNetwork(networkId string, settings string) (*HostComputeNetwork, error) {
+	if err := V2ApiSupported(); err != nil {
+		return nil, err
+	}
 	networkGuid := guid.FromString(networkId)
 	// Open Network
 	var (
@@ -197,6 +209,9 @@ func modifyNetwork(networkId string, settings string) (*HostComputeNetwork, erro
 }
 
 func deleteNetwork(networkId string) error {
+	if err := V2ApiSupported(); err != nil {
+		return err
+	}
 	networkGuid := guid.FromString(networkId)
 	var resultBuffer *uint16
 	hr := hcnDeleteNetwork(&networkGuid, &resultBuffer)
@@ -206,29 +221,24 @@ func deleteNetwork(networkId string) error {
 	return nil
 }
 
-// ListNetworks makes a HNS call to list all available networks.
+// ListNetworks makes a call to list all available networks.
 func ListNetworks() ([]HostComputeNetwork, error) {
-	if err := HnsV2ApiSupported(); err != nil {
-		return nil, err
-	}
 	hcnQuery := QuerySchema(2)
-	query, err := json.Marshal(hcnQuery)
-	if err != nil {
-		return nil, err
-	}
-	networks, err := enumerateNetworks(string(query))
+	networks, err := ListNetworksQuery(hcnQuery)
 	if err != nil {
 		return nil, err
 	}
 	return networks, nil
 }
 
-// ListNetworksQuery makes a HNS call to query the list of available networks.
-func ListNetworksQuery(query string) ([]HostComputeNetwork, error) {
-	if err := HnsV2ApiSupported(); err != nil {
+// ListNetworksQuery makes a call to query the list of available networks.
+func ListNetworksQuery(query HostComputeQuery) ([]HostComputeNetwork, error) {
+	queryJson, err := json.Marshal(query)
+	if err != nil {
 		return nil, err
 	}
-	networks, err := enumerateNetworks(query)
+
+	networks, err := enumerateNetworks(string(queryJson))
 	if err != nil {
 		return nil, err
 	}
@@ -237,9 +247,6 @@ func ListNetworksQuery(query string) ([]HostComputeNetwork, error) {
 
 // GetNetworkByID returns the network specified by Id.
 func GetNetworkByID(networkID string) (*HostComputeNetwork, error) {
-	if err := HnsV2ApiSupported(); err != nil {
-		return nil, err
-	}
 	hcnQuery := QuerySchema(2)
 	mapA := map[string]string{"ID": networkID}
 	filter, err := json.Marshal(mapA)
@@ -247,11 +254,8 @@ func GetNetworkByID(networkID string) (*HostComputeNetwork, error) {
 		return nil, err
 	}
 	hcnQuery.Filter = string(filter)
-	query, err := json.Marshal(hcnQuery)
-	if err != nil {
-		return nil, err
-	}
-	networks, err := enumerateNetworks(string(query))
+
+	networks, err := ListNetworksQuery(hcnQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -263,9 +267,6 @@ func GetNetworkByID(networkID string) (*HostComputeNetwork, error) {
 
 // GetNetworkByName returns the network specified by Name.
 func GetNetworkByName(networkName string) (*HostComputeNetwork, error) {
-	if err := HnsV2ApiSupported(); err != nil {
-		return nil, err
-	}
 	hcnQuery := QuerySchema(2)
 	mapA := map[string]string{"Name": networkName}
 	filter, err := json.Marshal(mapA)
@@ -273,11 +274,8 @@ func GetNetworkByName(networkName string) (*HostComputeNetwork, error) {
 		return nil, err
 	}
 	hcnQuery.Filter = string(filter)
-	query, err := json.Marshal(hcnQuery)
-	if err != nil {
-		return nil, err
-	}
-	networks, err := enumerateNetworks(string(query))
+
+	networks, err := ListNetworksQuery(hcnQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -289,10 +287,7 @@ func GetNetworkByName(networkName string) (*HostComputeNetwork, error) {
 
 // Create Network.
 func (network *HostComputeNetwork) Create() (*HostComputeNetwork, error) {
-	if err := HnsV2ApiSupported(); err != nil {
-		return nil, err
-	}
-	logrus.Debugf("hcsshim::HostComputeNetwork::Create id=%s", network.Id)
+	logrus.Debugf("hcn::HostComputeNetwork::Create id=%s", network.Id)
 
 	jsonString, err := json.Marshal(network)
 	if err != nil {
@@ -308,10 +303,7 @@ func (network *HostComputeNetwork) Create() (*HostComputeNetwork, error) {
 
 // Delete Network.
 func (network *HostComputeNetwork) Delete() (*HostComputeNetwork, error) {
-	if err := HnsV2ApiSupported(); err != nil {
-		return nil, err
-	}
-	logrus.Debugf("hcsshim::HostComputeNetwork::Delete id=%s", network.Id)
+	logrus.Debugf("hcn::HostComputeNetwork::Delete id=%s", network.Id)
 
 	if err := deleteNetwork(network.Id); err != nil {
 		return nil, err
@@ -321,11 +313,8 @@ func (network *HostComputeNetwork) Delete() (*HostComputeNetwork, error) {
 
 // CreateEndpoint creates an endpoint on the Network.
 func (network *HostComputeNetwork) CreateEndpoint(endpoint *HostComputeEndpoint) (*HostComputeEndpoint, error) {
-	if err := HnsV2ApiSupported(); err != nil {
-		return nil, err
-	}
 	isRemote := endpoint.Flags&1 != 0 // EndpointFlags::RemoteEndpoint == 1
-	logrus.Debugf("hcsshim::HostComputeNetwork::CreatEndpoint, networkId=%s remote=%t", network.Id, isRemote)
+	logrus.Debugf("hcn::HostComputeNetwork::CreatEndpoint, networkId=%s remote=%t", network.Id, isRemote)
 
 	endpoint.HostComputeNetwork = network.Id
 	endpointSettings, err := json.Marshal(endpoint)
