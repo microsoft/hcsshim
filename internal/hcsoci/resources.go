@@ -70,7 +70,7 @@ func ReleaseResources(r *Resources, vm *uvm.UtilityVM, all bool) error {
 				if !os.IsNotExist(err) {
 					return err
 				}
-				logrus.Warnf("removing endpoint %s from namespace %s: does not exist", endpoint, r.NetNS)
+				logrus.Warnf("removing endpoint %s from namespace %s: does not exist", endpoint, r.NetNS())
 			}
 			r.networkEndpoints = r.networkEndpoints[:len(r.networkEndpoints)-1]
 		}

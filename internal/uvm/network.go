@@ -21,7 +21,7 @@ func (uvm *UtilityVM) AddNetNS(id string, endpoints []*hns.HNSEndpoint) (err err
 		defer func() {
 			if err != nil {
 				if e := uvm.removeNamespaceNICs(ns); e != nil {
-					logrus.Warn("failed to undo NIC add: %s", e)
+					logrus.Warnf("failed to undo NIC add: %v", e)
 				}
 			}
 		}()
