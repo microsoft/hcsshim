@@ -222,12 +222,12 @@ func TestApplyPolicyOnEndpoint(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	jsonString, err := json.Marshal(endpointPolicyList)
+	jsonString, err := json.Marshal(*endpointPolicyList)
 	if err != nil {
 		t.Error(err)
 	}
 	fmt.Printf("ACLS JSON:\n%s \n", jsonString)
-	err = Endpoint.ApplyPolicy(endpointPolicyList)
+	err = Endpoint.ApplyPolicy(*endpointPolicyList)
 	if err != nil {
 		t.Error(err)
 	}

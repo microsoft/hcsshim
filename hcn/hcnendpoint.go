@@ -37,6 +37,10 @@ type ModifyEndpointSettingRequest struct {
 	Settings     json.RawMessage `json:",omitempty"`
 }
 
+type PolicyEndpointRequest struct {
+	Policies []EndpointPolicy `json:",omitempty"`
+}
+
 func getEndpoint(endpointGuid guid.GUID, query string) (*HostComputeEndpoint, error) {
 	if err := V2ApiSupported(); err != nil {
 		return nil, err
@@ -329,7 +333,7 @@ func ModifyEndpointSettings(endpointId string, request *ModifyEndpointSettingReq
 }
 
 // ApplyPolicy applies a Policy (ex: ACL) on the Endpoint.
-func (endpoint *HostComputeEndpoint) ApplyPolicy(endpointPolicy []EndpointPolicy) error {
+func (endpoint *HostComputeEndpoint) ApplyPolicy(endpointPolicy PolicyEndpointRequest) error {
 	logrus.Debugf("hcn::HostComputeEndpoint::ApplyPolicy id=%s", endpoint.Id)
 
 	settingsJson, err := json.Marshal(endpointPolicy)

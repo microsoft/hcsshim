@@ -96,7 +96,7 @@ func HcnCreateTestNamespace() (*HostComputeNamespace, error) {
 	return namespace.Create()
 }
 
-func HcnCreateAcls() ([]EndpointPolicy, error) {
+func HcnCreateAcls() (*PolicyEndpointRequest, error) {
 	in := AclPolicySetting{
 		Protocols:       "6",
 		Action:          "Allow",
@@ -139,7 +139,11 @@ func HcnCreateAcls() ([]EndpointPolicy, error) {
 		Settings: rawJSON,
 	}
 
-	return []EndpointPolicy{inPolicy, outPolicy}, nil
+	endpointRequest := PolicyEndpointRequest{
+		Policies: []EndpointPolicy{inPolicy, outPolicy},
+	}
+
+	return &endpointRequest, nil
 }
 
 func HcnCreateTestLoadBalancer(endpoint *HostComputeEndpoint) (*HostComputeLoadBalancer, error) {
