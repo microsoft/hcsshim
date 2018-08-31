@@ -92,10 +92,7 @@ func checkForErrors(methodName string, hr error, resultBuffer *uint16) error {
 }
 
 // SchemaVersion for HCN Objects/Queries.
-type SchemaVersion struct {
-	Major uint32 `json:",omitempty"`
-	Minor uint32 `json:",omitempty"`
-}
+type SchemaVersion = Version // hcnglobals.go
 
 // HostComputeQueryFlags are passed in to a HostComputeQuery to determine which
 // properties of an object are returned.
