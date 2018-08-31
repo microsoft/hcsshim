@@ -52,18 +52,18 @@ func getEndpoint(endpointGuid guid.GUID, query string) (*HostComputeEndpoint, er
 		propertiesBuffer *uint16
 	)
 	hr := hcnOpenEndpoint(&endpointGuid, &endpointHandle, &resultBuffer)
-	if err := CheckForErrors("hcnOpenEndpoint", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnOpenEndpoint", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	// Query endpoint.
 	hr = hcnQueryEndpointProperties(endpointHandle, query, &propertiesBuffer, &resultBuffer)
-	if err := CheckForErrors("hcnQueryEndpointProperties", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnQueryEndpointProperties", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	properties := interop.ConvertAndFreeCoTaskMemString(propertiesBuffer)
 	// Close endpoint.
 	hr = hcnCloseEndpoint(endpointHandle)
-	if err := CheckForErrors("hcnCloseEndpoint", hr, nil); err != nil {
+	if err := checkForErrors("hcnCloseEndpoint", hr, nil); err != nil {
 		return nil, err
 	}
 	// Convert output to HostComputeEndpoint
@@ -84,7 +84,7 @@ func enumerateEndpoints(query string) ([]HostComputeEndpoint, error) {
 		endpointBuffer *uint16
 	)
 	hr := hcnEnumerateEndpoints(query, &endpointBuffer, &resultBuffer)
-	if err := CheckForErrors("hcnEnumerateEndpoints", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnEnumerateEndpoints", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 
@@ -115,14 +115,14 @@ func createEndpoint(networkId string, endpointSettings string) (*HostComputeEndp
 	var networkHandle hcnNetwork
 	var resultBuffer *uint16
 	hr := hcnOpenNetwork(&networkGuid, &networkHandle, &resultBuffer)
-	if err := CheckForErrors("hcnOpenNetwork", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnOpenNetwork", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	// Create endpoint.
 	endpointId := guid.GUID{}
 	var endpointHandle hcnEndpoint
 	hr = hcnCreateEndpoint(networkHandle, &endpointId, endpointSettings, &endpointHandle, &resultBuffer)
-	if err := CheckForErrors("hcnCreateEndpoint", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnCreateEndpoint", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	// Query endpoint.
@@ -133,18 +133,18 @@ func createEndpoint(networkId string, endpointSettings string) (*HostComputeEndp
 	}
 	var propertiesBuffer *uint16
 	hr = hcnQueryEndpointProperties(endpointHandle, string(query), &propertiesBuffer, &resultBuffer)
-	if err := CheckForErrors("hcnQueryEndpointProperties", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnQueryEndpointProperties", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	properties := interop.ConvertAndFreeCoTaskMemString(propertiesBuffer)
 	// Close endpoint.
 	hr = hcnCloseEndpoint(endpointHandle)
-	if err := CheckForErrors("hcnCloseEndpoint", hr, nil); err != nil {
+	if err := checkForErrors("hcnCloseEndpoint", hr, nil); err != nil {
 		return nil, err
 	}
 	// Close network.
 	hr = hcnCloseNetwork(networkHandle)
-	if err := CheckForErrors("hcnCloseNetwork", hr, nil); err != nil {
+	if err := checkForErrors("hcnCloseNetwork", hr, nil); err != nil {
 		return nil, err
 	}
 	// Convert output to HostComputeEndpoint
@@ -167,12 +167,12 @@ func modifyEndpoint(endpointId string, settings string) (*HostComputeEndpoint, e
 		propertiesBuffer *uint16
 	)
 	hr := hcnOpenEndpoint(&endpointGuid, &endpointHandle, &resultBuffer)
-	if err := CheckForErrors("hcnOpenEndpoint", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnOpenEndpoint", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	// Modify endpoint
 	hr = hcnModifyEndpoint(endpointHandle, settings, &resultBuffer)
-	if err := CheckForErrors("hcnModifyEndpoint", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnModifyEndpoint", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	// Query endpoint.
@@ -182,13 +182,13 @@ func modifyEndpoint(endpointId string, settings string) (*HostComputeEndpoint, e
 		return nil, err
 	}
 	hr = hcnQueryEndpointProperties(endpointHandle, string(query), &propertiesBuffer, &resultBuffer)
-	if err := CheckForErrors("hcnQueryEndpointProperties", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnQueryEndpointProperties", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	properties := interop.ConvertAndFreeCoTaskMemString(propertiesBuffer)
 	// Close endpoint.
 	hr = hcnCloseEndpoint(endpointHandle)
-	if err := CheckForErrors("hcnCloseEndpoint", hr, nil); err != nil {
+	if err := checkForErrors("hcnCloseEndpoint", hr, nil); err != nil {
 		return nil, err
 	}
 	// Convert output to HostComputeEndpoint
@@ -206,7 +206,7 @@ func deleteEndpoint(endpointId string) error {
 	endpointGuid := guid.FromString(endpointId)
 	var resultBuffer *uint16
 	hr := hcnDeleteEndpoint(&endpointGuid, &resultBuffer)
-	if err := CheckForErrors("hcnDeleteEndpoint", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnDeleteEndpoint", hr, resultBuffer); err != nil {
 		return err
 	}
 	return nil

@@ -37,18 +37,18 @@ func getLoadBalancer(loadBalancerGuid guid.GUID, query string) (*HostComputeLoad
 		propertiesBuffer   *uint16
 	)
 	hr := hcnOpenLoadBalancer(&loadBalancerGuid, &loadBalancerHandle, &resultBuffer)
-	if err := CheckForErrors("hcnOpenLoadBalancer", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnOpenLoadBalancer", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	// Query loadBalancer.
 	hr = hcnQueryLoadBalancerProperties(loadBalancerHandle, query, &propertiesBuffer, &resultBuffer)
-	if err := CheckForErrors("hcnQueryLoadBalancerProperties", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnQueryLoadBalancerProperties", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	properties := interop.ConvertAndFreeCoTaskMemString(propertiesBuffer)
 	// Close loadBalancer.
 	hr = hcnCloseLoadBalancer(loadBalancerHandle)
-	if err := CheckForErrors("hcnCloseLoadBalancer", hr, nil); err != nil {
+	if err := checkForErrors("hcnCloseLoadBalancer", hr, nil); err != nil {
 		return nil, err
 	}
 	// Convert output to HostComputeLoadBalancer
@@ -69,7 +69,7 @@ func enumerateLoadBalancers(query string) ([]HostComputeLoadBalancer, error) {
 		loadBalancerBuffer *uint16
 	)
 	hr := hcnEnumerateLoadBalancers(query, &loadBalancerBuffer, &resultBuffer)
-	if err := CheckForErrors("hcnEnumerateLoadBalancers", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnEnumerateLoadBalancers", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 
@@ -102,7 +102,7 @@ func createLoadBalancer(settings string) (*HostComputeLoadBalancer, error) {
 	)
 	loadBalancerGuid := guid.GUID{}
 	hr := hcnCreateLoadBalancer(&loadBalancerGuid, settings, &loadBalancerHandle, &resultBuffer)
-	if err := CheckForErrors("hcnCreateLoadBalancer", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnCreateLoadBalancer", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	// Query loadBalancer.
@@ -112,13 +112,13 @@ func createLoadBalancer(settings string) (*HostComputeLoadBalancer, error) {
 		return nil, err
 	}
 	hr = hcnQueryLoadBalancerProperties(loadBalancerHandle, string(query), &propertiesBuffer, &resultBuffer)
-	if err := CheckForErrors("hcnQueryLoadBalancerProperties", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnQueryLoadBalancerProperties", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	properties := interop.ConvertAndFreeCoTaskMemString(propertiesBuffer)
 	// Close loadBalancer.
 	hr = hcnCloseLoadBalancer(loadBalancerHandle)
-	if err := CheckForErrors("hcnCloseLoadBalancer", hr, nil); err != nil {
+	if err := checkForErrors("hcnCloseLoadBalancer", hr, nil); err != nil {
 		return nil, err
 	}
 	// Convert output to HostComputeLoadBalancer
@@ -141,12 +141,12 @@ func modifyLoadBalancer(loadBalancerId string, settings string) (*HostComputeLoa
 		propertiesBuffer   *uint16
 	)
 	hr := hcnOpenLoadBalancer(&loadBalancerGuid, &loadBalancerHandle, &resultBuffer)
-	if err := CheckForErrors("hcnOpenLoadBalancer", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnOpenLoadBalancer", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	// Modify loadBalancer.
 	hr = hcnModifyLoadBalancer(loadBalancerHandle, settings, &resultBuffer)
-	if err := CheckForErrors("hcnModifyLoadBalancer", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnModifyLoadBalancer", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	// Query loadBalancer.
@@ -156,13 +156,13 @@ func modifyLoadBalancer(loadBalancerId string, settings string) (*HostComputeLoa
 		return nil, err
 	}
 	hr = hcnQueryLoadBalancerProperties(loadBalancerHandle, string(query), &propertiesBuffer, &resultBuffer)
-	if err := CheckForErrors("hcnQueryLoadBalancerProperties", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnQueryLoadBalancerProperties", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	properties := interop.ConvertAndFreeCoTaskMemString(propertiesBuffer)
 	// Close loadBalancer.
 	hr = hcnCloseLoadBalancer(loadBalancerHandle)
-	if err := CheckForErrors("hcnCloseLoadBalancer", hr, nil); err != nil {
+	if err := checkForErrors("hcnCloseLoadBalancer", hr, nil); err != nil {
 		return nil, err
 	}
 	// Convert output to LoadBalancer
@@ -180,7 +180,7 @@ func deleteLoadBalancer(loadBalancerId string) error {
 	loadBalancerGuid := guid.FromString(loadBalancerId)
 	var resultBuffer *uint16
 	hr := hcnDeleteLoadBalancer(&loadBalancerGuid, &resultBuffer)
-	if err := CheckForErrors("hcnDeleteLoadBalancer", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnDeleteLoadBalancer", hr, resultBuffer); err != nil {
 		return err
 	}
 	return nil

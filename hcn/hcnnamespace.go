@@ -52,18 +52,18 @@ func getNamespace(namespaceGuid guid.GUID, query string) (*HostComputeNamespace,
 		propertiesBuffer *uint16
 	)
 	hr := hcnOpenNamespace(&namespaceGuid, &namespaceHandle, &resultBuffer)
-	if err := CheckForErrors("hcnOpenNamespace", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnOpenNamespace", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	// Query namespace.
 	hr = hcnQueryNamespaceProperties(namespaceHandle, query, &propertiesBuffer, &resultBuffer)
-	if err := CheckForErrors("hcnQueryNamespaceProperties", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnQueryNamespaceProperties", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	properties := interop.ConvertAndFreeCoTaskMemString(propertiesBuffer)
 	// Close namespace.
 	hr = hcnCloseNamespace(namespaceHandle)
-	if err := CheckForErrors("hcnCloseNamespace", hr, nil); err != nil {
+	if err := checkForErrors("hcnCloseNamespace", hr, nil); err != nil {
 		return nil, err
 	}
 	// Convert output to HostComputeNamespace
@@ -84,7 +84,7 @@ func enumerateNamespaces(query string) ([]HostComputeNamespace, error) {
 		namespaceBuffer *uint16
 	)
 	hr := hcnEnumerateNamespaces(query, &namespaceBuffer, &resultBuffer)
-	if err := CheckForErrors("hcnEnumerateNamespaces", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnEnumerateNamespaces", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 
@@ -117,7 +117,7 @@ func createNamespace(settings string) (*HostComputeNamespace, error) {
 	)
 	namespaceGuid := guid.GUID{}
 	hr := hcnCreateNamespace(&namespaceGuid, settings, &namespaceHandle, &resultBuffer)
-	if err := CheckForErrors("hcnCreateNamespace", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnCreateNamespace", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	// Query namespace.
@@ -127,13 +127,13 @@ func createNamespace(settings string) (*HostComputeNamespace, error) {
 		return nil, err
 	}
 	hr = hcnQueryNamespaceProperties(namespaceHandle, string(query), &propertiesBuffer, &resultBuffer)
-	if err := CheckForErrors("hcnQueryNamespaceProperties", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnQueryNamespaceProperties", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	properties := interop.ConvertAndFreeCoTaskMemString(propertiesBuffer)
 	// Close namespace.
 	hr = hcnCloseNamespace(namespaceHandle)
-	if err := CheckForErrors("hcnCloseNamespace", hr, nil); err != nil {
+	if err := checkForErrors("hcnCloseNamespace", hr, nil); err != nil {
 		return nil, err
 	}
 	// Convert output to HostComputeNamespace
@@ -156,12 +156,12 @@ func modifyNamespace(namespaceId string, settings string) (*HostComputeNamespace
 		propertiesBuffer *uint16
 	)
 	hr := hcnOpenNamespace(&namespaceGuid, &namespaceHandle, &resultBuffer)
-	if err := CheckForErrors("hcnOpenNamespace", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnOpenNamespace", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	// Modify namespace.
 	hr = hcnModifyNamespace(namespaceHandle, settings, &resultBuffer)
-	if err := CheckForErrors("hcnModifyNamespace", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnModifyNamespace", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	// Query namespace.
@@ -171,13 +171,13 @@ func modifyNamespace(namespaceId string, settings string) (*HostComputeNamespace
 		return nil, err
 	}
 	hr = hcnQueryNamespaceProperties(namespaceHandle, string(query), &propertiesBuffer, &resultBuffer)
-	if err := CheckForErrors("hcnQueryNamespaceProperties", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnQueryNamespaceProperties", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	properties := interop.ConvertAndFreeCoTaskMemString(propertiesBuffer)
 	// Close namespace.
 	hr = hcnCloseNamespace(namespaceHandle)
-	if err := CheckForErrors("hcnCloseNamespace", hr, nil); err != nil {
+	if err := checkForErrors("hcnCloseNamespace", hr, nil); err != nil {
 		return nil, err
 	}
 	// Convert output to Namespace
@@ -195,7 +195,7 @@ func deleteNamespace(namespaceId string) error {
 	namespaceGuid := guid.FromString(namespaceId)
 	var resultBuffer *uint16
 	hr := hcnDeleteNamespace(&namespaceGuid, &resultBuffer)
-	if err := CheckForErrors("hcnDeleteNamespace", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnDeleteNamespace", hr, resultBuffer); err != nil {
 		return err
 	}
 	return nil

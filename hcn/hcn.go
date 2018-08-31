@@ -69,8 +69,7 @@ type hcnLoadBalancer syscall.Handle
 type hcnService syscall.Handle
 type hcnCallbackHandle syscall.Handle
 
-// CheckForErrors looks for non-zero HRESULT and looks at the result buffer.
-func CheckForErrors(methodName string, hr error, resultBuffer *uint16) error {
+func checkForErrors(methodName string, hr error, resultBuffer *uint16) error {
 	errorFound := false
 
 	if hr != nil {

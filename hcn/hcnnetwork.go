@@ -72,18 +72,18 @@ func getNetwork(networkGuid guid.GUID, query string) (*HostComputeNetwork, error
 		propertiesBuffer *uint16
 	)
 	hr := hcnOpenNetwork(&networkGuid, &networkHandle, &resultBuffer)
-	if err := CheckForErrors("hcnOpenNetwork", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnOpenNetwork", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	// Query network.
 	hr = hcnQueryNetworkProperties(networkHandle, query, &propertiesBuffer, &resultBuffer)
-	if err := CheckForErrors("hcnQueryNetworkProperties", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnQueryNetworkProperties", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	properties := interop.ConvertAndFreeCoTaskMemString(propertiesBuffer)
 	// Close network.
 	hr = hcnCloseNetwork(networkHandle)
-	if err := CheckForErrors("hcnCloseNetwork", hr, nil); err != nil {
+	if err := checkForErrors("hcnCloseNetwork", hr, nil); err != nil {
 		return nil, err
 	}
 	// Convert output to HostComputeNetwork
@@ -104,7 +104,7 @@ func enumerateNetworks(query string) ([]HostComputeNetwork, error) {
 		networkBuffer *uint16
 	)
 	hr := hcnEnumerateNetworks(query, &networkBuffer, &resultBuffer)
-	if err := CheckForErrors("hcnEnumerateNetworks", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnEnumerateNetworks", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 
@@ -137,7 +137,7 @@ func createNetwork(settings string) (*HostComputeNetwork, error) {
 	)
 	networkGuid := guid.GUID{}
 	hr := hcnCreateNetwork(&networkGuid, settings, &networkHandle, &resultBuffer)
-	if err := CheckForErrors("hcnCreateNetwork", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnCreateNetwork", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	// Query network.
@@ -147,13 +147,13 @@ func createNetwork(settings string) (*HostComputeNetwork, error) {
 		return nil, err
 	}
 	hr = hcnQueryNetworkProperties(networkHandle, string(query), &propertiesBuffer, &resultBuffer)
-	if err := CheckForErrors("hcnQueryNetworkProperties", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnQueryNetworkProperties", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	properties := interop.ConvertAndFreeCoTaskMemString(propertiesBuffer)
 	// Close network.
 	hr = hcnCloseNetwork(networkHandle)
-	if err := CheckForErrors("hcnCloseNetwork", hr, nil); err != nil {
+	if err := checkForErrors("hcnCloseNetwork", hr, nil); err != nil {
 		return nil, err
 	}
 	// Convert output to HostComputeNetwork
@@ -176,12 +176,12 @@ func modifyNetwork(networkId string, settings string) (*HostComputeNetwork, erro
 		propertiesBuffer *uint16
 	)
 	hr := hcnOpenNetwork(&networkGuid, &networkHandle, &resultBuffer)
-	if err := CheckForErrors("hcnOpenNetwork", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnOpenNetwork", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	// Modify Network
 	hr = hcnModifyNetwork(networkHandle, settings, &resultBuffer)
-	if err := CheckForErrors("hcnModifyNetwork", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnModifyNetwork", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	// Query network.
@@ -191,13 +191,13 @@ func modifyNetwork(networkId string, settings string) (*HostComputeNetwork, erro
 		return nil, err
 	}
 	hr = hcnQueryNetworkProperties(networkHandle, string(query), &propertiesBuffer, &resultBuffer)
-	if err := CheckForErrors("hcnQueryNetworkProperties", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnQueryNetworkProperties", hr, resultBuffer); err != nil {
 		return nil, err
 	}
 	properties := interop.ConvertAndFreeCoTaskMemString(propertiesBuffer)
 	// Close network.
 	hr = hcnCloseNetwork(networkHandle)
-	if err := CheckForErrors("hcnCloseNetwork", hr, nil); err != nil {
+	if err := checkForErrors("hcnCloseNetwork", hr, nil); err != nil {
 		return nil, err
 	}
 	// Convert output to HostComputeNetwork
@@ -215,7 +215,7 @@ func deleteNetwork(networkId string) error {
 	networkGuid := guid.FromString(networkId)
 	var resultBuffer *uint16
 	hr := hcnDeleteNetwork(&networkGuid, &resultBuffer)
-	if err := CheckForErrors("hcnDeleteNetwork", hr, resultBuffer); err != nil {
+	if err := checkForErrors("hcnDeleteNetwork", hr, resultBuffer); err != nil {
 		return err
 	}
 	return nil
