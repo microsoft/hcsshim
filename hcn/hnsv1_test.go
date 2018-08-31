@@ -1,6 +1,6 @@
-// +build functional
+// +build integration
 
-package hcsshimtest
+package hcn
 
 import (
 	"os"
