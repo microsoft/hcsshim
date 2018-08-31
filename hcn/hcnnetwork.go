@@ -62,9 +62,6 @@ type HostComputeNetwork struct {
 }
 
 func getNetwork(networkGuid guid.GUID, query string) (*HostComputeNetwork, error) {
-	if err := V2ApiSupported(); err != nil {
-		return nil, err
-	}
 	// Open network.
 	var (
 		networkHandle    hcnNetwork
@@ -95,9 +92,6 @@ func getNetwork(networkGuid guid.GUID, query string) (*HostComputeNetwork, error
 }
 
 func enumerateNetworks(query string) ([]HostComputeNetwork, error) {
-	if err := V2ApiSupported(); err != nil {
-		return nil, err
-	}
 	// Enumerate all Network Guids
 	var (
 		resultBuffer  *uint16
@@ -126,9 +120,6 @@ func enumerateNetworks(query string) ([]HostComputeNetwork, error) {
 }
 
 func createNetwork(settings string) (*HostComputeNetwork, error) {
-	if err := V2ApiSupported(); err != nil {
-		return nil, err
-	}
 	// Create new network.
 	var (
 		networkHandle    hcnNetwork
@@ -165,9 +156,6 @@ func createNetwork(settings string) (*HostComputeNetwork, error) {
 }
 
 func modifyNetwork(networkId string, settings string) (*HostComputeNetwork, error) {
-	if err := V2ApiSupported(); err != nil {
-		return nil, err
-	}
 	networkGuid := guid.FromString(networkId)
 	// Open Network
 	var (
@@ -209,9 +197,6 @@ func modifyNetwork(networkId string, settings string) (*HostComputeNetwork, erro
 }
 
 func deleteNetwork(networkId string) error {
-	if err := V2ApiSupported(); err != nil {
-		return err
-	}
 	networkGuid := guid.FromString(networkId)
 	var resultBuffer *uint16
 	hr := hcnDeleteNetwork(&networkGuid, &resultBuffer)

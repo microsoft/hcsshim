@@ -27,9 +27,6 @@ type HostComputeLoadBalancer struct {
 }
 
 func getLoadBalancer(loadBalancerGuid guid.GUID, query string) (*HostComputeLoadBalancer, error) {
-	if err := V2ApiSupported(); err != nil {
-		return nil, err
-	}
 	// Open loadBalancer.
 	var (
 		loadBalancerHandle hcnLoadBalancer
@@ -60,9 +57,6 @@ func getLoadBalancer(loadBalancerGuid guid.GUID, query string) (*HostComputeLoad
 }
 
 func enumerateLoadBalancers(query string) ([]HostComputeLoadBalancer, error) {
-	if err := V2ApiSupported(); err != nil {
-		return nil, err
-	}
 	// Enumerate all LoadBalancer Guids
 	var (
 		resultBuffer       *uint16
@@ -91,9 +85,6 @@ func enumerateLoadBalancers(query string) ([]HostComputeLoadBalancer, error) {
 }
 
 func createLoadBalancer(settings string) (*HostComputeLoadBalancer, error) {
-	if err := V2ApiSupported(); err != nil {
-		return nil, err
-	}
 	// Create new loadBalancer.
 	var (
 		loadBalancerHandle hcnLoadBalancer
@@ -130,9 +121,6 @@ func createLoadBalancer(settings string) (*HostComputeLoadBalancer, error) {
 }
 
 func modifyLoadBalancer(loadBalancerId string, settings string) (*HostComputeLoadBalancer, error) {
-	if err := V2ApiSupported(); err != nil {
-		return nil, err
-	}
 	loadBalancerGuid := guid.FromString(loadBalancerId)
 	// Open loadBalancer.
 	var (
@@ -174,9 +162,6 @@ func modifyLoadBalancer(loadBalancerId string, settings string) (*HostComputeLoa
 }
 
 func deleteLoadBalancer(loadBalancerId string) error {
-	if err := V2ApiSupported(); err != nil {
-		return err
-	}
 	loadBalancerGuid := guid.FromString(loadBalancerId)
 	var resultBuffer *uint16
 	hr := hcnDeleteLoadBalancer(&loadBalancerGuid, &resultBuffer)

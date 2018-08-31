@@ -8,14 +8,18 @@ import (
 	"testing"
 )
 
-func TestSupport(t *testing.T) {
+func TestSupportedFeatures(t *testing.T) {
 	supportedFeatures := GetSupportedFeatures()
 	jsonString, err := json.Marshal(supportedFeatures)
 	if err != nil {
 		t.Error(err)
 	}
 	fmt.Printf("Supported Features:\n%s \n", jsonString)
-	if supportedFeatures.Api.V2 != true {
-		t.Errorf("No V2 Support found")
+}
+
+func TestV2ApiSupport(t *testing.T) {
+	err := V2ApiSupported()
+	if err != nil {
+		t.Error(err)
 	}
 }

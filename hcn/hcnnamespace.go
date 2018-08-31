@@ -66,9 +66,6 @@ type ModifyNamespaceSettingRequest struct {
 }
 
 func getNamespace(namespaceGuid guid.GUID, query string) (*HostComputeNamespace, error) {
-	if err := V2ApiSupported(); err != nil {
-		return nil, err
-	}
 	// Open namespace.
 	var (
 		namespaceHandle  hcnNamespace
@@ -99,9 +96,6 @@ func getNamespace(namespaceGuid guid.GUID, query string) (*HostComputeNamespace,
 }
 
 func enumerateNamespaces(query string) ([]HostComputeNamespace, error) {
-	if err := V2ApiSupported(); err != nil {
-		return nil, err
-	}
 	// Enumerate all Namespace Guids
 	var (
 		resultBuffer    *uint16
@@ -130,9 +124,6 @@ func enumerateNamespaces(query string) ([]HostComputeNamespace, error) {
 }
 
 func createNamespace(settings string) (*HostComputeNamespace, error) {
-	if err := V2ApiSupported(); err != nil {
-		return nil, err
-	}
 	// Create new namespace.
 	var (
 		namespaceHandle  hcnNamespace
@@ -169,9 +160,6 @@ func createNamespace(settings string) (*HostComputeNamespace, error) {
 }
 
 func modifyNamespace(namespaceId string, settings string) (*HostComputeNamespace, error) {
-	if err := V2ApiSupported(); err != nil {
-		return nil, err
-	}
 	namespaceGuid := guid.FromString(namespaceId)
 	// Open namespace.
 	var (
@@ -213,9 +201,6 @@ func modifyNamespace(namespaceId string, settings string) (*HostComputeNamespace
 }
 
 func deleteNamespace(namespaceId string) error {
-	if err := V2ApiSupported(); err != nil {
-		return err
-	}
 	namespaceGuid := guid.FromString(namespaceId)
 	var resultBuffer *uint16
 	hr := hcnDeleteNamespace(&namespaceGuid, &resultBuffer)

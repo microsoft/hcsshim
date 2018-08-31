@@ -62,9 +62,6 @@ type PolicyEndpointRequest struct {
 }
 
 func getEndpoint(endpointGuid guid.GUID, query string) (*HostComputeEndpoint, error) {
-	if err := V2ApiSupported(); err != nil {
-		return nil, err
-	}
 	// Open endpoint.
 	var (
 		endpointHandle   hcnEndpoint
@@ -95,9 +92,6 @@ func getEndpoint(endpointGuid guid.GUID, query string) (*HostComputeEndpoint, er
 }
 
 func enumerateEndpoints(query string) ([]HostComputeEndpoint, error) {
-	if err := V2ApiSupported(); err != nil {
-		return nil, err
-	}
 	// Enumerate all Endpoint Guids
 	var (
 		resultBuffer   *uint16
@@ -127,9 +121,6 @@ func enumerateEndpoints(query string) ([]HostComputeEndpoint, error) {
 }
 
 func createEndpoint(networkId string, endpointSettings string) (*HostComputeEndpoint, error) {
-	if err := V2ApiSupported(); err != nil {
-		return nil, err
-	}
 	networkGuid := guid.FromString(networkId)
 	// Open network.
 	var networkHandle hcnNetwork
@@ -176,9 +167,6 @@ func createEndpoint(networkId string, endpointSettings string) (*HostComputeEndp
 }
 
 func modifyEndpoint(endpointId string, settings string) (*HostComputeEndpoint, error) {
-	if err := V2ApiSupported(); err != nil {
-		return nil, err
-	}
 	endpointGuid := guid.FromString(endpointId)
 	// Open endpoint
 	var (
@@ -220,9 +208,6 @@ func modifyEndpoint(endpointId string, settings string) (*HostComputeEndpoint, e
 }
 
 func deleteEndpoint(endpointId string) error {
-	if err := V2ApiSupported(); err != nil {
-		return err
-	}
 	endpointGuid := guid.FromString(endpointId)
 	var resultBuffer *uint16
 	hr := hcnDeleteEndpoint(&endpointGuid, &resultBuffer)
