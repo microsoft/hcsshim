@@ -141,7 +141,7 @@ func createNetwork(settings string) (*HostComputeNetwork, error) {
 		return nil, err
 	}
 	// Query network.
-	hcnQuery := QuerySchema(2)
+	hcnQuery := defaultQuery()
 	query, err := json.Marshal(hcnQuery)
 	if err != nil {
 		return nil, err
@@ -185,7 +185,7 @@ func modifyNetwork(networkId string, settings string) (*HostComputeNetwork, erro
 		return nil, err
 	}
 	// Query network.
-	hcnQuery := QuerySchema(2)
+	hcnQuery := defaultQuery()
 	query, err := json.Marshal(hcnQuery)
 	if err != nil {
 		return nil, err
@@ -223,7 +223,7 @@ func deleteNetwork(networkId string) error {
 
 // ListNetworks makes a call to list all available networks.
 func ListNetworks() ([]HostComputeNetwork, error) {
-	hcnQuery := QuerySchema(2)
+	hcnQuery := defaultQuery()
 	networks, err := ListNetworksQuery(hcnQuery)
 	if err != nil {
 		return nil, err
@@ -247,7 +247,7 @@ func ListNetworksQuery(query HostComputeQuery) ([]HostComputeNetwork, error) {
 
 // GetNetworkByID returns the network specified by Id.
 func GetNetworkByID(networkID string) (*HostComputeNetwork, error) {
-	hcnQuery := QuerySchema(2)
+	hcnQuery := defaultQuery()
 	mapA := map[string]string{"ID": networkID}
 	filter, err := json.Marshal(mapA)
 	if err != nil {
@@ -267,7 +267,7 @@ func GetNetworkByID(networkID string) (*HostComputeNetwork, error) {
 
 // GetNetworkByName returns the network specified by Name.
 func GetNetworkByName(networkName string) (*HostComputeNetwork, error) {
-	hcnQuery := QuerySchema(2)
+	hcnQuery := defaultQuery()
 	mapA := map[string]string{"Name": networkName}
 	filter, err := json.Marshal(mapA)
 	if err != nil {
@@ -313,7 +313,7 @@ func (network *HostComputeNetwork) Delete() (*HostComputeNetwork, error) {
 
 // CreateEndpoint creates an endpoint on the Network.
 func (network *HostComputeNetwork) CreateEndpoint(endpoint *HostComputeEndpoint) (*HostComputeEndpoint, error) {
-	isRemote := endpoint.Flags&1 != 0 // EndpointFlags::RemoteEndpoint == 1
+	isRemote := endpoint.Flags&EndpointFlagsRemoteEndpoint != 0
 	logrus.Debugf("hcn::HostComputeNetwork::CreatEndpoint, networkId=%s remote=%t", network.Id, isRemote)
 
 	endpoint.HostComputeNetwork = network.Id
@@ -330,6 +330,6 @@ func (network *HostComputeNetwork) CreateEndpoint(endpoint *HostComputeEndpoint)
 
 // CreateRemoteEndpoint creates a remote endpoint on the Network.
 func (network *HostComputeNetwork) CreateRemoteEndpoint(endpoint *HostComputeEndpoint) (*HostComputeEndpoint, error) {
-	endpoint.Flags = 1 | endpoint.Flags // EndpointFlags::RemoteEndpoint == 1
+	endpoint.Flags = EndpointFlagsRemoteEndpoint | endpoint.Flags
 	return network.CreateEndpoint(endpoint)
 }

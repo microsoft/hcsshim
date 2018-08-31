@@ -18,17 +18,41 @@ type NamespaceResourceContainer struct {
 	Id string `json:"ID,"`
 }
 
+// NamespaceResourceType determines whether the Namespace resource is a Container or Endpoint.
+type NamespaceResourceType string
+
+var (
+	// NamespaceResourceTypeContainer are contianers associated with a Namespace.
+	NamespaceResourceTypeContainer NamespaceResourceType = "Container"
+	// NamespaceResourceTypeEndpoint are endpoints associated with a Namespace.
+	NamespaceResourceTypeEndpoint NamespaceResourceType = "Endpoint"
+)
+
 // NamespaceResource is associated with a namespace
 type NamespaceResource struct {
-	Type string          `json:","` // Container, Endpoint
-	Data json.RawMessage `json:","`
+	Type NamespaceResourceType `json:","` // Container, Endpoint
+	Data json.RawMessage       `json:","`
 }
+
+// NamespaceType determines whether the Namespace is for a Host or Guest
+type NamespaceType string
+
+var (
+	// NamespaceTypeHost are host namespaces.
+	NamespaceTypeHost NamespaceType = "Host"
+	// NamespaceTypeHostDefault are host namespaces in the default compartment.
+	NamespaceTypeHostDefault NamespaceType = "HostDefault"
+	// NamespaceTypeGuest are guest namespaces.
+	NamespaceTypeGuest NamespaceType = "Guest"
+	// NamespaceTypeGuestDefault are guest namespaces in the default compartment.
+	NamespaceTypeGuestDefault NamespaceType = "GuestDefault"
+)
 
 // HostComputeNamespace represents a namespace (AKA compartment) in
 type HostComputeNamespace struct {
 	Id            string              `json:"ID,omitempty"`
 	NamespaceId   uint32              `json:",omitempty"`
-	Type          string              `json:",omitempty"` // Host, HostDefault, Guest, GuestDefault
+	Type          NamespaceType       `json:",omitempty"` // Host, HostDefault, Guest, GuestDefault
 	Resources     []NamespaceResource `json:",omitempty"`
 	SchemaVersion SchemaVersion       `json:",omitempty"`
 }
@@ -36,9 +60,9 @@ type HostComputeNamespace struct {
 // ModifyNamespaceSettingRequest is the structure used to send request to modify a namespace.
 // Used to Add/Remove an endpoints and containers to/from a namespace.
 type ModifyNamespaceSettingRequest struct {
-	ResourceType string          `json:",omitempty"` // Container, Endpoint
-	RequestType  string          `json:",omitempty"` // Add, Remove, Update, Refresh
-	Settings     json.RawMessage `json:",omitempty"`
+	ResourceType NamespaceResourceType `json:",omitempty"` // Container, Endpoint
+	RequestType  RequestType           `json:",omitempty"` // Add, Remove, Update, Refresh
+	Settings     json.RawMessage       `json:",omitempty"`
 }
 
 func getNamespace(namespaceGuid guid.GUID, query string) (*HostComputeNamespace, error) {
@@ -121,7 +145,7 @@ func createNamespace(settings string) (*HostComputeNamespace, error) {
 		return nil, err
 	}
 	// Query namespace.
-	hcnQuery := QuerySchema(2)
+	hcnQuery := defaultQuery()
 	query, err := json.Marshal(hcnQuery)
 	if err != nil {
 		return nil, err
@@ -165,7 +189,7 @@ func modifyNamespace(namespaceId string, settings string) (*HostComputeNamespace
 		return nil, err
 	}
 	// Query namespace.
-	hcnQuery := QuerySchema(2)
+	hcnQuery := defaultQuery()
 	query, err := json.Marshal(hcnQuery)
 	if err != nil {
 		return nil, err
@@ -203,7 +227,7 @@ func deleteNamespace(namespaceId string) error {
 
 // ListNamespaces makes a call to list all available namespaces.
 func ListNamespaces() ([]HostComputeNamespace, error) {
-	hcnQuery := QuerySchema(2)
+	hcnQuery := defaultQuery()
 	namespaces, err := ListNamespacesQuery(hcnQuery)
 	if err != nil {
 		return nil, err
@@ -227,7 +251,7 @@ func ListNamespacesQuery(query HostComputeQuery) ([]HostComputeNamespace, error)
 
 // GetNamespaceByID returns the Namespace specified by Id.
 func GetNamespaceByID(namespaceId string) (*HostComputeNamespace, error) {
-	hcnQuery := QuerySchema(2)
+	hcnQuery := defaultQuery()
 	mapA := map[string]string{"ID": namespaceId}
 	filter, err := json.Marshal(mapA)
 	if err != nil {
@@ -335,8 +359,8 @@ func AddNamespaceEndpoint(namespaceId string, endpointId string) error {
 		return err
 	}
 	requestMessage := &ModifyNamespaceSettingRequest{
-		ResourceType: "Endpoint",
-		RequestType:  "Add",
+		ResourceType: NamespaceResourceTypeEndpoint,
+		RequestType:  RequestTypeAdd,
 		Settings:     settingsJson,
 	}
 
@@ -353,8 +377,8 @@ func RemoveNamespaceEndpoint(namespaceId string, endpointId string) error {
 		return err
 	}
 	requestMessage := &ModifyNamespaceSettingRequest{
-		ResourceType: "Endpoint",
-		RequestType:  "Remove",
+		ResourceType: NamespaceResourceTypeEndpoint,
+		RequestType:  RequestTypeRemove,
 		Settings:     settingsJson,
 	}
 

@@ -83,19 +83,19 @@ type RuleType string
 
 const (
 	// Allow traffic
-	Allow ActionType = "Allow"
+	ActionTypeAllow ActionType = "Allow"
 	// Block traffic
-	Block ActionType = "Block"
+	ActionTypeBlock ActionType = "Block"
 
 	// In is traffic coming to the Endpoint
-	In DirectionType = "In"
+	DirectionTypeIn DirectionType = "In"
 	// Out is traffic leaving the Endpoint
-	Out DirectionType = "Out"
+	DirectionTypeOut DirectionType = "Out"
 
 	// Host creates WFP (Windows Firewall) rules
-	Host RuleType = "Host"
+	RuleTypeHost RuleType = "Host"
 	// Switch creates VFP (Virtual Filter Platform) rules
-	Switch RuleType = "Switch"
+	RuleTypeSwitch RuleType = "Switch"
 )
 
 // AclPolicySetting creates firewall rules on an endpoint

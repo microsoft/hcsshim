@@ -194,8 +194,8 @@ func TestModifyNamespaceSettings(t *testing.T) {
 		t.Error(err)
 	}
 	requestMessage := &ModifyNamespaceSettingRequest{
-		ResourceType: "Endpoint",
-		RequestType:  "Add",
+		ResourceType: NamespaceResourceTypeEndpoint,
+		RequestType:  RequestTypeAdd,
 		Settings:     settingsJson,
 	}
 

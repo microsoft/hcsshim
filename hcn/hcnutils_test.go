@@ -85,7 +85,7 @@ func HcnCreateTestEndpointWithNamespace(network *HostComputeNetwork, namespace *
 
 func HcnCreateTestNamespace() (*HostComputeNamespace, error) {
 	namespace := &HostComputeNamespace{
-		Type:        "HostDefault",
+		Type:        NamespaceTypeHostDefault,
 		NamespaceId: 5,
 		SchemaVersion: SchemaVersion{
 			Major: 2,
@@ -99,13 +99,13 @@ func HcnCreateTestNamespace() (*HostComputeNamespace, error) {
 func HcnCreateAcls() (*PolicyEndpointRequest, error) {
 	in := AclPolicySetting{
 		Protocols:       "6",
-		Action:          "Allow",
-		Direction:       "In",
+		Action:          ActionTypeAllow,
+		Direction:       DirectionTypeIn,
 		LocalAddresses:  "192.168.100.0/24,10.0.0.21",
 		RemoteAddresses: "192.168.100.0/24,10.0.0.21",
 		LocalPorts:      "80,8080",
 		RemotePorts:     "80,8080",
-		RuleType:        "Switch",
+		RuleType:        RuleTypeSwitch,
 		Priority:        200,
 	}
 
@@ -114,19 +114,19 @@ func HcnCreateAcls() (*PolicyEndpointRequest, error) {
 		return nil, err
 	}
 	inPolicy := EndpointPolicy{
-		Type:     "ACL",
+		Type:     ACL,
 		Settings: rawJSON,
 	}
 
 	out := AclPolicySetting{
 		Protocols:       "6",
-		Action:          "Allow",
-		Direction:       "Out",
+		Action:          ActionTypeAllow,
+		Direction:       DirectionTypeOut,
 		LocalAddresses:  "192.168.100.0/24,10.0.0.21",
 		RemoteAddresses: "192.168.100.0/24,10.0.0.21",
 		LocalPorts:      "80,8080",
 		RemotePorts:     "80,8080",
-		RuleType:        "Switch",
+		RuleType:        RuleTypeSwitch,
 		Priority:        200,
 	}
 
@@ -135,7 +135,7 @@ func HcnCreateAcls() (*PolicyEndpointRequest, error) {
 		return nil, err
 	}
 	outPolicy := EndpointPolicy{
-		Type:     "ACL",
+		Type:     ACL,
 		Settings: rawJSON,
 	}
 

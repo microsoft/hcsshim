@@ -14,6 +14,16 @@ type IpConfig struct {
 	PrefixLength uint8  `json:",omitempty"`
 }
 
+// EndpointFlags are special settings on an endpoint.
+type EndpointFlags uint32
+
+var (
+	// EndpointFlagsNone is the default.
+	EndpointFlagsNone EndpointFlags
+	// EndpointFlagsRemoteEndpoint means that an endpoint is on another host.
+	EndpointFlagsRemoteEndpoint EndpointFlags = 1
+)
+
 // HostComputeEndpoint represents a network endpoint
 type HostComputeEndpoint struct {
 	Id                   string           `json:"ID,omitempty"`
@@ -25,16 +35,26 @@ type HostComputeEndpoint struct {
 	Dns                  Dns              `json:",omitempty"`
 	Routes               []Route          `json:",omitempty"`
 	MacAddress           string           `json:",omitempty"`
-	Flags                uint32           `json:",omitempty"` // 0: None, 1: RemoteEndpoint
+	Flags                EndpointFlags    `json:",omitempty"`
 	SchemaVersion        SchemaVersion    `json:",omitempty"`
 }
+
+// EndpointResourceType are the two different Endpoint settings resources.
+type EndpointResourceType string
+
+var (
+	// EndpointResourceTypePolicy is for Endpoint Policies. Ex: ACL, NAT
+	EndpointResourceTypePolicy EndpointResourceType = "Policy"
+	// EndpointResourceTypePort is for Endpoint Port settings.
+	EndpointResourceTypePort EndpointResourceType = "Port"
+)
 
 // ModifyEndpointSettingRequest is the structure used to send request to modify an endpoint.
 // Used to update policy/port on an endpoint.
 type ModifyEndpointSettingRequest struct {
-	ResourceType string          `json:",omitempty"` // Policy, Port
-	RequestType  string          `json:",omitempty"` // Add, Remove, Update, Refresh
-	Settings     json.RawMessage `json:",omitempty"`
+	ResourceType EndpointResourceType `json:",omitempty"` // Policy, Port
+	RequestType  RequestType          `json:",omitempty"` // Add, Remove, Update, Refresh
+	Settings     json.RawMessage      `json:",omitempty"`
 }
 
 type PolicyEndpointRequest struct {
@@ -126,7 +146,7 @@ func createEndpoint(networkId string, endpointSettings string) (*HostComputeEndp
 		return nil, err
 	}
 	// Query endpoint.
-	hcnQuery := QuerySchema(2)
+	hcnQuery := defaultQuery()
 	query, err := json.Marshal(hcnQuery)
 	if err != nil {
 		return nil, err
@@ -176,7 +196,7 @@ func modifyEndpoint(endpointId string, settings string) (*HostComputeEndpoint, e
 		return nil, err
 	}
 	// Query endpoint.
-	hcnQuery := QuerySchema(2)
+	hcnQuery := defaultQuery()
 	query, err := json.Marshal(hcnQuery)
 	if err != nil {
 		return nil, err
@@ -214,7 +234,7 @@ func deleteEndpoint(endpointId string) error {
 
 // ListEndpoints makes a call to list all available endpoints.
 func ListEndpoints() ([]HostComputeEndpoint, error) {
-	hcnQuery := QuerySchema(2)
+	hcnQuery := defaultQuery()
 	endpoints, err := ListEndpointsQuery(hcnQuery)
 	if err != nil {
 		return nil, err
@@ -238,7 +258,7 @@ func ListEndpointsQuery(query HostComputeQuery) ([]HostComputeEndpoint, error) {
 
 // ListEndpointsOfNetwork queries the list of endpoints on a network.
 func ListEndpointsOfNetwork(networkId string) ([]HostComputeEndpoint, error) {
-	hcnQuery := QuerySchema(2)
+	hcnQuery := defaultQuery()
 	// TODO: Once query can convert schema, change to {HostComputeNetwork:networkId}
 	mapA := map[string]string{"VirtualNetwork": networkId}
 	filter, err := json.Marshal(mapA)
@@ -252,7 +272,7 @@ func ListEndpointsOfNetwork(networkId string) ([]HostComputeEndpoint, error) {
 
 // GetEndpointByID returns an endpoint specified by Id
 func GetEndpointByID(endpointId string) (*HostComputeEndpoint, error) {
-	hcnQuery := QuerySchema(2)
+	hcnQuery := defaultQuery()
 	mapA := map[string]string{"ID": endpointId}
 	filter, err := json.Marshal(mapA)
 	if err != nil {
@@ -272,7 +292,7 @@ func GetEndpointByID(endpointId string) (*HostComputeEndpoint, error) {
 
 // GetEndpointByName returns an endpoint specified by Name
 func GetEndpointByName(endpointName string) (*HostComputeEndpoint, error) {
-	hcnQuery := QuerySchema(2)
+	hcnQuery := defaultQuery()
 	mapA := map[string]string{"Name": endpointName}
 	filter, err := json.Marshal(mapA)
 	if err != nil {
@@ -341,8 +361,8 @@ func (endpoint *HostComputeEndpoint) ApplyPolicy(endpointPolicy PolicyEndpointRe
 		return err
 	}
 	requestMessage := &ModifyEndpointSettingRequest{
-		ResourceType: "Policy",
-		RequestType:  "Update",
+		ResourceType: EndpointResourceTypePolicy,
+		RequestType:  RequestTypeUpdate,
 		Settings:     settingsJson,
 	}
 

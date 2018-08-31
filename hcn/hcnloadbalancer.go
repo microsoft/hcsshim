@@ -106,7 +106,7 @@ func createLoadBalancer(settings string) (*HostComputeLoadBalancer, error) {
 		return nil, err
 	}
 	// Query loadBalancer.
-	hcnQuery := QuerySchema(2)
+	hcnQuery := defaultQuery()
 	query, err := json.Marshal(hcnQuery)
 	if err != nil {
 		return nil, err
@@ -150,7 +150,7 @@ func modifyLoadBalancer(loadBalancerId string, settings string) (*HostComputeLoa
 		return nil, err
 	}
 	// Query loadBalancer.
-	hcnQuery := QuerySchema(2)
+	hcnQuery := defaultQuery()
 	query, err := json.Marshal(hcnQuery)
 	if err != nil {
 		return nil, err
@@ -188,7 +188,7 @@ func deleteLoadBalancer(loadBalancerId string) error {
 
 // ListLoadBalancers makes a call to list all available loadBalancers.
 func ListLoadBalancers() ([]HostComputeLoadBalancer, error) {
-	hcnQuery := QuerySchema(2)
+	hcnQuery := defaultQuery()
 	loadBalancers, err := ListLoadBalancersQuery(hcnQuery)
 	if err != nil {
 		return nil, err
@@ -212,7 +212,7 @@ func ListLoadBalancersQuery(query HostComputeQuery) ([]HostComputeLoadBalancer, 
 
 // GetLoadBalancerByID returns the LoadBalancer specified by Id.
 func GetLoadBalancerByID(loadBalancerId string) (*HostComputeLoadBalancer, error) {
-	hcnQuery := QuerySchema(2)
+	hcnQuery := defaultQuery()
 	mapA := map[string]string{"ID": loadBalancerId}
 	filter, err := json.Marshal(mapA)
 	if err != nil {

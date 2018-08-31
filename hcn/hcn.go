@@ -97,31 +97,33 @@ type SchemaVersion struct {
 	Minor uint32 `json:",omitempty"`
 }
 
-// MarshalJSON formats the SchemaVersion.
-func (s *SchemaVersion) MarshalJSON() ([]byte, error) {
-	jsonString := fmt.Sprintf("{\"Major\":%d,\"Minor\":%d}", s.Major, s.Minor)
-	return []byte(jsonString), nil
-}
+// HostComputeQueryFlags are passed in to a HostComputeQuery to determine which
+// properties of an object are returned.
+type HostComputeQueryFlags uint32
+
+var (
+	// HostComputeQueryFlagsNone returns an object with the standard properties.
+	HostComputeQueryFlagsNone HostComputeQueryFlags
+	// HostComputeQueryFlagsDetailed returns an object with all properties.
+	HostComputeQueryFlagsDetailed HostComputeQueryFlags = 1
+)
 
 // HostComputeQuery is the format for HCN queries.
 type HostComputeQuery struct {
-	SchemaVersion SchemaVersion `json:""`
-	Flags         uint32        `json:",omitempty"` // 0: None, 1: Detailed
-	Filter        string        `json:",omitempty"`
+	SchemaVersion SchemaVersion         `json:""`
+	Flags         HostComputeQueryFlags `json:",omitempty"`
+	Filter        string                `json:",omitempty"`
 }
 
-// QuerySchema generates HCN Query.
+// defaultQuery generates HCN Query.
 // Passed into get/enumerate calls to filter results.
-func QuerySchema(version int) HostComputeQuery {
-	var query HostComputeQuery
-	switch version {
-	case 2:
-		query = HostComputeQuery{
-			SchemaVersion: SchemaVersion{
-				Major: 2,
-				Minor: 0,
-			},
-		}
+func defaultQuery() HostComputeQuery {
+	query := HostComputeQuery{
+		SchemaVersion: SchemaVersion{
+			Major: 2,
+			Minor: 0,
+		},
+		Flags: HostComputeQueryFlagsNone,
 	}
 	return query
 }
@@ -139,3 +141,18 @@ func V2ApiSupported() error {
 	}
 	return platformDoesNotSupportError("V2 Api/Schema")
 }
+
+// RequestType are the different operations performed to settings.
+// Used to update the settings of Endpoint/Namespace objects.
+type RequestType string
+
+var (
+	// RequestTypeAdd adds the provided settings object.
+	RequestTypeAdd RequestType = "Add"
+	// RequestTypeRemove removes the provided settings object.
+	RequestTypeRemove RequestType = "Remove"
+	// RequestTypeUpdate replaces settings with the ones provided.
+	RequestTypeUpdate RequestType = "Update"
+	// RequestTypeRefresh refreshes the settings provided.
+	RequestTypeRefresh RequestType = "Refresh"
+)

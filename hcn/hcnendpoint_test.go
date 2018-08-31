@@ -269,8 +269,8 @@ func TestModifyEndpointSettings(t *testing.T) {
 	}
 
 	requestMessage := &ModifyEndpointSettingRequest{
-		ResourceType: "Policy",
-		RequestType:  "Update",
+		ResourceType: EndpointResourceTypePolicy,
+		RequestType:  RequestTypeUpdate,
 		Settings:     settingsJson,
 	}
 
