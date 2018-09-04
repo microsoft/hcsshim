@@ -29,6 +29,9 @@ var (
 	// SystemResume is the timeout for resuming a compute system
 	SystemResume time.Duration = defaultTimeout
 
+	// SyscallWatcher is the timeout before warning of a potential stuck platform syscall.
+	SyscallWatcher time.Duration = defaultTimeout
+
 	// Tar2VHD is the timeout for the tar2vhd operation to complete
 	Tar2VHD time.Duration = defaultTimeout
 
@@ -48,6 +51,7 @@ func init() {
 	SystemStart = durationFromEnvironment("HCSSHIM_TIMEOUT_SYSTEMSTART", SystemStart)
 	SystemPause = durationFromEnvironment("HCSSHIM_TIMEOUT_SYSTEMPAUSE", SystemPause)
 	SystemResume = durationFromEnvironment("HCSSHIM_TIMEOUT_SYSTEMRESUME", SystemResume)
+	SyscallWatcher = durationFromEnvironment("HCSSHIM_TIMEOUT_SYSCALLWATCHER", SyscallWatcher)
 	Tar2VHD = durationFromEnvironment("HCSSHIM_TIMEOUT_TAR2VHD", Tar2VHD)
 	ExternalCommandToStart = durationFromEnvironment("HCSSHIM_TIMEOUT_EXTERNALCOMMANDSTART", ExternalCommandToStart)
 	ExternalCommandToComplete = durationFromEnvironment("HCSSHIM_TIMEOUT_EXTERNALCOMMANDCOMPLETE", ExternalCommandToComplete)
