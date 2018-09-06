@@ -8,10 +8,10 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcserror"
 	"github.com/Microsoft/hcsshim/internal/interop"
+	"github.com/google/uuid"
 )
 
-// hns flag imports "github.com/Microsoft/hcsshim/internal/guid"
-//go:generate go run ../mksyscall_windows.go -output zsyscall_windows.go -hns hcn.go
+//go:generate go run ../mksyscall_windows.go -output zsyscall_windows.go hcn.go
 
 /// HNS V1 API
 
@@ -22,38 +22,38 @@ import (
 
 // Network
 //sys hcnEnumerateNetworks(query string, networks **uint16, result **uint16) (hr error) = computenetwork.HcnEnumerateNetworks?
-//sys hcnCreateNetwork(id *guid.GUID, settings string, network *hcnNetwork, result **uint16) (hr error) = computenetwork.HcnCreateNetwork?
-//sys hcnOpenNetwork(id *guid.GUID, network *hcnNetwork, result **uint16) (hr error) = computenetwork.HcnOpenNetwork?
+//sys hcnCreateNetwork(id *_guid, settings string, network *hcnNetwork, result **uint16) (hr error) = computenetwork.HcnCreateNetwork?
+//sys hcnOpenNetwork(id *_guid, network *hcnNetwork, result **uint16) (hr error) = computenetwork.HcnOpenNetwork?
 //sys hcnModifyNetwork(network hcnNetwork, settings string, result **uint16) (hr error) = computenetwork.HcnModifyNetwork?
 //sys hcnQueryNetworkProperties(network hcnNetwork, query string, properties **uint16, result **uint16) (hr error) = computenetwork.HcnQueryNetworkProperties?
-//sys hcnDeleteNetwork(id *guid.GUID, result **uint16) (hr error) = computenetwork.HcnDeleteNetwork?
+//sys hcnDeleteNetwork(id *_guid, result **uint16) (hr error) = computenetwork.HcnDeleteNetwork?
 //sys hcnCloseNetwork(network hcnNetwork) (hr error) = computenetwork.HcnCloseNetwork?
 
 // Endpoint
 //sys hcnEnumerateEndpoints(query string, endpoints **uint16, result **uint16) (hr error) = computenetwork.HcnEnumerateEndpoints?
-//sys hcnCreateEndpoint(network hcnNetwork, id *guid.GUID, settings string, endpoint *hcnEndpoint, result **uint16) (hr error) = computenetwork.HcnCreateEndpoint?
-//sys hcnOpenEndpoint(id *guid.GUID, endpoint *hcnEndpoint, result **uint16) (hr error) = computenetwork.HcnOpenEndpoint?
+//sys hcnCreateEndpoint(network hcnNetwork, id *_guid, settings string, endpoint *hcnEndpoint, result **uint16) (hr error) = computenetwork.HcnCreateEndpoint?
+//sys hcnOpenEndpoint(id *_guid, endpoint *hcnEndpoint, result **uint16) (hr error) = computenetwork.HcnOpenEndpoint?
 //sys hcnModifyEndpoint(endpoint hcnEndpoint, settings string, result **uint16) (hr error) = computenetwork.HcnModifyEndpoint?
 //sys hcnQueryEndpointProperties(endpoint hcnEndpoint, query string, properties **uint16, result **uint16) (hr error) = computenetwork.HcnQueryEndpointProperties?
-//sys hcnDeleteEndpoint(id *guid.GUID, result **uint16) (hr error) = computenetwork.HcnDeleteEndpoint?
+//sys hcnDeleteEndpoint(id *_guid, result **uint16) (hr error) = computenetwork.HcnDeleteEndpoint?
 //sys hcnCloseEndpoint(endpoint hcnEndpoint) (hr error) = computenetwork.HcnCloseEndpoint?
 
 // Namespace
 //sys hcnEnumerateNamespaces(query string, namespaces **uint16, result **uint16) (hr error) = computenetwork.HcnEnumerateNamespaces?
-//sys hcnCreateNamespace(id *guid.GUID, settings string, namespace *hcnNamespace, result **uint16) (hr error) = computenetwork.HcnCreateNamespace?
-//sys hcnOpenNamespace(id *guid.GUID, namespace *hcnNamespace, result **uint16) (hr error) = computenetwork.HcnOpenNamespace?
+//sys hcnCreateNamespace(id *_guid, settings string, namespace *hcnNamespace, result **uint16) (hr error) = computenetwork.HcnCreateNamespace?
+//sys hcnOpenNamespace(id *_guid, namespace *hcnNamespace, result **uint16) (hr error) = computenetwork.HcnOpenNamespace?
 //sys hcnModifyNamespace(namespace hcnNamespace, settings string, result **uint16) (hr error) = computenetwork.HcnModifyNamespace?
 //sys hcnQueryNamespaceProperties(namespace hcnNamespace, query string, properties **uint16, result **uint16) (hr error) = computenetwork.HcnQueryNamespaceProperties?
-//sys hcnDeleteNamespace(id *guid.GUID, result **uint16) (hr error) = computenetwork.HcnDeleteNamespace?
+//sys hcnDeleteNamespace(id *_guid, result **uint16) (hr error) = computenetwork.HcnDeleteNamespace?
 //sys hcnCloseNamespace(namespace hcnNamespace) (hr error) = computenetwork.HcnCloseNamespace?
 
 // LoadBalancer
 //sys hcnEnumerateLoadBalancers(query string, loadBalancers **uint16, result **uint16) (hr error) = computenetwork.HcnEnumerateLoadBalancers?
-//sys hcnCreateLoadBalancer(id *guid.GUID, settings string, loadBalancer *hcnLoadBalancer, result **uint16) (hr error) = computenetwork.HcnCreateLoadBalancer?
-//sys hcnOpenLoadBalancer(id *guid.GUID, loadBalancer *hcnLoadBalancer, result **uint16) (hr error) = computenetwork.HcnOpenLoadBalancer?
+//sys hcnCreateLoadBalancer(id *_guid, settings string, loadBalancer *hcnLoadBalancer, result **uint16) (hr error) = computenetwork.HcnCreateLoadBalancer?
+//sys hcnOpenLoadBalancer(id *_guid, loadBalancer *hcnLoadBalancer, result **uint16) (hr error) = computenetwork.HcnOpenLoadBalancer?
 //sys hcnModifyLoadBalancer(loadBalancer hcnLoadBalancer, settings string, result **uint16) (hr error) = computenetwork.HcnModifyLoadBalancer?
 //sys hcnQueryLoadBalancerProperties(loadBalancer hcnLoadBalancer, query string, properties **uint16, result **uint16) (hr error) = computenetwork.HcnQueryLoadBalancerProperties?
-//sys hcnDeleteLoadBalancer(id *guid.GUID, result **uint16) (hr error) = computenetwork.HcnDeleteLoadBalancer?
+//sys hcnDeleteLoadBalancer(id *_guid, result **uint16) (hr error) = computenetwork.HcnDeleteLoadBalancer?
 //sys hcnCloseLoadBalancer(loadBalancer hcnLoadBalancer) (hr error) = computenetwork.HcnCloseLoadBalancer?
 
 // Service
@@ -61,6 +61,8 @@ import (
 //sys hcnRegisterServiceCallback(service hcnService, callback int32, context int32, callbackHandle *hcnCallbackHandle) (hr error) = computenetwork.HcnRegisterServiceCallback?
 //sys hcnUnregisterServiceCallback(callbackHandle hcnCallbackHandle) (hr error) = computenetwork.HcnUnregisterServiceCallback?
 //sys hcnCloseService(service hcnService) (hr error) = computenetwork.HcnCloseService?
+
+type _guid = uuid.UUID
 
 type hcnNetwork syscall.Handle
 type hcnEndpoint syscall.Handle

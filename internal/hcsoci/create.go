@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/google/uuid"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
@@ -69,7 +69,7 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 
 	// Defaults if omitted by caller.
 	if coi.actualID == "" {
-		coi.actualID = guid.New().String()
+		coi.actualID = uuid.New().String()
 	}
 	if coi.actualOwner == "" {
 		coi.actualOwner = filepath.Base(os.Args[0])

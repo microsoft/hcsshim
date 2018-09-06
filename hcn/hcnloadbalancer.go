@@ -3,8 +3,8 @@ package hcn
 import (
 	"encoding/json"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/interop"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
 
@@ -26,7 +26,7 @@ type HostComputeLoadBalancer struct {
 	SchemaVersion        SchemaVersion             `json:",omitempty"`
 }
 
-func getLoadBalancer(loadBalancerGuid guid.GUID, query string) (*HostComputeLoadBalancer, error) {
+func getLoadBalancer(loadBalancerGuid uuid.UUID, query string) (*HostComputeLoadBalancer, error) {
 	// Open loadBalancer.
 	var (
 		loadBalancerHandle hcnLoadBalancer
@@ -68,7 +68,7 @@ func enumerateLoadBalancers(query string) ([]HostComputeLoadBalancer, error) {
 	}
 
 	loadBalancers := interop.ConvertAndFreeCoTaskMemString(loadBalancerBuffer)
-	var loadBalancerIds []guid.GUID
+	var loadBalancerIds []uuid.UUID
 	if err := json.Unmarshal([]byte(loadBalancers), &loadBalancerIds); err != nil {
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func createLoadBalancer(settings string) (*HostComputeLoadBalancer, error) {
 		resultBuffer       *uint16
 		propertiesBuffer   *uint16
 	)
-	loadBalancerGuid := guid.GUID{}
+	loadBalancerGuid := uuid.UUID{}
 	hr := hcnCreateLoadBalancer(&loadBalancerGuid, settings, &loadBalancerHandle, &resultBuffer)
 	if err := checkForErrors("hcnCreateLoadBalancer", hr, resultBuffer); err != nil {
 		return nil, err
@@ -121,7 +121,7 @@ func createLoadBalancer(settings string) (*HostComputeLoadBalancer, error) {
 }
 
 func modifyLoadBalancer(loadBalancerId string, settings string) (*HostComputeLoadBalancer, error) {
-	loadBalancerGuid := guid.FromString(loadBalancerId)
+	loadBalancerGuid := uuid.MustParse(loadBalancerId)
 	// Open loadBalancer.
 	var (
 		loadBalancerHandle hcnLoadBalancer
@@ -162,7 +162,7 @@ func modifyLoadBalancer(loadBalancerId string, settings string) (*HostComputeLoa
 }
 
 func deleteLoadBalancer(loadBalancerId string) error {
-	loadBalancerGuid := guid.FromString(loadBalancerId)
+	loadBalancerGuid := uuid.MustParse(loadBalancerId)
 	var resultBuffer *uint16
 	hr := hcnDeleteLoadBalancer(&loadBalancerGuid, &resultBuffer)
 	if err := checkForErrors("hcnDeleteLoadBalancer", hr, resultBuffer); err != nil {

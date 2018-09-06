@@ -6,9 +6,9 @@ import (
 	"net"
 	"sync"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/google/uuid"
 )
 
 //                    | WCOW | LCOW
@@ -47,7 +47,7 @@ type plan9Info struct {
 	port      int32 // Temporary. TODO Remove
 }
 type nicInfo struct {
-	ID       guid.GUID
+	ID       uuid.UUID
 	Endpoint *hns.HNSEndpoint
 }
 

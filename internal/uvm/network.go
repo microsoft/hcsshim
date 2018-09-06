@@ -5,10 +5,10 @@ import (
 	"path"
 
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
-	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
 
@@ -26,7 +26,7 @@ func (uvm *UtilityVM) AddNetNS(id string, endpoints []*hns.HNSEndpoint) (err err
 			}
 		}()
 		for _, endpoint := range endpoints {
-			nicID := guid.New()
+			nicID := uuid.New()
 			err = uvm.addNIC(nicID, endpoint)
 			if err != nil {
 				return err
@@ -70,7 +70,7 @@ func (uvm *UtilityVM) removeNamespaceNICs(ns *namespaceInfo) error {
 	return nil
 }
 
-func (uvm *UtilityVM) addNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
+func (uvm *UtilityVM) addNIC(id uuid.UUID, endpoint *hns.HNSEndpoint) error {
 
 	// First a pre-add. This is a guest-only request and is only done on Windows.
 	if uvm.operatingSystem == "windows" {
@@ -124,7 +124,7 @@ func (uvm *UtilityVM) addNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
 	return nil
 }
 
-func (uvm *UtilityVM) removeNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
+func (uvm *UtilityVM) removeNIC(id uuid.UUID, endpoint *hns.HNSEndpoint) error {
 	request := hcsschema.ModifySettingRequest{
 		RequestType:  requesttype.Remove,
 		ResourcePath: path.Join("VirtualMachine/Devices/NetworkAdapters", id.String()),

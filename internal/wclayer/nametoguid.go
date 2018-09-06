@@ -1,15 +1,15 @@
 package wclayer
 
 import (
-	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcserror"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
 
 // NameToGuid converts the given string into a GUID using the algorithm in the
 // Host Compute Service, ensuring GUIDs generated with the same string are common
 // across all clients.
-func NameToGuid(name string) (id guid.GUID, err error) {
+func NameToGuid(name string) (id uuid.UUID, err error) {
 	title := "hcsshim::NameToGuid "
 
 	err = nameToGuid(name, &id)

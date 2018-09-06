@@ -374,7 +374,7 @@ func generateShimLayersStruct(t *testing.T, imageLayers []string) []hcsshim.Laye
 	var layers []hcsshim.Layer
 	for _, layerFolder := range imageLayers {
 		guid, _ := wclayer.NameToGuid(filepath.Base(layerFolder))
-		layers = append(layers, hcsshim.Layer{Path: layerFolder, ID: guid.String()})
+		layers = append(layers, hcsshim.Layer{Path: layerFolder, ID: uuid.String()})
 	}
 	return layers
 }
