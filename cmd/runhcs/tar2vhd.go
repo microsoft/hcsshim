@@ -9,6 +9,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/internal/osversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/internal/wclayer"
 	gcsclient "github.com/Microsoft/opengcs/client"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -99,6 +100,9 @@ var tarToVhdCommand = cli.Command{
 			}
 			defer convertUVM.Terminate()
 
+			if err := wclayer.GrantVmAccess(opts.ID, scratch); err != nil {
+				return errors.Wrapf(err, "failed to grant access to scratch path: '%s' to '%s'", scratch, opts.ID)
+			}
 			if _, _, err := convertUVM.AddSCSI(scratch, "/tmp/scratch"); err != nil {
 				return errors.Wrapf(err, "failed to mount scratch path: '%s' to '%s'", scratch, opts.ID)
 			}
