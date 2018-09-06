@@ -7,7 +7,6 @@ package functional
 //	"testing"
 
 //	"github.com/Microsoft/hcsshim/functional/utilities"
-//	"github.com/Microsoft/hcsshim/internal/guid"
 //	"github.com/Microsoft/hcsshim/internal/hcsoci"
 //	"github.com/Microsoft/hcsshim/internal/osversion"
 //	"github.com/Microsoft/hcsshim/internal/schemaversion"

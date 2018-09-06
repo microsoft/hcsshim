@@ -6,7 +6,7 @@ package wclayer
 import (
 	"syscall"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
 
@@ -63,7 +63,7 @@ typedef struct _WC_LAYER_DESCRIPTOR {
 } WC_LAYER_DESCRIPTOR, *PWC_LAYER_DESCRIPTOR;
 */
 type WC_LAYER_DESCRIPTOR struct {
-	LayerId guid.GUID
+	LayerId uuid.UUID
 	Flags   uint32
 	Pathp   *uint16
 }

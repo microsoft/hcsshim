@@ -15,11 +15,11 @@ import (
 	"time"
 
 	winio "github.com/Microsoft/go-winio"
-	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/regstate"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/google/uuid"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
@@ -37,8 +37,8 @@ type persistedState struct {
 	Spec           *specs.Spec
 	RequestedNetNS string
 	IsHost         bool
-	UniqueID       guid.GUID
-	HostUniqueID   guid.GUID
+	UniqueID       uuid.UUID
+	HostUniqueID   uuid.UUID
 }
 
 type containerStatus string
@@ -297,10 +297,10 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		}
 	}
 
-	uniqueID := guid.New()
+	uniqueID := uuid.New()
 
 	newvm := false
-	var hostUniqueID guid.GUID
+	var hostUniqueID uuid.UUID
 	if hostID != "" {
 		host, err := getContainer(hostID, false)
 		if err != nil {

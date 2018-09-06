@@ -3,8 +3,8 @@ package hcn
 import (
 	"encoding/json"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/interop"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
 
@@ -61,7 +61,7 @@ type HostComputeNetwork struct {
 	SchemaVersion SchemaVersion   `json:",omitempty"`
 }
 
-func getNetwork(networkGuid guid.GUID, query string) (*HostComputeNetwork, error) {
+func getNetwork(networkGuid uuid.UUID, query string) (*HostComputeNetwork, error) {
 	// Open network.
 	var (
 		networkHandle    hcnNetwork
@@ -103,7 +103,7 @@ func enumerateNetworks(query string) ([]HostComputeNetwork, error) {
 	}
 
 	networks := interop.ConvertAndFreeCoTaskMemString(networkBuffer)
-	var networkIds []guid.GUID
+	var networkIds []uuid.UUID
 	if err := json.Unmarshal([]byte(networks), &networkIds); err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func createNetwork(settings string) (*HostComputeNetwork, error) {
 		resultBuffer     *uint16
 		propertiesBuffer *uint16
 	)
-	networkGuid := guid.GUID{}
+	networkGuid := uuid.UUID{}
 	hr := hcnCreateNetwork(&networkGuid, settings, &networkHandle, &resultBuffer)
 	if err := checkForErrors("hcnCreateNetwork", hr, resultBuffer); err != nil {
 		return nil, err
@@ -156,7 +156,7 @@ func createNetwork(settings string) (*HostComputeNetwork, error) {
 }
 
 func modifyNetwork(networkId string, settings string) (*HostComputeNetwork, error) {
-	networkGuid := guid.FromString(networkId)
+	networkGuid := uuid.MustParse(networkId)
 	// Open Network
 	var (
 		networkHandle    hcnNetwork
@@ -197,7 +197,7 @@ func modifyNetwork(networkId string, settings string) (*HostComputeNetwork, erro
 }
 
 func deleteNetwork(networkId string) error {
-	networkGuid := guid.FromString(networkId)
+	networkGuid := uuid.MustParse(networkId)
 	var resultBuffer *uint16
 	hr := hcnDeleteNetwork(&networkGuid, &resultBuffer)
 	if err := checkForErrors("hcnDeleteNetwork", hr, resultBuffer); err != nil {

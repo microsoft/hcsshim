@@ -3,8 +3,8 @@ package hcn
 import (
 	"encoding/json"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/interop"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
 
@@ -65,7 +65,7 @@ type ModifyNamespaceSettingRequest struct {
 	Settings     json.RawMessage       `json:",omitempty"`
 }
 
-func getNamespace(namespaceGuid guid.GUID, query string) (*HostComputeNamespace, error) {
+func getNamespace(namespaceGuid uuid.UUID, query string) (*HostComputeNamespace, error) {
 	// Open namespace.
 	var (
 		namespaceHandle  hcnNamespace
@@ -107,7 +107,7 @@ func enumerateNamespaces(query string) ([]HostComputeNamespace, error) {
 	}
 
 	namespaces := interop.ConvertAndFreeCoTaskMemString(namespaceBuffer)
-	var namespaceIds []guid.GUID
+	var namespaceIds []uuid.UUID
 	if err := json.Unmarshal([]byte(namespaces), &namespaceIds); err != nil {
 		return nil, err
 	}
@@ -130,7 +130,7 @@ func createNamespace(settings string) (*HostComputeNamespace, error) {
 		resultBuffer     *uint16
 		propertiesBuffer *uint16
 	)
-	namespaceGuid := guid.GUID{}
+	namespaceGuid := uuid.UUID{}
 	hr := hcnCreateNamespace(&namespaceGuid, settings, &namespaceHandle, &resultBuffer)
 	if err := checkForErrors("hcnCreateNamespace", hr, resultBuffer); err != nil {
 		return nil, err
@@ -160,7 +160,7 @@ func createNamespace(settings string) (*HostComputeNamespace, error) {
 }
 
 func modifyNamespace(namespaceId string, settings string) (*HostComputeNamespace, error) {
-	namespaceGuid := guid.FromString(namespaceId)
+	namespaceGuid := uuid.MustParse(namespaceId)
 	// Open namespace.
 	var (
 		namespaceHandle  hcnNamespace
@@ -201,7 +201,7 @@ func modifyNamespace(namespaceId string, settings string) (*HostComputeNamespace
 }
 
 func deleteNamespace(namespaceId string) error {
-	namespaceGuid := guid.FromString(namespaceId)
+	namespaceGuid := uuid.MustParse(namespaceId)
 	var resultBuffer *uint16
 	hr := hcnDeleteNamespace(&namespaceGuid, &resultBuffer)
 	if err := checkForErrors("hcnDeleteNamespace", hr, resultBuffer); err != nil {

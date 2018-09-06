@@ -1,6 +1,6 @@
 package wclayer
 
-import "github.com/Microsoft/hcsshim/internal/guid"
+import "github.com/google/uuid"
 
 //go:generate go run ../../mksyscall_windows.go -output zsyscall_windows.go -winio wclayer.go
 
@@ -34,4 +34,4 @@ import "github.com/Microsoft/hcsshim/internal/guid"
 
 //sys grantVmAccess(vmid string, filepath string) (hr error) = vmcompute.GrantVmAccess?
 
-type _guid = guid.GUID
+type _guid = uuid.UUID

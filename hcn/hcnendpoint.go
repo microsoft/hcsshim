@@ -3,8 +3,8 @@ package hcn
 import (
 	"encoding/json"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/interop"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
 
@@ -61,7 +61,7 @@ type PolicyEndpointRequest struct {
 	Policies []EndpointPolicy `json:",omitempty"`
 }
 
-func getEndpoint(endpointGuid guid.GUID, query string) (*HostComputeEndpoint, error) {
+func getEndpoint(endpointGuid uuid.UUID, query string) (*HostComputeEndpoint, error) {
 	// Open endpoint.
 	var (
 		endpointHandle   hcnEndpoint
@@ -103,7 +103,7 @@ func enumerateEndpoints(query string) ([]HostComputeEndpoint, error) {
 	}
 
 	endpoints := interop.ConvertAndFreeCoTaskMemString(endpointBuffer)
-	var endpointIds []guid.GUID
+	var endpointIds []uuid.UUID
 	err := json.Unmarshal([]byte(endpoints), &endpointIds)
 	if err != nil {
 		return nil, err
@@ -121,7 +121,7 @@ func enumerateEndpoints(query string) ([]HostComputeEndpoint, error) {
 }
 
 func createEndpoint(networkId string, endpointSettings string) (*HostComputeEndpoint, error) {
-	networkGuid := guid.FromString(networkId)
+	networkGuid := uuid.MustParse(networkId)
 	// Open network.
 	var networkHandle hcnNetwork
 	var resultBuffer *uint16
@@ -130,7 +130,7 @@ func createEndpoint(networkId string, endpointSettings string) (*HostComputeEndp
 		return nil, err
 	}
 	// Create endpoint.
-	endpointId := guid.GUID{}
+	endpointId := uuid.UUID{}
 	var endpointHandle hcnEndpoint
 	hr = hcnCreateEndpoint(networkHandle, &endpointId, endpointSettings, &endpointHandle, &resultBuffer)
 	if err := checkForErrors("hcnCreateEndpoint", hr, resultBuffer); err != nil {
@@ -167,7 +167,7 @@ func createEndpoint(networkId string, endpointSettings string) (*HostComputeEndp
 }
 
 func modifyEndpoint(endpointId string, settings string) (*HostComputeEndpoint, error) {
-	endpointGuid := guid.FromString(endpointId)
+	endpointGuid := uuid.MustParse(endpointId)
 	// Open endpoint
 	var (
 		endpointHandle   hcnEndpoint
@@ -208,7 +208,7 @@ func modifyEndpoint(endpointId string, settings string) (*HostComputeEndpoint, e
 }
 
 func deleteEndpoint(endpointId string) error {
-	endpointGuid := guid.FromString(endpointId)
+	endpointGuid := uuid.MustParse(endpointId)
 	var resultBuffer *uint16
 	hr := hcnDeleteEndpoint(&endpointGuid, &resultBuffer)
 	if err := checkForErrors("hcnDeleteEndpoint", hr, resultBuffer); err != nil {

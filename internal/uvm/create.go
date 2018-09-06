@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/mergemaps"
 	"github.com/Microsoft/hcsshim/internal/schema2"
@@ -17,6 +16,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/internal/wcow"
+	"github.com/google/uuid"
 	"github.com/linuxkit/virtsock/pkg/hvsock"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
@@ -87,7 +87,7 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 	// Defaults if omitted by caller.
 	// TODO: Change this. Don't auto generate ID if omitted. Avoids the chicken-and-egg problem
 	if uvm.id == "" {
-		uvm.id = guid.New().String()
+		uvm.id = uuid.New().String()
 	}
 	if uvm.owner == "" {
 		uvm.owner = filepath.Base(os.Args[0])
