@@ -2,6 +2,7 @@ package hcn
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/interop"
@@ -249,7 +250,7 @@ func GetNamespaceByID(namespaceId string) (*HostComputeNamespace, error) {
 		return nil, err
 	}
 	if len(namespaces) == 0 {
-		return nil, nil
+		return nil, fmt.Errorf("Namespace %s not found", namespaceId)
 	}
 	return &namespaces[0], err
 }

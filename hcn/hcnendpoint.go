@@ -2,6 +2,7 @@ package hcn
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/interop"
@@ -270,7 +271,7 @@ func GetEndpointByID(endpointId string) (*HostComputeEndpoint, error) {
 		return nil, err
 	}
 	if len(endpoints) == 0 {
-		return nil, nil
+		return nil, fmt.Errorf("Endpoint %s not found", endpointId)
 	}
 	return &endpoints[0], err
 }
@@ -290,7 +291,7 @@ func GetEndpointByName(endpointName string) (*HostComputeEndpoint, error) {
 		return nil, err
 	}
 	if len(endpoints) == 0 {
-		return nil, nil
+		return nil, fmt.Errorf("Endpoint %s not found", endpointName)
 	}
 	return &endpoints[0], err
 }
