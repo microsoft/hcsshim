@@ -6,7 +6,6 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/interop"
 	"golang.org/x/sys/windows"
 )
@@ -137,7 +136,7 @@ func _hcnEnumerateNetworks(query *uint16, networks **uint16, result **uint16) (h
 	return
 }
 
-func hcnCreateNetwork(id *guid.GUID, settings string, network *hcnNetwork, result **uint16) (hr error) {
+func hcnCreateNetwork(id *_guid, settings string, network *hcnNetwork, result **uint16) (hr error) {
 	var _p0 *uint16
 	_p0, hr = syscall.UTF16PtrFromString(settings)
 	if hr != nil {
@@ -146,7 +145,7 @@ func hcnCreateNetwork(id *guid.GUID, settings string, network *hcnNetwork, resul
 	return _hcnCreateNetwork(id, _p0, network, result)
 }
 
-func _hcnCreateNetwork(id *guid.GUID, settings *uint16, network *hcnNetwork, result **uint16) (hr error) {
+func _hcnCreateNetwork(id *_guid, settings *uint16, network *hcnNetwork, result **uint16) (hr error) {
 	if hr = procHcnCreateNetwork.Find(); hr != nil {
 		return
 	}
@@ -157,7 +156,7 @@ func _hcnCreateNetwork(id *guid.GUID, settings *uint16, network *hcnNetwork, res
 	return
 }
 
-func hcnOpenNetwork(id *guid.GUID, network *hcnNetwork, result **uint16) (hr error) {
+func hcnOpenNetwork(id *_guid, network *hcnNetwork, result **uint16) (hr error) {
 	if hr = procHcnOpenNetwork.Find(); hr != nil {
 		return
 	}
@@ -208,7 +207,7 @@ func _hcnQueryNetworkProperties(network hcnNetwork, query *uint16, properties **
 	return
 }
 
-func hcnDeleteNetwork(id *guid.GUID, result **uint16) (hr error) {
+func hcnDeleteNetwork(id *_guid, result **uint16) (hr error) {
 	if hr = procHcnDeleteNetwork.Find(); hr != nil {
 		return
 	}
@@ -250,7 +249,7 @@ func _hcnEnumerateEndpoints(query *uint16, endpoints **uint16, result **uint16) 
 	return
 }
 
-func hcnCreateEndpoint(network hcnNetwork, id *guid.GUID, settings string, endpoint *hcnEndpoint, result **uint16) (hr error) {
+func hcnCreateEndpoint(network hcnNetwork, id *_guid, settings string, endpoint *hcnEndpoint, result **uint16) (hr error) {
 	var _p0 *uint16
 	_p0, hr = syscall.UTF16PtrFromString(settings)
 	if hr != nil {
@@ -259,7 +258,7 @@ func hcnCreateEndpoint(network hcnNetwork, id *guid.GUID, settings string, endpo
 	return _hcnCreateEndpoint(network, id, _p0, endpoint, result)
 }
 
-func _hcnCreateEndpoint(network hcnNetwork, id *guid.GUID, settings *uint16, endpoint *hcnEndpoint, result **uint16) (hr error) {
+func _hcnCreateEndpoint(network hcnNetwork, id *_guid, settings *uint16, endpoint *hcnEndpoint, result **uint16) (hr error) {
 	if hr = procHcnCreateEndpoint.Find(); hr != nil {
 		return
 	}
@@ -270,7 +269,7 @@ func _hcnCreateEndpoint(network hcnNetwork, id *guid.GUID, settings *uint16, end
 	return
 }
 
-func hcnOpenEndpoint(id *guid.GUID, endpoint *hcnEndpoint, result **uint16) (hr error) {
+func hcnOpenEndpoint(id *_guid, endpoint *hcnEndpoint, result **uint16) (hr error) {
 	if hr = procHcnOpenEndpoint.Find(); hr != nil {
 		return
 	}
@@ -321,7 +320,7 @@ func _hcnQueryEndpointProperties(endpoint hcnEndpoint, query *uint16, properties
 	return
 }
 
-func hcnDeleteEndpoint(id *guid.GUID, result **uint16) (hr error) {
+func hcnDeleteEndpoint(id *_guid, result **uint16) (hr error) {
 	if hr = procHcnDeleteEndpoint.Find(); hr != nil {
 		return
 	}
@@ -363,7 +362,7 @@ func _hcnEnumerateNamespaces(query *uint16, namespaces **uint16, result **uint16
 	return
 }
 
-func hcnCreateNamespace(id *guid.GUID, settings string, namespace *hcnNamespace, result **uint16) (hr error) {
+func hcnCreateNamespace(id *_guid, settings string, namespace *hcnNamespace, result **uint16) (hr error) {
 	var _p0 *uint16
 	_p0, hr = syscall.UTF16PtrFromString(settings)
 	if hr != nil {
@@ -372,7 +371,7 @@ func hcnCreateNamespace(id *guid.GUID, settings string, namespace *hcnNamespace,
 	return _hcnCreateNamespace(id, _p0, namespace, result)
 }
 
-func _hcnCreateNamespace(id *guid.GUID, settings *uint16, namespace *hcnNamespace, result **uint16) (hr error) {
+func _hcnCreateNamespace(id *_guid, settings *uint16, namespace *hcnNamespace, result **uint16) (hr error) {
 	if hr = procHcnCreateNamespace.Find(); hr != nil {
 		return
 	}
@@ -383,7 +382,7 @@ func _hcnCreateNamespace(id *guid.GUID, settings *uint16, namespace *hcnNamespac
 	return
 }
 
-func hcnOpenNamespace(id *guid.GUID, namespace *hcnNamespace, result **uint16) (hr error) {
+func hcnOpenNamespace(id *_guid, namespace *hcnNamespace, result **uint16) (hr error) {
 	if hr = procHcnOpenNamespace.Find(); hr != nil {
 		return
 	}
@@ -434,7 +433,7 @@ func _hcnQueryNamespaceProperties(namespace hcnNamespace, query *uint16, propert
 	return
 }
 
-func hcnDeleteNamespace(id *guid.GUID, result **uint16) (hr error) {
+func hcnDeleteNamespace(id *_guid, result **uint16) (hr error) {
 	if hr = procHcnDeleteNamespace.Find(); hr != nil {
 		return
 	}
@@ -476,7 +475,7 @@ func _hcnEnumerateLoadBalancers(query *uint16, loadBalancers **uint16, result **
 	return
 }
 
-func hcnCreateLoadBalancer(id *guid.GUID, settings string, loadBalancer *hcnLoadBalancer, result **uint16) (hr error) {
+func hcnCreateLoadBalancer(id *_guid, settings string, loadBalancer *hcnLoadBalancer, result **uint16) (hr error) {
 	var _p0 *uint16
 	_p0, hr = syscall.UTF16PtrFromString(settings)
 	if hr != nil {
@@ -485,7 +484,7 @@ func hcnCreateLoadBalancer(id *guid.GUID, settings string, loadBalancer *hcnLoad
 	return _hcnCreateLoadBalancer(id, _p0, loadBalancer, result)
 }
 
-func _hcnCreateLoadBalancer(id *guid.GUID, settings *uint16, loadBalancer *hcnLoadBalancer, result **uint16) (hr error) {
+func _hcnCreateLoadBalancer(id *_guid, settings *uint16, loadBalancer *hcnLoadBalancer, result **uint16) (hr error) {
 	if hr = procHcnCreateLoadBalancer.Find(); hr != nil {
 		return
 	}
@@ -496,7 +495,7 @@ func _hcnCreateLoadBalancer(id *guid.GUID, settings *uint16, loadBalancer *hcnLo
 	return
 }
 
-func hcnOpenLoadBalancer(id *guid.GUID, loadBalancer *hcnLoadBalancer, result **uint16) (hr error) {
+func hcnOpenLoadBalancer(id *_guid, loadBalancer *hcnLoadBalancer, result **uint16) (hr error) {
 	if hr = procHcnOpenLoadBalancer.Find(); hr != nil {
 		return
 	}
@@ -547,7 +546,7 @@ func _hcnQueryLoadBalancerProperties(loadBalancer hcnLoadBalancer, query *uint16
 	return
 }
 
-func hcnDeleteLoadBalancer(id *guid.GUID, result **uint16) (hr error) {
+func hcnDeleteLoadBalancer(id *_guid, result **uint16) (hr error) {
 	if hr = procHcnDeleteLoadBalancer.Find(); hr != nil {
 		return
 	}
