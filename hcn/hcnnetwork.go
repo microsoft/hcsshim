@@ -2,6 +2,7 @@ package hcn
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/interop"
@@ -245,7 +246,7 @@ func GetNetworkByID(networkID string) (*HostComputeNetwork, error) {
 		return nil, err
 	}
 	if len(networks) == 0 {
-		return nil, nil
+		return nil, fmt.Errorf("Network %s not found", networkID)
 	}
 	return &networks[0], err
 }
@@ -265,7 +266,7 @@ func GetNetworkByName(networkName string) (*HostComputeNetwork, error) {
 		return nil, err
 	}
 	if len(networks) == 0 {
-		return nil, nil
+		return nil, fmt.Errorf("Network %s not found", networkName)
 	}
 	return &networks[0], err
 }

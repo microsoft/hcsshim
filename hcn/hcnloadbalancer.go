@@ -2,6 +2,7 @@ package hcn
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/interop"
@@ -210,7 +211,7 @@ func GetLoadBalancerByID(loadBalancerId string) (*HostComputeLoadBalancer, error
 		return nil, err
 	}
 	if len(loadBalancers) == 0 {
-		return nil, nil
+		return nil, fmt.Errorf("LoadBalancer %s not found", loadBalancerId)
 	}
 	return &loadBalancers[0], err
 }
