@@ -70,7 +70,6 @@ var (
 	printTraceFlag = flag.Bool("trace", false, "generate print statement after every syscall")
 	systemDLL      = flag.Bool("systemdll", true, "whether all DLLs should be loaded from the Windows system directory")
 	winio          = flag.Bool("winio", false, "import go-winio")
-	hns            = flag.Bool("hns", false, "import guid")
 )
 
 func trim(s string) string {
@@ -777,9 +776,6 @@ func (src *Source) Generate(w io.Writer) error {
 	src.ExternalImport("github.com/Microsoft/hcsshim/internal/interop")
 	if *winio {
 		src.ExternalImport("github.com/Microsoft/go-winio")
-	}
-	if *hns {
-		src.ExternalImport("github.com/Microsoft/hcsshim/internal/guid")
 	}
 	if packageName != "syscall" {
 		src.Import("syscall")
