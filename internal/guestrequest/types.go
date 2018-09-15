@@ -54,6 +54,7 @@ const (
 	ResourceTypeMappedDirectory   ResourceType = "MappedDirectory"
 	ResourceTypeMappedVirtualDisk ResourceType = "MappedVirtualDisk"
 	ResourceTypeNetwork           ResourceType = "Network"
+	ResourceTypeNetworkNamespace  ResourceType = "NetworkNamespace"
 	ResourceTypeCombinedLayers    ResourceType = "CombinedLayers"
 	ResourceTypeVPMemDevice       ResourceType = "VPMemDevice"
 )

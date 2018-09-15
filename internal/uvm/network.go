@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 
+	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hns"
@@ -12,12 +13,31 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// AddNetNS adds network namespace inside the guest & adds endpoints to the guest on that namepace
 func (uvm *UtilityVM) AddNetNS(id string, endpoints []*hns.HNSEndpoint) (err error) {
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 	ns := uvm.namespaces[id]
 	if ns == nil {
 		ns = &namespaceInfo{}
+		// Add a Guest Network namespace
+		if uvm.operatingSystem == "windows" {
+			hcnNamespace, err := hcn.GetNamespaceByID(id)
+			if err != nil {
+				return err
+			}
+			guestNamespace := hcsschema.ModifySettingRequest{
+				GuestRequest: guestrequest.GuestRequest{
+					ResourceType: guestrequest.ResourceTypeNetworkNamespace,
+					RequestType:  requesttype.Add,
+					Settings:     hcnNamespace,
+				},
+			}
+			if err := uvm.Modify(&guestNamespace); err != nil {
+				return err
+			}
+		}
+
 		defer func() {
 			if err != nil {
 				if e := uvm.removeNamespaceNICs(ns); e != nil {
@@ -42,6 +62,7 @@ func (uvm *UtilityVM) AddNetNS(id string, endpoints []*hns.HNSEndpoint) (err err
 	return nil
 }
 
+//RemoveNetNS removes the namespace information
 func (uvm *UtilityVM) RemoveNetNS(id string) error {
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
@@ -55,6 +76,25 @@ func (uvm *UtilityVM) RemoveNetNS(id string) error {
 		err = uvm.removeNamespaceNICs(ns)
 		delete(uvm.namespaces, id)
 	}
+
+	// Add a Guest Network namespace
+	if uvm.operatingSystem == "windows" {
+		hcnNamespace, err := hcn.GetNamespaceByID(id)
+		if err != nil {
+			return err
+		}
+		guestNamespace := hcsschema.ModifySettingRequest{
+			GuestRequest: guestrequest.GuestRequest{
+				ResourceType: guestrequest.ResourceTypeNetworkNamespace,
+				RequestType:  requesttype.Remove,
+				Settings:     hcnNamespace,
+			},
+		}
+		if err := uvm.Modify(&guestNamespace); err != nil {
+			return err
+		}
+	}
+
 	return err
 }
 

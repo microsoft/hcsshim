@@ -3,6 +3,7 @@
 package hcn
 
 import (
+	"encoding/json"
 	"fmt"
 	"syscall"
 
@@ -101,6 +102,15 @@ func defaultQuery() HostComputeQuery {
 		Flags: HostComputeQueryFlagsNone,
 	}
 	return query
+}
+
+func defaultQueryJson() string {
+	query := defaultQuery()
+	queryJson, err := json.Marshal(query)
+	if err != nil {
+		return ""
+	}
+	return string(queryJson)
 }
 
 // PlatformDoesNotSupportError happens when users are attempting to use a newer shim on an older OS
