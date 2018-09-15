@@ -109,7 +109,6 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 	if coi.Spec.Windows != nil &&
 		coi.Spec.Windows.Network != nil &&
 		schemaversion.IsV21(coi.actualSchemaVersion) {
-
 		if coi.NetworkNamespace != "" {
 			resources.netNS = coi.NetworkNamespace
 		} else {

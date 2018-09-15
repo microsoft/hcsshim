@@ -336,8 +336,8 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		}
 
 		// Determine the network namespace to use.
-		if cfg.Spec.Windows.Network != nil && cfg.Spec.Windows.Network.NetworkSharedContainerName != "" {
-			err = stateKey.Get(cfg.Spec.Windows.Network.NetworkSharedContainerName, keyNetNS, &netNS)
+		if cfg.Spec.Windows.Network != nil && cfg.Spec.Windows.Network.NetworkNamespace != "" {
+			err = stateKey.Get(cfg.Spec.Windows.Network.NetworkNamespace, keyNetNS, &netNS)
 			if err != nil {
 				if _, ok := err.(*regstate.NoStateError); !ok {
 					return nil, err
