@@ -1,8 +1,6 @@
 package main
 
 import (
-	"errors"
-
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/urfave/cli"
 )
@@ -33,7 +31,7 @@ signal to the init process of the "ubuntu01" container:
 			return err
 		}
 		if status != containerRunning {
-			return errors.New("container is not running")
+			return errContainerStopped
 		}
 
 		sigstr := context.Args().Get(1)
