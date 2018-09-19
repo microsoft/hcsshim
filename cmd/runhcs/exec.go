@@ -81,7 +81,7 @@ following will output a list of processes running in the container:
 			return err
 		}
 		if status != containerRunning {
-			return fmt.Errorf("cannot exec a container that is not running")
+			return errContainerStopped
 		}
 		spec, err := getProcessSpec(context, c)
 		if err != nil {
