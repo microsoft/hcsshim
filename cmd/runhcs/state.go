@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/appargs"
+	"github.com/Microsoft/hcsshim/internal/runhcs"
 	"github.com/urfave/cli"
 )
 
@@ -31,7 +32,7 @@ instance of a container.`,
 			}
 			status = containerUnknown
 		}
-		cs := containerState{
+		cs := runhcs.ContainerState{
 			Version:        c.Spec.Version,
 			ID:             c.ID,
 			InitProcessPid: c.ShimPid,
