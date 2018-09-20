@@ -7,8 +7,6 @@ import (
 	"syscall"
 
 	"github.com/Microsoft/hcsshim/internal/guid"
-	"github.com/Microsoft/hcsshim/internal/hcserror"
-	"github.com/Microsoft/hcsshim/internal/interop"
 )
 
 //go:generate go run ../mksyscall_windows.go -output zsyscall_windows.go hcn.go
@@ -70,28 +68,6 @@ type hcnNamespace syscall.Handle
 type hcnLoadBalancer syscall.Handle
 type hcnService syscall.Handle
 type hcnCallbackHandle syscall.Handle
-
-func checkForErrors(methodName string, hr error, resultBuffer *uint16) error {
-	errorFound := false
-
-	if hr != nil {
-		errorFound = true
-	}
-
-	result := ""
-	if resultBuffer != nil {
-		result = interop.ConvertAndFreeCoTaskMemString(resultBuffer)
-		if result != "" {
-			errorFound = true
-		}
-	}
-
-	if errorFound {
-		return hcserror.New(hr, methodName, result)
-	}
-
-	return nil
-}
 
 // SchemaVersion for HCN Objects/Queries.
 type SchemaVersion = Version // hcnglobals.go
