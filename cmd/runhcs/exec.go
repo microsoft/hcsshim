@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/Microsoft/hcsshim/internal/appargs"
@@ -146,7 +147,9 @@ func validateProcessSpec(spec *specs.Process) error {
 	if spec.Cwd == "" {
 		return fmt.Errorf("Cwd property must not be empty")
 	}
-	if !filepath.IsAbs(spec.Cwd) {
+	// IsAbs doesnt recognize Unix paths on Windows builds so handle that case
+	// here.
+	if !filepath.IsAbs(spec.Cwd) && !strings.HasPrefix(spec.Cwd, "/") {
 		return fmt.Errorf("Cwd must be an absolute path")
 	}
 	if len(spec.Args) == 0 {
