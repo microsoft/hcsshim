@@ -3,7 +3,6 @@
 package hcn
 
 import (
-	"reflect"
 	"testing"
 )
 
@@ -15,7 +14,7 @@ func TestMissingNetworkByName(t *testing.T) {
 	if !IsNotFoundError(err) {
 		t.Errorf("Unrelated error was thrown.")
 	}
-	if reflect.TypeOf(err) != reflect.TypeOf(NetworkNotFoundError{}) {
+	if _, ok := err.(NetworkNotFoundError); !ok {
 		t.Errorf("Wrong error type was thrown.")
 	}
 }
@@ -29,7 +28,7 @@ func TestMissingNetworkById(t *testing.T) {
 	if !IsNotFoundError(err) {
 		t.Errorf("Unrelated error was thrown.")
 	}
-	if reflect.TypeOf(err) != reflect.TypeOf(NetworkNotFoundError{}) {
+	if _, ok := err.(NetworkNotFoundError); !ok {
 		t.Errorf("Wrong error type was thrown.")
 	}
 }

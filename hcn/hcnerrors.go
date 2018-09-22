@@ -4,7 +4,6 @@ package hcn
 
 import (
 	"fmt"
-	"reflect"
 
 	"github.com/Microsoft/hcsshim/internal/hcserror"
 	"github.com/Microsoft/hcsshim/internal/interop"
@@ -79,16 +78,14 @@ func (e LoadBalancerNotFoundError) Error() string {
 // IsNotFoundError returns a boolean indicating whether the error was caused by
 // a resource not being found.
 func IsNotFoundError(err error) bool {
-	if reflect.TypeOf(err) == reflect.TypeOf(NetworkNotFoundError{}) {
+	switch err.(type) {
+	case NetworkNotFoundError:
 		return true
-	}
-	if reflect.TypeOf(err) == reflect.TypeOf(EndpointNotFoundError{}) {
+	case EndpointNotFoundError:
 		return true
-	}
-	if reflect.TypeOf(err) == reflect.TypeOf(NamespaceNotFoundError{}) {
+	case NamespaceNotFoundError:
 		return true
-	}
-	if reflect.TypeOf(err) == reflect.TypeOf(LoadBalancerNotFoundError{}) {
+	case LoadBalancerNotFoundError:
 		return true
 	}
 	return false
