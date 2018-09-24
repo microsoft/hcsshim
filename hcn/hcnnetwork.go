@@ -2,7 +2,6 @@ package hcn
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/interop"
@@ -49,11 +48,25 @@ type Dns struct {
 	Options    []string `json:",omitempty"`
 }
 
+// NetworkType are various networks.
+type NetworkType string
+
+// NetworkType const
+const (
+	NAT         NetworkType = "NAT"
+	Transparent NetworkType = "Transparent"
+	L2Bridge    NetworkType = "L2Bridge"
+	L2Tunnel    NetworkType = "L2Tunnel"
+	ICS         NetworkType = "ICS"
+	Private     NetworkType = "Private"
+	Overlay     NetworkType = "Overlay"
+)
+
 // HostComputeNetwork represents a network
 type HostComputeNetwork struct {
 	Id            string          `json:"ID,omitempty"`
 	Name          string          `json:",omitempty"`
-	Type          string          `json:",omitempty"` // EX: NAT, Overlay
+	Type          NetworkType     `json:",omitempty"`
 	Policies      []NetworkPolicy `json:",omitempty"`
 	MacPool       MacPool         `json:",omitempty"`
 	Dns           Dns             `json:",omitempty"`
@@ -246,7 +259,7 @@ func GetNetworkByID(networkID string) (*HostComputeNetwork, error) {
 		return nil, err
 	}
 	if len(networks) == 0 {
-		return nil, fmt.Errorf("Network %s not found", networkID)
+		return nil, NetworkNotFoundError{NetworkID: networkID}
 	}
 	return &networks[0], err
 }
@@ -266,7 +279,7 @@ func GetNetworkByName(networkName string) (*HostComputeNetwork, error) {
 		return nil, err
 	}
 	if len(networks) == 0 {
-		return nil, fmt.Errorf("Network %s not found", networkName)
+		return nil, NetworkNotFoundError{NetworkName: networkName}
 	}
 	return &networks[0], err
 }
