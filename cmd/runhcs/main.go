@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/regstate"
 	"github.com/opencontainers/runtime-spec/specs-go"
-
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -71,7 +71,7 @@ func main() {
 		cli.StringFlag{
 			Name:  "log",
 			Value: "nul",
-			Usage: "set the log file path where internal debug information is written",
+			Usage: `set the log file path or named pipe (e.g. \\.\pipe\ProtectedPrefix\Administrators\runhcs-log) where internal debug information is written`,
 		},
 		cli.StringFlag{
 			Name:  "log-format",
@@ -114,7 +114,13 @@ func main() {
 			logrus.SetLevel(logrus.DebugLevel)
 		}
 		if path := context.GlobalString("log"); path != "" {
-			f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND|os.O_SYNC, 0666)
+			var f io.Writer
+			var err error
+			if strings.HasPrefix(path, safePipePrefix) {
+				f, err = winio.DialPipe(path, nil)
+			} else {
+				f, err = os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND|os.O_SYNC, 0666)
+			}
 			if err != nil {
 				return err
 			}

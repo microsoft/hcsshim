@@ -146,11 +146,16 @@ func launchShim(cmd, pidFile, logFile string, args []string, data interface{}) (
 	var log *os.File
 	fullargs := []string{os.Args[0]}
 	if logFile != "" {
-		log, err = os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND|os.O_SYNC, 0666)
-		if err != nil {
-			return nil, err
+		if strings.HasPrefix(logFile, safePipePrefix) {
+			logrus.Debugf("opening pipe path: %s", logFile)
+			args = append(args, "--log-pipe", logFile)
+		} else {
+			log, err = os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND|os.O_SYNC, 0666)
+			if err != nil {
+				return nil, err
+			}
+			defer log.Close()
 		}
-		defer log.Close()
 
 		fullargs = append(fullargs, "--log-format", logFormat)
 		if logrus.GetLevel() == logrus.DebugLevel {

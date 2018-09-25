@@ -43,10 +43,21 @@ var shimCommand = cli.Command{
 		&cli.IntFlag{Name: "stdout", Hidden: true},
 		&cli.IntFlag{Name: "stderr", Hidden: true},
 		&cli.BoolFlag{Name: "exec", Hidden: true},
+		cli.StringFlag{Name: "log-pipe", Hidden: true},
 	},
 	Before: appargs.Validate(argID),
 	Action: func(context *cli.Context) error {
-		logrus.SetOutput(os.Stderr)
+		logPipe := context.String("log-pipe")
+		if logPipe != "" {
+			lpc, err := winio.DialPipe(logPipe, nil)
+			if err != nil {
+				return err
+			}
+			defer lpc.Close()
+			logrus.SetOutput(lpc)
+		} else {
+			logrus.SetOutput(os.Stderr)
+		}
 		fatalWriter.Writer = os.Stdout
 
 		id := context.Args().First()

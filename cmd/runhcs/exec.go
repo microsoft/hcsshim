@@ -59,7 +59,7 @@ following will output a list of processes running in the container:
 		cli.StringFlag{
 			Name:  "shim-log",
 			Value: "",
-			Usage: "path to the log file for the launched shim process",
+			Usage: `path to the log file or named pipe (e.g. \\.\pipe\ProtectedPrefix\Administrators\runhcs-<container-id>-<exec-id>-log) for the launched shim process`,
 		},
 	},
 	Before: appargs.Validate(argID, appargs.Rest(appargs.String)),

@@ -6,8 +6,13 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/appargs"
+)
+
+const (
+	safePipePrefix = `\\.\pipe\ProtectedPrefix\Administrators\`
 )
 
 var shimSuccess = []byte{0, 'O', 'K', 0}
@@ -17,6 +22,11 @@ var argID = appargs.NonEmptyString
 func absPathOrEmpty(path string) (string, error) {
 	if path == "" {
 		return "", nil
+	}
+	if strings.HasPrefix(path, safePipePrefix) {
+		if len(path) > len(safePipePrefix) {
+			return safePipePath(path[len(safePipePrefix):]), nil
+		}
 	}
 	return filepath.Abs(path)
 }
@@ -44,7 +54,7 @@ func createPidFile(path string, pid int) error {
 func safePipePath(name string) string {
 	// Use a pipe in the Administrators protected prefixed to prevent malicious
 	// squatting.
-	return `\\.\pipe\ProtectedPrefix\Administrators\` + url.PathEscape(name)
+	return safePipePrefix + url.PathEscape(name)
 }
 
 func closeWritePipe(pipe net.Conn) error {
