@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -208,6 +209,16 @@ var shimCommand = cli.Command{
 				return err
 			}
 		}
+
+		// Store the Guest pid map
+		err = stateKey.Set(c.ID, fmt.Sprintf(keyPidMapFmt, os.Getpid()), p.Pid())
+		if err != nil {
+			return err
+		}
+		defer func() {
+			// Remove the Guest pid map when this process is cleaned up
+			stateKey.Clear(c.ID, fmt.Sprintf(keyPidMapFmt, os.Getpid()))
+		}()
 
 		terminateOnFailure = false
 

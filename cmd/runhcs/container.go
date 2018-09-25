@@ -55,6 +55,9 @@ const (
 	keyShimPid   = "shim"
 	keyInitPid   = "pid"
 	keyNetNS     = "netns"
+	// keyPidMapFmt is the format to use when mapping a host OS pid to a guest
+	// pid.
+	keyPidMapFmt = "pid-%d"
 )
 
 type container struct {
