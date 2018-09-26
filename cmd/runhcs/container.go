@@ -112,6 +112,9 @@ func startProcessShim(id, pidFile, logFile string, spec *specs.Process) (_ *os.P
 	if spec != nil {
 		args = append(args, "--exec")
 	}
+	if strings.HasPrefix(logFile, safePipePrefix) {
+		args = append(args, "--log-pipe", logFile)
+	}
 	args = append(args, id)
 	return launchShim("shim", pidFile, logFile, args, spec)
 }
@@ -146,10 +149,7 @@ func launchShim(cmd, pidFile, logFile string, args []string, data interface{}) (
 	var log *os.File
 	fullargs := []string{os.Args[0]}
 	if logFile != "" {
-		if strings.HasPrefix(logFile, safePipePrefix) {
-			logrus.Debugf("opening pipe path: %s", logFile)
-			args = append(args, "--log-pipe", logFile)
-		} else {
+		if !strings.HasPrefix(logFile, safePipePrefix) {
 			log, err = os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND|os.O_SYNC, 0666)
 			if err != nil {
 				return nil, err
@@ -255,7 +255,12 @@ func (c *container) startVMShim(logFile string, consolePipe string) (*os.Process
 		}
 		opts.LayerFolders = layers
 	}
-	return launchShim("vmshim", "", logFile, []string{c.VMPipePath()}, opts)
+	args := []string{}
+	if strings.HasPrefix(logFile, safePipePrefix) {
+		args = append(args, "--log-pipe", logFile)
+	}
+	args = append(args, c.VMPipePath())
+	return launchShim("vmshim", "", logFile, args, opts)
 }
 
 type containerConfig struct {
