@@ -23,10 +23,22 @@ var vmshimCommand = cli.Command{
 	Name:   "vmshim",
 	Usage:  `launch a VM and containers inside it (do not call it outside of runhcs)`,
 	Hidden: true,
-	Flags:  []cli.Flag{},
+	Flags: []cli.Flag{
+		cli.StringFlag{Name: "log-pipe", Hidden: true},
+	},
 	Before: appargs.Validate(argID),
 	Action: func(context *cli.Context) error {
-		logrus.SetOutput(os.Stderr)
+		logPipe := context.String("log-pipe")
+		if logPipe != "" {
+			lpc, err := winio.DialPipe(logPipe, nil)
+			if err != nil {
+				return err
+			}
+			defer lpc.Close()
+			logrus.SetOutput(lpc)
+		} else {
+			logrus.SetOutput(os.Stderr)
+		}
 		fatalWriter.Writer = os.Stdout
 
 		pipePath := context.Args().First()
