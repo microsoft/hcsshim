@@ -19,6 +19,10 @@ import (
 )
 
 func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) error {
+	if coi.Spec == nil || coi.Spec.Windows == nil || coi.Spec.Windows.LayerFolders == nil {
+		return fmt.Errorf("field 'Spec.Windows.Layerfolders' is not populated")
+	}
+
 	scratchFolder := coi.Spec.Windows.LayerFolders[len(coi.Spec.Windows.LayerFolders)-1]
 	logrus.Debugf("hcsshim::allocateWindowsResources scratch folder: %s", scratchFolder)
 
