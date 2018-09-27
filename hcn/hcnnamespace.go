@@ -2,9 +2,14 @@ package hcn
 
 import (
 	"encoding/json"
+	"os"
+	"syscall"
 
+	icni "github.com/Microsoft/hcsshim/internal/cni"
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/interop"
+	"github.com/Microsoft/hcsshim/internal/regstate"
+	"github.com/Microsoft/hcsshim/internal/runhcs"
 	"github.com/sirupsen/logrus"
 )
 
@@ -316,6 +321,60 @@ func (namespace *HostComputeNamespace) Delete() (*HostComputeNamespace, error) {
 		return nil, err
 	}
 	return nil, nil
+}
+
+// Sync Namespace endpoints with the appropriate sandbox container holding the
+// network namespace open. If no sandbox container is found for this namespace
+// this method is determined to be a success and will not return an error in
+// this case. If the sandbox container is found and a sync is initiated any
+// failures will be returned via this method.
+//
+// This call initiates a sync between endpoints and the matching UtilityVM
+// hosting those endpoints. It is safe to call for any `NamespaceType` but
+// `NamespaceTypeGuest` is the only case when a sync will actually occur. For
+// `NamespaceTypeHost` the process container will be automatically synchronized
+// when the the endpoint is added via `AddNamespaceEndpoint`.
+//
+// Note: This method sync's both additions and removals of endpoints from a
+// `NamespaceTypeGuest` namespace.
+func (namespace *HostComputeNamespace) Sync() error {
+	logrus.WithField("id", namespace.Id).Debugf("hcs::HostComputeNamespace::Sync")
+
+	// We only attempt a sync for namespace guest.
+	if namespace.Type != NamespaceTypeGuest {
+		return nil
+	}
+
+	// Look in the registry for the key to map from namespace id to pod-id
+	cfg, err := icni.LoadPersistedNamespaceConfig(namespace.Id)
+	if err != nil {
+		if regstate.IsNotFoundError(err) {
+			return nil
+		}
+		return err
+	}
+	req := runhcs.VMRequest{
+		ID: cfg.ContainerID,
+		Op: runhcs.OpSyncNamespace,
+	}
+	shimPath := runhcs.VMPipePath(cfg.HostUniqueID)
+	if err := runhcs.IssueVMRequest(shimPath, &req); err != nil {
+		// The shim is likey gone. Simply ignore the sync as if it didn't exist.
+		if perr, ok := err.(*os.PathError); ok && perr.Err == syscall.ERROR_FILE_NOT_FOUND {
+			// Remove the reg key there is no point to try again
+			cfg.Remove()
+			return nil
+		}
+		f := map[string]interface{}{
+			"id":           namespace.Id,
+			"container-id": cfg.ContainerID,
+		}
+		logrus.WithFields(f).
+			WithError(err).
+			Debugf("hcs::HostComputeNamespace::Sync failed to connect to shim pipe: '%s'", shimPath)
+		return err
+	}
+	return nil
 }
 
 // ModifyNamespaceSettings updates the Endpoints/Containers of a Namespace.

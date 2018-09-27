@@ -15,6 +15,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
+	"github.com/Microsoft/hcsshim/internal/runhcs"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
@@ -23,7 +24,7 @@ import (
 )
 
 func containerPipePath(id string) string {
-	return safePipePath("runhcs-shim-" + id)
+	return runhcs.SafePipePath("runhcs-shim-" + id)
 }
 
 func newFile(context *cli.Context, param string) *os.File {
@@ -110,7 +111,7 @@ var shimCommand = cli.Command{
 
 			// Alert the parent process that initialization has completed
 			// successfully.
-			errorOut.Write(shimSuccess)
+			errorOut.Write(runhcs.ShimSuccess)
 			errorOut.Close()
 			fatalWriter.Writer = ioutil.Discard
 
@@ -235,7 +236,7 @@ var shimCommand = cli.Command{
 
 		// Alert the connected process that the process was launched
 		// successfully.
-		errorOut.Write(shimSuccess)
+		errorOut.Write(runhcs.ShimSuccess)
 		errorOut.Close()
 		fatalWriter.Writer = ioutil.Discard
 
