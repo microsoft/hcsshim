@@ -10,7 +10,9 @@ import (
 
 	winio "github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/appargs"
+	"github.com/Microsoft/hcsshim/internal/runhcs"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -76,7 +78,7 @@ var vmshimCommand = cli.Command{
 
 		// Alert the parent process that initialization has completed
 		// successfully.
-		os.Stdout.Write(shimSuccess)
+		os.Stdout.Write(runhcs.ShimSuccess)
 		os.Stdout.Close()
 		fatalWriter.Writer = ioutil.Discard
 
@@ -99,7 +101,7 @@ var vmshimCommand = cli.Command{
 			case pipe := <-pipeCh:
 				err = processRequest(vm, pipe)
 				if err == nil {
-					_, err = pipe.Write(shimSuccess)
+					_, err = pipe.Write(runhcs.ShimSuccess)
 					// Wait until the pipe is closed before closing the
 					// container so that it is properly handed off to the other
 					// process.
@@ -119,19 +121,6 @@ var vmshimCommand = cli.Command{
 	},
 }
 
-type vmRequestOp string
-
-const (
-	opCreateContainer          vmRequestOp = "create"
-	opUnmountContainer         vmRequestOp = "unmount"
-	opUnmountContainerDiskOnly vmRequestOp = "unmount-disk"
-)
-
-type vmRequest struct {
-	ID string
-	Op vmRequestOp
-}
-
 func startVM(opts *uvm.UVMOptions) (*uvm.UtilityVM, error) {
 	vm, err := uvm.Create(opts)
 	if err != nil {
@@ -146,7 +135,7 @@ func startVM(opts *uvm.UVMOptions) (*uvm.UtilityVM, error) {
 }
 
 func processRequest(vm *uvm.UtilityVM, pipe net.Conn) error {
-	var req vmRequest
+	var req runhcs.VMRequest
 	err := json.NewDecoder(pipe).Decode(&req)
 	if err != nil {
 		return err
@@ -162,7 +151,7 @@ func processRequest(vm *uvm.UtilityVM, pipe net.Conn) error {
 		}
 	}()
 	switch req.Op {
-	case opCreateContainer:
+	case runhcs.OpCreateContainer:
 		err = createContainerInHost(c, vm)
 		if err != nil {
 			return err
@@ -175,12 +164,14 @@ func processRequest(vm *uvm.UtilityVM, pipe net.Conn) error {
 		}()
 		c = nil
 
-	case opUnmountContainer, opUnmountContainerDiskOnly:
-		err = c.unmountInHost(vm, req.Op == opUnmountContainer)
+	case runhcs.OpUnmountContainer, runhcs.OpUnmountContainerDiskOnly:
+		err = c.unmountInHost(vm, req.Op == runhcs.OpUnmountContainer)
 		if err != nil {
 			return err
 		}
 
+	case runhcs.OpSyncNamespace:
+		return errors.New("Not implemented")
 	default:
 		panic("unknown operation")
 	}
@@ -195,25 +186,15 @@ func (err *noVMError) Error() string {
 	return "VM " + err.ID + " cannot be contacted"
 }
 
-func (c *container) issueVMRequest(op vmRequestOp) error {
-	pipe, err := winio.DialPipe(c.VMPipePath(), nil)
-	if err != nil {
-		if perr, ok := err.(*os.PathError); ok && perr.Err == syscall.ERROR_FILE_NOT_FOUND {
-			return &noVMError{c.HostID}
-		}
-		return err
-	}
-	defer pipe.Close()
-	req := vmRequest{
+func (c *container) issueVMRequest(op runhcs.VMRequestOp) error {
+	req := runhcs.VMRequest{
 		ID: c.ID,
 		Op: op,
 	}
-	err = json.NewEncoder(pipe).Encode(&req)
-	if err != nil {
-		return err
-	}
-	err = getErrorFromPipe(pipe, nil)
-	if err != nil {
+	if err := runhcs.IssueVMRequest(c.VMPipePath(), &req); err != nil {
+		if perr, ok := err.(*os.PathError); ok && perr.Err == syscall.ERROR_FILE_NOT_FOUND {
+			return &noVMError{c.HostID}
+		}
 		return err
 	}
 	return nil

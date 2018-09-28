@@ -1,24 +1,22 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	winio "github.com/Microsoft/go-winio"
+	"github.com/Microsoft/hcsshim/internal/cni"
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/regstate"
+	"github.com/Microsoft/hcsshim/internal/runhcs"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
@@ -67,32 +65,6 @@ type container struct {
 	resources *hcsoci.Resources
 }
 
-func getErrorFromPipe(pipe io.Reader, p *os.Process) error {
-	serr, err := ioutil.ReadAll(pipe)
-	if err != nil {
-		return err
-	}
-
-	if bytes.Equal(serr, shimSuccess) {
-		return nil
-	}
-
-	extra := ""
-	if p != nil {
-		p.Kill()
-		state, err := p.Wait()
-		if err != nil {
-			panic(err)
-		}
-		extra = fmt.Sprintf(", exit code %d", state.Sys().(syscall.WaitStatus).ExitCode)
-	}
-	if len(serr) == 0 {
-		return fmt.Errorf("unknown shim failure%s", extra)
-	}
-
-	return errors.New(string(serr))
-}
-
 func startProcessShim(id, pidFile, logFile string, spec *specs.Process) (_ *os.Process, err error) {
 	// Ensure the stdio handles inherit to the child process. This isn't undone
 	// after the StartProcess call because the caller never launches another
@@ -112,7 +84,7 @@ func startProcessShim(id, pidFile, logFile string, spec *specs.Process) (_ *os.P
 	if spec != nil {
 		args = append(args, "--exec")
 	}
-	if strings.HasPrefix(logFile, safePipePrefix) {
+	if strings.HasPrefix(logFile, runhcs.SafePipePrefix) {
 		args = append(args, "--log-pipe", logFile)
 	}
 	args = append(args, id)
@@ -149,7 +121,7 @@ func launchShim(cmd, pidFile, logFile string, args []string, data interface{}) (
 	var log *os.File
 	fullargs := []string{os.Args[0]}
 	if logFile != "" {
-		if !strings.HasPrefix(logFile, safePipePrefix) {
+		if !strings.HasPrefix(logFile, runhcs.SafePipePrefix) {
 			log, err = os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND|os.O_SYNC, 0666)
 			if err != nil {
 				return nil, err
@@ -193,7 +165,7 @@ func launchShim(cmd, pidFile, logFile string, args []string, data interface{}) (
 		wdatap.Close()
 	}
 
-	err = getErrorFromPipe(rp, p)
+	err = runhcs.GetErrorFromPipe(rp, p)
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +228,7 @@ func (c *container) startVMShim(logFile string, consolePipe string) (*os.Process
 		opts.LayerFolders = layers
 	}
 	args := []string{}
-	if strings.HasPrefix(logFile, safePipePrefix) {
+	if strings.HasPrefix(logFile, runhcs.SafePipePrefix) {
 		args = append(args, "--log-pipe", logFile)
 	}
 	args = append(args, c.VMPipePath())
@@ -385,6 +357,18 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 			c.Remove()
 		}
 	}()
+	if isSandbox {
+		cnicfg := cni.NewPersistedNamespaceConfig(netNS, cfg.ID, hostUniqueID)
+		err = cnicfg.Store()
+		if err != nil {
+			return nil, err
+		}
+		defer func() {
+			if err != nil {
+				cnicfg.Remove()
+			}
+		}()
+	}
 
 	// Start a VM if necessary.
 	if newvm {
@@ -399,7 +383,7 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		// Call to the VM shim process to create the container. This is done so
 		// that the VM process can keep track of the VM's virtual hardware
 		// resource use.
-		err = c.issueVMRequest(opCreateContainer)
+		err = c.issueVMRequest(runhcs.OpCreateContainer)
 		if err != nil {
 			return nil, err
 		}
@@ -428,11 +412,11 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 }
 
 func (c *container) ShimPipePath() string {
-	return safePipePath("runhcs-shim-" + c.UniqueID.String())
+	return runhcs.SafePipePath("runhcs-shim-" + c.UniqueID.String())
 }
 
 func (c *container) VMPipePath() string {
-	return safePipePath("runhcs-vm-" + c.HostUniqueID.String())
+	return runhcs.VMPipePath(c.HostUniqueID)
 }
 
 func (c *container) VMIsolated() bool {
@@ -463,9 +447,9 @@ func (c *container) unmountInHost(vm *uvm.UtilityVM, all bool) error {
 
 func (c *container) Unmount(all bool) error {
 	if c.VMIsolated() {
-		op := opUnmountContainerDiskOnly
+		op := runhcs.OpUnmountContainerDiskOnly
 		if all {
-			op = opUnmountContainer
+			op = runhcs.OpUnmountContainer
 		}
 		err := c.issueVMRequest(op)
 		if err != nil {
@@ -584,7 +568,7 @@ func (c *container) Exec() error {
 	}
 	defer shim.Release()
 
-	err = getErrorFromPipe(pipe, shim)
+	err = runhcs.GetErrorFromPipe(pipe, shim)
 	if err != nil {
 		return err
 	}

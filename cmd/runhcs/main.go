@@ -8,6 +8,7 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/regstate"
+	"github.com/Microsoft/hcsshim/internal/runhcs"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -116,7 +117,7 @@ func main() {
 		if path := context.GlobalString("log"); path != "" {
 			var f io.Writer
 			var err error
-			if strings.HasPrefix(path, safePipePrefix) {
+			if strings.HasPrefix(path, runhcs.SafePipePrefix) {
 				f, err = winio.DialPipe(path, nil)
 			} else {
 				f, err = os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND|os.O_SYNC, 0666)

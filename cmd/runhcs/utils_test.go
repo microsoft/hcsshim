@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 	"testing"
+
+	"github.com/Microsoft/hcsshim/internal/runhcs"
 )
 
 func Test_AbsPathOrEmpty(t *testing.T) {
@@ -13,15 +15,15 @@ func Test_AbsPathOrEmpty(t *testing.T) {
 
 	tests := []string{
 		"",
-		safePipePrefix + "test",
-		safePipePrefix + "test with spaces",
+		runhcs.SafePipePrefix + "test",
+		runhcs.SafePipePrefix + "test with spaces",
 		"test",
 		"C:\\test..\\test",
 	}
 	expected := []string{
 		"",
-		safePipePrefix + "test",
-		safePipePrefix + "test%20with%20spaces",
+		runhcs.SafePipePrefix + "test",
+		runhcs.SafePipePrefix + "test%20with%20spaces",
 		wd + "\\test",
 		"C:\\test..\\test",
 	}
@@ -32,18 +34,6 @@ func Test_AbsPathOrEmpty(t *testing.T) {
 		}
 		if actual != expected[i] {
 			t.Fatalf("absPathOrEmpty: actual '%s' != '%s'", actual, expected[i])
-		}
-	}
-}
-
-func Test_SafePipePath(t *testing.T) {
-	tests := []string{"test", "test with spaces", "test/with\\\\.\\slashes", "test.with..dots..."}
-	expected := []string{"test", "test%20with%20spaces", "test%2Fwith%5C%5C.%5Cslashes", "test.with..dots..."}
-	for i, test := range tests {
-		actual := safePipePath(test)
-		e := safePipePrefix + expected[i]
-		if actual != e {
-			t.Fatalf("safePipePath: actual '%s' != '%s'", actual, expected[i])
 		}
 	}
 }
