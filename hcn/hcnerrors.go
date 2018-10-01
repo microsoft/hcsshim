@@ -7,6 +7,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcserror"
 	"github.com/Microsoft/hcsshim/internal/interop"
+	"github.com/sirupsen/logrus"
 )
 
 func checkForErrors(methodName string, hr error, resultBuffer *uint16) error {
@@ -25,7 +26,9 @@ func checkForErrors(methodName string, hr error, resultBuffer *uint16) error {
 	}
 
 	if errorFound {
-		return hcserror.New(hr, methodName, result)
+		returnError := hcserror.New(hr, methodName, result)
+		logrus.Debugf(returnError.Error()) // HCN errors logged for debugging.
+		return returnError
 	}
 
 	return nil
