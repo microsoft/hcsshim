@@ -177,6 +177,7 @@ var shimCommand = cli.Command{
 				WorkingDirectory: spec.Cwd,
 				EmulateConsole:   spec.Terminal,
 				Environment:      environment,
+				User:             spec.User.Username,
 			}
 			for i, arg := range spec.Args {
 				e := windows.EscapeArg(arg)
@@ -184,6 +185,12 @@ var shimCommand = cli.Command{
 					wpp.CommandLine = e
 				} else {
 					wpp.CommandLine += " " + e
+				}
+			}
+			if spec.ConsoleSize != nil {
+				wpp.ConsoleSize = []int32{
+					int32(spec.ConsoleSize.Height),
+					int32(spec.ConsoleSize.Width),
 				}
 			}
 
