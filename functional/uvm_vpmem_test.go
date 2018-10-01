@@ -9,9 +9,9 @@ import (
 
 	"github.com/Microsoft/hcsshim/functional/utilities"
 	"github.com/Microsoft/hcsshim/internal/copyfile"
-	"github.com/Microsoft/hcsshim/internal/osversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
+	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/sirupsen/logrus"
 )
 

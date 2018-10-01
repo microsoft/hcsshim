@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/Microsoft/hcsshim/functional/utilities"
-	"github.com/Microsoft/hcsshim/internal/osversion"
+	"github.com/Microsoft/hcsshim/osversion"
 )
 
 // TestPlan9 tests adding/removing Plan9 shares to/from a v2 Linux utility VM

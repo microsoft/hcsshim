@@ -9,7 +9,7 @@ package functional
 //	"github.com/Microsoft/hcsshim/functional/utilities"
 //	"github.com/Microsoft/hcsshim/internal/guid"
 //	"github.com/Microsoft/hcsshim/internal/hcsoci"
-//	"github.com/Microsoft/hcsshim/internal/osversion"
+//	"github.com/Microsoft/hcsshim/osversion"
 //	"github.com/Microsoft/hcsshim/internal/schemaversion"
 //	"github.com/Microsoft/hcsshim/internal/uvm"
 //	"github.com/Microsoft/hcsshim/internal/uvmfolder"

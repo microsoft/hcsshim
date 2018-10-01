@@ -9,7 +9,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/functional/utilities"
 	"github.com/Microsoft/hcsshim/internal/lcow"
-	"github.com/Microsoft/hcsshim/internal/osversion"
+	"github.com/Microsoft/hcsshim/osversion"
 )
 
 func TestScratchCreateLCOW(t *testing.T) {

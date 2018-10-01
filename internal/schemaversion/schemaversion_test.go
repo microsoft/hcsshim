@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	_ "github.com/Microsoft/hcsshim/functional/manifest"
-	"github.com/Microsoft/hcsshim/internal/osversion"
 	"github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/hcsshim/osversion"
 )
 
 func TestDetermineSchemaVersion(t *testing.T) {
