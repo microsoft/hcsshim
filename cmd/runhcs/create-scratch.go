@@ -6,8 +6,8 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
-	"github.com/Microsoft/hcsshim/internal/osversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/osversion"
 	gcsclient "github.com/Microsoft/opengcs/client"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
