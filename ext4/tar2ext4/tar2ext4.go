@@ -64,7 +64,7 @@ func Convert(r io.Reader, w io.WriteSeeker, options ...Option) error {
 
 				// Create an overlay-style whiteout.
 				f := &compactext4.File{
-					Mode:     compactext4.S_IFBLK,
+					Mode:     compactext4.S_IFCHR,
 					Devmajor: 0,
 					Devminor: 0,
 				}
