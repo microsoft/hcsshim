@@ -185,7 +185,7 @@ func netnsConfig() error {
 			var cos string
 			co, err := cmd.CombinedOutput() // In case it has written something
 			if err != nil {
-				cos = string(co[:])
+				cos = string(co)
 			}
 			cmd.Process.Kill()
 			log.Infof("udhcpc timed out [%s]", cos)
@@ -194,7 +194,7 @@ func netnsConfig() error {
 			var cos string
 			co, err := cmd.CombinedOutput() // Something should be on stderr
 			if err != nil {
-				cos = string(co[:])
+				cos = string(co)
 			}
 			if err != nil {
 				log.Infof("udhcpc failed %s [%s]", err, cos)
@@ -204,7 +204,7 @@ func netnsConfig() error {
 		var cos string
 		co, err := cmd.CombinedOutput()
 		if err != nil {
-			cos = string(co[:])
+			cos = string(co)
 		}
 		log.Debugf("udhcpc succeeded: %s", cos)
 	}
