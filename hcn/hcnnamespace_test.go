@@ -29,6 +29,26 @@ func TestCreateDeleteNamespace(t *testing.T) {
 	}
 }
 
+func TestCreateDeleteNamespaceGuest(t *testing.T) {
+	namespace := &HostComputeNamespace{
+		Type:        NamespaceTypeGuestDefault,
+		SchemaVersion: SchemaVersion{
+			Major: 2,
+			Minor: 0,
+		},
+	}
+
+	hnsNamespace, err := namespace.Create()
+	if err != nil {
+		t.Error(err)
+	}
+
+	_, err = hnsNamespace.Delete()
+	if err != nil {
+		t.Error(err)
+	}
+}
+
 func TestGetNamespaceById(t *testing.T) {
 	namespace, err := HcnCreateTestNamespace()
 	if err != nil {
