@@ -15,6 +15,7 @@ import (
 type params struct {
 	convertWhiteout bool
 	appendVhdFooter bool
+	ext4opts        []compactext4.Option
 }
 
 // Option is the type for optional parameters to Convert.
@@ -32,6 +33,13 @@ func AppendVhdFooter(p *params) {
 	p.appendVhdFooter = true
 }
 
+// InlineData instructs the converter to write small files into the inode
+// structures directly. This creates smaller images but currently is not
+// compatible with DAX.
+func InlineData(p *params) {
+	p.ext4opts = append(p.ext4opts, compactext4.InlineData)
+}
+
 const (
 	whiteoutPrefix = ".wh."
 	opaqueWhiteout = ".wh..wh..opq"
@@ -41,11 +49,11 @@ const (
 // input tar stream.
 func Convert(r io.Reader, w io.WriteSeeker, options ...Option) error {
 	var p params
-	for _, o := range options {
-		o(&p)
+	for _, opt := range options {
+		opt(&p)
 	}
 	t := tar.NewReader(bufio.NewReader(r))
-	fs := compactext4.NewWriter(w)
+	fs := compactext4.NewWriter(w, p.ext4opts...)
 	for {
 		hdr, err := t.Next()
 		if err == io.EOF {

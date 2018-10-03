@@ -11,10 +11,11 @@ import (
 )
 
 var (
-	input   = flag.String("i", "", "input file")
-	output  = flag.String("o", "", "output file")
-	overlay = flag.Bool("overlay", false, "produce overlayfs-compatible layer image")
-	vhd     = flag.Bool("vhd", false, "add a VHD footer to the end of the image")
+	input      = flag.String("i", "", "input file")
+	output     = flag.String("o", "", "output file")
+	overlay    = flag.Bool("overlay", false, "produce overlayfs-compatible layer image")
+	vhd        = flag.Bool("vhd", false, "add a VHD footer to the end of the image")
+	inlineData = flag.Bool("inline", false, "write small file data into the inode; not compatible with DAX")
 )
 
 func main() {
@@ -43,6 +44,9 @@ func main() {
 		}
 		if *vhd {
 			opts = append(opts, tar2ext4.AppendVhdFooter)
+		}
+		if *inlineData {
+			opts = append(opts, tar2ext4.InlineData)
 		}
 		err = tar2ext4.Convert(in, out, opts...)
 		if err != nil {
