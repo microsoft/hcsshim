@@ -10,10 +10,11 @@ import (
 )
 
 type testFile struct {
-	Path string
-	File *File
-	Data []byte
-	Link string
+	Path        string
+	File        *File
+	Data        []byte
+	Link        string
+	ExpectError bool
 }
 
 const ()
@@ -37,18 +38,21 @@ func init() {
 }
 
 func createTestFile(t *testing.T, w *Writer, tf testFile) {
+	var err error
 	if tf.File != nil {
 		tf.File.Size = int64(len(tf.Data))
-		err := w.Create(tf.Path, tf.File)
-		if err != nil {
-			t.Fatal(err)
-		}
+		err = w.Create(tf.Path, tf.File)
+	} else {
+		err = w.Link(tf.Link, tf.Path)
+	}
+	if tf.ExpectError && err == nil {
+		t.Fatalf("%s: expected error", tf.Path)
+	}
+	if !tf.ExpectError && err != nil {
+		t.Fatal(err)
+	}
+	if tf.File != nil {
 		_, err = w.Write(tf.Data)
-		if err != nil {
-			t.Fatal(err)
-		}
-	} else if tf.Link != "" {
-		err := w.Link(tf.Link, tf.Path)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -79,8 +83,24 @@ func runTestsOnFiles(t *testing.T, testFiles []testFile, opts ...Option) {
 
 	if mountImage(t, image, mountPath) {
 		defer unmountImage(t, mountPath)
-		for _, tf := range testFiles {
-			verifyTestFile(t, mountPath, tf)
+		validated := make(map[string]*testFile)
+		for i := range testFiles {
+			tf := testFiles[len(testFiles)-i-1]
+			if validated[tf.Link] != nil {
+				// The link target was subsequently replaced. Find the
+				// earlier instance.
+				for j := range testFiles[:len(testFiles)-i-1] {
+					otf := testFiles[j]
+					if otf.Path == tf.Link && !otf.ExpectError {
+						tf = otf
+						break
+					}
+				}
+			}
+			if !tf.ExpectError && validated[tf.Path] == nil {
+				verifyTestFile(t, mountPath, tf)
+				validated[tf.Path] = &tf
+			}
 		}
 	}
 }
@@ -154,6 +174,35 @@ func TestXattrs(t *testing.T) {
 				},
 			},
 		},
+	}
+	runTestsOnFiles(t, testFiles)
+}
+
+func TestReplace(t *testing.T) {
+	testFiles := []testFile{
+		{Path: "lost+found", ExpectError: true, File: &File{}}, // can't change type
+		{Path: "lost+found", File: &File{Mode: format.S_IFDIR | 0777}},
+
+		{Path: "dir", File: &File{Mode: format.S_IFDIR | 0777}},
+		{Path: "dir/file", File: &File{}},
+		{Path: "dir", File: &File{Mode: format.S_IFDIR | 0700}},
+
+		{Path: "file", File: &File{}},
+		{Path: "file", File: &File{Mode: 0600}},
+		{Path: "file2", File: &File{}},
+		{Path: "link", Link: "file2"},
+		{Path: "file2", File: &File{Mode: 0600}},
+
+		{Path: "nolinks", File: &File{}},
+		{Path: "nolinks", ExpectError: true, Link: "file"}, // would orphan nolinks
+
+		{Path: "onelink", File: &File{}},
+		{Path: "onelink2", Link: "onelink"},
+		{Path: "onelink", Link: "file"},
+
+		{Path: "", ExpectError: true, File: &File{}},
+		{Path: "", ExpectError: true, Link: "file"},
+		{Path: "", File: &File{Mode: format.S_IFDIR | 0777}},
 	}
 	runTestsOnFiles(t, testFiles)
 }

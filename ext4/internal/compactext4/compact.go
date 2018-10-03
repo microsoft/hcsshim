@@ -283,27 +283,38 @@ func (w *Writer) writeXattrs(inode *inode, state *xattrState) error {
 	return nil
 }
 
-func (w *Writer) makeInode(f *File) (*inode, error) {
+func (w *Writer) makeInode(f *File, node *inode) (*inode, error) {
 	mode := f.Mode
 	if mode&format.TypeMask == 0 {
 		mode |= format.S_IFREG
 	}
 	typ := mode & format.TypeMask
 	ino := format.InodeNumber(len(w.inodes) + 1)
-	inode := &inode{
-		Number:    ino,
-		Mode:      mode,
-		Uid:       f.Uid,
-		Gid:       f.Gid,
-		LinkCount: 1,
-		Flags:     format.InodeFlagHugeFile,
-		Atime:     timeToFsTime(f.Atime),
-		Ctime:     timeToFsTime(f.Ctime),
-		Mtime:     timeToFsTime(f.Mtime),
-		Crtime:    timeToFsTime(f.Crtime),
-		Devmajor:  f.Devmajor,
-		Devminor:  f.Devminor,
+	if node == nil {
+		node = &inode{
+			Number: ino,
+		}
+		if typ == S_IFDIR {
+			node.Children = make(directory)
+			node.LinkCount = 1 // A directory is linked to itself.
+		}
+	} else if node.XattrBlock != 0 || node.Flags&format.InodeFlagExtents != 0 {
+		// Since we cannot deallocate or reuse blocks, don't allow updates that
+		// would invalidate data that has already been written.
+		return nil, errors.New("cannot overwrite file with xattrs or data")
 	}
+	node.Mode = mode
+	node.Uid = f.Uid
+	node.Gid = f.Gid
+	node.Flags = format.InodeFlagHugeFile
+	node.Atime = timeToFsTime(f.Atime)
+	node.Ctime = timeToFsTime(f.Ctime)
+	node.Mtime = timeToFsTime(f.Mtime)
+	node.Crtime = timeToFsTime(f.Crtime)
+	node.Devmajor = f.Devmajor
+	node.Devminor = f.Devminor
+	node.Data = nil
+	node.XattrInline = nil
 
 	var xstate xattrState
 	xstate.init()
@@ -316,31 +327,27 @@ func (w *Writer) makeInode(f *File) (*inode, error) {
 			return nil, fmt.Errorf("file too big: %d > %d", f.Size, maxFileSize)
 		}
 		if f.Size <= inlineDataSize && w.supportInlineData {
-			inode.Data = make([]byte, f.Size)
+			node.Data = make([]byte, f.Size)
 			extra := 0
 			if f.Size > inodeDataSize {
 				extra = int(f.Size - inodeDataSize)
 			}
 			// Add a dummy entry for now.
-			if !xstate.addXattr("system.data", inode.Data[:extra]) {
+			if !xstate.addXattr("system.data", node.Data[:extra]) {
 				panic("not enough room for inline data")
 			}
-			inode.Flags |= format.InodeFlagInlineData
+			node.Flags |= format.InodeFlagInlineData
 		}
 	case format.S_IFLNK:
-		inode.Mode |= 0777 // Symlinks should appear as ugw rwx
+		node.Mode |= 0777 // Symlinks should appear as ugw rwx
 		size = int64(len(f.Linkname))
 		if size <= smallSymlinkSize {
 			// Special case: small symlinks go directly in Block without setting
 			// an inline data flag.
-			inode.Data = make([]byte, len(f.Linkname))
-			copy(inode.Data, f.Linkname)
+			node.Data = make([]byte, len(f.Linkname))
+			copy(node.Data, f.Linkname)
 		}
-	case format.S_IFDIR:
-		inode.Children = make(directory)
-		inode.LinkCount++ // The directory is linked to itself.
-	case format.S_IFIFO, format.S_IFSOCK:
-	case format.S_IFCHR, format.S_IFBLK:
+	case format.S_IFDIR, format.S_IFIFO, format.S_IFSOCK, format.S_IFCHR, format.S_IFBLK:
 	default:
 		return nil, fmt.Errorf("invalid mode %o", mode)
 	}
@@ -360,14 +367,14 @@ func (w *Writer) makeInode(f *File) (*inode, error) {
 		}
 	}
 
-	if err := w.writeXattrs(inode, &xstate); err != nil {
+	if err := w.writeXattrs(node, &xstate); err != nil {
 		return nil, err
 	}
 
-	inode.Size = size
+	node.Size = size
 	if typ == format.S_IFLNK && size > smallSymlinkSize {
 		// Write the link name as data.
-		w.startInode(inode, size)
+		w.startInode(node, size)
 		if _, err := w.Write([]byte(f.Linkname)); err != nil {
 			return nil, err
 		}
@@ -376,45 +383,75 @@ func (w *Writer) makeInode(f *File) (*inode, error) {
 		}
 	}
 
-	w.inodes = append(w.inodes, inode)
-	return inode, nil
+	if int(node.Number-1) >= len(w.inodes) {
+		w.inodes = append(w.inodes, node)
+	}
+	return node, nil
 }
 
 func (w *Writer) root() *inode {
 	return w.getInode(format.InodeRoot)
 }
 
+func (w *Writer) lookup(name string, mustExist bool) (*inode, *inode, string, error) {
+	root := w.root()
+	cleanname := path.Clean("/" + name)[1:]
+	if len(cleanname) == 0 {
+		return root, root, "", nil
+	}
+	dirname, childname := path.Split(cleanname)
+	if len(childname) == 0 || len(childname) > 0xff {
+		return nil, nil, "", fmt.Errorf("%s: invalid name", name)
+	}
+	dir := w.findPath(root, dirname)
+	if dir == nil || !dir.IsDir() {
+		return nil, nil, "", fmt.Errorf("%s: path not found", name)
+	}
+	child := dir.Children[childname]
+	if child == nil && mustExist {
+		return nil, nil, "", fmt.Errorf("%s: file not found", name)
+	}
+	return dir, child, childname, nil
+}
+
 // Create adds a file to the file system.
-func (w *Writer) Create(p string, f *File) error {
+func (w *Writer) Create(name string, f *File) error {
 	if err := w.finishInode(); err != nil {
 		return err
 	}
-	p = path.Clean("/" + p)[1:]
-	if len(p) == 0 {
-		return nil
-	}
-	dir, name := path.Split(p)
-	if len(name) == 0 || len(name) > 0xff {
-		return fmt.Errorf("invalid name: %s", name)
-	}
-	di := w.findPath(w.root(), dir)
-	if di == nil || !di.IsDir() {
-		return fmt.Errorf("path not found: %s", dir)
-	}
-	if di.Children[name] != nil {
-		return fmt.Errorf("path already in use: %s", p)
-	}
-
-	inode, err := w.makeInode(f)
+	dir, existing, childname, err := w.lookup(name, false)
 	if err != nil {
 		return err
 	}
-	di.Children[name] = inode
-	if inode.Mode&format.TypeMask == format.S_IFREG && f.Size != 0 {
-		w.startInode(inode, f.Size)
+	var reuse *inode
+	if existing != nil {
+		if existing.IsDir() {
+			if f.Mode&TypeMask != S_IFDIR {
+				return fmt.Errorf("%s: cannot replace a directory with a file", name)
+			}
+			reuse = existing
+		} else if f.Mode&TypeMask == S_IFDIR {
+			return fmt.Errorf("%s: cannot replace a file with a directory", name)
+		} else if existing.LinkCount < 2 {
+			reuse = existing
+		}
 	}
-	if inode.IsDir() {
-		di.LinkCount++
+	child, err := w.makeInode(f, reuse)
+	if err != nil {
+		return fmt.Errorf("%s: %s", name, err)
+	}
+	if existing != child {
+		if existing != nil {
+			existing.LinkCount--
+		}
+		dir.Children[childname] = child
+		child.LinkCount++
+		if child.IsDir() {
+			dir.LinkCount++
+		}
+	}
+	if child.Mode&format.TypeMask == format.S_IFREG && f.Size != 0 {
+		w.startInode(child, f.Size)
 	}
 	return nil
 }
@@ -424,33 +461,28 @@ func (w *Writer) Link(oldname, newname string) error {
 	if err := w.finishInode(); err != nil {
 		return err
 	}
-	newname = path.Clean("/" + newname)[1:]
-	oldname = path.Clean("/" + oldname)[1:]
-	newdirpath, name := path.Split(newname)
-	if len(name) == 0 || len(name) > 0xff {
-		return fmt.Errorf("invalid name: %s", name)
+	newdir, existing, newchildname, err := w.lookup(newname, false)
+	if err != nil {
+		return err
+	}
+	if existing != nil && (existing.IsDir() || existing.LinkCount < 2) {
+		return fmt.Errorf("%s: cannot orphan existing file or directory", newname)
 	}
 
-	newdir := w.findPath(w.root(), newdirpath)
-	if newdir == nil || !newdir.IsDir() {
-		return fmt.Errorf("path not found: %s", newdirpath)
+	_, oldfile, _, err := w.lookup(oldname, true)
+	if err != nil {
+		return err
 	}
-	if newdir.Children[name] != nil {
-		return fmt.Errorf("path already in use: %s", newname)
-	}
-
-	oldfile := w.findPath(w.root(), oldname)
-	if oldfile == nil {
-		return fmt.Errorf("file not found: %s", oldname)
-	}
-
 	switch oldfile.Mode & format.TypeMask {
 	case format.S_IFDIR, format.S_IFLNK:
 		return fmt.Errorf("link target cannot be a directory or symlink: %s", oldname)
 	}
 
+	if existing != nil {
+		existing.LinkCount--
+	}
 	oldfile.LinkCount++
-	newdir.Children[name] = oldfile
+	newdir.Children[newchildname] = oldfile
 	return nil
 }
 
@@ -831,9 +863,10 @@ func (w *Writer) init() error {
 	// Skip the defective block inode.
 	w.inodes = make([]*inode, 1, 32)
 	// Create the root directory.
-	w.makeInode(&File{
+	root, _ := w.makeInode(&File{
 		Mode: format.S_IFDIR | 0755,
-	})
+	}, nil)
+	root.LinkCount++ // The root is linked to itself.
 	// Skip until the first non-reserved inode.
 	w.inodes = append(w.inodes, make([]*inode, inodeFirst-len(w.inodes)-1)...)
 
