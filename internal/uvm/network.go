@@ -10,6 +10,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/sirupsen/logrus"
 )
 
@@ -110,6 +111,21 @@ func (uvm *UtilityVM) removeNamespaceNICs(ns *namespaceInfo) error {
 	return nil
 }
 
+func getNetworkModifyRequest(adapterID string, requestType string, settings interface{}) interface{} {
+	if osversion.Get().Build > osversion.RS4 {
+		return guestrequest.NetworkModifyRequest{
+			AdapterId:   adapterID,
+			RequestType: requestType,
+			Settings:    settings,
+		}
+	}
+	return guestrequest.RS4NetworkModifyRequest{
+		AdapterInstanceId: adapterID,
+		RequestType:       requestType,
+		Settings:          settings,
+	}
+}
+
 func (uvm *UtilityVM) addNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
 
 	// First a pre-add. This is a guest-only request and is only done on Windows.
@@ -118,11 +134,10 @@ func (uvm *UtilityVM) addNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
 			GuestRequest: guestrequest.GuestRequest{
 				ResourceType: guestrequest.ResourceTypeNetwork,
 				RequestType:  requesttype.Add,
-				Settings: guestrequest.NetworkModifyRequest{
-					AdapterId:   id.String(),
-					RequestType: requesttype.PreAdd,
-					Settings:    endpoint,
-				},
+				Settings: getNetworkModifyRequest(
+					id.String(),
+					requesttype.PreAdd,
+					endpoint),
 			},
 		}
 		if err := uvm.Modify(&preAddRequest); err != nil {
@@ -144,10 +159,10 @@ func (uvm *UtilityVM) addNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
 		request.GuestRequest = guestrequest.GuestRequest{
 			ResourceType: guestrequest.ResourceTypeNetwork,
 			RequestType:  requesttype.Add,
-			Settings: guestrequest.NetworkModifyRequest{
-				AdapterId:   id.String(),
-				RequestType: requesttype.Add,
-			},
+			Settings: getNetworkModifyRequest(
+				id.String(),
+				requesttype.Add,
+				nil),
 		}
 	} else {
 		request.GuestRequest = guestrequest.GuestRequest{
@@ -177,10 +192,10 @@ func (uvm *UtilityVM) removeNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
 	if uvm.operatingSystem == "windows" {
 		request.GuestRequest = hcsschema.ModifySettingRequest{
 			RequestType: requesttype.Remove,
-			Settings: guestrequest.NetworkModifyRequest{
-				AdapterId:   id.String(),
-				RequestType: requesttype.Remove,
-			},
+			Settings: getNetworkModifyRequest(
+				id.String(),
+				requesttype.Remove,
+				nil),
 		}
 	} else {
 		request.GuestRequest = guestrequest.GuestRequest{

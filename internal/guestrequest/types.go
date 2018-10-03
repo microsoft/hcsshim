@@ -71,3 +71,9 @@ type NetworkModifyRequest struct {
 	RequestType string      `json:"RequestType,omitempty"`
 	Settings    interface{} `json:"Settings,omitempty"`
 }
+
+type RS4NetworkModifyRequest struct {
+	AdapterInstanceId string      `json:"AdapterInstanceId,omitempty"`
+	RequestType       string      `json:"RequestType,omitempty"`
+	Settings          interface{} `json:"Settings,omitempty"`
+}
