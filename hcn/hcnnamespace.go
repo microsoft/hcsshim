@@ -282,6 +282,14 @@ func GetNamespaceContainerIds(namespaceId string) ([]string, error) {
 	return containerIds, nil
 }
 
+// NewNamespace creates a new Namespace object
+func NewNamespace(nsType NamespaceType) *HostComputeNamespace {
+	return &HostComputeNamespace{
+		Type:          nsType,
+		SchemaVersion: V2SchemaVersion(),
+	}
+}
+
 // Create Namespace.
 func (namespace *HostComputeNamespace) Create() (*HostComputeNamespace, error) {
 	logrus.Debugf("hcn::HostComputeNamespace::Create id=%s", namespace.Id)

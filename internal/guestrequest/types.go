@@ -67,7 +67,7 @@ type GuestRequest struct {
 }
 
 type NetworkModifyRequest struct {
-	AdapterInstanceId string      `json:"AdapterInstanceId,omitempty"`
-	RequestType       string      `json:"RequestType,omitempty"`
-	Settings          interface{} `json:"Settings,omitempty"`
+	AdapterId   string      `json:"AdapterId,omitempty"`
+	RequestType string      `json:"RequestType,omitempty"`
+	Settings    interface{} `json:"Settings,omitempty"`
 }

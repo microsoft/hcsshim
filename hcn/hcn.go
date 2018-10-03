@@ -127,6 +127,13 @@ func V2ApiSupported() error {
 	return platformDoesNotSupportError("V2 Api/Schema")
 }
 
+func V2SchemaVersion() SchemaVersion {
+	return SchemaVersion{
+		Major: 2,
+		Minor: 0,
+	}
+}
+
 // RequestType are the different operations performed to settings.
 // Used to update the settings of Endpoint/Namespace objects.
 type RequestType string

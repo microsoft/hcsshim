@@ -119,9 +119,9 @@ func (uvm *UtilityVM) addNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
 				ResourceType: guestrequest.ResourceTypeNetwork,
 				RequestType:  requesttype.Add,
 				Settings: guestrequest.NetworkModifyRequest{
-					AdapterInstanceId: id.String(),
-					RequestType:       requesttype.PreAdd,
-					Settings:          endpoint,
+					AdapterId:   id.String(),
+					RequestType: requesttype.PreAdd,
+					Settings:    endpoint,
 				},
 			},
 		}
@@ -145,8 +145,8 @@ func (uvm *UtilityVM) addNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
 			ResourceType: guestrequest.ResourceTypeNetwork,
 			RequestType:  requesttype.Add,
 			Settings: guestrequest.NetworkModifyRequest{
-				AdapterInstanceId: id.String(),
-				RequestType:       requesttype.Add,
+				AdapterId:   id.String(),
+				RequestType: requesttype.Add,
 			},
 		}
 	} else {
@@ -178,8 +178,8 @@ func (uvm *UtilityVM) removeNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
 		request.GuestRequest = hcsschema.ModifySettingRequest{
 			RequestType: requesttype.Remove,
 			Settings: guestrequest.NetworkModifyRequest{
-				AdapterInstanceId: id.String(),
-				RequestType:       requesttype.Remove,
+				AdapterId:   id.String(),
+				RequestType: requesttype.Remove,
 			},
 		}
 	} else {
