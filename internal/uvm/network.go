@@ -164,12 +164,13 @@ func (uvm *UtilityVM) addNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
 				requesttype.Add,
 				nil),
 		}
-	} else {
-		request.GuestRequest = guestrequest.GuestRequest{
-			ResourceType: guestrequest.ResourceTypeNetwork,
-			RequestType:  requesttype.Add,
-			Settings:     endpoint,
-		}
+		// Uncomment this once we have GuestRequest support for Linux
+		//} else {
+		//	request.GuestRequest = guestrequest.GuestRequest{
+		//		ResourceType: guestrequest.ResourceTypeNetwork,
+		//		RequestType:  requesttype.Add,
+		//		Settings:     endpoint,
+		//	}
 	}
 
 	if err := uvm.Modify(&request); err != nil {
