@@ -24,6 +24,7 @@ type Writer struct {
 	pos                  int64
 	dataWritten, dataMax int64
 	initialized          bool
+	supportInlineData    bool
 }
 
 // Mode flags for Linux files.
@@ -314,7 +315,7 @@ func (w *Writer) makeInode(f *File) (*inode, error) {
 		if f.Size > maxFileSize {
 			return nil, fmt.Errorf("file too big: %d > %d", f.Size, maxFileSize)
 		}
-		if f.Size <= inlineDataSize {
+		if f.Size <= inlineDataSize && w.supportInlineData {
 			inode.Data = make([]byte, f.Size)
 			extra := 0
 			if f.Size > inodeDataSize {
@@ -805,11 +806,25 @@ func (w *Writer) writeInodeTable(tableSize uint32) error {
 
 // NewWriter returns a Writer that writes an ext4 file system to the provided
 // WriteSeeker.
-func NewWriter(f io.WriteSeeker) *Writer {
-	return &Writer{
+func NewWriter(f io.WriteSeeker, opts ...Option) *Writer {
+	w := &Writer{
 		f:  f,
 		bw: bufio.NewWriterSize(f, 65536*8),
 	}
+	for _, opt := range opts {
+		opt(w)
+	}
+	return w
+}
+
+// An Option provides extra options to NewWriter.
+type Option func(*Writer)
+
+// InlineData instructs the Writer to write small files into the inode
+// structures directly. This creates smaller images but currently is not
+// compatible with DAX.
+func InlineData(w *Writer) {
+	w.supportInlineData = true
 }
 
 func (w *Writer) init() error {
@@ -1008,11 +1023,14 @@ func (w *Writer) Close() error {
 		LpfInode:           inodeLostAndFound,
 		InodeSize:          inodeSize,
 		FeatureCompat:      format.CompatSparseSuper2 | format.CompatExtAttr,
-		FeatureIncompat:    format.IncompatFiletype | format.IncompatExtents | format.IncompatFlexBg | format.IncompatInlineData,
+		FeatureIncompat:    format.IncompatFiletype | format.IncompatExtents | format.IncompatFlexBg,
 		FeatureRoCompat:    format.RoCompatLargeFile | format.RoCompatHugeFile | format.RoCompatExtraIsize | format.RoCompatReadonly,
 		MinExtraIsize:      extraIsize,
 		WantExtraIsize:     extraIsize,
 		LogGroupsPerFlex:   31,
+	}
+	if w.supportInlineData {
+		sb.FeatureIncompat |= format.IncompatInlineData
 	}
 	if err := binary.Write(w.bw, binary.LittleEndian, sb); err != nil {
 		return err

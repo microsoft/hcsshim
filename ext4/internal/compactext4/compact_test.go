@@ -16,6 +16,26 @@ type testFile struct {
 	Link string
 }
 
+const ()
+
+var (
+	data []byte
+	name string
+)
+
+func init() {
+	data = make([]byte, blockSize*2)
+	for i := range data {
+		data[i] = uint8(i)
+	}
+
+	nameb := make([]byte, 300)
+	for i := range nameb {
+		nameb[i] = byte('0' + i%10)
+	}
+	name = string(nameb)
+}
+
 func createTestFile(t *testing.T, w *Writer, tf testFile) {
 	if tf.File != nil {
 		tf.File.Size = int64(len(tf.Data))
@@ -35,27 +55,42 @@ func createTestFile(t *testing.T, w *Writer, tf testFile) {
 	}
 }
 
-func TestCreateFs(t *testing.T) {
-	data := make([]byte, blockSize*2)
-	for i := range data {
-		data[i] = uint8(i)
+func runTestsOnFiles(t *testing.T, testFiles []testFile, opts ...Option) {
+	image := "testfs.img"
+	imagef, err := os.Create(image)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer imagef.Close()
+	defer os.Remove(image)
+
+	w := NewWriter(imagef, opts...)
+	for _, tf := range testFiles {
+		createTestFile(t, w, tf)
 	}
 
-	nameb := make([]byte, 300)
-	for i := range nameb {
-		nameb[i] = byte('0' + i%10)
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
 	}
-	name := string(nameb)
 
+	fsck(t, image)
+
+	mountPath := "testmnt"
+
+	if mountImage(t, image, mountPath) {
+		defer unmountImage(t, mountPath)
+		for _, tf := range testFiles {
+			verifyTestFile(t, mountPath, tf)
+		}
+	}
+}
+
+func TestBasic(t *testing.T) {
 	now := time.Now()
 	testFiles := []testFile{
 		{Path: "empty", File: &File{Mode: 0644}},
+		{Path: "small", File: &File{Mode: 0644}, Data: data[:40]},
 		{Path: "time", File: &File{Atime: now, Ctime: now.Add(time.Second), Mtime: now.Add(time.Hour)}},
-		{Path: "inline_30", File: &File{Mode: 0644}, Data: data[:30]},
-		{Path: "inline_60", File: &File{Mode: 0644}, Data: data[:60]},
-		{Path: "inline_120", File: &File{Mode: 0644}, Data: data[:120]},
-		{Path: "inline_full", File: &File{Mode: 0644}, Data: data[:inlineDataSize]},
-		{Path: "block_min", File: &File{Mode: 0644}, Data: data[:inlineDataSize+1]},
 		{Path: "block_1", File: &File{Mode: 0644}, Data: data[:blockSize]},
 		{Path: "block_2", File: &File{Mode: 0644}, Data: data[:blockSize*2]},
 		{Path: "symlink", File: &File{Linkname: "block_1", Mode: format.S_IFLNK}},
@@ -68,8 +103,39 @@ func TestCreateFs(t *testing.T) {
 		{Path: "dir/sock", File: &File{Mode: format.S_IFSOCK}},
 		{Path: "dir/blk", File: &File{Mode: format.S_IFBLK, Devmajor: 0x5678, Devminor: 0x1234}},
 		{Path: "dir/chr", File: &File{Mode: format.S_IFCHR, Devmajor: 0x5678, Devminor: 0x1234}},
-		{Path: "dir/hard_link", Link: "block_min"},
+		{Path: "dir/hard_link", Link: "small"},
+	}
+
+	runTestsOnFiles(t, testFiles)
+}
+
+func TestLargeDirectory(t *testing.T) {
+	testFiles := []testFile{
 		{Path: "bigdir", File: &File{Mode: format.S_IFDIR | 0755}},
+	}
+	for i := 0; i < 50000; i++ {
+		testFiles = append(testFiles, testFile{
+			Path: fmt.Sprintf("bigdir/%d", i), File: &File{Mode: 0644},
+		})
+	}
+
+	runTestsOnFiles(t, testFiles)
+}
+
+func TestInlineData(t *testing.T) {
+	testFiles := []testFile{
+		{Path: "inline_30", File: &File{Mode: 0644}, Data: data[:30]},
+		{Path: "inline_60", File: &File{Mode: 0644}, Data: data[:60]},
+		{Path: "inline_120", File: &File{Mode: 0644}, Data: data[:120]},
+		{Path: "inline_full", File: &File{Mode: 0644}, Data: data[:inlineDataSize]},
+		{Path: "block_min", File: &File{Mode: 0644}, Data: data[:inlineDataSize+1]},
+	}
+
+	runTestsOnFiles(t, testFiles, InlineData)
+}
+
+func TestXattrs(t *testing.T) {
+	testFiles := []testFile{
 		{Path: "withsmallxattrs",
 			File: &File{
 				Mode: format.S_IFREG | 0644,
@@ -89,38 +155,5 @@ func TestCreateFs(t *testing.T) {
 			},
 		},
 	}
-
-	image := "testfs.img"
-	imagef, err := os.Create(image)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer imagef.Close()
-	w := NewWriter(imagef)
-
-	for _, tf := range testFiles {
-		createTestFile(t, w, tf)
-	}
-
-	for i := 0; i < 50000; i++ {
-		createTestFile(t, w, testFile{Path: fmt.Sprintf("bigdir/%d", i), File: &File{Mode: 0644}})
-	}
-
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	fsck(t, image)
-
-	mountPath := "testmnt"
-
-	if mountImage(t, image, mountPath) {
-		defer unmountImage(t, mountPath)
-		for _, tf := range testFiles {
-			verifyTestFile(t, mountPath, tf)
-		}
-		for i := 0; i < 50000; i++ {
-			verifyTestFile(t, mountPath, testFile{Path: fmt.Sprintf("bigdir/%d", i), File: &File{Mode: 0644}})
-		}
-	}
+	runTestsOnFiles(t, testFiles)
 }
