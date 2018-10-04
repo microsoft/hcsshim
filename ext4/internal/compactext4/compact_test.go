@@ -348,3 +348,10 @@ func TestDirLinkLimit(t *testing.T) {
 	testFiles[len(testFiles)-1].ExpectError = true
 	runTestsOnFiles(t, testFiles)
 }
+
+func TestLargeDisk(t *testing.T) {
+	testFiles := []testFile{
+		{Path: "file", File: &File{}},
+	}
+	runTestsOnFiles(t, testFiles, MaximumDiskSize(maxMaxDiskSize))
+}

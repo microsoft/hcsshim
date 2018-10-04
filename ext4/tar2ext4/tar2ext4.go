@@ -39,6 +39,15 @@ func InlineData(p *params) {
 	p.ext4opts = append(p.ext4opts, compactext4.InlineData)
 }
 
+// MaximumDiskSize instructs the writer to limit the disk size to the specified
+// value. This also reserves enough metadata space for the specified disk size.
+// If not provided, then 16GB is the default.
+func MaximumDiskSize(size int64) Option {
+	return func(p *params) {
+		p.ext4opts = append(p.ext4opts, compactext4.MaximumDiskSize(size))
+	}
+}
+
 const (
 	whiteoutPrefix = ".wh."
 	opaqueWhiteout = ".wh..wh..opq"
