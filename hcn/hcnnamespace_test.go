@@ -11,6 +11,13 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guid"
 )
 
+func TestNewNamespace(t *testing.T) {
+	_ = NewNamespace(NamespaceTypeHost)
+	_ = NewNamespace(NamespaceTypeHostDefault)
+	_ = NewNamespace(NamespaceTypeGuest)
+	_ = NewNamespace(NamespaceTypeGuestDefault)
+}
+
 func TestCreateDeleteNamespace(t *testing.T) {
 	namespace, err := HcnCreateTestNamespace()
 	if err != nil {

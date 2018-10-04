@@ -321,12 +321,18 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		}
 
 		// Determine the network namespace to use.
-		if cfg.Spec.Windows.Network != nil && cfg.Spec.Windows.Network.NetworkSharedContainerName != "" {
-			err = stateKey.Get(cfg.Spec.Windows.Network.NetworkSharedContainerName, keyNetNS, &netNS)
-			if err != nil {
-				if _, ok := err.(*regstate.NoStateError); !ok {
-					return nil, err
+		if cfg.Spec.Windows.Network != nil {
+			if cfg.Spec.Windows.Network.NetworkSharedContainerName != "" {
+				// RS4 case
+				err = stateKey.Get(cfg.Spec.Windows.Network.NetworkSharedContainerName, keyNetNS, &netNS)
+				if err != nil {
+					if _, ok := err.(*regstate.NoStateError); !ok {
+						return nil, err
+					}
 				}
+			} else if cfg.Spec.Windows.Network.NetworkNamespace != "" {
+				// RS5 case
+				netNS = cfg.Spec.Windows.Network.NetworkNamespace
 			}
 		}
 	}
@@ -496,7 +502,7 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 
 	// Record the network namespace to support namespace sharing by container ID.
 	if resources.NetNS() != "" {
-		err = stateKey.Set(c.ID, keyNetNS, resources.NetNS)
+		err = stateKey.Set(c.ID, keyNetNS, resources.NetNS())
 		if err != nil {
 			return err
 		}

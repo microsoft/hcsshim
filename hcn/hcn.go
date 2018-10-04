@@ -3,6 +3,7 @@
 package hcn
 
 import (
+	"encoding/json"
 	"fmt"
 	"syscall"
 
@@ -103,6 +104,15 @@ func defaultQuery() HostComputeQuery {
 	return query
 }
 
+func defaultQueryJson() string {
+	query := defaultQuery()
+	queryJson, err := json.Marshal(query)
+	if err != nil {
+		return ""
+	}
+	return string(queryJson)
+}
+
 // PlatformDoesNotSupportError happens when users are attempting to use a newer shim on an older OS
 func platformDoesNotSupportError(featureName string) error {
 	return fmt.Errorf("Platform does not support feature %s", featureName)
@@ -115,6 +125,13 @@ func V2ApiSupported() error {
 		return nil
 	}
 	return platformDoesNotSupportError("V2 Api/Schema")
+}
+
+func V2SchemaVersion() SchemaVersion {
+	return SchemaVersion{
+		Major: 2,
+		Minor: 0,
+	}
 }
 
 // RequestType are the different operations performed to settings.
