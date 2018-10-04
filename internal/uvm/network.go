@@ -71,14 +71,8 @@ func (uvm *UtilityVM) RemoveNetNS(id string) error {
 	if ns == nil || ns.refCount <= 0 {
 		panic(fmt.Errorf("removed a namespace that was not added: %s", id))
 	}
-	ns.refCount--
-	var err error
-	if ns.refCount == 0 {
-		err = uvm.removeNamespaceNICs(ns)
-		delete(uvm.namespaces, id)
-	}
 
-	// Add a Guest Network namespace
+	// Remove the Guest Network namespace
 	if uvm.operatingSystem == "windows" {
 		hcnNamespace, err := hcn.GetNamespaceByID(id)
 		if err != nil {
@@ -94,6 +88,13 @@ func (uvm *UtilityVM) RemoveNetNS(id string) error {
 		if err := uvm.Modify(&guestNamespace); err != nil {
 			return err
 		}
+	}
+
+	ns.refCount--
+	var err error
+	if ns.refCount == 0 {
+		err = uvm.removeNamespaceNICs(ns)
+		delete(uvm.namespaces, id)
 	}
 
 	return err
@@ -112,7 +113,7 @@ func (uvm *UtilityVM) removeNamespaceNICs(ns *namespaceInfo) error {
 }
 
 func getNetworkModifyRequest(adapterID string, requestType string, settings interface{}) interface{} {
-	if osversion.Get().Build > osversion.RS4 {
+	if osversion.Get().Build >= osversion.RS5 {
 		return guestrequest.NetworkModifyRequest{
 			AdapterId:   adapterID,
 			RequestType: requestType,
