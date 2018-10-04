@@ -1,8 +1,10 @@
 package compactext4
 
 import (
+	"bytes"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -59,6 +61,52 @@ func createTestFile(t *testing.T, w *Writer, tf testFile) {
 	}
 }
 
+func expectedMode(f *File) uint16 {
+	switch f.Mode & format.TypeMask {
+	case 0:
+		return f.Mode | S_IFREG
+	case S_IFLNK:
+		return f.Mode | 0777
+	default:
+		return f.Mode
+	}
+}
+
+func expectedSize(f *File) int64 {
+	switch f.Mode & format.TypeMask {
+	case 0, S_IFREG:
+		return f.Size
+	case S_IFLNK:
+		return int64(len(f.Linkname))
+	default:
+		return 0
+	}
+}
+
+func fileEqual(f1 *File, f2 *File) bool {
+	if !(f1.Linkname == f2.Linkname &&
+		expectedSize(f1) == expectedSize(f2) &&
+		expectedMode(f1) == expectedMode(f2) &&
+		f1.Uid == f2.Uid &&
+		f1.Gid == f2.Gid &&
+		f1.Atime.Equal(f2.Atime) &&
+		f1.Ctime.Equal(f2.Ctime) &&
+		f1.Mtime.Equal(f2.Mtime) &&
+		f1.Crtime.Equal(f2.Crtime) &&
+		f1.Devmajor == f2.Devmajor &&
+		f1.Devminor == f2.Devminor &&
+		len(f1.Xattrs) == len(f2.Xattrs)) {
+
+		return false
+	}
+	for name, value := range f1.Xattrs {
+		if !bytes.Equal(f2.Xattrs[name], value) {
+			return false
+		}
+	}
+	return true
+}
+
 func runTestsOnFiles(t *testing.T, testFiles []testFile, opts ...Option) {
 	image := "testfs.img"
 	imagef, err := os.Create(image)
@@ -71,6 +119,16 @@ func runTestsOnFiles(t *testing.T, testFiles []testFile, opts ...Option) {
 	w := NewWriter(imagef, opts...)
 	for _, tf := range testFiles {
 		createTestFile(t, w, tf)
+		if !tf.ExpectError && tf.File != nil {
+			f, err := w.Stat(tf.Path)
+			if err != nil {
+				if !strings.Contains(err.Error(), "cannot retrieve") {
+					t.Error(err)
+				}
+			} else if !fileEqual(f, tf.File) {
+				t.Errorf("%s: stat mismatch: %#v %#v", tf.Path, tf.File, f)
+			}
+		}
 	}
 
 	if err := w.Close(); err != nil {
@@ -205,4 +263,12 @@ func TestReplace(t *testing.T) {
 		{Path: "", File: &File{Mode: format.S_IFDIR | 0777}},
 	}
 	runTestsOnFiles(t, testFiles)
+}
+
+func TestTime(t *testing.T) {
+	now := time.Now()
+	now2 := fsTimeToTime(timeToFsTime(now))
+	if now.UnixNano() != now2.UnixNano() {
+		t.Fatalf("%s != %s", now, now2)
+	}
 }

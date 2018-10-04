@@ -68,8 +68,12 @@ type inode struct {
 	Children                    directory
 }
 
-func (inode *inode) IsDir() bool {
-	return inode.Mode&format.TypeMask == S_IFDIR
+func (node *inode) FileType() uint16 {
+	return node.Mode & format.TypeMask
+}
+
+func (node *inode) IsDir() bool {
+	return node.FileType() == S_IFDIR
 }
 
 // A File represents a file to be added to an ext4 file system.
@@ -142,6 +146,17 @@ func timeToFsTime(t time.Time) uint64 {
 	return uint64(s) | uint64(t.Nanosecond())<<34
 }
 
+func fsTimeToTime(t uint64) time.Time {
+	if t == 0 {
+		return time.Time{}
+	}
+	s := int64(t & 0x3ffffffff)
+	if s > 0x7fffffff && s < 0x100000000 {
+		s = int64(int32(uint32(s)))
+	}
+	return time.Unix(s, int64(t>>34))
+}
+
 func (w *Writer) getInode(i format.InodeNumber) *inode {
 	if i == 0 || int(i) > len(w.inodes) {
 		return nil
@@ -149,26 +164,35 @@ func (w *Writer) getInode(i format.InodeNumber) *inode {
 	return w.inodes[i-1]
 }
 
-func compressXattrName(name string) (uint8, string) {
-	prefixes := []struct {
-		Index  uint8
-		Prefix string
-	}{
-		{2, "system.posix_acl_access"},
-		{3, "system.posix_acl_default"},
-		{8, "system.richacl"},
-		{7, "system."},
-		{1, "user."},
-		{4, "trusted."},
-		{6, "security."},
-	}
+var xattrPrefixes = []struct {
+	Index  uint8
+	Prefix string
+}{
+	{2, "system.posix_acl_access"},
+	{3, "system.posix_acl_default"},
+	{8, "system.richacl"},
+	{7, "system."},
+	{1, "user."},
+	{4, "trusted."},
+	{6, "security."},
+}
 
-	for _, p := range prefixes {
+func compressXattrName(name string) (uint8, string) {
+	for _, p := range xattrPrefixes {
 		if strings.HasPrefix(name, p.Prefix) {
 			return p.Index, name[len(p.Prefix):]
 		}
 	}
 	return 0, name
+}
+
+func decompressXattrName(index uint8, name string) string {
+	for _, p := range xattrPrefixes {
+		if index == p.Index {
+			return p.Prefix + name
+		}
+	}
+	return name
 }
 
 func hashXattrEntry(name string, value []byte) uint32 {
@@ -252,6 +276,28 @@ func putXattrs(xattrs []xattr, b []byte, offsetDelta uint16) {
 	}
 }
 
+func getXattrs(b []byte, offsetDelta uint16) map[string][]byte {
+	eb := b
+	xattrs := make(map[string][]byte)
+	for len(eb) != 0 {
+		nameLen := eb[0]
+		if nameLen == 0 {
+			break
+		}
+		index := eb[1]
+		offset := binary.LittleEndian.Uint16(eb[2:]) - offsetDelta
+		valueLen := binary.LittleEndian.Uint32(eb[8:])
+		attr := xattr{
+			Index: index,
+			Name:  string(eb[16 : 16+nameLen]),
+			Value: b[offset : uint32(offset)+valueLen],
+		}
+		xattrs[decompressXattrName(index, attr.Name)] = attr.Value
+		eb = eb[attr.EntryLen():]
+	}
+	return xattrs
+}
+
 func (w *Writer) writeXattrs(inode *inode, state *xattrState) error {
 	if len(state.inode) != 0 {
 		inode.XattrInline = make([]byte, inodeExtraSize)
@@ -301,7 +347,7 @@ func (w *Writer) makeInode(f *File, node *inode) (*inode, error) {
 	} else if node.XattrBlock != 0 || node.Flags&format.InodeFlagExtents != 0 {
 		// Since we cannot deallocate or reuse blocks, don't allow updates that
 		// would invalidate data that has already been written.
-		return nil, errors.New("cannot overwrite file with xattrs or data")
+		return nil, errors.New("cannot overwrite file with non-inline xattrs or data")
 	}
 	node.Mode = mode
 	node.Uid = f.Uid
@@ -484,6 +530,43 @@ func (w *Writer) Link(oldname, newname string) error {
 	oldfile.LinkCount++
 	newdir.Children[newchildname] = oldfile
 	return nil
+}
+
+// Stat returns information about a file that has been written.
+func (w *Writer) Stat(name string) (*File, error) {
+	if err := w.finishInode(); err != nil {
+		return nil, err
+	}
+	_, node, _, err := w.lookup(name, true)
+	if err != nil {
+		return nil, err
+	}
+	f := &File{
+		Size:     node.Size,
+		Mode:     node.Mode,
+		Uid:      node.Uid,
+		Gid:      node.Gid,
+		Atime:    fsTimeToTime(node.Atime),
+		Ctime:    fsTimeToTime(node.Ctime),
+		Mtime:    fsTimeToTime(node.Mtime),
+		Crtime:   fsTimeToTime(node.Crtime),
+		Devmajor: node.Devmajor,
+		Devminor: node.Devminor,
+	}
+	if node.XattrBlock != 0 {
+		return nil, fmt.Errorf("%s: cannot retrieve xattr information", name)
+	}
+	if len(node.XattrInline) != 0 {
+		f.Xattrs = getXattrs(node.XattrInline[4:], 0)
+		delete(f.Xattrs, "system.data")
+	}
+	if node.FileType() == S_IFLNK {
+		if node.Size > smallSymlinkSize {
+			return nil, fmt.Errorf("%s: cannot retrieve link information", name)
+		}
+		f.Linkname = string(node.Data)
+	}
+	return f, nil
 }
 
 func (w *Writer) Write(b []byte) (int, error) {

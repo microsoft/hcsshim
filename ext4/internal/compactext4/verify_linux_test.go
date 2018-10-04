@@ -15,38 +15,16 @@ import (
 	"github.com/Microsoft/hcsshim/ext4/internal/format"
 )
 
-func expectedMode(f *File) uint16 {
-	switch f.Mode & format.TypeMask {
-	case 0:
-		return f.Mode | S_IFREG
-	case S_IFLNK:
-		return f.Mode | 0777
-	default:
-		return f.Mode
-	}
-}
-
-func expectedSize(f *File) int64 {
-	switch f.Mode & format.TypeMask {
-	case 0, S_IFREG:
-		return f.Size
-	case S_IFLNK:
-		return int64(len(f.Linkname))
-	default:
-		return 0
-	}
-}
-
-func expectedDevice(f *File) uint64 {
-	return uint64(f.Devminor&0xff | f.Devmajor<<8 | (f.Devminor&0xffffff00)<<12)
-}
-
 func timeEqual(ts syscall.Timespec, t time.Time) bool {
 	sec, nsec := t.Unix(), t.Nanosecond()
 	if t.IsZero() {
 		sec, nsec = 0, 0
 	}
 	return ts.Sec == sec && int(ts.Nsec) == nsec
+}
+
+func expectedDevice(f *File) uint64 {
+	return uint64(f.Devminor&0xff | f.Devmajor<<8 | (f.Devminor&0xffffff00)<<12)
 }
 
 func verifyTestFile(t *testing.T, mountPath string, tf testFile) {
