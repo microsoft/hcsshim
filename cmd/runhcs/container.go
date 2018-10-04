@@ -363,7 +363,7 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 			c.Remove()
 		}
 	}()
-	if isSandbox {
+	if isSandbox && vmisolated {
 		cnicfg := cni.NewPersistedNamespaceConfig(netNS, cfg.ID, hostUniqueID)
 		err = cnicfg.Store()
 		if err != nil {
