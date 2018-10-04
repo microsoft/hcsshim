@@ -46,7 +46,7 @@ const (
 
 // Convert writes a compact ext4 file system image that contains the files in the
 // input tar stream.
-func Convert(r io.Reader, w io.WriteSeeker, options ...Option) error {
+func Convert(r io.Reader, w io.ReadWriteSeeker, options ...Option) error {
 	var p params
 	for _, opt := range options {
 		opt(&p)

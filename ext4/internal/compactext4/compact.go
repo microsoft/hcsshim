@@ -17,12 +17,14 @@ import (
 
 // Writer writes a compact ext4 file system.
 type Writer struct {
-	f                    io.WriteSeeker
+	f                    io.ReadWriteSeeker
 	bw                   *bufio.Writer
 	inodes               []*inode
+	curName              string
 	curInode             *inode
 	pos                  int64
 	dataWritten, dataMax int64
+	err                  error
 	initialized          bool
 	supportInlineData    bool
 }
@@ -276,9 +278,8 @@ func putXattrs(xattrs []xattr, b []byte, offsetDelta uint16) {
 	}
 }
 
-func getXattrs(b []byte, offsetDelta uint16) map[string][]byte {
+func getXattrs(b []byte, xattrs map[string][]byte, offsetDelta uint16) {
 	eb := b
-	xattrs := make(map[string][]byte)
 	for len(eb) != 0 {
 		nameLen := eb[0]
 		if nameLen == 0 {
@@ -295,17 +296,19 @@ func getXattrs(b []byte, offsetDelta uint16) map[string][]byte {
 		xattrs[decompressXattrName(index, attr.Name)] = attr.Value
 		eb = eb[attr.EntryLen():]
 	}
-	return xattrs
 }
 
 func (w *Writer) writeXattrs(inode *inode, state *xattrState) error {
+	// Write the inline attributes.
 	if len(state.inode) != 0 {
 		inode.XattrInline = make([]byte, inodeExtraSize)
 		binary.LittleEndian.PutUint32(inode.XattrInline[0:], format.XAttrHeaderMagic) // Magic
 		putXattrs(state.inode, inode.XattrInline[4:], 0)
 	}
 
-	if len(state.block) != 0 {
+	// Write the block attributes. If there was previously an xattr block, then
+	// rewrite it even if it is now empty.
+	if len(state.block) != 0 || inode.XattrBlock != 0 {
 		sort.Slice(state.block, func(i, j int) bool {
 			return state.block[i].Index < state.block[j].Index ||
 				len(state.block[i].Name) < len(state.block[j].Name) ||
@@ -318,15 +321,42 @@ func (w *Writer) writeXattrs(inode *inode, state *xattrState) error {
 		binary.LittleEndian.PutUint32(b[8:], 1)                       // Blocks
 		putXattrs(state.block, b[32:], 32)
 
-		inode.XattrBlock = uint32(w.pos / blockSize)
-		inode.BlockCount++
-		if _, err := w.bw.Write(b[:]); err != nil {
+		orig := w.block()
+		if inode.XattrBlock == 0 {
+			inode.XattrBlock = orig
+			inode.BlockCount++
+		} else {
+			// Reuse the original block.
+			w.seekBlock(inode.XattrBlock)
+			defer w.seekBlock(orig)
+		}
+
+		if _, err := w.write(b[:]); err != nil {
 			return err
 		}
-		w.pos += blockSize
 	}
 
 	return nil
+}
+
+func (w *Writer) write(b []byte) (int, error) {
+	if w.err != nil {
+		return 0, w.err
+	}
+	n, err := w.bw.Write(b)
+	w.pos += int64(n)
+	w.err = err
+	return n, err
+}
+
+func (w *Writer) zero(n int64) (int64, error) {
+	if w.err != nil {
+		return 0, w.err
+	}
+	n, err := io.CopyN(w.bw, zero, n)
+	w.pos += n
+	w.err = err
+	return n, err
 }
 
 func (w *Writer) makeInode(f *File, node *inode) (*inode, error) {
@@ -344,10 +374,10 @@ func (w *Writer) makeInode(f *File, node *inode) (*inode, error) {
 			node.Children = make(directory)
 			node.LinkCount = 1 // A directory is linked to itself.
 		}
-	} else if node.XattrBlock != 0 || node.Flags&format.InodeFlagExtents != 0 {
+	} else if node.Flags&format.InodeFlagExtents != 0 {
 		// Since we cannot deallocate or reuse blocks, don't allow updates that
 		// would invalidate data that has already been written.
-		return nil, errors.New("cannot overwrite file with non-inline xattrs or data")
+		return nil, errors.New("cannot overwrite file with non-inline data")
 	}
 	node.Mode = mode
 	node.Uid = f.Uid
@@ -420,7 +450,7 @@ func (w *Writer) makeInode(f *File, node *inode) (*inode, error) {
 	node.Size = size
 	if typ == format.S_IFLNK && size > smallSymlinkSize {
 		// Write the link name as data.
-		w.startInode(node, size)
+		w.startInode("", node, size)
 		if _, err := w.Write([]byte(f.Linkname)); err != nil {
 			return nil, err
 		}
@@ -496,8 +526,8 @@ func (w *Writer) Create(name string, f *File) error {
 			dir.LinkCount++
 		}
 	}
-	if child.Mode&format.TypeMask == format.S_IFREG && f.Size != 0 {
-		w.startInode(child, f.Size)
+	if child.Mode&format.TypeMask == format.S_IFREG {
+		w.startInode(name, child, f.Size)
 	}
 	return nil
 }
@@ -553,12 +583,26 @@ func (w *Writer) Stat(name string) (*File, error) {
 		Devmajor: node.Devmajor,
 		Devminor: node.Devminor,
 	}
-	if node.XattrBlock != 0 {
-		return nil, fmt.Errorf("%s: cannot retrieve xattr information", name)
-	}
-	if len(node.XattrInline) != 0 {
-		f.Xattrs = getXattrs(node.XattrInline[4:], 0)
-		delete(f.Xattrs, "system.data")
+	if node.XattrBlock != 0 || len(node.XattrInline) != 0 {
+		f.Xattrs = make(map[string][]byte)
+		if node.XattrBlock != 0 {
+			orig := w.block()
+			w.seekBlock(node.XattrBlock)
+			if w.err != nil {
+				return nil, w.err
+			}
+			var b [blockSize]byte
+			_, err := w.f.Read(b[:])
+			w.seekBlock(orig)
+			if err != nil {
+				return nil, err
+			}
+			getXattrs(b[32:], f.Xattrs, 32)
+		}
+		if len(node.XattrInline) != 0 {
+			getXattrs(node.XattrInline[4:], f.Xattrs, 0)
+			delete(f.Xattrs, "system.data")
+		}
 	}
 	if node.FileType() == S_IFLNK {
 		if node.Size > smallSymlinkSize {
@@ -574,7 +618,7 @@ func (w *Writer) Write(b []byte) (int, error) {
 		return 0, nil
 	}
 	if w.dataWritten+int64(len(b)) > w.dataMax {
-		return 0, fmt.Errorf("wrote too much: %d > %d", w.dataWritten, w.dataMax)
+		return 0, fmt.Errorf("%s: wrote too much: %d > %d", w.curName, w.dataWritten+int64(len(b)), w.dataMax)
 	}
 
 	if w.curInode.Flags&format.InodeFlagInlineData != 0 {
@@ -583,28 +627,43 @@ func (w *Writer) Write(b []byte) (int, error) {
 		return len(b), nil
 	}
 
-	n, err := w.bw.Write(b)
+	n, err := w.write(b)
 	w.dataWritten += int64(n)
-	w.pos += int64(n)
 	return n, err
 }
 
-func (w *Writer) startInode(inode *inode, size int64) {
+func (w *Writer) startInode(name string, inode *inode, size int64) {
 	if w.curInode != nil {
 		panic("inode already in progress")
 	}
+	w.curName = name
 	w.curInode = inode
 	w.dataWritten = 0
 	w.dataMax = size
 }
 
+func (w *Writer) block() uint32 {
+	return uint32(w.pos / blockSize)
+}
+
+func (w *Writer) seekBlock(block uint32) {
+	w.pos = int64(block) * blockSize
+	if w.err != nil {
+		return
+	}
+	w.err = w.bw.Flush()
+	if w.err != nil {
+		return
+	}
+	_, w.err = w.f.Seek(w.pos, io.SeekStart)
+}
+
 func (w *Writer) nextBlock() error {
 	if w.pos%blockSize != 0 {
-		_, err := io.CopyN(w.bw, zero, blockSize-w.pos%blockSize)
+		_, err := w.zero(blockSize - w.pos%blockSize)
 		if err != nil {
 			return err
 		}
-		w.pos += blockSize - w.pos%blockSize
 	}
 	return nil
 }
@@ -641,7 +700,7 @@ func (w *Writer) writeExtents(inode *inode) error {
 	}
 
 	startBlock := uint32(start / blockSize)
-	blocks := uint32(w.pos/blockSize) - startBlock
+	blocks := w.block() - startBlock
 	usedBlocks := blocks
 
 	const extentNodeSize = 12
@@ -676,7 +735,7 @@ func (w *Writer) writeExtents(inode *inode) error {
 		for i := uint32(0); i < extentBlocks; i++ {
 			root.nodes[i] = format.ExtentIndexNode{
 				Block:   i * extentsPerBlock * maxBlocksPerExtent,
-				LeafLow: uint32(w.pos / blockSize),
+				LeafLow: w.block(),
 			}
 			extentsInBlock := extents - i*extentBlocks
 			if extentsInBlock > extentsPerBlock {
@@ -691,6 +750,9 @@ func (w *Writer) writeExtents(inode *inode) error {
 
 			offset := i * extentsPerBlock * maxBlocksPerExtent
 			fillExtents(&node.hdr, node.extents[:extentsInBlock], startBlock+offset, offset, blocks)
+			if w.err != nil {
+				return w.err
+			}
 			if err := binary.Write(w.bw, binary.LittleEndian, node); err != nil {
 				return err
 			}
@@ -720,7 +782,7 @@ func (w *Writer) finishInode() error {
 		return fmt.Errorf("did not write the right amount: %d != %d", w.dataWritten, w.dataMax)
 	}
 
-	if w.curInode.Flags&format.InodeFlagInlineData == 0 {
+	if w.dataMax != 0 && w.curInode.Flags&format.InodeFlagInlineData == 0 {
 		if err := w.writeExtents(w.curInode); err != nil {
 			return err
 		}
@@ -770,7 +832,7 @@ func (w *Writer) writeDirectory(dir, parent *inode) error {
 	}
 
 	// The size of the directory is not known yet.
-	w.startInode(dir, 0x7fffffffffffffff)
+	w.startInode("", dir, 0x7fffffffffffffff)
 	left := blockSize
 	finishBlock := func() error {
 		if left > 0 {
@@ -907,21 +969,20 @@ func (w *Writer) writeInodeTable(tableSize uint32) error {
 		} else {
 			io.CopyN(&b, zero, inodeSize)
 		}
-		if _, err := w.bw.Write(b.Next(inodeSize)); err != nil {
+		if _, err := w.write(b.Next(inodeSize)); err != nil {
 			return err
 		}
 	}
 	rest := tableSize - uint32(len(w.inodes)*inodeSize)
-	if _, err := io.CopyN(w.bw, zero, int64(rest)); err != nil {
+	if _, err := w.zero(int64(rest)); err != nil {
 		return err
 	}
-	w.pos += int64(tableSize)
 	return nil
 }
 
 // NewWriter returns a Writer that writes an ext4 file system to the provided
 // WriteSeeker.
-func NewWriter(f io.WriteSeeker, opts ...Option) *Writer {
+func NewWriter(f io.ReadWriteSeeker, opts ...Option) *Writer {
 	w := &Writer{
 		f:  f,
 		bw: bufio.NewWriterSize(f, 65536*8),
@@ -953,18 +1014,15 @@ func (w *Writer) init() error {
 	// Skip until the first non-reserved inode.
 	w.inodes = append(w.inodes, make([]*inode, inodeFirst-len(w.inodes)-1)...)
 
-	if _, err := w.f.Seek(blockSize*2, io.SeekStart); err != nil {
-		return err
-	}
-
-	w.pos = blockSize * 2
+	// Skip past the superblock and block descriptor table.
+	w.seekBlock(2)
 	w.initialized = true
 
 	// The lost+found directory is required to exist for e2fsck to pass.
 	if err := w.Create("lost+found", &File{Mode: format.S_IFDIR | 0700}); err != nil {
 		return err
 	}
-	return nil
+	return w.err
 }
 
 func groupCount(blocks uint32, inodes uint32, inodesPerGroup uint32) uint32 {
@@ -1007,15 +1065,15 @@ func (w *Writer) Close() error {
 	}
 
 	// Write the inode table
-	inodeTableOffset := uint32(w.pos / blockSize)
-	groups, inodesPerGroup := bestGroupCount(uint32(w.pos/blockSize), uint32(len(w.inodes)))
+	inodeTableOffset := w.block()
+	groups, inodesPerGroup := bestGroupCount(inodeTableOffset, uint32(len(w.inodes)))
 	err := w.writeInodeTable(groups * inodesPerGroup * inodeSize)
 	if err != nil {
 		return err
 	}
 
 	// Write the bitmaps.
-	bitmapOffset := uint32(w.pos / blockSize)
+	bitmapOffset := w.block()
 	bitmapSize := groups * 2
 	validDataSize := bitmapOffset + bitmapSize
 	diskSize := validDataSize
@@ -1069,7 +1127,7 @@ func (w *Writer) Close() error {
 				dirCount++
 			}
 		}
-		_, err := w.bw.Write(b[:])
+		_, err := w.write(b[:])
 		if err != nil {
 			return err
 		}
@@ -1087,20 +1145,15 @@ func (w *Writer) Close() error {
 	}
 
 	// Zero up to the disk size.
-	_, err = io.CopyN(w.bw, zero, int64(diskSize-bitmapOffset-bitmapSize)*blockSize)
+	_, err = w.zero(int64(diskSize-bitmapOffset-bitmapSize) * blockSize)
 	if err != nil {
 		return err
 	}
-	w.pos = int64(diskSize) * blockSize
 
 	// Write the block descriptors
-	err = w.bw.Flush()
-	if err != nil {
-		return err
-	}
-	_, err = w.f.Seek(blockSize, io.SeekStart)
-	if err != nil {
-		return err
+	w.seekBlock(1)
+	if w.err != nil {
+		return w.err
 	}
 	err = binary.Write(w.bw, binary.LittleEndian, gds)
 	if err != nil {
@@ -1108,15 +1161,8 @@ func (w *Writer) Close() error {
 	}
 
 	// Write the super block
-	err = w.bw.Flush()
-	if err != nil {
-		return err
-	}
-	_, err = w.f.Seek(0, io.SeekStart)
-	if err != nil {
-		return err
-	}
-	if _, err := io.CopyN(w.bw, zero, 1024); err != nil {
+	w.seekBlock(0)
+	if _, err := w.zero(1024); err != nil {
 		return err
 	}
 	sb := &format.SuperBlock{
@@ -1151,9 +1197,9 @@ func (w *Writer) Close() error {
 	if err := binary.Write(w.bw, binary.LittleEndian, sb); err != nil {
 		return err
 	}
-	if _, err := io.CopyN(w.bw, zero, int64(blockSize-1024-binary.Size(sb))); err != nil {
+	if _, err := w.zero(int64(blockSize - 1024 - binary.Size(sb))); err != nil {
 		return err
 	}
-
-	return w.bw.Flush()
+	w.seekBlock(diskSize)
+	return w.err
 }

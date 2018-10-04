@@ -3,7 +3,7 @@ package compactext4
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"os/exec"
 	"path"
@@ -27,6 +27,93 @@ func expectedDevice(f *File) uint64 {
 	return uint64(f.Devminor&0xff | f.Devmajor<<8 | (f.Devminor&0xffffff00)<<12)
 }
 
+func llistxattr(path string, b []byte) (int, error) {
+	pathp := syscall.StringBytePtr(path)
+	var p unsafe.Pointer
+	if len(b) > 0 {
+		p = unsafe.Pointer(&b[0])
+	}
+	r, _, e := syscall.Syscall(syscall.SYS_LLISTXATTR, uintptr(unsafe.Pointer(pathp)), uintptr(p), uintptr(len(b)))
+	if e != 0 {
+		return 0, &os.PathError{Path: path, Op: "llistxattr", Err: syscall.Errno(e)}
+	}
+	return int(r), nil
+}
+
+func lgetxattr(path string, name string, b []byte) (int, error) {
+	pathp := syscall.StringBytePtr(path)
+	namep := syscall.StringBytePtr(name)
+	var p unsafe.Pointer
+	if len(b) > 0 {
+		p = unsafe.Pointer(&b[0])
+	}
+	r, _, e := syscall.Syscall6(syscall.SYS_LGETXATTR, uintptr(unsafe.Pointer(pathp)), uintptr(unsafe.Pointer(namep)), uintptr(p), uintptr(len(b)), 0, 0)
+	if e != 0 {
+		return 0, &os.PathError{Path: path, Op: "lgetxattr", Err: syscall.Errno(e)}
+	}
+	return int(r), nil
+}
+
+func readXattrs(path string) (map[string][]byte, error) {
+	xattrs := make(map[string][]byte)
+	var buf [4096]byte
+	var buf2 [4096]byte
+	b := buf[:]
+	n, err := llistxattr(path, b)
+	if err != nil {
+		return nil, err
+	}
+	b = b[:n]
+	for len(b) != 0 {
+		nn := bytes.IndexByte(b, 0)
+		name := string(b[:nn])
+		b = b[nn+1:]
+		vn, err := lgetxattr(path, name, buf2[:])
+		if err != nil {
+			return nil, err
+		}
+		value := buf2[:vn]
+		xattrs[name] = value
+	}
+	return xattrs, nil
+}
+
+func streamEqual(r1, r2 io.Reader) (bool, error) {
+	var b [4096]byte
+	var b2 [4096]byte
+	for {
+		n, err := r1.Read(b[:])
+		if n == 0 {
+			if err == io.EOF {
+				break
+			}
+			if err == nil {
+				continue
+			}
+			return false, err
+		}
+		_, err = io.ReadFull(r2, b2[:n])
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		if !bytes.Equal(b[n:], b2[n:]) {
+			return false, nil
+		}
+	}
+	// Check the tail of r2
+	_, err := r2.Read(b[:1])
+	if err == nil {
+		return false, nil
+	}
+	if err != io.EOF {
+		return false, err
+	}
+	return true, nil
+}
+
 func verifyTestFile(t *testing.T, mountPath string, tf testFile) {
 	name := path.Join(mountPath, tf.Path)
 	fi, err := os.Lstat(name)
@@ -48,15 +135,22 @@ func verifyTestFile(t *testing.T, mountPath string, tf testFile) {
 			t.Errorf("%s: stat mismatch, expected: %#v got: %#v", tf.Path, tf.File, st)
 		}
 
+		xattrs, err := readXattrs(name)
+		if err != nil {
+			t.Error(err)
+		} else if !xattrsEqual(xattrs, tf.File.Xattrs) {
+			t.Errorf("%s: xattr mismatch, expected: %#v got: %#v", tf.Path, tf.File.Xattrs, xattrs)
+		}
+
 		switch tf.File.Mode & format.TypeMask {
 		case S_IFREG:
 			if f, err := os.Open(name); err != nil {
 				t.Error(err)
 			} else {
-				b, err := ioutil.ReadAll(f)
+				same, err := streamEqual(f, tf.Reader())
 				if err != nil {
 					t.Error(err)
-				} else if !bytes.Equal(b, tf.Data) {
+				} else if !same {
 					t.Errorf("%s: data mismatch", tf.Path)
 				}
 				f.Close()
