@@ -287,6 +287,10 @@ const (
 	InodeFlagReserved           InodeFlag = 0x80000000
 )
 
+const (
+	MaxLinks = 65000
+)
+
 type ExtentHeader struct {
 	Magic      uint16
 	Entries    uint16
