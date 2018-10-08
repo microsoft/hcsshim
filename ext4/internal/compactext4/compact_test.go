@@ -1,8 +1,12 @@
 package compactext4
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +17,7 @@ type testFile struct {
 	Path        string
 	File        *File
 	Data        []byte
+	DataSize    int64
 	Link        string
 	ExpectError bool
 }
@@ -37,26 +42,98 @@ func init() {
 	name = string(nameb)
 }
 
+type largeData struct {
+	pos int64
+}
+
+func (d *largeData) Read(b []byte) (int, error) {
+	p := d.pos
+	var pb [8]byte
+	for i := range b {
+		binary.LittleEndian.PutUint64(pb[:], uint64(p+int64(i)))
+		b[i] = pb[i%8]
+	}
+	p += int64(len(b))
+	return len(b), nil
+}
+
+func (tf *testFile) Reader() io.Reader {
+	if tf.DataSize != 0 {
+		return io.LimitReader(&largeData{}, tf.DataSize)
+	}
+	return bytes.NewReader(tf.Data)
+}
+
 func createTestFile(t *testing.T, w *Writer, tf testFile) {
 	var err error
 	if tf.File != nil {
 		tf.File.Size = int64(len(tf.Data))
+		if tf.File.Size == 0 {
+			tf.File.Size = tf.DataSize
+		}
 		err = w.Create(tf.Path, tf.File)
 	} else {
 		err = w.Link(tf.Link, tf.Path)
 	}
 	if tf.ExpectError && err == nil {
-		t.Fatalf("%s: expected error", tf.Path)
-	}
-	if !tf.ExpectError && err != nil {
-		t.Fatal(err)
-	}
-	if tf.File != nil {
-		_, err = w.Write(tf.Data)
+		t.Errorf("%s: expected error", tf.Path)
+	} else if !tf.ExpectError && err != nil {
+		t.Error(err)
+	} else {
+		_, err := io.Copy(w, tf.Reader())
 		if err != nil {
-			t.Fatal(err)
+			t.Error(err)
 		}
 	}
+}
+
+func expectedMode(f *File) uint16 {
+	switch f.Mode & format.TypeMask {
+	case 0:
+		return f.Mode | S_IFREG
+	case S_IFLNK:
+		return f.Mode | 0777
+	default:
+		return f.Mode
+	}
+}
+
+func expectedSize(f *File) int64 {
+	switch f.Mode & format.TypeMask {
+	case 0, S_IFREG:
+		return f.Size
+	case S_IFLNK:
+		return int64(len(f.Linkname))
+	default:
+		return 0
+	}
+}
+
+func xattrsEqual(x1, x2 map[string][]byte) bool {
+	if len(x1) != len(x2) {
+		return false
+	}
+	for name, value := range x1 {
+		if !bytes.Equal(x2[name], value) {
+			return false
+		}
+	}
+	return true
+}
+
+func fileEqual(f1, f2 *File) bool {
+	return f1.Linkname == f2.Linkname &&
+		expectedSize(f1) == expectedSize(f2) &&
+		expectedMode(f1) == expectedMode(f2) &&
+		f1.Uid == f2.Uid &&
+		f1.Gid == f2.Gid &&
+		f1.Atime.Equal(f2.Atime) &&
+		f1.Ctime.Equal(f2.Ctime) &&
+		f1.Mtime.Equal(f2.Mtime) &&
+		f1.Crtime.Equal(f2.Crtime) &&
+		f1.Devmajor == f2.Devmajor &&
+		f1.Devminor == f2.Devminor &&
+		xattrsEqual(f1.Xattrs, f2.Xattrs)
 }
 
 func runTestsOnFiles(t *testing.T, testFiles []testFile, opts ...Option) {
@@ -71,6 +148,20 @@ func runTestsOnFiles(t *testing.T, testFiles []testFile, opts ...Option) {
 	w := NewWriter(imagef, opts...)
 	for _, tf := range testFiles {
 		createTestFile(t, w, tf)
+		if !tf.ExpectError && tf.File != nil {
+			f, err := w.Stat(tf.Path)
+			if err != nil {
+				if !strings.Contains(err.Error(), "cannot retrieve") {
+					t.Error(err)
+				}
+			} else if !fileEqual(f, tf.File) {
+				t.Errorf("%s: stat mismatch: %#v %#v", tf.Path, tf.File, f)
+			}
+		}
+	}
+
+	if t.Failed() {
+		return
 	}
 
 	if err := w.Close(); err != nil {
@@ -203,6 +294,35 @@ func TestReplace(t *testing.T) {
 		{Path: "", ExpectError: true, File: &File{}},
 		{Path: "", ExpectError: true, Link: "file"},
 		{Path: "", File: &File{Mode: format.S_IFDIR | 0777}},
+
+		{Path: "smallxattr", File: &File{Xattrs: map[string][]byte{"user.foo": data[:4]}}},
+		{Path: "smallxattr", File: &File{Xattrs: map[string][]byte{"user.foo": data[:8]}}},
+
+		{Path: "smallxattr_delete", File: &File{Xattrs: map[string][]byte{"user.foo": data[:4]}}},
+		{Path: "smallxattr_delete", File: &File{}},
+
+		{Path: "largexattr", File: &File{Xattrs: map[string][]byte{"user.small": data[:8], "user.foo": data[:200]}}},
+		{Path: "largexattr", File: &File{Xattrs: map[string][]byte{"user.small": data[:12], "user.foo": data[:400]}}},
+
+		{Path: "largexattr", File: &File{Xattrs: map[string][]byte{"user.foo": data[:200]}}},
+		{Path: "largexattr_delete", File: &File{}},
+	}
+	runTestsOnFiles(t, testFiles)
+}
+
+func TestTime(t *testing.T) {
+	now := time.Now()
+	now2 := fsTimeToTime(timeToFsTime(now))
+	if now.UnixNano() != now2.UnixNano() {
+		t.Fatalf("%s != %s", now, now2)
+	}
+}
+
+func TestLargeFile(t *testing.T) {
+	testFiles := []testFile{
+		{Path: "small", File: &File{}, DataSize: 1024 * 1024},        // can't change type
+		{Path: "medium", File: &File{}, DataSize: 200 * 1024 * 1024}, // can't change type
+		{Path: "large", File: &File{}, DataSize: 600 * 1024 * 1024},  // can't change type
 	}
 	runTestsOnFiles(t, testFiles)
 }
