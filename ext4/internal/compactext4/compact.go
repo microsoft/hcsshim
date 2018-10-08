@@ -892,7 +892,18 @@ func (w *Writer) writeDirectory(dir, parent *inode) error {
 	if err := writeEntry(parent.Number, ".."); err != nil {
 		return err
 	}
-	for name, child := range dir.Children { // BUGBUG: order?
+
+	// Follow e2fsck's convention and sort the children by inode number.
+	var children []string
+	for name := range dir.Children {
+		children = append(children, name)
+	}
+	sort.Slice(children, func(i, j int) bool {
+		return dir.Children[children[i]].Number < dir.Children[children[j]].Number
+	})
+
+	for _, name := range children {
+		child := dir.Children[name]
 		if err := writeEntry(child.Number, name); err != nil {
 			return err
 		}
