@@ -326,3 +326,25 @@ func TestLargeFile(t *testing.T) {
 	}
 	runTestsOnFiles(t, testFiles)
 }
+
+func TestFileLinkLimit(t *testing.T) {
+	testFiles := []testFile{
+		{Path: "file", File: &File{}},
+	}
+	for i := 0; i < format.MaxLinks; i++ {
+		testFiles = append(testFiles, testFile{Path: fmt.Sprintf("link%d", i), Link: "file"})
+	}
+	testFiles[len(testFiles)-1].ExpectError = true
+	runTestsOnFiles(t, testFiles)
+}
+
+func TestDirLinkLimit(t *testing.T) {
+	testFiles := []testFile{
+		{Path: "dir", File: &File{Mode: S_IFDIR}},
+	}
+	for i := 0; i < format.MaxLinks-1; i++ {
+		testFiles = append(testFiles, testFile{Path: fmt.Sprintf("dir/%d", i), File: &File{Mode: S_IFDIR}})
+	}
+	testFiles[len(testFiles)-1].ExpectError = true
+	runTestsOnFiles(t, testFiles)
+}

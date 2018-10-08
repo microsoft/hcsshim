@@ -511,6 +511,10 @@ func (w *Writer) Create(name string, f *File) error {
 		} else if existing.LinkCount < 2 {
 			reuse = existing
 		}
+	} else {
+		if f.Mode&TypeMask == S_IFDIR && dir.LinkCount >= format.MaxLinks {
+			return fmt.Errorf("%s: exceeded parent directory maximum link count", name)
+		}
 	}
 	child, err := w.makeInode(f, reuse)
 	if err != nil {
@@ -551,7 +555,11 @@ func (w *Writer) Link(oldname, newname string) error {
 	}
 	switch oldfile.Mode & format.TypeMask {
 	case format.S_IFDIR, format.S_IFLNK:
-		return fmt.Errorf("link target cannot be a directory or symlink: %s", oldname)
+		return fmt.Errorf("%s: link target cannot be a directory or symlink: %s", newname, oldname)
+	}
+
+	if existing != oldfile && oldfile.LinkCount >= format.MaxLinks {
+		return fmt.Errorf("%s: link target would exceed maximum link count: %s", newname, oldname)
 	}
 
 	if existing != nil {
@@ -940,7 +948,7 @@ func (w *Writer) writeInodeTable(tableSize uint32) error {
 				Gid:           uint16(inode.Gid & 0xffff),
 				SizeLow:       uint32(inode.Size & 0xffffffff),
 				SizeHigh:      uint32(inode.Size >> 32),
-				LinksCount:    uint16(inode.LinkCount), // BUGBUG overflow
+				LinksCount:    uint16(inode.LinkCount),
 				BlocksLow:     inode.BlockCount,
 				Flags:         inode.Flags,
 				XattrBlockLow: inode.XattrBlock,
