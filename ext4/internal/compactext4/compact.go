@@ -591,8 +591,8 @@ func (w *Writer) Stat(name string) (*File, error) {
 		Devmajor: node.Devmajor,
 		Devminor: node.Devminor,
 	}
+	f.Xattrs = make(map[string][]byte)
 	if node.XattrBlock != 0 || len(node.XattrInline) != 0 {
-		f.Xattrs = make(map[string][]byte)
 		if node.XattrBlock != 0 {
 			orig := w.block()
 			w.seekBlock(node.XattrBlock)
