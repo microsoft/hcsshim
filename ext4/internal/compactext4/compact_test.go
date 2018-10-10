@@ -22,8 +22,6 @@ type testFile struct {
 	ExpectError bool
 }
 
-const ()
-
 var (
 	data []byte
 	name string

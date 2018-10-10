@@ -290,7 +290,7 @@ func AddLoadBalancer(endpoints []HostComputeEndpoint, isILB bool, sourceVIP stri
 	loadBalancer := &HostComputeLoadBalancer{
 		SourceVIP: sourceVIP,
 		PortMappings: []LoadBalancerPortMapping{
-			LoadBalancerPortMapping{
+			{
 				Protocol:     uint32(protocol),
 				InternalPort: internalPort,
 				ExternalPort: externalPort,
