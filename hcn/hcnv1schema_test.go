@@ -10,7 +10,7 @@ import (
 )
 
 func TestV1Network(t *testing.T) {
-	cleanup()
+	cleanup(NatTestNetworkName)
 
 	v1network := hcsshim.HNSNetwork{
 		Type: "NAT",
@@ -49,7 +49,7 @@ func TestV1Network(t *testing.T) {
 }
 
 func TestV1Endpoint(t *testing.T) {
-	cleanup()
+	cleanup(NatTestNetworkName)
 
 	v1network := hcsshim.HNSNetwork{
 		Type: "NAT",

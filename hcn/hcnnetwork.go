@@ -75,6 +75,30 @@ type HostComputeNetwork struct {
 	SchemaVersion SchemaVersion   `json:",omitempty"`
 }
 
+// NetworkResourceType are the 3 different Network settings resources.
+type NetworkResourceType string
+
+var (
+	// NetworkResourceTypePolicy is for Network's policies. Ex: RemoteSubnet
+	NetworkResourceTypePolicy NetworkResourceType = "Policy"
+	// NetworkResourceTypeDNS is for Network's DNS settings.
+	NetworkResourceTypeDNS NetworkResourceType = "DNS"
+	// NetworkResourceTypeExtension is for Network's extension settings.
+	NetworkResourceTypeExtension NetworkResourceType = "Extension"
+)
+
+// ModifyNetworkSettingRequest is the structure used to send request to modify an network.
+// Used to update DNS/extension/policy on an network.
+type ModifyNetworkSettingRequest struct {
+	ResourceType NetworkResourceType `json:",omitempty"` // Policy, DNS, Extension
+	RequestType  RequestType         `json:",omitempty"` // Add, Remove, Update, Refresh
+	Settings     json.RawMessage     `json:",omitempty"`
+}
+
+type PolicyNetworkRequest struct {
+	Policies []NetworkPolicy `json:",omitempty"`
+}
+
 func getNetwork(networkGuid guid.GUID, query string) (*HostComputeNetwork, error) {
 	// Open network.
 	var (
@@ -309,6 +333,56 @@ func (network *HostComputeNetwork) Delete() (*HostComputeNetwork, error) {
 		return nil, err
 	}
 	return nil, nil
+}
+
+// ModifyNetworkSettings updates the Policy for a network.
+func (network *HostComputeNetwork) ModifyNetworkSettings(request *ModifyNetworkSettingRequest) error {
+	logrus.Debugf("hcn::HostComputeNetwork::ModifyNetworkSettings id=%s", network.Id)
+
+	networkSettingsRequest, err := json.Marshal(request)
+	if err != nil {
+		return err
+	}
+
+	_, err = modifyNetwork(network.Id, string(networkSettingsRequest))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// AddPolicy applies a Policy (ex: RemoteSubnet) on the Network.
+func (network *HostComputeNetwork) AddPolicy(networkPolicy PolicyNetworkRequest) error {
+	logrus.Debugf("hcn::HostComputeNetwork::AddPolicy id=%s", network.Id)
+
+	settingsJson, err := json.Marshal(networkPolicy)
+	if err != nil {
+		return err
+	}
+	requestMessage := &ModifyNetworkSettingRequest{
+		ResourceType: NetworkResourceTypePolicy,
+		RequestType:  RequestTypeAdd,
+		Settings:     settingsJson,
+	}
+
+	return network.ModifyNetworkSettings(requestMessage)
+}
+
+// RemovePolicy removes a Policy (ex: RemoteSubnet) from the Network.
+func (network *HostComputeNetwork) RemovePolicy(networkPolicy PolicyNetworkRequest) error {
+	logrus.Debugf("hcn::HostComputeNetwork::RemovePolicy id=%s", network.Id)
+
+	settingsJson, err := json.Marshal(networkPolicy)
+	if err != nil {
+		return err
+	}
+	requestMessage := &ModifyNetworkSettingRequest{
+		ResourceType: NetworkResourceTypePolicy,
+		RequestType:  RequestTypeRemove,
+		Settings:     settingsJson,
+	}
+
+	return network.ModifyNetworkSettings(requestMessage)
 }
 
 // CreateEndpoint creates an endpoint on the Network.

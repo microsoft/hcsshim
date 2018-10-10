@@ -97,7 +97,7 @@ func TestListNamespaces(t *testing.T) {
 }
 
 func TestGetNamespaceEndpointIds(t *testing.T) {
-	network, err := HcnCreateTestNetwork()
+	network, err := HcnCreateTestNATNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestGetNamespaceContainers(t *testing.T) {
 }
 
 func TestAddRemoveNamespaceEndpoint(t *testing.T) {
-	network, err := HcnCreateTestNetwork()
+	network, err := HcnCreateTestNATNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +205,7 @@ func TestAddRemoveNamespaceEndpoint(t *testing.T) {
 }
 
 func TestModifyNamespaceSettings(t *testing.T) {
-	network, err := HcnCreateTestNetwork()
+	network, err := HcnCreateTestNATNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
