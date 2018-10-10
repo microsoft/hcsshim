@@ -16,13 +16,13 @@ func TestV1Network(t *testing.T) {
 		Type: "NAT",
 		Name: NatTestNetworkName,
 		MacPools: []hcsshim.MacPool{
-			hcsshim.MacPool{
+			{
 				StartMacAddress: "00-15-5D-52-C0-00",
 				EndMacAddress:   "00-15-5D-52-CF-FF",
 			},
 		},
 		Subnets: []hcsshim.Subnet{
-			hcsshim.Subnet{
+			{
 				AddressPrefix:  "192.168.100.0/24",
 				GatewayAddress: "192.168.100.1",
 			},
@@ -52,13 +52,13 @@ func TestV1Endpoint(t *testing.T) {
 		Type: "NAT",
 		Name: NatTestNetworkName,
 		MacPools: []hcsshim.MacPool{
-			hcsshim.MacPool{
+			{
 				StartMacAddress: "00-15-5D-52-C0-00",
 				EndMacAddress:   "00-15-5D-52-CF-FF",
 			},
 		},
 		Subnets: []hcsshim.Subnet{
-			hcsshim.Subnet{
+			{
 				AddressPrefix:  "192.168.100.0/24",
 				GatewayAddress: "192.168.100.1",
 			},

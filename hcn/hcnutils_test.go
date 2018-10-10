@@ -27,20 +27,20 @@ func HcnCreateTestNetwork() (*HostComputeNetwork, error) {
 		Name: NatTestNetworkName,
 		MacPool: MacPool{
 			Ranges: []MacRange{
-				MacRange{
+				{
 					StartMacAddress: "00-15-5D-52-C0-00",
 					EndMacAddress:   "00-15-5D-52-CF-FF",
 				},
 			},
 		},
 		Ipams: []Ipam{
-			Ipam{
+			{
 				Type: "Static",
 				Subnets: []Subnet{
-					Subnet{
+					{
 						IpAddressPrefix: "192.168.100.0/24",
 						Routes: []Route{
-							Route{
+							{
 								NextHop:           "192.168.100.1",
 								DestinationPrefix: "0.0.0.0",
 							},
@@ -151,7 +151,7 @@ func HcnCreateTestLoadBalancer(endpoint *HostComputeEndpoint) (*HostComputeLoadB
 		HostComputeEndpoints: []string{endpoint.Id},
 		SourceVIP:            "10.0.0.1",
 		PortMappings: []LoadBalancerPortMapping{
-			LoadBalancerPortMapping{
+			{
 				Protocol:     6, // TCP
 				InternalPort: 8080,
 				ExternalPort: 8090,

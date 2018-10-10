@@ -23,7 +23,7 @@ func CreateTestNetwork() (*hcsshim.HNSNetwork, error) {
 		Type: "NAT",
 		Name: NatTestNetworkName,
 		Subnets: []hcsshim.Subnet{
-			hcsshim.Subnet{
+			{
 				AddressPrefix:  "192.168.100.0/24",
 				GatewayAddress: "192.168.100.1",
 			},

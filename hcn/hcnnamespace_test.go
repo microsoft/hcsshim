@@ -38,7 +38,7 @@ func TestCreateDeleteNamespace(t *testing.T) {
 
 func TestCreateDeleteNamespaceGuest(t *testing.T) {
 	namespace := &HostComputeNamespace{
-		Type:        NamespaceTypeGuestDefault,
+		Type: NamespaceTypeGuestDefault,
 		SchemaVersion: SchemaVersion{
 			Major: 2,
 			Minor: 0,

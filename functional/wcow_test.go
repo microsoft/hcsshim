@@ -416,12 +416,12 @@ func TestWCOWArgonShim(t *testing.T) {
 		LayerFolderPath: argonShimScratchDir,
 		Layers:          layers,
 		MappedDirectories: []schema1.MappedDir{
-			schema1.MappedDir{
+			{
 				HostPath:      hostROSharedDirectory,
 				ContainerPath: `c:\mappedro`,
 				ReadOnly:      true,
 			},
-			schema1.MappedDir{
+			{
 				HostPath:      hostRWSharedDirectory,
 				ContainerPath: `c:\mappedrw`,
 			},
@@ -470,12 +470,12 @@ func TestWCOWXenonShim(t *testing.T) {
 		HvRuntime:       &hcsshim.HvRuntime{ImagePath: filepath.Join(uvmImagePath, "UtilityVM")},
 		HvPartition:     true,
 		MappedDirectories: []schema1.MappedDir{
-			schema1.MappedDir{
+			{
 				HostPath:      hostROSharedDirectory,
 				ContainerPath: `c:\mappedro`,
 				ReadOnly:      true,
 			},
-			schema1.MappedDir{
+			{
 				HostPath:      hostRWSharedDirectory,
 				ContainerPath: `c:\mappedrw`,
 			},
@@ -495,12 +495,12 @@ func generateWCOWOciTestSpec(t *testing.T, imageLayers []string, scratchPath, ho
 			LayerFolders: append(imageLayers, scratchPath),
 		},
 		Mounts: []specs.Mount{
-			specs.Mount{
+			{
 				Source:      hostROSharedDirectory,
 				Destination: `c:\mappedro`,
 				Options:     []string{"ro"},
 			},
-			specs.Mount{
+			{
 				Source:      hostRWSharedDirectory,
 				Destination: `c:\mappedrw`,
 			},
