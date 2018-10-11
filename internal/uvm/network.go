@@ -9,6 +9,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
+	"github.com/Microsoft/hcsshim/internal/schema1"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/sirupsen/logrus"
@@ -21,21 +22,24 @@ func (uvm *UtilityVM) AddNetNS(id string, endpoints []*hns.HNSEndpoint) (err err
 	ns := uvm.namespaces[id]
 	if ns == nil {
 		ns = &namespaceInfo{}
-		// Add a Guest Network namespace
-		if uvm.operatingSystem == "windows" {
-			hcnNamespace, err := hcn.GetNamespaceByID(id)
-			if err != nil {
-				return err
-			}
-			guestNamespace := hcsschema.ModifySettingRequest{
-				GuestRequest: guestrequest.GuestRequest{
-					ResourceType: guestrequest.ResourceTypeNetworkNamespace,
-					RequestType:  requesttype.Add,
-					Settings:     hcnNamespace,
-				},
-			}
-			if err := uvm.Modify(&guestNamespace); err != nil {
-				return err
+
+		if uvm.isNetworkNamespaceSupported() {
+			// Add a Guest Network namespace. Remove windows check when LCOW supports it
+			if uvm.operatingSystem == "windows" {
+				hcnNamespace, err := hcn.GetNamespaceByID(id)
+				if err != nil {
+					return err
+				}
+				guestNamespace := hcsschema.ModifySettingRequest{
+					GuestRequest: guestrequest.GuestRequest{
+						ResourceType: guestrequest.ResourceTypeNetworkNamespace,
+						RequestType:  requesttype.Add,
+						Settings:     hcnNamespace,
+					},
+				}
+				if err := uvm.Modify(&guestNamespace); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -72,25 +76,28 @@ func (uvm *UtilityVM) RemoveNetNS(id string) error {
 		panic(fmt.Errorf("removed a namespace that was not added: %s", id))
 	}
 
+	ns.refCount--
+
 	// Remove the Guest Network namespace
-	if uvm.operatingSystem == "windows" {
-		hcnNamespace, err := hcn.GetNamespaceByID(id)
-		if err != nil {
-			return err
-		}
-		guestNamespace := hcsschema.ModifySettingRequest{
-			GuestRequest: guestrequest.GuestRequest{
-				ResourceType: guestrequest.ResourceTypeNetworkNamespace,
-				RequestType:  requesttype.Remove,
-				Settings:     hcnNamespace,
-			},
-		}
-		if err := uvm.Modify(&guestNamespace); err != nil {
-			return err
+	if uvm.isNetworkNamespaceSupported() {
+		if uvm.operatingSystem == "windows" {
+			hcnNamespace, err := hcn.GetNamespaceByID(id)
+			if err != nil {
+				return err
+			}
+			guestNamespace := hcsschema.ModifySettingRequest{
+				GuestRequest: guestrequest.GuestRequest{
+					ResourceType: guestrequest.ResourceTypeNetworkNamespace,
+					RequestType:  requesttype.Remove,
+					Settings:     hcnNamespace,
+				},
+			}
+			if err := uvm.Modify(&guestNamespace); err != nil {
+				return err
+			}
 		}
 	}
 
-	ns.refCount--
 	var err error
 	if ns.refCount == 0 {
 		err = uvm.removeNamespaceNICs(ns)
@@ -98,6 +105,16 @@ func (uvm *UtilityVM) RemoveNetNS(id string) error {
 	}
 
 	return err
+}
+
+// IsNetworkNamespaceSupported returns bool value specifying if network namespace is supported inside the guest
+func (uvm *UtilityVM) isNetworkNamespaceSupported() bool {
+	p, err := uvm.ComputeSystem().Properties(schema1.PropertyTypeGuestConnection)
+	if err == nil {
+		return p.GuestConnectionInfo.GuestDefinedCapabilities.NamespaceAddRequestSupported
+	}
+
+	return false
 }
 
 func (uvm *UtilityVM) removeNamespaceNICs(ns *namespaceInfo) error {
