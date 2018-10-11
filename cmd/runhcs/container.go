@@ -18,6 +18,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/regstate"
 	"github.com/Microsoft/hcsshim/internal/runhcs"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/osversion"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
@@ -296,7 +297,8 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 			return nil, fmt.Errorf("host container %s is not a VM host", hostID)
 		}
 		hostUniqueID = host.UniqueID
-	} else if vmisolated && (isSandbox || cfg.Spec.Linux != nil) {
+	} else if vmisolated && (isSandbox || cfg.Spec.Linux != nil || osversion.Get().Build >= osversion.RS5) {
+		// This handles all LCOW, Pod Sandbox, and (Windows Xenon V2 for RS5+)
 		hostID = cfg.ID
 		newvm = true
 		hostUniqueID = uniqueID
