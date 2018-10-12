@@ -77,3 +77,9 @@ type RS4NetworkModifyRequest struct {
 	RequestType       string      `json:"RequestType,omitempty"`
 	Settings          interface{} `json:"Settings,omitempty"`
 }
+
+// SignalProcessOptions is the options passed to either WCOW or LCOW
+// to signal a given process.
+type SignalProcessOptions struct {
+	Signal int `json:,omitempty`
+}
