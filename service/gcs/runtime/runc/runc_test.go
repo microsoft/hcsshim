@@ -397,7 +397,7 @@ var _ = Describe("runC", func() {
 							Expect(container.Status).To(Equal("running"))
 						})
 						It("should respond properly to stdio", func() {
-							Expect(outputString).To(Equal("/ # whoami"))
+							Expect(outputString).Should(ContainSubstring("whoami"))
 							Expect(outputString2).To(Equal("root"))
 						})
 					})
@@ -553,7 +553,7 @@ var _ = Describe("runC", func() {
 									Expect(processes).To(HaveLen(2))
 								})
 								It("should respond properly to stdio", func() {
-									Expect(outputString).To(Equal("/ # whoami"))
+									Expect(outputString).Should(ContainSubstring("whoami"))
 									Expect(outputString2).To(Equal("root"))
 								})
 							})
