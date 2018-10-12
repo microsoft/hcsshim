@@ -224,6 +224,9 @@ func (o *realOS) PathIsMounted(name string) (bool, error) {
 		if name == dir1 || name == dir2 {
 			return true, nil
 		}
+		if ("/var/volatile" + name) == dir1 || ("/var/volatile" + name) == dir2 {
+			return true, nil
+		}
 	}
 	return false, nil
 }
