@@ -3,6 +3,7 @@ package hcn
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 
 	"github.com/Microsoft/hcsshim/internal/hcserror"
 	"github.com/Microsoft/hcsshim/internal/interop"
@@ -30,7 +31,7 @@ var (
 // GetGlobals returns the global properties of the HCN Service.
 func GetGlobals() (*Globals, error) {
 	var version Version
-	err := hnsCall("GET", "/globals/version", "", &version)
+	err := hnsCall(http.MethodGet, "/globals/version", "", &version)
 	if err != nil {
 		return nil, err
 	}
