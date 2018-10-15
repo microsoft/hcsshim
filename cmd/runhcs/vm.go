@@ -162,7 +162,6 @@ func processRequest(vm *uvm.UtilityVM, pipe net.Conn) error {
 			c2.hc.Wait()
 			c2.Close()
 		}()
-		c = nil
 
 	case runhcs.OpUnmountContainer, runhcs.OpUnmountContainerDiskOnly:
 		err = c.unmountInHost(vm, req.Op == runhcs.OpUnmountContainer)
