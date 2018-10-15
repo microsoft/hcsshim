@@ -77,6 +77,7 @@ following will output a list of processes running in the container:
 		if err != nil {
 			return err
 		}
+		defer c.Close()
 		status, err := c.Status()
 		if err != nil {
 			return err
