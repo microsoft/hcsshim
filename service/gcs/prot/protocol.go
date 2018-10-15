@@ -249,7 +249,14 @@ type GcsCapabilities struct {
 	// GuestDefinedCapabilities define any JSON object that will be directly
 	// passed to a client of the HCS. This can be useful to pass runtime
 	// specific capabilities not tied to the platform itself.
-	GuestDefinedCapabilities interface{} `json:",omitempty"`
+	GuestDefinedCapabilities GcsGuestCapabilities `json:",omitempty"`
+}
+
+// GcsGuestCapabilities represents the customized guest capabilities supported
+// by this GCS.
+type GcsGuestCapabilities struct {
+	NamespaceAddRequestSupported bool `json:",omitempty"`
+	SignalProcessSupported       bool `json:",omitempty"`
 }
 
 // MessageBase is the base type embedded in all messages sent from the HCS to

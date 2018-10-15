@@ -41,6 +41,9 @@ var capabilities = prot.GcsCapabilities{
 		},
 	},
 	RuntimeOsType: prot.OsTypeLinux,
+	GuestDefinedCapabilities: prot.GcsGuestCapabilities{
+		SignalProcessSupported: true,
+	},
 }
 
 // UnknownMessage represents the default handler logic for an unmatched request
