@@ -66,6 +66,7 @@ var shimCommand = cli.Command{
 		if err != nil {
 			return err
 		}
+		defer c.Close()
 
 		// Asynchronously wait for the container to exit.
 		containerExitCh := make(chan error)

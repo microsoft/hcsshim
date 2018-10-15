@@ -25,6 +25,7 @@ instance of a container.`,
 		if err != nil {
 			return err
 		}
+		defer c.Close()
 		status, err := c.Status()
 		if err != nil {
 			if !strings.Contains(err.Error(), "operation is not valid in the current state") {

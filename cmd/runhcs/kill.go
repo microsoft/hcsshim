@@ -33,6 +33,7 @@ signal to the init process of the "ubuntu01" container:
 		if err != nil {
 			return err
 		}
+		defer c.Close()
 		status, err := c.Status()
 		if err != nil {
 			return err
@@ -47,6 +48,7 @@ signal to the init process of the "ubuntu01" container:
 			if err != nil {
 				return err
 			}
+			defer uvm.Close()
 			if props, err := uvm.Properties(schema1.PropertyTypeGuestConnection); err == nil &&
 				props.GuestConnectionInfo.GuestDefinedCapabilities.SignalProcessSupported {
 				signalsSupported = true
