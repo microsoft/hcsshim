@@ -224,6 +224,7 @@ func (loadBalancer *HostComputeLoadBalancer) Create() (*HostComputeLoadBalancer,
 		return nil, err
 	}
 
+	logrus.Debugf("hcn::HostComputeLoadBalancer::Create JSON: %s", jsonString)
 	loadBalancer, hcnErr := createLoadBalancer(string(jsonString))
 	if hcnErr != nil {
 		return nil, hcnErr

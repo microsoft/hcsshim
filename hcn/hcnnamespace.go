@@ -299,6 +299,7 @@ func (namespace *HostComputeNamespace) Create() (*HostComputeNamespace, error) {
 		return nil, err
 	}
 
+	logrus.Debugf("hcn::HostComputeNamespace::Create JSON: %s", jsonString)
 	namespace, hcnErr := createNamespace(string(jsonString))
 	if hcnErr != nil {
 		return nil, hcnErr

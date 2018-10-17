@@ -293,6 +293,7 @@ func (network *HostComputeNetwork) Create() (*HostComputeNetwork, error) {
 		return nil, err
 	}
 
+	logrus.Debugf("hcn::HostComputeNetwork::Create JSON: %s", jsonString)
 	network, hcnErr := createNetwork(string(jsonString))
 	if hcnErr != nil {
 		return nil, hcnErr

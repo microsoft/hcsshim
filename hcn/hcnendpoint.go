@@ -304,6 +304,7 @@ func (endpoint *HostComputeEndpoint) Create() (*HostComputeEndpoint, error) {
 		return nil, err
 	}
 
+	logrus.Debugf("hcn::HostComputeEndpoint::Create JSON: %s", jsonString)
 	endpoint, hcnErr := createEndpoint(endpoint.HostComputeNetwork, string(jsonString))
 	if hcnErr != nil {
 		return nil, hcnErr
