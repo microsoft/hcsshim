@@ -653,7 +653,10 @@ func (c *container) Status() (containerStatus, error) {
 	}
 	props, err := c.hc.Properties()
 	if err != nil {
-		return "", err
+		if !strings.Contains(err.Error(), "operation is not valid in the current state") {
+			return "", err
+		}
+		return containerUnknown, nil
 	}
 	state := containerUnknown
 	switch props.State {

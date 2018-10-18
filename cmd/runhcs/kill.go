@@ -8,6 +8,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/schema1"
+	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 )
@@ -43,21 +44,39 @@ signal to the init process of the "ubuntu01" container:
 		}
 
 		signalsSupported := false
-		if c.IsHost {
-			uvm, err := hcs.OpenComputeSystem(vmID(c.ID))
-			if err != nil {
-				return err
-			}
-			defer uvm.Close()
-			if props, err := uvm.Properties(schema1.PropertyTypeGuestConnection); err == nil &&
-				props.GuestConnectionInfo.GuestDefinedCapabilities.SignalProcessSupported {
+
+		// The Signal feature was added in RS5
+		if osversion.Get().Build >= osversion.RS5 {
+			if c.IsHost || c.HostID != "" {
+				var hostID string
+				if c.IsHost {
+					// This is the LCOW, Pod Sandbox, or Windows Xenon V2 for RS5+
+					hostID = vmID(c.ID)
+				} else {
+					// This is the Nth container in a Pod
+					hostID = c.HostID
+				}
+				uvm, err := hcs.OpenComputeSystem(hostID)
+				if err != nil {
+					return err
+				}
+				defer uvm.Close()
+				if props, err := uvm.Properties(schema1.PropertyTypeGuestConnection); err == nil &&
+					props.GuestConnectionInfo.GuestDefinedCapabilities.SignalProcessSupported {
+					signalsSupported = true
+				}
+			} else if c.Spec.Linux == nil && c.Spec.Windows.HyperV == nil {
+				// RS5+ Windows Argon
 				signalsSupported = true
 			}
 		}
 
-		signal, err := validateSigstr(context.Args().Get(1), signalsSupported, c.Spec.Linux != nil)
-		if err != nil {
-			return err
+		signal := 0
+		if signalsSupported {
+			signal, err = validateSigstr(context.Args().Get(1), signalsSupported, c.Spec.Linux != nil)
+			if err != nil {
+				return err
+			}
 		}
 
 		var pid int
@@ -71,7 +90,7 @@ signal to the init process of the "ubuntu01" container:
 		}
 		defer p.Close()
 
-		if signalsSupported {
+		if signalsSupported && (c.Spec.Linux != nil || !c.Spec.Process.Terminal) {
 			opts := guestrequest.SignalProcessOptions{
 				Signal: signal,
 			}
