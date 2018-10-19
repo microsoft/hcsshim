@@ -233,6 +233,7 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 		ComputeTopology: &hcsschema.Topology{
 			Memory: &hcsschema.Memory2{
 				AllowOvercommit: true,
+				EnableHotHint:   uvm.operatingSystem == "windows",
 				SizeInMB:        memory,
 			},
 			Processor: &hcsschema.Processor2{
