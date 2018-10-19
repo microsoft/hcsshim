@@ -65,20 +65,20 @@ func CreateTestOverlayNetwork() (*HostComputeNetwork, error) {
 		Name: OverlayTestNetworkName,
 		MacPool: MacPool{
 			Ranges: []MacRange{
-				MacRange{
+				{
 					StartMacAddress: "00-15-5D-52-C0-00",
 					EndMacAddress:   "00-15-5D-52-CF-FF",
 				},
 			},
 		},
 		Ipams: []Ipam{
-			Ipam{
+			{
 				Type: "Static",
 				Subnets: []Subnet{
-					Subnet{
+					{
 						IpAddressPrefix: "192.168.100.0/24",
 						Routes: []Route{
-							Route{
+							{
 								NextHop:           "192.168.100.1",
 								DestinationPrefix: "0.0.0.0/0",
 							},
