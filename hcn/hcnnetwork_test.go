@@ -71,12 +71,12 @@ func TestAddRemoveRemoteSubnetRoutePolicy(t *testing.T) {
 
 	network, err := CreateTestOverlayNetwork()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 
 	remoteSubnetRoutePolicy, err := HcnCreateRemoteSubnetRoute()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 
 	//Add Policy
@@ -85,7 +85,7 @@ func TestAddRemoveRemoteSubnetRoutePolicy(t *testing.T) {
 	//Reload the network object from HNS.
 	network, err = GetNetworkByID(network.Id)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 
 	foundPolicy := false
@@ -96,7 +96,7 @@ func TestAddRemoveRemoteSubnetRoutePolicy(t *testing.T) {
 		}
 	}
 	if !foundPolicy {
-		t.Errorf("Could not find remote subnet route policy on network.")
+		t.Fatalf("Could not find remote subnet route policy on network.")
 	}
 
 	//Remove Policy.
@@ -105,7 +105,7 @@ func TestAddRemoveRemoteSubnetRoutePolicy(t *testing.T) {
 	//Reload the network object from HNS.
 	network, err = GetNetworkByID(network.Id)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 
 	foundPolicy = false
@@ -116,11 +116,11 @@ func TestAddRemoveRemoteSubnetRoutePolicy(t *testing.T) {
 		}
 	}
 	if foundPolicy {
-		t.Errorf("Found remote subnet route policy on network when it should have been deleted.")
+		t.Fatalf("Found remote subnet route policy on network when it should have been deleted.")
 	}
 
 	_, err = network.Delete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 }
