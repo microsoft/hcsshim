@@ -209,8 +209,8 @@ type VsidPolicySetting struct {
 
 // RemoteSubnetRoutePolicySetting creates remote subnet route rules on a network
 type RemoteSubnetRoutePolicySetting struct {
-	DestinationPrefix           string `json:","`
-	IsolationId                 uint16 `json:","`
-	ProviderAddress             string `json:","`
-	DistributedRouterMacAddress string `json:","`
+	DestinationPrefix           string
+	IsolationId                 uint16
+	ProviderAddress             string
+	DistributedRouterMacAddress string
 }

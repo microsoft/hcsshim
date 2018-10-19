@@ -67,7 +67,7 @@ func TestListNetwork(t *testing.T) {
 	}
 }
 
-func TestAddPolicyNetwork(t *testing.T) {
+func TestAddRemoveRemoteSubnetRoutePolicy(t *testing.T) {
 
 	network, err := CreateTestOverlayNetwork()
 	if err != nil {
