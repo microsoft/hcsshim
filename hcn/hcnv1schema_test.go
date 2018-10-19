@@ -31,17 +31,20 @@ func TestV1Network(t *testing.T) {
 
 	jsonString, err := json.Marshal(v1network)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
+		t.Fail()
 	}
 
 	network, err := createNetwork(string(jsonString))
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
+		t.Fail()
 	}
 
 	_, err = network.Delete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
+		t.Fail()
 	}
 }
 
@@ -67,12 +70,14 @@ func TestV1Endpoint(t *testing.T) {
 
 	jsonString, err := json.Marshal(v1network)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
+		t.Fail()
 	}
 
 	network, err := createNetwork(string(jsonString))
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
+		t.Fail()
 	}
 
 	v1endpoint := hcsshim.HNSEndpoint{
@@ -82,21 +87,25 @@ func TestV1Endpoint(t *testing.T) {
 
 	jsonString, err = json.Marshal(v1endpoint)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
+		t.Fail()
 	}
 
 	endpoint, err := createEndpoint(network.Id, string(jsonString))
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
+		t.Fail()
 	}
 
 	_, err = endpoint.Delete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
+		t.Fail()
 	}
 
 	_, err = network.Delete()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
+		t.Fail()
 	}
 }

@@ -24,6 +24,7 @@ type HostComputeLoadBalancer struct {
 	FrontendVIPs         []string                  `json:",omitempty"`
 	PortMappings         []LoadBalancerPortMapping `json:",omitempty"`
 	SchemaVersion        SchemaVersion             `json:",omitempty"`
+	Flags                uint32                    `json:",omitempty"` // 0: None, 1: EnableDirectServerReturn
 }
 
 func getLoadBalancer(loadBalancerGuid guid.GUID, query string) (*HostComputeLoadBalancer, error) {
@@ -279,13 +280,19 @@ func (loadBalancer *HostComputeLoadBalancer) RemoveEndpoint(endpoint *HostComput
 }
 
 // AddLoadBalancer for the specified endpoints
-func AddLoadBalancer(endpoints []HostComputeEndpoint, isILB bool, sourceVIP string, frontendVIPs []string, protocol uint16, internalPort uint16, externalPort uint16) (*HostComputeLoadBalancer, error) {
+func AddLoadBalancer(endpoints []HostComputeEndpoint, isILB bool, isDSR bool, sourceVIP string, frontendVIPs []string, protocol uint16, internalPort uint16, externalPort uint16) (*HostComputeLoadBalancer, error) {
 	logrus.Debugf("hcn::HostComputeLoadBalancer::AddLoadBalancer endpointId=%v, isILB=%v, sourceVIP=%s, frontendVIPs=%v, protocol=%v, internalPort=%v, externalPort=%v", endpoints, isILB, sourceVIP, frontendVIPs, protocol, internalPort, externalPort)
 
 	var portMappingFlags uint32
 	portMappingFlags = 0
 	if isILB {
 		portMappingFlags = 1
+	}
+
+	var lbFlags uint32
+	lbFlags = 0
+	if isDSR {
+		lbFlags = 1 // EnableDirectServerReturn
 	}
 
 	loadBalancer := &HostComputeLoadBalancer{
@@ -303,6 +310,7 @@ func AddLoadBalancer(endpoints []HostComputeEndpoint, isILB bool, sourceVIP stri
 			Major: 2,
 			Minor: 0,
 		},
+		Flags: lbFlags,
 	}
 
 	for _, endpoint := range endpoints {

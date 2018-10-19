@@ -59,6 +59,9 @@ func HcnCreateTestNetwork() (*HostComputeNetwork, error) {
 }
 
 func HcnCreateTestEndpoint(network *HostComputeNetwork) (*HostComputeEndpoint, error) {
+	if network == nil {
+
+	}
 	Endpoint := &HostComputeEndpoint{
 		Name: NatTestEndpointName,
 		SchemaVersion: SchemaVersion{
