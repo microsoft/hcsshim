@@ -171,7 +171,7 @@ func TestAddLoadBalancer(t *testing.T) {
 }
 
 func TestAddDSRLoadBalancer(t *testing.T) {
-	network, err := HcnCreateTestNetwork()
+	network, err := CreateTestOverlayNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestAddDSRLoadBalancer(t *testing.T) {
 }
 
 func TestAddILBLoadBalancer(t *testing.T) {
-	network, err := HcnCreateTestNetwork()
+	network, err := CreateTestOverlayNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}

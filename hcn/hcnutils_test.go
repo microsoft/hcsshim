@@ -228,7 +228,7 @@ func HcnCreateTestLoadBalancer(endpoint *HostComputeEndpoint) (*HostComputeLoadB
 	return loadBalancer.Create()
 }
 
-func HcnCreateRemoteSubnetRoute() (*PolicyNetworkRequest, error) {
+func HcnCreateTestRemoteSubnetRoute() (*PolicyNetworkRequest, error) {
 	rsr := RemoteSubnetRoutePolicySetting{
 		DestinationPrefix:           "192.168.2.0/24",
 		IsolationId:                 5000,
