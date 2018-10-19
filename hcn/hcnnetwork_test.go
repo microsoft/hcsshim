@@ -74,7 +74,7 @@ func TestAddRemoveRemoteSubnetRoutePolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	remoteSubnetRoutePolicy, err := HcnCreateRemoteSubnetRoute()
+	remoteSubnetRoutePolicy, err := HcnCreateTestRemoteSubnetRoute()
 	if err != nil {
 		t.Fatal(err)
 	}
