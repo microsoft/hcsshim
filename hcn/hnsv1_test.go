@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	NatTestNetworkName  string = "GoTestNat"
-	NatTestEndpointName string = "GoTestNatEndpoint"
+	NatTestNetworkName     string = "GoTestNat"
+	NatTestEndpointName    string = "GoTestNatEndpoint"
+	OverlayTestNetworkName string = "GoTestOverlay"
 )
 
 func TestMain(m *testing.M) {

@@ -9,7 +9,7 @@ import (
 )
 
 func TestCreateDeleteEndpoint(t *testing.T) {
-	network, err := HcnCreateTestNetwork()
+	network, err := HcnCreateTestNATNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestCreateDeleteEndpoint(t *testing.T) {
 }
 
 func TestGetEndpointById(t *testing.T) {
-	network, err := HcnCreateTestNetwork()
+	network, err := HcnCreateTestNATNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestGetEndpointById(t *testing.T) {
 }
 
 func TestGetEndpointByName(t *testing.T) {
-	network, err := HcnCreateTestNetwork()
+	network, err := HcnCreateTestNATNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestGetEndpointByName(t *testing.T) {
 }
 
 func TestListEndpoints(t *testing.T) {
-	network, err := HcnCreateTestNetwork()
+	network, err := HcnCreateTestNATNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestListEndpoints(t *testing.T) {
 }
 
 func TestListEndpointsOfNetwork(t *testing.T) {
-	network, err := HcnCreateTestNetwork()
+	network, err := HcnCreateTestNATNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestListEndpointsOfNetwork(t *testing.T) {
 }
 
 func TestEndpointNamespaceAttachDetach(t *testing.T) {
-	network, err := HcnCreateTestNetwork()
+	network, err := HcnCreateTestNATNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func TestEndpointNamespaceAttachDetach(t *testing.T) {
 }
 
 func TestCreateEndpointWithNamespace(t *testing.T) {
-	network, err := HcnCreateTestNetwork()
+	network, err := HcnCreateTestNATNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ func TestCreateEndpointWithNamespace(t *testing.T) {
 }
 
 func TestApplyPolicyOnEndpoint(t *testing.T) {
-	network, err := HcnCreateTestNetwork()
+	network, err := HcnCreateTestNATNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func TestApplyPolicyOnEndpoint(t *testing.T) {
 }
 
 func TestModifyEndpointSettings(t *testing.T) {
-	network, err := HcnCreateTestNetwork()
+	network, err := HcnCreateTestNATNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}

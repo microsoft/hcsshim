@@ -9,7 +9,7 @@ import (
 )
 
 func TestCreateDeleteLoadBalancer(t *testing.T) {
-	network, err := HcnCreateTestNetwork()
+	network, err := HcnCreateTestNATNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestCreateDeleteLoadBalancer(t *testing.T) {
 }
 
 func TestGetLoadBalancerById(t *testing.T) {
-	network, err := HcnCreateTestNetwork()
+	network, err := HcnCreateTestNATNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestListLoadBalancer(t *testing.T) {
 }
 
 func TestLoadBalancerAddRemoveEndpoint(t *testing.T) {
-	network, err := HcnCreateTestNetwork()
+	network, err := HcnCreateTestNATNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +135,7 @@ func TestLoadBalancerAddRemoveEndpoint(t *testing.T) {
 }
 
 func TestAddLoadBalancer(t *testing.T) {
-	network, err := HcnCreateTestNetwork()
+	network, err := HcnCreateTestNATNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestAddLoadBalancer(t *testing.T) {
 }
 
 func TestAddDSRLoadBalancer(t *testing.T) {
-	network, err := HcnCreateTestNetwork()
+	network, err := CreateTestOverlayNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestAddDSRLoadBalancer(t *testing.T) {
 }
 
 func TestAddILBLoadBalancer(t *testing.T) {
-	network, err := HcnCreateTestNetwork()
+	network, err := CreateTestOverlayNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
