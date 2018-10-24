@@ -29,6 +29,12 @@ type vsmbShare struct {
 type scsiInfo struct {
 	hostPath string
 	uvmPath  string
+
+	// While most VHDs attached to SCSI are scratch spaces, in the case of LCOW
+	// when the size is over the size possible to attach to PMEM, we use SCSI for
+	// read-only layers. As RO layers are shared, we perform ref-counting.
+	isLayer  bool
+	refCount uint32
 }
 
 // vpmemInfo is an internal structure used for determining VPMem devices mapped to
