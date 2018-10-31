@@ -32,6 +32,20 @@ const (
 	vhdFile    = "rootfs.vhd"
 )
 
+// MemoryBackingType is the set of values possible for the UVM's memory type.
+// TODO: JTERRY75 - Get this into the OCI spec for WindowsMemoryResources
+type MemoryBackingType int
+
+const (
+	// MemoryBackingTypeVirtual uses virtual memory for the UVM.
+	MemoryBackingTypeVirtual MemoryBackingType = iota
+	// MemoryBackingTypeVirtualDeferred uses virtual memory for the UVM with
+	// Deferred Commit.
+	MemoryBackingTypeVirtualDeferred
+	// MemoryBackingTypePhysical uses physical memory for the UVM.
+	MemoryBackingTypePhysical
+)
+
 // UVMOptions are the set of options passed to Create() to create a utility vm.
 type UVMOptions struct {
 	ID                      string                  // Identifier for the uvm. Defaults to generated GUID.
@@ -53,6 +67,9 @@ type UVMOptions struct {
 	ConsolePipe           string               // The named pipe path to use for the serial console.  eg \\.\pipe\vmpipe
 	VPMemDeviceCount      *int32               // Number of VPMem devices. Limit at 128. If booting UVM from VHD, device 0 is taken. LCOW Only.
 	SCSIControllerCount   *int                 // The number of SCSI controllers. Defaults to 1 if omitted. Currently we only support 0 or 1.
+
+	// TODO: JTERRY75 - If we put this in OCI remove this type and use it from WindowsMemoryResources
+	MemoryBackingType *MemoryBackingType
 }
 
 const linuxLogVsockPort = 109
@@ -225,6 +242,18 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 		}
 	}
 
+	var backing string
+	enableDeferredCommit := false
+	if opts.MemoryBackingType != nil {
+		backing = "Virtual"
+		switch *opts.MemoryBackingType {
+		case MemoryBackingTypeVirtualDeferred:
+			enableDeferredCommit = true
+		case MemoryBackingTypePhysical:
+			backing = "Physical"
+		}
+	}
+
 	vm := &hcsschema.VirtualMachine{
 		Chipset: &hcsschema.Chipset{
 			Uefi: &hcsschema.Uefi{},
@@ -232,9 +261,11 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 
 		ComputeTopology: &hcsschema.Topology{
 			Memory: &hcsschema.Memory2{
-				AllowOvercommit: true,
-				EnableHotHint:   uvm.operatingSystem == "windows",
-				SizeInMB:        memory,
+				SizeInMB:             memory,
+				Backing:              backing,
+				AllowOvercommit:      true,
+				EnableHotHint:        uvm.operatingSystem == "windows",
+				EnableDeferredCommit: enableDeferredCommit,
 			},
 			Processor: &hcsschema.Processor2{
 				Count: processors,
