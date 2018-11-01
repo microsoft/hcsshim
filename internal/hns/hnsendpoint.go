@@ -24,6 +24,7 @@ type HNSEndpoint struct {
 	PrefixLength       uint8             `json:",omitempty"`
 	IsRemoteEndpoint   bool              `json:",omitempty"`
 	Namespace          *Namespace        `json:",omitempty"`
+	SharedContainers   []string          `json:",omitempty"`
 }
 
 //SystemType represents the type of the system on which actions are done
