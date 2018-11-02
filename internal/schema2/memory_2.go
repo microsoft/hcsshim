@@ -10,8 +10,10 @@
 package hcsschema
 
 type Memory2 struct {
-
 	SizeInMB int32 `json:"SizeInMB,omitempty"`
+
+	// Backing { Physical, Virtual } is private in the schema. If regenerated need to add back.
+	Backing string `json:"Backing,omitempty"`
 
 	AllowOvercommit bool `json:"AllowOvercommit,omitempty"`
 
@@ -20,4 +22,7 @@ type Memory2 struct {
 	EnableColdHint bool `json:"EnableColdHint,omitempty"`
 
 	EnableEpf bool `json:"EnableEpf,omitempty"`
+
+	// EnableDeferredCommit is private in the schema. If regenerated need to add back.
+	EnableDeferredCommit bool `json:"EnableDeferredCommit,omitempty"`
 }

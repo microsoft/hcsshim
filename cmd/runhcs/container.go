@@ -202,11 +202,7 @@ func parseSandboxAnnotations(spec *specs.Spec) (string, bool) {
 	return "", false
 }
 
-func (c *container) startVMShim(logFile string, consolePipe string) (*os.Process, error) {
-	opts := &uvm.UVMOptions{
-		ID:          vmID(c.ID),
-		ConsolePipe: consolePipe,
-	}
+func (c *container) startVMShim(logFile string, opts *uvm.UVMOptions) (*os.Process, error) {
 	if c.Spec.Windows != nil {
 		opts.Resources = c.Spec.Windows.Resources
 	}
@@ -380,7 +376,26 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 
 	// Start a VM if necessary.
 	if newvm {
-		shim, err := c.startVMShim(cfg.VMLogFile, cfg.VMConsolePipe)
+		var mbt *uvm.MemoryBackingType
+		if v, ok := cfg.Spec.Annotations["uvm-memory-type"]; ok {
+			switch strings.ToLower(v) {
+			case "virtual":
+				iv := uvm.MemoryBackingTypeVirtual
+				mbt = &iv
+			case "virtualdeferred":
+				iv := uvm.MemoryBackingTypeVirtualDeferred
+				mbt = &iv
+			case "physical":
+				iv := uvm.MemoryBackingTypePhysical
+				mbt = &iv
+			}
+		}
+		opts := &uvm.UVMOptions{
+			ID:                vmID(c.ID),
+			ConsolePipe:       cfg.VMConsolePipe,
+			MemoryBackingType: mbt,
+		}
+		shim, err := c.startVMShim(cfg.VMLogFile, opts)
 		if err != nil {
 			return nil, err
 		}
