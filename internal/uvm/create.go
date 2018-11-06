@@ -242,15 +242,14 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 		}
 	}
 
-	var backing string
+	allowOvercommit := true
 	enableDeferredCommit := false
 	if opts.MemoryBackingType != nil {
-		backing = "Virtual"
 		switch *opts.MemoryBackingType {
 		case MemoryBackingTypeVirtualDeferred:
 			enableDeferredCommit = true
 		case MemoryBackingTypePhysical:
-			backing = "Physical"
+			allowOvercommit = false
 		}
 	}
 
@@ -262,8 +261,7 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 		ComputeTopology: &hcsschema.Topology{
 			Memory: &hcsschema.Memory2{
 				SizeInMB:             memory,
-				Backing:              backing,
-				AllowOvercommit:      true,
+				AllowOvercommit:      allowOvercommit,
 				EnableHotHint:        uvm.operatingSystem == "windows",
 				EnableDeferredCommit: enableDeferredCommit,
 			},
