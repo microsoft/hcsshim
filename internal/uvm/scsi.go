@@ -6,6 +6,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	"github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/sirupsen/logrus"
 )
 
@@ -105,6 +106,11 @@ func (uvm *UtilityVM) addSCSIActual(hostPath string, uvmPath string, isLayer boo
 
 	if uvm.scsiControllerCount == 0 {
 		return -1, -1, ErrNoSCSIControllers
+	}
+
+	// Ensure the utility VM has access
+	if err := wclayer.GrantVmAccess(uvm.ID(), hostPath); err != nil {
+		return -1, -1, err
 	}
 
 	// We must hold the lock throughout the lookup (findSCSIAttachment) until

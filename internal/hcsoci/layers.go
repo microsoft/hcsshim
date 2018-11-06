@@ -109,21 +109,18 @@ func MountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 			fi, err = os.Stat(hostPath)
 			if err == nil && fi.Size() > maxPMEMSize {
 				// Too big for PMEM. Add on SCSI instead (at /tmp/S<C>/<L>).
-				// As SCSI, we have to grant access first.
-				if err = wclayer.GrantVmAccess(uvm.ID(), hostPath); err == nil {
-					var (
-						controller int
-						lun        int32
-					)
-					controller, lun, err = uvm.AddSCSILayer(hostPath)
-					if err == nil {
-						lcowlayersAdded = append(lcowlayersAdded,
-							lcowLayerEntry{
-								hostPath: hostPath,
-								uvmPath:  fmt.Sprintf("/tmp/S%d/%d", controller, lun),
-								scsi:     true,
-							})
-					}
+				var (
+					controller int
+					lun        int32
+				)
+				controller, lun, err = uvm.AddSCSILayer(hostPath)
+				if err == nil {
+					lcowlayersAdded = append(lcowlayersAdded,
+						lcowLayerEntry{
+							hostPath: hostPath,
+							uvmPath:  fmt.Sprintf("/tmp/S%d/%d", controller, lun),
+							scsi:     true,
+						})
 				}
 			} else {
 				_, uvmPath, err = uvm.AddVPMEM(hostPath, true) // UVM path is calculated. Will be /tmp/vN/
@@ -145,14 +142,6 @@ func MountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 	// Add the scratch at an unused SCSI location. The container path inside the
 	// utility VM will be C:\<ID>.
 	hostPath := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
-
-	// On Linux, we need to grant access to the scratch
-	if uvm.OS() == "linux" {
-		if err := wclayer.GrantVmAccess(uvm.ID(), hostPath); err != nil {
-			cleanupOnMountFailure(uvm, wcowLayersAdded, lcowlayersAdded, attachedSCSIHostPath)
-			return nil, err
-		}
-	}
 
 	// BUGBUG Rename guestRoot better.
 	containerScratchPathInUVM := ospath.Join(uvm.OS(), guestRoot, scratchPath)

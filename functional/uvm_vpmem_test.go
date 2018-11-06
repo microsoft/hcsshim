@@ -10,7 +10,6 @@ import (
 	"github.com/Microsoft/hcsshim/functional/utilities"
 	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/uvm"
-	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/sirupsen/logrus"
 )
@@ -32,9 +31,6 @@ func TestVPMEM(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(tempDir)
-	if err := wclayer.GrantVmAccess(id, filepath.Join(tempDir, "layer.vhd")); err != nil {
-		t.Fatal(err)
-	}
 
 	for i := 0; i < int(iterations); i++ {
 		deviceNumber, uvmPath, err := u.AddVPMEM(filepath.Join(tempDir, "layer.vhd"), true)
