@@ -9,16 +9,18 @@ environment:
   PATH: C:\mingw-w64\x86_64-7.2.0-posix-seh-rt_v5-rev1\mingw64\bin;%GOPATH%\bin;%PATH%
 
 build_script:
-  - go get -v -t ./...
   - go get -u github.com/alecthomas/gometalinter
   - gometalinter.exe --install
   - gometalinter.exe --config .gometalinter.json ./...
+  - go get -v -d -t -tags "runhcs_test functional integration admin" ./...
   - go build ./cmd/wclayer
   - go build ./cmd/runhcs
-  - go build ./cmd/tar2ext4  
+  - go test -c ./pkg/go-runhcs/ -tags runhcs_test
+  - go build ./cmd/tar2ext4
   - go test -v ./... -tags admin
 
 artifacts:
   - path: 'wclayer.exe'
   - path: 'runhcs.exe'
-  - path: 'tar2ext4.exe'  
+  - path: 'go-runhcs.test.exe'
+  - path: 'tar2ext4.exe'
