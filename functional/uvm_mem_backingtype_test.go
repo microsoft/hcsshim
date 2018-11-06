@@ -44,7 +44,7 @@ func runMemStartWCOWTest(t *testing.T, opts *uvm.UVMOptions) {
 	scratchDir := testutilities.CreateTempDir(t)
 	defer os.RemoveAll(scratchDir)
 
-	opts.LayerFolders = layers
+	opts.LayerFolders = append(layers, scratchDir)
 	runMemStartTest(t, opts)
 }
 
