@@ -18,9 +18,11 @@ build_script:
   - go test -c ./pkg/go-runhcs/ -tags runhcs_test
   - go build ./cmd/tar2ext4
   - go test -v ./... -tags admin
+  - go test -c ./functional/ -tags functional
 
 artifacts:
   - path: 'wclayer.exe'
   - path: 'runhcs.exe'
   - path: 'go-runhcs.test.exe'
   - path: 'tar2ext4.exe'
+  - path: 'functional.test.exe'
