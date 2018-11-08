@@ -232,10 +232,23 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 		}
 	}
 
+	//                     +------------------+------------------------+
+	//                     | Allow OverCommit | Enable Deferred Commit |
+	// +-------------------+------------------+------------------------+
+	// | Virtual (Default) |       YES        |        NO              |
+	// +-------------------+------------------+------------------------+
+	// | Virtual Deferred  |       YES        |        YES             |
+	// +-------------------+------------------+------------------------+
+	// | Physical          |       NO         |        NO              |
+	// +-------------------+------------------+------------------------+
 	allowOvercommit := true
 	enableDeferredCommit := false
+	enableHotHint := uvm.operatingSystem == "windows"
 	if opts.AllowOvercommit != nil {
 		allowOvercommit = *opts.AllowOvercommit
+		if !allowOvercommit {
+			enableHotHint = false // Hot hint is not compatible with physical/don't allow overcommit
+		}
 	}
 	if opts.EnableDeferredCommit != nil {
 		enableDeferredCommit = *opts.EnableDeferredCommit
@@ -250,7 +263,7 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 			Memory: &hcsschema.Memory2{
 				SizeInMB:             memory,
 				AllowOvercommit:      allowOvercommit,
-				EnableHotHint:        uvm.operatingSystem == "windows",
+				EnableHotHint:        enableHotHint,
 				EnableDeferredCommit: enableDeferredCommit,
 			},
 			Processor: &hcsschema.Processor2{

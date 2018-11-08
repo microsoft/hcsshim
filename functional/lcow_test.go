@@ -23,7 +23,7 @@ import (
 // no VPMem device. Uses initrd.
 func TestLCOWUVMNoSCSINoVPMemInitrd(t *testing.T) {
 	scsiCount := 0
-	var vpmemCount int32 = 0
+	var vpmemCount uint32 = 0
 	opts := &uvm.UVMOptions{
 		OperatingSystem:     "linux",
 		ID:                  "uvm",
@@ -37,7 +37,7 @@ func TestLCOWUVMNoSCSINoVPMemInitrd(t *testing.T) {
 // only a single VPMem device. Uses VPMEM VHD
 func TestLCOWUVMNoSCSISingleVPMemVHD(t *testing.T) {
 	scsiCount := 0
-	var vpmemCount int32 = 1
+	var vpmemCount uint32 = 1
 	var prfst uvm.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
 	opts := &uvm.UVMOptions{
 		OperatingSystem:     "linux",
@@ -83,7 +83,7 @@ func TestLCOWTimeUVMStartInitRD(t *testing.T) {
 
 func testLCOWTimeUVMStart(t *testing.T, rfsType uvm.PreferredRootFSType) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	var vpmemCount int32 = 32
+	var vpmemCount uint32 = 32
 	for i := 0; i < 3; i++ {
 		opts := &uvm.UVMOptions{
 			OperatingSystem:     "linux",
