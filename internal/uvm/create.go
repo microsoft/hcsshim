@@ -32,20 +32,6 @@ const (
 	vhdFile    = "rootfs.vhd"
 )
 
-// MemoryBackingType is the set of values possible for the UVM's memory type.
-// TODO: JTERRY75 - Get this into the OCI spec for WindowsMemoryResources
-type MemoryBackingType int
-
-const (
-	// MemoryBackingTypeVirtual uses virtual memory for the UVM.
-	MemoryBackingTypeVirtual MemoryBackingType = iota
-	// MemoryBackingTypeVirtualDeferred uses virtual memory for the UVM with
-	// Deferred Commit.
-	MemoryBackingTypeVirtualDeferred
-	// MemoryBackingTypePhysical uses physical memory for the UVM.
-	MemoryBackingTypePhysical
-)
-
 // UVMOptions are the set of options passed to Create() to create a utility vm.
 type UVMOptions struct {
 	ID                      string                  // Identifier for the uvm. Defaults to generated GUID.
@@ -65,11 +51,13 @@ type UVMOptions struct {
 	KernelBootOptions     string               // Additional boot options for the kernel
 	EnableGraphicsConsole bool                 // If true, enable a graphics console for the utility VM
 	ConsolePipe           string               // The named pipe path to use for the serial console.  eg \\.\pipe\vmpipe
-	VPMemDeviceCount      *int32               // Number of VPMem devices. Limit at 128. If booting UVM from VHD, device 0 is taken. LCOW Only.
 	SCSIControllerCount   *int                 // The number of SCSI controllers. Defaults to 1 if omitted. Currently we only support 0 or 1.
 
-	// TODO: JTERRY75 - If we put this in OCI remove this type and use it from WindowsMemoryResources
-	MemoryBackingType *MemoryBackingType
+	// Fields that can be configured via OCI annotations in runhcs.
+	AllowOvercommit      *bool   // Memory for UVM. Defaults to true. For physical backed memory, set to false. io.microsoft.virtualmachine.computetopology.memory.allowovercommit=true|false
+	EnableDeferredCommit *bool   // Memory for UVM. Defaults to false. For virtual memory with deferred commit, set to true. io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit=true|false
+	VPMemDeviceCount     *uint32 // Number of VPMem devices. Limit at 128. If booting UVM from VHD, device 0 is taken. LCOW Only. io.microsoft.virtualmachine.devices.virtualpmem.maximumcount
+	VPMemSizeBytes       *uint64 // Size of the VPMem devices. LCOW Only. Defaults to 4GB. io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes
 }
 
 const linuxLogVsockPort = 109
@@ -122,7 +110,9 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 		if opts.VPMemDeviceCount != nil {
 			return nil, fmt.Errorf("cannot specify VPMemDeviceCount for Windows utility VMs")
 		}
-
+		if opts.VPMemSizeBytes != nil {
+			return nil, fmt.Errorf("cannot specify VPMemSizeBytes for Windows utility VMs")
+		}
 		var err error
 		uvmFolder, err = uvmfolder.LocateUVMFolder(opts.LayerFolders)
 		if err != nil {
@@ -161,13 +151,13 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 		scsi["0"] = hcsschema.Scsi{Attachments: attachments}
 		uvm.scsiLocations[0][0].hostPath = attachments["0"].Path
 	} else {
-		uvm.vpmemMax = DefaultVPMEM
+		uvm.vpmemMaxCount = DefaultVPMEMCount
 		if opts.VPMemDeviceCount != nil {
-			if *opts.VPMemDeviceCount > MaxVPMEM || *opts.VPMemDeviceCount < 0 {
-				return nil, fmt.Errorf("vpmem device count must between 0 and %d", MaxVPMEM)
+			if *opts.VPMemDeviceCount > MaxVPMEMCount {
+				return nil, fmt.Errorf("vpmem device count cannot be greater than %d", MaxVPMEMCount)
 			}
-			uvm.vpmemMax = *opts.VPMemDeviceCount
-			logrus.Debugln("uvm::Create:: uvm.vpmemMax=", uvm.vpmemMax)
+			uvm.vpmemMaxCount = *opts.VPMemDeviceCount
+			logrus.Debugln("uvm::Create:: uvm.vpmemMax=", uvm.vpmemMaxCount)
 		}
 
 		scsi["0"] = hcsschema.Scsi{Attachments: attachments}
@@ -244,13 +234,11 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 
 	allowOvercommit := true
 	enableDeferredCommit := false
-	if opts.MemoryBackingType != nil {
-		switch *opts.MemoryBackingType {
-		case MemoryBackingTypeVirtualDeferred:
-			enableDeferredCommit = true
-		case MemoryBackingTypePhysical:
-			allowOvercommit = false
-		}
+	if opts.AllowOvercommit != nil {
+		allowOvercommit = *opts.AllowOvercommit
+	}
+	if opts.EnableDeferredCommit != nil {
+		enableDeferredCommit = *opts.EnableDeferredCommit
 	}
 
 	vm := &hcsschema.VirtualMachine{
@@ -330,10 +318,17 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 			},
 		}
 
-		if uvm.vpmemMax > 0 {
-			vm.Devices.VirtualPMem = &hcsschema.VirtualPMemController{
-				MaximumCount: uvm.vpmemMax,
+		vm.Devices.VirtualPMem = &hcsschema.VirtualPMemController{
+			MaximumSizeBytes: DefaultVPMemSizeBytes,
+		}
+		if uvm.vpmemMaxCount > 0 {
+			vm.Devices.VirtualPMem.MaximumCount = uvm.vpmemMaxCount
+		}
+		if opts.VPMemSizeBytes != nil {
+			if *opts.VPMemSizeBytes%4096 != 0 {
+				return nil, fmt.Errorf("VPMemSizeBytes must be a multiple of 4096")
 			}
+			vm.Devices.VirtualPMem.MaximumSizeBytes = *opts.VPMemSizeBytes
 		}
 
 		kernelArgs := "initrd=/" + opts.RootFSFile
@@ -343,7 +338,7 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 
 		// Support for VPMem VHD(X) booting rather than initrd..
 		if actualRootFSType == PreferredRootFSTypeVHD {
-			if uvm.vpmemMax == 0 {
+			if uvm.vpmemMaxCount == 0 {
 				return nil, fmt.Errorf("PreferredRootFSTypeVHD requess at least one VPMem device")
 			}
 			imageFormat := "Vhd1"
@@ -465,6 +460,11 @@ func (uvm *UtilityVM) ID() string {
 // OS returns the operating system of the utility VM.
 func (uvm *UtilityVM) OS() string {
 	return uvm.operatingSystem
+}
+
+// PMemMaxSizeBytes returns the maximum size of a PMEM layer (LCOW)
+func (uvm *UtilityVM) PMemMaxSizeBytes() uint64 {
+	return uvm.vpmemMaxSizeBytes
 }
 
 // Close terminates and releases resources associated with the utility VM.

@@ -23,7 +23,7 @@ func TestVPMEM(t *testing.T) {
 	u := testutilities.CreateLCOWUVM(t, id)
 	defer u.Terminate()
 
-	var iterations uint32 = uvm.MaxVPMEM
+	var iterations uint32 = uvm.MaxVPMEMCount
 
 	// Use layer.vhd from the alpine image as something to add
 	tempDir := testutilities.CreateTempDir(t)

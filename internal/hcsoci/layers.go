@@ -24,13 +24,7 @@ type lcowLayerEntry struct {
 	scsi     bool
 }
 
-const (
-	scratchPath = "scratch"
-
-	// In LCOW, we can't map to PMEM if a layer VHD is over this size, and
-	// we use SCSI instead.
-	maxPMEMSize = 512 * 1024 * 1024 // 512MB
-)
+const scratchPath = "scratch"
 
 // mountContainerLayers is a helper for clients to hide all the complexity of layer mounting
 // Layer folder are in order: base, [rolayer1..rolayern,] scratch
@@ -107,7 +101,7 @@ func MountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Util
 
 			var fi os.FileInfo
 			fi, err = os.Stat(hostPath)
-			if err == nil && fi.Size() > maxPMEMSize {
+			if err == nil && uint64(fi.Size()) > uvm.PMemMaxSizeBytes() {
 				// Too big for PMEM. Add on SCSI instead (at /tmp/S<C>/<L>).
 				var (
 					controller int
@@ -319,7 +313,7 @@ func UnmountContainerLayers(layerFolders []string, guestRoot string, uvm *uvm.Ut
 			hostPath := filepath.Join(layerPath, "layer.vhd")
 			if fi, err := os.Stat(hostPath); err != nil {
 				var e error
-				if fi.Size() > maxPMEMSize {
+				if uint64(fi.Size()) > uvm.PMemMaxSizeBytes() {
 					e = uvm.RemoveSCSI(hostPath)
 				} else {
 					e = uvm.RemoveVPMEM(hostPath)
