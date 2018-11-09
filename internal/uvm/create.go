@@ -243,12 +243,8 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 	// +-------------------+------------------+------------------------+
 	allowOvercommit := true
 	enableDeferredCommit := false
-	enableHotHint := uvm.operatingSystem == "windows"
 	if opts.AllowOvercommit != nil {
 		allowOvercommit = *opts.AllowOvercommit
-		if !allowOvercommit {
-			enableHotHint = false // Hot hint is not compatible with physical/don't allow overcommit
-		}
 	}
 	if opts.EnableDeferredCommit != nil {
 		enableDeferredCommit = *opts.EnableDeferredCommit
@@ -261,9 +257,10 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 
 		ComputeTopology: &hcsschema.Topology{
 			Memory: &hcsschema.Memory2{
-				SizeInMB:             memory,
-				AllowOvercommit:      allowOvercommit,
-				EnableHotHint:        enableHotHint,
+				SizeInMB:        memory,
+				AllowOvercommit: allowOvercommit,
+				// Hot hint is not compatible with physical. Only virtual, and only Windows.
+				EnableHotHint:        allowOvercommit && uvm.operatingSystem == "windows",
 				EnableDeferredCommit: enableDeferredCommit,
 			},
 			Processor: &hcsschema.Processor2{

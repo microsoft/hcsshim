@@ -45,10 +45,10 @@ func runMemTests(t *testing.T, os string) {
 	no := false
 
 	testCases := []testCase{
-		testCase{nil, nil}, // Implicit default - Virtual
-		testCase{allowOvercommit: &yes, enableDeferredCommit: &no},  // Explicit default - Virtual
-		testCase{allowOvercommit: &yes, enableDeferredCommit: &yes}, // Virtual Deferred
-		testCase{allowOvercommit: &no, enableDeferredCommit: &no},   // Physical
+		{nil, nil}, // Implicit default - Virtual
+		{allowOvercommit: &yes, enableDeferredCommit: &no},  // Explicit default - Virtual
+		{allowOvercommit: &yes, enableDeferredCommit: &yes}, // Virtual Deferred
+		{allowOvercommit: &no, enableDeferredCommit: &no},   // Physical
 	}
 
 	for _, bt := range testCases {
