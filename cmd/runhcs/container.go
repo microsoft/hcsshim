@@ -390,53 +390,53 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 
 		// Cater for fields that can be configured via OCI annotations
 		if v, ok := cfg.Spec.Annotations[annotationAllowOverCommit]; ok {
-			var allowOvercommit *bool
+			yes := true
+			no := false
 			switch strings.ToLower(v) {
 			case "true":
-				*allowOvercommit = true
+				opts.AllowOvercommit = &yes
 			case "false":
-				*allowOvercommit = false
+				opts.AllowOvercommit = &no
 			default:
 				return nil, fmt.Errorf("annotation %s must be true or false", annotationAllowOverCommit)
 			}
-			opts.AllowOvercommit = allowOvercommit
 		}
 
 		if v, ok := cfg.Spec.Annotations[annotationEnableDeferredCommit]; ok {
-			var enableDeferredCommit *bool
+			yes := true
+			no := false
 			switch strings.ToLower(v) {
 			case "true":
-				*enableDeferredCommit = true
+				opts.EnableDeferredCommit = &yes
 			case "false":
-				*enableDeferredCommit = false
+				opts.EnableDeferredCommit = &no
 			default:
 				return nil, fmt.Errorf("annotation %s must be true or false", annotationEnableDeferredCommit)
 			}
-			opts.EnableDeferredCommit = enableDeferredCommit
 		}
 
 		if v, ok := cfg.Spec.Annotations[annotationVPMemCount]; ok {
 			var (
 				countu uint64
-				counti *uint32
+				counti uint32
 				err    error
 			)
 			if countu, err = strconv.ParseUint(v, 10, 32); err != nil {
 				return nil, fmt.Errorf("annotation %s could not be parsed: %s", annotationVPMemCount, err)
 			}
-			*counti = uint32(countu)
-			opts.VPMemDeviceCount = counti
+			counti = uint32(countu)
+			opts.VPMemDeviceCount = &counti
 		}
 
 		if v, ok := cfg.Spec.Annotations[annotationVPMemSize]; ok {
 			var (
-				countu *uint64
+				countu uint64
 				err    error
 			)
-			if *countu, err = strconv.ParseUint(v, 10, 64); err != nil {
+			if countu, err = strconv.ParseUint(v, 10, 64); err != nil {
 				return nil, fmt.Errorf("annotation %s could not be parsed: %s", annotationVPMemSize, err)
 			}
-			opts.VPMemSizeBytes = countu
+			opts.VPMemSizeBytes = &countu
 		}
 
 		shim, err := c.startVMShim(cfg.VMLogFile, opts)
