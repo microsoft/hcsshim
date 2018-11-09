@@ -3,7 +3,6 @@
 package functional
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -13,19 +12,6 @@ import (
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/sirupsen/logrus"
 )
-
-func memoryBackingTypeToString(bt uvm.MemoryBackingType) string {
-	switch bt {
-	case uvm.MemoryBackingTypeVirtual:
-		return "Virtual"
-	case uvm.MemoryBackingTypeVirtualDeferred:
-		return "VirtualDeferred"
-	case uvm.MemoryBackingTypePhysical:
-		return "Physical"
-	default:
-		panic(fmt.Sprintf("unknown memory type: %v", bt))
-	}
-}
 
 func runMemStartTest(t *testing.T, opts *uvm.UVMOptions) {
 	u, err := uvm.Create(opts)
@@ -49,17 +35,27 @@ func runMemStartWCOWTest(t *testing.T, opts *uvm.UVMOptions) {
 }
 
 func runMemTests(t *testing.T, os string) {
-	types := [3]uvm.MemoryBackingType{
-		uvm.MemoryBackingTypeVirtual,
-		uvm.MemoryBackingTypeVirtualDeferred,
-		uvm.MemoryBackingTypePhysical,
+
+	type testCase struct {
+		allowOvercommit      *bool
+		enableDeferredCommit *bool
 	}
 
-	for _, bt := range types {
+	yes := true
+	no := false
+
+	testCases := []testCase{
+		{nil, nil}, // Implicit default - Virtual
+		{allowOvercommit: &yes, enableDeferredCommit: &no},  // Explicit default - Virtual
+		{allowOvercommit: &yes, enableDeferredCommit: &yes}, // Virtual Deferred
+		{allowOvercommit: &no, enableDeferredCommit: &no},   // Physical
+	}
+
+	for _, bt := range testCases {
 		opts := &uvm.UVMOptions{
-			ID:                fmt.Sprintf("%s-%s", t.Name(), memoryBackingTypeToString(bt)),
-			OperatingSystem:   os,
-			MemoryBackingType: &bt,
+			OperatingSystem:      os,
+			AllowOvercommit:      bt.allowOvercommit,
+			EnableDeferredCommit: bt.enableDeferredCommit,
 		}
 
 		if os == "windows" {
@@ -91,12 +87,12 @@ func runBenchMemStartTest(b *testing.B, opts *uvm.UVMOptions) {
 	}
 }
 
-func runBenchMemStartLcowTest(b *testing.B, bt uvm.MemoryBackingType) {
+func runBenchMemStartLcowTest(b *testing.B, allowOverCommit bool, enableDeferredCommit bool) {
 	for i := 0; i < b.N; i++ {
 		opts := &uvm.UVMOptions{
-			ID:                fmt.Sprintf("%s-%s-%d", b.Name(), memoryBackingTypeToString(bt), i),
-			OperatingSystem:   "linux",
-			MemoryBackingType: &bt,
+			OperatingSystem:      "linux",
+			AllowOvercommit:      &allowOverCommit,
+			EnableDeferredCommit: &enableDeferredCommit,
 		}
 		runBenchMemStartTest(b, opts)
 	}
@@ -106,19 +102,19 @@ func BenchmarkMemBackingTypeVirtualLCOW(b *testing.B) {
 	//testutilities.RequiresBuild(t, osversion.RS5)
 	logrus.SetOutput(ioutil.Discard)
 
-	runBenchMemStartLcowTest(b, uvm.MemoryBackingTypeVirtual)
+	runBenchMemStartLcowTest(b, true, false)
 }
 
 func BenchmarkMemBackingTypeVirtualDeferredLCOW(b *testing.B) {
 	//testutilities.RequiresBuild(t, osversion.RS5)
 	logrus.SetOutput(ioutil.Discard)
 
-	runBenchMemStartLcowTest(b, uvm.MemoryBackingTypeVirtualDeferred)
+	runBenchMemStartLcowTest(b, true, true)
 }
 
 func BenchmarkMemBackingTypePhyscialLCOW(b *testing.B) {
 	//testutilities.RequiresBuild(t, osversion.RS5)
 	logrus.SetOutput(ioutil.Discard)
 
-	runBenchMemStartLcowTest(b, uvm.MemoryBackingTypePhysical)
+	runBenchMemStartLcowTest(b, false, false)
 }

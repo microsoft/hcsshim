@@ -376,25 +376,69 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 
 	// Start a VM if necessary.
 	if newvm {
-		var mbt *uvm.MemoryBackingType
-		if v, ok := cfg.Spec.Annotations["uvm-memory-type"]; ok {
-			switch strings.ToLower(v) {
-			case "virtual":
-				iv := uvm.MemoryBackingTypeVirtual
-				mbt = &iv
-			case "virtualdeferred":
-				iv := uvm.MemoryBackingTypeVirtualDeferred
-				mbt = &iv
-			case "physical":
-				iv := uvm.MemoryBackingTypePhysical
-				mbt = &iv
-			}
-		}
 		opts := &uvm.UVMOptions{
-			ID:                vmID(c.ID),
-			ConsolePipe:       cfg.VMConsolePipe,
-			MemoryBackingType: mbt,
+			ID:          vmID(c.ID),
+			ConsolePipe: cfg.VMConsolePipe,
 		}
+
+		const (
+			annotationAllowOverCommit      = "io.microsoft.virtualmachine.computetopology.memory.allowovercommit"
+			annotationEnableDeferredCommit = "io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit"
+			annotationVPMemCount           = "io.microsoft.virtualmachine.devices.virtualpmem.maximumcount"
+			annotationVPMemSize            = "io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes"
+		)
+
+		// Cater for fields that can be configured via OCI annotations
+		if v, ok := cfg.Spec.Annotations[annotationAllowOverCommit]; ok {
+			var allowOvercommit *bool
+			switch strings.ToLower(v) {
+			case "true":
+				*allowOvercommit = true
+			case "false":
+				*allowOvercommit = false
+			default:
+				return nil, fmt.Errorf("annotation %s must be true or false", annotationAllowOverCommit)
+			}
+			opts.AllowOvercommit = allowOvercommit
+		}
+
+		if v, ok := cfg.Spec.Annotations[annotationEnableDeferredCommit]; ok {
+			var enableDeferredCommit *bool
+			switch strings.ToLower(v) {
+			case "true":
+				*enableDeferredCommit = true
+			case "false":
+				*enableDeferredCommit = false
+			default:
+				return nil, fmt.Errorf("annotation %s must be true or false", annotationEnableDeferredCommit)
+			}
+			opts.EnableDeferredCommit = enableDeferredCommit
+		}
+
+		if v, ok := cfg.Spec.Annotations[annotationVPMemCount]; ok {
+			var (
+				countu uint64
+				counti *uint32
+				err    error
+			)
+			if countu, err = strconv.ParseUint(v, 10, 32); err != nil {
+				return nil, fmt.Errorf("annotation %s could not be parsed: %s", annotationVPMemCount, err)
+			}
+			*counti = uint32(countu)
+			opts.VPMemDeviceCount = counti
+		}
+
+		if v, ok := cfg.Spec.Annotations[annotationVPMemSize]; ok {
+			var (
+				countu *uint64
+				err    error
+			)
+			if *countu, err = strconv.ParseUint(v, 10, 64); err != nil {
+				return nil, fmt.Errorf("annotation %s could not be parsed: %s", annotationVPMemSize, err)
+			}
+			opts.VPMemSizeBytes = countu
+		}
+
 		shim, err := c.startVMShim(cfg.VMLogFile, opts)
 		if err != nil {
 			return nil, err
