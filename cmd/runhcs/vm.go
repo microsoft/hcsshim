@@ -51,7 +51,28 @@ var vmshimCommand = cli.Command{
 		}
 		os.Stdin.Close()
 
-		opts := &uvm.UVMOptions{}
+		var (
+			opts    interface{}
+			isLCOW  bool
+			optKeys map[string]interface{}
+		)
+
+		// Total HACK. We know that LayerFolders will only be set if we are
+		// talking about WCOW We check for this key to know what type we need to
+		// deserialize.
+		err = json.Unmarshal(optsj, &optKeys)
+		if err != nil {
+			return err
+		}
+		if _, ok := optKeys["LayerFolders"]; !ok {
+			isLCOW = true
+		}
+		if isLCOW {
+			opts = &uvm.OptionsLCOW{}
+		} else {
+			opts = &uvm.OptionsWCOW{}
+		}
+
 		err = json.Unmarshal(optsj, opts)
 		if err != nil {
 			return err
@@ -63,8 +84,18 @@ var vmshimCommand = cli.Command{
 			return err
 		}
 
-		vm, err := startVM(opts)
+		var vm *uvm.UtilityVM
+		if isLCOW {
+			vm, err = uvm.CreateLCOW(opts.(*uvm.OptionsLCOW))
+		} else {
+			vm, err = uvm.CreateWCOW(opts.(*uvm.OptionsWCOW))
+		}
 		if err != nil {
+			return err
+		}
+		err = vm.Start()
+		if err != nil {
+			vm.Close()
 			return err
 		}
 
@@ -119,19 +150,6 @@ var vmshimCommand = cli.Command{
 			}
 		}
 	},
-}
-
-func startVM(opts *uvm.UVMOptions) (*uvm.UtilityVM, error) {
-	vm, err := uvm.Create(opts)
-	if err != nil {
-		return nil, err
-	}
-	err = vm.Start()
-	if err != nil {
-		vm.Close()
-		return nil, err
-	}
-	return vm, nil
 }
 
 func processRequest(vm *uvm.UtilityVM, pipe net.Conn) error {

@@ -95,5 +95,6 @@ func containerConfigFromContext(context *cli.Context) (*containerConfig, error) 
 		VMConsolePipe: context.String("vm-console"),
 		Spec:          spec,
 		HostID:        context.String("host"),
+		Owner:         context.GlobalString("owner"),
 	}, nil
 }

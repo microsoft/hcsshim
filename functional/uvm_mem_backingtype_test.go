@@ -13,25 +13,36 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func runMemStartTest(t *testing.T, opts *uvm.UVMOptions) {
-	u, err := uvm.Create(opts)
-	if err != nil {
-		t.Fatal(err)
-	}
+func runMemStartTest(t *testing.T, u *uvm.UtilityVM) {
 	defer u.Terminate()
 	if err := u.Start(); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func runMemStartWCOWTest(t *testing.T, opts *uvm.UVMOptions) {
+func runMemStartLCOWTest(t *testing.T, opts *uvm.Options) {
+	u, err := uvm.CreateLCOW(&uvm.OptionsLCOW{Options: opts})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runMemStartTest(t, u)
+}
+
+func runMemStartWCOWTest(t *testing.T, opts *uvm.Options) {
 	imageName := "microsoft/nanoserver"
 	layers := testutilities.LayerFolders(t, imageName)
 	scratchDir := testutilities.CreateTempDir(t)
 	defer os.RemoveAll(scratchDir)
 
-	opts.LayerFolders = append(layers, scratchDir)
-	runMemStartTest(t, opts)
+	wopts := &uvm.OptionsWCOW{
+		Options:      opts,
+		LayerFolders: append(layers, scratchDir),
+	}
+	u, err := uvm.CreateWCOW(wopts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runMemStartTest(t, u)
 }
 
 func runMemTests(t *testing.T, os string) {
@@ -52,8 +63,7 @@ func runMemTests(t *testing.T, os string) {
 	}
 
 	for _, bt := range testCases {
-		opts := &uvm.UVMOptions{
-			OperatingSystem:      os,
+		opts := &uvm.Options{
 			AllowOvercommit:      bt.allowOvercommit,
 			EnableDeferredCommit: bt.enableDeferredCommit,
 		}
@@ -61,7 +71,7 @@ func runMemTests(t *testing.T, os string) {
 		if os == "windows" {
 			runMemStartWCOWTest(t, opts)
 		} else {
-			runMemStartTest(t, opts)
+			runMemStartLCOWTest(t, opts)
 		}
 	}
 }
@@ -76,8 +86,8 @@ func TestMemBackingTypeLCOW(t *testing.T) {
 	runMemTests(t, "linux")
 }
 
-func runBenchMemStartTest(b *testing.B, opts *uvm.UVMOptions) {
-	u, err := uvm.Create(opts)
+func runBenchMemStartTest(b *testing.B, opts *uvm.Options) {
+	u, err := uvm.CreateLCOW(&uvm.OptionsLCOW{Options: opts})
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -89,8 +99,7 @@ func runBenchMemStartTest(b *testing.B, opts *uvm.UVMOptions) {
 
 func runBenchMemStartLcowTest(b *testing.B, allowOverCommit bool, enableDeferredCommit bool) {
 	for i := 0; i < b.N; i++ {
-		opts := &uvm.UVMOptions{
-			OperatingSystem:      "linux",
+		opts := &uvm.Options{
 			AllowOvercommit:      &allowOverCommit,
 			EnableDeferredCommit: &enableDeferredCommit,
 		}

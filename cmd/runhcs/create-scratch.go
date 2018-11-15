@@ -51,11 +51,13 @@ var createScratchCommand = cli.Command{
 				return errors.Wrapf(err, "failed to create ext4vhdx for '%s'", cfg.Name)
 			}
 		} else {
-			opts := uvm.UVMOptions{
-				ID:              "createscratch-uvm",
-				OperatingSystem: "linux",
+			opts := uvm.OptionsLCOW{
+				Options: &uvm.Options{
+					ID:    "createscratch-uvm",
+					Owner: context.GlobalString("owner"),
+				},
 			}
-			convertUVM, err := uvm.Create(&opts)
+			convertUVM, err := uvm.CreateLCOW(&opts)
 			if err != nil {
 				return errors.Wrapf(err, "failed to create '%s'", opts.ID)
 			}

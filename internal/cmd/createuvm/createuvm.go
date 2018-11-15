@@ -14,7 +14,7 @@ import (
 func main() {
 
 	fmt.Println("Creating...")
-	lcowUVM, err := uvm.Create(&uvm.UVMOptions{OperatingSystem: "linux", ID: "uvm"})
+	lcowUVM, err := uvm.CreateLCOW(&uvm.OptionsLCOW{Options: &uvm.Options{ID: "uvm"}})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create utility VM: %s", err)
 		os.Exit(-1)

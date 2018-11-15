@@ -140,8 +140,16 @@ func runTestsOnFiles(t *testing.T, testFiles []testFile, opts ...Option) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer imagef.Close()
-	defer os.Remove(image)
+	defer func() {
+		err := imagef.Close()
+		if err != nil {
+			t.Log(err)
+		}
+		err = os.Remove(image)
+		if err != nil {
+			t.Log(err)
+		}
+	}()
 
 	w := NewWriter(imagef, opts...)
 	for _, tf := range testFiles {
@@ -163,10 +171,14 @@ func runTestsOnFiles(t *testing.T, testFiles []testFile, opts ...Option) {
 	}
 
 	if err := w.Close(); err != nil {
-		t.Fatal(err)
+		t.Error(err)
+		return
 	}
 
 	fsck(t, image)
+	if t.Failed() {
+		return
+	}
 
 	mountPath := "testmnt"
 

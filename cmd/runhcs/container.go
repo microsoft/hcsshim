@@ -202,28 +202,47 @@ func parseSandboxAnnotations(spec *specs.Spec) (string, bool) {
 	return "", false
 }
 
-func (c *container) startVMShim(logFile string, opts *uvm.UVMOptions) (*os.Process, error) {
-	if c.Spec.Windows != nil {
-		opts.Resources = c.Spec.Windows.Resources
-	}
-
-	if c.Spec.Linux != nil {
-		opts.OperatingSystem = "linux"
-	} else {
-		opts.OperatingSystem = "windows"
-		layers := make([]string, len(c.Spec.Windows.LayerFolders))
-		for i, f := range c.Spec.Windows.LayerFolders {
-			if i == len(c.Spec.Windows.LayerFolders)-1 {
-				f = filepath.Join(f, "vm")
-				err := os.MkdirAll(f, 0)
-				if err != nil {
-					return nil, err
-				}
-			}
-			layers[i] = f
+func readAnnotationsBool(a map[string]string, key string) *bool {
+	if v, ok := a[key]; ok {
+		yes := true
+		no := false
+		switch strings.ToLower(v) {
+		case "true":
+			return &yes
+		case "false":
+			return &no
 		}
-		opts.LayerFolders = layers
 	}
+	return nil
+}
+
+func readAnnotationsUint32(a map[string]string, key string) *uint32 {
+	if v, ok := a[key]; ok {
+		countu, err := strconv.ParseUint(v, 10, 32)
+		if err == nil {
+			v := uint32(countu)
+			return &v
+		}
+		logrus.Debugf("annotation %s could not be parsed into uint32: %s", key, err)
+
+	}
+	return nil
+}
+
+func readAnnotationsUint64(a map[string]string, key string) *uint64 {
+	if v, ok := a[key]; ok {
+		countu, err := strconv.ParseUint(v, 10, 64)
+		if err == nil {
+			return &countu
+		}
+		logrus.Debugf("annotation %s could not be parsed into uint64: %s", key, err)
+
+	}
+	return nil
+}
+
+// startVMShim starts a vm-shim command with the specified `opts`. `opts` can be `uvm.OptionsWCOW` or `uvm.OptionsLCOW`
+func (c *container) startVMShim(logFile string, opts interface{}) (*os.Process, error) {
 	args := []string{}
 	if strings.HasPrefix(logFile, runhcs.SafePipePrefix) {
 		args = append(args, "--log-pipe", logFile)
@@ -239,6 +258,7 @@ type containerConfig struct {
 	ShimLogFile, VMLogFile string
 	Spec                   *specs.Spec
 	VMConsolePipe          string
+	Owner                  string
 }
 
 func createContainer(cfg *containerConfig) (_ *container, err error) {
@@ -376,10 +396,7 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 
 	// Start a VM if necessary.
 	if newvm {
-		opts := &uvm.UVMOptions{
-			ID:          vmID(c.ID),
-			ConsolePipe: cfg.VMConsolePipe,
-		}
+		var opts interface{}
 
 		const (
 			annotationAllowOverCommit      = "io.microsoft.virtualmachine.computetopology.memory.allowovercommit"
@@ -388,55 +405,27 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 			annotationVPMemSize            = "io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes"
 		)
 
-		// Cater for fields that can be configured via OCI annotations
-		if v, ok := cfg.Spec.Annotations[annotationAllowOverCommit]; ok {
-			yes := true
-			no := false
-			switch strings.ToLower(v) {
-			case "true":
-				opts.AllowOvercommit = &yes
-			case "false":
-				opts.AllowOvercommit = &no
-			default:
-				return nil, fmt.Errorf("annotation %s must be true or false", annotationAllowOverCommit)
-			}
+		bothOpts := &uvm.Options{
+			ID:                   vmID(c.ID),
+			Owner:                cfg.Owner,
+			Resources:            c.Spec.Windows.Resources,
+			AllowOvercommit:      readAnnotationsBool(cfg.Spec.Annotations, annotationAllowOverCommit),
+			EnableDeferredCommit: readAnnotationsBool(cfg.Spec.Annotations, annotationEnableDeferredCommit),
 		}
 
-		if v, ok := cfg.Spec.Annotations[annotationEnableDeferredCommit]; ok {
-			yes := true
-			no := false
-			switch strings.ToLower(v) {
-			case "true":
-				opts.EnableDeferredCommit = &yes
-			case "false":
-				opts.EnableDeferredCommit = &no
-			default:
-				return nil, fmt.Errorf("annotation %s must be true or false", annotationEnableDeferredCommit)
+		if cfg.Spec.Linux != nil {
+			lopts := &uvm.OptionsLCOW{
+				Options:          bothOpts,
+				VPMemDeviceCount: readAnnotationsUint32(cfg.Spec.Annotations, annotationVPMemCount),
+				VPMemSizeBytes:   readAnnotationsUint64(cfg.Spec.Annotations, annotationVPMemSize),
 			}
-		}
-
-		if v, ok := cfg.Spec.Annotations[annotationVPMemCount]; ok {
-			var (
-				countu uint64
-				counti uint32
-				err    error
-			)
-			if countu, err = strconv.ParseUint(v, 10, 32); err != nil {
-				return nil, fmt.Errorf("annotation %s could not be parsed: %s", annotationVPMemCount, err)
+			opts = lopts
+		} else {
+			wopts := &uvm.OptionsWCOW{
+				Options:      bothOpts,
+				LayerFolders: c.Spec.Windows.LayerFolders,
 			}
-			counti = uint32(countu)
-			opts.VPMemDeviceCount = &counti
-		}
-
-		if v, ok := cfg.Spec.Annotations[annotationVPMemSize]; ok {
-			var (
-				countu uint64
-				err    error
-			)
-			if countu, err = strconv.ParseUint(v, 10, 64); err != nil {
-				return nil, fmt.Errorf("annotation %s could not be parsed: %s", annotationVPMemSize, err)
-			}
-			opts.VPMemSizeBytes = &countu
+			opts = wopts
 		}
 
 		shim, err := c.startVMShim(cfg.VMLogFile, opts)

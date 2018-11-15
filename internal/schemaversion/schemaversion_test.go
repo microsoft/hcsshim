@@ -12,8 +12,8 @@ func TestDetermineSchemaVersion(t *testing.T) {
 	osv := osversion.Get()
 
 	if osv.Build >= osversion.RS5 {
-		if sv := DetermineSchemaVersion(nil); !IsV10(sv) { // TODO: Toggle this at some point so default is 2.0
-			t.Fatalf("expected v1")
+		if sv := DetermineSchemaVersion(nil); !IsV21(sv) {
+			t.Fatalf("expected v2")
 		}
 		if sv := DetermineSchemaVersion(SchemaV21()); !IsV21(sv) {
 			t.Fatalf("expected requested v2")
@@ -21,8 +21,8 @@ func TestDetermineSchemaVersion(t *testing.T) {
 		if sv := DetermineSchemaVersion(SchemaV10()); !IsV10(sv) {
 			t.Fatalf("expected requested v1")
 		}
-		if sv := DetermineSchemaVersion(&hcsschema.Version{}); !IsV10(sv) { // Logs a warning that 0.0 is ignored // TODO: Toggle this too
-			t.Fatalf("expected requested v1")
+		if sv := DetermineSchemaVersion(&hcsschema.Version{}); !IsV21(sv) { // Logs a warning that 0.0 is ignored // TODO: Toggle this too
+			t.Fatalf("expected requested v2")
 		}
 
 		if err := IsSupported(SchemaV21()); err != nil {

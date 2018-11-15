@@ -692,11 +692,12 @@ func TestWCOWXenonOciV2(t *testing.T) {
 		t.Fatalf("failed to create scratch: %s", err)
 	}
 
-	xenonOci2UVM, err = uvm.Create(
-		&uvm.UVMOptions{
-			ID:              xenonOci2UVMId,
-			OperatingSystem: "windows",
-			LayerFolders:    append(imageLayers, xenonOci2UVMScratchDir),
+	xenonOci2UVM, err = uvm.CreateWCOW(
+		&uvm.OptionsWCOW{
+			Options: &uvm.Options{
+				ID: xenonOci2UVMId,
+			},
+			LayerFolders: append(imageLayers, xenonOci2UVMScratchDir),
 		})
 	if err != nil {
 		t.Fatalf("Failed create UVM: %s", err)

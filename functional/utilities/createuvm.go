@@ -11,15 +11,16 @@ import (
 func CreateWCOWUVM(t *testing.T, uvmLayers []string, id string, resources *specs.WindowsResources) (*uvm.UtilityVM, string) {
 	scratchDir := CreateTempDir(t)
 
-	opts := &uvm.UVMOptions{
-		OperatingSystem: "windows",
-		LayerFolders:    append(uvmLayers, scratchDir),
-		Resources:       resources,
+	opts := &uvm.OptionsWCOW{
+		Options: &uvm.Options{
+			Resources: resources,
+		},
+		LayerFolders: append(uvmLayers, scratchDir),
 	}
 	if id != "" {
 		opts.ID = id
 	}
-	uvm, err := uvm.Create(opts)
+	uvm, err := uvm.CreateWCOW(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,11 +33,11 @@ func CreateWCOWUVM(t *testing.T, uvmLayers []string, id string, resources *specs
 
 // CreateLCOWUVM creates an LCOW utility VM.
 func CreateLCOWUVM(t *testing.T, id string) *uvm.UtilityVM {
-	opts := &uvm.UVMOptions{OperatingSystem: "linux"}
+	opts := &uvm.OptionsLCOW{}
 	if id != "" {
 		opts.ID = id
 	}
-	uvm, err := uvm.Create(opts)
+	uvm, err := uvm.CreateLCOW(opts)
 	if err != nil {
 		t.Fatal(err)
 	}

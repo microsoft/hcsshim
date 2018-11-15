@@ -1,4 +1,4 @@
-// +build runhcs_test
+// +build integration
 
 package runhcs
 
@@ -17,6 +17,8 @@ import (
 
 	"github.com/Microsoft/go-winio/vhd"
 	testutilities "github.com/Microsoft/hcsshim/functional/utilities"
+	"github.com/Microsoft/hcsshim/internal/uvmfolder"
+	"github.com/Microsoft/hcsshim/internal/wcow"
 	"github.com/Microsoft/hcsshim/osversion"
 	runc "github.com/containerd/go-runc"
 	"github.com/opencontainers/runtime-tools/generate"
@@ -175,7 +177,11 @@ func testWindows(t *testing.T, version int, isolated bool) {
 	}()
 	scratch := testutilities.CreateTempDir(t)
 	defer func() {
-		vhd.DetachVhd(filepath.Join(scratch, "sandbox.vhdx"))
+		if !isolated {
+			// TODO: This is an argon bug. This should be detached automatically
+			// by the destruct.
+			vhd.DetachVhd(filepath.Join(scratch, "sandbox.vhdx"))
+		}
 		os.RemoveAll(scratch)
 	}()
 
@@ -194,6 +200,22 @@ func testWindows(t *testing.T, version int, isolated bool) {
 	// Get the LayerFolders
 	imageName := getWindowsImageNameByVersion(t, version)
 	layers := testutilities.LayerFolders(t, imageName)
+
+	if isolated {
+		// Create the sandbox.vhdx
+		uvmFolder, err := uvmfolder.LocateUVMFolder(layers)
+		if err != nil {
+			t.Errorf("failed to find UVM folder with error: %v", err)
+			return
+		}
+		err = wcow.CreateUVMScratch(uvmFolder, scratch, t.Name())
+		if err != nil {
+			t.Errorf("failed to generate UVM scratch with error: %v", err)
+			return
+		}
+	}
+
+	// Add the Layers to the spec.
 	for _, layer := range layers {
 		g.AddWindowsLayerFolders(layer)
 	}

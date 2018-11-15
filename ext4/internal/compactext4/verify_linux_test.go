@@ -219,13 +219,15 @@ func mountImage(t *testing.T, image string, mountPath string) bool {
 
 	err = os.MkdirAll(mountPath, 0777)
 	if err != nil {
-		t.Fatal(err)
+		t.Error(err)
+		return false
 	}
 
 	out, err := exec.Command("mount", "-o", "loop,ro", "-t", "ext4", image, mountPath).CombinedOutput()
 	t.Logf("%s", out)
 	if err != nil {
-		t.Fatal(err)
+		t.Error(err)
+		return false
 	}
 	return true
 }
@@ -243,6 +245,6 @@ func fsck(t *testing.T, image string) {
 	out, err := cmd.CombinedOutput()
 	t.Logf("%s", out)
 	if err != nil {
-		t.Fatal(err)
+		t.Error(err)
 	}
 }
