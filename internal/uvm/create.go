@@ -159,6 +159,15 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 			uvm.vpmemMaxCount = *opts.VPMemDeviceCount
 			logrus.Debugln("uvm::Create:: uvm.vpmemMax=", uvm.vpmemMaxCount)
 		}
+		if uvm.vpmemMaxCount > 0 {
+			uvm.vpmemMaxSizeBytes = DefaultVPMemSizeBytes
+			if opts.VPMemSizeBytes != nil {
+				if *opts.VPMemSizeBytes%4096 != 0 {
+					return nil, fmt.Errorf("VPMemSizeBytes must be a multiple of 4096")
+				}
+				uvm.vpmemMaxSizeBytes = *opts.VPMemSizeBytes
+			}
+		}
 
 		scsi["0"] = hcsschema.Scsi{Attachments: attachments}
 		uvm.scsiControllerCount = 1
@@ -328,17 +337,11 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 			},
 		}
 
-		vm.Devices.VirtualPMem = &hcsschema.VirtualPMemController{
-			MaximumSizeBytes: DefaultVPMemSizeBytes,
-		}
 		if uvm.vpmemMaxCount > 0 {
-			vm.Devices.VirtualPMem.MaximumCount = uvm.vpmemMaxCount
-		}
-		if opts.VPMemSizeBytes != nil {
-			if *opts.VPMemSizeBytes%4096 != 0 {
-				return nil, fmt.Errorf("VPMemSizeBytes must be a multiple of 4096")
+			vm.Devices.VirtualPMem = &hcsschema.VirtualPMemController{
+				MaximumCount:     uvm.vpmemMaxCount,
+				MaximumSizeBytes: uvm.vpmemMaxSizeBytes,
 			}
-			vm.Devices.VirtualPMem.MaximumSizeBytes = *opts.VPMemSizeBytes
 		}
 
 		kernelArgs := "initrd=/" + opts.RootFSFile
