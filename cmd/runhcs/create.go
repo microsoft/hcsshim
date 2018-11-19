@@ -89,6 +89,7 @@ func containerConfigFromContext(context *cli.Context) (*containerConfig, error) 
 	}
 	return &containerConfig{
 		ID:            id,
+		Owner:         context.GlobalString("owner"),
 		PidFile:       pidFile,
 		ShimLogFile:   shimLog,
 		VMLogFile:     vmLog,

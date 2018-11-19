@@ -28,6 +28,7 @@ var errContainerStopped = errors.New("container is stopped")
 
 type persistedState struct {
 	ID             string
+	Owner          string
 	SandboxID      string
 	HostID         string
 	Bundle         string
@@ -234,6 +235,7 @@ func (c *container) startVMShim(logFile string, opts *uvm.UVMOptions) (*os.Proce
 
 type containerConfig struct {
 	ID                     string
+	Owner                  string
 	HostID                 string
 	PidFile                string
 	ShimLogFile, VMLogFile string
@@ -340,6 +342,7 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 	c := &container{
 		persistedState: persistedState{
 			ID:             cfg.ID,
+			Owner:          cfg.Owner,
 			Bundle:         cwd,
 			Rootfs:         rootfs,
 			Created:        time.Now(),
@@ -378,6 +381,7 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 	if newvm {
 		opts := &uvm.UVMOptions{
 			ID:          vmID(c.ID),
+			Owner:       cfg.Owner,
 			ConsolePipe: cfg.VMConsolePipe,
 		}
 
@@ -540,6 +544,7 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 	// Create the container without starting it.
 	opts := &hcsoci.CreateOptions{
 		ID:               c.ID,
+		Owner:            c.Owner,
 		Spec:             c.Spec,
 		HostingSystem:    vm,
 		NetworkNamespace: c.RequestedNetNS,
