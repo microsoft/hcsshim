@@ -273,6 +273,10 @@ func (c *container) startVMShim(logFile string, opts *uvm.UVMOptions) (*os.Proce
 		opts.OperatingSystem = "linux"
 	} else {
 		opts.OperatingSystem = "windows"
+
+		// In order for the UVM sandbox.vhdx not to collide with the actual
+		// nested Argon sandbox.vhdx we append the \vm folder to the last entry
+		// in the list.
 		layers := make([]string, len(c.Spec.Windows.LayerFolders))
 		for i, f := range c.Spec.Windows.LayerFolders {
 			if i == len(c.Spec.Windows.LayerFolders)-1 {
