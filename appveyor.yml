@@ -12,10 +12,10 @@ build_script:
   - go get -u github.com/alecthomas/gometalinter
   - gometalinter.exe --install
   - gometalinter.exe --config .gometalinter.json ./...
-  - go get -v -d -t -tags "runhcs_test functional integration admin" ./...
+  - go get -v -d -t -tags "functional integration admin" ./...
   - go build ./cmd/wclayer
   - go build ./cmd/runhcs
-  - go test -c ./pkg/go-runhcs/ -tags runhcs_test
+  - go test -c ./pkg/go-runhcs/ -tags integration
   - go build ./cmd/tar2ext4
   - go test -v ./... -tags admin
   - go test -c ./functional/ -tags functional

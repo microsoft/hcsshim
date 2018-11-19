@@ -1,4 +1,4 @@
-// +build runhcs_test
+// +build integration
 
 package runhcs
 
