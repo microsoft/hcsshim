@@ -21,7 +21,7 @@ func TestPlan9(t *testing.T) {
 	//alpineLayers := testutilities.LayerFolders(t, "alpine")
 
 	uvm := testutilities.CreateLCOWUVM(t, "TestPlan9")
-	defer uvm.Terminate()
+	defer uvm.Close()
 
 	dir := testutilities.CreateTempDir(t)
 	defer os.RemoveAll(dir)

@@ -681,7 +681,7 @@ func TestWCOWXenonOciV2(t *testing.T) {
 			hcsoci.ReleaseResources(xenonOci2Resources, xenonOci2UVM, true)
 		}
 		if xenonOci2UVMCreated {
-			xenonOci2UVM.Terminate()
+			xenonOci2UVM.Close()
 		}
 	}()
 
@@ -703,7 +703,7 @@ func TestWCOWXenonOciV2(t *testing.T) {
 	}
 	xenonOci2UVMCreated = true
 	if err := xenonOci2UVM.Start(); err != nil {
-		xenonOci2UVM.Terminate()
+		xenonOci2UVM.Close()
 		t.Fatalf("Failed start UVM: %s", err)
 
 	}
@@ -729,6 +729,6 @@ func TestWCOWXenonOciV2(t *testing.T) {
 	xenonOci2Mounted = false
 
 	// Terminate the UVM
-	xenonOci2UVM.ComputeSystem().Terminate()
+	xenonOci2UVM.Close()
 	xenonOci2UVMCreated = false
 }

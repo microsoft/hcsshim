@@ -17,7 +17,7 @@ func TestPropertiesGuestConnection_LCOW(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	uvm := testutilities.CreateLCOWUVM(t, "TestCreateLCOWScratch")
-	defer uvm.Terminate()
+	defer uvm.Close()
 
 	p, err := uvm.ComputeSystem().Properties(schema1.PropertyTypeGuestConnection)
 	if err != nil {
@@ -37,7 +37,7 @@ func TestPropertiesGuestConnection_WCOW(t *testing.T) {
 	layers := testutilities.LayerFolders(t, imageName)
 	uvm, uvmScratchDir := testutilities.CreateWCOWUVM(t, layers, "", nil)
 	defer os.RemoveAll(uvmScratchDir)
-	defer uvm.Terminate()
+	defer uvm.Close()
 
 	p, err := uvm.ComputeSystem().Properties(schema1.PropertyTypeGuestConnection)
 	if err != nil {

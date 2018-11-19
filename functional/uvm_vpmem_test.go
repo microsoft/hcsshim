@@ -21,7 +21,7 @@ func TestVPMEM(t *testing.T) {
 
 	id := "TestVPMEM"
 	u := testutilities.CreateLCOWUVM(t, id)
-	defer u.Terminate()
+	defer u.Close()
 
 	var iterations uint32 = uvm.MaxVPMEMCount
 

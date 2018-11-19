@@ -18,7 +18,7 @@ func runMemStartTest(t *testing.T, opts *uvm.UVMOptions) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer u.Terminate()
+	defer u.Close()
 	if err := u.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func runBenchMemStartTest(b *testing.B, opts *uvm.UVMOptions) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer u.Terminate()
+	defer u.Close()
 	if err := u.Start(); err != nil {
 		b.Fatal(err)
 	}
