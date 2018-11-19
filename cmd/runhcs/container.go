@@ -181,8 +181,14 @@ func launchShim(cmd, pidFile, logFile string, args []string, data interface{}) (
 	return p, nil
 }
 
-func parseSandboxAnnotations(spec *specs.Spec) (string, bool) {
-	a := spec.Annotations
+// parseSandboxAnnotations searches `a` for various annotations used by
+// different runtimes to represent a sandbox ID, and sandbox type.
+//
+// If found returns the tuple `(sandboxID, isSandbox)` where `isSandbox == true`
+// indicates the identifer is the sandbox itself; `isSandbox == false` indicates
+// the identifer is the sandbox in which to place this container. Otherwise
+// returns `("", false)`.
+func parseSandboxAnnotations(a map[string]string) (string, bool) {
 	var t, id string
 	if t = a["io.kubernetes.cri.container-type"]; t != "" {
 		id = a["io.kubernetes.cri.sandbox-id"]
@@ -214,6 +220,8 @@ func parseAnnotationsBool(a map[string]string, key string) *bool {
 			return &yes
 		case "false":
 			return &no
+		default:
+			logrus.Warningf("annotation: '%s', with value: '%s', could not be parsed into boolean", key, v)
 		}
 	}
 	return nil
@@ -228,8 +236,7 @@ func parseAnnotationsUint32(a map[string]string, key string) *uint32 {
 			v := uint32(countu)
 			return &v
 		}
-		logrus.Debugf("annotation %s could not be parsed into uint32: %s", key, err)
-
+		logrus.Warningf("annotation: '%s', with value: '%s', could not be parsed into uint32: %s", key, v, err)
 	}
 	return nil
 }
@@ -242,8 +249,7 @@ func parseAnnotationsUint64(a map[string]string, key string) *uint64 {
 		if err == nil {
 			return &countu
 		}
-		logrus.Debugf("annotation %s could not be parsed into uint64: %s", key, err)
-
+		logrus.Warningf("annotation: '%s', with value: '%s', could not be parsed into uint64: %s", key, v, err)
 	}
 	return nil
 }
@@ -293,7 +299,7 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 
 	vmisolated := cfg.Spec.Linux != nil || (cfg.Spec.Windows != nil && cfg.Spec.Windows.HyperV != nil)
 
-	sandboxID, isSandbox := parseSandboxAnnotations(cfg.Spec)
+	sandboxID, isSandbox := parseSandboxAnnotations(cfg.Spec.Annotations)
 	hostID := cfg.HostID
 	if isSandbox {
 		if sandboxID != cfg.ID {
