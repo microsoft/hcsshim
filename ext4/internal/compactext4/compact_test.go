@@ -140,8 +140,8 @@ func runTestsOnFiles(t *testing.T, testFiles []testFile, opts ...Option) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer imagef.Close()
 	defer os.Remove(image)
+	defer imagef.Close()
 
 	w := NewWriter(imagef, opts...)
 	for _, tf := range testFiles {
