@@ -20,7 +20,7 @@ import (
 func TestSCSIAddRemoveLCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 	u := testutilities.CreateLCOWUVM(t, "TestAddRemoveSCSILCOW")
-	defer u.Terminate()
+	defer u.Close()
 
 	testSCSIAddRemove(t, u, `/`, "linux", []string{})
 
@@ -35,7 +35,7 @@ func TestSCSIAddRemoveWCOW(t *testing.T) {
 	layers := testutilities.LayerFolders(t, imageName)
 	u, uvmScratchDir := testutilities.CreateWCOWUVM(t, layers, "", nil)
 	defer os.RemoveAll(uvmScratchDir)
-	defer u.Terminate()
+	defer u.Close()
 
 	testSCSIAddRemove(t, u, `c:\`, "windows", layers)
 }

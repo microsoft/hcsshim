@@ -18,7 +18,7 @@ func TestVSMB(t *testing.T) {
 
 	uvm, uvmScratchDir := testutilities.CreateWCOWUVM(t, nanoLayers, "", nil)
 	defer os.RemoveAll(uvmScratchDir)
-	defer uvm.Terminate()
+	defer uvm.Close()
 
 	dir := testutilities.CreateTempDir(t)
 	defer os.RemoveAll(dir)

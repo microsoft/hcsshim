@@ -59,7 +59,7 @@ func testLCOWUVMNoSCSISingleVPMem(t *testing.T, opts *uvm.UVMOptions, expected s
 	if err := lcowUVM.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer lcowUVM.Terminate()
+	defer lcowUVM.Close()
 	out, err := exec.Command(`hcsdiag`, `exec`, `-uvm`, lcowUVM.ID(), `dmesg`).Output() // TODO: Move the CreateProcess.
 	if err != nil {
 		t.Fatal(string(err.(*exec.ExitError).Stderr))
@@ -98,7 +98,7 @@ func testLCOWTimeUVMStart(t *testing.T, rfsType uvm.PreferredRootFSType) {
 		if err := lcowUVM.Start(); err != nil {
 			t.Fatal(err)
 		}
-		lcowUVM.Terminate()
+		lcowUVM.Close()
 	}
 }
 
@@ -137,7 +137,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	if err := lcowUVM.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer lcowUVM.Terminate()
+	defer lcowUVM.Close()
 
 	// Populate the cache and generate the scratch file for /tmp/scratch
 	if err := lcow.CreateScratch(lcowUVM, uvmScratchFile, lcow.DefaultScratchSizeGB, cacheFile, ""); err != nil {
