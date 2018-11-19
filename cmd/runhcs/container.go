@@ -249,10 +249,6 @@ func parseAnnotationsUint64(a map[string]string, key string) *uint64 {
 }
 
 func (c *container) startVMShim(logFile string, opts *uvm.UVMOptions) (*os.Process, error) {
-	if c.Spec.Windows != nil {
-		opts.Resources = c.Spec.Windows.Resources
-	}
-
 	if c.Spec.Linux != nil {
 		opts.OperatingSystem = "linux"
 	} else {
@@ -432,8 +428,10 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		)
 
 		opts := &uvm.UVMOptions{
-			ID:                   vmID(c.ID),
-			Owner:                cfg.Owner,
+			ID:    vmID(c.ID),
+			Owner: cfg.Owner,
+			// Resources are used for both LCOW/WCOW memory/processor etc.
+			Resources:            c.Spec.Windows.Resources,
 			ConsolePipe:          cfg.VMConsolePipe,
 			AllowOvercommit:      parseAnnotationsBool(cfg.Spec.Annotations, annotationAllowOverCommit),
 			EnableDeferredCommit: parseAnnotationsBool(cfg.Spec.Annotations, annotationEnableDeferredCommit),
