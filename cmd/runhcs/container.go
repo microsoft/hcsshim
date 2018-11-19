@@ -203,6 +203,51 @@ func parseSandboxAnnotations(spec *specs.Spec) (string, bool) {
 	return "", false
 }
 
+// parseAnnotationsBool searches `a` for `key` and if found verifies that the
+// value is `true` or `false` in any case. If `key` is not found returns `nil`.
+func parseAnnotationsBool(a map[string]string, key string) *bool {
+	if v, ok := a[key]; ok {
+		yes := true
+		no := false
+		switch strings.ToLower(v) {
+		case "true":
+			return &yes
+		case "false":
+			return &no
+		}
+	}
+	return nil
+}
+
+// parseAnnotationsUint32 searches `a` for `key` and if found verifies that the
+// value is a 32 bit unsigned integer. If `key` is not found returns `nil`.
+func parseAnnotationsUint32(a map[string]string, key string) *uint32 {
+	if v, ok := a[key]; ok {
+		countu, err := strconv.ParseUint(v, 10, 32)
+		if err == nil {
+			v := uint32(countu)
+			return &v
+		}
+		logrus.Debugf("annotation %s could not be parsed into uint32: %s", key, err)
+
+	}
+	return nil
+}
+
+// parseAnnotationsUint64 searches `a` for `key` and if found verifies that the
+// value is a 64 bit unsigned integer. If `key` is not found returns `nil`.
+func parseAnnotationsUint64(a map[string]string, key string) *uint64 {
+	if v, ok := a[key]; ok {
+		countu, err := strconv.ParseUint(v, 10, 64)
+		if err == nil {
+			return &countu
+		}
+		logrus.Debugf("annotation %s could not be parsed into uint64: %s", key, err)
+
+	}
+	return nil
+}
+
 func (c *container) startVMShim(logFile string, opts *uvm.UVMOptions) (*os.Process, error) {
 	if c.Spec.Windows != nil {
 		opts.Resources = c.Spec.Windows.Resources
@@ -379,12 +424,6 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 
 	// Start a VM if necessary.
 	if newvm {
-		opts := &uvm.UVMOptions{
-			ID:          vmID(c.ID),
-			Owner:       cfg.Owner,
-			ConsolePipe: cfg.VMConsolePipe,
-		}
-
 		const (
 			annotationAllowOverCommit      = "io.microsoft.virtualmachine.computetopology.memory.allowovercommit"
 			annotationEnableDeferredCommit = "io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit"
@@ -392,55 +431,14 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 			annotationVPMemSize            = "io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes"
 		)
 
-		// Cater for fields that can be configured via OCI annotations
-		if v, ok := cfg.Spec.Annotations[annotationAllowOverCommit]; ok {
-			yes := true
-			no := false
-			switch strings.ToLower(v) {
-			case "true":
-				opts.AllowOvercommit = &yes
-			case "false":
-				opts.AllowOvercommit = &no
-			default:
-				return nil, fmt.Errorf("annotation %s must be true or false", annotationAllowOverCommit)
-			}
-		}
-
-		if v, ok := cfg.Spec.Annotations[annotationEnableDeferredCommit]; ok {
-			yes := true
-			no := false
-			switch strings.ToLower(v) {
-			case "true":
-				opts.EnableDeferredCommit = &yes
-			case "false":
-				opts.EnableDeferredCommit = &no
-			default:
-				return nil, fmt.Errorf("annotation %s must be true or false", annotationEnableDeferredCommit)
-			}
-		}
-
-		if v, ok := cfg.Spec.Annotations[annotationVPMemCount]; ok {
-			var (
-				countu uint64
-				counti uint32
-				err    error
-			)
-			if countu, err = strconv.ParseUint(v, 10, 32); err != nil {
-				return nil, fmt.Errorf("annotation %s could not be parsed: %s", annotationVPMemCount, err)
-			}
-			counti = uint32(countu)
-			opts.VPMemDeviceCount = &counti
-		}
-
-		if v, ok := cfg.Spec.Annotations[annotationVPMemSize]; ok {
-			var (
-				countu uint64
-				err    error
-			)
-			if countu, err = strconv.ParseUint(v, 10, 64); err != nil {
-				return nil, fmt.Errorf("annotation %s could not be parsed: %s", annotationVPMemSize, err)
-			}
-			opts.VPMemSizeBytes = &countu
+		opts := &uvm.UVMOptions{
+			ID:                   vmID(c.ID),
+			Owner:                cfg.Owner,
+			ConsolePipe:          cfg.VMConsolePipe,
+			AllowOvercommit:      parseAnnotationsBool(cfg.Spec.Annotations, annotationAllowOverCommit),
+			EnableDeferredCommit: parseAnnotationsBool(cfg.Spec.Annotations, annotationEnableDeferredCommit),
+			VPMemDeviceCount:     parseAnnotationsUint32(cfg.Spec.Annotations, annotationVPMemCount),
+			VPMemSizeBytes:       parseAnnotationsUint64(cfg.Spec.Annotations, annotationVPMemSize),
 		}
 
 		shim, err := c.startVMShim(cfg.VMLogFile, opts)
