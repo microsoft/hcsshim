@@ -27,18 +27,32 @@ import (
 var errContainerStopped = errors.New("container is stopped")
 
 type persistedState struct {
-	ID             string
-	Owner          string
-	SandboxID      string
-	HostID         string
-	Bundle         string
-	Created        time.Time
-	Rootfs         string
-	Spec           *specs.Spec
-	RequestedNetNS string
-	IsHost         bool
-	UniqueID       guid.GUID
-	HostUniqueID   guid.GUID
+	// ID is the id of this container/UVM.
+	ID string `json:",omitempty"`
+	// Owner is the owner value passed into the runhcs command and may be `""`.
+	Owner string `json:",omitempty"`
+	// SandboxID is the sandbox identifer passed in via OCI specifications. This
+	// can either be the sandbox itself or the sandbox this container should run
+	// in. See `parseSandboxAnnotations`.
+	SandboxID string `json:",omitempty"`
+	// HostID will be VM ID hosting this container. If a sandbox is used it will
+	// match the `SandboxID`.
+	HostID string `json:",omitempty"`
+	// Bundle is the folder path on disk where the container state and spec files
+	// reside.
+	Bundle  string    `json:",omitempty"`
+	Created time.Time `json:",omitempty"`
+	Rootfs  string    `json:",omitempty"`
+	// Spec is the in memory deserialized values found on `Bundle\config.json`.
+	Spec           *specs.Spec `json:",omitempty"`
+	RequestedNetNS string      `json:",omitempty"`
+	// IsHost is `true` when this is a VM isolated config.
+	IsHost bool `json:",omitempty"`
+	// UniqueID is a unique ID generated per container config.
+	UniqueID guid.GUID `json:",omitempty"`
+	// HostUniqueID is the unique ID of the hosting VM if this container is
+	// hosted.
+	HostUniqueID guid.GUID `json:",omitempty"`
 }
 
 type containerStatus string
