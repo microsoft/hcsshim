@@ -14,13 +14,13 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func runMemStartLCOWTest(t *testing.T, opts *uvm.UVMOptions) {
-	u := testutilities.CreateLCOWUVMFromOpts(t, opts)
+func runMemStartLCOWTest(t *testing.T, opts *uvm.Options) {
+	u := testutilities.CreateLCOWUVMFromOpts(t, &uvm.OptionsLCOW{Options: opts})
 	u.Close()
 }
 
-func runMemStartWCOWTest(t *testing.T, opts *uvm.UVMOptions) {
-	u, _, scratchDir := testutilities.CreateWCOWUVMFromOptsWithImage(t, opts, "microsoft/nanoserver")
+func runMemStartWCOWTest(t *testing.T, opts *uvm.Options) {
+	u, _, scratchDir := testutilities.CreateWCOWUVMFromOptsWithImage(t, &uvm.OptionsWCOW{Options: opts}, "microsoft/nanoserver")
 	defer os.RemoveAll(scratchDir)
 	u.Close()
 }
@@ -43,9 +43,8 @@ func runMemTests(t *testing.T, os string) {
 
 	mem := uint64(512 * 1024 * 1024) // 512 MB (OCI in Bytes)
 	for _, bt := range testCases {
-		opts := &uvm.UVMOptions{
-			ID:              t.Name(),
-			OperatingSystem: os,
+		opts := &uvm.Options{
+			ID: t.Name(),
 			Resources: &specs.WindowsResources{
 				Memory: &specs.WindowsMemoryResources{
 					Limit: &mem,
@@ -73,8 +72,9 @@ func TestMemBackingTypeLCOW(t *testing.T) {
 	runMemTests(t, "linux")
 }
 
-func runBenchMemStartTest(b *testing.B, opts *uvm.UVMOptions) {
-	u, err := uvm.Create(opts)
+func runBenchMemStartTest(b *testing.B, opts *uvm.Options) {
+	// Cant use testutilities here because its `testing.B` not `testing.T`
+	u, err := uvm.CreateLCOW(&uvm.OptionsLCOW{Options: opts})
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -87,9 +87,8 @@ func runBenchMemStartTest(b *testing.B, opts *uvm.UVMOptions) {
 func runBenchMemStartLcowTest(b *testing.B, allowOverCommit bool, enableDeferredCommit bool) {
 	mem := uint64(512 * 1024 * 1024) // 512 MB (OCI in Bytes)
 	for i := 0; i < b.N; i++ {
-		opts := &uvm.UVMOptions{
-			ID:              b.Name(),
-			OperatingSystem: "linux",
+		opts := &uvm.Options{
+			ID: b.Name(),
 			Resources: &specs.WindowsResources{
 				Memory: &specs.WindowsMemoryResources{
 					Limit: &mem,

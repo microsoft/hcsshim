@@ -11,11 +11,12 @@ import (
 // CreateWCOWUVM creates a WCOW utility VM with all default options. Returns the
 // UtilityVM object; folder used as its scratch
 func CreateWCOWUVM(t *testing.T, id, image string) (*uvm.UtilityVM, []string, string) {
-	return CreateWCOWUVMFromOptsWithImage(t, &uvm.UVMOptions{ID: id, OperatingSystem: "windows"}, image)
+	return CreateWCOWUVMFromOptsWithImage(t, &uvm.OptionsWCOW{Options: &uvm.Options{ID: id}}, image)
+
 }
 
 // CreateWCOWUVMFromOpts creates a WCOW utility VM with the passed opts.
-func CreateWCOWUVMFromOpts(t *testing.T, opts *uvm.UVMOptions) *uvm.UtilityVM {
+func CreateWCOWUVMFromOpts(t *testing.T, opts *uvm.OptionsWCOW) *uvm.UtilityVM {
 	if opts == nil || len(opts.LayerFolders) < 2 {
 		t.Fatalf("opts must bet set with LayerFolders")
 	}
@@ -23,7 +24,7 @@ func CreateWCOWUVMFromOpts(t *testing.T, opts *uvm.UVMOptions) *uvm.UtilityVM {
 		opts.ID = guid.New().String()
 	}
 
-	uvm, err := uvm.Create(opts)
+	uvm, err := uvm.CreateWCOW(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +38,7 @@ func CreateWCOWUVMFromOpts(t *testing.T, opts *uvm.UVMOptions) *uvm.UtilityVM {
 // CreateWCOWUVMFromOptsWithImage creates a WCOW utility VM with the passed opts
 // builds the LayerFolders based on `image`. Returns the UtilityVM object;
 // folder used as its scratch
-func CreateWCOWUVMFromOptsWithImage(t *testing.T, opts *uvm.UVMOptions, image string) (*uvm.UtilityVM, []string, string) {
+func CreateWCOWUVMFromOptsWithImage(t *testing.T, opts *uvm.OptionsWCOW, image string) (*uvm.UtilityVM, []string, string) {
 	if opts == nil {
 		t.Fatal("opts must be set")
 	}
@@ -58,19 +59,21 @@ func CreateWCOWUVMFromOptsWithImage(t *testing.T, opts *uvm.UVMOptions, image st
 
 // CreateLCOWUVM with all default options.
 func CreateLCOWUVM(t *testing.T, id string) *uvm.UtilityVM {
-	return CreateLCOWUVMFromOpts(t, &uvm.UVMOptions{ID: id, OperatingSystem: "linux"})
+	return CreateLCOWUVMFromOpts(t, &uvm.OptionsLCOW{Options: &uvm.Options{ID: id}})
 }
 
 // CreateLCOWUVMFromOpts creates an LCOW utility VM with the specified options.
-func CreateLCOWUVMFromOpts(t *testing.T, opts *uvm.UVMOptions) *uvm.UtilityVM {
+func CreateLCOWUVMFromOpts(t *testing.T, opts *uvm.OptionsLCOW) *uvm.UtilityVM {
 	if opts == nil {
-		opts = &uvm.UVMOptions{}
+		opts = &uvm.OptionsLCOW{
+			Options: &uvm.Options{},
+		}
 	}
 	if opts.ID == "" {
 		opts.ID = guid.New().String()
 	}
 
-	uvm, err := uvm.Create(opts)
+	uvm, err := uvm.CreateLCOW(opts)
 	if err != nil {
 		t.Fatal(err)
 	}

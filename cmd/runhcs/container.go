@@ -303,29 +303,15 @@ func parseAnnotationsUint64(a map[string]string, key string) *uint64 {
 	return nil
 }
 
-func (c *container) startVMShim(logFile string, opts *uvm.UVMOptions) (*os.Process, error) {
-	if c.Spec.Linux != nil {
-		opts.OperatingSystem = "linux"
+// startVMShim starts a vm-shim command with the specified `opts`. `opts` can be `uvm.OptionsWCOW` or `uvm.OptionsLCOW`
+func (c *container) startVMShim(logFile string, opts interface{}) (*os.Process, error) {
+	var os string
+	if _, ok := opts.(*uvm.OptionsLCOW); ok {
+		os = "linux"
 	} else {
-		opts.OperatingSystem = "windows"
-
-		// In order for the UVM sandbox.vhdx not to collide with the actual
-		// nested Argon sandbox.vhdx we append the \vm folder to the last entry
-		// in the list.
-		layers := make([]string, len(c.Spec.Windows.LayerFolders))
-		for i, f := range c.Spec.Windows.LayerFolders {
-			if i == len(c.Spec.Windows.LayerFolders)-1 {
-				f = filepath.Join(f, "vm")
-				err := os.MkdirAll(f, 0)
-				if err != nil {
-					return nil, err
-				}
-			}
-			layers[i] = f
-		}
-		opts.LayerFolders = layers
+		os = "windows"
 	}
-	args := []string{}
+	args := []string{"--os", os}
 	if strings.HasPrefix(logFile, runhcs.SafePipePrefix) {
 		args = append(args, "--log-pipe", logFile)
 	}
@@ -479,6 +465,8 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 
 	// Start a VM if necessary.
 	if newvm {
+		var opts interface{}
+
 		const (
 			annotationAllowOverCommit      = "io.microsoft.virtualmachine.computetopology.memory.allowovercommit"
 			annotationEnableDeferredCommit = "io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit"
@@ -489,36 +477,60 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 			annotationPreferredRootFSType  = "io.microsoft.virtualmachine.lcow.preferredrootfstype"
 		)
 
-		opts := &uvm.UVMOptions{
-			ID:    vmID(c.ID),
-			Owner: cfg.Owner,
-			// Resources are used for both LCOW/WCOW memory/processor etc.
-			Resources:            c.Spec.Windows.Resources,
-			ConsolePipe:          cfg.VMConsolePipe,
+		bothOpts := &uvm.Options{
+			ID:                   vmID(c.ID),
+			Owner:                cfg.Owner,
+			Resources:            cfg.Spec.Windows.Resources,
 			AllowOvercommit:      parseAnnotationsBool(cfg.Spec.Annotations, annotationAllowOverCommit),
 			EnableDeferredCommit: parseAnnotationsBool(cfg.Spec.Annotations, annotationEnableDeferredCommit),
-			VPMemDeviceCount:     parseAnnotationsUint32(cfg.Spec.Annotations, annotationVPMemCount),
-			VPMemSizeBytes:       parseAnnotationsUint64(cfg.Spec.Annotations, annotationVPMemSize),
-			PreferredRootFSType:  parseAnnotationsPreferredRootFSType(cfg.Spec.Annotations, annotationPreferredRootFSType),
 		}
 
 		memSize := parseAnnotationsUint64(cfg.Spec.Annotations, annotationMemorySizeInMB)
 		cpuCount := parseAnnotationsUint64(cfg.Spec.Annotations, annotationProcessorCount)
 		if memSize != nil || cpuCount != nil {
-			if opts.Resources == nil {
-				opts.Resources = &specs.WindowsResources{}
+			if bothOpts.Resources == nil {
+				bothOpts.Resources = &specs.WindowsResources{}
 			}
 			if memSize != nil {
-				if opts.Resources.Memory == nil {
-					opts.Resources.Memory = &specs.WindowsMemoryResources{}
+				if bothOpts.Resources.Memory == nil {
+					bothOpts.Resources.Memory = &specs.WindowsMemoryResources{}
 				}
-				opts.Resources.Memory.Limit = memSize
+				bothOpts.Resources.Memory.Limit = memSize
 			}
 			if cpuCount != nil {
-				if opts.Resources.CPU == nil {
-					opts.Resources.CPU = &specs.WindowsCPUResources{}
+				if bothOpts.Resources.CPU == nil {
+					bothOpts.Resources.CPU = &specs.WindowsCPUResources{}
 				}
-				opts.Resources.CPU.Count = cpuCount
+				bothOpts.Resources.CPU.Count = cpuCount
+			}
+		}
+
+		if cfg.Spec.Linux != nil {
+			opts = &uvm.OptionsLCOW{
+				Options:             bothOpts,
+				ConsolePipe:         cfg.VMConsolePipe,
+				VPMemDeviceCount:    parseAnnotationsUint32(cfg.Spec.Annotations, annotationVPMemCount),
+				VPMemSizeBytes:      parseAnnotationsUint64(cfg.Spec.Annotations, annotationVPMemSize),
+				PreferredRootFSType: parseAnnotationsPreferredRootFSType(cfg.Spec.Annotations, annotationPreferredRootFSType),
+			}
+		} else {
+			// In order for the UVM sandbox.vhdx not to collide with the actual
+			// nested Argon sandbox.vhdx we append the \vm folder to the last entry
+			// in the list.
+			layersLen := len(cfg.Spec.Windows.LayerFolders)
+			layers := make([]string, layersLen)
+			copy(layers, cfg.Spec.Windows.LayerFolders)
+
+			vmPath := filepath.Join(layers[layersLen-1], "vm")
+			err := os.MkdirAll(vmPath, 0)
+			if err != nil {
+				return nil, err
+			}
+			layers[layersLen-1] = vmPath
+
+			opts = &uvm.OptionsWCOW{
+				Options:      bothOpts,
+				LayerFolders: layers,
 			}
 		}
 
