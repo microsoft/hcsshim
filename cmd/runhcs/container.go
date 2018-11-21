@@ -15,6 +15,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/regstate"
 	"github.com/Microsoft/hcsshim/internal/runhcs"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -235,7 +236,11 @@ func parseAnnotationsBool(a map[string]string, key string) *bool {
 		case "false":
 			return &no
 		default:
-			logrus.Warningf("annotation: '%s', with value: '%s', could not be parsed into boolean", key, v)
+			logrus.WithFields(logrus.Fields{
+				logfields.OCIAnnotation: key,
+				logfields.Value:         v,
+				logfields.ExpectedType:  logfields.Bool,
+			}).Warning("annotation could not be parsed")
 		}
 	}
 	return nil
@@ -270,7 +275,12 @@ func parseAnnotationsUint32(a map[string]string, key string) *uint32 {
 			v := uint32(countu)
 			return &v
 		}
-		logrus.Warningf("annotation: '%s', with value: '%s', could not be parsed into uint32: %s", key, v, err)
+		logrus.WithFields(logrus.Fields{
+			logfields.OCIAnnotation: key,
+			logfields.Value:         v,
+			logfields.ExpectedType:  logfields.Uint32,
+			logrus.ErrorKey:         err,
+		}).Warning("annotation could not be parsed")
 	}
 	return nil
 }
@@ -283,7 +293,12 @@ func parseAnnotationsUint64(a map[string]string, key string) *uint64 {
 		if err == nil {
 			return &countu
 		}
-		logrus.Warningf("annotation: '%s', with value: '%s', could not be parsed into uint64: %s", key, v, err)
+		logrus.WithFields(logrus.Fields{
+			logfields.OCIAnnotation: key,
+			logfields.Value:         v,
+			logfields.ExpectedType:  logfields.Uint64,
+			logrus.ErrorKey:         err,
+		}).Warning("annotation could not be parsed")
 	}
 	return nil
 }
@@ -589,7 +604,11 @@ func (c *container) Unmount(all bool) error {
 		err := c.issueVMRequest(op)
 		if err != nil {
 			if _, ok := err.(*noVMError); ok {
-				logrus.Warnf("did not unmount resources for container %s because VM shim for %s could not be contacted", c.ID, c.HostID)
+				logrus.WithFields(logrus.Fields{
+					logfields.ContainerID: c.ID,
+					logfields.UVMID:       c.HostID,
+					logrus.ErrorKey:       errors.New("failed to unmount container resources"),
+				}).Warning("VM shim could not be contacted")
 			} else {
 				return err
 			}
@@ -617,7 +636,10 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 	if vm != nil {
 		vmid = vm.ID()
 	}
-	logrus.Infof("creating container %s (VM: '%s')", c.ID, vmid)
+	logrus.WithFields(logrus.Fields{
+		logfields.ContainerID: c.ID,
+		logfields.UVMID:       vmid,
+	}).Info("creating container in UVM")
 	hc, resources, err := hcsoci.CreateContainer(opts)
 	if err != nil {
 		return err

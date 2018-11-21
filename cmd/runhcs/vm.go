@@ -10,6 +10,7 @@ import (
 
 	winio "github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/appargs"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/runhcs"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/pkg/errors"
@@ -112,7 +113,8 @@ var vmshimCommand = cli.Command{
 						ioutil.ReadAll(pipe)
 					}
 				} else {
-					logrus.Error("failed creating container in VM: ", err)
+					logrus.WithError(err).
+						Error("failed creating container in VM")
 					fmt.Fprintf(pipe, "%v", err)
 				}
 				pipe.Close()
@@ -140,7 +142,10 @@ func processRequest(vm *uvm.UtilityVM, pipe net.Conn) error {
 	if err != nil {
 		return err
 	}
-	logrus.Debug("received operation ", req.Op, " for ", req.ID)
+	logrus.WithFields(logrus.Fields{
+		logfields.ContainerID:     req.ID,
+		logfields.VMShimOperation: req.Op,
+	}).Debug("process request")
 	c, err := getContainer(req.ID, false)
 	if err != nil {
 		return err
