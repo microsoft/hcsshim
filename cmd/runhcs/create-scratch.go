@@ -53,6 +53,7 @@ var createScratchCommand = cli.Command{
 		} else {
 			opts := uvm.UVMOptions{
 				ID:              "createscratch-uvm",
+				Owner:           context.GlobalString("owner"),
 				OperatingSystem: "linux",
 			}
 			convertUVM, err := uvm.Create(&opts)
