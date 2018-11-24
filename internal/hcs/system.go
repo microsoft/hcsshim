@@ -106,7 +106,10 @@ func OpenComputeSystem(id string) (*System, error) {
 		handle  hcsSystem
 		resultp *uint16
 	)
+	completed := false
+	go syscallWatcher(fmt.Sprintf("OpenComputeSystem %s", id), &completed)
 	err := hcsOpenComputeSystem(id, &handle, &resultp)
+	completed = true
 	events := processHcsResult(resultp)
 	if err != nil {
 		return nil, makeSystemError(computeSystem, operation, "", err, events)

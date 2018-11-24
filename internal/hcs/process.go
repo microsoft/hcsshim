@@ -190,7 +190,10 @@ func (process *Process) ResizeConsole(width, height uint16) error {
 	modifyRequestStr := string(modifyRequestb)
 
 	var resultp *uint16
+	completed := false
+	go syscallWatcher(fmt.Sprintf("ModifyProcess %s: %d", process.SystemID(), process.Pid()), &completed)
 	err = hcsModifyProcess(process.handle, modifyRequestStr, &resultp)
+	completed = true
 	events := processHcsResult(resultp)
 	if err != nil {
 		return makeProcessError(process, operation, err, events)
@@ -279,7 +282,10 @@ func (process *Process) Stdio() (io.WriteCloser, io.ReadCloser, io.ReadCloser, e
 			processInfo hcsProcessInformation
 			resultp     *uint16
 		)
+		completed := false
+		go syscallWatcher(fmt.Sprintf("GetProcessInfo %s: %d", process.SystemID(), process.Pid()), &completed)
 		err := hcsGetProcessInfo(process.handle, &processInfo, &resultp)
+		completed = true
 		events := processHcsResult(resultp)
 		if err != nil {
 			return nil, nil, nil, makeProcessError(process, operation, err, events)
@@ -331,7 +337,10 @@ func (process *Process) CloseStdin() error {
 	modifyRequestStr := string(modifyRequestb)
 
 	var resultp *uint16
+	completed := false
+	go syscallWatcher(fmt.Sprintf("ModifyProcess %s: %d", process.SystemID(), process.Pid()), &completed)
 	err = hcsModifyProcess(process.handle, modifyRequestStr, &resultp)
+	completed = true
 	events := processHcsResult(resultp)
 	if err != nil {
 		return makeProcessError(process, operation, err, events)
@@ -359,9 +368,13 @@ func (process *Process) Close() error {
 		return makeProcessError(process, operation, err, nil)
 	}
 
+	completed := false
+	go syscallWatcher(fmt.Sprintf("CloseProcess %s: %d", process.SystemID(), process.Pid()), &completed)
 	if err := hcsCloseProcess(process.handle); err != nil {
+		completed = true
 		return makeProcessError(process, operation, err, nil)
 	}
+	completed = true
 
 	process.handle = 0
 
