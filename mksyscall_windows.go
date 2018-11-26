@@ -192,7 +192,7 @@ func (p *Param) SyscallArgList() []string {
 
 // IsError determines if p parameter is used to return error.
 func (p *Param) IsError() bool {
-	return p.Name == "err" && p.Type == "error"
+	return p.Type == "error"
 }
 
 // HelperType returns type of parameter p used in helper function.
@@ -228,9 +228,9 @@ type Rets struct {
 // ErrorVarName returns error variable name for r.
 func (r *Rets) ErrorVarName() string {
 	if r.ReturnsError {
-		return "err"
-	}
-	if r.Type == "error" {
+		if r.Name == "" {
+			return "err"
+		}
 		return r.Name
 	}
 	return ""
@@ -241,9 +241,6 @@ func (r *Rets) ToParams() []*Param {
 	ps := make([]*Param, 0)
 	if len(r.Name) > 0 {
 		ps = append(ps, &Param{Name: r.Name, Type: r.Type})
-	}
-	if r.ReturnsError {
-		ps = append(ps, &Param{Name: "err", Type: "error"})
 	}
 	return ps
 }
@@ -272,11 +269,7 @@ func (r *Rets) SetReturnValuesCode() string {
 	if r.Name == "" {
 		retvar = "r1"
 	}
-	errvar := "_"
-	if r.ReturnsError {
-		errvar = "e1"
-	}
-	return fmt.Sprintf("%s, _, %s := ", retvar, errvar)
+	return fmt.Sprintf("%s, _, _ := ", retvar)
 }
 
 func (r *Rets) useLongHandleErrorCode(retvar string) string {
@@ -425,10 +418,9 @@ func newFn(s string) (*Fn, error) {
 		case 1:
 			if r[0].IsError() {
 				f.Rets.ReturnsError = true
-			} else {
-				f.Rets.Name = r[0].Name
-				f.Rets.Type = r[0].Type
 			}
+			f.Rets.Name = r[0].Name
+			f.Rets.Type = r[0].Type
 		case 2:
 			if !r[1].IsError() {
 				return nil, errors.New("Only last windows error is allowed as second return value in \"" + f.src + "\"")
@@ -923,7 +915,7 @@ func {{.HelperName}}({{.HelperParamList}}) {{template "results" .}}{
 
 {{define "syscall"}}{{.Rets.SetReturnValuesCode}}{{.Syscall}}(proc{{.DLLFuncName}}.Addr(), {{.ParamCount}}, {{.SyscallParamList}}){{end}}
 
-{{define "syscallcheck"}}{{if .ConfirmProc}}if {{.Rets.ErrorVarName}} = proc{{.DLLFuncName}}.Find(); {{.Rets.ErrorVarName}} != nil {
+{{define "syscallcheck"}}{{if .ConfirmProc}}if {{if .Rets.ReturnsError}}{{.Rets.ErrorVarName}} ={{else}}err :={{end}} proc{{.DLLFuncName}}.Find(); {{if .Rets.ReturnsError}}{{.Rets.ErrorVarName}}{{else}}err{{end}} != nil {
     return
 }
 {{end}}{{end}}
