@@ -414,7 +414,7 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 			initArgs = `sh -c "` + initArgs + ` & exec sh"`
 		}
 
-		kernelArgs += ` -- ` + initArgs
+		kernelArgs += ` pci=off -- ` + initArgs
 		vm.Chipset.Uefi.BootThis = &hcsschema.UefiBootEntry{
 			DevicePath:   `\` + opts.KernelFile,
 			DeviceType:   "VmbFs",
