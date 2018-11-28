@@ -394,9 +394,11 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 			vm.Devices.VideoMonitor = &hcsschema.VideoMonitor{}
 		}
 
-		if !vmDebugging {
+		if vmDebugging {
+			kernelArgs += " 8250_core.nr_uarts=1 8250_core.skip_txen_test=1"
+		} else {
 			// Terminate the VM if there is a kernel panic.
-			kernelArgs += " panic=-1"
+			kernelArgs += " panic=-1 8250_core.nr_uarts=0"
 		}
 
 		if opts.KernelBootOptions != "" {
