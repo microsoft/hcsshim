@@ -22,7 +22,7 @@ import (
 // TestLCOWUVMNoSCSINoVPMemInitrd starts an LCOW utility VM without a SCSI controller and
 // no VPMem device. Uses initrd.
 func TestLCOWUVMNoSCSINoVPMemInitrd(t *testing.T) {
-	scsiCount := 0
+	var scsiCount uint32 = 0
 	var vpmemCount uint32 = 0
 	opts := &uvm.UVMOptions{
 		OperatingSystem:     "linux",
@@ -36,7 +36,7 @@ func TestLCOWUVMNoSCSINoVPMemInitrd(t *testing.T) {
 // TestLCOWUVMNoSCSISingleVPMemVHD starts an LCOW utility VM without a SCSI controller and
 // only a single VPMem device. Uses VPMEM VHD
 func TestLCOWUVMNoSCSISingleVPMemVHD(t *testing.T) {
-	scsiCount := 0
+	var scsiCount uint32 = 0
 	var vpmemCount uint32 = 1
 	var prfst uvm.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
 	opts := &uvm.UVMOptions{
