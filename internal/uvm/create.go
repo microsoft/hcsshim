@@ -398,7 +398,7 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 			kernelArgs += " 8250_core.nr_uarts=1 8250_core.skip_txen_test=1"
 		} else {
 			// Terminate the VM if there is a kernel panic.
-			kernelArgs += " panic=-1 8250_core.nr_uarts=0"
+			kernelArgs += " panic=-1 8250_core.nr_uarts=0 quiet"
 		}
 
 		if opts.KernelBootOptions != "" {
