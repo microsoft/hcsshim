@@ -19,8 +19,7 @@ func TestVPMEM(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 	alpineLayers := testutilities.LayerFolders(t, "alpine")
 
-	id := "TestVPMEM"
-	u := testutilities.CreateLCOWUVM(t, id)
+	u := testutilities.CreateLCOWUVM(t, t.Name())
 	defer u.Close()
 
 	var iterations uint32 = uvm.MaxVPMEMCount

@@ -14,29 +14,18 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func runMemStartTest(t *testing.T, opts *uvm.UVMOptions) {
-	u, err := uvm.Create(opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer u.Close()
-	if err := u.Start(); err != nil {
-		t.Fatal(err)
-	}
+func runMemStartLCOWTest(t *testing.T, opts *uvm.UVMOptions) {
+	u := testutilities.CreateLCOWUVMFromOpts(t, opts)
+	u.Close()
 }
 
 func runMemStartWCOWTest(t *testing.T, opts *uvm.UVMOptions) {
-	imageName := "microsoft/nanoserver"
-	layers := testutilities.LayerFolders(t, imageName)
-	scratchDir := testutilities.CreateTempDir(t)
+	u, _, scratchDir := testutilities.CreateWCOWUVMFromOptsWithImage(t, opts, "microsoft/nanoserver")
 	defer os.RemoveAll(scratchDir)
-
-	opts.LayerFolders = append(layers, scratchDir)
-	runMemStartTest(t, opts)
+	u.Close()
 }
 
 func runMemTests(t *testing.T, os string) {
-
 	type testCase struct {
 		allowOvercommit      *bool
 		enableDeferredCommit *bool
@@ -55,6 +44,7 @@ func runMemTests(t *testing.T, os string) {
 	mem := uint64(512 * 1024 * 1024) // 512 MB (OCI in Bytes)
 	for _, bt := range testCases {
 		opts := &uvm.UVMOptions{
+			ID:              t.Name(),
 			OperatingSystem: os,
 			Resources: &specs.WindowsResources{
 				Memory: &specs.WindowsMemoryResources{
@@ -68,7 +58,7 @@ func runMemTests(t *testing.T, os string) {
 		if os == "windows" {
 			runMemStartWCOWTest(t, opts)
 		} else {
-			runMemStartTest(t, opts)
+			runMemStartLCOWTest(t, opts)
 		}
 	}
 }
@@ -98,6 +88,7 @@ func runBenchMemStartLcowTest(b *testing.B, allowOverCommit bool, enableDeferred
 	mem := uint64(512 * 1024 * 1024) // 512 MB (OCI in Bytes)
 	for i := 0; i < b.N; i++ {
 		opts := &uvm.UVMOptions{
+			ID:              b.Name(),
 			OperatingSystem: "linux",
 			Resources: &specs.WindowsResources{
 				Memory: &specs.WindowsMemoryResources{

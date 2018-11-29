@@ -14,9 +14,7 @@ import (
 // TestVSMB tests adding/removing VSMB layers from a v2 Windows utility VM
 func TestVSMB(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	nanoLayers := testutilities.LayerFolders(t, "microsoft/nanoserver")
-
-	uvm, uvmScratchDir := testutilities.CreateWCOWUVM(t, nanoLayers, "", nil)
+	uvm, _, uvmScratchDir := testutilities.CreateWCOWUVM(t, t.Name(), "microsoft/nanoserver")
 	defer os.RemoveAll(uvmScratchDir)
 	defer uvm.Close()
 
