@@ -241,6 +241,26 @@ func parseAnnotationsBool(a map[string]string, key string) *bool {
 	return nil
 }
 
+// parseAnnotationsPreferredRootFSType searches `a` for `key` and verifies that the
+// value is in the set of allowed values. If `key` is not found returns `nil`.
+// Otherwise returns the index at which it was found in allowed values.
+func parseAnnotationsPreferredRootFSType(a map[string]string, key string) *uvm.PreferredRootFSType {
+	if v, ok := a[key]; ok {
+		// Following array must match enumeration uvm.PreferredRootFSType indexes
+		possibles := []string{"initrd", "vhd"}
+		for index, possible := range possibles {
+			if possible == v {
+				prfstype := uvm.PreferredRootFSType(index)
+				return &prfstype
+			}
+		}
+		logrus.Warningf("annotation: '%s', with value: '%s' must be one of %+v", key, v, possibles)
+		return nil
+
+	}
+	return nil
+}
+
 // parseAnnotationsUint32 searches `a` for `key` and if found verifies that the
 // value is a 32 bit unsigned integer. If `key` is not found returns `nil`.
 func parseAnnotationsUint32(a map[string]string, key string) *uint32 {
@@ -449,6 +469,7 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 			annotationEnableDeferredCommit = "io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit"
 			annotationVPMemCount           = "io.microsoft.virtualmachine.devices.virtualpmem.maximumcount"
 			annotationVPMemSize            = "io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes"
+			annotationPreferredRootFSType  = "io.microsoft.virtualmachine.lcow.preferredrootfstype"
 		)
 
 		opts := &uvm.UVMOptions{
@@ -461,6 +482,7 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 			EnableDeferredCommit: parseAnnotationsBool(cfg.Spec.Annotations, annotationEnableDeferredCommit),
 			VPMemDeviceCount:     parseAnnotationsUint32(cfg.Spec.Annotations, annotationVPMemCount),
 			VPMemSizeBytes:       parseAnnotationsUint64(cfg.Spec.Annotations, annotationVPMemSize),
+			PreferredRootFSType:  parseAnnotationsPreferredRootFSType(cfg.Spec.Annotations, annotationPreferredRootFSType),
 		}
 
 		shim, err := c.startVMShim(cfg.VMLogFile, opts)
