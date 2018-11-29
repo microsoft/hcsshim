@@ -389,12 +389,14 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 
 		if opts.ConsolePipe != "" {
 			vmDebugging = true
-			kernelArgs += " console=ttyS0,115200"
+			kernelArgs += " 8250_core.nr_uarts=1 8250_core.skip_txen_test=1 console=ttyS0,115200"
 			vm.Devices.ComPorts = map[string]hcsschema.ComPort{
 				"0": { // Which is actually COM1
 					NamedPipe: opts.ConsolePipe,
 				},
 			}
+		} else {
+			kernelArgs += " 8250_core.nr_uarts=0"
 		}
 
 		if opts.EnableGraphicsConsole {
@@ -405,11 +407,9 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 			vm.Devices.VideoMonitor = &hcsschema.VideoMonitor{}
 		}
 
-		if vmDebugging {
-			kernelArgs += " 8250_core.nr_uarts=1 8250_core.skip_txen_test=1"
-		} else {
+		if !vmDebugging {
 			// Terminate the VM if there is a kernel panic.
-			kernelArgs += " panic=-1 8250_core.nr_uarts=0 quiet"
+			kernelArgs += " panic=-1 quiet"
 		}
 
 		if opts.KernelBootOptions != "" {
