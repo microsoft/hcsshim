@@ -44,20 +44,31 @@ type UVMOptions struct {
 	LayerFolders []string // Set of folders for base layers and scratch. Ordered from top most read-only through base read-only layer, followed by scratch
 
 	// LCOW specific parameters
-	BootFilesPath         string               // Folder in which kernel and root file system reside. Defaults to \Program Files\Linux Containers
-	KernelFile            string               // Filename under BootFilesPath for the kernel. Defaults to `kernel`
-	RootFSFile            string               // Filename under BootFilesPath for the UVMs root file system. Defaults are `initrd.img` or `rootfs.vhd`.
-	PreferredRootFSType   *PreferredRootFSType // Controls searching for the RootFSFile.
-	KernelBootOptions     string               // Additional boot options for the kernel
-	EnableGraphicsConsole bool                 // If true, enable a graphics console for the utility VM
-	ConsolePipe           string               // The named pipe path to use for the serial console.  eg \\.\pipe\vmpipe
-	SCSIControllerCount   *int                 // The number of SCSI controllers. Defaults to 1 if omitted. Currently we only support 0 or 1.
+	BootFilesPath         string // Folder in which kernel and root file system reside. Defaults to \Program Files\Linux Containers
+	KernelFile            string // Filename under BootFilesPath for the kernel. Defaults to `kernel`
+	RootFSFile            string // Filename under BootFilesPath for the UVMs root file system. Defaults are `initrd.img` or `rootfs.vhd`.
+	KernelBootOptions     string // Additional boot options for the kernel
+	EnableGraphicsConsole bool   // If true, enable a graphics console for the utility VM
+	ConsolePipe           string // The named pipe path to use for the serial console.  eg \\.\pipe\vmpipe
+	SCSIControllerCount   *int   // The number of SCSI controllers. Defaults to 1 if omitted. Currently we only support 0 or 1.
 
 	// Fields that can be configured via OCI annotations in runhcs.
-	AllowOvercommit      *bool   // Memory for UVM. Defaults to true. For physical backed memory, set to false. io.microsoft.virtualmachine.computetopology.memory.allowovercommit=true|false
-	EnableDeferredCommit *bool   // Memory for UVM. Defaults to false. For virtual memory with deferred commit, set to true. io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit=true|false
-	VPMemDeviceCount     *uint32 // Number of VPMem devices. Limit at 128. If booting UVM from VHD, device 0 is taken. LCOW Only. io.microsoft.virtualmachine.devices.virtualpmem.maximumcount
-	VPMemSizeBytes       *uint64 // Size of the VPMem devices. LCOW Only. Defaults to 4GB. io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes
+
+	// Memory for UVM. Defaults to true. For physical backed memory, set to false. io.microsoft.virtualmachine.computetopology.memory.allowovercommit=true|false
+	AllowOvercommit *bool
+
+	// Memory for UVM. Defaults to false. For virtual memory with deferred commit, set to true. io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit=true|false
+	EnableDeferredCommit *bool
+
+	// Number of VPMem devices. Limit at 128. If booting UVM from VHD, device 0 is taken. LCOW Only. io.microsoft.virtualmachine.devices.virtualpmem.maximumcount
+	VPMemDeviceCount *uint32
+
+	// Size of the VPMem devices. LCOW Only. Defaults to 4GB. io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes
+	VPMemSizeBytes *uint64
+
+	// Controls searching for the RootFSFile. Defaults to initrd (0). Can be set to VHD (1). io.microsoft.virtualmachine.lcow.preferredrootfstype
+	// Note this uses an arbitrary annotation strict which has no direct mapping to the HCS schema.
+	PreferredRootFSType *PreferredRootFSType
 }
 
 const linuxLogVsockPort = 109
@@ -101,7 +112,7 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 	attachments := make(map[string]hcsschema.Attachment)
 	scsi := make(map[string]hcsschema.Scsi)
 	uvm.scsiControllerCount = 1
-	var actualRootFSType PreferredRootFSType = PreferredRootFSTypeInitRd // TODO Should we switch to VPMem/VHD as default?
+	var actualRootFSType PreferredRootFSType = PreferredRootFSTypeInitRd
 
 	if uvm.operatingSystem == "windows" {
 		if len(opts.LayerFolders) < 2 {
