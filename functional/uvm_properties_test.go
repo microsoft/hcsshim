@@ -13,10 +13,8 @@ import (
 
 func TestPropertiesGuestConnection_LCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	tempDir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(tempDir)
 
-	uvm := testutilities.CreateLCOWUVM(t, "TestCreateLCOWScratch")
+	uvm := testutilities.CreateLCOWUVM(t, t.Name())
 	defer uvm.Close()
 
 	p, err := uvm.ComputeSystem().Properties(schema1.PropertyTypeGuestConnection)
@@ -33,9 +31,7 @@ func TestPropertiesGuestConnection_LCOW(t *testing.T) {
 
 func TestPropertiesGuestConnection_WCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	imageName := "microsoft/nanoserver"
-	layers := testutilities.LayerFolders(t, imageName)
-	uvm, uvmScratchDir := testutilities.CreateWCOWUVM(t, layers, "", nil)
+	uvm, _, uvmScratchDir := testutilities.CreateWCOWUVM(t, t.Name(), "microsoft/nanoserver")
 	defer os.RemoveAll(uvmScratchDir)
 	defer uvm.Close()
 

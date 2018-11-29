@@ -18,9 +18,8 @@ import (
 // TODO: This is very basic. Need multiple shares and so-on. Can be iterated on later.
 func TestPlan9(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	//alpineLayers := testutilities.LayerFolders(t, "alpine")
 
-	uvm := testutilities.CreateLCOWUVM(t, "TestPlan9")
+	uvm := testutilities.CreateLCOWUVM(t, t.Name())
 	defer uvm.Close()
 
 	dir := testutilities.CreateTempDir(t)

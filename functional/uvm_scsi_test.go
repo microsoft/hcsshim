@@ -19,7 +19,7 @@ import (
 // negative testing so that a disk can't be attached twice.
 func TestSCSIAddRemoveLCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	u := testutilities.CreateLCOWUVM(t, "TestAddRemoveSCSILCOW")
+	u := testutilities.CreateLCOWUVM(t, t.Name())
 	defer u.Close()
 
 	testSCSIAddRemove(t, u, `/`, "linux", []string{})
@@ -31,9 +31,7 @@ func TestSCSIAddRemoveLCOW(t *testing.T) {
 // negative testing so that a disk can't be attached twice.
 func TestSCSIAddRemoveWCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	imageName := "microsoft/nanoserver"
-	layers := testutilities.LayerFolders(t, imageName)
-	u, uvmScratchDir := testutilities.CreateWCOWUVM(t, layers, "", nil)
+	u, layers, uvmScratchDir := testutilities.CreateWCOWUVM(t, t.Name(), "microsoft/nanoserver")
 	defer os.RemoveAll(uvmScratchDir)
 	defer u.Close()
 

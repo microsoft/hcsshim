@@ -52,13 +52,7 @@ func TestLCOWUVMNoSCSISingleVPMemVHD(t *testing.T) {
 
 func testLCOWUVMNoSCSISingleVPMem(t *testing.T, opts *uvm.UVMOptions, expected string) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	lcowUVM, err := uvm.Create(opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := lcowUVM.Start(); err != nil {
-		t.Fatal(err)
-	}
+	lcowUVM := testutilities.CreateLCOWUVMFromOpts(t, opts)
 	defer lcowUVM.Close()
 	out, err := exec.Command(`hcsdiag`, `exec`, `-uvm`, lcowUVM.ID(), `dmesg`).Output() // TODO: Move the CreateProcess.
 	if err != nil {
@@ -91,13 +85,7 @@ func testLCOWTimeUVMStart(t *testing.T, rfsType uvm.PreferredRootFSType) {
 			VPMemDeviceCount:    &vpmemCount,
 			PreferredRootFSType: &rfsType,
 		}
-		lcowUVM, err := uvm.Create(opts)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := lcowUVM.Start(); err != nil {
-			t.Fatal(err)
-		}
+		lcowUVM := testutilities.CreateLCOWUVMFromOpts(t, opts)
 		lcowUVM.Close()
 	}
 }
@@ -126,17 +114,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	defer os.RemoveAll(c2ScratchDir)
 	c2ScratchFile := filepath.Join(c2ScratchDir, "sandbox.vhdx")
 
-	opts := &uvm.UVMOptions{
-		OperatingSystem: "linux",
-		ID:              "uvm",
-	}
-	lcowUVM, err := uvm.Create(opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := lcowUVM.Start(); err != nil {
-		t.Fatal(err)
-	}
+	lcowUVM := testutilities.CreateLCOWUVM(t, "uvm")
 	defer lcowUVM.Close()
 
 	// Populate the cache and generate the scratch file for /tmp/scratch
