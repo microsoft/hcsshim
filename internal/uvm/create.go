@@ -44,13 +44,13 @@ type UVMOptions struct {
 	LayerFolders []string // Set of folders for base layers and scratch. Ordered from top most read-only through base read-only layer, followed by scratch
 
 	// LCOW specific parameters
-	BootFilesPath         string // Folder in which kernel and root file system reside. Defaults to \Program Files\Linux Containers
-	KernelFile            string // Filename under BootFilesPath for the kernel. Defaults to `kernel`
-	RootFSFile            string // Filename under BootFilesPath for the UVMs root file system. Defaults are `initrd.img` or `rootfs.vhd`.
-	KernelBootOptions     string // Additional boot options for the kernel
-	EnableGraphicsConsole bool   // If true, enable a graphics console for the utility VM
-	ConsolePipe           string // The named pipe path to use for the serial console.  eg \\.\pipe\vmpipe
-	SCSIControllerCount   *int   // The number of SCSI controllers. Defaults to 1 if omitted. Currently we only support 0 or 1.
+	BootFilesPath         string  // Folder in which kernel and root file system reside. Defaults to \Program Files\Linux Containers
+	KernelFile            string  // Filename under BootFilesPath for the kernel. Defaults to `kernel`
+	RootFSFile            string  // Filename under BootFilesPath for the UVMs root file system. Defaults are `initrd.img` or `rootfs.vhd`.
+	KernelBootOptions     string  // Additional boot options for the kernel
+	EnableGraphicsConsole bool    // If true, enable a graphics console for the utility VM
+	ConsolePipe           string  // The named pipe path to use for the serial console.  eg \\.\pipe\vmpipe
+	SCSIControllerCount   *uint32 // The number of SCSI controllers. Defaults to 1 if omitted. Currently we only support 0 or 1.
 
 	// Fields that can be configured via OCI annotations in runhcs.
 
@@ -183,7 +183,7 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 		scsi["0"] = hcsschema.Scsi{Attachments: attachments}
 		uvm.scsiControllerCount = 1
 		if opts.SCSIControllerCount != nil {
-			if *opts.SCSIControllerCount < 0 || *opts.SCSIControllerCount > 1 {
+			if *opts.SCSIControllerCount > 1 {
 				return nil, fmt.Errorf("SCSI controller count must be 0 or 1") // Future extension here for up to 4
 			}
 			uvm.scsiControllerCount = *opts.SCSIControllerCount
