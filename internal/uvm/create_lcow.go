@@ -51,6 +51,8 @@ type OptionsLCOW struct {
 	// Controls searching for the RootFSFile. Defaults to initrd (0). Can be set to VHD (1). io.microsoft.virtualmachine.lcow.preferredrootfstype
 	// Note this uses an arbitrary annotation strict which has no direct mapping to the HCS schema.
 	PreferredRootFSType *PreferredRootFSType
+
+	SuppressGcsLogs bool
 }
 
 const linuxLogVsockPort = 109
@@ -153,10 +155,10 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 					Count: getProcessors(opts.Resources),
 				},
 			},
-			GuestConnection: &hcsschema.GuestConnection{
-				UseVsock:            true,
-				UseConnectedSuspend: true,
-			},
+			// GuestConnection: &hcsschema.GuestConnection{
+			// 	UseVsock:            true,
+			// 	UseConnectedSuspend: true,
+			// },
 			Devices: &hcsschema.Devices{
 				HvSocket: &hcsschema.HvSocket2{
 					HvSocketConfig: &hcsschema.HvSocketSystemConfig{
@@ -264,9 +266,10 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 
 	// Start GCS with stderr pointing to the vsock port created below in
 	// order to forward guest logs to logrus.
-	initArgs := fmt.Sprintf("/bin/vsockexec -e %d /bin/gcs -log-format json -loglevel %s",
-		linuxLogVsockPort,
-		logrus.StandardLogger().Level.String())
+	// initArgs := fmt.Sprintf("/bin/vsockexec -e %d /bin/gcs -log-format json -loglevel %s",
+	// 	linuxLogVsockPort,
+	// 	logrus.StandardLogger().Level.String())
+	initArgs := fmt.Sprintf("/bin/vsockexec -o %d /bin/dmesg", linuxLogVsockPort)
 
 	if vmDebugging {
 		// Launch a shell on the console.
@@ -313,6 +316,8 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 
 	// Create a socket that the GCS can send logrus log data to.
 	uvm.gcslog, err = uvm.listenVsock(linuxLogVsockPort)
+	uvm.gcsLogsExited = make(chan struct{})
+	uvm.suppressGcsLogs = opts.SuppressGcsLogs
 	if err != nil {
 		return nil, err
 	}
