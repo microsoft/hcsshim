@@ -17,6 +17,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/internal/wcow"
+	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/linuxkit/virtsock/pkg/hvsock"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
@@ -46,6 +47,7 @@ type UVMOptions struct {
 	// LCOW specific parameters
 	BootFilesPath         string  // Folder in which kernel and root file system reside. Defaults to \Program Files\Linux Containers
 	KernelFile            string  // Filename under BootFilesPath for the kernel. Defaults to `kernel`
+	KernelDirect          bool    // Skip UEFI and boot directly to `kernel`
 	RootFSFile            string  // Filename under BootFilesPath for the UVMs root file system. Defaults are `initrd.img` or `rootfs.vhd`.
 	KernelBootOptions     string  // Additional boot options for the kernel
 	EnableGraphicsConsole bool    // If true, enable a graphics console for the utility VM
@@ -178,6 +180,9 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 				}
 				uvm.vpmemMaxSizeBytes = *opts.VPMemSizeBytes
 			}
+		}
+		if opts.KernelDirect && osversion.Get().Build < 18286 {
+			return nil, fmt.Errorf("KernelDirectBoot is not support on builds older than 18286")
 		}
 
 		scsi["0"] = hcsschema.Scsi{Attachments: attachments}
@@ -333,19 +338,21 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 		vmDebugging := false
 		vm.GuestConnection.UseVsock = true
 		vm.GuestConnection.UseConnectedSuspend = true
-		vm.Devices.VirtualSmb = &hcsschema.VirtualSmb{
-			Shares: []hcsschema.VirtualSmbShare{
-				{
-					Name: "os",
-					Path: opts.BootFilesPath,
-					Options: &hcsschema.VirtualSmbShareOptions{
-						ReadOnly:            true,
-						TakeBackupPrivilege: true,
-						CacheIo:             true,
-						ShareRead:           true,
+		if !opts.KernelDirect {
+			vm.Devices.VirtualSmb = &hcsschema.VirtualSmb{
+				Shares: []hcsschema.VirtualSmbShare{
+					{
+						Name: "os",
+						Path: opts.BootFilesPath,
+						Options: &hcsschema.VirtualSmbShareOptions{
+							ReadOnly:            true,
+							TakeBackupPrivilege: true,
+							CacheIo:             true,
+							ShareRead:           true,
+						},
 					},
 				},
-			},
+			}
 		}
 
 		if uvm.vpmemMaxCount > 0 {
@@ -355,8 +362,13 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 			}
 		}
 
-		kernelArgs := "initrd=/" + opts.RootFSFile
-		if actualRootFSType == PreferredRootFSTypeVHD {
+		var kernelArgs string
+		switch actualRootFSType {
+		case PreferredRootFSTypeInitRd:
+			if !opts.KernelDirect {
+				kernelArgs = "initrd=/" + opts.RootFSFile
+			}
+		case PreferredRootFSTypeVHD:
 			kernelArgs = "root=/dev/pmem0 init=/init"
 		}
 
@@ -428,10 +440,22 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 		}
 
 		kernelArgs += ` pci=off -- ` + initArgs
-		vm.Chipset.Uefi.BootThis = &hcsschema.UefiBootEntry{
-			DevicePath:   `\` + opts.KernelFile,
-			DeviceType:   "VmbFs",
-			OptionalData: kernelArgs,
+
+		if !opts.KernelDirect {
+			vm.Chipset.Uefi.BootThis = &hcsschema.UefiBootEntry{
+				DevicePath:   `\` + opts.KernelFile,
+				DeviceType:   "VmbFs",
+				OptionalData: kernelArgs,
+			}
+		} else {
+			vm.Chipset.Uefi = nil
+			vm.Chipset.LinuxKernelDirect = &hcsschema.LinuxKernelDirect{
+				KernelFilePath: filepath.Join(opts.BootFilesPath, opts.KernelFile),
+				KernelCmdLine:  kernelArgs,
+			}
+			if actualRootFSType == PreferredRootFSTypeInitRd {
+				vm.Chipset.LinuxKernelDirect.InitRdPath = filepath.Join(opts.BootFilesPath, opts.RootFSFile)
+			}
 		}
 	}
 

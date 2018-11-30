@@ -66,17 +66,38 @@ func testLCOWUVMNoSCSISingleVPMem(t *testing.T, opts *uvm.UVMOptions, expected s
 // TestLCOWTimeUVMStartVHD starts/terminates a utility VM booting from VPMem-
 // attached root filesystem a number of times.
 func TestLCOWTimeUVMStartVHD(t *testing.T) {
-	testLCOWTimeUVMStart(t, uvm.PreferredRootFSTypeVHD)
+	testutilities.RequiresBuild(t, osversion.RS5)
+
+	testLCOWTimeUVMStart(t, false, uvm.PreferredRootFSTypeVHD)
+}
+
+// TestLCOWUVMStart_KernelDirect_VHD starts/terminates a utility VM booting from
+// VPMem- attached root filesystem a number of times starting from the Linux
+// Kernel directly and skipping EFI.
+func TestLCOWUVMStart_KernelDirect_VHD(t *testing.T) {
+	testutilities.RequiresBuild(t, 18286)
+
+	testLCOWTimeUVMStart(t, true, uvm.PreferredRootFSTypeVHD)
 }
 
 // TestLCOWTimeUVMStartInitRD starts/terminates a utility VM booting from initrd-
 // attached root file system a number of times.
 func TestLCOWTimeUVMStartInitRD(t *testing.T) {
-	testLCOWTimeUVMStart(t, uvm.PreferredRootFSTypeInitRd)
+	testutilities.RequiresBuild(t, osversion.RS5)
+
+	testLCOWTimeUVMStart(t, false, uvm.PreferredRootFSTypeInitRd)
 }
 
-func testLCOWTimeUVMStart(t *testing.T, rfsType uvm.PreferredRootFSType) {
-	testutilities.RequiresBuild(t, osversion.RS5)
+// TestLCOWUVMStart_KernelDirect_InitRd starts/terminates a utility VM booting
+// from initrd- attached root file system a number of times starting from the
+// Linux Kernel directly and skipping EFI.
+func TestLCOWUVMStart_KernelDirect_InitRd(t *testing.T) {
+	testutilities.RequiresBuild(t, 18286)
+
+	testLCOWTimeUVMStart(t, true, uvm.PreferredRootFSTypeInitRd)
+}
+
+func testLCOWTimeUVMStart(t *testing.T, kernelDirect bool, rfsType uvm.PreferredRootFSType) {
 	var vpmemCount uint32 = 32
 	for i := 0; i < 3; i++ {
 		opts := &uvm.UVMOptions{
@@ -84,6 +105,7 @@ func testLCOWTimeUVMStart(t *testing.T, rfsType uvm.PreferredRootFSType) {
 			ID:                  "uvm",
 			VPMemDeviceCount:    &vpmemCount,
 			PreferredRootFSType: &rfsType,
+			KernelDirect:        kernelDirect,
 		}
 		lcowUVM := testutilities.CreateLCOWUVMFromOpts(t, opts)
 		lcowUVM.Close()
