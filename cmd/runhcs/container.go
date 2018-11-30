@@ -467,6 +467,8 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		const (
 			annotationAllowOverCommit      = "io.microsoft.virtualmachine.computetopology.memory.allowovercommit"
 			annotationEnableDeferredCommit = "io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit"
+			annotationMemorySizeInMB       = "io.microsoft.virtualmachine.computetopology.memory.sizeinmb"
+			annotationProcessorCount       = "io.microsoft.virtualmachine.computetopology.processor.count"
 			annotationVPMemCount           = "io.microsoft.virtualmachine.devices.virtualpmem.maximumcount"
 			annotationVPMemSize            = "io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes"
 			annotationPreferredRootFSType  = "io.microsoft.virtualmachine.lcow.preferredrootfstype"
@@ -483,6 +485,26 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 			VPMemDeviceCount:     parseAnnotationsUint32(cfg.Spec.Annotations, annotationVPMemCount),
 			VPMemSizeBytes:       parseAnnotationsUint64(cfg.Spec.Annotations, annotationVPMemSize),
 			PreferredRootFSType:  parseAnnotationsPreferredRootFSType(cfg.Spec.Annotations, annotationPreferredRootFSType),
+		}
+
+		memSize := parseAnnotationsUint64(cfg.Spec.Annotations, annotationMemorySizeInMB)
+		cpuCount := parseAnnotationsUint64(cfg.Spec.Annotations, annotationProcessorCount)
+		if memSize != nil || cpuCount != nil {
+			if opts.Resources == nil {
+				opts.Resources = &specs.WindowsResources{}
+			}
+			if memSize != nil {
+				if opts.Resources.Memory == nil {
+					opts.Resources.Memory = &specs.WindowsMemoryResources{}
+				}
+				opts.Resources.Memory.Limit = memSize
+			}
+			if cpuCount != nil {
+				if opts.Resources.CPU == nil {
+					opts.Resources.CPU = &specs.WindowsCPUResources{}
+				}
+				opts.Resources.CPU.Count = cpuCount
+			}
 		}
 
 		shim, err := c.startVMShim(cfg.VMLogFile, opts)
