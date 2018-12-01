@@ -369,7 +369,7 @@ func Create(opts *UVMOptions) (_ *UtilityVM, err error) {
 				kernelArgs = "initrd=/" + opts.RootFSFile
 			}
 		case PreferredRootFSTypeVHD:
-			kernelArgs = "root=/dev/pmem0 init=/init"
+			kernelArgs = "root=/dev/pmem0 ro init=/init"
 		}
 
 		// Support for VPMem VHD(X) booting rather than initrd..
