@@ -467,6 +467,8 @@ const (
 	MrtCombinedLayers = ModifyResourceType("CombinedLayers")
 	// MrtVPMemDevice is the modify resource type for VPMem devices
 	MrtVPMemDevice = ModifyResourceType("VPMemDevice")
+	// MrtNetwork is the modify resource type for the `NetworkAdapterV2` device.
+	MrtNetwork = ModifyResourceType("Network")
 )
 
 // ModifyRequestType is the type of operation to perform on a given modify
@@ -606,6 +608,12 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 				return &request, errors.Wrap(err, "failed to unmarshal settings as CombinedLayersV2")
 			}
 			msr.Settings = cl
+		case MrtNetwork:
+			na := &NetworkAdapterV2{}
+			if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, na); err != nil {
+				return &request, errors.Wrap(err, "failed to unmarshal settings as NetworkAdapterV2")
+			}
+			msr.Settings = na
 		default:
 			return &request, errors.Errorf("invalid ResourceType '%s'", msr.ResourceType)
 		}
@@ -709,6 +717,21 @@ type NetworkAdapter struct {
 	HostDNSSuffix      string `json:"HostDnsSuffix,omitempty"`
 	EnableLowMetric    bool   `json:",omitempty"`
 	EncapOverhead      uint16 `json:",omitempty"`
+}
+
+// NetworkAdapterV2 represents a network interface and its associated
+// configuration in a namespace.
+type NetworkAdapterV2 struct {
+	NamespaceID     string `json:",omitempty"`
+	ID              string `json:",omitempty"`
+	MacAddress      string `json:",omitempty"`
+	IPAddress       string `json:",omitempty"`
+	PrefixLength    uint8  `json:",omitempty"`
+	GatewayAddress  string `json:",omitempty"`
+	DNSSuffix       string `json:",omitempty"`
+	DNSServerList   string `json:",omitempty"`
+	EnableLowMetric bool   `json:",omitempty"`
+	EncapOverhead   uint16 `json:",omitempty"`
 }
 
 // MappedVirtualDisk represents a disk on the host which is mapped into a

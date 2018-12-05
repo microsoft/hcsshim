@@ -4,13 +4,14 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
-
-	"github.com/sirupsen/logrus"
+	"time"
 
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/oslayer"
@@ -20,6 +21,7 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/transport"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 // UVMContainerID is the ContainerID that will be sent on any prot.MessageBase
@@ -36,10 +38,23 @@ type Host struct {
 	rtime runtime.Runtime
 	osl   oslayer.OS
 	vsock transport.Transport
+
+	// cachedAdapters is a map from `NamespaceID` to adapter.
+	cachedAdapters map[string][]*prot.NetworkAdapterV2
+	// networkNSToContainer is a map from `NamespaceID` to `ContainerID`. If the
+	// map entry does not exist then the adapter is cached in `cachedAdapters`
+	// for addition when the container is eventually created.
+	networkNSToContainer sync.Map
 }
 
 func NewHost(rtime runtime.Runtime, osl oslayer.OS, vsock transport.Transport) *Host {
-	return &Host{rtime: rtime, osl: osl, vsock: vsock, containers: make(map[string]*Container)}
+	return &Host{
+		containers:     make(map[string]*Container),
+		rtime:          rtime,
+		osl:            osl,
+		vsock:          vsock,
+		cachedAdapters: make(map[string][]*prot.NetworkAdapterV2),
+	}
 }
 
 func (h *Host) getContainerLocked(id string) (*Container, error) {
@@ -104,6 +119,7 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create container")
 	}
+
 	c = &Container{
 		id:        id,
 		vsock:     h.vsock,
@@ -114,6 +130,25 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 	// Add the WG count for the init process
 	c.processesWg.Add(1)
 	c.initProcess = newProcess(c, settings.OCISpecification.Process, con.(runtime.Process), uint32(c.container.Pid()))
+
+	// Add cached network adapters that were added previous to container create.
+	if settings.OCISpecification.Windows != nil &&
+		settings.OCISpecification.Windows.Network != nil &&
+		settings.OCISpecification.Windows.Network.NetworkNamespace != "" {
+		ns := strings.ToLower(settings.OCISpecification.Windows.Network.NetworkNamespace)
+		if adapters, ok := h.cachedAdapters[ns]; ok {
+			for _, a := range adapters {
+				err = c.AddNetworkAdapter(h.osl, a)
+				if err != nil {
+					return nil, err
+				}
+			}
+			delete(h.cachedAdapters, ns)
+		}
+		// Add a link for all HotAdd/Remove from NS id to this container.
+		h.networkNSToContainer.Store(ns, id)
+	}
+
 	h.containers[id] = c
 	return c, nil
 }
@@ -239,6 +274,49 @@ func (h *Host) ModifyHostSettings(settings *prot.ModifySettingRequest) error {
 			cl := setting.(*prot.CombinedLayersV2)
 			return unmountPath(h.osl, cl.ContainerRootPath, true)
 		}
+	case prot.MrtNetwork:
+		add = func(setting interface{}) error {
+			na := setting.(*prot.NetworkAdapterV2)
+			na.NamespaceID = strings.ToLower(na.NamespaceID)
+			if cidraw, ok := h.networkNSToContainer.Load(na.NamespaceID); ok {
+				// The container has already been created. Get it and add this
+				// adapter in real time.
+				c, err := h.GetContainer(cidraw.(string))
+				if err != nil {
+					return err
+				}
+				return c.AddNetworkAdapter(h.osl, na)
+			}
+			h.cachedAdapters[na.NamespaceID] = append(h.cachedAdapters[na.NamespaceID], na)
+			return nil
+		}
+		remove = func(setting interface{}) error {
+			na := setting.(*prot.NetworkAdapterV2)
+			na.NamespaceID = strings.ToLower(na.NamespaceID)
+			if cidraw, ok := h.networkNSToContainer.Load(na.NamespaceID); ok {
+				// The container was previously created or is still. Remove the
+				// network. If the container is not found we just remove the
+				// namespace reference.
+				if c, err := h.GetContainer(cidraw.(string)); err == nil {
+					return c.RemoveNetworkAdapter(h.osl, na.ID)
+				}
+				h.networkNSToContainer.Delete(na.NamespaceID)
+			} else {
+				if adapters, ok := h.cachedAdapters[na.NamespaceID]; ok {
+					var i int
+					var a *prot.NetworkAdapterV2
+					for i, a = range adapters {
+						if na.ID == a.ID {
+							break
+						}
+					}
+					if a != nil {
+						h.cachedAdapters[na.NamespaceID] = append(adapters[:i], adapters[i+1:]...)
+					}
+				}
+			}
+			return nil
+		}
 	default:
 		return errors.Errorf("the resource type \"%s\" is not supported", settings.ResourceType)
 	}
@@ -351,6 +429,60 @@ func (c *Container) Wait() int {
 	logrus.Debugf("container: %s, beginning wait", c.id)
 	c.processesWg.Wait()
 	return c.initProcess.exitCode
+}
+
+// AddNetworkAdapter adds `a` to the network namespace held by this container.
+func (c *Container) AddNetworkAdapter(o oslayer.OS, a *prot.NetworkAdapterV2) error {
+	// TODO: netnscfg is not coded for v2 but since they are almost the same
+	// just convert the parts of the adapter here.
+	v1Adapter := &prot.NetworkAdapter{
+		NatEnabled:         a.IPAddress != "",
+		AllocatedIPAddress: a.IPAddress,
+		HostIPAddress:      a.GatewayAddress,
+		HostIPPrefixLength: a.PrefixLength,
+		EnableLowMetric:    a.EnableLowMetric,
+		EncapOverhead:      a.EncapOverhead,
+	}
+
+	cfg, err := json.Marshal(v1Adapter)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal adapter struct to JSON")
+	}
+
+	a.ID = strings.ToLower(a.ID)
+	start := time.Now()
+	var id string
+	for {
+		id, err = instanceIDToName(o, a.ID)
+		if err != nil {
+			if os.IsNotExist(errors.Cause(err)) {
+				<-time.After(10 * time.Millisecond)
+				if time.Now().Sub(start) > 2*time.Second {
+					return errors.Wrap(err, "timed out waiting for net adapter after 2 seconds")
+				}
+				continue
+			}
+			return err
+		}
+		break
+	}
+	logrus.Debugf("Waited: %v for the network adapter to show up", time.Now().Sub(start))
+	out, err := o.Command("netnscfg",
+		"-if", id,
+		"-nspid", strconv.Itoa(c.container.Pid()),
+		"-cfg", string(cfg)).CombinedOutput()
+	if err != nil {
+		return errors.Wrapf(err, "failed to configure adapter cid: %s, aid: %s, if id: %s", c.id, a.ID, id, out)
+	}
+	logrus.Debugf("netnscfg output:\n%s", out)
+	return nil
+}
+
+// RemoveNetworkAdapter removes the network adapter `id` from the network
+// namespace held by this container.
+func (c *Container) RemoveNetworkAdapter(o oslayer.OS, id string) error {
+	// TODO: JTERRY75 - Implement removal if we ever need to support hot remove.
+	return errors.New("not implemented")
 }
 
 // Process is a struct that defines the lifetime and operations associated with
