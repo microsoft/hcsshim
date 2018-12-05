@@ -16,8 +16,9 @@ import (
 	"testing"
 
 	"github.com/Microsoft/go-winio/vhd"
-	testutilities "github.com/Microsoft/hcsshim/functional/utilities"
 	"github.com/Microsoft/hcsshim/osversion"
+	runhcs "github.com/Microsoft/hcsshim/pkg/go-runhcs"
+	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	runc "github.com/containerd/go-runc"
 	"github.com/opencontainers/runtime-tools/generate"
 	"github.com/pkg/errors"
@@ -214,7 +215,7 @@ func testWindows(t *testing.T, version int, isolated bool) {
 
 	// Create the Argon, Xenon, or UVM
 	ctx := context.TODO()
-	rhcs := Runhcs{
+	rhcs := runhcs.Runhcs{
 		Debug: true,
 	}
 	tio := newTestIO(t)
@@ -226,7 +227,7 @@ func testWindows(t *testing.T, version int, isolated bool) {
 	defer func() {
 		tio.Close()
 	}()
-	copts := &CreateOpts{
+	copts := &runhcs.CreateOpts{
 		IO:      tio,
 		PidFile: filepath.Join(bundle, "pid-file.txt"),
 		ShimLog: filepath.Join(bundle, "shim-log.txt"),
@@ -240,7 +241,7 @@ func testWindows(t *testing.T, version int, isolated bool) {
 		return
 	}
 	defer func() {
-		rhcs.Delete(ctx, t.Name(), &DeleteOpts{Force: true})
+		rhcs.Delete(ctx, t.Name(), &runhcs.DeleteOpts{Force: true})
 	}()
 
 	// Find the shim/vmshim process and begin exit wait

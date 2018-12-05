@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/Microsoft/hcsshim"
-	"github.com/Microsoft/hcsshim/functional/utilities"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/schema1"
@@ -20,6 +19,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/internal/wcow"
 	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/Microsoft/hcsshim/test/functional/utilities"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 

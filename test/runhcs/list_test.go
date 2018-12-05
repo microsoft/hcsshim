@@ -5,10 +5,12 @@ package runhcs
 import (
 	"context"
 	"testing"
+
+	runhcs "github.com/Microsoft/hcsshim/pkg/go-runhcs"
 )
 
 func Test_List_NoContainers(t *testing.T) {
-	rhcs := Runhcs{
+	rhcs := runhcs.Runhcs{
 		Debug: true,
 	}
 

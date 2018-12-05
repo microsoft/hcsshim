@@ -6,9 +6,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/functional/utilities"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/Microsoft/hcsshim/test/functional/utilities"
 )
 
 // TestVSMB tests adding/removing VSMB layers from a v2 Windows utility VM

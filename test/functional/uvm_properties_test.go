@@ -6,9 +6,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/functional/utilities"
 	"github.com/Microsoft/hcsshim/internal/schema1"
 	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/Microsoft/hcsshim/test/functional/utilities"
 )
 
 func TestPropertiesGuestConnection_LCOW(t *testing.T) {
