@@ -24,9 +24,10 @@ import (
 func TestLCOWUVMNoSCSINoVPMemInitrd(t *testing.T) {
 	var scsiCount uint32 = 0
 	var vpmemCount uint32 = 0
-	opts := &uvm.UVMOptions{
-		OperatingSystem:     "linux",
-		ID:                  "uvm",
+	opts := &uvm.OptionsLCOW{
+		Options: &uvm.Options{
+			ID: "uvm",
+		},
 		VPMemDeviceCount:    &vpmemCount,
 		SCSIControllerCount: &scsiCount,
 	}
@@ -39,9 +40,10 @@ func TestLCOWUVMNoSCSISingleVPMemVHD(t *testing.T) {
 	var scsiCount uint32 = 0
 	var vpmemCount uint32 = 1
 	var prfst uvm.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
-	opts := &uvm.UVMOptions{
-		OperatingSystem:     "linux",
-		ID:                  "uvm",
+	opts := &uvm.OptionsLCOW{
+		Options: &uvm.Options{
+			ID: "uvm",
+		},
 		VPMemDeviceCount:    &vpmemCount,
 		SCSIControllerCount: &scsiCount,
 		PreferredRootFSType: &prfst,
@@ -50,7 +52,7 @@ func TestLCOWUVMNoSCSISingleVPMemVHD(t *testing.T) {
 	testLCOWUVMNoSCSISingleVPMem(t, opts, `Command line: root=/dev/pmem0 init=/init`)
 }
 
-func testLCOWUVMNoSCSISingleVPMem(t *testing.T, opts *uvm.UVMOptions, expected string) {
+func testLCOWUVMNoSCSISingleVPMem(t *testing.T, opts *uvm.OptionsLCOW, expected string) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 	lcowUVM := testutilities.CreateLCOWUVMFromOpts(t, opts)
 	defer lcowUVM.Close()
@@ -100,9 +102,10 @@ func TestLCOWUVMStart_KernelDirect_InitRd(t *testing.T) {
 func testLCOWTimeUVMStart(t *testing.T, kernelDirect bool, rfsType uvm.PreferredRootFSType) {
 	var vpmemCount uint32 = 32
 	for i := 0; i < 3; i++ {
-		opts := &uvm.UVMOptions{
-			OperatingSystem:     "linux",
-			ID:                  "uvm",
+		opts := &uvm.OptionsLCOW{
+			Options: &uvm.Options{
+				ID: t.Name(),
+			},
 			VPMemDeviceCount:    &vpmemCount,
 			PreferredRootFSType: &rfsType,
 			KernelDirect:        kernelDirect,
