@@ -1,4 +1,4 @@
-package libtar2vhd
+package libvhd2tar
 
 import (
 	"bufio"
@@ -12,56 +12,14 @@ import (
 
 	"github.com/docker/docker/pkg/archive"
 	"github.com/sirupsen/logrus"
-
-	"github.com/Microsoft/opengcs/service/gcsutils/fs"
-	"github.com/Microsoft/opengcs/service/gcsutils/tarlib"
-	"github.com/Microsoft/opengcs/service/gcsutils/vhd"
 )
 
-// Options contains the configuration parameters that get passed to the tar2vhd library.
+const fixedVHDHeaderSize int64 = 512
+
+// Options contains the configuration parameters that get passed to the vhd2tar library.
 type Options struct {
 	TarOpts       *archive.TarOptions // Docker's archive.TarOptions struct
-	Filesystem    fs.Filesystem       // Interface for type of filesystem
-	Converter     vhd.Converter       // Interface for type of whiteout file
 	TempDirectory string              // Temp directory used for the conversions
-}
-
-// Tar2VHD takes in a tarstream and outputs a vhd containing the files. It also
-// returns the size of the outputted VHD file.
-func Tar2VHD(in io.Reader, out io.Writer, options *Options) (int64, error) {
-	logrus.Info("creating a temp file for VHD")
-
-	// Create a VHD file
-	vhdFile, err := ioutil.TempFile(options.TempDirectory, "vhd")
-	if err != nil {
-		return 0, err
-	}
-
-	defer os.Remove(vhdFile.Name())
-	defer vhdFile.Close()
-
-	logrus.Info("create Tar disk")
-	// Write Tar file to vhd
-	if _, err := tarlib.CreateTarDisk(in,
-		options.Filesystem,
-		options.TarOpts,
-		options.TempDirectory,
-		vhdFile); err != nil {
-		return 0, err
-	}
-
-	logrus.Info("convert to VHD")
-	if err := options.Converter.ConvertToVHD(vhdFile); err != nil {
-		return 0, err
-	}
-
-	logrus.Info("send to std out pipe")
-	diskSize, err := io.Copy(out, vhdFile)
-	if err != nil {
-		return 0, err
-	}
-	logrus.Infof("leaving Tar2VHD: VHD disk size:%d", diskSize)
-	return diskSize, nil
 }
 
 // VHD2Tar takes in a vhd and outputs a tar stream containing the files in the
@@ -79,7 +37,16 @@ func VHD2Tar(in io.Reader, out io.Writer, options *Options) (int64, error) {
 		return 0, err
 	}
 
-	if err := options.Converter.ConvertFromVHD(vhdFile); err != nil {
+	info, err := vhdFile.Stat()
+	if err != nil {
+		return 0, err
+	}
+
+	if info.Size() < fixedVHDHeaderSize {
+		return 0, fmt.Errorf("invalid input file: %s", vhdFile.Name())
+	}
+
+	if err := vhdFile.Truncate(info.Size() - fixedVHDHeaderSize); err != nil {
 		return 0, err
 	}
 

@@ -11,7 +11,6 @@ BASE:=base.tar.gz
 
 # The link aliases for gcstools
 GCS_TOOLS=\
-	tar2vhd \
 	vhd2tar \
 	exportSandbox \
 	netnscfg \
@@ -48,13 +47,6 @@ out/rootfs.tar.gz: $(BASE) .rootfs-done
 out/initrd.img: out/rootfs.tar.gz
 	# Convert from the rootfs tar to newc cpio
 	bsdtar -zcf $@ --format newc @out/rootfs.tar.gz
-
-out/rootfs.vhd: out/rootfs.tar.gz bin/tar2vhd
-	@mkdir -p out
-	t=`mktemp` && zcat out/rootfs.tar.gz | bin/tar2vhd > "$$t" && mv $$t $@
-
-bin/tar2vhd: bin/gcstools
-	ln -s gcstools $@
 
 bin/gcs.always: always
 	@mkdir -p bin
