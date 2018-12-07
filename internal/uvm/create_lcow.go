@@ -53,6 +53,9 @@ type OptionsLCOW struct {
 	PreferredRootFSType *PreferredRootFSType
 
 	SuppressGcsLogs bool
+	ExecCommandLine string
+	ForwardStdout   *bool
+	ForwardStderr   *bool
 }
 
 const linuxLogVsockPort = 109
@@ -103,6 +106,14 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 		case PreferredRootFSTypeVHD:
 			opts.RootFSFile = "rootfs.vhd"
 		}
+	}
+	if opts.ForwardStdout == nil {
+		val := false
+		opts.ForwardStdout = &val
+	}
+	if opts.ForwardStderr == nil {
+		val := true
+		opts.ForwardStderr = &val
 	}
 
 	if _, err := os.Stat(filepath.Join(opts.BootFilesPath, opts.RootFSFile)); os.IsNotExist(err) {
@@ -264,12 +275,25 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 		kernelArgs += " " + opts.KernelBootOptions
 	}
 
-	// Start GCS with stderr pointing to the vsock port created below in
-	// order to forward guest logs to logrus.
-	// initArgs := fmt.Sprintf("/bin/vsockexec -e %d /bin/gcs -log-format json -loglevel %s",
-	// 	linuxLogVsockPort,
-	// 	logrus.StandardLogger().Level.String())
-	initArgs := fmt.Sprintf("/bin/vsockexec -o %d /bin/dmesg", linuxLogVsockPort)
+	// With default options, run GCS with stderr pointing to the vsock port
+	// created below in order to forward guest logs to logrus.
+	initArgs := "/bin/vsockexec"
+
+	if *opts.ForwardStdout {
+		initArgs += fmt.Sprintf(" -o %d", linuxLogVsockPort)
+	}
+
+	if *opts.ForwardStderr {
+		initArgs += fmt.Sprintf(" -e %d", linuxLogVsockPort)
+	}
+
+	initArgs += " "
+	if opts.ExecCommandLine != "" {
+		initArgs += opts.ExecCommandLine
+	} else {
+		// Default to running GCS when another command isn't specified.
+		initArgs += fmt.Sprintf("/bin/gcs -log-format json -loglevel %s", logrus.StandardLogger().Level.String())
+	}
 
 	if vmDebugging {
 		// Launch a shell on the console.

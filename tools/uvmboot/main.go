@@ -26,6 +26,9 @@ const (
 	countArgName                = "count"
 	kernelDirectArgName         = "kernel-direct"
 	suppressOutputArgName       = "suppress-output"
+	execCommandLineArgName      = "exec"
+	forwardStdoutArgName        = "fwd-stdout"
+	forwardStderrArgName        = "fwd-stderr"
 )
 
 func main() {
@@ -36,13 +39,11 @@ func main() {
 	app.Flags = []cli.Flag{
 		cli.Uint64Flag{
 			Name:  cpusArgName,
-			Value: 2,
-			Usage: "Number of CPUs on the UVM",
+			Usage: "Number of CPUs on the UVM. Uses hcsshim default if not specified",
 		},
 		cli.UintFlag{
 			Name:  memoryArgName,
-			Value: 1024,
-			Usage: "Amount of memory on the UVM, in MB",
+			Usage: "Amount of memory on the UVM, in MB. Uses hcsshim default if not specified",
 		},
 		cli.BoolFlag{
 			Name:  measureArgName,
@@ -62,7 +63,7 @@ func main() {
 			Name:  suppressOutputArgName,
 			Usage: "Hide output from the UVM",
 		},
-		cli.BoolTFlag{
+		cli.BoolFlag{
 			Name:  allowOvercommitArgName,
 			Usage: "Allow memory overcommit on the UVM",
 		},
@@ -84,33 +85,34 @@ func main() {
 				},
 				cli.UintFlag{
 					Name:  rootFSTypeArgName,
-					Value: 0,
-					Usage: "0 to boot from initrd, 1 to boot from VHD",
+					Usage: "0 to boot from initrd, 1 to boot from VHD. Uses hcsshim default if not specified",
 				},
 				cli.UintFlag{
 					Name:  vpMemMaxCountArgName,
-					Value: 64,
-					Usage: "Number of VPMem devices on the UVM",
+					Usage: "Number of VPMem devices on the UVM. Uses hcsshim default if not specified",
 				},
 				cli.Uint64Flag{
 					Name:  vpMemMaxSizeArgName,
-					Value: 4 * 1024,
-					Usage: "Size of each VPMem device, in MB",
+					Usage: "Size of each VPMem device, in MB. Uses hcsshim default if not specified",
 				},
 				cli.BoolFlag{
 					Name:  kernelDirectArgName,
 					Usage: "Use kernel direct booting for UVM",
 				},
+				cli.StringFlag{
+					Name:  execCommandLineArgName,
+					Usage: "Command to execute in the UVM.",
+				},
+				cli.BoolFlag{
+					Name:  forwardStdoutArgName,
+					Usage: "Whether stdout from the process in the UVM should be forwarded",
+				},
+				cli.BoolFlag{
+					Name:  forwardStderrArgName,
+					Usage: "Whether stderr from the process in the UVM should be forwarded",
+				},
 			},
 			Action: func(c *cli.Context) error {
-				rootFSType := uvm.PreferredRootFSType(c.Int(rootFSTypeArgName))
-				vpMemMaxCount := uint32(c.Uint(vpMemMaxCountArgName))
-				vpMemMaxSize := c.Uint64(vpMemMaxSizeArgName) * 1024 * 1024 // convert from MB to bytes
-				cpus := c.GlobalUint64(cpusArgName)
-				memory := c.GlobalUint64(memoryArgName) * 1024 * 1024 // convert from MB to bytes
-				allowOvercommit := c.GlobalBoolT(allowOvercommitArgName)
-				enableDeferredCommit := c.GlobalBool(enableDeferredCommitArgName)
-
 				parallelCount := c.GlobalInt(parallelArgName)
 
 				var wg sync.WaitGroup
@@ -131,33 +133,68 @@ func main() {
 
 						options := uvm.OptionsLCOW{
 							Options: &uvm.Options{
-								ID: id,
-								Resources: &specs.WindowsResources{
-									CPU: &specs.WindowsCPUResources{
-										Count: &cpus,
-									},
-									Memory: &specs.WindowsMemoryResources{
-										Limit: &memory,
-									},
-								},
-								AllowOvercommit:      &allowOvercommit,
-								EnableDeferredCommit: &enableDeferredCommit,
+								ID:        id,
+								Resources: &specs.WindowsResources{},
 							},
-							KernelDirect:        c.Bool(kernelDirectArgName),
-							KernelBootOptions:   c.String(kernelArgsArgName),
-							PreferredRootFSType: &rootFSType,
-							VPMemDeviceCount:    &vpMemMaxCount,
-							VPMemSizeBytes:      &vpMemMaxSize,
-							SuppressGcsLogs:     c.GlobalBool(suppressOutputArgName),
 						}
 
-						// log.Infof("[%d] Starting", id)
+						if c.GlobalIsSet(cpusArgName) {
+							val := c.GlobalUint64(cpusArgName)
+							options.Options.Resources.CPU = &specs.WindowsCPUResources{
+								Count: &val,
+							}
+						}
+						if c.GlobalIsSet(memoryArgName) {
+							val := c.GlobalUint64(memoryArgName)
+							options.Options.Resources.Memory = &specs.WindowsMemoryResources{
+								Limit: &val,
+							}
+						}
+						if c.GlobalIsSet(allowOvercommitArgName) {
+							val := c.GlobalBool(allowOvercommitArgName)
+							options.Options.AllowOvercommit = &val
+						}
+						if c.GlobalIsSet(enableDeferredCommitArgName) {
+							val := c.GlobalBool(enableDeferredCommitArgName)
+							options.Options.EnableDeferredCommit = &val
+						}
+						if c.GlobalIsSet(suppressOutputArgName) {
+							options.SuppressGcsLogs = c.GlobalBool(suppressOutputArgName)
+						}
+
+						if c.IsSet(kernelDirectArgName) {
+							options.KernelDirect = c.Bool(kernelDirectArgName)
+						}
+						if c.IsSet(rootFSTypeArgName) {
+							val := uvm.PreferredRootFSType(c.Int(rootFSTypeArgName))
+							options.PreferredRootFSType = &val
+						}
+						if c.IsSet(kernelArgsArgName) {
+							options.KernelBootOptions = c.String(kernelArgsArgName)
+						}
+						if c.IsSet(vpMemMaxCountArgName) {
+							val := uint32(c.Uint(vpMemMaxCountArgName))
+							options.VPMemDeviceCount = &val
+						}
+						if c.IsSet(vpMemMaxSizeArgName) {
+							val := c.Uint64(vpMemMaxSizeArgName) * 1024 * 1024 // convert from MB to bytes
+							options.VPMemSizeBytes = &val
+						}
+						if c.IsSet(execCommandLineArgName) {
+							options.ExecCommandLine = c.String(execCommandLineArgName)
+						}
+						if c.IsSet(forwardStdoutArgName) {
+							val := c.Bool(forwardStdoutArgName)
+							options.ForwardStdout = &val
+						}
+						if c.IsSet(forwardStderrArgName) {
+							val := c.Bool(forwardStderrArgName)
+							options.ForwardStderr = &val
+						}
 
 						if err := run(&options); err != nil {
 							log.Errorf("[%s] %s", id, err)
 						}
-
-						// log.Infof("[%d] Finished", id)
 					}
 				}
 
