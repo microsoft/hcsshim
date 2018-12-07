@@ -8,7 +8,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
 
@@ -29,6 +29,7 @@ const (
 	execCommandLineArgName      = "exec"
 	forwardStdoutArgName        = "fwd-stdout"
 	forwardStderrArgName        = "fwd-stderr"
+	debugArgName                = "debug"
 )
 
 func main() {
@@ -70,6 +71,10 @@ func main() {
 		cli.BoolFlag{
 			Name:  enableDeferredCommitArgName,
 			Usage: "Enable deferred commit on the UVM",
+		},
+		cli.BoolFlag{
+			Name:  debugArgName,
+			Usage: "Enable debug level logging in HCSShim",
 		},
 	}
 
@@ -113,6 +118,10 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) error {
+				if c.GlobalBool("debug") {
+					logrus.SetLevel(logrus.DebugLevel)
+				}
+
 				parallelCount := c.GlobalInt(parallelArgName)
 
 				var wg sync.WaitGroup
@@ -193,7 +202,7 @@ func main() {
 						}
 
 						if err := run(&options); err != nil {
-							log.Errorf("[%s] %s", id, err)
+							logrus.WithField("uvm-id", id).Error(err)
 						}
 					}
 				}
@@ -223,7 +232,7 @@ func main() {
 
 	err := app.Run(os.Args)
 	if err != nil {
-		log.Fatal(err)
+		logrus.Fatal(err)
 	}
 }
 
