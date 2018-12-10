@@ -83,7 +83,7 @@ func CreateComputeSystem(id string, hcsDocumentInterface interface{}) (_ *System
 
 	computeSystem := newSystem(id)
 	computeSystem.logOperationBegin(operation)
-	defer computeSystem.logOperationEnd(err)
+	defer func() { computeSystem.logOperationEnd(err) }()
 
 	hcsDocumentB, err := json.Marshal(hcsDocumentInterface)
 	if err != nil {
@@ -133,7 +133,7 @@ func OpenComputeSystem(id string) (_ *System, err error) {
 
 	computeSystem := newSystem(id)
 	computeSystem.logOperationBegin(operation)
-	defer computeSystem.logOperationEnd(err)
+	defer func() { computeSystem.logOperationEnd(err) }()
 
 	var (
 		handle  hcsSystem
@@ -221,7 +221,7 @@ func (computeSystem *System) Start() (err error) {
 
 	operation := "hcsshim::ComputeSystem::Start"
 	computeSystem.logOperationBegin(operation)
-	defer computeSystem.logOperationEnd(err)
+	defer func() { computeSystem.logOperationEnd(err) }()
 
 	if computeSystem.handle == 0 {
 		return makeSystemError(computeSystem, "Start", "", ErrAlreadyClosed, nil)
@@ -279,7 +279,7 @@ func (computeSystem *System) Shutdown() (err error) {
 
 	operation := "hcsshim::ComputeSystem::Shutdown"
 	computeSystem.logOperationBegin(operation)
-	defer computeSystem.logOperationEnd(err)
+	defer func() { computeSystem.logOperationEnd(err) }()
 
 	if computeSystem.handle == 0 {
 		return makeSystemError(computeSystem, "Shutdown", "", ErrAlreadyClosed, nil)
@@ -306,7 +306,7 @@ func (computeSystem *System) Terminate() (err error) {
 
 	operation := "hcsshim::ComputeSystem::Terminate"
 	computeSystem.logOperationBegin(operation)
-	defer computeSystem.logOperationEnd(err)
+	defer func() { computeSystem.logOperationEnd(err) }()
 
 	if computeSystem.handle == 0 {
 		return makeSystemError(computeSystem, "Terminate", "", ErrAlreadyClosed, nil)
@@ -329,7 +329,7 @@ func (computeSystem *System) Terminate() (err error) {
 func (computeSystem *System) Wait() (err error) {
 	operation := "hcsshim::ComputeSystem::Wait"
 	computeSystem.logOperationBegin(operation)
-	defer computeSystem.logOperationEnd(err)
+	defer func() { computeSystem.logOperationEnd(err) }()
 
 	err = waitForNotification(computeSystem.callbackNumber, hcsNotificationSystemExited, nil)
 	if err != nil {
@@ -344,7 +344,7 @@ func (computeSystem *System) Wait() (err error) {
 func (computeSystem *System) WaitTimeout(timeout time.Duration) (err error) {
 	operation := "hcsshim::ComputeSystem::WaitTimeout"
 	computeSystem.logOperationBegin(operation)
-	defer computeSystem.logOperationEnd(err)
+	defer func() { computeSystem.logOperationEnd(err) }()
 
 	err = waitForNotification(computeSystem.callbackNumber, hcsNotificationSystemExited, &timeout)
 	if err != nil {
@@ -360,7 +360,7 @@ func (computeSystem *System) Properties(types ...schema1.PropertyType) (_ *schem
 
 	operation := "hcsshim::ComputeSystem::Properties"
 	computeSystem.logOperationBegin(operation)
-	defer computeSystem.logOperationEnd(err)
+	defer func() { computeSystem.logOperationEnd(err) }()
 
 	queryj, err := json.Marshal(schema1.PropertyQuery{types})
 	if err != nil {
@@ -400,7 +400,7 @@ func (computeSystem *System) Pause() (err error) {
 
 	operation := "hcsshim::ComputeSystem::Pause"
 	computeSystem.logOperationBegin(operation)
-	defer computeSystem.logOperationEnd(err)
+	defer func() { computeSystem.logOperationEnd(err) }()
 
 	if computeSystem.handle == 0 {
 		return makeSystemError(computeSystem, "Pause", "", ErrAlreadyClosed, nil)
@@ -426,7 +426,7 @@ func (computeSystem *System) Resume() (err error) {
 
 	operation := "hcsshim::ComputeSystem::Resume"
 	computeSystem.logOperationBegin(operation)
-	defer computeSystem.logOperationEnd(err)
+	defer func() { computeSystem.logOperationEnd(err) }()
 
 	if computeSystem.handle == 0 {
 		return makeSystemError(computeSystem, "Resume", "", ErrAlreadyClosed, nil)
@@ -452,7 +452,7 @@ func (computeSystem *System) CreateProcess(c interface{}) (_ *Process, err error
 
 	operation := "hcsshim::ComputeSystem::CreateProcess"
 	computeSystem.logOperationBegin(operation)
-	defer computeSystem.logOperationEnd(err)
+	defer func() { computeSystem.logOperationEnd(err) }()
 
 	var (
 		processInfo   hcsProcessInformation
@@ -513,7 +513,7 @@ func (computeSystem *System) OpenProcess(pid int) (_ *Process, err error) {
 
 	operation := "hcsshim::ComputeSystem::OpenProcess"
 	computeSystem.logOperationBegin(operation)
-	defer computeSystem.logOperationEnd(err)
+	defer func() { computeSystem.logOperationEnd(err) }()
 
 	var (
 		processHandle hcsProcess
@@ -548,7 +548,7 @@ func (computeSystem *System) Close() (err error) {
 
 	operation := "hcsshim::ComputeSystem::Close"
 	computeSystem.logOperationBegin(operation)
-	defer computeSystem.logOperationEnd(err)
+	defer func() { computeSystem.logOperationEnd(err) }()
 
 	// Don't double free this
 	if computeSystem.handle == 0 {
@@ -636,7 +636,7 @@ func (computeSystem *System) Modify(config interface{}) (err error) {
 
 	operation := "hcsshim::ComputeSystem::Modify"
 	computeSystem.logOperationBegin(operation)
-	defer computeSystem.logOperationEnd(err)
+	defer func() { computeSystem.logOperationEnd(err) }()
 
 	if computeSystem.handle == 0 {
 		return makeSystemError(computeSystem, "Modify", "", ErrAlreadyClosed, nil)
