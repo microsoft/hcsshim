@@ -22,9 +22,18 @@ import (
 type PreferredRootFSType int
 
 const (
-	PreferredRootFSTypeInitRd PreferredRootFSType = 0
-	PreferredRootFSTypeVHD    PreferredRootFSType = 1
+	PreferredRootFSTypeInitRd PreferredRootFSType = iota
+	PreferredRootFSTypeVHD
+)
 
+type OutputHandlingType int
+
+const (
+	OutputHandlingTypeLogrus OutputHandlingType = iota
+	OutputHandlingTypeStdout
+)
+
+const (
 	initrdFile = "initrd.img"
 	vhdFile    = "rootfs.vhd"
 )
@@ -33,14 +42,18 @@ const (
 type OptionsLCOW struct {
 	*Options
 
-	BootFilesPath         string  // Folder in which kernel and root file system reside. Defaults to \Program Files\Linux Containers
-	KernelFile            string  // Filename under BootFilesPath for the kernel. Defaults to `kernel`
-	KernelDirect          bool    // Skip UEFI and boot directly to `kernel`
-	RootFSFile            string  // Filename under BootFilesPath for the UVMs root file system. Defaults are `initrd.img` or `rootfs.vhd` based on `PreferredRootFSType`.
-	KernelBootOptions     string  // Additional boot options for the kernel
-	EnableGraphicsConsole bool    // If true, enable a graphics console for the utility VM
-	ConsolePipe           string  // The named pipe path to use for the serial console.  eg \\.\pipe\vmpipe
-	SCSIControllerCount   *uint32 // The number of SCSI controllers. Defaults to 1 if omitted. Currently we only support 0 or 1.
+	BootFilesPath         string             // Folder in which kernel and root file system reside. Defaults to \Program Files\Linux Containers
+	KernelFile            string             // Filename under BootFilesPath for the kernel. Defaults to `kernel`
+	KernelDirect          bool               // Skip UEFI and boot directly to `kernel`
+	RootFSFile            string             // Filename under BootFilesPath for the UVMs root file system. Defaults are `initrd.img` or `rootfs.vhd` based on `PreferredRootFSType`.
+	KernelBootOptions     string             // Additional boot options for the kernel
+	EnableGraphicsConsole bool               // If true, enable a graphics console for the utility VM
+	ConsolePipe           string             // The named pipe path to use for the serial console.  eg \\.\pipe\vmpipe
+	SCSIControllerCount   *uint32            // The number of SCSI controllers. Defaults to 1 if omitted. Currently we only support 0 or 1.
+	ExecCommandLine       string             // The command line to exec from init. Defaults to GCS
+	ForwardStdout         *bool              // Whether stdout will be forwarded from the executed program
+	ForwardStderr         *bool              // Whether stderr will be forwarded from the executed program
+	OutputHandling        OutputHandlingType // Controls how output received over HVSocket from the UVM is handled.
 
 	// Number of VPMem devices. Limit at 128. If booting UVM from VHD, device 0 is taken. LCOW Only. io.microsoft.virtualmachine.devices.virtualpmem.maximumcount
 	VPMemDeviceCount *uint32
@@ -51,11 +64,6 @@ type OptionsLCOW struct {
 	// Controls searching for the RootFSFile. Defaults to initrd (0). Can be set to VHD (1). io.microsoft.virtualmachine.lcow.preferredrootfstype
 	// Note this uses an arbitrary annotation strict which has no direct mapping to the HCS schema.
 	PreferredRootFSType *PreferredRootFSType
-
-	SuppressGcsLogs bool
-	ExecCommandLine string
-	ForwardStdout   *bool
-	ForwardStderr   *bool
 }
 
 const linuxLogVsockPort = 109
@@ -84,6 +92,10 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 	}
 	if uvm.owner == "" {
 		uvm.owner = filepath.Base(os.Args[0])
+	}
+	if opts.UseGuestConnection == nil {
+		val := true
+		opts.UseGuestConnection = &val
 	}
 
 	if opts.BootFilesPath == "" {
@@ -166,10 +178,6 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 					Count: getProcessors(opts.Resources),
 				},
 			},
-			// GuestConnection: &hcsschema.GuestConnection{
-			// 	UseVsock:            true,
-			// 	UseConnectedSuspend: true,
-			// },
 			Devices: &hcsschema.Devices{
 				HvSocket: &hcsschema.HvSocket2{
 					HvSocketConfig: &hcsschema.HvSocketSystemConfig{
@@ -180,6 +188,13 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 				},
 			},
 		},
+	}
+
+	if *opts.UseGuestConnection {
+		doc.VirtualMachine.GuestConnection = &hcsschema.GuestConnection{
+			UseVsock:            true,
+			UseConnectedSuspend: true,
+		}
 	}
 
 	if !opts.KernelDirect {
@@ -338,12 +353,15 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 		}
 	}()
 
-	// Create a socket that the GCS can send logrus log data to.
-	uvm.gcslog, err = uvm.listenVsock(linuxLogVsockPort)
-	uvm.gcsLogsExited = make(chan struct{})
-	uvm.suppressGcsLogs = opts.SuppressGcsLogs
-	if err != nil {
-		return nil, err
+	// Create a socket that the executed program can send to. This is usually
+	// used by GCS to send log data.
+	if *opts.ForwardStdout || *opts.ForwardStderr {
+		uvm.outputHandling = opts.OutputHandling
+		uvm.outputProcessingDone = make(chan struct{})
+		uvm.outputListener, err = uvm.listenVsock(linuxLogVsockPort)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return uvm, nil

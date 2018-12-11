@@ -25,11 +25,12 @@ const (
 	parallelArgName             = "parallel"
 	countArgName                = "count"
 	kernelDirectArgName         = "kernel-direct"
-	suppressOutputArgName       = "suppress-output"
 	execCommandLineArgName      = "exec"
 	forwardStdoutArgName        = "fwd-stdout"
 	forwardStderrArgName        = "fwd-stderr"
 	debugArgName                = "debug"
+	guestConnectionArgName      = "guest-con"
+	outputHandlingArgName       = "output-handling"
 )
 
 func main() {
@@ -61,10 +62,6 @@ func main() {
 			Usage: "Total number of UVMs to run",
 		},
 		cli.BoolFlag{
-			Name:  suppressOutputArgName,
-			Usage: "Hide output from the UVM",
-		},
-		cli.BoolFlag{
 			Name:  allowOvercommitArgName,
 			Usage: "Allow memory overcommit on the UVM",
 		},
@@ -75,6 +72,10 @@ func main() {
 		cli.BoolFlag{
 			Name:  debugArgName,
 			Usage: "Enable debug level logging in HCSShim",
+		},
+		cli.BoolFlag{
+			Name:  guestConnectionArgName,
+			Usage: "Tell HCS to establish a connection to the UVM's GCS.",
 		},
 	}
 
@@ -116,6 +117,10 @@ func main() {
 					Name:  forwardStderrArgName,
 					Usage: "Whether stderr from the process in the UVM should be forwarded",
 				},
+				cli.IntFlag{
+					Name:  outputHandlingArgName,
+					Usage: "0 to parse Logrus logs, 1 to print to stdout",
+				},
 			},
 			Action: func(c *cli.Context) error {
 				if c.GlobalBool("debug") {
@@ -149,26 +154,27 @@ func main() {
 
 						if c.GlobalIsSet(cpusArgName) {
 							val := c.GlobalUint64(cpusArgName)
-							options.Options.Resources.CPU = &specs.WindowsCPUResources{
+							options.Resources.CPU = &specs.WindowsCPUResources{
 								Count: &val,
 							}
 						}
 						if c.GlobalIsSet(memoryArgName) {
 							val := c.GlobalUint64(memoryArgName)
-							options.Options.Resources.Memory = &specs.WindowsMemoryResources{
+							options.Resources.Memory = &specs.WindowsMemoryResources{
 								Limit: &val,
 							}
 						}
 						if c.GlobalIsSet(allowOvercommitArgName) {
 							val := c.GlobalBool(allowOvercommitArgName)
-							options.Options.AllowOvercommit = &val
+							options.AllowOvercommit = &val
 						}
 						if c.GlobalIsSet(enableDeferredCommitArgName) {
 							val := c.GlobalBool(enableDeferredCommitArgName)
-							options.Options.EnableDeferredCommit = &val
+							options.EnableDeferredCommit = &val
 						}
-						if c.GlobalIsSet(suppressOutputArgName) {
-							options.SuppressGcsLogs = c.GlobalBool(suppressOutputArgName)
+						if c.GlobalIsSet(guestConnectionArgName) {
+							val := c.GlobalBool(guestConnectionArgName)
+							options.UseGuestConnection = &val
 						}
 
 						if c.IsSet(kernelDirectArgName) {
@@ -199,6 +205,9 @@ func main() {
 						if c.IsSet(forwardStderrArgName) {
 							val := c.Bool(forwardStderrArgName)
 							options.ForwardStderr = &val
+						}
+						if c.IsSet(outputHandlingArgName) {
+							options.OutputHandling = uvm.OutputHandlingType(c.Int(outputHandlingArgName))
 						}
 
 						if err := run(&options); err != nil {

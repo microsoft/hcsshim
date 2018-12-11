@@ -97,7 +97,7 @@ type UtilityVM struct {
 
 	namespaces map[string]*namespaceInfo
 
-	gcslog          net.Listener
-	gcsLogsExited   chan struct{}
-	suppressGcsLogs bool
+	outputListener       net.Listener
+	outputProcessingDone chan struct{}
+	outputHandling       OutputHandlingType
 }

@@ -12,6 +12,7 @@ type Options struct {
 	Owner                   string                  // Specifies the owner. Defaults to executable name.
 	Resources               *specs.WindowsResources // Optional resources for the utility VM. Supports Memory.limit and CPU.Count only currently. // TODO consider extending?
 	AdditionHCSDocumentJSON string                  // Optional additional JSON to merge into the HCS document prior
+	UseGuestConnection      *bool                   // Whether the HCS should connect to the UVM's GCS
 
 	// Fields that can be configured via OCI annotations in runhcs.
 
@@ -35,9 +36,10 @@ func (uvm *UtilityVM) OS() string {
 // Close terminates and releases resources associated with the utility VM.
 func (uvm *UtilityVM) Close() error {
 	uvm.Terminate()
-	if uvm.gcslog != nil {
-		uvm.gcslog.Close()
-		uvm.gcslog = nil
+	if uvm.outputListener != nil {
+		close(uvm.outputProcessingDone)
+		uvm.outputListener.Close()
+		uvm.outputListener = nil
 	}
 	err := uvm.hcsSystem.Close()
 	uvm.hcsSystem = nil
