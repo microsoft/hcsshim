@@ -39,6 +39,7 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 		owner:               opts.Owner,
 		operatingSystem:     "windows",
 		scsiControllerCount: 1,
+		vsmbShares:          make(map[string]*vsmbShare),
 	}
 
 	// Defaults if omitted by caller.

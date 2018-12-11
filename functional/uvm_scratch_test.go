@@ -43,7 +43,7 @@ func TestScratchCreateLCOW(t *testing.T) {
 	}
 
 	// Make sure it can be added (verifies it has access correctly)
-	c, l, err := targetUVM.AddSCSI(destTwo, "")
+	c, l, err := targetUVM.AddSCSI(destTwo, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
