@@ -70,6 +70,12 @@ type UtilityVM struct {
 	hcsSystem       *hcs.System // The handle to the compute system
 	m               sync.Mutex  // Lock for adding/removing devices
 
+	// containerCounter is the current number of containers that have been
+	// created. This is never decremented in the life of the UVM.
+	//
+	// NOTE: All accesses to this MUST be done atomically.
+	containerCounter uint64
+
 	// VSMB shares that are mapped into a Windows UVM. These are used for read-only
 	// layers and mapped directories
 	vsmbShares  map[string]*vsmbShare
