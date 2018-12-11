@@ -790,6 +790,9 @@ func (src *Source) Generate(w io.Writer) error {
 			if !*systemDLL {
 				return syscalldot() + "NewLazyDLL(" + arg + ")"
 			}
+			if strings.HasPrefix(dll, "api_") || strings.HasPrefix(dll, "ext_") {
+				arg = strings.Replace(arg, "_", "-", -1)
+			}
 			switch pkgtype {
 			case pkgStd:
 				return syscalldot() + "NewLazyDLL(sysdll.Add(" + arg + "))"
