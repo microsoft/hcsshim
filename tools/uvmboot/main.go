@@ -80,7 +80,7 @@ func main() {
 	}
 
 	app.Commands = []cli.Command{
-		cli.Command{
+		{
 			Name:  "lcow",
 			Usage: "Boot an LCOW UVM",
 			Flags: []cli.Flag{
