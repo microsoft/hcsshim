@@ -257,6 +257,10 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 		kernelArgs += " panic=-1 quiet"
 	}
 
+	if opts.KernelDirect {
+		kernelArgs += " efi=noruntime"
+	}
+
 	if opts.KernelBootOptions != "" {
 		kernelArgs += " " + opts.KernelBootOptions
 	}
