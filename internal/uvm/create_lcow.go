@@ -11,6 +11,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/mergemaps"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
@@ -142,7 +143,19 @@ const linuxLogVsockPort = 109
 
 // CreateLCOW creates an HCS compute system representing a utility VM.
 func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
-	logrus.Debugf("uvm::CreateLCOW %+v", opts)
+	op := "uvm::CreateLCOW"
+	log := logrus.WithFields(logrus.Fields{
+		logfields.UVMID: opts.ID,
+	})
+	log.Debugf(op+" - Begin Operation: %+v", opts)
+	defer func() {
+		if err != nil {
+			log.Data[logrus.ErrorKey] = err
+			log.Error(op + " - End Operation - Error")
+		} else {
+			log.Debug(op + " - End Operation - Success")
+		}
+	}()
 
 	// We dont serialize OutputHandler so if it is missing we need to put it back to the default.
 	if opts.OutputHandler == nil {
@@ -346,7 +359,6 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 
 	hcsSystem, err := hcs.CreateComputeSystem(uvm.id, fullDoc)
 	if err != nil {
-		logrus.Debugln("failed to create UVM: ", err)
 		return nil, err
 	}
 
@@ -383,9 +395,4 @@ func (uvm *UtilityVM) listenVsock(port uint32) (net.Listener, error) {
 	serviceID, _ := hvsock.GUIDFromString("00000000-facb-11e6-bd58-64006a7986d3")
 	binary.LittleEndian.PutUint32(serviceID[0:4], port)
 	return hvsock.Listen(hvsock.Addr{VMID: vmID, ServiceID: serviceID})
-}
-
-// PMemMaxSizeBytes returns the maximum size of a PMEM layer (LCOW)
-func (uvm *UtilityVM) PMemMaxSizeBytes() uint64 {
-	return uvm.vpmemMaxSizeBytes
 }
