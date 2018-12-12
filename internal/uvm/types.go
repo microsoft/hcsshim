@@ -99,5 +99,5 @@ type UtilityVM struct {
 
 	outputListener       net.Listener
 	outputProcessingDone chan struct{}
-	outputHandling       OutputHandlingType
+	outputHandler        OutputHandler
 }

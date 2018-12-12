@@ -5,7 +5,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
-	"os"
 	"syscall"
 
 	"github.com/sirupsen/logrus"
@@ -13,10 +12,8 @@ import (
 
 const _ERROR_CONNECTION_ABORTED syscall.Errno = 1236
 
-type outputHandler func(net.Conn)
-
-func parseLogrus(c net.Conn) {
-	j := json.NewDecoder(c)
+func parseLogrus(r io.Reader) {
+	j := json.NewDecoder(r)
 	logger := logrus.StandardLogger()
 	for {
 		e := logrus.Entry{Logger: logger}
@@ -28,7 +25,7 @@ func parseLogrus(c net.Conn) {
 			// Something went wrong. Read the rest of the data as a single
 			// string and log it at once -- it's probably a GCS panic stack.
 			logrus.Error("gcs log read: ", err)
-			rest, _ := ioutil.ReadAll(io.MultiReader(j.Buffered(), c))
+			rest, _ := ioutil.ReadAll(io.MultiReader(j.Buffered(), r))
 			if len(rest) != 0 {
 				logrus.Error("gcs stderr: ", string(rest))
 			}
@@ -55,11 +52,7 @@ func parseLogrus(c net.Conn) {
 	}
 }
 
-func printToStdout(c net.Conn) {
-	io.Copy(os.Stdout, c)
-}
-
-func processOutput(l net.Listener, doneChan chan struct{}, handler outputHandler) {
+func processOutput(l net.Listener, doneChan chan struct{}, handler OutputHandler) {
 	defer close(doneChan)
 
 	c, err := l.Accept()
@@ -76,14 +69,7 @@ func processOutput(l net.Listener, doneChan chan struct{}, handler outputHandler
 // Start synchronously starts the utility VM.
 func (uvm *UtilityVM) Start() error {
 	if uvm.outputListener != nil {
-		var handler outputHandler
-		switch uvm.outputHandling {
-		case OutputHandlingTypeLogrus:
-			handler = parseLogrus
-		case OutputHandlingTypeStdout:
-			handler = printToStdout
-		}
-		go processOutput(uvm.outputListener, uvm.outputProcessingDone, handler)
+		go processOutput(uvm.outputListener, uvm.outputProcessingDone, uvm.outputHandler)
 		uvm.outputListener = nil
 	}
 	return uvm.hcsSystem.Start()

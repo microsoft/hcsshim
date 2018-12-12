@@ -50,10 +50,6 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 	if uvm.owner == "" {
 		uvm.owner = filepath.Base(os.Args[0])
 	}
-	if opts.UseGuestConnection == nil {
-		val := true
-		opts.UseGuestConnection = &val
-	}
 
 	if len(opts.LayerFolders) < 2 {
 		return nil, fmt.Errorf("at least 2 LayerFolders must be supplied")
@@ -115,6 +111,7 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 					Count: getProcessors(opts.Resources),
 				},
 			},
+			GuestConnection: &hcsschema.GuestConnection{},
 			Devices: &hcsschema.Devices{
 				Scsi: map[string]hcsschema.Scsi{
 					"0": {
@@ -151,10 +148,6 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 				},
 			},
 		},
-	}
-
-	if *opts.UseGuestConnection {
-		doc.VirtualMachine.GuestConnection = &hcsschema.GuestConnection{}
 	}
 
 	uvm.scsiLocations[0][0].hostPath = doc.VirtualMachine.Devices.Scsi["0"].Attachments["0"].Path

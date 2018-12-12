@@ -2,10 +2,13 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
@@ -29,7 +32,6 @@ const (
 	forwardStdoutArgName        = "fwd-stdout"
 	forwardStderrArgName        = "fwd-stderr"
 	debugArgName                = "debug"
-	guestConnectionArgName      = "guest-con"
 	outputHandlingArgName       = "output-handling"
 )
 
@@ -73,10 +75,6 @@ func main() {
 			Name:  debugArgName,
 			Usage: "Enable debug level logging in HCSShim",
 		},
-		cli.BoolFlag{
-			Name:  guestConnectionArgName,
-			Usage: "Tell HCS to establish a connection to the UVM's GCS.",
-		},
 	}
 
 	app.Commands = []cli.Command{
@@ -89,9 +87,9 @@ func main() {
 					Value: "",
 					Usage: "Additional arguments to pass to the kernel",
 				},
-				cli.UintFlag{
+				cli.StringFlag{
 					Name:  rootFSTypeArgName,
-					Usage: "0 to boot from initrd, 1 to boot from VHD. Uses hcsshim default if not specified",
+					Usage: "Either 'initrd' or 'vhd'. Uses hcsshim default if not specified",
 				},
 				cli.UintFlag{
 					Name:  vpMemMaxCountArgName,
@@ -117,9 +115,9 @@ func main() {
 					Name:  forwardStderrArgName,
 					Usage: "Whether stderr from the process in the UVM should be forwarded",
 				},
-				cli.IntFlag{
+				cli.StringFlag{
 					Name:  outputHandlingArgName,
-					Usage: "0 to parse Logrus logs, 1 to print to stdout",
+					Usage: "Controls how output from UVM is handled. Use 'stdout' to print all output to stdout",
 				},
 			},
 			Action: func(c *cli.Context) error {
@@ -152,6 +150,11 @@ func main() {
 							},
 						}
 
+						{
+							val := false
+							options.UseGuestConnection = &val
+						}
+
 						if c.GlobalIsSet(cpusArgName) {
 							val := c.GlobalUint64(cpusArgName)
 							options.Resources.CPU = &specs.WindowsCPUResources{
@@ -172,17 +175,21 @@ func main() {
 							val := c.GlobalBool(enableDeferredCommitArgName)
 							options.EnableDeferredCommit = &val
 						}
-						if c.GlobalIsSet(guestConnectionArgName) {
-							val := c.GlobalBool(guestConnectionArgName)
-							options.UseGuestConnection = &val
-						}
 
 						if c.IsSet(kernelDirectArgName) {
 							options.KernelDirect = c.Bool(kernelDirectArgName)
 						}
 						if c.IsSet(rootFSTypeArgName) {
-							val := uvm.PreferredRootFSType(c.Int(rootFSTypeArgName))
-							options.PreferredRootFSType = &val
+							switch strings.ToLower(c.String(rootFSTypeArgName)) {
+							case "initrd":
+								val := uvm.PreferredRootFSTypeInitRd
+								options.PreferredRootFSType = &val
+							case "vhd":
+								val := uvm.PreferredRootFSTypeVHD
+								options.PreferredRootFSType = &val
+							default:
+								logrus.Fatalf("Unrecognized value '%s' for option %s", c.String(rootFSTypeArgName), rootFSTypeArgName)
+							}
 						}
 						if c.IsSet(kernelArgsArgName) {
 							options.KernelBootOptions = c.String(kernelArgsArgName)
@@ -207,7 +214,13 @@ func main() {
 							options.ForwardStderr = &val
 						}
 						if c.IsSet(outputHandlingArgName) {
-							options.OutputHandling = uvm.OutputHandlingType(c.Int(outputHandlingArgName))
+							switch strings.ToLower(c.String(outputHandlingArgName)) {
+							case "stdout":
+								val := uvm.OutputHandler(func(r io.Reader) { io.Copy(os.Stdout, r) })
+								options.OutputHandler = &val
+							default:
+								logrus.Fatalf("Unrecognized value '%s' for option %s", c.String(outputHandlingArgName), outputHandlingArgName)
+							}
 						}
 
 						if err := run(&options); err != nil {
@@ -256,7 +269,7 @@ func run(options *uvm.OptionsLCOW) error {
 		return err
 	}
 
-	if err := uvm.Wait(); err != nil {
+	if err := uvm.WaitExpectedError(hcs.ErrVmcomputeUnexpectedExit); err != nil {
 		return err
 	}
 
