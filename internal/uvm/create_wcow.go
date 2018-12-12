@@ -85,8 +85,9 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 	}
 
 	doc := &hcsschema.ComputeSystem{
-		Owner:         uvm.owner,
-		SchemaVersion: schemaversion.SchemaV21(),
+		Owner:                             uvm.owner,
+		SchemaVersion:                     schemaversion.SchemaV21(),
+		ShouldTerminateOnLastHandleClosed: true,
 		VirtualMachine: &hcsschema.VirtualMachine{
 			Chipset: &hcsschema.Chipset{
 				Uefi: &hcsschema.Uefi{
