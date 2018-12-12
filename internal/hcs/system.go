@@ -318,7 +318,7 @@ func (computeSystem *System) Terminate() (err error) {
 	err = hcsTerminateComputeSystem(computeSystem.handle, "", &resultp)
 	completed = true
 	events := processHcsResult(resultp)
-	if err != nil {
+	if err != nil && err != ErrVmcomputeAlreadyStopped {
 		return makeSystemError(computeSystem, "Terminate", "", err, events)
 	}
 
