@@ -170,14 +170,14 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 			Chipset: &hcsschema.Chipset{},
 			ComputeTopology: &hcsschema.Topology{
 				Memory: &hcsschema.Memory2{
-					SizeInMB: getMemory(opts.Resources),
+					SizeInMB: normalizeMemory(opts.MemorySizeInMB),
 					// AllowOvercommit `true` by default if not passed.
 					AllowOvercommit: opts.AllowOvercommit == nil || *opts.AllowOvercommit,
 					// EnableDeferredCommit `false` by default if not passed.
 					EnableDeferredCommit: opts.EnableDeferredCommit != nil && *opts.EnableDeferredCommit,
 				},
 				Processor: &hcsschema.Processor2{
-					Count: getProcessors(opts.Resources),
+					Count: normalizeProcessors(opts.ProcessorCount),
 				},
 			},
 			Devices: &hcsschema.Devices{
