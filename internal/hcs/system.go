@@ -339,6 +339,21 @@ func (computeSystem *System) Wait() (err error) {
 	return nil
 }
 
+// WaitExpectedError synchronously waits for the compute system to shutdown or
+// terminate, and ignores the passed error if it occurs.
+func (computeSystem *System) WaitExpectedError(expected error) (err error) {
+	operation := "hcsshim::ComputeSystem::WaitExpectedError"
+	computeSystem.logOperationBegin(operation)
+	defer func() { computeSystem.logOperationEnd(err) }()
+
+	err = waitForNotification(computeSystem.callbackNumber, hcsNotificationSystemExited, nil)
+	if err != nil && err != expected {
+		return makeSystemError(computeSystem, "WaitExpectedError", "", err, nil)
+	}
+
+	return nil
+}
+
 // WaitTimeout synchronously waits for the compute system to terminate or the duration to elapse.
 // If the timeout expires, IsTimeout(err) == true
 func (computeSystem *System) WaitTimeout(timeout time.Duration) (err error) {

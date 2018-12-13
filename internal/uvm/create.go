@@ -35,9 +35,13 @@ func (uvm *UtilityVM) OS() string {
 // Close terminates and releases resources associated with the utility VM.
 func (uvm *UtilityVM) Close() error {
 	uvm.Terminate()
-	if uvm.gcslog != nil {
-		uvm.gcslog.Close()
-		uvm.gcslog = nil
+
+	// outputListener will only be nil for a Create -> Stop without a Start. In this case
+	// we have no goroutine processing output so its safe to close the channel here.
+	if uvm.outputListener != nil {
+		close(uvm.outputProcessingDone)
+		uvm.outputListener.Close()
+		uvm.outputListener = nil
 	}
 	err := uvm.hcsSystem.Close()
 	uvm.hcsSystem = nil
