@@ -10,7 +10,6 @@ import (
 	"github.com/Microsoft/hcsshim/functional/utilities"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
 
@@ -41,15 +40,10 @@ func runMemTests(t *testing.T, os string) {
 		{allowOvercommit: &no, enableDeferredCommit: &no},   // Physical
 	}
 
-	mem := uint64(512 * 1024 * 1024) // 512 MB (OCI in Bytes)
 	for _, bt := range testCases {
 		opts := &uvm.Options{
-			ID: t.Name(),
-			Resources: &specs.WindowsResources{
-				Memory: &specs.WindowsMemoryResources{
-					Limit: &mem,
-				},
-			},
+			ID:                   t.Name(),
+			MemorySizeInMB:       512,
 			AllowOvercommit:      bt.allowOvercommit,
 			EnableDeferredCommit: bt.enableDeferredCommit,
 		}
@@ -85,15 +79,10 @@ func runBenchMemStartTest(b *testing.B, opts *uvm.Options) {
 }
 
 func runBenchMemStartLcowTest(b *testing.B, allowOverCommit bool, enableDeferredCommit bool) {
-	mem := uint64(512 * 1024 * 1024) // 512 MB (OCI in Bytes)
 	for i := 0; i < b.N; i++ {
 		opts := &uvm.Options{
-			ID: b.Name(),
-			Resources: &specs.WindowsResources{
-				Memory: &specs.WindowsMemoryResources{
-					Limit: &mem,
-				},
-			},
+			ID:                   b.Name(),
+			MemorySizeInMB:       512,
 			AllowOvercommit:      &allowOverCommit,
 			EnableDeferredCommit: &enableDeferredCommit,
 		}

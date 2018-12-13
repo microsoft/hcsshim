@@ -480,29 +480,27 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		bothOpts := &uvm.Options{
 			ID:                   vmID(c.ID),
 			Owner:                cfg.Owner,
-			Resources:            cfg.Spec.Windows.Resources,
 			AllowOvercommit:      parseAnnotationsBool(cfg.Spec.Annotations, annotationAllowOverCommit),
 			EnableDeferredCommit: parseAnnotationsBool(cfg.Spec.Annotations, annotationEnableDeferredCommit),
 		}
 
+		// If the Resources section of the config specified mem/cpu set it now.
+		if cfg.Spec.Windows != nil && cfg.Spec.Windows.Resources != nil {
+			if cfg.Spec.Windows.Resources.Memory != nil && cfg.Spec.Windows.Resources.Memory.Limit != nil {
+				bothOpts.MemorySizeInMB = int32(*cfg.Spec.Windows.Resources.Memory.Limit / 1024 / 1024)
+			}
+			if cfg.Spec.Windows.Resources.CPU != nil && cfg.Spec.Windows.Resources.CPU.Count != nil {
+				bothOpts.ProcessorCount = int32(*cfg.Spec.Windows.Resources.CPU.Count)
+			}
+		}
+		// Allow overrides of any mem/cpu annotations
 		memSize := parseAnnotationsUint64(cfg.Spec.Annotations, annotationMemorySizeInMB)
+		if memSize != nil {
+			bothOpts.MemorySizeInMB = int32(*memSize)
+		}
 		cpuCount := parseAnnotationsUint64(cfg.Spec.Annotations, annotationProcessorCount)
-		if memSize != nil || cpuCount != nil {
-			if bothOpts.Resources == nil {
-				bothOpts.Resources = &specs.WindowsResources{}
-			}
-			if memSize != nil {
-				if bothOpts.Resources.Memory == nil {
-					bothOpts.Resources.Memory = &specs.WindowsMemoryResources{}
-				}
-				bothOpts.Resources.Memory.Limit = memSize
-			}
-			if cpuCount != nil {
-				if bothOpts.Resources.CPU == nil {
-					bothOpts.Resources.CPU = &specs.WindowsCPUResources{}
-				}
-				bothOpts.Resources.CPU.Count = cpuCount
-			}
+		if cpuCount != nil {
+			bothOpts.ProcessorCount = int32(*cpuCount)
 		}
 
 		if cfg.Spec.Linux != nil {

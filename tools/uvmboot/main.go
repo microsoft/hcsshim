@@ -10,7 +10,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/uvm"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -145,8 +144,7 @@ func main() {
 
 						options := uvm.OptionsLCOW{
 							Options: &uvm.Options{
-								ID:        id,
-								Resources: &specs.WindowsResources{},
+								ID: id,
 							},
 						}
 
@@ -156,16 +154,10 @@ func main() {
 						}
 
 						if c.GlobalIsSet(cpusArgName) {
-							val := c.GlobalUint64(cpusArgName)
-							options.Resources.CPU = &specs.WindowsCPUResources{
-								Count: &val,
-							}
+							options.ProcessorCount = int32(c.GlobalUint64(cpusArgName))
 						}
 						if c.GlobalIsSet(memoryArgName) {
-							val := c.GlobalUint64(memoryArgName)
-							options.Resources.Memory = &specs.WindowsMemoryResources{
-								Limit: &val,
-							}
+							options.MemorySizeInMB = int32(c.GlobalUint64(memoryArgName))
 						}
 						if c.GlobalIsSet(allowOvercommitArgName) {
 							val := c.GlobalBool(allowOvercommitArgName)

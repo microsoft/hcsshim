@@ -2,24 +2,29 @@ package uvm
 
 import (
 	"runtime"
-
-	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 // Options are the set of options passed to Create() to create a utility vm.
 type Options struct {
-	ID                      string                  // Identifier for the uvm. Defaults to generated GUID.
-	Owner                   string                  // Specifies the owner. Defaults to executable name.
-	Resources               *specs.WindowsResources // Optional resources for the utility VM. Supports Memory.limit and CPU.Count only currently. // TODO consider extending?
-	AdditionHCSDocumentJSON string                  // Optional additional JSON to merge into the HCS document prior
+	ID                      string // Identifier for the uvm. Defaults to generated GUID.
+	Owner                   string // Specifies the owner. Defaults to executable name.
+	AdditionHCSDocumentJSON string // Optional additional JSON to merge into the HCS document prior
 
-	// Fields that can be configured via OCI annotations in runhcs.
+	// MemorySizeInMB sets the UVM memory. If `0` will default to platform
+	// default.
+	MemorySizeInMB int32
 
-	// Memory for UVM. Defaults to true. For physical backed memory, set to false. io.microsoft.virtualmachine.computetopology.memory.allowovercommit=true|false
+	// Memory for UVM. Defaults to true. For physical backed memory, set to
+	// false.
 	AllowOvercommit *bool
 
-	// Memory for UVM. Defaults to false. For virtual memory with deferred commit, set to true. io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit=true|false
+	// Memory for UVM. Defaults to false. For virtual memory with deferred
+	// commit, set to true.
 	EnableDeferredCommit *bool
+
+	// ProcessorCount sets the number of vCPU's. If `0` will default to platform
+	// default.
+	ProcessorCount int32
 }
 
 // ID returns the ID of the VM's compute system.
@@ -36,8 +41,9 @@ func (uvm *UtilityVM) OS() string {
 func (uvm *UtilityVM) Close() error {
 	uvm.Terminate()
 
-	// outputListener will only be nil for a Create -> Stop without a Start. In this case
-	// we have no goroutine processing output so its safe to close the channel here.
+	// outputListener will only be nil for a Create -> Stop without a Start. In
+	// this case we have no goroutine processing output so its safe to close the
+	// channel here.
 	if uvm.outputListener != nil {
 		close(uvm.outputProcessingDone)
 		uvm.outputListener.Close()
@@ -48,20 +54,19 @@ func (uvm *UtilityVM) Close() error {
 	return err
 }
 
-func getMemory(r *specs.WindowsResources) int32 {
-	if r == nil || r.Memory == nil || r.Memory.Limit == nil {
+func normalizeMemory(m int32) int32 {
+	if m == 0 {
 		return 1024 // 1GB By Default.
 	}
-	return int32(*r.Memory.Limit / 1024 / 1024) // OCI spec is in bytes. HCS takes MB
+	return m
 }
 
-func getProcessors(r *specs.WindowsResources) int32 {
-	if r == nil || r.CPU == nil || r.CPU.Count == nil {
-		processors := int32(2)
+func normalizeProcessors(p int32) int32 {
+	if p == 0 {
 		if runtime.NumCPU() == 1 {
-			processors = 1
+			return 1
 		}
-		return processors
+		return 2
 	}
-	return int32(*r.CPU.Count)
+	return p
 }
