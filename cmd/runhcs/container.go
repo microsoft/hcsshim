@@ -468,7 +468,7 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		var opts interface{}
 
 		const (
-			annotationAllowOverCommit      = "io.microsoft.virtualmachine.computetopology.memory.allowovercommit"
+			annotationAllowOvercommit      = "io.microsoft.virtualmachine.computetopology.memory.allowovercommit"
 			annotationEnableDeferredCommit = "io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit"
 			annotationMemorySizeInMB       = "io.microsoft.virtualmachine.computetopology.memory.sizeinmb"
 			annotationProcessorCount       = "io.microsoft.virtualmachine.computetopology.processor.count"
@@ -477,41 +477,78 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 			annotationPreferredRootFSType  = "io.microsoft.virtualmachine.lcow.preferredrootfstype"
 		)
 
-		bothOpts := &uvm.Options{
-			ID:                   vmID(c.ID),
-			Owner:                cfg.Owner,
-			AllowOvercommit:      parseAnnotationsBool(cfg.Spec.Annotations, annotationAllowOverCommit),
-			EnableDeferredCommit: parseAnnotationsBool(cfg.Spec.Annotations, annotationEnableDeferredCommit),
-		}
+		var (
+			memorySizeInMB *int32
+			processorCount *int32
+		)
+
+		allowOvercommit := parseAnnotationsBool(cfg.Spec.Annotations, annotationAllowOvercommit)
+		enableDeferredCommit := parseAnnotationsBool(cfg.Spec.Annotations, annotationEnableDeferredCommit)
 
 		// If the Resources section of the config specified mem/cpu set it now.
 		if cfg.Spec.Windows != nil && cfg.Spec.Windows.Resources != nil {
 			if cfg.Spec.Windows.Resources.Memory != nil && cfg.Spec.Windows.Resources.Memory.Limit != nil {
-				bothOpts.MemorySizeInMB = int32(*cfg.Spec.Windows.Resources.Memory.Limit / 1024 / 1024)
+				v := int32(*cfg.Spec.Windows.Resources.Memory.Limit / 1024 / 1024)
+				memorySizeInMB = &v
 			}
 			if cfg.Spec.Windows.Resources.CPU != nil && cfg.Spec.Windows.Resources.CPU.Count != nil {
-				bothOpts.ProcessorCount = int32(*cfg.Spec.Windows.Resources.CPU.Count)
+				v := int32(*cfg.Spec.Windows.Resources.CPU.Count)
+				processorCount = &v
 			}
 		}
 		// Allow overrides of any mem/cpu annotations
-		memSize := parseAnnotationsUint64(cfg.Spec.Annotations, annotationMemorySizeInMB)
-		if memSize != nil {
-			bothOpts.MemorySizeInMB = int32(*memSize)
+		if m := parseAnnotationsUint64(cfg.Spec.Annotations, annotationMemorySizeInMB); m != nil {
+			v := int32(*m)
+			memorySizeInMB = &v
 		}
-		cpuCount := parseAnnotationsUint64(cfg.Spec.Annotations, annotationProcessorCount)
-		if cpuCount != nil {
-			bothOpts.ProcessorCount = int32(*cpuCount)
+		if c := parseAnnotationsUint64(cfg.Spec.Annotations, annotationProcessorCount); c != nil {
+			v := int32(*c)
+			processorCount = &v
 		}
 
 		if cfg.Spec.Linux != nil {
-			opts = &uvm.OptionsLCOW{
-				Options:             bothOpts,
-				ConsolePipe:         cfg.VMConsolePipe,
-				VPMemDeviceCount:    parseAnnotationsUint32(cfg.Spec.Annotations, annotationVPMemCount),
-				VPMemSizeBytes:      parseAnnotationsUint64(cfg.Spec.Annotations, annotationVPMemSize),
-				PreferredRootFSType: parseAnnotationsPreferredRootFSType(cfg.Spec.Annotations, annotationPreferredRootFSType),
+			lopts := uvm.NewDefaultOptionsLCOW(vmID(c.ID), cfg.Owner)
+			if memorySizeInMB != nil {
+				lopts.MemorySizeInMB = *memorySizeInMB
 			}
+			if allowOvercommit != nil {
+				lopts.AllowOvercommit = *allowOvercommit
+			}
+			if enableDeferredCommit != nil {
+				lopts.EnableDeferredCommit = *enableDeferredCommit
+			}
+			if processorCount != nil {
+				lopts.ProcessorCount = *processorCount
+			}
+			lopts.ConsolePipe = cfg.VMConsolePipe
+			if v := parseAnnotationsUint32(cfg.Spec.Annotations, annotationVPMemCount); v != nil {
+				lopts.VPMemDeviceCount = *v
+			}
+			if v := parseAnnotationsUint64(cfg.Spec.Annotations, annotationVPMemSize); v != nil {
+				lopts.VPMemSizeBytes = *v
+			}
+			if r := parseAnnotationsPreferredRootFSType(cfg.Spec.Annotations, annotationPreferredRootFSType); r != nil {
+				lopts.PreferredRootFSType = *r
+				if lopts.PreferredRootFSType == uvm.PreferredRootFSTypeVHD {
+					lopts.RootFSFile = "rootfs.vhd"
+				}
+			}
+			opts = lopts
 		} else {
+			wopts := uvm.NewDefaultOptionsWCOW(vmID(c.ID), cfg.Owner)
+			if memorySizeInMB != nil {
+				wopts.MemorySizeInMB = *memorySizeInMB
+			}
+			if allowOvercommit != nil {
+				wopts.AllowOvercommit = *allowOvercommit
+			}
+			if enableDeferredCommit != nil {
+				wopts.EnableDeferredCommit = *enableDeferredCommit
+			}
+			if processorCount != nil {
+				wopts.ProcessorCount = *processorCount
+			}
+
 			// In order for the UVM sandbox.vhdx not to collide with the actual
 			// nested Argon sandbox.vhdx we append the \vm folder to the last entry
 			// in the list.
@@ -526,10 +563,8 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 			}
 			layers[layersLen-1] = vmPath
 
-			opts = &uvm.OptionsWCOW{
-				Options:      bothOpts,
-				LayerFolders: layers,
-			}
+			wopts.LayerFolders = layers
+			opts = wopts
 		}
 
 		shim, err := c.startVMShim(cfg.VMLogFile, opts)

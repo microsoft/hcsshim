@@ -22,33 +22,21 @@ import (
 // TestLCOWUVMNoSCSINoVPMemInitrd starts an LCOW utility VM without a SCSI controller and
 // no VPMem device. Uses initrd.
 func TestLCOWUVMNoSCSINoVPMemInitrd(t *testing.T) {
-	var scsiCount uint32 = 0
-	var vpmemCount uint32 = 0
-	opts := &uvm.OptionsLCOW{
-		Options: &uvm.Options{
-			ID: "uvm",
-		},
-		VPMemDeviceCount:    &vpmemCount,
-		SCSIControllerCount: &scsiCount,
-	}
+	opts := uvm.NewDefaultOptionsLCOW(t.Name(), "")
+	opts.SCSIControllerCount = 0
+	opts.VPMemDeviceCount = 0
+
 	testLCOWUVMNoSCSISingleVPMem(t, opts, `Command line: initrd=/initrd.img`)
 }
 
 // TestLCOWUVMNoSCSISingleVPMemVHD starts an LCOW utility VM without a SCSI controller and
 // only a single VPMem device. Uses VPMEM VHD
 func TestLCOWUVMNoSCSISingleVPMemVHD(t *testing.T) {
-	var scsiCount uint32 = 0
-	var vpmemCount uint32 = 1
-	var prfst uvm.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
-	opts := &uvm.OptionsLCOW{
-		Options: &uvm.Options{
-			ID: "uvm",
-		},
-		VPMemDeviceCount:    &vpmemCount,
-		SCSIControllerCount: &scsiCount,
-		PreferredRootFSType: &prfst,
-		//ConsolePipe:         `\\.\pipe\vmpipe`,
-	}
+	opts := uvm.NewDefaultOptionsLCOW(t.Name(), "")
+	opts.SCSIControllerCount = 0
+	opts.VPMemDeviceCount = 1
+	opts.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
+
 	testLCOWUVMNoSCSISingleVPMem(t, opts, `Command line: root=/dev/pmem0 init=/init`)
 }
 
@@ -100,16 +88,12 @@ func TestLCOWUVMStart_KernelDirect_InitRd(t *testing.T) {
 }
 
 func testLCOWTimeUVMStart(t *testing.T, kernelDirect bool, rfsType uvm.PreferredRootFSType) {
-	var vpmemCount uint32 = 32
 	for i := 0; i < 3; i++ {
-		opts := &uvm.OptionsLCOW{
-			Options: &uvm.Options{
-				ID: t.Name(),
-			},
-			VPMemDeviceCount:    &vpmemCount,
-			PreferredRootFSType: &rfsType,
-			KernelDirect:        kernelDirect,
-		}
+		opts := uvm.NewDefaultOptionsLCOW(t.Name(), "")
+		opts.KernelDirect = kernelDirect
+		opts.VPMemDeviceCount = 32
+		opts.PreferredRootFSType = rfsType
+
 		lcowUVM := testutilities.CreateLCOWUVMFromOpts(t, opts)
 		lcowUVM.Close()
 	}
