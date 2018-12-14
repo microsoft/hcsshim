@@ -234,13 +234,13 @@ func (loadBalancer *HostComputeLoadBalancer) Create() (*HostComputeLoadBalancer,
 }
 
 // Delete LoadBalancer.
-func (loadBalancer *HostComputeLoadBalancer) Delete() (*HostComputeLoadBalancer, error) {
+func (loadBalancer *HostComputeLoadBalancer) Delete() error {
 	logrus.Debugf("hcn::HostComputeLoadBalancer::Delete id=%s", loadBalancer.Id)
 
 	if err := deleteLoadBalancer(loadBalancer.Id); err != nil {
-		return nil, err
+		return err
 	}
-	return nil, nil
+	return nil
 }
 
 // AddEndpoint add an endpoint to a LoadBalancer
