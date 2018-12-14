@@ -18,7 +18,7 @@ func TestCreateDeleteNetwork(t *testing.T) {
 		t.Fatal(err)
 	}
 	fmt.Printf("Network JSON:\n%s \n", jsonString)
-	_, err = network.Delete()
+	err = network.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestGetNetworkByName(t *testing.T) {
 	if network == nil {
 		t.Fatal("No Network found")
 	}
-	_, err = network.Delete()
+	err = network.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestGetNetworkById(t *testing.T) {
 	if network == nil {
 		t.Fatal("No Network found")
 	}
-	_, err = network.Delete()
+	err = network.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestAddRemoveRemoteSubnetRoutePolicy(t *testing.T) {
 		t.Fatalf("Found remote subnet route policy on network when it should have been deleted.")
 	}
 
-	_, err = network.Delete()
+	err = network.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}

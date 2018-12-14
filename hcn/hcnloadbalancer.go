@@ -247,7 +247,7 @@ func (loadBalancer *HostComputeLoadBalancer) Delete() error {
 func (loadBalancer *HostComputeLoadBalancer) AddEndpoint(endpoint *HostComputeEndpoint) (*HostComputeLoadBalancer, error) {
 	logrus.Debugf("hcn::HostComputeLoadBalancer::AddEndpoint loadBalancer=%s endpoint=%s", loadBalancer.Id, endpoint.Id)
 
-	_, err := loadBalancer.Delete()
+	err := loadBalancer.Delete()
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +262,7 @@ func (loadBalancer *HostComputeLoadBalancer) AddEndpoint(endpoint *HostComputeEn
 func (loadBalancer *HostComputeLoadBalancer) RemoveEndpoint(endpoint *HostComputeEndpoint) (*HostComputeLoadBalancer, error) {
 	logrus.Debugf("hcn::HostComputeLoadBalancer::RemoveEndpoint loadBalancer=%s endpoint=%s", loadBalancer.Id, endpoint.Id)
 
-	_, err := loadBalancer.Delete()
+	err := loadBalancer.Delete()
 	if err != nil {
 		return nil, err
 	}

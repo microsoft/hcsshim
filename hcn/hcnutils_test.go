@@ -13,7 +13,7 @@ func cleanup(networkName string) {
 		return
 	}
 	if testNetwork != nil {
-		_, err := testNetwork.Delete()
+		err := testNetwork.Delete()
 		if err != nil {
 			return
 		}
