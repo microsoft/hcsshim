@@ -53,7 +53,6 @@ func main() {
 			Name:  "namespace",
 			Usage: "the namespace of the container",
 		},
-
 		cli.StringFlag{
 			Name:  "address",
 			Usage: "the address of the containerd's main socket",
@@ -65,6 +64,10 @@ func main() {
 		cli.StringFlag{
 			Name:  "id",
 			Usage: "the id of the container",
+		},
+		cli.StringFlag{
+			Name:  "bundle",
+			Usage: "the bundle path to delete (delete command only).",
 		},
 	}
 	app.Commands = []cli.Command{
