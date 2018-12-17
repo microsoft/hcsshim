@@ -148,7 +148,6 @@ func main() {
 	fatalWriter.Writer = cli.ErrWriter
 	cli.ErrWriter = &fatalWriter
 	if err := app.Run(os.Args); err != nil {
-		logrus.Error(err)
 		fmt.Fprintln(cli.ErrWriter, err)
 		os.Exit(1)
 	}
