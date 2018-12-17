@@ -27,15 +27,15 @@ func TestCreateDeleteLoadBalancer(t *testing.T) {
 	}
 	fmt.Printf("LoadBalancer JSON:\n%s \n", jsonString)
 
-	_, err = loadBalancer.Delete()
+	err = loadBalancer.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = endpoint.Delete()
+	err = endpoint.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = network.Delete()
+	err = network.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,15 +61,15 @@ func TestGetLoadBalancerById(t *testing.T) {
 	if foundLB == nil {
 		t.Fatalf("No loadBalancer found")
 	}
-	_, err = loadBalancer.Delete()
+	err = loadBalancer.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = endpoint.Delete()
+	err = endpoint.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = network.Delete()
+	err = network.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,19 +116,19 @@ func TestLoadBalancerAddRemoveEndpoint(t *testing.T) {
 		t.Fatalf("Endpoint not removed from loadBalancer")
 	}
 
-	_, err = loadBalancer.Delete()
+	err = loadBalancer.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = secondEndpoint.Delete()
+	err = secondEndpoint.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = endpoint.Delete()
+	err = endpoint.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = network.Delete()
+	err = network.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,15 +156,15 @@ func TestAddLoadBalancer(t *testing.T) {
 		t.Fatal(fmt.Errorf("No loadBalancer found"))
 	}
 
-	_, err = loadBalancer.Delete()
+	err = loadBalancer.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = endpoint.Delete()
+	err = endpoint.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = network.Delete()
+	err = network.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,15 +192,15 @@ func TestAddDSRLoadBalancer(t *testing.T) {
 		t.Fatal(fmt.Errorf("No loadBalancer found"))
 	}
 
-	_, err = loadBalancer.Delete()
+	err = loadBalancer.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = endpoint.Delete()
+	err = endpoint.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = network.Delete()
+	err = network.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,15 +228,15 @@ func TestAddILBLoadBalancer(t *testing.T) {
 		t.Fatal(fmt.Errorf("No loadBalancer found"))
 	}
 
-	_, err = loadBalancer.Delete()
+	err = loadBalancer.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = endpoint.Delete()
+	err = endpoint.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = network.Delete()
+	err = network.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}

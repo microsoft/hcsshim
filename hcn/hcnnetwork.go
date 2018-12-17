@@ -326,13 +326,13 @@ func (network *HostComputeNetwork) Create() (*HostComputeNetwork, error) {
 }
 
 // Delete Network.
-func (network *HostComputeNetwork) Delete() (*HostComputeNetwork, error) {
+func (network *HostComputeNetwork) Delete() error {
 	logrus.Debugf("hcn::HostComputeNetwork::Delete id=%s", network.Id)
 
 	if err := deleteNetwork(network.Id); err != nil {
-		return nil, err
+		return err
 	}
-	return nil, nil
+	return nil
 }
 
 // ModifyNetworkSettings updates the Policy for a network.
