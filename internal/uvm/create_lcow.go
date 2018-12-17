@@ -167,7 +167,8 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 		SchemaVersion:                     schemaversion.SchemaV21(),
 		ShouldTerminateOnLastHandleClosed: true,
 		VirtualMachine: &hcsschema.VirtualMachine{
-			Chipset: &hcsschema.Chipset{},
+			StopOnReset: true,
+			Chipset:     &hcsschema.Chipset{},
 			ComputeTopology: &hcsschema.Topology{
 				Memory: &hcsschema.Memory2{
 					SizeInMB: normalizeMemory(opts.MemorySizeInMB),

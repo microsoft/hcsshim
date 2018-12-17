@@ -89,6 +89,7 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 		SchemaVersion:                     schemaversion.SchemaV21(),
 		ShouldTerminateOnLastHandleClosed: true,
 		VirtualMachine: &hcsschema.VirtualMachine{
+			StopOnReset: true,
 			Chipset: &hcsschema.Chipset{
 				Uefi: &hcsschema.Uefi{
 					BootThis: &hcsschema.UefiBootEntry{
