@@ -32,6 +32,7 @@ const (
 	forwardStderrArgName        = "fwd-stderr"
 	debugArgName                = "debug"
 	outputHandlingArgName       = "output-handling"
+	consolePipeArgName          = "console-pipe"
 )
 
 func main() {
@@ -117,6 +118,10 @@ func main() {
 				cli.StringFlag{
 					Name:  outputHandlingArgName,
 					Usage: "Controls how output from UVM is handled. Use 'stdout' to print all output to stdout",
+				},
+				cli.StringFlag{
+					Name:  consolePipeArgName,
+					Usage: "Named pipe for serial console output (which will be enabled)",
 				},
 			},
 			Action: func(c *cli.Context) error {
@@ -213,6 +218,9 @@ func main() {
 							default:
 								logrus.Fatalf("Unrecognized value '%s' for option %s", c.String(outputHandlingArgName), outputHandlingArgName)
 							}
+						}
+						if pipe := c.String(consolePipeArgName); pipe != "" {
+							options.ConsolePipe = pipe
 						}
 
 						if err := run(&options); err != nil {
