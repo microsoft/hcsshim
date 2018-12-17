@@ -25,6 +25,8 @@ func TestLCOWUVMNoSCSINoVPMemInitrd(t *testing.T) {
 	opts := uvm.NewDefaultOptionsLCOW(t.Name(), "")
 	opts.SCSIControllerCount = 0
 	opts.VPMemDeviceCount = 0
+	opts.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
+	opts.RootFSFile = "initrd.img"
 
 	testLCOWUVMNoSCSISingleVPMem(t, opts, `Command line: initrd=/initrd.img`)
 }
@@ -36,6 +38,7 @@ func TestLCOWUVMNoSCSISingleVPMemVHD(t *testing.T) {
 	opts.SCSIControllerCount = 0
 	opts.VPMemDeviceCount = 1
 	opts.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
+	opts.RootFSFile = "rootfs.vhd"
 
 	testLCOWUVMNoSCSISingleVPMem(t, opts, `Command line: root=/dev/pmem0 init=/init`)
 }
@@ -93,6 +96,12 @@ func testLCOWTimeUVMStart(t *testing.T, kernelDirect bool, rfsType uvm.Preferred
 		opts.KernelDirect = kernelDirect
 		opts.VPMemDeviceCount = 32
 		opts.PreferredRootFSType = rfsType
+		switch opts.PreferredRootFSType {
+		case uvm.PreferredRootFSTypeInitRd:
+			opts.RootFSFile = "initrd.img"
+		case uvm.PreferredRootFSTypeVHD:
+			opts.RootFSFile = "rootfs.vhd"
+		}
 
 		lcowUVM := testutilities.CreateLCOWUVMFromOpts(t, opts)
 		lcowUVM.Close()
