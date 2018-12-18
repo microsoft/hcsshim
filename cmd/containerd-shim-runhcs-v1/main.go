@@ -85,6 +85,9 @@ func main() {
 		if containerdBinaryFlag = context.GlobalString("publish-binary"); containerdBinaryFlag == "" {
 			return errors.New("publish-binary required")
 		}
+		if idFlag = context.GlobalString("id"); idFlag == "" {
+			return errors.New("id is required")
+		}
 		return nil
 	}
 }
