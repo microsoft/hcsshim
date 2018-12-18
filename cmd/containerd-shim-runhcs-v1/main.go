@@ -1,4 +1,4 @@
-package shim
+package main
 
 import (
 	"errors"
