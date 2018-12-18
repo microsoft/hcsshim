@@ -42,7 +42,7 @@ type MacPool struct {
 
 // Dns (Domain Name System is associated with a network.
 type Dns struct {
-	Domain     string   `json:",omitempty"`
+	Suffix     string   `json:",omitempty"`
 	Search     []string `json:",omitempty"`
 	ServerList []string `json:",omitempty"`
 	Options    []string `json:",omitempty"`
