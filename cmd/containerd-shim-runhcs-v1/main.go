@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -49,7 +50,7 @@ func main() {
 	app.Version = strings.Join(v, "\n")
 
 	app.Flags = []cli.Flag{
-		cli.BoolFlag{
+		cli.StringFlag{
 			Name:  "namespace",
 			Usage: "the namespace of the container",
 		},
@@ -77,17 +78,22 @@ func main() {
 	}
 	app.Before = func(context *cli.Context) error {
 		if namespaceFlag = context.GlobalString("namespace"); namespaceFlag == "" {
-			return errors.New("namespace required")
+			return errors.New("namespace is required")
 		}
 		if addressFlag = context.GlobalString("address"); addressFlag == "" {
-			return errors.New("address required")
+			return errors.New("address is required")
 		}
 		if containerdBinaryFlag = context.GlobalString("publish-binary"); containerdBinaryFlag == "" {
-			return errors.New("publish-binary required")
+			return errors.New("publish-binary is required")
 		}
 		if idFlag = context.GlobalString("id"); idFlag == "" {
 			return errors.New("id is required")
 		}
 		return nil
+	}
+
+	if err := app.Run(os.Args); err != nil {
+		fmt.Fprintln(cli.ErrWriter, err)
+		os.Exit(1)
 	}
 }

@@ -20,8 +20,9 @@ import (
 )
 
 var serveCommand = cli.Command{
-	Name:   "serve",
-	Hidden: true,
+	Name:           "serve",
+	Hidden:         true,
+	SkipArgReorder: true,
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  "socket",
@@ -51,10 +52,11 @@ var serveCommand = cli.Command{
 		// the events.
 
 		os.Stdin.Close()
+		os.Stdout.Close()
 
 		socket := ctx.String("socket")
 		if !strings.HasPrefix(socket, `\\.\pipe`) {
-			return errors.New("socket required to be pipe address")
+			return errors.New("socket is required to be pipe address")
 		}
 
 		logrus.SetFormatter(&logrus.TextFormatter{
@@ -134,12 +136,12 @@ var serveCommand = cli.Command{
 
 			// This is our best indication that we have not errored on creation
 			// and are successfully serving the API.
-			os.Stdout.Close()
 			os.Stderr.Close()
 		}
 
 		// Wait for the serve API to be shut down.
-		return <-serrs
+		<-serrs
+		return nil
 	},
 }
 

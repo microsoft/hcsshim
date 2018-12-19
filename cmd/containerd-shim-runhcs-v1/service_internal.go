@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
@@ -69,9 +70,19 @@ func (s *service) statsInternal(ctx context.Context, req *task.StatsRequest) (*t
 }
 
 func (s *service) connectInternal(ctx context.Context, req *task.ConnectRequest) (*task.ConnectResponse, error) {
-	return nil, errdefs.ErrNotImplemented
+	// We treat the shim/task as the same pid on the Windows host.
+	pid := uint32(os.Getpid())
+	return &task.ConnectResponse{
+		ShimPid: pid,
+		TaskPid: pid,
+	}, nil
 }
 
 func (s *service) shutdownInternal(ctx context.Context, req *task.ShutdownRequest) (*google_protobuf1.Empty, error) {
+	if req.Now {
+		os.Exit(0)
+	}
+	// TODO: JTERRY75 if we dont use `now` issue a Shutdown to the ttrpc
+	// connection to drain any active requests.
 	return nil, errdefs.ErrNotImplemented
 }

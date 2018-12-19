@@ -1,28 +1,34 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
+	"io/ioutil"
 	"os"
-	"path/filepath"
 	"time"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/gogo/protobuf/proto"
-	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/urfave/cli"
 )
 
 var deleteCommand = cli.Command{
 	Name: "delete",
-	Usage: `This command allows containerd to delete any container resources created, mounted, and/or run by a shim when containerd can no longer communicate over rpc. This happens if a shim is SIGKILL'd with a running container. These resources will need to be cleaned up when containerd looses the connection to a shim. This is also used when containerd boots and reconnects to shims. If a bundle is still on disk but containerd cannot connect to a shim, the delete command is invoked.
+	Usage: `
+This command allows containerd to delete any container resources created, mounted, and/or run by a shim when containerd can no longer communicate over rpc. This happens if a shim is SIGKILL'd with a running container. These resources will need to be cleaned up when containerd looses the connection to a shim. This is also used when containerd boots and reconnects to shims. If a bundle is still on disk but containerd cannot connect to a shim, the delete command is invoked.
 	
-The delete command will be executed in the container's bundle as its cwd.`,
+The delete command will be executed in the container's bundle as its cwd.
+`,
+	SkipArgReorder: true,
 	Action: func(context *cli.Context) error {
+		// We cant write anything to stdout/stderr for this cmd.
+		logrus.SetOutput(ioutil.Discard)
+
 		bundleFlag := context.GlobalString("bundle")
 		if bundleFlag == "" {
-			return errors.New("bundle required")
+			return errors.New("bundle is required")
 		}
 
 		// Attempt to find the hcssystem for this bundle and terminate it.
@@ -33,29 +39,24 @@ The delete command will be executed in the container's bundle as its cwd.`,
 		}
 
 		// Determine if the config file was a POD and if so kill the whole POD.
-		configPath := filepath.Join(bundleFlag, "config.json")
-		if _, err := os.Stat(configPath); err != nil {
+		if s, err := getSpecAnnotations(bundleFlag); err != nil {
 			if !os.IsNotExist(err) {
 				return err
 			}
 		} else {
-			if s, err := getSpecFromPath(configPath); err != nil {
-				return err
-			} else {
-				if containerType := s.Annotations["io.kubernetes.cri.container-type"]; containerType == "container" {
-					if sandboxID := s.Annotations["io.kubernetes.cri.sandbox-id"]; sandboxID != "" {
-						if sys, _ := hcs.OpenComputeSystem(sandboxID); sys != nil {
-							sys.Terminate()
-							sys.Wait()
-							sys.Close()
-						}
+			if containerType := s["io.kubernetes.cri.container-type"]; containerType == "container" {
+				if sandboxID := s["io.kubernetes.cri.sandbox-id"]; sandboxID != "" {
+					if sys, _ := hcs.OpenComputeSystem(sandboxID); sys != nil {
+						sys.Terminate()
+						sys.Wait()
+						sys.Close()
 					}
 				}
 			}
 		}
 
 		// Remove the bundle on disk
-		if err := os.RemoveAll(bundleFlag); err != nil {
+		if err := os.RemoveAll(bundleFlag); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 
@@ -71,17 +72,4 @@ The delete command will be executed in the container's bundle as its cwd.`,
 		}
 		return nil
 	},
-}
-
-func getSpecFromPath(path string) (*oci.Spec, error) {
-	f, err := os.OpenFile(path, os.O_RDONLY, 0)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	var spec oci.Spec
-	if err := json.NewDecoder(f).Decode(&spec); err != nil {
-		return nil, err
-	}
-	return &spec, nil
 }
