@@ -17,7 +17,7 @@ import (
 //
 // Usage is:
 //
-// sysycallWatcher(logContext, func() {
+// syscallWatcher(logContext, func() {
 //    err = <syscall>(args...)
 // })
 //
