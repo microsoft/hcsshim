@@ -8,10 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	runhcs "github.com/Microsoft/hcsshim/pkg/go-runhcs"
 )
 
 func Test_CreateScratch_EmptyDestpath_Fail(t *testing.T) {
-	rhcs := Runhcs{
+	rhcs := runhcs.Runhcs{
 		Debug: true,
 	}
 
@@ -23,7 +25,7 @@ func Test_CreateScratch_EmptyDestpath_Fail(t *testing.T) {
 }
 
 func Test_CreateScratch_DirDestpath_Failure(t *testing.T) {
-	rhcs := Runhcs{
+	rhcs := runhcs.Runhcs{
 		Debug: true,
 	}
 
@@ -41,7 +43,7 @@ func Test_CreateScratch_DirDestpath_Failure(t *testing.T) {
 }
 
 func Test_CreateScratch_ValidDestpath_Success(t *testing.T) {
-	rhcs := Runhcs{
+	rhcs := runhcs.Runhcs{
 		Debug: true,
 	}
 

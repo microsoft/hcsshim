@@ -15,14 +15,14 @@ build_script:
   - go get -v -d -t -tags "functional integration admin" ./...
   - go build ./cmd/wclayer
   - go build ./cmd/runhcs
-  - go test -c ./pkg/go-runhcs/ -tags integration
   - go build ./cmd/tar2ext4
   - go test -v ./... -tags admin
-  - go test -c ./functional/ -tags functional
+  - go test -c ./test/functional/ -tags functional
+  - go test -c ./test/runhcs/ -tags integration
 
 artifacts:
   - path: 'wclayer.exe'
   - path: 'runhcs.exe'
-  - path: 'go-runhcs.test.exe'
   - path: 'tar2ext4.exe'
   - path: 'functional.test.exe'
+  - path: 'runhcs.test.exe'
