@@ -199,23 +199,6 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 		}
 	}
 
-	if !opts.KernelDirect {
-		doc.VirtualMachine.Devices.VirtualSmb = &hcsschema.VirtualSmb{
-			Shares: []hcsschema.VirtualSmbShare{
-				{
-					Name: "os",
-					Path: opts.BootFilesPath,
-					Options: &hcsschema.VirtualSmbShareOptions{
-						ReadOnly:            true,
-						TakeBackupPrivilege: true,
-						CacheIo:             true,
-						ShareRead:           true,
-					},
-				},
-			},
-		}
-	}
-
 	if uvm.scsiControllerCount > 0 {
 		// TODO: JTERRY75 - this should enumerate scsicount and add an entry per value.
 		doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{
@@ -322,9 +305,10 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 	if !opts.KernelDirect {
 		doc.VirtualMachine.Chipset.Uefi = &hcsschema.Uefi{
 			BootThis: &hcsschema.UefiBootEntry{
-				DevicePath:   `\` + opts.KernelFile,
-				DeviceType:   "VmbFs",
-				OptionalData: kernelArgs,
+				DevicePath:    `\` + opts.KernelFile,
+				DeviceType:    "VmbFs",
+				VmbFsRootPath: opts.BootFilesPath,
+				OptionalData:  kernelArgs,
 			},
 		}
 	} else {
