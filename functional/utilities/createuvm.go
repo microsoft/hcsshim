@@ -4,14 +4,13 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 )
 
 // CreateWCOWUVM creates a WCOW utility VM with all default options. Returns the
 // UtilityVM object; folder used as its scratch
 func CreateWCOWUVM(t *testing.T, id, image string) (*uvm.UtilityVM, []string, string) {
-	return CreateWCOWUVMFromOptsWithImage(t, &uvm.OptionsWCOW{Options: &uvm.Options{ID: id}}, image)
+	return CreateWCOWUVMFromOptsWithImage(t, uvm.NewDefaultOptionsWCOW(id, ""), image)
 
 }
 
@@ -19,9 +18,6 @@ func CreateWCOWUVM(t *testing.T, id, image string) (*uvm.UtilityVM, []string, st
 func CreateWCOWUVMFromOpts(t *testing.T, opts *uvm.OptionsWCOW) *uvm.UtilityVM {
 	if opts == nil || len(opts.LayerFolders) < 2 {
 		t.Fatalf("opts must bet set with LayerFolders")
-	}
-	if opts.ID == "" {
-		opts.ID = guid.New().String()
 	}
 
 	uvm, err := uvm.CreateWCOW(opts)
@@ -59,18 +55,13 @@ func CreateWCOWUVMFromOptsWithImage(t *testing.T, opts *uvm.OptionsWCOW, image s
 
 // CreateLCOWUVM with all default options.
 func CreateLCOWUVM(t *testing.T, id string) *uvm.UtilityVM {
-	return CreateLCOWUVMFromOpts(t, &uvm.OptionsLCOW{Options: &uvm.Options{ID: id}})
+	return CreateLCOWUVMFromOpts(t, uvm.NewDefaultOptionsLCOW(id, ""))
 }
 
 // CreateLCOWUVMFromOpts creates an LCOW utility VM with the specified options.
 func CreateLCOWUVMFromOpts(t *testing.T, opts *uvm.OptionsLCOW) *uvm.UtilityVM {
 	if opts == nil {
-		opts = &uvm.OptionsLCOW{
-			Options: &uvm.Options{},
-		}
-	}
-	if opts.ID == "" {
-		opts.ID = guid.New().String()
+		t.Fatal("opts must be set")
 	}
 
 	uvm, err := uvm.CreateLCOW(opts)

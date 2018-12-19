@@ -13,45 +13,42 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func runMemStartLCOWTest(t *testing.T, opts *uvm.Options) {
-	u := testutilities.CreateLCOWUVMFromOpts(t, &uvm.OptionsLCOW{Options: opts})
+func runMemStartLCOWTest(t *testing.T, opts *uvm.OptionsLCOW) {
+	u := testutilities.CreateLCOWUVMFromOpts(t, opts)
 	u.Close()
 }
 
-func runMemStartWCOWTest(t *testing.T, opts *uvm.Options) {
-	u, _, scratchDir := testutilities.CreateWCOWUVMFromOptsWithImage(t, &uvm.OptionsWCOW{Options: opts}, "microsoft/nanoserver")
+func runMemStartWCOWTest(t *testing.T, opts *uvm.OptionsWCOW) {
+	u, _, scratchDir := testutilities.CreateWCOWUVMFromOptsWithImage(t, opts, "microsoft/nanoserver")
 	defer os.RemoveAll(scratchDir)
 	u.Close()
 }
 
 func runMemTests(t *testing.T, os string) {
 	type testCase struct {
-		allowOvercommit      *bool
-		enableDeferredCommit *bool
+		allowOvercommit      bool
+		enableDeferredCommit bool
 	}
 
-	yes := true
-	no := false
-
 	testCases := []testCase{
-		{nil, nil}, // Implicit default - Virtual
-		{allowOvercommit: &yes, enableDeferredCommit: &no},  // Explicit default - Virtual
-		{allowOvercommit: &yes, enableDeferredCommit: &yes}, // Virtual Deferred
-		{allowOvercommit: &no, enableDeferredCommit: &no},   // Physical
+		{allowOvercommit: true, enableDeferredCommit: false},  // Explicit default - Virtual
+		{allowOvercommit: true, enableDeferredCommit: true},   // Virtual Deferred
+		{allowOvercommit: false, enableDeferredCommit: false}, // Physical
 	}
 
 	for _, bt := range testCases {
-		opts := &uvm.Options{
-			ID:                   t.Name(),
-			MemorySizeInMB:       512,
-			AllowOvercommit:      bt.allowOvercommit,
-			EnableDeferredCommit: bt.enableDeferredCommit,
-		}
-
 		if os == "windows" {
-			runMemStartWCOWTest(t, opts)
+			wopts := uvm.NewDefaultOptionsWCOW(t.Name(), "")
+			wopts.MemorySizeInMB = 512
+			wopts.AllowOvercommit = bt.allowOvercommit
+			wopts.EnableDeferredCommit = bt.enableDeferredCommit
+			runMemStartWCOWTest(t, wopts)
 		} else {
-			runMemStartLCOWTest(t, opts)
+			lopts := uvm.NewDefaultOptionsLCOW(t.Name(), "")
+			lopts.MemorySizeInMB = 512
+			lopts.AllowOvercommit = bt.allowOvercommit
+			lopts.EnableDeferredCommit = bt.enableDeferredCommit
+			runMemStartLCOWTest(t, lopts)
 		}
 	}
 }
@@ -66,9 +63,9 @@ func TestMemBackingTypeLCOW(t *testing.T) {
 	runMemTests(t, "linux")
 }
 
-func runBenchMemStartTest(b *testing.B, opts *uvm.Options) {
+func runBenchMemStartTest(b *testing.B, opts *uvm.OptionsLCOW) {
 	// Cant use testutilities here because its `testing.B` not `testing.T`
-	u, err := uvm.CreateLCOW(&uvm.OptionsLCOW{Options: opts})
+	u, err := uvm.CreateLCOW(opts)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -78,14 +75,12 @@ func runBenchMemStartTest(b *testing.B, opts *uvm.Options) {
 	}
 }
 
-func runBenchMemStartLcowTest(b *testing.B, allowOverCommit bool, enableDeferredCommit bool) {
+func runBenchMemStartLcowTest(b *testing.B, allowOvercommit bool, enableDeferredCommit bool) {
 	for i := 0; i < b.N; i++ {
-		opts := &uvm.Options{
-			ID:                   b.Name(),
-			MemorySizeInMB:       512,
-			AllowOvercommit:      &allowOverCommit,
-			EnableDeferredCommit: &enableDeferredCommit,
-		}
+		opts := uvm.NewDefaultOptionsLCOW(b.Name(), "")
+		opts.MemorySizeInMB = 512
+		opts.AllowOvercommit = allowOvercommit
+		opts.EnableDeferredCommit = enableDeferredCommit
 		runBenchMemStartTest(b, opts)
 	}
 }
