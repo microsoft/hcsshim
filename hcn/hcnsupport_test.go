@@ -23,3 +23,14 @@ func TestV2ApiSupport(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRemoteSubnetSupport(t *testing.T) {
+	supportedFeatures := GetSupportedFeatures()
+	err := RemoteSubnetSupported()
+	if supportedFeatures.RemoteSubnet && err != nil {
+		t.Fatal(err)
+	}
+	if !supportedFeatures.RemoteSubnet && err == nil {
+		t.Fatal(err)
+	}
+}
