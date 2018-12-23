@@ -134,6 +134,15 @@ func V2SchemaVersion() SchemaVersion {
 	}
 }
 
+// RemoteSubnetSupported returns an error if the HCN version does not support Remote Subnet policies.
+func RemoteSubnetSupported() error {
+	supported := GetSupportedFeatures()
+	if supported.RemoteSubnet {
+		return nil
+	}
+	return platformDoesNotSupportError("Remote Subnet")
+}
+
 // RequestType are the different operations performed to settings.
 // Used to update the settings of Endpoint/Namespace objects.
 type RequestType string
