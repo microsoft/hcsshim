@@ -89,7 +89,7 @@ func main() {
 				},
 				cli.StringFlag{
 					Name:  rootFSTypeArgName,
-					Usage: "Either 'initrd' or 'vhd'. Uses hcsshim default if not specified",
+					Usage: "Either 'initrd' or 'vhd'. (default: 'vhd' if rootfs.vhd exists)",
 				},
 				cli.UintFlag{
 					Name:  vpMemMaxCountArgName,
@@ -101,7 +101,7 @@ func main() {
 				},
 				cli.BoolFlag{
 					Name:  kernelDirectArgName,
-					Usage: "Use kernel direct booting for UVM",
+					Usage: "Use kernel direct booting for UVM (default: true on builds >= 18286)",
 				},
 				cli.StringFlag{
 					Name:  execCommandLineArgName,

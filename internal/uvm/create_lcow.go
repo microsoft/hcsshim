@@ -76,7 +76,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		},
 		BootFilesPath:         filepath.Join(os.Getenv("ProgramFiles"), "Linux Containers"),
 		KernelFile:            "kernel",
-		KernelDirect:          false,
+		KernelDirect:          osversion.Get().Build >= 18286, // Use KernelDirect boot by default on all builds that support it.
 		RootFSFile:            "initrd.img",
 		KernelBootOptions:     "",
 		EnableGraphicsConsole: false,
@@ -99,7 +99,11 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		opts.Owner = filepath.Base(os.Args[0])
 	}
 
-	// TODO: If > RS5 use KernelDirect. If rootfs.vhd exists use it.
+	if _, err := os.Stat(filepath.Join(opts.BootFilesPath, "rootfs.vhd")); err != nil {
+		// We have a rootfs.vhd in the boot files path. Use it over an initrd.img
+		opts.RootFSFile = "rootfs.vhd"
+		opts.PreferredRootFSType = PreferredRootFSTypeVHD
+	}
 	return opts
 }
 
