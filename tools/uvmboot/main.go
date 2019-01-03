@@ -169,10 +169,10 @@ func main() {
 						if c.IsSet(rootFSTypeArgName) {
 							switch strings.ToLower(c.String(rootFSTypeArgName)) {
 							case "initrd":
-								options.RootFSFile = "initrd.img"
+								options.RootFSFile = uvm.InitrdFile
 								options.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
 							case "vhd":
-								options.RootFSFile = "rootfs.vhd"
+								options.RootFSFile = uvm.VhdFile
 								options.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
 							default:
 								logrus.Fatalf("Unrecognized value '%s' for option %s", c.String(rootFSTypeArgName), rootFSTypeArgName)

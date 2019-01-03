@@ -4,6 +4,7 @@ package functional
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,9 +27,9 @@ func TestLCOWUVMNoSCSINoVPMemInitrd(t *testing.T) {
 	opts.SCSIControllerCount = 0
 	opts.VPMemDeviceCount = 0
 	opts.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
-	opts.RootFSFile = "initrd.img"
+	opts.RootFSFile = uvm.InitrdFile
 
-	testLCOWUVMNoSCSISingleVPMem(t, opts, `Command line: initrd=/initrd.img`)
+	testLCOWUVMNoSCSISingleVPMem(t, opts, fmt.Sprintf("Command line: initrd=/%s", opts.RootFSFile))
 }
 
 // TestLCOWUVMNoSCSISingleVPMemVHD starts an LCOW utility VM without a SCSI controller and
@@ -38,7 +39,7 @@ func TestLCOWUVMNoSCSISingleVPMemVHD(t *testing.T) {
 	opts.SCSIControllerCount = 0
 	opts.VPMemDeviceCount = 1
 	opts.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
-	opts.RootFSFile = "rootfs.vhd"
+	opts.RootFSFile = uvm.VhdFile
 
 	testLCOWUVMNoSCSISingleVPMem(t, opts, `Command line: root=/dev/pmem0 init=/init`)
 }
@@ -98,9 +99,9 @@ func testLCOWTimeUVMStart(t *testing.T, kernelDirect bool, rfsType uvm.Preferred
 		opts.PreferredRootFSType = rfsType
 		switch opts.PreferredRootFSType {
 		case uvm.PreferredRootFSTypeInitRd:
-			opts.RootFSFile = "initrd.img"
+			opts.RootFSFile = uvm.InitrdFile
 		case uvm.PreferredRootFSTypeVHD:
-			opts.RootFSFile = "rootfs.vhd"
+			opts.RootFSFile = uvm.VhdFile
 		}
 
 		lcowUVM := testutilities.CreateLCOWUVMFromOpts(t, opts)

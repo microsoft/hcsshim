@@ -517,9 +517,9 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 			lopts.PreferredRootFSType = parseAnnotationsPreferredRootFSType(cfg.Spec.Annotations, annotationPreferredRootFSType, lopts.PreferredRootFSType)
 			switch lopts.PreferredRootFSType {
 			case uvm.PreferredRootFSTypeInitRd:
-				lopts.RootFSFile = "initrd.img"
+				lopts.RootFSFile = uvm.InitrdFile
 			case uvm.PreferredRootFSTypeVHD:
-				lopts.RootFSFile = "rootfs.vhd"
+				lopts.RootFSFile = uvm.VhdFile
 			}
 			opts = lopts
 		} else {

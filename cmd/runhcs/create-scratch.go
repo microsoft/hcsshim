@@ -36,7 +36,7 @@ var createScratchCommand = cli.Command{
 				Options: gcsclient.Options{
 					KirdPath:   filepath.Join(os.Getenv("ProgramFiles"), "Linux Containers"),
 					KernelFile: "kernel",
-					InitrdFile: "initrd.img",
+					InitrdFile: uvm.InitrdFile,
 				},
 				Name:              "createscratch-uvm",
 				UvmTimeoutSeconds: 5 * 60, // 5 Min

@@ -31,8 +31,10 @@ const (
 type OutputHandler func(io.Reader)
 
 const (
-	initrdFile = "initrd.img"
-	vhdFile    = "rootfs.vhd"
+	// InitrdFile is the default file name for an initrd.img used to boot LCOW.
+	InitrdFile = "initrd.img"
+	// VhdFile is the default file name for a rootfs.vhd used to boot LCOW.
+	VhdFile = "rootfs.vhd"
 )
 
 // OptionsLCOW are the set of options passed to CreateLCOW() to create a utility vm.
@@ -42,7 +44,7 @@ type OptionsLCOW struct {
 	BootFilesPath         string              // Folder in which kernel and root file system reside. Defaults to \Program Files\Linux Containers
 	KernelFile            string              // Filename under `BootFilesPath` for the kernel. Defaults to `kernel`
 	KernelDirect          bool                // Skip UEFI and boot directly to `kernel`
-	RootFSFile            string              // Filename under `BootFilesPath` for the UVMs root file system. Defaults to `initrd.img`
+	RootFSFile            string              // Filename under `BootFilesPath` for the UVMs root file system. Defaults to `InitrdFile`
 	KernelBootOptions     string              // Additional boot options for the kernel
 	EnableGraphicsConsole bool                // If true, enable a graphics console for the utility VM
 	ConsolePipe           string              // The named pipe path to use for the serial console.  eg \\.\pipe\vmpipe
@@ -54,7 +56,7 @@ type OptionsLCOW struct {
 	OutputHandler         OutputHandler       // Controls how output received over HVSocket from the UVM is handled. Defaults to parsing output as logrus messages
 	VPMemDeviceCount      uint32              // Number of VPMem devices. Defaults to `DefaultVPMEMCount`. Limit at 128. If booting UVM from VHD, device 0 is taken.
 	VPMemSizeBytes        uint64              // Size of the VPMem devices. Defaults to `DefaultVPMemSizeBytes`.
-	PreferredRootFSType   PreferredRootFSType // If `KernelFile` is initrd.img use `PreferredRootFSTypeInitRd`. If `KernelFile` is rootfs.vhd use `PreferredRootFSTypeVHD`
+	PreferredRootFSType   PreferredRootFSType // If `KernelFile` is `InitrdFile` use `PreferredRootFSTypeInitRd`. If `KernelFile` is `VhdFile` use `PreferredRootFSTypeVHD`
 }
 
 // NewDefaultOptionsLCOW creates the default options for a bootable version of
@@ -77,7 +79,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		BootFilesPath:         filepath.Join(os.Getenv("ProgramFiles"), "Linux Containers"),
 		KernelFile:            "kernel",
 		KernelDirect:          osversion.Get().Build >= 18286, // Use KernelDirect boot by default on all builds that support it.
-		RootFSFile:            "initrd.img",
+		RootFSFile:            InitrdFile,
 		KernelBootOptions:     "",
 		EnableGraphicsConsole: false,
 		ConsolePipe:           "",
@@ -99,9 +101,9 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		opts.Owner = filepath.Base(os.Args[0])
 	}
 
-	if _, err := os.Stat(filepath.Join(opts.BootFilesPath, "rootfs.vhd")); err != nil {
+	if _, err := os.Stat(filepath.Join(opts.BootFilesPath, VhdFile)); err != nil {
 		// We have a rootfs.vhd in the boot files path. Use it over an initrd.img
-		opts.RootFSFile = "rootfs.vhd"
+		opts.RootFSFile = VhdFile
 		opts.PreferredRootFSType = PreferredRootFSTypeVHD
 	}
 	return opts
