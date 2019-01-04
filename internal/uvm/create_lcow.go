@@ -53,7 +53,7 @@ type OptionsLCOW struct {
 	ExecCommandLine       string              // The command line to exec from init. Defaults to GCS
 	ForwardStdout         bool                // Whether stdout will be forwarded from the executed program. Defaults to false
 	ForwardStderr         bool                // Whether stderr will be forwarded from the executed program. Defaults to true
-	OutputHandler         OutputHandler       // Controls how output received over HVSocket from the UVM is handled. Defaults to parsing output as logrus messages
+	OutputHandler         OutputHandler       `json:"-"` // Controls how output received over HVSocket from the UVM is handled. Defaults to parsing output as logrus messages
 	VPMemDeviceCount      uint32              // Number of VPMem devices. Defaults to `DefaultVPMEMCount`. Limit at 128. If booting UVM from VHD, device 0 is taken.
 	VPMemSizeBytes        uint64              // Size of the VPMem devices. Defaults to `DefaultVPMemSizeBytes`.
 	PreferredRootFSType   PreferredRootFSType // If `KernelFile` is `InitrdFile` use `PreferredRootFSTypeInitRd`. If `KernelFile` is `VhdFile` use `PreferredRootFSTypeVHD`
@@ -114,6 +114,11 @@ const linuxLogVsockPort = 109
 // CreateLCOW creates an HCS compute system representing a utility VM.
 func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 	logrus.Debugf("uvm::CreateLCOW %+v", opts)
+
+	// We dont serialize OutputHandler so if it is missing we need to put it back to the default.
+	if opts.OutputHandler == nil {
+		opts.OutputHandler = parseLogrus
+	}
 
 	uvm := &UtilityVM{
 		id:                  opts.ID,

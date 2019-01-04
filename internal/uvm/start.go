@@ -12,6 +12,8 @@ import (
 
 const _ERROR_CONNECTION_ABORTED syscall.Errno = 1236
 
+var _ = (OutputHandler)(parseLogrus)
+
 func parseLogrus(r io.Reader) {
 	j := json.NewDecoder(r)
 	logger := logrus.StandardLogger()
