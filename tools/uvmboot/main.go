@@ -89,7 +89,7 @@ func main() {
 				},
 				cli.StringFlag{
 					Name:  rootFSTypeArgName,
-					Usage: "Either 'initrd' or 'vhd'. Uses hcsshim default if not specified",
+					Usage: "Either 'initrd' or 'vhd'. (default: 'vhd' if rootfs.vhd exists)",
 				},
 				cli.UintFlag{
 					Name:  vpMemMaxCountArgName,
@@ -101,7 +101,7 @@ func main() {
 				},
 				cli.BoolFlag{
 					Name:  kernelDirectArgName,
-					Usage: "Use kernel direct booting for UVM",
+					Usage: "Use kernel direct booting for UVM (default: true on builds >= 18286)",
 				},
 				cli.StringFlag{
 					Name:  execCommandLineArgName,
@@ -169,10 +169,10 @@ func main() {
 						if c.IsSet(rootFSTypeArgName) {
 							switch strings.ToLower(c.String(rootFSTypeArgName)) {
 							case "initrd":
-								options.RootFSFile = "initrd.img"
+								options.RootFSFile = uvm.InitrdFile
 								options.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
 							case "vhd":
-								options.RootFSFile = "rootfs.vhd"
+								options.RootFSFile = uvm.VhdFile
 								options.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
 							default:
 								logrus.Fatalf("Unrecognized value '%s' for option %s", c.String(rootFSTypeArgName), rootFSTypeArgName)
