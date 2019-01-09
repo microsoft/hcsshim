@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/pkg/errors"
@@ -18,7 +19,7 @@ import (
 // namespace and configures it there.
 func (c *gcsCore) configureAdapterInNamespace(container runtime.Container, adapter prot.NetworkAdapter) error {
 	id := adapter.AdapterInstanceID
-	interfaceName, err := c.instanceIDToName(id)
+	interfaceName, err := instanceIDToName(c.OS, id)
 	if err != nil {
 		return err
 	}
@@ -45,7 +46,7 @@ func (c *gcsCore) configureAdapterInNamespace(container runtime.Container, adapt
 
 	if adapter.NatEnabled {
 		// Set the DNS configuration.
-		if err := c.generateResolvConfFile(resolvPath, adapter); err != nil {
+		if err := generateResolvConfFile(c.OS, resolvPath, adapter); err != nil {
 			return errors.Wrapf(err, "failed to generate resolv.conf file for adapter %s", adapter.AdapterInstanceID)
 		}
 	} else {
@@ -67,7 +68,7 @@ func (c *gcsCore) configureAdapterInNamespace(container runtime.Container, adapt
 // for the given adapter.
 // TODO: This method of managing DNS will potentially be replaced with another
 // method in the future.
-func (c *gcsCore) generateResolvConfFile(resolvPath string, adapter prot.NetworkAdapter) error {
+func generateResolvConfFile(o oslayer.OS, resolvPath string, adapter prot.NetworkAdapter) error {
 	fileContents := ""
 
 	split := func(r rune) bool {
@@ -88,7 +89,7 @@ func (c *gcsCore) generateResolvConfFile(resolvPath string, adapter prot.Network
 		fileContents += fmt.Sprintf("search %s\n", adapter.HostDNSSuffix)
 	}
 
-	file, err := c.OS.OpenFile(resolvPath, os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := o.OpenFile(resolvPath, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return errors.Wrapf(err, "failed to create resolv.conf file for adapter %s", adapter.AdapterInstanceID)
 	}
@@ -102,8 +103,8 @@ func (c *gcsCore) generateResolvConfFile(resolvPath string, adapter prot.Network
 
 // instanceIDToName converts from the given instance ID (a GUID generated on
 // the Windows host) to its corresponding interface name (e.g. "eth0").
-func (c *gcsCore) instanceIDToName(id string) (string, error) {
-	deviceDirs, err := c.OS.ReadDir(filepath.Join("/sys", "bus", "vmbus", "devices", id, "net"))
+func instanceIDToName(o oslayer.OS, id string) (string, error) {
+	deviceDirs, err := o.ReadDir(filepath.Join("/sys", "bus", "vmbus", "devices", id, "net"))
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to read vmbus network device from /sys filesystem for adapter %s", id)
 	}

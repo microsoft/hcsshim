@@ -42,6 +42,7 @@ var capabilities = prot.GcsCapabilities{
 	},
 	RuntimeOsType: prot.OsTypeLinux,
 	GuestDefinedCapabilities: prot.GcsGuestCapabilities{
+		NamespaceAddRequestSupported: true,
 		SignalProcessSupported: true,
 	},
 }
