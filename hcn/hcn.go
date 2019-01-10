@@ -143,6 +143,15 @@ func RemoteSubnetSupported() error {
 	return platformDoesNotSupportError("Remote Subnet")
 }
 
+// DSRSupported returns an error if the HCN version does not support Direct Server Return.
+func DSRSupported() error {
+	supported := GetSupportedFeatures()
+	if supported.DSR {
+		return nil
+	}
+	return platformDoesNotSupportError("Direct Server Return (DSR)")
+}
+
 // RequestType are the different operations performed to settings.
 // Used to update the settings of Endpoint/Namespace objects.
 type RequestType string

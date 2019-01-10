@@ -27,6 +27,8 @@ var (
 	V2ApiSupport = Version{Major: 9, Minor: 1}
 	// Remote Subnet allows for Remote Subnet policies on Overlay networks
 	RemoteSubnetVersion = Version{Major: 9, Minor: 2}
+	// HNS 10.2 allows for Direct Server Return for loadbalancing
+	DSRVersion = Version{Major: 10, Minor: 2}
 )
 
 // GetGlobals returns the global properties of the HCN Service.
