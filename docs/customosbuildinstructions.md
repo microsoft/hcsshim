@@ -110,16 +110,18 @@ Here are the expected contents of each subdirectory /file
 
     - Required binaires: utilities used by gcs
 
-             /bin/sh
-             /bin/mkfs.ext4
-             /bin/blockdev
-             /bin/mkdir
-             /bin/rmdir
-             /bin/mount
-             /bin/udhcpd
-             /bin/ip
-             /bin/iproute
              /bin/hostname
+             /bin/mkdir
+             /bin/mount
+             /bin/rmdir
+             /bin/sh
+
+             /sbin/blockdev
+             /sbin/
+             /sbin/ip
+             /sbin/iproute
+             /sbin/mkfs.ext4
+             /sbin/udhcp
 
     - Required binaires: utilities used by docker
 
@@ -127,7 +129,6 @@ Here are the expected contents of each subdirectory /file
              /bin/kill
              /bin/ls
              /bin/pidof
-             /bin/test
 
     - Debugging tools: mostly from busybox tool set
 
