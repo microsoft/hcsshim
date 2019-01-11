@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/go-winio/pkg/etwlogrus"
 	"github.com/Microsoft/hcsshim/internal/regstate"
 	"github.com/Microsoft/hcsshim/internal/runhcs"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -50,6 +51,20 @@ Where "<container-id>" is your name for the instance of the container that you a
 )
 
 func main() {
+	hook, err := etwlogrus.NewHook("Microsoft-Virtualization-RunHCS")
+	if err == nil {
+		logrus.AddHook(hook)
+	} else {
+		logrus.Error(err)
+	}
+	defer func() {
+		if hook != nil {
+			if err := hook.Close(); err != nil {
+				logrus.Error(err)
+			}
+		}
+	}()
+
 	app := cli.NewApp()
 	app.Name = "runhcs"
 	app.Usage = usage
