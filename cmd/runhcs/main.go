@@ -51,7 +51,8 @@ Where "<container-id>" is your name for the instance of the container that you a
 )
 
 func main() {
-	hook, err := etwlogrus.NewHook("Microsoft-Virtualization-RunHCS")
+	// Provider ID: 0b52781f-b24d-5685-ddf6-69830ed40ec3
+	hook, err := etwlogrus.NewHook("Microsoft.Virtualization.RunHCS")
 	if err == nil {
 		logrus.AddHook(hook)
 	} else {
