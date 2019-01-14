@@ -52,19 +52,12 @@ Where "<container-id>" is your name for the instance of the container that you a
 
 func main() {
 	// Provider ID: 0b52781f-b24d-5685-ddf6-69830ed40ec3
-	hook, err := etwlogrus.NewHook("Microsoft.Virtualization.RunHCS")
-	if err == nil {
+	// Hook isn't closed explicitly, as it will exist until process exit.
+	if hook, err := etwlogrus.NewHook("Microsoft.Virtualization.RunHCS"); err == nil {
 		logrus.AddHook(hook)
 	} else {
 		logrus.Error(err)
 	}
-	defer func() {
-		if hook != nil {
-			if err := hook.Close(); err != nil {
-				logrus.Error(err)
-			}
-		}
-	}()
 
 	app := cli.NewApp()
 	app.Name = "runhcs"
