@@ -87,6 +87,7 @@ func CreateTestOverlayNetwork() (*HostComputeNetwork, error) {
 				},
 			},
 		},
+		Flags: EnableNonPersistent,
 		SchemaVersion: SchemaVersion{
 			Major: 2,
 			Minor: 0,

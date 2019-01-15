@@ -140,3 +140,26 @@ func TestAddRemoveHostRoutePolicy(t *testing.T) {
 
 	testNetworkPolicy(t, hostRoutePolicy)
 }
+
+func TestNetworkFlags(t *testing.T) {
+
+	network, err := CreateTestOverlayNetwork()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//Reload the network object from HNS.
+	network, err = GetNetworkByID(network.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if network.Flags != EnableNonPersistent {
+		t.Errorf("EnableNonPersistent flag (%d) is not set on network", EnableNonPersistent)
+	}
+
+	err = network.Delete()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
