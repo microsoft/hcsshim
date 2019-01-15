@@ -20,7 +20,6 @@ import (
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
-	"golang.org/x/sys/windows"
 )
 
 func containerPipePath(id string) string {
@@ -175,19 +174,13 @@ var shimCommand = cli.Command{
 				}
 			}
 			wpp = &hcsschema.ProcessParameters{
+				CommandLine:      strings.Join(spec.Args, " "),
 				WorkingDirectory: spec.Cwd,
 				EmulateConsole:   spec.Terminal,
 				Environment:      environment,
 				User:             spec.User.Username,
 			}
-			for i, arg := range spec.Args {
-				e := windows.EscapeArg(arg)
-				if i == 0 {
-					wpp.CommandLine = e
-				} else {
-					wpp.CommandLine += " " + e
-				}
-			}
+
 			if spec.ConsoleSize != nil {
 				wpp.ConsoleSize = []int32{
 					int32(spec.ConsoleSize.Height),
