@@ -251,3 +251,16 @@ func HcnCreateTestRemoteSubnetRoute() (*PolicyNetworkRequest, error) {
 
 	return &networkRequest, nil
 }
+
+func HcnCreateTestHostRoute() (*PolicyNetworkRequest, error) {
+	hostRoutePolicy := NetworkPolicy{
+		Type:     HostRoute,
+		Settings: []byte("{}"),
+	}
+
+	networkRequest := PolicyNetworkRequest{
+		Policies: []NetworkPolicy{hostRoutePolicy},
+	}
+
+	return &networkRequest, nil
+}
