@@ -101,7 +101,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		opts.Owner = filepath.Base(os.Args[0])
 	}
 
-	if _, err := os.Stat(filepath.Join(opts.BootFilesPath, VhdFile)); err != nil {
+	if _, err := os.Stat(filepath.Join(opts.BootFilesPath, VhdFile)); err == nil {
 		// We have a rootfs.vhd in the boot files path. Use it over an initrd.img
 		opts.RootFSFile = VhdFile
 		opts.PreferredRootFSType = PreferredRootFSTypeVHD
