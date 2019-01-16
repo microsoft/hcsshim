@@ -76,9 +76,7 @@ func (ms *mountSpec) MountWithTimedRetry(osl oslayer.OS, target string) error {
 	for {
 		err := ms.Mount(osl, target)
 		if err != nil {
-			currentTime := time.Now()
-			elapsedTime := currentTime.Sub(startTime)
-			if elapsedTime > mappedDiskMountTimeout {
+			if time.Since(startTime) > mappedDiskMountTimeout {
 				return errors.Wrapf(err, "failed to mount directory %s for mapped virtual disk device %s", target, ms.Source)
 			}
 		} else {
@@ -93,7 +91,7 @@ func (ms *mountSpec) MountWithTimedRetry(osl oslayer.OS, target string) error {
 func (c *gcsCore) getLayerMounts(scratch string, layers []prot.Layer) (scratchMount *mountSpec, layerMounts []*mountSpec, err error) {
 	layerMounts = make([]*mountSpec, len(layers))
 	for i, layer := range layers {
-		deviceName, pmem, err := deviceIDToName(c.OS, layer.Path)
+		deviceName, pmem, err := c.deviceIDToName(layer.Path)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -111,7 +109,7 @@ func (c *gcsCore) getLayerMounts(scratch string, layers []prot.Layer) (scratchMo
 	}
 	// An empty scratch value indicates no scratch space is to be attached.
 	if scratch != "" {
-		scratchDevice, _, err := deviceIDToName(c.OS, scratch)
+		scratchDevice, _, err := c.deviceIDToName(scratch)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -129,7 +127,7 @@ func (c *gcsCore) getLayerMounts(scratch string, layers []prot.Layer) (scratchMo
 func (c *gcsCore) getMappedVirtualDiskMounts(disks []prot.MappedVirtualDisk) ([]*mountSpec, error) {
 	devices := make([]*mountSpec, len(disks))
 	for i, disk := range disks {
-		device, err := scsiLunToName(c.OS, disk.Lun)
+		device, err := c.scsiLunToName(disk.Lun)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to get device name for mapped virtual disk %s, lun %d", disk.ContainerPath, disk.Lun)
 		}
@@ -152,6 +150,11 @@ func (c *gcsCore) getMappedVirtualDiskMounts(disks []prot.MappedVirtualDisk) ([]
 // scsiControllerLunToName finds the SCSI device with the given LUN. This assumes
 // only one SCSI controller.
 func scsiControllerLunToName(osl oslayer.OS, controller, lun uint8) (string, error) {
+	logrus.WithFields(logrus.Fields{
+		"controller": controller,
+		"lun":        lun,
+	}).Info("opengcs::storage::scsiControllerLunToName")
+
 	scsiID := fmt.Sprintf("0:0:%d:%d", controller, lun)
 
 	// Query for the device name up until the timeout.
@@ -163,9 +166,7 @@ func scsiControllerLunToName(osl oslayer.OS, controller, lun uint8) (string, err
 		var err error
 		deviceNames, err = osl.ReadDir(filepath.Join("/sys/bus/scsi/devices", scsiID, "block"))
 		if err != nil {
-			currentTime := time.Now()
-			elapsedTime := currentTime.Sub(startTime)
-			if elapsedTime > deviceLookupTimeout {
+			if time.Since(startTime) > deviceLookupTimeout {
 				return "", errors.Wrap(err, "failed to retrieve SCSI device names from filesystem")
 			}
 		} else {
@@ -185,14 +186,14 @@ func scsiControllerLunToName(osl oslayer.OS, controller, lun uint8) (string, err
 
 // scsiLunToName finds the SCSI device with the given LUN. This assumes
 // only one SCSI controller.
-func scsiLunToName(osl oslayer.OS, lun uint8) (string, error) {
-	return scsiControllerLunToName(osl, 0, lun)
+func (c *gcsCore) scsiLunToName(lun uint8) (string, error) {
+	return scsiControllerLunToName(c.OS, 0, lun)
 }
 
 // deviceIDToName converts a device ID (scsi:<lun> or pmem:<device#> to a
 // device name (/dev/sd? or /dev/pmem?).
 // For temporary compatibility, this also accepts just <lun> for SCSI devices.
-func deviceIDToName(osl oslayer.OS, id string) (device string, pmem bool, err error) {
+func (c *gcsCore) deviceIDToName(id string) (device string, pmem bool, err error) {
 	const (
 		pmemPrefix = "pmem:"
 		scsiPrefix = "scsi:"
@@ -208,7 +209,7 @@ func deviceIDToName(osl oslayer.OS, id string) (device string, pmem bool, err er
 	}
 
 	if lun, err := strconv.ParseInt(lunStr, 10, 8); err == nil {
-		name, err := scsiLunToName(osl, uint8(lun))
+		name, err := c.scsiLunToName(uint8(lun))
 		return name, false, err
 	}
 
@@ -244,6 +245,11 @@ func (c *gcsCore) mountMappedVirtualDisks(disks []prot.MappedVirtualDisk, mounts
 // unmountPath unmounts the target path if it exists and is a mount path. If
 // removeTarget this will remove the previously mounted folder.
 func unmountPath(osl oslayer.OS, target string, removeTarget bool) error {
+	logrus.WithFields(logrus.Fields{
+		"target": target,
+		"remove": removeTarget,
+	}).Info("opengcs::storage::unmountPath")
+
 	if exists, err := osl.PathExists(target); err != nil {
 		return errors.Wrapf(err, "failed to determine if path '%s' exists", target)
 	} else if exists {
@@ -264,6 +270,13 @@ func unmountPath(osl oslayer.OS, target string, removeTarget bool) error {
 // mountPlan9Share mounts the given Plan9 share to the filesystem with the given
 // options.
 func mountPlan9Share(osl oslayer.OS, vsock transport.Transport, mountPath, share string, port uint32, readonly bool) error {
+	logrus.WithFields(logrus.Fields{
+		"target":   mountPath,
+		"share":    share,
+		"port":     port,
+		"readonly": readonly,
+	}).Info("opengcs::storage::mountPlan9Share")
+
 	if err := osl.MkdirAll(mountPath, 0700); err != nil {
 		return errors.Wrapf(err, "failed to create directory for mapped directory %s", mountPath)
 	}
@@ -295,7 +308,10 @@ func mountPlan9Share(osl oslayer.OS, vsock transport.Transport, mountPath, share
 
 // mountLayer mounts the layer spec at location
 func mountLayer(osl oslayer.OS, location string, layer *mountSpec) error {
-	logrus.Infof("mounting layer at path: %s", location)
+	logrus.WithFields(logrus.Fields{
+		"target": location,
+	}).Info("opengcs::storage::mountLayer")
+
 	if err := osl.MkdirAll(location, 0700); err != nil {
 		return errors.Wrapf(err, "failed to create directory for layer '%s'", location)
 	}
@@ -360,6 +376,13 @@ func (c *gcsCore) mountLayers(index uint32, scratchMount *mountSpec, layers []*m
 }
 
 func mountOverlay(osl oslayer.OS, layerPaths []string, upperdirPath, workdirPath, rootfsPath string, mountOptions uintptr) error {
+	logrus.WithFields(logrus.Fields{
+		"layerPaths":   layerPaths,
+		"upperdirPath": upperdirPath,
+		"workdirPath":  workdirPath,
+		"rootfsPath":   rootfsPath,
+	}).Info("opengcs::storage::mountOverlay")
+
 	lowerdir := strings.Join(layerPaths, ":")
 	options := fmt.Sprintf("lowerdir=%s", lowerdir)
 

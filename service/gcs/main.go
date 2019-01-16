@@ -39,7 +39,10 @@ func main() {
 	if *logFile != "" {
 		logFileHandle, err := os.OpenFile(*logFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 		if err != nil {
-			logrus.Fatalf("failed to create log file %s", *logFile)
+			logrus.WithFields(logrus.Fields{
+				"path":          *logFile,
+				logrus.ErrorKey: err,
+			}).Fatal("opengcs::main - failed to create log file")
 		}
 		logrus.SetOutput(logFileHandle)
 	}
@@ -50,7 +53,9 @@ func main() {
 	case "json":
 		logrus.SetFormatter(new(logrus.JSONFormatter))
 	default:
-		logrus.Fatalf("unknown log-format %q", *logFormat)
+		logrus.WithFields(logrus.Fields{
+			"log-format": *logFormat,
+		}).Fatal("opengcs::main - unknown log-format")
 	}
 
 	level, err := logrus.ParseLevel(*logLevel)
@@ -70,7 +75,10 @@ func main() {
 	signal.Notify(sigChan, unix.SIGUSR1)
 	go func() {
 		if err := os.MkdirAll(baseLogPath, 0700); err != nil {
-			logrus.Errorf("failed to create base directory to write signal info err (%s)", err)
+			logrus.WithFields(logrus.Fields{
+				"path":          baseLogPath,
+				logrus.ErrorKey: err,
+			}).Error("opengcs::main - failed to create base directory to write signal info")
 			return
 		}
 
@@ -90,7 +98,10 @@ func main() {
 
 			path := filepath.Join(baseLogPath, "gcs-stacks.log")
 			if stackFile, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600); err != nil {
-				logrus.Errorf("failed to create stacks file (%s) to write signal info err (%s)", path, err)
+				logrus.WithFields(logrus.Fields{
+					"path":          path,
+					logrus.ErrorKey: err,
+				}).Error("opengcs::main - failed to create stacks file to write signal info")
 				continue
 			} else {
 				writeWg := sync.WaitGroup{}
@@ -101,7 +112,10 @@ func main() {
 					defer stackFile.Sync()
 
 					if _, err := stackFile.Write(buf); err != nil {
-						logrus.Errorf("failed to write stacks data to file (%s)", err)
+						logrus.WithFields(logrus.Fields{
+							"path":          path,
+							logrus.ErrorKey: err,
+						}).Error("opengcs::main - failed to write stacks data to file")
 					}
 				}()
 
@@ -114,7 +128,9 @@ func main() {
 	tport := &transport.VsockTransport{}
 	rtime, err := runc.NewRuntime(baseLogPath)
 	if err != nil {
-		logrus.Fatalf("%+v", err)
+		logrus.WithFields(logrus.Fields{
+			logrus.ErrorKey: err,
+		}).Fatal("opengcs::main - failed to initialize new runc runtime")
 	}
 	ros := realos.NewOS()
 	coreint := gcs.NewGCSCore(baseLogPath, baseStoragePath, rtime, ros, tport)
@@ -134,15 +150,19 @@ func main() {
 		const commandPort uint32 = 0x40000000
 		bridgeCon, err := tport.Dial(commandPort)
 		if err != nil {
-			logrus.Fatal(err)
+			logrus.WithFields(logrus.Fields{
+				"port":          commandPort,
+				logrus.ErrorKey: err,
+			}).Fatal("opengcs::main - failed to dial host vsock connection")
 		}
 		bridgeIn = bridgeCon
 		bridgeOut = bridgeCon
-		logrus.Info("main: successfully connected to the HCS via HyperV_Socket")
 	}
 
 	err = b.ListenAndServe(bridgeIn, bridgeOut)
 	if err != nil {
-		logrus.Fatal(err)
+		logrus.WithFields(logrus.Fields{
+			logrus.ErrorKey: err,
+		}).Fatal("opengcs::main - failed to serve gcs service")
 	}
 }

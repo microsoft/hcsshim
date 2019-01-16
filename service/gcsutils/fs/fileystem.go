@@ -29,10 +29,8 @@ type Filesystem interface {
 	GetSizeInfo() FilesystemSizeInfo
 
 	// MakeFileSystem takes the current context and creates a file system on the
-	// given device. MakeBasicFileSystem just makes the file system with default
-	// arguments & does not a need a context.
+	// given device.
 	MakeFileSystem(file *os.File) error
-	MakeBasicFileSystem(file *os.File) error
 
 	// CleanupContext() clears up system resources to safely begin a new context
 	CleanupSizeContext() error

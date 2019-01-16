@@ -348,6 +348,10 @@ type Container struct {
 }
 
 func (c *Container) Start(conSettings stdio.ConnectionSettings) (int, error) {
+	logrus.WithFields(logrus.Fields{
+		"cid": c.id,
+	}).Info("opengcs::Container::Start")
+
 	stdioSet, err := stdio.Connect(c.vsock, conSettings)
 	if err != nil {
 		return -1, err
@@ -370,7 +374,10 @@ func (c *Container) Start(conSettings stdio.ConnectionSettings) (int, error) {
 }
 
 func (c *Container) ExecProcess(process *oci.Process, conSettings stdio.ConnectionSettings) (int, error) {
-	logrus.Debugf("container::ExecProcess %+v", *process)
+	logrus.WithFields(logrus.Fields{
+		"cid": c.id,
+	}).Info("opengcs::Container::ExecProcess")
+
 	stdioSet, err := stdio.Connect(c.vsock, conSettings)
 	if err != nil {
 		return -1, err
@@ -402,7 +409,11 @@ func (c *Container) ExecProcess(process *oci.Process, conSettings stdio.Connecti
 // GetProcess returns the *Process with the matching 'pid'. If the 'pid' does
 // not exit returns error.
 func (c *Container) GetProcess(pid uint32) (*Process, error) {
-	logrus.Debugf("container: %s, get process: %d", c.id, pid)
+	logrus.WithFields(logrus.Fields{
+		"cid": c.id,
+		"pid": pid,
+	}).Info("opengcs::Container::GetProcess")
+
 	if c.initProcess.pid == pid {
 		return c.initProcess, nil
 	}
@@ -419,20 +430,33 @@ func (c *Container) GetProcess(pid uint32) (*Process, error) {
 
 // Kill sends 'signal' to the container process.
 func (c *Container) Kill(signal oslayer.Signal) error {
-	logrus.Debugf("container: %s, sending kill %v", c.id, signal)
+	logrus.WithFields(logrus.Fields{
+		"cid":    c.id,
+		"signal": signal,
+	}).Info("opengcs::Container::Kill")
+
 	return c.container.Kill(signal)
 }
 
 // Wait waits for all processes exec'ed to finish as well as the init process
 // representing the container.
 func (c *Container) Wait() int {
-	logrus.Debugf("container: %s, beginning wait", c.id)
+	logrus.WithFields(logrus.Fields{
+		"cid": c.id,
+	}).Info("opengcs::Container::Wait")
+
 	c.processesWg.Wait()
 	return c.initProcess.exitCode
 }
 
 // AddNetworkAdapter adds `a` to the network namespace held by this container.
 func (c *Container) AddNetworkAdapter(o oslayer.OS, a *prot.NetworkAdapterV2) error {
+	log := logrus.WithFields(logrus.Fields{
+		"cid":       c.id,
+		"adapterID": a.ID,
+	})
+	log.Info("opengcs::Container::AddNetworkAdapter")
+
 	// TODO: netnscfg is not coded for v2 but since they are almost the same
 	// just convert the parts of the adapter here.
 	v1Adapter := &prot.NetworkAdapter{
@@ -457,7 +481,7 @@ func (c *Container) AddNetworkAdapter(o oslayer.OS, a *prot.NetworkAdapterV2) er
 		if err != nil {
 			if os.IsNotExist(errors.Cause(err)) {
 				<-time.After(10 * time.Millisecond)
-				if time.Now().Sub(start) > 2*time.Second {
+				if time.Since(start) > 2*time.Second {
 					return errors.Wrap(err, "timed out waiting for net adapter after 2 seconds")
 				}
 				continue
@@ -466,7 +490,9 @@ func (c *Container) AddNetworkAdapter(o oslayer.OS, a *prot.NetworkAdapterV2) er
 		}
 		break
 	}
-	logrus.Debugf("Waited: %v for the network adapter to show up", time.Now().Sub(start))
+	log.Data["adapter-wait-time-ns"] = time.Since(start)
+	log.Debug("opengcs::Container::AddNetworkAdapter - Waited for network adapter to show up")
+
 	out, err := o.Command("netnscfg",
 		"-if", id,
 		"-nspid", strconv.Itoa(c.container.Pid()),
@@ -474,13 +500,17 @@ func (c *Container) AddNetworkAdapter(o oslayer.OS, a *prot.NetworkAdapterV2) er
 	if err != nil {
 		return errors.Wrapf(err, "failed to configure adapter cid: %s, aid: %s, if id: %s", c.id, a.ID, id, out)
 	}
-	logrus.Debugf("netnscfg output:\n%s", out)
 	return nil
 }
 
 // RemoveNetworkAdapter removes the network adapter `id` from the network
 // namespace held by this container.
 func (c *Container) RemoveNetworkAdapter(o oslayer.OS, id string) error {
+	logrus.WithFields(logrus.Fields{
+		"cid":       c.id,
+		"adapterID": id,
+	}).Info("opengcs::Container::RemoveNetworkAdapter")
+
 	// TODO: JTERRY75 - Implement removal if we ever need to support hot remove.
 	return errors.New("not implemented")
 }
@@ -489,6 +519,8 @@ func (c *Container) RemoveNetworkAdapter(o oslayer.OS, id string) error {
 // an oci.Process.
 type Process struct {
 	spec *oci.Process
+	// cid is the container id that owns this process.
+	cid string
 
 	process runtime.Process
 	pid     uint32
@@ -516,6 +548,7 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 	p := &Process{
 		spec:    spec,
 		process: process,
+		cid:     c.id,
 		pid:     pid,
 	}
 	p.exitWg.Add(1)
@@ -524,12 +557,21 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 		// Wait for the process to exit
 		state, err := p.process.Wait()
 		if err != nil {
-			logrus.Errorf("process: %d, failed to wait for runc process", p.pid)
+			logrus.WithFields(logrus.Fields{
+				"cid":           c.id,
+				"pid":           pid,
+				logrus.ErrorKey: err,
+			}).Error("opengcs::Process - failed to wait for runc process")
 			p.exitCode = -1
 		} else {
 			p.exitCode = state.ExitCode()
 		}
-		logrus.Debugf("process: %d, exited with code: %d", p.pid, p.exitCode)
+		logrus.WithFields(logrus.Fields{
+			"cid":      c.id,
+			"pid":      pid,
+			"exitCode": p.exitCode,
+		}).Info("opengcs::Process - process exited")
+
 		// Free any process waiters
 		p.exitWg.Done()
 		// Decrement any container process count waiters
@@ -542,7 +584,12 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 		go func() {
 			p.writersWg.Wait()
 			c.processesMutex.Lock()
-			logrus.Debugf("process: %d, all waiters have completed, removing process", p.pid)
+
+			logrus.WithFields(logrus.Fields{
+				"cid": c.id,
+				"pid": pid,
+			}).Debug("opengcs::Process - all waiters have completed, removing process")
+
 			delete(c.processes, p.pid)
 			c.processesMutex.Unlock()
 		}()
@@ -552,7 +599,12 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 
 // Kill sends 'signal' to the process.
 func (p *Process) Kill(signal syscall.Signal) error {
-	logrus.Debugf("process: %d, sending kill %v", p.pid, signal)
+	logrus.WithFields(logrus.Fields{
+		"cid":    p.cid,
+		"pid":    p.pid,
+		"signal": signal,
+	}).Info("opengcs::Process::Kill")
+
 	if err := syscall.Kill(int(p.pid), signal); err != nil {
 		return errors.WithStack(err)
 	}
@@ -563,7 +615,12 @@ func (p *Process) Kill(signal syscall.Signal) error {
 // gather the exit code. The second channel must be signaled from the caller
 // when the caller has completed its use of this call to Wait.
 func (p *Process) Wait() (<-chan int, chan<- bool) {
-	logrus.Debugf("process: %d, beginning wait", p.pid)
+	log := logrus.WithFields(logrus.Fields{
+		"cid": p.cid,
+		"pid": p.pid,
+	})
+	log.Info("opengcs::Process::Wait")
+
 	exitCodeChan := make(chan int, 1)
 	doneChan := make(chan bool)
 
@@ -590,13 +647,15 @@ func (p *Process) Wait() (<-chan int, chan<- bool) {
 			case <-doneChan:
 				p.writersSyncRoot.Lock()
 				// Decrement this waiter
-				logrus.Debugf("process: %d, wait completed, releasing wait count", p.pid)
+				log.Debug("opengcs::Process::Wait - wait completed, releasing wait count")
+
 				p.writersWg.Done()
 				if !p.writersCalled {
 					// We have at least 1 response for the exit code for this
 					// process. Decrement the release waiter that will free the
 					// process resources when the writersWg hits 0
-					logrus.Debugf("process: %d, first wait completed, releasing first wait count", p.pid)
+					log.Debug("opengcs::Process::Wait - first wait completed, releasing first wait count")
+
 					p.writersCalled = true
 					p.writersWg.Done()
 				}
@@ -608,7 +667,8 @@ func (p *Process) Wait() (<-chan int, chan<- bool) {
 			// decrement the waiter but since no exit code we just deal with our
 			// waiter.
 			p.writersSyncRoot.Lock()
-			logrus.Debugf("process: %d, wait canceled before exit, releasing wait count", p.pid)
+			log.Debug("opengcs::Process::Wait - wait canceled before exit, releasing wait count")
+
 			p.writersWg.Done()
 			p.writersSyncRoot.Unlock()
 		}
