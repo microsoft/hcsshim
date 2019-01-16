@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
@@ -12,7 +13,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
@@ -38,20 +38,20 @@ type Host struct {
 	rtime runtime.Runtime
 	vsock transport.Transport
 
-	// cachedAdapters is a map from `NamespaceID` to adapter.
-	cachedAdapters map[string][]*prot.NetworkAdapterV2
-	// networkNSToContainer is a map from `NamespaceID` to `ContainerID`. If the
-	// map entry does not exist then the adapter is cached in `cachedAdapters`
-	// for addition when the container is eventually created.
+	// netNamespaces maps `NamespaceID` to the namespace opts
+	netNamespaces map[string]*netNSOpts
+	// networkNSToContainer is a map from `NamespaceID` to sandbox
+	// `ContainerID`. If the map entry does not exist then the adapter is cached
+	// in `netNamespaces` for addition when the sandbox is eventually created.
 	networkNSToContainer sync.Map
 }
 
 func NewHost(rtime runtime.Runtime, vsock transport.Transport) *Host {
 	return &Host{
-		containers:     make(map[string]*Container),
-		rtime:          rtime,
-		vsock:          vsock,
-		cachedAdapters: make(map[string][]*prot.NetworkAdapterV2),
+		containers:    make(map[string]*Container),
+		rtime:         rtime,
+		vsock:         vsock,
+		netNamespaces: make(map[string]*netNSOpts),
 	}
 }
 
@@ -85,6 +85,11 @@ func (h *Host) GetContainer(id string) (*Container, error) {
 	return h.getContainerLocked(id)
 }
 
+type netNSOpts struct {
+	Adapters   []*prot.NetworkAdapterV2
+	ResolvPath string
+}
+
 func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettingsV2) (*Container, error) {
 	h.containersMutex.Lock()
 	defer h.containersMutex.Unlock()
@@ -93,6 +98,76 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 	if err == nil {
 		return c, nil
 	}
+
+	isSandboxOrStandalone := false
+	if criType, ok := settings.OCISpecification.Annotations["io.kubernetes.cri.container-type"]; ok {
+		// If the annotation is present it must be "sandbox"
+		isSandboxOrStandalone = criType == "sandbox"
+	} else {
+		// No annotation declares a standalone LCOW
+		isSandboxOrStandalone = true
+	}
+
+	// Check if we have a network namespace and if so generate the resolv.conf
+	// so we can bindmount it into the container
+	var networkNamespace string
+	if settings.OCISpecification.Windows != nil &&
+		settings.OCISpecification.Windows.Network != nil &&
+		settings.OCISpecification.Windows.Network.NetworkNamespace != "" {
+		networkNamespace = strings.ToLower(settings.OCISpecification.Windows.Network.NetworkNamespace)
+	}
+	if networkNamespace != "" {
+		if isSandboxOrStandalone {
+			// We have a network namespace. Generate the resolv.conf and add the bind mount.
+			netopts := h.netNamespaces[networkNamespace]
+			if netopts == nil || len(netopts.Adapters) == 0 {
+				logrus.WithFields(logrus.Fields{
+					"cid":   id,
+					"netNS": networkNamespace,
+				}).Warn("opengcs::CreateContainer - No adapters in namespace for sandbox")
+			} else {
+				logrus.WithFields(logrus.Fields{
+					"cid":   id,
+					"netNS": networkNamespace,
+				}).Info("opengcs::CreateContainer - Generate sandbox resolv.conf")
+
+				// TODO: Can we ever have more than one nic here at start?
+				td, err := ioutil.TempDir("", "")
+				if err != nil {
+					return nil, errors.Wrap(err, "failed to create tmp directory")
+				}
+				resolvPath := filepath.Join(td, "resolv.conf")
+				adp := netopts.Adapters[0]
+				err = generateResolvConfFile(resolvPath, prot.NetworkAdapter{
+					AdapterInstanceID: adp.ID,
+					HostDNSServerList: adp.DNSServerList,
+					HostDNSSuffix:     adp.DNSSuffix,
+				})
+				if err != nil {
+					return nil, err
+				}
+				// Store the resolve path for all workload containers
+				netopts.ResolvPath = resolvPath
+			}
+		}
+		if netopts, ok := h.netNamespaces[networkNamespace]; ok && netopts.ResolvPath != "" {
+			logrus.WithFields(logrus.Fields{
+				"cid":        id,
+				"netNS":      networkNamespace,
+				"resolvPath": netopts.ResolvPath,
+			}).Info("opengcs::CreateContainer - Adding /etc/resolv.conf mount")
+
+			settings.OCISpecification.Mounts = append(settings.OCISpecification.Mounts, oci.Mount{
+				Destination: "/etc/resolv.conf",
+				Type:        "bind",
+				Source:      netopts.ResolvPath,
+				Options:     []string{"bind", "ro"},
+			})
+		}
+	}
+
+	// Clear the windows section of the config
+	settings.OCISpecification.Windows = nil
 
 	// Container doesnt exit. Create it here
 	// Create the BundlePath
@@ -129,22 +204,18 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 	c.processesWg.Add(1)
 	c.initProcess = newProcess(c, settings.OCISpecification.Process, con.(runtime.Process), uint32(c.container.Pid()))
 
-	// Add cached network adapters that were added previous to container create.
-	if settings.OCISpecification.Windows != nil &&
-		settings.OCISpecification.Windows.Network != nil &&
-		settings.OCISpecification.Windows.Network.NetworkNamespace != "" {
-		ns := strings.ToLower(settings.OCISpecification.Windows.Network.NetworkNamespace)
-		if adapters, ok := h.cachedAdapters[ns]; ok {
-			for _, a := range adapters {
+	// For the sandbox move all adapters into the network namespace
+	if isSandboxOrStandalone && networkNamespace != "" {
+		if netopts, ok := h.netNamespaces[networkNamespace]; ok {
+			for _, a := range netopts.Adapters {
 				err = c.AddNetworkAdapter(a)
 				if err != nil {
 					return nil, err
 				}
 			}
-			delete(h.cachedAdapters, ns)
 		}
 		// Add a link for all HotAdd/Remove from NS id to this container.
-		h.networkNSToContainer.Store(ns, id)
+		h.networkNSToContainer.Store(networkNamespace, id)
 	}
 
 	h.containers[id] = c
@@ -275,6 +346,7 @@ func (h *Host) ModifyHostSettings(settings *prot.ModifySettingRequest) error {
 	case prot.MrtNetwork:
 		add = func(setting interface{}) error {
 			na := setting.(*prot.NetworkAdapterV2)
+			na.ID = strings.ToLower(na.ID)
 			na.NamespaceID = strings.ToLower(na.NamespaceID)
 			if cidraw, ok := h.networkNSToContainer.Load(na.NamespaceID); ok {
 				// The container has already been created. Get it and add this
@@ -285,11 +357,17 @@ func (h *Host) ModifyHostSettings(settings *prot.ModifySettingRequest) error {
 				}
 				return c.AddNetworkAdapter(na)
 			}
-			h.cachedAdapters[na.NamespaceID] = append(h.cachedAdapters[na.NamespaceID], na)
+			netopts, ok := h.netNamespaces[na.NamespaceID]
+			if !ok {
+				netopts = &netNSOpts{}
+				h.netNamespaces[na.NamespaceID] = netopts
+			}
+			netopts.Adapters = append(netopts.Adapters, na)
 			return nil
 		}
 		remove = func(setting interface{}) error {
 			na := setting.(*prot.NetworkAdapterV2)
+			na.ID = strings.ToLower(na.ID)
 			na.NamespaceID = strings.ToLower(na.NamespaceID)
 			if cidraw, ok := h.networkNSToContainer.Load(na.NamespaceID); ok {
 				// The container was previously created or is still. Remove the
@@ -298,18 +376,17 @@ func (h *Host) ModifyHostSettings(settings *prot.ModifySettingRequest) error {
 				if c, err := h.GetContainer(cidraw.(string)); err == nil {
 					return c.RemoveNetworkAdapter(na.ID)
 				}
-				h.networkNSToContainer.Delete(na.NamespaceID)
 			} else {
-				if adapters, ok := h.cachedAdapters[na.NamespaceID]; ok {
+				if netopts, ok := h.netNamespaces[na.NamespaceID]; ok {
 					var i int
 					var a *prot.NetworkAdapterV2
-					for i, a = range adapters {
+					for i, a = range netopts.Adapters {
 						if na.ID == a.ID {
 							break
 						}
 					}
 					if a != nil {
-						h.cachedAdapters[na.NamespaceID] = append(adapters[:i], adapters[i+1:]...)
+						netopts.Adapters = append(netopts.Adapters[:i], netopts.Adapters[i+1:]...)
 					}
 				}
 			}
@@ -450,8 +527,8 @@ func (c *Container) Wait() int {
 // AddNetworkAdapter adds `a` to the network namespace held by this container.
 func (c *Container) AddNetworkAdapter(a *prot.NetworkAdapterV2) error {
 	log := logrus.WithFields(logrus.Fields{
-		"cid":       c.id,
-		"adapterID": a.ID,
+		"cid":               c.id,
+		"adapterInstanceID": a.ID,
 	})
 	log.Info("opengcs::Container::AddNetworkAdapter")
 
@@ -471,32 +548,17 @@ func (c *Container) AddNetworkAdapter(a *prot.NetworkAdapterV2) error {
 		return errors.Wrap(err, "failed to marshal adapter struct to JSON")
 	}
 
-	a.ID = strings.ToLower(a.ID)
-	start := time.Now()
-	var id string
-	for {
-		id, err = instanceIDToName(a.ID)
-		if err != nil {
-			if os.IsNotExist(errors.Cause(err)) {
-				<-time.After(10 * time.Millisecond)
-				if time.Since(start) > 2*time.Second {
-					return errors.Wrap(err, "timed out waiting for net adapter after 2 seconds")
-				}
-				continue
-			}
-			return err
-		}
-		break
+	ifname, err := instanceIDToName(a.ID, true)
+	if err != nil {
+		return err
 	}
-	log.Data["adapter-wait-time-ns"] = time.Since(start)
-	log.Debug("opengcs::Container::AddNetworkAdapter - Waited for network adapter to show up")
 
 	out, err := exec.Command("netnscfg",
-		"-if", id,
+		"-if", ifname,
 		"-nspid", strconv.Itoa(c.container.Pid()),
 		"-cfg", string(cfg)).CombinedOutput()
 	if err != nil {
-		return errors.Wrapf(err, "failed to configure adapter cid: %s, aid: %s, if id: %s, stdout: %s", c.id, a.ID, id, string(out))
+		return errors.Wrapf(err, "failed to configure adapter cid: %s, aid: %s, if id: %s", c.id, a.ID, ifname, string(out))
 	}
 	return nil
 }
@@ -505,8 +567,8 @@ func (c *Container) AddNetworkAdapter(a *prot.NetworkAdapterV2) error {
 // namespace held by this container.
 func (c *Container) RemoveNetworkAdapter(id string) error {
 	logrus.WithFields(logrus.Fields{
-		"cid":       c.id,
-		"adapterID": id,
+		"cid":               c.id,
+		"adapterInstanceID": id,
 	}).Info("opengcs::Container::RemoveNetworkAdapter")
 
 	// TODO: JTERRY75 - Implement removal if we ever need to support hot remove.
