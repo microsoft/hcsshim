@@ -116,6 +116,9 @@ func validateSigstr(sigstr string, signalsSupported bool, isLcow bool) (int, err
 	sigstr = strings.ToUpper(sigstr)
 
 	if !signalsSupported {
+		// If signals arent supported we just validate that its a known signal.
+		// We already return 0 since we only supported a platform Kill() at that
+		// time.
 		if isLcow {
 			switch sigstr {
 			case "15":
@@ -123,16 +126,25 @@ func validateSigstr(sigstr string, signalsSupported bool, isLcow bool) (int, err
 			case "TERM":
 				fallthrough
 			case "SIGTERM":
-				return 0xf, nil
+				return 0, nil
 			default:
 				return 0, errInvalidSignal
 			}
 		}
 		switch sigstr {
+		// Docker sends a UNIX term in the supported Windows Signal map.
+		case "15":
+			fallthrough
+		case "TERM":
+			fallthrough
 		case "0":
 			fallthrough
 		case "CTRLC":
-			return 0x0, nil
+			return 0, nil
+		case "9":
+			fallthrough
+		case "KILL":
+			return 0, nil
 		default:
 			return 0, errInvalidSignal
 		}

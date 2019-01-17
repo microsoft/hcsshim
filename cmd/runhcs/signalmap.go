@@ -43,4 +43,6 @@ var signalMapWindows = map[string]int{
 	"CTRLCLOSE":    0x2,
 	"CTRLLOGOFF":   0x5,
 	"CTRLSHUTDOWN": 0x6,
+	"TERM":         0x0, // Docker sends the UNIX signal. Convert to CTRLC
+	"KILL":         0x6, // Docker sends the UNIX signal. Convert to CTRLSHUTDOWN
 }
