@@ -154,6 +154,9 @@ func Test_Bridge_Mux_Handler_NilRequest_Panic(t *testing.T) {
 	m := NewBridgeMux()
 	m.HandleFunc(prot.ComputeSystemCreateV1, prot.PvInvalid, hIn)
 	m.Handler(nil)
+	if set {
+		t.Fatal("should not be set on nil request")
+	}
 }
 
 func verifyResponseIsDefaultHandler(t *testing.T, i interface{}) {
