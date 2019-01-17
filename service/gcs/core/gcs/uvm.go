@@ -611,6 +611,22 @@ func (p *Process) Kill(signal syscall.Signal) error {
 	return nil
 }
 
+// ResizeConsole resizes the tty to `height`x`width` for the process.
+func (p *Process) ResizeConsole(height, width uint16) error {
+	logrus.WithFields(logrus.Fields{
+		"cid":    p.cid,
+		"pid":    p.pid,
+		"height": height,
+		"width":  width,
+	}).Info("opengcs::Process::ResizeConsole")
+
+	tty := p.process.Tty()
+	if tty == nil {
+		return fmt.Errorf("pid: %d, is not a tty and cannot be resized", p.pid)
+	}
+	return tty.ResizeConsole(height, width)
+}
+
 // Wait returns a channel that can be used to wait for the process to exit and
 // gather the exit code. The second channel must be signaled from the caller
 // when the caller has completed its use of this call to Wait.

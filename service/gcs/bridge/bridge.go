@@ -865,7 +865,22 @@ func (b *Bridge) resizeConsole(w ResponseWriter, r *Request) {
 		"width":      request.Width,
 	}).Info("opengcs::bridge::resizeConsole")
 
-	if err := b.coreint.ResizeConsole(int(request.ProcessID), request.Height, request.Width); err != nil {
+	var (
+		err error
+		c   *gcspkg.Container
+		p   *gcspkg.Process
+	)
+
+	// First see if this is a V2 Container process.
+	if c, err = b.hostState.GetContainer(request.ContainerID); err == nil {
+		if p, err = c.GetProcess(request.ProcessID); err == nil {
+			err = p.ResizeConsole(request.Height, request.Width)
+		}
+	} else {
+		err = b.coreint.ResizeConsole(int(request.ProcessID), request.Height, request.Width)
+	}
+
+	if err != nil {
 		w.Error(request.ActivityID, err)
 		return
 	}
