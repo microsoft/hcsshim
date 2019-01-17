@@ -2,7 +2,7 @@ GO:=go
 GO_FLAGS:=-ldflags "-s -w" # strip Go binaries
 GO_BUILD:=CGO_ENABLED=0 $(GO) build $(GO_FLAGS)
 
-CFLAGS:=-O2
+CFLAGS:=-O2 -Wall
 LDFLAGS:=-static -s # strip C binaries
 
 SRCROOT=$(dir $(abspath $(lastword $(MAKEFILE_LIST))))
@@ -27,11 +27,10 @@ test:
 
 rootfs: .rootfs-done
 
-.rootfs-done: init/init bin/vsockexec bin/gcs bin/gcstools Makefile
+.rootfs-done: bin/init bin/vsockexec bin/gcs bin/gcstools Makefile
 	rm -rf rootfs
 	mkdir -p rootfs/bin/
-	cp $(SRCROOT)/init/init rootfs/
-	chmod 755 rootfs/init
+	cp bin/init rootfs/
 	cp bin/vsockexec rootfs/bin/
 	cp bin/gcs rootfs/bin/
 	cp bin/gcstools rootfs/bin/
@@ -67,6 +66,10 @@ bin/gcstools.always: always
 VPATH=$(SRCROOT)
 
 bin/vsockexec: vsockexec/vsockexec.o
+	@mkdir -p bin
+	$(CC) $(LDFLAGS) -o $@ $<
+
+bin/init: init/init.o
 	@mkdir -p bin
 	$(CC) $(LDFLAGS) -o $@ $<
 
