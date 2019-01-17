@@ -133,7 +133,13 @@ func OpenComputeSystem(id string) (_ *System, err error) {
 
 	computeSystem := newSystem(id)
 	computeSystem.logOperationBegin(operation)
-	defer func() { computeSystem.logOperationEnd(err) }()
+	defer func() {
+		if IsNotExist(err) {
+			computeSystem.logOperationEnd(nil)
+		} else {
+			computeSystem.logOperationEnd(err)
+		}
+	}()
 
 	var (
 		handle  hcsSystem
@@ -278,7 +284,13 @@ func (computeSystem *System) Shutdown() (err error) {
 
 	operation := "hcsshim::ComputeSystem::Shutdown"
 	computeSystem.logOperationBegin(operation)
-	defer func() { computeSystem.logOperationEnd(err) }()
+	defer func() {
+		if IsAlreadyStopped(err) {
+			computeSystem.logOperationEnd(nil)
+		} else {
+			computeSystem.logOperationEnd(err)
+		}
+	}()
 
 	if computeSystem.handle == 0 {
 		return makeSystemError(computeSystem, "Shutdown", "", ErrAlreadyClosed, nil)
@@ -304,7 +316,13 @@ func (computeSystem *System) Terminate() (err error) {
 
 	operation := "hcsshim::ComputeSystem::Terminate"
 	computeSystem.logOperationBegin(operation)
-	defer func() { computeSystem.logOperationEnd(err) }()
+	defer func() {
+		if IsPending(err) {
+			computeSystem.logOperationEnd(nil)
+		} else {
+			computeSystem.logOperationEnd(err)
+		}
+	}()
 
 	if computeSystem.handle == 0 {
 		return makeSystemError(computeSystem, "Terminate", "", ErrAlreadyClosed, nil)
