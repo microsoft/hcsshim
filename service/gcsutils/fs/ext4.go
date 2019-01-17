@@ -134,13 +134,18 @@ func (e *Ext4Fs) CleanupSizeContext() error {
 
 // MakeFileSystem writes an ext4 filesystem to the given file after the size context is finalized.
 func (e *Ext4Fs) MakeFileSystem(file *os.File) error {
+	logrus.WithFields(logrus.Fields{
+		"blockSize": e.BlockSize,
+		"inodeSize": e.InodeSize,
+		"numInodes": e.numInodes,
+		"totalSize": e.totalSize,
+	}).Info("opengcs::Ext4Fs::MakeFileSystem - making file system mkfs.ext4")
+
 	blockSize := strconv.FormatUint(e.BlockSize, 10)
 	inodeSize := strconv.FormatUint(e.InodeSize, 10)
 	numInodes := strconv.FormatUint(e.numInodes, 10)
-	logrus.Infof("making file system with: bs=%d is=%d numi=%d size=%d",
-		e.BlockSize, e.InodeSize, e.numInodes, e.totalSize)
 
-	err := exec.Command(
+	return exec.Command(
 		"mkfs.ext4",
 		"-O", "^has_journal,^resize_inode",
 		"-N", numInodes,
@@ -148,18 +153,6 @@ func (e *Ext4Fs) MakeFileSystem(file *os.File) error {
 		"-I", inodeSize,
 		"-F",
 		file.Name()).Run()
-
-	if err != nil {
-		logrus.Infof("running mkfs.ext4 failed with ... (%s)", err)
-	}
-
-	return err
-}
-
-// MakeBasicFileSystem just creates an empty file system on the given file using
-// the default settings.
-func (e *Ext4Fs) MakeBasicFileSystem(file *os.File) error {
-	return exec.Command("mkfs.ext4", "-F", file.Name()).Run()
 }
 
 func maxU64(x, y uint64) uint64 {

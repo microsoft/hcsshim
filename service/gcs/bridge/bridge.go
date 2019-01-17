@@ -43,7 +43,7 @@ var capabilities = prot.GcsCapabilities{
 	RuntimeOsType: prot.OsTypeLinux,
 	GuestDefinedCapabilities: prot.GcsGuestCapabilities{
 		NamespaceAddRequestSupported: true,
-		SignalProcessSupported: true,
+		SignalProcessSupported:       true,
 	},
 }
 
@@ -98,7 +98,10 @@ func (mux *Mux) Handle(id prot.MessageIdentifier, ver prot.ProtocolVersion, hand
 	}
 
 	if _, ok := mux.m[id][ver]; ok {
-		logrus.Infof("bridge: overwriting bridge handler for type: %v, version: %v", id, ver)
+		logrus.WithFields(logrus.Fields{
+			"message-type":     id.String(),
+			"protocol-version": ver,
+		}).Warn("opengcs::bridge - overwriting bridge handler")
 	}
 
 	mux.m[id][ver] = handler
@@ -178,6 +181,11 @@ func (w *requestResponseWriter) Header() *prot.MessageHeader {
 }
 
 func (w *requestResponseWriter) Write(r interface{}) {
+	logrus.WithFields(logrus.Fields{
+		"message-type": w.header.Type.String(),
+		"message-id":   w.header.ID,
+	}).Info("opengcs::bridge::requestResponseWriter")
+
 	w.respChan <- bridgeResponse{header: w.header, response: r}
 	w.respWritten = true
 }
@@ -189,7 +197,12 @@ func (w *requestResponseWriter) Error(activityID string, err error) {
 
 	resp := &prot.MessageResponseBase{ActivityID: activityID}
 	setErrorForResponseBase(resp, err)
-	logrus.Errorf("requestResponseWriter::Error %s", err)
+	logrus.WithFields(logrus.Fields{
+		"activityID":    activityID,
+		"message-type":  w.header.Type.String(),
+		"message-id":    w.header.ID,
+		logrus.ErrorKey: err,
+	}).Error("opengcs::bridge::requestResponseWriter - error")
 	w.Write(resp)
 }
 
@@ -298,8 +311,11 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 					recverr = errors.Wrap(err, "bridge: failed reading message payload")
 					break
 				}
-				logrus.Infof("bridge: read message type: %v", header.Type)
-				logrus.Infof("bridge: read message '%s'", message)
+				logrus.WithFields(logrus.Fields{
+					"message-type": header.Type.String(),
+					"message-id":   header.ID,
+					"message":      string(message),
+				}).Debug("opengcs::bridge - read message")
 				requestChan <- &Request{header, message, b.protVer}
 			}
 		}
@@ -318,7 +334,10 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 				}
 				b.Handler.ServeMsg(wr, r)
 				if !wr.respWritten {
-					logrus.Errorf("bridge: request: ID: 0x%x, Type: %v failed to write a response.", r.Header.ID, r.Header.Type)
+					logrus.WithFields(logrus.Fields{
+						"message-type": r.Header.Type.String(),
+						"message-id":   r.Header.ID,
+					}).Error("opengcs::bridge - request didn't write response")
 				}
 			}(req)
 		}
@@ -342,7 +361,11 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 				resperr = errors.Wrap(err, "bridge: failed writing message payload")
 				break
 			}
-			logrus.Infof("bridge: response sent: '%s' to HCS", responseBytes)
+			logrus.WithFields(logrus.Fields{
+				"message-type": resp.header.Type.String(),
+				"message-id":   resp.header.ID,
+				"message":      string(responseBytes),
+			}).Debug("opengcs::bridge - response sent")
 		}
 		responseErrChan <- resperr
 	}()
@@ -380,6 +403,13 @@ func (b *Bridge) PublishNotification(n *prot.ContainerNotification) {
 		panic("bridge: cannot publish nil notification")
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"activityID": n.ActivityID,
+		"cid":        n.ContainerID,
+		"operation":  n.Operation,
+		"result":     n.Result,
+	}).Info("opengcs::bridge::PublishNotification")
+
 	resp := bridgeResponse{
 		header: &prot.MessageHeader{
 			Type: prot.ComputeSystemNotificationV1,
@@ -398,6 +428,13 @@ func (b *Bridge) negotiateProtocol(w ResponseWriter, r *Request) {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message))
 		return
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"activityID":      request.ActivityID,
+		"cid":             request.ContainerID,
+		"minimum-version": request.MinimumVersion,
+		"maximum-version": request.MaximumVersion,
+	}).Info("opengcs::bridge::negotiateProtocol")
 
 	if request.MaximumVersion < uint32(prot.PvV4) || uint32(prot.PvMax) < request.MinimumVersion {
 		w.Error(request.ActivityID, gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion))
@@ -432,6 +469,11 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message))
 		return
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"activityID": request.ActivityID,
+		"cid":        request.ContainerID,
+	}).Info("opengcs::bridge::createContainer")
 
 	var exitCodeFn func() int
 	wasV2Config := false
@@ -523,6 +565,12 @@ func (b *Bridge) startContainer(w ResponseWriter, r *Request) {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
 		return
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"activityID": request.ActivityID,
+		"cid":        request.ContainerID,
+	}).Info("opengcs::bridge::startContainer")
+
 	response := &prot.MessageResponseBase{
 		ActivityID: request.ActivityID,
 	}
@@ -535,6 +583,11 @@ func (b *Bridge) execProcess(w ResponseWriter, r *Request) {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
 		return
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"activityID": request.ActivityID,
+		"cid":        request.ContainerID,
+	}).Info("opengcs::bridge::execProcess")
 
 	// The request contains a JSON string field which is equivalent to an
 	// ExecuteProcessInfo struct.
@@ -570,22 +623,17 @@ func (b *Bridge) execProcess(w ResponseWriter, r *Request) {
 	var c *gcspkg.Container
 	var err error
 	if params.IsExternal {
-		logrus.Debugf("bridge::execProcess: IsExternal: calling b.coreint.RunExternalProcess")
 		pid, err = b.coreint.RunExternalProcess(params, conSettings)
 	} else if request.ContainerID == gcspkg.UVMContainerID {
-		logrus.Debugf("bridge::execProcess: UVMContainerID: calling b.coreint.RunExternalProcess")
 		pid, err = b.coreint.RunExternalProcess(params, conSettings)
 	} else if c, err = b.hostState.GetContainer(request.ContainerID); err == nil {
 		// We found a V2 container. Treat this as a V2 process.
 		if params.OCIProcess == nil {
-			logrus.Debugf("bridge::execProcess: v2 starting container init process")
 			pid, err = c.Start(conSettings)
 		} else {
-			logrus.Debug("bridge::execProcess: v2 exec additional container process")
 			pid, err = c.ExecProcess(params.OCIProcess, conSettings)
 		}
 	} else {
-		logrus.Debug("bridge::execProcess: Calling b.coreint.ExecProcess")
 		pid, execInitErrorDone, err = b.coreint.ExecProcess(request.ContainerID, params, conSettings)
 	}
 
@@ -593,7 +641,6 @@ func (b *Bridge) execProcess(w ResponseWriter, r *Request) {
 		w.Error(request.ActivityID, err)
 		return
 	}
-	logrus.Debugf("bridge::execProcess Success from running process or starting container")
 
 	response := &prot.ContainerExecuteProcessResponse{
 		MessageResponseBase: &prot.MessageResponseBase{
@@ -621,12 +668,19 @@ func (b *Bridge) signalContainer(w ResponseWriter, r *Request, signal oslayer.Si
 		return
 	}
 
+	log := logrus.WithFields(logrus.Fields{
+		"activityID": request.ActivityID,
+		"cid":        request.ContainerID,
+		"signal":     signal,
+	})
+	log.Info("opengcs::bridge::signalContainer")
+
 	// V2 added support for sending a signal to the host UVM itself. See if this is targeting
 	// the UVM and then see if its a V2 container ID before falling back to the V1 path.
 	if request.ContainerID == gcspkg.UVMContainerID {
 		// We are asking to shutdown the UVM itself.
 		if signal != oslayer.SIGTERM {
-			logrus.Errorf("invalid signal %d sent to uvm. Will shutdown anyway.", signal)
+			log.Error("opengcs::bridge::signalContainer - invalid signal for uvm")
 		}
 		// This is a destructive call. We do not respond to the HCS
 		b.quitChan <- true
@@ -656,6 +710,13 @@ func (b *Bridge) signalProcess(w ResponseWriter, r *Request) {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
 		return
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"activityID": request.ActivityID,
+		"cid":        request.ContainerID,
+		"pid":        request.ProcessID,
+		"signal":     request.Options.Signal,
+	}).Info("opengcs::bridge::signalProcess")
 
 	// First see if this is a V2 Container.
 	if c, err := b.hostState.GetContainer(request.ContainerID); err == nil {
@@ -693,6 +754,11 @@ func (b *Bridge) getProperties(w ResponseWriter, r *Request) {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
 		return
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"activityID": request.ActivityID,
+		"cid":        request.ContainerID,
+	}).Info("opengcs::bridge::getProperties")
 
 	var properties *prot.Properties
 	if request.ContainerID == gcspkg.UVMContainerID {
@@ -740,6 +806,13 @@ func (b *Bridge) waitOnProcess(w ResponseWriter, r *Request) {
 		return
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"activityID": request.ActivityID,
+		"cid":        request.ContainerID,
+		"pid":        request.ProcessID,
+		"timeout-ms": request.TimeoutInMs,
+	}).Info("opengcs::bridge::waitOnProcess")
+
 	var exitCodeChan <-chan int
 	var doneChan chan<- bool
 
@@ -784,6 +857,14 @@ func (b *Bridge) resizeConsole(w ResponseWriter, r *Request) {
 		return
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"activityID": request.ActivityID,
+		"cid":        request.ContainerID,
+		"pid":        request.ProcessID,
+		"height":     request.Height,
+		"width":      request.Width,
+	}).Info("opengcs::bridge::resizeConsole")
+
 	if err := b.coreint.ResizeConsole(int(request.ProcessID), request.Height, request.Width); err != nil {
 		w.Error(request.ActivityID, err)
 		return
@@ -805,6 +886,11 @@ func (b *Bridge) modifySettings(w ResponseWriter, r *Request) {
 		w.Error(aid, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
 		return
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"activityID": request.ActivityID,
+		"cid":        request.ContainerID,
+	}).Info("opengcs::bridge::modifySettings")
 
 	if request.ContainerID == gcspkg.UVMContainerID {
 		// V2 request
@@ -842,7 +928,10 @@ func setErrorForResponseBase(response *prot.MessageResponseBase, errForResponse 
 		var err error
 		lineNumber, err = strconv.Atoi(lineNumberStr)
 		if err != nil {
-			logrus.Error(errors.Wrapf(err, "failed to parse \"%s\" as line number of error, using -1 instead", lineNumberStr))
+			logrus.WithFields(logrus.Fields{
+				"line-number":   lineNumberStr,
+				logrus.ErrorKey: err,
+			}).Error("opengcs::bridge::setErrorForResponseBase - failed to parse line number, using -1 instead")
 			lineNumber = -1
 		}
 		functionName = fmt.Sprintf("%n", bottomFrame)

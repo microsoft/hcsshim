@@ -69,6 +69,13 @@ func (c *gcsCore) configureAdapterInNamespace(container runtime.Container, adapt
 // TODO: This method of managing DNS will potentially be replaced with another
 // method in the future.
 func generateResolvConfFile(o oslayer.OS, resolvPath string, adapter prot.NetworkAdapter) error {
+	logrus.WithFields(logrus.Fields{
+		"adapterID":            adapter.AdapterInstanceID,
+		"resolvPath":           resolvPath,
+		"host-dns-server-list": adapter.HostDNSServerList,
+		"host-dns-suffix":      adapter.HostDNSSuffix,
+	}).Info("opengcs::networking::generateResolvConfFile")
+
 	fileContents := ""
 
 	split := func(r rune) bool {
@@ -97,13 +104,16 @@ func generateResolvConfFile(o oslayer.OS, resolvPath string, adapter prot.Networ
 	if _, err := io.WriteString(file, fileContents); err != nil {
 		return errors.Wrapf(err, "failed to write to resolv.conf file for adapter %s", adapter.AdapterInstanceID)
 	}
-	logrus.Debugf("wrote %s:\n%s", resolvPath, fileContents)
 	return nil
 }
 
 // instanceIDToName converts from the given instance ID (a GUID generated on
 // the Windows host) to its corresponding interface name (e.g. "eth0").
 func instanceIDToName(o oslayer.OS, id string) (string, error) {
+	logrus.WithFields(logrus.Fields{
+		"adapterID": id,
+	}).Info("opengcs::networking::instanceIDToName")
+
 	deviceDirs, err := o.ReadDir(filepath.Join("/sys", "bus", "vmbus", "devices", id, "net"))
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to read vmbus network device from /sys filesystem for adapter %s", id)

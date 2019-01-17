@@ -3,6 +3,7 @@ package stdio
 import (
 	"io"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/Microsoft/opengcs/service/gcs/transport"
@@ -168,10 +169,14 @@ func (pr *PipeRelay) Start() {
 		pr.wg.Add(1)
 		go func() {
 			if _, err := io.Copy(pr.pipes[1], pr.s.In); err != nil {
-				logrus.Errorf("error copying stdin to pipe: %s", err)
+				logrus.WithFields(logrus.Fields{
+					logrus.ErrorKey: err,
+				}).Error("opengcs::PipeRelay::Start - error copying stdin to pipe")
 			}
 			if err := pr.pipes[1].Close(); err != nil {
-				logrus.Errorf("error closing stdin write pipe: %s", err)
+				logrus.WithFields(logrus.Fields{
+					logrus.ErrorKey: err,
+				}).Error("opengcs::PipeRelay::Start - error closing stdin write pipe")
 			}
 			pr.pipes[1] = nil
 			pr.wg.Done()
@@ -181,10 +186,14 @@ func (pr *PipeRelay) Start() {
 		pr.wg.Add(1)
 		go func() {
 			if _, err := io.Copy(pr.s.Out, pr.pipes[2]); err != nil {
-				logrus.Errorf("error copying stdout from pipe: %s", err)
+				logrus.WithFields(logrus.Fields{
+					logrus.ErrorKey: err,
+				}).Error("opengcs::PipeRelay::Start - error copying stdout from pipe")
 			}
 			if err := pr.s.Out.Close(); err != nil {
-				logrus.Errorf("error closing stdout socket: %s", err)
+				logrus.WithFields(logrus.Fields{
+					logrus.ErrorKey: err,
+				}).Error("opengcs::PipeRelay::Start - error closing stdout socket")
 			}
 			pr.wg.Done()
 		}()
@@ -193,10 +202,14 @@ func (pr *PipeRelay) Start() {
 		pr.wg.Add(1)
 		go func() {
 			if _, err := io.Copy(pr.s.Err, pr.pipes[4]); err != nil {
-				logrus.Errorf("error copying stderr from pipe: %s", err)
+				logrus.WithFields(logrus.Fields{
+					logrus.ErrorKey: err,
+				}).Error("opengcs::PipeRelay::Start - error copying stderr from pipe")
 			}
 			if err := pr.s.Err.Close(); err != nil {
-				logrus.Errorf("error closing stderr socket: %s", err)
+				logrus.WithFields(logrus.Fields{
+					logrus.ErrorKey: err,
+				}).Error("opengcs::PipeRelay::Start - error closing stderr socket")
 			}
 			pr.wg.Done()
 		}()
@@ -211,9 +224,7 @@ func (pr *PipeRelay) Wait() {
 	// exit back to the client, and the client expects the process notification before
 	// it will close its side of stdin (which io.Copy is waiting on in the copying goroutine).
 	if pr.s.In != nil {
-		if err := pr.s.In.CloseRead(); err != nil {
-			logrus.Errorf("error closing read for stdin: %s", err)
-		}
+		pr.s.In.CloseRead()
 	}
 
 	pr.wg.Wait()
@@ -248,7 +259,11 @@ func (pr *PipeRelay) closePipes() {
 	for i := 0; i < len(pr.pipes); i++ {
 		if pr.pipes[i] != nil {
 			if err := pr.pipes[i].Close(); err != nil {
-				logrus.Errorf("failed to close relay pipe: (%s)", err)
+				if !strings.Contains(err.Error(), "file already closed") {
+					logrus.WithFields(logrus.Fields{
+						logrus.ErrorKey: err,
+					}).Error("opengcs::PipeRelay::closePipes - error closing relay pipe")
+				}
 			}
 			pr.pipes[i] = nil
 		}
@@ -292,9 +307,10 @@ func (r *TtyRelay) Start() {
 	if r.s.In != nil {
 		r.wg.Add(1)
 		go func() {
-			_, err := io.Copy(r.pty, r.s.In)
-			if err != nil {
-				logrus.Errorf("error copying stdin to pty: %s", err)
+			if _, err := io.Copy(r.pty, r.s.In); err != nil {
+				logrus.WithFields(logrus.Fields{
+					logrus.ErrorKey: err,
+				}).Error("opengcs::TtyRelay::Start - error copying stdin to pty")
 			}
 			r.wg.Done()
 		}()
@@ -302,9 +318,10 @@ func (r *TtyRelay) Start() {
 	if r.s.Out != nil {
 		r.wg.Add(1)
 		go func() {
-			_, err := io.Copy(r.s.Out, r.pty)
-			if err != nil {
-				logrus.Errorf("error copying pty to stdout: %s", err)
+			if _, err := io.Copy(r.s.Out, r.pty); err != nil {
+				logrus.WithFields(logrus.Fields{
+					logrus.ErrorKey: err,
+				}).Error("opengcs::TtyRelay::Start - error copying pty to stdout")
 			}
 			r.wg.Done()
 		}()
@@ -319,9 +336,7 @@ func (r *TtyRelay) Wait() {
 	// exit back to the client, and the client expects the process notification before
 	// it will close its side of stdin (which io.Copy is waiting on in the copying goroutine).
 	if r.s.In != nil {
-		if err := r.s.In.CloseRead(); err != nil {
-			logrus.Errorf("error closing read for stdin: %s", err)
-		}
+		r.s.In.CloseRead()
 	}
 
 	// Wait for all users of stdioSet and master to finish before closing them.
