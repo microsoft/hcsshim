@@ -32,9 +32,9 @@ func TestValidateSigstrEmpty(t *testing.T) {
 }
 
 func TestValidateSigstrDefaultLCOW(t *testing.T) {
-	runValidateSigstrTest("15", false, true, 0xf, false, t)
-	runValidateSigstrTest("TERM", false, true, 0xf, false, t)
-	runValidateSigstrTest("SIGTERM", false, true, 0xf, false, t)
+	runValidateSigstrTest("15", false, true, 0, false, t)
+	runValidateSigstrTest("TERM", false, true, 0, false, t)
+	runValidateSigstrTest("SIGTERM", false, true, 0, false, t)
 }
 
 func TestValidateSigstrDefaultLCOWInvalid(t *testing.T) {
@@ -43,12 +43,16 @@ func TestValidateSigstrDefaultLCOWInvalid(t *testing.T) {
 }
 
 func TestValidateSigstrDefaultWCOW(t *testing.T) {
-	runValidateSigstrTest("0", false, false, 0x0, false, t)
-	runValidateSigstrTest("CTRLC", false, false, 0x0, false, t)
+	runValidateSigstrTest("15", false, false, 0, false, t)
+	runValidateSigstrTest("TERM", false, false, 0, false, t)
+	runValidateSigstrTest("0", false, false, 0, false, t)
+	runValidateSigstrTest("CTRLC", false, false, 0, false, t)
+	runValidateSigstrTest("9", false, false, 0, false, t)
+	runValidateSigstrTest("KILL", false, false, 0, false, t)
 }
 
 func TestValidateSigstrDefaultWCOWInvalid(t *testing.T) {
-	runValidateSigstrTest("15", false, false, 0, true, t)
+	runValidateSigstrTest("2", false, false, 0, true, t)
 	runValidateSigstrTest("test", false, false, 0, true, t)
 }
 
