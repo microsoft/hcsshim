@@ -272,6 +272,22 @@ func IsNotSupported(err error) bool {
 		err == ErrVmcomputeUnknownMessage
 }
 
+// On RS1, RS2 builds GetContainers may fail with access denied error
+// when there is race condition, you can have retry loop in order
+// to resolve this problem
+func IsOperationAccessIsDenied(err error) bool {
+	err = getInnerError(err)
+	return err == ErrVmcomputeOperationAccessIsDenied
+}
+
+// On RS1, RS2 build GetContainers may fail with invalid state error
+// when there is race condition, you can have retry loop in order
+// to resolve this problem
+func IsOperationInvalidState(err error) bool {
+	err = getInnerError(err)
+	return err == ErrVmcomputeOperationInvalidState
+}
+
 func getInnerError(err error) error {
 	switch pe := err.(type) {
 	case nil:
