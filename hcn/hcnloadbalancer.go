@@ -10,10 +10,10 @@ import (
 
 // LoadBalancerPortMapping is associated with HostComputeLoadBalancer
 type LoadBalancerPortMapping struct {
-	Protocol     uint32 `json:",omitempty"` // EX: TCP = 6, UDP = 17
-	InternalPort uint16 `json:",omitempty"`
-	ExternalPort uint16 `json:",omitempty"`
-	Flags        uint32 `json:",omitempty"` // 0: None, 1: EnableILB, 2: LocalRoutedVip
+	Protocol     uint32                       `json:",omitempty"` // EX: TCP = 6, UDP = 17
+	InternalPort uint16                       `json:",omitempty"`
+	ExternalPort uint16                       `json:",omitempty"`
+	Flags        LoadBalancerPortMappingFlags `json:",omitempty"`
 }
 
 // HostComputeLoadBalancer represents software load balancer.
@@ -26,6 +26,22 @@ type HostComputeLoadBalancer struct {
 	SchemaVersion        SchemaVersion             `json:",omitempty"`
 	Flags                uint32                    `json:",omitempty"` // 0: None, 1: EnableDirectServerReturn
 }
+
+// LoadBalancerPortMappingFlags are special settings on a loadbalancer.
+type LoadBalancerPortMappingFlags uint32
+
+var (
+	// LoadBalancerPortMappingFlagsNone is the default.
+	LoadBalancerPortMappingFlagsNone LoadBalancerPortMappingFlags
+	// LoadBalancerPortMappingFlagsILB enables internal loadbalancing.
+	LoadBalancerPortMappingFlagsILB LoadBalancerPortMappingFlags = 1
+	// LoadBalancerPortMappingFlagsLocalRoutedVIP enables VIP access from the host.
+	LoadBalancerPortMappingFlagsLocalRoutedVIP LoadBalancerPortMappingFlags = 2
+	// LoadBalancerPortMappingFlagsUseMux enables DSR for NodePort access of VIP.
+	LoadBalancerPortMappingFlagsUseMux LoadBalancerPortMappingFlags = 4
+	// LoadBalancerPortMappingFlagsPreserveDIP delivers packets with destination IP as the VIP.
+	LoadBalancerPortMappingFlagsPreserveDIP LoadBalancerPortMappingFlags = 8
+)
 
 func getLoadBalancer(loadBalancerGuid guid.GUID, query string) (*HostComputeLoadBalancer, error) {
 	// Open loadBalancer.
@@ -280,13 +296,18 @@ func (loadBalancer *HostComputeLoadBalancer) RemoveEndpoint(endpoint *HostComput
 }
 
 // AddLoadBalancer for the specified endpoints
-func AddLoadBalancer(endpoints []HostComputeEndpoint, isILB bool, isDSR bool, sourceVIP string, frontendVIPs []string, protocol uint16, internalPort uint16, externalPort uint16) (*HostComputeLoadBalancer, error) {
+func AddLoadBalancer(endpoints []HostComputeEndpoint, isILB bool, isDSR bool, useMux bool, preserveDIP bool, sourceVIP string, frontendVIPs []string, protocol uint16, internalPort uint16, externalPort uint16) (*HostComputeLoadBalancer, error) {
 	logrus.Debugf("hcn::HostComputeLoadBalancer::AddLoadBalancer endpointId=%v, isILB=%v, sourceVIP=%s, frontendVIPs=%v, protocol=%v, internalPort=%v, externalPort=%v", endpoints, isILB, sourceVIP, frontendVIPs, protocol, internalPort, externalPort)
 
-	var portMappingFlags uint32
-	portMappingFlags = 0
+	portMappingFlags := LoadBalancerPortMappingFlagsNone
 	if isILB {
-		portMappingFlags = 1
+		portMappingFlags = LoadBalancerPortMappingFlagsILB | portMappingFlags
+	}
+	if useMux {
+		portMappingFlags = LoadBalancerPortMappingFlagsUseMux | portMappingFlags
+	}
+	if preserveDIP {
+		portMappingFlags = LoadBalancerPortMappingFlagsPreserveDIP | portMappingFlags
 	}
 
 	var lbFlags uint32
