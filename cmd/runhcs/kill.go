@@ -148,6 +148,21 @@ func validateSigstr(sigstr string, signalsSupported bool, isLcow bool) (int, err
 		default:
 			return 0, errInvalidSignal
 		}
+	} else {
+		if !isLcow {
+			// Docker sends the UNIX signal name or value. Convert them to the
+			// correct Windows signals.
+			switch sigstr {
+			case "15":
+				fallthrough
+			case "TERM":
+				return 0x0, nil // Convert to CTRLC
+			case "9":
+				fallthrough
+			case "KILL":
+				return 0x6, nil // Convert to CTRLSHUTDOWN
+			}
+		}
 	}
 
 	var sigmap map[string]int
