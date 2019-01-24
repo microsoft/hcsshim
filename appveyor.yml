@@ -18,6 +18,7 @@ build_script:
   - go build ./cmd/runhcs
   - go build ./cmd/tar2ext4
   - go build ./cmd/wclayer
+  - go build ./tools/uvmboot
   - go test -v ./... -tags admin
   - go test -c ./test/containerd-shim-runhcs-v1/ -tags functional
   - go test -c ./test/cri-containerd/ -tags functional
@@ -28,6 +29,7 @@ artifacts:
   - path: 'wclayer.exe'
   - path: 'runhcs.exe'
   - path: 'tar2ext4.exe'
-  - path: cri-containerd.test.exe
+  - path: 'uvmboot.exe'
+  - path: 'cri-containerd.test.exe'
   - path: 'functional.test.exe'
   - path: 'runhcs.test.exe'
