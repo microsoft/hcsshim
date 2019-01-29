@@ -28,6 +28,10 @@ var serveCommand = cli.Command{
 			Name:  "socket",
 			Usage: "the socket path to serve",
 		},
+		cli.BoolFlag{
+			Name:  "is-sandbox",
+			Usage: "is the task id a Kubernetes sandbox id",
+		},
 	},
 	Action: func(ctx *cli.Context) error {
 		// On Windows the serve command is internally used to actually create
@@ -90,7 +94,10 @@ var serveCommand = cli.Command{
 		}()
 
 		// Setup the ttrpc server
-		svc := &service{}
+		svc := &service{
+			tid:       idFlag,
+			isSandbox: ctx.Bool("is-sandbox"),
+		}
 		s, err := ttrpc.NewServer()
 		if err != nil {
 			return err

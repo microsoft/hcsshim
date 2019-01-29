@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/ttrpc"
@@ -68,12 +69,13 @@ The start command can either start a new shim or return an address to an existin
 			return err
 		}
 
-		if v := a["io.kubernetes.cri.container-type"]; v == "container" {
-			id := a["io.kubernetes.cri.sandbox-id"]
-			if id == "" {
-				return errors.New("invalid 'io.kubernetes.cri.sandbox-id' for 'io.kubernetes.cri.container-type == container'")
-			}
-			address = fmt.Sprintf(addrFmt, namespaceFlag, id)
+		ct, sbid, err := oci.GetSandboxTypeAndID(a)
+		if err != nil {
+			return err
+		}
+
+		if ct == oci.KubernetesContainerTypeContainer {
+			address = fmt.Sprintf(addrFmt, namespaceFlag, sbid)
 
 			// Connect to the hosting shim and get the pid
 			c, err := winio.DialPipe(address, nil)
@@ -84,7 +86,7 @@ The start command can either start a new shim or return an address to an existin
 			cl.OnClose(func() { c.Close() })
 			t := task.NewTaskClient(cl)
 			ctx := gocontext.Background()
-			req := &task.ConnectRequest{ID: id}
+			req := &task.ConnectRequest{ID: sbid}
 			cr, err := t.Connect(ctx, req)
 
 			cl.Close()
@@ -97,6 +99,15 @@ The start command can either start a new shim or return an address to an existin
 
 		// We need to serve a new one.
 		if address == "" {
+			isSandbox := ct == oci.KubernetesContainerTypeSandbox
+			if isSandbox && idFlag != sbid {
+				return errors.Errorf(
+					"'id' and '%s' must match for '%s=%s'",
+					oci.KubernetesSandboxIDAnnotation,
+					oci.KubernetesContainerTypeAnnotation,
+					oci.KubernetesContainerTypeSandbox)
+			}
+
 			self, err := os.Executable()
 			if err != nil {
 				return err
@@ -110,17 +121,21 @@ The start command can either start a new shim or return an address to an existin
 			defer w.Close()
 
 			address = fmt.Sprintf(addrFmt, namespaceFlag, idFlag)
+			args := []string{
+				self,
+				"--namespace", namespaceFlag,
+				"--address", addressFlag,
+				"--publish-binary", containerdBinaryFlag,
+				"--id", idFlag,
+				"serve",
+				"--socket", address,
+			}
+			if isSandbox {
+				args = append(args, "--is-sandbox")
+			}
 			cmd := &exec.Cmd{
-				Path: self,
-				Args: []string{
-					self,
-					"--namespace", namespaceFlag,
-					"--address", addressFlag,
-					"--publish-binary", containerdBinaryFlag,
-					"--id", idFlag,
-					"serve",
-					"--socket", address,
-				},
+				Path:   self,
+				Args:   args,
 				Env:    os.Environ(),
 				Dir:    cwd,
 				Stderr: w,

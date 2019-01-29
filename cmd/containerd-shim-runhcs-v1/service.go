@@ -26,6 +26,19 @@ func endActivity(activity string, fields logrus.Fields, err error) {
 var _ = (task.TaskService)(&service{})
 
 type service struct {
+	// tid is the original task id to be served. This can either be a single
+	// task or represent the POD sandbox task id. The first call to Create MUST
+	// match this id or the shim is considered to be invalid.
+	//
+	// This MUST be treated as readonly for the lifetime of the shim.
+	tid string
+	// isSandbox specifies if `tid` is a POD sandbox. If `false` the shim will
+	// reject all calls to `Create` where `tid` does not match. If `true`
+	// multiple calls to `Create` are allowed as long as the workload containers
+	// all have the same parent task id.
+	//
+	// This MUST be treated as readonly for the lifetime of the shim.
+	isSandbox bool
 }
 
 func (s *service) State(ctx context.Context, req *task.StateRequest) (_ *task.StateResponse, err error) {
