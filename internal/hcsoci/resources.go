@@ -37,7 +37,7 @@ type Resources struct {
 
 	// plan9Mounts is an array of all the host paths which have been added to
 	// an LCOW utility VM
-	plan9Mounts []string
+	plan9Mounts []*uvm.Plan9Share
 
 	// netNS is the network namespace
 	netNS string
