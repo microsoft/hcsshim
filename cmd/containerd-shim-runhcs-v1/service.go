@@ -48,7 +48,7 @@ func (s *service) State(ctx context.Context, req *task.StateRequest) (_ *task.St
 		"eid": req.ExecID,
 	}
 	beginActivity(activity, af)
-	defer endActivity(activity, af, err)
+	defer func() { endActivity(activity, af, err) }()
 
 	return s.stateInternal(ctx, req)
 }
@@ -66,9 +66,11 @@ func (s *service) Create(ctx context.Context, req *task.CreateTaskRequest) (_ *t
 		"checkpoint":       req.Checkpoint,
 		"parentcheckpoint": req.ParentCheckpoint,
 	})
-	defer endActivity(activity, logrus.Fields{
-		"tid": req.ID,
-	}, err)
+	defer func() {
+		endActivity(activity, logrus.Fields{
+			"tid": req.ID,
+		}, err)
+	}()
 
 	return s.createInternal(ctx, req)
 }
@@ -80,7 +82,7 @@ func (s *service) Start(ctx context.Context, req *task.StartRequest) (_ *task.St
 		"eid": req.ExecID,
 	}
 	beginActivity(activity, af)
-	defer endActivity(activity, af, err)
+	defer func() { endActivity(activity, af, err) }()
 
 	return s.startInternal(ctx, req)
 }
@@ -92,7 +94,7 @@ func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (_ *task.
 		"eid": req.ExecID,
 	}
 	beginActivity(activity, af)
-	defer endActivity(activity, af, err)
+	defer func() { endActivity(activity, af, err) }()
 
 	return s.deleteInternal(ctx, req)
 }
@@ -103,7 +105,7 @@ func (s *service) Pids(ctx context.Context, req *task.PidsRequest) (_ *task.Pids
 		"tid": req.ID,
 	}
 	beginActivity(activity, af)
-	defer endActivity(activity, af, err)
+	defer func() { endActivity(activity, af, err) }()
 
 	return s.pidsInternal(ctx, req)
 }
@@ -114,7 +116,7 @@ func (s *service) Pause(ctx context.Context, req *task.PauseRequest) (_ *google_
 		"tid": req.ID,
 	}
 	beginActivity(activity, af)
-	defer endActivity(activity, af, err)
+	defer func() { endActivity(activity, af, err) }()
 
 	return s.pauseInternal(ctx, req)
 }
@@ -125,7 +127,7 @@ func (s *service) Resume(ctx context.Context, req *task.ResumeRequest) (_ *googl
 		"tid": req.ID,
 	}
 	beginActivity(activity, af)
-	defer endActivity(activity, af, err)
+	defer func() { endActivity(activity, af, err) }()
 
 	return s.resumeInternal(ctx, req)
 }
@@ -137,7 +139,7 @@ func (s *service) Checkpoint(ctx context.Context, req *task.CheckpointTaskReques
 		"path": req.Path,
 	}
 	beginActivity(activity, af)
-	defer endActivity(activity, af, err)
+	defer func() { endActivity(activity, af, err) }()
 
 	return s.checkpointInternal(ctx, req)
 }
@@ -151,7 +153,7 @@ func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *google_pr
 		"all":    req.All,
 	}
 	beginActivity(activity, af)
-	defer endActivity(activity, af, err)
+	defer func() { endActivity(activity, af, err) }()
 
 	return s.killInternal(ctx, req)
 }
@@ -167,7 +169,7 @@ func (s *service) Exec(ctx context.Context, req *task.ExecProcessRequest) (_ *go
 		"stderr":   req.Stderr,
 	}
 	beginActivity(activity, af)
-	defer endActivity(activity, af, err)
+	defer func() { endActivity(activity, af, err) }()
 
 	return s.execInternal(ctx, req)
 }
@@ -181,7 +183,7 @@ func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ 
 		"height": req.Height,
 	}
 	beginActivity(activity, af)
-	defer endActivity(activity, af, err)
+	defer func() { endActivity(activity, af, err) }()
 
 	return s.resizePtyInternal(ctx, req)
 }
@@ -194,7 +196,7 @@ func (s *service) CloseIO(ctx context.Context, req *task.CloseIORequest) (_ *goo
 		"stdin": req.Stdin,
 	}
 	beginActivity(activity, af)
-	defer endActivity(activity, af, err)
+	defer func() { endActivity(activity, af, err) }()
 
 	return s.closeIOInternal(ctx, req)
 }
@@ -205,7 +207,7 @@ func (s *service) Update(ctx context.Context, req *task.UpdateTaskRequest) (_ *g
 		"tid": req.ID,
 	}
 	beginActivity(activity, af)
-	defer endActivity(activity, af, err)
+	defer func() { endActivity(activity, af, err) }()
 
 	return s.updateInternal(ctx, req)
 }
@@ -217,7 +219,7 @@ func (s *service) Wait(ctx context.Context, req *task.WaitRequest) (_ *task.Wait
 		"eid": req.ExecID,
 	}
 	beginActivity(activity, af)
-	defer endActivity(activity, af, err)
+	defer func() { endActivity(activity, af, err) }()
 
 	return s.waitInternal(ctx, req)
 }
@@ -228,7 +230,7 @@ func (s *service) Stats(ctx context.Context, req *task.StatsRequest) (_ *task.St
 		"tid": req.ID,
 	}
 	beginActivity(activity, af)
-	defer endActivity(activity, af, err)
+	defer func() { endActivity(activity, af, err) }()
 
 	return s.statsInternal(ctx, req)
 }
@@ -239,7 +241,7 @@ func (s *service) Connect(ctx context.Context, req *task.ConnectRequest) (_ *tas
 		"tid": req.ID,
 	}
 	beginActivity(activity, af)
-	defer endActivity(activity, af, err)
+	defer func() { endActivity(activity, af, err) }()
 
 	return s.connectInternal(ctx, req)
 }
@@ -251,7 +253,7 @@ func (s *service) Shutdown(ctx context.Context, req *task.ShutdownRequest) (_ *g
 		"now": req.Now,
 	}
 	beginActivity(activity, af)
-	defer endActivity(activity, af, err)
+	defer func() { endActivity(activity, af, err) }()
 
 	return s.shutdownInternal(ctx, req)
 }
