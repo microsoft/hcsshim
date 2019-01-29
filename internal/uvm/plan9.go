@@ -35,7 +35,10 @@ func (uvm *UtilityVM) AddPlan9(hostPath string, uvmPath string, readOnly bool) e
 		shareFlagsCaseSensitive int32 = 0x00000008
 	)
 
-	flags := shareFlagsLinuxMetadata | shareFlagsCaseSensitive
+	// TODO: JTERRY75 - `shareFlagsCaseSensitive` only works if the Windows
+	// `hostPath` supports case sensitivity. We need to detect this case before
+	// forwarding this flag in all cases.
+	flags := shareFlagsLinuxMetadata // | shareFlagsCaseSensitive
 	if readOnly {
 		flags |= shareFlagsReadOnly
 	}
