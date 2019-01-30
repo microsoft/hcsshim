@@ -1,6 +1,13 @@
 package main
 
-import "context"
+import (
+	"context"
+	"sync"
+
+	"github.com/containerd/containerd/errdefs"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
+)
 
 // shimPod represents the logical grouping of all tasks in a single set of
 // shared namespaces. The pod sandbox (container) is represented by the task
@@ -26,4 +33,63 @@ type shimPod interface {
 	// the `shimExecStateRunning` state. If the exec is not in this state this
 	// pod MUST return `errdefs.ErrFailedPrecondition`.
 	KillTask(ctx context.Context, tid, eid string, signal uint32, all bool) error
+}
+
+var _ = (shimPod)(&pod{})
+
+type pod struct {
+	// id is the id of the sandbox task when the pod is created.
+	//
+	// It MUST be treated as read only in the lifetime of the pod.
+	id string
+	// sandboxTask is the task that represents the sandbox.
+	//
+	// Note: The invariant `id==sandboxTask.ID()` MUST be true.
+	//
+	// It MUST be treated as read only in the lifetime of the pod.
+	sandboxTask shimTask
+
+	workloadTasks sync.Map
+}
+
+func (p *pod) ID() string {
+	return p.id
+}
+
+func (p *pod) GetTask(tid string) (shimTask, error) {
+	if tid == p.id {
+		return p.sandboxTask, nil
+	}
+	raw, loaded := p.workloadTasks.Load(tid)
+	if !loaded {
+		return nil, errors.Wrapf(errdefs.ErrNotFound, "task with id: '%s' not found", tid)
+	}
+	return raw.(shimTask), nil
+}
+
+func (p *pod) KillTask(ctx context.Context, tid, eid string, signal uint32, all bool) error {
+	t, err := p.GetTask(tid)
+	if err != nil {
+		return err
+	}
+	if all && eid != "" {
+		return errors.Wrapf(errdefs.ErrFailedPrecondition, "cannot signal all with non empty ExecID: '%s'", eid)
+	}
+	eg := errgroup.Group{}
+	if all && tid == p.id {
+		// We are in a kill all on the sandbox task. Signal everything.
+		p.workloadTasks.Range(func(key, value interface{}) bool {
+			wt := value.(shimTask)
+			eg.Go(func() error {
+				return wt.KillExec(ctx, eid, signal, all)
+			})
+
+			// iterate all
+			return false
+		})
+	}
+	eg.Go(func() error {
+		return t.KillExec(ctx, eid, signal, all)
+	})
+	return eg.Wait()
 }
