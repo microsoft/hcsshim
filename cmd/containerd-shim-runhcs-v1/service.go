@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/containerd/containerd/runtime/v2/task"
 	google_protobuf1 "github.com/gogo/protobuf/types"
@@ -39,6 +40,11 @@ type service struct {
 	//
 	// This MUST be treated as readonly for the lifetime of the shim.
 	isSandbox bool
+
+	// z is either the `pod` this shim is tracking if `isSandbox == true` or it
+	// is the `task` this shim is tracking. If no call to `Create` has taken
+	// place yet `z.Load()` MUST return `nil`.
+	z atomic.Value
 }
 
 func (s *service) State(ctx context.Context, req *task.StateRequest) (_ *task.StateResponse, err error) {
