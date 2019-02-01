@@ -105,18 +105,13 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 		}
 	}
 
-	// Create a network namespace if necessary.
+	// Attach networking
 	if coi.Spec.Windows != nil &&
 		coi.Spec.Windows.Network != nil &&
 		schemaversion.IsV21(coi.actualSchemaVersion) {
 
 		if coi.NetworkNamespace != "" {
 			resources.netNS = coi.NetworkNamespace
-		} else {
-			err := createNetworkNamespace(coi, resources)
-			if err != nil {
-				return nil, resources, err
-			}
 		}
 		coi.actualNetworkNamespace = resources.netNS
 		if coi.HostingSystem != nil {
