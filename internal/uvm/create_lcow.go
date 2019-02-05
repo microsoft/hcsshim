@@ -199,6 +199,7 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 						DefaultBindSecurityDescriptor: "D:P(A;;FA;;;SY)(A;;FA;;;BA)",
 					},
 				},
+				Plan9: &hcsschema.Plan9{},
 			},
 		},
 	}
