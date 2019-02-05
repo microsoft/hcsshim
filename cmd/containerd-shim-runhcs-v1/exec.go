@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
+	"github.com/pkg/errors"
 )
 
 type shimExecState string
@@ -25,10 +27,6 @@ const (
 type shimExec interface {
 	// ID returns the original id of this exec.
 	ID() string
-	// Parent returns the task that is hosting this process.
-	//
-	// A call to `Parent` may happen in any `State()`.
-	Parent() shimTask
 	// Pid returns the pid of the exec process.
 	//
 	// A call to `Pid` is valid in any `State()`.
@@ -55,6 +53,9 @@ type shimExec interface {
 	Kill(ctx context.Context, signal uint32) error
 	// ResizePty resizes the tty of this exec process.
 	//
+	// If this exec is not a tty this exec MUST return
+	// `errdefs.ErrFailedPrecondition`.
+	//
 	// If `State() != shimExecStateRunning` this exec MUST return
 	// `errdefs.ErrFailedPrecondition`.
 	ResizePty(ctx context.Context, width, height uint32) error
@@ -70,4 +71,14 @@ type shimExec interface {
 	// process is already in the `State() == shimExecStateExited` state, `Wait`
 	// MUST return immediately with the original exit state.
 	Wait(ctx context.Context) *task.StateResponse
+}
+
+func newExecInvalidStateError(tid, eid string, state shimExecState, op string) error {
+	return errors.Wrapf(
+		errdefs.ErrFailedPrecondition,
+		"exec: '%s' in task: '%s' is in invalid state: '%s' for %s",
+		eid,
+		tid,
+		state,
+		op)
 }

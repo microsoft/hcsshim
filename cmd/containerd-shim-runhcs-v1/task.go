@@ -31,7 +31,8 @@ type shimTask interface {
 	//
 	// A call to `KillExec` is only valid when the exec is in the
 	// `shimExecStateRunning` state. If the exec is not in this state this task
-	// MUST return `errdefs.ErrFailedPrecondition`.
+	// MUST return `errdefs.ErrFailedPrecondition`. If `eid=="" && all == false`
+	// all additional exec's must be in the `shimExecStateExited` state.
 	KillExec(ctx context.Context, eid string, signal uint32, all bool) error
 	// DeleteExec deletes a `shimExec` in this `shimTask` that matches `eid`. If
 	// `eid == ""` deletes the init `shimExec` AND this `shimTask`.
@@ -40,7 +41,9 @@ type shimTask interface {
 	//
 	// A call to `DeleteExec` is only valid in `shimExecStateCreated` and
 	// `shimExecStateExited` states and MUST return
-	// `errdefs.ErrFailedPrecondition` if not in these states.
+	// `errdefs.ErrFailedPrecondition` if not in these states. If `eid==""` all
+	// additional exec's tracked by this task must also be in the
+	// `shimExecStateExited` state.
 	DeleteExec(ctx context.Context, eid string) (int, uint32, time.Time, error)
 	// Pids returns all process pid's in this `shimTask` including ones not
 	// created by the caller via a `CreateExec`.

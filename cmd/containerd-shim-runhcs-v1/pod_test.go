@@ -53,7 +53,7 @@ func setupTestPodWithFakes(t *testing.T) (*pod, *testShimTask) {
 	seid := strconv.Itoa(rand.Int())
 	st.execs[seid] = &testShimExec{
 		id:  seid,
-		pid: rand.Int(),
+		pid: int(rand.Int31()),
 	}
 	p := &pod{
 		id:          t.Name(),
@@ -67,7 +67,7 @@ func setupTestTaskInPod(t *testing.T, p *pod) *testShimTask {
 		id: strconv.Itoa(rand.Int()),
 		exec: &testShimExec{
 			id:  "",
-			pid: rand.Int(),
+			pid: int(rand.Int31()),
 		},
 	}
 	p.workloadTasks.Store(wt.id, wt)

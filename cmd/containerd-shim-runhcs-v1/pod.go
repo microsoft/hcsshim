@@ -6,6 +6,7 @@ import (
 
 	"github.com/containerd/containerd/errdefs"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -68,6 +69,13 @@ func (p *pod) GetTask(tid string) (shimTask, error) {
 }
 
 func (p *pod) KillTask(ctx context.Context, tid, eid string, signal uint32, all bool) error {
+	logrus.WithFields(logrus.Fields{
+		"tid":    tid,
+		"eid":    eid,
+		"signal": signal,
+		"all":    all,
+	}).Debug("pod::KillTask")
+
 	t, err := p.GetTask(tid)
 	if err != nil {
 		return err
