@@ -35,6 +35,7 @@ func newLcowExec(
 		terminal:   terminal,
 		spec:       spec,
 		io:         io,
+		state:      shimExecStateCreated,
 		exitStatus: 255, // By design for non-exited process status.
 		exited:     make(chan struct{}),
 	}
@@ -305,6 +306,7 @@ func (le *lcowExec) waitForExit() {
 	// If the exec closes before the container we set status here.
 	if le.state != shimExecStateExited {
 		le.state = shimExecStateExited
+		le.pid = 0
 		le.exitStatus = uint32(code)
 		le.exitedAt = time.Now()
 		le.p.Close()
@@ -326,6 +328,7 @@ func (le *lcowExec) waitForContainerExit() {
 	if le.state != shimExecStateExited {
 		// If the container closes before the exec we set status here.
 		le.state = shimExecStateExited
+		le.pid = 0
 		le.exitStatus = 1
 		le.exitedAt = time.Now()
 	}
