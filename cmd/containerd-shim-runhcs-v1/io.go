@@ -7,8 +7,13 @@ import (
 	winio "github.com/Microsoft/go-winio"
 )
 
-func newRelay(stdin, stdout, stderr string) (_ *iorelay, err error) {
-	ir := &iorelay{}
+func newRelay(stdin, stdout, stderr string, terminal bool) (_ *iorelay, err error) {
+	ir := &iorelay{
+		stdin:    stdin,
+		stdout:   stdout,
+		stderr:   stderr,
+		terminal: terminal,
+	}
 	defer func() {
 		if err != nil {
 			ir.close()
@@ -39,6 +44,9 @@ func newRelay(stdin, stdout, stderr string) (_ *iorelay, err error) {
 }
 
 type iorelay struct {
+	stdin, stdout, stderr string
+	terminal              bool
+
 	wg sync.WaitGroup
 
 	l sync.Mutex
@@ -48,6 +56,22 @@ type iorelay struct {
 
 	di     io.WriteCloser
 	do, de io.ReadCloser
+}
+
+func (ir *iorelay) StdinPath() string {
+	return ir.stdin
+}
+
+func (ir *iorelay) StdoutPath() string {
+	return ir.stdout
+}
+
+func (ir *iorelay) StderrPath() string {
+	return ir.stderr
+}
+
+func (ir *iorelay) Terminal() bool {
+	return ir.terminal
 }
 
 func (ir *iorelay) BeginRelay(stdin io.WriteCloser, stdout io.ReadCloser, stderr io.ReadCloser) {

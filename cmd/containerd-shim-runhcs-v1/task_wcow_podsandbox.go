@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
@@ -58,6 +59,11 @@ type wcowPodSandboxTask struct {
 	//
 	// It MUST be treated as read only in the lifetime of the task.
 	init *wcowPodSandboxExec
+	// host is the hosting VM for this task if hypervisor isolated. If
+	// `host==nil` this is an Argon task so no UVM cleanup is required.
+	host *uvm.UtilityVM
+
+	closeOnce sync.Once
 }
 
 func (wpst *wcowPodSandboxTask) ID() string {
@@ -87,7 +93,19 @@ func (wpst *wcowPodSandboxTask) KillExec(ctx context.Context, eid string, signal
 	if all && eid != "" {
 		return errors.Wrapf(errdefs.ErrFailedPrecondition, "cannot signal all for non-empty exec: '%s'", eid)
 	}
-	return e.Kill(ctx, signal)
+	err = e.Kill(ctx, signal)
+	if err != nil {
+		return err
+	}
+	if eid == "" {
+		// We killed the fake init task. Bring down the uvm.
+		wpst.closeOnce.Do(func() {
+			if wpst.host != nil {
+				wpst.host.Close()
+			}
+		})
+	}
+	return nil
 }
 
 func (wpst *wcowPodSandboxTask) DeleteExec(ctx context.Context, eid string) (int, uint32, time.Time, error) {

@@ -2,9 +2,15 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"sync"
 
+	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/runtime/v2/task"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -16,6 +22,12 @@ import (
 type shimPod interface {
 	// ID is the id of the task representing the pause (sandbox) container.
 	ID() string
+	// CreateTask creates a workload task within this pod named `tid` with
+	// settings `s`.
+	//
+	// If `tid==ID()` or `tid` is the same as any other task in this pod, this
+	// pod MUST return `errdefs.ErrAlreadyExists`.
+	CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error)
 	// GetTask returns a task in this pod that matches `tid`.
 	//
 	// If `tid` is not found, this pod MUST return `errdefs.ErrNotFound`.
@@ -36,6 +48,82 @@ type shimPod interface {
 	KillTask(ctx context.Context, tid, eid string, signal uint32, all bool) error
 }
 
+func createPod(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) (shimPod, error) {
+	ct, sid, err := oci.GetSandboxTypeAndID(s.Annotations)
+	if err != nil {
+		return nil, err
+	}
+	if ct != oci.KubernetesContainerTypeSandbox {
+		return nil, errors.Wrapf(
+			errdefs.ErrFailedPrecondition,
+			"expected annotation: '%s': '%s' got '%s'",
+			oci.KubernetesContainerTypeAnnotation,
+			oci.KubernetesContainerTypeSandbox,
+			ct)
+	}
+	if sid != req.ID {
+		return nil, errors.Wrapf(
+			errdefs.ErrFailedPrecondition,
+			"expected annotation '%s': '%s' got '%s'",
+			oci.KubernetesSandboxIDAnnotation,
+			req.ID,
+			sid)
+	}
+
+	owner, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+
+	var parent *uvm.UtilityVM
+	if oci.IsIsolated(s) {
+		// Create the UVM parent
+		opts, err := oci.SpecToUVMCreateOpts(s, fmt.Sprintf("%s@vm", req.ID), owner)
+		if err != nil {
+			return nil, err
+		}
+		switch opts.(type) {
+		case *uvm.OptionsLCOW:
+			lopts := (opts).(*uvm.OptionsLCOW)
+			parent, err = uvm.CreateLCOW(lopts)
+			if err != nil {
+				return nil, err
+			}
+		case *uvm.OptionsWCOW:
+			wopts := (opts).(*uvm.OptionsWCOW)
+			parent, err = uvm.CreateWCOW(wopts)
+			if err != nil {
+				return nil, err
+			}
+		}
+		err = parent.Start()
+		if err != nil {
+			parent.Close()
+		}
+	} else if !oci.IsWCOW(s) {
+		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "oci spec does not contain WCOW or LCOW spec")
+	}
+
+	p := pod{
+		id:   req.ID,
+		host: parent,
+	}
+	if oci.IsWCOW(s) {
+		// For WCOW we fake out the init task since we dont need it.
+		p.sandboxTask = newWcowPodSandboxTask(req.ID, req.Bundle, parent)
+	} else {
+		// LCOW requires a real task for the sandbox
+		lt, err := newLcowTask(parent, true, req, s)
+		if err != nil {
+			parent.Close()
+			return nil, err
+		}
+		p.sandboxTask = lt
+	}
+
+	return &p, nil
+}
+
 var _ = (shimPod)(&pod{})
 
 type pod struct {
@@ -49,12 +137,73 @@ type pod struct {
 	//
 	// It MUST be treated as read only in the lifetime of the pod.
 	sandboxTask shimTask
+	// host is the UtilityVM that is hosting `sandboxTask` if the task is
+	// hypervisor isolated.
+	//
+	// It MUST be treated as read only in the lifetime of the pod.
+	host *uvm.UtilityVM
 
+	// wcl is the worload create mutex. All calls to CreateTask must hold this
+	// lock while the ID reservation takes place. Once the ID is held it is safe
+	// to release the lock to allow concurrent creates.
+	wcl           sync.Mutex
 	workloadTasks sync.Map
 }
 
 func (p *pod) ID() string {
 	return p.id
+}
+
+func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
+	if req.ID == p.id {
+		return nil, errors.Wrapf(errdefs.ErrAlreadyExists, "task with id: '%s' already exists", req.ID)
+	}
+	e, _ := p.sandboxTask.GetExec("")
+	if e.State() != shimExecStateRunning {
+		return nil, errors.Wrapf(errdefs.ErrFailedPrecondition, "task with id: '%s' cannot be created in pod: '%s' which is not running", req.ID, p.id)
+	}
+
+	p.wcl.Lock()
+	_, loaded := p.workloadTasks.LoadOrStore(req.ID, nil)
+	if loaded {
+		return nil, errors.Wrapf(errdefs.ErrAlreadyExists, "task with id: '%s' already exists id pod: '%s'", req.ID, p.id)
+	}
+	p.wcl.Unlock()
+	var err error
+	defer func() {
+		if err != nil {
+			p.workloadTasks.Delete(req.ID)
+		}
+	}()
+
+	ct, sid, err := oci.GetSandboxTypeAndID(s.Annotations)
+	if err != nil {
+		return nil, err
+	}
+	if ct != oci.KubernetesContainerTypeContainer {
+		return nil, errors.Wrapf(
+			errdefs.ErrFailedPrecondition,
+			"expected annotation: '%s': '%s' got '%s'",
+			oci.KubernetesContainerTypeAnnotation,
+			oci.KubernetesContainerTypeContainer,
+			ct)
+	}
+	if sid != p.id {
+		return nil, errors.Wrapf(
+			errdefs.ErrFailedPrecondition,
+			"expected annotation '%s': '%s' got '%s'",
+			oci.KubernetesSandboxIDAnnotation,
+			p.id,
+			sid)
+	}
+
+	st, err := newLcowTask(p.host, false, req, s)
+	if err != nil {
+		return nil, err
+	}
+
+	p.workloadTasks.Store(req.ID, st)
+	return st, nil
 }
 
 func (p *pod) GetTask(tid string) (shimTask, error) {

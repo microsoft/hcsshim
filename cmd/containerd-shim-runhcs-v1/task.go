@@ -3,6 +3,10 @@ package main
 import (
 	"context"
 	"time"
+
+	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/runtime/v2/task"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 // shimTaskPidPair groups a process pid to its execID if it was user generated.
@@ -48,4 +52,8 @@ type shimTask interface {
 	// Pids returns all process pid's in this `shimTask` including ones not
 	// created by the caller via a `CreateExec`.
 	Pids(ctx context.Context) ([]shimTaskPidPair, error)
+}
+
+func createStandaloneTask(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
+	return nil, errdefs.ErrNotImplemented
 }

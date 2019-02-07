@@ -80,6 +80,10 @@ func main() {
 			Name:  "bundle",
 			Usage: "the bundle path to delete (delete command only).",
 		},
+		cli.BoolFlag{
+			Name:  "debug",
+			Usage: "run the shim in debug mode",
+		},
 	}
 	app.Commands = []cli.Command{
 		startCommand,

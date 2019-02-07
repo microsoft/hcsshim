@@ -72,7 +72,10 @@ var serveCommand = cli.Command{
 		//
 		// TODO: JTERRY75 we need this to be the reconnect log listener or
 		// switch to events
-		logl, err := winio.ListenPipe(socket+"-log", nil)
+		// TODO: JTERRY75 switch containerd to use the protected path.
+		//const logAddrFmt = "\\\\.\\pipe\\ProtectedPrefix\\Administrators\\containerd-shim-%s-%s-log"
+		const logAddrFmt = "\\\\.\\pipe\\containerd-shim-%s-%s-log"
+		logl, err := winio.ListenPipe(fmt.Sprintf(logAddrFmt, namespaceFlag, idFlag), nil)
 		if err != nil {
 			return err
 		}

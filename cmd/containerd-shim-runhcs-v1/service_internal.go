@@ -2,15 +2,22 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
 
+	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/mount"
 	runcopts "github.com/containerd/containerd/runtime/v2/runc/options"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/typeurl"
 	google_protobuf1 "github.com/gogo/protobuf/types"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 var empty = &google_protobuf1.Empty{}
@@ -62,7 +69,121 @@ func (s *service) stateInternal(ctx context.Context, req *task.StateRequest) (*t
 }
 
 func (s *service) createInternal(ctx context.Context, req *task.CreateTaskRequest) (*task.CreateTaskResponse, error) {
-	return nil, errdefs.ErrNotImplemented
+	var shimOpts *runhcsopts.Options
+	if req.Options != nil {
+		v, err := typeurl.UnmarshalAny(req.Options)
+		if err != nil {
+			return nil, err
+		}
+		shimOpts = v.(*runhcsopts.Options)
+	}
+
+	if shimOpts.Debug {
+		logrus.SetLevel(logrus.DebugLevel)
+	}
+
+	var spec specs.Spec
+	f, err := os.Open(filepath.Join(req.Bundle, "config.json"))
+	if err != nil {
+		return nil, err
+	}
+	if err := json.NewDecoder(f).Decode(&spec); err != nil {
+		f.Close()
+		return nil, err
+	}
+	f.Close()
+
+	if len(req.Rootfs) == 0 {
+		// If no mounts are passed via the snapshotter its the callers full
+		// responsibility to manage the storage. Just move on without affecting
+		// the config.json at all.
+		if spec.Windows == nil || len(spec.Windows.LayerFolders) < 2 {
+			return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "no Windows.LayerFolders found in oci spec")
+		}
+	} else if len(req.Rootfs) != 1 {
+		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "Rootfs does not contain exactly 1 mount for the root file system")
+	} else {
+		m := req.Rootfs[0]
+		if m.Type != "windows-layer" && m.Type != "lcow-layer" {
+			return nil, errors.Wrapf(errdefs.ErrFailedPrecondition, "unsupported mount type '%s'", m.Type)
+		}
+
+		// parentLayerPaths are passed in layerN, layerN-1, ..., layer 0
+		//
+		// The OCI spec expects:
+		//   layerN, layerN-1, ..., layer0, scratch
+		var parentLayerPaths []string
+		for _, option := range m.Options {
+			if strings.HasPrefix(option, mount.ParentLayerPathsFlag) {
+				err := json.Unmarshal([]byte(option[len(mount.ParentLayerPathsFlag):]), &parentLayerPaths)
+				if err != nil {
+					return nil, errors.Wrapf(errdefs.ErrFailedPrecondition, "failed to unmarshal parent layer paths from mount: %v", err)
+				}
+			}
+		}
+
+		if m.Type == "lcow-layer" {
+			// If we are creating LCOW make sure that spec.Windows is filled out before
+			// appending layer folders.
+			if spec.Windows == nil {
+				spec.Windows = &specs.Windows{}
+			}
+			if spec.Windows.HyperV == nil {
+				spec.Windows.HyperV = &specs.WindowsHyperV{}
+			}
+		} else if spec.Windows.HyperV == nil {
+			// This is a Windows Argon make sure that we have a Root filled in.
+			if spec.Root == nil {
+				spec.Root = &specs.Root{}
+			}
+		}
+
+		// Append the parents
+		spec.Windows.LayerFolders = append(spec.Windows.LayerFolders, parentLayerPaths...)
+		// Append the scratch
+		spec.Windows.LayerFolders = append(spec.Windows.LayerFolders, m.Source)
+	}
+
+	if req.Terminal && req.Stderr != "" {
+		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "if using terminal, stderr must be empty")
+	}
+
+	resp := &task.CreateTaskResponse{}
+	s.cl.Lock()
+	if s.isSandbox {
+		pod, err := s.getPod()
+		if err == nil {
+			// The POD sandbox was previously created. Unlock and forward to the POD
+			s.cl.Unlock()
+			t, err := pod.CreateTask(ctx, req, &spec)
+			if err != nil {
+				return nil, err
+			}
+			e, _ := t.GetExec("")
+			resp.Pid = uint32(e.Pid())
+			return resp, nil
+		}
+		pod, err = createPod(ctx, req, &spec)
+		if err != nil {
+			s.cl.Unlock()
+			return nil, err
+		}
+		t, _ := pod.GetTask(req.ID)
+		e, _ := t.GetExec("")
+		resp.Pid = uint32(e.Pid())
+		s.z.Store(pod)
+	} else {
+		t, err := newLcowStandaloneTask(ctx, req, &spec)
+		if err != nil {
+			s.cl.Unlock()
+			return nil, err
+		}
+		e, _ := t.GetExec("")
+		resp.Pid = uint32(e.Pid())
+		s.z.Store(t)
+	}
+	s.cl.Unlock()
+	return resp, nil
 }
 
 func (s *service) startInternal(ctx context.Context, req *task.StartRequest) (*task.StartResponse, error) {

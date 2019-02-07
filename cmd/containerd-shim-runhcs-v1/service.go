@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 
 	"github.com/containerd/containerd/runtime/v2/task"
@@ -45,6 +46,12 @@ type service struct {
 	// is the `task` this shim is tracking. If no call to `Create` has taken
 	// place yet `z.Load()` MUST return `nil`.
 	z atomic.Value
+
+	// cl is the create lock. Since each shim MUST only track a single task or
+	// POD. `cl` is used to create the task or POD sandbox. It SHOULD not be
+	// taken when creating tasks in a POD sandbox as they can happen
+	// concurrently.
+	cl sync.Mutex
 }
 
 func (s *service) State(ctx context.Context, req *task.StateRequest) (_ *task.StateResponse, err error) {

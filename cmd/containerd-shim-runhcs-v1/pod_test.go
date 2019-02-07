@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/runtime/v2/task"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 var _ = (shimPod)(&testShimPod{})
@@ -20,6 +22,10 @@ type testShimPod struct {
 
 func (tsp *testShimPod) ID() string {
 	return tsp.id
+}
+
+func (tsp *testShimPod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
+	return nil, errdefs.ErrNotImplemented
 }
 
 func (tsp *testShimPod) GetTask(tid string) (shimTask, error) {

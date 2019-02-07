@@ -17,11 +17,14 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// newLcowExec creates an exec to track the lifetime of `spec` in `c` which is
+// actually created on the call to `Start()`. If `id==""` then this is the init
+// exec and the exec will also start `c` on the call to `Start()` before execing
+// the process `spec`.
 func newLcowExec(
 	tid string,
 	c *hcs.System,
-	id, bundle, stdin, stdout, stderr string,
-	terminal bool,
+	id, bundle string,
 	spec *specs.Process,
 	io *iorelay) shimExec {
 	le := &lcowExec{
@@ -29,10 +32,6 @@ func newLcowExec(
 		c:          c,
 		id:         id,
 		bundle:     bundle,
-		stdin:      stdin,
-		stdout:     stdout,
-		stderr:     stderr,
-		terminal:   terminal,
 		spec:       spec,
 		io:         io,
 		state:      shimExecStateCreated,
@@ -64,26 +63,6 @@ type lcowExec struct {
 	//
 	// This MUST be treated as read only in the lifetime of the exec.
 	bundle string
-	// stdin is the path of the `stdin` connection passed at create time. If
-	// `stdin==""` then no `stdin` connection was requested.
-	//
-	// This MUST be treated as read only in the lifetime of the exec.
-	stdin string
-	// stdout is the path of the `stdout` connection passed at create time. If
-	// `stdout==""` then no `stdout` connection was requested.
-	//
-	// This MUST be treated as read only in the lifetime of the exec.
-	stdout string
-	// stderr is the path of the `stderr` connection passed at create time. If
-	// `stderr==""` then no `stderr` connection was requested.
-	//
-	// This MUST be treated as read only in the lifetime of the exec.
-	stderr string
-	// terminal signifies if this process is emulating a terminal connection. If
-	// `terminal==true` then `stderr` MUST equal `""`.
-	//
-	// This MUST be treated as read only in the lifetime of the exec.
-	terminal bool
 	// spec is the OCI Process spec that was passed in at create time. This is
 	// stored because we don't actually create the process until the call to
 	// `Start`.
@@ -147,10 +126,10 @@ func (le *lcowExec) Status() *task.StateResponse {
 		Bundle:     le.bundle,
 		Pid:        uint32(le.pid),
 		Status:     s,
-		Stdin:      le.stdin,
-		Stdout:     le.stdout,
-		Stderr:     le.stderr,
-		Terminal:   le.terminal,
+		Stdin:      le.io.StdinPath(),
+		Stdout:     le.io.StdoutPath(),
+		Stderr:     le.io.StderrPath(),
+		Terminal:   le.io.Terminal(),
 		ExitStatus: le.exitStatus,
 		ExitedAt:   le.exitedAt,
 	}
@@ -167,11 +146,18 @@ func (le *lcowExec) Start(ctx context.Context) error {
 	if le.state != shimExecStateCreated {
 		return newExecInvalidStateError(le.tid, le.id, le.state, "start")
 	}
+	if le.id == "" {
+		// This is the init exec. We need to start the container itself
+		err := le.c.Start()
+		if err != nil {
+			return err
+		}
+	}
 	lpp := &lcow.ProcessParameters{
 		ProcessParameters: hcsschema.ProcessParameters{
-			CreateStdInPipe:  le.stdin != "",
-			CreateStdOutPipe: le.stdout != "",
-			CreateStdErrPipe: le.stderr != "",
+			CreateStdInPipe:  le.io.StdinPath() != "",
+			CreateStdOutPipe: le.io.StdoutPath() != "",
+			CreateStdErrPipe: le.io.StderrPath() != "",
 		},
 	}
 	if le.id != "" {
@@ -243,7 +229,7 @@ func (le *lcowExec) ResizePty(ctx context.Context, width, height uint32) error {
 	if le.state != shimExecStateRunning {
 		return newExecInvalidStateError(le.tid, le.id, le.state, "resizepty")
 	}
-	if !le.terminal {
+	if !le.io.Terminal() {
 		return errors.Wrapf(errdefs.ErrFailedPrecondition, "exec: '%s' in task: '%s' is not a tty", le.id, le.tid)
 	}
 
