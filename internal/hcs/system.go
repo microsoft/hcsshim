@@ -280,7 +280,7 @@ func (computeSystem *System) Shutdown() (err error) {
 	operation := "hcsshim::ComputeSystem::Shutdown"
 	computeSystem.logOperationBegin(operation)
 	defer func() {
-		if IsAlreadyStopped(err) {
+		if IsAlreadyStopped(err) || IsPending(err) {
 			computeSystem.logOperationEnd(operation, nil)
 		} else {
 			computeSystem.logOperationEnd(operation, err)
