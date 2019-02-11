@@ -2,10 +2,7 @@ package gcs
 
 import (
 	"fmt"
-	"syscall"
 
-	"github.com/Microsoft/opengcs/service/gcs/oslayer"
-	"github.com/Microsoft/opengcs/service/gcs/oslayer/mockos"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime/mockruntime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
@@ -13,6 +10,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
+	"golang.org/x/sys/unix"
 )
 
 var _ = Describe("GCS", func() {
@@ -563,82 +561,27 @@ var _ = Describe("GCS", func() {
 
 		Describe("calling into the primary GCS functions", func() {
 			var (
-				coreint                              *gcsCore
-				containerID                          string
-				processID                            int
-				createSettings                       prot.VMHostedContainerSettings
-				createSettingsCreateInUtilityVMFalse prot.VMHostedContainerSettings
-				initialExecParams                    prot.ProcessParameters
-				nonInitialExecParams                 prot.ProcessParameters
-				externalParams                       prot.ProcessParameters
-				fullStdioSet                         stdio.ConnectionSettings
-				mappedVirtualDisk                    prot.MappedVirtualDisk
-				mappedDirectory                      prot.MappedDirectory
-				diskModificationRequest              prot.ResourceModificationRequestResponse
-				diskModificationRequestSameLun       prot.ResourceModificationRequestResponse
-				diskModificationRequestRemove        prot.ResourceModificationRequestResponse
-				dirModificationRequest               prot.ResourceModificationRequestResponse
-				dirModificationRequestSamePort       prot.ResourceModificationRequestResponse
-				dirModificationRequestRemove         prot.ResourceModificationRequestResponse
-				err                                  error
+				coreint                       *gcsCore
+				containerID                   string
+				processID                     int
+				initialExecParams             prot.ProcessParameters
+				nonInitialExecParams          prot.ProcessParameters
+				externalParams                prot.ProcessParameters
+				fullStdioSet                  stdio.ConnectionSettings
+				mappedVirtualDisk             prot.MappedVirtualDisk
+				mappedDirectory               prot.MappedDirectory
+				diskModificationRequest       prot.ResourceModificationRequestResponse
+				diskModificationRequestRemove prot.ResourceModificationRequestResponse
+				dirModificationRequest        prot.ResourceModificationRequestResponse
+				dirModificationRequestRemove  prot.ResourceModificationRequestResponse
+				err                           error
 			)
 			BeforeEach(func() {
 				rtime := mockruntime.NewRuntime("/tmp/gcs")
-				os := mockos.NewOS()
-				cint := NewGCSCore("/tmp/gcs", "/tmp", rtime, os, &transport.MockTransport{})
+				cint := NewGCSCore("/tmp/gcs", "/tmp", rtime, &transport.MockTransport{})
 				coreint = cint.(*gcsCore)
 				containerID = "01234567-89ab-cdef-0123-456789abcdef"
 				processID = 101
-				createSettings = prot.VMHostedContainerSettings{
-					Layers:          []prot.Layer{prot.Layer{Path: "0"}, prot.Layer{Path: "1"}, prot.Layer{Path: "2"}},
-					SandboxDataPath: "3",
-					MappedVirtualDisks: []prot.MappedVirtualDisk{
-						prot.MappedVirtualDisk{
-							ContainerPath:     "/path/inside/container",
-							Lun:               4,
-							CreateInUtilityVM: true,
-							ReadOnly:          false,
-						},
-					},
-					NetworkAdapters: []prot.NetworkAdapter{
-						prot.NetworkAdapter{
-							AdapterInstanceID:  "00000000-0000-0000-0000-000000000000",
-							FirewallEnabled:    false,
-							NatEnabled:         true,
-							AllocatedIPAddress: "192.168.0.0",
-							HostIPAddress:      "192.168.0.1",
-							HostIPPrefixLength: 16,
-							HostDNSServerList:  "0.0.0.0 1.1.1.1 8.8.8.8",
-							HostDNSSuffix:      "microsoft.com",
-							EnableLowMetric:    true,
-						},
-					},
-				}
-				createSettingsCreateInUtilityVMFalse = prot.VMHostedContainerSettings{
-					Layers:          []prot.Layer{prot.Layer{Path: "0"}, prot.Layer{Path: "1"}, prot.Layer{Path: "2"}},
-					SandboxDataPath: "3",
-					MappedVirtualDisks: []prot.MappedVirtualDisk{
-						prot.MappedVirtualDisk{
-							ContainerPath:     "/path/inside/container",
-							Lun:               4,
-							CreateInUtilityVM: false,
-							ReadOnly:          false,
-						},
-					},
-					NetworkAdapters: []prot.NetworkAdapter{
-						prot.NetworkAdapter{
-							AdapterInstanceID:  "00000000-0000-0000-0000-000000000000",
-							FirewallEnabled:    false,
-							NatEnabled:         true,
-							AllocatedIPAddress: "192.168.0.0",
-							HostIPAddress:      "192.168.0.1",
-							HostIPPrefixLength: 16,
-							HostDNSServerList:  "0.0.0.0 1.1.1.1 8.8.8.8",
-							HostDNSSuffix:      "microsoft.com",
-							EnableLowMetric:    true,
-						},
-					},
-				}
 				initialExecParams = prot.ProcessParameters{
 					CreateStdInPipe:  true,
 					CreateStdOutPipe: true,
@@ -692,17 +635,6 @@ var _ = Describe("GCS", func() {
 					RequestType:  prot.RtAdd,
 					Settings:     &mappedVirtualDisk,
 				}
-				diskSameLun := prot.MappedVirtualDisk{
-					ContainerPath:     "/path/inside/container",
-					Lun:               4,
-					CreateInUtilityVM: true,
-					ReadOnly:          false,
-				}
-				diskModificationRequestSameLun = prot.ResourceModificationRequestResponse{
-					ResourceType: prot.PtMappedVirtualDisk,
-					RequestType:  prot.RtAdd,
-					Settings:     &diskSameLun,
-				}
 				diskModificationRequestRemove = prot.ResourceModificationRequestResponse{
 					ResourceType: prot.PtMappedVirtualDisk,
 					RequestType:  prot.RtRemove,
@@ -713,49 +645,19 @@ var _ = Describe("GCS", func() {
 					RequestType:  prot.RtAdd,
 					Settings:     &mappedDirectory,
 				}
-				dirSamePort := prot.MappedDirectory{
-					ContainerPath:     "abcdefghijklmnopqrstuvwxyz",
-					CreateInUtilityVM: true,
-					ReadOnly:          false,
-					Port:              4,
-				}
-				dirModificationRequestSamePort = prot.ResourceModificationRequestResponse{
-					ResourceType: prot.PtMappedDirectory,
-					RequestType:  prot.RtAdd,
-					Settings:     &dirSamePort,
-				}
 				dirModificationRequestRemove = prot.ResourceModificationRequestResponse{
 					ResourceType: prot.PtMappedDirectory,
 					RequestType:  prot.RtRemove,
 					Settings:     &mappedDirectory,
 				}
 			})
-			Describe("calling CreateContainer", func() {
-				Context("mapped virtual disk is created in the utility VM", func() {
-					JustBeforeEach(func() {
-						err = coreint.CreateContainer(containerID, createSettings)
-					})
-					It("should not produce an error", func() {
-						Expect(err).NotTo(HaveOccurred())
-					})
-				})
-				Context("mapped virtual disk is created in the container namespace", func() {
-					JustBeforeEach(func() {
-						err = coreint.CreateContainer(containerID, createSettingsCreateInUtilityVMFalse)
-					})
-					It("should produce an error", func() {
-						Expect(err).To(HaveOccurred())
-					})
-				})
-			})
 			Describe("calling ExecProcess", func() {
 				var (
 					params      prot.ProcessParameters
-					pid         int
 					errDoneChan chan<- struct{}
 				)
 				JustBeforeEach(func() {
-					pid, errDoneChan, err = coreint.ExecProcess(containerID, params, fullStdioSet)
+					_, errDoneChan, err = coreint.ExecProcess(containerID, params, fullStdioSet)
 				})
 				AfterEach(func() {
 					if errDoneChan != nil {
@@ -765,15 +667,6 @@ var _ = Describe("GCS", func() {
 				Context("it is the initial process", func() {
 					BeforeEach(func() {
 						params = initialExecParams
-					})
-					Context("the container has already been created", func() {
-						BeforeEach(func() {
-							err = coreint.CreateContainer(containerID, createSettings)
-							Expect(err).NotTo(HaveOccurred())
-						})
-						It("should not produce an error", func() {
-							Expect(err).NotTo(HaveOccurred())
-						})
 					})
 					Context("the container has not already been created", func() {
 						It("should produce an error", func() {
@@ -785,26 +678,6 @@ var _ = Describe("GCS", func() {
 					BeforeEach(func() {
 						params = nonInitialExecParams
 					})
-					Context("the container has already been created", func() {
-						BeforeEach(func() {
-							err = coreint.CreateContainer(containerID, createSettings)
-							Expect(err).NotTo(HaveOccurred())
-						})
-						Context("the container already has an initial process in it", func() {
-							BeforeEach(func() {
-								pid, _, err = coreint.ExecProcess(containerID, initialExecParams, fullStdioSet)
-								Expect(err).NotTo(HaveOccurred())
-							})
-							It("should not produce an error", func() {
-								Expect(err).NotTo(HaveOccurred())
-							})
-						})
-						Context("the container does not already have an initial process in it", func() {
-							It("should produce an error", func() {
-								Expect(err).To(HaveOccurred())
-							})
-						})
-					})
 					Context("the container has not already been created", func() {
 						It("should produce an error", func() {
 							Expect(err).To(HaveOccurred())
@@ -815,16 +688,7 @@ var _ = Describe("GCS", func() {
 			Describe("calling SignalContainer", func() {
 				Context("using signal SIGKILL", func() {
 					JustBeforeEach(func() {
-						err = coreint.SignalContainer(containerID, oslayer.SIGKILL)
-					})
-					Context("the container has already been created", func() {
-						BeforeEach(func() {
-							err = coreint.CreateContainer(containerID, createSettings)
-							Expect(err).NotTo(HaveOccurred())
-						})
-						It("should not produce an error", func() {
-							Expect(err).NotTo(HaveOccurred())
-						})
+						err = coreint.SignalContainer(containerID, unix.SIGKILL)
 					})
 					Context("the container has not already been created", func() {
 						It("should produce an error", func() {
@@ -834,16 +698,7 @@ var _ = Describe("GCS", func() {
 				})
 				Context("using signal SIGTERM", func() {
 					JustBeforeEach(func() {
-						err = coreint.SignalContainer(containerID, oslayer.SIGTERM)
-					})
-					Context("the container has already been created", func() {
-						BeforeEach(func() {
-							err = coreint.CreateContainer(containerID, createSettings)
-							Expect(err).NotTo(HaveOccurred())
-						})
-						It("should not produce an error", func() {
-							Expect(err).NotTo(HaveOccurred())
-						})
+						err = coreint.SignalContainer(containerID, unix.SIGTERM)
 					})
 					Context("the container has not already been created", func() {
 						It("should produce an error", func() {
@@ -857,30 +712,10 @@ var _ = Describe("GCS", func() {
 					sigkillOptions prot.SignalProcessOptions
 				)
 				BeforeEach(func() {
-					sigkillOptions = prot.SignalProcessOptions{Signal: int32(syscall.SIGKILL)}
+					sigkillOptions = prot.SignalProcessOptions{Signal: int32(unix.SIGKILL)}
 				})
 				JustBeforeEach(func() {
 					err = coreint.SignalProcess(processID, sigkillOptions)
-				})
-				Context("the process has already been created", func() {
-					BeforeEach(func() {
-						err = coreint.CreateContainer(containerID, createSettings)
-						Expect(err).NotTo(HaveOccurred())
-						_, _, err = coreint.ExecProcess(containerID, initialExecParams, fullStdioSet)
-						Expect(err).NotTo(HaveOccurred())
-					})
-					It("should not produce an error", func() {
-						Expect(err).NotTo(HaveOccurred())
-					})
-				})
-				Context("the external process has already been created", func() {
-					BeforeEach(func() {
-						_, err = coreint.RunExternalProcess(externalParams, fullStdioSet)
-						Expect(err).NotTo(HaveOccurred())
-					})
-					It("should not produce an error", func() {
-						Expect(err).NotTo(HaveOccurred())
-					})
 				})
 				Context("the process has not already been created", func() {
 					It("should produce an error", func() {
@@ -890,61 +725,10 @@ var _ = Describe("GCS", func() {
 			})
 			Describe("calling GetProperties", func() {
 				var (
-					properties *prot.Properties
-					query      string
+					query string
 				)
 				JustBeforeEach(func() {
-					properties, err = coreint.GetProperties(containerID, query)
-				})
-				Context("the container has already been created", func() {
-					BeforeEach(func() {
-						err = coreint.CreateContainer(containerID, createSettings)
-						Expect(err).NotTo(HaveOccurred())
-					})
-					Context("a process has been executed", func() {
-						BeforeEach(func() {
-							_, _, err = coreint.ExecProcess(containerID, initialExecParams, fullStdioSet)
-							Expect(err).NotTo(HaveOccurred())
-						})
-						Context("using an empty query", func() {
-							It("should not produce an error", func() {
-								Expect(err).NotTo(HaveOccurred())
-							})
-							It("should not return any processes", func() {
-								Expect(properties).NotTo(BeNil())
-								Expect(properties.ProcessList).To(BeEmpty())
-							})
-						})
-						Context("using a process list query", func() {
-							BeforeEach(func() {
-								query = "{\"PropertyTypes\":[\"ProcessList\"]}"
-							})
-							It("should not produce an error", func() {
-								Expect(err).NotTo(HaveOccurred())
-							})
-							It("should return a process with pid 123", func() {
-								Expect(properties).NotTo(BeNil())
-								Expect(properties.ProcessList).To(HaveLen(1))
-								Expect(properties.ProcessList[0].ProcessID).To(Equal(uint32(123)))
-							})
-						})
-						Context("using an invalid JSON query", func() {
-							BeforeEach(func() {
-								query = "{"
-							})
-							It("should produce an error", func() {
-								Expect(err).To(HaveOccurred())
-							})
-						})
-					})
-					Context("no process has been executed", func() {
-						It("should not produce an error", func() {
-							Expect(err).NotTo(HaveOccurred())
-						})
-						It("should return a nil properties", func() {
-							Expect(properties).To(BeNil())
-						})
-					})
+					_, err = coreint.GetProperties(containerID, query)
 				})
 				Context("the container has not already been created", func() {
 					It("should produce an error", func() {
@@ -953,11 +737,8 @@ var _ = Describe("GCS", func() {
 				})
 			})
 			Describe("calling RunExternalProcess", func() {
-				var (
-					pid int
-				)
 				JustBeforeEach(func() {
-					pid, err = coreint.RunExternalProcess(externalParams, fullStdioSet)
+					_, err = coreint.RunExternalProcess(externalParams, fullStdioSet)
 				})
 				It("should not produce an error", func() {
 					Expect(err).NotTo(HaveOccurred())
@@ -969,15 +750,6 @@ var _ = Describe("GCS", func() {
 						JustBeforeEach(func() {
 							err = coreint.ModifySettings(containerID, &diskModificationRequest)
 						})
-						Context("the container has already been created", func() {
-							BeforeEach(func() {
-								err = coreint.CreateContainer(containerID, createSettings)
-								Expect(err).NotTo(HaveOccurred())
-							})
-							It("should not produce an error", func() {
-								Expect(err).NotTo(HaveOccurred())
-							})
-						})
 						Context("the container has not already been created", func() {
 							It("should produce an error", func() {
 								Expect(err).To(HaveOccurred())
@@ -986,29 +758,9 @@ var _ = Describe("GCS", func() {
 					})
 				})
 				Context("removing a mapped virtual disk", func() {
-					Context("the disk has not been added", func() {
-						BeforeEach(func() {
-							err = coreint.CreateContainer(containerID, createSettings)
-							Expect(err).NotTo(HaveOccurred())
-							err = coreint.ModifySettings(containerID, &diskModificationRequestRemove)
-						})
-						It("should not produce an error", func() {
-							Expect(err).NotTo(HaveOccurred())
-						})
-					})
 					Context("the disk has been added", func() {
 						JustBeforeEach(func() {
 							err = coreint.ModifySettings(containerID, &diskModificationRequestRemove)
-						})
-						Context("the container has already been created", func() {
-							BeforeEach(func() {
-								err = coreint.CreateContainer(containerID, createSettings)
-								Expect(err).NotTo(HaveOccurred())
-								coreint.containerCache[containerID].AddMappedVirtualDisk(mappedVirtualDisk)
-							})
-							It("should not produce an error", func() {
-								Expect(err).NotTo(HaveOccurred())
-							})
 						})
 						Context("the container has not already been created", func() {
 							It("should produce an error", func() {
@@ -1022,15 +774,6 @@ var _ = Describe("GCS", func() {
 						JustBeforeEach(func() {
 							err = coreint.ModifySettings(containerID, &dirModificationRequest)
 						})
-						Context("the container has already been created", func() {
-							BeforeEach(func() {
-								err = coreint.CreateContainer(containerID, createSettings)
-								Expect(err).NotTo(HaveOccurred())
-							})
-							It("should not produce an error", func() {
-								Expect(err).NotTo(HaveOccurred())
-							})
-						})
 						Context("the container has not already been created", func() {
 							It("should produce an error", func() {
 								Expect(err).To(HaveOccurred())
@@ -1039,29 +782,9 @@ var _ = Describe("GCS", func() {
 					})
 				})
 				Context("removing a mapped directory", func() {
-					Context("the directory has not been added", func() {
-						BeforeEach(func() {
-							err = coreint.CreateContainer(containerID, createSettings)
-							Expect(err).NotTo(HaveOccurred())
-							err = coreint.ModifySettings(containerID, &dirModificationRequestRemove)
-						})
-						It("should not produce an error", func() {
-							Expect(err).NotTo(HaveOccurred())
-						})
-					})
 					Context("the directory has been added", func() {
 						JustBeforeEach(func() {
 							err = coreint.ModifySettings(containerID, &dirModificationRequestRemove)
-						})
-						Context("the container has already been created", func() {
-							BeforeEach(func() {
-								err = coreint.CreateContainer(containerID, createSettings)
-								Expect(err).NotTo(HaveOccurred())
-								coreint.containerCache[containerID].AddMappedDirectory(mappedDirectory)
-							})
-							It("should not produce an error", func() {
-								Expect(err).NotTo(HaveOccurred())
-							})
 						})
 						Context("the container has not already been created", func() {
 							It("should produce an error", func() {
@@ -1072,14 +795,11 @@ var _ = Describe("GCS", func() {
 				})
 			})
 			Describe("calling wait container", func() {
-				var (
-					exitCode int = -1
-				)
 				JustBeforeEach(func() {
 					var exitCodeFn func() int
 					exitCodeFn, err = coreint.WaitContainer(containerID)
 					if err == nil {
-						exitCode = exitCodeFn()
+						exitCodeFn()
 					}
 				})
 				Context("container does not exist", func() {
@@ -1087,27 +807,17 @@ var _ = Describe("GCS", func() {
 						Expect(err).To(HaveOccurred())
 					})
 				})
-				Context("container does exist", func() {
-					JustBeforeEach(func() {
-						err = coreint.CreateContainer(containerID, createSettings)
-						Expect(err).NotTo(HaveOccurred())
-					})
-					It("should not produce an error", func() {
-						Expect(err).NotTo(HaveOccurred())
-					})
-				})
 			})
 			Describe("calling wait process", func() {
 				var (
-					pid      int
-					exitCode int
+					pid int
 				)
 				JustBeforeEach(func() {
 					var exitCodeChan <-chan int
 					var doneChan chan<- bool
 					exitCodeChan, doneChan, err = coreint.WaitProcess(pid)
 					if err == nil {
-						exitCode = <-exitCodeChan
+						<-exitCodeChan
 						doneChan <- true
 					}
 				})
@@ -1119,17 +829,6 @@ var _ = Describe("GCS", func() {
 				Context("process does exist", func() {
 					JustBeforeEach(func() {
 						pid, err = coreint.RunExternalProcess(externalParams, fullStdioSet)
-						Expect(err).NotTo(HaveOccurred())
-					})
-					It("should not produce an error", func() {
-						Expect(err).NotTo(HaveOccurred())
-					})
-				})
-				Context("is a container process", func() {
-					JustBeforeEach(func() {
-						err = coreint.CreateContainer(containerID, createSettings)
-						Expect(err).NotTo(HaveOccurred())
-						pid, _, err = coreint.ExecProcess(containerID, initialExecParams, fullStdioSet)
 						Expect(err).NotTo(HaveOccurred())
 					})
 					It("should not produce an error", func() {

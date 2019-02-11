@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strconv"
@@ -14,7 +15,6 @@ import (
 	"time"
 
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
-	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
@@ -36,7 +36,6 @@ type Host struct {
 
 	// Rtime is the Runtime interface used by the GCS core.
 	rtime runtime.Runtime
-	osl   oslayer.OS
 	vsock transport.Transport
 
 	// cachedAdapters is a map from `NamespaceID` to adapter.
@@ -47,11 +46,10 @@ type Host struct {
 	networkNSToContainer sync.Map
 }
 
-func NewHost(rtime runtime.Runtime, osl oslayer.OS, vsock transport.Transport) *Host {
+func NewHost(rtime runtime.Runtime, vsock transport.Transport) *Host {
 	return &Host{
 		containers:     make(map[string]*Container),
 		rtime:          rtime,
-		osl:            osl,
 		vsock:          vsock,
 		cachedAdapters: make(map[string][]*prot.NetworkAdapterV2),
 	}
@@ -98,11 +96,11 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 
 	// Container doesnt exit. Create it here
 	// Create the BundlePath
-	if err := h.osl.MkdirAll(settings.OCIBundlePath, 0700); err != nil {
+	if err := os.MkdirAll(settings.OCIBundlePath, 0700); err != nil {
 		return nil, errors.Wrapf(err, "failed to create OCIBundlePath: '%s'", settings.OCIBundlePath)
 	}
 	configFile := path.Join(settings.OCIBundlePath, "config.json")
-	f, err := h.osl.Create(configFile)
+	f, err := os.Create(configFile)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create config.json at: '%s'", configFile)
 	}
@@ -138,7 +136,7 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 		ns := strings.ToLower(settings.OCISpecification.Windows.Network.NetworkNamespace)
 		if adapters, ok := h.cachedAdapters[ns]; ok {
 			for _, a := range adapters {
-				err = c.AddNetworkAdapter(h.osl, a)
+				err = c.AddNetworkAdapter(a)
 				if err != nil {
 					return nil, err
 				}
@@ -186,7 +184,7 @@ func (h *Host) ModifyHostSettings(settings *prot.ModifySettingRequest) error {
 	case prot.MrtMappedVirtualDisk:
 		add = func(setting interface{}) error {
 			mvd := setting.(*prot.MappedVirtualDiskV2)
-			scsiName, err := scsiControllerLunToName(h.osl, mvd.Controller, mvd.Lun)
+			scsiName, err := scsiControllerLunToName(mvd.Controller, mvd.Lun)
 			if err != nil {
 				return errors.Wrapf(err, "failed to create MappedVirtualDiskV2")
 			}
@@ -200,10 +198,10 @@ func (h *Host) ModifyHostSettings(settings *prot.ModifySettingRequest) error {
 				ms.Options = append(ms.Options, mountOptionNoLoad)
 			}
 			if mvd.MountPath != "" {
-				if err := h.osl.MkdirAll(mvd.MountPath, 0700); err != nil {
+				if err := os.MkdirAll(mvd.MountPath, 0700); err != nil {
 					return errors.Wrapf(err, "failed to create directory for MappedVirtualDiskV2 %s", mvd.MountPath)
 				}
-				if err := ms.MountWithTimedRetry(h.osl, mvd.MountPath); err != nil {
+				if err := ms.MountWithTimedRetry(mvd.MountPath); err != nil {
 					return errors.Wrapf(err, "failed to mount directory for MappedVirtualDiskV2 %s", mvd.MountPath)
 				}
 			}
@@ -212,20 +210,20 @@ func (h *Host) ModifyHostSettings(settings *prot.ModifySettingRequest) error {
 		remove = func(setting interface{}) error {
 			mvd := setting.(*prot.MappedVirtualDiskV2)
 			if mvd.MountPath != "" {
-				if err := unmountPath(h.osl, mvd.MountPath, true); err != nil {
+				if err := unmountPath(mvd.MountPath, true); err != nil {
 					return errors.Wrapf(err, "failed to hot remove MappedVirtualDiskV2 path: '%s'", mvd.MountPath)
 				}
 			}
-			return h.osl.UnplugSCSIDisk(fmt.Sprintf("0:0:%d:%d", mvd.Controller, mvd.Lun))
+			return unplugSCSIDisk(fmt.Sprintf("0:0:%d:%d", mvd.Controller, mvd.Lun))
 		}
 	case prot.MrtMappedDirectory:
 		add = func(setting interface{}) error {
 			md := setting.(*prot.MappedDirectoryV2)
-			return mountPlan9Share(h.osl, h.vsock, md.MountPath, md.ShareName, md.Port, md.ReadOnly)
+			return mountPlan9Share(h.vsock, md.MountPath, md.ShareName, md.Port, md.ReadOnly)
 		}
 		remove = func(setting interface{}) error {
 			md := setting.(*prot.MappedDirectoryV2)
-			return unmountPath(h.osl, md.MountPath, true)
+			return unmountPath(md.MountPath, true)
 		}
 	case prot.MrtVPMemDevice:
 		add = func(setting interface{}) error {
@@ -236,11 +234,11 @@ func (h *Host) ModifyHostSettings(settings *prot.ModifySettingRequest) error {
 				Flags:      syscall.MS_RDONLY,
 				Options:    []string{mountOptionNoLoad, mountOptionDax},
 			}
-			return mountLayer(h.osl, vpd.MountPath, ms)
+			return mountLayer(vpd.MountPath, ms)
 		}
 		remove = func(setting interface{}) error {
 			vpd := setting.(*prot.MappedVPMemDeviceV2)
-			return unmountPath(h.osl, vpd.MountPath, true)
+			return unmountPath(vpd.MountPath, true)
 		}
 	case prot.MrtCombinedLayers:
 		add = func(setting interface{}) error {
@@ -248,7 +246,7 @@ func (h *Host) ModifyHostSettings(settings *prot.ModifySettingRequest) error {
 			if cl.ContainerRootPath == "" {
 				return errors.New("cannot combine layers with empty ContainerRootPath")
 			}
-			if err := h.osl.MkdirAll(cl.ContainerRootPath, 0700); err != nil {
+			if err := os.MkdirAll(cl.ContainerRootPath, 0700); err != nil {
 				return errors.Wrapf(err, "failed to create ContainerRootPath directory '%s'", cl.ContainerRootPath)
 			}
 
@@ -268,11 +266,11 @@ func (h *Host) ModifyHostSettings(settings *prot.ModifySettingRequest) error {
 				workdirPath = filepath.Join(cl.ScratchPath, "work")
 			}
 
-			return mountOverlay(h.osl, layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, mountOptions)
+			return mountOverlay(layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, mountOptions)
 		}
 		remove = func(setting interface{}) error {
 			cl := setting.(*prot.CombinedLayersV2)
-			return unmountPath(h.osl, cl.ContainerRootPath, true)
+			return unmountPath(cl.ContainerRootPath, true)
 		}
 	case prot.MrtNetwork:
 		add = func(setting interface{}) error {
@@ -285,7 +283,7 @@ func (h *Host) ModifyHostSettings(settings *prot.ModifySettingRequest) error {
 				if err != nil {
 					return err
 				}
-				return c.AddNetworkAdapter(h.osl, na)
+				return c.AddNetworkAdapter(na)
 			}
 			h.cachedAdapters[na.NamespaceID] = append(h.cachedAdapters[na.NamespaceID], na)
 			return nil
@@ -298,7 +296,7 @@ func (h *Host) ModifyHostSettings(settings *prot.ModifySettingRequest) error {
 				// network. If the container is not found we just remove the
 				// namespace reference.
 				if c, err := h.GetContainer(cidraw.(string)); err == nil {
-					return c.RemoveNetworkAdapter(h.osl, na.ID)
+					return c.RemoveNetworkAdapter(na.ID)
 				}
 				h.networkNSToContainer.Delete(na.NamespaceID)
 			} else {
@@ -330,7 +328,7 @@ func (h *Host) ModifyHostSettings(settings *prot.ModifySettingRequest) error {
 // Shutdown terminates this UVM. This is a destructive call and will destroy all
 // state that has not been cleaned before calling this function.
 func (h *Host) Shutdown() {
-	h.osl.Shutdown()
+	syscall.Reboot(syscall.LINUX_REBOOT_CMD_POWER_OFF)
 }
 
 type Container struct {
@@ -429,7 +427,7 @@ func (c *Container) GetProcess(pid uint32) (*Process, error) {
 }
 
 // Kill sends 'signal' to the container process.
-func (c *Container) Kill(signal oslayer.Signal) error {
+func (c *Container) Kill(signal syscall.Signal) error {
 	logrus.WithFields(logrus.Fields{
 		"cid":    c.id,
 		"signal": signal,
@@ -450,7 +448,7 @@ func (c *Container) Wait() int {
 }
 
 // AddNetworkAdapter adds `a` to the network namespace held by this container.
-func (c *Container) AddNetworkAdapter(o oslayer.OS, a *prot.NetworkAdapterV2) error {
+func (c *Container) AddNetworkAdapter(a *prot.NetworkAdapterV2) error {
 	log := logrus.WithFields(logrus.Fields{
 		"cid":       c.id,
 		"adapterID": a.ID,
@@ -477,7 +475,7 @@ func (c *Container) AddNetworkAdapter(o oslayer.OS, a *prot.NetworkAdapterV2) er
 	start := time.Now()
 	var id string
 	for {
-		id, err = instanceIDToName(o, a.ID)
+		id, err = instanceIDToName(a.ID)
 		if err != nil {
 			if os.IsNotExist(errors.Cause(err)) {
 				<-time.After(10 * time.Millisecond)
@@ -493,19 +491,19 @@ func (c *Container) AddNetworkAdapter(o oslayer.OS, a *prot.NetworkAdapterV2) er
 	log.Data["adapter-wait-time-ns"] = time.Since(start)
 	log.Debug("opengcs::Container::AddNetworkAdapter - Waited for network adapter to show up")
 
-	out, err := o.Command("netnscfg",
+	out, err := exec.Command("netnscfg",
 		"-if", id,
 		"-nspid", strconv.Itoa(c.container.Pid()),
 		"-cfg", string(cfg)).CombinedOutput()
 	if err != nil {
-		return errors.Wrapf(err, "failed to configure adapter cid: %s, aid: %s, if id: %s", c.id, a.ID, id, out)
+		return errors.Wrapf(err, "failed to configure adapter cid: %s, aid: %s, if id: %s, stdout: %s", c.id, a.ID, id, string(out))
 	}
 	return nil
 }
 
 // RemoveNetworkAdapter removes the network adapter `id` from the network
 // namespace held by this container.
-func (c *Container) RemoveNetworkAdapter(o oslayer.OS, id string) error {
+func (c *Container) RemoveNetworkAdapter(id string) error {
 	logrus.WithFields(logrus.Fields{
 		"cid":       c.id,
 		"adapterID": id,
@@ -555,17 +553,15 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 	p.writersWg.Add(1)
 	go func() {
 		// Wait for the process to exit
-		state, err := p.process.Wait()
+		exitCode, err := p.process.Wait()
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
 				"cid":           c.id,
 				"pid":           pid,
 				logrus.ErrorKey: err,
 			}).Error("opengcs::Process - failed to wait for runc process")
-			p.exitCode = -1
-		} else {
-			p.exitCode = state.ExitCode()
 		}
+		p.exitCode = exitCode
 		logrus.WithFields(logrus.Fields{
 			"cid":      c.id,
 			"pid":      pid,

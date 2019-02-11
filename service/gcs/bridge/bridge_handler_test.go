@@ -12,9 +12,9 @@ import (
 
 	"github.com/Microsoft/opengcs/service/gcs/core/gcs"
 	"github.com/Microsoft/opengcs/service/gcs/core/mockcore"
-	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
 type testResponseWriter struct {
@@ -515,7 +515,7 @@ func Test_ExecProcess_Container_CoreFails_Failure(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemExecuteProcessV1, prot.PvV3, r)
 
-	uvm := gcs.NewHost(nil, nil, nil)
+	uvm := gcs.NewHost(nil, nil)
 	tb := &Bridge{
 		hostState: uvm,
 		coreint: &mockcore.MockCore{
@@ -542,7 +542,7 @@ func Test_ExecProcess_Container_CoreSucceeds_Success(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemExecuteProcessV1, prot.PvV3, r)
 
-	uvm := gcs.NewHost(nil, nil, nil)
+	uvm := gcs.NewHost(nil, nil)
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
 	tb := &Bridge{
 		hostState: uvm,
@@ -574,7 +574,7 @@ func Test_KillContainer_CoreFails_Failure(t *testing.T) {
 	r := newMessageBase()
 	req, rw := setupRequestResponse(t, prot.ComputeSystemShutdownForcedV1, prot.PvV3, r)
 
-	uvm := gcs.NewHost(nil, nil, nil)
+	uvm := gcs.NewHost(nil, nil)
 	tb := &Bridge{
 		hostState: uvm,
 		coreint: &mockcore.MockCore{
@@ -591,7 +591,7 @@ func Test_KillContainer_CoreSucceeds_Success(t *testing.T) {
 	r := newMessageBase()
 	req, rw := setupRequestResponse(t, prot.ComputeSystemShutdownForcedV1, prot.PvV3, r)
 
-	uvm := gcs.NewHost(nil, nil, nil)
+	uvm := gcs.NewHost(nil, nil)
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
 	tb := &Bridge{hostState: uvm, coreint: mc}
 	tb.killContainer(rw, req)
@@ -601,7 +601,7 @@ func Test_KillContainer_CoreSucceeds_Success(t *testing.T) {
 	if r.ContainerID != mc.LastSignalContainer.ID {
 		t.Fatal("last signal container did not have the same container ID")
 	}
-	if mc.LastSignalContainer.Signal != oslayer.SIGKILL {
+	if mc.LastSignalContainer.Signal != unix.SIGKILL {
 		t.Fatal("last signal container did not have equal signal values")
 	}
 }
@@ -620,7 +620,7 @@ func Test_ShutdownContainer_CoreFails_Failure(t *testing.T) {
 	r := newMessageBase()
 	req, rw := setupRequestResponse(t, prot.ComputeSystemShutdownGracefulV1, prot.PvV3, r)
 
-	uvm := gcs.NewHost(nil, nil, nil)
+	uvm := gcs.NewHost(nil, nil)
 	tb := &Bridge{
 		hostState: uvm,
 		coreint: &mockcore.MockCore{
@@ -637,7 +637,7 @@ func Test_ShutdownContainer_CoreSucceeds_Success(t *testing.T) {
 	r := newMessageBase()
 	req, rw := setupRequestResponse(t, prot.ComputeSystemShutdownGracefulV1, prot.PvV3, r)
 
-	uvm := gcs.NewHost(nil, nil, nil)
+	uvm := gcs.NewHost(nil, nil)
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
 	tb := &Bridge{hostState: uvm, coreint: mc}
 	tb.shutdownContainer(rw, req)
@@ -647,7 +647,7 @@ func Test_ShutdownContainer_CoreSucceeds_Success(t *testing.T) {
 	if r.ContainerID != mc.LastSignalContainer.ID {
 		t.Fatal("last signal container did not have the same container ID")
 	}
-	if mc.LastSignalContainer.Signal != oslayer.SIGTERM {
+	if mc.LastSignalContainer.Signal != unix.SIGTERM {
 		t.Fatal("last signal container did not have equal signal values")
 	}
 }
@@ -673,7 +673,7 @@ func Test_SignalProcess_CoreFails_Failure(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemSignalProcessV1, prot.PvV3, r)
 
-	uvm := gcs.NewHost(nil, nil, nil)
+	uvm := gcs.NewHost(nil, nil)
 	tb := &Bridge{
 		hostState: uvm,
 		coreint: &mockcore.MockCore{
@@ -697,7 +697,7 @@ func Test_SignalProcess_CoreSucceeds_Success(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemSignalProcessV1, prot.PvV3, r)
 
-	uvm := gcs.NewHost(nil, nil, nil)
+	uvm := gcs.NewHost(nil, nil)
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
 	tb := &Bridge{hostState: uvm, coreint: mc}
 	tb.signalProcess(rw, req)
@@ -730,7 +730,7 @@ func Test_GetProperties_CoreFails_Failure(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemGetPropertiesV1, prot.PvV3, r)
 
-	uvm := gcs.NewHost(nil, nil, nil)
+	uvm := gcs.NewHost(nil, nil)
 	tb := &Bridge{
 		hostState: uvm,
 		coreint: &mockcore.MockCore{
@@ -751,7 +751,7 @@ func Test_GetProperties_CoreSucceeds_Success(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemGetPropertiesV1, prot.PvV3, r)
 
-	uvm := gcs.NewHost(nil, nil, nil)
+	uvm := gcs.NewHost(nil, nil)
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
 	tb := &Bridge{hostState: uvm, coreint: mc}
 	tb.getProperties(rw, req)
@@ -797,7 +797,7 @@ func Test_WaitOnProcess_CoreFails_Failure(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemWaitForProcessV1, prot.PvV3, r)
 
-	uvm := gcs.NewHost(nil, nil, nil)
+	uvm := gcs.NewHost(nil, nil)
 	tb := &Bridge{
 		hostState: uvm,
 		coreint: &mockcore.MockCore{
@@ -826,7 +826,7 @@ func Test_WaitOnProcess_CoreSucceeds_Timeout_Error(t *testing.T) {
 	}
 
 	// Do not write the exit code so that the timeout occurs.
-	uvm := gcs.NewHost(nil, nil, nil)
+	uvm := gcs.NewHost(nil, nil)
 	tb := &Bridge{hostState: uvm, coreint: mc}
 	tb.waitOnProcess(rw, req)
 
@@ -856,7 +856,7 @@ func Test_WaitOnProcess_CoreSucceeds_Success(t *testing.T) {
 	// Immediately write the exit code so the waitOnProcess doesnt block.
 	mc.LastWaitProcessReturnContext.ExitCodeChan <- 2980
 
-	uvm := gcs.NewHost(nil, nil, nil)
+	uvm := gcs.NewHost(nil, nil)
 	tb := &Bridge{hostState: uvm, coreint: mc}
 	tb.waitOnProcess(rw, req)
 
@@ -889,7 +889,7 @@ func Test_ResizeConsole_CoreFails_Failure(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemResizeConsoleV1, prot.PvV3, r)
 
-	uvm := gcs.NewHost(nil, nil, nil)
+	uvm := gcs.NewHost(nil, nil)
 	tb := &Bridge{
 		hostState: uvm,
 		coreint: &mockcore.MockCore{
@@ -912,7 +912,7 @@ func Test_ResizeConsole_CoreSucceeds_Success(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemResizeConsoleV1, prot.PvV3, r)
 
-	uvm := gcs.NewHost(nil, nil, nil)
+	uvm := gcs.NewHost(nil, nil)
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
 	tb := &Bridge{hostState: uvm, coreint: mc}
 	tb.resizeConsole(rw, req)
@@ -985,7 +985,7 @@ func Test_ModifySettings_CoreFails_Failure(t *testing.T) {
 
 	req, rw := setupRequestResponse(t, prot.ComputeSystemModifySettingsV1, prot.PvV3, r)
 
-	uvm := gcs.NewHost(nil, nil, nil)
+	uvm := gcs.NewHost(nil, nil)
 	tb := &Bridge{
 		hostState: uvm,
 		coreint: &mockcore.MockCore{
@@ -1013,7 +1013,7 @@ func Test_ModifySettings_CoreSucceeds_Success(t *testing.T) {
 	req, rw := setupRequestResponse(t, prot.ComputeSystemModifySettingsV1, prot.PvV3, r)
 
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
-	uvm := gcs.NewHost(nil, nil, nil)
+	uvm := gcs.NewHost(nil, nil)
 	tb := &Bridge{
 		hostState: uvm,
 		coreint:   mc,
@@ -1089,7 +1089,7 @@ func Test_ModifySettings_BothV1V2_Success(t *testing.T) {
 	req, rw := setupRequestResponse(t, prot.ComputeSystemModifySettingsV1, prot.PvV3, r)
 
 	mc := &mockcore.MockCore{Behavior: mockcore.Success}
-	uvm := gcs.NewHost(nil, nil, nil)
+	uvm := gcs.NewHost(nil, nil)
 	tb := &Bridge{
 		hostState: uvm,
 		coreint:   mc,

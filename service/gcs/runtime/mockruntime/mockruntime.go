@@ -3,9 +3,8 @@ package mockruntime
 
 import (
 	"sync"
+	"syscall"
 
-	"github.com/Microsoft/opengcs/service/gcs/oslayer"
-	"github.com/Microsoft/opengcs/service/gcs/oslayer/mockos"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
@@ -58,7 +57,7 @@ func (c *container) ExecProcess(process *oci.Process, stdioSet *stdio.Connection
 	return c, nil
 }
 
-func (c *container) Kill(signal oslayer.Signal) error {
+func (c *container) Kill(signal syscall.Signal) error {
 	c.r.killed.L.Lock()
 	defer c.r.killed.L.Unlock()
 	c.r.killed.Broadcast()
@@ -133,10 +132,9 @@ func (c *container) GetAllProcesses() ([]runtime.ContainerProcessState, error) {
 	return states, nil
 }
 
-func (c *container) Wait() (oslayer.ProcessExitState, error) {
+func (c *container) Wait() (int, error) {
 	c.r.killed.L.Lock()
 	defer c.r.killed.L.Unlock()
 	c.r.killed.Wait()
-	state := mockos.NewProcessExitState(123)
-	return state, nil
+	return 123, nil
 }

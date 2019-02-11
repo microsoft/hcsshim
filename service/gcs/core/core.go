@@ -3,7 +3,8 @@
 package core
 
 import (
-	"github.com/Microsoft/opengcs/service/gcs/oslayer"
+	"syscall"
+
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
 )
@@ -14,7 +15,7 @@ import (
 type Core interface {
 	CreateContainer(id string, info prot.VMHostedContainerSettings) error
 	ExecProcess(id string, info prot.ProcessParameters, conSettings stdio.ConnectionSettings) (pid int, execInitErrorDone chan<- struct{}, err error)
-	SignalContainer(id string, signal oslayer.Signal) error
+	SignalContainer(id string, signal syscall.Signal) error
 	SignalProcess(pid int, options prot.SignalProcessOptions) error
 	GetProperties(id string, query string) (*prot.Properties, error)
 	RunExternalProcess(info prot.ProcessParameters, conSettings stdio.ConnectionSettings) (pid int, err error)

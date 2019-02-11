@@ -17,12 +17,12 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/core"
 	gcspkg "github.com/Microsoft/opengcs/service/gcs/core/gcs"
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
-	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
 // The capabilities of this GCS.
@@ -652,16 +652,16 @@ func (b *Bridge) execProcess(w ResponseWriter, r *Request) {
 }
 
 func (b *Bridge) killContainer(w ResponseWriter, r *Request) {
-	b.signalContainer(w, r, oslayer.SIGKILL)
+	b.signalContainer(w, r, unix.SIGKILL)
 }
 
 func (b *Bridge) shutdownContainer(w ResponseWriter, r *Request) {
-	b.signalContainer(w, r, oslayer.SIGTERM)
+	b.signalContainer(w, r, unix.SIGTERM)
 }
 
 // signalContainer is not a handler func. This is because the actual signal is
 // implied based on the message type.
-func (b *Bridge) signalContainer(w ResponseWriter, r *Request, signal oslayer.Signal) {
+func (b *Bridge) signalContainer(w ResponseWriter, r *Request, signal syscall.Signal) {
 	var request prot.MessageBase
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
@@ -679,7 +679,7 @@ func (b *Bridge) signalContainer(w ResponseWriter, r *Request, signal oslayer.Si
 	// the UVM and then see if its a V2 container ID before falling back to the V1 path.
 	if request.ContainerID == gcspkg.UVMContainerID {
 		// We are asking to shutdown the UVM itself.
-		if signal != oslayer.SIGTERM {
+		if signal != unix.SIGTERM {
 			log.Error("opengcs::bridge::signalContainer - invalid signal for uvm")
 		}
 		// This is a destructive call. We do not respond to the HCS
@@ -726,7 +726,7 @@ func (b *Bridge) signalProcess(w ResponseWriter, r *Request) {
 		} else {
 			var signal syscall.Signal
 			if request.Options.Signal == 0 {
-				signal = syscall.SIGKILL
+				signal = unix.SIGKILL
 			} else {
 				signal = syscall.Signal(request.Options.Signal)
 			}

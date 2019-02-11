@@ -12,9 +12,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 
-	"github.com/Microsoft/opengcs/service/gcs/oslayer"
-	"github.com/Microsoft/opengcs/service/gcs/oslayer/realos"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
@@ -91,13 +90,14 @@ func NewRuntime(logBasePath string) (runtime.Runtime, error) {
 func (r *runcRuntime) initialize() error {
 	paths := [2]string{containerFilesDir, r.runcLogBasePath}
 	for _, p := range paths {
-		exists, err := r.pathExists(p)
+		_, err := os.Stat(p)
 		if err != nil {
-			return err
-		}
-		if !exists {
-			if err := os.MkdirAll(p, 0700); err != nil {
-				return errors.Wrapf(err, "failed making runC container files directory %s", p)
+			if os.IsNotExist(err) {
+				if err := os.MkdirAll(p, 0700); err != nil {
+					return errors.Wrapf(err, "failed making runC container files directory %s", p)
+				}
+			} else {
+				return err
 			}
 		}
 	}
@@ -141,7 +141,7 @@ func (c *container) ExecProcess(process *oci.Process, stdioSet *stdio.Connection
 }
 
 // Kill sends the specified signal to the container's init process.
-func (c *container) Kill(signal oslayer.Signal) error {
+func (c *container) Kill(signal syscall.Signal) error {
 	logPath := c.r.getLogPath(c.id)
 	cmd := exec.Command("runc", "--log", logPath, "kill", c.id, strconv.Itoa(int(signal)))
 	out, err := cmd.CombinedOutput()
@@ -383,39 +383,41 @@ func (r *runcRuntime) pidMapToProcessStates(pidMap map[int]*runtime.ContainerPro
 	return processStates
 }
 
-// waitOnProcess waits for the process to exit, and returns its
-// oslayer.ProcessExitState containing exit information.
-// TODO: We might want to give more options for this, such as specifying WNOHANG.
-func (r *runcRuntime) waitOnProcess(pid int) (oslayer.ProcessExitState, error) {
+// waitOnProcess waits for the process to exit, and returns its exit code.
+//
+// TODO: We might want to give more options for this, such as specifying
+// WNOHANG.
+func (r *runcRuntime) waitOnProcess(pid int) (int, error) {
 	process, err := os.FindProcess(pid)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to find process %d", pid)
+		return -1, errors.Wrapf(err, "failed to find process %d", pid)
 	}
 	state, err := process.Wait()
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed waiting on process %d", pid)
+		return -1, errors.Wrapf(err, "failed waiting on process %d", pid)
 	}
-	return realos.NewProcessExitState(state), nil
+
+	return state.Sys().(syscall.WaitStatus).ExitStatus(), nil
 }
 
-func (p *process) Wait() (oslayer.ProcessExitState, error) {
-	state, err := p.c.r.waitOnProcess(p.pid)
+func (p *process) Wait() (int, error) {
+	exitCode, err := p.c.r.waitOnProcess(p.pid)
 	if p.ttyRelay != nil {
 		p.ttyRelay.Wait()
 	}
 	if p.pipeRelay != nil {
 		p.pipeRelay.Wait()
 	}
-	return state, err
+	return exitCode, err
 }
 
 // Wait waits on every non-init process in the container, and then performs a
-// final wait on the init process. The oslayer.ProcessExitState returned is the
-// state acquired from waiting on the init process.
-func (c *container) Wait() (oslayer.ProcessExitState, error) {
+// final wait on the init process. The exit code returned is the exit code
+// acquired from waiting on the init process.
+func (c *container) Wait() (int, error) {
 	processes, err := c.GetAllProcesses()
 	if err != nil {
-		return nil, err
+		return -1, err
 	}
 	for _, process := range processes {
 		// Only wait on non-init processes that were created with exec.
@@ -427,11 +429,11 @@ func (c *container) Wait() (oslayer.ProcessExitState, error) {
 			c.r.waitOnProcess(process.Pid)
 		}
 	}
-	state, err := c.init.Wait()
+	exitCode, err := c.init.Wait()
 	if err != nil {
-		return nil, err
+		return -1, err
 	}
-	return state, nil
+	return exitCode, nil
 }
 
 // runCreateCommand sets up the arguments for calling runc create.
