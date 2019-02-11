@@ -173,7 +173,7 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 		resp.Pid = uint32(e.Pid())
 		s.z.Store(pod)
 	} else {
-		t, err := newLcowStandaloneTask(ctx, req, &spec)
+		t, err := newHcsStandaloneTask(ctx, req, &spec)
 		if err != nil {
 			s.cl.Unlock()
 			return nil, err

@@ -12,7 +12,12 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func newWcowPodSandboxExec(tid, bundle string) *wcowPodSandboxExec {
+func newWcowPodSandboxExec(ctx context.Context, tid, bundle string) *wcowPodSandboxExec {
+	logrus.WithFields(logrus.Fields{
+		"tid": tid,
+		"eid": "",
+	}).Debug("newWcowPodSandboxExec")
+
 	wpse := &wcowPodSandboxExec{
 		tid:        tid,
 		bundle:     bundle,

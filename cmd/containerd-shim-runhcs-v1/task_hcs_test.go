@@ -10,12 +10,12 @@ import (
 	"github.com/containerd/containerd/errdefs"
 )
 
-func setupTestLcowTask(t *testing.T) (*lcowTask, *testShimExec, *testShimExec) {
+func setupTestHcsTask(t *testing.T) (*hcsTask, *testShimExec, *testShimExec) {
 	initExec := &testShimExec{
 		id:  "", // init exec
 		pid: int(rand.Int31()),
 	}
-	lt := &lcowTask{
+	lt := &hcsTask{
 		id:   t.Name(),
 		init: initExec,
 	}
@@ -27,16 +27,16 @@ func setupTestLcowTask(t *testing.T) (*lcowTask, *testShimExec, *testShimExec) {
 	return lt, initExec, secondExec
 }
 
-func Test_lcowTask_ID(t *testing.T) {
-	lt, _, _ := setupTestLcowTask(t)
+func Test_hcsTask_ID(t *testing.T) {
+	lt, _, _ := setupTestHcsTask(t)
 
 	if lt.ID() != t.Name() {
 		t.Fatalf("expect ID: '%s', got: '%s'", t.Name(), lt.ID())
 	}
 }
 
-func Test_lcowTask_GetExec_Empty_Success(t *testing.T) {
-	lt, i, _ := setupTestLcowTask(t)
+func Test_hcsTask_GetExec_Empty_Success(t *testing.T) {
+	lt, i, _ := setupTestHcsTask(t)
 
 	e, err := lt.GetExec("")
 	if err != nil {
@@ -47,16 +47,16 @@ func Test_lcowTask_GetExec_Empty_Success(t *testing.T) {
 	}
 }
 
-func Test_lcowTask_GetExec_UnknownExecID_Error(t *testing.T) {
-	lt, _, _ := setupTestLcowTask(t)
+func Test_hcsTask_GetExec_UnknownExecID_Error(t *testing.T) {
+	lt, _, _ := setupTestHcsTask(t)
 
 	e, err := lt.GetExec("shouldnotmatch")
 
 	verifyExpectedError(t, e, err, errdefs.ErrNotFound)
 }
 
-func Test_lcowTask_GetExec_2ndID_Success(t *testing.T) {
-	lt, _, second := setupTestLcowTask(t)
+func Test_hcsTask_GetExec_2ndID_Success(t *testing.T) {
+	lt, _, second := setupTestHcsTask(t)
 
 	e, err := lt.GetExec(second.id)
 	if err != nil {
@@ -67,24 +67,24 @@ func Test_lcowTask_GetExec_2ndID_Success(t *testing.T) {
 	}
 }
 
-func Test_lcowTask_KillExec_UnknownExecID_Error(t *testing.T) {
-	lt, _, _ := setupTestLcowTask(t)
+func Test_hcsTask_KillExec_UnknownExecID_Error(t *testing.T) {
+	lt, _, _ := setupTestHcsTask(t)
 
 	err := lt.KillExec(context.TODO(), "thisshouldnotmatch", 0xf, false)
 
 	verifyExpectedError(t, nil, err, errdefs.ErrNotFound)
 }
 
-func Test_lcowTask_KillExec_InitExecID_Unexited2ndExec_Error(t *testing.T) {
-	lt, _, _ := setupTestLcowTask(t)
+func Test_hcsTask_KillExec_InitExecID_Unexited2ndExec_Error(t *testing.T) {
+	lt, _, _ := setupTestHcsTask(t)
 
 	err := lt.KillExec(context.TODO(), "", 0xf, false)
 
 	verifyExpectedError(t, nil, err, errdefs.ErrFailedPrecondition)
 }
 
-func Test_lcowTask_KillExec_InitExecID_All_Success(t *testing.T) {
-	lt, init, second := setupTestLcowTask(t)
+func Test_hcsTask_KillExec_InitExecID_All_Success(t *testing.T) {
+	lt, init, second := setupTestHcsTask(t)
 
 	err := lt.KillExec(context.TODO(), "", 0xf, true)
 	if err != nil {
@@ -98,8 +98,8 @@ func Test_lcowTask_KillExec_InitExecID_All_Success(t *testing.T) {
 	}
 }
 
-func Test_lcowTask_KillExec_2ndExecID_Success(t *testing.T) {
-	lt, _, second := setupTestLcowTask(t)
+func Test_hcsTask_KillExec_2ndExecID_Success(t *testing.T) {
+	lt, _, second := setupTestHcsTask(t)
 
 	err := lt.KillExec(context.TODO(), second.id, 0xf, false)
 	if err != nil {
@@ -110,8 +110,8 @@ func Test_lcowTask_KillExec_2ndExecID_Success(t *testing.T) {
 	}
 }
 
-func Test_lcowTask_KillExec_2ndExecID_All_Error(t *testing.T) {
-	lt, _, second := setupTestLcowTask(t)
+func Test_hcsTask_KillExec_2ndExecID_All_Error(t *testing.T) {
+	lt, _, second := setupTestHcsTask(t)
 
 	err := lt.KillExec(context.TODO(), second.id, 0xf, true)
 
@@ -142,16 +142,16 @@ func verifyDeleteSuccessValues(t *testing.T, pid int, status uint32, at time.Tim
 	}
 }
 
-func Test_lcowTask_DeleteExec_UnknownExecID_Error(t *testing.T) {
-	lt, _, _ := setupTestLcowTask(t)
+func Test_hcsTask_DeleteExec_UnknownExecID_Error(t *testing.T) {
+	lt, _, _ := setupTestHcsTask(t)
 
 	pid, status, at, err := lt.DeleteExec(context.TODO(), "thisshouldnotmatch")
 	verifyExpectedError(t, nil, err, errdefs.ErrNotFound)
 	verifyDeleteFailureValues(t, pid, status, at)
 }
 
-func Test_lcowTask_DeleteExec_InitExecID_Unexited_Error(t *testing.T) {
-	lt, _, second := setupTestLcowTask(t)
+func Test_hcsTask_DeleteExec_InitExecID_Unexited_Error(t *testing.T) {
+	lt, _, second := setupTestHcsTask(t)
 	lt.execs.Delete(second.id)
 
 	pid, status, at, err := lt.DeleteExec(context.TODO(), "")
@@ -160,16 +160,16 @@ func Test_lcowTask_DeleteExec_InitExecID_Unexited_Error(t *testing.T) {
 	verifyDeleteFailureValues(t, pid, status, at)
 }
 
-func Test_lcowTask_DeleteExec_InitExecID_Unexited2ndExec_Error(t *testing.T) {
-	lt, _, _ := setupTestLcowTask(t)
+func Test_hcsTask_DeleteExec_InitExecID_Unexited2ndExec_Error(t *testing.T) {
+	lt, _, _ := setupTestHcsTask(t)
 	pid, status, at, err := lt.DeleteExec(context.TODO(), "")
 
 	verifyExpectedError(t, nil, err, errdefs.ErrFailedPrecondition)
 	verifyDeleteFailureValues(t, pid, status, at)
 }
 
-func Test_lcowTask_DeleteExec_InitExecID_NoAdditionalExecs_Success(t *testing.T) {
-	lt, init, second := setupTestLcowTask(t)
+func Test_hcsTask_DeleteExec_InitExecID_NoAdditionalExecs_Success(t *testing.T) {
+	lt, init, second := setupTestHcsTask(t)
 	lt.execs.Delete(second.id)
 	init.Kill(context.TODO(), 0xf)
 
@@ -180,8 +180,8 @@ func Test_lcowTask_DeleteExec_InitExecID_NoAdditionalExecs_Success(t *testing.T)
 	verifyDeleteSuccessValues(t, pid, status, at, init)
 }
 
-func Test_lcowTask_DeleteExec_InitExecID_Exited2ndExec_Success(t *testing.T) {
-	lt, init, second := setupTestLcowTask(t)
+func Test_hcsTask_DeleteExec_InitExecID_Exited2ndExec_Success(t *testing.T) {
+	lt, init, second := setupTestHcsTask(t)
 	second.Kill(context.TODO(), 0xf)
 	init.Kill(context.TODO(), 0xf)
 
@@ -192,8 +192,8 @@ func Test_lcowTask_DeleteExec_InitExecID_Exited2ndExec_Success(t *testing.T) {
 	verifyDeleteSuccessValues(t, pid, status, at, init)
 }
 
-func Test_lcowTask_DeleteExec_2ndExecID_Unexited_Error(t *testing.T) {
-	lt, _, second := setupTestLcowTask(t)
+func Test_hcsTask_DeleteExec_2ndExecID_Unexited_Error(t *testing.T) {
+	lt, _, second := setupTestHcsTask(t)
 
 	pid, status, at, err := lt.DeleteExec(context.TODO(), second.id)
 
@@ -205,8 +205,8 @@ func Test_lcowTask_DeleteExec_2ndExecID_Unexited_Error(t *testing.T) {
 	}
 }
 
-func Test_lcowTask_DeleteExec_2ndExecID_Success(t *testing.T) {
-	lt, _, second := setupTestLcowTask(t)
+func Test_hcsTask_DeleteExec_2ndExecID_Success(t *testing.T) {
+	lt, _, second := setupTestHcsTask(t)
 	second.Kill(context.TODO(), 0xf)
 
 	pid, status, at, err := lt.DeleteExec(context.TODO(), second.id)

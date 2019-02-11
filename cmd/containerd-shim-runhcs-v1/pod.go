@@ -49,6 +49,10 @@ type shimPod interface {
 }
 
 func createPod(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) (shimPod, error) {
+	logrus.WithFields(logrus.Fields{
+		"tid": req.ID,
+	}).Debug("createPod")
+
 	ct, sid, err := oci.GetSandboxTypeAndID(s.Annotations)
 	if err != nil {
 		return nil, err
@@ -110,10 +114,10 @@ func createPod(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) 
 	}
 	if oci.IsWCOW(s) {
 		// For WCOW we fake out the init task since we dont need it.
-		p.sandboxTask = newWcowPodSandboxTask(req.ID, req.Bundle, parent)
+		p.sandboxTask = newWcowPodSandboxTask(ctx, req.ID, req.Bundle, parent)
 	} else {
 		// LCOW requires a real task for the sandbox
-		lt, err := newLcowTask(parent, true, req, s)
+		lt, err := newHcsTask(ctx, parent, true, req, s)
 		if err != nil {
 			parent.Close()
 			return nil, err
@@ -155,6 +159,11 @@ func (p *pod) ID() string {
 }
 
 func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
+	logrus.WithFields(logrus.Fields{
+		"pod-id": p.id,
+		"tid":    req.ID,
+	}).Debug("pod::CreateTask")
+
 	if req.ID == p.id {
 		return nil, errors.Wrapf(errdefs.ErrAlreadyExists, "task with id: '%s' already exists", req.ID)
 	}
@@ -197,7 +206,7 @@ func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *sp
 			sid)
 	}
 
-	st, err := newLcowTask(p.host, false, req, s)
+	st, err := newHcsTask(ctx, p.host, false, req, s)
 	if err != nil {
 		return nil, err
 	}
@@ -219,6 +228,7 @@ func (p *pod) GetTask(tid string) (shimTask, error) {
 
 func (p *pod) KillTask(ctx context.Context, tid, eid string, signal uint32, all bool) error {
 	logrus.WithFields(logrus.Fields{
+		"pod-id": p.id,
 		"tid":    tid,
 		"eid":    eid,
 		"signal": signal,

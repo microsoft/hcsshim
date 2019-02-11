@@ -1,13 +1,22 @@
 package main
 
 import (
+	"context"
 	"io"
 	"sync"
 
 	winio "github.com/Microsoft/go-winio"
+	"github.com/sirupsen/logrus"
 )
 
-func newRelay(stdin, stdout, stderr string, terminal bool) (_ *iorelay, err error) {
+func newRelay(ctx context.Context, stdin, stdout, stderr string, terminal bool) (_ *iorelay, err error) {
+	logrus.WithFields(logrus.Fields{
+		"stdin":    stdin,
+		"stdout":   stdout,
+		"stderr":   stderr,
+		"terminal": terminal,
+	}).Debug("newRelay")
+
 	ir := &iorelay{
 		stdin:    stdin,
 		stdout:   stdout,
@@ -80,10 +89,8 @@ func (ir *iorelay) BeginRelay(stdin io.WriteCloser, stdout io.ReadCloser, stderr
 
 	if ir.ui != nil {
 		ir.di = stdin
-		ir.wg.Add(1)
 		go func() {
 			io.Copy(ir.di, ir.ui)
-			ir.wg.Done()
 		}()
 	}
 	if ir.uo != nil {

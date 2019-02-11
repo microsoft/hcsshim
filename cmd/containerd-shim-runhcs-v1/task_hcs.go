@@ -19,7 +19,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func newLcowStandaloneTask(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
+func newHcsStandaloneTask(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
+	logrus.WithFields(logrus.Fields{
+		"tid": req.ID,
+	}).Debug("newHcsStandloneTask")
+
 	ct, _, err := oci.GetSandboxTypeAndID(s.Annotations)
 	if err != nil {
 		return nil, err
@@ -66,7 +70,7 @@ func newLcowStandaloneTask(ctx context.Context, req *task.CreateTaskRequest, s *
 		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "oci spec does not contain WCOW or LCOW spec")
 	}
 
-	shim, err := newLcowTask(parent, true, req, s)
+	shim, err := newHcsTask(ctx, parent, true, req, s)
 	if err != nil {
 		if parent != nil {
 			parent.Close()
@@ -76,17 +80,22 @@ func newLcowStandaloneTask(ctx context.Context, req *task.CreateTaskRequest, s *
 	return shim, nil
 }
 
-// newLcowTask creates a container within `parent` and its init exec process in
+// newHcsTask creates a container within `parent` and its init exec process in
 // the `shimExecCreated` state and returns the task that tracks its lifetime.
 //
 // If `parent == nil` the container is created on the host.
-func newLcowTask(parent *uvm.UtilityVM, ownsParent bool, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
+func newHcsTask(ctx context.Context, parent *uvm.UtilityVM, ownsParent bool, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
+	logrus.WithFields(logrus.Fields{
+		"tid":        req.ID,
+		"ownsParent": ownsParent,
+	}).Debug("newHcsTask")
+
 	owner, err := os.Executable()
 	if err != nil {
 		return nil, err
 	}
 
-	io, err := newRelay(req.Stdin, req.Stdout, req.Stderr, req.Terminal)
+	io, err := newRelay(ctx, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
 	if err != nil {
 		return nil, err
 	}
@@ -108,28 +117,34 @@ func newLcowTask(parent *uvm.UtilityVM, ownsParent bool, req *task.CreateTaskReq
 		return nil, err
 	}
 
-	lt := &lcowTask{
+	ht := &hcsTask{
 		id: req.ID,
 		c:  system,
 		cr: resources,
 	}
 	if ownsParent {
-		lt.ownsHost = true
-		lt.host = parent
+		ht.ownsHost = true
+		ht.host = parent
 	}
-	lt.init = newLcowExec(
+	ht.init = newHcsExec(
+		ctx,
 		req.ID,
 		system,
 		"",
 		req.Bundle,
-		s.Process,
+		s,
 		io)
-	return lt, nil
+	return ht, nil
 }
 
-var _ = (shimTask)(&lcowTask{})
+var _ = (shimTask)(&hcsTask{})
 
-type lcowTask struct {
+// hcsTask is a generic task that represents a WCOW Container (process or
+// hypervisor isolated), or a LCOW Container. This task MAY own the UVM the
+// container is in but in the case of a POD it may just track the UVM for
+// container lifetime management. In the case of ownership when the init
+// task/exec is stopped the UVM itself will be stopped as well.
+type hcsTask struct {
 	// id is the id of this task when it is created.
 	//
 	// It MUST be treated as read only in the liftetime of the task.
@@ -164,30 +179,30 @@ type lcowTask struct {
 	closeOnce sync.Once
 }
 
-func (lt *lcowTask) ID() string {
-	return lt.id
+func (ht *hcsTask) ID() string {
+	return ht.id
 }
 
-func (lt *lcowTask) GetExec(eid string) (shimExec, error) {
+func (ht *hcsTask) GetExec(eid string) (shimExec, error) {
 	if eid == "" {
-		return lt.init, nil
+		return ht.init, nil
 	}
-	raw, loaded := lt.execs.Load(eid)
+	raw, loaded := ht.execs.Load(eid)
 	if !loaded {
-		return nil, errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", eid, lt.id)
+		return nil, errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", eid, ht.id)
 	}
 	return raw.(shimExec), nil
 }
 
-func (lt *lcowTask) KillExec(ctx context.Context, eid string, signal uint32, all bool) error {
+func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all bool) error {
 	logrus.WithFields(logrus.Fields{
-		"tid":    lt.id,
+		"tid":    ht.id,
 		"eid":    eid,
 		"signal": signal,
 		"all":    all,
-	}).Debug("lcowTask::KillExec")
+	}).Debug("hcsTask::KillExec")
 
-	e, err := lt.GetExec(eid)
+	e, err := ht.GetExec(eid)
 	if err != nil {
 		return err
 	}
@@ -197,7 +212,7 @@ func (lt *lcowTask) KillExec(ctx context.Context, eid string, signal uint32, all
 	eg := errgroup.Group{}
 	if all {
 		// We are in a kill all on the init task. Signal everything.
-		lt.execs.Range(func(key, value interface{}) bool {
+		ht.execs.Range(func(key, value interface{}) bool {
 			ex := value.(shimExec)
 			eg.Go(func() error {
 				return ex.Kill(ctx, signal)
@@ -210,7 +225,7 @@ func (lt *lcowTask) KillExec(ctx context.Context, eid string, signal uint32, all
 		// We are in a kill of the init task. Verify all exec's are in the
 		// non-running state.
 		invalid := false
-		lt.execs.Range(func(key, value interface{}) bool {
+		ht.execs.Range(func(key, value interface{}) bool {
 			ex := value.(shimExec)
 			if ex.State() != shimExecStateExited {
 				invalid = true
@@ -233,45 +248,45 @@ func (lt *lcowTask) KillExec(ctx context.Context, eid string, signal uint32, all
 	}
 	if eid == "" {
 		// We just killed the init process. Tear down the container too.
-		lt.closeOnce.Do(func() {
-			serr := lt.c.Shutdown()
+		ht.closeOnce.Do(func() {
+			serr := ht.c.Shutdown()
 			if serr != nil {
 				if hcs.IsPending(serr) {
 					const shutdownTimeout = time.Minute * 5
-					werr := lt.c.WaitTimeout(shutdownTimeout)
+					werr := ht.c.WaitTimeout(shutdownTimeout)
 					if err != nil {
 						if hcs.IsTimeout(werr) {
 							// TODO: Log this?
 						}
-						lt.c.Terminate()
+						ht.c.Terminate()
 					}
 				} else {
-					lt.c.Terminate()
+					ht.c.Terminate()
 				}
 			}
-			hcsoci.ReleaseResources(lt.cr, lt.host, true)
-			if lt.ownsHost && lt.host != nil {
-				lt.host.Close()
+			hcsoci.ReleaseResources(ht.cr, ht.host, true)
+			if ht.ownsHost && ht.host != nil {
+				ht.host.Close()
 			}
 		})
 	}
 	return nil
 }
 
-func (lt *lcowTask) DeleteExec(ctx context.Context, eid string) (int, uint32, time.Time, error) {
+func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, time.Time, error) {
 	logrus.WithFields(logrus.Fields{
-		"tid": lt.id,
+		"tid": ht.id,
 		"eid": eid,
-	}).Debug("lcowTask::DeleteExec")
+	}).Debug("hcsTask::DeleteExec")
 
-	e, err := lt.GetExec(eid)
+	e, err := ht.GetExec(eid)
 	if err != nil {
 		return 0, 0, time.Time{}, err
 	}
 	if eid == "" {
 		// We are deleting the init exec. Verify all additional exec's are exited as well
 		invalid := false
-		lt.execs.Range(func(key, value interface{}) bool {
+		ht.execs.Range(func(key, value interface{}) bool {
 			ex := value.(shimExec)
 			if ex.State() != shimExecStateExited {
 				invalid = true
@@ -287,19 +302,19 @@ func (lt *lcowTask) DeleteExec(ctx context.Context, eid string) (int, uint32, ti
 	}
 	state := e.State()
 	if state != shimExecStateExited {
-		return 0, 0, time.Time{}, newExecInvalidStateError(lt.id, eid, state, "delete")
+		return 0, 0, time.Time{}, newExecInvalidStateError(ht.id, eid, state, "delete")
 	}
 	if eid != "" {
-		lt.execs.Delete(eid)
+		ht.execs.Delete(eid)
 	}
 	status := e.Status()
 	return int(status.Pid), status.ExitStatus, status.ExitedAt, nil
 }
 
-func (lt *lcowTask) Pids(ctx context.Context) ([]shimTaskPidPair, error) {
+func (ht *hcsTask) Pids(ctx context.Context) ([]shimTaskPidPair, error) {
 	logrus.WithFields(logrus.Fields{
-		"tid": lt.id,
-	}).Debug("lcowTask::Pids")
+		"tid": ht.id,
+	}).Debug("hcsTask::Pids")
 
 	return nil, errdefs.ErrNotImplemented
 }

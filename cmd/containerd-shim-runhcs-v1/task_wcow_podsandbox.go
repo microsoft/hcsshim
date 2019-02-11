@@ -12,10 +12,14 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func newWcowPodSandboxTask(id, bundle string, parent *uvm.UtilityVM) shimTask {
+func newWcowPodSandboxTask(ctx context.Context, id, bundle string, parent *uvm.UtilityVM) shimTask {
+	logrus.WithFields(logrus.Fields{
+		"tid": id,
+	}).Debug("newWcowPodSandboxTask")
+
 	wpst := &wcowPodSandboxTask{
 		id:   id,
-		init: newWcowPodSandboxExec(id, bundle),
+		init: newWcowPodSandboxExec(ctx, id, bundle),
 	}
 	if parent != nil {
 		go func() {
