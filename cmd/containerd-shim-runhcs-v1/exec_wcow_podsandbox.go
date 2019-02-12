@@ -166,15 +166,14 @@ func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) error {
 	wpse.exitedAt = time.Now()
 
 	// Publish the exited event
-	status := wpse.Status()
 	wpse.events(
 		runtime.TaskExitEventTopic,
 		&eventstypes.TaskExit{
 			ContainerID: wpse.tid,
 			ID:          "",
-			Pid:         status.Pid,
-			ExitStatus:  status.ExitStatus,
-			ExitedAt:    status.ExitedAt,
+			Pid:         uint32(wpse.pid),
+			ExitStatus:  wpse.exitStatus,
+			ExitedAt:    wpse.exitedAt,
 		})
 
 	close(wpse.exited)
