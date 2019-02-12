@@ -59,7 +59,7 @@ func (tst *testShimTask) DeleteExec(ctx context.Context, eid string) (int, uint3
 
 func (tst *testShimTask) Pids(ctx context.Context) ([]shimTaskPidPair, error) {
 	pairs := []shimTaskPidPair{
-		shimTaskPidPair{
+		{
 			Pid:    tst.exec.Pid(),
 			ExecID: tst.exec.ID(),
 		},

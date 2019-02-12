@@ -162,7 +162,7 @@ func (wpst *wcowPodSandboxTask) Pids(ctx context.Context) ([]shimTaskPidPair, er
 	}).Debug("wcowPodSandboxTask::Pids")
 
 	return []shimTaskPidPair{
-		shimTaskPidPair{
+		{
 			Pid:    wpst.init.Pid(),
 			ExecID: wpst.init.ID(),
 		},

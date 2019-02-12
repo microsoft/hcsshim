@@ -35,7 +35,7 @@ func setupPodServiceWithFakes(t *testing.T) (*service, *testShimTask, *testShimT
 			pid: 101,
 		},
 		execs: map[string]*testShimExec{
-			t.Name() + "-2": &testShimExec{
+			t.Name() + "-2": {
 				id:  t.Name() + "-2",
 				pid: 201,
 			},

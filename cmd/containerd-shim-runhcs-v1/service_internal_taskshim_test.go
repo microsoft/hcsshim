@@ -22,7 +22,7 @@ func setupTaskServiceWithFakes(t *testing.T) (*service, *testShimTask) {
 			pid: 10,
 		},
 		execs: map[string]*testShimExec{
-			t.Name() + "-2": &testShimExec{
+			t.Name() + "-2": {
 				id:  t.Name() + "-2", // Fake 2nd pid ID
 				pid: 101,
 			},
