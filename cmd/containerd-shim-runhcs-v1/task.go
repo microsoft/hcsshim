@@ -21,6 +21,8 @@ type shimTaskPidPair struct {
 type shimTask interface {
 	// ID returns the original id used at `Create`.
 	ID() string
+	// CreateExec
+	CreateExec(ctx context.Context, req *task.ExecProcessRequest, s *specs.Process) error
 	// GetExec returns an exec in this task that matches `eid`. If `eid == ""`
 	// returns the init exec from the initial call to `Create`.
 	//

@@ -135,9 +135,10 @@ func newHcsTask(ctx context.Context, parent *uvm.UtilityVM, ownsParent bool, req
 	}
 
 	ht := &hcsTask{
-		id: req.ID,
-		c:  system,
-		cr: resources,
+		id:     req.ID,
+		isWCOW: oci.IsWCOW(s),
+		c:      system,
+		cr:     resources,
 	}
 	if ownsParent {
 		ht.ownsHost = true
@@ -149,7 +150,8 @@ func newHcsTask(ctx context.Context, parent *uvm.UtilityVM, ownsParent bool, req
 		system,
 		"",
 		req.Bundle,
-		s,
+		ht.isWCOW,
+		s.Process,
 		io)
 	return ht, nil
 }
@@ -166,6 +168,10 @@ type hcsTask struct {
 	//
 	// It MUST be treated as read only in the liftetime of the task.
 	id string
+	// isWCOW is set to `true` if this is a task representing a Windows container.
+	//
+	// It MUST be treated as read only in the liftetime of the task.
+	isWCOW bool
 	// c is the container backing this task.
 	//
 	// It MUST be treated as read only in the lifetime of this task EXCEPT after
@@ -191,6 +197,9 @@ type hcsTask struct {
 	// `host==nil` this is an Argon task so no UVM cleanup is required.
 	host *uvm.UtilityVM
 
+	// ecl is the exec create lock for all non-init execs and MUST be held
+	// durring create to prevent ID duplication.
+	ecl   sync.Mutex
 	execs sync.Map
 
 	closeOnce sync.Once
@@ -198,6 +207,34 @@ type hcsTask struct {
 
 func (ht *hcsTask) ID() string {
 	return ht.id
+}
+
+func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest, spec *specs.Process) error {
+	logrus.WithFields(logrus.Fields{
+		"tid": ht.id,
+		"eid": req.ExecID,
+	}).Debug("hcsTask::CreateExec")
+
+	ht.ecl.Lock()
+	defer ht.ecl.Unlock()
+
+	// If the task exists or we got a request for "" which is the init task
+	// fail.
+	if _, loaded := ht.execs.Load(req.ExecID); loaded || req.ExecID == "" {
+		return errors.Wrapf(errdefs.ErrAlreadyExists, "exec: '%s' in task: '%s' already exists", req.ExecID, ht.id)
+	}
+
+	if ht.init.State() != shimExecStateRunning {
+		return errors.Wrapf(errdefs.ErrFailedPrecondition, "exec: '' in task: '%s' must be running to create additional execs", ht.id)
+	}
+
+	io, err := newRelay(ctx, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
+	if err != nil {
+		return err
+	}
+	he := newHcsExec(ctx, ht.id, ht.c, req.ExecID, ht.init.Status().Bundle, ht.isWCOW, spec, io)
+	ht.execs.Store(req.ExecID, he)
+	return nil
 }
 
 func (ht *hcsTask) GetExec(eid string) (shimExec, error) {

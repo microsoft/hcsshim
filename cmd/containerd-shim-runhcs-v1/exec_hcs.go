@@ -9,7 +9,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
-	"github.com/Microsoft/hcsshim/internal/oci"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
@@ -29,7 +28,8 @@ func newHcsExec(
 	tid string,
 	c *hcs.System,
 	id, bundle string,
-	spec *specs.Spec,
+	isWCOW bool,
+	spec *specs.Process,
 	io *iorelay) shimExec {
 	logrus.WithFields(logrus.Fields{
 		"tid": tid,
@@ -42,6 +42,7 @@ func newHcsExec(
 		c:                 c,
 		id:                id,
 		bundle:            bundle,
+		isWCOW:            isWCOW,
 		spec:              spec,
 		io:                io,
 		processCtx:        processCtx,
@@ -75,12 +76,16 @@ type hcsExec struct {
 	//
 	// This MUST be treated as read only in the lifetime of the exec.
 	bundle string
+	// isWCOW is set to `true` when this process is part of a Windows OCI spec.
+	//
+	// This MUST be treated as read only in the lifetime of the exec.
+	isWCOW bool
 	// spec is the OCI Process spec that was passed in at create time. This is
 	// stored because we don't actually create the process until the call to
 	// `Start`.
 	//
 	// This MUST be treated as read only in the lifetime of the exec.
-	spec *specs.Spec
+	spec *specs.Process
 	// io is the relay for copying between the upstream io and the downstream
 	// io. The upstream IO MUST already be connected at create time in order to
 	// be valid.
@@ -171,23 +176,23 @@ func (he *hcsExec) Start(ctx context.Context) error {
 		proc *hcs.Process
 		err  error
 	)
-	if oci.IsWCOW(he.spec) {
+	if he.isWCOW {
 		wpp := &hcsschema.ProcessParameters{
-			CommandLine:      he.spec.Process.CommandLine,
-			User:             he.spec.Process.User.Username,
-			WorkingDirectory: he.spec.Process.Cwd,
-			EmulateConsole:   he.spec.Process.Terminal,
+			CommandLine:      he.spec.CommandLine,
+			User:             he.spec.User.Username,
+			WorkingDirectory: he.spec.Cwd,
+			EmulateConsole:   he.spec.Terminal,
 			CreateStdInPipe:  he.io.StdinPath() != "",
 			CreateStdOutPipe: he.io.StdoutPath() != "",
 			CreateStdErrPipe: he.io.StderrPath() != "",
 		}
 
-		if he.spec.Process.CommandLine == "" {
-			wpp.CommandLine = escapeArgs(he.spec.Process.Args)
+		if he.spec.CommandLine == "" {
+			wpp.CommandLine = escapeArgs(he.spec.Args)
 		}
 
 		environment := make(map[string]string)
-		for _, v := range he.spec.Process.Env {
+		for _, v := range he.spec.Env {
 			s := strings.SplitN(v, "=", 2)
 			if len(s) == 2 && len(s[1]) > 0 {
 				environment[s[0]] = s[1]
@@ -195,10 +200,10 @@ func (he *hcsExec) Start(ctx context.Context) error {
 		}
 		wpp.Environment = environment
 
-		if he.spec.Process.ConsoleSize != nil {
+		if he.spec.ConsoleSize != nil {
 			wpp.ConsoleSize = []int32{
-				int32(he.spec.Process.ConsoleSize.Height),
-				int32(he.spec.Process.ConsoleSize.Width),
+				int32(he.spec.ConsoleSize.Height),
+				int32(he.spec.ConsoleSize.Width),
 			}
 		}
 		proc, err = he.c.CreateProcess(wpp)
@@ -213,7 +218,7 @@ func (he *hcsExec) Start(ctx context.Context) error {
 		if he.id != "" {
 			// An init exec passes the process as part of the config. We only pass
 			// the spec if this is a true exec.
-			lpp.OCIProcess = he.spec.Process
+			lpp.OCIProcess = he.spec
 		}
 		proc, err = he.c.CreateProcess(lpp)
 	}

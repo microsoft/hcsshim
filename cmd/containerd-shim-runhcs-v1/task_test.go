@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/runtime/v2/task"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 var _ = (shimTask)(&testShimTask{})
@@ -18,6 +20,10 @@ type testShimTask struct {
 
 func (tst *testShimTask) ID() string {
 	return tst.id
+}
+
+func (tst *testShimTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest, s *specs.Process) error {
+	return errdefs.ErrNotImplemented
 }
 
 func (tst *testShimTask) GetExec(eid string) (shimExec, error) {

@@ -8,6 +8,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/runtime/v2/task"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -72,6 +74,15 @@ type wcowPodSandboxTask struct {
 
 func (wpst *wcowPodSandboxTask) ID() string {
 	return wpst.id
+}
+
+func (wpst *wcowPodSandboxTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest, s *specs.Process) error {
+	logrus.WithFields(logrus.Fields{
+		"tid": wpst.id,
+		"eid": req.ID,
+	}).Debug("wcowPodSandboxTask::CreateExec")
+
+	return errors.Wrap(errdefs.ErrNotImplemented, "WCOW Pod task should never issue exec")
 }
 
 func (wpst *wcowPodSandboxTask) GetExec(eid string) (shimExec, error) {

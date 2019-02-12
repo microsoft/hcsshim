@@ -291,7 +291,22 @@ func (s *service) killInternal(ctx context.Context, req *task.KillRequest) (*goo
 }
 
 func (s *service) execInternal(ctx context.Context, req *task.ExecProcessRequest) (*google_protobuf1.Empty, error) {
-	return nil, errdefs.ErrNotImplemented
+	t, err := s.getTask(req.ID)
+	if err != nil {
+		return nil, err
+	}
+	if req.Terminal && req.Stderr != "" {
+		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "if using terminal, stderr must be empty")
+	}
+	var spec specs.Process
+	if err := json.Unmarshal(req.Spec.Value, &spec); err != nil {
+		return nil, errors.Wrap(err, "request.Spec was not oci process")
+	}
+	err = t.CreateExec(ctx, req, &spec)
+	if err != nil {
+		return nil, err
+	}
+	return empty, nil
 }
 
 func (s *service) resizePtyInternal(ctx context.Context, req *task.ResizePtyRequest) (*google_protobuf1.Empty, error) {
