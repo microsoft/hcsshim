@@ -173,16 +173,7 @@ func Test_PodShim_stateInternal_2ndTaskID_2ndExecID_Success(t *testing.T) {
 	}
 }
 
-func Test_PodShim_createInternal_Error(t *testing.T) {
-	s := service{
-		tid:       t.Name(),
-		isSandbox: true,
-	}
-
-	resp, err := s.createInternal(context.TODO(), &task.CreateTaskRequest{ID: t.Name()})
-
-	verifyExpectedError(t, resp, err, errdefs.ErrNotImplemented)
-}
+// TODO: Test_PodShim_createInternal_*
 
 func Test_PodShim_startInternal_NoTask_Error(t *testing.T) {
 	s := service{
