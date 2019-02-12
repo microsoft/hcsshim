@@ -365,5 +365,6 @@ func (s *service) shutdownInternal(ctx context.Context, req *task.ShutdownReques
 	}
 	// TODO: JTERRY75 if we dont use `now` issue a Shutdown to the ttrpc
 	// connection to drain any active requests.
-	return nil, errdefs.ErrNotImplemented
+	os.Exit(0)
+	return empty, nil
 }
