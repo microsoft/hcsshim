@@ -12,7 +12,9 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	eventstypes "github.com/containerd/containerd/api/events"
 	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/task"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -20,7 +22,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func newHcsStandaloneTask(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
+func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
 	logrus.WithFields(logrus.Fields{
 		"tid": req.ID,
 	}).Debug("newHcsStandloneTask")
@@ -87,7 +89,7 @@ func newHcsStandaloneTask(ctx context.Context, req *task.CreateTaskRequest, s *s
 		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "oci spec does not contain WCOW or LCOW spec")
 	}
 
-	shim, err := newHcsTask(ctx, parent, true, req, s)
+	shim, err := newHcsTask(ctx, events, parent, true, req, s)
 	if err != nil {
 		if parent != nil {
 			parent.Close()
@@ -101,7 +103,13 @@ func newHcsStandaloneTask(ctx context.Context, req *task.CreateTaskRequest, s *s
 // the `shimExecCreated` state and returns the task that tracks its lifetime.
 //
 // If `parent == nil` the container is created on the host.
-func newHcsTask(ctx context.Context, parent *uvm.UtilityVM, ownsParent bool, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
+func newHcsTask(
+	ctx context.Context,
+	events publisher,
+	parent *uvm.UtilityVM,
+	ownsParent bool,
+	req *task.CreateTaskRequest,
+	s *specs.Spec) (shimTask, error) {
 	logrus.WithFields(logrus.Fields{
 		"tid":        req.ID,
 		"ownsParent": ownsParent,
@@ -135,6 +143,7 @@ func newHcsTask(ctx context.Context, parent *uvm.UtilityVM, ownsParent bool, req
 	}
 
 	ht := &hcsTask{
+		events: events,
 		id:     req.ID,
 		isWCOW: oci.IsWCOW(s),
 		c:      system,
@@ -146,6 +155,7 @@ func newHcsTask(ctx context.Context, parent *uvm.UtilityVM, ownsParent bool, req
 	}
 	ht.init = newHcsExec(
 		ctx,
+		events,
 		req.ID,
 		system,
 		"",
@@ -153,6 +163,23 @@ func newHcsTask(ctx context.Context, parent *uvm.UtilityVM, ownsParent bool, req
 		ht.isWCOW,
 		s.Process,
 		io)
+
+	// Publish the created event
+	ht.events(
+		runtime.TaskCreateEventTopic,
+		&eventstypes.TaskCreate{
+			ContainerID: req.ID,
+			Bundle:      req.Bundle,
+			Rootfs:      req.Rootfs,
+			IO: &eventstypes.TaskIO{
+				Stdin:    req.Stdin,
+				Stdout:   req.Stdout,
+				Stderr:   req.Stderr,
+				Terminal: req.Terminal,
+			},
+			Checkpoint: "",
+			Pid:        uint32(ht.init.Pid()),
+		})
 	return ht, nil
 }
 
@@ -164,6 +191,7 @@ var _ = (shimTask)(&hcsTask{})
 // container lifetime management. In the case of ownership when the init
 // task/exec is stopped the UVM itself will be stopped as well.
 type hcsTask struct {
+	events publisher
 	// id is the id of this task when it is created.
 	//
 	// It MUST be treated as read only in the liftetime of the task.
@@ -232,8 +260,17 @@ func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest,
 	if err != nil {
 		return err
 	}
-	he := newHcsExec(ctx, ht.id, ht.c, req.ExecID, ht.init.Status().Bundle, ht.isWCOW, spec, io)
+	he := newHcsExec(ctx, ht.events, ht.id, ht.c, req.ExecID, ht.init.Status().Bundle, ht.isWCOW, spec, io)
 	ht.execs.Store(req.ExecID, he)
+
+	// Publish the created event
+	ht.events(
+		runtime.TaskExecAddedEventTopic,
+		&eventstypes.TaskExecAdded{
+			ContainerID: ht.id,
+			ExecID:      req.ExecID,
+		})
+
 	return nil
 }
 
@@ -358,10 +395,22 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, tim
 	if state != shimExecStateExited {
 		return 0, 0, time.Time{}, newExecInvalidStateError(ht.id, eid, state, "delete")
 	}
+	status := e.Status()
 	if eid != "" {
 		ht.execs.Delete(eid)
+		// TODO: JTERRY75 does exec delete not have an event?
+	} else {
+		// Publish the deleted event
+		ht.events(
+			runtime.TaskDeleteEventTopic,
+			&eventstypes.TaskDelete{
+				ContainerID: ht.id,
+				Pid:         status.Pid,
+				ExitStatus:  status.ExitStatus,
+				ExitedAt:    status.ExitedAt,
+			})
 	}
-	status := e.Status()
+
 	return int(status.Pid), status.ExitStatus, status.ExitedAt, nil
 }
 

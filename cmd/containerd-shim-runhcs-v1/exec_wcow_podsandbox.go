@@ -5,20 +5,23 @@ import (
 	"sync"
 	"time"
 
+	eventstypes "github.com/containerd/containerd/api/events"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
-func newWcowPodSandboxExec(ctx context.Context, tid, bundle string) *wcowPodSandboxExec {
+func newWcowPodSandboxExec(ctx context.Context, events publisher, tid, bundle string) *wcowPodSandboxExec {
 	logrus.WithFields(logrus.Fields{
 		"tid": tid,
 		"eid": "",
 	}).Debug("newWcowPodSandboxExec")
 
 	wpse := &wcowPodSandboxExec{
+		events:     events,
 		tid:        tid,
 		bundle:     bundle,
 		state:      shimExecStateCreated,
@@ -45,6 +48,7 @@ var _ = (shimExec)(&wcowPodSandboxExec{})
 // HNS and not by any container runtime attribute. If we ever have a shared
 // namespace that requires a container we will have to rethink this.
 type wcowPodSandboxExec struct {
+	events publisher
 	// tid is the task id of the container hosting this process.
 	//
 	// This MUST be treated as read only in the lifetime of the exec.
@@ -126,6 +130,16 @@ func (wpse *wcowPodSandboxExec) Start(ctx context.Context) error {
 	// Transition the state
 	wpse.state = shimExecStateRunning
 	wpse.pid = 1 // Fake but init pid is always 1
+
+	// Publish the task start event. We mever have an exec for the WCOW
+	// PodSandbox.
+	wpse.events(
+		runtime.TaskStartEventTopic,
+		&eventstypes.TaskStart{
+			ContainerID: wpse.tid,
+			Pid:         uint32(wpse.pid),
+		})
+
 	return nil
 }
 
@@ -150,7 +164,21 @@ func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) error {
 	wpse.pid = 0
 	wpse.exitStatus = 0
 	wpse.exitedAt = time.Now()
+
+	// Publish the exited event
+	status := wpse.Status()
+	wpse.events(
+		runtime.TaskExitEventTopic,
+		&eventstypes.TaskExit{
+			ContainerID: wpse.tid,
+			ID:          "",
+			Pid:         status.Pid,
+			ExitStatus:  status.ExitStatus,
+			ExitedAt:    status.ExitedAt,
+		})
+
 	close(wpse.exited)
+
 	return nil
 }
 

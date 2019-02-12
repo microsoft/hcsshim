@@ -9,7 +9,9 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	eventstypes "github.com/containerd/containerd/api/events"
 	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/task"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -49,7 +51,7 @@ type shimPod interface {
 	KillTask(ctx context.Context, tid, eid string, signal uint32, all bool) error
 }
 
-func createPod(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) (shimPod, error) {
+func createPod(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (shimPod, error) {
 	logrus.WithFields(logrus.Fields{
 		"tid": req.ID,
 	}).Debug("createPod")
@@ -126,15 +128,33 @@ func createPod(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) 
 	}
 
 	p := pod{
-		id:   req.ID,
-		host: parent,
+		events: events,
+		id:     req.ID,
+		host:   parent,
 	}
 	if oci.IsWCOW(s) {
 		// For WCOW we fake out the init task since we dont need it.
-		p.sandboxTask = newWcowPodSandboxTask(ctx, req.ID, req.Bundle, parent)
+		p.sandboxTask = newWcowPodSandboxTask(ctx, events, req.ID, req.Bundle, parent)
+		// Publish the created event. We only do this for the fake WCOW task a
+		// HCS Task will event itself.
+		events(
+			runtime.TaskCreateEventTopic,
+			&eventstypes.TaskCreate{
+				ContainerID: req.ID,
+				Bundle:      req.Bundle,
+				Rootfs:      req.Rootfs,
+				IO: &eventstypes.TaskIO{
+					Stdin:    req.Stdin,
+					Stdout:   req.Stdout,
+					Stderr:   req.Stderr,
+					Terminal: req.Terminal,
+				},
+				Checkpoint: "",
+				Pid:        0,
+			})
 	} else {
 		// LCOW requires a real task for the sandbox
-		lt, err := newHcsTask(ctx, parent, true, req, s)
+		lt, err := newHcsTask(ctx, events, parent, true, req, s)
 		if err != nil {
 			parent.Close()
 			return nil, err
@@ -148,6 +168,7 @@ func createPod(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) 
 var _ = (shimPod)(&pod{})
 
 type pod struct {
+	events publisher
 	// id is the id of the sandbox task when the pod is created.
 	//
 	// It MUST be treated as read only in the lifetime of the pod.
@@ -223,7 +244,7 @@ func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *sp
 			sid)
 	}
 
-	st, err := newHcsTask(ctx, p.host, false, req, s)
+	st, err := newHcsTask(ctx, p.events, p.host, false, req, s)
 	if err != nil {
 		return nil, err
 	}

@@ -98,6 +98,7 @@ var serveCommand = cli.Command{
 
 		// Setup the ttrpc server
 		svc := &service{
+			events:    publishEvent,
 			tid:       idFlag,
 			isSandbox: ctx.Bool("is-sandbox"),
 		}

@@ -25,9 +25,15 @@ func endActivity(activity string, fields logrus.Fields, err error) {
 	}
 }
 
+type cdevent struct {
+	topic string
+	event interface{}
+}
+
 var _ = (task.TaskService)(&service{})
 
 type service struct {
+	events publisher
 	// tid is the original task id to be served. This can either be a single
 	// task or represent the POD sandbox task id. The first call to Create MUST
 	// match this id or the shim is considered to be invalid.

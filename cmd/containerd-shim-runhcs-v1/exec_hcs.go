@@ -10,8 +10,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
+	eventstypes "github.com/containerd/containerd/api/events"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -25,6 +27,7 @@ import (
 // the process `spec.Process`.
 func newHcsExec(
 	ctx context.Context,
+	events publisher,
 	tid string,
 	c *hcs.System,
 	id, bundle string,
@@ -38,6 +41,7 @@ func newHcsExec(
 
 	processCtx, processDoneCancel := context.WithCancel(context.Background())
 	he := &hcsExec{
+		events:            events,
 		tid:               tid,
 		c:                 c,
 		id:                id,
@@ -58,6 +62,7 @@ func newHcsExec(
 var _ = (shimExec)(&hcsExec{})
 
 type hcsExec struct {
+	events publisher
 	// tid is the task id of the container hosting this process.
 	//
 	// This MUST be treated as read only in the lifetime of the exec.
@@ -246,6 +251,25 @@ func (he *hcsExec) Start(ctx context.Context) error {
 	he.pid = he.p.Pid()
 	he.state = shimExecStateRunning
 
+	// Publish the task/exec start event. This MUST happen before waitForExit to
+	// avoid publishing the exit pervious to the start.
+	if he.id != "" {
+		he.events(
+			runtime.TaskExecStartedEventTopic,
+			&eventstypes.TaskExecStarted{
+				ContainerID: he.tid,
+				ExecID:      he.id,
+				Pid:         uint32(he.pid),
+			})
+	} else {
+		he.events(
+			runtime.TaskStartEventTopic,
+			&eventstypes.TaskStart{
+				ContainerID: he.tid,
+				Pid:         uint32(he.pid),
+			})
+	}
+
 	// wait in the background for the exit.
 	go he.waitForExit()
 	return nil
@@ -417,6 +441,19 @@ func (he *hcsExec) waitForContainerExit() {
 func (he *hcsExec) close() {
 	he.exitedOnce.Do(func() {
 		he.io.Wait()
+
+		// Publish the exited event
+		status := he.Status()
+		he.events(
+			runtime.TaskExitEventTopic,
+			&eventstypes.TaskExit{
+				ContainerID: he.tid,
+				ID:          he.id,
+				Pid:         status.Pid,
+				ExitStatus:  status.ExitStatus,
+				ExitedAt:    status.ExitedAt,
+			})
+
 		close(he.exited)
 	})
 }

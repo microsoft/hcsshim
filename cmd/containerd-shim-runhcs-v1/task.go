@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
@@ -21,7 +20,13 @@ type shimTaskPidPair struct {
 type shimTask interface {
 	// ID returns the original id used at `Create`.
 	ID() string
-	// CreateExec
+	// CreateExec creates an additional exec within this task.
+	//
+	// If `req.ID==""` or `req.ID` is already a known exec this task MUST return
+	// `errdefs.ErrAlreadyExists`
+	//
+	// If the init exec is no longer running this task MUST return
+	// `errdefs.ErrFailedPrecondition`.
 	CreateExec(ctx context.Context, req *task.ExecProcessRequest, s *specs.Process) error
 	// GetExec returns an exec in this task that matches `eid`. If `eid == ""`
 	// returns the init exec from the initial call to `Create`.
@@ -54,8 +59,4 @@ type shimTask interface {
 	// Pids returns all process pid's in this `shimTask` including ones not
 	// created by the caller via a `CreateExec`.
 	Pids(ctx context.Context) ([]shimTaskPidPair, error)
-}
-
-func createStandaloneTask(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
-	return nil, errdefs.ErrNotImplemented
 }

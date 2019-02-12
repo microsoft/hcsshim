@@ -7,21 +7,24 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	eventstypes "github.com/containerd/containerd/api/events"
 	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
-func newWcowPodSandboxTask(ctx context.Context, id, bundle string, parent *uvm.UtilityVM) shimTask {
+func newWcowPodSandboxTask(ctx context.Context, events publisher, id, bundle string, parent *uvm.UtilityVM) shimTask {
 	logrus.WithFields(logrus.Fields{
 		"tid": id,
 	}).Debug("newWcowPodSandboxTask")
 
 	wpst := &wcowPodSandboxTask{
-		id:   id,
-		init: newWcowPodSandboxExec(ctx, id, bundle),
+		events: events,
+		id:     id,
+		init:   newWcowPodSandboxExec(ctx, events, id, bundle),
 	}
 	if parent != nil {
 		go func() {
@@ -53,6 +56,7 @@ var _ = (shimTask)(&wcowPodSandboxTask{})
 // the lifetime of the UVM for a WCOW POD but the UVM will have no WCOW
 // container/exec init representing the actual POD Sandbox task.
 type wcowPodSandboxTask struct {
+	events publisher
 	// id is the id of this task when it is created.
 	//
 	// It MUST be treated as read only in the liftetime of the task.
@@ -138,6 +142,17 @@ func (wpst *wcowPodSandboxTask) DeleteExec(ctx context.Context, eid string) (int
 		return 0, 0, time.Time{}, newExecInvalidStateError(wpst.id, eid, state, "delete")
 	}
 	status := e.Status()
+	if eid == "" {
+		// Publish the deleted event
+		wpst.events(
+			runtime.TaskDeleteEventTopic,
+			&eventstypes.TaskDelete{
+				ContainerID: wpst.id,
+				Pid:         status.Pid,
+				ExitStatus:  status.ExitStatus,
+				ExitedAt:    status.ExitedAt,
+			})
+	}
 	return int(status.Pid), status.ExitStatus, status.ExitedAt, nil
 }
 

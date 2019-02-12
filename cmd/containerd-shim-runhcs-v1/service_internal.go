@@ -163,7 +163,7 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 			resp.Pid = uint32(e.Pid())
 			return resp, nil
 		}
-		pod, err = createPod(ctx, req, &spec)
+		pod, err = createPod(ctx, s.events, req, &spec)
 		if err != nil {
 			s.cl.Unlock()
 			return nil, err
@@ -173,7 +173,7 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 		resp.Pid = uint32(e.Pid())
 		s.z.Store(pod)
 	} else {
-		t, err := newHcsStandaloneTask(ctx, req, &spec)
+		t, err := newHcsStandaloneTask(ctx, s.events, req, &spec)
 		if err != nil {
 			s.cl.Unlock()
 			return nil, err
@@ -215,6 +215,7 @@ func (s *service) deleteInternal(ctx context.Context, req *task.DeleteRequest) (
 	if err != nil {
 		return nil, err
 	}
+
 	return &task.DeleteResponse{
 		Pid:        uint32(pid),
 		ExitStatus: exitStatus,
@@ -254,10 +255,26 @@ func (s *service) pidsInternal(ctx context.Context, req *task.PidsRequest) (*tas
 }
 
 func (s *service) pauseInternal(ctx context.Context, req *task.PauseRequest) (*google_protobuf1.Empty, error) {
+	/*
+		s.events <- cdevent{
+			topic: runtime.TaskPausedEventTopic,
+			event: &eventstypes.TaskPaused{
+				req.ID,
+			},
+		}
+	*/
 	return nil, errdefs.ErrNotImplemented
 }
 
 func (s *service) resumeInternal(ctx context.Context, req *task.ResumeRequest) (*google_protobuf1.Empty, error) {
+	/*
+		s.events <- cdevent{
+			topic: runtime.TaskResumedEventTopic,
+			event: &eventstypes.TaskResumed{
+				req.ID,
+			},
+		}
+	*/
 	return nil, errdefs.ErrNotImplemented
 }
 
