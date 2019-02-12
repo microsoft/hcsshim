@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -57,6 +58,22 @@ func newHcsStandaloneTask(ctx context.Context, req *task.CreateTaskRequest, s *s
 			}
 		case *uvm.OptionsWCOW:
 			wopts := (opts).(*uvm.OptionsWCOW)
+
+			// In order for the UVM sandbox.vhdx not to collide with the actual
+			// nested Argon sandbox.vhdx we append the \vm folder to the last
+			// entry in the list.
+			layersLen := len(s.Windows.LayerFolders)
+			layers := make([]string, layersLen)
+			copy(layers, s.Windows.LayerFolders)
+
+			vmPath := filepath.Join(layers[layersLen-1], "vm")
+			err := os.MkdirAll(vmPath, 0)
+			if err != nil {
+				return nil, err
+			}
+			layers[layersLen-1] = vmPath
+			wopts.LayerFolders = layers
+
 			parent, err = uvm.CreateWCOW(wopts)
 			if err != nil {
 				return nil, err
