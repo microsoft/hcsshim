@@ -340,22 +340,28 @@ func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all 
 	if eid == "" {
 		// We just killed the init process. Tear down the container too.
 		ht.closeOnce.Do(func() {
-			serr := ht.c.Shutdown()
-			if serr != nil {
-				if hcs.IsPending(serr) {
-					const shutdownTimeout = time.Minute * 5
-					werr := ht.c.WaitTimeout(shutdownTimeout)
-					if err != nil {
-						if hcs.IsTimeout(werr) {
-							// TODO: Log this?
+			// ht.c should never be nil for a real task but in testing we stub
+			// this to avoid a nil dereference. We really should introduce a
+			// method or interface for ht.c operations that we can stub for
+			// testing.
+			if ht.c != nil {
+				serr := ht.c.Shutdown()
+				if serr != nil {
+					if hcs.IsPending(serr) {
+						const shutdownTimeout = time.Minute * 5
+						werr := ht.c.WaitTimeout(shutdownTimeout)
+						if err != nil {
+							if hcs.IsTimeout(werr) {
+								// TODO: Log this?
+							}
+							ht.c.Terminate()
 						}
+					} else {
 						ht.c.Terminate()
 					}
-				} else {
-					ht.c.Terminate()
 				}
+				hcsoci.ReleaseResources(ht.cr, ht.host, true)
 			}
-			hcsoci.ReleaseResources(ht.cr, ht.host, true)
 			if ht.ownsHost && ht.host != nil {
 				ht.host.Close()
 			}

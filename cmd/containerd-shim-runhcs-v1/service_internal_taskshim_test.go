@@ -380,16 +380,7 @@ func Test_TaskShim_killInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
 	}
 }
 
-func Test_TaskShim_execInternal_Error(t *testing.T) {
-	s := service{
-		tid:       t.Name(),
-		isSandbox: true,
-	}
-
-	resp, err := s.execInternal(context.TODO(), &task.ExecProcessRequest{ID: t.Name()})
-
-	verifyExpectedError(t, resp, err, errdefs.ErrNotImplemented)
-}
+// TODO: Test_TaskShim_execInternal_*
 
 func Test_TaskShim_resizePtyInternal_NoTask_Error(t *testing.T) {
 	s := service{
