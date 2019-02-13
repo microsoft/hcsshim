@@ -28,7 +28,7 @@ func setupTaskServiceWithFakes(t *testing.T) (*service, *testShimTask) {
 			},
 		},
 	}
-	s.z.Store(task)
+	s.taskOrPod.Store(task)
 	return &s, task
 }
 

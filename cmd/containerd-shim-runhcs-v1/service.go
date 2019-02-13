@@ -48,10 +48,10 @@ type service struct {
 	// This MUST be treated as readonly for the lifetime of the shim.
 	isSandbox bool
 
-	// z is either the `pod` this shim is tracking if `isSandbox == true` or it
-	// is the `task` this shim is tracking. If no call to `Create` has taken
-	// place yet `z.Load()` MUST return `nil`.
-	z atomic.Value
+	// taskOrPod is either the `pod` this shim is tracking if `isSandbox ==
+	// true` or it is the `task` this shim is tracking. If no call to `Create`
+	// has taken place yet `taskOrPod.Load()` MUST return `nil`.
+	taskOrPod atomic.Value
 
 	// cl is the create lock. Since each shim MUST only track a single task or
 	// POD. `cl` is used to create the task or POD sandbox. It SHOULD not be

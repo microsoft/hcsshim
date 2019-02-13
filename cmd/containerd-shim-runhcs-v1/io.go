@@ -56,14 +56,20 @@ type iorelay struct {
 	stdin, stdout, stderr string
 	terminal              bool
 
+	// wg tracks the state of the relay's stdin/stdout/stderr if they exist.
 	wg sync.WaitGroup
 
+	// l synchronizes access to all upstream/downstream IO
 	l sync.Mutex
 
-	ui     io.ReadCloser
+	// ui is the upstream stdin. IE: above the shim.
+	ui io.ReadCloser
+	// uo and ue are the upstream stdout and stderr. IE: above the shim.
 	uo, ue io.WriteCloser
 
-	di     io.WriteCloser
+	// di is the down stdin. IE: from the hcs process.
+	di io.WriteCloser
+	// do and de are the downstream stdout and stderr. IE: from the hcs process.
 	do, de io.ReadCloser
 }
 
@@ -127,26 +133,7 @@ func (ir *iorelay) CloseStdin() {
 func (ir *iorelay) Wait() {
 	ir.wg.Wait()
 
-	ir.l.Lock()
-	defer ir.l.Unlock()
-	if ir.ui != nil {
-		ir.ui.Close()
-		ir.ui = nil
-		ir.di.Close()
-		ir.di = nil
-	}
-	if ir.uo != nil {
-		ir.do.Close()
-		ir.do = nil
-		ir.uo.Close()
-		ir.uo = nil
-	}
-	if ir.ue != nil {
-		ir.de.Close()
-		ir.de = nil
-		ir.ue.Close()
-		ir.ue = nil
-	}
+	ir.close()
 }
 
 func (ir *iorelay) close() {
@@ -158,9 +145,14 @@ func (ir *iorelay) close() {
 		ir.do, ir.uo,
 		ir.de, ir.ue,
 	} {
-		closer.Close()
+		if closer != nil {
+			closer.Close()
+		}
 	}
 	ir.ui = nil
 	ir.uo = nil
 	ir.ue = nil
+	ir.di = nil
+	ir.do = nil
+	ir.de = nil
 }

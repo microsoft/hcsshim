@@ -45,7 +45,7 @@ func setupPodServiceWithFakes(t *testing.T) (*service, *testShimTask, *testShimT
 	// store the init task and 2nd task in the pod
 	pod.tasks.Store(task.id, task)
 	pod.tasks.Store(task2.id, task2)
-	s.z.Store(pod)
+	s.taskOrPod.Store(pod)
 	return &s, task, task2
 }
 

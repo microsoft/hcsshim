@@ -52,7 +52,7 @@ var serveCommand = cli.Command{
 		// write the error to stderr and the caller will forward the error on as
 		// part of the `shim start` failure path. Once successfully served the
 		// shim `MUST` not use any std handles. The shim can log any errors to
-		// the upstream caller by listening for a log connection and steaming
+		// the upstream caller by listening for a log connection and streaming
 		// the events.
 
 		os.Stdin.Close()

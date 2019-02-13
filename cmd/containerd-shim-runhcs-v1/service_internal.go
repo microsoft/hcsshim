@@ -29,7 +29,7 @@ var empty = &google_protobuf1.Empty{}
 //
 // If `pod==nil` returns `errdefs.ErrFailedPrecondition`.
 func (s *service) getPod() (shimPod, error) {
-	raw := s.z.Load()
+	raw := s.taskOrPod.Load()
 	if raw == nil {
 		return nil, errors.Wrapf(errdefs.ErrFailedPrecondition, "task with id: '%s' must be created first", s.tid)
 	}
@@ -41,7 +41,7 @@ func (s *service) getPod() (shimPod, error) {
 //
 // If `tid` is not found will return `errdefs.ErrNotFound`.
 func (s *service) getTask(tid string) (shimTask, error) {
-	raw := s.z.Load()
+	raw := s.taskOrPod.Load()
 	if raw == nil {
 		return nil, errors.Wrapf(errdefs.ErrNotFound, "task with id: '%s' not found", tid)
 	}
@@ -171,7 +171,7 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 		t, _ := pod.GetTask(req.ID)
 		e, _ := t.GetExec("")
 		resp.Pid = uint32(e.Pid())
-		s.z.Store(pod)
+		s.taskOrPod.Store(pod)
 	} else {
 		t, err := newHcsStandaloneTask(ctx, s.events, req, &spec)
 		if err != nil {
@@ -180,7 +180,7 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 		}
 		e, _ := t.GetExec("")
 		resp.Pid = uint32(e.Pid())
-		s.z.Store(t)
+		s.taskOrPod.Store(t)
 	}
 	s.cl.Unlock()
 	return resp, nil

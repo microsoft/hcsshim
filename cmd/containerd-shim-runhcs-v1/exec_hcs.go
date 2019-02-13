@@ -293,9 +293,8 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 		he.exitedAt = time.Now()
 		return nil
 	case shimExecStateRunning:
-		// TODO: We don't support a version of LCOW that doesn't support signals. We
-		// should likely be reading the guest properties but we don't actually need
-		// to.
+		// TODO: We need to detect that the guest supports Signal process else
+		// issue a kill here.
 		return he.p.Signal(guestrequest.SignalProcessOptions{
 			Signal: int(signal),
 		})
