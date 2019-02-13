@@ -285,9 +285,14 @@ func (p *pod) KillTask(ctx context.Context, tid, eid string, signal uint32, all 
 		// We are in a kill all on the sandbox task. Signal everything.
 		p.workloadTasks.Range(func(key, value interface{}) bool {
 			wt := value.(shimTask)
-			eg.Go(func() error {
-				return wt.KillExec(ctx, eid, signal, all)
-			})
+			ie, _ := wt.GetExec("")
+			// Only send the kill signal to non-exited tasks when in the `all`
+			// case.
+			if ie.State() != shimExecStateExited {
+				eg.Go(func() error {
+					return wt.KillExec(ctx, eid, signal, all)
+				})
+			}
 
 			// iterate all
 			return false
