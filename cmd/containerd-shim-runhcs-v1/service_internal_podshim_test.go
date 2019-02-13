@@ -20,25 +20,16 @@ func setupPodServiceWithFakes(t *testing.T) (*service, *testShimTask, *testShimT
 
 	// create init fake container
 	task := &testShimTask{
-		id: t.Name(),
-		exec: &testShimExec{
-			id:  "", // Fake init pid ID
-			pid: 10,
-		},
+		id:   t.Name(),
+		exec: newTestShimExec(t.Name(), "", 10),
 	}
 
 	// create a 2nd fake container
 	task2 := &testShimTask{
-		id: t.Name() + "-2",
-		exec: &testShimExec{
-			id:  "",
-			pid: 101,
-		},
+		id:   t.Name() + "-2",
+		exec: newTestShimExec(t.Name()+"-2", "", 101),
 		execs: map[string]*testShimExec{
-			t.Name() + "-2": {
-				id:  t.Name() + "-2",
-				pid: 201,
-			},
+			t.Name() + "-2": newTestShimExec(t.Name()+"-2", t.Name()+"-2", 201),
 		},
 	}
 
@@ -150,7 +141,7 @@ func Test_PodShim_stateInternal_InitTaskID_InitExecID_Success(t *testing.T) {
 	if resp == nil {
 		t.Fatal("should of returned StateResponse")
 	}
-	if resp.ID != "" || resp.Pid != uint32(t1.exec.pid) {
+	if resp.ID != t1.ID() || resp.Pid != uint32(t1.exec.pid) {
 		t.Fatalf("should of returned init pid, got: %v", resp)
 	}
 }

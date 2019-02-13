@@ -48,19 +48,13 @@ func (tsp *testShimPod) KillTask(ctx context.Context, tid, eid string, signal ui
 
 func setupTestPodWithFakes(t *testing.T) (*pod, *testShimTask) {
 	st := &testShimTask{
-		id: t.Name(),
-		exec: &testShimExec{
-			id:  "",
-			pid: 10,
-		},
+		id:    t.Name(),
+		exec:  newTestShimExec(t.Name(), "", 10),
 		execs: make(map[string]*testShimExec),
 	}
 	// Add a 2nd exec
 	seid := strconv.Itoa(rand.Int())
-	st.execs[seid] = &testShimExec{
-		id:  seid,
-		pid: int(rand.Int31()),
-	}
+	st.execs[seid] = newTestShimExec(t.Name(), seid, int(rand.Int31()))
 	p := &pod{
 		id:          t.Name(),
 		sandboxTask: st,
@@ -69,12 +63,10 @@ func setupTestPodWithFakes(t *testing.T) (*pod, *testShimTask) {
 }
 
 func setupTestTaskInPod(t *testing.T, p *pod) *testShimTask {
+	tid := strconv.Itoa(rand.Int())
 	wt := &testShimTask{
-		id: strconv.Itoa(rand.Int()),
-		exec: &testShimExec{
-			id:  "",
-			pid: int(rand.Int31()),
-		},
+		id:   tid,
+		exec: newTestShimExec(tid, "", int(rand.Int31())),
 	}
 	p.workloadTasks.Store(wt.id, wt)
 	return wt

@@ -103,7 +103,7 @@ func (wpse *wcowPodSandboxExec) Status() *task.StateResponse {
 	}
 
 	return &task.StateResponse{
-		ID:         "",
+		ID:         wpse.tid,
 		Bundle:     wpse.bundle,
 		Pid:        uint32(wpse.pid),
 		Status:     s,

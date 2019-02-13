@@ -11,7 +11,7 @@ import (
 )
 
 func verifyWcowPodSandboxExecStatus(t *testing.T, es containerd_v1_types.Status, status *task.StateResponse) {
-	if status.ID != "" {
+	if status.ID != t.Name() {
 		t.Fatalf("expected id: '' got: '%s'", status.ID)
 	}
 	if status.Bundle != t.Name() {

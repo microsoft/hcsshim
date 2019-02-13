@@ -7,9 +7,18 @@ import (
 	"github.com/containerd/containerd/runtime/v2/task"
 )
 
+func newTestShimExec(tid, id string, pid int) *testShimExec {
+	return &testShimExec{
+		tid: tid,
+		id:  id,
+		pid: pid,
+	}
+}
+
 var _ = (shimExec)(&testShimExec{})
 
 type testShimExec struct {
+	tid    string
 	id     string
 	pid    int
 	status uint32
@@ -29,7 +38,7 @@ func (tse *testShimExec) State() shimExecState {
 }
 func (tse *testShimExec) Status() *task.StateResponse {
 	return &task.StateResponse{
-		ID:         tse.id,
+		ID:         tse.tid,
 		Pid:        uint32(tse.pid),
 		ExitStatus: tse.status,
 		ExitedAt:   tse.at,

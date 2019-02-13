@@ -146,7 +146,7 @@ func (he *hcsExec) Status() *task.StateResponse {
 	}
 
 	return &task.StateResponse{
-		ID:         he.id,
+		ID:         he.tid, // TODO: Add ExecID to StateResponse
 		Bundle:     he.bundle,
 		Pid:        uint32(he.pid),
 		Status:     s,

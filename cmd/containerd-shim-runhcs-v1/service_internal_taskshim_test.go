@@ -16,16 +16,10 @@ func setupTaskServiceWithFakes(t *testing.T) (*service, *testShimTask) {
 		isSandbox: false,
 	}
 	task := &testShimTask{
-		id: t.Name(),
-		exec: &testShimExec{
-			id:  "", // Fake init pid ID
-			pid: 10,
-		},
+		id:   t.Name(),
+		exec: newTestShimExec(t.Name(), "", 10),
 		execs: map[string]*testShimExec{
-			t.Name() + "-2": {
-				id:  t.Name() + "-2", // Fake 2nd pid ID
-				pid: 101,
-			},
+			t.Name() + "-2": newTestShimExec(t.Name(), t.Name()+"-2", 101),
 		},
 	}
 	s.taskOrPod.Store(task)
@@ -98,7 +92,7 @@ func Test_TaskShim_stateInternal_InitTaskID_InitExecID_Success(t *testing.T) {
 	if resp == nil {
 		t.Fatal("should of returned StateResponse")
 	}
-	if resp.ID != "" || resp.Pid != uint32(t1.exec.pid) {
+	if resp.ID != t1.ID() || resp.Pid != uint32(t1.exec.pid) {
 		t.Fatalf("should of returned init pid, got: %v", resp)
 	}
 }
@@ -117,7 +111,7 @@ func Test_TaskShim_stateInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
 	if resp == nil {
 		t.Fatal("should of returned StateResponse")
 	}
-	if resp.ID != t1.execs[eid].id || resp.Pid != uint32(t1.execs[eid].pid) {
+	if resp.ID != t1.ID() || resp.Pid != uint32(t1.execs[eid].pid) {
 		t.Fatalf("should of returned 2nd exec pid, got: %v", resp)
 	}
 }
