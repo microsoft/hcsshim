@@ -12,7 +12,10 @@ import (
 
 func verifyWcowPodSandboxExecStatus(t *testing.T, es containerd_v1_types.Status, status *task.StateResponse) {
 	if status.ID != t.Name() {
-		t.Fatalf("expected id: '' got: '%s'", status.ID)
+		t.Fatalf("expected id: '%s' got: '%s'", t.Name(), status.ID)
+	}
+	if status.ExecID != t.Name() {
+		t.Fatalf("expected execid: '%s' got: '%s'", t.Name(), status.ExecID)
 	}
 	if status.Bundle != t.Name() {
 		t.Fatalf("expected bundle: '%s' got: '%s'", t.Name(), status.Bundle)
@@ -69,8 +72,8 @@ func Test_newWcowPodSandboxExec(t *testing.T) {
 func Test_newWcowPodSandboxExec_ID(t *testing.T) {
 	wpse := newWcowPodSandboxExec(context.TODO(), fakePublisher, t.Name(), t.Name())
 
-	if wpse.ID() != "" {
-		t.Fatalf("expected ID: '' got: '%s", wpse.ID())
+	if wpse.ID() != t.Name() {
+		t.Fatalf("expected ID: '%s' got: '%s", t.Name(), wpse.ID())
 	}
 }
 

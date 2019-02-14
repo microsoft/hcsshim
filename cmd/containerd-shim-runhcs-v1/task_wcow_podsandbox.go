@@ -142,17 +142,18 @@ func (wpst *wcowPodSandboxTask) DeleteExec(ctx context.Context, eid string) (int
 		return 0, 0, time.Time{}, newExecInvalidStateError(wpst.id, eid, state, "delete")
 	}
 	status := e.Status()
-	if eid == "" {
-		// Publish the deleted event
-		wpst.events(
-			runtime.TaskDeleteEventTopic,
-			&eventstypes.TaskDelete{
-				ContainerID: wpst.id,
-				Pid:         status.Pid,
-				ExitStatus:  status.ExitStatus,
-				ExitedAt:    status.ExitedAt,
-			})
-	}
+
+	// Publish the deleted event
+	wpst.events(
+		runtime.TaskDeleteEventTopic,
+		&eventstypes.TaskDelete{
+			ContainerID: wpst.id,
+			ID:          eid,
+			Pid:         status.Pid,
+			ExitStatus:  status.ExitStatus,
+			ExitedAt:    status.ExitedAt,
+		})
+
 	return int(status.Pid), status.ExitStatus, status.ExitedAt, nil
 }
 

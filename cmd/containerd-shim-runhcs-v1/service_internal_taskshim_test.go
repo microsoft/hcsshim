@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"math/rand"
+	"strconv"
 	"testing"
 
 	"github.com/containerd/containerd/errdefs"
@@ -10,20 +12,22 @@ import (
 	"github.com/containerd/typeurl"
 )
 
-func setupTaskServiceWithFakes(t *testing.T) (*service, *testShimTask) {
+func setupTaskServiceWithFakes(t *testing.T) (*service, *testShimTask, *testShimExec) {
+	tid := strconv.Itoa(rand.Int())
 	s := service{
-		tid:       t.Name(),
+		tid:       tid,
 		isSandbox: false,
 	}
 	task := &testShimTask{
-		id:   t.Name(),
-		exec: newTestShimExec(t.Name(), "", 10),
-		execs: map[string]*testShimExec{
-			t.Name() + "-2": newTestShimExec(t.Name(), t.Name()+"-2", 101),
-		},
+		id:    tid,
+		exec:  newTestShimExec(tid, tid, 10),
+		execs: make(map[string]*testShimExec),
 	}
+	secondExecID := strconv.Itoa(rand.Int())
+	secondExec := newTestShimExec(tid, secondExecID, 101)
+	task.execs[secondExecID] = secondExec
 	s.taskOrPod.Store(task)
-	return &s, task
+	return &s, task, secondExec
 }
 
 func Test_TaskShim_getTask_NotCreated_Error(t *testing.T) {
@@ -38,7 +42,7 @@ func Test_TaskShim_getTask_NotCreated_Error(t *testing.T) {
 }
 
 func Test_TaskShim_getTask_Created_DifferentID_Error(t *testing.T) {
-	s, _ := setupTaskServiceWithFakes(t)
+	s, _, _ := setupTaskServiceWithFakes(t)
 
 	st, err := s.getTask("thisidwontmatch")
 
@@ -46,9 +50,9 @@ func Test_TaskShim_getTask_Created_DifferentID_Error(t *testing.T) {
 }
 
 func Test_TaskShim_getTask_Created_CorrectID_Success(t *testing.T) {
-	s, t1 := setupTaskServiceWithFakes(t)
+	s, t1, _ := setupTaskServiceWithFakes(t)
 
-	st, err := s.getTask(t.Name())
+	st, err := s.getTask(t1.ID())
 	if err != nil {
 		t.Fatalf("should have not failed with error, got: %v", err)
 	}
@@ -69,10 +73,10 @@ func Test_TaskShim_stateInternal_NoTask_Error(t *testing.T) {
 }
 
 func Test_TaskShim_stateInternal_InitTaskID_DifferentExecID_Error(t *testing.T) {
-	s, _ := setupTaskServiceWithFakes(t)
+	s, t1, _ := setupTaskServiceWithFakes(t)
 
 	resp, err := s.stateInternal(context.TODO(), &task.StateRequest{
-		ID:     t.Name(),
+		ID:     t1.ID(),
 		ExecID: "thisshouldnotmatch",
 	})
 
@@ -80,10 +84,10 @@ func Test_TaskShim_stateInternal_InitTaskID_DifferentExecID_Error(t *testing.T) 
 }
 
 func Test_TaskShim_stateInternal_InitTaskID_InitExecID_Success(t *testing.T) {
-	s, t1 := setupTaskServiceWithFakes(t)
+	s, t1, _ := setupTaskServiceWithFakes(t)
 
 	resp, err := s.stateInternal(context.TODO(), &task.StateRequest{
-		ID:     t.Name(),
+		ID:     t1.ID(),
 		ExecID: "",
 	})
 	if err != nil {
@@ -92,18 +96,23 @@ func Test_TaskShim_stateInternal_InitTaskID_InitExecID_Success(t *testing.T) {
 	if resp == nil {
 		t.Fatal("should of returned StateResponse")
 	}
-	if resp.ID != t1.ID() || resp.Pid != uint32(t1.exec.pid) {
-		t.Fatalf("should of returned init pid, got: %v", resp)
+	if resp.ID != t1.ID() {
+		t.Fatalf("StateResponse.ID expected '%s' got '%s'", t1.ID(), resp.ID)
+	}
+	if resp.ExecID != t1.ID() {
+		t.Fatalf("StateResponse.ExecID expected '%s' got '%s'", t1.ID(), resp.ExecID)
+	}
+	if resp.Pid != uint32(t1.exec.pid) {
+		t.Fatalf("should of returned init pid, got: %v", resp.Pid)
 	}
 }
 
 func Test_TaskShim_stateInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
-	s, t1 := setupTaskServiceWithFakes(t)
+	s, t1, e2 := setupTaskServiceWithFakes(t)
 
-	eid := t.Name() + "-2"
 	resp, err := s.stateInternal(context.TODO(), &task.StateRequest{
-		ID:     t.Name(),
-		ExecID: eid,
+		ID:     t1.ID(),
+		ExecID: e2.ID(),
 	})
 	if err != nil {
 		t.Fatalf("should not have failed with error got: %v", err)
@@ -111,8 +120,14 @@ func Test_TaskShim_stateInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
 	if resp == nil {
 		t.Fatal("should of returned StateResponse")
 	}
-	if resp.ID != t1.ID() || resp.Pid != uint32(t1.execs[eid].pid) {
-		t.Fatalf("should of returned 2nd exec pid, got: %v", resp)
+	if resp.ID != t1.ID() {
+		t.Fatalf("StateResponse.ID expected '%s' got '%s'", t1.ID(), resp.ID)
+	}
+	if resp.ExecID != e2.ID() {
+		t.Fatalf("StateResponse.ExecID expected '%s' got '%s'", e2.ID(), resp.ExecID)
+	}
+	if resp.Pid != uint32(t1.execs[e2.ID()].pid) {
+		t.Fatalf("should of returned 2nd exec pid, got: %v", resp.Pid)
 	}
 }
 
@@ -130,10 +145,10 @@ func Test_TaskShim_startInternal_NoTask_Error(t *testing.T) {
 }
 
 func Test_TaskShim_startInternal_ValidTask_DifferentExecID_Error(t *testing.T) {
-	s, _ := setupTaskServiceWithFakes(t)
+	s, t1, _ := setupTaskServiceWithFakes(t)
 
 	resp, err := s.startInternal(context.TODO(), &task.StartRequest{
-		ID:     t.Name(),
+		ID:     t1.ID(),
 		ExecID: "thisshouldnotmatch",
 	})
 
@@ -141,10 +156,10 @@ func Test_TaskShim_startInternal_ValidTask_DifferentExecID_Error(t *testing.T) {
 }
 
 func Test_TaskShim_startInternal_InitTaskID_InitExecID_Success(t *testing.T) {
-	s, t1 := setupTaskServiceWithFakes(t)
+	s, t1, _ := setupTaskServiceWithFakes(t)
 
 	resp, err := s.startInternal(context.TODO(), &task.StartRequest{
-		ID:     t.Name(),
+		ID:     t1.ID(),
 		ExecID: "",
 	})
 	if err != nil {
@@ -159,12 +174,11 @@ func Test_TaskShim_startInternal_InitTaskID_InitExecID_Success(t *testing.T) {
 }
 
 func Test_TaskShim_startInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
-	s, t1 := setupTaskServiceWithFakes(t)
+	s, t1, e2 := setupTaskServiceWithFakes(t)
 
-	eid := t.Name() + "-2"
 	resp, err := s.startInternal(context.TODO(), &task.StartRequest{
-		ID:     t.Name(),
-		ExecID: eid,
+		ID:     t1.ID(),
+		ExecID: e2.ID(),
 	})
 	if err != nil {
 		t.Fatalf("should not have failed with error got: %v", err)
@@ -172,7 +186,7 @@ func Test_TaskShim_startInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
 	if resp == nil {
 		t.Fatal("should of returned StartResponse")
 	}
-	if resp.Pid != uint32(t1.execs[eid].pid) {
+	if resp.Pid != uint32(t1.execs[e2.ID()].pid) {
 		t.Fatal("should of returned 2nd pid")
 	}
 }
@@ -189,10 +203,10 @@ func Test_TaskShim_deleteInternal_NoTask_Error(t *testing.T) {
 }
 
 func Test_TaskShim_deleteInternal_ValidTask_DifferentExecID_Error(t *testing.T) {
-	s, _ := setupTaskServiceWithFakes(t)
+	s, t1, _ := setupTaskServiceWithFakes(t)
 
 	resp, err := s.deleteInternal(context.TODO(), &task.DeleteRequest{
-		ID:     t.Name(),
+		ID:     t1.ID(),
 		ExecID: "thisshouldnotmatch",
 	})
 
@@ -200,10 +214,10 @@ func Test_TaskShim_deleteInternal_ValidTask_DifferentExecID_Error(t *testing.T) 
 }
 
 func Test_TaskShim_deleteInternal_InitTaskID_InitExecID_Success(t *testing.T) {
-	s, t1 := setupTaskServiceWithFakes(t)
+	s, t1, _ := setupTaskServiceWithFakes(t)
 
 	resp, err := s.deleteInternal(context.TODO(), &task.DeleteRequest{
-		ID:     t.Name(),
+		ID:     t1.ID(),
 		ExecID: "",
 	})
 	if err != nil {
@@ -218,15 +232,14 @@ func Test_TaskShim_deleteInternal_InitTaskID_InitExecID_Success(t *testing.T) {
 }
 
 func Test_TaskShim_deleteInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
-	s, t1 := setupTaskServiceWithFakes(t)
+	s, t1, e2 := setupTaskServiceWithFakes(t)
 
 	// capture the t2 task as it will be deleted
-	eid := t.Name() + "-2"
-	t2t := t1.execs[eid]
+	t2t := t1.execs[e2.ID()]
 
 	resp, err := s.deleteInternal(context.TODO(), &task.DeleteRequest{
-		ID:     t.Name(),
-		ExecID: eid,
+		ID:     t1.ID(),
+		ExecID: e2.ID(),
 	})
 	if err != nil {
 		t.Fatalf("should not have failed with error got: %v", err)
@@ -237,7 +250,7 @@ func Test_TaskShim_deleteInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
 	if resp.Pid != uint32(t2t.pid) {
 		t.Fatal("should of returned 2nd pid")
 	}
-	if _, ok := t1.execs[eid]; ok {
+	if _, ok := t1.execs[e2.ID()]; ok {
 		t.Fatal("should of deleted the 2nd exec")
 	}
 }
@@ -254,10 +267,9 @@ func Test_TaskShim_pidsInternal_NoTask_Error(t *testing.T) {
 }
 
 func Test_TaskShim_pidsInternal_InitTaskID_Success(t *testing.T) {
-	s, t1 := setupTaskServiceWithFakes(t)
+	s, t1, e2 := setupTaskServiceWithFakes(t)
 
-	eid := t.Name() + "-2"
-	resp, err := s.pidsInternal(context.TODO(), &task.PidsRequest{ID: t.Name()})
+	resp, err := s.pidsInternal(context.TODO(), &task.PidsRequest{ID: t1.ID()})
 	if err != nil {
 		t.Fatalf("should not have failed with error got: %v", err)
 	}
@@ -270,10 +282,10 @@ func Test_TaskShim_pidsInternal_InitTaskID_Success(t *testing.T) {
 	if resp.Processes[0].Pid != uint32(t1.exec.pid) {
 		t.Fatal("should of returned init pid")
 	}
-	if resp.Processes[0].Info != nil {
-		t.Fatal("should of returned nil init pid info")
+	if resp.Processes[0].Info == nil {
+		t.Fatal("should not have returned nil init pid info")
 	}
-	if resp.Processes[1].Pid != uint32(t1.execs[eid].pid) {
+	if resp.Processes[1].Pid != uint32(t1.execs[e2.ID()].pid) {
 		t.Fatal("should of returned 2nd pid")
 	}
 	if resp.Processes[1].Info == nil {
@@ -284,7 +296,7 @@ func Test_TaskShim_pidsInternal_InitTaskID_Success(t *testing.T) {
 		t.Fatalf("failed to unmarshal 2nd pid info, err: %v", err)
 	}
 	pi := u.(*runcopts.ProcessDetails)
-	if pi.ExecID != eid {
+	if pi.ExecID != e2.ID() {
 		t.Fatalf("should of returned 2nd pid ExecID, got: %v", pi.ExecID)
 	}
 }
@@ -334,10 +346,10 @@ func Test_TaskShim_killInternal_NoTask_Error(t *testing.T) {
 }
 
 func Test_TaskShim_killInternal_InitTaskID_DifferentExecID_Error(t *testing.T) {
-	s, _ := setupTaskServiceWithFakes(t)
+	s, t1, _ := setupTaskServiceWithFakes(t)
 
 	resp, err := s.killInternal(context.TODO(), &task.KillRequest{
-		ID:     t.Name(),
+		ID:     t1.ID(),
 		ExecID: "thisshouldnotmatch",
 	})
 
@@ -345,10 +357,10 @@ func Test_TaskShim_killInternal_InitTaskID_DifferentExecID_Error(t *testing.T) {
 }
 
 func Test_TaskShim_killInternal_InitTaskID_InitExecID_Success(t *testing.T) {
-	s, _ := setupTaskServiceWithFakes(t)
+	s, t1, _ := setupTaskServiceWithFakes(t)
 
 	resp, err := s.killInternal(context.TODO(), &task.KillRequest{
-		ID:     t.Name(),
+		ID:     t1.ID(),
 		ExecID: "",
 	})
 	if err != nil {
@@ -360,11 +372,11 @@ func Test_TaskShim_killInternal_InitTaskID_InitExecID_Success(t *testing.T) {
 }
 
 func Test_TaskShim_killInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
-	s, _ := setupTaskServiceWithFakes(t)
+	s, t1, e2 := setupTaskServiceWithFakes(t)
 
 	resp, err := s.killInternal(context.TODO(), &task.KillRequest{
-		ID:     t.Name(),
-		ExecID: t.Name() + "-2",
+		ID:     t1.ID(),
+		ExecID: e2.ID(),
 	})
 	if err != nil {
 		t.Fatalf("should not have failed with error got: %v", err)
@@ -388,10 +400,10 @@ func Test_TaskShim_resizePtyInternal_NoTask_Error(t *testing.T) {
 }
 
 func Test_TaskShim_resizePtyInternal_InitTaskID_DifferentExecID_Error(t *testing.T) {
-	s, _ := setupTaskServiceWithFakes(t)
+	s, t1, _ := setupTaskServiceWithFakes(t)
 
 	resp, err := s.resizePtyInternal(context.TODO(), &task.ResizePtyRequest{
-		ID:     t.Name(),
+		ID:     t1.ID(),
 		ExecID: "thisshouldnotmatch",
 	})
 
@@ -399,10 +411,10 @@ func Test_TaskShim_resizePtyInternal_InitTaskID_DifferentExecID_Error(t *testing
 }
 
 func Test_TaskShim_resizePtyInternal_InitTaskID_InitExecID_Success(t *testing.T) {
-	s, _ := setupTaskServiceWithFakes(t)
+	s, t1, _ := setupTaskServiceWithFakes(t)
 
 	resp, err := s.resizePtyInternal(context.TODO(), &task.ResizePtyRequest{
-		ID:     t.Name(),
+		ID:     t1.ID(),
 		ExecID: "",
 	})
 	if err != nil {
@@ -414,11 +426,11 @@ func Test_TaskShim_resizePtyInternal_InitTaskID_InitExecID_Success(t *testing.T)
 }
 
 func Test_TaskShim_resizePtyInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
-	s, _ := setupTaskServiceWithFakes(t)
+	s, t1, e2 := setupTaskServiceWithFakes(t)
 
 	resp, err := s.resizePtyInternal(context.TODO(), &task.ResizePtyRequest{
-		ID:     t.Name(),
-		ExecID: t.Name() + "-2",
+		ID:     t1.ID(),
+		ExecID: e2.ID(),
 	})
 	if err != nil {
 		t.Fatalf("should not have failed with error got: %v", err)
@@ -440,10 +452,10 @@ func Test_TaskShim_closeIOInternal_NoTask_Error(t *testing.T) {
 }
 
 func Test_TaskShim_closeIOInternal_InitTaskID_DifferentExecID_Error(t *testing.T) {
-	s, _ := setupTaskServiceWithFakes(t)
+	s, t1, _ := setupTaskServiceWithFakes(t)
 
 	resp, err := s.closeIOInternal(context.TODO(), &task.CloseIORequest{
-		ID:     t.Name(),
+		ID:     t1.ID(),
 		ExecID: "thisshouldnotmatch",
 	})
 
@@ -451,10 +463,10 @@ func Test_TaskShim_closeIOInternal_InitTaskID_DifferentExecID_Error(t *testing.T
 }
 
 func Test_TaskShim_closeIOInternal_InitTaskID_InitExecID_Success(t *testing.T) {
-	s, _ := setupTaskServiceWithFakes(t)
+	s, t1, _ := setupTaskServiceWithFakes(t)
 
 	resp, err := s.closeIOInternal(context.TODO(), &task.CloseIORequest{
-		ID:     t.Name(),
+		ID:     t1.ID(),
 		ExecID: "",
 	})
 	if err != nil {
@@ -466,11 +478,11 @@ func Test_TaskShim_closeIOInternal_InitTaskID_InitExecID_Success(t *testing.T) {
 }
 
 func Test_TaskShim_closeIOInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
-	s, _ := setupTaskServiceWithFakes(t)
+	s, t1, e2 := setupTaskServiceWithFakes(t)
 
 	resp, err := s.closeIOInternal(context.TODO(), &task.CloseIORequest{
-		ID:     t.Name(),
-		ExecID: t.Name() + "-2",
+		ID:     t1.ID(),
+		ExecID: e2.ID(),
 	})
 	if err != nil {
 		t.Fatalf("should not have failed with error got: %v", err)
@@ -503,10 +515,10 @@ func Test_TaskShim_waitInternal_NoTask_Error(t *testing.T) {
 }
 
 func Test_TaskShim_waitInternal_InitTaskID_DifferentExecID_Error(t *testing.T) {
-	s, _ := setupTaskServiceWithFakes(t)
+	s, t1, _ := setupTaskServiceWithFakes(t)
 
 	resp, err := s.waitInternal(context.TODO(), &task.WaitRequest{
-		ID:     t.Name(),
+		ID:     t1.ID(),
 		ExecID: "thisshouldnotmatch",
 	})
 
@@ -514,10 +526,10 @@ func Test_TaskShim_waitInternal_InitTaskID_DifferentExecID_Error(t *testing.T) {
 }
 
 func Test_TaskShim_waitInternal_InitTaskID_InitExecID_Success(t *testing.T) {
-	s, t1 := setupTaskServiceWithFakes(t)
+	s, t1, _ := setupTaskServiceWithFakes(t)
 
 	resp, err := s.waitInternal(context.TODO(), &task.WaitRequest{
-		ID:     t.Name(),
+		ID:     t1.ID(),
 		ExecID: "",
 	})
 	if err != nil {
@@ -532,12 +544,11 @@ func Test_TaskShim_waitInternal_InitTaskID_InitExecID_Success(t *testing.T) {
 }
 
 func Test_TaskShim_waitInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
-	s, t1 := setupTaskServiceWithFakes(t)
+	s, t1, e2 := setupTaskServiceWithFakes(t)
 
-	eid := t.Name() + "-2"
 	resp, err := s.waitInternal(context.TODO(), &task.WaitRequest{
-		ID:     t.Name(),
-		ExecID: eid,
+		ID:     t1.ID(),
+		ExecID: e2.ID(),
 	})
 	if err != nil {
 		t.Fatalf("should not have failed with error got: %v", err)
@@ -545,7 +556,7 @@ func Test_TaskShim_waitInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
 	if resp == nil {
 		t.Fatal("should of returned WaitResponse")
 	}
-	if resp.ExitStatus != t1.execs[eid].Status().ExitStatus {
+	if resp.ExitStatus != t1.execs[e2.ID()].Status().ExitStatus {
 		t.Fatal("should of returned exit status for init")
 	}
 }

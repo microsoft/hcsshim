@@ -22,7 +22,7 @@ import (
 )
 
 // newHcsExec creates an exec to track the lifetime of `spec` in `c` which is
-// actually created on the call to `Start()`. If `id==""` then this is the init
+// actually created on the call to `Start()`. If `id==tid` then this is the init
 // exec and the exec will also start `c` on the call to `Start()` before execing
 // the process `spec.Process`.
 func newHcsExec(
@@ -76,7 +76,7 @@ type hcsExec struct {
 	// This MUST be treated as read only in the lifetime of the exec.
 	id string
 	// bundle is the on disk path to the folder containing the `process.json`
-	// describing this process. If `id==""` the process is described in the
+	// describing this process. If `id==tid` the process is described in the
 	// `config.json`.
 	//
 	// This MUST be treated as read only in the lifetime of the exec.
@@ -146,7 +146,8 @@ func (he *hcsExec) Status() *task.StateResponse {
 	}
 
 	return &task.StateResponse{
-		ID:         he.tid, // TODO: Add ExecID to StateResponse
+		ID:         he.tid,
+		ExecID:     he.id,
 		Bundle:     he.bundle,
 		Pid:        uint32(he.pid),
 		Status:     s,
@@ -162,7 +163,7 @@ func (he *hcsExec) Status() *task.StateResponse {
 func (he *hcsExec) Start(ctx context.Context) error {
 	logrus.WithFields(logrus.Fields{
 		"tid": he.tid,
-		"id":  he.id,
+		"eid": he.id,
 	}).Debug("hcsExec::Start")
 
 	he.sl.Lock()
@@ -170,7 +171,7 @@ func (he *hcsExec) Start(ctx context.Context) error {
 	if he.state != shimExecStateCreated {
 		return newExecInvalidStateError(he.tid, he.id, he.state, "start")
 	}
-	if he.id == "" {
+	if he.id == he.tid {
 		// This is the init exec. We need to start the container itself
 		err := he.c.Start()
 		if err != nil {
@@ -220,7 +221,7 @@ func (he *hcsExec) Start(ctx context.Context) error {
 				CreateStdErrPipe: he.io.StderrPath() != "",
 			},
 		}
-		if he.id != "" {
+		if he.id != he.tid {
 			// An init exec passes the process as part of the config. We only pass
 			// the spec if this is a true exec.
 			lpp.OCIProcess = he.spec
@@ -238,7 +239,7 @@ func (he *hcsExec) Start(ctx context.Context) error {
 		he.setExitedL(1)
 		he.close()
 
-		if he.id == "" {
+		if he.id == he.tid {
 			// We just started the container as well. Force kill it here
 			he.c.Terminate()
 		}
@@ -253,7 +254,7 @@ func (he *hcsExec) Start(ctx context.Context) error {
 
 	// Publish the task/exec start event. This MUST happen before waitForExit to
 	// avoid publishing the exit pervious to the start.
-	if he.id != "" {
+	if he.id != he.tid {
 		he.events(
 			runtime.TaskExecStartedEventTopic,
 			&eventstypes.TaskExecStarted{
@@ -278,7 +279,7 @@ func (he *hcsExec) Start(ctx context.Context) error {
 func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 	logrus.WithFields(logrus.Fields{
 		"tid":    he.tid,
-		"id":     he.id,
+		"eid":    he.id,
 		"signal": signal,
 	}).Debug("hcsExec::Kill")
 
@@ -306,7 +307,7 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 func (he *hcsExec) ResizePty(ctx context.Context, width, height uint32) error {
 	logrus.WithFields(logrus.Fields{
 		"tid":    he.tid,
-		"id":     he.id,
+		"eid":    he.id,
 		"width":  width,
 		"height": height,
 	}).Debug("hcsExec::ResizePty")
@@ -326,7 +327,7 @@ func (he *hcsExec) ResizePty(ctx context.Context, width, height uint32) error {
 func (he *hcsExec) CloseIO(ctx context.Context, stdin bool) error {
 	logrus.WithFields(logrus.Fields{
 		"tid":   he.tid,
-		"id":    he.id,
+		"eid":   he.id,
 		"stdin": stdin,
 	}).Debug("hcsExec::CloseIO")
 
@@ -349,7 +350,7 @@ func (he *hcsExec) CloseIO(ctx context.Context, stdin bool) error {
 func (he *hcsExec) Wait(ctx context.Context) *task.StateResponse {
 	logrus.WithFields(logrus.Fields{
 		"tid": he.tid,
-		"id":  he.id,
+		"eid": he.id,
 	}).Debug("hcsExec::Wait")
 
 	<-he.exited
