@@ -57,7 +57,7 @@ func Test_TaskShim_getTask_Created_CorrectID_Success(t *testing.T) {
 		t.Fatalf("should have not failed with error, got: %v", err)
 	}
 	if st != t1 {
-		t.Fatal("should of returned a valid task")
+		t.Fatal("should have returned a valid task")
 	}
 }
 
@@ -94,7 +94,7 @@ func Test_TaskShim_stateInternal_InitTaskID_InitExecID_Success(t *testing.T) {
 		t.Fatalf("should not have failed with error got: %v", err)
 	}
 	if resp == nil {
-		t.Fatal("should of returned StateResponse")
+		t.Fatal("should have returned StateResponse")
 	}
 	if resp.ID != t1.ID() {
 		t.Fatalf("StateResponse.ID expected '%s' got '%s'", t1.ID(), resp.ID)
@@ -103,7 +103,7 @@ func Test_TaskShim_stateInternal_InitTaskID_InitExecID_Success(t *testing.T) {
 		t.Fatalf("StateResponse.ExecID expected '%s' got '%s'", t1.ID(), resp.ExecID)
 	}
 	if resp.Pid != uint32(t1.exec.pid) {
-		t.Fatalf("should of returned init pid, got: %v", resp.Pid)
+		t.Fatalf("should have returned init pid, got: %v", resp.Pid)
 	}
 }
 
@@ -118,7 +118,7 @@ func Test_TaskShim_stateInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
 		t.Fatalf("should not have failed with error got: %v", err)
 	}
 	if resp == nil {
-		t.Fatal("should of returned StateResponse")
+		t.Fatal("should have returned StateResponse")
 	}
 	if resp.ID != t1.ID() {
 		t.Fatalf("StateResponse.ID expected '%s' got '%s'", t1.ID(), resp.ID)
@@ -127,7 +127,7 @@ func Test_TaskShim_stateInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
 		t.Fatalf("StateResponse.ExecID expected '%s' got '%s'", e2.ID(), resp.ExecID)
 	}
 	if resp.Pid != uint32(t1.execs[e2.ID()].pid) {
-		t.Fatalf("should of returned 2nd exec pid, got: %v", resp.Pid)
+		t.Fatalf("should have returned 2nd exec pid, got: %v", resp.Pid)
 	}
 }
 
@@ -166,10 +166,10 @@ func Test_TaskShim_startInternal_InitTaskID_InitExecID_Success(t *testing.T) {
 		t.Fatalf("should not have failed with error got: %v", err)
 	}
 	if resp == nil {
-		t.Fatal("should of returned StartResponse")
+		t.Fatal("should have returned StartResponse")
 	}
 	if resp.Pid != uint32(t1.exec.pid) {
-		t.Fatal("should of returned init pid")
+		t.Fatal("should have returned init pid")
 	}
 }
 
@@ -184,10 +184,10 @@ func Test_TaskShim_startInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
 		t.Fatalf("should not have failed with error got: %v", err)
 	}
 	if resp == nil {
-		t.Fatal("should of returned StartResponse")
+		t.Fatal("should have returned StartResponse")
 	}
 	if resp.Pid != uint32(t1.execs[e2.ID()].pid) {
-		t.Fatal("should of returned 2nd pid")
+		t.Fatal("should have returned 2nd pid")
 	}
 }
 
@@ -224,10 +224,10 @@ func Test_TaskShim_deleteInternal_InitTaskID_InitExecID_Success(t *testing.T) {
 		t.Fatalf("should not have failed with error got: %v", err)
 	}
 	if resp == nil {
-		t.Fatal("should of returned DeleteResponse")
+		t.Fatal("should have returned DeleteResponse")
 	}
 	if resp.Pid != uint32(t1.exec.pid) {
-		t.Fatal("should of returned init pid")
+		t.Fatal("should have returned init pid")
 	}
 }
 
@@ -245,13 +245,13 @@ func Test_TaskShim_deleteInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
 		t.Fatalf("should not have failed with error got: %v", err)
 	}
 	if resp == nil {
-		t.Fatal("should of returned DeleteResponse")
+		t.Fatal("should have returned DeleteResponse")
 	}
 	if resp.Pid != uint32(t2t.pid) {
-		t.Fatal("should of returned 2nd pid")
+		t.Fatal("should have returned 2nd pid")
 	}
 	if _, ok := t1.execs[e2.ID()]; ok {
-		t.Fatal("should of deleted the 2nd exec")
+		t.Fatal("should have deleted the 2nd exec")
 	}
 }
 
@@ -274,19 +274,19 @@ func Test_TaskShim_pidsInternal_InitTaskID_Success(t *testing.T) {
 		t.Fatalf("should not have failed with error got: %v", err)
 	}
 	if resp == nil {
-		t.Fatal("should of returned PidsResponse")
+		t.Fatal("should have returned PidsResponse")
 	}
 	if len(resp.Processes) != 2 {
-		t.Fatalf("should of returned len(processes) == 1, got: %v", len(resp.Processes))
+		t.Fatalf("should have returned len(processes) == 1, got: %v", len(resp.Processes))
 	}
 	if resp.Processes[0].Pid != uint32(t1.exec.pid) {
-		t.Fatal("should of returned init pid")
+		t.Fatal("should have returned init pid")
 	}
 	if resp.Processes[0].Info == nil {
 		t.Fatal("should not have returned nil init pid info")
 	}
 	if resp.Processes[1].Pid != uint32(t1.execs[e2.ID()].pid) {
-		t.Fatal("should of returned 2nd pid")
+		t.Fatal("should have returned 2nd pid")
 	}
 	if resp.Processes[1].Info == nil {
 		t.Fatal("should not have returned nil 2nd pid info")
@@ -297,7 +297,7 @@ func Test_TaskShim_pidsInternal_InitTaskID_Success(t *testing.T) {
 	}
 	pi := u.(*runcopts.ProcessDetails)
 	if pi.ExecID != e2.ID() {
-		t.Fatalf("should of returned 2nd pid ExecID, got: %v", pi.ExecID)
+		t.Fatalf("should have returned 2nd pid ExecID, got: %v", pi.ExecID)
 	}
 }
 
@@ -367,7 +367,7 @@ func Test_TaskShim_killInternal_InitTaskID_InitExecID_Success(t *testing.T) {
 		t.Fatalf("should not have failed with error got: %v", err)
 	}
 	if resp == nil {
-		t.Fatal("should of returned KillResponse")
+		t.Fatal("should have returned KillResponse")
 	}
 }
 
@@ -382,7 +382,7 @@ func Test_TaskShim_killInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
 		t.Fatalf("should not have failed with error got: %v", err)
 	}
 	if resp == nil {
-		t.Fatal("should of returned KillResponse")
+		t.Fatal("should have returned KillResponse")
 	}
 }
 
@@ -421,7 +421,7 @@ func Test_TaskShim_resizePtyInternal_InitTaskID_InitExecID_Success(t *testing.T)
 		t.Fatalf("should not have failed with error got: %v", err)
 	}
 	if resp == nil {
-		t.Fatal("should of returned ResizePtyResponse")
+		t.Fatal("should have returned ResizePtyResponse")
 	}
 }
 
@@ -436,7 +436,7 @@ func Test_TaskShim_resizePtyInternal_InitTaskID_2ndExecID_Success(t *testing.T) 
 		t.Fatalf("should not have failed with error got: %v", err)
 	}
 	if resp == nil {
-		t.Fatal("should of returned ResizePtyResponse")
+		t.Fatal("should have returned ResizePtyResponse")
 	}
 }
 
@@ -473,7 +473,7 @@ func Test_TaskShim_closeIOInternal_InitTaskID_InitExecID_Success(t *testing.T) {
 		t.Fatalf("should not have failed with error got: %v", err)
 	}
 	if resp == nil {
-		t.Fatal("should of returned CloseIOResponse")
+		t.Fatal("should have returned CloseIOResponse")
 	}
 }
 
@@ -488,7 +488,7 @@ func Test_TaskShim_closeIOInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
 		t.Fatalf("should not have failed with error got: %v", err)
 	}
 	if resp == nil {
-		t.Fatal("should of returned CloseIOResponse")
+		t.Fatal("should have returned CloseIOResponse")
 	}
 }
 
@@ -536,10 +536,10 @@ func Test_TaskShim_waitInternal_InitTaskID_InitExecID_Success(t *testing.T) {
 		t.Fatalf("should not have failed with error got: %v", err)
 	}
 	if resp == nil {
-		t.Fatal("should of returned WaitResponse")
+		t.Fatal("should have returned WaitResponse")
 	}
 	if resp.ExitStatus != t1.exec.Status().ExitStatus {
-		t.Fatal("should of returned exit status for init")
+		t.Fatal("should have returned exit status for init")
 	}
 }
 
@@ -554,10 +554,10 @@ func Test_TaskShim_waitInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
 		t.Fatalf("should not have failed with error got: %v", err)
 	}
 	if resp == nil {
-		t.Fatal("should of returned WaitResponse")
+		t.Fatal("should have returned WaitResponse")
 	}
 	if resp.ExitStatus != t1.execs[e2.ID()].Status().ExitStatus {
-		t.Fatal("should of returned exit status for init")
+		t.Fatal("should have returned exit status for init")
 	}
 }
 
