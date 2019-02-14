@@ -14,10 +14,12 @@ build_script:
   - appveyor DownloadFile https://github.com/alecthomas/gometalinter/releases/download/v2.0.12/gometalinter-2.0.12-windows-amd64.zip
   - 7z x gometalinter-2.0.12-windows-amd64.zip -y -oC:\ > NUL
   - gometalinter.exe --config .gometalinter.json ./...
-  - go build ./cmd/wclayer
+  - go build ./cmd/containerd-shim-runhcs-v1
   - go build ./cmd/runhcs
   - go build ./cmd/tar2ext4
+  - go build ./cmd/wclayer
   - go test -v ./... -tags admin
+  - go test -c ./test/containerd-shim-runhcs-v1/ -tags functional
   - go test -c ./test/functional/ -tags functional
   - go test -c ./test/runhcs/ -tags integration
 
