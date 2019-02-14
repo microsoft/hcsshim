@@ -46,8 +46,8 @@ type shimPod interface {
 	// `errdefs.ErrFailedPrecondition`.
 	//
 	// A call to `KillTask` is only valid when the exec found by `tid,eid` is in
-	// the `shimExecStateRunning` state. If the exec is not in this state this
-	// pod MUST return `errdefs.ErrFailedPrecondition`.
+	// the `shimExecStateRunning, shimExecStateExited` states. If the exec is
+	// not in this state this pod MUST return `errdefs.ErrFailedPrecondition`.
 	KillTask(ctx context.Context, tid, eid string, signal uint32, all bool) error
 }
 
@@ -285,14 +285,9 @@ func (p *pod) KillTask(ctx context.Context, tid, eid string, signal uint32, all 
 		// We are in a kill all on the sandbox task. Signal everything.
 		p.workloadTasks.Range(func(key, value interface{}) bool {
 			wt := value.(shimTask)
-			ie, _ := wt.GetExec("")
-			// Only send the kill signal to non-exited tasks when in the `all`
-			// case.
-			if ie.State() != shimExecStateExited {
-				eg.Go(func() error {
-					return wt.KillExec(ctx, eid, signal, all)
-				})
-			}
+			eg.Go(func() error {
+				return wt.KillExec(ctx, eid, signal, all)
+			})
 
 			// iterate all
 			return false

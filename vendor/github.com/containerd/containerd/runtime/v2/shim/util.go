@@ -24,13 +24,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/containerd/containerd/namespaces"
 	"github.com/pkg/errors"
 )
 
-const shimBinaryFormat = "containerd-shim-%s-%s"
+var runtimePaths sync.Map
 
 // Command returns the shim command with the provided args and configuration
 func Command(ctx context.Context, runtime, containerdAddress, path string, cmdArgs ...string) (*exec.Cmd, error) {
@@ -52,19 +53,42 @@ func Command(ctx context.Context, runtime, containerdAddress, path string, cmdAr
 	if name == "" {
 		return nil, fmt.Errorf("invalid runtime name %s, correct runtime name should format like io.containerd.runc.v1", runtime)
 	}
+
 	var cmdPath string
-	var lerr error
-	if cmdPath, lerr = exec.LookPath(name); lerr != nil {
-		if eerr, ok := lerr.(*exec.Error); ok {
-			if eerr.Err == exec.ErrNotFound {
-				return nil, errors.Wrapf(os.ErrNotExist, "runtime %q binary not installed %q", runtime, name)
+	cmdPathI, cmdPathFound := runtimePaths.Load(name)
+	if cmdPathFound {
+		cmdPath = cmdPathI.(string)
+	} else {
+		var lerr error
+		if cmdPath, lerr = exec.LookPath(name); lerr != nil {
+			if eerr, ok := lerr.(*exec.Error); ok {
+				if eerr.Err == exec.ErrNotFound {
+					// LookPath only finds current directory matches based on
+					// the callers current directory but the caller is not
+					// likely in the same directory as the containerd
+					// executables. Instead match the calling binaries path
+					// (containerd) and see if they are side by side. If so
+					// execute the shim found there.
+					testPath := filepath.Join(filepath.Dir(self), name)
+					if _, serr := os.Stat(testPath); serr == nil {
+						cmdPath = testPath
+					}
+					if cmdPath == "" {
+						return nil, errors.Wrapf(os.ErrNotExist, "runtime %q binary not installed %q", runtime, name)
+					}
+				}
 			}
 		}
+		cmdPath, err = filepath.Abs(cmdPath)
+		if err != nil {
+			return nil, err
+		}
+		if cmdPathI, cmdPathFound = runtimePaths.LoadOrStore(name, cmdPath); cmdPathFound {
+			// We didn't store cmdPath we loaded an already cached value. Use it.
+			cmdPath = cmdPathI.(string)
+		}
 	}
-	cmdPath, err = filepath.Abs(cmdPath)
-	if err != nil {
-		return nil, err
-	}
+
 	cmd := exec.Command(cmdPath, args...)
 	cmd.Dir = path
 	cmd.Env = append(os.Environ(), "GOMAXPROCS=2")

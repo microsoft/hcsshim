@@ -7,6 +7,8 @@ import (
 	"github.com/containerd/containerd/runtime/v2/task"
 )
 
+// newTestShimExec creates a test exec. If you are intending to make an init
+// exec `tid==id` MUST be true by containerd convention.
 func newTestShimExec(tid, id string, pid int) *testShimExec {
 	return &testShimExec{
 		tid: tid,
@@ -39,6 +41,7 @@ func (tse *testShimExec) State() shimExecState {
 func (tse *testShimExec) Status() *task.StateResponse {
 	return &task.StateResponse{
 		ID:         tse.tid,
+		ExecID:     tse.id,
 		Pid:        uint32(tse.pid),
 		ExitStatus: tse.status,
 		ExitedAt:   tse.at,

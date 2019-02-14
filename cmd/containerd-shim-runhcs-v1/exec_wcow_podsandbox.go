@@ -17,7 +17,7 @@ import (
 func newWcowPodSandboxExec(ctx context.Context, events publisher, tid, bundle string) *wcowPodSandboxExec {
 	logrus.WithFields(logrus.Fields{
 		"tid": tid,
-		"eid": "",
+		"eid": tid, // Init exec ID is always same as Task ID
 	}).Debug("newWcowPodSandboxExec")
 
 	wpse := &wcowPodSandboxExec{
@@ -53,8 +53,9 @@ type wcowPodSandboxExec struct {
 	//
 	// This MUST be treated as read only in the lifetime of the exec.
 	tid string
-	// bundle is the on disk path to the folder containing the `process.json`
-	// describing this process. If `id==""` the process is described in the
+	// bundle is typically the on disk path to the folder containing the
+	// `process.json` describing this process. In the `wcowPodSandboxExec` this
+	// will always be the init exec and thus the process is described in the
 	// `config.json`.
 	//
 	// This MUST be treated as read only in the lifetime of the exec.
@@ -73,7 +74,7 @@ type wcowPodSandboxExec struct {
 }
 
 func (wpse *wcowPodSandboxExec) ID() string {
-	return ""
+	return wpse.tid
 }
 
 func (wpse *wcowPodSandboxExec) Pid() int {
@@ -104,6 +105,7 @@ func (wpse *wcowPodSandboxExec) Status() *task.StateResponse {
 
 	return &task.StateResponse{
 		ID:         wpse.tid,
+		ExecID:     wpse.tid, // Init exec ID is always same as Task ID
 		Bundle:     wpse.bundle,
 		Pid:        uint32(wpse.pid),
 		Status:     s,
@@ -119,13 +121,13 @@ func (wpse *wcowPodSandboxExec) Status() *task.StateResponse {
 func (wpse *wcowPodSandboxExec) Start(ctx context.Context) error {
 	logrus.WithFields(logrus.Fields{
 		"tid": wpse.tid,
-		"id":  "",
+		"eid": wpse.tid, // Init exec ID is always same as Task ID
 	}).Debug("wcowPodSandboxExec::Start")
 
 	wpse.sl.Lock()
 	defer wpse.sl.Unlock()
 	if wpse.state != shimExecStateCreated {
-		return newExecInvalidStateError(wpse.tid, "", wpse.state, "start")
+		return newExecInvalidStateError(wpse.tid, wpse.tid, wpse.state, "start")
 	}
 	// Transition the state
 	wpse.state = shimExecStateRunning
@@ -146,7 +148,7 @@ func (wpse *wcowPodSandboxExec) Start(ctx context.Context) error {
 func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) error {
 	logrus.WithFields(logrus.Fields{
 		"tid":    wpse.tid,
-		"id":     "",
+		"eid":    wpse.tid, // Init exec ID is always same as Task ID
 		"signal": signal,
 	}).Debug("wcowPodSandboxExec::Kill")
 
@@ -155,8 +157,10 @@ func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) error {
 	switch wpse.state {
 	case shimExecStateCreated, shimExecStateRunning:
 		// TODO: Should we verify that the signal would of killed the WCOW Process?
+	case shimExecStateExited:
+		return nil
 	default:
-		return newExecInvalidStateError(wpse.tid, "", wpse.state, "kill")
+		return newExecInvalidStateError(wpse.tid, wpse.tid, wpse.state, "kill")
 	}
 
 	// Transition the state and unlock the waiters on `Wait`.
@@ -170,7 +174,7 @@ func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) error {
 		runtime.TaskExitEventTopic,
 		&eventstypes.TaskExit{
 			ContainerID: wpse.tid,
-			ID:          "",
+			ID:          wpse.tid, // The init exec ID is always the same as Task ID.
 			Pid:         uint32(wpse.pid),
 			ExitStatus:  wpse.exitStatus,
 			ExitedAt:    wpse.exitedAt,
@@ -184,7 +188,7 @@ func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) error {
 func (wpse *wcowPodSandboxExec) ResizePty(ctx context.Context, width, height uint32) error {
 	logrus.WithFields(logrus.Fields{
 		"tid":    wpse.tid,
-		"id":     "",
+		"eid":    wpse.tid, // Init exec ID is always same as Task ID
 		"width":  width,
 		"height": height,
 	}).Debug("wcowPodSandboxExec::ResizePty")
@@ -192,17 +196,17 @@ func (wpse *wcowPodSandboxExec) ResizePty(ctx context.Context, width, height uin
 	wpse.sl.Lock()
 	defer wpse.sl.Unlock()
 	if wpse.state != shimExecStateRunning {
-		return newExecInvalidStateError(wpse.tid, "", wpse.state, "resizepty")
+		return newExecInvalidStateError(wpse.tid, wpse.tid, wpse.state, "resizepty")
 	}
 	// We will never have IO for a sandbox container so we wont have a tty
 	// either.
-	return errors.Wrapf(errdefs.ErrFailedPrecondition, "exec: '%s' in task: '%s' is not a tty", "", wpse.tid)
+	return errors.Wrapf(errdefs.ErrFailedPrecondition, "exec: '%s' in task: '%s' is not a tty", wpse.tid, wpse.tid)
 }
 
 func (wpse *wcowPodSandboxExec) CloseIO(ctx context.Context, stdin bool) error {
 	logrus.WithFields(logrus.Fields{
 		"tid":   wpse.tid,
-		"id":    "",
+		"eid":   wpse.tid, // Init exec ID is always same as Task ID
 		"stdin": stdin,
 	}).Debug("wcowPodSandboxExec::CloseIO")
 
@@ -212,7 +216,7 @@ func (wpse *wcowPodSandboxExec) CloseIO(ctx context.Context, stdin bool) error {
 func (wpse *wcowPodSandboxExec) Wait(ctx context.Context) *task.StateResponse {
 	logrus.WithFields(logrus.Fields{
 		"tid": wpse.tid,
-		"id":  "",
+		"eid": wpse.tid, // Init exec ID is always same as Task ID
 	}).Debug("wcowPodSandboxExec::Wait")
 
 	<-wpse.exited

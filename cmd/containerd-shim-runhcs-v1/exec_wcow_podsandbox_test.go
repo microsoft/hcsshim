@@ -12,7 +12,10 @@ import (
 
 func verifyWcowPodSandboxExecStatus(t *testing.T, es containerd_v1_types.Status, status *task.StateResponse) {
 	if status.ID != t.Name() {
-		t.Fatalf("expected id: '' got: '%s'", status.ID)
+		t.Fatalf("expected id: '%s' got: '%s'", t.Name(), status.ID)
+	}
+	if status.ExecID != t.Name() {
+		t.Fatalf("expected execid: '%s' got: '%s'", t.Name(), status.ExecID)
 	}
 	if status.Bundle != t.Name() {
 		t.Fatalf("expected bundle: '%s' got: '%s'", t.Name(), status.Bundle)
@@ -69,8 +72,8 @@ func Test_newWcowPodSandboxExec(t *testing.T) {
 func Test_newWcowPodSandboxExec_ID(t *testing.T) {
 	wpse := newWcowPodSandboxExec(context.TODO(), fakePublisher, t.Name(), t.Name())
 
-	if wpse.ID() != "" {
-		t.Fatalf("expected ID: '' got: '%s", wpse.ID())
+	if wpse.ID() != t.Name() {
+		t.Fatalf("expected ID: '%s' got: '%s", t.Name(), wpse.ID())
 	}
 }
 
@@ -183,7 +186,9 @@ func Test_newWcowPodSandboxExec_Kill_Created(t *testing.T) {
 
 	// Call Kill again
 	err = wpse.Kill(context.TODO(), 0x0)
-	verifyExpectedError(t, nil, err, errdefs.ErrFailedPrecondition)
+	if err != nil {
+		t.Fatal("Kill should not fail in the exited state")
+	}
 }
 
 func Test_newWcowPodSandboxExec_Kill_Started(t *testing.T) {
@@ -206,7 +211,9 @@ func Test_newWcowPodSandboxExec_Kill_Started(t *testing.T) {
 
 	// Call Kill again
 	err = wpse.Kill(context.TODO(), 0x0)
-	verifyExpectedError(t, nil, err, errdefs.ErrFailedPrecondition)
+	if err != nil {
+		t.Fatal("Kill should not fail in the exited state")
+	}
 }
 
 func Test_newWcowPodSandboxExec_ResizePty(t *testing.T) {

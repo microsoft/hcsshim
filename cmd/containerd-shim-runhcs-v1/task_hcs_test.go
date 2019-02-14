@@ -11,14 +11,15 @@ import (
 )
 
 func setupTestHcsTask(t *testing.T) (*hcsTask, *testShimExec, *testShimExec) {
-	initExec := newTestShimExec(t.Name(), "", int(rand.Int31()))
+	initExec := newTestShimExec(t.Name(), t.Name(), int(rand.Int31()))
 	lt := &hcsTask{
 		events: fakePublisher,
 		id:     t.Name(),
 		init:   initExec,
 	}
-	secondExec := newTestShimExec(t.Name(), strconv.Itoa(rand.Int()), int(rand.Int31()))
-	lt.execs.Store(secondExec.id, secondExec)
+	secondExecID := strconv.Itoa(rand.Int())
+	secondExec := newTestShimExec(t.Name(), secondExecID, int(rand.Int31()))
+	lt.execs.Store(secondExecID, secondExec)
 	return lt, initExec, secondExec
 }
 
