@@ -186,7 +186,9 @@ func Test_newWcowPodSandboxExec_Kill_Created(t *testing.T) {
 
 	// Call Kill again
 	err = wpse.Kill(context.TODO(), 0x0)
-	verifyExpectedError(t, nil, err, errdefs.ErrFailedPrecondition)
+	if err != nil {
+		t.Fatal("Kill should not fail in the exited state")
+	}
 }
 
 func Test_newWcowPodSandboxExec_Kill_Started(t *testing.T) {
@@ -209,7 +211,9 @@ func Test_newWcowPodSandboxExec_Kill_Started(t *testing.T) {
 
 	// Call Kill again
 	err = wpse.Kill(context.TODO(), 0x0)
-	verifyExpectedError(t, nil, err, errdefs.ErrFailedPrecondition)
+	if err != nil {
+		t.Fatal("Kill should not fail in the exited state")
+	}
 }
 
 func Test_newWcowPodSandboxExec_ResizePty(t *testing.T) {

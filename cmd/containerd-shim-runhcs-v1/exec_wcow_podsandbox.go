@@ -157,6 +157,8 @@ func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) error {
 	switch wpse.state {
 	case shimExecStateCreated, shimExecStateRunning:
 		// TODO: Should we verify that the signal would of killed the WCOW Process?
+	case shimExecStateExited:
+		return nil
 	default:
 		return newExecInvalidStateError(wpse.tid, wpse.tid, wpse.state, "kill")
 	}

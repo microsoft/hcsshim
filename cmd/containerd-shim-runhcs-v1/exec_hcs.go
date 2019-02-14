@@ -299,6 +299,8 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 		return he.p.Signal(guestrequest.SignalProcessOptions{
 			Signal: int(signal),
 		})
+	case shimExecStateExited:
+		return nil
 	default:
 		return newExecInvalidStateError(he.tid, he.id, he.state, "kill")
 	}
