@@ -12,6 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/osversion"
 	eventstypes "github.com/containerd/containerd/api/events"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime"
@@ -45,7 +46,7 @@ func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.Creat
 	}
 
 	var parent *uvm.UtilityVM
-	if oci.IsIsolated(s) {
+	if osversion.Get().Build >= osversion.RS5 && oci.IsIsolated(s) {
 		// Create the UVM parent
 		opts, err := oci.SpecToUVMCreateOpts(s, fmt.Sprintf("%s@vm", req.ID), owner)
 		if err != nil {
@@ -223,6 +224,9 @@ type hcsTask struct {
 	ownsHost bool
 	// host is the hosting VM for this exec if hypervisor isolated. If
 	// `host==nil` this is an Argon task so no UVM cleanup is required.
+	//
+	// NOTE: if `osversion.Get().Build < osversion.RS5` this will always be
+	// `nil`.
 	host *uvm.UtilityVM
 
 	// ecl is the exec create lock for all non-init execs and MUST be held
