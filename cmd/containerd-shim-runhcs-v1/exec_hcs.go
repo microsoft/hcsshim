@@ -405,7 +405,6 @@ func (he *hcsExec) waitForExit() {
 func (he *hcsExec) setExitedL(code int) {
 	if he.state != shimExecStateExited {
 		he.state = shimExecStateExited
-		he.pid = 0
 		he.exitStatus = uint32(code)
 		he.exitedAt = time.Now()
 		if he.p != nil {

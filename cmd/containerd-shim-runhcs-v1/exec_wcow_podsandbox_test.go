@@ -10,7 +10,7 @@ import (
 	"github.com/containerd/containerd/runtime/v2/task"
 )
 
-func verifyWcowPodSandboxExecStatus(t *testing.T, es containerd_v1_types.Status, status *task.StateResponse) {
+func verifyWcowPodSandboxExecStatus(t *testing.T, wasStarted bool, es containerd_v1_types.Status, status *task.StateResponse) {
 	if status.ID != t.Name() {
 		t.Fatalf("expected id: '%s' got: '%s'", t.Name(), status.ID)
 	}
@@ -21,7 +21,7 @@ func verifyWcowPodSandboxExecStatus(t *testing.T, es containerd_v1_types.Status,
 		t.Fatalf("expected bundle: '%s' got: '%s'", t.Name(), status.Bundle)
 	}
 	var expectedPid uint32
-	if es == containerd_v1_types.StatusRunning {
+	if wasStarted && es != containerd_v1_types.StatusCreated {
 		expectedPid = 1
 	}
 	if status.Pid != expectedPid {
@@ -66,7 +66,7 @@ func verifyWcowPodSandboxExecStatus(t *testing.T, es containerd_v1_types.Status,
 func Test_newWcowPodSandboxExec(t *testing.T) {
 	wpse := newWcowPodSandboxExec(context.TODO(), fakePublisher, t.Name(), t.Name())
 
-	verifyWcowPodSandboxExecStatus(t, containerd_v1_types.StatusCreated, wpse.Status())
+	verifyWcowPodSandboxExecStatus(t, false, containerd_v1_types.StatusCreated, wpse.Status())
 }
 
 func Test_newWcowPodSandboxExec_ID(t *testing.T) {
@@ -100,8 +100,8 @@ func Test_newWcowPodSandboxExec_Pid(t *testing.T) {
 		t.Fatalf("should not have failed to stop got: %v", err)
 	}
 
-	if wpse.Pid() != 0 {
-		t.Fatalf("expected stopped pid: '0' got: '%d", wpse.Pid())
+	if wpse.Pid() != 1 {
+		t.Fatalf("expected stopped pid: '1' got: '%d", wpse.Pid())
 	}
 }
 
@@ -136,7 +136,7 @@ func Test_newWcowPodSandboxExec_State(t *testing.T) {
 func Test_newWcowPodSandboxExec_Status(t *testing.T) {
 	wpse := newWcowPodSandboxExec(context.TODO(), fakePublisher, t.Name(), t.Name())
 
-	verifyWcowPodSandboxExecStatus(t, containerd_v1_types.StatusCreated, wpse.Status())
+	verifyWcowPodSandboxExecStatus(t, false, containerd_v1_types.StatusCreated, wpse.Status())
 
 	// Start it
 	err := wpse.Start(context.TODO())
@@ -144,7 +144,7 @@ func Test_newWcowPodSandboxExec_Status(t *testing.T) {
 		t.Fatalf("should not have failed to start got: %v", err)
 	}
 
-	verifyWcowPodSandboxExecStatus(t, containerd_v1_types.StatusRunning, wpse.Status())
+	verifyWcowPodSandboxExecStatus(t, true, containerd_v1_types.StatusRunning, wpse.Status())
 
 	// Stop it
 	err = wpse.Kill(context.TODO(), 0x0)
@@ -152,7 +152,7 @@ func Test_newWcowPodSandboxExec_Status(t *testing.T) {
 		t.Fatalf("should not have failed to stop got: %v", err)
 	}
 
-	verifyWcowPodSandboxExecStatus(t, containerd_v1_types.StatusStopped, wpse.Status())
+	verifyWcowPodSandboxExecStatus(t, true, containerd_v1_types.StatusStopped, wpse.Status())
 }
 
 func Test_newWcowPodSandboxExec_Start(t *testing.T) {
@@ -292,13 +292,13 @@ func Test_newWcowPodSandboxExec_Wait_Created(t *testing.T) {
 	}
 
 	status := <-waitExit
-	verifyWcowPodSandboxExecStatus(t, containerd_v1_types.StatusStopped, status)
+	verifyWcowPodSandboxExecStatus(t, false, containerd_v1_types.StatusStopped, status)
 	if status.ExitedAt.Before(now) {
 		t.Fatal("exit should not have unblocked previous to kill")
 	}
 
 	// Verify the wait in the exited state doesnt block.
-	verifyWcowPodSandboxExecStatus(t, containerd_v1_types.StatusStopped, wpse.Wait(context.TODO()))
+	verifyWcowPodSandboxExecStatus(t, false, containerd_v1_types.StatusStopped, wpse.Wait(context.TODO()))
 }
 
 func Test_newWcowPodSandboxExec_Wait_Started(t *testing.T) {
@@ -324,11 +324,11 @@ func Test_newWcowPodSandboxExec_Wait_Started(t *testing.T) {
 	}
 
 	status := <-waitExit
-	verifyWcowPodSandboxExecStatus(t, containerd_v1_types.StatusStopped, status)
+	verifyWcowPodSandboxExecStatus(t, true, containerd_v1_types.StatusStopped, status)
 	if status.ExitedAt.Before(now) {
 		t.Fatal("exit should not have unblocked previous to kill")
 	}
 
 	// Verify the wait in the exited state doesnt block.
-	verifyWcowPodSandboxExecStatus(t, containerd_v1_types.StatusStopped, wpse.Wait(context.TODO()))
+	verifyWcowPodSandboxExecStatus(t, true, containerd_v1_types.StatusStopped, wpse.Wait(context.TODO()))
 }

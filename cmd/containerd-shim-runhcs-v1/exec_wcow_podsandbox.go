@@ -165,7 +165,6 @@ func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) error {
 
 	// Transition the state and unlock the waiters on `Wait`.
 	wpse.state = shimExecStateExited
-	wpse.pid = 0
 	wpse.exitStatus = 0
 	wpse.exitedAt = time.Now()
 
