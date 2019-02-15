@@ -69,6 +69,8 @@ func (s *service) stateInternal(ctx context.Context, req *task.StateRequest) (*t
 }
 
 func (s *service) createInternal(ctx context.Context, req *task.CreateTaskRequest) (*task.CreateTaskResponse, error) {
+	setupDebuggerEvent()
+
 	var shimOpts *runhcsopts.Options
 	if req.Options != nil {
 		v, err := typeurl.UnmarshalAny(req.Options)

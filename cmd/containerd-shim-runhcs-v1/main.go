@@ -106,6 +106,9 @@ func main() {
 		return nil
 	}
 
+	// Setup the event for stack dump
+	setupDumpStacks()
+
 	if err := app.Run(os.Args); err != nil {
 		fmt.Fprintln(cli.ErrWriter, err)
 		os.Exit(1)
