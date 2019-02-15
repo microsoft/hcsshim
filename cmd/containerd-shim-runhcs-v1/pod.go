@@ -9,6 +9,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/osversion"
 	eventstypes "github.com/containerd/containerd/api/events"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime"
@@ -55,6 +56,10 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 	logrus.WithFields(logrus.Fields{
 		"tid": req.ID,
 	}).Debug("createPod")
+
+	if osversion.Get().Build < osversion.RS5 {
+		return nil, errors.Wrapf(errdefs.ErrFailedPrecondition, "pod support is not available on Windows versions previous to RS5 (%d)", osversion.RS5)
+	}
 
 	ct, sid, err := oci.GetSandboxTypeAndID(s.Annotations)
 	if err != nil {
