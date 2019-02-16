@@ -2,6 +2,8 @@ package uvm
 
 import (
 	"runtime"
+
+	"github.com/Microsoft/hcsshim/internal/hcs"
 )
 
 // Options are the set of options passed to Create() to create a utility vm.
@@ -39,7 +41,9 @@ func (uvm *UtilityVM) OS() string {
 
 // Close terminates and releases resources associated with the utility VM.
 func (uvm *UtilityVM) Close() error {
-	uvm.Terminate()
+	if err := uvm.Terminate(); hcs.IsPending(err) {
+		uvm.Wait()
+	}
 
 	// outputListener will only be nil for a Create -> Stop without a Start. In
 	// this case we have no goroutine processing output so its safe to close the
