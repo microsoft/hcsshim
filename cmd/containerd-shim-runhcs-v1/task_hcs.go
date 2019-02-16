@@ -40,10 +40,7 @@ func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.Creat
 			ct)
 	}
 
-	owner, err := os.Executable()
-	if err != nil {
-		return nil, err
-	}
+	owner := filepath.Base(os.Args[0])
 
 	var parent *uvm.UtilityVM
 	if osversion.Get().Build >= osversion.RS5 && oci.IsIsolated(s) {
