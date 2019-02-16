@@ -82,10 +82,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 			sid)
 	}
 
-	owner, err := os.Executable()
-	if err != nil {
-		return nil, err
-	}
+	owner := filepath.Base(os.Args[0])
 
 	var parent *uvm.UtilityVM
 	if oci.IsIsolated(s) {
