@@ -156,15 +156,13 @@ var serveCommand = cli.Command{
 	},
 }
 
-func setupDumpStacks() error {
-	// Windows does not support signals like *nix systems. So instead of
-	// trapping on SIGUSR1 to dump stacks, we wait on a Win32 event to be
-	// signaled. ACL'd to builtin administrators and local system
-	event := "Global\\containerd-shim-runhcs-v1-" + fmt.Sprint(os.Getpid())
+// createEvent creates a Windows event ACL'd to builtin administrator
+// and local system. Can use docker-signal to signal the event.
+func createEvent(event string) (windows.Handle, error) {
 	ev, _ := windows.UTF16PtrFromString(event)
 	sd, err := winio.SddlToSecurityDescriptor("D:P(A;;GA;;;BA)(A;;GA;;;SY)")
 	if err != nil {
-		return errors.Wrapf(err, "failed to get security descriptor for debug stackdump event '%s'", event)
+		return 0, errors.Wrapf(err, "failed to get security descriptor for event '%s'", event)
 	}
 	var sa windows.SecurityAttributes
 	sa.Length = uint32(unsafe.Sizeof(sa))
@@ -172,15 +170,42 @@ func setupDumpStacks() error {
 	sa.SecurityDescriptor = uintptr(unsafe.Pointer(&sd[0]))
 	h, err := windows.CreateEvent(&sa, 0, 0, ev)
 	if h == 0 || err != nil {
-		return errors.Wrapf(err, "failed to create debug dump stack event '%s'", event)
+		return 0, errors.Wrapf(err, "failed to create event '%s'", event)
+	}
+	return h, nil
+}
+
+// setupDebuggerEvent listens for an event to allow a debugger such as delve
+// to attach for advanced debugging. It's called when handling a ContainerCreate
+func setupDebuggerEvent() {
+	if os.Getenv("CONTAINERD_SHIM_RUNHCS_V1_WAIT_DEBUGGER") == "" {
+		return
+	}
+	event := "Global\\debugger-" + fmt.Sprint(os.Getpid())
+	handle, err := createEvent(event)
+	if err != nil {
+		return
+	}
+	logrus.Infof("Halting until %s is signalled", event)
+	windows.WaitForSingleObject(handle, windows.INFINITE)
+	return
+}
+
+// setupDumpStacks listens for an event which when signalled dumps the
+// stacks from this process to the log output.
+func setupDumpStacks() {
+	event := "Global\\stackdump-" + fmt.Sprint(os.Getpid())
+	handle, err := createEvent(event)
+	if err != nil {
+		return
 	}
 	go func() {
 		for {
-			windows.WaitForSingleObject(h, windows.INFINITE)
+			windows.WaitForSingleObject(handle, windows.INFINITE)
 			dumpStacks()
 		}
 	}()
-	return nil
+	return
 }
 
 func dumpStacks() {
