@@ -394,6 +394,12 @@ func (s *service) connectInternal(ctx context.Context, req *task.ConnectRequest)
 }
 
 func (s *service) shutdownInternal(ctx context.Context, req *task.ShutdownRequest) (*google_protobuf1.Empty, error) {
+	// Because a pod shim hosts multiple tasks only the init task can issue the
+	// shutdown request.
+	if req.ID != s.tid {
+		return empty, nil
+	}
+
 	if req.Now {
 		os.Exit(0)
 	}
