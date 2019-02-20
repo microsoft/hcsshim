@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
+	"golang.org/x/sys/unix"
 )
 
 // globals for the whole test suite
@@ -113,7 +113,7 @@ func attemptKillAndDeleteAllContainers(containers []runtime.Container) error {
 			}
 			wg := sync.WaitGroup{}
 			if status == "running" {
-				if err := c.Kill(oslayer.SIGKILL); err != nil {
+				if err := c.Kill(unix.SIGKILL); err != nil {
 					io.WriteString(GinkgoWriter, err.Error())
 					if errToReturn == nil {
 						errToReturn = err
@@ -607,7 +607,7 @@ var _ = Describe("runC", func() {
 
 					Describe("killing a container", func() {
 						JustBeforeEach(func() {
-							err = c.Kill(oslayer.SIGKILL)
+							err = c.Kill(unix.SIGKILL)
 						})
 						Context("using an sh init process", func() {
 							BeforeEach(func() {
@@ -649,7 +649,7 @@ var _ = Describe("runC", func() {
 						JustBeforeEach(func(done Done) {
 							defer close(done)
 
-							err = c.Kill(oslayer.SIGKILL)
+							err = c.Kill(unix.SIGKILL)
 							Expect(err).NotTo(HaveOccurred())
 							_, err = c.Wait()
 							Expect(err).NotTo(HaveOccurred())

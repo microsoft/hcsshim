@@ -1,9 +1,9 @@
 package gcs
 
 import (
-	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
 // CleanupContainer cleans up the state left behind by the container with the
@@ -20,7 +20,7 @@ func (c *gcsCore) cleanupContainer(containerEntry *containerCacheEntry) error {
 
 	for _, disk := range containerEntry.MappedVirtualDisks {
 		if !disk.AttachOnly {
-			if err := unmountPath(c.OS, disk.ContainerPath, false); err != nil {
+			if err := unmountPath(disk.ContainerPath, false); err != nil {
 				logrus.Warn(err)
 				if errToReturn == nil {
 					errToReturn = err
@@ -29,7 +29,7 @@ func (c *gcsCore) cleanupContainer(containerEntry *containerCacheEntry) error {
 		}
 	}
 	for _, directory := range containerEntry.MappedDirectories {
-		if err := unmountPath(c.OS, directory.ContainerPath, false); err != nil {
+		if err := unmountPath(directory.ContainerPath, false); err != nil {
 			logrus.Warn(err)
 			if errToReturn == nil {
 				errToReturn = err
@@ -79,7 +79,7 @@ func (c *gcsCore) forceDeleteContainer(container runtime.Container) error {
 			status = "running"
 		}
 		if status == "running" {
-			if err := container.Kill(oslayer.SIGKILL); err != nil {
+			if err := container.Kill(unix.SIGKILL); err != nil {
 				return err
 			}
 			container.Wait()

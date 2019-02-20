@@ -3,8 +3,8 @@ package mockcore
 
 import (
 	"sync"
+	"syscall"
 
-	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	"github.com/pkg/errors"
@@ -39,7 +39,7 @@ type ExecProcessCall struct {
 // SignalContainerCall captures the arguments of SignalContainer.
 type SignalContainerCall struct {
 	ID     string
-	Signal oslayer.Signal
+	Signal syscall.Signal
 }
 
 // SignalProcessCall captures the arguments of SignalProcess.
@@ -143,7 +143,7 @@ func (c *MockCore) ExecProcess(id string, params prot.ProcessParameters, conSett
 }
 
 // SignalContainer captures its arguments.
-func (c *MockCore) SignalContainer(id string, signal oslayer.Signal) error {
+func (c *MockCore) SignalContainer(id string, signal syscall.Signal) error {
 	c.LastSignalContainer = SignalContainerCall{ID: id, Signal: signal}
 	return c.behaviorResult()
 }

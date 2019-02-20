@@ -9,13 +9,13 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"syscall"
 
 	"github.com/Microsoft/opengcs/service/gcs/core"
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
-	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
@@ -24,6 +24,7 @@ import (
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
 // gcsCore is an implementation of the Core interface, defining the
@@ -31,9 +32,6 @@ import (
 type gcsCore struct {
 	// Rtime is the Runtime interface used by the GCS core.
 	Rtime runtime.Runtime
-
-	// OS is the OS interface used by the GCS core.
-	OS oslayer.OS
 
 	// vsock is the transport used to connect to plan9 servers.
 	vsock transport.Transport
@@ -128,12 +126,11 @@ func (c *gcsCore) removeContainerIndex(id string) {
 }
 
 // NewGCSCore creates a new gcsCore struct initialized with the given Runtime.
-func NewGCSCore(baseLogPath, baseStoragePath string, rtime runtime.Runtime, os oslayer.OS, vsock transport.Transport) core.Core {
+func NewGCSCore(baseLogPath, baseStoragePath string, rtime runtime.Runtime, vsock transport.Transport) core.Core {
 	return &gcsCore{
 		baseLogPath:     baseLogPath,
 		baseStoragePath: baseStoragePath,
 		Rtime:           rtime,
-		OS:              os,
 		vsock:           vsock,
 		containerCache:  make(map[string]*containerCacheEntry),
 		processCache:    make(map[int]*processCacheEntry),
@@ -288,7 +285,7 @@ func (c *gcsCore) CreateContainer(id string, settings prot.VMHostedContainerSett
 	// supposed to be read-only layer in the overlay...  Ideally,
 	// dockerd would pass a runc config with a bind mount for
 	// /etc/resolv.conf like it does on unix.
-	if err := c.OS.MkdirAll(filepath.Join(baseFilesPath, "etc"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(baseFilesPath, "etc"), 0755); err != nil {
 		return errors.Wrapf(err, "failed to create resolv.conf directory")
 	}
 
@@ -375,16 +372,12 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, connecti
 		}
 
 		go func() {
-			var exitCode int
 			// If we fail to cleanup the container we cannot reuse the storage location.
 			leakContainerIndex := false
-			state, werr := container.Wait()
+			exitCode, werr := container.Wait()
 			c.containerCacheMutex.Lock()
 			if werr != nil {
 				logrus.Error(werr)
-				exitCode = -1
-			} else {
-				exitCode = state.ExitCode()
 			}
 			logrus.Debugf("gcsCore::ExecProcess container init process %d exited with exit status %d", container.Pid(), exitCode)
 
@@ -431,13 +424,9 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, connecti
 		processEntry.Tty = p.Tty()
 
 		go func() {
-			var exitCode int
-			state, werr := p.Wait()
+			exitCode, werr := p.Wait()
 			if werr != nil {
 				logrus.Error(werr)
-				exitCode = -1
-			} else {
-				exitCode = state.ExitCode()
 			}
 			logrus.Infof("container process %d exited with exit status %d", p.Pid(), exitCode)
 
@@ -469,7 +458,7 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, connecti
 }
 
 // SignalContainer sends the specified signal to the container's init process.
-func (c *gcsCore) SignalContainer(id string, signal oslayer.Signal) error {
+func (c *gcsCore) SignalContainer(id string, signal syscall.Signal) error {
 	c.containerCacheMutex.Lock()
 	defer c.containerCacheMutex.Unlock()
 
@@ -501,12 +490,12 @@ func (c *gcsCore) SignalProcess(pid int, options prot.SignalProcessOptions) erro
 	// older Windows builds which don't support sending signals.
 	var signal syscall.Signal
 	if options.Signal == 0 {
-		signal = syscall.SIGKILL
+		signal = unix.SIGKILL
 	} else {
 		signal = syscall.Signal(options.Signal)
 	}
 
-	if err := c.OS.Kill(pid, signal); err != nil {
+	if err := syscall.Kill(pid, signal); err != nil {
 		return errors.Wrapf(err, "failed call to kill on process %d with signal %d", pid, options.Signal)
 	}
 
@@ -573,9 +562,9 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, conSettings 
 	if err != nil {
 		return -1, err
 	}
-	cmd := c.OS.Command(ociProcess.Args[0], ociProcess.Args[1:]...)
-	cmd.SetDir(ociProcess.Cwd)
-	cmd.SetEnv(ociProcess.Env)
+	cmd := exec.Command(ociProcess.Args[0], ociProcess.Args[1:]...)
+	cmd.Dir = ociProcess.Cwd
+	cmd.Env = ociProcess.Env
 
 	var relay *stdio.TtyRelay
 	if params.EmulateConsole {
@@ -594,17 +583,17 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, conSettings 
 			}
 		}()
 
-		var console oslayer.File
-		console, err = c.OS.OpenFile(consolePath, os.O_RDWR, 0777)
+		var console *os.File
+		console, err = os.OpenFile(consolePath, os.O_RDWR, 0777)
 		if err != nil {
 			return -1, errors.Wrap(err, "failed to open console file for external process")
 		}
 		defer console.Close()
 
 		relay = stdio.NewTtyRelay(stdioSet, master)
-		cmd.SetStdin(console)
-		cmd.SetStdout(console)
-		cmd.SetStderr(console)
+		cmd.Stdin = console
+		cmd.Stdout = console
+		cmd.Stderr = console
 	} else {
 		var fileSet *stdio.FileSet
 		fileSet, err = stdioSet.Files()
@@ -613,9 +602,9 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, conSettings 
 		}
 		defer fileSet.Close()
 		defer stdioSet.Close()
-		cmd.SetStdin(fileSet.In)
-		cmd.SetStdout(fileSet.Out)
-		cmd.SetStderr(fileSet.Err)
+		cmd.Stdin = fileSet.In
+		cmd.Stdout = fileSet.Out
+		cmd.Stderr = fileSet.Err
 	}
 	if err = cmd.Start(); err != nil {
 		return -1, errors.Wrap(err, "failed call to Start for external process")
@@ -637,8 +626,8 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, conSettings 
 			// important.
 			logrus.Error(errors.Wrap(werr, "failed call to Wait for external process"))
 		}
-		exitCode := cmd.ExitState().ExitCode()
-		logrus.Infof("external process %d exited with exit status %d", cmd.Process().Pid(), exitCode)
+		exitCode := cmd.ProcessState.Sys().(syscall.WaitStatus).ExitStatus()
+		logrus.Infof("external process %d exited with exit status %d", cmd.Process.Pid, exitCode)
 
 		if relay != nil {
 			relay.Wait()
@@ -649,7 +638,7 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, conSettings 
 		processEntry.exitWg.Done()
 	}()
 
-	pid := cmd.Process().Pid()
+	pid := cmd.Process.Pid
 	c.processCacheMutex.Lock()
 	c.processCache[pid] = processEntry
 	c.processCacheMutex.Unlock()
@@ -684,12 +673,12 @@ func (c *gcsCore) ModifySettings(id string, request *prot.ResourceModificationRe
 			// If the disk was specified AttachOnly, it shouldn't have been mounted
 			// in the first place.
 			if !mvd.AttachOnly {
-				if err := unmountPath(c.OS, mvd.ContainerPath, false); err != nil {
+				if err := unmountPath(mvd.ContainerPath, false); err != nil {
 					return errors.Wrapf(err, "failed to unmount mapped virtual disks for container %s", id)
 				}
 			}
 			scsiID := fmt.Sprintf("0:0:0:%d", mvd.Lun)
-			if err := c.OS.UnplugSCSIDisk(scsiID); err != nil {
+			if err := unplugSCSIDisk(scsiID); err != nil {
 				return errors.Wrapf(err, "failed to unplug mapped virtual disks for container %s, scsi: %s", id, scsiID)
 			}
 			containerEntry.RemoveMappedVirtualDisk(*mvd)
@@ -708,7 +697,7 @@ func (c *gcsCore) ModifySettings(id string, request *prot.ResourceModificationRe
 			}
 			containerEntry.AddMappedDirectory(*md)
 		case prot.RtRemove:
-			if err := unmountPath(c.OS, md.ContainerPath, false); err != nil {
+			if err := unmountPath(md.ContainerPath, false); err != nil {
 				return errors.Wrapf(err, "failed to mount mapped directories for container %s", id)
 			}
 			containerEntry.RemoveMappedDirectory(*md)
@@ -864,7 +853,7 @@ func (c *gcsCore) setupMappedDirectories(id string, dirs []prot.MappedDirectory)
 		if !dir.CreateInUtilityVM {
 			return errors.New("we do not currently support mapping directories inside the container namespace")
 		}
-		if err := mountPlan9Share(c.OS, c.vsock, dir.ContainerPath, "", dir.Port, dir.ReadOnly); err != nil {
+		if err := mountPlan9Share(c.vsock, dir.ContainerPath, "", dir.Port, dir.ReadOnly); err != nil {
 			return errors.Wrapf(err, "failed to mount mapped directory %s for container %s", dir.ContainerPath, id)
 		}
 	}

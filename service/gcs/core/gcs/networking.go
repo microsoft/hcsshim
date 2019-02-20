@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
-	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/pkg/errors"
@@ -19,7 +20,7 @@ import (
 // namespace and configures it there.
 func (c *gcsCore) configureAdapterInNamespace(container runtime.Container, adapter prot.NetworkAdapter) error {
 	id := adapter.AdapterInstanceID
-	interfaceName, err := instanceIDToName(c.OS, id)
+	interfaceName, err := instanceIDToName(id)
 	if err != nil {
 		return err
 	}
@@ -29,7 +30,7 @@ func (c *gcsCore) configureAdapterInNamespace(container runtime.Container, adapt
 		return errors.Wrapf(err, "failed to marshal adapter struct to JSON for adapter %s", id)
 	}
 
-	out, err := c.OS.Command("netnscfg",
+	out, err := exec.Command("netnscfg",
 		"-if", interfaceName,
 		"-nspid", fmt.Sprintf("%d", nspid),
 		"-cfg", string(cfg)).CombinedOutput()
@@ -46,20 +47,20 @@ func (c *gcsCore) configureAdapterInNamespace(container runtime.Container, adapt
 
 	if adapter.NatEnabled {
 		// Set the DNS configuration.
-		if err := generateResolvConfFile(c.OS, resolvPath, adapter); err != nil {
+		if err := generateResolvConfFile(resolvPath, adapter); err != nil {
 			return errors.Wrapf(err, "failed to generate resolv.conf file for adapter %s", adapter.AdapterInstanceID)
 		}
 	} else {
-		exists, err := c.OS.PathExists(resolvPath)
+		_, err := os.Stat(resolvPath)
 		if err != nil {
+			if os.IsNotExist(err) {
+				if err := os.Link("/etc/resolv.conf", resolvPath); err != nil {
+					return errors.Wrapf(err, "failed to link resolv.conf file for adapter %s", adapter.AdapterInstanceID)
+				}
+				return nil
+			}
 			return errors.Wrapf(err, "failed to check if resolv.conf path already exists for adapter %s", adapter.AdapterInstanceID)
 		}
-		if !exists {
-			if err := c.OS.Link("/etc/resolv.conf", resolvPath); err != nil {
-				return errors.Wrapf(err, "failed to link resolv.conf file for adapter %s", adapter.AdapterInstanceID)
-			}
-		}
-
 	}
 	return nil
 }
@@ -68,7 +69,7 @@ func (c *gcsCore) configureAdapterInNamespace(container runtime.Container, adapt
 // for the given adapter.
 // TODO: This method of managing DNS will potentially be replaced with another
 // method in the future.
-func generateResolvConfFile(o oslayer.OS, resolvPath string, adapter prot.NetworkAdapter) error {
+func generateResolvConfFile(resolvPath string, adapter prot.NetworkAdapter) error {
 	logrus.WithFields(logrus.Fields{
 		"adapterID":            adapter.AdapterInstanceID,
 		"resolvPath":           resolvPath,
@@ -96,7 +97,7 @@ func generateResolvConfFile(o oslayer.OS, resolvPath string, adapter prot.Networ
 		fileContents += fmt.Sprintf("search %s\n", adapter.HostDNSSuffix)
 	}
 
-	file, err := o.OpenFile(resolvPath, os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(resolvPath, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return errors.Wrapf(err, "failed to create resolv.conf file for adapter %s", adapter.AdapterInstanceID)
 	}
@@ -109,12 +110,12 @@ func generateResolvConfFile(o oslayer.OS, resolvPath string, adapter prot.Networ
 
 // instanceIDToName converts from the given instance ID (a GUID generated on
 // the Windows host) to its corresponding interface name (e.g. "eth0").
-func instanceIDToName(o oslayer.OS, id string) (string, error) {
+func instanceIDToName(id string) (string, error) {
 	logrus.WithFields(logrus.Fields{
 		"adapterID": id,
 	}).Info("opengcs::networking::instanceIDToName")
 
-	deviceDirs, err := o.ReadDir(filepath.Join("/sys", "bus", "vmbus", "devices", id, "net"))
+	deviceDirs, err := ioutil.ReadDir(filepath.Join("/sys", "bus", "vmbus", "devices", id, "net"))
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to read vmbus network device from /sys filesystem for adapter %s", id)
 	}

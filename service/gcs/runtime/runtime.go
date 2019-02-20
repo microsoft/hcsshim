@@ -4,8 +4,8 @@ package runtime
 
 import (
 	"io"
+	"syscall"
 
-	"github.com/Microsoft/opengcs/service/gcs/oslayer"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
@@ -40,7 +40,7 @@ type StdioPipes struct {
 
 // Process is an interface to manipulate process state.
 type Process interface {
-	Wait() (oslayer.ProcessExitState, error)
+	Wait() (int, error)
 	Pid() int
 	Delete() error
 	Tty() *stdio.TtyRelay
@@ -54,7 +54,7 @@ type Container interface {
 	Exists() (bool, error)
 	Start() error
 	ExecProcess(process *oci.Process, stdioSet *stdio.ConnectionSet) (p Process, err error)
-	Kill(signal oslayer.Signal) error
+	Kill(signal syscall.Signal) error
 	Pause() error
 	Resume() error
 	GetState() (*ContainerState, error)

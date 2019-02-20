@@ -12,7 +12,6 @@ import (
 
 	"github.com/Microsoft/opengcs/service/gcs/bridge"
 	"github.com/Microsoft/opengcs/service/gcs/core/gcs"
-	"github.com/Microsoft/opengcs/service/gcs/oslayer/realos"
 	"github.com/Microsoft/opengcs/service/gcs/runtime/runc"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
 	"github.com/sirupsen/logrus"
@@ -132,13 +131,12 @@ func main() {
 			logrus.ErrorKey: err,
 		}).Fatal("opengcs::main - failed to initialize new runc runtime")
 	}
-	ros := realos.NewOS()
-	coreint := gcs.NewGCSCore(baseLogPath, baseStoragePath, rtime, ros, tport)
+	coreint := gcs.NewGCSCore(baseLogPath, baseStoragePath, rtime, tport)
 	mux := bridge.NewBridgeMux()
 	b := bridge.Bridge{
 		Handler: mux,
 	}
-	h := gcs.NewHost(rtime, ros, tport)
+	h := gcs.NewHost(rtime, tport)
 	b.AssignHandlers(mux, coreint, h)
 
 	var bridgeIn io.ReadCloser
