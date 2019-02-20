@@ -7,7 +7,6 @@ import (
 )
 
 var commands = map[string]func(){
-	"tar2vhd":       tar2vhdMain,
 	"vhd2tar":       vhd2tarMain,
 	"exportSandbox": exportSandboxMain,
 	"netnscfg":      netnsConfigMain,

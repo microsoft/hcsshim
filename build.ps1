@@ -1,11 +1,11 @@
 <#
 .NOTES
-    Summary: Simple wrapper to build a local initrd.img and rootfs.vhd from sources and optionally install it.
+    Summary: Simple wrapper to build a local initrd.img and rootfs.tar.gz from sources and optionally install it.
 
     License: See https://github.com/Microsoft/opengcs/blob/master/LICENSE
 
 .Parameter Install
-    Installs the built initrd.img and rootfs.vhd
+    Installs the built initrd.img and rootfs.tar.gz
 
 #>
 
@@ -35,15 +35,16 @@ Try {
         Throw "failed to build opengcs image"
     }
 
-
     # Add SYS_ADMIN and loop device access (device group 7) to allow loopback
-    # mounting for creating rootfs.vhd. --privileged would also be sufficient
+    # mounting for creating rootfs.tar.gz. --privileged would also be sufficient
     # but is not currently supported in LCOW.
     Write-Host -ForegroundColor Yellow "INFO: Compiling targets"
-    docker run --cap-add SYS_ADMIN --device-cgroup-rule="c 7:* rmw" --rm -v $d`:/build/out opengcs sh -c 'make -f $SRC/Makefile all out/rootfs.vhd'
+    docker run --cap-add SYS_ADMIN --device-cgroup-rule="c 7:* rmw" --rm -v $d`:/build/out opengcs sh -c 'make -f $SRC/Makefile all'
     if ( $LastExitCode -ne 0 ) {
         Throw "failed to build"
     }
+
+    Write-Host -ForegroundColor Yellow "INFO: If you would like a rootfs.vhd use github.com/Microsoft/hcsshim/cmd/tar2ext4:`n`ttar2ext4.exe -i rootfs.tar.gz -o rootfs.vhd -vhd"
 
     if ($Install) {
         if (Test-Path "C:\Program Files\Linux Containers\initrd.img" -PathType Leaf) {

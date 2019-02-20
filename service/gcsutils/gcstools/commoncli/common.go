@@ -10,14 +10,12 @@ import (
 	"github.com/docker/docker/pkg/archive"
 	"github.com/sirupsen/logrus"
 
-	"github.com/Microsoft/opengcs/service/gcsutils/fs"
-	"github.com/Microsoft/opengcs/service/gcsutils/libtar2vhd"
-	"github.com/Microsoft/opengcs/service/gcsutils/vhd"
+	"github.com/Microsoft/opengcs/service/gcsutils/libvhd2tar"
 )
 
-// SetFlagsForTar2VHDLib creates the command line flags for the tar2vhd/vhd2tar
+// SetFlagsForVHD2TarLib creates the command line flags for the vhd2tar
 // functions.
-func SetFlagsForTar2VHDLib() []*string {
+func SetFlagsForVHD2TarLib() []*string {
 	filesystem := flag.String("fs", "ext4", "Filesystem format: ext4")
 	whiteout := flag.String("whiteout", "overlay", "Whiteout format: aufs, overlay")
 	vhdFormat := flag.String("vhd", "fixed", "VHD format: fixed")
@@ -25,10 +23,10 @@ func SetFlagsForTar2VHDLib() []*string {
 	return []*string{filesystem, whiteout, vhdFormat, tempDirectory}
 }
 
-// SetupTar2VHDLibOptions converts the command line flags to libtar2vhd.Options.
-func SetupTar2VHDLibOptions(args ...*string) (*libtar2vhd.Options, error) {
+// SetupVHD2TarLibOptions converts the command line flags to libvhd2tar.Options.
+func SetupVHD2TarLibOptions(args ...*string) (*libvhd2tar.Options, error) {
 	if len(args) < 4 {
-		return nil, fmt.Errorf("Mistmatched arguments for tar2vhd")
+		return nil, fmt.Errorf("Mistmatched arguments for vhd2tar")
 	}
 
 	fsys := *args[0]
@@ -58,10 +56,8 @@ func SetupTar2VHDLibOptions(args ...*string) (*libtar2vhd.Options, error) {
 		return nil, err
 	}
 
-	options := &libtar2vhd.Options{
+	options := &libvhd2tar.Options{
 		TarOpts:       &archive.TarOptions{WhiteoutFormat: format},
-		Filesystem:    &fs.Ext4Fs{BlockSize: 4096, InodeSize: 256},
-		Converter:     vhd.FixedVHDConverter{},
 		TempDirectory: tmpdir,
 	}
 

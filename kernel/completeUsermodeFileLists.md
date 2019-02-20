@@ -260,7 +260,6 @@
 ./bin/fsync
 ./bin/nandwrite
 ./bin/delgroup
-./bin/tar2vhd
 ./bin/brctl
 ./bin/unlzma
 ./bin/adjtimex

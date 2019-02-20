@@ -5,4 +5,4 @@ install:
   - docker build -t opengcs .
 
 script:
-  - docker run --privileged opengcs make -f /go/src/github.com/Microsoft/opengcs/Makefile all out/rootfs.vhd test
+  - docker run --privileged opengcs make -f /go/src/github.com/Microsoft/opengcs/Makefile all test
