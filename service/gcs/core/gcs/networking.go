@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
@@ -19,15 +20,14 @@ import (
 // configureAdapterInNamespace moves a given adapter into a network
 // namespace and configures it there.
 func (c *gcsCore) configureAdapterInNamespace(container runtime.Container, adapter prot.NetworkAdapter) error {
-	id := adapter.AdapterInstanceID
-	interfaceName, err := instanceIDToName(id)
+	interfaceName, err := instanceIDToName(adapter.AdapterInstanceID, false)
 	if err != nil {
 		return err
 	}
 	nspid := container.Pid()
 	cfg, err := json.Marshal(adapter)
 	if err != nil {
-		return errors.Wrapf(err, "failed to marshal adapter struct to JSON for adapter %s", id)
+		return errors.Wrapf(err, "failed to marshal adapter struct to JSON for adapter %s", adapter.AdapterInstanceID)
 	}
 
 	out, err := exec.Command("netnscfg",
@@ -71,7 +71,7 @@ func (c *gcsCore) configureAdapterInNamespace(container runtime.Container, adapt
 // method in the future.
 func generateResolvConfFile(resolvPath string, adapter prot.NetworkAdapter) error {
 	logrus.WithFields(logrus.Fields{
-		"adapterID":            adapter.AdapterInstanceID,
+		"adapterInstanceID":    adapter.AdapterInstanceID,
 		"resolvPath":           resolvPath,
 		"host-dns-server-list": adapter.HostDNSServerList,
 		"host-dns-suffix":      adapter.HostDNSSuffix,
@@ -110,14 +110,32 @@ func generateResolvConfFile(resolvPath string, adapter prot.NetworkAdapter) erro
 
 // instanceIDToName converts from the given instance ID (a GUID generated on
 // the Windows host) to its corresponding interface name (e.g. "eth0").
-func instanceIDToName(id string) (string, error) {
+func instanceIDToName(id string, wait bool) (string, error) {
 	logrus.WithFields(logrus.Fields{
-		"adapterID": id,
+		"adapterInstanceID": id,
 	}).Info("opengcs::networking::instanceIDToName")
 
-	deviceDirs, err := ioutil.ReadDir(filepath.Join("/sys", "bus", "vmbus", "devices", id, "net"))
-	if err != nil {
-		return "", errors.Wrapf(err, "failed to read vmbus network device from /sys filesystem for adapter %s", id)
+	const timeout = 2 * time.Second
+	var (
+		deviceDirs []os.FileInfo
+		err        error
+	)
+	start := time.Now()
+	for {
+		deviceDirs, err = ioutil.ReadDir(filepath.Join("/sys", "bus", "vmbus", "devices", id, "net"))
+		if err != nil {
+			if wait {
+				if os.IsNotExist(errors.Cause(err)) {
+					time.Sleep(10 * time.Millisecond)
+					if time.Since(start) > timeout {
+						return "", errors.Wrapf(err, "timed out waiting for net adapter after %d seconds", timeout)
+					}
+					continue
+				}
+			}
+			return "", errors.Wrapf(err, "failed to read vmbus network device from /sys filesystem for adapter %s", id)
+		}
+		break
 	}
 	if len(deviceDirs) == 0 {
 		return "", errors.Errorf("no interface name found for adapter %s", id)
@@ -125,5 +143,10 @@ func instanceIDToName(id string) (string, error) {
 	if len(deviceDirs) > 1 {
 		return "", errors.Errorf("multiple interface names found for adapter %s", id)
 	}
-	return deviceDirs[0].Name(), nil
+	ifname := deviceDirs[0].Name()
+	logrus.WithFields(logrus.Fields{
+		"adapterInstanceID": id,
+		"adapter-ifname":    ifname,
+	}).Debug("opengcs::networking::instanceIDToName - Success")
+	return ifname, nil
 }
