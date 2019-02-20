@@ -52,8 +52,7 @@ type nicInfo struct {
 }
 
 type namespaceInfo struct {
-	nics     []nicInfo
-	refCount int
+	nics map[string]*nicInfo
 }
 
 // UtilityVM is the object used by clients representing a utility VM

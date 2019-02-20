@@ -24,7 +24,15 @@ func createNetworkNamespace(coi *createOptionsInternal, resources *Resources) er
 	return nil
 }
 
-func getNamespaceEndpoints(netNS string) ([]*hns.HNSEndpoint, error) {
+// GetNamespaceEndpoints gets all endpoints in `netNS`
+func GetNamespaceEndpoints(netNS string) ([]*hns.HNSEndpoint, error) {
+	op := "hcsoci::GetNamespaceEndpoints"
+	log := logrus.WithField("netns-id", netNS)
+	log.Debug(op + " - Begin")
+	defer func() {
+		log.Debug(op + " - End")
+	}()
+
 	ids, err := hns.GetNamespaceEndpoints(netNS)
 	if err != nil {
 		return nil, err

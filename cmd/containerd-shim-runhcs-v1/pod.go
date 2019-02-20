@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
@@ -52,7 +53,7 @@ type shimPod interface {
 	KillTask(ctx context.Context, tid, eid string, signal uint32, all bool) error
 }
 
-func createPod(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (shimPod, error) {
+func createPod(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (_ shimPod, err error) {
 	logrus.WithFields(logrus.Fields{
 		"tid": req.ID,
 	}).Debug("createPod")
@@ -128,6 +129,12 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 	} else if !oci.IsWCOW(s) {
 		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "oci spec does not contain WCOW or LCOW spec")
 	}
+	defer func() {
+		// clean up the uvm if we fail any further operations
+		if err != nil && parent != nil {
+			parent.Close()
+		}
+	}()
 
 	p := pod{
 		events: events,
@@ -135,7 +142,27 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		host:   parent,
 	}
 	if oci.IsWCOW(s) {
-		// For WCOW we fake out the init task since we dont need it.
+		// For WCOW we fake out the init task since we dont need it. We only
+		// need to provision the guest network namespace.
+		nsid := ""
+		if s.Windows != nil && s.Windows.Network != nil {
+			nsid = s.Windows.Network.NetworkNamespace
+		}
+
+		if nsid != "" {
+			endpoints, err := hcsoci.GetNamespaceEndpoints(nsid)
+			if err != nil {
+				return nil, err
+			}
+			err = parent.AddNetNS(nsid)
+			if err != nil {
+				return nil, err
+			}
+			err = parent.AddEndpointsToNS(nsid, endpoints)
+			if err != nil {
+				return nil, err
+			}
+		}
 		p.sandboxTask = newWcowPodSandboxTask(ctx, events, req.ID, req.Bundle, parent)
 		// Publish the created event. We only do this for a fake WCOW task. A
 		// HCS Task will event itself based on actual process lifetime.
@@ -158,7 +185,6 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		// LCOW requires a real task for the sandbox
 		lt, err := newHcsTask(ctx, events, parent, true, req, s)
 		if err != nil {
-			parent.Close()
 			return nil, err
 		}
 		p.sandboxTask = lt
