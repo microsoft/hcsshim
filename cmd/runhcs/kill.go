@@ -1,15 +1,12 @@
 package main
 
 import (
-	"strconv"
-	"strings"
-
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/schema1"
+	"github.com/Microsoft/hcsshim/internal/signals"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 )
 
@@ -73,7 +70,7 @@ signal to the init process of the "ubuntu01" container:
 
 		signal := 0
 		if signalsSupported {
-			signal, err = validateSigstr(context.Args().Get(1), signalsSupported, c.Spec.Linux != nil)
+			signal, err = signals.ValidateSigstr(context.Args().Get(1), signalsSupported, c.Spec.Linux != nil)
 			if err != nil {
 				return err
 			}
@@ -100,94 +97,4 @@ signal to the init process of the "ubuntu01" container:
 		// Legacy signal issue a kill
 		return p.Kill()
 	},
-}
-
-func validateSigstr(sigstr string, signalsSupported bool, isLcow bool) (int, error) {
-	errInvalidSignal := errors.Errorf("invalid signal '%s'", sigstr)
-
-	// All flavors including legacy default to SIGTERM on LCOW CtrlC on Windows
-	if sigstr == "" {
-		if isLcow {
-			return 0xf, nil
-		}
-		return 0, nil
-	}
-
-	sigstr = strings.ToUpper(sigstr)
-
-	if !signalsSupported {
-		// If signals arent supported we just validate that its a known signal.
-		// We already return 0 since we only supported a platform Kill() at that
-		// time.
-		if isLcow {
-			switch sigstr {
-			case "15":
-				fallthrough
-			case "TERM":
-				fallthrough
-			case "SIGTERM":
-				return 0, nil
-			default:
-				return 0, errInvalidSignal
-			}
-		}
-		switch sigstr {
-		// Docker sends a UNIX term in the supported Windows Signal map.
-		case "15":
-			fallthrough
-		case "TERM":
-			fallthrough
-		case "0":
-			fallthrough
-		case "CTRLC":
-			return 0, nil
-		case "9":
-			fallthrough
-		case "KILL":
-			return 0, nil
-		default:
-			return 0, errInvalidSignal
-		}
-	} else {
-		if !isLcow {
-			// Docker sends the UNIX signal name or value. Convert them to the
-			// correct Windows signals.
-			switch sigstr {
-			case "15":
-				fallthrough
-			case "TERM":
-				return 0x0, nil // Convert to CTRLC
-			case "9":
-				fallthrough
-			case "KILL":
-				return 0x6, nil // Convert to CTRLSHUTDOWN
-			}
-		}
-	}
-
-	var sigmap map[string]int
-	if isLcow {
-		sigmap = signalMapLcow
-	} else {
-		sigmap = signalMapWindows
-	}
-
-	signal, err := strconv.Atoi(sigstr)
-	if err != nil {
-		// Signal might still match the string value
-		for k, v := range sigmap {
-			if k == sigstr {
-				return v, nil
-			}
-		}
-		return 0, errInvalidSignal
-	}
-
-	// Match signal by value
-	for _, v := range sigmap {
-		if signal == v {
-			return signal, nil
-		}
-	}
-	return 0, errInvalidSignal
 }

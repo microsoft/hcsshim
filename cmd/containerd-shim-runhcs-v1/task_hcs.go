@@ -153,6 +153,7 @@ func newHcsTask(
 		ctx,
 		events,
 		req.ID,
+		parent,
 		system,
 		req.ID,
 		req.Bundle,
@@ -259,7 +260,7 @@ func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest,
 	if err != nil {
 		return err
 	}
-	he := newHcsExec(ctx, ht.events, ht.id, ht.c, req.ExecID, ht.init.Status().Bundle, ht.isWCOW, spec, io)
+	he := newHcsExec(ctx, ht.events, ht.id, ht.host, ht.c, req.ExecID, ht.init.Status().Bundle, ht.isWCOW, spec, io)
 	ht.execs.Store(req.ExecID, he)
 
 	// Publish the created event
