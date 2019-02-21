@@ -10,6 +10,9 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/hcsshim/internal/signals"
+	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/osversion"
 	eventstypes "github.com/containerd/containerd/api/events"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
@@ -29,6 +32,7 @@ func newHcsExec(
 	ctx context.Context,
 	events publisher,
 	tid string,
+	host *uvm.UtilityVM,
 	c *hcs.System,
 	id, bundle string,
 	isWCOW bool,
@@ -43,6 +47,7 @@ func newHcsExec(
 	he := &hcsExec{
 		events:            events,
 		tid:               tid,
+		host:              host,
 		c:                 c,
 		id:                id,
 		bundle:            bundle,
@@ -67,6 +72,11 @@ type hcsExec struct {
 	//
 	// This MUST be treated as read only in the lifetime of the exec.
 	tid string
+	// host is the hosting VM for `c`. If `host==nil` this exec MUST be a
+	// process isolated WCOW exec.
+	//
+	// This MUST be treated as read only in the lifetime of the exec.
+	host *uvm.UtilityVM
 	// c is the hosting container for this exec.
 	//
 	// This MUST be treated as read only in the lifetime of the exec.
@@ -294,11 +304,21 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 		he.exitedAt = time.Now()
 		return nil
 	case shimExecStateRunning:
-		// TODO: We need to detect that the guest supports Signal process else
-		// issue a kill here.
-		return he.p.Signal(guestrequest.SignalProcessOptions{
-			Signal: int(signal),
-		})
+		supported := false
+		if osversion.Get().Build >= osversion.RS5 {
+			supported = he.host == nil || he.host.SignalProcessSupported()
+		}
+		sig, err := signals.Validate(int(signal), supported, !he.isWCOW)
+		if err != nil {
+			return err
+		}
+		if supported {
+			return he.p.Signal(guestrequest.SignalProcessOptions{
+				Signal: sig,
+			})
+		}
+		// legacy path before signals support.
+		return he.p.Kill()
 	case shimExecStateExited:
 		return nil
 	default:

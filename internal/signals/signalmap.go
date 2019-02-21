@@ -1,4 +1,9 @@
-package main
+package signals
+
+const (
+	sigKill = 0x9
+	sigTerm = 0xf
+)
 
 var signalMapLcow = map[string]int{
 	"ABRT":   0x6,
@@ -37,10 +42,18 @@ var signalMapLcow = map[string]int{
 	"XFSZ":   0x19,
 }
 
+const (
+	ctrlC        = 0x0
+	ctrlBreak    = 0x1
+	ctrlClose    = 0x2
+	ctrlLogOff   = 0x5
+	ctrlShutdown = 0x6
+)
+
 var signalMapWindows = map[string]int{
-	"CTRLC":        0x0,
-	"CTRLBREAK":    0x1,
-	"CTRLCLOSE":    0x2,
-	"CTRLLOGOFF":   0x5,
-	"CTRLSHUTDOWN": 0x6,
+	"CTRLC":        ctrlC,
+	"CTRLBREAK":    ctrlBreak,
+	"CTRLCLOSE":    ctrlClose,
+	"CTRLLOGOFF":   ctrlLogOff,
+	"CTRLSHUTDOWN": ctrlShutdown,
 }

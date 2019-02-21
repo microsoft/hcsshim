@@ -1,7 +1,6 @@
-package main
+package signals
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -9,11 +8,11 @@ import (
 
 func runValidateSigstrTest(sigstr string, signalsSupported, isLcow bool,
 	expectedSignal int, expectedError bool, t *testing.T) {
-	signal, err := validateSigstr(sigstr, signalsSupported, isLcow)
+	signal, err := ValidateSigstr(sigstr, signalsSupported, isLcow)
 	if expectedError {
 		if err == nil {
 			t.Fatalf("Expected err: %v, got: nil", expectedError)
-		} else if err.Error() != fmt.Sprintf("invalid signal '%s'", sigstr) {
+		} else if err != ErrInvalidSignal {
 			t.Fatalf("Expected err: %v, got: %v", expectedError, err)
 		}
 	}
