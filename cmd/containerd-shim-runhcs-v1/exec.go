@@ -48,10 +48,10 @@ type shimExec interface {
 	Start(ctx context.Context) error
 	// Kill sends `signal` to this exec process.
 	//
-	// If `State() != shimExecStateRunning` this exec MUST return
-	// `errdefs.ErrFailedPrecondition`.
+	// If `State() == shimExecStateExited` this exec MUST silently return `nil`.
 	//
-	// If `State() == shimExecStateExited` this exec MUST silently succeed.
+	// A call to `Kill` is valid in any `State()`. Note that for `State() == shimExecStateExited` this
+	// exec process must silently return `nil`.
 	Kill(ctx context.Context, signal uint32) error
 	// ResizePty resizes the tty of this exec process.
 	//

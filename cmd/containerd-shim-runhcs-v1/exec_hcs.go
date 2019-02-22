@@ -299,9 +299,8 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 	case shimExecStateCreated:
 		// Created state kill is just a state transition
 		// TODO: What are the right values here?
-		he.state = shimExecStateExited
-		he.exitStatus = 1
-		he.exitedAt = time.Now()
+		he.setExitedL(1)
+		he.close()
 		return nil
 	case shimExecStateRunning:
 		supported := false

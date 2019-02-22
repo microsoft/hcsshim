@@ -47,9 +47,7 @@ type shimPod interface {
 	// If `all == true && eid != ""` this pod MUST return
 	// `errdefs.ErrFailedPrecondition`.
 	//
-	// A call to `KillTask` is only valid when the exec found by `tid,eid` is in
-	// the `shimExecStateRunning, shimExecStateExited` states. If the exec is
-	// not in this state this pod MUST return `errdefs.ErrFailedPrecondition`.
+	// A call to `KillExec` is valid in any exec state.
 	KillTask(ctx context.Context, tid, eid string, signal uint32, all bool) error
 }
 

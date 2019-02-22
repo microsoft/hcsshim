@@ -40,11 +40,7 @@ type shimTask interface {
 	// If `all == true && eid != ""` this task MUST return
 	// `errdefs.ErrFailedPrecondition`.
 	//
-	// A call to `KillExec` is only valid when the exec is in the
-	// `shimExecStateRunning, shimExecStateExited` states. If the exec is not in
-	// this state this task MUST return `errdefs.ErrFailedPrecondition`. If
-	// `eid=="" && all == false` all additional exec's must be in the
-	// `shimExecStateExited` state.
+	// A call to `KillExec` is valid in any exec state.
 	KillExec(ctx context.Context, eid string, signal uint32, all bool) error
 	// DeleteExec deletes a `shimExec` in this `shimTask` that matches `eid`. If
 	// `eid == ""` deletes the init `shimExec` AND this `shimTask`.

@@ -161,6 +161,9 @@ func newHcsTask(
 		s.Process,
 		io)
 
+	// Issue the background wait
+	go ht.waitForExit()
+
 	// Publish the created event
 	ht.events(
 		runtime.TaskCreateEventTopic,
@@ -229,8 +232,6 @@ type hcsTask struct {
 	// durring create to prevent ID duplication.
 	ecl   sync.Mutex
 	execs sync.Map
-
-	closeOnce sync.Once
 }
 
 func (ht *hcsTask) ID() string {
@@ -337,10 +338,6 @@ func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all 
 	if err != nil {
 		return err
 	}
-	if eid == "" {
-		// We just killed the init process. Tear down the container too.
-		ht.close()
-	}
 	return nil
 }
 
@@ -402,84 +399,86 @@ func (ht *hcsTask) Pids(ctx context.Context) ([]shimTaskPidPair, error) {
 	return nil, errdefs.ErrNotImplemented
 }
 
-// close shuts down the container that is owned by this task and if
-// `ht.ownsHost` will shutdown the hosting VM the container was placed in.
+// waitForExit waits for the init process exit and shuts down the container that
+// is owned by this task and if `ht.ownsHost` will shutdown the hosting VM the
+// container was placed in.
 //
 // NOTE: For Windows process isolated containers `ht.ownsHost==true && ht.host
 // == nil`.
-func (ht *hcsTask) close() {
+func (ht *hcsTask) waitForExit() {
 	logrus.WithFields(logrus.Fields{
 		"tid": ht.id,
-	}).Debug("hcsTask::close")
+	}).Debug("hcsTask::waitForExit")
 
-	ht.closeOnce.Do(func() {
-		// ht.c should never be nil for a real task but in testing we stub
-		// this to avoid a nil dereference. We really should introduce a
-		// method or interface for ht.c operations that we can stub for
-		// testing.
-		if ht.c != nil {
-			// Do our best attempt to tear down the container.
-			if err := ht.c.Shutdown(); err != nil {
+	// Wait for the init task to exit.
+	ht.init.Wait(context.Background())
+
+	// ht.c should never be nil for a real task but in testing we stub
+	// this to avoid a nil dereference. We really should introduce a
+	// method or interface for ht.c operations that we can stub for
+	// testing.
+	if ht.c != nil {
+		// Do our best attempt to tear down the container.
+		if err := ht.c.Shutdown(); err != nil {
+			if !hcs.IsPending(err) {
+				logrus.WithFields(logrus.Fields{
+					"tid":           ht.id,
+					logrus.ErrorKey: err,
+				}).Error("hcsTask::close - failed to shutdown container")
+			} else {
+				const shutdownTimeout = time.Minute * 5
+				if err := ht.c.WaitTimeout(shutdownTimeout); err != nil {
+					logrus.WithFields(logrus.Fields{
+						"tid":           ht.id,
+						logrus.ErrorKey: err,
+					}).Error("hcsTask::close - failed to wait for container shutdown")
+				}
+			}
+			if err := ht.c.Terminate(); err != nil && !hcs.IsAlreadyStopped(err) {
 				if !hcs.IsPending(err) {
 					logrus.WithFields(logrus.Fields{
 						"tid":           ht.id,
 						logrus.ErrorKey: err,
-					}).Error("hcsTask::close - failed to shutdown container")
+					}).Error("hcsTask::close - failed to terminate container")
 				} else {
-					const shutdownTimeout = time.Minute * 5
-					if err := ht.c.WaitTimeout(shutdownTimeout); err != nil {
+					const terminateTimeout = time.Second * 30
+					if err := ht.c.WaitTimeout(terminateTimeout); err != nil {
 						logrus.WithFields(logrus.Fields{
 							"tid":           ht.id,
 							logrus.ErrorKey: err,
-						}).Error("hcsTask::close - failed to wait for container shutdown")
+						}).Error("hcsTask::close - failed to wait for container terminate")
 					}
 				}
-				if err := ht.c.Terminate(); err != nil && !hcs.IsAlreadyStopped(err) {
-					if !hcs.IsPending(err) {
-						logrus.WithFields(logrus.Fields{
-							"tid":           ht.id,
-							logrus.ErrorKey: err,
-						}).Error("hcsTask::close - failed to terminate container")
-					} else {
-						const terminateTimeout = time.Second * 30
-						if err := ht.c.WaitTimeout(terminateTimeout); err != nil {
-							logrus.WithFields(logrus.Fields{
-								"tid":           ht.id,
-								logrus.ErrorKey: err,
-							}).Error("hcsTask::close - failed to wait for container terminate")
-						}
-					}
-				}
-			}
-
-			// Release any resources associated with the container.
-			if err := hcsoci.ReleaseResources(ht.cr, ht.host, true); err != nil {
-				logrus.WithFields(logrus.Fields{
-					"tid":           ht.id,
-					logrus.ErrorKey: err,
-				}).Error("hcsTask::close - failed to release container resources")
-			}
-
-			// Close the container handle invalidating all future access.
-			if err := ht.c.Close(); err != nil && !hcs.IsAlreadyClosed(err) {
-				logrus.WithFields(logrus.Fields{
-					"tid":           ht.id,
-					logrus.ErrorKey: err,
-				}).Error("hcsTask::close - failed to close container")
 			}
 		}
 
-		if ht.ownsHost && ht.host != nil {
+		// Release any resources associated with the container.
+		if err := hcsoci.ReleaseResources(ht.cr, ht.host, true); err != nil {
 			logrus.WithFields(logrus.Fields{
-				"tid": ht.id,
-			}).Debug("hcsTask::close - begin host vm shutdown")
-
-			if err := ht.host.Close(); err != nil {
-				logrus.WithFields(logrus.Fields{
-					"tid":           ht.id,
-					logrus.ErrorKey: err,
-				}).Error("hcsTask::close - failed host vm shutdown")
-			}
+				"tid":           ht.id,
+				logrus.ErrorKey: err,
+			}).Error("hcsTask::close - failed to release container resources")
 		}
-	})
+
+		// Close the container handle invalidating all future access.
+		if err := ht.c.Close(); err != nil && !hcs.IsAlreadyClosed(err) {
+			logrus.WithFields(logrus.Fields{
+				"tid":           ht.id,
+				logrus.ErrorKey: err,
+			}).Error("hcsTask::close - failed to close container")
+		}
+	}
+
+	if ht.ownsHost && ht.host != nil {
+		logrus.WithFields(logrus.Fields{
+			"tid": ht.id,
+		}).Debug("hcsTask::close - begin host vm shutdown")
+
+		if err := ht.host.Close(); err != nil {
+			logrus.WithFields(logrus.Fields{
+				"tid":           ht.id,
+				logrus.ErrorKey: err,
+			}).Error("hcsTask::close - failed host vm shutdown")
+		}
+	}
 }
