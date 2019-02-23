@@ -145,6 +145,14 @@ func (he *hcsExec) Status() *task.StateResponse {
 	he.sl.Lock()
 	defer he.sl.Unlock()
 
+	return he.statusL()
+}
+
+// statusL returns the status of the current exec.
+//
+// The caller MUST hold `he.sl` durring the call.
+func (he *hcsExec) statusL() *task.StateResponse {
+
 	var s containerd_v1_types.Status
 	switch he.state {
 	case shimExecStateCreated:
@@ -247,7 +255,7 @@ func (he *hcsExec) Start(ctx context.Context) error {
 	if err != nil {
 		he.p.Kill()
 		he.setExitedL(1)
-		he.close()
+		he.closeL()
 
 		if he.id == he.tid {
 			// We just started the container as well. Force kill it here
@@ -300,7 +308,7 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 		// Created state kill is just a state transition
 		// TODO: What are the right values here?
 		he.setExitedL(1)
-		he.close()
+		he.closeL()
 		return nil
 	case shimExecStateRunning:
 		supported := false
@@ -411,8 +419,8 @@ func (he *hcsExec) waitForExit() {
 	he.sl.Lock()
 	// If the exec closes before the container we set status here.
 	he.setExitedL(code)
+	he.closeL()
 	he.sl.Unlock()
-	he.close()
 }
 
 // setExitedL sets the process exit state.
@@ -451,19 +459,23 @@ func (he *hcsExec) waitForContainerExit() {
 		// state and cleanup any resources
 		he.sl.Lock()
 		he.setExitedL(1)
+		he.closeL()
 		he.sl.Unlock()
-		he.close()
 	case <-he.processCtx.Done():
 		// Process exited first. This is the normal case do nothing.
 	}
 }
 
-func (he *hcsExec) close() {
+// closeL waits for all io to complete, sends the exited notification, and
+// unblocks any waiters.
+//
+// The caller MUST hold `he.sl` for the call.
+func (he *hcsExec) closeL() {
 	he.exitedOnce.Do(func() {
 		he.io.Wait()
 
 		// Publish the exited event
-		status := he.Status()
+		status := he.statusL()
 		he.events(
 			runtime.TaskExitEventTopic,
 			&eventstypes.TaskExit{
