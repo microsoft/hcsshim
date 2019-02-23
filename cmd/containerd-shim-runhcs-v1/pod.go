@@ -143,24 +143,28 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 	}
 	if oci.IsWCOW(s) {
 		// For WCOW we fake out the init task since we dont need it. We only
-		// need to provision the guest network namespace.
-		nsid := ""
-		if s.Windows != nil && s.Windows.Network != nil {
-			nsid = s.Windows.Network.NetworkNamespace
-		}
+		// need to provision the guest network namespace if this is hypervisor
+		// isolated. Process isolated WCOW gets the namespace endpoints
+		// automatically.
+		if parent != nil {
+			nsid := ""
+			if s.Windows != nil && s.Windows.Network != nil {
+				nsid = s.Windows.Network.NetworkNamespace
+			}
 
-		if nsid != "" {
-			endpoints, err := hcsoci.GetNamespaceEndpoints(nsid)
-			if err != nil {
-				return nil, err
-			}
-			err = parent.AddNetNS(nsid)
-			if err != nil {
-				return nil, err
-			}
-			err = parent.AddEndpointsToNS(nsid, endpoints)
-			if err != nil {
-				return nil, err
+			if nsid != "" {
+				endpoints, err := hcsoci.GetNamespaceEndpoints(nsid)
+				if err != nil {
+					return nil, err
+				}
+				err = parent.AddNetNS(nsid)
+				if err != nil {
+					return nil, err
+				}
+				err = parent.AddEndpointsToNS(nsid, endpoints)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 		p.sandboxTask = newWcowPodSandboxTask(ctx, events, req.ID, req.Bundle, parent)
