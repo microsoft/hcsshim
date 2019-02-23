@@ -118,7 +118,7 @@ func newHcsTask(
 		return nil, err
 	}
 
-	io, err := newRelay(ctx, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
+	io, err := newNpipeIO(ctx, req.ID, req.ID, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +256,7 @@ func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest,
 		return errors.Wrapf(errdefs.ErrFailedPrecondition, "exec: '' in task: '%s' must be running to create additional execs", ht.id)
 	}
 
-	io, err := newRelay(ctx, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
+	io, err := newNpipeIO(ctx, ht.id, req.ExecID, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
 	if err != nil {
 		return err
 	}

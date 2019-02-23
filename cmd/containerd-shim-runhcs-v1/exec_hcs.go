@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -37,7 +38,7 @@ func newHcsExec(
 	id, bundle string,
 	isWCOW bool,
 	spec *specs.Process,
-	io *iorelay) shimExec {
+	io upstreamIO) shimExec {
 	logrus.WithFields(logrus.Fields{
 		"tid": tid,
 		"eid": id,
@@ -101,12 +102,13 @@ type hcsExec struct {
 	//
 	// This MUST be treated as read only in the lifetime of the exec.
 	spec *specs.Process
-	// io is the relay for copying between the upstream io and the downstream
-	// io. The upstream IO MUST already be connected at create time in order to
-	// be valid.
+	// io is the upstream io connections used for copying between the upstream
+	// io and the downstream io. The upstream IO MUST already be connected at
+	// create time in order to be valid.
 	//
 	// This MUST be treated as read only in the lifetime of the exec.
-	io                *iorelay
+	io                upstreamIO
+	ioWg              sync.WaitGroup
 	processCtx        context.Context
 	processDoneCancel context.CancelFunc
 
@@ -118,7 +120,6 @@ type hcsExec struct {
 	exitStatus uint32
 	exitedAt   time.Time
 	p          *hcs.Process
-	closedIO   bool
 
 	// exited is a wait block which waits async for the process to exit.
 	exited     chan struct{}
@@ -256,7 +257,34 @@ func (he *hcsExec) Start(ctx context.Context) error {
 		return err
 	}
 
-	he.io.BeginRelay(in, out, serr)
+	if he.io.StdinPath() != "" {
+		he.ioWg.Add(1)
+		go func() {
+			io.Copy(in, he.io.Stdin())
+			in.Close()
+			he.p.CloseStdin()
+			he.io.CloseStdin()
+			he.ioWg.Done()
+		}()
+	}
+
+	if he.io.StdoutPath() != "" {
+		he.ioWg.Add(1)
+		go func() {
+			io.Copy(he.io.Stdout(), out)
+			out.Close()
+			he.ioWg.Done()
+		}()
+	}
+
+	if he.io.StderrPath() != "" {
+		he.ioWg.Add(1)
+		go func() {
+			io.Copy(he.io.Stderr(), serr)
+			serr.Close()
+			he.ioWg.Done()
+		}()
+	}
 
 	// Assign the PID and transition the state.
 	he.pid = he.p.Pid()
@@ -353,19 +381,11 @@ func (he *hcsExec) CloseIO(ctx context.Context, stdin bool) error {
 		"stdin": stdin,
 	}).Debug("hcsExec::CloseIO")
 
-	he.sl.Lock()
-	defer he.sl.Unlock()
-
-	if !he.closedIO {
-		he.closedIO = true
-		he.io.CloseStdin()
-		if he.p != nil {
-			err := he.p.CloseStdin()
-			if err != nil {
-				return err
-			}
-		}
-	}
+	// If we have any upstream IO we close the upstream connection. This will
+	// unblock the `io.Copy` in the `Start()` call which will signal
+	// `he.p.CloseStdin()`. If `he.io.Stdin()` is already closed this is safe to
+	// call multiple times.
+	he.io.CloseStdin()
 	return nil
 }
 
@@ -385,6 +405,7 @@ func (he *hcsExec) Wait(ctx context.Context) *task.StateResponse {
 // This MUST be called via a goroutine.
 func (he *hcsExec) waitForExit() {
 	err := he.p.Wait()
+	he.ioWg.Wait()
 	code := 1
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
@@ -461,8 +482,6 @@ func (he *hcsExec) waitForContainerExit() {
 
 func (he *hcsExec) close() {
 	he.exitedOnce.Do(func() {
-		he.io.Wait()
-
 		// Publish the exited event
 		status := he.Status()
 		he.events(
