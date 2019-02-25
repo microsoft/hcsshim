@@ -37,8 +37,19 @@ The delete command will be executed in the container's bundle as its cwd.
 		if sys, _ := hcs.OpenComputeSystem(idFlag); sys != nil {
 			if err := sys.Terminate(); err != nil {
 				if hcs.IsPending(err) {
-					if werr := sys.Wait(); err != nil {
-						fmt.Fprintf(os.Stderr, "failed to wait for '%s' to terminate: %v", idFlag, werr)
+					const terminateTimeout = time.Second * 30
+					done := make(chan bool)
+					go func() {
+						if werr := sys.Wait(); err != nil {
+							fmt.Fprintf(os.Stderr, "failed to wait for '%s' to terminate: %v", idFlag, werr)
+						}
+						done <- true
+					}()
+					select {
+					case <-done:
+					case <-time.After(terminateTimeout):
+						sys.Close()
+						return fmt.Errorf("timed out waiting for '%s' to terminate", idFlag)
 					}
 				} else {
 					fmt.Fprintf(os.Stderr, "failed to terminate '%s': %v", idFlag, err)
