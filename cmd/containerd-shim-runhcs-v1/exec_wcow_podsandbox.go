@@ -155,33 +155,33 @@ func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) error {
 	wpse.sl.Lock()
 	defer wpse.sl.Unlock()
 	switch wpse.state {
-	case shimExecStateCreated, shimExecStateRunning:
+	case shimExecStateCreated:
+		wpse.state = shimExecStateExited
+		wpse.exitStatus = 1
+		wpse.exitedAt = time.Now()
+		close(wpse.exited)
+		return nil
+	case shimExecStateRunning:
 		// TODO: Should we verify that the signal would of killed the WCOW Process?
+		wpse.state = shimExecStateExited
+		wpse.exitStatus = 0
+		wpse.exitedAt = time.Now()
+		wpse.events(
+			runtime.TaskExitEventTopic,
+			&eventstypes.TaskExit{
+				ContainerID: wpse.tid,
+				ID:          wpse.tid, // The init exec ID is always the same as Task ID.
+				Pid:         uint32(wpse.pid),
+				ExitStatus:  wpse.exitStatus,
+				ExitedAt:    wpse.exitedAt,
+			})
+		close(wpse.exited)
+		return nil
 	case shimExecStateExited:
 		return nil
 	default:
 		return newExecInvalidStateError(wpse.tid, wpse.tid, wpse.state, "kill")
 	}
-
-	// Transition the state and unlock the waiters on `Wait`.
-	wpse.state = shimExecStateExited
-	wpse.exitStatus = 0
-	wpse.exitedAt = time.Now()
-
-	// Publish the exited event
-	wpse.events(
-		runtime.TaskExitEventTopic,
-		&eventstypes.TaskExit{
-			ContainerID: wpse.tid,
-			ID:          wpse.tid, // The init exec ID is always the same as Task ID.
-			Pid:         uint32(wpse.pid),
-			ExitStatus:  wpse.exitStatus,
-			ExitedAt:    wpse.exitedAt,
-		})
-
-	close(wpse.exited)
-
-	return nil
 }
 
 func (wpse *wcowPodSandboxExec) ResizePty(ctx context.Context, width, height uint32) error {
@@ -220,4 +220,35 @@ func (wpse *wcowPodSandboxExec) Wait(ctx context.Context) *task.StateResponse {
 
 	<-wpse.exited
 	return wpse.Status()
+}
+
+func (wpse *wcowPodSandboxExec) ForceExit(status int) {
+	wpse.sl.Lock()
+	defer wpse.sl.Unlock()
+	if wpse.state != shimExecStateExited {
+		// Avoid logging the force if we already exited gracefully
+		logrus.WithFields(logrus.Fields{
+			"tid":    wpse.tid,
+			"eid":    wpse.tid,
+			"status": status,
+		}).Debug("hcsExec::ForceExit")
+
+		wasRunning := wpse.state == shimExecStateRunning
+		wpse.state = shimExecStateExited
+		wpse.exitStatus = 1
+		wpse.exitedAt = time.Now()
+
+		if wasRunning {
+			wpse.events(
+				runtime.TaskExitEventTopic,
+				&eventstypes.TaskExit{
+					ContainerID: wpse.tid,
+					ID:          wpse.tid, // The init exec ID is always the same as Task ID.
+					Pid:         uint32(wpse.pid),
+					ExitStatus:  wpse.exitStatus,
+					ExitedAt:    wpse.exitedAt,
+				})
+		}
+		close(wpse.exited)
+	}
 }

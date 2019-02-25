@@ -38,7 +38,8 @@ func newWcowPodSandboxTask(ctx context.Context, events publisher, id, bundle str
 			// The UVM came down. Force transition the init task (if it wasn't
 			// already) to unblock any waiters since the platform wont send any
 			// events for this fake process.
-			wpst.init.Kill(context.Background(), 0x0)
+			wpst.init.ForceExit(1)
+			parent.Close()
 		}()
 	}
 	return wpst
