@@ -73,6 +73,14 @@ type shimExec interface {
 	// process is already in the `State() == shimExecStateExited` state, `Wait`
 	// MUST return immediately with the original exit state.
 	Wait(ctx context.Context) *task.StateResponse
+	// ForceExit forcibly terminates the exec, sets the exit status to `status`,
+	// and unblocks all waiters.
+	//
+	// This call is idempotent and safe to call even on an already exited exec
+	// in which case it does nothing.
+	//
+	// `ForceExit` is safe to call in any `State()`.
+	ForceExit(status int)
 }
 
 func newExecInvalidStateError(tid, eid string, state shimExecState, op string) error {

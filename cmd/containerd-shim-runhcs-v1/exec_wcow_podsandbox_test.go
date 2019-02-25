@@ -47,7 +47,11 @@ func verifyWcowPodSandboxExecStatus(t *testing.T, wasStarted bool, es containerd
 	case containerd_v1_types.StatusCreated, containerd_v1_types.StatusRunning:
 		expectedExitStatus = 255
 	case containerd_v1_types.StatusStopped:
-		expectedExitStatus = 0
+		if !wasStarted {
+			expectedExitStatus = 1
+		} else {
+			expectedExitStatus = 0
+		}
 	}
 	if status.ExitStatus != expectedExitStatus {
 		t.Fatalf("expected exitstatus: '%d' got: '%d'", expectedExitStatus, status.ExitStatus)

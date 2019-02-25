@@ -113,10 +113,7 @@ func newHcsTask(
 		"ownsParent": ownsParent,
 	}).Debug("newHcsTask")
 
-	owner, err := os.Executable()
-	if err != nil {
-		return nil, err
-	}
+	owner := filepath.Base(os.Args[0])
 
 	io, err := newNpipeIO(ctx, req.ID, req.ID, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
 	if err != nil {
@@ -160,6 +157,17 @@ func newHcsTask(
 		ht.isWCOW,
 		s.Process,
 		io)
+
+	if parent != nil {
+		go ht.waitForHostExit()
+	}
+
+	go func() {
+		// Wait for our init process to exit.
+		ht.init.Wait(context.Background())
+		// Release all container resources for this task.
+		ht.close()
+	}()
 
 	// Publish the created event
 	ht.events(
@@ -231,6 +239,9 @@ type hcsTask struct {
 	execs sync.Map
 
 	closeOnce sync.Once
+	// closeHostOnce is used to close `host`. This will only be used if
+	// `ownsHost==true` and `host != nil`.
+	closeHostOnce sync.Once
 }
 
 func (ht *hcsTask) ID() string {
@@ -333,15 +344,7 @@ func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all 
 	eg.Go(func() error {
 		return e.Kill(ctx, signal)
 	})
-	err = eg.Wait()
-	if err != nil {
-		return err
-	}
-	if eid == "" {
-		// We just killed the init process. Tear down the container too.
-		ht.close()
-	}
-	return nil
+	return eg.Wait()
 }
 
 func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, time.Time, error) {
@@ -400,6 +403,44 @@ func (ht *hcsTask) Pids(ctx context.Context) ([]shimTaskPidPair, error) {
 	}).Debug("hcsTask::Pids")
 
 	return nil, errdefs.ErrNotImplemented
+}
+
+// waitForHostExit waits for the host virtual machine to exit. Once exited
+// forcibly exits all additional exec's in this task.
+//
+// This MUST be called via a goroutine to wait on a background thread.
+//
+// Note: For Windows process isolated containers there is no host virtual
+// machine so this should not be called.
+func (ht *hcsTask) waitForHostExit() {
+	log := logrus.WithFields(logrus.Fields{
+		"tid": ht.id,
+	})
+	err := ht.host.Wait()
+	if err != nil {
+		log.Data[logrus.ErrorKey] = err
+		log.Error("hcsTask::waitForHostExit - Failed to wait for host virtual machine exit")
+		delete(log.Data, logrus.ErrorKey)
+	} else {
+		log.Debug("hcsTask::waitForHostExit - Host virtual machine exited")
+	}
+
+	ht.execs.Range(func(key, value interface{}) bool {
+		ex := value.(shimExec)
+		ex.ForceExit(1)
+
+		// iterate all
+		return false
+	})
+	ht.init.ForceExit(1)
+	ht.closeHostOnce.Do(func() {
+		if err := ht.host.Close(); err != nil {
+			logrus.WithFields(logrus.Fields{
+				"tid":           ht.id,
+				logrus.ErrorKey: err,
+			}).Error("hcsTask::close - failed host vm shutdown")
+		}
+	})
 }
 
 // close shuts down the container that is owned by this task and if
@@ -470,16 +511,16 @@ func (ht *hcsTask) close() {
 		}
 
 		if ht.ownsHost && ht.host != nil {
-			logrus.WithFields(logrus.Fields{
-				"tid": ht.id,
-			}).Debug("hcsTask::close - begin host vm shutdown")
-
-			if err := ht.host.Close(); err != nil {
-				logrus.WithFields(logrus.Fields{
-					"tid":           ht.id,
-					logrus.ErrorKey: err,
-				}).Error("hcsTask::close - failed host vm shutdown")
-			}
+			// This task is also the host owner. Shutdown the host as part of
+			// the init process going down.
+			ht.closeHostOnce.Do(func() {
+				if err := ht.host.Close(); err != nil {
+					logrus.WithFields(logrus.Fields{
+						"tid":           ht.id,
+						logrus.ErrorKey: err,
+					}).Error("hcsTask::close - failed host vm shutdown")
+				}
+			})
 		}
 	})
 }
