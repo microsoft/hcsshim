@@ -20,6 +20,7 @@ build_script:
   - go build ./cmd/wclayer
   - go test -v ./... -tags admin
   - go test -c ./test/containerd-shim-runhcs-v1/ -tags functional
+  - go test -c ./test/cri-containerd/ -tags functional
   - go test -c ./test/functional/ -tags functional
   - go test -c ./test/runhcs/ -tags integration
 
@@ -27,5 +28,6 @@ artifacts:
   - path: 'wclayer.exe'
   - path: 'runhcs.exe'
   - path: 'tar2ext4.exe'
+  - path: cri-containerd.test.exe
   - path: 'functional.test.exe'
   - path: 'runhcs.test.exe'
