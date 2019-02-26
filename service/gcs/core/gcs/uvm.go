@@ -558,7 +558,7 @@ func (c *Container) AddNetworkAdapter(a *prot.NetworkAdapterV2) error {
 		"-nspid", strconv.Itoa(c.container.Pid()),
 		"-cfg", string(cfg)).CombinedOutput()
 	if err != nil {
-		return errors.Wrapf(err, "failed to configure adapter cid: %s, aid: %s, if id: %s", c.id, a.ID, ifname, string(out))
+		return errors.Wrapf(err, "failed to configure adapter cid: %s, aid: %s, if id: %s %s", c.id, a.ID, ifname, string(out))
 	}
 	return nil
 }
