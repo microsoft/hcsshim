@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -19,6 +20,7 @@ const (
 	annotationVPMemCount           = "io.microsoft.virtualmachine.devices.virtualpmem.maximumcount"
 	annotationVPMemSize            = "io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes"
 	annotationPreferredRootFSType  = "io.microsoft.virtualmachine.lcow.preferredrootfstype"
+	annotationBootFilesRootPath    = "io.microsoft.virtualmachine.lcow.bootfilesrootpath"
 )
 
 // parseAnnotationsBool searches `a` for `key` and if found verifies that the
@@ -128,6 +130,14 @@ func parseAnnotationsUint64(a map[string]string, key string, def uint64) uint64 
 	return def
 }
 
+// parseAnnotationsString searches `a` for `key`. If `key` is not found returns `def`.
+func parseAnnotationsString(a map[string]string, key string, def string) string {
+	if v, ok := a[key]; ok {
+		return v
+	}
+	return def
+}
+
 // SpecToUVMCreateOpts parses `s` and returns either `*uvm.OptionsLCOW` or
 // `*uvm.OptionsWCOW`.
 func SpecToUVMCreateOpts(s *specs.Spec, id, owner string) (interface{}, error) {
@@ -149,6 +159,7 @@ func SpecToUVMCreateOpts(s *specs.Spec, id, owner string) (interface{}, error) {
 		case uvm.PreferredRootFSTypeVHD:
 			lopts.RootFSFile = uvm.VhdFile
 		}
+		lopts.BootFilesPath = parseAnnotationsString(s.Annotations, annotationBootFilesRootPath, lopts.BootFilesPath)
 		return lopts, nil
 	} else if IsWCOW(s) {
 		wopts := uvm.NewDefaultOptionsWCOW(id, owner)
@@ -159,4 +170,14 @@ func SpecToUVMCreateOpts(s *specs.Spec, id, owner string) (interface{}, error) {
 		return wopts, nil
 	}
 	return nil, errors.New("cannot create UVM opts spec is not LCOW or WCOW")
+}
+
+// UpdateSpecFromOptions sets extra annotations on the OCI spec based on the
+// `opts` struct.
+func UpdateSpecFromOptions(s specs.Spec, opts *runhcsopts.Options) specs.Spec {
+	if opts.BootFilesRootPath != "" {
+		s.Annotations[annotationBootFilesRootPath] = opts.BootFilesRootPath
+	}
+
+	return s
 }

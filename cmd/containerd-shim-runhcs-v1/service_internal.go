@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	"github.com/Microsoft/hcsshim/internal/oci"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/mount"
@@ -94,6 +95,8 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 		return nil, err
 	}
 	f.Close()
+
+	spec = oci.UpdateSpecFromOptions(spec, shimOpts)
 
 	if len(req.Rootfs) == 0 {
 		// If no mounts are passed via the snapshotter its the callers full
