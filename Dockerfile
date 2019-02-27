@@ -13,10 +13,10 @@
 #   <TODO: Additional step to generate VHD from rootfs.tar.gz and install>
 #   <Restart the docker daemon to pick up the new initrd>
 
-FROM linuxkit/runc:7c39a68490a12cde830e1922f171c451fb08e731 AS runc
+FROM linuxkit/runc:069d5cd3cc4f0aec70e4af53aed5d27a21c79c35 AS runc
 FROM busybox AS busybox
 
-FROM linuxkit/alpine:b1a36f0dd41e60142dd84dab7cd333ce7da1d1f8
+FROM golang:1.11.5-alpine3.9
 ENV GOPATH=/go PATH=$PATH:/go/bin SRC=/go/src/github.com/Microsoft/opengcs
 WORKDIR /build
 RUN \
@@ -31,7 +31,7 @@ RUN \
     rm -rf /target/etc/apk /target/lib/apk /target/var/cache && \
     \
     # Install the build packages
-    apk add --no-cache build-base curl git go musl-dev linux-headers libarchive-tools e2fsprogs && \
+    apk add --no-cache build-base curl git musl-dev linux-headers libarchive-tools e2fsprogs && \
     \
     # Grab udhcpc_config.script
     curl -fSL "https://raw.githubusercontent.com/mirror/busybox/38d966943f5288bb1f2e7219f50a92753c730b14/examples/udhcp/simple.script" -o /target/sbin/udhcpc_config.script && \
