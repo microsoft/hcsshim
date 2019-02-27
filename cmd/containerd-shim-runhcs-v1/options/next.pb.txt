@@ -48,6 +48,13 @@ file {
       type_name: ".containerd.runhcs.v1.Options.SandboxIsolation"
       json_name: "sandboxIsolation"
     }
+    field {
+      name: "boot_files_root_path"
+      number: 7
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "bootFilesRootPath"
+    }
     enum_type {
       name: "DebugType"
       value {

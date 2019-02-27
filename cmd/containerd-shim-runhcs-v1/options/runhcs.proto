@@ -40,4 +40,8 @@ message Options {
 	// the sandbox. For Windows runtime PROCESS and HYPERVISOR are valid. For
 	// LCOW only HYPERVISOR is valid and default if omitted.
 	SandboxIsolation sandbox_isolation = 6;
+
+	// boot_files_root_path is the path to the directory containing the LCOW
+	// kernel and root FS files.
+	string boot_files_root_path = 7;
 }
