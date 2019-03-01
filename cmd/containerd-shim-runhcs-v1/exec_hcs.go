@@ -265,13 +265,15 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 	}
 
 	if he.io.StdinPath() != "" {
-		he.ioWg.Add(1)
 		go func() {
 			io.Copy(in, he.io.Stdin())
+			logrus.WithFields(logrus.Fields{
+				"tid": he.tid,
+				"eid": he.id,
+			}).Debug("hcsExec::Start::Stdin - Copy completed")
 			in.Close()
 			he.p.CloseStdin()
 			he.io.CloseStdin()
-			he.ioWg.Done()
 		}()
 	}
 
@@ -279,6 +281,10 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 		he.ioWg.Add(1)
 		go func() {
 			io.Copy(he.io.Stdout(), out)
+			logrus.WithFields(logrus.Fields{
+				"tid": he.tid,
+				"eid": he.id,
+			}).Debug("hcsExec::Start::Stdout - Copy completed")
 			out.Close()
 			he.ioWg.Done()
 		}()
@@ -288,6 +294,10 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 		he.ioWg.Add(1)
 		go func() {
 			io.Copy(he.io.Stderr(), serr)
+			logrus.WithFields(logrus.Fields{
+				"tid": he.tid,
+				"eid": he.id,
+			}).Debug("hcsExec::Start::Stderr - Copy completed")
 			serr.Close()
 			he.ioWg.Done()
 		}()
