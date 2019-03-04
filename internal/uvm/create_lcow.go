@@ -64,6 +64,18 @@ type OptionsLCOW struct {
 	PreferredRootFSType   PreferredRootFSType // If `KernelFile` is `InitrdFile` use `PreferredRootFSTypeInitRd`. If `KernelFile` is `VhdFile` use `PreferredRootFSTypeVHD`
 }
 
+// defaultLCOWOSBootFilesPath returns the default path used to locate the LCOW
+// OS kernel and root FS files. This default is the subdirectory
+// `LinuxBootFiles` in the directory of the executable that started the current
+// process; or, if it does not exist, `%ProgramFiles%\Linux Containers`.
+func defaultLCOWOSBootFilesPath() string {
+	localDirPath := filepath.Join(filepath.Dir(os.Args[0]), "LinuxBootFiles")
+	if _, err := os.Stat(localDirPath); err == nil {
+		return localDirPath
+	}
+	return filepath.Join(os.Getenv("ProgramFiles"), "Linux Containers")
+}
+
 // NewDefaultOptionsLCOW creates the default options for a bootable version of
 // LCOW.
 //
@@ -83,7 +95,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 			EnableDeferredCommit: false,
 			ProcessorCount:       defaultProcessorCount(),
 		},
-		BootFilesPath:         filepath.Join(os.Getenv("ProgramFiles"), "Linux Containers"),
+		BootFilesPath:         defaultLCOWOSBootFilesPath(),
 		KernelFile:            KernelFile,
 		KernelDirect:          kernelDirectSupported,
 		RootFSFile:            InitrdFile,
