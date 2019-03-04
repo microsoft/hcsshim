@@ -288,7 +288,7 @@ func (process *Process) ExitCode() (_ int, err error) {
 			logfields.ContainerID: process.SystemID(),
 			logfields.ProcessID:   process.processID,
 			"wait-result":         properties.LastWaitResult,
-		}).Warn("hcsshim::Process::ExitCode - Non-zero lat wait result")
+		}).Warn("hcsshim::Process::ExitCode - Non-zero last wait result")
 		return -1, nil
 	}
 
