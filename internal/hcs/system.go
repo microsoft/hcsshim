@@ -640,7 +640,7 @@ func (computeSystem *System) unregisterCallback() error {
 	closeChannels(context.channels)
 
 	callbackMapLock.Lock()
-	callbackMap[callbackNumber] = nil
+	delete(callbackMap, callbackNumber)
 	callbackMapLock.Unlock()
 
 	handle = 0
