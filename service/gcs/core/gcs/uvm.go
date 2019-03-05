@@ -173,7 +173,7 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 	if settings.OCISpecification.Annotations["io.microsoft.virtualmachine.lcow.privileged"] == "true" {
 		logrus.WithFields(logrus.Fields{
 			"cid": id,
-		}).Debugf("opengcs::CreateContainer - spec.Linux.Resources.Devices set for privileged container")
+		}).Debugf("opengcs::CreateContainer - 'io.microsoft.virtualmachine.lcow.privileged' set for privileged container")
 
 		// Add all host devices
 		hostDevices, err := HostDevices()
