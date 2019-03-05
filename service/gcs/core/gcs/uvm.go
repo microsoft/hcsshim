@@ -193,8 +193,10 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 				// Invalid device, most likely a symbolic link, skip it.
 				continue
 			}
+			found := false
 			for i, dev := range settings.OCISpecification.Linux.Devices {
 				if dev.Path == rd.Path {
+					found = true
 					settings.OCISpecification.Linux.Devices[i] = rd
 					break
 				}
@@ -204,7 +206,9 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 					}).Warnf("opengcs::CreateContainer - The same type '%s', major '%d' and minor '%d', should not be used for multiple devices.", dev.Type, dev.Major, dev.Minor)
 				}
 			}
-			settings.OCISpecification.Linux.Devices = append(settings.OCISpecification.Linux.Devices, rd)
+			if !found {
+				settings.OCISpecification.Linux.Devices = append(settings.OCISpecification.Linux.Devices, rd)
+			}
 		}
 
 		// Set the cgroup access
