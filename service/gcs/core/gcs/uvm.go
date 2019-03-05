@@ -169,6 +169,53 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 	// Clear the windows section of the config
 	settings.OCISpecification.Windows = nil
 
+	// Check if we need to do any capability/device mappings
+	if settings.OCISpecification.Annotations["io.microsoft.virtualmachine.lcow.privileged"] == "true" {
+		logrus.WithFields(logrus.Fields{
+			"cid": id,
+		}).Debugf("opengcs::CreateContainer - spec.Linux.Resources.Devices set for privileged container")
+
+		// Add all host devices
+		hostDevices, err := HostDevices()
+		if err != nil {
+			return nil, err
+		}
+		for _, hostDevice := range hostDevices {
+			rd := oci.LinuxDevice{
+				Path:  hostDevice.Path,
+				Type:  string(hostDevice.Type),
+				Major: hostDevice.Major,
+				Minor: hostDevice.Minor,
+				UID:   &hostDevice.Uid,
+				GID:   &hostDevice.Gid,
+			}
+			if hostDevice.Major == 0 && hostDevice.Minor == 0 {
+				// Invalid device, most likely a symbolic link, skip it.
+				continue
+			}
+			for i, dev := range settings.OCISpecification.Linux.Devices {
+				if dev.Path == rd.Path {
+					settings.OCISpecification.Linux.Devices[i] = rd
+					break
+				}
+				if dev.Type == rd.Type && dev.Major == rd.Major && dev.Minor == rd.Minor {
+					logrus.WithFields(logrus.Fields{
+						"cid": id,
+					}).Warnf("opengcs::CreateContainer - The same type '%s', major '%d' and minor '%d', should not be used for multiple devices.", dev.Type, dev.Major, dev.Minor)
+				}
+			}
+			settings.OCISpecification.Linux.Devices = append(settings.OCISpecification.Linux.Devices, rd)
+		}
+
+		// Set the cgroup access
+		settings.OCISpecification.Linux.Resources.Devices = []oci.LinuxDeviceCgroup{
+			{
+				Allow:  true,
+				Access: "rwm",
+			},
+		}
+	}
+
 	// Container doesnt exit. Create it here
 	// Create the BundlePath
 	if err := os.MkdirAll(settings.OCIBundlePath, 0700); err != nil {
