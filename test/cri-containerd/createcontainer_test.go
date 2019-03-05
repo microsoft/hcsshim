@@ -44,6 +44,10 @@ func runCreateContainerTest(t *testing.T, runtimeHandler string, request *runtim
 		},
 		RuntimeHandler: runtimeHandler,
 	}
+	runCreateContainerTestWithSandbox(t, sandboxRequest, request)
+}
+
+func runCreateContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.RunPodSandboxRequest, request *runtime.CreateContainerRequest) {
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -56,7 +60,15 @@ func runCreateContainerTest(t *testing.T, runtimeHandler string, request *runtim
 	request.PodSandboxId = podID
 	request.SandboxConfig = sandboxRequest.Config
 	containerID := createContainer(t, client, ctx, request)
-	stopAndRemoveContainer(t, client, ctx, containerID)
+	defer func() {
+		stopAndRemoveContainer(t, client, ctx, containerID)
+	}()
+	_, err := client.StartContainer(ctx, &runtime.StartContainerRequest{
+		ContainerId: containerID,
+	})
+	if err != nil {
+		t.Fatalf("failed StartContainer request for container: %s, with: %v", containerID, err)
+	}
 }
 
 func Test_CreateContainer_WCOW_Process(t *testing.T) {
@@ -188,4 +200,45 @@ func Test_CreateContainer_LCOW_Tty(t *testing.T) {
 		},
 	}
 	runCreateContainerTest(t, lcowRuntimeHandler, request)
+}
+
+func Test_CreateContainer_LCOW_Privileged(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	sandboxRequest := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name() + "-Sandbox",
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Linux: &runtime.LinuxPodSandboxConfig{
+				SecurityContext: &runtime.LinuxSandboxSecurityContext{
+					Privileged: true,
+				},
+			},
+		},
+		RuntimeHandler: lcowRuntimeHandler,
+	}
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			// Hold this command open until killed
+			Command: []string{
+				"top",
+			},
+			Linux: &runtime.LinuxContainerConfig{
+				SecurityContext: &runtime.LinuxContainerSecurityContext{
+					Privileged: true,
+				},
+			},
+		},
+	}
+	runCreateContainerTestWithSandbox(t, sandboxRequest, request)
 }
