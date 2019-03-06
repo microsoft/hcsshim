@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/containerd/containerd/runtime/v2/task"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
@@ -59,5 +60,5 @@ type shimTask interface {
 	DeleteExec(ctx context.Context, eid string) (int, uint32, time.Time, error)
 	// Pids returns all process pid's in this `shimTask` including ones not
 	// created by the caller via a `CreateExec`.
-	Pids(ctx context.Context) ([]shimTaskPidPair, error)
+	Pids(ctx context.Context) ([]options.ProcessDetails, error)
 }

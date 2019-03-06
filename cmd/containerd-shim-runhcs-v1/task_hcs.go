@@ -8,9 +8,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/internal/schema1"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 	eventstypes "github.com/containerd/containerd/api/events"
@@ -397,12 +399,45 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, tim
 	return int(status.Pid), status.ExitStatus, status.ExitedAt, nil
 }
 
-func (ht *hcsTask) Pids(ctx context.Context) ([]shimTaskPidPair, error) {
+func (ht *hcsTask) Pids(ctx context.Context) ([]options.ProcessDetails, error) {
 	logrus.WithFields(logrus.Fields{
 		"tid": ht.id,
 	}).Debug("hcsTask::Pids")
 
-	return nil, errdefs.ErrNotImplemented
+	// Map all user created exec's to pid/exec-id
+	pidMap := make(map[int]string)
+	ht.execs.Range(func(key, value interface{}) bool {
+		ex := value.(shimExec)
+		pidMap[ex.Pid()] = ex.ID()
+
+		// Iterate all
+		return false
+	})
+	pidMap[ht.init.Pid()] = ht.init.ID()
+
+	// Get the guest pids
+	props, err := ht.c.Properties(schema1.PropertyTypeProcessList)
+	if err != nil {
+		return nil, err
+	}
+
+	// Copy to pid/exec-id pair's
+	pairs := make([]options.ProcessDetails, len(props.ProcessList))
+	for i, p := range props.ProcessList {
+		pairs[i].ImageName = p.ImageName
+		pairs[i].CreatedAt = p.CreateTimestamp
+		pairs[i].KernelTime_100Ns = p.KernelTime100ns
+		pairs[i].MemoryCommitBytes = p.MemoryCommitBytes
+		pairs[i].MemoryWorkingSetPrivateBytes = p.MemoryWorkingSetPrivateBytes
+		pairs[i].MemoryWorkingSetSharedBytes = p.MemoryWorkingSetSharedBytes
+		pairs[i].ProcessID = p.ProcessId
+		pairs[i].UserTime_100Ns = p.KernelTime100ns
+
+		if eid, ok := pidMap[int(p.ProcessId)]; ok {
+			pairs[i].ExecID = eid
+		}
+	}
+	return pairs, nil
 }
 
 // waitForHostExit waits for the host virtual machine to exit. Once exited

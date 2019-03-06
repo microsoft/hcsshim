@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/containerd/containerd/errdefs"
-	runcopts "github.com/containerd/containerd/runtime/v2/runc/options"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/typeurl"
 )
@@ -334,13 +334,13 @@ func Test_PodShim_pidsInternal_InitTaskID_Success(t *testing.T) {
 		t.Fatal("should have returned init pid")
 	}
 	if resp.Processes[0].Info == nil {
-		t.Fatal("should not have returned init pid info")
+		t.Fatal("should have returned init pid info")
 	}
 	u, err := typeurl.UnmarshalAny(resp.Processes[0].Info)
 	if err != nil {
 		t.Fatalf("failed to unmarshal init pid info, err: %v", err)
 	}
-	pi := u.(*runcopts.ProcessDetails)
+	pi := u.(*options.ProcessDetails)
 	if pi.ExecID != t1.ID() {
 		t.Fatalf("should have returned 2nd pid ExecID, got: %v", pi.ExecID)
 	}
@@ -363,19 +363,19 @@ func Test_PodShim_pidsInternal_2ndTaskID_Success(t *testing.T) {
 		t.Fatal("should have returned init pid")
 	}
 	if resp.Processes[0].Info == nil {
-		t.Fatal("should not have returned init pid info")
+		t.Fatal("should have returned init pid info")
 	}
 	if resp.Processes[1].Pid != uint32(t2.execs[t2e2.ID()].pid) {
 		t.Fatal("should have returned 2nd pid")
 	}
 	if resp.Processes[1].Info == nil {
-		t.Fatal("should not have returned nil 2nd pid info")
+		t.Fatal("should have returned 2nd pid info")
 	}
 	u, err := typeurl.UnmarshalAny(resp.Processes[1].Info)
 	if err != nil {
 		t.Fatalf("failed to unmarshal 2nd pid info, err: %v", err)
 	}
-	pi := u.(*runcopts.ProcessDetails)
+	pi := u.(*options.ProcessDetails)
 	if pi.ExecID != t2e2.ID() {
 		t.Fatalf("should have returned 2nd pid ExecID, got: %v", pi.ExecID)
 	}

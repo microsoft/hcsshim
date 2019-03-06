@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	eventstypes "github.com/containerd/containerd/api/events"
@@ -158,15 +159,15 @@ func (wpst *wcowPodSandboxTask) DeleteExec(ctx context.Context, eid string) (int
 	return int(status.Pid), status.ExitStatus, status.ExitedAt, nil
 }
 
-func (wpst *wcowPodSandboxTask) Pids(ctx context.Context) ([]shimTaskPidPair, error) {
+func (wpst *wcowPodSandboxTask) Pids(ctx context.Context) ([]options.ProcessDetails, error) {
 	logrus.WithFields(logrus.Fields{
 		"tid": wpst.id,
 	}).Debug("wcowPodSandboxTask::Pids")
 
-	return []shimTaskPidPair{
+	return []options.ProcessDetails{
 		{
-			Pid:    wpst.init.Pid(),
-			ExecID: wpst.init.ID(),
+			ProcessID: uint32(wpst.init.Pid()),
+			ExecID:    wpst.init.ID(),
 		},
 	}, nil
 }
