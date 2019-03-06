@@ -61,6 +61,7 @@ type service struct {
 }
 
 func (s *service) State(ctx context.Context, req *task.StateRequest) (_ *task.StateResponse, err error) {
+	defer panicRecover()
 	const activity = "State"
 	af := logrus.Fields{
 		"tid": req.ID,
@@ -73,6 +74,7 @@ func (s *service) State(ctx context.Context, req *task.StateRequest) (_ *task.St
 }
 
 func (s *service) Create(ctx context.Context, req *task.CreateTaskRequest) (_ *task.CreateTaskResponse, err error) {
+	defer panicRecover()
 	const activity = "Create"
 	beginActivity(activity, logrus.Fields{
 		"tid":              req.ID,
@@ -95,6 +97,7 @@ func (s *service) Create(ctx context.Context, req *task.CreateTaskRequest) (_ *t
 }
 
 func (s *service) Start(ctx context.Context, req *task.StartRequest) (_ *task.StartResponse, err error) {
+	defer panicRecover()
 	const activity = "Start"
 	af := logrus.Fields{
 		"tid": req.ID,
@@ -107,6 +110,7 @@ func (s *service) Start(ctx context.Context, req *task.StartRequest) (_ *task.St
 }
 
 func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (_ *task.DeleteResponse, err error) {
+	defer panicRecover()
 	const activity = "Delete"
 	af := logrus.Fields{
 		"tid": req.ID,
@@ -119,6 +123,7 @@ func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (_ *task.
 }
 
 func (s *service) Pids(ctx context.Context, req *task.PidsRequest) (_ *task.PidsResponse, err error) {
+	defer panicRecover()
 	const activity = "Pids"
 	af := logrus.Fields{
 		"tid": req.ID,
@@ -130,6 +135,7 @@ func (s *service) Pids(ctx context.Context, req *task.PidsRequest) (_ *task.Pids
 }
 
 func (s *service) Pause(ctx context.Context, req *task.PauseRequest) (_ *google_protobuf1.Empty, err error) {
+	defer panicRecover()
 	const activity = "Pause"
 	af := logrus.Fields{
 		"tid": req.ID,
@@ -141,6 +147,7 @@ func (s *service) Pause(ctx context.Context, req *task.PauseRequest) (_ *google_
 }
 
 func (s *service) Resume(ctx context.Context, req *task.ResumeRequest) (_ *google_protobuf1.Empty, err error) {
+	defer panicRecover()
 	const activity = "Resume"
 	af := logrus.Fields{
 		"tid": req.ID,
@@ -152,6 +159,7 @@ func (s *service) Resume(ctx context.Context, req *task.ResumeRequest) (_ *googl
 }
 
 func (s *service) Checkpoint(ctx context.Context, req *task.CheckpointTaskRequest) (_ *google_protobuf1.Empty, err error) {
+	defer panicRecover()
 	const activity = "Checkpoint"
 	af := logrus.Fields{
 		"tid":  req.ID,
@@ -164,6 +172,7 @@ func (s *service) Checkpoint(ctx context.Context, req *task.CheckpointTaskReques
 }
 
 func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *google_protobuf1.Empty, err error) {
+	defer panicRecover()
 	const activity = "Kill"
 	af := logrus.Fields{
 		"tid":    req.ID,
@@ -178,6 +187,7 @@ func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *google_pr
 }
 
 func (s *service) Exec(ctx context.Context, req *task.ExecProcessRequest) (_ *google_protobuf1.Empty, err error) {
+	defer panicRecover()
 	const activity = "Exec"
 	af := logrus.Fields{
 		"tid":      req.ID,
@@ -194,6 +204,7 @@ func (s *service) Exec(ctx context.Context, req *task.ExecProcessRequest) (_ *go
 }
 
 func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ *google_protobuf1.Empty, err error) {
+	defer panicRecover()
 	const activity = "ResizePty"
 	af := logrus.Fields{
 		"tid":    req.ID,
@@ -208,6 +219,7 @@ func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ 
 }
 
 func (s *service) CloseIO(ctx context.Context, req *task.CloseIORequest) (_ *google_protobuf1.Empty, err error) {
+	defer panicRecover()
 	const activity = "CloseIO"
 	af := logrus.Fields{
 		"tid":   req.ID,
@@ -221,6 +233,7 @@ func (s *service) CloseIO(ctx context.Context, req *task.CloseIORequest) (_ *goo
 }
 
 func (s *service) Update(ctx context.Context, req *task.UpdateTaskRequest) (_ *google_protobuf1.Empty, err error) {
+	defer panicRecover()
 	const activity = "Update"
 	af := logrus.Fields{
 		"tid": req.ID,
@@ -232,6 +245,7 @@ func (s *service) Update(ctx context.Context, req *task.UpdateTaskRequest) (_ *g
 }
 
 func (s *service) Wait(ctx context.Context, req *task.WaitRequest) (_ *task.WaitResponse, err error) {
+	defer panicRecover()
 	const activity = "Wait"
 	af := logrus.Fields{
 		"tid": req.ID,
@@ -244,6 +258,7 @@ func (s *service) Wait(ctx context.Context, req *task.WaitRequest) (_ *task.Wait
 }
 
 func (s *service) Stats(ctx context.Context, req *task.StatsRequest) (_ *task.StatsResponse, err error) {
+	defer panicRecover()
 	const activity = "Stats"
 	af := logrus.Fields{
 		"tid": req.ID,
@@ -255,6 +270,7 @@ func (s *service) Stats(ctx context.Context, req *task.StatsRequest) (_ *task.St
 }
 
 func (s *service) Connect(ctx context.Context, req *task.ConnectRequest) (_ *task.ConnectResponse, err error) {
+	defer panicRecover()
 	const activity = "Connect"
 	af := logrus.Fields{
 		"tid": req.ID,
@@ -266,6 +282,7 @@ func (s *service) Connect(ctx context.Context, req *task.ConnectRequest) (_ *tas
 }
 
 func (s *service) Shutdown(ctx context.Context, req *task.ShutdownRequest) (_ *google_protobuf1.Empty, err error) {
+	defer panicRecover()
 	const activity = "Shutdown"
 	af := logrus.Fields{
 		"tid": req.ID,

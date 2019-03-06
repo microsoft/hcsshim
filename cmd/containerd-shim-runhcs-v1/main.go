@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/Microsoft/go-winio/pkg/etwlogrus"
@@ -36,6 +37,28 @@ var (
 	idFlag string
 )
 
+func stack() []byte {
+	buf := make([]byte, 1024)
+	for {
+		n := runtime.Stack(buf, true) // true means all goroutines
+		if n < len(buf) {
+			return buf[:n]
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+}
+
+func panicRecover() {
+	if r := recover(); r != nil {
+		logrus.Errorf("containerd-shim-runhcs-v1: panic: %s", r)
+		s := string(stack())
+		split := strings.Split(s, "\n")
+		for _, line := range split {
+			logrus.Error(line)
+		}
+	}
+}
+
 func main() {
 	// Provider ID: 0b52781f-b24d-5685-ddf6-69830ed40ec3
 	// Hook isn't closed explicitly, as it will exist until process exit.
@@ -44,6 +67,8 @@ func main() {
 	} else {
 		logrus.Error(err)
 	}
+
+	defer panicRecover()
 
 	app := cli.NewApp()
 	app.Name = "containerd-shim-runhcs-v1"
