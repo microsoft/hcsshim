@@ -22,8 +22,8 @@ const (
 	lcowRuntimeHandler           = "lcow-debug"
 	imageWindowsRS5Nanoserver    = "mcr.microsoft.com/windows/nanoserver:1809"
 	imageWindowsRS5Servercore    = "mcr.microsoft.com/windows/servercore:1809"
-	imageLcowK8sPause            = "k8s.gcr.io/pause"
-	imageLcowAlpine              = "docker.io/library/alpine"
+	imageLcowK8sPause            = "k8s.gcr.io/pause:3.1"
+	imageLcowAlpine              = "docker.io/library/alpine:latest"
 )
 
 func newTestRuntimeClient(t *testing.T) runtime.RuntimeServiceClient {

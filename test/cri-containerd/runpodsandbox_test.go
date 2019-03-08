@@ -433,7 +433,7 @@ func Test_RunPodSandbox_PortMappings_WCOW_Hypervisor(t *testing.T) {
 }
 
 func Test_RunPodSandbox_PortMappings_LCOW(t *testing.T) {
-	pullRequiredImages(t, []string{imageLcowK8sPause})
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
