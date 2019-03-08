@@ -141,7 +141,12 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		id:     req.ID,
 		host:   parent,
 	}
-	if oci.IsWCOW(s) {
+	// TOOD: JTERRY75 - There is a bug in the compartment activation for Windows
+	// Process isolated that requires us to create the real pause container to
+	// hold the network compartment open. This is not required for Windows
+	// Hypervisor isolated. When we have a build that supports this for Windows
+	// Process isolated make sure to move back to this model.
+	if oci.IsWCOW(s) && parent != nil {
 		// For WCOW we fake out the init task since we dont need it. We only
 		// need to provision the guest network namespace if this is hypervisor
 		// isolated. Process isolated WCOW gets the namespace endpoints
@@ -186,7 +191,8 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 				Pid:        0,
 			})
 	} else {
-		// LCOW requires a real task for the sandbox
+		// LCOW (and WCOW Process Isolated for the time being) requires a real
+		// task for the sandbox.
 		lt, err := newHcsTask(ctx, events, parent, true, req, s)
 		if err != nil {
 			return nil, err
