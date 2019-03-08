@@ -84,6 +84,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 	}
 
 	owner := filepath.Base(os.Args[0])
+	isWCOW := oci.IsWCOW(s)
 
 	var parent *uvm.UtilityVM
 	if oci.IsIsolated(s) {
@@ -126,7 +127,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		if err != nil {
 			parent.Close()
 		}
-	} else if !oci.IsWCOW(s) {
+	} else if !isWCOW {
 		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "oci spec does not contain WCOW or LCOW spec")
 	}
 	defer func() {
@@ -146,7 +147,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 	// hold the network compartment open. This is not required for Windows
 	// Hypervisor isolated. When we have a build that supports this for Windows
 	// Process isolated make sure to move back to this model.
-	if oci.IsWCOW(s) && parent != nil {
+	if isWCOW && parent != nil {
 		// For WCOW we fake out the init task since we dont need it. We only
 		// need to provision the guest network namespace if this is hypervisor
 		// isolated. Process isolated WCOW gets the namespace endpoints
@@ -191,6 +192,12 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 				Pid:        0,
 			})
 	} else {
+		if isWCOW {
+			// The pause container activation will immediately exit on Windows
+			// because there is no command. We forcibly update the command here
+			// to keep it alive.
+			s.Process.CommandLine = "cmd /c ping -t 127.0.0.1 > nul"
+		}
 		// LCOW (and WCOW Process Isolated for the time being) requires a real
 		// task for the sandbox.
 		lt, err := newHcsTask(ctx, events, parent, true, req, s)
