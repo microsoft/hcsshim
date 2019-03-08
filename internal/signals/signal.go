@@ -12,6 +12,11 @@ var (
 	ErrInvalidSignal = errors.New("invalid signal value")
 )
 
+// ShouldKill returns `true` if `signal` should terminate the process.
+func ShouldKill(signal uint32) bool {
+	return signal == sigKill || signal == sigTerm
+}
+
 // ValidateSigstr validates that `sigstr` is an acceptable signal for WCOW/LCOW
 // based on `signalsSupported`.
 //

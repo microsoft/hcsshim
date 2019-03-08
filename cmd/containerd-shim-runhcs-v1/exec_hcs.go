@@ -25,6 +25,17 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+const (
+	// processStopTimeout is the amount of time after signaling the process with
+	// a signal expected to kill the process that the exec must wait before
+	// forcibly terminating the process.
+	//
+	// For example, sending a SIGKILL is expected to kill a process. If the
+	// process does not stop within `processStopTimeout` we will forcibly
+	// terminate the process without a signal.
+	processStopTimeout = time.Second * 5
+)
+
 // newHcsExec creates an exec to track the lifetime of `spec` in `c` which is
 // actually created on the call to `Start()`. If `id==tid` then this is the init
 // exec and the exec will also start `c` on the call to `Start()` before execing
@@ -354,6 +365,28 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 			return err
 		}
 		if supported {
+			if signals.ShouldKill(signal) {
+				go func() {
+					select {
+					case <-time.After(processStopTimeout):
+						logrus.WithFields(logrus.Fields{
+							"tid":    he.tid,
+							"eid":    he.id,
+							"signal": signal,
+						}).Warning("hcsExec::Kill - timed out waiting for expected process stop")
+						if err := he.p.Kill(); err != nil && !hcs.IsAlreadyClosed(err) && !hcs.IsAlreadyStopped(err) {
+							logrus.WithFields(logrus.Fields{
+								"tid":           he.tid,
+								"eid":           he.id,
+								"signal":        signal,
+								logrus.ErrorKey: err,
+							}).Error("hcsExec::Kill - failed to forcibly terminate process after timeout period")
+						}
+					case <-he.processCtx.Done():
+						// Process exited. This is the normal case.
+					}
+				}()
+			}
 			return he.p.Signal(guestrequest.SignalProcessOptions{
 				Signal: sig,
 			})
