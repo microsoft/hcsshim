@@ -25,6 +25,17 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+const (
+	// processStopTimeout is the amount of time after signaling the process with
+	// a signal expected to kill the process that the exec must wait before
+	// forcibly terminating the process.
+	//
+	// For example, sending a SIGKILL is expected to kill a process. If the
+	// process does not stop within `processStopTimeout` we will forcibly
+	// terminate the process without a signal.
+	processStopTimeout = time.Second * 5
+)
+
 // newHcsExec creates an exec to track the lifetime of `spec` in `c` which is
 // actually created on the call to `Start()`. If `id==tid` then this is the init
 // exec and the exec will also start `c` on the call to `Start()` before execing
@@ -114,12 +125,13 @@ type hcsExec struct {
 
 	// sl is the state lock that MUST be held to safely read/write any of the
 	// following members.
-	sl         sync.Mutex
-	state      shimExecState
-	pid        int
-	exitStatus uint32
-	exitedAt   time.Time
-	p          *hcs.Process
+	sl             sync.Mutex
+	state          shimExecState
+	pid            int
+	exitStatus     uint32
+	exitedAt       time.Time
+	p              *hcs.Process
+	stdout, stderr io.Closer
 
 	// exited is a wait block which waits async for the process to exit.
 	exited     chan struct{}
@@ -278,6 +290,7 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 	}
 
 	if he.io.StdoutPath() != "" {
+		he.stdout = out
 		he.ioWg.Add(1)
 		go func() {
 			io.Copy(he.io.Stdout(), out)
@@ -285,12 +298,20 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 				"tid": he.tid,
 				"eid": he.id,
 			}).Debug("hcsExec::Start::Stdout - Copy completed")
-			out.Close()
 			he.ioWg.Done()
+
+			// Close the stdout io handle if not closed.
+			he.sl.Lock()
+			if he.stdout != nil {
+				he.stdout.Close()
+				he.stdout = nil
+			}
+			he.sl.Unlock()
 		}()
 	}
 
 	if he.io.StderrPath() != "" {
+		he.stderr = serr
 		he.ioWg.Add(1)
 		go func() {
 			io.Copy(he.io.Stderr(), serr)
@@ -298,8 +319,15 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 				"tid": he.tid,
 				"eid": he.id,
 			}).Debug("hcsExec::Start::Stderr - Copy completed")
-			serr.Close()
 			he.ioWg.Done()
+
+			// Close the stderr io handle if not closed.
+			he.sl.Lock()
+			if he.stderr != nil {
+				he.stderr.Close()
+				he.stderr = nil
+			}
+			he.sl.Unlock()
 		}()
 	}
 
@@ -354,6 +382,28 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 			return err
 		}
 		if supported {
+			if signals.ShouldKill(signal) {
+				go func() {
+					select {
+					case <-time.After(processStopTimeout):
+						logrus.WithFields(logrus.Fields{
+							"tid":    he.tid,
+							"eid":    he.id,
+							"signal": signal,
+						}).Warning("hcsExec::Kill - timed out waiting for expected process stop")
+						if err := he.p.Kill(); err != nil && !hcs.IsAlreadyClosed(err) && !hcs.IsAlreadyStopped(err) {
+							logrus.WithFields(logrus.Fields{
+								"tid":           he.tid,
+								"eid":           he.id,
+								"signal":        signal,
+								logrus.ErrorKey: err,
+							}).Error("hcsExec::Kill - failed to forcibly terminate process after timeout period")
+						}
+					case <-he.processCtx.Done():
+						// Process exited. This is the normal case.
+					}
+				}()
+			}
 			return he.p.Signal(guestrequest.SignalProcessOptions{
 				Signal: sig,
 			})
@@ -530,6 +580,34 @@ func (he *hcsExec) waitForExit() {
 	he.exitStatus = uint32(code)
 	he.exitedAt = time.Now()
 	he.sl.Unlock()
+
+	go func() {
+		// processCopyTimeout is the amount of time after process exit we allow the
+		// stdout, stderr relay's to continue before forcibly closing them if not
+		// already completed. This is primarily a safety step against the HCS when
+		// it fails to send a close on the stdout, stderr pipes when the process
+		// exits and blocks the relay wait groups forever.
+		const processCopyTimeout = time.Second * 1
+
+		time.Sleep(processCopyTimeout)
+		he.sl.Lock()
+		defer he.sl.Unlock()
+		if he.stdout != nil || he.stderr != nil {
+			logrus.WithFields(logrus.Fields{
+				"tid": he.tid,
+				"eid": he.id,
+			}).Warn("hcsExec::waitForExit - timed out waiting for ioRelay to complete")
+
+			if he.stdout != nil {
+				he.stdout.Close()
+				he.stdout = nil
+			}
+			if he.stderr != nil {
+				he.stderr.Close()
+				he.stderr = nil
+			}
+		}
+	}()
 
 	// Wait for all IO copies to complete and free the resources.
 	he.ioWg.Wait()
