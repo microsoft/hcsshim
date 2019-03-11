@@ -623,7 +623,11 @@ func (c *Container) RemoveNetworkAdapter(id string) error {
 	}).Info("opengcs::Container::RemoveNetworkAdapter")
 
 	// TODO: JTERRY75 - Implement removal if we ever need to support hot remove.
-	return errors.New("not implemented")
+	logrus.WithFields(logrus.Fields{
+		"cid":               c.id,
+		"adapterInstanceID": id,
+	}).Warning("opengcs::Container::RemoveNetworkAdapter - Not implemented")
+	return nil
 }
 
 // Process is a struct that defines the lifetime and operations associated with
