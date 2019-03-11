@@ -762,14 +762,19 @@ func (b *Bridge) getProperties(w ResponseWriter, r *Request) {
 
 	var properties *prot.Properties
 	if request.ContainerID == gcspkg.UVMContainerID {
-		// We only ever supported querying the pid's in V1. Until we support more than that
-		// we can just return this same set in V2.
-		pids := b.hostState.GetAllProcessPids()
+		w.Error(request.ActivityID, errors.New("getProperties is not supported against the UVM handle"))
+		return
+	} else if c, err := b.hostState.GetContainer(request.ContainerID); err == nil {
+		pids, err := c.GetAllProcessPids()
+		if err != nil {
+			w.Error(request.ActivityID, err)
+			return
+		}
 		properties = &prot.Properties{
 			ProcessList: make([]prot.ProcessDetails, len(pids)),
 		}
-		for _, pid := range pids {
-			properties.ProcessList = append(properties.ProcessList, prot.ProcessDetails{ProcessID: pid})
+		for i, pid := range pids {
+			properties.ProcessList[i].ProcessID = uint32(pid)
 		}
 	} else {
 		var err error
