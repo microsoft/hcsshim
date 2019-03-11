@@ -41,10 +41,10 @@ type NetworkNotFoundError struct {
 }
 
 func (e NetworkNotFoundError) Error() string {
-	if e.NetworkName == "" {
-		return fmt.Sprintf("Network Name %s not found", e.NetworkName)
+	if e.NetworkName != "" {
+		return fmt.Sprintf("Network name %q not found", e.NetworkName)
 	}
-	return fmt.Sprintf("Network Id %s not found", e.NetworkID)
+	return fmt.Sprintf("Network ID %q not found", e.NetworkID)
 }
 
 // EndpointNotFoundError results from a failed seach for an endpoint by Id or Name
@@ -54,10 +54,10 @@ type EndpointNotFoundError struct {
 }
 
 func (e EndpointNotFoundError) Error() string {
-	if e.EndpointName == "" {
-		return fmt.Sprintf("Endpoint Name %s not found", e.EndpointName)
+	if e.EndpointName != "" {
+		return fmt.Sprintf("Endpoint name %q not found", e.EndpointName)
 	}
-	return fmt.Sprintf("Endpoint Id %s not found", e.EndpointID)
+	return fmt.Sprintf("Endpoint ID %q not found", e.EndpointID)
 }
 
 // NamespaceNotFoundError results from a failed seach for a namsepace by Id
