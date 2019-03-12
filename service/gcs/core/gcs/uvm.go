@@ -63,21 +63,6 @@ func (h *Host) getContainerLocked(id string) (*Container, error) {
 	}
 }
 
-func (h *Host) GetAllProcessPids() []uint32 {
-	h.containersMutex.Lock()
-	defer h.containersMutex.Unlock()
-
-	pids := make([]uint32, 0)
-	for _, c := range h.containers {
-		c.processesMutex.Lock()
-		for _, p := range c.processes {
-			pids = append(pids, p.pid)
-		}
-		c.processesMutex.Unlock()
-	}
-	return pids
-}
-
 func (h *Host) GetContainer(id string) (*Container, error) {
 	h.containersMutex.Lock()
 	defer h.containersMutex.Unlock()
@@ -552,6 +537,19 @@ func (c *Container) GetProcess(pid uint32) (*Process, error) {
 		return nil, errors.WithStack(gcserr.NewProcessDoesNotExistError(int(pid)))
 	}
 	return p, nil
+}
+
+// GetAllProcessPids returns all process pids in the container namespace.
+func (c *Container) GetAllProcessPids() ([]int, error) {
+	state, err := c.container.GetAllProcesses()
+	if err != nil {
+		return nil, err
+	}
+	pids := make([]int, len(state))
+	for i, s := range state {
+		pids[i] = s.Pid
+	}
+	return pids, nil
 }
 
 // Kill sends 'signal' to the container process.
