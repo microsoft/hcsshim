@@ -2,10 +2,18 @@ package hcsoci
 
 import (
 	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/sirupsen/logrus"
 )
 
 func createNetworkNamespace(coi *createOptionsInternal, resources *Resources) error {
+	op := "hcsoci::createNetworkNamespace"
+	log := logrus.WithField(logfields.ContainerID, coi.ID)
+	log.Debug(op + " - Begin")
+	defer func() {
+		log.Debug(op + " - End")
+	}()
+
 	netID, err := hns.CreateNamespace()
 	if err != nil {
 		return err
