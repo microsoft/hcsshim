@@ -12,7 +12,6 @@ import (
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/mount"
-	runcopts "github.com/containerd/containerd/runtime/v2/runc/options"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/typeurl"
 	google_protobuf1 "github.com/gogo/protobuf/types"
@@ -239,18 +238,13 @@ func (s *service) pidsInternal(ctx context.Context, req *task.PidsRequest) (*tas
 	}
 	processes := make([]*containerd_v1_types.ProcessInfo, len(pids))
 	for i, p := range pids {
-		proc := &containerd_v1_types.ProcessInfo{
-			Pid: uint32(p.Pid),
+		a, err := typeurl.MarshalAny(&p)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to marshal ProcessDetails for process: %s, task: %s", p.ExecID, req.ID)
 		}
-		if p.ExecID != "" {
-			d := &runcopts.ProcessDetails{
-				ExecID: p.ExecID,
-			}
-			a, err := typeurl.MarshalAny(d)
-			if err != nil {
-				return nil, errors.Wrapf(err, "failed to marshal ProcessDetails for process: %s, task: %s", p.ExecID, req.ID)
-			}
-			proc.Info = a
+		proc := &containerd_v1_types.ProcessInfo{
+			Pid:  p.ProcessID,
+			Info: a,
 		}
 		processes[i] = proc
 	}

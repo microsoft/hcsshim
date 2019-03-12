@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -57,17 +58,17 @@ func (tst *testShimTask) DeleteExec(ctx context.Context, eid string) (int, uint3
 	return int(status.Pid), status.ExitStatus, status.ExitedAt, nil
 }
 
-func (tst *testShimTask) Pids(ctx context.Context) ([]shimTaskPidPair, error) {
-	pairs := []shimTaskPidPair{
+func (tst *testShimTask) Pids(ctx context.Context) ([]options.ProcessDetails, error) {
+	pairs := []options.ProcessDetails{
 		{
-			Pid:    tst.exec.Pid(),
-			ExecID: tst.exec.ID(),
+			ProcessID: uint32(tst.exec.Pid()),
+			ExecID:    tst.exec.ID(),
 		},
 	}
 	for _, p := range tst.execs {
-		pairs = append(pairs, shimTaskPidPair{
-			Pid:    p.pid,
-			ExecID: p.id,
+		pairs = append(pairs, options.ProcessDetails{
+			ProcessID: uint32(p.pid),
+			ExecID:    p.id,
 		})
 	}
 	return pairs, nil
