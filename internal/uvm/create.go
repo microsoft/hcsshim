@@ -54,7 +54,6 @@ func (uvm *UtilityVM) Close() error {
 		uvm.outputListener = nil
 	}
 	err := uvm.hcsSystem.Close()
-	uvm.hcsSystem = nil
 	return err
 }
 

@@ -126,6 +126,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		err = parent.Start()
 		if err != nil {
 			parent.Close()
+			return nil, err
 		}
 	} else if !isWCOW {
 		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "oci spec does not contain WCOW or LCOW spec")
