@@ -48,7 +48,7 @@ func newHcsExec(
 	c *hcs.System,
 	id, bundle string,
 	isWCOW bool,
-	spec *specs.Process,
+	spec *specs.Spec,
 	io upstreamIO) shimExec {
 	logrus.WithFields(logrus.Fields{
 		"tid": tid,
@@ -107,12 +107,13 @@ type hcsExec struct {
 	//
 	// This MUST be treated as read only in the lifetime of the exec.
 	isWCOW bool
-	// spec is the OCI Process spec that was passed in at create time. This is
+	// spec is the OCI spec that was passed in at create time. This is
 	// stored because we don't actually create the process until the call to
-	// `Start`.
+	// `Start`. Generally, we only need to process part, but due to the
+	// ignore flushes optimisation, easiest way is to pass in the whole spec.
 	//
 	// This MUST be treated as read only in the lifetime of the exec.
-	spec *specs.Process
+	spec *specs.Spec
 	// io is the upstream io connections used for copying between the upstream
 	// io and the downstream io. The upstream IO MUST already be connected at
 	// create time in order to be valid.
@@ -200,6 +201,9 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 		}
 	}()
 	if he.id == he.tid {
+
+		// JJH HACK TO GO IN HERE.
+
 		// This is the init exec. We need to start the container itself
 		err = he.c.Start()
 		if err != nil {
@@ -216,21 +220,21 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 	)
 	if he.isWCOW {
 		wpp := &hcsschema.ProcessParameters{
-			CommandLine:      he.spec.CommandLine,
-			User:             he.spec.User.Username,
-			WorkingDirectory: he.spec.Cwd,
-			EmulateConsole:   he.spec.Terminal,
+			CommandLine:      he.spec.Process.CommandLine,
+			User:             he.spec.Process.User.Username,
+			WorkingDirectory: he.spec.Process.Cwd,
+			EmulateConsole:   he.spec.Process.Terminal,
 			CreateStdInPipe:  he.io.StdinPath() != "",
 			CreateStdOutPipe: he.io.StdoutPath() != "",
 			CreateStdErrPipe: he.io.StderrPath() != "",
 		}
 
-		if he.spec.CommandLine == "" {
-			wpp.CommandLine = escapeArgs(he.spec.Args)
+		if he.spec.Process.CommandLine == "" {
+			wpp.CommandLine = escapeArgs(he.spec.Process.Args)
 		}
 
 		environment := make(map[string]string)
-		for _, v := range he.spec.Env {
+		for _, v := range he.spec.Process.Env {
 			s := strings.SplitN(v, "=", 2)
 			if len(s) == 2 && len(s[1]) > 0 {
 				environment[s[0]] = s[1]
@@ -238,10 +242,10 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 		}
 		wpp.Environment = environment
 
-		if he.spec.ConsoleSize != nil {
+		if he.spec.Process.ConsoleSize != nil {
 			wpp.ConsoleSize = []int32{
-				int32(he.spec.ConsoleSize.Height),
-				int32(he.spec.ConsoleSize.Width),
+				int32(he.spec.Process.ConsoleSize.Height),
+				int32(he.spec.Process.ConsoleSize.Width),
 			}
 		}
 		proc, err = he.c.CreateProcess(wpp)

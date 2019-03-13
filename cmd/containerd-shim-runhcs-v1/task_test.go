@@ -23,7 +23,7 @@ func (tst *testShimTask) ID() string {
 	return tst.id
 }
 
-func (tst *testShimTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest, s *specs.Process) error {
+func (tst *testShimTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest, s *specs.Spec) error {
 	return errdefs.ErrNotImplemented
 }
 

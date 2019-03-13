@@ -28,7 +28,7 @@ type shimTask interface {
 	//
 	// If the init exec is no longer running this task MUST return
 	// `errdefs.ErrFailedPrecondition`.
-	CreateExec(ctx context.Context, req *task.ExecProcessRequest, s *specs.Process) error
+	CreateExec(ctx context.Context, req *task.ExecProcessRequest, s *specs.Spec) error
 	// GetExec returns an exec in this task that matches `eid`. If `eid == ""`
 	// returns the init exec from the initial call to `Create`.
 	//

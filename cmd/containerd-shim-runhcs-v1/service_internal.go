@@ -314,9 +314,10 @@ func (s *service) execInternal(ctx context.Context, req *task.ExecProcessRequest
 	if req.Terminal && req.Stderr != "" {
 		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "if using terminal, stderr must be empty")
 	}
-	var spec specs.Process
+	spec := specs.Spec{Process: &specs.Process{}}
+
 	if err := json.Unmarshal(req.Spec.Value, &spec); err != nil {
-		return nil, errors.Wrap(err, "request.Spec was not oci process")
+		return nil, errors.Wrap(err, "request.Spec was not an oci spec")
 	}
 	err = t.CreateExec(ctx, req, &spec)
 	if err != nil {

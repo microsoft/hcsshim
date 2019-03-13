@@ -157,7 +157,7 @@ func newHcsTask(
 		req.ID,
 		req.Bundle,
 		ht.isWCOW,
-		s.Process,
+		s,
 		io)
 
 	if parent != nil {
@@ -250,7 +250,7 @@ func (ht *hcsTask) ID() string {
 	return ht.id
 }
 
-func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest, spec *specs.Process) error {
+func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest, spec *specs.Spec) error {
 	logrus.WithFields(logrus.Fields{
 		"tid": ht.id,
 		"eid": req.ExecID,

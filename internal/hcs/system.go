@@ -3,6 +3,7 @@ package hcs
 import (
 	"encoding/json"
 	"os"
+	grt "runtime"
 	"strconv"
 	"sync"
 	"syscall"
@@ -214,11 +215,23 @@ func GetComputeSystems(q schema1.ComputeSystemQuery) (_ []schema1.ContainerPrope
 
 	return computeSystems, nil
 }
+func Stack() []byte {
+	buf := make([]byte, 1024)
+	for {
+		n := grt.Stack(buf, false)
+		if n < len(buf) {
+			return buf[:n]
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+}
 
 // Start synchronously starts the computeSystem.
 func (computeSystem *System) Start() (err error) {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
+
+	logrus.Debugf(string(Stack()[:]))
 
 	operation := "hcsshim::ComputeSystem::Start"
 	computeSystem.logOperationBegin(operation)

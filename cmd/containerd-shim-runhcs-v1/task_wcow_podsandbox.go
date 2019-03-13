@@ -82,7 +82,7 @@ func (wpst *wcowPodSandboxTask) ID() string {
 	return wpst.id
 }
 
-func (wpst *wcowPodSandboxTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest, s *specs.Process) error {
+func (wpst *wcowPodSandboxTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest, s *specs.Spec) error {
 	logrus.WithFields(logrus.Fields{
 		"tid": wpst.id,
 		"eid": req.ID,
