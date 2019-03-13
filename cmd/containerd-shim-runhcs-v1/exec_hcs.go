@@ -2,11 +2,16 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
+	"unsafe"
 
+	"github.com/Microsoft/go-winio/vhd"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
@@ -184,6 +189,118 @@ func (he *hcsExec) Status() *task.StateResponse {
 	}
 }
 
+type WriteCacheMode uint16
+
+const (
+	// Write Cache Mode for a VHD.
+	WriteCacheModeCacheMetadata         WriteCacheMode = 0
+	WriteCacheModeWriteInternalMetadata WriteCacheMode = 1
+	WriteCacheModeWriteMetadata         WriteCacheMode = 2
+	WriteCacheModeCommitAll             WriteCacheMode = 3
+	WriteCacheModeDisableFlushing       WriteCacheMode = 4
+)
+
+// setVhdWriteCacheMode sets the WriteCacheMode for a VHD. The handle
+// to the VHD should be opened with Access: None, Flags: ParentCachedIO |
+// IgnoreRelativeParentLocator. Use DisableFlushing for optimisation during
+// first boot, and CacheMetadata following container start
+func setVhdWriteCacheMode(handle syscall.Handle, wcm WriteCacheMode) error {
+	type storageSetSurfaceCachePolicyRequest struct {
+		RequestLevel uint32
+		CacheMode    uint16
+		pad          uint16 // For 4-byte alignment
+	}
+	const ioctlSetSurfaceCachePolicy uint32 = 0x2d1a10
+	request := storageSetSurfaceCachePolicyRequest{
+		RequestLevel: 1,
+		CacheMode:    uint16(wcm),
+		pad:          0,
+	}
+	var bytesReturned uint32
+	return syscall.DeviceIoControl(
+		handle,
+		ioctlSetSurfaceCachePolicy,
+		(*byte)(unsafe.Pointer(&request)),
+		uint32(unsafe.Sizeof(request)),
+		nil,
+		0,
+		&bytesReturned,
+		nil)
+}
+
+// startFlushDisableRequired determines if the optimisations in
+// preStartFlushDisable and postStartFlushEnable are required.
+func (he *hcsExec) startFlushDisableRequired() bool {
+	// No-op pre-RS5 or post-18855. Pre-RS5 doesn't use v2. Post 18855 has
+	// these optimisations in the platform for v2 callers. Only for WCOW.
+	osv := osversion.Get()
+	if osv.Build < 17763 || osv.Build >= 18855 ||
+		!he.isWCOW ||
+		!he.spec.Windows.IgnoreFlushesDuringBoot ||
+		he.spec.Windows.HyperV != nil { // TODO @jhowardmsft Remove this when xenon WCOW bit implemented
+		return false
+	}
+	return true
+}
+
+// preStartFlushDisable conditionally disables flushing if required
+// prior to the computesystem Start() call. This is necessary only on
+// certain Windows builds where HCS does not implement this functionality
+// itself.
+func (he *hcsExec) preStartFlushDisable() (syscall.Handle, error) {
+	if !he.startFlushDisableRequired() {
+		return 0, nil
+	}
+
+	if he.spec.Windows.HyperV == nil {
+		// Operating on the scratch disk
+		path := filepath.Join(he.spec.Windows.LayerFolders[len(he.spec.Windows.LayerFolders)-1], "sandbox.vhdx")
+
+		logrus.WithFields(logrus.Fields{
+			"tid":  he.tid,
+			"eid":  he.id,
+			"path": path,
+		}).Debug("hcsExec::Start Disabling VHD flushing")
+
+		handle, err := vhd.OpenVirtualDisk(path, vhd.VirtualDiskAccessNone, vhd.OpenVirtualDiskFlagParentCachedIO|vhd.OpenVirtualDiskFlagIgnoreRelativeParentLocator)
+		if err != nil {
+			syscall.CloseHandle(handle)
+			return 0, errors.Wrap(err, fmt.Sprintf("failed to open %s", path))
+		}
+		if err := setVhdWriteCacheMode(handle, WriteCacheModeDisableFlushing); err != nil {
+			syscall.CloseHandle(handle)
+			return 0, errors.Wrap(err, fmt.Sprintf("failed to disable flushing on %s", path))
+		}
+		return handle, nil
+
+	}
+
+	// TODO @jhowardmsft - Extend for xenon WCOW
+	return 0, nil
+}
+
+// postStartFlushEnable conditionally enables flushing if required
+// after the computesystem Start() call. It effectively reverses anything
+// that might have been done in `preStartFlushDisable()`.
+func (he *hcsExec) postStartFlushEnable(handle syscall.Handle) {
+	if he.spec.Windows.HyperV == nil {
+		if handle == 0 {
+			return
+		}
+
+		logrus.WithFields(logrus.Fields{
+			"tid": he.tid,
+			"eid": he.id,
+		}).Debug("hcsExec::Start Re-enabling VHD flushing")
+
+		setVhdWriteCacheMode(handle, WriteCacheModeCacheMetadata)
+		syscall.CloseHandle(handle)
+	}
+
+	// TODO @jhowardmsft - Extend for xenon WCOW
+
+}
+
 func (he *hcsExec) Start(ctx context.Context) (err error) {
 	logrus.WithFields(logrus.Fields{
 		"tid": he.tid,
@@ -202,10 +319,15 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 	}()
 	if he.id == he.tid {
 
-		// JJH HACK TO GO IN HERE.
+		var handle syscall.Handle
+		handle, err = he.preStartFlushDisable()
+		if err != nil {
+			return err
+		}
 
 		// This is the init exec. We need to start the container itself
 		err = he.c.Start()
+		he.postStartFlushEnable(handle) // Regardless of successful start or not
 		if err != nil {
 			return err
 		}
