@@ -210,7 +210,8 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 		handle, err = flushing.PreStartFlushDisable(
 			he.isWCOW,
 			he.spec.Windows.IgnoreFlushesDuringBoot,
-			he.spec.Windows.HyperV != nil,
+			he.c,
+			he.host,
 			he.tid,
 			he.id,
 			filepath.Join(he.spec.Windows.LayerFolders[len(he.spec.Windows.LayerFolders)-1], "sandbox.vhdx"))
@@ -224,7 +225,8 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 		// Re-enable flushing after start, regardless or not of success.
 		flushing.PostStartFlushEnable(
 			handle,
-			he.spec.Windows.HyperV != nil,
+			he.c,
+			he.host,
 			he.tid,
 			he.id)
 

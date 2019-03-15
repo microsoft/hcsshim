@@ -9,16 +9,18 @@ import (
 	"unsafe"
 
 	"github.com/Microsoft/go-winio/vhd"
+	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	//"golang.org/x/sys/windows"
 )
 
 type writeCacheMode uint16
 
 const (
-	// Write Cache Mode for a VHD.
+	// Write cache modes for a VHD.
 	writeCacheModeCacheMetadata         writeCacheMode = 0
 	writeCacheModeWriteInternalMetadata writeCacheMode = 1
 	writeCacheModeWriteMetadata         writeCacheMode = 2
@@ -54,73 +56,173 @@ func setVhdWriteCacheMode(handle syscall.Handle, wcm writeCacheMode) error {
 		nil)
 }
 
+// getFlushDisableSettings determines whether or not we are doing
+// VHD flushing and/or registry flushing disablement.
+func getFlushDisableSettings(isWCOW, ignoreFlushes bool) (vhdOpt bool, registryOpt bool) {
+
+	vhdOpt = false
+	registryOpt = false
+
+	// Pre-RS5 doesn't use v2. Post 18855 has registry flush capability
+	// in the platform for v2 callers. All of this is WCOW specific, and
+	// requires that the OCI spec being used indicates flushes should be
+	// ignored during boot.
+	osv := osversion.Get()
+	if osv.Build < osversion.RS5 || !isWCOW || !ignoreFlushes {
+		return
+	}
+
+	vhdOpt = true
+	if osv.Build > 18855 {
+		registryOpt = true
+	}
+	return
+}
+
 // PreStartFlushDisable conditionally disables flushing if required
 // prior to the computesystem Start() call. This is necessary only on
 // certain Windows builds where HCS does not implement this functionality
-// itself.
+// itself. It returns a handle (argon case) to the sandbox VHD which
+// should be passed into PostStartFlushEnable after Start() has completed.
 func PreStartFlushDisable(
 	isWCOW bool,
 	ignoreFlushes bool,
-	isHyperV bool,
+	c *hcs.System,
+	host *uvm.UtilityVM,
 	tid string,
 	eid string,
-	scratch string) (syscall.Handle, error) {
+	scratch string) (handle syscall.Handle, err error) {
 
-	// No-op pre-RS5 or post-18855. Pre-RS5 doesn't use v2. Post 18855 has
-	// these optimisations in the platform for v2 callers. Only for WCOW.
-	osv := osversion.Get()
-	if osv.Build < osversion.RS5 || osv.Build >= 18855 ||
-		!isWCOW ||
-		!ignoreFlushes ||
-		isHyperV { // TODO @jhowardmsft Remove this when xenon WCOW bit implemented
+	vhdOpt, registryOpt := getFlushDisableSettings(isWCOW, ignoreFlushes)
+	if !vhdOpt && !registryOpt {
 		return 0, nil
 	}
 
-	if !isHyperV {
-		// Operating on the scratch disk
-		//path := filepath.Join(he.spec.Windows.LayerFolders[len(he.spec.Windows.LayerFolders)-1], "sandbox.vhdx")
+	registryOptDone := false
+	vhdOptDone := false
 
+	defer func() {
+		if err != nil {
+
+			if registryOptDone {
+				if innerErr := modifyRegistryFlushState(c, true); innerErr != nil {
+					logrus.WithFields(logrus.Fields{
+						"tid": tid,
+						"eid": eid,
+					}).WithError(innerErr).Error("failed to rollback registry flushing following previous error")
+				}
+			}
+
+			if vhdOptDone {
+				if innerErr := setVhdWriteCacheMode(handle, writeCacheModeCacheMetadata); innerErr != nil {
+					logrus.WithFields(logrus.Fields{
+						"tid":     tid,
+						"eid":     eid,
+						"scratch": scratch,
+					}).WithError(innerErr).Error("failed to rollback VHD write cache mode following previous error")
+
+				}
+				syscall.CloseHandle(handle)
+				handle = 0
+			}
+		}
+	}()
+
+	if vhdOpt {
 		logrus.WithFields(logrus.Fields{
 			"tid":     tid,
 			"eid":     eid,
 			"scratch": scratch,
 		}).Debug("Disabling VHD flushing")
 
-		handle, err := vhd.OpenVirtualDisk(scratch, vhd.VirtualDiskAccessNone, vhd.OpenVirtualDiskFlagParentCachedIO|vhd.OpenVirtualDiskFlagIgnoreRelativeParentLocator)
-		if err != nil {
-			syscall.CloseHandle(handle)
-			return 0, errors.Wrap(err, fmt.Sprintf("failed to open %s", scratch))
+		// Note it is safe to go direct to the disk here, even in the Xenon case.
+		if handle, err = vhd.OpenVirtualDisk(scratch, vhd.VirtualDiskAccessNone, vhd.OpenVirtualDiskFlagParentCachedIO|vhd.OpenVirtualDiskFlagIgnoreRelativeParentLocator); err != nil {
+			err = errors.Wrapf(err, "failed to open %s", scratch)
+			return
 		}
-		if err := setVhdWriteCacheMode(handle, writeCacheModeDisableFlushing); err != nil {
-			syscall.CloseHandle(handle)
-			return 0, errors.Wrap(err, fmt.Sprintf("failed to disable flushing on %s", scratch))
+		if err = setVhdWriteCacheMode(handle, writeCacheModeDisableFlushing); err != nil {
+			err = errors.Wrapf(err, "failed to disable flushing on %s", scratch)
+			return
 		}
-		return handle, nil
-
+		vhdOptDone = true
 	}
 
-	// TODO @jhowardmsft - Extend for xenon WCOW
-	return 0, nil
+	if registryOpt {
+		logrus.WithFields(logrus.Fields{
+			"tid": tid,
+			"eid": eid,
+		}).Debug("Disabling registry flushing")
+
+		if err = modifyRegistryFlushState(c, false); err != nil {
+			err = errors.Wrapf(err, "failed to disable registry flushing")
+			return
+		}
+		registryOptDone = true
+	}
+
+	return
 }
 
 // PostStartFlushEnable conditionally enables flushing if required
 // after the computesystem Start() call. It effectively reverses anything
 // that might have been done in `PreStartFlushDisable()`.
-func PostStartFlushEnable(handle syscall.Handle, isHyperV bool, tid string, eid string) {
-	if !isHyperV {
-		if handle == 0 {
-			return
-		}
+func PostStartFlushEnable(
+	handle syscall.Handle,
+	c *hcs.System,
+	host *uvm.UtilityVM,
+	tid string,
+	eid string) {
 
-		logrus.WithFields(logrus.Fields{
-			"tid": tid,
-			"eid": eid,
-		}).Debug("Re-enabling VHD flushing")
-
-		setVhdWriteCacheMode(handle, writeCacheModeCacheMetadata)
-		syscall.CloseHandle(handle)
+	//	if host == nil {
+	if handle == 0 {
+		return
 	}
 
-	// TODO @jhowardmsft - Extend for xenon WCOW
+	logrus.WithFields(logrus.Fields{
+		"tid": tid,
+		"eid": eid,
+	}).Debug("Re-enabling VHD flushing")
 
+	if err := setVhdWriteCacheMode(handle, writeCacheModeCacheMetadata); err != nil {
+		panic("JJH")
+	}
+	syscall.CloseHandle(handle)
+	//	}
+
+	// ALL TODO HERE including defer error handling etc, logging, xenon,.....
+	// // Xenon Path. We try our best regardless on both of these but don't fail if we can't.
+	// modifyRegistryFlushState(host, true)
+	// modifyAttachmentFlushState(c, 0, scratch, false)
+
+	// JJH BIG TODO: ^^ The attachment ID. Can only assume 0 for non-pod scenarios
+
+}
+
+// modifyRegistryFlushState sends a modify request to a container to enable
+// or disable the registry flush state.
+func modifyRegistryFlushState(c *hcs.System, enabled bool) error {
+	type registryFlushSetting struct {
+		Enabled bool `json:"Enabled"`
+	}
+
+	return c.Modify(hcsschema.ModifySettingRequest{
+		ResourcePath: "Container/RegistryFlushState",
+		RequestType:  "Update",
+		Settings:     registryFlushSetting{Enabled: enabled},
+	})
+}
+
+// modifyAttachmentFlushState sends a modify request to a utility VM to enable
+// or disable flushing on a containers scratch disk. Need to pass in the ID
+// on the SCSI controller, and the path of the file in the utility VM.
+func modifyAttachmentFlushState(host *uvm.UtilityVM, attachmentID uint16, scratch string, ignoreFlushes bool) error {
+	return host.Modify(hcsschema.ModifySettingRequest{
+		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/0/Attachments/%d", attachmentID),
+		RequestType:  "Update",
+		Settings: hcsschema.Attachment{
+			Type_:         "VirtualDisk",
+			Path:          scratch,
+			IgnoreFlushes: ignoreFlushes,
+		},
+	})
 }
