@@ -20,13 +20,25 @@ type Plan9Share struct {
 const plan9Port = 564
 
 // AddPlan9 adds a Plan9 share to a utility VM.
-func (uvm *UtilityVM) AddPlan9(hostPath string, uvmPath string, readOnly bool, restrict bool, allowedNames []string) (*Plan9Share, error) {
-	logrus.WithFields(logrus.Fields{
+func (uvm *UtilityVM) AddPlan9(hostPath string, uvmPath string, readOnly bool, restrict bool, allowedNames []string) (_ *Plan9Share, err error) {
+	op := "uvm::AddPlan9"
+	log := logrus.WithFields(logrus.Fields{
 		logfields.UVMID: uvm.id,
 		"host-path":     hostPath,
 		"uvm-path":      uvmPath,
 		"readOnly":      readOnly,
-	}).Debug("uvm::AddPlan9")
+		"restrict":      restrict,
+		"allowedNames":  allowedNames,
+	})
+	log.Debug(op + " - Begin Operation")
+	defer func() {
+		if err != nil {
+			log.Data[logrus.ErrorKey] = err
+			log.Error(op + " - End Operation - Error")
+		} else {
+			log.Debug(op + " - End Operation - Success")
+		}
+	}()
 
 	if uvm.operatingSystem != "linux" {
 		return nil, errNotSupported
@@ -92,17 +104,32 @@ func (uvm *UtilityVM) AddPlan9(hostPath string, uvmPath string, readOnly bool, r
 	}
 
 	share := &Plan9Share{name: name, uvmPath: uvmPath}
-	logrus.Debugf("hcsshim::AddPlan9 Success %s: %+v", hostPath, share)
 	return share, nil
 }
 
 // RemovePlan9 removes a Plan9 share from a utility VM. Each Plan9 share is ref-counted
 // and only actually removed when the ref-count drops to zero.
-func (uvm *UtilityVM) RemovePlan9(share *Plan9Share) error {
+func (uvm *UtilityVM) RemovePlan9(share *Plan9Share) (err error) {
+	op := "uvm::RemovePlan9"
+	log := logrus.WithFields(logrus.Fields{
+		logfields.UVMID: uvm.id,
+		"name":          share.name,
+		"uvm-path":      share.uvmPath,
+	})
+	log.Debug(op + " - Begin Operation")
+	defer func() {
+		if err != nil {
+			log.Data[logrus.ErrorKey] = err
+			log.Error(op + " - End Operation - Error")
+		} else {
+			log.Debug(op + " - End Operation - Success")
+		}
+	}()
+
 	if uvm.operatingSystem != "linux" {
 		return errNotSupported
 	}
-	logrus.Debugf("uvm::RemovePlan9 %s id:%s", share.name, uvm.id)
+
 	modification := &hcsschema.ModifySettingRequest{
 		RequestType: requesttype.Remove,
 		Settings: hcsschema.Plan9Share{
@@ -124,6 +151,5 @@ func (uvm *UtilityVM) RemovePlan9(share *Plan9Share) error {
 	if err := uvm.Modify(modification); err != nil {
 		return fmt.Errorf("failed to remove plan9 share %s from %s: %+v: %s", share.name, uvm.id, modification, err)
 	}
-	logrus.Debugf("uvm::RemovePlan9 Success %s id:%s successfully removed from utility VM", share.name, uvm.id)
 	return nil
 }

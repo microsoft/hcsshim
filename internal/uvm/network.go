@@ -29,15 +29,20 @@ var (
 // AddNetNS adds network namespace inside the guest.
 //
 // If a namespace with `id` already exists returns `ErrNetNSAlreadyAttached`.
-func (uvm *UtilityVM) AddNetNS(id string) error {
+func (uvm *UtilityVM) AddNetNS(id string) (err error) {
 	op := "uvm::AddNetNS"
 	log := logrus.WithFields(logrus.Fields{
 		logfields.UVMID: uvm.id,
 		"netns-id":      id,
 	})
-	log.Debug(op + " - Begin")
+	log.Debug(op + " - Begin Operation")
 	defer func() {
-		log.Debug(op + " - End")
+		if err != nil {
+			log.Data[logrus.ErrorKey] = err
+			log.Error(op + " - End Operation - Error")
+		} else {
+			log.Debug(op + " - End Operation - Success")
+		}
 	}()
 
 	uvm.m.Lock()
@@ -81,15 +86,20 @@ func (uvm *UtilityVM) AddNetNS(id string) error {
 // added endpoints.
 //
 // If no network namespace matches `id` returns `ErrNetNSNotFound`.
-func (uvm *UtilityVM) AddEndpointsToNS(id string, endpoints []*hns.HNSEndpoint) error {
+func (uvm *UtilityVM) AddEndpointsToNS(id string, endpoints []*hns.HNSEndpoint) (err error) {
 	op := "uvm::AddEndpointsToNS"
 	log := logrus.WithFields(logrus.Fields{
 		logfields.UVMID: uvm.id,
 		"netns-id":      id,
 	})
-	log.Debug(op + " - Begin")
+	log.Debug(op + " - Begin Operation")
 	defer func() {
-		log.Debug(op + " - End")
+		if err != nil {
+			log.Data[logrus.ErrorKey] = err
+			log.Error(op + " - End Operation - Error")
+		} else {
+			log.Debug(op + " - End Operation - Success")
+		}
 	}()
 
 	uvm.m.Lock()
@@ -119,15 +129,20 @@ func (uvm *UtilityVM) AddEndpointsToNS(id string, endpoints []*hns.HNSEndpoint) 
 // the namespace.
 //
 // If a namespace matching `id` is not found this command silently succeeds.
-func (uvm *UtilityVM) RemoveNetNS(id string) error {
+func (uvm *UtilityVM) RemoveNetNS(id string) (err error) {
 	op := "uvm::RemoveNetNS"
 	log := logrus.WithFields(logrus.Fields{
 		logfields.UVMID: uvm.id,
 		"netns-id":      id,
 	})
-	log.Debug(op + " - Begin")
+	log.Debug(op + " - Begin Operation")
 	defer func() {
-		log.Debug(op + " - End")
+		if err != nil {
+			log.Data[logrus.ErrorKey] = err
+			log.Error(op + " - End Operation - Error")
+		} else {
+			log.Debug(op + " - End Operation - Success")
+		}
 	}()
 
 	uvm.m.Lock()
@@ -168,15 +183,20 @@ func (uvm *UtilityVM) RemoveNetNS(id string) error {
 // the network namespace this command silently succeeds.
 //
 // If no network namespace matches `id` returns `ErrNetNSNotFound`.
-func (uvm *UtilityVM) RemoveEndpointsFromNS(id string, endpoints []*hns.HNSEndpoint) error {
+func (uvm *UtilityVM) RemoveEndpointsFromNS(id string, endpoints []*hns.HNSEndpoint) (err error) {
 	op := "uvm::RemoveEndpointsFromNS"
 	log := logrus.WithFields(logrus.Fields{
 		logfields.UVMID: uvm.id,
 		"netns-id":      id,
 	})
-	log.Debug(op + " - Begin")
+	log.Debug(op + " - Begin Operation")
 	defer func() {
-		log.Debug(op + " - End")
+		if err != nil {
+			log.Data[logrus.ErrorKey] = err
+			log.Error(op + " - End Operation - Error")
+		} else {
+			log.Debug(op + " - End Operation - Success")
+		}
 	}()
 
 	uvm.m.Lock()

@@ -7,6 +7,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/mergemaps"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
@@ -57,7 +58,19 @@ func NewDefaultOptionsWCOW(id, owner string) *OptionsWCOW {
 //   - The scratch is always attached to SCSI 0:0
 //
 func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
-	logrus.Debugf("uvm::CreateWCOW %+v", opts)
+	op := "uvm::CreateWCOW"
+	log := logrus.WithFields(logrus.Fields{
+		logfields.UVMID: opts.ID,
+	})
+	log.Debugf(op+" - Begin Operation: %+v", opts)
+	defer func() {
+		if err != nil {
+			log.Data[logrus.ErrorKey] = err
+			log.Error(op + " - End Operation - Error")
+		} else {
+			log.Debug(op + " - End Operation - Success")
+		}
+	}()
 
 	if opts.Options == nil {
 		opts.Options = &Options{}

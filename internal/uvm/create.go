@@ -4,6 +4,8 @@ import (
 	"runtime"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/sirupsen/logrus"
 )
 
 // Options are the set of options passed to Create() to create a utility vm.
@@ -40,7 +42,21 @@ func (uvm *UtilityVM) OS() string {
 }
 
 // Close terminates and releases resources associated with the utility VM.
-func (uvm *UtilityVM) Close() error {
+func (uvm *UtilityVM) Close() (err error) {
+	op := "uvm::Close"
+	log := logrus.WithFields(logrus.Fields{
+		logfields.UVMID: uvm.id,
+	})
+	log.Debug(op + " - Begin Operation")
+	defer func() {
+		if err != nil {
+			log.Data[logrus.ErrorKey] = err
+			log.Error(op + " - End Operation - Error")
+		} else {
+			log.Debug(op + " - End Operation - Success")
+		}
+	}()
+
 	if err := uvm.Terminate(); hcs.IsPending(err) {
 		uvm.Wait()
 	}
@@ -53,8 +69,7 @@ func (uvm *UtilityVM) Close() error {
 		uvm.outputListener.Close()
 		uvm.outputListener = nil
 	}
-	err := uvm.hcsSystem.Close()
-	return err
+	return uvm.hcsSystem.Close()
 }
 
 func defaultProcessorCount() int32 {

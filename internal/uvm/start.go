@@ -8,6 +8,7 @@ import (
 	"net"
 	"syscall"
 
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/sirupsen/logrus"
 )
 
@@ -87,7 +88,21 @@ func processOutput(ctx context.Context, l net.Listener, doneChan chan struct{}, 
 }
 
 // Start synchronously starts the utility VM.
-func (uvm *UtilityVM) Start() error {
+func (uvm *UtilityVM) Start() (err error) {
+	op := "uvm::Start"
+	log := logrus.WithFields(logrus.Fields{
+		logfields.UVMID: uvm.id,
+	})
+	log.Debug(op + " - Begin Operation")
+	defer func() {
+		if err != nil {
+			log.Data[logrus.ErrorKey] = err
+			log.Error(op + " - End Operation - Error")
+		} else {
+			log.Debug(op + " - End Operation - Success")
+		}
+	}()
+
 	if uvm.outputListener != nil {
 		ctx, cancel := context.WithCancel(context.Background())
 		go processOutput(ctx, uvm.outputListener, uvm.outputProcessingDone, uvm.outputHandler)
