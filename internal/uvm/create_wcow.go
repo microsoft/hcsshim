@@ -140,7 +140,7 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 					EnableDeferredCommit: opts.EnableDeferredCommit,
 				},
 				Processor: &hcsschema.Processor2{
-					Count: defaultProcessorCount(),
+					Count: opts.ProcessorCount,
 				},
 			},
 			GuestConnection: &hcsschema.GuestConnection{},
