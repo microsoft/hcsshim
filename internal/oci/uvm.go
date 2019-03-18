@@ -15,12 +15,17 @@ import (
 const (
 	annotationAllowOvercommit      = "io.microsoft.virtualmachine.computetopology.memory.allowovercommit"
 	annotationEnableDeferredCommit = "io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit"
-	annotationMemorySizeInMB       = "io.microsoft.virtualmachine.computetopology.memory.sizeinmb"
-	annotationProcessorCount       = "io.microsoft.virtualmachine.computetopology.processor.count"
-	annotationVPMemCount           = "io.microsoft.virtualmachine.devices.virtualpmem.maximumcount"
-	annotationVPMemSize            = "io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes"
-	annotationPreferredRootFSType  = "io.microsoft.virtualmachine.lcow.preferredrootfstype"
-	annotationBootFilesRootPath    = "io.microsoft.virtualmachine.lcow.bootfilesrootpath"
+	// annotationMemorySizeInMB overrides the container memory size set via the
+	// OCI spec.
+	//
+	// Note: This annotation is in MB. OCI is in Bytes. When using this override
+	// the caller MUST use MB or sizing will be wrong.
+	annotationMemorySizeInMB      = "io.microsoft.virtualmachine.computetopology.memory.sizeinmb"
+	annotationProcessorCount      = "io.microsoft.virtualmachine.computetopology.processor.count"
+	annotationVPMemCount          = "io.microsoft.virtualmachine.devices.virtualpmem.maximumcount"
+	annotationVPMemSize           = "io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes"
+	annotationPreferredRootFSType = "io.microsoft.virtualmachine.lcow.preferredrootfstype"
+	annotationBootFilesRootPath   = "io.microsoft.virtualmachine.lcow.bootfilesrootpath"
 )
 
 // parseAnnotationsBool searches `a` for `key` and if found verifies that the
@@ -63,6 +68,8 @@ func parseAnnotationsCPU(s *specs.Spec, annotation string, def int32) int32 {
 // parseAnnotationsMemory searches `s.Annotations` for the memory annotation. If
 // not found searches `s` for the Windows memory section. If neither are found
 // returns `def`.
+//
+// Note: The returned value is in `MB`.
 func parseAnnotationsMemory(s *specs.Spec, annotation string, def int32) int32 {
 	if m := parseAnnotationsUint64(s.Annotations, annotation, 0); m != 0 {
 		return int32(m)
@@ -72,7 +79,7 @@ func parseAnnotationsMemory(s *specs.Spec, annotation string, def int32) int32 {
 		s.Windows.Resources.Memory != nil &&
 		s.Windows.Resources.Memory.Limit != nil &&
 		*s.Windows.Resources.Memory.Limit > 0 {
-		return int32(*s.Windows.Resources.Memory.Limit)
+		return int32(*s.Windows.Resources.Memory.Limit / 1024 / 1024)
 	}
 	return def
 }
