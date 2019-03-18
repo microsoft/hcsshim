@@ -202,7 +202,9 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 					EnableDeferredCommit: opts.EnableDeferredCommit,
 				},
 				Processor: &hcsschema.Processor2{
-					Count: uvm.processorCount,
+					Count:  uvm.processorCount,
+					Limit:  opts.ProcessorLimit,
+					Weight: opts.ProcessorWeight,
 				},
 			},
 			Devices: &hcsschema.Devices{
@@ -216,6 +218,14 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 				Plan9: &hcsschema.Plan9{},
 			},
 		},
+	}
+
+	// Handle StorageQoS if set
+	if opts.StorageQoSBandwidthMaximum > 0 || opts.StorageQoSIopsMaximum > 0 {
+		doc.VirtualMachine.StorageQoS = &hcsschema.StorageQoS{
+			IopsMaximum:      opts.StorageQoSIopsMaximum,
+			BandwidthMaximum: opts.StorageQoSBandwidthMaximum,
+		}
 	}
 
 	if opts.UseGuestConnection {

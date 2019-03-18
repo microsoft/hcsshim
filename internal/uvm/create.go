@@ -32,6 +32,22 @@ type Options struct {
 	// ProcessorCount sets the number of vCPU's. If `0` will default to platform
 	// default.
 	ProcessorCount int32
+
+	// ProcessorLimit sets the maximum percentage of each vCPU's the UVM can
+	// consume. If `0` will default to platform default.
+	ProcessorLimit int32
+
+	// ProcessorWeight sets the relative weight of these vCPU's vs another UVM's
+	// when scheduling. If `0` will default to platform default.
+	ProcessorWeight int32
+
+	// StorageQoSIopsMaximum sets the maximum number of Iops. If `0` will
+	// default to the platform default.
+	StorageQoSIopsMaximum int32
+
+	// StorageQoSIopsMaximum sets the maximum number of bytes per second. If `0`
+	// will default to the platform default.
+	StorageQoSBandwidthMaximum int32
 }
 
 // newDefaultOptions returns the default base options for WCOW and LCOW.
