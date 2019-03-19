@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/Microsoft/go-winio/pkg/etw"
 	"github.com/Microsoft/go-winio/pkg/etwlogrus"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
@@ -61,14 +62,27 @@ func panicRecover() {
 
 func main() {
 	// Provider ID: 0b52781f-b24d-5685-ddf6-69830ed40ec3
-	// Hook isn't closed explicitly, as it will exist until process exit.
-	if hook, err := etwlogrus.NewHook("Microsoft.Virtualization.RunHCS"); err == nil {
-		logrus.AddHook(hook)
-	} else {
+	// Provider and hook aren't closed explicitly, as they will exist until process exit.
+	provider, err := etw.NewProvider("Microsoft.Virtualization.RunHCS", nil)
+	if err != nil {
 		logrus.Error(err)
+	} else {
+		if hook, err := etwlogrus.NewHookFromProvider(provider); err == nil {
+			logrus.AddHook(hook)
+		} else {
+			logrus.Error(err)
+		}
 	}
 
 	defer panicRecover()
+
+	provider.WriteEvent(
+		"ShimLaunched",
+		nil,
+		etw.WithFields(
+			etw.StringArray("Args", os.Args),
+		),
+	)
 
 	app := cli.NewApp()
 	app.Name = "containerd-shim-runhcs-v1"
