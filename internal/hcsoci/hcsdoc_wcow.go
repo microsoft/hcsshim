@@ -103,10 +103,22 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 		v1.ProcessorMaximum = int64(cpuLimit)
 		v1.ProcessorWeight = uint64(cpuWeight)
 
-		v2Container.Processor = &hcsschema.Processor{
-			Count:   cpuCount,
-			Maximum: cpuLimit,
-			Weight:  cpuWeight,
+		if cpuCount == 0 {
+			// TODO: JTERRY75 - There is a Windows platform bug (VSO#20891779)
+			// for V2 that we cannot set Maximum or Weight. We have to silently
+			// ignore here until its fixed. When the bug is fixed fully remove
+			// this if/else and always assign the v2Container.Processor field.
+			log := logrus.WithField(logfields.ContainerID, coi.ID)
+			if coi.HostingSystem != nil {
+				log.Data[logfields.UVMID] = coi.HostingSystem.ID()
+			}
+			log.Warningf("silently ignoring Windows Process Container QoS for Limit: '%d' or Weight: '%d' until bug fix", cpuLimit, cpuWeight)
+		} else {
+			v2Container.Processor = &hcsschema.Processor{
+				Count: cpuCount,
+				// Maximum: cpuLimit, // TODO: JTERRY75 - When the above bug is fixed remove this if/else and set this value.
+				// Weight:  cpuWeight, // TODO: JTERRY75 - When the above bug is fixed remove this if/else and set this value.
+			}
 		}
 	}
 
