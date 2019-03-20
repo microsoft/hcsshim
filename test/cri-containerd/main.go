@@ -17,9 +17,9 @@ const (
 	daemonAddress                = "tcp://127.0.0.1:2376"
 	connectTimeout               = time.Second * 10
 	testNamespace                = "cri-containerd-test"
-	wcowProcessRuntimeHandler    = "default-debug"
-	wcowHypervisorRuntimeHandler = "wcow-debug"
-	lcowRuntimeHandler           = "lcow-debug"
+	wcowProcessRuntimeHandler    = "runhcs-wcow-process"
+	wcowHypervisorRuntimeHandler = "runhcs-wcow-hypervisor"
+	lcowRuntimeHandler           = "runhcs-lcow"
 	imageWindowsRS5Nanoserver    = "mcr.microsoft.com/windows/nanoserver:1809"
 	imageWindowsRS5Servercore    = "mcr.microsoft.com/windows/servercore:1809"
 	imageLcowK8sPause            = "k8s.gcr.io/pause:3.1"
