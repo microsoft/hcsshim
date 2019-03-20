@@ -27,6 +27,9 @@ const (
 	// AnnotationContainerProcessorCount overrides the container processor count
 	// set via the OCI spec.
 	//
+	// Note: For Windows Process Containers CPU Count/Limit/Weight are mutually
+	// exclusive and the caller MUST only set one of the values.
+	//
 	// Note: This is only present because CRI does not (currently) have a
 	// `WindowsPodSandboxConfig` for setting this correctly. It should not be
 	// used via OCI runtimes and rather use `spec.Windows.Resources.CPU.Count`.
@@ -37,6 +40,9 @@ const (
 	// Limit allows values 1 - 10,000 where 10,000 means 100% CPU. (And is the
 	// default if omitted)
 	//
+	// Note: For Windows Process Containers CPU Count/Limit/Weight are mutually
+	// exclusive and the caller MUST only set one of the values.
+	//
 	// Note: This is only present because CRI does not (currently) have a
 	// `WindowsPodSandboxConfig` for setting this correctly. It should not be
 	// used via OCI runtimes and rather use
@@ -46,6 +52,9 @@ const (
 	// weight set via the OCI spec.
 	//
 	// Weight allows values 0 - 10,000. (100 is the default)
+	//
+	// Note: For Windows Process Containers CPU Count/Limit/Weight are mutually
+	// exclusive and the caller MUST only set one of the values.
 	//
 	// Note: This is only present because CRI does not (currently) have a
 	// `WindowsPodSandboxConfig` for setting this correctly. It should not be

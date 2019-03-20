@@ -64,10 +64,25 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 	}
 
 	// CPU Resources
+	cpuNumSet := 0
 	cpuCount := oci.ParseAnnotationsCPUCount(coi.Spec, oci.AnnotationContainerProcessorCount, 0)
+	if cpuCount > 0 {
+		cpuNumSet++
+	}
+
 	cpuLimit := oci.ParseAnnotationsCPULimit(coi.Spec, oci.AnnotationContainerProcessorLimit, 0)
+	if cpuLimit > 0 {
+		cpuNumSet++
+	}
+
 	cpuWeight := oci.ParseAnnotationsCPUWeight(coi.Spec, oci.AnnotationContainerProcessorWeight, 0)
-	if cpuCount > 0 || cpuLimit > 0 || cpuWeight > 0 {
+	if cpuWeight > 0 {
+		cpuNumSet++
+	}
+
+	if cpuNumSet > 1 {
+		return nil, fmt.Errorf("invalid spec - Windows Process Container CPU Count: '%d', Limit: '%d', and Weight: '%d' are mutually exclusive", cpuCount, cpuLimit, cpuWeight)
+	} else if cpuNumSet == 1 {
 		var hostCPUCount int32
 		if coi.HostingSystem != nil {
 			// Normalize to UVM size
