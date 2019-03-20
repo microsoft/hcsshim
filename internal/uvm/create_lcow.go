@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/mergemaps"
@@ -88,14 +87,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 	// Use KernelDirect boot by default on all builds that support it.
 	kernelDirectSupported := osversion.Get().Build >= 18286
 	opts := &OptionsLCOW{
-		Options: &Options{
-			ID:                   id,
-			Owner:                owner,
-			MemorySizeInMB:       1024,
-			AllowOvercommit:      true,
-			EnableDeferredCommit: false,
-			ProcessorCount:       defaultProcessorCount(),
-		},
+		Options:               newDefaultOptions(id, owner),
 		BootFilesPath:         defaultLCOWOSBootFilesPath(),
 		KernelFile:            KernelFile,
 		KernelDirect:          kernelDirectSupported,
@@ -112,13 +104,6 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		VPMemDeviceCount:      DefaultVPMEMCount,
 		VPMemSizeBytes:        DefaultVPMemSizeBytes,
 		PreferredRootFSType:   PreferredRootFSTypeInitRd,
-	}
-
-	if opts.ID == "" {
-		opts.ID = guid.New().String()
-	}
-	if opts.Owner == "" {
-		opts.Owner = filepath.Base(os.Args[0])
 	}
 
 	if _, err := os.Stat(filepath.Join(opts.BootFilesPath, VhdFile)); err == nil {
@@ -171,6 +156,10 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 		vpmemMaxSizeBytes:   opts.VPMemSizeBytes,
 	}
 
+	// To maintain compatability with Docker we need to automatically downgrade
+	// a user CPU count if the setting is not possible.
+	uvm.normalizeProcessorCount(opts.ProcessorCount)
+
 	kernelFullPath := filepath.Join(opts.BootFilesPath, opts.KernelFile)
 	if _, err := os.Stat(kernelFullPath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("kernel: '%s' not found", kernelFullPath)
@@ -213,7 +202,7 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 					EnableDeferredCommit: opts.EnableDeferredCommit,
 				},
 				Processor: &hcsschema.Processor2{
-					Count: opts.ProcessorCount,
+					Count: uvm.processorCount,
 				},
 			},
 			Devices: &hcsschema.Devices{

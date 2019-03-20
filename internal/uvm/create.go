@@ -1,8 +1,11 @@
 package uvm
 
 import (
+	"os"
+	"path/filepath"
 	"runtime"
 
+	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/sirupsen/logrus"
@@ -29,6 +32,31 @@ type Options struct {
 	// ProcessorCount sets the number of vCPU's. If `0` will default to platform
 	// default.
 	ProcessorCount int32
+}
+
+// newDefaultOptions returns the default base options for WCOW and LCOW.
+//
+// If `id` is empty it will be generated.
+//
+// If `owner` is empty it will be set to the calling executables name.
+func newDefaultOptions(id, owner string) *Options {
+	opts := &Options{
+		ID:                   id,
+		Owner:                owner,
+		MemorySizeInMB:       1024,
+		AllowOvercommit:      true,
+		EnableDeferredCommit: false,
+		ProcessorCount:       defaultProcessorCount(),
+	}
+
+	if opts.ID == "" {
+		opts.ID = guid.New().String()
+	}
+	if opts.Owner == "" {
+		opts.Owner = filepath.Base(os.Args[0])
+	}
+
+	return opts
 }
 
 // ID returns the ID of the VM's compute system.
@@ -77,4 +105,25 @@ func defaultProcessorCount() int32 {
 		return 1
 	}
 	return 2
+}
+
+// normalizeProcessorCount sets `uvm.processorCount` to `Min(requested,
+// runtime.NumCPU())`.
+func (uvm *UtilityVM) normalizeProcessorCount(requested int32) {
+	hostCount := int32(runtime.NumCPU())
+	if requested > hostCount {
+		logrus.WithFields(logrus.Fields{
+			logfields.UVMID: uvm.id,
+		}).Warningf("Changing user requested CPUCount: %d to current number of processors: %d",
+			requested,
+			hostCount)
+		uvm.processorCount = hostCount
+	} else {
+		uvm.processorCount = requested
+	}
+}
+
+// ProcessorCount returns the number of processors actually assigned to the UVM.
+func (uvm *UtilityVM) ProcessorCount() int32 {
+	return uvm.processorCount
 }

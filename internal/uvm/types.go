@@ -61,7 +61,8 @@ type UtilityVM struct {
 	owner           string      // Owner for the utility VM (user supplied or generated)
 	operatingSystem string      // "windows" or "linux"
 	hcsSystem       *hcs.System // The handle to the compute system
-	m               sync.Mutex  // Lock for adding/removing devices
+	processorCount  int32
+	m               sync.Mutex // Lock for adding/removing devices
 
 	// containerCounter is the current number of containers that have been
 	// created. This is never decremented in the life of the UVM.
