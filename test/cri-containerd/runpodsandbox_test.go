@@ -4,6 +4,7 @@ package cri_containerd
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	runtime "k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2"
@@ -206,7 +207,26 @@ func Test_RunPodSandbox_PhysicalMemory_LCOW(t *testing.T) {
 	runPodSandboxTest(t, request)
 }
 
-func Test_RunPodSandbox_CustomMemory_WCOW_Hypervisor(t *testing.T) {
+func Test_RunPodSandbox_MemorySize_WCOW_Process(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.container.memory.sizeinmb": "128",
+			},
+		},
+		RuntimeHandler: wcowProcessRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_MemorySize_WCOW_Hypervisor(t *testing.T) {
 	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
@@ -225,7 +245,7 @@ func Test_RunPodSandbox_CustomMemory_WCOW_Hypervisor(t *testing.T) {
 	runPodSandboxTest(t, request)
 }
 
-func Test_RunPodSandbox_CustomMemory_LCOW(t *testing.T) {
+func Test_RunPodSandbox_MemorySize_LCOW(t *testing.T) {
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
 	request := &runtime.RunPodSandboxRequest{
@@ -244,7 +264,26 @@ func Test_RunPodSandbox_CustomMemory_LCOW(t *testing.T) {
 	runPodSandboxTest(t, request)
 }
 
-func Test_RunPodSandbox_CustomCPU_WCOW_Hypervisor(t *testing.T) {
+func Test_RunPodSandbox_CPUCount_WCOW_Process(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.container.processor.count": "1",
+			},
+		},
+		RuntimeHandler: wcowProcessRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_CPUCount_WCOW_Hypervisor(t *testing.T) {
 	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
@@ -263,7 +302,7 @@ func Test_RunPodSandbox_CustomCPU_WCOW_Hypervisor(t *testing.T) {
 	runPodSandboxTest(t, request)
 }
 
-func Test_RunPodSandbox_CustomCPU_LCOW(t *testing.T) {
+func Test_RunPodSandbox_CPUCount_LCOW(t *testing.T) {
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
 	request := &runtime.RunPodSandboxRequest{
@@ -275,6 +314,234 @@ func Test_RunPodSandbox_CustomCPU_LCOW(t *testing.T) {
 			},
 			Annotations: map[string]string{
 				"io.microsoft.virtualmachine.computetopology.processor.count": "1",
+			},
+		},
+		RuntimeHandler: lcowRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_CPULimit_WCOW_Process(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.container.processor.limit": "9000",
+			},
+		},
+		RuntimeHandler: wcowProcessRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_CPULimit_WCOW_Hypervisor(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.computetopology.processor.limit": "9000",
+			},
+		},
+		RuntimeHandler: wcowHypervisorRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_CPULimit_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.computetopology.processor.limit": "9000",
+			},
+		},
+		RuntimeHandler: lcowRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_CPUWeight_WCOW_Process(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.container.processor.weight": "500",
+			},
+		},
+		RuntimeHandler: wcowProcessRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_CPUWeight_WCOW_Hypervisor(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.computetopology.processor.weight": "500",
+			},
+		},
+		RuntimeHandler: wcowHypervisorRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_CPUWeight_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.computetopology.processor.weight": "500",
+			},
+		},
+		RuntimeHandler: lcowRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_StorageQoSBandwithMax_WCOW_Process(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.container.storage.qos.bandwidthmaximum": fmt.Sprintf("%d", 1024*1024), // 1MB/s
+			},
+		},
+		RuntimeHandler: wcowProcessRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_StorageQoSBandwithMax_WCOW_Hypervisor(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.storageqos.bandwidthmaximum": fmt.Sprintf("%d", 1024*1024), // 1MB/s
+			},
+		},
+		RuntimeHandler: wcowHypervisorRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_StorageQoSBandwithMax_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.storageqos.bandwidthmaximum": fmt.Sprintf("%d", 1024*1024), // 1MB/s
+			},
+		},
+		RuntimeHandler: lcowRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_StorageQoSIopsMax_WCOW_Process(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.container.storage.qos.iopsmaximum": "300",
+			},
+		},
+		RuntimeHandler: wcowProcessRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_StorageQoSIopsMax_WCOW_Hypervisor(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.storageqos.iopsmaximum": "300",
+			},
+		},
+		RuntimeHandler: wcowHypervisorRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_StorageQoSIopsMax_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.storageqos.iopsmaximum": "300",
 			},
 		},
 		RuntimeHandler: lcowRuntimeHandler,

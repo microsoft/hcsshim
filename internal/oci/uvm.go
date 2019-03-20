@@ -13,19 +13,106 @@ import (
 )
 
 const (
-	annotationAllowOvercommit      = "io.microsoft.virtualmachine.computetopology.memory.allowovercommit"
-	annotationEnableDeferredCommit = "io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit"
+	// AnnotationContainerMemorySizeInMB overrides the container memory size set
+	// via the OCI spec.
+	//
+	// Note: This annotation is in MB. OCI is in Bytes. When using this override
+	// the caller MUST use MB or sizing will be wrong.
+	//
+	// Note: This is only present because CRI does not (currently) have a
+	// `WindowsPodSandboxConfig` for setting this correctly. It should not be
+	// used via OCI runtimes and rather use
+	// `spec.Windows.Resources.Memory.Limit`.
+	AnnotationContainerMemorySizeInMB = "io.microsoft.container.memory.sizeinmb"
+	// AnnotationContainerProcessorCount overrides the container processor count
+	// set via the OCI spec.
+	//
+	// Note: For Windows Process Containers CPU Count/Limit/Weight are mutually
+	// exclusive and the caller MUST only set one of the values.
+	//
+	// Note: This is only present because CRI does not (currently) have a
+	// `WindowsPodSandboxConfig` for setting this correctly. It should not be
+	// used via OCI runtimes and rather use `spec.Windows.Resources.CPU.Count`.
+	AnnotationContainerProcessorCount = "io.microsoft.container.processor.count"
+	// AnnotationContainerProcessorLimit overrides the container processor limit
+	// set via the OCI spec.
+	//
+	// Limit allows values 1 - 10,000 where 10,000 means 100% CPU. (And is the
+	// default if omitted)
+	//
+	// Note: For Windows Process Containers CPU Count/Limit/Weight are mutually
+	// exclusive and the caller MUST only set one of the values.
+	//
+	// Note: This is only present because CRI does not (currently) have a
+	// `WindowsPodSandboxConfig` for setting this correctly. It should not be
+	// used via OCI runtimes and rather use
+	// `spec.Windows.Resources.CPU.Maximum`.
+	AnnotationContainerProcessorLimit = "io.microsoft.container.processor.limit"
+	// AnnotationContainerProcessorWeight overrides the container processor
+	// weight set via the OCI spec.
+	//
+	// Weight allows values 0 - 10,000. (100 is the default)
+	//
+	// Note: For Windows Process Containers CPU Count/Limit/Weight are mutually
+	// exclusive and the caller MUST only set one of the values.
+	//
+	// Note: This is only present because CRI does not (currently) have a
+	// `WindowsPodSandboxConfig` for setting this correctly. It should not be
+	// used via OCI runtimes and rather use `spec.Windows.Resources.CPU.Shares`.
+	AnnotationContainerProcessorWeight = "io.microsoft.container.processor.weight"
+	// AnnotationContainerStorageQoSBandwidthMaximum overrides the container
+	// storage bandwidth per second set via the OCI spec.
+	//
+	// Note: This is only present because CRI does not (currently) have a
+	// `WindowsPodSandboxConfig` for setting this correctly. It should not be
+	// used via OCI runtimes and rather use
+	// `spec.Windows.Resources.Storage.Bps`.
+	AnnotationContainerStorageQoSBandwidthMaximum = "io.microsoft.container.storage.qos.bandwidthmaximum"
+	// AnnotationContainerStorageQoSIopsMaximum overrides the container storage
+	// maximum iops set via the OCI spec.
+	//
+	// Note: This is only present because CRI does not (currently) have a
+	// `WindowsPodSandboxConfig` for setting this correctly. It should not be
+	// used via OCI runtimes and rather use
+	// `spec.Windows.Resources.Storage.Iops`.
+	AnnotationContainerStorageQoSIopsMaximum = "io.microsoft.container.storage.qos.iopsmaximum"
+	annotationAllowOvercommit                = "io.microsoft.virtualmachine.computetopology.memory.allowovercommit"
+	annotationEnableDeferredCommit           = "io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit"
 	// annotationMemorySizeInMB overrides the container memory size set via the
 	// OCI spec.
 	//
 	// Note: This annotation is in MB. OCI is in Bytes. When using this override
 	// the caller MUST use MB or sizing will be wrong.
-	annotationMemorySizeInMB      = "io.microsoft.virtualmachine.computetopology.memory.sizeinmb"
-	annotationProcessorCount      = "io.microsoft.virtualmachine.computetopology.processor.count"
-	annotationVPMemCount          = "io.microsoft.virtualmachine.devices.virtualpmem.maximumcount"
-	annotationVPMemSize           = "io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes"
-	annotationPreferredRootFSType = "io.microsoft.virtualmachine.lcow.preferredrootfstype"
-	annotationBootFilesRootPath   = "io.microsoft.virtualmachine.lcow.bootfilesrootpath"
+	annotationMemorySizeInMB = "io.microsoft.virtualmachine.computetopology.memory.sizeinmb"
+	// annotationProcessorCount overrides the hypervisor isolated vCPU count set
+	// via the OCI spec.
+	//
+	// Note: Unlike Windows process isolated container QoS Count/Limt/Weight on
+	// the UVM are not mutually exclusive and can be set together.
+	annotationProcessorCount = "io.microsoft.virtualmachine.computetopology.processor.count"
+	// annotationProcessorLimit overrides the hypervisor isolated vCPU limit set
+	// via the OCI spec.
+	//
+	// Limit allows values 1 - 10,000 where 10,000 means 100% CPU. (And is the
+	// default if omitted)
+	//
+	// Note: Unlike Windows process isolated container QoS Count/Limt/Weight on
+	// the UVM are not mutually exclusive and can be set together.
+	annotationProcessorLimit = "io.microsoft.virtualmachine.computetopology.processor.limit"
+	// annotationProcessorWeight overrides the hypervisor isolated vCPU weight set
+	// via the OCI spec.
+	//
+	// Weight allows values 0 - 10,000. (100 is the default if omitted)
+	//
+	// Note: Unlike Windows process isolated container QoS Count/Limt/Weight on
+	// the UVM are not mutually exclusive and can be set together.
+	annotationProcessorWeight            = "io.microsoft.virtualmachine.computetopology.processor.weight"
+	annotationVPMemCount                 = "io.microsoft.virtualmachine.devices.virtualpmem.maximumcount"
+	annotationVPMemSize                  = "io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes"
+	annotationPreferredRootFSType        = "io.microsoft.virtualmachine.lcow.preferredrootfstype"
+	annotationBootFilesRootPath          = "io.microsoft.virtualmachine.lcow.bootfilesrootpath"
+	annotationStorageQoSBandwidthMaximum = "io.microsoft.virtualmachine.storageqos.bandwidthmaximum"
+	annotationStorageQoSIopsMaximum      = "io.microsoft.virtualmachine.storageqos.iopsmaximum"
 )
 
 // parseAnnotationsBool searches `a` for `key` and if found verifies that the
@@ -48,10 +135,10 @@ func parseAnnotationsBool(a map[string]string, key string, def bool) bool {
 	return def
 }
 
-// parseAnnotationsCPU searches `s.Annotations` for the CPU annotation. If
+// ParseAnnotationsCPUCount searches `s.Annotations` for the CPU annotation. If
 // not found searches `s` for the Windows CPU section. If neither are found
 // returns `def`.
-func parseAnnotationsCPU(s *specs.Spec, annotation string, def int32) int32 {
+func ParseAnnotationsCPUCount(s *specs.Spec, annotation string, def int32) int32 {
 	if m := parseAnnotationsUint64(s.Annotations, annotation, 0); m != 0 {
 		return int32(m)
 	}
@@ -65,12 +152,80 @@ func parseAnnotationsCPU(s *specs.Spec, annotation string, def int32) int32 {
 	return def
 }
 
-// parseAnnotationsMemory searches `s.Annotations` for the memory annotation. If
+// ParseAnnotationsCPULimit searches `s.Annotations` for the CPU annotation. If
+// not found searches `s` for the Windows CPU section. If neither are found
+// returns `def`.
+func ParseAnnotationsCPULimit(s *specs.Spec, annotation string, def int32) int32 {
+	if m := parseAnnotationsUint64(s.Annotations, annotation, 0); m != 0 {
+		return int32(m)
+	}
+	if s.Windows != nil &&
+		s.Windows.Resources != nil &&
+		s.Windows.Resources.CPU != nil &&
+		s.Windows.Resources.CPU.Maximum != nil &&
+		*s.Windows.Resources.CPU.Maximum > 0 {
+		return int32(*s.Windows.Resources.CPU.Maximum)
+	}
+	return def
+}
+
+// ParseAnnotationsCPUWeight searches `s.Annotations` for the CPU annotation. If
+// not found searches `s` for the Windows CPU section. If neither are found
+// returns `def`.
+func ParseAnnotationsCPUWeight(s *specs.Spec, annotation string, def int32) int32 {
+	if m := parseAnnotationsUint64(s.Annotations, annotation, 0); m != 0 {
+		return int32(m)
+	}
+	if s.Windows != nil &&
+		s.Windows.Resources != nil &&
+		s.Windows.Resources.CPU != nil &&
+		s.Windows.Resources.CPU.Shares != nil &&
+		*s.Windows.Resources.CPU.Shares > 0 {
+		return int32(*s.Windows.Resources.CPU.Shares)
+	}
+	return def
+}
+
+// ParseAnnotationsStorageIops searches `s.Annotations` for the `Iops`
+// annotation. If not found searches `s` for the Windows Storage section. If
+// neither are found returns `def`.
+func ParseAnnotationsStorageIops(s *specs.Spec, annotation string, def int32) int32 {
+	if m := parseAnnotationsUint64(s.Annotations, annotation, 0); m != 0 {
+		return int32(m)
+	}
+	if s.Windows != nil &&
+		s.Windows.Resources != nil &&
+		s.Windows.Resources.Storage != nil &&
+		s.Windows.Resources.Storage.Iops != nil &&
+		*s.Windows.Resources.Storage.Iops > 0 {
+		return int32(*s.Windows.Resources.Storage.Iops)
+	}
+	return def
+}
+
+// ParseAnnotationsStorageBps searches `s.Annotations` for the `Bps` annotation.
+// If not found searches `s` for the Windows Storage section. If neither are
+// found returns `def`.
+func ParseAnnotationsStorageBps(s *specs.Spec, annotation string, def int32) int32 {
+	if m := parseAnnotationsUint64(s.Annotations, annotation, 0); m != 0 {
+		return int32(m)
+	}
+	if s.Windows != nil &&
+		s.Windows.Resources != nil &&
+		s.Windows.Resources.Storage != nil &&
+		s.Windows.Resources.Storage.Bps != nil &&
+		*s.Windows.Resources.Storage.Bps > 0 {
+		return int32(*s.Windows.Resources.Storage.Bps)
+	}
+	return def
+}
+
+// ParseAnnotationsMemory searches `s.Annotations` for the memory annotation. If
 // not found searches `s` for the Windows memory section. If neither are found
 // returns `def`.
 //
 // Note: The returned value is in `MB`.
-func parseAnnotationsMemory(s *specs.Spec, annotation string, def int32) int32 {
+func ParseAnnotationsMemory(s *specs.Spec, annotation string, def int32) int32 {
 	if m := parseAnnotationsUint64(s.Annotations, annotation, 0); m != 0 {
 		return int32(m)
 	}
@@ -153,12 +308,16 @@ func SpecToUVMCreateOpts(s *specs.Spec, id, owner string) (interface{}, error) {
 	}
 	if IsLCOW(s) {
 		lopts := uvm.NewDefaultOptionsLCOW(id, owner)
-		lopts.MemorySizeInMB = parseAnnotationsMemory(s, annotationMemorySizeInMB, lopts.MemorySizeInMB)
+		lopts.MemorySizeInMB = ParseAnnotationsMemory(s, annotationMemorySizeInMB, lopts.MemorySizeInMB)
 		lopts.AllowOvercommit = parseAnnotationsBool(s.Annotations, annotationAllowOvercommit, lopts.AllowOvercommit)
 		lopts.EnableDeferredCommit = parseAnnotationsBool(s.Annotations, annotationEnableDeferredCommit, lopts.EnableDeferredCommit)
-		lopts.ProcessorCount = parseAnnotationsCPU(s, annotationProcessorCount, lopts.ProcessorCount)
+		lopts.ProcessorCount = ParseAnnotationsCPUCount(s, annotationProcessorCount, lopts.ProcessorCount)
+		lopts.ProcessorLimit = ParseAnnotationsCPULimit(s, annotationProcessorLimit, lopts.ProcessorLimit)
+		lopts.ProcessorWeight = ParseAnnotationsCPUWeight(s, annotationProcessorWeight, lopts.ProcessorWeight)
 		lopts.VPMemDeviceCount = parseAnnotationsUint32(s.Annotations, annotationVPMemCount, lopts.VPMemDeviceCount)
 		lopts.VPMemSizeBytes = parseAnnotationsUint64(s.Annotations, annotationVPMemSize, lopts.VPMemSizeBytes)
+		lopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(s, annotationStorageQoSBandwidthMaximum, lopts.StorageQoSBandwidthMaximum)
+		lopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(s, annotationStorageQoSIopsMaximum, lopts.StorageQoSIopsMaximum)
 		lopts.PreferredRootFSType = parseAnnotationsPreferredRootFSType(s.Annotations, annotationPreferredRootFSType, lopts.PreferredRootFSType)
 		switch lopts.PreferredRootFSType {
 		case uvm.PreferredRootFSTypeInitRd:
@@ -170,10 +329,14 @@ func SpecToUVMCreateOpts(s *specs.Spec, id, owner string) (interface{}, error) {
 		return lopts, nil
 	} else if IsWCOW(s) {
 		wopts := uvm.NewDefaultOptionsWCOW(id, owner)
-		wopts.MemorySizeInMB = parseAnnotationsMemory(s, annotationMemorySizeInMB, wopts.MemorySizeInMB)
+		wopts.MemorySizeInMB = ParseAnnotationsMemory(s, annotationMemorySizeInMB, wopts.MemorySizeInMB)
 		wopts.AllowOvercommit = parseAnnotationsBool(s.Annotations, annotationAllowOvercommit, wopts.AllowOvercommit)
 		wopts.EnableDeferredCommit = parseAnnotationsBool(s.Annotations, annotationEnableDeferredCommit, wopts.EnableDeferredCommit)
-		wopts.ProcessorCount = parseAnnotationsCPU(s, annotationProcessorCount, wopts.ProcessorCount)
+		wopts.ProcessorCount = ParseAnnotationsCPUCount(s, annotationProcessorCount, wopts.ProcessorCount)
+		wopts.ProcessorLimit = ParseAnnotationsCPULimit(s, annotationProcessorLimit, wopts.ProcessorLimit)
+		wopts.ProcessorWeight = ParseAnnotationsCPUWeight(s, annotationProcessorWeight, wopts.ProcessorWeight)
+		wopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(s, annotationStorageQoSBandwidthMaximum, wopts.StorageQoSBandwidthMaximum)
+		wopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(s, annotationStorageQoSIopsMaximum, wopts.StorageQoSIopsMaximum)
 		return wopts, nil
 	}
 	return nil, errors.New("cannot create UVM opts spec is not LCOW or WCOW")

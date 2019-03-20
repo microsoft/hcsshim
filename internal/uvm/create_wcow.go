@@ -123,7 +123,9 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 					EnableDeferredCommit: opts.EnableDeferredCommit,
 				},
 				Processor: &hcsschema.Processor2{
-					Count: uvm.processorCount,
+					Count:  uvm.processorCount,
+					Limit:  opts.ProcessorLimit,
+					Weight: opts.ProcessorWeight,
 				},
 			},
 			GuestConnection: &hcsschema.GuestConnection{},
@@ -163,6 +165,14 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 				},
 			},
 		},
+	}
+
+	// Handle StorageQoS if set
+	if opts.StorageQoSBandwidthMaximum > 0 || opts.StorageQoSIopsMaximum > 0 {
+		doc.VirtualMachine.StorageQoS = &hcsschema.StorageQoS{
+			IopsMaximum:      opts.StorageQoSIopsMaximum,
+			BandwidthMaximum: opts.StorageQoSBandwidthMaximum,
+		}
 	}
 
 	uvm.scsiLocations[0][0].hostPath = doc.VirtualMachine.Devices.Scsi["0"].Attachments["0"].Path

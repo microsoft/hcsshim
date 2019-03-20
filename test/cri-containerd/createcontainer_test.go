@@ -4,6 +4,7 @@ package cri_containerd
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	runtime "k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2"
@@ -241,4 +242,553 @@ func Test_CreateContainer_LCOW_Privileged(t *testing.T) {
 		},
 	}
 	runCreateContainerTestWithSandbox(t, sandboxRequest, request)
+}
+
+func Test_CreateContainer_MemorySize_Config_WCOW_Process(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsRS5Nanoserver,
+			},
+			// Hold this command open until killed (pause for Windows)
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Windows: &runtime.WindowsContainerConfig{
+				Resources: &runtime.WindowsContainerResources{
+					MemoryLimitInBytes: 768 * 1024 * 1024, // 768MB
+				},
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowProcessRuntimeHandler, request)
+}
+
+func Test_CreateContainer_MemorySize_Annotation_WCOW_Process(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsRS5Nanoserver,
+			},
+			// Hold this command open until killed (pause for Windows)
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Annotations: map[string]string{
+				"io.microsoft.container.memory.sizeinmb": fmt.Sprintf("%d", 768*1024*1024), // 768MB
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowProcessRuntimeHandler, request)
+}
+
+func Test_CreateContainer_MemorySize_Config_WCOW_Hypervisor(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsRS5Nanoserver,
+			},
+			// Hold this command open until killed (pause for Windows)
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Windows: &runtime.WindowsContainerConfig{
+				Resources: &runtime.WindowsContainerResources{
+					MemoryLimitInBytes: 768 * 1024 * 1024, // 768MB
+				},
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
+}
+
+func Test_CreateContainer_MemorySize_Annotation_WCOW_Hypervisor(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsRS5Nanoserver,
+			},
+			// Hold this command open until killed (pause for Windows)
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Annotations: map[string]string{
+				"io.microsoft.container.memory.sizeinmb": fmt.Sprintf("%d", 768*1024*1024), // 768MB
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
+}
+
+func Test_CreateContainer_MemorySize_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			// Hold this command open until killed
+			Command: []string{
+				"top",
+			},
+			Linux: &runtime.LinuxContainerConfig{
+				Resources: &runtime.LinuxContainerResources{
+					MemoryLimitInBytes: 768 * 1024 * 1024, // 768MB
+				},
+			},
+		},
+	}
+	runCreateContainerTest(t, lcowRuntimeHandler, request)
+}
+
+func Test_CreateContainer_CPUCount_Config_WCOW_Process(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsRS5Nanoserver,
+			},
+			// Hold this command open until killed (pause for Windows)
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Windows: &runtime.WindowsContainerConfig{
+				Resources: &runtime.WindowsContainerResources{
+					CpuCount: 1,
+				},
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowProcessRuntimeHandler, request)
+}
+
+func Test_CreateContainer_CPUCount_Annotation_WCOW_Process(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsRS5Nanoserver,
+			},
+			// Hold this command open until killed (pause for Windows)
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Annotations: map[string]string{
+				"io.microsoft.container.processor.count": "1",
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowProcessRuntimeHandler, request)
+}
+
+func Test_CreateContainer_CPUCount_Config_WCOW_Hypervisor(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsRS5Nanoserver,
+			},
+			// Hold this command open until killed (pause for Windows)
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Windows: &runtime.WindowsContainerConfig{
+				Resources: &runtime.WindowsContainerResources{
+					CpuCount: 1,
+				},
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
+}
+
+func Test_CreateContainer_CPUCount_Annotation_WCOW_Hypervisor(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsRS5Nanoserver,
+			},
+			// Hold this command open until killed (pause for Windows)
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Annotations: map[string]string{
+				"io.microsoft.container.processor.count": "1",
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
+}
+
+func Test_CreateContainer_CPUCount_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			// Hold this command open until killed
+			Command: []string{
+				"top",
+			},
+			Linux: &runtime.LinuxContainerConfig{
+				Resources: &runtime.LinuxContainerResources{
+					CpusetCpus: "0-3",
+				},
+			},
+		},
+	}
+	runCreateContainerTest(t, lcowRuntimeHandler, request)
+}
+
+func Test_CreateContainer_CPULimit_Config_WCOW_Process(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsRS5Nanoserver,
+			},
+			// Hold this command open until killed (pause for Windows)
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Windows: &runtime.WindowsContainerConfig{
+				Resources: &runtime.WindowsContainerResources{
+					CpuMaximum: 9000,
+				},
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowProcessRuntimeHandler, request)
+}
+
+func Test_CreateContainer_CPULimit_Annotation_WCOW_Process(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsRS5Nanoserver,
+			},
+			// Hold this command open until killed (pause for Windows)
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Annotations: map[string]string{
+				"io.microsoft.container.processor.limit": "9000",
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowProcessRuntimeHandler, request)
+}
+
+func Test_CreateContainer_CPULimit_Config_WCOW_Hypervisor(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsRS5Nanoserver,
+			},
+			// Hold this command open until killed (pause for Windows)
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Windows: &runtime.WindowsContainerConfig{
+				Resources: &runtime.WindowsContainerResources{
+					CpuMaximum: 9000,
+				},
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
+}
+
+func Test_CreateContainer_CPULimit_Annotation_WCOW_Hypervisor(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsRS5Nanoserver,
+			},
+			// Hold this command open until killed (pause for Windows)
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Annotations: map[string]string{
+				"io.microsoft.container.processor.limit": "9000",
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
+}
+
+func Test_CreateContainer_CPUQuota_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			// Hold this command open until killed
+			Command: []string{
+				"top",
+			},
+			Linux: &runtime.LinuxContainerConfig{
+				Resources: &runtime.LinuxContainerResources{
+					CpuQuota:  1000000,
+					CpuPeriod: 500000,
+				},
+			},
+		},
+	}
+	runCreateContainerTest(t, lcowRuntimeHandler, request)
+}
+
+func Test_CreateContainer_CPUWeight_Config_WCOW_Process(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsRS5Nanoserver,
+			},
+			// Hold this command open until killed (pause for Windows)
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Windows: &runtime.WindowsContainerConfig{
+				Resources: &runtime.WindowsContainerResources{
+					CpuShares: 500,
+				},
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowProcessRuntimeHandler, request)
+}
+
+func Test_CreateContainer_CPUWeight_Annotation_WCOW_Process(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsRS5Nanoserver,
+			},
+			// Hold this command open until killed (pause for Windows)
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Annotations: map[string]string{
+				"io.microsoft.container.processor.weight": "500",
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowProcessRuntimeHandler, request)
+}
+
+func Test_CreateContainer_CPUWeight_Config_WCOW_Hypervisor(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsRS5Nanoserver,
+			},
+			// Hold this command open until killed (pause for Windows)
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Windows: &runtime.WindowsContainerConfig{
+				Resources: &runtime.WindowsContainerResources{
+					CpuMaximum: 500,
+				},
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
+}
+
+func Test_CreateContainer_CPUWeight_Annotation_WCOW_Hypervisor(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsRS5Nanoserver,
+			},
+			// Hold this command open until killed (pause for Windows)
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Annotations: map[string]string{
+				"io.microsoft.container.processor.limit": "500",
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
+}
+
+func Test_CreateContainer_CPUShares_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			// Hold this command open until killed
+			Command: []string{
+				"top",
+			},
+			Linux: &runtime.LinuxContainerConfig{
+				Resources: &runtime.LinuxContainerResources{
+					CpuShares: 1024,
+				},
+			},
+		},
+	}
+	runCreateContainerTest(t, lcowRuntimeHandler, request)
 }
