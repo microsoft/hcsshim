@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/mergemaps"
@@ -31,25 +30,9 @@ type OptionsWCOW struct {
 // `owner` the owner of the compute system. If not passed will use the
 // executable files name.
 func NewDefaultOptionsWCOW(id, owner string) *OptionsWCOW {
-	opts := &OptionsWCOW{
-		Options: &Options{
-			ID:                   id,
-			Owner:                owner,
-			MemorySizeInMB:       1024,
-			AllowOvercommit:      true,
-			EnableDeferredCommit: false,
-			ProcessorCount:       defaultProcessorCount(),
-		},
+	return &OptionsWCOW{
+		Options: newDefaultOptions(id, owner),
 	}
-
-	if opts.ID == "" {
-		opts.ID = guid.New().String()
-	}
-	if opts.Owner == "" {
-		opts.Owner = filepath.Base(os.Args[0])
-	}
-
-	return opts
 }
 
 // CreateWCOW creates an HCS compute system representing a utility VM.
@@ -72,10 +55,6 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 		}
 	}()
 
-	if opts.Options == nil {
-		opts.Options = &Options{}
-	}
-
 	uvm := &UtilityVM{
 		id:                  opts.ID,
 		owner:               opts.Owner,
@@ -83,6 +62,10 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 		scsiControllerCount: 1,
 		vsmbShares:          make(map[string]*vsmbShare),
 	}
+
+	// To maintain compatability with Docker we need to automatically downgrade
+	// a user CPU count if the setting is not possible.
+	uvm.normalizeProcessorCount(opts.ProcessorCount)
 
 	if len(opts.LayerFolders) < 2 {
 		return nil, fmt.Errorf("at least 2 LayerFolders must be supplied")
@@ -140,7 +123,7 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 					EnableDeferredCommit: opts.EnableDeferredCommit,
 				},
 				Processor: &hcsschema.Processor2{
-					Count: opts.ProcessorCount,
+					Count: uvm.processorCount,
 				},
 			},
 			GuestConnection: &hcsschema.GuestConnection{},

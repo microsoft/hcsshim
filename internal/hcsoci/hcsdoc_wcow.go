@@ -69,8 +69,14 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 				v2Container.Processor = &hcsschema.Processor{}
 			}
 			if coi.Spec.Windows.Resources.CPU.Count != nil {
+				var hostCPUCount uint64
+				if coi.HostingSystem != nil {
+					// Normalize to UVM size
+					hostCPUCount = uint64(coi.HostingSystem.ProcessorCount())
+				} else {
+					hostCPUCount = uint64(runtime.NumCPU())
+				}
 				cpuCount := *coi.Spec.Windows.Resources.CPU.Count
-				hostCPUCount := uint64(runtime.NumCPU())
 				if cpuCount > hostCPUCount {
 					logrus.Warnf("Changing requested CPUCount of %d to current number of processors, %d", cpuCount, hostCPUCount)
 					cpuCount = hostCPUCount
