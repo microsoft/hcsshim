@@ -201,8 +201,10 @@ func (uvm *UtilityVM) addSCSIActual(hostPath, uvmPath, attachmentType string, is
 	}
 
 	// Ensure the utility VM has access
-	if err := wclayer.GrantVmAccess(uvm.id, hostPath); err != nil {
-		return -1, -1, err
+	if !isLayer {
+		if err := wclayer.GrantVmAccess(uvm.id, hostPath); err != nil {
+			return -1, -1, err
+		}
 	}
 
 	// We must hold the lock throughout the lookup (findSCSIAttachment) until

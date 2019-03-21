@@ -14,7 +14,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/mergemaps"
 	"github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
-	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/linuxkit/virtsock/pkg/hvsock"
 	"github.com/sirupsen/logrus"
@@ -269,9 +268,6 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 				ReadOnly:    true,
 				ImageFormat: imageFormat,
 			},
-		}
-		if err := wclayer.GrantVmAccess(uvm.id, rootfsFullPath); err != nil {
-			return nil, fmt.Errorf("failed to grantvmaccess to %s: %s", rootfsFullPath, err)
 		}
 		// Add to our internal structure
 		uvm.vpmemDevices[0] = vpmemInfo{
