@@ -161,9 +161,13 @@ func newHcsTask(
 		io)
 
 	if parent != nil {
+		// We have a parent UVM. Listen for its exit and forcibly close this
+		// task. This is not expected but in the event of a UVM crash we need to
+		// handle this case.
 		go ht.waitForHostExit()
 	}
-
+	// In the normal case the `Signal` call from the caller killed this task's
+	// init process.
 	go func() {
 		// Wait for our init process to exit.
 		ht.init.Wait(context.Background())
@@ -468,14 +472,7 @@ func (ht *hcsTask) waitForHostExit() {
 		return false
 	})
 	ht.init.ForceExit(1)
-	ht.closeHostOnce.Do(func() {
-		if err := ht.host.Close(); err != nil {
-			logrus.WithFields(logrus.Fields{
-				"tid":           ht.id,
-				logrus.ErrorKey: err,
-			}).Error("hcsTask::close - failed host vm shutdown")
-		}
-	})
+	ht.closeHost()
 }
 
 // close shuts down the container that is owned by this task and if
@@ -544,18 +541,37 @@ func (ht *hcsTask) close() {
 				}).Error("hcsTask::close - failed to close container")
 			}
 		}
+		ht.closeHost()
+	})
+}
 
+// closeHost safely closes the hosting UVM if this task is the owner. Once
+// closed and all resources released it events the `runtime.TaskExitEventTopic`
+// for all upstream listeners.
+//
+// Note: If this is a process isolated task the hosting UVM is simply a `noop`.
+//
+// This call is idempotent and safe to call multiple times.
+func (ht *hcsTask) closeHost() {
+	ht.closeHostOnce.Do(func() {
 		if ht.ownsHost && ht.host != nil {
-			// This task is also the host owner. Shutdown the host as part of
-			// the init process going down.
-			ht.closeHostOnce.Do(func() {
-				if err := ht.host.Close(); err != nil {
-					logrus.WithFields(logrus.Fields{
-						"tid":           ht.id,
-						logrus.ErrorKey: err,
-					}).Error("hcsTask::close - failed host vm shutdown")
-				}
-			})
+			if err := ht.host.Close(); err != nil {
+				logrus.WithFields(logrus.Fields{
+					"tid":           ht.id,
+					logrus.ErrorKey: err,
+				}).Error("hcsTask::closeHost - failed host vm shutdown")
+			}
 		}
+		// Send the `init` exec exit notification always.
+		exit := ht.init.Status()
+		ht.events(
+			runtime.TaskExitEventTopic,
+			&eventstypes.TaskExit{
+				ContainerID: ht.id,
+				ID:          exit.ID,
+				Pid:         uint32(exit.Pid),
+				ExitStatus:  exit.ExitStatus,
+				ExitedAt:    exit.ExitedAt,
+			})
 	})
 }

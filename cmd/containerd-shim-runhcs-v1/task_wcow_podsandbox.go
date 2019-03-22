@@ -17,6 +17,14 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// newWcowPodSandboxTask creates a fake WCOW task with a fake WCOW `init`
+// process as a performance optimization rather than creating an actual
+// container and process since it is not needed to hold open any namespaces like
+// the equivalent on Linux.
+//
+// It is assumed that this is the only fake WCOW task and that this task owns
+// `parent`. When the fake WCOW `init` process exits via `Signal` `parent` will
+// be forcibly closed by this task.
 func newWcowPodSandboxTask(ctx context.Context, events publisher, id, bundle string, parent *uvm.UtilityVM) shimTask {
 	logrus.WithFields(logrus.Fields{
 		"tid": id,
@@ -28,6 +36,9 @@ func newWcowPodSandboxTask(ctx context.Context, events publisher, id, bundle str
 		init:   newWcowPodSandboxExec(ctx, events, id, bundle),
 	}
 	if parent != nil {
+		// We have (and own) a parent UVM. Listen for its exit and forcibly
+		// close this task. This is not expected but in the event of a UVM crash
+		// we need to handle this case.
 		go func() {
 			werr := parent.Wait()
 			if werr != nil && !hcs.IsAlreadyClosed(werr) {
@@ -40,9 +51,20 @@ func newWcowPodSandboxTask(ctx context.Context, events publisher, id, bundle str
 			// already) to unblock any waiters since the platform wont send any
 			// events for this fake process.
 			wpst.init.ForceExit(1)
-			parent.Close()
+
+			// Close the host and event the exit.
+			wpst.close()
 		}()
 	}
+	// In the normal case the `Signal` call from the caller killed this fake
+	// init process.
+	go func() {
+		// Wait for it to exit on its own
+		wpst.init.Wait(context.Background())
+
+		// Close the host and event the exit
+		wpst.close()
+	}()
 	return wpst
 }
 
@@ -118,14 +140,6 @@ func (wpst *wcowPodSandboxTask) KillExec(ctx context.Context, eid string, signal
 	if err != nil {
 		return err
 	}
-	if eid == "" {
-		// We killed the fake init task. Bring down the uvm.
-		wpst.closeOnce.Do(func() {
-			if wpst.host != nil {
-				wpst.host.Close()
-			}
-		})
-	}
 	return nil
 }
 
@@ -170,4 +184,32 @@ func (wpst *wcowPodSandboxTask) Pids(ctx context.Context) ([]options.ProcessDeta
 			ExecID:    wpst.init.ID(),
 		},
 	}, nil
+}
+
+// close safely closes the hosting UVM. Because of the specialty of this task it
+// is assumed that this is always the owner of `wpst.host`. Once closed and all
+// resources released it events the `runtime.TaskExitEventTopic` for all
+// upstream listeners.
+//
+// This call is idempotent and safe to call multiple times.
+func (wpst *wcowPodSandboxTask) close() {
+	wpst.closeOnce.Do(func() {
+		if err := wpst.host.Close(); !hcs.IsAlreadyClosed(err) {
+			logrus.WithFields(logrus.Fields{
+				"tid":           wpst.id,
+				logrus.ErrorKey: err,
+			}).Error("wcowPodSandboxTask::close - failed host vm shutdown")
+		}
+		// Send the `init` exec exit notification always.
+		exit := wpst.init.Status()
+		wpst.events(
+			runtime.TaskExitEventTopic,
+			&eventstypes.TaskExit{
+				ContainerID: wpst.id,
+				ID:          exit.ID,
+				Pid:         uint32(exit.Pid),
+				ExitStatus:  exit.ExitStatus,
+				ExitedAt:    exit.ExitedAt,
+			})
+	})
 }

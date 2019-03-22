@@ -166,15 +166,10 @@ func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) error {
 		wpse.state = shimExecStateExited
 		wpse.exitStatus = 0
 		wpse.exitedAt = time.Now()
-		wpse.events(
-			runtime.TaskExitEventTopic,
-			&eventstypes.TaskExit{
-				ContainerID: wpse.tid,
-				ID:          wpse.tid, // The init exec ID is always the same as Task ID.
-				Pid:         uint32(wpse.pid),
-				ExitStatus:  wpse.exitStatus,
-				ExitedAt:    wpse.exitedAt,
-			})
+
+		// NOTE: We do not support a non `init` exec for this "fake" init
+		// process. Skip any exited event which will be sent by the task.
+
 		close(wpse.exited)
 		return nil
 	case shimExecStateExited:
@@ -233,22 +228,13 @@ func (wpse *wcowPodSandboxExec) ForceExit(status int) {
 			"status": status,
 		}).Debug("hcsExec::ForceExit")
 
-		wasRunning := wpse.state == shimExecStateRunning
 		wpse.state = shimExecStateExited
 		wpse.exitStatus = 1
 		wpse.exitedAt = time.Now()
 
-		if wasRunning {
-			wpse.events(
-				runtime.TaskExitEventTopic,
-				&eventstypes.TaskExit{
-					ContainerID: wpse.tid,
-					ID:          wpse.tid, // The init exec ID is always the same as Task ID.
-					Pid:         uint32(wpse.pid),
-					ExitStatus:  wpse.exitStatus,
-					ExitedAt:    wpse.exitedAt,
-				})
-		}
+		// NOTE: We do not support a non `init` exec for this "fake" init
+		// process. Skip any exited event which will be sent by the task.
+
 		close(wpse.exited)
 	}
 }

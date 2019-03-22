@@ -613,16 +613,22 @@ func (he *hcsExec) waitForExit() {
 	he.ioWg.Wait()
 	he.io.Close()
 
-	// We had a valid process so send the exited notification.
-	he.events(
-		runtime.TaskExitEventTopic,
-		&eventstypes.TaskExit{
-			ContainerID: he.tid,
-			ID:          he.id,
-			Pid:         uint32(he.pid),
-			ExitStatus:  he.exitStatus,
-			ExitedAt:    he.exitedAt,
-		})
+	// Only send the `runtime.TaskExitEventTopic` notification if this is a true
+	// exec. For the `init` exec this is handled in task teardown.
+	if he.tid != he.id {
+		// We had a valid process so send the exited notification.
+		he.events(
+			runtime.TaskExitEventTopic,
+			&eventstypes.TaskExit{
+				ContainerID: he.tid,
+				ID:          he.id,
+				Pid:         uint32(he.pid),
+				ExitStatus:  he.exitStatus,
+				ExitedAt:    he.exitedAt,
+			})
+	}
+
+	// Free any waiters.
 	he.exitedOnce.Do(func() {
 		close(he.exited)
 	})
