@@ -11,7 +11,8 @@
 
 
 param(
-    [Parameter(Mandatory=$false)][switch]$Install
+    [Parameter(Mandatory=$false)][switch]$Install,
+	[Parameter(Mandatory=$false)][switch]$NoCache
 )
 
 $ErrorActionPreference = 'Stop'
@@ -30,7 +31,10 @@ Try {
     $d=New-TemporaryDirectory
     echo "Commit:`t$commit`nRepo:`tmicrosoft/opengcs`nBranch:`t$branch`nBuilt:`t$(date)" > $d\opengcsversion.txt
 
-    &docker build --platform=linux -t opengcs .
+    if ($NoCache -eq $true) {
+        $cache="--no-cache"
+    }
+    &docker build --platform=linux $cache -t opengcs .
     if ( $LastExitCode -ne 0 ) {
         Throw "failed to build opengcs image"
     }
