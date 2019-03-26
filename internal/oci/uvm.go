@@ -345,7 +345,7 @@ func SpecToUVMCreateOpts(s *specs.Spec, id, owner string) (interface{}, error) {
 // UpdateSpecFromOptions sets extra annotations on the OCI spec based on the
 // `opts` struct.
 func UpdateSpecFromOptions(s specs.Spec, opts *runhcsopts.Options) specs.Spec {
-	if opts.BootFilesRootPath != "" {
+	if opts != nil && opts.BootFilesRootPath != "" {
 		s.Annotations[annotationBootFilesRootPath] = opts.BootFilesRootPath
 	}
 
