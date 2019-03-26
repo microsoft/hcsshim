@@ -80,7 +80,7 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 		shimOpts = v.(*runhcsopts.Options)
 	}
 
-	if shimOpts.Debug {
+	if shimOpts != nil && shimOpts.Debug {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 
