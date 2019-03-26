@@ -486,12 +486,19 @@ func (ht *hcsTask) close() {
 	}).Debug("hcsTask::close")
 
 	ht.closeOnce.Do(func() {
+		logrus.WithFields(logrus.Fields{
+			"tid": ht.id,
+		}).Debug("hcsTask::close In closeOnce.Do processing")
+
 		// ht.c should never be nil for a real task but in testing we stub
 		// this to avoid a nil dereference. We really should introduce a
 		// method or interface for ht.c operations that we can stub for
 		// testing.
 		if ht.c != nil {
 			// Do our best attempt to tear down the container.
+			logrus.WithFields(logrus.Fields{
+				"tid": ht.id,
+			}).Debug("hcsTask::close Calling Shutdown")
 			if err := ht.c.Shutdown(); err != nil {
 				if !hcs.IsPending(err) {
 					logrus.WithFields(logrus.Fields{
@@ -500,13 +507,23 @@ func (ht *hcsTask) close() {
 					}).Error("hcsTask::close - failed to shutdown container")
 				} else {
 					const shutdownTimeout = time.Minute * 5
+					logrus.WithFields(logrus.Fields{
+						"tid": ht.id,
+					}).Debug("hcsTask::close shutdown got IsPending so waiting for timeout")
 					if err := ht.c.WaitTimeout(shutdownTimeout); err != nil {
 						logrus.WithFields(logrus.Fields{
 							"tid":           ht.id,
 							logrus.ErrorKey: err,
 						}).Error("hcsTask::close - failed to wait for container shutdown")
+					} else {
+						logrus.WithFields(logrus.Fields{
+							"tid": ht.id,
+						}).Debug("hcsTask::close WithTimeout for shutdown completed")
 					}
 				}
+				logrus.WithFields(logrus.Fields{
+					"tid": ht.id,
+				}).Debug("hcsTask::close Calling Terminate")
 				if err := ht.c.Terminate(); err != nil && !hcs.IsAlreadyStopped(err) {
 					if !hcs.IsPending(err) {
 						logrus.WithFields(logrus.Fields{
@@ -526,12 +543,19 @@ func (ht *hcsTask) close() {
 			}
 
 			// Release any resources associated with the container.
+			logrus.WithFields(logrus.Fields{
+				"tid": ht.id,
+			}).Debug("hcsTask::close releasing resources")
 			if err := hcsoci.ReleaseResources(ht.cr, ht.host, true); err != nil {
 				logrus.WithFields(logrus.Fields{
 					"tid":           ht.id,
 					logrus.ErrorKey: err,
 				}).Error("hcsTask::close - failed to release container resources")
 			}
+
+			logrus.WithFields(logrus.Fields{
+				"tid": ht.id,
+			}).Debug("hcsTask::close Closing container handle")
 
 			// Close the container handle invalidating all future access.
 			if err := ht.c.Close(); err != nil && !hcs.IsAlreadyClosed(err) {
@@ -541,8 +565,14 @@ func (ht *hcsTask) close() {
 				}).Error("hcsTask::close - failed to close container")
 			}
 		}
+		logrus.WithFields(logrus.Fields{
+			"tid": ht.id,
+		}).Debug("hcsTask::close Calling closeHost()")
 		ht.closeHost()
 	})
+	logrus.WithFields(logrus.Fields{
+		"tid": ht.id,
+	}).Debug("hcsTask::close complete")
 }
 
 // closeHost safely closes the hosting UVM if this task is the owner. Once
