@@ -147,6 +147,7 @@ func newHcsTask(
 		cr:       resources,
 		ownsHost: ownsParent,
 		host:     parent,
+		closed:   make(chan struct{}),
 	}
 	ht.init = newHcsExec(
 		ctx,
@@ -244,6 +245,7 @@ type hcsTask struct {
 	ecl   sync.Mutex
 	execs sync.Map
 
+	closed    chan struct{}
 	closeOnce sync.Once
 	// closeHostOnce is used to close `host`. This will only be used if
 	// `ownsHost==true` and `host != nil`.
@@ -444,6 +446,11 @@ func (ht *hcsTask) Pids(ctx context.Context) ([]options.ProcessDetails, error) {
 	return pairs, nil
 }
 
+func (ht *hcsTask) Wait(ctx context.Context) *task.StateResponse {
+	<-ht.closed
+	return ht.init.Wait(ctx)
+}
+
 // waitForHostExit waits for the host virtual machine to exit. Once exited
 // forcibly exits all additional exec's in this task.
 //
@@ -573,5 +580,6 @@ func (ht *hcsTask) closeHost() {
 				ExitStatus:  exit.ExitStatus,
 				ExitedAt:    exit.ExitedAt,
 			})
+		close(ht.closed)
 	})
 }

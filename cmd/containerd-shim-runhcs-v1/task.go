@@ -61,4 +61,12 @@ type shimTask interface {
 	// Pids returns all process pid's in this `shimTask` including ones not
 	// created by the caller via a `CreateExec`.
 	Pids(ctx context.Context) ([]options.ProcessDetails, error)
+	// Waits for the the init task to complete.
+	//
+	// Note: If the `request.ExecID == ""` the caller should instead call `Wait`
+	// rather than `exec.Wait` on the init exec. This is because  the lifetime
+	// of the task is larger than just the init process and on shutdown we need
+	// to wait for the container and potentially UVM before unblocking any event
+	// based listeners or `Wait` based listeners.
+	Wait(ctx context.Context) *task.StateResponse
 }

@@ -16,6 +16,7 @@ func setupTestHcsTask(t *testing.T) (*hcsTask, *testShimExec, *testShimExec) {
 		events: fakePublisher,
 		id:     t.Name(),
 		init:   initExec,
+		closed: make(chan struct{}),
 	}
 	secondExecID := strconv.Itoa(rand.Int())
 	secondExec := newTestShimExec(t.Name(), secondExecID, int(rand.Int31()))
