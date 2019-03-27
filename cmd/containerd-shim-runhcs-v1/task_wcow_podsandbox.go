@@ -34,6 +34,7 @@ func newWcowPodSandboxTask(ctx context.Context, events publisher, id, bundle str
 		events: events,
 		id:     id,
 		init:   newWcowPodSandboxExec(ctx, events, id, bundle),
+		host:   parent,
 		closed: make(chan struct{}),
 	}
 	if parent != nil {
@@ -201,11 +202,17 @@ func (wpst *wcowPodSandboxTask) Wait(ctx context.Context) *task.StateResponse {
 // This call is idempotent and safe to call multiple times.
 func (wpst *wcowPodSandboxTask) close() {
 	wpst.closeOnce.Do(func() {
-		if err := wpst.host.Close(); !hcs.IsAlreadyClosed(err) {
-			logrus.WithFields(logrus.Fields{
-				"tid":           wpst.id,
-				logrus.ErrorKey: err,
-			}).Error("wcowPodSandboxTask::close - failed host vm shutdown")
+		logrus.WithFields(logrus.Fields{
+			"tid": wpst.id,
+		}).Debug("wcowPodSandboxTask::close")
+
+		if wpst.host != nil {
+			if err := wpst.host.Close(); !hcs.IsAlreadyClosed(err) {
+				logrus.WithFields(logrus.Fields{
+					"tid":           wpst.id,
+					logrus.ErrorKey: err,
+				}).Error("wcowPodSandboxTask::close - failed host vm shutdown")
+			}
 		}
 		// Send the `init` exec exit notification always.
 		exit := wpst.init.Status()
