@@ -500,7 +500,9 @@ func (ht *hcsTask) close() {
 		if ht.c != nil {
 			// Do our best attempt to tear down the container.
 			if err := ht.c.Shutdown(); err != nil {
-				if !hcs.IsPending(err) {
+				if hcs.IsAlreadyClosed(err) || hcs.IsAlreadyStopped(err) {
+					// This is the state we want. Do nothing.
+				} else if !hcs.IsPending(err) {
 					logrus.WithFields(logrus.Fields{
 						"tid":           ht.id,
 						logrus.ErrorKey: err,
@@ -514,8 +516,10 @@ func (ht *hcsTask) close() {
 						}).Error("hcsTask::close - failed to wait for container shutdown")
 					}
 				}
-				if err := ht.c.Terminate(); err != nil && !hcs.IsAlreadyStopped(err) {
-					if !hcs.IsPending(err) {
+				if err := ht.c.Terminate(); err != nil {
+					if hcs.IsAlreadyClosed(err) || hcs.IsAlreadyStopped(err) {
+						// This is the state we want. Do nothing.
+					} else if !hcs.IsPending(err) {
 						logrus.WithFields(logrus.Fields{
 							"tid":           ht.id,
 							logrus.ErrorKey: err,

@@ -208,6 +208,7 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 		defer func() {
 			if err != nil {
 				he.c.Terminate()
+				he.c.Close()
 			}
 		}()
 	}

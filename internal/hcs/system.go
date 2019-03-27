@@ -44,8 +44,9 @@ type System struct {
 
 	logctx logrus.Fields
 
-	waitBlock chan struct{}
-	waitError error
+	closedWaitOnce sync.Once
+	waitBlock      chan struct{}
+	waitError      error
 }
 
 func newSystem(id string) *System {
@@ -287,7 +288,7 @@ func (computeSystem *System) Shutdown() (err error) {
 	operation := "hcsshim::ComputeSystem::Shutdown"
 	computeSystem.logOperationBegin(operation)
 	defer func() {
-		if IsAlreadyStopped(err) || IsPending(err) {
+		if IsAlreadyClosed(err) || IsAlreadyStopped(err) || IsPending(err) {
 			computeSystem.logOperationEnd(operation, nil)
 		} else {
 			computeSystem.logOperationEnd(operation, err)
@@ -319,7 +320,7 @@ func (computeSystem *System) Terminate() (err error) {
 	operation := "hcsshim::ComputeSystem::Terminate"
 	computeSystem.logOperationBegin(operation)
 	defer func() {
-		if IsPending(err) {
+		if IsAlreadyClosed(err) || IsAlreadyStopped(err) || IsPending(err) {
 			computeSystem.logOperationEnd(operation, nil)
 		} else {
 			computeSystem.logOperationEnd(operation, err)
@@ -350,7 +351,9 @@ func (computeSystem *System) Terminate() (err error) {
 // `WaitExpectedError`, and `WaitTimeout` are safe to call multiple times.
 func (computeSystem *System) waitBackground() {
 	computeSystem.waitError = waitForNotification(computeSystem.callbackNumber, hcsNotificationSystemExited, nil)
-	close(computeSystem.waitBlock)
+	computeSystem.closedWaitOnce.Do(func() {
+		close(computeSystem.waitBlock)
+	})
 }
 
 // Wait synchronously waits for the compute system to shutdown or terminate. If
@@ -613,6 +616,9 @@ func (computeSystem *System) Close() (err error) {
 	}
 
 	computeSystem.handle = 0
+	computeSystem.closedWaitOnce.Do(func() {
+		close(computeSystem.waitBlock)
+	})
 
 	return nil
 }

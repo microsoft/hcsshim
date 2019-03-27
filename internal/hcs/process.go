@@ -24,8 +24,9 @@ type Process struct {
 
 	logctx logrus.Fields
 
-	waitBlock chan struct{}
-	waitError error
+	closedWaitOnce sync.Once
+	waitBlock      chan struct{}
+	waitError      error
 }
 
 func newProcess(process hcsProcess, processID int, computeSystem *System) *Process {
@@ -174,7 +175,9 @@ func (process *Process) Kill() (err error) {
 // `WaitTimeout` are safe to call multiple times.
 func (process *Process) waitBackground() {
 	process.waitError = waitForNotification(process.callbackNumber, hcsNotificationProcessExited, nil)
-	close(process.waitBlock)
+	process.closedWaitOnce.Do(func() {
+		close(process.waitBlock)
+	})
 }
 
 // Wait waits for the process to exit. If the process has already exited returns
@@ -420,6 +423,9 @@ func (process *Process) Close() (err error) {
 	}
 
 	process.handle = 0
+	process.closedWaitOnce.Do(func() {
+		close(process.waitBlock)
+	})
 
 	return nil
 }
