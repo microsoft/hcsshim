@@ -366,11 +366,16 @@ func (s *service) waitInternal(ctx context.Context, req *task.WaitRequest) (*tas
 	if err != nil {
 		return nil, err
 	}
-	e, err := t.GetExec(req.ExecID)
-	if err != nil {
-		return nil, err
+	var state *task.StateResponse
+	if req.ExecID != "" {
+		e, err := t.GetExec(req.ExecID)
+		if err != nil {
+			return nil, err
+		}
+		state = e.Wait(ctx)
+	} else {
+		state = t.Wait(ctx)
 	}
-	state := e.Wait(ctx)
 	return &task.WaitResponse{
 		ExitStatus: state.ExitStatus,
 		ExitedAt:   state.ExitedAt,

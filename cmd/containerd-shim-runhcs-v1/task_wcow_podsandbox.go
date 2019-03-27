@@ -34,6 +34,8 @@ func newWcowPodSandboxTask(ctx context.Context, events publisher, id, bundle str
 		events: events,
 		id:     id,
 		init:   newWcowPodSandboxExec(ctx, events, id, bundle),
+		host:   parent,
+		closed: make(chan struct{}),
 	}
 	if parent != nil {
 		// We have (and own) a parent UVM. Listen for its exit and forcibly
@@ -97,6 +99,7 @@ type wcowPodSandboxTask struct {
 	// `host==nil` this is an Argon task so no UVM cleanup is required.
 	host *uvm.UtilityVM
 
+	closed    chan struct{}
 	closeOnce sync.Once
 }
 
@@ -186,6 +189,11 @@ func (wpst *wcowPodSandboxTask) Pids(ctx context.Context) ([]options.ProcessDeta
 	}, nil
 }
 
+func (wpst *wcowPodSandboxTask) Wait(ctx context.Context) *task.StateResponse {
+	<-wpst.closed
+	return wpst.init.Wait(ctx)
+}
+
 // close safely closes the hosting UVM. Because of the specialty of this task it
 // is assumed that this is always the owner of `wpst.host`. Once closed and all
 // resources released it events the `runtime.TaskExitEventTopic` for all
@@ -194,11 +202,17 @@ func (wpst *wcowPodSandboxTask) Pids(ctx context.Context) ([]options.ProcessDeta
 // This call is idempotent and safe to call multiple times.
 func (wpst *wcowPodSandboxTask) close() {
 	wpst.closeOnce.Do(func() {
-		if err := wpst.host.Close(); !hcs.IsAlreadyClosed(err) {
-			logrus.WithFields(logrus.Fields{
-				"tid":           wpst.id,
-				logrus.ErrorKey: err,
-			}).Error("wcowPodSandboxTask::close - failed host vm shutdown")
+		logrus.WithFields(logrus.Fields{
+			"tid": wpst.id,
+		}).Debug("wcowPodSandboxTask::close")
+
+		if wpst.host != nil {
+			if err := wpst.host.Close(); !hcs.IsAlreadyClosed(err) {
+				logrus.WithFields(logrus.Fields{
+					"tid":           wpst.id,
+					logrus.ErrorKey: err,
+				}).Error("wcowPodSandboxTask::close - failed host vm shutdown")
+			}
 		}
 		// Send the `init` exec exit notification always.
 		exit := wpst.init.Status()
@@ -211,5 +225,6 @@ func (wpst *wcowPodSandboxTask) close() {
 				ExitStatus:  exit.ExitStatus,
 				ExitedAt:    exit.ExitedAt,
 			})
+		close(wpst.closed)
 	})
 }

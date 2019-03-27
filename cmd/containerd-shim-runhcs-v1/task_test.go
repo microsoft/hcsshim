@@ -73,3 +73,7 @@ func (tst *testShimTask) Pids(ctx context.Context) ([]options.ProcessDetails, er
 	}
 	return pairs, nil
 }
+
+func (tst *testShimTask) Wait(ctx context.Context) *task.StateResponse {
+	return tst.exec.Wait(ctx)
+}
