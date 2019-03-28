@@ -147,73 +147,142 @@ func Test_hcsTask_DeleteExec_UnknownExecID_Error(t *testing.T) {
 	verifyDeleteFailureValues(t, pid, status, at)
 }
 
-func Test_hcsTask_DeleteExec_InitExecID_Unexited_Error(t *testing.T) {
-	lt, _, second := setupTestHcsTask(t)
-	lt.execs.Delete(second.id)
-
-	pid, status, at, err := lt.DeleteExec(context.TODO(), "")
-
-	verifyExpectedError(t, nil, err, errdefs.ErrFailedPrecondition)
-	verifyDeleteFailureValues(t, pid, status, at)
-}
-
-func Test_hcsTask_DeleteExec_InitExecID_Unexited2ndExec_Error(t *testing.T) {
-	lt, _, _ := setupTestHcsTask(t)
-	pid, status, at, err := lt.DeleteExec(context.TODO(), "")
-
-	verifyExpectedError(t, nil, err, errdefs.ErrFailedPrecondition)
-	verifyDeleteFailureValues(t, pid, status, at)
-}
-
-func Test_hcsTask_DeleteExec_InitExecID_NoAdditionalExecs_Success(t *testing.T) {
+func Test_hcsTask_DeleteExec_InitExecID_CreatedState_Success(t *testing.T) {
 	lt, init, second := setupTestHcsTask(t)
+	// remove the 2nd exec so we just check without it.
 	lt.execs.Delete(second.id)
-	init.Kill(context.TODO(), 0xf)
 
+	// try to delete the init exec
 	pid, status, at, err := lt.DeleteExec(context.TODO(), "")
+
 	if err != nil {
-		t.Fatalf("should not have failed got: %v", err)
+		t.Fatalf("expected nil err got: %v", err)
 	}
 	verifyDeleteSuccessValues(t, pid, status, at, init)
 }
 
-func Test_hcsTask_DeleteExec_InitExecID_Exited2ndExec_Success(t *testing.T) {
+func Test_hcsTask_DeleteExec_InitExecID_RunningState_Error(t *testing.T) {
 	lt, init, second := setupTestHcsTask(t)
-	second.Kill(context.TODO(), 0xf)
+	// remove the 2nd exec so we just check without it.
+	lt.execs.Delete(second.id)
+
+	// Start the init exec
+	init.Start(context.TODO())
+
+	// try to delete the init exec
+	pid, status, at, err := lt.DeleteExec(context.TODO(), "")
+
+	verifyExpectedError(t, nil, err, errdefs.ErrFailedPrecondition)
+	verifyDeleteFailureValues(t, pid, status, at)
+}
+
+func Test_hcsTask_DeleteExec_InitExecID_ExitedState_Success(t *testing.T) {
+	lt, init, second := setupTestHcsTask(t)
+	// remove the 2nd exec so we just check without it.
+	lt.execs.Delete(second.id)
+
 	init.Kill(context.TODO(), 0xf)
 
+	// try to delete the init exec
 	pid, status, at, err := lt.DeleteExec(context.TODO(), "")
+
 	if err != nil {
-		t.Fatalf("should not have failed got: %v", err)
+		t.Fatalf("expected nil err got: %v", err)
 	}
 	verifyDeleteSuccessValues(t, pid, status, at, init)
 }
 
-func Test_hcsTask_DeleteExec_2ndExecID_Unexited_Error(t *testing.T) {
-	lt, _, second := setupTestHcsTask(t)
+func Test_hcsTask_DeleteExec_InitExecID_2ndExec_CreatedState_Success(t *testing.T) {
+	lt, init, _ := setupTestHcsTask(t)
 
-	pid, status, at, err := lt.DeleteExec(context.TODO(), second.id)
+	// start the init exec (required to have 2nd exec)
+	init.Start(context.TODO())
+
+	// try to delete the init exec
+	pid, status, at, err := lt.DeleteExec(context.TODO(), "")
 
 	verifyExpectedError(t, nil, err, errdefs.ErrFailedPrecondition)
 	verifyDeleteFailureValues(t, pid, status, at)
-	_, loaded := lt.execs.Load(second.id)
-	if !loaded {
-		t.Fatal("delete should not have removed 2nd exec")
-	}
 }
 
-func Test_hcsTask_DeleteExec_2ndExecID_Success(t *testing.T) {
-	lt, _, second := setupTestHcsTask(t)
+func Test_hcsTask_DeleteExec_InitExecID_2ndExec_RunningState_Error(t *testing.T) {
+	lt, init, second := setupTestHcsTask(t)
+
+	// start the init exec (required to have 2nd exec)
+	init.Start(context.TODO())
+
+	// put the 2nd exec into the running state
+	second.Start(context.TODO())
+
+	// try to delete the init exec
+	pid, status, at, err := lt.DeleteExec(context.TODO(), "")
+
+	verifyExpectedError(t, nil, err, errdefs.ErrFailedPrecondition)
+	verifyDeleteFailureValues(t, pid, status, at)
+}
+
+func Test_hcsTask_DeleteExec_InitExecID_2ndExec_ExitedState_Success(t *testing.T) {
+	lt, init, second := setupTestHcsTask(t)
+
+	// put the init exec into the exited state
+	init.Kill(context.TODO(), 0xf)
+	// put the 2nd exec into the exited state
 	second.Kill(context.TODO(), 0xf)
 
+	// try to delete the init exec
+	pid, status, at, err := lt.DeleteExec(context.TODO(), "")
+
+	if err != nil {
+		t.Fatalf("expected nil err got: %v", err)
+	}
+	verifyDeleteSuccessValues(t, pid, status, at, init)
+}
+
+func Test_hcsTask_DeleteExec_2ndExecID_CreatedState_Success(t *testing.T) {
+	lt, init, second := setupTestHcsTask(t)
+
+	// start the init exec (required to have 2nd exec)
+	init.Start(context.TODO())
+
+	// try to delete the 2nd exec
 	pid, status, at, err := lt.DeleteExec(context.TODO(), second.id)
 
 	if err != nil {
-		t.Fatalf("should not have failed got: %v", err)
+		t.Fatalf("expected nil err got: %v", err)
 	}
 	verifyDeleteSuccessValues(t, pid, status, at, second)
-	_, loaded := lt.execs.Load(second.id)
-	if loaded {
-		t.Fatal("delete should have removed 2nd exec")
+}
+
+func Test_hcsTask_DeleteExec_2ndExecID_RunningState_Error(t *testing.T) {
+	lt, init, second := setupTestHcsTask(t)
+
+	// start the init exec (required to have 2nd exec)
+	init.Start(context.TODO())
+
+	// put the 2nd exec into the running state
+	second.Start(context.TODO())
+
+	// try to delete the 2nd exec
+	pid, status, at, err := lt.DeleteExec(context.TODO(), second.id)
+
+	verifyExpectedError(t, nil, err, errdefs.ErrFailedPrecondition)
+	verifyDeleteFailureValues(t, pid, status, at)
+}
+
+func Test_hcsTask_DeleteExec_2ndExecID_ExitedState_Success(t *testing.T) {
+	lt, init, second := setupTestHcsTask(t)
+
+	// start the init exec (required to have 2nd exec)
+	init.Kill(context.TODO(), 0xf)
+
+	// put the 2nd exec into the exited state
+	second.Kill(context.TODO(), 0xf)
+
+	// try to delete the 2nd exec
+	pid, status, at, err := lt.DeleteExec(context.TODO(), second.id)
+
+	if err != nil {
+		t.Fatalf("expected nil err got: %v", err)
 	}
+	verifyDeleteSuccessValues(t, pid, status, at, second)
 }

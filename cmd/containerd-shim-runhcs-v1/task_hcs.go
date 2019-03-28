@@ -370,9 +370,13 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, tim
 		invalid := false
 		ht.execs.Range(func(key, value interface{}) bool {
 			ex := value.(shimExec)
-			if ex.State() != shimExecStateExited {
+			switch state := ex.State(); state {
+			case shimExecStateCreated:
+				// we have a created additional exec. Forcibly exit it.
+				ex.ForceExit(0)
+			case shimExecStateRunning:
 				invalid = true
-				// we have an invalid state. Stop iteration.
+				// we have a running additional exec. Stop iteration.
 				return true
 			}
 			// iterate next valid
@@ -382,8 +386,10 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, tim
 			return 0, 0, time.Time{}, errors.Wrap(errdefs.ErrFailedPrecondition, "cannot delete init exec with un-exited additional exec's")
 		}
 	}
-	state := e.State()
-	if state != shimExecStateExited {
+	switch state := e.State(); state {
+	case shimExecStateCreated:
+		e.ForceExit(0)
+	case shimExecStateRunning:
 		return 0, 0, time.Time{}, newExecInvalidStateError(ht.id, eid, state, "delete")
 	}
 	status := e.Status()
