@@ -219,7 +219,7 @@ func (s *service) deleteInternal(ctx context.Context, req *task.DeleteRequest) (
 	if err != nil {
 		return nil, err
 	}
-
+	// TODO: We should be removing the task after this right?
 	return &task.DeleteResponse{
 		Pid:        uint32(pid),
 		ExitStatus: exitStatus,

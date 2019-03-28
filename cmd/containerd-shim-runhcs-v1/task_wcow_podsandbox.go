@@ -156,8 +156,10 @@ func (wpst *wcowPodSandboxTask) DeleteExec(ctx context.Context, eid string) (int
 	if err != nil {
 		return 0, 0, time.Time{}, err
 	}
-	state := e.State()
-	if state != shimExecStateExited {
+	switch state := e.State(); state {
+	case shimExecStateCreated:
+		e.ForceExit(0)
+	case shimExecStateRunning:
 		return 0, 0, time.Time{}, newExecInvalidStateError(wpst.id, eid, state, "delete")
 	}
 	status := e.Status()
