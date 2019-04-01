@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/Microsoft/hcsshim/internal/appargs"
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/schema1"
 	"github.com/Microsoft/hcsshim/internal/signals"
@@ -68,11 +67,21 @@ signal to the init process of the "ubuntu01" container:
 			}
 		}
 
-		signal := 0
+		var sigOptions interface{}
 		if signalsSupported {
-			signal, err = signals.ValidateSigstr(context.Args().Get(1), signalsSupported, c.Spec.Linux != nil)
-			if err != nil {
-				return err
+			sigStr := context.Args().Get(1)
+			if c.Spec.Linux == nil {
+				opts, err := signals.ValidateSigstrWCOW(sigStr, signalsSupported)
+				if err != nil {
+					return err
+				}
+				sigOptions = opts
+			} else {
+				opts, err := signals.ValidateSigstrLCOW(sigStr, signalsSupported)
+				if err != nil {
+					return err
+				}
+				sigOptions = opts
 			}
 		}
 
@@ -87,11 +96,8 @@ signal to the init process of the "ubuntu01" container:
 		}
 		defer p.Close()
 
-		if signalsSupported && (c.Spec.Linux != nil || !c.Spec.Process.Terminal) {
-			opts := guestrequest.SignalProcessOptions{
-				Signal: signal,
-			}
-			return p.Signal(opts)
+		if signalsSupported && sigOptions != nil && (c.Spec.Linux != nil || !c.Spec.Process.Terminal) {
+			return p.Signal(sigOptions)
 		}
 
 		// Legacy signal issue a kill

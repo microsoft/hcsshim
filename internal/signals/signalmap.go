@@ -49,11 +49,3 @@ const (
 	ctrlLogOff   = 0x5
 	ctrlShutdown = 0x6
 )
-
-var signalMapWindows = map[string]int{
-	"CTRLC":        ctrlC,
-	"CTRLBREAK":    ctrlBreak,
-	"CTRLCLOSE":    ctrlClose,
-	"CTRLLOGOFF":   ctrlLogOff,
-	"CTRLSHUTDOWN": ctrlShutdown,
-}
