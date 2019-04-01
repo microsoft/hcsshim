@@ -7,7 +7,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/interop"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/sirupsen/logrus"
@@ -112,7 +111,11 @@ func (process *Process) logOperationEnd(operation string, err error) {
 }
 
 // Signal signals the process with `options`.
-func (process *Process) Signal(options guestrequest.SignalProcessOptions) (err error) {
+//
+// For LCOW `guestrequest.SignalProcessOptionsLCOW`.
+//
+// For WCOW `guestrequest.SignalProcessOptionsWCOW`.
+func (process *Process) Signal(options interface{}) (err error) {
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
 

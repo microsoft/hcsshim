@@ -1,110 +1,312 @@
 package signals
 
 import (
-	"strconv"
-	"strings"
+	"fmt"
 	"testing"
+
+	"github.com/Microsoft/hcsshim/internal/guestrequest"
 )
 
-func runValidateSigstrTest(sigstr string, signalsSupported, isLcow bool,
-	expectedSignal int, expectedError bool, t *testing.T) {
-	signal, err := ValidateSigstr(sigstr, signalsSupported, isLcow)
-	if expectedError {
-		if err == nil {
-			t.Fatalf("Expected err: %v, got: nil", expectedError)
-		} else if err != ErrInvalidSignal {
-			t.Fatalf("Expected err: %v, got: %v", expectedError, err)
+func Test_ValidateSigstr_LCOW_Empty_No_SignalsSupported(t *testing.T) {
+	ret, err := ValidateSigstrLCOW("", false)
+	if err != nil {
+		t.Fatalf("should return nil error got: %v", err)
+	}
+	if ret != nil {
+		t.Fatalf("should return nil signal for LCOW Terminate usage got: %+v", ret)
+	}
+}
+
+func Test_ValidateSigstr_LCOW_Empty_SignalsSupported(t *testing.T) {
+	ret, err := ValidateSigstrLCOW("", true)
+	if err != nil {
+		t.Fatalf("should return nil error got: %v", err)
+	}
+	if ret == nil {
+		t.Fatal("expected non-nil ret")
+	}
+	if ret.Signal != sigTerm {
+		t.Fatalf("expected signal: %v, got: %v", sigTerm, ret.Signal)
+	}
+}
+
+func Test_ValidateSigstr_LCOW_ValidSigstr_No_SignalsSupported(t *testing.T) {
+	cases := []string{"TERM", "15", "KILL", "9"}
+	for _, c := range cases {
+		ret, err := ValidateSigstrLCOW(c, false)
+		if err != nil {
+			t.Fatalf("expected nil err for signal: %v got: %v", c, err)
+		}
+		if ret != nil {
+			t.Fatalf("expected nil ret for signal: %v got: %+v", c, ret)
 		}
 	}
-	if signal != expectedSignal {
-		t.Fatalf("Test - Signal: %s, Support: %v, LCOW: %v\nExpected signal: %v, got: %v",
-			sigstr, signalsSupported, isLcow,
-			expectedSignal, signal)
-	}
 }
 
-func Test_ValidateSigstr_Empty(t *testing.T) {
-	runValidateSigstrTest("", false, false, 0, false, t)
-	runValidateSigstrTest("", false, true, 0xf, false, t)
-	runValidateSigstrTest("", true, false, 0, false, t)
-	runValidateSigstrTest("", true, true, 0xf, false, t)
-}
-
-func Test_ValidateSigstr_LCOW_NoSignalSupport_Default(t *testing.T) {
-	runValidateSigstrTest("15", false, true, 0, false, t)
-	runValidateSigstrTest("TERM", false, true, 0, false, t)
-	runValidateSigstrTest("SIGTERM", false, true, 0, false, t)
-}
-
-func Test_ValidateSigstr_LCOW_NoSignalSupport_Default_Invalid(t *testing.T) {
-	runValidateSigstrTest("2", false, true, 0, true, t)
-	runValidateSigstrTest("test", false, true, 0, true, t)
-}
-
-func Test_ValidateSigstr_WCOW_NoSignalSupport_Default(t *testing.T) {
-	runValidateSigstrTest("15", false, false, 0, false, t)
-	runValidateSigstrTest("TERM", false, false, 0, false, t)
-	runValidateSigstrTest("0", false, false, 0, false, t)
-	runValidateSigstrTest("CTRLC", false, false, 0, false, t)
-	runValidateSigstrTest("9", false, false, 0, false, t)
-	runValidateSigstrTest("KILL", false, false, 0, false, t)
-}
-
-func Test_ValidateSigstr_WCOW_NoSignalSupport_Default_Invalid(t *testing.T) {
-	runValidateSigstrTest("2", false, false, 0, true, t)
-	runValidateSigstrTest("test", false, false, 0, true, t)
-}
-
-func Test_ValidateSigstr_LCOW_SignalSupport_SignalNames(t *testing.T) {
+func Test_ValidateSigstr_LCOW_SignalsSupported(t *testing.T) {
+	// Test map entry by string name
 	for k, v := range signalMapLcow {
-		runValidateSigstrTest(k, true, true, v, false, t)
-		// run it again with a case not in the map
-		lc := strings.ToLower(k)
-		if k == lc {
-			t.Fatalf("Expected lower casing - map: %v, got: %v", k, lc)
+		ret, err := ValidateSigstrLCOW(k, true)
+		if err != nil {
+			t.Fatalf("expected nil err for signal: %v got: %v", k, err)
 		}
-		runValidateSigstrTest(lc, true, true, v, false, t)
+		if ret == nil {
+			t.Fatalf("expected non-nil ret for signal: %v", k)
+		}
+		if ret.Signal != v {
+			t.Fatalf("expected signal: %v, got: %v", v, ret.Signal)
+		}
+	}
+
+	// Test map entry by string value
+	for k, v := range signalMapLcow {
+		ret, err := ValidateSigstrLCOW(fmt.Sprintf("%d", v), true)
+		if err != nil {
+			t.Fatalf("expected nil err for signal: %v got: %v", k, err)
+		}
+		if ret == nil {
+			t.Fatalf("expected non-nil ret for signal: %v", k)
+		}
+		if ret.Signal != v {
+			t.Fatalf("expected signal: %v, got: %v", v, ret.Signal)
+		}
 	}
 }
 
-func Test_ValidateSigstr_WCOW_SignalSupport_SignalNames(t *testing.T) {
-	for k, v := range signalMapWindows {
-		runValidateSigstrTest(k, true, false, v, false, t)
-		// run it again with a case not in the map
-		lc := strings.ToLower(k)
-		if k == lc {
-			t.Fatalf("Expected lower casing - map: %v, got: %v", k, lc)
+func Test_ValidateSigstr_Invalid_LCOW_No_SignalsSupported(t *testing.T) {
+	cases := []string{"90", "test"}
+	for _, c := range cases {
+		ret, err := ValidateSigstrLCOW(c, false)
+		if err != ErrInvalidSignal {
+			t.Fatalf("expected %v err for signal: %v got: %v", ErrInvalidSignal, c, err)
 		}
-		runValidateSigstrTest(lc, true, false, v, false, t)
+		if ret != nil {
+			t.Fatalf("expected nil ret for signal: %v got: %+v", c, ret)
+		}
 	}
 }
 
-func Test_ValidateSigstr_LCOW_SignalSupport_SignalValues(t *testing.T) {
+func Test_ValidateSigstr_Invalid_LCOW_SignalsSupported(t *testing.T) {
+	cases := []string{"90", "SIGTEST"}
+	for _, c := range cases {
+		ret, err := ValidateSigstrLCOW(c, true)
+		if err != ErrInvalidSignal {
+			t.Fatalf("expected %v err for signal: %v got: %v", ErrInvalidSignal, c, err)
+		}
+		if ret != nil {
+			t.Fatalf("expected nil ret for signal: %v got: %+v", c, ret)
+		}
+	}
+}
+
+func Test_ValidateSigstr_WCOW_Empty_No_SignalsSupported(t *testing.T) {
+	ret, err := ValidateSigstrWCOW("", false)
+	if err != nil {
+		t.Fatalf("should return nil error got: %v", err)
+	}
+	if ret != nil {
+		t.Fatalf("should return nil signal for WCOW Terminate usage got: %+v", ret)
+	}
+}
+
+func Test_ValidateSigstr_WCOW_Empty_SignalsSupported(t *testing.T) {
+	ret, err := ValidateSigstrWCOW("", true)
+	if err != nil {
+		t.Fatalf("should return nil error got: %v", err)
+	}
+	if ret == nil {
+		t.Fatal("expected non-nil ret")
+	}
+	if ret.Signal != guestrequest.SignalValueWCOWCtrlShutdown {
+		t.Fatalf("expected signal: %v, got: %v", guestrequest.SignalValueWCOWCtrlShutdown, ret.Signal)
+	}
+}
+
+func Test_ValidateSigstr_WCOW_ValidSigstr_No_SignalsSupported(t *testing.T) {
+	cases := []string{"CtrlShutdown", "6", "TERM", "15", "KILL", "9"}
+	for _, c := range cases {
+		ret, err := ValidateSigstrWCOW(c, false)
+		if err != nil {
+			t.Fatalf("expected nil err for signal: %v got: %v", c, err)
+		}
+		if ret != nil {
+			t.Fatalf("expected nil ret for signal: %v got: %+v", c, ret)
+		}
+	}
+}
+
+func Test_ValidateSigstr_WCOW_SignalsSupported(t *testing.T) {
+	type testcase struct {
+		value  string
+		result guestrequest.SignalValueWCOW
+	}
+	cases := []testcase{
+		{
+			"CtrlC",
+			guestrequest.SignalValueWCOWCtrlC,
+		},
+		{
+			"0",
+			guestrequest.SignalValueWCOWCtrlC,
+		},
+		{
+			"CtrlBreak",
+			guestrequest.SignalValueWCOWCtrlBreak,
+		},
+		{
+			"1",
+			guestrequest.SignalValueWCOWCtrlBreak,
+		},
+		{
+			"CtrlClose",
+			guestrequest.SignalValueWCOWCtrlClose,
+		},
+		{
+			"2",
+			guestrequest.SignalValueWCOWCtrlClose,
+		},
+		{
+			"CtrlLogOff",
+			guestrequest.SignalValueWCOWCtrlLogOff,
+		},
+		{
+			"5",
+			guestrequest.SignalValueWCOWCtrlLogOff,
+		},
+		{
+			"CtrlShutdown",
+			guestrequest.SignalValueWCOWCtrlShutdown,
+		},
+		{
+			"6",
+			guestrequest.SignalValueWCOWCtrlShutdown,
+		},
+		{
+			"TERM",
+			guestrequest.SignalValueWCOWCtrlShutdown,
+		},
+		{
+			"15",
+			guestrequest.SignalValueWCOWCtrlShutdown,
+		},
+		{
+			"KILL",
+			guestrequest.SignalValueWCOW("<invalid>"),
+		},
+		{
+			"9",
+			guestrequest.SignalValueWCOW("<invalid>"),
+		},
+	}
+	for _, c := range cases {
+		ret, err := ValidateSigstrWCOW(c.value, true)
+		if err != nil {
+			t.Fatalf("expected nil err for signal: %v got: %v", c.value, err)
+		}
+		if c.result == guestrequest.SignalValueWCOW("<invalid>") {
+			if ret != nil {
+				t.Fatalf("expected nil ret for signal: %v got: %+v", c.value, ret)
+			}
+		} else {
+			if ret == nil {
+				t.Fatalf("expected non-nil ret for signal: %v", c.value)
+			}
+		}
+	}
+}
+
+func Test_ValidateSigstr_Invalid_WCOW_No_SignalsSupported(t *testing.T) {
+	cases := []string{"2", "test"}
+	for _, c := range cases {
+		ret, err := ValidateSigstrWCOW(c, false)
+		if err != ErrInvalidSignal {
+			t.Fatalf("expected %v err for signal: %v got: %v", ErrInvalidSignal, c, err)
+		}
+		if ret != nil {
+			t.Fatalf("expected nil ret for signal: %v got: %+v", c, ret)
+		}
+	}
+}
+
+func Test_ValidateSigstr_Invalid_WCOW_SignalsSupported(t *testing.T) {
+	cases := []string{"20", "CtrlTest"}
+	for _, c := range cases {
+		ret, err := ValidateSigstrWCOW(c, true)
+		if err != ErrInvalidSignal {
+			t.Fatalf("expected %v err for signal: %v got: %v", ErrInvalidSignal, c, err)
+		}
+		if ret != nil {
+			t.Fatalf("expected nil ret for signal: %v got: %+v", c, ret)
+		}
+	}
+}
+
+func Test_ValidateLCOW_SignalsSupported(t *testing.T) {
 	for _, v := range signalMapLcow {
-		str := strconv.Itoa(v)
-		runValidateSigstrTest(str, true, true, v, false, t)
+		ret, err := ValidateLCOW(v, true)
+		if err != nil {
+			t.Fatalf("expected nil err for signal: %v got: %v", v, err)
+		}
+		if ret == nil {
+			t.Fatalf("expected non-nil ret for signal: %v", v)
+		}
+		if ret.Signal != v {
+			t.Fatalf("expected signal: %v got: %v", v, ret.Signal)
+		}
 	}
 }
 
-func Test_ValidateSigstr_WCOW_SignalSupport_SignalValues(t *testing.T) {
-	for _, v := range signalMapWindows {
-		str := strconv.Itoa(v)
-		runValidateSigstrTest(str, true, false, v, false, t)
+func Test_ValidateWCOW_SignalsSupported(t *testing.T) {
+	type testcase struct {
+		value  int
+		result guestrequest.SignalValueWCOW
 	}
-}
-
-func Test_ValidateSigstr_WCOW_SignalSupport_Docker_SignalNames(t *testing.T) {
-	// Docker KILL -> CTRLSHUTDOWN when signals are supported
-	runValidateSigstrTest("KILL", true, false, 0x6, false, t)
-
-	// Docker TERM -> CTRLSHUTDOWN when signals are supported
-	runValidateSigstrTest("TERM", true, false, 0x0, false, t)
-}
-
-func Test_ValidateSigstr_WCOW_SignalSupport_Docker_SignalValues(t *testing.T) {
-	// Docker KILL -> CTRLSHUTDOWN when signals are supported
-	runValidateSigstrTest("9", true, false, 0x6, false, t)
-
-	// Docker TERM -> CTRLSHUTDOWN when signals are supported
-	runValidateSigstrTest("15", true, false, 0x0, false, t)
+	cases := []testcase{
+		{
+			ctrlC,
+			guestrequest.SignalValueWCOWCtrlC,
+		},
+		{
+			ctrlBreak,
+			guestrequest.SignalValueWCOWCtrlBreak,
+		},
+		{
+			ctrlClose,
+			guestrequest.SignalValueWCOWCtrlClose,
+		},
+		{
+			ctrlLogOff,
+			guestrequest.SignalValueWCOWCtrlLogOff,
+		},
+		{
+			ctrlShutdown,
+			guestrequest.SignalValueWCOWCtrlShutdown,
+		},
+		{
+			sigTerm,
+			guestrequest.SignalValueWCOWCtrlShutdown,
+		},
+		{
+			sigKill,
+			guestrequest.SignalValueWCOW("<invalid>"),
+		},
+	}
+	for _, c := range cases {
+		ret, err := ValidateWCOW(c.value, true)
+		if err != nil {
+			t.Fatalf("expected nil err for signal: %v got: %v", c.value, err)
+		}
+		if c.result == guestrequest.SignalValueWCOW("<invalid>") {
+			if ret != nil {
+				t.Fatalf("expected nil ret for signal: %v got: %+v", c.value, ret)
+			}
+		} else {
+			if ret == nil {
+				t.Fatalf("expected non-nil ret for signal: %v", c.value)
+			}
+			if ret.Signal != c.result {
+				t.Fatalf("expected signal: %v, got: %v", c.result, ret.Signal)
+			}
+		}
+	}
 }

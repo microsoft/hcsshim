@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
@@ -378,38 +377,25 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 		if osversion.Get().Build >= osversion.RS5 {
 			supported = he.host == nil || he.host.SignalProcessSupported()
 		}
-		sig, err := signals.Validate(int(signal), supported, !he.isWCOW)
-		if err != nil {
-			return err
-		}
-		if supported {
-			if signals.ShouldKill(signal) {
-				go func() {
-					select {
-					case <-time.After(processStopTimeout):
-						logrus.WithFields(logrus.Fields{
-							"tid":    he.tid,
-							"eid":    he.id,
-							"signal": signal,
-						}).Warning("hcsExec::Kill - timed out waiting for expected process stop")
-						if err := he.p.Kill(); err != nil && !hcs.IsAlreadyClosed(err) && !hcs.IsAlreadyStopped(err) {
-							logrus.WithFields(logrus.Fields{
-								"tid":           he.tid,
-								"eid":           he.id,
-								"signal":        signal,
-								logrus.ErrorKey: err,
-							}).Error("hcsExec::Kill - failed to forcibly terminate process after timeout period")
-						}
-					case <-he.processCtx.Done():
-						// Process exited. This is the normal case.
-					}
-				}()
+		if he.isWCOW {
+			opt, err := signals.ValidateWCOW(int(signal), supported)
+			if err != nil {
+				return err
 			}
-			return he.p.Signal(guestrequest.SignalProcessOptions{
-				Signal: sig,
-			})
+			// WCOW can return nil err and nil opt when we need to terminate the
+			// process.
+			if opt != nil {
+				return he.p.Signal(opt)
+			}
+		} else {
+			opt, err := signals.ValidateLCOW(int(signal), supported)
+			if err != nil {
+				return err
+			}
+			return he.p.Signal(opt)
 		}
-		// legacy path before signals support.
+		// legacy path before signals support OR if WCOW with signals support
+		// needs to issue a terminate.
 		return he.p.Kill()
 	case shimExecStateExited:
 		return nil
