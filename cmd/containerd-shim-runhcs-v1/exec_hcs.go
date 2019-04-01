@@ -398,7 +398,7 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 		// needs to issue a terminate.
 		return he.p.Kill()
 	case shimExecStateExited:
-		return nil
+		return errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", he.id, he.tid)
 	default:
 		return newExecInvalidStateError(he.tid, he.id, he.state, "kill")
 	}

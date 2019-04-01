@@ -173,7 +173,7 @@ func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) error {
 		close(wpse.exited)
 		return nil
 	case shimExecStateExited:
-		return nil
+		return errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", wpse.tid, wpse.tid)
 	default:
 		return newExecInvalidStateError(wpse.tid, wpse.tid, wpse.state, "kill")
 	}

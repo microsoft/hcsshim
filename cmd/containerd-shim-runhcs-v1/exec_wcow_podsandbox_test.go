@@ -8,6 +8,7 @@ import (
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
+	"github.com/pkg/errors"
 )
 
 func verifyWcowPodSandboxExecStatus(t *testing.T, wasStarted bool, es containerd_v1_types.Status, status *task.StateResponse) {
@@ -190,8 +191,8 @@ func Test_newWcowPodSandboxExec_Kill_Created(t *testing.T) {
 
 	// Call Kill again
 	err = wpse.Kill(context.TODO(), 0x0)
-	if err != nil {
-		t.Fatal("Kill should not fail in the exited state")
+	if errors.Cause(err) != errdefs.ErrNotFound {
+		t.Fatalf("Kill should fail with `ErrNotFound` in the exited state got: %v", err)
 	}
 }
 
@@ -215,8 +216,8 @@ func Test_newWcowPodSandboxExec_Kill_Started(t *testing.T) {
 
 	// Call Kill again
 	err = wpse.Kill(context.TODO(), 0x0)
-	if err != nil {
-		t.Fatal("Kill should not fail in the exited state")
+	if errors.Cause(err) != errdefs.ErrNotFound {
+		t.Fatalf("Kill should fail with `ErrNotFound` in the exited state got: %v", err)
 	}
 }
 

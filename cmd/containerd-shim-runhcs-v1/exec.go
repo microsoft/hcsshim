@@ -51,7 +51,7 @@ type shimExec interface {
 	// If `State() != shimExecStateRunning` this exec MUST return
 	// `errdefs.ErrFailedPrecondition`.
 	//
-	// If `State() == shimExecStateExited` this exec MUST silently succeed.
+	// If `State() == shimExecStateExited` this exec MUST return `errdefs.ErrNotFound`.
 	Kill(ctx context.Context, signal uint32) error
 	// ResizePty resizes the tty of this exec process.
 	//
