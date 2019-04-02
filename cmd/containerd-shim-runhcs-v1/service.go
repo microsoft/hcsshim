@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
 	google_protobuf1 "github.com/gogo/protobuf/types"
 	"github.com/sirupsen/logrus"
@@ -70,7 +71,8 @@ func (s *service) State(ctx context.Context, req *task.StateRequest) (_ *task.St
 	beginActivity(activity, af)
 	defer func() { endActivity(activity, af, err) }()
 
-	return s.stateInternal(ctx, req)
+	r, e := s.stateInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Create(ctx context.Context, req *task.CreateTaskRequest) (_ *task.CreateTaskResponse, err error) {
@@ -93,7 +95,8 @@ func (s *service) Create(ctx context.Context, req *task.CreateTaskRequest) (_ *t
 		}, err)
 	}()
 
-	return s.createInternal(ctx, req)
+	r, e := s.createInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Start(ctx context.Context, req *task.StartRequest) (_ *task.StartResponse, err error) {
@@ -106,7 +109,8 @@ func (s *service) Start(ctx context.Context, req *task.StartRequest) (_ *task.St
 	beginActivity(activity, af)
 	defer func() { endActivity(activity, af, err) }()
 
-	return s.startInternal(ctx, req)
+	r, e := s.startInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (_ *task.DeleteResponse, err error) {
@@ -119,7 +123,8 @@ func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (_ *task.
 	beginActivity(activity, af)
 	defer func() { endActivity(activity, af, err) }()
 
-	return s.deleteInternal(ctx, req)
+	r, e := s.deleteInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Pids(ctx context.Context, req *task.PidsRequest) (_ *task.PidsResponse, err error) {
@@ -131,7 +136,8 @@ func (s *service) Pids(ctx context.Context, req *task.PidsRequest) (_ *task.Pids
 	beginActivity(activity, af)
 	defer func() { endActivity(activity, af, err) }()
 
-	return s.pidsInternal(ctx, req)
+	r, e := s.pidsInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Pause(ctx context.Context, req *task.PauseRequest) (_ *google_protobuf1.Empty, err error) {
@@ -143,7 +149,8 @@ func (s *service) Pause(ctx context.Context, req *task.PauseRequest) (_ *google_
 	beginActivity(activity, af)
 	defer func() { endActivity(activity, af, err) }()
 
-	return s.pauseInternal(ctx, req)
+	r, e := s.pauseInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Resume(ctx context.Context, req *task.ResumeRequest) (_ *google_protobuf1.Empty, err error) {
@@ -155,7 +162,8 @@ func (s *service) Resume(ctx context.Context, req *task.ResumeRequest) (_ *googl
 	beginActivity(activity, af)
 	defer func() { endActivity(activity, af, err) }()
 
-	return s.resumeInternal(ctx, req)
+	r, e := s.resumeInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Checkpoint(ctx context.Context, req *task.CheckpointTaskRequest) (_ *google_protobuf1.Empty, err error) {
@@ -168,7 +176,8 @@ func (s *service) Checkpoint(ctx context.Context, req *task.CheckpointTaskReques
 	beginActivity(activity, af)
 	defer func() { endActivity(activity, af, err) }()
 
-	return s.checkpointInternal(ctx, req)
+	r, e := s.checkpointInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *google_protobuf1.Empty, err error) {
@@ -183,7 +192,8 @@ func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *google_pr
 	beginActivity(activity, af)
 	defer func() { endActivity(activity, af, err) }()
 
-	return s.killInternal(ctx, req)
+	r, e := s.killInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Exec(ctx context.Context, req *task.ExecProcessRequest) (_ *google_protobuf1.Empty, err error) {
@@ -200,7 +210,8 @@ func (s *service) Exec(ctx context.Context, req *task.ExecProcessRequest) (_ *go
 	beginActivity(activity, af)
 	defer func() { endActivity(activity, af, err) }()
 
-	return s.execInternal(ctx, req)
+	r, e := s.execInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ *google_protobuf1.Empty, err error) {
@@ -215,7 +226,8 @@ func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ 
 	beginActivity(activity, af)
 	defer func() { endActivity(activity, af, err) }()
 
-	return s.resizePtyInternal(ctx, req)
+	r, e := s.resizePtyInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) CloseIO(ctx context.Context, req *task.CloseIORequest) (_ *google_protobuf1.Empty, err error) {
@@ -229,7 +241,8 @@ func (s *service) CloseIO(ctx context.Context, req *task.CloseIORequest) (_ *goo
 	beginActivity(activity, af)
 	defer func() { endActivity(activity, af, err) }()
 
-	return s.closeIOInternal(ctx, req)
+	r, e := s.closeIOInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Update(ctx context.Context, req *task.UpdateTaskRequest) (_ *google_protobuf1.Empty, err error) {
@@ -241,7 +254,8 @@ func (s *service) Update(ctx context.Context, req *task.UpdateTaskRequest) (_ *g
 	beginActivity(activity, af)
 	defer func() { endActivity(activity, af, err) }()
 
-	return s.updateInternal(ctx, req)
+	r, e := s.updateInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Wait(ctx context.Context, req *task.WaitRequest) (_ *task.WaitResponse, err error) {
@@ -254,7 +268,8 @@ func (s *service) Wait(ctx context.Context, req *task.WaitRequest) (_ *task.Wait
 	beginActivity(activity, af)
 	defer func() { endActivity(activity, af, err) }()
 
-	return s.waitInternal(ctx, req)
+	r, e := s.waitInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Stats(ctx context.Context, req *task.StatsRequest) (_ *task.StatsResponse, err error) {
@@ -266,7 +281,8 @@ func (s *service) Stats(ctx context.Context, req *task.StatsRequest) (_ *task.St
 	beginActivity(activity, af)
 	defer func() { endActivity(activity, af, err) }()
 
-	return s.statsInternal(ctx, req)
+	r, e := s.statsInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Connect(ctx context.Context, req *task.ConnectRequest) (_ *task.ConnectResponse, err error) {
@@ -278,7 +294,8 @@ func (s *service) Connect(ctx context.Context, req *task.ConnectRequest) (_ *tas
 	beginActivity(activity, af)
 	defer func() { endActivity(activity, af, err) }()
 
-	return s.connectInternal(ctx, req)
+	r, e := s.connectInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Shutdown(ctx context.Context, req *task.ShutdownRequest) (_ *google_protobuf1.Empty, err error) {
@@ -291,5 +308,6 @@ func (s *service) Shutdown(ctx context.Context, req *task.ShutdownRequest) (_ *g
 	beginActivity(activity, af)
 	defer func() { endActivity(activity, af, err) }()
 
-	return s.shutdownInternal(ctx, req)
+	r, e := s.shutdownInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
 }
