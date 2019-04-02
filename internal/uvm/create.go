@@ -101,7 +101,7 @@ func (uvm *UtilityVM) Close() (err error) {
 		}
 	}()
 
-	if err := uvm.Terminate(); hcs.IsPending(err) {
+	if err := uvm.hcsSystem.Terminate(); hcs.IsPending(err) {
 		uvm.Wait()
 	}
 
