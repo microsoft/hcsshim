@@ -57,7 +57,10 @@ func SetupVHD2TarLibOptions(args ...*string) (*libvhd2tar.Options, error) {
 	}
 
 	options := &libvhd2tar.Options{
-		TarOpts:       &archive.TarOptions{WhiteoutFormat: format},
+		TarOpts: &archive.TarOptions{
+			WhiteoutFormat:  format,
+			ExcludePatterns: []string{`lost\+found`},
+		},
 		TempDirectory: tmpdir,
 	}
 
