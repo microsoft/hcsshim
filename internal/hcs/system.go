@@ -626,7 +626,8 @@ func (computeSystem *System) Close() (err error) {
 
 func (computeSystem *System) registerCallback() error {
 	context := &notifcationWatcherContext{
-		channels: newChannels(),
+		channels: newSystemChannels(),
+		systemID: computeSystem.id,
 	}
 
 	callbackMapLock.Lock()

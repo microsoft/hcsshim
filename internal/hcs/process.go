@@ -435,7 +435,9 @@ func (process *Process) Close() (err error) {
 
 func (process *Process) registerCallback() error {
 	context := &notifcationWatcherContext{
-		channels: newChannels(),
+		channels:  newProcessChannels(),
+		systemID:  process.SystemID(),
+		processID: process.processID,
 	}
 
 	callbackMapLock.Lock()
