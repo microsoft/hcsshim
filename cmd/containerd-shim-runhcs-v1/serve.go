@@ -56,7 +56,10 @@ var serveCommand = cli.Command{
 		// the events.
 
 		os.Stdin.Close()
-		os.Stdout.Close()
+
+		// Force the cli.ErrWriter to be os.Stdout for this. We use stderr for
+		// the panic.log attached via start.
+		cli.ErrWriter = os.Stdout
 
 		socket := ctx.String("socket")
 		if !strings.HasPrefix(socket, `\\.\pipe`) {
@@ -147,7 +150,7 @@ var serveCommand = cli.Command{
 
 			// This is our best indication that we have not errored on creation
 			// and are successfully serving the API.
-			os.Stderr.Close()
+			os.Stdout.Close()
 		}
 
 		// Wait for the serve API to be shut down.
