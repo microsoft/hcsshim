@@ -88,7 +88,6 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 	opts := &OptionsLCOW{
 		Options:               newDefaultOptions(id, owner),
 		BootFilesPath:         defaultLCOWOSBootFilesPath(),
-		KernelFile:            KernelFile,
 		KernelDirect:          kernelDirectSupported,
 		RootFSFile:            InitrdFile,
 		KernelBootOptions:     "",
@@ -111,15 +110,6 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		opts.PreferredRootFSType = PreferredRootFSTypeVHD
 	}
 
-	if kernelDirectSupported {
-		// KernelDirect supports uncompressed kernel if the kernel is present.
-		// Default to uncompressed if on box. NOTE: If `kernel` is already
-		// uncompressed and simply named 'kernel' it will still be used
-		// uncompressed automatically.
-		if _, err := os.Stat(filepath.Join(opts.BootFilesPath, UncompressedKernelFile)); err == nil {
-			opts.KernelFile = UncompressedKernelFile
-		}
-	}
 	return opts
 }
 
@@ -144,6 +134,19 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 	// We dont serialize OutputHandler so if it is missing we need to put it back to the default.
 	if opts.OutputHandler == nil {
 		opts.OutputHandler = parseLogrus
+	}
+
+	if opts.KernelFile == "" {
+		opts.KernelFile = KernelFile
+		if opts.KernelDirect {
+			// KernelDirect supports uncompressed kernel if the kernel is present.
+			// Default to uncompressed if on box. NOTE: If `kernel` is already
+			// uncompressed and simply named 'kernel' it will still be used
+			// uncompressed automatically.
+			if _, err := os.Stat(filepath.Join(opts.BootFilesPath, UncompressedKernelFile)); err == nil {
+				opts.KernelFile = UncompressedKernelFile
+			}
+		}
 	}
 
 	uvm := &UtilityVM{
