@@ -120,6 +120,12 @@ The start command can either start a new shim or return an address to an existin
 			defer r.Close()
 			defer w.Close()
 
+			f, err := os.Create(filepath.Join(filepath.Dir(self), "panic.log"))
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+
 			address = fmt.Sprintf(addrFmt, namespaceFlag, idFlag)
 			args := []string{
 				self,
@@ -138,7 +144,8 @@ The start command can either start a new shim or return an address to an existin
 				Args:   args,
 				Env:    os.Environ(),
 				Dir:    cwd,
-				Stderr: w,
+				Stdout: w,
+				Stderr: f,
 			}
 
 			if err := cmd.Start(); err != nil {
