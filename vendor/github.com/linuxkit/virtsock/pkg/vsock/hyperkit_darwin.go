@@ -29,16 +29,17 @@ var (
 // ("hyperkit:/path") or Docker for Mac mode ("docker"). This function
 // must be called before using the vsock bindings.
 func SocketMode(socketMode string) {
-	connectPath = filepath.Join(socketPath, "connect")
 	socketFmt = "%08x.%08x"
 
 	if strings.HasPrefix(socketMode, "hyperkit:") {
 		socketPath = socketMode[len("hyperkit:"):]
 	} else if socketMode == "docker" {
-		socketPath = filepath.Join(os.Getenv("HOME"), "/Library/Containers/com.docker.docker/Data")
+		socketPath = filepath.Join(os.Getenv("HOME"), "/Library/Containers/com.docker.docker/Data/vms/0")
 	} else {
 		log.Fatalln("Unknown socket mode: ", socketMode)
 	}
+
+	connectPath = filepath.Join(socketPath, "connect")
 }
 
 // Dial creates a connection to the VM with the given client ID and port
