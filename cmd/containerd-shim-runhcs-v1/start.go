@@ -120,7 +120,7 @@ The start command can either start a new shim or return an address to an existin
 			defer r.Close()
 			defer w.Close()
 
-			f, err := os.Create(filepath.Join(filepath.Dir(self), "panic.log"))
+			f, err := os.Create(filepath.Join(cwd, "panic.log"))
 			if err != nil {
 				return err
 			}
