@@ -278,6 +278,20 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 
 	if he.io.StdinPath() != "" {
 		go func() {
+			// This goroutine was panicking on the next io.Copy line with:
+			// panic: runtime error: invalid memory address or nil pointer dereference
+			// [signal 0xc0000005 code=0x0 addr=0x18 pc=0x49b718]
+
+			// goroutine 35 [running]:
+			// io.copyBuffer(0x1a983e8, 0xc00015e780, 0x0, 0x0, 0xc000264000, 0x8000, 0x8000, 0xc00004e360, 0xc00004e360, 0x1)
+			//      C:/Go/src/io/io.go:402 +0x108
+			// io.Copy(...)
+			//      C:/Go/src/io/io.go:364
+			// main.(*hcsExec).Start.func4(0x1ad4488, 0xc00015e780, 0xc0001e9e60)
+			//      e:/go/src/github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/exec_hcs.go:281 +0xcf
+			// created by main.(*hcsExec).Start
+			//      e:/go/src/github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/exec_hcs.go:280 +0xab6
+			defer panicRecover()
 			io.Copy(in, he.io.Stdin())
 			logrus.WithFields(logrus.Fields{
 				"tid": he.tid,
@@ -293,6 +307,7 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 		he.stdout = out
 		he.ioWg.Add(1)
 		go func() {
+			defer panicRecover()
 			io.Copy(he.io.Stdout(), out)
 			logrus.WithFields(logrus.Fields{
 				"tid": he.tid,
@@ -314,6 +329,7 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 		he.stderr = serr
 		he.ioWg.Add(1)
 		go func() {
+			defer panicRecover()
 			io.Copy(he.io.Stderr(), serr)
 			logrus.WithFields(logrus.Fields{
 				"tid": he.tid,
