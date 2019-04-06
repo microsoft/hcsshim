@@ -71,13 +71,19 @@ type npipeio struct {
 	// This MUST be treated as readonly in the lifetime of the pipe io.
 	terminal bool
 
-	// l synchronizes access to all io connections.
-	l sync.Mutex
-
 	// sin is the upstream `stdin` connection.
-	sin io.ReadCloser
+	//
+	// `sin` MUST be treated as readonly in the lifetime of the pipe io after
+	// the return from `newNpipeIO`.
+	sin       io.ReadCloser
+	sinCloser sync.Once
+
 	// sout and serr are the upstream `stdout` and `stderr` connections.
-	sout, serr io.WriteCloser
+	//
+	// `sout` and `serr` MUST be treated as readonly in the lifetime of the pipe
+	// io after the return from `newNpipeIO`.
+	sout, serr   io.WriteCloser
+	outErrCloser sync.Once
 }
 
 func (nio *npipeio) Close() {
@@ -86,21 +92,19 @@ func (nio *npipeio) Close() {
 		"eid": nio.eid,
 	}).Debug("npipeio::Close")
 
-	nio.l.Lock()
-	defer nio.l.Unlock()
-
-	if nio.sin != nil {
-		nio.sin.Close()
-		nio.sin = nil
-	}
-	if nio.sout != nil {
-		nio.sout.Close()
-		nio.sout = nil
-	}
-	if nio.serr != nil {
-		nio.serr.Close()
-		nio.serr = nil
-	}
+	nio.sinCloser.Do(func() {
+		if nio.sin != nil {
+			nio.sin.Close()
+		}
+	})
+	nio.outErrCloser.Do(func() {
+		if nio.sout != nil {
+			nio.sout.Close()
+		}
+		if nio.serr != nil {
+			nio.serr.Close()
+		}
+	})
 }
 
 func (nio *npipeio) CloseStdin() {
@@ -109,19 +113,14 @@ func (nio *npipeio) CloseStdin() {
 		"eid": nio.eid,
 	}).Debug("npipeio::CloseStdin")
 
-	nio.l.Lock()
-	defer nio.l.Unlock()
-
-	if nio.sin != nil {
-		nio.sin.Close()
-		nio.sin = nil
-	}
+	nio.sinCloser.Do(func() {
+		if nio.sin != nil {
+			nio.sin.Close()
+		}
+	})
 }
 
 func (nio *npipeio) Stdin() io.Reader {
-	nio.l.Lock()
-	defer nio.l.Unlock()
-
 	return nio.sin
 }
 
@@ -130,9 +129,6 @@ func (nio *npipeio) StdinPath() string {
 }
 
 func (nio *npipeio) Stdout() io.Writer {
-	nio.l.Lock()
-	defer nio.l.Unlock()
-
 	return nio.sout
 }
 
@@ -141,9 +137,6 @@ func (nio *npipeio) StdoutPath() string {
 }
 
 func (nio *npipeio) Stderr() io.Writer {
-	nio.l.Lock()
-	defer nio.l.Unlock()
-
 	return nio.serr
 }
 
