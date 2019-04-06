@@ -343,27 +343,30 @@ func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int
 		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/%d/Attachments/%d", controller, lun),
 	}
 
-	// Include the GuestRequest so that the GCS ejects the disk cleanly if the disk was attached/mounted
-	if uvmPath != "" {
-		if uvm.operatingSystem == "windows" {
-			scsiModification.GuestRequest = guestrequest.GuestRequest{
-				ResourceType: guestrequest.ResourceTypeMappedVirtualDisk,
-				RequestType:  requesttype.Remove,
-				Settings: guestrequest.WCOWMappedVirtualDisk{
-					ContainerPath: uvmPath,
-					Lun:           lun,
-				},
-			}
-		} else {
-			scsiModification.GuestRequest = guestrequest.GuestRequest{
-				ResourceType: guestrequest.ResourceTypeMappedVirtualDisk,
-				RequestType:  requesttype.Remove,
-				Settings: guestrequest.LCOWMappedVirtualDisk{
-					MountPath:  uvmPath, // May be blank in attach-only
-					Lun:        uint8(lun),
-					Controller: uint8(controller),
-				},
-			}
+	// Include the GuestRequest so that the GCS ejects the disk cleanly if the
+	// disk was attached/mounted
+	//
+	// Note: We always send a guest eject even if there is no UVM path in lcow
+	// so that we synchronize the guest state. This seems to always avoid SCSI
+	// related errors if this index quickly reused by another container.
+	if uvm.operatingSystem == "windows" && uvmPath != "" {
+		scsiModification.GuestRequest = guestrequest.GuestRequest{
+			ResourceType: guestrequest.ResourceTypeMappedVirtualDisk,
+			RequestType:  requesttype.Remove,
+			Settings: guestrequest.WCOWMappedVirtualDisk{
+				ContainerPath: uvmPath,
+				Lun:           lun,
+			},
+		}
+	} else {
+		scsiModification.GuestRequest = guestrequest.GuestRequest{
+			ResourceType: guestrequest.ResourceTypeMappedVirtualDisk,
+			RequestType:  requesttype.Remove,
+			Settings: guestrequest.LCOWMappedVirtualDisk{
+				MountPath:  uvmPath, // May be blank in attach-only
+				Lun:        uint8(lun),
+				Controller: uint8(controller),
+			},
 		}
 	}
 
