@@ -275,8 +275,24 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err != nil {
+			if in != nil {
+				in.Close()
+			}
+			if out != nil {
+				out.Close()
+			}
+			if serr != nil {
+				serr.Close()
+			}
+		}
+	}()
 
 	if he.io.StdinPath() != "" {
+		if in == nil {
+			return errors.New("hcsExec::Start - platform returned nil stdin pipe")
+		}
 		go func() {
 			io.Copy(in, he.io.Stdin())
 			logrus.WithFields(logrus.Fields{
@@ -290,6 +306,9 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 	}
 
 	if he.io.StdoutPath() != "" {
+		if out == nil {
+			return errors.New("hcsExec::Start - platform returned nil stdout pipe")
+		}
 		he.stdout = out
 		he.ioWg.Add(1)
 		go func() {
@@ -311,6 +330,9 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 	}
 
 	if he.io.StderrPath() != "" {
+		if serr == nil {
+			return errors.New("hcsExec::Start - platform returned nil stderr pipe")
+		}
 		he.stderr = serr
 		he.ioWg.Add(1)
 		go func() {

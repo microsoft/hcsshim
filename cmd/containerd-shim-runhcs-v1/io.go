@@ -15,18 +15,18 @@ type upstreamIO interface {
 	//
 	// This call is idempotent and safe to call multiple times.
 	CloseStdin()
-	// Stdin returns the open `stdin` reader. If a call to `Close()` has been made
-	// or if `stdin` was never opened this will return `nil`.
+	// Stdin returns the open `stdin` reader. If `stdin` was never opened this
+	// will return `nil`.
 	Stdin() io.Reader
 	// StdinPath returns the original path used to open the `Stdin()` reader.
 	StdinPath() string
-	// Stdout returns the open `stdout` writer. If a call to `Close()` has been
-	// made or if `stdout` was never opened this will return `nil`.
+	// Stdout returns the open `stdout` writer. If `stdout` was never opened
+	// this will return `nil`.
 	Stdout() io.Writer
 	// StdoutPath returns the original path used to open the `Stdout()` writer.
 	StdoutPath() string
-	// Stderr returns the open `stderr` writer. If a call to `Close()` has been
-	// made or if `stderr` was never opened this will return `nil`.
+	// Stderr returns the open `stderr` writer. If `stderr` was never opened
+	// this will return `nil`.
 	Stderr() io.Writer
 	// StderrPath returns the original path used to open the `Stderr()` writer.
 	StderrPath() string
