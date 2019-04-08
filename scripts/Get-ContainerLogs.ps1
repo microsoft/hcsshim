@@ -1,9 +1,10 @@
 $ErrorActionPreference = "Stop"
 $now=get-date -Format("yyyyMMdd-HHmmss")
 $outputPath = join-path $env:TEMP "container-logs-$now"
+$containerdState = "c:\programdata\containerd\state"
 mkdir $outputPath | Out-Null
 $ErrorActionPreference = "SilentlyContinue"
-Write-Host "- Gathering stack dumps and event logs"
+Write-Host "- Gathering stack dumps, event logs, computer info and more:"
 
 function gethveventlog($elName) {
     $ErrorActionPreference = "SilentlyContinue"
@@ -33,6 +34,15 @@ if ($proc -ne $null) {
     }
 }
 
+# Gather a copy of the containerd state directory
+# TODO: A means is needed to get from containerd what the state directory
+# is so that we could for example use ctr.exe to extract it. Unfortunately
+# ctr version API only has version and revision.
+$state = Join-Path $outputPath "state"
+mkdir $state | Out-Null
+xcopy /C/H/R/S/Y $containerdState $state | Out-Null
+
+
 $procs = (get-process containerd-shim-runhcs-v1)
 if ($procs.Length -gt 0) {
     $procs | ForEach-Object {
@@ -47,7 +57,8 @@ if ($procs.Length -gt 0) {
 $proc = (get-process dockerd)
 if ($proc -ne $null) {
     docker-signal.exe -pid $proc.Id 2>&1 | Out-Null
-    $lookingFor = Join-Path $env:TEMP dockerd.$($proc.Id).stacks.log
+    $drd=$(docker info -f "{{.DockerRootDir}}")
+    $lookingFor = get-childitem $drd -Filter goroutine* | sort creationtime | select -expand fullname -last 1
     if (Test-Path $lookingFor) {
         Copy-Item $lookingFor $outputPath
     }
@@ -68,6 +79,20 @@ $el | ForEach-Object {
         gethveventlog  $_
     }
 }
+
+# Save the drive info (includes drive letter, free and size)
+$di = $(Join-Path $outputPath "driveinfo.txt")
+Get-WmiObject -Class Win32_logicaldisk -Filter "DriveType = '3'" | Out-File $di
+
+# Save the Operating system Info
+$os = $(Join-Path $outputPath "win32_operatingsystem.txt")
+Get-WmiObject -Class Win32_OperatingSystem | Out-File $os
+
+# Save the ComputerInfo
+$ci = $(Join-Path $outputPath "Get-ComputerInfo.txt")
+Get-ComputerInfo | Out-File $ci
+
+
 
 $zip = "c:\container-logs-$now.zip"
 Write-Host ""
