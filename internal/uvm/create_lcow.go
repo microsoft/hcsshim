@@ -257,7 +257,7 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 		}
 	case PreferredRootFSTypeVHD:
 		// Support for VPMem VHD(X) booting rather than initrd..
-		kernelArgs = "root=/dev/pmem0 ro init=/init"
+		kernelArgs = "root=/dev/pmem0 ro rootwait init=/init"
 		imageFormat := "Vhd1"
 		if strings.ToLower(filepath.Ext(opts.RootFSFile)) == "vhdx" {
 			imageFormat = "Vhdx"
