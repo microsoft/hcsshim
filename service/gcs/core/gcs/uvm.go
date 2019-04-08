@@ -14,6 +14,11 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/Microsoft/opengcs/internal/storage"
+	"github.com/Microsoft/opengcs/internal/storage/overlay"
+	"github.com/Microsoft/opengcs/internal/storage/plan9"
+	"github.com/Microsoft/opengcs/internal/storage/pmem"
+	"github.com/Microsoft/opengcs/internal/storage/scsi"
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
@@ -291,72 +296,41 @@ func (h *Host) ModifyHostSettings(settings *prot.ModifySettingRequest) error {
 	case prot.MrtMappedVirtualDisk:
 		add = func(setting interface{}) error {
 			mvd := setting.(*prot.MappedVirtualDiskV2)
-			scsiName, err := scsiControllerLunToName(mvd.Controller, mvd.Lun)
-			if err != nil {
-				return errors.Wrapf(err, "failed to create MappedVirtualDiskV2")
-			}
-			ms := mountSpec{
-				Source:     scsiName,
-				FileSystem: defaultFileSystem,
-				Flags:      uintptr(0),
-			}
-			if mvd.ReadOnly {
-				ms.Flags |= syscall.MS_RDONLY
-				ms.Options = append(ms.Options, mountOptionNoLoad)
-			}
 			if mvd.MountPath != "" {
-				if err := os.MkdirAll(mvd.MountPath, 0700); err != nil {
-					return errors.Wrapf(err, "failed to create directory for MappedVirtualDiskV2 %s", mvd.MountPath)
-				}
-				if err := ms.MountWithTimedRetry(mvd.MountPath); err != nil {
-					return errors.Wrapf(err, "failed to mount directory for MappedVirtualDiskV2 %s", mvd.MountPath)
-				}
+				return scsi.Mount(mvd.Controller, mvd.Lun, mvd.MountPath, mvd.ReadOnly)
 			}
 			return nil
 		}
 		remove = func(setting interface{}) error {
 			mvd := setting.(*prot.MappedVirtualDiskV2)
 			if mvd.MountPath != "" {
-				if err := unmountPath(mvd.MountPath, true); err != nil {
+				if err := storage.UnmountPath(mvd.MountPath, true); err != nil {
 					return errors.Wrapf(err, "failed to hot remove MappedVirtualDiskV2 path: '%s'", mvd.MountPath)
 				}
 			}
-			return unplugSCSIDisk(fmt.Sprintf("0:0:%d:%d", mvd.Controller, mvd.Lun))
+			return scsi.UnplugDevice(mvd.Controller, mvd.Lun)
 		}
 	case prot.MrtMappedDirectory:
 		add = func(setting interface{}) error {
 			md := setting.(*prot.MappedDirectoryV2)
-			return mountPlan9Share(h.vsock, md.MountPath, md.ShareName, md.Port, md.ReadOnly)
+			return plan9.Mount(h.vsock, md.MountPath, md.ShareName, md.Port, md.ReadOnly)
 		}
 		remove = func(setting interface{}) error {
 			md := setting.(*prot.MappedDirectoryV2)
-			return unmountPath(md.MountPath, true)
+			return storage.UnmountPath(md.MountPath, true)
 		}
 	case prot.MrtVPMemDevice:
 		add = func(setting interface{}) error {
 			vpd := setting.(*prot.MappedVPMemDeviceV2)
-			ms := &mountSpec{
-				Source:     "/dev/pmem" + strconv.FormatUint(uint64(vpd.DeviceNumber), 10),
-				FileSystem: defaultFileSystem,
-				Flags:      syscall.MS_RDONLY,
-				Options:    []string{mountOptionNoLoad, mountOptionDax},
-			}
-			return mountLayer(vpd.MountPath, ms)
+			return pmem.Mount(vpd.DeviceNumber, vpd.MountPath)
 		}
 		remove = func(setting interface{}) error {
 			vpd := setting.(*prot.MappedVPMemDeviceV2)
-			return unmountPath(vpd.MountPath, true)
+			return storage.UnmountPath(vpd.MountPath, true)
 		}
 	case prot.MrtCombinedLayers:
 		add = func(setting interface{}) error {
 			cl := setting.(*prot.CombinedLayersV2)
-			if cl.ContainerRootPath == "" {
-				return errors.New("cannot combine layers with empty ContainerRootPath")
-			}
-			if err := os.MkdirAll(cl.ContainerRootPath, 0700); err != nil {
-				return errors.Wrapf(err, "failed to create ContainerRootPath directory '%s'", cl.ContainerRootPath)
-			}
-
 			layerPaths := make([]string, len(cl.Layers))
 			for i, layer := range cl.Layers {
 				layerPaths[i] = layer.Path
@@ -364,20 +338,20 @@ func (h *Host) ModifyHostSettings(settings *prot.ModifySettingRequest) error {
 
 			var upperdirPath string
 			var workdirPath string
-			var mountOptions uintptr
+			readonly := false
 			if cl.ScratchPath == "" {
 				// The user did not pass a scratch path. Mount overlay as readonly.
-				mountOptions |= syscall.O_RDONLY
+				readonly = true
 			} else {
 				upperdirPath = filepath.Join(cl.ScratchPath, "upper")
 				workdirPath = filepath.Join(cl.ScratchPath, "work")
 			}
 
-			return mountOverlay(layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, mountOptions)
+			return overlay.Mount(layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, readonly)
 		}
 		remove = func(setting interface{}) error {
 			cl := setting.(*prot.CombinedLayersV2)
-			return unmountPath(cl.ContainerRootPath, true)
+			return storage.UnmountPath(cl.ContainerRootPath, true)
 		}
 	case prot.MrtNetwork:
 		add = func(setting interface{}) error {

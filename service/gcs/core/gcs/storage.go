@@ -3,8 +3,6 @@ package gcs
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,8 +10,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Microsoft/opengcs/internal/storage"
+	"github.com/Microsoft/opengcs/internal/storage/overlay"
+	"github.com/Microsoft/opengcs/internal/storage/scsi"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
-	"github.com/Microsoft/opengcs/service/gcs/transport"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -23,10 +23,6 @@ const (
 	// baseFilesPath is the path in the utility VM containing all the files
 	// that will be used as the base layer for containers.
 	baseFilesPath = "/tmp/base/"
-
-	// deviceLookupTimeout is the amount of time before deviceIDToName will
-	// give up trying to look up the device name from its ID.
-	deviceLookupTimeout = time.Second * 2
 
 	// mappedDiskMountTimeout is the amount of time before
 	// mountMappedVirtualDisks will give up trying to mount a device.
@@ -147,47 +143,10 @@ func (c *gcsCore) getMappedVirtualDiskMounts(disks []prot.MappedVirtualDisk) ([]
 	return devices, nil
 }
 
-// scsiControllerLunToName finds the SCSI device with the given LUN. This assumes
-// only one SCSI controller.
-func scsiControllerLunToName(controller, lun uint8) (string, error) {
-	logrus.WithFields(logrus.Fields{
-		"controller": controller,
-		"lun":        lun,
-	}).Info("opengcs::storage::scsiControllerLunToName")
-
-	scsiID := fmt.Sprintf("0:0:%d:%d", controller, lun)
-
-	// Query for the device name up until the timeout.
-	var deviceNames []os.FileInfo
-	startTime := time.Now()
-	for {
-		// Devices matching the given SCSI code should each have a subdirectory
-		// under /sys/bus/scsi/devices/<scsiID>/block.
-		var err error
-		deviceNames, err = ioutil.ReadDir(filepath.Join("/sys/bus/scsi/devices", scsiID, "block"))
-		if err != nil {
-			if time.Since(startTime) > deviceLookupTimeout {
-				return "", errors.Wrap(err, "failed to retrieve SCSI device names from filesystem")
-			}
-		} else {
-			break
-		}
-		time.Sleep(time.Millisecond * 10)
-	}
-
-	if len(deviceNames) == 0 {
-		return "", errors.Errorf("no matching device names found for SCSI ID \"%s\"", scsiID)
-	}
-	if len(deviceNames) > 1 {
-		return "", errors.Errorf("more than one block device could match SCSI ID \"%s\"", scsiID)
-	}
-	return filepath.Join("/dev", deviceNames[0].Name()), nil
-}
-
 // scsiLunToName finds the SCSI device with the given LUN. This assumes
 // only one SCSI controller.
 func (c *gcsCore) scsiLunToName(lun uint8) (string, error) {
-	return scsiControllerLunToName(0, lun)
+	return scsi.ControllerLunToName(0, lun)
 }
 
 // deviceIDToName converts a device ID (scsi:<lun> or pmem:<device#> to a
@@ -242,84 +201,6 @@ func (c *gcsCore) mountMappedVirtualDisks(disks []prot.MappedVirtualDisk, mounts
 	return nil
 }
 
-// unmountPath unmounts the target path if it exists and is a mount path. If
-// removeTarget this will remove the previously mounted folder.
-func unmountPath(target string, removeTarget bool) error {
-	logrus.WithFields(logrus.Fields{
-		"target": target,
-		"remove": removeTarget,
-	}).Info("opengcs::storage::unmountPath")
-
-	if _, err := os.Stat(target); err != nil && !os.IsNotExist(err) {
-		return errors.Wrapf(err, "failed to determine if path '%s' exists", target)
-	}
-	if mounted, err := pathIsMounted(target); err != nil {
-		return errors.Wrapf(err, "failed to determine if path '%s' is mounted", target)
-	} else if mounted {
-		if err := syscall.Unmount(target, 0); err != nil {
-			return errors.Wrapf(err, "failed to unmount path '%s'", target)
-		}
-	}
-	if removeTarget {
-		return os.RemoveAll(target)
-	}
-	return nil
-}
-
-// mountPlan9Share mounts the given Plan9 share to the filesystem with the given
-// options.
-func mountPlan9Share(vsock transport.Transport, mountPath, share string, port uint32, readonly bool) error {
-	logrus.WithFields(logrus.Fields{
-		"target":   mountPath,
-		"share":    share,
-		"port":     port,
-		"readonly": readonly,
-	}).Info("opengcs::storage::mountPlan9Share")
-
-	if err := os.MkdirAll(mountPath, 0700); err != nil {
-		return errors.Wrapf(err, "failed to create directory for mapped directory %s", mountPath)
-	}
-	conn, err := vsock.Dial(port)
-	if err != nil {
-		return errors.Wrapf(err, "could not connect to plan9 server for %s", mountPath)
-	}
-	f, err := conn.File()
-	conn.Close()
-	if err != nil {
-		return errors.Wrapf(err, "could not get file for plan9 connection for %s", mountPath)
-	}
-	defer f.Close()
-
-	var mountOptions uintptr
-	data := fmt.Sprintf("trans=fd,rfdno=%d,wfdno=%d", f.Fd(), f.Fd())
-	if readonly {
-		mountOptions |= syscall.MS_RDONLY
-		data += ",noload"
-	}
-	if share != "" {
-		data += ",aname=" + share
-	}
-	if err := syscall.Mount(mountPath, mountPath, "9p", mountOptions, data); err != nil {
-		return errors.Wrapf(err, "failed to mount directory for mapped directory %s", mountPath)
-	}
-	return nil
-}
-
-// mountLayer mounts the layer spec at location
-func mountLayer(location string, layer *mountSpec) error {
-	logrus.WithFields(logrus.Fields{
-		"target": location,
-	}).Info("opengcs::storage::mountLayer")
-
-	if err := os.MkdirAll(location, 0700); err != nil {
-		return errors.Wrapf(err, "failed to create directory for layer '%s'", location)
-	}
-	if err := layer.Mount(location); err != nil {
-		return errors.Wrapf(err, "failed to mount layer directory %s", location)
-	}
-	return nil
-}
-
 // mountLayers mounts each device into a mountpoint, and then layers them into a
 // union filesystem in the given order.
 // These mountpoints are all stored under a directory reserved for the container
@@ -355,7 +236,7 @@ func (c *gcsCore) mountLayers(index uint32, scratchMount *mountSpec, layers []*m
 	layerPaths[0] = baseFilesPath
 
 	// Mount the layers into a union filesystem.
-	var mountOptions uintptr
+	readonly := false
 	if err := os.MkdirAll(baseFilesPath, 0700); err != nil {
 		return errors.Wrapf(err, "failed to create directory for base files %s", baseFilesPath)
 	}
@@ -369,41 +250,9 @@ func (c *gcsCore) mountLayers(index uint32, scratchMount *mountSpec, layers []*m
 	} else {
 		// If no scratch device is attached, the overlay filesystem should be
 		// readonly.
-		mountOptions |= syscall.O_RDONLY
+		readonly = true
 	}
-	return mountOverlay(layerPaths, upperdirPath, workdirPath, rootfsPath, mountOptions)
-}
-
-func mountOverlay(layerPaths []string, upperdirPath, workdirPath, rootfsPath string, mountOptions uintptr) error {
-	logrus.WithFields(logrus.Fields{
-		"layerPaths":   layerPaths,
-		"upperdirPath": upperdirPath,
-		"workdirPath":  workdirPath,
-		"rootfsPath":   rootfsPath,
-	}).Info("opengcs::storage::mountOverlay")
-
-	lowerdir := strings.Join(layerPaths, ":")
-	options := fmt.Sprintf("lowerdir=%s", lowerdir)
-
-	if upperdirPath != "" {
-		if err := os.MkdirAll(upperdirPath, 0755); err != nil {
-			return errors.Wrap(err, "failed to create upper directory in scratch space")
-		}
-		options += ",upperdir=" + upperdirPath
-	}
-	if workdirPath != "" {
-		if err := os.MkdirAll(workdirPath, 0755); err != nil {
-			return errors.Wrap(err, "failed to create workdir in scratch space")
-		}
-		options += ",workdir=" + workdirPath
-	}
-	if err := os.MkdirAll(rootfsPath, 0755); err != nil {
-		return errors.Wrapf(err, "failed to create directory for container root filesystem %s", rootfsPath)
-	}
-	if err := syscall.Mount("overlay", rootfsPath, "overlay", mountOptions, options); err != nil {
-		return errors.Wrapf(err, "failed to mount container root filesystem using overlayfs %s", rootfsPath)
-	}
-	return nil
+	return overlay.Mount(layerPaths, upperdirPath, workdirPath, rootfsPath, readonly)
 }
 
 // unmountLayers unmounts the union filesystem for the container with the given
@@ -412,12 +261,12 @@ func (c *gcsCore) unmountLayers(index uint32) error {
 	layerPrefix, scratchPath, _, _, rootfsPath := c.getUnioningPaths(index)
 
 	// clean up rootfsPath operations
-	if err := unmountPath(rootfsPath, false); err != nil {
+	if err := storage.UnmountPath(rootfsPath, false); err != nil {
 		return errors.Wrap(err, "failed to unmount root filesytem")
 	}
 
 	// clean up scratchPath operations
-	if err := unmountPath(scratchPath, false); err != nil {
+	if err := storage.UnmountPath(scratchPath, false); err != nil {
 		return errors.Wrap(err, "failed to unmount scratch")
 	}
 
@@ -427,7 +276,7 @@ func (c *gcsCore) unmountLayers(index uint32) error {
 		return errors.Wrap(err, "failed to get layer paths using Glob")
 	}
 	for _, layerPath := range layerPaths {
-		if err := unmountPath(layerPath, false); err != nil {
+		if err := storage.UnmountPath(layerPath, false); err != nil {
 			return errors.Wrap(err, "failed to unmount layer")
 		}
 	}
@@ -492,39 +341,4 @@ func (c *gcsCore) getUnioningPaths(index uint32) (layerPrefix string, scratchPat
 // getConfigPath returns the path to the container's config file.
 func (c *gcsCore) getConfigPath(index uint32) string {
 	return filepath.Join(c.getContainerStoragePath(index), "config.json")
-}
-
-func unplugSCSIDisk(scsiID string) error {
-	f, err := os.OpenFile(filepath.Join("/sys/bus/scsi/devices", scsiID, "delete"), os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	if _, err := f.Write([]byte("1\n")); err != nil {
-		return err
-	}
-	return nil
-}
-
-func pathIsMounted(name string) (bool, error) {
-	mountinfoFile, err := os.Open("/proc/self/mountinfo")
-	if err != nil {
-		return false, err
-	}
-	defer mountinfoFile.Close()
-
-	scanner := bufio.NewScanner(mountinfoFile)
-	for scanner.Scan() {
-		tokens := strings.Fields(scanner.Text())
-		dir1 := tokens[3]
-		dir2 := tokens[4]
-		if name == dir1 || name == dir2 {
-			return true, nil
-		}
-		if ("/var/volatile"+name) == dir1 || ("/var/volatile"+name) == dir2 {
-			return true, nil
-		}
-	}
-	return false, nil
 }
