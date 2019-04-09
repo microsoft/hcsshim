@@ -1,14 +1,12 @@
-// +build linux
-
-package hcsv2
-
-// TODO: JTERRY75 this is from runc/devices.go. When we fix the vendor issue pull this in from that pacakge instead.
+package devices
 
 import (
 	"errors"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+
+	"github.com/opencontainers/runc/libcontainer/configs"
 
 	"golang.org/x/sys/unix"
 )
@@ -24,7 +22,7 @@ var (
 )
 
 // Given the path to a device and its cgroup_permissions(which cannot be easily queried) look up the information about a linux device and return that information as a Device struct.
-func DeviceFromPath(path, permissions string) (*Device, error) {
+func DeviceFromPath(path, permissions string) (*configs.Device, error) {
 	var stat unix.Stat_t
 	err := unixLstat(path, &stat)
 	if err != nil {
@@ -50,7 +48,7 @@ func DeviceFromPath(path, permissions string) (*Device, error) {
 	case mode&unix.S_IFCHR == unix.S_IFCHR:
 		devType = 'c'
 	}
-	return &Device{
+	return &configs.Device{
 		Type:        devType,
 		Path:        path,
 		Major:       int64(major),
@@ -62,16 +60,16 @@ func DeviceFromPath(path, permissions string) (*Device, error) {
 	}, nil
 }
 
-func HostDevices() ([]*Device, error) {
+func HostDevices() ([]*configs.Device, error) {
 	return getDevices("/dev")
 }
 
-func getDevices(path string) ([]*Device, error) {
+func getDevices(path string) ([]*configs.Device, error) {
 	files, err := ioutilReadDir(path)
 	if err != nil {
 		return nil, err
 	}
-	out := []*Device{}
+	out := []*configs.Device{}
 	for _, f := range files {
 		switch {
 		case f.IsDir():

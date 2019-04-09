@@ -1,9 +1,4 @@
-// +build linux
-
-package hcsv2
-
-// TODO: JTERRY75 - When we fix the vendor problem this is from runc device.go.
-// Vendor it instead.
+package configs
 
 import (
 	"fmt"

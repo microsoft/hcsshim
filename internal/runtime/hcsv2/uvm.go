@@ -27,6 +27,7 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
+	"github.com/opencontainers/runc/libcontainer/devices"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -165,7 +166,7 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 		}).Debugf("opengcs::CreateContainer - 'io.microsoft.virtualmachine.lcow.privileged' set for privileged container")
 
 		// Add all host devices
-		hostDevices, err := HostDevices()
+		hostDevices, err := devices.HostDevices()
 		if err != nil {
 			return nil, err
 		}
