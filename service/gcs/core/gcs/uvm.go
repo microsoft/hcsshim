@@ -14,6 +14,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/Microsoft/opengcs/internal/network"
 	"github.com/Microsoft/opengcs/internal/storage"
 	"github.com/Microsoft/opengcs/internal/storage/overlay"
 	"github.com/Microsoft/opengcs/internal/storage/plan9"
@@ -128,11 +129,7 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 				}
 				resolvPath := filepath.Join(td, "resolv.conf")
 				adp := netopts.Adapters[0]
-				err = generateResolvConfFile(resolvPath, prot.NetworkAdapter{
-					AdapterInstanceID: adp.ID,
-					HostDNSServerList: adp.DNSServerList,
-					HostDNSSuffix:     adp.DNSSuffix,
-				})
+				err = network.GenerateResolvConfFile(resolvPath, adp.DNSServerList, adp.DNSSuffix)
 				if err != nil {
 					return nil, err
 				}
@@ -571,7 +568,7 @@ func (c *Container) AddNetworkAdapter(a *prot.NetworkAdapterV2) error {
 		return errors.Wrap(err, "failed to marshal adapter struct to JSON")
 	}
 
-	ifname, err := instanceIDToName(a.ID, true)
+	ifname, err := network.InstanceIDToName(a.ID, true)
 	if err != nil {
 		return err
 	}
