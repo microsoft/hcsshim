@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"sync"
 
+	"github.com/Microsoft/opengcs/internal/runtime/hcsv2"
 	"github.com/Microsoft/opengcs/service/gcs/bridge"
 	"github.com/Microsoft/opengcs/service/gcs/core/gcs"
 	"github.com/Microsoft/opengcs/service/gcs/runtime/runc"
@@ -136,7 +137,7 @@ func main() {
 	b := bridge.Bridge{
 		Handler: mux,
 	}
-	h := gcs.NewHost(rtime, tport)
+	h := hcsv2.NewHost(rtime, tport)
 	b.AssignHandlers(mux, coreint, h)
 
 	var bridgeIn io.ReadCloser

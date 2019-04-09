@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Microsoft/opengcs/internal/runtime/hcsv2"
 	"github.com/Microsoft/opengcs/service/gcs/core"
-	gcspkg "github.com/Microsoft/opengcs/service/gcs/core/gcs"
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
@@ -228,7 +228,7 @@ type Bridge struct {
 	responseChan chan bridgeResponse
 
 	coreint   core.Core
-	hostState *gcspkg.Host
+	hostState *hcsv2.Host
 
 	quitChan chan bool
 	// hasQuitPending when != 0 will cause no more requests to be Read.
@@ -240,7 +240,7 @@ type Bridge struct {
 // AssignHandlers creates and assigns the appropriate bridge
 // events to be listen for and intercepted on `mux` before forwarding
 // to `gcs` for handling.
-func (b *Bridge) AssignHandlers(mux *Mux, gcs core.Core, host *gcspkg.Host) {
+func (b *Bridge) AssignHandlers(mux *Mux, gcs core.Core, host *hcsv2.Host) {
 	b.coreint = gcs
 	b.hostState = host
 
@@ -620,11 +620,11 @@ func (b *Bridge) execProcess(w ResponseWriter, r *Request) {
 		}
 	}()
 
-	var c *gcspkg.Container
+	var c *hcsv2.Container
 	var err error
 	if params.IsExternal {
 		pid, err = b.coreint.RunExternalProcess(params, conSettings)
-	} else if request.ContainerID == gcspkg.UVMContainerID {
+	} else if request.ContainerID == hcsv2.UVMContainerID {
 		pid, err = b.coreint.RunExternalProcess(params, conSettings)
 	} else if c, err = b.hostState.GetContainer(request.ContainerID); err == nil {
 		// We found a V2 container. Treat this as a V2 process.
@@ -677,7 +677,7 @@ func (b *Bridge) signalContainer(w ResponseWriter, r *Request, signal syscall.Si
 
 	// V2 added support for sending a signal to the host UVM itself. See if this is targeting
 	// the UVM and then see if its a V2 container ID before falling back to the V1 path.
-	if request.ContainerID == gcspkg.UVMContainerID {
+	if request.ContainerID == hcsv2.UVMContainerID {
 		// We are asking to shutdown the UVM itself.
 		if signal != unix.SIGTERM {
 			log.Error("opengcs::bridge::signalContainer - invalid signal for uvm")
@@ -761,7 +761,7 @@ func (b *Bridge) getProperties(w ResponseWriter, r *Request) {
 	}).Info("opengcs::bridge::getProperties")
 
 	var properties *prot.Properties
-	if request.ContainerID == gcspkg.UVMContainerID {
+	if request.ContainerID == hcsv2.UVMContainerID {
 		w.Error(request.ActivityID, errors.New("getProperties is not supported against the UVM handle"))
 		return
 	} else if c, err := b.hostState.GetContainer(request.ContainerID); err == nil {
@@ -872,8 +872,8 @@ func (b *Bridge) resizeConsole(w ResponseWriter, r *Request) {
 
 	var (
 		err error
-		c   *gcspkg.Container
-		p   *gcspkg.Process
+		c   *hcsv2.Container
+		p   *hcsv2.Process
 	)
 
 	// First see if this is a V2 Container process.
@@ -912,7 +912,7 @@ func (b *Bridge) modifySettings(w ResponseWriter, r *Request) {
 		"cid":        request.ContainerID,
 	}).Info("opengcs::bridge::modifySettings")
 
-	if request.ContainerID == gcspkg.UVMContainerID {
+	if request.ContainerID == hcsv2.UVMContainerID {
 		// V2 request
 		if err := b.hostState.ModifyHostSettings(request.Request.(*prot.ModifySettingRequest)); err != nil {
 			w.Error(request.ActivityID, err)

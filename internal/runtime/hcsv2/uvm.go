@@ -1,4 +1,6 @@
-package gcs
+// +build linux
+
+package hcsv2
 
 import (
 	"bufio"

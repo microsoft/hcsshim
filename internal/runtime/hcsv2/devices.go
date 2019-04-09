@@ -1,4 +1,6 @@
-package gcs
+// +build linux
+
+package hcsv2
 
 // TODO: JTERRY75 this is from runc/devices.go. When we fix the vendor issue pull this in from that pacakge instead.
 
