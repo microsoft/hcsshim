@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
@@ -399,26 +400,38 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 		if osversion.Get().Build >= osversion.RS5 {
 			supported = he.host == nil || he.host.SignalProcessSupported()
 		}
+		var options interface{}
+		var err error
 		if he.isWCOW {
-			opt, err := signals.ValidateWCOW(int(signal), supported)
-			if err != nil {
-				return err
-			}
-			// WCOW can return nil err and nil opt when we need to terminate the
-			// process.
+			var opt *guestrequest.SignalProcessOptionsWCOW
+			opt, err = signals.ValidateWCOW(int(signal), supported)
 			if opt != nil {
-				return he.p.Signal(opt)
+				options = opt
 			}
 		} else {
-			opt, err := signals.ValidateLCOW(int(signal), supported)
-			if err != nil {
-				return err
+			var opt *guestrequest.SignalProcessOptionsLCOW
+			opt, err = signals.ValidateLCOW(int(signal), supported)
+			if opt != nil {
+				options = opt
 			}
-			return he.p.Signal(opt)
 		}
-		// legacy path before signals support OR if WCOW with signals support
-		// needs to issue a terminate.
-		return he.p.Kill()
+		if err != nil {
+			return errors.Wrapf(errdefs.ErrFailedPrecondition, "signal %d: %v", signal, err)
+		}
+		if supported && options != nil {
+			err = he.p.Signal(options)
+		} else {
+			// legacy path before signals support OR if WCOW with signals
+			// support needs to issue a terminate.
+			err = he.p.Kill()
+		}
+		if err != nil {
+			if hcs.IsNotExist(err) {
+				return errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", he.id, he.tid)
+			}
+			return err
+		}
+		return nil
 	case shimExecStateExited:
 		return errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", he.id, he.tid)
 	default:
