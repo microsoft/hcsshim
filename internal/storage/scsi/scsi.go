@@ -69,8 +69,20 @@ func Mount(controller, lun uint8, target string, readonly bool) (err error) {
 		flags |= unix.MS_RDONLY
 		data = "noload"
 	}
-	if err := unixMount(source, target, "ext4", flags, data); err != nil {
-		return err
+
+	start := time.Now()
+	for {
+		if err := unixMount(source, target, "ext4", flags, data); err != nil {
+			// The `source` found by controllerLunToName can take some time
+			// before its actually available under `/dev/sd*`. Retry while we
+			// wait for `source` to show up.
+			if err == unix.ENOENT && time.Since(start) < DeviceLookupTimeout {
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
+			return err
+		}
+		break
 	}
 	return nil
 }
