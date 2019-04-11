@@ -236,7 +236,6 @@ func (c *gcsCore) mountLayers(index uint32, scratchMount *mountSpec, layers []*m
 	layerPaths[0] = baseFilesPath
 
 	// Mount the layers into a union filesystem.
-	readonly := false
 	if err := os.MkdirAll(baseFilesPath, 0700); err != nil {
 		return errors.Wrapf(err, "failed to create directory for base files %s", baseFilesPath)
 	}
@@ -248,11 +247,11 @@ func (c *gcsCore) mountLayers(index uint32, scratchMount *mountSpec, layers []*m
 			return errors.Wrapf(err, "failed to mount scratch directory %s", scratchPath)
 		}
 	} else {
-		// If no scratch device is attached, the overlay filesystem should be
-		// readonly.
-		readonly = true
+		// NOTE: V1 has never supported a readonly overlay mount. It was "by
+		// accident" always getting a writable overlay. Do nothing here if the
+		// call does not have a scratch path.
 	}
-	return overlay.Mount(layerPaths, upperdirPath, workdirPath, rootfsPath, readonly)
+	return overlay.Mount(layerPaths, upperdirPath, workdirPath, rootfsPath, false)
 }
 
 // unmountLayers unmounts the union filesystem for the container with the given
