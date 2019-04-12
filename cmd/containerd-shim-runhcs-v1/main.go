@@ -9,6 +9,7 @@ import (
 
 	"github.com/Microsoft/go-winio/pkg/etw"
 	"github.com/Microsoft/go-winio/pkg/etwlogrus"
+	"github.com/Microsoft/go-winio/pkg/guid"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -60,10 +61,16 @@ func panicRecover() {
 	}
 }
 
+func etwCallback(sourceID *guid.GUID, state etw.ProviderState, level etw.Level, matchAnyKeyword uint64, matchAllKeyword uint64, filterData uintptr) {
+	if state == etw.ProviderStateCaptureState {
+		dumpStacks(false)
+	}
+}
+
 func main() {
 	// Provider ID: 0b52781f-b24d-5685-ddf6-69830ed40ec3
 	// Provider and hook aren't closed explicitly, as they will exist until process exit.
-	provider, err := etw.NewProvider("Microsoft.Virtualization.RunHCS", nil)
+	provider, err := etw.NewProvider("Microsoft.Virtualization.RunHCS", etwCallback)
 	if err != nil {
 		logrus.Error(err)
 	} else {

@@ -206,13 +206,13 @@ func setupDumpStacks() {
 	go func() {
 		for {
 			windows.WaitForSingleObject(handle, windows.INFINITE)
-			dumpStacks()
+			dumpStacks(true)
 		}
 	}()
 	return
 }
 
-func dumpStacks() {
+func dumpStacks(writeToFile bool) {
 	var (
 		buf       []byte
 		stackSize int
@@ -226,12 +226,14 @@ func dumpStacks() {
 	buf = buf[:stackSize]
 	logrus.Infof("=== BEGIN goroutine stack dump ===\n%s\n=== END goroutine stack dump ===", buf)
 
-	// Also write to file to aid gathering diagnostics
-	name := filepath.Join(os.TempDir(), fmt.Sprintf("containerd-shim-runhcs-v1.%d.stacks.log", os.Getpid()))
-	f, err := os.Create(name)
-	if err != nil {
-		return
+	if writeToFile {
+		// Also write to file to aid gathering diagnostics
+		name := filepath.Join(os.TempDir(), fmt.Sprintf("containerd-shim-runhcs-v1.%d.stacks.log", os.Getpid()))
+		f, err := os.Create(name)
+		if err != nil {
+			return
+		}
+		defer f.Close()
+		f.WriteString(string(buf))
 	}
-	defer f.Close()
-	f.WriteString(string(buf))
 }
