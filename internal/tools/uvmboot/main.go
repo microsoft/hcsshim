@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/lcow"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -33,6 +35,7 @@ const (
 	debugArgName                = "debug"
 	outputHandlingArgName       = "output-handling"
 	consolePipeArgName          = "console-pipe"
+	gcsArgName                  = "gcs"
 )
 
 func main() {
@@ -74,6 +77,10 @@ func main() {
 		cli.BoolFlag{
 			Name:  debugArgName,
 			Usage: "Enable debug level logging in HCSShim",
+		},
+		cli.BoolFlag{
+			Name:  gcsArgName,
+			Usage: "Launch the GCS and perform requested operations via its RPC interface",
 		},
 	}
 
@@ -127,6 +134,8 @@ func main() {
 			Action: func(c *cli.Context) error {
 				if c.GlobalBool("debug") {
 					logrus.SetLevel(logrus.DebugLevel)
+				} else {
+					logrus.SetLevel(logrus.WarnLevel)
 				}
 
 				parallelCount := c.GlobalInt(parallelArgName)
@@ -148,7 +157,8 @@ func main() {
 						id := fmt.Sprintf("uvmboot-%d", i)
 
 						options := uvm.NewDefaultOptionsLCOW(id, "")
-						options.UseGuestConnection = false
+						useGcs := c.GlobalBool(gcsArgName)
+						options.UseGuestConnection = useGcs
 
 						if c.GlobalIsSet(cpusArgName) {
 							options.ProcessorCount = int32(c.GlobalUint64(cpusArgName))
@@ -187,28 +197,30 @@ func main() {
 						if c.IsSet(vpMemMaxSizeArgName) {
 							options.VPMemSizeBytes = c.Uint64(vpMemMaxSizeArgName) * 1024 * 1024 // convert from MB to bytes
 						}
-						if c.IsSet(execCommandLineArgName) {
-							options.ExecCommandLine = c.String(execCommandLineArgName)
-						}
-						if c.IsSet(forwardStdoutArgName) {
-							options.ForwardStdout = c.Bool(forwardStdoutArgName)
-						}
-						if c.IsSet(forwardStderrArgName) {
-							options.ForwardStderr = c.Bool(forwardStderrArgName)
-						}
-						if c.IsSet(outputHandlingArgName) {
-							switch strings.ToLower(c.String(outputHandlingArgName)) {
-							case "stdout":
-								options.OutputHandler = uvm.OutputHandler(func(r io.Reader) { io.Copy(os.Stdout, r) })
-							default:
-								logrus.Fatalf("Unrecognized value '%s' for option %s", c.String(outputHandlingArgName), outputHandlingArgName)
+						if !useGcs {
+							if c.IsSet(execCommandLineArgName) {
+								options.ExecCommandLine = c.String(execCommandLineArgName)
+							}
+							if c.IsSet(forwardStdoutArgName) {
+								options.ForwardStdout = c.Bool(forwardStdoutArgName)
+							}
+							if c.IsSet(forwardStderrArgName) {
+								options.ForwardStderr = c.Bool(forwardStderrArgName)
+							}
+							if c.IsSet(outputHandlingArgName) {
+								switch strings.ToLower(c.String(outputHandlingArgName)) {
+								case "stdout":
+									options.OutputHandler = uvm.OutputHandler(func(r io.Reader) { io.Copy(os.Stdout, r) })
+								default:
+									logrus.Fatalf("Unrecognized value '%s' for option %s", c.String(outputHandlingArgName), outputHandlingArgName)
+								}
 							}
 						}
 						if c.IsSet(consolePipeArgName) {
 							options.ConsolePipe = c.String(consolePipeArgName)
 						}
 
-						if err := run(options); err != nil {
+						if err := run(options, c); err != nil {
 							logrus.WithField("uvm-id", id).Error(err)
 						}
 					}
@@ -243,7 +255,7 @@ func main() {
 	}
 }
 
-func run(options *uvm.OptionsLCOW) error {
+func run(options *uvm.OptionsLCOW, c *cli.Context) error {
 	uvm, err := uvm.CreateLCOW(options)
 	if err != nil {
 		return err
@@ -254,9 +266,78 @@ func run(options *uvm.OptionsLCOW) error {
 		return err
 	}
 
-	if err := uvm.WaitExpectedError(hcs.ErrVmcomputeUnexpectedExit); err != nil {
-		return err
+	if options.UseGuestConnection {
+		if err := execViaGcs(uvm.ComputeSystem(), c); err != nil {
+			return err
+		}
+		if err := uvm.ComputeSystem().Terminate(); err != nil {
+			if hcs.IsPending(err) {
+				err = uvm.ComputeSystem().Wait()
+			}
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		if err := uvm.WaitExpectedError(hcs.ErrVmcomputeUnexpectedExit); err != nil {
+			return err
+		}
 	}
 
+	return nil
+}
+
+func execViaGcs(cs *hcs.System, c *cli.Context) error {
+	var copyOut, copyErr bool
+	if c.String(outputHandlingArgName) == "stdout" {
+		copyOut = c.Bool(forwardStdoutArgName)
+		copyErr = c.Bool(forwardStderrArgName)
+	}
+	popts := &lcow.ProcessParameters{
+		ProcessParameters: hcsschema.ProcessParameters{
+			CommandArgs:      []string{"/bin/sh", "-c", c.String(execCommandLineArgName)},
+			Environment:      map[string]string{"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
+			WorkingDirectory: "/",
+			CreateStdOutPipe: copyOut,
+			CreateStdErrPipe: copyErr,
+		},
+		CreateInUtilityVm: true,
+	}
+	p, err := cs.CreateProcess(popts)
+	if err != nil {
+		return err
+	}
+	defer p.Close()
+	_, pout, perr, err := p.Stdio()
+	if err != nil {
+		return err
+	}
+	ch := make(chan error)
+	n := 0
+	asyncCopy := func(w io.Writer, r io.ReadCloser) {
+		n++
+		go func() {
+			_, err := io.Copy(w, r)
+			r.Close()
+			ch <- err
+		}()
+	}
+	if copyOut {
+		asyncCopy(os.Stdout, pout)
+	}
+	if copyErr {
+		asyncCopy(os.Stdout, perr) // match non-GCS behavior and forward to stdout
+	}
+	if err = p.Wait(); err != nil {
+		return err
+	}
+	for i := 0; i < n; i++ {
+		if err := <-ch; err != nil {
+			return err
+		}
+	}
+	if err = p.Close(); err != nil {
+		return err
+	}
 	return nil
 }
