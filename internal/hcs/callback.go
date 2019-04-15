@@ -137,7 +137,7 @@ func notificationWatcher(notificationType hcsNotification, callbackNumber uintpt
 	}
 
 	log := logrus.WithFields(logrus.Fields{
-		"notification-type": notificationType,
+		"notification-type": notificationType.String(),
 		"system-id":         context.systemID,
 	})
 	if context.processID != 0 {
