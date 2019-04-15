@@ -12,7 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/mergemaps"
-	"github.com/Microsoft/hcsshim/internal/schema2"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/linuxkit/virtsock/pkg/hvsock"
@@ -99,7 +99,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		ExecCommandLine:       fmt.Sprintf("/bin/gcs -log-format json -loglevel %s", logrus.StandardLogger().Level.String()),
 		ForwardStdout:         false,
 		ForwardStderr:         true,
-		OutputHandler:         parseLogrus,
+		OutputHandler:         parseLogrus(id),
 		VPMemDeviceCount:      DefaultVPMEMCount,
 		VPMemSizeBytes:        DefaultVPMemSizeBytes,
 		PreferredRootFSType:   PreferredRootFSTypeInitRd,
@@ -143,7 +143,7 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 
 	// We dont serialize OutputHandler so if it is missing we need to put it back to the default.
 	if opts.OutputHandler == nil {
-		opts.OutputHandler = parseLogrus
+		opts.OutputHandler = parseLogrus(opts.ID)
 	}
 
 	uvm := &UtilityVM{
