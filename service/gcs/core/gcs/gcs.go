@@ -14,6 +14,9 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/Microsoft/opengcs/internal/storage"
+	"github.com/Microsoft/opengcs/internal/storage/plan9"
+	"github.com/Microsoft/opengcs/internal/storage/scsi"
 	"github.com/Microsoft/opengcs/service/gcs/core"
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
@@ -673,13 +676,12 @@ func (c *gcsCore) ModifySettings(id string, request *prot.ResourceModificationRe
 			// If the disk was specified AttachOnly, it shouldn't have been mounted
 			// in the first place.
 			if !mvd.AttachOnly {
-				if err := unmountPath(mvd.ContainerPath, false); err != nil {
+				if err := storage.UnmountPath(mvd.ContainerPath, false); err != nil {
 					return errors.Wrapf(err, "failed to unmount mapped virtual disks for container %s", id)
 				}
 			}
-			scsiID := fmt.Sprintf("0:0:0:%d", mvd.Lun)
-			if err := unplugSCSIDisk(scsiID); err != nil {
-				return errors.Wrapf(err, "failed to unplug mapped virtual disks for container %s, scsi: %s", id, scsiID)
+			if err := scsi.UnplugDevice(0, mvd.Lun); err != nil {
+				return errors.Wrapf(err, "failed to unplug mapped virtual disks for container %s, scsi lun: %d", mvd.Lun)
 			}
 			containerEntry.RemoveMappedVirtualDisk(*mvd)
 		default:
@@ -697,7 +699,7 @@ func (c *gcsCore) ModifySettings(id string, request *prot.ResourceModificationRe
 			}
 			containerEntry.AddMappedDirectory(*md)
 		case prot.RtRemove:
-			if err := unmountPath(md.ContainerPath, false); err != nil {
+			if err := storage.UnmountPath(md.ContainerPath, false); err != nil {
 				return errors.Wrapf(err, "failed to mount mapped directories for container %s", id)
 			}
 			containerEntry.RemoveMappedDirectory(*md)
@@ -853,7 +855,7 @@ func (c *gcsCore) setupMappedDirectories(id string, dirs []prot.MappedDirectory)
 		if !dir.CreateInUtilityVM {
 			return errors.New("we do not currently support mapping directories inside the container namespace")
 		}
-		if err := mountPlan9Share(c.vsock, dir.ContainerPath, "", dir.Port, dir.ReadOnly); err != nil {
+		if err := plan9.Mount(c.vsock, dir.ContainerPath, "", dir.Port, dir.ReadOnly); err != nil {
 			return errors.Wrapf(err, "failed to mount mapped directory %s for container %s", dir.ContainerPath, id)
 		}
 	}
