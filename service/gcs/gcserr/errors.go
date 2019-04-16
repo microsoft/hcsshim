@@ -11,18 +11,8 @@ import (
 type Hresult int32
 
 const (
-	// HrUnexpected is the HRESULT for an unexpected exit.
-	HrUnexpected = Hresult(-2147418113) // 0x8000FFFF
-	// HrNotImpl is the HRESULT for a not implemented function.
-	HrNotImpl = Hresult(-2147467263) // 0x80004001
-	// HrInvalidArg is the HRESULT for an invalid argument to a function.
-	HrInvalidArg = Hresult(-2147024809) // 0x80070057
-	// HrPointer is the HRESULT for a nil pointer that is passed to a function.
-	HrPointer = Hresult(-2147467261) // 0x80004003
 	// HrFail is the HRESULT for an invocation failure.
 	HrFail = Hresult(-2147467259) // 0x80004005
-	// HrAccessDenied is the HRESULT for access denied to a resource.
-	HrAccessDenied = Hresult(-2147024891) // 0x80070005
 	// HvVmcomputeTimeout is the HRESULT for operations that timed out.
 	HvVmcomputeTimeout = Hresult(-1070137079) // 0xC0370109
 	// HrVmcomputeInvalidJSON is the HRESULT for failing to unmarshal a json
@@ -31,9 +21,6 @@ const (
 	// HrVmcomputeSystemAlreadyStopped is the HRESULT for calling
 	// Shutdown/Terminate on a machine that is already in that state.
 	HrVmcomputeSystemAlreadyStopped = Hresult(-1070137072) // 0xC0370110
-	// HrVmcomputeProtocolError is the HRESULT for an invalid protocol
-	// request/response.
-	HrVmcomputeProtocolError = Hresult(-1070137071) // 0xC0370111
 	// HrVmcomputeUnsupportedProtocolVersion is the HRESULT for an invalid
 	// protocol version range specified at negotiation.
 	HrVmcomputeUnsupportedProtocolVersion = Hresult(-1070137076) // 0xC037010C
