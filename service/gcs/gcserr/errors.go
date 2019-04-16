@@ -20,9 +20,15 @@ const (
 	// HrVmcomputeInvalidJSON is the HRESULT for failing to unmarshal a json
 	// string.
 	HrVmcomputeInvalidJSON = Hresult(-1070137075) // 0xC037010D
-	// HrVmcomputeSystemAlreadyStopped is the HRESULT for calling
-	// Shutdown/Terminate on a machine that is already in that state.
-	HrVmcomputeSystemAlreadyStopped = Hresult(-1070137072) // 0xC0370110
+	// HrVmcomputeSystemNotFound is the HRESULT for:
+	//
+	// A virtual machine or container with the specified identifier does not
+	// exist.
+	HrVmcomputeSystemNotFound = Hresult(-1070137074) // 0xC037010E
+	// HrVmcomputeSystemAlreadyExists is the HRESULT for:
+	//
+	// A virtual machine or container with the specified identifier already exists.
+	HrVmcomputeSystemAlreadyExists = Hresult(-1070137073) // 0xC037010F
 	// HrVmcomputeUnsupportedProtocolVersion is the HRESULT for an invalid
 	// protocol version range specified at negotiation.
 	HrVmcomputeUnsupportedProtocolVersion = Hresult(-1070137076) // 0xC037010C
@@ -30,45 +36,6 @@ const (
 	// from the HCS.
 	HrVmcomputeUnknownMessage = Hresult(-1070137077) // 0xC037010B
 )
-
-type containerExistsError struct {
-	ID string
-}
-
-func (e *containerExistsError) Error() string {
-	return fmt.Sprintf("a container with the ID \"%s\" already exists", e.ID)
-}
-
-// NewContainerExistsError returns an error referring to the given ID.
-func NewContainerExistsError(id string) error {
-	return &containerExistsError{ID: id}
-}
-
-type containerDoesNotExistError struct {
-	ID string
-}
-
-func (e *containerDoesNotExistError) Error() string {
-	return fmt.Sprintf("a container with the ID \"%s\" does not exist", e.ID)
-}
-
-// NewContainerDoesNotExistError returns an error referring to the given ID.
-func NewContainerDoesNotExistError(id string) error {
-	return &containerDoesNotExistError{ID: id}
-}
-
-type processDoesNotExistError struct {
-	Pid int
-}
-
-func (e *processDoesNotExistError) Error() string {
-	return fmt.Sprintf("a process with the pid %d does not exist", e.Pid)
-}
-
-// NewProcessDoesNotExistError returns an error referring to the given pid.
-func NewProcessDoesNotExistError(pid int) error {
-	return &processDoesNotExistError{Pid: pid}
-}
 
 // StackTracer is an interface originating (but not exported) from the
 // github.com/pkg/errors package. It defines something which can return a stack

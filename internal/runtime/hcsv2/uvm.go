@@ -62,7 +62,7 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport) *Host {
 
 func (h *Host) getContainerLocked(id string) (*Container, error) {
 	if c, ok := h.containers[id]; !ok {
-		return nil, errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
+		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemNotFound)
 	} else {
 		return c, nil
 	}

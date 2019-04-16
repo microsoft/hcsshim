@@ -234,7 +234,7 @@ func (c *gcsCore) CreateContainer(id string, settings prot.VMHostedContainerSett
 	defer c.containerCacheMutex.Unlock()
 
 	if c.getContainer(id) != nil {
-		return errors.WithStack(gcserr.NewContainerExistsError(id))
+		return gcserr.NewHresultError(gcserr.HrVmcomputeSystemAlreadyExists)
 	}
 
 	containerEntry := newContainerCacheEntry(id)
@@ -316,7 +316,7 @@ func (c *gcsCore) ExecProcess(id string, params prot.ProcessParameters, connecti
 
 	containerEntry := c.getContainer(id)
 	if containerEntry == nil {
-		return -1, nil, gcserr.NewContainerDoesNotExistError(id)
+		return -1, nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemNotFound)
 	}
 	var processEntry *processCacheEntry
 	if !containerEntry.hasRunInitProcess {
@@ -467,7 +467,7 @@ func (c *gcsCore) SignalContainer(id string, signal syscall.Signal) error {
 
 	containerEntry := c.getContainer(id)
 	if containerEntry == nil {
-		return gcserr.WrapHresult(errors.WithStack(gcserr.NewContainerDoesNotExistError(id)), gcserr.HrVmcomputeSystemAlreadyStopped)
+		return gcserr.NewHresultError(gcserr.HrVmcomputeSystemNotFound)
 	}
 
 	if containerEntry.container != nil {
@@ -484,7 +484,7 @@ func (c *gcsCore) SignalProcess(pid int, options prot.SignalProcessOptions) erro
 	c.processCacheMutex.Lock()
 	if _, ok := c.processCache[pid]; !ok {
 		c.processCacheMutex.Unlock()
-		return errors.WithStack(gcserr.NewProcessDoesNotExistError(pid))
+		return gcserr.NewHresultError(gcserr.HrErrNotFound)
 	}
 	c.processCacheMutex.Unlock()
 
@@ -512,7 +512,7 @@ func (c *gcsCore) GetProperties(id string, query string) (*prot.Properties, erro
 
 	containerEntry := c.getContainer(id)
 	if containerEntry == nil {
-		return nil, errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
+		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemNotFound)
 	}
 	if containerEntry.container == nil {
 		return nil, nil
@@ -657,7 +657,7 @@ func (c *gcsCore) ModifySettings(id string, request *prot.ResourceModificationRe
 
 	containerEntry := c.getContainer(id)
 	if containerEntry == nil {
-		return errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
+		return gcserr.NewHresultError(gcserr.HrVmcomputeSystemNotFound)
 	}
 
 	switch request.ResourceType {
@@ -719,7 +719,7 @@ func (c *gcsCore) ResizeConsole(pid int, height, width uint16) error {
 	var ok bool
 	if p, ok = c.processCache[pid]; !ok {
 		c.processCacheMutex.Unlock()
-		return errors.WithStack(gcserr.NewProcessDoesNotExistError(pid))
+		return gcserr.NewHresultError(gcserr.HrErrNotFound)
 	}
 	c.processCacheMutex.Unlock()
 
@@ -738,7 +738,7 @@ func (c *gcsCore) WaitContainer(id string) (func() int, error) {
 	entry := c.getContainer(id)
 	if entry == nil {
 		c.containerCacheMutex.Unlock()
-		return nil, errors.WithStack(gcserr.NewContainerDoesNotExistError(id))
+		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemNotFound)
 	}
 	c.containerCacheMutex.Unlock()
 
@@ -765,7 +765,7 @@ func (c *gcsCore) WaitProcess(pid int) (<-chan int, chan<- bool, error) {
 	entry, ok := c.processCache[pid]
 	if !ok {
 		c.processCacheMutex.Unlock()
-		return nil, nil, errors.WithStack(gcserr.NewProcessDoesNotExistError(pid))
+		return nil, nil, gcserr.NewHresultError(gcserr.HrErrNotFound)
 	}
 	c.processCacheMutex.Unlock()
 

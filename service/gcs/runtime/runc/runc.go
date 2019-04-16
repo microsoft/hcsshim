@@ -14,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
@@ -143,12 +144,20 @@ func (c *container) ExecProcess(process *oci.Process, stdioSet *stdio.Connection
 // Kill sends the specified signal to the container's init process.
 func (c *container) Kill(signal syscall.Signal) error {
 	logPath := c.r.getLogPath(c.id)
-	cmd := exec.Command("runc", "--log", logPath, "kill", c.id, strconv.Itoa(int(signal)))
+	args := []string{"--log", logPath, "kill"}
+	if signal == syscall.SIGTERM || signal == syscall.SIGKILL {
+		args = append(args, "--all")
+	}
+	args = append(args, c.id, strconv.Itoa(int(signal)))
+	cmd := exec.Command("runc", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		if !strings.Contains(err.Error(), "os: process already finished") {
-			return errors.Wrapf(err, "runc kill failed with: %s", out)
+		if strings.Contains(err.Error(), "os: process already finished") ||
+			strings.Contains(err.Error(), "container not running") ||
+			err == syscall.ESRCH {
+			return gcserr.NewHresultError(gcserr.HrVmcomputeSystemNotFound)
 		}
+		return errors.Wrapf(err, "unknown runc error after kill: %s", string(out))
 	}
 	return nil
 }
