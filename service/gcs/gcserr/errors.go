@@ -13,6 +13,8 @@ type Hresult int32
 const (
 	// HrFail is the HRESULT for an invocation failure.
 	HrFail = Hresult(-2147467259) // 0x80004005
+	// HrErrNotFound is the HRESULT for an invalid process id.
+	HrErrNotFound = Hresult(-2147023728) // 0x80070490
 	// HvVmcomputeTimeout is the HRESULT for operations that timed out.
 	HvVmcomputeTimeout = Hresult(-1070137079) // 0xC0370109
 	// HrVmcomputeInvalidJSON is the HRESULT for failing to unmarshal a json

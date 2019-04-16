@@ -7,9 +7,9 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -94,6 +94,8 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 }
 
 // Kill sends 'signal' to the process.
+//
+// If the process has already exited returns `gcserr.HrErrNotFound` by contract.
 func (p *Process) Kill(signal syscall.Signal) error {
 	logrus.WithFields(logrus.Fields{
 		"cid":    p.cid,
@@ -102,7 +104,10 @@ func (p *Process) Kill(signal syscall.Signal) error {
 	}).Info("opengcs::Process::Kill")
 
 	if err := syscall.Kill(int(p.pid), signal); err != nil {
-		return errors.WithStack(err)
+		if err == syscall.ESRCH {
+			return gcserr.NewHresultError(gcserr.HrErrNotFound)
+		}
+		return err
 	}
 	return nil
 }
