@@ -349,6 +349,20 @@ func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all 
 			return errors.Wrap(errdefs.ErrFailedPrecondition, "cannot signal init exec with un-exited additional exec's")
 		}
 	}
+	if signal == 0x9 && eid == "" && ht.ownsHost && ht.host != nil {
+		go func() {
+			// The caller has issued a SIGKILL to the init process that owns the
+			// host.
+			//
+			// To mitigate failures that can cause the HCS to never deliver the
+			// exit notification give everything 30 seconds and terminate the
+			// UVM to force all exits.
+			time.Sleep(30 * time.Second)
+			// Safe to call multiple times if called previously on successful
+			// shutdown.
+			ht.host.Close()
+		}()
+	}
 	eg.Go(func() error {
 		return e.Kill(ctx, signal)
 	})
@@ -506,7 +520,7 @@ func (ht *hcsTask) close() {
 		if ht.c != nil {
 			// Do our best attempt to tear down the container.
 			if err := ht.c.Shutdown(); err != nil {
-				if hcs.IsAlreadyClosed(err) || hcs.IsAlreadyStopped(err) {
+				if hcs.IsAlreadyClosed(err) || hcs.IsNotExist(err) || hcs.IsAlreadyStopped(err) {
 					// This is the state we want. Do nothing.
 				} else if !hcs.IsPending(err) {
 					logrus.WithFields(logrus.Fields{
@@ -523,7 +537,7 @@ func (ht *hcsTask) close() {
 					}
 				}
 				if err := ht.c.Terminate(); err != nil {
-					if hcs.IsAlreadyClosed(err) || hcs.IsAlreadyStopped(err) {
+					if hcs.IsAlreadyClosed(err) || hcs.IsNotExist(err) || hcs.IsAlreadyStopped(err) {
 						// This is the state we want. Do nothing.
 					} else if !hcs.IsPending(err) {
 						logrus.WithFields(logrus.Fields{
