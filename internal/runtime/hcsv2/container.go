@@ -110,7 +110,7 @@ func (c *Container) GetProcess(pid uint32) (*Process, error) {
 
 	p, ok := c.processes[pid]
 	if !ok {
-		return nil, errors.WithStack(gcserr.NewProcessDoesNotExistError(int(pid)))
+		return nil, gcserr.NewHresultError(gcserr.HrErrNotFound)
 	}
 	return p, nil
 }

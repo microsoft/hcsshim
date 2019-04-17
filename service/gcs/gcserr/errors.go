@@ -11,29 +11,24 @@ import (
 type Hresult int32
 
 const (
-	// HrUnexpected is the HRESULT for an unexpected exit.
-	HrUnexpected = Hresult(-2147418113) // 0x8000FFFF
-	// HrNotImpl is the HRESULT for a not implemented function.
-	HrNotImpl = Hresult(-2147467263) // 0x80004001
-	// HrInvalidArg is the HRESULT for an invalid argument to a function.
-	HrInvalidArg = Hresult(-2147024809) // 0x80070057
-	// HrPointer is the HRESULT for a nil pointer that is passed to a function.
-	HrPointer = Hresult(-2147467261) // 0x80004003
 	// HrFail is the HRESULT for an invocation failure.
 	HrFail = Hresult(-2147467259) // 0x80004005
-	// HrAccessDenied is the HRESULT for access denied to a resource.
-	HrAccessDenied = Hresult(-2147024891) // 0x80070005
+	// HrErrNotFound is the HRESULT for an invalid process id.
+	HrErrNotFound = Hresult(-2147023728) // 0x80070490
 	// HvVmcomputeTimeout is the HRESULT for operations that timed out.
 	HvVmcomputeTimeout = Hresult(-1070137079) // 0xC0370109
 	// HrVmcomputeInvalidJSON is the HRESULT for failing to unmarshal a json
 	// string.
 	HrVmcomputeInvalidJSON = Hresult(-1070137075) // 0xC037010D
-	// HrVmcomputeSystemAlreadyStopped is the HRESULT for calling
-	// Shutdown/Terminate on a machine that is already in that state.
-	HrVmcomputeSystemAlreadyStopped = Hresult(-1070137072) // 0xC0370110
-	// HrVmcomputeProtocolError is the HRESULT for an invalid protocol
-	// request/response.
-	HrVmcomputeProtocolError = Hresult(-1070137071) // 0xC0370111
+	// HrVmcomputeSystemNotFound is the HRESULT for:
+	//
+	// A virtual machine or container with the specified identifier does not
+	// exist.
+	HrVmcomputeSystemNotFound = Hresult(-1070137074) // 0xC037010E
+	// HrVmcomputeSystemAlreadyExists is the HRESULT for:
+	//
+	// A virtual machine or container with the specified identifier already exists.
+	HrVmcomputeSystemAlreadyExists = Hresult(-1070137073) // 0xC037010F
 	// HrVmcomputeUnsupportedProtocolVersion is the HRESULT for an invalid
 	// protocol version range specified at negotiation.
 	HrVmcomputeUnsupportedProtocolVersion = Hresult(-1070137076) // 0xC037010C
@@ -41,45 +36,6 @@ const (
 	// from the HCS.
 	HrVmcomputeUnknownMessage = Hresult(-1070137077) // 0xC037010B
 )
-
-type containerExistsError struct {
-	ID string
-}
-
-func (e *containerExistsError) Error() string {
-	return fmt.Sprintf("a container with the ID \"%s\" already exists", e.ID)
-}
-
-// NewContainerExistsError returns an error referring to the given ID.
-func NewContainerExistsError(id string) error {
-	return &containerExistsError{ID: id}
-}
-
-type containerDoesNotExistError struct {
-	ID string
-}
-
-func (e *containerDoesNotExistError) Error() string {
-	return fmt.Sprintf("a container with the ID \"%s\" does not exist", e.ID)
-}
-
-// NewContainerDoesNotExistError returns an error referring to the given ID.
-func NewContainerDoesNotExistError(id string) error {
-	return &containerDoesNotExistError{ID: id}
-}
-
-type processDoesNotExistError struct {
-	Pid int
-}
-
-func (e *processDoesNotExistError) Error() string {
-	return fmt.Sprintf("a process with the pid %d does not exist", e.Pid)
-}
-
-// NewProcessDoesNotExistError returns an error referring to the given pid.
-func NewProcessDoesNotExistError(pid int) error {
-	return &processDoesNotExistError{Pid: pid}
-}
 
 // StackTracer is an interface originating (but not exported) from the
 // github.com/pkg/errors package. It defines something which can return a stack
