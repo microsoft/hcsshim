@@ -7,14 +7,13 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
+	"os"
 	"syscall"
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/sirupsen/logrus"
 )
-
-const _ERROR_CONNECTION_ABORTED syscall.Errno = 1236
 
 type gcsLogEntryStandard struct {
 	Time    time.Time    `json:"time"`
@@ -55,6 +54,15 @@ func (e *gcsLogEntry) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+func isDisconnectError(err error) bool {
+	if o, ok := err.(*net.OpError); ok {
+		if s, ok := o.Err.(*os.SyscallError); ok {
+			return s.Err == syscall.WSAECONNABORTED || s.Err == syscall.WSAECONNRESET
+		}
+	}
+	return false
+}
+
 func parseLogrus(vmid string) func(r io.Reader) {
 	return func(r io.Reader) {
 		j := json.NewDecoder(r)
@@ -69,7 +77,7 @@ func parseLogrus(vmid string) func(r io.Reader) {
 			if err != nil {
 				// Something went wrong. Read the rest of the data as a single
 				// string and log it at once -- it's probably a GCS panic stack.
-				if err != io.EOF && err != _ERROR_CONNECTION_ABORTED && err != syscall.WSAECONNRESET {
+				if err != io.EOF && !isDisconnectError(err) {
 					logrus.WithFields(logrus.Fields{
 						logfields.UVMID: vmid,
 						logrus.ErrorKey: err,

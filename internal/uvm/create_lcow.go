@@ -1,7 +1,6 @@
 package uvm
 
 import (
-	"encoding/binary"
 	"fmt"
 	"io"
 	"net"
@@ -9,13 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/mergemaps"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/linuxkit/virtsock/pkg/hvsock"
 	"github.com/sirupsen/logrus"
 )
 
@@ -383,11 +382,8 @@ func (uvm *UtilityVM) listenVsock(port uint32) (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	vmID, err := hvsock.GUIDFromString(properties.RuntimeID)
-	if err != nil {
-		return nil, err
-	}
-	serviceID, _ := hvsock.GUIDFromString("00000000-facb-11e6-bd58-64006a7986d3")
-	binary.LittleEndian.PutUint32(serviceID[0:4], port)
-	return hvsock.Listen(hvsock.Addr{VMID: vmID, ServiceID: serviceID})
+	return winio.ListenHvsock(&winio.HvsockAddr{
+		VMID:      *properties.RuntimeID,
+		ServiceID: winio.VsockServiceID(port),
+	})
 }
