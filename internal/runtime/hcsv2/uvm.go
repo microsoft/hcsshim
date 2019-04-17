@@ -84,9 +84,8 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 	h.containersMutex.Lock()
 	defer h.containersMutex.Unlock()
 
-	c, err := h.getContainerLocked(id)
-	if err == nil {
-		return c, nil
+	if _, ok := h.containers[id]; ok {
+		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemAlreadyExists)
 	}
 
 	isSandboxOrStandalone := false
@@ -230,7 +229,7 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 		return nil, errors.Wrapf(err, "failed to create container")
 	}
 
-	c = &Container{
+	c := &Container{
 		id:        id,
 		vsock:     h.vsock,
 		spec:      settings.OCISpecification,
