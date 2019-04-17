@@ -426,9 +426,28 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 			err = he.p.Kill()
 		}
 		if err != nil {
-			if hcs.IsNotExist(err) {
+			if hcs.IsNotExist(err) && signal == 0x9 || hcs.IsOperationInvalidState(err) {
+				// If we issued a SIGKILL (or terminate) and get ERROR_NOT_FOUND
+				// or ERROR_VMCOMPUTE_INVALID_STATE `he.waitForExit` is either:
+				//
+				// 1. About to transition the state when it is signaled by the
+				// HCS and everything is fine. This was just a simple race where
+				// the SIGKILL came in before the previous signal completed.
+				//
+				// OR
+				//
+				// 2. We are stuck in `he.waitForExit` and the notification is
+				// not going to be delivered. In this case we force the exit by
+				// closing `he.p` and unblocking all waiters.
+				go func() {
+					// Give the HCS 1 second to finish and deliver the notification.
+					time.Sleep(1 * time.Second)
+					// Force the close. This is safe to call if `he.waitForExit` already called it.
+					he.p.Close()
+				}()
 				return errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", he.id, he.tid)
 			}
+			// Unknown. Return the err from Signal/Kill
 			return err
 		}
 		return nil
