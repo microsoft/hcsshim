@@ -192,7 +192,7 @@ func (process *Process) Wait() (err error) {
 
 	<-process.waitBlock
 	if process.waitError != nil {
-		return makeProcessError(process, operation, err, nil)
+		return makeProcessError(process, operation, process.waitError, nil)
 	}
 	return nil
 }
