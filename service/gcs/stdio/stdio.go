@@ -162,15 +162,53 @@ func (pr *PipeRelay) Files() (*FileSet, error) {
 	return fs, nil
 }
 
+func copyAndCleanClose(c transport.Connection, r io.Reader, name string) {
+	if n, err := io.Copy(c, r); err != nil {
+		logrus.WithFields(logrus.Fields{
+			logrus.ErrorKey: err,
+			"bytes":         n,
+			"file":          name,
+		}).Error("opengcs::PipeRelay::copyAndCleanClose - error copying from pipe")
+	}
+	// Shut down the write end of the socket, then read a byte (which should
+	// yield EOF) to wait for the other endpoint to finish reading and close
+	// the connection.
+	if err := c.CloseWrite(); err == nil {
+		var b [1]byte
+		_, err = c.Read(b[:])
+		if err == nil {
+			err = errors.New("unexpected data in socket")
+		}
+		if err != io.EOF {
+			logrus.WithFields(logrus.Fields{
+				logrus.ErrorKey: err,
+				"file":          name,
+			}).Error("opengcs::PipeRelay::copyAndCleanClose - error reading for clean close")
+		}
+	} else {
+		logrus.WithFields(logrus.Fields{
+			logrus.ErrorKey: err,
+			"file":          name,
+		}).Error("opengcs::PipeRelay::copyAndCleanClose - error shutting down socket")
+	}
+	if err := c.Close(); err != nil {
+		logrus.WithFields(logrus.Fields{
+			logrus.ErrorKey: err,
+			"file":          name,
+		}).Error("opengcs::PipeRelay::copyAndCleanClose - error closing socket")
+	}
+}
+
 // Start starts the relay operation. The caller must call Wait to wait
 // for the relay to finish and release the associated resources.
 func (pr *PipeRelay) Start() {
 	if pr.s.In != nil {
 		pr.wg.Add(1)
 		go func() {
-			if _, err := io.Copy(pr.pipes[1], pr.s.In); err != nil {
+			if n, err := io.Copy(pr.pipes[1], pr.s.In); err != nil {
 				logrus.WithFields(logrus.Fields{
 					logrus.ErrorKey: err,
+					"bytes":         n,
 				}).Error("opengcs::PipeRelay::Start - error copying stdin to pipe")
 			}
 			if err := pr.pipes[1].Close(); err != nil {
@@ -185,32 +223,14 @@ func (pr *PipeRelay) Start() {
 	if pr.s.Out != nil {
 		pr.wg.Add(1)
 		go func() {
-			if _, err := io.Copy(pr.s.Out, pr.pipes[2]); err != nil {
-				logrus.WithFields(logrus.Fields{
-					logrus.ErrorKey: err,
-				}).Error("opengcs::PipeRelay::Start - error copying stdout from pipe")
-			}
-			if err := pr.s.Out.Close(); err != nil {
-				logrus.WithFields(logrus.Fields{
-					logrus.ErrorKey: err,
-				}).Error("opengcs::PipeRelay::Start - error closing stdout socket")
-			}
+			copyAndCleanClose(pr.s.Out, pr.pipes[2], "stdout")
 			pr.wg.Done()
 		}()
 	}
 	if pr.s.Err != nil {
 		pr.wg.Add(1)
 		go func() {
-			if _, err := io.Copy(pr.s.Err, pr.pipes[4]); err != nil {
-				logrus.WithFields(logrus.Fields{
-					logrus.ErrorKey: err,
-				}).Error("opengcs::PipeRelay::Start - error copying stderr from pipe")
-			}
-			if err := pr.s.Err.Close(); err != nil {
-				logrus.WithFields(logrus.Fields{
-					logrus.ErrorKey: err,
-				}).Error("opengcs::PipeRelay::Start - error closing stderr socket")
-			}
+			copyAndCleanClose(pr.s.Err, pr.pipes[4], "stderr")
 			pr.wg.Done()
 		}()
 	}
