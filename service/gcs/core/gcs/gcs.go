@@ -629,7 +629,7 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, conSettings 
 			// important.
 			logrus.Error(errors.Wrap(werr, "failed call to Wait for external process"))
 		}
-		exitCode := cmd.ProcessState.Sys().(syscall.WaitStatus).ExitStatus()
+		exitCode := cmd.ProcessState.ExitCode()
 		logrus.Infof("external process %d exited with exit status %d", cmd.Process.Pid, exitCode)
 
 		if relay != nil {
