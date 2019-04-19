@@ -406,7 +406,7 @@ func (r *runcRuntime) waitOnProcess(pid int) (int, error) {
 		return -1, errors.Wrapf(err, "failed waiting on process %d", pid)
 	}
 
-	return state.Sys().(syscall.WaitStatus).ExitStatus(), nil
+	return state.ExitCode(), nil
 }
 
 func (p *process) Wait() (int, error) {
