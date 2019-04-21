@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,7 +17,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/internal/runhcs"
-	"github.com/Microsoft/hcsshim/internal/schema2"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -47,8 +48,8 @@ var shimCommand = cli.Command{
 		cli.StringFlag{Name: "log-pipe", Hidden: true},
 	},
 	Before: appargs.Validate(argID),
-	Action: func(context *cli.Context) error {
-		logPipe := context.String("log-pipe")
+	Action: func(ctx *cli.Context) error {
+		logPipe := ctx.String("log-pipe")
 		if logPipe != "" {
 			lpc, err := winio.DialPipe(logPipe, nil)
 			if err != nil {
@@ -61,7 +62,7 @@ var shimCommand = cli.Command{
 		}
 		fatalWriter.Writer = os.Stdout
 
-		id := context.Args().First()
+		id := ctx.Args().First()
 		c, err := getContainer(id, true)
 		if err != nil {
 			return err
@@ -71,15 +72,15 @@ var shimCommand = cli.Command{
 		// Asynchronously wait for the container to exit.
 		containerExitCh := make(chan error)
 		go func() {
-			containerExitCh <- c.hc.WaitExpectedError(hcs.ErrAlreadyClosed)
+			containerExitCh <- c.hc.Wait(context.TODO())
 		}()
 
 		// Get File objects for the open stdio files passed in as arguments.
-		stdin := newFile(context, "stdin")
-		stdout := newFile(context, "stdout")
-		stderr := newFile(context, "stderr")
+		stdin := newFile(ctx, "stdin")
+		stdout := newFile(ctx, "stdout")
+		stderr := newFile(ctx, "stderr")
 
-		exec := context.Bool("exec")
+		exec := ctx.Bool("exec")
 		terminateOnFailure := false
 
 		errorOut := io.WriteCloser(os.Stdout)
@@ -123,7 +124,7 @@ var shimCommand = cli.Command{
 
 			defer func() {
 				if terminateOnFailure {
-					if err = c.hc.Terminate(); hcs.IsPending(err) {
+					if delivered, _ := c.hc.Terminate(); delivered {
 						<-containerExitCh
 					}
 				}
@@ -277,7 +278,7 @@ var shimCommand = cli.Command{
 			}()
 		}
 
-		err = p.Wait()
+		err = p.Wait(context.TODO())
 		wg.Wait()
 
 		// Attempt to get the exit code from the process.
@@ -294,8 +295,8 @@ var shimCommand = cli.Command{
 			// forcefully.
 			const shutdownTimeout = time.Minute * 5
 			waited := false
-			err = c.hc.Shutdown()
-			if hcs.IsPending(err) {
+			delivered, err := c.hc.Shutdown()
+			if delivered {
 				select {
 				case err = <-containerExitCh:
 					waited = true
@@ -303,14 +304,11 @@ var shimCommand = cli.Command{
 					err = hcs.ErrTimeout
 				}
 			}
-			if hcs.IsAlreadyStopped(err) {
-				err = nil
-			}
 
 			if err != nil {
-				err = c.hc.Terminate()
+				_, err = c.hc.Terminate()
 				if waited {
-					err = c.hc.Wait()
+					err = c.hc.Wait(context.TODO())
 				} else {
 					err = <-containerExitCh
 				}

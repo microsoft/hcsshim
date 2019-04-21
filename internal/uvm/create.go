@@ -6,7 +6,6 @@ import (
 	"runtime"
 
 	"github.com/Microsoft/hcsshim/internal/guid"
-	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/sirupsen/logrus"
 )
@@ -101,7 +100,7 @@ func (uvm *UtilityVM) Close() (err error) {
 		}
 	}()
 
-	if err := uvm.hcsSystem.Terminate(); hcs.IsPending(err) {
+	if delivered, _ := uvm.hcsSystem.Terminate(); delivered {
 		uvm.Wait()
 	}
 

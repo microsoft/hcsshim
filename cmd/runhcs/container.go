@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -540,7 +541,7 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 	defer func() {
 		if err != nil {
 			hc.Terminate()
-			hc.Wait()
+			hc.Wait(context.TODO())
 			hcsoci.ReleaseResources(resources, vm, true)
 		}
 	}()
@@ -668,8 +669,8 @@ func (c *container) Remove() error {
 	if c.IsHost {
 		vm, err := hcs.OpenComputeSystem(vmID(c.ID))
 		if err == nil {
-			if err := vm.Terminate(); hcs.IsPending(err) {
-				vm.Wait()
+			if delivered, _ := vm.Terminate(); delivered {
+				vm.Wait(context.TODO())
 			}
 		}
 	}
@@ -680,12 +681,9 @@ func (c *container) Kill() error {
 	if c.hc == nil {
 		return nil
 	}
-	err := c.hc.Terminate()
-	if hcs.IsPending(err) {
-		err = c.hc.Wait()
-	}
-	if hcs.IsAlreadyStopped(err) {
-		err = nil
+	delivered, err := c.hc.Terminate()
+	if delivered {
+		err = c.hc.Wait(context.TODO())
 	}
 	return err
 }

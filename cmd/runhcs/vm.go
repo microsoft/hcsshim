@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -168,7 +169,7 @@ func processRequest(vm *uvm.UtilityVM, pipe net.Conn) error {
 		c2 := c
 		c = nil
 		go func() {
-			c2.hc.Wait()
+			c2.hc.Wait(context.TODO())
 			c2.Close()
 		}()
 

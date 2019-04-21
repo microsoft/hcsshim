@@ -2,6 +2,7 @@ package lcow
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -77,7 +78,9 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		}
 		defer testdProc.Close()
 
-		testdProc.WaitTimeout(timeout.ExternalCommandToComplete)
+		ctx, cancel := context.WithTimeout(context.TODO(), timeout.ExternalCommandToComplete)
+		testdProc.Wait(ctx)
+		cancel()
 		testdExitCode, err := testdProc.ExitCode()
 		if err != nil {
 			lcowUVM.RemoveSCSI(destFile)
@@ -112,7 +115,9 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		return fmt.Errorf("failed to `%+v` following hot-add %s to utility VM: %s", lsCommand, destFile, err)
 	}
 	defer lsProc.Close()
-	lsProc.WaitTimeout(timeout.ExternalCommandToComplete)
+	ctx, cancel := context.WithTimeout(context.TODO(), timeout.ExternalCommandToComplete)
+	lsProc.Wait(ctx)
+	cancel()
 	lsExitCode, err := lsProc.ExitCode()
 	if err != nil {
 		lcowUVM.RemoveSCSI(destFile)
@@ -140,7 +145,9 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		return fmt.Errorf("failed to `%+v` following hot-add %s to utility VM: %s", mkfsCommand, destFile, err)
 	}
 	defer mkfsProc.Close()
-	mkfsProc.WaitTimeout(timeout.ExternalCommandToComplete)
+	ctx, cancel = context.WithTimeout(context.TODO(), timeout.ExternalCommandToComplete)
+	mkfsProc.Wait(ctx)
+	cancel()
 	mkfsExitCode, err := mkfsProc.ExitCode()
 	if err != nil {
 		lcowUVM.RemoveSCSI(destFile)

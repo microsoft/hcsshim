@@ -1,6 +1,8 @@
 package uvm
 
 import (
+	"context"
+
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/sirupsen/logrus"
 )
@@ -15,7 +17,7 @@ func (uvm *UtilityVM) waitForOutput() {
 
 // Wait waits synchronously for a utility VM to terminate.
 func (uvm *UtilityVM) Wait() error {
-	err := uvm.hcsSystem.Wait()
+	err := uvm.hcsSystem.Wait(context.TODO())
 
 	// outputProcessingCancel will only cancel waiting for the vsockexec
 	// connection, it won't stop output processing once the connection is

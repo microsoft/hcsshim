@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -270,13 +271,12 @@ func run(options *uvm.OptionsLCOW, c *cli.Context) error {
 		if err := execViaGcs(uvm.ComputeSystem(), c); err != nil {
 			return err
 		}
-		if err := uvm.ComputeSystem().Terminate(); err != nil {
-			if hcs.IsPending(err) {
-				err = uvm.ComputeSystem().Wait()
-			}
-			if err != nil {
-				return err
-			}
+		delivered, err := uvm.ComputeSystem().Terminate()
+		if delivered {
+			err = uvm.ComputeSystem().Wait(context.TODO())
+		}
+		if err != nil {
+			return err
 		}
 	} else {
 		if err := uvm.WaitExpectedError(hcs.ErrVmcomputeUnexpectedExit); err != nil {
@@ -328,7 +328,7 @@ func execViaGcs(cs *hcs.System, c *cli.Context) error {
 	if copyErr {
 		asyncCopy(os.Stdout, perr) // match non-GCS behavior and forward to stdout
 	}
-	if err = p.Wait(); err != nil {
+	if err = p.Wait(context.TODO()); err != nil {
 		return err
 	}
 	for i := 0; i < n; i++ {

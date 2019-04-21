@@ -1,9 +1,11 @@
 package hcs
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"syscall"
 
 	"github.com/Microsoft/hcsshim/internal/interop"
@@ -141,12 +143,24 @@ type HcsError struct {
 	Events []ErrorEvent
 }
 
+var _ net.Error = &HcsError{}
+
 func (e *HcsError) Error() string {
 	s := e.Op + ": " + e.Err.Error()
 	for _, ev := range e.Events {
 		s += "\n" + ev.String()
 	}
 	return s
+}
+
+func (e *HcsError) Temporary() bool {
+	err, ok := e.Err.(net.Error)
+	return ok && err.Temporary()
+}
+
+func (e *HcsError) Timeout() bool {
+	err, ok := e.Err.(net.Error)
+	return ok && err.Timeout()
 }
 
 // ProcessError is an error encountered in HCS during an operation on a Process object
@@ -158,6 +172,8 @@ type ProcessError struct {
 	Events   []ErrorEvent
 }
 
+var _ net.Error = &ProcessError{}
+
 // SystemError is an error encountered in HCS during an operation on a Container object
 type SystemError struct {
 	ID     string
@@ -166,6 +182,8 @@ type SystemError struct {
 	Extra  string
 	Events []ErrorEvent
 }
+
+var _ net.Error = &SystemError{}
 
 func (e *SystemError) Error() string {
 	s := e.Op + " " + e.ID + ": " + e.Err.Error()
@@ -176,6 +194,16 @@ func (e *SystemError) Error() string {
 		s += "\n(extra info: " + e.Extra + ")"
 	}
 	return s
+}
+
+func (e *SystemError) Temporary() bool {
+	err, ok := e.Err.(net.Error)
+	return ok && err.Temporary()
+}
+
+func (e *SystemError) Timeout() bool {
+	err, ok := e.Err.(net.Error)
+	return ok && err.Timeout()
 }
 
 func makeSystemError(system *System, op string, extra string, err error, events []ErrorEvent) error {
@@ -198,6 +226,16 @@ func (e *ProcessError) Error() string {
 		s += "\n" + ev.String()
 	}
 	return s
+}
+
+func (e *ProcessError) Temporary() bool {
+	err, ok := e.Err.(net.Error)
+	return ok && err.Temporary()
+}
+
+func (e *ProcessError) Timeout() bool {
+	err, ok := e.Err.(net.Error)
+	return ok && err.Timeout()
 }
 
 func makeProcessError(process *Process, op string, err error, events []ErrorEvent) error {
@@ -242,6 +280,9 @@ func IsPending(err error) bool {
 // IsTimeout returns a boolean indicating whether the error is caused by
 // a timeout waiting for the operation to complete.
 func IsTimeout(err error) bool {
+	if err, ok := err.(net.Error); ok && err.Timeout() {
+		return true
+	}
 	err = getInnerError(err)
 	return err == ErrTimeout
 }
@@ -291,4 +332,17 @@ func getInnerError(err error) error {
 		err = pe.Err
 	}
 	return err
+}
+
+func getOperationLogResult(err error) (string, error) {
+	switch getInnerError(err) {
+	case nil:
+		return "Success", nil
+	case context.Canceled:
+		return "Canceled", nil
+	case context.DeadlineExceeded:
+		return "Timeout", nil
+	default:
+		return "Error", err
+	}
 }

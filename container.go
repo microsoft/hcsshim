@@ -1,7 +1,9 @@
 package hcsshim
 
 import (
+	"context"
 	"fmt"
+	"net"
 	"os"
 	"time"
 
@@ -99,23 +101,43 @@ func (container *container) Start() error {
 
 // Shutdown requests a container shutdown, but it may not actually be shutdown until Wait() succeeds.
 func (container *container) Shutdown() error {
-	return convertSystemError(container.system.Shutdown(), container)
+	delivered, err := container.system.Shutdown()
+	if err != nil {
+		return convertSystemError(err, container)
+	}
+	if delivered {
+		return &ContainerError{Container: container, Err: ErrVmcomputeOperationPending, Operation: "hcsshim::ComputeSystem::Shutdown"}
+	}
+	return nil
 }
 
 // Terminate requests a container terminate, but it may not actually be terminated until Wait() succeeds.
 func (container *container) Terminate() error {
-	return convertSystemError(container.system.Terminate(), container)
+	delivered, err := container.system.Terminate()
+	if err != nil {
+		return convertSystemError(err, container)
+	}
+	if delivered {
+		return &ContainerError{Container: container, Err: ErrVmcomputeOperationPending, Operation: "hcsshim::ComputeSystem::Shutdown"}
+	}
+	return nil
 }
 
 // Waits synchronously waits for the container to shutdown or terminate.
 func (container *container) Wait() error {
-	return convertSystemError(container.system.Wait(), container)
+	return convertSystemError(container.system.Wait(context.Background()), container)
 }
 
 // WaitTimeout synchronously waits for the container to terminate or the duration to elapse. It
 // returns false if timeout occurs.
 func (container *container) WaitTimeout(t time.Duration) error {
-	return convertSystemError(container.system.WaitTimeout(t), container)
+	ctx, cancel := context.WithTimeout(context.Background(), t)
+	err := container.system.Wait(ctx)
+	cancel()
+	if err, ok := err.(net.Error); ok && err.Timeout() {
+		return &ContainerError{Container: container, Err: ErrTimeout, Operation: "hcsshim::ComputeSystem::Wait"}
+	}
+	return convertSystemError(err, container)
 }
 
 // Pause pauses the execution of a container.

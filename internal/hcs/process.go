@@ -1,6 +1,7 @@
 package hcs
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"sync"
@@ -97,17 +98,40 @@ func (process *Process) logOperationBegin(operation string) {
 }
 
 func (process *Process) logOperationEnd(operation string, err error) {
-	var result string
-	if err == nil {
-		result = "Success"
-	} else {
-		result = "Error"
-	}
-
+	result, err := getOperationLogResult(err)
 	logOperationEnd(
 		process.logctx,
 		operation+" - End Operation - "+result,
 		err)
+}
+
+func (process *Process) processSignalResult(err error) (bool, error) {
+	if err == nil {
+		return true, nil
+	}
+	if IsNotExist(err) || IsOperationInvalidState(err) {
+		select {
+		case <-process.waitBlock:
+			// The process exit notification has already arrived.
+		default:
+			// The process should be gone, but we have not received the notification.
+			// After a second, force unblock the process wait to work around a possible
+			// deadlock in the HCS.
+			go func() {
+				time.Sleep(time.Second)
+				process.closedWaitOnce.Do(func() {
+					logrus.WithFields(logrus.Fields{
+						logfields.ContainerID: process.SystemID(),
+						logfields.ProcessID:   process.processID,
+						logrus.ErrorKey:       err,
+					}).Warn("hcsshim::Process::processSignalResult - Force unblocking process waits")
+					close(process.waitBlock)
+				})
+			}()
+		}
+		return false, nil
+	}
+	return false, err
 }
 
 // Signal signals the process with `options`.
@@ -115,7 +139,7 @@ func (process *Process) logOperationEnd(operation string, err error) {
 // For LCOW `guestrequest.SignalProcessOptionsLCOW`.
 //
 // For WCOW `guestrequest.SignalProcessOptionsWCOW`.
-func (process *Process) Signal(options interface{}) (err error) {
+func (process *Process) Signal(options interface{}) (_ bool, err error) {
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
 
@@ -124,12 +148,12 @@ func (process *Process) Signal(options interface{}) (err error) {
 	defer func() { process.logOperationEnd(operation, err) }()
 
 	if process.handle == 0 {
-		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
+		return false, makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
 	optionsb, err := json.Marshal(options)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	optionsStr := string(optionsb)
@@ -139,15 +163,15 @@ func (process *Process) Signal(options interface{}) (err error) {
 		err = hcsSignalProcess(process.handle, optionsStr, &resultp)
 	})
 	events := processHcsResult(resultp)
+	delivered, err := process.processSignalResult(err)
 	if err != nil {
-		return makeProcessError(process, operation, err, events)
+		err = makeProcessError(process, operation, err, events)
 	}
-
-	return nil
+	return delivered, err
 }
 
 // Kill signals the process to terminate but does not wait for it to finish terminating.
-func (process *Process) Kill() (err error) {
+func (process *Process) Kill() (_ bool, err error) {
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
 
@@ -156,7 +180,7 @@ func (process *Process) Kill() (err error) {
 	defer func() { process.logOperationEnd(operation, err) }()
 
 	if process.handle == 0 {
-		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
+		return false, makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
 	var resultp *uint16
@@ -165,17 +189,21 @@ func (process *Process) Kill() (err error) {
 	})
 	events := processHcsResult(resultp)
 	if err != nil {
-		return makeProcessError(process, operation, err, events)
+		return false, makeProcessError(process, operation, err, events)
 	}
 
-	return nil
+	delivered, err := process.processSignalResult(err)
+	if err != nil {
+		err = makeProcessError(process, operation, err, events)
+	}
+	return delivered, err
 }
 
 // waitBackground waits for the process exit notification. Once received sets
-// `process.waitError` (if any) and unblocks all `Wait` and `WaitTimeout` calls.
+// `process.waitError` (if any) and unblocks all `Wait` calls.
 //
-// This MUST be called exactly once per `process.handle` but `Wait` and
-// `WaitTimeout` are safe to call multiple times.
+// This MUST be called exactly once per `process.handle` but `Wait` is safe to
+// call multiple times.
 func (process *Process) waitBackground() {
 	process.waitError = waitForNotification(process.callbackNumber, hcsNotificationProcessExited, nil)
 	process.closedWaitOnce.Do(func() {
@@ -185,35 +213,21 @@ func (process *Process) waitBackground() {
 
 // Wait waits for the process to exit. If the process has already exited returns
 // the pervious error (if any).
-func (process *Process) Wait() (err error) {
+func (process *Process) Wait(ctx context.Context) (err error) {
 	operation := "hcsshim::Process::Wait"
-	process.logOperationBegin(operation)
-	defer func() { process.logOperationEnd(operation, err) }()
-
-	<-process.waitBlock
-	if process.waitError != nil {
-		return makeProcessError(process, operation, process.waitError, nil)
-	}
-	return nil
-}
-
-// WaitTimeout waits for the process to exit or the duration to elapse. If the
-// process has already exited returns the pervious error (if any). If a timeout
-// occurs returns `ErrTimeout`.
-func (process *Process) WaitTimeout(timeout time.Duration) (err error) {
-	operation := "hcssshim::Process::WaitTimeout"
 	process.logOperationBegin(operation)
 	defer func() { process.logOperationEnd(operation, err) }()
 
 	select {
 	case <-process.waitBlock:
-		if process.waitError != nil {
-			return makeProcessError(process, operation, process.waitError, nil)
-		}
-		return nil
-	case <-time.After(timeout):
-		return makeProcessError(process, operation, ErrTimeout, nil)
+		err = process.waitError
+	case <-ctx.Done():
+		err = ctx.Err()
 	}
+	if err != nil {
+		return makeProcessError(process, operation, err, nil)
+	}
+	return nil
 }
 
 // ResizeConsole resizes the console of the process.

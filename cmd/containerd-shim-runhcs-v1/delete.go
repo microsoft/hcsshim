@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"os"
 	"time"
 
@@ -22,37 +24,31 @@ This command allows containerd to delete any container resources created, mounte
 The delete command will be executed in the container's bundle as its cwd.
 `,
 	SkipArgReorder: true,
-	Action: func(context *cli.Context) error {
+	Action: func(ctx *cli.Context) error {
 		// We cant write anything to stdout for this cmd other than the
 		// task.DeleteResponse by protcol. We can write to stderr which will be
 		// warning logged in containerd.
 		logrus.SetOutput(ioutil.Discard)
 
-		bundleFlag := context.GlobalString("bundle")
+		bundleFlag := ctx.GlobalString("bundle")
 		if bundleFlag == "" {
 			return errors.New("bundle is required")
 		}
 
 		// Attempt to find the hcssystem for this bundle and terminate it.
 		if sys, _ := hcs.OpenComputeSystem(idFlag); sys != nil {
-			if err := sys.Terminate(); err != nil {
-				if hcs.IsPending(err) {
-					const terminateTimeout = time.Second * 30
-					done := make(chan bool)
-					go func() {
-						if werr := sys.Wait(); err != nil {
-							fmt.Fprintf(os.Stderr, "failed to wait for '%s' to terminate: %v", idFlag, werr)
-						}
-						done <- true
-					}()
-					select {
-					case <-done:
-					case <-time.After(terminateTimeout):
+			if _, err := sys.Terminate(); err != nil {
+				fmt.Fprintf(os.Stderr, "failed to terminate '%s': %v", idFlag, err)
+			} else {
+				ctx, cancel := context.WithTimeout(context.TODO(), time.Second*30)
+				err := sys.Wait(ctx)
+				cancel()
+				if err != nil {
+					if err, ok := err.(net.Error); ok && err.Timeout() {
 						sys.Close()
 						return fmt.Errorf("timed out waiting for '%s' to terminate", idFlag)
 					}
-				} else {
-					fmt.Fprintf(os.Stderr, "failed to terminate '%s': %v", idFlag, err)
+					fmt.Fprintf(os.Stderr, "failed to wait for '%s' to terminate: %v", idFlag, err)
 				}
 			}
 			sys.Close()
@@ -67,14 +63,10 @@ The delete command will be executed in the container's bundle as its cwd.
 			if containerType := s["io.kubernetes.cri.container-type"]; containerType == "container" {
 				if sandboxID := s["io.kubernetes.cri.sandbox-id"]; sandboxID != "" {
 					if sys, _ := hcs.OpenComputeSystem(sandboxID); sys != nil {
-						if err := sys.Terminate(); err != nil {
-							if hcs.IsPending(err) {
-								if werr := sys.Wait(); err != nil {
-									fmt.Fprintf(os.Stderr, "failed to wait for '%s' to terminate: %v", idFlag, werr)
-								}
-							} else {
-								fmt.Fprintf(os.Stderr, "failed to terminate '%s': %v", idFlag, err)
-							}
+						if _, err := sys.Terminate(); err != nil {
+							fmt.Fprintf(os.Stderr, "failed to terminate '%s': %v", idFlag, err)
+						} else if err := sys.Wait(context.TODO()); err != nil {
+							fmt.Fprintf(os.Stderr, "failed to wait for '%s' to terminate: %v", idFlag, err)
 						}
 						sys.Close()
 					}

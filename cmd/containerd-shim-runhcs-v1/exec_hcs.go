@@ -418,37 +418,19 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 		if err != nil {
 			return errors.Wrapf(errdefs.ErrFailedPrecondition, "signal %d: %v", signal, err)
 		}
+		var delivered bool
 		if supported && options != nil {
-			err = he.p.Signal(options)
+			delivered, err = he.p.Signal(options)
 		} else {
 			// legacy path before signals support OR if WCOW with signals
 			// support needs to issue a terminate.
-			err = he.p.Kill()
+			delivered, err = he.p.Kill()
 		}
 		if err != nil {
-			if hcs.IsNotExist(err) && signal == 0x9 || hcs.IsOperationInvalidState(err) {
-				// If we issued a SIGKILL (or terminate) and get ERROR_NOT_FOUND
-				// or ERROR_VMCOMPUTE_INVALID_STATE `he.waitForExit` is either:
-				//
-				// 1. About to transition the state when it is signaled by the
-				// HCS and everything is fine. This was just a simple race where
-				// the SIGKILL came in before the previous signal completed.
-				//
-				// OR
-				//
-				// 2. We are stuck in `he.waitForExit` and the notification is
-				// not going to be delivered. In this case we force the exit by
-				// closing `he.p` and unblocking all waiters.
-				go func() {
-					// Give the HCS 1 second to finish and deliver the notification.
-					time.Sleep(1 * time.Second)
-					// Force the close. This is safe to call if `he.waitForExit` already called it.
-					he.p.Close()
-				}()
-				return errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", he.id, he.tid)
-			}
-			// Unknown. Return the err from Signal/Kill
 			return err
+		}
+		if !delivered {
+			return errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", he.id, he.tid)
 		}
 		return nil
 	case shimExecStateExited:
@@ -585,7 +567,7 @@ func (he *hcsExec) exitFromCreatedL(status int) {
 // 6. Close `he.exited` channel to unblock any waiters who might have called
 // `Create`/`Wait`/`Start` which is a valid pattern.
 func (he *hcsExec) waitForExit() {
-	err := he.p.Wait()
+	err := he.p.Wait(context.TODO())
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			"tid":           he.tid,
@@ -681,12 +663,8 @@ func (he *hcsExec) waitForExit() {
 //
 // This MUST be called via a goroutine at exec create.
 func (he *hcsExec) waitForContainerExit() {
-	cexit := make(chan error)
-	go func() {
-		cexit <- he.c.Wait()
-	}()
-	select {
-	case <-cexit:
+	err := he.c.Wait(he.processCtx)
+	if err == nil || he.processCtx.Err() == nil {
 		// Container exited first. We need to force the process into the exited
 		// state and cleanup any resources
 		he.sl.Lock()
@@ -698,7 +676,7 @@ func (he *hcsExec) waitForContainerExit() {
 			he.p.Kill()
 		}
 		he.sl.Unlock()
-	case <-he.processCtx.Done():
+	} else {
 		// Process exited first. This is the normal case do nothing because
 		// `he.waitForExit` will release any waiters.
 	}

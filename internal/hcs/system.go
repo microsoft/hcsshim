@@ -1,6 +1,7 @@
 package hcs
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"strconv"
@@ -66,13 +67,7 @@ func (computeSystem *System) logOperationBegin(operation string) {
 }
 
 func (computeSystem *System) logOperationEnd(operation string, err error) {
-	var result string
-	if err == nil {
-		result = "Success"
-	} else {
-		result = "Error"
-	}
-
+	result, err := getOperationLogResult(err)
 	logOperationEnd(
 		computeSystem.logctx,
 		operation+" - End Operation - "+result,
@@ -281,22 +276,18 @@ func (computeSystem *System) ID() string {
 
 // Shutdown requests a compute system shutdown, if IsPending() on the error returned is true,
 // it may not actually be shut down until Wait() succeeds.
-func (computeSystem *System) Shutdown() (err error) {
+func (computeSystem *System) Shutdown() (_ bool, err error) {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
 	operation := "hcsshim::ComputeSystem::Shutdown"
 	computeSystem.logOperationBegin(operation)
 	defer func() {
-		if IsAlreadyClosed(err) || IsAlreadyStopped(err) || IsPending(err) {
-			computeSystem.logOperationEnd(operation, nil)
-		} else {
-			computeSystem.logOperationEnd(operation, err)
-		}
+		computeSystem.logOperationEnd(operation, err)
 	}()
 
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, "Shutdown", "", ErrAlreadyClosed, nil)
+		return false, nil
 	}
 
 	var resultp *uint16
@@ -304,16 +295,18 @@ func (computeSystem *System) Shutdown() (err error) {
 		err = hcsShutdownComputeSystem(computeSystem.handle, "", &resultp)
 	})
 	events := processHcsResult(resultp)
-	if err != nil {
-		return makeSystemError(computeSystem, "Shutdown", "", err, events)
+	if IsAlreadyStopped(err) || IsNotExist(err) {
+		return false, nil
 	}
-
-	return nil
+	if err != nil && !IsPending(err) {
+		return false, makeSystemError(computeSystem, "Shutdown", "", err, events)
+	}
+	return true, nil
 }
 
 // Terminate requests a compute system terminate, if IsPending() on the error returned is true,
 // it may not actually be shut down until Wait() succeeds.
-func (computeSystem *System) Terminate() (err error) {
+func (computeSystem *System) Terminate() (_ bool, err error) {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
@@ -328,7 +321,7 @@ func (computeSystem *System) Terminate() (err error) {
 	}()
 
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, "Terminate", "", ErrAlreadyClosed, nil)
+		return false, nil
 	}
 
 	var resultp *uint16
@@ -336,19 +329,21 @@ func (computeSystem *System) Terminate() (err error) {
 		err = hcsTerminateComputeSystem(computeSystem.handle, "", &resultp)
 	})
 	events := processHcsResult(resultp)
-	if err != nil && err != ErrVmcomputeAlreadyStopped {
-		return makeSystemError(computeSystem, "Terminate", "", err, events)
+	if IsAlreadyStopped(err) || IsNotExist(err) {
+		return false, nil
 	}
-
-	return nil
+	if err != nil && !IsPending(err) {
+		return false, makeSystemError(computeSystem, "Terminate", "", err, events)
+	}
+	return true, nil
 }
 
 // waitBackground waits for the compute system exit notification. Once received
-// sets `computeSystem.waitError` (if any) and unblocks all `Wait`,
-// `WaitExpectedError`, and `WaitTimeout` calls.
+// sets `computeSystem.waitError` (if any) and unblocks all `Wait` and
+// `WaitExpectedError` calls.
 //
-// This MUST be called exactly once per `computeSystem.handle` but `Wait`,
-// `WaitExpectedError`, and `WaitTimeout` are safe to call multiple times.
+// This MUST be called exactly once per `computeSystem.handle` but `Wait` and
+// `WaitExpectedError` are safe to call multiple times.
 func (computeSystem *System) waitBackground() {
 	computeSystem.waitError = waitForNotification(computeSystem.callbackNumber, hcsNotificationSystemExited, nil)
 	computeSystem.closedWaitOnce.Do(func() {
@@ -358,16 +353,20 @@ func (computeSystem *System) waitBackground() {
 
 // Wait synchronously waits for the compute system to shutdown or terminate. If
 // the compute system has already exited returns the previous error (if any).
-func (computeSystem *System) Wait() (err error) {
+func (computeSystem *System) Wait(ctx context.Context) (err error) {
 	operation := "hcsshim::ComputeSystem::Wait"
 	computeSystem.logOperationBegin(operation)
 	defer func() { computeSystem.logOperationEnd(operation, err) }()
 
-	<-computeSystem.waitBlock
-	if computeSystem.waitError != nil {
-		return makeSystemError(computeSystem, "Wait", "", computeSystem.waitError, nil)
+	select {
+	case <-computeSystem.waitBlock:
+		err = computeSystem.waitError
+	case <-ctx.Done():
+		err = ctx.Err()
 	}
-
+	if err != nil {
+		return makeSystemError(computeSystem, "Wait", "", err, nil)
+	}
 	return nil
 }
 
@@ -385,25 +384,6 @@ func (computeSystem *System) WaitExpectedError(expected error) (err error) {
 		return makeSystemError(computeSystem, "WaitExpectedError", "", computeSystem.waitError, nil)
 	}
 	return nil
-}
-
-// WaitTimeout synchronously waits for the compute system to terminate or the
-// duration to elapse. If the timeout expires, `IsTimeout(err) == true`. If
-// the compute system has already exited returns the previous error (if any).
-func (computeSystem *System) WaitTimeout(timeout time.Duration) (err error) {
-	operation := "hcsshim::ComputeSystem::WaitTimeout"
-	computeSystem.logOperationBegin(operation)
-	defer func() { computeSystem.logOperationEnd(operation, err) }()
-
-	select {
-	case <-computeSystem.waitBlock:
-		if computeSystem.waitError != nil {
-			return makeSystemError(computeSystem, "WaitTimeout", "", computeSystem.waitError, nil)
-		}
-		return nil
-	case <-time.After(timeout):
-		return makeSystemError(computeSystem, "WaitTimeout", "", ErrTimeout, nil)
-	}
 }
 
 func (computeSystem *System) Properties(types ...schema1.PropertyType) (_ *schema1.ContainerProperties, err error) {
