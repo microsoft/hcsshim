@@ -18,7 +18,9 @@ type Process struct {
 	handle         hcsProcess
 	processID      int
 	system         *System
-	cachedPipes    *cachedPipes
+	stdin          io.WriteCloser
+	stdout         io.ReadCloser
+	stderr         io.ReadCloser
 	callbackNumber uintptr
 
 	logctx logrus.Fields
@@ -39,12 +41,6 @@ func newProcess(process hcsProcess, processID int, computeSystem *System) *Proce
 		},
 		waitBlock: make(chan struct{}),
 	}
-}
-
-type cachedPipes struct {
-	stdIn  syscall.Handle
-	stdOut syscall.Handle
-	stdErr syscall.Handle
 }
 
 type processModifyRequest struct {
@@ -319,10 +315,10 @@ func (process *Process) ExitCode() (_ int, err error) {
 	return int(properties.ExitCode), nil
 }
 
-// Stdio returns the stdin, stdout, and stderr pipes, respectively. Closing
+// StdioLegacy returns the stdin, stdout, and stderr pipes, respectively. Closing
 // these pipes does not close the underlying pipes; it should be possible to
 // call this multiple times to get multiple interfaces.
-func (process *Process) Stdio() (_ io.WriteCloser, _ io.ReadCloser, _ io.ReadCloser, err error) {
+func (process *Process) StdioLegacy() (_ io.WriteCloser, _ io.ReadCloser, _ io.ReadCloser, err error) {
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
 
@@ -334,34 +330,28 @@ func (process *Process) Stdio() (_ io.WriteCloser, _ io.ReadCloser, _ io.ReadClo
 		return nil, nil, nil, makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
-	var stdIn, stdOut, stdErr syscall.Handle
-
-	if process.cachedPipes == nil {
-		var (
-			processInfo hcsProcessInformation
-			resultp     *uint16
-		)
-		err = hcsGetProcessInfo(process.handle, &processInfo, &resultp)
-		events := processHcsResult(resultp)
-		if err != nil {
-			return nil, nil, nil, makeProcessError(process, operation, err, events)
-		}
-
-		stdIn, stdOut, stdErr = processInfo.StdInput, processInfo.StdOutput, processInfo.StdError
-	} else {
-		// Use cached pipes
-		stdIn, stdOut, stdErr = process.cachedPipes.stdIn, process.cachedPipes.stdOut, process.cachedPipes.stdErr
-
-		// Invalidate the cache
-		process.cachedPipes = nil
+	var (
+		processInfo hcsProcessInformation
+		resultp     *uint16
+	)
+	err = hcsGetProcessInfo(process.handle, &processInfo, &resultp)
+	events := processHcsResult(resultp)
+	if err != nil {
+		return nil, nil, nil, makeProcessError(process, operation, err, events)
 	}
 
-	pipes, err := makeOpenFiles([]syscall.Handle{stdIn, stdOut, stdErr})
+	pipes, err := makeOpenFiles([]syscall.Handle{processInfo.StdInput, processInfo.StdOutput, processInfo.StdError})
 	if err != nil {
 		return nil, nil, nil, makeProcessError(process, operation, err, nil)
 	}
 
 	return pipes[0], pipes[1], pipes[2], nil
+}
+
+// Stdio returns the stdin, stdout, and stderr pipes, respectively.
+// To close them, close the process handle.
+func (process *Process) Stdio() (stdin io.Writer, stdout, stderr io.Reader) {
+	return process.stdin, process.stdout, process.stderr
 }
 
 // CloseStdin closes the write side of the stdin pipe so that the process is
@@ -399,6 +389,9 @@ func (process *Process) CloseStdin() (err error) {
 		return makeProcessError(process, operation, err, events)
 	}
 
+	if process.stdin != nil {
+		process.stdin.Close()
+	}
 	return nil
 }
 
@@ -415,6 +408,16 @@ func (process *Process) Close() (err error) {
 	// Don't double free this
 	if process.handle == 0 {
 		return nil
+	}
+
+	if process.stdin != nil {
+		process.stdin.Close()
+	}
+	if process.stdout != nil {
+		process.stdout.Close()
+	}
+	if process.stderr != nil {
+		process.stderr.Close()
 	}
 
 	if err = process.unregisterCallback(); err != nil {

@@ -52,7 +52,7 @@ func (process *process) ResizeConsole(width, height uint16) error {
 // these pipes does not close the underlying pipes; it should be possible to
 // call this multiple times to get multiple interfaces.
 func (process *process) Stdio() (io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
-	stdin, stdout, stderr, err := process.p.Stdio()
+	stdin, stdout, stderr, err := process.p.StdioLegacy()
 	if err != nil {
 		err = convertProcessError(err, process)
 	}

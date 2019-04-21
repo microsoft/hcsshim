@@ -538,12 +538,18 @@ func (computeSystem *System) CreateProcess(c interface{}) (_ *Process, err error
 		Debug("HCS ComputeSystem CreateProcess PID")
 
 	process := newProcess(processHandle, int(processInfo.ProcessId), computeSystem)
-	process.cachedPipes = &cachedPipes{
-		stdIn:  processInfo.StdInput,
-		stdOut: processInfo.StdOutput,
-		stdErr: processInfo.StdError,
+	defer func() {
+		if err != nil {
+			process.Close()
+		}
+	}()
+	pipes, err := makeOpenFiles([]syscall.Handle{processInfo.StdInput, processInfo.StdOutput, processInfo.StdError})
+	if err != nil {
+		return nil, makeSystemError(computeSystem, "CreateProcess", "", err, nil)
 	}
-
+	process.stdin = pipes[0]
+	process.stdout = pipes[1]
+	process.stderr = pipes[2]
 	if err = process.registerCallback(); err != nil {
 		return nil, makeSystemError(computeSystem, "CreateProcess", "", err, nil)
 	}
