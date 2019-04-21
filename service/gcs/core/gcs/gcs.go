@@ -587,7 +587,7 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, conSettings 
 		}()
 
 		var console *os.File
-		console, err = os.OpenFile(consolePath, os.O_RDWR, 0777)
+		console, err = os.OpenFile(consolePath, os.O_RDWR|syscall.O_NOCTTY, 0777)
 		if err != nil {
 			return -1, errors.Wrap(err, "failed to open console file for external process")
 		}
@@ -597,6 +597,13 @@ func (c *gcsCore) RunExternalProcess(params prot.ProcessParameters, conSettings 
 		cmd.Stdin = console
 		cmd.Stdout = console
 		cmd.Stderr = console
+		// Make the child process a session leader and adopt the pty as
+		// the controlling terminal.
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			Setsid:  true,
+			Setctty: true,
+			Ctty:    syscall.Stdin,
+		}
 	} else {
 		var fileSet *stdio.FileSet
 		fileSet, err = stdioSet.Files()
