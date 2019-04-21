@@ -9,6 +9,7 @@ import (
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/mount"
@@ -323,6 +324,35 @@ func (s *service) execInternal(ctx context.Context, req *task.ExecProcessRequest
 		return nil, err
 	}
 	return empty, nil
+}
+
+func (s *service) diagExecInHostInternal(ctx context.Context, req *shimdiag.ExecProcessRequest) (*shimdiag.ExecProcessResponse, error) {
+	if req.Terminal && req.Stderr != "" {
+		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "if using terminal, stderr must be empty")
+	}
+	var obj interface{}
+	if s.isSandbox {
+		p, err := s.getPod()
+		if err != nil {
+			return nil, err
+		}
+		obj = p
+	} else {
+		t, err := s.getTask("")
+		if err != nil {
+			return nil, err
+		}
+		obj = t
+	}
+	diag, ok := obj.(taskDiagnostics)
+	if !ok {
+		return nil, errdefs.ErrNotImplemented
+	}
+	ec, err := diag.ExecInHost(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return &shimdiag.ExecProcessResponse{ExitCode: int32(ec)}, nil
 }
 
 func (s *service) resizePtyInternal(ctx context.Context, req *task.ResizePtyRequest) (*google_protobuf1.Empty, error) {

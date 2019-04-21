@@ -30,6 +30,10 @@ plugins = ["grpc", "fieldpath"]
   "google/protobuf/timestamp.proto" = "github.com/gogo/protobuf/types"
   "google/protobuf/duration.proto" = "github.com/gogo/protobuf/types"
 
+[[overrides]]
+prefixes = ["github.com/Microsoft/hcsshim/internal/shimdiag"]
+plugins = ["ttrpc"]
+
 # Lock down runhcs config
 
 [[descriptors]]

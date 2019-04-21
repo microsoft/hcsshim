@@ -13,6 +13,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/schema1"
+	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 	eventstypes "github.com/containerd/containerd/api/events"
@@ -606,4 +607,13 @@ func (ht *hcsTask) closeHost() {
 			})
 		close(ht.closed)
 	})
+}
+
+var _ taskDiagnostics = &hcsTask{}
+
+func (ht *hcsTask) ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (int, error) {
+	if ht.host == nil {
+		return 0, errors.New("task is not isolated")
+	}
+	return execInUvm(ctx, ht.host, req)
 }

@@ -11,6 +11,7 @@ import (
 	"unsafe"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/ttrpc"
@@ -112,6 +113,7 @@ var serveCommand = cli.Command{
 		}
 		defer s.Close()
 		task.RegisterTaskService(s, svc)
+		shimdiag.RegisterShimDiagService(s, svc)
 
 		sl, err := winio.ListenPipe(socket, nil)
 		if err != nil {
