@@ -7,6 +7,7 @@ import weak "gogoproto/gogo.proto";
 
 service ShimDiag {
     rpc DiagExecInHost(ExecProcessRequest) returns (ExecProcessResponse);
+    rpc DiagStacks(StacksRequest) returns (StacksResponse);
 }
 
 message ExecProcessRequest {
@@ -20,4 +21,11 @@ message ExecProcessRequest {
 
 message ExecProcessResponse {
     int32 exit_code = 1;
+}
+
+message StacksRequest {
+}
+
+message StacksResponse {
+    string stacks = 1;
 }

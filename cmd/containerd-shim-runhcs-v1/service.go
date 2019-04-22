@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"runtime"
 	"sync"
 	"sync/atomic"
 
@@ -329,4 +330,22 @@ func (s *service) Shutdown(ctx context.Context, req *task.ShutdownRequest) (_ *g
 
 	r, e := s.shutdownInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
+}
+
+func (s *service) DiagStacks(ctx context.Context, req *shimdiag.StacksRequest) (_ *shimdiag.StacksResponse, err error) {
+	defer panicRecover()
+	const activity = "DiagStacks"
+	af := logrus.Fields{}
+	beginActivity(activity, af)
+	defer func() { endActivity(activity, af, err) }()
+
+	buf := make([]byte, 4096)
+	for {
+		buf = buf[:runtime.Stack(buf, true)]
+		if len(buf) < cap(buf) {
+			break
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+	return &shimdiag.StacksResponse{Stacks: string(buf)}, nil
 }

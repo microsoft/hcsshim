@@ -108,9 +108,88 @@ func (m *ExecProcessResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ExecProcessResponse proto.InternalMessageInfo
 
+type StacksRequest struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *StacksRequest) Reset()      { *m = StacksRequest{} }
+func (*StacksRequest) ProtoMessage() {}
+func (*StacksRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_c7933dc6ffbb8784, []int{2}
+}
+func (m *StacksRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StacksRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_StacksRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *StacksRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StacksRequest.Merge(m, src)
+}
+func (m *StacksRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *StacksRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_StacksRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StacksRequest proto.InternalMessageInfo
+
+type StacksResponse struct {
+	Stacks               string   `protobuf:"bytes,1,opt,name=stacks,proto3" json:"stacks,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *StacksResponse) Reset()      { *m = StacksResponse{} }
+func (*StacksResponse) ProtoMessage() {}
+func (*StacksResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_c7933dc6ffbb8784, []int{3}
+}
+func (m *StacksResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StacksResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_StacksResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *StacksResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StacksResponse.Merge(m, src)
+}
+func (m *StacksResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *StacksResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_StacksResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StacksResponse proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterType((*ExecProcessRequest)(nil), "containerd.runhcs.v1.diag.ExecProcessRequest")
 	proto.RegisterType((*ExecProcessResponse)(nil), "containerd.runhcs.v1.diag.ExecProcessResponse")
+	proto.RegisterType((*StacksRequest)(nil), "containerd.runhcs.v1.diag.StacksRequest")
+	proto.RegisterType((*StacksResponse)(nil), "containerd.runhcs.v1.diag.StacksResponse")
 }
 
 func init() {
@@ -118,29 +197,32 @@ func init() {
 }
 
 var fileDescriptor_c7933dc6ffbb8784 = []byte{
-	// 347 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x91, 0x3f, 0x4f, 0xeb, 0x30,
-	0x14, 0xc5, 0xeb, 0xd7, 0x3f, 0x2f, 0xf5, 0xf0, 0x06, 0xbf, 0xea, 0xc9, 0xaf, 0x48, 0x51, 0xd4,
-	0x29, 0x0b, 0x8e, 0x28, 0x03, 0x03, 0x62, 0xe1, 0x8f, 0x04, 0x03, 0x12, 0x84, 0x05, 0xb1, 0xa0,
-	0xd4, 0x36, 0x89, 0x45, 0xe3, 0x5b, 0x6c, 0x07, 0x2a, 0xb1, 0xf0, 0x61, 0xf8, 0x30, 0x1d, 0x19,
-	0x19, 0x69, 0x3e, 0x09, 0x4a, 0xfa, 0x47, 0x42, 0x08, 0x09, 0x26, 0x9f, 0xdf, 0xd1, 0xb9, 0xd6,
-	0xd5, 0x3d, 0x78, 0x2f, 0x55, 0x2e, 0x2b, 0x46, 0x8c, 0x43, 0x1e, 0x9d, 0x2a, 0x6e, 0xc0, 0xc2,
-	0x8d, 0x8b, 0x32, 0x6e, 0x6d, 0xa6, 0xf2, 0x48, 0x69, 0x27, 0x8d, 0x4e, 0xc6, 0x51, 0x45, 0x42,
-	0x25, 0xe9, 0x5a, 0xb0, 0x89, 0x01, 0x07, 0xe4, 0x3f, 0x07, 0xed, 0x12, 0xa5, 0xa5, 0x11, 0xcc,
-	0x14, 0x3a, 0xe3, 0x96, 0xdd, 0x6f, 0xb1, 0x2a, 0xd0, 0xef, 0xa5, 0x90, 0x42, 0x9d, 0x8a, 0x2a,
-	0xb5, 0x18, 0x18, 0x3c, 0x23, 0x4c, 0x8e, 0xa6, 0x92, 0x9f, 0x19, 0xe0, 0xd2, 0xda, 0x58, 0xde,
-	0x15, 0xd2, 0x3a, 0x42, 0x70, 0x2b, 0x31, 0xa9, 0xa5, 0x28, 0x68, 0x86, 0xdd, 0xb8, 0xd6, 0x84,
-	0xe2, 0xdf, 0x0f, 0x60, 0x6e, 0x85, 0x32, 0xf4, 0x57, 0x80, 0xc2, 0x6e, 0xbc, 0x42, 0xd2, 0xc7,
-	0x9e, 0x93, 0x26, 0x57, 0x3a, 0x19, 0xd3, 0x66, 0x80, 0x42, 0x2f, 0x5e, 0x33, 0xe9, 0xe1, 0xb6,
-	0x75, 0x42, 0x69, 0xda, 0xaa, 0x67, 0x16, 0x40, 0xfe, 0xe1, 0x8e, 0x75, 0x02, 0x0a, 0x47, 0xdb,
-	0xb5, 0xbd, 0xa4, 0xa5, 0x2f, 0x8d, 0xa1, 0x9d, 0xb5, 0x2f, 0x8d, 0x19, 0x0c, 0xf1, 0xdf, 0x0f,
-	0x5b, 0xda, 0x09, 0x68, 0x2b, 0xc9, 0x06, 0xee, 0xca, 0xa9, 0x72, 0xd7, 0x1c, 0x84, 0xa4, 0x28,
-	0x40, 0x61, 0x3b, 0xf6, 0x2a, 0xe3, 0x00, 0x84, 0x1c, 0x3e, 0x62, 0xef, 0x22, 0x53, 0xf9, 0xa1,
-	0x4a, 0x52, 0x02, 0xf8, 0x4f, 0xf5, 0x56, 0x7f, 0x9c, 0xe8, 0x63, 0xb0, 0x8e, 0x6c, 0xb2, 0x2f,
-	0x4f, 0xc5, 0x3e, 0x1f, 0xa4, 0xcf, 0xbe, 0x1b, 0x5f, 0x6c, 0xb6, 0x7f, 0x3e, 0x9b, 0xfb, 0x8d,
-	0xd7, 0xb9, 0xdf, 0x78, 0x2a, 0x7d, 0x34, 0x2b, 0x7d, 0xf4, 0x52, 0xfa, 0xe8, 0xad, 0xf4, 0xd1,
-	0xd5, 0xce, 0xcf, 0x1a, 0xde, 0x5d, 0x89, 0xcb, 0xc6, 0xa8, 0x53, 0x77, 0xb6, 0xfd, 0x1e, 0x00,
-	0x00, 0xff, 0xff, 0x2f, 0xb6, 0x3c, 0xd2, 0x25, 0x02, 0x00, 0x00,
+	// 391 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x52, 0xcf, 0x8b, 0xd4, 0x30,
+	0x18, 0x9d, 0xb8, 0x3b, 0x63, 0x27, 0xe0, 0x0a, 0x71, 0x91, 0x58, 0xa1, 0x94, 0x9e, 0xea, 0xc1,
+	0x14, 0xd7, 0x83, 0x07, 0xf1, 0xe2, 0x0f, 0xd0, 0x83, 0xa0, 0xdd, 0x8b, 0x78, 0x91, 0x6c, 0x1a,
+	0xdb, 0xb0, 0xdb, 0x7c, 0x63, 0x92, 0xea, 0x1c, 0xfd, 0x63, 0xfc, 0x63, 0xe6, 0xe8, 0xd1, 0x93,
+	0x38, 0xfd, 0x4b, 0x24, 0x69, 0x3b, 0x30, 0x88, 0x32, 0x9e, 0xf2, 0xde, 0xe3, 0x3d, 0xde, 0x97,
+	0x8f, 0x0f, 0x3f, 0xa9, 0x95, 0x6b, 0xba, 0x0b, 0x26, 0xa0, 0x2d, 0x5e, 0x2b, 0x61, 0xc0, 0xc2,
+	0x47, 0x57, 0x34, 0xc2, 0xda, 0x46, 0xb5, 0x85, 0xd2, 0x4e, 0x1a, 0xcd, 0xaf, 0x0a, 0xcf, 0x2a,
+	0xc5, 0xeb, 0x1d, 0x60, 0x2b, 0x03, 0x0e, 0xc8, 0x1d, 0x01, 0xda, 0x71, 0xa5, 0xa5, 0xa9, 0x98,
+	0xe9, 0x74, 0x23, 0x2c, 0xfb, 0xfc, 0x80, 0x79, 0x43, 0x7c, 0x5a, 0x43, 0x0d, 0xc1, 0x55, 0x78,
+	0x34, 0x04, 0xb2, 0x6f, 0x08, 0x93, 0x17, 0x6b, 0x29, 0xde, 0x18, 0x10, 0xd2, 0xda, 0x52, 0x7e,
+	0xea, 0xa4, 0x75, 0x84, 0xe0, 0x63, 0x6e, 0x6a, 0x4b, 0x51, 0x7a, 0x94, 0x2f, 0xcb, 0x80, 0x09,
+	0xc5, 0xd7, 0xbf, 0x80, 0xb9, 0xac, 0x94, 0xa1, 0xd7, 0x52, 0x94, 0x2f, 0xcb, 0x89, 0x92, 0x18,
+	0x47, 0x4e, 0x9a, 0x56, 0x69, 0x7e, 0x45, 0x8f, 0x52, 0x94, 0x47, 0xe5, 0x8e, 0x93, 0x53, 0x3c,
+	0xb7, 0xae, 0x52, 0x9a, 0x1e, 0x87, 0xcc, 0x40, 0xc8, 0x6d, 0xbc, 0xb0, 0xae, 0x82, 0xce, 0xd1,
+	0x79, 0x90, 0x47, 0x36, 0xea, 0xd2, 0x18, 0xba, 0xd8, 0xe9, 0xd2, 0x98, 0xec, 0x0c, 0xdf, 0xda,
+	0x9b, 0xd2, 0xae, 0x40, 0x5b, 0x49, 0xee, 0xe2, 0xa5, 0x5c, 0x2b, 0xf7, 0x41, 0x40, 0x25, 0x29,
+	0x4a, 0x51, 0x3e, 0x2f, 0x23, 0x2f, 0x3c, 0x83, 0x4a, 0x66, 0x37, 0xf1, 0x8d, 0x73, 0xc7, 0xc5,
+	0xe5, 0xf4, 0xa9, 0x2c, 0xc7, 0x27, 0x93, 0x30, 0xe6, 0x43, 0x9d, 0x57, 0x42, 0x38, 0xd4, 0x79,
+	0x76, 0xf6, 0x13, 0xe1, 0xe8, 0xbc, 0x51, 0xed, 0x73, 0xc5, 0x6b, 0x02, 0xf8, 0xc4, 0xbf, 0xbe,
+	0xff, 0x95, 0x7e, 0x09, 0xd6, 0x91, 0xfb, 0xec, 0xaf, 0x6b, 0x66, 0x7f, 0x2e, 0x33, 0x66, 0x87,
+	0xda, 0xc7, 0xa9, 0x38, 0xc6, 0xbe, 0x70, 0x98, 0x95, 0xe4, 0xff, 0x48, 0xef, 0xfd, 0x2f, 0xbe,
+	0x77, 0x80, 0x73, 0xa8, 0x78, 0xfa, 0x76, 0xb3, 0x4d, 0x66, 0x3f, 0xb6, 0xc9, 0xec, 0x6b, 0x9f,
+	0xa0, 0x4d, 0x9f, 0xa0, 0xef, 0x7d, 0x82, 0x7e, 0xf5, 0x09, 0x7a, 0xff, 0xe8, 0xff, 0x0e, 0xf0,
+	0xf1, 0x04, 0xde, 0xcd, 0x2e, 0x16, 0xe1, 0xa4, 0x1e, 0xfe, 0x0e, 0x00, 0x00, 0xff, 0xff, 0x96,
+	0xdc, 0x49, 0x53, 0xc4, 0x02, 0x00, 0x00,
 }
 
 func (m *ExecProcessRequest) Marshal() (dAtA []byte, err error) {
@@ -239,6 +321,54 @@ func (m *ExecProcessResponse) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
+func (m *StacksRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *StacksRequest) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *StacksResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *StacksResponse) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Stacks) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintShimdiag(dAtA, i, uint64(len(m.Stacks)))
+		i += copy(dAtA[i:], m.Stacks)
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
 func encodeVarintShimdiag(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
@@ -300,6 +430,34 @@ func (m *ExecProcessResponse) Size() (n int) {
 	return n
 }
 
+func (m *StacksRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *StacksResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Stacks)
+	if l > 0 {
+		n += 1 + l + sovShimdiag(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func sovShimdiag(x uint64) (n int) {
 	for {
 		n++
@@ -340,6 +498,27 @@ func (this *ExecProcessResponse) String() string {
 	}, "")
 	return s
 }
+func (this *StacksRequest) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&StacksRequest{`,
+		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *StacksResponse) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&StacksResponse{`,
+		`Stacks:` + fmt.Sprintf("%v", this.Stacks) + `,`,
+		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
+		`}`,
+	}, "")
+	return s
+}
 func valueToStringShimdiag(v interface{}) string {
 	rv := reflect.ValueOf(v)
 	if rv.IsNil() {
@@ -351,6 +530,7 @@ func valueToStringShimdiag(v interface{}) string {
 
 type ShimDiagService interface {
 	DiagExecInHost(ctx context.Context, req *ExecProcessRequest) (*ExecProcessResponse, error)
+	DiagStacks(ctx context.Context, req *StacksRequest) (*StacksResponse, error)
 }
 
 func RegisterShimDiagService(srv *github_com_containerd_ttrpc.Server, svc ShimDiagService) {
@@ -361,6 +541,13 @@ func RegisterShimDiagService(srv *github_com_containerd_ttrpc.Server, svc ShimDi
 				return nil, err
 			}
 			return svc.DiagExecInHost(ctx, &req)
+		},
+		"DiagStacks": func(ctx context.Context, unmarshal func(interface{}) error) (interface{}, error) {
+			var req StacksRequest
+			if err := unmarshal(&req); err != nil {
+				return nil, err
+			}
+			return svc.DiagStacks(ctx, &req)
 		},
 	})
 }
@@ -378,6 +565,14 @@ func NewShimDiagClient(client *github_com_containerd_ttrpc.Client) ShimDiagServi
 func (c *shimDiagClient) DiagExecInHost(ctx context.Context, req *ExecProcessRequest) (*ExecProcessResponse, error) {
 	var resp ExecProcessResponse
 	if err := c.client.Call(ctx, "containerd.runhcs.v1.diag.ShimDiag", "DiagExecInHost", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func (c *shimDiagClient) DiagStacks(ctx context.Context, req *StacksRequest) (*StacksResponse, error) {
+	var resp StacksResponse
+	if err := c.client.Call(ctx, "containerd.runhcs.v1.diag.ShimDiag", "DiagStacks", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -664,6 +859,146 @@ func (m *ExecProcessResponse) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipShimdiag(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthShimdiag
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthShimdiag
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *StacksRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowShimdiag
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: StacksRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: StacksRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipShimdiag(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthShimdiag
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthShimdiag
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *StacksResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowShimdiag
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: StacksResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: StacksResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Stacks", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowShimdiag
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthShimdiag
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthShimdiag
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Stacks = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipShimdiag(dAtA[iNdEx:])
