@@ -8,7 +8,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/copywithtimeout"
 	"github.com/Microsoft/hcsshim/internal/hcs"
-	"github.com/Microsoft/hcsshim/internal/schema2"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
@@ -108,12 +108,7 @@ func CreateProcess(opts *ProcessOptions) (*hcs.Process, *ByteCounts, error) {
 		return nil, nil, err
 	}
 
-	processStdin, processStdout, processStderr, err := proc.Stdio()
-	if err != nil {
-		proc.Kill() // Should this have a timeout?
-		proc.Close()
-		return nil, nil, fmt.Errorf("failed to get stdio pipes for process %+v: %s", processConfig, err)
-	}
+	processStdin, processStdout, processStderr := proc.Stdio()
 
 	// Send the data into the process's stdin
 	if opts.Stdin != nil {

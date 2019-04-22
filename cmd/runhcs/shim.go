@@ -16,7 +16,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/internal/runhcs"
-	"github.com/Microsoft/hcsshim/internal/schema2"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -217,10 +217,8 @@ var shimCommand = cli.Command{
 			return err
 		}
 
-		cstdin, cstdout, cstderr, err := p.Stdio()
-		if err != nil {
-			return err
-		}
+		defer p.Close()
+		cstdin, cstdout, cstderr := p.Stdio()
 
 		if !exec {
 			err = stateKey.Set(c.ID, keyInitPid, p.Pid())
@@ -252,7 +250,6 @@ var shimCommand = cli.Command{
 		if cstdin != nil {
 			go func() {
 				io.Copy(cstdin, stdin)
-				cstdin.Close()
 				p.CloseStdin()
 			}()
 		}
@@ -262,7 +259,6 @@ var shimCommand = cli.Command{
 			go func() {
 				io.Copy(stdout, cstdout)
 				stdout.Close()
-				cstdout.Close()
 				wg.Done()
 			}()
 		}
@@ -272,7 +268,6 @@ var shimCommand = cli.Command{
 			go func() {
 				io.Copy(stderr, cstderr)
 				stderr.Close()
-				cstderr.Close()
 				wg.Done()
 			}()
 		}

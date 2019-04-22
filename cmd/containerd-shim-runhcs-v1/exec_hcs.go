@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -125,13 +126,13 @@ type hcsExec struct {
 
 	// sl is the state lock that MUST be held to safely read/write any of the
 	// following members.
-	sl             sync.Mutex
-	state          shimExecState
-	pid            int
-	exitStatus     uint32
-	exitedAt       time.Time
-	p              *hcs.Process
-	stdout, stderr io.Closer
+	sl         sync.Mutex
+	state      shimExecState
+	pid        int
+	exitStatus uint32
+	exitedAt   time.Time
+	p          *hcs.Process
+	pCloseOnce sync.Once
 
 	// exited is a wait block which waits async for the process to exit.
 	exited     chan struct{}
@@ -181,6 +182,17 @@ func (he *hcsExec) Status() *task.StateResponse {
 		ExitStatus: he.exitStatus,
 		ExitedAt:   he.exitedAt,
 	}
+}
+
+func copyAndLog(w io.Writer, r io.Reader, e *logrus.Entry, msg string) {
+	n, err := io.Copy(w, r)
+	lvl := logrus.DebugLevel
+	e = e.WithField("bytes", n)
+	if err != nil {
+		lvl = logrus.ErrorLevel
+		e = e.WithError(err)
+	}
+	e.Log(lvl, msg)
 }
 
 func (he *hcsExec) Start(ctx context.Context) (err error) {
@@ -272,86 +284,50 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 		}
 	}()
 
-	in, out, serr, err := he.p.Stdio()
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err != nil {
-			if in != nil {
-				in.Close()
-			}
-			if out != nil {
-				out.Close()
-			}
-			if serr != nil {
-				serr.Close()
-			}
-		}
-	}()
+	in, out, serr := he.p.Stdio()
 
 	if he.io.StdinPath() != "" {
 		if in == nil {
 			return errors.New("hcsExec::Start - platform returned nil stdin pipe")
 		}
 		go func() {
-			io.Copy(in, he.io.Stdin())
-			logrus.WithFields(logrus.Fields{
-				"tid": he.tid,
-				"eid": he.id,
-			}).Debug("hcsExec::Start::Stdin - Copy completed")
-			in.Close()
+			copyAndLog(in, he.io.Stdin(),
+				logrus.WithFields(logrus.Fields{
+					"tid":  he.tid,
+					"eid":  he.id,
+					"file": "stdin",
+				}), "hcsExec::Start - Copy completed")
 			he.p.CloseStdin()
 			he.io.CloseStdin()
 		}()
 	}
 
-	if he.io.StdoutPath() != "" {
-		if out == nil {
-			return errors.New("hcsExec::Start - platform returned nil stdout pipe")
+	copyOut := func(w io.Writer, r io.Reader, name string) error {
+		if r == nil {
+			return fmt.Errorf("hcsExec::Start - platform returned nil %s pipe", name)
 		}
-		he.stdout = out
 		he.ioWg.Add(1)
 		go func() {
-			io.Copy(he.io.Stdout(), out)
-			logrus.WithFields(logrus.Fields{
-				"tid": he.tid,
-				"eid": he.id,
-			}).Debug("hcsExec::Start::Stdout - Copy completed")
+			copyAndLog(w, r, logrus.WithFields(logrus.Fields{
+				"tid":  he.tid,
+				"eid":  he.id,
+				"file": name,
+			}), "hcsExec::Start - Copy completed")
 			he.ioWg.Done()
-
-			// Close the stdout io handle if not closed.
-			he.sl.Lock()
-			if he.stdout != nil {
-				he.stdout.Close()
-				he.stdout = nil
-			}
-			he.sl.Unlock()
 		}()
+		return nil
+	}
+
+	if he.io.StdoutPath() != "" {
+		if err = copyOut(he.io.Stdout(), out, "stdout"); err != nil {
+			return err
+		}
 	}
 
 	if he.io.StderrPath() != "" {
-		if serr == nil {
-			return errors.New("hcsExec::Start - platform returned nil stderr pipe")
+		if err = copyOut(he.io.Stderr(), serr, "stderr"); err != nil {
+			return err
 		}
-		he.stderr = serr
-		he.ioWg.Add(1)
-		go func() {
-			io.Copy(he.io.Stderr(), serr)
-			logrus.WithFields(logrus.Fields{
-				"tid": he.tid,
-				"eid": he.id,
-			}).Debug("hcsExec::Start::Stderr - Copy completed")
-			he.ioWg.Done()
-
-			// Close the stderr io handle if not closed.
-			he.sl.Lock()
-			if he.stderr != nil {
-				he.stderr.Close()
-				he.stderr = nil
-			}
-			he.sl.Unlock()
-		}()
 	}
 
 	// Assign the PID and transition the state.
@@ -613,9 +589,6 @@ func (he *hcsExec) waitForExit() {
 		}).Debug("hcsExec::waitForExit - Exited")
 	}
 
-	// Close the process handle (we will never reference it again)
-	he.p.Close()
-
 	he.sl.Lock()
 	he.state = shimExecStateExited
 	he.exitStatus = uint32(code)
@@ -631,28 +604,25 @@ func (he *hcsExec) waitForExit() {
 		const processCopyTimeout = time.Second * 1
 
 		time.Sleep(processCopyTimeout)
-		he.sl.Lock()
-		defer he.sl.Unlock()
-		if he.stdout != nil || he.stderr != nil {
+		// Close the process to cancel any reads to stdout or stderr.
+		he.pCloseOnce.Do(func() {
 			logrus.WithFields(logrus.Fields{
 				"tid": he.tid,
 				"eid": he.id,
 			}).Warn("hcsExec::waitForExit - timed out waiting for ioRelay to complete")
 
-			if he.stdout != nil {
-				he.stdout.Close()
-				he.stdout = nil
-			}
-			if he.stderr != nil {
-				he.stderr.Close()
-				he.stderr = nil
-			}
-		}
+			he.p.Close()
+		})
 	}()
 
 	// Wait for all IO copies to complete and free the resources.
 	he.ioWg.Wait()
 	he.io.Close()
+
+	// Close the process handle.
+	he.pCloseOnce.Do(func() {
+		he.p.Close()
+	})
 
 	// Only send the `runtime.TaskExitEventTopic` notification if this is a true
 	// exec. For the `init` exec this is handled in task teardown.

@@ -27,6 +27,8 @@ func newNpipeIO(ctx context.Context, tid, eid string, stdin, stdout, stderr stri
 		stdout:   stdout,
 		stderr:   stderr,
 		terminal: terminal,
+		eid:      eid,
+		tid:      tid,
 	}
 	defer func() {
 		if err != nil {

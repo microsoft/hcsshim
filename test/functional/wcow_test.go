@@ -19,7 +19,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/internal/wcow"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/Microsoft/hcsshim/test/functional/utilities"
+	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
@@ -317,7 +317,7 @@ func runHcsCommand(t *testing.T,
 	if c == nil {
 		t.Fatalf("requested container to start is nil!")
 	}
-	p, err := c.CreateProcess(&hcsshim.ProcessConfig{
+	p, err := c.CreateProcess(&schema1.ProcessConfig{
 		CommandLine:      command,
 		WorkingDirectory: workdir,
 		CreateStdInPipe:  true,
@@ -339,10 +339,7 @@ func runHcsCommand(t *testing.T,
 	if exitCode != expectedExitCode {
 		t.Fatalf("Exit code from %s wasn't %d (%d)", command, expectedExitCode, exitCode)
 	}
-	_, o, _, err := p.Stdio()
-	if err != nil {
-		t.Fatalf("Failed to get Stdio handles for process: %s", err)
-	}
+	_, o, _ := p.Stdio()
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(o)
 	out := strings.TrimSpace(buf.String())

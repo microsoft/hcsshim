@@ -308,25 +308,24 @@ func execViaGcs(cs *hcs.System, c *cli.Context) error {
 		return err
 	}
 	defer p.Close()
-	_, pout, perr, err := p.Stdio()
-	if err != nil {
-		return err
-	}
+	_, pout, perr := p.Stdio()
 	ch := make(chan error)
 	n := 0
-	asyncCopy := func(w io.Writer, r io.ReadCloser) {
+	asyncCopy := func(w io.Writer, r io.Reader, name string) {
 		n++
 		go func() {
 			_, err := io.Copy(w, r)
-			r.Close()
+			if err != nil {
+				err = fmt.Errorf("%s: %s", name, err)
+			}
 			ch <- err
 		}()
 	}
 	if copyOut {
-		asyncCopy(os.Stdout, pout)
+		asyncCopy(os.Stdout, pout, "stdout")
 	}
 	if copyErr {
-		asyncCopy(os.Stdout, perr) // match non-GCS behavior and forward to stdout
+		asyncCopy(os.Stdout, perr, "stderr") // match non-GCS behavior and forward to stdout
 	}
 	if err = p.Wait(); err != nil {
 		return err
