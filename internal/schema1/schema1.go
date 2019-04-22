@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/go-winio/pkg/guid"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 )
 
 // ProcessConfig is used as both the input of Container.CreateProcess
@@ -135,7 +136,7 @@ type ContainerProperties struct {
 	SystemType                   string
 	Owner                        string
 	SiloGUID                     string                              `json:"SiloGuid,omitempty"`
-	RuntimeID                    string                              `json:"RuntimeId,omitempty"`
+	RuntimeID                    *guid.GUID                          `json:"RuntimeId,omitempty"`
 	IsRuntimeTemplate            bool                                `json:",omitempty"`
 	RuntimeImagePath             string                              `json:",omitempty"`
 	Stopped                      bool                                `json:",omitempty"`
