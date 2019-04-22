@@ -282,7 +282,9 @@ int reap_until(pid_t until_pid) {
                 }
                 return WEXITSTATUS(status);
             }
-            fputs("child exited by signal\n", stderr);
+            fputs("child exited by signal: ", stderr);
+            fputs(strsignal(WTERMSIG(status)), stderr);
+            fputs("\n", stderr);
             return 128 + WTERMSIG(status);
         }
     }
