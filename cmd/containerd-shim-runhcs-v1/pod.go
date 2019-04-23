@@ -9,6 +9,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 	eventstypes "github.com/containerd/containerd/api/events"
@@ -343,4 +344,13 @@ func (p *pod) KillTask(ctx context.Context, tid, eid string, signal uint32, all 
 		return t.KillExec(ctx, eid, signal, all)
 	})
 	return eg.Wait()
+}
+
+var _ taskDiagnostics = &pod{}
+
+func (p *pod) ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (int, error) {
+	if p.host == nil {
+		return 0, errors.New("pod is not isolated")
+	}
+	return execInUvm(ctx, p.host, req)
 }

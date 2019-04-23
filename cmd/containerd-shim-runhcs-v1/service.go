@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
 	google_protobuf1 "github.com/gogo/protobuf/types"
@@ -211,6 +212,24 @@ func (s *service) Exec(ctx context.Context, req *task.ExecProcessRequest) (_ *go
 	defer func() { endActivity(activity, af, err) }()
 
 	r, e := s.execInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
+}
+
+func (s *service) DiagExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (_ *shimdiag.ExecProcessResponse, err error) {
+	defer panicRecover()
+	const activity = "DiagExecInHost"
+	af := logrus.Fields{
+		"args":     req.Args,
+		"workdir":  req.Workdir,
+		"terminal": req.Terminal,
+		"stdin":    req.Stdin,
+		"stdout":   req.Stdout,
+		"stderr":   req.Stderr,
+	}
+	beginActivity(activity, af)
+	defer func() { endActivity(activity, af, err) }()
+
+	r, e := s.diagExecInHostInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
