@@ -7,6 +7,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	eventstypes "github.com/containerd/containerd/api/events"
 	"github.com/containerd/containerd/errdefs"
@@ -229,4 +230,11 @@ func (wpst *wcowPodSandboxTask) close() {
 			})
 		close(wpst.closed)
 	})
+}
+
+func (wpst *wcowPodSandboxTask) ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (int, error) {
+	if wpst.host == nil {
+		return 0, errors.New("task is not isolated")
+	}
+	return execInUvm(ctx, wpst.host, req)
 }

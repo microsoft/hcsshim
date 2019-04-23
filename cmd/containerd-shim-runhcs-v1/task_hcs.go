@@ -609,8 +609,6 @@ func (ht *hcsTask) closeHost() {
 	})
 }
 
-var _ taskDiagnostics = &hcsTask{}
-
 func (ht *hcsTask) ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (int, error) {
 	if ht.host == nil {
 		return 0, errors.New("task is not isolated")

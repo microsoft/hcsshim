@@ -5,9 +5,11 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
 )
 
 var _ = (shimTask)(&testShimTask{})
@@ -76,4 +78,8 @@ func (tst *testShimTask) Pids(ctx context.Context) ([]options.ProcessDetails, er
 
 func (tst *testShimTask) Wait(ctx context.Context) *task.StateResponse {
 	return tst.exec.Wait(ctx)
+}
+
+func (tst *testShimTask) ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (int, error) {
+	return 0, errors.New("not implemented")
 }
