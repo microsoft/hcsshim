@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/containerd/containerd/runtime/v2/task"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
@@ -69,4 +70,9 @@ type shimTask interface {
 	// to wait for the container and potentially UVM before unblocking any event
 	// based listeners or `Wait` based listeners.
 	Wait(ctx context.Context) *task.StateResponse
+	// ExecInHost execs a process in the host UVM. It is not tracked in the
+	// other lifetimes of the task and is used only for diagnostics.
+	//
+	// If the host is not hypervisor isolated returns error.
+	ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (int, error)
 }

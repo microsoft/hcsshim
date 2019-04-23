@@ -9,10 +9,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvm"
 )
 
-type taskDiagnostics interface {
-	ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (int, error)
-}
-
 func execInUvm(ctx context.Context, vm *uvm.UtilityVM, req *shimdiag.ExecProcessRequest) (int, error) {
 	np, err := newNpipeIO(ctx, "", "", req.Stdin, req.Stdout, req.Stderr, req.Terminal)
 	if err != nil {

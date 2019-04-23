@@ -330,25 +330,11 @@ func (s *service) diagExecInHostInternal(ctx context.Context, req *shimdiag.Exec
 	if req.Terminal && req.Stderr != "" {
 		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "if using terminal, stderr must be empty")
 	}
-	var obj interface{}
-	if s.isSandbox {
-		p, err := s.getPod()
-		if err != nil {
-			return nil, err
-		}
-		obj = p
-	} else {
-		t, err := s.getTask("")
-		if err != nil {
-			return nil, err
-		}
-		obj = t
+	t, err := s.getTask(s.tid)
+	if err != nil {
+		return nil, err
 	}
-	diag, ok := obj.(taskDiagnostics)
-	if !ok {
-		return nil, errdefs.ErrNotImplemented
-	}
-	ec, err := diag.ExecInHost(ctx, req)
+	ec, err := t.ExecInHost(ctx, req)
 	if err != nil {
 		return nil, err
 	}
