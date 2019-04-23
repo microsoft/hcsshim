@@ -38,27 +38,24 @@ func execInUvm(ctx context.Context, vm *uvm.UtilityVM, req *shimdiag.ExecProcess
 	if err != nil {
 		return 0, err
 	}
-	pin, pout, perr, err := proc.Stdio()
+	pin, pout, perr := proc.Stdio()
 	if err != nil {
 		return 0, err
 	}
 	if pin != nil {
 		go func() {
 			io.Copy(pin, np.Stdin())
-			pin.Close()
 			proc.CloseStdin()
 		}()
 	}
 	if pout != nil {
 		go func() {
 			io.Copy(np.Stdout(), pout)
-			pout.Close()
 		}()
 	}
 	if perr != nil {
 		go func() {
 			io.Copy(np.Stderr(), perr)
-			perr.Close()
 		}()
 	}
 	err = proc.Wait()
