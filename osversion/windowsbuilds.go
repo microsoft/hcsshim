@@ -20,4 +20,8 @@ const (
 	// RS5 (version 1809, codename "Redstone 5") corresponds to Windows Server
 	// 2019 (ltsc2019), and Windows 10 (October 2018 Update).
 	RS5 = 17763
+
+	// RS6 (version 1903, codename "Redstone 6") corresponds to Windows Server
+	// 1903 (Semi-Annual Channel (SAC)), and Windows 10 (May 2019 Update).
+	RS6 = 18362
 )
