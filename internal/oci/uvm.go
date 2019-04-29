@@ -93,7 +93,7 @@ const (
 	// annotationProcessorLimit overrides the hypervisor isolated vCPU limit set
 	// via the OCI spec.
 	//
-	// Limit allows values 1 - 10,000 where 10,000 means 100% CPU. (And is the
+	// Limit allows values 1 - 100,000 where 100,000 means 100% CPU. (And is the
 	// default if omitted)
 	//
 	// Note: Unlike Windows process isolated container QoS Count/Limt/Weight on
