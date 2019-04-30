@@ -2,10 +2,20 @@ package svm
 
 import (
 	"fmt"
+	"io"
+	"io/ioutil"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/sirupsen/logrus"
 )
+
+func init() {
+	logrus.SetLevel(logrus.DebugLevel)
+}
 
 // // TestNewInvalidOptions ensures that calls to New with invalid options fail.
 // func TestNewInvalidOptions(t *testing.T) {
@@ -91,65 +101,140 @@ import (
 // 	checkCount(t, i, 0)
 // }
 
-// TestProcess tests launching processes in a service VM
-func TestProcess(t *testing.T) {
+// // TestProcess tests launching processes in a service VM
+// func TestProcess(t *testing.T) {
+// 	ig := newInstance(t, ModeGlobal)
+// 	defer ig.Destroy()
+// 	create(t, ig, "dont-care-as-global")
+// 	testProcess(t, ig)
+
+// 	ug := newInstance(t, ModeUnique)
+// 	defer ug.Destroy()
+// 	create(t, ug, "anything")
+// 	testProcess(t, ug)
+// }
+
+// func testProcess(t *testing.T, i Instance) {
+// 	// A process which succeeds, check it's output
+// 	ec, output, err := i.RunProcess("anything", []string{"ls", "-l", "/"}, "")
+// 	if ec != 0 || err != nil {
+// 		t.Fatalf("expected success ec=%d err=%d", ec, err)
+// 	}
+// 	if !strings.Contains(output, "lost+found") {
+// 		t.Fatalf("output was %s", output)
+// 	}
+
+// 	// A non-zero exit code
+// 	ec, output, err = i.RunProcess("anything", []string{"sh", "-c", `"exit 123"`}, "")
+// 	if err != nil {
+// 		t.Fatalf("err was %s", err)
+// 	}
+// 	if ec != 123 {
+// 		t.Fatalf("ec was %d", ec)
+// 	}
+
+// 	// Command not found
+// 	ec, output, err = i.RunProcess("anything", []string{"foobarbaz"}, "")
+// 	if err == nil {
+// 		t.Fatalf("expected an error")
+// 	}
+// 	if !strings.Contains(err.Error(), "executable file not found in $PATH") {
+// 		t.Fatalf("didn't find what we were looking for %s", err)
+// 	}
+
+// 	// Something to stderr is returned in output
+// 	ec, output, err = i.RunProcess("anything", []string{"cat", "some-file-which-does-not-exist"}, "")
+// 	if err != nil {
+// 		t.Fatalf("expected success")
+// 	}
+// 	if !strings.Contains(output, "cat: can't open 'some-file-which-does-not-exist': No such file or directory") {
+// 		t.Fatalf("unexpected output %s", output)
+// 	}
+// 	if ec != 1 {
+// 		t.Fatalf("ec was %d", ec)
+// 	}
+
+// 	// Send stdin. TODO Figure out how to do a test here.
+// 	// ec, output, err = i.RunProcess("anything", []string{"cat < /proc/self/fd/0"}, "hello\r\nworld\r\n")
+// 	// if err != nil {
+// 	// 	t.Fatalf("expected success")
+// 	// }
+// 	// fmt.Println(output)
+// }
+
+func TestCreateScratch(t *testing.T) {
+	targetDir, err := ioutil.TempDir("", "ext4target")
+	if err != nil {
+		t.Fatalf("failed to create tempdir: %s", err)
+	}
+	defer os.RemoveAll(targetDir)
+
+	cacheDir, err := ioutil.TempDir("", "ext4cache")
+	if err != nil {
+		t.Fatalf("failed to create tempdir: %s", err)
+	}
+	defer os.RemoveAll(cacheDir)
+
 	ig := newInstance(t, ModeGlobal)
 	defer ig.Destroy()
 	create(t, ig, "dont-care-as-global")
-	testProcess(t, ig)
 
-	ug := newInstance(t, ModeUnique)
-	defer ug.Destroy()
-	create(t, ug, "anything")
-	testProcess(t, ug)
+	if err := ig.CreateScratch("anything", DefaultScratchSizeGB, cacheDir, targetDir); err != nil {
+		t.Fatal(err)
+	}
+	checkFileExists(t, filepath.Join(cacheDir, fmt.Sprintf("scratch.%d.vhdx", DefaultScratchSizeGB)))
+	checkFileExists(t, filepath.Join(targetDir, "scratch.vhdx"))
+
+	// Cache already exists from above.
+	removeContents(targetDir)
+	if err := ig.CreateScratch("anything", DefaultScratchSizeGB, cacheDir, targetDir); err != nil {
+		t.Fatal(err)
+	}
+	checkFileExists(t, filepath.Join(cacheDir, fmt.Sprintf("scratch.%d.vhdx", DefaultScratchSizeGB)))
+	checkFileExists(t, filepath.Join(targetDir, "scratch.vhdx"))
+
 }
 
-func testProcess(t *testing.T, i Instance) {
-	// A process which succeeds, check it's output
-	ec, output, err := i.RunProcess("anything", []string{"ls", "-l", "/"}, "")
-	if ec != 0 || err != nil {
-		t.Fatalf("expected success ec=%d err=%d", ec, err)
-	}
-	if !strings.Contains(output, "lost+found") {
-		t.Fatalf("output was %s", output)
-	}
-
-	// A non-zero exit code
-	ec, output, err = i.RunProcess("anything", []string{"sh", "-c", `"exit 123"`}, "")
+// Helper to remove contents of a directory
+func removeContents(dir string) error {
+	d, err := os.Open(dir)
 	if err != nil {
-		t.Fatalf("err was %s", err)
+		return err
 	}
-	if ec != 123 {
-		t.Fatalf("ec was %d", ec)
-	}
-
-	// Command not found
-	ec, output, err = i.RunProcess("anything", []string{"foobarbaz"}, "")
-	if err == nil {
-		t.Fatalf("expected an error")
-	}
-	if !strings.Contains(err.Error(), "executable file not found in $PATH") {
-		t.Fatalf("didn't find what we were looking for %s", err)
-	}
-
-	// Something to stderr is returned in output
-	ec, output, err = i.RunProcess("anything", []string{"cat", "some-file-which-does-not-exist"}, "")
+	defer d.Close()
+	names, err := d.Readdirnames(-1)
 	if err != nil {
-		t.Fatalf("expected success")
+		return err
 	}
-	if !strings.Contains(output, "cat: can't open 'some-file-which-does-not-exist': No such file or directory") {
-		t.Fatalf("unexpected output %s", output)
+	for _, name := range names {
+		err = os.RemoveAll(filepath.Join(dir, name))
+		if err != nil {
+			return err
+		}
 	}
-	if ec != 1 {
-		t.Fatalf("ec was %d", ec)
-	}
+	return nil
+}
 
-	// Send stdin
-	ec, output, err = i.RunProcess("anything", []string{"cat < /proc/self/fd/0"}, "hello\r\nworld\r\n")
+// Helper to validate a directory is empty
+func checkEmptyDir(t *testing.T, name string) {
+	f, err := os.Open(name)
 	if err != nil {
-		t.Fatalf("expected success")
+		t.Fatalf("expected %s to be empty", name)
 	}
-	fmt.Println(output)
+	defer f.Close()
+	_, err = f.Readdirnames(1)
+	if err == io.EOF {
+		return
+	}
+	t.Fatalf("expected %s to be empty", name)
+}
+
+// Helper to validate a file exists
+func checkFileExists(t *testing.T, name string) {
+	if _, err := os.Stat(name); err == nil {
+		return
+	}
+	t.Fatalf("expected %s to exist", name)
 }
 
 func newInstance(t *testing.T, mode Mode) Instance {

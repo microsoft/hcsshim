@@ -14,17 +14,8 @@ type Instance interface {
 	// mode, a second call to create will create a second service.
 	Create(id string) error
 
-	// GenerateExt4 generates a formatted EXT4 for use as a scratch disk.
-	//
-	// If the file already exists in the cache directory (scratch.nn.vhdx), where
-	// nn represents the size in GB, it's just a file copy to the target directory,
-	// and named as just scratch.vhdx.
-	//
-	// If the file does not exist in the cache directory, it uses a service VM
-	// to create on in the targetDir named scratch.vhdx. Once created, if
-	// storeInCache is passed, then the file is copied to the cacheDir with the
-	// name scratch.nn.vhdx.
-	GenerateExt4(id string, sizeGB uint16, cacheDir string, targetDir string, storeInCache bool) error
+	// CreateScratch generates a formatted EXT4 for use as a scratch disk.
+	CreateScratch(id string, sizeGB uint32, cacheDir string, targetDir string) error
 
 	// Discard removes the callers reference to this instance. In global mode,
 	// it's a no-op if the service VM is already running. In per-instance mode,
@@ -45,5 +36,6 @@ type Instance interface {
 
 	// RunProcess is a simple wrapper for running a process in a service VM.
 	// It returns the exit code and the combined stdout/stderr.
-	RunProcess(id string, args []string, stdin string) (int, string, error)
+	// TODO
+	//RunProcess(id string, args []string, stdin string) (int, string, error)
 }
