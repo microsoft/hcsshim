@@ -19,6 +19,14 @@ func createContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx cont
 	return response.ContainerId
 }
 
+func execContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.ExecSyncRequest) *runtime.ExecSyncResponse {
+	response, err := client.ExecSync(ctx, request)
+	if err != nil {
+		t.Fatalf("failed ExecSync in container: %s, with: %v", request.ContainerId, err)
+	}
+	return response
+}
+
 func stopAndRemoveContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) {
 	_, err := client.StopContainer(ctx, &runtime.StopContainerRequest{
 		ContainerId: containerID,
@@ -49,7 +57,7 @@ func runCreateContainerTest(t *testing.T, runtimeHandler string, request *runtim
 	runCreateContainerTestWithSandbox(t, sandboxRequest, request)
 }
 
-func runCreateContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.RunPodSandboxRequest, request *runtime.CreateContainerRequest) {
+func runCreateContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.RunPodSandboxRequest, request *runtime.CreateContainerRequest) string {
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -71,6 +79,7 @@ func runCreateContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.Run
 	if err != nil {
 		t.Fatalf("failed StartContainer request for container: %s, with: %v", containerID, err)
 	}
+	return containerID
 }
 
 func execContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.RunPodSandboxRequest, request *runtime.CreateContainerRequest, execReq *runtime.ExecSyncRequest) *runtime.ExecSyncResponse {
@@ -78,32 +87,8 @@ func execContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.RunPodSa
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	podID := runPodSandbox(t, client, ctx, sandboxRequest)
-	defer func() {
-		stopAndRemovePodSandbox(t, client, ctx, podID)
-	}()
-
-	request.PodSandboxId = podID
-	request.SandboxConfig = sandboxRequest.Config
-	containerID := createContainer(t, client, ctx, request)
-	defer func() {
-		stopAndRemoveContainer(t, client, ctx, containerID)
-	}()
-	_, err := client.StartContainer(ctx, &runtime.StartContainerRequest{
-		ContainerId: containerID,
-	})
-	if err != nil {
-		t.Fatalf("failed StartContainer request for container: %s, with: %v", containerID, err)
-	}
-
-	execReq.ContainerId = containerID
-	resp, err := client.ExecSync(ctx, execReq)
-
-	if err != nil {
-		t.Fatalf("failed to exec in container: %v", err)
-	}
-
-	return resp
+	execReq.ContainerId = runCreateContainerTestWithSandbox(t, sandboxRequest, request)
+	return execContainer(t, client, ctx, execReq)
 }
 
 func Test_CreateContainer_WCOW_Process(t *testing.T) {
@@ -830,11 +815,11 @@ func Test_CreateContainer_CPUShares_LCOW(t *testing.T) {
 func Test_CreateContainer_RunAs_LCOW(t *testing.T) {
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowCosmos})
 
-	//sandbox reques
+	//run podsandbox request
 	sandboxRequest := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
 			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name() + "-Sandbox2",
+				Name:      t.Name() + "-Sandbox",
 				Uid:       "0",
 				Namespace: testNamespace,
 			},
@@ -847,11 +832,11 @@ func Test_CreateContainer_RunAs_LCOW(t *testing.T) {
 		RuntimeHandler: lcowRuntimeHandler,
 	}
 
-	//container request
+	//create container request
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
 			Metadata: &runtime.ContainerMetadata{
-				Name: t.Name() + "-Container2",
+				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
 				Image: imageLcowCosmos,
@@ -887,7 +872,6 @@ func Test_CreateContainer_RunAs_LCOW(t *testing.T) {
 	}
 
 	r := execContainerTestWithSandbox(t, sandboxRequest, request, execRequest)
-
 	output := strings.TrimSpace(string(r.Stdout))
 	errorMsg := string(r.Stderr)
 	exitCode := int(r.ExitCode)
