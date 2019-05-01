@@ -1,13 +1,14 @@
+BASE:=base.tar.gz
+
 GO:=go
 GO_FLAGS:=-ldflags "-s -w" # strip Go binaries
-GO_BUILD:=CGO_ENABLED=0 $(GO) build $(GO_FLAGS)
 
+CGO_ENABLED:=0
 CFLAGS:=-O2 -Wall
 LDFLAGS:=-static -s # strip C binaries
 
+GO_BUILD=CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(GO_FLAGS)
 SRCROOT=$(dir $(abspath $(lastword $(MAKEFILE_LIST))))
-
-BASE:=base.tar.gz
 
 # The link aliases for gcstools
 GCS_TOOLS=\
@@ -20,13 +21,16 @@ GCS_TOOLS=\
 
 all: out/initrd.img out/rootfs.tar.gz
 
+clean:
+	find -name '*.o' -print0 | xargs -0 rm
+	rm bin/*
+
 test:
 	cd $(SRCROOT) && go test ./service/gcsutils/...
 	cd $(SRCROOT)/service/gcs && ginkgo -r -keepGoing
 
-rootfs: .rootfs-done
-
-.rootfs-done: bin/init bin/vsockexec bin/gcs bin/gcstools Makefile
+out/delta.tar.gz: bin/init bin/vsockexec bin/gcs bin/gcstools Makefile
+	@mkdir -p out
 	rm -rf rootfs
 	mkdir -p rootfs/bin/
 	cp bin/init rootfs/
@@ -36,16 +40,16 @@ rootfs: .rootfs-done
 	for tool in $(GCS_TOOLS); do ln -s gcstools rootfs/bin/$$tool; done
 	git -C $(SRCROOT) rev-parse HEAD > rootfs/gcs.commit && \
 	git -C $(SRCROOT) rev-parse --abbrev-ref HEAD > rootfs/gcs.branch
-	touch .rootfs-done
+	tar -zcf $@ -C rootfs .
+	rm -rf rootfs
 
-out/rootfs.tar.gz: $(BASE) .rootfs-done
-	@mkdir -p out
-	# Append the added files to the base archive
-	bsdtar -C rootfs -zcf $@ @$(abspath $(BASE)) .
+out/rootfs.tar.gz: out/initrd.img
+	bsdtar -zcf $@ @out/initrd.img
 
-out/initrd.img: out/rootfs.tar.gz
-	# Convert from the rootfs tar to newc cpio
-	bsdtar -zcf $@ --format newc @out/rootfs.tar.gz
+out/initrd.img: $(BASE) out/delta.tar.gz $(SRCROOT)/hack/catcpio.sh
+	$(SRCROOT)/hack/catcpio.sh "$(BASE)" out/delta.tar.gz > out/initrd.img.uncompressed
+	gzip -c out/initrd.img.uncompressed > $@
+	rm out/initrd.img.uncompressed
 
 bin/gcs.always: always
 	@mkdir -p bin
