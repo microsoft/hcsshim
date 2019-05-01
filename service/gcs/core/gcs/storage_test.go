@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"syscall"
 
 	"github.com/Microsoft/opengcs/service/gcs/runtime/runc"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
@@ -139,58 +138,6 @@ var _ = Describe("Storage", func() {
 					path = fileToTest
 				})
 				AssertExists()
-			})
-		})
-	})
-
-	// TODO: This test and the PathExists test should be moved to a new testing
-	// suite for realos.
-	Describe("checking if a path is mounted", func() {
-		var (
-			mountSource string
-			mountTarget string
-			mounted     bool
-			err         error
-		)
-		BeforeEach(func() {
-			mountSource = "/tmp/mountsource"
-			mountTarget = "/tmp/mounttarget"
-			err := os.Mkdir(mountSource, 0600)
-			Expect(err).NotTo(HaveOccurred())
-			err = os.Mkdir(mountTarget, 0600)
-			Expect(err).NotTo(HaveOccurred())
-		})
-		AfterEach(func() {
-			err := os.Remove(mountSource)
-			Expect(err).NotTo(HaveOccurred())
-			err = os.Remove(mountTarget)
-			Expect(err).NotTo(HaveOccurred())
-		})
-		JustBeforeEach(func() {
-			mounted, err = pathIsMounted(mountTarget)
-		})
-		Context("the source isn't mounted", func() {
-			It("should not report mounted", func() {
-				Expect(mounted).To(BeFalse())
-			})
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-		})
-		Context("the source is mounted", func() {
-			BeforeEach(func() {
-				err := syscall.Mount(mountSource, mountTarget, defaultFileSystem, syscall.MS_BIND, "")
-				Expect(err).NotTo(HaveOccurred())
-			})
-			AfterEach(func() {
-				syscall.Unmount(mountTarget, 0)
-				Expect(err).NotTo(HaveOccurred())
-			})
-			It("should report mounted", func() {
-				Expect(mounted).To(BeTrue())
-			})
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
 			})
 		})
 	})
