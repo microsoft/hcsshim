@@ -6,7 +6,6 @@ import (
 	"runtime"
 
 	"github.com/Microsoft/hcsshim/internal/guid"
-	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/sirupsen/logrus"
 )
@@ -101,9 +100,8 @@ func (uvm *UtilityVM) Close() (err error) {
 		}
 	}()
 
-	if err := uvm.hcsSystem.Terminate(); hcs.IsPending(err) {
-		uvm.Wait()
-	}
+	uvm.hcsSystem.Terminate()
+	uvm.Wait()
 
 	// outputListener will only be nil for a Create -> Stop without a Start. In
 	// this case we have no goroutine processing output so its safe to close the

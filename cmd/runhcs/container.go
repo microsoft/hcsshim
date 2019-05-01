@@ -668,9 +668,8 @@ func (c *container) Remove() error {
 	if c.IsHost {
 		vm, err := hcs.OpenComputeSystem(vmID(c.ID))
 		if err == nil {
-			if err := vm.Terminate(); hcs.IsPending(err) {
-				vm.Wait()
-			}
+			vm.Terminate()
+			vm.Wait()
 		}
 	}
 	return stateKey.Remove(c.ID)
@@ -680,14 +679,8 @@ func (c *container) Kill() error {
 	if c.hc == nil {
 		return nil
 	}
-	err := c.hc.Terminate()
-	if hcs.IsPending(err) {
-		err = c.hc.Wait()
-	}
-	if hcs.IsAlreadyStopped(err) {
-		err = nil
-	}
-	return err
+	c.hc.Terminate()
+	return c.hc.Wait()
 }
 
 func (c *container) Status() (containerStatus, error) {

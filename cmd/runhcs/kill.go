@@ -97,10 +97,12 @@ signal to the init process of the "ubuntu01" container:
 		defer p.Close()
 
 		if signalsSupported && sigOptions != nil && (c.Spec.Linux != nil || !c.Spec.Process.Terminal) {
-			return p.Signal(sigOptions)
+			_, err = p.Signal(sigOptions)
+		} else {
+			// Legacy signal issue a kill
+			_, err = p.Kill()
 		}
 
-		// Legacy signal issue a kill
-		return p.Kill()
+		return err
 	},
 }
