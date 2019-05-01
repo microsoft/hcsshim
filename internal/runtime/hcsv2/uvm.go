@@ -234,11 +234,12 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 		vsock:     h.vsock,
 		spec:      settings.OCISpecification,
 		container: con,
+		exitType:  prot.NtUnexpectedExit,
 		processes: make(map[uint32]*Process),
 	}
 	// Add the WG count for the init process
 	c.processesWg.Add(1)
-	c.initProcess = newProcess(c, settings.OCISpecification.Process, con.(runtime.Process), uint32(c.container.Pid()))
+	c.initProcess = newProcess(c, settings.OCISpecification.Process, con.(runtime.Process), uint32(c.container.Pid()), true)
 
 	// For the sandbox move all adapters into the network namespace
 	if isSandboxOrStandalone && networkNamespace != "" {

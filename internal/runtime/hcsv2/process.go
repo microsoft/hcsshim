@@ -16,12 +16,17 @@ import (
 // Process is a struct that defines the lifetime and operations associated with
 // an oci.Process.
 type Process struct {
+	// c is the owning container
+	c    *Container
 	spec *oci.Process
 	// cid is the container id that owns this process.
 	cid string
 
 	process runtime.Process
 	pid     uint32
+	// init is `true` if this is the container process itself
+	init bool
+
 	// This is only valid post the exitWg
 	exitCode int
 	exitWg   sync.WaitGroup
@@ -42,10 +47,12 @@ type Process struct {
 // outstanding wait for process exit, and post exit an outstanding wait for
 // process cleanup to release all resources once at least 1 waiter has
 // successfully written the exit response.
-func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid uint32) *Process {
+func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid uint32, init bool) *Process {
 	p := &Process{
+		c:       c,
 		spec:    spec,
 		process: process,
+		init:    init,
 		cid:     c.id,
 		pid:     pid,
 	}
@@ -108,6 +115,9 @@ func (p *Process) Kill(signal syscall.Signal) error {
 			return gcserr.NewHresultError(gcserr.HrErrNotFound)
 		}
 		return err
+	}
+	if p.init {
+		p.c.setExitType(signal)
 	}
 	return nil
 }
