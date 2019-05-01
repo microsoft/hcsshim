@@ -688,7 +688,7 @@ func (c *gcsCore) ModifySettings(id string, request *prot.ResourceModificationRe
 				}
 			}
 			if err := scsi.UnplugDevice(0, mvd.Lun); err != nil {
-				return errors.Wrapf(err, "failed to unplug mapped virtual disks for container %s, scsi lun: %d", mvd.Lun)
+				return errors.Wrapf(err, "failed to unplug mapped virtual disks for container %s, scsi lun: %d", id, mvd.Lun)
 			}
 			containerEntry.RemoveMappedVirtualDisk(*mvd)
 		default:
