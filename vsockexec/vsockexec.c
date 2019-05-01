@@ -3,7 +3,6 @@
 
 #include <errno.h>
 #include <sys/socket.h>
-#include <linux/vm_sockets.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,6 +14,19 @@ static const int tcpmode = 1;
 #else
 static const int tcpmode;
 #endif
+
+struct sockaddr_vm {
+	unsigned short svm_family;
+	unsigned short svm_reserved1;
+	unsigned int svm_port;
+	unsigned int svm_cid;
+	unsigned char svm_zero[sizeof(struct sockaddr) -
+			       sizeof(sa_family_t) -
+			       sizeof(unsigned short) -
+			       sizeof(unsigned int) - sizeof(unsigned int)];
+};
+
+#define VMADDR_CID_HOST 2
 
 static int openvsock(unsigned int cid, unsigned int port)
 {
