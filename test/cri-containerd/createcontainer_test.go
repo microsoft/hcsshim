@@ -5,7 +5,6 @@ package cri_containerd
 import (
 	"context"
 	"fmt"
-	"strings"
 	"testing"
 
 	runtime "k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2"
@@ -17,14 +16,6 @@ func createContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx cont
 		t.Fatalf("failed CreateContainer in sandbox: %s, with: %v", request.PodSandboxId, err)
 	}
 	return response.ContainerId
-}
-
-func execContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.ExecSyncRequest) *runtime.ExecSyncResponse {
-	response, err := client.ExecSync(ctx, request)
-	if err != nil {
-		t.Fatalf("failed ExecSync in container: %s, with: %v", request.ContainerId, err)
-	}
-	return response
 }
 
 func stopAndRemoveContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) {
@@ -80,15 +71,6 @@ func runCreateContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.Run
 		t.Fatalf("failed StartContainer request for container: %s, with: %v", containerID, err)
 	}
 	return containerID
-}
-
-func execContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.RunPodSandboxRequest, request *runtime.CreateContainerRequest, execReq *runtime.ExecSyncRequest) *runtime.ExecSyncResponse {
-	client := newTestRuntimeClient(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	execReq.ContainerId = runCreateContainerTestWithSandbox(t, sandboxRequest, request)
-	return execContainer(t, client, ctx, execReq)
 }
 
 func Test_CreateContainer_WCOW_Process(t *testing.T) {
@@ -810,80 +792,4 @@ func Test_CreateContainer_CPUShares_LCOW(t *testing.T) {
 		},
 	}
 	runCreateContainerTest(t, lcowRuntimeHandler, request)
-}
-
-func Test_CreateContainer_RunAs_LCOW(t *testing.T) {
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowCosmos})
-
-	//run podsandbox request
-	sandboxRequest := &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name() + "-Sandbox",
-				Uid:       "0",
-				Namespace: testNamespace,
-			},
-			Linux: &runtime.LinuxPodSandboxConfig{
-				SecurityContext: &runtime.LinuxSandboxSecurityContext{
-					Privileged: true,
-				},
-			},
-		},
-		RuntimeHandler: lcowRuntimeHandler,
-	}
-
-	//create container request
-	request := &runtime.CreateContainerRequest{
-		Config: &runtime.ContainerConfig{
-			Metadata: &runtime.ContainerMetadata{
-				Name: t.Name() + "-Container",
-			},
-			Image: &runtime.ImageSpec{
-				Image: imageLcowCosmos,
-			},
-			// Hold this command open until killed
-			Command: []string{
-				"sleep",
-				"100000",
-			},
-			Linux: &runtime.LinuxContainerConfig{
-				SecurityContext: &runtime.LinuxContainerSecurityContext{
-					RunAsUser: &runtime.Int64Value{
-						Value: 9000, // cosmosarno user
-					},
-				},
-			},
-		},
-	}
-
-	//exec request
-	execRequest := &runtime.ExecSyncRequest{
-		ContainerId: "",
-		// this is just saying 'give me the UID of the process with pid = 1; ignore headers'
-		Cmd: []string{
-			"ps",
-			"-o",
-			"uid",
-			"-p",
-			"1",
-			"--no-headers",
-		},
-		Timeout: 20,
-	}
-
-	r := execContainerTestWithSandbox(t, sandboxRequest, request, execRequest)
-	output := strings.TrimSpace(string(r.Stdout))
-	errorMsg := string(r.Stderr)
-	exitCode := int(r.ExitCode)
-
-	t.Logf("exec request exited with code: %d", exitCode)
-	t.Logf("exec request output: %v", output)
-
-	if exitCode != 0 {
-		t.Fatalf("Test %v exited with exit code: %d, Test_CreateContainer_RunAs_LCOW", errorMsg, exitCode)
-	}
-
-	if output != "9000" {
-		t.Fatalf("failed to start container with runas option: error: %v, exitcode: %d", errorMsg, exitCode)
-	}
 }
