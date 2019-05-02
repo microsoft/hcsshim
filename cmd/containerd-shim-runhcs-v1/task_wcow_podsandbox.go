@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
-	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	eventstypes "github.com/containerd/containerd/api/events"
@@ -44,7 +43,7 @@ func newWcowPodSandboxTask(ctx context.Context, events publisher, id, bundle str
 		// we need to handle this case.
 		go func() {
 			werr := parent.Wait()
-			if werr != nil && !hcs.IsAlreadyClosed(werr) {
+			if werr != nil {
 				logrus.WithFields(logrus.Fields{
 					"tid":           id,
 					logrus.ErrorKey: werr,
@@ -210,7 +209,7 @@ func (wpst *wcowPodSandboxTask) close() {
 		}).Debug("wcowPodSandboxTask::close")
 
 		if wpst.host != nil {
-			if err := wpst.host.Close(); !hcs.IsAlreadyClosed(err) {
+			if err := wpst.host.Close(); err != nil {
 				logrus.WithFields(logrus.Fields{
 					"tid":           wpst.id,
 					logrus.ErrorKey: err,

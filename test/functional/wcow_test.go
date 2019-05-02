@@ -196,14 +196,12 @@ func stopContainer(t *testing.T, c interface{}) {
 
 	switch c.(type) {
 	case *hcs.System:
-		if err := c.(*hcs.System).Shutdown(); err != nil {
-			if hcsshim.IsPending(err) {
-				if err := c.(*hcs.System).Wait(); err != nil {
-					t.Fatalf("Failed Wait shutdown: %s", err)
-				}
-			} else {
-				t.Fatalf("Failed shutdown: %s", err)
+		if err := c.(*hcs.System).Shutdown(); err == nil {
+			if err := c.(*hcs.System).Wait(); err != nil {
+				t.Fatalf("Failed Wait shutdown: %s", err)
 			}
+		} else {
+			t.Fatalf("Failed shutdown: %s", err)
 		}
 		c.(*hcs.System).Terminate()
 

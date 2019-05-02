@@ -2,6 +2,7 @@ package hcsshim
 
 import (
 	"io"
+	"sync"
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
@@ -9,7 +10,10 @@ import (
 
 // ContainerError is an error encountered in HCS
 type process struct {
-	p *hcs.Process
+	p        *hcs.Process
+	waitOnce sync.Once
+	waitCh   chan struct{}
+	waitErr  error
 }
 
 // Pid returns the process ID of the process within the container.
@@ -19,7 +23,14 @@ func (process *process) Pid() int {
 
 // Kill signals the process to terminate but does not wait for it to finish terminating.
 func (process *process) Kill() error {
-	return convertProcessError(process.p.Kill(), process)
+	found, err := process.p.Kill()
+	if err != nil {
+		return convertProcessError(err, process)
+	}
+	if !found {
+		return &ProcessError{Process: process, Err: ErrElementNotFound, Operation: "hcsshim::Process::Kill"}
+	}
+	return nil
 }
 
 // Wait waits for the process to exit.
@@ -30,7 +41,21 @@ func (process *process) Wait() error {
 // WaitTimeout waits for the process to exit or the duration to elapse. It returns
 // false if timeout occurs.
 func (process *process) WaitTimeout(timeout time.Duration) error {
-	return convertProcessError(process.p.WaitTimeout(timeout), process)
+	process.waitOnce.Do(func() {
+		process.waitCh = make(chan struct{})
+		go func() {
+			process.waitErr = process.Wait()
+			close(process.waitCh)
+		}()
+	})
+	t := time.NewTimer(timeout)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return &ProcessError{Process: process, Err: ErrTimeout, Operation: "hcsshim::Process::Wait"}
+	case <-process.waitCh:
+		return process.waitErr
+	}
 }
 
 // ExitCode returns the exit code of the process. The process must have

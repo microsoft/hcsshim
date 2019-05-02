@@ -270,21 +270,12 @@ func run(options *uvm.OptionsLCOW, c *cli.Context) error {
 		if err := execViaGcs(uvm.ComputeSystem(), c); err != nil {
 			return err
 		}
-		if err := uvm.ComputeSystem().Terminate(); err != nil {
-			if hcs.IsPending(err) {
-				err = uvm.ComputeSystem().Wait()
-			}
-			if err != nil {
-				return err
-			}
-		}
-	} else {
-		if err := uvm.WaitExpectedError(hcs.ErrVmcomputeUnexpectedExit); err != nil {
-			return err
-		}
+		uvm.ComputeSystem().Terminate()
+		uvm.Wait()
+		return uvm.ComputeSystem().ExitError()
 	}
 
-	return nil
+	return uvm.Wait()
 }
 
 func execViaGcs(cs *hcs.System, c *cli.Context) error {

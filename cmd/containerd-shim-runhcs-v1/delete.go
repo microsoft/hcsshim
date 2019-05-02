@@ -18,7 +18,7 @@ var deleteCommand = cli.Command{
 	Name: "delete",
 	Usage: `
 This command allows containerd to delete any container resources created, mounted, and/or run by a shim when containerd can no longer communicate over rpc. This happens if a shim is SIGKILL'd with a running container. These resources will need to be cleaned up when containerd loses the connection to a shim. This is also used when containerd boots and reconnects to shims. If a bundle is still on disk but containerd cannot connect to a shim, the delete command is invoked.
-	
+
 The delete command will be executed in the container's bundle as its cwd.
 `,
 	SkipArgReorder: true,
@@ -35,27 +35,24 @@ The delete command will be executed in the container's bundle as its cwd.
 
 		// Attempt to find the hcssystem for this bundle and terminate it.
 		if sys, _ := hcs.OpenComputeSystem(idFlag); sys != nil {
+			defer sys.Close()
 			if err := sys.Terminate(); err != nil {
-				if hcs.IsPending(err) {
-					const terminateTimeout = time.Second * 30
-					done := make(chan bool)
-					go func() {
-						if werr := sys.Wait(); err != nil {
-							fmt.Fprintf(os.Stderr, "failed to wait for '%s' to terminate: %v", idFlag, werr)
-						}
-						done <- true
-					}()
-					select {
-					case <-done:
-					case <-time.After(terminateTimeout):
-						sys.Close()
-						return fmt.Errorf("timed out waiting for '%s' to terminate", idFlag)
+				fmt.Fprintf(os.Stderr, "failed to terminate '%s': %v", idFlag, err)
+			} else {
+				ch := make(chan error, 1)
+				go func() { ch <- sys.Wait() }()
+				t := time.NewTimer(time.Second * 30)
+				select {
+				case <-t.C:
+					sys.Close()
+					return fmt.Errorf("timed out waiting for '%s' to terminate", idFlag)
+				case err := <-ch:
+					t.Stop()
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "failed to wait for '%s' to terminate: %v", idFlag, err)
 					}
-				} else {
-					fmt.Fprintf(os.Stderr, "failed to terminate '%s': %v", idFlag, err)
 				}
 			}
-			sys.Close()
 		}
 
 		// Determine if the config file was a POD and if so kill the whole POD.
@@ -68,13 +65,9 @@ The delete command will be executed in the container's bundle as its cwd.
 				if sandboxID := s["io.kubernetes.cri.sandbox-id"]; sandboxID != "" {
 					if sys, _ := hcs.OpenComputeSystem(sandboxID); sys != nil {
 						if err := sys.Terminate(); err != nil {
-							if hcs.IsPending(err) {
-								if werr := sys.Wait(); err != nil {
-									fmt.Fprintf(os.Stderr, "failed to wait for '%s' to terminate: %v", idFlag, werr)
-								}
-							} else {
-								fmt.Fprintf(os.Stderr, "failed to terminate '%s': %v", idFlag, err)
-							}
+							fmt.Fprintf(os.Stderr, "failed to terminate '%s': %v", idFlag, err)
+						} else if err := sys.Wait(); err != nil {
+							fmt.Fprintf(os.Stderr, "failed to wait for '%s' to terminate: %v", idFlag, err)
 						}
 						sys.Close()
 					}

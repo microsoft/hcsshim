@@ -56,22 +56,20 @@ func newHcsExec(
 		"eid": id,
 	}).Debug("newHcsExec")
 
-	processCtx, processDoneCancel := context.WithCancel(context.Background())
 	he := &hcsExec{
-		events:            events,
-		tid:               tid,
-		host:              host,
-		c:                 c,
-		id:                id,
-		bundle:            bundle,
-		isWCOW:            isWCOW,
-		spec:              spec,
-		io:                io,
-		processCtx:        processCtx,
-		processDoneCancel: processDoneCancel,
-		state:             shimExecStateCreated,
-		exitStatus:        255, // By design for non-exited process status.
-		exited:            make(chan struct{}),
+		events:      events,
+		tid:         tid,
+		host:        host,
+		c:           c,
+		id:          id,
+		bundle:      bundle,
+		isWCOW:      isWCOW,
+		spec:        spec,
+		io:          io,
+		processDone: make(chan struct{}),
+		state:       shimExecStateCreated,
+		exitStatus:  255, // By design for non-exited process status.
+		exited:      make(chan struct{}),
 	}
 	go he.waitForContainerExit()
 	return he
@@ -119,10 +117,10 @@ type hcsExec struct {
 	// create time in order to be valid.
 	//
 	// This MUST be treated as read only in the lifetime of the exec.
-	io                upstreamIO
-	ioWg              sync.WaitGroup
-	processCtx        context.Context
-	processDoneCancel context.CancelFunc
+	io              upstreamIO
+	ioWg            sync.WaitGroup
+	processDone     chan struct{}
+	processDoneOnce sync.Once
 
 	// sl is the state lock that MUST be held to safely read/write any of the
 	// following members.
@@ -394,37 +392,19 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 		if err != nil {
 			return errors.Wrapf(errdefs.ErrFailedPrecondition, "signal %d: %v", signal, err)
 		}
+		var delivered bool
 		if supported && options != nil {
-			err = he.p.Signal(options)
+			delivered, err = he.p.Signal(options)
 		} else {
 			// legacy path before signals support OR if WCOW with signals
 			// support needs to issue a terminate.
-			err = he.p.Kill()
+			delivered, err = he.p.Kill()
 		}
 		if err != nil {
-			if hcs.IsNotExist(err) && signal == 0x9 || hcs.IsOperationInvalidState(err) {
-				// If we issued a SIGKILL (or terminate) and get ERROR_NOT_FOUND
-				// or ERROR_VMCOMPUTE_INVALID_STATE `he.waitForExit` is either:
-				//
-				// 1. About to transition the state when it is signaled by the
-				// HCS and everything is fine. This was just a simple race where
-				// the SIGKILL came in before the previous signal completed.
-				//
-				// OR
-				//
-				// 2. We are stuck in `he.waitForExit` and the notification is
-				// not going to be delivered. In this case we force the exit by
-				// closing `he.p` and unblocking all waiters.
-				go func() {
-					// Give the HCS 1 second to finish and deliver the notification.
-					time.Sleep(1 * time.Second)
-					// Force the close. This is safe to call if `he.waitForExit` already called it.
-					he.p.Close()
-				}()
-				return errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", he.id, he.tid)
-			}
-			// Unknown. Return the err from Signal/Kill
 			return err
+		}
+		if !delivered {
+			return errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", he.id, he.tid)
 		}
 		return nil
 	case shimExecStateExited:
@@ -523,7 +503,7 @@ func (he *hcsExec) ForceExit(status int) {
 func (he *hcsExec) exitFromCreatedL(status int) {
 	if he.state != shimExecStateExited {
 		// Unblock the container exit goroutine
-		he.processDoneCancel()
+		he.processDoneOnce.Do(func() { close(he.processDone) })
 		// Transition this exec
 		he.state = shimExecStateExited
 		he.exitStatus = uint32(status)
@@ -572,7 +552,7 @@ func (he *hcsExec) waitForExit() {
 
 	// Issue the process cancellation to unblock the container wait as early as
 	// possible.
-	he.processDoneCancel()
+	he.processDoneOnce.Do(func() { close(he.processDone) })
 
 	code, err := he.p.ExitCode()
 	if err != nil {
@@ -651,9 +631,10 @@ func (he *hcsExec) waitForExit() {
 //
 // This MUST be called via a goroutine at exec create.
 func (he *hcsExec) waitForContainerExit() {
-	cexit := make(chan error)
+	cexit := make(chan struct{})
 	go func() {
-		cexit <- he.c.Wait()
+		he.c.Wait()
+		close(cexit)
 	}()
 	select {
 	case <-cexit:
@@ -668,7 +649,7 @@ func (he *hcsExec) waitForContainerExit() {
 			he.p.Kill()
 		}
 		he.sl.Unlock()
-	case <-he.processCtx.Done():
+	case <-he.processDone:
 		// Process exited first. This is the normal case do nothing because
 		// `he.waitForExit` will release any waiters.
 	}

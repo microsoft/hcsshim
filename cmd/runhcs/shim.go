@@ -69,9 +69,11 @@ var shimCommand = cli.Command{
 		defer c.Close()
 
 		// Asynchronously wait for the container to exit.
-		containerExitCh := make(chan error)
+		containerExitCh := make(chan struct{})
+		var containerExitErr error
 		go func() {
-			containerExitCh <- c.hc.WaitExpectedError(hcs.ErrAlreadyClosed)
+			containerExitErr = c.hc.Wait()
+			close(containerExitCh)
 		}()
 
 		// Get File objects for the open stdio files passed in as arguments.
@@ -123,9 +125,8 @@ var shimCommand = cli.Command{
 
 			defer func() {
 				if terminateOnFailure {
-					if err = c.hc.Terminate(); hcs.IsPending(err) {
-						<-containerExitCh
-					}
+					c.hc.Terminate()
+					<-containerExitCh
 				}
 			}()
 			terminateOnFailure = true
@@ -145,7 +146,8 @@ var shimCommand = cli.Command{
 				if err != nil {
 					return err
 				}
-			case err = <-containerExitCh:
+			case <-containerExitCh:
+				err = containerExitErr
 				if err != nil {
 					return err
 				}
@@ -288,28 +290,21 @@ var shimCommand = cli.Command{
 			// Shutdown the container, waiting 5 minutes before terminating is
 			// forcefully.
 			const shutdownTimeout = time.Minute * 5
-			waited := false
-			err = c.hc.Shutdown()
-			if hcs.IsPending(err) {
+			err := c.hc.Shutdown()
+			if err != nil {
 				select {
-				case err = <-containerExitCh:
-					waited = true
+				case <-containerExitCh:
+					err = containerExitErr
 				case <-time.After(shutdownTimeout):
 					err = hcs.ErrTimeout
 				}
 			}
-			if hcs.IsAlreadyStopped(err) {
-				err = nil
-			}
 
 			if err != nil {
-				err = c.hc.Terminate()
-				if waited {
-					err = c.hc.Wait()
-				} else {
-					err = <-containerExitCh
-				}
+				c.hc.Terminate()
 			}
+			<-containerExitCh
+			err = containerExitErr
 		}
 
 		return cli.NewExitError("", code)

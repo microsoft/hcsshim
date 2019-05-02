@@ -9,6 +9,7 @@ import (
 
 	"github.com/Microsoft/go-winio/vhd"
 	"github.com/Microsoft/hcsshim/internal/copyfile"
+	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -77,8 +78,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		}
 		defer testdProc.Close()
 
-		testdProc.WaitTimeout(timeout.ExternalCommandToComplete)
-		testdExitCode, err := testdProc.ExitCode()
+		testdExitCode, err := waitForProcess(testdProc)
 		if err != nil {
 			lcowUVM.RemoveSCSI(destFile)
 			return fmt.Errorf("failed to get exit code from from %+v following hot-add %s to utility VM: %s", testdCommand, destFile, err)
@@ -112,8 +112,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		return fmt.Errorf("failed to `%+v` following hot-add %s to utility VM: %s", lsCommand, destFile, err)
 	}
 	defer lsProc.Close()
-	lsProc.WaitTimeout(timeout.ExternalCommandToComplete)
-	lsExitCode, err := lsProc.ExitCode()
+	lsExitCode, err := waitForProcess(lsProc)
 	if err != nil {
 		lcowUVM.RemoveSCSI(destFile)
 		return fmt.Errorf("failed to get exit code from `%+v` following hot-add %s to utility VM: %s", lsCommand, destFile, err)
@@ -140,8 +139,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		return fmt.Errorf("failed to `%+v` following hot-add %s to utility VM: %s", mkfsCommand, destFile, err)
 	}
 	defer mkfsProc.Close()
-	mkfsProc.WaitTimeout(timeout.ExternalCommandToComplete)
-	mkfsExitCode, err := mkfsProc.ExitCode()
+	mkfsExitCode, err := waitForProcess(mkfsProc)
 	if err != nil {
 		lcowUVM.RemoveSCSI(destFile)
 		return fmt.Errorf("failed to get exit code from `%+v` following hot-add %s to utility VM: %s", mkfsCommand, destFile, err)
@@ -165,4 +163,20 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 
 	logrus.Debugf("hcsshim::CreateLCOWScratch: %s created (non-cache)", destFile)
 	return nil
+}
+
+func waitForProcess(p *hcs.Process) (int, error) {
+	ch := make(chan error, 1)
+	go func() {
+		ch <- p.Wait()
+	}()
+
+	t := time.NewTimer(timeout.ExternalCommandToComplete)
+	select {
+	case <-ch:
+		t.Stop()
+	case <-t.C:
+		p.Kill()
+	}
+	return p.ExitCode()
 }
