@@ -12,9 +12,9 @@ for file; do
     fi
     case `file -bz "$file"` in
         "ASCII cpio archive"*"(gzip compressed data"*)
-            gunzip -c "$file" | (cd "$dir" && cpio -i) ;;
+            gunzip -c "$file" | (cd "$dir" && cpio -iumd) ;;
         "ASCII cpio archive"*)
-            cat "$file" | (cd "$dir" && cpio -i) ;;
+            cat "$file" | (cd "$dir" && cpio -iumd) ;;
         *)
             tar -xf "$file" -C "$dir" ;;
     esac
