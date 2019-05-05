@@ -12,7 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/schema1"
-	"github.com/Microsoft/hcsshim/internal/schema2"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
@@ -25,7 +25,7 @@ import (
 // a container, both hosted and process isolated. It can create both v1 and v2
 // schema, WCOW only. The containers storage should have been mounted already.
 func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, error) {
-	logrus.Debugf("hcsshim: CreateHCSContainerDocument")
+	logrus.Debug("hcsshim: CreateHCSContainerDocument")
 	// TODO: Make this safe if exported so no null pointer dereferences.
 
 	if coi.Spec == nil {
@@ -95,7 +95,10 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 			if coi.HostingSystem != nil {
 				log.Data[logfields.UVMID] = coi.HostingSystem.ID()
 			}
-			log.Warningf("Changing user requested CPUCount: %d to current number of processors: %d", cpuCount, hostCPUCount)
+			log.WithFields(logrus.Fields{
+				"requested": cpuCount,
+				"assigned":  hostCPUCount,
+			}).Warn("Changing user requested CPUCount to current number of processors")
 			cpuCount = hostCPUCount
 		}
 
@@ -112,7 +115,10 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 			if coi.HostingSystem != nil {
 				log.Data[logfields.UVMID] = coi.HostingSystem.ID()
 			}
-			log.Warningf("silently ignoring Windows Process Container QoS for Limit: '%d' or Weight: '%d' until bug fix", cpuLimit, cpuWeight)
+			log.WithFields(logrus.Fields{
+				"limit":  cpuLimit,
+				"weight": cpuWeight,
+			}).Warning("silently ignoring Windows Process Container QoS for limit or weight until bug fix")
 		} else {
 			v2Container.Processor = &hcsschema.Processor{
 				Count: cpuCount,

@@ -192,7 +192,7 @@ func setupDebuggerEvent() {
 	if err != nil {
 		return
 	}
-	logrus.Infof("Halting until %s is signalled", event)
+	logrus.WithField("event", event).Info("Halting until signalled")
 	windows.WaitForSingleObject(handle, windows.INFINITE)
 	return
 }
@@ -226,7 +226,7 @@ func dumpStacks(writeToFile bool) {
 		bufferLen *= 2
 	}
 	buf = buf[:stackSize]
-	logrus.Infof("=== BEGIN goroutine stack dump ===\n%s\n=== END goroutine stack dump ===", buf)
+	logrus.WithField("stack", string(buf)).Info("goroutine stack dump")
 
 	if writeToFile {
 		// Also write to file to aid gathering diagnostics

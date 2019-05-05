@@ -104,7 +104,7 @@ func CreateProcess(opts *ProcessOptions) (*hcs.Process, *ByteCounts, error) {
 
 	proc, err := opts.HCSSystem.CreateProcess(processConfig)
 	if err != nil {
-		logrus.Debugf("failed to create process: %s", err)
+		logrus.WithError(err).Debug("failed to create process")
 		return nil, nil, err
 	}
 

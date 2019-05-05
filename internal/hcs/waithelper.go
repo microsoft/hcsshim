@@ -19,7 +19,7 @@ func waitForNotification(callbackNumber uintptr, expectedNotification hcsNotific
 	callbackMapLock.RLock()
 	if _, ok := callbackMap[callbackNumber]; !ok {
 		callbackMapLock.RUnlock()
-		logrus.Errorf("failed to waitForNotification: callbackNumber %d does not exist in callbackMap", callbackNumber)
+		logrus.WithField("callbackNumber", callbackNumber).Error("failed to waitForNotification: callbackNumber does not exist in callbackMap")
 		return ErrHandleClose
 	}
 	channels := callbackMap[callbackNumber].channels
@@ -27,7 +27,7 @@ func waitForNotification(callbackNumber uintptr, expectedNotification hcsNotific
 
 	expectedChannel := channels[expectedNotification]
 	if expectedChannel == nil {
-		logrus.Errorf("unknown notification type in waitForNotification %x", expectedNotification)
+		logrus.WithField("type", expectedNotification).Error("unknown notification type in waitForNotification")
 		return ErrInvalidNotificationType
 	}
 

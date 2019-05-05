@@ -13,7 +13,7 @@ import (
 
 // TarToVhd streams a tarstream contained in an io.Reader to a fixed vhd file
 func TarToVhd(lcowUVM *uvm.UtilityVM, targetVHDFile string, reader io.Reader) (int64, error) {
-	logrus.Debugf("hcsshim: TarToVhd: %s", targetVHDFile)
+	logrus.WithField("target", targetVHDFile).Debug("hcsshim: TarToVhd")
 
 	if lcowUVM == nil {
 		return 0, fmt.Errorf("no utility VM passed")
@@ -41,6 +41,9 @@ func TarToVhd(lcowUVM *uvm.UtilityVM, targetVHDFile string, reader io.Reader) (i
 	}
 	defer tar2vhd.Close()
 
-	logrus.Debugf("hcsshim: TarToVhd: %s created, %d bytes", targetVHDFile, byteCounts.Out)
+	logrus.WithFields(logrus.Fields{
+		"target": targetVHDFile,
+		"size":   byteCounts.Out,
+	}).Debug("hcsshim: TarToVhd: created")
 	return byteCounts.Out, err
 }

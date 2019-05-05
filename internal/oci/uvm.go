@@ -249,7 +249,10 @@ func parseAnnotationsPreferredRootFSType(a map[string]string, key string, def uv
 		case "vhd":
 			return uvm.PreferredRootFSTypeVHD
 		default:
-			logrus.Warningf("annotation: '%s', with value: '%s' must be 'initrd' or 'vhd'", key, v)
+			logrus.WithFields(logrus.Fields{
+				"annotation": key,
+				"value":      v,
+			}).Warn("annotation value must be 'initrd' or 'vhd'")
 		}
 	}
 	return def

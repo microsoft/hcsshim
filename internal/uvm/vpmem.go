@@ -6,7 +6,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
-	"github.com/Microsoft/hcsshim/internal/schema2"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/sirupsen/logrus"
 )
 
@@ -141,9 +141,11 @@ func (uvm *UtilityVM) AddVPMEM(hostPath string, expose bool) (_ uint32, _ string
 			uvmPath:  uvmPath}
 		uvm.vpmemDevices[deviceNumber] = pmemi
 	}
-	logrus.Debugf("hcsshim::AddVPMEM id:%s Success %+v", uvm.id, uvm.vpmemDevices[deviceNumber])
+	logrus.WithFields(logrus.Fields{
+		logfields.UVMID: uvm.id,
+		"device":        fmt.Sprintf("%+v", uvm.vpmemDevices[deviceNumber]),
+	}).Debug("hcsshim::AddVPMEM Success")
 	return deviceNumber, uvmPath, nil
-
 }
 
 // RemoveVPMEM removes a VPMEM disk from a utility VM. As an external API, it

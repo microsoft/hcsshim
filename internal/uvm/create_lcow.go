@@ -130,7 +130,7 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 	log := logrus.WithFields(logrus.Fields{
 		logfields.UVMID: opts.ID,
 	})
-	log.Debugf(op+" - Begin Operation: %+v", opts)
+	log.WithField("options", fmt.Sprintf("%+v", opts)).Debug(op + " - Begin Operation")
 	defer func() {
 		if err != nil {
 			log.Data[logrus.ErrorKey] = err

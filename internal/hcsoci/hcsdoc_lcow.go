@@ -5,7 +5,7 @@ package hcsoci
 import (
 	"encoding/json"
 
-	"github.com/Microsoft/hcsshim/internal/schema2"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
@@ -90,7 +90,7 @@ func createLinuxContainerDocument(coi *createOptionsInternal, guestRoot string) 
 		return nil, err
 	}
 
-	logrus.Debugf("hcsshim::createLinuxContainerDoc: guestRoot:%s", guestRoot)
+	logrus.WithField("guestRoot", guestRoot).Debug("hcsshim::createLinuxContainerDoc")
 	v2 := &linuxComputeSystem{
 		Owner:                             coi.actualOwner,
 		SchemaVersion:                     schemaversion.SchemaV21(),

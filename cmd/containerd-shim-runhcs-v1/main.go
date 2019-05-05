@@ -52,12 +52,10 @@ func stack() []byte {
 
 func panicRecover() {
 	if r := recover(); r != nil {
-		logrus.Errorf("containerd-shim-runhcs-v1: panic: %s", r)
-		s := string(stack())
-		split := strings.Split(s, "\n")
-		for _, line := range split {
-			logrus.Error(line)
-		}
+		logrus.WithFields(logrus.Fields{
+			"panic": r,
+			"stack": string(stack()),
+		}).Error("containerd-shim-runhcs-v1: panic")
 	}
 }
 

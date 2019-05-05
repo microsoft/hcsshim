@@ -6,7 +6,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
-	"github.com/Microsoft/hcsshim/internal/schema2"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/sirupsen/logrus"
 )
 
@@ -38,7 +38,10 @@ func (uvm *UtilityVM) AddVSMB(hostPath string, guestRequest interface{}, options
 		logfields.UVMID: uvm.id,
 		"host-path":     hostPath,
 	})
-	log.Debugf(op+" - GuestRequest: %+v, Options: %+v - Begin Operation", guestRequest, options)
+	log.WithFields(logrus.Fields{
+		"options":      fmt.Sprintf("%+v", options),
+		"guestRequest": fmt.Sprintf("%+v", guestRequest),
+	}).Debug(op + " - Begin Operation")
 	defer func() {
 		if err != nil {
 			log.Data[logrus.ErrorKey] = err
