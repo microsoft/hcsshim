@@ -29,7 +29,7 @@ func TarToVhd(lcowUVM *uvm.UtilityVM, targetVHDFile string, reader io.Reader) (i
 	// BUGBUG Delete the file on failure
 
 	tar2vhd, byteCounts, err := CreateProcess(&ProcessOptions{
-		HCSSystem:         lcowUVM.ComputeSystem(),
+		Host:              lcowUVM,
 		Process:           &specs.Process{Args: []string{"tar2vhd"}},
 		CreateInUtilityVm: true,
 		Stdin:             reader,

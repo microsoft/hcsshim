@@ -6,9 +6,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/schema1"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/Microsoft/hcsshim/test/functional/utilities"
+	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 )
 
 func TestPropertiesGuestConnection_LCOW(t *testing.T) {
@@ -17,15 +16,11 @@ func TestPropertiesGuestConnection_LCOW(t *testing.T) {
 	uvm := testutilities.CreateLCOWUVM(t, t.Name())
 	defer uvm.Close()
 
-	p, err := uvm.ComputeSystem().Properties(schema1.PropertyTypeGuestConnection)
-	if err != nil {
-		t.Fatalf("Failed to query properties: %s", err)
-	}
-
-	if p.GuestConnectionInfo.GuestDefinedCapabilities.NamespaceAddRequestSupported ||
-		!p.GuestConnectionInfo.GuestDefinedCapabilities.SignalProcessSupported ||
-		p.GuestConnectionInfo.ProtocolVersion < 4 {
-		t.Fatalf("unexpected values: %+v", p.GuestConnectionInfo)
+	p, gc := uvm.Capabilities()
+	if gc.NamespaceAddRequestSupported ||
+		!gc.SignalProcessSupported ||
+		p < 4 {
+		t.Fatalf("unexpected values: %d %+v", p, gc)
 	}
 }
 
@@ -35,14 +30,10 @@ func TestPropertiesGuestConnection_WCOW(t *testing.T) {
 	defer os.RemoveAll(uvmScratchDir)
 	defer uvm.Close()
 
-	p, err := uvm.ComputeSystem().Properties(schema1.PropertyTypeGuestConnection)
-	if err != nil {
-		t.Fatalf("Failed to query properties: %s", err)
-	}
-
-	if !p.GuestConnectionInfo.GuestDefinedCapabilities.NamespaceAddRequestSupported ||
-		!p.GuestConnectionInfo.GuestDefinedCapabilities.SignalProcessSupported ||
-		p.GuestConnectionInfo.ProtocolVersion < 4 {
-		t.Fatalf("unexpected values: %+v", p.GuestConnectionInfo)
+	p, gc := uvm.Capabilities()
+	if !gc.NamespaceAddRequestSupported ||
+		!gc.SignalProcessSupported ||
+		p < 4 {
+		t.Fatalf("unexpected values: %d %+v", p, gc)
 	}
 }

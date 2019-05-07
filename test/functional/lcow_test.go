@@ -17,7 +17,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/Microsoft/hcsshim/test/functional/utilities"
+	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 )
 
 // TestLCOWUVMNoSCSINoVPMemInitrd starts an LCOW utility VM without a SCSI controller and
@@ -206,7 +206,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 func runInitProcess(t *testing.T, s *hcs.System, expected string) {
 	var outB, errB bytes.Buffer
 	p, bc, err := lcow.CreateProcess(&lcow.ProcessOptions{
-		HCSSystem:   s,
+		Host:        s,
 		Stdout:      &outB,
 		Stderr:      &errB,
 		CopyTimeout: 30 * time.Second,

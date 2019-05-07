@@ -12,8 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
-	"github.com/Microsoft/hcsshim/internal/schema1"
-	"github.com/Microsoft/hcsshim/internal/schema2"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/osversion"
 )
 
@@ -220,12 +219,7 @@ func (uvm *UtilityVM) RemoveEndpointsFromNS(id string, endpoints []*hns.HNSEndpo
 
 // IsNetworkNamespaceSupported returns bool value specifying if network namespace is supported inside the guest
 func (uvm *UtilityVM) isNetworkNamespaceSupported() bool {
-	p, err := uvm.ComputeSystem().Properties(schema1.PropertyTypeGuestConnection)
-	if err == nil {
-		return p.GuestConnectionInfo.GuestDefinedCapabilities.NamespaceAddRequestSupported
-	}
-
-	return false
+	return uvm.guestCaps.NamespaceAddRequestSupported
 }
 
 func getNetworkModifyRequest(adapterID string, requestType string, settings interface{}) interface{} {

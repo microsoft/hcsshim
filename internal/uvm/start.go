@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/schema1"
 	"github.com/sirupsen/logrus"
 )
 
@@ -153,5 +154,19 @@ func (uvm *UtilityVM) Start() (err error) {
 		uvm.outputProcessingCancel = cancel
 		uvm.outputListener = nil
 	}
-	return uvm.hcsSystem.Start()
+	err = uvm.hcsSystem.Start()
+	if err != nil {
+		return err
+	}
+
+	// Cache the guest connection properties.
+	properties, err := uvm.hcsSystem.Properties(schema1.PropertyTypeGuestConnection)
+	if err != nil {
+		uvm.hcsSystem.Terminate()
+		uvm.hcsSystem.Wait()
+		return err
+	}
+	uvm.guestCaps = properties.GuestConnectionInfo.GuestDefinedCapabilities
+	uvm.protocol = properties.GuestConnectionInfo.ProtocolVersion
+	return nil
 }

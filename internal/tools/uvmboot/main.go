@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -267,18 +266,18 @@ func run(options *uvm.OptionsLCOW, c *cli.Context) error {
 	}
 
 	if options.UseGuestConnection {
-		if err := execViaGcs(uvm.ComputeSystem(), c); err != nil {
+		if err := execViaGcs(uvm, c); err != nil {
 			return err
 		}
-		uvm.ComputeSystem().Terminate()
+		uvm.Terminate()
 		uvm.Wait()
-		return uvm.ComputeSystem().ExitError()
+		return uvm.ExitError()
 	}
 
 	return uvm.Wait()
 }
 
-func execViaGcs(cs *hcs.System, c *cli.Context) error {
+func execViaGcs(vm *uvm.UtilityVM, c *cli.Context) error {
 	var copyOut, copyErr bool
 	if c.String(outputHandlingArgName) == "stdout" {
 		copyOut = c.Bool(forwardStdoutArgName)
@@ -294,7 +293,7 @@ func execViaGcs(cs *hcs.System, c *cli.Context) error {
 		},
 		CreateInUtilityVm: true,
 	}
-	p, err := cs.CreateProcess(popts)
+	p, err := vm.CreateProcess(popts)
 	if err != nil {
 		return err
 	}

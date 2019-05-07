@@ -23,7 +23,7 @@ func execInUvm(ctx context.Context, vm *uvm.UtilityVM, req *shimdiag.ExecProcess
 			wd = "/"
 		}
 	}
-	proc, err := vm.ComputeSystem().CreateProcess(&hcsschema.ProcessParameters{
+	proc, err := vm.CreateProcess(&hcsschema.ProcessParameters{
 		CommandArgs:      req.Args,
 		CreateStdInPipe:  req.Stdin != "",
 		CreateStdOutPipe: req.Stdout != "",
