@@ -14,7 +14,10 @@ import (
 func CreateUVMScratch(imagePath, destDirectory, vmID string) error {
 	sourceScratch := filepath.Join(imagePath, `UtilityVM\SystemTemplate.vhdx`)
 	targetScratch := filepath.Join(destDirectory, "sandbox.vhdx")
-	logrus.Debugf("uvm::CreateUVMScratch %s from %s", targetScratch, sourceScratch)
+	logrus.WithFields(logrus.Fields{
+		"target": targetScratch,
+		"source": sourceScratch,
+	}).Debug("uvm::CreateUVMScratch")
 	if err := copyfile.CopyFile(sourceScratch, targetScratch, true); err != nil {
 		return err
 	}

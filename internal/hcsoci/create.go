@@ -60,8 +60,6 @@ type createOptionsInternal struct {
 // release the resources on failure, so that the client can make the necessary
 // call to release resources that have been allocated as part of calling this function.
 func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources, err error) {
-	logrus.Debugf("hcsshim::CreateContainer options: %+v", createOptions)
-
 	coi := &createOptionsInternal{
 		CreateOptions: createOptions,
 		actualID:      createOptions.ID,
@@ -85,8 +83,12 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 		coi.actualSchemaVersion = schemaversion.SchemaV21()
 	} else {
 		coi.actualSchemaVersion = schemaversion.DetermineSchemaVersion(coi.SchemaVersion)
-		logrus.Debugf("hcsshim::CreateContainer using schema %s", schemaversion.String(coi.actualSchemaVersion))
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"options": fmt.Sprintf("%+v", createOptions),
+		"schema":  coi.actualSchemaVersion,
+	}).Debug("hcsshim::CreateContainer")
 
 	resources := &Resources{}
 	defer func() {
@@ -149,40 +151,40 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 	}
 
 	var hcsDocument interface{}
-	logrus.Debugf("hcsshim::CreateContainer allocating resources")
+	logrus.Debug("hcsshim::CreateContainer allocating resources")
 	if coi.Spec.Linux != nil {
 		if schemaversion.IsV10(coi.actualSchemaVersion) {
 			return nil, resources, errors.New("LCOW v1 not supported")
 		}
-		logrus.Debugf("hcsshim::CreateContainer allocateLinuxResources")
+		logrus.Debug("hcsshim::CreateContainer allocateLinuxResources")
 		err = allocateLinuxResources(coi, resources)
 		if err != nil {
-			logrus.Debugf("failed to allocateLinuxResources %s", err)
+			logrus.WithError(err).Debug("failed to allocateLinuxResources")
 			return nil, resources, err
 		}
 		hcsDocument, err = createLinuxContainerDocument(coi, resources.containerRootInUVM)
 		if err != nil {
-			logrus.Debugf("failed createHCSContainerDocument %s", err)
+			logrus.WithError(err).Debug("failed createHCSContainerDocument")
 			return nil, resources, err
 		}
 	} else {
 		err = allocateWindowsResources(coi, resources)
 		if err != nil {
-			logrus.Debugf("failed to allocateWindowsResources %s", err)
+			logrus.WithError(err).Debug("failed to allocateWindowsResources")
 			return nil, resources, err
 		}
-		logrus.Debugf("hcsshim::CreateContainer creating container document")
+		logrus.Debug("hcsshim::CreateContainer creating container document")
 		hcsDocument, err = createWindowsContainerDocument(coi)
 		if err != nil {
-			logrus.Debugf("failed createHCSContainerDocument %s", err)
+			logrus.WithError(err).Debug("failed createHCSContainerDocument")
 			return nil, resources, err
 		}
 	}
 
-	logrus.Debugf("hcsshim::CreateContainer creating compute system")
+	logrus.Debug("hcsshim::CreateContainer creating compute system")
 	system, err := hcs.CreateComputeSystem(coi.actualID, hcsDocument)
 	if err != nil {
-		logrus.Debugf("failed to CreateComputeSystem %s", err)
+		logrus.WithError(err).Debug("failed to CreateComputeSystem")
 		return nil, resources, err
 	}
 	return system, resources, err

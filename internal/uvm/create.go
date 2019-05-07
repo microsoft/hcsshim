@@ -128,9 +128,9 @@ func (uvm *UtilityVM) normalizeProcessorCount(requested int32) {
 	if requested > hostCount {
 		logrus.WithFields(logrus.Fields{
 			logfields.UVMID: uvm.id,
-		}).Warningf("Changing user requested CPUCount: %d to current number of processors: %d",
-			requested,
-			hostCount)
+			"requested":     requested,
+			"assigned":      hostCount,
+		}).Warn("Changing user requested CPUCount to current number of processors")
 		uvm.processorCount = hostCount
 	} else {
 		uvm.processorCount = requested

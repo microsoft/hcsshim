@@ -62,7 +62,7 @@ func Copy(dst io.Writer, src io.Reader, size int64, context string, timeout time
 				if size > 0 {
 					bytes := make([]byte, size)
 					if _, err := buf.Read(bytes); err == nil {
-						logrus.Debugf("hcsshim::copyWithTimeout - Read bytes\n%s", hex.Dump(bytes))
+						logrus.WithField("bytes", hex.Dump(bytes)).Debug("hcsshim::copyWithTimeout - Read bytes")
 					}
 				}
 			}

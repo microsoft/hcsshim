@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/Microsoft/hcsshim/internal/schema2"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/sirupsen/logrus"
 )
@@ -74,7 +74,7 @@ func DetermineSchemaVersion(requestedSV *hcsschema.Version) *hcsschema.Version {
 		if err := IsSupported(requestedSV); err == nil {
 			sv = requestedSV
 		} else {
-			logrus.Warnf("Ignoring unsupported requested schema version %+v", requestedSV)
+			logrus.WithField("schemaVersion", requestedSV).Warn("Ignoring unsupported requested schema version")
 		}
 	}
 	return sv

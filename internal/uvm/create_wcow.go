@@ -45,7 +45,7 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 	log := logrus.WithFields(logrus.Fields{
 		logfields.UVMID: opts.ID,
 	})
-	log.Debugf(op+" - Begin Operation: %+v", opts)
+	log.WithField("options", fmt.Sprintf("%+v", opts)).Debug(op + " - Begin Operation")
 	defer func() {
 		if err != nil {
 			log.Data[logrus.ErrorKey] = err
@@ -85,11 +85,11 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 	//       - Update tests that rely on this current behaviour.
 	// Create the RW scratch in the top-most layer folder, creating the folder if it doesn't already exist.
 	scratchFolder := opts.LayerFolders[len(opts.LayerFolders)-1]
-	logrus.Debugf("uvm::CreateWCOW scratch folder: %s", scratchFolder)
+	logrus.WithField("scratchFolder", scratchFolder).Debug("uvm::CreateWCOW scratch folder")
 
 	// Create the directory if it doesn't exist
 	if _, err := os.Stat(scratchFolder); os.IsNotExist(err) {
-		logrus.Debugf("uvm::CreateWCOW creating folder: %s ", scratchFolder)
+		logrus.WithField("scratchFolder", scratchFolder).Debug("uvm::CreateWCOW creating folder")
 		if err := os.MkdirAll(scratchFolder, 0777); err != nil {
 			return nil, fmt.Errorf("failed to create utility VM scratch folder: %s", err)
 		}
@@ -187,7 +187,7 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 
 	hcsSystem, err := hcs.CreateComputeSystem(uvm.id, fullDoc)
 	if err != nil {
-		logrus.Debugln("failed to create UVM: ", err)
+		logrus.WithError(err).Debug("failed to create UVM")
 		return nil, err
 	}
 	uvm.hcsSystem = hcsSystem
