@@ -8,6 +8,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/sirupsen/logrus"
 )
 
@@ -146,6 +148,22 @@ func (uvm *UtilityVM) Close() (err error) {
 		return uvm.hcsSystem.Close()
 	}
 	return nil
+}
+
+// CreateContainer creates a container in the utility VM.
+func (uvm *UtilityVM) CreateContainer(id string, settings interface{}) (*hcs.System, error) {
+	doc := hcsschema.ComputeSystem{
+		HostingSystemId:                   uvm.id,
+		Owner:                             uvm.owner,
+		SchemaVersion:                     schemaversion.SchemaV21(),
+		ShouldTerminateOnLastHandleClosed: true,
+		HostedSystem:                      settings,
+	}
+	c, err := hcs.CreateComputeSystem(id, &doc)
+	if err != nil {
+		return nil, err
+	}
+	return c, err
 }
 
 // CreateProcess creates a process in the utility VM.
