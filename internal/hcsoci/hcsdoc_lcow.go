@@ -5,8 +5,8 @@ package hcsoci
 import (
 	"encoding/json"
 
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/Microsoft/hcsshim/internal/schemaversion"
+	hcsschema "github.com/microsoft/hcsshim/internal/schema2"
+	"github.com/microsoft/hcsshim/internal/schemaversion"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )

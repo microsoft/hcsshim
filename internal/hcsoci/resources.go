@@ -3,8 +3,8 @@ package hcsoci
 import (
 	"os"
 
-	"github.com/Microsoft/hcsshim/internal/hns"
-	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/microsoft/hcsshim/internal/hns"
+	"github.com/microsoft/hcsshim/internal/uvm"
 	"github.com/sirupsen/logrus"
 )
 

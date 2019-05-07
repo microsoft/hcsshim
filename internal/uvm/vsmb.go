@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/requesttype"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/microsoft/hcsshim/internal/logfields"
+	"github.com/microsoft/hcsshim/internal/requesttype"
+	hcsschema "github.com/microsoft/hcsshim/internal/schema2"
 	"github.com/sirupsen/logrus"
 )
 

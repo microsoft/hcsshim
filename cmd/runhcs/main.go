@@ -6,10 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Microsoft/go-winio"
-	"github.com/Microsoft/go-winio/pkg/etwlogrus"
-	"github.com/Microsoft/hcsshim/internal/regstate"
-	"github.com/Microsoft/hcsshim/internal/runhcs"
+	"github.com/microsoft/go-winio"
+	"github.com/microsoft/go-winio/pkg/etwlogrus"
+	"github.com/microsoft/hcsshim/internal/regstate"
+	"github.com/microsoft/hcsshim/internal/runhcs"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -53,7 +53,7 @@ Where "<container-id>" is your name for the instance of the container that you a
 func main() {
 	// Provider ID: 0b52781f-b24d-5685-ddf6-69830ed40ec3
 	// Hook isn't closed explicitly, as it will exist until process exit.
-	if hook, err := etwlogrus.NewHook("Microsoft.Virtualization.RunHCS"); err == nil {
+	if hook, err := etwlogrus.NewHook("microsoft.Virtualization.RunHCS"); err == nil {
 		logrus.AddHook(hook)
 	} else {
 		logrus.Error(err)

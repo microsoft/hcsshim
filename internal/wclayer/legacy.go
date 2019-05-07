@@ -12,18 +12,18 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/Microsoft/go-winio"
-	"github.com/Microsoft/hcsshim/internal/longpath"
-	"github.com/Microsoft/hcsshim/internal/safefile"
+	"github.com/microsoft/go-winio"
+	"github.com/microsoft/hcsshim/internal/longpath"
+	"github.com/microsoft/hcsshim/internal/safefile"
 )
 
 var errorIterationCanceled = errors.New("")
 
 var mutatedUtilityVMFiles = map[string]bool{
-	`EFI\Microsoft\Boot\BCD`:      true,
-	`EFI\Microsoft\Boot\BCD.LOG`:  true,
-	`EFI\Microsoft\Boot\BCD.LOG1`: true,
-	`EFI\Microsoft\Boot\BCD.LOG2`: true,
+	`EFI\microsoft\Boot\BCD`:      true,
+	`EFI\microsoft\Boot\BCD.LOG`:  true,
+	`EFI\microsoft\Boot\BCD.LOG1`: true,
+	`EFI\microsoft\Boot\BCD.LOG2`: true,
 }
 
 const (

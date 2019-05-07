@@ -12,7 +12,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/Microsoft/hcsshim/ext4/internal/format"
+	"github.com/microsoft/hcsshim/ext4/internal/format"
 )
 
 func timeEqual(ts syscall.Timespec, t time.Time) bool {

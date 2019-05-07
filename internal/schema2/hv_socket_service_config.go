@@ -17,6 +17,6 @@ type HvSocketServiceConfig struct {
 	//  SDDL string that HvSocket will check before allowing a host process to connect  to this specific service.  If not specified, defaults to the system DefaultConnectSecurityDescriptor, defined in  HvSocketSystemWpConfig in V1.
 	ConnectSecurityDescriptor string `json:"ConnectSecurityDescriptor,omitempty"`
 
-	//  If true, HvSocket will process wildcard binds for this service/system combination.  Wildcard binds are secured in the registry at  SOFTWARE/Microsoft/Windows NT/CurrentVersion/Virtualization/HvSocket/WildcardDescriptors
+	//  If true, HvSocket will process wildcard binds for this service/system combination.  Wildcard binds are secured in the registry at  SOFTWARE/microsoft/Windows NT/CurrentVersion/Virtualization/HvSocket/WildcardDescriptors
 	AllowWildcardBinds bool `json:"AllowWildcardBinds,omitempty"`
 }

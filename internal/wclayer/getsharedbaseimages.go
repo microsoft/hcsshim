@@ -1,8 +1,8 @@
 package wclayer
 
 import (
-	"github.com/Microsoft/hcsshim/internal/hcserror"
-	"github.com/Microsoft/hcsshim/internal/interop"
+	"github.com/microsoft/hcsshim/internal/hcserror"
+	"github.com/microsoft/hcsshim/internal/interop"
 	"github.com/sirupsen/logrus"
 )
 

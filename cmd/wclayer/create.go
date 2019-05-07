@@ -3,8 +3,8 @@ package main
 import (
 	"path/filepath"
 
-	"github.com/Microsoft/hcsshim"
-	"github.com/Microsoft/hcsshim/internal/appargs"
+	"github.com/microsoft/hcsshim"
+	"github.com/microsoft/hcsshim/internal/appargs"
 	"github.com/urfave/cli"
 )
 

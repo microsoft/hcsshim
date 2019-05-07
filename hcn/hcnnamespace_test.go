@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/cni"
-	"github.com/Microsoft/hcsshim/internal/guid"
+	"github.com/microsoft/hcsshim/internal/cni"
+	"github.com/microsoft/hcsshim/internal/guid"
 )
 
 func TestNewNamespace(t *testing.T) {

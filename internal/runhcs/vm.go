@@ -3,7 +3,7 @@ package runhcs
 import (
 	"encoding/json"
 
-	"github.com/Microsoft/go-winio"
+	"github.com/microsoft/go-winio"
 )
 
 // VMRequestOp is an operation that can be issued to a VM shim.

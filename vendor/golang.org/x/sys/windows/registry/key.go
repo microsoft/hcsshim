@@ -8,7 +8,7 @@
 //
 // Here is a simple example, opening a registry key and reading a string value from it.
 //
-//	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows NT\CurrentVersion`, registry.QUERY_VALUE)
+//	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\microsoft\Windows NT\CurrentVersion`, registry.QUERY_VALUE)
 //	if err != nil {
 //		log.Fatal(err)
 //	}

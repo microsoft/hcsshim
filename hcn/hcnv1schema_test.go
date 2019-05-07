@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/Microsoft/hcsshim"
+	"github.com/microsoft/hcsshim"
 )
 
 func TestV1Network(t *testing.T) {

@@ -75,7 +75,7 @@ getnteventlog "Application"
 # Save all the Hyper-V event logs
 $el = $(wevtutil.exe el)
 $el | ForEach-Object {
-    if ($_.StartsWith("Microsoft-Windows-Hyper")) {
+    if ($_.StartsWith("microsoft-Windows-Hyper")) {
         gethveventlog  $_
     }
 }

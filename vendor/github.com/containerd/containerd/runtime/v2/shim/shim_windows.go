@@ -29,7 +29,7 @@ import (
 	"sync"
 	"unsafe"
 
-	winio "github.com/Microsoft/go-winio"
+	winio "github.com/microsoft/go-winio"
 	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/ttrpc"

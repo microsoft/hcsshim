@@ -10,9 +10,9 @@ import (
 	"unicode/utf16"
 	"unsafe"
 
-	"github.com/Microsoft/hcsshim/internal/longpath"
+	"github.com/microsoft/hcsshim/internal/longpath"
 
-	winio "github.com/Microsoft/go-winio"
+	winio "github.com/microsoft/go-winio"
 )
 
 //go:generate go run $GOROOT\src\syscall\mksyscall_windows.go -output zsyscall_windows.go safeopen.go

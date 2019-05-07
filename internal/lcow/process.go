@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/copywithtimeout"
-	"github.com/Microsoft/hcsshim/internal/hcs"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/microsoft/hcsshim/internal/copywithtimeout"
+	"github.com/microsoft/hcsshim/internal/hcs"
+	hcsschema "github.com/microsoft/hcsshim/internal/schema2"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )

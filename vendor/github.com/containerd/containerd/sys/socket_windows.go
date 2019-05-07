@@ -21,7 +21,7 @@ package sys
 import (
 	"net"
 
-	"github.com/Microsoft/go-winio"
+	"github.com/microsoft/go-winio"
 )
 
 // GetLocalListener returns a Listernet out of a named pipe.

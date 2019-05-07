@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	winio "github.com/Microsoft/go-winio"
-	"github.com/Microsoft/go-winio/archive/tar"
-	"github.com/Microsoft/go-winio/backuptar"
-	"github.com/Microsoft/hcsshim"
+	winio "github.com/microsoft/go-winio"
+	"github.com/microsoft/go-winio/archive/tar"
+	"github.com/microsoft/go-winio/backuptar"
+	"github.com/microsoft/hcsshim"
 )
 
 const whiteoutPrefix = ".wh."
@@ -20,10 +20,10 @@ var (
 	// mutatedFiles is a list of files that are mutated by the import process
 	// and must be backed up and restored.
 	mutatedFiles = map[string]string{
-		"UtilityVM/Files/EFI/Microsoft/Boot/BCD":      "bcd.bak",
-		"UtilityVM/Files/EFI/Microsoft/Boot/BCD.LOG":  "bcd.log.bak",
-		"UtilityVM/Files/EFI/Microsoft/Boot/BCD.LOG1": "bcd.log1.bak",
-		"UtilityVM/Files/EFI/Microsoft/Boot/BCD.LOG2": "bcd.log2.bak",
+		"UtilityVM/Files/EFI/microsoft/Boot/BCD":      "bcd.bak",
+		"UtilityVM/Files/EFI/microsoft/Boot/BCD.LOG":  "bcd.log.bak",
+		"UtilityVM/Files/EFI/microsoft/Boot/BCD.LOG1": "bcd.log1.bak",
+		"UtilityVM/Files/EFI/microsoft/Boot/BCD.LOG2": "bcd.log2.bak",
 	}
 )
 

@@ -2,7 +2,7 @@ version: 0.1.{build}
 
 image: Visual Studio 2017
 
-clone_folder: c:\gopath\src\github.com\Microsoft\hcsshim
+clone_folder: c:\gopath\src\github.com\microsoft\hcsshim
 
 environment:
   GOPATH: c:\gopath

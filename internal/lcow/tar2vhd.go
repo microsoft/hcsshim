@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/microsoft/hcsshim/internal/uvm"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )

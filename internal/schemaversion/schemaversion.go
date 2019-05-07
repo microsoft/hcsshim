@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/Microsoft/hcsshim/osversion"
+	hcsschema "github.com/microsoft/hcsshim/internal/schema2"
+	"github.com/microsoft/hcsshim/osversion"
 	"github.com/sirupsen/logrus"
 )
 

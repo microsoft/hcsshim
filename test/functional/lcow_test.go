@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/hcs"
-	"github.com/Microsoft/hcsshim/internal/hcsoci"
-	"github.com/Microsoft/hcsshim/internal/lcow"
-	"github.com/Microsoft/hcsshim/internal/uvm"
-	"github.com/Microsoft/hcsshim/osversion"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/microsoft/hcsshim/internal/hcs"
+	"github.com/microsoft/hcsshim/internal/hcsoci"
+	"github.com/microsoft/hcsshim/internal/lcow"
+	"github.com/microsoft/hcsshim/internal/uvm"
+	"github.com/microsoft/hcsshim/osversion"
+	testutilities "github.com/microsoft/hcsshim/test/functional/utilities"
 )
 
 // TestLCOWUVMNoSCSINoVPMemInitrd starts an LCOW utility VM without a SCSI controller and

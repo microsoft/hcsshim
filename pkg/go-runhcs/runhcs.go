@@ -11,7 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	irunhcs "github.com/Microsoft/hcsshim/internal/runhcs"
+	irunhcs "github.com/microsoft/hcsshim/internal/runhcs"
 	"github.com/containerd/go-runc"
 )
 

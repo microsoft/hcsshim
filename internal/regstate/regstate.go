@@ -31,7 +31,7 @@ type Key struct {
 var localMachine = &Key{registry.LOCAL_MACHINE, "HKEY_LOCAL_MACHINE"}
 var localUser = &Key{registry.CURRENT_USER, "HKEY_CURRENT_USER"}
 
-var rootPath = `SOFTWARE\Microsoft\runhcs`
+var rootPath = `SOFTWARE\microsoft\runhcs`
 
 type NotFoundError struct {
 	Id string

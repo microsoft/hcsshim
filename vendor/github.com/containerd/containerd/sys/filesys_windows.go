@@ -26,8 +26,8 @@ import (
 	"syscall"
 	"unsafe"
 
-	winio "github.com/Microsoft/go-winio"
-	"github.com/Microsoft/hcsshim"
+	winio "github.com/microsoft/go-winio"
+	"github.com/microsoft/hcsshim"
 )
 
 // MkdirAllWithACL is a wrapper for MkdirAll that creates a directory

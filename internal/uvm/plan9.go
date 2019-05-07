@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
-	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/requesttype"
-	"github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/microsoft/hcsshim/internal/guestrequest"
+	"github.com/microsoft/hcsshim/internal/logfields"
+	"github.com/microsoft/hcsshim/internal/requesttype"
+	"github.com/microsoft/hcsshim/internal/schema2"
+	"github.com/microsoft/hcsshim/osversion"
 	"github.com/sirupsen/logrus"
 )
 

@@ -5,12 +5,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/mergemaps"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/Microsoft/hcsshim/internal/schemaversion"
-	"github.com/Microsoft/hcsshim/internal/uvmfolder"
-	"github.com/Microsoft/hcsshim/internal/wcow"
+	"github.com/microsoft/hcsshim/internal/logfields"
+	"github.com/microsoft/hcsshim/internal/mergemaps"
+	hcsschema "github.com/microsoft/hcsshim/internal/schema2"
+	"github.com/microsoft/hcsshim/internal/schemaversion"
+	"github.com/microsoft/hcsshim/internal/uvmfolder"
+	"github.com/microsoft/hcsshim/internal/wcow"
 	"github.com/sirupsen/logrus"
 )
 
@@ -116,7 +116,7 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 			Chipset: &hcsschema.Chipset{
 				Uefi: &hcsschema.Uefi{
 					BootThis: &hcsschema.UefiBootEntry{
-						DevicePath: `\EFI\Microsoft\Boot\bootmgfw.efi`,
+						DevicePath: `\EFI\microsoft\Boot\bootmgfw.efi`,
 						DeviceType: "VmbFs",
 					},
 				},

@@ -4,7 +4,7 @@ import (
 	"io"
 	"syscall"
 
-	"github.com/Microsoft/go-winio"
+	"github.com/microsoft/go-winio"
 )
 
 // makeOpenFiles calls winio.MakeOpenFile for each handle in a slice but closes all the handles

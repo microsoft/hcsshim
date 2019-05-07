@@ -10,8 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/Microsoft/go-winio"
-	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/microsoft/go-winio"
+	"github.com/microsoft/hcsshim/internal/oci"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/ttrpc"

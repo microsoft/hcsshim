@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
+	"github.com/microsoft/hcsshim/internal/guid"
 )
 
 // ContainerState represents the platform agnostic pieces relating to a

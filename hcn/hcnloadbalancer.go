@@ -3,8 +3,8 @@ package hcn
 import (
 	"encoding/json"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
-	"github.com/Microsoft/hcsshim/internal/interop"
+	"github.com/microsoft/hcsshim/internal/guid"
+	"github.com/microsoft/hcsshim/internal/interop"
 	"github.com/sirupsen/logrus"
 )
 

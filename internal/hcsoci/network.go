@@ -1,8 +1,8 @@
 package hcsoci
 
 import (
-	"github.com/Microsoft/hcsshim/internal/hns"
-	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/microsoft/hcsshim/internal/hns"
+	"github.com/microsoft/hcsshim/internal/logfields"
 	"github.com/sirupsen/logrus"
 )
 

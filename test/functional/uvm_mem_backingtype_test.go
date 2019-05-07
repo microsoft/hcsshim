@@ -7,9 +7,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/uvm"
-	"github.com/Microsoft/hcsshim/osversion"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/microsoft/hcsshim/internal/uvm"
+	"github.com/microsoft/hcsshim/osversion"
+	testutilities "github.com/microsoft/hcsshim/test/functional/utilities"
 	"github.com/sirupsen/logrus"
 )
 

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Microsoft/hcsshim/ext4/internal/format"
+	"github.com/microsoft/hcsshim/ext4/internal/format"
 )
 
 type testFile struct {

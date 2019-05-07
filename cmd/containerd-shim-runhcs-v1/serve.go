@@ -10,8 +10,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/Microsoft/go-winio"
-	"github.com/Microsoft/hcsshim/internal/shimdiag"
+	"github.com/microsoft/go-winio"
+	"github.com/microsoft/hcsshim/internal/shimdiag"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/ttrpc"

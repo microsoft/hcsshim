@@ -3,8 +3,8 @@ package cni
 import (
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
-	"github.com/Microsoft/hcsshim/internal/regstate"
+	"github.com/microsoft/hcsshim/internal/guid"
+	"github.com/microsoft/hcsshim/internal/regstate"
 )
 
 func Test_LoadPersistedNamespaceConfig_NoConfig(t *testing.T) {

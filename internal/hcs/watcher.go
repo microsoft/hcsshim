@@ -3,8 +3,8 @@ package hcs
 import (
 	"context"
 
-	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/timeout"
+	"github.com/microsoft/hcsshim/internal/logfields"
+	"github.com/microsoft/hcsshim/internal/timeout"
 	"github.com/sirupsen/logrus"
 )
 

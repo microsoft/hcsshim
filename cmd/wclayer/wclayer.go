@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Microsoft/hcsshim"
+	"github.com/microsoft/hcsshim"
 	"github.com/urfave/cli"
 )
 

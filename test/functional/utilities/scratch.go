@@ -4,10 +4,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/hcs"
-	"github.com/Microsoft/hcsshim/internal/lcow"
-	"github.com/Microsoft/hcsshim/internal/uvm"
-	"github.com/Microsoft/hcsshim/internal/wclayer"
+	"github.com/microsoft/hcsshim/internal/hcs"
+	"github.com/microsoft/hcsshim/internal/lcow"
+	"github.com/microsoft/hcsshim/internal/uvm"
+	"github.com/microsoft/hcsshim/internal/wclayer"
 )
 
 const lcowGlobalSVMID = "test.lcowglobalsvm"

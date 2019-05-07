@@ -3,7 +3,7 @@ package wclayer
 import (
 	"sync"
 
-	"github.com/Microsoft/hcsshim/internal/hcserror"
+	"github.com/microsoft/hcsshim/internal/hcserror"
 	"github.com/sirupsen/logrus"
 )
 

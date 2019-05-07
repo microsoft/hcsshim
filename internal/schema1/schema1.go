@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/Microsoft/go-winio/pkg/guid"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/microsoft/go-winio/pkg/guid"
+	hcsschema "github.com/microsoft/hcsshim/internal/schema2"
 )
 
 // ProcessConfig is used as both the input of Container.CreateProcess

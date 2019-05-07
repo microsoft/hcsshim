@@ -6,9 +6,9 @@ import (
 	"io"
 	"path/filepath"
 
-	"github.com/Microsoft/go-winio/archive/tar"
-	"github.com/Microsoft/go-winio/backuptar"
-	"github.com/Microsoft/hcsshim"
+	"github.com/microsoft/go-winio/archive/tar"
+	"github.com/microsoft/go-winio/backuptar"
+	"github.com/microsoft/hcsshim"
 )
 
 var driverInfo = hcsshim.DriverInfo{}

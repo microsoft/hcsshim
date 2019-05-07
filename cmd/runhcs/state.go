@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"os"
 
-	"github.com/Microsoft/hcsshim/internal/appargs"
-	"github.com/Microsoft/hcsshim/internal/runhcs"
+	"github.com/microsoft/hcsshim/internal/appargs"
+	"github.com/microsoft/hcsshim/internal/runhcs"
 	"github.com/urfave/cli"
 )
 

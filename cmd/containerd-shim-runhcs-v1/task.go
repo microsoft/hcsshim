@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
-	"github.com/Microsoft/hcsshim/internal/shimdiag"
+	"github.com/microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	"github.com/microsoft/hcsshim/internal/shimdiag"
 	"github.com/containerd/containerd/runtime/v2/task"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )

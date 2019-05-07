@@ -4,7 +4,7 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/Microsoft/hcsshim/internal/appargs"
+	"github.com/microsoft/hcsshim/internal/appargs"
 	"github.com/urfave/cli"
 )
 

@@ -1,6 +1,6 @@
 package lcow
 
-import "github.com/Microsoft/hcsshim/internal/schema2"
+import "github.com/microsoft/hcsshim/internal/schema2"
 
 // Additional fields to hcsschema.ProcessParameters used by LCOW
 type ProcessParameters struct {

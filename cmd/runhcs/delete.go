@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Microsoft/hcsshim/internal/appargs"
-	"github.com/Microsoft/hcsshim/internal/regstate"
+	"github.com/microsoft/hcsshim/internal/appargs"
+	"github.com/microsoft/hcsshim/internal/regstate"
 	"github.com/urfave/cli"
 )
 

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Microsoft/go-winio"
+	"github.com/microsoft/go-winio"
 	"github.com/containerd/ttrpc"
 	"github.com/urfave/cli"
 	"golang.org/x/sys/windows"

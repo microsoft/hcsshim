@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	irunhcs "github.com/Microsoft/hcsshim/internal/runhcs"
+	irunhcs "github.com/microsoft/hcsshim/internal/runhcs"
 )
 
 // ContainerState is the representation of the containers state at the moment of

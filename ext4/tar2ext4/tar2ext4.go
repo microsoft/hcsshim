@@ -8,7 +8,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/ext4/internal/compactext4"
+	"github.com/microsoft/hcsshim/ext4/internal/compactext4"
 )
 
 type params struct {

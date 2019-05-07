@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	runhcs "github.com/Microsoft/hcsshim/pkg/go-runhcs"
+	runhcs "github.com/microsoft/hcsshim/pkg/go-runhcs"
 )
 
 func Test_CreateScratch_EmptyDestpath_Fail(t *testing.T) {

@@ -1,11 +1,11 @@
 package main
 
 import (
-	"github.com/Microsoft/hcsshim/internal/appargs"
-	"github.com/Microsoft/hcsshim/internal/hcs"
-	"github.com/Microsoft/hcsshim/internal/schema1"
-	"github.com/Microsoft/hcsshim/internal/signals"
-	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/microsoft/hcsshim/internal/appargs"
+	"github.com/microsoft/hcsshim/internal/hcs"
+	"github.com/microsoft/hcsshim/internal/schema1"
+	"github.com/microsoft/hcsshim/internal/signals"
+	"github.com/microsoft/hcsshim/osversion"
 	"github.com/urfave/cli"
 )
 

@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
+	"github.com/microsoft/hcsshim/internal/guestrequest"
 )
 
 var (
