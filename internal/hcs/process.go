@@ -58,7 +58,7 @@ type closeHandle struct {
 	Handle string
 }
 
-type ProcessStatus struct {
+type processStatus struct {
 	ProcessID      uint32
 	Exited         bool
 	ExitCode       uint32
@@ -256,7 +256,7 @@ func (process *Process) ResizeConsole(width, height uint16) (err error) {
 	return nil
 }
 
-func (process *Process) Properties() (_ *ProcessStatus, err error) {
+func (process *Process) properties() (_ *processStatus, err error) {
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
 
@@ -285,7 +285,7 @@ func (process *Process) Properties() (_ *ProcessStatus, err error) {
 	}
 	propertiesRaw := interop.ConvertAndFreeCoTaskMemBytes(propertiesp)
 
-	properties := &ProcessStatus{}
+	properties := &processStatus{}
 	if err := json.Unmarshal(propertiesRaw, properties); err != nil {
 		return nil, makeProcessError(process, operation, err, nil)
 	}
@@ -300,7 +300,7 @@ func (process *Process) ExitCode() (_ int, err error) {
 	process.logOperationBegin(operation)
 	defer func() { process.logOperationEnd(operation, err) }()
 
-	properties, err := process.Properties()
+	properties, err := process.properties()
 	if err != nil {
 		return -1, makeProcessError(process, operation, err, nil)
 	}
