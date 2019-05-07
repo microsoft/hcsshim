@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/Microsoft/go-winio"
-	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/mergemaps"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
@@ -153,6 +152,11 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 		vpmemMaxCount:       opts.VPMemDeviceCount,
 		vpmemMaxSizeBytes:   opts.VPMemSizeBytes,
 	}
+	defer func() {
+		if err != nil {
+			uvm.Close()
+		}
+	}()
 
 	// To maintain compatability with Docker we need to automatically downgrade
 	// a user CPU count if the setting is not possible.
@@ -354,17 +358,10 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 		return nil, fmt.Errorf("failed to merge additional JSON '%s': %s", opts.AdditionHCSDocumentJSON, err)
 	}
 
-	hcsSystem, err := hcs.CreateComputeSystem(uvm.id, fullDoc)
+	err = uvm.create(fullDoc)
 	if err != nil {
 		return nil, err
 	}
-
-	uvm.hcsSystem = hcsSystem
-	defer func() {
-		if err != nil {
-			uvm.Close()
-		}
-	}()
 
 	// Create a socket that the executed program can send to. This is usually
 	// used by GCS to send log data.
@@ -381,12 +378,8 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 }
 
 func (uvm *UtilityVM) listenVsock(port uint32) (net.Listener, error) {
-	properties, err := uvm.hcsSystem.Properties()
-	if err != nil {
-		return nil, err
-	}
 	return winio.ListenHvsock(&winio.HvsockAddr{
-		VMID:      *properties.RuntimeID,
+		VMID:      uvm.runtimeID,
 		ServiceID: winio.VsockServiceID(port),
 	})
 }

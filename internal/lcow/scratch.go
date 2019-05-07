@@ -78,7 +78,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 	for {
 		testdCommand := []string{"test", "-d", fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d", controller, lun)}
 		testdProc, _, err := CreateProcess(&ProcessOptions{
-			HCSSystem:         lcowUVM.ComputeSystem(),
+			Host:              lcowUVM,
 			CreateInUtilityVm: true,
 			CopyTimeout:       timeout.ExternalCommandToStart,
 			Process:           &specs.Process{Args: testdCommand},
@@ -111,7 +111,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 	var lsOutput bytes.Buffer
 	lsCommand := []string{"ls", fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d/block", controller, lun)}
 	lsProc, _, err := CreateProcess(&ProcessOptions{
-		HCSSystem:         lcowUVM.ComputeSystem(),
+		Host:              lcowUVM,
 		CreateInUtilityVm: true,
 		CopyTimeout:       timeout.ExternalCommandToStart,
 		Process:           &specs.Process{Args: lsCommand},
@@ -142,7 +142,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 	mkfsCommand := []string{"mkfs.ext4", "-q", "-E", "lazy_itable_init=1", "-O", `^has_journal,sparse_super2,uninit_bg,^resize_inode`, device}
 	var mkfsStderr bytes.Buffer
 	mkfsProc, _, err := CreateProcess(&ProcessOptions{
-		HCSSystem:         lcowUVM.ComputeSystem(),
+		Host:              lcowUVM,
 		CreateInUtilityVm: true,
 		CopyTimeout:       timeout.ExternalCommandToStart,
 		Process:           &specs.Process{Args: mkfsCommand},

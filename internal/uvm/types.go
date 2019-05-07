@@ -7,9 +7,11 @@ import (
 	"net"
 	"sync"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
+	"github.com/Microsoft/go-winio/pkg/guid"
+	iguid "github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/Microsoft/hcsshim/internal/schema1"
 )
 
 //                    | WCOW | LCOW
@@ -47,7 +49,7 @@ type vpmemInfo struct {
 }
 
 type nicInfo struct {
-	ID       guid.GUID
+	ID       iguid.GUID
 	Endpoint *hns.HNSEndpoint
 }
 
@@ -58,11 +60,16 @@ type namespaceInfo struct {
 // UtilityVM is the object used by clients representing a utility VM
 type UtilityVM struct {
 	id              string      // Identifier for the utility VM (user supplied or generated)
+	runtimeID       guid.GUID   // Hyper-V VM ID
 	owner           string      // Owner for the utility VM (user supplied or generated)
 	operatingSystem string      // "windows" or "linux"
 	hcsSystem       *hcs.System // The handle to the compute system
 	processorCount  int32
 	m               sync.Mutex // Lock for adding/removing devices
+
+	// GCS bridge protocol and capabilities
+	protocol  uint32
+	guestCaps schema1.GuestDefinedCapabilities
 
 	// containerCounter is the current number of containers that have been
 	// created. This is never decremented in the life of the UVM.

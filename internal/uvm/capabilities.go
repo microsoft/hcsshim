@@ -7,8 +7,11 @@ import "github.com/Microsoft/hcsshim/internal/schema1"
 //
 // This support was added RS5+ guests.
 func (uvm *UtilityVM) SignalProcessSupported() bool {
-	if props, err := uvm.hcsSystem.Properties(schema1.PropertyTypeGuestConnection); err == nil {
-		return props.GuestConnectionInfo.GuestDefinedCapabilities.SignalProcessSupported
-	}
-	return false
+	return uvm.guestCaps.SignalProcessSupported
+}
+
+// Capabilities returns the protocol version and the guest defined capabilities.
+// This should only be used for testing.
+func (uvm *UtilityVM) Capabilities() (uint32, schema1.GuestDefinedCapabilities) {
+	return uvm.protocol, uvm.guestCaps
 }

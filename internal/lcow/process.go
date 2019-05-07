@@ -21,10 +21,14 @@ type ByteCounts struct {
 	Err int64
 }
 
+type ProcessHost interface {
+	CreateProcess(settings interface{}) (*hcs.Process, error)
+}
+
 // ProcessOptions are the set of options which are passed to CreateProcessEx() to
 // create a utility vm.
 type ProcessOptions struct {
-	HCSSystem         *hcs.System
+	Host              ProcessHost
 	Process           *specs.Process
 	Stdin             io.Reader     // Optional reader for sending on to the processes stdin stream
 	Stdout            io.Writer     // Optional writer for returning the processes stdout stream
@@ -62,7 +66,7 @@ func CreateProcess(opts *ProcessOptions) (*hcs.Process, *ByteCounts, error) {
 		return nil, nil, fmt.Errorf("no options supplied")
 	}
 
-	if opts.HCSSystem == nil {
+	if opts.Host == nil {
 		return nil, nil, fmt.Errorf("no HCS system supplied")
 	}
 
@@ -102,7 +106,7 @@ func CreateProcess(opts *ProcessOptions) (*hcs.Process, *ByteCounts, error) {
 		}
 	}
 
-	proc, err := opts.HCSSystem.CreateProcess(processConfig)
+	proc, err := opts.Host.CreateProcess(processConfig)
 	if err != nil {
 		logrus.WithError(err).Debug("failed to create process")
 		return nil, nil, err

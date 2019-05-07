@@ -6,6 +6,7 @@ import (
 	"runtime"
 
 	"github.com/Microsoft/hcsshim/internal/guid"
+	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/sirupsen/logrus"
 )
@@ -84,6 +85,34 @@ func (uvm *UtilityVM) OS() string {
 	return uvm.operatingSystem
 }
 
+func (uvm *UtilityVM) create(doc interface{}) error {
+	system, err := hcs.CreateComputeSystem(uvm.id, doc)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if system != nil {
+			system.Terminate()
+			system.Wait()
+		}
+	}()
+
+	// Cache the VM ID of the utility VM.
+	properties, err := system.Properties()
+	if err != nil {
+		return err
+	}
+	uvm.runtimeID = *properties.RuntimeID
+	uvm.hcsSystem = system
+	system = nil
+
+	logrus.WithFields(logrus.Fields{
+		logfields.UVMID: uvm.id,
+		"runtime-id":    uvm.runtimeID,
+	}).Debug("created utility VM")
+	return nil
+}
+
 // Close terminates and releases resources associated with the utility VM.
 func (uvm *UtilityVM) Close() (err error) {
 	op := "uvm::Close"
@@ -100,8 +129,10 @@ func (uvm *UtilityVM) Close() (err error) {
 		}
 	}()
 
-	uvm.hcsSystem.Terminate()
-	uvm.Wait()
+	if uvm.hcsSystem != nil {
+		uvm.hcsSystem.Terminate()
+		uvm.Wait()
+	}
 
 	// outputListener will only be nil for a Create -> Stop without a Start. In
 	// this case we have no goroutine processing output so its safe to close the
@@ -111,7 +142,25 @@ func (uvm *UtilityVM) Close() (err error) {
 		uvm.outputListener.Close()
 		uvm.outputListener = nil
 	}
-	return uvm.hcsSystem.Close()
+	if uvm.hcsSystem != nil {
+		return uvm.hcsSystem.Close()
+	}
+	return nil
+}
+
+// CreateProcess creates a process in the utility VM.
+func (uvm *UtilityVM) CreateProcess(settings interface{}) (*hcs.Process, error) {
+	return uvm.hcsSystem.CreateProcess(settings)
+}
+
+// Terminate requests that the utility VM be terminated.
+func (uvm *UtilityVM) Terminate() error {
+	return uvm.hcsSystem.Terminate()
+}
+
+// ExitError returns an error if the utility VM has terminated unexpectedly.
+func (uvm *UtilityVM) ExitError() error {
+	return uvm.hcsSystem.ExitError()
 }
 
 func defaultProcessorCount() int32 {
