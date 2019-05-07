@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/appargs"
-	"github.com/Microsoft/hcsshim/internal/runhcs"
+	"github.com/microsoft/hcsshim/internal/appargs"
+	"github.com/microsoft/hcsshim/internal/runhcs"
 )
 
 var argID = appargs.NonEmptyString

@@ -4,9 +4,9 @@ import (
 	"context"
 	"io"
 
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/Microsoft/hcsshim/internal/shimdiag"
-	"github.com/Microsoft/hcsshim/internal/uvm"
+	hcsschema "github.com/microsoft/hcsshim/internal/schema2"
+	"github.com/microsoft/hcsshim/internal/shimdiag"
+	"github.com/microsoft/hcsshim/internal/uvm"
 )
 
 func execInUvm(ctx context.Context, vm *uvm.UtilityVM, req *shimdiag.ExecProcessRequest) (int, error) {

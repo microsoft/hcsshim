@@ -5,9 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Microsoft/go-winio"
-	"github.com/Microsoft/hcsshim/internal/hcserror"
-	"github.com/Microsoft/hcsshim/internal/safefile"
+	"github.com/microsoft/go-winio"
+	"github.com/microsoft/hcsshim/internal/hcserror"
+	"github.com/microsoft/hcsshim/internal/safefile"
 	"github.com/sirupsen/logrus"
 )
 

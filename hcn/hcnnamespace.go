@@ -5,11 +5,11 @@ import (
 	"os"
 	"syscall"
 
-	icni "github.com/Microsoft/hcsshim/internal/cni"
-	"github.com/Microsoft/hcsshim/internal/guid"
-	"github.com/Microsoft/hcsshim/internal/interop"
-	"github.com/Microsoft/hcsshim/internal/regstate"
-	"github.com/Microsoft/hcsshim/internal/runhcs"
+	icni "github.com/microsoft/hcsshim/internal/cni"
+	"github.com/microsoft/hcsshim/internal/guid"
+	"github.com/microsoft/hcsshim/internal/interop"
+	"github.com/microsoft/hcsshim/internal/regstate"
+	"github.com/microsoft/hcsshim/internal/runhcs"
 	"github.com/sirupsen/logrus"
 )
 

@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/lcow"
-	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/microsoft/hcsshim/internal/lcow"
+	"github.com/microsoft/hcsshim/osversion"
+	"github.com/microsoft/hcsshim/test/functional/utilities"
 )
 
 func TestScratchCreateLCOW(t *testing.T) {

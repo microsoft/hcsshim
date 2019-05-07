@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
+	"github.com/microsoft/hcsshim/internal/guestrequest"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )

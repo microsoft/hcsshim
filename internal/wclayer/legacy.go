@@ -12,9 +12,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/Microsoft/go-winio"
-	"github.com/Microsoft/hcsshim/internal/longpath"
-	"github.com/Microsoft/hcsshim/internal/safefile"
+	"github.com/microsoft/go-winio"
+	"github.com/microsoft/hcsshim/internal/longpath"
+	"github.com/microsoft/hcsshim/internal/safefile"
 )
 
 var errorIterationCanceled = errors.New("")

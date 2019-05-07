@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Microsoft/go-winio/pkg/security"
+	"github.com/microsoft/go-winio/pkg/security"
 )
 
 func main() {

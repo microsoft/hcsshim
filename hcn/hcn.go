@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"syscall"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
+	"github.com/microsoft/hcsshim/internal/guid"
 )
 
 //go:generate go run ../mksyscall_windows.go -output zsyscall_windows.go hcn.go

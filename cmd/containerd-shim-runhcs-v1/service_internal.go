@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
-	"github.com/Microsoft/hcsshim/internal/oci"
-	"github.com/Microsoft/hcsshim/internal/shimdiag"
+	runhcsopts "github.com/microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	"github.com/microsoft/hcsshim/internal/oci"
+	"github.com/microsoft/hcsshim/internal/shimdiag"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/mount"

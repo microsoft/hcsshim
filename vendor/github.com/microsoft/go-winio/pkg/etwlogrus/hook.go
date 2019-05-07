@@ -1,7 +1,7 @@
 package etwlogrus
 
 import (
-	"github.com/Microsoft/go-winio/pkg/etw"
+	"github.com/microsoft/go-winio/pkg/etw"
 	"github.com/sirupsen/logrus"
 )
 

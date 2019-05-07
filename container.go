@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/hcs"
-	"github.com/Microsoft/hcsshim/internal/mergemaps"
-	"github.com/Microsoft/hcsshim/internal/schema1"
+	"github.com/microsoft/hcsshim/internal/hcs"
+	"github.com/microsoft/hcsshim/internal/mergemaps"
+	"github.com/microsoft/hcsshim/internal/schema1"
 )
 
 // ContainerProperties holds the properties for a container and the processes running in that container

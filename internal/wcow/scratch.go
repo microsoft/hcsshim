@@ -4,8 +4,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Microsoft/hcsshim/internal/copyfile"
-	"github.com/Microsoft/hcsshim/internal/wclayer"
+	"github.com/microsoft/hcsshim/internal/copyfile"
+	"github.com/microsoft/hcsshim/internal/wclayer"
 	"github.com/sirupsen/logrus"
 )
 

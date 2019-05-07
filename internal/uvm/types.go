@@ -7,11 +7,11 @@ import (
 	"net"
 	"sync"
 
-	"github.com/Microsoft/go-winio/pkg/guid"
-	iguid "github.com/Microsoft/hcsshim/internal/guid"
-	"github.com/Microsoft/hcsshim/internal/hcs"
-	"github.com/Microsoft/hcsshim/internal/hns"
-	"github.com/Microsoft/hcsshim/internal/schema1"
+	"github.com/microsoft/go-winio/pkg/guid"
+	iguid "github.com/microsoft/hcsshim/internal/guid"
+	"github.com/microsoft/hcsshim/internal/hcs"
+	"github.com/microsoft/hcsshim/internal/hns"
+	"github.com/microsoft/hcsshim/internal/schema1"
 )
 
 //                    | WCOW | LCOW

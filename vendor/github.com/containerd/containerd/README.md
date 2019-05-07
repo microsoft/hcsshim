@@ -29,7 +29,7 @@ If you are interested in trying out containerd see our example at [Getting Start
 
 Runtime requirements for containerd are very minimal. Most interactions with
 the Linux and Windows container feature sets are handled via [runc](https://github.com/opencontainers/runc) and/or
-OS-specific libraries (e.g. [hcsshim](https://github.com/Microsoft/hcsshim) for Microsoft). The current required version of `runc` is always listed in [RUNC.md](/RUNC.md).
+OS-specific libraries (e.g. [hcsshim](https://github.com/microsoft/hcsshim) for Microsoft). The current required version of `runc` is always listed in [RUNC.md](/RUNC.md).
 
 There are specific features
 used by containerd core code and snapshotters that will require a minimum kernel

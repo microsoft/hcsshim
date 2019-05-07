@@ -1,7 +1,7 @@
 package hcsshim
 
 import (
-	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/microsoft/hcsshim/internal/hns"
 )
 
 type HNSGlobals = hns.HNSGlobals

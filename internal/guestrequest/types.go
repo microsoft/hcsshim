@@ -1,7 +1,7 @@
 package guestrequest
 
 import (
-	"github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/microsoft/hcsshim/internal/schema2"
 )
 
 // Arguably, many of these (at least CombinedLayers) should have been generated

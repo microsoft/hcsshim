@@ -1,10 +1,10 @@
 package main
 
 import (
-	"github.com/Microsoft/hcsshim/internal/appargs"
-	"github.com/Microsoft/hcsshim/internal/lcow"
-	"github.com/Microsoft/hcsshim/internal/uvm"
-	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/microsoft/hcsshim/internal/appargs"
+	"github.com/microsoft/hcsshim/internal/lcow"
+	"github.com/microsoft/hcsshim/internal/uvm"
+	"github.com/microsoft/hcsshim/osversion"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 )

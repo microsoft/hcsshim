@@ -7,7 +7,7 @@ import (
 	"syscall"
 	"testing"
 
-	winio "github.com/Microsoft/go-winio"
+	winio "github.com/microsoft/go-winio"
 )
 
 func tempRoot() (*os.File, error) {

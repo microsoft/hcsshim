@@ -3,11 +3,11 @@ package uvm
 import (
 	"fmt"
 
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
-	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/requesttype"
-	"github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/Microsoft/hcsshim/internal/wclayer"
+	"github.com/microsoft/hcsshim/internal/guestrequest"
+	"github.com/microsoft/hcsshim/internal/logfields"
+	"github.com/microsoft/hcsshim/internal/requesttype"
+	"github.com/microsoft/hcsshim/internal/schema2"
+	"github.com/microsoft/hcsshim/internal/wclayer"
 	"github.com/sirupsen/logrus"
 )
 

@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/Microsoft/hcsshim/internal/schemaversion"
-	"github.com/Microsoft/hcsshim/internal/wclayer"
+	"github.com/microsoft/hcsshim/internal/guestrequest"
+	hcsschema "github.com/microsoft/hcsshim/internal/schema2"
+	"github.com/microsoft/hcsshim/internal/schemaversion"
+	"github.com/microsoft/hcsshim/internal/wclayer"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )

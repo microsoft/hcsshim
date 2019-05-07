@@ -6,7 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/Microsoft/hcsshim/internal/shimdiag"
+	"github.com/microsoft/hcsshim/internal/shimdiag"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
 	google_protobuf1 "github.com/gogo/protobuf/types"

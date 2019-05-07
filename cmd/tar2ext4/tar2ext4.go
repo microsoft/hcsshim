@@ -7,7 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/Microsoft/hcsshim/ext4/tar2ext4"
+	"github.com/microsoft/hcsshim/ext4/tar2ext4"
 )
 
 var (

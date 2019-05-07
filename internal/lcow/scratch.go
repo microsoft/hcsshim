@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Microsoft/go-winio/vhd"
-	"github.com/Microsoft/hcsshim/internal/copyfile"
-	"github.com/Microsoft/hcsshim/internal/hcs"
-	"github.com/Microsoft/hcsshim/internal/timeout"
-	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/microsoft/go-winio/vhd"
+	"github.com/microsoft/hcsshim/internal/copyfile"
+	"github.com/microsoft/hcsshim/internal/hcs"
+	"github.com/microsoft/hcsshim/internal/timeout"
+	"github.com/microsoft/hcsshim/internal/uvm"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )

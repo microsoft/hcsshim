@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/microsoft/hcsshim/internal/hcs"
 )
 
 // ContainerError is an error encountered in HCS

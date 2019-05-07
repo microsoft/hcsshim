@@ -30,7 +30,7 @@ file {
   syntax: "proto3"
 }
 file {
-  name: "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options/runhcs.proto"
+  name: "github.com/microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options/runhcs.proto"
   package: "containerd.runhcs.v1"
   dependency: "gogoproto/gogo.proto"
   dependency: "google/protobuf/timestamp.proto"
@@ -186,7 +186,7 @@ file {
     }
   }
   options {
-    go_package: "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options;options"
+    go_package: "github.com/microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options;options"
   }
   weak_dependency: 0
   syntax: "proto3"

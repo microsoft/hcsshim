@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	winio "github.com/Microsoft/go-winio"
-	"github.com/Microsoft/go-winio/archive/tar"
-	"github.com/Microsoft/go-winio/backuptar"
-	"github.com/Microsoft/hcsshim"
+	winio "github.com/microsoft/go-winio"
+	"github.com/microsoft/go-winio/archive/tar"
+	"github.com/microsoft/go-winio/backuptar"
+	"github.com/microsoft/hcsshim"
 )
 
 const whiteoutPrefix = ".wh."

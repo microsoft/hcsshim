@@ -6,7 +6,7 @@ package hcsshim
 import (
 	"syscall"
 
-	"github.com/Microsoft/hcsshim/internal/hcserror"
+	"github.com/microsoft/hcsshim/internal/hcserror"
 )
 
 //go:generate go run mksyscall_windows.go -output zsyscall_windows.go hcsshim.go

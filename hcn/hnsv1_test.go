@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Microsoft/hcsshim"
+	"github.com/microsoft/hcsshim"
 )
 
 const (

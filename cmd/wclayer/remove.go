@@ -3,9 +3,9 @@ package main
 import (
 	"path/filepath"
 
-	winio "github.com/Microsoft/go-winio"
-	"github.com/Microsoft/hcsshim"
-	"github.com/Microsoft/hcsshim/internal/appargs"
+	winio "github.com/microsoft/go-winio"
+	"github.com/microsoft/hcsshim"
+	"github.com/microsoft/hcsshim/internal/appargs"
 
 	"github.com/urfave/cli"
 )

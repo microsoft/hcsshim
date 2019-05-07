@@ -21,7 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Microsoft/hcsshim"
+	"github.com/microsoft/hcsshim"
 	"github.com/pkg/errors"
 )
 

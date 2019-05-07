@@ -9,10 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/interop"
-	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/schema1"
-	"github.com/Microsoft/hcsshim/internal/timeout"
+	"github.com/microsoft/hcsshim/internal/interop"
+	"github.com/microsoft/hcsshim/internal/logfields"
+	"github.com/microsoft/hcsshim/internal/schema1"
+	"github.com/microsoft/hcsshim/internal/timeout"
 	"github.com/sirupsen/logrus"
 )
 

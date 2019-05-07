@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/Microsoft/hcsshim/test/functional/manifest"
+	_ "github.com/microsoft/hcsshim/test/functional/manifest"
 	"google.golang.org/grpc"
 	runtime "k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2"
 )

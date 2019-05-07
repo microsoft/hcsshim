@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Microsoft/go-winio"
+	"github.com/microsoft/go-winio"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/ttrpc"
 	specs "github.com/opencontainers/runtime-spec/specs-go"

@@ -31,13 +31,13 @@ plugins = ["grpc", "fieldpath"]
   "google/protobuf/duration.proto" = "github.com/gogo/protobuf/types"
 
 [[overrides]]
-prefixes = ["github.com/Microsoft/hcsshim/internal/shimdiag"]
+prefixes = ["github.com/microsoft/hcsshim/internal/shimdiag"]
 plugins = ["ttrpc"]
 
 # Lock down runhcs config
 
 [[descriptors]]
-prefix = "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+prefix = "github.com/microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 target = "cmd/containerd-shim-runhcs-v1/options/next.pb.txt"
 ignore_files = [
 	"google/protobuf/descriptor.proto",

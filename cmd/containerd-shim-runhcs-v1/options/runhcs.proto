@@ -5,7 +5,7 @@ package containerd.runhcs.v1;
 import weak "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options;options";
+option go_package = "github.com/microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options;options";
 
 // Options are the set of customizations that can be passed at Create time.
 message Options {

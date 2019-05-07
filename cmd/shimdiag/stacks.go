@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Microsoft/hcsshim/internal/appargs"
-	"github.com/Microsoft/hcsshim/internal/shimdiag"
+	"github.com/microsoft/hcsshim/internal/appargs"
+	"github.com/microsoft/hcsshim/internal/shimdiag"
 	"github.com/urfave/cli"
 )
 

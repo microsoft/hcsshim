@@ -7,7 +7,7 @@ package hcsoci
 //	"path/filepath"
 //	"testing"
 
-//	"github.com/Microsoft/hcsshim/internal/schemaversion"
+//	"github.com/microsoft/hcsshim/internal/schemaversion"
 //	specs "github.com/opencontainers/runtime-spec/specs-go"
 //)
 

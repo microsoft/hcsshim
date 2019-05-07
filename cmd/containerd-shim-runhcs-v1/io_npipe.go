@@ -5,7 +5,7 @@ import (
 	"io"
 	"sync"
 
-	winio "github.com/Microsoft/go-winio"
+	winio "github.com/microsoft/go-winio"
 	"github.com/sirupsen/logrus"
 )
 

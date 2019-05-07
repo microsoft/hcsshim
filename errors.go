@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"syscall"
 
-	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/microsoft/hcsshim/internal/hns"
 
-	"github.com/Microsoft/hcsshim/internal/hcs"
-	"github.com/Microsoft/hcsshim/internal/hcserror"
+	"github.com/microsoft/hcsshim/internal/hcs"
+	"github.com/microsoft/hcsshim/internal/hcserror"
 )
 
 var (

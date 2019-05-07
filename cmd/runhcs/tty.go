@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/Microsoft/hcsshim/internal/appargs"
+	"github.com/microsoft/hcsshim/internal/appargs"
 	"github.com/urfave/cli"
 )
 

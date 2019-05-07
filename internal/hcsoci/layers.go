@@ -8,12 +8,12 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
-	"github.com/Microsoft/hcsshim/internal/ospath"
-	"github.com/Microsoft/hcsshim/internal/requesttype"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/Microsoft/hcsshim/internal/uvm"
-	"github.com/Microsoft/hcsshim/internal/wclayer"
+	"github.com/microsoft/hcsshim/internal/guestrequest"
+	"github.com/microsoft/hcsshim/internal/ospath"
+	"github.com/microsoft/hcsshim/internal/requesttype"
+	hcsschema "github.com/microsoft/hcsshim/internal/schema2"
+	"github.com/microsoft/hcsshim/internal/uvm"
+	"github.com/microsoft/hcsshim/internal/wclayer"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )

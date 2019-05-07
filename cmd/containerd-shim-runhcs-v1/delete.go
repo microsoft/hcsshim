@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/microsoft/hcsshim/internal/hcs"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/gogo/protobuf/proto"
 	"github.com/sirupsen/logrus"

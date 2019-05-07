@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/hcs"
-	"github.com/Microsoft/hcsshim/internal/hcsoci"
+	"github.com/microsoft/hcsshim/internal/hcs"
+	"github.com/microsoft/hcsshim/internal/hcsoci"
 	"github.com/sirupsen/logrus"
 )
 

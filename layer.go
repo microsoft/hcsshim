@@ -4,8 +4,8 @@ import (
 	"crypto/sha1"
 	"path/filepath"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
-	"github.com/Microsoft/hcsshim/internal/wclayer"
+	"github.com/microsoft/hcsshim/internal/guid"
+	"github.com/microsoft/hcsshim/internal/wclayer"
 )
 
 func layerPath(info *DriverInfo, id string) string {

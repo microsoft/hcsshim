@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/lcow"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/microsoft/hcsshim/internal/lcow"
+	hcsschema "github.com/microsoft/hcsshim/internal/schema2"
+	"github.com/microsoft/hcsshim/internal/uvm"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )

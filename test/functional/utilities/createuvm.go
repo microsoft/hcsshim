@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/microsoft/hcsshim/internal/uvm"
 )
 
 // CreateWCOWUVM creates a WCOW utility VM with all default options. Returns the

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	irunhcs "github.com/Microsoft/hcsshim/internal/runhcs"
+	irunhcs "github.com/microsoft/hcsshim/internal/runhcs"
 	runc "github.com/containerd/go-runc"
 )
 

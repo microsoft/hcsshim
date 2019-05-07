@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/runhcs"
+	"github.com/microsoft/hcsshim/internal/runhcs"
 )
 
 func Test_AbsPathOrEmpty(t *testing.T) {

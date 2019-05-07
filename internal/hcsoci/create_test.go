@@ -22,8 +22,8 @@ package hcsoci
 //	"strings"
 //	"testing"
 
-//	"github.com/Microsoft/hcsshim/internal/schemaversion"
-//	_ "github.com/Microsoft/hcsshim/test/assets"
+//	"github.com/microsoft/hcsshim/internal/schemaversion"
+//	_ "github.com/microsoft/hcsshim/test/assets"
 //	specs "github.com/opencontainers/runtime-spec/specs-go"
 //	"github.com/sirupsen/logrus"
 //)

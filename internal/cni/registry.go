@@ -3,8 +3,8 @@ package cni
 import (
 	"errors"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
-	"github.com/Microsoft/hcsshim/internal/regstate"
+	"github.com/microsoft/hcsshim/internal/guid"
+	"github.com/microsoft/hcsshim/internal/regstate"
 )
 
 const (

@@ -7,9 +7,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/Microsoft/go-winio/pkg/etw"
-	"github.com/Microsoft/go-winio/pkg/etwlogrus"
-	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/microsoft/go-winio/pkg/etw"
+	"github.com/microsoft/go-winio/pkg/etwlogrus"
+	"github.com/microsoft/go-winio/pkg/guid"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
