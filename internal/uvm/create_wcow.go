@@ -8,7 +8,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/mergemaps"
-	"github.com/Microsoft/hcsshim/internal/schema2"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
 	"github.com/Microsoft/hcsshim/internal/wcow"
@@ -67,6 +67,9 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 	// a user CPU count if the setting is not possible.
 	uvm.normalizeProcessorCount(opts.ProcessorCount)
 
+	// Align the requested memory size.
+	memorySizeInMB := uvm.normalizeMemorySize(opts.MemorySizeInMB)
+
 	if len(opts.LayerFolders) < 2 {
 		return nil, fmt.Errorf("at least 2 LayerFolders must be supplied")
 	}
@@ -116,7 +119,7 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 			},
 			ComputeTopology: &hcsschema.Topology{
 				Memory: &hcsschema.Memory2{
-					SizeInMB:        opts.MemorySizeInMB,
+					SizeInMB:        memorySizeInMB,
 					AllowOvercommit: opts.AllowOvercommit,
 					// EnableHotHint is not compatible with physical.
 					EnableHotHint:        opts.AllowOvercommit,

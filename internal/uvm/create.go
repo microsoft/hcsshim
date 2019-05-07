@@ -141,3 +141,15 @@ func (uvm *UtilityVM) normalizeProcessorCount(requested int32) {
 func (uvm *UtilityVM) ProcessorCount() int32 {
 	return uvm.processorCount
 }
+
+func (uvm *UtilityVM) normalizeMemorySize(requested int32) int32 {
+	actual := (requested + 1) &^ 1 // align up to an even number
+	if requested != actual {
+		logrus.WithFields(logrus.Fields{
+			logfields.UVMID: uvm.id,
+			"requested":     requested,
+			"assigned":      actual,
+		}).Warn("Changing user requested MemorySizeInMB to align to 2MB")
+	}
+	return actual
+}

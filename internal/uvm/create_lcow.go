@@ -158,6 +158,9 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 	// a user CPU count if the setting is not possible.
 	uvm.normalizeProcessorCount(opts.ProcessorCount)
 
+	// Align the requested memory size.
+	memorySizeInMB := uvm.normalizeMemorySize(opts.MemorySizeInMB)
+
 	kernelFullPath := filepath.Join(opts.BootFilesPath, opts.KernelFile)
 	if _, err := os.Stat(kernelFullPath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("kernel: '%s' not found", kernelFullPath)
@@ -195,7 +198,7 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 			Chipset:     &hcsschema.Chipset{},
 			ComputeTopology: &hcsschema.Topology{
 				Memory: &hcsschema.Memory2{
-					SizeInMB:             opts.MemorySizeInMB,
+					SizeInMB:             memorySizeInMB,
 					AllowOvercommit:      opts.AllowOvercommit,
 					EnableDeferredCommit: opts.EnableDeferredCommit,
 				},
