@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/Microsoft/opengcs/internal/runtime/hcsv2"
 	"github.com/Microsoft/opengcs/service/gcs/bridge"
@@ -51,7 +52,9 @@ func main() {
 	case "text":
 		// retain logrus's default.
 	case "json":
-		logrus.SetFormatter(new(logrus.JSONFormatter))
+		logrus.SetFormatter(&logrus.JSONFormatter{
+			TimestampFormat: time.RFC3339Nano, // include ns for accurate comparisons on the host
+		})
 	default:
 		logrus.WithFields(logrus.Fields{
 			"log-format": *logFormat,
