@@ -8,16 +8,13 @@ import (
 	"net"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	winio "github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/appargs"
-	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs"
-	"github.com/Microsoft/hcsshim/internal/lcow"
+	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/runhcs"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -164,75 +161,37 @@ var shimCommand = cli.Command{
 		}
 
 		// Create the process in the container.
-		var wpp *hcsschema.ProcessParameters // Windows Process Parameters
-		var lpp *lcow.ProcessParameters      // Linux Process Parameters
-
-		var p cow.Process
-
-		if c.Spec.Linux == nil {
-			environment := make(map[string]string)
-			for _, v := range spec.Env {
-				s := strings.SplitN(v, "=", 2)
-				if len(s) == 2 && len(s[1]) > 0 {
-					environment[s[0]] = s[1]
-				}
-			}
-			wpp = &hcsschema.ProcessParameters{
-				WorkingDirectory: spec.Cwd,
-				EmulateConsole:   spec.Terminal,
-				Environment:      environment,
-				User:             spec.User.Username,
-			}
-
-			if spec.CommandLine != "" {
-				wpp.CommandLine = spec.CommandLine
-			} else {
-				wpp.CommandLine = escapeArgs(spec.Args)
-			}
-
-			if spec.ConsoleSize != nil {
-				wpp.ConsoleSize = []int32{
-					int32(spec.ConsoleSize.Height),
-					int32(spec.ConsoleSize.Width),
-				}
-			}
-
-			wpp.CreateStdInPipe = stdin != nil
-			wpp.CreateStdOutPipe = stdout != nil
-			wpp.CreateStdErrPipe = stderr != nil
-
-			p, err = c.hc.CreateProcess(wpp)
-
-		} else {
-			lpp = &lcow.ProcessParameters{}
-			if exec {
-				lpp.OCIProcess = spec
-			}
-
-			lpp.CreateStdInPipe = stdin != nil
-			lpp.CreateStdOutPipe = stdout != nil
-			lpp.CreateStdErrPipe = stderr != nil
-
-			p, err = c.hc.CreateProcess(lpp)
+		cmd := &hcsoci.Cmd{
+			Host:   c.hc,
+			Stdin:  stdin,
+			Stdout: stdout,
+			Stderr: stderr,
+		}
+		if c.Spec.Linux == nil || exec {
+			cmd.Spec = spec
 		}
 
+		err = cmd.Start()
 		if err != nil {
 			return err
 		}
-
-		defer p.Close()
-		cstdin, cstdout, cstderr := p.Stdio()
-
+		pid := cmd.Process.Pid()
 		if !exec {
-			err = stateKey.Set(c.ID, keyInitPid, p.Pid())
+			err = stateKey.Set(c.ID, keyInitPid, pid)
 			if err != nil {
+				stdin.Close()
+				cmd.Process.Kill()
+				cmd.Wait()
 				return err
 			}
 		}
 
 		// Store the Guest pid map
-		err = stateKey.Set(c.ID, fmt.Sprintf(keyPidMapFmt, os.Getpid()), p.Pid())
+		err = stateKey.Set(c.ID, fmt.Sprintf(keyPidMapFmt, os.Getpid()), pid)
 		if err != nil {
+			stdin.Close()
+			cmd.Process.Kill()
+			cmd.Wait()
 			return err
 		}
 		defer func() {
@@ -248,45 +207,8 @@ var shimCommand = cli.Command{
 		errorOut.Close()
 		fatalWriter.Writer = ioutil.Discard
 
-		// Relay stdio.
-		var wg sync.WaitGroup
-		if cstdin != nil {
-			go func() {
-				io.Copy(cstdin, stdin)
-				p.CloseStdin()
-			}()
-		}
-
-		if cstdout != nil {
-			wg.Add(1)
-			go func() {
-				io.Copy(stdout, cstdout)
-				stdout.Close()
-				wg.Done()
-			}()
-		}
-
-		if cstderr != nil {
-			wg.Add(1)
-			go func() {
-				io.Copy(stderr, cstderr)
-				stderr.Close()
-				wg.Done()
-			}()
-		}
-
-		err = p.Wait()
-		wg.Wait()
-
-		// Attempt to get the exit code from the process.
-		code := 1
-		if err == nil {
-			code, err = p.ExitCode()
-			if err != nil {
-				code = 1
-			}
-		}
-
+		cmd.Wait()
+		code := cmd.ExitState.ExitCode()
 		if !exec {
 			// Shutdown the container, waiting 5 minutes before terminating is
 			// forcefully.
