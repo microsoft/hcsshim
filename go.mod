@@ -9,6 +9,7 @@ require (
 	github.com/containerd/continuity v0.0.0-20181203112020-004b46473808 // indirect
 	github.com/docker/docker v0.0.0-20190404075923-dbe4a30928d4
 	github.com/docker/go-units v0.0.0-20181030082039-2fb04c6466a5 // indirect
+	github.com/google/go-cmp v0.3.0 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/linuxkit/virtsock v0.0.0-20180830132707-8e79449dea07
 	github.com/mattn/go-shellwords v1.0.5
@@ -25,6 +26,6 @@ require (
 	golang.org/x/net v0.0.0-20190403144856-b630fd6fe46b // indirect
 	golang.org/x/sync v0.0.0-20190227155943-e225da77a7e6 // indirect
 	golang.org/x/sys v0.0.0-20190403152447-81d4e9dc473e
-	gopkg.in/fsnotify/fsnotify.v1 v1.4.7 // indirect
 	gopkg.in/yaml.v2 v2.2.2 // indirect
+	gotest.tools v2.2.0+incompatible // indirect
 )
