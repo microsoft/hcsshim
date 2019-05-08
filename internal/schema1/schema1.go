@@ -134,6 +134,7 @@ type ContainerProperties struct {
 	State                        string
 	Name                         string
 	SystemType                   string
+	RuntimeOSType                string `json:"RuntimeOsType,omitempty"`
 	Owner                        string
 	SiloGUID                     string                              `json:"SiloGuid,omitempty"`
 	RuntimeID                    *guid.GUID                          `json:"RuntimeId,omitempty"`
