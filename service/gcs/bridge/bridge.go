@@ -406,6 +406,7 @@ func (b *Bridge) PublishNotification(n *prot.ContainerNotification) {
 	logrus.WithFields(logrus.Fields{
 		"activityID": n.ActivityID,
 		"cid":        n.ContainerID,
+		"type":       n.Type,
 		"operation":  n.Operation,
 		"result":     n.Result,
 	}).Info("opengcs::bridge::PublishNotification")
@@ -475,7 +476,7 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 		"cid":        request.ContainerID,
 	}).Info("opengcs::bridge::createContainer")
 
-	var exitCodeFn func() int
+	var waitFn func() prot.NotificationType
 	wasV2Config := false
 	id := request.ContainerID
 	if b.protVer >= prot.PvV4 {
@@ -493,7 +494,7 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 				w.Error(request.ActivityID, err)
 				return
 			}
-			exitCodeFn = func() int {
+			waitFn = func() prot.NotificationType {
 				return c.Wait()
 			}
 		}
@@ -529,22 +530,22 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 
 	if !wasV2Config {
 		var err error
-		exitCodeFn, err = b.coreint.WaitContainer(id)
+		waitFn, err = b.coreint.WaitContainer(id)
 		if err != nil {
 			logrus.Error(err)
 		}
 	}
 
 	go func() {
-		exitCode := exitCodeFn()
+		nt := waitFn()
 		notification := &prot.ContainerNotification{
 			MessageBase: &prot.MessageBase{
 				ContainerID: id,
 				ActivityID:  request.ActivityID,
 			},
-			Type:       prot.NtUnexpectedExit, // TODO: Support different exit types.
+			Type:       nt,
 			Operation:  prot.AoNone,
-			Result:     int32(exitCode),
+			Result:     0,
 			ResultInfo: "",
 		}
 		b.PublishNotification(notification)

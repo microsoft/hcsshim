@@ -738,9 +738,9 @@ func (c *gcsCore) ResizeConsole(pid int, height, width uint16) error {
 }
 
 // WaitContainer returns a function that can be used to sucessfully wait for a
-// container exit code. This will only return after all writers on WaitProcess
-// have completed. On error the container id was not a valid container.
-func (c *gcsCore) WaitContainer(id string) (func() int, error) {
+// container. This will only return after all writers on WaitProcess have
+// completed. On error the container id was not a valid container.
+func (c *gcsCore) WaitContainer(id string) (func() prot.NotificationType, error) {
 	c.containerCacheMutex.Lock()
 	entry := c.getContainer(id)
 	if entry == nil {
@@ -749,11 +749,12 @@ func (c *gcsCore) WaitContainer(id string) (func() int, error) {
 	}
 	c.containerCacheMutex.Unlock()
 
-	f := func() int {
+	f := func() prot.NotificationType {
 		logrus.Debugf("gcscore::WaitContainer waiting on init process waitgroup")
 		entry.initProcess.writersWg.Wait()
 		logrus.Debugf("gcscore::WaitContainer init process waitgroup count has dropped to zero")
-		return entry.initProcess.exitCode
+		// v1 only supported unexpected exit
+		return prot.NtUnexpectedExit
 	}
 
 	return f, nil

@@ -796,10 +796,10 @@ var _ = Describe("GCS", func() {
 			})
 			Describe("calling wait container", func() {
 				JustBeforeEach(func() {
-					var exitCodeFn func() int
-					exitCodeFn, err = coreint.WaitContainer(containerID)
+					var waitFn func() prot.NotificationType
+					waitFn, err = coreint.WaitContainer(containerID)
 					if err == nil {
-						exitCodeFn()
+						waitFn()
 					}
 				})
 				Context("container does not exist", func() {

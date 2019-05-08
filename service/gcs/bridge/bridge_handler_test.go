@@ -376,7 +376,7 @@ func Test_CreateContainer_Success_WaitContainer_Success(t *testing.T) {
 		if cn.Operation != prot.AoNone {
 			t.Fatal("publish response had invalid operation")
 		}
-		if cn.Result != -1 {
+		if cn.Result != 0 {
 			t.Fatal("publish response had invalid result")
 		}
 	}()
