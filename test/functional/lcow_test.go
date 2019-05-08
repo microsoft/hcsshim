@@ -4,6 +4,7 @@ package functional
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -204,21 +205,20 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 // Helper to run the init process in an LCOW container; verify it exits with exit
 // code 0; verify stderr is empty; check output is as expected.
 func runInitProcess(t *testing.T, s cow.Container, expected string) {
-	var outB, errB bytes.Buffer
-	p, bc, err := lcow.CreateProcess(&lcow.ProcessOptions{
-		Host:        s,
-		Stdout:      &outB,
-		Stderr:      &errB,
-		CopyTimeout: 30 * time.Second,
-	})
+	var errB bytes.Buffer
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := &hcsoci.Cmd{
+		Host:    s,
+		Stderr:  &errB,
+		Context: ctx,
+	}
+	outb, err := cmd.Output()
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("stderr: %s", err)
 	}
-	defer p.Close()
-	if bc.Err != 0 {
-		t.Fatalf("got %d bytes on stderr: %s", bc.Err, errB.String())
-	}
-	if strings.TrimSpace(outB.String()) != expected {
-		t.Fatalf("got %q (%d) expecting %q", outB.String(), bc.Out, expected)
+	out := string(outb)
+	if strings.TrimSpace(out) != expected {
+		t.Fatalf("got %q expecting %q", string(out), expected)
 	}
 }
