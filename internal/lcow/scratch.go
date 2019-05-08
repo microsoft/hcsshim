@@ -9,7 +9,7 @@ import (
 
 	"github.com/Microsoft/go-winio/vhd"
 	"github.com/Microsoft/hcsshim/internal/copyfile"
-	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -179,7 +179,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 	return nil
 }
 
-func waitForProcess(p *hcs.Process) (int, error) {
+func waitForProcess(p cow.Process) (int, error) {
 	ch := make(chan error, 1)
 	go func() {
 		ch <- p.Wait()

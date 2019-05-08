@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -203,7 +203,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 
 // Helper to run the init process in an LCOW container; verify it exits with exit
 // code 0; verify stderr is empty; check output is as expected.
-func runInitProcess(t *testing.T, s *hcs.System, expected string) {
+func runInitProcess(t *testing.T, s cow.Container, expected string) {
 	var outB, errB bytes.Buffer
 	p, bc, err := lcow.CreateProcess(&lcow.ProcessOptions{
 		Host:        s,

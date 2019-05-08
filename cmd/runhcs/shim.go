@@ -13,6 +13,7 @@ import (
 
 	winio "github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/appargs"
+	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/internal/runhcs"
@@ -166,7 +167,7 @@ var shimCommand = cli.Command{
 		var wpp *hcsschema.ProcessParameters // Windows Process Parameters
 		var lpp *lcow.ProcessParameters      // Linux Process Parameters
 
-		var p *hcs.Process
+		var p cow.Process
 
 		if c.Spec.Linux == nil {
 			environment := make(map[string]string)

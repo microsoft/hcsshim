@@ -199,7 +199,7 @@ func (container *container) CreateProcess(c *ProcessConfig) (Process, error) {
 	if err != nil {
 		return nil, convertSystemError(err, container)
 	}
-	return &process{p: p}, nil
+	return &process{p: p.(*hcs.Process)}, nil
 }
 
 // OpenProcess gets an interface to an existing process within the container.

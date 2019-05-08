@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/oci"
@@ -59,7 +60,7 @@ type createOptionsInternal struct {
 // case of an error. This provides support for the debugging option not to
 // release the resources on failure, so that the client can make the necessary
 // call to release resources that have been allocated as part of calling this function.
-func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources, err error) {
+func CreateContainer(createOptions *CreateOptions) (_ cow.Container, _ *Resources, err error) {
 	coi := &createOptionsInternal{
 		CreateOptions: createOptions,
 		actualID:      createOptions.ID,
