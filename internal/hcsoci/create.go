@@ -150,7 +150,7 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 		}
 	}
 
-	var hcsDocument interface{}
+	var hcsDocument, gcsDocument interface{}
 	logrus.Debug("hcsshim::CreateContainer allocating resources")
 	if coi.Spec.Linux != nil {
 		if schemaversion.IsV10(coi.actualSchemaVersion) {
@@ -162,7 +162,7 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 			logrus.WithError(err).Debug("failed to allocateLinuxResources")
 			return nil, resources, err
 		}
-		hcsDocument, err = createLinuxContainerDocument(coi, resources.containerRootInUVM)
+		gcsDocument, err = createLinuxContainerDocument(coi, resources.containerRootInUVM)
 		if err != nil {
 			logrus.WithError(err).Debug("failed createHCSContainerDocument")
 			return nil, resources, err
@@ -174,18 +174,44 @@ func CreateContainer(createOptions *CreateOptions) (_ *hcs.System, _ *Resources,
 			return nil, resources, err
 		}
 		logrus.Debug("hcsshim::CreateContainer creating container document")
-		hcsDocument, err = createWindowsContainerDocument(coi)
+		v1, v2, err := createWindowsContainerDocument(coi)
 		if err != nil {
 			logrus.WithError(err).Debug("failed createHCSContainerDocument")
 			return nil, resources, err
 		}
+
+		if schemaversion.IsV10(coi.actualSchemaVersion) {
+			// v1 Argon or Xenon. Pass the document directly to HCS.
+			hcsDocument = v1
+		} else if coi.HostingSystem != nil {
+			// v2 Xenon. Pass the container object to the UVM.
+			gcsDocument = &hcsschema.HostedSystem{
+				SchemaVersion: schemaversion.SchemaV21(),
+				Container:     v2,
+			}
+		} else {
+			// v2 Argon. Pass the container object to the HCS.
+			hcsDocument = &hcsschema.ComputeSystem{
+				Owner:                             coi.actualOwner,
+				SchemaVersion:                     schemaversion.SchemaV21(),
+				ShouldTerminateOnLastHandleClosed: true,
+				Container:                         v2,
+			}
+		}
 	}
 
 	logrus.Debug("hcsshim::CreateContainer creating compute system")
+	if gcsDocument != nil {
+		c, err := coi.HostingSystem.CreateContainer(coi.actualID, gcsDocument)
+		if err != nil {
+			return nil, resources, err
+		}
+		return c, resources, nil
+	}
+
 	system, err := hcs.CreateComputeSystem(coi.actualID, hcsDocument)
 	if err != nil {
-		logrus.WithError(err).Debug("failed to CreateComputeSystem")
 		return nil, resources, err
 	}
-	return system, resources, err
+	return system, resources, nil
 }

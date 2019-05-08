@@ -21,19 +21,19 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// createWindowsContainerDocument creates a document suitable for calling HCS to create
-// a container, both hosted and process isolated. It can create both v1 and v2
-// schema, WCOW only. The containers storage should have been mounted already.
-func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, error) {
+// createWindowsContainerDocument creates documents for passing to HCS or GCS to create
+// a container, both hosted and process isolated. It creates both v1 and v2
+// container objects, WCOW only. The containers storage should have been mounted already.
+func createWindowsContainerDocument(coi *createOptionsInternal) (*schema1.ContainerConfig, *hcsschema.Container, error) {
 	logrus.Debug("hcsshim: CreateHCSContainerDocument")
 	// TODO: Make this safe if exported so no null pointer dereferences.
 
 	if coi.Spec == nil {
-		return nil, fmt.Errorf("cannot create HCS container document - OCI spec is missing")
+		return nil, nil, fmt.Errorf("cannot create HCS container document - OCI spec is missing")
 	}
 
 	if coi.Spec.Windows == nil {
-		return nil, fmt.Errorf("cannot create HCS container document - OCI spec Windows section is missing ")
+		return nil, nil, fmt.Errorf("cannot create HCS container document - OCI spec Windows section is missing ")
 	}
 
 	v1 := &schema1.ContainerConfig{
@@ -46,16 +46,11 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 
 	// IgnoreFlushesDuringBoot is a property of the SCSI attachment for the scratch. Set when it's hot-added to the utility VM
 	// ID is a property on the create call in V2 rather than part of the schema.
-	v2 := &hcsschema.ComputeSystem{
-		Owner:                             coi.actualOwner,
-		SchemaVersion:                     schemaversion.SchemaV21(),
-		ShouldTerminateOnLastHandleClosed: true,
-	}
 	v2Container := &hcsschema.Container{Storage: &hcsschema.Storage{}}
 
 	// TODO: Still want to revisit this.
 	if coi.Spec.Windows.LayerFolders == nil || len(coi.Spec.Windows.LayerFolders) < 2 {
-		return nil, fmt.Errorf("invalid spec - not enough layer folders supplied")
+		return nil, nil, fmt.Errorf("invalid spec - not enough layer folders supplied")
 	}
 
 	if coi.Spec.Hostname != "" {
@@ -81,7 +76,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 	}
 
 	if cpuNumSet > 1 {
-		return nil, fmt.Errorf("invalid spec - Windows Process Container CPU Count: '%d', Limit: '%d', and Weight: '%d' are mutually exclusive", cpuCount, cpuLimit, cpuWeight)
+		return nil, nil, fmt.Errorf("invalid spec - Windows Process Container CPU Count: '%d', Limit: '%d', and Weight: '%d' are mutually exclusive", cpuCount, cpuLimit, cpuWeight)
 	} else if cpuNumSet == 1 {
 		var hostCPUCount int32
 		if coi.HostingSystem != nil {
@@ -174,11 +169,11 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 	}
 
 	if coi.Spec.Root == nil {
-		return nil, fmt.Errorf("spec is invalid - root isn't populated")
+		return nil, nil, fmt.Errorf("spec is invalid - root isn't populated")
 	}
 
 	if coi.Spec.Root.Readonly {
-		return nil, fmt.Errorf(`invalid container spec - readonly is not supported for Windows containers`)
+		return nil, nil, fmt.Errorf(`invalid container spec - readonly is not supported for Windows containers`)
 	}
 
 	// Strip off the top-most RW/scratch layer as that's passed in separately to HCS for v1
@@ -189,7 +184,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 		// Argon v1 or v2.
 		const volumeGUIDRegex = `^\\\\\?\\(Volume)\{{0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}\}(|\\)$`
 		if matched, err := regexp.MatchString(volumeGUIDRegex, coi.Spec.Root.Path); !matched || err != nil {
-			return nil, fmt.Errorf(`invalid container spec - Root.Path '%s' must be a volume GUID path in the format '\\?\Volume{GUID}\'`, coi.Spec.Root.Path)
+			return nil, nil, fmt.Errorf(`invalid container spec - Root.Path '%s' must be a volume GUID path in the format '\\?\Volume{GUID}\'`, coi.Spec.Root.Path)
 		}
 		if coi.Spec.Root.Path[len(coi.Spec.Root.Path)-1] != '\\' {
 			coi.Spec.Root.Path += `\` // Be nice to clients and make sure well-formed for back-compat
@@ -202,7 +197,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 			// V1 Xenon
 			v1.HvPartition = true
 			if coi.Spec == nil || coi.Spec.Windows == nil || coi.Spec.Windows.HyperV == nil { // Be resilient to nil de-reference
-				return nil, fmt.Errorf(`invalid container spec - Spec.Windows.HyperV is nil`)
+				return nil, nil, fmt.Errorf(`invalid container spec - Spec.Windows.HyperV is nil`)
 			}
 			if coi.Spec.Windows.HyperV.UtilityVMPath != "" {
 				// Client-supplied utility VM path
@@ -211,7 +206,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 				// Client was lazy. Let's locate it from the layer folders instead.
 				uvmImagePath, err := uvmfolder.LocateUVMFolder(coi.Spec.Windows.LayerFolders)
 				if err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 				v1.HvRuntime = &schema1.HvRuntime{ImagePath: filepath.Join(uvmImagePath, `UtilityVM`)}
 			}
@@ -221,7 +216,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 			if coi.HostingSystem.OS() == "windows" {
 				layers, err := computeV2Layers(coi.HostingSystem, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1])
 				if err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 				v2Container.Storage.Layers = layers
 			}
@@ -232,7 +227,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 		for _, layerPath := range coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1] {
 			layerID, err := wclayer.LayerID(layerPath)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			v1.Layers = append(v1.Layers, schema1.Layer{ID: layerID.String(), Path: layerPath})
 			v2Container.Storage.Layers = append(v2Container.Storage.Layers, hcsschema.Layer{Id: layerID.String(), Path: layerPath})
@@ -250,7 +245,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 	for _, mount := range coi.Spec.Mounts {
 		const pipePrefix = `\\.\pipe\`
 		if mount.Type != "" {
-			return nil, fmt.Errorf("invalid container spec - Mount.Type '%s' must not be set", mount.Type)
+			return nil, nil, fmt.Errorf("invalid container spec - Mount.Type '%s' must not be set", mount.Type)
 		}
 		if strings.HasPrefix(strings.ToLower(mount.Destination), pipePrefix) {
 			mpsv1 = append(mpsv1, schema1.MappedPipe{HostPath: mount.Source, ContainerPipeName: mount.Destination[len(pipePrefix):]})
@@ -273,10 +268,10 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 						// It could also be a scsi mount.
 						uvmPath, err = coi.HostingSystem.GetScsiUvmPath(mount.Source)
 						if err != nil {
-							return nil, err
+							return nil, nil, err
 						}
 					} else {
-						return nil, err
+						return nil, nil, err
 					}
 				}
 				mdv2.HostPath = uvmPath
@@ -289,25 +284,9 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (interface{}, er
 	v1.MappedDirectories = mdsv1
 	v2Container.MappedDirectories = mdsv2
 	if len(mpsv1) > 0 && osversion.Get().Build < osversion.RS3 {
-		return nil, fmt.Errorf("named pipe mounts are not supported on this version of Windows")
+		return nil, nil, fmt.Errorf("named pipe mounts are not supported on this version of Windows")
 	}
 	v1.MappedPipes = mpsv1
 	v2Container.MappedPipes = mpsv2
-
-	// Put the v2Container object as a HostedSystem for a Xenon, or directly in the schema for an Argon.
-	if coi.HostingSystem == nil {
-		v2.Container = v2Container
-	} else {
-		v2.HostingSystemId = coi.HostingSystem.ID()
-		v2.HostedSystem = &hcsschema.HostedSystem{
-			SchemaVersion: schemaversion.SchemaV21(),
-			Container:     v2Container,
-		}
-	}
-
-	if schemaversion.IsV10(coi.actualSchemaVersion) {
-		return v1, nil
-	}
-
-	return v2, nil
+	return v1, v2Container, nil
 }

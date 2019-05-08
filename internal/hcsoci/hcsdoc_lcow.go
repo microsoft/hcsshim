@@ -67,41 +67,22 @@ func createLCOWSpec(coi *createOptionsInternal) (*specs.Spec, error) {
 	return spec, nil
 }
 
-// This is identical to hcsschema.ComputeSystem but HostedSystem is an LCOW specific type - the schema docs only include WCOW.
-type linuxComputeSystem struct {
-	Owner                             string                    `json:"Owner,omitempty"`
-	SchemaVersion                     *hcsschema.Version        `json:"SchemaVersion,omitempty"`
-	HostingSystemId                   string                    `json:"HostingSystemId,omitempty"`
-	HostedSystem                      *linuxHostedSystem        `json:"HostedSystem,omitempty"`
-	Container                         *hcsschema.Container      `json:"Container,omitempty"`
-	VirtualMachine                    *hcsschema.VirtualMachine `json:"VirtualMachine,omitempty"`
-	ShouldTerminateOnLastHandleClosed bool                      `json:"ShouldTerminateOnLastHandleClosed,omitempty"`
-}
-
 type linuxHostedSystem struct {
 	SchemaVersion    *hcsschema.Version
 	OciBundlePath    string
 	OciSpecification *specs.Spec
 }
 
-func createLinuxContainerDocument(coi *createOptionsInternal, guestRoot string) (interface{}, error) {
+func createLinuxContainerDocument(coi *createOptionsInternal, guestRoot string) (*linuxHostedSystem, error) {
 	spec, err := createLCOWSpec(coi)
 	if err != nil {
 		return nil, err
 	}
 
 	logrus.WithField("guestRoot", guestRoot).Debug("hcsshim::createLinuxContainerDoc")
-	v2 := &linuxComputeSystem{
-		Owner:                             coi.actualOwner,
-		SchemaVersion:                     schemaversion.SchemaV21(),
-		ShouldTerminateOnLastHandleClosed: true,
-		HostingSystemId:                   coi.HostingSystem.ID(),
-		HostedSystem: &linuxHostedSystem{
-			SchemaVersion:    schemaversion.SchemaV21(),
-			OciBundlePath:    guestRoot,
-			OciSpecification: spec,
-		},
-	}
-
-	return v2, nil
+	return &linuxHostedSystem{
+		SchemaVersion:    schemaversion.SchemaV21(),
+		OciBundlePath:    guestRoot,
+		OciSpecification: spec,
+	}, nil
 }
