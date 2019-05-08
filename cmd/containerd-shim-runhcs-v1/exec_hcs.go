@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
-	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/signals"
@@ -46,7 +46,7 @@ func newHcsExec(
 	events publisher,
 	tid string,
 	host *uvm.UtilityVM,
-	c *hcs.System,
+	c cow.Container,
 	id, bundle string,
 	isWCOW bool,
 	spec *specs.Process,
@@ -91,7 +91,7 @@ type hcsExec struct {
 	// c is the hosting container for this exec.
 	//
 	// This MUST be treated as read only in the lifetime of the exec.
-	c *hcs.System
+	c cow.Container
 	// id is the id of this process.
 	//
 	// This MUST be treated as read only in the lifetime of the exec.
@@ -129,7 +129,7 @@ type hcsExec struct {
 	pid        int
 	exitStatus uint32
 	exitedAt   time.Time
-	p          *hcs.Process
+	p          cow.Process
 	pCloseOnce sync.Once
 
 	// exited is a wait block which waits async for the process to exit.
@@ -223,7 +223,7 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 		}()
 	}
 	var (
-		proc *hcs.Process
+		proc cow.Process
 	)
 	if he.isWCOW {
 		wpp := &hcsschema.ProcessParameters{

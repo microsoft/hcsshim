@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/copywithtimeout"
+	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -21,14 +22,9 @@ type ByteCounts struct {
 	Err int64
 }
 
-type ProcessHost interface {
-	CreateProcess(settings interface{}) (*hcs.Process, error)
-}
-
-// ProcessOptions are the set of options which are passed to CreateProcessEx() to
-// create a utility vm.
+// ProcessOptions are the set of options which are passed to CreateProcess().
 type ProcessOptions struct {
-	Host              ProcessHost
+	Host              cow.ProcessHost
 	Process           *specs.Process
 	Stdin             io.Reader     // Optional reader for sending on to the processes stdin stream
 	Stdout            io.Writer     // Optional writer for returning the processes stdout stream
@@ -57,7 +53,7 @@ type ProcessOptions struct {
 //
 // It is the responsibility of the caller to call Close() on the process returned.
 
-func CreateProcess(opts *ProcessOptions) (*hcs.Process, *ByteCounts, error) {
+func CreateProcess(opts *ProcessOptions) (cow.Process, *ByteCounts, error) {
 
 	var environment = make(map[string]string)
 	copiedByteCounts := &ByteCounts{}

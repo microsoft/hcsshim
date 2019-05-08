@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/logfields"
@@ -167,7 +168,7 @@ func (uvm *UtilityVM) CreateContainer(id string, settings interface{}) (*hcs.Sys
 }
 
 // CreateProcess creates a process in the utility VM.
-func (uvm *UtilityVM) CreateProcess(settings interface{}) (*hcs.Process, error) {
+func (uvm *UtilityVM) CreateProcess(settings interface{}) (cow.Process, error) {
 	return uvm.hcsSystem.CreateProcess(settings)
 }
 

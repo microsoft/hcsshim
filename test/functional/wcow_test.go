@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/Microsoft/hcsshim"
-	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/schema1"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
@@ -172,50 +172,41 @@ import (
 //}
 
 // Helper to start a container.
-// Ones created through hcsoci methods will be of type *hcs.System.
+// Ones created through hcsoci methods will be of type cow.Container.
 // Ones created through hcsshim methods will be of type hcsshim.Container
-func startContainer(t *testing.T, c interface{}) {
-	var err error
-	switch c.(type) {
-	case *hcs.System:
-		err = c.(*hcs.System).Start()
-	case hcsshim.Container:
-		err = c.(hcsshim.Container).Start()
-	default:
-		t.Fatal("unknown type")
-	}
+func startContainer(t *testing.T, c interface{ Start() error }) {
+	err := c.Start()
 	if err != nil {
 		t.Fatalf("Failed start: %s", err)
 	}
 }
 
 // Helper to stop a container.
-// Ones created through hcsoci methods will be of type *hcs.System.
+// Ones created through hcsoci methods will be of type cow.Container.
 // Ones created through hcsshim methods will be of type hcsshim.Container
 func stopContainer(t *testing.T, c interface{}) {
-
-	switch c.(type) {
-	case *hcs.System:
-		if err := c.(*hcs.System).Shutdown(); err == nil {
-			if err := c.(*hcs.System).Wait(); err != nil {
+	switch c := c.(type) {
+	case cow.Container:
+		if err := c.Shutdown(); err == nil {
+			if err := c.Wait(); err != nil {
 				t.Fatalf("Failed Wait shutdown: %s", err)
 			}
 		} else {
 			t.Fatalf("Failed shutdown: %s", err)
 		}
-		c.(*hcs.System).Terminate()
+		c.Terminate()
 
 	case hcsshim.Container:
-		if err := c.(hcsshim.Container).Shutdown(); err != nil {
+		if err := c.Shutdown(); err != nil {
 			if hcsshim.IsPending(err) {
-				if err := c.(hcsshim.Container).Wait(); err != nil {
+				if err := c.Wait(); err != nil {
 					t.Fatalf("Failed Wait shutdown: %s", err)
 				}
 			} else {
 				t.Fatalf("Failed shutdown: %s", err)
 			}
 		}
-		c.(hcsshim.Container).Terminate()
+		c.Terminate()
 	default:
 		t.Fatalf("unknown type")
 	}
@@ -286,7 +277,7 @@ func runShimCommands(t *testing.T, c hcsshim.Container) {
 	runShimCommand(t, c, `ls`, `c:\mappedrw`, 0, `readwrite`)
 }
 
-func runHcsCommands(t *testing.T, c *hcs.System) {
+func runHcsCommands(t *testing.T, c cow.Container) {
 	runHcsCommand(t, c, `echo Hello`, `c:\`, 0, "Hello")
 
 	// Check that read-only doesn't allow deletion or creation
@@ -306,7 +297,7 @@ func runHcsCommands(t *testing.T, c *hcs.System) {
 // Helper to launch a process in a container created through the hcsshim methods.
 // At the point of calling, the container must have been successfully created.
 func runHcsCommand(t *testing.T,
-	c *hcs.System,
+	c cow.Container,
 	command string,
 	workdir string,
 	expectedExitCode int,
@@ -519,7 +510,7 @@ func TestWCOWArgonOciV1(t *testing.T) {
 
 	// For cleanup on failure
 	var argonOci1Resources *hcsoci.Resources
-	var argonOci1 *hcs.System
+	var argonOci1 cow.Container
 	defer func() {
 		if argonOci1Mounted {
 			hcsoci.ReleaseResources(argonOci1Resources, nil, true)
@@ -570,7 +561,7 @@ func TestWCOWXenonOciV1(t *testing.T) {
 
 	// For cleanup on failure
 	var xenonOci1Resources *hcsoci.Resources
-	var xenonOci1 *hcs.System
+	var xenonOci1 cow.Container
 	defer func() {
 		if xenonOci1Mounted {
 			hcsoci.ReleaseResources(xenonOci1Resources, nil, true)
@@ -617,7 +608,7 @@ func TestWCOWArgonOciV2(t *testing.T) {
 
 	// For cleanup on failure
 	var argonOci2Resources *hcsoci.Resources
-	var argonOci2 *hcs.System
+	var argonOci2 cow.Container
 	defer func() {
 		if argonOci2Mounted {
 			hcsoci.ReleaseResources(argonOci2Resources, nil, true)
@@ -669,7 +660,7 @@ func TestWCOWXenonOciV2(t *testing.T) {
 	}
 
 	var xenonOci2Resources *hcsoci.Resources
-	var xenonOci2 *hcs.System
+	var xenonOci2 cow.Container
 	var xenonOci2UVM *uvm.UtilityVM
 	defer func() {
 		if xenonOci2Mounted {

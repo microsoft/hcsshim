@@ -557,7 +557,7 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 	if err != nil {
 		return err
 	}
-	c.hc = hc
+	c.hc = hc.(*hcs.System)
 	return nil
 }
 

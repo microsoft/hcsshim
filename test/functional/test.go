@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/sirupsen/logrus"
 )
@@ -33,7 +33,7 @@ func init() {
 
 }
 
-func CreateContainerTestWrapper(options *hcsoci.CreateOptions) (*hcs.System, *hcsoci.Resources, error) {
+func CreateContainerTestWrapper(options *hcsoci.CreateOptions) (cow.Container, *hcsoci.Resources, error) {
 	if pauseDurationOnCreateContainerFailure != 0 {
 		options.DoNotReleaseResourcesOnFailure = true
 	}

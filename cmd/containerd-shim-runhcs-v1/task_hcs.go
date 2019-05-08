@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/oci"
@@ -217,7 +218,7 @@ type hcsTask struct {
 	//
 	// It MUST be treated as read only in the lifetime of this task EXCEPT after
 	// a Kill to the init task in which it must be shutdown.
-	c *hcs.System
+	c cow.Container
 	// cr is the container resources this task is holding.
 	//
 	// It MUST be treated as read only in the lifetime of this task EXCEPT after

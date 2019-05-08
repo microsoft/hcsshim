@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/interop"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/schema1"
@@ -466,7 +467,7 @@ func (computeSystem *System) Resume() (err error) {
 }
 
 // CreateProcess launches a new process within the computeSystem.
-func (computeSystem *System) CreateProcess(c interface{}) (_ *Process, err error) {
+func (computeSystem *System) CreateProcess(c interface{}) (_ cow.Process, err error) {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
