@@ -8,8 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/lcow"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -278,55 +277,15 @@ func run(options *uvm.OptionsLCOW, c *cli.Context) error {
 }
 
 func execViaGcs(vm *uvm.UtilityVM, c *cli.Context) error {
-	var copyOut, copyErr bool
+	cmd := hcsoci.Command(vm, "/bin/sh", "-c", c.String(execCommandLineArgName))
+	cmd.Log = logrus.NewEntry(logrus.StandardLogger())
 	if c.String(outputHandlingArgName) == "stdout" {
-		copyOut = c.Bool(forwardStdoutArgName)
-		copyErr = c.Bool(forwardStderrArgName)
-	}
-	popts := &lcow.ProcessParameters{
-		ProcessParameters: hcsschema.ProcessParameters{
-			CommandArgs:      []string{"/bin/sh", "-c", c.String(execCommandLineArgName)},
-			Environment:      map[string]string{"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
-			WorkingDirectory: "/",
-			CreateStdOutPipe: copyOut,
-			CreateStdErrPipe: copyErr,
-		},
-		CreateInUtilityVm: true,
-	}
-	p, err := vm.CreateProcess(popts)
-	if err != nil {
-		return err
-	}
-	defer p.Close()
-	_, pout, perr := p.Stdio()
-	ch := make(chan error)
-	n := 0
-	asyncCopy := func(w io.Writer, r io.Reader, name string) {
-		n++
-		go func() {
-			_, err := io.Copy(w, r)
-			if err != nil {
-				err = fmt.Errorf("%s: %s", name, err)
-			}
-			ch <- err
-		}()
-	}
-	if copyOut {
-		asyncCopy(os.Stdout, pout, "stdout")
-	}
-	if copyErr {
-		asyncCopy(os.Stdout, perr, "stderr") // match non-GCS behavior and forward to stdout
-	}
-	if err = p.Wait(); err != nil {
-		return err
-	}
-	for i := 0; i < n; i++ {
-		if err := <-ch; err != nil {
-			return err
+		if c.Bool(forwardStdoutArgName) {
+			cmd.Stdout = os.Stdout
+		}
+		if c.Bool(forwardStderrArgName) {
+			cmd.Stderr = os.Stdout // match non-GCS behavior and forward to stdout
 		}
 	}
-	if err = p.Close(); err != nil {
-		return err
-	}
-	return nil
+	return cmd.Run()
 }
