@@ -172,6 +172,12 @@ func (uvm *UtilityVM) CreateProcess(settings interface{}) (cow.Process, error) {
 	return uvm.hcsSystem.CreateProcess(settings)
 }
 
+// IsOCI returns false, indicating the parameters to CreateProcess should not
+// include an OCI spec.
+func (uvm *UtilityVM) IsOCI() bool {
+	return false
+}
+
 // Terminate requests that the utility VM be terminated.
 func (uvm *UtilityVM) Terminate() error {
 	return uvm.hcsSystem.Terminate()

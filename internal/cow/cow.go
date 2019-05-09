@@ -44,6 +44,13 @@ type ProcessHost interface {
 	// CreateProcess creates a process. The configuration is host specific
 	// (either hcsschema.ProcessParameters or lcow.ProcessParameters).
 	CreateProcess(config interface{}) (Process, error)
+	// OS returns the host's operating system, "linux" or "windows".
+	OS() string
+	// IsOCI specifies whether this is an OCI-compliant process host. If true,
+	// then the configuration passed to CreateProcess should have an OCI process
+	// spec (or nil if this is the initial process in an OCI container).
+	// Otherwise, it should have the HCS-specific process parameters.
+	IsOCI() bool
 }
 
 // Container is the interface for container objects, either running on the host or

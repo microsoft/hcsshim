@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -50,6 +51,8 @@ type System struct {
 	waitBlock      chan struct{}
 	waitError      error
 	exitError      error
+
+	os, typ string
 }
 
 func newSystem(id string) *System {
@@ -105,6 +108,11 @@ func CreateComputeSystem(id string, hcsDocumentInterface interface{}) (_ *System
 	})
 
 	if createError == nil || IsPending(createError) {
+		defer func() {
+			if err != nil {
+				computeSystem.Close()
+			}
+		}()
 		if err = computeSystem.registerCallback(); err != nil {
 			// Terminate the compute system if it still exists. We're okay to
 			// ignore a failure here.
@@ -122,9 +130,10 @@ func CreateComputeSystem(id string, hcsDocumentInterface interface{}) (_ *System
 		}
 		return nil, makeSystemError(computeSystem, operation, hcsDocument, err, events)
 	}
-
 	go computeSystem.waitBackground()
-
+	if err = computeSystem.getCachedProperties(); err != nil {
+		return nil, err
+	}
 	return computeSystem, nil
 }
 
@@ -151,15 +160,46 @@ func OpenComputeSystem(id string) (_ *System, err error) {
 	if err != nil {
 		return nil, makeSystemError(computeSystem, operation, "", err, events)
 	}
-
 	computeSystem.handle = handle
-
+	defer func() {
+		if err != nil {
+			computeSystem.Close()
+		}
+	}()
 	if err = computeSystem.registerCallback(); err != nil {
 		return nil, makeSystemError(computeSystem, operation, "", err, nil)
 	}
 	go computeSystem.waitBackground()
-
+	if err = computeSystem.getCachedProperties(); err != nil {
+		return nil, err
+	}
 	return computeSystem, nil
+}
+
+func (computeSystem *System) getCachedProperties() error {
+	props, err := computeSystem.Properties()
+	if err != nil {
+		return err
+	}
+	computeSystem.typ = strings.ToLower(props.SystemType)
+	computeSystem.os = strings.ToLower(props.RuntimeOSType)
+	if computeSystem.os == "" && computeSystem.typ == "container" {
+		// Pre-RS5 HCS did not return the OS, but it only supported containers
+		// that ran Windows.
+		computeSystem.os = "windows"
+	}
+	return nil
+}
+
+// OS returns the operating system of the compute system, "linux" or "windows".
+func (computeSystem *System) OS() string {
+	return computeSystem.os
+}
+
+// IsOCI returns whether processes in the compute system should be created via
+// OCI.
+func (computeSystem *System) IsOCI() bool {
+	return computeSystem.os == "linux" && computeSystem.typ == "container"
 }
 
 // GetComputeSystems gets a list of the compute systems on the system that match the query
