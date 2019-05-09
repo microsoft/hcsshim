@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"syscall"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
@@ -15,6 +16,20 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
+
+type rawConReader struct {
+	f *os.File
+}
+
+func (r rawConReader) Read(b []byte) (int, error) {
+	n, err := syscall.Read(syscall.Handle(r.f.Fd()), b)
+	if n == 0 && len(b) != 0 && err == nil {
+		// A zero-byte read on a console indicates that the user wrote Ctrl-Z.
+		b[0] = 26
+		return 1, nil
+	}
+	return n, err
+}
 
 var execTty bool
 var execCommand = cli.Command{
@@ -36,17 +51,23 @@ var execCommand = cli.Command{
 			return err
 		}
 
+		var osStdin io.Reader = os.Stdin
 		if execTty {
 			// Enable raw mode on the client's console.
-			con := console.Current()
-			err := con.SetRaw()
-			if err != nil {
-				return err
+			con, err := console.ConsoleFromFile(os.Stdin)
+			if err == nil {
+				err = con.SetRaw()
+				if err != nil {
+					return err
+				}
+				defer con.Reset()
+				// Console reads return EOF whenever the user presses Ctrl-Z.
+				// Wrap the reads to translate these EOFs back.
+				osStdin = rawConReader{os.Stdin}
 			}
-			defer con.Reset()
 		}
 
-		stdin, err := makePipe(os.Stdin, true)
+		stdin, err := makePipe(osStdin, true)
 		if err != nil {
 			return err
 		}
@@ -83,7 +104,7 @@ var execCommand = cli.Command{
 	},
 }
 
-func makePipe(f *os.File, in bool) (string, error) {
+func makePipe(f interface{}, in bool) (string, error) {
 	r, err := guid.NewV4()
 	if err != nil {
 		return "", err
@@ -100,10 +121,10 @@ func makePipe(f *os.File, in bool) (string, error) {
 			return
 		}
 		if in {
-			io.Copy(c, f)
+			io.Copy(c, f.(io.Reader))
 			c.Close()
 		} else {
-			io.Copy(f, c)
+			io.Copy(f.(io.Writer), c)
 		}
 	}()
 	return p, nil
