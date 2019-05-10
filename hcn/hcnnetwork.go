@@ -3,7 +3,8 @@ package hcn
 import (
 	"encoding/json"
 	"errors"
-	"github.com/Microsoft/hcsshim/internal/guid"
+
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/interop"
 	"github.com/sirupsen/logrus"
 )
@@ -203,7 +204,10 @@ func createNetwork(settings string) (*HostComputeNetwork, error) {
 }
 
 func modifyNetwork(networkId string, settings string) (*HostComputeNetwork, error) {
-	networkGuid := guid.FromString(networkId)
+	networkGuid, err := guid.FromString(networkId)
+	if err != nil {
+		return nil, errInvalidNetworkID
+	}
 	// Open Network
 	var (
 		networkHandle    hcnNetwork
@@ -244,7 +248,10 @@ func modifyNetwork(networkId string, settings string) (*HostComputeNetwork, erro
 }
 
 func deleteNetwork(networkId string) error {
-	networkGuid := guid.FromString(networkId)
+	networkGuid, err := guid.FromString(networkId)
+	if err != nil {
+		return errInvalidNetworkID
+	}
 	var resultBuffer *uint16
 	hr := hcnDeleteNetwork(&networkGuid, &resultBuffer)
 	if err := checkForErrors("hcnDeleteNetwork", hr, resultBuffer); err != nil {

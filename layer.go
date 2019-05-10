@@ -2,9 +2,10 @@ package hcsshim
 
 import (
 	"crypto/sha1"
+	"encoding/binary"
 	"path/filepath"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 )
 
@@ -75,9 +76,27 @@ type DriverInfo struct {
 
 type GUID [16]byte
 
+func guidToArray(g guid.GUID) GUID {
+	g2 := GUID{}
+	binary.LittleEndian.PutUint32(g2[0:3], g.Data1)
+	binary.LittleEndian.PutUint16(g2[4:5], g.Data2)
+	binary.LittleEndian.PutUint16(g2[6:7], g.Data3)
+	copy(g2[8:16], g.Data4[:])
+	return g2
+}
+
+func arrayToGUID(g GUID) guid.GUID {
+	g2 := guid.GUID{}
+	g2.Data1 = binary.LittleEndian.Uint32(g[0:3])
+	g2.Data2 = binary.LittleEndian.Uint16(g[4:5])
+	g2.Data3 = binary.LittleEndian.Uint16(g[6:7])
+	copy(g2.Data4[:], g[8:16])
+	return g2
+}
+
 func NameToGuid(name string) (id GUID, err error) {
 	g, err := wclayer.NameToGuid(name)
-	return GUID(g), err
+	return guidToArray(g), err
 }
 
 func NewGUID(source string) *GUID {
@@ -88,7 +107,7 @@ func NewGUID(source string) *GUID {
 }
 
 func (g *GUID) ToString() string {
-	return (guid.GUID)(*g).String()
+	return arrayToGUID(*g).String()
 }
 
 type LayerReader = wclayer.LayerReader

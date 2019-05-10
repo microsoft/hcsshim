@@ -6,9 +6,9 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
-	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
@@ -111,7 +111,10 @@ func (uvm *UtilityVM) AddEndpointsToNS(id string, endpoints []*hns.HNSEndpoint) 
 
 	for _, endpoint := range endpoints {
 		if _, ok := ns.nics[endpoint.Id]; !ok {
-			nicID := guid.New()
+			nicID, err := guid.NewV4()
+			if err != nil {
+				return err
+			}
 			if err := uvm.addNIC(nicID, endpoint); err != nil {
 				return err
 			}

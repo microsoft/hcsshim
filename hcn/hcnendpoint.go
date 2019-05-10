@@ -3,7 +3,8 @@ package hcn
 import (
 	"encoding/json"
 	"errors"
-	"github.com/Microsoft/hcsshim/internal/guid"
+
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/interop"
 	"github.com/sirupsen/logrus"
 )
@@ -121,7 +122,10 @@ func enumerateEndpoints(query string) ([]HostComputeEndpoint, error) {
 }
 
 func createEndpoint(networkId string, endpointSettings string) (*HostComputeEndpoint, error) {
-	networkGuid := guid.FromString(networkId)
+	networkGuid, err := guid.FromString(networkId)
+	if err != nil {
+		return nil, errInvalidNetworkID
+	}
 	// Open network.
 	var networkHandle hcnNetwork
 	var resultBuffer *uint16
@@ -167,7 +171,10 @@ func createEndpoint(networkId string, endpointSettings string) (*HostComputeEndp
 }
 
 func modifyEndpoint(endpointId string, settings string) (*HostComputeEndpoint, error) {
-	endpointGuid := guid.FromString(endpointId)
+	endpointGuid, err := guid.FromString(endpointId)
+	if err != nil {
+		return nil, errInvalidEndpointID
+	}
 	// Open endpoint
 	var (
 		endpointHandle   hcnEndpoint
@@ -208,7 +215,10 @@ func modifyEndpoint(endpointId string, settings string) (*HostComputeEndpoint, e
 }
 
 func deleteEndpoint(endpointId string) error {
-	endpointGuid := guid.FromString(endpointId)
+	endpointGuid, err := guid.FromString(endpointId)
+	if err != nil {
+		return errInvalidEndpointID
+	}
 	var resultBuffer *uint16
 	hr := hcnDeleteEndpoint(&endpointGuid, &resultBuffer)
 	if err := checkForErrors("hcnDeleteEndpoint", hr, resultBuffer); err != nil {
