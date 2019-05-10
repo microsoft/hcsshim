@@ -105,7 +105,7 @@ func (uvm *UtilityVM) create(doc interface{}) error {
 	if err != nil {
 		return err
 	}
-	uvm.runtimeID = *properties.RuntimeID
+	uvm.runtimeID = properties.RuntimeID
 	uvm.hcsSystem = system
 	system = nil
 

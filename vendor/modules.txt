@@ -1,4 +1,4 @@
-# github.com/Microsoft/go-winio v0.0.0-20190422163245-d132a827c0ad
+# github.com/Microsoft/go-winio v0.4.13-0.20190509182014-01fe22a8b81b
 github.com/Microsoft/go-winio
 github.com/Microsoft/go-winio/pkg/etw
 github.com/Microsoft/go-winio/pkg/etwlogrus
@@ -66,7 +66,7 @@ github.com/opencontainers/runtime-tools/specerror
 github.com/opencontainers/runtime-tools/error
 # github.com/pkg/errors v0.8.1
 github.com/pkg/errors
-# github.com/sirupsen/logrus v1.3.0
+# github.com/sirupsen/logrus v1.4.1
 github.com/sirupsen/logrus
 # github.com/syndtr/gocapability v0.0.0-20170704070218-db04d3cc01c8
 github.com/syndtr/gocapability/capability
@@ -78,8 +78,6 @@ github.com/xeipuuv/gojsonpointer
 github.com/xeipuuv/gojsonreference
 # github.com/xeipuuv/gojsonschema v0.0.0-20180618132009-1d523034197f
 github.com/xeipuuv/gojsonschema
-# golang.org/x/crypto v0.0.0-20190103213133-ff983b9c42bc
-golang.org/x/crypto/ssh/terminal
 # golang.org/x/net v0.0.0-20190119204137-ed066c81e75e
 golang.org/x/net/context
 golang.org/x/net/http2
@@ -90,7 +88,7 @@ golang.org/x/net/idna
 golang.org/x/net/internal/timeseries
 # golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
 golang.org/x/sync/errgroup
-# golang.org/x/sys v0.0.0-20190116151225-e5ecc2a6747c
+# golang.org/x/sys v0.0.0-20190507160741-ecd444e8653b
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
 golang.org/x/sys/unix

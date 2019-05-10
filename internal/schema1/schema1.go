@@ -137,7 +137,7 @@ type ContainerProperties struct {
 	RuntimeOSType                string `json:"RuntimeOsType,omitempty"`
 	Owner                        string
 	SiloGUID                     string                              `json:"SiloGuid,omitempty"`
-	RuntimeID                    *guid.GUID                          `json:"RuntimeId,omitempty"`
+	RuntimeID                    guid.GUID                           `json:"RuntimeId,omitempty"`
 	IsRuntimeTemplate            bool                                `json:",omitempty"`
 	RuntimeImagePath             string                              `json:",omitempty"`
 	Stopped                      bool                                `json:",omitempty"`
