@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
 	"os"
 	"syscall"
 	"time"
+
+	"github.com/Microsoft/hcsshim/internal/gcs"
 
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/schema1"
@@ -134,6 +137,8 @@ func processOutput(ctx context.Context, l net.Listener, doneChan chan struct{}, 
 
 // Start synchronously starts the utility VM.
 func (uvm *UtilityVM) Start() (err error) {
+	ctx, cancel := context.WithTimeout(context.TODO(), 2*time.Minute)
+	defer cancel()
 	op := "uvm::Start"
 	log := logrus.WithFields(logrus.Fields{
 		logfields.UVMID: uvm.id,
@@ -158,15 +163,83 @@ func (uvm *UtilityVM) Start() (err error) {
 	if err != nil {
 		return err
 	}
-
-	// Cache the guest connection properties.
-	properties, err := uvm.hcsSystem.Properties(schema1.PropertyTypeGuestConnection)
-	if err != nil {
-		uvm.hcsSystem.Terminate()
-		uvm.hcsSystem.Wait()
-		return err
+	defer func() {
+		if err != nil {
+			uvm.hcsSystem.Terminate()
+			uvm.hcsSystem.Wait()
+		}
+	}()
+	// Start waiting on the utility VM.
+	uvm.exitCh = make(chan struct{})
+	go func() {
+		err := uvm.hcsSystem.Wait()
+		if err == nil {
+			err = uvm.hcsSystem.ExitError()
+		}
+		uvm.exitErr = err
+		close(uvm.exitCh)
+	}()
+	if uvm.gcListener != nil {
+		// Accept the GCS connection.
+		conn, err := uvm.acceptAndClose(ctx, uvm.gcListener)
+		uvm.gcListener = nil
+		if err != nil {
+			return fmt.Errorf("failed to connect to GCS: %s", err)
+		}
+		// Start the GCS protocol.
+		gcc := &gcs.GuestConnectionConfig{
+			Conn:     conn,
+			Log:      logrus.WithField(logfields.UVMID, uvm.id),
+			IoListen: gcs.HvsockIoListen(uvm.runtimeID),
+		}
+		uvm.gc, err = gcc.Connect(ctx)
+		if err != nil {
+			return err
+		}
+		uvm.guestCaps = *uvm.gc.Capabilities()
+		uvm.protocol = uvm.gc.Protocol()
+	} else {
+		// Cache the guest connection properties.
+		properties, err := uvm.hcsSystem.Properties(schema1.PropertyTypeGuestConnection)
+		if err != nil {
+			return err
+		}
+		uvm.guestCaps = properties.GuestConnectionInfo.GuestDefinedCapabilities
+		uvm.protocol = properties.GuestConnectionInfo.ProtocolVersion
 	}
-	uvm.guestCaps = properties.GuestConnectionInfo.GuestDefinedCapabilities
-	uvm.protocol = properties.GuestConnectionInfo.ProtocolVersion
 	return nil
+}
+
+// acceptAndClose accepts a connection and then closes a listener. If the
+// context becomes done or the utility VM terminates, the operation will be
+// cancelled (but the listener will still be closed).
+func (uvm *UtilityVM) acceptAndClose(ctx context.Context, l net.Listener) (net.Conn, error) {
+	var conn net.Conn
+	ch := make(chan error)
+	go func() {
+		var err error
+		conn, err = l.Accept()
+		ch <- err
+	}()
+	select {
+	case err := <-ch:
+		l.Close()
+		return conn, err
+	case <-ctx.Done():
+	case <-uvm.exitCh:
+	}
+	l.Close()
+	err := <-ch
+	if err == nil {
+		return conn, err
+	}
+	// Prefer context error to VM error to accept error in order to return the
+	// most useful error.
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	if uvm.exitErr != nil {
+		return nil, uvm.exitErr
+	}
+	return nil, err
 }

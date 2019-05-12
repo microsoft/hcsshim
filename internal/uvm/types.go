@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/Microsoft/hcsshim/internal/gcs"
 	iguid "github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hns"
@@ -59,13 +60,18 @@ type namespaceInfo struct {
 
 // UtilityVM is the object used by clients representing a utility VM
 type UtilityVM struct {
-	id              string      // Identifier for the utility VM (user supplied or generated)
-	runtimeID       guid.GUID   // Hyper-V VM ID
-	owner           string      // Owner for the utility VM (user supplied or generated)
-	operatingSystem string      // "windows" or "linux"
-	hcsSystem       *hcs.System // The handle to the compute system
+	id              string               // Identifier for the utility VM (user supplied or generated)
+	runtimeID       guid.GUID            // Hyper-V VM ID
+	owner           string               // Owner for the utility VM (user supplied or generated)
+	operatingSystem string               // "windows" or "linux"
+	hcsSystem       *hcs.System          // The handle to the compute system
+	gcListener      net.Listener         // The GCS connection listener
+	gc              *gcs.GuestConnection // The GCS connection
 	processorCount  int32
 	m               sync.Mutex // Lock for adding/removing devices
+
+	exitErr error
+	exitCh  chan struct{}
 
 	// GCS bridge protocol and capabilities
 	protocol  uint32

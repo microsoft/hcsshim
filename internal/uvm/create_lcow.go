@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Microsoft/hcsshim/internal/gcs"
+
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/mergemaps"
@@ -22,6 +24,8 @@ type PreferredRootFSType int
 const (
 	PreferredRootFSTypeInitRd PreferredRootFSType = iota
 	PreferredRootFSTypeVHD
+
+	linuxLogVsockPort = 109
 )
 
 // OutputHandler is used to process the output from the program run in the UVM.
@@ -120,8 +124,6 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 	}
 	return opts
 }
-
-const linuxLogVsockPort = 109
 
 // CreateLCOW creates an HCS compute system representing a utility VM.
 func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
@@ -233,7 +235,7 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 		}
 	}
 
-	if opts.UseGuestConnection {
+	if opts.UseGuestConnection && !opts.ExternalGuestConnection {
 		doc.VirtualMachine.GuestConnection = &hcsschema.GuestConnection{
 			UseVsock:            true,
 			UseConnectedSuspend: true,
@@ -372,6 +374,14 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	if opts.UseGuestConnection && opts.ExternalGuestConnection {
+		l, err := uvm.listenVsock(gcs.LinuxGcsVsockPort)
+		if err != nil {
+			return nil, err
+		}
+		uvm.gcListener = l
 	}
 
 	return uvm, nil
