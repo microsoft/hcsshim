@@ -11,6 +11,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/gcs"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/mergemaps"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
@@ -140,6 +141,14 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 			log.Debug(op + " - End Operation - Success")
 		}
 	}()
+
+	if opts.ID == "" {
+		g, err := guid.NewV4()
+		if err != nil {
+			return nil, err
+		}
+		opts.ID = g.String()
+	}
 
 	// We dont serialize OutputHandler so if it is missing we need to put it back to the default.
 	if opts.OutputHandler == nil {

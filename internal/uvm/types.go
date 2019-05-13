@@ -9,7 +9,6 @@ import (
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/gcs"
-	iguid "github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/schema1"
@@ -50,7 +49,7 @@ type vpmemInfo struct {
 }
 
 type nicInfo struct {
-	ID       iguid.GUID
+	ID       guid.GUID
 	Endpoint *hns.HNSEndpoint
 }
 

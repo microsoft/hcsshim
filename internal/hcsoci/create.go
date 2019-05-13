@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/cow"
-	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
@@ -69,7 +69,11 @@ func CreateContainer(createOptions *CreateOptions) (_ cow.Container, _ *Resource
 
 	// Defaults if omitted by caller.
 	if coi.actualID == "" {
-		coi.actualID = guid.New().String()
+		g, err := guid.NewV4()
+		if err != nil {
+			return nil, nil, err
+		}
+		coi.actualID = g.String()
 	}
 	if coi.actualOwner == "" {
 		coi.actualOwner = filepath.Base(os.Args[0])

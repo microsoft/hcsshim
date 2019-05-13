@@ -5,9 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Microsoft/hcsshim/internal/gcs"
-
 	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/mergemaps"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
@@ -56,6 +56,14 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 			log.Debug(op + " - End Operation - Success")
 		}
 	}()
+
+	if opts.ID == "" {
+		g, err := guid.NewV4()
+		if err != nil {
+			return nil, err
+		}
+		opts.ID = g.String()
+	}
 
 	uvm := &UtilityVM{
 		id:                  opts.ID,

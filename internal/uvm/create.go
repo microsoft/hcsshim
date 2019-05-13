@@ -8,7 +8,6 @@ import (
 	"runtime"
 
 	"github.com/Microsoft/hcsshim/internal/cow"
-	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
@@ -74,9 +73,6 @@ func newDefaultOptions(id, owner string) *Options {
 		ProcessorCount:       defaultProcessorCount(),
 	}
 
-	if opts.ID == "" {
-		opts.ID = guid.New().String()
-	}
 	if opts.Owner == "" {
 		opts.Owner = filepath.Base(os.Args[0])
 	}

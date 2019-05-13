@@ -11,8 +11,8 @@ import (
 	"time"
 
 	winio "github.com/Microsoft/go-winio"
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/cni"
-	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/logfields"
@@ -289,7 +289,10 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		}
 	}
 
-	uniqueID := guid.New()
+	uniqueID, err := guid.NewV4()
+	if err != nil {
+		return nil, err
+	}
 
 	newvm := false
 	var hostUniqueID guid.GUID
