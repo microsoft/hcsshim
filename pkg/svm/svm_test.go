@@ -1,7 +1,7 @@
 package svm
 
 import (
-	"fmt"
+	"bytes"
 	"io"
 	"io/ioutil"
 	"os"
@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -17,182 +18,135 @@ func init() {
 	logrus.SetLevel(logrus.DebugLevel)
 }
 
-// // TestNewInvalidOptions ensures that calls to New with invalid options fail.
-// func TestNewInvalidOptions(t *testing.T) {
-// 	if _, err := New(nil); err == nil {
-// 		t.Fatal("expected failure")
-// 	}
-// 	if _, err := New(&NewOptions{Mode: 0}); err == nil {
-// 		t.Fatal("expected failure")
-// 	}
-// }
+// TestNewInvalidOptions ensures that calls to New with invalid options fail.
+func TestNewInvalidOptions(t *testing.T) {
+	if _, err := New(nil); err == nil {
+		t.Fatal("expected failure")
+	}
+	if _, err := New(&NewOptions{Mode: 0}); err == nil {
+		t.Fatal("expected failure")
+	}
+}
 
-// // TestCreateDestroyGlobal creates a single global SVM in an instance and tears
-// // it down using destroy.
-// func TestCreateDestroyGlobal(t *testing.T) {
-// 	i := newInstance(t, ModeGlobal)
-// 	create(t, i, "some-irrelevant-id")
-// 	if err := i.Destroy(); err != nil {
-// 		t.Fatal("should succeed")
-// 	}
-// 	checkZeroComputeSystems(t)
-// 	checkCount(t, i, 0)
-// }
-
-// // TestCreateDestroyUniqueTwoSVMs creates two SVMs in an instance and tears them
-// // down using destroy.
-// func TestCreateDestroyUniqueTwoSVMs(t *testing.T) {
-// 	i := newInstance(t, ModeUnique)
-// 	create(t, i, "first")
-// 	checkCount(t, i, 1)
-// 	create(t, i, "second")
-// 	checkCount(t, i, 2)
-// 	if err := i.Destroy(); err != nil {
-// 		t.Fatal("should succeed")
-// 	}
-// 	checkZeroComputeSystems(t)
-// 	checkCount(t, i, 0)
-// }
-
-// // TestDestroyNilMap makes sure destroy works even if we never created/started a service VM
-// func TestDestroyNilMap(t *testing.T) {
-// 	i := newInstance(t, ModeGlobal)
-// 	if err := i.Destroy(); err != nil {
-// 		t.Fatal("should succeed")
-// 	}
-// 	checkCount(t, i, 0)
-// }
-
-// // TestMode validates the Mode() method on an instance
-// func TestMode(t *testing.T) {
-// 	gi := newInstance(t, ModeGlobal)
-// 	ui := newInstance(t, ModeUnique)
-// 	if gi.Mode() != ModeGlobal || ui.Mode() != ModeUnique {
-// 		t.Fatal("returned incorrect mode")
-// 	}
-// 	checkCount(t, gi, 0)
-// 	checkCount(t, ui, 0)
-// }
-
-// // TestDiscardGlobal ensures that discard in global mode succeeds
-// func TestDiscardGlobal(t *testing.T) {
-// 	gi := newInstance(t, ModeGlobal)
-// 	if gi.Discard("anything") != nil {
-// 		t.Fatal("should succeed")
-// 	}
-// 	checkZeroComputeSystems(t)
-// 	checkCount(t, gi, 0)
-// }
-
-// // TestDiscardUnique verifies discard in unique mode succeeds if an ID
-// // is valid, and fails when an ID is invalid.
-// func TestDiscardUnique(t *testing.T) {
-// 	i := newInstance(t, ModeUnique)
-// 	id := "TestDiscardUniqueDoesntExist"
-// 	create(t, i, id)
-// 	checkCount(t, i, 1)
-// 	if err := i.Discard("does not exist"); err != ErrNotFound {
-// 		t.Fatalf("expected %s, got %s", ErrNotFound, err)
-// 	}
-// 	if err := i.Discard(id); err != nil {
-// 		t.Fatal("expected success")
-// 	}
-// 	checkZeroComputeSystems(t)
-// 	checkCount(t, i, 0)
-// }
-
-// // TestProcess tests launching processes in a service VM
-// func TestProcess(t *testing.T) {
-// 	ig := newInstance(t, ModeGlobal)
-// 	defer ig.Destroy()
-// 	create(t, ig, "dont-care-as-global")
-// 	testProcess(t, ig)
-
-// 	ug := newInstance(t, ModeUnique)
-// 	defer ug.Destroy()
-// 	create(t, ug, "anything")
-// 	testProcess(t, ug)
-// }
-
-// func testProcess(t *testing.T, i Instance) {
-// 	// A process which succeeds, check it's output
-// 	ec, output, err := i.RunProcess("anything", []string{"ls", "-l", "/"}, "")
-// 	if ec != 0 || err != nil {
-// 		t.Fatalf("expected success ec=%d err=%d", ec, err)
-// 	}
-// 	if !strings.Contains(output, "lost+found") {
-// 		t.Fatalf("output was %s", output)
-// 	}
-
-// 	// A non-zero exit code
-// 	ec, output, err = i.RunProcess("anything", []string{"sh", "-c", `"exit 123"`}, "")
-// 	if err != nil {
-// 		t.Fatalf("err was %s", err)
-// 	}
-// 	if ec != 123 {
-// 		t.Fatalf("ec was %d", ec)
-// 	}
-
-// 	// Command not found
-// 	ec, output, err = i.RunProcess("anything", []string{"foobarbaz"}, "")
-// 	if err == nil {
-// 		t.Fatalf("expected an error")
-// 	}
-// 	if !strings.Contains(err.Error(), "executable file not found in $PATH") {
-// 		t.Fatalf("didn't find what we were looking for %s", err)
-// 	}
-
-// 	// Something to stderr is returned in output
-// 	ec, output, err = i.RunProcess("anything", []string{"cat", "some-file-which-does-not-exist"}, "")
-// 	if err != nil {
-// 		t.Fatalf("expected success")
-// 	}
-// 	if !strings.Contains(output, "cat: can't open 'some-file-which-does-not-exist': No such file or directory") {
-// 		t.Fatalf("unexpected output %s", output)
-// 	}
-// 	if ec != 1 {
-// 		t.Fatalf("ec was %d", ec)
-// 	}
-
-// 	// Send stdin. TODO Figure out how to do a test here.
-// 	// ec, output, err = i.RunProcess("anything", []string{"cat < /proc/self/fd/0"}, "hello\r\nworld\r\n")
-// 	// if err != nil {
-// 	// 	t.Fatalf("expected success")
-// 	// }
-// 	// fmt.Println(output)
-// }
-
-func TestCreateScratch(t *testing.T) {
-	targetDir, err := ioutil.TempDir("", "ext4target")
+func createTempDirs(t *testing.T) (string, string) {
+	scratchDir, err := ioutil.TempDir("", "scratchDir")
 	if err != nil {
 		t.Fatalf("failed to create tempdir: %s", err)
 	}
-	defer os.RemoveAll(targetDir)
-
-	cacheDir, err := ioutil.TempDir("", "ext4cache")
+	cacheDir, err := ioutil.TempDir("", "cacheDir")
 	if err != nil {
 		t.Fatalf("failed to create tempdir: %s", err)
 	}
+	return cacheDir, scratchDir
+}
+
+// TestCreateDestroyGlobal creates a single global SVM in an instance and tears
+// it down using destroy.
+func TestCreateDestroyGlobal(t *testing.T) {
+	i := newInstance(t, ModeGlobal)
+
+	cacheDir, scratchDir := createTempDirs(t)
 	defer os.RemoveAll(cacheDir)
+	defer os.RemoveAll(scratchDir)
 
-	ig := newInstance(t, ModeGlobal)
-	defer ig.Destroy()
-	create(t, ig, "dont-care-as-global")
+	create(t, i, "some-irrelevant-id", cacheDir, scratchDir)
 
-	if err := ig.CreateScratch("anything", DefaultScratchSizeGB, cacheDir, targetDir); err != nil {
-		t.Fatal(err)
+	if err := i.Destroy(); err != nil {
+		t.Fatal("should succeed")
 	}
-	checkFileExists(t, filepath.Join(cacheDir, fmt.Sprintf("scratch.%d.vhdx", DefaultScratchSizeGB)))
-	checkFileExists(t, filepath.Join(targetDir, "scratch.vhdx"))
+	checkZeroComputeSystems(t)
+	checkCount(t, i, 0)
 
-	// Cache already exists from above.
-	removeContents(targetDir)
-	if err := ig.CreateScratch("anything", DefaultScratchSizeGB, cacheDir, targetDir); err != nil {
-		t.Fatal(err)
+}
+
+// TestCreateDestroyUniqueTwoSVMs creates two SVMs in an instance and tears them
+// down using destroy. It validates that the cached scratch and scratches are
+// created and mounted
+func TestCreateDestroyUniqueTwoSVMs(t *testing.T) {
+	i := newInstance(t, ModeUnique)
+	cacheDir, scratchDir := createTempDirs(t)
+	defer os.RemoveAll(cacheDir)
+	defer os.RemoveAll(scratchDir)
+	create(t, i, "first", cacheDir, scratchDir)
+	checkCount(t, i, 1)
+	create(t, i, "second", cacheDir, scratchDir)
+	checkCount(t, i, 2)
+	checkFileExists(t, filepath.Join(cacheDir, "cache_ext4.20GB.vhdx"))
+	checkFileExists(t, filepath.Join(scratchDir, "first_svm_scratch.vhdx"))
+	checkFileExists(t, filepath.Join(scratchDir, "second_svm_scratch.vhdx"))
+
+	var out bytes.Buffer
+	po := &ProcessOptions{
+		Id:          "first",
+		Args:        []string{"mount"},
+		Stdout:      &out,
+		CopyTimeout: 30 * time.Second,
 	}
-	checkFileExists(t, filepath.Join(cacheDir, fmt.Sprintf("scratch.%d.vhdx", DefaultScratchSizeGB)))
-	checkFileExists(t, filepath.Join(targetDir, "scratch.vhdx"))
+	_, ec, err := i.RunProcess(po)
+	if err != nil {
+		t.Fatalf("expected success: %s", err)
+	}
+	if ec != 0 {
+		t.Fatalf("expected zero exit code: %d", ec)
+	}
+	if !strings.Contains(out.String(), "/dev/sda on /tmp/scratch type ext4") {
+		t.Fatalf("expected to find '/dev/sda on /tmp/scratch type ext4': %s", out.String())
+	}
+	if err := i.Destroy(); err != nil {
+		t.Fatal("should succeed")
+	}
+	checkZeroComputeSystems(t)
+	checkCount(t, i, 0)
+}
 
+// TestDestroyNilMap makes sure destroy works even if we never created/started a service VM
+func TestDestroyNilMap(t *testing.T) {
+	i := newInstance(t, ModeGlobal)
+	if err := i.Destroy(); err != nil {
+		t.Fatal("should succeed")
+	}
+	checkCount(t, i, 0)
+}
+
+// TestMode validates the Mode() method on an instance
+func TestMode(t *testing.T) {
+	gi := newInstance(t, ModeGlobal)
+	ui := newInstance(t, ModeUnique)
+	if gi.Mode() != ModeGlobal || ui.Mode() != ModeUnique {
+		t.Fatal("returned incorrect mode")
+	}
+	checkCount(t, gi, 0)
+	checkCount(t, ui, 0)
+}
+
+// TestDiscardGlobal ensures that discard in global mode succeeds
+func TestDiscardGlobal(t *testing.T) {
+	gi := newInstance(t, ModeGlobal)
+	if gi.Discard("anything") != nil {
+		t.Fatal("should succeed")
+	}
+	checkZeroComputeSystems(t)
+	checkCount(t, gi, 0)
+}
+
+// TestDiscardUnique verifies discard in unique mode succeeds if an ID
+// is valid, and fails when an ID is invalid.
+func TestDiscardUnique(t *testing.T) {
+	i := newInstance(t, ModeUnique)
+	id := "TestDiscardUniqueDoesntExist"
+	cacheDir, scratchDir := createTempDirs(t)
+	defer os.RemoveAll(cacheDir)
+	defer os.RemoveAll(scratchDir)
+	create(t, i, id, cacheDir, scratchDir)
+	checkCount(t, i, 1)
+	if err := i.Discard("does not exist"); err != ErrNotFound {
+		t.Fatalf("expected %s, got %s", ErrNotFound, err)
+	}
+	if err := i.Discard(id); err != nil {
+		t.Fatal("expected success")
+	}
+	checkZeroComputeSystems(t)
+	checkCount(t, i, 0)
 }
 
 // Helper to remove contents of a directory
@@ -245,8 +199,8 @@ func newInstance(t *testing.T, mode Mode) Instance {
 	return i
 }
 
-func create(t *testing.T, i Instance, id string) {
-	if err := i.Create(id); err != nil {
+func create(t *testing.T, i Instance, id string, cacheDir string, scratchDir string) {
+	if err := i.Create(id, cacheDir, scratchDir); err != nil {
 		t.Fatalf("failed create %s: %s", id, err)
 	}
 }

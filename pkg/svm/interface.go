@@ -11,8 +11,10 @@ type Instance interface {
 
 	// Create creates a service VM in this instance. In global mode, a call to
 	// create when the service VM is already running is a no-op. In per-instance
-	// mode, a second call to create will create a second service.
-	Create(id string) error
+	// mode, a second call to create will create a second service. Each
+	// SVM will have a scratch space (just a mount, not a container scratch)
+	// attached at /tmp/scratch for use by the remote filesystem utilities.
+	Create(id string, cacheDir string, scratchDir string) error
 
 	// CreateScratch generates a formatted EXT4 for use as a scratch disk.
 	CreateScratch(id string, sizeGB uint32, cacheDir string, targetDir string) error
@@ -35,7 +37,5 @@ type Instance interface {
 	Unmount(id string, svmPath string) error
 
 	// RunProcess is a simple wrapper for running a process in a service VM.
-	// It returns the exit code and the combined stdout/stderr.
-	// TODO
-	//RunProcess(id string, args []string, stdin string) (int, string, error)
+	RunProcess(opts *ProcessOptions) (*ByteCounts, int, error)
 }
