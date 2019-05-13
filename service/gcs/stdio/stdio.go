@@ -316,7 +316,7 @@ func (r *TtyRelay) ResizeConsole(height, width uint16) error {
 	defer r.m.Unlock()
 
 	if r.closed {
-		return errors.New("error resizing console pty is closed")
+		return nil
 	}
 	return ResizeConsole(r.pty, height, width)
 }
