@@ -57,19 +57,19 @@ out/initrd.img: $(BASE) out/delta.tar.gz $(SRCROOT)/hack/catcpio.sh
 	gzip -c out/initrd.img.uncompressed > $@
 	rm out/initrd.img.uncompressed
 
-include deps/service/gcs.gomake
-include deps/service/gcsutils/gcstools.gomake
+-include deps/service/gcs.gomake
+-include deps/service/gcsutils/gcstools.gomake
 
 # Implicit rule for includes that define Go targets.
 %.gomake: $(SRCROOT)/Makefile
 	@mkdir -p $(dir $@)
-	@echo $(@:deps/%.gomake=bin/%): $(SRCROOT)/hack/gomakedeps.sh > $@.new
-	@echo -e '\t@mkdir -p $$(dir $$@) $(dir $@)' >> $@.new
-	@echo -e '\t$$(GO_BUILD) -o $$@.new $$(SRCROOT)/$$(@:bin/%=%)' >> $@.new
-	@echo -e '\t$$(SRCROOT)/hack/gomakedeps.sh $$@ $$(SRCROOT)/$$(@:bin/%=%) $$(GO_FLAGS) $$(GO_FLAGS_EXTRA) > $(@:%.gomake=%.godeps).new' >> $@.new
-	@echo -e '\tmv $(@:%.gomake=%.godeps).new $(@:%.gomake=%.godeps)' >> $@.new
-	@echo -e '\tmv $$@.new $$@' >> $@.new
-	@echo -e '-include $(@:%.gomake=%.godeps)' >> $@.new
+	@/bin/echo $(@:deps/%.gomake=bin/%): $(SRCROOT)/hack/gomakedeps.sh > $@.new
+	@/bin/echo -e '\t@mkdir -p $$(dir $$@) $(dir $@)' >> $@.new
+	@/bin/echo -e '\t$$(GO_BUILD) -o $$@.new $$(SRCROOT)/$$(@:bin/%=%)' >> $@.new
+	@/bin/echo -e '\tGO="$(GO)" $$(SRCROOT)/hack/gomakedeps.sh $$@ $$(SRCROOT)/$$(@:bin/%=%) $$(GO_FLAGS) $$(GO_FLAGS_EXTRA) > $(@:%.gomake=%.godeps).new' >> $@.new
+	@/bin/echo -e '\tmv $(@:%.gomake=%.godeps).new $(@:%.gomake=%.godeps)' >> $@.new
+	@/bin/echo -e '\tmv $$@.new $$@' >> $@.new
+	@/bin/echo -e '-include $(@:%.gomake=%.godeps)' >> $@.new
 	mv $@.new $@
 
 VPATH=$(SRCROOT)
