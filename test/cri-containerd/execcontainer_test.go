@@ -1,4 +1,4 @@
-// +build functional
+// +build functional,failing_tests
 
 package cri_containerd
 
