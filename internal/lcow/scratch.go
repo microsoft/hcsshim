@@ -2,17 +2,17 @@ package lcow
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/Microsoft/go-winio/vhd"
 	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/uvm"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
 
@@ -22,7 +22,6 @@ import (
 // does not exist, it uses a utility VM to create target. It is the responsibility of the
 // caller to synchronise simultaneous attempts to create the cache file.
 func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cacheFile string, vmID string) error {
-
 	if lcowUVM == nil {
 		return fmt.Errorf("no uvm")
 	}
@@ -65,6 +64,12 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 	if err != nil {
 		return err
 	}
+	removeSCSI := true
+	defer func() {
+		if removeSCSI {
+			lcowUVM.RemoveSCSI(destFile)
+		}
+	}()
 
 	logrus.WithFields(logrus.Fields{
 		"dest":       destFile,
@@ -74,96 +79,48 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 
 	// Validate /sys/bus/scsi/devices/C:0:0:L exists as a directory
 
-	startTime := time.Now()
+	testdCtx, cancel := context.WithTimeout(context.TODO(), timeout.TestDRetryLoop)
+	defer cancel()
 	for {
-		testdCommand := []string{"test", "-d", fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d", controller, lun)}
-		testdProc, _, err := CreateProcess(&ProcessOptions{
-			Host:              lcowUVM,
-			CreateInUtilityVm: true,
-			CopyTimeout:       timeout.ExternalCommandToStart,
-			Process:           &specs.Process{Args: testdCommand},
-		})
-		if err != nil {
-			lcowUVM.RemoveSCSI(destFile)
-			return fmt.Errorf("failed to run %+v following hot-add %s to utility VM: %s", testdCommand, destFile, err)
-		}
-		defer testdProc.Close()
-
-		testdExitCode, err := waitForProcess(testdProc)
-		if err != nil {
-			lcowUVM.RemoveSCSI(destFile)
-			return fmt.Errorf("failed to get exit code from from %+v following hot-add %s to utility VM: %s", testdCommand, destFile, err)
-		}
-		if testdExitCode != 0 {
-			currentTime := time.Now()
-			elapsedTime := currentTime.Sub(startTime)
-			if elapsedTime > timeout.TestDRetryLoop {
-				lcowUVM.RemoveSCSI(destFile)
-				return fmt.Errorf("`%+v` return non-zero exit code (%d) following hot-add %s to utility VM", testdCommand, testdExitCode, destFile)
-			}
-		} else {
+		cmd := hcsoci.CommandContext(testdCtx, lcowUVM, "test", "-d", fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d", controller, lun))
+		err := cmd.Run()
+		cancel()
+		if err == nil {
 			break
+		}
+		if err, ok := err.(*hcsoci.ExitError); !ok {
+			return fmt.Errorf("failed to run %+v following hot-add %s to utility VM: %s", cmd.Spec.Args, destFile, err)
 		}
 		time.Sleep(time.Millisecond * 10)
 	}
 
 	// Get the device from under the block subdirectory by doing a simple ls. This will come back as (eg) `sda`
-	var lsOutput bytes.Buffer
-	lsCommand := []string{"ls", fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d/block", controller, lun)}
-	lsProc, _, err := CreateProcess(&ProcessOptions{
-		Host:              lcowUVM,
-		CreateInUtilityVm: true,
-		CopyTimeout:       timeout.ExternalCommandToStart,
-		Process:           &specs.Process{Args: lsCommand},
-		Stdout:            &lsOutput,
-	})
-
+	lsCtx, cancel := context.WithTimeout(context.TODO(), timeout.ExternalCommandToStart)
+	cmd := hcsoci.CommandContext(lsCtx, lcowUVM, "ls", fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d/block", controller, lun))
+	lsOutput, err := cmd.Output()
+	cancel()
 	if err != nil {
-		lcowUVM.RemoveSCSI(destFile)
-		return fmt.Errorf("failed to `%+v` following hot-add %s to utility VM: %s", lsCommand, destFile, err)
+		return fmt.Errorf("failed to `%+v` following hot-add %s to utility VM: %s", cmd.Spec.Args, destFile, err)
 	}
-	defer lsProc.Close()
-	lsExitCode, err := waitForProcess(lsProc)
-	if err != nil {
-		lcowUVM.RemoveSCSI(destFile)
-		return fmt.Errorf("failed to get exit code from `%+v` following hot-add %s to utility VM: %s", lsCommand, destFile, err)
-	}
-	if lsExitCode != 0 {
-		lcowUVM.RemoveSCSI(destFile)
-		return fmt.Errorf("`%+v` return non-zero exit code (%d) following hot-add %s to utility VM", lsCommand, lsExitCode, destFile)
-	}
-	device := fmt.Sprintf(`/dev/%s`, strings.TrimSpace(lsOutput.String()))
+	device := fmt.Sprintf(`/dev/%s`, bytes.TrimSpace(lsOutput))
 	logrus.WithFields(logrus.Fields{
 		"dest":   destFile,
 		"device": device,
 	}).Debug("hcsshim::CreateExt4Vhdx")
 
 	// Format it ext4
-	mkfsCommand := []string{"mkfs.ext4", "-q", "-E", "lazy_itable_init=1", "-O", `^has_journal,sparse_super2,uninit_bg,^resize_inode`, device}
+	mkfsCtx, cancel := context.WithTimeout(context.TODO(), timeout.ExternalCommandToStart)
+	cmd = hcsoci.CommandContext(mkfsCtx, lcowUVM, "mkfs.ext4", "-q", "-E", "lazy_itable_init=1", "-O", `^has_journal,sparse_super2,uninit_bg,^resize_inode`, device)
 	var mkfsStderr bytes.Buffer
-	mkfsProc, _, err := CreateProcess(&ProcessOptions{
-		Host:              lcowUVM,
-		CreateInUtilityVm: true,
-		CopyTimeout:       timeout.ExternalCommandToStart,
-		Process:           &specs.Process{Args: mkfsCommand},
-		Stderr:            &mkfsStderr,
-	})
+	cmd.Stderr = &mkfsStderr
+	err = cmd.Run()
+	cancel()
 	if err != nil {
-		lcowUVM.RemoveSCSI(destFile)
-		return fmt.Errorf("failed to `%+v` following hot-add %s to utility VM: %s", mkfsCommand, destFile, err)
-	}
-	defer mkfsProc.Close()
-	mkfsExitCode, err := waitForProcess(mkfsProc)
-	if err != nil {
-		lcowUVM.RemoveSCSI(destFile)
-		return fmt.Errorf("failed to get exit code from `%+v` following hot-add %s to utility VM: %s", mkfsCommand, destFile, err)
-	}
-	if mkfsExitCode != 0 {
-		lcowUVM.RemoveSCSI(destFile)
-		return fmt.Errorf("`%+v` return non-zero exit code (%d) following hot-add %s to utility VM: %s", mkfsCommand, mkfsExitCode, destFile, strings.TrimSpace(mkfsStderr.String()))
+		return fmt.Errorf("failed to `%+v` following hot-add %s to utility VM: %s", cmd.Spec.Args, destFile, err)
 	}
 
 	// Hot-Remove before we copy it
+	removeSCSI = false
 	if err := lcowUVM.RemoveSCSI(destFile); err != nil {
 		return fmt.Errorf("failed to hot-remove: %s", err)
 	}

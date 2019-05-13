@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -10,8 +9,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
-	"github.com/Microsoft/hcsshim/internal/lcow"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/signals"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
@@ -118,7 +116,6 @@ type hcsExec struct {
 	//
 	// This MUST be treated as read only in the lifetime of the exec.
 	io              upstreamIO
-	ioWg            sync.WaitGroup
 	processDone     chan struct{}
 	processDoneOnce sync.Once
 
@@ -129,8 +126,7 @@ type hcsExec struct {
 	pid        int
 	exitStatus uint32
 	exitedAt   time.Time
-	p          cow.Process
-	pCloseOnce sync.Once
+	p          *hcsoci.Cmd
 
 	// exited is a wait block which waits async for the process to exit.
 	exited     chan struct{}
@@ -222,114 +218,30 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 			}
 		}()
 	}
-	var (
-		proc cow.Process
-	)
-	if he.isWCOW {
-		wpp := &hcsschema.ProcessParameters{
-			CommandLine:      he.spec.CommandLine,
-			User:             he.spec.User.Username,
-			WorkingDirectory: he.spec.Cwd,
-			EmulateConsole:   he.spec.Terminal,
-			CreateStdInPipe:  he.io.StdinPath() != "",
-			CreateStdOutPipe: he.io.StdoutPath() != "",
-			CreateStdErrPipe: he.io.StderrPath() != "",
-		}
-
-		if he.spec.CommandLine == "" {
-			wpp.CommandLine = escapeArgs(he.spec.Args)
-		}
-
-		environment := make(map[string]string)
-		for _, v := range he.spec.Env {
-			s := strings.SplitN(v, "=", 2)
-			if len(s) == 2 && len(s[1]) > 0 {
-				environment[s[0]] = s[1]
-			}
-		}
-		wpp.Environment = environment
-
-		if he.spec.ConsoleSize != nil {
-			wpp.ConsoleSize = []int32{
-				int32(he.spec.ConsoleSize.Height),
-				int32(he.spec.ConsoleSize.Width),
-			}
-		}
-		proc, err = he.c.CreateProcess(wpp)
-	} else {
-		lpp := &lcow.ProcessParameters{
-			ProcessParameters: hcsschema.ProcessParameters{
-				CreateStdInPipe:  he.io.StdinPath() != "",
-				CreateStdOutPipe: he.io.StdoutPath() != "",
-				CreateStdErrPipe: he.io.StderrPath() != "",
-			},
-		}
-		if he.id != he.tid {
-			// An init exec passes the process as part of the config. We only pass
-			// the spec if this is a true exec.
-			lpp.OCIProcess = he.spec
-		}
-		proc, err = he.c.CreateProcess(lpp)
+	cmd := &hcsoci.Cmd{
+		Host:   he.c,
+		Stdin:  he.io.Stdin(),
+		Stdout: he.io.Stdout(),
+		Stderr: he.io.Stderr(),
+		Log: logrus.WithFields(logrus.Fields{
+			"tid": he.tid,
+			"eid": he.id,
+		}),
+		CopyAfterExitTimeout: time.Second * 1,
 	}
+	if he.isWCOW || he.id != he.tid {
+		// An init exec passes the process as part of the config. We only pass
+		// the spec if this is a true exec.
+		cmd.Spec = he.spec
+	}
+	err = cmd.Start()
 	if err != nil {
 		return err
 	}
-	he.p = proc
-	defer func() {
-		if err != nil {
-			he.p.Kill()
-			he.p.Close()
-		}
-	}()
-
-	in, out, serr := he.p.Stdio()
-
-	if he.io.StdinPath() != "" {
-		if in == nil {
-			return errors.New("hcsExec::Start - platform returned nil stdin pipe")
-		}
-		go func() {
-			copyAndLog(in, he.io.Stdin(),
-				logrus.WithFields(logrus.Fields{
-					"tid":  he.tid,
-					"eid":  he.id,
-					"file": "stdin",
-				}), "hcsExec::Start - Copy completed")
-			he.p.CloseStdin()
-			he.io.CloseStdin()
-		}()
-	}
-
-	copyOut := func(w io.Writer, r io.Reader, name string) error {
-		if r == nil {
-			return fmt.Errorf("hcsExec::Start - platform returned nil %s pipe", name)
-		}
-		he.ioWg.Add(1)
-		go func() {
-			copyAndLog(w, r, logrus.WithFields(logrus.Fields{
-				"tid":  he.tid,
-				"eid":  he.id,
-				"file": name,
-			}), "hcsExec::Start - Copy completed")
-			he.ioWg.Done()
-		}()
-		return nil
-	}
-
-	if he.io.StdoutPath() != "" {
-		if err = copyOut(he.io.Stdout(), out, "stdout"); err != nil {
-			return err
-		}
-	}
-
-	if he.io.StderrPath() != "" {
-		if err = copyOut(he.io.Stderr(), serr, "stderr"); err != nil {
-			return err
-		}
-	}
+	he.p = cmd
 
 	// Assign the PID and transition the state.
-	he.pid = he.p.Pid()
+	he.pid = he.p.Process.Pid()
 	he.state = shimExecStateRunning
 
 	// Publish the task/exec start event. This MUST happen before waitForExit to
@@ -394,11 +306,11 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 		}
 		var delivered bool
 		if supported && options != nil {
-			delivered, err = he.p.Signal(options)
+			delivered, err = he.p.Process.Signal(options)
 		} else {
 			// legacy path before signals support OR if WCOW with signals
 			// support needs to issue a terminate.
-			delivered, err = he.p.Kill()
+			delivered, err = he.p.Process.Kill()
 		}
 		if err != nil {
 			return err
@@ -431,7 +343,7 @@ func (he *hcsExec) ResizePty(ctx context.Context, width, height uint32) error {
 		return errors.Wrapf(errdefs.ErrFailedPrecondition, "exec: '%s' in task: '%s' is not a tty", he.id, he.tid)
 	}
 
-	return he.p.ResizeConsole(uint16(width), uint16(height))
+	return he.p.Process.ResizeConsole(uint16(width), uint16(height))
 }
 
 func (he *hcsExec) CloseIO(ctx context.Context, stdin bool) error {
@@ -474,7 +386,7 @@ func (he *hcsExec) ForceExit(status int) {
 			he.exitFromCreatedL(status)
 		case shimExecStateRunning:
 			// Kill the process to unblock `he.waitForExit`
-			he.p.Kill()
+			he.p.Process.Kill()
 		}
 	}
 }
@@ -541,7 +453,7 @@ func (he *hcsExec) exitFromCreatedL(status int) {
 // 6. Close `he.exited` channel to unblock any waiters who might have called
 // `Create`/`Wait`/`Start` which is a valid pattern.
 func (he *hcsExec) waitForExit() {
-	err := he.p.Wait()
+	err := he.p.Process.Wait()
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			"tid":           he.tid,
@@ -554,7 +466,7 @@ func (he *hcsExec) waitForExit() {
 	// possible.
 	he.processDoneOnce.Do(func() { close(he.processDone) })
 
-	code, err := he.p.ExitCode()
+	code, err := he.p.Process.ExitCode()
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			"tid":           he.tid,
@@ -575,34 +487,9 @@ func (he *hcsExec) waitForExit() {
 	he.exitedAt = time.Now()
 	he.sl.Unlock()
 
-	go func() {
-		// processCopyTimeout is the amount of time after process exit we allow the
-		// stdout, stderr relay's to continue before forcibly closing them if not
-		// already completed. This is primarily a safety step against the HCS when
-		// it fails to send a close on the stdout, stderr pipes when the process
-		// exits and blocks the relay wait groups forever.
-		const processCopyTimeout = time.Second * 1
-
-		time.Sleep(processCopyTimeout)
-		// Close the process to cancel any reads to stdout or stderr.
-		he.pCloseOnce.Do(func() {
-			logrus.WithFields(logrus.Fields{
-				"tid": he.tid,
-				"eid": he.id,
-			}).Warn("hcsExec::waitForExit - timed out waiting for ioRelay to complete")
-
-			he.p.Close()
-		})
-	}()
-
 	// Wait for all IO copies to complete and free the resources.
-	he.ioWg.Wait()
+	he.p.Wait()
 	he.io.Close()
-
-	// Close the process handle.
-	he.pCloseOnce.Do(func() {
-		he.p.Close()
-	})
 
 	// Only send the `runtime.TaskExitEventTopic` notification if this is a true
 	// exec. For the `init` exec this is handled in task teardown.
@@ -646,7 +533,7 @@ func (he *hcsExec) waitForContainerExit() {
 			he.exitFromCreatedL(1)
 		case shimExecStateRunning:
 			// Kill the process to unblock `he.waitForExit`.
-			he.p.Kill()
+			he.p.Process.Kill()
 		}
 		he.sl.Unlock()
 	case <-he.processDone:
