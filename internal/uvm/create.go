@@ -1,6 +1,8 @@
 package uvm
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -51,6 +53,10 @@ type Options struct {
 	// StorageQoSIopsMaximum sets the maximum number of bytes per second. If `0`
 	// will default to the platform default.
 	StorageQoSBandwidthMaximum int32
+
+	// ExternalGuestConnection sets whether the guest RPC connection is performed
+	// internally by the OS platform or externally by this package.
+	ExternalGuestConnection bool
 }
 
 // newDefaultOptions returns the default base options for WCOW and LCOW.
@@ -89,6 +95,7 @@ func (uvm *UtilityVM) OS() string {
 }
 
 func (uvm *UtilityVM) create(doc interface{}) error {
+	uvm.exitCh = make(chan struct{})
 	system, err := hcs.CreateComputeSystem(uvm.id, doc)
 	if err != nil {
 		return err
@@ -136,6 +143,12 @@ func (uvm *UtilityVM) Close() (err error) {
 		uvm.hcsSystem.Terminate()
 		uvm.Wait()
 	}
+	if uvm.gc != nil {
+		uvm.gc.Close()
+	}
+	if uvm.gcListener != nil {
+		uvm.gcListener.Close()
+	}
 
 	// outputListener will only be nil for a Create -> Stop without a Start. In
 	// this case we have no goroutine processing output so its safe to close the
@@ -152,7 +165,14 @@ func (uvm *UtilityVM) Close() (err error) {
 }
 
 // CreateContainer creates a container in the utility VM.
-func (uvm *UtilityVM) CreateContainer(id string, settings interface{}) (*hcs.System, error) {
+func (uvm *UtilityVM) CreateContainer(id string, settings interface{}) (cow.Container, error) {
+	if uvm.gc != nil {
+		c, err := uvm.gc.CreateContainer(context.TODO(), id, settings)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create container %s: %s", id, err)
+		}
+		return c, nil
+	}
 	doc := hcsschema.ComputeSystem{
 		HostingSystemId:                   uvm.id,
 		Owner:                             uvm.owner,
@@ -169,6 +189,9 @@ func (uvm *UtilityVM) CreateContainer(id string, settings interface{}) (*hcs.Sys
 
 // CreateProcess creates a process in the utility VM.
 func (uvm *UtilityVM) CreateProcess(settings interface{}) (cow.Process, error) {
+	if uvm.gc != nil {
+		return uvm.gc.CreateProcess(settings)
+	}
 	return uvm.hcsSystem.CreateProcess(settings)
 }
 

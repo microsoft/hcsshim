@@ -5,6 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Microsoft/hcsshim/internal/gcs"
+
+	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/mergemaps"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
@@ -193,5 +196,17 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if opts.ExternalGuestConnection {
+		l, err := winio.ListenHvsock(&winio.HvsockAddr{
+			VMID:      uvm.runtimeID,
+			ServiceID: gcs.WindowsGcsHvsockServiceID,
+		})
+		if err != nil {
+			return nil, err
+		}
+		uvm.gcListener = l
+	}
+
 	return uvm, nil
 }

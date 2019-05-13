@@ -34,6 +34,7 @@ const (
 	outputHandlingArgName       = "output-handling"
 	consolePipeArgName          = "console-pipe"
 	gcsArgName                  = "gcs"
+	externalBridgeArgName       = "external-bridge"
 )
 
 func main() {
@@ -79,6 +80,10 @@ func main() {
 		cli.BoolFlag{
 			Name:  gcsArgName,
 			Usage: "Launch the GCS and perform requested operations via its RPC interface",
+		},
+		cli.BoolFlag{
+			Name:  externalBridgeArgName,
+			Usage: "Use the external implementation of the guest connection",
 		},
 	}
 
@@ -169,6 +174,9 @@ func main() {
 						}
 						if c.GlobalIsSet(enableDeferredCommitArgName) {
 							options.EnableDeferredCommit = c.GlobalBool(enableDeferredCommitArgName)
+						}
+						if c.GlobalIsSet(externalBridgeArgName) {
+							options.ExternalGuestConnection = c.GlobalBool(externalBridgeArgName)
 						}
 
 						if c.IsSet(kernelDirectArgName) {
