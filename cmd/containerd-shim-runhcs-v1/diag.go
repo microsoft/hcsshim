@@ -24,6 +24,9 @@ func execInUvm(ctx context.Context, vm *uvm.UtilityVM, req *shimdiag.ExecProcess
 	if req.Workdir != "" {
 		cmd.Spec.Cwd = req.Workdir
 	}
+	if vm.OS() == "windows" {
+		cmd.Spec.User.Username = `NT AUTHORITY\SYSTEM`
+	}
 	cmd.Spec.Terminal = req.Terminal
 	cmd.Stdin = np.Stdin()
 	cmd.Stdout = np.Stdout()
