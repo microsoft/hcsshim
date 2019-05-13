@@ -4,6 +4,7 @@
 
 set -e
 
+GO="${GO:-go}"
 target_bin="$1"
 target_pkg="$2"
 shift 2
@@ -15,5 +16,5 @@ $target_bin: {{\$dir := .Dir}}{{ range .GoFiles }}{{\$dir}}/{{.}} {{end}}
 EOF
 )
 
-go list "$@" -f '{{ .ImportPath }} {{ join .Deps "\n" }}' "$target_pkg" |
-    xargs go list "$@" -find -f "$fmt"
+"$GO" list "$@" -f '{{ .ImportPath }} {{ join .Deps "\n" }}' "$target_pkg" |
+    xargs "$GO" list "$@" -find -f "$fmt"
