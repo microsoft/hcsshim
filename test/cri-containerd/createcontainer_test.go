@@ -48,7 +48,7 @@ func runCreateContainerTest(t *testing.T, runtimeHandler string, request *runtim
 	runCreateContainerTestWithSandbox(t, sandboxRequest, request)
 }
 
-func runCreateContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.RunPodSandboxRequest, request *runtime.CreateContainerRequest) {
+func runCreateContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.RunPodSandboxRequest, request *runtime.CreateContainerRequest) string {
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -70,6 +70,7 @@ func runCreateContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.Run
 	if err != nil {
 		t.Fatalf("failed StartContainer request for container: %s, with: %v", containerID, err)
 	}
+	return containerID
 }
 
 func Test_CreateContainer_WCOW_Process(t *testing.T) {
