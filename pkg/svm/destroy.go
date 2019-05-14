@@ -16,7 +16,7 @@ func (i *instance) Destroy() error {
 }
 
 func terminate(u *uvm.UtilityVM) error {
-	if err := u.ComputeSystem().Terminate(); err != nil {
+	if err := u.Terminate(); err != nil {
 		if hcs.IsPending(err) {
 			err = u.Wait()
 		}

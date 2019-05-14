@@ -37,5 +37,5 @@ type Instance interface {
 	Unmount(id string, svmPath string) error
 
 	// RunProcess is a simple wrapper for running a process in a service VM.
-	RunProcess(opts *ProcessOptions) (*ByteCounts, int, error)
+	RunProcess(opts *ProcessOptions) (int, error)
 }

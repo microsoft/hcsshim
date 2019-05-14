@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -77,12 +78,12 @@ func TestCreateDestroyUniqueTwoSVMs(t *testing.T) {
 
 	var out bytes.Buffer
 	po := &ProcessOptions{
-		Id:          "first",
-		Args:        []string{"mount"},
-		Stdout:      &out,
-		CopyTimeout: 30 * time.Second,
+		Id:      "first",
+		Args:    []string{"mount"},
+		Stdout:  &out,
+		Timeout: 30 * time.Second,
 	}
-	_, ec, err := i.RunProcess(po)
+	ec, err := i.RunProcess(po)
 	if err != nil {
 		t.Fatalf("expected success: %s", err)
 	}

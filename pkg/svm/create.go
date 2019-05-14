@@ -56,14 +56,14 @@ func (i *instance) Create(id string, cacheDir string, scratchDir string) error {
 
 	// Create a scratch
 	if err := i.createScratchNoLock(id, DefaultScratchSizeGB, cacheDir, scratchDir); err != nil {
-		svm.ComputeSystem().Terminate()
+		svm.Terminate()
 		delete(i.serviceVMs, id)
 		return err
 	}
 
 	// Attach the scratch
 	if _, _, err := svm.AddSCSI(filepath.Join(scratchDir, fmt.Sprintf("%s_svm_scratch.vhdx", id)), "/tmp/scratch", false); err != nil {
-		svm.ComputeSystem().Terminate()
+		svm.Terminate()
 		delete(i.serviceVMs, id)
 		return err
 	}
