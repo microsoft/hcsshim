@@ -50,7 +50,7 @@ var capabilities = prot.GcsCapabilities{
 // UnknownMessage represents the default handler logic for an unmatched request
 // type sent from the bridge.
 func UnknownMessage(w ResponseWriter, r *Request) {
-	w.Error("", gcserr.WrapHresult(errors.Errorf("bridge: function not supported, header type: %v", r.Header.Type), gcserr.HrVmcomputeUnknownMessage))
+	w.Error("", gcserr.WrapHresult(errors.Errorf("bridge: function not supported, header type: %v", r.Header.Type), gcserr.HrNotImpl))
 }
 
 // UnknownMessageHandler creates a default HandlerFunc out of the

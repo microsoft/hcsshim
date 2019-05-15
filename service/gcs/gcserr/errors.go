@@ -11,6 +11,8 @@ import (
 type Hresult int32
 
 const (
+	// HrNotImpl is the HRESULT for a not implemented function.
+	HrNotImpl = Hresult(-2147467263) // 0x80004001
 	// HrFail is the HRESULT for an invocation failure.
 	HrFail = Hresult(-2147467259) // 0x80004005
 	// HrErrNotFound is the HRESULT for an invalid process id.
