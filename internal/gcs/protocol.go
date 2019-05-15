@@ -3,7 +3,6 @@ package gcs
 import (
 	"encoding/json"
 	"fmt"
-	"syscall"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/schema1"
@@ -118,12 +117,13 @@ type requestBase struct {
 	ActivityID  guid.GUID `json:"ActivityId"`
 }
 
-func (req *requestBase) SetActivityID(id guid.GUID) {
-	req.ActivityID = id
+func (req *requestBase) Base() *requestBase {
+	return req
 }
 
 type responseBase struct {
 	Result       int32         // HResult
+	ErrorMessage string        `json:",omitempty"`
 	ActivityID   guid.GUID     `json:"ActivityId,omitempty"`
 	ErrorRecords []errorRecord `json:",omitempty"`
 }
@@ -138,23 +138,8 @@ type errorRecord struct {
 	FunctionName string `json:",omitempty"`
 }
 
-type rpcError struct {
-	result  int32
-	records []errorRecord
-}
-
-func (err *rpcError) Error() string {
-	if len(err.records) == 0 {
-		return syscall.Errno(err.result).Error()
-	}
-	return err.records[0].Message
-}
-
-func (resp *responseBase) Err() error {
-	if resp.Result == 0 {
-		return nil
-	}
-	return &rpcError{result: resp.Result, records: resp.ErrorRecords}
+func (resp *responseBase) Base() *responseBase {
+	return resp
 }
 
 type negotiateProtocolRequest struct {

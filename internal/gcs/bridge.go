@@ -15,8 +15,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/windows"
 )
 
 const (
@@ -32,11 +32,11 @@ const (
 )
 
 type requestMessage interface {
-	SetActivityID(id guid.GUID)
+	Base() *requestBase
 }
 
 type responseMessage interface {
-	Err() error
+	Base() *responseBase
 }
 
 // rpc represents an outstanding rpc request to the guest
@@ -169,13 +169,30 @@ func (call *rpc) complete(err error) {
 	close(call.ch)
 }
 
+type rpcError struct {
+	result  int32
+	message string
+}
+
+func (err *rpcError) Error() string {
+	msg := err.message
+	if msg == "" {
+		msg = windows.Errno(err.result).Error()
+	}
+	return "guest RPC failure: " + msg
+}
+
 // Err returns the RPC's result. This may be a transport error or an error from
 // the message response.
 func (call *rpc) Err() error {
 	if call.brdgErr != nil {
 		return call.brdgErr
 	}
-	return call.resp.Err()
+	resp := call.resp.Base()
+	if resp.Result == 0 {
+		return nil
+	}
+	return &rpcError{result: resp.Result, message: resp.ErrorMessage}
 }
 
 // Done returns whether the RPC has completed.
@@ -296,6 +313,20 @@ func (brdg *bridge) recvLoop() error {
 			err := json.Unmarshal(b, call.resp)
 			if err != nil {
 				err = fmt.Errorf("bridge response unmarshal failed: %s", err)
+			} else if resp := call.resp.Base(); resp.Result != 0 {
+				for _, rec := range resp.ErrorRecords {
+					brdg.log.WithFields(logrus.Fields{
+						"message-id":     id,
+						"result":         rec.Result,
+						"result-message": windows.Errno(rec.Result).Error(),
+						"error-message":  rec.Message,
+						"stack":          rec.StackTrace,
+						"module":         rec.ModuleName,
+						"file":           rec.FileName,
+						"line":           rec.Line,
+						"function":       rec.FunctionName,
+					}).Error("bridge RPC error record")
+				}
 			}
 			call.complete(err)
 			if err != nil {
