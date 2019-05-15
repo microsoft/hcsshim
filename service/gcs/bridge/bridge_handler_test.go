@@ -167,7 +167,7 @@ func Test_NegotiateProtocol_DuplicateCall_Failure(t *testing.T) {
 	req, rw := setupRequestResponse(t, prot.ComputeSystemNegotiateProtocolV1, prot.PvInvalid, nil)
 
 	tb := new(Bridge)
-	tb.negotiateProtocol(rw, req)
+	tb.negotiateProtocolV2(rw, req)
 
 	verifyResponseJSONError(t, rw)
 	verifyActivityIDEmptyGUID(t, rw)
@@ -177,7 +177,7 @@ func Test_NegotiateProtocol_InvalidJson_Failure(t *testing.T) {
 	req, rw := setupRequestResponse(t, prot.ComputeSystemNegotiateProtocolV1, prot.PvInvalid, nil)
 
 	tb := new(Bridge)
-	tb.negotiateProtocol(rw, req)
+	tb.negotiateProtocolV2(rw, req)
 
 	verifyResponseJSONError(t, rw)
 	verifyActivityIDEmptyGUID(t, rw)
@@ -193,7 +193,7 @@ func Test_NegotiateProtocol_InvalidRange_Low_Failure(t *testing.T) {
 	req, rw := setupRequestResponse(t, prot.ComputeSystemNegotiateProtocolV1, prot.PvInvalid, r)
 
 	tb := new(Bridge)
-	tb.negotiateProtocol(rw, req)
+	tb.negotiateProtocolV2(rw, req)
 
 	verifyResponseError(t, rw)
 	verifyActivityID(t, r.MessageBase, rw)
@@ -209,7 +209,7 @@ func Test_NegotiateProtocol_InvalidRange_High_Failure(t *testing.T) {
 	req, rw := setupRequestResponse(t, prot.ComputeSystemNegotiateProtocolV1, prot.PvInvalid, r)
 
 	tb := new(Bridge)
-	tb.negotiateProtocol(rw, req)
+	tb.negotiateProtocolV2(rw, req)
 
 	verifyResponseError(t, rw)
 	verifyActivityID(t, r.MessageBase, rw)
@@ -225,7 +225,7 @@ func Test_NegotiateProtocol_ValidRange_Success(t *testing.T) {
 	req, rw := setupRequestResponse(t, prot.ComputeSystemNegotiateProtocolV1, prot.PvInvalid, r)
 
 	tb := new(Bridge)
-	tb.negotiateProtocol(rw, req)
+	tb.negotiateProtocolV2(rw, req)
 
 	verifyResponseSuccess(t, rw)
 	verifyActivityID(t, r.MessageBase, rw)
@@ -408,7 +408,7 @@ func Test_StartContainer_InvalidJson_Failure(t *testing.T) {
 	req, rw := setupRequestResponse(t, prot.ComputeSystemStartV1, prot.PvV4, nil)
 
 	b := new(Bridge)
-	b.startContainer(rw, req)
+	b.startContainerV2(rw, req)
 
 	verifyResponseJSONError(t, rw)
 	verifyActivityIDEmptyGUID(t, rw)
@@ -422,7 +422,7 @@ func Test_StartContainer_Success(t *testing.T) {
 	b.responseChan = make(chan bridgeResponse)
 	defer close(b.responseChan)
 
-	b.startContainer(rw, req)
+	b.startContainerV2(rw, req)
 	verifyResponseSuccess(t, rw)
 	verifyActivityID(t, r, rw)
 }

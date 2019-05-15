@@ -25,6 +25,7 @@ func main() {
 	logFile := flag.String("logfile", "", "Logging Target: An optional file name/path. Omit for console output.")
 	logFormat := flag.String("log-format", "text", "Logging Format: text or json")
 	useInOutErr := flag.Bool("use-inouterr", false, "If true use stdin/stdout for bridge communication and stderr for logging")
+	v4 := flag.Bool("v4", false, "enable the v4 protocol support and v2 schema")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "\nUsage of %s:\n", os.Args[0])
@@ -138,7 +139,8 @@ func main() {
 	coreint := gcs.NewGCSCore(baseLogPath, baseStoragePath, rtime, tport)
 	mux := bridge.NewBridgeMux()
 	b := bridge.Bridge{
-		Handler: mux,
+		Handler:  mux,
+		EnableV4: *v4,
 	}
 	h := hcsv2.NewHost(rtime, tport)
 	b.AssignHandlers(mux, coreint, h)

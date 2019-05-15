@@ -25,28 +25,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// The capabilities of this GCS.
-var capabilities = prot.GcsCapabilities{
-	SendHostCreateMessage:   false,
-	SendHostStartMessage:    false,
-	HVSocketConfigOnStartup: false,
-	SupportedSchemaVersions: []prot.SchemaVersion{
-		prot.SchemaVersion{
-			Major: 1,
-			Minor: 0,
-		},
-		prot.SchemaVersion{
-			Major: 2,
-			Minor: 1,
-		},
-	},
-	RuntimeOsType: prot.OsTypeLinux,
-	GuestDefinedCapabilities: prot.GcsGuestCapabilities{
-		NamespaceAddRequestSupported: true,
-		SignalProcessSupported:       true,
-	},
-}
-
 // UnknownMessage represents the default handler logic for an unmatched request
 // type sent from the bridge.
 func UnknownMessage(w ResponseWriter, r *Request) {
@@ -222,6 +200,8 @@ func (w *requestResponseWriter) Error(activityID string, err error) {
 type Bridge struct {
 	// Handler to invoke when messages are received.
 	Handler Handler
+	// EnableV4 enables the v4+ bridge and the schema v2+ interfaces.
+	EnableV4 bool
 
 	// responseChan is the response channel used for both request/response
 	// and publish notification workflows.
@@ -246,8 +226,11 @@ func (b *Bridge) AssignHandlers(mux *Mux, gcs core.Core, host *hcsv2.Host) {
 
 	// These are PvInvalid because they will be called previous to any protocol
 	// negotiation so they respond only when the protocols are not known.
-	mux.HandleFunc(prot.ComputeSystemNegotiateProtocolV1, prot.PvInvalid, b.negotiateProtocol)
-	mux.HandleFunc(prot.ComputeSystemCreateV1, prot.PvInvalid, b.createContainer)
+	if b.EnableV4 {
+		mux.HandleFunc(prot.ComputeSystemNegotiateProtocolV1, prot.PvInvalid, b.negotiateProtocolV2)
+	} else {
+		mux.HandleFunc(prot.ComputeSystemCreateV1, prot.PvInvalid, b.createContainer)
+	}
 
 	// v3 specific handlers
 	mux.HandleFunc(prot.ComputeSystemExecuteProcessV1, prot.PvV3, b.execProcess)
@@ -259,17 +242,19 @@ func (b *Bridge) AssignHandlers(mux *Mux, gcs core.Core, host *hcsv2.Host) {
 	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, prot.PvV3, b.resizeConsole)
 	mux.HandleFunc(prot.ComputeSystemModifySettingsV1, prot.PvV3, b.modifySettings)
 
-	// v4 specific handlers
-	mux.HandleFunc(prot.ComputeSystemStartV1, prot.PvV4, b.startContainer)
-	mux.HandleFunc(prot.ComputeSystemCreateV1, prot.PvV4, b.createContainer)
-	mux.HandleFunc(prot.ComputeSystemExecuteProcessV1, prot.PvV4, b.execProcess)
-	mux.HandleFunc(prot.ComputeSystemShutdownForcedV1, prot.PvV4, b.killContainer)
-	mux.HandleFunc(prot.ComputeSystemShutdownGracefulV1, prot.PvV4, b.shutdownContainer)
-	mux.HandleFunc(prot.ComputeSystemSignalProcessV1, prot.PvV4, b.signalProcess)
-	mux.HandleFunc(prot.ComputeSystemGetPropertiesV1, prot.PvV4, b.getProperties)
-	mux.HandleFunc(prot.ComputeSystemWaitForProcessV1, prot.PvV4, b.waitOnProcess)
-	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, prot.PvV4, b.resizeConsole)
-	mux.HandleFunc(prot.ComputeSystemModifySettingsV1, prot.PvV4, b.modifySettings)
+	if b.EnableV4 {
+		// v4 specific handlers
+		mux.HandleFunc(prot.ComputeSystemStartV1, prot.PvV4, b.startContainerV2)
+		mux.HandleFunc(prot.ComputeSystemCreateV1, prot.PvV4, b.createContainerV2)
+		mux.HandleFunc(prot.ComputeSystemExecuteProcessV1, prot.PvV4, b.execProcessV2)
+		mux.HandleFunc(prot.ComputeSystemShutdownForcedV1, prot.PvV4, b.killContainerV2)
+		mux.HandleFunc(prot.ComputeSystemShutdownGracefulV1, prot.PvV4, b.shutdownContainerV2)
+		mux.HandleFunc(prot.ComputeSystemSignalProcessV1, prot.PvV4, b.signalProcessV2)
+		mux.HandleFunc(prot.ComputeSystemGetPropertiesV1, prot.PvV4, b.getPropertiesV2)
+		mux.HandleFunc(prot.ComputeSystemWaitForProcessV1, prot.PvV4, b.waitOnProcessV2)
+		mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, prot.PvV4, b.resizeConsoleV2)
+		mux.HandleFunc(prot.ComputeSystemModifySettingsV1, prot.PvV4, b.modifySettingsV2)
+	}
 }
 
 // ListenAndServe connects to the bridge transport, listens for
@@ -421,49 +406,6 @@ func (b *Bridge) PublishNotification(n *prot.ContainerNotification) {
 	b.responseChan <- resp
 }
 
-// negotiateProtocol was introduced in v4 so will not be called
-// with a minimum lower than that.
-func (b *Bridge) negotiateProtocol(w ResponseWriter, r *Request) {
-	var request prot.NegotiateProtocol
-	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message))
-		return
-	}
-
-	logrus.WithFields(logrus.Fields{
-		"activityID":      request.ActivityID,
-		"cid":             request.ContainerID,
-		"minimum-version": request.MinimumVersion,
-		"maximum-version": request.MaximumVersion,
-	}).Info("opengcs::bridge::negotiateProtocol")
-
-	if request.MaximumVersion < uint32(prot.PvV4) || uint32(prot.PvMax) < request.MinimumVersion {
-		w.Error(request.ActivityID, gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion))
-		return
-	}
-
-	min := func(x, y uint32) uint32 {
-		if x < y {
-			return x
-		}
-		return y
-	}
-
-	major := min(uint32(prot.PvMax), request.MaximumVersion)
-
-	response := &prot.NegotiateProtocolResponse{
-		MessageResponseBase: &prot.MessageResponseBase{
-			ActivityID: request.ActivityID,
-		},
-		Version:      major,
-		Capabilities: capabilities,
-	}
-
-	// Set our protocol selected version before return.
-	b.protVer = prot.ProtocolVersion(major)
-	w.Write(response)
-}
-
 func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 	var request prot.ContainerCreate
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
@@ -476,71 +418,35 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 		"cid":        request.ContainerID,
 	}).Info("opengcs::bridge::createContainer")
 
-	var waitFn func() prot.NotificationType
-	wasV2Config := false
-	id := request.ContainerID
-	if b.protVer >= prot.PvV4 {
-		// First try to determine if this is actually a V2 schema.
-		var settingsV2 prot.VMHostedContainerSettingsV2
-		if err := commonutils.UnmarshalJSONWithHresult([]byte(request.ContainerConfig), &settingsV2); err != nil {
-			w.Error(request.ActivityID, errors.Wrapf(err, "failed to unmarshal JSON for ContainerConfig \"%s\"", request.ContainerConfig))
-			return
-		}
-
-		if settingsV2.SchemaVersion.Cmp(prot.SchemaVersion{Major: 2, Minor: 1}) >= 0 {
-			wasV2Config = true
-			c, err := b.hostState.CreateContainer(id, &settingsV2)
-			if err != nil {
-				w.Error(request.ActivityID, err)
-				return
-			}
-			waitFn = func() prot.NotificationType {
-				return c.Wait()
-			}
-		}
+	// The request contains a JSON string field which is equivalent to a
+	// CreateContainerInfo struct.
+	var settings prot.VMHostedContainerSettings
+	if err := commonutils.UnmarshalJSONWithHresult([]byte(request.ContainerConfig), &settings); err != nil {
+		w.Error(request.ActivityID, errors.Wrapf(err, "failed to unmarshal JSON for ContainerConfig \"%s\"", request.ContainerConfig))
+		return
 	}
-
-	// If it wasnt a V2 config try to fall back.
-	if !wasV2Config {
-		// The request contains a JSON string field which is equivalent to a
-		// CreateContainerInfo struct.
-		var settings prot.VMHostedContainerSettings
-		if err := commonutils.UnmarshalJSONWithHresult([]byte(request.ContainerConfig), &settings); err != nil {
-			w.Error(request.ActivityID, errors.Wrapf(err, "failed to unmarshal JSON for ContainerConfig \"%s\"", request.ContainerConfig))
-			return
-		}
-		if err := b.coreint.CreateContainer(id, settings); err != nil {
-			w.Error(request.ActivityID, err)
-			return
-		}
+	if err := b.coreint.CreateContainer(request.ContainerID, settings); err != nil {
+		w.Error(request.ActivityID, err)
+		return
 	}
 
 	response := &prot.ContainerCreateResponse{
 		MessageResponseBase: &prot.MessageResponseBase{
 			ActivityID: request.ActivityID,
 		},
+		SelectedProtocolVersion: uint32(prot.PvV3),
 	}
 
-	// The dispatcher will set all PvV4+ before the call to createContainer via
-	// the negotiateProtocol. For all PvV3- the version was included in the
-	// response message.
-	if b.protVer == prot.PvInvalid {
-		response.SelectedProtocolVersion = uint32(prot.PvV3)
-	}
-
-	if !wasV2Config {
-		var err error
-		waitFn, err = b.coreint.WaitContainer(id)
-		if err != nil {
-			logrus.Error(err)
-		}
+	waitFn, err := b.coreint.WaitContainer(request.ContainerID)
+	if err != nil {
+		logrus.Error(err)
 	}
 
 	go func() {
 		nt := waitFn()
 		notification := &prot.ContainerNotification{
 			MessageBase: &prot.MessageBase{
-				ContainerID: id,
+				ContainerID: request.ContainerID,
 				ActivityID:  request.ActivityID,
 			},
 			Type:       nt,
@@ -552,29 +458,7 @@ func (b *Bridge) createContainer(w ResponseWriter, r *Request) {
 	}()
 
 	// Set our protocol selected version before return.
-	if b.protVer == prot.PvInvalid {
-		b.protVer = prot.PvV3
-	}
-	w.Write(response)
-}
-
-func (b *Bridge) startContainer(w ResponseWriter, r *Request) {
-	// This is just a noop, but needs to be handled so that an error isn't
-	// returned to the HCS.
-	var request prot.MessageBase
-	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
-		return
-	}
-
-	logrus.WithFields(logrus.Fields{
-		"activityID": request.ActivityID,
-		"cid":        request.ContainerID,
-	}).Info("opengcs::bridge::startContainer")
-
-	response := &prot.MessageResponseBase{
-		ActivityID: request.ActivityID,
-	}
+	b.protVer = prot.PvV3
 	w.Write(response)
 }
 
@@ -620,20 +504,9 @@ func (b *Bridge) execProcess(w ResponseWriter, r *Request) {
 			execInitErrorDone <- struct{}{}
 		}
 	}()
-
-	var c *hcsv2.Container
 	var err error
 	if params.IsExternal {
 		pid, err = b.coreint.RunExternalProcess(params, conSettings)
-	} else if request.ContainerID == hcsv2.UVMContainerID {
-		pid, err = b.coreint.RunExternalProcess(params, conSettings)
-	} else if c, err = b.hostState.GetContainer(request.ContainerID); err == nil {
-		// We found a V2 container. Treat this as a V2 process.
-		if params.OCIProcess == nil {
-			pid, err = c.Start(conSettings)
-		} else {
-			pid, err = c.ExecProcess(params.OCIProcess, conSettings)
-		}
 	} else {
 		pid, execInitErrorDone, err = b.coreint.ExecProcess(request.ContainerID, params, conSettings)
 	}
@@ -676,27 +549,10 @@ func (b *Bridge) signalContainer(w ResponseWriter, r *Request, signal syscall.Si
 	})
 	log.Info("opengcs::bridge::signalContainer")
 
-	// V2 added support for sending a signal to the host UVM itself. See if this is targeting
-	// the UVM and then see if its a V2 container ID before falling back to the V1 path.
-	if request.ContainerID == hcsv2.UVMContainerID {
-		// We are asking to shutdown the UVM itself.
-		if signal != unix.SIGTERM {
-			log.Error("opengcs::bridge::signalContainer - invalid signal for uvm")
-		}
-		// This is a destructive call. We do not respond to the HCS
-		b.quitChan <- true
-		b.hostState.Shutdown()
+	err := b.coreint.SignalContainer(request.ContainerID, signal)
+	if err != nil {
+		w.Error(request.ActivityID, err)
 		return
-	} else if c, err := b.hostState.GetContainer(request.ContainerID); err == nil {
-		if err := c.Kill(signal); err != nil {
-			w.Error(request.ActivityID, err)
-			return
-		}
-	} else {
-		if err := b.coreint.SignalContainer(request.ContainerID, signal); err != nil {
-			w.Error(request.ActivityID, err)
-			return
-		}
 	}
 
 	response := &prot.MessageResponseBase{
@@ -719,28 +575,9 @@ func (b *Bridge) signalProcess(w ResponseWriter, r *Request) {
 		"signal":     request.Options.Signal,
 	}).Info("opengcs::bridge::signalProcess")
 
-	// First see if this is a V2 Container.
-	if c, err := b.hostState.GetContainer(request.ContainerID); err == nil {
-		if p, err := c.GetProcess(request.ProcessID); err != nil {
-			w.Error(request.ActivityID, err)
-			return
-		} else {
-			var signal syscall.Signal
-			if request.Options.Signal == 0 {
-				signal = unix.SIGKILL
-			} else {
-				signal = syscall.Signal(request.Options.Signal)
-			}
-			if err := p.Kill(signal); err != nil {
-				w.Error(request.ActivityID, err)
-				return
-			}
-		}
-	} else {
-		if err := b.coreint.SignalProcess(int(request.ProcessID), request.Options); err != nil {
-			w.Error(request.ActivityID, err)
-			return
-		}
+	if err := b.coreint.SignalProcess(int(request.ProcessID), request.Options); err != nil {
+		w.Error(request.ActivityID, err)
+		return
 	}
 
 	response := &prot.MessageResponseBase{
@@ -761,29 +598,10 @@ func (b *Bridge) getProperties(w ResponseWriter, r *Request) {
 		"cid":        request.ContainerID,
 	}).Info("opengcs::bridge::getProperties")
 
-	var properties *prot.Properties
-	if request.ContainerID == hcsv2.UVMContainerID {
-		w.Error(request.ActivityID, errors.New("getProperties is not supported against the UVM handle"))
+	properties, err := b.coreint.GetProperties(request.ContainerID, request.Query)
+	if err != nil {
+		w.Error(request.ActivityID, err)
 		return
-	} else if c, err := b.hostState.GetContainer(request.ContainerID); err == nil {
-		pids, err := c.GetAllProcessPids()
-		if err != nil {
-			w.Error(request.ActivityID, err)
-			return
-		}
-		properties = &prot.Properties{
-			ProcessList: make([]prot.ProcessDetails, len(pids)),
-		}
-		for i, pid := range pids {
-			properties.ProcessList[i].ProcessID = uint32(pid)
-		}
-	} else {
-		var err error
-		properties, err = b.coreint.GetProperties(request.ContainerID, request.Query)
-		if err != nil {
-			w.Error(request.ActivityID, err)
-			return
-		}
 	}
 
 	propertyJSON := []byte("{}")
@@ -819,23 +637,10 @@ func (b *Bridge) waitOnProcess(w ResponseWriter, r *Request) {
 		"timeout-ms": request.TimeoutInMs,
 	}).Info("opengcs::bridge::waitOnProcess")
 
-	var exitCodeChan <-chan int
-	var doneChan chan<- bool
-
-	// First see if this is a V2 Container.
-	if c, err := b.hostState.GetContainer(request.ContainerID); err == nil {
-		p, err := c.GetProcess(request.ProcessID)
-		if err != nil {
-			w.Error(request.ActivityID, err)
-			return
-		}
-		exitCodeChan, doneChan = p.Wait()
-	} else {
-		exitCodeChan, doneChan, err = b.coreint.WaitProcess(int(request.ProcessID))
-		if err != nil {
-			w.Error(request.ActivityID, err)
-			return
-		}
+	exitCodeChan, doneChan, err := b.coreint.WaitProcess(int(request.ProcessID))
+	if err != nil {
+		w.Error(request.ActivityID, err)
+		return
 	}
 	defer close(doneChan)
 
@@ -871,21 +676,7 @@ func (b *Bridge) resizeConsole(w ResponseWriter, r *Request) {
 		"width":      request.Width,
 	}).Info("opengcs::bridge::resizeConsole")
 
-	var (
-		err error
-		c   *hcsv2.Container
-		p   *hcsv2.Process
-	)
-
-	// First see if this is a V2 Container process.
-	if c, err = b.hostState.GetContainer(request.ContainerID); err == nil {
-		if p, err = c.GetProcess(request.ProcessID); err == nil {
-			err = p.ResizeConsole(request.Height, request.Width)
-		}
-	} else {
-		err = b.coreint.ResizeConsole(int(request.ProcessID), request.Height, request.Width)
-	}
-
+	err := b.coreint.ResizeConsole(int(request.ProcessID), request.Height, request.Width)
 	if err != nil {
 		w.Error(request.ActivityID, err)
 		return
@@ -913,16 +704,8 @@ func (b *Bridge) modifySettings(w ResponseWriter, r *Request) {
 		"cid":        request.ContainerID,
 	}).Info("opengcs::bridge::modifySettings")
 
-	if request.ContainerID == hcsv2.UVMContainerID {
-		// V2 request
-		if err := b.hostState.ModifyHostSettings(request.Request.(*prot.ModifySettingRequest)); err != nil {
-			w.Error(request.ActivityID, err)
-			return
-		}
-	} else if _, err := b.hostState.GetContainer(request.ContainerID); err == nil {
-		w.Error(request.ActivityID, errors.New("V2 Modify request not supported on anything but UVM"))
-		return
-	} else if err := b.coreint.ModifySettings(request.ContainerID, request.Request.(*prot.ResourceModificationRequestResponse)); err != nil {
+	err = b.coreint.ModifySettings(request.ContainerID, request.Request.(*prot.ResourceModificationRequestResponse))
+	if err != nil {
 		w.Error(request.ActivityID, err)
 		return
 	}
