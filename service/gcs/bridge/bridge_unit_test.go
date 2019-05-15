@@ -166,7 +166,7 @@ func verifyResponseIsDefaultHandler(t *testing.T, i interface{}) {
 	}
 
 	base := i.(*prot.MessageResponseBase)
-	if base.Result != int32(gcserr.HrVmcomputeUnknownMessage) {
+	if base.Result != int32(gcserr.HrNotImpl) {
 		t.Error("The default handler did not set a -1 error result.")
 	}
 	if len(base.ErrorRecords) != 1 {
