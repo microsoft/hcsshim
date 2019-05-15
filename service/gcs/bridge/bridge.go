@@ -963,6 +963,7 @@ func setErrorForResponseBase(response *prot.MessageResponseBase, errForResponse 
 		hresult = gcserr.HrFail
 	}
 	response.Result = int32(hresult)
+	response.ErrorMessage = errorMessage
 	newRecord := prot.ErrorRecord{
 		Result:       int32(hresult),
 		Message:      errorMessage,

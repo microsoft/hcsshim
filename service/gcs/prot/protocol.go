@@ -642,6 +642,7 @@ type ErrorRecord struct {
 type MessageResponseBase struct {
 	Result       int32
 	ActivityID   string        `json:"ActivityId"`
+	ErrorMessage string        `json:",omitempty"` // Only used by hcsshim external bridge
 	ErrorRecords []ErrorRecord `json:",omitempty"`
 }
 
