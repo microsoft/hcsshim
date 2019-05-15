@@ -113,6 +113,27 @@ func (gc *GuestConnection) connect(ctx context.Context) (err error) {
 	if gc.os == "" {
 		gc.os = "windows"
 	}
+	if resp.Capabilities.SendHostCreateMessage {
+		createReq := containerCreate{
+			requestBase: makeRequest(nullContainerID),
+			ContainerConfig: anyInString{&uvmConfig{
+				SystemType: "Container",
+			}},
+		}
+		var createResp responseBase
+		err = gc.brdg.RPC(ctx, rpcCreate, &createReq, &createResp, true)
+		if err != nil {
+			return err
+		}
+		if resp.Capabilities.SendHostStartMessage {
+			startReq := makeRequest(nullContainerID)
+			var startResp responseBase
+			err = gc.brdg.RPC(ctx, rpcStart, &startReq, &startResp, true)
+			if err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 

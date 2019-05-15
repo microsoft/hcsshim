@@ -146,7 +146,6 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 					Weight: opts.ProcessorWeight,
 				},
 			},
-			GuestConnection: &hcsschema.GuestConnection{},
 			Devices: &hcsschema.Devices{
 				Scsi: map[string]hcsschema.Scsi{
 					"0": {
@@ -183,6 +182,10 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 				},
 			},
 		},
+	}
+
+	if !opts.ExternalGuestConnection {
+		doc.VirtualMachine.GuestConnection = &hcsschema.GuestConnection{}
 	}
 
 	// Handle StorageQoS if set
