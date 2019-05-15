@@ -174,6 +174,10 @@ type containerCreate struct {
 	ContainerConfig anyInString
 }
 
+type uvmConfig struct {
+	SystemType string // must be "Container"
+}
+
 type containerNotification struct {
 	requestBase
 	Type       string      // Compute.System.NotificationType
@@ -194,15 +198,15 @@ type executeProcessSettings struct {
 }
 
 type executeProcessStdioRelaySettings struct {
-	StdIn  guid.GUID
-	StdOut guid.GUID
-	StdErr guid.GUID
+	StdIn  *guid.GUID `json:",omitempty"`
+	StdOut *guid.GUID `json:",omitempty"`
+	StdErr *guid.GUID `json:",omitempty"`
 }
 
 type executeProcessVsockStdioRelaySettings struct {
-	StdIn  uint32
-	StdOut uint32
-	StdErr uint32
+	StdIn  uint32 `json:",omitempty"`
+	StdOut uint32 `json:",omitempty"`
+	StdErr uint32 `json:",omitempty"`
 }
 
 type containerResizeConsole struct {

@@ -50,8 +50,7 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 	req := containerExecuteProcess{
 		requestBase: makeRequest(cid),
 		Settings: executeProcessSettings{
-			ProcessParameters:       anyInString{params},
-			VsockStdioRelaySettings: &executeProcessVsockStdioRelaySettings{},
+			ProcessParameters: anyInString{params},
 		},
 	}
 
@@ -76,21 +75,24 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 		if err != nil {
 			return nil, err
 		}
-		hvsockSettings.StdIn = winio.VsockServiceID(vsockSettings.StdIn)
+		g := winio.VsockServiceID(vsockSettings.StdIn)
+		hvsockSettings.StdIn = &g
 	}
 	if bp.CreateStdOutPipe {
 		p.stdout, vsockSettings.StdOut, err = gc.newIoChannel()
 		if err != nil {
 			return nil, err
 		}
-		hvsockSettings.StdOut = winio.VsockServiceID(vsockSettings.StdOut)
+		g := winio.VsockServiceID(vsockSettings.StdOut)
+		hvsockSettings.StdOut = &g
 	}
 	if bp.CreateStdErrPipe {
 		p.stderr, vsockSettings.StdErr, err = gc.newIoChannel()
 		if err != nil {
 			return nil, err
 		}
-		hvsockSettings.StdErr = winio.VsockServiceID(vsockSettings.StdErr)
+		g := winio.VsockServiceID(vsockSettings.StdErr)
+		hvsockSettings.StdErr = &g
 	}
 
 	var resp containerExecuteProcessResponse
