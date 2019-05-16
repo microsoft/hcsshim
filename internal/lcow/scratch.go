@@ -110,7 +110,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 
 	// Format it ext4
 	mkfsCtx, cancel := context.WithTimeout(context.TODO(), timeout.ExternalCommandToStart)
-	cmd = hcsoci.CommandContext(mkfsCtx, lcowUVM, "mkfs.ext4", "-q", "-E", "lazy_itable_init=1", "-O", `^has_journal,sparse_super2,uninit_bg,^resize_inode`, device)
+	cmd = hcsoci.CommandContext(mkfsCtx, lcowUVM, "mkfs.ext4", "-q", "-E", "lazy_itable_init=0,nodiscard", "-O", `^has_journal,sparse_super2,^resize_inode`, device)
 	var mkfsStderr bytes.Buffer
 	cmd.Stderr = &mkfsStderr
 	err = cmd.Run()
