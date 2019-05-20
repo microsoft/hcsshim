@@ -11,6 +11,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/containerd/console"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -19,6 +20,7 @@ var (
 	wcowDockerImage string
 	wcowCommandLine string
 	wcowImage       string
+	wcowUseTerminal bool
 )
 
 var wcowCommand = cli.Command{
@@ -39,6 +41,11 @@ var wcowCommand = cli.Command{
 			Name:        "image",
 			Usage:       "Path for the UVM image",
 			Destination: &wcowImage,
+		},
+		cli.BoolFlag{
+			Name:        "tty,t",
+			Usage:       "create the process in the UVM with a TTY enabled",
+			Destination: &wcowUseTerminal,
 		},
 	},
 	Action: func(c *cli.Context) error {
@@ -80,8 +87,22 @@ var wcowCommand = cli.Command{
 				cmd := hcsoci.Command(vm, "cmd.exe", "/c", wcowCommandLine)
 				cmd.Spec.User.Username = `NT AUTHORITY\SYSTEM`
 				cmd.Log = logrus.NewEntry(logrus.StandardLogger())
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stdout
+				if wcowUseTerminal {
+					cmd.Spec.Terminal = true
+					cmd.Stdin = os.Stdin
+					cmd.Stdout = os.Stdout
+					con, err := console.ConsoleFromFile(os.Stdin)
+					if err == nil {
+						err = con.SetRaw()
+						if err != nil {
+							return err
+						}
+						defer con.Reset()
+					}
+				} else {
+					cmd.Stdout = os.Stdout
+					cmd.Stderr = os.Stdout
+				}
 				err = cmd.Run()
 				if err != nil {
 					return err

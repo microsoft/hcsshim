@@ -7,6 +7,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/containerd/console"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -21,6 +22,10 @@ const (
 	rootFSTypeArgName     = "root-fs-type"
 	vpMemMaxCountArgName  = "vpmem-max-count"
 	vpMemMaxSizeArgName   = "vpmem-max-size"
+)
+
+var (
+	lcowUseTerminal bool
 )
 
 var lcowCommand = cli.Command{
@@ -67,6 +72,11 @@ var lcowCommand = cli.Command{
 		cli.StringFlag{
 			Name:  consolePipeArgName,
 			Usage: "Named pipe for serial console output (which will be enabled)",
+		},
+		cli.BoolFlag{
+			Name:        "tty,t",
+			Usage:       "create the process in the UVM with a TTY enabled",
+			Destination: &lcowUseTerminal,
 		},
 	},
 	Action: func(c *cli.Context) error {
@@ -159,7 +169,19 @@ func runLCOW(options *uvm.OptionsLCOW, c *cli.Context) error {
 func execViaGcs(vm *uvm.UtilityVM, c *cli.Context) error {
 	cmd := hcsoci.Command(vm, "/bin/sh", "-c", c.String(execCommandLineArgName))
 	cmd.Log = logrus.NewEntry(logrus.StandardLogger())
-	if c.String(outputHandlingArgName) == "stdout" {
+	if lcowUseTerminal {
+		cmd.Spec.Terminal = true
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		con, err := console.ConsoleFromFile(os.Stdin)
+		if err == nil {
+			err = con.SetRaw()
+			if err != nil {
+				return err
+			}
+			defer con.Reset()
+		}
+	} else if c.String(outputHandlingArgName) == "stdout" {
 		if c.Bool(forwardStdoutArgName) {
 			cmd.Stdout = os.Stdout
 		}
