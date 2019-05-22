@@ -13,8 +13,6 @@ require (
 	github.com/containerd/ttrpc v0.0.0-20180920185216-2a805f718635
 	github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd
 	github.com/gogo/protobuf v1.2.1
-	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b // indirect
-	github.com/golang/protobuf v1.2.0 // indirect
 	github.com/google/go-cmp v0.3.0 // indirect
 	github.com/hashicorp/errwrap v0.0.0-20141028054710-7554cd9344ce // indirect
 	github.com/hashicorp/go-multierror v0.0.0-20161216184304-ed905158d874 // indirect
@@ -29,12 +27,9 @@ require (
 	github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/xeipuuv/gojsonschema v0.0.0-20180618132009-1d523034197f // indirect
-	golang.org/x/net v0.0.0-20190119204137-ed066c81e75e // indirect
 	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
 	golang.org/x/sys v0.0.0-20190507160741-ecd444e8653b
-	golang.org/x/text v0.0.0-20190225234057-d14c52b222ee // indirect
-	google.golang.org/genproto v0.0.0-20170523043604-d80a6e20e776 // indirect
-	google.golang.org/grpc v1.12.0
+	google.golang.org/grpc v1.20.1
 	gotest.tools v2.2.0+incompatible // indirect
 	k8s.io/kubernetes v1.13.0
 )

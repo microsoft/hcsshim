@@ -1,8 +1,8 @@
 # github.com/Microsoft/go-winio v0.4.13-0.20190509182014-01fe22a8b81b
+github.com/Microsoft/go-winio/pkg/guid
 github.com/Microsoft/go-winio
 github.com/Microsoft/go-winio/pkg/etw
 github.com/Microsoft/go-winio/pkg/etwlogrus
-github.com/Microsoft/go-winio/pkg/guid
 github.com/Microsoft/go-winio/vhd
 github.com/Microsoft/go-winio/archive/tar
 github.com/Microsoft/go-winio/backuptar
@@ -78,41 +78,47 @@ github.com/xeipuuv/gojsonpointer
 github.com/xeipuuv/gojsonreference
 # github.com/xeipuuv/gojsonschema v0.0.0-20180618132009-1d523034197f
 github.com/xeipuuv/gojsonschema
-# golang.org/x/net v0.0.0-20190119204137-ed066c81e75e
-golang.org/x/net/context
-golang.org/x/net/http2
+# golang.org/x/net v0.0.0-20190311183353-d8887717615a
 golang.org/x/net/trace
-golang.org/x/net/http/httpguts
-golang.org/x/net/http2/hpack
-golang.org/x/net/idna
+golang.org/x/net/context
 golang.org/x/net/internal/timeseries
+golang.org/x/net/http2
+golang.org/x/net/http2/hpack
+golang.org/x/net/http/httpguts
+golang.org/x/net/idna
 # golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
 golang.org/x/sync/errgroup
 # golang.org/x/sys v0.0.0-20190507160741-ecd444e8653b
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
 golang.org/x/sys/unix
-# golang.org/x/text v0.0.0-20190225234057-d14c52b222ee
+# golang.org/x/text v0.3.0
 golang.org/x/text/secure/bidirule
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
 golang.org/x/text/transform
-# google.golang.org/genproto v0.0.0-20170523043604-d80a6e20e776
+# google.golang.org/genproto v0.0.0-20180817151627-c66870c02cf8
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.12.0
+# google.golang.org/grpc v1.20.1
 google.golang.org/grpc
 google.golang.org/grpc/codes
 google.golang.org/grpc/status
 google.golang.org/grpc/balancer
 google.golang.org/grpc/balancer/roundrobin
-google.golang.org/grpc/channelz
 google.golang.org/grpc/connectivity
 google.golang.org/grpc/credentials
 google.golang.org/grpc/encoding
 google.golang.org/grpc/encoding/proto
-google.golang.org/grpc/grpclb/grpc_lb_v1/messages
 google.golang.org/grpc/grpclog
 google.golang.org/grpc/internal
+google.golang.org/grpc/internal/backoff
+google.golang.org/grpc/internal/balancerload
+google.golang.org/grpc/internal/binarylog
+google.golang.org/grpc/internal/channelz
+google.golang.org/grpc/internal/envconfig
+google.golang.org/grpc/internal/grpcrand
+google.golang.org/grpc/internal/grpcsync
+google.golang.org/grpc/internal/transport
 google.golang.org/grpc/keepalive
 google.golang.org/grpc/metadata
 google.golang.org/grpc/naming
@@ -122,7 +128,9 @@ google.golang.org/grpc/resolver/dns
 google.golang.org/grpc/resolver/passthrough
 google.golang.org/grpc/stats
 google.golang.org/grpc/tap
-google.golang.org/grpc/transport
 google.golang.org/grpc/balancer/base
+google.golang.org/grpc/credentials/internal
+google.golang.org/grpc/binarylog/grpc_binarylog_v1
+google.golang.org/grpc/internal/syscall
 # k8s.io/kubernetes v1.13.0
 k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2
