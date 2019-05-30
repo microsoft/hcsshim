@@ -1,0 +1,139 @@
+package hcsv2
+
+import (
+	"context"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/Microsoft/opengcs/internal/network"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+)
+
+func getStandaloneRootDir(id string) string {
+	return filepath.Join("/tmp/gcs/s", id)
+	return filepath.Join("/tmp/gcs/s", id)
+}
+
+func getStandaloneHostnamePath(id string) string {
+	return filepath.Join(getStandaloneRootDir(id), "hostname")
+}
+
+func getStandaloneHostsPath(id string) string {
+	return filepath.Join(getStandaloneRootDir(id), "hosts")
+}
+
+func getStandaloneResolvPath(id string) string {
+	return filepath.Join(getStandaloneRootDir(id), "resolv.conf")
+}
+
+func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec) (err error) {
+	// TODO: JTERRY75 use ctx for log
+	operation := "setupStandaloneContainerSpec"
+	start := time.Now()
+	defer func() {
+		end := time.Now()
+		fields := logrus.Fields{
+			"cid":      id,
+			"endTime":  end,
+			"duration": end.Sub(start),
+		}
+		if err != nil {
+			fields[logrus.ErrorKey] = err
+			logrus.WithFields(fields).Error(operation)
+		} else {
+			logrus.WithFields(fields).Info(operation)
+		}
+	}()
+
+	// Generate the standalone root dir
+	rootDir := getStandaloneRootDir(id)
+	if err := os.MkdirAll(rootDir, 0755); err != nil {
+		return errors.Wrapf(err, "failed to create container root directory %q", rootDir)
+	}
+
+	// Write the hostname
+	if !isInMounts("/etc/hostname", spec.Mounts) {
+		hostname := spec.Hostname
+		if hostname == "" {
+			var err error
+			hostname, err = os.Hostname()
+			if err != nil {
+				return errors.Wrap(err, "failed to get hostname")
+			}
+		}
+
+		standaloneHostnamePath := getStandaloneHostnamePath(id)
+		if err := ioutil.WriteFile(standaloneHostnamePath, []byte(hostname+"\n"), 0644); err != nil {
+			return errors.Wrapf(err, "failed to write hostname to %q", standaloneHostnamePath)
+		}
+
+		mt := oci.Mount{
+			Destination: "/etc/hostname",
+			Type:        "bind",
+			Source:      getStandaloneHostnamePath(id),
+			Options:     []string{"bind"},
+		}
+		if isRootReadonly(spec) {
+			mt.Options = append(mt.Options, "ro")
+		}
+		spec.Mounts = append(spec.Mounts, mt)
+	}
+
+	// Write the hosts
+	if !isInMounts("/etc/hosts", spec.Mounts) {
+		standaloneHostsPath := getStandaloneHostsPath(id)
+		if err := copyFile("/etc/hosts", standaloneHostsPath, 0644); err != nil {
+			return errors.Wrapf(err, "failed to write standalone hosts to %q", standaloneHostsPath)
+		}
+
+		mt := oci.Mount{
+			Destination: "/etc/hosts",
+			Type:        "bind",
+			Source:      getStandaloneHostsPath(id),
+			Options:     []string{"bind"},
+		}
+		if isRootReadonly(spec) {
+			mt.Options = append(mt.Options, "ro")
+		}
+		spec.Mounts = append(spec.Mounts, mt)
+	}
+
+	// Write resolv.conf
+	if !isInMounts("/etc/resolv.conf", spec.Mounts) {
+		ns := getOrAddNetworkNamespace(getNetworkNamespaceID(spec))
+		var searches, servers []string
+		for _, n := range ns.Adapters() {
+			servers = network.MergeValues(servers, strings.Split(n.DNSServerList, ","))
+			servers = network.MergeValues(servers, strings.Split(n.DNSServerList, ","))
+		}
+		resolvContent, err := network.GenerateResolvConfContent(ctx, searches, servers, nil)
+		if err != nil {
+			return errors.Wrap(err, "failed to generate standalone resolv.conf content")
+		}
+		standaloneResolvPath := getStandaloneResolvPath(id)
+		if err := ioutil.WriteFile(standaloneResolvPath, []byte(resolvContent), 0644); err != nil {
+			return errors.Wrap(err, "failed to write standalone resolv.conf")
+		}
+
+		mt := oci.Mount{
+			Destination: "/etc/resolv.conf",
+			Type:        "bind",
+			Source:      getStandaloneResolvPath(id),
+			Options:     []string{"bind"},
+		}
+		if isRootReadonly(spec) {
+			mt.Options = append(mt.Options, "ro")
+		}
+		spec.Mounts = append(spec.Mounts, mt)
+	}
+
+	// Clear the windows section as we dont want to forward to runc
+	spec.Windows = nil
+
+	return nil
+}
