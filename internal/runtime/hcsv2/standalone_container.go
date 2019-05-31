@@ -6,12 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/Microsoft/opengcs/internal/network"
+	"github.com/Microsoft/opengcs/internal/oc"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
 
 func getStandaloneRootDir(id string) string {
@@ -32,23 +32,10 @@ func getStandaloneResolvPath(id string) string {
 }
 
 func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec) (err error) {
-	// TODO: JTERRY75 use ctx for log
-	operation := "setupStandaloneContainerSpec"
-	start := time.Now()
-	defer func() {
-		end := time.Now()
-		fields := logrus.Fields{
-			"cid":      id,
-			"endTime":  end,
-			"duration": end.Sub(start),
-		}
-		if err != nil {
-			fields[logrus.ErrorKey] = err
-			logrus.WithFields(fields).Error(operation)
-		} else {
-			logrus.WithFields(fields).Info(operation)
-		}
-	}()
+	ctx, span := trace.StartSpan(ctx, "hcsv2::setupStandaloneContainerSpec")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("cid", id))
 
 	// Generate the standalone root dir
 	rootDir := getStandaloneRootDir(id)

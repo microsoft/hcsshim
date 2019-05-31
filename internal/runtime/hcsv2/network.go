@@ -10,10 +10,11 @@ import (
 	"sync"
 
 	"github.com/Microsoft/opengcs/internal/network"
+	"github.com/Microsoft/opengcs/internal/oc"
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
 
 var (
@@ -65,13 +66,13 @@ func getOrAddNetworkNamespace(id string) *namespace {
 }
 
 // removeNetworkNamespace removes the in-memory `namespace` found by `id`.
-func removeNetworkNamespace(ctx context.Context, id string) error {
-	id = strings.ToLower(id)
+func removeNetworkNamespace(ctx context.Context, id string) (err error) {
+	_, span := trace.StartSpan(ctx, "hcsv2::removeNetworkNamespace")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
 
-	op := "hcsv2::removeNetworkNamespace"
-	log := logrus.WithField("namespace", id)
-	log.Info(op + " - Begin Operation")
-	defer log.Info(op + " - End Operation")
+	id = strings.ToLower(id)
+	span.AddAttributes(trace.StringAttribute("id", id))
 
 	namespaceSync.Lock()
 	defer namespaceSync.Unlock()
@@ -106,14 +107,13 @@ func (n *namespace) ID() string {
 // AssignContainerPid assigns `pid` to `n` but does NOT move any previously
 // assigned adapters into this namespace. The caller MUST call `Sync()` to
 // complete this operation.
-func (n *namespace) AssignContainerPid(ctx context.Context, pid int) error {
-	op := "namespace::AssignContainerPid"
-	log := logrus.WithFields(logrus.Fields{
-		"namespace": n.id,
-		"pid":       pid,
-	})
-	log.Info(op + " - Begin Operation")
-	defer log.Info(op + " - End Operation")
+func (n *namespace) AssignContainerPid(ctx context.Context, pid int) (err error) {
+	_, span := trace.StartSpan(ctx, "namespace::AssignContainerPid")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("namespace", n.id),
+		trace.Int64Attribute("pid", int64(pid)))
 
 	n.m.Lock()
 	defer n.m.Unlock()
@@ -142,14 +142,13 @@ func (n *namespace) Adapters() []*prot.NetworkAdapterV2 {
 // AddAdapter adds `adp` to `n` but does NOT move the adapter into the network
 // namespace assigned to `n`. A user must call `Sync()` to complete this
 // operation.
-func (n *namespace) AddAdapter(ctx context.Context, adp *prot.NetworkAdapterV2) error {
-	op := "namespace::AddAdapter"
-	log := logrus.WithFields(logrus.Fields{
-		"namespace": n.id,
-		"adapter":   fmt.Sprintf("%+v", adp),
-	})
-	log.Info(op + " - Begin Operation")
-	defer log.Info(op + " - End Operation")
+func (n *namespace) AddAdapter(ctx context.Context, adp *prot.NetworkAdapterV2) (err error) {
+	ctx, span := trace.StartSpan(ctx, "namespace::AddAdapter")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("namespace", n.id),
+		trace.StringAttribute("adapter", fmt.Sprintf("%+v", adp)))
 
 	n.m.Lock()
 	defer n.m.Unlock()
@@ -160,7 +159,7 @@ func (n *namespace) AddAdapter(ctx context.Context, adp *prot.NetworkAdapterV2) 
 		}
 	}
 
-	ifname, err := networkInstanceIDToName(adp.ID, true)
+	ifname, err := networkInstanceIDToName(ctx, adp.ID, true)
 	if err != nil {
 		return err
 	}
@@ -173,14 +172,13 @@ func (n *namespace) AddAdapter(ctx context.Context, adp *prot.NetworkAdapterV2) 
 
 // RemoveAdapter removes the adapter matching `id` from `n`. If `id` is not
 // found returns no error.
-func (n *namespace) RemoveAdapter(ctx context.Context, id string) error {
-	op := "namespace::RemoveAdapter"
-	log := logrus.WithFields(logrus.Fields{
-		"namespace":  n.id,
-		"adapter-id": id,
-	})
-	log.Info(op + " - Begin Operation")
-	defer log.Info(op + " - End Operation")
+func (n *namespace) RemoveAdapter(ctx context.Context, id string) (err error) {
+	_, span := trace.StartSpan(ctx, "namespace::RemoveAdapter")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("namespace", n.id),
+		trace.StringAttribute("adapterID", id))
 
 	n.m.Lock()
 	defer n.m.Unlock()
@@ -201,20 +199,18 @@ func (n *namespace) RemoveAdapter(ctx context.Context, id string) error {
 }
 
 // Sync moves all adapters to the network namespace of `n` if assigned.
-func (n *namespace) Sync(ctx context.Context) error {
-	op := "namespace::Sync"
-	log := logrus.WithFields(logrus.Fields{
-		"namespace": n.id,
-	})
-	log.Info(op + " - Begin Operation")
-	defer log.Info(op + " - End Operation")
+func (n *namespace) Sync(ctx context.Context) (err error) {
+	ctx, span := trace.StartSpan(ctx, "namespace::Sync")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("namespace", n.id))
 
 	n.m.Lock()
 	defer n.m.Unlock()
 
 	if n.pid != 0 {
 		for _, a := range n.nics {
-			err := a.assignToPid(ctx, n.pid)
+			err = a.assignToPid(ctx, n.pid)
 			if err != nil {
 				return err
 			}
@@ -236,15 +232,14 @@ type nicInNamespace struct {
 }
 
 // assignToPid assigns `nin.adapter`, represented by `nin.ifname` to `pid`.
-func (nin *nicInNamespace) assignToPid(ctx context.Context, pid int) error {
-	op := "nicInNamespace::assignToPid"
-	log := logrus.WithFields(logrus.Fields{
-		"adapter": fmt.Sprintf("%+v", nin.adapter),
-		"ifname":  nin.ifname,
-		"pid":     pid,
-	})
-	log.Info(op + " - Begin Operation")
-	defer log.Info(op + " - End Operation")
+func (nin *nicInNamespace) assignToPid(ctx context.Context, pid int) (err error) {
+	ctx, span := trace.StartSpan(ctx, "nicInNamespace::assignToPid")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("adapterID", nin.adapter.ID),
+		trace.StringAttribute("ifname", nin.ifname),
+		trace.Int64Attribute("pid", int64(pid)))
 
 	// TODO: netnscfg is not coded for v2 but since they are almost the same
 	// just convert the parts of the adapter here.

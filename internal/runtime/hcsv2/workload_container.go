@@ -3,12 +3,13 @@ package hcsv2
 import (
 	"context"
 	"path/filepath"
-	"time"
 
+	"github.com/Microsoft/opengcs/internal/log"
+	"github.com/Microsoft/opengcs/internal/oc"
 	"github.com/opencontainers/runc/libcontainer/devices"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
 
 func getWorkloadRootDir(sbid, id string) string {
@@ -16,24 +17,12 @@ func getWorkloadRootDir(sbid, id string) string {
 }
 
 func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.Spec) (err error) {
-	// TODO: JTERRY75 use ctx for log
-	operation := "setupWorkloadContainerSpec"
-	start := time.Now()
-	defer func() {
-		end := time.Now()
-		fields := logrus.Fields{
-			"cid":       id,
-			"startTime": start,
-			"endTime":   end,
-			"duration":  end.Sub(start),
-		}
-		if err != nil {
-			fields[logrus.ErrorKey] = err
-			logrus.WithFields(fields).Error(operation)
-		} else {
-			logrus.WithFields(fields).Info(operation)
-		}
-	}()
+	ctx, span := trace.StartSpan(ctx, "hcsv2::setupWorkloadContainerSpec")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("sandboxID", sbid),
+		trace.StringAttribute("cid", id))
 
 	// Verify no hostname
 	if spec.Hostname != "" {
@@ -88,9 +77,7 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 
 	// Check if we need to do any capability/device mappings
 	if spec.Annotations["io.microsoft.virtualmachine.lcow.privileged"] == "true" {
-		logrus.WithFields(logrus.Fields{
-			"cid": id,
-		}).Debugf("setupWorkloadContainerSpec - 'io.microsoft.virtualmachine.lcow.privileged' set for privileged container")
+		log.G(ctx).Debug("'io.microsoft.virtualmachine.lcow.privileged' set for privileged container")
 
 		// Add all host devices
 		hostDevices, err := devices.HostDevices()
@@ -118,9 +105,7 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 					break
 				}
 				if dev.Type == rd.Type && dev.Major == rd.Major && dev.Minor == rd.Minor {
-					logrus.WithFields(logrus.Fields{
-						"cid": id,
-					}).Warnf("setupWorkloadContainerSpec - The same type '%s', major '%d' and minor '%d', should not be used for multiple devices.", dev.Type, dev.Major, dev.Minor)
+					log.G(ctx).Warnf("The same type '%s', major '%d' and minor '%d', should not be used for multiple devices.", dev.Type, dev.Major, dev.Minor)
 				}
 			}
 			if !found {

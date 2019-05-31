@@ -3,16 +3,18 @@
 package hcsv2
 
 import (
+	"context"
 	"sync"
 	"syscall"
 
+	"github.com/Microsoft/opengcs/internal/oc"
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
 
 type Container struct {
@@ -32,10 +34,11 @@ type Container struct {
 	processes      map[uint32]*Process
 }
 
-func (c *Container) Start(conSettings stdio.ConnectionSettings) (int, error) {
-	logrus.WithFields(logrus.Fields{
-		"cid": c.id,
-	}).Info("opengcs::Container::Start")
+func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSettings) (_ int, err error) {
+	_, span := trace.StartSpan(ctx, "opengcs::Container::Start")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("cid", c.id))
 
 	stdioSet, err := stdio.Connect(c.vsock, conSettings)
 	if err != nil {
@@ -58,10 +61,11 @@ func (c *Container) Start(conSettings stdio.ConnectionSettings) (int, error) {
 	return int(c.initProcess.pid), err
 }
 
-func (c *Container) ExecProcess(process *oci.Process, conSettings stdio.ConnectionSettings) (int, error) {
-	logrus.WithFields(logrus.Fields{
-		"cid": c.id,
-	}).Info("opengcs::Container::ExecProcess")
+func (c *Container) ExecProcess(ctx context.Context, process *oci.Process, conSettings stdio.ConnectionSettings) (_ int, err error) {
+	_, span := trace.StartSpan(ctx, "opengcs::Container::ExecProcess")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("cid", c.id))
 
 	stdioSet, err := stdio.Connect(c.vsock, conSettings)
 	if err != nil {
@@ -94,11 +98,6 @@ func (c *Container) ExecProcess(process *oci.Process, conSettings stdio.Connecti
 // GetProcess returns the *Process with the matching 'pid'. If the 'pid' does
 // not exit returns error.
 func (c *Container) GetProcess(pid uint32) (*Process, error) {
-	logrus.WithFields(logrus.Fields{
-		"cid": c.id,
-		"pid": pid,
-	}).Info("opengcs::Container::GetProcess")
-
 	if c.initProcess.pid == pid {
 		return c.initProcess, nil
 	}
@@ -114,7 +113,12 @@ func (c *Container) GetProcess(pid uint32) (*Process, error) {
 }
 
 // GetAllProcessPids returns all process pids in the container namespace.
-func (c *Container) GetAllProcessPids() ([]int, error) {
+func (c *Container) GetAllProcessPids(ctx context.Context) (_ []int, err error) {
+	_, span := trace.StartSpan(ctx, "opengcs::Container::GetAllProcessPids")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("cid", c.id))
+
 	state, err := c.container.GetAllProcesses()
 	if err != nil {
 		return nil, err
@@ -127,13 +131,15 @@ func (c *Container) GetAllProcessPids() ([]int, error) {
 }
 
 // Kill sends 'signal' to the container process.
-func (c *Container) Kill(signal syscall.Signal) error {
-	logrus.WithFields(logrus.Fields{
-		"cid":    c.id,
-		"signal": signal,
-	}).Info("opengcs::Container::Kill")
+func (c *Container) Kill(ctx context.Context, signal syscall.Signal) (err error) {
+	_, span := trace.StartSpan(ctx, "opengcs::Container::Kill")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("cid", c.id),
+		trace.Int64Attribute("signal", int64(signal)))
 
-	err := c.container.Kill(signal)
+	err = c.container.Kill(signal)
 	if err != nil {
 		return err
 	}
@@ -144,9 +150,9 @@ func (c *Container) Kill(signal syscall.Signal) error {
 // Wait waits for all processes exec'ed to finish as well as the init process
 // representing the container.
 func (c *Container) Wait() prot.NotificationType {
-	logrus.WithFields(logrus.Fields{
-		"cid": c.id,
-	}).Info("opengcs::Container::Wait")
+	_, span := trace.StartSpan(context.Background(), "opengcs::Container::Wait")
+	defer span.End()
+	span.AddAttributes(trace.StringAttribute("cid", c.id))
 
 	c.processesWg.Wait()
 	c.etL.Lock()
