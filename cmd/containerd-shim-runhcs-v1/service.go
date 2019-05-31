@@ -13,18 +13,18 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func beginActivity(activity string, fields logrus.Fields) {
-	logrus.WithFields(fields).Info(activity)
+func beginActivity(activity string, fields logrus.Fields) *logrus.Entry {
+	log := logrus.WithFields(fields)
+	log.Info(activity)
+	return log
 }
 
-func endActivity(activity string, fields logrus.Fields, err error) {
+func endActivity(log *logrus.Entry, activity string, err error) {
 	if err != nil {
-		fields["result"] = "Error"
-		fields[logrus.ErrorKey] = err
-		logrus.WithFields(fields).Error(activity)
+		log.Data[logrus.ErrorKey] = err
+		log.Error(activity)
 	} else {
-		fields["result"] = "Success"
-		logrus.WithFields(fields).Info(activity)
+		log.Info(activity)
 	}
 }
 
@@ -63,24 +63,29 @@ type service struct {
 	cl sync.Mutex
 }
 
-func (s *service) State(ctx context.Context, req *task.StateRequest) (_ *task.StateResponse, err error) {
+func (s *service) State(ctx context.Context, req *task.StateRequest) (resp *task.StateResponse, err error) {
 	defer panicRecover()
 	const activity = "State"
 	af := logrus.Fields{
 		"tid": req.ID,
 		"eid": req.ExecID,
 	}
-	beginActivity(activity, af)
-	defer func() { endActivity(activity, af, err) }()
+	log := beginActivity(activity, af)
+	defer func() {
+		log.Data["status"] = resp.Status.String()
+		log.Data["exitStatus"] = resp.ExitStatus
+		log.Data["exitedAt"] = resp.ExitedAt
+		endActivity(log, activity, err)
+	}()
 
 	r, e := s.stateInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
-func (s *service) Create(ctx context.Context, req *task.CreateTaskRequest) (_ *task.CreateTaskResponse, err error) {
+func (s *service) Create(ctx context.Context, req *task.CreateTaskRequest) (resp *task.CreateTaskResponse, err error) {
 	defer panicRecover()
 	const activity = "Create"
-	beginActivity(activity, logrus.Fields{
+	log := beginActivity(activity, logrus.Fields{
 		"tid":              req.ID,
 		"bundle":           req.Bundle,
 		"rootfs":           req.Rootfs,
@@ -92,38 +97,45 @@ func (s *service) Create(ctx context.Context, req *task.CreateTaskRequest) (_ *t
 		"parentcheckpoint": req.ParentCheckpoint,
 	})
 	defer func() {
-		endActivity(activity, logrus.Fields{
-			"tid": req.ID,
-		}, err)
+		log.Data["pid"] = resp.Pid
+		endActivity(log, activity, err)
 	}()
 
 	r, e := s.createInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
-func (s *service) Start(ctx context.Context, req *task.StartRequest) (_ *task.StartResponse, err error) {
+func (s *service) Start(ctx context.Context, req *task.StartRequest) (resp *task.StartResponse, err error) {
 	defer panicRecover()
 	const activity = "Start"
 	af := logrus.Fields{
 		"tid": req.ID,
 		"eid": req.ExecID,
 	}
-	beginActivity(activity, af)
-	defer func() { endActivity(activity, af, err) }()
+	log := beginActivity(activity, af)
+	defer func() {
+		log.Data["pid"] = resp.Pid
+		endActivity(log, activity, err)
+	}()
 
 	r, e := s.startInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
-func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (_ *task.DeleteResponse, err error) {
+func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (resp *task.DeleteResponse, err error) {
 	defer panicRecover()
 	const activity = "Delete"
 	af := logrus.Fields{
 		"tid": req.ID,
 		"eid": req.ExecID,
 	}
-	beginActivity(activity, af)
-	defer func() { endActivity(activity, af, err) }()
+	log := beginActivity(activity, af)
+	defer func() {
+		log.Data["pid"] = resp.Pid
+		log.Data["exitStatus"] = resp.ExitStatus
+		log.Data["exitedAt"] = resp.ExitedAt
+		endActivity(log, activity, err)
+	}()
 
 	r, e := s.deleteInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -135,8 +147,8 @@ func (s *service) Pids(ctx context.Context, req *task.PidsRequest) (_ *task.Pids
 	af := logrus.Fields{
 		"tid": req.ID,
 	}
-	beginActivity(activity, af)
-	defer func() { endActivity(activity, af, err) }()
+	log := beginActivity(activity, af)
+	defer func() { endActivity(log, activity, err) }()
 
 	r, e := s.pidsInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -148,8 +160,8 @@ func (s *service) Pause(ctx context.Context, req *task.PauseRequest) (_ *google_
 	af := logrus.Fields{
 		"tid": req.ID,
 	}
-	beginActivity(activity, af)
-	defer func() { endActivity(activity, af, err) }()
+	log := beginActivity(activity, af)
+	defer func() { endActivity(log, activity, err) }()
 
 	r, e := s.pauseInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -161,8 +173,8 @@ func (s *service) Resume(ctx context.Context, req *task.ResumeRequest) (_ *googl
 	af := logrus.Fields{
 		"tid": req.ID,
 	}
-	beginActivity(activity, af)
-	defer func() { endActivity(activity, af, err) }()
+	log := beginActivity(activity, af)
+	defer func() { endActivity(log, activity, err) }()
 
 	r, e := s.resumeInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -175,8 +187,8 @@ func (s *service) Checkpoint(ctx context.Context, req *task.CheckpointTaskReques
 		"tid":  req.ID,
 		"path": req.Path,
 	}
-	beginActivity(activity, af)
-	defer func() { endActivity(activity, af, err) }()
+	log := beginActivity(activity, af)
+	defer func() { endActivity(log, activity, err) }()
 
 	r, e := s.checkpointInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -191,8 +203,8 @@ func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *google_pr
 		"signal": req.Signal,
 		"all":    req.All,
 	}
-	beginActivity(activity, af)
-	defer func() { endActivity(activity, af, err) }()
+	log := beginActivity(activity, af)
+	defer func() { endActivity(log, activity, err) }()
 
 	r, e := s.killInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -209,8 +221,8 @@ func (s *service) Exec(ctx context.Context, req *task.ExecProcessRequest) (_ *go
 		"stdout":   req.Stdout,
 		"stderr":   req.Stderr,
 	}
-	beginActivity(activity, af)
-	defer func() { endActivity(activity, af, err) }()
+	log := beginActivity(activity, af)
+	defer func() { endActivity(log, activity, err) }()
 
 	r, e := s.execInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -227,8 +239,8 @@ func (s *service) DiagExecInHost(ctx context.Context, req *shimdiag.ExecProcessR
 		"stdout":   req.Stdout,
 		"stderr":   req.Stderr,
 	}
-	beginActivity(activity, af)
-	defer func() { endActivity(activity, af, err) }()
+	log := beginActivity(activity, af)
+	defer func() { endActivity(log, activity, err) }()
 
 	r, e := s.diagExecInHostInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -243,8 +255,8 @@ func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ 
 		"width":  req.Width,
 		"height": req.Height,
 	}
-	beginActivity(activity, af)
-	defer func() { endActivity(activity, af, err) }()
+	log := beginActivity(activity, af)
+	defer func() { endActivity(log, activity, err) }()
 
 	r, e := s.resizePtyInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -258,8 +270,8 @@ func (s *service) CloseIO(ctx context.Context, req *task.CloseIORequest) (_ *goo
 		"eid":   req.ExecID,
 		"stdin": req.Stdin,
 	}
-	beginActivity(activity, af)
-	defer func() { endActivity(activity, af, err) }()
+	log := beginActivity(activity, af)
+	defer func() { endActivity(log, activity, err) }()
 
 	r, e := s.closeIOInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -271,22 +283,26 @@ func (s *service) Update(ctx context.Context, req *task.UpdateTaskRequest) (_ *g
 	af := logrus.Fields{
 		"tid": req.ID,
 	}
-	beginActivity(activity, af)
-	defer func() { endActivity(activity, af, err) }()
+	log := beginActivity(activity, af)
+	defer func() { endActivity(log, activity, err) }()
 
 	r, e := s.updateInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
-func (s *service) Wait(ctx context.Context, req *task.WaitRequest) (_ *task.WaitResponse, err error) {
+func (s *service) Wait(ctx context.Context, req *task.WaitRequest) (resp *task.WaitResponse, err error) {
 	defer panicRecover()
 	const activity = "Wait"
 	af := logrus.Fields{
 		"tid": req.ID,
 		"eid": req.ExecID,
 	}
-	beginActivity(activity, af)
-	defer func() { endActivity(activity, af, err) }()
+	log := beginActivity(activity, af)
+	defer func() {
+		log.Data["exitStatus"] = resp.ExitStatus
+		log.Data["exitedAt"] = resp.ExitedAt
+		endActivity(log, activity, err)
+	}()
 
 	r, e := s.waitInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -298,21 +314,26 @@ func (s *service) Stats(ctx context.Context, req *task.StatsRequest) (_ *task.St
 	af := logrus.Fields{
 		"tid": req.ID,
 	}
-	beginActivity(activity, af)
-	defer func() { endActivity(activity, af, err) }()
+	log := beginActivity(activity, af)
+	defer func() { endActivity(log, activity, err) }()
 
 	r, e := s.statsInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
-func (s *service) Connect(ctx context.Context, req *task.ConnectRequest) (_ *task.ConnectResponse, err error) {
+func (s *service) Connect(ctx context.Context, req *task.ConnectRequest) (resp *task.ConnectResponse, err error) {
 	defer panicRecover()
 	const activity = "Connect"
 	af := logrus.Fields{
 		"tid": req.ID,
 	}
-	beginActivity(activity, af)
-	defer func() { endActivity(activity, af, err) }()
+	log := beginActivity(activity, af)
+	defer func() {
+		log.Data["shimPid"] = resp.ShimPid
+		log.Data["taskPid"] = resp.TaskPid
+		log.Data["version"] = resp.Version
+		endActivity(log, activity, err)
+	}()
 
 	r, e := s.connectInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -325,8 +346,8 @@ func (s *service) Shutdown(ctx context.Context, req *task.ShutdownRequest) (_ *g
 		"tid": req.ID,
 		"now": req.Now,
 	}
-	beginActivity(activity, af)
-	defer func() { endActivity(activity, af, err) }()
+	log := beginActivity(activity, af)
+	defer func() { endActivity(log, activity, err) }()
 
 	r, e := s.shutdownInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -336,8 +357,8 @@ func (s *service) DiagStacks(ctx context.Context, req *shimdiag.StacksRequest) (
 	defer panicRecover()
 	const activity = "DiagStacks"
 	af := logrus.Fields{}
-	beginActivity(activity, af)
-	defer func() { endActivity(activity, af, err) }()
+	log := beginActivity(activity, af)
+	defer func() { endActivity(log, activity, err) }()
 
 	buf := make([]byte, 4096)
 	for {
