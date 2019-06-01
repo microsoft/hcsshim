@@ -3,7 +3,7 @@ module github.com/Microsoft/hcsshim
 go 1.12
 
 require (
-	github.com/Microsoft/go-winio v0.4.13-0.20190509182014-01fe22a8b81b
+	github.com/Microsoft/go-winio v0.4.13-0.20190516165658-12afdbf8b879
 	github.com/blang/semver v3.1.0+incompatible // indirect
 	github.com/containerd/console v0.0.0-20180822173158-c12b1e7919c1
 	github.com/containerd/containerd v0.0.0-20190214164719-faec567304bb
