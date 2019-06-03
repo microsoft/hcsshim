@@ -1,7 +1,7 @@
 package guestrequest
 
 import (
-	"github.com/Microsoft/hcsshim/internal/schema2"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 )
 
 // Arguably, many of these (at least CombinedLayers) should have been generated
@@ -96,7 +96,7 @@ type RS4NetworkModifyRequest struct {
 // SignalProcessOptionsLCOW is the options passed to LCOW to signal a given
 // process.
 type SignalProcessOptionsLCOW struct {
-	Signal int `json:,omitempty`
+	Signal int `json:",omitempty"`
 }
 
 type SignalValueWCOW string
