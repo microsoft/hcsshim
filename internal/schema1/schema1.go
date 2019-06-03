@@ -63,7 +63,7 @@ type MappedVirtualDisk struct {
 	CreateInUtilityVM bool   `json:",omitempty"`
 	ReadOnly          bool   `json:",omitempty"`
 	Cache             string `json:",omitempty"` // "" (Unspecified); "Disabled"; "Enabled"; "Private"; "PrivateAllowSharing"
-	AttachOnly        bool   `json:",omitempty:`
+	AttachOnly        bool   `json:",omitempty"`
 }
 
 // AssignedDevice represents a device that has been directly assigned to a container
