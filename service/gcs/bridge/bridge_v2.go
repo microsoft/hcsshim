@@ -35,11 +35,10 @@ var capabilities = prot.GcsCapabilities{
 
 // negotiateProtocolV2 was introduced in v4 so will not be called with a minimum
 // lower than that.
-func (b *Bridge) negotiateProtocolV2(w ResponseWriter, r *Request) {
+func (b *Bridge) negotiateProtocolV2(r *Request) (RequestResponse, error) {
 	var request prot.NegotiateProtocol
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message))
-		return
+		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -50,8 +49,7 @@ func (b *Bridge) negotiateProtocolV2(w ResponseWriter, r *Request) {
 	}).Info("opengcs::bridge::negotiateProtocolV2")
 
 	if request.MaximumVersion < uint32(prot.PvV4) || uint32(prot.PvMax) < request.MinimumVersion {
-		w.Error(request.ActivityID, gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion))
-		return
+		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeUnsupportedProtocolVersion)
 	}
 
 	min := func(x, y uint32) uint32 {
@@ -63,27 +61,22 @@ func (b *Bridge) negotiateProtocolV2(w ResponseWriter, r *Request) {
 
 	major := min(uint32(prot.PvMax), request.MaximumVersion)
 
-	response := &prot.NegotiateProtocolResponse{
-		MessageResponseBase: &prot.MessageResponseBase{
-			ActivityID: request.ActivityID,
-		},
-		Version:      major,
-		Capabilities: capabilities,
-	}
-
 	// Set our protocol selected version before return.
 	b.protVer = prot.ProtocolVersion(major)
-	w.Write(response)
+
+	return &prot.NegotiateProtocolResponse{
+		Version:      major,
+		Capabilities: capabilities,
+	}, nil
 }
 
 // createContainerV2 creates a container based on the settings passed in `r`.
 //
 // This is allowed only for protocol version 4+, schema version 2.1+
-func (b *Bridge) createContainerV2(w ResponseWriter, r *Request) {
+func (b *Bridge) createContainerV2(r *Request) (RequestResponse, error) {
 	var request prot.ContainerCreate
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message))
-		return
+		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -93,32 +86,21 @@ func (b *Bridge) createContainerV2(w ResponseWriter, r *Request) {
 
 	var settingsV2 prot.VMHostedContainerSettingsV2
 	if err := commonutils.UnmarshalJSONWithHresult([]byte(request.ContainerConfig), &settingsV2); err != nil {
-		w.Error(request.ActivityID, errors.Wrapf(err, "failed to unmarshal JSON for ContainerConfig \"%s\"", request.ContainerConfig))
-		return
+		return nil, errors.Wrapf(err, "failed to unmarshal JSON for ContainerConfig \"%s\"", request.ContainerConfig)
 	}
 
 	if settingsV2.SchemaVersion.Cmp(prot.SchemaVersion{Major: 2, Minor: 1}) < 0 {
-		w.Error(
-			request.ActivityID,
-			gcserr.WrapHresult(
-				errors.Errorf("invalid schema version: %v", settingsV2.SchemaVersion),
-				gcserr.HrVmcomputeInvalidJSON))
-		return
+		return nil, gcserr.WrapHresult(
+			errors.Errorf("invalid schema version: %v", settingsV2.SchemaVersion),
+			gcserr.HrVmcomputeInvalidJSON)
 	}
 
 	c, err := b.hostState.CreateContainer(request.ContainerID, &settingsV2)
 	if err != nil {
-		w.Error(request.ActivityID, err)
-		return
+		return nil, err
 	}
 	waitFn := func() prot.NotificationType {
 		return c.Wait()
-	}
-
-	response := &prot.ContainerCreateResponse{
-		MessageResponseBase: &prot.MessageResponseBase{
-			ActivityID: request.ActivityID,
-		},
 	}
 
 	go func() {
@@ -136,7 +118,7 @@ func (b *Bridge) createContainerV2(w ResponseWriter, r *Request) {
 		b.PublishNotification(notification)
 	}()
 
-	w.Write(response)
+	return &prot.ContainerCreateResponse{}, nil
 }
 
 // startContainerV2 doesn't have a great correlation to LCOW. On Windows this is
@@ -144,13 +126,12 @@ func (b *Bridge) createContainerV2(w ResponseWriter, r *Request) {
 // wait until the exec process of the init process to actually issue the start.
 //
 // This is allowed only for protocol version 4+, schema version 2.1+
-func (b *Bridge) startContainerV2(w ResponseWriter, r *Request) {
+func (b *Bridge) startContainerV2(r *Request) (RequestResponse, error) {
 	// This is just a noop, but needs to be handled so that an error isn't
 	// returned to the HCS.
 	var request prot.MessageBase
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
-		return
+		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -158,10 +139,7 @@ func (b *Bridge) startContainerV2(w ResponseWriter, r *Request) {
 		"cid":        request.ContainerID,
 	}).Info("opengcs::bridge::startContainerV2")
 
-	response := &prot.MessageResponseBase{
-		ActivityID: request.ActivityID,
-	}
-	w.Write(response)
+	return &prot.MessageResponseBase{}, nil
 }
 
 // execProcessV2 is used to execute three types of processes in the guest.
@@ -179,11 +157,10 @@ func (b *Bridge) startContainerV2(w ResponseWriter, r *Request) {
 // pid namespace.
 //
 // This is allowed only for protocol version 4+, schema version 2.1+
-func (b *Bridge) execProcessV2(w ResponseWriter, r *Request) {
+func (b *Bridge) execProcessV2(r *Request) (RequestResponse, error) {
 	var request prot.ContainerExecuteProcess
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
-		return
+		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -195,8 +172,7 @@ func (b *Bridge) execProcessV2(w ResponseWriter, r *Request) {
 	// ExecuteProcessInfo struct.
 	var params prot.ProcessParameters
 	if err := commonutils.UnmarshalJSONWithHresult([]byte(request.Settings.ProcessParameters), &params); err != nil {
-		w.Error(request.ActivityID, errors.Wrapf(err, "failed to unmarshal JSON for ProcessParameters \"%s\"", request.Settings.ProcessParameters))
-		return
+		return nil, errors.Wrapf(err, "failed to unmarshal JSON for ProcessParameters \"%s\"", request.Settings.ProcessParameters)
 	}
 
 	var conSettings stdio.ConnectionSettings
@@ -225,17 +201,12 @@ func (b *Bridge) execProcessV2(w ResponseWriter, r *Request) {
 	}
 
 	if err != nil {
-		w.Error(request.ActivityID, err)
-		return
+		return nil, err
 	}
 
-	response := &prot.ContainerExecuteProcessResponse{
-		MessageResponseBase: &prot.MessageResponseBase{
-			ActivityID: request.ActivityID,
-		},
+	return &prot.ContainerExecuteProcessResponse{
 		ProcessID: uint32(pid),
-	}
-	w.Write(response)
+	}, nil
 }
 
 // killContainerV2 is a user forced terminate of the container and all processes
@@ -243,8 +214,8 @@ func (b *Bridge) execProcessV2(w ResponseWriter, r *Request) {
 // all exec'd processes.
 //
 // This is allowed only for protocol version 4+, schema version 2.1+
-func (b *Bridge) killContainerV2(w ResponseWriter, r *Request) {
-	b.signalContainer(w, r, unix.SIGKILL)
+func (b *Bridge) killContainerV2(r *Request) (RequestResponse, error) {
+	return b.signalContainer(r, unix.SIGKILL)
 }
 
 // shutdownContainerV2 is a user requested shutdown of the container and all
@@ -252,18 +223,17 @@ func (b *Bridge) killContainerV2(w ResponseWriter, r *Request) {
 // process and all exec'd processes.
 //
 // This is allowed only for protocol version 4+, schema version 2.1+
-func (b *Bridge) shutdownContainerV2(w ResponseWriter, r *Request) {
-	b.signalContainer(w, r, unix.SIGTERM)
+func (b *Bridge) shutdownContainerV2(r *Request) (RequestResponse, error) {
+	return b.signalContainer(r, unix.SIGTERM)
 }
 
 // signalContainerV2 is not a handler func. This is because the actual signal is
 // implied based on the message type of either `killContainerV2` or
 // `shutdownContainerV2`.
-func (b *Bridge) signalContainerV2(w ResponseWriter, r *Request, signal syscall.Signal) {
+func (b *Bridge) signalContainerV2(r *Request, signal syscall.Signal) (RequestResponse, error) {
 	var request prot.MessageBase
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
-		return
+		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
 	}
 
 	log := logrus.WithFields(logrus.Fields{
@@ -282,32 +252,25 @@ func (b *Bridge) signalContainerV2(w ResponseWriter, r *Request, signal syscall.
 		// This is a destructive call. We do not respond to the HCS
 		b.quitChan <- true
 		b.hostState.Shutdown()
-		return
+	} else {
+		c, err := b.hostState.GetContainer(request.ContainerID)
+		if err != nil {
+			return nil, err
+		}
+
+		err = c.Kill(signal)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	c, err := b.hostState.GetContainer(request.ContainerID)
-	if err != nil {
-		w.Error(request.ActivityID, err)
-		return
-	}
-
-	err = c.Kill(signal)
-	if err != nil {
-		w.Error(request.ActivityID, err)
-		return
-	}
-
-	response := &prot.MessageResponseBase{
-		ActivityID: request.ActivityID,
-	}
-	w.Write(response)
+	return &prot.MessageResponseBase{}, nil
 }
 
-func (b *Bridge) signalProcessV2(w ResponseWriter, r *Request) {
+func (b *Bridge) signalProcessV2(r *Request) (RequestResponse, error) {
 	var request prot.ContainerSignalProcess
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
-		return
+		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -319,14 +282,12 @@ func (b *Bridge) signalProcessV2(w ResponseWriter, r *Request) {
 
 	c, err := b.hostState.GetContainer(request.ContainerID)
 	if err != nil {
-		w.Error(request.ActivityID, err)
-		return
+		return nil, err
 	}
 
 	p, err := c.GetProcess(request.ProcessID)
 	if err != nil {
-		w.Error(request.ActivityID, err)
-		return
+		return nil, err
 	}
 
 	var signal syscall.Signal
@@ -336,21 +297,16 @@ func (b *Bridge) signalProcessV2(w ResponseWriter, r *Request) {
 		signal = syscall.Signal(request.Options.Signal)
 	}
 	if err := p.Kill(signal); err != nil {
-		w.Error(request.ActivityID, err)
-		return
+		return nil, err
 	}
 
-	response := &prot.MessageResponseBase{
-		ActivityID: request.ActivityID,
-	}
-	w.Write(response)
+	return &prot.MessageResponseBase{}, nil
 }
 
-func (b *Bridge) getPropertiesV2(w ResponseWriter, r *Request) {
+func (b *Bridge) getPropertiesV2(r *Request) (RequestResponse, error) {
 	var request prot.ContainerGetProperties
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
-		return
+		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -360,19 +316,16 @@ func (b *Bridge) getPropertiesV2(w ResponseWriter, r *Request) {
 
 	var properties *prot.Properties
 	if request.ContainerID == hcsv2.UVMContainerID {
-		w.Error(request.ActivityID, errors.New("getPropertiesV2 is not supported against the UVM handle"))
-		return
+		return nil, errors.New("getPropertiesV2 is not supported against the UVM")
 	}
 	c, err := b.hostState.GetContainer(request.ContainerID)
 	if err != nil {
-		w.Error(request.ActivityID, err)
-		return
+		return nil, err
 	}
 
 	pids, err := c.GetAllProcessPids()
 	if err != nil {
-		w.Error(request.ActivityID, err)
-		return
+		return nil, err
 	}
 	properties = &prot.Properties{
 		ProcessList: make([]prot.ProcessDetails, len(pids)),
@@ -386,25 +339,19 @@ func (b *Bridge) getPropertiesV2(w ResponseWriter, r *Request) {
 		var err error
 		propertyJSON, err = json.Marshal(properties)
 		if err != nil {
-			w.Error(request.ActivityID, errors.Wrapf(err, "failed to marshal properties into JSON: %v", properties))
-			return
+			return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%+v\"", properties)
 		}
 	}
 
-	response := &prot.ContainerGetPropertiesResponse{
-		MessageResponseBase: &prot.MessageResponseBase{
-			ActivityID: request.ActivityID,
-		},
+	return &prot.ContainerGetPropertiesResponse{
 		Properties: string(propertyJSON),
-	}
-	w.Write(response)
+	}, nil
 }
 
-func (b *Bridge) waitOnProcessV2(w ResponseWriter, r *Request) {
+func (b *Bridge) waitOnProcessV2(r *Request) (RequestResponse, error) {
 	var request prot.ContainerWaitForProcess
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
-		return
+		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -424,47 +371,37 @@ func (b *Bridge) waitOnProcessV2(w ResponseWriter, r *Request) {
 		var err error
 		exitCodeChan, doneChan, err = b.coreint.WaitProcess(int(request.ProcessID))
 		if err != nil {
-			w.Error(request.ActivityID, err)
-			return
+			return nil, err
 		}
 	} else {
 		c, err := b.hostState.GetContainer(request.ContainerID)
 		if err != nil {
-			w.Error(request.ActivityID, err)
-			return
+			return nil, err
 		}
 		p, err := c.GetProcess(request.ProcessID)
 		if err != nil {
-			w.Error(request.ActivityID, err)
-			return
+			return nil, err
 		}
 		exitCodeChan, doneChan = p.Wait()
 	}
 
+	// If we timed out or if we got the exit code. Acknowledge we no longer want to wait.
 	defer close(doneChan)
 
 	select {
 	case exitCode := <-exitCodeChan:
-		response := &prot.ContainerWaitForProcessResponse{
-			MessageResponseBase: &prot.MessageResponseBase{
-				ActivityID: request.ActivityID,
-			},
+		return &prot.ContainerWaitForProcessResponse{
 			ExitCode: uint32(exitCode),
-		}
-		w.Write(response)
+		}, nil
 	case <-time.After(time.Duration(request.TimeoutInMs) * time.Millisecond):
-		w.Error(request.ActivityID, gcserr.NewHresultError(gcserr.HvVmcomputeTimeout))
+		return nil, gcserr.NewHresultError(gcserr.HvVmcomputeTimeout)
 	}
-
-	// If we timed out or if we got the exit code. Acknowledge we no longer want to wait.
-	doneChan <- true
 }
 
-func (b *Bridge) resizeConsoleV2(w ResponseWriter, r *Request) {
+func (b *Bridge) resizeConsoleV2(r *Request) (RequestResponse, error) {
 	var request prot.ContainerResizeConsole
 	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		w.Error("", errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
-		return
+		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -477,37 +414,26 @@ func (b *Bridge) resizeConsoleV2(w ResponseWriter, r *Request) {
 
 	c, err := b.hostState.GetContainer(request.ContainerID)
 	if err != nil {
-		w.Error(request.ActivityID, err)
-		return
+		return nil, err
 	}
 
 	p, err := c.GetProcess(request.ProcessID)
 	if err != nil {
-		w.Error(request.ActivityID, err)
-		return
+		return nil, err
 	}
 
 	err = p.ResizeConsole(request.Height, request.Width)
 	if err != nil {
-		w.Error(request.ActivityID, err)
-		return
+		return nil, err
 	}
 
-	response := &prot.MessageResponseBase{
-		ActivityID: request.ActivityID,
-	}
-	w.Write(response)
+	return &prot.MessageResponseBase{}, nil
 }
 
-func (b *Bridge) modifySettingsV2(w ResponseWriter, r *Request) {
+func (b *Bridge) modifySettingsV2(r *Request) (RequestResponse, error) {
 	request, err := prot.UnmarshalContainerModifySettings(r.Message)
 	if err != nil {
-		aid := ""
-		if request != nil {
-			aid = request.ActivityID
-		}
-		w.Error(aid, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message))
-		return
+		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -516,18 +442,13 @@ func (b *Bridge) modifySettingsV2(w ResponseWriter, r *Request) {
 	}).Info("opengcs::bridge::modifySettingsV2")
 
 	if request.ContainerID != hcsv2.UVMContainerID {
-		w.Error(request.ActivityID, errors.New("V2 Modify request not supported on anything but UVM"))
-		return
+		return nil, errors.New("V2 Modify request not supported on anything but UVM")
 	}
 
 	err = b.hostState.ModifyHostSettings(request.Request.(*prot.ModifySettingRequest))
 	if err != nil {
-		w.Error(request.ActivityID, err)
-		return
+		return nil, err
 	}
 
-	response := &prot.MessageResponseBase{
-		ActivityID: request.ActivityID,
-	}
-	w.Write(response)
+	return &prot.MessageResponseBase{}, nil
 }
