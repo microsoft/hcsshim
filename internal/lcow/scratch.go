@@ -78,11 +78,11 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 	}).Debug("hcsshim::CreateLCOWScratch device")
 
 	// Validate /sys/bus/scsi/devices/C:0:0:L exists as a directory
-
+	devicePath := fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d/block", controller, lun)
 	testdCtx, cancel := context.WithTimeout(context.TODO(), timeout.TestDRetryLoop)
 	defer cancel()
 	for {
-		cmd := hcsoci.CommandContext(testdCtx, lcowUVM, "test", "-d", fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d", controller, lun))
+		cmd := hcsoci.CommandContext(testdCtx, lcowUVM, "test", "-d", devicePath)
 		err := cmd.Run()
 		if err == nil {
 			break
@@ -96,7 +96,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 
 	// Get the device from under the block subdirectory by doing a simple ls. This will come back as (eg) `sda`
 	lsCtx, cancel := context.WithTimeout(context.TODO(), timeout.ExternalCommandToStart)
-	cmd := hcsoci.CommandContext(lsCtx, lcowUVM, "ls", fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d/block", controller, lun))
+	cmd := hcsoci.CommandContext(lsCtx, lcowUVM, "ls", devicePath)
 	lsOutput, err := cmd.Output()
 	cancel()
 	if err != nil {
