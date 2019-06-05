@@ -168,7 +168,7 @@ func (b *Bridge) startContainerV2(w ResponseWriter, r *Request) {
 //
 // 1. HostProcess. This is a process in the Host pid namespace that runs as
 // root. It is signified by either `request.IsExternal` or `request.ContainerID
-// == UVMID`.
+// == hcsv2.UVMContainerID`.
 //
 // 2. Container Init process. This is the init process of the created container.
 // We use exec for this instead of `StartContainer` because the protocol does
@@ -414,19 +414,33 @@ func (b *Bridge) waitOnProcessV2(w ResponseWriter, r *Request) {
 		"timeout-ms": request.TimeoutInMs,
 	}).Info("opengcs::bridge::waitOnProcessV2")
 
-	c, err := b.hostState.GetContainer(request.ContainerID)
-	if err != nil {
-		w.Error(request.ActivityID, err)
-		return
+	var exitCodeChan <-chan int
+	var doneChan chan<- bool
+
+	// TODO: JTERRY75 - Move to hostState.ExecExternalProcess so we dont have a
+	// dependency on gcscore.
+	if request.ContainerID == hcsv2.UVMContainerID {
+		// Pull the process from gcsCore
+		var err error
+		exitCodeChan, doneChan, err = b.coreint.WaitProcess(int(request.ProcessID))
+		if err != nil {
+			w.Error(request.ActivityID, err)
+			return
+		}
+	} else {
+		c, err := b.hostState.GetContainer(request.ContainerID)
+		if err != nil {
+			w.Error(request.ActivityID, err)
+			return
+		}
+		p, err := c.GetProcess(request.ProcessID)
+		if err != nil {
+			w.Error(request.ActivityID, err)
+			return
+		}
+		exitCodeChan, doneChan = p.Wait()
 	}
 
-	p, err := c.GetProcess(request.ProcessID)
-	if err != nil {
-		w.Error(request.ActivityID, err)
-		return
-	}
-
-	exitCodeChan, doneChan := p.Wait()
 	defer close(doneChan)
 
 	select {
