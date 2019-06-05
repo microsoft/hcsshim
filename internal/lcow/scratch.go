@@ -84,7 +84,6 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 	for {
 		cmd := hcsoci.CommandContext(testdCtx, lcowUVM, "test", "-d", fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d", controller, lun))
 		err := cmd.Run()
-		cancel()
 		if err == nil {
 			break
 		}
@@ -93,6 +92,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		}
 		time.Sleep(time.Millisecond * 10)
 	}
+	cancel()
 
 	// Get the device from under the block subdirectory by doing a simple ls. This will come back as (eg) `sda`
 	lsCtx, cancel := context.WithTimeout(context.TODO(), timeout.ExternalCommandToStart)
