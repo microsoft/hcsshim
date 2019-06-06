@@ -641,16 +641,21 @@ type ErrorRecord struct {
 // GCS to the HCS except for ContainerNotification.
 type MessageResponseBase struct {
 	Result       int32
-	ActivityID   string        `json:"ActivityId"`
+	ActivityID   string        `json:"ActivityId,omitempty"`
 	ErrorMessage string        `json:",omitempty"` // Only used by hcsshim external bridge
 	ErrorRecords []ErrorRecord `json:",omitempty"`
+}
+
+// Base returns the response base by reference.
+func (mrp *MessageResponseBase) Base() *MessageResponseBase {
+	return mrp
 }
 
 // NegotiateProtocolResponse is the message to the HCS responding to a
 // NegotiateProtocol message. It specifies the prefered protocol version and
 // available capabilities of the GCS.
 type NegotiateProtocolResponse struct {
-	*MessageResponseBase
+	MessageResponseBase
 	Version      uint32
 	Capabilities GcsCapabilities
 }
@@ -660,7 +665,7 @@ type NegotiateProtocolResponse struct {
 // for protocol versions 3 and lower, returning protocol version information to
 // the HCS.
 type ContainerCreateResponse struct {
-	*MessageResponseBase
+	MessageResponseBase
 	SelectedVersion         string `json:",omitempty"`
 	SelectedProtocolVersion uint32
 }
@@ -668,14 +673,14 @@ type ContainerCreateResponse struct {
 // ContainerExecuteProcessResponse is the message to the HCS responding to a
 // ContainerExecuteProcess message. It provides back the process's pid.
 type ContainerExecuteProcessResponse struct {
-	*MessageResponseBase
+	MessageResponseBase
 	ProcessID uint32 `json:"ProcessId"`
 }
 
 // ContainerWaitForProcessResponse is the message to the HCS responding to a
 // ContainerWaitForProcess message. It is only sent when the process has exited.
 type ContainerWaitForProcessResponse struct {
-	*MessageResponseBase
+	MessageResponseBase
 	ExitCode uint32
 }
 
@@ -683,7 +688,7 @@ type ContainerWaitForProcessResponse struct {
 // ContainerGetProperties message. It contains a string representing the
 // properties requested.
 type ContainerGetPropertiesResponse struct {
-	*MessageResponseBase
+	MessageResponseBase
 	Properties string
 }
 
