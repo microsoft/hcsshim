@@ -57,7 +57,7 @@ func testSCSIAddRemove(t *testing.T, u *uvm.UtilityVM, pathPrefix string, operat
 		if operatingSystem == "windows" {
 			tempDir = testutilities.CreateWCOWBlankRWLayer(t, wcowImageLayerFolders)
 		} else {
-			tempDir = testutilities.CreateLCOWBlankRWLayer(t, u.ID())
+			tempDir = testutilities.CreateLCOWBlankRWLayer(t)
 		}
 		defer os.RemoveAll(tempDir)
 		disks[i] = filepath.Join(tempDir, `sandbox.vhdx`)
@@ -134,7 +134,7 @@ func TestParallelScsiOps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create tmpdir for test: %v", err)
 	}
-	if err := lcow.CreateScratch(u, filepath.Join(tempDir, "sandbox.vhdx"), lcow.DefaultScratchSizeGB, "", u.ID()); err != nil {
+	if err := lcow.CreateScratch(u, filepath.Join(tempDir, "sandbox.vhdx"), lcow.DefaultScratchSizeGB, ""); err != nil {
 		t.Fatalf("failed to create EXT4 scratch for LCOW test cases: %s", err)
 	}
 	defer func() {

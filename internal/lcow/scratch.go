@@ -3,6 +3,7 @@ package lcow
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -16,30 +17,26 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// CreateScratch uses a utility VM to create an empty scratch disk of a requested size.
-// It has a caching capability. If the cacheFile exists, and the request is for a default
-// size, a copy of that is made to the target. If the size is non-default, or the cache file
-// does not exist, it uses a utility VM to create target. It is the responsibility of the
-// caller to synchronise simultaneous attempts to create the cache file.
-func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cacheFile string, vmID string) error {
+// CreateScratch uses a utility VM to create an empty scratch disk of a
+// requested size. It has a caching capability. If the cacheFile exists, and the
+// request is for a default size, a copy of that is made to the target. If the
+// size is non-default, or the cache file does not exist, it uses a utility VM
+// to create target. It is the responsibility of the caller to synchronise
+// simultaneous attempts to create the cache file.
+func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cacheFile string) error {
 	if lcowUVM == nil {
 		return fmt.Errorf("no uvm")
 	}
 
 	if lcowUVM.OS() != "linux" {
-		return fmt.Errorf("CreateLCOWScratch requires a linux utility VM to operate!")
-	}
-
-	// Smallest we can accept is the default scratch size as we can't size down, only expand.
-	if sizeGB < DefaultScratchSizeGB {
-		sizeGB = DefaultScratchSizeGB
+		return errors.New("lcow::CreateScratch requires a linux utility VM to operate")
 	}
 
 	logrus.WithFields(logrus.Fields{
 		"dest":   destFile,
 		"sizeGB": sizeGB,
 		"cache":  cacheFile,
-	}).Debug("hcsshim::CreateLCOWScratch")
+	}).Debug("lcow::CreateScratch opts")
 
 	// Retrieve from cache if the default size and already on disk
 	if cacheFile != "" && sizeGB == DefaultScratchSizeGB {
@@ -50,7 +47,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 			logrus.WithFields(logrus.Fields{
 				"dest":  destFile,
 				"cache": cacheFile,
-			}).Debug("hcsshim::CreateLCOWScratch fulfilled from cache")
+			}).Debug("lcow::CreateScratch copied from cache")
 			return nil
 		}
 	}
@@ -75,7 +72,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		"dest":       destFile,
 		"controller": controller,
 		"lun":        lun,
-	}).Debug("hcsshim::CreateLCOWScratch device")
+	}).Debug("lcow::CreateScratch device attached")
 
 	// Validate /sys/bus/scsi/devices/C:0:0:L exists as a directory
 	devicePath := fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d/block", controller, lun)
@@ -106,7 +103,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 	logrus.WithFields(logrus.Fields{
 		"dest":   destFile,
 		"device": device,
-	}).Debug("hcsshim::CreateExt4Vhdx")
+	}).Debug("lcow::CreateScratch device guest location")
 
 	// Format it ext4
 	mkfsCtx, cancel := context.WithTimeout(context.TODO(), timeout.ExternalCommandToStart)
@@ -132,7 +129,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		}
 	}
 
-	logrus.WithField("dest", destFile).Debug("hcsshim::CreateLCOWScratch: created (non-cache)")
+	logrus.WithField("dest", destFile).Debug("lcow::CreateScratch created (non-cache)")
 	return nil
 }
 
