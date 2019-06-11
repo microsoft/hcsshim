@@ -72,9 +72,11 @@ func (s *service) State(ctx context.Context, req *task.StateRequest) (resp *task
 	}
 	log := beginActivity(activity, af)
 	defer func() {
-		log.Data["status"] = resp.Status.String()
-		log.Data["exitStatus"] = resp.ExitStatus
-		log.Data["exitedAt"] = resp.ExitedAt
+		if resp != nil {
+			log.Data["status"] = resp.Status.String()
+			log.Data["exitStatus"] = resp.ExitStatus
+			log.Data["exitedAt"] = resp.ExitedAt
+		}
 		endActivity(log, activity, err)
 	}()
 
@@ -97,7 +99,9 @@ func (s *service) Create(ctx context.Context, req *task.CreateTaskRequest) (resp
 		"parentcheckpoint": req.ParentCheckpoint,
 	})
 	defer func() {
-		log.Data["pid"] = resp.Pid
+		if resp != nil {
+			log.Data["pid"] = resp.Pid
+		}
 		endActivity(log, activity, err)
 	}()
 
@@ -114,7 +118,9 @@ func (s *service) Start(ctx context.Context, req *task.StartRequest) (resp *task
 	}
 	log := beginActivity(activity, af)
 	defer func() {
-		log.Data["pid"] = resp.Pid
+		if resp != nil {
+			log.Data["pid"] = resp.Pid
+		}
 		endActivity(log, activity, err)
 	}()
 
@@ -131,9 +137,11 @@ func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (resp *ta
 	}
 	log := beginActivity(activity, af)
 	defer func() {
-		log.Data["pid"] = resp.Pid
-		log.Data["exitStatus"] = resp.ExitStatus
-		log.Data["exitedAt"] = resp.ExitedAt
+		if resp != nil {
+			log.Data["pid"] = resp.Pid
+			log.Data["exitStatus"] = resp.ExitStatus
+			log.Data["exitedAt"] = resp.ExitedAt
+		}
 		endActivity(log, activity, err)
 	}()
 
@@ -299,8 +307,10 @@ func (s *service) Wait(ctx context.Context, req *task.WaitRequest) (resp *task.W
 	}
 	log := beginActivity(activity, af)
 	defer func() {
-		log.Data["exitStatus"] = resp.ExitStatus
-		log.Data["exitedAt"] = resp.ExitedAt
+		if resp != nil {
+			log.Data["exitStatus"] = resp.ExitStatus
+			log.Data["exitedAt"] = resp.ExitedAt
+		}
 		endActivity(log, activity, err)
 	}()
 
@@ -329,9 +339,11 @@ func (s *service) Connect(ctx context.Context, req *task.ConnectRequest) (resp *
 	}
 	log := beginActivity(activity, af)
 	defer func() {
-		log.Data["shimPid"] = resp.ShimPid
-		log.Data["taskPid"] = resp.TaskPid
-		log.Data["version"] = resp.Version
+		if resp != nil {
+			log.Data["shimPid"] = resp.ShimPid
+			log.Data["taskPid"] = resp.TaskPid
+			log.Data["version"] = resp.Version
+		}
 		endActivity(log, activity, err)
 	}()
 
