@@ -41,18 +41,17 @@ func CreateWCOWBlankRWLayer(t *testing.T, imageLayers []string) string {
 	return tempDir
 }
 
-// CreateLCOWBlankRWLayer uses an LCOW utility VM to create a blank
-// VHDX and format it ext4. If vmID is supplied, it grants access to the
-// destination file. This can then be used as a scratch space for a container,
-// or for a "service VM".
-func CreateLCOWBlankRWLayer(t *testing.T, vmID string) string {
+// CreateLCOWBlankRWLayer uses an LCOW utility VM to create a blank VHDX and
+// format it ext4. This can then be used as a scratch space for a container, or
+// for a "service VM".
+func CreateLCOWBlankRWLayer(t *testing.T) string {
 	if lcowGlobalSVM == nil {
 		lcowGlobalSVM = CreateLCOWUVM(t, lcowGlobalSVMID)
 		lcowCacheScratchFile = filepath.Join(CreateTempDir(t), "sandbox.vhdx")
 	}
 	tempDir := CreateTempDir(t)
 
-	if err := lcow.CreateScratch(lcowGlobalSVM, filepath.Join(tempDir, "sandbox.vhdx"), lcow.DefaultScratchSizeGB, lcowCacheScratchFile, vmID); err != nil {
+	if err := lcow.CreateScratch(lcowGlobalSVM, filepath.Join(tempDir, "sandbox.vhdx"), lcow.DefaultScratchSizeGB, lcowCacheScratchFile); err != nil {
 		t.Fatalf("failed to create EXT4 scratch for LCOW test cases: %s", err)
 	}
 	return tempDir

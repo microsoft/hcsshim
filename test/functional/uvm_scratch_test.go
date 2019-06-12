@@ -24,7 +24,7 @@ func TestScratchCreateLCOW(t *testing.T) {
 	destOne := filepath.Join(tempDir, "destone.vhdx")
 	destTwo := filepath.Join(tempDir, "desttwo.vhdx")
 
-	if err := lcow.CreateScratch(firstUVM, destOne, lcow.DefaultScratchSizeGB, cacheFile, ""); err != nil {
+	if err := lcow.CreateScratch(firstUVM, destOne, lcow.DefaultScratchSizeGB, cacheFile); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(destOne); err != nil {
@@ -38,7 +38,7 @@ func TestScratchCreateLCOW(t *testing.T) {
 	defer targetUVM.Close()
 
 	// A non-cached create
-	if err := lcow.CreateScratch(firstUVM, destTwo, lcow.DefaultScratchSizeGB, cacheFile, targetUVM.ID()); err != nil {
+	if err := lcow.CreateScratch(firstUVM, destTwo, lcow.DefaultScratchSizeGB, cacheFile); err != nil {
 		t.Fatal(err)
 	}
 

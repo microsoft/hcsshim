@@ -138,7 +138,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	defer lcowUVM.Close()
 
 	// Populate the cache and generate the scratch file for /tmp/scratch
-	if err := lcow.CreateScratch(lcowUVM, uvmScratchFile, lcow.DefaultScratchSizeGB, cacheFile, ""); err != nil {
+	if err := lcow.CreateScratch(lcowUVM, uvmScratchFile, lcow.DefaultScratchSizeGB, cacheFile); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := lcowUVM.AddSCSI(uvmScratchFile, `/tmp/scratch`, false); err != nil {
@@ -146,7 +146,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	}
 
 	// Now create the first containers sandbox, populate a spec
-	if err := lcow.CreateScratch(lcowUVM, c1ScratchFile, lcow.DefaultScratchSizeGB, cacheFile, ""); err != nil {
+	if err := lcow.CreateScratch(lcowUVM, c1ScratchFile, lcow.DefaultScratchSizeGB, cacheFile); err != nil {
 		t.Fatal(err)
 	}
 	c1Spec := testutilities.GetDefaultLinuxSpec(t)
@@ -159,7 +159,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	}
 
 	// Now create the second containers sandbox, populate a spec
-	if err := lcow.CreateScratch(lcowUVM, c2ScratchFile, lcow.DefaultScratchSizeGB, cacheFile, ""); err != nil {
+	if err := lcow.CreateScratch(lcowUVM, c2ScratchFile, lcow.DefaultScratchSizeGB, cacheFile); err != nil {
 		t.Fatal(err)
 	}
 	c2Spec := testutilities.GetDefaultLinuxSpec(t)

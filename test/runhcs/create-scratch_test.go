@@ -65,3 +65,30 @@ func Test_CreateScratch_ValidDestpath_Success(t *testing.T) {
 		t.Fatalf("Failed to stat scratch path with: %v", err)
 	}
 }
+
+func Test_CreateScratchWithOpts_SizeGB_Success(t *testing.T) {
+	rhcs := runhcs.Runhcs{
+		Debug: true,
+	}
+
+	td, err := ioutil.TempDir("", "CreateScratchWithSize")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(td)
+
+	scratchPath := filepath.Join(td, "scratch.vhdx")
+
+	ctx := context.TODO()
+	opts := &runhcs.CreateScratchOpts{
+		SizeGB: 30,
+	}
+	err = rhcs.CreateScratchWithOpts(ctx, scratchPath, opts)
+	if err != nil {
+		t.Fatalf("Failed 'CreateScratch' command with: %v", err)
+	}
+	_, err = os.Stat(scratchPath)
+	if err != nil {
+		t.Fatalf("Failed to stat scratch path with: %v", err)
+	}
+}

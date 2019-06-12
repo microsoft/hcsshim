@@ -18,6 +18,15 @@ var createScratchCommand = cli.Command{
 			Name:  "destpath",
 			Usage: "Required: describes the destination vhd path",
 		},
+		cli.UintFlag{
+			Name:  "sizeGB",
+			Value: 0,
+			Usage: "optional: The size in GB of the scratch file to create",
+		},
+		cli.StringFlag{
+			Name:  "cache-path",
+			Usage: "optional: The path to an existing scratch.vhdx to copy instead of create.",
+		},
 	},
 	Before: appargs.Validate(),
 	Action: func(context *cli.Context) error {
@@ -36,6 +45,11 @@ var createScratchCommand = cli.Command{
 		opts.MemorySizeInMB = 256
 		opts.VPMemDeviceCount = 1
 
+		sizeGB := uint32(context.Uint("sizeGB"))
+		if sizeGB == 0 {
+			sizeGB = lcow.DefaultScratchSizeGB
+		}
+
 		convertUVM, err := uvm.CreateLCOW(opts)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create '%s'", opts.ID)
@@ -45,7 +59,7 @@ var createScratchCommand = cli.Command{
 			return errors.Wrapf(err, "failed to start '%s'", opts.ID)
 		}
 
-		if err := lcow.CreateScratch(convertUVM, dest, lcow.DefaultScratchSizeGB, "", ""); err != nil {
+		if err := lcow.CreateScratch(convertUVM, dest, sizeGB, context.String("cache-path")); err != nil {
 			return errors.Wrapf(err, "failed to create ext4vhdx for '%s'", opts.ID)
 		}
 
