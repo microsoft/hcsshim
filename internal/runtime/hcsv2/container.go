@@ -3,20 +3,15 @@
 package hcsv2
 
 import (
-	"encoding/json"
-	"os/exec"
-	"strconv"
 	"sync"
 	"syscall"
 
-	"github.com/Microsoft/opengcs/internal/network"
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -157,61 +152,6 @@ func (c *Container) Wait() prot.NotificationType {
 	c.etL.Lock()
 	defer c.etL.Unlock()
 	return c.exitType
-}
-
-// AddNetworkAdapter adds `a` to the network namespace held by this container.
-func (c *Container) AddNetworkAdapter(a *prot.NetworkAdapterV2) error {
-	log := logrus.WithFields(logrus.Fields{
-		"cid":               c.id,
-		"adapterInstanceID": a.ID,
-	})
-	log.Info("opengcs::Container::AddNetworkAdapter")
-
-	// TODO: netnscfg is not coded for v2 but since they are almost the same
-	// just convert the parts of the adapter here.
-	v1Adapter := &prot.NetworkAdapter{
-		NatEnabled:         a.IPAddress != "",
-		AllocatedIPAddress: a.IPAddress,
-		HostIPAddress:      a.GatewayAddress,
-		HostIPPrefixLength: a.PrefixLength,
-		EnableLowMetric:    a.EnableLowMetric,
-		EncapOverhead:      a.EncapOverhead,
-	}
-
-	cfg, err := json.Marshal(v1Adapter)
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal adapter struct to JSON")
-	}
-
-	ifname, err := network.InstanceIDToName(a.ID, true)
-	if err != nil {
-		return err
-	}
-
-	out, err := exec.Command("netnscfg",
-		"-if", ifname,
-		"-nspid", strconv.Itoa(c.container.Pid()),
-		"-cfg", string(cfg)).CombinedOutput()
-	if err != nil {
-		return errors.Wrapf(err, "failed to configure adapter cid: %s, aid: %s, if id: %s %s", c.id, a.ID, ifname, string(out))
-	}
-	return nil
-}
-
-// RemoveNetworkAdapter removes the network adapter `id` from the network
-// namespace held by this container.
-func (c *Container) RemoveNetworkAdapter(id string) error {
-	logrus.WithFields(logrus.Fields{
-		"cid":               c.id,
-		"adapterInstanceID": id,
-	}).Info("opengcs::Container::RemoveNetworkAdapter")
-
-	// TODO: JTERRY75 - Implement removal if we ever need to support hot remove.
-	logrus.WithFields(logrus.Fields{
-		"cid":               c.id,
-		"adapterInstanceID": id,
-	}).Warning("opengcs::Container::RemoveNetworkAdapter - Not implemented")
-	return nil
 }
 
 // setExitType sets `c.exitType` to the appropriate value based on `signal` if
