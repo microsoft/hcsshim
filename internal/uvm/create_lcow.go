@@ -343,7 +343,7 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 		initArgs = `sh -c "` + initArgs + ` & exec sh"`
 	}
 
-	kernelArgs += ` pci=off brd.rd_nr=0 pmtmr=0 -- ` + initArgs
+	kernelArgs += fmt.Sprintf(" nr_cpus=%d pci=off brd.rd_nr=0 pmtmr=0 -- %s", uvm.processorCount, initArgs)
 
 	if !opts.KernelDirect {
 		doc.VirtualMachine.Chipset.Uefi = &hcsschema.Uefi{
