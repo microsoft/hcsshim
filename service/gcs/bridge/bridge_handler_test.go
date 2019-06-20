@@ -65,7 +65,7 @@ func verifyResponseSuccess(t *testing.T, resp RequestResponse, err error) {
 	}
 }
 
-func newMessageBase() *prot.MessageBase {
+func newMessageBase() prot.MessageBase {
 	const chars = "abcdefghijklmnopqrstuvwxyz"
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	f := func() string {
@@ -76,14 +76,14 @@ func newMessageBase() *prot.MessageBase {
 		return string(b)
 	}
 
-	base := &prot.MessageBase{
+	base := prot.MessageBase{
 		ContainerID: f(),
 		ActivityID:  f(),
 	}
 	return base
 }
 
-func newMessageUVMBase() *prot.MessageBase {
+func newMessageUVMBase() prot.MessageBase {
 	b := newMessageBase()
 	b.ContainerID = hcsv2.UVMContainerID
 	return b
