@@ -422,7 +422,7 @@ func (b *Bridge) createContainer(r *Request) (RequestResponse, error) {
 	go func() {
 		nt := waitFn()
 		notification := &prot.ContainerNotification{
-			MessageBase: &prot.MessageBase{
+			MessageBase: prot.MessageBase{
 				ContainerID: request.ContainerID,
 				ActivityID:  request.ActivityID,
 			},

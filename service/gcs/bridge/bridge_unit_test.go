@@ -471,7 +471,7 @@ func Test_Bridge_ListenAndServe_UnknownMessageHandler_Success(t *testing.T) {
 	}()
 
 	message := &prot.ContainerResizeConsole{
-		MessageBase: &prot.MessageBase{
+		MessageBase: prot.MessageBase{
 			ContainerID: "01234567-89ab-cdef-0123-456789abcdef",
 			ActivityID:  "00000000-0000-0000-0000-000000000001",
 		},
@@ -513,7 +513,7 @@ func Test_Bridge_ListenAndServe_CorrectHandler_Success(t *testing.T) {
 
 	mux := NewBridgeMux()
 	message := &prot.ContainerResizeConsole{
-		MessageBase: &prot.MessageBase{
+		MessageBase: prot.MessageBase{
 			ContainerID: "01234567-89ab-cdef-0123-456789abcdef",
 			ActivityID:  "00000000-0000-0000-0000-000000000010",
 		},
