@@ -322,8 +322,8 @@ func (process *Process) ExitCode() (_ int, err error) {
 }
 
 // StdioLegacy returns the stdin, stdout, and stderr pipes, respectively. Closing
-// these pipes does not close the underlying pipes; it should be possible to
-// call this multiple times to get multiple interfaces.
+// these pipes does not close the underlying pipes; but this function can only
+// be called once on each Process.
 func (process *Process) StdioLegacy() (_ io.WriteCloser, _ io.ReadCloser, _ io.ReadCloser, err error) {
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()

@@ -506,8 +506,7 @@ func (computeSystem *System) Resume() (err error) {
 	return nil
 }
 
-// CreateProcess launches a new process within the computeSystem.
-func (computeSystem *System) CreateProcess(c interface{}) (_ cow.Process, err error) {
+func (computeSystem *System) createProcess(c interface{}) (_ *Process, _ *hcsProcessInformation, err error) {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
@@ -522,12 +521,12 @@ func (computeSystem *System) CreateProcess(c interface{}) (_ cow.Process, err er
 	)
 
 	if computeSystem.handle == 0 {
-		return nil, makeSystemError(computeSystem, "CreateProcess", "", ErrAlreadyClosed, nil)
+		return nil, nil, makeSystemError(computeSystem, "CreateProcess", "", ErrAlreadyClosed, nil)
 	}
 
 	configurationb, err := json.Marshal(c)
 	if err != nil {
-		return nil, makeSystemError(computeSystem, "CreateProcess", "", err, nil)
+		return nil, nil, makeSystemError(computeSystem, "CreateProcess", "", err, nil)
 	}
 
 	configuration := string(configurationb)
@@ -541,19 +540,54 @@ func (computeSystem *System) CreateProcess(c interface{}) (_ cow.Process, err er
 	})
 	events := processHcsResult(resultp)
 	if err != nil {
-		return nil, makeSystemError(computeSystem, "CreateProcess", configuration, err, events)
+		return nil, nil, makeSystemError(computeSystem, "CreateProcess", configuration, err, events)
 	}
 
 	logrus.WithFields(computeSystem.logctx).
 		WithField(logfields.ProcessID, processInfo.ProcessId).
 		Debug("HCS ComputeSystem CreateProcess PID")
 
-	process := newProcess(processHandle, int(processInfo.ProcessId), computeSystem)
+	return newProcess(processHandle, int(processInfo.ProcessId), computeSystem), &processInfo, nil
+}
+
+// CreateProcessNoStdio launches a new process within the computeSystem. The
+// Stdio handles are not cached on the process struct.
+func (computeSystem *System) CreateProcessNoStdio(c interface{}) (_ cow.Process, err error) {
+	process, processInfo, err := computeSystem.createProcess(c)
+	if err != nil {
+		return nil, err
+	}
 	defer func() {
 		if err != nil {
 			process.Close()
 		}
 	}()
+
+	// We don't do anything with these handles. Close them so they don't leak.
+	syscall.Close(processInfo.StdInput)
+	syscall.Close(processInfo.StdOutput)
+	syscall.Close(processInfo.StdError)
+
+	if err = process.registerCallback(); err != nil {
+		return nil, makeSystemError(computeSystem, "CreateProcess", "", err, nil)
+	}
+	go process.waitBackground()
+
+	return process, nil
+}
+
+// CreateProcess launches a new process within the computeSystem.
+func (computeSystem *System) CreateProcess(c interface{}) (_ cow.Process, err error) {
+	process, processInfo, err := computeSystem.createProcess(c)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			process.Close()
+		}
+	}()
+
 	pipes, err := makeOpenFiles([]syscall.Handle{processInfo.StdInput, processInfo.StdOutput, processInfo.StdError})
 	if err != nil {
 		return nil, makeSystemError(computeSystem, "CreateProcess", "", err, nil)
@@ -561,6 +595,7 @@ func (computeSystem *System) CreateProcess(c interface{}) (_ cow.Process, err er
 	process.stdin = pipes[0]
 	process.stdout = pipes[1]
 	process.stderr = pipes[2]
+
 	if err = process.registerCallback(); err != nil {
 		return nil, makeSystemError(computeSystem, "CreateProcess", "", err, nil)
 	}
