@@ -60,3 +60,14 @@ func TestDSRSupport(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPreserveDIPSupport(t *testing.T) {
+	supportedFeatures := GetSupportedFeatures()
+	err := PreserveDIPSupported()
+	if supportedFeatures.PreserveDIP && err != nil {
+		t.Fatal(err)
+	}
+	if !supportedFeatures.PreserveDIP && err == nil {
+		t.Fatal(err)
+	}
+}

@@ -161,6 +161,15 @@ func DSRSupported() error {
 	return platformDoesNotSupportError("Direct Server Return (DSR)")
 }
 
+// PreserveDIPSupported returns an error if the HCN version does not support Direct Server Return.
+func PreserveDIPSupported() error {
+	supported := GetSupportedFeatures()
+	if supported.PreserveDIP {
+		return nil
+	}
+	return platformDoesNotSupportError("Preserve Destination IPAddress feature")
+}
+
 // RequestType are the different operations performed to settings.
 // Used to update the settings of Endpoint/Namespace objects.
 type RequestType string

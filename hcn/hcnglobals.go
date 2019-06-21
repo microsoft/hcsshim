@@ -29,8 +29,10 @@ var (
 	RemoteSubnetVersion = Version{Major: 9, Minor: 2}
 	// A Host Route policy allows for local container to local host communication Overlay networks
 	HostRouteVersion = Version{Major: 9, Minor: 2}
-	// HNS 10.2 allows for Direct Server Return for loadbalancing
-	DSRVersion = Version{Major: 10, Minor: 2}
+	// HNS 10.2 supports Preserve Destination IpAddress for DSR
+	PreserveDipVersion = Version{Major: 10, Minor: 2}
+	// HNS 10.5 allows for Direct Server Return for loadbalancing
+	DSRVersion = Version{Major: 10, Minor: 5}
 )
 
 // GetGlobals returns the global properties of the HCN Service.
