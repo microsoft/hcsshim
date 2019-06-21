@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"math/rand"
@@ -18,7 +19,10 @@ import (
 )
 
 func createRequest(t *testing.T, id prot.MessageIdentifier, ver prot.ProtocolVersion, message interface{}) *Request {
-	r := &Request{}
+	r := &Request{
+		Context: context.Background(),
+		Version: ver,
+	}
 
 	bytes := make([]byte, 0)
 	if message != nil {
@@ -36,7 +40,6 @@ func createRequest(t *testing.T, id prot.MessageIdentifier, ver prot.ProtocolVer
 
 	r.Header = hdr
 	r.Message = bytes
-	r.Version = ver
 	return r
 }
 

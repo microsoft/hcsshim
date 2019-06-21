@@ -3,6 +3,7 @@
 package bridge
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Microsoft/opengcs/internal/log"
+	"github.com/Microsoft/opengcs/internal/oc"
 	"github.com/Microsoft/opengcs/internal/runtime/hcsv2"
 	"github.com/Microsoft/opengcs/service/gcs/core"
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
@@ -22,6 +25,7 @@ import (
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
 )
 
@@ -126,6 +130,8 @@ func (mux *Mux) ServeMsg(r *Request) (RequestResponse, error) {
 
 // Request is the bridge request that has been sent.
 type Request struct {
+	// Context is the request context received from the bridge.
+	Context context.Context
 	// Header is the wire format message header that preceeded the message for
 	// this request.
 	Header *prot.MessageHeader
@@ -147,6 +153,8 @@ type RequestResponse interface {
 }
 
 type bridgeResponse struct {
+	// ctx is the context created on request read
+	ctx      context.Context
 	header   *prot.MessageHeader
 	response interface{}
 }
@@ -263,11 +271,7 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 					recverr = errors.Wrap(err, "bridge: failed reading message payload")
 					break
 				}
-				logrus.WithFields(logrus.Fields{
-					"message-type": header.Type.String(),
-					"message-id":   header.ID,
-					"message":      string(message),
-				}).Debug("opengcs::bridge - read message")
+
 				base := prot.MessageBase{}
 				if err := json.Unmarshal(message, &base); err != nil {
 					// TODO: JTERRY75 - This should fail the request but right
@@ -275,7 +279,18 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 					// this error. Unify the JSON part previous to invoking a
 					// request.
 				}
+
+				ctx, span := trace.StartSpan(context.Background(), "opengcs::bridge::request")
+				span.AddAttributes(
+					trace.Int64Attribute("message-id", int64(header.ID)),
+					trace.StringAttribute("message-type", header.Type.String()),
+					trace.StringAttribute("activityID", base.ActivityID),
+					trace.StringAttribute("cid", base.ContainerID))
+
+				log.G(ctx).WithField("message", string(message)).Debug("request read message")
+
 				requestChan <- &Request{
+					Context:     ctx,
 					Header:      header,
 					ContainerID: base.ContainerID,
 					ActivityID:  base.ActivityID,
@@ -291,6 +306,7 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 		for req := range requestChan {
 			go func(r *Request) {
 				br := bridgeResponse{
+					ctx: r.Context,
 					header: &prot.MessageHeader{
 						Type: prot.GetResponseIdentifier(r.Header.Type),
 						ID:   r.Header.ID,
@@ -302,9 +318,12 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 				}
 				resp.Base().ActivityID = r.ActivityID
 				if err != nil {
+					span := trace.FromContext(r.Context)
+					if span != nil {
+						oc.SetSpanStatus(span, err)
+					}
 					setErrorForResponseBase(resp.Base(), err)
 				}
-
 				br.response = resp
 				b.responseChan <- br
 			}(req)
@@ -329,11 +348,12 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 				resperr = errors.Wrap(err, "bridge: failed writing message payload")
 				break
 			}
-			logrus.WithFields(logrus.Fields{
-				"message-type": resp.header.Type.String(),
-				"message-id":   resp.header.ID,
-				"message":      string(responseBytes),
-			}).Debug("opengcs::bridge - response sent")
+
+			s := trace.FromContext(resp.ctx)
+			if s != nil {
+				log.G(resp.ctx).WithField("message", string(responseBytes)).Debug("request write response")
+				s.End()
+			}
 		}
 		responseErrChan <- resperr
 	}()
@@ -367,19 +387,13 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 
 // PublishNotification writes a specific notification to the bridge.
 func (b *Bridge) PublishNotification(n *prot.ContainerNotification) {
-	if n == nil {
-		panic("bridge: cannot publish nil notification")
-	}
-
-	logrus.WithFields(logrus.Fields{
-		"activityID": n.ActivityID,
-		"cid":        n.ContainerID,
-		"type":       n.Type,
-		"operation":  n.Operation,
-		"result":     n.Result,
-	}).Info("opengcs::bridge::PublishNotification")
+	ctx, span := trace.StartSpan(context.Background(), "opengcs::bridge::PublishNotification")
+	span.AddAttributes(trace.StringAttribute("notification", fmt.Sprintf("%+v", n)))
+	// DONT defer span.End() here. Publish is odd because bridgeResponse calls
+	// `End` on the `ctx` after the response is sent.
 
 	resp := bridgeResponse{
+		ctx: ctx,
 		header: &prot.MessageHeader{
 			Type: prot.ComputeSystemNotificationV1,
 			ID:   0,
@@ -511,12 +525,11 @@ func (b *Bridge) signalContainer(r *Request, signal syscall.Signal) (RequestResp
 		return nil, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message)
 	}
 
-	log := logrus.WithFields(logrus.Fields{
+	logrus.WithFields(logrus.Fields{
 		"activityID": request.ActivityID,
 		"cid":        request.ContainerID,
 		"signal":     signal,
-	})
-	log.Info("opengcs::bridge::signalContainer")
+	}).Info("opengcs::bridge::signalContainer")
 
 	err := b.coreint.SignalContainer(request.ContainerID, signal)
 	if err != nil {

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/Microsoft/opengcs/internal/oc"
 	"github.com/Microsoft/opengcs/internal/storage"
 	"github.com/Microsoft/opengcs/internal/storage/overlay"
 	"github.com/Microsoft/opengcs/internal/storage/plan9"
@@ -22,6 +23,7 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
 	"github.com/pkg/errors"
+	"go.opencensus.io/trace"
 )
 
 // UVMContainerID is the ContainerID that will be sent on any prot.MessageBase
@@ -62,7 +64,12 @@ func (h *Host) GetContainer(id string) (*Container, error) {
 	return h.getContainerLocked(id)
 }
 
-func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettingsV2) (*Container, error) {
+func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VMHostedContainerSettingsV2) (_ *Container, err error) {
+	ctx, span := trace.StartSpan(ctx, "opengcs::Host::CreateContainer")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("cid", id))
+
 	h.containersMutex.Lock()
 	defer h.containersMutex.Unlock()
 
@@ -70,17 +77,14 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemAlreadyExists)
 	}
 
-	var (
-		namespaceID string
-		err         error
-	)
+	var namespaceID string
 	criType, isCRI := settings.OCISpecification.Annotations["io.kubernetes.cri.container-type"]
 	if isCRI {
 		switch criType {
 		case "sandbox":
 			// Capture namespaceID if any because setupSandboxContainerSpec clears the Windows section.
 			namespaceID = getNetworkNamespaceID(settings.OCISpecification)
-			err = setupSandboxContainerSpec(context.TODO(), id, settings.OCISpecification)
+			err = setupSandboxContainerSpec(ctx, id, settings.OCISpecification)
 			defer func() {
 				if err != nil {
 					defer os.RemoveAll(getSandboxRootDir(id))
@@ -91,7 +95,7 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 			if !ok || sid == "" {
 				return nil, errors.Errorf("unsupported 'io.kubernetes.cri.sandbox-id': '%s'", sid)
 			}
-			err = setupWorkloadContainerSpec(context.TODO(), sid, id, settings.OCISpecification)
+			err = setupWorkloadContainerSpec(ctx, sid, id, settings.OCISpecification)
 			defer func() {
 				if err != nil {
 					defer os.RemoveAll(getWorkloadRootDir(sid, id))
@@ -103,7 +107,7 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 	} else {
 		// Capture namespaceID if any because setupStandaloneContainerSpec clears the Windows section.
 		namespaceID = getNetworkNamespaceID(settings.OCISpecification)
-		err = setupStandaloneContainerSpec(context.TODO(), id, settings.OCISpecification)
+		err = setupStandaloneContainerSpec(ctx, id, settings.OCISpecification)
 		defer func() {
 			if err != nil {
 				os.RemoveAll(getStandaloneRootDir(id))
@@ -157,10 +161,10 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 		}
 		// standalone is not required to have a networking namespace setup
 		if ns != nil {
-			if err := ns.AssignContainerPid(context.TODO(), c.container.Pid()); err != nil {
+			if err := ns.AssignContainerPid(ctx, c.container.Pid()); err != nil {
 				return nil, err
 			}
-			if err := ns.Sync(context.TODO()); err != nil {
+			if err := ns.Sync(ctx); err != nil {
 				return nil, err
 			}
 		}
@@ -170,7 +174,11 @@ func (h *Host) CreateContainer(id string, settings *prot.VMHostedContainerSettin
 	return c, nil
 }
 
-func (h *Host) ModifyHostSettings(settings *prot.ModifySettingRequest) error {
+func (h *Host) ModifyHostSettings(ctx context.Context, settings *prot.ModifySettingRequest) (err error) {
+	ctx, span := trace.StartSpan(ctx, "opengcs::Host::ModifyHostSettings")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+
 	type modifyFunc func(interface{}) error
 
 	requestTypeFn := func(req prot.ModifyRequestType, setting interface{}, add, remove, update modifyFunc) error {
@@ -204,36 +212,36 @@ func (h *Host) ModifyHostSettings(settings *prot.ModifySettingRequest) error {
 		add = func(setting interface{}) error {
 			mvd := setting.(*prot.MappedVirtualDiskV2)
 			if mvd.MountPath != "" {
-				return scsi.Mount(mvd.Controller, mvd.Lun, mvd.MountPath, mvd.ReadOnly)
+				return scsi.Mount(ctx, mvd.Controller, mvd.Lun, mvd.MountPath, mvd.ReadOnly)
 			}
 			return nil
 		}
 		remove = func(setting interface{}) error {
 			mvd := setting.(*prot.MappedVirtualDiskV2)
 			if mvd.MountPath != "" {
-				if err := storage.UnmountPath(mvd.MountPath, true); err != nil {
+				if err := storage.UnmountPath(ctx, mvd.MountPath, true); err != nil {
 					return errors.Wrapf(err, "failed to hot remove MappedVirtualDiskV2 path: '%s'", mvd.MountPath)
 				}
 			}
-			return scsi.UnplugDevice(mvd.Controller, mvd.Lun)
+			return scsi.UnplugDevice(ctx, mvd.Controller, mvd.Lun)
 		}
 	case prot.MrtMappedDirectory:
 		add = func(setting interface{}) error {
 			md := setting.(*prot.MappedDirectoryV2)
-			return plan9.Mount(h.vsock, md.MountPath, md.ShareName, md.Port, md.ReadOnly)
+			return plan9.Mount(ctx, h.vsock, md.MountPath, md.ShareName, md.Port, md.ReadOnly)
 		}
 		remove = func(setting interface{}) error {
 			md := setting.(*prot.MappedDirectoryV2)
-			return storage.UnmountPath(md.MountPath, true)
+			return storage.UnmountPath(ctx, md.MountPath, true)
 		}
 	case prot.MrtVPMemDevice:
 		add = func(setting interface{}) error {
 			vpd := setting.(*prot.MappedVPMemDeviceV2)
-			return pmem.Mount(vpd.DeviceNumber, vpd.MountPath)
+			return pmem.Mount(ctx, vpd.DeviceNumber, vpd.MountPath)
 		}
 		remove = func(setting interface{}) error {
 			vpd := setting.(*prot.MappedVPMemDeviceV2)
-			return storage.UnmountPath(vpd.MountPath, true)
+			return storage.UnmountPath(ctx, vpd.MountPath, true)
 		}
 	case prot.MrtCombinedLayers:
 		add = func(setting interface{}) error {
@@ -254,27 +262,27 @@ func (h *Host) ModifyHostSettings(settings *prot.ModifySettingRequest) error {
 				workdirPath = filepath.Join(cl.ScratchPath, "work")
 			}
 
-			return overlay.Mount(layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, readonly)
+			return overlay.Mount(ctx, layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, readonly)
 		}
 		remove = func(setting interface{}) error {
 			cl := setting.(*prot.CombinedLayersV2)
-			return storage.UnmountPath(cl.ContainerRootPath, true)
+			return storage.UnmountPath(ctx, cl.ContainerRootPath, true)
 		}
 	case prot.MrtNetwork:
 		add = func(setting interface{}) error {
 			na := setting.(*prot.NetworkAdapterV2)
 			ns := getOrAddNetworkNamespace(na.NamespaceID)
-			if err := ns.AddAdapter(context.TODO(), na); err != nil {
+			if err := ns.AddAdapter(ctx, na); err != nil {
 				return err
 			}
 			// This code doesnt know if the namespace was already added to the
 			// container or not so it must always call `Sync`.
-			return ns.Sync(context.TODO())
+			return ns.Sync(ctx)
 		}
 		remove = func(setting interface{}) error {
 			na := setting.(*prot.NetworkAdapterV2)
 			ns := getOrAddNetworkNamespace(na.ID)
-			if err := ns.RemoveAdapter(context.TODO(), na.ID); err != nil {
+			if err := ns.RemoveAdapter(ctx, na.ID); err != nil {
 				return err
 			}
 			return nil
