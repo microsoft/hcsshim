@@ -12,6 +12,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/schema1"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
@@ -23,14 +25,15 @@ import (
 	"github.com/containerd/containerd/runtime/v2/task"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 	"golang.org/x/sync/errgroup"
 )
 
-func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
-	logrus.WithFields(logrus.Fields{
-		"tid": req.ID,
-	}).Debug("newHcsStandloneTask")
+func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (_ shimTask, err error) {
+	ctx, span := trace.StartSpan(ctx, "newHcsStandaloneTask")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("tid", req.ID))
 
 	ct, _, err := oci.GetSandboxTypeAndID(s.Annotations)
 	if err != nil {
@@ -111,15 +114,17 @@ func newHcsTask(
 	parent *uvm.UtilityVM,
 	ownsParent bool,
 	req *task.CreateTaskRequest,
-	s *specs.Spec) (shimTask, error) {
-	logrus.WithFields(logrus.Fields{
-		"tid":        req.ID,
-		"ownsParent": ownsParent,
-	}).Debug("newHcsTask")
+	s *specs.Spec) (_ shimTask, err error) {
+	ctx, span := trace.StartSpan(ctx, "newHcsTask")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("tid", req.ID),
+		trace.BoolAttribute("ownsParent", ownsParent))
 
 	owner := filepath.Base(os.Args[0])
 
-	io, err := newNpipeIO(ctx, req.ID, req.ID, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
+	io, err := newNpipeIO(ctx, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
 	if err != nil {
 		return nil, err
 	}
@@ -171,15 +176,11 @@ func newHcsTask(
 	}
 	// In the normal case the `Signal` call from the caller killed this task's
 	// init process.
-	go func() {
-		// Wait for our init process to exit.
-		ht.init.Wait(context.Background())
-		// Release all container resources for this task.
-		ht.close()
-	}()
+	go ht.waitInitExit()
 
 	// Publish the created event
 	ht.events(
+		ctx,
 		runtime.TaskCreateEventTopic,
 		&eventstypes.TaskCreate{
 			ContainerID: req.ID,
@@ -258,11 +259,13 @@ func (ht *hcsTask) ID() string {
 	return ht.id
 }
 
-func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest, spec *specs.Process) error {
-	logrus.WithFields(logrus.Fields{
-		"tid": ht.id,
-		"eid": req.ExecID,
-	}).Debug("hcsTask::CreateExec")
+func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest, spec *specs.Process) (err error) {
+	ctx, span := trace.StartSpan(ctx, "hcsTask::CreateExec")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("tid", ht.id),
+		trace.StringAttribute("eid", req.ExecID))
 
 	ht.ecl.Lock()
 	defer ht.ecl.Unlock()
@@ -277,7 +280,7 @@ func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest,
 		return errors.Wrapf(errdefs.ErrFailedPrecondition, "exec: '' in task: '%s' must be running to create additional execs", ht.id)
 	}
 
-	io, err := newNpipeIO(ctx, ht.id, req.ExecID, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
+	io, err := newNpipeIO(ctx, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
 	if err != nil {
 		return err
 	}
@@ -286,6 +289,7 @@ func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest,
 
 	// Publish the created event
 	ht.events(
+		ctx,
 		runtime.TaskExecAddedEventTopic,
 		&eventstypes.TaskExecAdded{
 			ContainerID: ht.id,
@@ -306,13 +310,15 @@ func (ht *hcsTask) GetExec(eid string) (shimExec, error) {
 	return raw.(shimExec), nil
 }
 
-func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all bool) error {
-	logrus.WithFields(logrus.Fields{
-		"tid":    ht.id,
-		"eid":    eid,
-		"signal": signal,
-		"all":    all,
-	}).Debug("hcsTask::KillExec")
+func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all bool) (err error) {
+	ctx, span := trace.StartSpan(ctx, "hcsTask::KillExec")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("tid", ht.id),
+		trace.StringAttribute("eid", eid),
+		trace.Int64Attribute("signal", int64(signal)),
+		trace.BoolAttribute("all", all))
 
 	e, err := ht.GetExec(eid)
 	if err != nil {
@@ -371,11 +377,13 @@ func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all 
 	return eg.Wait()
 }
 
-func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, time.Time, error) {
-	logrus.WithFields(logrus.Fields{
-		"tid": ht.id,
-		"eid": eid,
-	}).Debug("hcsTask::DeleteExec")
+func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (_ int, _ uint32, _ time.Time, err error) {
+	ctx, span := trace.StartSpan(ctx, "hcsTask::DeleteExec")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("tid", ht.id),
+		trace.StringAttribute("eid", eid))
 
 	e, err := ht.GetExec(eid)
 	if err != nil {
@@ -389,7 +397,7 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, tim
 			switch state := ex.State(); state {
 			case shimExecStateCreated:
 				// we have a created additional exec. Forcibly exit it.
-				ex.ForceExit(0)
+				ex.ForceExit(ctx, 0)
 			case shimExecStateRunning:
 				invalid = true
 				// we have a running additional exec. Stop iteration.
@@ -404,7 +412,7 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, tim
 	}
 	switch state := e.State(); state {
 	case shimExecStateCreated:
-		e.ForceExit(0)
+		e.ForceExit(ctx, 0)
 	case shimExecStateRunning:
 		return 0, 0, time.Time{}, newExecInvalidStateError(ht.id, eid, state, "delete")
 	}
@@ -415,6 +423,7 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, tim
 
 	// Publish the deleted event
 	ht.events(
+		ctx,
 		runtime.TaskDeleteEventTopic,
 		&eventstypes.TaskDelete{
 			ContainerID: ht.id,
@@ -427,10 +436,11 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, tim
 	return int(status.Pid), status.ExitStatus, status.ExitedAt, nil
 }
 
-func (ht *hcsTask) Pids(ctx context.Context) ([]options.ProcessDetails, error) {
-	logrus.WithFields(logrus.Fields{
-		"tid": ht.id,
-	}).Debug("hcsTask::Pids")
+func (ht *hcsTask) Pids(ctx context.Context) (_ []options.ProcessDetails, err error) {
+	_, span := trace.StartSpan(ctx, "hcsTask::Pids")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("tid", ht.id))
 
 	// Map all user created exec's to pid/exec-id
 	pidMap := make(map[int]string)
@@ -469,8 +479,24 @@ func (ht *hcsTask) Pids(ctx context.Context) ([]options.ProcessDetails, error) {
 }
 
 func (ht *hcsTask) Wait(ctx context.Context) *task.StateResponse {
+	ctx, span := trace.StartSpan(ctx, "hcsTask::Wait")
+	defer span.End()
+	span.AddAttributes(trace.StringAttribute("tid", ht.id))
+
 	<-ht.closed
 	return ht.init.Wait(ctx)
+}
+
+func (ht *hcsTask) waitInitExit() {
+	ctx, span := trace.StartSpan(context.Background(), "hcsTask::waitInitExit")
+	defer span.End()
+	span.AddAttributes(trace.StringAttribute("tid", ht.id))
+
+	// Wait for it to exit on its own
+	ht.init.Wait(context.Background())
+
+	// Close the host and event the exit
+	ht.close(ctx)
 }
 
 // waitForHostExit waits for the host virtual machine to exit. Once exited
@@ -481,27 +507,26 @@ func (ht *hcsTask) Wait(ctx context.Context) *task.StateResponse {
 // Note: For Windows process isolated containers there is no host virtual
 // machine so this should not be called.
 func (ht *hcsTask) waitForHostExit() {
-	log := logrus.WithFields(logrus.Fields{
-		"tid": ht.id,
-	})
+	ctx, span := trace.StartSpan(context.Background(), "hcsTask::waitForHostExit")
+	defer span.End()
+	span.AddAttributes(trace.StringAttribute("tid", ht.id))
+
 	err := ht.host.Wait()
 	if err != nil {
-		log.Data[logrus.ErrorKey] = err
-		log.Error("hcsTask::waitForHostExit - Failed to wait for host virtual machine exit")
-		delete(log.Data, logrus.ErrorKey)
+		log.G(ctx).WithError(err).Error("failed to wait for host virtual machine exit")
 	} else {
-		log.Debug("hcsTask::waitForHostExit - Host virtual machine exited")
+		log.G(ctx).Debug("host virtual machine exited")
 	}
 
 	ht.execs.Range(func(key, value interface{}) bool {
 		ex := value.(shimExec)
-		ex.ForceExit(1)
+		ex.ForceExit(ctx, 1)
 
 		// iterate all
 		return false
 	})
-	ht.init.ForceExit(1)
-	ht.closeHost()
+	ht.init.ForceExit(ctx, 1)
+	ht.closeHost(ctx)
 }
 
 // close shuts down the container that is owned by this task and if
@@ -509,10 +534,10 @@ func (ht *hcsTask) waitForHostExit() {
 //
 // NOTE: For Windows process isolated containers `ht.ownsHost==true && ht.host
 // == nil`.
-func (ht *hcsTask) close() {
-	logrus.WithFields(logrus.Fields{
-		"tid": ht.id,
-	}).Debug("hcsTask::close")
+func (ht *hcsTask) close(ctx context.Context) {
+	ctx, span := trace.StartSpan(ctx, "hcsTask::close")
+	defer span.End()
+	span.AddAttributes(trace.StringAttribute("tid", ht.id))
 
 	ht.closeOnce.Do(func() {
 		// ht.c should never be nil for a real task but in testing we stub
@@ -529,10 +554,7 @@ func (ht *hcsTask) close() {
 			}()
 			err := ht.c.Shutdown()
 			if err != nil {
-				logrus.WithFields(logrus.Fields{
-					"tid":           ht.id,
-					logrus.ErrorKey: err,
-				}).Error("hcsTask::close - failed to shutdown container")
+				log.G(ctx).WithError(err).Error("failed to shutdown container")
 			} else {
 				t := time.NewTimer(time.Minute * 5)
 				select {
@@ -540,26 +562,17 @@ func (ht *hcsTask) close() {
 					err = werr
 					t.Stop()
 					if err != nil {
-						logrus.WithFields(logrus.Fields{
-							"tid":           ht.id,
-							logrus.ErrorKey: err,
-						}).Error("hcsTask::close - failed to wait for container shutdown")
+						log.G(ctx).WithError(err).Error("failed to wait for container shutdown")
 					}
 				case <-t.C:
-					logrus.WithFields(logrus.Fields{
-						"tid":           ht.id,
-						logrus.ErrorKey: hcs.ErrTimeout,
-					}).Error("hcsTask::close - failed to wait for container shutdown")
+					log.G(ctx).WithError(hcs.ErrTimeout).Error("failed to wait for container shutdown")
 				}
 			}
 
 			if err != nil {
 				err = ht.c.Terminate()
 				if err != nil {
-					logrus.WithFields(logrus.Fields{
-						"tid":           ht.id,
-						logrus.ErrorKey: err,
-					}).Error("hcsTask::close - failed to terminate container")
+					log.G(ctx).WithError(err).Error("failed to terminate container")
 				} else {
 					t := time.NewTimer(time.Second * 30)
 					select {
@@ -567,37 +580,25 @@ func (ht *hcsTask) close() {
 						err = werr
 						t.Stop()
 						if err != nil {
-							logrus.WithFields(logrus.Fields{
-								"tid":           ht.id,
-								logrus.ErrorKey: err,
-							}).Error("hcsTask::close - failed to wait for container terminate")
+							log.G(ctx).WithError(err).Error("failed to wait for container terminate")
 						}
 					case <-t.C:
-						logrus.WithFields(logrus.Fields{
-							"tid":           ht.id,
-							logrus.ErrorKey: hcs.ErrTimeout,
-						}).Error("hcsTask::close - failed to wait for container terminate")
+						log.G(ctx).WithError(hcs.ErrTimeout).Error("failed to wait for container terminate")
 					}
 				}
 			}
 
 			// Release any resources associated with the container.
 			if err := hcsoci.ReleaseResources(ht.cr, ht.host, true); err != nil {
-				logrus.WithFields(logrus.Fields{
-					"tid":           ht.id,
-					logrus.ErrorKey: err,
-				}).Error("hcsTask::close - failed to release container resources")
+				log.G(ctx).WithError(err).Error("failed to release container resources")
 			}
 
 			// Close the container handle invalidating all future access.
 			if err := ht.c.Close(); err != nil {
-				logrus.WithFields(logrus.Fields{
-					"tid":           ht.id,
-					logrus.ErrorKey: err,
-				}).Error("hcsTask::close - failed to close container")
+				log.G(ctx).WithError(err).Error("failed to close container")
 			}
 		}
-		ht.closeHost()
+		ht.closeHost(ctx)
 	})
 }
 
@@ -608,19 +609,21 @@ func (ht *hcsTask) close() {
 // Note: If this is a process isolated task the hosting UVM is simply a `noop`.
 //
 // This call is idempotent and safe to call multiple times.
-func (ht *hcsTask) closeHost() {
+func (ht *hcsTask) closeHost(ctx context.Context) {
+	ctx, span := trace.StartSpan(ctx, "hcsTask::closeHost")
+	defer span.End()
+	span.AddAttributes(trace.StringAttribute("tid", ht.id))
+
 	ht.closeHostOnce.Do(func() {
 		if ht.ownsHost && ht.host != nil {
 			if err := ht.host.Close(); err != nil {
-				logrus.WithFields(logrus.Fields{
-					"tid":           ht.id,
-					logrus.ErrorKey: err,
-				}).Error("hcsTask::closeHost - failed host vm shutdown")
+				log.G(ctx).WithError(err).Error("failed host vm shutdown")
 			}
 		}
 		// Send the `init` exec exit notification always.
 		exit := ht.init.Status()
 		ht.events(
+			ctx,
 			runtime.TaskExitEventTopic,
 			&eventstypes.TaskExit{
 				ContainerID: ht.id,

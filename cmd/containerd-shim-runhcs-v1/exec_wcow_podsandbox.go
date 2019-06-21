@@ -5,20 +5,24 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/oc"
+
 	eventstypes "github.com/containerd/containerd/api/events"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
 
 func newWcowPodSandboxExec(ctx context.Context, events publisher, tid, bundle string) *wcowPodSandboxExec {
-	logrus.WithFields(logrus.Fields{
-		"tid": tid,
-		"eid": tid, // Init exec ID is always same as Task ID
-	}).Debug("newWcowPodSandboxExec")
+	ctx, span := trace.StartSpan(ctx, "newWcowPodSandboxExec")
+	defer span.End()
+	span.AddAttributes(
+		trace.StringAttribute("tid", tid),
+		trace.StringAttribute("eid", tid), // Init exec ID is always same as Task ID
+		trace.StringAttribute("bundle", bundle))
 
 	wpse := &wcowPodSandboxExec{
 		events:     events,
@@ -118,11 +122,13 @@ func (wpse *wcowPodSandboxExec) Status() *task.StateResponse {
 	}
 }
 
-func (wpse *wcowPodSandboxExec) Start(ctx context.Context) error {
-	logrus.WithFields(logrus.Fields{
-		"tid": wpse.tid,
-		"eid": wpse.tid, // Init exec ID is always same as Task ID
-	}).Debug("wcowPodSandboxExec::Start")
+func (wpse *wcowPodSandboxExec) Start(ctx context.Context) (err error) {
+	ctx, span := trace.StartSpan(ctx, "wcowPodSandboxExec::Start")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("tid", wpse.tid),
+		trace.StringAttribute("eid", wpse.tid)) // Init exec ID is always same as Task ID
 
 	wpse.sl.Lock()
 	defer wpse.sl.Unlock()
@@ -136,6 +142,7 @@ func (wpse *wcowPodSandboxExec) Start(ctx context.Context) error {
 	// Publish the task start event. We mever have an exec for the WCOW
 	// PodSandbox.
 	wpse.events(
+		ctx,
 		runtime.TaskStartEventTopic,
 		&eventstypes.TaskStart{
 			ContainerID: wpse.tid,
@@ -145,12 +152,14 @@ func (wpse *wcowPodSandboxExec) Start(ctx context.Context) error {
 	return nil
 }
 
-func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) error {
-	logrus.WithFields(logrus.Fields{
-		"tid":    wpse.tid,
-		"eid":    wpse.tid, // Init exec ID is always same as Task ID
-		"signal": signal,
-	}).Debug("wcowPodSandboxExec::Kill")
+func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) (err error) {
+	_, span := trace.StartSpan(ctx, "wcowPodSandboxExec::Kill")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("tid", wpse.tid),
+		trace.StringAttribute("eid", wpse.tid), // Init exec ID is always same as Task ID
+		trace.Int64Attribute("signal", int64(signal)))
 
 	wpse.sl.Lock()
 	defer wpse.sl.Unlock()
@@ -179,13 +188,15 @@ func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) error {
 	}
 }
 
-func (wpse *wcowPodSandboxExec) ResizePty(ctx context.Context, width, height uint32) error {
-	logrus.WithFields(logrus.Fields{
-		"tid":    wpse.tid,
-		"eid":    wpse.tid, // Init exec ID is always same as Task ID
-		"width":  width,
-		"height": height,
-	}).Debug("wcowPodSandboxExec::ResizePty")
+func (wpse *wcowPodSandboxExec) ResizePty(ctx context.Context, width, height uint32) (err error) {
+	_, span := trace.StartSpan(ctx, "wcowPodSandboxExec::ResizePty")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("tid", wpse.tid),
+		trace.StringAttribute("eid", wpse.tid), // Init exec ID is always same as Task ID
+		trace.Int64Attribute("width", int64(width)),
+		trace.Int64Attribute("height", int64(height)))
 
 	wpse.sl.Lock()
 	defer wpse.sl.Unlock()
@@ -198,35 +209,38 @@ func (wpse *wcowPodSandboxExec) ResizePty(ctx context.Context, width, height uin
 }
 
 func (wpse *wcowPodSandboxExec) CloseIO(ctx context.Context, stdin bool) error {
-	logrus.WithFields(logrus.Fields{
-		"tid":   wpse.tid,
-		"eid":   wpse.tid, // Init exec ID is always same as Task ID
-		"stdin": stdin,
-	}).Debug("wcowPodSandboxExec::CloseIO")
+	_, span := trace.StartSpan(ctx, "wcowPodSandboxExec::CloseIO")
+	defer span.End()
+	span.AddAttributes(
+		trace.StringAttribute("tid", wpse.tid),
+		trace.StringAttribute("eid", wpse.tid), // Init exec ID is always same as Task ID
+		trace.BoolAttribute("stdin", stdin))
 
 	return nil
 }
 
 func (wpse *wcowPodSandboxExec) Wait(ctx context.Context) *task.StateResponse {
-	logrus.WithFields(logrus.Fields{
-		"tid": wpse.tid,
-		"eid": wpse.tid, // Init exec ID is always same as Task ID
-	}).Debug("wcowPodSandboxExec::Wait")
+	ctx, span := trace.StartSpan(ctx, "wcowPodSandboxExec::Wait")
+	defer span.End()
+	span.AddAttributes(
+		trace.StringAttribute("tid", wpse.tid),
+		trace.StringAttribute("eid", wpse.tid)) // Init exec ID is always same as Task ID
 
 	<-wpse.exited
 	return wpse.Status()
 }
 
-func (wpse *wcowPodSandboxExec) ForceExit(status int) {
+func (wpse *wcowPodSandboxExec) ForceExit(ctx context.Context, status int) {
 	wpse.sl.Lock()
 	defer wpse.sl.Unlock()
 	if wpse.state != shimExecStateExited {
 		// Avoid logging the force if we already exited gracefully
-		logrus.WithFields(logrus.Fields{
-			"tid":    wpse.tid,
-			"eid":    wpse.tid,
-			"status": status,
-		}).Debug("hcsExec::ForceExit")
+		_, span := trace.StartSpan(ctx, "wcowPodSandboxExec::ForceExit")
+		defer span.End()
+		span.AddAttributes(
+			trace.StringAttribute("tid", wpse.tid),
+			trace.StringAttribute("eid", wpse.tid), // Init exec ID is always same as Task ID
+			trace.Int64Attribute("status", int64(status)))
 
 		wpse.state = shimExecStateExited
 		wpse.exitStatus = 1

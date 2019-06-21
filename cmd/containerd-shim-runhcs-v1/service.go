@@ -3,30 +3,17 @@ package main
 import (
 	"context"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
 	google_protobuf1 "github.com/gogo/protobuf/types"
-	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
-
-func beginActivity(activity string, fields logrus.Fields) *logrus.Entry {
-	log := logrus.WithFields(fields)
-	log.Info(activity)
-	return log
-}
-
-func endActivity(log *logrus.Entry, activity string, err error) {
-	if err != nil {
-		log.Data[logrus.ErrorKey] = err
-		log.Error(activity)
-	} else {
-		log.Info(activity)
-	}
-}
 
 type cdevent struct {
 	topic string
@@ -65,20 +52,21 @@ type service struct {
 
 func (s *service) State(ctx context.Context, req *task.StateRequest) (resp *task.StateResponse, err error) {
 	defer panicRecover()
-	const activity = "State"
-	af := logrus.Fields{
-		"tid": req.ID,
-		"eid": req.ExecID,
-	}
-	log := beginActivity(activity, af)
+	ctx, span := trace.StartSpan(ctx, "State")
+	defer span.End()
 	defer func() {
 		if resp != nil {
-			log.Data["status"] = resp.Status.String()
-			log.Data["exitStatus"] = resp.ExitStatus
-			log.Data["exitedAt"] = resp.ExitedAt
+			span.AddAttributes(
+				trace.StringAttribute("status", resp.Status.String()),
+				trace.Int64Attribute("exitStatus", int64(resp.ExitStatus)),
+				trace.StringAttribute("exitedAt", resp.ExitedAt.String()))
 		}
-		endActivity(log, activity, err)
+		oc.SetSpanStatus(span, err)
 	}()
+
+	span.AddAttributes(
+		trace.StringAttribute("tid", req.ID),
+		trace.StringAttribute("eid", req.ExecID))
 
 	r, e := s.stateInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -86,24 +74,26 @@ func (s *service) State(ctx context.Context, req *task.StateRequest) (resp *task
 
 func (s *service) Create(ctx context.Context, req *task.CreateTaskRequest) (resp *task.CreateTaskResponse, err error) {
 	defer panicRecover()
-	const activity = "Create"
-	log := beginActivity(activity, logrus.Fields{
-		"tid":              req.ID,
-		"bundle":           req.Bundle,
-		"rootfs":           req.Rootfs,
-		"terminal":         req.Terminal,
-		"stdin":            req.Stdin,
-		"stdout":           req.Stdout,
-		"stderr":           req.Stderr,
-		"checkpoint":       req.Checkpoint,
-		"parentcheckpoint": req.ParentCheckpoint,
-	})
+	ctx, span := trace.StartSpan(ctx, "Create")
+	defer span.End()
 	defer func() {
 		if resp != nil {
-			log.Data["pid"] = resp.Pid
+			span.AddAttributes(trace.Int64Attribute("pid", int64(resp.Pid)))
 		}
-		endActivity(log, activity, err)
+		oc.SetSpanStatus(span, err)
 	}()
+
+	span.AddAttributes(
+		trace.StringAttribute("tid", req.ID),
+		trace.StringAttribute("bundle", req.Bundle),
+		// trace.StringAttribute("rootfs", req.Rootfs), TODO: JTERRY75 -
+		// OpenCensus doesnt support slice like our logrus hook
+		trace.BoolAttribute("terminal", req.Terminal),
+		trace.StringAttribute("stdin", req.Stdin),
+		trace.StringAttribute("stdout", req.Stdout),
+		trace.StringAttribute("stderr", req.Stderr),
+		trace.StringAttribute("checkpoint", req.Checkpoint),
+		trace.StringAttribute("parentcheckpoint", req.ParentCheckpoint))
 
 	r, e := s.createInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -111,18 +101,18 @@ func (s *service) Create(ctx context.Context, req *task.CreateTaskRequest) (resp
 
 func (s *service) Start(ctx context.Context, req *task.StartRequest) (resp *task.StartResponse, err error) {
 	defer panicRecover()
-	const activity = "Start"
-	af := logrus.Fields{
-		"tid": req.ID,
-		"eid": req.ExecID,
-	}
-	log := beginActivity(activity, af)
+	ctx, span := trace.StartSpan(ctx, "Start")
+	defer span.End()
 	defer func() {
 		if resp != nil {
-			log.Data["pid"] = resp.Pid
+			span.AddAttributes(trace.Int64Attribute("pid", int64(resp.Pid)))
 		}
-		endActivity(log, activity, err)
+		oc.SetSpanStatus(span, err)
 	}()
+
+	span.AddAttributes(
+		trace.StringAttribute("tid", req.ID),
+		trace.StringAttribute("eid", req.ExecID))
 
 	r, e := s.startInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -130,20 +120,21 @@ func (s *service) Start(ctx context.Context, req *task.StartRequest) (resp *task
 
 func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (resp *task.DeleteResponse, err error) {
 	defer panicRecover()
-	const activity = "Delete"
-	af := logrus.Fields{
-		"tid": req.ID,
-		"eid": req.ExecID,
-	}
-	log := beginActivity(activity, af)
+	ctx, span := trace.StartSpan(ctx, "Delete")
+	defer span.End()
 	defer func() {
 		if resp != nil {
-			log.Data["pid"] = resp.Pid
-			log.Data["exitStatus"] = resp.ExitStatus
-			log.Data["exitedAt"] = resp.ExitedAt
+			span.AddAttributes(
+				trace.Int64Attribute("pid", int64(resp.Pid)),
+				trace.Int64Attribute("exitStatus", int64(resp.ExitStatus)),
+				trace.StringAttribute("exitedAt", resp.ExitedAt.String()))
 		}
-		endActivity(log, activity, err)
+		oc.SetSpanStatus(span, err)
 	}()
+
+	span.AddAttributes(
+		trace.StringAttribute("tid", req.ID),
+		trace.StringAttribute("eid", req.ExecID))
 
 	r, e := s.deleteInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -151,12 +142,13 @@ func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (resp *ta
 
 func (s *service) Pids(ctx context.Context, req *task.PidsRequest) (_ *task.PidsResponse, err error) {
 	defer panicRecover()
-	const activity = "Pids"
-	af := logrus.Fields{
-		"tid": req.ID,
-	}
-	log := beginActivity(activity, af)
-	defer func() { endActivity(log, activity, err) }()
+	ctx, span := trace.StartSpan(ctx, "Pids")
+	defer span.End()
+	defer func() {
+		oc.SetSpanStatus(span, err)
+	}()
+
+	span.AddAttributes(trace.StringAttribute("tid", req.ID))
 
 	r, e := s.pidsInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -164,12 +156,13 @@ func (s *service) Pids(ctx context.Context, req *task.PidsRequest) (_ *task.Pids
 
 func (s *service) Pause(ctx context.Context, req *task.PauseRequest) (_ *google_protobuf1.Empty, err error) {
 	defer panicRecover()
-	const activity = "Pause"
-	af := logrus.Fields{
-		"tid": req.ID,
-	}
-	log := beginActivity(activity, af)
-	defer func() { endActivity(log, activity, err) }()
+	ctx, span := trace.StartSpan(ctx, "Pause")
+	defer span.End()
+	defer func() {
+		oc.SetSpanStatus(span, err)
+	}()
+
+	span.AddAttributes(trace.StringAttribute("tid", req.ID))
 
 	r, e := s.pauseInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -177,12 +170,13 @@ func (s *service) Pause(ctx context.Context, req *task.PauseRequest) (_ *google_
 
 func (s *service) Resume(ctx context.Context, req *task.ResumeRequest) (_ *google_protobuf1.Empty, err error) {
 	defer panicRecover()
-	const activity = "Resume"
-	af := logrus.Fields{
-		"tid": req.ID,
-	}
-	log := beginActivity(activity, af)
-	defer func() { endActivity(log, activity, err) }()
+	ctx, span := trace.StartSpan(ctx, "Resume")
+	defer span.End()
+	defer func() {
+		oc.SetSpanStatus(span, err)
+	}()
+
+	span.AddAttributes(trace.StringAttribute("tid", req.ID))
 
 	r, e := s.resumeInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -190,13 +184,15 @@ func (s *service) Resume(ctx context.Context, req *task.ResumeRequest) (_ *googl
 
 func (s *service) Checkpoint(ctx context.Context, req *task.CheckpointTaskRequest) (_ *google_protobuf1.Empty, err error) {
 	defer panicRecover()
-	const activity = "Checkpoint"
-	af := logrus.Fields{
-		"tid":  req.ID,
-		"path": req.Path,
-	}
-	log := beginActivity(activity, af)
-	defer func() { endActivity(log, activity, err) }()
+	ctx, span := trace.StartSpan(ctx, "Checkpoint")
+	defer span.End()
+	defer func() {
+		oc.SetSpanStatus(span, err)
+	}()
+
+	span.AddAttributes(
+		trace.StringAttribute("tid", req.ID),
+		trace.StringAttribute("path", req.Path))
 
 	r, e := s.checkpointInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -204,15 +200,17 @@ func (s *service) Checkpoint(ctx context.Context, req *task.CheckpointTaskReques
 
 func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *google_protobuf1.Empty, err error) {
 	defer panicRecover()
-	const activity = "Kill"
-	af := logrus.Fields{
-		"tid":    req.ID,
-		"eid":    req.ExecID,
-		"signal": req.Signal,
-		"all":    req.All,
-	}
-	log := beginActivity(activity, af)
-	defer func() { endActivity(log, activity, err) }()
+	ctx, span := trace.StartSpan(ctx, "Kill")
+	defer span.End()
+	defer func() {
+		oc.SetSpanStatus(span, err)
+	}()
+
+	span.AddAttributes(
+		trace.StringAttribute("tid", req.ID),
+		trace.StringAttribute("eid", req.ExecID),
+		trace.Int64Attribute("signal", int64(req.Signal)),
+		trace.BoolAttribute("all", req.All))
 
 	r, e := s.killInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -220,17 +218,19 @@ func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *google_pr
 
 func (s *service) Exec(ctx context.Context, req *task.ExecProcessRequest) (_ *google_protobuf1.Empty, err error) {
 	defer panicRecover()
-	const activity = "Exec"
-	af := logrus.Fields{
-		"tid":      req.ID,
-		"eid":      req.ExecID,
-		"terminal": req.Terminal,
-		"stdin":    req.Stdin,
-		"stdout":   req.Stdout,
-		"stderr":   req.Stderr,
-	}
-	log := beginActivity(activity, af)
-	defer func() { endActivity(log, activity, err) }()
+	ctx, span := trace.StartSpan(ctx, "Exec")
+	defer span.End()
+	defer func() {
+		oc.SetSpanStatus(span, err)
+	}()
+
+	span.AddAttributes(
+		trace.StringAttribute("tid", req.ID),
+		trace.StringAttribute("eid", req.ExecID),
+		trace.BoolAttribute("terminal", req.Terminal),
+		trace.StringAttribute("stdin", req.Stdin),
+		trace.StringAttribute("stdout", req.Stdout),
+		trace.StringAttribute("stderr", req.Stderr))
 
 	r, e := s.execInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -238,17 +238,19 @@ func (s *service) Exec(ctx context.Context, req *task.ExecProcessRequest) (_ *go
 
 func (s *service) DiagExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (_ *shimdiag.ExecProcessResponse, err error) {
 	defer panicRecover()
-	const activity = "DiagExecInHost"
-	af := logrus.Fields{
-		"args":     req.Args,
-		"workdir":  req.Workdir,
-		"terminal": req.Terminal,
-		"stdin":    req.Stdin,
-		"stdout":   req.Stdout,
-		"stderr":   req.Stderr,
-	}
-	log := beginActivity(activity, af)
-	defer func() { endActivity(log, activity, err) }()
+	ctx, span := trace.StartSpan(ctx, "DiagExecInHost")
+	defer span.End()
+	defer func() {
+		oc.SetSpanStatus(span, err)
+	}()
+
+	span.AddAttributes(
+		trace.StringAttribute("args", strings.Join(req.Args, " ")),
+		trace.StringAttribute("workdir", req.Workdir),
+		trace.BoolAttribute("terminal", req.Terminal),
+		trace.StringAttribute("stdin", req.Stdin),
+		trace.StringAttribute("stdout", req.Stdout),
+		trace.StringAttribute("stderr", req.Stderr))
 
 	r, e := s.diagExecInHostInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -256,15 +258,17 @@ func (s *service) DiagExecInHost(ctx context.Context, req *shimdiag.ExecProcessR
 
 func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ *google_protobuf1.Empty, err error) {
 	defer panicRecover()
-	const activity = "ResizePty"
-	af := logrus.Fields{
-		"tid":    req.ID,
-		"eid":    req.ExecID,
-		"width":  req.Width,
-		"height": req.Height,
-	}
-	log := beginActivity(activity, af)
-	defer func() { endActivity(log, activity, err) }()
+	ctx, span := trace.StartSpan(ctx, "ResizePty")
+	defer span.End()
+	defer func() {
+		oc.SetSpanStatus(span, err)
+	}()
+
+	span.AddAttributes(
+		trace.StringAttribute("tid", req.ID),
+		trace.StringAttribute("eid", req.ExecID),
+		trace.Int64Attribute("width", int64(req.Width)),
+		trace.Int64Attribute("height", int64(req.Height)))
 
 	r, e := s.resizePtyInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -272,14 +276,16 @@ func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ 
 
 func (s *service) CloseIO(ctx context.Context, req *task.CloseIORequest) (_ *google_protobuf1.Empty, err error) {
 	defer panicRecover()
-	const activity = "CloseIO"
-	af := logrus.Fields{
-		"tid":   req.ID,
-		"eid":   req.ExecID,
-		"stdin": req.Stdin,
-	}
-	log := beginActivity(activity, af)
-	defer func() { endActivity(log, activity, err) }()
+	ctx, span := trace.StartSpan(ctx, "CloseIO")
+	defer span.End()
+	defer func() {
+		oc.SetSpanStatus(span, err)
+	}()
+
+	span.AddAttributes(
+		trace.StringAttribute("tid", req.ID),
+		trace.StringAttribute("eid", req.ExecID),
+		trace.BoolAttribute("stdin", req.Stdin))
 
 	r, e := s.closeIOInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -287,12 +293,13 @@ func (s *service) CloseIO(ctx context.Context, req *task.CloseIORequest) (_ *goo
 
 func (s *service) Update(ctx context.Context, req *task.UpdateTaskRequest) (_ *google_protobuf1.Empty, err error) {
 	defer panicRecover()
-	const activity = "Update"
-	af := logrus.Fields{
-		"tid": req.ID,
-	}
-	log := beginActivity(activity, af)
-	defer func() { endActivity(log, activity, err) }()
+	ctx, span := trace.StartSpan(ctx, "Update")
+	defer span.End()
+	defer func() {
+		oc.SetSpanStatus(span, err)
+	}()
+
+	span.AddAttributes(trace.StringAttribute("tid", req.ID))
 
 	r, e := s.updateInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -300,19 +307,20 @@ func (s *service) Update(ctx context.Context, req *task.UpdateTaskRequest) (_ *g
 
 func (s *service) Wait(ctx context.Context, req *task.WaitRequest) (resp *task.WaitResponse, err error) {
 	defer panicRecover()
-	const activity = "Wait"
-	af := logrus.Fields{
-		"tid": req.ID,
-		"eid": req.ExecID,
-	}
-	log := beginActivity(activity, af)
+	ctx, span := trace.StartSpan(ctx, "Wait")
+	defer span.End()
 	defer func() {
 		if resp != nil {
-			log.Data["exitStatus"] = resp.ExitStatus
-			log.Data["exitedAt"] = resp.ExitedAt
+			span.AddAttributes(
+				trace.Int64Attribute("exitStatus", int64(resp.ExitStatus)),
+				trace.StringAttribute("exitedAt", resp.ExitedAt.String()))
 		}
-		endActivity(log, activity, err)
+		oc.SetSpanStatus(span, err)
 	}()
+
+	span.AddAttributes(
+		trace.StringAttribute("tid", req.ID),
+		trace.StringAttribute("eid", req.ExecID))
 
 	r, e := s.waitInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -320,12 +328,13 @@ func (s *service) Wait(ctx context.Context, req *task.WaitRequest) (resp *task.W
 
 func (s *service) Stats(ctx context.Context, req *task.StatsRequest) (_ *task.StatsResponse, err error) {
 	defer panicRecover()
-	const activity = "Stats"
-	af := logrus.Fields{
-		"tid": req.ID,
-	}
-	log := beginActivity(activity, af)
-	defer func() { endActivity(log, activity, err) }()
+	ctx, span := trace.StartSpan(ctx, "Stats")
+	defer span.End()
+	defer func() {
+		oc.SetSpanStatus(span, err)
+	}()
+
+	span.AddAttributes(trace.StringAttribute("tid", req.ID))
 
 	r, e := s.statsInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -333,19 +342,19 @@ func (s *service) Stats(ctx context.Context, req *task.StatsRequest) (_ *task.St
 
 func (s *service) Connect(ctx context.Context, req *task.ConnectRequest) (resp *task.ConnectResponse, err error) {
 	defer panicRecover()
-	const activity = "Connect"
-	af := logrus.Fields{
-		"tid": req.ID,
-	}
-	log := beginActivity(activity, af)
+	ctx, span := trace.StartSpan(ctx, "Connect")
+	defer span.End()
 	defer func() {
 		if resp != nil {
-			log.Data["shimPid"] = resp.ShimPid
-			log.Data["taskPid"] = resp.TaskPid
-			log.Data["version"] = resp.Version
+			span.AddAttributes(
+				trace.Int64Attribute("shimPid", int64(resp.ShimPid)),
+				trace.Int64Attribute("taskPid", int64(resp.TaskPid)),
+				trace.StringAttribute("version", resp.Version))
 		}
-		endActivity(log, activity, err)
+		oc.SetSpanStatus(span, err)
 	}()
+
+	span.AddAttributes(trace.StringAttribute("tid", req.ID))
 
 	r, e := s.connectInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -353,13 +362,13 @@ func (s *service) Connect(ctx context.Context, req *task.ConnectRequest) (resp *
 
 func (s *service) Shutdown(ctx context.Context, req *task.ShutdownRequest) (_ *google_protobuf1.Empty, err error) {
 	defer panicRecover()
-	const activity = "Shutdown"
-	af := logrus.Fields{
-		"tid": req.ID,
-		"now": req.Now,
-	}
-	log := beginActivity(activity, af)
-	defer func() { endActivity(log, activity, err) }()
+	ctx, span := trace.StartSpan(ctx, "Shutdown")
+	defer span.End()
+	defer func() {
+		oc.SetSpanStatus(span, err)
+	}()
+
+	span.AddAttributes(trace.StringAttribute("tid", req.ID))
 
 	r, e := s.shutdownInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -367,10 +376,11 @@ func (s *service) Shutdown(ctx context.Context, req *task.ShutdownRequest) (_ *g
 
 func (s *service) DiagStacks(ctx context.Context, req *shimdiag.StacksRequest) (_ *shimdiag.StacksResponse, err error) {
 	defer panicRecover()
-	const activity = "DiagStacks"
-	af := logrus.Fields{}
-	log := beginActivity(activity, af)
-	defer func() { endActivity(log, activity, err) }()
+	ctx, span := trace.StartSpan(ctx, "DiagStacks")
+	defer span.End()
+	defer func() {
+		oc.SetSpanStatus(span, err)
+	}()
 
 	buf := make([]byte, 4096)
 	for {

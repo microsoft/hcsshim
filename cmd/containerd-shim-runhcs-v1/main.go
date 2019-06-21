@@ -10,9 +10,11 @@ import (
 	"github.com/Microsoft/go-winio/pkg/etw"
 	"github.com/Microsoft/go-winio/pkg/etwlogrus"
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	"go.opencensus.io/trace"
 )
 
 const usage = ``
@@ -88,6 +90,10 @@ func main() {
 			etw.StringArray("Args", os.Args),
 		),
 	)
+
+	// Register our OpenCensus logrus exporter
+	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
+	trace.RegisterExporter(&oc.LogrusExporter{})
 
 	app := cli.NewApp()
 	app.Name = "containerd-shim-runhcs-v1"
