@@ -1,4 +1,4 @@
-# github.com/Microsoft/go-winio v0.4.13-0.20190516165658-12afdbf8b879
+# github.com/Microsoft/go-winio v0.4.13-0.20190625174015-d2ef9cfdac5d
 github.com/Microsoft/go-winio/pkg/guid
 github.com/Microsoft/go-winio
 github.com/Microsoft/go-winio/pkg/etw
