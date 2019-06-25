@@ -33,15 +33,7 @@ func NewHookFromProvider(provider *etw.Provider) (*Hook, error) {
 // Levels returns the set of levels that this hook wants to receive log entries
 // for.
 func (h *Hook) Levels() []logrus.Level {
-	return []logrus.Level{
-		logrus.TraceLevel,
-		logrus.DebugLevel,
-		logrus.InfoLevel,
-		logrus.WarnLevel,
-		logrus.ErrorLevel,
-		logrus.FatalLevel,
-		logrus.PanicLevel,
-	}
+	return logrus.AllLevels
 }
 
 var logrusToETWLevelMap = map[logrus.Level]etw.Level{
@@ -78,9 +70,10 @@ func (h *Hook) Fire(e *logrus.Entry) error {
 	}
 	sort.Strings(names)
 
-	// Reserve extra space for the message field.
-	fields := make([]etw.FieldOpt, 0, len(e.Data)+1)
+	// Reserve extra space for the message and time fields.
+	fields := make([]etw.FieldOpt, 0, len(e.Data)+2)
 	fields = append(fields, etw.StringField("Message", e.Message))
+	fields = append(fields, etw.Time("Time", e.Time))
 	for _, k := range names {
 		fields = append(fields, etw.SmartField(k, e.Data[k]))
 	}

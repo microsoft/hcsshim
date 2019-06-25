@@ -4,6 +4,8 @@ github.com/Microsoft/go-winio v0.4.13-0.20190509182014-01fe22a8b81b h1:4hq1MOP1J
 github.com/Microsoft/go-winio v0.4.13-0.20190509182014-01fe22a8b81b/go.mod h1:qXqCSQ3Xa7+6tgxaGTIe4Kpcdsi+P8jBhyzoq1bpyYA=
 github.com/Microsoft/go-winio v0.4.13-0.20190516165658-12afdbf8b879 h1:fQb0usH3PEv/Lq1sH+OUtambUVdeS0e5UQ3afz/yuzs=
 github.com/Microsoft/go-winio v0.4.13-0.20190516165658-12afdbf8b879/go.mod h1:qXqCSQ3Xa7+6tgxaGTIe4Kpcdsi+P8jBhyzoq1bpyYA=
+github.com/Microsoft/go-winio v0.4.13-0.20190625174015-d2ef9cfdac5d h1:7mO5VQnRoRUIvk2ruCSTB7pSrFjcYG2CBVuItjuWxyk=
+github.com/Microsoft/go-winio v0.4.13-0.20190625174015-d2ef9cfdac5d/go.mod h1:qXqCSQ3Xa7+6tgxaGTIe4Kpcdsi+P8jBhyzoq1bpyYA=
 github.com/blang/semver v3.1.0+incompatible h1:7hqmJYuaEK3qwVjWubYiht3j93YI0WQBuysxHIfUriU=
 github.com/blang/semver v3.1.0+incompatible/go.mod h1:kRBLl5iJ+tD4TcOOxsy/0fnwebNt5EWlYSAyrTnjyyk=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
