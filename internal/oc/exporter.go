@@ -30,7 +30,7 @@ func (le *LogrusExporter) ExportSpan(s *trace.SpanData) {
 	baseEntry.Data["parentSpanID"] = s.ParentSpanID.String()
 	baseEntry.Data["startTime"] = s.StartTime
 	baseEntry.Data["endTime"] = s.EndTime
-	baseEntry.Data["duration"] = s.EndTime.Sub(s.StartTime)
+	baseEntry.Data["duration"] = s.EndTime.Sub(s.StartTime).String()
 	baseEntry.Data["name"] = s.Name
 	baseEntry.Time = s.StartTime
 
