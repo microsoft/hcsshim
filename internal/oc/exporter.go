@@ -31,12 +31,13 @@ func (le *LogrusExporter) ExportSpan(s *trace.SpanData) {
 	baseEntry.Data["startTime"] = s.StartTime
 	baseEntry.Data["endTime"] = s.EndTime
 	baseEntry.Data["duration"] = s.EndTime.Sub(s.StartTime)
-	baseEntry.Time = s.EndTime
+	baseEntry.Data["name"] = s.Name
+	baseEntry.Time = s.StartTime
 
 	level := logrus.InfoLevel
 	if s.Status.Code != 0 {
 		level = logrus.ErrorLevel
 		baseEntry.Data[logrus.ErrorKey] = s.Status.Message
 	}
-	baseEntry.Log(level, s.Name)
+	baseEntry.Log(level, "Span")
 }
