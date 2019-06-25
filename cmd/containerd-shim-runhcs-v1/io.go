@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"io"
 )
 
@@ -10,11 +11,11 @@ type upstreamIO interface {
 	// Close closes all open io.
 	//
 	// This call is idempotent and safe to call multiple times.
-	Close()
+	Close(ctx context.Context)
 	// CloseStdin closes just `Stdin()` if open.
 	//
 	// This call is idempotent and safe to call multiple times.
-	CloseStdin()
+	CloseStdin(ctx context.Context)
 	// Stdin returns the open `stdin` reader. If `stdin` was never opened this
 	// will return `nil`.
 	Stdin() io.Reader

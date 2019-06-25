@@ -2,20 +2,26 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"os/exec"
 	"sync"
 
 	"github.com/containerd/typeurl"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
 
-type publisher func(topic string, event interface{})
+type publisher func(ctx context.Context, topic string, event interface{})
 
 var _ = (publisher)(publishEvent)
 
 var publishLock sync.Mutex
 
-func publishEvent(topic string, event interface{}) {
+func publishEvent(ctx context.Context, topic string, event interface{}) {
+	_, span := trace.StartSpan(ctx, "publishEvent")
+	defer span.End()
+	span.AddAttributes(trace.StringAttribute("topic", topic))
+
 	publishLock.Lock()
 	defer publishLock.Unlock()
 

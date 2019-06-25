@@ -13,7 +13,6 @@ require (
 	github.com/containerd/ttrpc v0.0.0-20180920185216-2a805f718635
 	github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd
 	github.com/gogo/protobuf v1.2.1
-	github.com/google/go-cmp v0.3.0 // indirect
 	github.com/hashicorp/errwrap v0.0.0-20141028054710-7554cd9344ce // indirect
 	github.com/hashicorp/go-multierror v0.0.0-20161216184304-ed905158d874 // indirect
 	github.com/opencontainers/go-digest v0.0.0-20180430190053-c9281466c8b2 // indirect
@@ -27,7 +26,8 @@ require (
 	github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/xeipuuv/gojsonschema v0.0.0-20180618132009-1d523034197f // indirect
-	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
+	go.opencensus.io v0.22.0
+	golang.org/x/sync v0.0.0-20190227155943-e225da77a7e6
 	golang.org/x/sys v0.0.0-20190507160741-ecd444e8653b
 	google.golang.org/grpc v1.20.1
 	gotest.tools v2.2.0+incompatible // indirect

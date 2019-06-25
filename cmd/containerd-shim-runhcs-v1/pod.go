@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/Microsoft/hcsshim/internal/oc"
+	"go.opencensus.io/trace"
+
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -17,7 +20,6 @@ import (
 	"github.com/containerd/containerd/runtime/v2/task"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -54,9 +56,12 @@ type shimPod interface {
 }
 
 func createPod(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (_ shimPod, err error) {
-	logrus.WithFields(logrus.Fields{
-		"tid": req.ID,
-	}).Debug("createPod")
+	ctx, span := trace.StartSpan(ctx, "createPod")
+	defer span.End()
+	defer func() {
+		oc.SetSpanStatus(span, err)
+	}()
+	span.AddAttributes(trace.StringAttribute("tid", req.ID))
 
 	if osversion.Get().Build < osversion.RS5 {
 		return nil, errors.Wrapf(errdefs.ErrFailedPrecondition, "pod support is not available on Windows versions previous to RS5 (%d)", osversion.RS5)
@@ -178,6 +183,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		// Publish the created event. We only do this for a fake WCOW task. A
 		// HCS Task will event itself based on actual process lifetime.
 		events(
+			ctx,
 			runtime.TaskCreateEventTopic,
 			&eventstypes.TaskCreate{
 				ContainerID: req.ID,
@@ -242,11 +248,15 @@ func (p *pod) ID() string {
 	return p.id
 }
 
-func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
-	logrus.WithFields(logrus.Fields{
-		"pod-id": p.id,
-		"tid":    req.ID,
-	}).Debug("pod::CreateTask")
+func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) (_ shimTask, err error) {
+	ctx, span := trace.StartSpan(ctx, "pod::CreateTask")
+	defer span.End()
+	defer func() {
+		oc.SetSpanStatus(span, err)
+	}()
+	span.AddAttributes(
+		trace.StringAttribute("pod-id", p.id),
+		trace.StringAttribute("tid", req.ID))
 
 	if req.ID == p.id {
 		return nil, errors.Wrapf(errdefs.ErrAlreadyExists, "task with id: '%s' already exists", req.ID)
@@ -262,7 +272,6 @@ func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *sp
 		return nil, errors.Wrapf(errdefs.ErrAlreadyExists, "task with id: '%s' already exists id pod: '%s'", req.ID, p.id)
 	}
 	p.wcl.Unlock()
-	var err error
 	defer func() {
 		if err != nil {
 			p.workloadTasks.Delete(req.ID)
@@ -310,14 +319,18 @@ func (p *pod) GetTask(tid string) (shimTask, error) {
 	return raw.(shimTask), nil
 }
 
-func (p *pod) KillTask(ctx context.Context, tid, eid string, signal uint32, all bool) error {
-	logrus.WithFields(logrus.Fields{
-		"pod-id": p.id,
-		"tid":    tid,
-		"eid":    eid,
-		"signal": signal,
-		"all":    all,
-	}).Debug("pod::KillTask")
+func (p *pod) KillTask(ctx context.Context, tid, eid string, signal uint32, all bool) (err error) {
+	ctx, span := trace.StartSpan(ctx, "pod::KillTask")
+	defer span.End()
+	defer func() {
+		oc.SetSpanStatus(span, err)
+	}()
+	span.AddAttributes(
+		trace.StringAttribute("pod-id", p.id),
+		trace.StringAttribute("tid", tid),
+		trace.StringAttribute("eid", eid),
+		trace.Int64Attribute("signal", int64(signal)),
+		trace.BoolAttribute("all", all))
 
 	t, err := p.GetTask(tid)
 	if err != nil {

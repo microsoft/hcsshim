@@ -1,7 +1,9 @@
 package main
 
+import "context"
+
 var _ = (publisher)(fakePublisher)
 
-func fakePublisher(topic string, event interface{}) {
+func fakePublisher(ctx context.Context, topic string, event interface{}) {
 	// Do nothing
 }

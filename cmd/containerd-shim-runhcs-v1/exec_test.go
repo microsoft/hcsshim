@@ -67,7 +67,7 @@ func (tse *testShimExec) CloseIO(ctx context.Context, stdin bool) error {
 func (tse *testShimExec) Wait(ctx context.Context) *task.StateResponse {
 	return tse.Status()
 }
-func (tse *testShimExec) ForceExit(status int) {
+func (tse *testShimExec) ForceExit(ctx context.Context, status int) {
 	if tse.state != shimExecStateExited {
 		tse.state = shimExecStateExited
 		tse.status = 1

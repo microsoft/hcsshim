@@ -7,9 +7,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/oc"
+
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/signals"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
@@ -21,6 +24,7 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 	"golang.org/x/sys/windows"
 )
 
@@ -49,10 +53,13 @@ func newHcsExec(
 	isWCOW bool,
 	spec *specs.Process,
 	io upstreamIO) shimExec {
-	logrus.WithFields(logrus.Fields{
-		"tid": tid,
-		"eid": id,
-	}).Debug("newHcsExec")
+	_, span := trace.StartSpan(ctx, "newHcsExec")
+	defer span.End()
+	span.AddAttributes(
+		trace.StringAttribute("tid", tid),
+		trace.StringAttribute("eid", id), // Init exec ID is always same as Task ID
+		trace.StringAttribute("bundle", bundle),
+		trace.BoolAttribute("wcow", isWCOW))
 
 	he := &hcsExec{
 		events:      events,
@@ -190,10 +197,12 @@ func copyAndLog(w io.Writer, r io.Reader, e *logrus.Entry, msg string) {
 }
 
 func (he *hcsExec) Start(ctx context.Context) (err error) {
-	logrus.WithFields(logrus.Fields{
-		"tid": he.tid,
-		"eid": he.id,
-	}).Debug("hcsExec::Start")
+	ctx, span := trace.StartSpan(ctx, "hcsExec::Start")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("tid", he.tid),
+		trace.StringAttribute("eid", he.id))
 
 	he.sl.Lock()
 	defer he.sl.Unlock()
@@ -202,7 +211,7 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 	}
 	defer func() {
 		if err != nil {
-			he.exitFromCreatedL(1)
+			he.exitFromCreatedL(ctx, 1)
 		}
 	}()
 	if he.id == he.tid {
@@ -223,7 +232,7 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 		Stdin:  he.io.Stdin(),
 		Stdout: he.io.Stdout(),
 		Stderr: he.io.Stderr(),
-		Log: logrus.WithFields(logrus.Fields{
+		Log: log.G(ctx).WithFields(logrus.Fields{
 			"tid": he.tid,
 			"eid": he.id,
 		}),
@@ -248,6 +257,7 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 	// avoid publishing the exit previous to the start.
 	if he.id != he.tid {
 		he.events(
+			ctx,
 			runtime.TaskExecStartedEventTopic,
 			&eventstypes.TaskExecStarted{
 				ContainerID: he.tid,
@@ -256,6 +266,7 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 			})
 	} else {
 		he.events(
+			ctx,
 			runtime.TaskStartEventTopic,
 			&eventstypes.TaskStart{
 				ContainerID: he.tid,
@@ -268,18 +279,20 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 	return nil
 }
 
-func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
-	logrus.WithFields(logrus.Fields{
-		"tid":    he.tid,
-		"eid":    he.id,
-		"signal": signal,
-	}).Debug("hcsExec::Kill")
+func (he *hcsExec) Kill(ctx context.Context, signal uint32) (err error) {
+	ctx, span := trace.StartSpan(ctx, "hcsExec::Kill")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("tid", he.tid),
+		trace.StringAttribute("eid", he.id),
+		trace.Int64Attribute("signal", int64(signal)))
 
 	he.sl.Lock()
 	defer he.sl.Unlock()
 	switch he.state {
 	case shimExecStateCreated:
-		he.exitFromCreatedL(1)
+		he.exitFromCreatedL(ctx, 1)
 		return nil
 	case shimExecStateRunning:
 		supported := false
@@ -326,13 +339,15 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 	}
 }
 
-func (he *hcsExec) ResizePty(ctx context.Context, width, height uint32) error {
-	logrus.WithFields(logrus.Fields{
-		"tid":    he.tid,
-		"eid":    he.id,
-		"width":  width,
-		"height": height,
-	}).Debug("hcsExec::ResizePty")
+func (he *hcsExec) ResizePty(ctx context.Context, width, height uint32) (err error) {
+	_, span := trace.StartSpan(ctx, "hcsExec::ResizePty")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("tid", he.tid),
+		trace.StringAttribute("eid", he.id),
+		trace.Int64Attribute("width", int64(width)),
+		trace.Int64Attribute("height", int64(height)))
 
 	he.sl.Lock()
 	defer he.sl.Unlock()
@@ -347,43 +362,46 @@ func (he *hcsExec) ResizePty(ctx context.Context, width, height uint32) error {
 }
 
 func (he *hcsExec) CloseIO(ctx context.Context, stdin bool) error {
-	logrus.WithFields(logrus.Fields{
-		"tid":   he.tid,
-		"eid":   he.id,
-		"stdin": stdin,
-	}).Debug("hcsExec::CloseIO")
+	ctx, span := trace.StartSpan(ctx, "hcsExec::CloseIO")
+	defer span.End()
+	span.AddAttributes(
+		trace.StringAttribute("tid", he.tid),
+		trace.StringAttribute("eid", he.id),
+		trace.BoolAttribute("stdin", stdin))
 
 	// If we have any upstream IO we close the upstream connection. This will
 	// unblock the `io.Copy` in the `Start()` call which will signal
 	// `he.p.CloseStdin()`. If `he.io.Stdin()` is already closed this is safe to
 	// call multiple times.
-	he.io.CloseStdin()
+	he.io.CloseStdin(ctx)
 	return nil
 }
 
 func (he *hcsExec) Wait(ctx context.Context) *task.StateResponse {
-	logrus.WithFields(logrus.Fields{
-		"tid": he.tid,
-		"eid": he.id,
-	}).Debug("hcsExec::Wait")
+	_, span := trace.StartSpan(ctx, "hcsExec::Wait")
+	defer span.End()
+	span.AddAttributes(
+		trace.StringAttribute("tid", he.tid),
+		trace.StringAttribute("eid", he.id))
 
 	<-he.exited
 	return he.Status()
 }
 
-func (he *hcsExec) ForceExit(status int) {
+func (he *hcsExec) ForceExit(ctx context.Context, status int) {
 	he.sl.Lock()
 	defer he.sl.Unlock()
 	if he.state != shimExecStateExited {
 		// Avoid logging the force if we already exited gracefully
-		logrus.WithFields(logrus.Fields{
-			"tid":    he.tid,
-			"eid":    he.id,
-			"status": status,
-		}).Debug("hcsExec::ForceExit")
+		ctx, span := trace.StartSpan(ctx, "hcsExec::ForceExit")
+		defer span.End()
+		span.AddAttributes(
+			trace.StringAttribute("tid", he.tid),
+			trace.StringAttribute("eid", he.id),
+			trace.Int64Attribute("status", int64(status)))
 		switch he.state {
 		case shimExecStateCreated:
-			he.exitFromCreatedL(status)
+			he.exitFromCreatedL(ctx, status)
 		case shimExecStateRunning:
 			// Kill the process to unblock `he.waitForExit`
 			he.p.Process.Kill()
@@ -412,8 +430,14 @@ func (he *hcsExec) ForceExit(status int) {
 //
 // We DO NOT send the async `TaskExit` event because we never would have sent
 // the `TaskStart`/`TaskExecStarted` event.
-func (he *hcsExec) exitFromCreatedL(status int) {
+func (he *hcsExec) exitFromCreatedL(ctx context.Context, status int) {
 	if he.state != shimExecStateExited {
+		ctx, span := trace.StartSpan(ctx, "hcsExec::exitFromCreatedL")
+		defer span.End()
+		span.AddAttributes(
+			trace.StringAttribute("tid", he.tid),
+			trace.StringAttribute("eid", he.id))
+
 		// Unblock the container exit goroutine
 		he.processDoneOnce.Do(func() { close(he.processDone) })
 		// Transition this exec
@@ -421,7 +445,7 @@ func (he *hcsExec) exitFromCreatedL(status int) {
 		he.exitStatus = uint32(status)
 		he.exitedAt = time.Now()
 		// Release all upstream IO connections (if any)
-		he.io.Close()
+		he.io.Close(ctx)
 		// Free any waiters
 		he.exitedOnce.Do(func() {
 			close(he.exited)
@@ -453,13 +477,15 @@ func (he *hcsExec) exitFromCreatedL(status int) {
 // 6. Close `he.exited` channel to unblock any waiters who might have called
 // `Create`/`Wait`/`Start` which is a valid pattern.
 func (he *hcsExec) waitForExit() {
+	ctx, span := trace.StartSpan(context.Background(), "hcsExec::waitForExit")
+	defer span.End()
+	span.AddAttributes(
+		trace.StringAttribute("tid", he.tid),
+		trace.StringAttribute("eid", he.id))
+
 	err := he.p.Process.Wait()
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"tid":           he.tid,
-			"eid":           he.id,
-			logrus.ErrorKey: err,
-		}).Error("hcsExec::waitForExit - Failed process Wait")
+		log.G(ctx).WithError(err).Error("failed process Wait")
 	}
 
 	// Issue the process cancellation to unblock the container wait as early as
@@ -468,17 +494,9 @@ func (he *hcsExec) waitForExit() {
 
 	code, err := he.p.Process.ExitCode()
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"tid":           he.tid,
-			"eid":           he.id,
-			logrus.ErrorKey: err,
-		}).Error("hcsExec::waitForExit - Failed to get ExitCode")
+		log.G(ctx).WithError(err).Error("failed to get ExitCode")
 	} else {
-		logrus.WithFields(logrus.Fields{
-			"tid":      he.tid,
-			"eid":      he.id,
-			"exitCode": code,
-		}).Debug("hcsExec::waitForExit - Exited")
+		log.G(ctx).WithField("exitCode", code).Debug("exited")
 	}
 
 	he.sl.Lock()
@@ -489,13 +507,14 @@ func (he *hcsExec) waitForExit() {
 
 	// Wait for all IO copies to complete and free the resources.
 	he.p.Wait()
-	he.io.Close()
+	he.io.Close(ctx)
 
 	// Only send the `runtime.TaskExitEventTopic` notification if this is a true
 	// exec. For the `init` exec this is handled in task teardown.
 	if he.tid != he.id {
 		// We had a valid process so send the exited notification.
 		he.events(
+			ctx,
 			runtime.TaskExitEventTopic,
 			&eventstypes.TaskExit{
 				ContainerID: he.tid,
@@ -518,6 +537,12 @@ func (he *hcsExec) waitForExit() {
 //
 // This MUST be called via a goroutine at exec create.
 func (he *hcsExec) waitForContainerExit() {
+	ctx, span := trace.StartSpan(context.Background(), "hcsExec::waitForContainerExit")
+	defer span.End()
+	span.AddAttributes(
+		trace.StringAttribute("tid", he.tid),
+		trace.StringAttribute("eid", he.id))
+
 	cexit := make(chan struct{})
 	go func() {
 		he.c.Wait()
@@ -530,7 +555,7 @@ func (he *hcsExec) waitForContainerExit() {
 		he.sl.Lock()
 		switch he.state {
 		case shimExecStateCreated:
-			he.exitFromCreatedL(1)
+			he.exitFromCreatedL(ctx, 1)
 		case shimExecStateRunning:
 			// Kill the process to unblock `he.waitForExit`.
 			he.p.Process.Kill()

@@ -5,7 +5,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/oc"
+
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	eventstypes "github.com/containerd/containerd/api/events"
@@ -14,7 +17,7 @@ import (
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
 
 // newWcowPodSandboxTask creates a fake WCOW task with a fake WCOW `init`
@@ -26,9 +29,9 @@ import (
 // `parent`. When the fake WCOW `init` process exits via `Signal` `parent` will
 // be forcibly closed by this task.
 func newWcowPodSandboxTask(ctx context.Context, events publisher, id, bundle string, parent *uvm.UtilityVM) shimTask {
-	logrus.WithFields(logrus.Fields{
-		"tid": id,
-	}).Debug("newWcowPodSandboxTask")
+	ctx, span := trace.StartSpan(ctx, "newWcowPodSandboxTask")
+	defer span.End()
+	span.AddAttributes(trace.StringAttribute("tid", id))
 
 	wpst := &wcowPodSandboxTask{
 		events: events,
@@ -41,32 +44,11 @@ func newWcowPodSandboxTask(ctx context.Context, events publisher, id, bundle str
 		// We have (and own) a parent UVM. Listen for its exit and forcibly
 		// close this task. This is not expected but in the event of a UVM crash
 		// we need to handle this case.
-		go func() {
-			werr := parent.Wait()
-			if werr != nil {
-				logrus.WithFields(logrus.Fields{
-					"tid":           id,
-					logrus.ErrorKey: werr,
-				}).Error("newWcowPodSandboxTask - UVM Wait failed")
-			}
-			// The UVM came down. Force transition the init task (if it wasn't
-			// already) to unblock any waiters since the platform wont send any
-			// events for this fake process.
-			wpst.init.ForceExit(1)
-
-			// Close the host and event the exit.
-			wpst.close()
-		}()
+		go wpst.waitParentExit()
 	}
 	// In the normal case the `Signal` call from the caller killed this fake
 	// init process.
-	go func() {
-		// Wait for it to exit on its own
-		wpst.init.Wait(context.Background())
-
-		// Close the host and event the exit
-		wpst.close()
-	}()
+	go wpst.waitInitExit()
 	return wpst
 }
 
@@ -107,11 +89,13 @@ func (wpst *wcowPodSandboxTask) ID() string {
 	return wpst.id
 }
 
-func (wpst *wcowPodSandboxTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest, s *specs.Process) error {
-	logrus.WithFields(logrus.Fields{
-		"tid": wpst.id,
-		"eid": req.ID,
-	}).Debug("wcowPodSandboxTask::CreateExec")
+func (wpst *wcowPodSandboxTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest, s *specs.Process) (err error) {
+	ctx, span := trace.StartSpan(ctx, "wcowPodSandboxTask::CreateExec")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("tid", wpst.id),
+		trace.StringAttribute("eid", req.ExecID))
 
 	return errors.Wrap(errdefs.ErrNotImplemented, "WCOW Pod task should never issue exec")
 }
@@ -124,13 +108,15 @@ func (wpst *wcowPodSandboxTask) GetExec(eid string) (shimExec, error) {
 	return nil, errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", eid, wpst.id)
 }
 
-func (wpst *wcowPodSandboxTask) KillExec(ctx context.Context, eid string, signal uint32, all bool) error {
-	logrus.WithFields(logrus.Fields{
-		"tid":    wpst.id,
-		"eid":    eid,
-		"signal": signal,
-		"all":    all,
-	}).Debug("wcowPodSandboxTask::KillExec")
+func (wpst *wcowPodSandboxTask) KillExec(ctx context.Context, eid string, signal uint32, all bool) (err error) {
+	ctx, span := trace.StartSpan(ctx, "wcowPodSandboxTask::KillExec")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("tid", wpst.id),
+		trace.StringAttribute("eid", eid),
+		trace.Int64Attribute("signal", int64(signal)),
+		trace.BoolAttribute("all", all))
 
 	e, err := wpst.GetExec(eid)
 	if err != nil {
@@ -146,11 +132,13 @@ func (wpst *wcowPodSandboxTask) KillExec(ctx context.Context, eid string, signal
 	return nil
 }
 
-func (wpst *wcowPodSandboxTask) DeleteExec(ctx context.Context, eid string) (int, uint32, time.Time, error) {
-	logrus.WithFields(logrus.Fields{
-		"tid": wpst.id,
-		"eid": eid,
-	}).Debug("wcowPodSandboxTask::DeleteExec")
+func (wpst *wcowPodSandboxTask) DeleteExec(ctx context.Context, eid string) (_ int, _ uint32, _ time.Time, err error) {
+	ctx, span := trace.StartSpan(ctx, "wcowPodSandboxTask::DeleteExec")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("tid", wpst.id),
+		trace.StringAttribute("eid", eid))
 
 	e, err := wpst.GetExec(eid)
 	if err != nil {
@@ -158,7 +146,7 @@ func (wpst *wcowPodSandboxTask) DeleteExec(ctx context.Context, eid string) (int
 	}
 	switch state := e.State(); state {
 	case shimExecStateCreated:
-		e.ForceExit(0)
+		e.ForceExit(ctx, 0)
 	case shimExecStateRunning:
 		return 0, 0, time.Time{}, newExecInvalidStateError(wpst.id, eid, state, "delete")
 	}
@@ -166,6 +154,7 @@ func (wpst *wcowPodSandboxTask) DeleteExec(ctx context.Context, eid string) (int
 
 	// Publish the deleted event
 	wpst.events(
+		ctx,
 		runtime.TaskDeleteEventTopic,
 		&eventstypes.TaskDelete{
 			ContainerID: wpst.id,
@@ -179,9 +168,9 @@ func (wpst *wcowPodSandboxTask) DeleteExec(ctx context.Context, eid string) (int
 }
 
 func (wpst *wcowPodSandboxTask) Pids(ctx context.Context) ([]options.ProcessDetails, error) {
-	logrus.WithFields(logrus.Fields{
-		"tid": wpst.id,
-	}).Debug("wcowPodSandboxTask::Pids")
+	ctx, span := trace.StartSpan(ctx, "wcowPodSandboxTask::Pids")
+	defer span.End()
+	span.AddAttributes(trace.StringAttribute("tid", wpst.id))
 
 	return []options.ProcessDetails{
 		{
@@ -192,6 +181,10 @@ func (wpst *wcowPodSandboxTask) Pids(ctx context.Context) ([]options.ProcessDeta
 }
 
 func (wpst *wcowPodSandboxTask) Wait(ctx context.Context) *task.StateResponse {
+	ctx, span := trace.StartSpan(ctx, "wcowPodSandboxTask::Wait")
+	defer span.End()
+	span.AddAttributes(trace.StringAttribute("tid", wpst.id))
+
 	<-wpst.closed
 	return wpst.init.Wait(ctx)
 }
@@ -202,23 +195,21 @@ func (wpst *wcowPodSandboxTask) Wait(ctx context.Context) *task.StateResponse {
 // upstream listeners.
 //
 // This call is idempotent and safe to call multiple times.
-func (wpst *wcowPodSandboxTask) close() {
+func (wpst *wcowPodSandboxTask) close(ctx context.Context) {
 	wpst.closeOnce.Do(func() {
-		logrus.WithFields(logrus.Fields{
-			"tid": wpst.id,
-		}).Debug("wcowPodSandboxTask::close")
+		ctx, span := trace.StartSpan(ctx, "wcowPodSandboxTask::close")
+		defer span.End()
+		span.AddAttributes(trace.StringAttribute("tid", wpst.id))
 
 		if wpst.host != nil {
 			if err := wpst.host.Close(); err != nil {
-				logrus.WithFields(logrus.Fields{
-					"tid":           wpst.id,
-					logrus.ErrorKey: err,
-				}).Error("wcowPodSandboxTask::close - failed host vm shutdown")
+				log.G(ctx).WithError(err).Error("failed host vm shutdown")
 			}
 		}
 		// Send the `init` exec exit notification always.
 		exit := wpst.init.Status()
 		wpst.events(
+			ctx,
 			runtime.TaskExitEventTopic,
 			&eventstypes.TaskExit{
 				ContainerID: wpst.id,
@@ -229,6 +220,36 @@ func (wpst *wcowPodSandboxTask) close() {
 			})
 		close(wpst.closed)
 	})
+}
+
+func (wpst *wcowPodSandboxTask) waitInitExit() {
+	ctx, span := trace.StartSpan(context.Background(), "wcowPodSandboxTask::waitInitExit")
+	defer span.End()
+	span.AddAttributes(trace.StringAttribute("tid", wpst.id))
+
+	// Wait for it to exit on its own
+	wpst.init.Wait(context.Background())
+
+	// Close the host and event the exit
+	wpst.close(ctx)
+}
+
+func (wpst *wcowPodSandboxTask) waitParentExit() {
+	ctx, span := trace.StartSpan(context.Background(), "wcowPodSandboxTask::waitParentExit")
+	defer span.End()
+	span.AddAttributes(trace.StringAttribute("tid", wpst.id))
+
+	werr := wpst.host.Wait()
+	if werr != nil {
+		log.G(ctx).WithError(werr).Error("parent wait failed")
+	}
+	// The UVM came down. Force transition the init task (if it wasn't
+	// already) to unblock any waiters since the platform wont send any
+	// events for this fake process.
+	wpst.init.ForceExit(ctx, 1)
+
+	// Close the host and event the exit.
+	wpst.close(ctx)
 }
 
 func (wpst *wcowPodSandboxTask) ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (int, error) {

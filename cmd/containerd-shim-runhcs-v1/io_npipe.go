@@ -6,33 +6,31 @@ import (
 	"sync"
 
 	winio "github.com/Microsoft/go-winio"
-	"github.com/sirupsen/logrus"
+	"github.com/Microsoft/hcsshim/internal/oc"
+	"go.opencensus.io/trace"
 )
 
-// newNpipeIO creates connected upstream io for task/exec `tid,eid`. It is the
-// callers responsibility to validate that `if terminal == true`, `stderr ==
-// ""`.
-func newNpipeIO(ctx context.Context, tid, eid string, stdin, stdout, stderr string, terminal bool) (_ upstreamIO, err error) {
-	logrus.WithFields(logrus.Fields{
-		"tid":      tid,
-		"eid":      eid,
-		"stdin":    stdin,
-		"stdout":   stdout,
-		"stderr":   stderr,
-		"terminal": terminal,
-	}).Debug("npipeio::New")
+// newNpipeIO creates connected upstream io. It is the callers responsibility to
+// validate that `if terminal == true`, `stderr == ""`.
+func newNpipeIO(ctx context.Context, stdin, stdout, stderr string, terminal bool) (_ upstreamIO, err error) {
+	ctx, span := trace.StartSpan(ctx, "newNpipeIO")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("stdin", stdin),
+		trace.StringAttribute("stdout", stdout),
+		trace.StringAttribute("stderr", stderr),
+		trace.BoolAttribute("terminal", terminal))
 
 	nio := &npipeio{
 		stdin:    stdin,
 		stdout:   stdout,
 		stderr:   stderr,
 		terminal: terminal,
-		eid:      eid,
-		tid:      tid,
 	}
 	defer func() {
 		if err != nil {
-			nio.Close()
+			nio.Close(ctx)
 		}
 	}()
 	if stdin != "" {
@@ -62,8 +60,6 @@ func newNpipeIO(ctx context.Context, tid, eid string, stdin, stdout, stderr stri
 var _ = (upstreamIO)(&npipeio{})
 
 type npipeio struct {
-	// tid, eid are the task and exec id's associated with this pipe io.
-	tid, eid string
 	// stdin, stdout, stderr are the original paths used to open the connections.
 	//
 	// They MUST be treated as readonly in the lifetime of the pipe io.
@@ -88,11 +84,9 @@ type npipeio struct {
 	outErrCloser sync.Once
 }
 
-func (nio *npipeio) Close() {
-	logrus.WithFields(logrus.Fields{
-		"tid": nio.tid,
-		"eid": nio.eid,
-	}).Debug("npipeio::Close")
+func (nio *npipeio) Close(ctx context.Context) {
+	ctx, span := trace.StartSpan(ctx, "npipeio::Close")
+	defer span.End()
 
 	nio.sinCloser.Do(func() {
 		if nio.sin != nil {
@@ -109,11 +103,9 @@ func (nio *npipeio) Close() {
 	})
 }
 
-func (nio *npipeio) CloseStdin() {
-	logrus.WithFields(logrus.Fields{
-		"tid": nio.tid,
-		"eid": nio.eid,
-	}).Debug("npipeio::CloseStdin")
+func (nio *npipeio) CloseStdin(ctx context.Context) {
+	ctx, span := trace.StartSpan(ctx, "npipeio::CloseStdin")
+	defer span.End()
 
 	nio.sinCloser.Do(func() {
 		if nio.sin != nil {
