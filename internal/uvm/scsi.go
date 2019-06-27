@@ -6,7 +6,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
-	"github.com/Microsoft/hcsshim/internal/schema2"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/sirupsen/logrus"
 )
@@ -195,7 +195,7 @@ func (uvm *UtilityVM) AddSCSILayer(hostPath string) (_ int, _ int32, err error) 
 // `readOnly` indicates the attachment should be added read only.
 //
 // Returns the controller ID (0..3) and LUN (0..63) where the disk is attached.
-func (uvm *UtilityVM) addSCSIActual(hostPath, uvmPath, attachmentType string, isLayer, readOnly bool) (int, int32, error) {
+func (uvm *UtilityVM) addSCSIActual(hostPath, uvmPath, attachmentType string, isLayer, readOnly bool) (_ int, _ int32, err error) {
 	if uvm.scsiControllerCount == 0 {
 		return -1, -1, ErrNoSCSIControllers
 	}
@@ -233,6 +233,11 @@ func (uvm *UtilityVM) addSCSIActual(hostPath, uvmPath, attachmentType string, is
 		uvm.m.Unlock()
 		return -1, -1, err
 	}
+	defer func() {
+		if err != nil {
+			uvm.deallocateSCSI(controller, lun)
+		}
+	}()
 
 	// Auto-generate the UVM path for LCOW layers
 	if isLayer {
@@ -244,7 +249,6 @@ func (uvm *UtilityVM) addSCSIActual(hostPath, uvmPath, attachmentType string, is
 
 	// Note: Can remove this check post-RS5 if multiple controllers are supported
 	if controller > 0 {
-		uvm.deallocateSCSI(controller, lun)
 		return -1, -1, ErrTooManyAttachments
 	}
 
@@ -283,15 +287,13 @@ func (uvm *UtilityVM) addSCSIActual(hostPath, uvmPath, attachmentType string, is
 	}
 
 	if err := uvm.Modify(SCSIModification); err != nil {
-		uvm.deallocateSCSI(controller, lun)
 		return -1, -1, fmt.Errorf("uvm::AddSCSI: failed to modify utility VM configuration: %s", err)
 	}
 	return controller, lun, nil
 
 }
 
-// RemoveSCSI removes a SCSI disk from a utility VM. As an external API, it
-// is "safe". Internal use can call removeSCSI.
+// RemoveSCSI removes a SCSI disk from a utility VM.
 func (uvm *UtilityVM) RemoveSCSI(hostPath string) (err error) {
 	op := "uvm::RemoveSCSI"
 	log := logrus.WithFields(logrus.Fields{
@@ -328,16 +330,6 @@ func (uvm *UtilityVM) RemoveSCSI(hostPath string) (err error) {
 		}
 	}
 
-	if err := uvm.removeSCSI(hostPath, uvmPath, controller, lun); err != nil {
-		return fmt.Errorf("failed to remove SCSI disk %s from container %s: %s", hostPath, uvm.id, err)
-
-	}
-	return nil
-}
-
-// removeSCSI is the internally callable "unsafe" version of RemoveSCSI. The mutex
-// MUST be held when calling this function.
-func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int, lun int32) error {
 	scsiModification := &hcsschema.ModifySettingRequest{
 		RequestType:  requesttype.Remove,
 		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/%d/Attachments/%d", controller, lun),
@@ -371,7 +363,7 @@ func (uvm *UtilityVM) removeSCSI(hostPath string, uvmPath string, controller int
 	}
 
 	if err := uvm.Modify(scsiModification); err != nil {
-		return err
+		return fmt.Errorf("failed to remove SCSI disk %s from container %s: %s", hostPath, uvm.id, err)
 	}
 	uvm.scsiLocations[controller][lun] = scsiInfo{}
 	return nil
