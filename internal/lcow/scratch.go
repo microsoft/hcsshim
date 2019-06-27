@@ -10,11 +10,19 @@ import (
 
 	"github.com/Microsoft/go-winio/vhd"
 	"github.com/Microsoft/hcsshim/internal/copyfile"
-	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/sirupsen/logrus"
+)
+
+const (
+	// DefaultScratchSizeGB is the size of the default LCOW scratch disk in GB
+	DefaultScratchSizeGB = 20
+
+	// defaultVhdxBlockSizeMB is the block-size for the scratch VHDx's this
+	// package can create.
+	defaultVhdxBlockSizeMB = 1
 )
 
 // CreateScratch uses a utility VM to create an empty scratch disk of a
@@ -131,20 +139,4 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 
 	logrus.WithField("dest", destFile).Debug("lcow::CreateScratch created (non-cache)")
 	return nil
-}
-
-func waitForProcess(p cow.Process) (int, error) {
-	ch := make(chan error, 1)
-	go func() {
-		ch <- p.Wait()
-	}()
-
-	t := time.NewTimer(timeout.ExternalCommandToComplete)
-	select {
-	case <-ch:
-		t.Stop()
-	case <-t.C:
-		p.Kill()
-	}
-	return p.ExitCode()
 }
