@@ -148,8 +148,7 @@ func (uvm *UtilityVM) AddVPMEM(hostPath string, expose bool) (_ uint32, _ string
 	return deviceNumber, uvmPath, nil
 }
 
-// RemoveVPMEM removes a VPMEM disk from a utility VM. As an external API, it
-// is "safe". Internal use can call removeVPMEM.
+// RemoveVPMEM removes a VPMEM disk from a utility VM.
 func (uvm *UtilityVM) RemoveVPMEM(hostPath string) (err error) {
 	op := "uvm::RemoveVPMEM"
 	log := logrus.WithFields(logrus.Fields{
@@ -179,15 +178,6 @@ func (uvm *UtilityVM) RemoveVPMEM(hostPath string) (err error) {
 		return fmt.Errorf("cannot remove VPMEM %s as it is not attached to utility VM %s: %s", hostPath, uvm.id, err)
 	}
 
-	if err := uvm.removeVPMEM(hostPath, uvmPath, deviceNumber); err != nil {
-		return fmt.Errorf("failed to remove VPMEM %s from utility VM %s: %s", hostPath, uvm.id, err)
-	}
-	return nil
-}
-
-// removeVPMEM is the internally callable "unsafe" version of RemoveVPMEM. The mutex
-// MUST be held when calling this function.
-func (uvm *UtilityVM) removeVPMEM(hostPath string, uvmPath string, deviceNumber uint32) error {
 	if uvm.vpmemDevices[deviceNumber].refCount == 1 {
 		modification := &hcsschema.ModifySettingRequest{
 			RequestType:  requesttype.Remove,
@@ -203,7 +193,7 @@ func (uvm *UtilityVM) removeVPMEM(hostPath string, uvmPath string, deviceNumber 
 		}
 
 		if err := uvm.Modify(modification); err != nil {
-			return err
+			return fmt.Errorf("failed to remove VPMEM %s from utility VM %s: %s", hostPath, uvm.id, err)
 		}
 		uvm.vpmemDevices[deviceNumber] = vpmemInfo{}
 		return nil
