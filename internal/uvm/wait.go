@@ -5,14 +5,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func (uvm *UtilityVM) waitForOutput() {
-	logrus.WithField(logfields.UVMID, uvm.id).
-		Debug("UVM exited, waiting for output processing to complete")
-	if uvm.outputProcessingDone != nil {
-		<-uvm.outputProcessingDone
-	}
-}
-
 // Wait waits synchronously for a utility VM to terminate.
 func (uvm *UtilityVM) Wait() error {
 	err := uvm.hcsSystem.Wait()
@@ -23,7 +15,10 @@ func (uvm *UtilityVM) Wait() error {
 	if uvm.outputProcessingCancel != nil {
 		uvm.outputProcessingCancel()
 	}
-	uvm.waitForOutput()
+	logrus.WithField(logfields.UVMID, uvm.id).Debug("UVM exited, waiting for output processing to complete")
+	if uvm.outputProcessingDone != nil {
+		<-uvm.outputProcessingDone
+	}
 
 	return err
 }
