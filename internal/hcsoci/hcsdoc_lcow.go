@@ -52,18 +52,6 @@ func createLCOWSpec(coi *createOptionsInternal) (*specs.Spec, error) {
 	}
 	spec.Linux.Seccomp = nil
 
-	// Clear any specified namespaces
-	var namespaces []specs.LinuxNamespace
-	for _, ns := range spec.Linux.Namespaces {
-		switch ns.Type {
-		case specs.NetworkNamespace:
-		default:
-			ns.Path = ""
-			namespaces = append(namespaces, ns)
-		}
-	}
-	spec.Linux.Namespaces = namespaces
-
 	return spec, nil
 }
 
