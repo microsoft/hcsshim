@@ -82,6 +82,12 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 		return errors.Wrap(err, "failed to write sandbox resolv.conf")
 	}
 
+	if userstr, ok := spec.Annotations["io.microsoft.lcow.userstr"]; ok {
+		if err := setUserStr(spec, userstr); err != nil {
+			return err
+		}
+	}
+
 	// TODO: JTERRY75 /dev/shm is not properly setup for LCOW I believe. CRI
 	// also has a concept of a sandbox/shm file when the IPC NamespaceMode !=
 	// NODE.

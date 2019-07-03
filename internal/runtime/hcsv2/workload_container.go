@@ -122,6 +122,12 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 		}
 	}
 
+	if userstr, ok := spec.Annotations["io.microsoft.lcow.userstr"]; ok {
+		if err := setUserStr(spec, userstr); err != nil {
+			return err
+		}
+	}
+
 	// Clear the windows section as we dont want to forward to runc
 	spec.Windows = nil
 
