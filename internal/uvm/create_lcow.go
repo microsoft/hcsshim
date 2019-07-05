@@ -108,6 +108,9 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		PreferredRootFSType:   PreferredRootFSTypeInitRd,
 	}
 
+	// LCOW has more reliable behavior with the external bridge.
+	opts.Options.ExternalGuestConnection = true
+
 	if _, err := os.Stat(filepath.Join(opts.BootFilesPath, VhdFile)); err == nil {
 		// We have a rootfs.vhd in the boot files path. Use it over an initrd.img
 		opts.RootFSFile = VhdFile
