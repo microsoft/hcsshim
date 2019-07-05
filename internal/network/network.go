@@ -3,6 +3,7 @@
 package network
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -19,6 +20,31 @@ import (
 
 // maxDNSSearches is limited to 6 in `man 5 resolv.conf`
 const maxDNSSearches = 6
+
+// GenerateEtcHostsContent generates a /etc/hosts file based on `hostname`.
+func GenerateEtcHostsContent(ctx context.Context, hostname string) string {
+	_, span := trace.StartSpan(ctx, "network::GenerateEtcHostsContent")
+	defer span.End()
+	span.AddAttributes(
+		trace.StringAttribute("hostname", hostname))
+
+	nameParts := strings.Split(hostname, ".")
+	buf := bytes.Buffer{}
+	buf.WriteString("127.0.0.1 localhost\n")
+	if len(nameParts) > 1 {
+		buf.WriteString(fmt.Sprintf("127.0.0.1 %s %s\n", hostname, nameParts[0]))
+	} else {
+		buf.WriteString(fmt.Sprintf("127.0.0.1 %s\n", hostname))
+	}
+	buf.WriteString("\n")
+	buf.WriteString("# The following lines are desirable for IPv6 capable hosts\n")
+	buf.WriteString("::1     ip6-localhost ip6-loopback\n")
+	buf.WriteString("fe00::0 ip6-localnet\n")
+	buf.WriteString("ff00::0 ip6-mcastprefix\n")
+	buf.WriteString("ff02::1 ip6-allnodes\n")
+	buf.WriteString("ff02::2 ip6-allrouters\n")
+	return buf.String()
+}
 
 // GenerateResolvConfContent generates the resolv.conf file content based on
 // `searches`, `servers`, and `options`.

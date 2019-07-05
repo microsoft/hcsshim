@@ -43,17 +43,17 @@ func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec
 		return errors.Wrapf(err, "failed to create container root directory %q", rootDir)
 	}
 
+	hostname := spec.Hostname
+	if hostname == "" {
+		var err error
+		hostname, err = os.Hostname()
+		if err != nil {
+			return errors.Wrap(err, "failed to get hostname")
+		}
+	}
+
 	// Write the hostname
 	if !isInMounts("/etc/hostname", spec.Mounts) {
-		hostname := spec.Hostname
-		if hostname == "" {
-			var err error
-			hostname, err = os.Hostname()
-			if err != nil {
-				return errors.Wrap(err, "failed to get hostname")
-			}
-		}
-
 		standaloneHostnamePath := getStandaloneHostnamePath(id)
 		if err := ioutil.WriteFile(standaloneHostnamePath, []byte(hostname+"\n"), 0644); err != nil {
 			return errors.Wrapf(err, "failed to write hostname to %q", standaloneHostnamePath)
@@ -73,8 +73,9 @@ func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec
 
 	// Write the hosts
 	if !isInMounts("/etc/hosts", spec.Mounts) {
+		standaloneHostsContent := network.GenerateEtcHostsContent(ctx, hostname)
 		standaloneHostsPath := getStandaloneHostsPath(id)
-		if err := copyFile("/etc/hosts", standaloneHostsPath, 0644); err != nil {
+		if err := ioutil.WriteFile(standaloneHostsPath, []byte(standaloneHostsContent), 0644); err != nil {
 			return errors.Wrapf(err, "failed to write standalone hosts to %q", standaloneHostsPath)
 		}
 
