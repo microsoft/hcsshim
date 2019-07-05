@@ -256,7 +256,7 @@ func Test_RunPodSandbox_MemorySize_LCOW(t *testing.T) {
 				Namespace: testNamespace,
 			},
 			Annotations: map[string]string{
-				"io.microsoft.virtualmachine.computetopology.memory.sizeinmb": "128",
+				"io.microsoft.virtualmachine.computetopology.memory.sizeinmb": "200",
 			},
 		},
 		RuntimeHandler: lcowRuntimeHandler,
