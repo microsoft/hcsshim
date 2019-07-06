@@ -117,3 +117,51 @@ func Test_MergeValues(t *testing.T) {
 		})
 	}
 }
+
+func Test_GenerateEtcHostsContent(t *testing.T) {
+	type testcase struct {
+		name string
+
+		hostname string
+
+		expectedContent string
+	}
+	testcases := []*testcase{
+		{
+			name:     "Net BIOS Name",
+			hostname: "Test",
+			expectedContent: `127.0.0.1 localhost
+127.0.0.1 Test
+
+# The following lines are desirable for IPv6 capable hosts
+::1     ip6-localhost ip6-loopback
+fe00::0 ip6-localnet
+ff00::0 ip6-mcastprefix
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+`,
+		},
+		{
+			name:     "FQDN",
+			hostname: "test.rules.domain.com",
+			expectedContent: `127.0.0.1 localhost
+127.0.0.1 test.rules.domain.com test
+
+# The following lines are desirable for IPv6 capable hosts
+::1     ip6-localhost ip6-loopback
+fe00::0 ip6-localnet
+ff00::0 ip6-mcastprefix
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+`,
+		},
+	}
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := GenerateEtcHostsContent(context.Background(), tc.hostname)
+			if c != tc.expectedContent {
+				t.Fatalf("expected content: %q got: %q", tc.expectedContent, c)
+			}
+		})
+	}
+}

@@ -58,8 +58,9 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 	}
 
 	// Write the hosts
+	sandboxHostsContent := network.GenerateEtcHostsContent(ctx, hostname)
 	sandboxHostsPath := getSandboxHostsPath(id)
-	if err := copyFile("/etc/hosts", sandboxHostsPath, 0644); err != nil {
+	if err := ioutil.WriteFile(sandboxHostsPath, []byte(sandboxHostsContent), 0644); err != nil {
 		return errors.Wrapf(err, "failed to write sandbox hosts to %q", sandboxHostsPath)
 	}
 
