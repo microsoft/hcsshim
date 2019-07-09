@@ -64,14 +64,18 @@ type SubnetPolicy struct {
 	Settings json.RawMessage  `json:",omitempty"`
 }
 
+// NatFlags are flags for portmappings.
+type NatFlags uint32
+
 /// Endpoint Policy objects
 
 // PortMappingPolicySetting defines Port Mapping (NAT)
 type PortMappingPolicySetting struct {
-	Protocol     uint32 `json:",omitempty"` // EX: TCP = 6, UDP = 17
-	InternalPort uint16 `json:",omitempty"`
-	ExternalPort uint16 `json:",omitempty"`
-	VIP          string `json:",omitempty"`
+	Protocol     uint32   `json:",omitempty"` // EX: TCP = 6, UDP = 17
+	InternalPort uint16   `json:",omitempty"`
+	ExternalPort uint16   `json:",omitempty"`
+	VIP          string   `json:",omitempty"`
+	Flags        NatFlags `json:",omitempty"`
 }
 
 // ActionType associated with ACLs. Value is either Allow or Block.
