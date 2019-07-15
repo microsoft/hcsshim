@@ -393,9 +393,6 @@ func (r *runcRuntime) pidMapToProcessStates(pidMap map[int]*runtime.ContainerPro
 }
 
 // waitOnProcess waits for the process to exit, and returns its exit code.
-//
-// TODO: We might want to give more options for this, such as specifying
-// WNOHANG.
 func (r *runcRuntime) waitOnProcess(pid int) (int, error) {
 	process, err := os.FindProcess(pid)
 	if err != nil {
@@ -406,7 +403,11 @@ func (r *runcRuntime) waitOnProcess(pid int) (int, error) {
 		return -1, errors.Wrapf(err, "failed waiting on process %d", pid)
 	}
 
-	return state.ExitCode(), nil
+	status := state.Sys().(syscall.WaitStatus)
+	if status.Signaled() {
+		return 128 + int(status.Signal()), nil
+	}
+	return status.ExitStatus(), nil
 }
 
 func (p *process) Wait() (int, error) {
