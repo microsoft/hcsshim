@@ -343,6 +343,7 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 		initArgs = `sh -c "` + initArgs + ` & exec sh"`
 	}
 
+	kernelArgs += fmt.Sprintf(" nr_cpus=%d", opts.ProcessorCount)
 	kernelArgs += ` pci=off brd.rd_nr=0 pmtmr=0 -- ` + initArgs
 
 	if !opts.KernelDirect {
