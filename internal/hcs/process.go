@@ -1,6 +1,7 @@
 package hcs
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"sync"
@@ -8,8 +9,11 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/interop"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
 
 // ContainerError is an error encountered in HCS
@@ -23,8 +27,6 @@ type Process struct {
 	stderr         io.ReadCloser
 	callbackNumber uintptr
 
-	logctx logrus.Fields
-
 	closedWaitOnce sync.Once
 	waitBlock      chan struct{}
 	waitError      error
@@ -35,10 +37,6 @@ func newProcess(process hcsProcess, processID int, computeSystem *System) *Proce
 		handle:    process,
 		processID: processID,
 		system:    computeSystem,
-		logctx: logrus.Fields{
-			logfields.ContainerID: computeSystem.ID(),
-			logfields.ProcessID:   processID,
-		},
 		waitBlock: make(chan struct{}),
 	}
 }
@@ -86,20 +84,6 @@ func (process *Process) SystemID() string {
 	return process.system.ID()
 }
 
-func (process *Process) logOperationBegin(operation string) {
-	logOperationBegin(
-		process.logctx,
-		operation+" - Begin Operation")
-}
-
-func (process *Process) logOperationEnd(operation string, err error) {
-	result, err := getOperationLogResult(err)
-	logOperationEnd(
-		process.logctx,
-		operation+" - End Operation - "+result,
-		err)
-}
-
 func (process *Process) processSignalResult(err error) (bool, error) {
 	switch err {
 	case nil:
@@ -136,13 +120,17 @@ func (process *Process) processSignalResult(err error) (bool, error) {
 // For LCOW `guestrequest.SignalProcessOptionsLCOW`.
 //
 // For WCOW `guestrequest.SignalProcessOptionsWCOW`.
-func (process *Process) Signal(options interface{}) (_ bool, err error) {
+func (process *Process) Signal(ctx context.Context, options interface{}) (_ bool, err error) {
+	operation := "hcsshim::Process::Signal"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.SystemID, process.SystemID()),
+		trace.Int64Attribute(logfields.ProcessID, int64(process.processID)))
+
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
-
-	operation := "hcsshim::Process::Signal"
-	process.logOperationBegin(operation)
-	defer func() { process.logOperationEnd(operation, err) }()
 
 	if process.handle == 0 {
 		return false, makeProcessError(process, operation, ErrAlreadyClosed, nil)
@@ -156,7 +144,7 @@ func (process *Process) Signal(options interface{}) (_ bool, err error) {
 	optionsStr := string(optionsb)
 
 	var resultp *uint16
-	syscallWatcher(process.logctx, func() {
+	syscallWatcher(ctx, func() {
 		err = hcsSignalProcess(process.handle, optionsStr, &resultp)
 	})
 	events := processHcsResult(resultp)
@@ -168,20 +156,24 @@ func (process *Process) Signal(options interface{}) (_ bool, err error) {
 }
 
 // Kill signals the process to terminate but does not wait for it to finish terminating.
-func (process *Process) Kill() (_ bool, err error) {
+func (process *Process) Kill(ctx context.Context) (_ bool, err error) {
+	operation := "hcsshim::Process::Kill"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.SystemID, process.SystemID()),
+		trace.Int64Attribute(logfields.ProcessID, int64(process.processID)))
+
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
-
-	operation := "hcsshim::Process::Kill"
-	process.logOperationBegin(operation)
-	defer func() { process.logOperationEnd(operation, err) }()
 
 	if process.handle == 0 {
 		return false, makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
 	var resultp *uint16
-	syscallWatcher(process.logctx, func() {
+	syscallWatcher(ctx, func() {
 		err = hcsTerminateProcess(process.handle, &resultp)
 	})
 	events := processHcsResult(resultp)
@@ -199,12 +191,17 @@ func (process *Process) Kill() (_ bool, err error) {
 // call multiple times.
 func (process *Process) waitBackground() {
 	operation := "hcsshim::Process::waitBackground"
-	process.logOperationBegin(operation)
+	_, span := trace.StartSpan(context.Background(), operation)
+	defer span.End()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.SystemID, process.SystemID()),
+		trace.Int64Attribute(logfields.ProcessID, int64(process.processID)))
+
 	err := waitForNotification(process.callbackNumber, hcsNotificationProcessExited, nil)
 	if err != nil {
-		err = makeProcessError(process, "Wait", err, nil)
+		err = makeProcessError(process, operation, err, nil)
 	}
-	process.logOperationEnd(operation, err)
+	oc.SetSpanStatus(span, err)
 	process.closedWaitOnce.Do(func() {
 		process.waitError = err
 		close(process.waitBlock)
@@ -219,13 +216,19 @@ func (process *Process) Wait() (err error) {
 }
 
 // ResizeConsole resizes the console of the process.
-func (process *Process) ResizeConsole(width, height uint16) (err error) {
+func (process *Process) ResizeConsole(ctx context.Context, width, height uint16) (err error) {
+	operation := "hcssshim::Process::ResizeConsole"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.SystemID, process.SystemID()),
+		trace.Int64Attribute(logfields.ProcessID, int64(process.processID)),
+		trace.Int64Attribute("width", int64(width)),
+		trace.Int64Attribute("height", int64(height)))
+
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
-
-	operation := "hcsshim::Process::ResizeConsole"
-	process.logOperationBegin(operation)
-	defer func() { process.logOperationEnd(operation, err) }()
 
 	if process.handle == 0 {
 		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
@@ -256,13 +259,17 @@ func (process *Process) ResizeConsole(width, height uint16) (err error) {
 	return nil
 }
 
-func (process *Process) properties() (_ *processStatus, err error) {
+func (process *Process) properties(ctx context.Context) (_ *processStatus, err error) {
+	operation := "hcssshim::Process::properties"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.SystemID, process.SystemID()),
+		trace.Int64Attribute(logfields.ProcessID, int64(process.processID)))
+
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
-
-	operation := "hcsshim::Process::Properties"
-	process.logOperationBegin(operation)
-	defer func() { process.logOperationEnd(operation, err) }()
 
 	if process.handle == 0 {
 		return nil, makeProcessError(process, operation, ErrAlreadyClosed, nil)
@@ -272,7 +279,7 @@ func (process *Process) properties() (_ *processStatus, err error) {
 		resultp     *uint16
 		propertiesp *uint16
 	)
-	syscallWatcher(process.logctx, func() {
+	syscallWatcher(ctx, func() {
 		err = hcsGetProcessProperties(process.handle, &propertiesp, &resultp)
 	})
 	events := processHcsResult(resultp)
@@ -295,12 +302,16 @@ func (process *Process) properties() (_ *processStatus, err error) {
 
 // ExitCode returns the exit code of the process. The process must have
 // already terminated.
-func (process *Process) ExitCode() (_ int, err error) {
-	operation := "hcsshim::Process::ExitCode"
-	process.logOperationBegin(operation)
-	defer func() { process.logOperationEnd(operation, err) }()
+func (process *Process) ExitCode(ctx context.Context) (_ int, err error) {
+	operation := "hcssshim::Process::ExitCode"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.SystemID, process.SystemID()),
+		trace.Int64Attribute(logfields.ProcessID, int64(process.processID)))
 
-	properties, err := process.properties()
+	properties, err := process.properties(ctx)
 	if err != nil {
 		return -1, makeProcessError(process, operation, err, nil)
 	}
@@ -310,14 +321,15 @@ func (process *Process) ExitCode() (_ int, err error) {
 	}
 
 	if properties.LastWaitResult != 0 {
-		logrus.WithFields(logrus.Fields{
-			logfields.ContainerID: process.SystemID(),
-			logfields.ProcessID:   process.processID,
-			"wait-result":         properties.LastWaitResult,
-		}).Warn("hcsshim::Process::ExitCode - Non-zero last wait result")
+		log.G(ctx).WithFields(logrus.Fields{
+			logfields.SystemID:  process.SystemID(),
+			logfields.ProcessID: process.processID,
+			"wait-result":       properties.LastWaitResult,
+		}).Warn("non-zero last wait result")
 		return -1, nil
 	}
 
+	log.G(ctx).WithField("exitCode", properties.ExitCode).Debug("found exit code")
 	return int(properties.ExitCode), nil
 }
 
@@ -325,12 +337,16 @@ func (process *Process) ExitCode() (_ int, err error) {
 // these pipes does not close the underlying pipes; but this function can only
 // be called once on each Process.
 func (process *Process) StdioLegacy() (_ io.WriteCloser, _ io.ReadCloser, _ io.ReadCloser, err error) {
+	operation := "hcssshim::Process::StdioLegacy"
+	_, span := trace.StartSpan(context.Background(), operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.SystemID, process.SystemID()),
+		trace.Int64Attribute(logfields.ProcessID, int64(process.processID)))
+
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
-
-	operation := "hcsshim::Process::Stdio"
-	process.logOperationBegin(operation)
-	defer func() { process.logOperationEnd(operation, err) }()
 
 	if process.handle == 0 {
 		return nil, nil, nil, makeProcessError(process, operation, ErrAlreadyClosed, nil)
@@ -362,13 +378,17 @@ func (process *Process) Stdio() (stdin io.Writer, stdout, stderr io.Reader) {
 
 // CloseStdin closes the write side of the stdin pipe so that the process is
 // notified on the read side that there is no more data in stdin.
-func (process *Process) CloseStdin() (err error) {
+func (process *Process) CloseStdin(ctx context.Context) (err error) {
+	operation := "hcssshim::Process::CloseStdin"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.SystemID, process.SystemID()),
+		trace.Int64Attribute(logfields.ProcessID, int64(process.processID)))
+
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
-
-	operation := "hcsshim::Process::CloseStdin"
-	process.logOperationBegin(operation)
-	defer func() { process.logOperationEnd(operation, err) }()
 
 	if process.handle == 0 {
 		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
@@ -403,13 +423,17 @@ func (process *Process) CloseStdin() (err error) {
 
 // Close cleans up any state associated with the process but does not kill
 // or wait on it.
-func (process *Process) Close() (err error) {
+func (process *Process) Close(ctx context.Context) (err error) {
+	operation := "hcssshim::Process::Close"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.SystemID, process.SystemID()),
+		trace.Int64Attribute(logfields.ProcessID, int64(process.processID)))
+
 	process.handleLock.Lock()
 	defer process.handleLock.Unlock()
-
-	operation := "hcsshim::Process::Close"
-	process.logOperationBegin(operation)
-	defer func() { process.logOperationEnd(operation, err) }()
 
 	// Don't double free this
 	if process.handle == 0 {

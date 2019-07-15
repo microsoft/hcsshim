@@ -1,6 +1,8 @@
 package main
 
 import (
+	gcontext "context"
+
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -50,16 +52,17 @@ var createScratchCommand = cli.Command{
 			sizeGB = lcow.DefaultScratchSizeGB
 		}
 
-		convertUVM, err := uvm.CreateLCOW(opts)
+		ctx := gcontext.Background()
+		convertUVM, err := uvm.CreateLCOW(ctx, opts)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create '%s'", opts.ID)
 		}
-		defer convertUVM.Close()
-		if err := convertUVM.Start(); err != nil {
+		defer convertUVM.Close(ctx)
+		if err := convertUVM.Start(ctx); err != nil {
 			return errors.Wrapf(err, "failed to start '%s'", opts.ID)
 		}
 
-		if err := lcow.CreateScratch(convertUVM, dest, sizeGB, context.String("cache-path")); err != nil {
+		if err := lcow.CreateScratch(ctx, convertUVM, dest, sizeGB, context.String("cache-path")); err != nil {
 			return errors.Wrapf(err, "failed to create ext4vhdx for '%s'", opts.ID)
 		}
 

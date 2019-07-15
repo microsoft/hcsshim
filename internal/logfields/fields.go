@@ -6,6 +6,7 @@ const (
 	ContainerID = "cid"
 	UVMID       = "uvm-id"
 	ProcessID   = "pid"
+	SystemID    = "system-id"
 
 	// Common Misc
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/sirupsen/logrus"
 )
@@ -48,7 +49,7 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 	}
 
 	req := containerExecuteProcess{
-		requestBase: makeRequest(cid),
+		requestBase: makeRequest(ctx, cid),
 		Settings: executeProcessSettings{
 			ProcessParameters: anyInString{params},
 		},
@@ -57,7 +58,7 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 	p := &Process{gc: gc, cid: cid}
 	defer func() {
 		if err != nil {
-			p.Close()
+			p.Close(ctx)
 		}
 	}()
 
@@ -103,7 +104,7 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 	p.id = resp.ProcessID
 	// Start a wait message.
 	waitReq := containerWaitForProcess{
-		requestBase: makeRequest(cid),
+		requestBase: makeRequest(ctx, cid),
 		ProcessID:   p.id,
 		TimeoutInMs: 0xffffffff,
 	}
@@ -116,7 +117,7 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 
 // Close releases resources associated with the process and closes the
 // associated standard IO streams.
-func (p *Process) Close() error {
+func (p *Process) Close(ctx context.Context) error {
 	p.stdin.Close()
 	p.stdout.Close()
 	p.stderr.Close()
@@ -124,7 +125,7 @@ func (p *Process) Close() error {
 }
 
 // CloseStdin causes the process to read EOF on its stdin stream.
-func (p *Process) CloseStdin() (err error) {
+func (p *Process) CloseStdin(ctx context.Context) (err error) {
 	p.stdinCloseWriteOnce.Do(func() {
 		p.stdinCloseWriteErr = p.stdin.CloseWrite()
 	})
@@ -133,7 +134,7 @@ func (p *Process) CloseStdin() (err error) {
 
 // ExitCode returns the process's exit code, or an error if the process is still
 // running or the exit code is otherwise unknown.
-func (p *Process) ExitCode() (_ int, err error) {
+func (p *Process) ExitCode(ctx context.Context) (_ int, err error) {
 	if !p.waitCall.Done() {
 		return -1, errors.New("process not exited")
 	}
@@ -146,8 +147,8 @@ func (p *Process) ExitCode() (_ int, err error) {
 // Kill sends a forceful terminate signal to the process and returns whether the
 // signal was delivered. The process might not be terminated by the time this
 // returns.
-func (p *Process) Kill() (bool, error) {
-	return p.Signal(nil)
+func (p *Process) Kill(ctx context.Context) (bool, error) {
+	return p.Signal(ctx, nil)
 }
 
 // Pid returns the process ID.
@@ -157,34 +158,34 @@ func (p *Process) Pid() int {
 
 // ResizeConsole requests that the pty associated with the process resize its
 // window.
-func (p *Process) ResizeConsole(width, height uint16) (err error) {
+func (p *Process) ResizeConsole(ctx context.Context, width, height uint16) (err error) {
 	req := containerResizeConsole{
-		requestBase: makeRequest(p.cid),
+		requestBase: makeRequest(ctx, p.cid),
 		ProcessID:   p.id,
 		Height:      height,
 		Width:       width,
 	}
 	var resp responseBase
-	return p.gc.brdg.RPC(context.TODO(), rpcResizeConsole, &req, &resp, true)
+	return p.gc.brdg.RPC(ctx, rpcResizeConsole, &req, &resp, true)
 }
 
 // Signal sends a signal to the process, returning whether it was delivered.
-func (p *Process) Signal(options interface{}) (bool, error) {
+func (p *Process) Signal(ctx context.Context, options interface{}) (bool, error) {
 	req := containerSignalProcess{
-		requestBase: makeRequest(p.cid),
+		requestBase: makeRequest(ctx, p.cid),
 		ProcessID:   p.id,
 		Options:     options,
 	}
 	var resp responseBase
 	// FUTURE: SIGKILL is idempotent and can safely be cancelled, but this interface
 	//		   does currently make it easy to determine what signal is being sent.
-	err := p.gc.brdg.RPC(context.TODO(), rpcSignalProcess, &req, &resp, false)
+	err := p.gc.brdg.RPC(ctx, rpcSignalProcess, &req, &resp, false)
 	if err != nil {
 		if uint32(resp.Result) != hrNotFound {
 			return false, err
 		}
 		if !p.waitCall.Done() {
-			logrus.WithFields(logrus.Fields{
+			log.G(ctx).WithFields(logrus.Fields{
 				logrus.ErrorKey:       err,
 				logfields.ContainerID: p.cid,
 				logfields.ProcessID:   p.id,

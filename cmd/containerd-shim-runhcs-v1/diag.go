@@ -5,11 +5,11 @@ import (
 	"errors"
 
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
-	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
 
@@ -37,7 +37,7 @@ func execInUvm(ctx context.Context, vm *uvm.UtilityVM, req *shimdiag.ExecProcess
 	cmd.Stdin = np.Stdin()
 	cmd.Stdout = np.Stdout()
 	cmd.Stderr = np.Stderr()
-	cmd.Log = logrus.WithField(logfields.UVMID, vm.ID())
+	cmd.Log = log.G(ctx).WithField(logfields.UVMID, vm.ID())
 	err = cmd.Run()
 	return cmd.ExitState.ExitCode(), err
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	gcontext "context"
 	"os"
 	"syscall"
 
@@ -36,7 +37,8 @@ command(s) that get executed on start, edit the args parameter of the spec.`,
 		if err != nil {
 			return err
 		}
-		c, err := createContainer(cfg)
+		ctx := gcontext.Background()
+		c, err := createContainer(ctx, cfg)
 		if err != nil {
 			return err
 		}
@@ -47,7 +49,7 @@ command(s) that get executed on start, edit the args parameter of the spec.`,
 		if err != nil {
 			return err
 		}
-		err = c.Exec()
+		err = c.Exec(ctx)
 		if err != nil {
 			return err
 		}
@@ -56,7 +58,7 @@ command(s) that get executed on start, edit the args parameter of the spec.`,
 			if err != nil {
 				return err
 			}
-			c.Remove()
+			c.Remove(ctx)
 			os.Exit(int(state.Sys().(syscall.WaitStatus).ExitCode))
 		}
 		return nil

@@ -3,6 +3,7 @@
 package hcsoci
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -24,7 +25,7 @@ import (
 // createWindowsContainerDocument creates documents for passing to HCS or GCS to create
 // a container, both hosted and process isolated. It creates both v1 and v2
 // container objects, WCOW only. The containers storage should have been mounted already.
-func createWindowsContainerDocument(coi *createOptionsInternal) (*schema1.ContainerConfig, *hcsschema.Container, error) {
+func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInternal) (*schema1.ContainerConfig, *hcsschema.Container, error) {
 	logrus.Debug("hcsshim: CreateHCSContainerDocument")
 	// TODO: Make this safe if exported so no null pointer dereferences.
 
@@ -204,7 +205,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (*schema1.Contai
 				v1.HvRuntime = &schema1.HvRuntime{ImagePath: coi.Spec.Windows.HyperV.UtilityVMPath}
 			} else {
 				// Client was lazy. Let's locate it from the layer folders instead.
-				uvmImagePath, err := uvmfolder.LocateUVMFolder(coi.Spec.Windows.LayerFolders)
+				uvmImagePath, err := uvmfolder.LocateUVMFolder(ctx, coi.Spec.Windows.LayerFolders)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -214,7 +215,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (*schema1.Contai
 			// Hosting system was supplied, so is v2 Xenon.
 			v2Container.Storage.Path = coi.Spec.Root.Path
 			if coi.HostingSystem.OS() == "windows" {
-				layers, err := computeV2Layers(coi.HostingSystem, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1])
+				layers, err := computeV2Layers(ctx, coi.HostingSystem, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1])
 				if err != nil {
 					return nil, nil, err
 				}
@@ -262,11 +263,11 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (*schema1.Contai
 			if coi.HostingSystem == nil {
 				mdv2.HostPath = mount.Source
 			} else {
-				uvmPath, err := coi.HostingSystem.GetVSMBUvmPath(mount.Source)
+				uvmPath, err := coi.HostingSystem.GetVSMBUvmPath(ctx, mount.Source)
 				if err != nil {
 					if err == uvm.ErrNotAttached {
 						// It could also be a scsi mount.
-						uvmPath, err = coi.HostingSystem.GetScsiUvmPath(mount.Source)
+						uvmPath, err = coi.HostingSystem.GetSCSIUvmPath(ctx, mount.Source)
 						if err != nil {
 							return nil, nil, err
 						}

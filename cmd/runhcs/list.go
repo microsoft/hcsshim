@@ -1,12 +1,12 @@
 package main
 
 import (
+	gcontext "context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"text/tabwriter"
 	"time"
-
-	"encoding/json"
 
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/Microsoft/hcsshim/internal/runhcs"
@@ -90,12 +90,13 @@ func getContainers(context *cli.Context) ([]runhcs.ContainerState, error) {
 
 	var s []runhcs.ContainerState
 	for _, id := range ids {
-		c, err := getContainer(id, false)
+		ctx := gcontext.Background()
+		c, err := getContainer(ctx, id, false)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "reading state for %s: %v\n", id, err)
 			continue
 		}
-		status, err := c.Status()
+		status, err := c.Status(ctx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "reading status for %s: %v\n", id, err)
 		}
@@ -110,7 +111,7 @@ func getContainers(context *cli.Context) ([]runhcs.ContainerState, error) {
 			Created:        c.Created,
 			Annotations:    c.Spec.Annotations,
 		})
-		c.Close()
+		c.Close(ctx)
 	}
 	return s, nil
 }

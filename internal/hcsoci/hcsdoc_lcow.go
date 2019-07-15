@@ -3,6 +3,7 @@
 package hcsoci
 
 import (
+	"context"
 	"encoding/json"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
@@ -11,7 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func createLCOWSpec(coi *createOptionsInternal) (*specs.Spec, error) {
+func createLCOWSpec(ctx context.Context, coi *createOptionsInternal) (*specs.Spec, error) {
 	// Remarshal the spec to perform a deep copy.
 	j, err := json.Marshal(coi.Spec)
 	if err != nil {
@@ -61,8 +62,8 @@ type linuxHostedSystem struct {
 	OciSpecification *specs.Spec
 }
 
-func createLinuxContainerDocument(coi *createOptionsInternal, guestRoot string) (*linuxHostedSystem, error) {
-	spec, err := createLCOWSpec(coi)
+func createLinuxContainerDocument(ctx context.Context, coi *createOptionsInternal, guestRoot string) (*linuxHostedSystem, error) {
+	spec, err := createLCOWSpec(ctx, coi)
 	if err != nil {
 		return nil, err
 	}

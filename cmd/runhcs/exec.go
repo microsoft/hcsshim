@@ -1,6 +1,7 @@
 package main
 
 import (
+	gcontext "context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -73,12 +74,13 @@ following will output a list of processes running in the container:
 		if err != nil {
 			return err
 		}
-		c, err := getContainer(id, false)
+		ctx := gcontext.Background()
+		c, err := getContainer(ctx, id, false)
 		if err != nil {
 			return err
 		}
-		defer c.Close()
-		status, err := c.Status()
+		defer c.Close(ctx)
+		status, err := c.Status(ctx)
 		if err != nil {
 			return err
 		}

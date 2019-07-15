@@ -1,6 +1,7 @@
 package testutilities
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -18,8 +19,9 @@ var (
 )
 
 func init() {
-	if hcsSystem, err := hcs.OpenComputeSystem(lcowGlobalSVMID); err == nil {
-		hcsSystem.Terminate()
+	ctx := context.Background()
+	if hcsSystem, err := hcs.OpenComputeSystem(ctx, lcowGlobalSVMID); err == nil {
+		hcsSystem.Terminate(ctx)
 	}
 }
 
@@ -44,14 +46,14 @@ func CreateWCOWBlankRWLayer(t *testing.T, imageLayers []string) string {
 // CreateLCOWBlankRWLayer uses an LCOW utility VM to create a blank VHDX and
 // format it ext4. This can then be used as a scratch space for a container, or
 // for a "service VM".
-func CreateLCOWBlankRWLayer(t *testing.T) string {
+func CreateLCOWBlankRWLayer(ctx context.Context, t *testing.T) string {
 	if lcowGlobalSVM == nil {
-		lcowGlobalSVM = CreateLCOWUVM(t, lcowGlobalSVMID)
+		lcowGlobalSVM = CreateLCOWUVM(ctx, t, lcowGlobalSVMID)
 		lcowCacheScratchFile = filepath.Join(CreateTempDir(t), "sandbox.vhdx")
 	}
 	tempDir := CreateTempDir(t)
 
-	if err := lcow.CreateScratch(lcowGlobalSVM, filepath.Join(tempDir, "sandbox.vhdx"), lcow.DefaultScratchSizeGB, lcowCacheScratchFile); err != nil {
+	if err := lcow.CreateScratch(ctx, lcowGlobalSVM, filepath.Join(tempDir, "sandbox.vhdx"), lcow.DefaultScratchSizeGB, lcowCacheScratchFile); err != nil {
 		t.Fatalf("failed to create EXT4 scratch for LCOW test cases: %s", err)
 	}
 	return tempDir

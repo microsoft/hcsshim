@@ -1,6 +1,7 @@
 package main
 
 import (
+	gcontext "context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -60,11 +61,12 @@ var shimCommand = cli.Command{
 		fatalWriter.Writer = os.Stdout
 
 		id := context.Args().First()
-		c, err := getContainer(id, true)
+		ctx := gcontext.Background()
+		c, err := getContainer(ctx, id, true)
 		if err != nil {
 			return err
 		}
-		defer c.Close()
+		defer c.Close(ctx)
 
 		// Asynchronously wait for the container to exit.
 		containerExitCh := make(chan struct{})
@@ -123,7 +125,7 @@ var shimCommand = cli.Command{
 
 			defer func() {
 				if terminateOnFailure {
-					c.hc.Terminate()
+					c.hc.Terminate(ctx)
 					<-containerExitCh
 				}
 			}()
@@ -180,7 +182,7 @@ var shimCommand = cli.Command{
 			err = stateKey.Set(c.ID, keyInitPid, pid)
 			if err != nil {
 				stdin.Close()
-				cmd.Process.Kill()
+				cmd.Process.Kill(ctx)
 				cmd.Wait()
 				return err
 			}
@@ -190,7 +192,7 @@ var shimCommand = cli.Command{
 		err = stateKey.Set(c.ID, fmt.Sprintf(keyPidMapFmt, os.Getpid()), pid)
 		if err != nil {
 			stdin.Close()
-			cmd.Process.Kill()
+			cmd.Process.Kill(ctx)
 			cmd.Wait()
 			return err
 		}
@@ -213,7 +215,7 @@ var shimCommand = cli.Command{
 			// Shutdown the container, waiting 5 minutes before terminating is
 			// forcefully.
 			const shutdownTimeout = time.Minute * 5
-			err := c.hc.Shutdown()
+			err := c.hc.Shutdown(ctx)
 			if err != nil {
 				select {
 				case <-containerExitCh:
@@ -224,7 +226,7 @@ var shimCommand = cli.Command{
 			}
 
 			if err != nil {
-				c.hc.Terminate()
+				c.hc.Terminate(ctx)
 			}
 			<-containerExitCh
 			err = containerExitErr

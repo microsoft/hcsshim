@@ -3,6 +3,7 @@
 package functional
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,7 +11,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/Microsoft/hcsshim/test/functional/utilities"
+	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	"github.com/sirupsen/logrus"
 )
 
@@ -19,20 +20,21 @@ func TestVPMEM(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 	alpineLayers := testutilities.LayerFolders(t, "alpine")
 
-	u := testutilities.CreateLCOWUVM(t, t.Name())
-	defer u.Close()
+	ctx := context.Background()
+	u := testutilities.CreateLCOWUVM(ctx, t, t.Name())
+	defer u.Close(ctx)
 
 	var iterations uint32 = uvm.MaxVPMEMCount
 
 	// Use layer.vhd from the alpine image as something to add
 	tempDir := testutilities.CreateTempDir(t)
-	if err := copyfile.CopyFile(filepath.Join(alpineLayers[0], "layer.vhd"), filepath.Join(tempDir, "layer.vhd"), true); err != nil {
+	if err := copyfile.CopyFile(ctx, filepath.Join(alpineLayers[0], "layer.vhd"), filepath.Join(tempDir, "layer.vhd"), true); err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(tempDir)
 
 	for i := 0; i < int(iterations); i++ {
-		deviceNumber, uvmPath, err := u.AddVPMEM(filepath.Join(tempDir, "layer.vhd"), true)
+		deviceNumber, uvmPath, err := u.AddVPMEM(ctx, filepath.Join(tempDir, "layer.vhd"), true)
 		if err != nil {
 			t.Fatalf("AddVPMEM failed: %s", err)
 		}
@@ -41,7 +43,7 @@ func TestVPMEM(t *testing.T) {
 
 	// Remove them all
 	for i := 0; i < int(iterations); i++ {
-		if err := u.RemoveVPMEM(filepath.Join(tempDir, "layer.vhd")); err != nil {
+		if err := u.RemoveVPMEM(ctx, filepath.Join(tempDir, "layer.vhd")); err != nil {
 			t.Fatalf("RemoveVPMEM failed: %s", err)
 		}
 	}

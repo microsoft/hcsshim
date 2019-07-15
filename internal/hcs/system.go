@@ -1,6 +1,7 @@
 package hcs
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -12,10 +13,12 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/interop"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/schema1"
 	"github.com/Microsoft/hcsshim/internal/timeout"
-	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
 
 // currentContainerStarts is used to limit the number of concurrent container
@@ -45,8 +48,6 @@ type System struct {
 	id             string
 	callbackNumber uintptr
 
-	logctx logrus.Fields
-
 	closedWaitOnce sync.Once
 	waitBlock      chan struct{}
 	waitError      error
@@ -57,35 +58,20 @@ type System struct {
 
 func newSystem(id string) *System {
 	return &System{
-		id: id,
-		logctx: logrus.Fields{
-			logfields.ContainerID: id,
-		},
+		id:        id,
 		waitBlock: make(chan struct{}),
 	}
 }
 
-func (computeSystem *System) logOperationBegin(operation string) {
-	logOperationBegin(
-		computeSystem.logctx,
-		operation+" - Begin Operation")
-}
-
-func (computeSystem *System) logOperationEnd(operation string, err error) {
-	result, err := getOperationLogResult(err)
-	logOperationEnd(
-		computeSystem.logctx,
-		operation+" - End Operation - "+result,
-		err)
-}
-
 // CreateComputeSystem creates a new compute system with the given configuration but does not start it.
-func CreateComputeSystem(id string, hcsDocumentInterface interface{}) (_ *System, err error) {
+func CreateComputeSystem(ctx context.Context, id string, hcsDocumentInterface interface{}) (_ *System, err error) {
 	operation := "hcsshim::CreateComputeSystem"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, id))
 
 	computeSystem := newSystem(id)
-	computeSystem.logOperationBegin(operation)
-	defer func() { computeSystem.logOperationEnd(operation, err) }()
 
 	hcsDocumentB, err := json.Marshal(hcsDocumentInterface)
 	if err != nil {
@@ -94,29 +80,27 @@ func CreateComputeSystem(id string, hcsDocumentInterface interface{}) (_ *System
 
 	hcsDocument := string(hcsDocumentB)
 
-	logrus.WithFields(computeSystem.logctx).
-		WithField(logfields.JSON, hcsDocument).
-		Debug("HCS ComputeSystem Document")
+	log.G(ctx).WithField("configuration", hcsDocument).Debug("create system document")
 
 	var (
 		resultp     *uint16
 		identity    syscall.Handle
 		createError error
 	)
-	syscallWatcher(computeSystem.logctx, func() {
+	syscallWatcher(ctx, func() {
 		createError = hcsCreateComputeSystem(id, hcsDocument, identity, &computeSystem.handle, &resultp)
 	})
 
 	if createError == nil || IsPending(createError) {
 		defer func() {
 			if err != nil {
-				computeSystem.Close()
+				computeSystem.Close(ctx)
 			}
 		}()
 		if err = computeSystem.registerCallback(); err != nil {
 			// Terminate the compute system if it still exists. We're okay to
 			// ignore a failure here.
-			computeSystem.Terminate()
+			computeSystem.Terminate(ctx)
 			return nil, makeSystemError(computeSystem, operation, "", err, nil)
 		}
 	}
@@ -126,30 +110,30 @@ func CreateComputeSystem(id string, hcsDocumentInterface interface{}) (_ *System
 		if err == ErrTimeout {
 			// Terminate the compute system if it still exists. We're okay to
 			// ignore a failure here.
-			computeSystem.Terminate()
+			computeSystem.Terminate(ctx)
 		}
 		return nil, makeSystemError(computeSystem, operation, hcsDocument, err, events)
 	}
 	go computeSystem.waitBackground()
-	if err = computeSystem.getCachedProperties(); err != nil {
+	if err = computeSystem.getCachedProperties(ctx); err != nil {
 		return nil, err
 	}
 	return computeSystem, nil
 }
 
 // OpenComputeSystem opens an existing compute system by ID.
-func OpenComputeSystem(id string) (_ *System, err error) {
+func OpenComputeSystem(ctx context.Context, id string) (_ *System, err error) {
 	operation := "hcsshim::OpenComputeSystem"
-
-	computeSystem := newSystem(id)
-	computeSystem.logOperationBegin(operation)
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
 	defer func() {
-		if IsNotExist(err) {
-			computeSystem.logOperationEnd(operation, nil)
-		} else {
-			computeSystem.logOperationEnd(operation, err)
+		if !IsNotExist(err) {
+			oc.SetSpanStatus(span, err)
 		}
 	}()
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, id))
+
+	computeSystem := newSystem(id)
 
 	var (
 		handle  hcsSystem
@@ -163,21 +147,26 @@ func OpenComputeSystem(id string) (_ *System, err error) {
 	computeSystem.handle = handle
 	defer func() {
 		if err != nil {
-			computeSystem.Close()
+			computeSystem.Close(ctx)
 		}
 	}()
 	if err = computeSystem.registerCallback(); err != nil {
 		return nil, makeSystemError(computeSystem, operation, "", err, nil)
 	}
 	go computeSystem.waitBackground()
-	if err = computeSystem.getCachedProperties(); err != nil {
+	if err = computeSystem.getCachedProperties(ctx); err != nil {
 		return nil, err
 	}
 	return computeSystem, nil
 }
 
-func (computeSystem *System) getCachedProperties() error {
-	props, err := computeSystem.Properties()
+func (computeSystem *System) getCachedProperties(ctx context.Context) (err error) {
+	ctx, span := trace.StartSpan(ctx, "hcsshim::System::getCachedProperties")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, computeSystem.id))
+
+	props, err := computeSystem.Properties(ctx)
 	if err != nil {
 		return err
 	}
@@ -203,26 +192,11 @@ func (computeSystem *System) IsOCI() bool {
 }
 
 // GetComputeSystems gets a list of the compute systems on the system that match the query
-func GetComputeSystems(q schema1.ComputeSystemQuery) (_ []schema1.ContainerProperties, err error) {
+func GetComputeSystems(ctx context.Context, q schema1.ComputeSystemQuery) (_ []schema1.ContainerProperties, err error) {
 	operation := "hcsshim::GetComputeSystems"
-	fields := logrus.Fields{}
-	logOperationBegin(
-		fields,
-		operation+" - Begin Operation")
-
-	defer func() {
-		var result string
-		if err == nil {
-			result = "Success"
-		} else {
-			result = "Error"
-		}
-
-		logOperationEnd(
-			fields,
-			operation+" - End Operation - "+result,
-			err)
-	}()
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
 
 	queryb, err := json.Marshal(q)
 	if err != nil {
@@ -231,16 +205,14 @@ func GetComputeSystems(q schema1.ComputeSystemQuery) (_ []schema1.ContainerPrope
 
 	query := string(queryb)
 
-	logrus.WithFields(fields).
-		WithField(logfields.JSON, query).
-		Debug("HCS ComputeSystem Query")
+	log.G(ctx).WithField("query", query).Debug("query document")
 
 	var (
 		resultp         *uint16
 		computeSystemsp *uint16
 	)
 
-	syscallWatcher(fields, func() {
+	syscallWatcher(ctx, func() {
 		err = hcsEnumerateComputeSystems(query, &computeSystemsp, &resultp)
 	})
 	events := processHcsResult(resultp)
@@ -261,16 +233,18 @@ func GetComputeSystems(q schema1.ComputeSystemQuery) (_ []schema1.ContainerPrope
 }
 
 // Start synchronously starts the computeSystem.
-func (computeSystem *System) Start() (err error) {
+func (computeSystem *System) Start(ctx context.Context) (err error) {
+	operation := "hcsshim::System::Start"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, computeSystem.id))
+
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
-	operation := "hcsshim::ComputeSystem::Start"
-	computeSystem.logOperationBegin(operation)
-	defer func() { computeSystem.logOperationEnd(operation, err) }()
-
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, "Start", "", ErrAlreadyClosed, nil)
+		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed, nil)
 	}
 
 	// This is a very simple backoff-retry loop to limit the number
@@ -300,12 +274,12 @@ func (computeSystem *System) Start() (err error) {
 	}
 
 	var resultp *uint16
-	syscallWatcher(computeSystem.logctx, func() {
+	syscallWatcher(ctx, func() {
 		err = hcsStartComputeSystem(computeSystem.handle, "", &resultp)
 	})
 	events, err := processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemStartCompleted, &timeout.SystemStart)
 	if err != nil {
-		return makeSystemError(computeSystem, "Start", "", err, events)
+		return makeSystemError(computeSystem, operation, "", err, events)
 	}
 
 	return nil
@@ -317,57 +291,57 @@ func (computeSystem *System) ID() string {
 }
 
 // Shutdown requests a compute system shutdown.
-func (computeSystem *System) Shutdown() (err error) {
+func (computeSystem *System) Shutdown(ctx context.Context) (err error) {
+	operation := "hcsshim::System::Shutdown"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, computeSystem.id))
+
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
-
-	operation := "hcsshim::ComputeSystem::Shutdown"
-	computeSystem.logOperationBegin(operation)
-	defer func() {
-		computeSystem.logOperationEnd(operation, err)
-	}()
 
 	if computeSystem.handle == 0 {
 		return nil
 	}
 
 	var resultp *uint16
-	syscallWatcher(computeSystem.logctx, func() {
+	syscallWatcher(ctx, func() {
 		err = hcsShutdownComputeSystem(computeSystem.handle, "", &resultp)
 	})
 	events := processHcsResult(resultp)
 	switch err {
 	case nil, ErrVmcomputeAlreadyStopped, ErrComputeSystemDoesNotExist, ErrVmcomputeOperationPending:
 	default:
-		return makeSystemError(computeSystem, "Shutdown", "", err, events)
+		return makeSystemError(computeSystem, operation, "", err, events)
 	}
 	return nil
 }
 
 // Terminate requests a compute system terminate.
-func (computeSystem *System) Terminate() (err error) {
+func (computeSystem *System) Terminate(ctx context.Context) (err error) {
+	operation := "hcsshim::System::Terminate"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, computeSystem.id))
+
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
-
-	operation := "hcsshim::ComputeSystem::Terminate"
-	computeSystem.logOperationBegin(operation)
-	defer func() {
-		computeSystem.logOperationEnd(operation, err)
-	}()
 
 	if computeSystem.handle == 0 {
 		return nil
 	}
 
 	var resultp *uint16
-	syscallWatcher(computeSystem.logctx, func() {
+	syscallWatcher(ctx, func() {
 		err = hcsTerminateComputeSystem(computeSystem.handle, "", &resultp)
 	})
 	events := processHcsResult(resultp)
 	switch err {
 	case nil, ErrVmcomputeAlreadyStopped, ErrComputeSystemDoesNotExist, ErrVmcomputeOperationPending:
 	default:
-		return makeSystemError(computeSystem, "Terminate", "", err, events)
+		return makeSystemError(computeSystem, operation, "", err, events)
 	}
 	return nil
 }
@@ -378,19 +352,22 @@ func (computeSystem *System) Terminate() (err error) {
 // This MUST be called exactly once per `computeSystem.handle` but `Wait` is
 // safe to call multiple times.
 func (computeSystem *System) waitBackground() {
-	operation := "hcsshim::ComputeSystem::waitBackground"
-	computeSystem.logOperationBegin(operation)
+	operation := "hcsshim::System::waitBackground"
+	ctx, span := trace.StartSpan(context.Background(), operation)
+	defer span.End()
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, computeSystem.id))
+
 	err := waitForNotification(computeSystem.callbackNumber, hcsNotificationSystemExited, nil)
 	switch err {
 	case nil:
 	case ErrVmcomputeUnexpectedExit:
-		logrus.WithFields(computeSystem.logctx).Info(operation + " - unexpected system exit")
-		computeSystem.exitError = makeSystemError(computeSystem, "Wait", "", err, nil)
+		log.G(ctx).WithField(logfields.SystemID, computeSystem.id).Debug("unexpected system exit")
+		computeSystem.exitError = makeSystemError(computeSystem, operation, "", err, nil)
 		err = nil
 	default:
-		err = makeSystemError(computeSystem, "Wait", "", err, nil)
+		err = makeSystemError(computeSystem, operation, "", err, nil)
 	}
-	computeSystem.logOperationEnd(operation, err)
+	oc.SetSpanStatus(span, err)
 	computeSystem.closedWaitOnce.Do(func() {
 		computeSystem.waitError = err
 		close(computeSystem.waitBlock)
@@ -417,31 +394,31 @@ func (computeSystem *System) ExitError() (err error) {
 	}
 }
 
-func (computeSystem *System) Properties(types ...schema1.PropertyType) (_ *schema1.ContainerProperties, err error) {
+func (computeSystem *System) Properties(ctx context.Context, types ...schema1.PropertyType) (_ *schema1.ContainerProperties, err error) {
+	operation := "hcsshim::System::Properties"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, computeSystem.id))
+
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
-	operation := "hcsshim::ComputeSystem::Properties"
-	computeSystem.logOperationBegin(operation)
-	defer func() { computeSystem.logOperationEnd(operation, err) }()
-
 	queryBytes, err := json.Marshal(schema1.PropertyQuery{PropertyTypes: types})
 	if err != nil {
-		return nil, makeSystemError(computeSystem, "Properties", "", err, nil)
+		return nil, makeSystemError(computeSystem, operation, "", err, nil)
 	}
 
 	queryString := string(queryBytes)
-	logrus.WithFields(computeSystem.logctx).
-		WithField(logfields.JSON, queryString).
-		Debug("HCS ComputeSystem Properties Query")
+	log.G(ctx).WithField("propertyQuery", queryString).Debug("query document")
 
 	var resultp, propertiesp *uint16
-	syscallWatcher(computeSystem.logctx, func() {
+	syscallWatcher(ctx, func() {
 		err = hcsGetComputeSystemProperties(computeSystem.handle, string(queryString), &propertiesp, &resultp)
 	})
 	events := processHcsResult(resultp)
 	if err != nil {
-		return nil, makeSystemError(computeSystem, "Properties", "", err, events)
+		return nil, makeSystemError(computeSystem, operation, "", err, events)
 	}
 
 	if propertiesp == nil {
@@ -450,69 +427,75 @@ func (computeSystem *System) Properties(types ...schema1.PropertyType) (_ *schem
 	propertiesRaw := interop.ConvertAndFreeCoTaskMemBytes(propertiesp)
 	properties := &schema1.ContainerProperties{}
 	if err := json.Unmarshal(propertiesRaw, properties); err != nil {
-		return nil, makeSystemError(computeSystem, "Properties", "", err, nil)
+		return nil, makeSystemError(computeSystem, operation, "", err, nil)
 	}
 
 	return properties, nil
 }
 
 // Pause pauses the execution of the computeSystem. This feature is not enabled in TP5.
-func (computeSystem *System) Pause() (err error) {
+func (computeSystem *System) Pause(ctx context.Context) (err error) {
+	operation := "hcsshim::System::Pause"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, computeSystem.id))
+
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
-	operation := "hcsshim::ComputeSystem::Pause"
-	computeSystem.logOperationBegin(operation)
-	defer func() { computeSystem.logOperationEnd(operation, err) }()
-
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, "Pause", "", ErrAlreadyClosed, nil)
+		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed, nil)
 	}
 
 	var resultp *uint16
-	syscallWatcher(computeSystem.logctx, func() {
+	syscallWatcher(ctx, func() {
 		err = hcsPauseComputeSystem(computeSystem.handle, "", &resultp)
 	})
 	events, err := processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemPauseCompleted, &timeout.SystemPause)
 	if err != nil {
-		return makeSystemError(computeSystem, "Pause", "", err, events)
+		return makeSystemError(computeSystem, operation, "", err, events)
 	}
 
 	return nil
 }
 
 // Resume resumes the execution of the computeSystem. This feature is not enabled in TP5.
-func (computeSystem *System) Resume() (err error) {
+func (computeSystem *System) Resume(ctx context.Context) (err error) {
+	operation := "hcsshim::System::Resume"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, computeSystem.id))
+
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
-	operation := "hcsshim::ComputeSystem::Resume"
-	computeSystem.logOperationBegin(operation)
-	defer func() { computeSystem.logOperationEnd(operation, err) }()
-
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, "Resume", "", ErrAlreadyClosed, nil)
+		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed, nil)
 	}
 
 	var resultp *uint16
-	syscallWatcher(computeSystem.logctx, func() {
+	syscallWatcher(ctx, func() {
 		err = hcsResumeComputeSystem(computeSystem.handle, "", &resultp)
 	})
 	events, err := processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemResumeCompleted, &timeout.SystemResume)
 	if err != nil {
-		return makeSystemError(computeSystem, "Resume", "", err, events)
+		return makeSystemError(computeSystem, operation, "", err, events)
 	}
 
 	return nil
 }
 
-func (computeSystem *System) createProcess(c interface{}) (_ *Process, _ *hcsProcessInformation, err error) {
+func (computeSystem *System) createProcess(ctx context.Context, c interface{}) (_ *Process, _ *hcsProcessInformation, err error) {
+	operation := "hcsshim::System::createProcess"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, computeSystem.id))
+
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
-
-	operation := "hcsshim::ComputeSystem::CreateProcess"
-	computeSystem.logOperationBegin(operation)
-	defer func() { computeSystem.logOperationEnd(operation, err) }()
 
 	var (
 		processInfo   hcsProcessInformation
@@ -521,45 +504,46 @@ func (computeSystem *System) createProcess(c interface{}) (_ *Process, _ *hcsPro
 	)
 
 	if computeSystem.handle == 0 {
-		return nil, nil, makeSystemError(computeSystem, "CreateProcess", "", ErrAlreadyClosed, nil)
+		return nil, nil, makeSystemError(computeSystem, operation, "", ErrAlreadyClosed, nil)
 	}
 
 	configurationb, err := json.Marshal(c)
 	if err != nil {
-		return nil, nil, makeSystemError(computeSystem, "CreateProcess", "", err, nil)
+		return nil, nil, makeSystemError(computeSystem, operation, "", err, nil)
 	}
 
 	configuration := string(configurationb)
 
-	logrus.WithFields(computeSystem.logctx).
-		WithField(logfields.JSON, configuration).
-		Debug("HCS ComputeSystem Process Document")
+	log.G(ctx).WithField("processParameters", configuration).Debug("create process document")
 
-	syscallWatcher(computeSystem.logctx, func() {
+	syscallWatcher(ctx, func() {
 		err = hcsCreateProcess(computeSystem.handle, configuration, &processInfo, &processHandle, &resultp)
 	})
 	events := processHcsResult(resultp)
 	if err != nil {
-		return nil, nil, makeSystemError(computeSystem, "CreateProcess", configuration, err, events)
+		return nil, nil, makeSystemError(computeSystem, operation, configuration, err, events)
 	}
 
-	logrus.WithFields(computeSystem.logctx).
-		WithField(logfields.ProcessID, processInfo.ProcessId).
-		Debug("HCS ComputeSystem CreateProcess PID")
-
+	log.G(ctx).WithField(logfields.ProcessID, processInfo.ProcessId).Debug("created process pid")
 	return newProcess(processHandle, int(processInfo.ProcessId), computeSystem), &processInfo, nil
 }
 
 // CreateProcessNoStdio launches a new process within the computeSystem. The
 // Stdio handles are not cached on the process struct.
-func (computeSystem *System) CreateProcessNoStdio(c interface{}) (_ cow.Process, err error) {
-	process, processInfo, err := computeSystem.createProcess(c)
+func (computeSystem *System) CreateProcessNoStdio(ctx context.Context, c interface{}) (_ cow.Process, err error) {
+	operation := "hcsshim::System::CreateProcessNoStdio"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, computeSystem.id))
+
+	process, processInfo, err := computeSystem.createProcess(ctx, c)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
 		if err != nil {
-			process.Close()
+			process.Close(ctx)
 		}
 	}()
 
@@ -569,7 +553,7 @@ func (computeSystem *System) CreateProcessNoStdio(c interface{}) (_ cow.Process,
 	syscall.Close(processInfo.StdError)
 
 	if err = process.registerCallback(); err != nil {
-		return nil, makeSystemError(computeSystem, "CreateProcess", "", err, nil)
+		return nil, makeSystemError(computeSystem, operation, "", err, nil)
 	}
 	go process.waitBackground()
 
@@ -577,27 +561,33 @@ func (computeSystem *System) CreateProcessNoStdio(c interface{}) (_ cow.Process,
 }
 
 // CreateProcess launches a new process within the computeSystem.
-func (computeSystem *System) CreateProcess(c interface{}) (_ cow.Process, err error) {
-	process, processInfo, err := computeSystem.createProcess(c)
+func (computeSystem *System) CreateProcess(ctx context.Context, c interface{}) (_ cow.Process, err error) {
+	operation := "hcsshim::System::CreateProcess"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, computeSystem.id))
+
+	process, processInfo, err := computeSystem.createProcess(ctx, c)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
 		if err != nil {
-			process.Close()
+			process.Close(ctx)
 		}
 	}()
 
 	pipes, err := makeOpenFiles([]syscall.Handle{processInfo.StdInput, processInfo.StdOutput, processInfo.StdError})
 	if err != nil {
-		return nil, makeSystemError(computeSystem, "CreateProcess", "", err, nil)
+		return nil, makeSystemError(computeSystem, operation, "", err, nil)
 	}
 	process.stdin = pipes[0]
 	process.stdout = pipes[1]
 	process.stderr = pipes[2]
 
 	if err = process.registerCallback(); err != nil {
-		return nil, makeSystemError(computeSystem, "CreateProcess", "", err, nil)
+		return nil, makeSystemError(computeSystem, operation, "", err, nil)
 	}
 	go process.waitBackground()
 
@@ -605,17 +595,17 @@ func (computeSystem *System) CreateProcess(c interface{}) (_ cow.Process, err er
 }
 
 // OpenProcess gets an interface to an existing process within the computeSystem.
-func (computeSystem *System) OpenProcess(pid int) (_ *Process, err error) {
+func (computeSystem *System) OpenProcess(ctx context.Context, pid int) (_ *Process, err error) {
+	operation := "hcsshim::System::OpenProcess"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.SystemID, computeSystem.id),
+		trace.Int64Attribute(logfields.ProcessID, int64(pid)))
+
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
-
-	// Add PID for the context of this operation
-	computeSystem.logctx[logfields.ProcessID] = pid
-	defer delete(computeSystem.logctx, logfields.ProcessID)
-
-	operation := "hcsshim::ComputeSystem::OpenProcess"
-	computeSystem.logOperationBegin(operation)
-	defer func() { computeSystem.logOperationEnd(operation, err) }()
 
 	var (
 		processHandle hcsProcess
@@ -623,20 +613,20 @@ func (computeSystem *System) OpenProcess(pid int) (_ *Process, err error) {
 	)
 
 	if computeSystem.handle == 0 {
-		return nil, makeSystemError(computeSystem, "OpenProcess", "", ErrAlreadyClosed, nil)
+		return nil, makeSystemError(computeSystem, operation, "", ErrAlreadyClosed, nil)
 	}
 
-	syscallWatcher(computeSystem.logctx, func() {
+	syscallWatcher(ctx, func() {
 		err = hcsOpenProcess(computeSystem.handle, uint32(pid), &processHandle, &resultp)
 	})
 	events := processHcsResult(resultp)
 	if err != nil {
-		return nil, makeSystemError(computeSystem, "OpenProcess", "", err, events)
+		return nil, makeSystemError(computeSystem, operation, "", err, events)
 	}
 
 	process := newProcess(processHandle, pid, computeSystem)
 	if err = process.registerCallback(); err != nil {
-		return nil, makeSystemError(computeSystem, "OpenProcess", "", err, nil)
+		return nil, makeSystemError(computeSystem, operation, "", err, nil)
 	}
 	go process.waitBackground()
 
@@ -644,13 +634,15 @@ func (computeSystem *System) OpenProcess(pid int) (_ *Process, err error) {
 }
 
 // Close cleans up any state associated with the compute system but does not terminate or wait for it.
-func (computeSystem *System) Close() (err error) {
+func (computeSystem *System) Close(ctx context.Context) (err error) {
+	operation := "hcsshim::System::Close"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, computeSystem.id))
+
 	computeSystem.handleLock.Lock()
 	defer computeSystem.handleLock.Unlock()
-
-	operation := "hcsshim::ComputeSystem::Close"
-	computeSystem.logOperationBegin(operation)
-	defer func() { computeSystem.logOperationEnd(operation, err) }()
 
 	// Don't double free this
 	if computeSystem.handle == 0 {
@@ -658,14 +650,14 @@ func (computeSystem *System) Close() (err error) {
 	}
 
 	if err = computeSystem.unregisterCallback(); err != nil {
-		return makeSystemError(computeSystem, "Close", "", err, nil)
+		return makeSystemError(computeSystem, operation, "", err, nil)
 	}
 
-	syscallWatcher(computeSystem.logctx, func() {
+	syscallWatcher(ctx, func() {
 		err = hcsCloseComputeSystem(computeSystem.handle)
 	})
 	if err != nil {
-		return makeSystemError(computeSystem, "Close", "", err, nil)
+		return makeSystemError(computeSystem, operation, "", err, nil)
 	}
 
 	computeSystem.handle = 0
@@ -736,16 +728,18 @@ func (computeSystem *System) unregisterCallback() error {
 }
 
 // Modify the System by sending a request to HCS
-func (computeSystem *System) Modify(config interface{}) (err error) {
+func (computeSystem *System) Modify(ctx context.Context, config interface{}) (err error) {
+	operation := "hcsshim::System::Modify"
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.SystemID, computeSystem.id))
+
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
-	operation := "hcsshim::ComputeSystem::Modify"
-	computeSystem.logOperationBegin(operation)
-	defer func() { computeSystem.logOperationEnd(operation, err) }()
-
 	if computeSystem.handle == 0 {
-		return makeSystemError(computeSystem, "Modify", "", ErrAlreadyClosed, nil)
+		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed, nil)
 	}
 
 	requestJSON, err := json.Marshal(config)
@@ -755,17 +749,15 @@ func (computeSystem *System) Modify(config interface{}) (err error) {
 
 	requestString := string(requestJSON)
 
-	logrus.WithFields(computeSystem.logctx).
-		WithField(logfields.JSON, requestString).
-		Debug("HCS ComputeSystem Modify Document")
+	log.G(ctx).WithField("configuration", requestString).Debug("modify document")
 
 	var resultp *uint16
-	syscallWatcher(computeSystem.logctx, func() {
+	syscallWatcher(ctx, func() {
 		err = hcsModifyComputeSystem(computeSystem.handle, requestString, &resultp)
 	})
 	events := processHcsResult(resultp)
 	if err != nil {
-		return makeSystemError(computeSystem, "Modify", requestString, err, events)
+		return makeSystemError(computeSystem, operation, requestString, err, events)
 	}
 
 	return nil

@@ -3,14 +3,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os/exec"
 	"sync"
 
-	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/containerd/typeurl"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
 
@@ -24,12 +23,9 @@ func publishEvent(ctx context.Context, topic string, event interface{}) (err err
 	ctx, span := trace.StartSpan(ctx, "publishEvent")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("topic", topic))
-
-	log.G(ctx).WithFields(logrus.Fields{
-		"topic": topic,
-		"event": event,
-	}).Debug("Publishing event")
+	span.AddAttributes(
+		trace.StringAttribute("topic", topic),
+		trace.StringAttribute("event", fmt.Sprintf("%+v", event)))
 
 	publishLock.Lock()
 	defer publishLock.Unlock()

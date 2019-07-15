@@ -1,6 +1,7 @@
 package main
 
 import (
+	gcontext "context"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -34,9 +35,10 @@ The delete command will be executed in the container's bundle as its cwd.
 		}
 
 		// Attempt to find the hcssystem for this bundle and terminate it.
-		if sys, _ := hcs.OpenComputeSystem(idFlag); sys != nil {
-			defer sys.Close()
-			if err := sys.Terminate(); err != nil {
+		ctx := gcontext.Background()
+		if sys, _ := hcs.OpenComputeSystem(ctx, idFlag); sys != nil {
+			defer sys.Close(ctx)
+			if err := sys.Terminate(ctx); err != nil {
 				fmt.Fprintf(os.Stderr, "failed to terminate '%s': %v", idFlag, err)
 			} else {
 				ch := make(chan error, 1)
@@ -44,7 +46,7 @@ The delete command will be executed in the container's bundle as its cwd.
 				t := time.NewTimer(time.Second * 30)
 				select {
 				case <-t.C:
-					sys.Close()
+					sys.Close(ctx)
 					return fmt.Errorf("timed out waiting for '%s' to terminate", idFlag)
 				case err := <-ch:
 					t.Stop()
@@ -63,13 +65,13 @@ The delete command will be executed in the container's bundle as its cwd.
 		} else {
 			if containerType := s["io.kubernetes.cri.container-type"]; containerType == "container" {
 				if sandboxID := s["io.kubernetes.cri.sandbox-id"]; sandboxID != "" {
-					if sys, _ := hcs.OpenComputeSystem(sandboxID); sys != nil {
-						if err := sys.Terminate(); err != nil {
+					if sys, _ := hcs.OpenComputeSystem(ctx, sandboxID); sys != nil {
+						if err := sys.Terminate(ctx); err != nil {
 							fmt.Fprintf(os.Stderr, "failed to terminate '%s': %v", idFlag, err)
 						} else if err := sys.Wait(); err != nil {
 							fmt.Fprintf(os.Stderr, "failed to wait for '%s' to terminate: %v", idFlag, err)
 						}
-						sys.Close()
+						sys.Close(ctx)
 					}
 				}
 			}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	gcontext "context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -24,13 +25,14 @@ var psCommand = cli.Command{
 	Before: appargs.Validate(argID),
 	Action: func(context *cli.Context) error {
 		id := context.Args().First()
-		container, err := getContainer(id, true)
+		ctx := gcontext.Background()
+		container, err := getContainer(ctx, id, true)
 		if err != nil {
 			return err
 		}
-		defer container.Close()
+		defer container.Close(ctx)
 
-		props, err := container.hc.Properties(schema1.PropertyTypeProcessList)
+		props, err := container.hc.Properties(ctx, schema1.PropertyTypeProcessList)
 		if err != nil {
 			return err
 		}

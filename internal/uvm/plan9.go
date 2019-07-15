@@ -1,16 +1,19 @@
 package uvm
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
-	"github.com/Microsoft/hcsshim/internal/schema2"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
 
 type Plan9Share struct {
@@ -20,25 +23,17 @@ type Plan9Share struct {
 const plan9Port = 564
 
 // AddPlan9 adds a Plan9 share to a utility VM.
-func (uvm *UtilityVM) AddPlan9(hostPath string, uvmPath string, readOnly bool, restrict bool, allowedNames []string) (_ *Plan9Share, err error) {
-	op := "uvm::AddPlan9"
-	log := logrus.WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"host-path":     hostPath,
-		"uvm-path":      uvmPath,
-		"readOnly":      readOnly,
-		"restrict":      restrict,
-		"allowedNames":  allowedNames,
-	})
-	log.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			log.Data[logrus.ErrorKey] = err
-			log.Error(op + " - End Operation - Error")
-		} else {
-			log.Debug(op + " - End Operation - Success")
-		}
-	}()
+func (uvm *UtilityVM) AddPlan9(ctx context.Context, hostPath string, uvmPath string, readOnly bool, restrict bool, allowedNames []string) (_ *Plan9Share, err error) {
+	ctx, span := trace.StartSpan(ctx, "uvm::AddPlan9")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.UVMID, uvm.id),
+		trace.StringAttribute("host-path", hostPath),
+		trace.StringAttribute("uvm-path", uvmPath),
+		trace.BoolAttribute("readOnly", readOnly),
+		trace.BoolAttribute("restrict", restrict),
+		trace.StringAttribute("allowedNames", strings.Join(allowedNames, ", ")))
 
 	if uvm.operatingSystem != "linux" {
 		return nil, errNotSupported
@@ -99,7 +94,7 @@ func (uvm *UtilityVM) AddPlan9(hostPath string, uvmPath string, readOnly bool, r
 		},
 	}
 
-	if err := uvm.Modify(modification); err != nil {
+	if err := uvm.Modify(ctx, modification); err != nil {
 		return nil, err
 	}
 
@@ -109,22 +104,14 @@ func (uvm *UtilityVM) AddPlan9(hostPath string, uvmPath string, readOnly bool, r
 
 // RemovePlan9 removes a Plan9 share from a utility VM. Each Plan9 share is ref-counted
 // and only actually removed when the ref-count drops to zero.
-func (uvm *UtilityVM) RemovePlan9(share *Plan9Share) (err error) {
-	op := "uvm::RemovePlan9"
-	log := logrus.WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"name":          share.name,
-		"uvm-path":      share.uvmPath,
-	})
-	log.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			log.Data[logrus.ErrorKey] = err
-			log.Error(op + " - End Operation - Error")
-		} else {
-			log.Debug(op + " - End Operation - Success")
-		}
-	}()
+func (uvm *UtilityVM) RemovePlan9(ctx context.Context, share *Plan9Share) (err error) {
+	ctx, span := trace.StartSpan(ctx, "uvm::RemovePlan9")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.UVMID, uvm.id),
+		trace.StringAttribute("name", share.name),
+		trace.StringAttribute("uvm-path", share.uvmPath))
 
 	if uvm.operatingSystem != "linux" {
 		return errNotSupported
@@ -148,7 +135,7 @@ func (uvm *UtilityVM) RemovePlan9(share *Plan9Share) (err error) {
 			},
 		},
 	}
-	if err := uvm.Modify(modification); err != nil {
+	if err := uvm.Modify(ctx, modification); err != nil {
 		return fmt.Errorf("failed to remove plan9 share %s from %s: %+v: %s", share.name, uvm.id, modification, err)
 	}
 	return nil

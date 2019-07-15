@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	gcontext "context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -72,27 +74,28 @@ var vmshimCommand = cli.Command{
 			return err
 		}
 
+		ctx := gcontext.Background()
 		var vm *uvm.UtilityVM
 		if isLCOW {
-			vm, err = uvm.CreateLCOW(opts.(*uvm.OptionsLCOW))
+			vm, err = uvm.CreateLCOW(ctx, opts.(*uvm.OptionsLCOW))
 		} else {
-			vm, err = uvm.CreateWCOW(opts.(*uvm.OptionsWCOW))
+			vm, err = uvm.CreateWCOW(ctx, opts.(*uvm.OptionsWCOW))
 		}
 		if err != nil {
 			return err
 		}
-		defer vm.Close()
-		if err = vm.Start(); err != nil {
+		defer vm.Close(ctx)
+		if err = vm.Start(ctx); err != nil {
 			return err
 		}
 
 		// Asynchronously wait for the VM to exit.
 		exitCh := make(chan error)
 		go func() {
-			exitCh <- vm.Wait()
+			exitCh <- vm.Wait(ctx)
 		}()
 
-		defer vm.Close()
+		defer vm.Close(ctx)
 
 		// Alert the parent process that initialization has completed
 		// successfully.
@@ -117,7 +120,7 @@ var vmshimCommand = cli.Command{
 			case <-exitCh:
 				return nil
 			case pipe := <-pipeCh:
-				err = processRequest(vm, pipe)
+				err = processRequest(ctx, vm, pipe)
 				if err == nil {
 					_, err = pipe.Write(runhcs.ShimSuccess)
 					// Wait until the pipe is closed before closing the
@@ -140,7 +143,7 @@ var vmshimCommand = cli.Command{
 	},
 }
 
-func processRequest(vm *uvm.UtilityVM, pipe net.Conn) error {
+func processRequest(ctx context.Context, vm *uvm.UtilityVM, pipe net.Conn) error {
 	var req runhcs.VMRequest
 	err := json.NewDecoder(pipe).Decode(&req)
 	if err != nil {
@@ -150,18 +153,18 @@ func processRequest(vm *uvm.UtilityVM, pipe net.Conn) error {
 		logfields.ContainerID:     req.ID,
 		logfields.VMShimOperation: req.Op,
 	}).Debug("process request")
-	c, err := getContainer(req.ID, false)
+	c, err := getContainer(ctx, req.ID, false)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if c != nil {
-			c.Close()
+			c.Close(ctx)
 		}
 	}()
 	switch req.Op {
 	case runhcs.OpCreateContainer:
-		err = createContainerInHost(c, vm)
+		err = createContainerInHost(ctx, c, vm)
 		if err != nil {
 			return err
 		}
@@ -169,11 +172,11 @@ func processRequest(vm *uvm.UtilityVM, pipe net.Conn) error {
 		c = nil
 		go func() {
 			c2.hc.Wait()
-			c2.Close()
+			c2.Close(ctx)
 		}()
 
 	case runhcs.OpUnmountContainer, runhcs.OpUnmountContainerDiskOnly:
-		err = c.unmountInHost(vm, req.Op == runhcs.OpUnmountContainer)
+		err = c.unmountInHost(ctx, vm, req.Op == runhcs.OpUnmountContainer)
 		if err != nil {
 			return err
 		}

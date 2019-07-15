@@ -1,6 +1,7 @@
 package main
 
 import (
+	gcontext "context"
 	"errors"
 	"fmt"
 
@@ -20,18 +21,19 @@ your host.`,
 	Before:      appargs.Validate(argID),
 	Action: func(context *cli.Context) error {
 		id := context.Args().First()
-		container, err := getContainer(id, false)
+		ctx := gcontext.Background()
+		container, err := getContainer(ctx, id, false)
 		if err != nil {
 			return err
 		}
-		defer container.Close()
-		status, err := container.Status()
+		defer container.Close(ctx)
+		status, err := container.Status(ctx)
 		if err != nil {
 			return err
 		}
 		switch status {
 		case containerCreated:
-			return container.Exec()
+			return container.Exec(ctx)
 		case containerStopped:
 			return errors.New("cannot start a container that has stopped")
 		case containerRunning:

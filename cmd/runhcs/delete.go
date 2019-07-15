@@ -1,6 +1,7 @@
 package main
 
 import (
+	gcontext "context"
 	"fmt"
 	"os"
 
@@ -32,7 +33,8 @@ status of "ubuntu01" as "stopped" the following will delete resources held for
 	Action: func(context *cli.Context) error {
 		id := context.Args().First()
 		force := context.Bool("force")
-		container, err := getContainer(id, false)
+		ctx := gcontext.Background()
+		container, err := getContainer(ctx, id, false)
 		if err != nil {
 			if _, ok := err.(*regstate.NoStateError); ok {
 				if e := stateKey.Remove(id); e != nil {
@@ -44,8 +46,8 @@ status of "ubuntu01" as "stopped" the following will delete resources held for
 			}
 			return err
 		}
-		defer container.Close()
-		s, err := container.Status()
+		defer container.Close(ctx)
+		s, err := container.Status(ctx)
 		if err != nil {
 			return err
 		}
@@ -63,11 +65,11 @@ status of "ubuntu01" as "stopped" the following will delete resources held for
 		}
 
 		if kill {
-			err = container.Kill()
+			err = container.Kill(ctx)
 			if err != nil {
 				return err
 			}
 		}
-		return container.Remove()
+		return container.Remove(ctx)
 	},
 }

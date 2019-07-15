@@ -1,6 +1,8 @@
 package main
 
 import (
+	gcontext "context"
+
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/schema1"
@@ -26,12 +28,13 @@ signal to the init process of the "ubuntu01" container:
 	Before: appargs.Validate(argID, appargs.Optional(appargs.String)),
 	Action: func(context *cli.Context) error {
 		id := context.Args().First()
-		c, err := getContainer(id, true)
+		ctx := gcontext.Background()
+		c, err := getContainer(ctx, id, true)
 		if err != nil {
 			return err
 		}
-		defer c.Close()
-		status, err := c.Status()
+		defer c.Close(ctx)
+		status, err := c.Status(ctx)
 		if err != nil {
 			return err
 		}
@@ -52,12 +55,12 @@ signal to the init process of the "ubuntu01" container:
 					// This is the Nth container in a Pod
 					hostID = c.HostID
 				}
-				uvm, err := hcs.OpenComputeSystem(hostID)
+				uvm, err := hcs.OpenComputeSystem(ctx, hostID)
 				if err != nil {
 					return err
 				}
-				defer uvm.Close()
-				if props, err := uvm.Properties(schema1.PropertyTypeGuestConnection); err == nil &&
+				defer uvm.Close(ctx)
+				if props, err := uvm.Properties(ctx, schema1.PropertyTypeGuestConnection); err == nil &&
 					props.GuestConnectionInfo.GuestDefinedCapabilities.SignalProcessSupported {
 					signalsSupported = true
 				}
@@ -90,17 +93,17 @@ signal to the init process of the "ubuntu01" container:
 			return err
 		}
 
-		p, err := c.hc.OpenProcess(pid)
+		p, err := c.hc.OpenProcess(ctx, pid)
 		if err != nil {
 			return err
 		}
-		defer p.Close()
+		defer p.Close(ctx)
 
 		if signalsSupported && sigOptions != nil && (c.Spec.Linux != nil || !c.Spec.Process.Terminal) {
-			_, err = p.Signal(sigOptions)
+			_, err = p.Signal(ctx, sigOptions)
 		} else {
 			// Legacy signal issue a kill
-			_, err = p.Kill()
+			_, err = p.Kill(ctx)
 		}
 
 		return err

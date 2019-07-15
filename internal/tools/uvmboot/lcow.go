@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"io"
 	"os"
 	"strings"
@@ -144,13 +145,13 @@ var lcowCommand = cli.Command{
 }
 
 func runLCOW(options *uvm.OptionsLCOW, c *cli.Context) error {
-	uvm, err := uvm.CreateLCOW(options)
+	uvm, err := uvm.CreateLCOW(context.Background(), options)
 	if err != nil {
 		return err
 	}
-	defer uvm.Close()
+	defer uvm.Close(context.Background())
 
-	if err := uvm.Start(); err != nil {
+	if err := uvm.Start(context.Background()); err != nil {
 		return err
 	}
 
@@ -158,12 +159,12 @@ func runLCOW(options *uvm.OptionsLCOW, c *cli.Context) error {
 		if err := execViaGcs(uvm, c); err != nil {
 			return err
 		}
-		uvm.Terminate()
-		uvm.Wait()
+		uvm.Terminate(context.Background())
+		uvm.Wait(context.Background())
 		return uvm.ExitError()
 	}
 
-	return uvm.Wait()
+	return uvm.Wait(context.Background())
 }
 
 func execViaGcs(vm *uvm.UtilityVM, c *cli.Context) error {

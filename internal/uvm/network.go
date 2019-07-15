@@ -1,19 +1,20 @@
 package uvm
 
 import (
+	"context"
 	"errors"
 	"path"
-
-	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/osversion"
+	"go.opencensus.io/trace"
 )
 
 var (
@@ -28,21 +29,13 @@ var (
 // AddNetNS adds network namespace inside the guest.
 //
 // If a namespace with `id` already exists returns `ErrNetNSAlreadyAttached`.
-func (uvm *UtilityVM) AddNetNS(id string) (err error) {
-	op := "uvm::AddNetNS"
-	log := logrus.WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"netns-id":      id,
-	})
-	log.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			log.Data[logrus.ErrorKey] = err
-			log.Error(op + " - End Operation - Error")
-		} else {
-			log.Debug(op + " - End Operation - Success")
-		}
-	}()
+func (uvm *UtilityVM) AddNetNS(ctx context.Context, id string) (err error) {
+	ctx, span := trace.StartSpan(ctx, "uvm::AddNetNS")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.UVMID, uvm.id),
+		trace.StringAttribute("netns-id", id))
 
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
@@ -65,7 +58,7 @@ func (uvm *UtilityVM) AddNetNS(id string) (err error) {
 					Settings:     hcnNamespace,
 				},
 			}
-			if err := uvm.Modify(&guestNamespace); err != nil {
+			if err := uvm.Modify(ctx, &guestNamespace); err != nil {
 				return err
 			}
 		}
@@ -85,21 +78,13 @@ func (uvm *UtilityVM) AddNetNS(id string) (err error) {
 // added endpoints.
 //
 // If no network namespace matches `id` returns `ErrNetNSNotFound`.
-func (uvm *UtilityVM) AddEndpointsToNS(id string, endpoints []*hns.HNSEndpoint) (err error) {
-	op := "uvm::AddEndpointsToNS"
-	log := logrus.WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"netns-id":      id,
-	})
-	log.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			log.Data[logrus.ErrorKey] = err
-			log.Error(op + " - End Operation - Error")
-		} else {
-			log.Debug(op + " - End Operation - Success")
-		}
-	}()
+func (uvm *UtilityVM) AddEndpointsToNS(ctx context.Context, id string, endpoints []*hns.HNSEndpoint) (err error) {
+	ctx, span := trace.StartSpan(ctx, "uvm::AddEndpointsToNS")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.UVMID, uvm.id),
+		trace.StringAttribute("netns-id", id))
 
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
@@ -115,7 +100,7 @@ func (uvm *UtilityVM) AddEndpointsToNS(id string, endpoints []*hns.HNSEndpoint) 
 			if err != nil {
 				return err
 			}
-			if err := uvm.addNIC(nicID, endpoint); err != nil {
+			if err := uvm.addNIC(ctx, nicID, endpoint); err != nil {
 				return err
 			}
 			ns.nics[endpoint.Id] = &nicInfo{
@@ -131,27 +116,19 @@ func (uvm *UtilityVM) AddEndpointsToNS(id string, endpoints []*hns.HNSEndpoint) 
 // the namespace.
 //
 // If a namespace matching `id` is not found this command silently succeeds.
-func (uvm *UtilityVM) RemoveNetNS(id string) (err error) {
-	op := "uvm::RemoveNetNS"
-	log := logrus.WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"netns-id":      id,
-	})
-	log.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			log.Data[logrus.ErrorKey] = err
-			log.Error(op + " - End Operation - Error")
-		} else {
-			log.Debug(op + " - End Operation - Success")
-		}
-	}()
+func (uvm *UtilityVM) RemoveNetNS(ctx context.Context, id string) (err error) {
+	ctx, span := trace.StartSpan(ctx, "uvm::RemoveNetNS")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.UVMID, uvm.id),
+		trace.StringAttribute("netns-id", id))
 
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 	if ns, ok := uvm.namespaces[id]; ok {
 		for _, ninfo := range ns.nics {
-			if err := uvm.removeNIC(ninfo.ID, ninfo.Endpoint); err != nil {
+			if err := uvm.removeNIC(ctx, ninfo.ID, ninfo.Endpoint); err != nil {
 				return err
 			}
 			ns.nics[ninfo.Endpoint.Id] = nil
@@ -170,7 +147,7 @@ func (uvm *UtilityVM) RemoveNetNS(id string) (err error) {
 						Settings:     hcnNamespace,
 					},
 				}
-				if err := uvm.Modify(&guestNamespace); err != nil {
+				if err := uvm.Modify(ctx, &guestNamespace); err != nil {
 					return err
 				}
 			}
@@ -185,21 +162,13 @@ func (uvm *UtilityVM) RemoveNetNS(id string) (err error) {
 // the network namespace this command silently succeeds.
 //
 // If no network namespace matches `id` returns `ErrNetNSNotFound`.
-func (uvm *UtilityVM) RemoveEndpointsFromNS(id string, endpoints []*hns.HNSEndpoint) (err error) {
-	op := "uvm::RemoveEndpointsFromNS"
-	log := logrus.WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"netns-id":      id,
-	})
-	log.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			log.Data[logrus.ErrorKey] = err
-			log.Error(op + " - End Operation - Error")
-		} else {
-			log.Debug(op + " - End Operation - Success")
-		}
-	}()
+func (uvm *UtilityVM) RemoveEndpointsFromNS(ctx context.Context, id string, endpoints []*hns.HNSEndpoint) (err error) {
+	ctx, span := trace.StartSpan(ctx, "uvm::RemoveEndpointsFromNS")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.UVMID, uvm.id),
+		trace.StringAttribute("netns-id", id))
 
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
@@ -211,7 +180,7 @@ func (uvm *UtilityVM) RemoveEndpointsFromNS(id string, endpoints []*hns.HNSEndpo
 
 	for _, endpoint := range endpoints {
 		if ninfo, ok := ns.nics[endpoint.Id]; ok && ninfo != nil {
-			if err := uvm.removeNIC(ninfo.ID, ninfo.Endpoint); err != nil {
+			if err := uvm.removeNIC(ctx, ninfo.ID, ninfo.Endpoint); err != nil {
 				return err
 			}
 			delete(ns.nics, endpoint.Id)
@@ -240,7 +209,13 @@ func getNetworkModifyRequest(adapterID string, requestType string, settings inte
 	}
 }
 
-func (uvm *UtilityVM) addNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
+func (uvm *UtilityVM) addNIC(ctx context.Context, id guid.GUID, endpoint *hns.HNSEndpoint) (err error) {
+	ctx, span := trace.StartSpan(ctx, "uvm::addNIC")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.UVMID, uvm.id),
+		trace.StringAttribute("nic-id", id.String()))
 
 	// First a pre-add. This is a guest-only request and is only done on Windows.
 	if uvm.operatingSystem == "windows" {
@@ -254,7 +229,7 @@ func (uvm *UtilityVM) addNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
 					endpoint),
 			},
 		}
-		if err := uvm.Modify(&preAddRequest); err != nil {
+		if err := uvm.Modify(ctx, &preAddRequest); err != nil {
 			return err
 		}
 	}
@@ -300,14 +275,21 @@ func (uvm *UtilityVM) addNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
 		}
 	}
 
-	if err := uvm.Modify(&request); err != nil {
+	if err := uvm.Modify(ctx, &request); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (uvm *UtilityVM) removeNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
+func (uvm *UtilityVM) removeNIC(ctx context.Context, id guid.GUID, endpoint *hns.HNSEndpoint) (err error) {
+	ctx, span := trace.StartSpan(ctx, "uvm::removeNIC")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.UVMID, uvm.id),
+		trace.StringAttribute("nic-id", id.String()))
+
 	request := hcsschema.ModifySettingRequest{
 		RequestType:  requesttype.Remove,
 		ResourcePath: path.Join("VirtualMachine/Devices/NetworkAdapters", id.String()),
@@ -339,7 +321,7 @@ func (uvm *UtilityVM) removeNIC(id guid.GUID, endpoint *hns.HNSEndpoint) error {
 		}
 	}
 
-	if err := uvm.Modify(&request); err != nil {
+	if err := uvm.Modify(ctx, &request); err != nil {
 		return err
 	}
 	return nil

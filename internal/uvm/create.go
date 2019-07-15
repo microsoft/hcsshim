@@ -9,10 +9,13 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
 
 // Options are the set of options passed to Create() to create a utility vm.
@@ -90,21 +93,25 @@ func (uvm *UtilityVM) OS() string {
 	return uvm.operatingSystem
 }
 
-func (uvm *UtilityVM) create(doc interface{}) error {
+func (uvm *UtilityVM) create(ctx context.Context, doc interface{}) (err error) {
+	ctx, span := trace.StartSpan(ctx, "uvm::create")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+
 	uvm.exitCh = make(chan struct{})
-	system, err := hcs.CreateComputeSystem(uvm.id, doc)
+	system, err := hcs.CreateComputeSystem(ctx, uvm.id, doc)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if system != nil {
-			system.Terminate()
+			system.Terminate(ctx)
 			system.Wait()
 		}
 	}()
 
 	// Cache the VM ID of the utility VM.
-	properties, err := system.Properties()
+	properties, err := system.Properties(ctx)
 	if err != nil {
 		return err
 	}
@@ -112,7 +119,7 @@ func (uvm *UtilityVM) create(doc interface{}) error {
 	uvm.hcsSystem = system
 	system = nil
 
-	logrus.WithFields(logrus.Fields{
+	log.G(ctx).WithFields(logrus.Fields{
 		logfields.UVMID: uvm.id,
 		"runtime-id":    uvm.runtimeID,
 	}).Debug("created utility VM")
@@ -120,24 +127,15 @@ func (uvm *UtilityVM) create(doc interface{}) error {
 }
 
 // Close terminates and releases resources associated with the utility VM.
-func (uvm *UtilityVM) Close() (err error) {
-	op := "uvm::Close"
-	log := logrus.WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-	})
-	log.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			log.Data[logrus.ErrorKey] = err
-			log.Error(op + " - End Operation - Error")
-		} else {
-			log.Debug(op + " - End Operation - Success")
-		}
-	}()
+func (uvm *UtilityVM) Close(ctx context.Context) (err error) {
+	ctx, span := trace.StartSpan(ctx, "uvm::Close")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.UVMID, uvm.id))
 
 	if uvm.hcsSystem != nil {
-		uvm.hcsSystem.Terminate()
-		uvm.Wait()
+		uvm.hcsSystem.Terminate(ctx)
+		uvm.Wait(ctx)
 	}
 	if uvm.gc != nil {
 		uvm.gc.Close()
@@ -155,13 +153,20 @@ func (uvm *UtilityVM) Close() (err error) {
 		uvm.outputListener = nil
 	}
 	if uvm.hcsSystem != nil {
-		return uvm.hcsSystem.Close()
+		return uvm.hcsSystem.Close(ctx)
 	}
 	return nil
 }
 
 // CreateContainer creates a container in the utility VM.
-func (uvm *UtilityVM) CreateContainer(id string, settings interface{}) (cow.Container, error) {
+func (uvm *UtilityVM) CreateContainer(ctx context.Context, id string, settings interface{}) (_ cow.Container, err error) {
+	ctx, span := trace.StartSpan(ctx, "uvm::CreateContainer")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.UVMID, uvm.id),
+		trace.StringAttribute(logfields.ContainerID, id))
+
 	if uvm.gc != nil {
 		c, err := uvm.gc.CreateContainer(context.TODO(), id, settings)
 		if err != nil {
@@ -176,7 +181,7 @@ func (uvm *UtilityVM) CreateContainer(id string, settings interface{}) (cow.Cont
 		ShouldTerminateOnLastHandleClosed: true,
 		HostedSystem:                      settings,
 	}
-	c, err := hcs.CreateComputeSystem(id, &doc)
+	c, err := hcs.CreateComputeSystem(ctx, id, &doc)
 	if err != nil {
 		return nil, err
 	}
@@ -184,11 +189,16 @@ func (uvm *UtilityVM) CreateContainer(id string, settings interface{}) (cow.Cont
 }
 
 // CreateProcess creates a process in the utility VM.
-func (uvm *UtilityVM) CreateProcess(settings interface{}) (cow.Process, error) {
+func (uvm *UtilityVM) CreateProcess(ctx context.Context, settings interface{}) (_ cow.Process, err error) {
+	ctx, span := trace.StartSpan(ctx, "uvm::CreateProcess")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.UVMID, uvm.id))
+
 	if uvm.gc != nil {
-		return uvm.gc.CreateProcess(settings)
+		return uvm.gc.CreateProcess(ctx, settings)
 	}
-	return uvm.hcsSystem.CreateProcess(settings)
+	return uvm.hcsSystem.CreateProcess(ctx, settings)
 }
 
 // IsOCI returns false, indicating the parameters to CreateProcess should not
@@ -198,8 +208,13 @@ func (uvm *UtilityVM) IsOCI() bool {
 }
 
 // Terminate requests that the utility VM be terminated.
-func (uvm *UtilityVM) Terminate() error {
-	return uvm.hcsSystem.Terminate()
+func (uvm *UtilityVM) Terminate(ctx context.Context) (err error) {
+	ctx, span := trace.StartSpan(ctx, "uvm::Terminate")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.UVMID, uvm.id))
+
+	return uvm.hcsSystem.Terminate(ctx)
 }
 
 // ExitError returns an error if the utility VM has terminated unexpectedly.
@@ -216,10 +231,10 @@ func defaultProcessorCount() int32 {
 
 // normalizeProcessorCount sets `uvm.processorCount` to `Min(requested,
 // runtime.NumCPU())`.
-func (uvm *UtilityVM) normalizeProcessorCount(requested int32) {
+func (uvm *UtilityVM) normalizeProcessorCount(ctx context.Context, requested int32) {
 	hostCount := int32(runtime.NumCPU())
 	if requested > hostCount {
-		logrus.WithFields(logrus.Fields{
+		log.G(ctx).WithFields(logrus.Fields{
 			logfields.UVMID: uvm.id,
 			"requested":     requested,
 			"assigned":      hostCount,
@@ -235,10 +250,10 @@ func (uvm *UtilityVM) ProcessorCount() int32 {
 	return uvm.processorCount
 }
 
-func (uvm *UtilityVM) normalizeMemorySize(requested int32) int32 {
+func (uvm *UtilityVM) normalizeMemorySize(ctx context.Context, requested int32) int32 {
 	actual := (requested + 1) &^ 1 // align up to an even number
 	if requested != actual {
-		logrus.WithFields(logrus.Fields{
+		log.G(ctx).WithFields(logrus.Fields{
 			logfields.UVMID: uvm.id,
 			"requested":     requested,
 			"assigned":      actual,

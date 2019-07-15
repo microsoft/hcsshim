@@ -3,9 +3,9 @@ package hcs
 import (
 	"context"
 
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/timeout"
-	"github.com/sirupsen/logrus"
 )
 
 // syscallWatcher is used as a very simple goroutine around calls into
@@ -17,23 +17,23 @@ import (
 //
 // Usage is:
 //
-// syscallWatcher(logContext, func() {
+// syscallWatcher(ctx, func() {
 //    err = <syscall>(args...)
 // })
 //
 
-func syscallWatcher(logContext logrus.Fields, syscallLambda func()) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout.SyscallWatcher)
+func syscallWatcher(ctx context.Context, syscallLambda func()) {
+	ctx, cancel := context.WithTimeout(ctx, timeout.SyscallWatcher)
 	defer cancel()
-	go watchFunc(ctx, logContext)
+	go watchFunc(ctx)
 	syscallLambda()
 }
 
-func watchFunc(ctx context.Context, logContext logrus.Fields) {
+func watchFunc(ctx context.Context) {
 	select {
 	case <-ctx.Done():
 		if ctx.Err() != context.Canceled {
-			logrus.WithFields(logContext).
+			log.G(ctx).
 				WithField(logfields.Timeout, timeout.SyscallWatcher).
 				Warning("Syscall did not complete within operation timeout. This may indicate a platform issue. If it appears to be making no forward progress, obtain the stacks and see if there is a syscall stuck in the platform API for a significant length of time.")
 		}

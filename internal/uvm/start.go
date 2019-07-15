@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/gcs"
+	"github.com/Microsoft/hcsshim/internal/oc"
+	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/schema1"
@@ -136,22 +138,14 @@ func processOutput(ctx context.Context, l net.Listener, doneChan chan struct{}, 
 }
 
 // Start synchronously starts the utility VM.
-func (uvm *UtilityVM) Start() (err error) {
+func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
+	ctx, span := trace.StartSpan(ctx, "uvm::Start")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.UVMID, uvm.id))
+
 	ctx, cancel := context.WithTimeout(context.TODO(), 2*time.Minute)
 	defer cancel()
-	op := "uvm::Start"
-	log := logrus.WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-	})
-	log.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			log.Data[logrus.ErrorKey] = err
-			log.Error(op + " - End Operation - Error")
-		} else {
-			log.Debug(op + " - End Operation - Success")
-		}
-	}()
 
 	if uvm.outputListener != nil {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -159,13 +153,13 @@ func (uvm *UtilityVM) Start() (err error) {
 		uvm.outputProcessingCancel = cancel
 		uvm.outputListener = nil
 	}
-	err = uvm.hcsSystem.Start()
+	err = uvm.hcsSystem.Start(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if err != nil {
-			uvm.hcsSystem.Terminate()
+			uvm.hcsSystem.Terminate(ctx)
 			uvm.hcsSystem.Wait()
 		}
 	}()
@@ -200,7 +194,7 @@ func (uvm *UtilityVM) Start() (err error) {
 		uvm.protocol = uvm.gc.Protocol()
 	} else {
 		// Cache the guest connection properties.
-		properties, err := uvm.hcsSystem.Properties(schema1.PropertyTypeGuestConnection)
+		properties, err := uvm.hcsSystem.Properties(ctx, schema1.PropertyTypeGuestConnection)
 		if err != nil {
 			return err
 		}

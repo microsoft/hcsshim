@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -75,12 +76,12 @@ var wcowCommand = cli.Command{
 			}
 			defer os.RemoveAll(tempDir)
 			options.LayerFolders = append(layers, tempDir)
-			vm, err := uvm.CreateWCOW(options)
+			vm, err := uvm.CreateWCOW(context.Background(), options)
 			if err != nil {
 				return err
 			}
-			defer vm.Close()
-			if err := vm.Start(); err != nil {
+			defer vm.Close(context.Background())
+			if err := vm.Start(context.Background()); err != nil {
 				return err
 			}
 			if wcowCommandLine != "" {
@@ -108,8 +109,8 @@ var wcowCommand = cli.Command{
 					return err
 				}
 			}
-			vm.Terminate()
-			vm.Wait()
+			vm.Terminate(context.Background())
+			vm.Wait(context.Background())
 			return vm.ExitError()
 		})
 		return nil

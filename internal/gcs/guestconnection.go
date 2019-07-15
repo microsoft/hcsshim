@@ -2,6 +2,7 @@ package gcs
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/schema1"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
 
 const (
@@ -115,7 +117,7 @@ func (gc *GuestConnection) connect(ctx context.Context) (err error) {
 	}
 	if resp.Capabilities.SendHostCreateMessage {
 		createReq := containerCreate{
-			requestBase: makeRequest(nullContainerID),
+			requestBase: makeRequest(ctx, nullContainerID),
 			ContainerConfig: anyInString{&uvmConfig{
 				SystemType: "Container",
 			}},
@@ -126,7 +128,7 @@ func (gc *GuestConnection) connect(ctx context.Context) (err error) {
 			return err
 		}
 		if resp.Capabilities.SendHostStartMessage {
-			startReq := makeRequest(nullContainerID)
+			startReq := makeRequest(ctx, nullContainerID)
 			var startResp responseBase
 			err = gc.brdg.RPC(ctx, rpcStart, &startReq, &startResp, true)
 			if err != nil {
@@ -141,7 +143,7 @@ func (gc *GuestConnection) connect(ctx context.Context) (err error) {
 // generally used to prepare virtual hardware that has been added to the guest.
 func (gc *GuestConnection) Modify(ctx context.Context, settings interface{}) error {
 	req := containerModifySettings{
-		requestBase: makeRequest(nullContainerID),
+		requestBase: makeRequest(ctx, nullContainerID),
 		Request:     settings,
 	}
 	var resp responseBase
@@ -158,8 +160,8 @@ func (gc *GuestConnection) Close() error {
 }
 
 // CreateProcess creates a process in the container host.
-func (gc *GuestConnection) CreateProcess(settings interface{}) (cow.Process, error) {
-	return gc.exec(context.TODO(), nullContainerID, settings)
+func (gc *GuestConnection) CreateProcess(ctx context.Context, settings interface{}) (cow.Process, error) {
+	return gc.exec(ctx, nullContainerID, settings)
 }
 
 // OS returns the operating system of the container's host, "windows" or "linux".
@@ -222,8 +224,15 @@ func (gc *GuestConnection) clearNotifies() {
 	}
 }
 
-func makeRequest(cid string) requestBase {
-	return requestBase{
+func makeRequest(ctx context.Context, cid string) requestBase {
+	r := requestBase{
 		ContainerID: cid,
 	}
+	span := trace.FromContext(ctx)
+	if span != nil {
+		sc := span.SpanContext()
+		r.TraceID = hex.EncodeToString(sc.TraceID[:])
+		r.SpanID = hex.EncodeToString(sc.SpanID[:])
+	}
+	return r
 }

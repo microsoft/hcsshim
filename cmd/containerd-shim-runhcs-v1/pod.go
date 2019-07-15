@@ -101,7 +101,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		switch opts.(type) {
 		case *uvm.OptionsLCOW:
 			lopts := (opts).(*uvm.OptionsLCOW)
-			parent, err = uvm.CreateLCOW(lopts)
+			parent, err = uvm.CreateLCOW(ctx, lopts)
 			if err != nil {
 				return nil, err
 			}
@@ -123,14 +123,14 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 			layers[layersLen-1] = vmPath
 			wopts.LayerFolders = layers
 
-			parent, err = uvm.CreateWCOW(wopts)
+			parent, err = uvm.CreateWCOW(ctx, wopts)
 			if err != nil {
 				return nil, err
 			}
 		}
-		err = parent.Start()
+		err = parent.Start(ctx)
 		if err != nil {
-			parent.Close()
+			parent.Close(ctx)
 			return nil, err
 		}
 	} else if !isWCOW {
@@ -139,7 +139,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 	defer func() {
 		// clean up the uvm if we fail any further operations
 		if err != nil && parent != nil {
-			parent.Close()
+			parent.Close(ctx)
 		}
 	}()
 
@@ -165,15 +165,15 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 			}
 
 			if nsid != "" {
-				endpoints, err := hcsoci.GetNamespaceEndpoints(nsid)
+				endpoints, err := hcsoci.GetNamespaceEndpoints(ctx, nsid)
 				if err != nil {
 					return nil, err
 				}
-				err = parent.AddNetNS(nsid)
+				err = parent.AddNetNS(ctx, nsid)
 				if err != nil {
 					return nil, err
 				}
-				err = parent.AddEndpointsToNS(nsid, endpoints)
+				err = parent.AddEndpointsToNS(ctx, nsid, endpoints)
 				if err != nil {
 					return nil, err
 				}

@@ -36,12 +36,12 @@ func (h *localProcessHost) IsOCI() bool {
 	return false
 }
 
-func (h *localProcessHost) CreateProcess(cfg interface{}) (_ cow.Process, err error) {
+func (h *localProcessHost) CreateProcess(ctx context.Context, cfg interface{}) (_ cow.Process, err error) {
 	params := cfg.(*hcsschema.ProcessParameters)
 	lp := &localProcess{ch: make(chan struct{})}
 	defer func() {
 		if err != nil {
-			lp.Close()
+			lp.Close(ctx)
 		}
 	}()
 	var stdin, stdout, stderr *os.File
@@ -86,7 +86,7 @@ func (h *localProcessHost) CreateProcess(cfg interface{}) (_ cow.Process, err er
 	return lp, nil
 }
 
-func (p *localProcess) Close() error {
+func (p *localProcess) Close(ctx context.Context) error {
 	if p.p != nil {
 		p.p.Release()
 	}
@@ -102,11 +102,11 @@ func (p *localProcess) Close() error {
 	return nil
 }
 
-func (p *localProcess) CloseStdin() error {
+func (p *localProcess) CloseStdin(ctx context.Context) error {
 	return p.stdin.Close()
 }
 
-func (p *localProcess) ExitCode() (int, error) {
+func (p *localProcess) ExitCode(ctx context.Context) (int, error) {
 	select {
 	case <-p.ch:
 		return p.state.ExitCode(), nil
@@ -115,19 +115,19 @@ func (p *localProcess) ExitCode() (int, error) {
 	}
 }
 
-func (p *localProcess) Kill() (bool, error) {
+func (p *localProcess) Kill(ctx context.Context) (bool, error) {
 	return true, p.p.Kill()
 }
 
-func (p *localProcess) Signal(interface{}) (bool, error) {
-	return p.Kill()
+func (p *localProcess) Signal(ctx context.Context, options interface{}) (bool, error) {
+	return p.Kill(ctx)
 }
 
 func (p *localProcess) Pid() int {
 	return p.p.Pid
 }
 
-func (p *localProcess) ResizeConsole(x, y uint16) error {
+func (p *localProcess) ResizeConsole(ctx context.Context, x, y uint16) error {
 	return errors.New("not supported")
 }
 
@@ -214,8 +214,8 @@ type stuckIoProcess struct {
 	pstdin, stdout, stderr  *io.PipeReader
 }
 
-func (h *stuckIoProcessHost) CreateProcess(cfg interface{}) (cow.Process, error) {
-	p, err := h.ProcessHost.CreateProcess(cfg)
+func (h *stuckIoProcessHost) CreateProcess(ctx context.Context, cfg interface{}) (cow.Process, error) {
+	p, err := h.ProcessHost.CreateProcess(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -232,11 +232,11 @@ func (p *stuckIoProcess) Stdio() (io.Writer, io.Reader, io.Reader) {
 	return p.stdin, p.stdout, p.stderr
 }
 
-func (p *stuckIoProcess) Close() error {
+func (p *stuckIoProcess) Close(ctx context.Context) error {
 	p.stdin.Close()
 	p.stdout.Close()
 	p.stderr.Close()
-	return p.Process.Close()
+	return p.Process.Close(ctx)
 }
 
 func TestCmdStuckIo(t *testing.T) {

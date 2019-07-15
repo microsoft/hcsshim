@@ -1,6 +1,7 @@
 package hcsoci
 
 import (
+	"context"
 	"os"
 
 	"github.com/Microsoft/hcsshim/internal/hns"
@@ -57,9 +58,9 @@ type Resources struct {
 }
 
 // TODO: Method on the resources?
-func ReleaseResources(r *Resources, vm *uvm.UtilityVM, all bool) error {
+func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all bool) error {
 	if vm != nil && r.addedNetNSToVM {
-		if err := vm.RemoveNetNS(r.netNS); err != nil {
+		if err := vm.RemoveNetNS(ctx, r.netNS); err != nil {
 			logrus.Warn(err)
 		}
 		r.addedNetNSToVM = false
@@ -93,7 +94,7 @@ func ReleaseResources(r *Resources, vm *uvm.UtilityVM, all bool) error {
 		if vm == nil || all {
 			op = UnmountOperationAll
 		}
-		err := UnmountContainerLayers(r.layers, r.containerRootInUVM, vm, op)
+		err := UnmountContainerLayers(ctx, r.layers, r.containerRootInUVM, vm, op)
 		if err != nil {
 			return err
 		}
@@ -103,7 +104,7 @@ func ReleaseResources(r *Resources, vm *uvm.UtilityVM, all bool) error {
 	if all {
 		for len(r.vsmbMounts) != 0 {
 			mount := r.vsmbMounts[len(r.vsmbMounts)-1]
-			if err := vm.RemoveVSMB(mount); err != nil {
+			if err := vm.RemoveVSMB(ctx, mount); err != nil {
 				return err
 			}
 			r.vsmbMounts = r.vsmbMounts[:len(r.vsmbMounts)-1]
@@ -111,14 +112,14 @@ func ReleaseResources(r *Resources, vm *uvm.UtilityVM, all bool) error {
 
 		for len(r.plan9Mounts) != 0 {
 			mount := r.plan9Mounts[len(r.plan9Mounts)-1]
-			if err := vm.RemovePlan9(mount); err != nil {
+			if err := vm.RemovePlan9(ctx, mount); err != nil {
 				return err
 			}
 			r.plan9Mounts = r.plan9Mounts[:len(r.plan9Mounts)-1]
 		}
 
 		for _, path := range r.scsiMounts {
-			if err := vm.RemoveSCSI(path); err != nil {
+			if err := vm.RemoveSCSI(ctx, path); err != nil {
 				return err
 			}
 			r.scsiMounts = nil

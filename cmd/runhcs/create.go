@@ -1,6 +1,8 @@
 package main
 
 import (
+	gcontext "context"
+
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/urfave/cli"
 )
@@ -61,7 +63,8 @@ command(s) that get executed on start, edit the args parameter of the spec. See
 		if err != nil {
 			return err
 		}
-		_, err = createContainer(cfg)
+		ctx := gcontext.Background()
+		_, err = createContainer(ctx, cfg)
 		if err != nil {
 			return err
 		}

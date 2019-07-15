@@ -59,7 +59,7 @@ func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.Creat
 		switch opts.(type) {
 		case *uvm.OptionsLCOW:
 			lopts := (opts).(*uvm.OptionsLCOW)
-			parent, err = uvm.CreateLCOW(lopts)
+			parent, err = uvm.CreateLCOW(ctx, lopts)
 			if err != nil {
 				return nil, err
 			}
@@ -81,14 +81,14 @@ func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.Creat
 			layers[layersLen-1] = vmPath
 			wopts.LayerFolders = layers
 
-			parent, err = uvm.CreateWCOW(wopts)
+			parent, err = uvm.CreateWCOW(ctx, wopts)
 			if err != nil {
 				return nil, err
 			}
 		}
-		err = parent.Start()
+		err = parent.Start(ctx)
 		if err != nil {
-			parent.Close()
+			parent.Close(ctx)
 		}
 	} else if !oci.IsWCOW(s) {
 		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "oci spec does not contain WCOW or LCOW spec")
@@ -97,7 +97,7 @@ func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.Creat
 	shim, err := newHcsTask(ctx, events, parent, true, req, s)
 	if err != nil {
 		if parent != nil {
-			parent.Close()
+			parent.Close(ctx)
 		}
 		return nil, err
 	}
@@ -141,7 +141,7 @@ func newHcsTask(
 		HostingSystem:    parent,
 		NetworkNamespace: netNS,
 	}
-	system, resources, err := hcsoci.CreateContainer(&opts)
+	system, resources, err := hcsoci.CreateContainer(ctx, &opts)
 	if err != nil {
 		return nil, err
 	}
@@ -359,6 +359,9 @@ func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all 
 	}
 	if signal == 0x9 && eid == "" && ht.ownsHost && ht.host != nil {
 		go func() {
+			ctx, span := trace.StartSpan(ctx, "hcsTask::KillExec::backgroundTimeoutWait")
+			defer span.End()
+
 			// The caller has issued a SIGKILL to the init process that owns the
 			// host.
 			//
@@ -368,7 +371,7 @@ func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all 
 			time.Sleep(30 * time.Second)
 			// Safe to call multiple times if called previously on successful
 			// shutdown.
-			ht.host.Close()
+			ht.host.Close(ctx)
 		}()
 	}
 	eg.Go(func() error {
@@ -437,7 +440,7 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (_ int, _ uint32,
 }
 
 func (ht *hcsTask) Pids(ctx context.Context) (_ []options.ProcessDetails, err error) {
-	_, span := trace.StartSpan(ctx, "hcsTask::Pids")
+	ctx, span := trace.StartSpan(ctx, "hcsTask::Pids")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("tid", ht.id))
@@ -454,7 +457,7 @@ func (ht *hcsTask) Pids(ctx context.Context) (_ []options.ProcessDetails, err er
 	pidMap[ht.init.Pid()] = ht.init.ID()
 
 	// Get the guest pids
-	props, err := ht.c.Properties(schema1.PropertyTypeProcessList)
+	props, err := ht.c.Properties(ctx, schema1.PropertyTypeProcessList)
 	if err != nil {
 		return nil, err
 	}
@@ -511,7 +514,7 @@ func (ht *hcsTask) waitForHostExit() {
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("tid", ht.id))
 
-	err := ht.host.Wait()
+	err := ht.host.Wait(ctx)
 	if err != nil {
 		log.G(ctx).WithError(err).Error("failed to wait for host virtual machine exit")
 	} else {
@@ -552,7 +555,7 @@ func (ht *hcsTask) close(ctx context.Context) {
 				werr = ht.c.Wait()
 				close(ch)
 			}()
-			err := ht.c.Shutdown()
+			err := ht.c.Shutdown(ctx)
 			if err != nil {
 				log.G(ctx).WithError(err).Error("failed to shutdown container")
 			} else {
@@ -570,7 +573,7 @@ func (ht *hcsTask) close(ctx context.Context) {
 			}
 
 			if err != nil {
-				err = ht.c.Terminate()
+				err = ht.c.Terminate(ctx)
 				if err != nil {
 					log.G(ctx).WithError(err).Error("failed to terminate container")
 				} else {
@@ -589,12 +592,12 @@ func (ht *hcsTask) close(ctx context.Context) {
 			}
 
 			// Release any resources associated with the container.
-			if err := hcsoci.ReleaseResources(ht.cr, ht.host, true); err != nil {
+			if err := hcsoci.ReleaseResources(ctx, ht.cr, ht.host, true); err != nil {
 				log.G(ctx).WithError(err).Error("failed to release container resources")
 			}
 
 			// Close the container handle invalidating all future access.
-			if err := ht.c.Close(); err != nil {
+			if err := ht.c.Close(ctx); err != nil {
 				log.G(ctx).WithError(err).Error("failed to close container")
 			}
 		}
@@ -616,7 +619,7 @@ func (ht *hcsTask) closeHost(ctx context.Context) {
 
 	ht.closeHostOnce.Do(func() {
 		if ht.ownsHost && ht.host != nil {
-			if err := ht.host.Close(); err != nil {
+			if err := ht.host.Close(ctx); err != nil {
 				log.G(ctx).WithError(err).Error("failed host vm shutdown")
 			}
 		}

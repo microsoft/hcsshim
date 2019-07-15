@@ -202,7 +202,7 @@ func (wpst *wcowPodSandboxTask) close(ctx context.Context) {
 		span.AddAttributes(trace.StringAttribute("tid", wpst.id))
 
 		if wpst.host != nil {
-			if err := wpst.host.Close(); err != nil {
+			if err := wpst.host.Close(ctx); err != nil {
 				log.G(ctx).WithError(err).Error("failed host vm shutdown")
 			}
 		}
@@ -239,7 +239,7 @@ func (wpst *wcowPodSandboxTask) waitParentExit() {
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("tid", wpst.id))
 
-	werr := wpst.host.Wait()
+	werr := wpst.host.Wait(ctx)
 	if werr != nil {
 		log.G(ctx).WithError(werr).Error("parent wait failed")
 	}

@@ -1,6 +1,7 @@
 package hcsshim
 
 import (
+	"context"
 	"io"
 	"sync"
 	"time"
@@ -23,7 +24,7 @@ func (process *process) Pid() int {
 
 // Kill signals the process to terminate but does not wait for it to finish terminating.
 func (process *process) Kill() error {
-	found, err := process.p.Kill()
+	found, err := process.p.Kill(context.Background())
 	if err != nil {
 		return convertProcessError(err, process)
 	}
@@ -61,7 +62,7 @@ func (process *process) WaitTimeout(timeout time.Duration) error {
 // ExitCode returns the exit code of the process. The process must have
 // already terminated.
 func (process *process) ExitCode() (int, error) {
-	code, err := process.p.ExitCode()
+	code, err := process.p.ExitCode(context.Background())
 	if err != nil {
 		err = convertProcessError(err, process)
 	}
@@ -70,7 +71,7 @@ func (process *process) ExitCode() (int, error) {
 
 // ResizeConsole resizes the console of the process.
 func (process *process) ResizeConsole(width, height uint16) error {
-	return convertProcessError(process.p.ResizeConsole(width, height), process)
+	return convertProcessError(process.p.ResizeConsole(context.Background(), width, height), process)
 }
 
 // Stdio returns the stdin, stdout, and stderr pipes, respectively. Closing
@@ -87,11 +88,11 @@ func (process *process) Stdio() (io.WriteCloser, io.ReadCloser, io.ReadCloser, e
 // CloseStdin closes the write side of the stdin pipe so that the process is
 // notified on the read side that there is no more data in stdin.
 func (process *process) CloseStdin() error {
-	return convertProcessError(process.p.CloseStdin(), process)
+	return convertProcessError(process.p.CloseStdin(context.Background()), process)
 }
 
 // Close cleans up any state associated with the process but does not kill
 // or wait on it.
 func (process *process) Close() error {
-	return convertProcessError(process.p.Close(), process)
+	return convertProcessError(process.p.Close(context.Background()), process)
 }

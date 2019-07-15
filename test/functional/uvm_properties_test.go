@@ -3,6 +3,7 @@
 package functional
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -13,8 +14,9 @@ import (
 func TestPropertiesGuestConnection_LCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 
-	uvm := testutilities.CreateLCOWUVM(t, t.Name())
-	defer uvm.Close()
+	ctx := context.Background()
+	uvm := testutilities.CreateLCOWUVM(ctx, t, t.Name())
+	defer uvm.Close(ctx)
 
 	p, gc := uvm.Capabilities()
 	if gc.NamespaceAddRequestSupported ||
@@ -26,9 +28,11 @@ func TestPropertiesGuestConnection_LCOW(t *testing.T) {
 
 func TestPropertiesGuestConnection_WCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	uvm, _, uvmScratchDir := testutilities.CreateWCOWUVM(t, t.Name(), "microsoft/nanoserver")
+
+	ctx := context.Background()
+	uvm, _, uvmScratchDir := testutilities.CreateWCOWUVM(ctx, t, t.Name(), "microsoft/nanoserver")
 	defer os.RemoveAll(uvmScratchDir)
-	defer uvm.Close()
+	defer uvm.Close(ctx)
 
 	p, gc := uvm.Capabilities()
 	if !gc.NamespaceAddRequestSupported ||

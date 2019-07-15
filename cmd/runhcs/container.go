@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -251,7 +252,7 @@ type containerConfig struct {
 	VMConsolePipe          string
 }
 
-func createContainer(cfg *containerConfig) (_ *container, err error) {
+func createContainer(ctx context.Context, cfg *containerConfig) (_ *container, err error) {
 	// Store the container information in a volatile registry key.
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -268,11 +269,11 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		}
 	} else if sandboxID != "" {
 		// Validate that the sandbox container exists.
-		sandbox, err := getContainer(sandboxID, false)
+		sandbox, err := getContainer(ctx, sandboxID, false)
 		if err != nil {
 			return nil, err
 		}
-		defer sandbox.Close()
+		defer sandbox.Close(ctx)
 		if sandbox.SandboxID != sandboxID {
 			return nil, fmt.Errorf("container %s is not a sandbox", sandboxID)
 		}
@@ -297,11 +298,11 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 	newvm := false
 	var hostUniqueID guid.GUID
 	if hostID != "" {
-		host, err := getContainer(hostID, false)
+		host, err := getContainer(ctx, hostID, false)
 		if err != nil {
 			return nil, err
 		}
-		defer host.Close()
+		defer host.Close(ctx)
 		if !host.IsHost {
 			return nil, fmt.Errorf("host container %s is not a VM host", hostID)
 		}
@@ -372,7 +373,7 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 	}
 	defer func() {
 		if err != nil {
-			c.Remove()
+			c.Remove(ctx)
 		}
 	}()
 	if isSandbox && vmisolated {
@@ -433,13 +434,13 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		if err != nil {
 			return nil, err
 		}
-		c.hc, err = hcs.OpenComputeSystem(cfg.ID)
+		c.hc, err = hcs.OpenComputeSystem(ctx, cfg.ID)
 		if err != nil {
 			return nil, err
 		}
 	} else {
 		// Create the container directly from this process.
-		err = createContainerInHost(c, nil)
+		err = createContainerInHost(ctx, c, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -448,8 +449,8 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 	// Create the shim process for the container.
 	err = startContainerShim(c, cfg.PidFile, cfg.ShimLogFile)
 	if err != nil {
-		if e := c.Kill(); e == nil {
-			c.Remove()
+		if e := c.Kill(ctx); e == nil {
+			c.Remove(ctx)
 		}
 		return nil, err
 	}
@@ -469,7 +470,7 @@ func (c *container) VMIsolated() bool {
 	return c.HostID != ""
 }
 
-func (c *container) unmountInHost(vm *uvm.UtilityVM, all bool) error {
+func (c *container) unmountInHost(ctx context.Context, vm *uvm.UtilityVM, all bool) error {
 	resources := &hcsoci.Resources{}
 	err := stateKey.Get(c.ID, keyResources, resources)
 	if _, ok := err.(*regstate.NoStateError); ok {
@@ -478,7 +479,7 @@ func (c *container) unmountInHost(vm *uvm.UtilityVM, all bool) error {
 	if err != nil {
 		return err
 	}
-	err = hcsoci.ReleaseResources(resources, vm, all)
+	err = hcsoci.ReleaseResources(ctx, resources, vm, all)
 	if err != nil {
 		stateKey.Set(c.ID, keyResources, resources)
 		return err
@@ -491,7 +492,7 @@ func (c *container) unmountInHost(vm *uvm.UtilityVM, all bool) error {
 	return nil
 }
 
-func (c *container) Unmount(all bool) error {
+func (c *container) Unmount(ctx context.Context, all bool) error {
 	if c.VMIsolated() {
 		op := runhcs.OpUnmountContainerDiskOnly
 		if all {
@@ -510,12 +511,12 @@ func (c *container) Unmount(all bool) error {
 			}
 		}
 	} else {
-		c.unmountInHost(nil, false)
+		c.unmountInHost(ctx, nil, false)
 	}
 	return nil
 }
 
-func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
+func createContainerInHost(ctx context.Context, c *container, vm *uvm.UtilityVM) (err error) {
 	if c.hc != nil {
 		return errors.New("container already created")
 	}
@@ -536,15 +537,15 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 		logfields.ContainerID: c.ID,
 		logfields.UVMID:       vmid,
 	}).Info("creating container in UVM")
-	hc, resources, err := hcsoci.CreateContainer(opts)
+	hc, resources, err := hcsoci.CreateContainer(ctx, opts)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if err != nil {
-			hc.Terminate()
+			hc.Terminate(ctx)
 			hc.Wait()
-			hcsoci.ReleaseResources(resources, vm, true)
+			hcsoci.ReleaseResources(ctx, resources, vm, true)
 		}
 	}()
 
@@ -592,15 +593,15 @@ func startContainerShim(c *container, pidFile, logFile string) error {
 	return nil
 }
 
-func (c *container) Close() error {
+func (c *container) Close(ctx context.Context) error {
 	if c.hc == nil {
 		return nil
 	}
-	return c.hc.Close()
+	return c.hc.Close(ctx)
 }
 
-func (c *container) Exec() error {
-	err := c.hc.Start()
+func (c *container) Exec(ctx context.Context) error {
+	err := c.hc.Start(ctx)
 	if err != nil {
 		return err
 	}
@@ -630,7 +631,7 @@ func (c *container) Exec() error {
 	return nil
 }
 
-func getContainer(id string, notStopped bool) (*container, error) {
+func getContainer(ctx context.Context, id string, notStopped bool) (*container, error) {
 	var c container
 	err := stateKey.Get(id, keyState, &c.persistedState)
 	if err != nil {
@@ -647,7 +648,7 @@ func getContainer(id string, notStopped bool) (*container, error) {
 		return nil, errContainerStopped
 	}
 
-	hc, err := hcs.OpenComputeSystem(c.ID)
+	hc, err := hcs.OpenComputeSystem(ctx, c.ID)
 	if err == nil {
 		c.hc = hc
 	} else if !hcs.IsNotExist(err) {
@@ -659,9 +660,9 @@ func getContainer(id string, notStopped bool) (*container, error) {
 	return &c, nil
 }
 
-func (c *container) Remove() error {
+func (c *container) Remove(ctx context.Context) error {
 	// Unmount any layers or mapped volumes.
-	err := c.Unmount(!c.IsHost)
+	err := c.Unmount(ctx, !c.IsHost)
 	if err != nil {
 		return err
 	}
@@ -669,28 +670,28 @@ func (c *container) Remove() error {
 	// Follow kata's example and delay tearing down the VM until the owning
 	// container is removed.
 	if c.IsHost {
-		vm, err := hcs.OpenComputeSystem(vmID(c.ID))
+		vm, err := hcs.OpenComputeSystem(ctx, vmID(c.ID))
 		if err == nil {
-			vm.Terminate()
+			vm.Terminate(ctx)
 			vm.Wait()
 		}
 	}
 	return stateKey.Remove(c.ID)
 }
 
-func (c *container) Kill() error {
+func (c *container) Kill(ctx context.Context) error {
 	if c.hc == nil {
 		return nil
 	}
-	c.hc.Terminate()
+	c.hc.Terminate(ctx)
 	return c.hc.Wait()
 }
 
-func (c *container) Status() (containerStatus, error) {
+func (c *container) Status(ctx context.Context) (containerStatus, error) {
 	if c.hc == nil || c.ShimPid == 0 {
 		return containerStopped, nil
 	}
-	props, err := c.hc.Properties()
+	props, err := c.hc.Properties(ctx)
 	if err != nil {
 		if !strings.Contains(err.Error(), "operation is not valid in the current state") {
 			return "", err

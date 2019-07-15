@@ -5,6 +5,7 @@ package hcsoci
 // Contains functions relating to a WCOW container, as opposed to a utility VM
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,7 +19,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) error {
+func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, resources *Resources) error {
 	if coi.Spec == nil || coi.Spec.Windows == nil || coi.Spec.Windows.LayerFolders == nil {
 		return fmt.Errorf("field 'Spec.Windows.Layerfolders' is not populated")
 	}
@@ -50,7 +51,7 @@ func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) 
 
 	if coi.Spec.Root.Path == "" && (coi.HostingSystem != nil || coi.Spec.Windows.HyperV == nil) {
 		logrus.Debug("hcsshim::allocateWindowsResources mounting storage")
-		mcl, err := MountContainerLayers(coi.Spec.Windows.LayerFolders, resources.containerRootInUVM, coi.HostingSystem)
+		mcl, err := MountContainerLayers(ctx, coi.Spec.Windows.LayerFolders, resources.containerRootInUVM, coi.HostingSystem)
 		if err != nil {
 			return fmt.Errorf("failed to mount container storage: %s", err)
 		}
@@ -90,7 +91,7 @@ func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) 
 			log := logrus.WithField("mount", fmt.Sprintf("%+v", mount))
 			if mount.Type == "physical-disk" {
 				log.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI physical disk for OCI mount")
-				_, _, err := coi.HostingSystem.AddSCSIPhysicalDisk(mount.Source, uvmPath, readOnly)
+				_, _, err := coi.HostingSystem.AddSCSIPhysicalDisk(ctx, mount.Source, uvmPath, readOnly)
 				if err != nil {
 					return fmt.Errorf("adding SCSI physical disk mount %+v: %s", mount, err)
 				}
@@ -98,7 +99,7 @@ func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) 
 				resources.scsiMounts = append(resources.scsiMounts, mount.Source)
 			} else if mount.Type == "virtual-disk" {
 				log.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI virtual disk for OCI mount")
-				_, _, err := coi.HostingSystem.AddSCSI(mount.Source, uvmPath, readOnly)
+				_, _, err := coi.HostingSystem.AddSCSI(ctx, mount.Source, uvmPath, readOnly)
 				if err != nil {
 					return fmt.Errorf("adding SCSI virtual disk mount %+v: %s", mount, err)
 				}
@@ -115,7 +116,7 @@ func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) 
 					break
 				}
 
-				err := coi.HostingSystem.AddVSMB(mount.Source, "", options)
+				err := coi.HostingSystem.AddVSMB(ctx, mount.Source, "", options)
 				if err != nil {
 					return fmt.Errorf("failed to add VSMB share to utility VM for mount %+v: %s", mount, err)
 				}

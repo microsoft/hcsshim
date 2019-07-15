@@ -115,6 +115,19 @@ func (typ msgType) String() string {
 type requestBase struct {
 	ContainerID string    `json:"ContainerId"`
 	ActivityID  guid.GUID `json:"ActivityId"`
+
+	// TraceID is the OpenCensus TraceID to propagate to the guest.
+	//
+	// NOTE: This is not a part of the protocol but because its a JSON protocol
+	// adding fields is a non-breaking change. If the guest supports it this is
+	// just additive context.
+	TraceID string `json:",omitempty"`
+	// SpanID is the OpenCensus SpanID to propagate to the guest.
+	//
+	// NOTE: This is not a part of the protocol but because its a JSON protocol
+	// adding fields is a non-breaking change. If the guest supports it this is
+	// just additive context.
+	SpanID string `json:",omitempty"`
 }
 
 func (req *requestBase) Base() *requestBase {

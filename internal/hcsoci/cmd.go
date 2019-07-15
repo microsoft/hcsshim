@@ -188,7 +188,11 @@ func (c *Cmd) Start() error {
 	if c.Context != nil && c.Context.Err() != nil {
 		return c.Context.Err()
 	}
-	p, err := c.Host.CreateProcess(x)
+	ctx := c.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	p, err := c.Host.CreateProcess(ctx, x)
 	if err != nil {
 		return err
 	}
@@ -212,7 +216,7 @@ func (c *Cmd) Start() error {
 				c.stdinErr.Store(err)
 			}
 			// Notify the process that there is no more input.
-			p.CloseStdin()
+			p.CloseStdin(ctx)
 		}()
 	}
 
@@ -234,7 +238,7 @@ func (c *Cmd) Start() error {
 		go func() {
 			select {
 			case <-c.Context.Done():
-				c.Process.Kill()
+				c.Process.Kill(ctx)
 			case <-c.allDoneCh:
 			}
 		}()
@@ -250,8 +254,12 @@ func (c *Cmd) Wait() error {
 	if waitErr != nil && c.Log != nil {
 		c.Log.WithError(waitErr).Warn("process wait failed")
 	}
+	ctx := c.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	state := &ExitState{}
-	code, exitErr := c.Process.ExitCode()
+	code, exitErr := c.Process.ExitCode(ctx)
 	if exitErr == nil {
 		state.exited = true
 		state.code = code
@@ -265,7 +273,7 @@ func (c *Cmd) Wait() error {
 			case <-c.allDoneCh:
 			case <-t.C:
 				// Close the process to cancel any reads to stdout or stderr.
-				c.Process.Close()
+				c.Process.Close(ctx)
 				if c.Log != nil {
 					c.Log.Warn("timed out waiting for stdio relay")
 				}
@@ -277,7 +285,7 @@ func (c *Cmd) Wait() error {
 		ioErr, _ = c.stdinErr.Load().(error)
 	}
 	close(c.allDoneCh)
-	c.Process.Close()
+	c.Process.Close(ctx)
 	c.ExitState = state
 	if exitErr != nil {
 		return exitErr

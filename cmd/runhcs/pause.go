@@ -1,6 +1,8 @@
 package main
 
 import (
+	gcontext "context"
+
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/urfave/cli"
 )
@@ -18,12 +20,13 @@ Use runhcs list to identify instances of containers and their current status.`,
 	Before: appargs.Validate(argID),
 	Action: func(context *cli.Context) error {
 		id := context.Args().First()
-		container, err := getContainer(id, true)
+		ctx := gcontext.Background()
+		container, err := getContainer(ctx, id, true)
 		if err != nil {
 			return err
 		}
-		defer container.Close()
-		if err := container.hc.Pause(); err != nil {
+		defer container.Close(ctx)
+		if err := container.hc.Pause(ctx); err != nil {
 			return err
 		}
 
@@ -44,12 +47,13 @@ Use runhcs list to identify instances of containers and their current status.`,
 	Before: appargs.Validate(argID),
 	Action: func(context *cli.Context) error {
 		id := context.Args().First()
-		container, err := getContainer(id, true)
+		ctx := gcontext.Background()
+		container, err := getContainer(ctx, id, true)
 		if err != nil {
 			return err
 		}
-		defer container.Close()
-		if err := container.hc.Resume(); err != nil {
+		defer container.Close(ctx)
+		if err := container.hc.Resume(ctx); err != nil {
 			return err
 		}
 

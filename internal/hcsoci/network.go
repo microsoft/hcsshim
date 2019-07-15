@@ -1,12 +1,14 @@
 package hcsoci
 
 import (
+	"context"
+
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/sirupsen/logrus"
 )
 
-func createNetworkNamespace(coi *createOptionsInternal, resources *Resources) error {
+func createNetworkNamespace(ctx context.Context, coi *createOptionsInternal, resources *Resources) error {
 	op := "hcsoci::createNetworkNamespace"
 	log := logrus.WithField(logfields.ContainerID, coi.ID)
 	log.Debug(op + " - Begin")
@@ -39,7 +41,7 @@ func createNetworkNamespace(coi *createOptionsInternal, resources *Resources) er
 }
 
 // GetNamespaceEndpoints gets all endpoints in `netNS`
-func GetNamespaceEndpoints(netNS string) ([]*hns.HNSEndpoint, error) {
+func GetNamespaceEndpoints(ctx context.Context, netNS string) ([]*hns.HNSEndpoint, error) {
 	op := "hcsoci::GetNamespaceEndpoints"
 	log := logrus.WithField("netns-id", netNS)
 	log.Debug(op + " - Begin")
