@@ -48,7 +48,7 @@ func Mount(ctx context.Context, layerPaths []string, upperdirPath, workdirPath, 
 	}
 
 	if readonly && (upperdirPath != "" || workdirPath != "") {
-		return errors.Errorf("upperdirPath: %q, and workdirPath: %q must be emty when readonly==true", upperdirPath, workdirPath)
+		return errors.Errorf("upperdirPath: %q, and workdirPath: %q must be empty when readonly==true", upperdirPath, workdirPath)
 	}
 
 	options := []string{"lowerdir=" + lowerdir}
