@@ -180,8 +180,8 @@ func TestAddDSRLoadBalancer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	portMappings := LoadBalancerPortMappingFlagsPreserveDIP | LoadBalancerPortMappingFlagsUseMux
-	loadBalancer, err := AddLoadBalancer([]HostComputeEndpoint{*endpoint}, LoadBalancerFlagsDSR, portMappings, "10.0.0.1", []string{"1.1.1.2", "1.1.1.3"}, 6, 8080, 80)
+	portMappingFlags := LoadBalancerPortMappingFlagsPreserveDIP
+	loadBalancer, err := AddLoadBalancer([]HostComputeEndpoint{*endpoint}, LoadBalancerFlagsDSR, portMappingFlags, "10.0.0.1", []string{"1.1.1.2", "1.1.1.3"}, 6, 8080, 80)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,9 +197,6 @@ func TestAddDSRLoadBalancer(t *testing.T) {
 	}
 
 	foundFlags := foundLB.PortMappings[0].Flags
-	if foundFlags&LoadBalancerPortMappingFlagsUseMux == 0 {
-		t.Fatal(fmt.Errorf("UseMux is not set"))
-	}
 	if foundFlags&LoadBalancerPortMappingFlagsPreserveDIP == 0 {
 		t.Fatal(fmt.Errorf("PreserveDIP is not set"))
 	}
