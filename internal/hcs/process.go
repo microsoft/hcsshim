@@ -28,6 +28,7 @@ type Process struct {
 
 	closedWaitOnce sync.Once
 	waitBlock      chan struct{}
+	exitCode       int
 	waitError      error
 }
 
@@ -121,6 +122,7 @@ func (process *Process) processSignalResult(err error) (bool, error) {
 						logfields.ProcessID:   process.processID,
 						logrus.ErrorKey:       err,
 					}).Warn("hcsshim::Process::processSignalResult - Force unblocking process waits")
+					process.exitCode = -1
 					process.waitError = err
 					close(process.waitBlock)
 				})
@@ -197,15 +199,65 @@ func (process *Process) Kill() (_ bool, err error) {
 func (process *Process) waitBackground() {
 	operation := "hcsshim::Process::waitBackground"
 	process.logOperationBegin(operation)
-	err := waitForNotification(process.callbackNumber, hcsNotificationProcessExited, nil)
+
+	var (
+		err      error
+		exitCode = -1
+	)
+
+	err = waitForNotification(process.callbackNumber, hcsNotificationProcessExited, nil)
 	if err != nil {
-		err = makeProcessError(process, "Wait", err, nil)
+		err = makeProcessError(process, operation, err, nil)
+		logrus.WithFields(logrus.Fields{
+			logfields.ContainerID: process.SystemID(),
+			logfields.ProcessID:   process.processID,
+			logrus.ErrorKey:       err,
+		}).Errorf("%s - failed wait", operation)
+	} else {
+		process.handleLock.RLock()
+		defer process.handleLock.RUnlock()
+
+		// Make sure we didnt race with Close() here
+		if process.handle != 0 {
+			var (
+				resultp     *uint16
+				propertiesp *uint16
+			)
+			err = hcsGetProcessPropertiesContext(gcontext.TODO(), process.handle, &propertiesp, &resultp)
+			events := processHcsResult(resultp)
+			if err != nil {
+				err = makeProcessError(process, operation, err, events)
+			} else {
+				properties := &processStatus{}
+				err = json.Unmarshal(interop.ConvertAndFreeCoTaskMemBytes(propertiesp), properties)
+				if err != nil {
+					err = makeProcessError(process, operation, err, nil)
+				} else {
+					if properties.LastWaitResult != 0 {
+						logrus.WithFields(logrus.Fields{
+							logfields.ContainerID: process.SystemID(),
+							logfields.ProcessID:   process.processID,
+							"wait-result":         properties.LastWaitResult,
+						}).Warningf("%s - Non-zero last wait result", operation)
+					} else {
+						exitCode = int(properties.ExitCode)
+					}
+				}
+			}
+		}
 	}
-	process.logOperationEnd(operation, err)
+	logrus.WithFields(logrus.Fields{
+		logfields.ContainerID: process.SystemID(),
+		logfields.ProcessID:   process.processID,
+		"exitCode":            exitCode,
+	}).Debugf("%s - process exited", operation)
+
 	process.closedWaitOnce.Do(func() {
+		process.exitCode = exitCode
 		process.waitError = err
 		close(process.waitBlock)
 	})
+	process.logOperationEnd(operation, err)
 }
 
 // Wait waits for the process to exit. If the process has already exited returns
@@ -253,67 +305,18 @@ func (process *Process) ResizeConsole(width, height uint16) (err error) {
 	return nil
 }
 
-func (process *Process) properties() (_ *processStatus, err error) {
-	process.handleLock.RLock()
-	defer process.handleLock.RUnlock()
-
-	operation := "hcsshim::Process::Properties"
-	process.logOperationBegin(operation)
-	defer func() { process.logOperationEnd(operation, err) }()
-
-	if process.handle == 0 {
-		return nil, makeProcessError(process, operation, ErrAlreadyClosed, nil)
-	}
-
-	var (
-		resultp     *uint16
-		propertiesp *uint16
-	)
-	err = hcsGetProcessPropertiesContext(gcontext.TODO(), process.handle, &propertiesp, &resultp)
-	events := processHcsResult(resultp)
-	if err != nil {
-		return nil, makeProcessError(process, operation, err, events)
-	}
-
-	if propertiesp == nil {
-		return nil, ErrUnexpectedValue
-	}
-	propertiesRaw := interop.ConvertAndFreeCoTaskMemBytes(propertiesp)
-
-	properties := &processStatus{}
-	if err := json.Unmarshal(propertiesRaw, properties); err != nil {
-		return nil, makeProcessError(process, operation, err, nil)
-	}
-
-	return properties, nil
-}
-
 // ExitCode returns the exit code of the process. The process must have
 // already terminated.
 func (process *Process) ExitCode() (_ int, err error) {
-	operation := "hcsshim::Process::ExitCode"
-	process.logOperationBegin(operation)
-	defer func() { process.logOperationEnd(operation, err) }()
-
-	properties, err := process.properties()
-	if err != nil {
-		return -1, makeProcessError(process, operation, err, nil)
+	select {
+	case <-process.waitBlock:
+		if process.waitError != nil {
+			return -1, process.waitError
+		}
+		return process.exitCode, nil
+	default:
+		return -1, makeProcessError(process, "hcsshim::Process::ExitCode", ErrInvalidProcessState, nil)
 	}
-
-	if properties.Exited == false {
-		return -1, makeProcessError(process, operation, ErrInvalidProcessState, nil)
-	}
-
-	if properties.LastWaitResult != 0 {
-		logrus.WithFields(logrus.Fields{
-			logfields.ContainerID: process.SystemID(),
-			logfields.ProcessID:   process.processID,
-			"wait-result":         properties.LastWaitResult,
-		}).Warn("hcsshim::Process::ExitCode - Non-zero last wait result")
-		return -1, nil
-	}
-
-	return int(properties.ExitCode), nil
 }
 
 // StdioLegacy returns the stdin, stdout, and stderr pipes, respectively. Closing
@@ -431,6 +434,7 @@ func (process *Process) Close() (err error) {
 
 	process.handle = 0
 	process.closedWaitOnce.Do(func() {
+		process.exitCode = -1
 		process.waitError = ErrAlreadyClosed
 		close(process.waitBlock)
 	})
