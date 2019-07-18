@@ -1,6 +1,7 @@
 package hcs
 
 import (
+	gcontext "context"
 	"encoding/json"
 	"io"
 	"sync"
@@ -156,9 +157,7 @@ func (process *Process) Signal(options interface{}) (_ bool, err error) {
 	optionsStr := string(optionsb)
 
 	var resultp *uint16
-	syscallWatcher(process.logctx, func() {
-		err = hcsSignalProcess(process.handle, optionsStr, &resultp)
-	})
+	err = hcsSignalProcessContext(gcontext.TODO(), process.handle, optionsStr, &resultp)
 	events := processHcsResult(resultp)
 	delivered, err := process.processSignalResult(err)
 	if err != nil {
@@ -181,9 +180,7 @@ func (process *Process) Kill() (_ bool, err error) {
 	}
 
 	var resultp *uint16
-	syscallWatcher(process.logctx, func() {
-		err = hcsTerminateProcess(process.handle, &resultp)
-	})
+	err = hcsTerminateProcessContext(gcontext.TODO(), process.handle, &resultp)
 	events := processHcsResult(resultp)
 	delivered, err := process.processSignalResult(err)
 	if err != nil {
@@ -247,7 +244,7 @@ func (process *Process) ResizeConsole(width, height uint16) (err error) {
 	modifyRequestStr := string(modifyRequestb)
 
 	var resultp *uint16
-	err = hcsModifyProcess(process.handle, modifyRequestStr, &resultp)
+	err = hcsModifyProcessContext(gcontext.TODO(), process.handle, modifyRequestStr, &resultp)
 	events := processHcsResult(resultp)
 	if err != nil {
 		return makeProcessError(process, operation, err, events)
@@ -272,9 +269,7 @@ func (process *Process) properties() (_ *processStatus, err error) {
 		resultp     *uint16
 		propertiesp *uint16
 	)
-	syscallWatcher(process.logctx, func() {
-		err = hcsGetProcessProperties(process.handle, &propertiesp, &resultp)
-	})
+	err = hcsGetProcessPropertiesContext(gcontext.TODO(), process.handle, &propertiesp, &resultp)
 	events := processHcsResult(resultp)
 	if err != nil {
 		return nil, makeProcessError(process, operation, err, events)
@@ -340,7 +335,7 @@ func (process *Process) StdioLegacy() (_ io.WriteCloser, _ io.ReadCloser, _ io.R
 		processInfo hcsProcessInformation
 		resultp     *uint16
 	)
-	err = hcsGetProcessInfo(process.handle, &processInfo, &resultp)
+	err = hcsGetProcessInfoContext(gcontext.TODO(), process.handle, &processInfo, &resultp)
 	events := processHcsResult(resultp)
 	if err != nil {
 		return nil, nil, nil, makeProcessError(process, operation, err, events)
@@ -389,7 +384,7 @@ func (process *Process) CloseStdin() (err error) {
 	modifyRequestStr := string(modifyRequestb)
 
 	var resultp *uint16
-	err = hcsModifyProcess(process.handle, modifyRequestStr, &resultp)
+	err = hcsModifyProcessContext(gcontext.TODO(), process.handle, modifyRequestStr, &resultp)
 	events := processHcsResult(resultp)
 	if err != nil {
 		return makeProcessError(process, operation, err, events)
@@ -430,7 +425,7 @@ func (process *Process) Close() (err error) {
 		return makeProcessError(process, operation, err, nil)
 	}
 
-	if err = hcsCloseProcess(process.handle); err != nil {
+	if err = hcsCloseProcessContext(gcontext.TODO(), process.handle); err != nil {
 		return makeProcessError(process, operation, err, nil)
 	}
 
@@ -457,7 +452,7 @@ func (process *Process) registerCallback() error {
 	callbackMapLock.Unlock()
 
 	var callbackHandle hcsCallback
-	err := hcsRegisterProcessCallback(process.handle, notificationWatcherCallback, callbackNumber, &callbackHandle)
+	err := hcsRegisterProcessCallbackContext(gcontext.TODO(), process.handle, notificationWatcherCallback, callbackNumber, &callbackHandle)
 	if err != nil {
 		return err
 	}
@@ -486,7 +481,7 @@ func (process *Process) unregisterCallback() error {
 
 	// hcsUnregisterProcessCallback has its own syncronization
 	// to wait for all callbacks to complete. We must NOT hold the callbackMapLock.
-	err := hcsUnregisterProcessCallback(handle)
+	err := hcsUnregisterProcessCallbackContext(gcontext.TODO(), handle)
 	if err != nil {
 		return err
 	}

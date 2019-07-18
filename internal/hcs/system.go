@@ -1,6 +1,7 @@
 package hcs
 
 import (
+	gcontext "context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -103,10 +104,7 @@ func CreateComputeSystem(id string, hcsDocumentInterface interface{}) (_ *System
 		identity    syscall.Handle
 		createError error
 	)
-	syscallWatcher(computeSystem.logctx, func() {
-		createError = hcsCreateComputeSystem(id, hcsDocument, identity, &computeSystem.handle, &resultp)
-	})
-
+	createError = hcsCreateComputeSystemContext(gcontext.TODO(), id, hcsDocument, identity, &computeSystem.handle, &resultp)
 	if createError == nil || IsPending(createError) {
 		defer func() {
 			if err != nil {
@@ -155,7 +153,7 @@ func OpenComputeSystem(id string) (_ *System, err error) {
 		handle  hcsSystem
 		resultp *uint16
 	)
-	err = hcsOpenComputeSystem(id, &handle, &resultp)
+	err = hcsOpenComputeSystemContext(gcontext.TODO(), id, &handle, &resultp)
 	events := processHcsResult(resultp)
 	if err != nil {
 		return nil, makeSystemError(computeSystem, operation, "", err, events)
@@ -239,10 +237,7 @@ func GetComputeSystems(q schema1.ComputeSystemQuery) (_ []schema1.ContainerPrope
 		resultp         *uint16
 		computeSystemsp *uint16
 	)
-
-	syscallWatcher(fields, func() {
-		err = hcsEnumerateComputeSystems(query, &computeSystemsp, &resultp)
-	})
+	err = hcsEnumerateComputeSystemsContext(gcontext.TODO(), query, &computeSystemsp, &resultp)
 	events := processHcsResult(resultp)
 	if err != nil {
 		return nil, &HcsError{Op: operation, Err: err, Events: events}
@@ -300,9 +295,7 @@ func (computeSystem *System) Start() (err error) {
 	}
 
 	var resultp *uint16
-	syscallWatcher(computeSystem.logctx, func() {
-		err = hcsStartComputeSystem(computeSystem.handle, "", &resultp)
-	})
+	err = hcsStartComputeSystemContext(gcontext.TODO(), computeSystem.handle, "", &resultp)
 	events, err := processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemStartCompleted, &timeout.SystemStart)
 	if err != nil {
 		return makeSystemError(computeSystem, "Start", "", err, events)
@@ -332,9 +325,7 @@ func (computeSystem *System) Shutdown() (err error) {
 	}
 
 	var resultp *uint16
-	syscallWatcher(computeSystem.logctx, func() {
-		err = hcsShutdownComputeSystem(computeSystem.handle, "", &resultp)
-	})
+	err = hcsShutdownComputeSystemContext(gcontext.TODO(), computeSystem.handle, "", &resultp)
 	events := processHcsResult(resultp)
 	switch err {
 	case nil, ErrVmcomputeAlreadyStopped, ErrComputeSystemDoesNotExist, ErrVmcomputeOperationPending:
@@ -360,9 +351,7 @@ func (computeSystem *System) Terminate() (err error) {
 	}
 
 	var resultp *uint16
-	syscallWatcher(computeSystem.logctx, func() {
-		err = hcsTerminateComputeSystem(computeSystem.handle, "", &resultp)
-	})
+	err = hcsTerminateComputeSystemContext(gcontext.TODO(), computeSystem.handle, "", &resultp)
 	events := processHcsResult(resultp)
 	switch err {
 	case nil, ErrVmcomputeAlreadyStopped, ErrComputeSystemDoesNotExist, ErrVmcomputeOperationPending:
@@ -436,9 +425,7 @@ func (computeSystem *System) Properties(types ...schema1.PropertyType) (_ *schem
 		Debug("HCS ComputeSystem Properties Query")
 
 	var resultp, propertiesp *uint16
-	syscallWatcher(computeSystem.logctx, func() {
-		err = hcsGetComputeSystemProperties(computeSystem.handle, string(queryString), &propertiesp, &resultp)
-	})
+	err = hcsGetComputeSystemPropertiesContext(gcontext.TODO(), computeSystem.handle, string(queryString), &propertiesp, &resultp)
 	events := processHcsResult(resultp)
 	if err != nil {
 		return nil, makeSystemError(computeSystem, "Properties", "", err, events)
@@ -470,9 +457,7 @@ func (computeSystem *System) Pause() (err error) {
 	}
 
 	var resultp *uint16
-	syscallWatcher(computeSystem.logctx, func() {
-		err = hcsPauseComputeSystem(computeSystem.handle, "", &resultp)
-	})
+	err = hcsPauseComputeSystemContext(gcontext.TODO(), computeSystem.handle, "", &resultp)
 	events, err := processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemPauseCompleted, &timeout.SystemPause)
 	if err != nil {
 		return makeSystemError(computeSystem, "Pause", "", err, events)
@@ -495,9 +480,7 @@ func (computeSystem *System) Resume() (err error) {
 	}
 
 	var resultp *uint16
-	syscallWatcher(computeSystem.logctx, func() {
-		err = hcsResumeComputeSystem(computeSystem.handle, "", &resultp)
-	})
+	err = hcsResumeComputeSystemContext(gcontext.TODO(), computeSystem.handle, "", &resultp)
 	events, err := processAsyncHcsResult(err, resultp, computeSystem.callbackNumber, hcsNotificationSystemResumeCompleted, &timeout.SystemResume)
 	if err != nil {
 		return makeSystemError(computeSystem, "Resume", "", err, events)
@@ -535,9 +518,7 @@ func (computeSystem *System) createProcess(c interface{}) (_ *Process, _ *hcsPro
 		WithField(logfields.JSON, configuration).
 		Debug("HCS ComputeSystem Process Document")
 
-	syscallWatcher(computeSystem.logctx, func() {
-		err = hcsCreateProcess(computeSystem.handle, configuration, &processInfo, &processHandle, &resultp)
-	})
+	err = hcsCreateProcessContext(gcontext.TODO(), computeSystem.handle, configuration, &processInfo, &processHandle, &resultp)
 	events := processHcsResult(resultp)
 	if err != nil {
 		return nil, nil, makeSystemError(computeSystem, "CreateProcess", configuration, err, events)
@@ -626,9 +607,7 @@ func (computeSystem *System) OpenProcess(pid int) (_ *Process, err error) {
 		return nil, makeSystemError(computeSystem, "OpenProcess", "", ErrAlreadyClosed, nil)
 	}
 
-	syscallWatcher(computeSystem.logctx, func() {
-		err = hcsOpenProcess(computeSystem.handle, uint32(pid), &processHandle, &resultp)
-	})
+	err = hcsOpenProcessContext(gcontext.TODO(), computeSystem.handle, uint32(pid), &processHandle, &resultp)
 	events := processHcsResult(resultp)
 	if err != nil {
 		return nil, makeSystemError(computeSystem, "OpenProcess", "", err, events)
@@ -661,9 +640,7 @@ func (computeSystem *System) Close() (err error) {
 		return makeSystemError(computeSystem, "Close", "", err, nil)
 	}
 
-	syscallWatcher(computeSystem.logctx, func() {
-		err = hcsCloseComputeSystem(computeSystem.handle)
-	})
+	err = hcsCloseComputeSystemContext(gcontext.TODO(), computeSystem.handle)
 	if err != nil {
 		return makeSystemError(computeSystem, "Close", "", err, nil)
 	}
@@ -690,7 +667,7 @@ func (computeSystem *System) registerCallback() error {
 	callbackMapLock.Unlock()
 
 	var callbackHandle hcsCallback
-	err := hcsRegisterComputeSystemCallback(computeSystem.handle, notificationWatcherCallback, callbackNumber, &callbackHandle)
+	err := hcsRegisterComputeSystemCallbackContext(gcontext.TODO(), computeSystem.handle, notificationWatcherCallback, callbackNumber, &callbackHandle)
 	if err != nil {
 		return err
 	}
@@ -719,7 +696,7 @@ func (computeSystem *System) unregisterCallback() error {
 
 	// hcsUnregisterComputeSystemCallback has its own syncronization
 	// to wait for all callbacks to complete. We must NOT hold the callbackMapLock.
-	err := hcsUnregisterComputeSystemCallback(handle)
+	err := hcsUnregisterComputeSystemCallbackContext(gcontext.TODO(), handle)
 	if err != nil {
 		return err
 	}
@@ -760,9 +737,7 @@ func (computeSystem *System) Modify(config interface{}) (err error) {
 		Debug("HCS ComputeSystem Modify Document")
 
 	var resultp *uint16
-	syscallWatcher(computeSystem.logctx, func() {
-		err = hcsModifyComputeSystem(computeSystem.handle, requestString, &resultp)
-	})
+	err = hcsModifyComputeSystemContext(gcontext.TODO(), computeSystem.handle, requestString, &resultp)
 	events := processHcsResult(resultp)
 	if err != nil {
 		return makeSystemError(computeSystem, "Modify", requestString, err, events)
