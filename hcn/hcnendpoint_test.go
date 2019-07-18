@@ -182,33 +182,6 @@ func TestEndpointNamespaceAttachDetach(t *testing.T) {
 	}
 }
 
-func TestCreateEndpointWithNamespace(t *testing.T) {
-	network, err := HcnCreateTestNATNetwork()
-	if err != nil {
-		t.Fatal(err)
-	}
-	namespace, err := HcnCreateTestNamespace()
-	if err != nil {
-		t.Fatal(err)
-	}
-	Endpoint, err := HcnCreateTestEndpointWithNamespace(network, namespace)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if Endpoint.HostComputeNamespace == "" {
-		t.Fatal("No Namespace detected.")
-	}
-
-	err = Endpoint.Delete()
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = network.Delete()
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestApplyPolicyOnEndpoint(t *testing.T) {
 	network, err := HcnCreateTestNATNetwork()
 	if err != nil {
