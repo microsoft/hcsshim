@@ -23,7 +23,7 @@ func CreateUVMScratch(ctx context.Context, imagePath, destDirectory, vmID string
 	if err := copyfile.CopyFile(sourceScratch, targetScratch, true); err != nil {
 		return err
 	}
-	if err := wclayer.GrantVmAccess(vmID, targetScratch); err != nil {
+	if err := wclayer.GrantVmAccess(ctx, vmID, targetScratch); err != nil {
 		os.Remove(targetScratch)
 		return err
 	}

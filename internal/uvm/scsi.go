@@ -159,7 +159,7 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, atta
 
 	// Ensure the utility VM has access
 	if !isLayer {
-		if err := wclayer.GrantVmAccess(uvm.id, hostPath); err != nil {
+		if err := wclayer.GrantVmAccess(ctx, uvm.id, hostPath); err != nil {
 			return -1, -1, err
 		}
 	}

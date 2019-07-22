@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -44,7 +45,7 @@ func main() {
 			return err
 		}
 
-		if err := wclayer.DestroyLayer(dir); err != nil {
+		if err := wclayer.DestroyLayer(context.Background(), dir); err != nil {
 			return err
 		}
 

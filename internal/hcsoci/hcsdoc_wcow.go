@@ -227,7 +227,7 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 
 	if coi.HostingSystem == nil { // Argon v1 or v2
 		for _, layerPath := range coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1] {
-			layerID, err := wclayer.LayerID(layerPath)
+			layerID, err := wclayer.LayerID(ctx, layerPath)
 			if err != nil {
 				return nil, nil, err
 			}

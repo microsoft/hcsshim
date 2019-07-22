@@ -181,7 +181,7 @@ func TestParallelScsiOps(t *testing.T) {
 					t.Errorf("failed to copy sandbox for worker: %d, iteration: %d with err: %v", scsiIndex, iteration, err)
 					continue
 				}
-				err = wclayer.GrantVmAccess(u.ID(), path)
+				err = wclayer.GrantVmAccess(context.Background(), u.ID(), path)
 				if err != nil {
 					os.Remove(path)
 					t.Errorf("failed to grantvmaccess for worker: %d, iteration: %d with err: %v", scsiIndex, iteration, err)
