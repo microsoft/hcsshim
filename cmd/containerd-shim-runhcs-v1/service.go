@@ -129,9 +129,7 @@ func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (resp *ta
 				trace.Int64Attribute("exitStatus", int64(resp.ExitStatus)),
 				trace.StringAttribute("exitedAt", resp.ExitedAt.String()))
 		}
-		if !errdefs.IsNotFound(err) {
-			oc.SetSpanStatus(span, err)
-		}
+		oc.SetSpanStatus(span, err)
 	}()
 
 	span.AddAttributes(
@@ -146,9 +144,7 @@ func (s *service) Pids(ctx context.Context, req *task.PidsRequest) (_ *task.Pids
 	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Pids")
 	defer span.End()
-	defer func() {
-		oc.SetSpanStatus(span, err)
-	}()
+	defer func() { oc.SetSpanStatus(span, err) }()
 
 	span.AddAttributes(trace.StringAttribute("tid", req.ID))
 
@@ -160,9 +156,7 @@ func (s *service) Pause(ctx context.Context, req *task.PauseRequest) (_ *google_
 	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Pause")
 	defer span.End()
-	defer func() {
-		oc.SetSpanStatus(span, err)
-	}()
+	defer func() { oc.SetSpanStatus(span, err) }()
 
 	span.AddAttributes(trace.StringAttribute("tid", req.ID))
 
@@ -174,9 +168,7 @@ func (s *service) Resume(ctx context.Context, req *task.ResumeRequest) (_ *googl
 	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Resume")
 	defer span.End()
-	defer func() {
-		oc.SetSpanStatus(span, err)
-	}()
+	defer func() { oc.SetSpanStatus(span, err) }()
 
 	span.AddAttributes(trace.StringAttribute("tid", req.ID))
 
@@ -188,9 +180,7 @@ func (s *service) Checkpoint(ctx context.Context, req *task.CheckpointTaskReques
 	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Checkpoint")
 	defer span.End()
-	defer func() {
-		oc.SetSpanStatus(span, err)
-	}()
+	defer func() { oc.SetSpanStatus(span, err) }()
 
 	span.AddAttributes(
 		trace.StringAttribute("tid", req.ID),
@@ -204,11 +194,7 @@ func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *google_pr
 	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Kill")
 	defer span.End()
-	defer func() {
-		if !errdefs.IsNotFound(err) {
-			oc.SetSpanStatus(span, err)
-		}
-	}()
+	defer func() { oc.SetSpanStatus(span, err) }()
 
 	span.AddAttributes(
 		trace.StringAttribute("tid", req.ID),
@@ -224,9 +210,7 @@ func (s *service) Exec(ctx context.Context, req *task.ExecProcessRequest) (_ *go
 	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Exec")
 	defer span.End()
-	defer func() {
-		oc.SetSpanStatus(span, err)
-	}()
+	defer func() { oc.SetSpanStatus(span, err) }()
 
 	span.AddAttributes(
 		trace.StringAttribute("tid", req.ID),
@@ -244,9 +228,7 @@ func (s *service) DiagExecInHost(ctx context.Context, req *shimdiag.ExecProcessR
 	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "DiagExecInHost")
 	defer span.End()
-	defer func() {
-		oc.SetSpanStatus(span, err)
-	}()
+	defer func() { oc.SetSpanStatus(span, err) }()
 
 	span.AddAttributes(
 		trace.StringAttribute("args", strings.Join(req.Args, " ")),
@@ -264,9 +246,7 @@ func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ 
 	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "ResizePty")
 	defer span.End()
-	defer func() {
-		oc.SetSpanStatus(span, err)
-	}()
+	defer func() { oc.SetSpanStatus(span, err) }()
 
 	span.AddAttributes(
 		trace.StringAttribute("tid", req.ID),
@@ -282,9 +262,7 @@ func (s *service) CloseIO(ctx context.Context, req *task.CloseIORequest) (_ *goo
 	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "CloseIO")
 	defer span.End()
-	defer func() {
-		oc.SetSpanStatus(span, err)
-	}()
+	defer func() { oc.SetSpanStatus(span, err) }()
 
 	span.AddAttributes(
 		trace.StringAttribute("tid", req.ID),
@@ -299,9 +277,7 @@ func (s *service) Update(ctx context.Context, req *task.UpdateTaskRequest) (_ *g
 	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Update")
 	defer span.End()
-	defer func() {
-		oc.SetSpanStatus(span, err)
-	}()
+	defer func() { oc.SetSpanStatus(span, err) }()
 
 	span.AddAttributes(trace.StringAttribute("tid", req.ID))
 
@@ -334,9 +310,7 @@ func (s *service) Stats(ctx context.Context, req *task.StatsRequest) (_ *task.St
 	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Stats")
 	defer span.End()
-	defer func() {
-		oc.SetSpanStatus(span, err)
-	}()
+	defer func() { oc.SetSpanStatus(span, err) }()
 
 	span.AddAttributes(trace.StringAttribute("tid", req.ID))
 
@@ -368,9 +342,7 @@ func (s *service) Shutdown(ctx context.Context, req *task.ShutdownRequest) (_ *g
 	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Shutdown")
 	defer span.End()
-	defer func() {
-		oc.SetSpanStatus(span, err)
-	}()
+	defer func() { oc.SetSpanStatus(span, err) }()
 
 	span.AddAttributes(trace.StringAttribute("tid", req.ID))
 
@@ -382,9 +354,7 @@ func (s *service) DiagStacks(ctx context.Context, req *shimdiag.StacksRequest) (
 	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "DiagStacks")
 	defer span.End()
-	defer func() {
-		oc.SetSpanStatus(span, err)
-	}()
+	defer func() { oc.SetSpanStatus(span, err) }()
 
 	buf := make([]byte, 4096)
 	for {

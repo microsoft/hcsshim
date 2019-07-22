@@ -228,11 +228,7 @@ func hcsCloseProcessContext(ctx gcontext.Context, process hcsProcess) (hr error)
 func hcsTerminateProcessContext(ctx gcontext.Context, process hcsProcess, result **uint16) (hr error) {
 	ctx, span := trace.StartSpan(ctx, "HcsTerminateProcess")
 	defer span.End()
-	defer func() {
-		if !IsNotExist(hr) {
-			oc.SetSpanStatus(span, hr)
-		}
-	}()
+	defer func() { oc.SetSpanStatus(span, hr) }()
 
 	return execute(ctx, timeout.SyscallWatcher, func() error {
 		return hcsTerminateProcess(process, result)
@@ -242,11 +238,7 @@ func hcsTerminateProcessContext(ctx gcontext.Context, process hcsProcess, result
 func hcsSignalProcessContext(ctx gcontext.Context, process hcsProcess, options string, result **uint16) (hr error) {
 	ctx, span := trace.StartSpan(ctx, "HcsSignalProcess")
 	defer span.End()
-	defer func() {
-		if !IsNotExist(hr) {
-			oc.SetSpanStatus(span, hr)
-		}
-	}()
+	defer func() { oc.SetSpanStatus(span, hr) }()
 	span.AddAttributes(trace.StringAttribute("options", options))
 
 	return execute(ctx, timeout.SyscallWatcher, func() error {
