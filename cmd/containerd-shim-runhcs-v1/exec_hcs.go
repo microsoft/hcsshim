@@ -7,8 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/oc"
-
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
@@ -197,13 +195,6 @@ func copyAndLog(w io.Writer, r io.Reader, e *logrus.Entry, msg string) {
 }
 
 func (he *hcsExec) Start(ctx context.Context) (err error) {
-	ctx, span := trace.StartSpan(ctx, "hcsExec::Start")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("tid", he.tid),
-		trace.StringAttribute("eid", he.id))
-
 	he.sl.Lock()
 	defer he.sl.Unlock()
 	if he.state != shimExecStateCreated {
@@ -279,15 +270,7 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 	return nil
 }
 
-func (he *hcsExec) Kill(ctx context.Context, signal uint32) (err error) {
-	ctx, span := trace.StartSpan(ctx, "hcsExec::Kill")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("tid", he.tid),
-		trace.StringAttribute("eid", he.id),
-		trace.Int64Attribute("signal", int64(signal)))
-
+func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 	he.sl.Lock()
 	defer he.sl.Unlock()
 	switch he.state {
@@ -339,16 +322,7 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) (err error) {
 	}
 }
 
-func (he *hcsExec) ResizePty(ctx context.Context, width, height uint32) (err error) {
-	_, span := trace.StartSpan(ctx, "hcsExec::ResizePty")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("tid", he.tid),
-		trace.StringAttribute("eid", he.id),
-		trace.Int64Attribute("width", int64(width)),
-		trace.Int64Attribute("height", int64(height)))
-
+func (he *hcsExec) ResizePty(ctx context.Context, width, height uint32) error {
 	he.sl.Lock()
 	defer he.sl.Unlock()
 	if he.state != shimExecStateRunning {
@@ -362,13 +336,6 @@ func (he *hcsExec) ResizePty(ctx context.Context, width, height uint32) (err err
 }
 
 func (he *hcsExec) CloseIO(ctx context.Context, stdin bool) error {
-	ctx, span := trace.StartSpan(ctx, "hcsExec::CloseIO")
-	defer span.End()
-	span.AddAttributes(
-		trace.StringAttribute("tid", he.tid),
-		trace.StringAttribute("eid", he.id),
-		trace.BoolAttribute("stdin", stdin))
-
 	// If we have any upstream IO we close the upstream connection. This will
 	// unblock the `io.Copy` in the `Start()` call which will signal
 	// `he.p.CloseStdin()`. If `he.io.Stdin()` is already closed this is safe to
@@ -378,12 +345,6 @@ func (he *hcsExec) CloseIO(ctx context.Context, stdin bool) error {
 }
 
 func (he *hcsExec) Wait(ctx context.Context) *task.StateResponse {
-	_, span := trace.StartSpan(ctx, "hcsExec::Wait")
-	defer span.End()
-	span.AddAttributes(
-		trace.StringAttribute("tid", he.tid),
-		trace.StringAttribute("eid", he.id))
-
 	<-he.exited
 	return he.Status()
 }

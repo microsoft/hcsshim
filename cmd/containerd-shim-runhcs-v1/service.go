@@ -129,7 +129,9 @@ func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (resp *ta
 				trace.Int64Attribute("exitStatus", int64(resp.ExitStatus)),
 				trace.StringAttribute("exitedAt", resp.ExitedAt.String()))
 		}
-		oc.SetSpanStatus(span, err)
+		if !errdefs.IsNotFound(err) {
+			oc.SetSpanStatus(span, err)
+		}
 	}()
 
 	span.AddAttributes(
@@ -203,7 +205,9 @@ func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *google_pr
 	ctx, span := trace.StartSpan(ctx, "Kill")
 	defer span.End()
 	defer func() {
-		oc.SetSpanStatus(span, err)
+		if !errdefs.IsNotFound(err) {
+			oc.SetSpanStatus(span, err)
+		}
 	}()
 
 	span.AddAttributes(

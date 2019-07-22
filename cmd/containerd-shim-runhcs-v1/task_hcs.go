@@ -259,14 +259,7 @@ func (ht *hcsTask) ID() string {
 	return ht.id
 }
 
-func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest, spec *specs.Process) (err error) {
-	ctx, span := trace.StartSpan(ctx, "hcsTask::CreateExec")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("tid", ht.id),
-		trace.StringAttribute("eid", req.ExecID))
-
+func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest, spec *specs.Process) error {
 	ht.ecl.Lock()
 	defer ht.ecl.Unlock()
 
@@ -310,16 +303,7 @@ func (ht *hcsTask) GetExec(eid string) (shimExec, error) {
 	return raw.(shimExec), nil
 }
 
-func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all bool) (err error) {
-	ctx, span := trace.StartSpan(ctx, "hcsTask::KillExec")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("tid", ht.id),
-		trace.StringAttribute("eid", eid),
-		trace.Int64Attribute("signal", int64(signal)),
-		trace.BoolAttribute("all", all))
-
+func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all bool) error {
 	e, err := ht.GetExec(eid)
 	if err != nil {
 		return err
@@ -377,14 +361,7 @@ func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all 
 	return eg.Wait()
 }
 
-func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (_ int, _ uint32, _ time.Time, err error) {
-	ctx, span := trace.StartSpan(ctx, "hcsTask::DeleteExec")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("tid", ht.id),
-		trace.StringAttribute("eid", eid))
-
+func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, time.Time, error) {
 	e, err := ht.GetExec(eid)
 	if err != nil {
 		return 0, 0, time.Time{}, err
@@ -436,12 +413,7 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (_ int, _ uint32,
 	return int(status.Pid), status.ExitStatus, status.ExitedAt, nil
 }
 
-func (ht *hcsTask) Pids(ctx context.Context) (_ []options.ProcessDetails, err error) {
-	_, span := trace.StartSpan(ctx, "hcsTask::Pids")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("tid", ht.id))
-
+func (ht *hcsTask) Pids(ctx context.Context) ([]options.ProcessDetails, error) {
 	// Map all user created exec's to pid/exec-id
 	pidMap := make(map[int]string)
 	ht.execs.Range(func(key, value interface{}) bool {
@@ -479,10 +451,6 @@ func (ht *hcsTask) Pids(ctx context.Context) (_ []options.ProcessDetails, err er
 }
 
 func (ht *hcsTask) Wait(ctx context.Context) *task.StateResponse {
-	ctx, span := trace.StartSpan(ctx, "hcsTask::Wait")
-	defer span.End()
-	span.AddAttributes(trace.StringAttribute("tid", ht.id))
-
 	<-ht.closed
 	return ht.init.Wait(ctx)
 }
