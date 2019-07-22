@@ -5,8 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/oc"
-
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
@@ -89,14 +87,7 @@ func (wpst *wcowPodSandboxTask) ID() string {
 	return wpst.id
 }
 
-func (wpst *wcowPodSandboxTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest, s *specs.Process) (err error) {
-	ctx, span := trace.StartSpan(ctx, "wcowPodSandboxTask::CreateExec")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("tid", wpst.id),
-		trace.StringAttribute("eid", req.ExecID))
-
+func (wpst *wcowPodSandboxTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest, s *specs.Process) error {
 	return errors.Wrap(errdefs.ErrNotImplemented, "WCOW Pod task should never issue exec")
 }
 
@@ -108,16 +99,7 @@ func (wpst *wcowPodSandboxTask) GetExec(eid string) (shimExec, error) {
 	return nil, errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", eid, wpst.id)
 }
 
-func (wpst *wcowPodSandboxTask) KillExec(ctx context.Context, eid string, signal uint32, all bool) (err error) {
-	ctx, span := trace.StartSpan(ctx, "wcowPodSandboxTask::KillExec")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("tid", wpst.id),
-		trace.StringAttribute("eid", eid),
-		trace.Int64Attribute("signal", int64(signal)),
-		trace.BoolAttribute("all", all))
-
+func (wpst *wcowPodSandboxTask) KillExec(ctx context.Context, eid string, signal uint32, all bool) error {
 	e, err := wpst.GetExec(eid)
 	if err != nil {
 		return err
@@ -132,14 +114,7 @@ func (wpst *wcowPodSandboxTask) KillExec(ctx context.Context, eid string, signal
 	return nil
 }
 
-func (wpst *wcowPodSandboxTask) DeleteExec(ctx context.Context, eid string) (_ int, _ uint32, _ time.Time, err error) {
-	ctx, span := trace.StartSpan(ctx, "wcowPodSandboxTask::DeleteExec")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("tid", wpst.id),
-		trace.StringAttribute("eid", eid))
-
+func (wpst *wcowPodSandboxTask) DeleteExec(ctx context.Context, eid string) (int, uint32, time.Time, error) {
 	e, err := wpst.GetExec(eid)
 	if err != nil {
 		return 0, 0, time.Time{}, err
@@ -168,10 +143,6 @@ func (wpst *wcowPodSandboxTask) DeleteExec(ctx context.Context, eid string) (_ i
 }
 
 func (wpst *wcowPodSandboxTask) Pids(ctx context.Context) ([]options.ProcessDetails, error) {
-	ctx, span := trace.StartSpan(ctx, "wcowPodSandboxTask::Pids")
-	defer span.End()
-	span.AddAttributes(trace.StringAttribute("tid", wpst.id))
-
 	return []options.ProcessDetails{
 		{
 			ProcessID: uint32(wpst.init.Pid()),
@@ -181,10 +152,6 @@ func (wpst *wcowPodSandboxTask) Pids(ctx context.Context) ([]options.ProcessDeta
 }
 
 func (wpst *wcowPodSandboxTask) Wait(ctx context.Context) *task.StateResponse {
-	ctx, span := trace.StartSpan(ctx, "wcowPodSandboxTask::Wait")
-	defer span.End()
-	span.AddAttributes(trace.StringAttribute("tid", wpst.id))
-
 	<-wpst.closed
 	return wpst.init.Wait(ctx)
 }

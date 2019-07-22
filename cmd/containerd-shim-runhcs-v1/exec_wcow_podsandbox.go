@@ -5,8 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/oc"
-
 	eventstypes "github.com/containerd/containerd/api/events"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
@@ -122,14 +120,7 @@ func (wpse *wcowPodSandboxExec) Status() *task.StateResponse {
 	}
 }
 
-func (wpse *wcowPodSandboxExec) Start(ctx context.Context) (err error) {
-	ctx, span := trace.StartSpan(ctx, "wcowPodSandboxExec::Start")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("tid", wpse.tid),
-		trace.StringAttribute("eid", wpse.tid)) // Init exec ID is always same as Task ID
-
+func (wpse *wcowPodSandboxExec) Start(ctx context.Context) error {
 	wpse.sl.Lock()
 	defer wpse.sl.Unlock()
 	if wpse.state != shimExecStateCreated {
@@ -152,15 +143,7 @@ func (wpse *wcowPodSandboxExec) Start(ctx context.Context) (err error) {
 	return nil
 }
 
-func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) (err error) {
-	_, span := trace.StartSpan(ctx, "wcowPodSandboxExec::Kill")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("tid", wpse.tid),
-		trace.StringAttribute("eid", wpse.tid), // Init exec ID is always same as Task ID
-		trace.Int64Attribute("signal", int64(signal)))
-
+func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) error {
 	wpse.sl.Lock()
 	defer wpse.sl.Unlock()
 	switch wpse.state {
@@ -188,16 +171,7 @@ func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) (err er
 	}
 }
 
-func (wpse *wcowPodSandboxExec) ResizePty(ctx context.Context, width, height uint32) (err error) {
-	_, span := trace.StartSpan(ctx, "wcowPodSandboxExec::ResizePty")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("tid", wpse.tid),
-		trace.StringAttribute("eid", wpse.tid), // Init exec ID is always same as Task ID
-		trace.Int64Attribute("width", int64(width)),
-		trace.Int64Attribute("height", int64(height)))
-
+func (wpse *wcowPodSandboxExec) ResizePty(ctx context.Context, width, height uint32) error {
 	wpse.sl.Lock()
 	defer wpse.sl.Unlock()
 	if wpse.state != shimExecStateRunning {
@@ -209,23 +183,10 @@ func (wpse *wcowPodSandboxExec) ResizePty(ctx context.Context, width, height uin
 }
 
 func (wpse *wcowPodSandboxExec) CloseIO(ctx context.Context, stdin bool) error {
-	_, span := trace.StartSpan(ctx, "wcowPodSandboxExec::CloseIO")
-	defer span.End()
-	span.AddAttributes(
-		trace.StringAttribute("tid", wpse.tid),
-		trace.StringAttribute("eid", wpse.tid), // Init exec ID is always same as Task ID
-		trace.BoolAttribute("stdin", stdin))
-
 	return nil
 }
 
 func (wpse *wcowPodSandboxExec) Wait(ctx context.Context) *task.StateResponse {
-	ctx, span := trace.StartSpan(ctx, "wcowPodSandboxExec::Wait")
-	defer span.End()
-	span.AddAttributes(
-		trace.StringAttribute("tid", wpse.tid),
-		trace.StringAttribute("eid", wpse.tid)) // Init exec ID is always same as Task ID
-
 	<-wpse.exited
 	return wpse.Status()
 }

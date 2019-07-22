@@ -249,15 +249,6 @@ func (p *pod) ID() string {
 }
 
 func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *specs.Spec) (_ shimTask, err error) {
-	ctx, span := trace.StartSpan(ctx, "pod::CreateTask")
-	defer span.End()
-	defer func() {
-		oc.SetSpanStatus(span, err)
-	}()
-	span.AddAttributes(
-		trace.StringAttribute("pod-id", p.id),
-		trace.StringAttribute("tid", req.ID))
-
 	if req.ID == p.id {
 		return nil, errors.Wrapf(errdefs.ErrAlreadyExists, "task with id: '%s' already exists", req.ID)
 	}
@@ -319,19 +310,7 @@ func (p *pod) GetTask(tid string) (shimTask, error) {
 	return raw.(shimTask), nil
 }
 
-func (p *pod) KillTask(ctx context.Context, tid, eid string, signal uint32, all bool) (err error) {
-	ctx, span := trace.StartSpan(ctx, "pod::KillTask")
-	defer span.End()
-	defer func() {
-		oc.SetSpanStatus(span, err)
-	}()
-	span.AddAttributes(
-		trace.StringAttribute("pod-id", p.id),
-		trace.StringAttribute("tid", tid),
-		trace.StringAttribute("eid", eid),
-		trace.Int64Attribute("signal", int64(signal)),
-		trace.BoolAttribute("all", all))
-
+func (p *pod) KillTask(ctx context.Context, tid, eid string, signal uint32, all bool) error {
 	t, err := p.GetTask(tid)
 	if err != nil {
 		return err

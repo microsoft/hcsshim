@@ -41,9 +41,6 @@ func createLCOWSpec(coi *createOptionsInternal) (*specs.Spec, error) {
 
 	// Clear unsupported features
 	if spec.Linux.Resources != nil {
-		if len(spec.Linux.Resources.Devices) > 0 {
-			logrus.Warning("clearing non-empty spec.Linux.Resources.Devices")
-		}
 		spec.Linux.Resources.Devices = nil
 		spec.Linux.Resources.Pids = nil
 		spec.Linux.Resources.BlockIO = nil

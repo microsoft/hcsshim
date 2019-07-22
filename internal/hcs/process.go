@@ -145,7 +145,13 @@ func (process *Process) Signal(options interface{}) (_ bool, err error) {
 
 	operation := "hcsshim::Process::Signal"
 	process.logOperationBegin(operation)
-	defer func() { process.logOperationEnd(operation, err) }()
+	defer func() {
+		if !IsNotExist(err) {
+			process.logOperationEnd(operation, err)
+		} else {
+			process.logOperationEnd(operation, nil)
+		}
+	}()
 
 	if process.handle == 0 {
 		return false, makeProcessError(process, operation, ErrAlreadyClosed, nil)
@@ -175,7 +181,13 @@ func (process *Process) Kill() (_ bool, err error) {
 
 	operation := "hcsshim::Process::Kill"
 	process.logOperationBegin(operation)
-	defer func() { process.logOperationEnd(operation, err) }()
+	defer func() {
+		if !IsNotExist(err) {
+			process.logOperationEnd(operation, err)
+		} else {
+			process.logOperationEnd(operation, nil)
+		}
+	}()
 
 	if process.handle == 0 {
 		return false, makeProcessError(process, operation, ErrAlreadyClosed, nil)
