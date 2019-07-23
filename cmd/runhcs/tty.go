@@ -1,6 +1,7 @@
 package main
 
 import (
+	gcontext "context"
 	"fmt"
 	"strconv"
 
@@ -45,12 +46,12 @@ var resizeTtyCommand = cli.Command{
 			}
 		}
 
-		p, err := c.hc.OpenProcess(pid)
+		p, err := c.hc.OpenProcess(gcontext.Background(), pid)
 		if err != nil {
 			return err
 		}
 		defer p.Close()
 
-		return p.ResizeConsole(uint16(width), uint16(height))
+		return p.ResizeConsole(gcontext.Background(), uint16(width), uint16(height))
 	},
 }

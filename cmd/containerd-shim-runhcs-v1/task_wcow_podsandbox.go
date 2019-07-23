@@ -151,9 +151,9 @@ func (wpst *wcowPodSandboxTask) Pids(ctx context.Context) ([]options.ProcessDeta
 	}, nil
 }
 
-func (wpst *wcowPodSandboxTask) Wait(ctx context.Context) *task.StateResponse {
+func (wpst *wcowPodSandboxTask) Wait() *task.StateResponse {
 	<-wpst.closed
-	return wpst.init.Wait(ctx)
+	return wpst.init.Wait()
 }
 
 // close safely closes the hosting UVM. Because of the specialty of this task it
@@ -195,7 +195,7 @@ func (wpst *wcowPodSandboxTask) waitInitExit() {
 	span.AddAttributes(trace.StringAttribute("tid", wpst.id))
 
 	// Wait for it to exit on its own
-	wpst.init.Wait(context.Background())
+	wpst.init.Wait()
 
 	// Close the host and event the exit
 	wpst.close(ctx)

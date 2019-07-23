@@ -1,6 +1,7 @@
 package hcs
 
 import (
+	"context"
 	gcontext "context"
 	"encoding/json"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/interop"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/sirupsen/logrus"
 )
@@ -88,21 +90,23 @@ func (process *Process) SystemID() string {
 	return process.system.ID()
 }
 
-func (process *Process) logOperationBegin(operation string) {
+func (process *Process) logOperationBegin(ctx gcontext.Context, operation string) {
 	logOperationBegin(
+		ctx,
 		process.logctx,
 		operation+" - Begin Operation")
 }
 
-func (process *Process) logOperationEnd(operation string, err error) {
+func (process *Process) logOperationEnd(ctx gcontext.Context, operation string, err error) {
 	result, err := getOperationLogResult(err)
 	logOperationEnd(
+		ctx,
 		process.logctx,
 		operation+" - End Operation - "+result,
 		err)
 }
 
-func (process *Process) processSignalResult(err error) (bool, error) {
+func (process *Process) processSignalResult(ctx context.Context, err error) (bool, error) {
 	switch err {
 	case nil:
 		return true, nil
@@ -117,7 +121,7 @@ func (process *Process) processSignalResult(err error) (bool, error) {
 			go func() {
 				time.Sleep(time.Second)
 				process.closedWaitOnce.Do(func() {
-					logrus.WithFields(logrus.Fields{
+					log.G(ctx).WithFields(logrus.Fields{
 						logfields.ContainerID: process.SystemID(),
 						logfields.ProcessID:   process.processID,
 						logrus.ErrorKey:       err,
@@ -139,13 +143,13 @@ func (process *Process) processSignalResult(err error) (bool, error) {
 // For LCOW `guestrequest.SignalProcessOptionsLCOW`.
 //
 // For WCOW `guestrequest.SignalProcessOptionsWCOW`.
-func (process *Process) Signal(options interface{}) (_ bool, err error) {
+func (process *Process) Signal(ctx gcontext.Context, options interface{}) (_ bool, err error) {
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
 
 	operation := "hcsshim::Process::Signal"
-	process.logOperationBegin(operation)
-	defer func() { process.logOperationEnd(operation, err) }()
+	process.logOperationBegin(ctx, operation)
+	defer func() { process.logOperationEnd(ctx, operation, err) }()
 
 	if process.handle == 0 {
 		return false, makeProcessError(process, operation, ErrAlreadyClosed, nil)
@@ -159,9 +163,9 @@ func (process *Process) Signal(options interface{}) (_ bool, err error) {
 	optionsStr := string(optionsb)
 
 	var resultp *uint16
-	err = hcsSignalProcessContext(gcontext.TODO(), process.handle, optionsStr, &resultp)
-	events := processHcsResult(resultp)
-	delivered, err := process.processSignalResult(err)
+	err = hcsSignalProcessContext(ctx, process.handle, optionsStr, &resultp)
+	events := processHcsResult(ctx, resultp)
+	delivered, err := process.processSignalResult(ctx, err)
 	if err != nil {
 		err = makeProcessError(process, operation, err, events)
 	}
@@ -169,22 +173,22 @@ func (process *Process) Signal(options interface{}) (_ bool, err error) {
 }
 
 // Kill signals the process to terminate but does not wait for it to finish terminating.
-func (process *Process) Kill() (_ bool, err error) {
+func (process *Process) Kill(ctx gcontext.Context) (_ bool, err error) {
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
 
 	operation := "hcsshim::Process::Kill"
-	process.logOperationBegin(operation)
-	defer func() { process.logOperationEnd(operation, err) }()
+	process.logOperationBegin(ctx, operation)
+	defer func() { process.logOperationEnd(ctx, operation, err) }()
 
 	if process.handle == 0 {
 		return false, makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
 	var resultp *uint16
-	err = hcsTerminateProcessContext(gcontext.TODO(), process.handle, &resultp)
-	events := processHcsResult(resultp)
-	delivered, err := process.processSignalResult(err)
+	err = hcsTerminateProcessContext(ctx, process.handle, &resultp)
+	events := processHcsResult(ctx, resultp)
+	delivered, err := process.processSignalResult(ctx, err)
 	if err != nil {
 		err = makeProcessError(process, operation, err, events)
 	}
@@ -197,8 +201,9 @@ func (process *Process) Kill() (_ bool, err error) {
 // This MUST be called exactly once per `process.handle` but `Wait` is safe to
 // call multiple times.
 func (process *Process) waitBackground() {
+	ctx := gcontext.TODO()
 	operation := "hcsshim::Process::waitBackground"
-	process.logOperationBegin(operation)
+	process.logOperationBegin(ctx, operation)
 
 	var (
 		err      error
@@ -208,7 +213,7 @@ func (process *Process) waitBackground() {
 	err = waitForNotification(process.callbackNumber, hcsNotificationProcessExited, nil)
 	if err != nil {
 		err = makeProcessError(process, operation, err, nil)
-		logrus.WithFields(logrus.Fields{
+		log.G(ctx).WithFields(logrus.Fields{
 			logfields.ContainerID: process.SystemID(),
 			logfields.ProcessID:   process.processID,
 			logrus.ErrorKey:       err,
@@ -223,8 +228,8 @@ func (process *Process) waitBackground() {
 				resultp     *uint16
 				propertiesp *uint16
 			)
-			err = hcsGetProcessPropertiesContext(gcontext.TODO(), process.handle, &propertiesp, &resultp)
-			events := processHcsResult(resultp)
+			err = hcsGetProcessPropertiesContext(ctx, process.handle, &propertiesp, &resultp)
+			events := processHcsResult(ctx, resultp)
 			if err != nil {
 				err = makeProcessError(process, operation, err, events)
 			} else {
@@ -234,7 +239,7 @@ func (process *Process) waitBackground() {
 					err = makeProcessError(process, operation, err, nil)
 				} else {
 					if properties.LastWaitResult != 0 {
-						logrus.WithFields(logrus.Fields{
+						log.G(ctx).WithFields(logrus.Fields{
 							logfields.ContainerID: process.SystemID(),
 							logfields.ProcessID:   process.processID,
 							"wait-result":         properties.LastWaitResult,
@@ -246,7 +251,7 @@ func (process *Process) waitBackground() {
 			}
 		}
 	}
-	logrus.WithFields(logrus.Fields{
+	log.G(ctx).WithFields(logrus.Fields{
 		logfields.ContainerID: process.SystemID(),
 		logfields.ProcessID:   process.processID,
 		"exitCode":            exitCode,
@@ -257,7 +262,7 @@ func (process *Process) waitBackground() {
 		process.waitError = err
 		close(process.waitBlock)
 	})
-	process.logOperationEnd(operation, err)
+	process.logOperationEnd(ctx, operation, err)
 }
 
 // Wait waits for the process to exit. If the process has already exited returns
@@ -268,13 +273,13 @@ func (process *Process) Wait() (err error) {
 }
 
 // ResizeConsole resizes the console of the process.
-func (process *Process) ResizeConsole(width, height uint16) (err error) {
+func (process *Process) ResizeConsole(ctx gcontext.Context, width, height uint16) (err error) {
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
 
 	operation := "hcsshim::Process::ResizeConsole"
-	process.logOperationBegin(operation)
-	defer func() { process.logOperationEnd(operation, err) }()
+	process.logOperationBegin(ctx, operation)
+	defer func() { process.logOperationEnd(ctx, operation, err) }()
 
 	if process.handle == 0 {
 		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
@@ -296,8 +301,8 @@ func (process *Process) ResizeConsole(width, height uint16) (err error) {
 	modifyRequestStr := string(modifyRequestb)
 
 	var resultp *uint16
-	err = hcsModifyProcessContext(gcontext.TODO(), process.handle, modifyRequestStr, &resultp)
-	events := processHcsResult(resultp)
+	err = hcsModifyProcessContext(ctx, process.handle, modifyRequestStr, &resultp)
+	events := processHcsResult(ctx, resultp)
 	if err != nil {
 		return makeProcessError(process, operation, err, events)
 	}
@@ -326,9 +331,10 @@ func (process *Process) StdioLegacy() (_ io.WriteCloser, _ io.ReadCloser, _ io.R
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
 
+	ctx := gcontext.Background()
 	operation := "hcsshim::Process::Stdio"
-	process.logOperationBegin(operation)
-	defer func() { process.logOperationEnd(operation, err) }()
+	process.logOperationBegin(ctx, operation)
+	defer func() { process.logOperationEnd(ctx, operation, err) }()
 
 	if process.handle == 0 {
 		return nil, nil, nil, makeProcessError(process, operation, ErrAlreadyClosed, nil)
@@ -338,8 +344,8 @@ func (process *Process) StdioLegacy() (_ io.WriteCloser, _ io.ReadCloser, _ io.R
 		processInfo hcsProcessInformation
 		resultp     *uint16
 	)
-	err = hcsGetProcessInfoContext(gcontext.TODO(), process.handle, &processInfo, &resultp)
-	events := processHcsResult(resultp)
+	err = hcsGetProcessInfoContext(ctx, process.handle, &processInfo, &resultp)
+	events := processHcsResult(ctx, resultp)
 	if err != nil {
 		return nil, nil, nil, makeProcessError(process, operation, err, events)
 	}
@@ -360,13 +366,13 @@ func (process *Process) Stdio() (stdin io.Writer, stdout, stderr io.Reader) {
 
 // CloseStdin closes the write side of the stdin pipe so that the process is
 // notified on the read side that there is no more data in stdin.
-func (process *Process) CloseStdin() (err error) {
+func (process *Process) CloseStdin(ctx gcontext.Context) (err error) {
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
 
 	operation := "hcsshim::Process::CloseStdin"
-	process.logOperationBegin(operation)
-	defer func() { process.logOperationEnd(operation, err) }()
+	process.logOperationBegin(ctx, operation)
+	defer func() { process.logOperationEnd(ctx, operation, err) }()
 
 	if process.handle == 0 {
 		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
@@ -387,8 +393,8 @@ func (process *Process) CloseStdin() (err error) {
 	modifyRequestStr := string(modifyRequestb)
 
 	var resultp *uint16
-	err = hcsModifyProcessContext(gcontext.TODO(), process.handle, modifyRequestStr, &resultp)
-	events := processHcsResult(resultp)
+	err = hcsModifyProcessContext(ctx, process.handle, modifyRequestStr, &resultp)
+	events := processHcsResult(ctx, resultp)
 	if err != nil {
 		return makeProcessError(process, operation, err, events)
 	}
@@ -405,9 +411,10 @@ func (process *Process) Close() (err error) {
 	process.handleLock.Lock()
 	defer process.handleLock.Unlock()
 
+	ctx := context.TODO()
 	operation := "hcsshim::Process::Close"
-	process.logOperationBegin(operation)
-	defer func() { process.logOperationEnd(operation, err) }()
+	process.logOperationBegin(ctx, operation)
+	defer func() { process.logOperationEnd(ctx, operation, err) }()
 
 	// Don't double free this
 	if process.handle == 0 {
@@ -424,11 +431,11 @@ func (process *Process) Close() (err error) {
 		process.stderr.Close()
 	}
 
-	if err = process.unregisterCallback(); err != nil {
+	if err = process.unregisterCallback(ctx); err != nil {
 		return makeProcessError(process, operation, err, nil)
 	}
 
-	if err = hcsCloseProcessContext(gcontext.TODO(), process.handle); err != nil {
+	if err = hcsCloseProcessContext(ctx, process.handle); err != nil {
 		return makeProcessError(process, operation, err, nil)
 	}
 
@@ -442,7 +449,7 @@ func (process *Process) Close() (err error) {
 	return nil
 }
 
-func (process *Process) registerCallback() error {
+func (process *Process) registerCallback(ctx gcontext.Context) error {
 	context := &notifcationWatcherContext{
 		channels:  newProcessChannels(),
 		systemID:  process.SystemID(),
@@ -456,7 +463,7 @@ func (process *Process) registerCallback() error {
 	callbackMapLock.Unlock()
 
 	var callbackHandle hcsCallback
-	err := hcsRegisterProcessCallbackContext(gcontext.TODO(), process.handle, notificationWatcherCallback, callbackNumber, &callbackHandle)
+	err := hcsRegisterProcessCallbackContext(ctx, process.handle, notificationWatcherCallback, callbackNumber, &callbackHandle)
 	if err != nil {
 		return err
 	}
@@ -466,7 +473,7 @@ func (process *Process) registerCallback() error {
 	return nil
 }
 
-func (process *Process) unregisterCallback() error {
+func (process *Process) unregisterCallback(ctx gcontext.Context) error {
 	callbackNumber := process.callbackNumber
 
 	callbackMapLock.RLock()
@@ -485,7 +492,7 @@ func (process *Process) unregisterCallback() error {
 
 	// hcsUnregisterProcessCallback has its own syncronization
 	// to wait for all callbacks to complete. We must NOT hold the callbackMapLock.
-	err := hcsUnregisterProcessCallbackContext(gcontext.TODO(), handle)
+	err := hcsUnregisterProcessCallbackContext(ctx, handle)
 	if err != nil {
 		return err
 	}

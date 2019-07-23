@@ -1,6 +1,7 @@
 package main
 
 import (
+	gcontext "context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -74,15 +75,15 @@ var vmshimCommand = cli.Command{
 
 		var vm *uvm.UtilityVM
 		if isLCOW {
-			vm, err = uvm.CreateLCOW(opts.(*uvm.OptionsLCOW))
+			vm, err = uvm.CreateLCOW(gcontext.Background(), opts.(*uvm.OptionsLCOW))
 		} else {
-			vm, err = uvm.CreateWCOW(opts.(*uvm.OptionsWCOW))
+			vm, err = uvm.CreateWCOW(gcontext.Background(), opts.(*uvm.OptionsWCOW))
 		}
 		if err != nil {
 			return err
 		}
 		defer vm.Close()
-		if err = vm.Start(); err != nil {
+		if err = vm.Start(gcontext.Background()); err != nil {
 			return err
 		}
 

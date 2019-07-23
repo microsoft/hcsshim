@@ -1,6 +1,8 @@
 package main
 
 import (
+	gcontext "context"
+
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/schema1"
@@ -52,12 +54,12 @@ signal to the init process of the "ubuntu01" container:
 					// This is the Nth container in a Pod
 					hostID = c.HostID
 				}
-				uvm, err := hcs.OpenComputeSystem(hostID)
+				uvm, err := hcs.OpenComputeSystem(gcontext.Background(), hostID)
 				if err != nil {
 					return err
 				}
 				defer uvm.Close()
-				if props, err := uvm.Properties(schema1.PropertyTypeGuestConnection); err == nil &&
+				if props, err := uvm.Properties(gcontext.Background(), schema1.PropertyTypeGuestConnection); err == nil &&
 					props.GuestConnectionInfo.GuestDefinedCapabilities.SignalProcessSupported {
 					signalsSupported = true
 				}
@@ -90,17 +92,17 @@ signal to the init process of the "ubuntu01" container:
 			return err
 		}
 
-		p, err := c.hc.OpenProcess(pid)
+		p, err := c.hc.OpenProcess(gcontext.Background(), pid)
 		if err != nil {
 			return err
 		}
 		defer p.Close()
 
 		if signalsSupported && sigOptions != nil && (c.Spec.Linux != nil || !c.Spec.Process.Terminal) {
-			_, err = p.Signal(sigOptions)
+			_, err = p.Signal(gcontext.Background(), sigOptions)
 		} else {
 			// Legacy signal issue a kill
-			_, err = p.Kill()
+			_, err = p.Kill(gcontext.Background())
 		}
 
 		return err

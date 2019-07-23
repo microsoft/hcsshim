@@ -11,6 +11,7 @@ import (
 	"github.com/Microsoft/go-winio/vhd"
 	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/sirupsen/logrus"
@@ -31,7 +32,7 @@ const (
 // size is non-default, or the cache file does not exist, it uses a utility VM
 // to create target. It is the responsibility of the caller to synchronise
 // simultaneous attempts to create the cache file.
-func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cacheFile string) error {
+func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cacheFile string) error {
 	if lcowUVM == nil {
 		return fmt.Errorf("no uvm")
 	}
@@ -40,7 +41,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		return errors.New("lcow::CreateScratch requires a linux utility VM to operate")
 	}
 
-	logrus.WithFields(logrus.Fields{
+	log.G(ctx).WithFields(logrus.Fields{
 		"dest":   destFile,
 		"sizeGB": sizeGB,
 		"cache":  cacheFile,
@@ -52,7 +53,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 			if err := copyfile.CopyFile(cacheFile, destFile, false); err != nil {
 				return fmt.Errorf("failed to copy cached file '%s' to '%s': %s", cacheFile, destFile, err)
 			}
-			logrus.WithFields(logrus.Fields{
+			log.G(ctx).WithFields(logrus.Fields{
 				"dest":  destFile,
 				"cache": cacheFile,
 			}).Debug("lcow::CreateScratch copied from cache")
@@ -65,18 +66,18 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		return fmt.Errorf("failed to create VHDx %s: %s", destFile, err)
 	}
 
-	controller, lun, err := lcowUVM.AddSCSI(destFile, "", false) // No destination as not formatted
+	controller, lun, err := lcowUVM.AddSCSI(ctx, destFile, "", false) // No destination as not formatted
 	if err != nil {
 		return err
 	}
 	removeSCSI := true
 	defer func() {
 		if removeSCSI {
-			lcowUVM.RemoveSCSI(destFile)
+			lcowUVM.RemoveSCSI(ctx, destFile)
 		}
 	}()
 
-	logrus.WithFields(logrus.Fields{
+	log.G(ctx).WithFields(logrus.Fields{
 		"dest":       destFile,
 		"controller": controller,
 		"lun":        lun,
@@ -84,7 +85,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 
 	// Validate /sys/bus/scsi/devices/C:0:0:L exists as a directory
 	devicePath := fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d/block", controller, lun)
-	testdCtx, cancel := context.WithTimeout(context.TODO(), timeout.TestDRetryLoop)
+	testdCtx, cancel := context.WithTimeout(ctx, timeout.TestDRetryLoop)
 	defer cancel()
 	for {
 		cmd := hcsoci.CommandContext(testdCtx, lcowUVM, "test", "-d", devicePath)
@@ -100,7 +101,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 	cancel()
 
 	// Get the device from under the block subdirectory by doing a simple ls. This will come back as (eg) `sda`
-	lsCtx, cancel := context.WithTimeout(context.TODO(), timeout.ExternalCommandToStart)
+	lsCtx, cancel := context.WithTimeout(ctx, timeout.ExternalCommandToStart)
 	cmd := hcsoci.CommandContext(lsCtx, lcowUVM, "ls", devicePath)
 	lsOutput, err := cmd.Output()
 	cancel()
@@ -108,13 +109,13 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		return fmt.Errorf("failed to `%+v` following hot-add %s to utility VM: %s", cmd.Spec.Args, destFile, err)
 	}
 	device := fmt.Sprintf(`/dev/%s`, bytes.TrimSpace(lsOutput))
-	logrus.WithFields(logrus.Fields{
+	log.G(ctx).WithFields(logrus.Fields{
 		"dest":   destFile,
 		"device": device,
 	}).Debug("lcow::CreateScratch device guest location")
 
 	// Format it ext4
-	mkfsCtx, cancel := context.WithTimeout(context.TODO(), timeout.ExternalCommandToStart)
+	mkfsCtx, cancel := context.WithTimeout(ctx, timeout.ExternalCommandToStart)
 	cmd = hcsoci.CommandContext(mkfsCtx, lcowUVM, "mkfs.ext4", "-q", "-E", "lazy_itable_init=0,nodiscard", "-O", `^has_journal,sparse_super2,^resize_inode`, device)
 	var mkfsStderr bytes.Buffer
 	cmd.Stderr = &mkfsStderr
@@ -126,7 +127,7 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 
 	// Hot-Remove before we copy it
 	removeSCSI = false
-	if err := lcowUVM.RemoveSCSI(destFile); err != nil {
+	if err := lcowUVM.RemoveSCSI(ctx, destFile); err != nil {
 		return fmt.Errorf("failed to hot-remove: %s", err)
 	}
 
@@ -137,6 +138,6 @@ func CreateScratch(lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cache
 		}
 	}
 
-	logrus.WithField("dest", destFile).Debug("lcow::CreateScratch created (non-cache)")
+	log.G(ctx).WithField("dest", destFile).Debug("lcow::CreateScratch created (non-cache)")
 	return nil
 }

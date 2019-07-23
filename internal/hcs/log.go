@@ -1,14 +1,19 @@
 package hcs
 
-import "github.com/sirupsen/logrus"
+import (
+	"context"
 
-func logOperationBegin(ctx logrus.Fields, msg string) {
-	logrus.WithFields(ctx).Debug(msg)
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/sirupsen/logrus"
+)
+
+func logOperationBegin(ctx context.Context, f logrus.Fields, msg string) {
+	log.G(ctx).WithFields(f).Debug(msg)
 }
 
-func logOperationEnd(ctx logrus.Fields, msg string, err error) {
+func logOperationEnd(ctx context.Context, f logrus.Fields, msg string, err error) {
 	// Copy the log and fields first.
-	log := logrus.WithFields(ctx)
+	log := log.G(ctx).WithFields(f)
 	if err == nil {
 		log.Debug(msg)
 	} else {

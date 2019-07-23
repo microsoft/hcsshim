@@ -1,6 +1,7 @@
 package main
 
 import (
+	gcontext "context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -123,7 +124,7 @@ var shimCommand = cli.Command{
 
 			defer func() {
 				if terminateOnFailure {
-					c.hc.Terminate()
+					c.hc.Terminate(gcontext.Background())
 					<-containerExitCh
 				}
 			}()
@@ -180,7 +181,7 @@ var shimCommand = cli.Command{
 			err = stateKey.Set(c.ID, keyInitPid, pid)
 			if err != nil {
 				stdin.Close()
-				cmd.Process.Kill()
+				cmd.Process.Kill(gcontext.Background())
 				cmd.Wait()
 				return err
 			}
@@ -190,7 +191,7 @@ var shimCommand = cli.Command{
 		err = stateKey.Set(c.ID, fmt.Sprintf(keyPidMapFmt, os.Getpid()), pid)
 		if err != nil {
 			stdin.Close()
-			cmd.Process.Kill()
+			cmd.Process.Kill(gcontext.Background())
 			cmd.Wait()
 			return err
 		}
@@ -213,7 +214,7 @@ var shimCommand = cli.Command{
 			// Shutdown the container, waiting 5 minutes before terminating is
 			// forcefully.
 			const shutdownTimeout = time.Minute * 5
-			err := c.hc.Shutdown()
+			err := c.hc.Shutdown(gcontext.Background())
 			if err != nil {
 				select {
 				case <-containerExitCh:
@@ -224,7 +225,7 @@ var shimCommand = cli.Command{
 			}
 
 			if err != nil {
-				c.hc.Terminate()
+				c.hc.Terminate(gcontext.Background())
 			}
 			<-containerExitCh
 			err = containerExitErr

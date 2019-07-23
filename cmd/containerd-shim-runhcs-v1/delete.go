@@ -1,6 +1,7 @@
 package main
 
 import (
+	gcontext "context"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -8,10 +9,12 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/gogo/protobuf/proto"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	"go.opencensus.io/trace"
 )
 
 var deleteCommand = cli.Command{
@@ -22,11 +25,15 @@ This command allows containerd to delete any container resources created, mounte
 The delete command will be executed in the container's bundle as its cwd.
 `,
 	SkipArgReorder: true,
-	Action: func(context *cli.Context) error {
+	Action: func(context *cli.Context) (err error) {
 		// We cant write anything to stdout for this cmd other than the
 		// task.DeleteResponse by protcol. We can write to stderr which will be
 		// warning logged in containerd.
 		logrus.SetOutput(ioutil.Discard)
+
+		ctx, span := trace.StartSpan(gcontext.Background(), "delete")
+		defer span.End()
+		defer func() { oc.SetSpanStatus(span, err) }()
 
 		bundleFlag := context.GlobalString("bundle")
 		if bundleFlag == "" {
@@ -34,9 +41,9 @@ The delete command will be executed in the container's bundle as its cwd.
 		}
 
 		// Attempt to find the hcssystem for this bundle and terminate it.
-		if sys, _ := hcs.OpenComputeSystem(idFlag); sys != nil {
+		if sys, _ := hcs.OpenComputeSystem(ctx, idFlag); sys != nil {
 			defer sys.Close()
-			if err := sys.Terminate(); err != nil {
+			if err := sys.Terminate(ctx); err != nil {
 				fmt.Fprintf(os.Stderr, "failed to terminate '%s': %v", idFlag, err)
 			} else {
 				ch := make(chan error, 1)
@@ -63,8 +70,8 @@ The delete command will be executed in the container's bundle as its cwd.
 		} else {
 			if containerType := s["io.kubernetes.cri.container-type"]; containerType == "container" {
 				if sandboxID := s["io.kubernetes.cri.sandbox-id"]; sandboxID != "" {
-					if sys, _ := hcs.OpenComputeSystem(sandboxID); sys != nil {
-						if err := sys.Terminate(); err != nil {
+					if sys, _ := hcs.OpenComputeSystem(ctx, sandboxID); sys != nil {
+						if err := sys.Terminate(ctx); err != nil {
 							fmt.Fprintf(os.Stderr, "failed to terminate '%s': %v", idFlag, err)
 						} else if err := sys.Wait(); err != nil {
 							fmt.Fprintf(os.Stderr, "failed to wait for '%s' to terminate: %v", idFlag, err)

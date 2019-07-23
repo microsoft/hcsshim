@@ -3,6 +3,7 @@
 package hcsoci
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
@@ -60,7 +62,7 @@ type createOptionsInternal struct {
 // case of an error. This provides support for the debugging option not to
 // release the resources on failure, so that the client can make the necessary
 // call to release resources that have been allocated as part of calling this function.
-func CreateContainer(createOptions *CreateOptions) (_ cow.Container, _ *Resources, err error) {
+func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.Container, _ *Resources, err error) {
 	coi := &createOptionsInternal{
 		CreateOptions: createOptions,
 		actualID:      createOptions.ID,
@@ -90,7 +92,7 @@ func CreateContainer(createOptions *CreateOptions) (_ cow.Container, _ *Resource
 		coi.actualSchemaVersion = schemaversion.DetermineSchemaVersion(coi.SchemaVersion)
 	}
 
-	logrus.WithFields(logrus.Fields{
+	log.G(ctx).WithFields(logrus.Fields{
 		"options": fmt.Sprintf("%+v", createOptions),
 		"schema":  coi.actualSchemaVersion,
 	}).Debug("hcsshim::CreateContainer")
@@ -99,7 +101,7 @@ func CreateContainer(createOptions *CreateOptions) (_ cow.Container, _ *Resource
 	defer func() {
 		if err != nil {
 			if !coi.DoNotReleaseResourcesOnFailure {
-				ReleaseResources(resources, coi.HostingSystem, true)
+				ReleaseResources(ctx, resources, coi.HostingSystem, true)
 			}
 		}
 	}()
@@ -121,7 +123,7 @@ func CreateContainer(createOptions *CreateOptions) (_ cow.Container, _ *Resource
 		if coi.NetworkNamespace != "" {
 			resources.netNS = coi.NetworkNamespace
 		} else {
-			err := createNetworkNamespace(coi, resources)
+			err := createNetworkNamespace(ctx, coi, resources)
 			if err != nil {
 				return nil, resources, err
 			}
@@ -136,18 +138,18 @@ func CreateContainer(createOptions *CreateOptions) (_ cow.Container, _ *Resource
 			// container but not a workload container in a sandbox that inherits
 			// the namespace.
 			if ct == oci.KubernetesContainerTypeNone || ct == oci.KubernetesContainerTypeSandbox {
-				endpoints, err := GetNamespaceEndpoints(coi.actualNetworkNamespace)
+				endpoints, err := GetNamespaceEndpoints(ctx, coi.actualNetworkNamespace)
 				if err != nil {
 					return nil, resources, err
 				}
-				err = coi.HostingSystem.AddNetNS(coi.actualNetworkNamespace)
+				err = coi.HostingSystem.AddNetNS(ctx, coi.actualNetworkNamespace)
 				if err != nil {
 					return nil, resources, err
 				}
-				err = coi.HostingSystem.AddEndpointsToNS(coi.actualNetworkNamespace, endpoints)
+				err = coi.HostingSystem.AddEndpointsToNS(ctx, coi.actualNetworkNamespace, endpoints)
 				if err != nil {
 					// Best effort clean up the NS
-					coi.HostingSystem.RemoveNetNS(coi.actualNetworkNamespace)
+					coi.HostingSystem.RemoveNetNS(ctx, coi.actualNetworkNamespace)
 					return nil, resources, err
 				}
 				resources.addedNetNSToVM = true
@@ -156,32 +158,32 @@ func CreateContainer(createOptions *CreateOptions) (_ cow.Container, _ *Resource
 	}
 
 	var hcsDocument, gcsDocument interface{}
-	logrus.Debug("hcsshim::CreateContainer allocating resources")
+	log.G(ctx).Debug("hcsshim::CreateContainer allocating resources")
 	if coi.Spec.Linux != nil {
 		if schemaversion.IsV10(coi.actualSchemaVersion) {
 			return nil, resources, errors.New("LCOW v1 not supported")
 		}
-		logrus.Debug("hcsshim::CreateContainer allocateLinuxResources")
-		err = allocateLinuxResources(coi, resources)
+		log.G(ctx).Debug("hcsshim::CreateContainer allocateLinuxResources")
+		err = allocateLinuxResources(ctx, coi, resources)
 		if err != nil {
-			logrus.WithError(err).Debug("failed to allocateLinuxResources")
+			log.G(ctx).WithError(err).Debug("failed to allocateLinuxResources")
 			return nil, resources, err
 		}
-		gcsDocument, err = createLinuxContainerDocument(coi, resources.containerRootInUVM)
+		gcsDocument, err = createLinuxContainerDocument(ctx, coi, resources.containerRootInUVM)
 		if err != nil {
-			logrus.WithError(err).Debug("failed createHCSContainerDocument")
+			log.G(ctx).WithError(err).Debug("failed createHCSContainerDocument")
 			return nil, resources, err
 		}
 	} else {
-		err = allocateWindowsResources(coi, resources)
+		err = allocateWindowsResources(ctx, coi, resources)
 		if err != nil {
-			logrus.WithError(err).Debug("failed to allocateWindowsResources")
+			log.G(ctx).WithError(err).Debug("failed to allocateWindowsResources")
 			return nil, resources, err
 		}
-		logrus.Debug("hcsshim::CreateContainer creating container document")
-		v1, v2, err := createWindowsContainerDocument(coi)
+		log.G(ctx).Debug("hcsshim::CreateContainer creating container document")
+		v1, v2, err := createWindowsContainerDocument(ctx, coi)
 		if err != nil {
-			logrus.WithError(err).Debug("failed createHCSContainerDocument")
+			log.G(ctx).WithError(err).Debug("failed createHCSContainerDocument")
 			return nil, resources, err
 		}
 
@@ -205,16 +207,16 @@ func CreateContainer(createOptions *CreateOptions) (_ cow.Container, _ *Resource
 		}
 	}
 
-	logrus.Debug("hcsshim::CreateContainer creating compute system")
+	log.G(ctx).Debug("hcsshim::CreateContainer creating compute system")
 	if gcsDocument != nil {
-		c, err := coi.HostingSystem.CreateContainer(coi.actualID, gcsDocument)
+		c, err := coi.HostingSystem.CreateContainer(ctx, coi.actualID, gcsDocument)
 		if err != nil {
 			return nil, resources, err
 		}
 		return c, resources, nil
 	}
 
-	system, err := hcs.CreateComputeSystem(coi.actualID, hcsDocument)
+	system, err := hcs.CreateComputeSystem(ctx, coi.actualID, hcsDocument)
 	if err != nil {
 		return nil, resources, err
 	}

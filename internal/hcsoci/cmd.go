@@ -188,7 +188,7 @@ func (c *Cmd) Start() error {
 	if c.Context != nil && c.Context.Err() != nil {
 		return c.Context.Err()
 	}
-	p, err := c.Host.CreateProcess(x)
+	p, err := c.Host.CreateProcess(context.TODO(), x)
 	if err != nil {
 		return err
 	}
@@ -212,7 +212,7 @@ func (c *Cmd) Start() error {
 				c.stdinErr.Store(err)
 			}
 			// Notify the process that there is no more input.
-			p.CloseStdin()
+			p.CloseStdin(context.TODO())
 		}()
 	}
 
@@ -234,7 +234,7 @@ func (c *Cmd) Start() error {
 		go func() {
 			select {
 			case <-c.Context.Done():
-				c.Process.Kill()
+				c.Process.Kill(context.TODO())
 			case <-c.allDoneCh:
 			}
 		}()

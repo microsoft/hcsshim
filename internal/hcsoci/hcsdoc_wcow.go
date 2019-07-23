@@ -3,12 +3,14 @@
 package hcsoci
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
 
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/schema1"
@@ -24,8 +26,8 @@ import (
 // createWindowsContainerDocument creates documents for passing to HCS or GCS to create
 // a container, both hosted and process isolated. It creates both v1 and v2
 // container objects, WCOW only. The containers storage should have been mounted already.
-func createWindowsContainerDocument(coi *createOptionsInternal) (*schema1.ContainerConfig, *hcsschema.Container, error) {
-	logrus.Debug("hcsshim: CreateHCSContainerDocument")
+func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInternal) (*schema1.ContainerConfig, *hcsschema.Container, error) {
+	log.G(ctx).Debug("hcsshim: CreateHCSContainerDocument")
 	// TODO: Make this safe if exported so no null pointer dereferences.
 
 	if coi.Spec == nil {
@@ -60,17 +62,17 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (*schema1.Contai
 
 	// CPU Resources
 	cpuNumSet := 0
-	cpuCount := oci.ParseAnnotationsCPUCount(coi.Spec, oci.AnnotationContainerProcessorCount, 0)
+	cpuCount := oci.ParseAnnotationsCPUCount(ctx, coi.Spec, oci.AnnotationContainerProcessorCount, 0)
 	if cpuCount > 0 {
 		cpuNumSet++
 	}
 
-	cpuLimit := oci.ParseAnnotationsCPULimit(coi.Spec, oci.AnnotationContainerProcessorLimit, 0)
+	cpuLimit := oci.ParseAnnotationsCPULimit(ctx, coi.Spec, oci.AnnotationContainerProcessorLimit, 0)
 	if cpuLimit > 0 {
 		cpuNumSet++
 	}
 
-	cpuWeight := oci.ParseAnnotationsCPUWeight(coi.Spec, oci.AnnotationContainerProcessorWeight, 0)
+	cpuWeight := oci.ParseAnnotationsCPUWeight(ctx, coi.Spec, oci.AnnotationContainerProcessorWeight, 0)
 	if cpuWeight > 0 {
 		cpuNumSet++
 	}
@@ -86,11 +88,11 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (*schema1.Contai
 			hostCPUCount = int32(runtime.NumCPU())
 		}
 		if cpuCount > hostCPUCount {
-			log := logrus.WithField(logfields.ContainerID, coi.ID)
+			l := log.G(ctx).WithField(logfields.ContainerID, coi.ID)
 			if coi.HostingSystem != nil {
-				log.Data[logfields.UVMID] = coi.HostingSystem.ID()
+				l.Data[logfields.UVMID] = coi.HostingSystem.ID()
 			}
-			log.WithFields(logrus.Fields{
+			l.WithFields(logrus.Fields{
 				"requested": cpuCount,
 				"assigned":  hostCPUCount,
 			}).Warn("Changing user requested CPUCount to current number of processors")
@@ -106,11 +108,11 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (*schema1.Contai
 			// for V2 that we cannot set Maximum or Weight. We have to silently
 			// ignore here until its fixed. When the bug is fixed fully remove
 			// this if/else and always assign the v2Container.Processor field.
-			log := logrus.WithField(logfields.ContainerID, coi.ID)
+			l := log.G(ctx).WithField(logfields.ContainerID, coi.ID)
 			if coi.HostingSystem != nil {
-				log.Data[logfields.UVMID] = coi.HostingSystem.ID()
+				l.Data[logfields.UVMID] = coi.HostingSystem.ID()
 			}
-			log.WithFields(logrus.Fields{
+			l.WithFields(logrus.Fields{
 				"limit":  cpuLimit,
 				"weight": cpuWeight,
 			}).Warning("silently ignoring Windows Process Container QoS for limit or weight until bug fix")
@@ -124,7 +126,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (*schema1.Contai
 	}
 
 	// Memory Resources
-	memoryMaxInMB := oci.ParseAnnotationsMemory(coi.Spec, oci.AnnotationContainerMemorySizeInMB, 0)
+	memoryMaxInMB := oci.ParseAnnotationsMemory(ctx, coi.Spec, oci.AnnotationContainerMemorySizeInMB, 0)
 	if memoryMaxInMB > 0 {
 		v1.MemoryMaximumInMB = int64(memoryMaxInMB)
 		v2Container.Memory = &hcsschema.Memory{
@@ -133,8 +135,8 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (*schema1.Contai
 	}
 
 	// Storage Resources
-	storageBandwidthMax := oci.ParseAnnotationsStorageBps(coi.Spec, oci.AnnotationContainerStorageQoSBandwidthMaximum, 0)
-	storageIopsMax := oci.ParseAnnotationsStorageIops(coi.Spec, oci.AnnotationContainerStorageQoSIopsMaximum, 0)
+	storageBandwidthMax := oci.ParseAnnotationsStorageBps(ctx, coi.Spec, oci.AnnotationContainerStorageQoSBandwidthMaximum, 0)
+	storageIopsMax := oci.ParseAnnotationsStorageIops(ctx, coi.Spec, oci.AnnotationContainerStorageQoSIopsMaximum, 0)
 	if storageBandwidthMax > 0 || storageIopsMax > 0 {
 		v1.StorageBandwidthMaximum = uint64(storageBandwidthMax)
 		v1.StorageIOPSMaximum = uint64(storageIopsMax)
@@ -204,7 +206,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (*schema1.Contai
 				v1.HvRuntime = &schema1.HvRuntime{ImagePath: coi.Spec.Windows.HyperV.UtilityVMPath}
 			} else {
 				// Client was lazy. Let's locate it from the layer folders instead.
-				uvmImagePath, err := uvmfolder.LocateUVMFolder(coi.Spec.Windows.LayerFolders)
+				uvmImagePath, err := uvmfolder.LocateUVMFolder(ctx, coi.Spec.Windows.LayerFolders)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -214,7 +216,7 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (*schema1.Contai
 			// Hosting system was supplied, so is v2 Xenon.
 			v2Container.Storage.Path = coi.Spec.Root.Path
 			if coi.HostingSystem.OS() == "windows" {
-				layers, err := computeV2Layers(coi.HostingSystem, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1])
+				layers, err := computeV2Layers(ctx, coi.HostingSystem, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1])
 				if err != nil {
 					return nil, nil, err
 				}
@@ -262,11 +264,11 @@ func createWindowsContainerDocument(coi *createOptionsInternal) (*schema1.Contai
 			if coi.HostingSystem == nil {
 				mdv2.HostPath = mount.Source
 			} else {
-				uvmPath, err := coi.HostingSystem.GetVSMBUvmPath(mount.Source)
+				uvmPath, err := coi.HostingSystem.GetVSMBUvmPath(ctx, mount.Source)
 				if err != nil {
 					if err == uvm.ErrNotAttached {
 						// It could also be a scsi mount.
-						uvmPath, err = coi.HostingSystem.GetScsiUvmPath(mount.Source)
+						uvmPath, err = coi.HostingSystem.GetScsiUvmPath(ctx, mount.Source)
 						if err != nil {
 							return nil, nil, err
 						}

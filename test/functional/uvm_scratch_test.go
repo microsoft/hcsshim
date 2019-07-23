@@ -3,13 +3,14 @@
 package functional
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/Microsoft/hcsshim/test/functional/utilities"
+	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 )
 
 func TestScratchCreateLCOW(t *testing.T) {
@@ -17,14 +18,14 @@ func TestScratchCreateLCOW(t *testing.T) {
 	tempDir := testutilities.CreateTempDir(t)
 	defer os.RemoveAll(tempDir)
 
-	firstUVM := testutilities.CreateLCOWUVM(t, "TestCreateLCOWScratch")
+	firstUVM := testutilities.CreateLCOWUVM(context.Background(), t, "TestCreateLCOWScratch")
 	defer firstUVM.Close()
 
 	cacheFile := filepath.Join(tempDir, "cache.vhdx")
 	destOne := filepath.Join(tempDir, "destone.vhdx")
 	destTwo := filepath.Join(tempDir, "desttwo.vhdx")
 
-	if err := lcow.CreateScratch(firstUVM, destOne, lcow.DefaultScratchSizeGB, cacheFile); err != nil {
+	if err := lcow.CreateScratch(context.Background(), firstUVM, destOne, lcow.DefaultScratchSizeGB, cacheFile); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(destOne); err != nil {
@@ -34,16 +35,16 @@ func TestScratchCreateLCOW(t *testing.T) {
 		t.Fatalf("cacheFile wasn't created!")
 	}
 
-	targetUVM := testutilities.CreateLCOWUVM(t, "TestCreateLCOWScratch_target")
+	targetUVM := testutilities.CreateLCOWUVM(context.Background(), t, "TestCreateLCOWScratch_target")
 	defer targetUVM.Close()
 
 	// A non-cached create
-	if err := lcow.CreateScratch(firstUVM, destTwo, lcow.DefaultScratchSizeGB, cacheFile); err != nil {
+	if err := lcow.CreateScratch(context.Background(), firstUVM, destTwo, lcow.DefaultScratchSizeGB, cacheFile); err != nil {
 		t.Fatal(err)
 	}
 
 	// Make sure it can be added (verifies it has access correctly)
-	c, l, err := targetUVM.AddSCSI(destTwo, "", false)
+	c, l, err := targetUVM.AddSCSI(context.Background(), destTwo, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}

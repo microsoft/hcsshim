@@ -5,31 +5,32 @@ package hcsoci
 // Contains functions relating to a WCOW container, as opposed to a utility VM
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/log"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/sirupsen/logrus"
 )
 
-func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) error {
+func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, resources *Resources) error {
 	if coi.Spec == nil || coi.Spec.Windows == nil || coi.Spec.Windows.LayerFolders == nil {
 		return fmt.Errorf("field 'Spec.Windows.Layerfolders' is not populated")
 	}
 
 	scratchFolder := coi.Spec.Windows.LayerFolders[len(coi.Spec.Windows.LayerFolders)-1]
-	logrus.WithField("scratchFolder", scratchFolder).Debug("hcsshim::allocateWindowsResources scratch folder")
+	log.G(ctx).WithField("scratchFolder", scratchFolder).Debug("hcsshim::allocateWindowsResources scratch folder")
 
 	// TODO: Remove this code for auto-creation. Make the caller responsible.
 	// Create the directory for the RW scratch layer if it doesn't exist
 	if _, err := os.Stat(scratchFolder); os.IsNotExist(err) {
-		logrus.WithField("scratchFolder", scratchFolder).Debug("hcsshim::allocateWindowsResources container scratch folder does not exist so creating")
+		log.G(ctx).WithField("scratchFolder", scratchFolder).Debug("hcsshim::allocateWindowsResources container scratch folder does not exist so creating")
 		if err := os.MkdirAll(scratchFolder, 0777); err != nil {
 			return fmt.Errorf("failed to auto-create container scratch folder %s: %s", scratchFolder, err)
 		}
@@ -38,7 +39,7 @@ func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) 
 	// Create sandbox.vhdx if it doesn't exist in the scratch folder. It's called sandbox.vhdx
 	// rather than scratch.vhdx as in the v1 schema, it's hard-coded in HCS.
 	if _, err := os.Stat(filepath.Join(scratchFolder, "sandbox.vhdx")); os.IsNotExist(err) {
-		logrus.WithField("scratchFolder", scratchFolder).Debug("hcsshim::allocateWindowsResources container sandbox.vhdx does not exist so creating")
+		log.G(ctx).WithField("scratchFolder", scratchFolder).Debug("hcsshim::allocateWindowsResources container sandbox.vhdx does not exist so creating")
 		if err := wclayer.CreateScratchLayer(scratchFolder, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1]); err != nil {
 			return fmt.Errorf("failed to CreateSandboxLayer %s", err)
 		}
@@ -49,8 +50,8 @@ func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) 
 	}
 
 	if coi.Spec.Root.Path == "" && (coi.HostingSystem != nil || coi.Spec.Windows.HyperV == nil) {
-		logrus.Debug("hcsshim::allocateWindowsResources mounting storage")
-		mcl, err := MountContainerLayers(coi.Spec.Windows.LayerFolders, resources.containerRootInUVM, coi.HostingSystem)
+		log.G(ctx).Debug("hcsshim::allocateWindowsResources mounting storage")
+		mcl, err := MountContainerLayers(ctx, coi.Spec.Windows.LayerFolders, resources.containerRootInUVM, coi.HostingSystem)
 		if err != nil {
 			return fmt.Errorf("failed to mount container storage: %s", err)
 		}
@@ -87,25 +88,25 @@ func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) 
 					break
 				}
 			}
-			log := logrus.WithField("mount", fmt.Sprintf("%+v", mount))
+			l := log.G(ctx).WithField("mount", fmt.Sprintf("%+v", mount))
 			if mount.Type == "physical-disk" {
-				log.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI physical disk for OCI mount")
-				_, _, err := coi.HostingSystem.AddSCSIPhysicalDisk(mount.Source, uvmPath, readOnly)
+				l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI physical disk for OCI mount")
+				_, _, err := coi.HostingSystem.AddSCSIPhysicalDisk(ctx, mount.Source, uvmPath, readOnly)
 				if err != nil {
 					return fmt.Errorf("adding SCSI physical disk mount %+v: %s", mount, err)
 				}
 				coi.Spec.Mounts[i].Type = ""
 				resources.scsiMounts = append(resources.scsiMounts, mount.Source)
 			} else if mount.Type == "virtual-disk" {
-				log.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI virtual disk for OCI mount")
-				_, _, err := coi.HostingSystem.AddSCSI(mount.Source, uvmPath, readOnly)
+				l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI virtual disk for OCI mount")
+				_, _, err := coi.HostingSystem.AddSCSI(ctx, mount.Source, uvmPath, readOnly)
 				if err != nil {
 					return fmt.Errorf("adding SCSI virtual disk mount %+v: %s", mount, err)
 				}
 				coi.Spec.Mounts[i].Type = ""
 				resources.scsiMounts = append(resources.scsiMounts, mount.Source)
 			} else {
-				log.Debug("hcsshim::allocateWindowsResources Hot-adding VSMB share for OCI mount")
+				l.Debug("hcsshim::allocateWindowsResources Hot-adding VSMB share for OCI mount")
 				options := &hcsschema.VirtualSmbShareOptions{}
 				if readOnly {
 					options.ReadOnly = true
@@ -115,7 +116,7 @@ func allocateWindowsResources(coi *createOptionsInternal, resources *Resources) 
 					break
 				}
 
-				err := coi.HostingSystem.AddVSMB(mount.Source, "", options)
+				err := coi.HostingSystem.AddVSMB(ctx, mount.Source, "", options)
 				if err != nil {
 					return fmt.Errorf("failed to add VSMB share to utility VM for mount %+v: %s", mount, err)
 				}

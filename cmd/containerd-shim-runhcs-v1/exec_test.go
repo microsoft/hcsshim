@@ -64,7 +64,7 @@ func (tse *testShimExec) ResizePty(ctx context.Context, width, height uint32) er
 func (tse *testShimExec) CloseIO(ctx context.Context, stdin bool) error {
 	return nil
 }
-func (tse *testShimExec) Wait(ctx context.Context) *task.StateResponse {
+func (tse *testShimExec) Wait() *task.StateResponse {
 	return tse.Status()
 }
 func (tse *testShimExec) ForceExit(ctx context.Context, status int) {

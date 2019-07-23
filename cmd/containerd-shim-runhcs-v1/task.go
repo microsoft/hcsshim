@@ -69,7 +69,7 @@ type shimTask interface {
 	// of the task is larger than just the init process and on shutdown we need
 	// to wait for the container and potentially UVM before unblocking any event
 	// based listeners or `Wait` based listeners.
-	Wait(ctx context.Context) *task.StateResponse
+	Wait() *task.StateResponse
 	// ExecInHost execs a process in the host UVM. It is not tracked in the
 	// other lifetimes of the task and is used only for diagnostics.
 	//

@@ -9,6 +9,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
@@ -90,21 +91,21 @@ func (uvm *UtilityVM) OS() string {
 	return uvm.operatingSystem
 }
 
-func (uvm *UtilityVM) create(doc interface{}) error {
+func (uvm *UtilityVM) create(ctx context.Context, doc interface{}) error {
 	uvm.exitCh = make(chan struct{})
-	system, err := hcs.CreateComputeSystem(uvm.id, doc)
+	system, err := hcs.CreateComputeSystem(ctx, uvm.id, doc)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if system != nil {
-			system.Terminate()
+			system.Terminate(ctx)
 			system.Wait()
 		}
 	}()
 
 	// Cache the VM ID of the utility VM.
-	properties, err := system.Properties()
+	properties, err := system.Properties(ctx)
 	if err != nil {
 		return err
 	}
@@ -112,7 +113,7 @@ func (uvm *UtilityVM) create(doc interface{}) error {
 	uvm.hcsSystem = system
 	system = nil
 
-	logrus.WithFields(logrus.Fields{
+	log.G(ctx).WithFields(logrus.Fields{
 		logfields.UVMID: uvm.id,
 		"runtime-id":    uvm.runtimeID,
 	}).Debug("created utility VM")
@@ -121,22 +122,23 @@ func (uvm *UtilityVM) create(doc interface{}) error {
 
 // Close terminates and releases resources associated with the utility VM.
 func (uvm *UtilityVM) Close() (err error) {
+	ctx := context.TODO()
 	op := "uvm::Close"
-	log := logrus.WithFields(logrus.Fields{
+	l := log.G(ctx).WithFields(logrus.Fields{
 		logfields.UVMID: uvm.id,
 	})
-	log.Debug(op + " - Begin Operation")
+	l.Debug(op + " - Begin Operation")
 	defer func() {
 		if err != nil {
-			log.Data[logrus.ErrorKey] = err
-			log.Error(op + " - End Operation - Error")
+			l.Data[logrus.ErrorKey] = err
+			l.Error(op + " - End Operation - Error")
 		} else {
-			log.Debug(op + " - End Operation - Success")
+			l.Debug(op + " - End Operation - Success")
 		}
 	}()
 
 	if uvm.hcsSystem != nil {
-		uvm.hcsSystem.Terminate()
+		uvm.hcsSystem.Terminate(ctx)
 		uvm.Wait()
 	}
 	if uvm.gc != nil {
@@ -161,9 +163,9 @@ func (uvm *UtilityVM) Close() (err error) {
 }
 
 // CreateContainer creates a container in the utility VM.
-func (uvm *UtilityVM) CreateContainer(id string, settings interface{}) (cow.Container, error) {
+func (uvm *UtilityVM) CreateContainer(ctx context.Context, id string, settings interface{}) (cow.Container, error) {
 	if uvm.gc != nil {
-		c, err := uvm.gc.CreateContainer(context.TODO(), id, settings)
+		c, err := uvm.gc.CreateContainer(ctx, id, settings)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create container %s: %s", id, err)
 		}
@@ -176,7 +178,7 @@ func (uvm *UtilityVM) CreateContainer(id string, settings interface{}) (cow.Cont
 		ShouldTerminateOnLastHandleClosed: true,
 		HostedSystem:                      settings,
 	}
-	c, err := hcs.CreateComputeSystem(id, &doc)
+	c, err := hcs.CreateComputeSystem(ctx, id, &doc)
 	if err != nil {
 		return nil, err
 	}
@@ -184,11 +186,11 @@ func (uvm *UtilityVM) CreateContainer(id string, settings interface{}) (cow.Cont
 }
 
 // CreateProcess creates a process in the utility VM.
-func (uvm *UtilityVM) CreateProcess(settings interface{}) (cow.Process, error) {
+func (uvm *UtilityVM) CreateProcess(ctx context.Context, settings interface{}) (cow.Process, error) {
 	if uvm.gc != nil {
-		return uvm.gc.CreateProcess(settings)
+		return uvm.gc.CreateProcess(ctx, settings)
 	}
-	return uvm.hcsSystem.CreateProcess(settings)
+	return uvm.hcsSystem.CreateProcess(ctx, settings)
 }
 
 // IsOCI returns false, indicating the parameters to CreateProcess should not
@@ -198,8 +200,8 @@ func (uvm *UtilityVM) IsOCI() bool {
 }
 
 // Terminate requests that the utility VM be terminated.
-func (uvm *UtilityVM) Terminate() error {
-	return uvm.hcsSystem.Terminate()
+func (uvm *UtilityVM) Terminate(ctx context.Context) error {
+	return uvm.hcsSystem.Terminate(ctx)
 }
 
 // ExitError returns an error if the utility VM has terminated unexpectedly.
@@ -216,10 +218,10 @@ func defaultProcessorCount() int32 {
 
 // normalizeProcessorCount sets `uvm.processorCount` to `Min(requested,
 // runtime.NumCPU())`.
-func (uvm *UtilityVM) normalizeProcessorCount(requested int32) {
+func (uvm *UtilityVM) normalizeProcessorCount(ctx context.Context, requested int32) {
 	hostCount := int32(runtime.NumCPU())
 	if requested > hostCount {
-		logrus.WithFields(logrus.Fields{
+		log.G(ctx).WithFields(logrus.Fields{
 			logfields.UVMID: uvm.id,
 			"requested":     requested,
 			"assigned":      hostCount,
@@ -235,10 +237,10 @@ func (uvm *UtilityVM) ProcessorCount() int32 {
 	return uvm.processorCount
 }
 
-func (uvm *UtilityVM) normalizeMemorySize(requested int32) int32 {
+func (uvm *UtilityVM) normalizeMemorySize(ctx context.Context, requested int32) int32 {
 	actual := (requested + 1) &^ 1 // align up to an even number
 	if requested != actual {
-		logrus.WithFields(logrus.Fields{
+		log.G(ctx).WithFields(logrus.Fields{
 			logfields.UVMID: uvm.id,
 			"requested":     requested,
 			"assigned":      actual,

@@ -158,8 +158,8 @@ func (gc *GuestConnection) Close() error {
 }
 
 // CreateProcess creates a process in the container host.
-func (gc *GuestConnection) CreateProcess(settings interface{}) (cow.Process, error) {
-	return gc.exec(context.TODO(), nullContainerID, settings)
+func (gc *GuestConnection) CreateProcess(ctx context.Context, settings interface{}) (cow.Process, error) {
+	return gc.exec(ctx, nullContainerID, settings)
 }
 
 // OS returns the operating system of the container's host, "windows" or "linux".

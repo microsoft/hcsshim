@@ -1,11 +1,13 @@
 package oci
 
 import (
+	"context"
 	"errors"
 	"strconv"
 	"strings"
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -117,7 +119,7 @@ const (
 
 // parseAnnotationsBool searches `a` for `key` and if found verifies that the
 // value is `true` or `false` in any case. If `key` is not found returns `def`.
-func parseAnnotationsBool(a map[string]string, key string, def bool) bool {
+func parseAnnotationsBool(ctx context.Context, a map[string]string, key string, def bool) bool {
 	if v, ok := a[key]; ok {
 		switch strings.ToLower(v) {
 		case "true":
@@ -125,7 +127,7 @@ func parseAnnotationsBool(a map[string]string, key string, def bool) bool {
 		case "false":
 			return false
 		default:
-			logrus.WithFields(logrus.Fields{
+			log.G(ctx).WithFields(logrus.Fields{
 				logfields.OCIAnnotation: key,
 				logfields.Value:         v,
 				logfields.ExpectedType:  logfields.Bool,
@@ -138,8 +140,8 @@ func parseAnnotationsBool(a map[string]string, key string, def bool) bool {
 // ParseAnnotationsCPUCount searches `s.Annotations` for the CPU annotation. If
 // not found searches `s` for the Windows CPU section. If neither are found
 // returns `def`.
-func ParseAnnotationsCPUCount(s *specs.Spec, annotation string, def int32) int32 {
-	if m := parseAnnotationsUint64(s.Annotations, annotation, 0); m != 0 {
+func ParseAnnotationsCPUCount(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
+	if m := parseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
 		return int32(m)
 	}
 	if s.Windows != nil &&
@@ -155,8 +157,8 @@ func ParseAnnotationsCPUCount(s *specs.Spec, annotation string, def int32) int32
 // ParseAnnotationsCPULimit searches `s.Annotations` for the CPU annotation. If
 // not found searches `s` for the Windows CPU section. If neither are found
 // returns `def`.
-func ParseAnnotationsCPULimit(s *specs.Spec, annotation string, def int32) int32 {
-	if m := parseAnnotationsUint64(s.Annotations, annotation, 0); m != 0 {
+func ParseAnnotationsCPULimit(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
+	if m := parseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
 		return int32(m)
 	}
 	if s.Windows != nil &&
@@ -172,8 +174,8 @@ func ParseAnnotationsCPULimit(s *specs.Spec, annotation string, def int32) int32
 // ParseAnnotationsCPUWeight searches `s.Annotations` for the CPU annotation. If
 // not found searches `s` for the Windows CPU section. If neither are found
 // returns `def`.
-func ParseAnnotationsCPUWeight(s *specs.Spec, annotation string, def int32) int32 {
-	if m := parseAnnotationsUint64(s.Annotations, annotation, 0); m != 0 {
+func ParseAnnotationsCPUWeight(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
+	if m := parseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
 		return int32(m)
 	}
 	if s.Windows != nil &&
@@ -189,8 +191,8 @@ func ParseAnnotationsCPUWeight(s *specs.Spec, annotation string, def int32) int3
 // ParseAnnotationsStorageIops searches `s.Annotations` for the `Iops`
 // annotation. If not found searches `s` for the Windows Storage section. If
 // neither are found returns `def`.
-func ParseAnnotationsStorageIops(s *specs.Spec, annotation string, def int32) int32 {
-	if m := parseAnnotationsUint64(s.Annotations, annotation, 0); m != 0 {
+func ParseAnnotationsStorageIops(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
+	if m := parseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
 		return int32(m)
 	}
 	if s.Windows != nil &&
@@ -206,8 +208,8 @@ func ParseAnnotationsStorageIops(s *specs.Spec, annotation string, def int32) in
 // ParseAnnotationsStorageBps searches `s.Annotations` for the `Bps` annotation.
 // If not found searches `s` for the Windows Storage section. If neither are
 // found returns `def`.
-func ParseAnnotationsStorageBps(s *specs.Spec, annotation string, def int32) int32 {
-	if m := parseAnnotationsUint64(s.Annotations, annotation, 0); m != 0 {
+func ParseAnnotationsStorageBps(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
+	if m := parseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
 		return int32(m)
 	}
 	if s.Windows != nil &&
@@ -225,8 +227,8 @@ func ParseAnnotationsStorageBps(s *specs.Spec, annotation string, def int32) int
 // returns `def`.
 //
 // Note: The returned value is in `MB`.
-func ParseAnnotationsMemory(s *specs.Spec, annotation string, def int32) int32 {
-	if m := parseAnnotationsUint64(s.Annotations, annotation, 0); m != 0 {
+func ParseAnnotationsMemory(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
+	if m := parseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
 		return int32(m)
 	}
 	if s.Windows != nil &&
@@ -241,7 +243,7 @@ func ParseAnnotationsMemory(s *specs.Spec, annotation string, def int32) int32 {
 
 // parseAnnotationsPreferredRootFSType searches `a` for `key` and verifies that the
 // value is in the set of allowed values. If `key` is not found returns `def`.
-func parseAnnotationsPreferredRootFSType(a map[string]string, key string, def uvm.PreferredRootFSType) uvm.PreferredRootFSType {
+func parseAnnotationsPreferredRootFSType(ctx context.Context, a map[string]string, key string, def uvm.PreferredRootFSType) uvm.PreferredRootFSType {
 	if v, ok := a[key]; ok {
 		switch v {
 		case "initrd":
@@ -249,7 +251,7 @@ func parseAnnotationsPreferredRootFSType(a map[string]string, key string, def uv
 		case "vhd":
 			return uvm.PreferredRootFSTypeVHD
 		default:
-			logrus.WithFields(logrus.Fields{
+			log.G(ctx).WithFields(logrus.Fields{
 				"annotation": key,
 				"value":      v,
 			}).Warn("annotation value must be 'initrd' or 'vhd'")
@@ -260,14 +262,14 @@ func parseAnnotationsPreferredRootFSType(a map[string]string, key string, def uv
 
 // parseAnnotationsUint32 searches `a` for `key` and if found verifies that the
 // value is a 32 bit unsigned integer. If `key` is not found returns `def`.
-func parseAnnotationsUint32(a map[string]string, key string, def uint32) uint32 {
+func parseAnnotationsUint32(ctx context.Context, a map[string]string, key string, def uint32) uint32 {
 	if v, ok := a[key]; ok {
 		countu, err := strconv.ParseUint(v, 10, 32)
 		if err == nil {
 			v := uint32(countu)
 			return v
 		}
-		logrus.WithFields(logrus.Fields{
+		log.G(ctx).WithFields(logrus.Fields{
 			logfields.OCIAnnotation: key,
 			logfields.Value:         v,
 			logfields.ExpectedType:  logfields.Uint32,
@@ -279,13 +281,13 @@ func parseAnnotationsUint32(a map[string]string, key string, def uint32) uint32 
 
 // parseAnnotationsUint64 searches `a` for `key` and if found verifies that the
 // value is a 64 bit unsigned integer. If `key` is not found returns `def`.
-func parseAnnotationsUint64(a map[string]string, key string, def uint64) uint64 {
+func parseAnnotationsUint64(ctx context.Context, a map[string]string, key string, def uint64) uint64 {
 	if v, ok := a[key]; ok {
 		countu, err := strconv.ParseUint(v, 10, 64)
 		if err == nil {
 			return countu
 		}
-		logrus.WithFields(logrus.Fields{
+		log.G(ctx).WithFields(logrus.Fields{
 			logfields.OCIAnnotation: key,
 			logfields.Value:         v,
 			logfields.ExpectedType:  logfields.Uint64,
@@ -305,23 +307,23 @@ func parseAnnotationsString(a map[string]string, key string, def string) string 
 
 // SpecToUVMCreateOpts parses `s` and returns either `*uvm.OptionsLCOW` or
 // `*uvm.OptionsWCOW`.
-func SpecToUVMCreateOpts(s *specs.Spec, id, owner string) (interface{}, error) {
+func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (interface{}, error) {
 	if !IsIsolated(s) {
 		return nil, errors.New("cannot create UVM opts for non-isolated spec")
 	}
 	if IsLCOW(s) {
 		lopts := uvm.NewDefaultOptionsLCOW(id, owner)
-		lopts.MemorySizeInMB = ParseAnnotationsMemory(s, annotationMemorySizeInMB, lopts.MemorySizeInMB)
-		lopts.AllowOvercommit = parseAnnotationsBool(s.Annotations, annotationAllowOvercommit, lopts.AllowOvercommit)
-		lopts.EnableDeferredCommit = parseAnnotationsBool(s.Annotations, annotationEnableDeferredCommit, lopts.EnableDeferredCommit)
-		lopts.ProcessorCount = ParseAnnotationsCPUCount(s, annotationProcessorCount, lopts.ProcessorCount)
-		lopts.ProcessorLimit = ParseAnnotationsCPULimit(s, annotationProcessorLimit, lopts.ProcessorLimit)
-		lopts.ProcessorWeight = ParseAnnotationsCPUWeight(s, annotationProcessorWeight, lopts.ProcessorWeight)
-		lopts.VPMemDeviceCount = parseAnnotationsUint32(s.Annotations, annotationVPMemCount, lopts.VPMemDeviceCount)
-		lopts.VPMemSizeBytes = parseAnnotationsUint64(s.Annotations, annotationVPMemSize, lopts.VPMemSizeBytes)
-		lopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(s, annotationStorageQoSBandwidthMaximum, lopts.StorageQoSBandwidthMaximum)
-		lopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(s, annotationStorageQoSIopsMaximum, lopts.StorageQoSIopsMaximum)
-		lopts.PreferredRootFSType = parseAnnotationsPreferredRootFSType(s.Annotations, annotationPreferredRootFSType, lopts.PreferredRootFSType)
+		lopts.MemorySizeInMB = ParseAnnotationsMemory(ctx, s, annotationMemorySizeInMB, lopts.MemorySizeInMB)
+		lopts.AllowOvercommit = parseAnnotationsBool(ctx, s.Annotations, annotationAllowOvercommit, lopts.AllowOvercommit)
+		lopts.EnableDeferredCommit = parseAnnotationsBool(ctx, s.Annotations, annotationEnableDeferredCommit, lopts.EnableDeferredCommit)
+		lopts.ProcessorCount = ParseAnnotationsCPUCount(ctx, s, annotationProcessorCount, lopts.ProcessorCount)
+		lopts.ProcessorLimit = ParseAnnotationsCPULimit(ctx, s, annotationProcessorLimit, lopts.ProcessorLimit)
+		lopts.ProcessorWeight = ParseAnnotationsCPUWeight(ctx, s, annotationProcessorWeight, lopts.ProcessorWeight)
+		lopts.VPMemDeviceCount = parseAnnotationsUint32(ctx, s.Annotations, annotationVPMemCount, lopts.VPMemDeviceCount)
+		lopts.VPMemSizeBytes = parseAnnotationsUint64(ctx, s.Annotations, annotationVPMemSize, lopts.VPMemSizeBytes)
+		lopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(ctx, s, annotationStorageQoSBandwidthMaximum, lopts.StorageQoSBandwidthMaximum)
+		lopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotationStorageQoSIopsMaximum, lopts.StorageQoSIopsMaximum)
+		lopts.PreferredRootFSType = parseAnnotationsPreferredRootFSType(ctx, s.Annotations, annotationPreferredRootFSType, lopts.PreferredRootFSType)
 		switch lopts.PreferredRootFSType {
 		case uvm.PreferredRootFSTypeInitRd:
 			lopts.RootFSFile = uvm.InitrdFile
@@ -332,14 +334,14 @@ func SpecToUVMCreateOpts(s *specs.Spec, id, owner string) (interface{}, error) {
 		return lopts, nil
 	} else if IsWCOW(s) {
 		wopts := uvm.NewDefaultOptionsWCOW(id, owner)
-		wopts.MemorySizeInMB = ParseAnnotationsMemory(s, annotationMemorySizeInMB, wopts.MemorySizeInMB)
-		wopts.AllowOvercommit = parseAnnotationsBool(s.Annotations, annotationAllowOvercommit, wopts.AllowOvercommit)
-		wopts.EnableDeferredCommit = parseAnnotationsBool(s.Annotations, annotationEnableDeferredCommit, wopts.EnableDeferredCommit)
-		wopts.ProcessorCount = ParseAnnotationsCPUCount(s, annotationProcessorCount, wopts.ProcessorCount)
-		wopts.ProcessorLimit = ParseAnnotationsCPULimit(s, annotationProcessorLimit, wopts.ProcessorLimit)
-		wopts.ProcessorWeight = ParseAnnotationsCPUWeight(s, annotationProcessorWeight, wopts.ProcessorWeight)
-		wopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(s, annotationStorageQoSBandwidthMaximum, wopts.StorageQoSBandwidthMaximum)
-		wopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(s, annotationStorageQoSIopsMaximum, wopts.StorageQoSIopsMaximum)
+		wopts.MemorySizeInMB = ParseAnnotationsMemory(ctx, s, annotationMemorySizeInMB, wopts.MemorySizeInMB)
+		wopts.AllowOvercommit = parseAnnotationsBool(ctx, s.Annotations, annotationAllowOvercommit, wopts.AllowOvercommit)
+		wopts.EnableDeferredCommit = parseAnnotationsBool(ctx, s.Annotations, annotationEnableDeferredCommit, wopts.EnableDeferredCommit)
+		wopts.ProcessorCount = ParseAnnotationsCPUCount(ctx, s, annotationProcessorCount, wopts.ProcessorCount)
+		wopts.ProcessorLimit = ParseAnnotationsCPULimit(ctx, s, annotationProcessorLimit, wopts.ProcessorLimit)
+		wopts.ProcessorWeight = ParseAnnotationsCPUWeight(ctx, s, annotationProcessorWeight, wopts.ProcessorWeight)
+		wopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(ctx, s, annotationStorageQoSBandwidthMaximum, wopts.StorageQoSBandwidthMaximum)
+		wopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotationStorageQoSIopsMaximum, wopts.StorageQoSIopsMaximum)
 		return wopts, nil
 	}
 	return nil, errors.New("cannot create UVM opts spec is not LCOW or WCOW")

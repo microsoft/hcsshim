@@ -1,24 +1,27 @@
 package hcsoci
 
 import (
+	"context"
+
 	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/sirupsen/logrus"
 )
 
-func createNetworkNamespace(coi *createOptionsInternal, resources *Resources) error {
+func createNetworkNamespace(ctx context.Context, coi *createOptionsInternal, resources *Resources) error {
 	op := "hcsoci::createNetworkNamespace"
-	log := logrus.WithField(logfields.ContainerID, coi.ID)
-	log.Debug(op + " - Begin")
+	l := log.G(ctx).WithField(logfields.ContainerID, coi.ID)
+	l.Debug(op + " - Begin")
 	defer func() {
-		log.Debug(op + " - End")
+		l.Debug(op + " - End")
 	}()
 
 	netID, err := hns.CreateNamespace()
 	if err != nil {
 		return err
 	}
-	logrus.WithFields(logrus.Fields{
+	log.G(ctx).WithFields(logrus.Fields{
 		"netID":               netID,
 		logfields.ContainerID: coi.ID,
 	}).Info("created network namespace for container")
@@ -29,7 +32,7 @@ func createNetworkNamespace(coi *createOptionsInternal, resources *Resources) er
 		if err != nil {
 			return err
 		}
-		logrus.WithFields(logrus.Fields{
+		log.G(ctx).WithFields(logrus.Fields{
 			"netID":      netID,
 			"endpointID": endpointID,
 		}).Info("added network endpoint to namespace")
@@ -39,12 +42,12 @@ func createNetworkNamespace(coi *createOptionsInternal, resources *Resources) er
 }
 
 // GetNamespaceEndpoints gets all endpoints in `netNS`
-func GetNamespaceEndpoints(netNS string) ([]*hns.HNSEndpoint, error) {
+func GetNamespaceEndpoints(ctx context.Context, netNS string) ([]*hns.HNSEndpoint, error) {
 	op := "hcsoci::GetNamespaceEndpoints"
-	log := logrus.WithField("netns-id", netNS)
-	log.Debug(op + " - Begin")
+	l := log.G(ctx).WithField("netns-id", netNS)
+	l.Debug(op + " - Begin")
 	defer func() {
-		log.Debug(op + " - End")
+		l.Debug(op + " - End")
 	}()
 
 	ids, err := hns.GetNamespaceEndpoints(netNS)

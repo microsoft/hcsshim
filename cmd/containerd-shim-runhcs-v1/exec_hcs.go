@@ -195,13 +195,13 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 	}()
 	if he.id == he.tid {
 		// This is the init exec. We need to start the container itself
-		err = he.c.Start()
+		err = he.c.Start(ctx)
 		if err != nil {
 			return err
 		}
 		defer func() {
 			if err != nil {
-				he.c.Terminate()
+				he.c.Terminate(ctx)
 				he.c.Close()
 			}
 		}()
@@ -290,11 +290,11 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 		}
 		var delivered bool
 		if supported && options != nil {
-			delivered, err = he.p.Process.Signal(options)
+			delivered, err = he.p.Process.Signal(ctx, options)
 		} else {
 			// legacy path before signals support OR if WCOW with signals
 			// support needs to issue a terminate.
-			delivered, err = he.p.Process.Kill()
+			delivered, err = he.p.Process.Kill(ctx)
 		}
 		if err != nil {
 			return err
@@ -320,7 +320,7 @@ func (he *hcsExec) ResizePty(ctx context.Context, width, height uint32) error {
 		return errors.Wrapf(errdefs.ErrFailedPrecondition, "exec: '%s' in task: '%s' is not a tty", he.id, he.tid)
 	}
 
-	return he.p.Process.ResizeConsole(uint16(width), uint16(height))
+	return he.p.Process.ResizeConsole(ctx, uint16(width), uint16(height))
 }
 
 func (he *hcsExec) CloseIO(ctx context.Context, stdin bool) error {
@@ -332,7 +332,7 @@ func (he *hcsExec) CloseIO(ctx context.Context, stdin bool) error {
 	return nil
 }
 
-func (he *hcsExec) Wait(ctx context.Context) *task.StateResponse {
+func (he *hcsExec) Wait() *task.StateResponse {
 	<-he.exited
 	return he.Status()
 }
@@ -353,7 +353,7 @@ func (he *hcsExec) ForceExit(ctx context.Context, status int) {
 			he.exitFromCreatedL(ctx, status)
 		case shimExecStateRunning:
 			// Kill the process to unblock `he.waitForExit`
-			he.p.Process.Kill()
+			he.p.Process.Kill(ctx)
 		}
 	}
 }
@@ -507,7 +507,7 @@ func (he *hcsExec) waitForContainerExit() {
 			he.exitFromCreatedL(ctx, 1)
 		case shimExecStateRunning:
 			// Kill the process to unblock `he.waitForExit`.
-			he.p.Process.Kill()
+			he.p.Process.Kill(ctx)
 		}
 		he.sl.Unlock()
 	case <-he.processDone:

@@ -1,6 +1,7 @@
 package uvm
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/gcs"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/mergemaps"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
@@ -42,18 +44,18 @@ func NewDefaultOptionsWCOW(id, owner string) *OptionsWCOW {
 // WCOW Notes:
 //   - The scratch is always attached to SCSI 0:0
 //
-func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
+func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error) {
 	op := "uvm::CreateWCOW"
-	log := logrus.WithFields(logrus.Fields{
+	l := log.G(ctx).WithFields(logrus.Fields{
 		logfields.UVMID: opts.ID,
 	})
-	log.WithField("options", fmt.Sprintf("%+v", opts)).Debug(op + " - Begin Operation")
+	l.WithField("options", fmt.Sprintf("%+v", opts)).Debug(op + " - Begin Operation")
 	defer func() {
 		if err != nil {
-			log.Data[logrus.ErrorKey] = err
-			log.Error(op + " - End Operation - Error")
+			l.Data[logrus.ErrorKey] = err
+			l.Error(op + " - End Operation - Error")
 		} else {
-			log.Debug(op + " - End Operation - Success")
+			l.Debug(op + " - End Operation - Success")
 		}
 	}()
 
@@ -80,15 +82,15 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 
 	// To maintain compatability with Docker we need to automatically downgrade
 	// a user CPU count if the setting is not possible.
-	uvm.normalizeProcessorCount(opts.ProcessorCount)
+	uvm.normalizeProcessorCount(ctx, opts.ProcessorCount)
 
 	// Align the requested memory size.
-	memorySizeInMB := uvm.normalizeMemorySize(opts.MemorySizeInMB)
+	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
 
 	if len(opts.LayerFolders) < 2 {
 		return nil, fmt.Errorf("at least 2 LayerFolders must be supplied")
 	}
-	uvmFolder, err := uvmfolder.LocateUVMFolder(opts.LayerFolders)
+	uvmFolder, err := uvmfolder.LocateUVMFolder(ctx, opts.LayerFolders)
 	if err != nil {
 		return nil, fmt.Errorf("failed to locate utility VM folder from layer folders: %s", err)
 	}
@@ -100,11 +102,11 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 	//       - Update tests that rely on this current behaviour.
 	// Create the RW scratch in the top-most layer folder, creating the folder if it doesn't already exist.
 	scratchFolder := opts.LayerFolders[len(opts.LayerFolders)-1]
-	logrus.WithField("scratchFolder", scratchFolder).Debug("uvm::CreateWCOW scratch folder")
+	log.G(ctx).WithField("scratchFolder", scratchFolder).Debug("uvm::CreateWCOW scratch folder")
 
 	// Create the directory if it doesn't exist
 	if _, err := os.Stat(scratchFolder); os.IsNotExist(err) {
-		logrus.WithField("scratchFolder", scratchFolder).Debug("uvm::CreateWCOW creating folder")
+		log.G(ctx).WithField("scratchFolder", scratchFolder).Debug("uvm::CreateWCOW creating folder")
 		if err := os.MkdirAll(scratchFolder, 0777); err != nil {
 			return nil, fmt.Errorf("failed to create utility VM scratch folder: %s", err)
 		}
@@ -113,7 +115,7 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 	// Create sandbox.vhdx in the scratch folder based on the template, granting the correct permissions to it
 	scratchPath := filepath.Join(scratchFolder, "sandbox.vhdx")
 	if _, err := os.Stat(scratchPath); os.IsNotExist(err) {
-		if err := wcow.CreateUVMScratch(uvmFolder, scratchFolder, uvm.id); err != nil {
+		if err := wcow.CreateUVMScratch(ctx, uvmFolder, scratchFolder, uvm.id); err != nil {
 			return nil, fmt.Errorf("failed to create scratch: %s", err)
 		}
 	}
@@ -203,7 +205,7 @@ func CreateWCOW(opts *OptionsWCOW) (_ *UtilityVM, err error) {
 		return nil, fmt.Errorf("failed to merge additional JSON '%s': %s", opts.AdditionHCSDocumentJSON, err)
 	}
 
-	err = uvm.create(fullDoc)
+	err = uvm.create(ctx, fullDoc)
 	if err != nil {
 		return nil, err
 	}
