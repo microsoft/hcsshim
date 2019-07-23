@@ -1,6 +1,7 @@
 package uvm
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/gcs"
+	"github.com/Microsoft/hcsshim/internal/log"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
@@ -130,18 +132,18 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 }
 
 // CreateLCOW creates an HCS compute system representing a utility VM.
-func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
+func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error) {
 	op := "uvm::CreateLCOW"
-	log := logrus.WithFields(logrus.Fields{
+	l := log.G(ctx).WithFields(logrus.Fields{
 		logfields.UVMID: opts.ID,
 	})
-	log.WithField("options", fmt.Sprintf("%+v", opts)).Debug(op + " - Begin Operation")
+	l.WithField("options", fmt.Sprintf("%+v", opts)).Debug(op + " - Begin Operation")
 	defer func() {
 		if err != nil {
-			log.Data[logrus.ErrorKey] = err
-			log.Error(op + " - End Operation - Error")
+			l.Data[logrus.ErrorKey] = err
+			l.Error(op + " - End Operation - Error")
 		} else {
-			log.Debug(op + " - End Operation - Success")
+			l.Debug(op + " - End Operation - Success")
 		}
 	}()
 
@@ -174,10 +176,10 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 
 	// To maintain compatability with Docker we need to automatically downgrade
 	// a user CPU count if the setting is not possible.
-	uvm.normalizeProcessorCount(opts.ProcessorCount)
+	uvm.normalizeProcessorCount(ctx, opts.ProcessorCount)
 
 	// Align the requested memory size.
-	memorySizeInMB := uvm.normalizeMemorySize(opts.MemorySizeInMB)
+	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
 
 	kernelFullPath := filepath.Join(opts.BootFilesPath, opts.KernelFile)
 	if _, err := os.Stat(kernelFullPath); os.IsNotExist(err) {
@@ -373,7 +375,7 @@ func CreateLCOW(opts *OptionsLCOW) (_ *UtilityVM, err error) {
 		return nil, fmt.Errorf("failed to merge additional JSON '%s': %s", opts.AdditionHCSDocumentJSON, err)
 	}
 
-	err = uvm.create(fullDoc)
+	err = uvm.create(ctx, fullDoc)
 	if err != nil {
 		return nil, err
 	}

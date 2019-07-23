@@ -388,9 +388,9 @@ func (s *service) waitInternal(ctx context.Context, req *task.WaitRequest) (*tas
 		if err != nil {
 			return nil, err
 		}
-		state = e.Wait(ctx)
+		state = e.Wait()
 	} else {
-		state = t.Wait(ctx)
+		state = t.Wait()
 	}
 	return &task.WaitResponse{
 		ExitStatus: state.ExitStatus,

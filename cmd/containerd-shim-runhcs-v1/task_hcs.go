@@ -52,14 +52,14 @@ func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.Creat
 	var parent *uvm.UtilityVM
 	if osversion.Get().Build >= osversion.RS5 && oci.IsIsolated(s) {
 		// Create the UVM parent
-		opts, err := oci.SpecToUVMCreateOpts(s, fmt.Sprintf("%s@vm", req.ID), owner)
+		opts, err := oci.SpecToUVMCreateOpts(ctx, s, fmt.Sprintf("%s@vm", req.ID), owner)
 		if err != nil {
 			return nil, err
 		}
 		switch opts.(type) {
 		case *uvm.OptionsLCOW:
 			lopts := (opts).(*uvm.OptionsLCOW)
-			parent, err = uvm.CreateLCOW(lopts)
+			parent, err = uvm.CreateLCOW(ctx, lopts)
 			if err != nil {
 				return nil, err
 			}
@@ -81,12 +81,12 @@ func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.Creat
 			layers[layersLen-1] = vmPath
 			wopts.LayerFolders = layers
 
-			parent, err = uvm.CreateWCOW(wopts)
+			parent, err = uvm.CreateWCOW(ctx, wopts)
 			if err != nil {
 				return nil, err
 			}
 		}
-		err = parent.Start()
+		err = parent.Start(ctx)
 		if err != nil {
 			parent.Close()
 		}
@@ -141,7 +141,7 @@ func newHcsTask(
 		HostingSystem:    parent,
 		NetworkNamespace: netNS,
 	}
-	system, resources, err := hcsoci.CreateContainer(&opts)
+	system, resources, err := hcsoci.CreateContainer(ctx, &opts)
 	if err != nil {
 		return nil, err
 	}
@@ -426,7 +426,7 @@ func (ht *hcsTask) Pids(ctx context.Context) ([]options.ProcessDetails, error) {
 	pidMap[ht.init.Pid()] = ht.init.ID()
 
 	// Get the guest pids
-	props, err := ht.c.Properties(schema1.PropertyTypeProcessList)
+	props, err := ht.c.Properties(ctx, schema1.PropertyTypeProcessList)
 	if err != nil {
 		return nil, err
 	}
@@ -450,9 +450,9 @@ func (ht *hcsTask) Pids(ctx context.Context) ([]options.ProcessDetails, error) {
 	return pairs, nil
 }
 
-func (ht *hcsTask) Wait(ctx context.Context) *task.StateResponse {
+func (ht *hcsTask) Wait() *task.StateResponse {
 	<-ht.closed
-	return ht.init.Wait(ctx)
+	return ht.init.Wait()
 }
 
 func (ht *hcsTask) waitInitExit() {
@@ -461,7 +461,7 @@ func (ht *hcsTask) waitInitExit() {
 	span.AddAttributes(trace.StringAttribute("tid", ht.id))
 
 	// Wait for it to exit on its own
-	ht.init.Wait(context.Background())
+	ht.init.Wait()
 
 	// Close the host and event the exit
 	ht.close(ctx)
@@ -520,7 +520,7 @@ func (ht *hcsTask) close(ctx context.Context) {
 				werr = ht.c.Wait()
 				close(ch)
 			}()
-			err := ht.c.Shutdown()
+			err := ht.c.Shutdown(ctx)
 			if err != nil {
 				log.G(ctx).WithError(err).Error("failed to shutdown container")
 			} else {
@@ -538,7 +538,7 @@ func (ht *hcsTask) close(ctx context.Context) {
 			}
 
 			if err != nil {
-				err = ht.c.Terminate()
+				err = ht.c.Terminate(ctx)
 				if err != nil {
 					log.G(ctx).WithError(err).Error("failed to terminate container")
 				} else {
@@ -557,7 +557,7 @@ func (ht *hcsTask) close(ctx context.Context) {
 			}
 
 			// Release any resources associated with the container.
-			if err := hcsoci.ReleaseResources(ht.cr, ht.host, true); err != nil {
+			if err := hcsoci.ReleaseResources(ctx, ht.cr, ht.host, true); err != nil {
 				log.G(ctx).WithError(err).Error("failed to release container resources")
 			}
 

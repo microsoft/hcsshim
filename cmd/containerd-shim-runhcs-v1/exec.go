@@ -72,7 +72,7 @@ type shimExec interface {
 	// A call to `Wait` is valid in any `State()`. Note that if this exec
 	// process is already in the `State() == shimExecStateExited` state, `Wait`
 	// MUST return immediately with the original exit state.
-	Wait(ctx context.Context) *task.StateResponse
+	Wait() *task.StateResponse
 	// ForceExit forcibly terminates the exec, sets the exit status to `status`,
 	// and unblocks all waiters.
 	//

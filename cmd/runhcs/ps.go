@@ -1,6 +1,7 @@
 package main
 
 import (
+	gcontext "context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -30,7 +31,7 @@ var psCommand = cli.Command{
 		}
 		defer container.Close()
 
-		props, err := container.hc.Properties(schema1.PropertyTypeProcessList)
+		props, err := container.hc.Properties(gcontext.Background(), schema1.PropertyTypeProcessList)
 		if err != nil {
 			return err
 		}

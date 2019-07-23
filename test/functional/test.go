@@ -1,6 +1,7 @@
 package functional
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"strconv"
@@ -33,15 +34,15 @@ func init() {
 
 }
 
-func CreateContainerTestWrapper(options *hcsoci.CreateOptions) (cow.Container, *hcsoci.Resources, error) {
+func CreateContainerTestWrapper(ctx context.Context, options *hcsoci.CreateOptions) (cow.Container, *hcsoci.Resources, error) {
 	if pauseDurationOnCreateContainerFailure != 0 {
 		options.DoNotReleaseResourcesOnFailure = true
 	}
-	s, r, err := hcsoci.CreateContainer(options)
+	s, r, err := hcsoci.CreateContainer(ctx, options)
 	if err != nil {
 		logrus.Warnf("Test is pausing for %s for debugging CreateContainer failure", pauseDurationOnCreateContainerFailure)
 		time.Sleep(pauseDurationOnCreateContainerFailure)
-		hcsoci.ReleaseResources(r, options.HostingSystem, true)
+		hcsoci.ReleaseResources(ctx, r, options.HostingSystem, true)
 	}
 	return s, r, err
 }

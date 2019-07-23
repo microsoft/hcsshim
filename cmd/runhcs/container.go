@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -390,7 +391,7 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 
 	// Start a VM if necessary.
 	if newvm {
-		opts, err := oci.SpecToUVMCreateOpts(cfg.Spec, vmID(c.ID), cfg.Owner)
+		opts, err := oci.SpecToUVMCreateOpts(context.Background(), cfg.Spec, vmID(c.ID), cfg.Owner)
 		if err != nil {
 			return nil, err
 		}
@@ -433,7 +434,7 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		if err != nil {
 			return nil, err
 		}
-		c.hc, err = hcs.OpenComputeSystem(cfg.ID)
+		c.hc, err = hcs.OpenComputeSystem(context.Background(), cfg.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -478,7 +479,7 @@ func (c *container) unmountInHost(vm *uvm.UtilityVM, all bool) error {
 	if err != nil {
 		return err
 	}
-	err = hcsoci.ReleaseResources(resources, vm, all)
+	err = hcsoci.ReleaseResources(context.Background(), resources, vm, all)
 	if err != nil {
 		stateKey.Set(c.ID, keyResources, resources)
 		return err
@@ -536,15 +537,15 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 		logfields.ContainerID: c.ID,
 		logfields.UVMID:       vmid,
 	}).Info("creating container in UVM")
-	hc, resources, err := hcsoci.CreateContainer(opts)
+	hc, resources, err := hcsoci.CreateContainer(context.Background(), opts)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if err != nil {
-			hc.Terminate()
+			hc.Terminate(context.Background())
 			hc.Wait()
-			hcsoci.ReleaseResources(resources, vm, true)
+			hcsoci.ReleaseResources(context.Background(), resources, vm, true)
 		}
 	}()
 
@@ -600,7 +601,7 @@ func (c *container) Close() error {
 }
 
 func (c *container) Exec() error {
-	err := c.hc.Start()
+	err := c.hc.Start(context.Background())
 	if err != nil {
 		return err
 	}
@@ -647,7 +648,7 @@ func getContainer(id string, notStopped bool) (*container, error) {
 		return nil, errContainerStopped
 	}
 
-	hc, err := hcs.OpenComputeSystem(c.ID)
+	hc, err := hcs.OpenComputeSystem(context.Background(), c.ID)
 	if err == nil {
 		c.hc = hc
 	} else if !hcs.IsNotExist(err) {
@@ -669,9 +670,9 @@ func (c *container) Remove() error {
 	// Follow kata's example and delay tearing down the VM until the owning
 	// container is removed.
 	if c.IsHost {
-		vm, err := hcs.OpenComputeSystem(vmID(c.ID))
+		vm, err := hcs.OpenComputeSystem(context.Background(), vmID(c.ID))
 		if err == nil {
-			vm.Terminate()
+			vm.Terminate(context.Background())
 			vm.Wait()
 		}
 	}
@@ -682,7 +683,7 @@ func (c *container) Kill() error {
 	if c.hc == nil {
 		return nil
 	}
-	c.hc.Terminate()
+	c.hc.Terminate(context.Background())
 	return c.hc.Wait()
 }
 
@@ -690,7 +691,7 @@ func (c *container) Status() (containerStatus, error) {
 	if c.hc == nil || c.ShimPid == 0 {
 		return containerStopped, nil
 	}
-	props, err := c.hc.Properties()
+	props, err := c.hc.Properties(context.Background())
 	if err != nil {
 		if !strings.Contains(err.Error(), "operation is not valid in the current state") {
 			return "", err

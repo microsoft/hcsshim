@@ -186,7 +186,7 @@ func (wpse *wcowPodSandboxExec) CloseIO(ctx context.Context, stdin bool) error {
 	return nil
 }
 
-func (wpse *wcowPodSandboxExec) Wait(ctx context.Context) *task.StateResponse {
+func (wpse *wcowPodSandboxExec) Wait() *task.StateResponse {
 	<-wpse.exited
 	return wpse.Status()
 }

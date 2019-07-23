@@ -10,6 +10,7 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/sirupsen/logrus"
 )
@@ -124,7 +125,7 @@ func (p *Process) Close() error {
 }
 
 // CloseStdin causes the process to read EOF on its stdin stream.
-func (p *Process) CloseStdin() (err error) {
+func (p *Process) CloseStdin(_ context.Context) (err error) {
 	p.stdinCloseWriteOnce.Do(func() {
 		p.stdinCloseWriteErr = p.stdin.CloseWrite()
 	})
@@ -146,8 +147,8 @@ func (p *Process) ExitCode() (_ int, err error) {
 // Kill sends a forceful terminate signal to the process and returns whether the
 // signal was delivered. The process might not be terminated by the time this
 // returns.
-func (p *Process) Kill() (bool, error) {
-	return p.Signal(nil)
+func (p *Process) Kill(ctx context.Context) (bool, error) {
+	return p.Signal(ctx, nil)
 }
 
 // Pid returns the process ID.
@@ -157,7 +158,7 @@ func (p *Process) Pid() int {
 
 // ResizeConsole requests that the pty associated with the process resize its
 // window.
-func (p *Process) ResizeConsole(width, height uint16) (err error) {
+func (p *Process) ResizeConsole(ctx context.Context, width, height uint16) (err error) {
 	req := containerResizeConsole{
 		requestBase: makeRequest(p.cid),
 		ProcessID:   p.id,
@@ -165,11 +166,11 @@ func (p *Process) ResizeConsole(width, height uint16) (err error) {
 		Width:       width,
 	}
 	var resp responseBase
-	return p.gc.brdg.RPC(context.TODO(), rpcResizeConsole, &req, &resp, true)
+	return p.gc.brdg.RPC(ctx, rpcResizeConsole, &req, &resp, true)
 }
 
 // Signal sends a signal to the process, returning whether it was delivered.
-func (p *Process) Signal(options interface{}) (bool, error) {
+func (p *Process) Signal(ctx context.Context, options interface{}) (bool, error) {
 	req := containerSignalProcess{
 		requestBase: makeRequest(p.cid),
 		ProcessID:   p.id,
@@ -178,13 +179,13 @@ func (p *Process) Signal(options interface{}) (bool, error) {
 	var resp responseBase
 	// FUTURE: SIGKILL is idempotent and can safely be cancelled, but this interface
 	//		   does currently make it easy to determine what signal is being sent.
-	err := p.gc.brdg.RPC(context.TODO(), rpcSignalProcess, &req, &resp, false)
+	err := p.gc.brdg.RPC(ctx, rpcSignalProcess, &req, &resp, false)
 	if err != nil {
 		if uint32(resp.Result) != hrNotFound {
 			return false, err
 		}
 		if !p.waitCall.Done() {
-			logrus.WithFields(logrus.Fields{
+			log.G(ctx).WithFields(logrus.Fields{
 				logrus.ErrorKey:       err,
 				logfields.ContainerID: p.cid,
 				logfields.ProcessID:   p.id,

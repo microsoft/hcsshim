@@ -3,12 +3,13 @@
 package hcsoci
 
 import (
+	"context"
 	"encoding/json"
 
+	"github.com/Microsoft/hcsshim/internal/log"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/sirupsen/logrus"
 )
 
 func createLCOWSpec(coi *createOptionsInternal) (*specs.Spec, error) {
@@ -58,13 +59,13 @@ type linuxHostedSystem struct {
 	OciSpecification *specs.Spec
 }
 
-func createLinuxContainerDocument(coi *createOptionsInternal, guestRoot string) (*linuxHostedSystem, error) {
+func createLinuxContainerDocument(ctx context.Context, coi *createOptionsInternal, guestRoot string) (*linuxHostedSystem, error) {
 	spec, err := createLCOWSpec(coi)
 	if err != nil {
 		return nil, err
 	}
 
-	logrus.WithField("guestRoot", guestRoot).Debug("hcsshim::createLinuxContainerDoc")
+	log.G(ctx).WithField("guestRoot", guestRoot).Debug("hcsshim::createLinuxContainerDoc")
 	return &linuxHostedSystem{
 		SchemaVersion:    schemaversion.SchemaV21(),
 		OciBundlePath:    guestRoot,

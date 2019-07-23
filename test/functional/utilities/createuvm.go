@@ -1,6 +1,7 @@
 package testutilities
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -9,22 +10,22 @@ import (
 
 // CreateWCOWUVM creates a WCOW utility VM with all default options. Returns the
 // UtilityVM object; folder used as its scratch
-func CreateWCOWUVM(t *testing.T, id, image string) (*uvm.UtilityVM, []string, string) {
-	return CreateWCOWUVMFromOptsWithImage(t, uvm.NewDefaultOptionsWCOW(id, ""), image)
+func CreateWCOWUVM(ctx context.Context, t *testing.T, id, image string) (*uvm.UtilityVM, []string, string) {
+	return CreateWCOWUVMFromOptsWithImage(ctx, t, uvm.NewDefaultOptionsWCOW(id, ""), image)
 
 }
 
 // CreateWCOWUVMFromOpts creates a WCOW utility VM with the passed opts.
-func CreateWCOWUVMFromOpts(t *testing.T, opts *uvm.OptionsWCOW) *uvm.UtilityVM {
+func CreateWCOWUVMFromOpts(ctx context.Context, t *testing.T, opts *uvm.OptionsWCOW) *uvm.UtilityVM {
 	if opts == nil || len(opts.LayerFolders) < 2 {
 		t.Fatalf("opts must bet set with LayerFolders")
 	}
 
-	uvm, err := uvm.CreateWCOW(opts)
+	uvm, err := uvm.CreateWCOW(ctx, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := uvm.Start(); err != nil {
+	if err := uvm.Start(ctx); err != nil {
 		uvm.Close()
 		t.Fatal(err)
 	}
@@ -34,7 +35,7 @@ func CreateWCOWUVMFromOpts(t *testing.T, opts *uvm.OptionsWCOW) *uvm.UtilityVM {
 // CreateWCOWUVMFromOptsWithImage creates a WCOW utility VM with the passed opts
 // builds the LayerFolders based on `image`. Returns the UtilityVM object;
 // folder used as its scratch
-func CreateWCOWUVMFromOptsWithImage(t *testing.T, opts *uvm.OptionsWCOW, image string) (*uvm.UtilityVM, []string, string) {
+func CreateWCOWUVMFromOptsWithImage(ctx context.Context, t *testing.T, opts *uvm.OptionsWCOW, image string) (*uvm.UtilityVM, []string, string) {
 	if opts == nil {
 		t.Fatal("opts must be set")
 	}
@@ -50,25 +51,25 @@ func CreateWCOWUVMFromOptsWithImage(t *testing.T, opts *uvm.OptionsWCOW, image s
 	opts.LayerFolders = append(opts.LayerFolders, uvmLayers...)
 	opts.LayerFolders = append(opts.LayerFolders, scratchDir)
 
-	return CreateWCOWUVMFromOpts(t, opts), uvmLayers, scratchDir
+	return CreateWCOWUVMFromOpts(ctx, t, opts), uvmLayers, scratchDir
 }
 
 // CreateLCOWUVM with all default options.
-func CreateLCOWUVM(t *testing.T, id string) *uvm.UtilityVM {
-	return CreateLCOWUVMFromOpts(t, uvm.NewDefaultOptionsLCOW(id, ""))
+func CreateLCOWUVM(ctx context.Context, t *testing.T, id string) *uvm.UtilityVM {
+	return CreateLCOWUVMFromOpts(ctx, t, uvm.NewDefaultOptionsLCOW(id, ""))
 }
 
 // CreateLCOWUVMFromOpts creates an LCOW utility VM with the specified options.
-func CreateLCOWUVMFromOpts(t *testing.T, opts *uvm.OptionsLCOW) *uvm.UtilityVM {
+func CreateLCOWUVMFromOpts(ctx context.Context, t *testing.T, opts *uvm.OptionsLCOW) *uvm.UtilityVM {
 	if opts == nil {
 		t.Fatal("opts must be set")
 	}
 
-	uvm, err := uvm.CreateLCOW(opts)
+	uvm, err := uvm.CreateLCOW(ctx, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := uvm.Start(); err != nil {
+	if err := uvm.Start(ctx); err != nil {
 		uvm.Close()
 		t.Fatal(err)
 	}

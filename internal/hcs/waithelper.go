@@ -1,13 +1,14 @@
 package hcs
 
 import (
+	"context"
 	"time"
 
 	"github.com/sirupsen/logrus"
 )
 
-func processAsyncHcsResult(err error, resultp *uint16, callbackNumber uintptr, expectedNotification hcsNotification, timeout *time.Duration) ([]ErrorEvent, error) {
-	events := processHcsResult(resultp)
+func processAsyncHcsResult(ctx context.Context, err error, resultp *uint16, callbackNumber uintptr, expectedNotification hcsNotification, timeout *time.Duration) ([]ErrorEvent, error) {
+	events := processHcsResult(ctx, resultp)
 	if IsPending(err) {
 		return nil, waitForNotification(callbackNumber, expectedNotification, timeout)
 	}

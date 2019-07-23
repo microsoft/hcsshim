@@ -287,7 +287,7 @@ func Test_newWcowPodSandboxExec_Wait_Created(t *testing.T) {
 
 	// Issue the wait in the created state
 	go func() {
-		waitExit <- wpse.Wait(context.TODO())
+		waitExit <- wpse.Wait()
 	}()
 
 	now := time.Now()
@@ -303,7 +303,7 @@ func Test_newWcowPodSandboxExec_Wait_Created(t *testing.T) {
 	}
 
 	// Verify the wait in the exited state doesnt block.
-	verifyWcowPodSandboxExecStatus(t, false, containerd_v1_types.StatusStopped, wpse.Wait(context.TODO()))
+	verifyWcowPodSandboxExecStatus(t, false, containerd_v1_types.StatusStopped, wpse.Wait())
 }
 
 func Test_newWcowPodSandboxExec_Wait_Started(t *testing.T) {
@@ -314,7 +314,7 @@ func Test_newWcowPodSandboxExec_Wait_Started(t *testing.T) {
 
 	// Issue the wait in the created state
 	go func() {
-		waitExit <- wpse.Wait(context.TODO())
+		waitExit <- wpse.Wait()
 	}()
 
 	err := wpse.Start(context.TODO())
@@ -335,5 +335,5 @@ func Test_newWcowPodSandboxExec_Wait_Started(t *testing.T) {
 	}
 
 	// Verify the wait in the exited state doesnt block.
-	verifyWcowPodSandboxExecStatus(t, true, containerd_v1_types.StatusStopped, wpse.Wait(context.TODO()))
+	verifyWcowPodSandboxExecStatus(t, true, containerd_v1_types.StatusStopped, wpse.Wait())
 }

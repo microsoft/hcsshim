@@ -76,8 +76,8 @@ func (tst *testShimTask) Pids(ctx context.Context) ([]options.ProcessDetails, er
 	return pairs, nil
 }
 
-func (tst *testShimTask) Wait(ctx context.Context) *task.StateResponse {
-	return tst.exec.Wait(ctx)
+func (tst *testShimTask) Wait() *task.StateResponse {
+	return tst.exec.Wait()
 }
 
 func (tst *testShimTask) ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (int, error) {

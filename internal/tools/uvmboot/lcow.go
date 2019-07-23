@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"io"
 	"os"
 	"strings"
@@ -133,7 +134,7 @@ var lcowCommand = cli.Command{
 				options.ConsolePipe = c.String(consolePipeArgName)
 			}
 
-			if err := runLCOW(options, c); err != nil {
+			if err := runLCOW(context.TODO(), options, c); err != nil {
 				return err
 			}
 			return nil
@@ -143,14 +144,14 @@ var lcowCommand = cli.Command{
 	},
 }
 
-func runLCOW(options *uvm.OptionsLCOW, c *cli.Context) error {
-	uvm, err := uvm.CreateLCOW(options)
+func runLCOW(ctx context.Context, options *uvm.OptionsLCOW, c *cli.Context) error {
+	uvm, err := uvm.CreateLCOW(ctx, options)
 	if err != nil {
 		return err
 	}
 	defer uvm.Close()
 
-	if err := uvm.Start(); err != nil {
+	if err := uvm.Start(ctx); err != nil {
 		return err
 	}
 
@@ -158,7 +159,7 @@ func runLCOW(options *uvm.OptionsLCOW, c *cli.Context) error {
 		if err := execViaGcs(uvm, c); err != nil {
 			return err
 		}
-		uvm.Terminate()
+		uvm.Terminate(ctx)
 		uvm.Wait()
 		return uvm.ExitError()
 	}

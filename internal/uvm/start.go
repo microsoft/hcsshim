@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/gcs"
+	"github.com/Microsoft/hcsshim/internal/log"
 
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/schema1"
@@ -136,20 +137,20 @@ func processOutput(ctx context.Context, l net.Listener, doneChan chan struct{}, 
 }
 
 // Start synchronously starts the utility VM.
-func (uvm *UtilityVM) Start() (err error) {
-	ctx, cancel := context.WithTimeout(context.TODO(), 2*time.Minute)
+func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	op := "uvm::Start"
-	log := logrus.WithFields(logrus.Fields{
+	l := log.G(ctx).WithFields(logrus.Fields{
 		logfields.UVMID: uvm.id,
 	})
-	log.Debug(op + " - Begin Operation")
+	l.Debug(op + " - Begin Operation")
 	defer func() {
 		if err != nil {
-			log.Data[logrus.ErrorKey] = err
-			log.Error(op + " - End Operation - Error")
+			l.Data[logrus.ErrorKey] = err
+			l.Error(op + " - End Operation - Error")
 		} else {
-			log.Debug(op + " - End Operation - Success")
+			l.Debug(op + " - End Operation - Success")
 		}
 	}()
 
@@ -159,13 +160,13 @@ func (uvm *UtilityVM) Start() (err error) {
 		uvm.outputProcessingCancel = cancel
 		uvm.outputListener = nil
 	}
-	err = uvm.hcsSystem.Start()
+	err = uvm.hcsSystem.Start(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if err != nil {
-			uvm.hcsSystem.Terminate()
+			uvm.hcsSystem.Terminate(ctx)
 			uvm.hcsSystem.Wait()
 		}
 	}()
@@ -189,7 +190,7 @@ func (uvm *UtilityVM) Start() (err error) {
 		// Start the GCS protocol.
 		gcc := &gcs.GuestConnectionConfig{
 			Conn:     conn,
-			Log:      logrus.WithField(logfields.UVMID, uvm.id),
+			Log:      logrus.WithField(logfields.UVMID, uvm.id), // TODO: JTERRY75 - should this be log.G(ctx)
 			IoListen: gcs.HvsockIoListen(uvm.runtimeID),
 		}
 		uvm.gc, err = gcc.Connect(ctx)
@@ -200,7 +201,7 @@ func (uvm *UtilityVM) Start() (err error) {
 		uvm.protocol = uvm.gc.Protocol()
 	} else {
 		// Cache the guest connection properties.
-		properties, err := uvm.hcsSystem.Properties(schema1.PropertyTypeGuestConnection)
+		properties, err := uvm.hcsSystem.Properties(ctx, schema1.PropertyTypeGuestConnection)
 		if err != nil {
 			return err
 		}

@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/schema1"
 	"github.com/sirupsen/logrus"
@@ -72,8 +73,8 @@ func (c *Container) Close() error {
 }
 
 // CreateProcess creates a process in the container.
-func (c *Container) CreateProcess(config interface{}) (cow.Process, error) {
-	return c.gc.exec(context.TODO(), c.id, config)
+func (c *Container) CreateProcess(ctx context.Context, config interface{}) (cow.Process, error) {
+	return c.gc.exec(ctx, c.id, config)
 }
 
 // ID returns the container's ID.
@@ -82,23 +83,23 @@ func (c *Container) ID() string {
 }
 
 // Modify sends a modify request to the container.
-func (c *Container) Modify(config interface{}) (err error) {
+func (c *Container) Modify(ctx context.Context, config interface{}) (err error) {
 	req := containerModifySettings{
 		requestBase: makeRequest(c.id),
 		Request:     config,
 	}
 	var resp responseBase
-	return c.gc.brdg.RPC(context.TODO(), rpcModifySettings, &req, &resp, false)
+	return c.gc.brdg.RPC(ctx, rpcModifySettings, &req, &resp, false)
 }
 
 // Properties requests properties of the container.
-func (c *Container) Properties(types ...schema1.PropertyType) (_ *schema1.ContainerProperties, err error) {
+func (c *Container) Properties(ctx context.Context, types ...schema1.PropertyType) (_ *schema1.ContainerProperties, err error) {
 	req := containerGetProperties{
 		requestBase: makeRequest(c.id),
 		Query:       containerPropertiesQuery{PropertyTypes: types},
 	}
 	var resp containerGetPropertiesResponse
-	err = c.gc.brdg.RPC(context.TODO(), rpcGetProperties, &req, &resp, true)
+	err = c.gc.brdg.RPC(ctx, rpcGetProperties, &req, &resp, true)
 	if err != nil {
 		return nil, err
 	}
@@ -106,10 +107,10 @@ func (c *Container) Properties(types ...schema1.PropertyType) (_ *schema1.Contai
 }
 
 // Start starts the container.
-func (c *Container) Start() error {
+func (c *Container) Start(ctx context.Context) error {
 	req := makeRequest(c.id)
 	var resp responseBase
-	return c.gc.brdg.RPC(context.TODO(), rpcStart, &req, &resp, false)
+	return c.gc.brdg.RPC(ctx, rpcStart, &req, &resp, false)
 }
 
 func (c *Container) shutdown(ctx context.Context, proc rpcProc) error {
@@ -123,7 +124,7 @@ func (c *Container) shutdown(ctx context.Context, proc rpcProc) error {
 		select {
 		case <-c.notifyCh:
 		default:
-			logrus.WithFields(logrus.Fields{
+			log.G(ctx).WithFields(logrus.Fields{
 				logrus.ErrorKey:       err,
 				logfields.ContainerID: c.id,
 			}).Warn("ignoring missing container")
@@ -135,15 +136,15 @@ func (c *Container) shutdown(ctx context.Context, proc rpcProc) error {
 // Shutdown sends a graceful shutdown request to the container. The container
 // might not be terminated by the time the request completes (and might never
 // terminate).
-func (c *Container) Shutdown() error {
-	return c.shutdown(context.TODO(), rpcShutdownGraceful)
+func (c *Container) Shutdown(ctx context.Context) error {
+	return c.shutdown(ctx, rpcShutdownGraceful)
 }
 
 // Terminate sends a forceful terminate request to the container. The container
 // might not be terminated by the time the request completes (and might never
 // terminate).
-func (c *Container) Terminate() error {
-	return c.shutdown(context.TODO(), rpcShutdownForced)
+func (c *Container) Terminate(ctx context.Context) error {
+	return c.shutdown(ctx, rpcShutdownForced)
 }
 
 // Wait waits for the container to terminate (or Close to be called, or the

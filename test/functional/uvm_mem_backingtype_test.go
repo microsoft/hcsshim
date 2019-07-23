@@ -3,6 +3,7 @@
 package functional
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -14,12 +15,12 @@ import (
 )
 
 func runMemStartLCOWTest(t *testing.T, opts *uvm.OptionsLCOW) {
-	u := testutilities.CreateLCOWUVMFromOpts(t, opts)
+	u := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, opts)
 	u.Close()
 }
 
 func runMemStartWCOWTest(t *testing.T, opts *uvm.OptionsWCOW) {
-	u, _, scratchDir := testutilities.CreateWCOWUVMFromOptsWithImage(t, opts, "microsoft/nanoserver")
+	u, _, scratchDir := testutilities.CreateWCOWUVMFromOptsWithImage(context.Background(), t, opts, "microsoft/nanoserver")
 	defer os.RemoveAll(scratchDir)
 	u.Close()
 }
@@ -65,12 +66,12 @@ func TestMemBackingTypeLCOW(t *testing.T) {
 
 func runBenchMemStartTest(b *testing.B, opts *uvm.OptionsLCOW) {
 	// Cant use testutilities here because its `testing.B` not `testing.T`
-	u, err := uvm.CreateLCOW(opts)
+	u, err := uvm.CreateLCOW(context.Background(), opts)
 	if err != nil {
 		b.Fatal(err)
 	}
 	defer u.Close()
-	if err := u.Start(); err != nil {
+	if err := u.Start(context.Background()); err != nil {
 		b.Fatal(err)
 	}
 }

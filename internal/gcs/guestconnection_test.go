@@ -178,7 +178,7 @@ func TestGcsWaitContainer(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer c.Close()
-	err = c.Terminate()
+	err = c.Terminate(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestGcsWaitContainerBridgeTerminated(t *testing.T) {
 func TestGcsCreateProcess(t *testing.T) {
 	gc := connectGcs(context.Background(), t)
 	defer gc.Close()
-	p, err := gc.CreateProcess(&baseProcessParams{
+	p, err := gc.CreateProcess(context.Background(), &baseProcessParams{
 		CreateStdInPipe:  true,
 		CreateStdOutPipe: true,
 	})
@@ -220,7 +220,7 @@ func TestGcsCreateProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = p.CloseStdin()
+	err = p.CloseStdin(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestGcsWaitProcessBridgeTerminated(t *testing.T) {
 	defer cancel()
 	gc := connectGcs(ctx, t)
 	defer gc.Close()
-	p, err := gc.CreateProcess(nil)
+	p, err := gc.CreateProcess(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
