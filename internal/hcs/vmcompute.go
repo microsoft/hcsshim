@@ -98,7 +98,11 @@ func hcsStartComputeSystemContext(ctx gcontext.Context, computeSystem hcsSystem,
 func hcsShutdownComputeSystemContext(ctx gcontext.Context, computeSystem hcsSystem, options string, result **uint16) (hr error) {
 	ctx, span := trace.StartSpan(ctx, "HcsShutdownComputeSystem")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, hr) }()
+	defer func() {
+		if hr != ErrVmcomputeOperationPending {
+			oc.SetSpanStatus(span, hr)
+		}
+	}()
 	span.AddAttributes(trace.StringAttribute("options", options))
 
 	return execute(ctx, timeout.SyscallWatcher, func() error {
