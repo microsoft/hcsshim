@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"io"
 	"strings"
 	"sync"
 	"time"
@@ -181,17 +180,6 @@ func (he *hcsExec) Status() *task.StateResponse {
 		ExitStatus: he.exitStatus,
 		ExitedAt:   he.exitedAt,
 	}
-}
-
-func copyAndLog(w io.Writer, r io.Reader, e *logrus.Entry, msg string) {
-	n, err := io.Copy(w, r)
-	lvl := logrus.DebugLevel
-	e = e.WithField("bytes", n)
-	if err != nil {
-		lvl = logrus.ErrorLevel
-		e = e.WithError(err)
-	}
-	e.Log(lvl, msg)
 }
 
 func (he *hcsExec) Start(ctx context.Context) (err error) {
