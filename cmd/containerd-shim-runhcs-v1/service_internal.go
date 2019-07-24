@@ -18,7 +18,6 @@ import (
 	google_protobuf1 "github.com/gogo/protobuf/types"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 var empty = &google_protobuf1.Empty{}
@@ -79,10 +78,6 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 			return nil, err
 		}
 		shimOpts = v.(*runhcsopts.Options)
-	}
-
-	if shimOpts != nil && shimOpts.Debug {
-		logrus.SetLevel(logrus.DebugLevel)
 	}
 
 	var spec specs.Spec

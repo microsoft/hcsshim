@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,10 +13,14 @@ import (
 	"unsafe"
 
 	"github.com/Microsoft/go-winio"
+	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/ttrpc"
+	"github.com/containerd/typeurl"
+	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -56,6 +62,17 @@ var serveCommand = cli.Command{
 		// shim `MUST` not use any std handles. The shim can log any errors to
 		// the upstream caller by listening for a log connection and streaming
 		// the events.
+
+		// containerd passes the shim options protobuf via stdin.
+		shimOpts, err := readOptions(os.Stdin)
+		if err != nil {
+			return errors.Wrap(err, "failed to read shim options from stdin")
+		} else if shimOpts != nil {
+			// We received a valid shim options struct. Use it here.
+			if shimOpts.Debug {
+				logrus.SetLevel(logrus.DebugLevel)
+			}
+		}
 
 		os.Stdin.Close()
 
@@ -160,6 +177,27 @@ var serveCommand = cli.Command{
 		<-serrs
 		return nil
 	},
+}
+
+// readOptions reads in bytes from the reader and converts it to a shim options
+// struct. If no data is available from the reader, returns (nil, nil).
+func readOptions(r io.Reader) (*runhcsopts.Options, error) {
+	d, err := ioutil.ReadAll(r)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read input")
+	}
+	if len(d) > 0 {
+		var a types.Any
+		if err := proto.Unmarshal(d, &a); err != nil {
+			return nil, errors.Wrap(err, "failed unmarshaling into Any")
+		}
+		v, err := typeurl.UnmarshalAny(&a)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed unmarshaling by typeurl")
+		}
+		return v.(*runhcsopts.Options), nil
+	}
+	return nil, nil
 }
 
 // createEvent creates a Windows event ACL'd to builtin administrator

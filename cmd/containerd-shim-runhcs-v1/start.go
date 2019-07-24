@@ -144,6 +144,7 @@ The start command can either start a new shim or return an address to an existin
 				Args:   args,
 				Env:    os.Environ(),
 				Dir:    cwd,
+				Stdin:  os.Stdin,
 				Stdout: w,
 				Stderr: f,
 			}
