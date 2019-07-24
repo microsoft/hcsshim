@@ -1,6 +1,10 @@
 package hcn
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/Microsoft/go-winio/pkg/guid"
+)
 
 // EndpointPolicyType are the potential Policies that apply to Endpoints.
 type EndpointPolicyType string
@@ -135,6 +139,26 @@ type SDNRoutePolicySetting struct {
 	NeedEncap         bool   `json:",omitempty"`
 }
 
+// A ProxyType is a type of proxy used by the L4 proxy policy.
+type ProxyType int
+
+const (
+	// ProxyTypeVFP specifies a Virtual Filtering Protocol proxy.
+	ProxyTypeVFP ProxyType = iota
+	// ProxyTypeWFP specifies a Windows Filtering Platform proxy.
+	ProxyTypeWFP
+)
+
+// FiveTuple is nested in L4ProxyPolicySetting for WFP support.
+type FiveTuple struct {
+	Protocols       string `json:",omitempty"`
+	LocalAddresses  string `json:",omitempty"`
+	RemoteAddresses string `json:",omitempty"`
+	LocalPorts      string `json:",omitempty"`
+	RemotePorts     string `json:",omitempty"`
+	Priority        uint16 `json:",omitempty"`
+}
+
 // L4ProxyPolicySetting sets Layer-4 Proxy on an endpoint.
 type L4ProxyPolicySetting struct {
 	IP            string   `json:",omitempty"`
@@ -143,6 +167,13 @@ type L4ProxyPolicySetting struct {
 	ExceptionList []string `json:",omitempty"`
 	Destination   string   `json:","`
 	OutboundNat   bool     `json:",omitempty"`
+
+	// For the WFP proxy
+	FilterTuple          FiveTuple `json:",omitempty"`
+	ProxyType            ProxyType `json:",omitempty"`
+	ID                   guid.GUID `json:",omitempty"`
+	UserSID              string    `json:",omitempty"`
+	NetworkCompartmentID uint32    `json:",omitempty"`
 }
 
 // PortnameEndpointPolicySetting sets the port name for an endpoint.
