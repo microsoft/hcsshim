@@ -133,6 +133,12 @@ func getNetwork(networkGuid guid.GUID, query string) (*HostComputeNetwork, error
 	}
 	// Convert output to HostComputeNetwork
 	var outputNetwork HostComputeNetwork
+
+	// If HNS sets the network type to NAT (i.e. '0' in HNS.Schema.Network.NetworkMode),
+	// the value will be omitted from the JSON blob. We therefore need to initialize NAT here before
+	// unmarshaling the JSON blob.
+	outputNetwork.Type = NAT
+
 	if err := json.Unmarshal([]byte(properties), &outputNetwork); err != nil {
 		return nil, err
 	}
@@ -197,6 +203,12 @@ func createNetwork(settings string) (*HostComputeNetwork, error) {
 	}
 	// Convert output to HostComputeNetwork
 	var outputNetwork HostComputeNetwork
+
+	// If HNS sets the network type to NAT (i.e. '0' in HNS.Schema.Network.NetworkMode),
+	// the value will be omitted from the JSON blob. We therefore need to initialize NAT here before
+	// unmarshaling the JSON blob.
+	outputNetwork.Type = NAT
+
 	if err := json.Unmarshal([]byte(properties), &outputNetwork); err != nil {
 		return nil, err
 	}
@@ -241,6 +253,12 @@ func modifyNetwork(networkId string, settings string) (*HostComputeNetwork, erro
 	}
 	// Convert output to HostComputeNetwork
 	var outputNetwork HostComputeNetwork
+
+	// If HNS sets the network type to NAT (i.e. '0' in HNS.Schema.Network.NetworkMode),
+	// the value will be omitted from the JSON blob. We therefore need to initialize NAT here before
+	// unmarshaling the JSON blob.
+	outputNetwork.Type = NAT
+
 	if err := json.Unmarshal([]byte(properties), &outputNetwork); err != nil {
 		return nil, err
 	}
