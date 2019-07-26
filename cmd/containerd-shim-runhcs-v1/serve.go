@@ -63,15 +63,67 @@ var serveCommand = cli.Command{
 		// the upstream caller by listening for a log connection and streaming
 		// the events.
 
+		var lerrs chan error
+
+		// Default values for shim options.
+		shimOpts := &runhcsopts.Options{
+			Debug:     false,
+			DebugType: runhcsopts.Options_NPIPE,
+		}
+
 		// containerd passes the shim options protobuf via stdin.
-		shimOpts, err := readOptions(os.Stdin)
+		newShimOpts, err := readOptions(os.Stdin)
 		if err != nil {
 			return errors.Wrap(err, "failed to read shim options from stdin")
-		} else if shimOpts != nil {
-			// We received a valid shim options struct. Use it here.
-			if shimOpts.Debug {
-				logrus.SetLevel(logrus.DebugLevel)
+		} else if newShimOpts != nil {
+			// We received a valid shim options struct.
+			shimOpts = newShimOpts
+		}
+
+		if shimOpts.Debug {
+			logrus.SetLevel(logrus.DebugLevel)
+		}
+
+		switch shimOpts.DebugType {
+		case runhcsopts.Options_NPIPE:
+			logrus.SetFormatter(&logrus.TextFormatter{
+				TimestampFormat: log.RFC3339NanoFixed,
+				FullTimestamp:   true,
+			})
+			// Setup the log listener
+			//
+			// TODO: JTERRY75 we need this to be the reconnect log listener or
+			// switch to events
+			// TODO: JTERRY75 switch containerd to use the protected path.
+			//const logAddrFmt = "\\\\.\\pipe\\ProtectedPrefix\\Administrators\\containerd-shim-%s-%s-log"
+			const logAddrFmt = "\\\\.\\pipe\\containerd-shim-%s-%s-log"
+			logl, err := winio.ListenPipe(fmt.Sprintf(logAddrFmt, namespaceFlag, idFlag), nil)
+			if err != nil {
+				return err
 			}
+			defer logl.Close()
+
+			lerrs = make(chan error, 1)
+			defer close(lerrs)
+			go func() {
+				// Listen for log connections in the background
+				a, err := logl.Accept()
+				if err != nil {
+					lerrs <- err
+					return
+				}
+				// Switch the logrus output to here. Note: we wont get this
+				// connection until the return from `shim start` so we still
+				// havent transitioned the error model yet.
+				logrus.SetOutput(a)
+			}()
+			// Logrus output will be redirected in the goroutine below that
+			// handles the pipe connection.
+		case runhcsopts.Options_FILE:
+			panic("file log output mode is not supported")
+		case runhcsopts.Options_ETW:
+			logrus.SetFormatter(nopFormatter{})
+			logrus.SetOutput(ioutil.Discard)
 		}
 
 		os.Stdin.Close()
@@ -84,39 +136,6 @@ var serveCommand = cli.Command{
 		if !strings.HasPrefix(socket, `\\.\pipe`) {
 			return errors.New("socket is required to be pipe address")
 		}
-
-		logrus.SetFormatter(&logrus.TextFormatter{
-			TimestampFormat: log.RFC3339NanoFixed,
-			FullTimestamp:   true,
-		})
-
-		// Setup the log listener
-		//
-		// TODO: JTERRY75 we need this to be the reconnect log listener or
-		// switch to events
-		// TODO: JTERRY75 switch containerd to use the protected path.
-		//const logAddrFmt = "\\\\.\\pipe\\ProtectedPrefix\\Administrators\\containerd-shim-%s-%s-log"
-		const logAddrFmt = "\\\\.\\pipe\\containerd-shim-%s-%s-log"
-		logl, err := winio.ListenPipe(fmt.Sprintf(logAddrFmt, namespaceFlag, idFlag), nil)
-		if err != nil {
-			return err
-		}
-		defer logl.Close()
-
-		lerrs := make(chan error, 1)
-		defer close(lerrs)
-		go func() {
-			// Listen for log connections in the background
-			a, err := logl.Accept()
-			if err != nil {
-				lerrs <- err
-				return
-			}
-			// Switch the logrus output to here. Note: we wont get this
-			// connection until the return from `shim start` so we still
-			// havent transitioned the error model yet.
-			logrus.SetOutput(a)
-		}()
 
 		// Setup the ttrpc server
 		svc := &service{
