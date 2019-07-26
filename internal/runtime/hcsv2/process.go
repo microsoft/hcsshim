@@ -114,15 +114,31 @@ func (p *Process) Kill(ctx context.Context, signal syscall.Signal) (err error) {
 		trace.Int64Attribute("pid", int64(p.pid)),
 		trace.Int64Attribute("signal", int64(signal)))
 
-	if err := syscall.Kill(int(p.pid), signal); err != nil {
-		if err == syscall.ESRCH {
-			return gcserr.NewHresultError(gcserr.HrErrNotFound)
-		}
-		return err
-	}
+	// When a container contains more than one process we can fail to unblock
+	// the wait if we only signal the init process. Instead we issue a `runc
+	// kill --all` which then signals all processes in the container.
 	if p.init {
-		p.c.setExitType(signal)
+		if err := p.c.Kill(ctx, signal); err != nil {
+			// Since we use the container logic to kill here it returns a
+			// `gcserr.HrVmcomputeSystemNotFound` but we need a
+			// `gcserr.HrErrNotFound` since we are operating on a process
+			// handle.
+			hr, e2 := gcserr.GetHresult(err)
+			if e2 == nil && hr == gcserr.HrVmcomputeSystemNotFound {
+				return gcserr.NewHresultError(gcserr.HrErrNotFound)
+			}
+			// Unknown runc error, return as is.
+			return err
+		}
+	} else {
+		if err := syscall.Kill(int(p.pid), signal); err != nil {
+			if err == syscall.ESRCH {
+				return gcserr.NewHresultError(gcserr.HrErrNotFound)
+			}
+			return err
+		}
 	}
+
 	return nil
 }
 
