@@ -182,18 +182,28 @@ func TestEndpointNamespaceAttachDetach(t *testing.T) {
 	}
 }
 
-// setupL4ProxyPolicyTest creates an endpoint inside a new overlay network and
-// returns the request to be sent.
-func setupL4ProxyPolicyTest(t *testing.T) (*HostComputeNetwork, *HostComputeEndpoint, PolicyEndpointRequest) {
+func TestAddL4ProxyPolicyOnEndpoint(t *testing.T) {
 	network, err := CreateTestOverlayNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer func() {
+		err = network.Delete()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	endpoint, err := HcnCreateTestEndpoint(network)
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer func() {
+		err = endpoint.Delete()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	policySetting := L4ProxyPolicySetting{
 		Port: "80",
@@ -219,39 +229,10 @@ func setupL4ProxyPolicyTest(t *testing.T) (*HostComputeNetwork, *HostComputeEndp
 		Policies: []EndpointPolicy{endpointPolicy},
 	}
 
-	return network, endpoint, request
-}
-
-// tearDownL4ProxyPolicyTest deletes the endpoint and the network that were
-// created for the test.
-func tearDownL4ProxyPolicyTest(t *testing.T, network *HostComputeNetwork, endpoint *HostComputeEndpoint) {
-	err := endpoint.Delete()
+	err = endpoint.ApplyPolicy(RequestTypeAdd, request)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	err = network.Delete()
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestAddL4ProxyPolicyOnEndpoint(t *testing.T) {
-	network, endpoint, request := setupL4ProxyPolicyTest(t)
-	err := endpoint.ApplyPolicy(RequestTypeAdd, request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tearDownL4ProxyPolicyTest(t, network, endpoint)
-}
-
-func TestUpdateL4ProxyPolicyOnEndpoint(t *testing.T) {
-	network, endpoint, request := setupL4ProxyPolicyTest(t)
-	err := endpoint.ApplyPolicy(RequestTypeUpdate, request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tearDownL4ProxyPolicyTest(t, network, endpoint)
 }
 
 func TestApplyPolicyOnEndpoint(t *testing.T) {
