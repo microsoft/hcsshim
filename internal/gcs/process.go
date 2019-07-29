@@ -12,7 +12,9 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
 
 const (
@@ -49,7 +51,7 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 	}
 
 	req := containerExecuteProcess{
-		requestBase: makeRequest(cid),
+		requestBase: makeRequest(ctx, cid),
 		Settings: executeProcessSettings{
 			ProcessParameters: anyInString{params},
 		},
@@ -102,9 +104,10 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 		return nil, err
 	}
 	p.id = resp.ProcessID
+	log.G(ctx).WithField("pid", p.id).Debug("created process pid")
 	// Start a wait message.
 	waitReq := containerWaitForProcess{
-		requestBase: makeRequest(cid),
+		requestBase: makeRequest(ctx, cid),
 		ProcessID:   p.id,
 		TimeoutInMs: 0xffffffff,
 	}
@@ -112,20 +115,43 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait on process, leaking process: %s", err)
 	}
+	go p.waitBackground()
 	return p, nil
 }
 
 // Close releases resources associated with the process and closes the
 // associated standard IO streams.
 func (p *Process) Close() error {
-	p.stdin.Close()
-	p.stdout.Close()
-	p.stderr.Close()
+	ctx, span := trace.StartSpan(context.Background(), "gcs::Process::Close")
+	defer span.End()
+	span.AddAttributes(
+		trace.StringAttribute("cid", p.cid),
+		trace.Int64Attribute("pid", int64(p.id)))
+
+	err := p.stdin.Close()
+	if err != nil {
+		log.G(ctx).WithError(err).Warn("close stdin failed")
+	}
+	err = p.stdout.Close()
+	if err != nil {
+		log.G(ctx).WithError(err).Warn("close stdout failed")
+	}
+	err = p.stderr.Close()
+	if err != nil {
+		log.G(ctx).WithError(err).Warn("close stderr failed")
+	}
 	return nil
 }
 
 // CloseStdin causes the process to read EOF on its stdin stream.
-func (p *Process) CloseStdin(_ context.Context) (err error) {
+func (p *Process) CloseStdin(ctx context.Context) (err error) {
+	ctx, span := trace.StartSpan(ctx, "gcs::Process::CloseStdin")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("cid", p.cid),
+		trace.Int64Attribute("pid", int64(p.id)))
+
 	p.stdinCloseWriteOnce.Do(func() {
 		p.stdinCloseWriteErr = p.stdin.CloseWrite()
 	})
@@ -147,7 +173,14 @@ func (p *Process) ExitCode() (_ int, err error) {
 // Kill sends a forceful terminate signal to the process and returns whether the
 // signal was delivered. The process might not be terminated by the time this
 // returns.
-func (p *Process) Kill(ctx context.Context) (bool, error) {
+func (p *Process) Kill(ctx context.Context) (_ bool, err error) {
+	ctx, span := trace.StartSpan(ctx, "gcs::Process::Kill")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("cid", p.cid),
+		trace.Int64Attribute("pid", int64(p.id)))
+
 	return p.Signal(ctx, nil)
 }
 
@@ -159,8 +192,15 @@ func (p *Process) Pid() int {
 // ResizeConsole requests that the pty associated with the process resize its
 // window.
 func (p *Process) ResizeConsole(ctx context.Context, width, height uint16) (err error) {
+	ctx, span := trace.StartSpan(ctx, "gcs::Process::ResizeConsole")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("cid", p.cid),
+		trace.Int64Attribute("pid", int64(p.id)))
+
 	req := containerResizeConsole{
-		requestBase: makeRequest(p.cid),
+		requestBase: makeRequest(ctx, p.cid),
 		ProcessID:   p.id,
 		Height:      height,
 		Width:       width,
@@ -170,16 +210,23 @@ func (p *Process) ResizeConsole(ctx context.Context, width, height uint16) (err 
 }
 
 // Signal sends a signal to the process, returning whether it was delivered.
-func (p *Process) Signal(ctx context.Context, options interface{}) (bool, error) {
+func (p *Process) Signal(ctx context.Context, options interface{}) (_ bool, err error) {
+	ctx, span := trace.StartSpan(ctx, "gcs::Process::Signal")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("cid", p.cid),
+		trace.Int64Attribute("pid", int64(p.id)))
+
 	req := containerSignalProcess{
-		requestBase: makeRequest(p.cid),
+		requestBase: makeRequest(ctx, p.cid),
 		ProcessID:   p.id,
 		Options:     options,
 	}
 	var resp responseBase
 	// FUTURE: SIGKILL is idempotent and can safely be cancelled, but this interface
 	//		   does currently make it easy to determine what signal is being sent.
-	err := p.gc.brdg.RPC(ctx, rpcSignalProcess, &req, &resp, false)
+	err = p.gc.brdg.RPC(ctx, rpcSignalProcess, &req, &resp, false)
 	if err != nil {
 		if uint32(resp.Result) != hrNotFound {
 			return false, err
@@ -203,7 +250,23 @@ func (p *Process) Stdio() (stdin io.Writer, stdout, stderr io.Reader) {
 }
 
 // Wait waits for the process (or guest connection) to terminate.
-func (p *Process) Wait() (err error) {
+func (p *Process) Wait() error {
 	p.waitCall.Wait()
 	return p.waitCall.Err()
+}
+
+func (p *Process) waitBackground() {
+	ctx, span := trace.StartSpan(context.Background(), "gcs::Process::waitBackground")
+	defer span.End()
+	span.AddAttributes(
+		trace.StringAttribute("cid", p.cid),
+		trace.Int64Attribute("pid", int64(p.id)))
+
+	p.waitCall.Wait()
+	ec, err := p.ExitCode()
+	if err != nil {
+		log.G(ctx).WithError(err).Error("failed wait")
+	}
+	log.G(ctx).WithField("exitCode", ec).Debug("process exited")
+	oc.SetSpanStatus(span, err)
 }

@@ -2,6 +2,8 @@ package gcs
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,7 +14,10 @@ import (
 	"time"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
+	"go.opencensus.io/trace/tracestate"
 )
 
 const pipePortFmt = `\\.\pipe\gctest-port-%d`
@@ -247,5 +252,96 @@ func TestGcsWaitProcessBridgeTerminated(t *testing.T) {
 	err = p.Wait()
 	if err == nil || !strings.Contains(err.Error(), "bridge closed") {
 		t.Fatal("unexpected: ", err)
+	}
+}
+
+func Test_makeRequestNoSpan(t *testing.T) {
+	r := makeRequest(context.Background(), t.Name())
+
+	if r.ContainerID != t.Name() {
+		t.Fatalf("expected ContainerID: %q, got: %q", t.Name(), r.ContainerID)
+	}
+	var empty guid.GUID
+	if r.ActivityID != empty {
+		t.Fatalf("expected ActivityID empty, got: %q", r.ActivityID.String())
+	}
+	if r.OpenCensusSpanContext != nil {
+		t.Fatal("expected nil span context")
+	}
+}
+
+func Test_makeRequestWithSpan(t *testing.T) {
+	ctx, span := trace.StartSpan(context.Background(), t.Name())
+	defer span.End()
+	r := makeRequest(ctx, t.Name())
+
+	if r.ContainerID != t.Name() {
+		t.Fatalf("expected ContainerID: %q, got: %q", t.Name(), r.ContainerID)
+	}
+	var empty guid.GUID
+	if r.ActivityID != empty {
+		t.Fatalf("expected ActivityID empty, got: %q", r.ActivityID.String())
+	}
+	if r.OpenCensusSpanContext == nil {
+		t.Fatal("expected non-nil span context")
+	}
+	sc := span.SpanContext()
+	encodedTraceID := hex.EncodeToString(sc.TraceID[:])
+	if r.OpenCensusSpanContext.TraceID != encodedTraceID {
+		t.Fatalf("expected encoded TraceID: %q, got: %q", encodedTraceID, r.OpenCensusSpanContext.TraceID)
+	}
+	encodedSpanID := hex.EncodeToString(sc.SpanID[:])
+	if r.OpenCensusSpanContext.SpanID != encodedSpanID {
+		t.Fatalf("expected encoded SpanID: %q, got: %q", encodedSpanID, r.OpenCensusSpanContext.SpanID)
+	}
+	encodedTraceOptions := uint32(sc.TraceOptions)
+	if r.OpenCensusSpanContext.TraceOptions != encodedTraceOptions {
+		t.Fatalf("expected encoded TraceOptions: %v, got: %v", encodedTraceOptions, r.OpenCensusSpanContext.TraceOptions)
+	}
+	if r.OpenCensusSpanContext.Tracestate != "" {
+		t.Fatalf("expected encoded TraceState: '', got: %q", r.OpenCensusSpanContext.Tracestate)
+	}
+}
+
+func Test_makeRequestWithSpan_TraceStateEmptyEntries(t *testing.T) {
+	// Start a remote context span so we can forward trace state.
+	ts, err := tracestate.New(nil)
+	if err != nil {
+		t.Fatalf("failed to make test Tracestate")
+	}
+	parent := trace.SpanContext{
+		Tracestate: ts,
+	}
+	ctx, span := trace.StartSpanWithRemoteParent(context.Background(), t.Name(), parent)
+	defer span.End()
+	r := makeRequest(ctx, t.Name())
+
+	if r.OpenCensusSpanContext == nil {
+		t.Fatal("expected non-nil span context")
+	}
+	if r.OpenCensusSpanContext.Tracestate != "" {
+		t.Fatalf("expected encoded TraceState: '', got: %q", r.OpenCensusSpanContext.Tracestate)
+	}
+}
+
+func Test_makeRequestWithSpan_TraceStateEntries(t *testing.T) {
+	// Start a remote context span so we can forward trace state.
+	ts, err := tracestate.New(nil, tracestate.Entry{Key: "test", Value: "test"})
+	if err != nil {
+		t.Fatalf("failed to make test Tracestate")
+	}
+	parent := trace.SpanContext{
+		Tracestate: ts,
+	}
+	ctx, span := trace.StartSpanWithRemoteParent(context.Background(), t.Name(), parent)
+	defer span.End()
+	r := makeRequest(ctx, t.Name())
+
+	if r.OpenCensusSpanContext == nil {
+		t.Fatal("expected non-nil span context")
+	}
+	encodedTraceState := base64.StdEncoding.EncodeToString([]byte(`[{"Key":"test","Value":"test"}]`))
+	if r.OpenCensusSpanContext.Tracestate != encodedTraceState {
+		t.Fatalf("expected encoded TraceState: %q, got: %q", encodedTraceState, r.OpenCensusSpanContext.Tracestate)
 	}
 }
