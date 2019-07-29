@@ -2,8 +2,6 @@ package hcn
 
 import (
 	"encoding/json"
-
-	"github.com/Microsoft/go-winio/pkg/guid"
 )
 
 // EndpointPolicyType are the potential Policies that apply to Endpoints.
@@ -171,7 +169,6 @@ type L4ProxyPolicySetting struct {
 	// For the WFP proxy
 	FilterTuple          FiveTuple `json:",omitempty"`
 	ProxyType            ProxyType `json:",omitempty"`
-	ID                   guid.GUID `json:",omitempty"`
 	UserSID              string    `json:",omitempty"`
 	NetworkCompartmentID uint32    `json:",omitempty"`
 }
