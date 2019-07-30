@@ -4,7 +4,9 @@ package bridge
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,6 +28,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
+	"go.opencensus.io/trace/tracestate"
 	"golang.org/x/sys/unix"
 )
 
@@ -280,7 +283,32 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 					// request.
 				}
 
-				ctx, span := trace.StartSpan(context.Background(), "opengcs::bridge::request")
+				var ctx context.Context
+				var span *trace.Span
+				if base.OpenCensusSpanContext != nil {
+					sc := trace.SpanContext{}
+					if bytes, err := hex.DecodeString(base.OpenCensusSpanContext.TraceID); err == nil {
+						copy(sc.TraceID[:], bytes)
+					}
+					if bytes, err := hex.DecodeString(base.OpenCensusSpanContext.SpanID); err == nil {
+						copy(sc.SpanID[:], bytes)
+					}
+					sc.TraceOptions = trace.TraceOptions(base.OpenCensusSpanContext.TraceOptions)
+					if base.OpenCensusSpanContext.Tracestate != "" {
+						if bytes, err := base64.StdEncoding.DecodeString(base.OpenCensusSpanContext.Tracestate); err == nil {
+							var entries []tracestate.Entry
+							if err := json.Unmarshal(bytes, entries); err == nil {
+								if ts, err := tracestate.New(nil, entries...); err == nil {
+									sc.Tracestate = ts
+								}
+							}
+						}
+					}
+					ctx, span = trace.StartSpanWithRemoteParent(context.Background(), "opengcs::bridge::request", sc)
+				} else {
+					ctx, span = trace.StartSpan(context.Background(), "opengcs::bridge::request")
+				}
+
 				span.AddAttributes(
 					trace.Int64Attribute("message-id", int64(header.ID)),
 					trace.StringAttribute("message-type", header.Type.String()),
