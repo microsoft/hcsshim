@@ -7,9 +7,9 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/schema1"
-	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
 
 const (
@@ -30,26 +30,32 @@ var _ cow.Container = &Container{}
 
 // CreateContainer creates a container using ID `cid` and `cfg`. The request
 // will likely not be cancellable even if `ctx` becomes done.
-func (gc *GuestConnection) CreateContainer(ctx context.Context, cid string, cfg interface{}) (*Container, error) {
+func (gc *GuestConnection) CreateContainer(ctx context.Context, cid string, config interface{}) (_ *Container, err error) {
+	ctx, span := trace.StartSpan(ctx, "gcs::GuestConnection::CreateContainer")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("cid", cid))
+
 	c := &Container{
 		gc:       gc,
 		id:       cid,
 		notifyCh: make(chan struct{}),
 		closeCh:  make(chan struct{}),
 	}
-	err := gc.requestNotify(cid, c.notifyCh)
+	err = gc.requestNotify(cid, c.notifyCh)
 	if err != nil {
 		return nil, err
 	}
 	req := containerCreate{
-		requestBase:     makeRequest(cid),
-		ContainerConfig: anyInString{cfg},
+		requestBase:     makeRequest(ctx, cid),
+		ContainerConfig: anyInString{config},
 	}
 	var resp containerCreateResponse
 	err = gc.brdg.RPC(ctx, rpcCreate, &req, &resp, false)
 	if err != nil {
 		return nil, err
 	}
+	go c.waitBackground()
 	return c, nil
 }
 
@@ -67,13 +73,20 @@ func (c *Container) IsOCI() bool {
 // Close releases associated with the container.
 func (c *Container) Close() error {
 	c.closeOnce.Do(func() {
-		close(c.closeCh)
+		_, span := trace.StartSpan(context.Background(), "gcs::Container::Close")
+		defer span.End()
+		span.AddAttributes(trace.StringAttribute("cid", c.id))
 	})
 	return nil
 }
 
 // CreateProcess creates a process in the container.
-func (c *Container) CreateProcess(ctx context.Context, config interface{}) (cow.Process, error) {
+func (c *Container) CreateProcess(ctx context.Context, config interface{}) (_ cow.Process, err error) {
+	ctx, span := trace.StartSpan(ctx, "gcs::Container::CreateProcess")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("cid", c.id))
+
 	return c.gc.exec(ctx, c.id, config)
 }
 
@@ -84,8 +97,13 @@ func (c *Container) ID() string {
 
 // Modify sends a modify request to the container.
 func (c *Container) Modify(ctx context.Context, config interface{}) (err error) {
+	ctx, span := trace.StartSpan(ctx, "gcs::Container::Modify")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("cid", c.id))
+
 	req := containerModifySettings{
-		requestBase: makeRequest(c.id),
+		requestBase: makeRequest(ctx, c.id),
 		Request:     config,
 	}
 	var resp responseBase
@@ -94,8 +112,13 @@ func (c *Container) Modify(ctx context.Context, config interface{}) (err error) 
 
 // Properties requests properties of the container.
 func (c *Container) Properties(ctx context.Context, types ...schema1.PropertyType) (_ *schema1.ContainerProperties, err error) {
+	ctx, span := trace.StartSpan(ctx, "gcs::Container::Properties")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("cid", c.id))
+
 	req := containerGetProperties{
-		requestBase: makeRequest(c.id),
+		requestBase: makeRequest(ctx, c.id),
 		Query:       containerPropertiesQuery{PropertyTypes: types},
 	}
 	var resp containerGetPropertiesResponse
@@ -107,14 +130,19 @@ func (c *Container) Properties(ctx context.Context, types ...schema1.PropertyTyp
 }
 
 // Start starts the container.
-func (c *Container) Start(ctx context.Context) error {
-	req := makeRequest(c.id)
+func (c *Container) Start(ctx context.Context) (err error) {
+	ctx, span := trace.StartSpan(ctx, "gcs::Container::Start")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("cid", c.id))
+
+	req := makeRequest(ctx, c.id)
 	var resp responseBase
 	return c.gc.brdg.RPC(ctx, rpcStart, &req, &resp, false)
 }
 
 func (c *Container) shutdown(ctx context.Context, proc rpcProc) error {
-	req := makeRequest(c.id)
+	req := makeRequest(ctx, c.id)
 	var resp responseBase
 	err := c.gc.brdg.RPC(ctx, proc, &req, &resp, true)
 	if err != nil {
@@ -124,10 +152,7 @@ func (c *Container) shutdown(ctx context.Context, proc rpcProc) error {
 		select {
 		case <-c.notifyCh:
 		default:
-			log.G(ctx).WithFields(logrus.Fields{
-				logrus.ErrorKey:       err,
-				logfields.ContainerID: c.id,
-			}).Warn("ignoring missing container")
+			log.G(ctx).WithError(err).Warn("ignoring missing container")
 		}
 	}
 	return nil
@@ -136,14 +161,24 @@ func (c *Container) shutdown(ctx context.Context, proc rpcProc) error {
 // Shutdown sends a graceful shutdown request to the container. The container
 // might not be terminated by the time the request completes (and might never
 // terminate).
-func (c *Container) Shutdown(ctx context.Context) error {
+func (c *Container) Shutdown(ctx context.Context) (err error) {
+	ctx, span := trace.StartSpan(ctx, "gcs::Container::Shutdown")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("cid", c.id))
+
 	return c.shutdown(ctx, rpcShutdownGraceful)
 }
 
 // Terminate sends a forceful terminate request to the container. The container
 // might not be terminated by the time the request completes (and might never
 // terminate).
-func (c *Container) Terminate(ctx context.Context) error {
+func (c *Container) Terminate(ctx context.Context) (err error) {
+	ctx, span := trace.StartSpan(ctx, "gcs::Container::Terminate")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("cid", c.id))
+
 	return c.shutdown(ctx, rpcShutdownForced)
 }
 
@@ -156,4 +191,14 @@ func (c *Container) Wait() error {
 	case <-c.closeCh:
 		return errors.New("container closed")
 	}
+}
+
+func (c *Container) waitBackground() {
+	ctx, span := trace.StartSpan(context.Background(), "gcs::Container::waitBackground")
+	defer span.End()
+	span.AddAttributes(trace.StringAttribute("cid", c.id))
+
+	err := c.Wait()
+	log.G(ctx).Debug("container exited")
+	oc.SetSpanStatus(span, err)
 }
