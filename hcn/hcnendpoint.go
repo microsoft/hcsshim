@@ -353,7 +353,7 @@ func ModifyEndpointSettings(endpointId string, request *ModifyEndpointSettingReq
 }
 
 // ApplyPolicy applies a Policy (ex: ACL) on the Endpoint.
-func (endpoint *HostComputeEndpoint) ApplyPolicy(endpointPolicy PolicyEndpointRequest) error {
+func (endpoint *HostComputeEndpoint) ApplyPolicy(requestType RequestType, endpointPolicy PolicyEndpointRequest) error {
 	logrus.Debugf("hcn::HostComputeEndpoint::ApplyPolicy id=%s", endpoint.Id)
 
 	settingsJson, err := json.Marshal(endpointPolicy)
@@ -362,7 +362,7 @@ func (endpoint *HostComputeEndpoint) ApplyPolicy(endpointPolicy PolicyEndpointRe
 	}
 	requestMessage := &ModifyEndpointSettingRequest{
 		ResourceType: EndpointResourceTypePolicy,
-		RequestType:  RequestTypeUpdate,
+		RequestType:  requestType,
 		Settings:     settingsJson,
 	}
 
