@@ -12,7 +12,6 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/Microsoft/opengcs/internal/oc"
 	"github.com/Microsoft/opengcs/internal/storage"
 	"github.com/Microsoft/opengcs/internal/storage/overlay"
 	"github.com/Microsoft/opengcs/internal/storage/plan9"
@@ -23,7 +22,6 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
 )
 
 // UVMContainerID is the ContainerID that will be sent on any prot.MessageBase
@@ -65,11 +63,6 @@ func (h *Host) GetContainer(id string) (*Container, error) {
 }
 
 func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VMHostedContainerSettingsV2) (_ *Container, err error) {
-	ctx, span := trace.StartSpan(ctx, "opengcs::Host::CreateContainer")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", id))
-
 	h.containersMutex.Lock()
 	defer h.containersMutex.Unlock()
 
