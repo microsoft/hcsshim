@@ -174,131 +174,118 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	return c, nil
 }
 
-func (h *Host) ModifyHostSettings(ctx context.Context, settings *prot.ModifySettingRequest) (err error) {
-	ctx, span := trace.StartSpan(ctx, "opengcs::Host::ModifyHostSettings")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	type modifyFunc func(interface{}) error
-
-	requestTypeFn := func(req prot.ModifyRequestType, setting interface{}, add, remove, update modifyFunc) error {
-		switch req {
-		case prot.MreqtAdd:
-			if add != nil {
-				return add(setting)
-			}
-			break
-		case prot.MreqtRemove:
-			if remove != nil {
-				return remove(setting)
-			}
-			break
-		case prot.MreqtUpdate:
-			if update != nil {
-				return update(setting)
-			}
-			break
-		}
-
-		return errors.Errorf("the RequestType \"%s\" is not supported", req)
-	}
-
-	var add modifyFunc
-	var remove modifyFunc
-	var update modifyFunc
-
+func (h *Host) ModifyHostSettings(ctx context.Context, settings *prot.ModifySettingRequest) error {
 	switch settings.ResourceType {
 	case prot.MrtMappedVirtualDisk:
-		add = func(setting interface{}) error {
-			mvd := setting.(*prot.MappedVirtualDiskV2)
-			if mvd.MountPath != "" {
-				return scsi.Mount(ctx, mvd.Controller, mvd.Lun, mvd.MountPath, mvd.ReadOnly)
-			}
-			return nil
-		}
-		remove = func(setting interface{}) error {
-			mvd := setting.(*prot.MappedVirtualDiskV2)
-			if mvd.MountPath != "" {
-				if err := storage.UnmountPath(ctx, mvd.MountPath, true); err != nil {
-					return errors.Wrapf(err, "failed to hot remove MappedVirtualDiskV2 path: '%s'", mvd.MountPath)
-				}
-			}
-			return scsi.UnplugDevice(ctx, mvd.Controller, mvd.Lun)
-		}
+		return modifyMappedVirtualDisk(ctx, settings.RequestType, settings.Settings.(*prot.MappedVirtualDiskV2))
 	case prot.MrtMappedDirectory:
-		add = func(setting interface{}) error {
-			md := setting.(*prot.MappedDirectoryV2)
-			return plan9.Mount(ctx, h.vsock, md.MountPath, md.ShareName, md.Port, md.ReadOnly)
-		}
-		remove = func(setting interface{}) error {
-			md := setting.(*prot.MappedDirectoryV2)
-			return storage.UnmountPath(ctx, md.MountPath, true)
-		}
+		return modifyMappedDirectory(ctx, h.vsock, settings.RequestType, settings.Settings.(*prot.MappedDirectoryV2))
 	case prot.MrtVPMemDevice:
-		add = func(setting interface{}) error {
-			vpd := setting.(*prot.MappedVPMemDeviceV2)
-			return pmem.Mount(ctx, vpd.DeviceNumber, vpd.MountPath)
-		}
-		remove = func(setting interface{}) error {
-			vpd := setting.(*prot.MappedVPMemDeviceV2)
-			return storage.UnmountPath(ctx, vpd.MountPath, true)
-		}
+		return modifyMappedVPMemDevice(ctx, settings.RequestType, settings.Settings.(*prot.MappedVPMemDeviceV2))
 	case prot.MrtCombinedLayers:
-		add = func(setting interface{}) error {
-			cl := setting.(*prot.CombinedLayersV2)
-			layerPaths := make([]string, len(cl.Layers))
-			for i, layer := range cl.Layers {
-				layerPaths[i] = layer.Path
-			}
-
-			var upperdirPath string
-			var workdirPath string
-			readonly := false
-			if cl.ScratchPath == "" {
-				// The user did not pass a scratch path. Mount overlay as readonly.
-				readonly = true
-			} else {
-				upperdirPath = filepath.Join(cl.ScratchPath, "upper")
-				workdirPath = filepath.Join(cl.ScratchPath, "work")
-			}
-
-			return overlay.Mount(ctx, layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, readonly)
-		}
-		remove = func(setting interface{}) error {
-			cl := setting.(*prot.CombinedLayersV2)
-			return storage.UnmountPath(ctx, cl.ContainerRootPath, true)
-		}
+		return modifyCombinedLayers(ctx, settings.RequestType, settings.Settings.(*prot.CombinedLayersV2))
 	case prot.MrtNetwork:
-		add = func(setting interface{}) error {
-			na := setting.(*prot.NetworkAdapterV2)
-			ns := getOrAddNetworkNamespace(na.NamespaceID)
-			if err := ns.AddAdapter(ctx, na); err != nil {
-				return err
-			}
-			// This code doesnt know if the namespace was already added to the
-			// container or not so it must always call `Sync`.
-			return ns.Sync(ctx)
-		}
-		remove = func(setting interface{}) error {
-			na := setting.(*prot.NetworkAdapterV2)
-			ns := getOrAddNetworkNamespace(na.ID)
-			if err := ns.RemoveAdapter(ctx, na.ID); err != nil {
-				return err
-			}
-			return nil
-		}
+		return modifyNetwork(ctx, settings.RequestType, settings.Settings.(*prot.NetworkAdapterV2))
 	default:
-		return errors.Errorf("the resource type \"%s\" is not supported", settings.ResourceType)
+		return errors.Errorf("the ResourceType \"%s\" is not supported", settings.ResourceType)
 	}
-
-	if err := requestTypeFn(settings.RequestType, settings.Settings, add, remove, update); err != nil {
-		return errors.Wrapf(err, "Failed to modify ResourceType: \"%s\"", settings.ResourceType)
-	}
-	return nil
 }
 
 // Shutdown terminates this UVM. This is a destructive call and will destroy all
 // state that has not been cleaned before calling this function.
 func (h *Host) Shutdown() {
 	syscall.Reboot(syscall.LINUX_REBOOT_CMD_POWER_OFF)
+}
+
+func newInvalidRequestTypeError(rt prot.ModifyRequestType) error {
+	return errors.Errorf("the RequestType \"%s\" is not supported", rt)
+}
+
+func modifyMappedVirtualDisk(ctx context.Context, rt prot.ModifyRequestType, mvd *prot.MappedVirtualDiskV2) (err error) {
+	switch rt {
+	case prot.MreqtAdd:
+		if mvd.MountPath != "" {
+			return scsi.Mount(ctx, mvd.Controller, mvd.Lun, mvd.MountPath, mvd.ReadOnly)
+		}
+		return nil
+	case prot.MreqtRemove:
+		if mvd.MountPath != "" {
+			if err := storage.UnmountPath(ctx, mvd.MountPath, true); err != nil {
+				return err
+			}
+		}
+		return scsi.UnplugDevice(ctx, mvd.Controller, mvd.Lun)
+	default:
+		return newInvalidRequestTypeError(rt)
+	}
+}
+
+func modifyMappedDirectory(ctx context.Context, vsock transport.Transport, rt prot.ModifyRequestType, md *prot.MappedDirectoryV2) (err error) {
+	switch rt {
+	case prot.MreqtAdd:
+		return plan9.Mount(ctx, vsock, md.MountPath, md.ShareName, md.Port, md.ReadOnly)
+	case prot.MreqtRemove:
+		return storage.UnmountPath(ctx, md.MountPath, true)
+	default:
+		return newInvalidRequestTypeError(rt)
+	}
+}
+
+func modifyMappedVPMemDevice(ctx context.Context, rt prot.ModifyRequestType, vpd *prot.MappedVPMemDeviceV2) (err error) {
+	switch rt {
+	case prot.MreqtAdd:
+		return pmem.Mount(ctx, vpd.DeviceNumber, vpd.MountPath)
+	case prot.MreqtRemove:
+		return storage.UnmountPath(ctx, vpd.MountPath, true)
+	default:
+		return newInvalidRequestTypeError(rt)
+	}
+}
+
+func modifyCombinedLayers(ctx context.Context, rt prot.ModifyRequestType, cl *prot.CombinedLayersV2) (err error) {
+	switch rt {
+	case prot.MreqtAdd:
+		layerPaths := make([]string, len(cl.Layers))
+		for i, layer := range cl.Layers {
+			layerPaths[i] = layer.Path
+		}
+
+		var upperdirPath string
+		var workdirPath string
+		readonly := false
+		if cl.ScratchPath == "" {
+			// The user did not pass a scratch path. Mount overlay as readonly.
+			readonly = true
+		} else {
+			upperdirPath = filepath.Join(cl.ScratchPath, "upper")
+			workdirPath = filepath.Join(cl.ScratchPath, "work")
+		}
+
+		return overlay.Mount(ctx, layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, readonly)
+	case prot.MreqtRemove:
+		return storage.UnmountPath(ctx, cl.ContainerRootPath, true)
+	default:
+		return newInvalidRequestTypeError(rt)
+	}
+}
+
+func modifyNetwork(ctx context.Context, rt prot.ModifyRequestType, na *prot.NetworkAdapterV2) (err error) {
+	switch rt {
+	case prot.MreqtAdd:
+		ns := getOrAddNetworkNamespace(na.NamespaceID)
+		if err := ns.AddAdapter(ctx, na); err != nil {
+			return err
+		}
+		// This code doesnt know if the namespace was already added to the
+		// container or not so it must always call `Sync`.
+		return ns.Sync(ctx)
+	case prot.MreqtRemove:
+		ns := getOrAddNetworkNamespace(na.ID)
+		if err := ns.RemoveAdapter(ctx, na.ID); err != nil {
+			return err
+		}
+		return nil
+	default:
+		return newInvalidRequestTypeError(rt)
+	}
 }
