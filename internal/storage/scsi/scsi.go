@@ -17,12 +17,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const (
-	// DeviceLookupTimeout is the amount of time before `ControllerLunToName`
-	// gives up waiting for the `/dev/sd*` path to surface.
-	DeviceLookupTimeout = 2 * time.Second
-)
-
 // Test dependencies
 var (
 	osMkdirAll  = os.MkdirAll
@@ -66,15 +60,19 @@ func Mount(ctx context.Context, controller, lun uint8, target string, readonly b
 		data = "noload"
 	}
 
-	start := time.Now()
 	for {
 		if err := unixMount(source, target, "ext4", flags, data); err != nil {
 			// The `source` found by controllerLunToName can take some time
 			// before its actually available under `/dev/sd*`. Retry while we
 			// wait for `source` to show up.
-			if err == unix.ENOENT && time.Since(start) < DeviceLookupTimeout {
-				time.Sleep(10 * time.Millisecond)
-				continue
+			if err == unix.ENOENT {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				default:
+					time.Sleep(10 * time.Millisecond)
+					continue
+				}
 			}
 			return err
 		}
@@ -96,22 +94,25 @@ func ControllerLunToName(ctx context.Context, controller, lun uint8) (_ string, 
 
 	scsiID := fmt.Sprintf("0:0:%d:%d", controller, lun)
 
-	// Query for the device name up until the timeout.
+	// Devices matching the given SCSI code should each have a subdirectory
+	// under /sys/bus/scsi/devices/<scsiID>/block.
+	blockPath := filepath.Join("/sys/bus/scsi/devices", scsiID, "block")
 	var deviceNames []os.FileInfo
-	startTime := time.Now()
 	for {
-		// Devices matching the given SCSI code should each have a subdirectory
-		// under /sys/bus/scsi/devices/<scsiID>/block.
-		var err error
-		deviceNames, err = ioutil.ReadDir(filepath.Join("/sys/bus/scsi/devices", scsiID, "block"))
+		deviceNames, err = ioutil.ReadDir(blockPath)
 		if err != nil {
-			if time.Since(startTime) > DeviceLookupTimeout {
-				return "", errors.Wrap(err, "failed to retrieve SCSI device names from filesystem")
+			if os.IsNotExist(err) {
+				select {
+				case <-ctx.Done():
+					return "", ctx.Err()
+				default:
+					time.Sleep(time.Millisecond * 10)
+					continue
+				}
 			}
-		} else {
-			break
+			return "", err
 		}
-		time.Sleep(time.Millisecond * 10)
+		break
 	}
 
 	if len(deviceNames) == 0 {

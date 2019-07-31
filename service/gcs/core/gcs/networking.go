@@ -20,7 +20,10 @@ import (
 // configureAdapterInNamespace moves a given adapter into a network
 // namespace and configures it there.
 func (c *gcsCore) configureAdapterInNamespace(container runtime.Container, adapter prot.NetworkAdapter) error {
-	interfaceName, err := network.InstanceIDToName(context.Background(), adapter.AdapterInstanceID, false)
+	// dont wait for any amount of time for it to arrive.
+	doneCtx, cancel := context.WithTimeout(context.Background(), 0)
+	defer cancel()
+	interfaceName, err := network.InstanceIDToName(doneCtx, adapter.AdapterInstanceID)
 	if err != nil {
 		return err
 	}

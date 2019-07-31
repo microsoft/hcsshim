@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Microsoft/opengcs/internal/network"
 	"github.com/Microsoft/opengcs/internal/oc"
@@ -159,7 +160,9 @@ func (n *namespace) AddAdapter(ctx context.Context, adp *prot.NetworkAdapterV2) 
 		}
 	}
 
-	ifname, err := networkInstanceIDToName(ctx, adp.ID, true)
+	resolveCtx, cancel := context.WithTimeout(ctx, time.Second*2)
+	defer cancel()
+	ifname, err := networkInstanceIDToName(resolveCtx, adp.ID)
 	if err != nil {
 		return err
 	}
