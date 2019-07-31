@@ -102,32 +102,32 @@ func MergeValues(first, second []string) []string {
 
 // InstanceIDToName converts from the given instance ID (a GUID generated on the
 // Windows host) to its corresponding interface name (e.g. "eth0").
-func InstanceIDToName(ctx context.Context, id string, wait bool) (_ string, err error) {
+//
+// Will retry the operation until `ctx` is exceeded or canceled.
+func InstanceIDToName(ctx context.Context, id string) (_ string, err error) {
 	ctx, span := trace.StartSpan(ctx, "network::InstanceIDToName")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
 	id = strings.ToLower(id)
-	span.AddAttributes(
-		trace.StringAttribute("adapterInstanceID", id),
-		trace.BoolAttribute("wait", wait))
+	span.AddAttributes(trace.StringAttribute("adapterInstanceID", id))
 
-	const timeout = 2 * time.Second
+	devicePath := filepath.Join("/sys", "bus", "vmbus", "devices", id, "net")
 	var deviceDirs []os.FileInfo
-	start := time.Now()
 	for {
-		deviceDirs, err = ioutil.ReadDir(filepath.Join("/sys", "bus", "vmbus", "devices", id, "net"))
+		deviceDirs, err = ioutil.ReadDir(devicePath)
 		if err != nil {
-			if wait {
-				if os.IsNotExist(errors.Cause(err)) {
+			if os.IsNotExist(err) {
+				select {
+				case <-ctx.Done():
+					return "", errors.Wrap(ctx.Err(), "timed out waiting for net adapter")
+				default:
 					time.Sleep(10 * time.Millisecond)
-					if time.Since(start) > timeout {
-						return "", errors.Wrapf(err, "timed out waiting for net adapter after %d seconds", timeout)
-					}
 					continue
 				}
+			} else {
+				return "", errors.Wrapf(err, "failed to read vmbus network device from /sys filesystem for adapter %s", id)
 			}
-			return "", errors.Wrapf(err, "failed to read vmbus network device from /sys filesystem for adapter %s", id)
 		}
 		break
 	}

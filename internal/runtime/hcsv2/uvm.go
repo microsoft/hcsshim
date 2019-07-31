@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/Microsoft/opengcs/internal/oc"
 	"github.com/Microsoft/opengcs/internal/storage"
@@ -204,8 +205,10 @@ func newInvalidRequestTypeError(rt prot.ModifyRequestType) error {
 func modifyMappedVirtualDisk(ctx context.Context, rt prot.ModifyRequestType, mvd *prot.MappedVirtualDiskV2) (err error) {
 	switch rt {
 	case prot.MreqtAdd:
+		mountCtx, cancel := context.WithTimeout(ctx, time.Second*4)
+		defer cancel()
 		if mvd.MountPath != "" {
-			return scsi.Mount(ctx, mvd.Controller, mvd.Lun, mvd.MountPath, mvd.ReadOnly)
+			return scsi.Mount(mountCtx, mvd.Controller, mvd.Lun, mvd.MountPath, mvd.ReadOnly)
 		}
 		return nil
 	case prot.MreqtRemove:

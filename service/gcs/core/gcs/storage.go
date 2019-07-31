@@ -147,7 +147,9 @@ func (c *gcsCore) getMappedVirtualDiskMounts(disks []prot.MappedVirtualDisk) ([]
 // scsiLunToName finds the SCSI device with the given LUN. This assumes
 // only one SCSI controller.
 func (c *gcsCore) scsiLunToName(lun uint8) (string, error) {
-	return scsi.ControllerLunToName(context.Background(), 0, lun)
+	resolveCtx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+	defer cancel()
+	return scsi.ControllerLunToName(resolveCtx, 0, lun)
 }
 
 // deviceIDToName converts a device ID (scsi:<lun> or pmem:<device#> to a
