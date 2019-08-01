@@ -6,7 +6,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/sirupsen/logrus"
@@ -19,12 +18,11 @@ func (uvm *UtilityVM) allocateVPMEM(ctx context.Context, hostPath string) (uint3
 		if vi.hostPath == "" {
 			vi.hostPath = hostPath
 			log.G(ctx).WithFields(logrus.Fields{
-				logfields.UVMID: uvm.id,
-				"host-path":     vi.hostPath,
-				"uvm-path":      vi.uvmPath,
-				"refCount":      vi.refCount,
-				"deviceNumber":  uint32(index),
-			}).Debug("uvm::allocateVPMEM")
+				"hostPath":     hostPath,
+				"uvmPath":      vi.uvmPath,
+				"refCount":     vi.refCount,
+				"deviceNumber": index,
+			}).Debug("allocated VPMEM location")
 			return uint32(index), nil
 		}
 	}
@@ -36,12 +34,11 @@ func (uvm *UtilityVM) findVPMEMDevice(ctx context.Context, findThisHostPath stri
 	for deviceNumber, vi := range uvm.vpmemDevices {
 		if vi.hostPath == findThisHostPath {
 			log.G(ctx).WithFields(logrus.Fields{
-				logfields.UVMID: uvm.id,
-				"host-path":     findThisHostPath,
-				"uvm-path":      vi.uvmPath,
-				"refCount":      vi.refCount,
-				"deviceNumber":  uint32(deviceNumber),
-			}).Debug("uvm::findVPMEMDevice")
+				"hostPath":     vi.hostPath,
+				"uvmPath":      vi.uvmPath,
+				"refCount":     vi.refCount,
+				"deviceNumber": deviceNumber,
+			}).Debug("found VPMEM location")
 			return uint32(deviceNumber), vi.uvmPath, nil
 		}
 	}
@@ -53,22 +50,6 @@ func (uvm *UtilityVM) findVPMEMDevice(ctx context.Context, findThisHostPath stri
 // Returns the location(0..MaxVPMEM-1) where the device is attached, and if exposed,
 // the utility VM path which will be /tmp/p<location>//
 func (uvm *UtilityVM) AddVPMEM(ctx context.Context, hostPath string, expose bool) (_ uint32, _ string, err error) {
-	op := "uvm::AddVPMEM"
-	l := log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"host-path":     hostPath,
-		"expose":        expose,
-	})
-	l.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
-
 	if uvm.operatingSystem != "linux" {
 		return 0, "", errNotSupported
 	}
@@ -125,30 +106,11 @@ func (uvm *UtilityVM) AddVPMEM(ctx context.Context, hostPath string, expose bool
 			uvmPath:  uvmPath}
 		uvm.vpmemDevices[deviceNumber] = pmemi
 	}
-	log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"device":        fmt.Sprintf("%+v", uvm.vpmemDevices[deviceNumber]),
-	}).Debug("hcsshim::AddVPMEM Success")
 	return deviceNumber, uvmPath, nil
 }
 
 // RemoveVPMEM removes a VPMEM disk from a utility VM.
 func (uvm *UtilityVM) RemoveVPMEM(ctx context.Context, hostPath string) (err error) {
-	op := "uvm::RemoveVPMEM"
-	l := log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"host-path":     hostPath,
-	})
-	l.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
-
 	if uvm.operatingSystem != "linux" {
 		return errNotSupported
 	}
@@ -184,7 +146,6 @@ func (uvm *UtilityVM) RemoveVPMEM(ctx context.Context, hostPath string) (err err
 	}
 	uvm.vpmemDevices[deviceNumber].refCount--
 	return nil
-
 }
 
 // PMemMaxSizeBytes returns the maximum size of a PMEM layer (LCOW)

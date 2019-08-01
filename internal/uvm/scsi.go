@@ -6,7 +6,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
@@ -36,16 +35,14 @@ func (uvm *UtilityVM) allocateSCSI(ctx context.Context, hostPath string, uvmPath
 					uvm.scsiLocations[controller][lun].refCount = 1
 				}
 				log.G(ctx).WithFields(logrus.Fields{
-					logfields.UVMID: uvm.id,
-					"host-path":     hostPath,
-					"uvm-path":      uvmPath,
-					"isLayer":       isLayer,
-					"refCount":      uvm.scsiLocations[controller][lun].refCount,
-					"controller":    controller,
-					"lun":           int32(lun),
-				}).Debug("uvm::allocateSCSI")
+					"hostPath":   hostPath,
+					"uvmPath":    uvmPath,
+					"isLayer":    isLayer,
+					"refCount":   0,
+					"controller": controller,
+					"lun":        lun,
+				}).Debug("allocated SCSI location")
 				return controller, int32(lun), nil
-
 			}
 		}
 	}
@@ -57,16 +54,15 @@ func (uvm *UtilityVM) deallocateSCSI(ctx context.Context, controller int, lun in
 	defer uvm.m.Unlock()
 	si := uvm.scsiLocations[controller][lun]
 	if si.hostPath != "" {
-		uvm.scsiLocations[controller][lun] = scsiInfo{}
 		log.G(ctx).WithFields(logrus.Fields{
-			logfields.UVMID: uvm.id,
-			"host-path":     si.hostPath,
-			"uvm-path":      si.uvmPath,
-			"isLayer":       si.isLayer,
-			"refCount":      si.refCount,
-			"controller":    controller,
-			"lun":           lun,
-		}).Debug("uvm::deallocateSCSI")
+			"hostPath":   si.hostPath,
+			"uvmPath":    si.uvmPath,
+			"isLayer":    si.isLayer,
+			"refCount":   si.refCount,
+			"controller": controller,
+			"lun":        lun,
+		}).Debug("removed SCSI location")
+		uvm.scsiLocations[controller][lun] = scsiInfo{}
 	}
 }
 
@@ -76,14 +72,13 @@ func (uvm *UtilityVM) findSCSIAttachment(ctx context.Context, findThisHostPath s
 		for lun, si := range luns {
 			if si.hostPath == findThisHostPath {
 				log.G(ctx).WithFields(logrus.Fields{
-					logfields.UVMID: uvm.id,
-					"host-path":     findThisHostPath,
-					"uvm-path":      si.uvmPath,
-					"isLayer":       si.isLayer,
-					"refCount":      si.refCount,
-					"controller":    controller,
-					"lun":           int32(lun),
-				}).Debug("uvm::findSCSIAttachment")
+					"hostPath":   si.hostPath,
+					"uvmPath":    si.uvmPath,
+					"isLayer":    si.isLayer,
+					"refCount":   si.refCount,
+					"controller": controller,
+					"lun":        lun,
+				}).Debug("found SCSI location")
 				return controller, int32(lun), si.uvmPath, nil
 			}
 		}
@@ -101,24 +96,7 @@ func (uvm *UtilityVM) findSCSIAttachment(ctx context.Context, findThisHostPath s
 // `uvmPath` is optional.
 //
 // `readOnly` set to `true` if the vhd/vhdx should be attached read only.
-func (uvm *UtilityVM) AddSCSI(ctx context.Context, hostPath string, uvmPath string, readOnly bool) (_ int, _ int32, err error) {
-	op := "uvm::AddSCSI"
-	l := log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"host-path":     hostPath,
-		"uvm-path":      uvmPath,
-		"readOnly":      readOnly,
-	})
-	l.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
-
+func (uvm *UtilityVM) AddSCSI(ctx context.Context, hostPath string, uvmPath string, readOnly bool) (int, int32, error) {
 	return uvm.addSCSIActual(ctx, hostPath, uvmPath, "VirtualDisk", false, readOnly)
 }
 
@@ -130,46 +108,14 @@ func (uvm *UtilityVM) AddSCSI(ctx context.Context, hostPath string, uvmPath stri
 // `uvmPath` is optional if a guest mount is not requested.
 //
 // `readOnly` set to `true` if the physical disk should be attached read only.
-func (uvm *UtilityVM) AddSCSIPhysicalDisk(ctx context.Context, hostPath, uvmPath string, readOnly bool) (_ int, _ int32, err error) {
-	op := "uvm::AddSCSIPhysicalDisk"
-	l := log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"host-path":     hostPath,
-		"uvm-path":      uvmPath,
-		"readOnly":      readOnly,
-	})
-	l.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
-
+func (uvm *UtilityVM) AddSCSIPhysicalDisk(ctx context.Context, hostPath, uvmPath string, readOnly bool) (int, int32, error) {
 	return uvm.addSCSIActual(ctx, hostPath, uvmPath, "PassThru", false, readOnly)
 }
 
 // AddSCSILayer adds a read-only layer disk to a utility VM at the next available
 // location. This function is used by LCOW as an alternate to PMEM for large layers.
 // The UVMPath will always be /tmp/S<controller>/<lun>.
-func (uvm *UtilityVM) AddSCSILayer(ctx context.Context, hostPath string) (_ int, _ int32, err error) {
-	op := "uvm::AddSCSILayer"
-	l := log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"host-path":     hostPath,
-	})
-	l.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
-
+func (uvm *UtilityVM) AddSCSILayer(ctx context.Context, hostPath string) (int, int32, error) {
 	if uvm.operatingSystem == "windows" {
 		return -1, -1, ErrSCSILayerWCOWUnsupported
 	}
@@ -296,22 +242,7 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, atta
 }
 
 // RemoveSCSI removes a SCSI disk from a utility VM.
-func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) (err error) {
-	op := "uvm::RemoveSCSI"
-	l := log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"host-path":     hostPath,
-	})
-	l.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
-
+func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) error {
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 
@@ -374,22 +305,7 @@ func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) (err erro
 // GetScsiUvmPath returns the guest mounted path of a SCSI drive.
 //
 // If `hostPath` is not mounted returns `ErrNotAttached`.
-func (uvm *UtilityVM) GetScsiUvmPath(ctx context.Context, hostPath string) (_ string, err error) {
-	op := "uvm::GetScsiUvmPath"
-	l := logrus.WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"host-path":     hostPath,
-	})
-	l.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
-
+func (uvm *UtilityVM) GetScsiUvmPath(ctx context.Context, hostPath string) (string, error) {
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 

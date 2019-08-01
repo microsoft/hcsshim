@@ -15,7 +15,7 @@ func (uvm *UtilityVM) Wait() error {
 	if uvm.outputProcessingCancel != nil {
 		uvm.outputProcessingCancel()
 	}
-	logrus.WithField(logfields.UVMID, uvm.id).Debug("UVM exited, waiting for output processing to complete")
+	logrus.WithField(logfields.UVMID, uvm.id).Debug("uvm exited, waiting for output processing to complete")
 	if uvm.outputProcessingDone != nil {
 		<-uvm.outputProcessingDone
 	}

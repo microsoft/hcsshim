@@ -5,28 +5,12 @@ import (
 	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/sirupsen/logrus"
 )
 
 // Modify modifies the compute system by sending a request to HCS.
 func (uvm *UtilityVM) Modify(ctx context.Context, doc *hcsschema.ModifySettingRequest) (err error) {
-	op := "uvm::Modify"
-	l := log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-	})
-	l.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
-
 	if doc.GuestRequest == nil || uvm.gc == nil {
 		return uvm.hcsSystem.Modify(ctx, doc)
 	}
@@ -43,7 +27,7 @@ func (uvm *UtilityVM) Modify(ctx context.Context, doc *hcsschema.ModifySettingRe
 				hostdoc.RequestType = requesttype.Remove
 				rerr := uvm.hcsSystem.Modify(ctx, &hostdoc)
 				if rerr != nil {
-					log.G(ctx).WithError(err).Error("failed to roll back resource add")
+					log.G(ctx).WithError(rerr).Error("failed to roll back resource add")
 				}
 			}
 		}()
