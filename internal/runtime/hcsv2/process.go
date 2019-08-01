@@ -9,7 +9,6 @@ import (
 	"syscall"
 
 	"github.com/Microsoft/opengcs/internal/log"
-	"github.com/Microsoft/opengcs/internal/oc"
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
@@ -105,15 +104,7 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 // Kill sends 'signal' to the process.
 //
 // If the process has already exited returns `gcserr.HrErrNotFound` by contract.
-func (p *Process) Kill(ctx context.Context, signal syscall.Signal) (err error) {
-	_, span := trace.StartSpan(ctx, "opengcs::Process::Kill")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("cid", p.cid),
-		trace.Int64Attribute("pid", int64(p.pid)),
-		trace.Int64Attribute("signal", int64(signal)))
-
+func (p *Process) Kill(ctx context.Context, signal syscall.Signal) error {
 	// When a container contains more than one process we can fail to unblock
 	// the wait if we only signal the init process. Instead we issue a `runc
 	// kill --all` which then signals all processes in the container.
@@ -143,16 +134,7 @@ func (p *Process) Kill(ctx context.Context, signal syscall.Signal) (err error) {
 }
 
 // ResizeConsole resizes the tty to `height`x`width` for the process.
-func (p *Process) ResizeConsole(ctx context.Context, height, width uint16) (err error) {
-	_, span := trace.StartSpan(ctx, "opengcs::Process::ResizeConsole")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("cid", p.cid),
-		trace.Int64Attribute("pid", int64(p.pid)),
-		trace.Int64Attribute("height", int64(height)),
-		trace.Int64Attribute("width", int64(width)))
-
+func (p *Process) ResizeConsole(ctx context.Context, height, width uint16) error {
 	tty := p.process.Tty()
 	if tty == nil {
 		return fmt.Errorf("pid: %d, is not a tty and cannot be resized", p.pid)

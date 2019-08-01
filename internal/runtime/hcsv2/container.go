@@ -7,7 +7,6 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/Microsoft/opengcs/internal/oc"
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
@@ -34,12 +33,7 @@ type Container struct {
 	processes      map[uint32]*Process
 }
 
-func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSettings) (_ int, err error) {
-	_, span := trace.StartSpan(ctx, "opengcs::Container::Start")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
-
+func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSettings) (int, error) {
 	stdioSet, err := stdio.Connect(c.vsock, conSettings)
 	if err != nil {
 		return -1, err
@@ -61,12 +55,7 @@ func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSetti
 	return int(c.initProcess.pid), err
 }
 
-func (c *Container) ExecProcess(ctx context.Context, process *oci.Process, conSettings stdio.ConnectionSettings) (_ int, err error) {
-	_, span := trace.StartSpan(ctx, "opengcs::Container::ExecProcess")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
-
+func (c *Container) ExecProcess(ctx context.Context, process *oci.Process, conSettings stdio.ConnectionSettings) (int, error) {
 	stdioSet, err := stdio.Connect(c.vsock, conSettings)
 	if err != nil {
 		return -1, err
@@ -113,12 +102,7 @@ func (c *Container) GetProcess(pid uint32) (*Process, error) {
 }
 
 // GetAllProcessPids returns all process pids in the container namespace.
-func (c *Container) GetAllProcessPids(ctx context.Context) (_ []int, err error) {
-	_, span := trace.StartSpan(ctx, "opengcs::Container::GetAllProcessPids")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
-
+func (c *Container) GetAllProcessPids(ctx context.Context) ([]int, error) {
 	state, err := c.container.GetAllProcesses()
 	if err != nil {
 		return nil, err
@@ -131,15 +115,8 @@ func (c *Container) GetAllProcessPids(ctx context.Context) (_ []int, err error) 
 }
 
 // Kill sends 'signal' to the container process.
-func (c *Container) Kill(ctx context.Context, signal syscall.Signal) (err error) {
-	_, span := trace.StartSpan(ctx, "opengcs::Container::Kill")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("cid", c.id),
-		trace.Int64Attribute("signal", int64(signal)))
-
-	err = c.container.Kill(signal)
+func (c *Container) Kill(ctx context.Context, signal syscall.Signal) error {
+	err := c.container.Kill(signal)
 	if err != nil {
 		return err
 	}

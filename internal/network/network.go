@@ -25,8 +25,7 @@ const maxDNSSearches = 6
 func GenerateEtcHostsContent(ctx context.Context, hostname string) string {
 	_, span := trace.StartSpan(ctx, "network::GenerateEtcHostsContent")
 	defer span.End()
-	span.AddAttributes(
-		trace.StringAttribute("hostname", hostname))
+	span.AddAttributes(trace.StringAttribute("hostname", hostname))
 
 	nameParts := strings.Split(hostname, ".")
 	buf := bytes.Buffer{}
