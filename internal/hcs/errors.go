@@ -8,9 +8,7 @@ import (
 	"net"
 	"syscall"
 
-	"github.com/Microsoft/hcsshim/internal/interop"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/logfields"
 )
 
 var (
@@ -119,12 +117,10 @@ func (ev *ErrorEvent) String() string {
 	return evs
 }
 
-func processHcsResult(ctx context.Context, resultp *uint16) []ErrorEvent {
-	if resultp != nil {
-		resultj := interop.ConvertAndFreeCoTaskMemString(resultp)
-		log.G(ctx).WithField(logfields.JSON, resultj).Debug("HCS Result")
+func processHcsResult(ctx context.Context, resultJSON string) []ErrorEvent {
+	if resultJSON != "" {
 		result := &hcsResult{}
-		if err := json.Unmarshal([]byte(resultj), result); err != nil {
+		if err := json.Unmarshal([]byte(resultJSON), result); err != nil {
 			log.G(ctx).WithError(err).Warning("Could not unmarshal HCS result")
 			return nil
 		}

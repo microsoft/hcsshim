@@ -8,16 +8,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/interop"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/vmcompute"
 	"go.opencensus.io/trace"
 )
 
 // ContainerError is an error encountered in HCS
 type Process struct {
 	handleLock     sync.RWMutex
-	handle         hcsProcess
+	handle         vmcompute.HcsProcess
 	processID      int
 	system         *System
 	stdin          io.WriteCloser
@@ -31,7 +31,7 @@ type Process struct {
 	waitError      error
 }
 
-func newProcess(process hcsProcess, processID int, computeSystem *System) *Process {
+func newProcess(process vmcompute.HcsProcess, processID int, computeSystem *System) *Process {
 	return &Process{
 		handle:    process,
 		processID: processID,
@@ -131,9 +131,8 @@ func (process *Process) Signal(ctx context.Context, options interface{}) (bool, 
 		return false, err
 	}
 
-	var resultp *uint16
-	err = hcsSignalProcessContext(ctx, process.handle, string(optionsb), &resultp)
-	events := processHcsResult(ctx, resultp)
+	resultJSON, err := vmcompute.HcsSignalProcess(ctx, process.handle, string(optionsb))
+	events := processHcsResult(ctx, resultJSON)
 	delivered, err := process.processSignalResult(ctx, err)
 	if err != nil {
 		err = makeProcessError(process, operation, err, events)
@@ -152,9 +151,8 @@ func (process *Process) Kill(ctx context.Context) (bool, error) {
 		return false, makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
-	var resultp *uint16
-	err := hcsTerminateProcessContext(ctx, process.handle, &resultp)
-	events := processHcsResult(ctx, resultp)
+	resultJSON, err := vmcompute.HcsTerminateProcess(ctx, process.handle)
+	events := processHcsResult(ctx, resultJSON)
 	delivered, err := process.processSignalResult(ctx, err)
 	if err != nil {
 		err = makeProcessError(process, operation, err, events)
@@ -190,17 +188,13 @@ func (process *Process) waitBackground() {
 
 		// Make sure we didnt race with Close() here
 		if process.handle != 0 {
-			var (
-				resultp     *uint16
-				propertiesp *uint16
-			)
-			err = hcsGetProcessPropertiesContext(ctx, process.handle, &propertiesp, &resultp)
-			events := processHcsResult(ctx, resultp)
+			propertiesJSON, resultJSON, err := vmcompute.HcsGetProcessProperties(ctx, process.handle)
+			events := processHcsResult(ctx, resultJSON)
 			if err != nil {
 				err = makeProcessError(process, operation, err, events)
 			} else {
 				properties := &processStatus{}
-				err = json.Unmarshal(interop.ConvertAndFreeCoTaskMemBytes(propertiesp), properties)
+				err = json.Unmarshal([]byte(propertiesJSON), properties)
 				if err != nil {
 					err = makeProcessError(process, operation, err, nil)
 				} else {
@@ -254,9 +248,8 @@ func (process *Process) ResizeConsole(ctx context.Context, width, height uint16)
 		return err
 	}
 
-	var resultp *uint16
-	err = hcsModifyProcessContext(ctx, process.handle, string(modifyRequestb), &resultp)
-	events := processHcsResult(ctx, resultp)
+	resultJSON, err := vmcompute.HcsModifyProcess(ctx, process.handle, string(modifyRequestb))
+	events := processHcsResult(ctx, resultJSON)
 	if err != nil {
 		return makeProcessError(process, operation, err, events)
 	}
@@ -297,12 +290,8 @@ func (process *Process) StdioLegacy() (_ io.WriteCloser, _ io.ReadCloser, _ io.R
 		return nil, nil, nil, makeProcessError(process, operation, ErrAlreadyClosed, nil)
 	}
 
-	var (
-		processInfo hcsProcessInformation
-		resultp     *uint16
-	)
-	err = hcsGetProcessInfoContext(ctx, process.handle, &processInfo, &resultp)
-	events := processHcsResult(ctx, resultp)
+	processInfo, resultJSON, err := vmcompute.HcsGetProcessInfo(ctx, process.handle)
+	events := processHcsResult(ctx, resultJSON)
 	if err != nil {
 		return nil, nil, nil, makeProcessError(process, operation, err, events)
 	}
@@ -345,9 +334,8 @@ func (process *Process) CloseStdin(ctx context.Context) error {
 		return err
 	}
 
-	var resultp *uint16
-	err = hcsModifyProcessContext(ctx, process.handle, string(modifyRequestb), &resultp)
-	events := processHcsResult(ctx, resultp)
+	resultJSON, err := vmcompute.HcsModifyProcess(ctx, process.handle, string(modifyRequestb))
+	events := processHcsResult(ctx, resultJSON)
 	if err != nil {
 		return makeProcessError(process, operation, err, events)
 	}
@@ -391,7 +379,7 @@ func (process *Process) Close() (err error) {
 		return makeProcessError(process, operation, err, nil)
 	}
 
-	if err = hcsCloseProcessContext(ctx, process.handle); err != nil {
+	if err = vmcompute.HcsCloseProcess(ctx, process.handle); err != nil {
 		return makeProcessError(process, operation, err, nil)
 	}
 
@@ -418,8 +406,7 @@ func (process *Process) registerCallback(ctx context.Context) error {
 	callbackMap[callbackNumber] = callbackContext
 	callbackMapLock.Unlock()
 
-	var callbackHandle hcsCallback
-	err := hcsRegisterProcessCallbackContext(ctx, process.handle, notificationWatcherCallback, callbackNumber, &callbackHandle)
+	callbackHandle, err := vmcompute.HcsRegisterProcessCallback(ctx, process.handle, notificationWatcherCallback, callbackNumber)
 	if err != nil {
 		return err
 	}
@@ -446,9 +433,9 @@ func (process *Process) unregisterCallback(ctx context.Context) error {
 		return nil
 	}
 
-	// hcsUnregisterProcessCallback has its own syncronization
-	// to wait for all callbacks to complete. We must NOT hold the callbackMapLock.
-	err := hcsUnregisterProcessCallbackContext(ctx, handle)
+	// vmcompute.HcsUnregisterProcessCallback has its own synchronization to
+	// wait for all callbacks to complete. We must NOT hold the callbackMapLock.
+	err := vmcompute.HcsUnregisterProcessCallback(ctx, handle)
 	if err != nil {
 		return err
 	}

@@ -7,8 +7,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 )
 
-func processAsyncHcsResult(ctx context.Context, err error, resultp *uint16, callbackNumber uintptr, expectedNotification hcsNotification, timeout *time.Duration) ([]ErrorEvent, error) {
-	events := processHcsResult(ctx, resultp)
+func processAsyncHcsResult(ctx context.Context, err error, resultJSON string, callbackNumber uintptr, expectedNotification hcsNotification, timeout *time.Duration) ([]ErrorEvent, error) {
+	events := processHcsResult(ctx, resultJSON)
 	if IsPending(err) {
 		return nil, waitForNotification(ctx, callbackNumber, expectedNotification, timeout)
 	}
