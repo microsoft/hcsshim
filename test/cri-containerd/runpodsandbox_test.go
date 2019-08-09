@@ -351,7 +351,7 @@ func Test_RunPodSandbox_CPULimit_WCOW_Hypervisor(t *testing.T) {
 				Namespace: testNamespace,
 			},
 			Annotations: map[string]string{
-				"io.microsoft.virtualmachine.computetopology.processor.limit": "9000",
+				"io.microsoft.virtualmachine.computetopology.processor.limit": "90000",
 			},
 		},
 		RuntimeHandler: wcowHypervisorRuntimeHandler,
@@ -370,7 +370,7 @@ func Test_RunPodSandbox_CPULimit_LCOW(t *testing.T) {
 				Namespace: testNamespace,
 			},
 			Annotations: map[string]string{
-				"io.microsoft.virtualmachine.computetopology.processor.limit": "9000",
+				"io.microsoft.virtualmachine.computetopology.processor.limit": "90000",
 			},
 		},
 		RuntimeHandler: lcowRuntimeHandler,
