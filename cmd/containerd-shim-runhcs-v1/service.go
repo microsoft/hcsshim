@@ -351,6 +351,9 @@ func (s *service) Shutdown(ctx context.Context, req *task.ShutdownRequest) (_ *g
 }
 
 func (s *service) DiagStacks(ctx context.Context, req *shimdiag.StacksRequest) (_ *shimdiag.StacksResponse, err error) {
+	if s == nil {
+		return nil, nil
+	}
 	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "DiagStacks")
 	defer span.End()
@@ -364,5 +367,17 @@ func (s *service) DiagStacks(ctx context.Context, req *shimdiag.StacksRequest) (
 		}
 		buf = make([]byte, 2*len(buf))
 	}
-	return &shimdiag.StacksResponse{Stacks: string(buf)}, nil
+	resp := &shimdiag.StacksResponse{Stacks: string(buf)}
+
+	if !s.isSandbox {
+		return resp, nil
+	}
+
+	sp, err := s.getPod()
+
+	if p, ok := sp.(*pod); ok {
+		resp.GuestStacks, err = p.host.DumpStacks(ctx)
+	}
+
+	return resp, err
 }
