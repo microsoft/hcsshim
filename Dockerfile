@@ -16,7 +16,7 @@
 FROM linuxkit/runc:069d5cd3cc4f0aec70e4af53aed5d27a21c79c35 AS runc
 FROM busybox AS busybox
 
-FROM golang:1.12.4-alpine3.9
+FROM golang:1.12.9-alpine3.9
 ENV GOPATH=/go PATH=$PATH:/go/bin SRC=/go/src/github.com/Microsoft/opengcs
 WORKDIR /build
 RUN \
