@@ -5,10 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
-	"path/filepath"
-	"runtime"
-	"sync"
 	"time"
 
 	"github.com/Microsoft/opengcs/internal/oc"
@@ -19,7 +15,6 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/transport"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
-	"golang.org/x/sys/unix"
 )
 
 func main() {
@@ -79,62 +74,6 @@ func main() {
 
 	baseLogPath := "/tmp/gcs"
 	baseStoragePath := "/tmp"
-
-	// Setup the ability to dump the go stacks if the process is signaled.
-	sigChan := make(chan os.Signal, 1)
-	defer close(sigChan)
-
-	signal.Notify(sigChan, unix.SIGUSR1)
-	go func() {
-		if err := os.MkdirAll(baseLogPath, 0700); err != nil {
-			logrus.WithFields(logrus.Fields{
-				"path":          baseLogPath,
-				logrus.ErrorKey: err,
-			}).Error("opengcs::main - failed to create base directory to write signal info")
-			return
-		}
-
-		for range sigChan {
-			var buf []byte
-			var stackSize int
-			bufStartLen := 10240 // 10 MB
-
-			// Continually grow the buffer until we have enough space to capture
-			// the entire stack.
-			for stackSize == len(buf) {
-				buf = make([]byte, bufStartLen)
-				stackSize = runtime.Stack(buf, true)
-				bufStartLen *= 2
-			}
-			buf = buf[:stackSize]
-
-			path := filepath.Join(baseLogPath, "gcs-stacks.log")
-			if stackFile, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600); err != nil {
-				logrus.WithFields(logrus.Fields{
-					"path":          path,
-					logrus.ErrorKey: err,
-				}).Error("opengcs::main - failed to create stacks file to write signal info")
-				continue
-			} else {
-				writeWg := sync.WaitGroup{}
-				writeWg.Add(1)
-				go func() {
-					defer writeWg.Done()
-					defer stackFile.Close()
-					defer stackFile.Sync()
-
-					if _, err := stackFile.Write(buf); err != nil {
-						logrus.WithFields(logrus.Fields{
-							"path":          path,
-							logrus.ErrorKey: err,
-						}).Error("opengcs::main - failed to write stacks data to file")
-					}
-				}()
-
-				writeWg.Wait()
-			}
-		}
-	}()
 
 	logrus.Info("GCS started")
 	tport := &transport.VsockTransport{}

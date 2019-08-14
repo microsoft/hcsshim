@@ -99,6 +99,8 @@ const (
 	ComputeSystemModifySettingsV1 = 0x10100a01
 	// ComputeSystemNegotiateProtocolV1 is the protocol negotiation request.
 	ComputeSystemNegotiateProtocolV1 = 0x10100b01
+	// ComputeSystemDumpStackV1 is the dump stack request
+	ComputeSystemDumpStacksV1 = 0x10100c01
 
 	// ComputeSystemResponseCreateV1 is the create container response.
 	ComputeSystemResponseCreateV1 = 0x20100101
@@ -127,6 +129,8 @@ const (
 	// ComputeSystemResponseNegotiateProtocolV1 is the protocol negotiation
 	// response.
 	ComputeSystemResponseNegotiateProtocolV1 = 0x20100b01
+	// ComputeSystemDumpStackV1 is the dump stack response
+	ComputeSystemResponseDumpStacksV1 = 0x20100c01
 
 	// ComputeSystemNotificationV1 is the notification identifier.
 	ComputeSystemNotificationV1 = 0x30100101
@@ -159,6 +163,8 @@ func (mi MessageIdentifier) String() string {
 		return "ComputeSystemModifySettingsV1"
 	case ComputeSystemNegotiateProtocolV1:
 		return "ComputeSystemNegotiateProtocolV1"
+	case ComputeSystemDumpStacksV1:
+		return "ComputeSystemDumpStacksV1"
 	case ComputeSystemResponseCreateV1:
 		return "ComputeSystemResponseCreateV1"
 	case ComputeSystemResponseStartV1:
@@ -181,6 +187,8 @@ func (mi MessageIdentifier) String() string {
 		return "ComputeSystemResponseModifySettingsV1"
 	case ComputeSystemResponseNegotiateProtocolV1:
 		return "ComputeSystemResponseNegotiateProtocolV1"
+	case ComputeSystemResponseDumpStacksV1:
+		return "ComputeSystemResponseDumpStacksV1"
 	case ComputeSystemNotificationV1:
 		return "ComputeSystemNotificationV1"
 	default:
@@ -257,6 +265,7 @@ type GcsCapabilities struct {
 type GcsGuestCapabilities struct {
 	NamespaceAddRequestSupported bool `json:",omitempty"`
 	SignalProcessSupported       bool `json:",omitempty"`
+	DumpStacksSupported          bool `json:",omitempty"`
 }
 
 // ocspancontext is the internal JSON representation of the OpenCensus
@@ -688,6 +697,11 @@ type NegotiateProtocolResponse struct {
 	MessageResponseBase
 	Version      uint32
 	Capabilities GcsCapabilities
+}
+
+type DumpStacksResponse struct {
+	MessageResponseBase
+	GuestStacks string
 }
 
 // ContainerCreateResponse is the message to the HCS responding to a
