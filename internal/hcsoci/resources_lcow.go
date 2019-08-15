@@ -94,6 +94,11 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, res
 				}
 				resources.scsiMounts = append(resources.scsiMounts, hostPath)
 				coi.Spec.Mounts[i].Type = "none"
+				// TODO: JTERRY75 - This is a hack and needs to be removed. The
+				// orchestrator should be controlling the lifetime.
+				if mount.Destination == "/tmp" {
+					resources.tmpVhdPath = hostPath
+				}
 			} else {
 				st, err := os.Stat(hostPath)
 				if err != nil {
