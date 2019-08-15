@@ -56,6 +56,15 @@ type Resources struct {
 	// scsiMounts is an array of the host-paths mounted into a utility VM to
 	// support scsi device passthrough.
 	scsiMounts []string
+
+	// tmpVhdPath is a specific type of vhd that can be mapped to an LCOW
+	// container. It is expected to be created before calling the shim but after
+	// the container is done executing it is expected to be automatically
+	// removed.
+	//
+	// TODO: JTERRY75 - This is a hack and needs to be removed. The orchestrator
+	// should be controlling the lifetime.
+	tmpVhdPath string
 }
 
 // TODO: Method on the resources?
@@ -124,6 +133,12 @@ func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all 
 				return err
 			}
 			r.scsiMounts = nil
+		}
+
+		if r.tmpVhdPath != "" {
+			if err := os.Remove(r.tmpVhdPath); err != nil {
+				log.G(ctx).WithError(err).Warnf("failed to remove tmp vhd at: %q", r.tmpVhdPath)
+			}
 		}
 	}
 
