@@ -11,7 +11,7 @@ import (
 
 var stacksCommand = cli.Command{
 	Name:      "stacks",
-	Usage:     "Dump the shim's goroutine stacks",
+	Usage:     "Dump the shim and guest's goroutine stacks",
 	ArgsUsage: "<shim name>",
 	Before:    appargs.Validate(appargs.String),
 	Action: func(c *cli.Context) error {
@@ -24,7 +24,12 @@ var stacksCommand = cli.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Print(resp.Stacks)
+
+		fmt.Println("Stacks:\n", resp.Stacks)
+
+		if resp.GuestStacks != "" {
+			fmt.Println("Guest Stacks:\n", resp.GuestStacks)
+		}
 		return nil
 	},
 }

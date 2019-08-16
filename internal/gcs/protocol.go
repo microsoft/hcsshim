@@ -48,6 +48,7 @@ const (
 	rpcGetProperties
 	rpcModifySettings
 	rpcNegotiateProtocol
+	rpcDumpStacks
 	rpcLifecycleNotification
 )
 
@@ -104,6 +105,8 @@ func (typ msgType) String() string {
 		s += "ModifySettings"
 	case rpcNegotiateProtocol:
 		s += "NegotiateProtocol"
+	case rpcDumpStacks:
+		s += "DumpStacks"
 	case rpcLifecycleNotification:
 		s += "LifecycleNotification"
 	default:
@@ -182,6 +185,15 @@ type negotiateProtocolResponse struct {
 	responseBase
 	Version      uint32          `json:",omitempty"`
 	Capabilities gcsCapabilities `json:",omitempty"`
+}
+
+type dumpStacksRequest struct {
+	requestBase
+}
+
+type dumpStacksResponse struct {
+	responseBase
+	GuestStacks string
 }
 
 type containerCreate struct {

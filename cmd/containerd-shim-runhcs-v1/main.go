@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/Microsoft/go-winio/pkg/etwlogrus"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -63,7 +65,15 @@ func panicRecover() {
 
 func etwCallback(sourceID guid.GUID, state etw.ProviderState, level etw.Level, matchAnyKeyword uint64, matchAllKeyword uint64, filterData uintptr) {
 	if state == etw.ProviderStateCaptureState {
-		dumpStacks(false)
+		resp, err := svc.DiagStacks(context.Background(), &shimdiag.StacksRequest{})
+		if err != nil {
+			return
+		}
+
+		logrus.WithField("stack", resp.Stacks).Info("goroutine stack dump")
+		if resp.GuestStacks != "" {
+			logrus.WithField("stack", resp.GuestStacks).Info("guest stack dump")
+		}
 	}
 }
 
@@ -155,9 +165,6 @@ func main() {
 		}
 		return nil
 	}
-
-	// Setup the event for stack dump
-	setupDumpStacks()
 
 	if err := app.Run(os.Args); err != nil {
 		fmt.Fprintln(cli.ErrWriter, err)

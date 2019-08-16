@@ -6,8 +6,6 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 	"unsafe"
@@ -26,6 +24,8 @@ import (
 	"github.com/urfave/cli"
 	"golang.org/x/sys/windows"
 )
+
+var svc *service
 
 var serveCommand = cli.Command{
 	Name:           "serve",
@@ -138,7 +138,7 @@ var serveCommand = cli.Command{
 		}
 
 		// Setup the ttrpc server
-		svc := &service{
+		svc = &service{
 			events:    publishEvent,
 			tid:       idFlag,
 			isSandbox: ctx.Bool("is-sandbox"),
@@ -252,47 +252,4 @@ func setupDebuggerEvent() {
 	logrus.WithField("event", event).Info("Halting until signalled")
 	windows.WaitForSingleObject(handle, windows.INFINITE)
 	return
-}
-
-// setupDumpStacks listens for an event which when signalled dumps the
-// stacks from this process to the log output.
-func setupDumpStacks() {
-	event := "Global\\stackdump-" + fmt.Sprint(os.Getpid())
-	handle, err := createEvent(event)
-	if err != nil {
-		return
-	}
-	go func() {
-		for {
-			windows.WaitForSingleObject(handle, windows.INFINITE)
-			dumpStacks(true)
-		}
-	}()
-	return
-}
-
-func dumpStacks(writeToFile bool) {
-	var (
-		buf       []byte
-		stackSize int
-	)
-	bufferLen := 16384
-	for stackSize == len(buf) {
-		buf = make([]byte, bufferLen)
-		stackSize = runtime.Stack(buf, true)
-		bufferLen *= 2
-	}
-	buf = buf[:stackSize]
-	logrus.WithField("stack", string(buf)).Info("goroutine stack dump")
-
-	if writeToFile {
-		// Also write to file to aid gathering diagnostics
-		name := filepath.Join(os.TempDir(), fmt.Sprintf("containerd-shim-runhcs-v1.%d.stacks.log", os.Getpid()))
-		f, err := os.Create(name)
-		if err != nil {
-			return
-		}
-		defer f.Close()
-		f.WriteString(string(buf))
-	}
 }

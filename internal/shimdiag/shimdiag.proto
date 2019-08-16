@@ -28,4 +28,5 @@ message StacksRequest {
 
 message StacksResponse {
     string stacks = 1;
+    string guest_stacks =2; 
 }
