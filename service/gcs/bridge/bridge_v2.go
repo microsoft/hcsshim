@@ -6,6 +6,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Microsoft/opengcs/internal/debug"
 	"github.com/Microsoft/opengcs/internal/log"
 	"github.com/Microsoft/opengcs/internal/oc"
 	"github.com/Microsoft/opengcs/internal/runtime/hcsv2"
@@ -33,6 +34,7 @@ var capabilities = prot.GcsCapabilities{
 	GuestDefinedCapabilities: prot.GcsGuestCapabilities{
 		NamespaceAddRequestSupported: true,
 		SignalProcessSupported:       true,
+		DumpStacksSupported:          true,
 	},
 }
 
@@ -465,4 +467,16 @@ func (b *Bridge) modifySettingsV2(r *Request) (_ RequestResponse, err error) {
 	}
 
 	return &prot.MessageResponseBase{}, nil
+}
+
+func (b *Bridge) dumpStacksV2(r *Request) (_ RequestResponse, err error) {
+	_, span := trace.StartSpan(r.Context, "opengcs::bridge::dumpStacksV2")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+
+	stacks := debug.DumpStacks()
+
+	return &prot.DumpStacksResponse{
+		GuestStacks: stacks,
+	}, nil
 }
