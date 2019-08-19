@@ -2,9 +2,24 @@ package main
 
 import "context"
 
-var _ = (publisher)(fakePublisher)
+type fakePublisher struct {
+	events []interface{}
+}
 
-func fakePublisher(ctx context.Context, topic string, event interface{}) error {
-	// Do nothing
+var _ = (publisher)(&fakePublisher{})
+
+func newFakePublisher() *fakePublisher {
+	return &fakePublisher{}
+}
+
+func (p *fakePublisher) publishEvent(ctx context.Context, topic string, event interface{}) (err error) {
+	if p == nil {
+		return nil
+	}
+	p.events = append(p.events, event)
 	return nil
+}
+
+func (p *fakePublisher) getEvents() []interface{} {
+	return p.events
 }

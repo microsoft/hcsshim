@@ -235,7 +235,7 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 	// Publish the task/exec start event. This MUST happen before waitForExit to
 	// avoid publishing the exit previous to the start.
 	if he.id != he.tid {
-		he.events(
+		he.events.publishEvent(
 			ctx,
 			runtime.TaskExecStartedEventTopic,
 			&eventstypes.TaskExecStarted{
@@ -244,7 +244,7 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 				Pid:         uint32(he.pid),
 			})
 	} else {
-		he.events(
+		he.events.publishEvent(
 			ctx,
 			runtime.TaskStartEventTopic,
 			&eventstypes.TaskStart{
@@ -462,7 +462,7 @@ func (he *hcsExec) waitForExit() {
 	// exec. For the `init` exec this is handled in task teardown.
 	if he.tid != he.id {
 		// We had a valid process so send the exited notification.
-		he.events(
+		he.events.publishEvent(
 			ctx,
 			runtime.TaskExitEventTopic,
 			&eventstypes.TaskExit{

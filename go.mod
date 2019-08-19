@@ -6,16 +6,20 @@ require (
 	github.com/Microsoft/go-winio v0.4.14
 	github.com/blang/semver v3.1.0+incompatible // indirect
 	github.com/containerd/console v0.0.0-20180822173158-c12b1e7919c1
-	github.com/containerd/containerd v0.0.0-20190214164719-faec567304bb
+	github.com/containerd/containerd v1.3.0-beta.2.0.20190828155532-0293cbd26c69
 	github.com/containerd/continuity v0.0.0-20190426062206-aaeac12a7ffc // indirect
 	github.com/containerd/fifo v0.0.0-20190226154929-a9fb20d87448 // indirect
 	github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3
 	github.com/containerd/ttrpc v0.0.0-20190826154248-f969a7f076a2
 	github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd
+	github.com/docker/distribution v2.7.1+incompatible // indirect
+	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
+	github.com/gogo/googleapis v1.2.0 // indirect
 	github.com/gogo/protobuf v1.2.1
 	github.com/hashicorp/errwrap v0.0.0-20141028054710-7554cd9344ce // indirect
 	github.com/hashicorp/go-multierror v0.0.0-20161216184304-ed905158d874 // indirect
 	github.com/opencontainers/go-digest v0.0.0-20180430190053-c9281466c8b2 // indirect
+	github.com/opencontainers/image-spec v1.0.1 // indirect
 	github.com/opencontainers/runc v0.0.0-20190115041553-12f6a991201f // indirect
 	github.com/opencontainers/runtime-spec v0.0.0-20190207185410-29686dbc5559
 	github.com/opencontainers/runtime-tools v0.0.0-20181011054405-1d69bd0f9c39

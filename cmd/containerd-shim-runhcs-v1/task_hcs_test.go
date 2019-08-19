@@ -13,7 +13,7 @@ import (
 func setupTestHcsTask(t *testing.T) (*hcsTask, *testShimExec, *testShimExec) {
 	initExec := newTestShimExec(t.Name(), t.Name(), int(rand.Int31()))
 	lt := &hcsTask{
-		events: fakePublisher,
+		events: newFakePublisher(),
 		id:     t.Name(),
 		init:   initExec,
 		closed: make(chan struct{}),
