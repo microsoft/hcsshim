@@ -5,6 +5,8 @@ package cri_containerd
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"testing"
 
 	runtime "k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2"
@@ -789,6 +791,82 @@ func Test_CreateContainer_CPUShares_LCOW(t *testing.T) {
 					CpuShares: 1024,
 				},
 			},
+		},
+	}
+	runCreateContainerTest(t, lcowRuntimeHandler, request)
+}
+
+func Test_CreateContainer_File_Hostpath_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	tempFile, err := ioutil.TempFile("", "test")
+
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %s", err)
+	}
+
+	tempFile.Close()
+
+	defer func() {
+		if err := os.Remove(tempFile.Name()); err != nil {
+			t.Fatalf("Failed to remove temp file: %s", err)
+		}
+	}()
+
+	containerFilePath := "/foo/test.txt"
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Mounts: []*runtime.Mount{
+				{
+					HostPath:      tempFile.Name(),
+					ContainerPath: containerFilePath,
+				},
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			Command: []string{
+				"top",
+			},
+			Linux: &runtime.LinuxContainerConfig{},
+		},
+	}
+	runCreateContainerTest(t, lcowRuntimeHandler, request)
+}
+
+func Test_CreateContainer_Dir_Hostpath_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	tempDir, err := ioutil.TempDir("", "")
+
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %s", err)
+	}
+
+	containerFilePath := "/foo"
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Mounts: []*runtime.Mount{
+				{
+					HostPath:      tempDir,
+					ContainerPath: containerFilePath,
+				},
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			Command: []string{
+				"top",
+			},
+			Linux: &runtime.LinuxContainerConfig{},
 		},
 	}
 	runCreateContainerTest(t, lcowRuntimeHandler, request)
