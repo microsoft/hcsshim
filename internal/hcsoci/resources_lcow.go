@@ -58,6 +58,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, res
 		case "bind":
 		case "physical-disk":
 		case "virtual-disk":
+		case "automanage-virtual-disk":
 		default:
 			// Unknown mount type
 			continue
@@ -85,21 +86,16 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, res
 				if err != nil {
 					return fmt.Errorf("adding SCSI physical disk mount %+v: %s", mount, err)
 				}
-				resources.scsiMounts = append(resources.scsiMounts, hostPath)
+				resources.scsiMounts = append(resources.scsiMounts, scsiMount{path: hostPath})
 				coi.Spec.Mounts[i].Type = "none"
-			} else if mount.Type == "virtual-disk" {
+			} else if mount.Type == "virtual-disk" || mount.Type == "automanage-virtual-disk" {
 				l.Debug("hcsshim::allocateLinuxResources Hot-adding SCSI virtual disk for OCI mount")
 				_, _, err := coi.HostingSystem.AddSCSI(ctx, hostPath, uvmPathForShare, readOnly)
 				if err != nil {
 					return fmt.Errorf("adding SCSI virtual disk mount %+v: %s", mount, err)
 				}
-				resources.scsiMounts = append(resources.scsiMounts, hostPath)
+				resources.scsiMounts = append(resources.scsiMounts, scsiMount{path: hostPath, autoManage: mount.Type == "automanage-virtual-disk"})
 				coi.Spec.Mounts[i].Type = "none"
-				// TODO: JTERRY75 - This is a hack and needs to be removed. The
-				// orchestrator should be controlling the lifetime.
-				if mount.Destination == "/tmp" {
-					resources.tmpVhdPath = hostPath
-				}
 			} else {
 				st, err := os.Stat(hostPath)
 				if err != nil {
