@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -110,7 +111,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, res
 					// Map the containing directory in, but restrict the share to a single
 					// file.
 					var fileName string
-					hostPath, fileName = path.Split(hostPath)
+					hostPath, fileName = filepath.Split(hostPath)
 					allowedNames = append(allowedNames, fileName)
 					restrictAccess = true
 					uvmPathForFile = path.Join(uvmPathForShare, fileName)
