@@ -167,10 +167,10 @@ type L4ProxyPolicySetting struct {
 	OutboundNat   bool     `json:",omitempty"`
 
 	// For the WFP proxy
-	FilterTuple          FiveTuple `json:",omitempty"`
-	ProxyType            ProxyType `json:",omitempty"`
-	UserSID              string    `json:",omitempty"`
-	NetworkCompartmentID uint32    `json:",omitempty"`
+	FilterTuple   FiveTuple `json:",omitempty"`
+	ProxyType     ProxyType `json:",omitempty"`
+	UserSID       string    `json:",omitempty"`
+	CompartmentID uint32    `json:",omitempty"`
 }
 
 // PortnameEndpointPolicySetting sets the port name for an endpoint.
