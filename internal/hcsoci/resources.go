@@ -53,18 +53,17 @@ type Resources struct {
 	// addedNetNSToVM indicates if the network namespace has been added to the containers utility VM
 	addedNetNSToVM bool
 
-	// scsiMounts is an array of the host-paths mounted into a utility VM to
-	// support scsi device passthrough.
-	scsiMounts []string
+	// scsiMounts is an array of the vhd's mounted into a utility VM to support
+	// scsi device passthrough.
+	scsiMounts []scsiMount
+}
 
-	// tmpVhdPath is a specific type of vhd that can be mapped to an LCOW
-	// container. It is expected to be created before calling the shim but after
-	// the container is done executing it is expected to be automatically
-	// removed.
-	//
-	// TODO: JTERRY75 - This is a hack and needs to be removed. The orchestrator
-	// should be controlling the lifetime.
-	tmpVhdPath string
+type scsiMount struct {
+	// path is the host path to the vhd that is mounted.
+	path string
+	// autoManage if `true` means that on cleanup, the runtime should
+	// automatically delete this vhd.
+	autoManage bool
 }
 
 // TODO: Method on the resources?
@@ -128,18 +127,17 @@ func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all 
 			r.plan9Mounts = r.plan9Mounts[:len(r.plan9Mounts)-1]
 		}
 
-		for _, path := range r.scsiMounts {
-			if err := vm.RemoveSCSI(ctx, path); err != nil {
+		for _, sm := range r.scsiMounts {
+			if err := vm.RemoveSCSI(ctx, sm.path); err != nil {
 				return err
 			}
-			r.scsiMounts = nil
-		}
-
-		if r.tmpVhdPath != "" {
-			if err := os.Remove(r.tmpVhdPath); err != nil {
-				log.G(ctx).WithError(err).Warnf("failed to remove tmp vhd at: %q", r.tmpVhdPath)
+			if sm.autoManage {
+				if err := os.Remove(sm.path); err != nil {
+					log.G(ctx).WithError(err).Warnf("failed to remove automanage-virtual-disk at: %q", sm.path)
+				}
 			}
 		}
+		r.scsiMounts = nil
 	}
 
 	return nil
