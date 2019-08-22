@@ -5,11 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/sirupsen/logrus"
 )
 
 // findVSMBShare finds a share by `hostPath`. If not found returns `ErrNotAttached`.
@@ -18,12 +15,6 @@ func (uvm *UtilityVM) findVSMBShare(ctx context.Context, hostPath string) (*vsmb
 	if !ok {
 		return nil, ErrNotAttached
 	}
-	log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"host-path":     hostPath,
-		"name":          share.name,
-		"refCount":      share.refCount,
-	}).Debug("uvm::findVSMBShare")
 	return share, nil
 }
 
@@ -34,25 +25,7 @@ func (share *vsmbShare) GuestPath() string {
 // AddVSMB adds a VSMB share to a Windows utility VM. Each VSMB share is ref-counted and
 // only added if it isn't already. This is used for read-only layers, mapped directories
 // to a container, and for mapped pipes.
-func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, guestRequest interface{}, options *hcsschema.VirtualSmbShareOptions) (err error) {
-	op := "uvm::AddVSMB"
-	l := log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"host-path":     hostPath,
-	})
-	l.WithFields(logrus.Fields{
-		"options":      fmt.Sprintf("%+v", options),
-		"guestRequest": fmt.Sprintf("%+v", guestRequest),
-	}).Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
-
+func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, guestRequest interface{}, options *hcsschema.VirtualSmbShareOptions) error {
 	if uvm.operatingSystem != "windows" {
 		return errNotSupported
 	}
@@ -89,22 +62,7 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, guestRequest
 
 // RemoveVSMB removes a VSMB share from a utility VM. Each VSMB share is ref-counted
 // and only actually removed when the ref-count drops to zero.
-func (uvm *UtilityVM) RemoveVSMB(ctx context.Context, hostPath string) (err error) {
-	op := "uvm::RemoveVSMB"
-	l := log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"host-path":     hostPath,
-	})
-	l.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
-
+func (uvm *UtilityVM) RemoveVSMB(ctx context.Context, hostPath string) error {
 	if uvm.operatingSystem != "windows" {
 		return errNotSupported
 	}
@@ -135,22 +93,7 @@ func (uvm *UtilityVM) RemoveVSMB(ctx context.Context, hostPath string) (err erro
 }
 
 // GetVSMBUvmPath returns the guest path of a VSMB mount.
-func (uvm *UtilityVM) GetVSMBUvmPath(ctx context.Context, hostPath string) (_ string, err error) {
-	op := "uvm::GetVSMBUvmPath"
-	l := log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"host-path":     hostPath,
-	})
-	l.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
-
+func (uvm *UtilityVM) GetVSMBUvmPath(ctx context.Context, hostPath string) (string, error) {
 	if hostPath == "" {
 		return "", fmt.Errorf("no hostPath passed to GetVSMBUvmPath")
 	}
@@ -160,6 +103,5 @@ func (uvm *UtilityVM) GetVSMBUvmPath(ctx context.Context, hostPath string) (_ st
 	if err != nil {
 		return "", err
 	}
-	path := share.GuestPath()
-	return path, nil
+	return share.GuestPath(), nil
 }

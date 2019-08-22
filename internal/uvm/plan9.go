@@ -7,12 +7,9 @@ import (
 	"strconv"
 
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
-	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/sirupsen/logrus"
 )
 
 type Plan9Share struct {
@@ -22,26 +19,7 @@ type Plan9Share struct {
 const plan9Port = 564
 
 // AddPlan9 adds a Plan9 share to a utility VM.
-func (uvm *UtilityVM) AddPlan9(ctx context.Context, hostPath string, uvmPath string, readOnly bool, restrict bool, allowedNames []string) (_ *Plan9Share, err error) {
-	op := "uvm::AddPlan9"
-	l := log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"host-path":     hostPath,
-		"uvm-path":      uvmPath,
-		"readOnly":      readOnly,
-		"restrict":      restrict,
-		"allowedNames":  allowedNames,
-	})
-	l.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
-
+func (uvm *UtilityVM) AddPlan9(ctx context.Context, hostPath string, uvmPath string, readOnly bool, restrict bool, allowedNames []string) (*Plan9Share, error) {
 	if uvm.operatingSystem != "linux" {
 		return nil, errNotSupported
 	}
@@ -111,23 +89,7 @@ func (uvm *UtilityVM) AddPlan9(ctx context.Context, hostPath string, uvmPath str
 
 // RemovePlan9 removes a Plan9 share from a utility VM. Each Plan9 share is ref-counted
 // and only actually removed when the ref-count drops to zero.
-func (uvm *UtilityVM) RemovePlan9(ctx context.Context, share *Plan9Share) (err error) {
-	op := "uvm::RemovePlan9"
-	l := log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"name":          share.name,
-		"uvm-path":      share.uvmPath,
-	})
-	l.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
-
+func (uvm *UtilityVM) RemovePlan9(ctx context.Context, share *Plan9Share) error {
 	if uvm.operatingSystem != "linux" {
 		return errNotSupported
 	}

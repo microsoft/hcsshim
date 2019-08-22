@@ -127,7 +127,7 @@ func processOutput(ctx context.Context, l net.Listener, doneChan chan struct{}, 
 		c, err := ar.c, ar.err
 		l.Close()
 		if err != nil {
-			logrus.Error("accepting log socket: ", err)
+			log.G(ctx).Error("accepting log socket: ", err)
 			return
 		}
 		defer c.Close()
@@ -140,19 +140,6 @@ func processOutput(ctx context.Context, l net.Listener, doneChan chan struct{}, 
 func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
-	op := "uvm::Start"
-	l := log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-	})
-	l.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
 
 	if uvm.outputListener != nil {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -190,7 +177,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 		// Start the GCS protocol.
 		gcc := &gcs.GuestConnectionConfig{
 			Conn:     conn,
-			Log:      logrus.WithField(logfields.UVMID, uvm.id), // TODO: JTERRY75 - should this be log.G(ctx)
+			Log:      log.G(ctx).WithField(logfields.UVMID, uvm.id),
 			IoListen: gcs.HvsockIoListen(uvm.runtimeID),
 		}
 		uvm.gc, err = gcc.Connect(ctx)

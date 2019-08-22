@@ -11,9 +11,11 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
 
 // Options are the set of options passed to Create() to create a utility vm.
@@ -122,20 +124,10 @@ func (uvm *UtilityVM) create(ctx context.Context, doc interface{}) error {
 
 // Close terminates and releases resources associated with the utility VM.
 func (uvm *UtilityVM) Close() (err error) {
-	ctx := context.TODO()
-	op := "uvm::Close"
-	l := log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-	})
-	l.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
+	ctx, span := trace.StartSpan(context.Background(), "uvm::Close")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.UVMID, uvm.id))
 
 	if uvm.hcsSystem != nil {
 		uvm.hcsSystem.Terminate(ctx)

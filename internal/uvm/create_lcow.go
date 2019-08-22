@@ -9,17 +9,18 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/gcs"
-	"github.com/Microsoft/hcsshim/internal/log"
-
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/Microsoft/hcsshim/internal/gcs"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/mergemaps"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
 
 type PreferredRootFSType int
@@ -133,19 +134,9 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 
 // CreateLCOW creates an HCS compute system representing a utility VM.
 func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error) {
-	op := "uvm::CreateLCOW"
-	l := log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: opts.ID,
-	})
-	l.WithField("options", fmt.Sprintf("%+v", opts)).Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
+	ctx, span := trace.StartSpan(ctx, "uvm::CreateLCOW")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
 
 	if opts.ID == "" {
 		g, err := guid.NewV4()
@@ -154,6 +145,9 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		}
 		opts.ID = g.String()
 	}
+
+	span.AddAttributes(trace.StringAttribute(logfields.UVMID, opts.ID))
+	log.G(ctx).WithField("options", fmt.Sprintf("%+v", opts)).Debug("uvm::CreateLCOW options")
 
 	// We dont serialize OutputHandler so if it is missing we need to put it back to the default.
 	if opts.OutputHandler == nil {

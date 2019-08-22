@@ -5,14 +5,10 @@ import (
 	"errors"
 	"path"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hns"
-	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/osversion"
@@ -30,22 +26,7 @@ var (
 // AddNetNS adds network namespace inside the guest.
 //
 // If a namespace with `id` already exists returns `ErrNetNSAlreadyAttached`.
-func (uvm *UtilityVM) AddNetNS(ctx context.Context, id string) (err error) {
-	op := "uvm::AddNetNS"
-	l := log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"netns-id":      id,
-	})
-	l.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
-
+func (uvm *UtilityVM) AddNetNS(ctx context.Context, id string) error {
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 	if _, ok := uvm.namespaces[id]; ok {
@@ -87,22 +68,7 @@ func (uvm *UtilityVM) AddNetNS(ctx context.Context, id string) (err error) {
 // added endpoints.
 //
 // If no network namespace matches `id` returns `ErrNetNSNotFound`.
-func (uvm *UtilityVM) AddEndpointsToNS(ctx context.Context, id string, endpoints []*hns.HNSEndpoint) (err error) {
-	op := "uvm::AddEndpointsToNS"
-	l := log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"netns-id":      id,
-	})
-	l.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
-
+func (uvm *UtilityVM) AddEndpointsToNS(ctx context.Context, id string, endpoints []*hns.HNSEndpoint) error {
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 
@@ -133,22 +99,7 @@ func (uvm *UtilityVM) AddEndpointsToNS(ctx context.Context, id string, endpoints
 // the namespace.
 //
 // If a namespace matching `id` is not found this command silently succeeds.
-func (uvm *UtilityVM) RemoveNetNS(ctx context.Context, id string) (err error) {
-	op := "uvm::RemoveNetNS"
-	l := log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"netns-id":      id,
-	})
-	l.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
-
+func (uvm *UtilityVM) RemoveNetNS(ctx context.Context, id string) error {
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 	if ns, ok := uvm.namespaces[id]; ok {
@@ -187,22 +138,7 @@ func (uvm *UtilityVM) RemoveNetNS(ctx context.Context, id string) (err error) {
 // the network namespace this command silently succeeds.
 //
 // If no network namespace matches `id` returns `ErrNetNSNotFound`.
-func (uvm *UtilityVM) RemoveEndpointsFromNS(ctx context.Context, id string, endpoints []*hns.HNSEndpoint) (err error) {
-	op := "uvm::RemoveEndpointsFromNS"
-	l := log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"netns-id":      id,
-	})
-	l.Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
-
+func (uvm *UtilityVM) RemoveEndpointsFromNS(ctx context.Context, id string, endpoints []*hns.HNSEndpoint) error {
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 
@@ -243,7 +179,6 @@ func getNetworkModifyRequest(adapterID string, requestType string, settings inte
 }
 
 func (uvm *UtilityVM) addNIC(ctx context.Context, id guid.GUID, endpoint *hns.HNSEndpoint) error {
-
 	// First a pre-add. This is a guest-only request and is only done on Windows.
 	if uvm.operatingSystem == "windows" {
 		preAddRequest := hcsschema.ModifySettingRequest{

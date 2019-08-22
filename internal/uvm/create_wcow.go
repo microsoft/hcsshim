@@ -12,11 +12,12 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/mergemaps"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
 	"github.com/Microsoft/hcsshim/internal/wcow"
-	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
 
 // OptionsWCOW are the set of options passed to CreateWCOW() to create a utility vm.
@@ -45,19 +46,9 @@ func NewDefaultOptionsWCOW(id, owner string) *OptionsWCOW {
 //   - The scratch is always attached to SCSI 0:0
 //
 func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error) {
-	op := "uvm::CreateWCOW"
-	l := log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: opts.ID,
-	})
-	l.WithField("options", fmt.Sprintf("%+v", opts)).Debug(op + " - Begin Operation")
-	defer func() {
-		if err != nil {
-			l.Data[logrus.ErrorKey] = err
-			l.Error(op + " - End Operation - Error")
-		} else {
-			l.Debug(op + " - End Operation - Success")
-		}
-	}()
+	ctx, span := trace.StartSpan(ctx, "uvm::CreateWCOW")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
 
 	if opts.ID == "" {
 		g, err := guid.NewV4()
@@ -66,6 +57,9 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		}
 		opts.ID = g.String()
 	}
+
+	span.AddAttributes(trace.StringAttribute(logfields.UVMID, opts.ID))
+	log.G(ctx).WithField("options", fmt.Sprintf("%+v", opts)).Debug("uvm::CreateLCOW options")
 
 	uvm := &UtilityVM{
 		id:                  opts.ID,
@@ -102,11 +96,9 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	//       - Update tests that rely on this current behaviour.
 	// Create the RW scratch in the top-most layer folder, creating the folder if it doesn't already exist.
 	scratchFolder := opts.LayerFolders[len(opts.LayerFolders)-1]
-	log.G(ctx).WithField("scratchFolder", scratchFolder).Debug("uvm::CreateWCOW scratch folder")
 
 	// Create the directory if it doesn't exist
 	if _, err := os.Stat(scratchFolder); os.IsNotExist(err) {
-		log.G(ctx).WithField("scratchFolder", scratchFolder).Debug("uvm::CreateWCOW creating folder")
 		if err := os.MkdirAll(scratchFolder, 0777); err != nil {
 			return nil, fmt.Errorf("failed to create utility VM scratch folder: %s", err)
 		}
