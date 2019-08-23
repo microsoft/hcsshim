@@ -69,10 +69,10 @@ func etwCallback(sourceID guid.GUID, state etw.ProviderState, level etw.Level, m
 		if err != nil {
 			return
 		}
-
-		logrus.WithField("stack", resp.Stacks).Info("goroutine stack dump")
+		log := logrus.WithField("tid", svc.tid)
+		log.WithField("stack", resp.Stacks).Info("goroutine stack dump")
 		if resp.GuestStacks != "" {
-			logrus.WithField("stack", resp.GuestStacks).Info("guest stack dump")
+			log.WithField("stack", resp.GuestStacks).Info("guest stack dump")
 		}
 	}
 }
