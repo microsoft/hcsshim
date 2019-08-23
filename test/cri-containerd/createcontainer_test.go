@@ -9,6 +9,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/Microsoft/hcsshim/osversion"
+	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	runtime "k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2"
 )
 
@@ -797,6 +799,7 @@ func Test_CreateContainer_CPUShares_LCOW(t *testing.T) {
 }
 
 func Test_CreateContainer_File_Hostpath_LCOW(t *testing.T) {
+	testutilities.RequiresBuild(t, osversion.V19H1)
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	tempFile, err := ioutil.TempFile("", "test")
