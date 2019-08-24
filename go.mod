@@ -10,7 +10,7 @@ require (
 	github.com/containerd/continuity v0.0.0-20190426062206-aaeac12a7ffc // indirect
 	github.com/containerd/fifo v0.0.0-20190226154929-a9fb20d87448 // indirect
 	github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3
-	github.com/containerd/ttrpc v0.0.0-20180920185216-2a805f718635
+	github.com/containerd/ttrpc v0.0.0-20190613183316-1fb3814edf44
 	github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd
 	github.com/gogo/protobuf v1.2.1
 	github.com/hashicorp/errwrap v0.0.0-20141028054710-7554cd9344ce // indirect

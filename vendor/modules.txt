@@ -28,7 +28,7 @@ github.com/containerd/containerd/events
 github.com/containerd/fifo
 # github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3
 github.com/containerd/go-runc
-# github.com/containerd/ttrpc v0.0.0-20180920185216-2a805f718635
+# github.com/containerd/ttrpc v0.0.0-20190613183316-1fb3814edf44
 github.com/containerd/ttrpc
 # github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd
 github.com/containerd/typeurl
@@ -82,6 +82,7 @@ github.com/xeipuuv/gojsonreference
 github.com/xeipuuv/gojsonschema
 # go.opencensus.io v0.22.0
 go.opencensus.io/trace
+go.opencensus.io/trace/propagation
 go.opencensus.io/internal
 go.opencensus.io/trace/internal
 go.opencensus.io/trace/tracestate
@@ -108,9 +109,9 @@ golang.org/x/text/transform
 # google.golang.org/genproto v0.0.0-20190425155659-357c62f0e4bb
 google.golang.org/genproto/googleapis/rpc/status
 # google.golang.org/grpc v1.20.1
-google.golang.org/grpc
 google.golang.org/grpc/codes
 google.golang.org/grpc/status
+google.golang.org/grpc
 google.golang.org/grpc/balancer
 google.golang.org/grpc/balancer/roundrobin
 google.golang.org/grpc/connectivity
