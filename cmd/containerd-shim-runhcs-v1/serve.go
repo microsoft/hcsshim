@@ -13,6 +13,7 @@ import (
 	"github.com/Microsoft/go-winio"
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
+	"github.com/Microsoft/hcsshim/pkg/octtrpc"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/ttrpc"
@@ -143,7 +144,7 @@ var serveCommand = cli.Command{
 			tid:       idFlag,
 			isSandbox: ctx.Bool("is-sandbox"),
 		}
-		s, err := ttrpc.NewServer()
+		s, err := ttrpc.NewServer(ttrpc.WithUnaryServerInterceptor(octtrpc.ServerInterceptor()))
 		if err != nil {
 			return err
 		}
