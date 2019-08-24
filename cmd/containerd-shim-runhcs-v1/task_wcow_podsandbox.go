@@ -225,3 +225,15 @@ func (wpst *wcowPodSandboxTask) ExecInHost(ctx context.Context, req *shimdiag.Ex
 	}
 	return execInUvm(ctx, wpst.host, req)
 }
+
+func (wpst *wcowPodSandboxTask) DumpGuestStacks(ctx context.Context) string {
+	if wpst.host != nil {
+		stacks, err := wpst.host.DumpStacks(ctx)
+		if err != nil {
+			log.G(ctx).WithError(err).Warn("failed to capture guest stacks")
+		} else {
+			return stacks
+		}
+	}
+	return ""
+}

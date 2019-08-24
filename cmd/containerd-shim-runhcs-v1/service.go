@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
@@ -350,14 +351,15 @@ func (s *service) Shutdown(ctx context.Context, req *task.ShutdownRequest) (_ *g
 	return r, errdefs.ToGRPC(e)
 }
 
-func (s *service) DiagStacks(ctx context.Context, req *shimdiag.StacksRequest) (_ *shimdiag.StacksResponse, err error) {
+func (s *service) DiagStacks(ctx context.Context, req *shimdiag.StacksRequest) (*shimdiag.StacksResponse, error) {
 	if s == nil {
 		return nil, nil
 	}
 	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "DiagStacks")
 	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+
+	span.AddAttributes(trace.StringAttribute("tid", s.tid))
 
 	buf := make([]byte, 4096)
 	for {
@@ -369,15 +371,11 @@ func (s *service) DiagStacks(ctx context.Context, req *shimdiag.StacksRequest) (
 	}
 	resp := &shimdiag.StacksResponse{Stacks: string(buf)}
 
-	if !s.isSandbox {
-		return resp, nil
+	t, _ := s.getTask(s.tid)
+	if t != nil {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		resp.GuestStacks = t.DumpGuestStacks(ctx)
 	}
-
-	sp, err := s.getPod()
-
-	if p, ok := sp.(*pod); ok {
-		resp.GuestStacks, err = p.host.DumpStacks(ctx)
-	}
-
-	return resp, err
+	return resp, nil
 }

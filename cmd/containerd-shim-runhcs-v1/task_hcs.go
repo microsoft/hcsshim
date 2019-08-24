@@ -610,3 +610,15 @@ func (ht *hcsTask) ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequ
 	}
 	return execInUvm(ctx, ht.host, req)
 }
+
+func (ht *hcsTask) DumpGuestStacks(ctx context.Context) string {
+	if ht.host != nil {
+		stacks, err := ht.host.DumpStacks(ctx)
+		if err != nil {
+			log.G(ctx).WithError(err).Warn("failed to capture guest stacks")
+		} else {
+			return stacks
+		}
+	}
+	return ""
+}

@@ -83,3 +83,7 @@ func (tst *testShimTask) Wait() *task.StateResponse {
 func (tst *testShimTask) ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (int, error) {
 	return 0, errors.New("not implemented")
 }
+
+func (wpst *testShimTask) DumpGuestStacks(ctx context.Context) string {
+	return ""
+}

@@ -75,4 +75,8 @@ type shimTask interface {
 	//
 	// If the host is not hypervisor isolated returns error.
 	ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (int, error)
+	// DumpGuestStacks dumps the GCS stacks associated with this task host.
+	//
+	// If the host is not hypervisor isolated returns `""`.
+	DumpGuestStacks(ctx context.Context) string
 }
