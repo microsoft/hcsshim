@@ -160,14 +160,42 @@ func netnsConfig() error {
 					return fmt.Errorf("netlink.AddrAdd(%#v, %#v) failed: %v", link, ipAddr2, err)
 				}
 			}
-			route := netlink.Route{
-				Scope:     netlink.SCOPE_UNIVERSE,
-				LinkIndex: link.Attrs().Index,
-				Gw:        gw,
-				Priority:  metric, // This is what ip route add does
-			}
-			if err := netlink.RouteAdd(&route); err != nil {
-				return fmt.Errorf("netlink.RouteAdd(%#v) failed: %v", route, err)
+
+			if !a.EnableLowMetric {
+				route := netlink.Route{
+					Scope:     netlink.SCOPE_UNIVERSE,
+					LinkIndex: link.Attrs().Index,
+					Gw:        gw,
+					Priority:  metric, // This is what ip route add does
+				}
+				if err := netlink.RouteAdd(&route); err != nil {
+					return fmt.Errorf("netlink.RouteAdd(%#v) failed: %v", route, err)
+				}
+			} else {
+				// add a route rule for the new interface so packets coming on this interface
+				// always go out the same interface
+				srcNet := &net.IPNet{IP: net.ParseIP(a.HostIPAddress), Mask: net.CIDRMask(0, 32)}
+				rule := netlink.NewRule()
+				rule.Table = 101
+				rule.Src = srcNet
+				rule.Priority = 5
+
+				if err := netlink.RuleAdd(rule); err != nil {
+					return fmt.Errorf("netlink.RuleAdd(%#v) failed: %v", rule, err)
+				}
+
+				// add the default route in that interface specific table
+				route := netlink.Route{
+					Scope:     netlink.SCOPE_UNIVERSE,
+					LinkIndex: link.Attrs().Index,
+					Gw:        gw,
+					Table:     rule.Table,
+					Priority:  metric,
+				}
+				if err := netlink.RouteAdd(&route); err != nil {
+					return fmt.Errorf("netlink.RouteAdd(%#v) failed: %v", route, err)
+				}
+
 			}
 		}
 	} else {
