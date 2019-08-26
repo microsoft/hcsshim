@@ -19,6 +19,8 @@ github.com/containerd/ttrpc v0.0.0-20180920185216-2a805f718635 h1:Hh9KYLzbpTyhtC
 github.com/containerd/ttrpc v0.0.0-20180920185216-2a805f718635/go.mod h1:PvCDdDGpgqzQIzDW1TphrGLssLDZp2GuS+X5DkEJB8o=
 github.com/containerd/ttrpc v0.0.0-20190613183316-1fb3814edf44 h1:vG5QXCUakUhR2CRI44aD3joCWcvb5mfZRxcwVqBVGeU=
 github.com/containerd/ttrpc v0.0.0-20190613183316-1fb3814edf44/go.mod h1:PvCDdDGpgqzQIzDW1TphrGLssLDZp2GuS+X5DkEJB8o=
+github.com/containerd/ttrpc v0.0.0-20190826154248-f969a7f076a2 h1:uR0Zz83OrfOhXWwDdwVYirFZI/LMdZXMzCHzfnQFO9w=
+github.com/containerd/ttrpc v0.0.0-20190826154248-f969a7f076a2/go.mod h1:PvCDdDGpgqzQIzDW1TphrGLssLDZp2GuS+X5DkEJB8o=
 github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd h1:JNn81o/xG+8NEo3bC/vx9pbi/g2WI8mtP2/nXzu297Y=
 github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd/go.mod h1:Cm3kwCdlkCfMSHURc+r6fwoGH6/F1hH3S4sg0rLFWPc=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=

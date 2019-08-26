@@ -28,7 +28,7 @@ github.com/containerd/containerd/events
 github.com/containerd/fifo
 # github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3
 github.com/containerd/go-runc
-# github.com/containerd/ttrpc v0.0.0-20190613183316-1fb3814edf44
+# github.com/containerd/ttrpc v0.0.0-20190826154248-f969a7f076a2
 github.com/containerd/ttrpc
 # github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd
 github.com/containerd/typeurl
