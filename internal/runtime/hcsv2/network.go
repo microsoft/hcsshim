@@ -160,7 +160,7 @@ func (n *namespace) AddAdapter(ctx context.Context, adp *prot.NetworkAdapterV2) 
 		}
 	}
 
-	resolveCtx, cancel := context.WithTimeout(ctx, time.Second*2)
+	resolveCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 	ifname, err := networkInstanceIDToName(resolveCtx, adp.ID)
 	if err != nil {
@@ -212,7 +212,12 @@ func (n *namespace) Sync(ctx context.Context) (err error) {
 	defer n.m.Unlock()
 
 	if n.pid != 0 {
-		for _, a := range n.nics {
+		for i, a := range n.nics {
+			// Lower the metric for anything but the first adapter
+			// TODO: remove when we correctly support assigning metrics to the default GWs
+			if i > 0 {
+				a.adapter.EnableLowMetric = true
+			}
 			err = a.assignToPid(ctx, n.pid)
 			if err != nil {
 				return err
