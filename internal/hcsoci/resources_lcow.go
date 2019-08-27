@@ -96,6 +96,11 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, res
 				}
 				resources.scsiMounts = append(resources.scsiMounts, scsiMount{path: hostPath, autoManage: mount.Type == "automanage-virtual-disk"})
 				coi.Spec.Mounts[i].Type = "none"
+			} else if strings.HasPrefix(mount.Source, "sandbox://") {
+				// Mounts that map to a path in UVM are specified with 'sandbox://' prefix.
+				// we remove the prefix before passing them to GCS. Mount format looks like below
+				// source: sandbox:///a/dirInUvm destination:/b/dirInContainer
+				uvmPathForFile = strings.TrimPrefix(mount.Source, "sandbox://")
 			} else {
 				st, err := os.Stat(hostPath)
 				if err != nil {
