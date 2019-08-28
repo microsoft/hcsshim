@@ -11,7 +11,7 @@ github.com/Microsoft/go-winio/pkg/security
 github.com/blang/semver
 # github.com/containerd/console v0.0.0-20180822173158-c12b1e7919c1
 github.com/containerd/console
-# github.com/containerd/containerd v0.0.0-20190214164719-faec567304bb
+# github.com/containerd/containerd v1.3.0-beta.2.0.20190828155532-0293cbd26c69
 github.com/containerd/containerd/api/events
 github.com/containerd/containerd/api/types/task
 github.com/containerd/containerd/errdefs
@@ -23,7 +23,10 @@ github.com/containerd/containerd/runtime/v2/task
 github.com/containerd/containerd/api/types
 github.com/containerd/containerd/sys
 github.com/containerd/containerd/namespaces
+github.com/containerd/containerd/api/services/ttrpc/events/v1
 github.com/containerd/containerd/events
+github.com/containerd/containerd/pkg/ttrpcutil
+github.com/containerd/containerd/sys/reaper
 # github.com/containerd/fifo v0.0.0-20190226154929-a9fb20d87448
 github.com/containerd/fifo
 # github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3

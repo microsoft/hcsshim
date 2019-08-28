@@ -128,7 +128,7 @@ func (wpst *wcowPodSandboxTask) DeleteExec(ctx context.Context, eid string) (int
 	status := e.Status()
 
 	// Publish the deleted event
-	wpst.events(
+	wpst.events.publishEvent(
 		ctx,
 		runtime.TaskDeleteEventTopic,
 		&eventstypes.TaskDelete{
@@ -175,7 +175,7 @@ func (wpst *wcowPodSandboxTask) close(ctx context.Context) {
 		}
 		// Send the `init` exec exit notification always.
 		exit := wpst.init.Status()
-		wpst.events(
+		wpst.events.publishEvent(
 			ctx,
 			runtime.TaskExitEventTopic,
 			&eventstypes.TaskExit{

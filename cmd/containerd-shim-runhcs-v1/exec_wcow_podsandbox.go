@@ -132,7 +132,7 @@ func (wpse *wcowPodSandboxExec) Start(ctx context.Context) error {
 
 	// Publish the task start event. We mever have an exec for the WCOW
 	// PodSandbox.
-	wpse.events(
+	wpse.events.publishEvent(
 		ctx,
 		runtime.TaskStartEventTopic,
 		&eventstypes.TaskStart{

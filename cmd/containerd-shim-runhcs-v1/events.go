@@ -1,26 +1,40 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"os/exec"
-	"sync"
 
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/containerd/typeurl"
-	"github.com/pkg/errors"
+	shim "github.com/containerd/containerd/runtime/v2/shim"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
 
-type publisher func(ctx context.Context, topic string, event interface{}) error
+type publisher interface {
+	publishEvent(ctx context.Context, topic string, event interface{}) (err error)
+}
 
-var _ = (publisher)(publishEvent)
+type eventPublisher struct {
+	remotePublisher *shim.RemoteEventsPublisher
+}
 
-var publishLock sync.Mutex
+var _ = (publisher)(&eventPublisher{})
 
-func publishEvent(ctx context.Context, topic string, event interface{}) (err error) {
+func newEventPublisher(address string) (*eventPublisher, error) {
+	p, err := shim.NewPublisher(address)
+	if err != nil {
+		return nil, err
+	}
+	return &eventPublisher{
+		remotePublisher: p,
+	}, nil
+}
+
+func (e *eventPublisher) close() error {
+	return e.remotePublisher.Close()
+}
+
+func (e *eventPublisher) publishEvent(ctx context.Context, topic string, event interface{}) (err error) {
 	ctx, span := trace.StartSpan(ctx, "publishEvent")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -31,23 +45,9 @@ func publishEvent(ctx context.Context, topic string, event interface{}) (err err
 		"event": event,
 	}).Debug("Publishing event")
 
-	publishLock.Lock()
-	defer publishLock.Unlock()
-
-	encoded, err := typeurl.MarshalAny(event)
-	if err != nil {
-		return errors.Wrap(err, "encode failed")
-	}
-	data, err := encoded.Marshal()
-	if err != nil {
-		return errors.Wrap(err, "marshal failed")
-	}
-	cmd := exec.Command(containerdBinaryFlag, "--address", addressFlag, "publish", "--topic", topic, "--namespace", namespaceFlag)
-	cmd.Stdin = bytes.NewReader(data)
-	err = cmd.Run()
-	if err != nil {
-		return errors.Wrap(err, "publish failed")
+	if e == nil {
+		return nil
 	}
 
-	return nil
+	return e.remotePublisher.Publish(ctx, topic, event)
 }

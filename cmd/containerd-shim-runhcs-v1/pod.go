@@ -182,7 +182,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		p.sandboxTask = newWcowPodSandboxTask(ctx, events, req.ID, req.Bundle, parent)
 		// Publish the created event. We only do this for a fake WCOW task. A
 		// HCS Task will event itself based on actual process lifetime.
-		events(
+		events.publishEvent(
 			ctx,
 			runtime.TaskCreateEventTopic,
 			&eventstypes.TaskCreate{

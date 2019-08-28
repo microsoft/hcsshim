@@ -1,3 +1,5 @@
+// +build windows
+
 /*
    Copyright The containerd Authors.
 
@@ -14,27 +16,19 @@
    limitations under the License.
 */
 
-package shim
+package ttrpcutil
 
 import (
 	"context"
 	"net"
 	"os"
-	"syscall"
 	"time"
 
 	winio "github.com/Microsoft/go-winio"
 	"github.com/pkg/errors"
 )
 
-const shimBinaryFormat = "containerd-shim-%s-%s.exe"
-
-func getSysProcAttr() *syscall.SysProcAttr {
-	return nil
-}
-
-// AnonDialer returns a dialer for a npipe
-func AnonDialer(address string, timeout time.Duration) (net.Conn, error) {
+func ttrpcDial(address string, timeout time.Duration) (net.Conn, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 

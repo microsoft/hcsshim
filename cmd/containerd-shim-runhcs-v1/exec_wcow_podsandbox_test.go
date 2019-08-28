@@ -69,13 +69,13 @@ func verifyWcowPodSandboxExecStatus(t *testing.T, wasStarted bool, es containerd
 }
 
 func Test_newWcowPodSandboxExec(t *testing.T) {
-	wpse := newWcowPodSandboxExec(context.TODO(), fakePublisher, t.Name(), t.Name())
+	wpse := newWcowPodSandboxExec(context.TODO(), newFakePublisher(), t.Name(), t.Name())
 
 	verifyWcowPodSandboxExecStatus(t, false, containerd_v1_types.StatusCreated, wpse.Status())
 }
 
 func Test_newWcowPodSandboxExec_ID(t *testing.T) {
-	wpse := newWcowPodSandboxExec(context.TODO(), fakePublisher, t.Name(), t.Name())
+	wpse := newWcowPodSandboxExec(context.TODO(), newFakePublisher(), t.Name(), t.Name())
 
 	if wpse.ID() != t.Name() {
 		t.Fatalf("expected ID: '%s' got: '%s", t.Name(), wpse.ID())
@@ -83,7 +83,7 @@ func Test_newWcowPodSandboxExec_ID(t *testing.T) {
 }
 
 func Test_newWcowPodSandboxExec_Pid(t *testing.T) {
-	wpse := newWcowPodSandboxExec(context.TODO(), fakePublisher, t.Name(), t.Name())
+	wpse := newWcowPodSandboxExec(context.TODO(), newFakePublisher(), t.Name(), t.Name())
 
 	if wpse.Pid() != 0 {
 		t.Fatalf("expected created pid: '0' got: '%d", wpse.Pid())
@@ -111,7 +111,7 @@ func Test_newWcowPodSandboxExec_Pid(t *testing.T) {
 }
 
 func Test_newWcowPodSandboxExec_State(t *testing.T) {
-	wpse := newWcowPodSandboxExec(context.TODO(), fakePublisher, t.Name(), t.Name())
+	wpse := newWcowPodSandboxExec(context.TODO(), newFakePublisher(), t.Name(), t.Name())
 
 	if wpse.State() != shimExecStateCreated {
 		t.Fatalf("expected state: '%s' got: '%s", shimExecStateCreated, wpse.State())
@@ -139,7 +139,7 @@ func Test_newWcowPodSandboxExec_State(t *testing.T) {
 }
 
 func Test_newWcowPodSandboxExec_Status(t *testing.T) {
-	wpse := newWcowPodSandboxExec(context.TODO(), fakePublisher, t.Name(), t.Name())
+	wpse := newWcowPodSandboxExec(context.TODO(), newFakePublisher(), t.Name(), t.Name())
 
 	verifyWcowPodSandboxExecStatus(t, false, containerd_v1_types.StatusCreated, wpse.Status())
 
@@ -161,7 +161,7 @@ func Test_newWcowPodSandboxExec_Status(t *testing.T) {
 }
 
 func Test_newWcowPodSandboxExec_Start(t *testing.T) {
-	wpse := newWcowPodSandboxExec(context.TODO(), fakePublisher, t.Name(), t.Name())
+	wpse := newWcowPodSandboxExec(context.TODO(), newFakePublisher(), t.Name(), t.Name())
 
 	// Start it
 	err := wpse.Start(context.TODO())
@@ -178,7 +178,7 @@ func Test_newWcowPodSandboxExec_Start(t *testing.T) {
 }
 
 func Test_newWcowPodSandboxExec_Kill_Created(t *testing.T) {
-	wpse := newWcowPodSandboxExec(context.TODO(), fakePublisher, t.Name(), t.Name())
+	wpse := newWcowPodSandboxExec(context.TODO(), newFakePublisher(), t.Name(), t.Name())
 
 	// Kill it in the created state
 	err := wpse.Kill(context.TODO(), 0x0)
@@ -197,7 +197,7 @@ func Test_newWcowPodSandboxExec_Kill_Created(t *testing.T) {
 }
 
 func Test_newWcowPodSandboxExec_Kill_Started(t *testing.T) {
-	wpse := newWcowPodSandboxExec(context.TODO(), fakePublisher, t.Name(), t.Name())
+	wpse := newWcowPodSandboxExec(context.TODO(), newFakePublisher(), t.Name(), t.Name())
 
 	// Start it
 	err := wpse.Start(context.TODO())
@@ -222,7 +222,7 @@ func Test_newWcowPodSandboxExec_Kill_Started(t *testing.T) {
 }
 
 func Test_newWcowPodSandboxExec_ResizePty(t *testing.T) {
-	wpse := newWcowPodSandboxExec(context.TODO(), fakePublisher, t.Name(), t.Name())
+	wpse := newWcowPodSandboxExec(context.TODO(), newFakePublisher(), t.Name(), t.Name())
 
 	// Resize in created state
 	err := wpse.ResizePty(context.TODO(), 10, 10)
@@ -248,7 +248,7 @@ func Test_newWcowPodSandboxExec_ResizePty(t *testing.T) {
 }
 
 func Test_newWcowPodSandboxExec_CloseIO(t *testing.T) {
-	wpse := newWcowPodSandboxExec(context.TODO(), fakePublisher, t.Name(), t.Name())
+	wpse := newWcowPodSandboxExec(context.TODO(), newFakePublisher(), t.Name(), t.Name())
 
 	// Resize in created state
 	err := wpse.CloseIO(context.TODO(), true)
@@ -280,7 +280,7 @@ func Test_newWcowPodSandboxExec_CloseIO(t *testing.T) {
 }
 
 func Test_newWcowPodSandboxExec_Wait_Created(t *testing.T) {
-	wpse := newWcowPodSandboxExec(context.TODO(), fakePublisher, t.Name(), t.Name())
+	wpse := newWcowPodSandboxExec(context.TODO(), newFakePublisher(), t.Name(), t.Name())
 
 	waitExit := make(chan *task.StateResponse, 1)
 	defer close(waitExit)
@@ -307,7 +307,7 @@ func Test_newWcowPodSandboxExec_Wait_Created(t *testing.T) {
 }
 
 func Test_newWcowPodSandboxExec_Wait_Started(t *testing.T) {
-	wpse := newWcowPodSandboxExec(context.TODO(), fakePublisher, t.Name(), t.Name())
+	wpse := newWcowPodSandboxExec(context.TODO(), newFakePublisher(), t.Name(), t.Name())
 
 	waitExit := make(chan *task.StateResponse, 1)
 	defer close(waitExit)

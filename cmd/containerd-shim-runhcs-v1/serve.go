@@ -138,9 +138,22 @@ var serveCommand = cli.Command{
 			return errors.New("socket is required to be pipe address")
 		}
 
+		ttrpcAddress := os.Getenv(ttrpcAddressEnv)
+		ttrpcEventPublisher, err := newEventPublisher(ttrpcAddress)
+
+		if err != nil {
+			return err
+		}
+
+		defer func() {
+			if err != nil {
+				ttrpcEventPublisher.close()
+			}
+		}()
+
 		// Setup the ttrpc server
 		svc = &service{
-			events:    publishEvent,
+			events:    ttrpcEventPublisher,
 			tid:       idFlag,
 			isSandbox: ctx.Bool("is-sandbox"),
 		}

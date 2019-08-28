@@ -17,8 +17,10 @@
 package shim
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"os/exec"
@@ -28,13 +30,15 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/namespaces"
+	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 )
 
 var runtimePaths sync.Map
 
 // Command returns the shim command with the provided args and configuration
-func Command(ctx context.Context, runtime, containerdAddress, path string, cmdArgs ...string) (*exec.Cmd, error) {
+func Command(ctx context.Context, runtime, containerdAddress, containerdTTRPCAddress, path string, opts *types.Any, cmdArgs ...string) (*exec.Cmd, error) {
 	ns, err := namespaces.NamespaceRequired(ctx)
 	if err != nil {
 		return nil, err
@@ -91,8 +95,19 @@ func Command(ctx context.Context, runtime, containerdAddress, path string, cmdAr
 
 	cmd := exec.Command(cmdPath, args...)
 	cmd.Dir = path
-	cmd.Env = append(os.Environ(), "GOMAXPROCS=2")
+	cmd.Env = append(
+		os.Environ(),
+		"GOMAXPROCS=2",
+		fmt.Sprintf("%s=%s", ttrpcAddressEnv, containerdTTRPCAddress),
+	)
 	cmd.SysProcAttr = getSysProcAttr()
+	if opts != nil {
+		d, err := proto.Marshal(opts)
+		if err != nil {
+			return nil, err
+		}
+		cmd.Stdin = bytes.NewReader(d)
+	}
 	return cmd, nil
 }
 
@@ -149,4 +164,23 @@ func WriteAddress(path, address string) error {
 		return err
 	}
 	return os.Rename(tempPath, path)
+}
+
+// ErrNoAddress is returned when the address file has no content
+var ErrNoAddress = errors.New("no shim address")
+
+// ReadAddress returns the shim's abstract socket address from the path
+func ReadAddress(path string) (string, error) {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	if len(data) == 0 {
+		return "", ErrNoAddress
+	}
+	return string(data), nil
 }

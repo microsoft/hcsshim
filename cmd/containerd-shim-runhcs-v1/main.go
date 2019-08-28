@@ -20,6 +20,7 @@ import (
 )
 
 const usage = ``
+const ttrpcAddressEnv = "TTRPC_ADDRESS"
 
 // Add a manifest to get proper Windows version detection.
 //
