@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -758,8 +759,11 @@ func Test_RunPodSandbox_CustomizableScratchDefaultSize_LCOW(t *testing.T) {
 	}
 
 	// df command shows size in KB, 20642524 is 20GB
-	if cols[1] != "20642524" {
-		t.Fatalf("Size of the overlay filesystem mounted at / is not 20642524 (20GB). It is %s", cols[1])
+	actualMountSize, _ := strconv.ParseInt(cols[1], 10, 64)
+	expectedMountSize := int64(20642524)
+	toleranceInKB := int64(10240)
+	if actualMountSize < (expectedMountSize-toleranceInKB) || actualMountSize > (expectedMountSize+toleranceInKB) {
+		t.Fatalf("Size of the overlay filesystem mounted at / is not within 10MB of 20642524 (20GB). It is %s", cols[1])
 	}
 }
 
@@ -799,9 +803,12 @@ func Test_RunPodSandbox_CustomizableScratchCustomSize_LCOW(t *testing.T) {
 	}
 
 	// df command shows size in KB, 206425432 is 200GB
-	if cols[1] != "206425432" {
+	actualMountSize, _ := strconv.ParseInt(cols[1], 10, 64)
+	expectedMountSize := int64(206425432)
+	toleranceInKB := int64(10240)
+	if actualMountSize < (expectedMountSize-toleranceInKB) || actualMountSize > (expectedMountSize+toleranceInKB) {
 		t.Log(output)
-		t.Fatalf("Size of the overlay filesystem mounted at / is not 206425432 (200GB). It is %s", cols[1])
+		t.Fatalf("Size of the overlay filesystem mounted at / is not within 10MB of 206425432 (200GB). It is %s", cols[1])
 	}
 }
 
