@@ -3,8 +3,11 @@
 package cri_containerd
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"testing"
 
 	runtime "k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2"
@@ -720,4 +723,158 @@ func Test_RunPodSandbox_PortMappings_LCOW(t *testing.T) {
 		RuntimeHandler: lcowRuntimeHandler,
 	}
 	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_CustomizableScratchDefaultSize_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+
+	annotations := map[string]string{
+		"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "true",
+	}
+
+	output, errorMsg, exitCode := createSandboxContainerAndExec(t, annotations)
+
+	if exitCode != 0 {
+		t.Fatalf("Exec into container failed with: %v and exit code: %d, Test_RunPodSandbox_CustomizableScratchDefaultSize_LCOW", errorMsg, exitCode)
+	}
+
+	// Format of output for df is below
+	// Filesystem           1K-blocks      Used Available Use% Mounted on
+	// overlay               20642524        36  19577528   0% /
+	// tmpfs                    65536         0     65536   0% /dev
+	scanner := bufio.NewScanner(strings.NewReader(output))
+	found := false
+	var cols []string
+	for scanner.Scan() {
+		outputLine := scanner.Text()
+		if cols = strings.Fields(outputLine); cols[0] == "overlay" && cols[5] == "/" {
+			found = true
+			t.Log(outputLine)
+			break
+		}
+	}
+
+	if !found {
+		t.Fatalf("could not find the correct output line for overlay mount on / n: error: %v, exitcode: %d", errorMsg, exitCode)
+	}
+
+	// df command shows size in KB, 20642524 is 20GB
+	actualMountSize, _ := strconv.ParseInt(cols[1], 10, 64)
+	expectedMountSize := int64(20642524)
+	toleranceInKB := int64(10240)
+	if actualMountSize < (expectedMountSize-toleranceInKB) || actualMountSize > (expectedMountSize+toleranceInKB) {
+		t.Fatalf("Size of the overlay filesystem mounted at / is not within 10MB of 20642524 (20GB). It is %s", cols[1])
+	}
+}
+
+func Test_RunPodSandbox_CustomizableScratchCustomSize_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+
+	annotations := map[string]string{
+		"io.microsoft.virtualmachine.computetopology.memory.allowovercommit":   "true",
+		"containerd.io/snapshot/io.microsoft.container.storage.rootfs.size-gb": "200",
+	}
+
+	output, errorMsg, exitCode := createSandboxContainerAndExec(t, annotations)
+
+	if exitCode != 0 {
+		t.Fatalf("Exec into container failed with: %v and exit code: %d, Test_RunPodSandbox_CustomizableScratchDefaultSize_LCOW", errorMsg, exitCode)
+	}
+
+	// Format of output for df is below
+	// Filesystem           1K-blocks      Used Available Use% Mounted on
+	// overlay               20642524        36  19577528   0% /
+	// tmpfs                    65536         0     65536   0% /dev
+	scanner := bufio.NewScanner(strings.NewReader(output))
+	found := false
+	var cols []string
+	for scanner.Scan() {
+		outputLine := scanner.Text()
+		if cols = strings.Fields(outputLine); cols[0] == "overlay" && cols[5] == "/" {
+			found = true
+			t.Log(outputLine)
+			break
+		}
+	}
+
+	if !found {
+		t.Log(output)
+		t.Fatalf("could not find the correct output line for overlay mount on / n: error: %v, exitcode: %d", errorMsg, exitCode)
+	}
+
+	// df command shows size in KB, 206425432 is 200GB
+	actualMountSize, _ := strconv.ParseInt(cols[1], 10, 64)
+	expectedMountSize := int64(206425432)
+	toleranceInKB := int64(10240)
+	if actualMountSize < (expectedMountSize-toleranceInKB) || actualMountSize > (expectedMountSize+toleranceInKB) {
+		t.Log(output)
+		t.Fatalf("Size of the overlay filesystem mounted at / is not within 10MB of 206425432 (200GB). It is %s", cols[1])
+	}
+}
+
+func createSandboxContainerAndExec(t *testing.T, annotations map[string]string) (output string, errorMsg string, exitCode int) {
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sbRequest := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: annotations,
+		},
+		RuntimeHandler: lcowRuntimeHandler,
+	}
+
+	podId := runPodSandbox(t, client, ctx, sbRequest)
+	defer func() {
+		stopAndRemovePodSandbox(t, client, ctx, podId)
+	}()
+
+	cRequest := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			// Hold this command open until killed
+			Command: []string{
+				"top",
+			},
+			Annotations: annotations,
+		},
+		PodSandboxId:  podId,
+		SandboxConfig: sbRequest.Config,
+	}
+
+	containerId := createContainer(t, client, ctx, cRequest)
+	_, err := client.StartContainer(ctx, &runtime.StartContainerRequest{
+		ContainerId: containerId,
+	})
+
+	if err != nil {
+		t.Fatalf("failed StartContainer request for container: %s, with: %v", containerId, err)
+	}
+
+	//exec request
+	execRequest := &runtime.ExecSyncRequest{
+		ContainerId: containerId,
+		// this is just saying 'give me the UID of the process with pid = 1; ignore headers'
+		Cmd: []string{
+			"df",
+		},
+		Timeout: 20,
+	}
+
+	r := execContainer(ctx, t, client, execRequest)
+	output = strings.TrimSpace(string(r.Stdout))
+	errorMsg = string(r.Stderr)
+	exitCode = int(r.ExitCode)
+
+	return output, errorMsg, exitCode
 }
