@@ -732,7 +732,7 @@ func Test_RunPodSandbox_CustomizableScratchDefaultSize_LCOW(t *testing.T) {
 		"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "true",
 	}
 
-	output, errorMsg, exitCode := createSandboxContainerAndExec(t, annotations)
+	output, errorMsg, exitCode := createSandboxContainerAndExecForCustomScratch(t, annotations)
 
 	if exitCode != 0 {
 		t.Fatalf("Exec into container failed with: %v and exit code: %d, Test_RunPodSandbox_CustomizableScratchDefaultSize_LCOW", errorMsg, exitCode)
@@ -775,7 +775,7 @@ func Test_RunPodSandbox_CustomizableScratchCustomSize_LCOW(t *testing.T) {
 		"containerd.io/snapshot/io.microsoft.container.storage.rootfs.size-gb": "200",
 	}
 
-	output, errorMsg, exitCode := createSandboxContainerAndExec(t, annotations)
+	output, errorMsg, exitCode := createSandboxContainerAndExecForCustomScratch(t, annotations)
 
 	if exitCode != 0 {
 		t.Fatalf("Exec into container failed with: %v and exit code: %d, Test_RunPodSandbox_CustomizableScratchDefaultSize_LCOW", errorMsg, exitCode)
@@ -812,7 +812,42 @@ func Test_RunPodSandbox_CustomizableScratchCustomSize_LCOW(t *testing.T) {
 	}
 }
 
-func createSandboxContainerAndExec(t *testing.T, annotations map[string]string) (output string, errorMsg string, exitCode int) {
+func Test_RunPodSandbox_ContainerUvmMount_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+
+	annotations := map[string]string{
+		"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "true",
+	}
+
+	mounts := []*runtime.Mount{
+		{
+			HostPath:      "sandbox:///boot",
+			ContainerPath: "/containerUvmDir",
+		},
+	}
+	cmd := []string{
+		"mount",
+	}
+
+	output, errorMsg, exitCode := createSandboxContainerAndExec(t, annotations, mounts, cmd)
+
+	if exitCode != 0 {
+		t.Fatalf("Exec into container failed with: %v and exit code: %d, Test_RunPodSandbox_ContainerUvmMount_LCOW", errorMsg, exitCode)
+	}
+
+	t.Log(output)
+
+	//TODO: Parse the output of the exec command to make sure the uvm mount was successful
+}
+
+func createSandboxContainerAndExecForCustomScratch(t *testing.T, annotations map[string]string) (string, string, int) {
+	cmd := []string{
+		"df",
+	}
+	return createSandboxContainerAndExec(t, annotations, nil, cmd)
+}
+
+func createSandboxContainerAndExec(t *testing.T, annotations map[string]string, mounts []*runtime.Mount, execCommand []string) (output string, errorMsg string, exitCode int) {
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -834,6 +869,12 @@ func createSandboxContainerAndExec(t *testing.T, annotations map[string]string) 
 		stopAndRemovePodSandbox(t, client, ctx, podId)
 	}()
 
+	testMounts := []*runtime.Mount{}
+
+	if mounts != nil {
+		testMounts = mounts
+	}
+
 	cRequest := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
 			Metadata: &runtime.ContainerMetadata{
@@ -847,6 +888,7 @@ func createSandboxContainerAndExec(t *testing.T, annotations map[string]string) 
 				"top",
 			},
 			Annotations: annotations,
+			Mounts:      testMounts,
 		},
 		PodSandboxId:  podId,
 		SandboxConfig: sbRequest.Config,
@@ -865,9 +907,7 @@ func createSandboxContainerAndExec(t *testing.T, annotations map[string]string) 
 	execRequest := &runtime.ExecSyncRequest{
 		ContainerId: containerId,
 		// this is just saying 'give me the UID of the process with pid = 1; ignore headers'
-		Cmd: []string{
-			"df",
-		},
+		Cmd:     execCommand,
 		Timeout: 20,
 	}
 
