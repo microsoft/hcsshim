@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/Microsoft/opengcs/internal/oc"
+	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
 )
@@ -45,5 +46,8 @@ func Mount(ctx context.Context, device uint32, target string) (err error) {
 	}()
 	source := fmt.Sprintf("/dev/pmem%d", device)
 	flags := uintptr(unix.MS_RDONLY)
-	return unixMount(source, target, "ext4", flags, "noload,dax")
+	if err := unixMount(source, target, "ext4", flags, "noload,dax"); err != nil {
+		return errors.Wrapf(err, "failed to mount pmem device %s onto %s", source, target)
+	}
+	return nil
 }
