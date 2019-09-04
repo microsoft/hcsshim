@@ -4,6 +4,7 @@ package cri_containerd
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -47,7 +48,7 @@ func runexecContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.RunPo
 	return execContainer(ctx, t, client, execReq)
 }
 
-func Test_ExecContainer_RunAs_LCOW(t *testing.T) {
+func execContainerLCOW(t *testing.T, uid int64, cmd []string) *runtime.ExecSyncResponse {
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowCosmos})
 
 	//run podsandbox request
@@ -84,7 +85,7 @@ func Test_ExecContainer_RunAs_LCOW(t *testing.T) {
 			Linux: &runtime.LinuxContainerConfig{
 				SecurityContext: &runtime.LinuxContainerSecurityContext{
 					RunAsUser: &runtime.Int64Value{
-						Value: 9000, // cosmosarno user
+						Value: uid,
 					},
 				},
 			},
@@ -94,19 +95,26 @@ func Test_ExecContainer_RunAs_LCOW(t *testing.T) {
 	//exec request
 	execRequest := &runtime.ExecSyncRequest{
 		ContainerId: "",
-		// this is just saying 'give me the UID of the process with pid = 1; ignore headers'
-		Cmd: []string{
+		Cmd:         cmd,
+		Timeout:     20,
+	}
+
+	return runexecContainerTestWithSandbox(t, sandboxRequest, request, execRequest)
+}
+
+func Test_ExecContainer_RunAs_LCOW(t *testing.T) {
+	// this is just saying 'give me the UID of the process with pid = 1; ignore headers'
+	r := execContainerLCOW(t,
+		9000, // cosmosarno user
+		[]string{
 			"ps",
 			"-o",
 			"uid",
 			"-p",
 			"1",
 			"--no-headers",
-		},
-		Timeout: 20,
-	}
+		})
 
-	r := runexecContainerTestWithSandbox(t, sandboxRequest, request, execRequest)
 	output := strings.TrimSpace(string(r.Stdout))
 	errorMsg := string(r.Stderr)
 	exitCode := int(r.ExitCode)
@@ -121,4 +129,20 @@ func Test_ExecContainer_RunAs_LCOW(t *testing.T) {
 	if output != "9000" {
 		t.Fatalf("failed to start container with runas option: error: %v, exitcode: %d", errorMsg, exitCode)
 	}
+}
+
+func Test_ExecContainer_LCOW_HasEntropy(t *testing.T) {
+	r := execContainerLCOW(t, 9000, []string{"cat", "/proc/sys/kernel/random/entropy_avail"})
+	if r.ExitCode != 0 {
+		t.Fatalf("failed with exit code %d to cat entropy_avail: %s", r.ExitCode, r.Stderr)
+	}
+	output := strings.TrimSpace(string(r.Stdout))
+	bits, err := strconv.ParseInt(output, 10, 0)
+	if err != nil {
+		t.Fatalf("could not parse entropy output %s: %s", output, err)
+	}
+	if bits < 2000 {
+		t.Fatalf("%d is fewer than 2000 bits entropy", bits)
+	}
+	t.Logf("got %d bits entropy", bits)
 }

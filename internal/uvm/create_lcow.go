@@ -29,6 +29,7 @@ const (
 	PreferredRootFSTypeInitRd PreferredRootFSType = iota
 	PreferredRootFSTypeVHD
 
+	entropyVsockPort  = 1
 	linuxLogVsockPort = 109
 )
 
@@ -323,9 +324,12 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		kernelArgs += " " + opts.KernelBootOptions
 	}
 
+	// Inject initial entropy over vsock during init launch.
+	initArgs := fmt.Sprintf("-e %d", entropyVsockPort)
+
 	// With default options, run GCS with stderr pointing to the vsock port
 	// created below in order to forward guest logs to logrus.
-	initArgs := "/bin/vsockexec"
+	initArgs += " /bin/vsockexec"
 
 	if opts.ForwardStdout {
 		initArgs += fmt.Sprintf(" -o %d", linuxLogVsockPort)
@@ -370,6 +374,12 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	}
 
 	err = uvm.create(ctx, fullDoc)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cerate a socket to inject entropy during boot.
+	uvm.entropyListener, err = uvm.listenVsock(entropyVsockPort)
 	if err != nil {
 		return nil, err
 	}
