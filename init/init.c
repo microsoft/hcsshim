@@ -2,7 +2,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
-#include <linux/random.h>
 #include <net/if.h>
 #include <netinet/ip.h>
 #include <signal.h>
@@ -17,6 +16,12 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include "../vsockexec/vsock.h"
+
+// musl-gcc doesn't use headers in /usr/include, so it can't find
+// linux/random.h which is where RNDADDENTROPY is defined. We only need this
+// single definition from linux/random.h, so we just duplicate it here as a
+// workaround.
+#define RNDADDENTROPY _IOW( 'R', 0x03, int [2] )
 
 #define DEFAULT_PATH_ENV "PATH=/sbin:/usr/sbin:/bin:/usr/bin"
 
