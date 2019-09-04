@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "vsock.h"
 
 #ifdef USE_TCP
 static const int tcpmode = 1;
@@ -15,44 +16,10 @@ static const int tcpmode = 1;
 static const int tcpmode;
 #endif
 
-struct sockaddr_vm {
-	unsigned short svm_family;
-	unsigned short svm_reserved1;
-	unsigned int svm_port;
-	unsigned int svm_cid;
-	unsigned char svm_zero[sizeof(struct sockaddr) -
-			       sizeof(sa_family_t) -
-			       sizeof(unsigned short) -
-			       sizeof(unsigned int) - sizeof(unsigned int)];
-};
-
-#define VMADDR_CID_HOST 2
-
-static int openvsock(unsigned int cid, unsigned int port)
-{
-    int s = socket(AF_VSOCK, SOCK_STREAM, 0);
-    if (s < 0) {
-        perror("socket: AF_VSOCK");
-        return -1;
-    }
-
-    struct sockaddr_vm addr = {0};
-    addr.svm_family = AF_VSOCK;
-    addr.svm_port = port;
-    addr.svm_cid = cid;
-    if (connect(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        fprintf(stderr, "connect: port %u: %s", port, strerror(errno));
-        return -1;
-    }
-
-    return s;
-}
-
 static int opentcp(unsigned short port)
 {
     int s = socket(AF_INET, SOCK_STREAM, 0);
     if (s < 0) {
-        perror("socket: AF_INET");
         return -1;
     }
 
@@ -61,7 +28,6 @@ static int opentcp(unsigned short port)
     addr.sin_port = htons(port);
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     if (connect(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        fprintf(stderr, "connect: port %u: %s\n", port, strerror(errno));
         return -1;
     }
 
@@ -121,6 +87,7 @@ int main(int argc, char **argv)
             if (j == i) {
                 int s = tcpmode ? opentcp(ports[i]) : openvsock(VMADDR_CID_HOST, ports[i]);
                 if (s < 0) {
+                    fprintf(stderr, "connect: port %u: %s", ports[i], strerror(errno));
                     return 1;
                 }
                 sockets[i] = s;

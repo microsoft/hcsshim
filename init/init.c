@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <linux/random.h>
 #include <net/if.h>
 #include <netinet/ip.h>
 #include <signal.h>
@@ -15,6 +16,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "../vsockexec/vsock.h"
 
 #define DEFAULT_PATH_ENV "PATH=/sbin:/usr/sbin:/bin:/usr/bin"
 
@@ -236,6 +238,42 @@ void init_network(const char *iface, int domain) {
     close(s);
 }
 
+// inject boot-time entropy after reading it from a vsock port
+void init_entropy(int port) {
+    int s = openvsock(VMADDR_CID_HOST, port);
+    if (s < 0) {
+        die("openvsock entropy");
+    }
+
+    int e = open("/dev/random", O_RDWR);
+    if (e < 0) {
+        die("open /dev/random");
+    }
+
+    struct {
+        int entropy_count;
+        int buf_size;
+        char buf[4096];
+    } buf;
+
+    for (;;) {
+        ssize_t n = read(s, buf.buf, sizeof(buf.buf));
+        if (n < 0) {
+            die("read entropy");
+        }
+
+        if (n == 0) {
+            break;
+        }
+
+        buf.entropy_count = n * 8; // in bits
+        buf.buf_size = n; // in bytes
+        if (ioctl(e, RNDADDENTROPY, &buf) < 0) {
+            die("ioctl(RNDADDENTROPY)");
+        }
+    }
+}
+
 pid_t launch(int argc, char **argv) {
     int pid = fork();
     if (pid != 0) {
@@ -292,16 +330,26 @@ int reap_until(pid_t until_pid) {
 
 int main(int argc, char **argv) {
     char *debug_shell = NULL;
+    int entropy_port = 0;
     if (argc <= 1) {
         argv = (char **)default_argv;
         argc = sizeof(default_argv) / sizeof(default_argv[0]);
         optind = 0;
         debug_shell = (char*)default_shell;
     } else {
-        for (int opt; (opt = getopt(argc, argv, "+d:")) >= 0; ) {
+        for (int opt; (opt = getopt(argc, argv, "+d:e:")) >= 0; ) {
             switch (opt) {
             case 'd':
                 debug_shell = optarg;
+                break;
+
+            case 'e':
+                entropy_port = atoi(optarg);
+                if (entropy_port == 0) {
+                    fputs("invalid entropy port\n", stderr);
+                    exit(1);
+                }
+
                 break;
 
             default:
@@ -323,6 +371,9 @@ int main(int argc, char **argv) {
     init_cgroups();
     init_network("lo", AF_INET);
     init_network("lo", AF_INET6);
+    if (entropy_port != 0) {
+        init_entropy(entropy_port);
+    }
 
     pid_t pid = launch(child_argc, child_argv);
     if (debug_shell != NULL) {

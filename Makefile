@@ -78,13 +78,13 @@ out/initrd.img: $(BASE) out/delta.tar.gz $(SRCROOT)/hack/catcpio.sh
 
 VPATH=$(SRCROOT)
 
-bin/vsockexec: vsockexec/vsockexec.o
+bin/vsockexec: vsockexec/vsockexec.o vsockexec/vsock.o
 	@mkdir -p bin
-	$(CC) $(LDFLAGS) -o $@ $<
+	$(CC) $(LDFLAGS) -o $@ $^
 
-bin/init: init/init.o
+bin/init: init/init.o vsockexec/vsock.o
 	@mkdir -p bin
-	$(CC) $(LDFLAGS) -o $@ $<
+	$(CC) $(LDFLAGS) -o $@ $^
 
 %.o: %.c
 	@mkdir -p $(dir $@)
