@@ -5,6 +5,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/containerd/containerd/namespaces"
 	shim "github.com/containerd/containerd/runtime/v2/shim"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
@@ -49,5 +50,5 @@ func (e *eventPublisher) publishEvent(ctx context.Context, topic string, event i
 		return nil
 	}
 
-	return e.remotePublisher.Publish(ctx, topic, event)
+	return e.remotePublisher.Publish(namespaces.WithNamespace(ctx, namespaceFlag), topic, event)
 }
