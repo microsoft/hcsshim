@@ -84,6 +84,12 @@ func execContainerLCOW(t *testing.T, uid int64, cmd []string) *runtime.ExecSyncR
 			},
 			Linux: &runtime.LinuxContainerConfig{
 				SecurityContext: &runtime.LinuxContainerSecurityContext{
+					// Our tests rely on the init process for the workload
+					// container being pid 1, but the CRI default is to use the
+					// pod's pid namespace.
+					NamespaceOptions: &runtime.NamespaceOption{
+						Pid: runtime.NamespaceMode_CONTAINER,
+					},
 					RunAsUser: &runtime.Int64Value{
 						Value: uid,
 					},
