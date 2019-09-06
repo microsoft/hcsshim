@@ -277,6 +277,9 @@ void init_entropy(int port) {
             die("ioctl(RNDADDENTROPY)");
         }
     }
+
+    close(s);
+    close(e);
 }
 
 pid_t launch(int argc, char **argv) {
