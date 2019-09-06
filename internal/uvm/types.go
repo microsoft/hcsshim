@@ -89,8 +89,9 @@ type UtilityVM struct {
 	// VPMEM devices that are mapped into a Linux UVM. These are used for read-only layers, or for
 	// booting from VHD.
 	vpmemDevices      [MaxVPMEMCount]vpmemInfo // Limited by ACPI size.
-	vpmemMaxCount     uint32                   // Actual number of VPMem devices
-	vpmemMaxSizeBytes uint64                   // Actual size of VPMem devices
+	vpmemNumDevices   uint32                   // Current number of VPMem devices
+	vpmemMaxCount     uint32                   // Actual max number of VPMem devices
+	vpmemMaxSizeBytes uint64                   // Actual max size of VPMem devices
 
 	// SCSI devices that are mapped into a Windows or Linux utility VM
 	scsiLocations       [4][64]scsiInfo // Hyper-V supports 4 controllers, 64 slots per controller. Limited to 1 controller for now though.
