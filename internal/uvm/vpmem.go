@@ -99,6 +99,8 @@ func (uvm *UtilityVM) AddVPMEM(ctx context.Context, hostPath string, expose bool
 			hostPath: hostPath,
 			refCount: 1,
 			uvmPath:  uvmPath}
+
+		uvm.vpmemNumDevices++
 	} else {
 		pmemi := vpmemInfo{
 			hostPath: hostPath,
@@ -142,6 +144,7 @@ func (uvm *UtilityVM) RemoveVPMEM(ctx context.Context, hostPath string) (err err
 			return fmt.Errorf("failed to remove VPMEM %s from utility VM %s: %s", hostPath, uvm.id, err)
 		}
 		uvm.vpmemDevices[deviceNumber] = vpmemInfo{}
+		uvm.vpmemNumDevices--
 		return nil
 	}
 	uvm.vpmemDevices[deviceNumber].refCount--
@@ -151,4 +154,9 @@ func (uvm *UtilityVM) RemoveVPMEM(ctx context.Context, hostPath string) (err err
 // PMemMaxSizeBytes returns the maximum size of a PMEM layer (LCOW)
 func (uvm *UtilityVM) PMemMaxSizeBytes() uint64 {
 	return uvm.vpmemMaxSizeBytes
+}
+
+// ExceededVPMem returns true if the addition of a new vpmem device exceeds uvm limits on vpmem
+func (uvm *UtilityVM) ExceededVPMem(fileSize int64) bool {
+	return (uint64(fileSize) > uvm.vpmemMaxSizeBytes) || (uvm.vpmemNumDevices >= uvm.vpmemMaxCount)
 }

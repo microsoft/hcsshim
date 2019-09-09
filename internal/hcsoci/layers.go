@@ -115,7 +115,8 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 
 			var fi os.FileInfo
 			fi, err = os.Stat(hostPath)
-			if err == nil && uint64(fi.Size()) > uvm.PMemMaxSizeBytes() {
+
+			if err == nil && uvm.ExceededVPMem(fi.Size()) {
 				// Too big for PMEM. Add on SCSI instead (at /tmp/S<C>/<L>).
 				var (
 					controller int

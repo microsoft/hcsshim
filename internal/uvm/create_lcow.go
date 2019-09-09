@@ -292,6 +292,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 			uvmPath:  "/",
 			refCount: 1,
 		}
+		uvm.vpmemNumDevices++
 	}
 
 	vmDebugging := false
