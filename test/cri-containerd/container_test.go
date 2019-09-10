@@ -55,6 +55,12 @@ func runLogRotationContainer(t *testing.T, sandboxRequest *runtime.RunPodSandbox
 	time.Sleep(3 * time.Second)
 }
 
+func runContainerLifetime(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) {
+	defer removeContainer(t, client, ctx, containerID)
+	startContainer(t, client, ctx, containerID)
+	stopContainer(t, client, ctx, containerID)
+}
+
 func Test_RotateLogs_LCOW(t *testing.T) {
 	image := "alpine:latest"
 	dir, err := ioutil.TempDir("", "")
@@ -129,5 +135,83 @@ func Test_RotateLogs_LCOW(t *testing.T) {
 			t.Fatalf("missing expected output value: %v (got %v)", expected, n)
 		}
 		expected++
+	}
+}
+
+func Test_RunContainer_Events_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	client := newTestRuntimeClient(t)
+
+	podctx, podcancel := context.WithCancel(context.Background())
+	defer podcancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	targetNamespace := "k8s.io"
+
+	sandboxRequest := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+		},
+		RuntimeHandler: lcowRuntimeHandler,
+	}
+
+	podID := runPodSandbox(t, client, podctx, sandboxRequest)
+	defer removePodSandbox(t, client, podctx, podID)
+	defer stopPodSandbox(t, client, podctx, podID)
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			Command: []string{
+				"top",
+			},
+			Linux: &runtime.LinuxContainerConfig{},
+		},
+		PodSandboxId:  podID,
+		SandboxConfig: sandboxRequest.Config,
+	}
+
+	topicNames, filters := getTargetRunTopics()
+	eventService := newTestEventService(t)
+	stream, errs := eventService.Subscribe(ctx, filters...)
+
+	containerID := createContainer(t, client, podctx, request)
+	runContainerLifetime(t, client, podctx, containerID)
+
+	for _, topic := range topicNames {
+		select {
+		case env := <-stream:
+			if topic != env.Topic {
+				t.Fatalf("event topic %v does not match expected topic %v", env.Topic, topic)
+			}
+			if targetNamespace != env.Namespace {
+				t.Fatalf("event namespace %v does not match expected namespace %v", env.Namespace, targetNamespace)
+			}
+			t.Logf("event topic seen: %v", env.Topic)
+
+			id, _, err := convertEvent(env.Event)
+			if err != nil {
+				t.Fatalf("topic %v event: %v", env.Topic, err)
+			}
+			if id != containerID {
+				t.Fatalf("event topic %v belongs to container %v, not targeted container %v", env.Topic, id, containerID)
+			}
+		case e := <-errs:
+			t.Fatalf("event subscription err %v", e)
+		case <-ctx.Done():
+			if ctx.Err() == context.DeadlineExceeded {
+				t.Fatalf("event %v deadline exceeded", topic)
+			}
+		}
 	}
 }

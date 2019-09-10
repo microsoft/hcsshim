@@ -4,12 +4,20 @@ package cri_containerd
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"testing"
 	"time"
 
 	"github.com/Microsoft/hcsshim/osversion"
 	_ "github.com/Microsoft/hcsshim/test/functional/manifest"
+	"github.com/containerd/containerd"
+	eventtypes "github.com/containerd/containerd/api/events"
+	eventsapi "github.com/containerd/containerd/api/services/events/v1"
+	eventruntime "github.com/containerd/containerd/runtime"
+	"github.com/containerd/typeurl"
+	"github.com/gogo/protobuf/types"
 	"google.golang.org/grpc"
 	runtime "k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2"
 )
@@ -59,28 +67,79 @@ func getWindowsServerCoreImage(build uint16) string {
 	}
 }
 
-func newTestRuntimeClient(t *testing.T) runtime.RuntimeServiceClient {
-	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
-	defer cancel()
+func createGRPCConn(ctx context.Context) (*grpc.ClientConn, error) {
 	conn, err := grpc.DialContext(ctx, daemonAddress, grpc.WithInsecure(), grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
 		return net.DialTimeout("tcp", "127.0.0.1:2376", timeout)
 	}))
+	return conn, err
+}
+
+func newTestRuntimeClient(t *testing.T) runtime.RuntimeServiceClient {
+	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
+	defer cancel()
+	conn, err := createGRPCConn(ctx)
 	if err != nil {
 		t.Fatalf("failed to dial runtime client: %v", err)
 	}
 	return runtime.NewRuntimeServiceClient(conn)
 }
 
+func newTestEventService(t *testing.T) containerd.EventService {
+	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
+	defer cancel()
+	conn, err := createGRPCConn(ctx)
+	if err != nil {
+		t.Fatalf("Failed to create a client connection %v", err)
+	}
+	return containerd.NewEventServiceFromClient(eventsapi.NewEventsClient(conn))
+}
+
 func newTestImageClient(t *testing.T) runtime.ImageServiceClient {
 	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
 	defer cancel()
-	conn, err := grpc.DialContext(ctx, daemonAddress, grpc.WithInsecure(), grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
-		return net.DialTimeout("tcp", "127.0.0.1:2376", timeout)
-	}))
+	conn, err := createGRPCConn(ctx)
 	if err != nil {
 		t.Fatalf("failed to dial runtime client: %v", err)
 	}
 	return runtime.NewImageServiceClient(conn)
+}
+
+func getTargetRunTopics() (topicNames []string, filters []string) {
+	topicNames = []string{
+		eventruntime.TaskCreateEventTopic,
+		eventruntime.TaskStartEventTopic,
+		eventruntime.TaskExitEventTopic,
+		eventruntime.TaskDeleteEventTopic,
+	}
+
+	filters = make([]string, len(topicNames))
+
+	for i, name := range topicNames {
+		filters[i] = fmt.Sprintf(`topic=="%v"`, name)
+	}
+	return topicNames, filters
+}
+
+func convertEvent(e *types.Any) (string, interface{}, error) {
+	id := ""
+	evt, err := typeurl.UnmarshalAny(e)
+	if err != nil {
+		return "", nil, err
+	}
+
+	switch event := evt.(type) {
+	case *eventtypes.TaskCreate:
+		id = event.ContainerID
+	case *eventtypes.TaskStart:
+		id = event.ContainerID
+	case *eventtypes.TaskDelete:
+		id = event.ContainerID
+	case *eventtypes.TaskExit:
+		id = event.ContainerID
+	default:
+		return "", nil, errors.New("test does not support this event")
+	}
+	return id, evt, nil
 }
 
 func pullRequiredImages(t *testing.T, images []string) {
