@@ -11,9 +11,10 @@ import (
 // exec `tid==id` MUST be true by containerd convention.
 func newTestShimExec(tid, id string, pid int) *testShimExec {
 	return &testShimExec{
-		tid: tid,
-		id:  id,
-		pid: pid,
+		tid:   tid,
+		id:    id,
+		pid:   pid,
+		state: shimExecStateCreated,
 	}
 }
 

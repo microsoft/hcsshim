@@ -25,8 +25,8 @@ import (
 	"github.com/containerd/containerd/runtime/v2/task"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
-	"golang.org/x/sync/errgroup"
 )
 
 func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (_ shimTask, err error) {
@@ -311,35 +311,20 @@ func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all 
 	if all && eid != "" {
 		return errors.Wrapf(errdefs.ErrFailedPrecondition, "cannot signal all for non-empty exec: '%s'", eid)
 	}
-	eg := errgroup.Group{}
 	if all {
 		// We are in a kill all on the init task. Signal everything.
 		ht.execs.Range(func(key, value interface{}) bool {
-			ex := value.(shimExec)
-			eg.Go(func() error {
-				return ex.Kill(ctx, signal)
-			})
+			err := value.(shimExec).Kill(ctx, signal)
+			if err != nil {
+				log.G(ctx).WithFields(logrus.Fields{
+					"eid":           key,
+					logrus.ErrorKey: err,
+				}).Warn("failed to kill exec in task")
+			}
 
 			// iterate all
 			return false
 		})
-	} else if eid == "" {
-		// We are in a kill of the init task. Verify all exec's are in the
-		// non-running state.
-		invalid := false
-		ht.execs.Range(func(key, value interface{}) bool {
-			ex := value.(shimExec)
-			if ex.State() != shimExecStateExited {
-				invalid = true
-				// we have an invalid state. Stop iteration.
-				return true
-			}
-			// iterate next valid
-			return false
-		})
-		if invalid {
-			return errors.Wrap(errdefs.ErrFailedPrecondition, "cannot signal init exec with un-exited additional exec's")
-		}
 	}
 	if signal == 0x9 && eid == "" && ht.ownsHost && ht.host != nil {
 		go func() {
@@ -355,10 +340,7 @@ func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all 
 			ht.host.Close()
 		}()
 	}
-	eg.Go(func() error {
-		return e.Kill(ctx, signal)
-	})
-	return eg.Wait()
+	return e.Kill(ctx, signal)
 }
 
 func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, time.Time, error) {
@@ -367,25 +349,16 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, tim
 		return 0, 0, time.Time{}, err
 	}
 	if eid == "" {
-		// We are deleting the init exec. Verify all additional exec's are exited as well
-		invalid := false
+		// We are deleting the init exec. Forcibly exit any additional exec's.
 		ht.execs.Range(func(key, value interface{}) bool {
 			ex := value.(shimExec)
-			switch state := ex.State(); state {
-			case shimExecStateCreated:
-				// we have a created additional exec. Forcibly exit it.
-				ex.ForceExit(ctx, 0)
-			case shimExecStateRunning:
-				invalid = true
-				// we have a running additional exec. Stop iteration.
-				return true
+			if s := ex.State(); s != shimExecStateExited {
+				ex.ForceExit(ctx, 1)
 			}
-			// iterate next valid
+
+			// iterate next
 			return false
 		})
-		if invalid {
-			return 0, 0, time.Time{}, errors.Wrap(errdefs.ErrFailedPrecondition, "cannot delete init exec with un-exited additional exec's")
-		}
 	}
 	switch state := e.State(); state {
 	case shimExecStateCreated:
