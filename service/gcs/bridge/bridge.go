@@ -298,7 +298,7 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 					if base.OpenCensusSpanContext.Tracestate != "" {
 						if bytes, err := base64.StdEncoding.DecodeString(base.OpenCensusSpanContext.Tracestate); err == nil {
 							var entries []tracestate.Entry
-							if err := json.Unmarshal(bytes, entries); err == nil {
+							if err := json.Unmarshal(bytes, &entries); err == nil {
 								if ts, err := tracestate.New(nil, entries...); err == nil {
 									sc.Tracestate = ts
 								}
