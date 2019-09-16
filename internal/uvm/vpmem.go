@@ -158,5 +158,7 @@ func (uvm *UtilityVM) PMemMaxSizeBytes() uint64 {
 
 // ExceededVPMem returns true if the addition of a new vpmem device exceeds uvm limits on vpmem
 func (uvm *UtilityVM) ExceededVPMem(fileSize int64) bool {
+	uvm.m.Lock()
+	defer uvm.m.Unlock()
 	return (uint64(fileSize) > uvm.vpmemMaxSizeBytes) || (uvm.vpmemNumDevices >= uvm.vpmemMaxCount)
 }
