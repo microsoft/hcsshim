@@ -13,37 +13,14 @@ import (
 	runtime "k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2"
 )
 
-func runPodSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.RunPodSandboxRequest) string {
-	response, err := client.RunPodSandbox(ctx, request)
-	if err != nil {
-		t.Fatalf("failed RunPodSandbox request with: %v", err)
-	}
-	return response.PodSandboxId
-}
-
-func stopAndRemovePodSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, podID string) {
-	_, err := client.StopPodSandbox(ctx, &runtime.StopPodSandboxRequest{
-		PodSandboxId: podID,
-	})
-	if err != nil {
-		// Error here so we can still attempt the delete
-		t.Errorf("failed StopPodSandbox for sandbox: %s, request with: %v", podID, err)
-	}
-	_, err = client.RemovePodSandbox(ctx, &runtime.RemovePodSandboxRequest{
-		PodSandboxId: podID,
-	})
-	if err != nil {
-		t.Fatalf("failed RemovePodSandbox for sandbox: %s, request with: %v", podID, err)
-	}
-}
-
 func runPodSandboxTest(t *testing.T, request *runtime.RunPodSandboxRequest) {
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	podID := runPodSandbox(t, client, ctx, request)
-	stopAndRemovePodSandbox(t, client, ctx, podID)
+	stopPodSandbox(t, client, ctx, podID)
+	removePodSandbox(t, client, ctx, podID)
 }
 
 func Test_RunPodSandbox_WCOW_Process(t *testing.T) {
@@ -864,10 +841,9 @@ func createSandboxContainerAndExec(t *testing.T, annotations map[string]string, 
 		RuntimeHandler: lcowRuntimeHandler,
 	}
 
-	podId := runPodSandbox(t, client, ctx, sbRequest)
-	defer func() {
-		stopAndRemovePodSandbox(t, client, ctx, podId)
-	}()
+	podID := runPodSandbox(t, client, ctx, sbRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
 
 	testMounts := []*runtime.Mount{}
 
@@ -890,28 +866,24 @@ func createSandboxContainerAndExec(t *testing.T, annotations map[string]string, 
 			Annotations: annotations,
 			Mounts:      testMounts,
 		},
-		PodSandboxId:  podId,
+		PodSandboxId:  podID,
 		SandboxConfig: sbRequest.Config,
 	}
 
-	containerId := createContainer(t, client, ctx, cRequest)
-	_, err := client.StartContainer(ctx, &runtime.StartContainerRequest{
-		ContainerId: containerId,
-	})
+	containerID := createContainer(t, client, ctx, cRequest)
+	defer removeContainer(t, client, ctx, containerID)
 
-	if err != nil {
-		t.Fatalf("failed StartContainer request for container: %s, with: %v", containerId, err)
-	}
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID)
 
 	//exec request
 	execRequest := &runtime.ExecSyncRequest{
-		ContainerId: containerId,
-		// this is just saying 'give me the UID of the process with pid = 1; ignore headers'
-		Cmd:     execCommand,
-		Timeout: 20,
+		ContainerId: containerID,
+		Cmd:         execCommand,
+		Timeout:     20,
 	}
 
-	r := execContainer(ctx, t, client, execRequest)
+	r := execSync(t, client, ctx, execRequest)
 	output = strings.TrimSpace(string(r.Stdout))
 	errorMsg = string(r.Stderr)
 	exitCode = int(r.ExitCode)

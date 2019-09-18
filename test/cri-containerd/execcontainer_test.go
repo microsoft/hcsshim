@@ -11,41 +11,26 @@ import (
 	runtime "k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2"
 )
 
-//TODO:
-// Create POD, Container interfaces and make
-// Runp, create, exec, start, stop as methods instead of funcs
-func execContainer(ctx context.Context, t *testing.T, client runtime.RuntimeServiceClient, request *runtime.ExecSyncRequest) *runtime.ExecSyncResponse {
-	response, err := client.ExecSync(ctx, request)
-	if err != nil {
-		t.Fatalf("failed ExecSync in container: %s, with: %v", request.ContainerId, err)
-	}
-	return response
-}
-
 func runexecContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.RunPodSandboxRequest, request *runtime.CreateContainerRequest, execReq *runtime.ExecSyncRequest) *runtime.ExecSyncResponse {
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
-	defer func() {
-		stopAndRemovePodSandbox(t, client, ctx, podID)
-	}()
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
 	request.PodSandboxId = podID
 	request.SandboxConfig = sandboxRequest.Config
+
 	containerID := createContainer(t, client, ctx, request)
-	defer func() {
-		stopAndRemoveContainer(t, client, ctx, containerID)
-	}()
-	_, err := client.StartContainer(ctx, &runtime.StartContainerRequest{
-		ContainerId: containerID,
-	})
-	if err != nil {
-		t.Fatalf("failed StartContainer request for container: %s, with: %v", containerID, err)
-	}
+	defer removeContainer(t, client, ctx, containerID)
+
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID)
 
 	execReq.ContainerId = containerID
-	return execContainer(ctx, t, client, execReq)
+	return execSync(t, client, ctx, execReq)
 }
 
 func execContainerLCOW(t *testing.T, uid int64, cmd []string) *runtime.ExecSyncResponse {
