@@ -24,22 +24,17 @@ func runLogRotationContainer(t *testing.T, sandboxRequest *runtime.RunPodSandbox
 	defer cancel()
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
-	defer func() {
-		stopAndRemovePodSandbox(t, client, ctx, podID)
-	}()
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
 
 	request.PodSandboxId = podID
 	request.SandboxConfig = sandboxRequest.Config
+
 	containerID := createContainer(t, client, ctx, request)
-	defer func() {
-		stopAndRemoveContainer(t, client, ctx, containerID)
-	}()
-	_, err := client.StartContainer(ctx, &runtime.StartContainerRequest{
-		ContainerId: containerID,
-	})
-	if err != nil {
-		t.Fatalf("failed StartContainer request for container: %s, with: %v", containerID, err)
-	}
+	defer removeContainer(t, client, ctx, containerID)
+
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID)
 
 	// Give some time for log output to accumulate.
 	time.Sleep(3 * time.Second)

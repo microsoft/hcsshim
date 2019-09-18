@@ -12,43 +12,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	runtime "k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2"
 )
 
-func createAndStartContainer(t *testing.T, sandboxRequest *runtime.RunPodSandboxRequest, request *runtime.CreateContainerRequest) {
-	client := newTestRuntimeClient(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	podID := runPodSandbox(t, client, ctx, sandboxRequest)
-	defer func() {
-		stopAndRemovePodSandbox(t, client, ctx, podID)
-	}()
-
-	request.PodSandboxId = podID
-	request.SandboxConfig = sandboxRequest.Config
-	containerID := createContainer(t, client, ctx, request)
-	defer func() {
-		stopAndRemoveContainer(t, client, ctx, containerID)
-	}()
-
-	_, err := client.StartContainer(ctx, &runtime.StartContainerRequest{
-		ContainerId: containerID,
-	})
-
-	if err != nil {
-		t.Fatalf("failed StartContainer request for container: %s, with: %v", containerID, err)
-	}
-
-	// wait a while for container to write to stdout
-	time.Sleep(3 * time.Second)
-}
-
 func Test_Container_Network_LCOW(t *testing.T) {
-	image := imageLcowAlpine
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
-	//create a directory and log file
+	// create a directory and log file
 	dir, err := ioutil.TempDir("", "")
 	if err != nil {
 		t.Fatalf("failed creating temp dir: %v", err)
@@ -60,9 +30,6 @@ func Test_Container_Network_LCOW(t *testing.T) {
 	}()
 	log := filepath.Join(dir, "ping.txt")
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, image})
-	logrus.SetLevel(logrus.DebugLevel)
-
 	sandboxRequest := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
 			Metadata: &runtime.PodSandboxMetadata{
@@ -73,17 +40,26 @@ func Test_Container_Network_LCOW(t *testing.T) {
 		RuntimeHandler: lcowRuntimeHandler,
 	}
 
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	podID := runPodSandbox(t, client, ctx, sandboxRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
 	request := &runtime.CreateContainerRequest{
+		PodSandboxId: podID,
 		Config: &runtime.ContainerConfig{
 			Metadata: &runtime.ContainerMetadata{
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: image,
+				Image: imageLcowAlpine,
 			},
 			Command: []string{
 				"ping",
-				"-q", //-q outputs ping stats only.
+				"-q", // -q outputs ping stats only.
 				"-c",
 				"10",
 				"google.com",
@@ -91,11 +67,19 @@ func Test_Container_Network_LCOW(t *testing.T) {
 			LogPath: log,
 			Linux:   &runtime.LinuxContainerConfig{},
 		},
+		SandboxConfig: sandboxRequest.Config,
 	}
 
-	createAndStartContainer(t, sandboxRequest, request)
+	containerID := createContainer(t, client, ctx, request)
+	defer removeContainer(t, client, ctx, containerID)
 
-	//open the log and test for any packet loss
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID)
+
+	// wait a while for container to write to stdout
+	time.Sleep(3 * time.Second)
+
+	// open the log and test for any packet loss
 	logFile, err := os.Open(log)
 	if err != nil {
 		t.Fatal(err)
