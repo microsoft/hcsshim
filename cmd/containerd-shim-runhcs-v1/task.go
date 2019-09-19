@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/containerd/containerd/runtime/v2/task"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -79,4 +80,7 @@ type shimTask interface {
 	//
 	// If the host is not hypervisor isolated returns `""`.
 	DumpGuestStacks(ctx context.Context) string
+	// Stats returns various metrics for the task. If the task owns the UVM,
+	// additional metrics on the UVM are returned as well.
+	Stats(ctx context.Context) (*stats.Statistics, error)
 }

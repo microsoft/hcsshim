@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
@@ -594,4 +595,16 @@ func (ht *hcsTask) DumpGuestStacks(ctx context.Context) string {
 		}
 	}
 	return ""
+}
+
+func (ht *hcsTask) Stats(ctx context.Context) (*stats.Statistics, error) {
+	stats := &stats.Statistics{}
+	if ht.ownsHost && ht.host != nil {
+		vmStats, err := ht.host.Stats(ctx)
+		if err != nil {
+			return nil, err
+		}
+		stats.VM = vmStats
+	}
+	return stats, nil
 }

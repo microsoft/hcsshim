@@ -11,6 +11,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/schema1"
+	"golang.org/x/sys/windows"
 )
 
 //                    | WCOW | LCOW
@@ -107,4 +108,11 @@ type UtilityVM struct {
 	outputHandler        OutputHandler
 
 	entropyListener net.Listener
+
+	// Handle to the vmmem process associated with this UVM. Used to look up
+	// memory metrics for the UVM.
+	vmmemProcess windows.Handle
+	// We only need to look up the vmmem process once, then we keep a handle
+	// open.
+	vmmemOnce sync.Once
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
+	"golang.org/x/sys/windows"
 )
 
 // Options are the set of options passed to Create() to create a utility vm.
@@ -128,6 +129,8 @@ func (uvm *UtilityVM) Close() (err error) {
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute(logfields.UVMID, uvm.id))
+
+	windows.Close(uvm.vmmemProcess)
 
 	if uvm.hcsSystem != nil {
 		uvm.hcsSystem.Terminate(ctx)

@@ -1,0 +1,93 @@
+file {
+  name: "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats/stats.proto"
+  package: "containerd.runhcs.stats.v1"
+  dependency: "gogoproto/gogo.proto"
+  message_type {
+    name: "Statistics"
+    field {
+      name: "windows"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".containerd.runhcs.stats.v1.WindowsContainerStatistics"
+      oneof_index: 0
+      json_name: "windows"
+    }
+    field {
+      name: "linux"
+      number: 2
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".containerd.runhcs.stats.v1.LinuxContainerStatistics"
+      oneof_index: 0
+      json_name: "linux"
+    }
+    field {
+      name: "vm"
+      number: 3
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".containerd.runhcs.stats.v1.VirtualMachineStatistics"
+      options {
+        65004: "VM"
+      }
+      json_name: "vm"
+    }
+    oneof_decl {
+      name: "container"
+    }
+  }
+  message_type {
+    name: "WindowsContainerStatistics"
+  }
+  message_type {
+    name: "LinuxContainerStatistics"
+  }
+  message_type {
+    name: "VirtualMachineStatistics"
+    field {
+      name: "processor"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".containerd.runhcs.stats.v1.VirtualMachineProcessorStatistics"
+      json_name: "processor"
+    }
+    field {
+      name: "memory"
+      number: 2
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".containerd.runhcs.stats.v1.VirtualMachineMemoryStatistics"
+      json_name: "memory"
+    }
+  }
+  message_type {
+    name: "VirtualMachineProcessorStatistics"
+    field {
+      name: "total_runtime_ns"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_UINT64
+      options {
+        65004: "TotalRuntimeNS"
+      }
+      json_name: "totalRuntimeNs"
+    }
+  }
+  message_type {
+    name: "VirtualMachineMemoryStatistics"
+    field {
+      name: "working_set_bytes"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_UINT64
+      json_name: "workingSetBytes"
+    }
+  }
+  options {
+    go_package: "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats;stats"
+  }
+  weak_dependency: 0
+  syntax: "proto3"
+}
