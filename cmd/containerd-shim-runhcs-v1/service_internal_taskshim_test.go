@@ -569,5 +569,5 @@ func Test_TaskShim_statsInternal_Error(t *testing.T) {
 
 	resp, err := s.statsInternal(context.TODO(), &task.StatsRequest{ID: t.Name()})
 
-	verifyExpectedError(t, resp, err, errdefs.ErrNotImplemented)
+	verifyExpectedError(t, resp, err, errdefs.ErrNotFound)
 }

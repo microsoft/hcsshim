@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
@@ -86,4 +87,8 @@ func (tst *testShimTask) ExecInHost(ctx context.Context, req *shimdiag.ExecProce
 
 func (wpst *testShimTask) DumpGuestStacks(ctx context.Context) string {
 	return ""
+}
+
+func (tst *testShimTask) Stats(ctx context.Context) (*stats.Statistics, error) {
+	return nil, errdefs.ErrNotImplemented
 }

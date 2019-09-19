@@ -394,7 +394,19 @@ func (s *service) waitInternal(ctx context.Context, req *task.WaitRequest) (*tas
 }
 
 func (s *service) statsInternal(ctx context.Context, req *task.StatsRequest) (*task.StatsResponse, error) {
-	return nil, errdefs.ErrNotImplemented
+	t, err := s.getTask(s.tid)
+	if err != nil {
+		return nil, err
+	}
+	stats, err := t.Stats(ctx)
+	if err != nil {
+		return nil, err
+	}
+	any, err := typeurl.MarshalAny(stats)
+	if err != nil {
+		return nil, err
+	}
+	return &task.StatsResponse{Stats: any}, nil
 }
 
 func (s *service) connectInternal(ctx context.Context, req *task.ConnectRequest) (*task.ConnectResponse, error) {

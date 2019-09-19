@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -236,4 +237,9 @@ func (wpst *wcowPodSandboxTask) DumpGuestStacks(ctx context.Context) string {
 		}
 	}
 	return ""
+}
+
+func (wpst *wcowPodSandboxTask) Stats(ctx context.Context) (*stats.Statistics, error) {
+	// TODO: Add support for WCOW UVM stats here.
+	return nil, errdefs.ErrNotImplemented
 }

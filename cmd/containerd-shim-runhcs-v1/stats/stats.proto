@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package containerd.runhcs.stats.v1;
+
+import weak "gogoproto/gogo.proto";
+
+option go_package = "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats;stats";
+
+message Statistics {
+	oneof container {
+		WindowsContainerStatistics windows = 1;
+		LinuxContainerStatistics linux = 2;
+	}
+	VirtualMachineStatistics vm = 3 [(gogoproto.customname) = "VM"];
+}
+
+message WindowsContainerStatistics {
+}
+
+message LinuxContainerStatistics {
+}
+
+message VirtualMachineStatistics {
+	VirtualMachineProcessorStatistics processor = 1;
+	VirtualMachineMemoryStatistics memory = 2;
+}
+
+message VirtualMachineProcessorStatistics {
+	uint64 total_runtime_ns = 1 [(gogoproto.customname) = "TotalRuntimeNS"];
+}
+
+message VirtualMachineMemoryStatistics {
+	uint64 working_set_bytes = 1;
+}

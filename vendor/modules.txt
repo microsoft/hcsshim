@@ -1,4 +1,4 @@
-# github.com/Microsoft/go-winio v0.4.14
+# github.com/Microsoft/go-winio v0.4.15-0.20190919025122-fc70bd9a86b5
 github.com/Microsoft/go-winio/pkg/guid
 github.com/Microsoft/go-winio
 github.com/Microsoft/go-winio/pkg/etw
@@ -7,6 +7,7 @@ github.com/Microsoft/go-winio/vhd
 github.com/Microsoft/go-winio/archive/tar
 github.com/Microsoft/go-winio/backuptar
 github.com/Microsoft/go-winio/pkg/security
+github.com/Microsoft/go-winio/pkg/process
 # github.com/blang/semver v3.1.0+incompatible
 github.com/blang/semver
 # github.com/containerd/console v0.0.0-20180822173158-c12b1e7919c1
@@ -17,12 +18,12 @@ github.com/containerd/containerd/api/types/task
 github.com/containerd/containerd/errdefs
 github.com/containerd/containerd/log
 github.com/containerd/containerd/mount
+github.com/containerd/containerd/namespaces
 github.com/containerd/containerd/runtime
 github.com/containerd/containerd/runtime/v2/shim
 github.com/containerd/containerd/runtime/v2/task
 github.com/containerd/containerd/api/types
 github.com/containerd/containerd/sys
-github.com/containerd/containerd/namespaces
 github.com/containerd/containerd/api/services/ttrpc/events/v1
 github.com/containerd/containerd/events
 github.com/containerd/containerd/pkg/ttrpcutil
@@ -100,7 +101,7 @@ golang.org/x/net/http/httpguts
 golang.org/x/net/idna
 # golang.org/x/sync v0.0.0-20190227155943-e225da77a7e6
 golang.org/x/sync/errgroup
-# golang.org/x/sys v0.0.0-20190507160741-ecd444e8653b
+# golang.org/x/sys v0.0.0-20190916202348-b4ddaad3f8a3
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
 golang.org/x/sys/unix
@@ -115,6 +116,7 @@ google.golang.org/genproto/googleapis/rpc/status
 google.golang.org/grpc/codes
 google.golang.org/grpc/status
 google.golang.org/grpc
+google.golang.org/grpc/metadata
 google.golang.org/grpc/balancer
 google.golang.org/grpc/balancer/roundrobin
 google.golang.org/grpc/connectivity
@@ -132,7 +134,6 @@ google.golang.org/grpc/internal/grpcrand
 google.golang.org/grpc/internal/grpcsync
 google.golang.org/grpc/internal/transport
 google.golang.org/grpc/keepalive
-google.golang.org/grpc/metadata
 google.golang.org/grpc/naming
 google.golang.org/grpc/peer
 google.golang.org/grpc/resolver
