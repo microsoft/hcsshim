@@ -27,8 +27,8 @@ func Test_SandboxStats_Single_LCOW(t *testing.T) {
 	defer cancel()
 
 	podID := runPodSandbox(t, client, ctx, request)
-	defer stopPodSandbox(t, client, ctx, podID)
 	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
 
 	statsRequest := &runtime.ContainerStatsRequest{
 		ContainerId: podID,
@@ -72,8 +72,8 @@ func Test_SandboxStats_List_ContainerID_LCOW(t *testing.T) {
 	defer cancel()
 
 	podID := runPodSandbox(t, client, ctx, request)
-	defer stopPodSandbox(t, client, ctx, podID)
 	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
 
 	statsRequest := &runtime.ListContainerStatsRequest{
 		Filter: &runtime.ContainerStatsFilter{
@@ -122,8 +122,8 @@ func Test_SandboxStats_List_PodID_LCOW(t *testing.T) {
 	defer cancel()
 
 	podID := runPodSandbox(t, client, ctx, request)
-	defer stopPodSandbox(t, client, ctx, podID)
 	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
 
 	statsRequest := &runtime.ListContainerStatsRequest{
 		Filter: &runtime.ContainerStatsFilter{
