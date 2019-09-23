@@ -6,6 +6,8 @@ This package contains the Golang interface for using the Windows [Host Compute S
 
 It is primarily used in the [Moby Project](https://github.com/moby/moby), but it can be freely used by other projects as well.
 
+This is a code-only repository and does not have a stable release. 0.8.6 is the last tagged release, and it is out of date for ContainerD and Kubernetes. Downstream projects should vendor in this codebase using commit ids instead of tags, then validate fixes and do a full test pass of the whole project.
+
 ## Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a
