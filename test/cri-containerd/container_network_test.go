@@ -96,3 +96,95 @@ func Test_Container_Network_LCOW(t *testing.T) {
 		}
 	}
 }
+
+func Test_Container_Network_Hostname(t *testing.T) {
+	type config struct {
+		name string
+
+		runtimeHandler string
+		sandboxImage   string
+		containerImage string
+		cmd            []string
+	}
+	tests := []config{
+		{
+			name:           "WCOW_Process",
+			runtimeHandler: wcowProcessRuntimeHandler,
+			sandboxImage:   imageWindowsRS5Nanoserver,
+			containerImage: imageWindowsRS5Nanoserver,
+			cmd:            []string{"cmd", "/c", "ping", "-t", "127.0.0.1"},
+		},
+		{
+			name:           "WCOW_Hypervisor",
+			runtimeHandler: wcowHypervisorRuntimeHandler,
+			sandboxImage:   imageWindowsRS5Nanoserver,
+			containerImage: imageWindowsRS5Nanoserver,
+			cmd:            []string{"cmd", "/c", "ping", "-t", "127.0.0.1"},
+		},
+		{
+			name:           "LCOW",
+			runtimeHandler: lcowRuntimeHandler,
+			sandboxImage:   imageLcowK8sPause,
+			containerImage: imageLcowAlpine,
+			cmd:            []string{"top"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.runtimeHandler == lcowRuntimeHandler {
+				pullRequiredLcowImages(t, []string{test.sandboxImage, test.containerImage})
+			} else {
+				pullRequiredImages(t, []string{test.sandboxImage, test.containerImage})
+			}
+
+			sandboxRequest := &runtime.RunPodSandboxRequest{
+				Config: &runtime.PodSandboxConfig{
+					Metadata: &runtime.PodSandboxMetadata{
+						Name:      t.Name() + "-Sandbox",
+						Namespace: testNamespace,
+					},
+					Hostname: "TestHost",
+				},
+				RuntimeHandler: test.runtimeHandler,
+			}
+
+			client := newTestRuntimeClient(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			podID := runPodSandbox(t, client, ctx, sandboxRequest)
+			defer removePodSandbox(t, client, ctx, podID)
+			defer stopPodSandbox(t, client, ctx, podID)
+
+			containerRequest := &runtime.CreateContainerRequest{
+				PodSandboxId: podID,
+				Config: &runtime.ContainerConfig{
+					Metadata: &runtime.ContainerMetadata{
+						Name: t.Name() + "-Container",
+					},
+					Image: &runtime.ImageSpec{
+						Image: test.containerImage,
+					},
+					Command: test.cmd,
+				},
+				SandboxConfig: sandboxRequest.Config,
+			}
+
+			containerID := createContainer(t, client, ctx, containerRequest)
+			defer removeContainer(t, client, ctx, containerID)
+
+			startContainer(t, client, ctx, containerID)
+			defer stopContainer(t, client, ctx, containerID)
+
+			execResponse := execSync(t, client, ctx, &runtime.ExecSyncRequest{
+				ContainerId: containerID,
+				Cmd:         []string{"hostname"},
+			})
+			stdout := strings.Trim(string(execResponse.Stdout), " \r\n")
+			if stdout != sandboxRequest.Config.Hostname {
+				t.Fatalf("expected hostname: '%s', got '%s'", sandboxRequest.Config.Hostname, stdout)
+			}
+		})
+	}
+}
