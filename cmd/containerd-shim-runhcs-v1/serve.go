@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -105,18 +106,29 @@ var serveCommand = cli.Command{
 			defer logl.Close()
 
 			lerrs = make(chan error, 1)
-			defer close(lerrs)
 			go func() {
-				// Listen for log connections in the background
-				a, err := logl.Accept()
-				if err != nil {
-					lerrs <- err
-					return
+				var cur net.Conn
+				for {
+					// Listen for log connections in the background
+					// We assume that there is always only one client
+					// which is containerd. If a new connection is
+					// accepted, it means that containerd is restarted.
+					// Note that logs generated during containerd restart
+					// may be lost.
+					new, err := logl.Accept()
+					if err != nil {
+						lerrs <- err
+						return
+					}
+					if cur != nil {
+						cur.Close()
+					}
+					cur = new
+					// Switch the logrus output to here. Note: we wont get this
+					// connection until the return from `shim start` so we still
+					// havent transitioned the error model yet.
+					logrus.SetOutput(cur)
 				}
-				// Switch the logrus output to here. Note: we wont get this
-				// connection until the return from `shim start` so we still
-				// havent transitioned the error model yet.
-				logrus.SetOutput(a)
 			}()
 			// Logrus output will be redirected in the goroutine below that
 			// handles the pipe connection.
