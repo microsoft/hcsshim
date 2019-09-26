@@ -182,8 +182,8 @@ func TestEndpointNamespaceAttachDetach(t *testing.T) {
 	}
 }
 
-func TestAddL4ProxyPolicyOnEndpoint(t *testing.T) {
-	network, err := CreateTestOverlayNetwork()
+func TestAddL4WfpProxyPolicyOnEndpoint(t *testing.T) {
+	network, err := HcnCreateTestNATNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,31 +205,18 @@ func TestAddL4ProxyPolicyOnEndpoint(t *testing.T) {
 		}
 	}()
 
-	policySetting := L4ProxyPolicySetting{
-		Port: "80",
-		FilterTuple: FiveTuple{
-			Protocols:       "6",
-			RemoteAddresses: "10.0.0.4",
-			Priority:        8,
-		},
-		ProxyType: ProxyTypeWFP,
-	}
-
-	policyJSON, err := json.Marshal(policySetting)
+	request, err := HcnCreateWfpProxyPolicyRequest()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	endpointPolicy := EndpointPolicy{
-		Type:     L4Proxy,
-		Settings: policyJSON,
+	jsonString, err := json.Marshal(*request)
+	if err != nil {
+		t.Fatal(err)
 	}
+	fmt.Printf("WFP Proxy JSON:\n%s \n", jsonString)
 
-	request := PolicyEndpointRequest{
-		Policies: []EndpointPolicy{endpointPolicy},
-	}
-
-	err = endpoint.ApplyPolicy(RequestTypeAdd, request)
+	err = endpoint.ApplyPolicy(RequestTypeAdd, *request)
 	if err != nil {
 		t.Fatal(err)
 	}

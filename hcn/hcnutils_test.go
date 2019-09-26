@@ -220,6 +220,33 @@ func HcnCreateAcls() (*PolicyEndpointRequest, error) {
 	return &endpointRequest, nil
 }
 
+func HcnCreateWfpProxyPolicyRequest() (*PolicyEndpointRequest, error) {
+	policySetting := L4WfpProxyPolicySetting{
+		Port: "80",
+		FilterTuple: FiveTuple{
+			Protocols:       "6",
+			RemoteAddresses: "10.0.0.4",
+			Priority:        8,
+		},
+	}
+
+	policyJSON, err := json.Marshal(policySetting)
+	if err != nil {
+		return nil, err
+	}
+
+	endpointPolicy := EndpointPolicy{
+		Type:     L4WFPPROXY,
+		Settings: policyJSON,
+	}
+
+	endpointRequest := PolicyEndpointRequest{
+		Policies: []EndpointPolicy{endpointPolicy},
+	}
+
+	return &endpointRequest, nil
+}
+
 func HcnCreateTestLoadBalancer(endpoint *HostComputeEndpoint) (*HostComputeLoadBalancer, error) {
 	loadBalancer := &HostComputeLoadBalancer{
 		HostComputeEndpoints: []string{endpoint.Id},
