@@ -112,6 +112,8 @@ type UtilityVM struct {
 	// Handle to the vmmem process associated with this UVM. Used to look up
 	// memory metrics for the UVM.
 	vmmemProcess windows.Handle
+	// Tracks the error returned when looking up the vmmem process.
+	vmmemErr error
 	// We only need to look up the vmmem process once, then we keep a handle
 	// open.
 	vmmemOnce sync.Once

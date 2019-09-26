@@ -2,7 +2,6 @@ package uvm
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
@@ -10,6 +9,8 @@ import (
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/schema1"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
 )
 
@@ -18,17 +19,12 @@ import (
 // `desiredDomain` and user name `desiredUser`. If the process matches, it
 // returns a handle to the process. If the process does not match, it returns
 // 0.
-func checkProcess(pid uint32, desiredProcessName string, desiredDomain string, desiredUser string) (p windows.Handle, err error) {
+func checkProcess(ctx context.Context, pid uint32, desiredProcessName string, desiredDomain string, desiredUser string) (p windows.Handle, err error) {
 	desiredProcessName = strings.ToUpper(desiredProcessName)
 	desiredDomain = strings.ToUpper(desiredDomain)
 	desiredUser = strings.ToUpper(desiredUser)
 
 	p, err = windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION|windows.PROCESS_VM_READ, false, pid)
-	// It is expected that there will be processes we can't open, even when
-	// running as SYSTEM. So just skip the process if we get access denied.
-	if err == windows.ERROR_ACCESS_DENIED {
-		return 0, nil
-	}
 	if err != nil {
 		return 0, err
 	}
@@ -58,6 +54,11 @@ func checkProcess(pid uint32, desiredProcessName string, desiredDomain string, d
 		if err != nil {
 			return 0, err
 		}
+		log.G(ctx).WithFields(logrus.Fields{
+			"name":   name,
+			"domain": domain,
+			"user":   user,
+		}).Debug("checking vmmem process identity")
 		if strings.ToUpper(domain) == desiredDomain && strings.ToUpper(user) == desiredUser {
 			return p, nil
 		}
@@ -75,18 +76,17 @@ func lookupVMMEM(ctx context.Context, vmID guid.GUID) (proc windows.Handle, err 
 
 	pids, err := process.EnumProcesses()
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrap(err, "failed to enumerate processes")
 	}
 	for _, pid := range pids {
-		if pid == 0 {
-			// Opening System process never works and fails with a different
-			// error (ERROR_INVALID_PARAMETER) than the usual
-			// ERROR_ACCESS_DENIED, so just skip it.
-			continue
-		}
-		p, err := checkProcess(pid, "vmmem", "NT VIRTUAL MACHINE", vmIDStr)
+		p, err := checkProcess(ctx, pid, "vmmem", "NT VIRTUAL MACHINE", vmIDStr)
 		if err != nil {
-			return 0, err
+			// Checking the process could fail for a variety of reasons, such as
+			// the process exiting since we called EnumProcesses, or not having
+			// access to open the process (even as SYSTEM). In the case of an
+			// error, we just log and continue looking at the other processes.
+			log.G(ctx).WithField("pid", pid).Debug("failed to check process")
+			continue
 		}
 		if p != 0 {
 			log.G(ctx).WithField("pid", pid).Debug("found vmmem match")
@@ -99,11 +99,11 @@ func lookupVMMEM(ctx context.Context, vmID guid.GUID) (proc windows.Handle, err 
 // getVMMEMProcess returns a handle to the vmmem process associated with this
 // UVM. It only does the actual process lookup once, after which it caches the
 // process handle in the UVM object.
-func (uvm *UtilityVM) getVMMEMProcess(ctx context.Context) (_ windows.Handle, err error) {
+func (uvm *UtilityVM) getVMMEMProcess(ctx context.Context) (windows.Handle, error) {
 	uvm.vmmemOnce.Do(func() {
-		uvm.vmmemProcess, err = lookupVMMEM(ctx, uvm.runtimeID)
+		uvm.vmmemProcess, uvm.vmmemErr = lookupVMMEM(ctx, uvm.runtimeID)
 	})
-	return uvm.vmmemProcess, err
+	return uvm.vmmemProcess, uvm.vmmemErr
 }
 
 // Stats returns various UVM statistics.
