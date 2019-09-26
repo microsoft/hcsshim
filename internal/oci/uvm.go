@@ -80,6 +80,7 @@ const (
 	AnnotationContainerStorageQoSIopsMaximum = "io.microsoft.container.storage.qos.iopsmaximum"
 	annotationAllowOvercommit                = "io.microsoft.virtualmachine.computetopology.memory.allowovercommit"
 	annotationEnableDeferredCommit           = "io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit"
+	annotationEnableColdDiscardHint          = "io.microsoft.virtualmachine.computetopology.memory.enablecolddiscardhint"
 	// annotationMemorySizeInMB overrides the container memory size set via the
 	// OCI spec.
 	//
@@ -316,6 +317,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.MemorySizeInMB = ParseAnnotationsMemory(ctx, s, annotationMemorySizeInMB, lopts.MemorySizeInMB)
 		lopts.AllowOvercommit = parseAnnotationsBool(ctx, s.Annotations, annotationAllowOvercommit, lopts.AllowOvercommit)
 		lopts.EnableDeferredCommit = parseAnnotationsBool(ctx, s.Annotations, annotationEnableDeferredCommit, lopts.EnableDeferredCommit)
+		lopts.EnableColdDiscardHint = parseAnnotationsBool(ctx, s.Annotations, annotationEnableColdDiscardHint, lopts.EnableColdDiscardHint)
 		lopts.ProcessorCount = ParseAnnotationsCPUCount(ctx, s, annotationProcessorCount, lopts.ProcessorCount)
 		lopts.ProcessorLimit = ParseAnnotationsCPULimit(ctx, s, annotationProcessorLimit, lopts.ProcessorLimit)
 		lopts.ProcessorWeight = ParseAnnotationsCPUWeight(ctx, s, annotationProcessorWeight, lopts.ProcessorWeight)

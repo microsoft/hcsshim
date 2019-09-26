@@ -68,6 +68,7 @@ type OptionsLCOW struct {
 	VPMemDeviceCount      uint32              // Number of VPMem devices. Defaults to `DefaultVPMEMCount`. Limit at 128. If booting UVM from VHD, device 0 is taken.
 	VPMemSizeBytes        uint64              // Size of the VPMem devices. Defaults to `DefaultVPMemSizeBytes`.
 	PreferredRootFSType   PreferredRootFSType // If `KernelFile` is `InitrdFile` use `PreferredRootFSTypeInitRd`. If `KernelFile` is `VhdFile` use `PreferredRootFSTypeVHD`
+	EnableColdDiscardHint bool                // Whether the HCS should use cold discard hints. Defaults to false
 }
 
 // defaultLCOWOSBootFilesPath returns the default path used to locate the LCOW
@@ -110,6 +111,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		VPMemDeviceCount:      DefaultVPMEMCount,
 		VPMemSizeBytes:        DefaultVPMemSizeBytes,
 		PreferredRootFSType:   PreferredRootFSTypeInitRd,
+		EnableColdDiscardHint: false,
 	}
 
 	// LCOW has more reliable behavior with the external bridge.
@@ -204,6 +206,10 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		return nil, fmt.Errorf("KernelDirectBoot is not support on builds older than 18286")
 	}
 
+	if opts.EnableColdDiscardHint && osversion.Get().Build < 18967 {
+		return nil, fmt.Errorf("EnableColdDiscardHint is not supported on builds older than 18967")
+	}
+
 	doc := &hcsschema.ComputeSystem{
 		Owner:                             uvm.owner,
 		SchemaVersion:                     schemaversion.SchemaV21(),
@@ -213,9 +219,10 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 			Chipset:     &hcsschema.Chipset{},
 			ComputeTopology: &hcsschema.Topology{
 				Memory: &hcsschema.Memory2{
-					SizeInMB:             memorySizeInMB,
-					AllowOvercommit:      opts.AllowOvercommit,
-					EnableDeferredCommit: opts.EnableDeferredCommit,
+					SizeInMB:              memorySizeInMB,
+					AllowOvercommit:       opts.AllowOvercommit,
+					EnableDeferredCommit:  opts.EnableDeferredCommit,
+					EnableColdDiscardHint: opts.EnableColdDiscardHint,
 				},
 				Processor: &hcsschema.Processor2{
 					Count:  uvm.processorCount,
