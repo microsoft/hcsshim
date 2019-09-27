@@ -5,10 +5,10 @@ github.com/Microsoft/go-winio v0.4.12/go.mod h1:VhR8bwka0BXejwEJY73c50VrPtXAaKcy
 github.com/Microsoft/hcsshim v0.0.0-20190404205635-cf1c2137fae1 h1:1cBBOe4Lep00PbhZ3JH3SkZQ4560JqjiGwnls1XBoo4=
 github.com/Microsoft/hcsshim v0.0.0-20190404205635-cf1c2137fae1/go.mod h1:Op3hHsoHPAvb6lceZHDtd9OkTew38wNoXnJs8iY7rUg=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
-github.com/containerd/containerd v1.2.5 h1:D+s0XmoswfcRJXgmMMlI1vAblp+LTCftRnEjKsgbFPU=
-github.com/containerd/containerd v1.2.5/go.mod h1:bC6axHOhabU15QhwfG7w5PipXdVtMXFTttgp+kVtyUA=
-github.com/containerd/continuity v0.0.0-20181203112020-004b46473808 h1:4BX8f882bXEDKfWIf0wa8HRvpnBoPszJJXL+TVbBw4M=
-github.com/containerd/continuity v0.0.0-20181203112020-004b46473808/go.mod h1:GL3xCUCBDV3CZiTSEKksMWbLE66hEyuu9qyDOOqM47Y=
+github.com/containerd/containerd v1.3.0 h1:xjvXQWABwS2uiv3TWgQt5Uth60Gu86LTGZXMJkjc7rY=
+github.com/containerd/containerd v1.3.0/go.mod h1:bC6axHOhabU15QhwfG7w5PipXdVtMXFTttgp+kVtyUA=
+github.com/containerd/continuity v0.0.0-20190815185530-f2a389ac0a02 h1:tN9D97v5A5QuKdcKHKt+UMKrkQ5YXUnD8iM7IAAjEfI=
+github.com/containerd/continuity v0.0.0-20190815185530-f2a389ac0a02/go.mod h1:GL3xCUCBDV3CZiTSEKksMWbLE66hEyuu9qyDOOqM47Y=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/docker/docker v0.0.0-20190404075923-dbe4a30928d4 h1:34LfsqlE2kEvmGP9qbRoPvOWkmluYGzmlvWVTzwvT0A=
@@ -45,8 +45,8 @@ github.com/opencontainers/go-digest v0.0.0-20190228220655-ac19fd6e7483 h1:MeQlJs
 github.com/opencontainers/go-digest v0.0.0-20190228220655-ac19fd6e7483/go.mod h1:cMLVZDEM3+U2I4VmLI6N8jQYUd2OVphdqWwCJHrFt2s=
 github.com/opencontainers/image-spec v1.0.1 h1:JMemWkRwHx4Zj+fVxWoMCFm/8sYGGrUVojFA6h/TRcI=
 github.com/opencontainers/image-spec v1.0.1/go.mod h1:BtxoFyWECRxE4U/7sNtV5W15zMzWCbyJoFRP3s7yZA0=
-github.com/opencontainers/runc v1.0.0-rc7 h1:1eqSWkWzuGk04OAMJPPjan7yGMcI1SUjpr/sx3+q1+M=
-github.com/opencontainers/runc v1.0.0-rc7/go.mod h1:qT5XzbpPznkRYVz/mWwUaVBUv2rmF59PVA73FjuZG0U=
+github.com/opencontainers/runc v1.0.0-rc2.0.20190926000215-3e425f80a8c9 h1:x4NaJozObHUDHS4EQ2ak9HCSgScO/y4dtI73OODDKrg=
+github.com/opencontainers/runc v1.0.0-rc2.0.20190926000215-3e425f80a8c9/go.mod h1:qT5XzbpPznkRYVz/mWwUaVBUv2rmF59PVA73FjuZG0U=
 github.com/opencontainers/runtime-spec v0.0.0-20190325081030-ad53dcdc39f1 h1:WGAOq3E+oiKGnubFH/dMc5rj+cW7+0ZCIxCUPjNJ5+I=
 github.com/opencontainers/runtime-spec v0.0.0-20190325081030-ad53dcdc39f1/go.mod h1:jwyrGlmzljRJv/Fgzds9SsS/C5hL+LL3ko9hs6T5lQ0=
 github.com/pkg/errors v0.8.1 h1:iURUrRGxPUNPdy5/HRSm+Yj6okJ6UtLINN0Q9M4+h3I=
