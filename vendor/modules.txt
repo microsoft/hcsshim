@@ -16,9 +16,9 @@ github.com/Microsoft/hcsshim/internal/timeout
 github.com/Microsoft/hcsshim/internal/schema2
 github.com/Microsoft/hcsshim/internal/longpath
 github.com/Microsoft/hcsshim/internal/safefile
-# github.com/containerd/containerd v1.2.5
+# github.com/containerd/containerd v1.3.0
 github.com/containerd/containerd/sys
-# github.com/containerd/continuity v0.0.0-20181203112020-004b46473808
+# github.com/containerd/continuity v0.0.0-20190815185530-f2a389ac0a02
 github.com/containerd/continuity/fs
 github.com/containerd/continuity/sysx
 github.com/containerd/continuity/pathdriver
@@ -86,11 +86,11 @@ github.com/opencontainers/go-digest
 # github.com/opencontainers/image-spec v1.0.1
 github.com/opencontainers/image-spec/specs-go/v1
 github.com/opencontainers/image-spec/specs-go
-# github.com/opencontainers/runc v1.0.0-rc7
+# github.com/opencontainers/runc v1.0.0-rc2.0.20190926000215-3e425f80a8c9
 github.com/opencontainers/runc/libcontainer/devices
+github.com/opencontainers/runc/libcontainer/user
 github.com/opencontainers/runc/libcontainer/configs
 github.com/opencontainers/runc/libcontainer/system
-github.com/opencontainers/runc/libcontainer/user
 # github.com/opencontainers/runtime-spec v0.0.0-20190325081030-ad53dcdc39f1
 github.com/opencontainers/runtime-spec/specs-go
 # github.com/pkg/errors v0.8.1
@@ -104,9 +104,9 @@ github.com/vishvananda/netlink/nl
 github.com/vishvananda/netns
 # go.opencensus.io v0.22.0
 go.opencensus.io/trace
+go.opencensus.io/trace/tracestate
 go.opencensus.io/internal
 go.opencensus.io/trace/internal
-go.opencensus.io/trace/tracestate
 go.opencensus.io
 # golang.org/x/net v0.0.0-20190501004415-9ce7a6920f09
 golang.org/x/net/html/charset
