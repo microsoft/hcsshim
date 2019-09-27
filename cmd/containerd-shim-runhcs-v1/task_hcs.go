@@ -327,18 +327,26 @@ func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all 
 			return false
 		})
 	}
-	if signal == 0x9 && eid == "" && ht.ownsHost && ht.host != nil {
+	if signal == 0x9 && eid == "" && ht.host != nil {
+		// If this is a SIGKILL against the init process we start a background
+		// timer and wait on either the timer expiring or the process exiting
+		// cleanly. If the timer exires first we forcibly close the UVM as we
+		// assume the guest is misbehaving for some reason.
 		go func() {
-			// The caller has issued a SIGKILL to the init process that owns the
-			// host.
-			//
-			// To mitigate failures that can cause the HCS to never deliver the
-			// exit notification give everything 30 seconds and terminate the
-			// UVM to force all exits.
-			time.Sleep(30 * time.Second)
-			// Safe to call multiple times if called previously on successful
-			// shutdown.
-			ht.host.Close()
+			t := time.NewTimer(30 * time.Second)
+			execExited := make(chan struct{})
+			go func() {
+				e.Wait()
+				close(execExited)
+			}()
+			select {
+			case <-execExited:
+				t.Stop()
+			case <-t.C:
+				// Safe to call multiple times if called previously on
+				// successful shutdown.
+				ht.host.Close()
+			}
 		}()
 	}
 	return e.Kill(ctx, signal)
