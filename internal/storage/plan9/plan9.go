@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"syscall"
 
 	"github.com/Microsoft/opengcs/internal/oc"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
@@ -13,6 +14,8 @@ import (
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
 )
+
+const packetPayloadBytes = 65536
 
 // Test dependencies
 var (
@@ -56,13 +59,23 @@ func Mount(ctx context.Context, vsock transport.Transport, target, share string,
 	defer f.Close()
 
 	var mountOptions uintptr
-	data := fmt.Sprintf("trans=fd,rfdno=%d,wfdno=%d", f.Fd(), f.Fd())
+	data := fmt.Sprintf("trans=fd,rfdno=%d,wfdno=%d,msize=%d", f.Fd(), f.Fd(), packetPayloadBytes)
 	if readonly {
 		mountOptions |= unix.MS_RDONLY
 		data += ",noload"
 	}
 	if share != "" {
 		data += ",aname=" + share
+	}
+
+	// set socket options to maximize bandwidth
+	err = syscall.SetsockoptInt(int(f.Fd()), syscall.SOL_SOCKET, syscall.SO_RCVBUF, packetPayloadBytes)
+	if err != nil {
+		return errors.Wrapf(err, "failed to set sock option syscall.SO_RCVBUF to %v on fd %v", packetPayloadBytes, f.Fd())
+	}
+	err = syscall.SetsockoptInt(int(f.Fd()), syscall.SOL_SOCKET, syscall.SO_SNDBUF, packetPayloadBytes)
+	if err != nil {
+		return errors.Wrapf(err, "failed to set sock option syscall.SO_SNDBUF to %v on fd %v", packetPayloadBytes, f.Fd())
 	}
 	if err := unixMount(target, target, "9p", mountOptions, data); err != nil {
 		return errors.Wrapf(err, "failed to mount directory for mapped directory %s", target)
