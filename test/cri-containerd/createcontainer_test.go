@@ -844,3 +844,81 @@ func Test_CreateContainer_Dir_Hostpath_LCOW(t *testing.T) {
 	}
 	runCreateContainerTest(t, lcowRuntimeHandler, request)
 }
+
+func Test_CreateContainer_File_Hostpath_WCOW(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	tempFile, err := ioutil.TempFile("", "test")
+
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %s", err)
+	}
+
+	tempFile.Close()
+
+	defer func() {
+		if err := os.Remove(tempFile.Name()); err != nil {
+			t.Fatalf("Failed to remove temp file: %s", err)
+		}
+	}()
+
+	containerFilePath := `C:\foo\test`
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Mounts: []*runtime.Mount{
+				{
+					HostPath:      tempFile.Name(),
+					ContainerPath: containerFilePath,
+				},
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsRS5Nanoserver,
+			},
+			Command: []string{
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
+}
+
+func Test_CreateContainer_Dir_Hostpath_WCOW(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	tempDir, err := ioutil.TempDir("", "")
+
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %s", err)
+	}
+
+	containerFilePath := "C:\\foo"
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Mounts: []*runtime.Mount{
+				{
+					HostPath:      tempDir,
+					ContainerPath: containerFilePath,
+				},
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsRS5Nanoserver,
+			},
+			Command: []string{
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
+}

@@ -66,7 +66,8 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		owner:               opts.Owner,
 		operatingSystem:     "windows",
 		scsiControllerCount: 1,
-		vsmbShares:          make(map[string]*vsmbShare),
+		vsmbDirShares:       make(map[string]*vsmbShare),
+		vsmbFileShares:      make(map[string]*vsmbShare),
 	}
 	defer func() {
 		if err != nil {

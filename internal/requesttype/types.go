@@ -7,4 +7,5 @@ const (
 	Add    = "Add"
 	Remove = "Remove"
 	PreAdd = "PreAdd" // For networking
+	Update = "Update"
 )
