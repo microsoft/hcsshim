@@ -117,8 +117,7 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 					break
 				}
 
-				err := coi.HostingSystem.AddVSMB(ctx, mount.Source, "", options)
-				if err != nil {
+				if err := coi.HostingSystem.AddVSMB(ctx, mount.Source, "", options); err != nil {
 					return fmt.Errorf("failed to add VSMB share to utility VM for mount %+v: %s", mount, err)
 				}
 				resources.vsmbMounts = append(resources.vsmbMounts, mount.Source)

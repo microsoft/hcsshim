@@ -3,6 +3,8 @@ package uvm
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/Microsoft/hcsshim/internal/requesttype"
@@ -10,8 +12,8 @@ import (
 )
 
 // findVSMBShare finds a share by `hostPath`. If not found returns `ErrNotAttached`.
-func (uvm *UtilityVM) findVSMBShare(ctx context.Context, hostPath string) (*vsmbShare, error) {
-	share, ok := uvm.vsmbShares[hostPath]
+func (uvm *UtilityVM) findVSMBShare(ctx context.Context, m map[string]*vsmbShare, hostPath string) (*vsmbShare, error) {
+	share, ok := m[hostPath]
 	if !ok {
 		return nil, ErrNotAttached
 	}
@@ -32,31 +34,68 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, guestRequest
 
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
-	share, err := uvm.findVSMBShare(ctx, hostPath)
+
+	// Temporary support to allow single-file mapping. If `hostPath` is a
+	// directory, map it without restriction. However, if it is a file, map the
+	// directory containing the file, and use `AllowedFileList` to only allow
+	// access to that file. If the directory has been mapped before for
+	// single-file use, add the new file to the `AllowedFileList` and issue an
+	// Update operation.
+	st, err := os.Stat(hostPath)
+	if err != nil {
+		return err
+	}
+	var file string
+	m := uvm.vsmbDirShares
+	if !st.IsDir() {
+		m = uvm.vsmbFileShares
+		file = hostPath
+		hostPath = filepath.Dir(hostPath)
+		options.RestrictFileAccess = true
+		options.SingleFileMapping = true
+	}
+	hostPath = filepath.Clean(hostPath)
+	var requestType = requesttype.Update
+	share, err := uvm.findVSMBShare(ctx, m, hostPath)
 	if err == ErrNotAttached {
+		requestType = requesttype.Add
 		uvm.vsmbCounter++
 		shareName := "s" + strconv.FormatUint(uvm.vsmbCounter, 16)
 
-		modification := &hcsschema.ModifySettingRequest{
-			RequestType: requesttype.Add,
-			Settings: hcsschema.VirtualSmbShare{
-				Name:    shareName,
-				Options: options,
-				Path:    hostPath,
-			},
-			ResourcePath: "VirtualMachine/Devices/VirtualSmb/Shares",
-		}
-
-		if err := uvm.Modify(ctx, modification); err != nil {
-			return err
-		}
 		share = &vsmbShare{
 			name:         shareName,
 			guestRequest: guestRequest,
 		}
-		uvm.vsmbShares[hostPath] = share
 	}
+	newAllowedFiles := share.allowedFiles
+	if options.RestrictFileAccess {
+		newAllowedFiles = append(newAllowedFiles, file)
+	}
+
+	// Update on a VSMB share currently only supports updating the
+	// AllowedFileList, and in fact will return an error if RestrictFileAccess
+	// isn't set (e.g. if used on an unrestricted share). So we only call Modify
+	// if we are either doing an Add, or if RestrictFileAccess is set.
+	if requestType == requesttype.Add || options.RestrictFileAccess {
+		modification := &hcsschema.ModifySettingRequest{
+			RequestType: requestType,
+			Settings: hcsschema.VirtualSmbShare{
+				Name:         share.name,
+				Options:      options,
+				Path:         hostPath,
+				AllowedFiles: newAllowedFiles,
+			},
+			ResourcePath: "VirtualMachine/Devices/VirtualSmb/Shares",
+		}
+		if err := uvm.Modify(ctx, modification); err != nil {
+			return err
+		}
+	}
+
+	share.allowedFiles = newAllowedFiles
 	share.refCount++
+	m[hostPath] = share
+
 	return nil
 }
 
@@ -69,7 +108,18 @@ func (uvm *UtilityVM) RemoveVSMB(ctx context.Context, hostPath string) error {
 
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
-	share, err := uvm.findVSMBShare(ctx, hostPath)
+
+	st, err := os.Stat(hostPath)
+	if err != nil {
+		return err
+	}
+	m := uvm.vsmbDirShares
+	if !st.IsDir() {
+		m = uvm.vsmbFileShares
+		hostPath = filepath.Dir(hostPath)
+	}
+	hostPath = filepath.Clean(hostPath)
+	share, err := uvm.findVSMBShare(ctx, m, hostPath)
 	if err != nil {
 		return fmt.Errorf("%s is not present as a VSMB share in %s, cannot remove", hostPath, uvm.id)
 	}
@@ -88,7 +138,7 @@ func (uvm *UtilityVM) RemoveVSMB(ctx context.Context, hostPath string) error {
 		return fmt.Errorf("failed to remove vsmb share %s from %s: %+v: %s", hostPath, uvm.id, modification, err)
 	}
 
-	delete(uvm.vsmbShares, hostPath)
+	delete(m, hostPath)
 	return nil
 }
 
@@ -97,11 +147,24 @@ func (uvm *UtilityVM) GetVSMBUvmPath(ctx context.Context, hostPath string) (stri
 	if hostPath == "" {
 		return "", fmt.Errorf("no hostPath passed to GetVSMBUvmPath")
 	}
+
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
-	share, err := uvm.findVSMBShare(ctx, hostPath)
+
+	st, err := os.Stat(hostPath)
 	if err != nil {
 		return "", err
 	}
-	return share.GuestPath(), nil
+	m := uvm.vsmbDirShares
+	f := ""
+	if !st.IsDir() {
+		m = uvm.vsmbFileShares
+		hostPath, f = filepath.Split(hostPath)
+	}
+	hostPath = filepath.Clean(hostPath)
+	share, err := uvm.findVSMBShare(ctx, m, hostPath)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(share.GuestPath(), f), nil
 }
