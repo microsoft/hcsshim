@@ -18,6 +18,10 @@ func getSandboxRootDir(id string) string {
 	return filepath.Join("/tmp/gcs/cri", id)
 }
 
+func getSandboxMountsDir(id string) string {
+	return filepath.Join(getSandboxRootDir(id), "sandboxMounts")
+}
+
 func getSandboxHostnamePath(id string) string {
 	return filepath.Join(getSandboxRootDir(id), "hostname")
 }
