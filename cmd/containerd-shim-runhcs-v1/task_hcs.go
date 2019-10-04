@@ -506,7 +506,7 @@ func (ht *hcsTask) close(ctx context.Context) {
 			if err != nil {
 				log.G(ctx).WithError(err).Error("failed to shutdown container")
 			} else {
-				t := time.NewTimer(time.Minute * 5)
+				t := time.NewTimer(time.Second * 30)
 				select {
 				case <-ch:
 					err = werr
