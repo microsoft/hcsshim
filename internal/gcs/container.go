@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -167,6 +168,8 @@ func (c *Container) Shutdown(ctx context.Context) (err error) {
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", c.id))
 
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	return c.shutdown(ctx, rpcShutdownGraceful)
 }
 
@@ -179,6 +182,8 @@ func (c *Container) Terminate(ctx context.Context) (err error) {
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", c.id))
 
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	return c.shutdown(ctx, rpcShutdownForced)
 }
 
