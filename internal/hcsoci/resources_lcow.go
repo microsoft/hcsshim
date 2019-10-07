@@ -98,9 +98,8 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, res
 				coi.Spec.Mounts[i].Type = "none"
 			} else if strings.HasPrefix(mount.Source, "sandbox://") {
 				// Mounts that map to a path in UVM are specified with 'sandbox://' prefix.
-				// we remove the prefix before passing them to GCS. Mount format looks like below
-				// source: sandbox:///a/dirInUvm destination:/b/dirInContainer
-				uvmPathForFile = strings.TrimPrefix(mount.Source, "sandbox://")
+				// example: sandbox:///a/dirInUvm destination:/b/dirInContainer
+				uvmPathForFile = mount.Source
 			} else {
 				st, err := os.Stat(hostPath)
 				if err != nil {
