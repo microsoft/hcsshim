@@ -77,10 +77,6 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 
 		// Free any process waiters
 		p.exitWg.Done()
-		// Decrement any container process count waiters
-		c.processesMutex.Lock()
-		c.processesWg.Done()
-		c.processesMutex.Unlock()
 
 		// Schedule the removal of this process object from the map once at
 		// least one waiter has read the result

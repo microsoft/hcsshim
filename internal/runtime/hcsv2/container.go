@@ -29,7 +29,6 @@ type Container struct {
 	exitType prot.NotificationType
 
 	processesMutex sync.Mutex
-	processesWg    sync.WaitGroup
 	processes      map[uint32]*Process
 }
 
@@ -61,18 +60,8 @@ func (c *Container) ExecProcess(ctx context.Context, process *oci.Process, conSe
 		return -1, err
 	}
 
-	// Increment the waiters before the call so that WaitContainer cannot complete in a race
-	// with adding a new process. When the process exits it will decrement this count.
-	c.processesMutex.Lock()
-	c.processesWg.Add(1)
-	c.processesMutex.Unlock()
-
 	p, err := c.container.ExecProcess(process, stdioSet)
 	if err != nil {
-		// We failed to exec any process. Remove our early count increment.
-		c.processesMutex.Lock()
-		c.processesWg.Done()
-		c.processesMutex.Unlock()
 		stdioSet.Close()
 		return -1, err
 	}
@@ -124,14 +113,13 @@ func (c *Container) Kill(ctx context.Context, signal syscall.Signal) error {
 	return nil
 }
 
-// Wait waits for all processes exec'ed to finish as well as the init process
-// representing the container.
+// Wait waits for the container's init process to exit.
 func (c *Container) Wait() prot.NotificationType {
 	_, span := trace.StartSpan(context.Background(), "opengcs::Container::Wait")
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("cid", c.id))
 
-	c.processesWg.Wait()
+	c.initProcess.writersWg.Wait()
 	c.etL.Lock()
 	defer c.etL.Unlock()
 	return c.exitType

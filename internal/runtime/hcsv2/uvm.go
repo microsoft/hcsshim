@@ -153,8 +153,6 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		exitType:  prot.NtUnexpectedExit,
 		processes: make(map[uint32]*Process),
 	}
-	// Add the WG count for the init process
-	c.processesWg.Add(1)
 	c.initProcess = newProcess(c, settings.OCISpecification.Process, con.(runtime.Process), uint32(c.container.Pid()), true)
 
 	// Sandbox or standalone, move the networks to the container namespace
