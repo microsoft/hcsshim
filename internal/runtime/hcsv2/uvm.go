@@ -63,6 +63,15 @@ func (h *Host) GetContainer(id string) (*Container, error) {
 	return h.getContainerLocked(id)
 }
 
+func setupSandboxMountsPath(id string) error {
+	mountPath := getSandboxMountsDir(id)
+	if err := os.MkdirAll(mountPath, 0755); err != nil {
+		return errors.Wrapf(err, "failed to create sandboxMounts dir in sandbox %v", id)
+	}
+
+	return storage.MountRShared(mountPath)
+}
+
 func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VMHostedContainerSettingsV2) (_ *Container, err error) {
 	h.containersMutex.Lock()
 	defer h.containersMutex.Unlock()
@@ -84,6 +93,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 					defer os.RemoveAll(getSandboxRootDir(id))
 				}
 			}()
+			err = setupSandboxMountsPath(id)
 		case "container":
 			sid, ok := settings.OCISpecification.Annotations["io.kubernetes.cri.sandbox-id"]
 			if !ok || sid == "" {

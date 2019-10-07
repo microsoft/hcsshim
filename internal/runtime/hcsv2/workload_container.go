@@ -2,7 +2,9 @@ package hcsv2
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Microsoft/opengcs/internal/log"
 	"github.com/Microsoft/opengcs/internal/oc"
@@ -16,6 +18,31 @@ func getWorkloadRootDir(sbid, id string) string {
 	return filepath.Join(getSandboxRootDir(sbid), id)
 }
 
+func updateSandboxMounts(sbid string, spec *oci.Spec) error {
+	sandboxMountPrefix := "sandbox://"
+	for i, m := range spec.Mounts {
+		if strings.HasPrefix(m.Source, sandboxMountPrefix) {
+			mountsDir := getSandboxMountsDir(sbid)
+			subPath := strings.TrimPrefix(m.Source, sandboxMountPrefix)
+			sandboxSource := filepath.Join(mountsDir, subPath)
+
+			if !strings.HasPrefix(sandboxSource, mountsDir) {
+				return errors.Errorf("mount path %v for mount %v is not within sandbox's mounts dir", sandboxSource, m.Source)
+			}
+
+			spec.Mounts[i].Source = sandboxSource
+
+			_, err := os.Stat(sandboxSource)
+			if os.IsNotExist(err) {
+				if err := os.MkdirAll(sandboxSource, 0755); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.Spec) (err error) {
 	ctx, span := trace.StartSpan(ctx, "hcsv2::setupWorkloadContainerSpec")
 	defer span.End()
@@ -27,6 +54,11 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 	// Verify no hostname
 	if spec.Hostname != "" {
 		return errors.Errorf("workload container must not change hostname: %s", spec.Hostname)
+	}
+
+	// update any sandbox mounts with the sandboxMounts directory path and create files
+	if err = updateSandboxMounts(sbid, spec); err != nil {
+		return errors.Wrapf(err, "failed to update sandbox mounts for container %v in sandbox %v", id, sbid)
 	}
 
 	// Add /etc/hostname if the spec did not override it.
