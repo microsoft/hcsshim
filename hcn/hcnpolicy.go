@@ -16,6 +16,7 @@ const (
 	OutBoundNAT   EndpointPolicyType = "OutBoundNAT"
 	SDNRoute      EndpointPolicyType = "SDNRoute"
 	L4Proxy       EndpointPolicyType = "L4Proxy"
+	L4WFPPROXY    EndpointPolicyType = "L4WFPPROXY"
 	PortName      EndpointPolicyType = "PortName"
 	EncapOverhead EndpointPolicyType = "EncapOverhead"
 	// Endpoint and Network have InterfaceConstraint and ProviderAddress
@@ -157,20 +158,11 @@ type FiveTuple struct {
 	Priority        uint16 `json:",omitempty"`
 }
 
-// L4ProxyPolicySetting sets Layer-4 Proxy on an endpoint.
-type L4ProxyPolicySetting struct {
-	IP            string   `json:",omitempty"`
-	Port          string   `json:",omitempty"`
-	Protocol      uint32   `json:",omitempty"` // EX: TCP = 6, UDP = 17
-	ExceptionList []string `json:",omitempty"`
-	Destination   string   `json:","`
-	OutboundNat   bool     `json:",omitempty"`
-
-	// For the WFP proxy
-	FilterTuple   FiveTuple `json:",omitempty"`
-	ProxyType     ProxyType `json:",omitempty"`
-	UserSID       string    `json:",omitempty"`
-	CompartmentID uint32    `json:",omitempty"`
+// L4WfpProxyPolicySetting sets Layer-4 Proxy on an endpoint.
+type L4WfpProxyPolicySetting struct {
+	Port        string    `json:",omitempty"`
+	FilterTuple FiveTuple `json:",omitempty"`
+	UserSID     string    `json:",omitempty"`
 }
 
 // PortnameEndpointPolicySetting sets the port name for an endpoint.
