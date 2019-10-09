@@ -17,6 +17,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/schema1"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
@@ -606,13 +607,49 @@ func (ht *hcsTask) DumpGuestStacks(ctx context.Context) string {
 }
 
 func (ht *hcsTask) Stats(ctx context.Context) (*stats.Statistics, error) {
-	stats := &stats.Statistics{}
+	s := &stats.Statistics{}
+
+	props, err := ht.c.PropertiesV2(ctx, hcsschema.PTStatistics)
+	if err != nil {
+		return nil, err
+	}
+	if ht.isWCOW {
+		wcs := &stats.Statistics_Windows{Windows: &stats.WindowsContainerStatistics{}}
+		if props.Statistics != nil {
+			wcs.Windows.Timestamp = props.Statistics.Timestamp
+			wcs.Windows.ContainerStartTime = props.Statistics.ContainerStartTime
+			wcs.Windows.UptimeNS = props.Statistics.Uptime100ns * 100
+			if props.Statistics.Processor != nil {
+				wcs.Windows.Processor = &stats.WindowsContainerProcessorStatistics{}
+				wcs.Windows.Processor.TotalRuntimeNS = props.Statistics.Processor.TotalRuntime100ns * 100
+				wcs.Windows.Processor.RuntimeUserNS = props.Statistics.Processor.RuntimeUser100ns * 100
+				wcs.Windows.Processor.RuntimeKernelNS = props.Statistics.Processor.RuntimeKernel100ns * 100
+			}
+			if props.Statistics.Memory != nil {
+				wcs.Windows.Memory = &stats.WindowsContainerMemoryStatistics{}
+				wcs.Windows.Memory.MemoryUsageCommitBytes = props.Statistics.Memory.MemoryUsageCommitBytes
+				wcs.Windows.Memory.MemoryUsageCommitPeakBytes = props.Statistics.Memory.MemoryUsageCommitPeakBytes
+				wcs.Windows.Memory.MemoryUsagePrivateWorkingSetBytes = props.Statistics.Memory.MemoryUsagePrivateWorkingSetBytes
+			}
+			if props.Statistics.Storage != nil {
+				wcs.Windows.Storage = &stats.WindowsContainerStorageStatistics{}
+				wcs.Windows.Storage.ReadCountNormalized = props.Statistics.Storage.ReadCountNormalized
+				wcs.Windows.Storage.ReadSizeBytes = props.Statistics.Storage.ReadSizeBytes
+				wcs.Windows.Storage.WriteCountNormalized = props.Statistics.Storage.WriteCountNormalized
+				wcs.Windows.Storage.WriteSizeBytes = props.Statistics.Storage.WriteSizeBytes
+			}
+		}
+		s.Container = wcs
+	} else {
+		lcs := &stats.Statistics_Linux{Linux: props.Metrics}
+		s.Container = lcs
+	}
 	if ht.ownsHost && ht.host != nil {
 		vmStats, err := ht.host.Stats(ctx)
 		if err != nil {
 			return nil, err
 		}
-		stats.VM = vmStats
+		s.VM = vmStats
 	}
-	return stats, nil
+	return s, nil
 }

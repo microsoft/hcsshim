@@ -394,7 +394,7 @@ func (s *service) waitInternal(ctx context.Context, req *task.WaitRequest) (*tas
 }
 
 func (s *service) statsInternal(ctx context.Context, req *task.StatsRequest) (*task.StatsResponse, error) {
-	t, err := s.getTask(s.tid)
+	t, err := s.getTask(req.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -404,7 +404,7 @@ func (s *service) statsInternal(ctx context.Context, req *task.StatsRequest) (*t
 	}
 	any, err := typeurl.MarshalAny(stats)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "failed to marshal Statistics for task: %s", req.ID)
 	}
 	return &task.StatsResponse{Stats: any}, nil
 }

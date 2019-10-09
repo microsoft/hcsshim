@@ -85,10 +85,40 @@ func (tst *testShimTask) ExecInHost(ctx context.Context, req *shimdiag.ExecProce
 	return 0, errors.New("not implemented")
 }
 
-func (wpst *testShimTask) DumpGuestStacks(ctx context.Context) string {
+func (tst *testShimTask) DumpGuestStacks(ctx context.Context) string {
 	return ""
 }
 
 func (tst *testShimTask) Stats(ctx context.Context) (*stats.Statistics, error) {
-	return nil, errdefs.ErrNotImplemented
+	return &stats.Statistics{
+		Container: &stats.Statistics_Windows{
+			Windows: &stats.WindowsContainerStatistics{
+				UptimeNS: 100,
+				Processor: &stats.WindowsContainerProcessorStatistics{
+					TotalRuntimeNS:  100,
+					RuntimeUserNS:   100,
+					RuntimeKernelNS: 100,
+				},
+				Memory: &stats.WindowsContainerMemoryStatistics{
+					MemoryUsageCommitBytes:            100,
+					MemoryUsageCommitPeakBytes:        100,
+					MemoryUsagePrivateWorkingSetBytes: 100,
+				},
+				Storage: &stats.WindowsContainerStorageStatistics{
+					ReadCountNormalized:  100,
+					ReadSizeBytes:        100,
+					WriteCountNormalized: 100,
+					WriteSizeBytes:       100,
+				},
+			},
+		},
+		VM: &stats.VirtualMachineStatistics{
+			Processor: &stats.VirtualMachineProcessorStatistics{
+				TotalRuntimeNS: 100,
+			},
+			Memory: &stats.VirtualMachineMemoryStatistics{
+				WorkingSetBytes: 100,
+			},
+		},
+	}, nil
 }

@@ -3,21 +3,45 @@ syntax = "proto3";
 package containerd.runhcs.stats.v1;
 
 import weak "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+import "github.com/containerd/cgroups/stats/v1/metrics.proto";
 
 option go_package = "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats;stats";
 
 message Statistics {
 	oneof container {
 		WindowsContainerStatistics windows = 1;
-		LinuxContainerStatistics linux = 2;
+		io.containerd.cgroups.v1.Metrics linux = 2;
 	}
 	VirtualMachineStatistics vm = 3 [(gogoproto.customname) = "VM"];
 }
 
 message WindowsContainerStatistics {
+	google.protobuf.Timestamp timestamp = 1 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+	google.protobuf.Timestamp container_start_time = 2 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+	int32 uptime_ns = 3 [(gogoproto.customname) = "UptimeNS"];
+	WindowsContainerProcessorStatistics processor = 4;
+	WindowsContainerMemoryStatistics memory = 5;
+	WindowsContainerStorageStatistics storage = 6;
 }
 
-message LinuxContainerStatistics {
+message WindowsContainerProcessorStatistics {
+	int32 total_runtime_ns = 1 [(gogoproto.customname) = "TotalRuntimeNS"];
+	int32 runtime_user_ns = 2 [(gogoproto.customname) = "RuntimeUserNS"];
+	int32 runtime_kernel_ns = 3 [(gogoproto.customname) = "RuntimeKernelNS"];
+}
+
+message WindowsContainerMemoryStatistics {
+	int32 memory_usage_commit_bytes = 1;
+	int32 memory_usage_commit_peak_bytes = 2;
+	int32 memory_usage_private_working_set_bytes = 3;
+}
+
+message WindowsContainerStorageStatistics {
+	int32 read_count_normalized = 1;
+	int32 read_size_bytes = 2;
+	int32 write_count_normalized = 3;
+	int32 write_size_bytes = 4;
 }
 
 message VirtualMachineStatistics {
@@ -31,4 +55,16 @@ message VirtualMachineProcessorStatistics {
 
 message VirtualMachineMemoryStatistics {
 	uint64 working_set_bytes = 1;
+	int32 virtual_node_count = 2;
+	VirtualMachineMemory vm_memory = 3;
+}
+
+message VirtualMachineMemory {
+	int32 available_memory = 1;
+	int32 available_memory_buffer = 2;
+	int32 reserved_memory = 3;
+	int32 assigned_memory = 4;
+	bool slp_active = 5;
+	bool balancing_enabled = 6;
+	bool dm_operation_in_progress = 7;
 }

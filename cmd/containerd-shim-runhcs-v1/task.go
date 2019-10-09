@@ -80,7 +80,9 @@ type shimTask interface {
 	//
 	// If the host is not hypervisor isolated returns `""`.
 	DumpGuestStacks(ctx context.Context) string
-	// Stats returns various metrics for the task. If the task owns the UVM,
-	// additional metrics on the UVM are returned as well.
+	// Stats returns various metrics for the task.
+	//
+	// If the host is hypervisor isolated and this task owns the host additional
+	// metrics on the UVM may be returned as well.
 	Stats(ctx context.Context) (*stats.Statistics, error)
 }
