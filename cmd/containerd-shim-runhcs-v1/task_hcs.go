@@ -17,6 +17,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/schema1"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
@@ -605,14 +606,56 @@ func (ht *hcsTask) DumpGuestStacks(ctx context.Context) string {
 	return ""
 }
 
+func hcsPropertiesToWindowsStats(props *hcsschema.Properties) *stats.Statistics_Windows {
+	wcs := &stats.Statistics_Windows{Windows: &stats.WindowsContainerStatistics{}}
+	if props.Statistics != nil {
+		wcs.Windows.Timestamp = props.Statistics.Timestamp
+		wcs.Windows.ContainerStartTime = props.Statistics.ContainerStartTime
+		wcs.Windows.UptimeNS = props.Statistics.Uptime100ns * 100
+		if props.Statistics.Processor != nil {
+			wcs.Windows.Processor = &stats.WindowsContainerProcessorStatistics{
+				TotalRuntimeNS:  props.Statistics.Processor.TotalRuntime100ns * 100,
+				RuntimeUserNS:   props.Statistics.Processor.RuntimeUser100ns * 100,
+				RuntimeKernelNS: props.Statistics.Processor.RuntimeKernel100ns * 100,
+			}
+		}
+		if props.Statistics.Memory != nil {
+			wcs.Windows.Memory = &stats.WindowsContainerMemoryStatistics{
+				MemoryUsageCommitBytes:            props.Statistics.Memory.MemoryUsageCommitBytes,
+				MemoryUsageCommitPeakBytes:        props.Statistics.Memory.MemoryUsageCommitPeakBytes,
+				MemoryUsagePrivateWorkingSetBytes: props.Statistics.Memory.MemoryUsagePrivateWorkingSetBytes,
+			}
+		}
+		if props.Statistics.Storage != nil {
+			wcs.Windows.Storage = &stats.WindowsContainerStorageStatistics{
+				ReadCountNormalized:  props.Statistics.Storage.ReadCountNormalized,
+				ReadSizeBytes:        props.Statistics.Storage.ReadSizeBytes,
+				WriteCountNormalized: props.Statistics.Storage.WriteCountNormalized,
+				WriteSizeBytes:       props.Statistics.Storage.WriteSizeBytes,
+			}
+		}
+	}
+	return wcs
+}
+
 func (ht *hcsTask) Stats(ctx context.Context) (*stats.Statistics, error) {
-	stats := &stats.Statistics{}
+	s := &stats.Statistics{}
+
+	props, err := ht.c.PropertiesV2(ctx, hcsschema.PTStatistics)
+	if err != nil {
+		return nil, err
+	}
+	if ht.isWCOW {
+		s.Container = hcsPropertiesToWindowsStats(props)
+	} else {
+		s.Container = &stats.Statistics_Linux{Linux: props.Metrics}
+	}
 	if ht.ownsHost && ht.host != nil {
 		vmStats, err := ht.host.Stats(ctx)
 		if err != nil {
 			return nil, err
 		}
-		stats.VM = vmStats
+		s.VM = vmStats
 	}
-	return stats, nil
+	return s, nil
 }

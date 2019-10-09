@@ -240,6 +240,11 @@ func (wpst *wcowPodSandboxTask) DumpGuestStacks(ctx context.Context) string {
 }
 
 func (wpst *wcowPodSandboxTask) Stats(ctx context.Context) (*stats.Statistics, error) {
-	// TODO: Add support for WCOW UVM stats here.
-	return nil, errdefs.ErrNotImplemented
+	vmStats, err := wpst.host.Stats(ctx)
+	if err != nil {
+		return nil, err
+	}
+	stats := &stats.Statistics{}
+	stats.VM = vmStats
+	return stats, nil
 }
