@@ -6,7 +6,7 @@ This package contains the Golang interface for using the Windows [Host Compute S
 
 It is primarily used in the [Moby Project](https://github.com/moby/moby), but it can be freely used by other projects as well.
 
-This is a code-only repository and does not have a stable release. 0.8.6 is the last tagged release, and it is out of date for ContainerD and Kubernetes. Downstream projects should vendor in this codebase using commit ids instead of tags, then validate fixes and do a full test pass of the whole project.
+The tags in this repo are from a vendoring scheme intended the Docker repos, and is only stable for the v1 container and process API's. Newer projects vendoring this repo such as ContainerD or Kubernetes should use commit ids instead of tags, then validate fixes and do a test pass of the whole project. Hcsshim is not tested or released as an isolated unit.
 
 ## Contributing
 
