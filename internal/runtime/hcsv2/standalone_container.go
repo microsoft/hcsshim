@@ -120,6 +120,9 @@ func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec
 		spec.Mounts = append(spec.Mounts, mt)
 	}
 
+	// Force the parent cgroup into our /containers root
+	spec.Linux.CgroupsPath = "/containers/" + id
+
 	// Clear the windows section as we dont want to forward to runc
 	spec.Windows = nil
 
