@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"syscall"
 	"time"
 
 	"github.com/Microsoft/opengcs/internal/oc"
@@ -13,6 +14,8 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/core/gcs"
 	"github.com/Microsoft/opengcs/service/gcs/runtime/runc"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
+	"github.com/containerd/cgroups"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
@@ -23,6 +26,8 @@ func main() {
 	logFormat := flag.String("log-format", "text", "Logging Format: text or json")
 	useInOutErr := flag.Bool("use-inouterr", false, "If true use stdin/stdout for bridge communication and stderr for logging")
 	v4 := flag.Bool("v4", false, "enable the v4 protocol support and v2 schema")
+	rootMemReserveBytes := flag.Uint64("root-mem-reserve-bytes", 75*1024*1024, "the amount of memory reserved for the orchestration, the rest will be assigned to containers")
+	gcsMemLimitBytes := flag.Uint64("gcs-mem-limit-bytes", 10*1024*1024, "the maximum amount of memory the gcs can use")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "\nUsage of %s:\n", os.Args[0])
@@ -79,9 +84,7 @@ func main() {
 	tport := &transport.VsockTransport{}
 	rtime, err := runc.NewRuntime(baseLogPath)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			logrus.ErrorKey: err,
-		}).Fatal("opengcs::main - failed to initialize new runc runtime")
+		logrus.WithError(err).Fatal("opengcs::main - failed to initialize new runc runtime")
 	}
 	coreint := gcs.NewGCSCore(baseLogPath, baseStoragePath, rtime, tport)
 	mux := bridge.NewBridgeMux()
@@ -108,6 +111,43 @@ func main() {
 		}
 		bridgeIn = bridgeCon
 		bridgeOut = bridgeCon
+	}
+
+	// Setup the UVM cgroups to protect against a workload taking all available
+	// memory and causing the GCS to malfunction we create two cgroups: gcs,
+	// containers.
+	//
+	// The containers cgroup is limited only by {Totalram - 75 MB
+	// (reservation)}.
+	//
+	// The gcs cgroup is limited to 10 MB to prevent unknown memory leaks over
+	// time from affecting workload memory.
+	sinfo := syscall.Sysinfo_t{}
+	if err := syscall.Sysinfo(&sinfo); err != nil {
+		logrus.WithError(err).Fatal("opengcs::main - failed to get sys info")
+	}
+	containersLimit := int64(sinfo.Totalram - *rootMemReserveBytes)
+	containersControl, err := cgroups.New(cgroups.V1, cgroups.StaticPath("/containers"), &oci.LinuxResources{
+		Memory: &oci.LinuxMemory{
+			Limit: &containersLimit,
+		},
+	})
+	if err != nil {
+		logrus.WithError(err).Fatal("opengcs::main - failed to create containers cgroup")
+	}
+	defer containersControl.Delete()
+	gcsLimit := int64(*gcsMemLimitBytes)
+	gcsControl, err := cgroups.New(cgroups.V1, cgroups.StaticPath("/gcs"), &oci.LinuxResources{
+		Memory: &oci.LinuxMemory{
+			Limit: &gcsLimit,
+		},
+	})
+	if err != nil {
+		logrus.WithError(err).Fatal("opengcs::main - failed to create gcs cgroup")
+	}
+	defer gcsControl.Delete()
+	if err := gcsControl.Add(cgroups.Process{Pid: os.Getpid()}); err != nil {
+		logrus.WithError(err).Fatal("opengcs::main - failed add gcs pid to gcs cgroup")
 	}
 
 	err = b.ListenAndServe(bridgeIn, bridgeOut)

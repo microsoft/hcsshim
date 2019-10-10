@@ -16,6 +16,9 @@ github.com/Microsoft/hcsshim/internal/timeout
 github.com/Microsoft/hcsshim/internal/schema2
 github.com/Microsoft/hcsshim/internal/longpath
 github.com/Microsoft/hcsshim/internal/safefile
+# github.com/containerd/cgroups v0.0.0-20190919134610-bf292b21730f
+github.com/containerd/cgroups
+github.com/containerd/cgroups/stats/v1
 # github.com/containerd/containerd v1.3.0
 github.com/containerd/containerd/sys
 # github.com/containerd/continuity v0.0.0-20190815185530-f2a389ac0a02
@@ -23,6 +26,8 @@ github.com/containerd/continuity/fs
 github.com/containerd/continuity/sysx
 github.com/containerd/continuity/pathdriver
 github.com/containerd/continuity/syscallx
+# github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e
+github.com/coreos/go-systemd/dbus
 # github.com/docker/docker v0.0.0-20190404075923-dbe4a30928d4
 github.com/docker/docker/pkg/archive
 github.com/docker/docker/pkg/symlink
@@ -33,8 +38,14 @@ github.com/docker/docker/pkg/longpath
 github.com/docker/docker/pkg/pools
 github.com/docker/docker/pkg/system
 github.com/docker/docker/pkg/mount
-# github.com/docker/go-units v0.0.0-20181030082039-2fb04c6466a5
+# github.com/docker/go-units v0.4.0
 github.com/docker/go-units
+# github.com/godbus/dbus v0.0.0-20190422162347-ade71ed3457e
+github.com/godbus/dbus
+# github.com/gogo/protobuf v1.2.1
+github.com/gogo/protobuf/gogoproto
+github.com/gogo/protobuf/proto
+github.com/gogo/protobuf/protoc-gen-gogo/descriptor
 # github.com/hashicorp/golang-lru v0.5.1
 github.com/hashicorp/golang-lru/simplelru
 # github.com/hpcloud/tail v1.0.0
@@ -91,7 +102,7 @@ github.com/opencontainers/runc/libcontainer/devices
 github.com/opencontainers/runc/libcontainer/user
 github.com/opencontainers/runc/libcontainer/configs
 github.com/opencontainers/runc/libcontainer/system
-# github.com/opencontainers/runtime-spec v0.0.0-20190325081030-ad53dcdc39f1
+# github.com/opencontainers/runtime-spec v0.1.2-0.20190507144316-5b71a03e2700
 github.com/opencontainers/runtime-spec/specs-go
 # github.com/pkg/errors v0.8.1
 github.com/pkg/errors
@@ -114,7 +125,7 @@ golang.org/x/net/html
 golang.org/x/net/html/atom
 # golang.org/x/sync v0.0.0-20190227155943-e225da77a7e6
 golang.org/x/sync/errgroup
-# golang.org/x/sys v0.0.0-20190502145724-3ef323f4f1fd
+# golang.org/x/sys v0.0.0-20190514135907-3a4b5fb9f71f
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 # golang.org/x/text v0.3.2

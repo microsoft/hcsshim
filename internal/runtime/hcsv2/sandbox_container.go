@@ -97,6 +97,9 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 	// also has a concept of a sandbox/shm file when the IPC NamespaceMode !=
 	// NODE.
 
+	// Force the parent cgroup into our /containers root
+	spec.Linux.CgroupsPath = "/containers/" + id
+
 	// Clear the windows section as we dont want to forward to runc
 	spec.Windows = nil
 

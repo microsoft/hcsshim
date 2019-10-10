@@ -160,6 +160,9 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 		}
 	}
 
+	// Force the parent cgroup into our /containers root
+	spec.Linux.CgroupsPath = "/containers/" + id
+
 	// Clear the windows section as we dont want to forward to runc
 	spec.Windows = nil
 
