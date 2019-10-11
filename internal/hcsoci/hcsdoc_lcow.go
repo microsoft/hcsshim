@@ -41,6 +41,7 @@ func createLCOWSpec(coi *createOptionsInternal) (*specs.Spec, error) {
 	spec.Hooks = nil
 
 	// Clear unsupported features
+	spec.Linux.CgroupsPath = "" // GCS controls its cgroups hierarchy on its own.
 	if spec.Linux.Resources != nil {
 		spec.Linux.Resources.Devices = nil
 		spec.Linux.Resources.Pids = nil
