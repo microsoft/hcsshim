@@ -9,6 +9,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/osversion"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	runtime "k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2"
@@ -768,7 +769,7 @@ func Test_CreateContainer_CPUShares_LCOW(t *testing.T) {
 	runCreateContainerTest(t, lcowRuntimeHandler, request)
 }
 
-func Test_CreateContainer_File_Hostpath_LCOW(t *testing.T) {
+func Test_CreateContainer_Mount_File_LCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.V19H1)
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
@@ -811,7 +812,7 @@ func Test_CreateContainer_File_Hostpath_LCOW(t *testing.T) {
 	runCreateContainerTest(t, lcowRuntimeHandler, request)
 }
 
-func Test_CreateContainer_Dir_Hostpath_LCOW(t *testing.T) {
+func Test_CreateContainer_Mount_Dir_LCOW(t *testing.T) {
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	tempDir, err := ioutil.TempDir("", "")
@@ -845,7 +846,7 @@ func Test_CreateContainer_Dir_Hostpath_LCOW(t *testing.T) {
 	runCreateContainerTest(t, lcowRuntimeHandler, request)
 }
 
-func Test_CreateContainer_File_Hostpath_WCOW(t *testing.T) {
+func Test_CreateContainer_Mount_File_WCOW(t *testing.T) {
 	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
 
 	tempFile, err := ioutil.TempFile("", "test")
@@ -888,7 +889,7 @@ func Test_CreateContainer_File_Hostpath_WCOW(t *testing.T) {
 	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
 }
 
-func Test_CreateContainer_Dir_Hostpath_WCOW(t *testing.T) {
+func Test_CreateContainer_Mount_Dir_WCOW(t *testing.T) {
 	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
 
 	tempDir, err := ioutil.TempDir("", "")
@@ -908,6 +909,44 @@ func Test_CreateContainer_Dir_Hostpath_WCOW(t *testing.T) {
 				{
 					HostPath:      tempDir,
 					ContainerPath: containerFilePath,
+				},
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsRS5Nanoserver,
+			},
+			Command: []string{
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
+}
+
+func Test_CreateContainer_Mount_NamedPipe_WCOW(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+
+	path := `\\.\pipe\testpipe`
+	pipe, err := winio.ListenPipe(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := pipe.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Mounts: []*runtime.Mount{
+				{
+					HostPath:      path,
+					ContainerPath: path,
 				},
 			},
 			Image: &runtime.ImageSpec{

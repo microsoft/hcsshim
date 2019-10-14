@@ -11,6 +11,8 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 )
 
+const vsmbSharePrefix = `\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\`
+
 // findVSMBShare finds a share by `hostPath`. If not found returns `ErrNotAttached`.
 func (uvm *UtilityVM) findVSMBShare(ctx context.Context, m map[string]*vsmbShare, hostPath string) (*vsmbShare, error) {
 	share, ok := m[hostPath]
@@ -21,7 +23,7 @@ func (uvm *UtilityVM) findVSMBShare(ctx context.Context, m map[string]*vsmbShare
 }
 
 func (share *vsmbShare) GuestPath() string {
-	return `\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\` + share.name
+	return vsmbSharePrefix + share.name
 }
 
 // AddVSMB adds a VSMB share to a Windows utility VM. Each VSMB share is ref-counted and
