@@ -789,8 +789,8 @@ func Test_RunPodSandbox_CustomizableScratchCustomSize_LCOW(t *testing.T) {
 	}
 }
 
-func Test_RunPodSandbox_ContainerUvmMount_LCOW(t *testing.T) {
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+func Test_RunPodSandbox_Mount_SandboxDir_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	annotations := map[string]string{
 		"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "true",
@@ -809,7 +809,7 @@ func Test_RunPodSandbox_ContainerUvmMount_LCOW(t *testing.T) {
 	output, errorMsg, exitCode := createSandboxContainerAndExec(t, annotations, mounts, cmd)
 
 	if exitCode != 0 {
-		t.Fatalf("Exec into container failed with: %v and exit code: %d, Test_RunPodSandbox_ContainerUvmMount_LCOW", errorMsg, exitCode)
+		t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, t.Name())
 	}
 
 	t.Log(output)

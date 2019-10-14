@@ -245,13 +245,13 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		mpsv2 []hcsschema.MappedPipe
 	)
 	for _, mount := range coi.Spec.Mounts {
-		const pipePrefix = `\\.\pipe\`
 		if mount.Type != "" {
 			return nil, nil, fmt.Errorf("invalid container spec - Mount.Type '%s' must not be set", mount.Type)
 		}
-		if strings.HasPrefix(strings.ToLower(mount.Destination), pipePrefix) {
-			mpsv1 = append(mpsv1, schema1.MappedPipe{HostPath: mount.Source, ContainerPipeName: mount.Destination[len(pipePrefix):]})
-			mpsv2 = append(mpsv2, hcsschema.MappedPipe{HostPath: mount.Source, ContainerPipeName: mount.Destination[len(pipePrefix):]})
+		if uvm.IsPipe(mount.Source) {
+			src, dst := uvm.GetContainerPipeMapping(coi.HostingSystem, mount)
+			mpsv1 = append(mpsv1, schema1.MappedPipe{HostPath: src, ContainerPipeName: dst})
+			mpsv2 = append(mpsv2, hcsschema.MappedPipe{HostPath: src, ContainerPipeName: dst})
 		} else {
 			readOnly := false
 			for _, o := range mount.Options {

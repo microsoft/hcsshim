@@ -37,6 +37,10 @@ type Resources struct {
 	// (bind-)mounts into a WCOW v2 Xenon.
 	vsmbMounts []string
 
+	// pipeMounts is an array of the host-paths of named pipes mounted into a utility
+	// VM.
+	pipeMounts []string
+
 	// plan9Mounts is an array of all the host paths which have been added to
 	// an LCOW utility VM
 	plan9Mounts []*uvm.Plan9Share
@@ -117,6 +121,14 @@ func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all 
 				return err
 			}
 			r.vsmbMounts = r.vsmbMounts[:len(r.vsmbMounts)-1]
+		}
+
+		for len(r.pipeMounts) != 0 {
+			mount := r.pipeMounts[len(r.pipeMounts)-1]
+			if err := vm.RemovePipe(ctx, mount); err != nil {
+				return err
+			}
+			r.pipeMounts = r.pipeMounts[:len(r.pipeMounts)-1]
 		}
 
 		for len(r.plan9Mounts) != 0 {

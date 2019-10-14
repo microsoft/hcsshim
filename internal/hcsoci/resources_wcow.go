@@ -15,6 +15,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
+	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
@@ -107,20 +108,28 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 				coi.Spec.Mounts[i].Type = ""
 				resources.scsiMounts = append(resources.scsiMounts, scsiMount{path: mount.Source, autoManage: mount.Type == "automanage-virtual-disk"})
 			} else {
-				l.Debug("hcsshim::allocateWindowsResources Hot-adding VSMB share for OCI mount")
-				options := &hcsschema.VirtualSmbShareOptions{}
-				if readOnly {
-					options.ReadOnly = true
-					options.CacheIo = true
-					options.ShareRead = true
-					options.ForceLevelIIOplocks = true
-					break
+				if uvm.IsPipe(mount.Source) {
+					if err := coi.HostingSystem.AddPipe(ctx, mount.Source); err != nil {
+						return fmt.Errorf("failed to add named pipe to UVM: %s", err)
+					}
+					resources.pipeMounts = append(resources.pipeMounts, mount.Source)
+				} else {
+					l.Debug("hcsshim::allocateWindowsResources Hot-adding VSMB share for OCI mount")
+					options := &hcsschema.VirtualSmbShareOptions{}
+					if readOnly {
+						options.ReadOnly = true
+						options.CacheIo = true
+						options.ShareRead = true
+						options.ForceLevelIIOplocks = true
+						break
+					}
+
+					if err := coi.HostingSystem.AddVSMB(ctx, mount.Source, "", options); err != nil {
+						return fmt.Errorf("failed to add VSMB share to utility VM for mount %+v: %s", mount, err)
+					}
+					resources.vsmbMounts = append(resources.vsmbMounts, mount.Source)
 				}
 
-				if err := coi.HostingSystem.AddVSMB(ctx, mount.Source, "", options); err != nil {
-					return fmt.Errorf("failed to add VSMB share to utility VM for mount %+v: %s", mount, err)
-				}
-				resources.vsmbMounts = append(resources.vsmbMounts, mount.Source)
 			}
 		}
 	}
