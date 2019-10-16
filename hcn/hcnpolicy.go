@@ -138,16 +138,6 @@ type SDNRoutePolicySetting struct {
 	NeedEncap         bool   `json:",omitempty"`
 }
 
-// A ProxyType is a type of proxy used by the L4 proxy policy.
-type ProxyType int
-
-const (
-	// ProxyTypeVFP specifies a Virtual Filtering Protocol proxy.
-	ProxyTypeVFP ProxyType = iota
-	// ProxyTypeWFP specifies a Windows Filtering Platform proxy.
-	ProxyTypeWFP
-)
-
 // FiveTuple is nested in L4ProxyPolicySetting for WFP support.
 type FiveTuple struct {
 	Protocols       string `json:",omitempty"`
