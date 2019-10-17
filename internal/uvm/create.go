@@ -118,7 +118,7 @@ func (uvm *UtilityVM) create(ctx context.Context, doc interface{}) error {
 
 	log.G(ctx).WithFields(logrus.Fields{
 		logfields.UVMID: uvm.id,
-		"runtime-id":    uvm.runtimeID,
+		"runtime-id":    uvm.runtimeID.String(),
 	}).Debug("created utility VM")
 	return nil
 }
