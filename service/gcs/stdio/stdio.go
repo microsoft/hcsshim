@@ -243,13 +243,15 @@ func (pr *PipeRelay) Wait() {
 	// because the host expects stdin to be closed before it will report process
 	// exit back to the client, and the client expects the process notification before
 	// it will close its side of stdin (which io.Copy is waiting on in the copying goroutine).
-	if pr.s.In != nil {
+	if pr.s != nil && pr.s.In != nil {
 		pr.s.In.CloseRead()
 	}
 
 	pr.wg.Wait()
 	pr.closePipes()
-	pr.s.Close()
+	if pr.s != nil {
+		pr.s.Close()
+	}
 }
 
 // CloseUnusedPipes gives the caller the ability to close any pipes that do not
@@ -355,7 +357,7 @@ func (r *TtyRelay) Wait() {
 	// because the host expects stdin to be closed before it will report process
 	// exit back to the client, and the client expects the process notification before
 	// it will close its side of stdin (which io.Copy is waiting on in the copying goroutine).
-	if r.s.In != nil {
+	if r.s != nil && r.s.In != nil {
 		r.s.In.CloseRead()
 	}
 
@@ -367,5 +369,7 @@ func (r *TtyRelay) Wait() {
 
 	r.pty.Close()
 	r.closed = true
-	r.s.Close()
+	if r.s != nil {
+		r.s.Close()
+	}
 }
