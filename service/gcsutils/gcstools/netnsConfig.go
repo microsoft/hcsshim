@@ -174,7 +174,7 @@ func netnsConfig() error {
 			} else {
 				// add a route rule for the new interface so packets coming on this interface
 				// always go out the same interface
-				srcNet := &net.IPNet{IP: net.ParseIP(a.HostIPAddress), Mask: net.CIDRMask(0, 32)}
+				srcNet := &net.IPNet{IP: net.ParseIP(a.AllocatedIPAddress), Mask: net.CIDRMask(32, 32)}
 				rule := netlink.NewRule()
 				rule.Table = 101
 				rule.Src = srcNet
