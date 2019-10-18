@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/typeurl"
@@ -561,13 +562,27 @@ func Test_TaskShim_waitInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
 	}
 }
 
-func Test_TaskShim_statsInternal_Error(t *testing.T) {
-	s := service{
-		tid:       t.Name(),
-		isSandbox: true,
+func Test_TaskShim_statsInternal_InitTaskID_Sucess(t *testing.T) {
+	testNames := []string{"WCOW", "LCOW"}
+	for i, isWCOW := range []bool{true, false} {
+		t.Run(testNames[i], func(t *testing.T) {
+			s, t1, _ := setupTaskServiceWithFakes(t)
+			t1.isWCOW = isWCOW
+
+			resp, err := s.statsInternal(context.TODO(), &task.StatsRequest{ID: t1.ID()})
+
+			if err != nil {
+				t.Fatalf("should not have failed with error got: %v", err)
+			}
+			if resp == nil || resp.Stats == nil {
+				t.Fatal("should have returned valid stats response")
+			}
+			statsI, err := typeurl.UnmarshalAny(resp.Stats)
+			if err != nil {
+				t.Fatalf("should not have failed to unmarshal StatsResponse got: %v", err)
+			}
+			stats := statsI.(*stats.Statistics)
+			verifyExpectedStats(t, t1.isWCOW, true, stats)
+		})
 	}
-
-	resp, err := s.statsInternal(context.TODO(), &task.StatsRequest{ID: t.Name()})
-
-	verifyExpectedError(t, resp, err, errdefs.ErrNotFound)
 }

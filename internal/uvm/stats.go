@@ -8,7 +8,7 @@ import (
 	"github.com/Microsoft/go-winio/pkg/process"
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/schema1"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
@@ -109,12 +109,12 @@ func (uvm *UtilityVM) getVMMEMProcess(ctx context.Context) (windows.Handle, erro
 // Stats returns various UVM statistics.
 func (uvm *UtilityVM) Stats(ctx context.Context) (*stats.VirtualMachineStatistics, error) {
 	s := &stats.VirtualMachineStatistics{}
-	statsV1, err := uvm.hcsSystem.Properties(ctx, schema1.PropertyTypeStatistics)
+	props, err := uvm.hcsSystem.PropertiesV2(ctx, hcsschema.PTStatistics, hcsschema.PTMemory)
 	if err != nil {
 		return nil, err
 	}
 	s.Processor = &stats.VirtualMachineProcessorStatistics{}
-	s.Processor.TotalRuntimeNS = statsV1.Statistics.Processor.TotalRuntime100ns * 100
+	s.Processor.TotalRuntimeNS = uint64(props.Statistics.Processor.TotalRuntime100ns * 100)
 
 	// The HCS properties does not return sufficient information to calculate
 	// working set size for a VA-backed UVM. To work around this, we instead
@@ -130,6 +130,17 @@ func (uvm *UtilityVM) Stats(ctx context.Context) (*stats.VirtualMachineStatistic
 	}
 	s.Memory = &stats.VirtualMachineMemoryStatistics{
 		WorkingSetBytes: uint64(memCounters.WorkingSetSize),
+	}
+	if props.Memory != nil {
+		s.Memory.VirtualNodeCount = props.Memory.VirtualNodeCount
+		s.Memory.VmMemory = &stats.VirtualMachineMemory{}
+		s.Memory.VmMemory.AvailableMemory = props.Memory.VirtualMachineMemory.AvailableMemory
+		s.Memory.VmMemory.AvailableMemoryBuffer = props.Memory.VirtualMachineMemory.AvailableMemoryBuffer
+		s.Memory.VmMemory.ReservedMemory = props.Memory.VirtualMachineMemory.ReservedMemory
+		s.Memory.VmMemory.AssignedMemory = props.Memory.VirtualMachineMemory.AssignedMemory
+		s.Memory.VmMemory.SlpActive = props.Memory.VirtualMachineMemory.SlpActive
+		s.Memory.VmMemory.BalancingEnabled = props.Memory.VirtualMachineMemory.BalancingEnabled
+		s.Memory.VmMemory.DmOperationInProgress = props.Memory.VirtualMachineMemory.DmOperationInProgress
 	}
 
 	return s, nil
