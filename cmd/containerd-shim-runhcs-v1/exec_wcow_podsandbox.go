@@ -174,9 +174,6 @@ func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) error {
 func (wpse *wcowPodSandboxExec) ResizePty(ctx context.Context, width, height uint32) error {
 	wpse.sl.Lock()
 	defer wpse.sl.Unlock()
-	if wpse.state != shimExecStateRunning {
-		return newExecInvalidStateError(wpse.tid, wpse.tid, wpse.state, "resizepty")
-	}
 	// We will never have IO for a sandbox container so we wont have a tty
 	// either.
 	return errors.Wrapf(errdefs.ErrFailedPrecondition, "exec: '%s' in task: '%s' is not a tty", wpse.tid, wpse.tid)

@@ -58,8 +58,8 @@ type shimExec interface {
 	// If this exec is not a tty this exec MUST return
 	// `errdefs.ErrFailedPrecondition`.
 	//
-	// If `State() != shimExecStateRunning` this exec MUST return
-	// `errdefs.ErrFailedPrecondition`.
+	// If `State() != shimExecStateRunning` the resize event MUST be ignored and
+	// return no error.
 	ResizePty(ctx context.Context, width, height uint32) error
 	// CloseIO closes `stdin` if open.
 	//

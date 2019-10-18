@@ -313,14 +313,14 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 func (he *hcsExec) ResizePty(ctx context.Context, width, height uint32) error {
 	he.sl.Lock()
 	defer he.sl.Unlock()
-	if he.state != shimExecStateRunning {
-		return newExecInvalidStateError(he.tid, he.id, he.state, "resizepty")
-	}
 	if !he.io.Terminal() {
 		return errors.Wrapf(errdefs.ErrFailedPrecondition, "exec: '%s' in task: '%s' is not a tty", he.id, he.tid)
 	}
 
-	return he.p.Process.ResizeConsole(ctx, uint16(width), uint16(height))
+	if he.state == shimExecStateRunning {
+		return he.p.Process.ResizeConsole(ctx, uint16(width), uint16(height))
+	}
+	return nil
 }
 
 func (he *hcsExec) CloseIO(ctx context.Context, stdin bool) error {
