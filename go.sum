@@ -7,6 +7,8 @@ github.com/Microsoft/hcsshim v0.0.0-20190404205635-cf1c2137fae1/go.mod h1:Op3hHs
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/containerd/cgroups v0.0.0-20190919134610-bf292b21730f h1:tSNMc+rJDfmYntojat8lljbt1mgKNpTxUZJsSzJ9Y1s=
 github.com/containerd/cgroups v0.0.0-20190919134610-bf292b21730f/go.mod h1:OApqhQ4XNSNC13gXIwDjhOQxjWa/NxkwZXJ1EvqT0ko=
+github.com/containerd/cgroups v0.0.0-20191011165608-5fbad35c2a7e h1:3bt+8T1I/CuYx+a5ww32+UT4fc9x8iRiXrhfduFTlBU=
+github.com/containerd/cgroups v0.0.0-20191011165608-5fbad35c2a7e/go.mod h1:OApqhQ4XNSNC13gXIwDjhOQxjWa/NxkwZXJ1EvqT0ko=
 github.com/containerd/containerd v1.3.0 h1:xjvXQWABwS2uiv3TWgQt5Uth60Gu86LTGZXMJkjc7rY=
 github.com/containerd/containerd v1.3.0/go.mod h1:bC6axHOhabU15QhwfG7w5PipXdVtMXFTttgp+kVtyUA=
 github.com/containerd/continuity v0.0.0-20190815185530-f2a389ac0a02 h1:tN9D97v5A5QuKdcKHKt+UMKrkQ5YXUnD8iM7IAAjEfI=

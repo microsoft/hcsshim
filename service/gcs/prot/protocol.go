@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
+	v1 "github.com/containerd/cgroups/stats/v1"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
@@ -931,4 +932,9 @@ type PropertyQuery struct {
 // Properties represents the properties of a compute system.
 type Properties struct {
 	ProcessList []ProcessDetails `json:",omitempty"`
+}
+
+type PropertiesV2 struct {
+	ProcessList []ProcessDetails `json:"ProcessList,omitempty"`
+	Metrics     *v1.Metrics      `json:"LCOWMetrics,omitempty"`
 }

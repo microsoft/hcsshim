@@ -324,24 +324,42 @@ func (b *Bridge) getPropertiesV2(r *Request) (_ RequestResponse, err error) {
 		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
 	}
 
-	var properties *prot.Properties
+	properties := &prot.PropertiesV2{}
+
+	var query prot.PropertyQuery
+	if len(request.Query) != 0 {
+		if err := json.Unmarshal([]byte(request.Query), &query); err != nil {
+			e := gcserr.WrapHresult(err, gcserr.HrVmcomputeInvalidJSON)
+			return nil, errors.Wrapf(e, "The query could not be unmarshaled: '%s'", query)
+		}
+	}
+
 	if request.ContainerID == hcsv2.UVMContainerID {
 		return nil, errors.New("getPropertiesV2 is not supported against the UVM")
 	}
+
 	c, err := b.hostState.GetContainer(request.ContainerID)
 	if err != nil {
 		return nil, err
 	}
 
-	pids, err := c.GetAllProcessPids(ctx)
-	if err != nil {
-		return nil, err
-	}
-	properties = &prot.Properties{
-		ProcessList: make([]prot.ProcessDetails, len(pids)),
-	}
-	for i, pid := range pids {
-		properties.ProcessList[i].ProcessID = uint32(pid)
+	for _, requestedProperty := range query.PropertyTypes {
+		if requestedProperty == prot.PtProcessList {
+			pids, err := c.GetAllProcessPids(ctx)
+			if err != nil {
+				return nil, err
+			}
+			properties.ProcessList = make([]prot.ProcessDetails, len(pids))
+			for i, pid := range pids {
+				properties.ProcessList[i].ProcessID = uint32(pid)
+			}
+		} else if requestedProperty == prot.PtStatistics {
+			cgroupMetrics, err := c.GetStats(ctx)
+			if err != nil {
+				return nil, err
+			}
+			properties.Metrics = cgroupMetrics
+		}
 	}
 
 	propertyJSON := []byte("{}")

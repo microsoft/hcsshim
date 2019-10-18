@@ -12,7 +12,10 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
+	"github.com/containerd/cgroups"
+	v1 "github.com/containerd/cgroups/stats/v1"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 )
 
@@ -136,4 +139,19 @@ func (c *Container) setExitType(signal syscall.Signal) {
 	} else if signal == syscall.SIGKILL {
 		c.exitType = prot.NtForcedExit
 	}
+}
+
+// GetStats returns the cgroup metrics for the container.
+func (c *Container) GetStats(ctx context.Context) (*v1.Metrics, error) {
+	_, span := trace.StartSpan(ctx, "opengcs::Container::GetStats")
+	defer span.End()
+	span.AddAttributes(trace.StringAttribute("cid", c.id))
+
+	cgroupPath := c.spec.Linux.CgroupsPath
+	cg, err := cgroups.Load(cgroups.V1, cgroups.StaticPath(cgroupPath))
+	if err != nil {
+		return nil, errors.Errorf("failed to get container stats for %v: %v", c.id, err)
+	}
+
+	return cg.Stat(cgroups.IgnoreNotExist)
 }
