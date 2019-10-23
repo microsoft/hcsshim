@@ -486,7 +486,7 @@ func Test_CreateContainer_CPUCount_LCOW(t *testing.T) {
 			},
 			Linux: &runtime.LinuxContainerConfig{
 				Resources: &runtime.LinuxContainerResources{
-					CpusetCpus: "0-3",
+					CpusetCpus: "0",
 				},
 			},
 		},
