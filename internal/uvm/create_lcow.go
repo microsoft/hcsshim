@@ -294,12 +294,11 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 			},
 		}
 		// Add to our internal structure
-		uvm.vpmemDevices[0] = vpmemInfo{
+		uvm.vpmemDevices[0] = &vpmemInfo{
 			hostPath: opts.RootFSFile,
 			uvmPath:  "/",
 			refCount: 1,
 		}
-		uvm.vpmemNumDevices++
 	}
 
 	vmDebugging := false
