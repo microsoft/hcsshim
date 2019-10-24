@@ -5,7 +5,6 @@ package hcsoci
 import (
 	"context"
 	"fmt"
-	"os"
 	"path"
 	"path/filepath"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	uvmpkg "github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -37,7 +37,7 @@ const scratchPath = "scratch"
 //                    inside the utility VM which is a GUID mapping of the scratch folder. Each
 //                    of the layers are the VSMB locations where the read-only layers are mounted.
 //
-func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot string, uvm *uvm.UtilityVM) (interface{}, error) {
+func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot string, uvm *uvmpkg.UtilityVM) (interface{}, error) {
 	log.G(ctx).WithField("layerFolders", layerFolders).Debug("hcsshim::mountContainerLayers")
 
 	if uvm == nil {
@@ -110,36 +110,25 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 				wcowLayersAdded = append(wcowLayersAdded, layerPath)
 			}
 		} else {
-			uvmPath := ""
-			hostPath := filepath.Join(layerPath, "layer.vhd")
-
-			var fi os.FileInfo
-			fi, err = os.Stat(hostPath)
-
-			if err == nil && uvm.ExceededVPMem(fi.Size()) {
-				// Too big for PMEM. Add on SCSI instead (at /tmp/S<C>/<L>).
+			entry := lcowLayerEntry{
+				hostPath: filepath.Join(layerPath, "layer.vhd"),
+			}
+			// We first try vPMEM and if it is full or the file is too large we
+			// fall back to SCSI.
+			_, entry.uvmPath, err = uvm.AddVPMEM(ctx, entry.hostPath, true)
+			if err == uvmpkg.ErrNoAvailableLocation || err == uvmpkg.ErrMaxVPMEMLayerSize {
 				var (
 					controller int
 					lun        int32
 				)
-				controller, lun, err = uvm.AddSCSILayer(ctx, hostPath)
+				controller, lun, err = uvm.AddSCSILayer(ctx, entry.hostPath)
 				if err == nil {
-					lcowlayersAdded = append(lcowlayersAdded,
-						lcowLayerEntry{
-							hostPath: hostPath,
-							uvmPath:  fmt.Sprintf("/tmp/S%d/%d", controller, lun),
-							scsi:     true,
-						})
+					entry.uvmPath = fmt.Sprintf("/tmp/S%d/%d", controller, lun)
+					entry.scsi = true
 				}
-			} else {
-				_, uvmPath, err = uvm.AddVPMEM(ctx, hostPath, true) // UVM path is calculated. Will be /tmp/vN/
-				if err == nil {
-					lcowlayersAdded = append(lcowlayersAdded,
-						lcowLayerEntry{
-							hostPath: hostPath,
-							uvmPath:  uvmPath,
-						})
-				}
+			}
+			if err == nil {
+				lcowlayersAdded = append(lcowlayersAdded, entry)
 			}
 		}
 		if err != nil {
@@ -246,7 +235,7 @@ const (
 )
 
 // UnmountContainerLayers is a helper for clients to hide all the complexity of layer unmounting
-func UnmountContainerLayers(ctx context.Context, layerFolders []string, guestRoot string, uvm *uvm.UtilityVM, op UnmountOperation) error {
+func UnmountContainerLayers(ctx context.Context, layerFolders []string, guestRoot string, uvm *uvmpkg.UtilityVM, op UnmountOperation) error {
 	log.G(ctx).WithField("layerFolders", layerFolders).Debug("hcsshim::unmountContainerLayers")
 	if uvm == nil {
 		// Must be an argon - folders are mounted on the host
@@ -330,20 +319,18 @@ func UnmountContainerLayers(ctx context.Context, layerFolders []string, guestRoo
 	if uvm.OS() == "linux" && len(layerFolders) > 1 && (op&UnmountOperationVPMEM) == UnmountOperationVPMEM {
 		for _, layerPath := range layerFolders[:len(layerFolders)-1] {
 			hostPath := filepath.Join(layerPath, "layer.vhd")
-			if fi, err := os.Stat(hostPath); err != nil {
-				var e error
-				if uint64(fi.Size()) > uvm.PMemMaxSizeBytes() {
-					e = uvm.RemoveSCSI(ctx, hostPath)
+
+			// Assume it was added to vPMEM and fall back to SCSI
+			e := uvm.RemoveVPMEM(ctx, hostPath)
+			if e == uvmpkg.ErrNotAttached {
+				e = uvm.RemoveSCSI(ctx, hostPath)
+			}
+			if e != nil {
+				log.G(ctx).WithError(e).Debug("remove layer failed")
+				if retError == nil {
+					retError = e
 				} else {
-					e = uvm.RemoveVPMEM(ctx, hostPath)
-				}
-				if e != nil {
-					log.G(ctx).WithError(e).Debug("remove layer failed")
-					if retError == nil {
-						retError = e
-					} else {
-						retError = errors.Wrapf(retError, e.Error())
-					}
+					retError = errors.Wrapf(retError, e.Error())
 				}
 			}
 		}

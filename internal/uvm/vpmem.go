@@ -3,6 +3,7 @@ package uvm
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -11,38 +12,42 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// allocateVPMEM finds the next available VPMem slot. The lock MUST be held
-// when calling this function.
-func (uvm *UtilityVM) allocateVPMEM(ctx context.Context, hostPath string) (uint32, error) {
-	for index, vi := range uvm.vpmemDevices {
-		if vi.hostPath == "" {
-			vi.hostPath = hostPath
+var (
+	// ErrMaxVPMEMLayerSize is the error returned when the size of `hostPath` is
+	// greater than the max vPMEM layer size set at create time.
+	ErrMaxVPMEMLayerSize = fmt.Errorf("layer size is to large for VPMEM max size")
+)
+
+// findNextVPMEM finds the next available VPMem slot.
+//
+// The lock MUST be held when calling this function.
+func (uvm *UtilityVM) findNextVPMEM(ctx context.Context, hostPath string) (uint32, error) {
+	for i := uint32(0); i < uvm.vpmemMaxCount; i++ {
+		if uvm.vpmemDevices[i] == nil {
 			log.G(ctx).WithFields(logrus.Fields{
 				"hostPath":     hostPath,
-				"uvmPath":      vi.uvmPath,
-				"refCount":     vi.refCount,
-				"deviceNumber": index,
+				"deviceNumber": i,
 			}).Debug("allocated VPMEM location")
-			return uint32(index), nil
+			return i, nil
 		}
 	}
-	return 0, fmt.Errorf("no free VPMEM locations")
+	return 0, ErrNoAvailableLocation
 }
 
 // Lock must be held when calling this function
-func (uvm *UtilityVM) findVPMEMDevice(ctx context.Context, findThisHostPath string) (uint32, string, error) {
-	for deviceNumber, vi := range uvm.vpmemDevices {
-		if vi.hostPath == findThisHostPath {
+func (uvm *UtilityVM) findVPMEMDevice(ctx context.Context, findThisHostPath string) (uint32, error) {
+	for i := uint32(0); i < uvm.vpmemMaxCount; i++ {
+		if vi := uvm.vpmemDevices[i]; vi != nil && vi.hostPath == findThisHostPath {
 			log.G(ctx).WithFields(logrus.Fields{
 				"hostPath":     vi.hostPath,
 				"uvmPath":      vi.uvmPath,
 				"refCount":     vi.refCount,
-				"deviceNumber": deviceNumber,
+				"deviceNumber": i,
 			}).Debug("found VPMEM location")
-			return uint32(deviceNumber), vi.uvmPath, nil
+			return i, nil
 		}
 	}
-	return 0, "", fmt.Errorf("%s is not attached to VPMEM", findThisHostPath)
+	return 0, ErrNotAttached
 }
 
 // AddVPMEM adds a VPMEM disk to a utility VM at the next available location.
@@ -58,12 +63,19 @@ func (uvm *UtilityVM) AddVPMEM(ctx context.Context, hostPath string, expose bool
 	defer uvm.m.Unlock()
 
 	var deviceNumber uint32
-	uvmPath := ""
-
-	deviceNumber, uvmPath, err = uvm.findVPMEMDevice(ctx, hostPath)
+	deviceNumber, err = uvm.findVPMEMDevice(ctx, hostPath)
 	if err != nil {
+		// We are going to add it so make sure it fits on vPMEM
+		fi, err := os.Stat(hostPath)
+		if err != nil {
+			return 0, "", err
+		}
+		if uint64(fi.Size()) > uvm.vpmemMaxSizeBytes {
+			return 0, "", ErrMaxVPMEMLayerSize
+		}
+
 		// It doesn't exist, so we're going to allocate and hot-add it
-		deviceNumber, err = uvm.allocateVPMEM(ctx, hostPath)
+		deviceNumber, err = uvm.findNextVPMEM(ctx, hostPath)
 		if err != nil {
 			return 0, "", err
 		}
@@ -78,8 +90,8 @@ func (uvm *UtilityVM) AddVPMEM(ctx context.Context, hostPath string, expose bool
 			ResourcePath: fmt.Sprintf("VirtualMachine/Devices/VirtualPMem/Devices/%d", deviceNumber),
 		}
 
+		uvmPath := fmt.Sprintf("/tmp/p%d", deviceNumber)
 		if expose {
-			uvmPath = fmt.Sprintf("/tmp/p%d", deviceNumber)
 			modification.GuestRequest = guestrequest.GuestRequest{
 				ResourceType: guestrequest.ResourceTypeVPMemDevice,
 				RequestType:  requesttype.Add,
@@ -91,27 +103,23 @@ func (uvm *UtilityVM) AddVPMEM(ctx context.Context, hostPath string, expose bool
 		}
 
 		if err := uvm.Modify(ctx, modification); err != nil {
-			uvm.vpmemDevices[deviceNumber] = vpmemInfo{}
 			return 0, "", fmt.Errorf("uvm::AddVPMEM: failed to modify utility VM configuration: %s", err)
 		}
 
-		uvm.vpmemDevices[deviceNumber] = vpmemInfo{
+		uvm.vpmemDevices[deviceNumber] = &vpmemInfo{
 			hostPath: hostPath,
+			uvmPath:  uvmPath,
 			refCount: 1,
-			uvmPath:  uvmPath}
-
-		uvm.vpmemNumDevices++
-	} else {
-		pmemi := vpmemInfo{
-			hostPath: hostPath,
-			refCount: uvm.vpmemDevices[deviceNumber].refCount + 1,
-			uvmPath:  uvmPath}
-		uvm.vpmemDevices[deviceNumber] = pmemi
+		}
+		return deviceNumber, uvmPath, nil
 	}
-	return deviceNumber, uvmPath, nil
+	device := uvm.vpmemDevices[deviceNumber]
+	device.refCount++
+	return deviceNumber, device.uvmPath, nil
 }
 
-// RemoveVPMEM removes a VPMEM disk from a utility VM.
+// RemoveVPMEM removes a VPMEM disk from a Utility VM. If the `hostPath` is not
+// attached returns `ErrNotAttached`.
 func (uvm *UtilityVM) RemoveVPMEM(ctx context.Context, hostPath string) (err error) {
 	if uvm.operatingSystem != "linux" {
 		return errNotSupported
@@ -120,13 +128,13 @@ func (uvm *UtilityVM) RemoveVPMEM(ctx context.Context, hostPath string) (err err
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 
-	// Make sure is actually attached
-	deviceNumber, uvmPath, err := uvm.findVPMEMDevice(ctx, hostPath)
+	deviceNumber, err := uvm.findVPMEMDevice(ctx, hostPath)
 	if err != nil {
-		return fmt.Errorf("cannot remove VPMEM %s as it is not attached to utility VM %s: %s", hostPath, uvm.id, err)
+		return err
 	}
 
-	if uvm.vpmemDevices[deviceNumber].refCount == 1 {
+	device := uvm.vpmemDevices[deviceNumber]
+	if device.refCount == 1 {
 		modification := &hcsschema.ModifySettingRequest{
 			RequestType:  requesttype.Remove,
 			ResourcePath: fmt.Sprintf("VirtualMachine/Devices/VirtualPMem/Devices/%d", deviceNumber),
@@ -135,7 +143,7 @@ func (uvm *UtilityVM) RemoveVPMEM(ctx context.Context, hostPath string) (err err
 				RequestType:  requesttype.Remove,
 				Settings: guestrequest.LCOWMappedVPMemDevice{
 					DeviceNumber: deviceNumber,
-					MountPath:    uvmPath,
+					MountPath:    device.uvmPath,
 				},
 			},
 		}
@@ -143,22 +151,9 @@ func (uvm *UtilityVM) RemoveVPMEM(ctx context.Context, hostPath string) (err err
 		if err := uvm.Modify(ctx, modification); err != nil {
 			return fmt.Errorf("failed to remove VPMEM %s from utility VM %s: %s", hostPath, uvm.id, err)
 		}
-		uvm.vpmemDevices[deviceNumber] = vpmemInfo{}
-		uvm.vpmemNumDevices--
-		return nil
+		uvm.vpmemDevices[deviceNumber] = nil
+	} else {
+		device.refCount--
 	}
-	uvm.vpmemDevices[deviceNumber].refCount--
 	return nil
-}
-
-// PMemMaxSizeBytes returns the maximum size of a PMEM layer (LCOW)
-func (uvm *UtilityVM) PMemMaxSizeBytes() uint64 {
-	return uvm.vpmemMaxSizeBytes
-}
-
-// ExceededVPMem returns true if the addition of a new vpmem device exceeds uvm limits on vpmem
-func (uvm *UtilityVM) ExceededVPMem(fileSize int64) bool {
-	uvm.m.Lock()
-	defer uvm.m.Unlock()
-	return (uint64(fileSize) > uvm.vpmemMaxSizeBytes) || (uvm.vpmemNumDevices >= uvm.vpmemMaxCount)
 }
