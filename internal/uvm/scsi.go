@@ -12,6 +12,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const (
+	lcowSCSILayerFmt = "/tmp/S%d/%d"
+)
+
 var (
 	ErrNoAvailableLocation      = fmt.Errorf("no available location")
 	ErrNotAttached              = fmt.Errorf("not attached")
@@ -112,15 +116,20 @@ func (uvm *UtilityVM) AddSCSIPhysicalDisk(ctx context.Context, hostPath, uvmPath
 	return uvm.addSCSIActual(ctx, hostPath, uvmPath, "PassThru", false, readOnly)
 }
 
-// AddSCSILayer adds a read-only layer disk to a utility VM at the next available
-// location. This function is used by LCOW as an alternate to PMEM for large layers.
-// The UVMPath will always be /tmp/S<controller>/<lun>.
-func (uvm *UtilityVM) AddSCSILayer(ctx context.Context, hostPath string) (int, int32, error) {
+// AddSCSILayer adds a read-only layer disk to a utility VM at the next
+// available location and returns the path in the UVM where the layer was
+// mounted. This function is used by LCOW as an alternate to PMEM for large
+// layers.
+func (uvm *UtilityVM) AddSCSILayer(ctx context.Context, hostPath string) (string, error) {
 	if uvm.operatingSystem == "windows" {
-		return -1, -1, ErrSCSILayerWCOWUnsupported
+		return "", ErrSCSILayerWCOWUnsupported
 	}
 
-	return uvm.addSCSIActual(ctx, hostPath, "", "VirtualDisk", true, true)
+	controller, lun, err := uvm.addSCSIActual(ctx, hostPath, "", "VirtualDisk", true, true)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(lcowSCSILayerFmt, controller, lun), nil
 }
 
 // addSCSIActual is the implementation behind the external functions AddSCSI and
@@ -189,7 +198,7 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, atta
 
 	// Auto-generate the UVM path for LCOW layers
 	if isLayer {
-		uvmPath = fmt.Sprintf("/tmp/S%d/%d", controller, lun)
+		uvmPath = fmt.Sprintf(lcowSCSILayerFmt, controller, lun)
 	}
 
 	// See comment higher up. Now safe to release the lock.

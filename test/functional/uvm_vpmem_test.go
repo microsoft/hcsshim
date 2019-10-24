@@ -12,7 +12,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
-	"github.com/sirupsen/logrus"
 )
 
 // TestVPMEM tests adding/removing VPMem Read-Only layers from a v2 Linux utility VM
@@ -33,11 +32,11 @@ func TestVPMEM(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	for i := 0; i < int(iterations); i++ {
-		deviceNumber, uvmPath, err := u.AddVPMEM(context.Background(), filepath.Join(tempDir, "layer.vhd"), true)
+		uvmPath, err := u.AddVPMEM(context.Background(), filepath.Join(tempDir, "layer.vhd"))
 		if err != nil {
 			t.Fatalf("AddVPMEM failed: %s", err)
 		}
-		logrus.Debugf("exposed as %s on %d", uvmPath, deviceNumber)
+		t.Logf("exposed as %s", uvmPath)
 	}
 
 	// Remove them all
