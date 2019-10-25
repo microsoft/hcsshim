@@ -391,7 +391,7 @@ func TestWCOWArgonShim(t *testing.T) {
 	argonShim, err := hcsshim.CreateContainer("argon", &hcsshim.ContainerConfig{
 		SystemType:      "Container",
 		Name:            "argonShim",
-		VolumePath:      argonShimLocalMountPath.(string),
+		VolumePath:      argonShimLocalMountPath,
 		LayerFolderPath: argonShimScratchDir,
 		Layers:          layers,
 		MappedDirectories: []schema1.MappedDir{

@@ -48,7 +48,7 @@ func (uvm *UtilityVM) AddNetNS(ctx context.Context, id string) error {
 					Settings:     hcnNamespace,
 				},
 			}
-			if err := uvm.Modify(ctx, &guestNamespace); err != nil {
+			if err := uvm.modify(ctx, &guestNamespace); err != nil {
 				return err
 			}
 		}
@@ -123,7 +123,7 @@ func (uvm *UtilityVM) RemoveNetNS(ctx context.Context, id string) error {
 						Settings:     hcnNamespace,
 					},
 				}
-				if err := uvm.Modify(ctx, &guestNamespace); err != nil {
+				if err := uvm.modify(ctx, &guestNamespace); err != nil {
 					return err
 				}
 			}
@@ -191,7 +191,7 @@ func (uvm *UtilityVM) addNIC(ctx context.Context, id guid.GUID, endpoint *hns.HN
 					endpoint),
 			},
 		}
-		if err := uvm.Modify(ctx, &preAddRequest); err != nil {
+		if err := uvm.modify(ctx, &preAddRequest); err != nil {
 			return err
 		}
 	}
@@ -237,7 +237,7 @@ func (uvm *UtilityVM) addNIC(ctx context.Context, id guid.GUID, endpoint *hns.HN
 		}
 	}
 
-	if err := uvm.Modify(ctx, &request); err != nil {
+	if err := uvm.modify(ctx, &request); err != nil {
 		return err
 	}
 
@@ -276,7 +276,7 @@ func (uvm *UtilityVM) removeNIC(ctx context.Context, id guid.GUID, endpoint *hns
 		}
 	}
 
-	if err := uvm.Modify(ctx, &request); err != nil {
+	if err := uvm.modify(ctx, &request); err != nil {
 		return err
 	}
 	return nil

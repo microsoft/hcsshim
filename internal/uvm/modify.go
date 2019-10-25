@@ -10,7 +10,7 @@ import (
 )
 
 // Modify modifies the compute system by sending a request to HCS.
-func (uvm *UtilityVM) Modify(ctx context.Context, doc *hcsschema.ModifySettingRequest) (err error) {
+func (uvm *UtilityVM) modify(ctx context.Context, doc *hcsschema.ModifySettingRequest) (err error) {
 	if doc.GuestRequest == nil || uvm.gc == nil {
 		return uvm.hcsSystem.Modify(ctx, doc)
 	}

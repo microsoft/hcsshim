@@ -243,7 +243,7 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, atta
 		}
 	}
 
-	if err := uvm.Modify(ctx, SCSIModification); err != nil {
+	if err := uvm.modify(ctx, SCSIModification); err != nil {
 		return -1, -1, fmt.Errorf("uvm::AddSCSI: failed to modify utility VM configuration: %s", err)
 	}
 	return controller, lun, nil
@@ -304,7 +304,7 @@ func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) error {
 		}
 	}
 
-	if err := uvm.Modify(ctx, scsiModification); err != nil {
+	if err := uvm.modify(ctx, scsiModification); err != nil {
 		return fmt.Errorf("failed to remove SCSI disk %s from container %s: %s", hostPath, uvm.id, err)
 	}
 	uvm.scsiLocations[controller][lun] = scsiInfo{}

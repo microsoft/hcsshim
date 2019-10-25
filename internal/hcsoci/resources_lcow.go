@@ -14,12 +14,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/log"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-const rootfsPath = "rootfs"
 const mountPathPrefix = "m"
 
 func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, resources *Resources) error {
@@ -28,14 +26,14 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, res
 	}
 	if coi.Spec.Windows != nil && len(coi.Spec.Windows.LayerFolders) > 0 {
 		log.G(ctx).Debug("hcsshim::allocateLinuxResources mounting storage")
-		mcl, err := MountContainerLayers(ctx, coi.Spec.Windows.LayerFolders, resources.containerRootInUVM, coi.HostingSystem)
+		rootPath, err := MountContainerLayers(ctx, coi.Spec.Windows.LayerFolders, resources.containerRootInUVM, coi.HostingSystem)
 		if err != nil {
 			return fmt.Errorf("failed to mount container storage: %s", err)
 		}
 		if coi.HostingSystem == nil {
-			coi.Spec.Root.Path = mcl.(string) // Argon v1 or v2
+			coi.Spec.Root.Path = rootPath // Argon v1 or v2
 		} else {
-			coi.Spec.Root.Path = mcl.(guestrequest.CombinedLayers).ContainerRootPath // v2 Xenon LCOW
+			coi.Spec.Root.Path = rootPath // v2 Xenon LCOW
 		}
 		resources.layers = coi.Spec.Windows.LayerFolders
 	} else if coi.Spec.Root.Path != "" {

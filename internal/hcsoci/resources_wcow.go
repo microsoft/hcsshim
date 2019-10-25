@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/log"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
@@ -52,14 +51,14 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 
 	if coi.Spec.Root.Path == "" && (coi.HostingSystem != nil || coi.Spec.Windows.HyperV == nil) {
 		log.G(ctx).Debug("hcsshim::allocateWindowsResources mounting storage")
-		mcl, err := MountContainerLayers(ctx, coi.Spec.Windows.LayerFolders, resources.containerRootInUVM, coi.HostingSystem)
+		containerRootPath, err := MountContainerLayers(ctx, coi.Spec.Windows.LayerFolders, resources.containerRootInUVM, coi.HostingSystem)
 		if err != nil {
 			return fmt.Errorf("failed to mount container storage: %s", err)
 		}
 		if coi.HostingSystem == nil {
-			coi.Spec.Root.Path = mcl.(string) // Argon v1 or v2
+			coi.Spec.Root.Path = containerRootPath // Argon v1 or v2
 		} else {
-			coi.Spec.Root.Path = mcl.(guestrequest.CombinedLayers).ContainerRootPath // v2 Xenon WCOW
+			coi.Spec.Root.Path = containerRootPath // v2 Xenon WCOW
 		}
 		resources.layers = coi.Spec.Windows.LayerFolders
 	}
