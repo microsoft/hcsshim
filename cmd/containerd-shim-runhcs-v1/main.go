@@ -150,19 +150,23 @@ func main() {
 		startCommand,
 		deleteCommand,
 		serveCommand,
+		createScratchCommand,
 	}
 	app.Before = func(context *cli.Context) error {
-		if namespaceFlag = context.GlobalString("namespace"); namespaceFlag == "" {
-			return errors.New("namespace is required")
-		}
-		if addressFlag = context.GlobalString("address"); addressFlag == "" {
-			return errors.New("address is required")
-		}
-		if containerdBinaryFlag = context.GlobalString("publish-binary"); containerdBinaryFlag == "" {
-			return errors.New("publish-binary is required")
-		}
-		if idFlag = context.GlobalString("id"); idFlag == "" {
-			return errors.New("id is required")
+		// create-scratch isnt really a shim command so dont validate params for it.
+		if context.Args().Get(0) != createScratchCommand.Name {
+			if namespaceFlag = context.GlobalString("namespace"); namespaceFlag == "" {
+				return errors.New("namespace is required")
+			}
+			if addressFlag = context.GlobalString("address"); addressFlag == "" {
+				return errors.New("address is required")
+			}
+			if containerdBinaryFlag = context.GlobalString("publish-binary"); containerdBinaryFlag == "" {
+				return errors.New("publish-binary is required")
+			}
+			if idFlag = context.GlobalString("id"); idFlag == "" {
+				return errors.New("id is required")
+			}
 		}
 		return nil
 	}
