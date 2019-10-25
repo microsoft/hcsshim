@@ -12,6 +12,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const (
+	lcowVPMEMLayerFmt = "/tmp/p%d"
+)
+
 var (
 	// ErrMaxVPMEMLayerSize is the error returned when the size of `hostPath` is
 	// greater than the max vPMEM layer size set at create time.
@@ -50,13 +54,11 @@ func (uvm *UtilityVM) findVPMEMDevice(ctx context.Context, findThisHostPath stri
 	return 0, ErrNotAttached
 }
 
-// AddVPMEM adds a VPMEM disk to a utility VM at the next available location.
-//
-// Returns the location(0..MaxVPMEM-1) where the device is attached, and if exposed,
-// the utility VM path which will be /tmp/p<location>//
-func (uvm *UtilityVM) AddVPMEM(ctx context.Context, hostPath string, expose bool) (_ uint32, _ string, err error) {
+// AddVPMEM adds a VPMEM disk to a utility VM at the next available location and
+// returns the UVM path where the layer was mounted.
+func (uvm *UtilityVM) AddVPMEM(ctx context.Context, hostPath string) (_ string, err error) {
 	if uvm.operatingSystem != "linux" {
-		return 0, "", errNotSupported
+		return "", errNotSupported
 	}
 
 	uvm.m.Lock()
@@ -68,16 +70,16 @@ func (uvm *UtilityVM) AddVPMEM(ctx context.Context, hostPath string, expose bool
 		// We are going to add it so make sure it fits on vPMEM
 		fi, err := os.Stat(hostPath)
 		if err != nil {
-			return 0, "", err
+			return "", err
 		}
 		if uint64(fi.Size()) > uvm.vpmemMaxSizeBytes {
-			return 0, "", ErrMaxVPMEMLayerSize
+			return "", ErrMaxVPMEMLayerSize
 		}
 
 		// It doesn't exist, so we're going to allocate and hot-add it
 		deviceNumber, err = uvm.findNextVPMEM(ctx, hostPath)
 		if err != nil {
-			return 0, "", err
+			return "", err
 		}
 
 		modification := &hcsschema.ModifySettingRequest{
@@ -90,20 +92,18 @@ func (uvm *UtilityVM) AddVPMEM(ctx context.Context, hostPath string, expose bool
 			ResourcePath: fmt.Sprintf("VirtualMachine/Devices/VirtualPMem/Devices/%d", deviceNumber),
 		}
 
-		uvmPath := fmt.Sprintf("/tmp/p%d", deviceNumber)
-		if expose {
-			modification.GuestRequest = guestrequest.GuestRequest{
-				ResourceType: guestrequest.ResourceTypeVPMemDevice,
-				RequestType:  requesttype.Add,
-				Settings: guestrequest.LCOWMappedVPMemDevice{
-					DeviceNumber: deviceNumber,
-					MountPath:    uvmPath,
-				},
-			}
+		uvmPath := fmt.Sprintf(lcowVPMEMLayerFmt, deviceNumber)
+		modification.GuestRequest = guestrequest.GuestRequest{
+			ResourceType: guestrequest.ResourceTypeVPMemDevice,
+			RequestType:  requesttype.Add,
+			Settings: guestrequest.LCOWMappedVPMemDevice{
+				DeviceNumber: deviceNumber,
+				MountPath:    uvmPath,
+			},
 		}
 
 		if err := uvm.Modify(ctx, modification); err != nil {
-			return 0, "", fmt.Errorf("uvm::AddVPMEM: failed to modify utility VM configuration: %s", err)
+			return "", fmt.Errorf("uvm::AddVPMEM: failed to modify utility VM configuration: %s", err)
 		}
 
 		uvm.vpmemDevices[deviceNumber] = &vpmemInfo{
@@ -111,11 +111,11 @@ func (uvm *UtilityVM) AddVPMEM(ctx context.Context, hostPath string, expose bool
 			uvmPath:  uvmPath,
 			refCount: 1,
 		}
-		return deviceNumber, uvmPath, nil
+		return uvmPath, nil
 	}
 	device := uvm.vpmemDevices[deviceNumber]
 	device.refCount++
-	return deviceNumber, device.uvmPath, nil
+	return device.uvmPath, nil
 }
 
 // RemoveVPMEM removes a VPMEM disk from a Utility VM. If the `hostPath` is not
