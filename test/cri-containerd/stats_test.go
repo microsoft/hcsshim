@@ -195,15 +195,15 @@ func Test_ContainerStats_ContainerID(t *testing.T) {
 		{
 			name:           "WCOW_Process",
 			runtimeHandler: wcowProcessRuntimeHandler,
-			sandboxImage:   imageWindowsRS5Nanoserver,
-			containerImage: imageWindowsRS5Nanoserver,
+			sandboxImage:   imageWindowsNanoserver,
+			containerImage: imageWindowsNanoserver,
 			cmd:            []string{"cmd", "/c", "ping", "-t", "127.0.0.1"},
 		},
 		{
 			name:           "WCOW_Hypervisor",
 			runtimeHandler: wcowHypervisorRuntimeHandler,
-			sandboxImage:   imageWindowsRS5Nanoserver,
-			containerImage: imageWindowsRS5Nanoserver,
+			sandboxImage:   imageWindowsNanoserver,
+			containerImage: imageWindowsNanoserver,
 			cmd:            []string{"cmd", "/c", "ping", "-t", "127.0.0.1"},
 		},
 		{
@@ -274,15 +274,15 @@ func Test_ContainerStats_List_ContainerID(t *testing.T) {
 		{
 			name:           "WCOW_Process",
 			runtimeHandler: wcowProcessRuntimeHandler,
-			sandboxImage:   imageWindowsRS5Nanoserver,
-			containerImage: imageWindowsRS5Nanoserver,
+			sandboxImage:   imageWindowsNanoserver,
+			containerImage: imageWindowsNanoserver,
 			cmd:            []string{"cmd", "/c", "ping", "-t", "127.0.0.1"},
 		},
 		{
 			name:           "WCOW_Hypervisor",
 			runtimeHandler: wcowHypervisorRuntimeHandler,
-			sandboxImage:   imageWindowsRS5Nanoserver,
-			containerImage: imageWindowsRS5Nanoserver,
+			sandboxImage:   imageWindowsNanoserver,
+			containerImage: imageWindowsNanoserver,
 			cmd:            []string{"cmd", "/c", "ping", "-t", "127.0.0.1"},
 		},
 		{
