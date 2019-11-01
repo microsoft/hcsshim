@@ -102,7 +102,7 @@ func (uvm *UtilityVM) AddVPMEM(ctx context.Context, hostPath string) (_ string, 
 			},
 		}
 
-		if err := uvm.Modify(ctx, modification); err != nil {
+		if err := uvm.modify(ctx, modification); err != nil {
 			return "", fmt.Errorf("uvm::AddVPMEM: failed to modify utility VM configuration: %s", err)
 		}
 
@@ -148,7 +148,7 @@ func (uvm *UtilityVM) RemoveVPMEM(ctx context.Context, hostPath string) (err err
 			},
 		}
 
-		if err := uvm.Modify(ctx, modification); err != nil {
+		if err := uvm.modify(ctx, modification); err != nil {
 			return fmt.Errorf("failed to remove VPMEM %s from utility VM %s: %s", hostPath, uvm.id, err)
 		}
 		uvm.vpmemDevices[deviceNumber] = nil

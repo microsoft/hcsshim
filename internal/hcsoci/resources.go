@@ -6,8 +6,14 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/ospath"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/sirupsen/logrus"
+)
+
+const (
+	scratchPath = "scratch"
+	rootfsPath  = "rootfs"
 )
 
 // NetNS returns the network namespace for the container
@@ -107,7 +113,11 @@ func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all 
 		if vm == nil || all {
 			op = UnmountOperationAll
 		}
-		err := UnmountContainerLayers(ctx, r.layers, r.containerRootInUVM, vm, op)
+		var crp string
+		if vm != nil {
+			crp = containerRootfsPath(vm, r.containerRootInUVM)
+		}
+		err := UnmountContainerLayers(ctx, r.layers, crp, vm, op)
 		if err != nil {
 			return err
 		}
@@ -153,4 +163,11 @@ func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all 
 	}
 
 	return nil
+}
+
+func containerRootfsPath(uvm *uvm.UtilityVM, rootPath string) string {
+	if uvm.OS() == "windows" {
+		return ospath.Join("windows", rootPath, scratchPath)
+	}
+	return ospath.Join("linux", rootPath, rootPath)
 }

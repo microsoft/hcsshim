@@ -89,7 +89,7 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, guestRequest
 			},
 			ResourcePath: "VirtualMachine/Devices/VirtualSmb/Shares",
 		}
-		if err := uvm.Modify(ctx, modification); err != nil {
+		if err := uvm.modify(ctx, modification); err != nil {
 			return err
 		}
 	}
@@ -136,7 +136,7 @@ func (uvm *UtilityVM) RemoveVSMB(ctx context.Context, hostPath string) error {
 		Settings:     hcsschema.VirtualSmbShare{Name: share.name},
 		ResourcePath: "VirtualMachine/Devices/VirtualSmb/Shares",
 	}
-	if err := uvm.Modify(ctx, modification); err != nil {
+	if err := uvm.modify(ctx, modification); err != nil {
 		return fmt.Errorf("failed to remove vsmb share %s from %s: %+v: %s", hostPath, uvm.id, modification, err)
 	}
 

@@ -17,7 +17,7 @@ func (uvm *UtilityVM) AddPipe(ctx context.Context, hostPath string) error {
 		RequestType:  requesttype.Add,
 		ResourcePath: "VirtualMachine/Devices/MappedPipes/" + hostPath,
 	}
-	if err := uvm.Modify(ctx, modification); err != nil {
+	if err := uvm.modify(ctx, modification); err != nil {
 		return err
 	}
 	return nil
@@ -29,7 +29,7 @@ func (uvm *UtilityVM) RemovePipe(ctx context.Context, hostPath string) error {
 		RequestType:  requesttype.Remove,
 		ResourcePath: "VirtualMachine/Devices/MappedPipes/" + hostPath,
 	}
-	if err := uvm.Modify(ctx, modification); err != nil {
+	if err := uvm.modify(ctx, modification); err != nil {
 		return err
 	}
 	return nil
