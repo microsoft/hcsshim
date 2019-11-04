@@ -100,18 +100,18 @@ func ControllerLunToName(ctx context.Context, controller, lun uint8) (_ string, 
 	var deviceNames []os.FileInfo
 	for {
 		deviceNames, err = ioutil.ReadDir(blockPath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				select {
-				case <-ctx.Done():
-					return "", ctx.Err()
-				default:
-					time.Sleep(time.Millisecond * 10)
-					continue
-				}
-			}
+		if err != nil && !os.IsNotExist(err) {
 			return "", err
 		}
+		if len(deviceNames) == 0 {
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			default:
+				time.Sleep(time.Millisecond * 10)
+				continue
+			}
+		} 
 		break
 	}
 
