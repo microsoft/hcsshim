@@ -83,6 +83,17 @@ func TestAclSupportForProtocol252Support(t *testing.T) {
 	}
 }
 
+func TestSessionAffinitySupport(t *testing.T) {
+	supportedFeatures := GetSupportedFeatures()
+	err := SessionAffinitySupported()
+	if supportedFeatures.SessionAffinity && err != nil {
+		t.Fatal(err)
+	}
+	if !supportedFeatures.SessionAffinity && err == nil {
+		t.Fatal(err)
+	}
+}
+
 func TestIsFeatureSupported(t *testing.T) {
 	// HNSVersion1803 testing (single range tests)
 	if isFeatureSupported(Version{Major: 0, Minor: 0}, HNSVersion1803) {

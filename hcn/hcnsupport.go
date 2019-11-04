@@ -13,6 +13,7 @@ type SupportedFeatures struct {
 	DSR                      bool        `json:"DSR"`
 	Slash32EndpointPrefixes  bool        `json:"Slash32EndpointPrefixes"`
 	AclSupportForProtocol252 bool        `json:"AclSupportForProtocol252"`
+	SessionAffinity          bool        `json:"SessionAffinity"`
 }
 
 // AclFeatures are the supported ACL possibilities.
@@ -57,6 +58,7 @@ func GetSupportedFeatures() SupportedFeatures {
 	features.DSR = isFeatureSupported(globals.Version, DSRVersion)
 	features.Slash32EndpointPrefixes = isFeatureSupported(globals.Version, Slash32EndpointPrefixesVersion)
 	features.AclSupportForProtocol252 = isFeatureSupported(globals.Version, AclSupportForProtocol252Version)
+	features.SessionAffinity = isFeatureSupported(globals.Version, SessionAffinityVersion)
 
 	return features
 }

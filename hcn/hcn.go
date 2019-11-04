@@ -179,6 +179,15 @@ func AclSupportForProtocol252Supported() error {
 	return platformDoesNotSupportError("HNS ACL Policies to support protocol 252 for VXLAN")
 }
 
+// SessionAffinitySupported returns an error if the HCN version does not support Session Affinity.
+func SessionAffinitySupported() error {
+	supported := GetSupportedFeatures()
+	if supported.SessionAffinity {
+		return nil
+	}
+	return platformDoesNotSupportError("Session Affinity")
+}
+
 // RequestType are the different operations performed to settings.
 // Used to update the settings of Endpoint/Namespace objects.
 type RequestType string
