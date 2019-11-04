@@ -1,12 +1,16 @@
 package runc
 
 import (
+	"encoding/json"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
+	"syscall"
 
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 // readPidFile reads the integer pid stored in the given file.
@@ -87,4 +91,39 @@ func (r *runcRuntime) getLogPath(id string) string {
 func (r *runcRuntime) processExists(pid int) bool {
 	_, err := os.Stat(filepath.Join("/proc", strconv.Itoa(pid)))
 	return !os.IsNotExist(err)
+}
+
+type standardLogEntry struct {
+	Level   logrus.Level `json:"level"`
+	Message string       `json:"msg"`
+	Err     error        `json:"error,omitempty"`
+}
+
+func getRuncLogError(logPath string) error {
+	reader, err := os.OpenFile(logPath, syscall.O_RDONLY, 0644)
+	if err != nil {
+		return nil
+	}
+	defer reader.Close()
+
+	var lastErr error
+	dec := json.NewDecoder(reader)
+	for {
+		entry := &standardLogEntry{}
+		if err := dec.Decode(entry); err != nil {
+			break
+		}
+		if entry.Level <= logrus.ErrorLevel {
+			lastErr = errors.New(entry.Message)
+			if entry.Err != nil {
+				lastErr = errors.Wrapf(lastErr, entry.Err.Error())
+			}
+		}
+	}
+	return lastErr
+}
+
+func createRuncCommand(logPath string, args ...string) *exec.Cmd {
+	args = append([]string{"--log", logPath, "--log-format", "json"}, args...)
+	return exec.Command("runc", args...)
 }
