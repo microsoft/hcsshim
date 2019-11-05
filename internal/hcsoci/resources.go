@@ -30,9 +30,8 @@ type Resources struct {
 	// to a container are exposed. For example, the mounted filesystem; the runtime
 	// spec (in the case of LCOW); overlay and scratch (in the case of LCOW).
 	//
-	// For WCOW, this will be under C:\c\N, and for LCOW this will
-	// be under /run/gcs/c/N. N is an atomic counter for each container created
-	// in that utility VM. For LCOW this is also the "OCI Bundle Path".
+	// For WCOW, this will be under wcowRootInUVM. For LCOW, this will be under
+	// lcowRootInUVM, this will also be the "OCI Bundle Path".
 	containerRootInUVM string
 
 	// layers is an array of the layer folder paths which have been mounted either on
@@ -108,22 +107,6 @@ func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all 
 		r.createdNetNS = false
 	}
 
-	if len(r.layers) != 0 {
-		op := UnmountOperationSCSI
-		if vm == nil || all {
-			op = UnmountOperationAll
-		}
-		var crp string
-		if vm != nil {
-			crp = containerRootfsPath(vm, r.containerRootInUVM)
-		}
-		err := UnmountContainerLayers(ctx, r.layers, crp, vm, op)
-		if err != nil {
-			return err
-		}
-		r.layers = nil
-	}
-
 	if all {
 		for len(r.vsmbMounts) != 0 {
 			mount := r.vsmbMounts[len(r.vsmbMounts)-1]
@@ -162,12 +145,28 @@ func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all 
 		r.scsiMounts = nil
 	}
 
+	if len(r.layers) != 0 {
+		op := UnmountOperationSCSI
+		if vm == nil || all {
+			op = UnmountOperationAll
+		}
+		var crp string
+		if vm != nil {
+			crp = containerRootfsPath(vm, r.containerRootInUVM)
+		}
+		err := UnmountContainerLayers(ctx, r.layers, crp, vm, op)
+		if err != nil {
+			return err
+		}
+		r.layers = nil
+	}
+
 	return nil
 }
 
 func containerRootfsPath(uvm *uvm.UtilityVM, rootPath string) string {
 	if uvm.OS() == "windows" {
-		return ospath.Join("windows", rootPath, scratchPath)
+		return ospath.Join(uvm.OS(), rootPath)
 	}
-	return ospath.Join("linux", rootPath, rootPath)
+	return ospath.Join(uvm.OS(), rootPath, rootfsPath)
 }

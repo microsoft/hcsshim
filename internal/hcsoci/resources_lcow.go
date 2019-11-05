@@ -11,14 +11,13 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/log"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-const mountPathPrefix = "m"
+const lcowMountPathPrefix = "/mounts/m%d"
 
 func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, resources *Resources) error {
 	if coi.Spec.Root == nil {
@@ -67,7 +66,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, res
 
 		if coi.HostingSystem != nil {
 			hostPath := mount.Source
-			uvmPathForShare := path.Join(resources.containerRootInUVM, mountPathPrefix+strconv.Itoa(i))
+			uvmPathForShare := path.Join(resources.containerRootInUVM, fmt.Sprintf(lcowMountPathPrefix, i))
 			uvmPathForFile := uvmPathForShare
 
 			readOnly := false

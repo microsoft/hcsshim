@@ -22,6 +22,11 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+var (
+	lcowRootInUVM = "/run/gcs/c/%s"
+	wcowRootInUVM = `C:\c\%s`
+)
+
 // CreateOptions are the set of fields used to call CreateContainer().
 // Note: In the spec, the LayerFolders must be arranged in the same way in which
 // moby configures them: layern, layern-1,...,layer2,layer1,scratch
@@ -109,9 +114,9 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 	if coi.HostingSystem != nil {
 		n := coi.HostingSystem.ContainerCounter()
 		if coi.Spec.Linux != nil {
-			resources.containerRootInUVM = "/run/gcs/c/" + strconv.FormatUint(n, 16)
+			resources.containerRootInUVM = fmt.Sprintf(lcowRootInUVM, createOptions.ID)
 		} else {
-			resources.containerRootInUVM = `C:\c\` + strconv.FormatUint(n, 16)
+			resources.containerRootInUVM = fmt.Sprintf(wcowRootInUVM, strconv.FormatUint(n, 16))
 		}
 	}
 

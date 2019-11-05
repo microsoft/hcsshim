@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	lcowVPMEMLayerFmt = "/tmp/p%d"
+	lcowVPMEMLayerFmt = "/run/layers/p%d"
 )
 
 var (
