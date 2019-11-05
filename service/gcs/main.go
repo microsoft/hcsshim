@@ -33,7 +33,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "\nUsage of %s:\n", os.Args[0])
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "Examples:\n")
-		fmt.Fprintf(os.Stderr, "    %s -loglevel=debug -logfile=/tmp/gcs.log\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "    %s -loglevel=debug -logfile=/run/gcs/gcs.log\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "    %s -loglevel=info -logfile=stdout\n", os.Args[0])
 	}
 
@@ -77,8 +77,8 @@ func main() {
 
 	logrus.SetLevel(level)
 
-	baseLogPath := "/tmp/gcs"
-	baseStoragePath := "/tmp"
+	baseLogPath := "/run/gcs/c"
+	baseStoragePath := "/run/gcs/c"
 
 	logrus.Info("GCS started")
 	tport := &transport.VsockTransport{}

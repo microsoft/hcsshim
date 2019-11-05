@@ -15,8 +15,7 @@ import (
 )
 
 func getStandaloneRootDir(id string) string {
-	return filepath.Join("/tmp/gcs/s", id)
-	return filepath.Join("/tmp/gcs/s", id)
+	return filepath.Join("/run/gcs/c", id)
 }
 
 func getStandaloneHostnamePath(id string) string {

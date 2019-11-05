@@ -14,8 +14,8 @@ import (
 	"go.opencensus.io/trace"
 )
 
-func getWorkloadRootDir(sbid, id string) string {
-	return filepath.Join(getSandboxRootDir(sbid), id)
+func getWorkloadRootDir(id string) string {
+	return filepath.Join("/run/gcs/c", id)
 }
 
 func updateSandboxMounts(sbid string, spec *oci.Spec) error {

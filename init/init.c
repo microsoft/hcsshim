@@ -31,7 +31,7 @@ const char *const default_envp[] = {
 };
 
 // When nothing is passed, default to the LCOWv1 behavior.
-const char *const default_argv[] = { "/bin/gcs", "-loglevel", "debug", "-logfile=/tmp/gcs.log" };
+const char *const default_argv[] = { "/bin/gcs", "-loglevel", "debug", "-logfile=/run/gcs/gcs.log" };
 const char *const default_shell = "/bin/sh";
 
 struct Mount {
