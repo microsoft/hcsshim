@@ -102,7 +102,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 			err = setupWorkloadContainerSpec(ctx, sid, id, settings.OCISpecification)
 			defer func() {
 				if err != nil {
-					defer os.RemoveAll(getWorkloadRootDir(sid, id))
+					defer os.RemoveAll(getWorkloadRootDir(id))
 				}
 			}()
 		default:

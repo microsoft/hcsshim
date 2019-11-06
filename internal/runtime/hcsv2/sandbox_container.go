@@ -15,7 +15,7 @@ import (
 )
 
 func getSandboxRootDir(id string) string {
-	return filepath.Join("/tmp/gcs/cri", id)
+	return filepath.Join("/run/gcs/c", id)
 }
 
 func getSandboxMountsDir(id string) string {
