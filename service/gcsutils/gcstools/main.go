@@ -7,10 +7,7 @@ import (
 )
 
 var commands = map[string]func(){
-	"vhd2tar":            vhd2tarMain,
-	"exportSandbox":      exportSandboxMain,
 	"netnscfg":           netnsConfigMain,
-	"remotefs":           remotefsMain,
 	"nvidiaPrestartHook": nvidiaPrestartHookMain,
 }
 

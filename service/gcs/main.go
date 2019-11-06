@@ -13,7 +13,6 @@ import (
 	"github.com/Microsoft/opengcs/internal/oc"
 	"github.com/Microsoft/opengcs/internal/runtime/hcsv2"
 	"github.com/Microsoft/opengcs/service/gcs/bridge"
-	"github.com/Microsoft/opengcs/service/gcs/core/gcs"
 	"github.com/Microsoft/opengcs/service/gcs/runtime/runc"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
 	"github.com/containerd/cgroups"
@@ -140,7 +139,6 @@ func main() {
 	logrus.SetLevel(level)
 
 	baseLogPath := "/run/gcs/c"
-	baseStoragePath := "/run/gcs/c"
 
 	logrus.Info("GCS started")
 
@@ -152,14 +150,13 @@ func main() {
 	if err != nil {
 		logrus.WithError(err).Fatal("failed to initialize new runc runtime")
 	}
-	coreint := gcs.NewGCSCore(baseLogPath, baseStoragePath, rtime, tport)
 	mux := bridge.NewBridgeMux()
 	b := bridge.Bridge{
 		Handler:  mux,
 		EnableV4: *v4,
 	}
 	h := hcsv2.NewHost(rtime, tport)
-	b.AssignHandlers(mux, coreint, h)
+	b.AssignHandlers(mux, h)
 
 	var bridgeIn io.ReadCloser
 	var bridgeOut io.WriteCloser
