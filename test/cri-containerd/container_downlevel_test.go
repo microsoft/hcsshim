@@ -5,10 +5,13 @@ package cri_containerd
 import (
 	"testing"
 
+	"github.com/Microsoft/hcsshim/osversion"
+	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	runtime "k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2"
 )
 
 func Test_CreateContainer_DownLevel_WCOW_Hypervisor(t *testing.T) {
+	testutilities.RequiresBuild(t, osversion.V19H1)
 	pullRequiredImages(t, []string{imageWindowsNanoserver17763})
 
 	sandboxRequest := &runtime.RunPodSandboxRequest{
