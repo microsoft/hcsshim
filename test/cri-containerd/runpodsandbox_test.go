@@ -24,7 +24,7 @@ func runPodSandboxTest(t *testing.T, request *runtime.RunPodSandboxRequest) {
 }
 
 func Test_RunPodSandbox_WCOW_Process(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
@@ -40,7 +40,7 @@ func Test_RunPodSandbox_WCOW_Process(t *testing.T) {
 }
 
 func Test_RunPodSandbox_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
@@ -72,7 +72,7 @@ func Test_RunPodSandbox_LCOW(t *testing.T) {
 }
 
 func Test_RunPodSandbox_VirtualMemory_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
@@ -110,7 +110,7 @@ func Test_RunPodSandbox_VirtualMemory_LCOW(t *testing.T) {
 }
 
 func Test_RunPodSandbox_VirtualMemory_DeferredCommit_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
@@ -150,7 +150,7 @@ func Test_RunPodSandbox_VirtualMemory_DeferredCommit_LCOW(t *testing.T) {
 }
 
 func Test_RunPodSandbox_PhysicalMemory_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
@@ -188,7 +188,7 @@ func Test_RunPodSandbox_PhysicalMemory_LCOW(t *testing.T) {
 }
 
 func Test_RunPodSandbox_MemorySize_WCOW_Process(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
@@ -207,7 +207,7 @@ func Test_RunPodSandbox_MemorySize_WCOW_Process(t *testing.T) {
 }
 
 func Test_RunPodSandbox_MemorySize_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
@@ -245,7 +245,7 @@ func Test_RunPodSandbox_MemorySize_LCOW(t *testing.T) {
 }
 
 func Test_RunPodSandbox_CPUCount_WCOW_Process(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
@@ -264,7 +264,7 @@ func Test_RunPodSandbox_CPUCount_WCOW_Process(t *testing.T) {
 }
 
 func Test_RunPodSandbox_CPUCount_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
@@ -302,7 +302,7 @@ func Test_RunPodSandbox_CPUCount_LCOW(t *testing.T) {
 }
 
 func Test_RunPodSandbox_CPULimit_WCOW_Process(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
@@ -321,7 +321,7 @@ func Test_RunPodSandbox_CPULimit_WCOW_Process(t *testing.T) {
 }
 
 func Test_RunPodSandbox_CPULimit_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
@@ -359,7 +359,7 @@ func Test_RunPodSandbox_CPULimit_LCOW(t *testing.T) {
 }
 
 func Test_RunPodSandbox_CPUWeight_WCOW_Process(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
@@ -378,7 +378,7 @@ func Test_RunPodSandbox_CPUWeight_WCOW_Process(t *testing.T) {
 }
 
 func Test_RunPodSandbox_CPUWeight_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
@@ -416,7 +416,7 @@ func Test_RunPodSandbox_CPUWeight_LCOW(t *testing.T) {
 }
 
 func Test_RunPodSandbox_StorageQoSBandwithMax_WCOW_Process(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
@@ -435,7 +435,7 @@ func Test_RunPodSandbox_StorageQoSBandwithMax_WCOW_Process(t *testing.T) {
 }
 
 func Test_RunPodSandbox_StorageQoSBandwithMax_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
@@ -473,7 +473,7 @@ func Test_RunPodSandbox_StorageQoSBandwithMax_LCOW(t *testing.T) {
 }
 
 func Test_RunPodSandbox_StorageQoSIopsMax_WCOW_Process(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
@@ -492,7 +492,7 @@ func Test_RunPodSandbox_StorageQoSIopsMax_WCOW_Process(t *testing.T) {
 }
 
 func Test_RunPodSandbox_StorageQoSIopsMax_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
@@ -568,7 +568,7 @@ func Test_RunPodSandbox_RootfsVhdBoot_LCOW(t *testing.T) {
 }
 
 func Test_RunPodSandbox_DnsConfig_WCOW_Process(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
@@ -590,7 +590,7 @@ func Test_RunPodSandbox_DnsConfig_WCOW_Process(t *testing.T) {
 }
 
 func Test_RunPodSandbox_DnsConfig_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
@@ -634,7 +634,7 @@ func Test_RunPodSandbox_DnsConfig_LCOW(t *testing.T) {
 }
 
 func Test_RunPodSandbox_PortMappings_WCOW_Process(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
@@ -657,7 +657,7 @@ func Test_RunPodSandbox_PortMappings_WCOW_Process(t *testing.T) {
 }
 
 func Test_RunPodSandbox_PortMappings_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{

@@ -49,7 +49,7 @@ func runCreateContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.Run
 }
 
 func Test_CreateContainer_WCOW_Process(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -57,7 +57,7 @@ func Test_CreateContainer_WCOW_Process(t *testing.T) {
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			// Hold this command open until killed (pause for Windows)
 			Command: []string{
@@ -73,7 +73,7 @@ func Test_CreateContainer_WCOW_Process(t *testing.T) {
 }
 
 func Test_CreateContainer_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -81,7 +81,7 @@ func Test_CreateContainer_WCOW_Hypervisor(t *testing.T) {
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			// Hold this command open until killed (pause for Windows)
 			Command: []string{
@@ -117,7 +117,7 @@ func Test_CreateContainer_LCOW(t *testing.T) {
 }
 
 func Test_CreateContainer_WCOW_Process_Tty(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -125,7 +125,7 @@ func Test_CreateContainer_WCOW_Process_Tty(t *testing.T) {
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			// Tty will hold this open until killed.
 			Command: []string{
@@ -138,7 +138,7 @@ func Test_CreateContainer_WCOW_Process_Tty(t *testing.T) {
 }
 
 func Test_CreateContainer_WCOW_Hypervisor_Tty(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -146,7 +146,7 @@ func Test_CreateContainer_WCOW_Hypervisor_Tty(t *testing.T) {
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			// Tty will hold this open until killed.
 			Command: []string{
@@ -221,7 +221,7 @@ func Test_CreateContainer_LCOW_Privileged(t *testing.T) {
 }
 
 func Test_CreateContainer_MemorySize_Config_WCOW_Process(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -229,7 +229,7 @@ func Test_CreateContainer_MemorySize_Config_WCOW_Process(t *testing.T) {
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			// Hold this command open until killed (pause for Windows)
 			Command: []string{
@@ -250,7 +250,7 @@ func Test_CreateContainer_MemorySize_Config_WCOW_Process(t *testing.T) {
 }
 
 func Test_CreateContainer_MemorySize_Annotation_WCOW_Process(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -258,7 +258,7 @@ func Test_CreateContainer_MemorySize_Annotation_WCOW_Process(t *testing.T) {
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			// Hold this command open until killed (pause for Windows)
 			Command: []string{
@@ -277,7 +277,7 @@ func Test_CreateContainer_MemorySize_Annotation_WCOW_Process(t *testing.T) {
 }
 
 func Test_CreateContainer_MemorySize_Config_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -285,7 +285,7 @@ func Test_CreateContainer_MemorySize_Config_WCOW_Hypervisor(t *testing.T) {
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			// Hold this command open until killed (pause for Windows)
 			Command: []string{
@@ -306,7 +306,7 @@ func Test_CreateContainer_MemorySize_Config_WCOW_Hypervisor(t *testing.T) {
 }
 
 func Test_CreateContainer_MemorySize_Annotation_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -314,7 +314,7 @@ func Test_CreateContainer_MemorySize_Annotation_WCOW_Hypervisor(t *testing.T) {
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			// Hold this command open until killed (pause for Windows)
 			Command: []string{
@@ -358,7 +358,7 @@ func Test_CreateContainer_MemorySize_LCOW(t *testing.T) {
 }
 
 func Test_CreateContainer_CPUCount_Config_WCOW_Process(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -366,7 +366,7 @@ func Test_CreateContainer_CPUCount_Config_WCOW_Process(t *testing.T) {
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			// Hold this command open until killed (pause for Windows)
 			Command: []string{
@@ -387,7 +387,7 @@ func Test_CreateContainer_CPUCount_Config_WCOW_Process(t *testing.T) {
 }
 
 func Test_CreateContainer_CPUCount_Annotation_WCOW_Process(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -395,7 +395,7 @@ func Test_CreateContainer_CPUCount_Annotation_WCOW_Process(t *testing.T) {
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			// Hold this command open until killed (pause for Windows)
 			Command: []string{
@@ -414,7 +414,7 @@ func Test_CreateContainer_CPUCount_Annotation_WCOW_Process(t *testing.T) {
 }
 
 func Test_CreateContainer_CPUCount_Config_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -422,7 +422,7 @@ func Test_CreateContainer_CPUCount_Config_WCOW_Hypervisor(t *testing.T) {
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			// Hold this command open until killed (pause for Windows)
 			Command: []string{
@@ -443,7 +443,7 @@ func Test_CreateContainer_CPUCount_Config_WCOW_Hypervisor(t *testing.T) {
 }
 
 func Test_CreateContainer_CPUCount_Annotation_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -451,7 +451,7 @@ func Test_CreateContainer_CPUCount_Annotation_WCOW_Hypervisor(t *testing.T) {
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			// Hold this command open until killed (pause for Windows)
 			Command: []string{
@@ -486,7 +486,7 @@ func Test_CreateContainer_CPUCount_LCOW(t *testing.T) {
 			},
 			Linux: &runtime.LinuxContainerConfig{
 				Resources: &runtime.LinuxContainerResources{
-					CpusetCpus: "0",
+					CpusetCpus: "0-3",
 				},
 			},
 		},
@@ -495,7 +495,7 @@ func Test_CreateContainer_CPUCount_LCOW(t *testing.T) {
 }
 
 func Test_CreateContainer_CPULimit_Config_WCOW_Process(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -503,7 +503,7 @@ func Test_CreateContainer_CPULimit_Config_WCOW_Process(t *testing.T) {
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			// Hold this command open until killed (pause for Windows)
 			Command: []string{
@@ -524,7 +524,7 @@ func Test_CreateContainer_CPULimit_Config_WCOW_Process(t *testing.T) {
 }
 
 func Test_CreateContainer_CPULimit_Annotation_WCOW_Process(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -532,7 +532,7 @@ func Test_CreateContainer_CPULimit_Annotation_WCOW_Process(t *testing.T) {
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			// Hold this command open until killed (pause for Windows)
 			Command: []string{
@@ -551,7 +551,7 @@ func Test_CreateContainer_CPULimit_Annotation_WCOW_Process(t *testing.T) {
 }
 
 func Test_CreateContainer_CPULimit_Config_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -559,7 +559,7 @@ func Test_CreateContainer_CPULimit_Config_WCOW_Hypervisor(t *testing.T) {
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			// Hold this command open until killed (pause for Windows)
 			Command: []string{
@@ -580,7 +580,7 @@ func Test_CreateContainer_CPULimit_Config_WCOW_Hypervisor(t *testing.T) {
 }
 
 func Test_CreateContainer_CPULimit_Annotation_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -588,7 +588,7 @@ func Test_CreateContainer_CPULimit_Annotation_WCOW_Hypervisor(t *testing.T) {
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			// Hold this command open until killed (pause for Windows)
 			Command: []string{
@@ -633,7 +633,7 @@ func Test_CreateContainer_CPUQuota_LCOW(t *testing.T) {
 }
 
 func Test_CreateContainer_CPUWeight_Config_WCOW_Process(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -641,7 +641,7 @@ func Test_CreateContainer_CPUWeight_Config_WCOW_Process(t *testing.T) {
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			// Hold this command open until killed (pause for Windows)
 			Command: []string{
@@ -662,7 +662,7 @@ func Test_CreateContainer_CPUWeight_Config_WCOW_Process(t *testing.T) {
 }
 
 func Test_CreateContainer_CPUWeight_Annotation_WCOW_Process(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -670,7 +670,7 @@ func Test_CreateContainer_CPUWeight_Annotation_WCOW_Process(t *testing.T) {
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			// Hold this command open until killed (pause for Windows)
 			Command: []string{
@@ -689,7 +689,7 @@ func Test_CreateContainer_CPUWeight_Annotation_WCOW_Process(t *testing.T) {
 }
 
 func Test_CreateContainer_CPUWeight_Config_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -697,7 +697,7 @@ func Test_CreateContainer_CPUWeight_Config_WCOW_Hypervisor(t *testing.T) {
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			// Hold this command open until killed (pause for Windows)
 			Command: []string{
@@ -718,7 +718,7 @@ func Test_CreateContainer_CPUWeight_Config_WCOW_Hypervisor(t *testing.T) {
 }
 
 func Test_CreateContainer_CPUWeight_Annotation_WCOW_Hypervisor(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -726,7 +726,7 @@ func Test_CreateContainer_CPUWeight_Annotation_WCOW_Hypervisor(t *testing.T) {
 				Name: t.Name() + "-Container",
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			// Hold this command open until killed (pause for Windows)
 			Command: []string{
@@ -847,7 +847,7 @@ func Test_CreateContainer_Mount_Dir_LCOW(t *testing.T) {
 }
 
 func Test_CreateContainer_Mount_File_WCOW(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	tempFile, err := ioutil.TempFile("", "test")
 
@@ -877,7 +877,7 @@ func Test_CreateContainer_Mount_File_WCOW(t *testing.T) {
 				},
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			Command: []string{
 				"ping",
@@ -890,7 +890,7 @@ func Test_CreateContainer_Mount_File_WCOW(t *testing.T) {
 }
 
 func Test_CreateContainer_Mount_Dir_WCOW(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	tempDir, err := ioutil.TempDir("", "")
 
@@ -912,7 +912,7 @@ func Test_CreateContainer_Mount_Dir_WCOW(t *testing.T) {
 				},
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			Command: []string{
 				"ping",
@@ -925,7 +925,7 @@ func Test_CreateContainer_Mount_Dir_WCOW(t *testing.T) {
 }
 
 func Test_CreateContainer_Mount_NamedPipe_WCOW(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsRS5Nanoserver})
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	path := `\\.\pipe\testpipe`
 	pipe, err := winio.ListenPipe(path, nil)
@@ -950,7 +950,7 @@ func Test_CreateContainer_Mount_NamedPipe_WCOW(t *testing.T) {
 				},
 			},
 			Image: &runtime.ImageSpec{
-				Image: imageWindowsRS5Nanoserver,
+				Image: imageWindowsNanoserver,
 			},
 			Command: []string{
 				"ping",
