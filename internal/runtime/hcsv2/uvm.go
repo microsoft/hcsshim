@@ -6,7 +6,9 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"sync"
@@ -21,7 +23,9 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
+	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
+	shellwords "github.com/mattn/go-shellwords"
 	"github.com/pkg/errors"
 )
 
@@ -35,6 +39,9 @@ type Host struct {
 	containersMutex sync.Mutex
 	containers      map[string]*Container
 
+	externalProcessesMutex sync.Mutex
+	externalProcesses      map[int]*externalProcess
+
 	// Rtime is the Runtime interface used by the GCS core.
 	rtime runtime.Runtime
 	vsock transport.Transport
@@ -42,9 +49,10 @@ type Host struct {
 
 func NewHost(rtime runtime.Runtime, vsock transport.Transport) *Host {
 	return &Host{
-		containers: make(map[string]*Container),
-		rtime:      rtime,
-		vsock:      vsock,
+		containers:        make(map[string]*Container),
+		externalProcesses: make(map[int]*externalProcess),
+		rtime:             rtime,
+		vsock:             vsock,
 	}
 }
 
@@ -151,7 +159,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		spec:      settings.OCISpecification,
 		container: con,
 		exitType:  prot.NtUnexpectedExit,
-		processes: make(map[uint32]*Process),
+		processes: make(map[uint32]*containerProcess),
 	}
 	c.initProcess = newProcess(c, settings.OCISpecification.Process, con.(runtime.Process), uint32(c.container.Pid()), true)
 
@@ -197,6 +205,106 @@ func (h *Host) ModifyHostSettings(ctx context.Context, settings *prot.ModifySett
 // state that has not been cleaned before calling this function.
 func (h *Host) Shutdown() {
 	syscall.Reboot(syscall.LINUX_REBOOT_CMD_POWER_OFF)
+}
+
+// RunExternalProcess runs a process in the utility VM.
+func (h *Host) RunExternalProcess(ctx context.Context, params prot.ProcessParameters, conSettings stdio.ConnectionSettings) (_ int, err error) {
+	var stdioSet *stdio.ConnectionSet
+	stdioSet, err = stdio.Connect(h.vsock, conSettings)
+	if err != nil {
+		return -1, err
+	}
+	defer func() {
+		if err != nil {
+			stdioSet.Close()
+		}
+	}()
+
+	args := params.CommandArgs
+	if len(args) == 0 {
+		args, err = processParamCommandLineToOCIArgs(params.CommandLine)
+		if err != nil {
+			return -1, err
+		}
+	}
+
+	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Dir = params.WorkingDirectory
+	cmd.Env = processParamEnvToOCIEnv(params.Environment)
+
+	var relay *stdio.TtyRelay
+	if params.EmulateConsole {
+		// Allocate a console for the process.
+		var (
+			master      *os.File
+			consolePath string
+		)
+		master, consolePath, err = stdio.NewConsole()
+		if err != nil {
+			return -1, errors.Wrap(err, "failed to create console for external process")
+		}
+		defer func() {
+			if err != nil {
+				master.Close()
+			}
+		}()
+
+		var console *os.File
+		console, err = os.OpenFile(consolePath, os.O_RDWR|syscall.O_NOCTTY, 0777)
+		if err != nil {
+			return -1, errors.Wrap(err, "failed to open console file for external process")
+		}
+		defer console.Close()
+
+		relay = stdio.NewTtyRelay(stdioSet, master)
+		cmd.Stdin = console
+		cmd.Stdout = console
+		cmd.Stderr = console
+		// Make the child process a session leader and adopt the pty as
+		// the controlling terminal.
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			Setsid:  true,
+			Setctty: true,
+			Ctty:    syscall.Stdin,
+		}
+	} else {
+		var fileSet *stdio.FileSet
+		fileSet, err = stdioSet.Files()
+		if err != nil {
+			return -1, errors.Wrap(err, "failed to set cmd stdio")
+		}
+		defer fileSet.Close()
+		defer stdioSet.Close()
+		cmd.Stdin = fileSet.In
+		cmd.Stdout = fileSet.Out
+		cmd.Stderr = fileSet.Err
+	}
+
+	onRemove := func(pid int) {
+		h.externalProcessesMutex.Lock()
+		delete(h.externalProcesses, pid)
+		h.externalProcessesMutex.Unlock()
+	}
+	p, err := newExternalProcess(ctx, cmd, relay, onRemove)
+	if err != nil {
+		return -1, err
+	}
+
+	h.externalProcessesMutex.Lock()
+	h.externalProcesses[p.Pid()] = p
+	h.externalProcessesMutex.Unlock()
+	return p.Pid(), nil
+}
+
+func (h *Host) GetExternalProcess(pid int) (Process, error) {
+	h.externalProcessesMutex.Lock()
+	defer h.externalProcessesMutex.Unlock()
+
+	p, ok := h.externalProcesses[pid]
+	if !ok {
+		return nil, gcserr.NewHresultError(gcserr.HrErrNotFound)
+	}
+	return p, nil
 }
 
 func newInvalidRequestTypeError(rt prot.ModifyRequestType) error {
@@ -292,4 +400,29 @@ func modifyNetwork(ctx context.Context, rt prot.ModifyRequestType, na *prot.Netw
 	default:
 		return newInvalidRequestTypeError(rt)
 	}
+}
+
+// processParamCommandLineToOCIArgs converts a CommandLine field from
+// ProcessParameters (a space separate argument string) into an array of string
+// arguments which can be used by an oci.Process.
+func processParamCommandLineToOCIArgs(commandLine string) ([]string, error) {
+	args, err := shellwords.Parse(commandLine)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to parse command line string \"%s\"", commandLine)
+	}
+	return args, nil
+}
+
+// processParamEnvToOCIEnv converts an Environment field from ProcessParameters
+// (a map from environment variable to value) into an array of environment
+// variable assignments (where each is in the form "<variable>=<value>") which
+// can be used by an oci.Process.
+func processParamEnvToOCIEnv(environment map[string]string) []string {
+	environmentList := make([]string, 0, len(environment))
+	for k, v := range environment {
+		// TODO: Do we need to escape things like quotation marks in
+		// environment variable values?
+		environmentList = append(environmentList, fmt.Sprintf("%s=%s", k, v))
+	}
+	return environmentList
 }

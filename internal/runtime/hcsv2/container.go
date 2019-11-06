@@ -26,13 +26,13 @@ type Container struct {
 	spec *oci.Spec
 
 	container   runtime.Container
-	initProcess *Process
+	initProcess *containerProcess
 
 	etL      sync.Mutex
 	exitType prot.NotificationType
 
 	processesMutex sync.Mutex
-	processes      map[uint32]*Process
+	processes      map[uint32]*containerProcess
 }
 
 func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSettings) (int, error) {
@@ -76,9 +76,9 @@ func (c *Container) ExecProcess(ctx context.Context, process *oci.Process, conSe
 	return pid, nil
 }
 
-// GetProcess returns the *Process with the matching 'pid'. If the 'pid' does
+// GetProcess returns the Process with the matching 'pid'. If the 'pid' does
 // not exit returns error.
-func (c *Container) GetProcess(pid uint32) (*Process, error) {
+func (c *Container) GetProcess(pid uint32) (Process, error) {
 	if c.initProcess.pid == pid {
 		return c.initProcess, nil
 	}
