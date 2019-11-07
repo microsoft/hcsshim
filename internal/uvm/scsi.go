@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	lcowSCSILayerFmt = "/tmp/S%d/%d"
+	lcowSCSILayerFmt = "/run/layers/S%d/%d"
 )
 
 var (
