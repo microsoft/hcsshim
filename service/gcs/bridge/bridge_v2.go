@@ -192,7 +192,7 @@ func (b *Bridge) execProcessV2(r *Request) (_ RequestResponse, err error) {
 	var pid int
 	var c *hcsv2.Container
 	if params.IsExternal || request.ContainerID == hcsv2.UVMContainerID {
-		pid, err = b.coreint.RunExternalProcess(params, conSettings)
+		pid, err = b.hostState.RunExternalProcess(ctx, params, conSettings)
 	} else if c, err = b.hostState.GetContainer(request.ContainerID); err == nil {
 		// We found a V2 container. Treat this as a V2 process.
 		if params.OCIProcess == nil {
@@ -394,15 +394,12 @@ func (b *Bridge) waitOnProcessV2(r *Request) (_ RequestResponse, err error) {
 	var exitCodeChan <-chan int
 	var doneChan chan<- bool
 
-	// TODO: JTERRY75 - Move to hostState.ExecExternalProcess so we dont have a
-	// dependency on gcscore.
 	if request.ContainerID == hcsv2.UVMContainerID {
-		// Pull the process from gcsCore
-		var err error
-		exitCodeChan, doneChan, err = b.coreint.WaitProcess(int(request.ProcessID))
+		p, err := b.hostState.GetExternalProcess(int(request.ProcessID))
 		if err != nil {
 			return nil, err
 		}
+		exitCodeChan, doneChan = p.Wait()
 	} else {
 		c, err := b.hostState.GetContainer(request.ContainerID)
 		if err != nil {

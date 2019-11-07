@@ -5,19 +5,38 @@ package hcsv2
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"sync"
 	"syscall"
 
 	"github.com/Microsoft/opengcs/internal/log"
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
+	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
 
+type Process interface {
+	// Kill sends `signal` to the process.
+	//
+	// If the process has already exited returns `gcserr.HrErrNotFound` by contract.
+	Kill(ctx context.Context, signal syscall.Signal) error
+	// Pid returns the process id of the process.
+	Pid() int
+	// ResizeConsole resizes the tty to `height`x`width` for the process.
+	ResizeConsole(ctx context.Context, height, width uint16) error
+	// Wait returns a channel that can be used to wait for the process to exit
+	// and gather the exit code. The second channel must be signaled from the
+	// caller when the caller has completed its use of this call to Wait.
+	Wait() (<-chan int, chan<- bool)
+}
+
 // Process is a struct that defines the lifetime and operations associated with
 // an oci.Process.
-type Process struct {
+type containerProcess struct {
 	// c is the owning container
 	c    *Container
 	spec *oci.Process
@@ -45,12 +64,12 @@ type Process struct {
 	writersCalled bool
 }
 
-// newProcess returns a Process struct that has been initialized with an
-// outstanding wait for process exit, and post exit an outstanding wait for
+// newProcess returns a containerProcess struct that has been initialized with
+// an outstanding wait for process exit, and post exit an outstanding wait for
 // process cleanup to release all resources once at least 1 waiter has
 // successfully written the exit response.
-func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid uint32, init bool) *Process {
-	p := &Process{
+func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid uint32, init bool) *containerProcess {
+	p := &containerProcess{
 		c:       c,
 		spec:    spec,
 		process: process,
@@ -100,7 +119,7 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 // Kill sends 'signal' to the process.
 //
 // If the process has already exited returns `gcserr.HrErrNotFound` by contract.
-func (p *Process) Kill(ctx context.Context, signal syscall.Signal) error {
+func (p *containerProcess) Kill(ctx context.Context, signal syscall.Signal) error {
 	// When a container contains more than one process we can fail to unblock
 	// the wait if we only signal the init process. Instead we issue a `runc
 	// kill --all` which then signals all processes in the container.
@@ -129,8 +148,12 @@ func (p *Process) Kill(ctx context.Context, signal syscall.Signal) error {
 	return nil
 }
 
+func (p *containerProcess) Pid() int {
+	return int(p.pid)
+}
+
 // ResizeConsole resizes the tty to `height`x`width` for the process.
-func (p *Process) ResizeConsole(ctx context.Context, height, width uint16) error {
+func (p *containerProcess) ResizeConsole(ctx context.Context, height, width uint16) error {
 	tty := p.process.Tty()
 	if tty == nil {
 		return fmt.Errorf("pid: %d, is not a tty and cannot be resized", p.pid)
@@ -141,8 +164,8 @@ func (p *Process) ResizeConsole(ctx context.Context, height, width uint16) error
 // Wait returns a channel that can be used to wait for the process to exit and
 // gather the exit code. The second channel must be signaled from the caller
 // when the caller has completed its use of this call to Wait.
-func (p *Process) Wait() (<-chan int, chan<- bool) {
-	ctx, span := trace.StartSpan(context.Background(), "opengcs::Process::Wait")
+func (p *containerProcess) Wait() (<-chan int, chan<- bool) {
+	ctx, span := trace.StartSpan(context.Background(), "opengcs::containerProcess::Wait")
 	span.AddAttributes(
 		trace.StringAttribute("cid", p.cid),
 		trace.Int64Attribute("pid", int64(p.pid)))
@@ -199,6 +222,93 @@ func (p *Process) Wait() (<-chan int, chan<- bool) {
 			p.writersWg.Done()
 			p.writersSyncRoot.Unlock()
 			span.End()
+		}
+	}()
+	return exitCodeChan, doneChan
+}
+
+func newExternalProcess(ctx context.Context, cmd *exec.Cmd, tty *stdio.TtyRelay, onRemove func(pid int)) (*externalProcess, error) {
+	ep := &externalProcess{
+		cmd:       cmd,
+		tty:       tty,
+		waitBlock: make(chan struct{}),
+		remove:    onRemove,
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, errors.Wrap(err, "failed to call Start for external process")
+	}
+	if tty != nil {
+		tty.Start()
+	}
+	go func() {
+		cmd.Wait()
+		ep.exitCode = cmd.ProcessState.ExitCode()
+		log.G(ctx).WithFields(logrus.Fields{
+			"pid":      cmd.Process.Pid,
+			"exitCode": ep.exitCode,
+		}).Debug("external process exited")
+		if ep.tty != nil {
+			ep.tty.Wait()
+		}
+		close(ep.waitBlock)
+	}()
+	return ep, nil
+}
+
+type externalProcess struct {
+	cmd *exec.Cmd
+	tty *stdio.TtyRelay
+
+	waitBlock chan struct{}
+	exitCode  int
+
+	removeOnce sync.Once
+	remove     func(pid int)
+}
+
+func (ep *externalProcess) Kill(ctx context.Context, signal syscall.Signal) error {
+	if err := syscall.Kill(int(ep.cmd.Process.Pid), signal); err != nil {
+		if err == syscall.ESRCH {
+			return gcserr.NewHresultError(gcserr.HrErrNotFound)
+		}
+		return err
+	}
+	return nil
+}
+
+func (ep *externalProcess) Pid() int {
+	return ep.cmd.Process.Pid
+}
+
+func (ep *externalProcess) ResizeConsole(ctx context.Context, height, width uint16) error {
+	if ep.tty == nil {
+		return fmt.Errorf("pid: %d, is not a tty and cannot be resized", ep.cmd.Process.Pid)
+	}
+	return ep.tty.ResizeConsole(height, width)
+}
+
+func (ep *externalProcess) Wait() (<-chan int, chan<- bool) {
+	_, span := trace.StartSpan(context.Background(), "opengcs::externalProcess::Wait")
+	span.AddAttributes(trace.Int64Attribute("pid", int64(ep.cmd.Process.Pid)))
+
+	exitCodeChan := make(chan int, 1)
+	doneChan := make(chan bool)
+
+	go func() {
+		defer close(exitCodeChan)
+
+		// Wait for the exit code or the caller to stop waiting.
+		select {
+		case <-ep.waitBlock:
+			// Process exited send the exit code and wait for caller to close.
+			exitCodeChan <- ep.exitCode
+			<-doneChan
+			// At least one waiter was successful, remove this external process.
+			ep.removeOnce.Do(func() {
+				ep.remove(ep.cmd.Process.Pid)
+			})
+		case <-doneChan:
+			// Caller closed early, do nothing.
 		}
 	}()
 	return exitCodeChan, doneChan
