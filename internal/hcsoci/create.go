@@ -102,7 +102,9 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 		"schema":  coi.actualSchemaVersion,
 	}).Debug("hcsshim::CreateContainer")
 
-	resources := &Resources{}
+	resources := &Resources{
+		id: createOptions.ID,
+	}
 	defer func() {
 		if err != nil {
 			if !coi.DoNotReleaseResourcesOnFailure {

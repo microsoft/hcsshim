@@ -49,6 +49,7 @@ const (
 	rpcModifySettings
 	rpcNegotiateProtocol
 	rpcDumpStacks
+	rpcDeleteContainerState
 	rpcLifecycleNotification
 )
 
@@ -107,6 +108,8 @@ func (typ msgType) String() string {
 		s += "NegotiateProtocol"
 	case rpcDumpStacks:
 		s += "DumpStacks"
+	case rpcDeleteContainerState:
+		s += "DeleteContainerState"
 	case rpcLifecycleNotification:
 		s += "LifecycleNotification"
 	default:
@@ -194,6 +197,10 @@ type dumpStacksRequest struct {
 type dumpStacksResponse struct {
 	responseBase
 	GuestStacks string
+}
+
+type deleteContainerStateRequest struct {
+	requestBase
 }
 
 type containerCreate struct {
