@@ -69,6 +69,10 @@ func (s *service) State(ctx context.Context, req *task.StateRequest) (resp *task
 		trace.StringAttribute("tid", req.ID),
 		trace.StringAttribute("eid", req.ExecID))
 
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
+
 	r, e := s.stateInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
@@ -96,6 +100,10 @@ func (s *service) Create(ctx context.Context, req *task.CreateTaskRequest) (resp
 		trace.StringAttribute("checkpoint", req.Checkpoint),
 		trace.StringAttribute("parentcheckpoint", req.ParentCheckpoint))
 
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
+
 	r, e := s.createInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
@@ -114,6 +122,10 @@ func (s *service) Start(ctx context.Context, req *task.StartRequest) (resp *task
 	span.AddAttributes(
 		trace.StringAttribute("tid", req.ID),
 		trace.StringAttribute("eid", req.ExecID))
+
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
 
 	r, e := s.startInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -137,6 +149,10 @@ func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (resp *ta
 		trace.StringAttribute("tid", req.ID),
 		trace.StringAttribute("eid", req.ExecID))
 
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
+
 	r, e := s.deleteInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
@@ -148,6 +164,10 @@ func (s *service) Pids(ctx context.Context, req *task.PidsRequest) (_ *task.Pids
 	defer func() { oc.SetSpanStatus(span, err) }()
 
 	span.AddAttributes(trace.StringAttribute("tid", req.ID))
+
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
 
 	r, e := s.pidsInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -161,6 +181,10 @@ func (s *service) Pause(ctx context.Context, req *task.PauseRequest) (_ *google_
 
 	span.AddAttributes(trace.StringAttribute("tid", req.ID))
 
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
+
 	r, e := s.pauseInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
@@ -172,6 +196,10 @@ func (s *service) Resume(ctx context.Context, req *task.ResumeRequest) (_ *googl
 	defer func() { oc.SetSpanStatus(span, err) }()
 
 	span.AddAttributes(trace.StringAttribute("tid", req.ID))
+
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
 
 	r, e := s.resumeInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -186,6 +214,10 @@ func (s *service) Checkpoint(ctx context.Context, req *task.CheckpointTaskReques
 	span.AddAttributes(
 		trace.StringAttribute("tid", req.ID),
 		trace.StringAttribute("path", req.Path))
+
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
 
 	r, e := s.checkpointInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -202,6 +234,10 @@ func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *google_pr
 		trace.StringAttribute("eid", req.ExecID),
 		trace.Int64Attribute("signal", int64(req.Signal)),
 		trace.BoolAttribute("all", req.All))
+
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
 
 	r, e := s.killInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -221,6 +257,10 @@ func (s *service) Exec(ctx context.Context, req *task.ExecProcessRequest) (_ *go
 		trace.StringAttribute("stdout", req.Stdout),
 		trace.StringAttribute("stderr", req.Stderr))
 
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
+
 	r, e := s.execInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
@@ -239,6 +279,10 @@ func (s *service) DiagExecInHost(ctx context.Context, req *shimdiag.ExecProcessR
 		trace.StringAttribute("stdout", req.Stdout),
 		trace.StringAttribute("stderr", req.Stderr))
 
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
+
 	r, e := s.diagExecInHostInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
@@ -255,6 +299,10 @@ func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ 
 		trace.Int64Attribute("width", int64(req.Width)),
 		trace.Int64Attribute("height", int64(req.Height)))
 
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
+
 	r, e := s.resizePtyInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
@@ -270,6 +318,10 @@ func (s *service) CloseIO(ctx context.Context, req *task.CloseIORequest) (_ *goo
 		trace.StringAttribute("eid", req.ExecID),
 		trace.BoolAttribute("stdin", req.Stdin))
 
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
+
 	r, e := s.closeIOInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
@@ -281,6 +333,10 @@ func (s *service) Update(ctx context.Context, req *task.UpdateTaskRequest) (_ *g
 	defer func() { oc.SetSpanStatus(span, err) }()
 
 	span.AddAttributes(trace.StringAttribute("tid", req.ID))
+
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
 
 	r, e := s.updateInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -303,6 +359,10 @@ func (s *service) Wait(ctx context.Context, req *task.WaitRequest) (resp *task.W
 		trace.StringAttribute("tid", req.ID),
 		trace.StringAttribute("eid", req.ExecID))
 
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
+
 	r, e := s.waitInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
@@ -314,6 +374,10 @@ func (s *service) Stats(ctx context.Context, req *task.StatsRequest) (_ *task.St
 	defer func() { oc.SetSpanStatus(span, err) }()
 
 	span.AddAttributes(trace.StringAttribute("tid", req.ID))
+
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
 
 	r, e := s.statsInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -335,6 +399,10 @@ func (s *service) Connect(ctx context.Context, req *task.ConnectRequest) (resp *
 
 	span.AddAttributes(trace.StringAttribute("tid", req.ID))
 
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
+
 	r, e := s.connectInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
@@ -346,6 +414,10 @@ func (s *service) Shutdown(ctx context.Context, req *task.ShutdownRequest) (_ *g
 	defer func() { oc.SetSpanStatus(span, err) }()
 
 	span.AddAttributes(trace.StringAttribute("tid", req.ID))
+
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
 
 	r, e := s.shutdownInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -360,6 +432,10 @@ func (s *service) DiagStacks(ctx context.Context, req *shimdiag.StacksRequest) (
 	defer span.End()
 
 	span.AddAttributes(trace.StringAttribute("tid", s.tid))
+
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
 
 	buf := make([]byte, 4096)
 	for {
