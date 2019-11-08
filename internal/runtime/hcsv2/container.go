@@ -7,6 +7,8 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/Microsoft/opengcs/internal/log"
+	"github.com/Microsoft/opengcs/internal/storage"
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
@@ -23,7 +25,8 @@ type Container struct {
 	id    string
 	vsock transport.Transport
 
-	spec *oci.Spec
+	spec      *oci.Spec
+	isSandbox bool
 
 	container   runtime.Container
 	initProcess *containerProcess
@@ -114,6 +117,16 @@ func (c *Container) Kill(ctx context.Context, signal syscall.Signal) error {
 	}
 	c.setExitType(signal)
 	return nil
+}
+
+func (c *Container) Delete(ctx context.Context) error {
+	if c.isSandbox {
+		// remove user mounts in sandbox container
+		if err := storage.UnmountAllInPath(ctx, getSandboxMountsDir(c.id), true); err != nil {
+			log.G(ctx).WithError(err).Error("failed to unmount sandbox mounts")
+		}
+	}
+	return c.container.Delete()
 }
 
 // Wait waits for the container's init process to exit.

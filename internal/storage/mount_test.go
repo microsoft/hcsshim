@@ -178,3 +178,35 @@ func Test_Unmount_RemoveAll_Called(t *testing.T) {
 		t.Fatal("expected remove to be called")
 	}
 }
+
+func Test_UnmountAllInPath_Unmount_Order(t *testing.T) {
+	clearTestDependencies()
+	parent := "/fake"
+	child := "/fake/test"
+	listMounts = func(path string) ([]string, error) {
+		return []string{parent, child}, nil
+	}
+
+	osStat = func(name string) (os.FileInfo, error) {
+		return nil, nil
+	}
+
+	timesCalled := 0
+	unixUnmount = func(target string, flags int) error {
+		if timesCalled == 0 && target != child {
+			return errors.Errorf("expected to unmount %v first, got %v", child, target)
+		}
+		timesCalled += 1
+		return nil
+	}
+
+	osRemoveAll = func(path string) error {
+		return nil
+	}
+
+	err := UnmountAllInPath(context.Background(), parent, true)
+
+	if err != nil {
+		t.Fatalf("expected nil error, got: %v", err)
+	}
+}

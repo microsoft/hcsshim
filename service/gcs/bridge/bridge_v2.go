@@ -32,9 +32,10 @@ var capabilities = prot.GcsCapabilities{
 	},
 	RuntimeOsType: prot.OsTypeLinux,
 	GuestDefinedCapabilities: prot.GcsGuestCapabilities{
-		NamespaceAddRequestSupported: true,
-		SignalProcessSupported:       true,
-		DumpStacksSupported:          true,
+		NamespaceAddRequestSupported:  true,
+		SignalProcessSupported:        true,
+		DumpStacksSupported:           true,
+		DeleteContainerStateSupported: true,
 	},
 }
 
@@ -494,4 +495,29 @@ func (b *Bridge) dumpStacksV2(r *Request) (_ RequestResponse, err error) {
 	return &prot.DumpStacksResponse{
 		GuestStacks: stacks,
 	}, nil
+}
+
+func (b *Bridge) deleteContainerStateV2(r *Request) (_ RequestResponse, err error) {
+	ctx, span := trace.StartSpan(r.Context, "opengcs::bridge::deleteContainerStateV2")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+
+	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
+
+	var request prot.MessageBase
+	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
+		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
+	}
+
+	c, err := b.hostState.GetContainer(request.ContainerID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := c.Delete(ctx); err != nil {
+		return nil, err
+	}
+
+	b.hostState.RemoveContainer(request.ContainerID)
+	return &prot.MessageResponseBase{}, nil
 }

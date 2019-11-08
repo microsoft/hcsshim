@@ -56,6 +56,13 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport) *Host {
 	}
 }
 
+func (h *Host) RemoveContainer(id string) {
+	h.containersMutex.Lock()
+	defer h.containersMutex.Unlock()
+
+	delete(h.containers, id)
+}
+
 func (h *Host) getContainerLocked(id string) (*Container, error) {
 	if c, ok := h.containers[id]; !ok {
 		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemNotFound)
@@ -157,6 +164,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		id:        id,
 		vsock:     h.vsock,
 		spec:      settings.OCISpecification,
+		isSandbox: criType == "sandbox",
 		container: con,
 		exitType:  prot.NtUnexpectedExit,
 		processes: make(map[uint32]*containerProcess),
