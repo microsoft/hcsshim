@@ -140,7 +140,7 @@ func Test_StopContainer_WithExec_LCOW(t *testing.T) {
 	startContainer(t, client, ctx, containerID)
 	defer stopContainer(t, client, ctx, containerID)
 
-	exec(t, client, ctx, &runtime.ExecRequest{
+	execRequest(t, client, ctx, &runtime.ExecRequest{
 		ContainerId: containerID,
 		Cmd: []string{
 			"top",

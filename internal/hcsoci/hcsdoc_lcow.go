@@ -25,16 +25,11 @@ func createLCOWSpec(coi *createOptionsInternal) (*specs.Spec, error) {
 	}
 
 	// Linux containers don't care about Windows aspects of the spec except the
-	// network namespace
+	// network namespace and windows devices
 	spec.Windows = nil
-	if coi.Spec.Windows != nil &&
-		coi.Spec.Windows.Network != nil &&
-		coi.Spec.Windows.Network.NetworkNamespace != "" {
-		spec.Windows = &specs.Windows{
-			Network: &specs.WindowsNetwork{
-				NetworkNamespace: coi.Spec.Windows.Network.NetworkNamespace,
-			},
-		}
+	if coi.Spec.Windows != nil {
+		setWindowsNetworkNamespace(coi, spec)
+		spec.Windows.Devices = coi.Spec.Windows.Devices
 	}
 
 	// Hooks are not supported (they should be run in the host)
@@ -52,6 +47,17 @@ func createLCOWSpec(coi *createOptionsInternal) (*specs.Spec, error) {
 	spec.Linux.Seccomp = nil
 
 	return spec, nil
+}
+
+func setWindowsNetworkNamespace(coi *createOptionsInternal, spec *specs.Spec) {
+	if coi.Spec.Windows.Network != nil &&
+		coi.Spec.Windows.Network.NetworkNamespace != "" {
+		spec.Windows = &specs.Windows{
+			Network: &specs.WindowsNetwork{
+				NetworkNamespace: coi.Spec.Windows.Network.NetworkNamespace,
+			},
+		}
+	}
 }
 
 type linuxHostedSystem struct {

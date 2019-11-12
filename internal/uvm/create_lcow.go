@@ -69,6 +69,7 @@ type OptionsLCOW struct {
 	VPMemSizeBytes        uint64              // Size of the VPMem devices. Defaults to `DefaultVPMemSizeBytes`.
 	PreferredRootFSType   PreferredRootFSType // If `KernelFile` is `InitrdFile` use `PreferredRootFSTypeInitRd`. If `KernelFile` is `VhdFile` use `PreferredRootFSTypeVHD`
 	EnableColdDiscardHint bool                // Whether the HCS should use cold discard hints. Defaults to false
+	VPCIEnabled           bool                // Whether the kernel should enable pci
 }
 
 // defaultLCOWOSBootFilesPath returns the default path used to locate the LCOW
@@ -112,6 +113,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		VPMemSizeBytes:        DefaultVPMemSizeBytes,
 		PreferredRootFSType:   PreferredRootFSTypeInitRd,
 		EnableColdDiscardHint: false,
+		VPCIEnabled:           false,
 	}
 
 	// LCOW has more reliable behavior with the external bridge.
@@ -223,6 +225,9 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 					AllowOvercommit:       opts.AllowOvercommit,
 					EnableDeferredCommit:  opts.EnableDeferredCommit,
 					EnableColdDiscardHint: opts.EnableColdDiscardHint,
+					LowMMIOGapInMB:        opts.LowMMIOGapInMB,
+					HighMMIOBaseInMB:      opts.HighMMIOBaseInMB,
+					HighMMIOGapInMB:       opts.HighMMIOGapInMB,
 				},
 				Processor: &hcsschema.Processor2{
 					Count:  uvm.processorCount,
@@ -331,6 +336,10 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		kernelArgs += " " + opts.KernelBootOptions
 	}
 
+	if !opts.VPCIEnabled {
+		kernelArgs += ` pci=off`
+	}
+
 	// Inject initial entropy over vsock during init launch.
 	initArgs := fmt.Sprintf("-e %d", entropyVsockPort)
 
@@ -354,7 +363,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	}
 
 	kernelArgs += fmt.Sprintf(" nr_cpus=%d", opts.ProcessorCount)
-	kernelArgs += ` pci=off brd.rd_nr=0 pmtmr=0 -- ` + initArgs
+	kernelArgs += ` brd.rd_nr=0 pmtmr=0 -- ` + initArgs
 
 	if !opts.KernelDirect {
 		doc.VirtualMachine.Chipset.Uefi = &hcsschema.Uefi{
