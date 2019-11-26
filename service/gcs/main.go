@@ -27,7 +27,7 @@ func main() {
 	useInOutErr := flag.Bool("use-inouterr", false, "If true use stdin/stdout for bridge communication and stderr for logging")
 	v4 := flag.Bool("v4", false, "enable the v4 protocol support and v2 schema")
 	rootMemReserveBytes := flag.Uint64("root-mem-reserve-bytes", 75*1024*1024, "the amount of memory reserved for the orchestration, the rest will be assigned to containers")
-	gcsMemLimitBytes := flag.Uint64("gcs-mem-limit-bytes", 10*1024*1024, "the maximum amount of memory the gcs can use")
+	gcsMemLimitBytes := flag.Uint64("gcs-mem-limit-bytes", 50*1024*1024, "the maximum amount of memory the gcs can use")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "\nUsage of %s:\n", os.Args[0])
@@ -120,7 +120,7 @@ func main() {
 	// The containers cgroup is limited only by {Totalram - 75 MB
 	// (reservation)}.
 	//
-	// The gcs cgroup is limited to 10 MB to prevent unknown memory leaks over
+	// The gcs cgroup is limited to 50 MB to prevent unknown memory leaks over
 	// time from affecting workload memory.
 	sinfo := syscall.Sysinfo_t{}
 	if err := syscall.Sysinfo(&sinfo); err != nil {
