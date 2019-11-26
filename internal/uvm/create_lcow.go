@@ -104,7 +104,10 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		ConsolePipe:           "",
 		SCSIControllerCount:   1,
 		UseGuestConnection:    true,
-		ExecCommandLine:       fmt.Sprintf("/bin/gcs -v4 -log-format json -loglevel %s", logrus.StandardLogger().Level.String()),
+		ExecCommandLine: fmt.Sprintf(
+			"/bin/gcs -v4 -log-format json -loglevel %s -gcs-mem-limit-bytes %d",
+			logrus.StandardLogger().Level.String(),
+			50*1024*1024),
 		ForwardStdout:         false,
 		ForwardStderr:         true,
 		OutputHandler:         parseLogrus(id),
