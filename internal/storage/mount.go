@@ -3,9 +3,11 @@
 package storage
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"syscall"
 
 	"github.com/Microsoft/opengcs/internal/oc"
@@ -14,12 +16,16 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+const procMountFile = "/proc/mounts"
+const numProcMountFields = 6
+
 // Test dependencies
 var (
 	osStat      = os.Stat
 	unixUnmount = unix.Unmount
 	unixMount   = unix.Mount
 	osRemoveAll = os.RemoveAll
+	listMounts  = listMountPointsUnderPath
 )
 
 // MountRShared creates a bind mountpoint and marks it as rshared
@@ -66,4 +72,42 @@ func UnmountPath(ctx context.Context, target string, removeTarget bool) (err err
 		return osRemoveAll(target)
 	}
 	return nil
+}
+
+func UnmountAllInPath(ctx context.Context, path string, removeTarget bool) (err error) {
+	childMounts, err := listMounts(path)
+	if err != nil {
+		return err
+	}
+
+	for i := len(childMounts) - 1; i >= 0; i-- {
+		childPath := childMounts[i]
+		if err := UnmountPath(ctx, childPath, removeTarget); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func listMountPointsUnderPath(path string) ([]string, error) {
+	var mountPoints []string
+	f, err := os.Open(procMountFile)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		fields := strings.Split(line, " ")
+		if len(fields) < numProcMountFields {
+			continue
+		}
+		destPath := fields[1]
+		if strings.HasPrefix(destPath, path) {
+			mountPoints = append(mountPoints, destPath)
+		}
+	}
+
+	return mountPoints, nil
 }
