@@ -10,6 +10,13 @@ func (uvm *UtilityVM) SignalProcessSupported() bool {
 	return uvm.guestCaps.SignalProcessSupported
 }
 
+func (uvm *UtilityVM) DeleteContainerStateSupported() bool {
+	if uvm.gc == nil {
+		return false
+	}
+	return uvm.guestCaps.DeleteContainerStateSupported
+}
+
 // Capabilities returns the protocol version and the guest defined capabilities.
 // This should only be used for testing.
 func (uvm *UtilityVM) Capabilities() (uint32, schema1.GuestDefinedCapabilities) {

@@ -26,6 +26,7 @@ func (r *Resources) NetNS() string {
 // it in a call to ReleaseResource to ensure everything is cleaned up when a
 // container exits.
 type Resources struct {
+	id string
 	// containerRootInUVM is the base path in a utility VM where elements relating
 	// to a container are exposed. For example, the mounted filesystem; the runtime
 	// spec (in the case of LCOW); overlay and scratch (in the case of LCOW).
@@ -143,6 +144,12 @@ func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all 
 			}
 		}
 		r.scsiMounts = nil
+	}
+
+	if vm.DeleteContainerStateSupported() {
+		if err := vm.DeleteContainerState(ctx, r.id); err != nil {
+			log.G(ctx).WithError(err).Error("failed to delete container state")
+		}
 	}
 
 	if len(r.layers) != 0 {

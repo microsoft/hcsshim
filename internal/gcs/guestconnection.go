@@ -177,6 +177,19 @@ func (gc *GuestConnection) DumpStacks(ctx context.Context) (response string, err
 	return resp.GuestStacks, err
 }
 
+func (gc *GuestConnection) DeleteContainerState(ctx context.Context, cid string) (err error) {
+	ctx, span := trace.StartSpan(ctx, "gcs::GuestConnection::DeleteContainerState")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("cid", cid))
+
+	req := deleteContainerStateRequest{
+		requestBase: makeRequest(ctx, cid),
+	}
+	var resp responseBase
+	return gc.brdg.RPC(ctx, rpcDeleteContainerState, &req, &resp, false)
+}
+
 // Close terminates the guest connection. It is undefined to call any other
 // methods on the connection after this is called.
 func (gc *GuestConnection) Close() error {
