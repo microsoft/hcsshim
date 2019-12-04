@@ -356,7 +356,7 @@ func UpdateSpecFromOptions(s specs.Spec, opts *runhcsopts.Options) specs.Spec {
 		return s
 	}
 
-	if opts.BootFilesRootPath != "" {
+	if _, ok := s.Annotations[annotationBootFilesRootPath]; !ok && opts.BootFilesRootPath != "" {
 		s.Annotations[annotationBootFilesRootPath] = opts.BootFilesRootPath
 	}
 

@@ -7,7 +7,7 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
-func Test_Spec_NO_Update_MemorySize(t *testing.T) {
+func Test_SpecUpdate_MemorySize_WithAnnotation_WithOpts(t *testing.T) {
 
 	opts := &runhcsopts.Options{
 		VmMemorySizeInMb: 3072,
@@ -20,12 +20,12 @@ func Test_Spec_NO_Update_MemorySize(t *testing.T) {
 	}
 	updatedSpec := UpdateSpecFromOptions(*s, opts)
 
-	if updatedSpec.Annotations[annotationMemorySizeInMB] == "3072" {
+	if updatedSpec.Annotations[annotationMemorySizeInMB] != "2048" {
 		t.Fatal("should not have updated annotation to default when annotation is provided in the spec")
 	}
 }
 
-func Test_SpecUpdate_MemorySize(t *testing.T) {
+func Test_SpecUpdate_MemorySize_NoAnnotation_WithOpts(t *testing.T) {
 
 	opts := &runhcsopts.Options{
 		VmMemorySizeInMb: 3072,
@@ -41,7 +41,7 @@ func Test_SpecUpdate_MemorySize(t *testing.T) {
 	}
 }
 
-func Test_Spec_NO_Update_ProcessorCount(t *testing.T) {
+func Test_SpecUpdate_ProcessorCount_WithAnnotation_WithOpts(t *testing.T) {
 
 	opts := &runhcsopts.Options{
 		VmProcessorCount: 4,
@@ -59,7 +59,7 @@ func Test_Spec_NO_Update_ProcessorCount(t *testing.T) {
 	}
 }
 
-func Test_SpecUpdate_ProcessorCount(t *testing.T) {
+func Test_SpecUpdate_ProcessorCount_NoAnnotation_WithOpts(t *testing.T) {
 
 	opts := &runhcsopts.Options{
 		VmProcessorCount: 4,
