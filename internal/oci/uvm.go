@@ -352,8 +352,20 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 // UpdateSpecFromOptions sets extra annotations on the OCI spec based on the
 // `opts` struct.
 func UpdateSpecFromOptions(s specs.Spec, opts *runhcsopts.Options) specs.Spec {
-	if opts != nil && opts.BootFilesRootPath != "" {
+	if opts == nil {
+		return s
+	}
+
+	if opts.BootFilesRootPath != "" {
 		s.Annotations[annotationBootFilesRootPath] = opts.BootFilesRootPath
+	}
+
+	if _, ok := s.Annotations[annotationProcessorCount]; !ok && opts.VmProcessorCount != 0 {
+		s.Annotations[annotationProcessorCount] = strconv.FormatInt(int64(opts.VmProcessorCount), 10)
+	}
+
+	if _, ok := s.Annotations[annotationMemorySizeInMB]; !ok && opts.VmMemorySizeInMb != 0 {
+		s.Annotations[annotationMemorySizeInMB] = strconv.FormatInt(int64(opts.VmMemorySizeInMb), 10)
 	}
 
 	return s
