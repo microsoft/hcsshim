@@ -14,10 +14,13 @@ func TestMissingNetworkByName(t *testing.T) {
 		t.Fatal("Error was not thrown.")
 	}
 	if !IsNotFoundError(err) {
-		t.Fatal("Unrelated error was thrown.")
+		t.Fatal("Unrelated error was thrown.", err)
 	}
 	if _, ok := err.(NetworkNotFoundError); !ok {
-		t.Fatal("Wrong error type was thrown.")
+		t.Fatal("Wrong error type was thrown.", err)
+	}
+	if err.Error() != `Network name "Not found name" not found` {
+		t.Fatal("Wrong error message was returned", err.Error())
 	}
 }
 
@@ -28,10 +31,13 @@ func TestMissingNetworkById(t *testing.T) {
 		t.Fatal("Error was not thrown.")
 	}
 	if !IsNotFoundError(err) {
-		t.Fatal("Unrelated error was thrown.")
+		t.Fatal("Unrelated error was thrown.", err)
 	}
 	if _, ok := err.(NetworkNotFoundError); !ok {
-		t.Fatal("Wrong error type was thrown.")
+		t.Fatal("Wrong error type was thrown.", err)
+	}
+	if err.Error() != `Network ID "5f0b1190-63be-4e0c-b974-bd0f55675a42" not found` {
+		t.Fatal("Wrong error message was returned", err.Error())
 	}
 }
 
@@ -42,9 +48,9 @@ func TestMissingNamespaceById(t *testing.T) {
 		t.Fatal("Error was not thrown.")
 	}
 	if !IsNotFoundError(err) {
-		t.Fatal("Unrelated error was thrown.")
+		t.Fatal("Unrelated error was thrown.", err)
 	}
 	if _, ok := err.(*hcserror.HcsError); !ok {
-		t.Fatal("Wrong error type was thrown.")
+		t.Fatal("Wrong error type was thrown.", err)
 	}
 }
