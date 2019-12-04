@@ -87,6 +87,20 @@ file {
       type: TYPE_STRING
       json_name: "bootFilesRootPath"
     }
+    field {
+      name: "vm_processor_count"
+      number: 8
+      label: LABEL_OPTIONAL
+      type: TYPE_INT32
+      json_name: "vmProcessorCount"
+    }
+    field {
+      name: "vm_memory_size_in_mb"
+      number: 9
+      label: LABEL_OPTIONAL
+      type: TYPE_INT32
+      json_name: "vmMemorySizeInMb"
+    }
     enum_type {
       name: "DebugType"
       value {
