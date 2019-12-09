@@ -35,13 +35,59 @@ func checkForErrors(methodName string, hr error, resultBuffer *uint16) error {
 	}
 
 	if errorFound {
-		returnError := hcserror.New(hr, methodName, result)
+		returnError := new(hr, methodName, result)
 		logrus.Debugf(returnError.Error()) // HCN errors logged for debugging.
 		return returnError
 	}
 
 	return nil
 }
+
+type ErrorCode uint32
+
+// For common errors, define the error as it is in windows, so we can quickly determine it later
+const (
+	ERROR_NOT_FOUND                     = 0x490
+	HCN_E_PORT_ALREADY_EXISTS ErrorCode = 0x803b0013
+)
+
+type HcnError struct {
+	*hcserror.HcsError
+	code ErrorCode
+}
+
+func (e *HcnError) Error() string {
+	return e.HcsError.Error()
+}
+
+func CheckErrorWithCode(err error, code ErrorCode) bool {
+	hcnError, ok := err.(*HcnError)
+	if ok {
+		return hcnError.code == code
+	}
+	return false
+}
+
+func IsElementNotFoundError(err error) bool {
+	return CheckErrorWithCode(err, ERROR_NOT_FOUND)
+}
+
+func IsPortAlreadyExistsError(err error) bool {
+	return CheckErrorWithCode(err, HCN_E_PORT_ALREADY_EXISTS)
+}
+
+func new(hr error, title string, rest string) error {
+	err := &HcnError{}
+	hcsError := hcserror.New(hr, title, rest)
+	err.HcsError = hcsError.(*hcserror.HcsError)
+	err.code = ErrorCode(hcserror.Win32FromError(hr))
+	return err
+}
+
+//
+// Note that the below errors are not errors returned by hcn itself
+// we wish to seperate them as they are shim usage error
+//
 
 // NetworkNotFoundError results from a failed seach for a network by Id or Name
 type NetworkNotFoundError struct {
@@ -75,7 +121,7 @@ type NamespaceNotFoundError struct {
 }
 
 func (e NamespaceNotFoundError) Error() string {
-	return fmt.Sprintf("Namespace %s not found", e.NamespaceID)
+	return fmt.Sprintf("Namespace ID %q not found", e.NamespaceID)
 }
 
 // LoadBalancerNotFoundError results from a failed seach for a loadbalancer by Id
@@ -84,7 +130,7 @@ type LoadBalancerNotFoundError struct {
 }
 
 func (e LoadBalancerNotFoundError) Error() string {
-	return fmt.Sprintf("LoadBalancer %s not found", e.LoadBalancerId)
+	return fmt.Sprintf("LoadBalancer %q not found", e.LoadBalancerId)
 }
 
 // IsNotFoundError returns a boolean indicating whether the error was caused by

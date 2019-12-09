@@ -144,6 +144,19 @@ func HcnCreateTestEndpoint(network *HostComputeNetwork) (*HostComputeEndpoint, e
 	return network.CreateEndpoint(Endpoint)
 }
 
+func HcnCreateTestEndpointWithPolicies(network *HostComputeNetwork, policies []EndpointPolicy) (*HostComputeEndpoint, error) {
+	Endpoint := &HostComputeEndpoint{
+		Name:     NatTestEndpointName,
+		Policies: policies,
+		SchemaVersion: SchemaVersion{
+			Major: 2,
+			Minor: 0,
+		},
+	}
+
+	return network.CreateEndpoint(Endpoint)
+}
+
 func HcnCreateTestEndpointWithNamespace(network *HostComputeNetwork, namespace *HostComputeNamespace) (*HostComputeEndpoint, error) {
 	Endpoint := &HostComputeEndpoint{
 		Name:                 NatTestEndpointName,
