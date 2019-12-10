@@ -18,6 +18,7 @@ import (
 )
 
 const lcowMountPathPrefix = "/mounts/m%d"
+const lcowGlobalMountPrefix = "/run/mounts/m%d"
 
 func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, resources *Resources) error {
 	if coi.Spec.Root == nil {
@@ -79,18 +80,29 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, res
 			l := log.G(ctx).WithField("mount", fmt.Sprintf("%+v", mount))
 			if mount.Type == "physical-disk" {
 				l.Debug("hcsshim::allocateLinuxResources Hot-adding SCSI physical disk for OCI mount")
-				_, _, err := coi.HostingSystem.AddSCSIPhysicalDisk(ctx, hostPath, uvmPathForShare, readOnly)
+				uvmPathForShare = fmt.Sprintf(lcowGlobalMountPrefix, i)
+				_, _, uvmPath, err := coi.HostingSystem.AddSCSIPhysicalDisk(ctx, hostPath, uvmPathForShare, readOnly)
 				if err != nil {
 					return fmt.Errorf("adding SCSI physical disk mount %+v: %s", mount, err)
 				}
+
+				uvmPathForFile = uvmPath
+				uvmPathForShare = uvmPath
 				resources.scsiMounts = append(resources.scsiMounts, scsiMount{path: hostPath})
 				coi.Spec.Mounts[i].Type = "none"
 			} else if mount.Type == "virtual-disk" || mount.Type == "automanage-virtual-disk" {
 				l.Debug("hcsshim::allocateLinuxResources Hot-adding SCSI virtual disk for OCI mount")
-				_, _, err := coi.HostingSystem.AddSCSI(ctx, hostPath, uvmPathForShare, readOnly)
+				uvmPathForShare = fmt.Sprintf(lcowGlobalMountPrefix, i)
+
+				// if the scsi device is already attached then we take the uvm path that the function below returns
+				// that is where it was previously mounted in UVM
+				_, _, uvmPath, err := coi.HostingSystem.AddSCSI(ctx, hostPath, uvmPathForShare, readOnly)
 				if err != nil {
 					return fmt.Errorf("adding SCSI virtual disk mount %+v: %s", mount, err)
 				}
+
+				uvmPathForFile = uvmPath
+				uvmPathForShare = uvmPath
 				resources.scsiMounts = append(resources.scsiMounts, scsiMount{path: hostPath, autoManage: mount.Type == "automanage-virtual-disk"})
 				coi.Spec.Mounts[i].Type = "none"
 			} else if strings.HasPrefix(mount.Source, "sandbox://") {
