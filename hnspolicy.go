@@ -4,6 +4,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hns"
 )
 
+// A test
+
 // Type of Request Support in ModifySystem
 type PolicyType = hns.PolicyType
 
