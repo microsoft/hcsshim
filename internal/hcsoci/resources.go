@@ -108,7 +108,7 @@ func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all 
 		r.createdNetNS = false
 	}
 
-	if all {
+	if vm != nil && all {
 		for len(r.vsmbMounts) != 0 {
 			mount := r.vsmbMounts[len(r.vsmbMounts)-1]
 			if err := vm.RemoveVSMB(ctx, mount); err != nil {
@@ -146,7 +146,7 @@ func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all 
 		r.scsiMounts = nil
 	}
 
-	if vm.DeleteContainerStateSupported() {
+	if vm != nil && vm.DeleteContainerStateSupported() {
 		if err := vm.DeleteContainerState(ctx, r.id); err != nil {
 			log.G(ctx).WithError(err).Error("failed to delete container state")
 		}
