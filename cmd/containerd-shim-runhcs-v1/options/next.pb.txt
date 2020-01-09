@@ -101,6 +101,41 @@ file {
       type: TYPE_INT32
       json_name: "vmMemorySizeInMb"
     }
+    field {
+      name: "disable_bind_mounts"
+      number: 10
+      label: LABEL_OPTIONAL
+      type: TYPE_BOOL
+      json_name: "disableBindMounts"
+    }
+    field {
+      name: "disable_physical_disk_mounts"
+      number: 11
+      label: LABEL_OPTIONAL
+      type: TYPE_BOOL
+      json_name: "disablePhysicalDiskMounts"
+    }
+    field {
+      name: "disable_virtual_disk_mounts"
+      number: 12
+      label: LABEL_OPTIONAL
+      type: TYPE_BOOL
+      json_name: "disableVirtualDiskMounts"
+    }
+    field {
+      name: "disable_pipe_mounts"
+      number: 13
+      label: LABEL_OPTIONAL
+      type: TYPE_BOOL
+      json_name: "disablePipeMounts"
+    }
+    field {
+      name: "disable_sandbox_mounts"
+      number: 14
+      label: LABEL_OPTIONAL
+      type: TYPE_BOOL
+      json_name: "disableSandboxMounts"
+    }
     enum_type {
       name: "DebugType"
       value {

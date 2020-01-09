@@ -91,6 +91,11 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 	}
 	f.Close()
 
+	err = oci.ValidateSupportedMounts(spec, shimOpts)
+	if err != nil {
+		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, err.Error())
+	}
+
 	spec = oci.UpdateSpecFromOptions(spec, shimOpts)
 
 	if len(req.Rootfs) == 0 {

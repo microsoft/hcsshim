@@ -3,6 +3,7 @@ package oci
 import (
 	"testing"
 
+	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
@@ -150,5 +151,242 @@ func Test_IsIsolated_Neither(t *testing.T) {
 
 	if IsIsolated(s) {
 		t.Fatal("should have not have returned isolated for neither config")
+	}
+}
+
+func Test_ValidateSupportedMounts_NilOpts(t *testing.T) {
+	s := specs.Spec{}
+	err := ValidateSupportedMounts(s, nil)
+	if err != nil {
+		t.Fatal("should not have failed")
+	}
+}
+
+func Test_ValidateSupportedMounts_DefaultOpts(t *testing.T) {
+	s := specs.Spec{}
+	o := &runhcsopts.Options{}
+	err := ValidateSupportedMounts(s, o)
+	if err != nil {
+		t.Fatal("should not have failed")
+	}
+}
+
+func Test_ValidateSupportedMounts_WCOW_Bind_File(t *testing.T) {
+	s := specs.Spec{
+		Mounts: []specs.Mount{
+			{
+				Type:   "",
+				Source: "C:\\test.txt",
+			},
+		},
+	}
+	o := &runhcsopts.Options{}
+	err := ValidateSupportedMounts(s, o)
+	if err != nil {
+		t.Fatal("should not have failed")
+	}
+
+	o.DisableBindMounts = true
+	err = ValidateSupportedMounts(s, o)
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func Test_ValidateSupportedMounts_WCOW_Bind_Folder(t *testing.T) {
+	s := specs.Spec{
+		Mounts: []specs.Mount{
+			{
+				Type:   "",
+				Source: "C:\\test",
+			},
+		},
+	}
+	o := &runhcsopts.Options{}
+	err := ValidateSupportedMounts(s, o)
+	if err != nil {
+		t.Fatal("should not have failed")
+	}
+
+	o.DisableBindMounts = true
+	err = ValidateSupportedMounts(s, o)
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func Test_ValidateSupportedMounts_LCOW_Bind_File(t *testing.T) {
+	s := specs.Spec{
+		Mounts: []specs.Mount{
+			{
+				Type:   "bind",
+				Source: "/test.txt",
+			},
+		},
+	}
+	o := &runhcsopts.Options{}
+	err := ValidateSupportedMounts(s, o)
+	if err != nil {
+		t.Fatal("should not have failed")
+	}
+
+	o.DisableBindMounts = true
+	err = ValidateSupportedMounts(s, o)
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func Test_ValidateSupportedMounts_LCOW_Bind_Folder(t *testing.T) {
+	s := specs.Spec{
+		Mounts: []specs.Mount{
+			{
+				Type:   "bind",
+				Source: "/test",
+			},
+		},
+	}
+	o := &runhcsopts.Options{}
+	err := ValidateSupportedMounts(s, o)
+	if err != nil {
+		t.Fatal("should not have failed")
+	}
+
+	o.DisableBindMounts = true
+	err = ValidateSupportedMounts(s, o)
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func Test_ValidateSupportedMounts_Physical_Disk(t *testing.T) {
+	s := specs.Spec{
+		Mounts: []specs.Mount{
+			{
+				Type:   "physical-disk",
+				Source: "\\\\.\\PHYSICALDRIVE0",
+			},
+		},
+	}
+	o := &runhcsopts.Options{}
+	err := ValidateSupportedMounts(s, o)
+	if err != nil {
+		t.Fatal("should not have failed")
+	}
+
+	o.DisablePhysicalDiskMounts = true
+	err = ValidateSupportedMounts(s, o)
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func Test_ValidateSupportedMounts_Virtual_Disk(t *testing.T) {
+	s := specs.Spec{
+		Mounts: []specs.Mount{
+			{
+				Type:   "virtual-disk",
+				Source: "C:\\test.vhd",
+			},
+		},
+	}
+	o := &runhcsopts.Options{}
+	err := ValidateSupportedMounts(s, o)
+	if err != nil {
+		t.Fatal("should not have failed")
+	}
+
+	o.DisableVirtualDiskMounts = true
+	err = ValidateSupportedMounts(s, o)
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func Test_ValidateSupportedMounts_Automanage_Virtual_Disk(t *testing.T) {
+	s := specs.Spec{
+		Mounts: []specs.Mount{
+			{
+				Type:   "automanage-virtual-disk",
+				Source: "C:\\test.vhd",
+			},
+		},
+	}
+	o := &runhcsopts.Options{}
+	err := ValidateSupportedMounts(s, o)
+	if err != nil {
+		t.Fatal("should not have failed")
+	}
+
+	o.DisableVirtualDiskMounts = true
+	err = ValidateSupportedMounts(s, o)
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func Test_ValidateSupportedMounts_WCOW_Pipe(t *testing.T) {
+	s := specs.Spec{
+		Mounts: []specs.Mount{
+			{
+				Type:   "",
+				Source: "\\\\.\\pipe\\test",
+			},
+		},
+	}
+	o := &runhcsopts.Options{}
+	err := ValidateSupportedMounts(s, o)
+	if err != nil {
+		t.Fatal("should not have failed")
+	}
+
+	o.DisablePipeMounts = true
+	err = ValidateSupportedMounts(s, o)
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func Test_ValidateSupportedMounts_WCOW_Sandbox(t *testing.T) {
+	s := specs.Spec{
+		Mounts: []specs.Mount{
+			{
+				Type:   "",
+				Source: "sandbox://test",
+			},
+		},
+	}
+	o := &runhcsopts.Options{}
+	err := ValidateSupportedMounts(s, o)
+	if err != nil {
+		t.Fatal("should not have failed")
+	}
+
+	o.DisableSandboxMounts = true
+	err = ValidateSupportedMounts(s, o)
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func Test_ValidateSupportedMounts_LCOW_Sandbox(t *testing.T) {
+	s := specs.Spec{
+		Mounts: []specs.Mount{
+			{
+				Type:   "bind",
+				Source: "sandbox:///test",
+			},
+		},
+	}
+	o := &runhcsopts.Options{}
+	err := ValidateSupportedMounts(s, o)
+	if err != nil {
+		t.Fatal("should not have failed")
+	}
+
+	o.DisableSandboxMounts = true
+	err = ValidateSupportedMounts(s, o)
+	if err == nil {
+		t.Fatal("should have failed")
 	}
 }

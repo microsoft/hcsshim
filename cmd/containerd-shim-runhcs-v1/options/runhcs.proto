@@ -59,6 +59,43 @@ message Options {
 	//
 	// The platform default is 1024MB if omitted.
 	int32 vm_memory_size_in_mb = 9;
+
+	// disable_bind_mounts disables the use of `bind` mounts for containers
+	// running in this shim.
+	//
+	// `bind` mounts enable a shared folder or file that can be readonly or
+	// read write from host-to-container.
+	bool disable_bind_mounts = 10;
+
+	// disable_physical_disk_mounts disables the use of `physical-disk` mounts
+	// for containers running in this shim.
+	//
+	// `physical-disk` mounts enable the attachment of a physical disk on the
+	// host directly to a containers file system.
+	bool disable_physical_disk_mounts = 11;
+	
+	// disable_virtual_disk_mounts disables the use of `virtual-disk` mounts
+	// for containers running in this shim.
+	//
+	// `virtual-disk` mounts enable the attachment of a `vhd` file on the host
+	// to a containers file system.
+	bool disable_virtual_disk_mounts = 12;
+
+	// disable_pipe_mounts disables the use of `\\.\pipe` mounts for containers
+	// running in this shim.
+	//
+	// `\\.\pipe` mounts can be used to share a bidirectional host-to-container
+	// named pipe.
+	bool disable_pipe_mounts = 13;
+
+	// disable_sandbox_mounts disables the use of `sandbox://` mounts for
+	// containers running in this shim.
+	//
+	// `sandbox://` mounts are essentially a bind mount that enable a shared
+	// folder or file that can be readonly or read write from
+	// host-to-container. The difference is that the `Source` of the mount is
+	// only considered from the host sandbox's perspective.
+	bool disable_sandbox_mounts = 14;
 }
 
 // ProcessDetails contains additional information about a process. This is the additional
