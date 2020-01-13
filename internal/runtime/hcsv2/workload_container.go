@@ -43,6 +43,15 @@ func updateSandboxMounts(sbid string, spec *oci.Spec) error {
 	return nil
 }
 
+func specHasGPUDevice(spec *oci.Spec) bool {
+	for _, d := range spec.Windows.Devices {
+		if d.IDType == "gpu" {
+			return true
+		}
+	}
+	return false
+}
+
 func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.Spec) (err error) {
 	ctx, span := trace.StartSpan(ctx, "hcsv2::setupWorkloadContainerSpec")
 	defer span.End()
@@ -162,6 +171,13 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 
 	// Force the parent cgroup into our /containers root
 	spec.Linux.CgroupsPath = "/containers/" + id
+
+	if spec.Windows != nil && specHasGPUDevice(spec) {
+		// we only support Nvidia gpus right now
+		if err := addNvidiaDevicePreHook(ctx, spec); err != nil {
+			return err
+		}
+	}
 
 	// Clear the windows section as we dont want to forward to runc
 	spec.Windows = nil
