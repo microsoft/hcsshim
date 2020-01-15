@@ -128,6 +128,7 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 			// fall back to SCSI.
 			uvmPath, err = uvm.AddVPMEM(ctx, layerPath)
 			if err == uvmpkg.ErrNoAvailableLocation || err == uvmpkg.ErrMaxVPMEMLayerSize {
+				log.G(ctx).WithError(err).Debug("falling back to SCSI for lcow layer addition")
 				uvmPath, err = uvm.AddSCSILayer(ctx, layerPath)
 			}
 			if err == nil {
