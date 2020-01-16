@@ -50,13 +50,12 @@ func newHcsExec(
 	isWCOW bool,
 	spec *specs.Process,
 	io upstreamIO) shimExec {
-	_, span := trace.StartSpan(ctx, "newHcsExec")
-	defer span.End()
-	span.AddAttributes(
-		trace.StringAttribute("tid", tid),
-		trace.StringAttribute("eid", id), // Init exec ID is always same as Task ID
-		trace.StringAttribute("bundle", bundle),
-		trace.BoolAttribute("wcow", isWCOW))
+	log.G(ctx).WithFields(logrus.Fields{
+		"tid":    tid,
+		"eid":    id, // Init exec ID is always same as Task ID
+		"bundle": bundle,
+		"wcow":   isWCOW,
+	}).Debug("newHcsExec")
 
 	he := &hcsExec{
 		events:      events,
@@ -341,13 +340,6 @@ func (he *hcsExec) ForceExit(ctx context.Context, status int) {
 	he.sl.Lock()
 	defer he.sl.Unlock()
 	if he.state != shimExecStateExited {
-		// Avoid logging the force if we already exited gracefully
-		ctx, span := trace.StartSpan(ctx, "hcsExec::ForceExit")
-		defer span.End()
-		span.AddAttributes(
-			trace.StringAttribute("tid", he.tid),
-			trace.StringAttribute("eid", he.id),
-			trace.Int64Attribute("status", int64(status)))
 		switch he.state {
 		case shimExecStateCreated:
 			he.exitFromCreatedL(ctx, status)
@@ -381,11 +373,8 @@ func (he *hcsExec) ForceExit(ctx context.Context, status int) {
 // the `TaskStart`/`TaskExecStarted` event.
 func (he *hcsExec) exitFromCreatedL(ctx context.Context, status int) {
 	if he.state != shimExecStateExited {
-		ctx, span := trace.StartSpan(ctx, "hcsExec::exitFromCreatedL")
-		defer span.End()
-		span.AddAttributes(
-			trace.StringAttribute("tid", he.tid),
-			trace.StringAttribute("eid", he.id))
+		// Avoid logging the force if we already exited gracefully
+		log.G(ctx).WithField("status", status).Debug("hcsExec::exitFromCreatedL")
 
 		// Unblock the container exit goroutine
 		he.processDoneOnce.Do(func() { close(he.processDone) })

@@ -2,12 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/containerd/containerd/namespaces"
 	shim "github.com/containerd/containerd/runtime/v2/shim"
-	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
 
@@ -39,12 +38,9 @@ func (e *eventPublisher) publishEvent(ctx context.Context, topic string, event i
 	ctx, span := trace.StartSpan(ctx, "publishEvent")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("topic", topic))
-
-	log.G(ctx).WithFields(logrus.Fields{
-		"topic": topic,
-		"event": event,
-	}).Debug("Publishing event")
+	span.AddAttributes(
+		trace.StringAttribute("topic", topic),
+		trace.StringAttribute("event", fmt.Sprintf("%+v", event)))
 
 	if e == nil {
 		return nil
