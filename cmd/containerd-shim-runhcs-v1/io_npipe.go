@@ -34,21 +34,21 @@ func newNpipeIO(ctx context.Context, stdin, stdout, stderr string, terminal bool
 		}
 	}()
 	if stdin != "" {
-		c, err := winio.DialPipe(stdin, nil)
+		c, err := winio.DialPipeContext(ctx, stdin)
 		if err != nil {
 			return nil, err
 		}
 		nio.sin = c
 	}
 	if stdout != "" {
-		c, err := winio.DialPipe(stdout, nil)
+		c, err := winio.DialPipeContext(ctx, stdout)
 		if err != nil {
 			return nil, err
 		}
 		nio.sout = c
 	}
 	if stderr != "" {
-		c, err := winio.DialPipe(stderr, nil)
+		c, err := winio.DialPipeContext(ctx, stderr)
 		if err != nil {
 			return nil, err
 		}
