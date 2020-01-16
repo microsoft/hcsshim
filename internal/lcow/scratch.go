@@ -50,7 +50,7 @@ func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string,
 	// Retrieve from cache if the default size and already on disk
 	if cacheFile != "" && sizeGB == DefaultScratchSizeGB {
 		if _, err := os.Stat(cacheFile); err == nil {
-			if err := copyfile.CopyFile(cacheFile, destFile, false); err != nil {
+			if err := copyfile.CopyFile(ctx, cacheFile, destFile, false); err != nil {
 				return fmt.Errorf("failed to copy cached file '%s' to '%s': %s", cacheFile, destFile, err)
 			}
 			log.G(ctx).WithFields(logrus.Fields{
@@ -133,7 +133,7 @@ func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string,
 
 	// Populate the cache.
 	if cacheFile != "" && (sizeGB == DefaultScratchSizeGB) {
-		if err := copyfile.CopyFile(destFile, cacheFile, true); err != nil {
+		if err := copyfile.CopyFile(ctx, destFile, cacheFile, true); err != nil {
 			return fmt.Errorf("failed to seed cache '%s' from '%s': %s", destFile, cacheFile, err)
 		}
 	}
