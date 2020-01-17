@@ -14,7 +14,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
@@ -31,11 +30,8 @@ import (
 	"go.opencensus.io/trace"
 )
 
-func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (_ shimTask, err error) {
-	ctx, span := trace.StartSpan(ctx, "newHcsStandaloneTask")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("tid", req.ID))
+func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
+	log.G(ctx).WithField("tid", req.ID).Debug("newHcsStandaloneTask")
 
 	ct, _, err := oci.GetSandboxTypeAndID(s.Annotations)
 	if err != nil {
@@ -117,12 +113,10 @@ func newHcsTask(
 	ownsParent bool,
 	req *task.CreateTaskRequest,
 	s *specs.Spec) (_ shimTask, err error) {
-	ctx, span := trace.StartSpan(ctx, "newHcsTask")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.BoolAttribute("ownsParent", ownsParent))
+	log.G(ctx).WithFields(logrus.Fields{
+		"tid":        req.ID,
+		"ownsParent": ownsParent,
+	}).Debug("newHcsTask")
 
 	owner := filepath.Base(os.Args[0])
 
@@ -486,11 +480,9 @@ func (ht *hcsTask) waitForHostExit() {
 // NOTE: For Windows process isolated containers `ht.ownsHost==true && ht.host
 // == nil`.
 func (ht *hcsTask) close(ctx context.Context) {
-	ctx, span := trace.StartSpan(ctx, "hcsTask::close")
-	defer span.End()
-	span.AddAttributes(trace.StringAttribute("tid", ht.id))
-
 	ht.closeOnce.Do(func() {
+		log.G(ctx).Debug("hcsTask::closeOnce")
+
 		// ht.c should never be nil for a real task but in testing we stub
 		// this to avoid a nil dereference. We really should introduce a
 		// method or interface for ht.c operations that we can stub for
@@ -561,11 +553,9 @@ func (ht *hcsTask) close(ctx context.Context) {
 //
 // This call is idempotent and safe to call multiple times.
 func (ht *hcsTask) closeHost(ctx context.Context) {
-	ctx, span := trace.StartSpan(ctx, "hcsTask::closeHost")
-	defer span.End()
-	span.AddAttributes(trace.StringAttribute("tid", ht.id))
-
 	ht.closeHostOnce.Do(func() {
+		log.G(ctx).Debug("hcsTask::closeHostOnce")
+
 		if ht.ownsHost && ht.host != nil {
 			if err := ht.host.Close(); err != nil {
 				log.G(ctx).WithError(err).Error("failed host vm shutdown")

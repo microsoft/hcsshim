@@ -28,9 +28,7 @@ import (
 // `parent`. When the fake WCOW `init` process exits via `Signal` `parent` will
 // be forcibly closed by this task.
 func newWcowPodSandboxTask(ctx context.Context, events publisher, id, bundle string, parent *uvm.UtilityVM) shimTask {
-	ctx, span := trace.StartSpan(ctx, "newWcowPodSandboxTask")
-	defer span.End()
-	span.AddAttributes(trace.StringAttribute("tid", id))
+	log.G(ctx).WithField("tid", id).Debug("newWcowPodSandboxTask")
 
 	wpst := &wcowPodSandboxTask{
 		events: events,
@@ -165,9 +163,7 @@ func (wpst *wcowPodSandboxTask) Wait() *task.StateResponse {
 // This call is idempotent and safe to call multiple times.
 func (wpst *wcowPodSandboxTask) close(ctx context.Context) {
 	wpst.closeOnce.Do(func() {
-		ctx, span := trace.StartSpan(ctx, "wcowPodSandboxTask::close")
-		defer span.End()
-		span.AddAttributes(trace.StringAttribute("tid", wpst.id))
+		log.G(ctx).Debug("wcowPodSandboxTask::closeOnce")
 
 		if wpst.host != nil {
 			if err := wpst.host.Close(); err != nil {

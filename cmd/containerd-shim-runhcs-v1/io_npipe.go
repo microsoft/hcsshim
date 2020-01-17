@@ -6,21 +6,18 @@ import (
 	"sync"
 
 	winio "github.com/Microsoft/go-winio"
-	"github.com/Microsoft/hcsshim/internal/oc"
-	"go.opencensus.io/trace"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/sirupsen/logrus"
 )
 
 // newNpipeIO creates connected upstream io. It is the callers responsibility to
 // validate that `if terminal == true`, `stderr == ""`.
 func newNpipeIO(ctx context.Context, stdin, stdout, stderr string, terminal bool) (_ upstreamIO, err error) {
-	ctx, span := trace.StartSpan(ctx, "newNpipeIO")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("stdin", stdin),
-		trace.StringAttribute("stdout", stdout),
-		trace.StringAttribute("stderr", stderr),
-		trace.BoolAttribute("terminal", terminal))
+	log.G(ctx).WithFields(logrus.Fields{
+		"stdin":    stdin,
+		"stdout":   stdout,
+		"stderr":   stderr,
+		"terminal": terminal}).Debug("newNpipeIO")
 
 	nio := &npipeio{
 		stdin:    stdin,
@@ -85,30 +82,28 @@ type npipeio struct {
 }
 
 func (nio *npipeio) Close(ctx context.Context) {
-	ctx, span := trace.StartSpan(ctx, "npipeio::Close")
-	defer span.End()
-
 	nio.sinCloser.Do(func() {
 		if nio.sin != nil {
+			log.G(ctx).Debug("npipeio::sinCloser")
 			nio.sin.Close()
 		}
 	})
 	nio.outErrCloser.Do(func() {
 		if nio.sout != nil {
+			log.G(ctx).Debug("npipeio::outErrCloser - stdout")
 			nio.sout.Close()
 		}
 		if nio.serr != nil {
+			log.G(ctx).Debug("npipeio::outErrCloser - stderr")
 			nio.serr.Close()
 		}
 	})
 }
 
 func (nio *npipeio) CloseStdin(ctx context.Context) {
-	ctx, span := trace.StartSpan(ctx, "npipeio::CloseStdin")
-	defer span.End()
-
 	nio.sinCloser.Do(func() {
 		if nio.sin != nil {
+			log.G(ctx).Debug("npipeio::sinCloser")
 			nio.sin.Close()
 		}
 	})

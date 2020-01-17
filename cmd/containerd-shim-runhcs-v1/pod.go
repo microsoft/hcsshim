@@ -7,10 +7,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/Microsoft/hcsshim/internal/oc"
-	"go.opencensus.io/trace"
-
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
@@ -55,13 +53,8 @@ type shimPod interface {
 	KillTask(ctx context.Context, tid, eid string, signal uint32, all bool) error
 }
 
-func createPod(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (_ shimPod, err error) {
-	ctx, span := trace.StartSpan(ctx, "createPod")
-	defer span.End()
-	defer func() {
-		oc.SetSpanStatus(span, err)
-	}()
-	span.AddAttributes(trace.StringAttribute("tid", req.ID))
+func createPod(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (shimPod, error) {
+	log.G(ctx).WithField("tid", req.ID).Debug("createPod")
 
 	if osversion.Get().Build < osversion.RS5 {
 		return nil, errors.Wrapf(errdefs.ErrFailedPrecondition, "pod support is not available on Windows versions previous to RS5 (%d)", osversion.RS5)

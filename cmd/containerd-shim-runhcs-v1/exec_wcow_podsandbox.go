@@ -5,22 +5,22 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/log"
 	eventstypes "github.com/containerd/containerd/api/events"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
+	"github.com/sirupsen/logrus"
 )
 
 func newWcowPodSandboxExec(ctx context.Context, events publisher, tid, bundle string) *wcowPodSandboxExec {
-	ctx, span := trace.StartSpan(ctx, "newWcowPodSandboxExec")
-	defer span.End()
-	span.AddAttributes(
-		trace.StringAttribute("tid", tid),
-		trace.StringAttribute("eid", tid), // Init exec ID is always same as Task ID
-		trace.StringAttribute("bundle", bundle))
+	log.G(ctx).WithFields(logrus.Fields{
+		"tid":    tid,
+		"eid":    tid, // Init exec ID is always same as Task ID
+		"bundle": bundle,
+	}).Debug("newWcowPodSandboxExec")
 
 	wpse := &wcowPodSandboxExec{
 		events:     events,
@@ -193,12 +193,7 @@ func (wpse *wcowPodSandboxExec) ForceExit(ctx context.Context, status int) {
 	defer wpse.sl.Unlock()
 	if wpse.state != shimExecStateExited {
 		// Avoid logging the force if we already exited gracefully
-		_, span := trace.StartSpan(ctx, "wcowPodSandboxExec::ForceExit")
-		defer span.End()
-		span.AddAttributes(
-			trace.StringAttribute("tid", wpse.tid),
-			trace.StringAttribute("eid", wpse.tid), // Init exec ID is always same as Task ID
-			trace.Int64Attribute("status", int64(status)))
+		log.G(ctx).WithField("status", status).Debug("wcowPodSandboxExec::ForceExit")
 
 		wpse.state = shimExecStateExited
 		wpse.exitStatus = 1
