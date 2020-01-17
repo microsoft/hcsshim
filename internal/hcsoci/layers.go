@@ -14,7 +14,6 @@ import (
 	uvmpkg "github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 // MountContainerLayers is a helper for clients to hide all the complexity of layer mounting
@@ -35,40 +34,25 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 		}
 		path := layerFolders[len(layerFolders)-1]
 		rest := layerFolders[:len(layerFolders)-1]
-		log.G(ctx).WithField("path", path).Debug("hcsshim::mountContainerLayers ActivateLayer")
-		if err := wclayer.ActivateLayer(path); err != nil {
+		if err := wclayer.ActivateLayer(ctx, path); err != nil {
 			return "", err
 		}
 		defer func() {
 			if err != nil {
-				if err := wclayer.DeactivateLayer(path); err != nil {
-					log.G(ctx).WithFields(logrus.Fields{
-						logrus.ErrorKey: err,
-						"path":          path,
-					}).Warn("failed to DeactivateLayer on cleanup")
-				}
+				wclayer.DeactivateLayer(ctx, path)
 			}
 		}()
 
-		log.G(ctx).WithFields(logrus.Fields{
-			"path": path,
-			"rest": rest,
-		}).Debug("hcsshim::mountContainerLayers PrepareLayer")
-		if err := wclayer.PrepareLayer(path, rest); err != nil {
+		if err := wclayer.PrepareLayer(ctx, path, rest); err != nil {
 			return "", err
 		}
 		defer func() {
 			if err != nil {
-				if err := wclayer.UnprepareLayer(path); err != nil {
-					log.G(ctx).WithFields(logrus.Fields{
-						logrus.ErrorKey: err,
-						"path":          path,
-					}).Warn("failed to UnprepareLayer on cleanup")
-				}
+				wclayer.UnprepareLayer(ctx, path)
 			}
 		}()
 
-		mountPath, err := wclayer.GetLayerMountPath(path)
+		mountPath, err := wclayer.GetLayerMountPath(ctx, path)
 		if err != nil {
 			return "", err
 		}
@@ -203,13 +187,10 @@ func UnmountContainerLayers(ctx context.Context, layerFolders []string, containe
 			return fmt.Errorf("need at least one layer for Unmount")
 		}
 		path := layerFolders[len(layerFolders)-1]
-		log.G(ctx).WithField("path", path).Debug("hcsshim::Unmount UnprepareLayer")
-		if err := wclayer.UnprepareLayer(path); err != nil {
+		if err := wclayer.UnprepareLayer(ctx, path); err != nil {
 			return err
 		}
-		// TODO Should we try this anyway?
-		log.G(ctx).WithField("path", path).Debug("hcsshim::unmountContainerLayers DeactivateLayer")
-		return wclayer.DeactivateLayer(path)
+		return wclayer.DeactivateLayer(ctx, path)
 	}
 
 	// V2 Xenon
@@ -289,7 +270,7 @@ func computeV2Layers(ctx context.Context, vm *uvm.UtilityVM, paths []string) (la
 		if err != nil {
 			return nil, err
 		}
-		layerID, err := wclayer.LayerID(path)
+		layerID, err := wclayer.LayerID(ctx, path)
 		if err != nil {
 			return nil, err
 		}

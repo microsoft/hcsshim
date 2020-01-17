@@ -352,7 +352,7 @@ func createTestMounts(t *testing.T) (string, string) {
 func generateShimLayersStruct(t *testing.T, imageLayers []string) []hcsshim.Layer {
 	var layers []hcsshim.Layer
 	for _, layerFolder := range imageLayers {
-		guid, _ := wclayer.NameToGuid(filepath.Base(layerFolder))
+		guid, _ := wclayer.NameToGuid(context.Background(), filepath.Base(layerFolder))
 		layers = append(layers, hcsshim.Layer{Path: layerFolder, ID: guid.String()})
 	}
 	return layers
@@ -365,7 +365,7 @@ func TestWCOWArgonShim(t *testing.T) {
 
 	argonShimScratchDir := testutilities.CreateTempDir(t)
 	defer os.RemoveAll(argonShimScratchDir)
-	if err := wclayer.CreateScratchLayer(argonShimScratchDir, imageLayers); err != nil {
+	if err := wclayer.CreateScratchLayer(context.Background(), argonShimScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create argon scratch layer: %s", err)
 	}
 
@@ -429,7 +429,7 @@ func TestWCOWXenonShim(t *testing.T) {
 
 	xenonShimScratchDir := testutilities.CreateTempDir(t)
 	defer os.RemoveAll(xenonShimScratchDir)
-	if err := wclayer.CreateScratchLayer(xenonShimScratchDir, imageLayers); err != nil {
+	if err := wclayer.CreateScratchLayer(context.Background(), xenonShimScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create xenon scratch layer: %s", err)
 	}
 
@@ -499,7 +499,7 @@ func TestWCOWArgonOciV1(t *testing.T) {
 	argonOci1Mounted := false
 	argonOci1ScratchDir := testutilities.CreateTempDir(t)
 	defer os.RemoveAll(argonOci1ScratchDir)
-	if err := wclayer.CreateScratchLayer(argonOci1ScratchDir, imageLayers); err != nil {
+	if err := wclayer.CreateScratchLayer(context.Background(), argonOci1ScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create argon scratch layer: %s", err)
 	}
 
@@ -548,7 +548,7 @@ func TestWCOWXenonOciV1(t *testing.T) {
 
 	xenonOci1ScratchDir := testutilities.CreateTempDir(t)
 	defer os.RemoveAll(xenonOci1ScratchDir)
-	if err := wclayer.CreateScratchLayer(xenonOci1ScratchDir, imageLayers); err != nil {
+	if err := wclayer.CreateScratchLayer(context.Background(), xenonOci1ScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create xenon scratch layer: %s", err)
 	}
 
@@ -605,7 +605,7 @@ func TestWCOWArgonOciV2(t *testing.T) {
 
 	argonOci2ScratchDir := testutilities.CreateTempDir(t)
 	defer os.RemoveAll(argonOci2ScratchDir)
-	if err := wclayer.CreateScratchLayer(argonOci2ScratchDir, imageLayers); err != nil {
+	if err := wclayer.CreateScratchLayer(context.Background(), argonOci2ScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create argon scratch layer: %s", err)
 	}
 
@@ -657,7 +657,7 @@ func TestWCOWXenonOciV2(t *testing.T) {
 
 	xenonOci2ScratchDir := testutilities.CreateTempDir(t)
 	defer os.RemoveAll(xenonOci2ScratchDir)
-	if err := wclayer.CreateScratchLayer(xenonOci2ScratchDir, imageLayers); err != nil {
+	if err := wclayer.CreateScratchLayer(context.Background(), xenonOci2ScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create xenon scratch layer: %s", err)
 	}
 

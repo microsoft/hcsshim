@@ -36,7 +36,7 @@ func CreateWCOWBlankRWLayer(t *testing.T, imageLayers []string) string {
 	//	}
 
 	tempDir := CreateTempDir(t)
-	if err := wclayer.CreateScratchLayer(tempDir, imageLayers); err != nil {
+	if err := wclayer.CreateScratchLayer(context.Background(), tempDir, imageLayers); err != nil {
 		t.Fatalf("Failed CreateScratchLayer: %s", err)
 	}
 	return tempDir

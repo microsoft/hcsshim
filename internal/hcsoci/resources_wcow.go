@@ -25,12 +25,10 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 	}
 
 	scratchFolder := coi.Spec.Windows.LayerFolders[len(coi.Spec.Windows.LayerFolders)-1]
-	log.G(ctx).WithField("scratchFolder", scratchFolder).Debug("hcsshim::allocateWindowsResources scratch folder")
 
 	// TODO: Remove this code for auto-creation. Make the caller responsible.
 	// Create the directory for the RW scratch layer if it doesn't exist
 	if _, err := os.Stat(scratchFolder); os.IsNotExist(err) {
-		log.G(ctx).WithField("scratchFolder", scratchFolder).Debug("hcsshim::allocateWindowsResources container scratch folder does not exist so creating")
 		if err := os.MkdirAll(scratchFolder, 0777); err != nil {
 			return fmt.Errorf("failed to auto-create container scratch folder %s: %s", scratchFolder, err)
 		}
@@ -39,8 +37,7 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 	// Create sandbox.vhdx if it doesn't exist in the scratch folder. It's called sandbox.vhdx
 	// rather than scratch.vhdx as in the v1 schema, it's hard-coded in HCS.
 	if _, err := os.Stat(filepath.Join(scratchFolder, "sandbox.vhdx")); os.IsNotExist(err) {
-		log.G(ctx).WithField("scratchFolder", scratchFolder).Debug("hcsshim::allocateWindowsResources container sandbox.vhdx does not exist so creating")
-		if err := wclayer.CreateScratchLayer(scratchFolder, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1]); err != nil {
+		if err := wclayer.CreateScratchLayer(ctx, scratchFolder, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1]); err != nil {
 			return fmt.Errorf("failed to CreateSandboxLayer %s", err)
 		}
 	}
