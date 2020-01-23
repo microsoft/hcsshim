@@ -317,3 +317,20 @@ func HcnCreateTestHostRoute() (*PolicyNetworkRequest, error) {
 
 	return &networkRequest, nil
 }
+
+func HcnCreateTestSdnRoute(endpoint *HostComputeEndpoint) (*HostComputeRoute, error) {
+	route := &HostComputeRoute{
+		SchemaVersion: V2SchemaVersion(),
+		Setting: []SDNRoutePolicySetting{
+			{
+				DestinationPrefix: "169.254.169.254/24",
+				NextHop:           "127.10.0.34",
+				NeedEncap:         false,
+			},
+		},
+	}
+
+	route.HostComputeEndpoints = append(route.HostComputeEndpoints, endpoint.Id)
+
+	return route
+}
