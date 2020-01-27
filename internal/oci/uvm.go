@@ -3,6 +3,7 @@ package oci
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -159,34 +160,69 @@ func ParseAnnotationsCPUCount(ctx context.Context, s *specs.Spec, annotation str
 // not found searches `s` for the Windows CPU section. If neither are found
 // returns `def`.
 func ParseAnnotationsCPULimit(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
-	if m := parseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
-		return int32(m)
+	if annotation != annotationProcessorLimit && annotation != AnnotationContainerProcessorLimit {
+		panic(fmt.Sprintf("unsupported CPU Limit annotation %q", annotation))
 	}
-	if s.Windows != nil &&
+
+	const defaulthvlimit = uint64(100000)  // 100,000
+	const defaultcontlimit = uint64(10000) // 10,000
+
+	m := parseAnnotationsUint64(ctx, s.Annotations, annotation, 0)
+	if m == 0 &&
+		s.Windows != nil &&
 		s.Windows.Resources != nil &&
 		s.Windows.Resources.CPU != nil &&
 		s.Windows.Resources.CPU.Maximum != nil &&
 		*s.Windows.Resources.CPU.Maximum > 0 {
-		return int32(*s.Windows.Resources.CPU.Maximum)
+		m = uint64(*s.Windows.Resources.CPU.Maximum)
+		if annotation == annotationProcessorLimit {
+			// Spec does not have a way to set both the cpu and container limit.
+			// For single instance containers we interpret both from the same
+			// value.
+			m *= 10
+		}
 	}
-	return def
+
+	if (m == defaulthvlimit && annotation == annotationProcessorLimit) ||
+		(m == defaultcontlimit && annotation == AnnotationContainerProcessorLimit) {
+		// Platform applies this as a default so skip applying it here.
+		m = 0
+	}
+
+	if m == 0 {
+		return def
+	}
+	return int32(m)
 }
 
 // ParseAnnotationsCPUWeight searches `s.Annotations` for the CPU annotation. If
 // not found searches `s` for the Windows CPU section. If neither are found
 // returns `def`.
 func ParseAnnotationsCPUWeight(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
-	if m := parseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
-		return int32(m)
+	if annotation != annotationProcessorWeight && annotation != AnnotationContainerProcessorWeight {
+		panic(fmt.Sprintf("unsupported CPU Limit annotation %q", annotation))
 	}
-	if s.Windows != nil &&
+
+	const defaultweight = uint64(100)
+	m := parseAnnotationsUint64(ctx, s.Annotations, annotation, 0)
+	if m == 0 &&
+		s.Windows != nil &&
 		s.Windows.Resources != nil &&
 		s.Windows.Resources.CPU != nil &&
 		s.Windows.Resources.CPU.Shares != nil &&
 		*s.Windows.Resources.CPU.Shares > 0 {
-		return int32(*s.Windows.Resources.CPU.Shares)
+		m = uint64(*s.Windows.Resources.CPU.Shares)
 	}
-	return def
+
+	if m == defaultweight {
+		// Platform applies this as a default so skip applying it here.
+		m = 0
+	}
+
+	if m == 0 {
+		return def
+	}
+	return int32(m)
 }
 
 // ParseAnnotationsStorageIops searches `s.Annotations` for the `Iops`
