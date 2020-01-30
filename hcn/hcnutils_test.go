@@ -332,5 +332,5 @@ func HcnCreateTestSdnRoute(endpoint *HostComputeEndpoint) (*HostComputeRoute, er
 
 	route.HostComputeEndpoints = append(route.HostComputeEndpoints, endpoint.Id)
 
-	return route
+	return route.Create()
 }
