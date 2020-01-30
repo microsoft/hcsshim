@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mount.h>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
@@ -123,6 +124,22 @@ _Noreturn void die(const char *msg) {
 _Noreturn void die2(const char *msg1, const char *msg2) {
     warn2(msg1, msg2);
     dien();
+}
+
+void init_rlimit() {
+    // Set the hard limit for number of open fds much larger. The kernel sets
+    // a limit of 4096 for historical reasons, and this limit is too low for
+    // some software. According to the systemd developers, there is no downside
+    // to a large hard limit in modern Linux kernels.
+    //
+    // Retain the small soft limit of 1024 for appcompat.
+    struct rlimit rlim = {
+        .rlim_cur = 1024,
+        .rlim_max = 1024 * 1024,
+    };
+    if (setrlimit(RLIMIT_NOFILE, &rlim) < 0) {
+        die("setrlimit(RLIMIT_NOFILE)");
+    }
 }
 
 void init_dev() {
@@ -374,6 +391,7 @@ int main(int argc, char **argv) {
     sigfillset(&set);
     sigprocmask(SIG_BLOCK, &set, 0);
 
+    init_rlimit();
     init_dev();
     init_fs(ops, sizeof(ops) / sizeof(ops[0]));
     init_cgroups();
