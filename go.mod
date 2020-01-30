@@ -39,5 +39,4 @@ require (
 	golang.org/x/sys v0.0.0-20190916202348-b4ddaad3f8a3
 	google.golang.org/grpc v1.23.0
 	gotest.tools v2.2.0+incompatible // indirect
-	k8s.io/kubernetes v1.13.0
 )

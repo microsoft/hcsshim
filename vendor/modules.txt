@@ -209,5 +209,3 @@ google.golang.org/grpc/balancer/base
 google.golang.org/grpc/credentials/internal
 google.golang.org/grpc/binarylog/grpc_binarylog_v1
 google.golang.org/grpc/internal/syscall
-# k8s.io/kubernetes v1.13.0
-k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2
