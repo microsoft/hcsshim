@@ -4,7 +4,6 @@ package hcn
 
 import (
 	"encoding/json"
-	"fmt"
 	"testing"
 )
 
@@ -25,7 +24,7 @@ func TestCreateDeleteRoute(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fmt.Printf("SDN Route JSON:\n%s \n", jsonString)
+	t.Logf("SDN Route JSON:\n%s \n", jsonString)
 
 	err = route.Delete()
 	if err != nil {
@@ -58,6 +57,7 @@ func TestGetRouteById(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Logf("SDN Route JSON:\n%s \n", jsonString)
 	foundRoute, err := GetRouteByID(route.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -148,6 +148,7 @@ func TestAddRoute(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Logf("SDN Route JSON:\n%s \n", jsonString)
 	foundRoute, err := GetRouteByID(route.ID)
 	if err != nil {
 		t.Fatal(err)
