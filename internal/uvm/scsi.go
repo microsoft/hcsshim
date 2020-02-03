@@ -100,7 +100,7 @@ func (uvm *UtilityVM) findSCSIAttachment(ctx context.Context, findThisHostPath s
 // `uvmPath` is optional.
 //
 // `readOnly` set to `true` if the vhd/vhdx should be attached read only.
-func (uvm *UtilityVM) AddSCSI(ctx context.Context, hostPath string, uvmPath string, readOnly bool) (int, int32, error) {
+func (uvm *UtilityVM) AddSCSI(ctx context.Context, hostPath string, uvmPath string, readOnly bool) (int, int32, string, error) {
 	return uvm.addSCSIActual(ctx, hostPath, uvmPath, "VirtualDisk", false, readOnly)
 }
 
@@ -112,7 +112,7 @@ func (uvm *UtilityVM) AddSCSI(ctx context.Context, hostPath string, uvmPath stri
 // `uvmPath` is optional if a guest mount is not requested.
 //
 // `readOnly` set to `true` if the physical disk should be attached read only.
-func (uvm *UtilityVM) AddSCSIPhysicalDisk(ctx context.Context, hostPath, uvmPath string, readOnly bool) (int, int32, error) {
+func (uvm *UtilityVM) AddSCSIPhysicalDisk(ctx context.Context, hostPath, uvmPath string, readOnly bool) (int, int32, string, error) {
 	return uvm.addSCSIActual(ctx, hostPath, uvmPath, "PassThru", false, readOnly)
 }
 
@@ -125,10 +125,15 @@ func (uvm *UtilityVM) AddSCSILayer(ctx context.Context, hostPath string) (string
 		return "", ErrSCSILayerWCOWUnsupported
 	}
 
-	controller, lun, err := uvm.addSCSIActual(ctx, hostPath, "", "VirtualDisk", true, true)
+	controller, lun, uvmPath, err := uvm.addSCSIActual(ctx, hostPath, "", "VirtualDisk", true, true)
 	if err != nil {
 		return "", err
 	}
+
+	if uvmPath != "" {
+		return uvmPath, nil
+	}
+
 	return fmt.Sprintf(lcowSCSILayerFmt, controller, lun), nil
 }
 
@@ -152,15 +157,15 @@ func (uvm *UtilityVM) AddSCSILayer(ctx context.Context, hostPath string) (string
 // `readOnly` indicates the attachment should be added read only.
 //
 // Returns the controller ID (0..3) and LUN (0..63) where the disk is attached.
-func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, attachmentType string, isLayer, readOnly bool) (_ int, _ int32, err error) {
+func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, attachmentType string, isLayer, readOnly bool) (_ int, _ int32, _ string, err error) {
 	if uvm.scsiControllerCount == 0 {
-		return -1, -1, ErrNoSCSIControllers
+		return -1, -1, "", ErrNoSCSIControllers
 	}
 
 	// Ensure the utility VM has access
 	if !isLayer {
 		if err := wclayer.GrantVmAccess(ctx, uvm.id, hostPath); err != nil {
-			return -1, -1, err
+			return -1, -1, "", err
 		}
 	}
 
@@ -170,17 +175,11 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, atta
 	// these two operations. All failure paths between these two must release
 	// the lock.
 	uvm.m.Lock()
-	if controller, lun, _, err := uvm.findSCSIAttachment(ctx, hostPath); err == nil {
-		// So is attached
-		if isLayer {
-			// Increment the refcount
-			uvm.scsiLocations[controller][lun].refCount++
-			uvm.m.Unlock()
-			return controller, lun, nil
-		}
-
+	if controller, lun, uvmPath, err := uvm.findSCSIAttachment(ctx, hostPath); err == nil {
+		// SCSI disk is already attached, Increment the refcount
+		uvm.scsiLocations[controller][lun].refCount++
 		uvm.m.Unlock()
-		return -1, -1, ErrAlreadyAttached
+		return controller, lun, uvmPath, nil
 	}
 
 	// At this point, we know it's not attached, regardless of whether it's a
@@ -188,7 +187,7 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, atta
 	controller, lun, err := uvm.allocateSCSI(ctx, hostPath, uvmPath, isLayer)
 	if err != nil {
 		uvm.m.Unlock()
-		return -1, -1, err
+		return -1, -1, "", err
 	}
 	defer func() {
 		if err != nil {
@@ -206,7 +205,7 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, atta
 
 	// Note: Can remove this check post-RS5 if multiple controllers are supported
 	if controller > 0 {
-		return -1, -1, ErrTooManyAttachments
+		return -1, -1, "", ErrTooManyAttachments
 	}
 
 	SCSIModification := &hcsschema.ModifySettingRequest{
@@ -244,9 +243,9 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, atta
 	}
 
 	if err := uvm.modify(ctx, SCSIModification); err != nil {
-		return -1, -1, fmt.Errorf("uvm::AddSCSI: failed to modify utility VM configuration: %s", err)
+		return -1, -1, "", fmt.Errorf("uvm::AddSCSI: failed to modify utility VM configuration: %s", err)
 	}
-	return controller, lun, nil
+	return controller, lun, uvmPath, nil
 
 }
 
@@ -265,11 +264,9 @@ func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) error {
 		return err
 	}
 
-	if uvm.scsiLocations[controller][lun].isLayer {
-		uvm.scsiLocations[controller][lun].refCount--
-		if uvm.scsiLocations[controller][lun].refCount > 0 {
-			return nil
-		}
+	uvm.scsiLocations[controller][lun].refCount--
+	if uvm.scsiLocations[controller][lun].refCount > 0 {
+		return nil
 	}
 
 	scsiModification := &hcsschema.ModifySettingRequest{
