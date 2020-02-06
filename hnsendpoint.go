@@ -10,6 +10,29 @@ type HNSEndpoint = hns.HNSEndpoint
 // Namespace represents a Compartment.
 type Namespace = hns.Namespace
 
+// ProxyPolicy represents a proxy policy for an endpoint
+type ProxyPolicy = hns.ProxyPolicy
+
+// PolicyType represents the type of the policy
+type PolicyType = hns.PolicyType
+
+//  PolicyType represents the type of the policy
+const (
+	Nat                  PolicyType = hns.Nat
+	ACL                  PolicyType = hns.ACL
+	PA                   PolicyType = hns.PA
+	VLAN                 PolicyType = hns.VLAN
+	VSID                 PolicyType = hns.VSID
+	VNet                 PolicyType = hns.Vnet
+	L2Driver             PolicyType = hns.L2Driver
+	Isolation            PolicyType = hns.Isolation
+	QOS                  PolicyType = hns.QOS
+	OutboundNat          PolicyType = hns.OutboundNat
+	ExternalLoadBalancer PolicyType = hns.ExternalLoadBalancer
+	Route                PolicyType = hns.Route
+	Proxy                PolicyType = hns.Proxy
+)
+
 //SystemType represents the type of the system on which actions are done
 type SystemType string
 
