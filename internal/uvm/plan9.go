@@ -66,7 +66,7 @@ func (uvm *UtilityVM) AddPlan9(ctx context.Context, hostPath string, uvmPath str
 			Flags:        flags,
 			AllowedFiles: allowedNames,
 		},
-		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Plan9/Shares"),
+		ResourcePath: plan9ShareResourcePath,
 		GuestRequest: guestrequest.GuestRequest{
 			ResourceType: guestrequest.ResourceTypeMappedDirectory,
 			RequestType:  requesttype.Add,
@@ -101,7 +101,7 @@ func (uvm *UtilityVM) RemovePlan9(ctx context.Context, share *Plan9Share) error 
 			AccessName: share.name,
 			Port:       plan9Port,
 		},
-		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Plan9/Shares"),
+		ResourcePath: plan9ShareResourcePath,
 		GuestRequest: guestrequest.GuestRequest{
 			ResourceType: guestrequest.ResourceTypeMappedDirectory,
 			RequestType:  requesttype.Remove,

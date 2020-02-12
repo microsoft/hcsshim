@@ -3,6 +3,7 @@ package uvm
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -215,7 +216,7 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, atta
 			Type_:    attachmentType,
 			ReadOnly: readOnly,
 		},
-		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/%d/Attachments/%d", controller, lun),
+		ResourcePath: fmt.Sprintf(scsiResourceFormat, strconv.Itoa(controller), lun),
 	}
 
 	if uvmPath != "" {
@@ -271,7 +272,7 @@ func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) error {
 
 	scsiModification := &hcsschema.ModifySettingRequest{
 		RequestType:  requesttype.Remove,
-		ResourcePath: fmt.Sprintf("VirtualMachine/Devices/Scsi/%d/Attachments/%d", controller, lun),
+		ResourcePath: fmt.Sprintf(scsiResourceFormat, strconv.Itoa(controller), lun),
 	}
 
 	// Include the GuestRequest so that the GCS ejects the disk cleanly if the

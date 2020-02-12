@@ -2,6 +2,7 @@ package uvm
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/requesttype"
@@ -15,7 +16,7 @@ const pipePrefix = `\\.\pipe\`
 func (uvm *UtilityVM) AddPipe(ctx context.Context, hostPath string) error {
 	modification := &hcsschema.ModifySettingRequest{
 		RequestType:  requesttype.Add,
-		ResourcePath: "VirtualMachine/Devices/MappedPipes/" + hostPath,
+		ResourcePath: fmt.Sprintf(mappedPipeResourceFormat, hostPath),
 	}
 	if err := uvm.modify(ctx, modification); err != nil {
 		return err
@@ -27,7 +28,7 @@ func (uvm *UtilityVM) AddPipe(ctx context.Context, hostPath string) error {
 func (uvm *UtilityVM) RemovePipe(ctx context.Context, hostPath string) error {
 	modification := &hcsschema.ModifySettingRequest{
 		RequestType:  requesttype.Remove,
-		ResourcePath: "VirtualMachine/Devices/MappedPipes/" + hostPath,
+		ResourcePath: fmt.Sprintf(mappedPipeResourceFormat, hostPath),
 	}
 	if err := uvm.modify(ctx, modification); err != nil {
 		return err
