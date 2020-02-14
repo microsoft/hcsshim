@@ -89,7 +89,7 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 			l := log.G(ctx).WithField("mount", fmt.Sprintf("%+v", mount))
 			if mount.Type == "physical-disk" {
 				l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI physical disk for OCI mount")
-				_, _, _, err := coi.HostingSystem.AddSCSIPhysicalDisk(ctx, mount.Source, uvmPath, readOnly)
+				_, _, err := coi.HostingSystem.AddSCSIPhysicalDisk(ctx, mount.Source, uvmPath, readOnly)
 				if err != nil {
 					return fmt.Errorf("adding SCSI physical disk mount %+v: %s", mount, err)
 				}
@@ -97,7 +97,7 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 				resources.scsiMounts = append(resources.scsiMounts, scsiMount{path: mount.Source})
 			} else if mount.Type == "virtual-disk" || mount.Type == "automanage-virtual-disk" {
 				l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI virtual disk for OCI mount")
-				_, _, _, err := coi.HostingSystem.AddSCSI(ctx, mount.Source, uvmPath, readOnly)
+				_, _, err := coi.HostingSystem.AddSCSI(ctx, mount.Source, uvmPath, readOnly)
 				if err != nil {
 					return fmt.Errorf("adding SCSI virtual disk mount %+v: %s", mount, err)
 				}

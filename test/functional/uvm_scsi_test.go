@@ -67,7 +67,7 @@ func testSCSIAddRemove(t *testing.T, u *uvm.UtilityVM, pathPrefix string, operat
 	// Add each of the disks to the utility VM. Attach-only, no container path
 	logrus.Debugln("First - adding in attach-only")
 	for i := 0; i < numDisks; i++ {
-		_, _, _, err := u.AddSCSI(context.Background(), disks[i], "", false)
+		_, _, err := u.AddSCSI(context.Background(), disks[i], "", false)
 		if err != nil {
 			t.Fatalf("failed to add scsi disk %d %s: %s", i, disks[i], err)
 		}
@@ -76,7 +76,7 @@ func testSCSIAddRemove(t *testing.T, u *uvm.UtilityVM, pathPrefix string, operat
 	// Try to re-add. These should all fail.
 	logrus.Debugln("Next - trying to re-add")
 	for i := 0; i < numDisks; i++ {
-		_, _, _, err := u.AddSCSI(context.Background(), disks[i], "", false)
+		_, _, err := u.AddSCSI(context.Background(), disks[i], "", false)
 		if err == nil {
 			t.Fatalf("should not be able to re-add the same SCSI disk!")
 		}
@@ -96,7 +96,7 @@ func testSCSIAddRemove(t *testing.T, u *uvm.UtilityVM, pathPrefix string, operat
 	// Now re-add but providing a container path
 	logrus.Debugln("Next - re-adding with a container path")
 	for i := 0; i < numDisks; i++ {
-		_, _, _, err := u.AddSCSI(context.Background(), disks[i], fmt.Sprintf(`%s%d`, pathPrefix, i), false)
+		_, _, err := u.AddSCSI(context.Background(), disks[i], fmt.Sprintf(`%s%d`, pathPrefix, i), false)
 		if err != nil {
 			t.Fatalf("failed to add scsi disk %d %s: %s", i, disks[i], err)
 		}
@@ -105,10 +105,12 @@ func testSCSIAddRemove(t *testing.T, u *uvm.UtilityVM, pathPrefix string, operat
 	// Try to re-add. These should all fail.
 	logrus.Debugln("Next - trying to re-add")
 	for i := 0; i < numDisks; i++ {
-		_, _, existingPath, err := u.AddSCSI(context.Background(), disks[i], fmt.Sprintf(`%s%d`, pathPrefix, i), false)
-
-		if existingPath == "" {
-			t.Fatalf("expecting existing path to not be empty but it is %s", err)
+		_, _, err := u.AddSCSI(context.Background(), disks[i], fmt.Sprintf(`%s%d`, pathPrefix, i), false)
+		if err == nil {
+			t.Fatalf("should not be able to re-add the same SCSI disk!")
+		}
+		if err != uvm.ErrAlreadyAttached {
+			t.Fatalf("expecting %s, got %s", uvm.ErrAlreadyAttached, err)
 		}
 	}
 
@@ -185,7 +187,7 @@ func TestParallelScsiOps(t *testing.T) {
 					t.Errorf("failed to grantvmaccess for worker: %d, iteration: %d with err: %v", scsiIndex, iteration, err)
 					continue
 				}
-				_, _, _, err = u.AddSCSI(context.Background(), path, "", false)
+				_, _, err = u.AddSCSI(context.Background(), path, "", false)
 				if err != nil {
 					os.Remove(path)
 					t.Errorf("failed to AddSCSI for worker: %d, iteration: %d with err: %v", scsiIndex, iteration, err)
@@ -197,7 +199,7 @@ func TestParallelScsiOps(t *testing.T) {
 					// This worker cant continue because the index is dead. We have to stop
 					break
 				}
-				_, _, _, err = u.AddSCSI(context.Background(), path, fmt.Sprintf("/run/gcs/c/0/scsi/%d", iteration), false)
+				_, _, err = u.AddSCSI(context.Background(), path, fmt.Sprintf("/run/gcs/c/0/scsi/%d", iteration), false)
 				if err != nil {
 					os.Remove(path)
 					t.Errorf("failed to AddSCSI for worker: %d, iteration: %d with err: %v", scsiIndex, iteration, err)
