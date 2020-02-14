@@ -127,7 +127,7 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 
 	hostPath := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
 	containerScratchPathInUVM := ospath.Join(uvm.OS(), guestRoot)
-	_, _, containerScratchPathInUVM, err = uvm.AddSCSI(ctx, hostPath, containerScratchPathInUVM, false)
+	_, _, err = uvm.AddSCSI(ctx, hostPath, containerScratchPathInUVM, false)
 	if err != nil {
 		return "", err
 	}

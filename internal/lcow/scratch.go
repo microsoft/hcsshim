@@ -66,7 +66,7 @@ func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string,
 		return fmt.Errorf("failed to create VHDx %s: %s", destFile, err)
 	}
 
-	controller, lun, _, err := lcowUVM.AddSCSI(ctx, destFile, "", false) // No destination as not formatted
+	controller, lun, err := lcowUVM.AddSCSI(ctx, destFile, "", false) // No destination as not formatted
 	if err != nil {
 		return err
 	}
