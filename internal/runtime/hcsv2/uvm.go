@@ -17,6 +17,7 @@ import (
 
 	"github.com/Microsoft/opengcs/internal/storage"
 	"github.com/Microsoft/opengcs/internal/storage/overlay"
+	"github.com/Microsoft/opengcs/internal/storage/pci"
 	"github.com/Microsoft/opengcs/internal/storage/plan9"
 	"github.com/Microsoft/opengcs/internal/storage/pmem"
 	"github.com/Microsoft/opengcs/internal/storage/scsi"
@@ -204,6 +205,8 @@ func (h *Host) ModifyHostSettings(ctx context.Context, settings *prot.ModifySett
 		return modifyCombinedLayers(ctx, settings.RequestType, settings.Settings.(*prot.CombinedLayersV2))
 	case prot.MrtNetwork:
 		return modifyNetwork(ctx, settings.RequestType, settings.Settings.(*prot.NetworkAdapterV2))
+	case prot.MrtVPCIDevice:
+		return modifyMappedVPCIDevice(ctx, settings.RequestType, settings.Settings.(*prot.MappedVPCIDeviceV2))
 	default:
 		return errors.Errorf("the ResourceType \"%s\" is not supported", settings.ResourceType)
 	}
@@ -357,6 +360,15 @@ func modifyMappedVPMemDevice(ctx context.Context, rt prot.ModifyRequestType, vpd
 		return pmem.Mount(ctx, vpd.DeviceNumber, vpd.MountPath)
 	case prot.MreqtRemove:
 		return storage.UnmountPath(ctx, vpd.MountPath, true)
+	default:
+		return newInvalidRequestTypeError(rt)
+	}
+}
+
+func modifyMappedVPCIDevice(ctx context.Context, rt prot.ModifyRequestType, vpciDev *prot.MappedVPCIDeviceV2) error {
+	switch rt {
+	case prot.MreqtAdd:
+		return pci.WaitForPCIDeviceFromVMBusGUID(ctx, vpciDev.VMBusGUID)
 	default:
 		return newInvalidRequestTypeError(rt)
 	}

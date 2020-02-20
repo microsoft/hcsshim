@@ -514,6 +514,8 @@ const (
 	MrtVPMemDevice = ModifyResourceType("VPMemDevice")
 	// MrtNetwork is the modify resource type for the `NetworkAdapterV2` device.
 	MrtNetwork = ModifyResourceType("Network")
+	// MrtVPCIDevice is the modify resource type for vpci devices
+	MrtVPCIDevice = ModifyResourceType("VPCIDevice")
 )
 
 // ModifyRequestType is the type of operation to perform on a given modify
@@ -659,6 +661,12 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 				return &request, errors.Wrap(err, "failed to unmarshal settings as NetworkAdapterV2")
 			}
 			msr.Settings = na
+		case MrtVPCIDevice:
+			vd := &MappedVPCIDeviceV2{}
+			if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, vd); err != nil {
+				return &request, errors.Wrap(err, "failed to unmarshal settings as MappedVPCIDeviceV2")
+			}
+			msr.Settings = vd
 		default:
 			return &request, errors.Errorf("invalid ResourceType '%s'", msr.ResourceType)
 		}
@@ -832,6 +840,10 @@ type MappedDirectoryV2 struct {
 type MappedVPMemDeviceV2 struct {
 	DeviceNumber uint32 `json:",omitempty"`
 	MountPath    string `json:",omitempty"`
+}
+
+type MappedVPCIDeviceV2 struct {
+	VMBusGUID string `json:",omitempty"`
 }
 
 // VMHostedContainerSettings is the set of settings used to specify the initial

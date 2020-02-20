@@ -21,7 +21,8 @@ GCS_TOOLS=\
 	vhd2tar \
 	exportSandbox \
 	netnscfg \
-	remotefs
+	remotefs \
+	nvidiaPrestartHook
 
 .PHONY: all always rootfs test
 

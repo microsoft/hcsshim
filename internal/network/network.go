@@ -14,6 +14,7 @@ import (
 
 	"github.com/Microsoft/opengcs/internal/log"
 	"github.com/Microsoft/opengcs/internal/oc"
+	"github.com/Microsoft/opengcs/internal/storage/vmbus"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 )
@@ -111,7 +112,9 @@ func InstanceIDToName(ctx context.Context, id string) (_ string, err error) {
 	id = strings.ToLower(id)
 	span.AddAttributes(trace.StringAttribute("adapterInstanceID", id))
 
-	devicePath := filepath.Join("/sys", "bus", "vmbus", "devices", id, "net")
+	vmBusSubPath := filepath.Join(id, "net")
+	devicePath, err := vmbus.WaitForDevicePath(ctx, vmBusSubPath)
+
 	var deviceDirs []os.FileInfo
 	for {
 		deviceDirs, err = ioutil.ReadDir(devicePath)
