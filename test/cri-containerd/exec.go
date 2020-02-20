@@ -17,7 +17,7 @@ func execSync(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Con
 	return response
 }
 
-func exec(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.ExecRequest) string {
+func execRequest(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.ExecRequest) string {
 	response, err := client.Exec(ctx, request)
 	if err != nil {
 		t.Fatalf("failed Exec request with: %v", err)

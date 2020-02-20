@@ -303,6 +303,66 @@ func Test_RunPodSandbox_MemorySize_LCOW(t *testing.T) {
 	runPodSandboxTest(t, request)
 }
 
+func Test_RunPodSandbox_MMIO_WCOW_Process(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.computetopology.memory.lowmmiogapinmb":   "100",
+				"io.microsoft.virtualmachine.computetopology.memory.highmmiobaseinmb": "100",
+				"io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb":  "100",
+			},
+		},
+		RuntimeHandler: wcowProcessRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_MMIO_WCOW_Hypervisor(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.computetopology.memory.lowmmiogapinmb":   "100",
+				"io.microsoft.virtualmachine.computetopology.memory.highmmiobaseinmb": "100",
+				"io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb":  "100",
+			},
+		},
+		RuntimeHandler: wcowHypervisorRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_MMIO_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.computetopology.memory.lowmmiogapinmb":   "100",
+				"io.microsoft.virtualmachine.computetopology.memory.highmmiobaseinmb": "100",
+				"io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb":  "100",
+			},
+		},
+		RuntimeHandler: lcowRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
 func Test_RunPodSandbox_CPUCount_WCOW_Process(t *testing.T) {
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
@@ -619,6 +679,42 @@ func Test_RunPodSandbox_RootfsVhdBoot_LCOW(t *testing.T) {
 			},
 			Annotations: map[string]string{
 				"io.microsoft.virtualmachine.lcow.preferredrootfstype": "vhd",
+			},
+		},
+		RuntimeHandler: lcowRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_VPCIEnabled_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.lcow.vpcienabled": "true",
+			},
+		},
+		RuntimeHandler: lcowRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_UEFIBoot_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.lcow.kerneldirectboot": "false",
 			},
 		},
 		RuntimeHandler: lcowRuntimeHandler,

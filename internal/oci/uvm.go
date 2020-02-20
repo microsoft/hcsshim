@@ -78,15 +78,20 @@ const (
 	// used via OCI runtimes and rather use
 	// `spec.Windows.Resources.Storage.Iops`.
 	AnnotationContainerStorageQoSIopsMaximum = "io.microsoft.container.storage.qos.iopsmaximum"
-	annotationAllowOvercommit                = "io.microsoft.virtualmachine.computetopology.memory.allowovercommit"
-	annotationEnableDeferredCommit           = "io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit"
-	annotationEnableColdDiscardHint          = "io.microsoft.virtualmachine.computetopology.memory.enablecolddiscardhint"
+	// AnnotationGPUVHDPath overrides the default path to search for the gpu vhd
+	AnnotationGPUVHDPath            = "io.microsoft.lcow.gpuvhdpath"
+	annotationAllowOvercommit       = "io.microsoft.virtualmachine.computetopology.memory.allowovercommit"
+	annotationEnableDeferredCommit  = "io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit"
+	annotationEnableColdDiscardHint = "io.microsoft.virtualmachine.computetopology.memory.enablecolddiscardhint"
 	// annotationMemorySizeInMB overrides the container memory size set via the
 	// OCI spec.
 	//
 	// Note: This annotation is in MB. OCI is in Bytes. When using this override
 	// the caller MUST use MB or sizing will be wrong.
-	annotationMemorySizeInMB = "io.microsoft.virtualmachine.computetopology.memory.sizeinmb"
+	annotationMemorySizeInMB         = "io.microsoft.virtualmachine.computetopology.memory.sizeinmb"
+	annotationMemoryLowMMIOGapInMB   = "io.microsoft.virtualmachine.computetopology.memory.lowmmiogapinmb"
+	annotationMemoryHighMMIOBaseInMB = "io.microsoft.virtualmachine.computetopology.memory.highmmiobaseinmb"
+	annotationMemoryHighMMIOGapInMB  = "io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb"
 	// annotationProcessorCount overrides the hypervisor isolated vCPU count set
 	// via the OCI spec.
 	//
@@ -114,6 +119,8 @@ const (
 	annotationVPMemSize                  = "io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes"
 	annotationPreferredRootFSType        = "io.microsoft.virtualmachine.lcow.preferredrootfstype"
 	annotationBootFilesRootPath          = "io.microsoft.virtualmachine.lcow.bootfilesrootpath"
+	annotationKernelDirectBoot           = "io.microsoft.virtualmachine.lcow.kerneldirectboot"
+	annotationVPCIEnabled                = "io.microsoft.virtualmachine.lcow.vpcienabled"
 	annotationStorageQoSBandwidthMaximum = "io.microsoft.virtualmachine.storageqos.bandwidthmaximum"
 	annotationStorageQoSIopsMaximum      = "io.microsoft.virtualmachine.storageqos.iopsmaximum"
 )
@@ -315,6 +322,9 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 	if IsLCOW(s) {
 		lopts := uvm.NewDefaultOptionsLCOW(id, owner)
 		lopts.MemorySizeInMB = ParseAnnotationsMemory(ctx, s, annotationMemorySizeInMB, lopts.MemorySizeInMB)
+		lopts.LowMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, annotationMemoryLowMMIOGapInMB, lopts.LowMMIOGapInMB)
+		lopts.HighMMIOBaseInMB = parseAnnotationsUint64(ctx, s.Annotations, annotationMemoryHighMMIOBaseInMB, lopts.HighMMIOBaseInMB)
+		lopts.HighMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, annotationMemoryHighMMIOGapInMB, lopts.HighMMIOGapInMB)
 		lopts.AllowOvercommit = parseAnnotationsBool(ctx, s.Annotations, annotationAllowOvercommit, lopts.AllowOvercommit)
 		lopts.EnableDeferredCommit = parseAnnotationsBool(ctx, s.Annotations, annotationEnableDeferredCommit, lopts.EnableDeferredCommit)
 		lopts.EnableColdDiscardHint = parseAnnotationsBool(ctx, s.Annotations, annotationEnableColdDiscardHint, lopts.EnableColdDiscardHint)
@@ -332,11 +342,19 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		case uvm.PreferredRootFSTypeVHD:
 			lopts.RootFSFile = uvm.VhdFile
 		}
+		lopts.VPCIEnabled = parseAnnotationsBool(ctx, s.Annotations, annotationVPCIEnabled, lopts.VPCIEnabled)
+		lopts.KernelDirect = parseAnnotationsBool(ctx, s.Annotations, annotationKernelDirectBoot, lopts.KernelDirect)
+		if !lopts.KernelDirect {
+			lopts.KernelFile = uvm.KernelFile
+		}
 		lopts.BootFilesPath = parseAnnotationsString(s.Annotations, annotationBootFilesRootPath, lopts.BootFilesPath)
 		return lopts, nil
 	} else if IsWCOW(s) {
 		wopts := uvm.NewDefaultOptionsWCOW(id, owner)
 		wopts.MemorySizeInMB = ParseAnnotationsMemory(ctx, s, annotationMemorySizeInMB, wopts.MemorySizeInMB)
+		wopts.LowMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, annotationMemoryLowMMIOGapInMB, wopts.LowMMIOGapInMB)
+		wopts.HighMMIOBaseInMB = parseAnnotationsUint64(ctx, s.Annotations, annotationMemoryHighMMIOBaseInMB, wopts.HighMMIOBaseInMB)
+		wopts.HighMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, annotationMemoryHighMMIOGapInMB, wopts.HighMMIOGapInMB)
 		wopts.AllowOvercommit = parseAnnotationsBool(ctx, s.Annotations, annotationAllowOvercommit, wopts.AllowOvercommit)
 		wopts.EnableDeferredCommit = parseAnnotationsBool(ctx, s.Annotations, annotationEnableDeferredCommit, wopts.EnableDeferredCommit)
 		wopts.ProcessorCount = ParseAnnotationsCPUCount(ctx, s, annotationProcessorCount, wopts.ProcessorCount)
@@ -366,6 +384,10 @@ func UpdateSpecFromOptions(s specs.Spec, opts *runhcsopts.Options) specs.Spec {
 
 	if _, ok := s.Annotations[annotationMemorySizeInMB]; !ok && opts.VmMemorySizeInMb != 0 {
 		s.Annotations[annotationMemorySizeInMB] = strconv.FormatInt(int64(opts.VmMemorySizeInMb), 10)
+	}
+
+	if _, ok := s.Annotations[AnnotationGPUVHDPath]; !ok && opts.GPUVHDPath != "" {
+		s.Annotations[AnnotationGPUVHDPath] = opts.GPUVHDPath
 	}
 
 	return s
