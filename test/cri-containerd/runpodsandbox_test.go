@@ -6,11 +6,16 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/lcow"
+	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	runtime "k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2"
 )
 
@@ -972,11 +977,149 @@ func Test_RunPodSandbox_Mount_SandboxDir_LCOW(t *testing.T) {
 	//TODO: Parse the output of the exec command to make sure the uvm mount was successful
 }
 
+func createExt4VHD(ctx context.Context, t *testing.T, path string) {
+	uvm := testutilities.CreateLCOWUVM(ctx, t, t.Name()+"-createExt4VHD")
+	defer uvm.Close()
+
+	if err := lcow.CreateScratch(ctx, uvm, path, 2, ""); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func Test_RunPodSandbox_MultipleContainersSameVhd_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	annotations := map[string]string{
+		"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "true",
+	}
+
+	// Create a temporary ext4 VHD to mount into the container.
+	vhdHostDir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("failed to create temp directory: %s", err)
+	}
+	defer os.RemoveAll(vhdHostDir)
+	vhdHostPath := filepath.Join(vhdHostDir, "temp.vhdx")
+	createExt4VHD(ctx, t, vhdHostPath)
+
+	vhdContainerPath := "/containerDir"
+
+	mounts := []*runtime.Mount{
+		{
+			HostPath:      "vhd://" + vhdHostPath,
+			ContainerPath: vhdContainerPath,
+		},
+	}
+
+	sbRequest := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: annotations,
+		},
+		RuntimeHandler: lcowRuntimeHandler,
+	}
+
+	podID := runPodSandbox(t, client, ctx, sbRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	execCommand := []string{
+		"ls",
+		vhdContainerPath,
+	}
+
+	command := []string{
+		"top",
+	}
+
+	// create 2 containers with vhd mounts and verify both can mount vhd
+	for i := 1; i < 3; i++ {
+		containerName := t.Name() + "-Container-" + strconv.Itoa(i)
+		containerId := createContainerInSandbox(t, client, ctx, podID, containerName, imageLcowAlpine, command, annotations, mounts, sbRequest.Config)
+		defer removeContainer(t, client, ctx, containerId)
+
+		startContainer(t, client, ctx, containerId)
+		defer stopContainer(t, client, ctx, containerId)
+
+		_, errorMsg, exitCode := execContainer(t, client, ctx, containerId, execCommand)
+
+		// For container 1 and 2 we should find the mounts
+		if exitCode != 0 {
+			t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerId)
+		}
+	}
+
+	// For the 3rd container don't add any mounts
+	// this makes sure you can have containers that share vhd mounts and
+	// at the same time containers in a pod that don't have any mounts
+	mounts = []*runtime.Mount{}
+	containerName := t.Name() + "-Container-3"
+	containerId := createContainerInSandbox(t, client, ctx, podID, containerName, imageLcowAlpine, command, annotations, mounts, sbRequest.Config)
+	defer removeContainer(t, client, ctx, containerId)
+
+	startContainer(t, client, ctx, containerId)
+	defer stopContainer(t, client, ctx, containerId)
+
+	output, errorMsg, exitCode := execContainer(t, client, ctx, containerId, execCommand)
+
+	// 3rd container should not have the mount and ls should fail
+	if exitCode == 0 {
+		t.Fatalf("Exec into container succeeded but we expected it to fail: %v and exit code: %s, %s", errorMsg, output, containerId)
+	}
+}
+
 func createSandboxContainerAndExecForCustomScratch(t *testing.T, annotations map[string]string) (string, string, int) {
 	cmd := []string{
 		"df",
 	}
 	return createSandboxContainerAndExec(t, annotations, nil, cmd)
+}
+
+func createContainerInSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, podId, containerName, imageName string, command []string,
+	annotations map[string]string, mounts []*runtime.Mount, podConfig *runtime.PodSandboxConfig) string {
+
+	cRequest := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: containerName,
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageName,
+			},
+			Command:     command,
+			Annotations: annotations,
+			Mounts:      mounts,
+		},
+		PodSandboxId:  podId,
+		SandboxConfig: podConfig,
+	}
+
+	containerID := createContainer(t, client, ctx, cRequest)
+
+	return containerID
+}
+
+func execContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerId string, command []string) (string, string, int) {
+	execRequest := &runtime.ExecSyncRequest{
+		ContainerId: containerId,
+		Cmd:         command,
+		Timeout:     20,
+	}
+
+	r := execSync(t, client, ctx, execRequest)
+	output := strings.TrimSpace(string(r.Stdout))
+	errorMsg := string(r.Stderr)
+	exitCode := int(r.ExitCode)
+
+	return output, errorMsg, exitCode
 }
 
 func createSandboxContainerAndExec(t *testing.T, annotations map[string]string, mounts []*runtime.Mount, execCommand []string) (output string, errorMsg string, exitCode int) {

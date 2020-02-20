@@ -54,7 +54,7 @@ func getWindowsNanoserverImage(build uint16) string {
 	case osversion.V19H1:
 		return "mcr.microsoft.com/windows/nanoserver:1903"
 	default:
-		panic("unspported build")
+		panic("unsupported build")
 	}
 }
 
@@ -65,7 +65,7 @@ func getWindowsServerCoreImage(build uint16) string {
 	case osversion.V19H1:
 		return "mcr.microsoft.com/windows/servercore:1903"
 	default:
-		panic("unspported build")
+		panic("unsupported build")
 	}
 }
 
