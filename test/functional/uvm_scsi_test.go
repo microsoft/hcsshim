@@ -22,8 +22,7 @@ import (
 )
 
 // TestSCSIAddRemovev2LCOW validates adding and removing SCSI disks
-// from a utility VM in both attach-only and with a container path. Also does
-// negative testing so that a disk can't be attached twice.
+// from a utility VM in both attach-only and with a container path.
 func TestSCSIAddRemoveLCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 	u := testutilities.CreateLCOWUVM(context.Background(), t, t.Name())
@@ -34,8 +33,7 @@ func TestSCSIAddRemoveLCOW(t *testing.T) {
 }
 
 // TestSCSIAddRemoveWCOW validates adding and removing SCSI disks
-// from a utility VM in both attach-only and with a container path. Also does
-// negative testing so that a disk can't be attached twice.
+// from a utility VM in both attach-only and with a container path.
 func TestSCSIAddRemoveWCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 	u, layers, uvmScratchDir := testutilities.CreateWCOWUVM(context.Background(), t, t.Name(), "microsoft/nanoserver")
@@ -67,21 +65,24 @@ func testSCSIAddRemove(t *testing.T, u *uvm.UtilityVM, pathPrefix string, operat
 	// Add each of the disks to the utility VM. Attach-only, no container path
 	logrus.Debugln("First - adding in attach-only")
 	for i := 0; i < numDisks; i++ {
-		_, _, _, err := u.AddSCSI(context.Background(), disks[i], "", false)
+		_, _, _, err := u.AddSCSI(context.Background(), disks[i], fmt.Sprintf(`%s%d`, pathPrefix, i), false)
 		if err != nil {
 			t.Fatalf("failed to add scsi disk %d %s: %s", i, disks[i], err)
 		}
 	}
 
-	// Try to re-add. These should all fail.
-	logrus.Debugln("Next - trying to re-add")
-	for i := 0; i < numDisks; i++ {
-		_, _, _, err := u.AddSCSI(context.Background(), disks[i], "", false)
-		if err == nil {
-			t.Fatalf("should not be able to re-add the same SCSI disk!")
-		}
-		if err != uvm.ErrAlreadyAttached {
-			t.Fatalf("expecting %s, got %s", uvm.ErrAlreadyAttached, err)
+	// Try to re-add.
+	// We only support re-adding the same scsi device for lcow right now
+	if operatingSystem != "windows" {
+		logrus.Debugln("Next - trying to re-add")
+		for i := 0; i < numDisks; i++ {
+			_, _, existingPath, err := u.AddSCSI(context.Background(), disks[i], fmt.Sprintf(`%s%d`, pathPrefix, i), false)
+			if err != nil {
+				t.Fatalf("expecting no error re-adding device, instead got %v", err)
+			}
+			if existingPath == "" {
+				t.Fatal("expecting existing path to not be empty but it is")
+			}
 		}
 	}
 

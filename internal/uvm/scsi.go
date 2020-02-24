@@ -36,14 +36,12 @@ func (uvm *UtilityVM) allocateSCSI(ctx context.Context, hostPath string, uvmPath
 				uvm.scsiLocations[controller][lun].hostPath = hostPath
 				uvm.scsiLocations[controller][lun].uvmPath = uvmPath
 				uvm.scsiLocations[controller][lun].isLayer = isLayer
-				if isLayer {
-					uvm.scsiLocations[controller][lun].refCount = 1
-				}
+				uvm.scsiLocations[controller][lun].refCount = 1
 				log.G(ctx).WithFields(logrus.Fields{
 					"hostPath":   hostPath,
 					"uvmPath":    uvmPath,
 					"isLayer":    isLayer,
-					"refCount":   0,
+					"refCount":   1,
 					"controller": controller,
 					"lun":        lun,
 				}).Debug("allocated SCSI location")
