@@ -189,7 +189,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, res
 		if err != nil {
 			return errors.Wrapf(err, "failed to add scsi device %s in the UVM %s at %s", gpuSupportVhdPath, coi.HostingSystem.ID(), lcowNvidiaMountPath)
 		}
-		resources.scsiMounts = append(resources.scsiMounts, scsiMount{path: lcowNvidiaMountPath})
+		resources.scsiMounts = append(resources.scsiMounts, scsiMount{path: gpuSupportVhdPath})
 	}
 
 	return nil

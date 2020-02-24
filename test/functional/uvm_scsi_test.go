@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -28,7 +29,7 @@ func TestSCSIAddRemoveLCOW(t *testing.T) {
 	u := testutilities.CreateLCOWUVM(context.Background(), t, t.Name())
 	defer u.Close()
 
-	testSCSIAddRemove(t, u, `/run/gcs/c/0/scsi`, "linux", []string{})
+	testSCSIAddRemoveMultiple(t, u, `/run/gcs/c/0/scsi`, "linux", []string{})
 
 }
 
@@ -36,14 +37,43 @@ func TestSCSIAddRemoveLCOW(t *testing.T) {
 // from a utility VM in both attach-only and with a container path.
 func TestSCSIAddRemoveWCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	u, layers, uvmScratchDir := testutilities.CreateWCOWUVM(context.Background(), t, t.Name(), "microsoft/nanoserver")
+	// TODO make the image configurable to the build we're testing on
+	u, layers, uvmScratchDir := testutilities.CreateWCOWUVM(context.Background(), t, t.Name(), "mcr.microsoft.com/windows/nanoserver:1903")
 	defer os.RemoveAll(uvmScratchDir)
 	defer u.Close()
 
-	testSCSIAddRemove(t, u, `c:\`, "windows", layers)
+	testSCSIAddRemoveSingle(t, u, `c:\`, "windows", layers)
 }
 
-func testSCSIAddRemove(t *testing.T, u *uvm.UtilityVM, pathPrefix string, operatingSystem string, wcowImageLayerFolders []string) {
+func testAddSCSI(u *uvm.UtilityVM, disks []string, pathPrefix string, usePath bool, reAdd bool) error {
+	for i := range disks {
+		uvmPath := ""
+		if usePath {
+			uvmPath = fmt.Sprintf(`%s%d`, pathPrefix, i)
+		}
+		_, _, existingPath, err := u.AddSCSI(context.Background(), disks[i], uvmPath, false)
+		if err != nil {
+			return err
+		}
+		if reAdd && existingPath != uvmPath {
+			return fmt.Errorf("expecting existing path to be %s but it is %s", uvmPath, existingPath)
+		}
+	}
+	return nil
+}
+
+func testRemoveAllSCSI(u *uvm.UtilityVM, disks []string) error {
+	for i := range disks {
+		if err := u.RemoveSCSI(context.Background(), disks[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// TODO this test is only needed until WCOW supports adding the same scsi device to
+// multiple containers
+func testSCSIAddRemoveSingle(t *testing.T, u *uvm.UtilityVM, pathPrefix string, operatingSystem string, wcowImageLayerFolders []string) {
 	numDisks := 63 // Windows: 63 as the UVM scratch is at 0:0
 	if operatingSystem == "linux" {
 		numDisks++ //
@@ -63,61 +93,119 @@ func testSCSIAddRemove(t *testing.T, u *uvm.UtilityVM, pathPrefix string, operat
 	}
 
 	// Add each of the disks to the utility VM. Attach-only, no container path
+	useUvmPathPrefix := false
 	logrus.Debugln("First - adding in attach-only")
-	for i := 0; i < numDisks; i++ {
-		_, _, _, err := u.AddSCSI(context.Background(), disks[i], fmt.Sprintf(`%s%d`, pathPrefix, i), false)
-		if err != nil {
-			t.Fatalf("failed to add scsi disk %d %s: %s", i, disks[i], err)
-		}
-	}
-
-	// Try to re-add.
-	// We only support re-adding the same scsi device for lcow right now
-	if operatingSystem != "windows" {
-		logrus.Debugln("Next - trying to re-add")
-		for i := 0; i < numDisks; i++ {
-			_, _, existingPath, err := u.AddSCSI(context.Background(), disks[i], fmt.Sprintf(`%s%d`, pathPrefix, i), false)
-			if err != nil {
-				t.Fatalf("expecting no error re-adding device, instead got %v", err)
-			}
-			if existingPath == "" {
-				t.Fatal("expecting existing path to not be empty but it is")
-			}
-		}
+	err := testAddSCSI(u, disks, pathPrefix, useUvmPathPrefix, false)
+	if err != nil {
+		t.Fatalf("failed to add SCSI device: %v", err)
 	}
 
 	// Remove them all
 	logrus.Debugln("Removing them all")
+	err = testRemoveAllSCSI(u, disks)
+	if err != nil {
+		t.Fatalf("failed to remove SCSI disk: %v", err)
+	}
+
+	// Now re-add but providing a container path
+	useUvmPathPrefix = true
+	logrus.Debugln("Next - re-adding with a container path")
+	err = testAddSCSI(u, disks, pathPrefix, useUvmPathPrefix, false)
+	if err != nil {
+		t.Fatalf("failed to add SCSI device: %v", err)
+	}
+
+	logrus.Debugln("Next - Removing them")
+	err = testRemoveAllSCSI(u, disks)
+	if err != nil {
+		t.Fatalf("failed to remove SCSI disk: %v", err)
+	}
+
+	// TODO: Could extend to validate can't add a 64th disk (windows). 65th (linux).
+}
+
+func testSCSIAddRemoveMultiple(t *testing.T, u *uvm.UtilityVM, pathPrefix string, operatingSystem string, wcowImageLayerFolders []string) {
+	numDisks := 63 // Windows: 63 as the UVM scratch is at 0:0
+	if operatingSystem == "linux" {
+		numDisks++ //
+	}
+
+	// Create a bunch of directories each containing sandbox.vhdx
+	disks := make([]string, numDisks)
 	for i := 0; i < numDisks; i++ {
-		if err := u.RemoveSCSI(context.Background(), disks[i]); err != nil {
-			t.Fatalf("expected success: %s", err)
+		tempDir := ""
+		if operatingSystem == "windows" {
+			tempDir = testutilities.CreateWCOWBlankRWLayer(t, wcowImageLayerFolders)
+		} else {
+			tempDir = testutilities.CreateLCOWBlankRWLayer(context.Background(), t)
 		}
+		defer os.RemoveAll(tempDir)
+		disks[i] = filepath.Join(tempDir, `sandbox.vhdx`)
+	}
+
+	// Add each of the disks to the utility VM. Attach-only, no container path
+	useUvmPathPrefix := false
+	logrus.Debugln("First - adding in attach-only")
+	err := testAddSCSI(u, disks, pathPrefix, useUvmPathPrefix, false)
+	if err != nil {
+		t.Fatalf("failed to add SCSI device: %v", err)
+	}
+
+	// Try to re-add.
+	// We only support re-adding the same scsi device for lcow right now
+	logrus.Debugln("Next - trying to re-add")
+	err = testAddSCSI(u, disks, pathPrefix, useUvmPathPrefix, true)
+	if err != nil {
+		t.Fatalf("failed to re-add SCSI device: %v", err)
+	}
+
+	// Remove them all
+	logrus.Debugln("Removing them all")
+	// first removal decrements ref count
+	err = testRemoveAllSCSI(u, disks)
+	if err != nil {
+		t.Fatalf("failed to remove SCSI disk: %v", err)
+	}
+	// second removal actually removes the device
+	err = testRemoveAllSCSI(u, disks)
+	if err != nil {
+		t.Fatalf("failed to remove SCSI disk: %v", err)
 	}
 
 	// Now re-add but providing a container path
 	logrus.Debugln("Next - re-adding with a container path")
-	for i := 0; i < numDisks; i++ {
-		_, _, _, err := u.AddSCSI(context.Background(), disks[i], fmt.Sprintf(`%s%d`, pathPrefix, i), false)
-		if err != nil {
-			t.Fatalf("failed to add scsi disk %d %s: %s", i, disks[i], err)
-		}
+	useUvmPathPrefix = true
+	err = testAddSCSI(u, disks, pathPrefix, useUvmPathPrefix, false)
+	if err != nil {
+		t.Fatalf("failed to add SCSI device: %v", err)
 	}
 
-	// Try to re-add. These should all fail.
+	// Try to re-add
 	logrus.Debugln("Next - trying to re-add")
-	for i := 0; i < numDisks; i++ {
-		_, _, existingPath, err := u.AddSCSI(context.Background(), disks[i], fmt.Sprintf(`%s%d`, pathPrefix, i), false)
-
-		if existingPath == "" {
-			t.Fatalf("expecting existing path to not be empty but it is %s", err)
-		}
+	err = testAddSCSI(u, disks, pathPrefix, useUvmPathPrefix, true)
+	if err != nil {
+		t.Fatalf("failed to add SCSI device: %v", err)
 	}
 
-	// Remove them all
 	logrus.Debugln("Next - Removing them")
+	// first removal decrements ref count
+	err = testRemoveAllSCSI(u, disks)
+	if err != nil {
+		t.Fatalf("failed to remove SCSI disk: %v", err)
+	}
+	// second removal actually removes the device
+	err = testRemoveAllSCSI(u, disks)
+	if err != nil {
+		t.Fatalf("failed to remove SCSI disk: %v", err)
+	}
+
+	// check the devices are no longer present on the uvm
+	targetNamespace := "k8s.io"
 	for i := 0; i < numDisks; i++ {
-		if err := u.RemoveSCSI(context.Background(), disks[i]); err != nil {
-			t.Fatalf("expected success: %s", err)
+		uvmPath := fmt.Sprintf(`%s%d`, pathPrefix, i)
+		out, err := exec.Command(`shimdiag.exe`, `exec`, targetNamespace, `ls`, uvmPath).Output()
+		if err == nil {
+			t.Fatalf("expected to no longer have scsi device files, instead returned %s", string(out))
 		}
 	}
 
