@@ -27,7 +27,7 @@ func findTestVirtualDevice() (string, error) {
 }
 
 func TestVirtualDevice(t *testing.T) {
-	testutilities.RequiresBuild(t, 19516)
+	testutilities.RequiresBuild(t, 19566)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
