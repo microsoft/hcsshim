@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/lcow"
+	"github.com/Microsoft/hcsshim/osversion"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	runtime "k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2"
 )
@@ -309,6 +310,9 @@ func Test_RunPodSandbox_MemorySize_LCOW(t *testing.T) {
 }
 
 func Test_RunPodSandbox_MMIO_WCOW_Process(t *testing.T) {
+	if osversion.Get().Build < 19566 {
+		t.Skip("Requires build +19566")
+	}
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
@@ -329,6 +333,9 @@ func Test_RunPodSandbox_MMIO_WCOW_Process(t *testing.T) {
 }
 
 func Test_RunPodSandbox_MMIO_WCOW_Hypervisor(t *testing.T) {
+	if osversion.Get().Build < 19566 {
+		t.Skip("Requires build +19566")
+	}
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	request := &runtime.RunPodSandboxRequest{
@@ -349,6 +356,9 @@ func Test_RunPodSandbox_MMIO_WCOW_Hypervisor(t *testing.T) {
 }
 
 func Test_RunPodSandbox_MMIO_LCOW(t *testing.T) {
+	if osversion.Get().Build < 19566 {
+		t.Skip("Requires build +19566")
+	}
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
 	request := &runtime.RunPodSandboxRequest{

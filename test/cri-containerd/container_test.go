@@ -218,8 +218,8 @@ func Test_RunContainer_Events_LCOW(t *testing.T) {
 }
 
 func Test_RunContainer_VirtualDevice_GPU_LCOW(t *testing.T) {
-	if osversion.Get().Build < 19516 {
-		t.Skip("Requires build +19516")
+	if osversion.Get().Build < 19566 {
+		t.Skip("Requires build +19566")
 	}
 
 	testDeviceInstanceID, err := findTestNvidiaGPUDevice()
