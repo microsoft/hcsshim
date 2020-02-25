@@ -36,6 +36,7 @@ const (
 	imageLcowK8sPause                 = "k8s.gcr.io/pause:3.1"
 	imageLcowAlpine                   = "docker.io/library/alpine:latest"
 	imageLcowCosmos                   = "cosmosarno/spark-master:2.4.1_2019-04-18_8e864ce"
+	testGPUBootFiles                  = "C:\\ContainerPlat\\LinuxBootFiles\\nvidiagpu"
 )
 
 var (

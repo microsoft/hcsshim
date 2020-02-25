@@ -250,6 +250,7 @@ func Test_RunContainer_VirtualDevice_GPU_LCOW(t *testing.T) {
 				// if a given gpu device needs more, this test will fail to create the container
 				// and may hang.
 				"io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb": "64000",
+				"io.microsoft.virtualmachine.lcow.bootfilesrootpath":                 testGPUBootFiles,
 			},
 		},
 		RuntimeHandler: lcowRuntimeHandler,
@@ -289,7 +290,6 @@ func Test_RunContainer_VirtualDevice_GPU_LCOW(t *testing.T) {
 	defer cancel()
 	containerID := createContainer(t, client, ctx, containerRequest)
 	defer removeContainer(t, client, ctx, containerID)
-
 	startContainer(t, client, ctx, containerID)
 	defer stopContainer(t, client, ctx, containerID)
 
