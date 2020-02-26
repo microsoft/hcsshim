@@ -416,14 +416,18 @@ func (b *Bridge) waitOnProcessV2(r *Request) (_ RequestResponse, err error) {
 	// If we timed out or if we got the exit code. Acknowledge we no longer want to wait.
 	defer close(doneChan)
 
-	t := time.NewTimer(time.Duration(request.TimeoutInMs) * time.Millisecond)
-	defer t.Stop()
+	var tc <-chan time.Time
+	if request.TimeoutInMs != prot.InfiniteWaitTimeout {
+		t := time.NewTimer(time.Duration(request.TimeoutInMs) * time.Millisecond)
+		defer t.Stop()
+		tc = t.C
+	}
 	select {
 	case exitCode := <-exitCodeChan:
 		return &prot.ContainerWaitForProcessResponse{
 			ExitCode: uint32(exitCode),
 		}, nil
-	case <-t.C:
+	case <-tc:
 		return nil, gcserr.NewHresultError(gcserr.HvVmcomputeTimeout)
 	}
 }

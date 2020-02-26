@@ -425,11 +425,13 @@ type ContainerResizeConsole struct {
 // response should not be sent until the process has exited.
 type ContainerWaitForProcess struct {
 	MessageBase
-	ProcessID uint32 `json:"ProcessId"`
-	// TimeoutInMs is currently ignored, since timeouts are handled on the host
-	// side.
+	ProcessID   uint32 `json:"ProcessId"`
 	TimeoutInMs uint32
 }
+
+// InfiniteWaitTimeout is the value for ContainerWaitForProcess.TimeoutInMs that
+// indicates that no timeout should be in effect.
+const InfiniteWaitTimeout = 0xffffffff
 
 // ContainerSignalProcess is the message from the HCS specifying to send a
 // signal to the given process.
