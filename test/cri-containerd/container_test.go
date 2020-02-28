@@ -308,3 +308,60 @@ func Test_RunContainer_VirtualDevice_GPU_LCOW(t *testing.T) {
 		t.Fatal("expected to see GPU device on container, not present")
 	}
 }
+
+func Test_RunContainer_ForksThenExits_ShowsAsExited_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	podRequest := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Namespace: testNamespace,
+			},
+		},
+		RuntimeHandler: lcowRuntimeHandler,
+	}
+	podID := runPodSandbox(t, client, ctx, podRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	containerRequest := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			Command: []string{
+				// Fork a background process (that runs forever), then exit.
+				"ash",
+				"-c",
+				"ash -c 'while true; do echo foo; sleep 1; done' &",
+			},
+			Linux: &runtime.LinuxContainerConfig{},
+		},
+		PodSandboxId:  podID,
+		SandboxConfig: podRequest.Config,
+	}
+	containerID := createContainer(t, client, ctx, containerRequest)
+	defer removeContainer(t, client, ctx, containerID)
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID)
+
+	// Give the container init time to exit.
+	time.Sleep(5 * time.Second)
+
+	// Validate that the container shows as exited. Once the container init
+	// dies, the forked background process should be killed off.
+	statusResponse, err := client.ContainerStatus(ctx, &runtime.ContainerStatusRequest{ContainerId: containerID})
+	if err != nil {
+		t.Fatalf("failed to get container status: %v", err)
+	}
+	if statusResponse.Status.State != runtime.ContainerState_CONTAINER_EXITED {
+		t.Fatalf("container expected to be exited but is in state %s", statusResponse.Status.State)
+	}
+}
