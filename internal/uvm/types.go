@@ -122,4 +122,9 @@ type UtilityVM struct {
 	// We only need to look up the vmmem process once, then we keep a handle
 	// open.
 	vmmemOnce sync.Once
+
+	// mountCounter is the number of mounts that have been added to the UVM
+	// This is used in generating unique mount path inside UVM for every mount.
+	// Access to this variable should be done atomically.
+	mountCounter uint64
 }
