@@ -99,7 +99,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, res
 			l := log.G(ctx).WithField("mount", fmt.Sprintf("%+v", mount))
 			if mount.Type == "physical-disk" {
 				l.Debug("hcsshim::allocateLinuxResources Hot-adding SCSI physical disk for OCI mount")
-				uvmPathForShare = fmt.Sprintf(lcowGlobalMountPrefix, i)
+				uvmPathForShare = fmt.Sprintf(lcowGlobalMountPrefix, coi.HostingSystem.UVMMountCounter())
 				_, _, uvmPath, err := coi.HostingSystem.AddSCSIPhysicalDisk(ctx, hostPath, uvmPathForShare, readOnly)
 				if err != nil {
 					return fmt.Errorf("adding SCSI physical disk mount %+v: %s", mount, err)
@@ -111,7 +111,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, res
 				coi.Spec.Mounts[i].Type = "none"
 			} else if mount.Type == "virtual-disk" || mount.Type == "automanage-virtual-disk" {
 				l.Debug("hcsshim::allocateLinuxResources Hot-adding SCSI virtual disk for OCI mount")
-				uvmPathForShare = fmt.Sprintf(lcowGlobalMountPrefix, i)
+				uvmPathForShare = fmt.Sprintf(lcowGlobalMountPrefix, coi.HostingSystem.UVMMountCounter())
 
 				// if the scsi device is already attached then we take the uvm path that the function below returns
 				// that is where it was previously mounted in UVM
