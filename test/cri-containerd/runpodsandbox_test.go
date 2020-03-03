@@ -1081,16 +1081,12 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_LCOW(t *testing.T) {
 		containerName := t.Name() + "-Container-" + strconv.Itoa(i)
 		containerId := createContainerInSandbox(t, client, ctx, podID, containerName, imageLcowAlpine, command, annotations, mounts, sbRequest.Config)
 		defer removeContainer(t, client, ctx, containerId)
-		t.Log("container ", i, " created")
 
 		startContainer(t, client, ctx, containerId)
 		defer stopContainer(t, client, ctx, containerId)
 
-		t.Log("container ", i, " started")
-
 		_, errorMsg, exitCode := execContainer(t, client, ctx, containerId, execCommand)
 
-		t.Log("container ", i, " exec done")
 		// For container 1 and 2 we should find the mounts
 		if exitCode != 0 {
 			t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerId)
