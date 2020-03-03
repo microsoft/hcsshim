@@ -19,6 +19,8 @@ import (
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
+const wcowGlobalMountPrefix = "C:\\mounts\\m%d"
+
 func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, resources *Resources) error {
 	if coi.Spec == nil || coi.Spec.Windows == nil || coi.Spec.Windows.LayerFolders == nil {
 		return fmt.Errorf("field 'Spec.Windows.Layerfolders' is not populated")
@@ -77,8 +79,7 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 		}
 
 		if coi.HostingSystem != nil && schemaversion.IsV21(coi.actualSchemaVersion) {
-			uvmPath := fmt.Sprintf("C:\\%s\\%d", coi.actualID, i)
-
+			uvmPath := fmt.Sprintf(wcowGlobalMountPrefix, coi.HostingSystem.UVMMountCounter())
 			readOnly := false
 			for _, o := range mount.Options {
 				if strings.ToLower(o) == "ro" {
