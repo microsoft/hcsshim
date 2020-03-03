@@ -58,11 +58,11 @@ func TestVirtualDevice(t *testing.T) {
 			},
 		},
 	}
-	busGUID, err := vm.AssignDevice(ctx, dev)
+	vpci, err := vm.AssignDevice(ctx, dev)
 	if err != nil {
 		t.Fatalf("failed to assign device %s with %v", testDeviceInstanceID, err)
 	}
-	if err := vm.RemoveDevice(ctx, busGUID); err != nil {
+	if err := vm.RemoveDevice(ctx, vpci.ID); err != nil {
 		t.Fatalf("failed to remove device %s with %v", testDeviceInstanceID, err)
 	}
 }
