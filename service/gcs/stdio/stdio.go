@@ -41,7 +41,8 @@ func (s *ConnectionSet) Close() error {
 	return err
 }
 
-// FileSet contains os.File fields for stdio.
+// FileSet represents the stdio of a process. It contains os.File types for
+// in, out, err.
 type FileSet struct {
 	In, Out, Err *os.File
 }

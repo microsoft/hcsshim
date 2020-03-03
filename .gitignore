@@ -26,6 +26,7 @@ service/pkg/
 bin/*
 rootfs/*
 *.o
+/build/
 
 deps/*
 out/*
