@@ -44,11 +44,11 @@ func TestScratchCreateLCOW(t *testing.T) {
 	}
 
 	// Make sure it can be added (verifies it has access correctly)
-	c, l, _, err := targetUVM.AddSCSI(context.Background(), destTwo, "", false)
+	scsiMount, err := targetUVM.AddSCSI(context.Background(), destTwo, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c != 0 && l != 0 {
+	if scsiMount.Controller != 0 && scsiMount.LUN != 0 {
 		t.Fatal(err)
 	}
 	// TODO Could consider giving it a host path and verifying it's contents somehow

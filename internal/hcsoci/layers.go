@@ -16,6 +16,31 @@ import (
 	"github.com/pkg/errors"
 )
 
+// ImageLayers contains all the layers for an image.
+type ImageLayers struct {
+	vm                 *uvm.UtilityVM
+	containerRootInUVM string
+	layers             []string
+}
+
+// Release unmounts all of the layers located in the layers array.
+func (layers *ImageLayers) Release(ctx context.Context, all bool) error {
+	op := UnmountOperationSCSI
+	if layers.vm == nil || all {
+		op = UnmountOperationAll
+	}
+	var crp string
+	if layers.vm != nil {
+		crp = containerRootfsPath(layers.vm, layers.containerRootInUVM)
+	}
+	err := UnmountContainerLayers(ctx, layers.layers, crp, layers.vm, op)
+	if err != nil {
+		return err
+	}
+	layers.layers = nil
+	return nil
+}
+
 // MountContainerLayers is a helper for clients to hide all the complexity of layer mounting
 // Layer folder are in order: base, [rolayer1..rolayern,] scratch
 //
@@ -25,6 +50,7 @@ import (
 //                    inside the utility VM which is a GUID mapping of the scratch folder. Each
 //                    of the layers are the VSMB locations where the read-only layers are mounted.
 //
+// TODO dcantah: Keep better track of the layers that are added, don't simply discard the SCSI, VSMB, etc. resource types gotten inside.
 func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot string, uvm *uvmpkg.UtilityVM) (_ string, err error) {
 	log.G(ctx).WithField("layerFolders", layerFolders).Debug("hcsshim::mountContainerLayers")
 
@@ -98,7 +124,7 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 				CacheIo:             true,
 				ShareRead:           true,
 			}
-			err = uvm.AddVSMB(ctx, layerPath, "", options)
+			_, err = uvm.AddVSMB(ctx, layerPath, "", options)
 			if err == nil {
 				layersAdded = append(layersAdded, layerPath)
 			}
@@ -113,7 +139,11 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 			uvmPath, err = uvm.AddVPMEM(ctx, layerPath)
 			if err == uvmpkg.ErrNoAvailableLocation || err == uvmpkg.ErrMaxVPMEMLayerSize {
 				log.G(ctx).WithError(err).Debug("falling back to SCSI for lcow layer addition")
-				uvmPath, err = uvm.AddSCSILayer(ctx, layerPath)
+				sm, err := uvm.AddSCSILayer(ctx, layerPath)
+				if err != nil {
+					return "", err
+				}
+				uvmPath = sm.UVMPath
 			}
 			if err == nil {
 				layersAdded = append(layersAdded, layerPath)
@@ -127,10 +157,12 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 
 	hostPath := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
 	containerScratchPathInUVM := ospath.Join(uvm.OS(), guestRoot)
-	_, _, containerScratchPathInUVM, err = uvm.AddSCSI(ctx, hostPath, containerScratchPathInUVM, false)
+	scsiMount, err := uvm.AddSCSI(ctx, hostPath, containerScratchPathInUVM, false)
 	if err != nil {
 		return "", err
 	}
+	containerScratchPathInUVM = scsiMount.UVMPath
+
 	defer func() {
 		if err != nil {
 			if err := uvm.RemoveSCSI(ctx, hostPath); err != nil {

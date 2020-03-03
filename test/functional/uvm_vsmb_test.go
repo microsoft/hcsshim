@@ -30,7 +30,7 @@ func TestVSMB(t *testing.T) {
 		ShareRead:           true,
 	}
 	for i := 0; i < int(iterations); i++ {
-		if err := uvm.AddVSMB(context.Background(), dir, "", options); err != nil {
+		if _, err := uvm.AddVSMB(context.Background(), dir, "", options); err != nil {
 			t.Fatalf("AddVSMB failed: %s", err)
 		}
 	}
