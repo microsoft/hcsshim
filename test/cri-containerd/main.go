@@ -37,6 +37,8 @@ const (
 	imageLcowAlpine                   = "docker.io/library/alpine:latest"
 	imageLcowCosmos                   = "cosmosarno/spark-master:2.4.1_2019-04-18_8e864ce"
 	testGPUBootFiles                  = "C:\\ContainerPlat\\LinuxBootFiles\\nvidiagpu"
+	alpineAspNet                      = "mcr.microsoft.com/dotnet/core/aspnet:3.1-alpine3.11"
+	alpineAspnetUpgrade               = "mcr.microsoft.com/dotnet/core/aspnet:3.1.2-alpine3.11"
 )
 
 var (
