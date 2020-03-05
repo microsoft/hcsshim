@@ -20,6 +20,7 @@ import (
 	containerdsys "github.com/containerd/containerd/sys"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -39,6 +40,9 @@ type container struct {
 	r    *runcRuntime
 	id   string
 	init *process
+	// ownsPidNamespace indicates whether the container's init process is also
+	// the init process for its pid namespace.
+	ownsPidNamespace bool
 }
 
 func (c *container) ID() string {
@@ -57,6 +61,8 @@ func (c *container) PipeRelay() *stdio.PipeRelay {
 	return c.init.pipeRelay
 }
 
+// process represents a process running in a container. It can either be a
+// container's init process, or an exec process in a container.
 type process struct {
 	c         *container
 	pid       int
@@ -427,6 +433,41 @@ func (r *runcRuntime) waitOnProcess(pid int) (int, error) {
 
 func (p *process) Wait() (int, error) {
 	exitCode, err := p.c.r.waitOnProcess(p.pid)
+
+	l := logrus.WithField("cid", p.c.id)
+	l.WithField("pid", p.pid).Debug("process wait completed")
+
+	// If the init process for the container has exited, kill everything else in
+	// the container. Runc uses the devices cgroup of the container ot determine
+	// what other processes to kill.
+	//
+	// We don't issue the kill if the container owns its own pid namespace,
+	// because in that case the container kernel will kill everything in the pid
+	// namespace automatically (as the container init will be the pid namespace
+	// init). This prevents a potential issue where two containers share cgroups
+	// but have their own pid namespaces. If we didn't handle this case, runc
+	// would kill the processes in both containers when trying to kill
+	// either one of them.
+	if p == p.c.init && !p.c.ownsPidNamespace {
+		// If the init process of a pid namespace terminates, the kernel
+		// terminates all other processes in the namespace with SIGKILL. We
+		// simulate the same behavior.
+		if err := p.c.Kill(syscall.SIGKILL); err != nil {
+			l.WithError(err).Error("failed to terminate container after process wait")
+		}
+	}
+
+	// Wait on the relay to drain any output that was already buffered.
+	//
+	// At this point, if this is the init process for the container, everything
+	// else in the container has been killed, so the write ends of the stdio
+	// relay will have been closed.
+	//
+	// If this is a container exec process instead, then it is possible the
+	// relay waits will hang waiting for the write ends to close. This can occur
+	// if the exec spawned any child processes that inherited its stdio.
+	// Currently we do not do anything to avoid hanging in this case, but in the
+	// future we could add special handling.
 	if p.ttyRelay != nil {
 		p.ttyRelay.Wait()
 	}
@@ -451,6 +492,10 @@ func (c *container) Wait() (int, error) {
 			// well (as in p.Wait()). This may not matter as long as the relays
 			// finish "soon" after Wait() returns since HCS expects the stdio
 			// connections to close before container shutdown can complete.
+			logrus.WithFields(logrus.Fields{
+				"cid": c.id,
+				"pid": process.Pid,
+			}).Debug("waiting on container exec process")
 			c.r.waitOnProcess(process.Pid)
 		}
 	}
@@ -473,27 +518,35 @@ func (r *runcRuntime) runCreateCommand(id string, bundlePath string, stdioSet *s
 		return nil, err
 	}
 
-	hasTerminal, err := r.hasTerminal(bundlePath)
+	spec, err := ociSpecFromBundle(bundlePath)
 	if err != nil {
 		return nil, err
 	}
 
-	bf, err := os.Open(path.Join(bundlePath, "config.json"))
-	if err == nil {
-		defer bf.Close()
-
-		var bundleSpec *oci.Spec
-		if err := json.NewDecoder(bf).Decode(&bundleSpec); err == nil {
-			if bundleSpec.Process.Cwd != "/" {
-				cwd := path.Join(bundlePath, "rootfs", bundleSpec.Process.Cwd)
-				_ = os.MkdirAll(cwd, 0755)
-				// Intentionally ignore the error.
+	// Determine if the container owns its own pid namespace or not. Per the OCI
+	// spec:
+	// - If the spec has no entry for the pid namespace, the container inherits
+	//   the runtime namespace (container does not own).
+	// - If the spec has a pid namespace entry, but the path is empty, a new
+	//   namespace will be created and used for the container (container owns).
+	// - If there is a pid namespace entry with a path, the container uses the
+	//   namespace at that path (container does not own).
+	if spec.Linux != nil {
+		for _, ns := range spec.Linux.Namespaces {
+			if ns.Type == oci.PIDNamespace {
+				c.ownsPidNamespace = ns.Path == ""
 			}
 		}
 	}
 
+	if spec.Process.Cwd != "/" {
+		cwd := path.Join(bundlePath, "rootfs", spec.Process.Cwd)
+		// Intentionally ignore the error.
+		_ = os.MkdirAll(cwd, 0755)
+	}
+
 	args := []string{"create", "-b", bundlePath, "--no-pivot"}
-	p, err := c.startProcess(tempProcessDir, hasTerminal, stdioSet, args...)
+	p, err := c.startProcess(tempProcessDir, spec.Process.Terminal, stdioSet, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -508,19 +561,18 @@ func (r *runcRuntime) runCreateCommand(id string, bundlePath string, stdioSet *s
 	return c, nil
 }
 
-// hasTerminal looks at the config.json in the bundlePath, and determines
-// whether its process's terminal value is true or false.
-func (r *runcRuntime) hasTerminal(bundlePath string) (bool, error) {
-	configFile, err := os.Open(filepath.Join(bundlePath, "config.json"))
+func ociSpecFromBundle(bundlePath string) (*oci.Spec, error) {
+	configPath := filepath.Join(bundlePath, "config.json")
+	configFile, err := os.Open(configPath)
 	if err != nil {
-		return false, errors.Wrapf(err, "failed to open config file %s", filepath.Join(bundlePath, "config.json"))
+		return nil, errors.Wrapf(err, "failed to open bundle config at %s", configPath)
 	}
 	defer configFile.Close()
-	var config oci.Spec
-	if err := commonutils.DecodeJSONWithHresult(configFile, &config); err != nil {
-		return false, errors.Wrap(err, "failed to decode config file as JSON")
+	var spec *oci.Spec
+	if err := commonutils.DecodeJSONWithHresult(configFile, &spec); err != nil {
+		return nil, errors.Wrap(err, "failed to parse OCI spec")
 	}
-	return config.Process.Terminal, nil
+	return spec, nil
 }
 
 // runExecCommand sets up the arguments for calling runc exec.
@@ -587,6 +639,8 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioS
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to get files for connection set for container %s", c.id)
 		}
+		// Closing the FileSet here is fine as that end of the pipes will have
+		// already been copied into the child process.
 		defer fileSet.Close()
 		if fileSet.In != nil {
 			cmd.Stdin = fileSet.In
