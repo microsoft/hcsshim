@@ -18,7 +18,7 @@ require (
 	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
 	github.com/godbus/dbus v4.1.0+incompatible // indirect
 	github.com/gogo/googleapis v1.2.0 // indirect
-	github.com/gogo/protobuf v1.2.1
+	github.com/gogo/protobuf v1.3.1
 	github.com/hashicorp/errwrap v0.0.0-20141028054710-7554cd9344ce // indirect
 	github.com/hashicorp/go-multierror v0.0.0-20161216184304-ed905158d874 // indirect
 	github.com/imdario/mergo v0.3.8 // indirect
@@ -37,7 +37,7 @@ require (
 	go.opencensus.io v0.22.0
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	golang.org/x/sys v0.0.0-20190916202348-b4ddaad3f8a3
-	google.golang.org/grpc v1.23.0
+	google.golang.org/grpc v1.23.1
 	gotest.tools v2.2.0+incompatible // indirect
-	k8s.io/kubernetes v1.13.0
+	k8s.io/cri-api v0.17.3
 )

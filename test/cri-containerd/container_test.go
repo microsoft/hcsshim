@@ -16,7 +16,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/sirupsen/logrus"
-	runtime "k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
 func runLogRotationContainer(t *testing.T, sandboxRequest *runtime.RunPodSandboxRequest, request *runtime.CreateContainerRequest, log string, logArchive string) {
@@ -48,7 +48,7 @@ func runLogRotationContainer(t *testing.T, sandboxRequest *runtime.RunPodSandbox
 		t.Fatalf("failed to rename log: %v", err)
 	}
 
-	if _, err := client.ReopenContainerLog(ctx, &runtime.ReopenContainerLogRequest{containerID}); err != nil {
+	if _, err := client.ReopenContainerLog(ctx, &runtime.ReopenContainerLogRequest{ContainerId: containerID}); err != nil {
 		t.Fatalf("failed to reopen log: %v", err)
 	}
 
