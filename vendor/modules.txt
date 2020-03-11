@@ -1,13 +1,13 @@
 # github.com/Microsoft/go-winio v0.4.15-0.20190919025122-fc70bd9a86b5
-github.com/Microsoft/go-winio/pkg/guid
 github.com/Microsoft/go-winio
-github.com/Microsoft/go-winio/pkg/etw
-github.com/Microsoft/go-winio/pkg/etwlogrus
-github.com/Microsoft/go-winio/vhd
 github.com/Microsoft/go-winio/archive/tar
 github.com/Microsoft/go-winio/backuptar
-github.com/Microsoft/go-winio/pkg/security
+github.com/Microsoft/go-winio/pkg/etw
+github.com/Microsoft/go-winio/pkg/etwlogrus
+github.com/Microsoft/go-winio/pkg/guid
 github.com/Microsoft/go-winio/pkg/process
+github.com/Microsoft/go-winio/pkg/security
+github.com/Microsoft/go-winio/vhd
 # github.com/blang/semver v3.1.0+incompatible
 github.com/blang/semver
 # github.com/containerd/cgroups v0.0.0-20190919134610-bf292b21730f
@@ -15,33 +15,22 @@ github.com/containerd/cgroups/stats/v1
 # github.com/containerd/console v0.0.0-20180822173158-c12b1e7919c1
 github.com/containerd/console
 # github.com/containerd/containerd v1.3.2
-github.com/containerd/containerd/api/events
-github.com/containerd/containerd/api/types/task
-github.com/containerd/containerd/errdefs
-github.com/containerd/containerd/log
-github.com/containerd/containerd/mount
-github.com/containerd/containerd/namespaces
-github.com/containerd/containerd/runtime
-github.com/containerd/containerd/runtime/v2/shim
-github.com/containerd/containerd/runtime/v2/task
 github.com/containerd/containerd
-github.com/containerd/containerd/api/services/events/v1
-github.com/containerd/containerd/api/types
-github.com/containerd/containerd/sys
-github.com/containerd/containerd/api/services/ttrpc/events/v1
-github.com/containerd/containerd/events
-github.com/containerd/containerd/pkg/ttrpcutil
-github.com/containerd/containerd/sys/reaper
+github.com/containerd/containerd/api/events
 github.com/containerd/containerd/api/services/containers/v1
 github.com/containerd/containerd/api/services/content/v1
 github.com/containerd/containerd/api/services/diff/v1
+github.com/containerd/containerd/api/services/events/v1
 github.com/containerd/containerd/api/services/images/v1
 github.com/containerd/containerd/api/services/introspection/v1
 github.com/containerd/containerd/api/services/leases/v1
 github.com/containerd/containerd/api/services/namespaces/v1
 github.com/containerd/containerd/api/services/snapshots/v1
 github.com/containerd/containerd/api/services/tasks/v1
+github.com/containerd/containerd/api/services/ttrpc/events/v1
 github.com/containerd/containerd/api/services/version/v1
+github.com/containerd/containerd/api/types
+github.com/containerd/containerd/api/types/task
 github.com/containerd/containerd/archive
 github.com/containerd/containerd/archive/compression
 github.com/containerd/containerd/cio
@@ -50,32 +39,43 @@ github.com/containerd/containerd/content
 github.com/containerd/containerd/content/proxy
 github.com/containerd/containerd/defaults
 github.com/containerd/containerd/diff
+github.com/containerd/containerd/errdefs
+github.com/containerd/containerd/events
+github.com/containerd/containerd/events/exchange
+github.com/containerd/containerd/filters
+github.com/containerd/containerd/identifiers
 github.com/containerd/containerd/images
 github.com/containerd/containerd/images/archive
+github.com/containerd/containerd/labels
 github.com/containerd/containerd/leases
 github.com/containerd/containerd/leases/proxy
+github.com/containerd/containerd/log
+github.com/containerd/containerd/mount
+github.com/containerd/containerd/namespaces
 github.com/containerd/containerd/oci
 github.com/containerd/containerd/pkg/dialer
+github.com/containerd/containerd/pkg/ttrpcutil
 github.com/containerd/containerd/platforms
 github.com/containerd/containerd/plugin
+github.com/containerd/containerd/reference
 github.com/containerd/containerd/remotes
 github.com/containerd/containerd/remotes/docker
 github.com/containerd/containerd/remotes/docker/schema1
 github.com/containerd/containerd/rootfs
+github.com/containerd/containerd/runtime
 github.com/containerd/containerd/runtime/linux/runctypes
 github.com/containerd/containerd/runtime/v2/runc/options
+github.com/containerd/containerd/runtime/v2/shim
+github.com/containerd/containerd/runtime/v2/task
 github.com/containerd/containerd/snapshots
 github.com/containerd/containerd/snapshots/proxy
-github.com/containerd/containerd/reference
-github.com/containerd/containerd/events/exchange
-github.com/containerd/containerd/labels
+github.com/containerd/containerd/sys
+github.com/containerd/containerd/sys/reaper
 github.com/containerd/containerd/version
-github.com/containerd/containerd/filters
-github.com/containerd/containerd/identifiers
 # github.com/containerd/continuity v0.0.0-20190426062206-aaeac12a7ffc
 github.com/containerd/continuity/fs
-github.com/containerd/continuity/sysx
 github.com/containerd/continuity/syscallx
+github.com/containerd/continuity/sysx
 # github.com/containerd/fifo v0.0.0-20190226154929-a9fb20d87448
 github.com/containerd/fifo
 # github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3
@@ -85,20 +85,20 @@ github.com/containerd/ttrpc
 # github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd
 github.com/containerd/typeurl
 # github.com/docker/distribution v0.0.0-20190905152932-14b96e55d84c
+github.com/docker/distribution/digestset
 github.com/docker/distribution/reference
 github.com/docker/distribution/registry/api/errcode
-github.com/docker/distribution/digestset
 # github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c
 github.com/docker/go-events
 # github.com/gogo/googleapis v1.2.0
 github.com/gogo/googleapis/google/rpc
-# github.com/gogo/protobuf v1.2.1
-github.com/gogo/protobuf/proto
-github.com/gogo/protobuf/types
-github.com/gogo/protobuf/sortkeys
+# github.com/gogo/protobuf v1.3.1
 github.com/gogo/protobuf/gogoproto
+github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/protoc-gen-gogo/descriptor
-# github.com/golang/protobuf v1.3.1
+github.com/gogo/protobuf/sortkeys
+github.com/gogo/protobuf/types
+# github.com/golang/protobuf v1.3.2
 github.com/golang/protobuf/proto
 github.com/golang/protobuf/ptypes
 github.com/golang/protobuf/ptypes/any
@@ -124,12 +124,12 @@ github.com/opencontainers/runc/libcontainer/user
 # github.com/opencontainers/runtime-spec v0.1.2-0.20190507144316-5b71a03e2700
 github.com/opencontainers/runtime-spec/specs-go
 # github.com/opencontainers/runtime-tools v0.0.0-20181011054405-1d69bd0f9c39
+github.com/opencontainers/runtime-tools/error
+github.com/opencontainers/runtime-tools/filepath
 github.com/opencontainers/runtime-tools/generate
 github.com/opencontainers/runtime-tools/generate/seccomp
-github.com/opencontainers/runtime-tools/validate
-github.com/opencontainers/runtime-tools/filepath
 github.com/opencontainers/runtime-tools/specerror
-github.com/opencontainers/runtime-tools/error
+github.com/opencontainers/runtime-tools/validate
 # github.com/pkg/errors v0.8.1
 github.com/pkg/errors
 # github.com/sirupsen/logrus v1.4.2
@@ -145,49 +145,50 @@ github.com/xeipuuv/gojsonreference
 # github.com/xeipuuv/gojsonschema v0.0.0-20180618132009-1d523034197f
 github.com/xeipuuv/gojsonschema
 # go.opencensus.io v0.22.0
-go.opencensus.io/trace
-go.opencensus.io/trace/propagation
-go.opencensus.io/internal
-go.opencensus.io/trace/internal
-go.opencensus.io/trace/tracestate
 go.opencensus.io
-# golang.org/x/net v0.0.0-20190619014844-b5b0513f8c1b
-golang.org/x/net/trace
+go.opencensus.io/internal
+go.opencensus.io/trace
+go.opencensus.io/trace/internal
+go.opencensus.io/trace/propagation
+go.opencensus.io/trace/tracestate
+# golang.org/x/net v0.0.0-20191004110552-13f9640d40b9
 golang.org/x/net/context
 golang.org/x/net/context/ctxhttp
-golang.org/x/net/internal/timeseries
+golang.org/x/net/http/httpguts
 golang.org/x/net/http2
 golang.org/x/net/http2/hpack
-golang.org/x/net/http/httpguts
 golang.org/x/net/idna
+golang.org/x/net/internal/timeseries
+golang.org/x/net/trace
 # golang.org/x/sync v0.0.0-20190423024810-112230192c58
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
 # golang.org/x/sys v0.0.0-20190916202348-b4ddaad3f8a3
+golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-golang.org/x/sys/unix
 # golang.org/x/text v0.3.2
 golang.org/x/text/secure/bidirule
+golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
-golang.org/x/text/transform
-# google.golang.org/genproto v0.0.0-20190425155659-357c62f0e4bb
+# google.golang.org/genproto v0.0.0-20190502173448-54afdca5d873
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.23.0
-google.golang.org/grpc/codes
-google.golang.org/grpc/status
+# google.golang.org/grpc v1.23.1
 google.golang.org/grpc
-google.golang.org/grpc/metadata
-google.golang.org/grpc/internal
-google.golang.org/grpc/health/grpc_health_v1
 google.golang.org/grpc/balancer
+google.golang.org/grpc/balancer/base
 google.golang.org/grpc/balancer/roundrobin
+google.golang.org/grpc/binarylog/grpc_binarylog_v1
+google.golang.org/grpc/codes
 google.golang.org/grpc/connectivity
 google.golang.org/grpc/credentials
+google.golang.org/grpc/credentials/internal
 google.golang.org/grpc/encoding
 google.golang.org/grpc/encoding/proto
 google.golang.org/grpc/grpclog
+google.golang.org/grpc/health/grpc_health_v1
+google.golang.org/grpc/internal
 google.golang.org/grpc/internal/backoff
 google.golang.org/grpc/internal/balancerload
 google.golang.org/grpc/internal/binarylog
@@ -195,8 +196,10 @@ google.golang.org/grpc/internal/channelz
 google.golang.org/grpc/internal/envconfig
 google.golang.org/grpc/internal/grpcrand
 google.golang.org/grpc/internal/grpcsync
+google.golang.org/grpc/internal/syscall
 google.golang.org/grpc/internal/transport
 google.golang.org/grpc/keepalive
+google.golang.org/grpc/metadata
 google.golang.org/grpc/naming
 google.golang.org/grpc/peer
 google.golang.org/grpc/resolver
@@ -204,10 +207,7 @@ google.golang.org/grpc/resolver/dns
 google.golang.org/grpc/resolver/passthrough
 google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
+google.golang.org/grpc/status
 google.golang.org/grpc/tap
-google.golang.org/grpc/balancer/base
-google.golang.org/grpc/credentials/internal
-google.golang.org/grpc/binarylog/grpc_binarylog_v1
-google.golang.org/grpc/internal/syscall
-# k8s.io/kubernetes v1.13.0
-k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2
+# k8s.io/cri-api v0.17.3
+k8s.io/cri-api/pkg/apis/runtime/v1alpha2
