@@ -11,6 +11,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/schema1"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"golang.org/x/sys/windows"
 )
 
@@ -127,4 +128,7 @@ type UtilityVM struct {
 	// This is used in generating unique mount path inside UVM for every mount.
 	// Access to this variable should be done atomically.
 	mountCounter uint64
+
+	// The configuration with which this UVM was created
+	configDoc *hcsschema.ComputeSystem
 }

@@ -28,6 +28,8 @@ import (
 //sys hcsModifyComputeSystem(computeSystem HcsSystem, configuration string, result **uint16) (hr error) = vmcompute.HcsModifyComputeSystem?
 //sys hcsRegisterComputeSystemCallback(computeSystem HcsSystem, callback uintptr, context uintptr, callbackHandle *HcsCallback) (hr error) = vmcompute.HcsRegisterComputeSystemCallback?
 //sys hcsUnregisterComputeSystemCallback(callbackHandle HcsCallback) (hr error) = vmcompute.HcsUnregisterComputeSystemCallback?
+//sys hcsSaveComputeSystem(computeSystem HcsSystem, options string, result **uint16) (hr error) = vmcompute.HcsSaveComputeSystem?
+
 
 //sys hcsCreateProcess(computeSystem HcsSystem, processParameters string, processInformation *HcsProcessInformation, process *HcsProcess, result **uint16) (hr error) = vmcompute.HcsCreateProcess?
 //sys hcsOpenProcess(computeSystem HcsSystem, pid uint32, process *HcsProcess, result **uint16) (hr error) = vmcompute.HcsOpenProcess?
@@ -354,6 +356,28 @@ func HcsUnregisterComputeSystemCallback(ctx gcontext.Context, callbackHandle Hcs
 
 	return execute(ctx, timeout.SyscallWatcher, func() error {
 		return hcsUnregisterComputeSystemCallback(callbackHandle)
+	})
+}
+
+func HcsSaveComputeSystem(ctx gcontext.Context, computeSystem HcsSystem, options string) (result string, hr error) {
+	ctx, span := trace.StartSpan(ctx, "HcsSaveComputeSystem")
+	defer span.End()
+	defer func() {
+		if result != "" {
+			span.AddAttributes(trace.StringAttribute("result", result))
+		}
+		if hr != errVmcomputeOperationPending {
+			oc.SetSpanStatus(span, hr)
+		}
+	}()
+
+	return result, execute(ctx, timeout.SyscallWatcher, func() error {
+		var resultp *uint16
+		err := hcsSaveComputeSystem(computeSystem, options, &resultp)
+		if resultp != nil {
+			result = interop.ConvertAndFreeCoTaskMemString(resultp)
+		}
+		return err
 	})
 }
 

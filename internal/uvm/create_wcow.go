@@ -59,7 +59,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	}
 
 	span.AddAttributes(trace.StringAttribute(logfields.UVMID, opts.ID))
-	log.G(ctx).WithField("options", fmt.Sprintf("%+v", opts)).Debug("uvm::CreateLCOW options")
+	log.G(ctx).WithField("options", fmt.Sprintf("%+v", opts)).Debug("uvm::CreateWCOW options")
 
 	uvm := &UtilityVM{
 		id:                  opts.ID,
@@ -74,6 +74,11 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 			uvm.Close()
 		}
 	}()
+
+	logFile, err = os.OpenFile("C:\\Users\\Amit\\Documents\\debuglog.txt", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0755)
+	for _, path := range opts.LayerFolders {
+		logFile.WriteString(path + "\n")
+	}
 
 	// To maintain compatability with Docker we need to automatically downgrade
 	// a user CPU count if the setting is not possible.
@@ -90,6 +95,8 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		return nil, fmt.Errorf("failed to locate utility VM folder from layer folders: %s", err)
 	}
 
+	logFile.WriteString("uvm folder: " + uvmFolder + "\n")
+
 	// TODO: BUGBUG Remove this. @jhowardmsft
 	//       It should be the responsiblity of the caller to do the creation and population.
 	//       - Update runhcs too (vm.go).
@@ -97,6 +104,8 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	//       - Update tests that rely on this current behaviour.
 	// Create the RW scratch in the top-most layer folder, creating the folder if it doesn't already exist.
 	scratchFolder := opts.LayerFolders[len(opts.LayerFolders)-1]
+
+	logFile.WriteString("scratch folder: " + scratchFolder + "\n")
 
 	// Create the directory if it doesn't exist
 	if _, err := os.Stat(scratchFolder); os.IsNotExist(err) {
@@ -112,6 +121,8 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 			return nil, fmt.Errorf("failed to create scratch: %s", err)
 		}
 	}
+
+	logFile.WriteString("scratch path: " + scratchPath + "\n")
 
 	doc := &hcsschema.ComputeSystem{
 		Owner:                             uvm.owner,
@@ -172,6 +183,8 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 								ReadOnly:            true,
 								PseudoOplocks:       true,
 								TakeBackupPrivilege: true,
+								NoLocks:             true,
+								PseudoDirnotify:     true,
 								CacheIo:             true,
 								ShareRead:           true,
 							},
@@ -200,6 +213,9 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	if err != nil {
 		return nil, fmt.Errorf("failed to merge additional JSON '%s': %s", opts.AdditionHCSDocumentJSON, err)
 	}
+
+	// TODO figure out a way to include the fullDoc
+	uvm.configDoc = doc
 
 	err = uvm.create(ctx, fullDoc)
 	if err != nil {

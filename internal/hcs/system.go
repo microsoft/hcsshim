@@ -371,7 +371,6 @@ func (computeSystem *System) Pause(ctx context.Context) (err error) {
 	if computeSystem.handle == 0 {
 		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed, nil)
 	}
-
 	resultJSON, err := vmcompute.HcsPauseComputeSystem(ctx, computeSystem.handle, "")
 	events, err := processAsyncHcsResult(ctx, err, resultJSON, computeSystem.callbackNumber, hcsNotificationSystemPauseCompleted, &timeout.SystemPause)
 	if err != nil {
@@ -600,6 +599,33 @@ func (computeSystem *System) Modify(ctx context.Context, config interface{}) err
 	events := processHcsResult(ctx, resultJSON)
 	if err != nil {
 		return makeSystemError(computeSystem, operation, requestJSON, err, events)
+	}
+
+	return nil
+}
+
+// Save the compute system
+func (computeSystem *System) Save(ctx context.Context, options string) (err error) {
+	operation := "hcsshim::System::Save"
+
+	// hcsSaveComputeSystemContext is an async peration. Start the outer span
+	// here to measure the full save time.
+	ctx, span := trace.StartSpan(ctx, operation)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
+
+	if computeSystem.handle == 0 {
+		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed, nil)
+	}
+
+	result, err := vmcompute.HcsSaveComputeSystem(ctx, computeSystem.handle, options)
+	events, err := processAsyncHcsResult(ctx, err, result, computeSystem.callbackNumber, hcsNotificationSystemSaveCompleted, &timeout.SystemSave)
+	if err != nil {
+		return makeSystemError(computeSystem, operation, "", err, events)
 	}
 
 	return nil
