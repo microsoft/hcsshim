@@ -36,6 +36,7 @@ func (s *service) getPod() (shimPod, error) {
 	return raw.(shimPod), nil
 }
 
+
 // getTask returns a task matching `tid` or else returns `nil`. This properly
 // handles a task in a pod or a singular task shim.
 //
@@ -79,7 +80,6 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 		}
 		shimOpts = v.(*runhcsopts.Options)
 	}
-
 	var spec specs.Spec
 	f, err := os.Open(filepath.Join(req.Bundle, "config.json"))
 	if err != nil {
@@ -163,15 +163,19 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 			resp.Pid = uint32(e.Pid())
 			return resp, nil
 		}
-		pod, err = createPod(ctx, s.events, req, &spec)
+		pod, err, templateID := createPod(ctx, s.events, req, &spec)
 		if err != nil {
 			s.cl.Unlock()
 			return nil, err
 		}
-		t, _ := pod.GetTask(req.ID)
-		e, _ := t.GetExec("")
-		resp.Pid = uint32(e.Pid())
-		s.taskOrPod.Store(pod)
+		if templateID == "" {
+			t, _ := pod.GetTask(req.ID)
+			e, _ := t.GetExec("")
+			resp.Pid = uint32(e.Pid())
+			s.taskOrPod.Store(pod)
+		}
+		// TODO(ambarve): A template pod probably should still be
+		// stored in the taskOrPod map until late cloning is implemented
 	} else {
 		t, err := newHcsStandaloneTask(ctx, s.events, req, &spec)
 		if err != nil {

@@ -48,6 +48,8 @@ func runCreateContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.Run
 	stopContainer(t, client, ctx, containerID)
 }
 
+
+
 func Test_CreateContainer_WCOW_Process(t *testing.T) {
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
@@ -960,4 +962,56 @@ func Test_CreateContainer_Mount_NamedPipe_WCOW(t *testing.T) {
 		},
 	}
 	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
+}
+
+
+
+// TODO(ambarve): This test doesn't work right now because start container command for template fails.
+// It seems that the pod directory is deleted if start pod command fails. So when the test creates a clone
+// it can not find the VHD of the template.
+// Once Proper responses are implemented for start template requests then this will start working.
+func Test_Create_Pod_FromTemplate(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// create template sandbox first
+	sandboxRequest := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name() + "-template-Sandbox",
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.saveastemplate": "true",
+			},
+		},
+		RuntimeHandler: wcowHypervisorRuntimeHandler,
+	}
+
+	templateID := runPodSandbox(t, client, ctx, sandboxRequest)
+	defer removePodSandbox(t, client, ctx, templatePodID)
+	defer stopPodSandbox(t, client, ctx, templatePodID)
+
+	// create clone from previously created template
+	sandboxRequest = &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name() + "-cloned-Sandbox",
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.templateid": templateID + "@vm",
+			},
+		},
+		RuntimeHandler: wcowHypervisorRuntimeHandler,
+	}
+
+	clonePodID := runPodSandbox(t, client, ctx, sandboxRequest)
+	defer removePodSandbox(t, client, ctx, clonePodID)
+	defer stopPodSandbox(t, client, ctx, clonePodID)
 }

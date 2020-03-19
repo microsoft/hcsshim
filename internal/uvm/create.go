@@ -64,6 +64,13 @@ type Options struct {
 	// ExternalGuestConnection sets whether the guest RPC connection is performed
 	// internally by the OS platform or externally by this package.
 	ExternalGuestConnection bool
+
+	// SaveAsTemplate states if this pod should be created and saved as template
+	SaveAsTemplate bool
+
+	// TemplateID specifies the ID of the template from which this pod should
+	// be created
+	TemplateID string
 }
 
 // newDefaultOptions returns the default base options for WCOW and LCOW.

@@ -123,6 +123,9 @@ const (
 	annotationVPCIEnabled                = "io.microsoft.virtualmachine.lcow.vpcienabled"
 	annotationStorageQoSBandwidthMaximum = "io.microsoft.virtualmachine.storageqos.bandwidthmaximum"
 	annotationStorageQoSIopsMaximum      = "io.microsoft.virtualmachine.storageqos.iopsmaximum"
+
+	annotationSaveAsTemplate             = "io.microsoft.virtualmachine.saveastemplate"
+	annotationTemplateID                 = "io.microsoft.virtualmachine.templateid"
 )
 
 // parseAnnotationsBool searches `a` for `key` and if found verifies that the
@@ -348,6 +351,8 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 			lopts.KernelFile = uvm.KernelFile
 		}
 		lopts.BootFilesPath = parseAnnotationsString(s.Annotations, annotationBootFilesRootPath, lopts.BootFilesPath)
+		lopts.SaveAsTemplate = parseAnnotationsBool(ctx, s.Annotations, annotationSaveAsTemplate, false)
+		lopts.TemplateID = parseAnnotationsString(s.Annotations, annotationTemplateID, lopts.TemplateID)
 		return lopts, nil
 	} else if IsWCOW(s) {
 		wopts := uvm.NewDefaultOptionsWCOW(id, owner)
@@ -362,6 +367,8 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		wopts.ProcessorWeight = ParseAnnotationsCPUWeight(ctx, s, annotationProcessorWeight, wopts.ProcessorWeight)
 		wopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(ctx, s, annotationStorageQoSBandwidthMaximum, wopts.StorageQoSBandwidthMaximum)
 		wopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotationStorageQoSIopsMaximum, wopts.StorageQoSIopsMaximum)
+		wopts.SaveAsTemplate = parseAnnotationsBool(ctx, s.Annotations, annotationSaveAsTemplate, false)
+		wopts.TemplateID = parseAnnotationsString(s.Annotations, annotationTemplateID, wopts.TemplateID)
 		return wopts, nil
 	}
 	return nil, errors.New("cannot create UVM opts spec is not LCOW or WCOW")

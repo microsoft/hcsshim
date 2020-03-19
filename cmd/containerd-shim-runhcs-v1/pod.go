@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
+	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -51,18 +51,24 @@ type shimPod interface {
 	// the `shimExecStateRunning, shimExecStateExited` states. If the exec is
 	// not in this state this pod MUST return `errdefs.ErrFailedPrecondition`.
 	KillTask(ctx context.Context, tid, eid string, signal uint32, all bool) error
+
+	// Specifies if this pod is a template
+	IsTemplate() bool
 }
 
-func createPod(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (shimPod, error) {
+// TODO (ambarve): The third return value of this function (the template id)
+// is only needed until we implement the late cloning part after that this return
+// value can be removed.
+func createPod(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (shimPod, error, string) {
 	log.G(ctx).WithField("tid", req.ID).Debug("createPod")
 
 	if osversion.Get().Build < osversion.RS5 {
-		return nil, errors.Wrapf(errdefs.ErrFailedPrecondition, "pod support is not available on Windows versions previous to RS5 (%d)", osversion.RS5)
+		return nil, errors.Wrapf(errdefs.ErrFailedPrecondition, "pod support is not available on Windows versions previous to RS5 (%d)", osversion.RS5), ""
 	}
 
 	ct, sid, err := oci.GetSandboxTypeAndID(s.Annotations)
 	if err != nil {
-		return nil, err
+		return nil, err, ""
 	}
 	if ct != oci.KubernetesContainerTypeSandbox {
 		return nil, errors.Wrapf(
@@ -70,7 +76,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 			"expected annotation: '%s': '%s' got '%s'",
 			oci.KubernetesContainerTypeAnnotation,
 			oci.KubernetesContainerTypeSandbox,
-			ct)
+			ct), ""
 	}
 	if sid != req.ID {
 		return nil, errors.Wrapf(
@@ -78,26 +84,29 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 			"expected annotation '%s': '%s' got '%s'",
 			oci.KubernetesSandboxIDAnnotation,
 			req.ID,
-			sid)
+			sid), ""
 	}
 
 	owner := filepath.Base(os.Args[0])
 	isWCOW := oci.IsWCOW(s)
 
 	var parent *uvm.UtilityVM
+	var isCreateTemplateRequest bool
 	if oci.IsIsolated(s) {
 		// Create the UVM parent
 		opts, err := oci.SpecToUVMCreateOpts(ctx, s, fmt.Sprintf("%s@vm", req.ID), owner)
 		if err != nil {
-			return nil, err
+			return nil, err, ""
 		}
 		switch opts.(type) {
 		case *uvm.OptionsLCOW:
 			lopts := (opts).(*uvm.OptionsLCOW)
 			parent, err = uvm.CreateLCOW(ctx, lopts)
 			if err != nil {
-				return nil, err
+				return nil, err, ""
 			}
+			// TODO(ambarve): implement cloning for LCOW
+			isCreateTemplateRequest = lopts.Options.SaveAsTemplate
 		case *uvm.OptionsWCOW:
 			wopts := (opts).(*uvm.OptionsWCOW)
 
@@ -111,23 +120,24 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 			vmPath := filepath.Join(layers[layersLen-1], "vm")
 			err := os.MkdirAll(vmPath, 0)
 			if err != nil {
-				return nil, err
+				return nil, err, ""
 			}
 			layers[layersLen-1] = vmPath
 			wopts.LayerFolders = layers
 
 			parent, err = uvm.CreateWCOW(ctx, wopts)
 			if err != nil {
-				return nil, err
+				return nil, err, ""
 			}
+			isCreateTemplateRequest = wopts.Options.SaveAsTemplate
 		}
 		err = parent.Start(ctx)
 		if err != nil {
 			parent.Close()
-			return nil, err
+			return nil, err, ""
 		}
 	} else if !isWCOW {
-		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "oci spec does not contain WCOW or LCOW spec")
+		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "oci spec does not contain WCOW or LCOW spec"), ""
 	}
 	defer func() {
 		// clean up the uvm if we fail any further operations
@@ -137,10 +147,22 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 	}()
 
 	p := pod{
-		events: events,
-		id:     req.ID,
-		host:   parent,
+		events:     events,
+		id:         req.ID,
+		host:       parent,
+		isTemplate: isCreateTemplateRequest,
 	}
+
+	// For a template creation request return before actually starting
+	// any containers inside it.
+	if isCreateTemplateRequest {
+		err = parent.SaveAsTemplate(ctx)
+		if err != nil {
+			return nil, err, ""
+		}
+		return &p, nil, parent.ID()
+	}
+
 	// TOOD: JTERRY75 - There is a bug in the compartment activation for Windows
 	// Process isolated that requires us to create the real pause container to
 	// hold the network compartment open. This is not required for Windows
@@ -160,15 +182,15 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 			if nsid != "" {
 				endpoints, err := hcsoci.GetNamespaceEndpoints(ctx, nsid)
 				if err != nil {
-					return nil, err
+					return nil, err, ""
 				}
 				err = parent.AddNetNS(ctx, nsid)
 				if err != nil {
-					return nil, err
+					return nil, err, ""
 				}
 				err = parent.AddEndpointsToNS(ctx, nsid, endpoints)
 				if err != nil {
-					return nil, err
+					return nil, err, ""
 				}
 			}
 		}
@@ -202,12 +224,12 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		// task for the sandbox.
 		lt, err := newHcsTask(ctx, events, parent, true, req, s)
 		if err != nil {
-			return nil, err
+			return nil, err, ""
 		}
 		p.sandboxTask = lt
 	}
 
-	return &p, nil
+	return &p, nil, ""
 }
 
 var _ = (shimPod)(&pod{})
@@ -235,6 +257,9 @@ type pod struct {
 	// to release the lock to allow concurrent creates.
 	wcl           sync.Mutex
 	workloadTasks sync.Map
+
+	// specifies if this pod was created as a template.
+	isTemplate bool
 }
 
 func (p *pod) ID() string {
@@ -328,4 +353,8 @@ func (p *pod) KillTask(ctx context.Context, tid, eid string, signal uint32, all 
 		return t.KillExec(ctx, eid, signal, all)
 	})
 	return eg.Wait()
+}
+
+func (p *pod) IsTemplate() bool {
+	return p.isTemplate
 }

@@ -2,121 +2,157 @@ package uvm
 
 import (
 	"context"
-	"os"
-	// "io"
 
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/Microsoft/hcsshim/internal/copyfile"
-	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/go-winio/pkg/security"
+	"github.com/Microsoft/hcsshim/internal/copyfile"
+	"github.com/Microsoft/hcsshim/internal/regstate"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 )
 
-var logFile *os.File
 var err error
 
-var hcsSaveOptions = "{\"SaveType\": \"AsTemplate\"}"
+const (
+	hcsSaveOptions = "{\"SaveType\": \"AsTemplate\"}"
+	templateRoot = "troot"
+	templateKey = "tkey"
+)
 
-func debuglog(msg string) {
-	if logFile == nil {
-		logFile, err = os.OpenFile("C:\\Users\\Amit\\Documents\\debuglog.txt", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0755)
-		if err != nil {
-			return
+type PersistedUVMConfig struct {
+	ID              string
+	Stored          bool
+	Config          hcsschema.ComputeSystem
+}
+
+func NewPersistedUVMConfig(ID string, config hcsschema.ComputeSystem) *PersistedUVMConfig {
+	return &PersistedUVMConfig{
+		ID: ID,
+		Stored: false,
+		Config: config,
+	}
+}
+
+// LoadTemplateConfig loads a persisted template config from the registry that matches
+// `templateID`. If not found returns `regstate.NotFoundError`
+func LoadPersistedUVMConfig(ID string) (*PersistedUVMConfig, error) {
+	sk, err := regstate.Open(templateRoot, false)
+	if err != nil {
+		return nil, err
+	}
+	defer sk.Close()
+
+	var puc PersistedUVMConfig
+	if err := sk.Get(ID, templateKey, &puc); err != nil {
+		return nil, err
+	}
+	return &puc, nil
+}
+
+// Store stores or updates the in-memory config to its registry state. If the
+// store fails returns the store error.
+func StorePersistedUVMConfig(puc *PersistedUVMConfig) error {
+	sk, err := regstate.Open(templateRoot, false)
+	if err != nil {
+		return err
+	}
+	defer sk.Close()
+
+	if puc.Stored {
+		if err := sk.Set(puc.ID, templateKey, puc); err != nil {
+			return err
+		}
+	} else {
+		if err := sk.Create(puc.ID, templateKey, puc); err != nil {
+			return err
 		}
 	}
-	logFile.WriteString(msg)
+	puc.Stored = true
+	return nil
 }
 
-func createCloneConfigDoc(uvm *UtilityVM) (*hcsschema.ComputeSystem) {
-	cloneDoc := *uvm.configDoc
-	cloneDoc.VirtualMachine.RestoreState = &hcsschema.RestoreState {}
-	cloneDoc.VirtualMachine.RestoreState.TemplateSystemId = uvm.ID()
-	return &cloneDoc
+// TODO(ambarve): Hook this up with the pod removal functions.
+// Remove removes any persisted state associated with this config. If the config
+// is not found in the registery `Remove` returns no error.
+func RemovePersistedUVMConfig(ID string) error {
+	sk, err := regstate.Open(templateRoot, false)
+	if err != nil {
+		if regstate.IsNotFoundError(err) {
+			return nil
+		}
+		return err
+	}
+	defer sk.Close()
+
+	if err := sk.Remove(ID); err != nil {
+		if regstate.IsNotFoundError(err) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
-func (uvm *UtilityVM) Clone(ctx context.Context) (*UtilityVM, error) {
+// Store the current UVM as a template which can be later used for cloning.
+// Note: Once this UVM is stored as a template it can not be resumed. It will
+// permananetly stay in Saved as template state.
+func (uvm *UtilityVM) SaveAsTemplate(ctx context.Context) error {
 	err := uvm.hcsSystem.Pause(ctx)
 	if err != nil {
-		debuglog("1." + err.Error() + "\n")
-		return nil, err
+		return err
 	}
 
 	err = uvm.hcsSystem.Save(ctx, hcsSaveOptions)
 	if err != nil {
-		debuglog("2." + err.Error() + "\n")
-		return nil, err
+		return err
 	}
 
-	props, err := uvm.hcsSystem.PropertiesV2(ctx)
+	err = StorePersistedUVMConfig(NewPersistedUVMConfig(uvm.ID(), *uvm.configDoc))
 	if err != nil {
-		debuglog("2.1." + err.Error() + "\n")
+		return err
+	}
+	return nil
+}
+
+// Get the config of the UVM with given ID
+func getUVMConfig(ctx context.Context, uvmID string) (*hcsschema.ComputeSystem, error) {
+	puc, err := LoadPersistedUVMConfig(uvmID)
+	if err != nil {
 		return nil, err
 	}
-	debuglog("properties: " + props.State)
+	return &puc.Config, nil
+}
 
-	cloneDoc := createCloneConfigDoc(uvm)
 
-	srcVhdPath := uvm.configDoc.VirtualMachine.Devices.Scsi["0"].Attachments["0"].Path
-	dstVhdPath := "C:\\Users\\Amit\\Documents\\sandbox.vhdx"
+func (uvm *UtilityVM) clone(ctx context.Context, doc *hcsschema.ComputeSystem, opts *OptionsWCOW) (error) {
+	doc.VirtualMachine.RestoreState = &hcsschema.RestoreState {}
+	doc.VirtualMachine.RestoreState.TemplateSystemId = opts.TemplateID
+
+	templateConfig, err := getUVMConfig(ctx, opts.TemplateID)
+	if err != nil {
+		return err
+	}
+
+	srcVhdPath := templateConfig.VirtualMachine.Devices.Scsi["0"].Attachments["0"].Path
+	dstVhdPath := doc.VirtualMachine.Devices.Scsi["0"].Attachments["0"].Path
 
 	// copy the VHDX of source VM
 	err = copyfile.CopyFile(ctx, srcVhdPath, dstVhdPath, true)
 	if err != nil {
-		debuglog("3." + err.Error() + "\n")
-		return nil, err
+		return err
 	}
 
-	// replace the VHD path in config
-	vhdAttachement := cloneDoc.VirtualMachine.Devices.Scsi["0"].Attachments["0"]
-	vhdAttachement.Path = dstVhdPath
-	cloneDoc.VirtualMachine.Devices.Scsi["0"].Attachments["0"] = vhdAttachement
-	// Guest connection will be done externally
-	cloneDoc.VirtualMachine.GuestConnection = &hcsschema.GuestConnection{}
+	// Guest connection will be done externally for clones
+	doc.VirtualMachine.GuestConnection = &hcsschema.GuestConnection{}
 
-
+	// original VHD has VM group access but it is overwritten in the copyFile op above
 	err = security.GrantVmGroupAccess(dstVhdPath)
 	if err != nil {
-		debuglog("4." + err.Error() + "\n")
-		return nil, err
+		return err
 	}
 
-	g, err := guid.NewV4()
+	err = uvm.create(ctx, uvm.configDoc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	opts := NewDefaultOptionsWCOW(g.String(), uvm.owner)
-
-	cloneUvm := &UtilityVM{
-		id:                  g.String(),
-		owner:               uvm.owner,
-		operatingSystem:     "windows",
-		scsiControllerCount: 1,
-		vsmbDirShares:       make(map[string]*vsmbShare),
-		vsmbFileShares:      make(map[string]*vsmbShare),
-	}
-	defer func() {
-		if err != nil {
-			cloneUvm.Close()
-		}
-	}()
-
-	// To maintain compatability with Docker we need to automatically downgrade
-	// a user CPU count if the setting is not possible.
-	cloneUvm.normalizeProcessorCount(ctx, opts.ProcessorCount)
-	cloneUvm.scsiLocations[0][0].hostPath = dstVhdPath
-
-
-	err = cloneUvm.create(ctx, cloneDoc)
-	if err != nil {
-		debuglog("5." + err.Error() + "\n")
-		return nil, err
-	}
-
-	err = cloneUvm.hcsSystem.Start(ctx)
-	if err != nil {
-		debuglog("6." + err.Error() + "\n")
-		return nil, err
-	}
-
-	return cloneUvm, nil
+	return nil
 }
