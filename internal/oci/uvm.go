@@ -123,7 +123,6 @@ const (
 	annotationVPCIEnabled                = "io.microsoft.virtualmachine.lcow.vpcienabled"
 	annotationStorageQoSBandwidthMaximum = "io.microsoft.virtualmachine.storageqos.bandwidthmaximum"
 	annotationStorageQoSIopsMaximum      = "io.microsoft.virtualmachine.storageqos.iopsmaximum"
-
 	annotationSaveAsTemplate             = "io.microsoft.virtualmachine.saveastemplate"
 	annotationTemplateID                 = "io.microsoft.virtualmachine.templateid"
 )

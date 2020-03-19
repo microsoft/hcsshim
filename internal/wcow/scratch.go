@@ -23,16 +23,3 @@ func CreateUVMScratch(ctx context.Context, imagePath, destDirectory, vmID string
 	}
 	return nil
 }
-
-
-// Copies the given VHD at a given destination path
-func CopyUVMVHD(ctx context.Context, srcVHDPath, dstVHDPath, vmID string) error {
-	if err := copyfile.CopyFile(ctx, srcVHDPath, dstVHDPath, true); err != nil {
-		return err
-	}
-	if err := wclayer.GrantVmAccess(ctx, dstVHDPath, vmID); err != nil {
-		os.Remove(dstVHDPath)
-		return err
-	}
-	return nil
-}

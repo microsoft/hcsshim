@@ -75,7 +75,6 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		}
 	}()
 
-
 	// To maintain compatability with Docker we need to automatically downgrade
 	// a user CPU count if the setting is not possible.
 	uvm.normalizeProcessorCount(ctx, opts.ProcessorCount)

@@ -36,7 +36,6 @@ func (s *service) getPod() (shimPod, error) {
 	return raw.(shimPod), nil
 }
 
-
 // getTask returns a task matching `tid` or else returns `nil`. This properly
 // handles a task in a pod or a singular task shim.
 //

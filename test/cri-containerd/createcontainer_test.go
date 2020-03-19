@@ -48,8 +48,6 @@ func runCreateContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.Run
 	stopContainer(t, client, ctx, containerID)
 }
 
-
-
 func Test_CreateContainer_WCOW_Process(t *testing.T) {
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
@@ -963,8 +961,6 @@ func Test_CreateContainer_Mount_NamedPipe_WCOW(t *testing.T) {
 	}
 	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
 }
-
-
 
 // TODO(ambarve): This test doesn't work right now because start container command for template fails.
 // It seems that the pod directory is deleted if start pod command fails. So when the test creates a clone

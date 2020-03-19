@@ -371,6 +371,7 @@ func (computeSystem *System) Pause(ctx context.Context) (err error) {
 	if computeSystem.handle == 0 {
 		return makeSystemError(computeSystem, operation, "", ErrAlreadyClosed, nil)
 	}
+
 	resultJSON, err := vmcompute.HcsPauseComputeSystem(ctx, computeSystem.handle, "")
 	events, err := processAsyncHcsResult(ctx, err, resultJSON, computeSystem.callbackNumber, hcsNotificationSystemPauseCompleted, &timeout.SystemPause)
 	if err != nil {
