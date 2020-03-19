@@ -30,7 +30,6 @@ import (
 //sys hcsUnregisterComputeSystemCallback(callbackHandle HcsCallback) (hr error) = vmcompute.HcsUnregisterComputeSystemCallback?
 //sys hcsSaveComputeSystem(computeSystem HcsSystem, options string, result **uint16) (hr error) = vmcompute.HcsSaveComputeSystem?
 
-
 //sys hcsCreateProcess(computeSystem HcsSystem, processParameters string, processInformation *HcsProcessInformation, process *HcsProcess, result **uint16) (hr error) = vmcompute.HcsCreateProcess?
 //sys hcsOpenProcess(computeSystem HcsSystem, pid uint32, process *HcsProcess, result **uint16) (hr error) = vmcompute.HcsOpenProcess?
 //sys hcsCloseProcess(process HcsProcess) (hr error) = vmcompute.HcsCloseProcess?

@@ -13,19 +13,19 @@ var err error
 
 const (
 	hcsSaveOptions = "{\"SaveType\": \"AsTemplate\"}"
-	templateRoot = "troot"
-	templateKey = "tkey"
+	templateRoot   = "troot"
+	templateKey    = "tkey"
 )
 
 type PersistedUVMConfig struct {
-	ID              string
-	Stored          bool
-	Config          hcsschema.ComputeSystem
+	ID     string
+	Stored bool
+	Config hcsschema.ComputeSystem
 }
 
 func NewPersistedUVMConfig(ID string, config hcsschema.ComputeSystem) *PersistedUVMConfig {
 	return &PersistedUVMConfig{
-		ID: ID,
+		ID:     ID,
 		Stored: false,
 		Config: config,
 	}
@@ -121,9 +121,8 @@ func getUVMConfig(ctx context.Context, uvmID string) (*hcsschema.ComputeSystem, 
 	return &puc.Config, nil
 }
 
-
-func (uvm *UtilityVM) clone(ctx context.Context, doc *hcsschema.ComputeSystem, opts *OptionsWCOW) (error) {
-	doc.VirtualMachine.RestoreState = &hcsschema.RestoreState {}
+func (uvm *UtilityVM) clone(ctx context.Context, doc *hcsschema.ComputeSystem, opts *OptionsWCOW) error {
+	doc.VirtualMachine.RestoreState = &hcsschema.RestoreState{}
 	doc.VirtualMachine.RestoreState.TemplateSystemId = opts.TemplateID
 
 	templateConfig, err := getUVMConfig(ctx, opts.TemplateID)
