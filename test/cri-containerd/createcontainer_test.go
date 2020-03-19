@@ -988,7 +988,7 @@ func Test_Create_Pod_FromTemplate(t *testing.T) {
 		RuntimeHandler: wcowHypervisorRuntimeHandler,
 	}
 
-	templateID := runPodSandbox(t, client, ctx, sandboxRequest)
+	templatePodID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, templatePodID)
 	defer stopPodSandbox(t, client, ctx, templatePodID)
 
@@ -1001,7 +1001,7 @@ func Test_Create_Pod_FromTemplate(t *testing.T) {
 				Namespace: testNamespace,
 			},
 			Annotations: map[string]string{
-				"io.microsoft.virtualmachine.templateid": templateID + "@vm",
+				"io.microsoft.virtualmachine.templateid": templatePodID + "@vm",
 			},
 		},
 		RuntimeHandler: wcowHypervisorRuntimeHandler,
