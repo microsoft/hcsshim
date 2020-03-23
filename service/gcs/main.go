@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"syscall"
 	"time"
 
+	"github.com/Microsoft/opengcs/internal/cgrouputils"
 	"github.com/Microsoft/opengcs/internal/kmsg"
 	"github.com/Microsoft/opengcs/internal/oc"
 	"github.com/Microsoft/opengcs/internal/runtime/hcsv2"
@@ -16,10 +18,56 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/runtime/runc"
 	"github.com/Microsoft/opengcs/service/gcs/transport"
 	"github.com/containerd/cgroups"
+	cgroupstats "github.com/containerd/cgroups/stats/v1"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
+
+func memoryLogFormat(metrics *cgroupstats.Metrics) logrus.Fields {
+	return logrus.Fields{
+		"memoryUsage":      metrics.Memory.Usage.Usage,
+		"memoryUsageMax":   metrics.Memory.Usage.Max,
+		"memoryUsageLimit": metrics.Memory.Usage.Limit,
+		"swapUsage":        metrics.Memory.Swap.Usage,
+		"swapUsageMax":     metrics.Memory.Swap.Max,
+		"swapUsageLimit":   metrics.Memory.Swap.Limit,
+		"kernelUsage":      metrics.Memory.Kernel.Usage,
+		"kernelUsageMax":   metrics.Memory.Kernel.Max,
+		"kernelUsageLimit": metrics.Memory.Kernel.Limit,
+	}
+}
+
+func readMemoryEvents(efdFile *os.File, cgName string, threshold int64, cg cgroups.Cgroup) {
+	// Buffer must be >= 8 bytes for eventfd reads
+	// http://man7.org/linux/man-pages/man2/eventfd.2.html
+	buf := make([]byte, 8)
+	for {
+		_, err := efdFile.Read(buf)
+		if err != nil {
+			logrus.WithError(err).Warn("failed to read from eventfd")
+			return
+		}
+
+		msg := "memory usage for cgroup exceeded threshold"
+		entry := logrus.WithFields(logrus.Fields{
+			"cgroup":         cgName,
+			"thresholdBytes": threshold,
+		})
+		// Sleep for one second in case there is a series of allocations slightly after
+		// reaching threshold.
+		time.Sleep(time.Second)
+		metrics, err := cg.Stat()
+		if err != nil {
+			// Don't return on Stat err as it will return an error if
+			// any of the cgroup subsystems Stat calls failed for any reason.
+			// We still want to log if we hit cgroup threshold/limit
+			entry.WithError(err).Error(msg)
+		} else {
+			entry.WithFields(memoryLogFormat(metrics)).Warn(msg)
+		}
+	}
+}
 
 func main() {
 	logLevel := flag.String("loglevel", "debug", "Logging Level: debug, info, warning, error, fatal, panic.")
@@ -126,8 +174,8 @@ func main() {
 	// The containers cgroup is limited only by {Totalram - 75 MB
 	// (reservation)}.
 	//
-	// The gcs cgroup is limited to 50 MB to prevent unknown memory leaks over
-	// time from affecting workload memory.
+	// The gcs cgroup is not limited but an event will get logged if memory
+	// usage exceeds 50 MB.
 	sinfo := syscall.Sysinfo_t{}
 	if err := syscall.Sysinfo(&sinfo); err != nil {
 		logrus.WithError(err).Fatal("opengcs::main - failed to get sys info")
@@ -143,11 +191,7 @@ func main() {
 	}
 	defer containersControl.Delete()
 	gcsLimit := int64(*gcsMemLimitBytes)
-	gcsControl, err := cgroups.New(cgroups.V1, cgroups.StaticPath("/gcs"), &oci.LinuxResources{
-		Memory: &oci.LinuxMemory{
-			Limit: &gcsLimit,
-		},
-	})
+	gcsControl, err := cgroups.New(cgroups.V1, cgroups.StaticPath("/gcs"), &oci.LinuxResources{})
 	if err != nil {
 		logrus.WithError(err).Fatal("opengcs::main - failed to create gcs cgroup")
 	}
@@ -156,6 +200,21 @@ func main() {
 		logrus.WithError(err).Fatal("opengcs::main - failed add gcs pid to gcs cgroup")
 	}
 
+	gefd, err := cgrouputils.RegisterMemoryThreshold(filepath.Join(cgrouputils.MemRoot, "gcs"), gcsLimit)
+	if err != nil {
+		logrus.WithError(err).Fatal("failed to register memory threshold for gcs cgroup")
+	}
+	defer gefd.Close()
+
+	oom, err := containersControl.OOMEventFD()
+	if err != nil {
+		logrus.WithError(err).Fatal("failed to retrieve the container cgroups oom eventfd")
+	}
+	cefd := os.NewFile(oom, "cefd")
+	defer cefd.Close()
+
+	go readMemoryEvents(gefd, "gcs", gcsLimit, gcsControl)
+	go readMemoryEvents(cefd, "containers", containersLimit, containersControl)
 	err = b.ListenAndServe(bridgeIn, bridgeOut)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
