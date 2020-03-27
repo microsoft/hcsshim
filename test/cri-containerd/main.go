@@ -42,6 +42,10 @@ const (
 	testGPUBootFiles                  = "C:\\ContainerPlat\\LinuxBootFiles\\nvidiagpu"
 	alpineAspNet                      = "mcr.microsoft.com/dotnet/core/aspnet:3.1-alpine3.11"
 	alpineAspnetUpgrade               = "mcr.microsoft.com/dotnet/core/aspnet:3.1.2-alpine3.11"
+	// Default account name for use with GMSA related tests. This will not be
+	// present/you will not have access to the account on your machine unless
+	// your environment is configured properly.
+	gmsaAccount = "cplat"
 )
 
 // Image definitions
@@ -65,12 +69,14 @@ const (
 	featureLCOW           = "LCOW"
 	featureWCOWProcess    = "WCOWProcess"
 	featureWCOWHypervisor = "WCOWHypervisor"
+	featureGMSA           = "GMSA"
 )
 
 var allFeatures = []string{
 	featureLCOW,
 	featureWCOWProcess,
 	featureWCOWHypervisor,
+	featureGMSA,
 }
 
 func init() {

@@ -138,5 +138,18 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 		}
 	}
 
+	if cs, ok := coi.Spec.Windows.CredentialSpec.(string); ok {
+		// Only need to create a CCG instance for v2 containers
+		if schemaversion.IsV21(coi.actualSchemaVersion) {
+			hypervisorIsolated := coi.HostingSystem != nil
+			ccgState, ccgInstance, err := CreateCredentialGuard(ctx, coi.actualID, cs, hypervisorIsolated)
+			if err != nil {
+				return err
+			}
+			coi.ccgState = ccgState
+			r.resources = append(r.resources, ccgInstance)
+			//TODO dcantah: If/when dynamic service table entries is supported register the RpcEndpoint with hvsocket here
+		}
+	}
 	return nil
 }

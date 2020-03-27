@@ -59,6 +59,7 @@ type createOptionsInternal struct {
 	actualID               string             // Identifier for the container
 	actualOwner            string             // Owner for the container
 	actualNetworkNamespace string
+	ccgState               *hcsschema.ContainerCredentialGuardState // Container Credential Guard information to be attached to HCS container document
 }
 
 // CreateContainer creates a container. It can cope with a  wide variety of

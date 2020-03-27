@@ -476,3 +476,148 @@ func Test_RunContainer_ZeroVPMEM_Multiple_LCOW(t *testing.T) {
 	startContainer(t, client, ctx, containerIDTwo)
 	defer stopContainer(t, client, ctx, containerIDTwo)
 }
+
+func Test_RunContainer_GMSA_WCOW_Process(t *testing.T) {
+	requireFeatures(t, featureWCOWProcess, featureGMSA)
+
+	credSpec := gmsaSetup(t)
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sandboxRequest := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name() + "-Sandbox",
+				Namespace: testNamespace,
+			},
+		},
+		RuntimeHandler: wcowProcessRuntimeHandler,
+	}
+
+	podID := runPodSandbox(t, client, ctx, sandboxRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	request := &runtime.CreateContainerRequest{
+		PodSandboxId: podID,
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsNanoserver,
+			},
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Windows: &runtime.WindowsContainerConfig{
+				SecurityContext: &runtime.WindowsContainerSecurityContext{
+					CredentialSpec: credSpec,
+				},
+			},
+		},
+		SandboxConfig: sandboxRequest.Config,
+	}
+
+	containerID := createContainer(t, client, ctx, request)
+	defer removeContainer(t, client, ctx, containerID)
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID)
+
+	// No klist and no powershell available
+	cmd := []string{"cmd", "/c", "set", "USERDNSDOMAIN"}
+	containerExecReq := &runtime.ExecSyncRequest{
+		ContainerId: containerID,
+		Cmd:         cmd,
+		Timeout:     20,
+	}
+	r := execSync(t, client, ctx, containerExecReq)
+	if r.ExitCode != 0 {
+		t.Fatalf("failed with exit code %d running 'set USERDNSDOMAIN': %s", r.ExitCode, string(r.Stderr))
+	}
+	// Check for USERDNSDOMAIN environment variable. This acts as a way tell if a
+	// user is joined to an Active Directory Domain and is successfully
+	// authenticated as a domain identity.
+	if !strings.Contains(string(r.Stdout), "USERDNSDOMAIN") {
+		t.Fatalf("expected to see USERDNSDOMAIN entry")
+	}
+}
+
+func Test_RunContainer_GMSA_WCOW_Hypervisor(t *testing.T) {
+	t.Skip("GMSA is not supported for Hyper-V isolated containers")
+	requireFeatures(t, featureWCOWHypervisor, featureGMSA)
+
+	credSpec := gmsaSetup(t)
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sandboxRequest := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name() + "-Sandbox",
+				Namespace: testNamespace,
+			},
+		},
+		RuntimeHandler: wcowHypervisorRuntimeHandler,
+	}
+
+	podID := runPodSandbox(t, client, ctx, sandboxRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	request := &runtime.CreateContainerRequest{
+		PodSandboxId: podID,
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsNanoserver,
+			},
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Windows: &runtime.WindowsContainerConfig{
+				SecurityContext: &runtime.WindowsContainerSecurityContext{
+					CredentialSpec: credSpec,
+				},
+			},
+		},
+		SandboxConfig: sandboxRequest.Config,
+	}
+
+	containerID := createContainer(t, client, ctx, request)
+	defer removeContainer(t, client, ctx, containerID)
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID)
+
+	// No klist and no powershell available
+	cmd := []string{"cmd", "/c", "set", "USERDNSDOMAIN"}
+	containerExecReq := &runtime.ExecSyncRequest{
+		ContainerId: containerID,
+		Cmd:         cmd,
+		Timeout:     20,
+	}
+	r := execSync(t, client, ctx, containerExecReq)
+	if r.ExitCode != 0 {
+		t.Fatalf("failed with exit code %d running 'set USERDNSDOMAIN': %s", r.ExitCode, string(r.Stderr))
+	}
+	// Check for USERDNSDOMAIN environment variable. This acts as a way tell if a
+	// user is joined to an Active Directory Domain and is successfully
+	// authenticated as a domain identity.
+	if !strings.Contains(string(r.Stdout), "USERDNSDOMAIN") {
+		t.Fatalf("expected to see USERDNSDOMAIN entry")
+	}
+}

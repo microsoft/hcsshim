@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
-	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/osversion"
@@ -23,8 +22,7 @@ type Plan9Share struct {
 // Release frees the resources of the corresponding Plan9 share
 func (p9 *Plan9Share) Release(ctx context.Context) error {
 	if err := p9.vm.RemovePlan9(ctx, p9); err != nil {
-		log.G(ctx).WithError(err).Warn("failed to remove plan9 share")
-		return err
+		return fmt.Errorf("failed to remove plan9 share: %s", err)
 	}
 	return nil
 }

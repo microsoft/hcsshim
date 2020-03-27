@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -23,8 +22,7 @@ type PipeMount struct {
 // Release frees the resources of the corresponding pipe Mount
 func (pipe *PipeMount) Release(ctx context.Context) error {
 	if err := pipe.vm.RemovePipe(ctx, pipe.HostPath); err != nil {
-		log.G(ctx).WithError(err).Warn("failed to remove pipe mount")
-		return err
+		return fmt.Errorf("failed to remove pipe mount: %s", err)
 	}
 	return nil
 }

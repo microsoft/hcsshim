@@ -2,6 +2,7 @@ package hcsoci
 
 import (
 	"context"
+	"errors"
 	"os"
 
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -76,16 +77,25 @@ func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all 
 		}
 	}
 
+	releaseErr := false
 	// Release resources in reverse order so that the most recently
-	// added are cleaned up first.
+	// added are cleaned up first. We don't return an error right away
+	// so that other resources still get cleaned up in the case of one
+	// or more failing.
 	for i := len(r.resources) - 1; i >= 0; i-- {
 		switch r.resources[i].(type) {
 		case *uvm.NetworkEndpoints:
 			if r.createdNetNS {
 				if err := r.resources[i].Release(ctx); err != nil {
-					return err
+					log.G(ctx).WithError(err).Error("failed to release container resource")
+					releaseErr = true
 				}
 				r.createdNetNS = false
+			}
+		case *CCGInstance:
+			if err := r.resources[i].Release(ctx); err != nil {
+				log.G(ctx).WithError(err).Error("failed to release container resource")
+				releaseErr = true
 			}
 		default:
 			// Don't need to check if vm != nil here anymore as they wouldnt
@@ -93,12 +103,16 @@ func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all 
 			// vm they belong to.
 			if all {
 				if err := r.resources[i].Release(ctx); err != nil {
-					return err
+					log.G(ctx).WithError(err).Error("failed to release container resource")
+					releaseErr = true
 				}
 			}
 		}
 	}
 	r.resources = nil
+	if releaseErr {
+		return errors.New("failed to release one or more container resources")
+	}
 
 	// cleanup container state
 	if vm != nil {
