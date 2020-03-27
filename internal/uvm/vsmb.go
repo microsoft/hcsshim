@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 )
@@ -29,8 +28,7 @@ type VSMBShare struct {
 // Release frees the resources of the corresponding vsmb Mount
 func (vsmb *VSMBShare) Release(ctx context.Context) error {
 	if err := vsmb.vm.RemoveVSMB(ctx, vsmb.HostPath); err != nil {
-		log.G(ctx).WithError(err).Warn("failed to remove vsmb share")
-		return err
+		return fmt.Errorf("failed to remove VSMB share: %s", err)
 	}
 	return nil
 }

@@ -6,7 +6,6 @@ import (
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
-	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 )
@@ -21,8 +20,7 @@ type VPCIDevice struct {
 // Release frees the resources of the corresponding vpci device
 func (vpci *VPCIDevice) Release(ctx context.Context) error {
 	if err := vpci.vm.RemoveDevice(ctx, vpci.ID); err != nil {
-		log.G(ctx).WithError(err).Warn("failed to remove VPCI device")
-		return err
+		return fmt.Errorf("failed to remove VPCI device: %s", err)
 	}
 	return nil
 }

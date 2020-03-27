@@ -165,9 +165,14 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		v2Container.Networking.NetworkSharedContainerName = v1.NetworkSharedContainerName
 	}
 
-	//	// TODO V2 Credentials not in the schema yet.
 	if cs, ok := coi.Spec.Windows.CredentialSpec.(string); ok {
 		v1.Credentials = cs
+		// If this is a HCS v2 schema container, we created the CCG instance
+		// with the other container resources. Pass the CCG state information
+		// as part of the container document.
+		if coi.ccgState != nil {
+			v2Container.ContainerCredentialGuard = coi.ccgState
+		}
 	}
 
 	if coi.Spec.Root == nil {
