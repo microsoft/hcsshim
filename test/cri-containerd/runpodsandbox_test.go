@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/osversion"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
@@ -1083,6 +1084,104 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_LCOW(t *testing.T) {
 	// 3rd container should not have the mount and ls should fail
 	if exitCode == 0 {
 		t.Fatalf("Exec into container succeeded but we expected it to fail: %v and exit code: %s, %s", errorMsg, output, containerId)
+	}
+}
+
+func Test_RunPodSandbox_MultipleContainersSameVhd_WCOW(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	annotations := map[string]string{
+		"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "true",
+	}
+
+	vhdHostDir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("failed to create temporary directory: %s", err)
+	}
+	defer os.RemoveAll(vhdHostDir)
+
+	vhdHostPath := filepath.Join(vhdHostDir, "temp.vhdx")
+
+	if err = hcs.CreateNTFSVHD(ctx, vhdHostPath, 10); err != nil {
+		t.Fatalf("failed to create NTFS VHD: %s", err)
+	}
+
+	vhdContainerPath := "C:\\containerDir"
+
+	mounts := []*runtime.Mount{
+		{
+			HostPath:      "vhd://" + vhdHostPath,
+			ContainerPath: vhdContainerPath,
+		},
+	}
+
+	sbRequest := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: annotations,
+		},
+		RuntimeHandler: wcowHypervisorRuntimeHandler,
+	}
+
+	podID := runPodSandbox(t, client, ctx, sbRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	execCommand := []string{
+		"cmd",
+		"/c",
+		"dir",
+		vhdContainerPath,
+	}
+
+	command := []string{
+		"ping",
+		"-t",
+		"127.0.0.1",
+	}
+
+	// create 2 containers with vhd mounts and verify both can mount vhd
+	for i := 1; i < 3; i++ {
+		containerName := t.Name() + "-Container-" + strconv.Itoa(i)
+		containerId := createContainerInSandbox(t, client, ctx, podID, containerName, imageWindowsNanoserver, command, annotations, mounts, sbRequest.Config)
+		defer removeContainer(t, client, ctx, containerId)
+
+		startContainer(t, client, ctx, containerId)
+		defer stopContainer(t, client, ctx, containerId)
+
+		_, errorMsg, exitCode := execContainer(t, client, ctx, containerId, execCommand)
+
+		// The dir command will return File Not Found error if the directory is empty.
+		// Don't fail the test if that happens. It is expected behaviour in this case.
+		if exitCode != 0 && !strings.Contains(errorMsg, "File Not Found") {
+			t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerId)
+		}
+	}
+
+	// For the 3rd container don't add any mounts
+	// this makes sure you can have containers that share vhd mounts and
+	// at the same time containers in a pod that don't have any mounts
+	mounts = []*runtime.Mount{}
+	containerName := t.Name() + "-Container-3"
+	containerId := createContainerInSandbox(t, client, ctx, podID, containerName, imageWindowsNanoserver, command, annotations, mounts, sbRequest.Config)
+	defer removeContainer(t, client, ctx, containerId)
+
+	startContainer(t, client, ctx, containerId)
+	defer stopContainer(t, client, ctx, containerId)
+
+	output, errorMsg, exitCode := execContainer(t, client, ctx, containerId, execCommand)
+
+	// 3rd container should not have the mount and ls should fail
+	if exitCode != 0 && !strings.Contains(errorMsg, "File Not Found") {
+		t.Fatalf("Exec into container failed: %v and exit code: %s, %s", errorMsg, output, containerId)
 	}
 }
 
