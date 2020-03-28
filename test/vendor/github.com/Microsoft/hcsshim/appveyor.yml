@@ -22,10 +22,12 @@ build_script:
   - go build ./internal/tools/uvmboot
   - go build ./internal/tools/zapdir
   - go test -v ./... -tags admin
-  - go test -c ./test/containerd-shim-runhcs-v1/ -tags functional
-  - go test -c ./test/cri-containerd/ -tags functional
-  - go test -c ./test/functional/ -tags functional
-  - go test -c ./test/runhcs/ -tags functional
+  - cd test
+  - go test -v ./internal -tags admin
+  - go test -c ./containerd-shim-runhcs-v1/ -tags functional
+  - go test -c ./cri-containerd/ -tags functional
+  - go test -c ./functional/ -tags functional
+  - go test -c ./runhcs/ -tags functional
 
 artifacts:
   - path: 'containerd-shim-runhcs-v1.exe'
