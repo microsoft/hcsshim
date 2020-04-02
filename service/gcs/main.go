@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Microsoft/opengcs/internal/kmsg"
 	"github.com/Microsoft/opengcs/internal/oc"
 	"github.com/Microsoft/opengcs/internal/runtime/hcsv2"
 	"github.com/Microsoft/opengcs/service/gcs/bridge"
@@ -22,6 +23,7 @@ import (
 
 func main() {
 	logLevel := flag.String("loglevel", "debug", "Logging Level: debug, info, warning, error, fatal, panic.")
+	kmsgLogLevel := flag.Uint("kmsgLogLevel", uint(kmsg.Warning), "Log all kmsg entries with a priority less than or equal to the supplied level.")
 	logFile := flag.String("logfile", "", "Logging Target: An optional file name/path. Omit for console output.")
 	logFormat := flag.String("log-format", "text", "Logging Format: text or json")
 	useInOutErr := flag.Bool("use-inouterr", false, "If true use stdin/stdout for bridge communication and stderr for logging")
@@ -81,6 +83,10 @@ func main() {
 	baseStoragePath := "/run/gcs/c"
 
 	logrus.Info("GCS started")
+
+	// Continuously log /dev/kmsg
+	go kmsg.ReadForever(kmsg.LogLevel(*kmsgLogLevel))
+
 	tport := &transport.VsockTransport{}
 	rtime, err := runc.NewRuntime(baseLogPath)
 	if err != nil {
