@@ -17,6 +17,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/sirupsen/logrus"
 )
 
 func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, resources *Resources) error {
@@ -86,31 +87,35 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 					break
 				}
 			}
-			l := log.G(ctx).WithField("mount", fmt.Sprintf("%+v", mount))
+			l := log.G(ctx).WithFields(logrus.Fields{
+				"mount":   mount,
+				"uvmPath": uvmPath,
+			})
 			if mount.Type == "physical-disk" {
-				l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI physical disk for OCI mount")
+				l.Debug("adding physical SCSI disk to UVM")
 				_, _, _, err := coi.HostingSystem.AddSCSIPhysicalDisk(ctx, mount.Source, uvmPath, readOnly)
 				if err != nil {
-					return fmt.Errorf("adding SCSI physical disk mount %+v: %s", mount, err)
+					return fmt.Errorf("failed to add physical SCSI disk %s: %s", mount.Source, err)
 				}
 				coi.Spec.Mounts[i].Type = ""
 				resources.scsiMounts = append(resources.scsiMounts, scsiMount{path: mount.Source})
 			} else if mount.Type == "virtual-disk" || mount.Type == "automanage-virtual-disk" {
-				l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI virtual disk for OCI mount")
+				l.Debug("adding VHD to UVM")
 				_, _, _, err := coi.HostingSystem.AddSCSI(ctx, mount.Source, uvmPath, readOnly)
 				if err != nil {
-					return fmt.Errorf("adding SCSI virtual disk mount %+v: %s", mount, err)
+					return fmt.Errorf("faield to add VHD %s: %s", mount.Source, err)
 				}
 				coi.Spec.Mounts[i].Type = ""
 				resources.scsiMounts = append(resources.scsiMounts, scsiMount{path: mount.Source, autoManage: mount.Type == "automanage-virtual-disk"})
 			} else {
 				if uvm.IsPipe(mount.Source) {
+					l.Debug("adding pipe mount to UVM")
 					if err := coi.HostingSystem.AddPipe(ctx, mount.Source); err != nil {
-						return fmt.Errorf("failed to add named pipe to UVM: %s", err)
+						return fmt.Errorf("failed to add pipe %s: %s", mount.Source, err)
 					}
 					resources.pipeMounts = append(resources.pipeMounts, mount.Source)
 				} else {
-					l.Debug("hcsshim::allocateWindowsResources Hot-adding VSMB share for OCI mount")
+					l.Debug("adding VSMB share to UVM")
 					options := &hcsschema.VirtualSmbShareOptions{}
 					if readOnly {
 						options.ReadOnly = true
@@ -119,9 +124,8 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 						options.ForceLevelIIOplocks = true
 						break
 					}
-
 					if err := coi.HostingSystem.AddVSMB(ctx, mount.Source, "", options); err != nil {
-						return fmt.Errorf("failed to add VSMB share to utility VM for mount %+v: %s", mount, err)
+						return fmt.Errorf("failed to add VSMB share %s: %s", mount.Source, err)
 					}
 					resources.vsmbMounts = append(resources.vsmbMounts, mount.Source)
 				}

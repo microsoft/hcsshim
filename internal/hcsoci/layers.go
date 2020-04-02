@@ -268,11 +268,11 @@ func computeV2Layers(ctx context.Context, vm *uvm.UtilityVM, paths []string) (la
 	for _, path := range paths {
 		uvmPath, err := vm.GetVSMBUvmPath(ctx, path)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to get VSMB guest path for %s: %s", path, err)
 		}
 		layerID, err := wclayer.LayerID(ctx, path)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to calculate layer ID for %s: %s", path, err)
 		}
 		layers = append(layers, hcsschema.Layer{Id: layerID.String(), Path: uvmPath})
 	}

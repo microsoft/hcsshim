@@ -229,7 +229,7 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		for _, layerPath := range coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1] {
 			layerID, err := wclayer.LayerID(ctx, layerPath)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, fmt.Errorf("failed to calculate layer ID for %s: %s", layerPath, err)
 			}
 			v1.Layers = append(v1.Layers, schema1.Layer{ID: layerID.String(), Path: layerPath})
 			v2Container.Storage.Layers = append(v2Container.Storage.Layers, hcsschema.Layer{Id: layerID.String(), Path: layerPath})
@@ -270,10 +270,10 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 						// It could also be a scsi mount.
 						uvmPath, err = coi.HostingSystem.GetScsiUvmPath(ctx, mount.Source)
 						if err != nil {
-							return nil, nil, err
+							return nil, nil, fmt.Errorf("failed to get SCSI guest path for %s: %s", mount.Source, err)
 						}
 					} else {
-						return nil, nil, err
+						return nil, nil, fmt.Errorf("failed to get VSMB guest path for %s: %s", mount.Source, err)
 					}
 				}
 				mdv2.HostPath = uvmPath

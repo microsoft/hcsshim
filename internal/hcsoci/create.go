@@ -98,9 +98,9 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 	}
 
 	log.G(ctx).WithFields(logrus.Fields{
-		"options": fmt.Sprintf("%+v", createOptions),
+		"options": createOptions,
 		"schema":  coi.actualSchemaVersion,
-	}).Debug("hcsshim::CreateContainer")
+	}).Debug("internal/hcsoci.CreateContainer")
 
 	resources := &Resources{
 		id: createOptions.ID,
@@ -165,33 +165,30 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 	}
 
 	var hcsDocument, gcsDocument interface{}
-	log.G(ctx).Debug("hcsshim::CreateContainer allocating resources")
 	if coi.Spec.Linux != nil {
 		if schemaversion.IsV10(coi.actualSchemaVersion) {
 			return nil, resources, errors.New("LCOW v1 not supported")
 		}
-		log.G(ctx).Debug("hcsshim::CreateContainer allocateLinuxResources")
+		log.G(ctx).Debug("allocating LCOW resources")
 		err = allocateLinuxResources(ctx, coi, resources)
 		if err != nil {
-			log.G(ctx).WithError(err).Debug("failed to allocateLinuxResources")
-			return nil, resources, err
+			return nil, resources, fmt.Errorf("failed to allocate LCOW resources: %s", err)
 		}
+		log.G(ctx).Debug("creating LCOW container document")
 		gcsDocument, err = createLinuxContainerDocument(ctx, coi, resources.containerRootInUVM)
 		if err != nil {
-			log.G(ctx).WithError(err).Debug("failed createHCSContainerDocument")
-			return nil, resources, err
+			return nil, resources, fmt.Errorf("failed to create LCOW container document: %s", err)
 		}
 	} else {
+		log.G(ctx).Debug("allocating WCOW resources")
 		err = allocateWindowsResources(ctx, coi, resources)
 		if err != nil {
-			log.G(ctx).WithError(err).Debug("failed to allocateWindowsResources")
-			return nil, resources, err
+			return nil, resources, fmt.Errorf("failed to allocate WCOW resources: %s", err)
 		}
-		log.G(ctx).Debug("hcsshim::CreateContainer creating container document")
+		log.G(ctx).Debug("creating WCOW container document")
 		v1, v2, err := createWindowsContainerDocument(ctx, coi)
 		if err != nil {
-			log.G(ctx).WithError(err).Debug("failed createHCSContainerDocument")
-			return nil, resources, err
+			return nil, resources, fmt.Errorf("failed to create WCOW container document: %s", err)
 		}
 
 		if schemaversion.IsV10(coi.actualSchemaVersion) {
@@ -214,18 +211,16 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 		}
 	}
 
-	log.G(ctx).Debug("hcsshim::CreateContainer creating compute system")
+	var c cow.Container
 	if gcsDocument != nil {
-		c, err := coi.HostingSystem.CreateContainer(ctx, coi.actualID, gcsDocument)
-		if err != nil {
-			return nil, resources, err
-		}
-		return c, resources, nil
+		log.G(ctx).Debug("creating guest compute system")
+		c, err = coi.HostingSystem.CreateContainer(ctx, coi.actualID, gcsDocument)
+	} else {
+		log.G(ctx).Debug("creating HCS compute system")
+		c, err = hcs.CreateComputeSystem(ctx, coi.actualID, hcsDocument)
 	}
-
-	system, err := hcs.CreateComputeSystem(ctx, coi.actualID, hcsDocument)
 	if err != nil {
-		return nil, resources, err
+		return nil, resources, fmt.Errorf("failed to create compute system: %s", err)
 	}
-	return system, resources, nil
+	return c, resources, nil
 }
