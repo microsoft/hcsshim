@@ -102,7 +102,7 @@ func main() {
 			logrus.WithFields(logrus.Fields{
 				"path":          *logFile,
 				logrus.ErrorKey: err,
-			}).Fatal("opengcs::main - failed to create log file")
+			}).Fatal("failed to create log file")
 		}
 		logrus.SetOutput(logFileHandle)
 	}
@@ -117,7 +117,7 @@ func main() {
 	default:
 		logrus.WithFields(logrus.Fields{
 			"log-format": *logFormat,
-		}).Fatal("opengcs::main - unknown log-format")
+		}).Fatal("unknown log-format")
 	}
 
 	level, err := logrus.ParseLevel(*logLevel)
@@ -138,7 +138,7 @@ func main() {
 	tport := &transport.VsockTransport{}
 	rtime, err := runc.NewRuntime(baseLogPath)
 	if err != nil {
-		logrus.WithError(err).Fatal("opengcs::main - failed to initialize new runc runtime")
+		logrus.WithError(err).Fatal("failed to initialize new runc runtime")
 	}
 	coreint := gcs.NewGCSCore(baseLogPath, baseStoragePath, rtime, tport)
 	mux := bridge.NewBridgeMux()
@@ -161,7 +161,7 @@ func main() {
 			logrus.WithFields(logrus.Fields{
 				"port":          commandPort,
 				logrus.ErrorKey: err,
-			}).Fatal("opengcs::main - failed to dial host vsock connection")
+			}).Fatal("failed to dial host vsock connection")
 		}
 		bridgeIn = bridgeCon
 		bridgeOut = bridgeCon
@@ -178,7 +178,7 @@ func main() {
 	// usage exceeds 50 MB.
 	sinfo := syscall.Sysinfo_t{}
 	if err := syscall.Sysinfo(&sinfo); err != nil {
-		logrus.WithError(err).Fatal("opengcs::main - failed to get sys info")
+		logrus.WithError(err).Fatal("failed to get sys info")
 	}
 	containersLimit := int64(sinfo.Totalram - *rootMemReserveBytes)
 	containersControl, err := cgroups.New(cgroups.V1, cgroups.StaticPath("/containers"), &oci.LinuxResources{
@@ -187,17 +187,17 @@ func main() {
 		},
 	})
 	if err != nil {
-		logrus.WithError(err).Fatal("opengcs::main - failed to create containers cgroup")
+		logrus.WithError(err).Fatal("failed to create containers cgroup")
 	}
 	defer containersControl.Delete()
 	gcsLimit := int64(*gcsMemLimitBytes)
 	gcsControl, err := cgroups.New(cgroups.V1, cgroups.StaticPath("/gcs"), &oci.LinuxResources{})
 	if err != nil {
-		logrus.WithError(err).Fatal("opengcs::main - failed to create gcs cgroup")
+		logrus.WithError(err).Fatal("failed to create gcs cgroup")
 	}
 	defer gcsControl.Delete()
 	if err := gcsControl.Add(cgroups.Process{Pid: os.Getpid()}); err != nil {
-		logrus.WithError(err).Fatal("opengcs::main - failed add gcs pid to gcs cgroup")
+		logrus.WithError(err).Fatal("failed add gcs pid to gcs cgroup")
 	}
 
 	gefd, err := cgrouputils.RegisterMemoryThreshold(filepath.Join(cgrouputils.MemRoot, "gcs"), gcsLimit)
@@ -219,6 +219,6 @@ func main() {
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			logrus.ErrorKey: err,
-		}).Fatal("opengcs::main - failed to serve gcs service")
+		}).Fatal("failed to serve gcs service")
 	}
 }
