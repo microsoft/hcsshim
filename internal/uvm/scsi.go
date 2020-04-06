@@ -5,16 +5,31 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/Microsoft/go-winio/pkg/security"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
+// VMAccessType is used to determine the various types of access we can
+// grant for a given file.
+type VMAccessType int
+
 const (
-	lcowSCSILayerFmt = "/run/layers/S%d/%d"
+	// `VMAccessTypeNoop` indicates no additional access should be given. Note
+	// this should be used for layers and gpu vhd where we have given VM group
+	// access outside of the shim (containerd for layers, package installation
+	// for gpu vhd).
+	VMAccessTypeNoop VMAccessType = iota
+	// `VMAccessTypeGroup` indicates we should give access to a file for the VM group sid
+	VMAccessTypeGroup
+	// `VMAccessTypeIndividual` indicates we should give additional access to a file for
+	// the running VM only
+	VMAccessTypeIndividual
 )
 
 var (
@@ -66,10 +81,10 @@ func (sm *SCSIMount) logFormat() logrus.Fields {
 	}
 }
 
-// allocateSCSI finds the next available slot on the
+// allocateSCSISlot finds the next available slot on the
 // SCSI controllers associated with a utility VM to use.
 // Lock must be held when calling this function
-func (uvm *UtilityVM) allocateSCSI(ctx context.Context, hostPath string, uvmPath string, isLayer bool) (*SCSIMount, error) {
+func (uvm *UtilityVM) allocateSCSISlot(ctx context.Context, hostPath string, uvmPath string) (*SCSIMount, error) {
 	for controller, luns := range uvm.scsiLocations {
 		for lun, sm := range luns {
 			// If sm is nil, we have found an open slot so we allocate a new SCSIMount
@@ -78,7 +93,6 @@ func (uvm *UtilityVM) allocateSCSI(ctx context.Context, hostPath string, uvmPath
 					vm:         uvm,
 					HostPath:   hostPath,
 					UVMPath:    uvmPath,
-					isLayer:    isLayer,
 					refCount:   1,
 					Controller: controller,
 					LUN:        int32(lun),
@@ -91,7 +105,7 @@ func (uvm *UtilityVM) allocateSCSI(ctx context.Context, hostPath string, uvmPath
 	return nil, ErrNoAvailableLocation
 }
 
-func (uvm *UtilityVM) deallocateSCSI(ctx context.Context, sm *SCSIMount) {
+func (uvm *UtilityVM) deallocateSCSIMount(ctx context.Context, sm *SCSIMount) {
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 	if sm != nil {
@@ -173,17 +187,18 @@ func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) error {
 }
 
 // AddSCSI adds a SCSI disk to a utility VM at the next available location. This
-// function should be called for a RW/scratch layer or a passthrough vhd/vhdx.
-// For read-only layers on LCOW as an alternate to PMEM for large layers, use
-// AddSCSILayer instead.
+// function should be called for a adding a scratch layer, a read-only layer as an
+// alternative to VPMEM, or for other VHD mounts.
 //
 // `hostPath` is required and must point to a vhd/vhdx path.
 //
-// `uvmPath` is optional.
+// `uvmPath` is optional. If not provided, no guest request will be made
 //
 // `readOnly` set to `true` if the vhd/vhdx should be attached read only.
-func (uvm *UtilityVM) AddSCSI(ctx context.Context, hostPath string, uvmPath string, readOnly bool) (*SCSIMount, error) {
-	return uvm.addSCSIActual(ctx, hostPath, uvmPath, "VirtualDisk", false, readOnly)
+//
+// `vmAccess` indicates what access to grant the vm for the hostpath
+func (uvm *UtilityVM) AddSCSI(ctx context.Context, hostPath string, uvmPath string, readOnly bool, vmAccess VMAccessType) (*SCSIMount, error) {
+	return uvm.addSCSIActual(ctx, hostPath, uvmPath, "VirtualDisk", readOnly, vmAccess)
 }
 
 // AddSCSIPhysicalDisk attaches a physical disk from the host directly to the
@@ -195,95 +210,42 @@ func (uvm *UtilityVM) AddSCSI(ctx context.Context, hostPath string, uvmPath stri
 //
 // `readOnly` set to `true` if the physical disk should be attached read only.
 func (uvm *UtilityVM) AddSCSIPhysicalDisk(ctx context.Context, hostPath, uvmPath string, readOnly bool) (*SCSIMount, error) {
-	return uvm.addSCSIActual(ctx, hostPath, uvmPath, "PassThru", false, readOnly)
-}
-
-// AddSCSILayer adds a read-only layer disk to a utility VM at the next
-// available location and returns the path in the UVM where the layer was
-// mounted. This function is used by LCOW as an alternate to PMEM for large
-// layers.
-func (uvm *UtilityVM) AddSCSILayer(ctx context.Context, hostPath string) (*SCSIMount, error) {
-	if uvm.operatingSystem == "windows" {
-		return nil, ErrSCSILayerWCOWUnsupported
-	}
-
-	sm, err := uvm.addSCSIActual(ctx, hostPath, "", "VirtualDisk", true, true)
-	if err != nil {
-		return nil, err
-	}
-
-	if sm.UVMPath != "" {
-		return sm, nil
-	}
-	sm.UVMPath = fmt.Sprintf(lcowSCSILayerFmt, sm.Controller, sm.LUN)
-	return sm, nil
+	return uvm.addSCSIActual(ctx, hostPath, uvmPath, "PassThru", readOnly, VMAccessTypeIndividual)
 }
 
 // addSCSIActual is the implementation behind the external functions AddSCSI and
-// AddSCSILayer.
+// AddSCSIPhysicalDisk.
 //
 // We are in control of everything ourselves. Hence we have ref- counting and
 // so-on tracking what SCSI locations are available or used.
 //
-// `hostPath` is required and may be a vhd/vhdx or physical disk path.
-//
-// `uvmPath` is optional, and `must` be empty for layers. If `!isLayer` and
-// `uvmPath` is empty no guest modify will take place.
-//
 // `attachmentType` is required and `must` be `VirtualDisk` for vhd/vhdx
 // attachments and `PassThru` for physical disk.
 //
-// `isLayer` indicates that this is a read-only (LCOW) layer VHD. This parameter
-// `must not` be used for Windows.
-//
 // `readOnly` indicates the attachment should be added read only.
 //
-// Returns the controller ID (0..3) and LUN (0..63) where the disk is attached.
-func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, attachmentType string, isLayer, readOnly bool) (*SCSIMount, error) {
-	if uvm.scsiControllerCount == 0 {
-		return nil, ErrNoSCSIControllers
-	}
-
-	// Ensure the utility VM has access
-	if !isLayer {
-		if err := wclayer.GrantVmAccess(ctx, uvm.id, hostPath); err != nil {
-			return nil, err
-		}
-	}
-
-	// We must hold the lock throughout the lookup (findSCSIAttachment) until
-	// after the possible allocation (allocateSCSI) has been completed to ensure
-	// there isn't a race condition for it being attached by another thread between
-	// these two operations. All failure paths between these two must release
-	// the lock.
-	uvm.m.Lock()
-	if sm, err := uvm.findSCSIAttachment(ctx, hostPath); err == nil {
-		// SCSI disk is already attached, Increment the refcount
-		sm.refCount++
-		uvm.m.Unlock()
-		return sm, nil
-	}
-
-	// At this point, we know it's not attached, regardless of whether it's a
-	// ref-counted layer VHD, or not.
-	sm, err := uvm.allocateSCSI(ctx, hostPath, uvmPath, isLayer)
+// `vmAccess` indicates what access to grant the vm for the hostpath
+//
+// Returns result from calling modify with the given scsi mount
+func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, attachmentType string, readOnly bool, vmAccess VMAccessType) (sm *SCSIMount, err error) {
+	sm, existed, err := uvm.allocateSCSIMount(ctx, hostPath, uvmPath, vmAccess)
 	if err != nil {
-		uvm.m.Unlock()
 		return nil, err
 	}
+
 	defer func() {
 		if err != nil {
-			uvm.deallocateSCSI(ctx, sm)
+			uvm.deallocateSCSIMount(ctx, sm)
 		}
 	}()
 
-	// Auto-generate the UVM path for LCOW layers
-	if isLayer {
-		uvmPath = fmt.Sprintf(lcowSCSILayerFmt, sm.Controller, sm.LUN)
+	if existed {
+		return sm, nil
 	}
 
-	// See comment higher up. Now safe to release the lock.
-	uvm.m.Unlock()
+	if uvm.scsiControllerCount == 0 {
+		return nil, ErrNoSCSIControllers
+	}
 
 	// Note: Can remove this check post-RS5 if multiple controllers are supported
 	if sm.Controller > 0 {
@@ -293,14 +255,14 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, atta
 	SCSIModification := &hcsschema.ModifySettingRequest{
 		RequestType: requesttype.Add,
 		Settings: hcsschema.Attachment{
-			Path:     hostPath,
+			Path:     sm.HostPath,
 			Type_:    attachmentType,
 			ReadOnly: readOnly,
 		},
 		ResourcePath: fmt.Sprintf(scsiResourceFormat, strconv.Itoa(sm.Controller), sm.LUN),
 	}
 
-	if uvmPath != "" {
+	if sm.UVMPath != "" {
 		guestReq := guestrequest.GuestRequest{
 			ResourceType: guestrequest.ResourceTypeMappedVirtualDisk,
 			RequestType:  requesttype.Add,
@@ -308,12 +270,12 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, atta
 
 		if uvm.operatingSystem == "windows" {
 			guestReq.Settings = guestrequest.WCOWMappedVirtualDisk{
-				ContainerPath: uvmPath,
+				ContainerPath: sm.UVMPath,
 				Lun:           sm.LUN,
 			}
 		} else {
 			guestReq.Settings = guestrequest.LCOWMappedVirtualDisk{
-				MountPath:  uvmPath,
+				MountPath:  sm.UVMPath,
 				Lun:        uint8(sm.LUN),
 				Controller: uint8(sm.Controller),
 				ReadOnly:   readOnly,
@@ -323,9 +285,37 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, atta
 	}
 
 	if err := uvm.modify(ctx, SCSIModification); err != nil {
-		return nil, fmt.Errorf("uvm::AddSCSI: failed to modify utility VM configuration: %s", err)
+		return nil, fmt.Errorf("failed to modify UVM with new SCSI mount: %s", err)
 	}
 	return sm, nil
+}
+
+// allocateSCSIMount grants vm access to hostpath and increments the ref count of an existing scsi
+// device or allocates a new one if not already present.
+// Returns the resulting *SCSIMount, a bool indicating if the scsi device was already present,
+// and error if any.
+func (uvm *UtilityVM) allocateSCSIMount(ctx context.Context, hostPath, uvmPath string, vmAccess VMAccessType) (*SCSIMount, bool, error) {
+	// Ensure the utility VM has access
+	err := uvm.grantAccess(ctx, hostPath, vmAccess)
+	if err != nil {
+		return nil, false, errors.Wrapf(err, "failed to grant VM access for SCSI mount")
+	}
+	// We must hold the lock throughout the lookup (findSCSIAttachment) until
+	// after the possible allocation (allocateSCSISlot) has been completed to ensure
+	// there isn't a race condition for it being attached by another thread between
+	// these two operations.
+	uvm.m.Lock()
+	defer uvm.m.Unlock()
+	if sm, err := uvm.findSCSIAttachment(ctx, hostPath); err == nil {
+		sm.refCount++
+		return sm, true, nil
+	}
+
+	sm, err := uvm.allocateSCSISlot(ctx, hostPath, uvmPath)
+	if err != nil {
+		return nil, false, err
+	}
+	return sm, false, nil
 }
 
 // GetScsiUvmPath returns the guest mounted path of a SCSI drive.
@@ -339,4 +329,16 @@ func (uvm *UtilityVM) GetScsiUvmPath(ctx context.Context, hostPath string) (stri
 		return "", err
 	}
 	return sm.UVMPath, err
+}
+
+// grantAccess helper function to grant access to a file for the vm or vm group
+func (uvm *UtilityVM) grantAccess(ctx context.Context, hostPath string, vmAccess VMAccessType) error {
+	switch vmAccess {
+	case VMAccessTypeGroup:
+		log.G(ctx).WithField("path", hostPath).Debug("granting vm group access")
+		return security.GrantVmGroupAccess(hostPath)
+	case VMAccessTypeIndividual:
+		return wclayer.GrantVmAccess(ctx, uvm.id, hostPath)
+	}
+	return nil
 }

@@ -141,7 +141,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	if err := lcow.CreateScratch(context.Background(), lcowUVM, uvmScratchFile, lcow.DefaultScratchSizeGB, cacheFile); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := lcowUVM.AddSCSI(context.Background(), uvmScratchFile, `/tmp/scratch`, false); err != nil {
+	if _, err := lcowUVM.AddSCSI(context.Background(), uvmScratchFile, `/tmp/scratch`, false, uvm.VMAccessTypeIndividual); err != nil {
 		t.Fatal(err)
 	}
 
