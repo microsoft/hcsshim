@@ -30,14 +30,29 @@ import (
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-func NewBlkio(root string) *blkioController {
-	return &blkioController{
-		root: filepath.Join(root, string(Blkio)),
+// NewBlkio returns a Blkio controller given the root folder of cgroups.
+// It may optionally accept other configuration options, such as ProcRoot(path)
+func NewBlkio(root string, options ...func(controller *blkioController)) *blkioController {
+	ctrl := &blkioController{
+		root:     filepath.Join(root, string(Blkio)),
+		procRoot: "/proc",
+	}
+	for _, opt := range options {
+		opt(ctrl)
+	}
+	return ctrl
+}
+
+// ProcRoot overrides the default location of the "/proc" filesystem
+func ProcRoot(path string) func(controller *blkioController) {
+	return func(c *blkioController) {
+		c.procRoot = path
 	}
 }
 
 type blkioController struct {
-	root string
+	root     string
+	procRoot string
 }
 
 func (b *blkioController) Name() Name {
@@ -75,55 +90,48 @@ func (b *blkioController) Update(path string, resources *specs.LinuxResources) e
 
 func (b *blkioController) Stat(path string, stats *v1.Metrics) error {
 	stats.Blkio = &v1.BlkIOStat{}
-	settings := []blkioStatSettings{
-		{
-			name:  "throttle.io_serviced",
-			entry: &stats.Blkio.IoServicedRecursive,
-		},
-		{
-			name:  "throttle.io_service_bytes",
-			entry: &stats.Blkio.IoServiceBytesRecursive,
-		},
-	}
+
+	var settings []blkioStatSettings
+
 	// Try to read CFQ stats available on all CFQ enabled kernels first
 	if _, err := os.Lstat(filepath.Join(b.Path(path), fmt.Sprintf("blkio.io_serviced_recursive"))); err == nil {
-		settings = []blkioStatSettings{}
-		settings = append(settings,
-			blkioStatSettings{
+		settings = []blkioStatSettings{
+			{
 				name:  "sectors_recursive",
 				entry: &stats.Blkio.SectorsRecursive,
 			},
-			blkioStatSettings{
+			{
 				name:  "io_service_bytes_recursive",
 				entry: &stats.Blkio.IoServiceBytesRecursive,
 			},
-			blkioStatSettings{
+			{
 				name:  "io_serviced_recursive",
 				entry: &stats.Blkio.IoServicedRecursive,
 			},
-			blkioStatSettings{
+			{
 				name:  "io_queued_recursive",
 				entry: &stats.Blkio.IoQueuedRecursive,
 			},
-			blkioStatSettings{
+			{
 				name:  "io_service_time_recursive",
 				entry: &stats.Blkio.IoServiceTimeRecursive,
 			},
-			blkioStatSettings{
+			{
 				name:  "io_wait_time_recursive",
 				entry: &stats.Blkio.IoWaitTimeRecursive,
 			},
-			blkioStatSettings{
+			{
 				name:  "io_merged_recursive",
 				entry: &stats.Blkio.IoMergedRecursive,
 			},
-			blkioStatSettings{
+			{
 				name:  "time_recursive",
 				entry: &stats.Blkio.IoTimeRecursive,
 			},
-		)
+		}
 	}
-	f, err := os.Open("/proc/diskstats")
+
+	f, err := os.Open(filepath.Join(b.procRoot, "diskstats"))
 	if err != nil {
 		return err
 	}
@@ -134,6 +142,29 @@ func (b *blkioController) Stat(path string, stats *v1.Metrics) error {
 		return err
 	}
 
+	var size int
+	for _, t := range settings {
+		if err := b.readEntry(devices, path, t.name, t.entry); err != nil {
+			return err
+		}
+		size += len(*t.entry)
+	}
+	if size > 0 {
+		return nil
+	}
+
+	// Even the kernel is compiled with the CFQ scheduler, the cgroup may not use
+	// block devices with the CFQ scheduler. If so, we should fallback to throttle.* files.
+	settings = []blkioStatSettings{
+		{
+			name:  "throttle.io_serviced",
+			entry: &stats.Blkio.IoServicedRecursive,
+		},
+		{
+			name:  "throttle.io_service_bytes",
+			entry: &stats.Blkio.IoServiceBytesRecursive,
+		},
+	}
 	for _, t := range settings {
 		if err := b.readEntry(devices, path, t.name, t.entry); err != nil {
 			return err
@@ -150,9 +181,6 @@ func (b *blkioController) readEntry(devices map[deviceKey]string, path, name str
 	defer f.Close()
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
-		if err := sc.Err(); err != nil {
-			return err
-		}
 		// format: dev type amount
 		fields := strings.FieldsFunc(sc.Text(), splitBlkIOStatLine)
 		if len(fields) < 3 {
@@ -189,7 +217,7 @@ func (b *blkioController) readEntry(devices map[deviceKey]string, path, name str
 			Value:  v,
 		})
 	}
-	return nil
+	return sc.Err()
 }
 
 func createBlkioSettings(blkio *specs.LinuxBlockIO) []blkioSettings {

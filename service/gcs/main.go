@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"syscall"
 	"time"
 
-	"github.com/Microsoft/opengcs/internal/cgrouputils"
 	"github.com/Microsoft/opengcs/internal/kmsg"
 	"github.com/Microsoft/opengcs/internal/oc"
 	"github.com/Microsoft/opengcs/internal/runtime/hcsv2"
@@ -43,9 +41,8 @@ func readMemoryEvents(efdFile *os.File, cgName string, threshold int64, cg cgrou
 	// http://man7.org/linux/man-pages/man2/eventfd.2.html
 	buf := make([]byte, 8)
 	for {
-		_, err := efdFile.Read(buf)
-		if err != nil {
-			logrus.WithError(err).Warn("failed to read from eventfd")
+		if _, err := efdFile.Read(buf); err != nil {
+			logrus.WithError(err).WithField("cgroup", cgName).Error("failed to read from eventfd")
 			return
 		}
 
@@ -190,7 +187,7 @@ func main() {
 		logrus.WithError(err).Fatal("failed to create containers cgroup")
 	}
 	defer containersControl.Delete()
-	gcsLimit := int64(*gcsMemLimitBytes)
+
 	gcsControl, err := cgroups.New(cgroups.V1, cgroups.StaticPath("/gcs"), &oci.LinuxResources{})
 	if err != nil {
 		logrus.WithError(err).Fatal("failed to create gcs cgroup")
@@ -200,21 +197,23 @@ func main() {
 		logrus.WithError(err).Fatal("failed add gcs pid to gcs cgroup")
 	}
 
-	gefd, err := cgrouputils.RegisterMemoryThreshold(filepath.Join(cgrouputils.MemRoot, "gcs"), gcsLimit)
+	event := cgroups.MemoryThresholdEvent(*gcsMemLimitBytes, false)
+	gefd, err := gcsControl.RegisterMemoryEvent(event)
 	if err != nil {
 		logrus.WithError(err).Fatal("failed to register memory threshold for gcs cgroup")
 	}
-	defer gefd.Close()
+	gefdFile := os.NewFile(gefd, "gefd")
+	defer gefdFile.Close()
 
 	oom, err := containersControl.OOMEventFD()
 	if err != nil {
 		logrus.WithError(err).Fatal("failed to retrieve the container cgroups oom eventfd")
 	}
-	cefd := os.NewFile(oom, "cefd")
-	defer cefd.Close()
+	oomFile := os.NewFile(oom, "cefd")
+	defer oomFile.Close()
 
-	go readMemoryEvents(gefd, "gcs", gcsLimit, gcsControl)
-	go readMemoryEvents(cefd, "containers", containersLimit, containersControl)
+	go readMemoryEvents(gefdFile, "/gcs", int64(*gcsMemLimitBytes), gcsControl)
+	go readMemoryEvents(oomFile, "/containers", containersLimit, containersControl)
 	err = b.ListenAndServe(bridgeIn, bridgeOut)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
