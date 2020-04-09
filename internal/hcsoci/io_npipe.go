@@ -1,4 +1,4 @@
-package main
+package hcsoci
 
 import (
 	"context"
@@ -10,14 +10,14 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// newNpipeIO creates connected upstream io. It is the callers responsibility to
+// NewNpipeIO creates connected upstream io. It is the callers responsibility to
 // validate that `if terminal == true`, `stderr == ""`.
-func newNpipeIO(ctx context.Context, stdin, stdout, stderr string, terminal bool) (_ upstreamIO, err error) {
+func NewNpipeIO(ctx context.Context, stdin, stdout, stderr string, terminal bool) (_ UpstreamIO, err error) {
 	log.G(ctx).WithFields(logrus.Fields{
 		"stdin":    stdin,
 		"stdout":   stdout,
 		"stderr":   stderr,
-		"terminal": terminal}).Debug("newNpipeIO")
+		"terminal": terminal}).Debug("NewNpipeIO")
 
 	nio := &npipeio{
 		stdin:    stdin,
@@ -54,7 +54,7 @@ func newNpipeIO(ctx context.Context, stdin, stdout, stderr string, terminal bool
 	return nio, nil
 }
 
-var _ = (upstreamIO)(&npipeio{})
+var _ = (UpstreamIO)(&npipeio{})
 
 type npipeio struct {
 	// stdin, stdout, stderr are the original paths used to open the connections.
@@ -69,14 +69,14 @@ type npipeio struct {
 	// sin is the upstream `stdin` connection.
 	//
 	// `sin` MUST be treated as readonly in the lifetime of the pipe io after
-	// the return from `newNpipeIO`.
+	// the return from `NewNpipeIO`.
 	sin       io.ReadCloser
 	sinCloser sync.Once
 
 	// sout and serr are the upstream `stdout` and `stderr` connections.
 	//
 	// `sout` and `serr` MUST be treated as readonly in the lifetime of the pipe
-	// io after the return from `newNpipeIO`.
+	// io after the return from `NewNpipeIO`.
 	sout, serr   io.WriteCloser
 	outErrCloser sync.Once
 }
