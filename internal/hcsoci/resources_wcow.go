@@ -127,7 +127,6 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 						options.CacheIo = true
 						options.ShareRead = true
 						options.ForceLevelIIOplocks = true
-						break
 					}
 					share, err := coi.HostingSystem.AddVSMB(ctx, mount.Source, "", options)
 					if err != nil {

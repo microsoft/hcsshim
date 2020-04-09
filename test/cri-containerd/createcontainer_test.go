@@ -812,14 +812,58 @@ func Test_CreateContainer_Mount_File_LCOW(t *testing.T) {
 	runCreateContainerTest(t, lcowRuntimeHandler, request)
 }
 
+func Test_CreateContainer_Mount_ReadOnlyFile_LCOW(t *testing.T) {
+	testutilities.RequiresBuild(t, osversion.V19H1)
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	tempFile, err := ioutil.TempFile("", "test")
+
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %s", err)
+	}
+
+	tempFile.Close()
+
+	defer func() {
+		if err := os.Remove(tempFile.Name()); err != nil {
+			t.Fatalf("Failed to remove temp file: %s", err)
+		}
+	}()
+
+	containerFilePath := "/foo/test.txt"
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Mounts: []*runtime.Mount{
+				{
+					HostPath:      tempFile.Name(),
+					ContainerPath: containerFilePath,
+					Readonly:      true,
+				},
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			Command: []string{
+				"top",
+			},
+			Linux: &runtime.LinuxContainerConfig{},
+		},
+	}
+	runCreateContainerTest(t, lcowRuntimeHandler, request)
+}
+
 func Test_CreateContainer_Mount_Dir_LCOW(t *testing.T) {
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	tempDir, err := ioutil.TempDir("", "")
-
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %s", err)
 	}
+	defer os.RemoveAll(tempDir)
 
 	containerFilePath := "/foo"
 
@@ -832,6 +876,41 @@ func Test_CreateContainer_Mount_Dir_LCOW(t *testing.T) {
 				{
 					HostPath:      tempDir,
 					ContainerPath: containerFilePath,
+				},
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			Command: []string{
+				"top",
+			},
+			Linux: &runtime.LinuxContainerConfig{},
+		},
+	}
+	runCreateContainerTest(t, lcowRuntimeHandler, request)
+}
+
+func Test_CreateContainer_Mount_ReadOnlyDir_LCOW(t *testing.T) {
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	tempDir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %s", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	containerFilePath := "/foo"
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Mounts: []*runtime.Mount{
+				{
+					HostPath:      tempDir,
+					ContainerPath: containerFilePath,
+					Readonly:      true,
 				},
 			},
 			Image: &runtime.ImageSpec{
@@ -889,14 +968,58 @@ func Test_CreateContainer_Mount_File_WCOW(t *testing.T) {
 	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
 }
 
+func Test_CreateContainer_Mount_ReadOnlyFile_WCOW(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
+
+	tempFile, err := ioutil.TempFile("", "test")
+
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %s", err)
+	}
+
+	tempFile.Close()
+
+	defer func() {
+		if err := os.Remove(tempFile.Name()); err != nil {
+			t.Fatalf("Failed to remove temp file: %s", err)
+		}
+	}()
+
+	containerFilePath := `C:\foo\test`
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Mounts: []*runtime.Mount{
+				{
+					HostPath:      tempFile.Name(),
+					ContainerPath: containerFilePath,
+					Readonly:      true,
+				},
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsNanoserver,
+			},
+			Command: []string{
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
+}
+
 func Test_CreateContainer_Mount_Dir_WCOW(t *testing.T) {
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	tempDir, err := ioutil.TempDir("", "")
-
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %s", err)
 	}
+	defer os.RemoveAll(tempDir)
 
 	containerFilePath := "C:\\foo"
 
@@ -909,6 +1032,42 @@ func Test_CreateContainer_Mount_Dir_WCOW(t *testing.T) {
 				{
 					HostPath:      tempDir,
 					ContainerPath: containerFilePath,
+				},
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsNanoserver,
+			},
+			Command: []string{
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
+}
+
+func Test_CreateContainer_Mount_ReadOnlyDir_WCOW(t *testing.T) {
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
+
+	tempDir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %s", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	containerFilePath := "C:\\foo"
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Mounts: []*runtime.Mount{
+				{
+					HostPath:      tempDir,
+					ContainerPath: containerFilePath,
+					Readonly:      true,
 				},
 			},
 			Image: &runtime.ImageSpec{
