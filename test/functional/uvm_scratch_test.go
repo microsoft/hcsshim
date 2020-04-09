@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/lcow"
+	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 )
@@ -44,7 +45,7 @@ func TestScratchCreateLCOW(t *testing.T) {
 	}
 
 	// Make sure it can be added (verifies it has access correctly)
-	scsiMount, err := targetUVM.AddSCSI(context.Background(), destTwo, "", false)
+	scsiMount, err := targetUVM.AddSCSI(context.Background(), destTwo, "", false, uvm.VMAccessTypeIndividual)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -140,11 +140,11 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 			uvmPath, err = uvm.AddVPMEM(ctx, layerPath)
 			if err == uvmpkg.ErrNoAvailableLocation || err == uvmpkg.ErrMaxVPMEMLayerSize {
 				log.G(ctx).WithError(err).Debug("falling back to SCSI for LCOW layer addition")
-				sm, err := uvm.AddSCSILayer(ctx, layerPath)
+				uvmPath = fmt.Sprintf(lcowGlobalMountPrefix, uvm.UVMMountCounter())
+				_, err := uvm.AddSCSI(ctx, layerPath, uvmPath, true, uvmpkg.VMAccessTypeNoop)
 				if err != nil {
 					return "", fmt.Errorf("failed to add SCSI layer: %s", err)
 				}
-				uvmPath = sm.UVMPath
 			} else if err != nil {
 				return "", fmt.Errorf("failed to add VPMEM layer: %s", err)
 			}
@@ -156,7 +156,7 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 	hostPath := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
 	containerScratchPathInUVM := ospath.Join(uvm.OS(), guestRoot)
 	log.G(ctx).WithField("hostPath", hostPath).Debug("mounting scratch VHD")
-	scsiMount, err := uvm.AddSCSI(ctx, hostPath, containerScratchPathInUVM, false)
+	scsiMount, err := uvm.AddSCSI(ctx, hostPath, containerScratchPathInUVM, false, uvmpkg.VMAccessTypeIndividual)
 	if err != nil {
 		return "", fmt.Errorf("failed to add SCSI scratch VHD: %s", err)
 	}

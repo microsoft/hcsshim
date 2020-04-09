@@ -15,6 +15,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/hcsshim/internal/uvm"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
@@ -116,7 +117,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 
 				// if the scsi device is already attached then we take the uvm path that the function below returns
 				// that is where it was previously mounted in UVM
-				scsiMount, err := coi.HostingSystem.AddSCSI(ctx, hostPath, uvmPathForShare, readOnly)
+				scsiMount, err := coi.HostingSystem.AddSCSI(ctx, hostPath, uvmPathForShare, readOnly, uvm.VMAccessTypeIndividual)
 				if err != nil {
 					return fmt.Errorf("adding SCSI virtual disk mount %+v: %s", mount, err)
 				}
@@ -189,7 +190,8 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 		}
 		// use lcowNvidiaMountPath since we only support nvidia gpus right now
 		// must use scsi here since DDA'ing a hyper-v pci device is not supported on VMs that have ANY virtual memory
-		scsiMount, err := coi.HostingSystem.AddSCSI(ctx, gpuSupportVhdPath, lcowNvidiaMountPath, true)
+		// gpuvhd must be granted VM Group access.
+		scsiMount, err := coi.HostingSystem.AddSCSI(ctx, gpuSupportVhdPath, lcowNvidiaMountPath, true, uvm.VMAccessTypeNoop)
 		if err != nil {
 			return errors.Wrapf(err, "failed to add scsi device %s in the UVM %s at %s", gpuSupportVhdPath, coi.HostingSystem.ID(), lcowNvidiaMountPath)
 		}
