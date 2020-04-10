@@ -66,7 +66,7 @@ func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string,
 		return fmt.Errorf("failed to create VHDx %s: %s", destFile, err)
 	}
 
-	controller, lun, _, err := lcowUVM.AddSCSI(ctx, destFile, "", false) // No destination as not formatted
+	scsi, err := lcowUVM.AddSCSI(ctx, destFile, "", false, uvm.VMAccessTypeIndividual) // No destination as not formatted
 	if err != nil {
 		return err
 	}
@@ -79,12 +79,12 @@ func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string,
 
 	log.G(ctx).WithFields(logrus.Fields{
 		"dest":       destFile,
-		"controller": controller,
-		"lun":        lun,
+		"controller": scsi.Controller,
+		"lun":        scsi.LUN,
 	}).Debug("lcow::CreateScratch device attached")
 
 	// Validate /sys/bus/scsi/devices/C:0:0:L exists as a directory
-	devicePath := fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d/block", controller, lun)
+	devicePath := fmt.Sprintf("/sys/bus/scsi/devices/%d:0:0:%d/block", scsi.Controller, scsi.LUN)
 	testdCtx, cancel := context.WithTimeout(ctx, timeout.TestDRetryLoop)
 	defer cancel()
 	for {

@@ -21,7 +21,7 @@ import (
 
 const wcowGlobalMountPrefix = "C:\\mounts\\m%d"
 
-func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, resources *Resources) error {
+func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r *Resources) error {
 	if coi.Spec == nil || coi.Spec.Windows == nil || coi.Spec.Windows.LayerFolders == nil {
 		return fmt.Errorf("field 'Spec.Windows.Layerfolders' is not populated")
 	}
@@ -50,7 +50,7 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 
 	if coi.Spec.Root.Path == "" && (coi.HostingSystem != nil || coi.Spec.Windows.HyperV == nil) {
 		log.G(ctx).Debug("hcsshim::allocateWindowsResources mounting storage")
-		containerRootPath, err := MountContainerLayers(ctx, coi.Spec.Windows.LayerFolders, resources.containerRootInUVM, coi.HostingSystem)
+		containerRootPath, err := MountContainerLayers(ctx, coi.Spec.Windows.LayerFolders, r.containerRootInUVM, coi.HostingSystem)
 		if err != nil {
 			return fmt.Errorf("failed to mount container storage: %s", err)
 		}
@@ -59,7 +59,12 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 		} else {
 			coi.Spec.Root.Path = containerRootPath // v2 Xenon WCOW
 		}
-		resources.layers = coi.Spec.Windows.LayerFolders
+		layers := &ImageLayers{
+			vm:                 coi.HostingSystem,
+			containerRootInUVM: r.containerRootInUVM,
+			layers:             coi.Spec.Windows.LayerFolders,
+		}
+		r.layers = layers
 	}
 
 	// Validate each of the mounts. If this is a V2 Xenon, we have to add them as
@@ -90,26 +95,30 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 			l := log.G(ctx).WithField("mount", fmt.Sprintf("%+v", mount))
 			if mount.Type == "physical-disk" {
 				l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI physical disk for OCI mount")
-				_, _, _, err := coi.HostingSystem.AddSCSIPhysicalDisk(ctx, mount.Source, uvmPath, readOnly)
+				scsiMount, err := coi.HostingSystem.AddSCSIPhysicalDisk(ctx, mount.Source, uvmPath, readOnly)
 				if err != nil {
 					return fmt.Errorf("adding SCSI physical disk mount %+v: %s", mount, err)
 				}
 				coi.Spec.Mounts[i].Type = ""
-				resources.scsiMounts = append(resources.scsiMounts, scsiMount{path: mount.Source})
+				r.resources = append(r.resources, scsiMount)
 			} else if mount.Type == "virtual-disk" || mount.Type == "automanage-virtual-disk" {
 				l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI virtual disk for OCI mount")
-				_, _, _, err := coi.HostingSystem.AddSCSI(ctx, mount.Source, uvmPath, readOnly)
+				scsiMount, err := coi.HostingSystem.AddSCSI(ctx, mount.Source, uvmPath, readOnly, uvm.VMAccessTypeIndividual)
 				if err != nil {
 					return fmt.Errorf("adding SCSI virtual disk mount %+v: %s", mount, err)
 				}
 				coi.Spec.Mounts[i].Type = ""
-				resources.scsiMounts = append(resources.scsiMounts, scsiMount{path: mount.Source, autoManage: mount.Type == "automanage-virtual-disk"})
+				if mount.Type == "automanage-virtual-disk" {
+					r.resources = append(r.resources, &AutoManagedVHD{hostPath: scsiMount.HostPath})
+				}
+				r.resources = append(r.resources, scsiMount)
 			} else {
 				if uvm.IsPipe(mount.Source) {
-					if err := coi.HostingSystem.AddPipe(ctx, mount.Source); err != nil {
+					pipe, err := coi.HostingSystem.AddPipe(ctx, mount.Source)
+					if err != nil {
 						return fmt.Errorf("failed to add named pipe to UVM: %s", err)
 					}
-					resources.pipeMounts = append(resources.pipeMounts, mount.Source)
+					r.resources = append(r.resources, pipe)
 				} else {
 					l.Debug("hcsshim::allocateWindowsResources Hot-adding VSMB share for OCI mount")
 					options := &hcsschema.VirtualSmbShareOptions{}
@@ -118,15 +127,13 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 						options.CacheIo = true
 						options.ShareRead = true
 						options.ForceLevelIIOplocks = true
-						break
 					}
-
-					if err := coi.HostingSystem.AddVSMB(ctx, mount.Source, "", options); err != nil {
+					share, err := coi.HostingSystem.AddVSMB(ctx, mount.Source, "", options)
+					if err != nil {
 						return fmt.Errorf("failed to add VSMB share to utility VM for mount %+v: %s", mount, err)
 					}
-					resources.vsmbMounts = append(resources.vsmbMounts, mount.Source)
+					r.resources = append(r.resources, share)
 				}
-
 			}
 		}
 	}
