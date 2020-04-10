@@ -6,6 +6,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/sirupsen/logrus"
 )
 
@@ -27,6 +28,7 @@ func createNetworkNamespace(ctx context.Context, coi *createOptionsInternal, res
 	}).Info("created network namespace for container")
 	resources.netNS = netID
 	resources.createdNetNS = true
+	endpoints := make([]string, 0)
 	for _, endpointID := range coi.Spec.Windows.Network.EndpointList {
 		err = hns.AddNamespaceEndpoint(netID, endpointID)
 		if err != nil {
@@ -36,8 +38,9 @@ func createNetworkNamespace(ctx context.Context, coi *createOptionsInternal, res
 			"netID":      netID,
 			"endpointID": endpointID,
 		}).Info("added network endpoint to namespace")
-		resources.networkEndpoints = append(resources.networkEndpoints, endpointID)
+		endpoints = append(endpoints, endpointID)
 	}
+	resources.resources = append(resources.resources, &uvm.NetworkEndpoints{EndpointIDs: endpoints, Namespace: netID})
 	return nil
 }
 

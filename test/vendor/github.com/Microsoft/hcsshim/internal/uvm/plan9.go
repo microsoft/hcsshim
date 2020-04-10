@@ -7,13 +7,26 @@ import (
 	"strconv"
 
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/osversion"
 )
 
+// Plan9Share is a struct containing host paths for the UVM
 type Plan9Share struct {
+	// UVM resource belongs to
+	vm            *UtilityVM
 	name, uvmPath string
+}
+
+// Release frees the resources of the corresponding Plan9 share
+func (p9 *Plan9Share) Release(ctx context.Context) error {
+	if err := p9.vm.RemovePlan9(ctx, p9); err != nil {
+		log.G(ctx).WithError(err).Warn("failed to remove plan9 share")
+		return err
+	}
+	return nil
 }
 
 const plan9Port = 564
@@ -83,8 +96,11 @@ func (uvm *UtilityVM) AddPlan9(ctx context.Context, hostPath string, uvmPath str
 		return nil, err
 	}
 
-	share := &Plan9Share{name: name, uvmPath: uvmPath}
-	return share, nil
+	return &Plan9Share{
+		vm:      uvm,
+		name:    name,
+		uvmPath: uvmPath,
+	}, nil
 }
 
 // RemovePlan9 removes a Plan9 share from a utility VM. Each Plan9 share is ref-counted

@@ -4,14 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -22,6 +25,36 @@ var (
 	// network namespace by this id.
 	ErrNetNSNotFound = errors.New("network namespace not found")
 )
+
+// NetworkEndpoints is a struct containing all of the endpoint IDs of a network
+// namespace.
+type NetworkEndpoints struct {
+	EndpointIDs []string
+	// ID of the namespace the endpoints belong to
+	Namespace string
+}
+
+// Release releases the resources for all of the network endpoints in a namespace.
+func (endpoints *NetworkEndpoints) Release(ctx context.Context) error {
+	for _, endpoint := range endpoints.EndpointIDs {
+		err := hns.RemoveNamespaceEndpoint(endpoints.Namespace, endpoint)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return err
+			}
+			log.G(ctx).WithFields(logrus.Fields{
+				"endpointID": endpoint,
+				"netID":      endpoints.Namespace,
+			}).Warn("removing endpoint from namespace: does not exist")
+		}
+	}
+	endpoints.EndpointIDs = nil
+	err := hns.RemoveNamespace(endpoints.Namespace)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
 
 // AddNetNS adds network namespace inside the guest.
 //

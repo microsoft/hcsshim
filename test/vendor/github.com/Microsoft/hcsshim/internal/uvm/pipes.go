@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -12,16 +13,32 @@ import (
 
 const pipePrefix = `\\.\pipe\`
 
+// PipeMount contains the host path for pipe mount
+type PipeMount struct {
+	// UVM the resource belongs to
+	vm       *UtilityVM
+	HostPath string
+}
+
+// Release frees the resources of the corresponding pipe Mount
+func (pipe *PipeMount) Release(ctx context.Context) error {
+	if err := pipe.vm.RemovePipe(ctx, pipe.HostPath); err != nil {
+		log.G(ctx).WithError(err).Warn("failed to remove pipe mount")
+		return err
+	}
+	return nil
+}
+
 // AddPipe shares a named pipe into the UVM.
-func (uvm *UtilityVM) AddPipe(ctx context.Context, hostPath string) error {
+func (uvm *UtilityVM) AddPipe(ctx context.Context, hostPath string) (*PipeMount, error) {
 	modification := &hcsschema.ModifySettingRequest{
 		RequestType:  requesttype.Add,
 		ResourcePath: fmt.Sprintf(mappedPipeResourceFormat, hostPath),
 	}
 	if err := uvm.modify(ctx, modification); err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return &PipeMount{uvm, hostPath}, nil
 }
 
 // RemovePipe removes a shared named pipe from the UVM.

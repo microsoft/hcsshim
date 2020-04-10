@@ -28,7 +28,6 @@ type PreferredRootFSType int
 const (
 	PreferredRootFSTypeInitRd PreferredRootFSType = iota
 	PreferredRootFSTypeVHD
-
 	entropyVsockPort  = 1
 	linuxLogVsockPort = 109
 )

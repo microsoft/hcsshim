@@ -7,14 +7,36 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 )
 
 const vsmbSharePrefix = `\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\`
 
+// VSMBShare contains the host path for a Vsmb Mount
+type VSMBShare struct {
+	// UVM the resource belongs to
+	vm           *UtilityVM
+	HostPath     string
+	refCount     uint32
+	name         string
+	guestRequest interface{}
+	allowedFiles []string
+	guestPath    string
+}
+
+// Release frees the resources of the corresponding vsmb Mount
+func (vsmb *VSMBShare) Release(ctx context.Context) error {
+	if err := vsmb.vm.RemoveVSMB(ctx, vsmb.HostPath); err != nil {
+		log.G(ctx).WithError(err).Warn("failed to remove vsmb share")
+		return err
+	}
+	return nil
+}
+
 // findVSMBShare finds a share by `hostPath`. If not found returns `ErrNotAttached`.
-func (uvm *UtilityVM) findVSMBShare(ctx context.Context, m map[string]*vsmbShare, hostPath string) (*vsmbShare, error) {
+func (uvm *UtilityVM) findVSMBShare(ctx context.Context, m map[string]*VSMBShare, hostPath string) (*VSMBShare, error) {
 	share, ok := m[hostPath]
 	if !ok {
 		return nil, ErrNotAttached
@@ -22,16 +44,12 @@ func (uvm *UtilityVM) findVSMBShare(ctx context.Context, m map[string]*vsmbShare
 	return share, nil
 }
 
-func (share *vsmbShare) GuestPath() string {
-	return vsmbSharePrefix + share.name
-}
-
 // AddVSMB adds a VSMB share to a Windows utility VM. Each VSMB share is ref-counted and
 // only added if it isn't already. This is used for read-only layers, mapped directories
 // to a container, and for mapped pipes.
-func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, guestRequest interface{}, options *hcsschema.VirtualSmbShareOptions) error {
+func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, guestRequest interface{}, options *hcsschema.VirtualSmbShareOptions) (*VSMBShare, error) {
 	if uvm.operatingSystem != "windows" {
-		return errNotSupported
+		return nil, errNotSupported
 	}
 
 	uvm.m.Lock()
@@ -45,7 +63,7 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, guestRequest
 	// Update operation.
 	st, err := os.Stat(hostPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var file string
 	m := uvm.vsmbDirShares
@@ -64,9 +82,11 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, guestRequest
 		uvm.vsmbCounter++
 		shareName := "s" + strconv.FormatUint(uvm.vsmbCounter, 16)
 
-		share = &vsmbShare{
+		share = &VSMBShare{
+			vm:           uvm,
 			name:         shareName,
 			guestRequest: guestRequest,
+			guestPath:    vsmbSharePrefix + shareName,
 		}
 	}
 	newAllowedFiles := share.allowedFiles
@@ -90,15 +110,14 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, guestRequest
 			ResourcePath: vSmbShareResourcePath,
 		}
 		if err := uvm.modify(ctx, modification); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	share.allowedFiles = newAllowedFiles
 	share.refCount++
 	m[hostPath] = share
-
-	return nil
+	return share, nil
 }
 
 // RemoveVSMB removes a VSMB share from a utility VM. Each VSMB share is ref-counted
@@ -168,5 +187,5 @@ func (uvm *UtilityVM) GetVSMBUvmPath(ctx context.Context, hostPath string) (stri
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(share.GuestPath(), f), nil
+	return filepath.Join(share.guestPath, f), nil
 }
