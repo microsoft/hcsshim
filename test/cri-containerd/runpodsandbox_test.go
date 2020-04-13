@@ -252,6 +252,26 @@ func Test_RunPodSandbox_PhysicalMemory_WCOW_Hypervisor(t *testing.T) {
 	runPodSandboxTest(t, request)
 }
 
+func Test_RunPodSandbox_FullyPhysicallyBacked_WCOW_Hypervisor(t *testing.T) {
+	requireFeatures(t, featureWCOWHypervisor)
+
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
+			},
+		},
+		RuntimeHandler: wcowHypervisorRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
 func Test_RunPodSandbox_PhysicalMemory_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
@@ -266,6 +286,26 @@ func Test_RunPodSandbox_PhysicalMemory_LCOW(t *testing.T) {
 			},
 			Annotations: map[string]string{
 				"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "false",
+			},
+		},
+		RuntimeHandler: lcowRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_FullyPhysicallyBacked_LCOW(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
 			},
 		},
 		RuntimeHandler: lcowRuntimeHandler,
