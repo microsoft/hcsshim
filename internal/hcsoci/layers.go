@@ -141,7 +141,8 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 			if err == uvmpkg.ErrNoAvailableLocation || err == uvmpkg.ErrMaxVPMEMLayerSize {
 				log.G(ctx).WithError(err).Debug("falling back to SCSI for LCOW layer addition")
 				uvmPath = fmt.Sprintf(lcowGlobalMountPrefix, uvm.UVMMountCounter())
-				_, err := uvm.AddSCSI(ctx, layerPath, uvmPath, true, uvmpkg.VMAccessTypeNoop)
+				sm, err := uvm.AddSCSI(ctx, layerPath, uvmPath, true, uvmpkg.VMAccessTypeNoop)
+				uvmPath = sm.UVMPath
 				if err != nil {
 					return "", fmt.Errorf("failed to add SCSI layer: %s", err)
 				}
