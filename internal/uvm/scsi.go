@@ -342,3 +342,23 @@ func (uvm *UtilityVM) grantAccess(ctx context.Context, hostPath string, vmAccess
 	}
 	return nil
 }
+
+// GetScsiLocationInfo returns the controller number and LUN for the SCSI disk that is
+// referenced by hostPath
+func (uvm *UtilityVM) GetScsiLocationInfo(ctx context.Context, hostPath string) (int, int32, error) {
+	uvm.m.Lock()
+	defer uvm.m.Unlock()
+	sm, err := uvm.findSCSIAttachment(ctx, hostPath)
+	if err != nil {
+		return -1, -1, err
+	}
+	return sm.Controller, sm.LUN, nil
+}
+
+// Scratch VHD of the UVM is always attached at SCSI 0:0
+func (uvm *UtilityVM) GetScratchVHDPath() (string, error) {
+	if uvm.scsiLocations[0][0] != nil {
+		return uvm.scsiLocations[0][0].HostPath, nil
+	}
+	return "", fmt.Errorf("No scratch VHD found for the uvm\n")
+}

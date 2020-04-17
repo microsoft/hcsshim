@@ -123,6 +123,19 @@ const (
 	annotationVPCIEnabled                = "io.microsoft.virtualmachine.lcow.vpcienabled"
 	annotationStorageQoSBandwidthMaximum = "io.microsoft.virtualmachine.storageqos.bandwidthmaximum"
 	annotationStorageQoSIopsMaximum      = "io.microsoft.virtualmachine.storageqos.iopsmaximum"
+	// SaveAsTemplate annotation must be used with a pod & container creation request.
+	// If this annotation is present in the request then it will save the UVM (pod)
+	// and the container(s) inside it as a template. However, this also means that this
+	// pod and the containers inside this pod will permananetly stay in the
+	// paused/templated state and can not be resumed again.
+	annotationSaveAsTemplate = "io.microsoft.virtualmachine.saveastemplate"
+	// This annotation should be used when creating a pod or a container from a template.
+	// When creating a pod from a template use the ID of the templated pod as the
+	// TemplateID and when creating a container use the ID of the templated container as
+	// the TemplateID. It is the client's responsibility to make sure that the sandbox
+	// within which a cloned container needs to be created must also be created from the
+	// same template.
+	annotationTemplateID = "io.microsoft.virtualmachine.templateid"
 )
 
 // parseAnnotationsBool searches `a` for `key` and if found verifies that the
@@ -313,6 +326,19 @@ func parseAnnotationsString(a map[string]string, key string, def string) string 
 	return def
 }
 
+// ParseAnnotationsSaveAsTemplate searches for the boolean value which specifies
+// if this create request should be considered as a template creation request. If value
+// is found the returns the actual value, returns false otherwise.
+func ParseAnnotationsSaveAsTemplate(ctx context.Context, s *specs.Spec) bool {
+	return parseAnnotationsBool(ctx, s.Annotations, annotationSaveAsTemplate, false)
+}
+
+// ParseAnnotationsTemplateID searches for the templateID in the create request. If the
+// value is found then returns the value otherwise returns the empty string.
+func ParseAnnotationsTemplateID(ctx context.Context, s *specs.Spec) string {
+	return parseAnnotationsString(s.Annotations, annotationTemplateID, "")
+}
+
 // SpecToUVMCreateOpts parses `s` and returns either `*uvm.OptionsLCOW` or
 // `*uvm.OptionsWCOW`.
 func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (interface{}, error) {
@@ -362,6 +388,8 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		wopts.ProcessorWeight = ParseAnnotationsCPUWeight(ctx, s, annotationProcessorWeight, wopts.ProcessorWeight)
 		wopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(ctx, s, annotationStorageQoSBandwidthMaximum, wopts.StorageQoSBandwidthMaximum)
 		wopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotationStorageQoSIopsMaximum, wopts.StorageQoSIopsMaximum)
+		wopts.SaveAsTemplateCapable = parseAnnotationsBool(ctx, s.Annotations, annotationSaveAsTemplate, false)
+		wopts.ExternalGuestConnection = (parseAnnotationsString(s.Annotations, annotationTemplateID, "") != "" || wopts.SaveAsTemplateCapable)
 		return wopts, nil
 	}
 	return nil, errors.New("cannot create UVM opts spec is not LCOW or WCOW")

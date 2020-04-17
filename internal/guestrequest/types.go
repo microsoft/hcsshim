@@ -77,6 +77,7 @@ const (
 	ResourceTypeCombinedLayers    ResourceType = "CombinedLayers"
 	ResourceTypeVPMemDevice       ResourceType = "VPMemDevice"
 	ResourceTypeVPCIDevice        ResourceType = "VPCIDevice"
+	ResourceTypeHvSocket          ResourceType = "HvSocket"
 )
 
 // GuestRequest is for modify commands passed to the guest.
@@ -119,3 +120,14 @@ const (
 type SignalProcessOptionsWCOW struct {
 	Signal SignalValueWCOW `json:",omitempty"`
 }
+
+type HvSocketAddress struct {
+	LocalAddress  string `json:",omitempty"`
+	ParentAddress string `json:",omitempty"`
+}
+
+// Mapped Directory path type values
+const (
+	MappedDirPathTypeAbsolutePath = "AbsolutePath"
+	MappedDirPathTypeVSMBShare    = "VirtualSmbShareName"
+)

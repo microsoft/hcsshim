@@ -247,3 +247,19 @@ func (uvm *UtilityVM) normalizeMemorySize(ctx context.Context, requested int32) 
 	}
 	return actual
 }
+
+func (uvm *UtilityVM) CloseGCConnection() error {
+	var err error = nil
+	if uvm.gc != nil {
+		err = uvm.gc.Close()
+	}
+	if err != nil && uvm.gcListener != nil {
+		err = uvm.gcListener.Close()
+	}
+	if err != nil && uvm.outputListener != nil {
+		close(uvm.outputProcessingDone)
+		err = uvm.outputListener.Close()
+		uvm.outputListener = nil
+	}
+	return err
+}

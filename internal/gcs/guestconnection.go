@@ -56,9 +56,8 @@ type GuestConnectionConfig struct {
 	IoListen IoListenFunc
 }
 
-// Connect establishes a GCS connection. `gcc.Conn` will be closed by this function.
-func (gcc *GuestConnectionConfig) Connect(ctx context.Context) (_ *GuestConnection, err error) {
-	ctx, span := trace.StartSpan(ctx, "gcs::GuestConnectionConfig::Connect")
+func (gcc *GuestConnectionConfig) connectCommon(ctx context.Context, isReconnect bool) (_ *GuestConnection, err error) {
+	ctx, span := trace.StartSpan(ctx, "gcs::GuestConnectionConfig::ConnectCommon")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
@@ -73,12 +72,24 @@ func (gcc *GuestConnectionConfig) Connect(ctx context.Context) (_ *GuestConnecti
 		gc.brdg.Wait()
 		gc.clearNotifies()
 	}()
-	err = gc.connect(ctx)
+
+	err = gc.connect(ctx, !isReconnect)
+
 	if err != nil {
 		gc.Close()
 		return nil, err
 	}
 	return gc, nil
+}
+
+// Connect establishes a GCS connection. `gcc.Conn` will be closed by this function.
+func (gcc *GuestConnectionConfig) Connect(ctx context.Context) (_ *GuestConnection, err error) {
+	return gcc.connectCommon(ctx, false)
+}
+
+// Connect re-establishes a GCS connection. `gcc.Conn` will be closed by this function.
+func (gcc *GuestConnectionConfig) Reconnect(ctx context.Context) (_ *GuestConnection, err error) {
+	return gcc.connectCommon(ctx, true)
 }
 
 // GuestConnection represents a connection to the GCS.
@@ -105,7 +116,9 @@ func (gc *GuestConnection) Protocol() uint32 {
 }
 
 // connect establishes a GCS connection. It must not be called more than once.
-func (gc *GuestConnection) connect(ctx context.Context) (err error) {
+// containerCreate request should not be sent in case of cloned VMs. sendHostCreate option
+// can be used to specify that.
+func (gc *GuestConnection) connect(ctx context.Context, sendHostCreate bool) (err error) {
 	req := negotiateProtocolRequest{
 		MinimumVersion: protocolVersion,
 		MaximumVersion: protocolVersion,
@@ -123,7 +136,8 @@ func (gc *GuestConnection) connect(ctx context.Context) (err error) {
 	if gc.os == "" {
 		gc.os = "windows"
 	}
-	if resp.Capabilities.SendHostCreateMessage {
+
+	if sendHostCreate && resp.Capabilities.SendHostCreateMessage {
 		createReq := containerCreate{
 			requestBase: makeRequest(ctx, nullContainerID),
 			ContainerConfig: anyInString{&uvmConfig{

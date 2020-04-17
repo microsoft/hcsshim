@@ -191,6 +191,16 @@ func (uvm *UtilityVM) RemoveEndpointsFromNS(ctx context.Context, id string, endp
 	return nil
 }
 
+// Removes all Network namespaces and corresponding enpoints associated with this UVM
+func (uvm *UtilityVM) RemoveAllNamespaces(ctx context.Context) error {
+	for nsid := range uvm.namespaces {
+		if err := uvm.RemoveNetNS(ctx, nsid); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // IsNetworkNamespaceSupported returns bool value specifying if network namespace is supported inside the guest
 func (uvm *UtilityVM) isNetworkNamespaceSupported() bool {
 	return uvm.guestCaps.NamespaceAddRequestSupported

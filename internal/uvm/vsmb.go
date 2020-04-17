@@ -189,3 +189,29 @@ func (uvm *UtilityVM) GetVSMBUvmPath(ctx context.Context, hostPath string) (stri
 	}
 	return filepath.Join(share.guestPath, f), nil
 }
+
+// GetVSMBShareName returns the name of the VSMB share
+func (uvm *UtilityVM) GetVSMBShareName(ctx context.Context, hostPath string) (string, error) {
+	if hostPath == "" {
+		return "", fmt.Errorf("no hostPath passed to GetVSMBShareName")
+	}
+
+	uvm.m.Lock()
+	defer uvm.m.Unlock()
+
+	st, err := os.Stat(hostPath)
+	if err != nil {
+		return "", err
+	}
+	m := uvm.vsmbDirShares
+	if !st.IsDir() {
+		m = uvm.vsmbFileShares
+		hostPath, _ = filepath.Split(hostPath)
+	}
+	hostPath = filepath.Clean(hostPath)
+	share, err := uvm.findVSMBShare(ctx, m, hostPath)
+	if err != nil {
+		return "", err
+	}
+	return share.name, nil
+}

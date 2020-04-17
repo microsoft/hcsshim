@@ -14,10 +14,14 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/gcs"
+	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/requesttype"
 	"github.com/Microsoft/hcsshim/internal/schema1"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -115,8 +119,38 @@ func parseLogrus(vmid string) func(r io.Reader) {
 	}
 }
 
-// Start synchronously starts the utility VM.
-func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
+// When using an external GCS connection it is necessary to configure the VM's Hyper-V
+// socket by sending an update with local address equal to the VM's GUID ID and parent
+// address equal to WindowsGcsHvHostID. (When using the HCS connection this step is done
+// by the HCS)
+// This only applies for WCOW
+func (uvm *UtilityVM) configureHvSocketForGCS(ctx context.Context) (err error) {
+	if uvm.OS() != "windows" {
+		return nil
+	}
+
+	hvsocketAddress := &guestrequest.HvSocketAddress{
+		LocalAddress:  uvm.runtimeID.String(),
+		ParentAddress: gcs.WindowsGcsHvHostID.String(),
+	}
+
+	conSetupReq := &hcsschema.ModifySettingRequest{
+		RequestType: requesttype.Update,
+		GuestRequest: guestrequest.GuestRequest{
+			RequestType:  requesttype.Update,
+			ResourceType: guestrequest.ResourceTypeHvSocket,
+			Settings:     hvsocketAddress,
+		},
+	}
+
+	if err = uvm.modify(ctx, conSetupReq); err != nil {
+		return fmt.Errorf("failed to configure HVSOCK for external GCS: %s", err)
+	}
+
+	return nil
+}
+
+func (uvm *UtilityVM) startInternal(ctx context.Context, isClone bool) (err error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	g, gctx := errgroup.WithContext(ctx)
 	defer g.Wait()
@@ -160,7 +194,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 
 	err = uvm.hcsSystem.Start(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to start HCS system: %s", err)
 	}
 	defer func() {
 		if err != nil {
@@ -185,7 +219,6 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	if err = g.Wait(); err != nil {
 		return err
 	}
-
 	if uvm.gcListener != nil {
 		// Accept the GCS connection.
 		conn, err := uvm.acceptAndClose(ctx, uvm.gcListener)
@@ -199,12 +232,25 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 			Log:      log.G(ctx).WithField(logfields.UVMID, uvm.id),
 			IoListen: gcs.HvsockIoListen(uvm.runtimeID),
 		}
-		uvm.gc, err = gcc.Connect(ctx)
+
+		if isClone {
+			uvm.gc, err = gcc.Reconnect(ctx)
+		} else {
+			uvm.gc, err = gcc.Connect(ctx)
+		}
+
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to connect with GCS: %s", err)
 		}
 		uvm.guestCaps = *uvm.gc.Capabilities()
 		uvm.protocol = uvm.gc.Protocol()
+
+		// initial setup required for external GCS connection
+		// TODO(ambarve): Should we check here if guest response includes this
+		// capability?
+		if err = uvm.configureHvSocketForGCS(ctx); err != nil {
+			return fmt.Errorf("failed to do initial GCS setup: %s", err)
+		}
 	} else {
 		// Cache the guest connection properties.
 		properties, err := uvm.hcsSystem.Properties(ctx, schema1.PropertyTypeGuestConnection)
@@ -217,10 +263,21 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	return nil
 }
 
+func (uvm *UtilityVM) StartClone(ctx context.Context) (err error) {
+	return uvm.startInternal(ctx, true)
+}
+
+// Start synchronously starts the utility VM.
+func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
+	return uvm.startInternal(ctx, false)
+}
+
 // acceptAndClose accepts a connection and then closes a listener. If the
 // context becomes done or the utility VM terminates, the operation will be
 // cancelled (but the listener will still be closed).
 func (uvm *UtilityVM) acceptAndClose(ctx context.Context, l net.Listener) (net.Conn, error) {
+	ctx, span := trace.StartSpan(ctx, "uvm::acceptAndClose")
+	defer span.End()
 	var conn net.Conn
 	ch := make(chan error)
 	go func() {

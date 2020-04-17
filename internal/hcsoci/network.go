@@ -67,3 +67,24 @@ func GetNamespaceEndpoints(ctx context.Context, netNS string) ([]*hns.HNSEndpoin
 	}
 	return endpoints, nil
 }
+
+// SetupNetworkNamespace adds the network namespace with given nsid into
+// the given UtilityVM and then adds the endpoints associated with that nsid into that
+// namespace.
+func SetupNetworkNamespace(ctx context.Context, hostingSystem *uvm.UtilityVM, nsid string) (err error) {
+	endpoints, err := GetNamespaceEndpoints(ctx, nsid)
+	if err != nil {
+		return err
+	}
+	err = hostingSystem.AddNetNS(ctx, nsid)
+	if err != nil {
+		return err
+	}
+	err = hostingSystem.AddEndpointsToNS(ctx, nsid, endpoints)
+	if err != nil {
+		// Best effort clean up the NS
+		hostingSystem.RemoveNetNS(ctx, nsid)
+		return err
+	}
+	return nil
+}

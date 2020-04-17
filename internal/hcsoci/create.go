@@ -9,12 +9,15 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -59,15 +62,11 @@ type createOptionsInternal struct {
 	actualID               string             // Identifier for the container
 	actualOwner            string             // Owner for the container
 	actualNetworkNamespace string
+	saveAsTemplate         bool   // Are we going to save this container as a template
+	templateID             string // is this container being created by cloning a container with id template ID
 }
 
-// CreateContainer creates a container. It can cope with a  wide variety of
-// scenarios, including v1 HCS schema calls, as well as more complex v2 HCS schema
-// calls. Note we always return the resources that have been allocated, even in the
-// case of an error. This provides support for the debugging option not to
-// release the resources on failure, so that the client can make the necessary
-// call to release resources that have been allocated as part of calling this function.
-func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.Container, _ *Resources, err error) {
+func initializeCreateOptions(ctx context.Context, createOptions *CreateOptions) (*createOptionsInternal, error) {
 	coi := &createOptionsInternal{
 		CreateOptions: createOptions,
 		actualID:      createOptions.ID,
@@ -78,7 +77,7 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 	if coi.actualID == "" {
 		g, err := guid.NewV4()
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		coi.actualID = g.String()
 	}
@@ -87,7 +86,7 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 	}
 
 	if coi.Spec == nil {
-		return nil, nil, fmt.Errorf("Spec must be supplied")
+		return nil, fmt.Errorf("Spec must be supplied")
 	}
 
 	if coi.HostingSystem != nil {
@@ -97,10 +96,61 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 		coi.actualSchemaVersion = schemaversion.DetermineSchemaVersion(coi.SchemaVersion)
 	}
 
+	coi.saveAsTemplate = oci.ParseAnnotationsSaveAsTemplate(ctx, createOptions.Spec)
+	coi.templateID = oci.ParseAnnotationsTemplateID(ctx, createOptions.Spec)
+
 	log.G(ctx).WithFields(logrus.Fields{
 		"options": fmt.Sprintf("%+v", createOptions),
 		"schema":  coi.actualSchemaVersion,
-	}).Debug("hcsshim::CreateContainer")
+	}).Debug("hcsshim::initializeCreateOptions")
+
+	return coi, nil
+}
+
+// configureSandboxNetwork creates a new network namespace for the pod (sandbox)
+// if required and then adds that namespace to the pod.
+func configureSandboxNetwork(ctx context.Context, coi *createOptionsInternal, resources *Resources) error {
+	if coi.NetworkNamespace != "" {
+		resources.netNS = coi.NetworkNamespace
+	} else {
+		err := createNetworkNamespace(ctx, coi, resources)
+		if err != nil {
+			return err
+		}
+	}
+	coi.actualNetworkNamespace = resources.netNS
+
+	if coi.HostingSystem != nil {
+		ct, _, err := oci.GetSandboxTypeAndID(coi.Spec.Annotations)
+		if err != nil {
+			return err
+		}
+		// Only add the network namespace to a standalone or sandbox
+		// container but not a workload container in a sandbox that inherits
+		// the namespace.
+		if ct == oci.KubernetesContainerTypeNone || ct == oci.KubernetesContainerTypeSandbox {
+			if err = SetupNetworkNamespace(ctx, coi.HostingSystem, coi.actualNetworkNamespace); err != nil {
+				return err
+			}
+			resources.addedNetNSToVM = true
+		}
+	}
+
+	return nil
+}
+
+// CreateContainer creates a container. It can cope with a  wide variety of
+// scenarios, including v1 HCS schema calls, as well as more complex v2 HCS schema
+// calls. Note we always return the resources that have been allocated, even in the
+// case of an error. This provides support for the debugging option not to
+// release the resources on failure, so that the client can make the necessary
+// call to release resources that have been allocated as part of calling this function.
+func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.Container, _ *Resources, err error) {
+
+	coi, err := initializeCreateOptions(ctx, createOptions)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	resources := &Resources{
 		id: createOptions.ID,
@@ -126,41 +176,9 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 	if coi.Spec.Windows != nil &&
 		coi.Spec.Windows.Network != nil &&
 		schemaversion.IsV21(coi.actualSchemaVersion) {
-
-		if coi.NetworkNamespace != "" {
-			resources.netNS = coi.NetworkNamespace
-		} else {
-			err := createNetworkNamespace(ctx, coi, resources)
-			if err != nil {
-				return nil, resources, err
-			}
-		}
-		coi.actualNetworkNamespace = resources.netNS
-		if coi.HostingSystem != nil {
-			ct, _, err := oci.GetSandboxTypeAndID(coi.Spec.Annotations)
-			if err != nil {
-				return nil, resources, err
-			}
-			// Only add the network namespace to a standalone or sandbox
-			// container but not a workload container in a sandbox that inherits
-			// the namespace.
-			if ct == oci.KubernetesContainerTypeNone || ct == oci.KubernetesContainerTypeSandbox {
-				endpoints, err := GetNamespaceEndpoints(ctx, coi.actualNetworkNamespace)
-				if err != nil {
-					return nil, resources, err
-				}
-				err = coi.HostingSystem.AddNetNS(ctx, coi.actualNetworkNamespace)
-				if err != nil {
-					return nil, resources, err
-				}
-				err = coi.HostingSystem.AddEndpointsToNS(ctx, coi.actualNetworkNamespace, endpoints)
-				if err != nil {
-					// Best effort clean up the NS
-					coi.HostingSystem.RemoveNetNS(ctx, coi.actualNetworkNamespace)
-					return nil, resources, err
-				}
-				resources.addedNetNSToVM = true
-			}
+		err = configureSandboxNetwork(ctx, coi, resources)
+		if err != nil {
+			return nil, resources, fmt.Errorf("failure while creating namespace for container: %s", err)
 		}
 	}
 
@@ -228,4 +246,109 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 		return nil, resources, err
 	}
 	return system, resources, nil
+}
+
+// CloneContainer is similar to CreateContainer but it does not add layers or namespace like
+// CreateContainer does. Also, instead of sending create container request it sends a modify
+// request to an existing container. CloneContainer only works for WCOW.
+func CloneContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.Container, _ *Resources, err error) {
+	coi, err := initializeCreateOptions(ctx, createOptions)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if coi.Spec.Windows == nil || coi.HostingSystem == nil {
+		return nil, nil, fmt.Errorf("CloneContainer is only supported for Hyper-v isolated WCOW ")
+	}
+
+	resources := &Resources{
+		id: createOptions.ID,
+	}
+	defer func() {
+		if err != nil {
+			if !coi.DoNotReleaseResourcesOnFailure {
+				ReleaseResources(ctx, resources, coi.HostingSystem, true)
+			}
+		}
+	}()
+
+	if coi.HostingSystem != nil {
+		n := coi.HostingSystem.ContainerCounter()
+		if coi.Spec.Linux != nil {
+			resources.containerRootInUVM = fmt.Sprintf(lcowRootInUVM, createOptions.ID)
+		} else {
+			resources.containerRootInUVM = fmt.Sprintf(wcowRootInUVM, strconv.FormatUint(n, 16))
+		}
+	}
+
+	if err = setupMounts(ctx, coi, resources); err != nil {
+		return nil, resources, err
+	}
+
+	// TODO(ambarve): everything that is added to the container during the createContainer
+	// request (via the gcsDocument) must be hot added here.
+	// 1. All types of mounts - scsi, physical disk, vsmb, pipes
+	// 2. Networking
+	// 3. GMSA credentials?
+	// Add the mounts as mapped directories or mapped pipes
+	// In case of cloned container we must add them as a modify request.
+	var (
+		mds []hcsschema.MappedDirectory
+		mps []hcsschema.MappedPipe
+	)
+	for _, mount := range coi.Spec.Mounts {
+		if mount.Type != "" {
+			return nil, nil, fmt.Errorf("invalid container spec - Mount.Type '%s' must not be set", mount.Type)
+		}
+		if uvm.IsPipe(mount.Source) {
+			src, dst := uvm.GetContainerPipeMapping(coi.HostingSystem, mount)
+			mps = append(mps, hcsschema.MappedPipe{HostPath: src, ContainerPipeName: dst})
+		} else {
+			readOnly := false
+			for _, o := range mount.Options {
+				if strings.ToLower(o) == "ro" {
+					readOnly = true
+				}
+			}
+			md := hcsschema.MappedDirectory{ContainerPath: mount.Destination, ReadOnly: readOnly}
+
+			uvmPath, err := coi.HostingSystem.GetVSMBUvmPath(ctx, mount.Source)
+			if err != nil {
+				if err == uvm.ErrNotAttached {
+					// It could also be a scsi mount.
+					uvmPath, err = coi.HostingSystem.GetScsiUvmPath(ctx, mount.Source)
+					if err != nil {
+						return nil, nil, err
+					}
+					md.HostPathType = guestrequest.MappedDirPathTypeAbsolutePath
+				} else {
+					return nil, nil, err
+				}
+			} else {
+				//TODO(ambarve): This should be vsmb path tyep but that doesn't work for some reason
+				md.HostPathType = guestrequest.MappedDirPathTypeAbsolutePath
+			}
+			md.HostPath = uvmPath
+			mds = append(mds, md)
+
+		}
+	}
+
+	// TODO(ambarve) : Find out if there is a way to send
+	// request for all the mounts at the same time. Otherwise make
+	// changes to send each request one by one.
+	var gcsDocument hcsschema.ModifySettingRequest
+	if len(mds) > 0 {
+		gcsDocument = hcsschema.ModifySettingRequest{
+			RequestType:  requesttype.Add,
+			ResourcePath: "Container/MappedDirectories",
+			Settings:     mds[0],
+		}
+	}
+
+	c, err := coi.HostingSystem.CloneContainer(ctx, coi.actualID, gcsDocument)
+	if err != nil {
+		return nil, resources, err
+	}
+	return c, resources, nil
 }

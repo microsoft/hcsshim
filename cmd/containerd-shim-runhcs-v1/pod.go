@@ -84,6 +84,15 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 	owner := filepath.Base(os.Args[0])
 	isWCOW := oci.IsWCOW(s)
 
+	templateID := oci.ParseAnnotationsTemplateID(ctx, s)
+	var utc *uvm.UVMTemplateConfig
+	if templateID != "" && isWCOW {
+		utc, err = FetchTemplateConfig(ctx, templateID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	var parent *uvm.UtilityVM
 	if oci.IsIsolated(s) {
 		// Create the UVM parent
@@ -115,13 +124,20 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 			}
 			layers[layersLen-1] = vmPath
 			wopts.LayerFolders = layers
-
-			parent, err = uvm.CreateWCOW(ctx, wopts)
+			if utc != nil {
+				parent, err = uvm.CloneWCOW(ctx, wopts, utc)
+			} else {
+				parent, err = uvm.CreateWCOW(ctx, wopts)
+			}
 			if err != nil {
 				return nil, err
 			}
 		}
-		err = parent.Start(ctx)
+		if utc != nil {
+			err = parent.StartClone(ctx)
+		} else {
+			err = parent.Start(ctx)
+		}
 		if err != nil {
 			parent.Close()
 			return nil, err
@@ -141,37 +157,25 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		id:     req.ID,
 		host:   parent,
 	}
+
 	// TOOD: JTERRY75 - There is a bug in the compartment activation for Windows
 	// Process isolated that requires us to create the real pause container to
 	// hold the network compartment open. This is not required for Windows
 	// Hypervisor isolated. When we have a build that supports this for Windows
 	// Process isolated make sure to move back to this model.
 	if isWCOW && parent != nil {
+
+		if s.Windows != nil && s.Windows.Network != nil {
+			err = hcsoci.SetupNetworkNamespace(ctx, parent, s.Windows.Network.NetworkNamespace)
+			if err != nil {
+				return nil, fmt.Errorf("failed to setup network namespace for pod: %s", err)
+			}
+		}
+
 		// For WCOW we fake out the init task since we dont need it. We only
 		// need to provision the guest network namespace if this is hypervisor
 		// isolated. Process isolated WCOW gets the namespace endpoints
 		// automatically.
-		if parent != nil {
-			nsid := ""
-			if s.Windows != nil && s.Windows.Network != nil {
-				nsid = s.Windows.Network.NetworkNamespace
-			}
-
-			if nsid != "" {
-				endpoints, err := hcsoci.GetNamespaceEndpoints(ctx, nsid)
-				if err != nil {
-					return nil, err
-				}
-				err = parent.AddNetNS(ctx, nsid)
-				if err != nil {
-					return nil, err
-				}
-				err = parent.AddEndpointsToNS(ctx, nsid, endpoints)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
 		p.sandboxTask = newWcowPodSandboxTask(ctx, events, req.ID, req.Bundle, parent)
 		// Publish the created event. We only do this for a fake WCOW task. A
 		// HCS Task will event itself based on actual process lifetime.
@@ -206,7 +210,6 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		}
 		p.sandboxTask = lt
 	}
-
 	return &p, nil
 }
 
@@ -262,6 +265,16 @@ func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *sp
 		}
 	}()
 
+	templateID := oci.ParseAnnotationsTemplateID(ctx, s)
+	saveAsTemplate := oci.ParseAnnotationsSaveAsTemplate(ctx, s)
+	if templateID != "" && saveAsTemplate {
+		return nil, errors.Wrapf(errdefs.ErrInvalidArgument, "templateID and save as template flags can not be passed in the same request.")
+	}
+
+	if (saveAsTemplate || templateID != "") && (p.host == nil || p.host.OS() != "windows") {
+		return nil, errors.Wrapf(errdefs.ErrInvalidArgument, "Save as template and creating clones is only available for WCOW.")
+	}
+
 	ct, sid, err := oci.GetSandboxTypeAndID(s.Annotations)
 	if err != nil {
 		return nil, err
@@ -283,11 +296,25 @@ func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *sp
 			sid)
 	}
 
-	st, err := newHcsTask(ctx, p.events, p.host, false, req, s)
+	var st shimTask
+	if templateID != "" {
+		st, err = newClonedHcsTask(ctx, p.events, p.host, false, req, s, templateID)
+	} else {
+		st, err = newHcsTask(ctx, p.events, p.host, false, req, s)
+	}
 	if err != nil {
 		return nil, err
 	}
 
+	// A container (and the UVM) is actually saved as a template only after the container
+	// is successfully started. However, information about the resources assigned to this
+	// container (which is required to properly clone this template) is only available
+	// at the time of creation. Hence, that information is saved here.
+	if saveAsTemplate {
+		if err = SaveTemplateConfig(ctx, p.host, s); err != nil {
+			return nil, err
+		}
+	}
 	p.workloadTasks.Store(req.ID, st)
 	return st, nil
 }
@@ -321,6 +348,7 @@ func (p *pod) KillTask(ctx context.Context, tid, eid string, signal uint32, all 
 			})
 
 			// iterate all
+			// TODO(ambarve): shouldn't this be true to continue iteration?
 			return false
 		})
 	}

@@ -265,6 +265,8 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 				mdv2.HostPath = mount.Source
 			} else {
 				uvmPath, err := coi.HostingSystem.GetVSMBUvmPath(ctx, mount.Source)
+				// TODO(ambarve): Why don't we look at mount.Type here to
+				// decide if this is going to be a vsmb mount of scsi mount
 				if err != nil {
 					if err == uvm.ErrNotAttached {
 						// It could also be a scsi mount.

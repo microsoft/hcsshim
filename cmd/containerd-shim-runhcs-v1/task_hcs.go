@@ -119,6 +119,7 @@ func newHcsTask(
 	}).Debug("newHcsTask")
 
 	owner := filepath.Base(os.Args[0])
+	saveAsTemplate := oci.ParseAnnotationsSaveAsTemplate(ctx, s)
 
 	io, err := newNpipeIO(ctx, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
 	if err != nil {
@@ -152,17 +153,144 @@ func newHcsTask(
 		host:     parent,
 		closed:   make(chan struct{}),
 	}
-	ht.init = newHcsExec(
+
+	if saveAsTemplate {
+		ht.init = newTemplateExec(
+			ctx,
+			events,
+			req.ID,
+			parent,
+			system,
+			req.ID,
+			req.Bundle,
+			ht.isWCOW,
+			s.Process,
+			io)
+	} else {
+		ht.init = newHcsExec(
+			ctx,
+			events,
+			req.ID,
+			parent,
+			system,
+			req.ID,
+			req.Bundle,
+			ht.isWCOW,
+			s.Process,
+			io)
+	}
+
+	// In the normal case the `Signal` call from the caller killed this task's
+	// init process. Or the init process can "appear" to have exited because the
+	// parent VM was saved as a template.
+	go ht.waitInitExit()
+
+	if parent != nil {
+		// We have a parent UVM. Listen for its exit and forcibly close this
+		// task. This is not expected but in the event of a UVM crash we need to
+		// handle this case.
+		go ht.waitForHostExit()
+	}
+
+	// Publish the created event
+	ht.events.publishEvent(
 		ctx,
-		events,
-		req.ID,
-		parent,
-		system,
-		req.ID,
-		req.Bundle,
-		ht.isWCOW,
-		s.Process,
-		io)
+		runtime.TaskCreateEventTopic,
+		&eventstypes.TaskCreate{
+			ContainerID: req.ID,
+			Bundle:      req.Bundle,
+			Rootfs:      req.Rootfs,
+			IO: &eventstypes.TaskIO{
+				Stdin:    req.Stdin,
+				Stdout:   req.Stdout,
+				Stderr:   req.Stderr,
+				Terminal: req.Terminal,
+			},
+			Checkpoint: "",
+			Pid:        uint32(ht.init.Pid()),
+		})
+	return ht, nil
+}
+
+// newClonedTask creates a container within `parent`. The parent must be already cloned
+// from a template and hence this container must already be present inside that parent.
+// This function simply creates the go wrapper around the container that is already
+// running inside the cloned parent.
+// This task MAY own the UVM that it is running in but as of now the cloning feature is
+// only used for WCOW hyper-V isolated containers and for WCOW, the wcowPodSandboxTask
+// owns that UVM.
+func newClonedHcsTask(
+	ctx context.Context,
+	events publisher,
+	parent *uvm.UtilityVM,
+	ownsParent bool,
+	req *task.CreateTaskRequest,
+	s *specs.Spec,
+	templateID string) (_ shimTask, err error) {
+	log.G(ctx).WithFields(logrus.Fields{
+		"tid":        req.ID,
+		"ownsParent": ownsParent,
+		"templateid": templateID,
+	}).Debug("newClonedHcsTask")
+
+	owner := filepath.Base(os.Args[0])
+
+	if parent.OS() != "windows" {
+		return nil, fmt.Errorf("Cloned task can only be created inside a windows host")
+	}
+
+	var netNS string
+	if s.Windows != nil &&
+		s.Windows.Network != nil {
+		netNS = s.Windows.Network.NetworkNamespace
+	}
+
+	io, err := newNpipeIO(ctx, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
+	if err != nil {
+		return nil, err
+	}
+
+	// Since this is a cloned task there is no need to actually add the layers
+	// that are specified in the spec (these resources must have already
+	// been allocated at the time of UVM cloning). Remove these resources from
+	// the spec here.
+	// Similary, use the templateid as the ID of the container here because that's
+	// the ID of this container inside the UVM.
+
+	layerFolders := s.Windows.LayerFolders
+	s.Windows.LayerFolders = []string{}
+
+	opts := hcsoci.CreateOptions{
+		ID:               templateID,
+		Owner:            owner,
+		Spec:             s,
+		HostingSystem:    parent,
+		NetworkNamespace: netNS,
+	}
+	system, resources, err := hcsoci.CloneContainer(ctx, &opts)
+	if err != nil {
+		return nil, err
+	}
+	s.Windows.LayerFolders = layerFolders
+
+	ht := &hcsTask{
+		events:   events,
+		id:       req.ID,
+		isWCOW:   oci.IsWCOW(s),
+		c:        system,
+		cr:       resources,
+		ownsHost: ownsParent,
+		host:     parent,
+		closed:   make(chan struct{}),
+		templateid: templateID,
+	}
+
+	// Since this container is already running there is no need of an init exec
+	// for this container. Just use the dummy exec for this.
+	// Todo(ambarve): The problem with this approach is that we don't have any
+	// connection to the actual init process running inside the cloned container, so
+	// if that process dies then there is no way for us to find that out.
+	ht.init = newClonedExec(ctx, events, req.ID, req.Bundle, io)
 
 	if parent != nil {
 		// We have a parent UVM. Listen for its exit and forcibly close this
@@ -249,6 +377,14 @@ type hcsTask struct {
 	// closeHostOnce is used to close `host`. This will only be used if
 	// `ownsHost==true` and `host != nil`.
 	closeHostOnce sync.Once
+
+	// templateid represents the id of the template container from which this container
+	// is cloned. The parent UVM (inside which this container is running) identifies this
+	// container with it's original id (i.e the id that was assigned to this container
+	// at the time of template creation i.e the templateid). Hence, every request that
+	// is sent to the GCS must actually use templateid to reference this container.
+	// A non-empty templateid specifies that this task was cloned.
+	templateid string
 }
 
 func (ht *hcsTask) ID() string {
@@ -455,14 +591,12 @@ func (ht *hcsTask) waitForHostExit() {
 	ctx, span := trace.StartSpan(context.Background(), "hcsTask::waitForHostExit")
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("tid", ht.id))
-
 	err := ht.host.Wait()
 	if err != nil {
 		log.G(ctx).WithError(err).Error("failed to wait for host virtual machine exit")
 	} else {
 		log.G(ctx).Debug("host virtual machine exited")
 	}
-
 	ht.execs.Range(func(key, value interface{}) bool {
 		ex := value.(shimExec)
 		ex.ForceExit(ctx, 1)
@@ -482,7 +616,6 @@ func (ht *hcsTask) waitForHostExit() {
 func (ht *hcsTask) close(ctx context.Context) {
 	ht.closeOnce.Do(func() {
 		log.G(ctx).Debug("hcsTask::closeOnce")
-
 		// ht.c should never be nil for a real task but in testing we stub
 		// this to avoid a nil dereference. We really should introduce a
 		// method or interface for ht.c operations that we can stub for
@@ -560,7 +693,12 @@ func (ht *hcsTask) closeHost(ctx context.Context) {
 			if err := ht.host.Close(); err != nil {
 				log.G(ctx).WithError(err).Error("failed host vm shutdown")
 			}
+			// cleanup template state if any exists.
+			if err := RemoveSavedTemplateConfig(ht.host.ID()); err != nil {
+				log.G(ctx).WithError(err).Error("failed to cleanup template config state for vm")
+			}
 		}
+
 		// Send the `init` exec exit notification always.
 		exit := ht.init.Status()
 		ht.events.publishEvent(

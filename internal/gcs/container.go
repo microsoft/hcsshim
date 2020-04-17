@@ -3,6 +3,7 @@ package gcs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -56,6 +57,40 @@ func (gc *GuestConnection) CreateContainer(ctx context.Context, cid string, conf
 	err = gc.brdg.RPC(ctx, rpcCreate, &req, &resp, false)
 	if err != nil {
 		return nil, err
+	}
+	go c.waitBackground()
+	return c, nil
+}
+
+// CloneContainer creates a container using ID `cid` and `cfg`. The request
+// will likely not be cancellable even if `ctx` becomes done.
+func (gc *GuestConnection) CloneContainer(ctx context.Context, cid string, config interface{}) (_ *Container, err error) {
+	ctx, span := trace.StartSpan(ctx, "gcs::GuestConnection::CloneContainer")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("cid", cid))
+
+	c := &Container{
+		gc:       gc,
+		id:       cid,
+		notifyCh: make(chan struct{}),
+		closeCh:  make(chan struct{}),
+	}
+	err = gc.requestNotify(cid, c.notifyCh)
+	if err != nil {
+		return nil, err
+	}
+	// config can be nil when the container doesn't have any mounts
+	if config != nil {
+		req := containerModifySettings{
+			requestBase: makeRequest(ctx, cid),
+			Request:     config,
+		}
+		var resp containerCreateResponse
+		err = gc.brdg.RPC(ctx, rpcModifySettings, &req, &resp, false)
+		if err != nil {
+			return nil, fmt.Errorf("CloneContainer modify settings failed: %s", err)
+		}
 	}
 	go c.waitBackground()
 	return c, nil
