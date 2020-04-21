@@ -39,15 +39,16 @@ type namespaceInfo struct {
 
 // UtilityVM is the object used by clients representing a utility VM
 type UtilityVM struct {
-	id              string               // Identifier for the utility VM (user supplied or generated)
-	runtimeID       guid.GUID            // Hyper-V VM ID
-	owner           string               // Owner for the utility VM (user supplied or generated)
-	operatingSystem string               // "windows" or "linux"
-	hcsSystem       *hcs.System          // The handle to the compute system
-	gcListener      net.Listener         // The GCS connection listener
-	gc              *gcs.GuestConnection // The GCS connection
-	processorCount  int32
-	m               sync.Mutex // Lock for adding/removing devices
+	id               string               // Identifier for the utility VM (user supplied or generated)
+	runtimeID        guid.GUID            // Hyper-V VM ID
+	owner            string               // Owner for the utility VM (user supplied or generated)
+	operatingSystem  string               // "windows" or "linux"
+	hcsSystem        *hcs.System          // The handle to the compute system
+	gcListener       net.Listener         // The GCS connection listener
+	gc               *gcs.GuestConnection // The GCS connection
+	processorCount   int32
+	physicallyBacked bool       // If the uvm is backed by physical memory and not virtual memory
+	m                sync.Mutex // Lock for adding/removing devices
 
 	exitErr error
 	exitCh  chan struct{}

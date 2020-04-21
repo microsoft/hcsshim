@@ -4,6 +4,7 @@ package cri_containerd
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
@@ -67,6 +68,18 @@ func verifyStatsContent(t *testing.T, stat *runtime.ContainerStats) {
 	}
 	if stat.Memory.WorkingSetBytes.Value == 0 {
 		t.Fatalf("expected memory usage != 0 but got %d", stat.Memory.WorkingSetBytes.Value)
+	}
+}
+
+// Physically backed working set should be equal to the amount of memory we assigned
+// to the UVM.
+func verifyPhysicallyBackedWorkingSet(t *testing.T, num uint64, stat *runtime.ContainerStats) {
+	if stat == nil {
+		t.Fatal("expected stat to be non nil")
+	}
+	numInBytes := num * 1024 * 1024
+	if stat.Memory.WorkingSetBytes.Value != numInBytes {
+		t.Fatalf("expected working set size to be %d bytes but got: %d", numInBytes, stat.Memory.WorkingSetBytes.Value)
 	}
 }
 
@@ -351,6 +364,83 @@ func Test_ContainerStats_List_ContainerID(t *testing.T) {
 				SandboxConfig: podRequest.Config,
 			}
 			runContainerAndQueryListStats(t, client, ctx, request)
+		})
+	}
+}
+
+func Test_SandboxStats_WorkingSet_PhysicallyBacked(t *testing.T) {
+	type config struct {
+		name             string
+		requiredFeatures []string
+		runtimeHandler   string
+		sandboxImage     string
+	}
+	tests := []config{
+		{
+			name:             "WCOW_Hypervisor",
+			requiredFeatures: []string{featureWCOWHypervisor},
+			runtimeHandler:   wcowHypervisorRuntimeHandler,
+			sandboxImage:     imageWindowsNanoserver,
+		},
+		{
+			name:             "LCOW",
+			requiredFeatures: []string{featureLCOW},
+			runtimeHandler:   lcowRuntimeHandler,
+			sandboxImage:     imageLcowK8sPause,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			requireFeatures(t, test.requiredFeatures...)
+
+			if test.runtimeHandler == lcowRuntimeHandler {
+				pullRequiredLcowImages(t, []string{test.sandboxImage})
+			} else {
+				pullRequiredImages(t, []string{test.sandboxImage})
+			}
+
+			// If we go too high we run the risk of getting a not enough memory
+			// for this operation error. Seems like a nice sweetspot thats different than
+			// the default that we can test. If we go less than 1GB WCOW is extremely
+			// sluggish.
+			var sizeInMB uint64 = 1536
+			sizeInMBStr := strconv.FormatUint(sizeInMB, 10)
+			podRequest := &runtime.RunPodSandboxRequest{
+				Config: &runtime.PodSandboxConfig{
+					Metadata: &runtime.PodSandboxMetadata{
+						Name:      t.Name(),
+						Uid:       "0",
+						Namespace: testNamespace,
+					},
+					Annotations: map[string]string{
+						"io.microsoft.virtualmachine.computetopology.memory.allowovercommit":      "false",
+						"io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit": "false",
+						"io.microsoft.virtualmachine.computetopology.memory.sizeinmb":             sizeInMBStr,
+					},
+				},
+				RuntimeHandler: test.runtimeHandler,
+			}
+
+			client := newTestRuntimeClient(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			podID := runPodSandbox(t, client, ctx, podRequest)
+			defer removePodSandbox(t, client, ctx, podID)
+			defer stopPodSandbox(t, client, ctx, podID)
+
+			statsRequest := &runtime.ContainerStatsRequest{
+				ContainerId: podID,
+			}
+
+			stats, err := client.ContainerStats(ctx, statsRequest)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			stat := stats.Stats
+			verifyPhysicallyBackedWorkingSet(t, sizeInMB, stat)
 		})
 	}
 }

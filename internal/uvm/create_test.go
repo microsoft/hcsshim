@@ -2,6 +2,7 @@ package uvm
 
 import (
 	"context"
+	"fmt"
 	"testing"
 )
 
@@ -20,7 +21,8 @@ func TestCreateBadBootFilesPath(t *testing.T) {
 func TestCreateWCOWBadLayerFolders(t *testing.T) {
 	opts := NewDefaultOptionsWCOW(t.Name(), "")
 	_, err := CreateWCOW(context.Background(), opts)
-	if err == nil || (err != nil && err.Error() != `at least 2 LayerFolders must be supplied`) {
+	errMsg := fmt.Sprintf("%s: %s", errBadUVMOpts, "at least 2 LayerFolders must be supplied")
+	if err == nil || (err != nil && err.Error() != errMsg) {
 		t.Fatal(err)
 	}
 }

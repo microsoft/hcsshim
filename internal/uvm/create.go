@@ -2,6 +2,7 @@ package uvm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
+	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/windows"
@@ -68,6 +70,46 @@ type Options struct {
 	// ExternalGuestConnection sets whether the guest RPC connection is performed
 	// internally by the OS platform or externally by this package.
 	ExternalGuestConnection bool
+}
+
+// Verifies that the final UVM options are correct and supported.
+func verifyOptions(ctx context.Context, options interface{}) error {
+	switch opts := options.(type) {
+	case *OptionsLCOW:
+		if opts.EnableDeferredCommit && !opts.AllowOvercommit {
+			return errors.New("EnableDeferredCommit is not supported on physically backed VMs")
+		}
+		if opts.SCSIControllerCount > 1 {
+			return errors.New("SCSI controller count must be 0 or 1") // Future extension here for up to 4
+		}
+		if opts.VPMemDeviceCount > MaxVPMEMCount {
+			return fmt.Errorf("VPMem device count cannot be greater than %d", MaxVPMEMCount)
+		}
+		if opts.VPMemDeviceCount > 0 {
+			if opts.VPMemSizeBytes%4096 != 0 {
+				return errors.New("VPMemSizeBytes must be a multiple of 4096")
+			}
+		} else {
+			if opts.PreferredRootFSType == PreferredRootFSTypeVHD {
+				return errors.New("PreferredRootFSTypeVHD requires at least one VPMem device")
+			}
+		}
+		if opts.KernelDirect && osversion.Get().Build < 18286 {
+			return errors.New("KernelDirectBoot is not supported on builds older than 18286")
+		}
+
+		if opts.EnableColdDiscardHint && osversion.Get().Build < 18967 {
+			return errors.New("EnableColdDiscardHint is not supported on builds older than 18967")
+		}
+	case *OptionsWCOW:
+		if opts.EnableDeferredCommit && !opts.AllowOvercommit {
+			return errors.New("EnableDeferredCommit is not supported on physically backed VMs")
+		}
+		if len(opts.LayerFolders) < 2 {
+			return errors.New("at least 2 LayerFolders must be supplied")
+		}
+	}
+	return nil
 }
 
 // newDefaultOptions returns the default base options for WCOW and LCOW.
@@ -247,6 +289,12 @@ func (uvm *UtilityVM) normalizeProcessorCount(ctx context.Context, requested int
 // ProcessorCount returns the number of processors actually assigned to the UVM.
 func (uvm *UtilityVM) ProcessorCount() int32 {
 	return uvm.processorCount
+}
+
+// PhysicallyBacked returns if the UVM is backed by physical memory
+// (Over commit and deferred commit both false)
+func (uvm *UtilityVM) PhysicallyBacked() bool {
+	return uvm.physicallyBacked
 }
 
 func (uvm *UtilityVM) normalizeMemorySize(ctx context.Context, requested int32) int32 {
