@@ -19,6 +19,7 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
@@ -166,8 +167,10 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		vpmemMaxCount:           opts.VPMemDeviceCount,
 		vpmemMaxSizeBytes:       opts.VPMemSizeBytes,
 		vpciDevices:             make(map[string]*VPCIDevice),
+		physicallyBacked:        !opts.AllowOvercommit,
 		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
 	}
+
 	defer func() {
 		if err != nil {
 			uvm.Close()
@@ -183,27 +186,8 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		return nil, fmt.Errorf("boot file: '%s' not found", rootfsFullPath)
 	}
 
-	if opts.SCSIControllerCount > 1 {
-		return nil, fmt.Errorf("SCSI controller count must be 0 or 1") // Future extension here for up to 4
-	}
-	if opts.VPMemDeviceCount > MaxVPMEMCount {
-		return nil, fmt.Errorf("vpmem device count cannot be greater than %d", MaxVPMEMCount)
-	}
-	if uvm.vpmemMaxCount > 0 {
-		if opts.VPMemSizeBytes%4096 != 0 {
-			return nil, fmt.Errorf("opts.VPMemSizeBytes must be a multiple of 4096")
-		}
-	} else {
-		if opts.PreferredRootFSType == PreferredRootFSTypeVHD {
-			return nil, fmt.Errorf("PreferredRootFSTypeVHD requires at least one VPMem device")
-		}
-	}
-	if opts.KernelDirect && osversion.Get().Build < 18286 {
-		return nil, fmt.Errorf("KernelDirectBoot is not support on builds older than 18286")
-	}
-
-	if opts.EnableColdDiscardHint && osversion.Get().Build < 18967 {
-		return nil, fmt.Errorf("EnableColdDiscardHint is not supported on builds older than 18967")
+	if err := verifyOptions(ctx, opts); err != nil {
+		return nil, errors.Wrap(err, errBadUVMOpts.Error())
 	}
 
 	processorTopology, err := hostProcessorInfo(ctx)

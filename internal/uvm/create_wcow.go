@@ -17,6 +17,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
 	"github.com/Microsoft/hcsshim/internal/wcow"
+	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 )
 
@@ -69,17 +70,20 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		vsmbDirShares:           make(map[string]*VSMBShare),
 		vsmbFileShares:          make(map[string]*VSMBShare),
 		vpciDevices:             make(map[string]*VPCIDevice),
+		physicallyBacked:        !opts.AllowOvercommit,
 		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
 	}
+
 	defer func() {
 		if err != nil {
 			uvm.Close()
 		}
 	}()
 
-	if len(opts.LayerFolders) < 2 {
-		return nil, fmt.Errorf("at least 2 LayerFolders must be supplied")
+	if err := verifyOptions(ctx, opts); err != nil {
+		return nil, errors.Wrap(err, errBadUVMOpts.Error())
 	}
+
 	uvmFolder, err := uvmfolder.LocateUVMFolder(ctx, opts.LayerFolders)
 	if err != nil {
 		return nil, fmt.Errorf("failed to locate utility VM folder from layer folders: %s", err)
