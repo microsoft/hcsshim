@@ -1088,6 +1088,12 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_LCOW(t *testing.T) {
 }
 
 func Test_RunPodSandbox_MultipleContainersSameVhd_WCOW(t *testing.T) {
+	// Prior to 19H1, we aren't able to easily create a formatted VHD, as
+	// HcsFormatWritableLayerVhd requires the VHD to be mounted prior the call.
+	if osversion.Get().Build < osversion.V19H1 {
+		t.Skip("Requires at least 19H1")
+	}
+
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	client := newTestRuntimeClient(t)
