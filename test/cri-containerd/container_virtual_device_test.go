@@ -52,7 +52,7 @@ func verifyGPUIsNotPresent(t *testing.T, client runtime.RuntimeServiceClient, ct
 	}
 }
 
-// findTestDevices returns the first nvidia pcip device on the host
+// findTestNvidiaGPUDevice returns the first nvidia pcip device on the host
 func findTestNvidiaGPUDevice() (string, error) {
 	out, err := exec.Command(
 		"powershell",
@@ -60,6 +60,42 @@ func findTestNvidiaGPUDevice() (string, error) {
 	).Output()
 	if err != nil {
 		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// findTestNvidiaGPULocationPath returns the location path of the first pci nvidia device on the host
+func findTestNvidiaGPULocationPath() (string, error) {
+	out, err := exec.Command(
+		"powershell",
+		`((Get-PnpDevice -presentOnly | where-object {$_.InstanceID -Match 'PCI\\VEN_10DE.*'})[0] | Get-PnpDeviceProperty DEVPKEY_Device_LocationPaths).Data[0]`,
+	).Output()
+	if err != nil {
+		return "", nil
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// findTestNvidiaGPUClassGUID returns the class guid of the first pci nvidia device on the host
+func findTestNvidiaGPUInterfaceClassGUID() (string, error) {
+	out, err := exec.Command(
+		"powershell",
+		`((Get-PnpDevice -presentOnly | where-object {$_.InstanceID -Match 'PCI\\VEN_10DE.*'})[0] | Get-PnpDeviceProperty DEVPKEY_DeviceInterface_ClassGuid).Data[0]`,
+	).Output()
+	if err != nil {
+		return "", nil
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// findTestVirtualDeviceID returns the instance ID of the first generic pcip device on the host
+func findTestVirtualDeviceID() (string, error) {
+	out, err := exec.Command(
+		"powershell",
+		`(Get-PnpDevice -presentOnly | where-object {$_.InstanceID -Match 'PCIP.*'})[0].InstanceId`,
+	).Output()
+	if err != nil {
+		return "", nil
 	}
 	return strings.TrimSpace(string(out)), nil
 }
@@ -88,7 +124,7 @@ func getGPUPodRequestLCOW(t *testing.T) *runtime.RunPodSandboxRequest {
 	}
 }
 
-func getGPUContainerRequest(t *testing.T, podID string, podConfig *runtime.PodSandboxConfig, device *runtime.Device) *runtime.CreateContainerRequest {
+func getGPUContainerRequestLCOW(t *testing.T, podID string, podConfig *runtime.PodSandboxConfig, device *runtime.Device) *runtime.CreateContainerRequest {
 	return &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
 			Metadata: &runtime.ContainerMetadata{
@@ -106,6 +142,31 @@ func getGPUContainerRequest(t *testing.T, podID string, podConfig *runtime.PodSa
 			Linux: &runtime.LinuxContainerConfig{},
 			Annotations: map[string]string{
 				"io.microsoft.container.gpu.capabilities": "utility",
+			},
+		},
+		PodSandboxId:  podID,
+		SandboxConfig: podConfig,
+	}
+}
+
+func getGPUContainerRequestWCOW(t *testing.T, podID string, podConfig *runtime.PodSandboxConfig, device *runtime.Device) *runtime.CreateContainerRequest {
+	return &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsNanoserver,
+			},
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Devices: []*runtime.Device{
+				device,
 			},
 		},
 		PodSandboxId:  podID,
@@ -142,7 +203,7 @@ func Test_RunContainer_VirtualDevice_GPU_LCOW(t *testing.T) {
 		HostPath: "gpu://" + testDeviceInstanceID,
 	}
 
-	containerRequest := getGPUContainerRequest(t, podID, sandboxRequest.Config, device)
+	containerRequest := getGPUContainerRequestLCOW(t, podID, sandboxRequest.Config, device)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	containerID := createContainer(t, client, ctx, containerRequest)
@@ -183,7 +244,7 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_LCOW(t *testing.T) {
 		HostPath: "gpu://" + testDeviceInstanceID,
 	}
 
-	containerRequest := getGPUContainerRequest(t, podID, sandboxRequest.Config, device)
+	containerRequest := getGPUContainerRequestLCOW(t, podID, sandboxRequest.Config, device)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -231,7 +292,7 @@ func Test_RunContainer_VirtualDevice_GPU_and_NoGPU_LCOW(t *testing.T) {
 		HostPath: "gpu://" + testDeviceInstanceID,
 	}
 
-	containerGPURequest := getGPUContainerRequest(t, podID, sandboxRequest.Config, device)
+	containerGPURequest := getGPUContainerRequestLCOW(t, podID, sandboxRequest.Config, device)
 
 	containerNoGPURequest := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -301,7 +362,7 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_Removal_LCOW(t *testing.T) {
 		HostPath: "gpu://" + testDeviceInstanceID,
 	}
 
-	containerRequest := getGPUContainerRequest(t, podID, sandboxRequest.Config, device)
+	containerRequest := getGPUContainerRequestLCOW(t, podID, sandboxRequest.Config, device)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -320,4 +381,90 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_Removal_LCOW(t *testing.T) {
 	// verify after removing second container that we can still see
 	// the GPU on the first container
 	verifyGPUIsPresent(t, client, ctx, containerOneID)
+}
+
+func Test_RunContainer_VirtualDevice_LocationPath_WCOW_Process(t *testing.T) {
+	requireFeatures(t, featureWCOWProcess, featureGPU)
+
+	testDeviceLocationPath, err := findTestNvidiaGPULocationPath()
+	if err != nil {
+		t.Skipf("skipping test, failed to retrieve assignable device on host with: %v", err)
+	}
+	if testDeviceLocationPath == "" {
+		t.Skipf("skipping test, host has no assignable devices")
+	}
+
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	client := newTestRuntimeClient(t)
+
+	podctx := context.Background()
+	sandboxRequest := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Namespace: testNamespace,
+			},
+		},
+		RuntimeHandler: wcowProcessRuntimeHandler,
+	}
+
+	podID := runPodSandbox(t, client, podctx, sandboxRequest)
+	defer removePodSandbox(t, client, podctx, podID)
+	defer stopPodSandbox(t, client, podctx, podID)
+
+	device := &runtime.Device{
+		HostPath: "vpci-location-path://" + testDeviceLocationPath,
+	}
+
+	containerRequest := getGPUContainerRequestWCOW(t, podID, sandboxRequest.Config, device)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	containerID := createContainer(t, client, ctx, containerRequest)
+	runContainerLifetime(t, client, ctx, containerID)
+}
+
+func Test_RunContainer_VirtualDevice_ClassGUID_WCOW_Process(t *testing.T) {
+	requireFeatures(t, featureWCOWProcess, featureGPU)
+
+	// instance ID is only used here to ensure there are devices present on the host
+	instanceID, err := findTestNvidiaGPUDevice()
+	if err != nil {
+		t.Skipf("skipping test, failed to retrieve assignable device on host with: %v", err)
+	}
+	if instanceID == "" {
+		t.Skipf("skipping test, host has no assignable devices")
+	}
+
+	// use fixed GPU class guid
+	testDeviceClassGUID := "5B45201D-F2F2-4F3B-85BB-30FF1F953599"
+
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	client := newTestRuntimeClient(t)
+
+	podctx := context.Background()
+	sandboxRequest := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Namespace: testNamespace,
+			},
+		},
+		RuntimeHandler: wcowProcessRuntimeHandler,
+	}
+
+	podID := runPodSandbox(t, client, podctx, sandboxRequest)
+	defer removePodSandbox(t, client, podctx, podID)
+	defer stopPodSandbox(t, client, podctx, podID)
+
+	device := &runtime.Device{
+		HostPath: "class://" + testDeviceClassGUID,
+	}
+
+	containerRequest := getGPUContainerRequestWCOW(t, podID, sandboxRequest.Config, device)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	containerID := createContainer(t, client, ctx, containerRequest)
+	runContainerLifetime(t, client, ctx, containerID)
 }

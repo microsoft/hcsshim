@@ -230,3 +230,27 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 	}
 	return system, resources, nil
 }
+
+// isV2Xenon returns true if the create options are for a HCS schema V2 xenon container
+// with a hosting VM
+func (coi *createOptionsInternal) isV2Xenon() bool {
+	return schemaversion.IsV21(coi.actualSchemaVersion) && coi.HostingSystem != nil
+}
+
+// isV1Xenon returns true if the create options are for a HCS schema V1 xenon container
+// with a hosting VM
+func (coi *createOptionsInternal) isV1Xenon() bool {
+	return schemaversion.IsV10(coi.actualSchemaVersion) && coi.HostingSystem != nil
+}
+
+// isV2Argon returns true if the create options are for a HCS schema V2 argon container
+// which should have no hosting VM
+func (coi *createOptionsInternal) isV2Argon() bool {
+	return schemaversion.IsV21(coi.actualSchemaVersion) && coi.HostingSystem == nil
+}
+
+// isV1Argon returns true if the create options are for a HCS schema V1 argon container
+// which should have no hyperv settings
+func (coi *createOptionsInternal) isV1Argon() bool {
+	return schemaversion.IsV10(coi.actualSchemaVersion) && coi.Spec.Windows.HyperV == nil
+}
