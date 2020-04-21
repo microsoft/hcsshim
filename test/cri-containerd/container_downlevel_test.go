@@ -11,7 +11,9 @@ import (
 )
 
 func Test_CreateContainer_DownLevel_WCOW_Hypervisor(t *testing.T) {
+	requireFeatures(t, featureWCOWHypervisor)
 	testutilities.RequiresBuild(t, osversion.V19H1)
+
 	pullRequiredImages(t, []string{imageWindowsNanoserver17763})
 
 	sandboxRequest := &runtime.RunPodSandboxRequest{

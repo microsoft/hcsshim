@@ -5,8 +5,10 @@ package cri_containerd
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/osversion"
 	_ "github.com/Microsoft/hcsshim/test/functional/manifest"
+	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	"github.com/containerd/containerd"
 	eventtypes "github.com/containerd/containerd/api/events"
 	eventsapi "github.com/containerd/containerd/api/services/events/v1"
@@ -41,6 +44,7 @@ const (
 	alpineAspnetUpgrade               = "mcr.microsoft.com/dotnet/core/aspnet:3.1.2-alpine3.11"
 )
 
+// Image definitions
 var (
 	imageWindowsNanoserver      = getWindowsNanoserverImage(osversion.Get().Build)
 	imageWindowsServercore      = getWindowsServerCoreImage(osversion.Get().Build)
@@ -49,6 +53,53 @@ var (
 	imageWindowsServercore17763 = getWindowsServerCoreImage(osversion.RS5)
 	imageWindowsServercore18362 = getWindowsServerCoreImage(osversion.V19H1)
 )
+
+// Flags
+var (
+	flagFeatures = testutilities.NewStringSetFlag()
+)
+
+// Features
+// Make sure you update allFeatures below with any new features you add.
+const (
+	featureLCOW           = "LCOW"
+	featureWCOWProcess    = "WCOWProcess"
+	featureWCOWHypervisor = "WCOWHypervisor"
+)
+
+var allFeatures = []string{
+	featureLCOW,
+	featureWCOWProcess,
+	featureWCOWHypervisor,
+}
+
+func init() {
+	// Flag definitions must be in init rather than TestMain, as TestMain isn't
+	// called if -help is passed, but we want the feature usage to show up.
+	flag.Var(flagFeatures, "feature", fmt.Sprintf(
+		"specifies which sets of functionality to test. can be set multiple times\n"+
+			"supported features: %v", allFeatures))
+}
+
+func TestMain(m *testing.M) {
+	flag.Parse()
+	os.Exit(m.Run())
+}
+
+// requireFeatures checks in flagFeatures to validate that each required feature
+// was enabled, and skips the test if any are missing. If the flagFeatures set
+// is empty, the function returns (by default all features are enabled).
+func requireFeatures(t *testing.T, features ...string) {
+	set := flagFeatures.ValueSet()
+	if len(set) == 0 {
+		return
+	}
+	for _, feature := range features {
+		if _, ok := set[feature]; !ok {
+			t.Skipf("skipping test due to feature not set: %s", feature)
+		}
+	}
+}
 
 func getWindowsNanoserverImage(build uint16) string {
 	switch build {
