@@ -94,6 +94,8 @@ func execContainerLCOW(t *testing.T, uid int64, cmd []string) *runtime.ExecSyncR
 }
 
 func Test_ExecContainer_RunAs_LCOW(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
 	// this is just saying 'give me the UID of the process with pid = 1; ignore headers'
 	r := execContainerLCOW(t,
 		9000, // cosmosarno user
@@ -123,6 +125,8 @@ func Test_ExecContainer_RunAs_LCOW(t *testing.T) {
 }
 
 func Test_ExecContainer_LCOW_HasEntropy(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
 	r := execContainerLCOW(t, 9000, []string{"cat", "/proc/sys/kernel/random/entropy_avail"})
 	if r.ExitCode != 0 {
 		t.Fatalf("failed with exit code %d to cat entropy_avail: %s", r.ExitCode, r.Stderr)

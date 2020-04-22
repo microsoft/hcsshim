@@ -16,6 +16,8 @@ import (
 )
 
 func Test_Container_Network_LCOW(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	// create a directory and log file
@@ -99,39 +101,44 @@ func Test_Container_Network_LCOW(t *testing.T) {
 
 func Test_Container_Network_Hostname(t *testing.T) {
 	type config struct {
-		name string
-
-		runtimeHandler string
-		sandboxImage   string
-		containerImage string
-		cmd            []string
+		name             string
+		requiredFeatures []string
+		runtimeHandler   string
+		sandboxImage     string
+		containerImage   string
+		cmd              []string
 	}
 	tests := []config{
 		{
-			name:           "WCOW_Process",
-			runtimeHandler: wcowProcessRuntimeHandler,
-			sandboxImage:   imageWindowsNanoserver,
-			containerImage: imageWindowsNanoserver,
-			cmd:            []string{"cmd", "/c", "ping", "-t", "127.0.0.1"},
+			name:             "WCOW_Process",
+			requiredFeatures: []string{featureWCOWProcess},
+			runtimeHandler:   wcowProcessRuntimeHandler,
+			sandboxImage:     imageWindowsNanoserver,
+			containerImage:   imageWindowsNanoserver,
+			cmd:              []string{"cmd", "/c", "ping", "-t", "127.0.0.1"},
 		},
 		{
-			name:           "WCOW_Hypervisor",
-			runtimeHandler: wcowHypervisorRuntimeHandler,
-			sandboxImage:   imageWindowsNanoserver,
-			containerImage: imageWindowsNanoserver,
-			cmd:            []string{"cmd", "/c", "ping", "-t", "127.0.0.1"},
+			name:             "WCOW_Hypervisor",
+			requiredFeatures: []string{featureWCOWHypervisor},
+			runtimeHandler:   wcowHypervisorRuntimeHandler,
+			sandboxImage:     imageWindowsNanoserver,
+			containerImage:   imageWindowsNanoserver,
+			cmd:              []string{"cmd", "/c", "ping", "-t", "127.0.0.1"},
 		},
 		{
-			name:           "LCOW",
-			runtimeHandler: lcowRuntimeHandler,
-			sandboxImage:   imageLcowK8sPause,
-			containerImage: imageLcowAlpine,
-			cmd:            []string{"top"},
+			name:             "LCOW",
+			requiredFeatures: []string{featureLCOW},
+			runtimeHandler:   lcowRuntimeHandler,
+			sandboxImage:     imageLcowK8sPause,
+			containerImage:   imageLcowAlpine,
+			cmd:              []string{"top"},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			requireFeatures(t, test.requiredFeatures...)
+
 			if test.runtimeHandler == lcowRuntimeHandler {
 				pullRequiredLcowImages(t, []string{test.sandboxImage, test.containerImage})
 			} else {
