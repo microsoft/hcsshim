@@ -1,13 +1,13 @@
-package main
+package hcsoci
 
 import (
 	"context"
 	"io"
 )
 
-// upstreamIO is an interface describing the IO to connect to above the shim.
+// UpstreamIO is an interface describing the IO to connect to above the shim.
 // Depending on the callers settings there may be no opened IO.
-type upstreamIO interface {
+type UpstreamIO interface {
 	// Close closes all open io.
 	//
 	// This call is idempotent and safe to call multiple times.

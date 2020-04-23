@@ -120,7 +120,7 @@ func newHcsTask(
 
 	owner := filepath.Base(os.Args[0])
 
-	io, err := newNpipeIO(ctx, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
+	io, err := hcsoci.NewNpipeIO(ctx, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +269,7 @@ func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest,
 		return errors.Wrapf(errdefs.ErrFailedPrecondition, "exec: '' in task: '%s' must be running to create additional execs", ht.id)
 	}
 
-	io, err := newNpipeIO(ctx, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
+	io, err := hcsoci.NewNpipeIO(ctx, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
 	if err != nil {
 		return err
 	}
@@ -581,7 +581,7 @@ func (ht *hcsTask) ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequ
 	if ht.host == nil {
 		return 0, errors.New("task is not isolated")
 	}
-	return execInUvm(ctx, ht.host, req)
+	return hcsoci.ExecInUvm(ctx, ht.host, req)
 }
 
 func (ht *hcsTask) DumpGuestStacks(ctx context.Context) string {

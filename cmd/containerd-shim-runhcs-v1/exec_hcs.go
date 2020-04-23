@@ -49,7 +49,7 @@ func newHcsExec(
 	id, bundle string,
 	isWCOW bool,
 	spec *specs.Process,
-	io upstreamIO) shimExec {
+	io hcsoci.UpstreamIO) shimExec {
 	log.G(ctx).WithFields(logrus.Fields{
 		"tid":    tid,
 		"eid":    id, // Init exec ID is always same as Task ID
@@ -118,7 +118,7 @@ type hcsExec struct {
 	// create time in order to be valid.
 	//
 	// This MUST be treated as read only in the lifetime of the exec.
-	io              upstreamIO
+	io              hcsoci.UpstreamIO
 	processDone     chan struct{}
 	processDoneOnce sync.Once
 
