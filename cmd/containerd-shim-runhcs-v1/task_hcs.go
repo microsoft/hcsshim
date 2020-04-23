@@ -274,14 +274,14 @@ func newClonedHcsTask(
 	s.Windows.LayerFolders = layerFolders
 
 	ht := &hcsTask{
-		events:   events,
-		id:       req.ID,
-		isWCOW:   oci.IsWCOW(s),
-		c:        system,
-		cr:       resources,
-		ownsHost: ownsParent,
-		host:     parent,
-		closed:   make(chan struct{}),
+		events:     events,
+		id:         req.ID,
+		isWCOW:     oci.IsWCOW(s),
+		c:          system,
+		cr:         resources,
+		ownsHost:   ownsParent,
+		host:       parent,
+		closed:     make(chan struct{}),
 		templateid: templateID,
 	}
 
