@@ -303,8 +303,7 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 		}
 		return nil
 	case shimExecStateExited:
-		// If the state is already exited then do nothing and return nil error
-		return nil
+		return errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", he.id, he.tid)
 	default:
 		return newExecInvalidStateError(he.tid, he.id, he.state, "kill")
 	}
