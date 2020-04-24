@@ -19,9 +19,9 @@ require (
 	github.com/hashicorp/errwrap v0.0.0-20141028054710-7554cd9344ce // indirect
 	github.com/hashicorp/go-multierror v0.0.0-20161216184304-ed905158d874 // indirect
 	github.com/imdario/mergo v0.3.8 // indirect
-	github.com/opencontainers/runtime-spec v0.1.2-0.20190507144316-5b71a03e2700
+	github.com/opencontainers/runtime-spec v1.0.2
 	github.com/opencontainers/runtime-tools v0.0.0-20181011054405-1d69bd0f9c39
-	github.com/pkg/errors v0.8.1
+	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.4.2
 	github.com/syndtr/gocapability v0.0.0-20170704070218-db04d3cc01c8 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f // indirect

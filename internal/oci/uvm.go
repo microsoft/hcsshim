@@ -79,7 +79,11 @@ const (
 	// `spec.Windows.Resources.Storage.Iops`.
 	AnnotationContainerStorageQoSIopsMaximum = "io.microsoft.container.storage.qos.iopsmaximum"
 	// AnnotationGPUVHDPath overrides the default path to search for the gpu vhd
-	AnnotationGPUVHDPath            = "io.microsoft.lcow.gpuvhdpath"
+	AnnotationGPUVHDPath                  = "io.microsoft.lcow.gpuvhdpath"
+	AnnotationAssignedDeviceKernelDrivers = "io.microsoft.assigneddevice.kerneldrivers"
+	// AnnotationAssignedDeviceUtilityTools overrides the default path to search for device-util
+	AnnotationAssignedDeviceUtilityTools = "io.microsoft.assigneddevice.utilitytools"
+
 	annotationAllowOvercommit       = "io.microsoft.virtualmachine.computetopology.memory.allowovercommit"
 	annotationEnableDeferredCommit  = "io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit"
 	annotationEnableColdDiscardHint = "io.microsoft.virtualmachine.computetopology.memory.enablecolddiscardhint"
@@ -432,6 +436,10 @@ func UpdateSpecFromOptions(s specs.Spec, opts *runhcsopts.Options) specs.Spec {
 
 	if _, ok := s.Annotations[AnnotationGPUVHDPath]; !ok && opts.GPUVHDPath != "" {
 		s.Annotations[AnnotationGPUVHDPath] = opts.GPUVHDPath
+	}
+
+	if _, ok := s.Annotations[AnnotationAssignedDeviceUtilityTools]; !ok && opts.DeviceUtilPath != "" {
+		s.Annotations[AnnotationAssignedDeviceUtilityTools] = opts.DeviceUtilPath
 	}
 
 	return s

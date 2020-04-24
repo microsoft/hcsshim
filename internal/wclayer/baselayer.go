@@ -9,6 +9,7 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/hcserror"
+	"github.com/Microsoft/hcsshim/internal/ntconstants"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/safefile"
 	"go.opencensus.io/trace"
@@ -37,7 +38,7 @@ type dirInfo struct {
 func reapplyDirectoryTimes(root *os.File, dis []dirInfo) error {
 	for i := range dis {
 		di := &dis[len(dis)-i-1] // reverse order: process child directories first
-		f, err := safefile.OpenRelative(di.path, root, syscall.GENERIC_READ|syscall.GENERIC_WRITE, syscall.FILE_SHARE_READ, safefile.FILE_OPEN, safefile.FILE_DIRECTORY_FILE)
+		f, err := safefile.OpenRelative(di.path, root, syscall.GENERIC_READ|syscall.GENERIC_WRITE, syscall.FILE_SHARE_READ, ntconstants.FILE_OPEN, ntconstants.FILE_DIRECTORY_FILE)
 		if err != nil {
 			return err
 		}
@@ -92,14 +93,14 @@ func (w *baseLayerWriter) Add(name string, fileInfo *winio.FileBasicInfo) (err e
 
 	extraFlags := uint32(0)
 	if fileInfo.FileAttributes&syscall.FILE_ATTRIBUTE_DIRECTORY != 0 {
-		extraFlags |= safefile.FILE_DIRECTORY_FILE
+		extraFlags |= ntconstants.FILE_DIRECTORY_FILE
 		if fileInfo.FileAttributes&syscall.FILE_ATTRIBUTE_REPARSE_POINT == 0 {
 			w.dirInfo = append(w.dirInfo, dirInfo{name, *fileInfo})
 		}
 	}
 
 	mode := uint32(syscall.GENERIC_READ | syscall.GENERIC_WRITE | winio.WRITE_DAC | winio.WRITE_OWNER | winio.ACCESS_SYSTEM_SECURITY)
-	f, err = safefile.OpenRelative(name, w.root, mode, syscall.FILE_SHARE_READ, safefile.FILE_CREATE, extraFlags)
+	f, err = safefile.OpenRelative(name, w.root, mode, syscall.FILE_SHARE_READ, ntconstants.FILE_CREATE, extraFlags)
 	if err != nil {
 		return hcserror.New(err, "Failed to safefile.OpenRelative", name)
 	}
