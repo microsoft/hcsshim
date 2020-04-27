@@ -16,6 +16,10 @@ const (
 	// DefaultVPMemSizeBytes is the default size of a VPMem device if the create request
 	// doesn't specify.
 	DefaultVPMemSizeBytes = 4 * 1024 * 1024 * 1024 // 4GB
+
+	// MaxNUMANodeCount is the maximum amount of virtual NUMA nodes that can be assigned
+	// to a utility VM.
+	MaxNUMANodeCount = 64
 )
 
 var (

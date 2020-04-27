@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	"github.com/sirupsen/logrus"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
@@ -525,4 +526,222 @@ func Test_RunContainer_GMSA_WCOW_Hypervisor(t *testing.T) {
 	if !strings.Contains(string(r.Stdout), "USERDNSDOMAIN") {
 		t.Fatalf("expected to see USERDNSDOMAIN entry")
 	}
+}
+
+func Test_RunContainer_NUMA_Nodes_Default_LCOW(t *testing.T) {
+	t.Skip("NUMA is not supported for LCOW")
+	requireFeatures(t, featureLCOW)
+
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	client := newTestRuntimeClient(t)
+
+	podctx := context.Background()
+	sandboxRequest := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.computetopology.numa.default": "true",
+			},
+		},
+		RuntimeHandler: lcowRuntimeHandler,
+	}
+
+	podID := runPodSandbox(t, client, podctx, sandboxRequest)
+	defer removePodSandbox(t, client, podctx, podID)
+	defer stopPodSandbox(t, client, podctx, podID)
+
+	containerRequest := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			Command: []string{
+				"top",
+			},
+			Linux: &runtime.LinuxContainerConfig{},
+		},
+		PodSandboxId:  podID,
+		SandboxConfig: sandboxRequest.Config,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	containerID := createContainer(t, client, ctx, containerRequest)
+	runContainerLifetime(t, client, ctx, containerID)
+}
+
+func Test_RunContainer_NUMA_Nodes_Default_WCOW_Hypervisor(t *testing.T) {
+	requireFeatures(t, featureWCOWHypervisor)
+
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
+	client := newTestRuntimeClient(t)
+	podctx := context.Background()
+
+	sandboxRequest := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.computetopology.numa.default": "true",
+			},
+		},
+		RuntimeHandler: wcowHypervisorRuntimeHandler,
+	}
+
+	podID := runPodSandbox(t, client, podctx, sandboxRequest)
+	defer removePodSandbox(t, client, podctx, podID)
+	defer stopPodSandbox(t, client, podctx, podID)
+
+	request := &runtime.CreateContainerRequest{
+		PodSandboxId: podID,
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsNanoserver,
+			},
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+		},
+		SandboxConfig: sandboxRequest.Config,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	containerID := createContainer(t, client, ctx, request)
+	runContainerLifetime(t, client, ctx, containerID)
+}
+
+func Test_RunContainer_NUMA_Nodes_Custom_LCOW(t *testing.T) {
+	t.Skip("NUMA is not supported on LCOW")
+	requireFeatures(t, featureLCOW)
+	testutilities.RequiresBuild(t, 18943)
+
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	client := newTestRuntimeClient(t)
+
+	podctx := context.Background()
+	sandboxRequest := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.computetopology.processor.count":                    "2",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodecount":              "2",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodes.0.virtualnode":    "0",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodes.0.physicalnode":   "0",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodes.0.virtualsocket":  "0",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodes.0.processorcount": "1",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodes.0.memoryamount":   "512",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodes.1.virtualnode":    "1",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodes.1.physicalnode":   "0",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodes.1.virtualsocket":  "1",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodes.1.processorcount": "1",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodes.1.memoryamount":   "512",
+			},
+		},
+		RuntimeHandler: lcowRuntimeHandler,
+	}
+
+	podID := runPodSandbox(t, client, podctx, sandboxRequest)
+	defer removePodSandbox(t, client, podctx, podID)
+	defer stopPodSandbox(t, client, podctx, podID)
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			Command: []string{
+				"top",
+			},
+			Linux: &runtime.LinuxContainerConfig{},
+		},
+		PodSandboxId:  podID,
+		SandboxConfig: sandboxRequest.Config,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	containerID := createContainer(t, client, ctx, request)
+	runContainerLifetime(t, client, ctx, containerID)
+}
+
+func Test_RunContainer_NUMA_Nodes_Custom_WCOW_Hypervisor(t *testing.T) {
+	requireFeatures(t, featureWCOWHypervisor)
+	testutilities.RequiresBuild(t, 18943)
+
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
+	client := newTestRuntimeClient(t)
+
+	podctx := context.Background()
+	sandboxRequest := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.computetopology.processor.count":                    "2",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodecount":              "2",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodes.0.virtualnode":    "0",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodes.0.physicalnode":   "0",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodes.0.virtualsocket":  "0",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodes.0.processorcount": "1",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodes.0.memoryamount":   "512",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodes.1.virtualnode":    "1",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodes.1.physicalnode":   "0",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodes.1.virtualsocket":  "1",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodes.1.processorcount": "1",
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodes.1.memoryamount":   "512",
+			},
+		},
+		RuntimeHandler: wcowHypervisorRuntimeHandler,
+	}
+
+	podID := runPodSandbox(t, client, podctx, sandboxRequest)
+	defer removePodSandbox(t, client, podctx, podID)
+	defer stopPodSandbox(t, client, podctx, podID)
+
+	request := &runtime.CreateContainerRequest{
+		PodSandboxId: podID,
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsNanoserver,
+			},
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+		},
+		SandboxConfig: sandboxRequest.Config,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	containerID := createContainer(t, client, ctx, request)
+	runContainerLifetime(t, client, ctx, containerID)
 }

@@ -59,6 +59,13 @@ type Options struct {
 	// when scheduling. If `0` will default to platform default.
 	ProcessorWeight int32
 
+	// DefaultNUMA will set the amount of virtual NUMA nodes to mirror the hosts
+	// count. If NUMATopology is provided this will be ignored.
+	DefaultNUMA bool
+
+	// The virtual NUMA topology configuration for the UVM.
+	NUMATopology *hcsschema.Numa
+
 	// StorageQoSIopsMaximum sets the maximum number of Iops. If `0` will
 	// default to the platform default.
 	StorageQoSIopsMaximum int32
@@ -97,9 +104,11 @@ func verifyOptions(ctx context.Context, options interface{}) error {
 		if opts.KernelDirect && osversion.Get().Build < 18286 {
 			return errors.New("KernelDirectBoot is not supported on builds older than 18286")
 		}
-
 		if opts.EnableColdDiscardHint && osversion.Get().Build < 18967 {
 			return errors.New("EnableColdDiscardHint is not supported on builds older than 18967")
+		}
+		if opts.DefaultNUMA || opts.NUMATopology != nil {
+			return errors.New("NUMA is not supported on LCOW ")
 		}
 	case *OptionsWCOW:
 		if opts.EnableDeferredCommit && !opts.AllowOvercommit {
@@ -295,6 +304,11 @@ func (uvm *UtilityVM) ProcessorCount() int32 {
 // (Over commit and deferred commit both false)
 func (uvm *UtilityVM) PhysicallyBacked() bool {
 	return uvm.physicallyBacked
+}
+
+// MemorySizeInMB returns the memory assigned to the UVM in MBs
+func (uvm *UtilityVM) MemorySizeInMB() int32 {
+	return uvm.memorySizeInMB
 }
 
 func (uvm *UtilityVM) normalizeMemorySize(ctx context.Context, requested int32) int32 {

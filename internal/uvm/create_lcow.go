@@ -19,7 +19,6 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
@@ -177,6 +176,10 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		}
 	}()
 
+	if err := verifyOptions(ctx, opts); err != nil {
+		return nil, fmt.Errorf("UVM options incorrect or unsupported: %s", err)
+	}
+
 	kernelFullPath := filepath.Join(opts.BootFilesPath, opts.KernelFile)
 	if _, err := os.Stat(kernelFullPath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("kernel: '%s' not found", kernelFullPath)
@@ -186,21 +189,17 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		return nil, fmt.Errorf("boot file: '%s' not found", rootfsFullPath)
 	}
 
-	if err := verifyOptions(ctx, opts); err != nil {
-		return nil, errors.Wrap(err, errBadUVMOpts.Error())
-	}
-
 	processorTopology, err := hostProcessorInfo(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get host processor information: %s", err)
 	}
-
 	// To maintain compatability with Docker we need to automatically downgrade
 	// a user CPU count if the setting is not possible.
 	uvm.processorCount = uvm.normalizeProcessorCount(ctx, opts.ProcessorCount, processorTopology)
-
 	// Align the requested memory size.
-	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
+	uvm.memorySizeInMB = uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
+
+	//TODO(dcantah): If LCOW starts supporting NUMA add here.
 
 	doc := &hcsschema.ComputeSystem{
 		Owner:                             uvm.owner,
@@ -211,7 +210,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 			Chipset:     &hcsschema.Chipset{},
 			ComputeTopology: &hcsschema.Topology{
 				Memory: &hcsschema.Memory2{
-					SizeInMB:              memorySizeInMB,
+					SizeInMB:              uvm.memorySizeInMB,
 					AllowOvercommit:       opts.AllowOvercommit,
 					EnableDeferredCommit:  opts.EnableDeferredCommit,
 					EnableColdDiscardHint: opts.EnableColdDiscardHint,

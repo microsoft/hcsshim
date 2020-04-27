@@ -9,8 +9,7 @@
 
 package hcsschema
 
-type Topology struct {
-	Memory    *Memory2    `json:"Memory,omitempty"`
-	Processor *Processor2 `json:"Processor,omitempty"`
-	Numa      *Numa       `json:"Numa,omitempty"`
+type ProcessorTopology struct {
+	LogicalProcessorCount uint32             `json:"LogicalProcessorCount,omitempty"`
+	LogicalProcessors     []LogicalProcessor `json:"LogicalProcessors,omitempty"`
 }

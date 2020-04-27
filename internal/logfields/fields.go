@@ -25,6 +25,7 @@ const (
 	Bool         = "bool"
 	Uint32       = "uint32"
 	Uint64       = "uint64"
+	Uint8        = "uint8"
 
 	// runhcs
 

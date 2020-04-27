@@ -9,6 +9,7 @@ import (
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
@@ -112,9 +113,12 @@ const (
 	//
 	// Weight allows values 0 - 10,000. (100 is the default if omitted)
 	//
-	// Note: Unlike Windows process isolated container QoS Count/Limt/Weight on
+	// Note: Unlike Windows process isolated container QoS Count/Limit/Weight on
 	// the UVM are not mutually exclusive and can be set together.
 	annotationProcessorWeight            = "io.microsoft.virtualmachine.computetopology.processor.weight"
+	annotationDefaultNUMA                = "io.microsoft.virtualmachine.computetopology.numa.default"
+	annotationVirtualNodeCount           = "io.microsoft.virtualmachine.computetopology.numa.virtualnodecount"
+	annotationPreferredPhysicalNodes     = "io.microsoft.virtualmachine.computetopology.numa.preferredphysicalnodes"
 	annotationVPMemCount                 = "io.microsoft.virtualmachine.devices.virtualpmem.maximumcount"
 	annotationVPMemSize                  = "io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes"
 	annotationPreferredRootFSType        = "io.microsoft.virtualmachine.lcow.preferredrootfstype"
@@ -269,6 +273,25 @@ func parseAnnotationsPreferredRootFSType(ctx context.Context, a map[string]strin
 	return def
 }
 
+// parseAnnotationsUint8 searches `a` for `key` and if found verifies that the
+// value is a 8 bit unsigned integer. If `key` is not found returns `def`.
+func parseAnnotationsUint8(ctx context.Context, a map[string]string, key string, def uint8) uint8 {
+	if v, ok := a[key]; ok {
+		countu, err := strconv.ParseUint(v, 10, 8)
+		if err == nil {
+			v := uint8(countu)
+			return v
+		}
+		log.G(ctx).WithFields(logrus.Fields{
+			logfields.OCIAnnotation: key,
+			logfields.Value:         v,
+			logfields.ExpectedType:  logfields.Uint8,
+			logrus.ErrorKey:         err,
+		}).Warning("annotation could not be parsed")
+	}
+	return def
+}
+
 // parseAnnotationsUint32 searches `a` for `key` and if found verifies that the
 // value is a 32 bit unsigned integer. If `key` is not found returns `def`.
 func parseAnnotationsUint32(ctx context.Context, a map[string]string, key string, def uint32) uint32 {
@@ -312,6 +335,83 @@ func parseAnnotationsString(a map[string]string, key string, def string) string 
 		return v
 	}
 	return def
+}
+
+func parseAnnotationsNUMATopology(ctx context.Context, a map[string]string) *hcsschema.Numa {
+	numa := &hcsschema.Numa{}
+	vNodeCount := parseAnnotationsUint8(ctx, a, annotationVirtualNodeCount, 0)
+	// If a virtual node count isn't specified just return nil as this will be the exact
+	// same as just returning an empty object.
+	if vNodeCount == 0 {
+		return nil
+	}
+	numa.VirtualNodeCount = vNodeCount
+	// NUMA annotations differ from the norm as there is a lot that can be configured.
+	// HCS allows the configuration of per virtual node settings so the annotations follow
+	// the format of:
+	// ------------------------------------------------------------------------------------
+	// io.microsoft.virtualmachine.computetopology.numa.virtualnodes.N.physicalnode = 1
+	// io.microsoft.virtualmachine.computetopology.numa.virtualnodes.N.processorcount = 32
+	// ------------------------------------------------------------------------------------
+	// where N is the virtual node number being configured.
+
+	// Can't use paraseAnnotationsUint32/64 as we need to know if the key was found
+	// and we cant use a sentinel value like -1 as they're uints.
+	parseUint32 := func(a map[string]string, key string) (uint32, bool) {
+		if v, ok := a[key]; ok {
+			countu, err := strconv.ParseUint(v, 10, 32)
+			if err == nil {
+				return uint32(countu), true
+			}
+		}
+		return 0, false
+	}
+	parseUint64 := func(a map[string]string, key string) (uint64, bool) {
+		if v, ok := a[key]; ok {
+			countu, err := strconv.ParseUint(v, 10, 64)
+			if err == nil {
+				return countu, true
+			}
+		}
+		return 0, false
+	}
+
+	var preferredPhysicalNodes []uint8
+	preferredNodes := parseAnnotationsString(a, annotationPreferredPhysicalNodes, "")
+	strSlice := strings.Split(preferredNodes, ",")
+	for _, elem := range strSlice {
+		countu, err := strconv.ParseUint(elem, 10, 8)
+		if err == nil {
+			preferredPhysicalNodes = append(preferredPhysicalNodes, uint8(countu))
+		}
+	}
+	numa.PreferredPhysicalNodes = preferredPhysicalNodes
+
+	var numaSettings []hcsschema.NumaSetting
+	annotationBase := "io.microsoft.virtualmachine.computetopology.numa.virtualnodes."
+	names := []string{"virtualnode", "physicalnode", "virtualsocket", "processorcount", "memoryamount"}
+	for i := 0; i < int(vNodeCount); i++ {
+		vNodeNumber, vNodeOK := parseUint32(a, annotationBase+strconv.Itoa(i)+"."+names[0])
+		pNodeNumber, pNodeOK := parseUint32(a, annotationBase+strconv.Itoa(i)+"."+names[1])
+		vSockNumber, vSockOK := parseUint32(a, annotationBase+strconv.Itoa(i)+"."+names[2])
+		procCount, procCountOK := parseUint32(a, annotationBase+strconv.Itoa(i)+"."+names[3])
+		memCount, memCountOK := parseUint64(a, annotationBase+strconv.Itoa(i)+"."+names[4])
+		settings := hcsschema.NumaSetting{
+			VirtualNodeNumber:   vNodeNumber,
+			PhysicalNodeNumber:  pNodeNumber,
+			VirtualSocketNumber: vSockNumber,
+			CountOfProcessors:   procCount,
+			CountOfMemoryBlocks: memCount,
+		}
+		// Every setting is expected to be passed but if any settings were found
+		// append all the values so the client can atleast get a failed to validate
+		// error at UVM creation time/from the vmworker process.
+		if vNodeOK || pNodeOK || vSockOK || procCountOK || memCountOK {
+			numaSettings = append(numaSettings, settings)
+		}
+	}
+	numa.Settings = numaSettings
+	return numa
 }
 
 // handleAnnotationKernelDirectBoot handles parsing annotationKernelDirectBoot and setting
@@ -377,6 +477,15 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.VPMemSizeBytes = parseAnnotationsUint64(ctx, s.Annotations, annotationVPMemSize, lopts.VPMemSizeBytes)
 		lopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(ctx, s, annotationStorageQoSBandwidthMaximum, lopts.StorageQoSBandwidthMaximum)
 		lopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotationStorageQoSIopsMaximum, lopts.StorageQoSIopsMaximum)
+		lopts.PreferredRootFSType = parseAnnotationsPreferredRootFSType(ctx, s.Annotations, annotationPreferredRootFSType, lopts.PreferredRootFSType)
+		lopts.DefaultNUMA = parseAnnotationsBool(ctx, s.Annotations, annotationDefaultNUMA, lopts.DefaultNUMA)
+		lopts.NUMATopology = parseAnnotationsNUMATopology(ctx, s.Annotations)
+		switch lopts.PreferredRootFSType {
+		case uvm.PreferredRootFSTypeInitRd:
+			lopts.RootFSFile = uvm.InitrdFile
+		case uvm.PreferredRootFSTypeVHD:
+			lopts.RootFSFile = uvm.VhdFile
+		}
 		lopts.VPCIEnabled = parseAnnotationsBool(ctx, s.Annotations, annotationVPCIEnabled, lopts.VPCIEnabled)
 		lopts.BootFilesPath = parseAnnotationsString(s.Annotations, annotationBootFilesRootPath, lopts.BootFilesPath)
 		handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
@@ -400,6 +509,8 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		wopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(ctx, s, annotationStorageQoSBandwidthMaximum, wopts.StorageQoSBandwidthMaximum)
 		wopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotationStorageQoSIopsMaximum, wopts.StorageQoSIopsMaximum)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, wopts)
+		wopts.DefaultNUMA = parseAnnotationsBool(ctx, s.Annotations, annotationDefaultNUMA, wopts.DefaultNUMA)
+		wopts.NUMATopology = parseAnnotationsNUMATopology(ctx, s.Annotations)
 		return wopts, nil
 	}
 	return nil, errors.New("cannot create UVM opts spec is not LCOW or WCOW")

@@ -112,18 +112,6 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		}
 	}
 
-	processorTopology, err := hostProcessorInfo(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get host processor information: %s", err)
-	}
-
-	// To maintain compatability with Docker we need to automatically downgrade
-	// a user CPU count if the setting is not possible.
-	uvm.processorCount = uvm.normalizeProcessorCount(ctx, opts.ProcessorCount, processorTopology)
-
-	// Align the requested memory size.
-	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
-
 	virtualSMB := &hcsschema.VirtualSmb{
 		DirectFileMappingInMB: 1024, // Sensible default, but could be a tuning parameter somewhere
 		Shares: []hcsschema.VirtualSmbShare{
@@ -142,6 +130,23 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		},
 	}
 
+	processorTopology, err := hostProcessorInfo(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get host processor information: %s", err)
+	}
+
+	// To maintain compatability with Docker we need to automatically downgrade
+	// a user CPU count if the setting is not possible.
+	uvm.processorCount = uvm.normalizeProcessorCount(ctx, opts.ProcessorCount, processorTopology)
+	// Align the requested memory size.
+	uvm.memorySizeInMB = uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
+
+	// numa will be nil if no annotations were passed.
+	numa, err := uvm.setupNUMA(opts.DefaultNUMA, processorTopology, opts.NUMATopology)
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup NUMA: %s", err)
+	}
+
 	doc := &hcsschema.ComputeSystem{
 		Owner:                             uvm.owner,
 		SchemaVersion:                     schemaversion.SchemaV21(),
@@ -158,7 +163,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 			},
 			ComputeTopology: &hcsschema.Topology{
 				Memory: &hcsschema.Memory2{
-					SizeInMB:        memorySizeInMB,
+					SizeInMB:        uvm.memorySizeInMB,
 					AllowOvercommit: opts.AllowOvercommit,
 					// EnableHotHint is not compatible with physical.
 					EnableHotHint:        opts.AllowOvercommit,
@@ -172,6 +177,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 					Limit:  opts.ProcessorLimit,
 					Weight: opts.ProcessorWeight,
 				},
+				Numa: numa,
 			},
 			Devices: &hcsschema.Devices{
 				Scsi: map[string]hcsschema.Scsi{

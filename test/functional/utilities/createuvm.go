@@ -12,7 +12,12 @@ import (
 // UtilityVM object; folder used as its scratch
 func CreateWCOWUVM(ctx context.Context, t *testing.T, id, image string) (*uvm.UtilityVM, []string, string) {
 	return CreateWCOWUVMFromOptsWithImage(ctx, t, uvm.NewDefaultOptionsWCOW(id, ""), image)
+}
 
+// CreateWCOWUVMCustom creates a WCOW utility VM with custom options. Returns the
+// UtilityVM object; folder used as its scratch
+func CreateWCOWUVMCustom(ctx context.Context, t *testing.T, id, image string, opts *uvm.OptionsWCOW) (*uvm.UtilityVM, []string, string) {
+	return CreateWCOWUVMFromOptsWithImage(ctx, t, opts, image)
 }
 
 // CreateWCOWUVMFromOpts creates a WCOW utility VM with the passed opts.

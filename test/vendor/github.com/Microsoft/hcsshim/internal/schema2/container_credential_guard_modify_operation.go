@@ -9,8 +9,9 @@
 
 package hcsschema
 
-type Topology struct {
-	Memory    *Memory2    `json:"Memory,omitempty"`
-	Processor *Processor2 `json:"Processor,omitempty"`
-	Numa      *Numa       `json:"Numa,omitempty"`
-}
+type ContainerCredentialGuardModifyOperation string
+
+const (
+	AddInstance    ContainerCredentialGuardModifyOperation = "AddInstance"
+	RemoveInstance ContainerCredentialGuardModifyOperation = "RemoveInstance"
+)

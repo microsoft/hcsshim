@@ -2,6 +2,7 @@ package uvm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
+	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/windows"
@@ -37,6 +39,10 @@ type Options struct {
 	// false.
 	AllowOvercommit bool
 
+	// FullyPhysicallyBacked describes if a uvm should be entirely physically
+	// backed, including in any additional devices
+	FullyPhysicallyBacked bool
+
 	// Memory for UVM. Defaults to false. For virtual memory with deferred
 	// commit, set to true.
 	EnableDeferredCommit bool
@@ -53,6 +59,13 @@ type Options struct {
 	// when scheduling. If `0` will default to platform default.
 	ProcessorWeight int32
 
+	// DefaultNUMA will set the amount of virtual NUMA nodes to mirror the hosts
+	// count. If NUMATopology is provided this will be ignored.
+	DefaultNUMA bool
+
+	// The virtual NUMA topology configuration for the UVM.
+	NUMATopology *hcsschema.Numa
+
 	// StorageQoSIopsMaximum sets the maximum number of Iops. If `0` will
 	// default to the platform default.
 	StorageQoSIopsMaximum int32
@@ -66,6 +79,48 @@ type Options struct {
 	ExternalGuestConnection bool
 }
 
+// Verifies that the final UVM options are correct and supported.
+func verifyOptions(ctx context.Context, options interface{}) error {
+	switch opts := options.(type) {
+	case *OptionsLCOW:
+		if opts.EnableDeferredCommit && !opts.AllowOvercommit {
+			return errors.New("EnableDeferredCommit is not supported on physically backed VMs")
+		}
+		if opts.SCSIControllerCount > 1 {
+			return errors.New("SCSI controller count must be 0 or 1") // Future extension here for up to 4
+		}
+		if opts.VPMemDeviceCount > MaxVPMEMCount {
+			return fmt.Errorf("VPMem device count cannot be greater than %d", MaxVPMEMCount)
+		}
+		if opts.VPMemDeviceCount > 0 {
+			if opts.VPMemSizeBytes%4096 != 0 {
+				return errors.New("VPMemSizeBytes must be a multiple of 4096")
+			}
+		} else {
+			if opts.PreferredRootFSType == PreferredRootFSTypeVHD {
+				return errors.New("PreferredRootFSTypeVHD requires at least one VPMem device")
+			}
+		}
+		if opts.KernelDirect && osversion.Get().Build < 18286 {
+			return errors.New("KernelDirectBoot is not supported on builds older than 18286")
+		}
+		if opts.EnableColdDiscardHint && osversion.Get().Build < 18967 {
+			return errors.New("EnableColdDiscardHint is not supported on builds older than 18967")
+		}
+		if opts.DefaultNUMA || opts.NUMATopology != nil {
+			return errors.New("NUMA is not supported on LCOW ")
+		}
+	case *OptionsWCOW:
+		if opts.EnableDeferredCommit && !opts.AllowOvercommit {
+			return errors.New("EnableDeferredCommit is not supported on physically backed VMs")
+		}
+		if len(opts.LayerFolders) < 2 {
+			return errors.New("at least 2 LayerFolders must be supplied")
+		}
+	}
+	return nil
+}
+
 // newDefaultOptions returns the default base options for WCOW and LCOW.
 //
 // If `id` is empty it will be generated.
@@ -73,12 +128,13 @@ type Options struct {
 // If `owner` is empty it will be set to the calling executables name.
 func newDefaultOptions(id, owner string) *Options {
 	opts := &Options{
-		ID:                   id,
-		Owner:                owner,
-		MemorySizeInMB:       1024,
-		AllowOvercommit:      true,
-		EnableDeferredCommit: false,
-		ProcessorCount:       defaultProcessorCount(),
+		ID:                    id,
+		Owner:                 owner,
+		MemorySizeInMB:        1024,
+		AllowOvercommit:       true,
+		EnableDeferredCommit:  false,
+		ProcessorCount:        defaultProcessorCount(),
+		FullyPhysicallyBacked: false,
 	}
 
 	if opts.Owner == "" {
@@ -216,24 +272,43 @@ func defaultProcessorCount() int32 {
 }
 
 // normalizeProcessorCount sets `uvm.processorCount` to `Min(requested,
-// runtime.NumCPU())`.
-func (uvm *UtilityVM) normalizeProcessorCount(ctx context.Context, requested int32) {
-	hostCount := int32(runtime.NumCPU())
+// logical CPU count)`.
+func (uvm *UtilityVM) normalizeProcessorCount(ctx context.Context, requested int32, processorTopology *hcsschema.ProcessorTopology) int32 {
+	// Use host processor information retrieved from HCS instead of runtime.NumCPU,
+	// GetMaximumProcessorCount or other OS level calls for two reasons.
+	// 1. Go uses GetProcessAffinityMask and falls back to GetSystemInfo both of
+	// which will not return LPs in another processor group.
+	// 2. GetMaximumProcessorCount will return all processors on the system
+	// but in configurations where the host partition doesn't see the full LP count
+	// i.e "Minroot" scenarios this won't be sufficient.
+	// (https://docs.microsoft.com/en-us/windows-server/virtualization/hyper-v/manage/manage-hyper-v-minroot-2016)
+	hostCount := int32(processorTopology.LogicalProcessorCount)
 	if requested > hostCount {
 		log.G(ctx).WithFields(logrus.Fields{
 			logfields.UVMID: uvm.id,
 			"requested":     requested,
 			"assigned":      hostCount,
 		}).Warn("Changing user requested CPUCount to current number of processors")
-		uvm.processorCount = hostCount
+		return hostCount
 	} else {
-		uvm.processorCount = requested
+		return requested
 	}
 }
 
 // ProcessorCount returns the number of processors actually assigned to the UVM.
 func (uvm *UtilityVM) ProcessorCount() int32 {
 	return uvm.processorCount
+}
+
+// PhysicallyBacked returns if the UVM is backed by physical memory
+// (Over commit and deferred commit both false)
+func (uvm *UtilityVM) PhysicallyBacked() bool {
+	return uvm.physicallyBacked
+}
+
+// MemorySizeInMB returns the memory assigned to the UVM in MBs
+func (uvm *UtilityVM) MemorySizeInMB() int32 {
+	return uvm.memorySizeInMB
 }
 
 func (uvm *UtilityVM) normalizeMemorySize(ctx context.Context, requested int32) int32 {
@@ -246,4 +321,10 @@ func (uvm *UtilityVM) normalizeMemorySize(ctx context.Context, requested int32) 
 		}).Warn("Changing user requested MemorySizeInMB to align to 2MB")
 	}
 	return actual
+}
+
+// DevicesPhysicallyBacked describes if additional devices added to the UVM
+// should be physically backed
+func (uvm *UtilityVM) DevicesPhysicallyBacked() bool {
+	return uvm.devicesPhysicallyBacked
 }

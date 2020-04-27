@@ -9,8 +9,6 @@
 
 package hcsschema
 
-type Topology struct {
-	Memory    *Memory2    `json:"Memory,omitempty"`
-	Processor *Processor2 `json:"Processor,omitempty"`
-	Numa      *Numa       `json:"Numa,omitempty"`
+type ContainerCredentialGuardRemoveInstanceRequest struct {
+	Id string `json:"Id,omitempty"`
 }

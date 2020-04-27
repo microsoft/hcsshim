@@ -47,6 +47,7 @@ type UtilityVM struct {
 	gcListener       net.Listener         // The GCS connection listener
 	gc               *gcs.GuestConnection // The GCS connection
 	processorCount   int32
+	memorySizeInMB   int32
 	physicallyBacked bool       // If the uvm is backed by physical memory and not virtual memory
 	m                sync.Mutex // Lock for adding/removing devices
 

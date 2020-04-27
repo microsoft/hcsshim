@@ -9,8 +9,7 @@
 
 package hcsschema
 
-type Topology struct {
-	Memory    *Memory2    `json:"Memory,omitempty"`
-	Processor *Processor2 `json:"Processor,omitempty"`
-	Numa      *Numa       `json:"Numa,omitempty"`
+type ContainerCredentialGuardOperationRequest struct {
+	Operation        ContainerCredentialGuardModifyOperation `json:"Operation,omitempty"`
+	OperationDetails interface{}                             `json:"OperationDetails,omitempty"`
 }

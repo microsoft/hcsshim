@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package containerd.runhcs.v1.diag;
+option go_package = "github.com/Microsoft/hcsshim/internal/shimdiag;shimdiag";
+
+import weak "gogoproto/gogo.proto";
+
+service ShimDiag {
+    rpc DiagExecInHost(ExecProcessRequest) returns (ExecProcessResponse);
+    rpc DiagStacks(StacksRequest) returns (StacksResponse);
+}
+
+message ExecProcessRequest {
+    repeated string args = 1;
+    string workdir = 2;
+    bool terminal = 3;
+    string stdin = 4;
+    string stdout = 5;
+    string stderr = 6;
+}
+
+message ExecProcessResponse {
+    int32 exit_code = 1;
+}
+
+message StacksRequest {
+}
+
+message StacksResponse {
+    string stacks = 1;
+    string guest_stacks =2; 
+}

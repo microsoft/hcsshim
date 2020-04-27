@@ -159,25 +159,26 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	}
 
 	uvm := &UtilityVM{
-		id:                  opts.ID,
-		owner:               opts.Owner,
-		operatingSystem:     "linux",
-		scsiControllerCount: opts.SCSIControllerCount,
-		vpmemMaxCount:       opts.VPMemDeviceCount,
-		vpmemMaxSizeBytes:   opts.VPMemSizeBytes,
+		id:                      opts.ID,
+		owner:                   opts.Owner,
+		operatingSystem:         "linux",
+		scsiControllerCount:     opts.SCSIControllerCount,
+		vpmemMaxCount:           opts.VPMemDeviceCount,
+		vpmemMaxSizeBytes:       opts.VPMemSizeBytes,
+		vpciDevices:             make(map[string]*VPCIDevice),
+		physicallyBacked:        !opts.AllowOvercommit,
+		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
 	}
+
 	defer func() {
 		if err != nil {
 			uvm.Close()
 		}
 	}()
 
-	// To maintain compatability with Docker we need to automatically downgrade
-	// a user CPU count if the setting is not possible.
-	uvm.normalizeProcessorCount(ctx, opts.ProcessorCount)
-
-	// Align the requested memory size.
-	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
+	if err := verifyOptions(ctx, opts); err != nil {
+		return nil, fmt.Errorf("UVM options incorrect or unsupported: %s", err)
+	}
 
 	kernelFullPath := filepath.Join(opts.BootFilesPath, opts.KernelFile)
 	if _, err := os.Stat(kernelFullPath); os.IsNotExist(err) {
@@ -188,28 +189,17 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		return nil, fmt.Errorf("boot file: '%s' not found", rootfsFullPath)
 	}
 
-	if opts.SCSIControllerCount > 1 {
-		return nil, fmt.Errorf("SCSI controller count must be 0 or 1") // Future extension here for up to 4
+	processorTopology, err := hostProcessorInfo(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get host processor information: %s", err)
 	}
-	if opts.VPMemDeviceCount > MaxVPMEMCount {
-		return nil, fmt.Errorf("vpmem device count cannot be greater than %d", MaxVPMEMCount)
-	}
-	if uvm.vpmemMaxCount > 0 {
-		if opts.VPMemSizeBytes%4096 != 0 {
-			return nil, fmt.Errorf("opts.VPMemSizeBytes must be a multiple of 4096")
-		}
-	} else {
-		if opts.PreferredRootFSType == PreferredRootFSTypeVHD {
-			return nil, fmt.Errorf("PreferredRootFSTypeVHD requires at least one VPMem device")
-		}
-	}
-	if opts.KernelDirect && osversion.Get().Build < 18286 {
-		return nil, fmt.Errorf("KernelDirectBoot is not support on builds older than 18286")
-	}
+	// To maintain compatability with Docker we need to automatically downgrade
+	// a user CPU count if the setting is not possible.
+	uvm.processorCount = uvm.normalizeProcessorCount(ctx, opts.ProcessorCount, processorTopology)
+	// Align the requested memory size.
+	uvm.memorySizeInMB = uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
 
-	if opts.EnableColdDiscardHint && osversion.Get().Build < 18967 {
-		return nil, fmt.Errorf("EnableColdDiscardHint is not supported on builds older than 18967")
-	}
+	//TODO(dcantah): If LCOW starts supporting NUMA add here.
 
 	doc := &hcsschema.ComputeSystem{
 		Owner:                             uvm.owner,
@@ -220,7 +210,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 			Chipset:     &hcsschema.Chipset{},
 			ComputeTopology: &hcsschema.Topology{
 				Memory: &hcsschema.Memory2{
-					SizeInMB:              memorySizeInMB,
+					SizeInMB:              uvm.memorySizeInMB,
 					AllowOvercommit:       opts.AllowOvercommit,
 					EnableDeferredCommit:  opts.EnableDeferredCommit,
 					EnableColdDiscardHint: opts.EnableColdDiscardHint,
