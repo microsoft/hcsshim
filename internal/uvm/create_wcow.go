@@ -75,15 +75,25 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		}
 	}()
 
+	processorInfo, processorTopology, err := uvm.hostProcessorInfo(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get host processor information: %s", err)
+	}
 	// To maintain compatability with Docker we need to automatically downgrade
 	// a user CPU count if the setting is not possible.
-	uvm.normalizeProcessorCount(ctx, opts.ProcessorCount)
+	uvm.normalizeProcessorCount(ctx, opts.ProcessorCount, processorTopology)
+
+	// If default NUMA configuration was specified and no explicit VirtualNodeCount
+	// was specified, assign the hosts default as the virtual node count we want.
+	if opts.DefaultNUMA && opts.VirtualNodeCount == 0 {
+		opts.VirtualNodeCount = processorInfo.NumaNodeCount
+	}
 
 	// Align the requested memory size.
 	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
 
-	if len(opts.LayerFolders) < 2 {
-		return nil, fmt.Errorf("at least 2 LayerFolders must be supplied")
+	if err := verifyOptions(ctx, opts); err != nil {
+		return nil, fmt.Errorf("UVM options incorrect or unsupported: %s", err)
 	}
 	uvmFolder, err := uvmfolder.LocateUVMFolder(ctx, opts.LayerFolders)
 	if err != nil {
@@ -142,6 +152,9 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 					Count:  uvm.processorCount,
 					Limit:  opts.ProcessorLimit,
 					Weight: opts.ProcessorWeight,
+				},
+				Numa: &hcsschema.Numa{
+					VirtualNodeCount: opts.VirtualNodeCount,
 				},
 			},
 			Devices: &hcsschema.Devices{

@@ -85,6 +85,9 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 			// Normalize to UVM size
 			hostCPUCount = coi.HostingSystem.ProcessorCount()
 		} else {
+			// For process isolated case the amount reported from the HCS apis will
+			// be over what is available to the host in a minroot config. Use
+			// GetLogicalProcessorInformationEx here instead?
 			hostCPUCount = int32(runtime.NumCPU())
 		}
 		if cpuCount > hostCPUCount {

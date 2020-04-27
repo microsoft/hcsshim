@@ -172,9 +172,19 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		}
 	}()
 
+	processorInfo, processorTopology, err := uvm.hostProcessorInfo(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get host processor information: %s", err)
+	}
 	// To maintain compatability with Docker we need to automatically downgrade
 	// a user CPU count if the setting is not possible.
-	uvm.normalizeProcessorCount(ctx, opts.ProcessorCount)
+	uvm.normalizeProcessorCount(ctx, opts.ProcessorCount, processorTopology)
+
+	// If default NUMA configuration was specified and no explicit VirtualNodeCount
+	// was specified, assign the hosts node count as the virtual node count.
+	if opts.DefaultNUMA && opts.VirtualNodeCount == 0 {
+		opts.VirtualNodeCount = processorInfo.NumaNodeCount
+	}
 
 	// Align the requested memory size.
 	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
@@ -188,27 +198,8 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		return nil, fmt.Errorf("boot file: '%s' not found", rootfsFullPath)
 	}
 
-	if opts.SCSIControllerCount > 1 {
-		return nil, fmt.Errorf("SCSI controller count must be 0 or 1") // Future extension here for up to 4
-	}
-	if opts.VPMemDeviceCount > MaxVPMEMCount {
-		return nil, fmt.Errorf("vpmem device count cannot be greater than %d", MaxVPMEMCount)
-	}
-	if uvm.vpmemMaxCount > 0 {
-		if opts.VPMemSizeBytes%4096 != 0 {
-			return nil, fmt.Errorf("opts.VPMemSizeBytes must be a multiple of 4096")
-		}
-	} else {
-		if opts.PreferredRootFSType == PreferredRootFSTypeVHD {
-			return nil, fmt.Errorf("PreferredRootFSTypeVHD requires at least one VPMem device")
-		}
-	}
-	if opts.KernelDirect && osversion.Get().Build < 18286 {
-		return nil, fmt.Errorf("KernelDirectBoot is not support on builds older than 18286")
-	}
-
-	if opts.EnableColdDiscardHint && osversion.Get().Build < 18967 {
-		return nil, fmt.Errorf("EnableColdDiscardHint is not supported on builds older than 18967")
+	if err := verifyOptions(ctx, opts); err != nil {
+		return nil, fmt.Errorf("UVM options incorrect or unsupported: %s", err)
 	}
 
 	doc := &hcsschema.ComputeSystem{
@@ -232,6 +223,9 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 					Count:  uvm.processorCount,
 					Limit:  opts.ProcessorLimit,
 					Weight: opts.ProcessorWeight,
+				},
+				Numa: &hcsschema.Numa{
+					VirtualNodeCount: opts.VirtualNodeCount,
 				},
 			},
 			Devices: &hcsschema.Devices{

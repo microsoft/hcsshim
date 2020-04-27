@@ -476,3 +476,67 @@ func Test_RunContainer_ZeroVPMEM_Multiple_LCOW(t *testing.T) {
 	startContainer(t, client, ctx, containerIDTwo)
 	defer stopContainer(t, client, ctx, containerIDTwo)
 }
+
+func Test_RunContainer_NUMA_Nodes_LCOW(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	client := newTestRuntimeClient(t)
+
+	podctx := context.Background()
+	sandboxRequest := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.computetopology.numa.virtualnodenumber": "2",
+			},
+		},
+		RuntimeHandler: lcowRuntimeHandler,
+	}
+
+	podID := runPodSandbox(t, client, podctx, sandboxRequest)
+	defer removePodSandbox(t, client, podctx, podID)
+	defer stopPodSandbox(t, client, podctx, podID)
+
+	containerRequest := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			Command: []string{
+				"top",
+			},
+			Linux: &runtime.LinuxContainerConfig{},
+		},
+		PodSandboxId:  podID,
+		SandboxConfig: sandboxRequest.Config,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	containerID := createContainer(t, client, ctx, containerRequest)
+	defer removeContainer(t, client, ctx, containerID)
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID)
+
+	cmd := []string{"ash", "lscpu", "|", "grep", "'NUMA node'"}
+
+	containerExecReq := &runtime.ExecSyncRequest{
+		ContainerId: containerID,
+		Cmd:         cmd,
+		Timeout:     20,
+	}
+	r := execSync(t, client, ctx, containerExecReq)
+	if r.ExitCode != 0 {
+		t.Fatalf("failed with exit code %d running 'lscpu | grep NUMA node: %s", r.ExitCode, string(r.Stderr))
+	}
+	// Check for the amount of virtual NUMA nodes we specified.
+	if !strings.Contains(string(r.Stdout), "2") {
+		t.Fatalf("expected to see 2 NUMA nodes, instead saw: %s", string(r.Stdout))
+	}
+}

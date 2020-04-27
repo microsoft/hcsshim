@@ -2,6 +2,7 @@ package uvm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
+	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/windows"
@@ -53,6 +55,14 @@ type Options struct {
 	// when scheduling. If `0` will default to platform default.
 	ProcessorWeight int32
 
+	// DefaultNUMA will set the amount of virtual NUMA nodes to mirror the hosts
+	// count. If VirtualNodeCount is also specified this will be overridden.
+	DefaultNUMA bool
+
+	// Number of virtual NUMA nodes to assign to the UVM. Only utilized if EnableNUMA
+	// is True.
+	VirtualNodeCount int32
+
 	// StorageQoSIopsMaximum sets the maximum number of Iops. If `0` will
 	// default to the platform default.
 	StorageQoSIopsMaximum int32
@@ -64,6 +74,53 @@ type Options struct {
 	// ExternalGuestConnection sets whether the guest RPC connection is performed
 	// internally by the OS platform or externally by this package.
 	ExternalGuestConnection bool
+}
+
+// Verifies that the final UVM options are correct and supported.
+func verifyOptions(ctx context.Context, options interface{}) error {
+	switch opts := options.(type) {
+	case *OptionsLCOW:
+		if opts.EnableDeferredCommit && !opts.AllowOvercommit {
+			return errors.New("Deferred commit is not supported on physically backed VMs")
+		}
+		if opts.SCSIControllerCount > 1 {
+			return errors.New("SCSI controller count must be 0 or 1") // Future extension here for up to 4
+		}
+		if opts.VPMemDeviceCount > MaxVPMEMCount {
+			return fmt.Errorf("vpmem device count cannot be greater than %d", MaxVPMEMCount)
+		}
+		if opts.VPMemDeviceCount > 0 {
+			if opts.VPMemSizeBytes%4096 != 0 {
+				return errors.New("VPMemSizeBytes must be a multiple of 4096")
+			}
+		} else {
+			if opts.PreferredRootFSType == PreferredRootFSTypeVHD {
+				return errors.New("PreferredRootFSTypeVHD requires at least one VPMem device")
+			}
+		}
+		if opts.KernelDirect && osversion.Get().Build < 18286 {
+			return errors.New("KernelDirectBoot is not supported on builds older than 18286")
+		}
+
+		if opts.EnableColdDiscardHint && osversion.Get().Build < 18967 {
+			return errors.New("EnableColdDiscardHint is not supported on builds older than 18967")
+		}
+
+		if opts.VirtualNodeCount > 64 {
+			return fmt.Errorf("VirtualNodeCount cannot be greater than %d", MaxNUMANodeCount)
+		}
+	case *OptionsWCOW:
+		if opts.EnableDeferredCommit && !opts.AllowOvercommit {
+			return errors.New("Deferred commit is not supported on physically backed VMs")
+		}
+		if len(opts.LayerFolders) < 2 {
+			return errors.New("at least 2 LayerFolders must be supplied")
+		}
+		if opts.VirtualNodeCount > 64 {
+			return fmt.Errorf("VirtualNodeCount cannot be greater than %d", MaxNUMANodeCount)
+		}
+	}
+	return nil
 }
 
 // newDefaultOptions returns the default base options for WCOW and LCOW.
@@ -216,9 +273,17 @@ func defaultProcessorCount() int32 {
 }
 
 // normalizeProcessorCount sets `uvm.processorCount` to `Min(requested,
-// runtime.NumCPU())`.
-func (uvm *UtilityVM) normalizeProcessorCount(ctx context.Context, requested int32) {
-	hostCount := int32(runtime.NumCPU())
+// logical CPU count`.
+func (uvm *UtilityVM) normalizeProcessorCount(ctx context.Context, requested int32, processorInfo *hcsschema.ProcessorTopology) {
+	// Use host processor information retrieved from HCS instead of runtime.NumCPU,
+	// GetLogicalProcessorInformationEx or other OS level calls for two reasons.
+	// 1. Go uses GetProcessAffinityMask and falls back to GetSystemInfo both of
+	// which will not return LPs in other NUMA nodes.
+	// 2. GetLogicalProcessorInformationEx will return all processors on the system
+	// but in configurations where the host partition doesn't see the full LP count
+	// i.e "Minroot" scenarios this won't be sufficient.
+	// (https://docs.microsoft.com/en-us/windows-server/virtualization/hyper-v/manage/manage-hyper-v-minroot-2016)
+	hostCount := processorInfo.LogicalProcessorCount
 	if requested > hostCount {
 		log.G(ctx).WithFields(logrus.Fields{
 			logfields.UVMID: uvm.id,
