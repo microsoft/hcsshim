@@ -1,13 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"fmt"
-	"path/filepath"
 
 	"github.com/Microsoft/hcsshim/internal/regstate"
 	"github.com/Microsoft/hcsshim/internal/uvm"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 const (
@@ -17,7 +17,7 @@ const (
 
 type PersistedUVMConfig struct {
 	// actual information related to template / clone
-	TemplateConfig uvm.UVMTemplateConfig
+	RawData []byte
 	// metadata field used to determine if this config is already started.
 	Stored bool
 }
@@ -83,58 +83,58 @@ func removePersistedUVMConfig(ID string) error {
 	return nil
 }
 
+// When encoding interfaces gob requires us to register the struct types that we will be using under those
+// interfaces. This registration needs to happen on both sides i.e the side which encodes the data and the
+// side which decodes the data.
+func gobInit() {
+	// Register the pointer to structs because that is what is being stored.
+	gob.Register(&uvm.VSMBShare{})
+	gob.Register(&uvm.SCSIMount{})
+}
+
+func encodeTemplateConfig(utc *uvm.UVMTemplateConfig) ([]byte, error) {
+	var buf bytes.Buffer
+
+	gobInit()
+	encoder := gob.NewEncoder(&buf)
+	err := encoder.Encode(utc)
+	if err != nil {
+		return nil, fmt.Errorf("Error while encoding template config: %s", err)
+	}
+	return buf.Bytes(), nil
+}
+
+func decodeTemplateConfig(encodedBytes []byte) (*uvm.UVMTemplateConfig, error) {
+	var utc uvm.UVMTemplateConfig
+
+	gobInit()
+	reader := bytes.NewReader(encodedBytes)
+	decoder := gob.NewDecoder(reader)
+	err := decoder.Decode(&utc)
+	if err != nil {
+		return nil, fmt.Errorf("Error while decoding template config: %s", err)
+	}
+	return &utc, nil
+}
+
 // Saves all the information required to create a clone from the template
 // of this container into the registry.
-func SaveTemplateConfig(ctx context.Context, hostUVM *uvm.UtilityVM, spec *specs.Spec) error {
+func SaveTemplateConfig(ctx context.Context, hostUVM *uvm.UtilityVM) error {
 	_, err := loadPersistedUVMConfig(hostUVM.ID())
 	if !regstate.IsNotFoundError(err) {
 		return fmt.Errorf("Parent VM(ID: %s) config shouldn't exit in registry (%s) \n", hostUVM.ID(), err.Error())
 	}
 
-	vhdPath, err := hostUVM.GetScratchVHDPath()
+	utc := hostUVM.GenerateTemplateConfig()
+
+	encodedBytes, err := encodeTemplateConfig(utc)
 	if err != nil {
 		return err
 	}
 
-	utc := uvm.UVMTemplateConfig{
-		UVMID:      hostUVM.ID(),
-		UVMVhdPath: vhdPath,
-		VSMBShares: []uvm.TemplateVSMBConfig{},
-		SCSIMounts: []uvm.TemplateSCSIMountConfig{},
-	}
-
-	// save layer information as VSMB mounts
-	for _, layer := range spec.Windows.LayerFolders[:len(spec.Windows.LayerFolders)-1] {
-		name, err := hostUVM.GetVSMBShareName(ctx, layer)
-		if err != nil {
-			return err
-		}
-		utc.VSMBShares = append(utc.VSMBShares, uvm.TemplateVSMBConfig{
-			ShareName: name,
-			HostPath:  layer,
-		})
-	}
-
-	scratchFolder := spec.Windows.LayerFolders[len(spec.Windows.LayerFolders)-1]
-	scratchVhd := filepath.Join(scratchFolder, "sandbox.vhdx")
-	svController, svLUN, err := hostUVM.GetScsiLocationInfo(ctx, scratchVhd)
-	if err != nil {
-		return err
-	}
-	utc.SCSIMounts = append(utc.SCSIMounts, uvm.TemplateSCSIMountConfig{
-		Controller: svController,
-		LUN:        svLUN,
-		HostPath:   scratchVhd,
-		IsScratch:  true,
-		// TODO(ambarve): Get correct type information here
-		Type: "VirtualDisk",
-	})
-
-	// TODO(ambarve): other mounts specified in the container config should also be
-	// captured here. For now, we won't allow such mounts for templates.
 	puc := &PersistedUVMConfig{
-		TemplateConfig: utc,
-		Stored:         false,
+		RawData: encodedBytes,
+		Stored:  false,
 	}
 
 	if err := storePersistedUVMConfig(hostUVM.ID(), puc); err != nil {
@@ -159,7 +159,12 @@ func FetchTemplateConfig(ctx context.Context, ID string) (*uvm.UVMTemplateConfig
 	if err != nil {
 		return nil, err
 	}
-	return &puc.TemplateConfig, nil
+
+	utc, err := decodeTemplateConfig(puc.RawData)
+	if err != nil {
+		return nil, err
+	}
+	return utc, nil
 }
 
 // SaveAsTemplate saves the host as a template. It is assumed that SaveTemplateConfig is

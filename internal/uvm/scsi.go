@@ -2,10 +2,15 @@ package uvm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/Microsoft/go-winio/pkg/security"
+	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
@@ -50,6 +55,80 @@ func (sm *SCSIMount) Release(ctx context.Context) error {
 	return nil
 }
 
+// If a SCSI mount is read only then we should simply add it to the uvm config. But if it
+// is a scratch layer (i.e writeable mount) then we should make a copy of it.
+func (sm *SCSIMount) Clone(ctx context.Context, vm *UtilityVM, cd *CloneData) (interface{}, error) {
+	var dstVhdPath string = sm.HostPath
+	var err error
+	var dir string
+	conStr := fmt.Sprintf("%d", sm.Controller)
+	lunStr := fmt.Sprintf("%d", sm.LUN)
+	log.G(ctx).Debug(fmt.Sprintf("cloning scsi mount with hostPath: %s, Controller: %d, LUN: %d", sm.HostPath, sm.Controller, sm.LUN))
+	if !sm.IsReadOnly {
+		// Copy this scsi disk
+		// TODO(ambarve): This can be a SCSI mount that belongs to some container
+		// which is being automatically cloned here as a part of UVM cloning
+		// process. We will receive a request for creation of this container
+		// later on which will specify the storage path for this container.
+		// However, that storage location is not available now so we just use
+		// the storage of the uvm instead. Find a better way for handling this.
+		dir, err = ioutil.TempDir(cd.scratchFolder, fmt.Sprintf("clone-mount-%d-%d", sm.Controller, sm.LUN))
+		if err != nil {
+			return nil, fmt.Errorf("Error while creating directory for scsi mounts of clone vm: %s", err)
+		}
+
+		// copy the VHDX of source VM
+		dstVhdPath = filepath.Join(dir, "sandbox.vhdx")
+		if err = copyfile.CopyFile(ctx, sm.HostPath, dstVhdPath, true); err != nil {
+			return nil, err
+		}
+
+		if err = wclayer.GrantVmAccess(ctx, cd.UVMID, dstVhdPath); err != nil {
+			os.Remove(dstVhdPath)
+			return nil, err
+		}
+
+	}
+
+	cd.doc.VirtualMachine.Devices.Scsi[conStr].Attachments[lunStr] = hcsschema.Attachment{
+		Path: dstVhdPath,
+		// TODO(ambarve) Get the correct type here
+		Type_: "VirtualDisk",
+	}
+
+	clonedScsiMount := SCSIMount{
+		vm:         vm,
+		HostPath:   dstVhdPath,
+		UVMPath:    sm.UVMPath,
+		Controller: sm.Controller,
+		LUN:        sm.LUN,
+		refCount:   1,
+		IsReadOnly: sm.IsReadOnly,
+	}
+
+	vm.scsiLocations[sm.Controller][sm.LUN] = &clonedScsiMount
+
+	return &clonedScsiMount, nil
+}
+
+func (sm *SCSIMount) GobEncode() ([]byte, error) {
+	ret, err := json.Marshal(sm)
+	if err != nil {
+		return nil, fmt.Errorf("Error while serializing VSMB share: %s", err)
+	}
+	return ret, nil
+}
+
+func (sm *SCSIMount) GobDecode(data []byte) error {
+	err := json.Unmarshal(data, &sm)
+	if err != nil {
+		return fmt.Errorf("Error while Deserializing VSMB share: %s", err)
+	}
+	return nil
+}
+
+var _ = (Cloneable)(&SCSIMount{})
+
 // SCSIMount struct representing a SCSI mount point and the UVM
 // it belongs to.
 type SCSIMount struct {
@@ -68,6 +147,8 @@ type SCSIMount struct {
 	// read-only layers. As RO layers are shared, we perform ref-counting.
 	isLayer  bool
 	refCount uint32
+	// specifies if this is a readonly layer
+	IsReadOnly bool
 }
 
 func (sm *SCSIMount) logFormat() logrus.Fields {
@@ -232,6 +313,7 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, atta
 	if err != nil {
 		return nil, err
 	}
+	sm.IsReadOnly = readOnly
 
 	defer func() {
 		if err != nil {

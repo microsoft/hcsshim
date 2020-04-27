@@ -119,9 +119,8 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 		log.G(ctx).WithField("layerPath", layerPath).Debug("mounting layer")
 		if uvm.OS() == "windows" {
 			options := &hcsschema.VirtualSmbShareOptions{
-				ReadOnly: true,
-				// PseudoOplocks:       true,
-				NoOplocks:           true,
+				ReadOnly:            true,
+				PseudoOplocks:       true,
 				TakeBackupPrivilege: true,
 				CacheIo:             true,
 				ShareRead:           true,

@@ -3,13 +3,11 @@ package uvm
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
-	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
@@ -18,10 +16,8 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
-	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/internal/wcow"
 	"go.opencensus.io/trace"
-	"golang.org/x/sys/windows"
 )
 
 const (
@@ -51,12 +47,9 @@ func NewDefaultOptionsWCOW(id, owner string) *OptionsWCOW {
 	}
 }
 
-// Creates a scratch Folder for this uvm if it is not already created by the caller.
-// Then creates a scratch VHDX inside that folder. This scratch VHDX can either be newly
-// created (denoted by passing an empty string for copyFrom parameter) or it can be copied
-// from an existing VHDX (for cloning scenario) by providing a path of that source VHDX
-// in copyFrom parameter.
-func createScratchVhdx(ctx context.Context, opts *OptionsWCOW, uvmFolder, copyFrom string) (_ string, _ string, err error) {
+// Finds a scratch Folder for this uvm. If it is not already created by the caller creates
+// a new folder.
+func getScratchFolder(ctx context.Context, opts *OptionsWCOW) (_ string, err error) {
 	// TODO: BUGBUG Remove this. @jhowardmsft
 	//       It should be the responsiblity of the caller to do the creation and population.
 	//       - Update runhcs too (vm.go).
@@ -68,49 +61,11 @@ func createScratchVhdx(ctx context.Context, opts *OptionsWCOW, uvmFolder, copyFr
 	// Create the directory if it doesn't exist
 	if _, err = os.Stat(scratchFolder); os.IsNotExist(err) {
 		if err = os.MkdirAll(scratchFolder, 0777); err != nil {
-			return "", "", fmt.Errorf("failed to create utility VM scratch folder: %s", err)
+			return "", fmt.Errorf("failed to create utility VM scratch folder: %s", err)
 		}
 	}
 
-	// Create sandbox.vhdx in the scratch folder based on the template, granting the correct permissions to it
-	scratchPath := filepath.Join(scratchFolder, "sandbox.vhdx")
-
-	if copyFrom == "" {
-		if _, err = os.Stat(scratchPath); os.IsNotExist(err) {
-			if err = wcow.CreateUVMScratch(ctx, uvmFolder, scratchFolder, opts.ID); err != nil {
-				return "", "", fmt.Errorf("failed to create scratch: %s", err)
-			}
-		}
-	} else {
-		// copy vhdx from the template
-		err = copyfile.CopyFile(ctx, copyFrom, scratchPath, true)
-		if err != nil {
-			return "", "", fmt.Errorf("failed to create a copy of VHD at %s : %s", copyFrom, err)
-		}
-		if err = wclayer.GrantVmAccess(ctx, opts.ID, scratchPath); err != nil {
-			os.Remove(scratchPath)
-			return "", "", fmt.Errorf("failed to grant access to %s : %s", scratchPath, err)
-		}
-	}
-
-	return scratchFolder, scratchPath, nil
-}
-
-// Get the SID associated with the current process and adds it into the DACL and returns that
-// string
-func getSecurityDescriptorForExternalGuestConnection() (string, error) {
-	token := windows.GetCurrentProcessToken()
-	tokenUser, err := token.GetTokenUser()
-	if err != nil {
-		return "", fmt.Errorf("Error when getting the current toekn user: %s", err)
-	}
-	sidStr, err := tokenUser.User.Sid.String()
-	if err != nil {
-		return "", fmt.Errorf("Error converting SID to string: %s", err)
-	}
-	descriptor := fmt.Sprintf(PROTECTED_DACL_ALLOW_ALL_TO_SHIM_SDDL_FMT, sidStr)
-	return descriptor, nil
-
+	return scratchFolder, nil
 }
 
 func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uvmFolder, scratchPath string) (*hcsschema.ComputeSystem, error) {
@@ -169,7 +124,6 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 						// Allow administrators and SYSTEM to bind to vsock sockets
 						// so that we can create a GCS log socket.
 						DefaultBindSecurityDescriptor: "D:P(A;;FA;;;SY)(A;;FA;;;BA)",
-						ServiceTable:                  map[string]hcsschema.HvSocketServiceConfig{},
 					},
 				},
 				VirtualSmb: &hcsschema.VirtualSmb{
@@ -194,16 +148,6 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 
 	if !opts.ExternalGuestConnection {
 		doc.VirtualMachine.GuestConnection = &hcsschema.GuestConnection{}
-		// If using external guest connection setup the SID of this process in
-		// config doc so that connections from this process are allowed by the GCS.
-		// This is specific to WCOW.
-		securityDescriptor, err := getSecurityDescriptorForExternalGuestConnection()
-		if err != nil {
-			return nil, err
-		}
-		doc.VirtualMachine.Devices.HvSocket.HvSocketConfig.ServiceTable[gcs.WindowsGcsHvsockServiceID.String()] = hcsschema.HvSocketServiceConfig{
-			BindSecurityDescriptor: securityDescriptor,
-		}
 	}
 
 	// Handle StorageQoS if set
@@ -215,6 +159,19 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 	}
 
 	return doc, nil
+}
+
+func (uvm *UtilityVM) startExternalGcsListener(ctx context.Context) error {
+	log.G(ctx).WithField("UVM ID", uvm.runtimeID).Debug("Using external GCS connection for uvm")
+	l, err := winio.ListenHvsock(&winio.HvsockAddr{
+		VMID:      uvm.runtimeID,
+		ServiceID: gcs.WindowsGcsHvsockServiceID,
+	})
+	if err != nil {
+		return err
+	}
+	uvm.gcListener = l
+	return nil
 }
 
 // CreateWCOW creates an HCS compute system representing a utility VM.
@@ -261,9 +218,18 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		return nil, fmt.Errorf("failed to locate utility VM folder from layer folders: %s", err)
 	}
 
-	_, scratchPath, err := createScratchVhdx(ctx, opts, uvmFolder, "")
+	scratchFolder, err := getScratchFolder(ctx, opts)
 	if err != nil {
 		return nil, err
+	}
+
+	// Create sandbox.vhdx in the scratch folder based on the template, granting the correct permissions to it
+	scratchPath := filepath.Join(scratchFolder, "sandbox.vhdx")
+
+	if _, err = os.Stat(scratchPath); os.IsNotExist(err) {
+		if err = wcow.CreateUVMScratch(ctx, uvmFolder, scratchFolder, opts.ID); err != nil {
+			return nil, fmt.Errorf("failed to create scratch: %s", err)
+		}
 	}
 
 	doc, err := prepareConfigDoc(ctx, uvm, opts, uvmFolder, scratchPath)
@@ -296,26 +262,22 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	}
 
 	if opts.ExternalGuestConnection {
-		l, err := winio.ListenHvsock(&winio.HvsockAddr{
-			VMID:      uvm.runtimeID,
-			ServiceID: gcs.WindowsGcsHvsockServiceID,
-		})
-		if err != nil {
+		if err = uvm.startExternalGcsListener(ctx); err != nil {
 			return nil, err
 		}
-		uvm.gcListener = l
 	}
 
 	return uvm, nil
 }
 
-// CloneeWCOW creates an HCS compute system representing a utility VM by creating a clone
+// CloneWCOW creates an HCS compute system representing a utility VM by creating a clone
 // from a given template
 //
 func CloneWCOW(ctx context.Context, opts *OptionsWCOW, utc *UVMTemplateConfig) (_ *UtilityVM, err error) {
 	ctx, span := trace.StartSpan(ctx, "uvm::CloneWCOW")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
+
 	if opts.ID == "" {
 		g, err := guid.NewV4()
 		if err != nil {
@@ -350,12 +312,14 @@ func CloneWCOW(ctx context.Context, opts *OptionsWCOW, utc *UVMTemplateConfig) (
 		return nil, fmt.Errorf("failed to locate utility VM folder from layer folders: %s", err)
 	}
 
-	scratchFolder, scratchPath, err := createScratchVhdx(ctx, opts, uvmFolder, utc.UVMVhdPath)
+	scratchFolder, err := getScratchFolder(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	doc, err := prepareConfigDoc(ctx, uvm, opts, uvmFolder, scratchPath)
+	// It is okay to pass empty path here becaues in the clone loop below we will
+	// anyway overwrite the scsi map.
+	doc, err := prepareConfigDoc(ctx, uvm, opts, uvmFolder, "")
 	if err != nil {
 		return nil, fmt.Errorf("Error in preparing config doc: %s", err)
 	}
@@ -363,67 +327,12 @@ func CloneWCOW(ctx context.Context, opts *OptionsWCOW, utc *UVMTemplateConfig) (
 	doc.VirtualMachine.RestoreState = &hcsschema.RestoreState{}
 	doc.VirtualMachine.RestoreState.TemplateSystemId = utc.UVMID
 
-	uvm.scsiLocations[0][0] = &SCSIMount{
-		vm:       uvm,
-		HostPath: doc.VirtualMachine.Devices.Scsi["0"].Attachments["0"].Path,
-		refCount: 1,
-	}
-
-	for _, scsiMount := range utc.SCSIMounts {
-		conStr := fmt.Sprintf("%d", scsiMount.Controller)
-		lunStr := fmt.Sprintf("%d", scsiMount.LUN)
-		var dstVhdPath string = scsiMount.HostPath
-		if scsiMount.IsScratch {
-			// Copy this scsi disk
-			// TODO(ambarve): This is a SCSI mount that belongs to some container
-			// which is being automatically cloned here as a part of UVM cloning
-			// process. We will receive a request for creation of this container
-			// later on which will specify the storage path for this container.
-			// However, that storage location is not available now so we just use
-			// the storage of the uvm instead. Find a better way for handling this.
-			dir, err := ioutil.TempDir(scratchFolder, fmt.Sprintf("clone-mount-%d-%d", scsiMount.Controller, scsiMount.LUN))
-			if err != nil {
-				return nil, fmt.Errorf("Error while creating directory for scsi mounts of clone vm: %s", err)
-			}
-
-			// copy the VHDX of source VM
-			dstVhdPath = filepath.Join(dir, "sandbox.vhdx")
-			if err = copyfile.CopyFile(ctx, scsiMount.HostPath, dstVhdPath, true); err != nil {
-				return nil, err
-			}
-
-			if err = wclayer.GrantVmAccess(ctx, opts.ID, dstVhdPath); err != nil {
-				os.Remove(dstVhdPath)
-				return nil, err
-			}
-
-		}
-
-		doc.VirtualMachine.Devices.Scsi[conStr].Attachments[lunStr] = hcsschema.Attachment{
-			Path:  dstVhdPath,
-			Type_: scsiMount.Type,
-		}
-
-		uvm.scsiLocations[scsiMount.Controller][scsiMount.LUN] = &SCSIMount{
-			vm:       uvm,
-			HostPath: dstVhdPath,
-			refCount: 1,
-		}
-	}
-
-	for _, vsmbShare := range utc.VSMBShares {
-		doc.VirtualMachine.Devices.VirtualSmb.Shares = append(doc.VirtualMachine.Devices.VirtualSmb.Shares, hcsschema.VirtualSmbShare{
-			Name: vsmbShare.ShareName,
-			Path: vsmbShare.HostPath,
-			Options: &hcsschema.VirtualSmbShareOptions{
-				ReadOnly:            true,
-				PseudoOplocks:       true,
-				TakeBackupPrivilege: true,
-				CacheIo:             true,
-				ShareRead:           true,
-			},
+	for _, cloneableResource := range utc.Resources {
+		cloneableResource.Clone(ctx, uvm, &CloneData{
+			doc:           doc,
+			scratchFolder: scratchFolder,
+			UVMID:         opts.ID,
 		})
-		uvm.vsmbCounter++
 	}
 
 	fullDoc, err := mergemaps.MergeJSON(doc, ([]byte)(opts.AdditionHCSDocumentJSON))
@@ -436,16 +345,7 @@ func CloneWCOW(ctx context.Context, opts *OptionsWCOW, utc *UVMTemplateConfig) (
 		return nil, err
 	}
 
-	if opts.ExternalGuestConnection {
-		l, err := winio.ListenHvsock(&winio.HvsockAddr{
-			VMID:      uvm.runtimeID,
-			ServiceID: gcs.WindowsGcsHvsockServiceID,
-		})
-		if err != nil {
-			return nil, err
-		}
-		uvm.gcListener = l
-	}
+	uvm.startExternalGcsListener(ctx)
 
 	return uvm, nil
 }

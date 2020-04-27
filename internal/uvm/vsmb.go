@@ -2,6 +2,7 @@ package uvm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,16 +15,19 @@ import (
 
 const vsmbSharePrefix = `\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\`
 
+var _ = (Cloneable)(&VSMBShare{})
+
 // VSMBShare contains the host path for a Vsmb Mount
 type VSMBShare struct {
 	// UVM the resource belongs to
 	vm           *UtilityVM
 	HostPath     string
 	refCount     uint32
-	name         string
+	Name         string
 	guestRequest interface{}
 	allowedFiles []string
 	guestPath    string
+	Options      hcsschema.VirtualSmbShareOptions
 }
 
 // Release frees the resources of the corresponding vsmb Mount
@@ -31,6 +35,44 @@ func (vsmb *VSMBShare) Release(ctx context.Context) error {
 	if err := vsmb.vm.RemoveVSMB(ctx, vsmb.HostPath); err != nil {
 		log.G(ctx).WithError(err).Warn("failed to remove vsmb share")
 		return err
+	}
+	return nil
+}
+
+// To clone VSMB share we just need to add it into the config doc of that VM and increase the
+// vsmb counter.
+func (vsmb *VSMBShare) Clone(ctx context.Context, vm *UtilityVM, cd *CloneData) (interface{}, error) {
+	cd.doc.VirtualMachine.Devices.VirtualSmb.Shares = append(cd.doc.VirtualMachine.Devices.VirtualSmb.Shares, hcsschema.VirtualSmbShare{
+		Name:    vsmb.Name,
+		Path:    vsmb.HostPath,
+		Options: &vsmb.Options,
+	})
+	vm.vsmbCounter++
+
+	clonedVSMB := VSMBShare{
+		vm:       vm,
+		HostPath: vsmb.HostPath,
+		refCount: 1,
+		Name:     vsmb.Name,
+		Options:  vsmb.Options,
+		// TODO(ambarve) Do we need to include allowedFiles & guestPath here
+	}
+
+	return &clonedVSMB, nil
+}
+
+func (vsmb *VSMBShare) GobEncode() ([]byte, error) {
+	ret, err := json.Marshal(vsmb)
+	if err != nil {
+		return nil, fmt.Errorf("Error while serializing VSMB share: %s", err)
+	}
+	return ret, nil
+}
+
+func (vsmb *VSMBShare) GobDecode(data []byte) error {
+	err := json.Unmarshal(data, &vsmb)
+	if err != nil {
+		return fmt.Errorf("Error while Deserializing VSMB share: %s", err)
 	}
 	return nil
 }
@@ -84,9 +126,11 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, guestRequest
 
 		share = &VSMBShare{
 			vm:           uvm,
-			name:         shareName,
+			Name:         shareName,
 			guestRequest: guestRequest,
 			guestPath:    vsmbSharePrefix + shareName,
+			HostPath:     hostPath,
+			Options:      *options,
 		}
 	}
 	newAllowedFiles := share.allowedFiles
@@ -102,7 +146,7 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, guestRequest
 		modification := &hcsschema.ModifySettingRequest{
 			RequestType: requestType,
 			Settings: hcsschema.VirtualSmbShare{
-				Name:         share.name,
+				Name:         share.Name,
 				Options:      options,
 				Path:         hostPath,
 				AllowedFiles: newAllowedFiles,
@@ -152,7 +196,7 @@ func (uvm *UtilityVM) RemoveVSMB(ctx context.Context, hostPath string) error {
 
 	modification := &hcsschema.ModifySettingRequest{
 		RequestType:  requesttype.Remove,
-		Settings:     hcsschema.VirtualSmbShare{Name: share.name},
+		Settings:     hcsschema.VirtualSmbShare{Name: share.Name},
 		ResourcePath: vSmbShareResourcePath,
 	}
 	if err := uvm.modify(ctx, modification); err != nil {
@@ -213,5 +257,5 @@ func (uvm *UtilityVM) GetVSMBShareName(ctx context.Context, hostPath string) (st
 	if err != nil {
 		return "", err
 	}
-	return share.name, nil
+	return share.Name, nil
 }

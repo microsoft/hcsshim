@@ -311,7 +311,7 @@ func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *sp
 	// container (which is required to properly clone this template) is only available
 	// at the time of creation. Hence, that information is saved here.
 	if saveAsTemplate {
-		if err = SaveTemplateConfig(ctx, p.host, s); err != nil {
+		if err = SaveTemplateConfig(ctx, p.host); err != nil {
 			return nil, err
 		}
 	}
