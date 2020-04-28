@@ -9,11 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/cow"
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
@@ -292,63 +290,42 @@ func CloneContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.Co
 	// 3. GMSA credentials?
 	// Add the mounts as mapped directories or mapped pipes
 	// In case of cloned container we must add them as a modify request.
-	var (
-		mds []hcsschema.MappedDirectory
-		mps []hcsschema.MappedPipe
-	)
-	for _, mount := range coi.Spec.Mounts {
-		if mount.Type != "" {
-			return nil, nil, fmt.Errorf("invalid container spec - Mount.Type '%s' must not be set", mount.Type)
-		}
-		if uvm.IsPipe(mount.Source) {
-			src, dst := uvm.GetContainerPipeMapping(coi.HostingSystem, mount)
-			mps = append(mps, hcsschema.MappedPipe{HostPath: src, ContainerPipeName: dst})
-		} else {
-			readOnly := false
-			for _, o := range mount.Options {
-				if strings.ToLower(o) == "ro" {
-					readOnly = true
-				}
-			}
-			md := hcsschema.MappedDirectory{ContainerPath: mount.Destination, ReadOnly: readOnly}
-
-			uvmPath, err := coi.HostingSystem.GetVSMBUvmPath(ctx, mount.Source)
-			if err != nil {
-				if err == uvm.ErrNotAttached {
-					// It could also be a scsi mount.
-					uvmPath, err = coi.HostingSystem.GetScsiUvmPath(ctx, mount.Source)
-					if err != nil {
-						return nil, nil, err
-					}
-					md.HostPathType = guestrequest.MappedDirPathTypeAbsolutePath
-				} else {
-					return nil, nil, err
-				}
-			} else {
-				//TODO(ambarve): This should be vsmb path tyep but that doesn't work for some reason
-				md.HostPathType = guestrequest.MappedDirPathTypeAbsolutePath
-			}
-			md.HostPath = uvmPath
-			mds = append(mds, md)
-
-		}
-	}
-
-	// TODO(ambarve) : Find out if there is a way to send
-	// request for all the mounts at the same time. Otherwise make
-	// changes to send each request one by one.
-	var gcsDocument hcsschema.ModifySettingRequest
-	if len(mds) > 0 {
-		gcsDocument = hcsschema.ModifySettingRequest{
-			RequestType:  requesttype.Add,
-			ResourcePath: "Container/MappedDirectories",
-			Settings:     mds[0],
-		}
-	}
-
-	c, err := coi.HostingSystem.CloneContainer(ctx, coi.actualID, gcsDocument)
+	_, _, mdsv2, mpsv2, err := createMountsConfig(ctx, coi)
 	if err != nil {
 		return nil, resources, err
 	}
+
+	c, err := coi.HostingSystem.CloneContainer(ctx, coi.actualID, nil)
+	if err != nil {
+		return nil, resources, err
+	}
+
+	// send modify requests for mounts one by one
+	// TODO(ambarve) : Find out if there is a way to send
+	// request for all the mounts at the same time to save time
+	for _, md := range mdsv2 {
+		requestDocument := &hcsschema.ModifySettingRequest{
+			RequestType:  requesttype.Add,
+			ResourcePath: "Container/MappedDirectories",
+			Settings:     md,
+		}
+		err := c.Modify(ctx, requestDocument)
+		if err != nil {
+			return c, resources, fmt.Errorf("Error while adding mapped directory (%s) to the container: %s", md.HostPath, err)
+		}
+	}
+
+	for _, mp := range mpsv2 {
+		requestDocument := &hcsschema.ModifySettingRequest{
+			RequestType:  requesttype.Add,
+			ResourcePath: "Container/MappedPipes",
+			Settings:     mp,
+		}
+		err := c.Modify(ctx, requestDocument)
+		if err != nil {
+			return c, resources, fmt.Errorf("Error while adding mapped pipe (%s) to the container: %s", mp.HostPath, err)
+		}
+	}
+
 	return c, resources, nil
 }

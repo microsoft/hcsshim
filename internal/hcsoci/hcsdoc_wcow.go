@@ -23,6 +23,60 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// createMountsConfig generates the arrays of MappedDirectory or MappedPipe requests
+// based on the mounts described in the container spec. Handles the mounts for both
+// v1 and v2 schema.
+func createMountsConfig(ctx context.Context, coi *createOptionsInternal) ([]schema1.MappedDir, []schema1.MappedPipe, []hcsschema.MappedDirectory, []hcsschema.MappedPipe, error) {
+
+	var (
+		mdsv1 []schema1.MappedDir
+		mpsv1 []schema1.MappedPipe
+		mdsv2 []hcsschema.MappedDirectory
+		mpsv2 []hcsschema.MappedPipe
+	)
+
+	// TODO: Mapped pipes to add in v2 schema.
+	for _, mount := range coi.Spec.Mounts {
+		if mount.Type != "" {
+			return nil, nil, nil, nil, fmt.Errorf("invalid container spec - Mount.Type '%s' must not be set", mount.Type)
+		}
+		if uvm.IsPipe(mount.Source) {
+			src, dst := uvm.GetContainerPipeMapping(coi.HostingSystem, mount)
+			mpsv1 = append(mpsv1, schema1.MappedPipe{HostPath: src, ContainerPipeName: dst})
+			mpsv2 = append(mpsv2, hcsschema.MappedPipe{HostPath: src, ContainerPipeName: dst})
+		} else {
+			readOnly := false
+			for _, o := range mount.Options {
+				if strings.ToLower(o) == "ro" {
+					readOnly = true
+				}
+			}
+			mdv1 := schema1.MappedDir{HostPath: mount.Source, ContainerPath: mount.Destination, ReadOnly: readOnly}
+			mdv2 := hcsschema.MappedDirectory{ContainerPath: mount.Destination, ReadOnly: readOnly}
+			if coi.HostingSystem == nil {
+				mdv2.HostPath = mount.Source
+			} else if mount.Type == "physical-disk" || mount.Type == "virtual-disk" || mount.Type == "automanage-virtual-disk" {
+				// It should be a SCSI mount
+				uvmPath, err := coi.HostingSystem.GetScsiUvmPath(ctx, mount.Source)
+				if err != nil {
+					return nil, nil, nil, nil, fmt.Errorf("Error while getting SCSI UVM path for mount type: %s, hostPath: %s - %s", mount.Type, mount.Source, err)
+				}
+				mdv2.HostPath = uvmPath
+			} else {
+				uvmPath, err := coi.HostingSystem.GetVSMBUvmPath(ctx, mount.Source)
+				if err != nil {
+					return nil, nil, nil, nil, fmt.Errorf("Error while getting VSMB UVM path for mount type: %s, hostPath: %s - %s", mount.Type, mount.Source, err)
+				}
+				mdv2.HostPath = uvmPath
+			}
+			mdsv1 = append(mdsv1, mdv1)
+			mdsv2 = append(mdsv2, mdv2)
+		}
+	}
+
+	return mdsv1, mpsv1, mdsv2, mpsv2, nil
+}
+
 // createWindowsContainerDocument creates documents for passing to HCS or GCS to create
 // a container, both hosted and process isolated. It creates both v1 and v2
 // container objects, WCOW only. The containers storage should have been mounted already.
@@ -237,52 +291,9 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	}
 
 	// Add the mounts as mapped directories or mapped pipes
-	// TODO: Mapped pipes to add in v2 schema.
-	var (
-		mdsv1 []schema1.MappedDir
-		mpsv1 []schema1.MappedPipe
-		mdsv2 []hcsschema.MappedDirectory
-		mpsv2 []hcsschema.MappedPipe
-	)
-	for _, mount := range coi.Spec.Mounts {
-		if mount.Type != "" {
-			return nil, nil, fmt.Errorf("invalid container spec - Mount.Type '%s' must not be set", mount.Type)
-		}
-		if uvm.IsPipe(mount.Source) {
-			src, dst := uvm.GetContainerPipeMapping(coi.HostingSystem, mount)
-			mpsv1 = append(mpsv1, schema1.MappedPipe{HostPath: src, ContainerPipeName: dst})
-			mpsv2 = append(mpsv2, hcsschema.MappedPipe{HostPath: src, ContainerPipeName: dst})
-		} else {
-			readOnly := false
-			for _, o := range mount.Options {
-				if strings.ToLower(o) == "ro" {
-					readOnly = true
-				}
-			}
-			mdv1 := schema1.MappedDir{HostPath: mount.Source, ContainerPath: mount.Destination, ReadOnly: readOnly}
-			mdv2 := hcsschema.MappedDirectory{ContainerPath: mount.Destination, ReadOnly: readOnly}
-			if coi.HostingSystem == nil {
-				mdv2.HostPath = mount.Source
-			} else {
-				uvmPath, err := coi.HostingSystem.GetVSMBUvmPath(ctx, mount.Source)
-				// TODO(ambarve): Why don't we look at mount.Type here to
-				// decide if this is going to be a vsmb mount of scsi mount
-				if err != nil {
-					if err == uvm.ErrNotAttached {
-						// It could also be a scsi mount.
-						uvmPath, err = coi.HostingSystem.GetScsiUvmPath(ctx, mount.Source)
-						if err != nil {
-							return nil, nil, err
-						}
-					} else {
-						return nil, nil, err
-					}
-				}
-				mdv2.HostPath = uvmPath
-			}
-			mdsv1 = append(mdsv1, mdv1)
-			mdsv2 = append(mdsv2, mdv2)
-		}
+	mdsv1, mpsv1, mdsv2, mpsv2, err := createMountsConfig(ctx, coi)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	v1.MappedDirectories = mdsv1

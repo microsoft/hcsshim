@@ -125,9 +125,3 @@ type HvSocketAddress struct {
 	LocalAddress  string `json:",omitempty"`
 	ParentAddress string `json:",omitempty"`
 }
-
-// Mapped Directory path type values
-const (
-	MappedDirPathTypeAbsolutePath = "AbsolutePath"
-	MappedDirPathTypeVSMBShare    = "VirtualSmbShareName"
-)
