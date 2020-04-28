@@ -171,16 +171,21 @@ func FetchTemplateConfig(ctx context.Context, ID string) (*uvm.UVMTemplateConfig
 // called on this host before calling SaveAsTemplate. SaveTemplateConfig saves the important
 // information that is required to create copies from this template. SaveAsTemplate actually
 // pauses this VM and saves it.
-// Saving is done in following 3 steps:
-// 1. First remove namespaces associated with the host.
-// 2. Close the GCS connection.
-// 3. Save the host as a template.
+// Saving is done in following steps:
+// - First remove namespaces associated with the host.
+// - Close the GCS connection.
+// - Save the information about the templtae that will be needed during cloning
+// - Save the host as a template.
 func SaveAsTemplate(ctx context.Context, host *uvm.UtilityVM) (err error) {
 	if err = host.RemoveAllNamespaces(ctx); err != nil {
 		return err
 	}
 
 	if err = host.CloseGCConnection(); err != nil {
+		return err
+	}
+
+	if err = SaveTemplateConfig(ctx, host); err != nil {
 		return err
 	}
 

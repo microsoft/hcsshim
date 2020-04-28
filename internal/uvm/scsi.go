@@ -63,7 +63,6 @@ func (sm *SCSIMount) Clone(ctx context.Context, vm *UtilityVM, cd *CloneData) (i
 	var dir string
 	conStr := fmt.Sprintf("%d", sm.Controller)
 	lunStr := fmt.Sprintf("%d", sm.LUN)
-	log.G(ctx).Debug(fmt.Sprintf("cloning scsi mount with hostPath: %s, Controller: %d, LUN: %d", sm.HostPath, sm.Controller, sm.LUN))
 	if !sm.IsReadOnly {
 		// Copy this scsi disk
 		// TODO(ambarve): This can be a SCSI mount that belongs to some container
@@ -77,8 +76,10 @@ func (sm *SCSIMount) Clone(ctx context.Context, vm *UtilityVM, cd *CloneData) (i
 			return nil, fmt.Errorf("Error while creating directory for scsi mounts of clone vm: %s", err)
 		}
 
-		// copy the VHDX of source VM
-		dstVhdPath = filepath.Join(dir, "sandbox.vhdx")
+		// copy the VHDX
+		dstVhdPath = filepath.Join(dir, filepath.Base(sm.HostPath))
+		log.G(ctx).Debug(fmt.Sprintf("cloning scsi mount with hostPath: %s, Controller: %d, LUN: %d to: %s", sm.HostPath, sm.Controller, sm.LUN, dstVhdPath))
+
 		if err = copyfile.CopyFile(ctx, sm.HostPath, dstVhdPath, true); err != nil {
 			return nil, err
 		}

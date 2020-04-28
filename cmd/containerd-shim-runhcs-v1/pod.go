@@ -306,15 +306,6 @@ func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *sp
 		return nil, err
 	}
 
-	// A container (and the UVM) is actually saved as a template only after the container
-	// is successfully started. However, information about the resources assigned to this
-	// container (which is required to properly clone this template) is only available
-	// at the time of creation. Hence, that information is saved here.
-	if saveAsTemplate {
-		if err = SaveTemplateConfig(ctx, p.host); err != nil {
-			return nil, err
-		}
-	}
 	p.workloadTasks.Store(req.ID, st)
 	return st, nil
 }

@@ -58,6 +58,8 @@ func (vsmb *VSMBShare) Clone(ctx context.Context, vm *UtilityVM, cd *CloneData) 
 		// TODO(ambarve) Do we need to include allowedFiles & guestPath here
 	}
 
+	vm.vsmbDirShares[vsmb.HostPath] = &clonedVSMB
+
 	return &clonedVSMB, nil
 }
 
