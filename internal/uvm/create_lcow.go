@@ -165,6 +165,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		scsiControllerCount:     opts.SCSIControllerCount,
 		vpmemMaxCount:           opts.VPMemDeviceCount,
 		vpmemMaxSizeBytes:       opts.VPMemSizeBytes,
+		vpciDevices:             make(map[string]*VPCIDevice),
 		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
 	}
 	defer func() {

@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
-	"strings"
 	"testing"
 	"time"
 
@@ -70,6 +68,7 @@ const (
 	featureWCOWProcess    = "WCOWProcess"
 	featureWCOWHypervisor = "WCOWHypervisor"
 	featureGMSA           = "GMSA"
+	featureGPU            = "GPU"
 )
 
 var allFeatures = []string{
@@ -77,6 +76,7 @@ var allFeatures = []string{
 	featureWCOWProcess,
 	featureWCOWHypervisor,
 	featureGMSA,
+	featureGPU,
 }
 
 func init() {
@@ -239,16 +239,4 @@ func pullRequiredImagesWithLabels(t *testing.T, images []string, labels map[stri
 			t.Fatalf("failed PullImage for image: %s, with error: %v", image, err)
 		}
 	}
-}
-
-// findTestDevices returns the first nvidia pcip device on the host
-func findTestNvidiaGPUDevice() (string, error) {
-	out, err := exec.Command(
-		"powershell",
-		`(Get-PnpDevice -presentOnly | where-object {$_.InstanceID -Match 'PCIP\\VEN_10DE.*'})[0].InstanceId`,
-	).Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
 }
