@@ -58,9 +58,11 @@ func (sm *SCSIMount) Release(ctx context.Context) error {
 // If a SCSI mount is read only then we should simply add it to the uvm config. But if it
 // is a scratch layer (i.e writeable mount) then we should make a copy of it.
 func (sm *SCSIMount) Clone(ctx context.Context, vm *UtilityVM, cd *CloneData) (interface{}, error) {
-	var dstVhdPath string = sm.HostPath
-	var err error
-	var dir string
+	var (
+		dstVhdPath string = sm.HostPath
+		err        error
+		dir        string
+	)
 	conStr := fmt.Sprintf("%d", sm.Controller)
 	lunStr := fmt.Sprintf("%d", sm.LUN)
 	if !sm.IsReadOnly {
@@ -88,7 +90,6 @@ func (sm *SCSIMount) Clone(ctx context.Context, vm *UtilityVM, cd *CloneData) (i
 			os.Remove(dstVhdPath)
 			return nil, err
 		}
-
 	}
 
 	cd.doc.VirtualMachine.Devices.Scsi[conStr].Attachments[lunStr] = hcsschema.Attachment{

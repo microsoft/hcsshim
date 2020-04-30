@@ -192,10 +192,13 @@ func (uvm *UtilityVM) RemoveEndpointsFromNS(ctx context.Context, id string, endp
 }
 
 // Removes all Network namespaces and corresponding enpoints associated with this UVM
-func (uvm *UtilityVM) RemoveAllNamespaces(ctx context.Context) error {
-	for nsid := range uvm.namespaces {
-		if err := uvm.RemoveNetNS(ctx, nsid); err != nil {
-			return err
+func (uvm *UtilityVM) RemoveAllNICs(ctx context.Context) error {
+	for _, ns := range uvm.namespaces {
+		for _, ninfo := range ns.nics {
+			if err := uvm.removeNIC(ctx, ninfo.ID, ninfo.Endpoint); err != nil {
+				return err
+			}
+			ns.nics[ninfo.Endpoint.Id] = nil
 		}
 	}
 	return nil

@@ -177,7 +177,7 @@ func FetchTemplateConfig(ctx context.Context, ID string) (*uvm.UVMTemplateConfig
 // - Save the information about the templtae that will be needed during cloning
 // - Save the host as a template.
 func SaveAsTemplate(ctx context.Context, host *uvm.UtilityVM) (err error) {
-	if err = host.RemoveAllNamespaces(ctx); err != nil {
+	if err = host.RemoveAllNICs(ctx); err != nil {
 		return err
 	}
 

@@ -328,11 +328,23 @@ func CloneWCOW(ctx context.Context, opts *OptionsWCOW, utc *UVMTemplateConfig) (
 	doc.VirtualMachine.RestoreState.TemplateSystemId = utc.UVMID
 
 	for _, cloneableResource := range utc.Resources {
-		cloneableResource.Clone(ctx, uvm, &CloneData{
+		_, err = cloneableResource.Clone(ctx, uvm, &CloneData{
 			doc:           doc,
 			scratchFolder: scratchFolder,
 			UVMID:         opts.ID,
 		})
+		if err != nil {
+			return nil, fmt.Errorf("Failed while cloning: %s", err)
+		}
+	}
+
+	for _, nsid := range utc.NetNSIDs {
+		if uvm.namespaces == nil {
+			uvm.namespaces = make(map[string]*namespaceInfo)
+		}
+		uvm.namespaces[nsid] = &namespaceInfo{
+			nics: make(map[string]*nicInfo),
+		}
 	}
 
 	fullDoc, err := mergemaps.MergeJSON(doc, ([]byte)(opts.AdditionHCSDocumentJSON))

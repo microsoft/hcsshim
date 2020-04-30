@@ -88,3 +88,26 @@ func SetupNetworkNamespace(ctx context.Context, hostingSystem *uvm.UtilityVM, ns
 	}
 	return nil
 }
+
+// CloneEndpoints adds all the endpoints from the namespace specified by srcnsid
+// into the namespace specified by dstnsid. This function does NOT add the srcnsid or the
+// dstnsid into the hostingSystem.
+func CloneEndpoints(ctx context.Context, hostingSystem *uvm.UtilityVM, srcnsid, dstnsid string) error {
+	endpoints, err := GetNamespaceEndpoints(ctx, srcnsid)
+	if err != nil {
+		return err
+	}
+	for _, ep := range endpoints {
+		ep.Namespace = &hns.Namespace{
+			ID: dstnsid,
+		}
+	}
+
+	err = hostingSystem.AddEndpointsToNS(ctx, dstnsid, endpoints)
+	if err != nil {
+		// Best effort clean up the NS
+		hostingSystem.RemoveNetNS(ctx, dstnsid)
+		return err
+	}
+	return nil
+}

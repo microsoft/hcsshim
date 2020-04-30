@@ -140,7 +140,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		}
 		if err != nil {
 			parent.Close()
-			return nil, err
+			return nil, fmt.Errorf("Error starting UVM: %s", err)
 		}
 	} else if !isWCOW {
 		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "oci spec does not contain WCOW or LCOW spec")
@@ -166,7 +166,15 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 	if isWCOW && parent != nil {
 
 		if s.Windows != nil && s.Windows.Network != nil {
-			err = hcsoci.SetupNetworkNamespace(ctx, parent, s.Windows.Network.NetworkNamespace)
+			if utc != nil {
+				if len(utc.NetNSIDs) > 0 {
+					err = hcsoci.CloneEndpoints(ctx, parent, s.Windows.Network.NetworkNamespace, utc.NetNSIDs[0])
+				} else {
+					log.G(ctx).Warnf("No network namespace provided in template %s", utc.UVMID)
+				}
+			} else {
+				err = hcsoci.SetupNetworkNamespace(ctx, parent, s.Windows.Network.NetworkNamespace)
+			}
 			if err != nil {
 				return nil, fmt.Errorf("failed to setup network namespace for pod: %s", err)
 			}
