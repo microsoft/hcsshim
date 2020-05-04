@@ -17,9 +17,11 @@ type HNSEndpoint struct {
 	Policies           []json.RawMessage `json:",omitempty"`
 	MacAddress         string            `json:",omitempty"`
 	IPAddress          net.IP            `json:",omitempty"`
+	IPv6Address        net.IP            `json:",omitempty"`
 	DNSSuffix          string            `json:",omitempty"`
 	DNSServerList      string            `json:",omitempty"`
 	GatewayAddress     string            `json:",omitempty"`
+	GatewayAddressV6   string            `json:",omitempty"`
 	EnableInternalDNS  bool              `json:",omitempty"`
 	DisableICC         bool              `json:",omitempty"`
 	PrefixLength       uint8             `json:",omitempty"`
