@@ -25,6 +25,7 @@ type HNSEndpoint struct {
 	EnableInternalDNS  bool              `json:",omitempty"`
 	DisableICC         bool              `json:",omitempty"`
 	PrefixLength       uint8             `json:",omitempty"`
+	IPv6PrefixLength   uint8             `json:",omitempty"`
 	IsRemoteEndpoint   bool              `json:",omitempty"`
 	EnableLowMetric    bool              `json:",omitempty"`
 	Namespace          *Namespace        `json:",omitempty"`
