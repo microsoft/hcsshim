@@ -62,12 +62,13 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	log.G(ctx).WithField("options", fmt.Sprintf("%+v", opts)).Debug("uvm::CreateLCOW options")
 
 	uvm := &UtilityVM{
-		id:                  opts.ID,
-		owner:               opts.Owner,
-		operatingSystem:     "windows",
-		scsiControllerCount: 1,
-		vsmbDirShares:       make(map[string]*VSMBShare),
-		vsmbFileShares:      make(map[string]*VSMBShare),
+		id:                      opts.ID,
+		owner:                   opts.Owner,
+		operatingSystem:         "windows",
+		scsiControllerCount:     1,
+		vsmbDirShares:           make(map[string]*VSMBShare),
+		vsmbFileShares:          make(map[string]*VSMBShare),
+		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
 	}
 	defer func() {
 		if err != nil {
@@ -111,6 +112,24 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		if err := wcow.CreateUVMScratch(ctx, uvmFolder, scratchFolder, uvm.id); err != nil {
 			return nil, fmt.Errorf("failed to create scratch: %s", err)
 		}
+	}
+
+	virtualSMB := &hcsschema.VirtualSmb{
+		DirectFileMappingInMB: 1024, // Sensible default, but could be a tuning parameter somewhere
+		Shares: []hcsschema.VirtualSmbShare{
+			{
+				Name: "os",
+				Path: filepath.Join(uvmFolder, `UtilityVM\Files`),
+				Options: &hcsschema.VirtualSmbShareOptions{
+					ReadOnly:            true,
+					PseudoOplocks:       true,
+					TakeBackupPrivilege: true,
+					CacheIo:             true,
+					ShareRead:           true,
+					NoDirectmap:         uvm.devicesPhysicallyBacked,
+				},
+			},
+		},
 	}
 
 	doc := &hcsschema.ComputeSystem{
@@ -162,22 +181,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 						DefaultBindSecurityDescriptor: "D:P(A;;FA;;;SY)(A;;FA;;;BA)",
 					},
 				},
-				VirtualSmb: &hcsschema.VirtualSmb{
-					DirectFileMappingInMB: 1024, // Sensible default, but could be a tuning parameter somewhere
-					Shares: []hcsschema.VirtualSmbShare{
-						{
-							Name: "os",
-							Path: filepath.Join(uvmFolder, `UtilityVM\Files`),
-							Options: &hcsschema.VirtualSmbShareOptions{
-								ReadOnly:            true,
-								PseudoOplocks:       true,
-								TakeBackupPrivilege: true,
-								CacheIo:             true,
-								ShareRead:           true,
-							},
-						},
-					},
-				},
+				VirtualSmb: virtualSMB,
 			},
 		},
 	}

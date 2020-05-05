@@ -159,12 +159,13 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	}
 
 	uvm := &UtilityVM{
-		id:                  opts.ID,
-		owner:               opts.Owner,
-		operatingSystem:     "linux",
-		scsiControllerCount: opts.SCSIControllerCount,
-		vpmemMaxCount:       opts.VPMemDeviceCount,
-		vpmemMaxSizeBytes:   opts.VPMemSizeBytes,
+		id:                      opts.ID,
+		owner:                   opts.Owner,
+		operatingSystem:         "linux",
+		scsiControllerCount:     opts.SCSIControllerCount,
+		vpmemMaxCount:           opts.VPMemDeviceCount,
+		vpmemMaxSizeBytes:       opts.VPMemSizeBytes,
+		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
 	}
 	defer func() {
 		if err != nil {

@@ -37,6 +37,10 @@ type Options struct {
 	// false.
 	AllowOvercommit bool
 
+	// FullyPhysicallyBacked describes if a uvm should be entirely physically
+	// backed, including in any additional devices
+	FullyPhysicallyBacked bool
+
 	// Memory for UVM. Defaults to false. For virtual memory with deferred
 	// commit, set to true.
 	EnableDeferredCommit bool
@@ -73,12 +77,13 @@ type Options struct {
 // If `owner` is empty it will be set to the calling executables name.
 func newDefaultOptions(id, owner string) *Options {
 	opts := &Options{
-		ID:                   id,
-		Owner:                owner,
-		MemorySizeInMB:       1024,
-		AllowOvercommit:      true,
-		EnableDeferredCommit: false,
-		ProcessorCount:       defaultProcessorCount(),
+		ID:                    id,
+		Owner:                 owner,
+		MemorySizeInMB:        1024,
+		AllowOvercommit:       true,
+		EnableDeferredCommit:  false,
+		ProcessorCount:        defaultProcessorCount(),
+		FullyPhysicallyBacked: false,
 	}
 
 	if opts.Owner == "" {
@@ -246,4 +251,10 @@ func (uvm *UtilityVM) normalizeMemorySize(ctx context.Context, requested int32) 
 		}).Warn("Changing user requested MemorySizeInMB to align to 2MB")
 	}
 	return actual
+}
+
+// DevicesPhysicallyBacked describes if additional devices added to the UVM
+// should be physically backed
+func (uvm *UtilityVM) DevicesPhysicallyBacked() bool {
+	return uvm.devicesPhysicallyBacked
 }

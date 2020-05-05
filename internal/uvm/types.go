@@ -52,6 +52,10 @@ type UtilityVM struct {
 	exitErr error
 	exitCh  chan struct{}
 
+	// devicesPhysicallyBacked indicates if additional devices added to a uvm should be
+	// entirely physically backed
+	devicesPhysicallyBacked bool
+
 	// GCS bridge protocol and capabilities
 	protocol  uint32
 	guestCaps schema1.GuestDefinedCapabilities

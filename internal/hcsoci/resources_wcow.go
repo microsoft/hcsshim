@@ -128,6 +128,9 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 						options.ShareRead = true
 						options.ForceLevelIIOplocks = true
 					}
+					if coi.HostingSystem.DevicesPhysicallyBacked() {
+						options.NoDirectmap = true
+					}
 					share, err := coi.HostingSystem.AddVSMB(ctx, mount.Source, "", options)
 					if err != nil {
 						return fmt.Errorf("failed to add VSMB share to utility VM for mount %+v: %s", mount, err)
