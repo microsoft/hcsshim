@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/sirupsen/logrus"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
@@ -218,100 +217,6 @@ func Test_RunContainer_Events_LCOW(t *testing.T) {
 				t.Fatalf("event %v deadline exceeded", topic)
 			}
 		}
-	}
-}
-
-func Test_RunContainer_VirtualDevice_GPU_LCOW(t *testing.T) {
-	requireFeatures(t, featureLCOW)
-
-	if osversion.Get().Build < 19566 {
-		t.Skip("Requires build +19566")
-	}
-
-	testDeviceInstanceID, err := findTestNvidiaGPUDevice()
-	if err != nil {
-		t.Skipf("skipping test, failed to find assignable nvidia gpu on host with: %v", err)
-	}
-	if testDeviceInstanceID == "" {
-		t.Skipf("skipping test, host has no assignable nvidia gpu devices")
-	}
-
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
-	client := newTestRuntimeClient(t)
-
-	podctx := context.Background()
-	sandboxRequest := &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name(),
-				Namespace: testNamespace,
-			},
-			Annotations: map[string]string{
-				"io.microsoft.virtualmachine.lcow.kerneldirectboot":                  "false",
-				"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "false",
-				"io.microsoft.virtualmachine.lcow.preferredrootfstype":               "initrd",
-				"io.microsoft.virtualmachine.devices.virtualpmem.maximumcount":       "0",
-				"io.microsoft.virtualmachine.lcow.vpcienabled":                       "true",
-				// we believe this is a sufficiently large high MMIO space amount for this test.
-				// if a given gpu device needs more, this test will fail to create the container
-				// and may hang.
-				"io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb": "64000",
-				"io.microsoft.virtualmachine.lcow.bootfilesrootpath":                 testGPUBootFiles,
-			},
-		},
-		RuntimeHandler: lcowRuntimeHandler,
-	}
-
-	podID := runPodSandbox(t, client, podctx, sandboxRequest)
-	defer removePodSandbox(t, client, podctx, podID)
-	defer stopPodSandbox(t, client, podctx, podID)
-
-	device := &runtime.Device{
-		HostPath: "gpu://" + testDeviceInstanceID,
-	}
-
-	containerRequest := &runtime.CreateContainerRequest{
-		Config: &runtime.ContainerConfig{
-			Metadata: &runtime.ContainerMetadata{
-				Name: t.Name() + "-Container",
-			},
-			Image: &runtime.ImageSpec{
-				Image: imageLcowAlpine,
-			},
-			Command: []string{
-				"top",
-			},
-			Devices: []*runtime.Device{
-				device,
-			},
-			Linux: &runtime.LinuxContainerConfig{},
-			Annotations: map[string]string{
-				"io.microsoft.container.gpu.capabilities": "utility",
-			},
-		},
-		PodSandboxId:  podID,
-		SandboxConfig: sandboxRequest.Config,
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	containerID := createContainer(t, client, ctx, containerRequest)
-	defer removeContainer(t, client, ctx, containerID)
-	startContainer(t, client, ctx, containerID)
-	defer stopContainer(t, client, ctx, containerID)
-
-	cmd := []string{"ls", "/proc/driver/nvidia/gpus"}
-
-	containerExecReq := &runtime.ExecSyncRequest{
-		ContainerId: containerID,
-		Cmd:         cmd,
-		Timeout:     20,
-	}
-	response := execSync(t, client, ctx, containerExecReq)
-	if len(response.Stderr) != 0 {
-		t.Fatalf("expected to see no error, instead saw %s", string(response.Stderr))
-	}
-	if len(response.Stdout) == 0 {
-		t.Fatal("expected to see GPU device on container, not present")
 	}
 }
 

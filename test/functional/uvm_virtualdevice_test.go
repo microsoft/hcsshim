@@ -9,10 +9,11 @@ import (
 	"testing"
 	"time"
 
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 )
+
+const lcowGPUBootFilesPath = "C:\\ContainerPlat\\LinuxBootFiles\\nvidiagpu"
 
 // findTestDevices returns the first pcip device on the host
 func findTestVirtualDevice() (string, error) {
@@ -48,21 +49,16 @@ func TestVirtualDevice(t *testing.T) {
 	opts.KernelFile = uvm.KernelFile
 	opts.RootFSFile = uvm.InitrdFile
 	opts.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
+	opts.BootFilesPath = lcowGPUBootFilesPath
 
 	// create test uvm and ensure we can assign and remove the device
 	vm := testutilities.CreateLCOWUVMFromOpts(ctx, t, opts)
-	dev := hcsschema.VirtualPciDevice{
-		Functions: []hcsschema.VirtualPciFunction{
-			{
-				DeviceInstancePath: testDeviceInstanceID,
-			},
-		},
-	}
-	vpci, err := vm.AssignDevice(ctx, dev)
+	defer vm.Close()
+	vpci, err := vm.AssignDevice(ctx, testDeviceInstanceID)
 	if err != nil {
 		t.Fatalf("failed to assign device %s with %v", testDeviceInstanceID, err)
 	}
-	if err := vm.RemoveDevice(ctx, vpci.ID); err != nil {
+	if err := vpci.Release(ctx); err != nil {
 		t.Fatalf("failed to remove device %s with %v", testDeviceInstanceID, err)
 	}
 }
