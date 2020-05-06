@@ -11,7 +11,15 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 )
 
-// VPCIDevice represents a vpci device.
+const (
+	GPUDeviceIDType         = "gpu"
+	VPCILocationPathIDType  = "vpci-location-path"
+	VPCIClassGUIDTypeLegacy = "class"
+	VPCIClassGUIDType       = "vpci-class-guid"
+)
+
+// VPCIDevice represents a vpci device. Holds its guid and a handle to the uvm it
+// belongs to.
 type VPCIDevice struct {
 	// vm is the handle to the UVM that this device belongs to
 	vm *UtilityVM

@@ -162,7 +162,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 	addGPUVHD := false
 	for i, d := range coi.Spec.Windows.Devices {
 		switch d.IDType {
-		case "gpu":
+		case uvm.GPUDeviceIDType:
 			addGPUVHD = true
 			vpci, err := coi.HostingSystem.AssignDevice(ctx, d.ID)
 			if err != nil {
@@ -172,6 +172,8 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 			// update device ID on the spec to the assigned device's resulting vmbus guid so gcs knows which devices to
 			// map into the container
 			coi.Spec.Windows.Devices[i].ID = vpci.VMBusGUID
+		default:
+			return fmt.Errorf("specified device %s has unsupported type %s", d.ID, d.IDType)
 		}
 	}
 
