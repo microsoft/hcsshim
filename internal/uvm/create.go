@@ -221,18 +221,26 @@ func defaultProcessorCount() int32 {
 }
 
 // normalizeProcessorCount sets `uvm.processorCount` to `Min(requested,
-// runtime.NumCPU())`.
-func (uvm *UtilityVM) normalizeProcessorCount(ctx context.Context, requested int32) {
-	hostCount := int32(runtime.NumCPU())
+// logical CPU count)`.
+func (uvm *UtilityVM) normalizeProcessorCount(ctx context.Context, requested int32, processorTopology *hcsschema.ProcessorTopology) int32 {
+	// Use host processor information retrieved from HCS instead of runtime.NumCPU,
+	// GetMaximumProcessorCount or other OS level calls for two reasons.
+	// 1. Go uses GetProcessAffinityMask and falls back to GetSystemInfo both of
+	// which will not return LPs in another processor group.
+	// 2. GetMaximumProcessorCount will return all processors on the system
+	// but in configurations where the host partition doesn't see the full LP count
+	// i.e "Minroot" scenarios this won't be sufficient.
+	// (https://docs.microsoft.com/en-us/windows-server/virtualization/hyper-v/manage/manage-hyper-v-minroot-2016)
+	hostCount := int32(processorTopology.LogicalProcessorCount)
 	if requested > hostCount {
 		log.G(ctx).WithFields(logrus.Fields{
 			logfields.UVMID: uvm.id,
 			"requested":     requested,
 			"assigned":      hostCount,
 		}).Warn("Changing user requested CPUCount to current number of processors")
-		uvm.processorCount = hostCount
+		return hostCount
 	} else {
-		uvm.processorCount = requested
+		return requested
 	}
 }
 
