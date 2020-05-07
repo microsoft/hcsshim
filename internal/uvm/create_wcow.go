@@ -77,13 +77,6 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		}
 	}()
 
-	// To maintain compatability with Docker we need to automatically downgrade
-	// a user CPU count if the setting is not possible.
-	uvm.normalizeProcessorCount(ctx, opts.ProcessorCount)
-
-	// Align the requested memory size.
-	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
-
 	if len(opts.LayerFolders) < 2 {
 		return nil, fmt.Errorf("at least 2 LayerFolders must be supplied")
 	}
@@ -114,6 +107,18 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 			return nil, fmt.Errorf("failed to create scratch: %s", err)
 		}
 	}
+
+	processorTopology, err := hostProcessorInfo(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get host processor information: %s", err)
+	}
+
+	// To maintain compatability with Docker we need to automatically downgrade
+	// a user CPU count if the setting is not possible.
+	uvm.processorCount = uvm.normalizeProcessorCount(ctx, opts.ProcessorCount, processorTopology)
+
+	// Align the requested memory size.
+	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
 
 	virtualSMB := &hcsschema.VirtualSmb{
 		DirectFileMappingInMB: 1024, // Sensible default, but could be a tuning parameter somewhere

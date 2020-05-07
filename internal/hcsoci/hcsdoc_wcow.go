@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
+
+	"github.com/Microsoft/hcsshim/internal/processorinfo"
 
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
@@ -85,7 +86,11 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 			// Normalize to UVM size
 			hostCPUCount = coi.HostingSystem.ProcessorCount()
 		} else {
-			hostCPUCount = int32(runtime.NumCPU())
+			// For process isolated case the amount of logical processors reported
+			// from the HCS apis may be greater than what is available to the host in a
+			// minroot configuration (host doesn't have access to all available LPs)
+			// so prefer standard OS level calls here instead.
+			hostCPUCount = processorinfo.ProcessorCount()
 		}
 		if cpuCount > hostCPUCount {
 			l := log.G(ctx).WithField(logfields.ContainerID, coi.ID)
