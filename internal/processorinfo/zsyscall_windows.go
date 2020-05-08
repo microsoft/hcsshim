@@ -39,11 +39,11 @@ func errnoErr(e syscall.Errno) error {
 var (
 	modkernel32 = windows.NewLazySystemDLL("kernel32.dll")
 
-	procGetMaximumProcessorCount = modkernel32.NewProc("GetMaximumProcessorCount")
+	procGetActiveProcessorCount = modkernel32.NewProc("GetActiveProcessorCount")
 )
 
-func getMaximumProcessorCount(groupNumber uint16) (amount uint32) {
-	r0, _, _ := syscall.Syscall(procGetMaximumProcessorCount.Addr(), 1, uintptr(groupNumber), 0, 0)
+func getActiveProcessorCount(groupNumber uint16) (amount uint32) {
+	r0, _, _ := syscall.Syscall(procGetActiveProcessorCount.Addr(), 1, uintptr(groupNumber), 0, 0)
 	amount = uint32(r0)
 	return
 }
