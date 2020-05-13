@@ -105,6 +105,17 @@ func TestIPv6DualStackSupport(t *testing.T) {
 	}
 }
 
+func TestSetPolicySupport(t *testing.T){
+	supportedFeatures := GetSupportedFeatures()
+	err := SetPolicySupported()
+	if supportedFeatures.SetPolicy && err != nil {
+		t.Fatal(err)
+	}
+	if !supportedFeatures.SetPolicy && err == nil {
+		t.Fatal(err)
+	}
+}
+
 func TestIsFeatureSupported(t *testing.T) {
 	// HNSVersion1803 testing (single range tests)
 	if isFeatureSupported(Version{Major: 0, Minor: 0}, HNSVersion1803) {

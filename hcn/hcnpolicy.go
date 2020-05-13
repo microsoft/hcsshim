@@ -44,6 +44,7 @@ const (
 	ProviderAddress     NetworkPolicyType = "ProviderAddress"
 	RemoteSubnetRoute   NetworkPolicyType = "RemoteSubnetRoute"
 	HostRoute           NetworkPolicyType = "HostRoute"
+	SetPolicy           NetworkPolicyType = "SetPolicy"
 )
 
 // NetworkPolicy is a collection of Policy settings for a Network.
@@ -229,4 +230,19 @@ type RemoteSubnetRoutePolicySetting struct {
 	IsolationId                 uint16
 	ProviderAddress             string
 	DistributedRouterMacAddress string
+}
+
+// SetPolicyTypes associated with SetPolicy. Value is IPSET.
+type SetPolicyType string;
+
+const (
+	SetPolicyTypeIpSet SetPolicyType = "IPSET"
+)
+
+// SetPolicySetting creates IPSets on network
+type SetPolicySetting struct {
+	Id        string
+	Name      string
+	Type      SetPolicyType
+	Values    string            
 }
