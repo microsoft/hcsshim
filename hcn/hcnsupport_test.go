@@ -105,7 +105,7 @@ func TestIPv6DualStackSupport(t *testing.T) {
 	}
 }
 
-func TestSetPolicySupport(t *testing.T){
+func TestSetPolicySupport(t *testing.T) {
 	supportedFeatures := GetSupportedFeatures()
 	err := SetPolicySupported()
 	if supportedFeatures.SetPolicy && err != nil {

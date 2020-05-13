@@ -233,7 +233,7 @@ type RemoteSubnetRoutePolicySetting struct {
 }
 
 // SetPolicyTypes associated with SetPolicy. Value is IPSET.
-type SetPolicyType string;
+type SetPolicyType string
 
 const (
 	SetPolicyTypeIpSet SetPolicyType = "IPSET"
@@ -241,8 +241,8 @@ const (
 
 // SetPolicySetting creates IPSets on network
 type SetPolicySetting struct {
-	Id        string
-	Name      string
-	Type      SetPolicyType
-	Values    string            
+	Id     string
+	Name   string
+	Type   SetPolicyType
+	Values string
 }
