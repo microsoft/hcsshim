@@ -1,0 +1,131 @@
+syntax = "proto3";
+
+package ncproxygrpc;
+
+service NetworkConfigProxy {
+    rpc AddNIC(AddNICRequest) returns (AddNICResponse) {}
+    rpc DeleteNIC(DeleteNICRequest) returns (DeleteNICResponse) {}
+    rpc CreateNetwork(CreateNetworkRequest) returns (CreateNetworkResponse) {}
+    rpc CreateEndpoint(CreateEndpointRequest) returns (CreateEndpointResponse) {}
+    rpc AddEndpoint(AddEndpointRequest) returns (AddEndpointResponse) {}
+    rpc DeleteEndpoint(DeleteEndpointRequest) returns (DeleteEndpointResponse) {}
+    rpc DeleteNetwork(DeleteNetworkRequest) returns (DeleteNetworkResponse) {}
+    rpc GetEndpoint(GetEndpointRequest) returns (GetEndpointResponse) {}
+    rpc GetNetwork(GetNetworkRequest) returns (GetNetworkResponse) {}
+    rpc GetEndpoints(GetEndpointsRequest) returns (GetEndpointsResponse) {}
+    rpc GetNetworks(GetNetworksRequest) returns (GetNetworksResponse) {}
+}
+
+message AddNICRequest {
+    string container_id = 1;
+    string nic_id = 2;
+    string endpoint_name = 3;
+}
+
+message AddNICResponse {}
+
+message DeleteNICRequest {
+    string container_id = 1;
+    string nic_id = 2;
+    string endpoint_name = 3;
+}
+
+message DeleteNICResponse {}
+
+message CreateNetworkRequest {
+    enum NetworkMode
+    {
+        Transparent = 0;
+    }
+
+    enum IpamType 
+    {
+        Static = 0;
+        DHCP = 1;
+    }
+
+    string name = 1; 
+    NetworkMode mode = 2;
+    string switch_name = 3;
+    IpamType ipam_type = 4;
+    repeated string subnet_ipadress_prefix = 5;
+    string default_gateway = 6;
+}
+
+message CreateNetworkResponse{
+    string id = 1;
+}
+
+message CreateEndpointRequest {
+    enum EndpointPolicyType
+    {
+        PortName = 0;
+    }
+
+    message PortNameEndpointPolicySetting {
+        string port_name = 1;
+    }
+
+    string name = 1;
+    string macaddress = 2;
+    string ipaddress = 3;
+    string ipaddress_prefixlength = 4;
+    EndpointPolicyType policy_type = 5;
+    PortNameEndpointPolicySetting portname_policy_setting = 6;
+    string network_name = 7;
+}
+
+message CreateEndpointResponse{
+    string id = 1;
+}
+
+message AddEndpointRequest {
+    string name = 1;
+    string namespace_id = 2;
+}
+
+message AddEndpointResponse{}
+
+message DeleteEndpointRequest {
+    string name = 1;
+}
+
+message DeleteEndpointResponse{}
+
+message DeleteNetworkRequest{
+    string name = 1;
+}
+
+message DeleteNetworkResponse{}
+
+message GetEndpointRequest{
+    string name = 1;
+}
+
+message GetEndpointResponse{
+    string id = 1;
+    string name = 2;
+    string network = 3; // GUID
+    string namespace = 4; // GUID
+}
+
+message GetNetworkRequest{
+    string name = 1;
+}
+
+message GetNetworkResponse{
+    string id = 1;
+    string name = 2;
+}
+
+message GetEndpointsRequest{}
+
+message GetEndpointsResponse{
+    repeated GetEndpointResponse endpoints = 1;
+}
+
+message GetNetworksRequest{}
+
+message GetNetworksResponse{
+    repeated GetNetworkResponse networks = 1;
+}

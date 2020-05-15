@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -141,25 +140,40 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		id:     req.ID,
 		host:   parent,
 	}
-	// TOOD: JTERRY75 - There is a bug in the compartment activation for Windows
+
+	if parent != nil {
+		cid := req.ID
+		if id, ok := s.Annotations[oci.AnnotationNcproxyContainerID]; ok {
+			cid = id
+		}
+		caAddr := fmt.Sprintf(uvm.ComputeAgentAddrFmt, cid)
+		if err := parent.CreateAndAssignNetworkSetup(ctx, caAddr, cid); err != nil {
+			return nil, err
+		}
+	}
+
+	// TODO: JTERRY75 - There is a bug in the compartment activation for Windows
 	// Process isolated that requires us to create the real pause container to
 	// hold the network compartment open. This is not required for Windows
 	// Hypervisor isolated. When we have a build that supports this for Windows
 	// Process isolated make sure to move back to this model.
+
+	// For WCOW we fake out the init task since we dont need it. We only
+	// need to provision the guest network namespace if this is hypervisor
+	// isolated. Process isolated WCOW gets the namespace endpoints
+	// automatically.
+	nsid := ""
 	if isWCOW && parent != nil {
-		// For WCOW we fake out the init task since we dont need it. We only
-		// need to provision the guest network namespace if this is hypervisor
-		// isolated. Process isolated WCOW gets the namespace endpoints
-		// automatically.
-		if parent != nil {
-			if s.Windows != nil && s.Windows.Network != nil && s.Windows.Network.NetworkNamespace != "" {
-				err = hcsoci.SetupNetworkNamespace(ctx, parent, s.Windows.Network.NetworkNamespace)
-				if err != nil {
-					return nil, err
-				}
+		if s.Windows != nil && s.Windows.Network != nil {
+			nsid = s.Windows.Network.NetworkNamespace
+		}
+
+		if nsid != "" {
+			if err := parent.ConfigureNetworking(ctx, nsid); err != nil {
+				return nil, errors.Wrapf(err, "failed to setup networking for pod %q", req.ID)
 			}
 		}
-		p.sandboxTask = newWcowPodSandboxTask(ctx, events, req.ID, req.Bundle, parent)
+		p.sandboxTask = newWcowPodSandboxTask(ctx, events, req.ID, req.Bundle, parent, nsid)
 		// Publish the created event. We only do this for a fake WCOW task. A
 		// HCS Task will event itself based on actual process lifetime.
 		events.publishEvent(
@@ -193,7 +207,6 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		}
 		p.sandboxTask = lt
 	}
-
 	return &p, nil
 }
 
@@ -217,7 +230,7 @@ type pod struct {
 	// It MUST be treated as read only in the lifetime of the pod.
 	host *uvm.UtilityVM
 
-	// wcl is the worload create mutex. All calls to CreateTask must hold this
+	// wcl is the workload create mutex. All calls to CreateTask must hold this
 	// lock while the ID reservation takes place. Once the ID is held it is safe
 	// to release the lock to allow concurrent creates.
 	wcl           sync.Mutex

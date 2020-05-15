@@ -19,7 +19,8 @@ build_script:
   - go build ./cmd/tar2ext4
   - go build ./cmd/wclayer
   - go build ./cmd/device-util
-  - go build ./internal/tools/grantvmgroupaccess
+  - go build ./cmd/ncproxy
+  - go build ./internal/tools/grantvmgroupaccess 
   - go build ./internal/tools/uvmboot
   - go build ./internal/tools/zapdir
   - go test -gcflags=all=-d=checkptr -v ./... -tags admin
@@ -40,6 +41,7 @@ artifacts:
   - path: 'grantvmgroupaccess.exe'  
   - path: 'uvmboot.exe'
   - path: 'zapdir.exe'
+  - path: 'ncproxy.exe'
   - path: './test/containerd-shim-runhcs-v1.test.exe'
   - path: './test/cri-containerd.test.exe'
   - path: './test/functional.test.exe'
