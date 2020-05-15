@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+option go_package = "github.com/Microsoft/hcsshim/internal/ncproxyttrpc/;ncproxyttrpc";
+
+import weak "gogoproto/gogo.proto";
+
+service NetworkConfigProxy {
+    rpc RegisterComputeAgent(RegisterComputeAgentRequest) returns (RegisterComputeAgentResponse) {}
+    rpc ConfigureNamespace(ConfigureNamespaceRequest) returns (ConfigureNamespaceResponse) {}
+}
+
+message RegisterComputeAgentRequest {
+    string agent_address = 1;
+    string namespace_id = 2;
+}
+
+message RegisterComputeAgentResponse {}
+
+message ConfigureNamespaceRequest{
+    string namespace_id = 1;
+}
+
+message ConfigureNamespaceResponse{}

@@ -70,6 +70,12 @@ type Options struct {
 	// ExternalGuestConnection sets whether the guest RPC connection is performed
 	// internally by the OS platform or externally by this package.
 	ExternalGuestConnection bool
+
+	// NetworkConfigProxy holds the address of the network config proxy service.
+	// This != "" determines whether to start the ComputeAgent TTRPC service
+	// that receives the UVMs set of NICs from this proxy instead of enumerating
+	// the endpoints locally.
+	NetworkConfigProxy string
 }
 
 // Verifies that the final UVM options are correct and supported.

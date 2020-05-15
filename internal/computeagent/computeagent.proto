@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+option go_package = "github.com/Microsoft/hcsshim/internal/computeagent;computeagent";
+
+import weak "gogoproto/gogo.proto";
+
+service ComputeAgent{
+    rpc AddNIC(AddNICRequest) returns (AddNICResponse) {}
+}
+
+message AddNICRequest {
+    string namespace_id = 1;
+    string nic_id = 2;
+    string endpoint_id = 3;
+}
+
+message AddNICResponse {}

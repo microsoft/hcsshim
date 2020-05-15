@@ -35,6 +35,14 @@ plugins = ["grpc", "fieldpath"]
 prefixes = ["github.com/Microsoft/hcsshim/internal/shimdiag"]
 plugins = ["ttrpc"]
 
+[[overrides]]
+prefixes = ["github.com/Microsoft/hcsshim/internal/computeagent"]
+plugins = ["ttrpc"]
+
+[[overrides]]
+prefixes = ["github.com/Microsoft/hcsshim/internal/ncproxyttrpc"]
+plugins = ["ttrpc"]
+
 # Lock down runhcs config
 
 [[descriptors]]

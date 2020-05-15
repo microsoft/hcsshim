@@ -7,6 +7,12 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/hcsshim/internal/computeagent"
+	"github.com/Microsoft/hcsshim/pkg/octtrpc"
+
+	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
+
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
@@ -16,6 +22,7 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/task"
+	"github.com/containerd/ttrpc"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -141,29 +148,68 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		id:     req.ID,
 		host:   parent,
 	}
-	// TOOD: JTERRY75 - There is a bug in the compartment activation for Windows
+
+	caAddr := fmt.Sprintf(addrFmt, parent.ID())
+	if parent != nil && parent.NCProxyEnabled() {
+		// Setup compute agent service
+		ttrpcListener, err := winio.ListenPipe(caAddr, nil)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to listen on %s", caAddr)
+		}
+		s, err := ttrpc.NewServer(ttrpc.WithUnaryServerInterceptor(octtrpc.ServerInterceptor()))
+		if err != nil {
+			return nil, err
+		}
+		caService := &computeAgent{parent}
+		computeagent.RegisterComputeAgentService(s, caService)
+		serveComputeAgent(ctx, s, ttrpcListener)
+	}
+
+	// TODO: JTERRY75 - There is a bug in the compartment activation for Windows
 	// Process isolated that requires us to create the real pause container to
 	// hold the network compartment open. This is not required for Windows
 	// Hypervisor isolated. When we have a build that supports this for Windows
 	// Process isolated make sure to move back to this model.
-	if isWCOW && parent != nil {
-		// For WCOW we fake out the init task since we dont need it. We only
-		// need to provision the guest network namespace if this is hypervisor
-		// isolated. Process isolated WCOW gets the namespace endpoints
-		// automatically.
-		if parent != nil {
-			nsid := ""
-			if s.Windows != nil && s.Windows.Network != nil {
-				nsid = s.Windows.Network.NetworkNamespace
-			}
 
-			if nsid != "" {
+	// For WCOW we fake out the init task since we dont need it. We only
+	// need to provision the guest network namespace if this is hypervisor
+	// isolated. Process isolated WCOW gets the namespace endpoints
+	// automatically.
+	nsid := ""
+	if isWCOW && parent != nil {
+		if s.Windows != nil && s.Windows.Network != nil {
+			nsid = s.Windows.Network.NetworkNamespace
+		}
+
+		if nsid != "" {
+			// If client passed in ncproxy addr, check if client is not nil and setup
+			// the network using the proxy.
+			if parent.NCProxyEnabled() {
+				if err := parent.AddNetNS(ctx, nsid); err != nil {
+					return nil, err
+				}
+				client := parent.NCProxyClient()
+				registerReq := &ncproxyttrpc.RegisterComputeAgentRequest{
+					NamespaceID:  nsid,
+					AgentAddress: caAddr,
+				}
+				if _, err := client.RegisterComputeAgent(ctx, registerReq); err != nil {
+					return nil, err
+				}
+				nsReq := &ncproxyttrpc.ConfigureNamespaceRequest{
+					NamespaceID: nsid,
+				}
+				if _, err := client.ConfigureNamespace(ctx, nsReq); err != nil {
+					return nil, err
+				}
+			} else {
+				// If the pod is not using the network configuration proxy to setup the
+				// network do this manually.
 				endpoints, err := hcsoci.GetNamespaceEndpoints(ctx, nsid)
 				if err != nil {
 					return nil, err
 				}
-				err = parent.AddNetNS(ctx, nsid)
-				if err != nil {
+				if err := parent.AddNetNS(ctx, nsid); err != nil {
 					return nil, err
 				}
 				err = parent.AddEndpointsToNS(ctx, nsid, endpoints)
@@ -206,7 +252,6 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		}
 		p.sandboxTask = lt
 	}
-
 	return &p, nil
 }
 
@@ -230,7 +275,7 @@ type pod struct {
 	// It MUST be treated as read only in the lifetime of the pod.
 	host *uvm.UtilityVM
 
-	// wcl is the worload create mutex. All calls to CreateTask must hold this
+	// wcl is the workload create mutex. All calls to CreateTask must hold this
 	// lock while the ID reservation takes place. Once the ID is held it is safe
 	// to release the lock to allow concurrent creates.
 	wcl           sync.Mutex

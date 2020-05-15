@@ -10,6 +10,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
 	"github.com/Microsoft/hcsshim/internal/schema1"
 	"golang.org/x/sys/windows"
 )
@@ -29,7 +30,7 @@ type vpmemInfo struct {
 }
 
 type nicInfo struct {
-	ID       guid.GUID
+	ID       string
 	Endpoint *hns.HNSEndpoint
 }
 
@@ -110,7 +111,11 @@ type UtilityVM struct {
 	vmmemOnce sync.Once
 
 	// mountCounter is the number of mounts that have been added to the UVM
-	// This is used in generating unique mount path inside UVM for every mount.
+	// This is used in generating a unique mount path inside the UVM for every mount.
 	// Access to this variable should be done atomically.
 	mountCounter uint64
+
+	// Network config proxy client. If nil then this wasn't requested and the
+	// uvms network will be configured locally.
+	ncProxyClient ncproxyttrpc.NetworkConfigProxyService
 }

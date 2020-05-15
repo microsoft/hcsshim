@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+option go_package = "github.com/Microsoft/hcsshim/internal/computeagent;computeagent";
+
+import weak "gogoproto/gogo.proto";
+
+service NetworkConfigAgent {
+    rpc ConnectNamespaceToNetwork(ConnectNamespaceToNetworkRequest) returns (ConnectNamespaceToNetworkResponse) {}
+}
+
+message ConnectNamespaceToNetworkRequest{
+    string namespace_id = 1;
+    string network_id = 2;
+}
+
+message ConnectNamespaceToNetworkResponse{}

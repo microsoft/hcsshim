@@ -63,6 +63,10 @@ message Options {
 	// GPUVHDPath is the path to the gpu vhd to add to the uvm
 	// when a container requests a gpu
 	string GPUVHDPath = 10; 
+
+	//NCProxyAddr is the address of the network configuration proxy service. If omitted 
+	// the network is setup locally. 
+	string NCProxyAddr = 11; 
 }
 
 // ProcessDetails contains additional information about a process. This is the additional
