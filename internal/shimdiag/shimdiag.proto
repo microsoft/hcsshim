@@ -8,6 +8,7 @@ import weak "gogoproto/gogo.proto";
 service ShimDiag {
     rpc DiagExecInHost(ExecProcessRequest) returns (ExecProcessResponse);
     rpc DiagStacks(StacksRequest) returns (StacksResponse);
+    rpc DiagShare(ShareRequest) returns (ShareResponse);
 }
 
 message ExecProcessRequest {
@@ -29,4 +30,13 @@ message StacksRequest {
 message StacksResponse {
     string stacks = 1;
     string guest_stacks =2; 
+}
+
+message ShareRequest {
+    string host_path = 1;
+    string uvm_path = 2;
+    bool read_only = 3;
+}
+
+message ShareResponse {
 }

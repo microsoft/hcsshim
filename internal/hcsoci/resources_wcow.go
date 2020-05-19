@@ -53,11 +53,7 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 		if err != nil {
 			return fmt.Errorf("failed to mount container storage: %s", err)
 		}
-		if coi.HostingSystem == nil {
-			coi.Spec.Root.Path = containerRootPath // Argon v1 or v2
-		} else {
-			coi.Spec.Root.Path = containerRootPath // v2 Xenon WCOW
-		}
+		coi.Spec.Root.Path = containerRootPath
 		layers := &ImageLayers{
 			vm:                 coi.HostingSystem,
 			containerRootInUVM: r.containerRootInUVM,

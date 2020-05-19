@@ -287,6 +287,25 @@ func (s *service) DiagExecInHost(ctx context.Context, req *shimdiag.ExecProcessR
 	return r, errdefs.ToGRPC(e)
 }
 
+func (s *service) DiagShare(ctx context.Context, req *shimdiag.ShareRequest) (_ *shimdiag.ShareResponse, err error) {
+	defer panicRecover()
+	ctx, span := trace.StartSpan(ctx, "DiagShare")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+
+	span.AddAttributes(
+		trace.StringAttribute("hostpath", req.HostPath),
+		trace.StringAttribute("uvmpath", req.UvmPath),
+		trace.BoolAttribute("readonly", req.ReadOnly))
+
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
+
+	r, e := s.diagShareInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
+}
+
 func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ *google_protobuf1.Empty, err error) {
 	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "ResizePty")
