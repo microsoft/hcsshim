@@ -80,6 +80,10 @@ type shimTask interface {
 	//
 	// If the host is not hypervisor isolated returns `""`.
 	DumpGuestStacks(ctx context.Context) string
+	// Share shares a directory/file into the host UVM.
+	//
+	// If the host is not hypervisor isolated returns error.
+	Share(ctx context.Context, req *shimdiag.ShareRequest) error
 	// Stats returns various metrics for the task.
 	//
 	// If the host is hypervisor isolated and this task owns the host additional

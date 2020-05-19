@@ -91,6 +91,10 @@ func (tst *testShimTask) DumpGuestStacks(ctx context.Context) string {
 	return ""
 }
 
+func (tst *testShimTask) Share(ctx context.Context, req *shimdiag.ShareRequest) error {
+	return errors.New("not implemented")
+}
+
 func (tst *testShimTask) Stats(ctx context.Context) (*stats.Statistics, error) {
 	if tst.isWCOW {
 		return getWCOWTestStats(), nil

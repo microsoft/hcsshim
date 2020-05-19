@@ -596,6 +596,31 @@ func (ht *hcsTask) DumpGuestStacks(ctx context.Context) string {
 	return ""
 }
 
+func (ht *hcsTask) Share(ctx context.Context, req *shimdiag.ShareRequest) error {
+	if ht.host == nil {
+		return errors.New("task is not isolated")
+	}
+	// For hyper-v isolated WCOW the task used isn't the standard hcsTask so we
+	// only have to deal with the LCOW case here.
+	st, err := os.Stat(req.HostPath)
+	if err != nil {
+		return fmt.Errorf("could not open '%s' path on host: %s", req.HostPath, err)
+	}
+	var (
+		hostPath       string = req.HostPath
+		restrictAccess bool
+		fileName       string
+		allowedNames   []string
+	)
+	if !st.IsDir() {
+		hostPath, fileName = filepath.Split(hostPath)
+		allowedNames = append(allowedNames, fileName)
+		restrictAccess = true
+	}
+	_, err = ht.host.AddPlan9(ctx, hostPath, req.UvmPath, req.ReadOnly, restrictAccess, allowedNames)
+	return err
+}
+
 func hcsPropertiesToWindowsStats(props *hcsschema.Properties) *stats.Statistics_Windows {
 	wcs := &stats.Statistics_Windows{Windows: &stats.WindowsContainerStatistics{}}
 	if props.Statistics != nil {

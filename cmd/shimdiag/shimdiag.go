@@ -26,6 +26,7 @@ func main() {
 		listCommand,
 		execCommand,
 		stacksCommand,
+		shareCommand,
 	}
 	if err := app.Run(os.Args); err != nil {
 		fmt.Fprintln(os.Stderr, err)

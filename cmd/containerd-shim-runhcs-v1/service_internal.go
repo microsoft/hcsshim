@@ -336,6 +336,17 @@ func (s *service) diagExecInHostInternal(ctx context.Context, req *shimdiag.Exec
 	return &shimdiag.ExecProcessResponse{ExitCode: int32(ec)}, nil
 }
 
+func (s *service) diagShareInternal(ctx context.Context, req *shimdiag.ShareRequest) (*shimdiag.ShareResponse, error) {
+	t, err := s.getTask(s.tid)
+	if err != nil {
+		return nil, err
+	}
+	if err := t.Share(ctx, req); err != nil {
+		return nil, err
+	}
+	return &shimdiag.ShareResponse{}, nil
+}
+
 func (s *service) resizePtyInternal(ctx context.Context, req *task.ResizePtyRequest) (*google_protobuf1.Empty, error) {
 	t, err := s.getTask(req.ID)
 	if err != nil {
