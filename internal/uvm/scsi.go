@@ -2,7 +2,6 @@ package uvm
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -111,22 +110,6 @@ func (sm *SCSIMount) Clone(ctx context.Context, vm *UtilityVM, cd *CloneData) (i
 	vm.scsiLocations[sm.Controller][sm.LUN] = &clonedScsiMount
 
 	return &clonedScsiMount, nil
-}
-
-func (sm *SCSIMount) GobEncode() ([]byte, error) {
-	ret, err := json.Marshal(sm)
-	if err != nil {
-		return nil, fmt.Errorf("Error while serializing VSMB share: %s", err)
-	}
-	return ret, nil
-}
-
-func (sm *SCSIMount) GobDecode(data []byte) error {
-	err := json.Unmarshal(data, &sm)
-	if err != nil {
-		return fmt.Errorf("Error while Deserializing VSMB share: %s", err)
-	}
-	return nil
 }
 
 var _ = (Cloneable)(&SCSIMount{})

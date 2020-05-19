@@ -13,28 +13,28 @@ const (
 	hcsSaveOptions = "{\"SaveType\": \"AsTemplate\"}"
 )
 
-// Cloneable is a generic interface for cloning a specific resource. Not all resources can be
-// cloned and so all resources might not implement this interface. This interface is mainly
-// used during late cloning process to clone the resources associated with the UVM and the
-// container. For some resources (like scratch VHDs of the UVM & container) cloning means
-// actually creating a copy of that resource while for some resources it simply means
-// adding that resources to the cloned VM without copying. The Clone function of that resource
-// will deal with these details.
-// Any resource that can be cloned must also implement the GobEncoder and GobDecoder interface. This is
-// required so that we can save the information about these resources during templating process and then
-// later on use that same information to clone.
+// Cloneable is a generic interface for cloning a specific resource. Not all resources can
+// be cloned and so all resources might not implement this interface. This interface is
+// mainly used during late cloning process to clone the resources associated with the UVM
+// and the container. For some resources (like scratch VHDs of the UVM & container)
+// cloning means actually creating a copy of that resource while for some resources it
+// simply means adding that resources to the cloned VM without copying. The Clone function
+// of that resource will deal with these details.
+// Any resource that can be cloned must also implement the GobEncoder and GobDecoder
+// interface. This is required so that we can save the information about these resources
+// during templating process and then later on use that same information to clone.
 type Cloneable interface {
 	// Clone function creates a clone of the resource on the UVM `vm` and returns a
 	// pointer to the struct that represents the clone.
-	// `cd` parameter can be used to pass any other
-	// data that is required during the cloning process of that resource (for example,
-	// when cloning SCSI Mounts we might need scratchFolder).
-	// Clone function should be called on a valid struct (Mostly on the struct
-	// which is deserialized, and so Clone function will only depend on the fields that
-	// are exported in the struct).
-	// The implementation of the clone function should never read any data from the `vm`
-	// struct, it can add new fields to the vm struct but since the vm struct isn't
-	// fully ready at this point it shouldn't be used to read any data.
+	// `cd` parameter can be used to pass any other data that is required during the
+	// cloning process of that resource (for example, when cloning SCSI Mounts we
+	// might need scratchFolder).
+	// Clone function should be called on a valid struct (Mostly on the struct which
+	// is deserialized, and so Clone function will only depend on the fields that are
+	// exported in the struct).
+	// The implementation of the clone function should never read any data from the
+	// `vm` struct, it can add new fields to the vm struct but since the vm struct
+	// isn't fully ready at this point it shouldn't be used to read any data.
 	Clone(ctx context.Context, vm *UtilityVM, cd *CloneData) (interface{}, error)
 }
 

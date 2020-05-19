@@ -2,7 +2,6 @@ package uvm
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -61,22 +60,6 @@ func (vsmb *VSMBShare) Clone(ctx context.Context, vm *UtilityVM, cd *CloneData) 
 	vm.vsmbDirShares[vsmb.HostPath] = &clonedVSMB
 
 	return &clonedVSMB, nil
-}
-
-func (vsmb *VSMBShare) GobEncode() ([]byte, error) {
-	ret, err := json.Marshal(vsmb)
-	if err != nil {
-		return nil, fmt.Errorf("Error while serializing VSMB share: %s", err)
-	}
-	return ret, nil
-}
-
-func (vsmb *VSMBShare) GobDecode(data []byte) error {
-	err := json.Unmarshal(data, &vsmb)
-	if err != nil {
-		return fmt.Errorf("Error while Deserializing VSMB share: %s", err)
-	}
-	return nil
 }
 
 // findVSMBShare finds a share by `hostPath`. If not found returns `ErrNotAttached`.

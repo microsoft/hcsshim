@@ -383,7 +383,7 @@ func TestWCOWArgonShim(t *testing.T) {
 	}()
 
 	// This is a cheat but stops us re-writing exactly the same code just for test
-	argonShimLocalMountPath, err := hcsoci.MountContainerLayers(context.Background(), append(imageLayers, argonShimScratchDir), "", nil)
+	argonShimLocalMountPath, err := hcsoci.MountContainerLayers(context.Background(), append(imageLayers, argonShimScratchDir), "", nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
