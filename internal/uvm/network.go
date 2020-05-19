@@ -56,13 +56,16 @@ func (endpoints *NetworkEndpoints) Release(ctx context.Context) error {
 	return nil
 }
 
-// AddNetNS adds network namespace inside the guest.
+// AddNetNSRAW adds network namespace inside the guest without actually querying for the
+// namespace by its ID. It uses the given namespace struct as it is in the guest request.
+// This function is mostly used when we need to override the values inside the namespace
+// struct returned by the GetNamespaceByID. For most uses cases AddNetNS is more appropriate.
 //
 // If a namespace with `id` already exists returns `ErrNetNSAlreadyAttached`.
-func (uvm *UtilityVM) AddNetNS(ctx context.Context, id string) error {
+func (uvm *UtilityVM) AddNetNSRAW(ctx context.Context, hcnNamespace *hcn.HostComputeNamespace) error {
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
-	if _, ok := uvm.namespaces[id]; ok {
+	if _, ok := uvm.namespaces[hcnNamespace.Id]; ok {
 		return ErrNetNSAlreadyAttached
 	}
 
@@ -70,10 +73,6 @@ func (uvm *UtilityVM) AddNetNS(ctx context.Context, id string) error {
 		// Add a Guest Network namespace. On LCOW we add the adapters
 		// dynamically.
 		if uvm.operatingSystem == "windows" {
-			hcnNamespace, err := hcn.GetNamespaceByID(id)
-			if err != nil {
-				return err
-			}
 			guestNamespace := hcsschema.ModifySettingRequest{
 				GuestRequest: guestrequest.GuestRequest{
 					ResourceType: guestrequest.ResourceTypeNetworkNamespace,
@@ -90,9 +89,25 @@ func (uvm *UtilityVM) AddNetNS(ctx context.Context, id string) error {
 	if uvm.namespaces == nil {
 		uvm.namespaces = make(map[string]*namespaceInfo)
 	}
-	uvm.namespaces[id] = &namespaceInfo{
+	uvm.namespaces[hcnNamespace.Id] = &namespaceInfo{
 		nics: make(map[string]*nicInfo),
 	}
+	return nil
+}
+
+// AddNetNS adds network namespace inside the guest.
+//
+// If a namespace with `id` already exists returns `ErrNetNSAlreadyAttached`.
+func (uvm *UtilityVM) AddNetNS(ctx context.Context, id string) error {
+	hcnNamespace, err := hcn.GetNamespaceByID(id)
+	if err != nil {
+		return err
+	}
+
+	if err = uvm.AddNetNSRAW(ctx, hcnNamespace); err != nil {
+		return err
+	}
+
 	return nil
 }
 

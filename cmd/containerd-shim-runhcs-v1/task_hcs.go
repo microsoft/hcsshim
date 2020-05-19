@@ -131,6 +131,7 @@ func newHcsTask(
 		s.Windows.Network != nil {
 		netNS = s.Windows.Network.NetworkNamespace
 	}
+
 	opts := hcsoci.CreateOptions{
 		ID:               req.ID,
 		Owner:            owner,
@@ -138,6 +139,7 @@ func newHcsTask(
 		HostingSystem:    parent,
 		NetworkNamespace: netNS,
 	}
+
 	system, resources, err := hcsoci.CreateContainer(ctx, &opts)
 	if err != nil {
 		return nil, err
@@ -154,36 +156,25 @@ func newHcsTask(
 		closed:   make(chan struct{}),
 	}
 
-	if saveAsTemplate {
-		ht.init = newTemplateExec(
-			ctx,
-			events,
-			req.ID,
-			parent,
-			system,
-			req.ID,
-			req.Bundle,
-			ht.isWCOW,
-			s.Process,
-			io)
-	} else {
-		ht.init = newHcsExec(
-			ctx,
-			events,
-			req.ID,
-			parent,
-			system,
-			req.ID,
-			req.Bundle,
-			ht.isWCOW,
-			s.Process,
-			io)
-	}
+	ht.init = newHcsExec(
+		ctx,
+		events,
+		req.ID,
+		parent,
+		system,
+		req.ID,
+		req.Bundle,
+		ht.isWCOW,
+		s.Process,
+		io,
+		saveAsTemplate)
 
 	// In the normal case the `Signal` call from the caller killed this task's
-	// init process. Or the init process can "appear" to have exited because the
-	// parent VM was saved as a template.
-	go ht.waitInitExit()
+	// init process. Or the init process ran to completion (this will mostly
+	// happen when we are creating a tempate and want to wait for init process
+	// to finish before we save the template. In such cases do not tear down the
+	// container after init exits - because we need the container in the template
+	go ht.waitInitExit(!saveAsTemplate)
 
 	if parent != nil {
 		// We have a parent UVM. Listen for its exit and forcibly close this
@@ -300,7 +291,7 @@ func newClonedHcsTask(
 	}
 	// In the normal case the `Signal` call from the caller killed this task's
 	// init process.
-	go ht.waitInitExit()
+	go ht.waitInitExit(true)
 
 	// Publish the created event
 	ht.events.publishEvent(
@@ -409,7 +400,7 @@ func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest,
 	if err != nil {
 		return err
 	}
-	he := newHcsExec(ctx, ht.events, ht.id, ht.host, ht.c, req.ExecID, ht.init.Status().Bundle, ht.isWCOW, spec, io)
+	he := newHcsExec(ctx, ht.events, ht.id, ht.host, ht.c, req.ExecID, ht.init.Status().Bundle, ht.isWCOW, spec, io, false)
 	ht.execs.Store(req.ExecID, he)
 
 	// Publish the created event
@@ -568,7 +559,7 @@ func (ht *hcsTask) Wait() *task.StateResponse {
 	return ht.init.Wait()
 }
 
-func (ht *hcsTask) waitInitExit() {
+func (ht *hcsTask) waitInitExit(destroyContainer bool) {
 	ctx, span := trace.StartSpan(context.Background(), "hcsTask::waitInitExit")
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("tid", ht.id))
@@ -576,8 +567,13 @@ func (ht *hcsTask) waitInitExit() {
 	// Wait for it to exit on its own
 	ht.init.Wait()
 
-	// Close the host and event the exit
-	ht.close(ctx)
+	if destroyContainer {
+		// Close the host and event the exit
+		ht.close(ctx)
+	} else {
+		// Only close the container without destroying it.
+		ht.closeHost(ctx)
+	}
 }
 
 // waitForHostExit waits for the host virtual machine to exit. Once exited

@@ -46,7 +46,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 	}
 	if coi.Spec.Windows != nil && len(coi.Spec.Windows.LayerFolders) > 0 {
 		log.G(ctx).Debug("hcsshim::allocateLinuxResources mounting storage")
-		rootPath, err := MountContainerLayers(ctx, coi.Spec.Windows.LayerFolders, r.containerRootInUVM, coi.HostingSystem)
+		rootPath, err := MountContainerLayers(ctx, coi.Spec.Windows.LayerFolders, r.containerRootInUVM, coi.HostingSystem, false)
 		if err != nil {
 			return fmt.Errorf("failed to mount container storage: %s", err)
 		}

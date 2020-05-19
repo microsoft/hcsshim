@@ -53,8 +53,6 @@ type UVMTemplateConfig struct {
 	UVMID string
 	// Array of all resources that will be required while making a clone from this template
 	Resources []Cloneable
-	// IDs of the network namespaces attached to this uvm
-	NetNSIDs []string
 }
 
 func (uvm *UtilityVM) GenerateTemplateConfig() *UVMTemplateConfig {
@@ -81,10 +79,6 @@ func (uvm *UtilityVM) GenerateTemplateConfig() *UVMTemplateConfig {
 				utc.Resources = append(utc.Resources, scsiMount)
 			}
 		}
-	}
-
-	for nsid := range uvm.namespaces {
-		utc.NetNSIDs = append(utc.NetNSIDs, nsid)
 	}
 
 	return &utc

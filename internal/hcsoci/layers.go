@@ -51,7 +51,7 @@ func (layers *ImageLayers) Release(ctx context.Context, all bool) error {
 //                    of the layers are the VSMB locations where the read-only layers are mounted.
 //
 // TODO dcantah: Keep better track of the layers that are added, don't simply discard the SCSI, VSMB, etc. resource types gotten inside.
-func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot string, uvm *uvmpkg.UtilityVM) (_ string, err error) {
+func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot string, uvm *uvmpkg.UtilityVM, saveCapable bool) (_ string, err error) {
 	log.G(ctx).WithField("layerFolders", layerFolders).Debug("hcsshim::mountContainerLayers")
 
 	if uvm == nil {
@@ -120,12 +120,18 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 		if uvm.OS() == "windows" {
 			options := &hcsschema.VirtualSmbShareOptions{
 				ReadOnly:            true,
-				NoOplocks:           true,
 				TakeBackupPrivilege: true,
 				CacheIo:             true,
 				ShareRead:           true,
 				PseudoDirnotify:     true,
 				NoLocks:             true,
+			}
+			if saveCapable {
+				// TODO(ambarve): If some other option disables
+				// NoDirectMap while saveastemplate is true then we
+				// should fail.
+				options.NoDirectmap = true
+				options.PseudoOplocks = true
 			}
 			if _, err := uvm.AddVSMB(ctx, layerPath, "", options); err != nil {
 				return "", fmt.Errorf("failed to add VSMB layer: %s", err)

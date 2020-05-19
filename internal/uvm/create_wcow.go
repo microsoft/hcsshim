@@ -9,6 +9,7 @@ import (
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/gcs"
+	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/mergemaps"
@@ -18,10 +19,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
 	"github.com/Microsoft/hcsshim/internal/wcow"
 	"go.opencensus.io/trace"
-)
-
-const (
-	PROTECTED_DACL_ALLOW_ALL_TO_SHIM_SDDL_FMT = "D:P(A;;FA;;;%s)"
 )
 
 // OptionsWCOW are the set of options passed to CreateWCOW() to create a utility vm.
@@ -240,8 +237,10 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	// Add appropriate VSMB share options if this UVM needs to be saved as a template
 	if opts.SaveAsTemplateCapable {
 		for _, share := range doc.VirtualMachine.Devices.VirtualSmb.Shares {
+			share.Options.PseudoOplocks = true
 			share.Options.PseudoDirnotify = true
 			share.Options.NoLocks = true
+			share.Options.NoDirectmap = true
 		}
 	}
 
@@ -338,13 +337,12 @@ func CloneWCOW(ctx context.Context, opts *OptionsWCOW, utc *UVMTemplateConfig) (
 		}
 	}
 
-	for _, nsid := range utc.NetNSIDs {
-		if uvm.namespaces == nil {
-			uvm.namespaces = make(map[string]*namespaceInfo)
-		}
-		uvm.namespaces[nsid] = &namespaceInfo{
-			nics: make(map[string]*nicInfo),
-		}
+	// we add default clone namespace for each clone. Include it here.
+	if uvm.namespaces == nil {
+		uvm.namespaces = make(map[string]*namespaceInfo)
+	}
+	uvm.namespaces[hns.CLONING_DEFAULT_NETWORK_NAMESPACE_ID] = &namespaceInfo{
+		nics: make(map[string]*nicInfo),
 	}
 
 	fullDoc, err := mergemaps.MergeJSON(doc, ([]byte)(opts.AdditionHCSDocumentJSON))

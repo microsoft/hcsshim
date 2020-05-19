@@ -49,7 +49,8 @@ func newHcsExec(
 	id, bundle string,
 	isWCOW bool,
 	spec *specs.Process,
-	io upstreamIO) shimExec {
+	io upstreamIO,
+	saveAsTemplate bool) shimExec {
 	log.G(ctx).WithFields(logrus.Fields{
 		"tid":    tid,
 		"eid":    id, // Init exec ID is always same as Task ID
@@ -57,20 +58,26 @@ func newHcsExec(
 		"wcow":   isWCOW,
 	}).Debug("newHcsExec")
 
+	if tid != id && saveAsTemplate {
+		log.G(ctx).Error("newHcsExec failure: saveAsTemplate can not be true when HcsExec is not the init process")
+		return nil
+	}
+
 	he := &hcsExec{
-		events:      events,
-		tid:         tid,
-		host:        host,
-		c:           c,
-		id:          id,
-		bundle:      bundle,
-		isWCOW:      isWCOW,
-		spec:        spec,
-		io:          io,
-		processDone: make(chan struct{}),
-		state:       shimExecStateCreated,
-		exitStatus:  255, // By design for non-exited process status.
-		exited:      make(chan struct{}),
+		events:         events,
+		tid:            tid,
+		host:           host,
+		c:              c,
+		id:             id,
+		bundle:         bundle,
+		isWCOW:         isWCOW,
+		spec:           spec,
+		io:             io,
+		processDone:    make(chan struct{}),
+		state:          shimExecStateCreated,
+		exitStatus:     255, // By design for non-exited process status.
+		exited:         make(chan struct{}),
+		saveAsTemplate: saveAsTemplate,
 	}
 	go he.waitForContainerExit()
 	return he
@@ -134,6 +141,10 @@ type hcsExec struct {
 	// exited is a wait block which waits async for the process to exit.
 	exited     chan struct{}
 	exitedOnce sync.Once
+
+	// if saveAsTemplate is true then the container for which this is an init exec
+	// will be saved as a template as soon as this exec exits.
+	saveAsTemplate bool
 }
 
 func (he *hcsExec) ID() string {
@@ -467,6 +478,13 @@ func (he *hcsExec) waitForExit() {
 	he.exitedOnce.Do(func() {
 		close(he.exited)
 	})
+
+	if he.saveAsTemplate {
+		// Now save this host as at template
+		if err = SaveAsTemplate(ctx, he.host); err != nil {
+			log.G(ctx).WithError(err).Error("failed to save as template")
+		}
+	}
 }
 
 // waitForContainerExit waits for `he.c` to exit. Depending on the exec's state

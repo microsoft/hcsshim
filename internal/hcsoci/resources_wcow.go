@@ -50,7 +50,7 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 
 	if coi.Spec.Root.Path == "" && (coi.HostingSystem != nil || coi.Spec.Windows.HyperV == nil) {
 		log.G(ctx).Debug("hcsshim::allocateWindowsResources mounting storage")
-		containerRootPath, err := MountContainerLayers(ctx, coi.Spec.Windows.LayerFolders, r.containerRootInUVM, coi.HostingSystem)
+		containerRootPath, err := MountContainerLayers(ctx, coi.Spec.Windows.LayerFolders, r.containerRootInUVM, coi.HostingSystem, coi.saveAsTemplate)
 		if err != nil {
 			return fmt.Errorf("failed to mount container storage: %s", err)
 		}
@@ -141,7 +141,8 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *Resources) 
 					if coi.saveAsTemplate {
 						options.PseudoDirnotify = true
 						options.NoLocks = true
-						options.NoOplocks = true
+						options.PseudoOplocks = true
+						options.NoDirectmap = true
 					}
 					share, err := coi.HostingSystem.AddVSMB(ctx, mount.Source, "", options)
 					if err != nil {
