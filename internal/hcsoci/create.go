@@ -283,13 +283,10 @@ func CloneContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.Co
 		return nil, resources, err
 	}
 
-	// TODO(ambarve): everything that is added to the container during the createContainer
-	// request (via the gcsDocument) must be hot added here.
-	// 1. All types of mounts - scsi, physical disk, vsmb, pipes
-	// 2. Networking
-	// 3. GMSA credentials?
-	// Add the mounts as mapped directories or mapped pipes
-	// In case of cloned container we must add them as a modify request.
+	// everything that is added to the container during the createContainer request
+	// (via the gcsDocument) must be hot added here.  Add the mounts as mapped
+	// directories or mapped pipes. In case of cloned container we must add them as a
+	// modify request.
 	_, _, mdsv2, mpsv2, err := createMountsConfig(ctx, coi)
 	if err != nil {
 		return nil, resources, err
@@ -300,9 +297,9 @@ func CloneContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.Co
 		return nil, resources, err
 	}
 
-	// send modify requests for mounts one by one
-	// TODO(ambarve) : Find out if there is a way to send
-	// request for all the mounts at the same time to save time
+	// send modify requests for mounts one by one.
+	// TODO(ambarve) : Find out if there is a way to send request for all the mounts
+	// at the same time to save time
 	for _, md := range mdsv2 {
 		requestDocument := &hcsschema.ModifySettingRequest{
 			RequestType:  requesttype.Add,

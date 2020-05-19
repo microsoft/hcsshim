@@ -22,6 +22,16 @@ type PersistedUVMConfig struct {
 	Stored bool
 }
 
+// When encoding interfaces gob requires us to register the struct types that we will be
+// using under those interfaces. This registration needs to happen on both sides i.e the
+// side which encodes the data and the side which decodes the data.
+// Go init function: https://golang.org/doc/effective_go.html#init
+func init() {
+	// Register the pointer to structs because that is what is being stored.
+	gob.Register(&uvm.VSMBShare{})
+	gob.Register(&uvm.SCSIMount{})
+}
+
 // loadPersistedConfig loads a persisted config from the registry that matches the given ID
 // If not found returns `regstate.NotFoundError`
 func loadPersistedUVMConfig(ID string) (*PersistedUVMConfig, error) {
@@ -83,19 +93,9 @@ func removePersistedUVMConfig(ID string) error {
 	return nil
 }
 
-// When encoding interfaces gob requires us to register the struct types that we will be using under those
-// interfaces. This registration needs to happen on both sides i.e the side which encodes the data and the
-// side which decodes the data.
-func gobInit() {
-	// Register the pointer to structs because that is what is being stored.
-	gob.Register(&uvm.VSMBShare{})
-	gob.Register(&uvm.SCSIMount{})
-}
-
 func encodeTemplateConfig(utc *uvm.UVMTemplateConfig) ([]byte, error) {
 	var buf bytes.Buffer
 
-	gobInit()
 	encoder := gob.NewEncoder(&buf)
 	err := encoder.Encode(utc)
 	if err != nil {
@@ -107,7 +107,6 @@ func encodeTemplateConfig(utc *uvm.UVMTemplateConfig) ([]byte, error) {
 func decodeTemplateConfig(encodedBytes []byte) (*uvm.UVMTemplateConfig, error) {
 	var utc uvm.UVMTemplateConfig
 
-	gobInit()
 	reader := bytes.NewReader(encodedBytes)
 	decoder := gob.NewDecoder(reader)
 	err := decoder.Decode(&utc)

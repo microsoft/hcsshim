@@ -119,7 +119,7 @@ func SetupNetworkNamespace(ctx context.Context, hostingSystem *uvm.UtilityVM, ns
 // will already have this namespace). We get the endpoints associated with
 // this namespace and then hot add those endpoints by changing their namespace IDs by the
 // deafult IDs.
-func SetupNetworkNamespaceForClones(ctx context.Context, hostingSystem *uvm.UtilityVM, nsid string, isTemplate bool) (err error) {
+func SetupNetworkNamespaceForClones(ctx context.Context, hostingSystem *uvm.UtilityVM, nsid string, isTemplate bool) error {
 	endpoints, err := GetNamespaceEndpoints(ctx, nsid)
 	if err != nil {
 		return err
@@ -133,8 +133,7 @@ func SetupNetworkNamespaceForClones(ctx context.Context, hostingSystem *uvm.Util
 		// override the namespce ID with the default ID
 		hcnNamespace.Id = hns.CLONING_DEFAULT_NETWORK_NAMESPACE_ID
 
-		err = hostingSystem.AddNetNSRAW(ctx, hcnNamespace)
-		if err != nil {
+		if err = hostingSystem.AddNetNSRAW(ctx, hcnNamespace); err != nil {
 			return err
 		}
 	}
@@ -146,10 +145,11 @@ func SetupNetworkNamespaceForClones(ctx context.Context, hostingSystem *uvm.Util
 		}
 	}
 
-	err = hostingSystem.AddEndpointsToNS(ctx, hns.CLONING_DEFAULT_NETWORK_NAMESPACE_ID, endpoints)
-	if err != nil {
+	if err = hostingSystem.AddEndpointsToNS(ctx, hns.CLONING_DEFAULT_NETWORK_NAMESPACE_ID, endpoints); err != nil {
 		// Best effort clean up the NS
-		hostingSystem.RemoveNetNS(ctx, nsid)
+		if removeErr := hostingSystem.RemoveNetNS(ctx, nsid); removeErr != nil {
+			log.G(ctx).Warn(removeErr)
+		}
 		return err
 	}
 	return nil
