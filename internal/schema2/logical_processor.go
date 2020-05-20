@@ -14,5 +14,5 @@ type LogicalProcessor struct {
 	NodeNumber  uint8  `json:"NodeNumber, omitempty"`
 	PackageId   uint32 `json:"PackageId, omitempty"`
 	CoreId      uint32 `json:"CoreId, omitempty"`
-	RootVpIndex uint32 `json:"RootVpIndex, omitempty"`
+	RootVpIndex int32  `json:"RootVpIndex, omitempty"`
 }
