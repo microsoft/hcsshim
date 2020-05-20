@@ -116,9 +116,6 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		VPCIEnabled:           false,
 	}
 
-	// LCOW has more reliable behavior with the external bridge.
-	opts.Options.ExternalGuestConnection = true
-
 	if _, err := os.Stat(filepath.Join(opts.BootFilesPath, VhdFile)); err == nil {
 		// We have a rootfs.vhd in the boot files path. Use it over an initrd.img
 		opts.RootFSFile = VhdFile
@@ -381,7 +378,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 
 	err = uvm.create(ctx, fullDoc)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error while creating the compute system: %s", err)
 	}
 
 	// Cerate a socket to inject entropy during boot.
@@ -402,6 +399,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	}
 
 	if opts.UseGuestConnection && opts.ExternalGuestConnection {
+		log.G(ctx).WithField("vmID", uvm.runtimeID).Debug("Using external GCS bridge")
 		l, err := uvm.listenVsock(gcs.LinuxGcsVsockPort)
 		if err != nil {
 			return nil, err

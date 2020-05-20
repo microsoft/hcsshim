@@ -221,10 +221,11 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 
 	err = uvm.create(ctx, fullDoc)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error while creating the compute system: %s", err)
 	}
 
 	if opts.ExternalGuestConnection {
+		log.G(ctx).WithField("vmID", uvm.runtimeID).Debug("Using external GCS bridge")
 		l, err := winio.ListenHvsock(&winio.HvsockAddr{
 			VMID:      uvm.runtimeID,
 			ServiceID: gcs.WindowsGcsHvsockServiceID,

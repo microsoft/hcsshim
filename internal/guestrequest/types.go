@@ -77,6 +77,7 @@ const (
 	ResourceTypeCombinedLayers    ResourceType = "CombinedLayers"
 	ResourceTypeVPMemDevice       ResourceType = "VPMemDevice"
 	ResourceTypeVPCIDevice        ResourceType = "VPCIDevice"
+	ResourceTypeHvSocket          ResourceType = "HvSocket"
 )
 
 // GuestRequest is for modify commands passed to the guest.

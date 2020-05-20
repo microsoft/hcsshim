@@ -124,6 +124,10 @@ const (
 	annotationStorageQoSBandwidthMaximum = "io.microsoft.virtualmachine.storageqos.bandwidthmaximum"
 	annotationStorageQoSIopsMaximum      = "io.microsoft.virtualmachine.storageqos.iopsmaximum"
 	annotationFullyPhysicallyBacked      = "io.microsoft.virtualmachine.fullyphysicallybacked"
+	// A boolean annotation to control whether to use an external bridge or the
+	// HCS-GCS bridge. Default value is true which means external bridge will be used
+	// by default.
+	annotationUseExternalGCSBridge = "io.microsoft.virtualmachine.useexternalgcsbridge"
 )
 
 // parseAnnotationsBool searches `a` for `key` and if found verifies that the
@@ -379,6 +383,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotationStorageQoSIopsMaximum, lopts.StorageQoSIopsMaximum)
 		lopts.VPCIEnabled = parseAnnotationsBool(ctx, s.Annotations, annotationVPCIEnabled, lopts.VPCIEnabled)
 		lopts.BootFilesPath = parseAnnotationsString(s.Annotations, annotationBootFilesRootPath, lopts.BootFilesPath)
+		lopts.ExternalGuestConnection = parseAnnotationsBool(ctx, s.Annotations, annotationUseExternalGCSBridge, lopts.ExternalGuestConnection)
 		handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
 		handleAnnotationKernelDirectBoot(ctx, s.Annotations, lopts)
 
@@ -399,6 +404,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		wopts.ProcessorWeight = ParseAnnotationsCPUWeight(ctx, s, annotationProcessorWeight, wopts.ProcessorWeight)
 		wopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(ctx, s, annotationStorageQoSBandwidthMaximum, wopts.StorageQoSBandwidthMaximum)
 		wopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotationStorageQoSIopsMaximum, wopts.StorageQoSIopsMaximum)
+		wopts.ExternalGuestConnection = parseAnnotationsBool(ctx, s.Annotations, annotationUseExternalGCSBridge, wopts.ExternalGuestConnection)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, wopts)
 		return wopts, nil
 	}

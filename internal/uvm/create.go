@@ -119,13 +119,14 @@ func verifyOptions(ctx context.Context, options interface{}) error {
 // If `owner` is empty it will be set to the calling executables name.
 func newDefaultOptions(id, owner string) *Options {
 	opts := &Options{
-		ID:                    id,
-		Owner:                 owner,
-		MemorySizeInMB:        1024,
-		AllowOvercommit:       true,
-		EnableDeferredCommit:  false,
-		ProcessorCount:        defaultProcessorCount(),
-		FullyPhysicallyBacked: false,
+		ID:                      id,
+		Owner:                   owner,
+		MemorySizeInMB:          1024,
+		AllowOvercommit:         true,
+		EnableDeferredCommit:    false,
+		ProcessorCount:          defaultProcessorCount(),
+		ExternalGuestConnection: true,
+		FullyPhysicallyBacked:   false,
 	}
 
 	if opts.Owner == "" {
