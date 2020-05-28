@@ -55,17 +55,18 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) ([]sche
 			mdv2 := hcsschema.MappedDirectory{ContainerPath: mount.Destination, ReadOnly: readOnly}
 			if coi.HostingSystem == nil {
 				mdv2.HostPath = mount.Source
-			} else if mount.Type == "physical-disk" || mount.Type == "virtual-disk" || mount.Type == "automanage-virtual-disk" {
-				// It should be a SCSI mount
-				uvmPath, err := coi.HostingSystem.GetScsiUvmPath(ctx, mount.Source)
-				if err != nil {
-					return nil, nil, nil, nil, fmt.Errorf("Error while getting SCSI UVM path for mount type: %s, hostPath: %s - %s", mount.Type, mount.Source, err)
-				}
-				mdv2.HostPath = uvmPath
 			} else {
 				uvmPath, err := coi.HostingSystem.GetVSMBUvmPath(ctx, mount.Source)
 				if err != nil {
-					return nil, nil, nil, nil, fmt.Errorf("Error while getting VSMB UVM path for mount type: %s, hostPath: %s - %s", mount.Type, mount.Source, err)
+					if err == uvm.ErrNotAttached {
+						// It could be a scsi mount.
+						uvmPath, err = coi.HostingSystem.GetScsiUvmPath(ctx, mount.Source)
+						if err != nil {
+							return nil, nil, nil, nil, err
+						}
+					} else {
+						return nil, nil, nil, nil, err
+					}
 				}
 				mdv2.HostPath = uvmPath
 			}

@@ -72,9 +72,15 @@ func (sm *SCSIMount) Clone(ctx context.Context, vm *UtilityVM, cd *CloneData) (i
 		// later on which will specify the storage path for this container.
 		// However, that storage location is not available now so we just use
 		// the storage of the uvm instead. Find a better way for handling this.
-		dir, err = ioutil.TempDir(cd.scratchFolder, fmt.Sprintf("clone-mount-%d-%d", sm.Controller, sm.LUN))
-		if err != nil {
-			return nil, fmt.Errorf("Error while creating directory for scsi mounts of clone vm: %s", err)
+
+		// For the scratch VHD of the VM clone it in the scratch folder
+		if sm.Controller == 0 && sm.LUN == 0 {
+			dir = cd.scratchFolder
+		} else {
+			dir, err = ioutil.TempDir(cd.scratchFolder, fmt.Sprintf("clone-mount-%d-%d", sm.Controller, sm.LUN))
+			if err != nil {
+				return nil, fmt.Errorf("Error while creating directory for scsi mounts of clone vm: %s", err)
+			}
 		}
 
 		// copy the VHDX
