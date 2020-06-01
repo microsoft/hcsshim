@@ -147,10 +147,7 @@ func SaveTemplateConfig(ctx context.Context, hostUVM *uvm.UtilityVM) error {
 // If there is no state associated with this ID then the function simply returns without
 // doing anything.
 func RemoveSavedTemplateConfig(ID string) error {
-	if err := removePersistedUVMConfig(ID); err != nil {
-		return err
-	}
-	return nil
+	return removePersistedUVMConfig(ID)
 }
 
 func FetchTemplateConfig(ctx context.Context, ID string) (*uvm.UVMTemplateConfig, error) {

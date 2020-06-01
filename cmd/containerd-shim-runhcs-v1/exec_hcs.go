@@ -192,7 +192,7 @@ func (he *hcsExec) Status() *task.StateResponse {
 	}
 }
 
-func (he *hcsExec) Start(ctx context.Context) (err error) {
+func (he *hcsExec) startInternal(ctx context.Context, startContainer bool) (err error) {
 	he.sl.Lock()
 	defer he.sl.Unlock()
 	if he.state != shimExecStateCreated {
@@ -203,8 +203,7 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 			he.exitFromCreatedL(ctx, 1)
 		}
 	}()
-	if he.id == he.tid {
-		// This is the init exec. We need to start the container itself
+	if startContainer {
 		err = he.c.Start(ctx)
 		if err != nil {
 			return err
@@ -266,6 +265,12 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 	// wait in the background for the exit.
 	go he.waitForExit()
 	return nil
+}
+
+func (he *hcsExec) Start(ctx context.Context) (err error) {
+	// If he.id == he.tid then this is the init exec.
+	// We need to start the container itself.
+	return he.startInternal(ctx, he.id == he.tid)
 }
 
 func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {

@@ -3,50 +3,65 @@ package main
 import (
 	"context"
 
+	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
 
-func newClonedExec(ctx context.Context, events publisher, tid, bundle string, io upstreamIO) *clonedExec {
+func newClonedExec(
+	ctx context.Context,
+	events publisher,
+	tid string,
+	host *uvm.UtilityVM,
+	c cow.Container,
+	id, bundle string,
+	isWCOW bool,
+	spec *specs.Process,
+	io upstreamIO) *clonedExec {
 	log.G(ctx).WithFields(logrus.Fields{
 		"tid":    tid,
-		"eid":    tid, // Init exec ID is always same as Task ID
+		"eid":    id, // Init exec ID is always same as Task ID
 		"bundle": bundle,
 	}).Debug("newClonedExec")
 
-	wpse := &wcowPodSandboxExec{
-		events:     events,
-		tid:        tid,
-		bundle:     bundle,
-		state:      shimExecStateCreated,
-		exitStatus: 255, // By design for non-exited process status.
-		exited:     make(chan struct{}),
+	he := &hcsExec{
+		events:         events,
+		tid:            tid,
+		host:           host,
+		c:              c,
+		id:             id,
+		bundle:         bundle,
+		isWCOW:         isWCOW,
+		spec:           spec,
+		io:             io,
+		processDone:    make(chan struct{}),
+		state:          shimExecStateCreated,
+		exitStatus:     255, // By design for non-exited process status.
+		exited:         make(chan struct{}),
+		saveAsTemplate: false,
 	}
 
 	ce := &clonedExec{
-		wpse,
-		io,
+		he,
 	}
+	go he.waitForContainerExit()
 	return ce
 }
 
 var _ = (shimExec)(&clonedExec{})
 
-// ClonedExec is almost the same as wcowPodSandboxExec in that it doesn't actually track
-// a process (it is just a dummy exec). However, Cloned exec tracks the IO channels passed
-// with the request and it closes them correctly when the exec kill is called.
+// clonedExec inherits from hcsExec. The only difference between these two is that
+// on starting a clonedExec it doesn't attempt to start the container even if the
+// exec is the init process. This is because in case of clonedExec the container is
+// already running inside the pod.
 type clonedExec struct {
-	*wcowPodSandboxExec
-	io upstreamIO
+	*hcsExec
 }
 
-func (ce *clonedExec) Kill(ctx context.Context, signal uint32) error {
-	err := ce.wcowPodSandboxExec.Kill(ctx, signal)
-	ce.io.Close(ctx)
-	return err
-}
-
-func (ce *clonedExec) ForceExit(ctx context.Context, status int) {
-	ce.wcowPodSandboxExec.ForceExit(ctx, status)
-	ce.io.Close(ctx)
+func (ce *clonedExec) Start(ctx context.Context) (err error) {
+	// A cloned exec should never start the container as it should
+	// already be running.
+	return ce.startInternal(ctx, false)
 }

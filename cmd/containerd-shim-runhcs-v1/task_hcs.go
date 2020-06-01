@@ -276,12 +276,19 @@ func newClonedHcsTask(
 		templateid: templateID,
 	}
 
-	// Since this container is already running there is no need of an init exec
-	// for this container. Just use the dummy exec for this.
-	// Todo(ambarve): The problem with this approach is that we don't have any
-	// connection to the actual init process running inside the cloned container, so
-	// if that process dies then there is no way for us to find that out.
-	ht.init = newClonedExec(ctx, events, req.ID, req.Bundle, io)
+	// The silo of the cloned container is already running but there is no process
+	// running inside it. Create an init process for this cloned container.
+	ht.init = newClonedExec(
+		ctx,
+		events,
+		req.ID,
+		parent,
+		system,
+		req.ID,
+		req.Bundle,
+		ht.isWCOW,
+		s.Process,
+		io)
 
 	if parent != nil {
 		// We have a parent UVM. Listen for its exit and forcibly close this
