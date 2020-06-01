@@ -249,14 +249,14 @@ func readOptions(r io.Reader) (*runhcsopts.Options, error) {
 // and local system. Can use docker-signal to signal the event.
 func createEvent(event string) (windows.Handle, error) {
 	ev, _ := windows.UTF16PtrFromString(event)
-	sd, err := winio.SddlToSecurityDescriptor("D:P(A;;GA;;;BA)(A;;GA;;;SY)")
+	sd, err := windows.SecurityDescriptorFromString("D:P(A;;GA;;;BA)(A;;GA;;;SY)")
 	if err != nil {
 		return 0, errors.Wrapf(err, "failed to get security descriptor for event '%s'", event)
 	}
 	var sa windows.SecurityAttributes
 	sa.Length = uint32(unsafe.Sizeof(sa))
 	sa.InheritHandle = 1
-	sa.SecurityDescriptor = uintptr(unsafe.Pointer(&sd[0]))
+	sa.SecurityDescriptor = sd
 	h, err := windows.CreateEvent(&sa, 0, 0, ev)
 	if h == 0 || err != nil {
 		return 0, errors.Wrapf(err, "failed to create event '%s'", event)
