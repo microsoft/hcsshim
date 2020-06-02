@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/log"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
@@ -121,17 +120,8 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 					r.resources = append(r.resources, pipe)
 				} else {
 					l.Debug("hcsshim::allocateWindowsResources Hot-adding VSMB share for OCI mount")
-					options := &hcsschema.VirtualSmbShareOptions{}
-					if readOnly {
-						options.ReadOnly = true
-						options.CacheIo = true
-						options.ShareRead = true
-						options.ForceLevelIIOplocks = true
-					}
-					if coi.HostingSystem.DevicesPhysicallyBacked() {
-						options.NoDirectmap = true
-					}
-					share, err := coi.HostingSystem.AddVSMB(ctx, mount.Source, "", options)
+					options := coi.HostingSystem.DefaultVSMBOptions(readOnly)
+					share, err := coi.HostingSystem.AddVSMB(ctx, mount.Source, options)
 					if err != nil {
 						return fmt.Errorf("failed to add VSMB share to utility VM for mount %+v: %s", mount, err)
 					}

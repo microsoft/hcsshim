@@ -118,15 +118,9 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 	for _, layerPath := range layerFolders[:len(layerFolders)-1] {
 		log.G(ctx).WithField("layerPath", layerPath).Debug("mounting layer")
 		if uvm.OS() == "windows" {
-			options := &hcsschema.VirtualSmbShareOptions{
-				ReadOnly:            true,
-				PseudoOplocks:       true,
-				TakeBackupPrivilege: true,
-				CacheIo:             true,
-				ShareRead:           true,
-				NoDirectmap:         uvm.DevicesPhysicallyBacked(),
-			}
-			if _, err := uvm.AddVSMB(ctx, layerPath, "", options); err != nil {
+			options := uvm.DefaultVSMBOptions(true)
+			options.TakeBackupPrivilege = true
+			if _, err := uvm.AddVSMB(ctx, layerPath, options); err != nil {
 				return "", fmt.Errorf("failed to add VSMB layer: %s", err)
 			}
 			layersAdded = append(layersAdded, layerPath)

@@ -124,20 +124,16 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	// Align the requested memory size.
 	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
 
+	// UVM rootfs share is readonly.
+	vsmbOpts := uvm.DefaultVSMBOptions(true)
+	vsmbOpts.TakeBackupPrivilege = true
 	virtualSMB := &hcsschema.VirtualSmb{
 		DirectFileMappingInMB: 1024, // Sensible default, but could be a tuning parameter somewhere
 		Shares: []hcsschema.VirtualSmbShare{
 			{
-				Name: "os",
-				Path: filepath.Join(uvmFolder, `UtilityVM\Files`),
-				Options: &hcsschema.VirtualSmbShareOptions{
-					ReadOnly:            true,
-					PseudoOplocks:       true,
-					TakeBackupPrivilege: true,
-					CacheIo:             true,
-					ShareRead:           true,
-					NoDirectmap:         uvm.devicesPhysicallyBacked,
-				},
+				Name:    "os",
+				Path:    filepath.Join(uvmFolder, `UtilityVM\Files`),
+				Options: vsmbOpts,
 			},
 		},
 	}
