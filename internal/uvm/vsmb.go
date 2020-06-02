@@ -20,7 +20,6 @@ type VSMBShare struct {
 	HostPath     string
 	refCount     uint32
 	name         string
-	guestRequest interface{}
 	allowedFiles []string
 	guestPath    string
 }
@@ -31,6 +30,27 @@ func (vsmb *VSMBShare) Release(ctx context.Context) error {
 		return fmt.Errorf("failed to remove VSMB share: %s", err)
 	}
 	return nil
+}
+
+// GuestPath returns the location of the vsmb share in the UVM. This avoids having to
+// call GetVSMBUvmPath if you already have a share object and not just a hostpath.
+func (vsmb *VSMBShare) GuestPath() string {
+	return vsmb.guestPath
+}
+
+// DefaultVSMBOptions returns the default VSMB options. If readOnly is specified,
+// returns the default VSMB options for a readonly share.
+func (uvm *UtilityVM) DefaultVSMBOptions(readOnly bool) *hcsschema.VirtualSmbShareOptions {
+	opts := &hcsschema.VirtualSmbShareOptions{
+		NoDirectmap: uvm.DevicesPhysicallyBacked(),
+	}
+	if readOnly {
+		opts.ShareRead = true
+		opts.CacheIo = true
+		opts.ReadOnly = true
+		opts.PseudoOplocks = true
+	}
+	return opts
 }
 
 // findVSMBShare finds a share by `hostPath`. If not found returns `ErrNotAttached`.
@@ -45,7 +65,7 @@ func (uvm *UtilityVM) findVSMBShare(ctx context.Context, m map[string]*VSMBShare
 // AddVSMB adds a VSMB share to a Windows utility VM. Each VSMB share is ref-counted and
 // only added if it isn't already. This is used for read-only layers, mapped directories
 // to a container, and for mapped pipes.
-func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, guestRequest interface{}, options *hcsschema.VirtualSmbShareOptions) (*VSMBShare, error) {
+func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcsschema.VirtualSmbShareOptions) (*VSMBShare, error) {
 	if uvm.operatingSystem != "windows" {
 		return nil, errNotSupported
 	}
@@ -81,10 +101,9 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, guestRequest
 		shareName := "s" + strconv.FormatUint(uvm.vsmbCounter, 16)
 
 		share = &VSMBShare{
-			vm:           uvm,
-			name:         shareName,
-			guestRequest: guestRequest,
-			guestPath:    vsmbSharePrefix + shareName,
+			vm:        uvm,
+			name:      shareName,
+			guestPath: vsmbSharePrefix + shareName,
 		}
 	}
 	newAllowedFiles := share.allowedFiles

@@ -7,7 +7,6 @@ import (
 	"os"
 	"testing"
 
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/osversion"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 )
@@ -22,15 +21,10 @@ func TestVSMB(t *testing.T) {
 	dir := testutilities.CreateTempDir(t)
 	defer os.RemoveAll(dir)
 	var iterations uint32 = 64
-	options := &hcsschema.VirtualSmbShareOptions{
-		ReadOnly:            true,
-		PseudoOplocks:       true,
-		TakeBackupPrivilege: true,
-		CacheIo:             true,
-		ShareRead:           true,
-	}
+	options := uvm.DefaultVSMBOptions(true)
+	options.TakeBackupPrivilege = true
 	for i := 0; i < int(iterations); i++ {
-		if _, err := uvm.AddVSMB(context.Background(), dir, "", options); err != nil {
+		if _, err := uvm.AddVSMB(context.Background(), dir, options); err != nil {
 			t.Fatalf("AddVSMB failed: %s", err)
 		}
 	}
