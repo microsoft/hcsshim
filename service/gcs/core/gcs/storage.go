@@ -93,10 +93,7 @@ func (c *gcsCore) getLayerMounts(scratch string, layers []prot.Layer) (scratchMo
 			return nil, nil, err
 		}
 		options := []string{mountOptionNoLoad}
-		if pmem {
-			// PMEM devices support DAX and should use it
-			options = append(options, mountOptionDax)
-		}
+		// TODO (dcantah): Add mountOptionDax when supported.
 		layerMounts[i] = &mountSpec{
 			Source:     deviceName,
 			FileSystem: defaultFileSystem,

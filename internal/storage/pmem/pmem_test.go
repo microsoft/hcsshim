@@ -212,7 +212,7 @@ func Test_Mount_Valid_Data(t *testing.T) {
 		return nil
 	}
 	unixMount = func(source string, target string, fstype string, flags uintptr, data string) error {
-		expectedData := "noload,dax"
+		expectedData := "noload"
 		if expectedData != data {
 			t.Errorf("expected data: %s, got: %s", expectedData, data)
 			return errors.New("unexpected data")
