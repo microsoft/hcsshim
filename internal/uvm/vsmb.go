@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/Microsoft/hcsshim/internal/guestrequest"
+
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 )
@@ -65,7 +67,7 @@ func (uvm *UtilityVM) findVSMBShare(ctx context.Context, m map[string]*VSMBShare
 // AddVSMB adds a VSMB share to a Windows utility VM. Each VSMB share is ref-counted and
 // only added if it isn't already. This is used for read-only layers, mapped directories
 // to a container, and for mapped pipes.
-func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcsschema.VirtualSmbShareOptions) (*VSMBShare, error) {
+func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath, uvmPath string, options *hcsschema.VirtualSmbShareOptions) (*VSMBShare, error) {
 	if uvm.operatingSystem != "windows" {
 		return nil, errNotSupported
 	}
@@ -125,6 +127,19 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 				AllowedFiles: newAllowedFiles,
 			},
 			ResourcePath: vSmbShareResourcePath,
+		}
+		// If uvmPath isn't an empty string, send a guest request to map this share
+		// in the UVM to uvmPath.
+		if uvmPath != "" {
+			modification.GuestRequest = &guestrequest.GuestRequest{
+				ResourceType: guestrequest.ResourceTypeMappedDirectory,
+				RequestType:  requesttype.Add,
+				Settings: &hcsschema.MappedDirectory{
+					HostPath:      share.guestPath,
+					ContainerPath: uvmPath,
+					ReadOnly:      options.ReadOnly,
+				},
+			}
 		}
 		if err := uvm.modify(ctx, modification); err != nil {
 			return nil, err

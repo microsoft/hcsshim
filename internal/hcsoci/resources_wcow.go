@@ -121,7 +121,7 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 				} else {
 					l.Debug("hcsshim::allocateWindowsResources Hot-adding VSMB share for OCI mount")
 					options := coi.HostingSystem.DefaultVSMBOptions(readOnly)
-					share, err := coi.HostingSystem.AddVSMB(ctx, mount.Source, options)
+					share, err := coi.HostingSystem.AddVSMB(ctx, mount.Source, "", options)
 					if err != nil {
 						return fmt.Errorf("failed to add VSMB share to utility VM for mount %+v: %s", mount, err)
 					}

@@ -120,7 +120,7 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 		if uvm.OS() == "windows" {
 			options := uvm.DefaultVSMBOptions(true)
 			options.TakeBackupPrivilege = true
-			if _, err := uvm.AddVSMB(ctx, layerPath, options); err != nil {
+			if _, err := uvm.AddVSMB(ctx, layerPath, "", options); err != nil {
 				return "", fmt.Errorf("failed to add VSMB layer: %s", err)
 			}
 			layersAdded = append(layersAdded, layerPath)
