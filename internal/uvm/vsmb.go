@@ -32,12 +32,6 @@ func (vsmb *VSMBShare) Release(ctx context.Context) error {
 	return nil
 }
 
-// GuestPath returns the location of the vsmb share in the UVM. This avoids having to
-// call GetVSMBUvmPath if you already have a share object and not just a hostpath.
-func (vsmb *VSMBShare) GuestPath() string {
-	return vsmb.guestPath
-}
-
 // DefaultVSMBOptions returns the default VSMB options. If readOnly is specified,
 // returns the default VSMB options for a readonly share.
 func (uvm *UtilityVM) DefaultVSMBOptions(readOnly bool) *hcsschema.VirtualSmbShareOptions {
