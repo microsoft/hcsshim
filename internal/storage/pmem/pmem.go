@@ -26,7 +26,7 @@ var (
 // automatically cleaned up.
 //
 // Note: For now the platform only supports readonly pmem that is assumed to be
-// `dax`, `ext4`.
+// `ext4`.
 func Mount(ctx context.Context, device uint32, target string) (err error) {
 	_, span := trace.StartSpan(ctx, "pmem::Mount")
 	defer span.End()
@@ -46,7 +46,7 @@ func Mount(ctx context.Context, device uint32, target string) (err error) {
 	}()
 	source := fmt.Sprintf("/dev/pmem%d", device)
 	flags := uintptr(unix.MS_RDONLY)
-	if err := unixMount(source, target, "ext4", flags, "noload,dax"); err != nil {
+	if err := unixMount(source, target, "ext4", flags, "noload"); err != nil {
 		return errors.Wrapf(err, "failed to mount pmem device %s onto %s", source, target)
 	}
 	return nil
