@@ -216,6 +216,15 @@ func SetPolicySupported() error {
 	return platformDoesNotSupportError("SetPolicy")
 }
 
+// VxlanPortSupported returns an error if the HCN version does not support configuring the VXLAN TCP port.
+func VxlanPortSupported() error {
+	supported := GetSupportedFeatures()
+	if supported.VxlanPort {
+		return nil
+	}
+	return platformDoesNotSupportError("VXLAN port configuration")
+}
+
 // RequestType are the different operations performed to settings.
 // Used to update the settings of Endpoint/Namespace objects.
 type RequestType string
