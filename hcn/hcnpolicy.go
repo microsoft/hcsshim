@@ -43,6 +43,7 @@ const (
 	InterfaceConstraint NetworkPolicyType = "InterfaceConstraint"
 	ProviderAddress     NetworkPolicyType = "ProviderAddress"
 	RemoteSubnetRoute   NetworkPolicyType = "RemoteSubnetRoute"
+	VxlanPort           NetworkPolicyType = "VxlanPort"
 	HostRoute           NetworkPolicyType = "HostRoute"
 	SetPolicy           NetworkPolicyType = "SetPolicy"
 )
@@ -245,4 +246,9 @@ type SetPolicySetting struct {
 	Name   string
 	Type   SetPolicyType
 	Values string
+}
+
+// VxlanPortPolicySetting allows configuring the VXLAN TCP port
+type VxlanPortPolicySetting struct {
+	Port uint16
 }
