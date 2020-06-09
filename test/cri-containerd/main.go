@@ -240,3 +240,24 @@ func pullRequiredImagesWithLabels(t *testing.T, images []string, labels map[stri
 		}
 	}
 }
+
+func removeImages(t *testing.T, images []string) {
+	if len(images) < 1 {
+		return
+	}
+
+	client := newTestImageClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	for _, image := range images {
+		_, err := client.RemoveImage(ctx, &runtime.RemoveImageRequest{
+			Image: &runtime.ImageSpec{
+				Image: image,
+			},
+		})
+		if err != nil {
+			t.Fatalf("failed removeImage for image: %s, with error: %v", image, err)
+		}
+	}
+}
