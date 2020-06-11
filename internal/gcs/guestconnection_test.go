@@ -152,7 +152,7 @@ func connectGcs(ctx context.Context, t *testing.T) *GuestConnection {
 		Log:      logrus.NewEntry(logrus.StandardLogger()),
 		IoListen: npipeIoListen,
 	}
-	gc, err := gcc.Connect(context.Background())
+	gc, err := gcc.Connect(context.Background(), true)
 	if err != nil {
 		c.Close()
 		t.Fatal(err)
