@@ -152,21 +152,8 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		// isolated. Process isolated WCOW gets the namespace endpoints
 		// automatically.
 		if parent != nil {
-			nsid := ""
-			if s.Windows != nil && s.Windows.Network != nil {
-				nsid = s.Windows.Network.NetworkNamespace
-			}
-
-			if nsid != "" {
-				endpoints, err := hcsoci.GetNamespaceEndpoints(ctx, nsid)
-				if err != nil {
-					return nil, err
-				}
-				err = parent.AddNetNS(ctx, nsid)
-				if err != nil {
-					return nil, err
-				}
-				err = parent.AddEndpointsToNS(ctx, nsid, endpoints)
+			if s.Windows != nil && s.Windows.Network != nil && s.Windows.Network.NetworkNamespace != "" {
+				err = hcsoci.SetupNetworkNamespace(ctx, parent, s.Windows.Network.NetworkNamespace)
 				if err != nil {
 					return nil, err
 				}

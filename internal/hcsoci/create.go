@@ -149,18 +149,8 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 			// container but not a workload container in a sandbox that inherits
 			// the namespace.
 			if ct == oci.KubernetesContainerTypeNone || ct == oci.KubernetesContainerTypeSandbox {
-				endpoints, err := GetNamespaceEndpoints(ctx, coi.actualNetworkNamespace)
+				err = SetupNetworkNamespace(ctx, coi.HostingSystem, coi.actualNetworkNamespace)
 				if err != nil {
-					return nil, r, err
-				}
-				err = coi.HostingSystem.AddNetNS(ctx, coi.actualNetworkNamespace)
-				if err != nil {
-					return nil, r, err
-				}
-				err = coi.HostingSystem.AddEndpointsToNS(ctx, coi.actualNetworkNamespace, endpoints)
-				if err != nil {
-					// Best effort clean up the NS
-					coi.HostingSystem.RemoveNetNS(ctx, coi.actualNetworkNamespace)
 					return nil, r, err
 				}
 				r.SetAddedNetNSToVM(true)
