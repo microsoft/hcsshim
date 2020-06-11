@@ -182,7 +182,14 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		v2Container.Networking = &hcsschema.Networking{}
 
 		v1.EndpointList = coi.Spec.Windows.Network.EndpointList
-		v2Container.Networking.Namespace = coi.actualNetworkNamespace
+
+		// Use the reserved network namespace for containers created inside
+		// cloned or template UVMs.
+		if coi.HostingSystem.IsTemplate || coi.HostingSystem.IsClone {
+			v2Container.Networking.Namespace = uvm.DEFAULT_CLONE_NETWORK_NAMESPACE_ID
+		} else {
+			v2Container.Networking.Namespace = coi.actualNetworkNamespace
+		}
 
 		v1.AllowUnqualifiedDNSQuery = coi.Spec.Windows.Network.AllowUnqualifiedDNSQuery
 		v2Container.Networking.AllowUnqualifiedDnsQuery = v1.AllowUnqualifiedDNSQuery
