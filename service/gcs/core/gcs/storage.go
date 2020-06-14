@@ -88,7 +88,7 @@ func (ms *mountSpec) MountWithTimedRetry(target string) error {
 func (c *gcsCore) getLayerMounts(scratch string, layers []prot.Layer) (scratchMount *mountSpec, layerMounts []*mountSpec, err error) {
 	layerMounts = make([]*mountSpec, len(layers))
 	for i, layer := range layers {
-		deviceName, pmem, err := c.deviceIDToName(layer.Path)
+		deviceName, _, err := c.deviceIDToName(layer.Path)
 		if err != nil {
 			return nil, nil, err
 		}
