@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"syscall"
 	"testing"
+
+	"github.com/Microsoft/hcsshim/internal/winapi"
 )
 
 func TestOpenRelative(t *testing.T) {
@@ -25,7 +27,7 @@ func TestOpenRelative(t *testing.T) {
 	defer root.Close()
 
 	// Create a file
-	f, err := OpenRelative("foo", root, 0, syscall.FILE_SHARE_READ, FILE_CREATE, 0)
+	f, err := OpenRelative("foo", root, 0, syscall.FILE_SHARE_READ, winapi.FILE_CREATE, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +59,7 @@ func TestOpenRelative(t *testing.T) {
 	}
 
 	// Make sure opens cannot happen through the symlink
-	f, err = OpenRelative("dsymlink/foo", root, 0, syscall.FILE_SHARE_READ, FILE_CREATE, 0)
+	f, err = OpenRelative("dsymlink/foo", root, 0, syscall.FILE_SHARE_READ, winapi.FILE_CREATE, 0)
 	if err == nil {
 		f.Close()
 		t.Fatal("created file in wrong tree!")
@@ -112,7 +114,7 @@ func TestOpenRelative(t *testing.T) {
 	}
 
 	// Make sure it's not possible to escape with .. (NT doesn't support .. at the kernel level)
-	f, err = OpenRelative("..", root, syscall.GENERIC_READ, syscall.FILE_SHARE_READ, FILE_OPEN, 0)
+	f, err = OpenRelative("..", root, syscall.GENERIC_READ, syscall.FILE_SHARE_READ, winapi.FILE_OPEN, 0)
 	if err == nil {
 		t.Fatal("escaped the directory")
 	}
