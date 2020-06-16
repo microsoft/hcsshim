@@ -101,6 +101,7 @@ func Command(host cow.ProcessHost, name string, arg ...string) *Cmd {
 		Spec: &specs.Process{
 			Args: append([]string{name}, arg...),
 		},
+		ExitState: &ExitState{},
 	}
 	if host.OS() == "windows" {
 		cmd.Spec.Cwd = `C:\`
