@@ -4,7 +4,6 @@ package hcsoci
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -282,29 +281,19 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	v1.MappedPipes = mpsv1
 	v2Container.MappedPipes = mpsv2
 
-	if specHasAssignedDevices(coi) {
-		// add assigned devices to the container definition
-		if err := parseAssignedDevices(coi, v2Container); err != nil {
-			return nil, nil, err
-		}
+	// add assigned devices to the container definition
+	if err := parseAssignedDevices(ctx, coi, v2Container); err != nil {
+		return nil, nil, err
 	}
 
 	return v1, v2Container, nil
 }
 
-func specHasAssignedDevices(coi *createOptionsInternal) bool {
-	if coi.Spec.Windows != nil && coi.Spec.Windows.Devices != nil &&
-		len(coi.Spec.Windows.Devices) > 0 {
-		return true
-	}
-	return false
-}
-
 // parseAssignedDevices parses assigned devices for the container definition
-// this is currently supported for HCS schema V2 argon only
-func parseAssignedDevices(coi *createOptionsInternal, v2 *hcsschema.Container) error {
-	if !coi.isV2Argon() {
-		return errors.New("device assignment is currently only supported for HCS schema V2 argon")
+// this is currently supported for v2 argon and xenon only
+func parseAssignedDevices(ctx context.Context, coi *createOptionsInternal, v2 *hcsschema.Container) error {
+	if !coi.isV2Argon() && !coi.isV2Xenon() {
+		return nil
 	}
 
 	v2AssignedDevices := []hcsschema.Device{}
@@ -321,6 +310,7 @@ func parseAssignedDevices(coi *createOptionsInternal, v2 *hcsschema.Container) e
 		default:
 			return fmt.Errorf("specified device %s has unsupported type %s", d.ID, d.IDType)
 		}
+		log.G(ctx).WithField("hcsv2 device", v2Dev).Debug("adding assigned device to container doc")
 		v2AssignedDevices = append(v2AssignedDevices, v2Dev)
 	}
 	v2.AssignedDevices = v2AssignedDevices

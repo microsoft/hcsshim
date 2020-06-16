@@ -138,5 +138,15 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 			//TODO dcantah: If/when dynamic service table entries is supported register the RpcEndpoint with hvsocket here
 		}
 	}
+
+	if coi.HostingSystem != nil && coi.hasWindowsAssignedDevices() {
+		windowsDevices, closers, err := handleAssignedDevicesWindows(ctx, coi.HostingSystem, coi.Spec.Annotations, coi.Spec.Windows.Devices)
+		if err != nil {
+			return err
+		}
+		r.Add(closers...)
+		coi.Spec.Windows.Devices = windowsDevices
+	}
+
 	return nil
 }
