@@ -120,7 +120,7 @@ func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all 
 				}
 				r.createdNetNS = false
 			}
-		case *credentials.CCGInstance:
+		case *credentials.CCGResource:
 			if err := r.resources[i].Release(ctx); err != nil {
 				log.G(ctx).WithError(err).Error("failed to release container resource")
 				releaseErr = true

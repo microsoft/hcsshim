@@ -29,18 +29,19 @@ import (
 // setting up instances manually is not needed, the GMSA credential specification
 // simply needs to be present in the V1 container document.
 
-// CCGInstance stores the id used when creating a ccg instance. Used when
+// CCGResource stores the id used when creating a ccg instance. Used when
 // closing a container to be able to release the instance.
-type CCGInstance struct {
+type CCGResource struct {
 	// ID of container that instance belongs to.
 	id string
 }
 
-// Release calls into hcs to remove the ccg instance. These do not get cleaned up automatically
-// they MUST be explicitly removed with a call to ModifyServiceSettings. The instances will persist
-// unless vmcompute.exe exits or they are removed manually as done here.
-func (instance *CCGInstance) Release(ctx context.Context) error {
-	if err := removeCredentialGuard(ctx, instance.id); err != nil {
+// Release calls into hcs to remove the ccg instance for the container matching CCGResource.id.
+// These do not get cleaned up automatically they MUST be explicitly removed with a call to
+// ModifyServiceSettings. The instances will persist unless vmcompute.exe exits or they are removed
+// manually as done here.
+func (ccgResource *CCGResource) Release(ctx context.Context) error {
+	if err := removeCredentialGuard(ctx, ccgResource.id); err != nil {
 		return fmt.Errorf("failed to remove container credential guard instance: %s", err)
 	}
 	return nil
@@ -48,7 +49,7 @@ func (instance *CCGInstance) Release(ctx context.Context) error {
 
 // CreateCredentialGuard creates a container credential guard instance and
 // returns the state object to be placed in a v2 container doc.
-func CreateCredentialGuard(ctx context.Context, id, credSpec string, hypervisorIsolated bool) (*hcsschema.ContainerCredentialGuardState, *CCGInstance, error) {
+func CreateCredentialGuard(ctx context.Context, id, credSpec string, hypervisorIsolated bool) (*hcsschema.ContainerCredentialGuardInstance, *CCGResource, error) {
 	log.G(ctx).WithField("containerID", id).Debug("creating container credential guard instance")
 	// V2 schema ccg setup a little different as its expected to be passed
 	// through all the way to the gcs. Can no longer be enabled just through
@@ -57,19 +58,21 @@ func CreateCredentialGuard(ctx context.Context, id, credSpec string, hypervisorI
 	// 1. Call HcsModifyServiceSettings with a ModificationRequest set with a
 	// ContainerCredentialGuardAddInstanceRequest. This is where the cred spec
 	// gets passed in. Transport either "LRPC" (Argon) or "HvSocket" (Xenon).
+	//
 	// 2. Query the instance with a call to HcsGetServiceProperties with the
 	// PropertyType "ContainerCredentialGuard". This will return all instances
+	//
 	// 3. Parse for the id of our container to find which one correlates to the
 	// container we're building the doc for, then add to the V2 doc.
-	// 4. If xenon container the hvsocketconfig will need to be in the UVMs V2
-	// schema HcsComputeSystem document before being created/sent to HCS. It must
-	// be in the doc at creation time as we do not support hot adding hvsocket
-	// service table entries.
-	// This is currently a blocker for adding support for hyper-v gmsa.
+	//
+	// 4. If xenon container the CCG instance with the Hvsocket service table
+	// information is expected to be in the Utility VMs doc before being sent
+	// to HCS for creation. For pod scenarios currently we don't have the OCI
+	// spec of a container at UVM creation time, therefore the service table entry
+	// for the CCG instance will have to be hot added.
 	transport := "LRPC"
 	if hypervisorIsolated {
-		// TODO(Dcantah) Set transport to HvSocket here when this is supported
-		return nil, nil, errors.New("hypervisor isolated containers with v2 HCS schema do not support GMSA")
+		transport = "HvSocket"
 	}
 	req := hcsschema.ModificationRequest{
 		PropertyType: hcsschema.PTContainerCredentialGuard,
@@ -103,10 +106,10 @@ func CreateCredentialGuard(ctx context.Context, id, credSpec string, hypervisorI
 	}
 	for _, ccgInstance := range ccgSysInfo.Instances {
 		if ccgInstance.Id == id {
-			instance := &CCGInstance{
+			ccgResource := &CCGResource{
 				id,
 			}
-			return ccgInstance.CredentialGuard, instance, nil
+			return &ccgInstance, ccgResource, nil
 		}
 	}
 	return nil, nil, fmt.Errorf("failed to find credential guard instance with container ID %s", id)
@@ -125,8 +128,5 @@ func removeCredentialGuard(ctx context.Context, id string) error {
 			},
 		},
 	}
-	if err := hcs.ModifyServiceSettings(ctx, req); err != nil {
-		return err
-	}
-	return nil
+	return hcs.ModifyServiceSettings(ctx, req)
 }

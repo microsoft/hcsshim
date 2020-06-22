@@ -129,13 +129,27 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 		// Only need to create a CCG instance for v2 containers
 		if schemaversion.IsV21(coi.actualSchemaVersion) {
 			hypervisorIsolated := coi.HostingSystem != nil
-			ccgState, ccgInstance, err := credentials.CreateCredentialGuard(ctx, coi.actualID, cs, hypervisorIsolated)
+			ccgInstance, ccgResource, err := credentials.CreateCredentialGuard(ctx, coi.actualID, cs, hypervisorIsolated)
 			if err != nil {
 				return err
 			}
-			coi.ccgState = ccgState
-			r.Add(ccgInstance)
-			//TODO dcantah: If/when dynamic service table entries is supported register the RpcEndpoint with hvsocket here
+			coi.ccgState = ccgInstance.CredentialGuard
+			r.Add(ccgResource)
+			if hypervisorIsolated {
+				// If hypervisor isolated we need to add an hvsocket service table entry
+				// By default HVSocket won't allow something inside the VM to connect
+				// back to a process on the host. We need to update the HVSocket service table
+				// to allow a connection to CCG.exe on the host, so that GMSA can function.
+				// We need to hot add this here because at UVM creation time we don't know what containers
+				// will be launched in the UVM, nonetheless if they will ask for GMSA. This is a workaround
+				// for the previous design requirement for CCG V2 where the service entry
+				// must be present in the UVM'S HCS document before being sent over as hot adding
+				// an HvSocket service was not possible.
+				hvSockConfig := ccgInstance.HvSocketConfig
+				if err := coi.HostingSystem.UpdateHvSocketService(ctx, hvSockConfig.ServiceId, hvSockConfig.ServiceConfig); err != nil {
+					return fmt.Errorf("failed to update hvsocket service: %s", err)
+				}
+			}
 		}
 	}
 

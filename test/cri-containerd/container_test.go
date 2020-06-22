@@ -455,7 +455,6 @@ func Test_RunContainer_GMSA_WCOW_Process(t *testing.T) {
 }
 
 func Test_RunContainer_GMSA_WCOW_Hypervisor(t *testing.T) {
-	t.Skip("GMSA is not supported for Hyper-V isolated containers")
 	requireFeatures(t, featureWCOWHypervisor, featureGMSA)
 
 	credSpec := gmsaSetup(t)
