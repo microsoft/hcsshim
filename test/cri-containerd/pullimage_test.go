@@ -54,7 +54,7 @@ func Test_PullImageTimestamps(t *testing.T) {
 				Namespace: testNamespace,
 			},
 		},
-		RuntimeHandler: wcowHypervisorRuntimeHandler,
+		RuntimeHandler: wcowHypervisor18362RuntimeHandler,
 	}
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
