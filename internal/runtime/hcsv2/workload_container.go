@@ -8,6 +8,7 @@ import (
 
 	"github.com/Microsoft/opengcs/internal/log"
 	"github.com/Microsoft/opengcs/internal/oc"
+	"github.com/opencontainers/runc/libcontainer/configs"
 	"github.com/opencontainers/runc/libcontainer/devices"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -126,32 +127,7 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 			return err
 		}
 		for _, hostDevice := range hostDevices {
-			rd := oci.LinuxDevice{
-				Path:  hostDevice.Path,
-				Type:  string(hostDevice.Type),
-				Major: hostDevice.Major,
-				Minor: hostDevice.Minor,
-				UID:   &hostDevice.Uid,
-				GID:   &hostDevice.Gid,
-			}
-			if hostDevice.Major == 0 && hostDevice.Minor == 0 {
-				// Invalid device, most likely a symbolic link, skip it.
-				continue
-			}
-			found := false
-			for i, dev := range spec.Linux.Devices {
-				if dev.Path == rd.Path {
-					found = true
-					spec.Linux.Devices[i] = rd
-					break
-				}
-				if dev.Type == rd.Type && dev.Major == rd.Major && dev.Minor == rd.Minor {
-					log.G(ctx).Warnf("The same type '%s', major '%d' and minor '%d', should not be used for multiple devices.", dev.Type, dev.Major, dev.Minor)
-				}
-			}
-			if !found {
-				spec.Linux.Devices = append(spec.Linux.Devices, rd)
-			}
+			addLinuxDeviceToSpec(ctx, hostDevice, spec, false)
 		}
 
 		// Set the cgroup access
@@ -160,6 +136,16 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 				Allow:  true,
 				Access: "rwm",
 			},
+		}
+	} else {
+		tempLinuxDevices := spec.Linux.Devices
+		spec.Linux.Devices = []oci.LinuxDevice{}
+		for _, ld := range tempLinuxDevices {
+			hostDevice, err := devices.DeviceFromPath(ld.Path, "rwm")
+			if err != nil {
+				return err
+			}
+			addLinuxDeviceToSpec(ctx, hostDevice, spec, true)
 		}
 	}
 
@@ -183,4 +169,43 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 	spec.Windows = nil
 
 	return nil
+}
+
+func addLinuxDeviceToSpec(ctx context.Context, hostDevice *configs.Device, spec *oci.Spec, addCgroupDevice bool) {
+	rd := oci.LinuxDevice{
+		Path:  hostDevice.Path,
+		Type:  string(hostDevice.Type),
+		Major: hostDevice.Major,
+		Minor: hostDevice.Minor,
+		UID:   &hostDevice.Uid,
+		GID:   &hostDevice.Gid,
+	}
+	if hostDevice.Major == 0 && hostDevice.Minor == 0 {
+		// Invalid device, most likely a symbolic link, skip it.
+		return
+	}
+	found := false
+	for i, dev := range spec.Linux.Devices {
+		if dev.Path == rd.Path {
+			found = true
+			spec.Linux.Devices[i] = rd
+			break
+		}
+		if dev.Type == rd.Type && dev.Major == rd.Major && dev.Minor == rd.Minor {
+			log.G(ctx).Warnf("The same type '%s', major '%d' and minor '%d', should not be used for multiple devices.", dev.Type, dev.Major, dev.Minor)
+		}
+	}
+	if !found {
+		spec.Linux.Devices = append(spec.Linux.Devices, rd)
+		if addCgroupDevice {
+			deviceCgroup := oci.LinuxDeviceCgroup{
+				Allow:  true,
+				Type:   string(hostDevice.Type),
+				Major:  &hostDevice.Major,
+				Minor:  &hostDevice.Minor,
+				Access: hostDevice.Permissions,
+			}
+			spec.Linux.Resources.Devices = append(spec.Linux.Resources.Devices, deviceCgroup)
+		}
+	}
 }
