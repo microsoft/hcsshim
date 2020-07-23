@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Microsoft/go-winio"
@@ -1137,6 +1138,47 @@ func Test_CreateContainer_Mount_ReadOnlyDir_WCOW(t *testing.T) {
 					HostPath:      tempDir,
 					ContainerPath: containerFilePath,
 					Readonly:      true,
+				},
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsNanoserver,
+			},
+			Command: []string{
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+		},
+	}
+	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
+}
+
+func Test_CreateContainer_Mount_EmptyDir_WCOW(t *testing.T) {
+	requireFeatures(t, featureWCOWHypervisor)
+
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
+
+	tempDir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %s", err)
+	}
+	defer os.RemoveAll(tempDir)
+	path := filepath.Join(tempDir, "kubernetes.io~empty-dir", "volume1")
+	if err := os.MkdirAll(path, 0); err != nil {
+		t.Fatalf("Failed to create kubernetes.io~empty-dir volume path: %s", err)
+	}
+
+	containerFilePath := "C:\\foo"
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Mounts: []*runtime.Mount{
+				{
+					HostPath:      path,
+					ContainerPath: containerFilePath,
 				},
 			},
 			Image: &runtime.ImageSpec{
