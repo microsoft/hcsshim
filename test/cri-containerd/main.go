@@ -33,6 +33,7 @@ const (
 	wcowHypervisorRuntimeHandler      = "runhcs-wcow-hypervisor"
 	wcowHypervisor17763RuntimeHandler = "runhcs-wcow-hypervisor-17763"
 	wcowHypervisor18362RuntimeHandler = "runhcs-wcow-hypervisor-18362"
+	wcowHypervisor19041RuntimeHandler = "runhcs-wcow-hypervisor-19041"
 	lcowRuntimeHandler                = "runhcs-lcow"
 	imageLcowK8sPause                 = "k8s.gcr.io/pause:3.1"
 	imageLcowAlpine                   = "docker.io/library/alpine:latest"
@@ -52,8 +53,10 @@ var (
 	imageWindowsServercore      = getWindowsServerCoreImage(osversion.Get().Build)
 	imageWindowsNanoserver17763 = getWindowsNanoserverImage(osversion.RS5)
 	imageWindowsNanoserver18362 = getWindowsNanoserverImage(osversion.V19H1)
+	imageWindowsNanoserver19041 = getWindowsNanoserverImage(osversion.V20H1)
 	imageWindowsServercore17763 = getWindowsServerCoreImage(osversion.RS5)
 	imageWindowsServercore18362 = getWindowsServerCoreImage(osversion.V19H1)
+	imageWindowsServercore19041 = getWindowsServerCoreImage(osversion.V20H1)
 )
 
 // Flags
@@ -113,6 +116,8 @@ func getWindowsNanoserverImage(build uint16) string {
 		return "mcr.microsoft.com/windows/nanoserver:1809"
 	case osversion.V19H1:
 		return "mcr.microsoft.com/windows/nanoserver:1903"
+	case osversion.V20H1:
+		return "mcr.microsoft.com/windows/nanoserver:2004"
 	default:
 		panic("unsupported build")
 	}
@@ -124,6 +129,8 @@ func getWindowsServerCoreImage(build uint16) string {
 		return "mcr.microsoft.com/windows/servercore:1809"
 	case osversion.V19H1:
 		return "mcr.microsoft.com/windows/servercore:1903"
+	case osversion.V20H1:
+		return "mcr.microsoft.com/windows/servercore:2004"
 	default:
 		panic("unsupported build")
 	}
