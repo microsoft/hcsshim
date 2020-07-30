@@ -31,7 +31,7 @@ func TestVSMB(t *testing.T) {
 
 	// Remove them all
 	for i := 0; i < int(iterations); i++ {
-		if err := uvm.RemoveVSMB(context.Background(), dir); err != nil {
+		if err := uvm.RemoveVSMB(context.Background(), dir, true); err != nil {
 			t.Fatalf("RemoveVSMB failed: %s", err)
 		}
 	}
