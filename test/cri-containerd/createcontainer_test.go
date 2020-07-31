@@ -235,6 +235,49 @@ func Test_CreateContainer_LCOW_Privileged(t *testing.T) {
 	runCreateContainerTestWithSandbox(t, sandboxRequest, request)
 }
 
+func Test_CreateContainer_SandboxDevice_LCOW(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	sandboxRequest := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name() + "-Sandbox",
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Linux: &runtime.LinuxPodSandboxConfig{
+				SecurityContext: &runtime.LinuxSandboxSecurityContext{
+					Privileged: true,
+				},
+			},
+		},
+		RuntimeHandler: lcowRuntimeHandler,
+	}
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			// Hold this command open until killed
+			Command: []string{
+				"top",
+			},
+			Devices: []*runtime.Device{
+				{
+					HostPath: "/dev/fuse",
+				},
+			},
+		},
+	}
+	runCreateContainerTestWithSandbox(t, sandboxRequest, request)
+}
+
 func Test_CreateContainer_MemorySize_Config_WCOW_Process(t *testing.T) {
 	requireFeatures(t, featureWCOWProcess)
 
