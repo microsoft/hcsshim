@@ -22,11 +22,12 @@ type VSMBShare struct {
 	name         string
 	allowedFiles []string
 	guestPath    string
+	readOnly     bool
 }
 
 // Release frees the resources of the corresponding vsmb Mount
 func (vsmb *VSMBShare) Release(ctx context.Context) error {
-	if err := vsmb.vm.RemoveVSMB(ctx, vsmb.HostPath); err != nil {
+	if err := vsmb.vm.RemoveVSMB(ctx, vsmb.HostPath, vsmb.readOnly); err != nil {
 		return fmt.Errorf("failed to remove VSMB share: %s", err)
 	}
 	return nil
@@ -48,8 +49,8 @@ func (uvm *UtilityVM) DefaultVSMBOptions(readOnly bool) *hcsschema.VirtualSmbSha
 }
 
 // findVSMBShare finds a share by `hostPath`. If not found returns `ErrNotAttached`.
-func (uvm *UtilityVM) findVSMBShare(ctx context.Context, m map[string]*VSMBShare, hostPath string) (*VSMBShare, error) {
-	share, ok := m[hostPath]
+func (uvm *UtilityVM) findVSMBShare(ctx context.Context, m map[string]*VSMBShare, shareKey string) (*VSMBShare, error) {
+	share, ok := m[shareKey]
 	if !ok {
 		return nil, ErrNotAttached
 	}
@@ -88,7 +89,8 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 	}
 	hostPath = filepath.Clean(hostPath)
 	var requestType = requesttype.Update
-	share, err := uvm.findVSMBShare(ctx, m, hostPath)
+	shareKey := getVSMBShareKey(hostPath, options.ReadOnly)
+	share, err := uvm.findVSMBShare(ctx, m, shareKey)
 	if err == ErrNotAttached {
 		requestType = requesttype.Add
 		uvm.vsmbCounter++
@@ -98,6 +100,7 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 			vm:        uvm,
 			name:      shareName,
 			guestPath: vsmbSharePrefix + shareName,
+			readOnly:  options.ReadOnly,
 		}
 	}
 	newAllowedFiles := share.allowedFiles
@@ -127,13 +130,13 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 
 	share.allowedFiles = newAllowedFiles
 	share.refCount++
-	m[hostPath] = share
+	m[shareKey] = share
 	return share, nil
 }
 
 // RemoveVSMB removes a VSMB share from a utility VM. Each VSMB share is ref-counted
 // and only actually removed when the ref-count drops to zero.
-func (uvm *UtilityVM) RemoveVSMB(ctx context.Context, hostPath string) error {
+func (uvm *UtilityVM) RemoveVSMB(ctx context.Context, hostPath string, readOnly bool) error {
 	if uvm.operatingSystem != "windows" {
 		return errNotSupported
 	}
@@ -151,7 +154,8 @@ func (uvm *UtilityVM) RemoveVSMB(ctx context.Context, hostPath string) error {
 		hostPath = filepath.Dir(hostPath)
 	}
 	hostPath = filepath.Clean(hostPath)
-	share, err := uvm.findVSMBShare(ctx, m, hostPath)
+	shareKey := getVSMBShareKey(hostPath, readOnly)
+	share, err := uvm.findVSMBShare(ctx, m, shareKey)
 	if err != nil {
 		return fmt.Errorf("%s is not present as a VSMB share in %s, cannot remove", hostPath, uvm.id)
 	}
@@ -170,12 +174,12 @@ func (uvm *UtilityVM) RemoveVSMB(ctx context.Context, hostPath string) error {
 		return fmt.Errorf("failed to remove vsmb share %s from %s: %+v: %s", hostPath, uvm.id, modification, err)
 	}
 
-	delete(m, hostPath)
+	delete(m, shareKey)
 	return nil
 }
 
 // GetVSMBUvmPath returns the guest path of a VSMB mount.
-func (uvm *UtilityVM) GetVSMBUvmPath(ctx context.Context, hostPath string) (string, error) {
+func (uvm *UtilityVM) GetVSMBUvmPath(ctx context.Context, hostPath string, readOnly bool) (string, error) {
 	if hostPath == "" {
 		return "", fmt.Errorf("no hostPath passed to GetVSMBUvmPath")
 	}
@@ -194,9 +198,18 @@ func (uvm *UtilityVM) GetVSMBUvmPath(ctx context.Context, hostPath string) (stri
 		hostPath, f = filepath.Split(hostPath)
 	}
 	hostPath = filepath.Clean(hostPath)
-	share, err := uvm.findVSMBShare(ctx, m, hostPath)
+	shareKey := getVSMBShareKey(hostPath, readOnly)
+	share, err := uvm.findVSMBShare(ctx, m, shareKey)
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(share.guestPath, f), nil
+}
+
+// getVSMBShareKey returns a string key which encapsulates the information that
+// is used to look up an existing VSMB share. If a share is being added, but
+// there is an existing share with the same key, the existing share will be used
+// instead (and its ref count incremented).
+func getVSMBShareKey(hostPath string, readOnly bool) string {
+	return fmt.Sprintf("%v-%v", hostPath, readOnly)
 }

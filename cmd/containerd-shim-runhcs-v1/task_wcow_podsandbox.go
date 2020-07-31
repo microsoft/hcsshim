@@ -248,7 +248,7 @@ func (wpst *wcowPodSandboxTask) Share(ctx context.Context, req *shimdiag.ShareRe
 	if err != nil {
 		return err
 	}
-	sharePath, err := wpst.host.GetVSMBUvmPath(ctx, req.HostPath)
+	sharePath, err := wpst.host.GetVSMBUvmPath(ctx, req.HostPath, req.ReadOnly)
 	if err != nil {
 		return err
 	}

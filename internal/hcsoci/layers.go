@@ -96,7 +96,7 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 		if err != nil {
 			if uvm.OS() == "windows" {
 				for _, l := range layersAdded {
-					if err := uvm.RemoveVSMB(ctx, l); err != nil {
+					if err := uvm.RemoveVSMB(ctx, l, true); err != nil {
 						log.G(ctx).WithError(err).Warn("failed to remove wcow layer on cleanup")
 					}
 				}
@@ -265,7 +265,7 @@ func UnmountContainerLayers(ctx context.Context, layerFolders []string, containe
 	// to share layers.
 	if uvm.OS() == "windows" && (op&UnmountOperationVSMB) == UnmountOperationVSMB {
 		for _, layerPath := range layerFolders[:len(layerFolders)-1] {
-			if e := uvm.RemoveVSMB(ctx, layerPath); e != nil {
+			if e := uvm.RemoveVSMB(ctx, layerPath, true); e != nil {
 				log.G(ctx).WithError(e).Warn("remove VSMB failed")
 				if retError == nil {
 					retError = e
@@ -304,7 +304,7 @@ func UnmountContainerLayers(ctx context.Context, layerFolders []string, containe
 
 func computeV2Layers(ctx context.Context, vm *uvm.UtilityVM, paths []string) (layers []hcsschema.Layer, err error) {
 	for _, path := range paths {
-		uvmPath, err := vm.GetVSMBUvmPath(ctx, path)
+		uvmPath, err := vm.GetVSMBUvmPath(ctx, path, true)
 		if err != nil {
 			return nil, err
 		}

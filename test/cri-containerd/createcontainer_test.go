@@ -1211,7 +1211,7 @@ func Test_CreateContainer_Mount_EmptyDir_WCOW(t *testing.T) {
 		t.Fatalf("Failed to create kubernetes.io~empty-dir volume path: %s", err)
 	}
 
-	containerFilePath := "C:\\foo"
+	containerFilePath := `C:\foo`
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -1235,6 +1235,91 @@ func Test_CreateContainer_Mount_EmptyDir_WCOW(t *testing.T) {
 		},
 	}
 	runCreateContainerTest(t, wcowHypervisorRuntimeHandler, request)
+}
+
+func Test_Mount_ReadOnlyDirReuse_WCOW(t *testing.T) {
+	requireFeatures(t, featureWCOWHypervisor)
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
+
+	containerPath := `C:\foo`
+
+	tempDir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %s", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	sandboxRequest := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name() + "-Sandbox",
+				Namespace: testNamespace,
+			},
+		},
+		RuntimeHandler: wcowHypervisorRuntimeHandler,
+	}
+
+	podID := runPodSandbox(t, client, ctx, sandboxRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	request := &runtime.CreateContainerRequest{
+		PodSandboxId: podID,
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsNanoserver,
+			},
+			Command: []string{
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Mounts: []*runtime.Mount{
+				{
+					HostPath:      tempDir,
+					ContainerPath: containerPath,
+				},
+			},
+		},
+		SandboxConfig: sandboxRequest.Config,
+	}
+
+	request.Config.Metadata.Name = request.Config.Metadata.Name + "-ro"
+	request.Config.Mounts[0].Readonly = true
+	c_ro := createContainer(t, client, ctx, request)
+	defer removeContainer(t, client, ctx, c_ro)
+	startContainer(t, client, ctx, c_ro)
+	defer stopContainer(t, client, ctx, c_ro)
+
+	request.Config.Metadata.Name = request.Config.Metadata.Name + "-rw"
+	request.Config.Mounts[0].Readonly = false
+	c_rw := createContainer(t, client, ctx, request)
+	defer removeContainer(t, client, ctx, c_rw)
+	startContainer(t, client, ctx, c_rw)
+	defer stopContainer(t, client, ctx, c_rw)
+
+	filePath := containerPath + `\tmp.txt`
+	execCommand := []string{"cmd", "/c", "echo foo", ">", filePath}
+
+	_, errorMsg, exitCode := execContainer(t, client, ctx, c_rw, execCommand)
+
+	// Writing a file to the rw container mount should succeed.
+	if exitCode != 0 || len(errorMsg) > 0 {
+		t.Fatalf("Failed to write file to rw container mount: %s, exitcode: %v\n", errorMsg, exitCode)
+	}
+
+	_, errorMsg, exitCode = execContainer(t, client, ctx, c_ro, execCommand)
+
+	// Writing a file to the ro container mount should fail.
+	if exitCode == 0 && len(errorMsg) == 0 {
+		t.Fatalf("Wrote file to ro container mount, should have failed: %s, exitcode: %v\n", errorMsg, exitCode)
+	}
 }
 
 func Test_CreateContainer_Mount_NamedPipe_WCOW(t *testing.T) {
