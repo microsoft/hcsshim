@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,8 +12,9 @@ import (
 
 var mountCommand = cli.Command{
 	Name:      "mount",
-	Usage:     "mounts a scratch",
-	ArgsUsage: "<scratch path>",
+	Usage:     "activates a scratch, optionally mounted to provided target",
+	ArgsUsage: "<scratch path> [target path]",
+	Before:    appargs.Validate(appargs.NonEmptyString, appargs.Optional(appargs.String)),
 	Flags: []cli.Flag{
 		cli.StringSliceFlag{
 			Name:  "layer, l",
@@ -22,10 +22,12 @@ var mountCommand = cli.Command{
 		},
 	},
 	Action: func(context *cli.Context) (err error) {
-		if context.NArg() != 1 {
-			return errors.New("invalid usage")
+		path, err := filepath.Abs(context.Args().Get(0))
+		if err != nil {
+			return err
 		}
-		path, err := filepath.Abs(context.Args().First())
+
+		targetPath, err := filepath.Abs(context.Args().Get(1))
 		if err != nil {
 			return err
 		}
@@ -59,6 +61,15 @@ var mountCommand = cli.Command{
 		if err != nil {
 			return err
 		}
+
+		if context.NArg() == 2 {
+			if err = setVolumeMountPoint(targetPath, mountPath); err != nil {
+				return err
+			}
+			_, err = fmt.Println(targetPath)
+			return err
+		}
+
 		_, err = fmt.Println(mountPath)
 		return err
 	},
@@ -66,13 +77,24 @@ var mountCommand = cli.Command{
 
 var unmountCommand = cli.Command{
 	Name:      "unmount",
-	Usage:     "unmounts a scratch",
-	ArgsUsage: "<layer path>",
-	Before:    appargs.Validate(appargs.NonEmptyString),
+	Usage:     "deactivates a scratch, optionally unmounting",
+	ArgsUsage: "<scratch path> [mounted path]",
+	Before:    appargs.Validate(appargs.NonEmptyString, appargs.Optional(appargs.String)),
 	Action: func(context *cli.Context) (err error) {
-		path, err := filepath.Abs(context.Args().First())
+		path, err := filepath.Abs(context.Args().Get(0))
 		if err != nil {
 			return err
+		}
+
+		mountedPath, err := filepath.Abs(context.Args().Get(1))
+		if err != nil {
+			return err
+		}
+
+		if context.NArg() == 2 {
+			if err = deleteVolumeMountPoint(mountedPath); err != nil {
+				return err
+			}
 		}
 
 		err = hcsshim.UnprepareLayer(driverInfo, path)
