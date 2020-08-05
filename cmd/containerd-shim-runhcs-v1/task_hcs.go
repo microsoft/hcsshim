@@ -15,6 +15,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/internal/privileged"
 	"github.com/Microsoft/hcsshim/internal/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
@@ -30,7 +31,7 @@ import (
 	"go.opencensus.io/trace"
 )
 
-func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
+func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.CreateTaskRequest, privileged bool, s *specs.Spec) (shimTask, error) {
 	log.G(ctx).WithField("tid", req.ID).Debug("newHcsStandaloneTask")
 
 	ct, _, err := oci.GetSandboxTypeAndID(s.Annotations)
@@ -92,7 +93,7 @@ func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.Creat
 		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "oci spec does not contain WCOW or LCOW spec")
 	}
 
-	shim, err := newHcsTask(ctx, events, parent, true, req, s)
+	shim, err := newHcsTask(ctx, events, parent, true, req, privileged, s)
 	if err != nil {
 		if parent != nil {
 			parent.Close()
@@ -112,6 +113,7 @@ func newHcsTask(
 	parent *uvm.UtilityVM,
 	ownsParent bool,
 	req *task.CreateTaskRequest,
+	isPrivileged bool,
 	s *specs.Spec) (_ shimTask, err error) {
 	log.G(ctx).WithFields(logrus.Fields{
 		"tid":        req.ID,
@@ -125,11 +127,16 @@ func newHcsTask(
 		return nil, err
 	}
 
-	var netNS string
+	var (
+		netNS     string
+		resources *hcsoci.Resources
+		container cow.Container
+	)
 	if s.Windows != nil &&
 		s.Windows.Network != nil {
 		netNS = s.Windows.Network.NetworkNamespace
 	}
+
 	opts := hcsoci.CreateOptions{
 		ID:               req.ID,
 		Owner:            owner,
@@ -137,27 +144,36 @@ func newHcsTask(
 		HostingSystem:    parent,
 		NetworkNamespace: netNS,
 	}
-	system, resources, err := hcsoci.CreateContainer(ctx, &opts)
-	if err != nil {
-		return nil, err
+
+	if isPrivileged {
+		container, err = privileged.CreateContainer(ctx, req.ID, s)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		container, resources, err = hcsoci.CreateContainer(ctx, &opts)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	ht := &hcsTask{
-		events:   events,
-		id:       req.ID,
-		isWCOW:   oci.IsWCOW(s),
-		c:        system,
-		cr:       resources,
-		ownsHost: ownsParent,
-		host:     parent,
-		closed:   make(chan struct{}),
+		events:     events,
+		id:         req.ID,
+		isWCOW:     oci.IsWCOW(s),
+		c:          container,
+		privileged: isPrivileged,
+		cr:         resources,
+		ownsHost:   ownsParent,
+		host:       parent,
+		closed:     make(chan struct{}),
 	}
 	ht.init = newHcsExec(
 		ctx,
 		events,
 		req.ID,
 		parent,
-		system,
+		container,
 		req.ID,
 		req.Bundle,
 		ht.isWCOW,
@@ -238,6 +254,10 @@ type hcsTask struct {
 	// NOTE: if `osversion.Get().Build < osversion.RS5` this will always be
 	// `nil`.
 	host *uvm.UtilityVM
+
+	// Determines whether this task is a privileged container (process(es) on the
+	// host in a job object)
+	privileged bool
 
 	// ecl is the exec create lock for all non-init execs and MUST be held
 	// durring create to prevent ID duplication.
@@ -325,7 +345,7 @@ func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all 
 	if signal == 0x9 && eid == "" && ht.host != nil {
 		// If this is a SIGKILL against the init process we start a background
 		// timer and wait on either the timer expiring or the process exiting
-		// cleanly. If the timer exires first we forcibly close the UVM as we
+		// cleanly. If the timer expires first we forcibly close the UVM as we
 		// assume the guest is misbehaving for some reason.
 		go func() {
 			t := time.NewTimer(30 * time.Second)
@@ -531,9 +551,19 @@ func (ht *hcsTask) close(ctx context.Context) {
 				}
 			}
 
-			// Release any resources associated with the container.
-			if err := hcsoci.ReleaseResources(ctx, ht.cr, ht.host, true); err != nil {
-				log.G(ctx).WithError(err).Error("failed to release container resources")
+			// TODO (dcantah): Maybe make ReleaseResources part of an interface and
+			// have hcsTask carry around the mentioned interface instead of hcsoci.Resources.
+			// Then we can just call if err := ht.cr.ReleaseResources() here for both.
+			if ht.privileged {
+				pc := ht.c.(*privileged.HostJobContainer)
+				if err := pc.Release(ctx); err != nil {
+					log.G(ctx).WithError(err).Error("failed to release privileged container resources")
+				}
+			} else {
+				// Release any resources associated with the container.
+				if err := hcsoci.ReleaseResources(ctx, ht.cr, ht.host, true); err != nil {
+					log.G(ctx).WithError(err).Error("failed to release container resources")
+				}
 			}
 
 			// Close the container handle invalidating all future access.
@@ -655,6 +685,11 @@ func hcsPropertiesToWindowsStats(props *hcsschema.Properties) *stats.Statistics_
 
 func (ht *hcsTask) Stats(ctx context.Context) (*stats.Statistics, error) {
 	s := &stats.Statistics{}
+
+	// TODO (dcantah): Get relevant stats from job object.
+	if ht.privileged {
+		return &stats.Statistics{}, nil
+	}
 
 	props, err := ht.c.PropertiesV2(ctx, hcsschema.PTStatistics)
 	if err != nil {

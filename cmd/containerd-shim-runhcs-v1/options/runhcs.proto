@@ -63,6 +63,10 @@ message Options {
 	// GPUVHDPath is the path to the gpu vhd to add to the uvm
 	// when a container requests a gpu
 	string GPUVHDPath = 10; 
+
+	// Privileged specifies whether to have the runtime create privileged containers 
+	// instead of the standard hcs containers. 
+	bool Privileged = 11;
 }
 
 // ProcessDetails contains additional information about a process. This is the additional

@@ -27,7 +27,7 @@ The delete command will be executed in the container's bundle as its cwd.
 	SkipArgReorder: true,
 	Action: func(context *cli.Context) (err error) {
 		// We cant write anything to stdout for this cmd other than the
-		// task.DeleteResponse by protcol. We can write to stderr which will be
+		// task.DeleteResponse by protocol. We can write to stderr which will be
 		// warning logged in containerd.
 		logrus.SetOutput(ioutil.Discard)
 
