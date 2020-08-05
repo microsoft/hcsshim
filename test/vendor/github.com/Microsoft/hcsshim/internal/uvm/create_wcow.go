@@ -17,6 +17,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
 	"github.com/Microsoft/hcsshim/internal/wcow"
+	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 )
 
@@ -59,32 +60,30 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	}
 
 	span.AddAttributes(trace.StringAttribute(logfields.UVMID, opts.ID))
-	log.G(ctx).WithField("options", fmt.Sprintf("%+v", opts)).Debug("uvm::CreateLCOW options")
+	log.G(ctx).WithField("options", fmt.Sprintf("%+v", opts)).Debug("uvm::CreateWCOW options")
 
 	uvm := &UtilityVM{
-		id:                  opts.ID,
-		owner:               opts.Owner,
-		operatingSystem:     "windows",
-		scsiControllerCount: 1,
-		vsmbDirShares:       make(map[string]*VSMBShare),
-		vsmbFileShares:      make(map[string]*VSMBShare),
+		id:                      opts.ID,
+		owner:                   opts.Owner,
+		operatingSystem:         "windows",
+		scsiControllerCount:     1,
+		vsmbDirShares:           make(map[string]*VSMBShare),
+		vsmbFileShares:          make(map[string]*VSMBShare),
+		vpciDevices:             make(map[string]*VPCIDevice),
+		physicallyBacked:        !opts.AllowOvercommit,
+		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
 	}
+
 	defer func() {
 		if err != nil {
 			uvm.Close()
 		}
 	}()
 
-	// To maintain compatability with Docker we need to automatically downgrade
-	// a user CPU count if the setting is not possible.
-	uvm.normalizeProcessorCount(ctx, opts.ProcessorCount)
-
-	// Align the requested memory size.
-	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
-
-	if len(opts.LayerFolders) < 2 {
-		return nil, fmt.Errorf("at least 2 LayerFolders must be supplied")
+	if err := verifyOptions(ctx, opts); err != nil {
+		return nil, errors.Wrap(err, errBadUVMOpts.Error())
 	}
+
 	uvmFolder, err := uvmfolder.LocateUVMFolder(ctx, opts.LayerFolders)
 	if err != nil {
 		return nil, fmt.Errorf("failed to locate utility VM folder from layer folders: %s", err)
@@ -111,6 +110,32 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		if err := wcow.CreateUVMScratch(ctx, uvmFolder, scratchFolder, uvm.id); err != nil {
 			return nil, fmt.Errorf("failed to create scratch: %s", err)
 		}
+	}
+
+	processorTopology, err := hostProcessorInfo(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get host processor information: %s", err)
+	}
+
+	// To maintain compatability with Docker we need to automatically downgrade
+	// a user CPU count if the setting is not possible.
+	uvm.processorCount = uvm.normalizeProcessorCount(ctx, opts.ProcessorCount, processorTopology)
+
+	// Align the requested memory size.
+	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
+
+	// UVM rootfs share is readonly.
+	vsmbOpts := uvm.DefaultVSMBOptions(true)
+	vsmbOpts.TakeBackupPrivilege = true
+	virtualSMB := &hcsschema.VirtualSmb{
+		DirectFileMappingInMB: 1024, // Sensible default, but could be a tuning parameter somewhere
+		Shares: []hcsschema.VirtualSmbShare{
+			{
+				Name:    "os",
+				Path:    filepath.Join(uvmFolder, `UtilityVM\Files`),
+				Options: vsmbOpts,
+			},
+		},
 	}
 
 	doc := &hcsschema.ComputeSystem{
@@ -162,22 +187,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 						DefaultBindSecurityDescriptor: "D:P(A;;FA;;;SY)(A;;FA;;;BA)",
 					},
 				},
-				VirtualSmb: &hcsschema.VirtualSmb{
-					DirectFileMappingInMB: 1024, // Sensible default, but could be a tuning parameter somewhere
-					Shares: []hcsschema.VirtualSmbShare{
-						{
-							Name: "os",
-							Path: filepath.Join(uvmFolder, `UtilityVM\Files`),
-							Options: &hcsschema.VirtualSmbShareOptions{
-								ReadOnly:            true,
-								PseudoOplocks:       true,
-								TakeBackupPrivilege: true,
-								CacheIo:             true,
-								ShareRead:           true,
-							},
-						},
-					},
-				},
+				VirtualSmb: virtualSMB,
 			},
 		},
 	}
@@ -207,10 +217,11 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 
 	err = uvm.create(ctx, fullDoc)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error while creating the compute system: %s", err)
 	}
 
 	if opts.ExternalGuestConnection {
+		log.G(ctx).WithField("vmID", uvm.runtimeID).Debug("Using external GCS bridge")
 		l, err := winio.ListenHvsock(&winio.HvsockAddr{
 			VMID:      uvm.runtimeID,
 			ServiceID: gcs.WindowsGcsHvsockServiceID,

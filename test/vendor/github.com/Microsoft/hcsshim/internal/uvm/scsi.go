@@ -44,8 +44,7 @@ var (
 // Release frees the resources of the corresponding Scsi Mount
 func (sm *SCSIMount) Release(ctx context.Context) error {
 	if err := sm.vm.RemoveSCSI(ctx, sm.HostPath); err != nil {
-		log.G(ctx).WithError(err).Warn("failed to remove scsi device")
-		return err
+		return fmt.Errorf("failed to remove SCSI device: %s", err)
 	}
 	return nil
 }

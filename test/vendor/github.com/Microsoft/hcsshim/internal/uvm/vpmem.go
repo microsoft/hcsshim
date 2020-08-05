@@ -2,6 +2,7 @@ package uvm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -19,7 +20,7 @@ const (
 var (
 	// ErrMaxVPMEMLayerSize is the error returned when the size of `hostPath` is
 	// greater than the max vPMEM layer size set at create time.
-	ErrMaxVPMEMLayerSize = fmt.Errorf("layer size is to large for VPMEM max size")
+	ErrMaxVPMEMLayerSize = errors.New("layer size is to large for VPMEM max size")
 )
 
 // findNextVPMEM finds the next available VPMem slot.

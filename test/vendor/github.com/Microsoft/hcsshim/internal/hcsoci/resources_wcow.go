@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/log"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
@@ -54,11 +53,7 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 		if err != nil {
 			return fmt.Errorf("failed to mount container storage: %s", err)
 		}
-		if coi.HostingSystem == nil {
-			coi.Spec.Root.Path = containerRootPath // Argon v1 or v2
-		} else {
-			coi.Spec.Root.Path = containerRootPath // v2 Xenon WCOW
-		}
+		coi.Spec.Root.Path = containerRootPath
 		layers := &ImageLayers{
 			vm:                 coi.HostingSystem,
 			containerRootInUVM: r.containerRootInUVM,
@@ -121,14 +116,8 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 					r.resources = append(r.resources, pipe)
 				} else {
 					l.Debug("hcsshim::allocateWindowsResources Hot-adding VSMB share for OCI mount")
-					options := &hcsschema.VirtualSmbShareOptions{}
-					if readOnly {
-						options.ReadOnly = true
-						options.CacheIo = true
-						options.ShareRead = true
-						options.ForceLevelIIOplocks = true
-					}
-					share, err := coi.HostingSystem.AddVSMB(ctx, mount.Source, "", options)
+					options := coi.HostingSystem.DefaultVSMBOptions(readOnly)
+					share, err := coi.HostingSystem.AddVSMB(ctx, mount.Source, options)
 					if err != nil {
 						return fmt.Errorf("failed to add VSMB share to utility VM for mount %+v: %s", mount, err)
 					}
@@ -138,5 +127,18 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 		}
 	}
 
+	if cs, ok := coi.Spec.Windows.CredentialSpec.(string); ok {
+		// Only need to create a CCG instance for v2 containers
+		if schemaversion.IsV21(coi.actualSchemaVersion) {
+			hypervisorIsolated := coi.HostingSystem != nil
+			ccgState, ccgInstance, err := CreateCredentialGuard(ctx, coi.actualID, cs, hypervisorIsolated)
+			if err != nil {
+				return err
+			}
+			coi.ccgState = ccgState
+			r.resources = append(r.resources, ccgInstance)
+			//TODO dcantah: If/when dynamic service table entries is supported register the RpcEndpoint with hvsocket here
+		}
+	}
 	return nil
 }

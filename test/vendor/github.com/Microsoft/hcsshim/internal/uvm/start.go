@@ -14,9 +14,12 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/gcs"
+	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/requesttype"
 	"github.com/Microsoft/hcsshim/internal/schema1"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
@@ -115,6 +118,37 @@ func parseLogrus(vmid string) func(r io.Reader) {
 	}
 }
 
+// When using an external GCS connection it is necessary to send a ModifySettings request
+// for HvSockt so that the GCS can setup some registry keys that are required for running
+// containers inside the UVM. In non external GCS connection scenarios this is done by the
+// HCS immediately after the GCS connection is done. Since, we are using the external GCS
+// connection we should do that setup here after we connect with the GCS.
+// This only applies for WCOW
+func (uvm *UtilityVM) configureHvSocketForGCS(ctx context.Context) (err error) {
+	if uvm.OS() != "windows" {
+		return nil
+	}
+
+	hvsocketAddress := &hcsschema.HvSocketAddress{
+		LocalAddress:  uvm.runtimeID.String(),
+		ParentAddress: gcs.WindowsGcsHvHostID.String(),
+	}
+
+	conSetupReq := &hcsschema.ModifySettingRequest{
+		GuestRequest: guestrequest.GuestRequest{
+			RequestType:  requesttype.Update,
+			ResourceType: guestrequest.ResourceTypeHvSocket,
+			Settings:     hvsocketAddress,
+		},
+	}
+
+	if err = uvm.modify(ctx, conSetupReq); err != nil {
+		return fmt.Errorf("failed to configure HVSOCK for external GCS: %s", err)
+	}
+
+	return nil
+}
+
 // Start synchronously starts the utility VM.
 func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
@@ -205,6 +239,11 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 		}
 		uvm.guestCaps = *uvm.gc.Capabilities()
 		uvm.protocol = uvm.gc.Protocol()
+
+		// initial setup required for external GCS connection
+		if err = uvm.configureHvSocketForGCS(ctx); err != nil {
+			return fmt.Errorf("failed to do initial GCS setup: %s", err)
+		}
 	} else {
 		// Cache the guest connection properties.
 		properties, err := uvm.hcsSystem.Properties(ctx, schema1.PropertyTypeGuestConnection)

@@ -123,6 +123,11 @@ const (
 	annotationVPCIEnabled                = "io.microsoft.virtualmachine.lcow.vpcienabled"
 	annotationStorageQoSBandwidthMaximum = "io.microsoft.virtualmachine.storageqos.bandwidthmaximum"
 	annotationStorageQoSIopsMaximum      = "io.microsoft.virtualmachine.storageqos.iopsmaximum"
+	annotationFullyPhysicallyBacked      = "io.microsoft.virtualmachine.fullyphysicallybacked"
+	// A boolean annotation to control whether to use an external bridge or the
+	// HCS-GCS bridge. Default value is true which means external bridge will be used
+	// by default.
+	annotationUseExternalGCSBridge = "io.microsoft.virtualmachine.useexternalgcsbridge"
 )
 
 // parseAnnotationsBool searches `a` for `key` and if found verifies that the
@@ -313,6 +318,47 @@ func parseAnnotationsString(a map[string]string, key string, def string) string 
 	return def
 }
 
+// handleAnnotationKernelDirectBoot handles parsing annotationKernelDirectBoot and setting
+// implied annotations from the result.
+func handleAnnotationKernelDirectBoot(ctx context.Context, a map[string]string, lopts *uvm.OptionsLCOW) {
+	lopts.KernelDirect = parseAnnotationsBool(ctx, a, annotationKernelDirectBoot, lopts.KernelDirect)
+	if !lopts.KernelDirect {
+		lopts.KernelFile = uvm.KernelFile
+	}
+}
+
+// handleAnnotationPreferredRootFSType handles parsing annotationPreferredRootFSType and setting
+// implied annotations from the result
+func handleAnnotationPreferredRootFSType(ctx context.Context, a map[string]string, lopts *uvm.OptionsLCOW) {
+	lopts.PreferredRootFSType = parseAnnotationsPreferredRootFSType(ctx, a, annotationPreferredRootFSType, lopts.PreferredRootFSType)
+	switch lopts.PreferredRootFSType {
+	case uvm.PreferredRootFSTypeInitRd:
+		lopts.RootFSFile = uvm.InitrdFile
+	case uvm.PreferredRootFSTypeVHD:
+		lopts.RootFSFile = uvm.VhdFile
+	}
+}
+
+// handleAnnotationFullyPhysicallyBacked handles parsing annotationFullyPhysicallyBacked and setting
+// implied annotations from the result. For both LCOW and WCOW options.
+func handleAnnotationFullyPhysicallyBacked(ctx context.Context, a map[string]string, opts interface{}) {
+	switch options := opts.(type) {
+	case *uvm.OptionsLCOW:
+		options.FullyPhysicallyBacked = parseAnnotationsBool(ctx, a, annotationFullyPhysicallyBacked, options.FullyPhysicallyBacked)
+		if options.FullyPhysicallyBacked {
+			options.AllowOvercommit = false
+			options.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
+			options.RootFSFile = uvm.InitrdFile
+			options.VPMemDeviceCount = 0
+		}
+	case *uvm.OptionsWCOW:
+		options.FullyPhysicallyBacked = parseAnnotationsBool(ctx, a, annotationFullyPhysicallyBacked, options.FullyPhysicallyBacked)
+		if options.FullyPhysicallyBacked {
+			options.AllowOvercommit = false
+		}
+	}
+}
+
 // SpecToUVMCreateOpts parses `s` and returns either `*uvm.OptionsLCOW` or
 // `*uvm.OptionsWCOW`.
 func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (interface{}, error) {
@@ -335,19 +381,15 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.VPMemSizeBytes = parseAnnotationsUint64(ctx, s.Annotations, annotationVPMemSize, lopts.VPMemSizeBytes)
 		lopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(ctx, s, annotationStorageQoSBandwidthMaximum, lopts.StorageQoSBandwidthMaximum)
 		lopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotationStorageQoSIopsMaximum, lopts.StorageQoSIopsMaximum)
-		lopts.PreferredRootFSType = parseAnnotationsPreferredRootFSType(ctx, s.Annotations, annotationPreferredRootFSType, lopts.PreferredRootFSType)
-		switch lopts.PreferredRootFSType {
-		case uvm.PreferredRootFSTypeInitRd:
-			lopts.RootFSFile = uvm.InitrdFile
-		case uvm.PreferredRootFSTypeVHD:
-			lopts.RootFSFile = uvm.VhdFile
-		}
 		lopts.VPCIEnabled = parseAnnotationsBool(ctx, s.Annotations, annotationVPCIEnabled, lopts.VPCIEnabled)
-		lopts.KernelDirect = parseAnnotationsBool(ctx, s.Annotations, annotationKernelDirectBoot, lopts.KernelDirect)
-		if !lopts.KernelDirect {
-			lopts.KernelFile = uvm.KernelFile
-		}
 		lopts.BootFilesPath = parseAnnotationsString(s.Annotations, annotationBootFilesRootPath, lopts.BootFilesPath)
+		lopts.ExternalGuestConnection = parseAnnotationsBool(ctx, s.Annotations, annotationUseExternalGCSBridge, lopts.ExternalGuestConnection)
+		handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
+		handleAnnotationKernelDirectBoot(ctx, s.Annotations, lopts)
+
+		// parsing of FullyPhysicallyBacked needs to go after handling kernel direct boot and
+		// preferred rootfs type since it may overwrite settings created by those
+		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, lopts)
 		return lopts, nil
 	} else if IsWCOW(s) {
 		wopts := uvm.NewDefaultOptionsWCOW(id, owner)
@@ -362,6 +404,8 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		wopts.ProcessorWeight = ParseAnnotationsCPUWeight(ctx, s, annotationProcessorWeight, wopts.ProcessorWeight)
 		wopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(ctx, s, annotationStorageQoSBandwidthMaximum, wopts.StorageQoSBandwidthMaximum)
 		wopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotationStorageQoSIopsMaximum, wopts.StorageQoSIopsMaximum)
+		wopts.ExternalGuestConnection = parseAnnotationsBool(ctx, s.Annotations, annotationUseExternalGCSBridge, wopts.ExternalGuestConnection)
+		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, wopts)
 		return wopts, nil
 	}
 	return nil, errors.New("cannot create UVM opts spec is not LCOW or WCOW")
