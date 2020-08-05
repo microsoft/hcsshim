@@ -4,18 +4,19 @@ package hcsoci
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
+
+	"github.com/Microsoft/hcsshim/internal/processorinfo"
 
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
-	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
@@ -85,7 +86,11 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 			// Normalize to UVM size
 			hostCPUCount = coi.HostingSystem.ProcessorCount()
 		} else {
-			hostCPUCount = int32(runtime.NumCPU())
+			// For process isolated case the amount of logical processors reported
+			// from the HCS apis may be greater than what is available to the host in a
+			// minroot configuration (host doesn't have access to all available LPs)
+			// so prefer standard OS level calls here instead.
+			hostCPUCount = processorinfo.ProcessorCount()
 		}
 		if cpuCount > hostCPUCount {
 			l := log.G(ctx).WithField(logfields.ContainerID, coi.ID)
@@ -103,25 +108,10 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		v1.ProcessorMaximum = int64(cpuLimit)
 		v1.ProcessorWeight = uint64(cpuWeight)
 
-		if cpuCount == 0 {
-			// TODO: JTERRY75 - There is a Windows platform bug (VSO#20891779)
-			// for V2 that we cannot set Maximum or Weight. We have to silently
-			// ignore here until its fixed. When the bug is fixed fully remove
-			// this if/else and always assign the v2Container.Processor field.
-			l := log.G(ctx).WithField(logfields.ContainerID, coi.ID)
-			if coi.HostingSystem != nil {
-				l.Data[logfields.UVMID] = coi.HostingSystem.ID()
-			}
-			l.WithFields(logrus.Fields{
-				"limit":  cpuLimit,
-				"weight": cpuWeight,
-			}).Warning("silently ignoring Windows Process Container QoS for limit or weight until bug fix")
-		} else {
-			v2Container.Processor = &hcsschema.Processor{
-				Count: cpuCount,
-				// Maximum: cpuLimit, // TODO: JTERRY75 - When the above bug is fixed remove this if/else and set this value.
-				// Weight:  cpuWeight, // TODO: JTERRY75 - When the above bug is fixed remove this if/else and set this value.
-			}
+		v2Container.Processor = &hcsschema.Processor{
+			Count:   cpuCount,
+			Maximum: cpuLimit,
+			Weight:  cpuWeight,
 		}
 	}
 
@@ -165,9 +155,14 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		v2Container.Networking.NetworkSharedContainerName = v1.NetworkSharedContainerName
 	}
 
-	//	// TODO V2 Credentials not in the schema yet.
 	if cs, ok := coi.Spec.Windows.CredentialSpec.(string); ok {
 		v1.Credentials = cs
+		// If this is a HCS v2 schema container, we created the CCG instance
+		// with the other container resources. Pass the CCG state information
+		// as part of the container document.
+		if coi.ccgState != nil {
+			v2Container.ContainerCredentialGuard = coi.ccgState
+		}
 	}
 
 	if coi.Spec.Root == nil {
@@ -181,8 +176,7 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	// Strip off the top-most RW/scratch layer as that's passed in separately to HCS for v1
 	v1.LayerFolderPath = coi.Spec.Windows.LayerFolders[len(coi.Spec.Windows.LayerFolders)-1]
 
-	if (schemaversion.IsV21(coi.actualSchemaVersion) && coi.HostingSystem == nil) ||
-		(schemaversion.IsV10(coi.actualSchemaVersion) && coi.Spec.Windows.HyperV == nil) {
+	if coi.isV2Argon() || coi.isV1Argon() {
 		// Argon v1 or v2.
 		const volumeGUIDRegex = `^\\\\\?\\(Volume)\{{0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}\}(|\\)$`
 		if matched, err := regexp.MatchString(volumeGUIDRegex, coi.Spec.Root.Path); !matched || err != nil {
@@ -193,39 +187,36 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		}
 		v1.VolumePath = coi.Spec.Root.Path[:len(coi.Spec.Root.Path)-1] // Strip the trailing backslash. Required for v1.
 		v2Container.Storage.Path = coi.Spec.Root.Path
-	} else {
-		// A hosting system was supplied, implying v2 Xenon; OR a v1 Xenon.
-		if schemaversion.IsV10(coi.actualSchemaVersion) {
-			// V1 Xenon
-			v1.HvPartition = true
-			if coi.Spec == nil || coi.Spec.Windows == nil || coi.Spec.Windows.HyperV == nil { // Be resilient to nil de-reference
-				return nil, nil, fmt.Errorf(`invalid container spec - Spec.Windows.HyperV is nil`)
-			}
-			if coi.Spec.Windows.HyperV.UtilityVMPath != "" {
-				// Client-supplied utility VM path
-				v1.HvRuntime = &schema1.HvRuntime{ImagePath: coi.Spec.Windows.HyperV.UtilityVMPath}
-			} else {
-				// Client was lazy. Let's locate it from the layer folders instead.
-				uvmImagePath, err := uvmfolder.LocateUVMFolder(ctx, coi.Spec.Windows.LayerFolders)
-				if err != nil {
-					return nil, nil, err
-				}
-				v1.HvRuntime = &schema1.HvRuntime{ImagePath: filepath.Join(uvmImagePath, `UtilityVM`)}
-			}
+	} else if coi.isV1Xenon() {
+		// V1 Xenon
+		v1.HvPartition = true
+		if coi.Spec == nil || coi.Spec.Windows == nil || coi.Spec.Windows.HyperV == nil { // Be resilient to nil de-reference
+			return nil, nil, fmt.Errorf(`invalid container spec - Spec.Windows.HyperV is nil`)
+		}
+		if coi.Spec.Windows.HyperV.UtilityVMPath != "" {
+			// Client-supplied utility VM path
+			v1.HvRuntime = &schema1.HvRuntime{ImagePath: coi.Spec.Windows.HyperV.UtilityVMPath}
 		} else {
-			// Hosting system was supplied, so is v2 Xenon.
-			v2Container.Storage.Path = coi.Spec.Root.Path
-			if coi.HostingSystem.OS() == "windows" {
-				layers, err := computeV2Layers(ctx, coi.HostingSystem, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1])
-				if err != nil {
-					return nil, nil, err
-				}
-				v2Container.Storage.Layers = layers
+			// Client was lazy. Let's locate it from the layer folders instead.
+			uvmImagePath, err := uvmfolder.LocateUVMFolder(ctx, coi.Spec.Windows.LayerFolders)
+			if err != nil {
+				return nil, nil, err
 			}
+			v1.HvRuntime = &schema1.HvRuntime{ImagePath: filepath.Join(uvmImagePath, `UtilityVM`)}
+		}
+	} else if coi.isV2Xenon() {
+		// Hosting system was supplied, so is v2 Xenon.
+		v2Container.Storage.Path = coi.Spec.Root.Path
+		if coi.HostingSystem.OS() == "windows" {
+			layers, err := computeV2Layers(ctx, coi.HostingSystem, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1])
+			if err != nil {
+				return nil, nil, err
+			}
+			v2Container.Storage.Layers = layers
 		}
 	}
 
-	if coi.HostingSystem == nil { // Argon v1 or v2
+	if coi.isV2Argon() || coi.isV1Argon() { // Argon v1 or v2
 		for _, layerPath := range coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1] {
 			layerID, err := wclayer.LayerID(ctx, layerPath)
 			if err != nil {
@@ -264,7 +255,7 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 			if coi.HostingSystem == nil {
 				mdv2.HostPath = mount.Source
 			} else {
-				uvmPath, err := coi.HostingSystem.GetVSMBUvmPath(ctx, mount.Source)
+				uvmPath, err := coi.HostingSystem.GetVSMBUvmPath(ctx, mount.Source, readOnly)
 				if err != nil {
 					if err == uvm.ErrNotAttached {
 						// It could also be a scsi mount.
@@ -290,5 +281,48 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	}
 	v1.MappedPipes = mpsv1
 	v2Container.MappedPipes = mpsv2
+
+	if specHasAssignedDevices(coi) {
+		// add assigned devices to the container definition
+		if err := parseAssignedDevices(coi, v2Container); err != nil {
+			return nil, nil, err
+		}
+	}
+
 	return v1, v2Container, nil
+}
+
+func specHasAssignedDevices(coi *createOptionsInternal) bool {
+	if coi.Spec.Windows != nil && coi.Spec.Windows.Devices != nil &&
+		len(coi.Spec.Windows.Devices) > 0 {
+		return true
+	}
+	return false
+}
+
+// parseAssignedDevices parses assigned devices for the container definition
+// this is currently supported for HCS schema V2 argon only
+func parseAssignedDevices(coi *createOptionsInternal, v2 *hcsschema.Container) error {
+	if !coi.isV2Argon() {
+		return errors.New("device assignment is currently only supported for HCS schema V2 argon")
+	}
+
+	v2AssignedDevices := []hcsschema.Device{}
+	for _, d := range coi.Spec.Windows.Devices {
+		v2Dev := hcsschema.Device{}
+		switch d.IDType {
+		case uvm.VPCILocationPathIDType:
+			v2Dev.LocationPath = d.ID
+			v2Dev.Type = hcsschema.DeviceInstance
+		case uvm.VPCIClassGUIDTypeLegacy:
+			v2Dev.InterfaceClassGuid = d.ID
+		case uvm.VPCIClassGUIDType:
+			v2Dev.InterfaceClassGuid = d.ID
+		default:
+			return fmt.Errorf("specified device %s has unsupported type %s", d.ID, d.IDType)
+		}
+		v2AssignedDevices = append(v2AssignedDevices, v2Dev)
+	}
+	v2.AssignedDevices = v2AssignedDevices
+	return nil
 }

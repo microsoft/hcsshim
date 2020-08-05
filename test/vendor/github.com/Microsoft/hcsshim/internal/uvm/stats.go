@@ -116,21 +116,30 @@ func (uvm *UtilityVM) Stats(ctx context.Context) (*stats.VirtualMachineStatistic
 	s.Processor = &stats.VirtualMachineProcessorStatistics{}
 	s.Processor.TotalRuntimeNS = uint64(props.Statistics.Processor.TotalRuntime100ns * 100)
 
-	// The HCS properties does not return sufficient information to calculate
-	// working set size for a VA-backed UVM. To work around this, we instead
-	// locate the vmmem process for the VM, and query that process's working set
-	// instead, which will be the working set for the VM.
-	vmmemProc, err := uvm.getVMMEMProcess(ctx)
-	if err != nil {
-		return nil, err
+	s.Memory = &stats.VirtualMachineMemoryStatistics{}
+	if uvm.physicallyBacked {
+		// If the uvm is physically backed we set the working set to the total amount allocated
+		// to the UVM. AssignedMemory returns the number of 4KB pages. Will always be 4KB
+		// regardless of what the UVMs actual page size is so we don't need that information.
+		if props.Memory != nil {
+			s.Memory.WorkingSetBytes = props.Memory.VirtualMachineMemory.AssignedMemory * 4096
+		}
+	} else {
+		// The HCS properties does not return sufficient information to calculate
+		// working set size for a VA-backed UVM. To work around this, we instead
+		// locate the vmmem process for the VM, and query that process's working set
+		// instead, which will be the working set for the VM.
+		vmmemProc, err := uvm.getVMMEMProcess(ctx)
+		if err != nil {
+			return nil, err
+		}
+		memCounters, err := process.GetProcessMemoryInfo(vmmemProc)
+		if err != nil {
+			return nil, err
+		}
+		s.Memory.WorkingSetBytes = uint64(memCounters.WorkingSetSize)
 	}
-	memCounters, err := process.GetProcessMemoryInfo(vmmemProc)
-	if err != nil {
-		return nil, err
-	}
-	s.Memory = &stats.VirtualMachineMemoryStatistics{
-		WorkingSetBytes: uint64(memCounters.WorkingSetSize),
-	}
+
 	if props.Memory != nil {
 		s.Memory.VirtualNodeCount = props.Memory.VirtualNodeCount
 		s.Memory.VmMemory = &stats.VirtualMachineMemory{}
@@ -142,6 +151,5 @@ func (uvm *UtilityVM) Stats(ctx context.Context) (*stats.VirtualMachineStatistic
 		s.Memory.VmMemory.BalancingEnabled = props.Memory.VirtualMachineMemory.BalancingEnabled
 		s.Memory.VmMemory.DmOperationInProgress = props.Memory.VirtualMachineMemory.DmOperationInProgress
 	}
-
 	return s, nil
 }

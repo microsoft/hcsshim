@@ -14,7 +14,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -163,23 +162,18 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 	addGPUVHD := false
 	for i, d := range coi.Spec.Windows.Devices {
 		switch d.IDType {
-		case "gpu":
+		case uvm.GPUDeviceIDType:
 			addGPUVHD = true
-			v := hcsschema.VirtualPciDevice{
-				Functions: []hcsschema.VirtualPciFunction{
-					{
-						DeviceInstancePath: d.ID,
-					},
-				},
-			}
-			vpci, err := coi.HostingSystem.AssignDevice(ctx, v)
+			vpci, err := coi.HostingSystem.AssignDevice(ctx, d.ID)
 			if err != nil {
 				return errors.Wrapf(err, "failed to assign gpu device %s to pod %s", d.ID, coi.HostingSystem.ID())
 			}
 			r.resources = append(r.resources, vpci)
 			// update device ID on the spec to the assigned device's resulting vmbus guid so gcs knows which devices to
 			// map into the container
-			coi.Spec.Windows.Devices[i].ID = vpci.ID
+			coi.Spec.Windows.Devices[i].ID = vpci.VMBusGUID
+		default:
+			return fmt.Errorf("specified device %s has unsupported type %s", d.ID, d.IDType)
 		}
 	}
 

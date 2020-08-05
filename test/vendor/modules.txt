@@ -27,6 +27,7 @@ github.com/Microsoft/hcsshim/internal/mergemaps
 github.com/Microsoft/hcsshim/internal/oc
 github.com/Microsoft/hcsshim/internal/oci
 github.com/Microsoft/hcsshim/internal/ospath
+github.com/Microsoft/hcsshim/internal/processorinfo
 github.com/Microsoft/hcsshim/internal/regstate
 github.com/Microsoft/hcsshim/internal/requesttype
 github.com/Microsoft/hcsshim/internal/runhcs
@@ -34,6 +35,7 @@ github.com/Microsoft/hcsshim/internal/safefile
 github.com/Microsoft/hcsshim/internal/schema1
 github.com/Microsoft/hcsshim/internal/schema2
 github.com/Microsoft/hcsshim/internal/schemaversion
+github.com/Microsoft/hcsshim/internal/shimdiag
 github.com/Microsoft/hcsshim/internal/timeout
 github.com/Microsoft/hcsshim/internal/uvm
 github.com/Microsoft/hcsshim/internal/uvmfolder
@@ -44,7 +46,7 @@ github.com/Microsoft/hcsshim/osversion
 github.com/Microsoft/hcsshim/pkg/go-runhcs
 # github.com/blang/semver v3.1.0+incompatible
 github.com/blang/semver
-# github.com/containerd/cgroups v0.0.0-20190919134610-bf292b21730f
+# github.com/containerd/cgroups v0.0.0-20200531161412-0dbf7f05ba59
 github.com/containerd/cgroups/stats/v1
 # github.com/containerd/console v0.0.0-20180822173158-c12b1e7919c1
 github.com/containerd/console
@@ -140,7 +142,7 @@ github.com/hashicorp/errwrap
 github.com/hashicorp/go-multierror
 # github.com/hashicorp/golang-lru v0.5.1
 github.com/hashicorp/golang-lru/simplelru
-# github.com/konsorten/go-windows-terminal-sequences v1.0.1
+# github.com/konsorten/go-windows-terminal-sequences v1.0.2
 github.com/konsorten/go-windows-terminal-sequences
 # github.com/opencontainers/go-digest v0.0.0-20180430190053-c9281466c8b2
 github.com/opencontainers/go-digest
@@ -151,7 +153,7 @@ github.com/opencontainers/image-spec/specs-go/v1
 # github.com/opencontainers/runc v0.0.0-20190115041553-12f6a991201f
 github.com/opencontainers/runc/libcontainer/system
 github.com/opencontainers/runc/libcontainer/user
-# github.com/opencontainers/runtime-spec v0.1.2-0.20190507144316-5b71a03e2700
+# github.com/opencontainers/runtime-spec v1.0.2
 github.com/opencontainers/runtime-spec/specs-go
 # github.com/opencontainers/runtime-tools v0.0.0-20181011054405-1d69bd0f9c39
 github.com/opencontainers/runtime-tools/error
@@ -160,7 +162,7 @@ github.com/opencontainers/runtime-tools/generate
 github.com/opencontainers/runtime-tools/generate/seccomp
 github.com/opencontainers/runtime-tools/specerror
 github.com/opencontainers/runtime-tools/validate
-# github.com/pkg/errors v0.8.1
+# github.com/pkg/errors v0.9.1
 github.com/pkg/errors
 # github.com/sirupsen/logrus v1.4.2
 github.com/sirupsen/logrus
@@ -190,7 +192,7 @@ golang.org/x/net/trace
 # golang.org/x/sync v0.0.0-20190423024810-112230192c58
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.0.0-20190916202348-b4ddaad3f8a3
+# golang.org/x/sys v0.0.0-20200120151820-655fe14d7479
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry

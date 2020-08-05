@@ -19,6 +19,7 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
@@ -115,9 +116,6 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		VPCIEnabled:           false,
 	}
 
-	// LCOW has more reliable behavior with the external bridge.
-	opts.Options.ExternalGuestConnection = true
-
 	if _, err := os.Stat(filepath.Join(opts.BootFilesPath, VhdFile)); err == nil {
 		// We have a rootfs.vhd in the boot files path. Use it over an initrd.img
 		opts.RootFSFile = VhdFile
@@ -159,25 +157,22 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	}
 
 	uvm := &UtilityVM{
-		id:                  opts.ID,
-		owner:               opts.Owner,
-		operatingSystem:     "linux",
-		scsiControllerCount: opts.SCSIControllerCount,
-		vpmemMaxCount:       opts.VPMemDeviceCount,
-		vpmemMaxSizeBytes:   opts.VPMemSizeBytes,
+		id:                      opts.ID,
+		owner:                   opts.Owner,
+		operatingSystem:         "linux",
+		scsiControllerCount:     opts.SCSIControllerCount,
+		vpmemMaxCount:           opts.VPMemDeviceCount,
+		vpmemMaxSizeBytes:       opts.VPMemSizeBytes,
+		vpciDevices:             make(map[string]*VPCIDevice),
+		physicallyBacked:        !opts.AllowOvercommit,
+		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
 	}
+
 	defer func() {
 		if err != nil {
 			uvm.Close()
 		}
 	}()
-
-	// To maintain compatability with Docker we need to automatically downgrade
-	// a user CPU count if the setting is not possible.
-	uvm.normalizeProcessorCount(ctx, opts.ProcessorCount)
-
-	// Align the requested memory size.
-	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
 
 	kernelFullPath := filepath.Join(opts.BootFilesPath, opts.KernelFile)
 	if _, err := os.Stat(kernelFullPath); os.IsNotExist(err) {
@@ -188,28 +183,21 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		return nil, fmt.Errorf("boot file: '%s' not found", rootfsFullPath)
 	}
 
-	if opts.SCSIControllerCount > 1 {
-		return nil, fmt.Errorf("SCSI controller count must be 0 or 1") // Future extension here for up to 4
-	}
-	if opts.VPMemDeviceCount > MaxVPMEMCount {
-		return nil, fmt.Errorf("vpmem device count cannot be greater than %d", MaxVPMEMCount)
-	}
-	if uvm.vpmemMaxCount > 0 {
-		if opts.VPMemSizeBytes%4096 != 0 {
-			return nil, fmt.Errorf("opts.VPMemSizeBytes must be a multiple of 4096")
-		}
-	} else {
-		if opts.PreferredRootFSType == PreferredRootFSTypeVHD {
-			return nil, fmt.Errorf("PreferredRootFSTypeVHD requires at least one VPMem device")
-		}
-	}
-	if opts.KernelDirect && osversion.Get().Build < 18286 {
-		return nil, fmt.Errorf("KernelDirectBoot is not support on builds older than 18286")
+	if err := verifyOptions(ctx, opts); err != nil {
+		return nil, errors.Wrap(err, errBadUVMOpts.Error())
 	}
 
-	if opts.EnableColdDiscardHint && osversion.Get().Build < 18967 {
-		return nil, fmt.Errorf("EnableColdDiscardHint is not supported on builds older than 18967")
+	processorTopology, err := hostProcessorInfo(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get host processor information: %s", err)
 	}
+
+	// To maintain compatability with Docker we need to automatically downgrade
+	// a user CPU count if the setting is not possible.
+	uvm.processorCount = uvm.normalizeProcessorCount(ctx, opts.ProcessorCount, processorTopology)
+
+	// Align the requested memory size.
+	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
 
 	doc := &hcsschema.ComputeSystem{
 		Owner:                             uvm.owner,
@@ -390,7 +378,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 
 	err = uvm.create(ctx, fullDoc)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error while creating the compute system: %s", err)
 	}
 
 	// Cerate a socket to inject entropy during boot.
@@ -411,6 +399,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	}
 
 	if opts.UseGuestConnection && opts.ExternalGuestConnection {
+		log.G(ctx).WithField("vmID", uvm.runtimeID).Debug("Using external GCS bridge")
 		l, err := uvm.listenVsock(gcs.LinuxGcsVsockPort)
 		if err != nil {
 			return nil, err

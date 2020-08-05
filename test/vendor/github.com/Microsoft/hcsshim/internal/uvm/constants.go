@@ -1,6 +1,8 @@
 package uvm
 
-import "fmt"
+import (
+	"errors"
+)
 
 const (
 	// MaxVPMEMCount is the maximum number of VPMem devices that may be added to an LCOW
@@ -16,4 +18,7 @@ const (
 	DefaultVPMemSizeBytes = 4 * 1024 * 1024 * 1024 // 4GB
 )
 
-var errNotSupported = fmt.Errorf("not supported")
+var (
+	errNotSupported = errors.New("not supported")
+	errBadUVMOpts   = errors.New("UVM options incorrect")
+)

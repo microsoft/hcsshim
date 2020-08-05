@@ -96,7 +96,7 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 		if err != nil {
 			if uvm.OS() == "windows" {
 				for _, l := range layersAdded {
-					if err := uvm.RemoveVSMB(ctx, l); err != nil {
+					if err := uvm.RemoveVSMB(ctx, l, true); err != nil {
 						log.G(ctx).WithError(err).Warn("failed to remove wcow layer on cleanup")
 					}
 				}
@@ -118,14 +118,9 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 	for _, layerPath := range layerFolders[:len(layerFolders)-1] {
 		log.G(ctx).WithField("layerPath", layerPath).Debug("mounting layer")
 		if uvm.OS() == "windows" {
-			options := &hcsschema.VirtualSmbShareOptions{
-				ReadOnly:            true,
-				PseudoOplocks:       true,
-				TakeBackupPrivilege: true,
-				CacheIo:             true,
-				ShareRead:           true,
-			}
-			if _, err := uvm.AddVSMB(ctx, layerPath, "", options); err != nil {
+			options := uvm.DefaultVSMBOptions(true)
+			options.TakeBackupPrivilege = true
+			if _, err := uvm.AddVSMB(ctx, layerPath, options); err != nil {
 				return "", fmt.Errorf("failed to add VSMB layer: %s", err)
 			}
 			layersAdded = append(layersAdded, layerPath)
@@ -134,19 +129,9 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 				layerPath = filepath.Join(layerPath, "layer.vhd")
 				uvmPath   string
 			)
-
-			// We first try vPMEM and if it is full or the file is too large we
-			// fall back to SCSI.
-			uvmPath, err = uvm.AddVPMEM(ctx, layerPath)
-			if err == uvmpkg.ErrNoAvailableLocation || err == uvmpkg.ErrMaxVPMEMLayerSize {
-				log.G(ctx).WithError(err).Debug("falling back to SCSI for LCOW layer addition")
-				uvmPath = fmt.Sprintf(lcowGlobalMountPrefix, uvm.UVMMountCounter())
-				_, err := uvm.AddSCSI(ctx, layerPath, uvmPath, true, uvmpkg.VMAccessTypeNoop)
-				if err != nil {
-					return "", fmt.Errorf("failed to add SCSI layer: %s", err)
-				}
-			} else if err != nil {
-				return "", fmt.Errorf("failed to add VPMEM layer: %s", err)
+			uvmPath, err = addLCOWLayer(ctx, uvm, layerPath)
+			if err != nil {
+				return "", fmt.Errorf("failed to add LCOW layer: %s", err)
 			}
 			layersAdded = append(layersAdded, layerPath)
 			lcowUvmLayerPaths = append(lcowUvmLayerPaths, uvmPath)
@@ -189,6 +174,28 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 	}
 	log.G(ctx).Debug("hcsshim::mountContainerLayers Succeeded")
 	return rootfs, nil
+}
+
+func addLCOWLayer(ctx context.Context, uvm *uvmpkg.UtilityVM, layerPath string) (uvmPath string, err error) {
+	// don't try to add as vpmem when we want additional devices on the uvm to be fully physically backed
+	if !uvm.DevicesPhysicallyBacked() {
+		// We first try vPMEM and if it is full or the file is too large we
+		// fall back to SCSI.
+		uvmPath, err = uvm.AddVPMEM(ctx, layerPath)
+		if err == nil {
+			return uvmPath, err
+		} else if err != uvmpkg.ErrNoAvailableLocation && err != uvmpkg.ErrMaxVPMEMLayerSize {
+			return "", err
+		}
+	}
+
+	uvmPath = fmt.Sprintf(lcowGlobalMountPrefix, uvm.UVMMountCounter())
+	sm, err := uvm.AddSCSI(ctx, layerPath, uvmPath, true, uvmpkg.VMAccessTypeNoop)
+	if err != nil {
+		return "", fmt.Errorf("failed to add SCSI layer: %s", err)
+	}
+
+	return sm.UVMPath, nil
 }
 
 // UnmountOperation is used when calling Unmount() to determine what type of unmount is
@@ -258,7 +265,7 @@ func UnmountContainerLayers(ctx context.Context, layerFolders []string, containe
 	// to share layers.
 	if uvm.OS() == "windows" && (op&UnmountOperationVSMB) == UnmountOperationVSMB {
 		for _, layerPath := range layerFolders[:len(layerFolders)-1] {
-			if e := uvm.RemoveVSMB(ctx, layerPath); e != nil {
+			if e := uvm.RemoveVSMB(ctx, layerPath, true); e != nil {
 				log.G(ctx).WithError(e).Warn("remove VSMB failed")
 				if retError == nil {
 					retError = e
@@ -297,7 +304,7 @@ func UnmountContainerLayers(ctx context.Context, layerFolders []string, containe
 
 func computeV2Layers(ctx context.Context, vm *uvm.UtilityVM, paths []string) (layers []hcsschema.Layer, err error) {
 	for _, path := range paths {
-		uvmPath, err := vm.GetVSMBUvmPath(ctx, path)
+		uvmPath, err := vm.GetVSMBUvmPath(ctx, path, true)
 		if err != nil {
 			return nil, err
 		}

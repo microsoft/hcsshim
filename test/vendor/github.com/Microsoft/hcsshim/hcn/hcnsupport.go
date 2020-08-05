@@ -14,6 +14,10 @@ type SupportedFeatures struct {
 	Slash32EndpointPrefixes  bool        `json:"Slash32EndpointPrefixes"`
 	AclSupportForProtocol252 bool        `json:"AclSupportForProtocol252"`
 	SessionAffinity          bool        `json:"SessionAffinity"`
+	IPv6DualStack            bool        `json:"IPv6DualStack"`
+	SetPolicy                bool        `json:"SetPolicy"`
+	VxlanPort                bool        `json:"VxlanPort"`
+	L4Proxy                  bool        `json:"L4Proxy"`
 }
 
 // AclFeatures are the supported ACL possibilities.
@@ -59,6 +63,10 @@ func GetSupportedFeatures() SupportedFeatures {
 	features.Slash32EndpointPrefixes = isFeatureSupported(globals.Version, Slash32EndpointPrefixesVersion)
 	features.AclSupportForProtocol252 = isFeatureSupported(globals.Version, AclSupportForProtocol252Version)
 	features.SessionAffinity = isFeatureSupported(globals.Version, SessionAffinityVersion)
+	features.IPv6DualStack = isFeatureSupported(globals.Version, IPv6DualStackVersion)
+	features.SetPolicy = isFeatureSupported(globals.Version, SetPolicyVersion)
+	features.VxlanPort = isFeatureSupported(globals.Version, VxlanPortVersion)
+	features.L4Proxy = isFeatureSupported(globals.Version, L4ProxyPolicyVersion)
 
 	return features
 }
