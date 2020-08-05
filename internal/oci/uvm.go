@@ -128,6 +128,9 @@ const (
 	// HCS-GCS bridge. Default value is true which means external bridge will be used
 	// by default.
 	annotationUseExternalGCSBridge = "io.microsoft.virtualmachine.useexternalgcsbridge"
+	// A boolean annotation to control whether to launch a "privileged" container instead
+	// of the standard.
+	annotationPrivileged = "io.microsoft.container.privileged"
 )
 
 // parseAnnotationsBool searches `a` for `key` and if found verifies that the
@@ -432,6 +435,10 @@ func UpdateSpecFromOptions(s specs.Spec, opts *runhcsopts.Options) specs.Spec {
 
 	if _, ok := s.Annotations[AnnotationGPUVHDPath]; !ok && opts.GPUVHDPath != "" {
 		s.Annotations[AnnotationGPUVHDPath] = opts.GPUVHDPath
+	}
+
+	if _, ok := s.Annotations[annotationPrivileged]; !ok && opts.Privileged {
+		s.Annotations[annotationPrivileged] = ""
 	}
 
 	return s

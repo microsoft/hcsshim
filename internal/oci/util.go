@@ -16,3 +16,11 @@ func IsWCOW(s *specs.Spec) bool {
 func IsIsolated(s *specs.Spec) bool {
 	return IsLCOW(s) || (s.Windows != nil && s.Windows.HyperV != nil)
 }
+
+// IsPrivileged checks if `s` is asking for a Windows privileged container.
+func IsPrivileged(s *specs.Spec) bool {
+	if _, ok := s.Annotations[annotationPrivileged]; ok {
+		return true
+	}
+	return false
+}
