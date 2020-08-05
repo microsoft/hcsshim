@@ -10,10 +10,10 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 )
 
-// hostProcessorInfo queries HCS for the UVM hosts processor information, including topology
+// HostProcessorInfo queries HCS for the UVM hosts processor information, including topology
 // and NUMA configuration. This is also used to reliably get the hosts number of logical
 // processors in multi processor group settings.
-func hostProcessorInfo(ctx context.Context) (*hcsschema.ProcessorTopology, error) {
+func HostProcessorInfo(ctx context.Context) (*hcsschema.ProcessorTopology, error) {
 	q := hcsschema.PropertyQuery{
 		PropertyTypes: []hcsschema.PropertyType{hcsschema.PTProcessorTopology},
 	}

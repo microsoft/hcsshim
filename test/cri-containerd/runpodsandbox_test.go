@@ -1137,6 +1137,150 @@ func Test_RunPodSandbox_Mount_SandboxDir_LCOW(t *testing.T) {
 	//TODO: Parse the output of the exec command to make sure the uvm mount was successful
 }
 
+func Test_RunPodSandbox_CPUGroup_LCOW(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+
+	annotations := []map[string]string{
+		{
+			"io.microsoft.virtualmachine.cpugroup.id": "FA22A12C-36B3-486D-A3E9-BC526C2B450B",
+			// we believe it is reasonable to assume our test machines will have at least two LPs, otherwise
+			// this test will fail.
+			"io.microsoft.virtualmachine.cpugroup.logicalprocessors": "0,1",
+			"io.microsoft.virtualmachine.cpugroup.cap":               "32768",
+		},
+		{
+			"io.microsoft.virtualmachine.cpugroup.randomid": "true",
+			// we believe it is reasonable to assume our test machines will have at least two LPs, otherwise
+			// this test will fail.
+			"io.microsoft.virtualmachine.cpugroup.logicalprocessors": "0,1",
+			"io.microsoft.virtualmachine.cpugroup.cap":               "32768",
+		},
+		{
+			"io.microsoft.virtualmachine.cpugroup.randomid": "true",
+		},
+		{
+			"io.microsoft.virtualmachine.cpugroup.id": "FA22A12C-36B3-486D-A3E9-BC526C2B450B",
+		},
+	}
+
+	for _, a := range annotations {
+		request := &runtime.RunPodSandboxRequest{
+			Config: &runtime.PodSandboxConfig{
+				Metadata: &runtime.PodSandboxMetadata{
+					Name:      t.Name(),
+					Uid:       "0",
+					Namespace: testNamespace,
+				},
+				Annotations: a,
+			},
+			RuntimeHandler: lcowRuntimeHandler,
+		}
+		runPodSandboxTest(t, request)
+	}
+}
+
+func Test_RunPodSandbox_CPUGroupSchedulingPriority_LCOW(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
+	// TODO(katiewasnothere): update build version when this support is
+	// in an official release
+	if osversion.Get().Build < 20196 {
+		t.Skip("Requires build +20196")
+	}
+
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.cpugroup.randomid": "true",
+				"io.microsoft.virtualmachine.cpugroup.priority": "2",
+			},
+		},
+		RuntimeHandler: lcowRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
+func Test_RunPodSandbox_CPUGroup_WCOW_Hypervisor(t *testing.T) {
+	requireFeatures(t, featureWCOWHypervisor)
+
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
+
+	annotations := []map[string]string{
+		{
+			"io.microsoft.virtualmachine.cpugroup.id": "FA22A12C-36B3-486D-A3E9-BC526C2B450B",
+			// we believe it is reasonable to assume our test machines will have at least two LPs, otherwise
+			// this test will fail.
+			"io.microsoft.virtualmachine.cpugroup.logicalprocessors": "0,1",
+			"io.microsoft.virtualmachine.cpugroup.cap":               "32768",
+		},
+		{
+			"io.microsoft.virtualmachine.cpugroup.randomid": "true",
+			// we believe it is reasonable to assume our test machines will have at least two LPs, otherwise
+			// this test will fail.
+			"io.microsoft.virtualmachine.cpugroup.logicalprocessors": "0,1",
+			"io.microsoft.virtualmachine.cpugroup.cap":               "32768",
+		},
+		{
+			"io.microsoft.virtualmachine.cpugroup.randomid": "true",
+		},
+		{
+			"io.microsoft.virtualmachine.cpugroup.id": "FA22A12C-36B3-486D-A3E9-BC526C2B450B",
+		},
+	}
+
+	for _, a := range annotations {
+		request := &runtime.RunPodSandboxRequest{
+			Config: &runtime.PodSandboxConfig{
+				Metadata: &runtime.PodSandboxMetadata{
+					Name:      t.Name(),
+					Uid:       "0",
+					Namespace: testNamespace,
+				},
+				Annotations: a,
+			},
+			RuntimeHandler: wcowHypervisorRuntimeHandler,
+		}
+		runPodSandboxTest(t, request)
+	}
+}
+
+func Test_RunPodSandbox_CPUGroupSchedulingPriority_WCOW_Hypervisor(t *testing.T) {
+	requireFeatures(t, featureWCOWHypervisor)
+
+	// TODO(katiewasnothere): update build version when this support is
+	// in an official release
+	if osversion.Get().Build < 20196 {
+		t.Skip("Requires build +20196")
+	}
+
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
+
+	request := &runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Uid:       "0",
+				Namespace: testNamespace,
+			},
+			Annotations: map[string]string{
+				"io.microsoft.virtualmachine.cpugroup.randomid": "true",
+				"io.microsoft.virtualmachine.cpugroup.priority": "2",
+			},
+		},
+		RuntimeHandler: wcowHypervisorRuntimeHandler,
+	}
+	runPodSandboxTest(t, request)
+}
+
 func createExt4VHD(ctx context.Context, t *testing.T, path string) {
 	uvm := testutilities.CreateLCOWUVM(ctx, t, t.Name()+"-createExt4VHD")
 	defer uvm.Close()

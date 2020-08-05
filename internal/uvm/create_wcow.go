@@ -112,7 +112,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		}
 	}
 
-	processorTopology, err := hostProcessorInfo(ctx)
+	processorTopology, err := HostProcessorInfo(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get host processor information: %s", err)
 	}

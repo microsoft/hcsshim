@@ -126,6 +126,10 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 			parent.Close()
 			return nil, err
 		}
+		if err := oci.HandleCPUGroupSetup(ctx, parent, s.Annotations); err != nil {
+			parent.Close()
+			return nil, err
+		}
 	} else if !isWCOW {
 		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "oci spec does not contain WCOW or LCOW spec")
 	}

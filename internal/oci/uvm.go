@@ -128,6 +128,13 @@ const (
 	// HCS-GCS bridge. Default value is true which means external bridge will be used
 	// by default.
 	annotationUseExternalGCSBridge = "io.microsoft.virtualmachine.useexternalgcsbridge"
+
+	// annotations relating to cpugroup creation
+	annotationCPUGroupCreateRandomID = "io.microsoft.virtualmachine.cpugroup.randomid"
+	annotationCPUGroupID             = "io.microsoft.virtualmachine.cpugroup.id"
+	annotationCPUGroupLPs            = "io.microsoft.virtualmachine.cpugroup.logicalprocessors"
+	annotationCPUGroupCap            = "io.microsoft.virtualmachine.cpugroup.cap"
+	annotationCPUGroupPriority       = "io.microsoft.virtualmachine.cpugroup.priority"
 )
 
 // parseAnnotationsBool searches `a` for `key` and if found verifies that the
@@ -314,6 +321,25 @@ func parseAnnotationsUint64(ctx context.Context, a map[string]string, key string
 func parseAnnotationsString(a map[string]string, key string, def string) string {
 	if v, ok := a[key]; ok {
 		return v
+	}
+	return def
+}
+
+// parseCommaSeperatedUint32 searches `a` for `key`. If found verifies that the value
+// is a comma separated slice of 32 bit unsigned integers. If `key` is not found,
+// returns `def`.
+func parseCommaSeperatedUint32(annotations map[string]string, key string, def []uint32) []uint32 {
+	if v, ok := annotations[key]; ok {
+		splitStrings := strings.Split(v, ",")
+		result := make([]uint32, len(splitStrings))
+		for i, c := range splitStrings {
+			countu, err := strconv.ParseUint(c, 10, 32)
+			if err != nil {
+				return def
+			}
+			result[i] = uint32(countu)
+		}
+		return result
 	}
 	return def
 }

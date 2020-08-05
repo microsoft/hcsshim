@@ -187,7 +187,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		return nil, errors.Wrap(err, errBadUVMOpts.Error())
 	}
 
-	processorTopology, err := hostProcessorInfo(ctx)
+	processorTopology, err := HostProcessorInfo(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get host processor information: %s", err)
 	}
