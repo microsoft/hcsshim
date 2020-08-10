@@ -10,11 +10,11 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/processorinfo"
-
+	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/internal/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -208,7 +208,7 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		// Hosting system was supplied, so is v2 Xenon.
 		v2Container.Storage.Path = coi.Spec.Root.Path
 		if coi.HostingSystem.OS() == "windows" {
-			layers, err := computeV2Layers(ctx, coi.HostingSystem, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1])
+			layers, err := layers.GetHCSLayers(ctx, coi.HostingSystem, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1])
 			if err != nil {
 				return nil, nil, err
 			}

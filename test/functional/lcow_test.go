@@ -13,9 +13,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/lcow"
+	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
@@ -189,12 +191,12 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	if err := c1hcsSystem.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	defer hcsoci.ReleaseResources(context.Background(), c1Resources, lcowUVM, true)
+	defer resources.ReleaseResources(context.Background(), c1Resources, lcowUVM, true)
 
 	if err := c2hcsSystem.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	defer hcsoci.ReleaseResources(context.Background(), c2Resources, lcowUVM, true)
+	defer resources.ReleaseResources(context.Background(), c2Resources, lcowUVM, true)
 
 	// Start the init process in each container and grab it's stdout comparing to expected
 	runInitProcess(t, c1hcsSystem, "hello lcow container one")
@@ -208,7 +210,7 @@ func runInitProcess(t *testing.T, s cow.Container, expected string) {
 	var errB bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	cmd := &hcsoci.Cmd{
+	cmd := &cmd.Cmd{
 		Host:    s,
 		Stderr:  &errB,
 		Context: ctx,

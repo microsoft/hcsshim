@@ -13,8 +13,8 @@ import (
 
 	winio "github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/appargs"
+	cmdpkg "github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/hcs"
-	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/runhcs"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
@@ -162,7 +162,7 @@ var shimCommand = cli.Command{
 		}
 
 		// Create the process in the container.
-		cmd := &hcsoci.Cmd{
+		cmd := &cmdpkg.Cmd{
 			Host:   c.hc,
 			Stdin:  stdin,
 			Stdout: stdout,

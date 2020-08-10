@@ -1,6 +1,9 @@
 // +build windows
 
-package hcsoci
+// Package credentials holds the necessary structs and functions for adding
+// and removing Container Credential Guard instances (shortened to CCG
+// normally) for V2 HCS schema containers.
+package credentials
 
 import (
 	"context"
@@ -13,9 +16,7 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 )
 
-// This file holds the necessary structs and functions for adding and removing Container
-// Credential Guard instances (shortened to CCG normally) for V2 HCS schema
-// containers. Container Credential Guard is in HCS's own words "The solution to
+// Container Credential Guard is in HCS's own words "The solution to
 // allowing windows containers to have access to domain credentials for the
 // applications running in their corresponding guest." It essentially acts as
 // a way to temporarily Active Directory join a given container with a Group

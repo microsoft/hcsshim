@@ -7,8 +7,8 @@ import (
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
+	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
-	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
@@ -224,7 +224,7 @@ func (wpst *wcowPodSandboxTask) ExecInHost(ctx context.Context, req *shimdiag.Ex
 	if wpst.host == nil {
 		return 0, errors.New("task is not isolated")
 	}
-	return hcsoci.ExecInUvm(ctx, wpst.host, req)
+	return cmd.ExecInUvm(ctx, wpst.host, req)
 }
 
 func (wpst *wcowPodSandboxTask) DumpGuestStacks(ctx context.Context) string {

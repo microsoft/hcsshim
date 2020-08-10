@@ -19,6 +19,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/regstate"
+	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/runhcs"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
@@ -81,7 +82,7 @@ type container struct {
 	persistedState
 	ShimPid   int
 	hc        *hcs.System
-	resources *hcsoci.Resources
+	resources *resources.Resources
 }
 
 func startProcessShim(id, pidFile, logFile string, spec *specs.Process) (_ *os.Process, err error) {
@@ -471,17 +472,17 @@ func (c *container) VMIsolated() bool {
 }
 
 func (c *container) unmountInHost(vm *uvm.UtilityVM, all bool) error {
-	resources := &hcsoci.Resources{}
-	err := stateKey.Get(c.ID, keyResources, resources)
+	r := &resources.Resources{}
+	err := stateKey.Get(c.ID, keyResources, r)
 	if _, ok := err.(*regstate.NoStateError); ok {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	err = hcsoci.ReleaseResources(context.Background(), resources, vm, all)
+	err = resources.ReleaseResources(context.Background(), r, vm, all)
 	if err != nil {
-		stateKey.Set(c.ID, keyResources, resources)
+		stateKey.Set(c.ID, keyResources, r)
 		return err
 	}
 
@@ -537,7 +538,7 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 		logfields.ContainerID: c.ID,
 		logfields.UVMID:       vmid,
 	}).Info("creating container in UVM")
-	hc, resources, err := hcsoci.CreateContainer(context.Background(), opts)
+	hc, r, err := hcsoci.CreateContainer(context.Background(), opts)
 	if err != nil {
 		return err
 	}
@@ -545,19 +546,19 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 		if err != nil {
 			hc.Terminate(context.Background())
 			hc.Wait()
-			hcsoci.ReleaseResources(context.Background(), resources, vm, true)
+			resources.ReleaseResources(context.Background(), r, vm, true)
 		}
 	}()
 
 	// Record the network namespace to support namespace sharing by container ID.
-	if resources.NetNS() != "" {
-		err = stateKey.Set(c.ID, keyNetNS, resources.NetNS())
+	if r.NetNS() != "" {
+		err = stateKey.Set(c.ID, keyNetNS, r.NetNS())
 		if err != nil {
 			return err
 		}
 	}
 
-	err = stateKey.Set(c.ID, keyResources, resources)
+	err = stateKey.Set(c.ID, keyResources, r)
 	if err != nil {
 		return err
 	}

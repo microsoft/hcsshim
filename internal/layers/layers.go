@@ -1,6 +1,7 @@
 // +build windows
 
-package hcsoci
+// Package layers deals with container layer mounting/unmounting for LCOW and WCOW
+package layers
 
 import (
 	"context"
@@ -21,6 +22,14 @@ type ImageLayers struct {
 	vm                 *uvm.UtilityVM
 	containerRootInUVM string
 	layers             []string
+}
+
+func NewImageLayers(vm *uvm.UtilityVM, containerRootInUVM string, layers []string) *ImageLayers {
+	return &ImageLayers{
+		vm:                 vm,
+		containerRootInUVM: containerRootInUVM,
+		layers:             layers,
+	}
 }
 
 // Release unmounts all of the layers located in the layers array.
@@ -159,14 +168,14 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 	if uvm.OS() == "windows" {
 		// 	Load the filter at the C:\s<ID> location calculated above. We pass into this request each of the
 		// 	read-only layer folders.
-		layers, err := computeV2Layers(ctx, uvm, layersAdded)
+		layers, err := GetHCSLayers(ctx, uvm, layersAdded)
 		if err != nil {
 			return "", err
 		}
 		err = uvm.CombineLayersWCOW(ctx, layers, containerScratchPathInUVM)
 		rootfs = containerScratchPathInUVM
 	} else {
-		rootfs = ospath.Join(uvm.OS(), guestRoot, rootfsPath)
+		rootfs = ospath.Join(uvm.OS(), guestRoot, uvmpkg.RootfsPath)
 		err = uvm.CombineLayersLCOW(ctx, lcowUvmLayerPaths, containerScratchPathInUVM, rootfs)
 	}
 	if err != nil {
@@ -189,7 +198,7 @@ func addLCOWLayer(ctx context.Context, uvm *uvmpkg.UtilityVM, layerPath string) 
 		}
 	}
 
-	uvmPath = fmt.Sprintf(lcowGlobalMountPrefix, uvm.UVMMountCounter())
+	uvmPath = fmt.Sprintf(uvmpkg.LCOWGlobalMountPrefix, uvm.UVMMountCounter())
 	sm, err := uvm.AddSCSI(ctx, layerPath, uvmPath, true, uvmpkg.VMAccessTypeNoop)
 	if err != nil {
 		return "", fmt.Errorf("failed to add SCSI layer: %s", err)
@@ -302,7 +311,8 @@ func UnmountContainerLayers(ctx context.Context, layerFolders []string, containe
 	return retError
 }
 
-func computeV2Layers(ctx context.Context, vm *uvm.UtilityVM, paths []string) (layers []hcsschema.Layer, err error) {
+// GetHCSLayers converts host paths corresponding to container layers into HCS schema V2 layers
+func GetHCSLayers(ctx context.Context, vm *uvm.UtilityVM, paths []string) (layers []hcsschema.Layer, err error) {
 	for _, path := range paths {
 		uvmPath, err := vm.GetVSMBUvmPath(ctx, path, true)
 		if err != nil {
@@ -315,4 +325,11 @@ func computeV2Layers(ctx context.Context, vm *uvm.UtilityVM, paths []string) (la
 		layers = append(layers, hcsschema.Layer{Id: layerID.String(), Path: uvmPath})
 	}
 	return layers, nil
+}
+
+func containerRootfsPath(uvm *uvm.UtilityVM, rootPath string) string {
+	if uvm.OS() == "windows" {
+		return ospath.Join(uvm.OS(), rootPath)
+	}
+	return ospath.Join(uvm.OS(), rootPath, uvmpkg.RootfsPath)
 }
