@@ -13,6 +13,8 @@ import (
 	"github.com/Microsoft/hcsshim"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
+	layerspkg "github.com/Microsoft/hcsshim/internal/layers"
+	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/schema1"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -378,12 +380,12 @@ func TestWCOWArgonShim(t *testing.T) {
 	// For cleanup on failure
 	defer func() {
 		if argonShimMounted {
-			hcsoci.UnmountContainerLayers(context.Background(), append(imageLayers, argonShimScratchDir), "", nil, hcsoci.UnmountOperationAll)
+			layerspkg.UnmountContainerLayers(context.Background(), append(imageLayers, argonShimScratchDir), "", nil, layerspkg.UnmountOperationAll)
 		}
 	}()
 
 	// This is a cheat but stops us re-writing exactly the same code just for test
-	argonShimLocalMountPath, err := hcsoci.MountContainerLayers(context.Background(), append(imageLayers, argonShimScratchDir), "", nil)
+	argonShimLocalMountPath, err := layerspkg.MountContainerLayers(context.Background(), append(imageLayers, argonShimScratchDir), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -416,7 +418,7 @@ func TestWCOWArgonShim(t *testing.T) {
 	}
 	runShimCommands(t, argonShim)
 	stopContainer(t, argonShim)
-	if err := hcsoci.UnmountContainerLayers(context.Background(), append(imageLayers, argonShimScratchDir), "", nil, hcsoci.UnmountOperationAll); err != nil {
+	if err := layerspkg.UnmountContainerLayers(context.Background(), append(imageLayers, argonShimScratchDir), "", nil, layerspkg.UnmountOperationAll); err != nil {
 		t.Fatal(err)
 	}
 	argonShimMounted = false
@@ -508,11 +510,11 @@ func TestWCOWArgonOciV1(t *testing.T) {
 	defer os.RemoveAll(hostROSharedDirectory)
 
 	// For cleanup on failure
-	var argonOci1Resources *hcsoci.Resources
+	var argonOci1Resources *resources.Resources
 	var argonOci1 cow.Container
 	defer func() {
 		if argonOci1Mounted {
-			hcsoci.ReleaseResources(context.Background(), argonOci1Resources, nil, true)
+			resources.ReleaseResources(context.Background(), argonOci1Resources, nil, true)
 		}
 	}()
 
@@ -535,7 +537,7 @@ func TestWCOWArgonOciV1(t *testing.T) {
 	}
 	runHcsCommands(t, argonOci1)
 	stopContainer(t, argonOci1)
-	if err := hcsoci.ReleaseResources(context.Background(), argonOci1Resources, nil, true); err != nil {
+	if err := resources.ReleaseResources(context.Background(), argonOci1Resources, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	argonOci1Mounted = false
@@ -563,11 +565,11 @@ func TestWCOWXenonOciV1(t *testing.T) {
 	//	}
 
 	// For cleanup on failure
-	var xenonOci1Resources *hcsoci.Resources
+	var xenonOci1Resources *resources.Resources
 	var xenonOci1 cow.Container
 	defer func() {
 		if xenonOci1Mounted {
-			hcsoci.ReleaseResources(context.Background(), xenonOci1Resources, nil, true)
+			resources.ReleaseResources(context.Background(), xenonOci1Resources, nil, true)
 		}
 	}()
 
@@ -591,7 +593,7 @@ func TestWCOWXenonOciV1(t *testing.T) {
 	}
 	runHcsCommands(t, xenonOci1)
 	stopContainer(t, xenonOci1)
-	if err := hcsoci.ReleaseResources(context.Background(), xenonOci1Resources, nil, true); err != nil {
+	if err := resources.ReleaseResources(context.Background(), xenonOci1Resources, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	xenonOci1Mounted = false
@@ -614,11 +616,11 @@ func TestWCOWArgonOciV2(t *testing.T) {
 	defer os.RemoveAll(hostROSharedDirectory)
 
 	// For cleanup on failure
-	var argonOci2Resources *hcsoci.Resources
+	var argonOci2Resources *resources.Resources
 	var argonOci2 cow.Container
 	defer func() {
 		if argonOci2Mounted {
-			hcsoci.ReleaseResources(context.Background(), argonOci2Resources, nil, true)
+			resources.ReleaseResources(context.Background(), argonOci2Resources, nil, true)
 		}
 	}()
 
@@ -641,7 +643,7 @@ func TestWCOWArgonOciV2(t *testing.T) {
 	}
 	runHcsCommands(t, argonOci2)
 	stopContainer(t, argonOci2)
-	if err := hcsoci.ReleaseResources(context.Background(), argonOci2Resources, nil, true); err != nil {
+	if err := resources.ReleaseResources(context.Background(), argonOci2Resources, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	argonOci2Mounted = false
@@ -670,12 +672,12 @@ func TestWCOWXenonOciV2(t *testing.T) {
 		t.Fatalf("LocateUVMFolder failed %s", err)
 	}
 
-	var xenonOci2Resources *hcsoci.Resources
+	var xenonOci2Resources *resources.Resources
 	var xenonOci2 cow.Container
 	var xenonOci2UVM *uvm.UtilityVM
 	defer func() {
 		if xenonOci2Mounted {
-			hcsoci.ReleaseResources(context.Background(), xenonOci2Resources, xenonOci2UVM, true)
+			resources.ReleaseResources(context.Background(), xenonOci2Resources, xenonOci2UVM, true)
 		}
 		if xenonOci2UVMCreated {
 			xenonOci2UVM.Close()
@@ -721,7 +723,7 @@ func TestWCOWXenonOciV2(t *testing.T) {
 	}
 	runHcsCommands(t, xenonOci2)
 	stopContainer(t, xenonOci2)
-	if err := hcsoci.ReleaseResources(context.Background(), xenonOci2Resources, xenonOci2UVM, true); err != nil {
+	if err := resources.ReleaseResources(context.Background(), xenonOci2Resources, xenonOci2UVM, true); err != nil {
 		t.Fatal(err)
 	}
 	xenonOci2Mounted = false

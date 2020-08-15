@@ -1,23 +1,56 @@
-package hcsoci
+// Package resources handles creating, updating, and releasing resources
+// on a container
+package resources
 
 import (
 	"context"
 	"errors"
-	"os"
 
+	"github.com/Microsoft/hcsshim/internal/credentials"
+	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/ospath"
 	"github.com/Microsoft/hcsshim/internal/uvm"
-)
-
-const (
-	scratchPath = "scratch"
-	rootfsPath  = "rootfs"
 )
 
 // NetNS returns the network namespace for the container
 func (r *Resources) NetNS() string {
 	return r.netNS
+}
+
+// SetNetNS updates the container resource's NetNS
+func (r *Resources) SetNetNS(netNS string) {
+	r.netNS = netNS
+}
+
+// SetCreatedNetNS updates the container resource's CreatedNetNS value
+func (r *Resources) SetCreatedNetNS(created bool) {
+	r.createdNetNS = true
+}
+
+// ContainerRootInUVM returns the containerRootInUVM for the container
+func (r *Resources) ContainerRootInUVM() string {
+	return r.containerRootInUVM
+}
+
+// SetContainerRootInUVM updates the container resource's containerRootInUVM value
+func (r *Resources) SetContainerRootInUVM(containerRootInUVM string) {
+	r.containerRootInUVM = containerRootInUVM
+}
+
+// SetAddedNetNSToVM updates the container resource's AddedNetNSToVM value
+func (r *Resources) SetAddedNetNSToVM(addedNetNSToVM bool) {
+	r.addedNetNSToVM = addedNetNSToVM
+}
+
+// SetLayers updates the container resource's image layers
+func (r *Resources) SetLayers(l *layers.ImageLayers) {
+	r.layers = l
+}
+
+// Add adds one or more resource closers to the resources struct to be
+// tracked for release later on
+func (r *Resources) Add(newResources ...ResourceCloser) {
+	r.resources = append(r.resources, newResources...)
 }
 
 // Resources is the structure returned as part of creating a container. It holds
@@ -39,7 +72,7 @@ type Resources struct {
 	// addedNetNSToVM indicates if the network namespace has been added to the containers utility VM
 	addedNetNSToVM bool
 	// layers is a pointer to a struct of the layers paths of a container
-	layers *ImageLayers
+	layers *layers.ImageLayers
 	// resources is an array of the resources associated with a container
 	resources []ResourceCloser
 }
@@ -51,17 +84,12 @@ type ResourceCloser interface {
 	Release(context.Context) error
 }
 
-// AutoManagedVHD struct representing a VHD that will be cleaned up automatically.
-type AutoManagedVHD struct {
-	hostPath string
-}
-
-// Release removes the vhd.
-func (vhd *AutoManagedVHD) Release(ctx context.Context) error {
-	if err := os.Remove(vhd.hostPath); err != nil {
-		log.G(ctx).WithField("hostPath", vhd.hostPath).WithError(err).Error("failed to remove automanage-virtual-disk")
+// NewContainerResources returns a new empty container Resources struct with the
+// given container id
+func NewContainerResources(id string) *Resources {
+	return &Resources{
+		id: id,
 	}
-	return nil
 }
 
 // ReleaseResources releases/frees all of the resources associated with a container. This includes
@@ -92,7 +120,7 @@ func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all 
 				}
 				r.createdNetNS = false
 			}
-		case *CCGInstance:
+		case *credentials.CCGInstance:
 			if err := r.resources[i].Release(ctx); err != nil {
 				log.G(ctx).WithError(err).Error("failed to release container resource")
 				releaseErr = true
@@ -131,11 +159,4 @@ func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all 
 		}
 	}
 	return nil
-}
-
-func containerRootfsPath(uvm *uvm.UtilityVM, rootPath string) string {
-	if uvm.OS() == "windows" {
-		return ospath.Join(uvm.OS(), rootPath)
-	}
-	return ospath.Join(uvm.OS(), rootPath, rootfsPath)
 }

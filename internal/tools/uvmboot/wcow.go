@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/hcsoci"
+	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/containerd/console"
 	"github.com/sirupsen/logrus"
@@ -85,7 +85,7 @@ var wcowCommand = cli.Command{
 				return err
 			}
 			if wcowCommandLine != "" {
-				cmd := hcsoci.Command(vm, "cmd.exe", "/c", wcowCommandLine)
+				cmd := cmd.Command(vm, "cmd.exe", "/c", wcowCommandLine)
 				cmd.Spec.User.Username = `NT AUTHORITY\SYSTEM`
 				cmd.Log = logrus.NewEntry(logrus.StandardLogger())
 				if wcowUseTerminal {

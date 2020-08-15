@@ -12,18 +12,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
-
-const lcowMountPathPrefix = "/mounts/m%d"
-const lcowGlobalMountPrefix = "/run/mounts/m%d"
-
-// keep lcowNvidiaMountPath value in sync with opengcs
-const lcowNvidiaMountPath = "/run/nvidia"
 
 // getGPUVHDPath gets the gpu vhd path from the shim options or uses the default if no
 // shim option is set. Right now we only support Nvidia gpus, so this will default to
@@ -39,34 +35,31 @@ func getGPUVHDPath(coi *createOptionsInternal) (string, error) {
 	return gpuVHDPath, nil
 }
 
-func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *Resources) error {
+func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *resources.Resources) error {
 	if coi.Spec.Root == nil {
 		coi.Spec.Root = &specs.Root{}
 	}
+	containerRootInUVM := r.ContainerRootInUVM()
 	if coi.Spec.Windows != nil && len(coi.Spec.Windows.LayerFolders) > 0 {
 		log.G(ctx).Debug("hcsshim::allocateLinuxResources mounting storage")
-		rootPath, err := MountContainerLayers(ctx, coi.Spec.Windows.LayerFolders, r.containerRootInUVM, coi.HostingSystem)
+		rootPath, err := layers.MountContainerLayers(ctx, coi.Spec.Windows.LayerFolders, containerRootInUVM, coi.HostingSystem)
 		if err != nil {
 			return fmt.Errorf("failed to mount container storage: %s", err)
 		}
 		coi.Spec.Root.Path = rootPath
-		layers := &ImageLayers{
-			vm:                 coi.HostingSystem,
-			containerRootInUVM: r.containerRootInUVM,
-			layers:             coi.Spec.Windows.LayerFolders,
-		}
-		r.layers = layers
+		layers := layers.NewImageLayers(coi.HostingSystem, containerRootInUVM, coi.Spec.Windows.LayerFolders)
+		r.SetLayers(layers)
 	} else if coi.Spec.Root.Path != "" {
 		// This is the "Plan 9" root filesystem.
 		// TODO: We need a test for this. Ask @jstarks how you can even lay this out on Windows.
 		hostPath := coi.Spec.Root.Path
-		uvmPathForContainersFileSystem := path.Join(r.containerRootInUVM, rootfsPath)
+		uvmPathForContainersFileSystem := path.Join(r.ContainerRootInUVM(), uvm.RootfsPath)
 		share, err := coi.HostingSystem.AddPlan9(ctx, hostPath, uvmPathForContainersFileSystem, coi.Spec.Root.Readonly, false, nil)
 		if err != nil {
 			return fmt.Errorf("adding plan9 root: %s", err)
 		}
 		coi.Spec.Root.Path = uvmPathForContainersFileSystem
-		r.resources = append(r.resources, share)
+		r.Add(share)
 	} else {
 		return errors.New("must provide either Windows.LayerFolders or Root.Path")
 	}
@@ -87,7 +80,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 
 		if coi.HostingSystem != nil {
 			hostPath := mount.Source
-			uvmPathForShare := path.Join(r.containerRootInUVM, fmt.Sprintf(lcowMountPathPrefix, i))
+			uvmPathForShare := path.Join(containerRootInUVM, fmt.Sprintf(uvm.LCOWMountPathPrefix, i))
 			uvmPathForFile := uvmPathForShare
 
 			readOnly := false
@@ -100,7 +93,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 			l := log.G(ctx).WithField("mount", fmt.Sprintf("%+v", mount))
 			if mount.Type == "physical-disk" {
 				l.Debug("hcsshim::allocateLinuxResources Hot-adding SCSI physical disk for OCI mount")
-				uvmPathForShare = fmt.Sprintf(lcowGlobalMountPrefix, coi.HostingSystem.UVMMountCounter())
+				uvmPathForShare = fmt.Sprintf(uvm.LCOWGlobalMountPrefix, coi.HostingSystem.UVMMountCounter())
 				scsiMount, err := coi.HostingSystem.AddSCSIPhysicalDisk(ctx, hostPath, uvmPathForShare, readOnly)
 				if err != nil {
 					return fmt.Errorf("adding SCSI physical disk mount %+v: %s", mount, err)
@@ -108,11 +101,11 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 
 				uvmPathForFile = scsiMount.UVMPath
 				uvmPathForShare = scsiMount.UVMPath
-				r.resources = append(r.resources, scsiMount)
+				r.Add(scsiMount)
 				coi.Spec.Mounts[i].Type = "none"
 			} else if mount.Type == "virtual-disk" || mount.Type == "automanage-virtual-disk" {
 				l.Debug("hcsshim::allocateLinuxResources Hot-adding SCSI virtual disk for OCI mount")
-				uvmPathForShare = fmt.Sprintf(lcowGlobalMountPrefix, coi.HostingSystem.UVMMountCounter())
+				uvmPathForShare = fmt.Sprintf(uvm.LCOWGlobalMountPrefix, coi.HostingSystem.UVMMountCounter())
 
 				// if the scsi device is already attached then we take the uvm path that the function below returns
 				// that is where it was previously mounted in UVM
@@ -124,9 +117,9 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 				uvmPathForFile = scsiMount.UVMPath
 				uvmPathForShare = scsiMount.UVMPath
 				if mount.Type == "automanage-virtual-disk" {
-					r.resources = append(r.resources, &AutoManagedVHD{hostPath: scsiMount.HostPath})
+					r.Add(uvm.NewAutoManagedVHD(scsiMount.HostPath))
 				}
-				r.resources = append(r.resources, scsiMount)
+				r.Add(scsiMount)
 				coi.Spec.Mounts[i].Type = "none"
 			} else if strings.HasPrefix(mount.Source, "sandbox://") {
 				// Mounts that map to a path in UVM are specified with 'sandbox://' prefix.
@@ -153,7 +146,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 				if err != nil {
 					return fmt.Errorf("adding plan9 mount %+v: %s", mount, err)
 				}
-				r.resources = append(r.resources, share)
+				r.Add(share)
 			}
 			coi.Spec.Mounts[i].Source = uvmPathForFile
 		}
@@ -168,7 +161,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 			if err != nil {
 				return errors.Wrapf(err, "failed to assign gpu device %s to pod %s", d.ID, coi.HostingSystem.ID())
 			}
-			r.resources = append(r.resources, vpci)
+			r.Add(vpci)
 			// update device ID on the spec to the assigned device's resulting vmbus guid so gcs knows which devices to
 			// map into the container
 			coi.Spec.Windows.Devices[i].ID = vpci.VMBusGUID
@@ -185,11 +178,11 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 		// use lcowNvidiaMountPath since we only support nvidia gpus right now
 		// must use scsi here since DDA'ing a hyper-v pci device is not supported on VMs that have ANY virtual memory
 		// gpuvhd must be granted VM Group access.
-		scsiMount, err := coi.HostingSystem.AddSCSI(ctx, gpuSupportVhdPath, lcowNvidiaMountPath, true, uvm.VMAccessTypeNoop)
+		scsiMount, err := coi.HostingSystem.AddSCSI(ctx, gpuSupportVhdPath, uvm.LCOWNvidiaMountPath, true, uvm.VMAccessTypeNoop)
 		if err != nil {
-			return errors.Wrapf(err, "failed to add scsi device %s in the UVM %s at %s", gpuSupportVhdPath, coi.HostingSystem.ID(), lcowNvidiaMountPath)
+			return errors.Wrapf(err, "failed to add scsi device %s in the UVM %s at %s", gpuSupportVhdPath, coi.HostingSystem.ID(), uvm.LCOWNvidiaMountPath)
 		}
-		r.resources = append(r.resources, scsiMount)
+		r.Add(scsiMount)
 	}
 	return nil
 }

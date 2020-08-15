@@ -1,4 +1,4 @@
-package hcsoci
+package cmd
 
 import (
 	"context"
