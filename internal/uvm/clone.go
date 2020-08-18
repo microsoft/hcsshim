@@ -2,7 +2,9 @@ package uvm
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/Microsoft/hcsshim/internal/cow"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/pkg/errors"
 )
@@ -50,7 +52,7 @@ type Cloneable interface {
 	Clone(ctx context.Context, vm *UtilityVM, cd *cloneData) error
 }
 
-// cloneData contains all the information that might be required during cloning process of
+// A struct to keep all the information that might be required during cloning process of
 // a resource.
 type cloneData struct {
 	// doc spec for the clone
@@ -68,15 +70,22 @@ type UVMTemplateConfig struct {
 	UVMID string
 	// Array of all resources that will be required while making a clone from this template
 	Resources []Cloneable
+	// The OptionsWCOW used for template uvm creation
+	CreateOpts OptionsWCOW
 }
 
 // Captures all the information that is necessary to properly save this UVM as a template
 // and create clones from this template later. The struct returned by this method must be
 // later on made available while creating a clone from this template.
-func (uvm *UtilityVM) GenerateTemplateConfig() *UVMTemplateConfig {
+func (uvm *UtilityVM) GenerateTemplateConfig() (*UVMTemplateConfig, error) {
+	if _, ok := uvm.createOpts.(OptionsWCOW); !ok {
+		return nil, fmt.Errorf("template config can only be created for a WCOW uvm")
+	}
+
 	// Add all the SCSI Mounts and VSMB shares into the list of clones
 	templateConfig := &UVMTemplateConfig{
-		UVMID: uvm.ID(),
+		UVMID:      uvm.ID(),
+		CreateOpts: uvm.createOpts.(OptionsWCOW),
 	}
 
 	for _, vsmbShare := range uvm.vsmbDirShares {
@@ -95,13 +104,13 @@ func (uvm *UtilityVM) GenerateTemplateConfig() *UVMTemplateConfig {
 		}
 	}
 
-	return templateConfig
+	return templateConfig, nil
 }
 
 // Pauses the uvm and then saves it as a template. This uvm can not be restarted or used
 // after it is successfully saved.
-// uvm must be in the paused state before we attempt to save it. save call will throw the
-// VM in incorrect state exception if it is not in the paused state at the time of saving.
+// uvm must be in the paused state before it can be saved as a template.save call will throw
+// an incorrect uvm state exception if uvm is not in the paused state at the time of saving.
 func (uvm *UtilityVM) SaveAsTemplate(ctx context.Context) error {
 	if err := uvm.hcsSystem.Pause(ctx); err != nil {
 		return errors.Wrap(err, "error pausing the VM")
@@ -114,4 +123,17 @@ func (uvm *UtilityVM) SaveAsTemplate(ctx context.Context) error {
 		return errors.Wrap(err, "error saving the VM")
 	}
 	return nil
+}
+
+// CloneContainer attaches back to a container that is already running inside the UVM
+// because of the clone
+func (uvm *UtilityVM) CloneContainer(ctx context.Context, id string) (cow.Container, error) {
+	if uvm.gc == nil {
+		return nil, fmt.Errorf("clone container cannot work without external GCS connection")
+	}
+	c, err := uvm.gc.CloneContainer(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to clone container %s: %s", id, err)
+	}
+	return c, nil
 }

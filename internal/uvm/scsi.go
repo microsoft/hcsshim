@@ -453,17 +453,21 @@ func (sm *SCSIMount) Clone(ctx context.Context, vm *UtilityVM, cd *cloneData) er
 	)
 
 	if !sm.readOnly {
-		// Copy this scsi disk
-		// TODO(ambarve): This is a writeable SCSI mount. It can either be the
-		// scratch VHD of the UVM or it can be a SCSI mount that belongs to some
-		// container which is being automatically cloned here as a part of UVM
-		// cloning process. We will receive a request for creation of this
-		// container later on which will specify the storage path for this
-		// container.  However, that storage location is not available now so we
-		// just use the storage of the uvm instead. Find a better way for handling
-		// this. Problem with this approach is that the scratch VHD of the container
-		// will not be automatically cleaned after container exits. It will stay
-		// there as long as the UVM keeps running.
+		// This is a writeable SCSI mount. It must be either the
+		// 1. scratch VHD of the UVM or
+		// 2. scratch VHD of the container.
+		// A user provided writable SCSI mount is not allowed on the template UVM
+		// or container and so this SCSI mount has to be the scratch VHD of the
+		// UVM or container.  The container inside this UVM will automatically be
+		// cloned here when we are cloning the uvm itself. We will receive a
+		// request for creation of this container later and that request will
+		// specify the storage path for this container.  However, that storage
+		// location is not available now so we just use the storage path of the
+		// uvm instead.
+		// TODO(ambarve): Find a better way for handling this. Problem with this
+		// approach is that the scratch VHD of the container will not be
+		// automatically cleaned after container exits. It will stay there as long
+		// as the UVM keeps running.
 
 		// For the scratch VHD of the VM (always attached at Controller:0, LUN:0)
 		// clone it in the scratch folder

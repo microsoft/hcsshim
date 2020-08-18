@@ -61,6 +61,23 @@ func (gc *GuestConnection) CreateContainer(ctx context.Context, cid string, conf
 	return c, nil
 }
 
+// CloneContainer just creates the wrappers and sets up notification requests for a
+// container that is already running inside the UVM (after cloning).
+func (gc *GuestConnection) CloneContainer(ctx context.Context, cid string) (_ *Container, err error) {
+	c := &Container{
+		gc:       gc,
+		id:       cid,
+		notifyCh: make(chan struct{}),
+		closeCh:  make(chan struct{}),
+	}
+	err = gc.requestNotify(cid, c.notifyCh)
+	if err != nil {
+		return nil, err
+	}
+	go c.waitBackground()
+	return c, nil
+}
+
 // OS returns the operating system of the container, "linux" or "windows".
 func (c *Container) OS() string {
 	return c.gc.os

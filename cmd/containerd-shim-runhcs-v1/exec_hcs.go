@@ -181,7 +181,7 @@ func (he *hcsExec) Status() *task.StateResponse {
 	}
 }
 
-func (he *hcsExec) Start(ctx context.Context) (err error) {
+func (he *hcsExec) startInternal(ctx context.Context, initializeContainer bool) (err error) {
 	he.sl.Lock()
 	defer he.sl.Unlock()
 	if he.state != shimExecStateCreated {
@@ -192,8 +192,7 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 			he.exitFromCreatedL(ctx, 1)
 		}
 	}()
-	if he.id == he.tid {
-		// This is the init exec. We need to start the container itself
+	if initializeContainer {
 		err = he.c.Start(ctx)
 		if err != nil {
 			return err
@@ -255,6 +254,12 @@ func (he *hcsExec) Start(ctx context.Context) (err error) {
 	// wait in the background for the exit.
 	go he.waitForExit()
 	return nil
+}
+
+func (he *hcsExec) Start(ctx context.Context) (err error) {
+	// If he.id == he.tid then this is the init exec.
+	// We need to initialize the container itself before starting this exec.
+	return he.startInternal(ctx, he.id == he.tid)
 }
 
 func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
@@ -414,6 +419,8 @@ func (he *hcsExec) exitFromCreatedL(ctx context.Context, status int) {
 //
 // 6. Close `he.exited` channel to unblock any waiters who might have called
 // `Create`/`Wait`/`Start` which is a valid pattern.
+//
+// 7. Finally, save the UVM and this container as a template if specified.
 func (he *hcsExec) waitForExit() {
 	ctx, span := trace.StartSpan(context.Background(), "hcsExec::waitForExit")
 	defer span.End()
