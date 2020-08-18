@@ -48,3 +48,13 @@ func removeContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx cont
 		t.Fatalf("failed StopContainer request for container: %s, with: %v", containerID, err)
 	}
 }
+
+func getContainerStatus(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) runtime.ContainerState {
+	response, err := client.ContainerStatus(ctx, &runtime.ContainerStatusRequest{
+		ContainerId: containerID,
+	})
+	if err != nil {
+		t.Fatalf("failed ContainerStatus request for container: %s, with: %v", containerID, err)
+	}
+	return response.Status.State
+}
