@@ -168,6 +168,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		physicallyBacked:        !opts.AllowOvercommit,
 		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
 		cpuGroupID:              opts.CPUGroupID,
+		createOpts:              opts,
 	}
 
 	defer func() {
