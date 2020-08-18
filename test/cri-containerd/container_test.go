@@ -148,9 +148,6 @@ func Test_RunContainer_Events_LCOW(t *testing.T) {
 
 	podctx, podcancel := context.WithCancel(context.Background())
 	defer podcancel()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
 	targetNamespace := "k8s.io"
 
 	sandboxRequest := &runtime.RunPodSandboxRequest{
@@ -184,6 +181,9 @@ func Test_RunContainer_Events_LCOW(t *testing.T) {
 		PodSandboxId:  podID,
 		SandboxConfig: sandboxRequest.Config,
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
 	topicNames, filters := getTargetRunTopics()
 	eventService := newTestEventService(t)
