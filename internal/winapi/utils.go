@@ -2,9 +2,12 @@ package winapi
 
 import (
 	"errors"
+	"fmt"
 	"syscall"
 	"unicode/utf16"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
 
 type UnicodeString struct {
@@ -57,4 +60,22 @@ func ConvertStringSetToSlice(buf []byte) ([]string, error) {
 		}
 	}
 	return nil, errors.New("string set malformed: missing null terminator at end of buffer")
+}
+
+// CreateProcThreadAttrList sets up and allocates a process thread attribute list
+// of the right size for use with a STARTUPINFOEX structure.
+func CreateProcThreadAttrList(num uint32) (uintptr, error) {
+	var procThreadSize uintptr
+	if err := InitializeProcThreadAttributeList(0, num, 0, &procThreadSize); err != nil && err != windows.E_NOT_SUFFICIENT_BUFFER {
+		return 0, fmt.Errorf("failed to initialize process thread attribute list: %s", err)
+	}
+
+	buf := make([]byte, procThreadSize)
+	procAttrList := uintptr(unsafe.Pointer(&buf[0]))
+
+	if err := InitializeProcThreadAttributeList(procAttrList, num, 0, &procThreadSize); err != nil {
+		return 0, fmt.Errorf("failed to initialize process thread attribute list: %s", err)
+	}
+
+	return procAttrList, nil
 }

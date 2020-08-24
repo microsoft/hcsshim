@@ -37,22 +37,132 @@ func errnoErr(e syscall.Errno) error {
 }
 
 var (
-	modcfgmgr32 = windows.NewLazySystemDLL("cfgmgr32.dll")
 	modkernel32 = windows.NewLazySystemDLL("kernel32.dll")
+	modcfgmgr32 = windows.NewLazySystemDLL("cfgmgr32.dll")
 	modntdll    = windows.NewLazySystemDLL("ntdll.dll")
 
-	procCM_Get_Device_ID_List_SizeA = modcfgmgr32.NewProc("CM_Get_Device_ID_List_SizeA")
-	procCM_Get_Device_ID_ListA      = modcfgmgr32.NewProc("CM_Get_Device_ID_ListA")
-	procCM_Locate_DevNodeW          = modcfgmgr32.NewProc("CM_Locate_DevNodeW")
-	procCM_Get_DevNode_PropertyW    = modcfgmgr32.NewProc("CM_Get_DevNode_PropertyW")
-	procLocalAlloc                  = modkernel32.NewProc("LocalAlloc")
-	procLocalFree                   = modkernel32.NewProc("LocalFree")
-	procNtCreateFile                = modntdll.NewProc("NtCreateFile")
-	procNtSetInformationFile        = modntdll.NewProc("NtSetInformationFile")
-	procNtOpenDirectoryObject       = modntdll.NewProc("NtOpenDirectoryObject")
-	procNtQueryDirectoryObject      = modntdll.NewProc("NtQueryDirectoryObject")
-	procRtlNtStatusToDosError       = modntdll.NewProc("RtlNtStatusToDosError")
+	procInitializeProcThreadAttributeList = modkernel32.NewProc("InitializeProcThreadAttributeList")
+	procUpdateProcThreadAttribute         = modkernel32.NewProc("UpdateProcThreadAttribute")
+	procDeleteProcThreadAttributeList     = modkernel32.NewProc("DeleteProcThreadAttributeList")
+	procGetProcessHeap                    = modkernel32.NewProc("GetProcessHeap")
+	procHeapAlloc                         = modkernel32.NewProc("HeapAlloc")
+	procHeapFree                          = modkernel32.NewProc("HeapFree")
+	procCreatePseudoConsole               = modkernel32.NewProc("CreatePseudoConsole")
+	procResizePseudoConsole               = modkernel32.NewProc("ResizePseudoConsole")
+	procClosePseudoConsole                = modkernel32.NewProc("ClosePseudoConsole")
+	procCM_Get_Device_ID_List_SizeA       = modcfgmgr32.NewProc("CM_Get_Device_ID_List_SizeA")
+	procCM_Get_Device_ID_ListA            = modcfgmgr32.NewProc("CM_Get_Device_ID_ListA")
+	procCM_Locate_DevNodeW                = modcfgmgr32.NewProc("CM_Locate_DevNodeW")
+	procCM_Get_DevNode_PropertyW          = modcfgmgr32.NewProc("CM_Get_DevNode_PropertyW")
+	procLocalAlloc                        = modkernel32.NewProc("LocalAlloc")
+	procLocalFree                         = modkernel32.NewProc("LocalFree")
+	procNtCreateFile                      = modntdll.NewProc("NtCreateFile")
+	procNtSetInformationFile              = modntdll.NewProc("NtSetInformationFile")
+	procNtOpenDirectoryObject             = modntdll.NewProc("NtOpenDirectoryObject")
+	procNtQueryDirectoryObject            = modntdll.NewProc("NtQueryDirectoryObject")
+	procRtlNtStatusToDosError             = modntdll.NewProc("RtlNtStatusToDosError")
 )
+
+func InitializeProcThreadAttributeList(lpAttributeList uintptr, dwAttributeCount uint32, dwFlags uint32, lpSize *uintptr) (err error) {
+	r1, _, e1 := syscall.Syscall6(procInitializeProcThreadAttributeList.Addr(), 4, uintptr(lpAttributeList), uintptr(dwAttributeCount), uintptr(dwFlags), uintptr(unsafe.Pointer(lpSize)), 0, 0)
+	if r1 == 0 {
+		if e1 != 0 {
+			err = errnoErr(e1)
+		} else {
+			err = syscall.EINVAL
+		}
+	}
+	return
+}
+
+func UpdateProcThreadAttribute(lpAttributeList uintptr, dwFlags uint32, attribute uintptr, lpValue *uintptr, cbSize uintptr, lpPreviousValue *uintptr, lpReturnSize *uintptr) (err error) {
+	r1, _, e1 := syscall.Syscall9(procUpdateProcThreadAttribute.Addr(), 7, uintptr(lpAttributeList), uintptr(dwFlags), uintptr(attribute), uintptr(unsafe.Pointer(lpValue)), uintptr(cbSize), uintptr(unsafe.Pointer(lpPreviousValue)), uintptr(unsafe.Pointer(lpReturnSize)), 0, 0)
+	if r1 == 0 {
+		if e1 != 0 {
+			err = errnoErr(e1)
+		} else {
+			err = syscall.EINVAL
+		}
+	}
+	return
+}
+
+func DeleteProcThreadAttributeList(lpAttributeList uintptr) {
+	syscall.Syscall(procDeleteProcThreadAttributeList.Addr(), 1, uintptr(lpAttributeList), 0, 0)
+	return
+}
+
+func GetProcessHeap() (procHeap windows.Handle, err error) {
+	r0, _, e1 := syscall.Syscall(procGetProcessHeap.Addr(), 0, 0, 0, 0)
+	procHeap = windows.Handle(r0)
+	if procHeap == 0 {
+		if e1 != 0 {
+			err = errnoErr(e1)
+		} else {
+			err = syscall.EINVAL
+		}
+	}
+	return
+}
+
+func HeapAlloc(hHeap windows.Handle, dwFlags uint32, dwBytes uintptr) (lpMem uintptr, err error) {
+	r0, _, e1 := syscall.Syscall(procHeapAlloc.Addr(), 3, uintptr(hHeap), uintptr(dwFlags), uintptr(dwBytes))
+	lpMem = uintptr(r0)
+	if lpMem == 0 {
+		if e1 != 0 {
+			err = errnoErr(e1)
+		} else {
+			err = syscall.EINVAL
+		}
+	}
+	return
+}
+
+func HeapFree(hHeap windows.Handle, dwFlags uint32, lpMem uintptr) (err error) {
+	r1, _, e1 := syscall.Syscall(procHeapFree.Addr(), 3, uintptr(hHeap), uintptr(dwFlags), uintptr(lpMem))
+	if r1 == 0 {
+		if e1 != 0 {
+			err = errnoErr(e1)
+		} else {
+			err = syscall.EINVAL
+		}
+	}
+	return
+}
+
+func CreatePseudoConsole(size uintptr, hInput windows.Handle, hOutput windows.Handle, dwFlags uint32, phPC *windows.Handle) (hr error) {
+	r0, _, _ := syscall.Syscall6(procCreatePseudoConsole.Addr(), 5, uintptr(size), uintptr(hInput), uintptr(hOutput), uintptr(dwFlags), uintptr(unsafe.Pointer(phPC)), 0)
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func ResizePseudoConsole(hPC windows.Handle, size uintptr) (hr error) {
+	r0, _, _ := syscall.Syscall(procResizePseudoConsole.Addr(), 2, uintptr(hPC), uintptr(size), 0)
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func ClosePseudoConsole(hPC windows.Handle) (err error) {
+	r1, _, e1 := syscall.Syscall(procClosePseudoConsole.Addr(), 1, uintptr(hPC), 0, 0)
+	if r1 == 0 {
+		if e1 != 0 {
+			err = errnoErr(e1)
+		} else {
+			err = syscall.EINVAL
+		}
+	}
+	return
+}
 
 func CMGetDeviceIDListSize(pulLen *uint32, pszFilter *byte, uFlags uint32) (hr error) {
 	r0, _, _ := syscall.Syscall(procCM_Get_Device_ID_List_SizeA.Addr(), 3, uintptr(unsafe.Pointer(pulLen)), uintptr(unsafe.Pointer(pszFilter)), uintptr(uFlags))

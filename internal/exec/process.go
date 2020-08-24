@@ -15,6 +15,7 @@ import (
 	"unicode/utf16"
 	"unsafe"
 
+	"github.com/Microsoft/hcsshim/internal/winapi"
 	"golang.org/x/sys/windows"
 )
 
@@ -54,12 +55,13 @@ type ProcAttr struct {
 }
 
 type SysProcAttr struct {
-	HideWindow        bool
-	CmdLine           string // used if non-empty, else the windows command line is built by escaping the arguments passed to StartProcess
-	CreationFlags     uint32
-	Token             syscall.Token               // if set, runs new process in the security context represented by the token
-	ProcessAttributes *syscall.SecurityAttributes // if set, applies these security attributes as the descriptor for the new process
-	ThreadAttributes  *syscall.SecurityAttributes // if set, applies these security attributes as the descriptor for the main thread of the new process
+	HideWindow         bool
+	CmdLine            string // used if non-empty, else the windows command line is built by escaping the arguments passed to StartProcess
+	CreationFlags      uint32
+	Token              syscall.Token               // if set, runs new process in the security context represented by the token
+	ProcessAttributes  *syscall.SecurityAttributes // if set, applies these security attributes as the descriptor for the new process
+	ThreadAttributes   *syscall.SecurityAttributes // if set, applies these security attributes as the descriptor for the main thread of the new process
+	ProcThreadAttrList uintptr                     // if set, applies these process thread attributes for the new process.
 }
 
 // Process stores the information about a process created by StartProcess.
@@ -223,24 +225,25 @@ func startProcess(argv0 string, argv []string, attr *ProcAttr) (pid int, handle 
 		}
 	}
 
-	si := new(syscall.StartupInfo)
-	si.Cb = uint32(unsafe.Sizeof(*si))
-	si.Flags = syscall.STARTF_USESTDHANDLES
+	si := new(winapi.STARTUPINFOEX)
+	si.StartupInfo.Cb = uint32(unsafe.Sizeof(*si))
+	si.StartupInfo.Flags = syscall.STARTF_USESTDHANDLES
 	if sys.HideWindow {
-		si.Flags |= syscall.STARTF_USESHOWWINDOW
-		si.ShowWindow = syscall.SW_HIDE
+		si.StartupInfo.Flags |= syscall.STARTF_USESHOWWINDOW
+		si.StartupInfo.ShowWindow = syscall.SW_HIDE
 	}
 	si.StdInput = fd[0]
 	si.StdOutput = fd[1]
 	si.StdErr = fd[2]
+	si.LpAttributeList = sys.ProcThreadAttrList
 
 	pi := new(syscall.ProcessInformation)
 
-	flags := sys.CreationFlags | syscall.CREATE_UNICODE_ENVIRONMENT
+	flags := sys.CreationFlags | syscall.CREATE_UNICODE_ENVIRONMENT | windows.EXTENDED_STARTUPINFO_PRESENT
 	if sys.Token != 0 {
-		err = syscall.CreateProcessAsUser(sys.Token, argv0p, argvp, sys.ProcessAttributes, sys.ThreadAttributes, true, flags, createEnvBlock(attr.Env), dirp, si, pi)
+		err = syscall.CreateProcessAsUser(sys.Token, argv0p, argvp, sys.ProcessAttributes, sys.ThreadAttributes, true, flags, createEnvBlock(attr.Env), dirp, &si.StartupInfo, pi)
 	} else {
-		err = syscall.CreateProcess(argv0p, argvp, sys.ProcessAttributes, sys.ThreadAttributes, true, flags, createEnvBlock(attr.Env), dirp, si, pi)
+		err = syscall.CreateProcess(argv0p, argvp, sys.ProcessAttributes, sys.ThreadAttributes, true, flags, createEnvBlock(attr.Env), dirp, &si.StartupInfo, pi)
 	}
 	if err != nil {
 		return 0, 0, err
