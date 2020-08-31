@@ -253,3 +253,8 @@ func (coi *createOptionsInternal) isV2Argon() bool {
 func (coi *createOptionsInternal) isV1Argon() bool {
 	return schemaversion.IsV10(coi.actualSchemaVersion) && coi.Spec.Windows.HyperV == nil
 }
+
+func (coi *createOptionsInternal) hasWindowsAssignedDevices() bool {
+	return (coi.Spec.Windows != nil) && (coi.Spec.Windows.Devices != nil) &&
+		(len(coi.Spec.Windows.Devices) > 0)
+}

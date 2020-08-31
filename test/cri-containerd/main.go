@@ -26,21 +26,26 @@ import (
 )
 
 const (
-	daemonAddress                     = "tcp://127.0.0.1:2376"
-	connectTimeout                    = time.Second * 10
-	testNamespace                     = "cri-containerd-test"
+	daemonAddress  = "tcp://127.0.0.1:2376"
+	connectTimeout = time.Second * 10
+	testNamespace  = "cri-containerd-test"
+
 	wcowProcessRuntimeHandler         = "runhcs-wcow-process"
 	wcowHypervisorRuntimeHandler      = "runhcs-wcow-hypervisor"
 	wcowHypervisor17763RuntimeHandler = "runhcs-wcow-hypervisor-17763"
 	wcowHypervisor18362RuntimeHandler = "runhcs-wcow-hypervisor-18362"
 	wcowHypervisor19041RuntimeHandler = "runhcs-wcow-hypervisor-19041"
-	lcowRuntimeHandler                = "runhcs-lcow"
-	imageLcowK8sPause                 = "k8s.gcr.io/pause:3.1"
-	imageLcowAlpine                   = "docker.io/library/alpine:latest"
-	imageLcowCosmos                   = "cosmosarno/spark-master:2.4.1_2019-04-18_8e864ce"
-	testGPUBootFiles                  = "C:\\ContainerPlat\\LinuxBootFiles\\nvidiagpu"
-	alpineAspNet                      = "mcr.microsoft.com/dotnet/core/aspnet:3.1-alpine3.11"
-	alpineAspnetUpgrade               = "mcr.microsoft.com/dotnet/core/aspnet:3.1.2-alpine3.11"
+
+	testDeviceUtilFilePath = "C:\\ContainerPlat\\device-util.exe"
+	testDriversPath        = "C:\\ContainerPlat\\testdrivers"
+	testGPUBootFiles       = "C:\\ContainerPlat\\LinuxBootFiles\\nvidiagpu"
+
+	lcowRuntimeHandler  = "runhcs-lcow"
+	imageLcowK8sPause   = "k8s.gcr.io/pause:3.1"
+	imageLcowAlpine     = "docker.io/library/alpine:latest"
+	imageLcowCosmos     = "cosmosarno/spark-master:2.4.1_2019-04-18_8e864ce"
+	alpineAspNet        = "mcr.microsoft.com/dotnet/core/aspnet:3.1-alpine3.11"
+	alpineAspnetUpgrade = "mcr.microsoft.com/dotnet/core/aspnet:3.1.2-alpine3.11"
 	// Default account name for use with GMSA related tests. This will not be
 	// present/you will not have access to the account on your machine unless
 	// your environment is configured properly.

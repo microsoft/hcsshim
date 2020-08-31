@@ -79,7 +79,13 @@ const (
 	// `spec.Windows.Resources.Storage.Iops`.
 	AnnotationContainerStorageQoSIopsMaximum = "io.microsoft.container.storage.qos.iopsmaximum"
 	// AnnotationGPUVHDPath overrides the default path to search for the gpu vhd
-	AnnotationGPUVHDPath            = "io.microsoft.lcow.gpuvhdpath"
+	AnnotationGPUVHDPath = "io.microsoft.lcow.gpuvhdpath"
+	// AnnotationAssignedDeviceKernelDrivers indicates what drivers to install in the pod during device
+	// assignment. This value should contain a list of comma separated directories containing all
+	// files and information needed to install given driver(s). This may include .sys,
+	// .inf, .cer, and/or other files used during standard installation with pnputil.
+	AnnotationAssignedDeviceKernelDrivers = "io.microsoft.assigneddevice.kerneldrivers"
+
 	annotationAllowOvercommit       = "io.microsoft.virtualmachine.computetopology.memory.allowovercommit"
 	annotationEnableDeferredCommit  = "io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit"
 	annotationEnableColdDiscardHint = "io.microsoft.virtualmachine.computetopology.memory.enablecolddiscardhint"
