@@ -36,9 +36,10 @@ func memoryLogFormat(metrics *cgroupstats.Metrics) logrus.Fields {
 	}
 }
 
-func readMemoryEvents(efdFile *os.File, cgName string, threshold int64, cg cgroups.Cgroup) {
+func readMemoryEvents(startTime time.Time, efdFile *os.File, cgName string, threshold int64, cg cgroups.Cgroup) {
 	// Buffer must be >= 8 bytes for eventfd reads
 	// http://man7.org/linux/man-pages/man2/eventfd.2.html
+	count := 0
 	buf := make([]byte, 8)
 	for {
 		if _, err := efdFile.Read(buf); err != nil {
@@ -46,19 +47,31 @@ func readMemoryEvents(efdFile *os.File, cgName string, threshold int64, cg cgrou
 			return
 		}
 
+		// Sometimes an event is sent during cgroup teardown, but does not indicate that the
+		// threshold was actually crossed. In the teardown case the cgroup.event_control file
+		// won't exist anymore, so check that to determine if we should ignore this event.
+		_, err := os.Lstat(fmt.Sprintf("/sys/fs/cgroup/memory%s/cgroup.event_control", cgName))
+		if os.IsNotExist(err) {
+			return
+		}
+
+		count++
 		msg := "memory usage for cgroup exceeded threshold"
 		entry := logrus.WithFields(logrus.Fields{
+			"gcsStartTime":   startTime,
+			"time":           time.Now(),
 			"cgroup":         cgName,
 			"thresholdBytes": threshold,
+			"count":          count,
 		})
 		// Sleep for one second in case there is a series of allocations slightly after
 		// reaching threshold.
 		time.Sleep(time.Second)
-		metrics, err := cg.Stat()
+		metrics, err := cg.Stat(cgroups.IgnoreNotExist)
 		if err != nil {
 			// Don't return on Stat err as it will return an error if
 			// any of the cgroup subsystems Stat calls failed for any reason.
-			// We still want to log if we hit cgroup threshold/limit
+			// We still want to log if we hit the cgroup threshold/limit
 			entry.WithError(err).Error(msg)
 		} else {
 			entry.WithFields(memoryLogFormat(metrics)).Warn(msg)
@@ -67,6 +80,7 @@ func readMemoryEvents(efdFile *os.File, cgName string, threshold int64, cg cgrou
 }
 
 func main() {
+	startTime := time.Now()
 	logLevel := flag.String("loglevel", "debug", "Logging Level: debug, info, warning, error, fatal, panic.")
 	kmsgLogLevel := flag.Uint("kmsgLogLevel", uint(kmsg.Warning), "Log all kmsg entries with a priority less than or equal to the supplied level.")
 	logFile := flag.String("logfile", "", "Logging Target: An optional file name/path. Omit for console output.")
@@ -212,8 +226,8 @@ func main() {
 	oomFile := os.NewFile(oom, "cefd")
 	defer oomFile.Close()
 
-	go readMemoryEvents(gefdFile, "/gcs", int64(*gcsMemLimitBytes), gcsControl)
-	go readMemoryEvents(oomFile, "/containers", containersLimit, containersControl)
+	go readMemoryEvents(startTime, gefdFile, "/gcs", int64(*gcsMemLimitBytes), gcsControl)
+	go readMemoryEvents(startTime, oomFile, "/containers", containersLimit, containersControl)
 	err = b.ListenAndServe(bridgeIn, bridgeOut)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
