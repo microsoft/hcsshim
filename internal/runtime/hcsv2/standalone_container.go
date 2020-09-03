@@ -95,8 +95,12 @@ func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec
 		ns := getOrAddNetworkNamespace(getNetworkNamespaceID(spec))
 		var searches, servers []string
 		for _, n := range ns.Adapters() {
-			servers = network.MergeValues(servers, strings.Split(n.DNSServerList, ","))
-			servers = network.MergeValues(servers, strings.Split(n.DNSServerList, ","))
+			if len(n.DNSSuffix) > 0 {
+				searches = network.MergeValues(searches, strings.Split(n.DNSSuffix, ","))
+			}
+			if len(n.DNSServerList) > 0 {
+				servers = network.MergeValues(servers, strings.Split(n.DNSServerList, ","))
+			}
 		}
 		resolvContent, err := network.GenerateResolvConfContent(ctx, searches, servers, nil)
 		if err != nil {
