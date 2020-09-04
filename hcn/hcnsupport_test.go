@@ -138,6 +138,17 @@ func TestL4ProxyPolicySupport(t *testing.T) {
 	}
 }
 
+func TestL4WfpProxyPolicySupport(t *testing.T) {
+	supportedFeatures := GetSupportedFeatures()
+	err := L4WfpProxyPolicySupported()
+	if supportedFeatures.L4WfpProxy && err != nil {
+		t.Fatal(err)
+	}
+	if !supportedFeatures.L4WfpProxy && err == nil {
+		t.Fatal(err)
+	}
+}
+
 func TestIsFeatureSupported(t *testing.T) {
 	// HNSVersion1803 testing (single range tests)
 	if isFeatureSupported(Version{Major: 0, Minor: 0}, HNSVersion1803) {
