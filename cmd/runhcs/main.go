@@ -108,6 +108,7 @@ func main() {
 		killCommand,
 		listCommand,
 		pauseCommand,
+		prepareDiskCommand,
 		psCommand,
 		resizeTtyCommand,
 		resumeCommand,
