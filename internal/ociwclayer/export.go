@@ -3,10 +3,10 @@
 package ociwclayer
 
 import (
+	"archive/tar"
 	"io"
 	"path/filepath"
 
-	"github.com/Microsoft/go-winio/archive/tar"
 	"github.com/Microsoft/go-winio/backuptar"
 	"github.com/Microsoft/hcsshim"
 )
