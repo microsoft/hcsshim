@@ -101,7 +101,7 @@ func setGlobalOptions(c *cli.Context, options *uvm.Options) {
 		options.ProcessorCount = int32(c.GlobalUint64(cpusArgName))
 	}
 	if c.GlobalIsSet(memoryArgName) {
-		options.MemorySizeInMB = int32(c.GlobalUint64(memoryArgName))
+		options.MemorySizeInMB = c.GlobalUint64(memoryArgName)
 	}
 	if c.GlobalIsSet(allowOvercommitArgName) {
 		options.AllowOvercommit = c.GlobalBool(allowOvercommitArgName)

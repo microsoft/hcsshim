@@ -29,7 +29,7 @@ type Options struct {
 
 	// MemorySizeInMB sets the UVM memory. If `0` will default to platform
 	// default.
-	MemorySizeInMB int32
+	MemorySizeInMB uint64
 
 	LowMMIOGapInMB   uint64
 	HighMMIOBaseInMB uint64
@@ -298,7 +298,7 @@ func (uvm *UtilityVM) PhysicallyBacked() bool {
 	return uvm.physicallyBacked
 }
 
-func (uvm *UtilityVM) normalizeMemorySize(ctx context.Context, requested int32) int32 {
+func (uvm *UtilityVM) normalizeMemorySize(ctx context.Context, requested uint64) uint64 {
 	actual := (requested + 1) &^ 1 // align up to an even number
 	if requested != actual {
 		log.G(ctx).WithFields(logrus.Fields{
