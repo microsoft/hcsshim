@@ -246,16 +246,16 @@ func ParseAnnotationsStorageBps(ctx context.Context, s *specs.Spec, annotation s
 // returns `def`.
 //
 // Note: The returned value is in `MB`.
-func ParseAnnotationsMemory(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
+func ParseAnnotationsMemory(ctx context.Context, s *specs.Spec, annotation string, def uint64) uint64 {
 	if m := parseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
-		return int32(m)
+		return m
 	}
 	if s.Windows != nil &&
 		s.Windows.Resources != nil &&
 		s.Windows.Resources.Memory != nil &&
 		s.Windows.Resources.Memory.Limit != nil &&
 		*s.Windows.Resources.Memory.Limit > 0 {
-		return int32(*s.Windows.Resources.Memory.Limit / 1024 / 1024)
+		return (*s.Windows.Resources.Memory.Limit / 1024 / 1024)
 	}
 	return def
 }
