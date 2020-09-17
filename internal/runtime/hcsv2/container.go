@@ -129,6 +129,10 @@ func (c *Container) Delete(ctx context.Context) error {
 	return c.container.Delete()
 }
 
+func (c *Container) Update(ctx context.Context, resources string) error {
+	return c.container.Update(resources)
+}
+
 // Wait waits for the container's init process to exit.
 func (c *Container) Wait() prot.NotificationType {
 	_, span := trace.StartSpan(context.Background(), "opengcs::Container::Wait")

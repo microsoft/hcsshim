@@ -692,3 +692,16 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioS
 	}
 	return &process{c: c, pid: pid, ttyRelay: ttyRelay, pipeRelay: pipeRelay}, nil
 }
+
+func (c *container) Update(resources string) error {
+	logPath := c.r.getLogPath(c.id)
+	args := []string{"update", "--resources", "-", c.id}
+	cmd := createRuncCommand(logPath, args...)
+	cmd.Stdin = strings.NewReader(resources)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		runcErr := getRuncLogError(logPath)
+		return errors.Wrapf(err, "runc update failed with %v: %s", runcErr, string(out))
+	}
+	return nil
+}
