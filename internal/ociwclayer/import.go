@@ -1,6 +1,7 @@
 package ociwclayer
 
 import (
+	"archive/tar"
 	"bufio"
 	"io"
 	"os"
@@ -9,7 +10,6 @@ import (
 	"strings"
 
 	winio "github.com/Microsoft/go-winio"
-	"github.com/Microsoft/go-winio/archive/tar"
 	"github.com/Microsoft/go-winio/backuptar"
 	"github.com/Microsoft/hcsshim"
 )
