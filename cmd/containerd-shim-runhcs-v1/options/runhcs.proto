@@ -62,7 +62,12 @@ message Options {
 
 	// GPUVHDPath is the path to the gpu vhd to add to the uvm
 	// when a container requests a gpu
-	string GPUVHDPath = 10; 
+	string GPUVHDPath = 10;
+
+        // scale_cpu_limits_to_sandbox indicates that container CPU limits should
+        // be adjusted to account for the difference in number of cores between the
+        // host and UVM.
+        bool scale_cpu_limits_to_sandbox = 11;
 }
 
 // ProcessDetails contains additional information about a process. This is the additional
