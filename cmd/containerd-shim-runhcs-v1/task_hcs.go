@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/cow"
@@ -26,6 +27,7 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/task"
+	"github.com/containerd/typeurl"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -132,12 +134,23 @@ func newHcsTask(
 		s.Windows.Network != nil {
 		netNS = s.Windows.Network.NetworkNamespace
 	}
+
+	var shimOpts *runhcsopts.Options
+	if req.Options != nil {
+		v, err := typeurl.UnmarshalAny(req.Options)
+		if err != nil {
+			return nil, err
+		}
+		shimOpts = v.(*runhcsopts.Options)
+	}
+
 	opts := hcsoci.CreateOptions{
-		ID:               req.ID,
-		Owner:            owner,
-		Spec:             s,
-		HostingSystem:    parent,
-		NetworkNamespace: netNS,
+		ID:                      req.ID,
+		Owner:                   owner,
+		Spec:                    s,
+		HostingSystem:           parent,
+		NetworkNamespace:        netNS,
+		ScaleCPULimitsToSandbox: shimOpts.ScaleCpuLimitsToSandbox,
 	}
 	system, resources, err := hcsoci.CreateContainer(ctx, &opts)
 	if err != nil {

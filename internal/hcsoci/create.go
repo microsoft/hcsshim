@@ -49,6 +49,10 @@ type CreateOptions struct {
 	// must a) not tear down the utility VM on failure (or pause in some way) and b) is responsible for
 	// performing the ReleaseResources() call themselves.
 	DoNotReleaseResourcesOnFailure bool
+
+	// ScaleCPULimitsToSandbox indicates that the container CPU limits should be adjusted to account
+	// for the difference in CPU count between the host and the UVM.
+	ScaleCPULimitsToSandbox bool
 }
 
 // createOptionsInternal is the set of user-supplied create options, but includes internal

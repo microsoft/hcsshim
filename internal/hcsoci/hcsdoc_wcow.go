@@ -80,27 +80,69 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	if cpuNumSet > 1 {
 		return nil, nil, fmt.Errorf("invalid spec - Windows Process Container CPU Count: '%d', Limit: '%d', and Weight: '%d' are mutually exclusive", cpuCount, cpuLimit, cpuWeight)
 	} else if cpuNumSet == 1 {
-		var hostCPUCount int32
+		hostCPUCount := processorinfo.ProcessorCount()
+		// usableCPUCount is the number of processors present in whatever environment
+		// the container is running in. It will be either the processor count of the
+		// host, or the UVM, based on if the container is process or hypervisor isolated.
+		usableCPUCount := hostCPUCount
+		var uvmCPUCount int32
 		if coi.HostingSystem != nil {
-			// Normalize to UVM size
-			hostCPUCount = coi.HostingSystem.ProcessorCount()
-		} else {
-			// For process isolated case the amount of logical processors reported
-			// from the HCS apis may be greater than what is available to the host in a
-			// minroot configuration (host doesn't have access to all available LPs)
-			// so prefer standard OS level calls here instead.
-			hostCPUCount = processorinfo.ProcessorCount()
+			uvmCPUCount = coi.HostingSystem.ProcessorCount()
+			usableCPUCount = uvmCPUCount
 		}
-		if cpuCount > hostCPUCount {
+		if cpuCount > usableCPUCount {
 			l := log.G(ctx).WithField(logfields.ContainerID, coi.ID)
 			if coi.HostingSystem != nil {
 				l.Data[logfields.UVMID] = coi.HostingSystem.ID()
 			}
 			l.WithFields(logrus.Fields{
 				"requested": cpuCount,
-				"assigned":  hostCPUCount,
+				"assigned":  usableCPUCount,
 			}).Warn("Changing user requested CPUCount to current number of processors")
-			cpuCount = hostCPUCount
+			cpuCount = usableCPUCount
+		}
+		if coi.ScaleCPULimitsToSandbox && cpuLimit > 0 && coi.HostingSystem != nil {
+			// When ScaleCPULimitsToSandbox is set and we are running in a UVM, we assume
+			// the CPU limit has been calculated based on the number of processors on the
+			// host, and instead re-calculate it based on the number of processors in the UVM.
+			//
+			// This is needed to work correctly with assumptions kubelet makes when computing
+			// the CPU limit value:
+			// - kubelet thinks about CPU limits in terms of millicores, which are 1000ths of
+			//   cores. So if 2000 millicores are assigned, the container can use 2 processors.
+			// - In Windows, the job object CPU limit is global across all processors on the
+			//   system, and is represented as a fraction out of 10000. In this model, a limit
+			//   of 10000 means the container can use all processors fully, regardless of how
+			//   many processors exist on the system.
+			// - To convert the millicores value into the job object limit, kubelet divides
+			//   the millicores by the number of CPU cores on the host. This causes problems
+			//   when running inside a UVM, as the UVM may have a different number of processors
+			//   than the host system.
+			//
+			// To work around this, we undo the division by the number of host processors, and
+			// re-do the division based on the number of processors inside the UVM. This will
+			// give the correct value based on the actual number of millicores that the kubelet
+			// wants the container to have.
+			//
+			// Kubelet formula to compute CPU limit:
+			// cpuMaximum := 10000 * cpuLimit.MilliValue() / int64(runtime.NumCPU()) / 1000
+			newCPULimit := cpuLimit * hostCPUCount / uvmCPUCount
+			// We only apply bounds here because we are calculating the CPU limit ourselves,
+			// and this matches the kubelet behavior where they also bound the CPU limit by [1, 10000].
+			// In the case where we use the value directly from the user, we don't alter it to fit
+			// within the bounds, but just let the platform throw an error if it is invalid.
+			if newCPULimit < 1 {
+				newCPULimit = 1
+			} else if newCPULimit > 10000 {
+				newCPULimit = 10000
+			}
+			log.G(ctx).WithFields(logrus.Fields{
+				"hostCPUCount": hostCPUCount,
+				"uvmCPUCount":  uvmCPUCount,
+				"oldCPULimit":  cpuLimit,
+				"newCPULimit":  newCPULimit,
+			}).Info("rescaling CPU limit for UVM sandbox")
+			cpuLimit = newCPULimit
 		}
 
 		v1.ProcessorCount = uint32(cpuCount)
