@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"syscall"
 	"time"
@@ -182,6 +183,14 @@ func main() {
 	// memory and causing the GCS to malfunction we create two cgroups: gcs,
 	// containers.
 	//
+
+	// Write 1 to memory.use_hierarchy on the root cgroup to enable hierarchy
+	// support. This needs to be set before we create any cgroups as the write
+	// will fail otherwise.
+	if err := ioutil.WriteFile("/sys/fs/cgroup/memory/memory.use_hierarchy", []byte("1"), 0644); err != nil {
+		logrus.WithError(err).Fatal("failed to enable hierarchy support for root cgroup")
+	}
+
 	// The containers cgroup is limited only by {Totalram - 75 MB
 	// (reservation)}.
 	//
