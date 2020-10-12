@@ -37,11 +37,13 @@ func errnoErr(e syscall.Errno) error {
 }
 
 var (
+	modiphlpapi = windows.NewLazySystemDLL("iphlpapi.dll")
 	modkernel32 = windows.NewLazySystemDLL("kernel32.dll")
 	modadvapi32 = windows.NewLazySystemDLL("advapi32.dll")
 	modcfgmgr32 = windows.NewLazySystemDLL("cfgmgr32.dll")
 	modntdll    = windows.NewLazySystemDLL("ntdll.dll")
 
+	procSetJobCompartmentId                  = modiphlpapi.NewProc("SetJobCompartmentId")
 	procIsProcessInJob                       = modkernel32.NewProc("IsProcessInJob")
 	procQueryInformationJobObject            = modkernel32.NewProc("QueryInformationJobObject")
 	procOpenJobObjectW                       = modkernel32.NewProc("OpenJobObjectW")
@@ -62,6 +64,17 @@ var (
 	procNtQueryDirectoryObject               = modntdll.NewProc("NtQueryDirectoryObject")
 	procRtlNtStatusToDosError                = modntdll.NewProc("RtlNtStatusToDosError")
 )
+
+func SetJobCompartmentId(handle windows.Handle, compartmentId uint32) (hr error) {
+	r0, _, _ := syscall.Syscall(procSetJobCompartmentId.Addr(), 2, uintptr(handle), uintptr(compartmentId), 0)
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
 
 func IsProcessInJob(procHandle windows.Handle, jobHandle windows.Handle, result *bool) (err error) {
 	r1, _, e1 := syscall.Syscall(procIsProcessInJob.Addr(), 3, uintptr(procHandle), uintptr(jobHandle), uintptr(unsafe.Pointer(result)))
