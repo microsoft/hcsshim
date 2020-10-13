@@ -100,10 +100,12 @@ const (
 	ComputeSystemModifySettingsV1 = 0x10100a01
 	// ComputeSystemNegotiateProtocolV1 is the protocol negotiation request.
 	ComputeSystemNegotiateProtocolV1 = 0x10100b01
-	// ComputeSystemDumpStackV1 is the dump stack request
+	// ComputeSystemDumpStacksV1 is the dump stack request
 	ComputeSystemDumpStacksV1 = 0x10100c01
 	// ComputeSystemDeleteContainerStateV1 is the delete container request.
 	ComputeSystemDeleteContainerStateV1 = 0x10100d01
+	// ComputeSystemUpdateContainerV1 is the update container request
+	ComputeSystemUpdateContainerV1 = 0x10100e01
 
 	// ComputeSystemResponseCreateV1 is the create container response.
 	ComputeSystemResponseCreateV1 = 0x20100101
@@ -132,7 +134,7 @@ const (
 	// ComputeSystemResponseNegotiateProtocolV1 is the protocol negotiation
 	// response.
 	ComputeSystemResponseNegotiateProtocolV1 = 0x20100b01
-	// ComputeSystemDumpStackV1 is the dump stack response
+	// ComputeSystemResponseDumpStacksV1 is the dump stack response
 	ComputeSystemResponseDumpStacksV1 = 0x20100c01
 
 	// ComputeSystemNotificationV1 is the notification identifier.
@@ -170,6 +172,8 @@ func (mi MessageIdentifier) String() string {
 		return "ComputeSystemDumpStacksV1"
 	case ComputeSystemDeleteContainerStateV1:
 		return "ComputeSystemDeleteContainerStateV1"
+	case ComputeSystemUpdateContainerV1:
+		return "ComputeSystemUpdateContainerV1"
 	case ComputeSystemResponseCreateV1:
 		return "ComputeSystemResponseCreateV1"
 	case ComputeSystemResponseStartV1:
@@ -272,6 +276,7 @@ type GcsGuestCapabilities struct {
 	SignalProcessSupported        bool `json:",omitempty"`
 	DumpStacksSupported           bool `json:",omitempty"`
 	DeleteContainerStateSupported bool `json:",omitempty"`
+	UpdateContainerSupported      bool `json:",omitempty"`
 }
 
 // ocspancontext is the internal JSON representation of the OpenCensus
@@ -446,6 +451,12 @@ type ContainerSignalProcess struct {
 type ContainerGetProperties struct {
 	MessageBase
 	Query string
+}
+
+// ContainerUpdate is the message sent to update a container's resources
+type ContainerUpdate struct {
+	MessageBase
+	Resources string
 }
 
 // PropertyType is the type of property, such as memory or virtual disk, which
