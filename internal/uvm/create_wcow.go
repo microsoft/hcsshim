@@ -16,6 +16,7 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
+	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/internal/wcow"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
@@ -109,6 +110,11 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	if _, err := os.Stat(scratchPath); os.IsNotExist(err) {
 		if err := wcow.CreateUVMScratch(ctx, uvmFolder, scratchFolder, uvm.id); err != nil {
 			return nil, fmt.Errorf("failed to create scratch: %s", err)
+		}
+	} else {
+		// Sandbox.vhdx exists, just need to grant vm access to it.
+		if err := wclayer.GrantVmAccess(ctx, uvm.id, scratchPath); err != nil {
+			return nil, errors.Wrap(err, "failed to grant vm access to scratch")
 		}
 	}
 
