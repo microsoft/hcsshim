@@ -181,6 +181,7 @@ func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) error {
 	if err := uvm.modify(ctx, scsiModification); err != nil {
 		return fmt.Errorf("failed to remove SCSI disk %s from container %s: %s", hostPath, uvm.id, err)
 	}
+	log.G(ctx).WithFields(sm.logFormat()).Debug("removed SCSI location")
 	uvm.scsiLocations[sm.Controller][sm.LUN] = nil
 	return nil
 }
