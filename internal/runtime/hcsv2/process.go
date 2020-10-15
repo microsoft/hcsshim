@@ -122,29 +122,15 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 //
 // If the process has already exited returns `gcserr.HrErrNotFound` by contract.
 func (p *containerProcess) Kill(ctx context.Context, signal syscall.Signal) error {
-	// When a container contains more than one process we can fail to unblock
-	// the wait if we only signal the init process. Instead we issue a `runc
-	// kill --all` which then signals all processes in the container.
+	if err := syscall.Kill(int(p.pid), signal); err != nil {
+		if err == syscall.ESRCH {
+			return gcserr.NewHresultError(gcserr.HrErrNotFound)
+		}
+		return err
+	}
+
 	if p.init {
-		if err := p.c.Kill(ctx, signal); err != nil {
-			// Since we use the container logic to kill here it returns a
-			// `gcserr.HrVmcomputeSystemNotFound` but we need a
-			// `gcserr.HrErrNotFound` since we are operating on a process
-			// handle.
-			hr, e2 := gcserr.GetHresult(err)
-			if e2 == nil && hr == gcserr.HrVmcomputeSystemNotFound {
-				return gcserr.NewHresultError(gcserr.HrErrNotFound)
-			}
-			// Unknown runc error, return as is.
-			return err
-		}
-	} else {
-		if err := syscall.Kill(int(p.pid), signal); err != nil {
-			if err == syscall.ESRCH {
-				return gcserr.NewHresultError(gcserr.HrErrNotFound)
-			}
-			return err
-		}
+		p.c.setExitType(signal)
 	}
 
 	return nil
