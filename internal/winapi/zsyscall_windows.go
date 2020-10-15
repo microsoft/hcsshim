@@ -65,13 +65,10 @@ var (
 	procRtlNtStatusToDosError                = modntdll.NewProc("RtlNtStatusToDosError")
 )
 
-func SetJobCompartmentId(handle windows.Handle, compartmentId uint32) (hr error) {
+func SetJobCompartmentId(handle windows.Handle, compartmentId uint32) (win32Err error) {
 	r0, _, _ := syscall.Syscall(procSetJobCompartmentId.Addr(), 2, uintptr(handle), uintptr(compartmentId), 0)
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
+	if r0 != 0 {
+		win32Err = syscall.Errno(r0)
 	}
 	return
 }
