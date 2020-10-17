@@ -138,6 +138,27 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		},
 	}
 
+	// Here for a temporary workaround until the need for setting this regkey is no more. To protect
+	// against any undesired behavior (such as some general networking scenarios ceasing to function)
+	// with a recent change to fix SMB share access in the UVM, this registry key will be checked to
+	// enable the change in question inside GNS.dll.
+	var registryChanges hcsschema.RegistryChanges
+	if !opts.DisableCompartmentNamespace {
+		registryChanges = hcsschema.RegistryChanges{
+			AddValues: []hcsschema.RegistryValue{
+				{
+					Key: &hcsschema.RegistryKey{
+						Hive: "System",
+						Name: "CurrentControlSet\\Services\\gns",
+					},
+					Name:       "EnableCompartmentNamespace",
+					DWordValue: 1,
+					Type_:      "DWord",
+				},
+			},
+		}
+	}
+
 	doc := &hcsschema.ComputeSystem{
 		Owner:                             uvm.owner,
 		SchemaVersion:                     schemaversion.SchemaV21(),
@@ -152,6 +173,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 					},
 				},
 			},
+			RegistryChanges: &registryChanges,
 			ComputeTopology: &hcsschema.Topology{
 				Memory: &hcsschema.Memory2{
 					SizeInMB:        memorySizeInMB,

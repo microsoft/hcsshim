@@ -120,16 +120,17 @@ const (
 	//
 	// Note: Unlike Windows process isolated container QoS Count/Limt/Weight on
 	// the UVM are not mutually exclusive and can be set together.
-	annotationProcessorWeight            = "io.microsoft.virtualmachine.computetopology.processor.weight"
-	annotationVPMemCount                 = "io.microsoft.virtualmachine.devices.virtualpmem.maximumcount"
-	annotationVPMemSize                  = "io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes"
-	annotationPreferredRootFSType        = "io.microsoft.virtualmachine.lcow.preferredrootfstype"
-	annotationBootFilesRootPath          = "io.microsoft.virtualmachine.lcow.bootfilesrootpath"
-	annotationKernelDirectBoot           = "io.microsoft.virtualmachine.lcow.kerneldirectboot"
-	annotationVPCIEnabled                = "io.microsoft.virtualmachine.lcow.vpcienabled"
-	annotationStorageQoSBandwidthMaximum = "io.microsoft.virtualmachine.storageqos.bandwidthmaximum"
-	annotationStorageQoSIopsMaximum      = "io.microsoft.virtualmachine.storageqos.iopsmaximum"
-	annotationFullyPhysicallyBacked      = "io.microsoft.virtualmachine.fullyphysicallybacked"
+	annotationProcessorWeight             = "io.microsoft.virtualmachine.computetopology.processor.weight"
+	annotationVPMemCount                  = "io.microsoft.virtualmachine.devices.virtualpmem.maximumcount"
+	annotationVPMemSize                   = "io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes"
+	annotationPreferredRootFSType         = "io.microsoft.virtualmachine.lcow.preferredrootfstype"
+	annotationBootFilesRootPath           = "io.microsoft.virtualmachine.lcow.bootfilesrootpath"
+	annotationKernelDirectBoot            = "io.microsoft.virtualmachine.lcow.kerneldirectboot"
+	annotationVPCIEnabled                 = "io.microsoft.virtualmachine.lcow.vpcienabled"
+	annotationStorageQoSBandwidthMaximum  = "io.microsoft.virtualmachine.storageqos.bandwidthmaximum"
+	annotationStorageQoSIopsMaximum       = "io.microsoft.virtualmachine.storageqos.iopsmaximum"
+	annotationFullyPhysicallyBacked       = "io.microsoft.virtualmachine.fullyphysicallybacked"
+	annotationDisableCompartmentNamespace = "io.microsoft.virtualmachine.disablecompartmentnamespace"
 	// A boolean annotation to control whether to use an external bridge or the
 	// HCS-GCS bridge. Default value is true which means external bridge will be used
 	// by default.
@@ -411,6 +412,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		wopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(ctx, s, annotationStorageQoSBandwidthMaximum, wopts.StorageQoSBandwidthMaximum)
 		wopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotationStorageQoSIopsMaximum, wopts.StorageQoSIopsMaximum)
 		wopts.ExternalGuestConnection = parseAnnotationsBool(ctx, s.Annotations, annotationUseExternalGCSBridge, wopts.ExternalGuestConnection)
+		wopts.DisableCompartmentNamespace = parseAnnotationsBool(ctx, s.Annotations, annotationDisableCompartmentNamespace, wopts.DisableCompartmentNamespace)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, wopts)
 		return wopts, nil
 	}
