@@ -92,15 +92,14 @@ func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all 
 				}
 				r.createdNetNS = false
 			}
-		case *CCGInstance:
+		case *CCGResource:
 			if err := r.resources[i].Release(ctx); err != nil {
 				log.G(ctx).WithError(err).Error("failed to release container resource")
 				releaseErr = true
 			}
 		default:
-			// Don't need to check if vm != nil here anymore as they wouldnt
-			// have been added in the first place. All resources have embedded
-			// vm they belong to.
+			// Don't need to check if vm != nil here as they wouldnt have been added
+			// in the first place. All resources have embedded vm they belong to.
 			if all {
 				if err := r.resources[i].Release(ctx); err != nil {
 					log.G(ctx).WithError(err).Error("failed to release container resource")
