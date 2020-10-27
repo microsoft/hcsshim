@@ -594,7 +594,7 @@ func (ht *hcsTask) closeHost(ctx context.Context) {
 
 func (ht *hcsTask) ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (int, error) {
 	if ht.host == nil {
-		return 0, errors.New("task is not isolated")
+		return cmd.ExecInShimHost(ctx, req)
 	}
 	return cmd.ExecInUvm(ctx, ht.host, req)
 }
@@ -613,7 +613,7 @@ func (ht *hcsTask) DumpGuestStacks(ctx context.Context) string {
 
 func (ht *hcsTask) Share(ctx context.Context, req *shimdiag.ShareRequest) error {
 	if ht.host == nil {
-		return errors.New("task is not isolated")
+		return errTaskNotIsolated
 	}
 	// For hyper-v isolated WCOW the task used isn't the standard hcsTask so we
 	// only have to deal with the LCOW case here.
