@@ -81,6 +81,10 @@ type Options struct {
 	// unneccessary behavior and once this restriction is removed then we can remove the need for this variable
 	// and the associated annotation as well.
 	DisableCompartmentNamespace bool
+
+	// CPUGroupID set the ID of a CPUGroup on the host that the UVM should be added to on start.
+	// Defaults to an empty string which indicates the UVM should not be added to any CPUGroup.
+	CPUGroupID string
 }
 
 // Verifies that the final UVM options are correct and supported.
@@ -196,6 +200,9 @@ func (uvm *UtilityVM) Close() (err error) {
 	windows.Close(uvm.vmmemProcess)
 
 	if uvm.hcsSystem != nil {
+		if err := uvm.ReleaseCPUGroup(ctx); err != nil {
+			log.G(ctx).WithError(err).Warn("failed to release VM resource")
+		}
 		uvm.hcsSystem.Terminate(ctx)
 		uvm.Wait()
 	}

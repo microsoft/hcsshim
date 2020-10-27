@@ -14,8 +14,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/cpugroup"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
+	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/osversion"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
@@ -1135,6 +1137,77 @@ func Test_RunPodSandbox_Mount_SandboxDir_LCOW(t *testing.T) {
 	t.Log(output)
 
 	//TODO: Parse the output of the exec command to make sure the uvm mount was successful
+}
+
+func Test_RunPodSandbox_CPUGroup(t *testing.T) {
+	ctx := context.Background()
+	presentID := "FA22A12C-36B3-486D-A3E9-BC526C2B450B"
+
+	processorTopology, err := processorinfo.HostProcessorInfo(ctx)
+	if err != nil {
+		t.Fatalf("failed to get host processor information: %s", err)
+	}
+	lpIndices := make([]uint32, processorTopology.LogicalProcessorCount)
+	for i, p := range processorTopology.LogicalProcessors {
+		lpIndices[i] = p.LpIndex
+	}
+
+	if err := cpugroup.Create(ctx, presentID, lpIndices); err != nil {
+		t.Fatalf("failed to create test cpugroup with: %v", err)
+	}
+
+	defer func() {
+		err := cpugroup.Delete(ctx, presentID)
+		if err != nil && err != cpugroup.ErrHVStatusInvalidCPUGroupState {
+			t.Fatalf("failed to clean up test cpugroup with: %v", err)
+		}
+	}()
+
+	type config struct {
+		name             string
+		requiredFeatures []string
+		runtimeHandler   string
+		sandboxImage     string
+	}
+
+	tests := []config{
+		{
+			name:             "WCOW_Hypervisor",
+			requiredFeatures: []string{featureWCOWHypervisor},
+			runtimeHandler:   wcowHypervisorRuntimeHandler,
+			sandboxImage:     imageWindowsNanoserver,
+		},
+		{
+			name:             "LCOW",
+			requiredFeatures: []string{featureLCOW},
+			runtimeHandler:   lcowRuntimeHandler,
+			sandboxImage:     imageLcowK8sPause,
+		},
+	}
+
+	for _, test := range tests {
+		requireFeatures(t, test.requiredFeatures...)
+		if test.runtimeHandler == lcowRuntimeHandler {
+			pullRequiredLcowImages(t, []string{test.sandboxImage})
+		} else {
+			pullRequiredImages(t, []string{test.sandboxImage})
+		}
+
+		request := &runtime.RunPodSandboxRequest{
+			Config: &runtime.PodSandboxConfig{
+				Metadata: &runtime.PodSandboxMetadata{
+					Name:      t.Name(),
+					Uid:       "0",
+					Namespace: testNamespace,
+				},
+				Annotations: map[string]string{
+					"io.microsoft.virtualmachine.cpugroup.id": presentID,
+				},
+			},
+			RuntimeHandler: test.runtimeHandler,
+		}
+		runPodSandboxTest(t, request)
+	}
 }
 
 func createExt4VHD(ctx context.Context, t *testing.T, path string) {

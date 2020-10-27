@@ -135,6 +135,9 @@ const (
 	// HCS-GCS bridge. Default value is true which means external bridge will be used
 	// by default.
 	annotationUseExternalGCSBridge = "io.microsoft.virtualmachine.useexternalgcsbridge"
+
+	// annotation used to specify the cpugroup ID that a UVM should be assigned to
+	annotationCPUGroupID = "io.microsoft.virtualmachine.cpugroup.id"
 )
 
 // parseAnnotationsBool searches `a` for `key` and if found verifies that the
@@ -391,6 +394,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.VPCIEnabled = parseAnnotationsBool(ctx, s.Annotations, annotationVPCIEnabled, lopts.VPCIEnabled)
 		lopts.BootFilesPath = parseAnnotationsString(s.Annotations, annotationBootFilesRootPath, lopts.BootFilesPath)
 		lopts.ExternalGuestConnection = parseAnnotationsBool(ctx, s.Annotations, annotationUseExternalGCSBridge, lopts.ExternalGuestConnection)
+		lopts.CPUGroupID = parseAnnotationsString(s.Annotations, annotationCPUGroupID, lopts.CPUGroupID)
 		handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
 		handleAnnotationKernelDirectBoot(ctx, s.Annotations, lopts)
 
@@ -413,6 +417,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		wopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotationStorageQoSIopsMaximum, wopts.StorageQoSIopsMaximum)
 		wopts.ExternalGuestConnection = parseAnnotationsBool(ctx, s.Annotations, annotationUseExternalGCSBridge, wopts.ExternalGuestConnection)
 		wopts.DisableCompartmentNamespace = parseAnnotationsBool(ctx, s.Annotations, annotationDisableCompartmentNamespace, wopts.DisableCompartmentNamespace)
+		wopts.CPUGroupID = parseAnnotationsString(s.Annotations, annotationCPUGroupID, wopts.CPUGroupID)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, wopts)
 		return wopts, nil
 	}

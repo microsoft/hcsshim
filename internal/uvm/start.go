@@ -203,6 +203,13 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 		}
 	}()
 
+	// assign the VM to the cpugroup specified, if any
+	if uvm.cpuGroupID != "" {
+		if err := uvm.SetCPUGroup(ctx, uvm.cpuGroupID); err != nil {
+			return err
+		}
+	}
+
 	// Start waiting on the utility VM.
 	uvm.exitCh = make(chan struct{})
 	go func() {
@@ -253,6 +260,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 		uvm.guestCaps = properties.GuestConnectionInfo.GuestDefinedCapabilities
 		uvm.protocol = properties.GuestConnectionInfo.ProtocolVersion
 	}
+
 	return nil
 }
 
