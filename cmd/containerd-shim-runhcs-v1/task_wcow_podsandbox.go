@@ -222,7 +222,7 @@ func (wpst *wcowPodSandboxTask) waitParentExit() {
 
 func (wpst *wcowPodSandboxTask) ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (int, error) {
 	if wpst.host == nil {
-		return 0, errors.New("task is not isolated")
+		return 0, errTaskNotIsolated
 	}
 	return cmd.ExecInUvm(ctx, wpst.host, req)
 }
@@ -241,7 +241,7 @@ func (wpst *wcowPodSandboxTask) DumpGuestStacks(ctx context.Context) string {
 
 func (wpst *wcowPodSandboxTask) Share(ctx context.Context, req *shimdiag.ShareRequest) error {
 	if wpst.host == nil {
-		return errors.New("task is not isolated")
+		return errTaskNotIsolated
 	}
 	options := wpst.host.DefaultVSMBOptions(req.ReadOnly)
 	_, err := wpst.host.AddVSMB(ctx, req.HostPath, options)

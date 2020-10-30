@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
@@ -10,6 +11,8 @@ import (
 	"github.com/containerd/containerd/runtime/v2/task"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
+
+var errTaskNotIsolated = errors.New("task is not isolated")
 
 // shimTaskPidPair groups a process pid to its execID if it was user generated.
 type shimTaskPidPair struct {
