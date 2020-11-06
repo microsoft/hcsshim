@@ -34,3 +34,15 @@ func removePodSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx con
 		t.Fatalf("failed RemovePodSandbox for sandbox: %s, request with: %v", podID, err)
 	}
 }
+
+func getRunPodSandboxRequest(t *testing.T, runtimeHandler string) runtime.RunPodSandboxRequest {
+	return runtime.RunPodSandboxRequest{
+		Config: &runtime.PodSandboxConfig{
+			Metadata: &runtime.PodSandboxMetadata{
+				Name:      t.Name(),
+				Namespace: testNamespace,
+			},
+		},
+		RuntimeHandler: runtimeHandler,
+	}
+}
