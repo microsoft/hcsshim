@@ -6,9 +6,15 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"unsafe"
 
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/hcsshim/internal/winapi"
+	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/windows"
 )
 
 const vsmbSharePrefix = `\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\`
@@ -57,6 +63,67 @@ func (uvm *UtilityVM) findVSMBShare(ctx context.Context, m map[string]*VSMBShare
 	return share, nil
 }
 
+// openHostPath opens the given path and returns the handle. The handle is opened with
+// full sharing and no access mask. The directory must already exist. This
+// function is intended to return a handle suitable for use with GetFileInformationByHandleEx.
+//
+// We are not able to use builtin Go functionality for opening a directory path:
+// - os.Open on a directory returns a os.File where Fd() is a search handle from FindFirstFile.
+// - syscall.Open does not provide a way to specify FILE_FLAG_BACKUP_SEMANTICS, which is needed to
+//   open a directory.
+// We could use os.Open if the path is a file, but it's easier to just use the same code for both.
+// Therefore, we call windows.CreateFile directly.
+func openHostPath(path string) (windows.Handle, error) {
+	u16, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return 0, err
+	}
+	h, err := windows.CreateFile(
+		u16,
+		0,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		nil,
+		windows.OPEN_EXISTING,
+		windows.FILE_FLAG_BACKUP_SEMANTICS,
+		0)
+	if err != nil {
+		return 0, &os.PathError{
+			Op:   "CreateFile",
+			Path: path,
+			Err:  err,
+		}
+	}
+	return h, nil
+}
+
+// In 19H1, a change was made to VSMB to require querying file ID for the files being shared in
+// order to support direct map. This change was made to ensure correctness in cases where direct
+// map is used with saving/restoring VMs.
+//
+// However, certain file systems (such as Azure Files SMB shares) don't support the FileIdInfo
+// query that is used. Azure Files in particular fails with ERROR_INVALID_PARAMETER. This issue
+// affects at least 19H1, 19H2, 20H1, and 20H2.
+//
+// To work around this, we attempt to query for FileIdInfo ourselves if on an affected build. If
+// the query fails, we override the specified options to force no direct map to be used.
+func forceNoDirectMap(path string) (bool, error) {
+	if ver := osversion.Get().Build; ver < osversion.V19H1 || ver > osversion.V20H2 {
+		return false, nil
+	}
+	h, err := openHostPath(path)
+	if err != nil {
+		return false, err
+	}
+	defer windows.CloseHandle(h)
+	var info winapi.FILE_ID_INFO
+	// We check for any error, rather than just ERROR_INVALID_PARAMETER. It seems better to also
+	// fall back if e.g. some other backing filesystem is used which returns a different error.
+	if err := windows.GetFileInformationByHandleEx(h, winapi.FileIdInfo, (*byte)(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info))); err != nil {
+		return true, nil
+	}
+	return false, nil
+}
+
 // AddVSMB adds a VSMB share to a Windows utility VM. Each VSMB share is ref-counted and
 // only added if it isn't already. This is used for read-only layers, mapped directories
 // to a container, and for mapped pipes.
@@ -88,6 +155,14 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 		options.SingleFileMapping = true
 	}
 	hostPath = filepath.Clean(hostPath)
+
+	if force, err := forceNoDirectMap(hostPath); err != nil {
+		return nil, err
+	} else if force {
+		log.G(ctx).WithField("path", hostPath).Info("Forcing NoDirectmap for VSMB mount")
+		options.NoDirectmap = true
+	}
+
 	var requestType = requesttype.Update
 	shareKey := getVSMBShareKey(hostPath, options.ReadOnly)
 	share, err := uvm.findVSMBShare(ctx, m, shareKey)
@@ -113,6 +188,12 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 	// isn't set (e.g. if used on an unrestricted share). So we only call Modify
 	// if we are either doing an Add, or if RestrictFileAccess is set.
 	if requestType == requesttype.Add || options.RestrictFileAccess {
+		log.G(ctx).WithFields(logrus.Fields{
+			"name":      share.name,
+			"path":      hostPath,
+			"options":   fmt.Sprintf("%+#v", options),
+			"operation": requestType,
+		}).Info("Modifying VSMB share")
 		modification := &hcsschema.ModifySettingRequest{
 			RequestType: requestType,
 			Settings: hcsschema.VirtualSmbShare{
