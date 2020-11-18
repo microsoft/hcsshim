@@ -29,6 +29,7 @@ build_script:
   - go test -c ./cri-containerd/ -tags functional
   - go test -c ./functional/ -tags functional
   - go test -c ./runhcs/ -tags functional
+  - go build -o sample-logging-driver.exe ./cri-containerd/helpers/log.go
 
 artifacts:
   - path: 'containerd-shim-runhcs-v1.exe'
@@ -43,3 +44,4 @@ artifacts:
   - path: './test/cri-containerd.test.exe'
   - path: './test/functional.test.exe'
   - path: './test/runhcs.test.exe'
+  - path: './test/sample-logging-driver.exe'

@@ -1019,21 +1019,9 @@ func createSandboxContainerAndExecForCustomScratch(t *testing.T, annotations map
 func createContainerInSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, podId, containerName, imageName string, command []string,
 	annotations map[string]string, mounts []*runtime.Mount, podConfig *runtime.PodSandboxConfig) string {
 
-	cRequest := &runtime.CreateContainerRequest{
-		Config: &runtime.ContainerConfig{
-			Metadata: &runtime.ContainerMetadata{
-				Name: containerName,
-			},
-			Image: &runtime.ImageSpec{
-				Image: imageName,
-			},
-			Command:     command,
-			Annotations: annotations,
-			Mounts:      mounts,
-		},
-		PodSandboxId:  podId,
-		SandboxConfig: podConfig,
-	}
+	cRequest := getCreateContainerRequest(podId, containerName, imageName, command, podConfig)
+	cRequest.Config.Annotations = annotations
+	cRequest.Config.Mounts = mounts
 
 	containerID := createContainer(t, client, ctx, cRequest)
 
