@@ -202,14 +202,6 @@ func Test_SandboxStats_List_PodID_LCOW(t *testing.T) {
 }
 
 func Test_ContainerStats_ContainerID(t *testing.T) {
-	type config struct {
-		name             string
-		requiredFeatures []string
-		runtimeHandler   string
-		sandboxImage     string
-		containerImage   string
-		cmd              []string
-	}
 	tests := []config{
 		{
 			name:             "WCOW_Process",
@@ -286,14 +278,6 @@ func Test_ContainerStats_ContainerID(t *testing.T) {
 }
 
 func Test_ContainerStats_List_ContainerID(t *testing.T) {
-	type config struct {
-		name             string
-		requiredFeatures []string
-		runtimeHandler   string
-		sandboxImage     string
-		containerImage   string
-		cmd              []string
-	}
 	tests := []config{
 		{
 			name:             "WCOW_Process",
@@ -369,12 +353,6 @@ func Test_ContainerStats_List_ContainerID(t *testing.T) {
 }
 
 func Test_SandboxStats_WorkingSet_PhysicallyBacked(t *testing.T) {
-	type config struct {
-		name             string
-		requiredFeatures []string
-		runtimeHandler   string
-		sandboxImage     string
-	}
 	tests := []config{
 		{
 			name:             "WCOW_Hypervisor",

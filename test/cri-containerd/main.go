@@ -87,6 +87,15 @@ var allFeatures = []string{
 	featureGPU,
 }
 
+type config struct {
+	name             string
+	requiredFeatures []string
+	runtimeHandler   string
+	sandboxImage     string
+	containerImage   string
+	cmd              []string
+}
+
 func init() {
 	// Flag definitions must be in init rather than TestMain, as TestMain isn't
 	// called if -help is passed, but we want the feature usage to show up.

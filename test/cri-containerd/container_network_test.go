@@ -100,14 +100,6 @@ func Test_Container_Network_LCOW(t *testing.T) {
 }
 
 func Test_Container_Network_Hostname(t *testing.T) {
-	type config struct {
-		name             string
-		requiredFeatures []string
-		runtimeHandler   string
-		sandboxImage     string
-		containerImage   string
-		cmd              []string
-	}
 	tests := []config{
 		{
 			name:             "WCOW_Process",
