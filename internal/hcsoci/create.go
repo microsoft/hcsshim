@@ -118,10 +118,10 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 	}()
 
 	if coi.HostingSystem != nil {
-		n := coi.HostingSystem.ContainerCounter()
 		if coi.Spec.Linux != nil {
 			r.SetContainerRootInUVM(fmt.Sprintf(lcowRootInUVM, createOptions.ID))
 		} else {
+			n := coi.HostingSystem.ContainerCounter()
 			r.SetContainerRootInUVM(fmt.Sprintf(wcowRootInUVM, strconv.FormatUint(n, 16)))
 		}
 	}

@@ -143,9 +143,13 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 		}
 	}
 
-	hostPath := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
 	containerScratchPathInUVM := ospath.Join(uvm.OS(), guestRoot)
+	hostPath, err := getScratchVHDPath(layerFolders)
+	if err != nil {
+		return "", fmt.Errorf("failed to get scratch VHD path in layer folders: %s", err)
+	}
 	log.G(ctx).WithField("hostPath", hostPath).Debug("mounting scratch VHD")
+
 	scsiMount, err := uvm.AddSCSI(ctx, hostPath, containerScratchPathInUVM, false, uvmpkg.VMAccessTypeIndividual)
 	if err != nil {
 		return "", fmt.Errorf("failed to add SCSI scratch VHD: %s", err)
@@ -284,7 +288,10 @@ func UnmountContainerLayers(ctx context.Context, layerFolders []string, containe
 
 	// Unload the SCSI scratch path
 	if (op & UnmountOperationSCSI) == UnmountOperationSCSI {
-		hostScratchFile := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
+		hostScratchFile, err := getScratchVHDPath(layerFolders)
+		if err != nil {
+			return fmt.Errorf("failed to get scratch VHD path in layer folders: %s", err)
+		}
 		if err := uvm.RemoveSCSI(ctx, hostScratchFile); err != nil {
 			log.G(ctx).WithError(err).Warn("failed to remove scratch")
 			if retError == nil {
@@ -352,4 +359,19 @@ func containerRootfsPath(uvm *uvm.UtilityVM, rootPath string) string {
 		return ospath.Join(uvm.OS(), rootPath)
 	}
 	return ospath.Join(uvm.OS(), rootPath, uvmpkg.RootfsPath)
+}
+
+func getScratchVHDPath(layerFolders []string) (string, error) {
+	hostPath := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
+	// For LCOW, we can reuse another container's scratch space (usually the sandbox container's).
+	//
+	// When sharing a scratch space, the `hostPath` will be a symlink to the sandbox.vhdx location to use.
+	// When not sharing a scratch space, `hostPath` will be the path to the sandbox.vhdx to use.
+	//
+	// Evaluate the symlink here (if there is one).
+	hostPath, err := filepath.EvalSymlinks(hostPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to eval symlinks: %s", err)
+	}
+	return hostPath, nil
 }
