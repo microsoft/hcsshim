@@ -69,7 +69,6 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 		case "bind":
 		case "physical-disk":
 		case "virtual-disk":
-		case "automanage-virtual-disk":
 		default:
 			// Unknown mount type
 			continue
@@ -103,7 +102,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 				uvmPathForShare = scsiMount.UVMPath
 				r.Add(scsiMount)
 				coi.Spec.Mounts[i].Type = "none"
-			} else if mount.Type == "virtual-disk" || mount.Type == "automanage-virtual-disk" {
+			} else if mount.Type == "virtual-disk" {
 				l.Debug("hcsshim::allocateLinuxResources Hot-adding SCSI virtual disk for OCI mount")
 				uvmPathForShare = fmt.Sprintf(uvm.LCOWGlobalMountPrefix, coi.HostingSystem.UVMMountCounter())
 
@@ -116,9 +115,6 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 
 				uvmPathForFile = scsiMount.UVMPath
 				uvmPathForShare = scsiMount.UVMPath
-				if mount.Type == "automanage-virtual-disk" {
-					r.Add(uvm.NewAutoManagedVHD(scsiMount.HostPath))
-				}
 				r.Add(scsiMount)
 				coi.Spec.Mounts[i].Type = "none"
 			} else if strings.HasPrefix(mount.Source, "sandbox://") {
