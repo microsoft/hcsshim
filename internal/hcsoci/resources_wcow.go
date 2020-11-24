@@ -71,7 +71,6 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 		case "":
 		case "physical-disk":
 		case "virtual-disk":
-		case "automanage-virtual-disk":
 		default:
 			return fmt.Errorf("invalid OCI spec - Type '%s' not supported", mount.Type)
 		}
@@ -94,16 +93,13 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 				}
 				coi.Spec.Mounts[i].Type = ""
 				r.Add(scsiMount)
-			} else if mount.Type == "virtual-disk" || mount.Type == "automanage-virtual-disk" {
+			} else if mount.Type == "virtual-disk" {
 				l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI virtual disk for OCI mount")
 				scsiMount, err := coi.HostingSystem.AddSCSI(ctx, mount.Source, uvmPath, readOnly, uvm.VMAccessTypeIndividual)
 				if err != nil {
 					return fmt.Errorf("adding SCSI virtual disk mount %+v: %s", mount, err)
 				}
 				coi.Spec.Mounts[i].Type = ""
-				if mount.Type == "automanage-virtual-disk" {
-					r.Add(uvm.NewAutoManagedVHD(scsiMount.HostPath))
-				}
 				r.Add(scsiMount)
 			} else {
 				if uvm.IsPipe(mount.Source) {
