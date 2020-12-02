@@ -67,7 +67,16 @@ func NewLayerReader(ctx context.Context, path string, parentLayerPaths []string)
 		trace.StringAttribute("path", path),
 		trace.StringAttribute("parentLayerPaths", strings.Join(parentLayerPaths, ", ")))
 
+<<<<<<< HEAD
 	exportPath, err := os.MkdirTemp("", "hcs")
+=======
+	if len(parentLayerPaths) == 0 {
+		// This is a base layer. It gets exported differently.
+		return newBaseLayerReader(ctx, path, span), nil
+	}
+
+	exportPath, err := ioutil.TempDir("", "hcs")
+>>>>>>> e286e8ca (Simple baseLayerReader to export parentless layers)
 	if err != nil {
 		return nil, err
 	}
