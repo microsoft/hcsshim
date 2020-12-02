@@ -350,7 +350,7 @@ type legacyLayerWriter struct {
 	currentIsDir    bool
 }
 
-// newLegacyLayerWriter returns a LayerWriter that can write the contaler layer
+// newLegacyLayerWriter returns a LayerWriter that can write the container layer
 // transport format to disk.
 func newLegacyLayerWriter(root string, parentRoots []string, destRoot string) (w *legacyLayerWriter, err error) {
 	w = &legacyLayerWriter{
