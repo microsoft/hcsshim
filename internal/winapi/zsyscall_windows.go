@@ -48,6 +48,7 @@ var (
 	procQueryInformationJobObject            = modkernel32.NewProc("QueryInformationJobObject")
 	procOpenJobObjectW                       = modkernel32.NewProc("OpenJobObjectW")
 	procSetIoRateControlInformationJobObject = modkernel32.NewProc("SetIoRateControlInformationJobObject")
+	procGetQueuedCompletionStatus            = modkernel32.NewProc("GetQueuedCompletionStatus")
 	procSearchPathW                          = modkernel32.NewProc("SearchPathW")
 	procLogonUserW                           = modadvapi32.NewProc("LogonUserW")
 	procRtlMoveMemory                        = modkernel32.NewProc("RtlMoveMemory")
@@ -120,6 +121,18 @@ func SetIoRateControlInformationJobObject(jobHandle windows.Handle, ioRateContro
 	r0, _, e1 := syscall.Syscall(procSetIoRateControlInformationJobObject.Addr(), 2, uintptr(jobHandle), uintptr(unsafe.Pointer(ioRateControlInfo)), 0)
 	ret = uint32(r0)
 	if ret == 0 {
+		if e1 != 0 {
+			err = errnoErr(e1)
+		} else {
+			err = syscall.EINVAL
+		}
+	}
+	return
+}
+
+func GetQueuedCompletionStatus(cphandle windows.Handle, qty *uint32, key *uintptr, overlapped **windows.Overlapped, timeout uint32) (err error) {
+	r1, _, e1 := syscall.Syscall6(procGetQueuedCompletionStatus.Addr(), 5, uintptr(cphandle), uintptr(unsafe.Pointer(qty)), uintptr(unsafe.Pointer(key)), uintptr(unsafe.Pointer(overlapped)), uintptr(timeout), 0)
+	if r1 == 0 {
 		if e1 != 0 {
 			err = errnoErr(e1)
 		} else {
