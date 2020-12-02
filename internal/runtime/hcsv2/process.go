@@ -103,6 +103,13 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 		// least one waiter has read the result
 		go func() {
 			p.writersWg.Wait()
+			// cleanup the process state
+			if derr := p.process.Delete(); derr != nil {
+				log.G(ctx).WithFields(logrus.Fields{
+					"cid": p.cid,
+					"pid": p.pid,
+				}).Debugf("process cleanup error: %s", derr)
+			}
 			c.processesMutex.Lock()
 
 			_, span := trace.StartSpan(context.Background(), "newProcess::waitBackground::waitAllWaiters")
