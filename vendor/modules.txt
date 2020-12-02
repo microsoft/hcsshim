@@ -1,4 +1,4 @@
-# github.com/Microsoft/go-winio v0.4.15-0.20200908182639-5b44b70ab3ab
+# github.com/Microsoft/go-winio v0.4.16-0.20201130162521-d1ffc52c7331
 github.com/Microsoft/go-winio
 github.com/Microsoft/go-winio/backuptar
 github.com/Microsoft/go-winio/pkg/etw
@@ -81,7 +81,8 @@ go.opencensus.io/trace/tracestate
 golang.org/x/net/context
 # golang.org/x/sync v0.0.0-20190423024810-112230192c58
 golang.org/x/sync/errgroup
-# golang.org/x/sys v0.0.0-20200120151820-655fe14d7479
+# golang.org/x/sys v0.0.0-20201201145000-ef89a241ccb3
+golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
