@@ -3,7 +3,7 @@ module github.com/Microsoft/hcsshim/test
 go 1.13
 
 require (
-	github.com/Microsoft/go-winio v0.4.15-0.20200908182639-5b44b70ab3ab
+	github.com/Microsoft/go-winio v0.4.16-0.20201130162521-d1ffc52c7331
 	github.com/Microsoft/hcsshim v0.8.7
 	github.com/blang/semver v3.1.0+incompatible // indirect
 	github.com/containerd/containerd v1.3.2
