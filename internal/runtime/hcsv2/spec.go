@@ -46,10 +46,12 @@ func setProcess(spec *oci.Spec) {
 	}
 }
 
-// setUserStr sets `spec.Process` to the valid `userstr` based on the OCI Image
-// Spec v1.0.0 `userstr`.
+// setUserStr sets `spec.Process` to the valid `userstr` based on the OCI Image Spec
+// v1.0.0 `userstr`.
 //
-// Valid values are: user, uid, user:group, uid:gid, uid:group, user:gid
+// Valid values are: user, uid, user:group, uid:gid, uid:group, user:gid.
+// If uid is provided instead of the username then that value is not checked against the
+// /etc/passwd file to verify if the user with given uid actually exists.
 func setUserStr(spec *oci.Spec, userstr string) error {
 	setProcess(spec)
 
@@ -120,7 +122,8 @@ func setUserID(spec *oci.Spec, uid int) error {
 		return u.Uid == uid
 	})
 	if err != nil {
-		return errors.Wrapf(err, "failed to find user by uid: %d", uid)
+		spec.Process.User.UID, spec.Process.User.GID = uint32(uid), 0
+		return nil
 	}
 	spec.Process.User.UID, spec.Process.User.GID = uint32(u.Uid), uint32(u.Gid)
 	return nil
