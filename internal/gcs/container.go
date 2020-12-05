@@ -14,9 +14,7 @@ import (
 	"go.opencensus.io/trace"
 )
 
-const (
-	hrComputeSystemDoesNotExist = 0xc037010e
-)
+const hrComputeSystemDoesNotExist = 0xc037010e
 
 // Container implements the cow.Container interface for containers
 // created via GuestConnection.

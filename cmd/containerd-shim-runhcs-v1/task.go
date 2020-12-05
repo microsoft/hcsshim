@@ -15,7 +15,10 @@ import (
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-var errTaskNotIsolated = errors.New("task is not isolated")
+var (
+	errTaskNotIsolated              = errors.New("task is not isolated")
+	errNotSupportedResourcesRequest = errors.New("update resources must be of type *WindowsResources or *LinuxResources")
+)
 
 type shimTask interface {
 	// ID returns the original id used at `Create`.
@@ -86,6 +89,18 @@ type shimTask interface {
 	// If the host is hypervisor isolated and this task owns the host additional
 	// metrics on the UVM may be returned as well.
 	Stats(ctx context.Context) (*stats.Statistics, error)
+	// Update updates a task's container
+	Update(ctx context.Context, req *task.UpdateTaskRequest) error
+}
+
+func verifyTaskUpdateResourcesType(data interface{}) error {
+	switch data.(type) {
+	case *specs.WindowsResources:
+	case *specs.LinuxResources:
+	default:
+		return errNotSupportedResourcesRequest
+	}
+	return nil
 }
 
 // isStatsNotFound returns true if the err corresponds to a scenario

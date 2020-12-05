@@ -36,9 +36,11 @@ const (
 	wcowHypervisor18362RuntimeHandler = "runhcs-wcow-hypervisor-18362"
 	wcowHypervisor19041RuntimeHandler = "runhcs-wcow-hypervisor-19041"
 
-	testDeviceUtilFilePath = "C:\\ContainerPlat\\device-util.exe"
-	testDriversPath        = "C:\\ContainerPlat\\testdrivers"
-	testGPUBootFiles       = "C:\\ContainerPlat\\LinuxBootFiles\\nvidiagpu"
+	testDeviceUtilFilePath    = "C:\\ContainerPlat\\device-util.exe"
+	testJobObjectUtilFilePath = "C:\\ContainerPlat\\jobobject-util.exe"
+
+	testDriversPath  = "C:\\ContainerPlat\\testdrivers"
+	testGPUBootFiles = "C:\\ContainerPlat\\LinuxBootFiles\\nvidiagpu"
 
 	lcowRuntimeHandler   = "runhcs-lcow"
 	imageLcowK8sPause    = "k8s.gcr.io/pause:3.1"

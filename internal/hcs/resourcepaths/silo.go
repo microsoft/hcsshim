@@ -8,4 +8,5 @@ const (
 	SiloMappedPipeResourcePath      string = "Container/MappedPipes"
 	SiloMemoryResourcePath          string = "Container/Memory/SizeInMB"
 	SiloRegistryFlushStatePath      string = "Container/RegistryFlushState"
+	SiloProcessorResourcePath       string = "Container/Processor"
 )

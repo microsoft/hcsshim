@@ -89,13 +89,13 @@ func (job *JobObject) SetCPULimit(rateControlType CPURateControlType, rateContro
 	}
 	switch rateControlType {
 	case WeightBased:
-		if rateControlValue < CPUWeightMin || rateControlValue > CPUWeightMax {
+		if rateControlValue < cpuWeightMin || rateControlValue > cpuWeightMax {
 			return fmt.Errorf("processor weight value of `%d` is invalid", rateControlValue)
 		}
 		cpuInfo.ControlFlags |= winapi.JOB_OBJECT_CPU_RATE_CONTROL_ENABLE | winapi.JOB_OBJECT_CPU_RATE_CONTROL_WEIGHT_BASED
 		cpuInfo.Value = rateControlValue
 	case RateBased:
-		if rateControlValue < CPULimitMin || rateControlValue > CPULimitMax {
+		if rateControlValue < cpuLimitMin || rateControlValue > cpuLimitMax {
 			return fmt.Errorf("processor rate of `%d` is invalid", rateControlValue)
 		}
 		cpuInfo.ControlFlags |= winapi.JOB_OBJECT_CPU_RATE_CONTROL_ENABLE | winapi.JOB_OBJECT_CPU_RATE_CONTROL_HARD_CAP
