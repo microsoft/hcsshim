@@ -87,6 +87,11 @@ const (
 	// files and information needed to install given driver(s). This may include .sys,
 	// .inf, .cer, and/or other files used during standard installation with pnputil.
 	AnnotationAssignedDeviceKernelDrivers = "io.microsoft.assigneddevice.kerneldrivers"
+	// AnnotationHostProcessInheritUser indicates whether to ignore the username passed in to run a host process
+	// container as and instead inherit the user token from the executable that is launching the container process.
+	AnnotationHostProcessInheritUser = "microsoft.com/hostprocess-inherit-user"
+	// AnnotationHostProcessContainer indicates to launch a host process container (job container in this repository).
+	AnnotationHostProcessContainer = "microsoft.com/hostprocess-container"
 
 	annotationAllowOvercommit       = "io.microsoft.virtualmachine.computetopology.memory.allowovercommit"
 	annotationEnableDeferredCommit  = "io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit"

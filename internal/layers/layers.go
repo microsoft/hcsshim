@@ -74,7 +74,7 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 
 	if uvm == nil {
 		if len(layerFolders) < 2 {
-			return "", fmt.Errorf("need at least two layers - base and scratch")
+			return "", errors.New("need at least two layers - base and scratch")
 		}
 		path := layerFolders[len(layerFolders)-1]
 		rest := layerFolders[:len(layerFolders)-1]
