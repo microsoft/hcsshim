@@ -27,7 +27,8 @@ func runMemStartLCOWTest(t *testing.T, opts *uvm.OptionsLCOW) {
 //nolint:unused // unused since tests are skipped
 func runMemStartWCOWTest(t *testing.T, opts *uvm.OptionsWCOW) {
 	t.Helper()
-	u, _, _ := tuvm.CreateWCOWUVMFromOptsWithImage(context.Background(), t, opts, "microsoft/nanoserver")
+	u, _, scratchDir := tuvm.CreateWCOWUVMFromOptsWithImage(context.Background(), t, opts, "microsoft/nanoserver")
+	defer os.RemoveAll(scratchDir)
 	u.Close()
 }
 

@@ -36,7 +36,8 @@ func TestPropertiesGuestConnection_WCOW(t *testing.T) {
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureWCOW)
 
-	uvm, _, _ := tuvm.CreateWCOWUVM(context.Background(), t, t.Name(), "microsoft/nanoserver")
+	uvm, _, uvmScratchDir := tuvm.CreateWCOWUVM(context.Background(), t, t.Name(), "microsoft/nanoserver")
+	defer os.RemoveAll(uvmScratchDir)
 	defer uvm.Close()
 
 	p, gc := uvm.Capabilities()
