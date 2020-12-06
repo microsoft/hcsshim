@@ -18,7 +18,7 @@ import (
 // TestVSMB tests adding/removing VSMB layers from a v2 Windows utility VM
 func TestVSMB(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	uvm, _, uvmScratchDir := testutilities.CreateWCOWUVM(context.Background(), t, t.Name(), "microsoft/nanoserver")
+	uvm, uvmScratchDir := testutilities.CreateWCOWUVM(context.Background(), t, t.Name(), "microsoft/nanoserver")
 	defer os.RemoveAll(uvmScratchDir)
 	defer uvm.Close()
 
@@ -48,7 +48,7 @@ func TestVSMB_Writable(t *testing.T) {
 
 	opts := uvm.NewDefaultOptionsWCOW(t.Name(), "")
 	opts.NoWritableFileShares = true
-	vm, _, uvmScratchDir := testutilities.CreateWCOWUVMFromOptsWithImage(context.Background(), t, opts, "microsoft/nanoserver")
+	vm, uvmScratchDir := testutilities.CreateWCOWUVMFromOptsWithImage(context.Background(), t, opts, "microsoft/nanoserver")
 	defer os.RemoveAll(uvmScratchDir)
 	defer vm.Close()
 
