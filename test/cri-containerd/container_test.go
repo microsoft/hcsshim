@@ -530,3 +530,67 @@ func Test_RunContainer_SandboxDevice_LCOW(t *testing.T) {
 		t.Fatal("did not find expected device /dev/fuse in container")
 	}
 }
+
+func Test_RunContainer_NonDefault_User(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
+	type config struct {
+		containerSecCtx *runtime.LinuxContainerSecurityContext
+		name            string
+	}
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	podReq := getRunPodSandboxRequest(t, lcowRuntimeHandler)
+	podID := runPodSandbox(t, client, ctx, podReq)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	tests := []config{
+		{
+			containerSecCtx: &runtime.LinuxContainerSecurityContext{
+				RunAsUsername: "guest",
+			},
+			name: "RunAsUsername",
+		},
+		{
+			containerSecCtx: &runtime.LinuxContainerSecurityContext{
+				RunAsUser: &runtime.Int64Value{
+					Value: 10001,
+				},
+			},
+			name: "RunAsUserUID",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(_ *testing.T) {
+			conReq := &runtime.CreateContainerRequest{
+				Config: &runtime.ContainerConfig{
+					Metadata: &runtime.ContainerMetadata{
+						Name: t.Name() + "-Container",
+					},
+					Image: &runtime.ImageSpec{
+						Image: imageLcowAlpine,
+					},
+					Command: []string{
+						"top",
+					},
+					Linux: &runtime.LinuxContainerConfig{
+						SecurityContext: test.containerSecCtx,
+					},
+				},
+				PodSandboxId:  podID,
+				SandboxConfig: podReq.Config,
+			}
+
+			containerID := createContainer(t, client, ctx, conReq)
+			defer removeContainer(t, client, ctx, containerID)
+			startContainer(t, client, ctx, containerID)
+			defer stopContainer(t, client, ctx, containerID)
+		})
+	}
+}
