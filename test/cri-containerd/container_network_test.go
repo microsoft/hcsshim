@@ -32,15 +32,7 @@ func Test_Container_Network_LCOW(t *testing.T) {
 	}()
 	log := filepath.Join(dir, "ping.txt")
 
-	sandboxRequest := &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name() + "-Sandbox",
-				Namespace: testNamespace,
-			},
-		},
-		RuntimeHandler: lcowRuntimeHandler,
-	}
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -145,16 +137,8 @@ func Test_Container_Network_Hostname(t *testing.T) {
 				pullRequiredImages(t, []string{test.sandboxImage, test.containerImage})
 			}
 
-			sandboxRequest := &runtime.RunPodSandboxRequest{
-				Config: &runtime.PodSandboxConfig{
-					Metadata: &runtime.PodSandboxMetadata{
-						Name:      t.Name() + "-Sandbox",
-						Namespace: testNamespace,
-					},
-					Hostname: "TestHost",
-				},
-				RuntimeHandler: test.runtimeHandler,
-			}
+			sandboxRequest := getRunPodSandboxRequest(t, test.runtimeHandler)
+			sandboxRequest.Config.Hostname = "TestHost"
 
 			client := newTestRuntimeClient(t)
 			ctx, cancel := context.WithCancel(context.Background())

@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
 const (
@@ -46,16 +44,7 @@ func Test_PullImageTimestamps(t *testing.T) {
 	pullRequiredImages(t, []string{imageWindowsNanoserverTestImage})
 	defer removeImages(t, []string{imageWindowsNanoserverTestImage})
 
-	sandboxRequest := &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name(),
-				Uid:       "0",
-				Namespace: testNamespace,
-			},
-		},
-		RuntimeHandler: wcowHypervisor18362RuntimeHandler,
-	}
+	sandboxRequest := getRunPodSandboxRequest(t, wcowHypervisor18362RuntimeHandler)
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)

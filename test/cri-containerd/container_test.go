@@ -80,15 +80,7 @@ func Test_RotateLogs_LCOW(t *testing.T) {
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, image})
 	logrus.SetLevel(logrus.DebugLevel)
 
-	sandboxRequest := &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name() + "-Sandbox",
-				Namespace: testNamespace,
-			},
-		},
-		RuntimeHandler: lcowRuntimeHandler,
-	}
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -150,16 +142,7 @@ func Test_RunContainer_Events_LCOW(t *testing.T) {
 	defer podcancel()
 	targetNamespace := "k8s.io"
 
-	sandboxRequest := &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name(),
-				Uid:       "0",
-				Namespace: testNamespace,
-			},
-		},
-		RuntimeHandler: lcowRuntimeHandler,
-	}
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
 	defer removePodSandbox(t, client, podctx, podID)
@@ -228,15 +211,7 @@ func Test_RunContainer_ForksThenExits_ShowsAsExited_LCOW(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	podRequest := &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name(),
-				Namespace: testNamespace,
-			},
-		},
-		RuntimeHandler: lcowRuntimeHandler,
-	}
+	podRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 	podID := runPodSandbox(t, client, ctx, podRequest)
 	defer removePodSandbox(t, client, ctx, podID)
 	defer stopPodSandbox(t, client, ctx, podID)
@@ -288,18 +263,10 @@ func Test_RunContainer_ZeroVPMEM_LCOW(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sandboxRequest := &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name() + "-Sandbox",
-				Namespace: testNamespace,
-			},
-			Annotations: map[string]string{
-				"io.microsoft.virtualmachine.lcow.preferredrootfstype":         "initrd",
-				"io.microsoft.virtualmachine.devices.virtualpmem.maximumcount": "0",
-			},
-		},
-		RuntimeHandler: lcowRuntimeHandler,
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
+	sandboxRequest.Config.Annotations = map[string]string{
+		"io.microsoft.virtualmachine.lcow.preferredrootfstype":         "initrd",
+		"io.microsoft.virtualmachine.devices.virtualpmem.maximumcount": "0",
 	}
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
@@ -335,18 +302,10 @@ func Test_RunContainer_ZeroVPMEM_Multiple_LCOW(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sandboxRequest := &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name() + "-Sandbox",
-				Namespace: testNamespace,
-			},
-			Annotations: map[string]string{
-				"io.microsoft.virtualmachine.lcow.preferredrootfstype":         "initrd",
-				"io.microsoft.virtualmachine.devices.virtualpmem.maximumcount": "0",
-			},
-		},
-		RuntimeHandler: lcowRuntimeHandler,
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
+	sandboxRequest.Config.Annotations = map[string]string{
+		"io.microsoft.virtualmachine.lcow.preferredrootfstype":         "initrd",
+		"io.microsoft.virtualmachine.devices.virtualpmem.maximumcount": "0",
 	}
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
@@ -391,15 +350,7 @@ func Test_RunContainer_GMSA_WCOW_Process(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sandboxRequest := &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name() + "-Sandbox",
-				Namespace: testNamespace,
-			},
-		},
-		RuntimeHandler: wcowProcessRuntimeHandler,
-	}
+	sandboxRequest := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler)
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)
@@ -463,15 +414,7 @@ func Test_RunContainer_GMSA_WCOW_Hypervisor(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sandboxRequest := &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name() + "-Sandbox",
-				Namespace: testNamespace,
-			},
-		},
-		RuntimeHandler: wcowHypervisorRuntimeHandler,
-	}
+	sandboxRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)
@@ -535,20 +478,11 @@ func Test_RunContainer_SandboxDevice_LCOW(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sandboxRequest := &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name() + "-Sandbox",
-				Uid:       "0",
-				Namespace: testNamespace,
-			},
-			Linux: &runtime.LinuxPodSandboxConfig{
-				SecurityContext: &runtime.LinuxSandboxSecurityContext{
-					Privileged: true,
-				},
-			},
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
+	sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
+		SecurityContext: &runtime.LinuxSandboxSecurityContext{
+			Privileged: true,
 		},
-		RuntimeHandler: lcowRuntimeHandler,
 	}
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
