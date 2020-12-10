@@ -420,15 +420,7 @@ func Test_RunContainer_VirtualDevice_LocationPath_WCOW_Process(t *testing.T) {
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
-	sandboxRequest := &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name(),
-				Namespace: testNamespace,
-			},
-		},
-		RuntimeHandler: wcowProcessRuntimeHandler,
-	}
+	sandboxRequest := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
 	defer removePodSandbox(t, client, podctx, podID)
@@ -469,15 +461,7 @@ func Test_RunContainer_VirtualDevice_ClassGUID_WCOW_Process(t *testing.T) {
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
-	sandboxRequest := &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name(),
-				Namespace: testNamespace,
-			},
-		},
-		RuntimeHandler: wcowProcessRuntimeHandler,
-	}
+	sandboxRequest := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
 	defer removePodSandbox(t, client, podctx, podID)
@@ -518,17 +502,9 @@ func Test_RunContainer_VirtualDevice_GPU_WCOW_Hypervisor(t *testing.T) {
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
-	sandboxRequest := &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name(),
-				Namespace: testNamespace,
-			},
-			Annotations: map[string]string{
-				"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
-			},
-		},
-		RuntimeHandler: wcowHypervisorRuntimeHandler,
+	sandboxRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
+	sandboxRequest.Config.Annotations = map[string]string{
+		"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
 	}
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
@@ -571,17 +547,9 @@ func Test_RunContainer_VirtualDevice_GPU_and_NoGPU_WCOW_Hypervisor(t *testing.T)
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
-	sandboxRequest := &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name(),
-				Namespace: testNamespace,
-			},
-			Annotations: map[string]string{
-				"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
-			},
-		},
-		RuntimeHandler: wcowHypervisorRuntimeHandler,
+	sandboxRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
+	sandboxRequest.Config.Annotations = map[string]string{
+		"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
 	}
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
@@ -641,17 +609,9 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_WCOW_Hypervisor(t *testing.T) 
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
-	sandboxRequest := &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name(),
-				Namespace: testNamespace,
-			},
-			Annotations: map[string]string{
-				"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
-			},
-		},
-		RuntimeHandler: wcowHypervisorRuntimeHandler,
+	sandboxRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
+	sandboxRequest.Config.Annotations = map[string]string{
+		"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
 	}
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
@@ -701,17 +661,9 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_Removal_WCOW_Hypervisor(t *tes
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
-	sandboxRequest := &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name(),
-				Namespace: testNamespace,
-			},
-			Annotations: map[string]string{
-				"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
-			},
-		},
-		RuntimeHandler: wcowHypervisorRuntimeHandler,
+	sandboxRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
+	sandboxRequest.Config.Annotations = map[string]string{
+		"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
 	}
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)

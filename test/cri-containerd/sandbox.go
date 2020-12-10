@@ -35,8 +35,8 @@ func removePodSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx con
 	}
 }
 
-func getRunPodSandboxRequest(t *testing.T, runtimeHandler string) runtime.RunPodSandboxRequest {
-	return runtime.RunPodSandboxRequest{
+func getRunPodSandboxRequest(t *testing.T, runtimeHandler string) *runtime.RunPodSandboxRequest {
+	return &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
 			Metadata: &runtime.PodSandboxMetadata{
 				Name:      t.Name(),

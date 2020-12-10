@@ -36,24 +36,15 @@ func runexecContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.RunPo
 func execContainerLCOW(t *testing.T, uid int64, cmd []string) *runtime.ExecSyncResponse {
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowCosmos})
 
-	//run podsandbox request
-	sandboxRequest := &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name() + "-Sandbox2",
-				Uid:       "0",
-				Namespace: testNamespace,
-			},
-			Linux: &runtime.LinuxPodSandboxConfig{
-				SecurityContext: &runtime.LinuxSandboxSecurityContext{
-					Privileged: true,
-				},
-			},
+	// run podsandbox request
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
+	sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
+		SecurityContext: &runtime.LinuxSandboxSecurityContext{
+			Privileged: true,
 		},
-		RuntimeHandler: lcowRuntimeHandler,
 	}
 
-	//create container request
+	// create container request
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
 			Metadata: &runtime.ContainerMetadata{
