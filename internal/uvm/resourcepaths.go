@@ -3,9 +3,10 @@ package uvm
 const (
 	gpuResourcePath                  string = "VirtualMachine/ComputeTopology/Gpu"
 	memoryResourcePath               string = "VirtualMachine/ComputeTopology/Memory/SizeInMB"
-	cpuGroupResourceFormat           string = "VirtualMachine/ComputeTopology/Processor/CpuGroup/%s"
+	cpuGroupResourcePath             string = "VirtualMachine/ComputeTopology/Processor/CpuGroup"
 	idledResourcePath                string = "VirtualMachine/ComputeTopology/Processor/IdledProcessors"
 	cpuFrequencyPowerCapResourcePath string = "VirtualMachine/ComputeTopology/Processor/CpuFrequencyPowerCap"
+	cpuLimitsResourcePath            string = "VirtualMachine/ComputeTopology/Processor/Limits"
 	serialResourceFormat             string = "VirtualMachine/Devices/ComPorts/%d"
 	flexibleIovResourceFormat        string = "VirtualMachine/Devices/FlexibleIov/%s"
 	licensingResourcePath            string = "VirtualMachine/Devices/Licensing"
