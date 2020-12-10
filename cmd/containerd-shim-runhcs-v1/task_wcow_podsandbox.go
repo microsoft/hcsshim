@@ -8,10 +8,7 @@ import (
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/cmd"
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/requesttype"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	eventstypes "github.com/containerd/containerd/api/events"
@@ -243,25 +240,7 @@ func (wpst *wcowPodSandboxTask) Share(ctx context.Context, req *shimdiag.ShareRe
 	if wpst.host == nil {
 		return errTaskNotIsolated
 	}
-	options := wpst.host.DefaultVSMBOptions(req.ReadOnly)
-	_, err := wpst.host.AddVSMB(ctx, req.HostPath, options)
-	if err != nil {
-		return err
-	}
-	sharePath, err := wpst.host.GetVSMBUvmPath(ctx, req.HostPath, req.ReadOnly)
-	if err != nil {
-		return err
-	}
-	guestReq := guestrequest.GuestRequest{
-		ResourceType: guestrequest.ResourceTypeMappedDirectory,
-		RequestType:  requesttype.Add,
-		Settings: &hcsschema.MappedDirectory{
-			HostPath:      sharePath,
-			ContainerPath: req.UvmPath,
-			ReadOnly:      req.ReadOnly,
-		},
-	}
-	return wpst.host.GuestRequest(ctx, guestReq)
+	return wpst.host.Share(ctx, req.HostPath, req.UvmPath, req.ReadOnly)
 }
 
 func (wpst *wcowPodSandboxTask) Stats(ctx context.Context) (*stats.Statistics, error) {
