@@ -186,6 +186,18 @@ func (r *baseLayerReader) Next() (path string, size int64, fileInfo *winio.FileB
 	return
 }
 
+func (r *baseLayerReader) LinkInfo() (uint32, *winio.FileIDInfo, error) {
+	fileStandardInfo, err := winio.GetFileStandardInfo(r.currentFile)
+	if err != nil {
+		return 0, nil, err
+	}
+	fileIDInfo, err := winio.GetFileID(r.currentFile)
+	if err != nil {
+		return 0, nil, err
+	}
+	return fileStandardInfo.NumberOfLinks, fileIDInfo, nil
+}
+
 func (r *baseLayerReader) Read(b []byte) (int, error) {
 	if r.backupReader == nil {
 		if r.currentFile == nil {

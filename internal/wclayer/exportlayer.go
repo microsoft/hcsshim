@@ -45,6 +45,8 @@ func ExportLayer(ctx context.Context, path string, exportFolderPath string, pare
 type LayerReader interface {
 	// Next advances to the next file and returns the name, size, and file info
 	Next() (string, int64, *winio.FileBasicInfo, error)
+	// LinkInfo returns the number of links and the file identifier for the current file.
+	LinkInfo() (uint32, *winio.FileIDInfo, error)
 	// Read reads data from the current file, in the format of a Win32 backup stream, and
 	// returns the number of bytes read.
 	Read(b []byte) (int, error)
