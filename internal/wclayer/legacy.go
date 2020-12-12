@@ -731,7 +731,7 @@ func (w *legacyLayerWriter) AddLink(name string, target string) error {
 		return errors.New("invalid hard link in layer")
 	}
 
-	// Find to try the target of the link in a previously added file. If that
+	// Try to find the target of the link in a previously added file. If that
 	// fails, search in parent layers.
 	var selectedRoot *os.File
 	if _, ok := w.addedFiles[target]; ok {
