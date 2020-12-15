@@ -113,4 +113,7 @@ type UtilityVM struct {
 	// This is used in generating unique mount path inside UVM for every mount.
 	// Access to this variable should be done atomically.
 	mountCounter uint64
+
+	// cpuGroupID is the ID of the cpugroup on the host that this UVM is assigned to
+	cpuGroupID string
 }

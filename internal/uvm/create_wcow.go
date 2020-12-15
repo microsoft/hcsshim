@@ -13,6 +13,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/mergemaps"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
@@ -73,6 +74,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		vpciDevices:             make(map[string]*VPCIDevice),
 		physicallyBacked:        !opts.AllowOvercommit,
 		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
+		cpuGroupID:              opts.CPUGroupID,
 	}
 
 	defer func() {
@@ -118,7 +120,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		}
 	}
 
-	processorTopology, err := hostProcessorInfo(ctx)
+	processorTopology, err := processorinfo.HostProcessorInfo(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get host processor information: %s", err)
 	}
