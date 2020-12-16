@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/containerd/ttrpc"
 	"github.com/urfave/cli"
 	"golang.org/x/sys/windows"
@@ -101,4 +103,19 @@ func getShim(name string) (*ttrpc.Client, error) {
 		return nil, err
 	}
 	return ttrpc.NewClient(conn), nil
+}
+
+func getPid(shimName string) (int32, error) {
+	shim, err := getShim(shimName)
+	if err != nil {
+		return 0, err
+	}
+	defer shim.Close()
+
+	svc := shimdiag.NewShimDiagClient(shim)
+	resp, err := svc.DiagPid(context.Background(), &shimdiag.PidRequest{})
+	if err != nil {
+		return 0, err
+	}
+	return resp.Pid, nil
 }
