@@ -145,13 +145,17 @@ func newHcsTask(
 	}
 
 	opts := hcsoci.CreateOptions{
-		ID:                      req.ID,
-		Owner:                   owner,
-		Spec:                    s,
-		HostingSystem:           parent,
-		NetworkNamespace:        netNS,
-		ScaleCPULimitsToSandbox: shimOpts.ScaleCpuLimitsToSandbox,
+		ID:               req.ID,
+		Owner:            owner,
+		Spec:             s,
+		HostingSystem:    parent,
+		NetworkNamespace: netNS,
 	}
+
+	if shimOpts != nil {
+		opts.ScaleCPULimitsToSandbox = shimOpts.ScaleCpuLimitsToSandbox
+	}
+
 	system, resources, err := hcsoci.CreateContainer(ctx, &opts)
 	if err != nil {
 		return nil, err
