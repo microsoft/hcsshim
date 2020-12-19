@@ -2,6 +2,7 @@ package main
 
 import (
 	"compress/gzip"
+	"context"
 	"io"
 	"os"
 	"path/filepath"
@@ -31,13 +32,13 @@ var exportCommand = cli.Command{
 	},
 	ArgsUsage: "<layer path>",
 	Before:    appargs.Validate(appargs.NonEmptyString),
-	Action: func(context *cli.Context) (err error) {
-		path, err := filepath.Abs(context.Args().First())
+	Action: func(cliContext *cli.Context) (err error) {
+		path, err := filepath.Abs(cliContext.Args().First())
 		if err != nil {
 			return err
 		}
 
-		layers, err := normalizeLayers(context.StringSlice("layer"), true)
+		layers, err := normalizeLayers(cliContext.StringSlice("layer"), true)
 		if err != nil {
 			return err
 		}
@@ -47,7 +48,7 @@ var exportCommand = cli.Command{
 			return err
 		}
 
-		fp := context.String("output")
+		fp := cliContext.String("output")
 		f := os.Stdout
 		if fp != "" {
 			f, err = os.Create(fp)
@@ -57,10 +58,10 @@ var exportCommand = cli.Command{
 			defer f.Close()
 		}
 		w := io.Writer(f)
-		if context.Bool("gzip") {
+		if cliContext.Bool("gzip") {
 			w = gzip.NewWriter(w)
 		}
 
-		return ociwclayer.ExportLayer(w, path, layers)
+		return ociwclayer.ExportLayer(context.Background(), w, path, layers)
 	},
 }
