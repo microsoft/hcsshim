@@ -14,13 +14,13 @@ import (
 
 var driverInfo = hcsshim.DriverInfo{}
 
-// ExportLayer writes an OCI layer tar stream from the provided on-disk layer.
+// ExportLayerToTar writes an OCI layer tar stream from the provided on-disk layer.
 // The caller must specify the parent layers, if any, ordered from lowest to
 // highest layer.
 //
 // The layer will be mounted for this process, so the caller should ensure that
 // it is not currently mounted.
-func ExportLayer(ctx context.Context, w io.Writer, path string, parentLayerPaths []string) error {
+func ExportLayerToTar(ctx context.Context, w io.Writer, path string, parentLayerPaths []string) error {
 	err := hcsshim.ActivateLayer(driverInfo, path)
 	if err != nil {
 		return err

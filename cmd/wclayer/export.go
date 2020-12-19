@@ -9,7 +9,7 @@ import (
 
 	winio "github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/appargs"
-	"github.com/Microsoft/hcsshim/internal/ociwclayer"
+	"github.com/Microsoft/hcsshim/pkg/ociwclayer"
 	"github.com/urfave/cli"
 )
 
@@ -62,6 +62,6 @@ var exportCommand = cli.Command{
 			w = gzip.NewWriter(w)
 		}
 
-		return ociwclayer.ExportLayer(context.Background(), w, path, layers)
+		return ociwclayer.ExportLayerToTar(context.Background(), w, path, layers)
 	},
 }

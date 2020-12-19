@@ -28,7 +28,7 @@ var (
 	}
 )
 
-// ImportLayer reads a layer from an OCI layer tar stream and extracts it to the
+// ImportLayerFromTar  reads a layer from an OCI layer tar stream and extracts it to the
 // specified path. The caller must specify the parent layers, if any, ordered
 // from lowest to highest layer.
 //
@@ -36,7 +36,7 @@ var (
 // restore privileges.
 //
 // This function returns the total size of the layer's files, in bytes.
-func ImportLayer(ctx context.Context, r io.Reader, path string, parentLayerPaths []string) (int64, error) {
+func ImportLayerFromTar(ctx context.Context, r io.Reader, path string, parentLayerPaths []string) (int64, error) {
 	err := os.MkdirAll(path, 0)
 	if err != nil {
 		return 0, err
