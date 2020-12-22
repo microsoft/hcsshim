@@ -76,7 +76,7 @@ func openRelativeInternal(path string, root *os.File, accessMask uint32, shareFl
 	}
 
 	oa.Length = unsafe.Sizeof(oa)
-	oa.ObjectName = uintptr(unsafe.Pointer(pathUnicode))
+	oa.ObjectName = pathUnicode
 	oa.RootDirectory = uintptr(root.Fd())
 	oa.Attributes = winapi.OBJ_DONT_REPARSE
 	status := winapi.NtCreateFile(

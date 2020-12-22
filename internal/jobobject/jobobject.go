@@ -58,31 +58,52 @@ var (
 	ErrNotRegistered = errors.New("job is not registered to receive notifications")
 )
 
+type Options struct {
+	// `Name` specifies the name of the job object if a named job object is desired.
+	Name string
+	// `Notifications` specifies if the job will be registered to receive notifications.
+	// Defaults to false.
+	Notifications bool
+	// `UseNTVariant` specifies if we should use the `Nt` variant of Open/CreateJobObject.
+	// Defaults to false.
+	UseNTVariant bool
+}
+
 // Create creates a job object.
 //
-// `name` specifies the name of the job object if a named job object is desired. If name
-// is an empty string, the job will not be assigned a name.
+// If name is an empty string, the job will not be assigned a name.
 //
-// `notifications` specifies if the job will be registered to receive notifications.
-// If this is false, `PollNotifications` will return immediately with error `errNotRegistered`.
+// If notifications are not enabled `PollNotifications` will return immediately with error `errNotRegistered`.
+//
+// If `options` is nil, use default option values.
 //
 // Returns a JobObject structure and an error if there is one.
-func Create(ctx context.Context, name string, notifications bool) (_ *JobObject, err error) {
-	var (
-		jobName *uint16
-		mq      *queue.MessageQueue
-	)
+func Create(ctx context.Context, options *Options) (_ *JobObject, err error) {
+	var jobName *winapi.UnicodeString
 
-	if name != "" {
-		jobName, err = windows.UTF16PtrFromString(name)
+	if options != nil && options.Name != "" {
+		jobName, err = winapi.NewUnicodeString(options.Name)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	jobHandle, err := windows.CreateJobObject(nil, jobName)
-	if err != nil {
-		return nil, err
+	var jobHandle windows.Handle
+	if options != nil && options.UseNTVariant {
+		oa := winapi.ObjectAttributes{
+			Length:     unsafe.Sizeof(winapi.ObjectAttributes{}),
+			ObjectName: jobName,
+			Attributes: 0,
+		}
+		status := winapi.NtCreateJobObject(&jobHandle, winapi.JOB_OBJECT_ALL_ACCESS, &oa)
+		if status != 0 {
+			return nil, winapi.RtlNtStatusToDosError(status)
+		}
+	} else {
+		jobHandle, err = windows.CreateJobObject(nil, jobName.Buffer)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	defer func() {
@@ -91,140 +112,109 @@ func Create(ctx context.Context, name string, notifications bool) (_ *JobObject,
 		}
 	}()
 
+	job := &JobObject{
+		handle: jobHandle,
+	}
+
 	// If the IOCP we'll be using to receive messages for all jobs hasn't been
 	// created, create it and start polling.
-	if notifications {
-		ioInitOnce.Do(func() {
-			h, err := windows.CreateIoCompletionPort(windows.InvalidHandle, 0, 0, 0xffffffff)
-			if err != nil {
-				initIOErr = err
-				return
-			}
-			ioCompletionPort = h
-			go pollIOCP(ctx, h)
-		})
-
-		if initIOErr != nil {
-			return nil, initIOErr
+	if options != nil && options.Notifications {
+		mq, err := setupNotifications(ctx, job)
+		if err != nil {
+			return nil, err
 		}
+		job.mq = mq
+	}
 
-		mq = queue.NewMessageQueue()
-		jobMap.Store(uintptr(jobHandle), mq)
-		if err = attachIOCP(jobHandle, ioCompletionPort); err != nil {
-			jobMap.Delete(uintptr(jobHandle))
+	return job, nil
+}
+
+// Open opens an existing job object with name provided in `options`. If no name is provided
+// return an error since we need to know what job object to open.
+//
+// If notifications are not enabled `PollNotifications` will return immediately with error `errNotRegistered`.
+//
+// Returns a JobObject structure and an error if there is one.
+func Open(ctx context.Context, options *Options) (_ *JobObject, err error) {
+	if options != nil && options.Name == "" {
+		return nil, errors.New("no job object name specified to open")
+	}
+	unicodeJobName, err := winapi.NewUnicodeString(options.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	var jobHandle windows.Handle
+	if options != nil && options.UseNTVariant {
+		oa := winapi.ObjectAttributes{
+			Length:     unsafe.Sizeof(winapi.ObjectAttributes{}),
+			ObjectName: unicodeJobName,
+			Attributes: 0,
+		}
+		status := winapi.NtOpenJobObject(&jobHandle, winapi.JOB_OBJECT_ALL_ACCESS, &oa)
+		if status != 0 {
+			return nil, winapi.RtlNtStatusToDosError(status)
+		}
+	} else {
+		jobHandle, err = winapi.OpenJobObject(winapi.JOB_OBJECT_ALL_ACCESS, false, unicodeJobName.Buffer)
+		if err != nil {
 			return nil, err
 		}
 	}
 
-	return &JobObject{
+	defer func() {
+		if err != nil {
+			windows.Close(jobHandle)
+		}
+	}()
+
+	job := &JobObject{
 		handle: jobHandle,
-		mq:     mq,
-	}, nil
+	}
+
+	// If the IOCP we'll be using to receive messages for all jobs hasn't been
+	// created, create it and start polling.
+	if options != nil && options.Notifications {
+		mq, err := setupNotifications(ctx, job)
+		if err != nil {
+			return nil, err
+		}
+		job.mq = mq
+	}
+
+	return job, nil
 }
 
-// SetResourceLimits sets resource limits on the job object (cpu, memory, storage).
-func (job *JobObject) SetResourceLimits(limits *JobLimits) error {
-	// Go through and check what limits were specified and apply them to the job.
-	if limits.MemoryLimitInBytes != 0 {
-		if err := job.SetMemoryLimit(limits.MemoryLimitInBytes); err != nil {
-			return errors.Wrap(err, "failed to set job object memory limit")
+// helper function to setup notifications for creating/opening a job object
+func setupNotifications(ctx context.Context, job *JobObject) (*queue.MessageQueue, error) {
+	ioInitOnce.Do(func() {
+		h, err := windows.CreateIoCompletionPort(windows.InvalidHandle, 0, 0, 0xffffffff)
+		if err != nil {
+			initIOErr = err
+			return
 		}
+		ioCompletionPort = h
+		go pollIOCP(ctx, h)
+	})
+
+	if initIOErr != nil {
+		return nil, initIOErr
 	}
 
-	if limits.CPULimit != 0 {
-		if err := job.SetCPULimit(RateBased, limits.CPULimit); err != nil {
-			return errors.Wrap(err, "failed to set job object cpu limit")
-		}
-	} else if limits.CPUWeight != 0 {
-		if err := job.SetCPULimit(WeightBased, limits.CPUWeight); err != nil {
-			return errors.Wrap(err, "failed to set job object cpu limit")
-		}
-	}
-
-	if limits.MaxBandwidth != 0 || limits.MaxIOPS != 0 {
-		if err := job.SetIOLimit(limits.MaxBandwidth, limits.MaxIOPS); err != nil {
-			return errors.Wrap(err, "failed to set io limit on job object")
-		}
-	}
-	return nil
-}
-
-// SetCPULimit sets the CPU limit specified on the job object.
-func (job *JobObject) SetCPULimit(rateControlType CPURateControlType, rateControlValue uint32) error {
 	job.handleLock.RLock()
 	defer job.handleLock.RUnlock()
 
 	if job.handle == 0 {
-		return ErrAlreadyClosed
+		return nil, ErrAlreadyClosed
 	}
 
-	var cpuInfo winapi.JOBOBJECT_CPU_RATE_CONTROL_INFORMATION
-	switch rateControlType {
-	case WeightBased:
-		if rateControlValue < CPUWeightMin || rateControlValue > CPUWeightMax {
-			return fmt.Errorf("processor weight value of `%d` is invalid", rateControlValue)
-		}
-		cpuInfo.ControlFlags = winapi.JOB_OBJECT_CPU_RATE_CONTROL_ENABLE | winapi.JOB_OBJECT_CPU_RATE_CONTROL_WEIGHT_BASED
-		cpuInfo.Value = rateControlValue
-	case RateBased:
-		if rateControlValue < CPULimitMin || rateControlValue > CPULimitMax {
-			return fmt.Errorf("processor rate of `%d` is invalid", rateControlValue)
-		}
-		cpuInfo.ControlFlags = winapi.JOB_OBJECT_CPU_RATE_CONTROL_ENABLE | winapi.JOB_OBJECT_CPU_RATE_CONTROL_HARD_CAP
-		cpuInfo.Value = rateControlValue
-	default:
-		return errors.New("invalid job object cpu rate control type")
+	mq := queue.NewMessageQueue()
+	jobMap.Store(uintptr(job.handle), mq)
+	if err := attachIOCP(job.handle, ioCompletionPort); err != nil {
+		jobMap.Delete(uintptr(job.handle))
+		return nil, err
 	}
-
-	_, err := windows.SetInformationJobObject(job.handle, windows.JobObjectCpuRateControlInformation, uintptr(unsafe.Pointer(&cpuInfo)), uint32(unsafe.Sizeof(cpuInfo)))
-	if err != nil {
-		return fmt.Errorf("failed to set cpu limit info on job object: %s", err)
-	}
-	return nil
-}
-
-// SetMemoryLimit sets the memory limit specified on the job object.
-func (job *JobObject) SetMemoryLimit(memoryLimitInBytes uint64) error {
-	job.handleLock.RLock()
-	defer job.handleLock.RUnlock()
-
-	if job.handle == 0 {
-		return ErrAlreadyClosed
-	}
-
-	var eliInfo windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
-	eliInfo.JobMemoryLimit = uintptr(memoryLimitInBytes)
-	eliInfo.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_JOB_MEMORY
-	_, err := windows.SetInformationJobObject(job.handle, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&eliInfo)), uint32(unsafe.Sizeof(eliInfo)))
-	if err != nil {
-		return fmt.Errorf("failed to set extended limit info on job object: %s", err)
-	}
-	return nil
-}
-
-// SetIOLimit sets the IO limits specified on the job object.
-func (job *JobObject) SetIOLimit(maxBandwidth, maxIOPS int64) error {
-	job.handleLock.RLock()
-	defer job.handleLock.RUnlock()
-
-	if job.handle == 0 {
-		return ErrAlreadyClosed
-	}
-
-	ioInfo := winapi.JOBOBJECT_IO_RATE_CONTROL_INFORMATION{
-		ControlFlags: winapi.JOB_OBJECT_IO_RATE_CONTROL_ENABLE,
-	}
-	if maxBandwidth != 0 {
-		ioInfo.MaxBandwidth = maxBandwidth
-	}
-	if maxIOPS != 0 {
-		ioInfo.MaxIops = maxIOPS
-	}
-	_, err := winapi.SetIoRateControlInformationJobObject(job.handle, &ioInfo)
-	if err != nil {
-		return fmt.Errorf("failed to set IO limit info on job object: %s", err)
-	}
-	return nil
+	return mq, nil
 }
 
 // PollNotification will poll for a job object notification. This call should only be called once
