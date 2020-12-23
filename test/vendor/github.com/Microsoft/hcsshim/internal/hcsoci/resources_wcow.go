@@ -11,16 +11,17 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Microsoft/hcsshim/internal/credentials"
+	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-const wcowGlobalMountPrefix = "C:\\mounts\\m%d"
-
-func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r *Resources) error {
+func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r *resources.Resources) error {
 	if coi.Spec == nil || coi.Spec.Windows == nil || coi.Spec.Windows.LayerFolders == nil {
 		return fmt.Errorf("field 'Spec.Windows.Layerfolders' is not populated")
 	}
@@ -49,17 +50,14 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 
 	if coi.Spec.Root.Path == "" && (coi.HostingSystem != nil || coi.Spec.Windows.HyperV == nil) {
 		log.G(ctx).Debug("hcsshim::allocateWindowsResources mounting storage")
-		containerRootPath, err := MountContainerLayers(ctx, coi.Spec.Windows.LayerFolders, r.containerRootInUVM, coi.HostingSystem)
+		containerRootInUVM := r.ContainerRootInUVM()
+		containerRootPath, err := layers.MountContainerLayers(ctx, coi.Spec.Windows.LayerFolders, containerRootInUVM, coi.HostingSystem)
 		if err != nil {
 			return fmt.Errorf("failed to mount container storage: %s", err)
 		}
 		coi.Spec.Root.Path = containerRootPath
-		layers := &ImageLayers{
-			vm:                 coi.HostingSystem,
-			containerRootInUVM: r.containerRootInUVM,
-			layers:             coi.Spec.Windows.LayerFolders,
-		}
-		r.layers = layers
+		layers := layers.NewImageLayers(coi.HostingSystem, containerRootInUVM, coi.Spec.Windows.LayerFolders)
+		r.SetLayers(layers)
 	}
 
 	// Validate each of the mounts. If this is a V2 Xenon, we have to add them as
@@ -73,13 +71,12 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 		case "":
 		case "physical-disk":
 		case "virtual-disk":
-		case "automanage-virtual-disk":
 		default:
 			return fmt.Errorf("invalid OCI spec - Type '%s' not supported", mount.Type)
 		}
 
 		if coi.HostingSystem != nil && schemaversion.IsV21(coi.actualSchemaVersion) {
-			uvmPath := fmt.Sprintf(wcowGlobalMountPrefix, coi.HostingSystem.UVMMountCounter())
+			uvmPath := fmt.Sprintf(uvm.WCOWGlobalMountPrefix, coi.HostingSystem.UVMMountCounter())
 			readOnly := false
 			for _, o := range mount.Options {
 				if strings.ToLower(o) == "ro" {
@@ -95,25 +92,22 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 					return fmt.Errorf("adding SCSI physical disk mount %+v: %s", mount, err)
 				}
 				coi.Spec.Mounts[i].Type = ""
-				r.resources = append(r.resources, scsiMount)
-			} else if mount.Type == "virtual-disk" || mount.Type == "automanage-virtual-disk" {
+				r.Add(scsiMount)
+			} else if mount.Type == "virtual-disk" {
 				l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI virtual disk for OCI mount")
 				scsiMount, err := coi.HostingSystem.AddSCSI(ctx, mount.Source, uvmPath, readOnly, uvm.VMAccessTypeIndividual)
 				if err != nil {
 					return fmt.Errorf("adding SCSI virtual disk mount %+v: %s", mount, err)
 				}
 				coi.Spec.Mounts[i].Type = ""
-				if mount.Type == "automanage-virtual-disk" {
-					r.resources = append(r.resources, &AutoManagedVHD{hostPath: scsiMount.HostPath})
-				}
-				r.resources = append(r.resources, scsiMount)
+				r.Add(scsiMount)
 			} else {
 				if uvm.IsPipe(mount.Source) {
 					pipe, err := coi.HostingSystem.AddPipe(ctx, mount.Source)
 					if err != nil {
 						return fmt.Errorf("failed to add named pipe to UVM: %s", err)
 					}
-					r.resources = append(r.resources, pipe)
+					r.Add(pipe)
 				} else {
 					l.Debug("hcsshim::allocateWindowsResources Hot-adding VSMB share for OCI mount")
 					options := coi.HostingSystem.DefaultVSMBOptions(readOnly)
@@ -121,7 +115,7 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 					if err != nil {
 						return fmt.Errorf("failed to add VSMB share to utility VM for mount %+v: %s", mount, err)
 					}
-					r.resources = append(r.resources, share)
+					r.Add(share)
 				}
 			}
 		}
@@ -131,14 +125,38 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 		// Only need to create a CCG instance for v2 containers
 		if schemaversion.IsV21(coi.actualSchemaVersion) {
 			hypervisorIsolated := coi.HostingSystem != nil
-			ccgState, ccgInstance, err := CreateCredentialGuard(ctx, coi.actualID, cs, hypervisorIsolated)
+			ccgInstance, ccgResource, err := credentials.CreateCredentialGuard(ctx, coi.actualID, cs, hypervisorIsolated)
 			if err != nil {
 				return err
 			}
-			coi.ccgState = ccgState
-			r.resources = append(r.resources, ccgInstance)
-			//TODO dcantah: If/when dynamic service table entries is supported register the RpcEndpoint with hvsocket here
+			coi.ccgState = ccgInstance.CredentialGuard
+			r.Add(ccgResource)
+			if hypervisorIsolated {
+				// If hypervisor isolated we need to add an hvsocket service table entry
+				// By default HVSocket won't allow something inside the VM to connect
+				// back to a process on the host. We need to update the HVSocket service table
+				// to allow a connection to CCG.exe on the host, so that GMSA can function.
+				// We need to hot add this here because at UVM creation time we don't know what containers
+				// will be launched in the UVM, nonetheless if they will ask for GMSA. This is a workaround
+				// for the previous design requirement for CCG V2 where the service entry
+				// must be present in the UVM'S HCS document before being sent over as hot adding
+				// an HvSocket service was not possible.
+				hvSockConfig := ccgInstance.HvSocketConfig
+				if err := coi.HostingSystem.UpdateHvSocketService(ctx, hvSockConfig.ServiceId, hvSockConfig.ServiceConfig); err != nil {
+					return fmt.Errorf("failed to update hvsocket service: %s", err)
+				}
+			}
 		}
 	}
+
+	if coi.HostingSystem != nil && coi.hasWindowsAssignedDevices() {
+		windowsDevices, closers, err := handleAssignedDevicesWindows(ctx, coi.HostingSystem, coi.Spec.Annotations, coi.Spec.Windows.Devices)
+		if err != nil {
+			return err
+		}
+		r.Add(closers...)
+		coi.Spec.Windows.Devices = windowsDevices
+	}
+
 	return nil
 }

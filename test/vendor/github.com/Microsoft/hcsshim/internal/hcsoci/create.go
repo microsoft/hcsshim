@@ -15,6 +15,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/internal/resources"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -48,6 +49,10 @@ type CreateOptions struct {
 	// must a) not tear down the utility VM on failure (or pause in some way) and b) is responsible for
 	// performing the ReleaseResources() call themselves.
 	DoNotReleaseResourcesOnFailure bool
+
+	// ScaleCPULimitsToSandbox indicates that the container CPU limits should be adjusted to account
+	// for the difference in CPU count between the host and the UVM.
+	ScaleCPULimitsToSandbox bool
 }
 
 // createOptionsInternal is the set of user-supplied create options, but includes internal
@@ -68,7 +73,7 @@ type createOptionsInternal struct {
 // case of an error. This provides support for the debugging option not to
 // release the resources on failure, so that the client can make the necessary
 // call to release resources that have been allocated as part of calling this function.
-func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.Container, _ *Resources, err error) {
+func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.Container, _ *resources.Resources, err error) {
 	coi := &createOptionsInternal{
 		CreateOptions: createOptions,
 		actualID:      createOptions.ID,
@@ -103,23 +108,21 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 		"schema":  coi.actualSchemaVersion,
 	}).Debug("hcsshim::CreateContainer")
 
-	resources := &Resources{
-		id: createOptions.ID,
-	}
+	r := resources.NewContainerResources(createOptions.ID)
 	defer func() {
 		if err != nil {
 			if !coi.DoNotReleaseResourcesOnFailure {
-				ReleaseResources(ctx, resources, coi.HostingSystem, true)
+				resources.ReleaseResources(ctx, r, coi.HostingSystem, true)
 			}
 		}
 	}()
 
 	if coi.HostingSystem != nil {
-		n := coi.HostingSystem.ContainerCounter()
 		if coi.Spec.Linux != nil {
-			resources.containerRootInUVM = fmt.Sprintf(lcowRootInUVM, createOptions.ID)
+			r.SetContainerRootInUVM(fmt.Sprintf(lcowRootInUVM, createOptions.ID))
 		} else {
-			resources.containerRootInUVM = fmt.Sprintf(wcowRootInUVM, strconv.FormatUint(n, 16))
+			n := coi.HostingSystem.ContainerCounter()
+			r.SetContainerRootInUVM(fmt.Sprintf(wcowRootInUVM, strconv.FormatUint(n, 16)))
 		}
 	}
 
@@ -129,18 +132,18 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 		schemaversion.IsV21(coi.actualSchemaVersion) {
 
 		if coi.NetworkNamespace != "" {
-			resources.netNS = coi.NetworkNamespace
+			r.SetNetNS(coi.NetworkNamespace)
 		} else {
-			err := createNetworkNamespace(ctx, coi, resources)
+			err := createNetworkNamespace(ctx, coi, r)
 			if err != nil {
-				return nil, resources, err
+				return nil, r, err
 			}
 		}
-		coi.actualNetworkNamespace = resources.netNS
+		coi.actualNetworkNamespace = r.NetNS()
 		if coi.HostingSystem != nil {
 			ct, _, err := oci.GetSandboxTypeAndID(coi.Spec.Annotations)
 			if err != nil {
-				return nil, resources, err
+				return nil, r, err
 			}
 			// Only add the network namespace to a standalone or sandbox
 			// container but not a workload container in a sandbox that inherits
@@ -148,19 +151,19 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 			if ct == oci.KubernetesContainerTypeNone || ct == oci.KubernetesContainerTypeSandbox {
 				endpoints, err := GetNamespaceEndpoints(ctx, coi.actualNetworkNamespace)
 				if err != nil {
-					return nil, resources, err
+					return nil, r, err
 				}
 				err = coi.HostingSystem.AddNetNS(ctx, coi.actualNetworkNamespace)
 				if err != nil {
-					return nil, resources, err
+					return nil, r, err
 				}
 				err = coi.HostingSystem.AddEndpointsToNS(ctx, coi.actualNetworkNamespace, endpoints)
 				if err != nil {
 					// Best effort clean up the NS
 					coi.HostingSystem.RemoveNetNS(ctx, coi.actualNetworkNamespace)
-					return nil, resources, err
+					return nil, r, err
 				}
-				resources.addedNetNSToVM = true
+				r.SetAddedNetNSToVM(true)
 			}
 		}
 	}
@@ -169,30 +172,30 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 	log.G(ctx).Debug("hcsshim::CreateContainer allocating resources")
 	if coi.Spec.Linux != nil {
 		if schemaversion.IsV10(coi.actualSchemaVersion) {
-			return nil, resources, errors.New("LCOW v1 not supported")
+			return nil, r, errors.New("LCOW v1 not supported")
 		}
 		log.G(ctx).Debug("hcsshim::CreateContainer allocateLinuxResources")
-		err = allocateLinuxResources(ctx, coi, resources)
+		err = allocateLinuxResources(ctx, coi, r)
 		if err != nil {
 			log.G(ctx).WithError(err).Debug("failed to allocateLinuxResources")
-			return nil, resources, err
+			return nil, r, err
 		}
-		gcsDocument, err = createLinuxContainerDocument(ctx, coi, resources.containerRootInUVM)
+		gcsDocument, err = createLinuxContainerDocument(ctx, coi, r.ContainerRootInUVM())
 		if err != nil {
 			log.G(ctx).WithError(err).Debug("failed createHCSContainerDocument")
-			return nil, resources, err
+			return nil, r, err
 		}
 	} else {
-		err = allocateWindowsResources(ctx, coi, resources)
+		err = allocateWindowsResources(ctx, coi, r)
 		if err != nil {
 			log.G(ctx).WithError(err).Debug("failed to allocateWindowsResources")
-			return nil, resources, err
+			return nil, r, err
 		}
 		log.G(ctx).Debug("hcsshim::CreateContainer creating container document")
 		v1, v2, err := createWindowsContainerDocument(ctx, coi)
 		if err != nil {
 			log.G(ctx).WithError(err).Debug("failed createHCSContainerDocument")
-			return nil, resources, err
+			return nil, r, err
 		}
 
 		if schemaversion.IsV10(coi.actualSchemaVersion) {
@@ -219,16 +222,16 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 	if gcsDocument != nil {
 		c, err := coi.HostingSystem.CreateContainer(ctx, coi.actualID, gcsDocument)
 		if err != nil {
-			return nil, resources, err
+			return nil, r, err
 		}
-		return c, resources, nil
+		return c, r, nil
 	}
 
 	system, err := hcs.CreateComputeSystem(ctx, coi.actualID, hcsDocument)
 	if err != nil {
-		return nil, resources, err
+		return nil, r, err
 	}
-	return system, resources, nil
+	return system, r, nil
 }
 
 // isV2Xenon returns true if the create options are for a HCS schema V2 xenon container
@@ -253,4 +256,9 @@ func (coi *createOptionsInternal) isV2Argon() bool {
 // which should have no hyperv settings
 func (coi *createOptionsInternal) isV1Argon() bool {
 	return schemaversion.IsV10(coi.actualSchemaVersion) && coi.Spec.Windows.HyperV == nil
+}
+
+func (coi *createOptionsInternal) hasWindowsAssignedDevices() bool {
+	return (coi.Spec.Windows != nil) && (coi.Spec.Windows.Devices != nil) &&
+		(len(coi.Spec.Windows.Devices) > 0)
 }

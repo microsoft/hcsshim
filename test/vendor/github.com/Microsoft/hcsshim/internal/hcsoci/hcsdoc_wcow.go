@@ -4,17 +4,16 @@ package hcsoci
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"regexp"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/processorinfo"
-
+	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/internal/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -81,27 +80,69 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	if cpuNumSet > 1 {
 		return nil, nil, fmt.Errorf("invalid spec - Windows Process Container CPU Count: '%d', Limit: '%d', and Weight: '%d' are mutually exclusive", cpuCount, cpuLimit, cpuWeight)
 	} else if cpuNumSet == 1 {
-		var hostCPUCount int32
+		hostCPUCount := processorinfo.ProcessorCount()
+		// usableCPUCount is the number of processors present in whatever environment
+		// the container is running in. It will be either the processor count of the
+		// host, or the UVM, based on if the container is process or hypervisor isolated.
+		usableCPUCount := hostCPUCount
+		var uvmCPUCount int32
 		if coi.HostingSystem != nil {
-			// Normalize to UVM size
-			hostCPUCount = coi.HostingSystem.ProcessorCount()
-		} else {
-			// For process isolated case the amount of logical processors reported
-			// from the HCS apis may be greater than what is available to the host in a
-			// minroot configuration (host doesn't have access to all available LPs)
-			// so prefer standard OS level calls here instead.
-			hostCPUCount = processorinfo.ProcessorCount()
+			uvmCPUCount = coi.HostingSystem.ProcessorCount()
+			usableCPUCount = uvmCPUCount
 		}
-		if cpuCount > hostCPUCount {
+		if cpuCount > usableCPUCount {
 			l := log.G(ctx).WithField(logfields.ContainerID, coi.ID)
 			if coi.HostingSystem != nil {
 				l.Data[logfields.UVMID] = coi.HostingSystem.ID()
 			}
 			l.WithFields(logrus.Fields{
 				"requested": cpuCount,
-				"assigned":  hostCPUCount,
+				"assigned":  usableCPUCount,
 			}).Warn("Changing user requested CPUCount to current number of processors")
-			cpuCount = hostCPUCount
+			cpuCount = usableCPUCount
+		}
+		if coi.ScaleCPULimitsToSandbox && cpuLimit > 0 && coi.HostingSystem != nil {
+			// When ScaleCPULimitsToSandbox is set and we are running in a UVM, we assume
+			// the CPU limit has been calculated based on the number of processors on the
+			// host, and instead re-calculate it based on the number of processors in the UVM.
+			//
+			// This is needed to work correctly with assumptions kubelet makes when computing
+			// the CPU limit value:
+			// - kubelet thinks about CPU limits in terms of millicores, which are 1000ths of
+			//   cores. So if 2000 millicores are assigned, the container can use 2 processors.
+			// - In Windows, the job object CPU limit is global across all processors on the
+			//   system, and is represented as a fraction out of 10000. In this model, a limit
+			//   of 10000 means the container can use all processors fully, regardless of how
+			//   many processors exist on the system.
+			// - To convert the millicores value into the job object limit, kubelet divides
+			//   the millicores by the number of CPU cores on the host. This causes problems
+			//   when running inside a UVM, as the UVM may have a different number of processors
+			//   than the host system.
+			//
+			// To work around this, we undo the division by the number of host processors, and
+			// re-do the division based on the number of processors inside the UVM. This will
+			// give the correct value based on the actual number of millicores that the kubelet
+			// wants the container to have.
+			//
+			// Kubelet formula to compute CPU limit:
+			// cpuMaximum := 10000 * cpuLimit.MilliValue() / int64(runtime.NumCPU()) / 1000
+			newCPULimit := cpuLimit * hostCPUCount / uvmCPUCount
+			// We only apply bounds here because we are calculating the CPU limit ourselves,
+			// and this matches the kubelet behavior where they also bound the CPU limit by [1, 10000].
+			// In the case where we use the value directly from the user, we don't alter it to fit
+			// within the bounds, but just let the platform throw an error if it is invalid.
+			if newCPULimit < 1 {
+				newCPULimit = 1
+			} else if newCPULimit > 10000 {
+				newCPULimit = 10000
+			}
+			log.G(ctx).WithFields(logrus.Fields{
+				"hostCPUCount": hostCPUCount,
+				"uvmCPUCount":  uvmCPUCount,
+				"oldCPULimit":  cpuLimit,
+				"newCPULimit":  newCPULimit,
+			}).Info("rescaling CPU limit for UVM sandbox")
+			cpuLimit = newCPULimit
 		}
 
 		v1.ProcessorCount = uint32(cpuCount)
@@ -208,7 +249,7 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		// Hosting system was supplied, so is v2 Xenon.
 		v2Container.Storage.Path = coi.Spec.Root.Path
 		if coi.HostingSystem.OS() == "windows" {
-			layers, err := computeV2Layers(ctx, coi.HostingSystem, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1])
+			layers, err := layers.GetHCSLayers(ctx, coi.HostingSystem, coi.Spec.Windows.LayerFolders[:len(coi.Spec.Windows.LayerFolders)-1])
 			if err != nil {
 				return nil, nil, err
 			}
@@ -282,29 +323,19 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	v1.MappedPipes = mpsv1
 	v2Container.MappedPipes = mpsv2
 
-	if specHasAssignedDevices(coi) {
-		// add assigned devices to the container definition
-		if err := parseAssignedDevices(coi, v2Container); err != nil {
-			return nil, nil, err
-		}
+	// add assigned devices to the container definition
+	if err := parseAssignedDevices(ctx, coi, v2Container); err != nil {
+		return nil, nil, err
 	}
 
 	return v1, v2Container, nil
 }
 
-func specHasAssignedDevices(coi *createOptionsInternal) bool {
-	if coi.Spec.Windows != nil && coi.Spec.Windows.Devices != nil &&
-		len(coi.Spec.Windows.Devices) > 0 {
-		return true
-	}
-	return false
-}
-
 // parseAssignedDevices parses assigned devices for the container definition
-// this is currently supported for HCS schema V2 argon only
-func parseAssignedDevices(coi *createOptionsInternal, v2 *hcsschema.Container) error {
-	if !coi.isV2Argon() {
-		return errors.New("device assignment is currently only supported for HCS schema V2 argon")
+// this is currently supported for v2 argon and xenon only
+func parseAssignedDevices(ctx context.Context, coi *createOptionsInternal, v2 *hcsschema.Container) error {
+	if !coi.isV2Argon() && !coi.isV2Xenon() {
+		return nil
 	}
 
 	v2AssignedDevices := []hcsschema.Device{}
@@ -321,6 +352,7 @@ func parseAssignedDevices(coi *createOptionsInternal, v2 *hcsschema.Container) e
 		default:
 			return fmt.Errorf("specified device %s has unsupported type %s", d.ID, d.IDType)
 		}
+		log.G(ctx).WithField("hcsv2 device", v2Dev).Debug("adding assigned device to container doc")
 		v2AssignedDevices = append(v2AssignedDevices, v2Dev)
 	}
 	v2.AssignedDevices = v2AssignedDevices

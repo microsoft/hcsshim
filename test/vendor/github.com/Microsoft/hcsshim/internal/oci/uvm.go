@@ -79,7 +79,13 @@ const (
 	// `spec.Windows.Resources.Storage.Iops`.
 	AnnotationContainerStorageQoSIopsMaximum = "io.microsoft.container.storage.qos.iopsmaximum"
 	// AnnotationGPUVHDPath overrides the default path to search for the gpu vhd
-	AnnotationGPUVHDPath            = "io.microsoft.lcow.gpuvhdpath"
+	AnnotationGPUVHDPath = "io.microsoft.lcow.gpuvhdpath"
+	// AnnotationAssignedDeviceKernelDrivers indicates what drivers to install in the pod during device
+	// assignment. This value should contain a list of comma separated directories containing all
+	// files and information needed to install given driver(s). This may include .sys,
+	// .inf, .cer, and/or other files used during standard installation with pnputil.
+	AnnotationAssignedDeviceKernelDrivers = "io.microsoft.assigneddevice.kerneldrivers"
+
 	annotationAllowOvercommit       = "io.microsoft.virtualmachine.computetopology.memory.allowovercommit"
 	annotationEnableDeferredCommit  = "io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit"
 	annotationEnableColdDiscardHint = "io.microsoft.virtualmachine.computetopology.memory.enablecolddiscardhint"
@@ -114,20 +120,24 @@ const (
 	//
 	// Note: Unlike Windows process isolated container QoS Count/Limt/Weight on
 	// the UVM are not mutually exclusive and can be set together.
-	annotationProcessorWeight            = "io.microsoft.virtualmachine.computetopology.processor.weight"
-	annotationVPMemCount                 = "io.microsoft.virtualmachine.devices.virtualpmem.maximumcount"
-	annotationVPMemSize                  = "io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes"
-	annotationPreferredRootFSType        = "io.microsoft.virtualmachine.lcow.preferredrootfstype"
-	annotationBootFilesRootPath          = "io.microsoft.virtualmachine.lcow.bootfilesrootpath"
-	annotationKernelDirectBoot           = "io.microsoft.virtualmachine.lcow.kerneldirectboot"
-	annotationVPCIEnabled                = "io.microsoft.virtualmachine.lcow.vpcienabled"
-	annotationStorageQoSBandwidthMaximum = "io.microsoft.virtualmachine.storageqos.bandwidthmaximum"
-	annotationStorageQoSIopsMaximum      = "io.microsoft.virtualmachine.storageqos.iopsmaximum"
-	annotationFullyPhysicallyBacked      = "io.microsoft.virtualmachine.fullyphysicallybacked"
+	annotationProcessorWeight             = "io.microsoft.virtualmachine.computetopology.processor.weight"
+	annotationVPMemCount                  = "io.microsoft.virtualmachine.devices.virtualpmem.maximumcount"
+	annotationVPMemSize                   = "io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes"
+	annotationPreferredRootFSType         = "io.microsoft.virtualmachine.lcow.preferredrootfstype"
+	annotationBootFilesRootPath           = "io.microsoft.virtualmachine.lcow.bootfilesrootpath"
+	annotationKernelDirectBoot            = "io.microsoft.virtualmachine.lcow.kerneldirectboot"
+	annotationVPCIEnabled                 = "io.microsoft.virtualmachine.lcow.vpcienabled"
+	annotationStorageQoSBandwidthMaximum  = "io.microsoft.virtualmachine.storageqos.bandwidthmaximum"
+	annotationStorageQoSIopsMaximum       = "io.microsoft.virtualmachine.storageqos.iopsmaximum"
+	annotationFullyPhysicallyBacked       = "io.microsoft.virtualmachine.fullyphysicallybacked"
+	annotationDisableCompartmentNamespace = "io.microsoft.virtualmachine.disablecompartmentnamespace"
 	// A boolean annotation to control whether to use an external bridge or the
 	// HCS-GCS bridge. Default value is true which means external bridge will be used
 	// by default.
 	annotationUseExternalGCSBridge = "io.microsoft.virtualmachine.useexternalgcsbridge"
+
+	// annotation used to specify the cpugroup ID that a UVM should be assigned to
+	annotationCPUGroupID = "io.microsoft.virtualmachine.cpugroup.id"
 )
 
 // parseAnnotationsBool searches `a` for `key` and if found verifies that the
@@ -240,16 +250,16 @@ func ParseAnnotationsStorageBps(ctx context.Context, s *specs.Spec, annotation s
 // returns `def`.
 //
 // Note: The returned value is in `MB`.
-func ParseAnnotationsMemory(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
+func ParseAnnotationsMemory(ctx context.Context, s *specs.Spec, annotation string, def uint64) uint64 {
 	if m := parseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
-		return int32(m)
+		return m
 	}
 	if s.Windows != nil &&
 		s.Windows.Resources != nil &&
 		s.Windows.Resources.Memory != nil &&
 		s.Windows.Resources.Memory.Limit != nil &&
 		*s.Windows.Resources.Memory.Limit > 0 {
-		return int32(*s.Windows.Resources.Memory.Limit / 1024 / 1024)
+		return (*s.Windows.Resources.Memory.Limit / 1024 / 1024)
 	}
 	return def
 }
@@ -384,6 +394,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.VPCIEnabled = parseAnnotationsBool(ctx, s.Annotations, annotationVPCIEnabled, lopts.VPCIEnabled)
 		lopts.BootFilesPath = parseAnnotationsString(s.Annotations, annotationBootFilesRootPath, lopts.BootFilesPath)
 		lopts.ExternalGuestConnection = parseAnnotationsBool(ctx, s.Annotations, annotationUseExternalGCSBridge, lopts.ExternalGuestConnection)
+		lopts.CPUGroupID = parseAnnotationsString(s.Annotations, annotationCPUGroupID, lopts.CPUGroupID)
 		handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
 		handleAnnotationKernelDirectBoot(ctx, s.Annotations, lopts)
 
@@ -405,6 +416,8 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		wopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(ctx, s, annotationStorageQoSBandwidthMaximum, wopts.StorageQoSBandwidthMaximum)
 		wopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotationStorageQoSIopsMaximum, wopts.StorageQoSIopsMaximum)
 		wopts.ExternalGuestConnection = parseAnnotationsBool(ctx, s.Annotations, annotationUseExternalGCSBridge, wopts.ExternalGuestConnection)
+		wopts.DisableCompartmentNamespace = parseAnnotationsBool(ctx, s.Annotations, annotationDisableCompartmentNamespace, wopts.DisableCompartmentNamespace)
+		wopts.CPUGroupID = parseAnnotationsString(s.Annotations, annotationCPUGroupID, wopts.CPUGroupID)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, wopts)
 		return wopts, nil
 	}

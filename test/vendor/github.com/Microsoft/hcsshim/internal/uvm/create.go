@@ -29,7 +29,7 @@ type Options struct {
 
 	// MemorySizeInMB sets the UVM memory. If `0` will default to platform
 	// default.
-	MemorySizeInMB int32
+	MemorySizeInMB uint64
 
 	LowMMIOGapInMB   uint64
 	HighMMIOBaseInMB uint64
@@ -70,6 +70,21 @@ type Options struct {
 	// ExternalGuestConnection sets whether the guest RPC connection is performed
 	// internally by the OS platform or externally by this package.
 	ExternalGuestConnection bool
+
+	// DisableCompartmentNamespace sets whether to disable namespacing the network compartment in the UVM
+	// for WCOW. Namespacing makes it so the compartment created for a container is essentially no longer
+	// aware or able to see any of the other compartments on the host (in this case the UVM).
+	// The compartment that the container is added to now behaves as the default compartment as
+	// far as the container is concerned and it is only able to view the NICs in the compartment it's assigned to.
+	// This is the compartment setup (and behavior) that is followed for V1 HCS schema containers (docker) so
+	// this change brings parity as well. This behavior is gated behind a registry key currently to avoid any
+	// unneccessary behavior and once this restriction is removed then we can remove the need for this variable
+	// and the associated annotation as well.
+	DisableCompartmentNamespace bool
+
+	// CPUGroupID set the ID of a CPUGroup on the host that the UVM should be added to on start.
+	// Defaults to an empty string which indicates the UVM should not be added to any CPUGroup.
+	CPUGroupID string
 }
 
 // Verifies that the final UVM options are correct and supported.
@@ -185,6 +200,9 @@ func (uvm *UtilityVM) Close() (err error) {
 	windows.Close(uvm.vmmemProcess)
 
 	if uvm.hcsSystem != nil {
+		if err := uvm.ReleaseCPUGroup(ctx); err != nil {
+			log.G(ctx).WithError(err).Warn("failed to release VM resource")
+		}
 		uvm.hcsSystem.Terminate(ctx)
 		uvm.Wait()
 	}
@@ -298,7 +316,7 @@ func (uvm *UtilityVM) PhysicallyBacked() bool {
 	return uvm.physicallyBacked
 }
 
-func (uvm *UtilityVM) normalizeMemorySize(ctx context.Context, requested int32) int32 {
+func (uvm *UtilityVM) normalizeMemorySize(ctx context.Context, requested uint64) uint64 {
 	actual := (requested + 1) &^ 1 // align up to an even number
 	if requested != actual {
 		log.G(ctx).WithFields(logrus.Fields{
