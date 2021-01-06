@@ -18,7 +18,7 @@ SRCROOT=$(dir $(abspath $(firstword $(MAKEFILE_LIST))))
 
 # The link aliases for gcstools
 GCS_TOOLS=\
-	nvidiaPrestartHook
+	generichook 
 
 .PHONY: all always rootfs test
 

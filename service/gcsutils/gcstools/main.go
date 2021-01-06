@@ -7,7 +7,7 @@ import (
 )
 
 var commands = map[string]func(){
-	"nvidiaPrestartHook": nvidiaPrestartHookMain,
+	"generichook": genericHookMain,
 }
 
 func main() {

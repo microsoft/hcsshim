@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Microsoft/opengcs/internal/storage/pci"
+	generichook "github.com/Microsoft/opengcs/service/gcsutils/generichook"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
@@ -23,14 +24,16 @@ const lcowNvidiaMountPath = "/run/nvidia"
 const annotationContainerGPUCapabilities = "io.microsoft.container.gpu.capabilities"
 const nvidiaDebugFilePath = "/nvidia-container.log"
 
+const nvidiaToolBinary = "nvidia-container-cli"
+
 // TODO katiewasnothere: prestart hooks will be depracated, this needs to be moved to a createRuntime hook
 // described here: https://github.com/opencontainers/runtime-spec/blob/39c287c415bf86fb5b7506528d471db5405f8ca8/config.md#posix-platform-hooks
 // addNvidiaDevicePreHook builds the arguments for nvidia-container-cli and creates the prestart hook
 func addNvidiaDevicePreHook(ctx context.Context, spec *oci.Spec) error {
-	nvidiaToolBinary := "nvidiaPrestartHook"
-	nvidiaToolPath, err := exec.LookPath(nvidiaToolBinary)
+	genericHookBinary := "generichook"
+	genericHookPath, err := exec.LookPath(genericHookBinary)
 	if err != nil {
-		return errors.Wrapf(err, "failed to find %s for container GPU support", nvidiaToolBinary)
+		return errors.Wrapf(err, "failed to find %s for container device support", genericHookBinary)
 	}
 
 	debugOption := fmt.Sprintf("--debug=%s", nvidiaDebugFilePath)
@@ -38,7 +41,15 @@ func addNvidiaDevicePreHook(ctx context.Context, spec *oci.Spec) error {
 	// TODO katiewasnothere: right now both host and container ldconfig do not work as expected for nvidia-container-cli
 	// ldconfig needs to be run in the container to setup the correct symlinks to the library files nvidia-container-cli
 	// maps into the container
-	args := []string{nvidiaToolPath, debugOption, "--load-kmods", "--no-pivot", "configure", "--ldconfig=@/sbin/ldconfig"}
+	args := []string{
+		genericHookPath,
+		nvidiaToolBinary,
+		debugOption,
+		"--load-kmods",
+		"--no-pivot",
+		"configure",
+		"--ldconfig=@/sbin/ldconfig",
+	}
 	if capabilities, ok := spec.Annotations[annotationContainerGPUCapabilities]; ok {
 		caps := strings.Split(capabilities, ",")
 		for _, c := range caps {
@@ -57,16 +68,19 @@ func addNvidiaDevicePreHook(ctx context.Context, spec *oci.Spec) error {
 		}
 	}
 
-	args = append(args, "--no-cgroups", "--pid=%v", spec.Root.Path)
+	// add template for pid argument to be injected later by the generic hook binary
+	args = append(args, "--no-cgroups", "--pid={{pid}}", spec.Root.Path)
 
 	if spec.Hooks == nil {
 		spec.Hooks = &oci.Hooks{}
 	}
 
+	hookLogDebugFileEnvOpt := fmt.Sprintf("%s=%s", generichook.LogDebugFileEnvKey, nvidiaDebugFilePath)
+	hookEnv := append(updateEnvWithNvidiaVariables(), hookLogDebugFileEnvOpt)
 	nvidiaHook := oci.Hook{
-		Path: nvidiaToolPath,
+		Path: genericHookPath,
 		Args: args,
-		Env:  updateEnvWithNvidiaVariables(),
+		Env:  hookEnv,
 	}
 
 	spec.Hooks.Prestart = append(spec.Hooks.Prestart, nvidiaHook)
