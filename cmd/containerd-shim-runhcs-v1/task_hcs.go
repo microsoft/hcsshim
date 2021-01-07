@@ -8,6 +8,16 @@ import (
 	"sync"
 	"time"
 
+	eventstypes "github.com/containerd/containerd/api/events"
+	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/runtime"
+	"github.com/containerd/containerd/runtime/v2/task"
+	"github.com/containerd/typeurl"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
+
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
@@ -23,15 +33,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
-	eventstypes "github.com/containerd/containerd/api/events"
-	"github.com/containerd/containerd/errdefs"
-	"github.com/containerd/containerd/runtime"
-	"github.com/containerd/containerd/runtime/v2/task"
-	"github.com/containerd/typeurl"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
 )
 
 func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
@@ -124,7 +125,7 @@ func newHcsTask(
 
 	owner := filepath.Base(os.Args[0])
 
-	io, err := cmd.NewNpipeIO(ctx, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
+	io, err := cmd.NewUpstreamIO(ctx, req.ID, req.Stdout, req.Stderr, req.Stdin, req.Terminal)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +182,8 @@ func newHcsTask(
 		req.Bundle,
 		ht.isWCOW,
 		s.Process,
-		io)
+		io,
+	)
 
 	if parent != nil {
 		// We have a parent UVM. Listen for its exit and forcibly close this
@@ -288,11 +290,24 @@ func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest,
 		return errors.Wrapf(errdefs.ErrFailedPrecondition, "exec: '' in task: '%s' must be running to create additional execs", ht.id)
 	}
 
-	io, err := cmd.NewNpipeIO(ctx, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
+	io, err := cmd.NewUpstreamIO(ctx, req.ID, req.Stdout, req.Stderr, req.Stdin, req.Terminal)
 	if err != nil {
 		return err
 	}
-	he := newHcsExec(ctx, ht.events, ht.id, ht.host, ht.c, req.ExecID, ht.init.Status().Bundle, ht.isWCOW, spec, io)
+
+	he := newHcsExec(
+		ctx,
+		ht.events,
+		ht.id,
+		ht.host,
+		ht.c,
+		req.ExecID,
+		ht.init.Status().Bundle,
+		ht.isWCOW,
+		spec,
+		io,
+	)
+
 	ht.execs.Store(req.ExecID, he)
 
 	// Publish the created event

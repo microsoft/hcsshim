@@ -48,3 +48,19 @@ func removeContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx cont
 		t.Fatalf("failed StopContainer request for container: %s, with: %v", containerID, err)
 	}
 }
+
+func getCreateContainerRequest(podID string, name string, image string, command []string, podConfig *runtime.PodSandboxConfig) *runtime.CreateContainerRequest {
+	return &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: name,
+			},
+			Image: &runtime.ImageSpec{
+				Image: image,
+			},
+			Command: command,
+		},
+		PodSandboxId:  podID,
+		SandboxConfig: podConfig,
+	}
+}
