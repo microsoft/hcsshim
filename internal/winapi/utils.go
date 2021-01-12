@@ -2,11 +2,23 @@ package winapi
 
 import (
 	"errors"
+	"reflect"
 	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
+
+// Uint16BufferToSlice wraps a uint16 pointer-and-length into a slice
+// for easier interop with Go APIs
+func Uint16BufferToSlice(buffer *uint16, bufferLength int) (result []uint16) {
+	hdr := (*reflect.SliceHeader)(unsafe.Pointer(&result))
+	hdr.Data = uintptr(unsafe.Pointer(buffer))
+	hdr.Cap = bufferLength
+	hdr.Len = bufferLength
+
+	return
+}
 
 type UnicodeString struct {
 	Length        uint16
@@ -16,12 +28,9 @@ type UnicodeString struct {
 
 //String converts a UnicodeString to a golang string
 func (uni UnicodeString) String() string {
-	p := (*[0xffff]uint16)(unsafe.Pointer(uni.Buffer))
-
 	// UnicodeString is not guaranteed to be null terminated, therefore
 	// use the UnicodeString's Length field
-	lengthInChars := uni.Length / 2
-	return syscall.UTF16ToString(p[:lengthInChars])
+	return syscall.UTF16ToString(Uint16BufferToSlice(uni.Buffer, int(uni.Length/2)))
 }
 
 // NewUnicodeString allocates a new UnicodeString and copies `s` into
