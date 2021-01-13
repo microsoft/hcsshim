@@ -674,19 +674,20 @@ func hcsPropertiesToWindowsStats(props *hcsschema.Properties) *stats.Statistics_
 
 func (ht *hcsTask) Stats(ctx context.Context) (*stats.Statistics, error) {
 	s := &stats.Statistics{}
-
 	props, err := ht.c.PropertiesV2(ctx, hcsschema.PTStatistics)
-	if err != nil {
+	if err != nil && !isStatsNotFound(err) {
 		return nil, err
 	}
-	if ht.isWCOW {
-		s.Container = hcsPropertiesToWindowsStats(props)
-	} else {
-		s.Container = &stats.Statistics_Linux{Linux: props.Metrics}
+	if props != nil {
+		if ht.isWCOW {
+			s.Container = hcsPropertiesToWindowsStats(props)
+		} else {
+			s.Container = &stats.Statistics_Linux{Linux: props.Metrics}
+		}
 	}
 	if ht.ownsHost && ht.host != nil {
 		vmStats, err := ht.host.Stats(ctx)
-		if err != nil {
+		if err != nil && !isStatsNotFound(err) {
 			return nil, err
 		}
 		s.VM = vmStats
