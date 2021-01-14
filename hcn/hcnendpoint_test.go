@@ -309,3 +309,57 @@ func TestModifyEndpointSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestApplyTierAclPolicyOnEndpoint(t *testing.T) {
+	network, err := HcnCreateTestL2BridgeNetwork()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err = network.Delete()
+		if err != nil {
+			fmt.Printf("Failed deleting from defer routine network: %s-%s \n", network.Id, network.Name)
+			t.Fatal(err)
+		}
+	}()
+
+	endpoint, err := HcnCreateTestEndpoint(network)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err = endpoint.Delete()
+		if err != nil {
+			fmt.Printf("Failed deleting from defer routine endpoint: %s-%s \n", endpoint.Id, endpoint.Name)
+			t.Fatal(err)
+		}
+	}()
+
+	endpointPolicyList, err := HcnCreateTierAcls()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	jsonString, err := json.Marshal(*endpointPolicyList)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Printf("TierAcls JSON:\n%s \n", jsonString)
+	err = endpoint.ApplyPolicy(RequestTypeUpdate, *endpointPolicyList)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	foundEndpoint, err := GetEndpointByName(endpoint.Name)
+	if err != nil {
+		t.Fatal(err)
+	} else {
+		fmt.Printf("Found endpoint: %s-%s \n", foundEndpoint.Id, foundEndpoint.Name)
+	}
+
+	if len(foundEndpoint.Policies) == 0 {
+		t.Fatal("No Endpoint Policies found")
+	}
+
+}

@@ -240,6 +240,15 @@ func VxlanPortSupported() error {
 	return platformDoesNotSupportError("VXLAN port configuration")
 }
 
+// TierAclPolicySupported returns an error if the HCN version does not support configuring the TierAcl.
+func TierAclPolicySupported() error {
+	supported := GetSupportedFeatures()
+	if supported.TierAcl {
+		return nil
+	}
+	return platformDoesNotSupportError("TierAcl")
+}
+
 // RequestType are the different operations performed to settings.
 // Used to update the settings of Endpoint/Namespace objects.
 type RequestType string
