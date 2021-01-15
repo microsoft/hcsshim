@@ -3,13 +3,14 @@ package main
 import (
 	"bufio"
 	"compress/gzip"
+	"context"
 	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/appargs"
-	"github.com/Microsoft/hcsshim/internal/ociwclayer"
+	"github.com/Microsoft/hcsshim/pkg/ociwclayer"
 	"github.com/urfave/cli"
 )
 
@@ -28,18 +29,18 @@ var importCommand = cli.Command{
 	},
 	ArgsUsage: "<layer path>",
 	Before:    appargs.Validate(appargs.NonEmptyString),
-	Action: func(context *cli.Context) (err error) {
-		path, err := filepath.Abs(context.Args().First())
+	Action: func(cliContext *cli.Context) (err error) {
+		path, err := filepath.Abs(cliContext.Args().First())
 		if err != nil {
 			return err
 		}
 
-		layers, err := normalizeLayers(context.StringSlice("layer"), false)
+		layers, err := normalizeLayers(cliContext.StringSlice("layer"), false)
 		if err != nil {
 			return err
 		}
 
-		fp := context.String("input")
+		fp := cliContext.String("input")
 		f := os.Stdin
 		if fp != "" {
 			f, err = os.Open(fp)
@@ -56,7 +57,7 @@ var importCommand = cli.Command{
 		if err != nil {
 			return err
 		}
-		_, err = ociwclayer.ImportLayer(r, path, layers)
+		_, err = ociwclayer.ImportLayerFromTar(context.Background(), r, path, layers)
 		return err
 	},
 }

@@ -4,6 +4,7 @@ package ociwclayer
 
 import (
 	"archive/tar"
+	"context"
 	"io"
 	"path/filepath"
 
@@ -13,13 +14,13 @@ import (
 
 var driverInfo = hcsshim.DriverInfo{}
 
-// ExportLayer writes an OCI layer tar stream from the provided on-disk layer.
+// ExportLayerToTar writes an OCI layer tar stream from the provided on-disk layer.
 // The caller must specify the parent layers, if any, ordered from lowest to
 // highest layer.
 //
 // The layer will be mounted for this process, so the caller should ensure that
 // it is not currently mounted.
-func ExportLayer(w io.Writer, path string, parentLayerPaths []string) error {
+func ExportLayerToTar(ctx context.Context, w io.Writer, path string, parentLayerPaths []string) error {
 	err := hcsshim.ActivateLayer(driverInfo, path)
 	if err != nil {
 		return err
@@ -41,7 +42,7 @@ func ExportLayer(w io.Writer, path string, parentLayerPaths []string) error {
 		return err
 	}
 
-	err = writeTarFromLayer(r, w)
+	err = writeTarFromLayer(ctx, r, w)
 	cerr := r.Close()
 	if err != nil {
 		return err
@@ -49,9 +50,15 @@ func ExportLayer(w io.Writer, path string, parentLayerPaths []string) error {
 	return cerr
 }
 
-func writeTarFromLayer(r hcsshim.LayerReader, w io.Writer) error {
+func writeTarFromLayer(ctx context.Context, r hcsshim.LayerReader, w io.Writer) error {
 	t := tar.NewWriter(w)
 	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		name, size, fileInfo, err := r.Next()
 		if err == io.EOF {
 			break

@@ -3,6 +3,7 @@ package ociwclayer
 import (
 	"archive/tar"
 	"bufio"
+	"context"
 	"io"
 	"os"
 	"path"
@@ -27,7 +28,7 @@ var (
 	}
 )
 
-// ImportLayer reads a layer from an OCI layer tar stream and extracts it to the
+// ImportLayerFromTar  reads a layer from an OCI layer tar stream and extracts it to the
 // specified path. The caller must specify the parent layers, if any, ordered
 // from lowest to highest layer.
 //
@@ -35,7 +36,7 @@ var (
 // restore privileges.
 //
 // This function returns the total size of the layer's files, in bytes.
-func ImportLayer(r io.Reader, path string, parentLayerPaths []string) (int64, error) {
+func ImportLayerFromTar(ctx context.Context, r io.Reader, path string, parentLayerPaths []string) (int64, error) {
 	err := os.MkdirAll(path, 0)
 	if err != nil {
 		return 0, err
@@ -44,7 +45,7 @@ func ImportLayer(r io.Reader, path string, parentLayerPaths []string) (int64, er
 	if err != nil {
 		return 0, err
 	}
-	n, err := writeLayerFromTar(r, w, path)
+	n, err := writeLayerFromTar(ctx, r, w, path)
 	cerr := w.Close()
 	if err != nil {
 		return 0, err
@@ -55,12 +56,18 @@ func ImportLayer(r io.Reader, path string, parentLayerPaths []string) (int64, er
 	return n, nil
 }
 
-func writeLayerFromTar(r io.Reader, w hcsshim.LayerWriter, root string) (int64, error) {
+func writeLayerFromTar(ctx context.Context, r io.Reader, w hcsshim.LayerWriter, root string) (int64, error) {
 	t := tar.NewReader(r)
 	hdr, err := t.Next()
 	totalSize := int64(0)
 	buf := bufio.NewWriter(nil)
 	for err == nil {
+		select {
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		default:
+		}
+
 		base := path.Base(hdr.Name)
 		if strings.HasPrefix(base, whiteoutPrefix) {
 			name := path.Join(path.Dir(hdr.Name), base[len(whiteoutPrefix):])
