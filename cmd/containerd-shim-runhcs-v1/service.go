@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -473,4 +474,19 @@ func (s *service) DiagStacks(ctx context.Context, req *shimdiag.StacksRequest) (
 		resp.GuestStacks = t.DumpGuestStacks(ctx)
 	}
 	return resp, nil
+}
+
+func (s *service) DiagPid(ctx context.Context, req *shimdiag.PidRequest) (*shimdiag.PidResponse, error) {
+	if s == nil {
+		return nil, nil
+	}
+	defer panicRecover()
+	ctx, span := trace.StartSpan(ctx, "DiagPid")
+	defer span.End()
+
+	span.AddAttributes(trace.StringAttribute("tid", s.tid))
+
+	return &shimdiag.PidResponse{
+		Pid: int32(os.Getpid()),
+	}, nil
 }
