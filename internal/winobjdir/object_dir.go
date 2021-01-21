@@ -32,7 +32,7 @@ func EnumerateNTObjectDirectory(ntObjDirPath string) ([]string, error) {
 	}
 
 	oa.Length = unsafe.Sizeof(oa)
-	oa.ObjectName = uintptr(unsafe.Pointer(pathUnicode))
+	oa.ObjectName = pathUnicode
 
 	// open `ntObjDirPath` directory
 	status := winapi.NtOpenDirectoryObject(
