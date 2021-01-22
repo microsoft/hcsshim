@@ -3,12 +3,10 @@ package winapi
 import (
 	"testing"
 	"unicode/utf16"
-	"unsafe"
 )
 
-func wideStringsEqual(target, actual []uint16, actualLengthInBytes int) bool {
-	actualLength := actualLengthInBytes / 2
-	if len(target) != actualLength {
+func wideStringsEqual(target, actual []uint16) bool {
+	if len(target) != len(actual) {
 		return false
 	}
 
@@ -38,13 +36,10 @@ func TestNewUnicodeString(t *testing.T) {
 			t.Fatalf("Expected new Unicode String maximum length to be %d for target string %s, got %d instead", targetLength, target, uni.MaximumLength)
 		}
 
-		uniBufferStringAsSlice := (*[32768]uint16)(unsafe.Pointer(uni.Buffer))[:]
+		uniBufferStringAsSlice := Uint16BufferToSlice(uni.Buffer, len(target))
 
-		// since we have to do casting to convert the unicode string's buffer into a uint16 slice
-		// the length of the actual slice will not be the true length of the contents in the unicode buffer
-		// therefore we need to use the unicode string's length field when comparing
-		if !wideStringsEqual(targetWideString, uniBufferStringAsSlice, int(uni.Length)) {
-			t.Fatalf("Expected wide string %v, got %v instead", targetWideString, uniBufferStringAsSlice[:uni.Length])
+		if !wideStringsEqual(targetWideString, uniBufferStringAsSlice) {
+			t.Fatalf("Expected wide string %v, got %v instead", targetWideString, uniBufferStringAsSlice)
 		}
 	}
 }
