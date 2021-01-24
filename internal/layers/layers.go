@@ -154,7 +154,16 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 	if err != nil {
 		return "", fmt.Errorf("failed to add SCSI scratch VHD: %s", err)
 	}
-	containerScratchPathInUVM = scsiMount.UVMPath
+
+	// This handles the case where we want to share a scratch disk for multiple containers instead
+	// of mounting a new one. Pass a unique value for `ScratchPath` to avoid container upper and
+	// work directories colliding in the UVM.
+	if scsiMount.RefCount() > 1 && uvm.OS() == "linux" {
+		scratchFmt := fmt.Sprintf("container_%s", filepath.Base(containerScratchPathInUVM))
+		containerScratchPathInUVM = ospath.Join("linux", scsiMount.UVMPath, scratchFmt)
+	} else {
+		containerScratchPathInUVM = scsiMount.UVMPath
+	}
 
 	defer func() {
 		if err != nil {
