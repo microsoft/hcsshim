@@ -23,18 +23,26 @@ type ImageLayers struct {
 	vm                 *uvm.UtilityVM
 	containerRootInUVM string
 	layers             []string
+	// In some instances we may want to avoid cleaning up the image layers, such as when tearing
+	// down a sandbox container since the UVM will be torn down shortly after and the resources
+	// can be cleaned up on the host.
+	skipCleanup bool
 }
 
-func NewImageLayers(vm *uvm.UtilityVM, containerRootInUVM string, layers []string) *ImageLayers {
+func NewImageLayers(vm *uvm.UtilityVM, containerRootInUVM string, layers []string, skipCleanup bool) *ImageLayers {
 	return &ImageLayers{
 		vm:                 vm,
 		containerRootInUVM: containerRootInUVM,
 		layers:             layers,
+		skipCleanup:        skipCleanup,
 	}
 }
 
 // Release unmounts all of the layers located in the layers array.
 func (layers *ImageLayers) Release(ctx context.Context, all bool) error {
+	if layers.skipCleanup && layers.vm != nil {
+		return nil
+	}
 	op := UnmountOperationSCSI
 	if layers.vm == nil || all {
 		op = UnmountOperationAll
@@ -244,9 +252,9 @@ func removeLCOWLayer(ctx context.Context, uvm *uvmpkg.UtilityVM, layerPath strin
 			}).Debug("Removed LCOW layer")
 			return nil
 		}
-		return fmt.Errorf("failed to remove SCSI layer: %s", err)
+		return errors.Wrap(err, "failed to remove SCSI layer")
 	}
-	return fmt.Errorf("failed to remove VPMEM layer: %s", err)
+	return errors.Wrap(err, "failed to remove VPMEM layer")
 }
 
 // UnmountOperation is used when calling Unmount() to determine what type of unmount is
@@ -270,10 +278,10 @@ func UnmountContainerLayers(ctx context.Context, layerFolders []string, containe
 	if uvm == nil {
 		// Must be an argon - folders are mounted on the host
 		if op != UnmountOperationAll {
-			return fmt.Errorf("only operation supported for host-mounted folders is unmountOperationAll")
+			return errors.New("only operation supported for host-mounted folders is unmountOperationAll")
 		}
 		if len(layerFolders) < 1 {
-			return fmt.Errorf("need at least one layer for Unmount")
+			return errors.New("need at least one layer for Unmount")
 		}
 		path := layerFolders[len(layerFolders)-1]
 		if err := wclayer.UnprepareLayer(ctx, path); err != nil {
@@ -286,7 +294,7 @@ func UnmountContainerLayers(ctx context.Context, layerFolders []string, containe
 
 	// Base+Scratch as a minimum. This is different to v1 which only requires the scratch
 	if len(layerFolders) < 2 {
-		return fmt.Errorf("at least two layers are required for unmount")
+		return errors.New("at least two layers are required for unmount")
 	}
 
 	var retError error
@@ -302,7 +310,7 @@ func UnmountContainerLayers(ctx context.Context, layerFolders []string, containe
 	if (op & UnmountOperationSCSI) == UnmountOperationSCSI {
 		hostScratchFile, err := getScratchVHDPath(layerFolders)
 		if err != nil {
-			return fmt.Errorf("failed to get scratch VHD path in layer folders: %s", err)
+			return errors.Wrap(err, "failed to get scratch VHD path in layer folders")
 		}
 		if err := uvm.RemoveSCSI(ctx, hostScratchFile); err != nil {
 			log.G(ctx).WithError(err).Warn("failed to remove scratch")
@@ -383,7 +391,7 @@ func getScratchVHDPath(layerFolders []string) (string, error) {
 	// Evaluate the symlink here (if there is one).
 	hostPath, err := filepath.EvalSymlinks(hostPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to eval symlinks: %s", err)
+		return "", errors.Wrap(err, "failed to eval symlinks")
 	}
 	return hostPath, nil
 }

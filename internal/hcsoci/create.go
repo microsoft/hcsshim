@@ -220,7 +220,7 @@ func initializeCreateOptions(ctx context.Context, createOptions *CreateOptions) 
 
 // configureSandboxNetwork creates a new network namespace for the pod (sandbox)
 // if required and then adds that namespace to the pod.
-func configureSandboxNetwork(ctx context.Context, coi *createOptionsInternal, r *resources.Resources) error {
+func configureSandboxNetwork(ctx context.Context, coi *createOptionsInternal, r *resources.Resources, ct oci.KubernetesContainerType) error {
 	if coi.NetworkNamespace != "" {
 		r.SetNetNS(coi.NetworkNamespace)
 	} else {
@@ -232,15 +232,11 @@ func configureSandboxNetwork(ctx context.Context, coi *createOptionsInternal, r 
 	coi.actualNetworkNamespace = r.NetNS()
 
 	if coi.HostingSystem != nil {
-		ct, _, err := oci.GetSandboxTypeAndID(coi.Spec.Annotations)
-		if err != nil {
-			return err
-		}
 		// Only add the network namespace to a standalone or sandbox
 		// container but not a workload container in a sandbox that inherits
 		// the namespace.
 		if ct == oci.KubernetesContainerTypeNone || ct == oci.KubernetesContainerTypeSandbox {
-			if err = SetupNetworkNamespace(ctx, coi.HostingSystem, coi.actualNetworkNamespace); err != nil {
+			if err := SetupNetworkNamespace(ctx, coi.HostingSystem, coi.actualNetworkNamespace); err != nil {
 				return err
 			}
 			r.SetAddedNetNSToVM(true)
@@ -284,14 +280,19 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 		}
 	}
 
+	ct, _, err := oci.GetSandboxTypeAndID(coi.Spec.Annotations)
+	if err != nil {
+		return nil, r, err
+	}
+	isSandbox := ct == oci.KubernetesContainerTypeSandbox
+
 	// Create a network namespace if necessary.
 	if coi.Spec.Windows != nil &&
 		coi.Spec.Windows.Network != nil &&
 		schemaversion.IsV21(coi.actualSchemaVersion) {
-		err = configureSandboxNetwork(ctx, coi, r)
+		err = configureSandboxNetwork(ctx, coi, r, ct)
 		if err != nil {
 			return nil, r, fmt.Errorf("failure while creating namespace for container: %s", err)
-
 		}
 	}
 
@@ -302,7 +303,7 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 			return nil, r, errors.New("LCOW v1 not supported")
 		}
 		log.G(ctx).Debug("hcsshim::CreateContainer allocateLinuxResources")
-		err = allocateLinuxResources(ctx, coi, r)
+		err = allocateLinuxResources(ctx, coi, r, isSandbox)
 		if err != nil {
 			log.G(ctx).WithError(err).Debug("failed to allocateLinuxResources")
 			return nil, r, err
@@ -313,7 +314,7 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 			return nil, r, err
 		}
 	} else {
-		err = allocateWindowsResources(ctx, coi, r)
+		err = allocateWindowsResources(ctx, coi, r, isSandbox)
 		if err != nil {
 			log.G(ctx).WithError(err).Debug("failed to allocateWindowsResources")
 			return nil, r, err

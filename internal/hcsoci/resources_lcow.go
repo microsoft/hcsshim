@@ -35,7 +35,7 @@ func getGPUVHDPath(coi *createOptionsInternal) (string, error) {
 	return gpuVHDPath, nil
 }
 
-func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *resources.Resources) error {
+func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *resources.Resources, isSandbox bool) error {
 	if coi.Spec.Root == nil {
 		coi.Spec.Root = &specs.Root{}
 	}
@@ -44,10 +44,10 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 		log.G(ctx).Debug("hcsshim::allocateLinuxResources mounting storage")
 		rootPath, err := layers.MountContainerLayers(ctx, coi.Spec.Windows.LayerFolders, containerRootInUVM, coi.HostingSystem)
 		if err != nil {
-			return fmt.Errorf("failed to mount container storage: %s", err)
+			return errors.Wrap(err, "failed to mount container storage")
 		}
 		coi.Spec.Root.Path = rootPath
-		layers := layers.NewImageLayers(coi.HostingSystem, containerRootInUVM, coi.Spec.Windows.LayerFolders)
+		layers := layers.NewImageLayers(coi.HostingSystem, containerRootInUVM, coi.Spec.Windows.LayerFolders, isSandbox)
 		r.SetLayers(layers)
 	} else if coi.Spec.Root.Path != "" {
 		// This is the "Plan 9" root filesystem.
@@ -56,7 +56,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 		uvmPathForContainersFileSystem := path.Join(r.ContainerRootInUVM(), uvm.RootfsPath)
 		share, err := coi.HostingSystem.AddPlan9(ctx, hostPath, uvmPathForContainersFileSystem, coi.Spec.Root.Readonly, false, nil)
 		if err != nil {
-			return fmt.Errorf("adding plan9 root: %s", err)
+			return errors.Wrap(err, "adding plan9 root")
 		}
 		coi.Spec.Root.Path = uvmPathForContainersFileSystem
 		r.Add(share)
@@ -95,7 +95,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 				uvmPathForShare = fmt.Sprintf(uvm.LCOWGlobalMountPrefix, coi.HostingSystem.UVMMountCounter())
 				scsiMount, err := coi.HostingSystem.AddSCSIPhysicalDisk(ctx, hostPath, uvmPathForShare, readOnly)
 				if err != nil {
-					return fmt.Errorf("adding SCSI physical disk mount %+v: %s", mount, err)
+					return errors.Wrapf(err, "adding SCSI physical disk mount %+v", mount)
 				}
 
 				uvmPathForFile = scsiMount.UVMPath
@@ -110,7 +110,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 				// that is where it was previously mounted in UVM
 				scsiMount, err := coi.HostingSystem.AddSCSI(ctx, hostPath, uvmPathForShare, readOnly, uvm.VMAccessTypeIndividual)
 				if err != nil {
-					return fmt.Errorf("adding SCSI virtual disk mount %+v: %s", mount, err)
+					return errors.Wrapf(err, "adding SCSI virtual disk mount %+v", mount)
 				}
 
 				uvmPathForFile = scsiMount.UVMPath
@@ -124,7 +124,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 			} else {
 				st, err := os.Stat(hostPath)
 				if err != nil {
-					return fmt.Errorf("could not open bind mount target: %s", err)
+					return errors.Wrap(err, "could not open bind mount target")
 				}
 				restrictAccess := false
 				var allowedNames []string
@@ -140,7 +140,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 				l.Debug("hcsshim::allocateLinuxResources Hot-adding Plan9 for OCI mount")
 				share, err := coi.HostingSystem.AddPlan9(ctx, hostPath, uvmPathForShare, readOnly, restrictAccess, allowedNames)
 				if err != nil {
-					return fmt.Errorf("adding plan9 mount %+v: %s", mount, err)
+					return errors.Wrapf(err, "adding plan9 mount %+v", mount)
 				}
 				r.Add(share)
 			}
