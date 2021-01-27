@@ -24,7 +24,7 @@ import (
 // stored inside the cim and the setupBaseOSLayer call fails if it doesn't find those
 // files so we create empty placeholder hives inside the layer directory.
 func createPlaceHolderHives(layerPath string) error {
-	regDir := filepath.Join(layerPath, regFilesPath)
+	regDir := filepath.Join(layerPath, wclayer.RegFilesPath)
 	if err := os.MkdirAll(regDir, 0777); err != nil {
 		return fmt.Errorf("error while creating placeholder registry hives directory: %s", err)
 	}
@@ -47,18 +47,21 @@ func processBaseLayer(ctx context.Context, layerPath string, hasUtilityVM bool) 
 	if err = createPlaceHolderHives(layerPath); err != nil {
 		return err
 	}
-	baseVhdPath := filepath.Join(layerPath, containerBaseVhd)
-	diffVhdPath := filepath.Join(layerPath, containerScratchVhd)
+	baseVhdPath := filepath.Join(layerPath, wclayer.ContainerBaseVhd)
+	diffVhdPath := filepath.Join(layerPath, wclayer.ContainerScratchVhd)
 	defaultVhdSize := uint64(20)
 	if err = computestorage.SetupContainerBaseLayer(ctx, layerPath, baseVhdPath, diffVhdPath, defaultVhdSize); err != nil {
 		return fmt.Errorf("failed to setup container base layer: %s", err)
 	}
 
 	if hasUtilityVM {
-		// process utilityVM base layer
-		// setupUtilityVMBaseLayer needs to access some of the layer files so we mount the cim
-		// and pass the path of the mounted cim as layerpath to setupUtilityVMBaseLayer.
-		mountpath, err := cimfs.Mount(GetCimPathFromLayer(layerPath))
+		// SetupUtilityVMBaseLayer needs to access some of the layer files so we
+		// mount the cim and pass the path of the mounted cim as layerpath to
+		// setupUtilityVMBaseLayer.  Since we just wrote the cim we must mount it
+		// without any flags, otherwise the cache of the written cim isn't
+		// properly flushed and that causes failures when accessing files from the
+		// mounted cim.
+		mountpath, err := cimfs.MountWithFlags(GetCimPathFromLayer(layerPath), 0)
 		if err != nil {
 			return fmt.Errorf("failed to mount cim : %s", err)
 		}
@@ -67,10 +70,10 @@ func processBaseLayer(ctx context.Context, layerPath string, hasUtilityVM bool) 
 			cimfs.Unmount(mountpath)
 		}()
 
-		baseVhdPath = filepath.Join(layerPath, utilityVMPath, utilityVMBaseVhd)
-		diffVhdPath = filepath.Join(layerPath, utilityVMPath, utilityVMScratchVhd)
+		baseVhdPath = filepath.Join(layerPath, wclayer.UtilityVMPath, wclayer.UtilityVMBaseVhd)
+		diffVhdPath = filepath.Join(layerPath, wclayer.UtilityVMPath, wclayer.UtilityVMScratchVhd)
 		defaultVhdSize = uint64(10)
-		if err := computestorage.SetupUtilityVMBaseLayer(ctx, filepath.Join(mountpath, utilityVMPath), baseVhdPath, diffVhdPath, defaultVhdSize); err != nil {
+		if err := computestorage.SetupUtilityVMBaseLayer(ctx, filepath.Join(mountpath, wclayer.UtilityVMPath), baseVhdPath, diffVhdPath, defaultVhdSize); err != nil {
 			return fmt.Errorf("failed to setup utility vm base layer: %s", err)
 		}
 	}
@@ -87,14 +90,14 @@ func createBaseLayerHives(cimWriter *cimfs.CimFsWriter) error {
 		ChangeTime:     windows.NsecToFiletime(time.Now().UnixNano()),
 		FileAttributes: 16,
 	}
-	err := cimWriter.AddFile(hivesPath, hivesDirInfo, 0, []byte{}, []byte{}, []byte{})
+	err := cimWriter.AddFile(wclayer.HivesPath, hivesDirInfo, 0, []byte{}, []byte{}, []byte{})
 	if err != nil {
 		return fmt.Errorf("failed while creating hives directory in the cim")
 	}
 	// add hard links from base hive files.
 	for _, hv := range hives {
-		err := cimWriter.AddLink(filepath.Join(regFilesPath, hv.name),
-			filepath.Join(hivesPath, hv.base))
+		err := cimWriter.AddLink(filepath.Join(wclayer.RegFilesPath, hv.name),
+			filepath.Join(wclayer.HivesPath, hv.base))
 		if err != nil {
 			return fmt.Errorf("failed while creating base registry hives in the cim: %s", err)
 		}
@@ -109,14 +112,14 @@ func createBaseLayerHives(cimWriter *cimfs.CimFsWriter) error {
 // number for future reference.
 func detectImageOsVersion(layerPath, tmpDir string) (uint16, error) {
 	// detect the build number of the uvm before doing anything else
-	layerRelativeSoftwareHivePath := filepath.Join(utilityVMPath, regFilesPath, "SOFTWARE")
+	layerRelativeSoftwareHivePath := filepath.Join(wclayer.UtilityVMPath, wclayer.RegFilesPath, "SOFTWARE")
 	tmpSoftwareHivePath := filepath.Join(tmpDir, "SOFTWARE")
 	if err := cimfs.FetchFileFromCim(GetCimPathFromLayer(layerPath), layerRelativeSoftwareHivePath, tmpSoftwareHivePath); err != nil {
 		return 0, err
 	}
 	defer os.Remove(tmpSoftwareHivePath)
 
-	osvStr, err := getOsBuildNumberFromRegistry(tmpSoftwareHivePath)
+	osvStr, err := wclayer.GetOsBuildNumberFromRegistry(tmpSoftwareHivePath)
 	if err != nil {
 		return 0, err
 	}
@@ -126,7 +129,7 @@ func detectImageOsVersion(layerPath, tmpDir string) (uint16, error) {
 		return 0, err
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(layerPath, uvmBuildVersionFileName), []byte(osvStr), 0644); err != nil {
+	if err := ioutil.WriteFile(filepath.Join(layerPath, wclayer.UvmBuildVersionFileName), []byte(osvStr), 0644); err != nil {
 		return uint16(osv), fmt.Errorf("failed to write uvm build version file: %s", err)
 	}
 
@@ -181,12 +184,12 @@ func postProcessBaseLayer(ctx context.Context, layerPath string) (err error) {
 	}
 
 	// add the layout file generated during processBaseLayer inside the cim.
-	if err := cimWriter.AddFileFromPath(layoutFileName, filepath.Join(layerPath, layoutFileName), []byte{}, []byte{}, []byte{}); err != nil {
+	if err := cimWriter.AddFileFromPath(wclayer.LayoutFileName, filepath.Join(layerPath, wclayer.LayoutFileName), []byte{}, []byte{}, []byte{}); err != nil {
 		return fmt.Errorf("failed while adding layout file to cim: %s", err)
 	}
 
 	// add the BCD file updated during processBaseLayer inside the cim.
-	if err := cimWriter.AddFileFromPath(bcdFilePath, filepath.Join(layerPath, bcdFilePath), []byte{}, []byte{}, []byte{}); err != nil {
+	if err := cimWriter.AddFileFromPath(wclayer.BcdFilePath, filepath.Join(layerPath, wclayer.BcdFilePath), []byte{}, []byte{}, []byte{}); err != nil {
 		return fmt.Errorf("failed while adding BCD file to cim: %s", err)
 	}
 
@@ -235,7 +238,7 @@ func processNonBaseLayer(ctx context.Context, layerPath string, parentLayerPaths
 		return fmt.Errorf("failed to enumerate hive files: %s", err)
 	}
 	for _, hv := range mergedHives {
-		cimHivePath := filepath.Join(hivesPath, hv.Name())
+		cimHivePath := filepath.Join(wclayer.HivesPath, hv.Name())
 		if err := cimWriter.AddFileFromPath(cimHivePath, filepath.Join(tmpCurrentLayer, hv.Name()), []byte{}, []byte{}, []byte{}); err != nil {
 			return err
 		}

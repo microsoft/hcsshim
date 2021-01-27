@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/Microsoft/hcsshim/internal/cimfs"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	cimlayer "github.com/Microsoft/hcsshim/internal/wclayer/cim"
 	"github.com/Microsoft/hcsshim/osversion"
@@ -35,11 +36,11 @@ func DeactivateLayer(info DriverInfo, id string) error {
 }
 
 func DestroyLayer(info DriverInfo, id string) error {
-	if osversion.Get().Version >= osversion.V21H1 {
-		return cimlayer.DestroyCimLayer(context.Background(), layerPath(&info, id))
-	} else {
-		return wclayer.DestroyLayer(context.Background(), layerPath(&info, id))
-	}
+	return wclayer.DestroyLayer(context.Background(), layerPath(&info, id))
+}
+
+func DestroyCimLayer(info DriverInfo, id string) error {
+	return cimlayer.DestroyCimLayer(context.Background(), layerPath(&info, id))
 }
 
 // New clients should use ExpandScratchSize instead. Kept in to preserve API compatibility.

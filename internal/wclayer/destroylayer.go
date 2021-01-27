@@ -16,7 +16,6 @@ func DestroyLayer(ctx context.Context, path string) (err error) {
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("path", path))
-
 	err = destroyLayer(&stdDriverInfo, path)
 	if err != nil {
 		return hcserror.New(err, title, "")

@@ -395,7 +395,7 @@ func (brdg *bridge) writeMessage(buf *bytes.Buffer, enc *json.Encoder, typ msgTy
 	// Write the message.
 	brdg.log.WithFields(logrus.Fields{
 		"payload":    string(buf.Bytes()[hdrSize:]),
-		"type":       typ,
+		"type":       typ.String(),
 		"message-id": id}).Debug("bridge send")
 	_, err = buf.WriteTo(brdg.conn)
 	if err != nil {

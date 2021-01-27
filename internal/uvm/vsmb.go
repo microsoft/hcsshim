@@ -154,6 +154,45 @@ func forceNoDirectMap(path string) (bool, error) {
 	return false, nil
 }
 
+// registerVSMBShare registers a VSMB share that is already present in the uvm and updates
+// the uvm data structure accordingly. It doesn't actually add this vsmb share into the
+// uvm. This is mostly required to register the VSMB shares that are added into the uvm
+// via the config doc at the time of creation. In these cases sometimes the name assigned
+// to the share is important and we don't want it to be generated at runtime. The `name`
+// parameter can be used in such cases. If empty value is passed for the name parameter
+// then a random name is generated for the share.
+func (uvm *UtilityVM) registerVSMBShare(hostPath string, options *hcsschema.VirtualSmbShareOptions, name string) error {
+	st, err := os.Stat(hostPath)
+	if err != nil {
+		return err
+	}
+	m := uvm.vsmbDirShares
+	allowedFiles := []string{}
+	if !st.IsDir() {
+		m = uvm.vsmbFileShares
+		allowedFiles = append(allowedFiles, hostPath)
+		hostPath = filepath.Dir(hostPath)
+		options.RestrictFileAccess = true
+		options.SingleFileMapping = true
+	}
+	hostPath = filepath.Clean(hostPath)
+	shareKey := getVSMBShareKey(hostPath, options.ReadOnly)
+	uvm.vsmbCounter++
+	if name == "" {
+		name = "s" + strconv.FormatUint(uvm.vsmbCounter, 16)
+	}
+	m[shareKey] = &VSMBShare{
+		vm:           uvm,
+		name:         name,
+		HostPath:     hostPath,
+		options:      *options,
+		refCount:     1,
+		allowedFiles: allowedFiles,
+		guestPath:    vsmbSharePrefix + name,
+	}
+	return nil
+}
+
 // AddVSMB adds a VSMB share to a Windows utility VM. Each VSMB share is ref-counted and
 // only added if it isn't already. This is used for read-only layers, mapped directories
 // to a container, and for mapped pipes.

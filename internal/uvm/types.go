@@ -124,6 +124,7 @@ type UtilityVM struct {
 	// The CreateOpts used to create this uvm. These can be either of type
 	// uvm.OptionsLCOW or uvm.OptionsWCOW
 	createOpts interface{}
+
 	// Network config proxy client. If nil then this wasn't requested and the
 	// uvms network will be configured locally.
 	ncProxyClient ncproxyttrpc.NetworkConfigProxyService
@@ -131,4 +132,17 @@ type UtilityVM struct {
 	// networkSetup handles the logic for setting up and tearing down any network configuration
 	// for the Utility VM.
 	networkSetup NetworkSetup
+
+	// cim layer on which this uvm will boot
+	cimPath string
+
+	// cim layers which are mounted inside this uvm.
+	cimMounts       map[string]*cimInfo
+	cimMountMapLock sync.Mutex
+
+	// layers passed for this uvm
+	layerFolders []string
+
+	// build version of this uvm
+	buildVersion uint16
 }

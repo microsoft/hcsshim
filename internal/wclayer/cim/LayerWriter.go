@@ -43,20 +43,6 @@ type CimLayerWriter struct {
 	hasUtilityVM bool
 }
 
-const (
-	regFilesPath            = "Files\\Windows\\System32\\config"
-	hivesPath               = "Hives"
-	utilityVMPath           = "UtilityVM"
-	utilityVMFilesPath      = "UtilityVM\\Files"
-	bcdFilePath             = "UtilityVM\\Files\\EFI\\Microsoft\\Boot\\BCD"
-	containerBaseVhd        = "blank-base.vhdx"
-	containerScratchVhd     = "blank.vhdx"
-	utilityVMBaseVhd        = "SystemTemplateBase.vhdx"
-	utilityVMScratchVhd     = "SystemTemplate.vhdx"
-	layoutFileName          = "layout"
-	uvmBuildVersionFileName = "uvmbuildversion"
-)
-
 type hive struct {
 	name  string
 	base  string
@@ -85,12 +71,12 @@ func isDeltaHive(path string) bool {
 // checks if this particular file should be written with a stdFileWriter instead of
 // using the cimWriter.
 func isStdFile(path string) bool {
-	return (isDeltaHive(path) || path == bcdFilePath)
+	return (isDeltaHive(path) || path == wclayer.BcdFilePath)
 }
 
 // Add adds a file to the layer with given metadata.
 func (cw *CimLayerWriter) Add(name string, fileInfo *winio.FileBasicInfo, fileSize int64, securityDescriptor []byte, extendedAttributes []byte, reparseData []byte) error {
-	if name == utilityVMPath {
+	if name == wclayer.UtilityVMPath {
 		cw.hasUtilityVM = true
 	}
 
@@ -264,30 +250,24 @@ func NewCimLayerWriter(ctx context.Context, path string, parentLayerPaths []stri
 	}, nil
 }
 
+// DestroyCimLayer destroys a cim layer i.e it removes all the cimfs files for the given layer as well as
+// all of the other files that are stored in the layer directory (at path `layerPath`).
+// If this is not a cimfs layer (i.e a cim file for the given layer does not exist) then nothing is done.
 func DestroyCimLayer(ctx context.Context, layerPath string) error {
-	// This layer could be a container / sandbox layer and not an image layer and
-	// so might not have the cim files. Simply forward the call to DestroyLayer HCS API
-	// in that case.
-	if err := wclayer.DestroyLayer(ctx, layerPath); err != nil {
-		return err
-	}
+	cimPath := GetCimPathFromLayer(layerPath)
 
-	// containerd renames the layer directory from `<layerID>` to `rm-<layerID>` before
-	// calling destroy layer on it. So here first we need to get the original layerID from
-	// the layerPath by removing the `rm` prefix.
-	// Probably there is a cleaner way to do this? Ideally if we keep the cim files in the
-	// layer folders then we won't have to worry about this at all. But that is not possible
-	// at the moment.
-	originalLayerId := strings.TrimPrefix(filepath.Base(layerPath), "rm-")
-	// Note that the originalLayerPath doesn't exist at this point. We just create this string
-	// to get the cimPath.
-	originalLayerPath := filepath.Join(filepath.Dir(layerPath), originalLayerId)
-	cimPath := GetCimPathFromLayer(originalLayerPath)
+	// verify that such a cim exists first, sometimes containerd tries to call
+	// this with the root snapshot directory as the layer path. We don't want to
+	// destroy everything inside the snapshots directory.
 	log.G(ctx).Debugf("DestroyCimLayer layerPath: %s, cimPath: %s", layerPath, cimPath)
 	if _, err := os.Stat(cimPath); err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
+		return err
+	}
+
+	if err := wclayer.DestroyLayer(ctx, layerPath); err != nil {
 		return err
 	}
 	return cimfs.DestroyCim(cimPath)

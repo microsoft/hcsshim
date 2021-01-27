@@ -3,8 +3,11 @@ package wclayer
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 	"syscall"
 
 	"github.com/Microsoft/go-winio"
@@ -142,6 +145,63 @@ func (w *baseLayerWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
+// GetOsBuildNumberFromRegistry fetches the "CurrentBuild" value at path
+// "Microsoft\Windows NT\CurrentVersion" from the SOFTWARE registry hive at path
+// `regHivePath`. This is used to detect the build version of the uvm.
+func GetOsBuildNumberFromRegistry(regHivePath string) (_ string, err error) {
+	var storeHandle, keyHandle winapi.OrHKey
+	var dataType, dataLen uint32
+	keyPath := "Microsoft\\Windows NT\\CurrentVersion"
+	valueName := "CurrentBuild"
+	dataLen = 16 // build version string can't be more than 5 wide chars?
+	dataBuf := make([]byte, dataLen)
+
+	if err = winapi.OrOpenHive(regHivePath, &storeHandle); err != nil {
+		return "", fmt.Errorf("failed to open registry store at %s: %s", regHivePath, err)
+	}
+	defer winapi.OrCloseHive(storeHandle)
+
+	if err = winapi.OrOpenKey(storeHandle, keyPath, &keyHandle); err != nil {
+		return "", fmt.Errorf("failed to open key at %s: %s", keyPath, err)
+	}
+	defer winapi.OrCloseKey(keyHandle)
+
+	if err = winapi.OrGetValue(keyHandle, "", valueName, &dataType, &dataBuf[0], &dataLen); err != nil {
+		return "", fmt.Errorf("failed to get value of %s: %s", valueName, err)
+	}
+
+	if dataType != uint32(winapi.REG_TYPE_SZ) {
+		return "", fmt.Errorf("unexpected build number data type (%d)", dataType)
+	}
+
+	return winapi.ParseUtf16LE(dataBuf[:(dataLen - 2)]), nil
+}
+
+// detectImageOsVersion tries to detect the windows build number (like 17763, 19042 etc.)
+// of the image by looking at the registry keys of the layer registry files. This function
+// creates a file named `uvmbuildversion` in the layer directory which contains the build
+// number for future reference.
+func detectImageOsVersion(layerPath string) (uint16, error) {
+	// detect the build number of the uvm before doing anything else
+	layerRelativeSoftwareHivePath := filepath.Join(layerPath, UtilityVMPath, RegFilesPath, "SOFTWARE")
+
+	osvStr, err := GetOsBuildNumberFromRegistry(layerRelativeSoftwareHivePath)
+	if err != nil {
+		return 0, err
+	}
+
+	osv, err := strconv.ParseUint(osvStr, 10, 16)
+	if err != nil {
+		return 0, err
+	}
+
+	if err := ioutil.WriteFile(filepath.Join(layerPath, UvmBuildVersionFileName), []byte(osvStr), 0644); err != nil {
+		return uint16(osv), fmt.Errorf("failed to write uvm build version file: %s", err)
+	}
+
+	return uint16(osv), nil
+}
+
 func (w *baseLayerWriter) Close() (err error) {
 	defer w.s.End()
 	defer func() { oc.SetSpanStatus(w.s, err) }()
@@ -176,6 +236,11 @@ func (w *baseLayerWriter) Close() (err error) {
 			if err != nil {
 				return err
 			}
+		}
+
+		_, err := detectImageOsVersion(w.root.Name())
+		if err != nil {
+			return fmt.Errorf("failed to get os version of uvm: %s", err)
 		}
 	}
 	return w.err

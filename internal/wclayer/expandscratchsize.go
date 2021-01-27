@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"unsafe"
 
+	"github.com/Microsoft/go-winio/vhd"
 	"github.com/Microsoft/hcsshim/internal/hcserror"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/osversion"
@@ -39,54 +40,19 @@ func ExpandScratchSize(ctx context.Context, path string, size uint64) (err error
 	return nil
 }
 
-type virtualStorageType struct {
-	DeviceID uint32
-	VendorID [16]byte
-}
-
-type openVersion2 struct {
-	GetInfoOnly    int32    // bool but 4-byte aligned
-	ReadOnly       int32    // bool but 4-byte aligned
-	ResiliencyGUID [16]byte // GUID
-}
-
-type openVirtualDiskParameters struct {
-	Version  uint32 // Must always be set to 2
-	Version2 openVersion2
-}
-
-func attachVhd(path string) (syscall.Handle, error) {
-	var (
-		defaultType virtualStorageType
-		handle      syscall.Handle
-	)
-	parameters := openVirtualDiskParameters{Version: 2}
-	err := openVirtualDisk(
-		&defaultType,
-		path,
-		0,
-		0,
-		&parameters,
-		&handle)
-	if err != nil {
-		return 0, &os.PathError{Op: "OpenVirtualDisk", Path: path, Err: err}
-	}
-	err = attachVirtualDisk(handle, 0, 0, 0, 0, 0)
-	if err != nil {
-		syscall.Close(handle)
-		return 0, &os.PathError{Op: "AttachVirtualDisk", Path: path, Err: err}
-	}
-	return handle, nil
-}
-
 func expandSandboxVolume(ctx context.Context, path string) error {
 	// Mount the sandbox VHD temporarily.
 	vhdPath := filepath.Join(path, "sandbox.vhdx")
-	vhd, err := attachVhd(vhdPath)
+	vhdHandle, err := vhd.OpenVirtualDisk(vhdPath, vhd.VirtualDiskAccessNone, vhd.OpenVirtualDiskFlagNone)
 	if err != nil {
-		return &os.PathError{Op: "OpenVirtualDisk", Path: vhdPath, Err: err}
+		return err
 	}
-	defer syscall.Close(vhd)
+	defer syscall.CloseHandle(vhdHandle)
+
+	err = vhd.AttachVirtualDisk(vhdHandle, vhd.AttachVirtualDiskFlagNone, &vhd.AttachVirtualDiskParameters{Version: 2})
+	if err != nil {
+		return err
+	}
 
 	// Open the volume.
 	volumePath, err := GetLayerMountPath(ctx, path)

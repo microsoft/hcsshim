@@ -10,6 +10,7 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/safefile"
+	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/pkg/errors"
 )
@@ -85,7 +86,7 @@ func (sfw *stdFileWriter) AddLink(name string, target string) error {
 	if err := sfw.closeActiveFile(); err != nil {
 		return err
 	}
-	if strings.HasPrefix(name, hivesPath) {
+	if strings.HasPrefix(name, wclayer.HivesPath) {
 		return errors.New("invalid hard link in layer")
 	}
 	return nil

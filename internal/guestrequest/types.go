@@ -121,6 +121,7 @@ const (
 	ResourceTypeContainerConstraints ResourceType = "ContainerConstraints"
 	ResourceTypeHvSocket             ResourceType = "HvSocket"
 	ResourceTypeSecurityPolicy       ResourceType = "SecurityPolicy"
+	ResourceTypeCimMount             ResourceType = "CimMount"
 )
 
 // GuestRequest is for modify commands passed to the guest.

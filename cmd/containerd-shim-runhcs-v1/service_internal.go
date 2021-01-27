@@ -104,7 +104,7 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "Rootfs does not contain exactly 1 mount for the root file system")
 	} else {
 		m := req.Rootfs[0]
-		if m.Type != "windows-layer" && m.Type != "lcow-layer" {
+		if m.Type != "cimfs" && m.Type != "windows-layer" && m.Type != "lcow-layer" {
 			return nil, errors.Wrapf(errdefs.ErrFailedPrecondition, "unsupported mount type '%s'", m.Type)
 		}
 
@@ -114,6 +114,11 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 		//   layerN, layerN-1, ..., layer0, scratch
 		var parentLayerPaths []string
 		for _, option := range m.Options {
+			if m.Type == "cimfs" {
+				if strings.Contains(option, mount.MountedCimFlag) {
+					spec.Windows.LayerFolders = append(spec.Windows.LayerFolders, strings.TrimPrefix(option, "mountedCim="))
+				}
+			}
 			if strings.HasPrefix(option, mount.ParentLayerPathsFlag) {
 				err := json.Unmarshal([]byte(option[len(mount.ParentLayerPathsFlag):]), &parentLayerPaths)
 				if err != nil {
