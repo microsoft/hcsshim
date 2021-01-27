@@ -23,6 +23,60 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// A simple wrapper struct around the container mount configs that should be added to the
+// container.
+type mountsConfig struct {
+	mdsv1 []schema1.MappedDir
+	mpsv1 []schema1.MappedPipe
+	mdsv2 []hcsschema.MappedDirectory
+	mpsv2 []hcsschema.MappedPipe
+}
+
+func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mountsConfig, error) {
+	// Add the mounts as mapped directories or mapped pipes
+	// TODO: Mapped pipes to add in v2 schema.
+	var config mountsConfig
+	for _, mount := range coi.Spec.Mounts {
+		if mount.Type != "" {
+			return nil, fmt.Errorf("invalid container spec - Mount.Type '%s' must not be set", mount.Type)
+		}
+		if uvm.IsPipe(mount.Source) {
+			src, dst := uvm.GetContainerPipeMapping(coi.HostingSystem, mount)
+			config.mpsv1 = append(config.mpsv1, schema1.MappedPipe{HostPath: src, ContainerPipeName: dst})
+			config.mpsv2 = append(config.mpsv2, hcsschema.MappedPipe{HostPath: src, ContainerPipeName: dst})
+		} else {
+			readOnly := false
+			for _, o := range mount.Options {
+				if strings.ToLower(o) == "ro" {
+					readOnly = true
+				}
+			}
+			mdv1 := schema1.MappedDir{HostPath: mount.Source, ContainerPath: mount.Destination, ReadOnly: readOnly}
+			mdv2 := hcsschema.MappedDirectory{ContainerPath: mount.Destination, ReadOnly: readOnly}
+			if coi.HostingSystem == nil {
+				mdv2.HostPath = mount.Source
+			} else {
+				uvmPath, err := coi.HostingSystem.GetVSMBUvmPath(ctx, mount.Source, readOnly)
+				if err != nil {
+					if err == uvm.ErrNotAttached {
+						// It could also be a scsi mount.
+						uvmPath, err = coi.HostingSystem.GetScsiUvmPath(ctx, mount.Source)
+						if err != nil {
+							return nil, err
+						}
+					} else {
+						return nil, err
+					}
+				}
+				mdv2.HostPath = uvmPath
+			}
+			config.mdsv1 = append(config.mdsv1, mdv1)
+			config.mdsv2 = append(config.mdsv2, mdv2)
+		}
+	}
+	return &config, nil
+}
+
 // createWindowsContainerDocument creates documents for passing to HCS or GCS to create
 // a container, both hosted and process isolated. It creates both v1 and v2
 // container objects, WCOW only. The containers storage should have been mounted already.
@@ -182,7 +236,14 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		v2Container.Networking = &hcsschema.Networking{}
 
 		v1.EndpointList = coi.Spec.Windows.Network.EndpointList
-		v2Container.Networking.Namespace = coi.actualNetworkNamespace
+
+		// Use the reserved network namespace for containers created inside
+		// cloned or template UVMs.
+		if coi.HostingSystem != nil && (coi.HostingSystem.IsTemplate || coi.HostingSystem.IsClone) {
+			v2Container.Networking.Namespace = uvm.DEFAULT_CLONE_NETWORK_NAMESPACE_ID
+		} else {
+			v2Container.Networking.Namespace = coi.actualNetworkNamespace
+		}
 
 		v1.AllowUnqualifiedDNSQuery = coi.Spec.Windows.Network.AllowUnqualifiedDNSQuery
 		v2Container.Networking.AllowUnqualifiedDnsQuery = v1.AllowUnqualifiedDNSQuery
@@ -268,60 +329,17 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		}
 	}
 
-	// Add the mounts as mapped directories or mapped pipes
-	// TODO: Mapped pipes to add in v2 schema.
-	var (
-		mdsv1 []schema1.MappedDir
-		mpsv1 []schema1.MappedPipe
-		mdsv2 []hcsschema.MappedDirectory
-		mpsv2 []hcsschema.MappedPipe
-	)
-	for _, mount := range coi.Spec.Mounts {
-		if mount.Type != "" {
-			return nil, nil, fmt.Errorf("invalid container spec - Mount.Type '%s' must not be set", mount.Type)
-		}
-		if uvm.IsPipe(mount.Source) {
-			src, dst := uvm.GetContainerPipeMapping(coi.HostingSystem, mount)
-			mpsv1 = append(mpsv1, schema1.MappedPipe{HostPath: src, ContainerPipeName: dst})
-			mpsv2 = append(mpsv2, hcsschema.MappedPipe{HostPath: src, ContainerPipeName: dst})
-		} else {
-			readOnly := false
-			for _, o := range mount.Options {
-				if strings.ToLower(o) == "ro" {
-					readOnly = true
-				}
-			}
-			mdv1 := schema1.MappedDir{HostPath: mount.Source, ContainerPath: mount.Destination, ReadOnly: readOnly}
-			mdv2 := hcsschema.MappedDirectory{ContainerPath: mount.Destination, ReadOnly: readOnly}
-			if coi.HostingSystem == nil {
-				mdv2.HostPath = mount.Source
-			} else {
-				uvmPath, err := coi.HostingSystem.GetVSMBUvmPath(ctx, mount.Source, readOnly)
-				if err != nil {
-					if err == uvm.ErrNotAttached {
-						// It could also be a scsi mount.
-						uvmPath, err = coi.HostingSystem.GetScsiUvmPath(ctx, mount.Source)
-						if err != nil {
-							return nil, nil, err
-						}
-					} else {
-						return nil, nil, err
-					}
-				}
-				mdv2.HostPath = uvmPath
-			}
-			mdsv1 = append(mdsv1, mdv1)
-			mdsv2 = append(mdsv2, mdv2)
-		}
+	mounts, err := createMountsConfig(ctx, coi)
+	if err != nil {
+		return nil, nil, err
 	}
-
-	v1.MappedDirectories = mdsv1
-	v2Container.MappedDirectories = mdsv2
-	if len(mpsv1) > 0 && osversion.Get().Build < osversion.RS3 {
+	v1.MappedDirectories = mounts.mdsv1
+	v2Container.MappedDirectories = mounts.mdsv2
+	if len(mounts.mpsv1) > 0 && osversion.Get().Build < osversion.RS3 {
 		return nil, nil, fmt.Errorf("named pipe mounts are not supported on this version of Windows")
 	}
-	v1.MappedPipes = mpsv1
-	v2Container.MappedPipes = mpsv2
+	v1.MappedPipes = mounts.mpsv1
+	v2Container.MappedPipes = mounts.mpsv2
 
 	// add assigned devices to the container definition
 	if err := parseAssignedDevices(ctx, coi, v2Container); err != nil {
