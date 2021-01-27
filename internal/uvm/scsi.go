@@ -69,6 +69,11 @@ type SCSIMount struct {
 	refCount uint32
 }
 
+// RefCount returns the current refcount for the SCSI mount.
+func (sm *SCSIMount) RefCount() uint32 {
+	return sm.refCount
+}
+
 func (sm *SCSIMount) logFormat() logrus.Fields {
 	return logrus.Fields{
 		"HostPath":   sm.HostPath,

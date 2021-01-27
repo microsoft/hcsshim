@@ -209,7 +209,7 @@ func Test_RunContainer_VirtualDevice_GPU_LCOW(t *testing.T) {
 		t.Fatalf("skipping test, failed to find assignable nvidia gpu on host with: %v", err)
 	}
 	if testDeviceInstanceID == "" {
-		t.Fatalf("skipping test, host has no assignable nvidia gpu devices")
+		t.Fatal("skipping test, host has no assignable nvidia gpu devices")
 	}
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
@@ -250,7 +250,7 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_LCOW(t *testing.T) {
 		t.Fatalf("skipping test, failed to find assignable nvidia gpu on host with: %v", err)
 	}
 	if testDeviceInstanceID == "" {
-		t.Fatalf("skipping test, host has no assignable nvidia gpu devices")
+		t.Fatal("skipping test, host has no assignable nvidia gpu devices")
 	}
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
@@ -295,10 +295,10 @@ func Test_RunContainer_VirtualDevice_GPU_and_NoGPU_LCOW(t *testing.T) {
 
 	testDeviceInstanceID, err := findTestNvidiaGPUDevice()
 	if err != nil {
-		t.Skipf("skipping test, failed to find assignable nvidia gpu on host with: %v", err)
+		t.Fatalf("skipping test, failed to find assignable nvidia gpu on host with: %v", err)
 	}
 	if testDeviceInstanceID == "" {
-		t.Skipf("skipping test, host has no assignable nvidia gpu devices")
+		t.Fatal("skipping test, host has no assignable nvidia gpu devices")
 	}
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
@@ -364,10 +364,10 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_Removal_LCOW(t *testing.T) {
 
 	testDeviceInstanceID, err := findTestNvidiaGPUDevice()
 	if err != nil {
-		t.Skipf("skipping test, failed to find assignable nvidia gpu on host with: %v", err)
+		t.Fatalf("skipping test, failed to find assignable nvidia gpu on host with: %v", err)
 	}
 	if testDeviceInstanceID == "" {
-		t.Skipf("skipping test, host has no assignable nvidia gpu devices")
+		t.Fatal("skipping test, host has no assignable nvidia gpu devices")
 	}
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
@@ -413,7 +413,7 @@ func Test_RunContainer_VirtualDevice_LocationPath_WCOW_Process(t *testing.T) {
 		t.Fatalf("skipping test, failed to retrieve assignable device on host with: %v", err)
 	}
 	if testDeviceLocationPath == "" {
-		t.Fatalf("skipping test, host has no assignable devices")
+		t.Fatal("skipping test, host has no assignable devices")
 	}
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
@@ -451,7 +451,7 @@ func Test_RunContainer_VirtualDevice_ClassGUID_WCOW_Process(t *testing.T) {
 		t.Fatalf("skipping test, failed to retrieve assignable device on host with: %v", err)
 	}
 	if instanceID == "" {
-		t.Fatalf("skipping test, host has no assignable devices")
+		t.Fatal("skipping test, host has no assignable devices")
 	}
 
 	// use fixed GPU class guid
@@ -495,7 +495,7 @@ func Test_RunContainer_VirtualDevice_GPU_WCOW_Hypervisor(t *testing.T) {
 		t.Fatalf("skipping test, failed to retrieve assignable device on host with: %v", err)
 	}
 	if testDeviceInstanceID == "" {
-		t.Fatalf("skipping test, host has no assignable devices")
+		t.Fatal("skipping test, host has no assignable devices")
 	}
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
@@ -540,7 +540,7 @@ func Test_RunContainer_VirtualDevice_GPU_and_NoGPU_WCOW_Hypervisor(t *testing.T)
 		t.Fatalf("skipping test, failed to retrieve assignable device on host with: %v", err)
 	}
 	if testDeviceInstanceID == "" {
-		t.Fatalf("skipping test, host has no assignable devices")
+		t.Fatal("skipping test, host has no assignable devices")
 	}
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
@@ -602,7 +602,7 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_WCOW_Hypervisor(t *testing.T) 
 		t.Fatalf("skipping test, failed to retrieve assignable device on host with: %v", err)
 	}
 	if testDeviceInstanceID == "" {
-		t.Fatalf("skipping test, host has no assignable devices")
+		t.Fatal("skipping test, host has no assignable devices")
 	}
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
@@ -654,7 +654,7 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_Removal_WCOW_Hypervisor(t *tes
 		t.Fatalf("skipping test, failed to retrieve assignable device on host with: %v", err)
 	}
 	if testDeviceInstanceID == "" {
-		t.Fatalf("skipping test, host has no assignable devices")
+		t.Fatal("skipping test, host has no assignable devices")
 	}
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
