@@ -87,6 +87,37 @@ type Options struct {
 	CPUGroupID string
 }
 
+// compares the create opts used during template creation with the create opts
+// provided for clone creation. If they don't match (except for a few fields)
+// then clone creation is failed.
+func verifyCloneUvmCreateOpts(templateOpts, cloneOpts *OptionsWCOW) bool {
+	// Following fields can be different in the template and clone configurations.
+	// 1. the scratch layer path. i.e the last element of the LayerFolders path.
+	// 2. IsTemplate, IsClone and TemplateConfig variables.
+	// 3. ID
+	// 4. AdditionalHCSDocumentJSON
+
+	// Save the original values of the fields that we want to ignore and replace them with
+	// the same values as that of the other object. So that we can simply use `==` operator.
+	templateIDBackup := templateOpts.ID
+	templateAdditionalJsonBackup := templateOpts.AdditionHCSDocumentJSON
+	templateOpts.ID = cloneOpts.ID
+	templateOpts.AdditionHCSDocumentJSON = cloneOpts.AdditionHCSDocumentJSON
+
+	// We can't use `==` operator on structs which include slices in them. So compare the
+	// Layerfolders separately and then directly compare the Options struct.
+	result := (len(templateOpts.LayerFolders) == len(cloneOpts.LayerFolders))
+	for i := 0; result && i < len(templateOpts.LayerFolders)-1; i++ {
+		result = result && (templateOpts.LayerFolders[i] == cloneOpts.LayerFolders[i])
+	}
+	result = result && (*templateOpts.Options == *cloneOpts.Options)
+
+	// set original values
+	templateOpts.ID = templateIDBackup
+	templateOpts.AdditionHCSDocumentJSON = templateAdditionalJsonBackup
+	return result
+}
+
 // Verifies that the final UVM options are correct and supported.
 func verifyOptions(ctx context.Context, options interface{}) error {
 	switch opts := options.(type) {
@@ -123,8 +154,17 @@ func verifyOptions(ctx context.Context, options interface{}) error {
 		if len(opts.LayerFolders) < 2 {
 			return errors.New("at least 2 LayerFolders must be supplied")
 		}
+		if opts.IsClone && !verifyCloneUvmCreateOpts(&opts.TemplateConfig.CreateOpts, opts) {
+			return errors.New("clone configuration doesn't match with template configuration.")
+		}
 		if opts.IsClone && opts.TemplateConfig == nil {
 			return errors.New("template config can not be nil when creating clone")
+		}
+		if opts.IsClone && !opts.ExternalGuestConnection {
+			return errors.New("External gcs connection can not be disabled for clones")
+		}
+		if opts.IsTemplate && opts.FullyPhysicallyBacked {
+			return errors.New("Template can not be created from a full physically backed UVM")
 		}
 	}
 	return nil
@@ -211,7 +251,7 @@ func (uvm *UtilityVM) Close() (err error) {
 	}
 
 	if err := uvm.CloseGCSConnection(); err != nil {
-		log.G(ctx).Errorf("close gcs connection failed: %f", err)
+		log.G(ctx).Errorf("close GCS connection failed: %s", err)
 	}
 
 	// outputListener will only be nil for a Create -> Stop without a Start. In
