@@ -116,4 +116,18 @@ type UtilityVM struct {
 
 	// cpuGroupID is the ID of the cpugroup on the host that this UVM is assigned to
 	cpuGroupID string
+
+	// specifies if this UVM is created to be saved as a template
+	IsTemplate bool
+
+	// specifies if this UVM is a cloned from a template
+	IsClone bool
+
+	// ID of the template from which this clone was created. Only applies when IsClone
+	// is true
+	TemplateID string
+
+	// The CreateOpts used to create this uvm. These can be either of type
+	// uvm.OptionsLCOW or uvm.OptionsWCOW
+	createOpts interface{}
 }

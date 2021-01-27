@@ -240,7 +240,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 			Log:      log.G(ctx).WithField(logfields.UVMID, uvm.id),
 			IoListen: gcs.HvsockIoListen(uvm.runtimeID),
 		}
-		uvm.gc, err = gcc.Connect(ctx)
+		uvm.gc, err = gcc.Connect(ctx, !uvm.IsClone)
 		if err != nil {
 			return err
 		}

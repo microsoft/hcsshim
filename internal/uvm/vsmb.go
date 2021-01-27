@@ -1,7 +1,9 @@
 package uvm
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,23 +19,27 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-const vsmbSharePrefix = `\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\`
+const (
+	vsmbSharePrefix            = `\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\`
+	vsmbCurrentSerialVersionID = 1
+)
 
 // VSMBShare contains the host path for a Vsmb Mount
 type VSMBShare struct {
 	// UVM the resource belongs to
-	vm           *UtilityVM
-	HostPath     string
-	refCount     uint32
-	name         string
-	allowedFiles []string
-	guestPath    string
-	readOnly     bool
+	vm              *UtilityVM
+	HostPath        string
+	refCount        uint32
+	name            string
+	allowedFiles    []string
+	guestPath       string
+	options         hcsschema.VirtualSmbShareOptions
+	serialVersionID uint32
 }
 
 // Release frees the resources of the corresponding vsmb Mount
 func (vsmb *VSMBShare) Release(ctx context.Context) error {
-	if err := vsmb.vm.RemoveVSMB(ctx, vsmb.HostPath, vsmb.readOnly); err != nil {
+	if err := vsmb.vm.RemoveVSMB(ctx, vsmb.HostPath, vsmb.options.ReadOnly); err != nil {
 		return fmt.Errorf("failed to remove VSMB share: %s", err)
 	}
 	return nil
@@ -52,6 +58,28 @@ func (uvm *UtilityVM) DefaultVSMBOptions(readOnly bool) *hcsschema.VirtualSmbSha
 		opts.PseudoOplocks = true
 	}
 	return opts
+}
+
+func (uvm *UtilityVM) SetSaveableVSMBOptions(opts *hcsschema.VirtualSmbShareOptions, readOnly bool) {
+	if readOnly {
+		opts.ShareRead = true
+		opts.CacheIo = true
+		opts.ReadOnly = true
+		opts.PseudoOplocks = true
+		opts.NoOplocks = false
+	} else {
+		// Using NoOpLocks can cause intermittent Access denied failures due to
+		// a VSMB bug that was fixed but not backported to RS5/19H1.
+		opts.ShareRead = false
+		opts.CacheIo = false
+		opts.ReadOnly = false
+		opts.PseudoOplocks = false
+		opts.NoOplocks = true
+	}
+	opts.NoLocks = true
+	opts.PseudoDirnotify = true
+	opts.NoDirectmap = true
+	return
 }
 
 // findVSMBShare finds a share by `hostPath`. If not found returns `ErrNotAttached`.
@@ -172,10 +200,11 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 		shareName := "s" + strconv.FormatUint(uvm.vsmbCounter, 16)
 
 		share = &VSMBShare{
-			vm:        uvm,
-			name:      shareName,
-			guestPath: vsmbSharePrefix + shareName,
-			readOnly:  options.ReadOnly,
+			vm:              uvm,
+			name:            shareName,
+			guestPath:       vsmbSharePrefix + shareName,
+			HostPath:        hostPath,
+			serialVersionID: vsmbCurrentSerialVersionID,
 		}
 	}
 	newAllowedFiles := share.allowedFiles
@@ -211,6 +240,7 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 
 	share.allowedFiles = newAllowedFiles
 	share.refCount++
+	share.options = *options
 	m[shareKey] = share
 	return share, nil
 }
@@ -287,10 +317,107 @@ func (uvm *UtilityVM) GetVSMBUvmPath(ctx context.Context, hostPath string, readO
 	return filepath.Join(share.guestPath, f), nil
 }
 
-// getVSMBShareKey returns a string key which encapsulates the information that
-// is used to look up an existing VSMB share. If a share is being added, but
-// there is an existing share with the same key, the existing share will be used
-// instead (and its ref count incremented).
+var _ = (Cloneable)(&VSMBShare{})
+
+// GobEncode serializes the VSMBShare struct
+func (vsmb *VSMBShare) GobEncode() ([]byte, error) {
+	var buf bytes.Buffer
+	encoder := gob.NewEncoder(&buf)
+	errMsgFmt := "failed to encode VSMBShare: %s"
+	// encode only the fields that can be safely deserialized.
+	if err := encoder.Encode(vsmb.serialVersionID); err != nil {
+		return nil, fmt.Errorf(errMsgFmt, err)
+	}
+	if err := encoder.Encode(vsmb.HostPath); err != nil {
+		return nil, fmt.Errorf(errMsgFmt, err)
+	}
+	if err := encoder.Encode(vsmb.name); err != nil {
+		return nil, fmt.Errorf(errMsgFmt, err)
+	}
+	if err := encoder.Encode(vsmb.allowedFiles); err != nil {
+		return nil, fmt.Errorf(errMsgFmt, err)
+	}
+	if err := encoder.Encode(vsmb.guestPath); err != nil {
+		return nil, fmt.Errorf(errMsgFmt, err)
+	}
+	if err := encoder.Encode(vsmb.options); err != nil {
+		return nil, fmt.Errorf(errMsgFmt, err)
+	}
+	return buf.Bytes(), nil
+}
+
+// GobDecode deserializes the VSMBShare struct into the struct on which this is called
+// (i.e the vsmb pointer)
+func (vsmb *VSMBShare) GobDecode(data []byte) error {
+	buf := bytes.NewBuffer(data)
+	decoder := gob.NewDecoder(buf)
+	errMsgFmt := "failed to decode VSMBShare: %s"
+	// fields should be decoded in the same order in which they were encoded.
+	// And verify the serialVersionID first
+	if err := decoder.Decode(&vsmb.serialVersionID); err != nil {
+		return fmt.Errorf(errMsgFmt, err)
+	}
+	if vsmb.serialVersionID != vsmbCurrentSerialVersionID {
+		return fmt.Errorf("Serialized version of VSMBShare %d doesn't match with the current version %d", vsmb.serialVersionID, vsmbCurrentSerialVersionID)
+	}
+	if err := decoder.Decode(&vsmb.HostPath); err != nil {
+		return fmt.Errorf(errMsgFmt, err)
+	}
+	if err := decoder.Decode(&vsmb.name); err != nil {
+		return fmt.Errorf(errMsgFmt, err)
+	}
+	if err := decoder.Decode(&vsmb.allowedFiles); err != nil {
+		return fmt.Errorf(errMsgFmt, err)
+	}
+	if err := decoder.Decode(&vsmb.guestPath); err != nil {
+		return fmt.Errorf(errMsgFmt, err)
+	}
+	if err := decoder.Decode(&vsmb.options); err != nil {
+		return fmt.Errorf(errMsgFmt, err)
+	}
+	return nil
+}
+
+// Clone creates a clone of the VSMBShare `vsmb` and adds that clone to the uvm `vm`.  To
+// clone VSMB share we just need to add it into the config doc of that VM and increase the
+// vsmb counter.
+func (vsmb *VSMBShare) Clone(ctx context.Context, vm *UtilityVM, cd *cloneData) error {
+	cd.doc.VirtualMachine.Devices.VirtualSmb.Shares = append(cd.doc.VirtualMachine.Devices.VirtualSmb.Shares, hcsschema.VirtualSmbShare{
+		Name:         vsmb.name,
+		Path:         vsmb.HostPath,
+		Options:      &vsmb.options,
+		AllowedFiles: vsmb.allowedFiles,
+	})
+	vm.vsmbCounter++
+
+	clonedVSMB := &VSMBShare{
+		vm:              vm,
+		HostPath:        vsmb.HostPath,
+		refCount:        1,
+		name:            vsmb.name,
+		options:         vsmb.options,
+		allowedFiles:    vsmb.allowedFiles,
+		guestPath:       vsmb.guestPath,
+		serialVersionID: vsmbCurrentSerialVersionID,
+	}
+
+	if vsmb.options.RestrictFileAccess {
+		vm.vsmbFileShares[vsmb.HostPath] = clonedVSMB
+	} else {
+		vm.vsmbDirShares[vsmb.HostPath] = clonedVSMB
+	}
+
+	return nil
+}
+
+// getVSMBShareKey returns a string key which encapsulates the information that is used to
+// look up an existing VSMB share. If a share is being added, but there is an existing
+// share with the same key, the existing share will be used instead (and its ref count
+// incremented).
 func getVSMBShareKey(hostPath string, readOnly bool) string {
 	return fmt.Sprintf("%v-%v", hostPath, readOnly)
+}
+
+func (vsmb *VSMBShare) GetSerialVersionID() uint32 {
+	return vsmbCurrentSerialVersionID
 }
