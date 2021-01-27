@@ -8,11 +8,15 @@ import (
 
 	"github.com/Microsoft/go-winio/pkg/security"
 	"github.com/Microsoft/go-winio/vhd"
+	"github.com/Microsoft/hcsshim/internal/vhdx"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
 )
 
-const defaultVHDXBlockSizeInMB = 1
+const (
+	defaultVHDXBlockSizeInMB = 1
+	bcdFilePath              = "Files\\EFI\\Microsoft\\Boot\\BCD"
+)
 
 // SetupContainerBaseLayer is a helper to setup a containers scratch. It
 // will create and format the vhdx's inside and the size is configurable with the sizeInGB
@@ -85,7 +89,8 @@ func SetupContainerBaseLayer(ctx context.Context, layerPath, baseVhdPath, diffVh
 	}
 
 	options := OsLayerOptions{
-		Type: OsLayerTypeContainer,
+		Type:                       OsLayerTypeContainer,
+		DisableCiCacheOptimization: true,
 	}
 
 	// SetupBaseOSLayer expects an empty vhd handle for a container layer and will
@@ -108,8 +113,12 @@ func SetupContainerBaseLayer(ctx context.Context, layerPath, baseVhdPath, diffVh
 	return nil
 }
 
-// SetupUtilityVMBaseLayer is a helper to setup a UVMs scratch space. It will create and format
-// the vhdx inside and the size is configurable by the sizeInGB parameter.
+// SetupUtilityVMBaseLayer is a helper to setup a UVMs scratch space. It will create and
+// format the vhdx inside and the size is configurable by the sizeInGB parameter. It
+// expects to find a BCD file at path `baseVhdDir` +
+// "Files\\EFI\\Microsoft\\Boot\\BCD" where `baseVhdDir` is the directory
+// inside which baseVhd is created. This BCD file is modified so that the uvm can boot
+// with the baseVHD that is newly created.
 //
 // `uvmPath` is the path to the UtilityVM filesystem.
 //
@@ -162,7 +171,9 @@ func SetupUtilityVMBaseLayer(ctx context.Context, uvmPath, baseVhdPath, diffVhdP
 	}
 
 	options := OsLayerOptions{
-		Type: OsLayerTypeVM,
+		Type:                       OsLayerTypeVM,
+		DisableCiCacheOptimization: true,
+		SkipUpdateBcdForBoot:       true,
 	}
 	if err := SetupBaseOSLayer(ctx, uvmPath, windows.Handle(handle), options); err != nil {
 		return err
@@ -176,6 +187,20 @@ func SetupUtilityVMBaseLayer(ctx context.Context, uvmPath, baseVhdPath, diffVhdP
 	if err = syscall.CloseHandle(handle); err != nil {
 		return errors.Wrap(err, "failed to close vhdx handle")
 	}
+
+	partitionInfo, err := vhdx.GetScratchVhdPartitionInfo(ctx, baseVhdPath)
+	if err != nil {
+		return errors.Wrap(err, "failed to get base vhd layout info")
+	}
+
+	bcdPath := filepath.Join(filepath.Dir(baseVhdPath), bcdFilePath)
+	if err = updateBcdStoreForBoot(bcdPath, partitionInfo.DiskID, partitionInfo.PartitionID); err != nil {
+		return errors.Wrap(err, "failed to update BCD")
+	}
+
+	// Note: diff vhd creation and granting of vm group access must be done AFTER
+	// getting the partition info of the base VHD. Otherwise it causes the vhd parent
+	// chain to get corrupted.
 
 	// Create the differencing disk that will be what's copied for the final rw layer
 	// for a container.

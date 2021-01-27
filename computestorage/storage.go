@@ -4,6 +4,7 @@
 package computestorage
 
 import (
+	"github.com/Microsoft/go-winio/pkg/guid"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
 
@@ -44,7 +45,17 @@ const (
 // OsLayerOptions are the set of options that are used with the `SetupBaseOSLayer` and
 // `SetupBaseOSVolume` calls.
 type OsLayerOptions struct {
-	Type                       OsLayerType `json:"Type,omitempty"`
-	DisableCiCacheOptimization bool        `json:"DisableCiCacheOptimization,omitempty"`
-	SkipUpdateBcdForBoot       bool        `json:"SkipUpdateBcdForBoot,omitempty"`
+	Type OsLayerType `json:"Type,omitempty"`
+
+	DisableCiCacheOptimization bool `json:"DisableCiCacheOptimization,omitempty"`
+
+	IsDynamic bool `json:"IsDynamic,omitempty"`
+
+	SkipSandboxPreExpansion bool `json:"SkipSandboxPreExpansion,omitempty"`
+
+	FileSystemLayers []hcsschema.Layer `json:"FileSystemLayers,omitempty"`
+
+	SandboxVhdPartitionId guid.GUID `json:"SandboxVhdPartitionId,omitempty"`
+
+	SkipUpdateBcdForBoot bool `json:"SkipUpdateBcdForBoot,omitempty"`
 }
