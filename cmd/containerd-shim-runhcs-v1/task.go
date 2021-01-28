@@ -103,5 +103,6 @@ func isStatsNotFound(err error) bool {
 	return errdefs.IsNotFound(err) ||
 		hcs.IsNotExist(err) ||
 		hcs.IsOperationInvalidState(err) ||
-		gcs.IsNotExist(err)
+		gcs.IsNotExist(err) ||
+		hcs.IsAccessIsDenied(err)
 }
