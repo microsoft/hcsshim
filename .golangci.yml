@@ -1,0 +1,16 @@
+run:
+  timeout: 2m
+  skip-dirs:
+    - internal/schema2
+
+  # Fail if go.mod is out-of-date
+  modules-download-mode: readonly
+
+output:
+  # sorts results by: filepath, line and column
+  sort-results: true
+
+linters:
+  disable-all: true
+  enable:
+    - gofmt
