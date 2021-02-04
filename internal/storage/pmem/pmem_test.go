@@ -4,11 +4,11 @@ package pmem
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"testing"
 
+	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -101,7 +101,7 @@ func Test_Mount_Calls_RemoveAll_OnMountFailure(t *testing.T) {
 		return expectedErr
 	}
 	err := Mount(context.Background(), 0, target)
-	if err != expectedErr {
+	if errors.Cause(err) != expectedErr {
 		t.Fatalf("expected err: %v, got: %v", expectedErr, err)
 	}
 	if !removeAllCalled {

@@ -1,7 +1,4 @@
 Dockerfile
-client
-docs
-kernel
 .travis.yml
 *.ps1
 LICENSE

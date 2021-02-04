@@ -18,10 +18,7 @@ SRCROOT=$(dir $(abspath $(firstword $(MAKEFILE_LIST))))
 
 # The link aliases for gcstools
 GCS_TOOLS=\
-	vhd2tar \
-	exportSandbox \
 	netnscfg \
-	remotefs \
 	nvidiaPrestartHook
 
 .PHONY: all always rootfs test

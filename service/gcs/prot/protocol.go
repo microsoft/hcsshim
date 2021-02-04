@@ -227,7 +227,6 @@ type ProtocolVersion uint32
 // Protocol versions.
 const (
 	PvInvalid ProtocolVersion = 0
-	PvV3      ProtocolVersion = 3
 	PvV4      ProtocolVersion = 4
 	PvMax     ProtocolVersion = PvV4
 )
@@ -557,14 +556,7 @@ type ModifySettingRequest struct {
 // container resource should be modified.
 type ContainerModifySettings struct {
 	MessageBase
-	// For V1 (RS3) Request will contain a ResourceModificationRequestResponse.
-	// For V2 (RS4) V2Request will be set and Request will be nil. For V2 (RS5)
-	// Request will contain a ModifySettingRequest and V2Request is deprecated.
 	Request interface{}
-	// Private. UnmarshalContainerModifySettings will set Request to either a
-	// *ResourceModificationRequestResponse or a *ModifySettingRequest.
-	// TODO: JTERRY75 remove when RS4 is no longer supported for LCOW.
-	V2Request interface{} `json:"v2Request"`
 }
 
 // UnmarshalContainerModifySettings unmarshals the given bytes into a
@@ -575,118 +567,64 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 	// Unmarshal the message.
 	var request ContainerModifySettings
 	var requestRawSettings json.RawMessage
-	var requestV2RawSettings json.RawMessage
 	request.Request = &requestRawSettings
-	request.V2Request = &requestV2RawSettings
 	if err := commonutils.UnmarshalJSONWithHresult(b, &request); err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal ContainerModifySettings")
 	}
 
-	isV2 := false
-
-	// RS3 or RS5
-	if len(requestRawSettings) > 0 {
-		// RS5
-		// TODO: JTERRY75 this will only work as long as we dont target a V2
-		// container and only do V2 UVM
-		if request.ContainerID == "00000000-0000-0000-0000-000000000000" {
-			isV2 = true
-		}
-	} else if len(requestV2RawSettings) > 0 {
-		// RS4
-		requestRawSettings = requestV2RawSettings
-		isV2 = true
-	} else {
-		return &request, errors.New("neither request.Request nor request.V2Request was passed")
+	var msr ModifySettingRequest
+	var msrRawSettings json.RawMessage
+	msr.Settings = &msrRawSettings
+	if err := commonutils.UnmarshalJSONWithHresult(requestRawSettings, &msr); err != nil {
+		return &request, errors.Wrap(err, "failed to unmarshal request.Settings as ModifySettingRequest")
 	}
 
-	if !isV2 {
-		var rmrr ResourceModificationRequestResponse
-		var rmrrRawSettings json.RawMessage
-		rmrr.Settings = &rmrrRawSettings
-		if err := commonutils.UnmarshalJSONWithHresult(requestRawSettings, &rmrr); err != nil {
-			return &request, errors.Wrap(err, "failed to unmarshal request.Settings as ResourceModificationRequestResponse")
-		}
-
-		if rmrr.RequestType == "" {
-			rmrr.RequestType = RtAdd
-		}
-
-		// Fill in the ResourceType-specific fields.
-		switch rmrr.ResourceType {
-		case PtMappedVirtualDisk:
-			mvd := &MappedVirtualDisk{}
-			if err := commonutils.UnmarshalJSONWithHresult(rmrrRawSettings, mvd); err != nil {
-				return &request, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDisk")
-			}
-			rmrr.Settings = mvd
-		case PtMappedDirectory:
-			md := &MappedDirectory{}
-			if err := commonutils.UnmarshalJSONWithHresult(rmrrRawSettings, md); err != nil {
-				return &request, errors.Wrap(err, "failed to unmarshal settings as MappedDirectory")
-			}
-			rmrr.Settings = md
-		default:
-			return &request, errors.Errorf("invalid ResourceType '%s'", rmrr.ResourceType)
-		}
-		request.Request = &rmrr
-	} else {
-		var msr ModifySettingRequest
-		var msrRawSettings json.RawMessage
-		msr.Settings = &msrRawSettings
-		if err := commonutils.UnmarshalJSONWithHresult(requestRawSettings, &msr); err != nil {
-			return &request, errors.Wrap(err, "failed to unmarshal request.Settings as ModifySettingRequest")
-		}
-
-		if msr.RequestType == "" {
-			msr.RequestType = MreqtAdd
-		}
-
-		// Fill in the ResourceType-specific fields.
-		switch msr.ResourceType {
-		case MrtMappedVirtualDisk:
-			mvd := &MappedVirtualDiskV2{}
-			if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, mvd); err != nil {
-				return &request, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDiskV2")
-			}
-			msr.Settings = mvd
-		case MrtMappedDirectory:
-			md := &MappedDirectoryV2{}
-			if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, md); err != nil {
-				return &request, errors.Wrap(err, "failed to unmarshal settings as MappedDirectoryV2")
-			}
-			msr.Settings = md
-		case MrtVPMemDevice:
-			vpd := &MappedVPMemDeviceV2{}
-			if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, vpd); err != nil {
-				return &request, errors.Wrap(err, "failed to unmarshal hosted settings as MappedVPMemDeviceV2")
-			}
-			msr.Settings = vpd
-		case MrtCombinedLayers:
-			cl := &CombinedLayersV2{}
-			if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, cl); err != nil {
-				return &request, errors.Wrap(err, "failed to unmarshal settings as CombinedLayersV2")
-			}
-			msr.Settings = cl
-		case MrtNetwork:
-			na := &NetworkAdapterV2{}
-			if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, na); err != nil {
-				return &request, errors.Wrap(err, "failed to unmarshal settings as NetworkAdapterV2")
-			}
-			msr.Settings = na
-		case MrtVPCIDevice:
-			vd := &MappedVPCIDeviceV2{}
-			if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, vd); err != nil {
-				return &request, errors.Wrap(err, "failed to unmarshal settings as MappedVPCIDeviceV2")
-			}
-			msr.Settings = vd
-		default:
-			return &request, errors.Errorf("invalid ResourceType '%s'", msr.ResourceType)
-		}
-		request.Request = &msr
+	if msr.RequestType == "" {
+		msr.RequestType = MreqtAdd
 	}
 
-	request.V2Request = nil
+	// Fill in the ResourceType-specific fields.
+	switch msr.ResourceType {
+	case MrtMappedVirtualDisk:
+		mvd := &MappedVirtualDiskV2{}
+		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, mvd); err != nil {
+			return &request, errors.Wrap(err, "failed to unmarshal settings as MappedVirtualDiskV2")
+		}
+		msr.Settings = mvd
+	case MrtMappedDirectory:
+		md := &MappedDirectoryV2{}
+		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, md); err != nil {
+			return &request, errors.Wrap(err, "failed to unmarshal settings as MappedDirectoryV2")
+		}
+		msr.Settings = md
+	case MrtVPMemDevice:
+		vpd := &MappedVPMemDeviceV2{}
+		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, vpd); err != nil {
+			return &request, errors.Wrap(err, "failed to unmarshal hosted settings as MappedVPMemDeviceV2")
+		}
+		msr.Settings = vpd
+	case MrtCombinedLayers:
+		cl := &CombinedLayersV2{}
+		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, cl); err != nil {
+			return &request, errors.Wrap(err, "failed to unmarshal settings as CombinedLayersV2")
+		}
+		msr.Settings = cl
+	case MrtNetwork:
+		na := &NetworkAdapterV2{}
+		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, na); err != nil {
+			return &request, errors.Wrap(err, "failed to unmarshal settings as NetworkAdapterV2")
+		}
+		msr.Settings = na
+	case MrtVPCIDevice:
+		vd := &MappedVPCIDeviceV2{}
+		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, vd); err != nil {
+			return &request, errors.Wrap(err, "failed to unmarshal settings as MappedVPCIDeviceV2")
+		}
+		msr.Settings = vd
+	default:
+		return &request, errors.Errorf("invalid ResourceType '%s'", msr.ResourceType)
+	}
+	request.Request = &msr
 	return &request, nil
 }
 

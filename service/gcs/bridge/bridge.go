@@ -14,22 +14,17 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/Microsoft/opengcs/internal/log"
 	"github.com/Microsoft/opengcs/internal/oc"
 	"github.com/Microsoft/opengcs/internal/runtime/hcsv2"
-	"github.com/Microsoft/opengcs/service/gcs/core"
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
-	"github.com/Microsoft/opengcs/service/gcs/stdio"
-	"github.com/Microsoft/opengcs/service/libs/commonutils"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/tracestate"
-	"golang.org/x/sys/unix"
 )
 
 // UnknownMessage represents the default handler logic for an unmatched request
@@ -185,7 +180,6 @@ type Bridge struct {
 	// and publish notification workflows.
 	responseChan chan bridgeResponse
 
-	coreint   core.Core
 	hostState *hcsv2.Host
 
 	quitChan chan bool
@@ -198,27 +192,14 @@ type Bridge struct {
 // AssignHandlers creates and assigns the appropriate bridge
 // events to be listen for and intercepted on `mux` before forwarding
 // to `gcs` for handling.
-func (b *Bridge) AssignHandlers(mux *Mux, gcs core.Core, host *hcsv2.Host) {
-	b.coreint = gcs
+func (b *Bridge) AssignHandlers(mux *Mux, host *hcsv2.Host) {
 	b.hostState = host
 
 	// These are PvInvalid because they will be called previous to any protocol
 	// negotiation so they respond only when the protocols are not known.
 	if b.EnableV4 {
 		mux.HandleFunc(prot.ComputeSystemNegotiateProtocolV1, prot.PvInvalid, b.negotiateProtocolV2)
-	} else {
-		mux.HandleFunc(prot.ComputeSystemCreateV1, prot.PvInvalid, b.createContainer)
 	}
-
-	// v3 specific handlers
-	mux.HandleFunc(prot.ComputeSystemExecuteProcessV1, prot.PvV3, b.execProcess)
-	mux.HandleFunc(prot.ComputeSystemShutdownForcedV1, prot.PvV3, b.killContainer)
-	mux.HandleFunc(prot.ComputeSystemShutdownGracefulV1, prot.PvV3, b.shutdownContainer)
-	mux.HandleFunc(prot.ComputeSystemSignalProcessV1, prot.PvV3, b.signalProcess)
-	mux.HandleFunc(prot.ComputeSystemGetPropertiesV1, prot.PvV3, b.getProperties)
-	mux.HandleFunc(prot.ComputeSystemWaitForProcessV1, prot.PvV3, b.waitOnProcess)
-	mux.HandleFunc(prot.ComputeSystemResizeConsoleV1, prot.PvV3, b.resizeConsole)
-	mux.HandleFunc(prot.ComputeSystemModifySettingsV1, prot.PvV3, b.modifySettings)
 
 	if b.EnableV4 {
 		// v4 specific handlers
@@ -432,266 +413,6 @@ func (b *Bridge) PublishNotification(n *prot.ContainerNotification) {
 		response: n,
 	}
 	b.responseChan <- resp
-}
-
-func (b *Bridge) createContainer(r *Request) (RequestResponse, error) {
-	var request prot.ContainerCreate
-	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
-	}
-
-	logrus.WithFields(logrus.Fields{
-		"activityID": request.ActivityID,
-		"cid":        request.ContainerID,
-	}).Info("opengcs::bridge::createContainer")
-
-	// The request contains a JSON string field which is equivalent to a
-	// CreateContainerInfo struct.
-	var settings prot.VMHostedContainerSettings
-	if err := commonutils.UnmarshalJSONWithHresult([]byte(request.ContainerConfig), &settings); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON for ContainerConfig \"%s\"", request.ContainerConfig)
-	}
-	if err := b.coreint.CreateContainer(request.ContainerID, settings); err != nil {
-		return nil, err
-	}
-
-	response := &prot.ContainerCreateResponse{
-		SelectedProtocolVersion: uint32(prot.PvV3),
-	}
-
-	waitFn, err := b.coreint.WaitContainer(request.ContainerID)
-	if err != nil {
-		logrus.Error(err)
-	}
-
-	go func() {
-		nt := waitFn()
-		notification := &prot.ContainerNotification{
-			MessageBase: prot.MessageBase{
-				ContainerID: request.ContainerID,
-				ActivityID:  request.ActivityID,
-			},
-			Type:       nt,
-			Operation:  prot.AoNone,
-			Result:     0,
-			ResultInfo: "",
-		}
-		b.PublishNotification(notification)
-	}()
-
-	// Set our protocol selected version before return.
-	b.protVer = prot.PvV3
-	return response, nil
-}
-
-func (b *Bridge) execProcess(r *Request) (RequestResponse, error) {
-	var request prot.ContainerExecuteProcess
-	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message)
-	}
-
-	logrus.WithFields(logrus.Fields{
-		"activityID": request.ActivityID,
-		"cid":        request.ContainerID,
-	}).Info("opengcs::bridge::execProcess")
-
-	// The request contains a JSON string field which is equivalent to an
-	// ExecuteProcessInfo struct.
-	var params prot.ProcessParameters
-	if err := commonutils.UnmarshalJSONWithHresult([]byte(request.Settings.ProcessParameters), &params); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON for ProcessParameters \"%s\"", request.Settings.ProcessParameters)
-	}
-
-	var conSettings stdio.ConnectionSettings
-	if params.CreateStdInPipe {
-		conSettings.StdIn = &request.Settings.VsockStdioRelaySettings.StdIn
-	}
-	if params.CreateStdOutPipe {
-		conSettings.StdOut = &request.Settings.VsockStdioRelaySettings.StdOut
-	}
-	if params.CreateStdErrPipe {
-		conSettings.StdErr = &request.Settings.VsockStdioRelaySettings.StdErr
-	}
-
-	var pid int
-	// If this is the exec of the init process for V1 we need to return the
-	// error of the exec previous to any ContainerExited notification. So we
-	// signal when we are done writing to the bridge.
-	var execInitErrorDone chan<- struct{}
-
-	defer func() {
-		if execInitErrorDone != nil {
-			execInitErrorDone <- struct{}{}
-		}
-	}()
-	var err error
-	if params.IsExternal {
-		pid, err = b.coreint.RunExternalProcess(params, conSettings)
-	} else {
-		pid, execInitErrorDone, err = b.coreint.ExecProcess(request.ContainerID, params, conSettings)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &prot.ContainerExecuteProcessResponse{
-		ProcessID: uint32(pid),
-	}, nil
-}
-
-func (b *Bridge) killContainer(r *Request) (RequestResponse, error) {
-	return b.signalContainer(r, unix.SIGKILL)
-}
-
-func (b *Bridge) shutdownContainer(r *Request) (RequestResponse, error) {
-	return b.signalContainer(r, unix.SIGTERM)
-}
-
-// signalContainer is not a handler func. This is because the actual signal is
-// implied based on the message type.
-func (b *Bridge) signalContainer(r *Request, signal syscall.Signal) (RequestResponse, error) {
-	var request prot.MessageBase
-	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message)
-	}
-
-	logrus.WithFields(logrus.Fields{
-		"activityID": request.ActivityID,
-		"cid":        request.ContainerID,
-		"signal":     signal,
-	}).Info("opengcs::bridge::signalContainer")
-
-	err := b.coreint.SignalContainer(request.ContainerID, signal)
-	if err != nil {
-		return nil, err
-	}
-
-	return &prot.MessageResponseBase{}, nil
-}
-
-func (b *Bridge) signalProcess(r *Request) (RequestResponse, error) {
-	var request prot.ContainerSignalProcess
-	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message)
-	}
-
-	logrus.WithFields(logrus.Fields{
-		"activityID": request.ActivityID,
-		"cid":        request.ContainerID,
-		"pid":        request.ProcessID,
-		"signal":     request.Options.Signal,
-	}).Info("opengcs::bridge::signalProcess")
-
-	if err := b.coreint.SignalProcess(int(request.ProcessID), request.Options); err != nil {
-		return nil, err
-	}
-
-	return &prot.MessageResponseBase{}, nil
-}
-
-func (b *Bridge) getProperties(r *Request) (RequestResponse, error) {
-	var request prot.ContainerGetProperties
-	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message)
-	}
-
-	logrus.WithFields(logrus.Fields{
-		"activityID": request.ActivityID,
-		"cid":        request.ContainerID,
-	}).Info("opengcs::bridge::getProperties")
-
-	properties, err := b.coreint.GetProperties(request.ContainerID, request.Query)
-	if err != nil {
-		return nil, err
-	}
-
-	propertyJSON := []byte("{}")
-	if properties != nil {
-		var err error
-		propertyJSON, err = json.Marshal(properties)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to marshal properties into JSON: %v", properties)
-		}
-	}
-
-	return &prot.ContainerGetPropertiesResponse{
-		Properties: string(propertyJSON),
-	}, nil
-}
-
-func (b *Bridge) waitOnProcess(r *Request) (RequestResponse, error) {
-	var request prot.ContainerWaitForProcess
-	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message)
-	}
-
-	logrus.WithFields(logrus.Fields{
-		"activityID": request.ActivityID,
-		"cid":        request.ContainerID,
-		"pid":        request.ProcessID,
-		"timeout-ms": request.TimeoutInMs,
-	}).Info("opengcs::bridge::waitOnProcess")
-
-	exitCodeChan, doneChan, err := b.coreint.WaitProcess(int(request.ProcessID))
-	if err != nil {
-		return nil, err
-	}
-
-	// If we timed out or if we got the exit code. Acknowledge we no longer want to wait.
-	defer close(doneChan)
-
-	select {
-	case exitCode := <-exitCodeChan:
-		return &prot.ContainerWaitForProcessResponse{
-			ExitCode: uint32(exitCode),
-		}, nil
-	case <-time.After(time.Duration(request.TimeoutInMs) * time.Millisecond):
-		return nil, gcserr.NewHresultError(gcserr.HvVmcomputeTimeout)
-	}
-}
-
-func (b *Bridge) resizeConsole(r *Request) (RequestResponse, error) {
-	var request prot.ContainerResizeConsole
-	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message)
-	}
-
-	logrus.WithFields(logrus.Fields{
-		"activityID": request.ActivityID,
-		"cid":        request.ContainerID,
-		"pid":        request.ProcessID,
-		"height":     request.Height,
-		"width":      request.Width,
-	}).Info("opengcs::bridge::resizeConsole")
-
-	err := b.coreint.ResizeConsole(int(request.ProcessID), request.Height, request.Width)
-	if err != nil {
-		return nil, err
-	}
-
-	return &prot.MessageResponseBase{
-		ActivityID: request.ActivityID,
-	}, nil
-}
-
-func (b *Bridge) modifySettings(r *Request) (RequestResponse, error) {
-	request, err := prot.UnmarshalContainerModifySettings(r.Message)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON for message \"%s\"", r.Message)
-	}
-
-	logrus.WithFields(logrus.Fields{
-		"activityID": request.ActivityID,
-		"cid":        request.ContainerID,
-	}).Info("opengcs::bridge::modifySettings")
-
-	err = b.coreint.ModifySettings(request.ContainerID, request.Request.(*prot.ResourceModificationRequestResponse))
-	if err != nil {
-		return nil, err
-	}
-
-	return &prot.MessageResponseBase{}, nil
 }
 
 // setErrorForResponseBase modifies the passed-in MessageResponseBase to
