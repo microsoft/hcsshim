@@ -87,7 +87,7 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 				// an HvSocket service was not possible.
 				hvSockConfig := ccgInstance.HvSocketConfig
 				if err := coi.HostingSystem.UpdateHvSocketService(ctx, hvSockConfig.ServiceId, hvSockConfig.ServiceConfig); err != nil {
-					return fmt.Errorf("failed to update hvsocket service: %s", err)
+					return errors.Wrap(err, "failed to update hvsocket service")
 				}
 			}
 		}
@@ -105,7 +105,7 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 	return nil
 }
 
-// setupMount adds the custom mounts requested in the container configuration of this
+// setupMounts adds the custom mounts requested in the container configuration of this
 // request.
 func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.Resources) error {
 	// Validate each of the mounts. If this is a V2 Xenon, we have to add them as
@@ -167,43 +167,6 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 				}
 			}
 		}
-	}
-
-	if cs, ok := coi.Spec.Windows.CredentialSpec.(string); ok {
-		// Only need to create a CCG instance for v2 containers
-		if schemaversion.IsV21(coi.actualSchemaVersion) {
-			hypervisorIsolated := coi.HostingSystem != nil
-			ccgInstance, ccgResource, err := credentials.CreateCredentialGuard(ctx, coi.actualID, cs, hypervisorIsolated)
-			if err != nil {
-				return err
-			}
-			coi.ccgState = ccgInstance.CredentialGuard
-			r.Add(ccgResource)
-			if hypervisorIsolated {
-				// If hypervisor isolated we need to add an hvsocket service table entry
-				// By default HVSocket won't allow something inside the VM to connect
-				// back to a process on the host. We need to update the HVSocket service table
-				// to allow a connection to CCG.exe on the host, so that GMSA can function.
-				// We need to hot add this here because at UVM creation time we don't know what containers
-				// will be launched in the UVM, nonetheless if they will ask for GMSA. This is a workaround
-				// for the previous design requirement for CCG V2 where the service entry
-				// must be present in the UVM'S HCS document before being sent over as hot adding
-				// an HvSocket service was not possible.
-				hvSockConfig := ccgInstance.HvSocketConfig
-				if err := coi.HostingSystem.UpdateHvSocketService(ctx, hvSockConfig.ServiceId, hvSockConfig.ServiceConfig); err != nil {
-					return errors.Wrap(err, "failed to update hvsocket service")
-				}
-			}
-		}
-	}
-
-	if coi.HostingSystem != nil && coi.hasWindowsAssignedDevices() {
-		windowsDevices, closers, err := handleAssignedDevicesWindows(ctx, coi.HostingSystem, coi.Spec.Annotations, coi.Spec.Windows.Devices)
-		if err != nil {
-			return err
-		}
-		r.Add(closers...)
-		coi.Spec.Windows.Devices = windowsDevices
 	}
 
 	return nil
