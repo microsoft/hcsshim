@@ -7,12 +7,15 @@ import (
 	"net"
 	"net/url"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/hcsshim/internal/log"
 )
@@ -96,6 +99,13 @@ func NewBinaryIO(ctx context.Context, id string, uri *url.URL) (_ UpstreamIO, er
 		return nil, errors.New("failed to start binary logger: timeout")
 	}
 
+	log.G(ctx).WithFields(logrus.Fields{
+		"containerID":        id,
+		"containerNamespace": ns,
+		"binaryCmd":          cmd,
+		"binaryProcessID":    cmd.Process.Pid,
+	}).Debug("binary io process started")
+
 	return &binaryIO{
 		cmd:    cmd,
 		stdout: stdoutPipePath,
@@ -105,8 +115,19 @@ func NewBinaryIO(ctx context.Context, id string, uri *url.URL) (_ UpstreamIO, er
 	}, nil
 }
 
+// sanitizePath parses the URL object and returns a clean path to the logging driver
+func sanitizePath(uri *url.URL) string {
+	path := filepath.Clean(uri.Path)
+
+	if strings.Contains(path, `:\`) {
+		return strings.TrimPrefix(path, "\\")
+	}
+
+	return path
+}
+
 func newBinaryCmd(ctx context.Context, uri *url.URL, envs []string) (*exec.Cmd, error) {
-	if uri.Host == "" && uri.Path == "" {
+	if uri.Path == "" {
 		return nil, errors.New("no logging driver path provided")
 	}
 
@@ -118,12 +139,7 @@ func newBinaryCmd(ctx context.Context, uri *url.URL, envs []string) (*exec.Cmd, 
 		}
 	}
 
-	execPath := uri.Path
-	// Absolute path is required, treat "binary://path/to/binary" and "binary:///path/to/binary"
-	// as the same.
-	if uri.Host != "" {
-		execPath = "/" + uri.Host + uri.Path
-	}
+	execPath := sanitizePath(uri)
 
 	cmd := exec.CommandContext(ctx, execPath, args...)
 	cmd.Env = append(cmd.Env, envs...)

@@ -18,19 +18,34 @@ func Test_newBinaryCmd_Key_Value_Pair(t *testing.T) {
 
 	tests := []*config{
 		{
-			name:      "use-path",
+			name:      "Path_With_Fwd_Slashes",
 			urlString: "binary:///executable?-key=value",
-			expected:  "/executable -key value",
+			expected:  `\executable -key value`,
 		},
 		{
-			name:      "use-host",
-			urlString: "binary://executable?-key=value",
-			expected:  "/executable -key value",
+			name:      "Path_With_Back_Slashes",
+			urlString: `binary:///\executable?-key=value`,
+			expected:  `\executable -key value`,
 		},
 		{
-			name:      "use-host-and-path",
-			urlString: "binary://path/to/executable?flag",
-			expected:  "/path/to/executable flag",
+			name:      "Clean_Path_With_Dots_And_Multiple_Fwd_Slashes",
+			urlString: "binary:///../path/to///to/../executable",
+			expected:  `\path\to\executable`,
+		},
+		{
+			name:      "Clean_Path_With_Dots_And_Multiple_Back_Slashes",
+			urlString: `binary:///..\path\to\\\from\..\executable`,
+			expected:  `\path\to\executable`,
+		},
+		{
+			name:      "Stripped_Path_With_Forward_Slashes",
+			urlString: "binary:///D:/path/to/executable",
+			expected:  `D:\path\to\executable`,
+		},
+		{
+			name:      "Stripped_Path_With_Back_Slashes",
+			urlString: `binary:///D:\path\to\executable`,
+			expected:  `D:\path\to\executable`,
 		},
 	}
 
@@ -77,7 +92,7 @@ func Test_newBinaryCmd_flags(t *testing.T) {
 	urlString := "schema:///path/to/binary?foo&bar&baz"
 	uri, _ := url.Parse(urlString)
 
-	expectedPath := "/path/to/binary"
+	expectedPath := `\path\to\binary`
 	expectedFlags := map[string]bool{"foo": true, "bar": true, "baz": true}
 
 	cmd, err := newBinaryCmd(ctx, uri, nil)
