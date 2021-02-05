@@ -54,7 +54,15 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 			mdv1 := schema1.MappedDir{HostPath: mount.Source, ContainerPath: mount.Destination, ReadOnly: readOnly}
 			mdv2 := hcsschema.MappedDirectory{ContainerPath: mount.Destination, ReadOnly: readOnly}
 			if coi.HostingSystem == nil {
-				mdv2.HostPath = mount.Source
+				// HCS has a bug where it does not correctly resolve file (not dir) paths
+				// if the path includes a symlink. Therefore, we resolve the path here before
+				// passing it in. The issue does not occur with VSMB, so don't need to worry
+				// about the isolated case.
+				src, err := filepath.EvalSymlinks(mount.Source)
+				if err != nil {
+					return nil, fmt.Errorf("failed to eval symlinks for mount source %q: %s", mount.Source, err)
+				}
+				mdv2.HostPath = src
 			} else {
 				uvmPath, err := coi.HostingSystem.GetVSMBUvmPath(ctx, mount.Source, readOnly)
 				if err != nil {
