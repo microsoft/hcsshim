@@ -193,7 +193,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	return c, nil
 }
 
-func (h *Host) ModifyHostSettings(ctx context.Context, settings *prot.ModifySettingRequest) error {
+func (h *Host) modifyHostSettings(ctx context.Context, containerID string, settings *prot.ModifySettingRequest) error {
 	switch settings.ResourceType {
 	case prot.MrtMappedVirtualDisk:
 		return modifyMappedVirtualDisk(ctx, settings.RequestType, settings.Settings.(*prot.MappedVirtualDiskV2))
@@ -207,9 +207,36 @@ func (h *Host) ModifyHostSettings(ctx context.Context, settings *prot.ModifySett
 		return modifyNetwork(ctx, settings.RequestType, settings.Settings.(*prot.NetworkAdapterV2))
 	case prot.MrtVPCIDevice:
 		return modifyMappedVPCIDevice(ctx, settings.RequestType, settings.Settings.(*prot.MappedVPCIDeviceV2))
+	case prot.MrtContainerConstraints:
+		c, err := h.GetContainer(containerID)
+		if err != nil {
+			return err
+		}
+		return c.modifyContainerConstraints(ctx, settings.RequestType, settings.Settings.(*prot.ContainerConstraintsV2))
 	default:
-		return errors.Errorf("the ResourceType \"%s\" is not supported", settings.ResourceType)
+		return errors.Errorf("the ResourceType \"%s\" is not supported for UVM", settings.ResourceType)
 	}
+}
+
+func (h *Host) modifyContainerSettings(ctx context.Context, containerID string, settings *prot.ModifySettingRequest) error {
+	c, err := h.GetContainer(containerID)
+	if err != nil {
+		return err
+	}
+
+	switch settings.ResourceType {
+	case prot.MrtContainerConstraints:
+		return c.modifyContainerConstraints(ctx, settings.RequestType, settings.Settings.(*prot.ContainerConstraintsV2))
+	default:
+		return errors.Errorf("the ResourceType \"%s\" is not supported for containers", settings.ResourceType)
+	}
+}
+
+func (h *Host) ModifySettings(ctx context.Context, containerID string, settings *prot.ModifySettingRequest) error {
+	if containerID == UVMContainerID {
+		return h.modifyHostSettings(ctx, containerID, settings)
+	}
+	return h.modifyContainerSettings(ctx, containerID, settings)
 }
 
 // Shutdown terminates this UVM. This is a destructive call and will destroy all

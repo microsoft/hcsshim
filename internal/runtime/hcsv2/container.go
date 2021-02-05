@@ -129,7 +129,7 @@ func (c *Container) Delete(ctx context.Context) error {
 	return c.container.Delete()
 }
 
-func (c *Container) Update(ctx context.Context, resources string) error {
+func (c *Container) Update(ctx context.Context, resources interface{}) error {
 	return c.container.Update(resources)
 }
 
@@ -171,4 +171,8 @@ func (c *Container) GetStats(ctx context.Context) (*v1.Metrics, error) {
 	}
 
 	return cg.Stat(cgroups.IgnoreNotExist)
+}
+
+func (c *Container) modifyContainerConstraints(ctx context.Context, rt prot.ModifyRequestType, cc *prot.ContainerConstraintsV2) (err error) {
+	return c.Update(ctx, cc.Linux)
 }

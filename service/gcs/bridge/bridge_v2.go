@@ -36,7 +36,6 @@ var capabilities = prot.GcsCapabilities{
 		SignalProcessSupported:        true,
 		DumpStacksSupported:           true,
 		DeleteContainerStateSupported: true,
-		UpdateContainerSupported:      true,
 	},
 }
 
@@ -478,11 +477,7 @@ func (b *Bridge) modifySettingsV2(r *Request) (_ RequestResponse, err error) {
 		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
 	}
 
-	if request.ContainerID != hcsv2.UVMContainerID {
-		return nil, errors.New("V2 Modify request not supported on anything but UVM")
-	}
-
-	err = b.hostState.ModifyHostSettings(ctx, request.Request.(*prot.ModifySettingRequest))
+	err = b.hostState.ModifySettings(ctx, request.ContainerID, request.Request.(*prot.ModifySettingRequest))
 	if err != nil {
 		return nil, err
 	}
@@ -524,29 +519,5 @@ func (b *Bridge) deleteContainerStateV2(r *Request) (_ RequestResponse, err erro
 	}
 
 	b.hostState.RemoveContainer(request.ContainerID)
-	return &prot.MessageResponseBase{}, nil
-}
-
-func (b *Bridge) updateContainerV1(r *Request) (_ RequestResponse, err error) {
-	ctx, span := trace.StartSpan(r.Context, "opengcs::bridge::updateContainerV1")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
-
-	c, err := b.hostState.GetContainer(r.ContainerID)
-	if err != nil {
-		return nil, err
-	}
-	var request prot.ContainerUpdate
-	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
-	}
-
-	if len(request.Resources) == 0 {
-		return nil, errors.New("cannot update container with empty resources")
-	}
-	if err := c.Update(ctx, request.Resources); err != nil {
-		return nil, err
-	}
 	return &prot.MessageResponseBase{}, nil
 }

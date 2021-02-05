@@ -215,7 +215,6 @@ func (b *Bridge) AssignHandlers(mux *Mux, host *hcsv2.Host) {
 		mux.HandleFunc(prot.ComputeSystemModifySettingsV1, prot.PvV4, b.modifySettingsV2)
 		mux.HandleFunc(prot.ComputeSystemDumpStacksV1, prot.PvV4, b.dumpStacksV2)
 		mux.HandleFunc(prot.ComputeSystemDeleteContainerStateV1, prot.PvV4, b.deleteContainerStateV2)
-		mux.HandleFunc(prot.ComputeSystemUpdateContainerV1, prot.PvV4, b.updateContainerV1)
 	}
 }
 

@@ -60,7 +60,7 @@ type Container interface {
 	GetState() (*ContainerState, error)
 	GetRunningProcesses() ([]ContainerProcessState, error)
 	GetAllProcesses() ([]ContainerProcessState, error)
-	Update(resources string) error
+	Update(resources interface{}) error
 }
 
 // Runtime is the interface defining commands over an OCI container runtime,

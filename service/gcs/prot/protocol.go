@@ -104,8 +104,6 @@ const (
 	ComputeSystemDumpStacksV1 = 0x10100c01
 	// ComputeSystemDeleteContainerStateV1 is the delete container request.
 	ComputeSystemDeleteContainerStateV1 = 0x10100d01
-	// ComputeSystemUpdateContainerV1 is the update container request
-	ComputeSystemUpdateContainerV1 = 0x10100e01
 
 	// ComputeSystemResponseCreateV1 is the create container response.
 	ComputeSystemResponseCreateV1 = 0x20100101
@@ -172,8 +170,6 @@ func (mi MessageIdentifier) String() string {
 		return "ComputeSystemDumpStacksV1"
 	case ComputeSystemDeleteContainerStateV1:
 		return "ComputeSystemDeleteContainerStateV1"
-	case ComputeSystemUpdateContainerV1:
-		return "ComputeSystemUpdateContainerV1"
 	case ComputeSystemResponseCreateV1:
 		return "ComputeSystemResponseCreateV1"
 	case ComputeSystemResponseStartV1:
@@ -275,7 +271,6 @@ type GcsGuestCapabilities struct {
 	SignalProcessSupported        bool `json:",omitempty"`
 	DumpStacksSupported           bool `json:",omitempty"`
 	DeleteContainerStateSupported bool `json:",omitempty"`
-	UpdateContainerSupported      bool `json:",omitempty"`
 }
 
 // ocspancontext is the internal JSON representation of the OpenCensus
@@ -452,12 +447,6 @@ type ContainerGetProperties struct {
 	Query string
 }
 
-// ContainerUpdate is the message sent to update a container's resources
-type ContainerUpdate struct {
-	MessageBase
-	Resources string
-}
-
 // PropertyType is the type of property, such as memory or virtual disk, which
 // is to be modified for the container.
 type PropertyType string
@@ -528,6 +517,8 @@ const (
 	MrtNetwork = ModifyResourceType("Network")
 	// MrtVPCIDevice is the modify resource type for vpci devices
 	MrtVPCIDevice = ModifyResourceType("VPCIDevice")
+	// MrtContainerConstraints is the modify resource type for updating container constraints
+	MrtContainerConstraints = ModifyResourceType("ContainerConstraints")
 )
 
 // ModifyRequestType is the type of operation to perform on a given modify
@@ -621,6 +612,12 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 			return &request, errors.Wrap(err, "failed to unmarshal settings as MappedVPCIDeviceV2")
 		}
 		msr.Settings = vd
+	case MrtContainerConstraints:
+		cc := &ContainerConstraintsV2{}
+		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, cc); err != nil {
+			return &request, errors.Wrap(err, "failed to unmarshal settings as ContainerConstraintsV2")
+		}
+		msr.Settings = cc
 	default:
 		return &request, errors.Errorf("invalid ResourceType '%s'", msr.ResourceType)
 	}
@@ -795,6 +792,11 @@ type MappedVPMemDeviceV2 struct {
 
 type MappedVPCIDeviceV2 struct {
 	VMBusGUID string `json:",omitempty"`
+}
+
+type ContainerConstraintsV2 struct {
+	Windows oci.WindowsResources `json:",omitempty"`
+	Linux   oci.LinuxResources   `json:",omitempty"`
 }
 
 // VMHostedContainerSettings is the set of settings used to specify the initial
