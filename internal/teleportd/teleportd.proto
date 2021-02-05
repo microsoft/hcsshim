@@ -1,0 +1,24 @@
+syntax = "proto3";
+package teleportd.manifest;
+
+import weak "gogoproto/gogo.proto";
+
+service ManifestStore {
+    rpc Source(ManifestRequest) returns (ManifestResponse);
+}
+
+message ManifestRequest {
+    string key = 1;
+}
+
+message Layer {
+    string digest = 1;
+    string source = 2;
+    string file = 3; 
+    string username = 4; 
+    string password = 5;
+}
+
+message ManifestResponse {
+    repeated Layer layers = 1;
+}

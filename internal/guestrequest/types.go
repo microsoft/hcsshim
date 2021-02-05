@@ -9,10 +9,10 @@ import (
 //
 // This will also change package name due to an inbound breaking change.
 
-// This class is used by a modify request to add or remove a combined layers
-// structure in the guest. For windows, the GCS applies a filter in ContainerRootPath
+// CombinedLayers is used by a modify request to add or remove a combined layers
+// structure in the guest. For Windows, the GCS applies a filter in ContainerRootPath
 // using the specified layers as the parent content. Ignores property ScratchPath
-// since the container path is already the scratch path. For linux, the GCS unions
+// since the container path is already the scratch path. For Linux, the GCS unions
 // the specified layers and ScratchPath together, placing the resulting union
 // filesystem at ContainerRootPath.
 type CombinedLayers struct {
@@ -49,6 +49,22 @@ type LCOWMappedVPMemDevice struct {
 	MountPath    string `json:"MountPath,omitempty"`
 }
 
+// LCOWLoopbackDevice represents a loopback device being asked to get created within
+// the guest. This request assumes `BackingFile` exists in the guest.
+type LCOWLoopbackDevice struct {
+	DeviceNumber uint32 `json:"DeviceNumber,omitempty"`
+	MountPath    string `json:"MountPath,omitempty"`
+	BackingFile  string `json:"BackingFile,omitempty"`
+}
+
+//LCOWCifsMount represents a cifs mount to be mounted in the guest.
+type LCOWCifsMount struct {
+	Source    string `json:"Source,omitempty"`
+	MountPath string `json:"MountPath,omitempty"`
+	Username  string `json:"Username,omitempty"`
+	Password  string `json:"Password,omitempty"`
+}
+
 type LCOWMappedVPCIDevice struct {
 	VMBusGUID string `json:"VMBusGUID,omitempty"`
 }
@@ -76,6 +92,8 @@ const (
 	ResourceTypeNetworkNamespace  ResourceType = "NetworkNamespace"
 	ResourceTypeCombinedLayers    ResourceType = "CombinedLayers"
 	ResourceTypeVPMemDevice       ResourceType = "VPMemDevice"
+	ResourceTypeLoopbackDevice    ResourceType = "LoopbackDevice"
+	ResourceTypeCifsMount         ResourceType = "CifsMount"
 	ResourceTypeVPCIDevice        ResourceType = "VPCIDevice"
 	ResourceTypeHvSocket          ResourceType = "HvSocket"
 )

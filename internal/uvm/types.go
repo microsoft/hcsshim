@@ -20,14 +20,6 @@ import (
 // Read-Only Layer    | VSMB | VPMEM
 // Mapped Directory   | VSMB | PLAN9
 
-// vpmemInfo is an internal structure used for determining VPMem devices mapped to
-// a Linux utility VM.
-type vpmemInfo struct {
-	hostPath string
-	uvmPath  string
-	refCount uint32
-}
-
 type nicInfo struct {
 	ID       guid.GUID
 	Endpoint *hns.HNSEndpoint
@@ -88,6 +80,11 @@ type UtilityVM struct {
 	scsiControllerCount uint32            // Number of SCSI controllers in the utility VM
 
 	vpciDevices map[string]*VPCIDevice // map of device instance id to vpci device
+
+	cifsMounts map[string]*CifsMount // map of unc path of the share to cifs mount structure.
+
+	loopbackDevices map[uint32]*LoopbackDevice // map of device number to loopback device
+	loopbackCounter uint32                     // Number of loopback devices that have been created
 
 	// Plan9 are directories mapped into a Linux utility VM
 	plan9Counter uint64 // Each newly-added plan9 share has a counter used as its ID in the ResourceURI and for the name

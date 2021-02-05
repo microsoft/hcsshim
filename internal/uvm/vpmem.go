@@ -23,6 +23,14 @@ var (
 	ErrMaxVPMEMLayerSize = errors.New("layer size is to large for VPMEM max size")
 )
 
+// vpmemInfo is an internal structure used for determining VPMem devices mapped to
+// a Linux utility VM.
+type vpmemInfo struct {
+	hostPath string
+	uvmPath  string
+	refCount uint32
+}
+
 // findNextVPMEM finds the next available VPMem slot.
 //
 // The lock MUST be held when calling this function.

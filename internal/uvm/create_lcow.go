@@ -165,6 +165,8 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		vpmemMaxCount:           opts.VPMemDeviceCount,
 		vpmemMaxSizeBytes:       opts.VPMemSizeBytes,
 		vpciDevices:             make(map[string]*VPCIDevice),
+		cifsMounts:              make(map[string]*CifsMount),
+		loopbackDevices:         make(map[uint32]*LoopbackDevice),
 		physicallyBacked:        !opts.AllowOvercommit,
 		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
 		cpuGroupID:              opts.CPUGroupID,

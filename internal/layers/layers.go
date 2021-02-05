@@ -74,7 +74,7 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 
 	if uvm == nil {
 		if len(layerFolders) < 2 {
-			return "", fmt.Errorf("need at least two layers - base and scratch")
+			return "", errors.New("need at least two layers - base and scratch")
 		}
 		path := layerFolders[len(layerFolders)-1]
 		rest := layerFolders[:len(layerFolders)-1]
@@ -128,42 +128,49 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 		}
 	}()
 
-	for _, layerPath := range layerFolders[:len(layerFolders)-1] {
-		log.G(ctx).WithField("layerPath", layerPath).Debug("mounting layer")
-		if uvm.OS() == "windows" {
-			options := uvm.DefaultVSMBOptions(true)
-			options.TakeBackupPrivilege = true
-			if uvm.IsTemplate {
-				uvm.SetSaveableVSMBOptions(options, options.ReadOnly)
+	if isTeleportable(layerFolders) {
+		lcowUvmLayerPaths, err = teleportLayers(ctx, layerFolders, uvm)
+		if err != nil {
+			return "", errors.Wrap(err, "failed to teleport lcow layers")
+		}
+	} else {
+		for _, layerPath := range layerFolders[:len(layerFolders)-1] {
+			log.G(ctx).WithField("layerPath", layerPath).Debug("mounting layer")
+			if uvm.OS() == "windows" {
+				options := uvm.DefaultVSMBOptions(true)
+				options.TakeBackupPrivilege = true
+				if uvm.IsTemplate {
+					uvm.SetSaveableVSMBOptions(options, options.ReadOnly)
+				}
+				if _, err := uvm.AddVSMB(ctx, layerPath, options); err != nil {
+					return "", errors.Wrap(err, "failed to add VSMB layer")
+				}
+				layersAdded = append(layersAdded, layerPath)
+			} else {
+				var (
+					layerPath = filepath.Join(layerPath, "layer.vhd")
+					uvmPath   string
+				)
+				uvmPath, err = addLCOWLayer(ctx, uvm, layerPath)
+				if err != nil {
+					return "", errors.Wrap(err, "failed to add LCOW layer")
+				}
+				layersAdded = append(layersAdded, layerPath)
+				lcowUvmLayerPaths = append(lcowUvmLayerPaths, uvmPath)
 			}
-			if _, err := uvm.AddVSMB(ctx, layerPath, options); err != nil {
-				return "", fmt.Errorf("failed to add VSMB layer: %s", err)
-			}
-			layersAdded = append(layersAdded, layerPath)
-		} else {
-			var (
-				layerPath = filepath.Join(layerPath, "layer.vhd")
-				uvmPath   string
-			)
-			uvmPath, err = addLCOWLayer(ctx, uvm, layerPath)
-			if err != nil {
-				return "", fmt.Errorf("failed to add LCOW layer: %s", err)
-			}
-			layersAdded = append(layersAdded, layerPath)
-			lcowUvmLayerPaths = append(lcowUvmLayerPaths, uvmPath)
 		}
 	}
 
 	containerScratchPathInUVM := ospath.Join(uvm.OS(), guestRoot)
 	hostPath, err := getScratchVHDPath(layerFolders)
 	if err != nil {
-		return "", fmt.Errorf("failed to get scratch VHD path in layer folders: %s", err)
+		return "", errors.Wrap(err, "failed to get scratch VHD path in layer folders")
 	}
 	log.G(ctx).WithField("hostPath", hostPath).Debug("mounting scratch VHD")
 
 	scsiMount, err := uvm.AddSCSI(ctx, hostPath, containerScratchPathInUVM, false, uvmpkg.VMAccessTypeIndividual)
 	if err != nil {
-		return "", fmt.Errorf("failed to add SCSI scratch VHD: %s", err)
+		return "", errors.Wrap(err, "failed to add SCSI scratch VHD")
 	}
 
 	// This handles the case where we want to share a scratch disk for multiple containers instead
@@ -218,14 +225,14 @@ func addLCOWLayer(ctx context.Context, uvm *uvmpkg.UtilityVM, layerPath string) 
 			}).Debug("Added LCOW layer")
 			return uvmPath, nil
 		} else if err != uvmpkg.ErrNoAvailableLocation && err != uvmpkg.ErrMaxVPMEMLayerSize {
-			return "", fmt.Errorf("failed to add VPMEM layer: %s", err)
+			return "", errors.Wrap(err, "failed to add VPMEM layer")
 		}
 	}
 
 	uvmPath = fmt.Sprintf(uvmpkg.LCOWGlobalMountPrefix, uvm.UVMMountCounter())
 	sm, err := uvm.AddSCSI(ctx, layerPath, uvmPath, true, uvmpkg.VMAccessTypeNoop)
 	if err != nil {
-		return "", fmt.Errorf("failed to add SCSI layer: %s", err)
+		return "", errors.Wrap(err, "failed to add SCSI layer")
 	}
 	log.G(ctx).WithFields(logrus.Fields{
 		"layerPath": layerPath,
