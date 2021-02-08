@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/Microsoft/go-winio/vhd"
+	cmdpkg "github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/copyfile"
-	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -88,12 +88,12 @@ func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string,
 	testdCtx, cancel := context.WithTimeout(ctx, timeout.TestDRetryLoop)
 	defer cancel()
 	for {
-		cmd := hcsoci.CommandContext(testdCtx, lcowUVM, "test", "-d", devicePath)
+		cmd := cmdpkg.CommandContext(testdCtx, lcowUVM, "test", "-d", devicePath)
 		err := cmd.Run()
 		if err == nil {
 			break
 		}
-		if _, ok := err.(*hcsoci.ExitError); !ok {
+		if _, ok := err.(*cmdpkg.ExitError); !ok {
 			return fmt.Errorf("failed to run %+v following hot-add %s to utility VM: %s", cmd.Spec.Args, destFile, err)
 		}
 		time.Sleep(time.Millisecond * 10)
@@ -102,7 +102,7 @@ func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string,
 
 	// Get the device from under the block subdirectory by doing a simple ls. This will come back as (eg) `sda`
 	lsCtx, cancel := context.WithTimeout(ctx, timeout.ExternalCommandToStart)
-	cmd := hcsoci.CommandContext(lsCtx, lcowUVM, "ls", devicePath)
+	cmd := cmdpkg.CommandContext(lsCtx, lcowUVM, "ls", devicePath)
 	lsOutput, err := cmd.Output()
 	cancel()
 	if err != nil {
@@ -116,7 +116,7 @@ func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string,
 
 	// Format it ext4
 	mkfsCtx, cancel := context.WithTimeout(ctx, timeout.ExternalCommandToStart)
-	cmd = hcsoci.CommandContext(mkfsCtx, lcowUVM, "mkfs.ext4", "-q", "-E", "lazy_itable_init=0,nodiscard", "-O", `^has_journal,sparse_super2,^resize_inode`, device)
+	cmd = cmdpkg.CommandContext(mkfsCtx, lcowUVM, "mkfs.ext4", "-q", "-E", "lazy_itable_init=0,nodiscard", "-O", `^has_journal,sparse_super2,^resize_inode`, device)
 	var mkfsStderr bytes.Buffer
 	cmd.Stderr = &mkfsStderr
 	err = cmd.Run()

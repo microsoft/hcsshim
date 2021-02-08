@@ -9,6 +9,7 @@ service ShimDiag {
     rpc DiagExecInHost(ExecProcessRequest) returns (ExecProcessResponse);
     rpc DiagStacks(StacksRequest) returns (StacksResponse);
     rpc DiagShare(ShareRequest) returns (ShareResponse);
+    rpc DiagPid(PidRequest) returns (PidResponse);
 }
 
 message ExecProcessRequest {
@@ -39,4 +40,11 @@ message ShareRequest {
 }
 
 message ShareResponse {
+}
+
+message PidRequest{
+}
+
+message PidResponse{
+    int32 pid = 1;
 }

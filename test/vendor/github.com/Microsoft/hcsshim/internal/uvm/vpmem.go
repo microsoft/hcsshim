@@ -152,6 +152,12 @@ func (uvm *UtilityVM) RemoveVPMEM(ctx context.Context, hostPath string) (err err
 		if err := uvm.modify(ctx, modification); err != nil {
 			return fmt.Errorf("failed to remove VPMEM %s from utility VM %s: %s", hostPath, uvm.id, err)
 		}
+		log.G(ctx).WithFields(logrus.Fields{
+			"hostPath":     device.hostPath,
+			"uvmPath":      device.uvmPath,
+			"refCount":     device.refCount,
+			"deviceNumber": deviceNumber,
+		}).Debug("removed VPMEM location")
 		uvm.vpmemDevices[deviceNumber] = nil
 	} else {
 		device.refCount--

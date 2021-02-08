@@ -182,6 +182,15 @@ func (err *rpcError) Error() string {
 	return "guest RPC failure: " + msg
 }
 
+// IsNotExist is a helper function to determine if the inner rpc error is Not Exist
+func IsNotExist(err error) bool {
+	switch rerr := err.(type) {
+	case *rpcError:
+		return uint32(rerr.result) == hrComputeSystemDoesNotExist
+	}
+	return false
+}
+
 // Err returns the RPC's result. This may be a transport error or an error from
 // the message response.
 func (call *rpc) Err() error {

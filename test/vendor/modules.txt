@@ -1,4 +1,4 @@
-# github.com/Microsoft/go-winio v0.4.15-0.20190919025122-fc70bd9a86b5
+# github.com/Microsoft/go-winio v0.4.16-0.20201130162521-d1ffc52c7331
 github.com/Microsoft/go-winio
 github.com/Microsoft/go-winio/pkg/guid
 github.com/Microsoft/go-winio/pkg/process
@@ -8,10 +8,16 @@ github.com/Microsoft/go-winio/vhd
 github.com/Microsoft/hcsshim
 github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options
 github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats
+github.com/Microsoft/hcsshim/computestorage
 github.com/Microsoft/hcsshim/hcn
+github.com/Microsoft/hcsshim/internal/clone
+github.com/Microsoft/hcsshim/internal/cmd
 github.com/Microsoft/hcsshim/internal/cni
 github.com/Microsoft/hcsshim/internal/copyfile
 github.com/Microsoft/hcsshim/internal/cow
+github.com/Microsoft/hcsshim/internal/cpugroup
+github.com/Microsoft/hcsshim/internal/credentials
+github.com/Microsoft/hcsshim/internal/devices
 github.com/Microsoft/hcsshim/internal/gcs
 github.com/Microsoft/hcsshim/internal/guestrequest
 github.com/Microsoft/hcsshim/internal/hcs
@@ -19,6 +25,7 @@ github.com/Microsoft/hcsshim/internal/hcserror
 github.com/Microsoft/hcsshim/internal/hcsoci
 github.com/Microsoft/hcsshim/internal/hns
 github.com/Microsoft/hcsshim/internal/interop
+github.com/Microsoft/hcsshim/internal/layers
 github.com/Microsoft/hcsshim/internal/lcow
 github.com/Microsoft/hcsshim/internal/log
 github.com/Microsoft/hcsshim/internal/logfields
@@ -30,6 +37,7 @@ github.com/Microsoft/hcsshim/internal/ospath
 github.com/Microsoft/hcsshim/internal/processorinfo
 github.com/Microsoft/hcsshim/internal/regstate
 github.com/Microsoft/hcsshim/internal/requesttype
+github.com/Microsoft/hcsshim/internal/resources
 github.com/Microsoft/hcsshim/internal/runhcs
 github.com/Microsoft/hcsshim/internal/safefile
 github.com/Microsoft/hcsshim/internal/schema1
@@ -42,6 +50,7 @@ github.com/Microsoft/hcsshim/internal/uvmfolder
 github.com/Microsoft/hcsshim/internal/vmcompute
 github.com/Microsoft/hcsshim/internal/wclayer
 github.com/Microsoft/hcsshim/internal/wcow
+github.com/Microsoft/hcsshim/internal/winapi
 github.com/Microsoft/hcsshim/osversion
 github.com/Microsoft/hcsshim/pkg/go-runhcs
 # github.com/blang/semver v3.1.0+incompatible
@@ -192,7 +201,8 @@ golang.org/x/net/trace
 # golang.org/x/sync v0.0.0-20190423024810-112230192c58
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.0.0-20200120151820-655fe14d7479
+# golang.org/x/sys v0.0.0-20201201145000-ef89a241ccb3
+golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
