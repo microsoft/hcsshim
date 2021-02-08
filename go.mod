@@ -11,7 +11,7 @@ require (
 	github.com/containerd/fifo v0.0.0-20190226154929-a9fb20d87448 // indirect
 	github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3
 	github.com/containerd/ttrpc v1.0.2
-	github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd
+	github.com/containerd/typeurl v1.0.1
 	github.com/gogo/protobuf v1.3.1
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/opencontainers/go-digest v0.0.0-20180430190053-c9281466c8b2 // indirect
