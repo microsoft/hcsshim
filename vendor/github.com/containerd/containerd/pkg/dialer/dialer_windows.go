@@ -14,17 +14,25 @@
    limitations under the License.
 */
 
-package shim
+package dialer
 
 import (
-	"github.com/containerd/containerd/sys/reaper"
-	"github.com/containerd/ttrpc"
+	"net"
+	"os"
+	"time"
+
+	winio "github.com/Microsoft/go-winio"
 )
 
-func newServer() (*ttrpc.Server, error) {
-	return ttrpc.NewServer(ttrpc.WithServerHandshaker(ttrpc.UnixSocketRequireSameUser()))
+func isNoent(err error) bool {
+	return os.IsNotExist(err)
 }
 
-func subreaper() error {
-	return reaper.SetSubreaper(1)
+func dialer(address string, timeout time.Duration) (net.Conn, error) {
+	return winio.DialPipe(address, &timeout)
+}
+
+// DialAddress returns the dial address
+func DialAddress(address string) string {
+	return address
 }
