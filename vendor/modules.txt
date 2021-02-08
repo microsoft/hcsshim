@@ -9,7 +9,7 @@ github.com/Microsoft/go-winio/pkg/security
 github.com/Microsoft/go-winio/vhd
 # github.com/containerd/cgroups v0.0.0-20200531161412-0dbf7f05ba59
 github.com/containerd/cgroups/stats/v1
-# github.com/containerd/console v0.0.0-20180822173158-c12b1e7919c1
+# github.com/containerd/console v1.0.1
 github.com/containerd/console
 # github.com/containerd/containerd v1.3.2
 github.com/containerd/containerd/api/events
