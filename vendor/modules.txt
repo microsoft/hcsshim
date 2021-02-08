@@ -51,8 +51,6 @@ github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/timestamp
 # github.com/hashicorp/golang-lru v0.5.1
 github.com/hashicorp/golang-lru/simplelru
-# github.com/konsorten/go-windows-terminal-sequences v1.0.2
-github.com/konsorten/go-windows-terminal-sequences
 # github.com/opencontainers/go-digest v0.0.0-20180430190053-c9281466c8b2
 github.com/opencontainers/go-digest
 # github.com/opencontainers/runc v0.0.0-20190115041553-12f6a991201f
@@ -66,7 +64,7 @@ github.com/pkg/errors
 github.com/russross/blackfriday/v2
 # github.com/shurcooL/sanitized_anchor_name v1.0.0
 github.com/shurcooL/sanitized_anchor_name
-# github.com/sirupsen/logrus v1.4.2
+# github.com/sirupsen/logrus v1.7.0
 github.com/sirupsen/logrus
 # github.com/urfave/cli v1.22.2
 github.com/urfave/cli

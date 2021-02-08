@@ -20,7 +20,7 @@ require (
 	github.com/opencontainers/runtime-spec v1.0.2
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/procfs v0.0.0-20180125133057-cb4147076ac7 // indirect
-	github.com/sirupsen/logrus v1.4.2
+	github.com/sirupsen/logrus v1.7.0
 	github.com/stretchr/testify v1.4.0 // indirect
 	github.com/urfave/cli v1.22.2
 	go.opencensus.io v0.22.0
