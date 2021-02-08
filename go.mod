@@ -3,7 +3,7 @@ module github.com/Microsoft/hcsshim
 go 1.13
 
 require (
-	github.com/Microsoft/go-winio v0.4.16-0.20201130162521-d1ffc52c7331
+	github.com/Microsoft/go-winio v0.4.16
 	github.com/containerd/cgroups v0.0.0-20200531161412-0dbf7f05ba59
 	github.com/containerd/console v0.0.0-20180822173158-c12b1e7919c1
 	github.com/containerd/containerd v1.3.2

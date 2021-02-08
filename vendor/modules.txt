@@ -1,4 +1,4 @@
-# github.com/Microsoft/go-winio v0.4.16-0.20201130162521-d1ffc52c7331
+# github.com/Microsoft/go-winio v0.4.16
 github.com/Microsoft/go-winio
 github.com/Microsoft/go-winio/backuptar
 github.com/Microsoft/go-winio/pkg/etw
