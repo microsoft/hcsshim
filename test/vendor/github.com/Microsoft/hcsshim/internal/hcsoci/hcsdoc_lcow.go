@@ -29,7 +29,7 @@ func createLCOWSpec(coi *createOptionsInternal) (*specs.Spec, error) {
 	spec.Windows = nil
 	if coi.Spec.Windows != nil {
 		setWindowsNetworkNamespace(coi, spec)
-		spec.Windows.Devices = coi.Spec.Windows.Devices
+		setWindowsDevices(coi, spec)
 	}
 
 	// Hooks are not supported (they should be run in the host)
@@ -52,11 +52,21 @@ func createLCOWSpec(coi *createOptionsInternal) (*specs.Spec, error) {
 func setWindowsNetworkNamespace(coi *createOptionsInternal, spec *specs.Spec) {
 	if coi.Spec.Windows.Network != nil &&
 		coi.Spec.Windows.Network.NetworkNamespace != "" {
-		spec.Windows = &specs.Windows{
-			Network: &specs.WindowsNetwork{
-				NetworkNamespace: coi.Spec.Windows.Network.NetworkNamespace,
-			},
+		if spec.Windows == nil {
+			spec.Windows = &specs.Windows{}
 		}
+		spec.Windows.Network = &specs.WindowsNetwork{
+			NetworkNamespace: coi.Spec.Windows.Network.NetworkNamespace,
+		}
+	}
+}
+
+func setWindowsDevices(coi *createOptionsInternal, spec *specs.Spec) {
+	if coi.Spec.Windows.Devices != nil {
+		if spec.Windows == nil {
+			spec.Windows = &specs.Windows{}
+		}
+		spec.Windows.Devices = coi.Spec.Windows.Devices
 	}
 }
 

@@ -29,7 +29,7 @@ type Options struct {
 
 	// MemorySizeInMB sets the UVM memory. If `0` will default to platform
 	// default.
-	MemorySizeInMB int32
+	MemorySizeInMB uint64
 
 	LowMMIOGapInMB   uint64
 	HighMMIOBaseInMB uint64
@@ -70,6 +70,52 @@ type Options struct {
 	// ExternalGuestConnection sets whether the guest RPC connection is performed
 	// internally by the OS platform or externally by this package.
 	ExternalGuestConnection bool
+
+	// DisableCompartmentNamespace sets whether to disable namespacing the network compartment in the UVM
+	// for WCOW. Namespacing makes it so the compartment created for a container is essentially no longer
+	// aware or able to see any of the other compartments on the host (in this case the UVM).
+	// The compartment that the container is added to now behaves as the default compartment as
+	// far as the container is concerned and it is only able to view the NICs in the compartment it's assigned to.
+	// This is the compartment setup (and behavior) that is followed for V1 HCS schema containers (docker) so
+	// this change brings parity as well. This behavior is gated behind a registry key currently to avoid any
+	// unneccessary behavior and once this restriction is removed then we can remove the need for this variable
+	// and the associated annotation as well.
+	DisableCompartmentNamespace bool
+
+	// CPUGroupID set the ID of a CPUGroup on the host that the UVM should be added to on start.
+	// Defaults to an empty string which indicates the UVM should not be added to any CPUGroup.
+	CPUGroupID string
+}
+
+// compares the create opts used during template creation with the create opts
+// provided for clone creation. If they don't match (except for a few fields)
+// then clone creation is failed.
+func verifyCloneUvmCreateOpts(templateOpts, cloneOpts *OptionsWCOW) bool {
+	// Following fields can be different in the template and clone configurations.
+	// 1. the scratch layer path. i.e the last element of the LayerFolders path.
+	// 2. IsTemplate, IsClone and TemplateConfig variables.
+	// 3. ID
+	// 4. AdditionalHCSDocumentJSON
+
+	// Save the original values of the fields that we want to ignore and replace them with
+	// the same values as that of the other object. So that we can simply use `==` operator.
+	templateIDBackup := templateOpts.ID
+	templateAdditionalJsonBackup := templateOpts.AdditionHCSDocumentJSON
+	templateOpts.ID = cloneOpts.ID
+	templateOpts.AdditionHCSDocumentJSON = cloneOpts.AdditionHCSDocumentJSON
+
+	// We can't use `==` operator on structs which include slices in them. So compare the
+	// Layerfolders separately and then directly compare the Options struct.
+	result := (len(templateOpts.LayerFolders) == len(cloneOpts.LayerFolders))
+	for i := 0; result && i < len(templateOpts.LayerFolders)-1; i++ {
+		result = result && (templateOpts.LayerFolders[i] == cloneOpts.LayerFolders[i])
+	}
+	result = result && (*templateOpts.Options == *cloneOpts.Options)
+
+	// set original values
+	templateOpts.ID = templateIDBackup
+	templateOpts.AdditionHCSDocumentJSON = templateAdditionalJsonBackup
+	return result
 }
 
 // Verifies that the final UVM options are correct and supported.
@@ -107,6 +153,18 @@ func verifyOptions(ctx context.Context, options interface{}) error {
 		}
 		if len(opts.LayerFolders) < 2 {
 			return errors.New("at least 2 LayerFolders must be supplied")
+		}
+		if opts.IsClone && !verifyCloneUvmCreateOpts(&opts.TemplateConfig.CreateOpts, opts) {
+			return errors.New("clone configuration doesn't match with template configuration.")
+		}
+		if opts.IsClone && opts.TemplateConfig == nil {
+			return errors.New("template config can not be nil when creating clone")
+		}
+		if opts.IsClone && !opts.ExternalGuestConnection {
+			return errors.New("External gcs connection can not be disabled for clones")
+		}
+		if opts.IsTemplate && opts.FullyPhysicallyBacked {
+			return errors.New("Template can not be created from a full physically backed UVM")
 		}
 	}
 	return nil
@@ -185,14 +243,15 @@ func (uvm *UtilityVM) Close() (err error) {
 	windows.Close(uvm.vmmemProcess)
 
 	if uvm.hcsSystem != nil {
+		if err := uvm.ReleaseCPUGroup(ctx); err != nil {
+			log.G(ctx).WithError(err).Warn("failed to release VM resource")
+		}
 		uvm.hcsSystem.Terminate(ctx)
 		uvm.Wait()
 	}
-	if uvm.gc != nil {
-		uvm.gc.Close()
-	}
-	if uvm.gcListener != nil {
-		uvm.gcListener.Close()
+
+	if err := uvm.CloseGCSConnection(); err != nil {
+		log.G(ctx).Errorf("close GCS connection failed: %s", err)
 	}
 
 	// outputListener will only be nil for a Create -> Stop without a Start. In
@@ -298,7 +357,7 @@ func (uvm *UtilityVM) PhysicallyBacked() bool {
 	return uvm.physicallyBacked
 }
 
-func (uvm *UtilityVM) normalizeMemorySize(ctx context.Context, requested int32) int32 {
+func (uvm *UtilityVM) normalizeMemorySize(ctx context.Context, requested uint64) uint64 {
 	actual := (requested + 1) &^ 1 // align up to an even number
 	if requested != actual {
 		log.G(ctx).WithFields(logrus.Fields{
@@ -314,4 +373,16 @@ func (uvm *UtilityVM) normalizeMemorySize(ctx context.Context, requested int32) 
 // should be physically backed
 func (uvm *UtilityVM) DevicesPhysicallyBacked() bool {
 	return uvm.devicesPhysicallyBacked
+}
+
+// Closes the external GCS connection if it is being used and also closes the
+// listener for GCS connection.
+func (uvm *UtilityVM) CloseGCSConnection() (err error) {
+	if uvm.gc != nil {
+		err = uvm.gc.Close()
+	}
+	if uvm.gcListener != nil {
+		err = uvm.gcListener.Close()
+	}
+	return
 }

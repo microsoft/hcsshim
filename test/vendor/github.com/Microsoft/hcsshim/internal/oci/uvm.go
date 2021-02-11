@@ -3,10 +3,12 @@ package oci
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	"github.com/Microsoft/hcsshim/internal/clone"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -79,7 +81,13 @@ const (
 	// `spec.Windows.Resources.Storage.Iops`.
 	AnnotationContainerStorageQoSIopsMaximum = "io.microsoft.container.storage.qos.iopsmaximum"
 	// AnnotationGPUVHDPath overrides the default path to search for the gpu vhd
-	AnnotationGPUVHDPath            = "io.microsoft.lcow.gpuvhdpath"
+	AnnotationGPUVHDPath = "io.microsoft.lcow.gpuvhdpath"
+	// AnnotationAssignedDeviceKernelDrivers indicates what drivers to install in the pod during device
+	// assignment. This value should contain a list of comma separated directories containing all
+	// files and information needed to install given driver(s). This may include .sys,
+	// .inf, .cer, and/or other files used during standard installation with pnputil.
+	AnnotationAssignedDeviceKernelDrivers = "io.microsoft.assigneddevice.kerneldrivers"
+
 	annotationAllowOvercommit       = "io.microsoft.virtualmachine.computetopology.memory.allowovercommit"
 	annotationEnableDeferredCommit  = "io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit"
 	annotationEnableColdDiscardHint = "io.microsoft.virtualmachine.computetopology.memory.enablecolddiscardhint"
@@ -114,20 +122,39 @@ const (
 	//
 	// Note: Unlike Windows process isolated container QoS Count/Limt/Weight on
 	// the UVM are not mutually exclusive and can be set together.
-	annotationProcessorWeight            = "io.microsoft.virtualmachine.computetopology.processor.weight"
-	annotationVPMemCount                 = "io.microsoft.virtualmachine.devices.virtualpmem.maximumcount"
-	annotationVPMemSize                  = "io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes"
-	annotationPreferredRootFSType        = "io.microsoft.virtualmachine.lcow.preferredrootfstype"
-	annotationBootFilesRootPath          = "io.microsoft.virtualmachine.lcow.bootfilesrootpath"
-	annotationKernelDirectBoot           = "io.microsoft.virtualmachine.lcow.kerneldirectboot"
-	annotationVPCIEnabled                = "io.microsoft.virtualmachine.lcow.vpcienabled"
-	annotationStorageQoSBandwidthMaximum = "io.microsoft.virtualmachine.storageqos.bandwidthmaximum"
-	annotationStorageQoSIopsMaximum      = "io.microsoft.virtualmachine.storageqos.iopsmaximum"
-	annotationFullyPhysicallyBacked      = "io.microsoft.virtualmachine.fullyphysicallybacked"
+	annotationProcessorWeight             = "io.microsoft.virtualmachine.computetopology.processor.weight"
+	annotationVPMemCount                  = "io.microsoft.virtualmachine.devices.virtualpmem.maximumcount"
+	annotationVPMemSize                   = "io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes"
+	annotationPreferredRootFSType         = "io.microsoft.virtualmachine.lcow.preferredrootfstype"
+	annotationBootFilesRootPath           = "io.microsoft.virtualmachine.lcow.bootfilesrootpath"
+	annotationKernelDirectBoot            = "io.microsoft.virtualmachine.lcow.kerneldirectboot"
+	annotationVPCIEnabled                 = "io.microsoft.virtualmachine.lcow.vpcienabled"
+	annotationStorageQoSBandwidthMaximum  = "io.microsoft.virtualmachine.storageqos.bandwidthmaximum"
+	annotationStorageQoSIopsMaximum       = "io.microsoft.virtualmachine.storageqos.iopsmaximum"
+	annotationFullyPhysicallyBacked       = "io.microsoft.virtualmachine.fullyphysicallybacked"
+	annotationDisableCompartmentNamespace = "io.microsoft.virtualmachine.disablecompartmentnamespace"
 	// A boolean annotation to control whether to use an external bridge or the
 	// HCS-GCS bridge. Default value is true which means external bridge will be used
 	// by default.
 	annotationUseExternalGCSBridge = "io.microsoft.virtualmachine.useexternalgcsbridge"
+
+	// annotation used to specify the cpugroup ID that a UVM should be assigned to
+	annotationCPUGroupID = "io.microsoft.virtualmachine.cpugroup.id"
+
+	// SaveAsTemplate annotation must be used with a pod & container creation request.
+	// If this annotation is present in the request then it will save the UVM (pod)
+	// and the container(s) inside it as a template. However, this also means that this
+	// pod and the containers inside this pod will permananetly stay in the
+	// paused/templated state and can not be resumed again.
+	annotationSaveAsTemplate = "io.microsoft.virtualmachine.saveastemplate"
+
+	// This annotation should be used when creating a pod or a container from a template.
+	// When creating a pod from a template use the ID of the templated pod as the
+	// TemplateID and when creating a container use the ID of the templated container as
+	// the TemplateID. It is the client's responsibility to make sure that the sandbox
+	// within which a cloned container needs to be created must also be created from the
+	// same template.
+	annotationTemplateID = "io.microsoft.virtualmachine.templateid"
 )
 
 // parseAnnotationsBool searches `a` for `key` and if found verifies that the
@@ -240,16 +267,16 @@ func ParseAnnotationsStorageBps(ctx context.Context, s *specs.Spec, annotation s
 // returns `def`.
 //
 // Note: The returned value is in `MB`.
-func ParseAnnotationsMemory(ctx context.Context, s *specs.Spec, annotation string, def int32) int32 {
+func ParseAnnotationsMemory(ctx context.Context, s *specs.Spec, annotation string, def uint64) uint64 {
 	if m := parseAnnotationsUint64(ctx, s.Annotations, annotation, 0); m != 0 {
-		return int32(m)
+		return m
 	}
 	if s.Windows != nil &&
 		s.Windows.Resources != nil &&
 		s.Windows.Resources.Memory != nil &&
 		s.Windows.Resources.Memory.Limit != nil &&
 		*s.Windows.Resources.Memory.Limit > 0 {
-		return int32(*s.Windows.Resources.Memory.Limit / 1024 / 1024)
+		return (*s.Windows.Resources.Memory.Limit / 1024 / 1024)
 	}
 	return def
 }
@@ -318,6 +345,32 @@ func parseAnnotationsString(a map[string]string, key string, def string) string 
 	return def
 }
 
+// ParseAnnotationsSaveAsTemplate searches for the boolean value which specifies
+// if this create request should be considered as a template creation request. If value
+// is found the returns the actual value, returns false otherwise.
+func ParseAnnotationsSaveAsTemplate(ctx context.Context, s *specs.Spec) bool {
+	return parseAnnotationsBool(ctx, s.Annotations, annotationSaveAsTemplate, false)
+}
+
+// ParseAnnotationsTemplateID searches for the templateID in the create request. If the
+// value is found then returns the value otherwise returns the empty string.
+func ParseAnnotationsTemplateID(ctx context.Context, s *specs.Spec) string {
+	return parseAnnotationsString(s.Annotations, annotationTemplateID, "")
+}
+
+func ParseCloneAnnotations(ctx context.Context, s *specs.Spec) (isTemplate bool, templateID string, err error) {
+	templateID = ParseAnnotationsTemplateID(ctx, s)
+	isTemplate = ParseAnnotationsSaveAsTemplate(ctx, s)
+	if templateID != "" && isTemplate {
+		return false, "", fmt.Errorf("templateID and save as template flags can not be passed in the same request")
+	}
+
+	if (isTemplate || templateID != "") && !IsWCOW(s) {
+		return false, "", fmt.Errorf("save as template and creating clones is only available for WCOW")
+	}
+	return
+}
+
 // handleAnnotationKernelDirectBoot handles parsing annotationKernelDirectBoot and setting
 // implied annotations from the result.
 func handleAnnotationKernelDirectBoot(ctx context.Context, a map[string]string, lopts *uvm.OptionsLCOW) {
@@ -359,6 +412,26 @@ func handleAnnotationFullyPhysicallyBacked(ctx context.Context, a map[string]str
 	}
 }
 
+// handleCloneAnnotations handles parsing annotations related to template creation and cloning
+// Since late cloning is only supported for WCOW this function only deals with WCOW options.
+func handleCloneAnnotations(ctx context.Context, a map[string]string, wopts *uvm.OptionsWCOW) (err error) {
+	wopts.IsTemplate = parseAnnotationsBool(ctx, a, annotationSaveAsTemplate, false)
+	templateID := parseAnnotationsString(a, annotationTemplateID, "")
+	if templateID != "" {
+		tc, err := clone.FetchTemplateConfig(ctx, templateID)
+		if err != nil {
+			return err
+		}
+		wopts.TemplateConfig = &uvm.UVMTemplateConfig{
+			UVMID:      tc.TemplateUVMID,
+			CreateOpts: tc.TemplateUVMCreateOpts,
+			Resources:  tc.TemplateUVMResources,
+		}
+		wopts.IsClone = true
+	}
+	return nil
+}
+
 // SpecToUVMCreateOpts parses `s` and returns either `*uvm.OptionsLCOW` or
 // `*uvm.OptionsWCOW`.
 func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (interface{}, error) {
@@ -384,6 +457,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.VPCIEnabled = parseAnnotationsBool(ctx, s.Annotations, annotationVPCIEnabled, lopts.VPCIEnabled)
 		lopts.BootFilesPath = parseAnnotationsString(s.Annotations, annotationBootFilesRootPath, lopts.BootFilesPath)
 		lopts.ExternalGuestConnection = parseAnnotationsBool(ctx, s.Annotations, annotationUseExternalGCSBridge, lopts.ExternalGuestConnection)
+		lopts.CPUGroupID = parseAnnotationsString(s.Annotations, annotationCPUGroupID, lopts.CPUGroupID)
 		handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
 		handleAnnotationKernelDirectBoot(ctx, s.Annotations, lopts)
 
@@ -405,7 +479,12 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		wopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(ctx, s, annotationStorageQoSBandwidthMaximum, wopts.StorageQoSBandwidthMaximum)
 		wopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotationStorageQoSIopsMaximum, wopts.StorageQoSIopsMaximum)
 		wopts.ExternalGuestConnection = parseAnnotationsBool(ctx, s.Annotations, annotationUseExternalGCSBridge, wopts.ExternalGuestConnection)
+		wopts.DisableCompartmentNamespace = parseAnnotationsBool(ctx, s.Annotations, annotationDisableCompartmentNamespace, wopts.DisableCompartmentNamespace)
+		wopts.CPUGroupID = parseAnnotationsString(s.Annotations, annotationCPUGroupID, wopts.CPUGroupID)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, wopts)
+		if err := handleCloneAnnotations(ctx, s.Annotations, wopts); err != nil {
+			return nil, err
+		}
 		return wopts, nil
 	}
 	return nil, errors.New("cannot create UVM opts spec is not LCOW or WCOW")

@@ -1,11 +1,17 @@
 package uvm
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/Microsoft/go-winio/pkg/security"
+	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
@@ -31,6 +37,8 @@ const (
 	// the running VM only
 	VMAccessTypeIndividual
 )
+
+const scsiCurrentSerialVersionID = 1
 
 var (
 	ErrNoAvailableLocation      = fmt.Errorf("no available location")
@@ -67,41 +75,58 @@ type SCSIMount struct {
 	// read-only layers. As RO layers are shared, we perform ref-counting.
 	isLayer  bool
 	refCount uint32
+	// specifies if this is a readonly layer
+	readOnly bool
+	// "VirtualDisk" or "PassThru" disk attachment type.
+	attachmentType string
+	// serialization ID
+	serialVersionID uint32
+}
+
+// RefCount returns the current refcount for the SCSI mount.
+func (sm *SCSIMount) RefCount() uint32 {
+	return sm.refCount
 }
 
 func (sm *SCSIMount) logFormat() logrus.Fields {
 	return logrus.Fields{
-		"HostPath":   sm.HostPath,
-		"UVMPath":    sm.UVMPath,
-		"isLayer":    sm.isLayer,
-		"refCount":   sm.refCount,
-		"Controller": sm.Controller,
-		"LUN":        sm.LUN,
+		"HostPath":        sm.HostPath,
+		"UVMPath":         sm.UVMPath,
+		"isLayer":         sm.isLayer,
+		"refCount":        sm.refCount,
+		"Controller":      sm.Controller,
+		"LUN":             sm.LUN,
+		"SerialVersionID": sm.serialVersionID,
+	}
+}
+
+func newSCSIMount(uvm *UtilityVM, hostPath, uvmPath, attachmentType string, refCount uint32, controller int, lun int32, readOnly bool) *SCSIMount {
+	return &SCSIMount{
+		vm:              uvm,
+		HostPath:        hostPath,
+		UVMPath:         uvmPath,
+		refCount:        refCount,
+		Controller:      controller,
+		LUN:             int32(lun),
+		readOnly:        readOnly,
+		attachmentType:  attachmentType,
+		serialVersionID: scsiCurrentSerialVersionID,
 	}
 }
 
 // allocateSCSISlot finds the next available slot on the
 // SCSI controllers associated with a utility VM to use.
 // Lock must be held when calling this function
-func (uvm *UtilityVM) allocateSCSISlot(ctx context.Context, hostPath string, uvmPath string) (*SCSIMount, error) {
+func (uvm *UtilityVM) allocateSCSISlot(ctx context.Context) (int, int, error) {
 	for controller, luns := range uvm.scsiLocations {
 		for lun, sm := range luns {
 			// If sm is nil, we have found an open slot so we allocate a new SCSIMount
 			if sm == nil {
-				uvm.scsiLocations[controller][lun] = &SCSIMount{
-					vm:         uvm,
-					HostPath:   hostPath,
-					UVMPath:    uvmPath,
-					refCount:   1,
-					Controller: controller,
-					LUN:        int32(lun),
-				}
-				log.G(ctx).WithFields(uvm.scsiLocations[controller][lun].logFormat()).Debug("allocated SCSI mount")
-				return uvm.scsiLocations[controller][lun], nil
+				return controller, lun, nil
 			}
 		}
 	}
-	return nil, ErrNoAvailableLocation
+	return -1, -1, ErrNoAvailableLocation
 }
 
 func (uvm *UtilityVM) deallocateSCSIMount(ctx context.Context, sm *SCSIMount) {
@@ -181,6 +206,7 @@ func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) error {
 	if err := uvm.modify(ctx, scsiModification); err != nil {
 		return fmt.Errorf("failed to remove SCSI disk %s from container %s: %s", hostPath, uvm.id, err)
 	}
+	log.G(ctx).WithFields(sm.logFormat()).Debug("removed SCSI location")
 	uvm.scsiLocations[sm.Controller][sm.LUN] = nil
 	return nil
 }
@@ -227,7 +253,7 @@ func (uvm *UtilityVM) AddSCSIPhysicalDisk(ctx context.Context, hostPath, uvmPath
 //
 // Returns result from calling modify with the given scsi mount
 func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, attachmentType string, readOnly bool, vmAccess VMAccessType) (sm *SCSIMount, err error) {
-	sm, existed, err := uvm.allocateSCSIMount(ctx, hostPath, uvmPath, vmAccess)
+	sm, existed, err := uvm.allocateSCSIMount(ctx, readOnly, hostPath, uvmPath, attachmentType, vmAccess)
 	if err != nil {
 		return nil, err
 	}
@@ -293,9 +319,9 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, atta
 // device or allocates a new one if not already present.
 // Returns the resulting *SCSIMount, a bool indicating if the scsi device was already present,
 // and error if any.
-func (uvm *UtilityVM) allocateSCSIMount(ctx context.Context, hostPath, uvmPath string, vmAccess VMAccessType) (*SCSIMount, bool, error) {
+func (uvm *UtilityVM) allocateSCSIMount(ctx context.Context, readOnly bool, hostPath, uvmPath, attachmentType string, vmAccess VMAccessType) (*SCSIMount, bool, error) {
 	// Ensure the utility VM has access
-	err := uvm.grantAccess(ctx, hostPath, vmAccess)
+	err := grantAccess(ctx, uvm.id, hostPath, vmAccess)
 	if err != nil {
 		return nil, false, errors.Wrapf(err, "failed to grant VM access for SCSI mount")
 	}
@@ -310,11 +336,16 @@ func (uvm *UtilityVM) allocateSCSIMount(ctx context.Context, hostPath, uvmPath s
 		return sm, true, nil
 	}
 
-	sm, err := uvm.allocateSCSISlot(ctx, hostPath, uvmPath)
+	controller, lun, err := uvm.allocateSCSISlot(ctx)
 	if err != nil {
 		return nil, false, err
 	}
-	return sm, false, nil
+
+	uvm.scsiLocations[controller][lun] = newSCSIMount(uvm, hostPath, uvmPath, attachmentType, 1, controller, int32(lun), readOnly)
+	log.G(ctx).WithFields(uvm.scsiLocations[controller][lun].logFormat()).Debug("allocated SCSI mount")
+
+	return uvm.scsiLocations[controller][lun], false, nil
+
 }
 
 // GetScsiUvmPath returns the guest mounted path of a SCSI drive.
@@ -331,13 +362,164 @@ func (uvm *UtilityVM) GetScsiUvmPath(ctx context.Context, hostPath string) (stri
 }
 
 // grantAccess helper function to grant access to a file for the vm or vm group
-func (uvm *UtilityVM) grantAccess(ctx context.Context, hostPath string, vmAccess VMAccessType) error {
+func grantAccess(ctx context.Context, uvmID string, hostPath string, vmAccess VMAccessType) error {
 	switch vmAccess {
 	case VMAccessTypeGroup:
 		log.G(ctx).WithField("path", hostPath).Debug("granting vm group access")
 		return security.GrantVmGroupAccess(hostPath)
 	case VMAccessTypeIndividual:
-		return wclayer.GrantVmAccess(ctx, uvm.id, hostPath)
+		return wclayer.GrantVmAccess(ctx, uvmID, hostPath)
 	}
 	return nil
+}
+
+var _ = (Cloneable)(&SCSIMount{})
+
+// GobEncode serializes the SCSIMount struct
+func (sm *SCSIMount) GobEncode() ([]byte, error) {
+	var buf bytes.Buffer
+	encoder := gob.NewEncoder(&buf)
+	errMsgFmt := "failed to encode SCSIMount: %s"
+	// encode only the fields that can be safely deserialized.
+	if err := encoder.Encode(sm.serialVersionID); err != nil {
+		return nil, fmt.Errorf(errMsgFmt, err)
+	}
+	if err := encoder.Encode(sm.HostPath); err != nil {
+		return nil, fmt.Errorf(errMsgFmt, err)
+	}
+	if err := encoder.Encode(sm.UVMPath); err != nil {
+		return nil, fmt.Errorf(errMsgFmt, err)
+	}
+	if err := encoder.Encode(sm.Controller); err != nil {
+		return nil, fmt.Errorf(errMsgFmt, err)
+	}
+	if err := encoder.Encode(sm.LUN); err != nil {
+		return nil, fmt.Errorf(errMsgFmt, err)
+	}
+	if err := encoder.Encode(sm.readOnly); err != nil {
+		return nil, fmt.Errorf(errMsgFmt, err)
+	}
+	if err := encoder.Encode(sm.attachmentType); err != nil {
+		return nil, fmt.Errorf(errMsgFmt, err)
+	}
+	return buf.Bytes(), nil
+}
+
+// GobDecode deserializes the SCSIMount struct into the struct on which this is called
+// (i.e the sm pointer)
+func (sm *SCSIMount) GobDecode(data []byte) error {
+	buf := bytes.NewBuffer(data)
+	decoder := gob.NewDecoder(buf)
+	errMsgFmt := "failed to decode SCSIMount: %s"
+	// fields should be decoded in the same order in which they were encoded.
+	if err := decoder.Decode(&sm.serialVersionID); err != nil {
+		return fmt.Errorf(errMsgFmt, err)
+	}
+	if sm.serialVersionID != scsiCurrentSerialVersionID {
+		return fmt.Errorf("Serialized version of SCSIMount: %d doesn't match with the current version: %d", sm.serialVersionID, scsiCurrentSerialVersionID)
+	}
+	if err := decoder.Decode(&sm.HostPath); err != nil {
+		return fmt.Errorf(errMsgFmt, err)
+	}
+	if err := decoder.Decode(&sm.UVMPath); err != nil {
+		return fmt.Errorf(errMsgFmt, err)
+	}
+	if err := decoder.Decode(&sm.Controller); err != nil {
+		return fmt.Errorf(errMsgFmt, err)
+	}
+	if err := decoder.Decode(&sm.LUN); err != nil {
+		return fmt.Errorf(errMsgFmt, err)
+	}
+	if err := decoder.Decode(&sm.readOnly); err != nil {
+		return fmt.Errorf(errMsgFmt, err)
+	}
+	if err := decoder.Decode(&sm.attachmentType); err != nil {
+		return fmt.Errorf(errMsgFmt, err)
+	}
+	return nil
+}
+
+// Clone function creates a clone of the SCSIMount `sm` and adds the cloned SCSIMount to
+// the uvm `vm`. If `sm` is read only then it is simply added to the `vm`. But if it is a
+// writeable mount(e.g a scratch layer) then a copy of it is made and that copy is added
+// to the `vm`.
+func (sm *SCSIMount) Clone(ctx context.Context, vm *UtilityVM, cd *cloneData) error {
+	var (
+		dstVhdPath string = sm.HostPath
+		err        error
+		dir        string
+		conStr     string = fmt.Sprintf("%d", sm.Controller)
+		lunStr     string = fmt.Sprintf("%d", sm.LUN)
+	)
+
+	if !sm.readOnly {
+		// This is a writeable SCSI mount. It must be either the
+		// 1. scratch VHD of the UVM or
+		// 2. scratch VHD of the container.
+		// A user provided writable SCSI mount is not allowed on the template UVM
+		// or container and so this SCSI mount has to be the scratch VHD of the
+		// UVM or container.  The container inside this UVM will automatically be
+		// cloned here when we are cloning the uvm itself. We will receive a
+		// request for creation of this container later and that request will
+		// specify the storage path for this container.  However, that storage
+		// location is not available now so we just use the storage path of the
+		// uvm instead.
+		// TODO(ambarve): Find a better way for handling this. Problem with this
+		// approach is that the scratch VHD of the container will not be
+		// automatically cleaned after container exits. It will stay there as long
+		// as the UVM keeps running.
+
+		// For the scratch VHD of the VM (always attached at Controller:0, LUN:0)
+		// clone it in the scratch folder
+		dir = cd.scratchFolder
+		if sm.Controller != 0 || sm.LUN != 0 {
+			dir, err = ioutil.TempDir(cd.scratchFolder, fmt.Sprintf("clone-mount-%d-%d", sm.Controller, sm.LUN))
+			if err != nil {
+				return fmt.Errorf("error while creating directory for scsi mounts of clone vm: %s", err)
+			}
+		}
+
+		// copy the VHDX
+		dstVhdPath = filepath.Join(dir, filepath.Base(sm.HostPath))
+		log.G(ctx).WithFields(logrus.Fields{
+			"source hostPath":      sm.HostPath,
+			"controller":           sm.Controller,
+			"LUN":                  sm.LUN,
+			"destination hostPath": dstVhdPath,
+		}).Debug("Creating a clone of SCSI mount")
+
+		if err = copyfile.CopyFile(ctx, sm.HostPath, dstVhdPath, true); err != nil {
+			return err
+		}
+
+		if err = grantAccess(ctx, cd.uvmID, dstVhdPath, VMAccessTypeIndividual); err != nil {
+			os.Remove(dstVhdPath)
+			return err
+		}
+	}
+
+	if cd.doc.VirtualMachine.Devices.Scsi == nil {
+		cd.doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
+	}
+
+	if _, ok := cd.doc.VirtualMachine.Devices.Scsi[conStr]; !ok {
+		cd.doc.VirtualMachine.Devices.Scsi[conStr] = hcsschema.Scsi{
+			Attachments: map[string]hcsschema.Attachment{},
+		}
+	}
+
+	cd.doc.VirtualMachine.Devices.Scsi[conStr].Attachments[lunStr] = hcsschema.Attachment{
+		Path:  dstVhdPath,
+		Type_: sm.attachmentType,
+	}
+
+	clonedScsiMount := newSCSIMount(vm, dstVhdPath, sm.UVMPath, sm.attachmentType, 1, sm.Controller, sm.LUN, sm.readOnly)
+
+	vm.scsiLocations[sm.Controller][sm.LUN] = clonedScsiMount
+
+	return nil
+}
+
+func (sm *SCSIMount) GetSerialVersionID() uint32 {
+	return scsiCurrentSerialVersionID
 }

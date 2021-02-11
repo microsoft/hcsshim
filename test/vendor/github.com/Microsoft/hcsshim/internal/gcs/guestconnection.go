@@ -57,7 +57,7 @@ type GuestConnectionConfig struct {
 }
 
 // Connect establishes a GCS connection. `gcc.Conn` will be closed by this function.
-func (gcc *GuestConnectionConfig) Connect(ctx context.Context) (_ *GuestConnection, err error) {
+func (gcc *GuestConnectionConfig) Connect(ctx context.Context, isColdStart bool) (_ *GuestConnection, err error) {
 	ctx, span := trace.StartSpan(ctx, "gcs::GuestConnectionConfig::Connect")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -73,7 +73,7 @@ func (gcc *GuestConnectionConfig) Connect(ctx context.Context) (_ *GuestConnecti
 		gc.brdg.Wait()
 		gc.clearNotifies()
 	}()
-	err = gc.connect(ctx)
+	err = gc.connect(ctx, isColdStart)
 	if err != nil {
 		gc.Close()
 		return nil, err
@@ -105,7 +105,10 @@ func (gc *GuestConnection) Protocol() uint32 {
 }
 
 // connect establishes a GCS connection. It must not be called more than once.
-func (gc *GuestConnection) connect(ctx context.Context) (err error) {
+// isColdStart should be true when the UVM is being connected to for the first time post-boot.
+// It should be false for subsequent connections (e.g. when connecting to a UVM that has
+// been cloned).
+func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool) (err error) {
 	req := negotiateProtocolRequest{
 		MinimumVersion: protocolVersion,
 		MaximumVersion: protocolVersion,
@@ -123,7 +126,7 @@ func (gc *GuestConnection) connect(ctx context.Context) (err error) {
 	if gc.os == "" {
 		gc.os = "windows"
 	}
-	if resp.Capabilities.SendHostCreateMessage {
+	if isColdStart && resp.Capabilities.SendHostCreateMessage {
 		createReq := containerCreate{
 			requestBase: makeRequest(ctx, nullContainerID),
 			ContainerConfig: anyInString{&uvmConfig{
@@ -188,6 +191,25 @@ func (gc *GuestConnection) DeleteContainerState(ctx context.Context, cid string)
 	}
 	var resp responseBase
 	return gc.brdg.RPC(ctx, rpcDeleteContainerState, &req, &resp, false)
+}
+
+func (gc *GuestConnection) UpdateContainer(ctx context.Context, cid string, resources interface{}) (err error) {
+	ctx, span := trace.StartSpan(ctx, "gcs::GuestConnection::UpdateContainer")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("cid", cid))
+
+	resourcesJSON, err := json.Marshal(resources)
+	if err != nil {
+		return err
+	}
+
+	req := updateContainerRequest{
+		requestBase: makeRequest(ctx, cid),
+		Resources:   string(resourcesJSON),
+	}
+	var resp responseBase
+	return gc.brdg.RPC(ctx, rpcUpdateContainer, &req, &resp, false)
 }
 
 // Close terminates the guest connection. It is undefined to call any other
