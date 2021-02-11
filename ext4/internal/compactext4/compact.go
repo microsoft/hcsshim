@@ -924,7 +924,13 @@ func (w *Writer) writeDirectory(dir, parent *inode) error {
 		children = append(children, name)
 	}
 	sort.Slice(children, func(i, j int) bool {
-		return dir.Children[children[i]].Number < dir.Children[children[j]].Number
+		left_num := dir.Children[children[i]].Number
+		right_num := dir.Children[children[j]].Number
+
+		if left_num == right_num {
+			return children[i] < children[j]
+		}
+		return left_num < right_num
 	})
 
 	for _, name := range children {
@@ -952,7 +958,13 @@ func (w *Writer) writeDirectoryRecursive(dir, parent *inode) error {
 		children = append(children, name)
 	}
 	sort.Slice(children, func(i, j int) bool {
-		return dir.Children[children[i]].Number < dir.Children[children[j]].Number
+		left_num := dir.Children[children[i]].Number
+		right_num := dir.Children[children[j]].Number
+
+		if left_num == right_num {
+			return children[i] < children[j]
+		}
+		return left_num < right_num
 	})
 
 	for _, name := range children {
