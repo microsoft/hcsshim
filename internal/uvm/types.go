@@ -7,12 +7,13 @@ import (
 	"sync"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"golang.org/x/sys/windows"
+
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
-	"golang.org/x/sys/windows"
 )
 
 //                    | WCOW | LCOW
@@ -20,14 +21,6 @@ import (
 // Scratch space      | ---- | SCSI   // For file system utilities. /tmp/scratch
 // Read-Only Layer    | VSMB | VPMEM
 // Mapped Directory   | VSMB | PLAN9
-
-// vpmemInfo is an internal structure used for determining VPMem devices mapped to
-// a Linux utility VM.
-type vpmemInfo struct {
-	hostPath string
-	uvmPath  string
-	refCount uint32
-}
 
 type nicInfo struct {
 	ID       string
@@ -81,9 +74,11 @@ type UtilityVM struct {
 
 	// VPMEM devices that are mapped into a Linux UVM. These are used for read-only layers, or for
 	// booting from VHD.
-	vpmemDevices      [MaxVPMEMCount]*vpmemInfo // Limited by ACPI size.
-	vpmemMaxCount     uint32                    // The max number of VPMem devices.
-	vpmemMaxSizeBytes uint64                    // The max size of the layer in bytes per vPMem device.
+	vpmemMaxCount           uint32 // The max number of VPMem devices.
+	vpmemMaxSizeBytes       uint64 // The max size of the layer in bytes per vPMem device.
+	vpmemMultiMapping       bool   // Enable mapping multiple VHDs onto a single VPMem device
+	vpmemDevicesDefault     [MaxVPMEMCount]*vPMemInfoDefault
+	vpmemDevicesMultiMapped [MaxVPMEMCount]*vPMemInfoMulti
 
 	// SCSI devices that are mapped into a Windows or Linux utility VM
 	scsiLocations       [4][64]*SCSIMount // Hyper-V supports 4 controllers, 64 slots per controller. Limited to 1 controller for now though.

@@ -212,14 +212,14 @@ func addLCOWLayer(ctx context.Context, uvm *uvmpkg.UtilityVM, layerPath string) 
 	if !uvm.DevicesPhysicallyBacked() {
 		// We first try vPMEM and if it is full or the file is too large we
 		// fall back to SCSI.
-		uvmPath, err = uvm.AddVPMEM(ctx, layerPath)
+		uvmPath, err = uvm.AddVPMem(ctx, layerPath)
 		if err == nil {
 			log.G(ctx).WithFields(logrus.Fields{
 				"layerPath": layerPath,
 				"layerType": "vpmem",
 			}).Debug("Added LCOW layer")
 			return uvmPath, nil
-		} else if err != uvmpkg.ErrNoAvailableLocation && err != uvmpkg.ErrMaxVPMEMLayerSize {
+		} else if err != uvmpkg.ErrNoAvailableLocation && err != uvmpkg.ErrMaxVPMemLayerSize {
 			return "", fmt.Errorf("failed to add VPMEM layer: %s", err)
 		}
 	}
@@ -239,7 +239,7 @@ func addLCOWLayer(ctx context.Context, uvm *uvmpkg.UtilityVM, layerPath string) 
 
 func removeLCOWLayer(ctx context.Context, uvm *uvmpkg.UtilityVM, layerPath string) error {
 	// Assume it was added to vPMEM and fall back to SCSI
-	err := uvm.RemoveVPMEM(ctx, layerPath)
+	err := uvm.RemoveVPMem(ctx, layerPath)
 	if err == nil {
 		log.G(ctx).WithFields(logrus.Fields{
 			"layerPath": layerPath,
