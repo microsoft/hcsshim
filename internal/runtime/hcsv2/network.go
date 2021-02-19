@@ -2,10 +2,7 @@ package hcsv2
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os/exec"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +12,7 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/gcserr"
 	"github.com/Microsoft/opengcs/service/gcs/prot"
 	"github.com/pkg/errors"
+	"github.com/vishvananda/netns"
 	"go.opencensus.io/trace"
 )
 
@@ -249,8 +247,6 @@ func (nin *nicInNamespace) assignToPid(ctx context.Context, pid int) (err error)
 		trace.StringAttribute("ifname", nin.ifname),
 		trace.Int64Attribute("pid", int64(pid)))
 
-	// TODO: netnscfg is not coded for v2 but since they are almost the same
-	// just convert the parts of the adapter here.
 	v1Adapter := &prot.NetworkAdapter{
 		NatEnabled:         nin.adapter.IPAddress != "",
 		AllocatedIPAddress: nin.adapter.IPAddress,
@@ -260,17 +256,23 @@ func (nin *nicInNamespace) assignToPid(ctx context.Context, pid int) (err error)
 		EncapOverhead:      nin.adapter.EncapOverhead,
 	}
 
-	cfg, err := json.Marshal(v1Adapter)
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal adapter struct to JSON")
+	if err := network.MoveInterfaceToNS(nin.ifname, pid); err != nil {
+		return errors.Wrapf(err, "failed to move interface %s to network namespace", nin.ifname)
 	}
 
-	out, err := exec.Command("netnscfg",
-		"-if", nin.ifname,
-		"-nspid", strconv.Itoa(pid),
-		"-cfg", string(cfg)).CombinedOutput()
+	// Get a reference to the new network namespace
+	ns, err := netns.GetFromPid(pid)
 	if err != nil {
-		return errors.Wrapf(err, "failed to configure adapter aid: %s, if id: %s %s", nin.adapter.ID, nin.ifname, string(out))
+		return errors.Wrapf(err, "netns.GetFromPid(%d) failed", pid)
+	}
+	defer ns.Close()
+
+	netNSCfg := func() error {
+		return network.NetNSConfig(ctx, nin.ifname, pid, v1Adapter)
+	}
+
+	if err := network.DoInNetNS(ns, netNSCfg); err != nil {
+		return errors.Wrapf(err, "failed to configure adapter aid: %s, if id: %s", nin.adapter.ID, nin.ifname)
 	}
 	nin.assignedPid = pid
 	return nil
