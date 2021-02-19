@@ -3,7 +3,7 @@ module github.com/Microsoft/hcsshim
 go 1.13
 
 require (
-	github.com/Microsoft/go-winio v0.4.16
+	github.com/Microsoft/go-winio v0.4.17-0.20210211115548-6eac466e5fa3
 	github.com/containerd/cgroups v0.0.0-20200824123100-0b889c03f102
 	github.com/containerd/console v1.0.1
 	github.com/containerd/containerd v1.5.0-beta.1
@@ -17,6 +17,6 @@ require (
 	github.com/urfave/cli v1.22.2
 	go.opencensus.io v0.22.3
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
-	golang.org/x/sys v0.0.0-20201202213521-69691e467435
+	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c
 	google.golang.org/grpc v1.30.0
 )
