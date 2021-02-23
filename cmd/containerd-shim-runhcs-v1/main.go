@@ -55,15 +55,6 @@ func stack() []byte {
 	}
 }
 
-func panicRecover() {
-	if r := recover(); r != nil {
-		logrus.WithFields(logrus.Fields{
-			"panic": r,
-			"stack": string(stack()),
-		}).Error("containerd-shim-runhcs-v1: panic")
-	}
-}
-
 func etwCallback(sourceID guid.GUID, state etw.ProviderState, level etw.Level, matchAnyKeyword uint64, matchAllKeyword uint64, filterData uintptr) {
 	if state == etw.ProviderStateCaptureState {
 		resp, err := svc.DiagStacks(context.Background(), &shimdiag.StacksRequest{})
@@ -91,8 +82,6 @@ func main() {
 			logrus.Error(err)
 		}
 	}
-
-	defer panicRecover()
 
 	provider.WriteEvent(
 		"ShimLaunched",
