@@ -260,8 +260,8 @@ func Test_RunPodSandbox_MemorySize_LCOW(t *testing.T) {
 func Test_RunPodSandbox_MMIO_WCOW_Process(t *testing.T) {
 	requireFeatures(t, featureWCOWProcess)
 
-	if osversion.Get().Build < 19566 {
-		t.Skip("Requires build +19566")
+	if osversion.Get().Build < osversion.V20H1 {
+		t.Skip("Requires build +20H1")
 	}
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
@@ -277,8 +277,8 @@ func Test_RunPodSandbox_MMIO_WCOW_Process(t *testing.T) {
 func Test_RunPodSandbox_MMIO_WCOW_Hypervisor(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)
 
-	if osversion.Get().Build < 19566 {
-		t.Skip("Requires build +19566")
+	if osversion.Get().Build < osversion.V20H1 {
+		t.Skip("Requires build +20H1")
 	}
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
@@ -294,8 +294,8 @@ func Test_RunPodSandbox_MMIO_WCOW_Hypervisor(t *testing.T) {
 func Test_RunPodSandbox_MMIO_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	if osversion.Get().Build < 19566 {
-		t.Skip("Requires build +19566")
+	if osversion.Get().Build < osversion.V20H1 {
+		t.Skip("Requires build +20H1")
 	}
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
