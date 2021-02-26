@@ -58,6 +58,7 @@ var (
 	ErrNotRegistered = errors.New("job is not registered to receive notifications")
 )
 
+// Options represents the set of configurable options when making or opening a job object.
 type Options struct {
 	// `Name` specifies the name of the job object if a named job object is desired.
 	Name string
@@ -71,17 +72,20 @@ type Options struct {
 
 // Create creates a job object.
 //
-// If name is an empty string, the job will not be assigned a name.
+// If options.Name is an empty string, the job will not be assigned a name.
 //
-// If notifications are not enabled `PollNotifications` will return immediately with error `errNotRegistered`.
+// If options.Notifications are not enabled `PollNotifications` will return immediately with error `errNotRegistered`.
 //
 // If `options` is nil, use default option values.
 //
 // Returns a JobObject structure and an error if there is one.
 func Create(ctx context.Context, options *Options) (_ *JobObject, err error) {
-	var jobName *winapi.UnicodeString
+	if options == nil {
+		options = &Options{}
+	}
 
-	if options != nil && options.Name != "" {
+	var jobName *winapi.UnicodeString
+	if options.Name != "" {
 		jobName, err = winapi.NewUnicodeString(options.Name)
 		if err != nil {
 			return nil, err
@@ -89,7 +93,7 @@ func Create(ctx context.Context, options *Options) (_ *JobObject, err error) {
 	}
 
 	var jobHandle windows.Handle
-	if options != nil && options.UseNTVariant {
+	if options.UseNTVariant {
 		oa := winapi.ObjectAttributes{
 			Length:     unsafe.Sizeof(winapi.ObjectAttributes{}),
 			ObjectName: jobName,
@@ -100,7 +104,11 @@ func Create(ctx context.Context, options *Options) (_ *JobObject, err error) {
 			return nil, winapi.RtlNtStatusToDosError(status)
 		}
 	} else {
-		jobHandle, err = windows.CreateJobObject(nil, jobName.Buffer)
+		var jobNameBuf *uint16
+		if jobName != nil && jobName.Buffer != nil {
+			jobNameBuf = jobName.Buffer
+		}
+		jobHandle, err = windows.CreateJobObject(nil, jobNameBuf)
 		if err != nil {
 			return nil, err
 		}
@@ -118,7 +126,7 @@ func Create(ctx context.Context, options *Options) (_ *JobObject, err error) {
 
 	// If the IOCP we'll be using to receive messages for all jobs hasn't been
 	// created, create it and start polling.
-	if options != nil && options.Notifications {
+	if options.Notifications {
 		mq, err := setupNotifications(ctx, job)
 		if err != nil {
 			return nil, err
@@ -132,13 +140,14 @@ func Create(ctx context.Context, options *Options) (_ *JobObject, err error) {
 // Open opens an existing job object with name provided in `options`. If no name is provided
 // return an error since we need to know what job object to open.
 //
-// If notifications are not enabled `PollNotifications` will return immediately with error `errNotRegistered`.
+// If options.Notifications is false `PollNotifications` will return immediately with error `errNotRegistered`.
 //
 // Returns a JobObject structure and an error if there is one.
 func Open(ctx context.Context, options *Options) (_ *JobObject, err error) {
-	if options != nil && options.Name == "" {
+	if options == nil || (options != nil && options.Name == "") {
 		return nil, errors.New("no job object name specified to open")
 	}
+
 	unicodeJobName, err := winapi.NewUnicodeString(options.Name)
 	if err != nil {
 		return nil, err
