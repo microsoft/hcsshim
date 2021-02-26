@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/osversion"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 )
 
@@ -28,7 +29,7 @@ func findTestVirtualDevice() (string, error) {
 }
 
 func TestVirtualDevice(t *testing.T) {
-	testutilities.RequiresBuild(t, 19566)
+	testutilities.RequiresBuild(t, osversion.V20H1)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
