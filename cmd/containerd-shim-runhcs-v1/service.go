@@ -53,7 +53,6 @@ type service struct {
 }
 
 func (s *service) State(ctx context.Context, req *task.StateRequest) (resp *task.StateResponse, err error) {
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "State")
 	defer span.End()
 	defer func() {
@@ -79,7 +78,6 @@ func (s *service) State(ctx context.Context, req *task.StateRequest) (resp *task
 }
 
 func (s *service) Create(ctx context.Context, req *task.CreateTaskRequest) (resp *task.CreateTaskResponse, err error) {
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Create")
 	defer span.End()
 	defer func() {
@@ -110,7 +108,6 @@ func (s *service) Create(ctx context.Context, req *task.CreateTaskRequest) (resp
 }
 
 func (s *service) Start(ctx context.Context, req *task.StartRequest) (resp *task.StartResponse, err error) {
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Start")
 	defer span.End()
 	defer func() {
@@ -133,7 +130,6 @@ func (s *service) Start(ctx context.Context, req *task.StartRequest) (resp *task
 }
 
 func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (resp *task.DeleteResponse, err error) {
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Delete")
 	defer span.End()
 	defer func() {
@@ -159,7 +155,6 @@ func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (resp *ta
 }
 
 func (s *service) Pids(ctx context.Context, req *task.PidsRequest) (_ *task.PidsResponse, err error) {
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Pids")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -175,7 +170,6 @@ func (s *service) Pids(ctx context.Context, req *task.PidsRequest) (_ *task.Pids
 }
 
 func (s *service) Pause(ctx context.Context, req *task.PauseRequest) (_ *google_protobuf1.Empty, err error) {
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Pause")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -191,7 +185,6 @@ func (s *service) Pause(ctx context.Context, req *task.PauseRequest) (_ *google_
 }
 
 func (s *service) Resume(ctx context.Context, req *task.ResumeRequest) (_ *google_protobuf1.Empty, err error) {
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Resume")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -207,7 +200,6 @@ func (s *service) Resume(ctx context.Context, req *task.ResumeRequest) (_ *googl
 }
 
 func (s *service) Checkpoint(ctx context.Context, req *task.CheckpointTaskRequest) (_ *google_protobuf1.Empty, err error) {
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Checkpoint")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -225,7 +217,6 @@ func (s *service) Checkpoint(ctx context.Context, req *task.CheckpointTaskReques
 }
 
 func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *google_protobuf1.Empty, err error) {
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Kill")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -245,7 +236,6 @@ func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *google_pr
 }
 
 func (s *service) Exec(ctx context.Context, req *task.ExecProcessRequest) (_ *google_protobuf1.Empty, err error) {
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Exec")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -267,7 +257,6 @@ func (s *service) Exec(ctx context.Context, req *task.ExecProcessRequest) (_ *go
 }
 
 func (s *service) DiagExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (_ *shimdiag.ExecProcessResponse, err error) {
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "DiagExecInHost")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -289,7 +278,6 @@ func (s *service) DiagExecInHost(ctx context.Context, req *shimdiag.ExecProcessR
 }
 
 func (s *service) DiagShare(ctx context.Context, req *shimdiag.ShareRequest) (_ *shimdiag.ShareResponse, err error) {
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "DiagShare")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -308,7 +296,6 @@ func (s *service) DiagShare(ctx context.Context, req *shimdiag.ShareRequest) (_ 
 }
 
 func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ *google_protobuf1.Empty, err error) {
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "ResizePty")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -328,7 +315,6 @@ func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ 
 }
 
 func (s *service) CloseIO(ctx context.Context, req *task.CloseIORequest) (_ *google_protobuf1.Empty, err error) {
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "CloseIO")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -347,7 +333,6 @@ func (s *service) CloseIO(ctx context.Context, req *task.CloseIORequest) (_ *goo
 }
 
 func (s *service) Update(ctx context.Context, req *task.UpdateTaskRequest) (_ *google_protobuf1.Empty, err error) {
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Update")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -363,7 +348,6 @@ func (s *service) Update(ctx context.Context, req *task.UpdateTaskRequest) (_ *g
 }
 
 func (s *service) Wait(ctx context.Context, req *task.WaitRequest) (resp *task.WaitResponse, err error) {
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Wait")
 	defer span.End()
 	defer func() {
@@ -388,7 +372,6 @@ func (s *service) Wait(ctx context.Context, req *task.WaitRequest) (resp *task.W
 }
 
 func (s *service) Stats(ctx context.Context, req *task.StatsRequest) (_ *task.StatsResponse, err error) {
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Stats")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -404,7 +387,6 @@ func (s *service) Stats(ctx context.Context, req *task.StatsRequest) (_ *task.St
 }
 
 func (s *service) Connect(ctx context.Context, req *task.ConnectRequest) (resp *task.ConnectResponse, err error) {
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Connect")
 	defer span.End()
 	defer func() {
@@ -428,7 +410,6 @@ func (s *service) Connect(ctx context.Context, req *task.ConnectRequest) (resp *
 }
 
 func (s *service) Shutdown(ctx context.Context, req *task.ShutdownRequest) (_ *google_protobuf1.Empty, err error) {
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "Shutdown")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -447,7 +428,6 @@ func (s *service) DiagStacks(ctx context.Context, req *shimdiag.StacksRequest) (
 	if s == nil {
 		return nil, nil
 	}
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "DiagStacks")
 	defer span.End()
 
@@ -480,7 +460,6 @@ func (s *service) DiagPid(ctx context.Context, req *shimdiag.PidRequest) (*shimd
 	if s == nil {
 		return nil, nil
 	}
-	defer panicRecover()
 	ctx, span := trace.StartSpan(ctx, "DiagPid")
 	defer span.End()
 

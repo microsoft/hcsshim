@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
@@ -29,7 +30,6 @@ The delete command will be executed in the container's bundle as its cwd.
 		// We cant write anything to stdout for this cmd other than the
 		// task.DeleteResponse by protcol. We can write to stderr which will be
 		// warning logged in containerd.
-		logrus.SetOutput(ioutil.Discard)
 
 		ctx, span := trace.StartSpan(gcontext.Background(), "delete")
 		defer span.End()
@@ -80,6 +80,13 @@ The delete command will be executed in the container's bundle as its cwd.
 					}
 				}
 			}
+		}
+
+		// hcsshim shim writes panic logs in the bundle directory in a file named "panic.log"
+		// log those messages (if any) on stderr so that it shows up in containerd's log.
+		logs, err := ioutil.ReadFile(filepath.Join(bundleFlag, "panic.log"))
+		if err == nil && len(logs) > 0 {
+			logrus.WithField("log", string(logs)).Error("found shim panic logs during delete")
 		}
 
 		// Remove the bundle on disk
