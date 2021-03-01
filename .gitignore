@@ -30,3 +30,5 @@ rootfs/*
 
 deps/*
 out/*
+
+.idea/

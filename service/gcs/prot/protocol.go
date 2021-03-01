@@ -783,11 +783,19 @@ type MappedDirectoryV2 struct {
 	ReadOnly  bool   `json:",omitempty"`
 }
 
+// DeviceMappingInfo represents a mapped device on a given VPMem
+type DeviceMappingInfo struct {
+	DeviceOffsetInBytes int64 `json:",omitempty"`
+	DeviceSizeInBytes   int64 `json:",omitempty"`
+}
+
 // MappedVPMemDeviceV2 represents a VPMem device that is mapped into a guest
 // path in the V2 schema.
 type MappedVPMemDeviceV2 struct {
 	DeviceNumber uint32 `json:",omitempty"`
 	MountPath    string `json:",omitempty"`
+	// MappingInfo is used when multiple devices are mapped onto a single VPMem device
+	MappingInfo *DeviceMappingInfo `json:",omitempty"`
 }
 
 type MappedVPCIDeviceV2 struct {

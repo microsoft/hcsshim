@@ -42,6 +42,8 @@ const (
 	_DM_READONLY_FLAG       = 1 << 0
 	_DM_SUSPEND_FLAG        = 1 << 1
 	_DM_PERSISTENT_DEV_FLAG = 1 << 3
+
+	BlockSize = 512
 )
 
 const (
@@ -177,6 +179,14 @@ func LinearTarget(sectorStart, length int64, path string, deviceStart int64) Tar
 	}
 }
 
+// PMemLinearTarget constructs a LinearTarget for PMem device with 0 sector start and length/device start
+// expected to be in bytes rather than blocks
+func PMemLinearTarget(lengthBytes int64, path string, deviceStartBytes int64) Target {
+	lengthInBlocks := lengthBytes / BlockSize
+	startInBlocks := deviceStartBytes / BlockSize
+	return LinearTarget(0, lengthInBlocks, path, startInBlocks)
+}
+
 // makeTableIoctl builds an ioctl input structure with a table of the speicifed
 // targets.
 func makeTableIoctl(name string, targets []Target) *dmIoctl {
@@ -243,7 +253,7 @@ func CreateDevice(name string, flags CreateFlags, targets []Target) (_ string, e
 
 	p := path.Join("/dev/mapper", name)
 	os.Remove(p)
-	err = unix.Mknod(p, unix.S_IFBLK|0600, int(dev))
+	err = unix.Mknod(p, unix.S_IFBLK|0600, dev)
 	if err != nil {
 		return "", nil
 	}
