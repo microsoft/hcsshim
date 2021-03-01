@@ -21,6 +21,7 @@ import (
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -291,6 +292,11 @@ func (c *container) GetRunningProcesses() ([]runtime.ContainerProcessState, erro
 	for _, pid := range pids {
 		command, err := c.r.getProcessCommand(pid)
 		if err != nil {
+			if errors.Is(err, unix.ENOENT) {
+				// process has exited between getting the running pids above
+				// and now, ignore error
+				continue
+			}
 			return nil, err
 		}
 		pidMap[pid] = &runtime.ContainerProcessState{Pid: pid, Command: command, CreatedByRuntime: false, IsZombie: false}
@@ -325,12 +331,22 @@ func (c *container) GetAllProcesses() ([]runtime.ContainerProcessState, error) {
 		return nil, err
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"cid":  c.id,
+		"pids": runningPids,
+	}).Debug("running container pids")
+
 	pidMap := map[int]*runtime.ContainerProcessState{}
 	// Initialize all processes with a pid and command, leaving CreatedByRuntime
 	// and IsZombie at the default value of false.
 	for _, pid := range runningPids {
 		command, err := c.r.getProcessCommand(pid)
 		if err != nil {
+			if errors.Is(err, unix.ENOENT) {
+				// process has exited between getting the running pids above
+				// and now, ignore error
+				continue
+			}
 			return nil, err
 		}
 		pidMap[pid] = &runtime.ContainerProcessState{Pid: pid, Command: command, CreatedByRuntime: false, IsZombie: false}
@@ -358,6 +374,10 @@ func (c *container) GetAllProcesses() ([]runtime.ContainerProcessState, error) {
 					// be a zombie.
 					command, err := c.r.getProcessCommand(pid)
 					if err != nil {
+						if errors.Is(err, unix.ENOENT) {
+							// process has exited between checking that it exists and now, ignore error
+							continue
+						}
 						return nil, err
 					}
 					pidMap[pid] = &runtime.ContainerProcessState{Pid: pid, Command: command, CreatedByRuntime: true, IsZombie: true}
@@ -365,7 +385,6 @@ func (c *container) GetAllProcesses() ([]runtime.ContainerProcessState, error) {
 			}
 		}
 	}
-
 	return c.r.pidMapToProcessStates(pidMap), nil
 }
 
