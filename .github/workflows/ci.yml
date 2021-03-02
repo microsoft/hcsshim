@@ -1,0 +1,87 @@
+name: CI
+on:
+  - push
+  - pull_request
+
+env:
+  GOPROXY: off
+  GOFLAGS: -mod=vendor
+
+jobs:
+  lint:
+    runs-on: 'windows-2019'
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.15.0'
+
+      - run: Invoke-WebRequest "https://github.com/alecthomas/gometalinter/releases/download/v2.0.12/gometalinter-2.0.12-windows-amd64.zip" -OutFile "gometalinter.zip"
+      - run: 7z x gometalinter.zip -y -oC:\
+      - run: gometalinter.exe --config .gometalinter.json ./...
+        env:
+          PATH: C:\gometalinter-2.0.12-windows-amd64;{{ env.PATH }}
+
+  test:
+    runs-on: 'windows-2019'
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.15.0'
+
+      - run: go test -gcflags=all=-d=checkptr -v ./... -tags admin
+      - run: go test -gcflags=all=-d=checkptr -v ./internal -tags admin
+        working-directory: test
+      - run: go test -gcflags=all=-d=checkptr -c ./containerd-shim-runhcs-v1/ -tags functional
+        working-directory: test
+      - run: go test -gcflags=all=-d=checkptr -c ./cri-containerd/ -tags functional
+        working-directory: test
+      - run: go test -gcflags=all=-d=checkptr -c ./functional/ -tags functional
+        working-directory: test
+      - run: go test -gcflags=all=-d=checkptr -c ./runhcs/ -tags functional
+        working-directory: test
+      - run: go build -o sample-logging-driver.exe ./cri-containerd/helpers/log.go
+        working-directory: test
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: test_binaries
+          path: |
+            test/containerd-shim-runhcs-v1.test.exe
+            test/cri-containerd.test.exe
+            test/functional.test.exe
+            test/runhcs.test.exe
+            test/sample-logging-driver.exe
+
+  build:
+    runs-on: 'windows-2019'
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.15.0'
+
+      - run: go build ./cmd/containerd-shim-runhcs-v1
+      - run: go build ./cmd/runhcs
+      - run: go build ./cmd/tar2ext4
+      - run: go build ./cmd/wclayer
+      - run: go build ./cmd/device-util
+      - run: go build ./cmd/ncproxy
+      - run: go build ./internal/tools/grantvmgroupaccess
+      - run: go build ./internal/tools/uvmboot
+      - run: go build ./internal/tools/zapdir
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: binaries
+          path: |
+            containerd-shim-runhcs-v1.exe
+            runhcs.exe
+            tar2ext4.exe
+            device-util.exe
+            wclayer.exe
+            grantvmgroupaccess.exe
+            uvmboot.exe
+            zapdir.exe
+            ncproxy.exe
