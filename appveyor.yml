@@ -7,6 +7,8 @@ clone_folder: c:\gopath\src\github.com\Microsoft\hcsshim
 environment:
   GOPATH: c:\gopath
   PATH: "%GOPATH%\\bin;C:\\gometalinter-2.0.12-windows-amd64;%PATH%"
+  GOPROXY: 'off'
+  GOFLAGS: '-mod=vendor'
 
 stack: go 1.15
 
