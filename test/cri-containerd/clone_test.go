@@ -193,7 +193,7 @@ func verifyTemplateContainerState(ctx context.Context, t *testing.T, client runt
 func verifyContainerExec(ctx context.Context, t *testing.T, client runtime.RuntimeServiceClient, containerID string) {
 	execCommand := []string{
 		"ping",
-		"www.microsoft.com",
+		"127.0.0.1",
 	}
 
 	execRequest := &runtime.ExecSyncRequest{
