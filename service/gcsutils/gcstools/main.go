@@ -7,7 +7,6 @@ import (
 )
 
 var commands = map[string]func(){
-	"netnscfg":           netnsConfigMain,
 	"nvidiaPrestartHook": nvidiaPrestartHookMain,
 }
 
