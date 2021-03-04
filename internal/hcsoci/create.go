@@ -35,7 +35,6 @@ var (
 // where layer1 is the base read-only layer, layern is the top-most read-only
 // layer, and scratch is the RW layer. This is for historical reasons only.
 type CreateOptions struct {
-
 	// Common parameters
 	ID               string             // Identifier for the container
 	Owner            string             // Specifies the owner. Defaults to executable name.
@@ -236,8 +235,19 @@ func configureSandboxNetwork(ctx context.Context, coi *createOptionsInternal, r 
 		// container but not a workload container in a sandbox that inherits
 		// the namespace.
 		if ct == oci.KubernetesContainerTypeNone || ct == oci.KubernetesContainerTypeSandbox {
-			if err := SetupNetworkNamespace(ctx, coi.HostingSystem, coi.actualNetworkNamespace); err != nil {
-				return err
+			if err := coi.HostingSystem.ConfigureNetworking(ctx, coi.actualNetworkNamespace); err != nil {
+				// No network setup type was specified for this UVM. Create and assign one here unless
+				// we received a different error.
+				if err == uvm.ErrNoNetworkSetup {
+					if err := coi.HostingSystem.CreateAndAssignNetworkSetup(ctx, "", ""); err != nil {
+						return err
+					}
+					if err := coi.HostingSystem.ConfigureNetworking(ctx, coi.actualNetworkNamespace); err != nil {
+						return err
+					}
+				} else {
+					return err
+				}
 			}
 			r.SetAddedNetNSToVM(true)
 		}

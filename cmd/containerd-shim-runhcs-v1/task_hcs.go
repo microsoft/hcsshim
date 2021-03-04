@@ -147,11 +147,12 @@ func newHcsTask(
 	}
 
 	opts := hcsoci.CreateOptions{
-		ID:               req.ID,
-		Owner:            owner,
-		Spec:             s,
-		HostingSystem:    parent,
-		NetworkNamespace: netNS,
+		ID:                      req.ID,
+		Owner:                   owner,
+		Spec:                    s,
+		HostingSystem:           parent,
+		NetworkNamespace:        netNS,
+		ScaleCPULimitsToSandbox: shimOpts.ScaleCpuLimitsToSandbox,
 	}
 
 	if shimOpts != nil {

@@ -101,6 +101,20 @@ type HostComputeQuery struct {
 	Filter        string                `json:",omitempty"`
 }
 
+type ExtraParams struct {
+	Resources        interface{} `json:",omitempty"`
+	SharedContainers interface{} `json:",omitempty"`
+	LayeredOn        string      `json:",omitempty"`
+	SwitchGuid       string      `json:",omitempty"`
+	UtilityVM        string      `json:",omitempty"`
+	VirtualMachine   string      `json:",omitempty"`
+}
+
+type Health struct {
+	Data  interface{} `json:",omitempty"`
+	Extra ExtraParams `json:",omitempty"`
+}
+
 // defaultQuery generates HCN Query.
 // Passed into get/enumerate calls to filter results.
 func defaultQuery() HostComputeQuery {

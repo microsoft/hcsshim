@@ -29,7 +29,7 @@ import (
 // It is assumed that this is the only fake WCOW task and that this task owns
 // `parent`. When the fake WCOW `init` process exits via `Signal` `parent` will
 // be forcibly closed by this task.
-func newWcowPodSandboxTask(ctx context.Context, events publisher, id, bundle string, parent *uvm.UtilityVM) shimTask {
+func newWcowPodSandboxTask(ctx context.Context, events publisher, id, bundle string, parent *uvm.UtilityVM, nsid string) shimTask {
 	log.G(ctx).WithField("tid", id).Debug("newWcowPodSandboxTask")
 
 	wpst := &wcowPodSandboxTask{
@@ -38,6 +38,7 @@ func newWcowPodSandboxTask(ctx context.Context, events publisher, id, bundle str
 		init:   newWcowPodSandboxExec(ctx, events, id, bundle),
 		host:   parent,
 		closed: make(chan struct{}),
+		nsid:   nsid,
 	}
 	if parent != nil {
 		// We have (and own) a parent UVM. Listen for its exit and forcibly
@@ -79,6 +80,12 @@ type wcowPodSandboxTask struct {
 	// host is the hosting VM for this task if hypervisor isolated. If
 	// `host==nil` this is an Argon task so no UVM cleanup is required.
 	host *uvm.UtilityVM
+
+	// nsid is the pods network namespace ID. Normally the network for the pod would be cleaned
+	// up when the pod sandbox container is being torn down, but as there isn't one
+	// we need to do this manually. Store the network namespace ID so we can remove this on
+	// close.
+	nsid string
 
 	closed    chan struct{}
 	closeOnce sync.Once
@@ -168,6 +175,10 @@ func (wpst *wcowPodSandboxTask) close(ctx context.Context) {
 		log.G(ctx).Debug("wcowPodSandboxTask::closeOnce")
 
 		if wpst.host != nil {
+			if err := wpst.host.TearDownNetworking(ctx, wpst.nsid); err != nil {
+				log.G(ctx).WithError(err).Error("failed to cleanup networking for utility VM")
+			}
+
 			if err := wpst.host.Close(); err != nil {
 				log.G(ctx).WithError(err).Error("failed host vm shutdown")
 			}
