@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+option go_package = "github.com/Microsoft/hcsshim/internal/computeagent;computeagent";
+
+import weak "gogoproto/gogo.proto";
+
+service ComputeAgent{
+    rpc AddNIC(AddNICInternalRequest) returns (AddNICInternalResponse) {}
+    rpc DeleteNIC(DeleteNICInternalRequest) returns (DeleteNICInternalResponse) {}
+}
+
+message AddNICInternalRequest {
+    string container_id = 1;
+    string nic_id = 2;
+    string endpoint_name = 3;
+}
+
+message AddNICInternalResponse {}
+
+message DeleteNICInternalRequest {
+    string container_id = 1;
+    string nic_id = 2;
+    string endpoint_name = 3;
+}
+
+message DeleteNICInternalResponse {}

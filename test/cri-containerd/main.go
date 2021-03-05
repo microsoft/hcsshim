@@ -7,7 +7,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"testing"
 	"time"
@@ -23,10 +22,10 @@ import (
 	"github.com/gogo/protobuf/types"
 	"google.golang.org/grpc"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	kubeutil "k8s.io/kubernetes/pkg/kubelet/util"
 )
 
 const (
-	daemonAddress  = "tcp://127.0.0.1:2376"
 	connectTimeout = time.Second * 10
 	testNamespace  = "cri-containerd-test"
 
@@ -66,7 +65,8 @@ var (
 
 // Flags
 var (
-	flagFeatures = testutilities.NewStringSetFlag()
+	flagFeatures    = testutilities.NewStringSetFlag()
+	flagCRIEndpoint = flag.String("cri-endpoint", "tcp://127.0.0.1:2376", "Address of CRI runtime and image service.")
 )
 
 // Features
@@ -144,10 +144,11 @@ func getWindowsServerCoreImage(build uint16) string {
 }
 
 func createGRPCConn(ctx context.Context) (*grpc.ClientConn, error) {
-	conn, err := grpc.DialContext(ctx, daemonAddress, grpc.WithInsecure(), grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
-		return net.DialTimeout("tcp", "127.0.0.1:2376", timeout)
-	}))
-	return conn, err
+	addr, dialer, err := kubeutil.GetAddressAndDialer(*flagCRIEndpoint)
+	if err != nil {
+		return nil, err
+	}
+	return grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithContextDialer(dialer))
 }
 
 func newTestRuntimeClient(t *testing.T) runtime.RuntimeServiceClient {
