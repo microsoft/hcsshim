@@ -1159,7 +1159,7 @@ func (w *Writer) Close() error {
 		diskSize = minSize
 	}
 
-	usedGdBlocks := (groups-1)/groupDescriptorSize + 1
+	usedGdBlocks := (groups-1)/groupsPerDescriptorBlock + 1
 	if usedGdBlocks > w.gdBlocks {
 		return exceededMaxSizeError{w.maxDiskSize}
 	}
