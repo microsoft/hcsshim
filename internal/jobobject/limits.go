@@ -14,7 +14,7 @@ const (
 	memoryLimitMax     uint64  = 0xffffffffffffffff
 )
 
-func isFlagSet(flag uint32, controlFlags uint32) bool {
+func isFlagSet(flag, controlFlags uint32) bool {
 	return (flag & controlFlags) == flag
 }
 
@@ -43,6 +43,17 @@ func (job *JobObject) SetResourceLimits(limits *JobLimits) error {
 		}
 	}
 	return nil
+}
+
+// SetTerminateOnLastHandleClose sets the job object flag that specifies that the job should terminate
+// all processes in the job on the last open handle being closed.
+func (job *JobObject) SetTerminateOnLastHandleClose() error {
+	info, err := job.getExtendedInformation()
+	if err != nil {
+		return err
+	}
+	info.BasicLimitInformation.LimitFlags |= windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+	return job.setExtendedInformation(info)
 }
 
 // SetMemoryLimit sets the memory limit of the job object based on the given `memoryLimitInBytes`.

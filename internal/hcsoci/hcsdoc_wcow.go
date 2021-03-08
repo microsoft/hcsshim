@@ -11,7 +11,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/internal/schema1"
@@ -20,6 +19,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/osversion"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
 
@@ -85,6 +85,55 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 	return &config, nil
 }
 
+// ConvertCPULimits handles the logic of converting and validating the containers CPU limits
+// specified in the OCI spec to what HCS expects.
+//
+// `cid` is the container's ID.
+//
+// `vmid` is the Utility VM's ID if the container we're constructing is going to belong to
+// one.
+//
+// `spec` is the OCI spec for the container.
+//
+// `maxCPUCount` is the maximum cpu count allowed for the container. This value should
+// be the number of processors on the host, or in the case of a hypervisor isolated container
+// the number of processors assigned to the guest/Utility VM.
+//
+// Returns the cpu count, cpu limit, and cpu weight in this order. Returns an error if more than one of
+// cpu count, cpu limit, or cpu weight was specified in the OCI spec as they are mutually
+// exclusive.
+func ConvertCPULimits(ctx context.Context, cid string, spec *specs.Spec, maxCPUCount int32) (int32, int32, int32, error) {
+	cpuNumSet := 0
+	cpuCount := oci.ParseAnnotationsCPUCount(ctx, spec, oci.AnnotationContainerProcessorCount, 0)
+	if cpuCount > 0 {
+		cpuNumSet++
+	}
+
+	cpuLimit := oci.ParseAnnotationsCPULimit(ctx, spec, oci.AnnotationContainerProcessorLimit, 0)
+	if cpuLimit > 0 {
+		cpuNumSet++
+	}
+
+	cpuWeight := oci.ParseAnnotationsCPUWeight(ctx, spec, oci.AnnotationContainerProcessorWeight, 0)
+	if cpuWeight > 0 {
+		cpuNumSet++
+	}
+
+	if cpuNumSet > 1 {
+		return 0, 0, 0, fmt.Errorf("invalid spec - Windows Container CPU Count: '%d', Limit: '%d', and Weight: '%d' are mutually exclusive", cpuCount, cpuLimit, cpuWeight)
+	} else if cpuNumSet == 1 {
+		if cpuCount > maxCPUCount {
+			log.G(ctx).WithFields(logrus.Fields{
+				"cid":       cid,
+				"requested": cpuCount,
+				"assigned":  maxCPUCount,
+			}).Warn("Changing user requested CPUCount to current number of processors")
+			cpuCount = maxCPUCount
+		}
+	}
+	return cpuCount, cpuLimit, cpuWeight, nil
+}
+
 // createWindowsContainerDocument creates documents for passing to HCS or GCS to create
 // a container, both hosted and process isolated. It creates both v1 and v2
 // container objects, WCOW only. The containers storage should have been mounted already.
@@ -122,100 +171,74 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		v2Container.GuestOs = &hcsschema.GuestOs{HostName: coi.Spec.Hostname}
 	}
 
-	// CPU Resources
-	cpuNumSet := 0
-	cpuCount := oci.ParseAnnotationsCPUCount(ctx, coi.Spec, oci.AnnotationContainerProcessorCount, 0)
-	if cpuCount > 0 {
-		cpuNumSet++
+	var (
+		uvmCPUCount  int32
+		hostCPUCount = processorinfo.ProcessorCount()
+		maxCPUCount  = hostCPUCount
+	)
+
+	if coi.HostingSystem != nil {
+		uvmCPUCount = coi.HostingSystem.ProcessorCount()
+		maxCPUCount = uvmCPUCount
 	}
 
-	cpuLimit := oci.ParseAnnotationsCPULimit(ctx, coi.Spec, oci.AnnotationContainerProcessorLimit, 0)
-	if cpuLimit > 0 {
-		cpuNumSet++
+	cpuCount, cpuLimit, cpuWeight, err := ConvertCPULimits(ctx, coi.ID, coi.Spec, maxCPUCount)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	cpuWeight := oci.ParseAnnotationsCPUWeight(ctx, coi.Spec, oci.AnnotationContainerProcessorWeight, 0)
-	if cpuWeight > 0 {
-		cpuNumSet++
+	if coi.HostingSystem != nil && coi.ScaleCPULimitsToSandbox && cpuLimit > 0 {
+		// When ScaleCPULimitsToSandbox is set and we are running in a UVM, we assume
+		// the CPU limit has been calculated based on the number of processors on the
+		// host, and instead re-calculate it based on the number of processors in the UVM.
+		//
+		// This is needed to work correctly with assumptions kubelet makes when computing
+		// the CPU limit value:
+		// - kubelet thinks about CPU limits in terms of millicores, which are 1000ths of
+		//   cores. So if 2000 millicores are assigned, the container can use 2 processors.
+		// - In Windows, the job object CPU limit is global across all processors on the
+		//   system, and is represented as a fraction out of 10000. In this model, a limit
+		//   of 10000 means the container can use all processors fully, regardless of how
+		//   many processors exist on the system.
+		// - To convert the millicores value into the job object limit, kubelet divides
+		//   the millicores by the number of CPU cores on the host. This causes problems
+		//   when running inside a UVM, as the UVM may have a different number of processors
+		//   than the host system.
+		//
+		// To work around this, we undo the division by the number of host processors, and
+		// re-do the division based on the number of processors inside the UVM. This will
+		// give the correct value based on the actual number of millicores that the kubelet
+		// wants the container to have.
+		//
+		// Kubelet formula to compute CPU limit:
+		// cpuMaximum := 10000 * cpuLimit.MilliValue() / int64(runtime.NumCPU()) / 1000
+		newCPULimit := cpuLimit * hostCPUCount / uvmCPUCount
+		// We only apply bounds here because we are calculating the CPU limit ourselves,
+		// and this matches the kubelet behavior where they also bound the CPU limit by [1, 10000].
+		// In the case where we use the value directly from the user, we don't alter it to fit
+		// within the bounds, but just let the platform throw an error if it is invalid.
+		if newCPULimit < 1 {
+			newCPULimit = 1
+		} else if newCPULimit > 10000 {
+			newCPULimit = 10000
+		}
+		log.G(ctx).WithFields(logrus.Fields{
+			"hostCPUCount": hostCPUCount,
+			"uvmCPUCount":  uvmCPUCount,
+			"oldCPULimit":  cpuLimit,
+			"newCPULimit":  newCPULimit,
+		}).Info("rescaling CPU limit for UVM sandbox")
+		cpuLimit = newCPULimit
 	}
 
-	if cpuNumSet > 1 {
-		return nil, nil, fmt.Errorf("invalid spec - Windows Process Container CPU Count: '%d', Limit: '%d', and Weight: '%d' are mutually exclusive", cpuCount, cpuLimit, cpuWeight)
-	} else if cpuNumSet == 1 {
-		hostCPUCount := processorinfo.ProcessorCount()
-		// usableCPUCount is the number of processors present in whatever environment
-		// the container is running in. It will be either the processor count of the
-		// host, or the UVM, based on if the container is process or hypervisor isolated.
-		usableCPUCount := hostCPUCount
-		var uvmCPUCount int32
-		if coi.HostingSystem != nil {
-			uvmCPUCount = coi.HostingSystem.ProcessorCount()
-			usableCPUCount = uvmCPUCount
-		}
-		if cpuCount > usableCPUCount {
-			l := log.G(ctx).WithField(logfields.ContainerID, coi.ID)
-			if coi.HostingSystem != nil {
-				l.Data[logfields.UVMID] = coi.HostingSystem.ID()
-			}
-			l.WithFields(logrus.Fields{
-				"requested": cpuCount,
-				"assigned":  usableCPUCount,
-			}).Warn("Changing user requested CPUCount to current number of processors")
-			cpuCount = usableCPUCount
-		}
-		if coi.ScaleCPULimitsToSandbox && cpuLimit > 0 && coi.HostingSystem != nil {
-			// When ScaleCPULimitsToSandbox is set and we are running in a UVM, we assume
-			// the CPU limit has been calculated based on the number of processors on the
-			// host, and instead re-calculate it based on the number of processors in the UVM.
-			//
-			// This is needed to work correctly with assumptions kubelet makes when computing
-			// the CPU limit value:
-			// - kubelet thinks about CPU limits in terms of millicores, which are 1000ths of
-			//   cores. So if 2000 millicores are assigned, the container can use 2 processors.
-			// - In Windows, the job object CPU limit is global across all processors on the
-			//   system, and is represented as a fraction out of 10000. In this model, a limit
-			//   of 10000 means the container can use all processors fully, regardless of how
-			//   many processors exist on the system.
-			// - To convert the millicores value into the job object limit, kubelet divides
-			//   the millicores by the number of CPU cores on the host. This causes problems
-			//   when running inside a UVM, as the UVM may have a different number of processors
-			//   than the host system.
-			//
-			// To work around this, we undo the division by the number of host processors, and
-			// re-do the division based on the number of processors inside the UVM. This will
-			// give the correct value based on the actual number of millicores that the kubelet
-			// wants the container to have.
-			//
-			// Kubelet formula to compute CPU limit:
-			// cpuMaximum := 10000 * cpuLimit.MilliValue() / int64(runtime.NumCPU()) / 1000
-			newCPULimit := cpuLimit * hostCPUCount / uvmCPUCount
-			// We only apply bounds here because we are calculating the CPU limit ourselves,
-			// and this matches the kubelet behavior where they also bound the CPU limit by [1, 10000].
-			// In the case where we use the value directly from the user, we don't alter it to fit
-			// within the bounds, but just let the platform throw an error if it is invalid.
-			if newCPULimit < 1 {
-				newCPULimit = 1
-			} else if newCPULimit > 10000 {
-				newCPULimit = 10000
-			}
-			log.G(ctx).WithFields(logrus.Fields{
-				"hostCPUCount": hostCPUCount,
-				"uvmCPUCount":  uvmCPUCount,
-				"oldCPULimit":  cpuLimit,
-				"newCPULimit":  newCPULimit,
-			}).Info("rescaling CPU limit for UVM sandbox")
-			cpuLimit = newCPULimit
-		}
+	v1.ProcessorCount = uint32(cpuCount)
+	v1.ProcessorMaximum = int64(cpuLimit)
+	v1.ProcessorWeight = uint64(cpuWeight)
 
-		v1.ProcessorCount = uint32(cpuCount)
-		v1.ProcessorMaximum = int64(cpuLimit)
-		v1.ProcessorWeight = uint64(cpuWeight)
-
-		v2Container.Processor = &hcsschema.Processor{
-			Count:   cpuCount,
-			Maximum: cpuLimit,
-			Weight:  cpuWeight,
-		}
+	v2Container.Processor = &hcsschema.Processor{
+		Count:   cpuCount,
+		Maximum: cpuLimit,
+		Weight:  cpuWeight,
 	}
 
 	// Memory Resources

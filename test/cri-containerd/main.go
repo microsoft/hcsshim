@@ -75,6 +75,7 @@ const (
 	featureLCOW           = "LCOW"
 	featureWCOWProcess    = "WCOWProcess"
 	featureWCOWHypervisor = "WCOWHypervisor"
+	featureHostProcess    = "HostProcess"
 	featureGMSA           = "GMSA"
 	featureGPU            = "GPU"
 )
@@ -83,6 +84,7 @@ var allFeatures = []string{
 	featureLCOW,
 	featureWCOWProcess,
 	featureWCOWHypervisor,
+	featureHostProcess,
 	featureGMSA,
 	featureGPU,
 }
