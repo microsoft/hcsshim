@@ -6,6 +6,7 @@ import weak "gogoproto/gogo.proto";
 
 service ComputeAgent{
     rpc AddNIC(AddNICInternalRequest) returns (AddNICInternalResponse) {}
+    rpc ModifyNIC(ModifyNICInternalRequest) returns (ModifyNICInternalResponse) {}
     rpc DeleteNIC(DeleteNICInternalRequest) returns (DeleteNICInternalResponse) {}
 }
 
@@ -17,6 +18,14 @@ message AddNICInternalRequest {
 
 message AddNICInternalResponse {}
 
+message ModifyNICInternalRequest {
+    string nic_id = 1;
+    string endpoint_name = 2;
+    IovSettings iov_policy_settings = 3;
+}
+
+message ModifyNICInternalResponse {}
+
 message DeleteNICInternalRequest {
     string container_id = 1;
     string nic_id = 2;
@@ -24,3 +33,9 @@ message DeleteNICInternalRequest {
 }
 
 message DeleteNICInternalResponse {}
+
+message IovSettings {
+    uint32 IovOffloadWeight = 1;
+    uint32 QueuePairsRequested = 2; 
+    uint32 InterruptModeration = 3;
+}
