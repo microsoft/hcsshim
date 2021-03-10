@@ -73,7 +73,7 @@ type Resources struct {
 	addedNetNSToVM bool
 	// layers is a pointer to a struct of the layers paths of a container
 	layers *layers.ImageLayers
-	// resources is an array of the resources associated with a container
+	// resources is a slice of the resources associated with a container
 	resources []ResourceCloser
 }
 
@@ -98,7 +98,7 @@ func NewContainerResources(id string) *Resources {
 func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all bool) error {
 	if vm != nil {
 		if r.addedNetNSToVM {
-			if err := vm.RemoveNetNS(ctx, r.netNS); err != nil {
+			if err := vm.TearDownNetworking(ctx, r.netNS); err != nil {
 				log.G(ctx).Warn(err)
 			}
 			r.addedNetNSToVM = false

@@ -47,6 +47,7 @@ const (
 	HostRoute           NetworkPolicyType = "HostRoute"
 	SetPolicy           NetworkPolicyType = "SetPolicy"
 	NetworkL4Proxy      NetworkPolicyType = "L4Proxy"
+	LayerConstraint     NetworkPolicyType = "LayerConstraint"
 )
 
 // NetworkPolicy is a collection of Policy settings for a Network.
@@ -213,6 +214,10 @@ type DrMacAddressNetworkPolicySetting struct {
 // AutomaticDNSNetworkPolicySetting enables/disables automatic DNS on a network.
 type AutomaticDNSNetworkPolicySetting struct {
 	Enable bool `json:",omitempty"`
+}
+
+type LayerConstraintNetworkPolicySetting struct {
+	LayerId string `json:",omitempty"`
 }
 
 /// Subnet Policy objects
