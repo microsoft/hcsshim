@@ -17,7 +17,7 @@ const (
 	testDirName                     = "testdir"
 	testLinkName                    = "fakelink"
 	testDirPath                     = "C:\\Users\\Public"
-	imageWindowsNanoserverTestImage = "docker.io/mtbar131/hcsshim:nanoserver_test"
+	imageWindowsNanoserverTestImage = "cplatpublic.azurecr.io/timestamp:latest"
 )
 
 func Test_PullImageTimestamps(t *testing.T) {
