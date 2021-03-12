@@ -1,3 +1,5 @@
+//+build !windows
+
 /*
    Copyright The containerd Authors.
 
@@ -14,21 +16,23 @@
    limitations under the License.
 */
 
-package version
+package runc
 
-import "runtime"
-
-var (
-	// Package is filled at linking time
-	Package = "github.com/containerd/containerd"
-
-	// Version holds the complete version number. Filled in at linking time.
-	Version = "1.5.0-beta.4+unknown"
-
-	// Revision is filled with the VCS (e.g. git) revision being used to build
-	// the program at linking time.
-	Revision = ""
-
-	// GoVersion is Go tree's version.
-	GoVersion = runtime.Version()
+import (
+	"golang.org/x/sys/unix"
 )
+
+// Runc is the client to the runc cli
+type Runc struct {
+	//If command is empty, DefaultCommand is used
+	Command       string
+	Root          string
+	Debug         bool
+	Log           string
+	LogFormat     Format
+	PdeathSignal  unix.Signal
+	Setpgid       bool
+	Criu          string
+	SystemdCgroup bool
+	Rootless      *bool // nil stands for "auto"
+}
