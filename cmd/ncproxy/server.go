@@ -12,6 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/octtrpc"
 	"github.com/containerd/ttrpc"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/plugin/ocgrpc"
 	"google.golang.org/grpc"
 )
 
@@ -28,7 +29,7 @@ func newServer(ctx context.Context, conf *config) (*server, error) {
 		return nil, err
 	}
 	return &server{
-		grpc:  grpc.NewServer(),
+		grpc:  grpc.NewServer(grpc.StatsHandler(&ocgrpc.ServerHandler{})),
 		ttrpc: ttrpcServer,
 		conf:  conf,
 	}, nil

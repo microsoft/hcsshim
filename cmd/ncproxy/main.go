@@ -8,10 +8,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Microsoft/go-winio/pkg/etwlogrus"
 	"github.com/Microsoft/hcsshim/cmd/ncproxy/nodenetsvc"
 	"github.com/Microsoft/hcsshim/internal/computeagent"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/plugin/ocgrpc"
+	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
 )
 
@@ -31,6 +35,18 @@ var (
 )
 
 func main() {
+	// Provider ID: cf9f01fe-87b3-568d-ecef-9f54b7c5ff70
+	// Hook isn't closed explicitly, as it will exist until process exit.
+	if hook, err := etwlogrus.NewHook("Microsoft.Virtualization.NCProxy"); err == nil {
+		logrus.AddHook(hook)
+	} else {
+		logrus.Error(err)
+	}
+
+	// Register our OpenCensus logrus exporter
+	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
+	trace.RegisterExporter(&oc.LogrusExporter{})
+
 	flag.Parse()
 	ctx := context.Background()
 	conf, err := loadConfig(*configPath)
@@ -50,7 +66,7 @@ func main() {
 	if conf.NodeNetSvcAddr != "" {
 		log.G(ctx).Debugf("connecting to NodeNetworkService at address %s", conf.NodeNetSvcAddr)
 
-		opts := []grpc.DialOption{grpc.WithInsecure()}
+		opts := []grpc.DialOption{grpc.WithInsecure(), grpc.WithStatsHandler(&ocgrpc.ClientHandler{})}
 		if conf.Timeout > 0 {
 			opts = append(opts, grpc.WithBlock(), grpc.WithTimeout(time.Duration(conf.Timeout)*time.Second))
 		}
