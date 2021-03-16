@@ -148,7 +148,7 @@ func Convert(r io.Reader, w io.ReadWriteSeeker, options ...Option) error {
 			}
 			f.Mode &= ^compactext4.TypeMask
 			f.Mode |= typ
-			err = fs.Create(hdr.Name, f)
+			err = fs.CreateWithParents(hdr.Name, f)
 			if err != nil {
 				return err
 			}
