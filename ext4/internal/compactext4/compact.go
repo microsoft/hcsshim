@@ -514,6 +514,45 @@ func (w *Writer) lookup(name string, mustExist bool) (*inode, *inode, string, er
 	return dir, child, childname, nil
 }
 
+// CreateWithParents adds a file to the file system creating the parent directories in the path if
+// they don't exist (like `mkdir -p`). These non existing parent directories are created
+// with the same permissions as that of it's parent directory. It is expected that the a
+// call to make these parent directories will be made at a later point with the correct
+// permissions, at that time the permissions of these directories will be updated.
+func (w *Writer) CreateWithParents(name string, f *File) error {
+	// go through the directories in the path one by one and create the
+	// parent directories if they don't exist.
+	cleanname := path.Clean("/" + name)[1:]
+	parentDirs, _ := path.Split(cleanname)
+	currentPath := ""
+	root := w.root()
+	dirname := ""
+	for parentDirs != "" {
+		dirname, parentDirs = splitFirst(parentDirs)
+		currentPath += "/" + dirname
+		if _, ok := root.Children[dirname]; !ok {
+			f := &File{
+				Mode:     root.Mode,
+				Atime:    time.Now(),
+				Mtime:    time.Now(),
+				Ctime:    time.Now(),
+				Crtime:   time.Now(),
+				Size:     0,
+				Uid:      root.Uid,
+				Gid:      root.Gid,
+				Devmajor: root.Devmajor,
+				Devminor: root.Devminor,
+				Xattrs:   make(map[string][]byte),
+			}
+			if err := w.Create(currentPath, f); err != nil {
+				return fmt.Errorf("failed while creating parent directories: %w", err)
+			}
+		}
+		root = root.Children[dirname]
+	}
+	return w.Create(name, f)
+}
+
 // Create adds a file to the file system.
 func (w *Writer) Create(name string, f *File) error {
 	if err := w.finishInode(); err != nil {
