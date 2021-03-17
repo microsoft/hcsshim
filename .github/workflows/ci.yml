@@ -16,11 +16,11 @@ jobs:
         with:
           go-version: '^1.15.0'
 
-      - run: Invoke-WebRequest "https://github.com/alecthomas/gometalinter/releases/download/v2.0.12/gometalinter-2.0.12-windows-amd64.zip" -OutFile "gometalinter.zip"
-      - run: 7z x gometalinter.zip -y -oC:\
-      - run: gometalinter.exe --config .gometalinter.json ./...
-        env:
-          PATH: C:\gometalinter-2.0.12-windows-amd64;{{ env.PATH }}
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v2
+        with:
+          version: v1.38.0
+          args: --timeout=5m
 
   test:
     runs-on: 'windows-2019'
