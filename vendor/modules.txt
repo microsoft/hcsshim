@@ -42,7 +42,7 @@ github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/protoc-gen-gogo/descriptor
 # github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e
 github.com/golang/groupcache/lru
-# github.com/linuxkit/virtsock v0.0.0-20180830132707-8e79449dea07
+# github.com/linuxkit/virtsock v0.0.0-20201010232012-f8cee7dfc7a3
 github.com/linuxkit/virtsock/pkg/vsock
 # github.com/mattn/go-shellwords v1.0.6
 github.com/mattn/go-shellwords
