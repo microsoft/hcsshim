@@ -80,9 +80,8 @@ const (
 
 type container struct {
 	persistedState
-	ShimPid   int
-	hc        *hcs.System
-	resources *resources.Resources
+	ShimPid int
+	hc      *hcs.System
 }
 
 func startProcessShim(id, pidFile, logFile string, spec *specs.Process) (_ *os.Process, err error) {
@@ -165,7 +164,7 @@ func launchShim(cmd, pidFile, logFile string, args []string, data interface{}) (
 	}
 	defer func() {
 		if err != nil {
-			p.Kill()
+			_ = p.Kill()
 		}
 	}()
 
@@ -374,7 +373,7 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 	}
 	defer func() {
 		if err != nil {
-			c.Remove()
+			_ = c.Remove()
 		}
 	}()
 	if isSandbox && vmisolated {
@@ -385,7 +384,7 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		}
 		defer func() {
 			if err != nil {
-				cnicfg.Remove()
+				_ = cnicfg.Remove()
 			}
 		}()
 	}
@@ -396,13 +395,10 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 		if err != nil {
 			return nil, err
 		}
-		switch opts.(type) {
+		switch opts := opts.(type) {
 		case *uvm.OptionsLCOW:
-			lopts := opts.(*uvm.OptionsLCOW)
-			lopts.ConsolePipe = cfg.VMConsolePipe
+			opts.ConsolePipe = cfg.VMConsolePipe
 		case *uvm.OptionsWCOW:
-			wopts := opts.(*uvm.OptionsWCOW)
-
 			// In order for the UVM sandbox.vhdx not to collide with the actual
 			// nested Argon sandbox.vhdx we append the \vm folder to the last entry
 			// in the list.
@@ -417,14 +413,14 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 			}
 			layers[layersLen-1] = vmPath
 
-			wopts.LayerFolders = layers
+			opts.LayerFolders = layers
 		}
 
 		shim, err := c.startVMShim(cfg.VMLogFile, opts)
 		if err != nil {
 			return nil, err
 		}
-		shim.Release()
+		_ = shim.Release()
 	}
 
 	if c.HostID != "" {
@@ -451,7 +447,7 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 	err = startContainerShim(c, cfg.PidFile, cfg.ShimLogFile)
 	if err != nil {
 		if e := c.Kill(); e == nil {
-			c.Remove()
+			_ = c.Remove()
 		}
 		return nil, err
 	}
@@ -482,7 +478,7 @@ func (c *container) unmountInHost(vm *uvm.UtilityVM, all bool) error {
 	}
 	err = resources.ReleaseResources(context.Background(), r, vm, all)
 	if err != nil {
-		stateKey.Set(c.ID, keyResources, r)
+		_ = stateKey.Set(c.ID, keyResources, r)
 		return err
 	}
 
@@ -500,19 +496,17 @@ func (c *container) Unmount(all bool) error {
 			op = runhcs.OpUnmountContainer
 		}
 		err := c.issueVMRequest(op)
-		if err != nil {
-			if _, ok := err.(*noVMError); ok {
-				logrus.WithFields(logrus.Fields{
-					logfields.ContainerID: c.ID,
-					logfields.UVMID:       c.HostID,
-					logrus.ErrorKey:       errors.New("failed to unmount container resources"),
-				}).Warning("VM shim could not be contacted")
-			} else {
-				return err
-			}
+		if _, ok := err.(*noVMError); ok {
+			logrus.WithFields(logrus.Fields{
+				logfields.ContainerID: c.ID,
+				logfields.UVMID:       c.HostID,
+				logrus.ErrorKey:       errors.New("failed to unmount container resources"),
+			}).Warning("VM shim could not be contacted")
+		} else {
+			return err
 		}
 	} else {
-		c.unmountInHost(nil, false)
+		_ = c.unmountInHost(nil, false)
 	}
 	return nil
 }
@@ -544,9 +538,9 @@ func createContainerInHost(c *container, vm *uvm.UtilityVM) (err error) {
 	}
 	defer func() {
 		if err != nil {
-			hc.Terminate(context.Background())
-			hc.Wait()
-			resources.ReleaseResources(context.Background(), r, vm, true)
+			_ = hc.Terminate(context.Background())
+			_ = hc.Wait()
+			_ = resources.ReleaseResources(context.Background(), r, vm, true)
 		}
 	}()
 
@@ -572,10 +566,12 @@ func startContainerShim(c *container, pidFile, logFile string) error {
 	if err != nil {
 		return err
 	}
-	defer shim.Release()
+	defer func() {
+		_ = shim.Release()
+	}()
 	defer func() {
 		if err != nil {
-			shim.Kill()
+			_ = shim.Kill()
 		}
 	}()
 
@@ -622,7 +618,9 @@ func (c *container) Exec() error {
 	if err != nil {
 		return err
 	}
-	defer shim.Release()
+	defer func() {
+		_ = shim.Release()
+	}()
 
 	err = runhcs.GetErrorFromPipe(pipe, shim)
 	if err != nil {
@@ -673,8 +671,8 @@ func (c *container) Remove() error {
 	if c.IsHost {
 		vm, err := hcs.OpenComputeSystem(context.Background(), vmID(c.ID))
 		if err == nil {
-			vm.Terminate(context.Background())
-			vm.Wait()
+			_ = vm.Terminate(context.Background())
+			_ = vm.Wait()
 		}
 	}
 	return stateKey.Remove(c.ID)
@@ -684,7 +682,7 @@ func (c *container) Kill() error {
 	if c.hc == nil {
 		return nil
 	}
-	c.hc.Terminate(context.Background())
+	_ = c.hc.Terminate(context.Background())
 	return c.hc.Wait()
 }
 

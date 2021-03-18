@@ -130,17 +130,15 @@ func (wpse *wcowPodSandboxExec) Start(ctx context.Context) error {
 	wpse.state = shimExecStateRunning
 	wpse.pid = 1 // Fake but init pid is always 1
 
-	// Publish the task start event. We mever have an exec for the WCOW
+	// Publish the task start event. We never have an exec for the WCOW
 	// PodSandbox.
-	wpse.events.publishEvent(
+	return wpse.events.publishEvent(
 		ctx,
 		runtime.TaskStartEventTopic,
 		&eventstypes.TaskStart{
 			ContainerID: wpse.tid,
 			Pid:         uint32(wpse.pid),
 		})
-
-	return nil
 }
 
 func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) error {

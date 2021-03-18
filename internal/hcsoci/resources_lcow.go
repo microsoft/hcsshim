@@ -99,7 +99,6 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 				}
 
 				uvmPathForFile = scsiMount.UVMPath
-				uvmPathForShare = scsiMount.UVMPath
 				r.Add(scsiMount)
 				coi.Spec.Mounts[i].Type = "none"
 			} else if mount.Type == "virtual-disk" {
@@ -114,7 +113,6 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 				}
 
 				uvmPathForFile = scsiMount.UVMPath
-				uvmPathForShare = scsiMount.UVMPath
 				r.Add(scsiMount)
 				coi.Spec.Mounts[i].Type = "none"
 			} else if strings.HasPrefix(mount.Source, "sandbox://") {

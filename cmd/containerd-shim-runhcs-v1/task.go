@@ -17,15 +17,6 @@ import (
 
 var errTaskNotIsolated = errors.New("task is not isolated")
 
-// shimTaskPidPair groups a process pid to its execID if it was user generated.
-type shimTaskPidPair struct {
-	// Pid is the pid of the container process.
-	Pid int
-	// ExecID is the id of the exec if this container process was user
-	// generated.
-	ExecID string
-}
-
 type shimTask interface {
 	// ID returns the original id used at `Create`.
 	ID() string

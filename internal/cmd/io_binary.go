@@ -155,7 +155,7 @@ type binaryIO struct {
 
 	binaryCloser sync.Once
 
-	stdin, stdout, stderr string
+	stdout, stderr string
 
 	sout, serr io.ReadWriteCloser
 	soutCloser sync.Once

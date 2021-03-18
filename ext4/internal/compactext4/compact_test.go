@@ -51,7 +51,7 @@ func (d *largeData) Read(b []byte) (int, error) {
 		binary.LittleEndian.PutUint64(pb[:], uint64(p+int64(i)))
 		b[i] = pb[i%8]
 	}
-	p += int64(len(b))
+	d.pos += int64(len(b))
 	return len(b), nil
 }
 

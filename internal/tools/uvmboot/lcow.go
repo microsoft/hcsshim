@@ -124,7 +124,9 @@ var lcowCommand = cli.Command{
 				if c.IsSet(outputHandlingArgName) {
 					switch strings.ToLower(c.String(outputHandlingArgName)) {
 					case "stdout":
-						options.OutputHandler = uvm.OutputHandler(func(r io.Reader) { io.Copy(os.Stdout, r) })
+						options.OutputHandler = uvm.OutputHandler(func(r io.Reader) {
+							_, _ = io.Copy(os.Stdout, r)
+						})
 					default:
 						logrus.Fatalf("Unrecognized value '%s' for option %s", c.String(outputHandlingArgName), outputHandlingArgName)
 					}
@@ -159,8 +161,8 @@ func runLCOW(ctx context.Context, options *uvm.OptionsLCOW, c *cli.Context) erro
 		if err := execViaGcs(uvm, c); err != nil {
 			return err
 		}
-		uvm.Terminate(ctx)
-		uvm.Wait()
+		_ = uvm.Terminate(ctx)
+		_ = uvm.Wait()
 		return uvm.ExitError()
 	}
 
@@ -180,7 +182,9 @@ func execViaGcs(vm *uvm.UtilityVM, c *cli.Context) error {
 			if err != nil {
 				return err
 			}
-			defer con.Reset()
+			defer func() {
+				_ = con.Reset()
+			}()
 		}
 	} else if c.String(outputHandlingArgName) == "stdout" {
 		if c.Bool(forwardStdoutArgName) {

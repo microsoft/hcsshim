@@ -43,7 +43,7 @@ var mountCommand = cli.Command{
 		}
 		defer func() {
 			if err != nil {
-				hcsshim.DeactivateLayer(driverInfo, path)
+				_ = hcsshim.DeactivateLayer(driverInfo, path)
 			}
 		}()
 
@@ -53,7 +53,7 @@ var mountCommand = cli.Command{
 		}
 		defer func() {
 			if err != nil {
-				hcsshim.UnprepareLayer(driverInfo, path)
+				_ = hcsshim.UnprepareLayer(driverInfo, path)
 			}
 		}()
 

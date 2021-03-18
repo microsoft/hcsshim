@@ -51,7 +51,7 @@ func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
 		}
 		switch proc := rpcProc(typ &^ msgTypeRequest); proc {
 		case rpcNegotiateProtocol:
-			err := sendJSON(t, rw, msgType(msgTypeResponse|proc), id, &negotiateProtocolResponse{
+			err := sendJSON(t, rw, msgTypeResponse|msgType(proc), id, &negotiateProtocolResponse{
 				Version: protocolVersion,
 				Capabilities: gcsCapabilities{
 					RuntimeOsType: "linux",
@@ -61,7 +61,7 @@ func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
 				return err
 			}
 		case rpcCreate:
-			err := sendJSON(t, rw, msgType(msgTypeResponse|proc), id, &containerCreateResponse{})
+			err := sendJSON(t, rw, msgTypeResponse|msgType(proc), id, &containerCreateResponse{})
 			if err != nil {
 				return err
 			}
@@ -105,7 +105,7 @@ func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
 					stdout.Close()
 				}()
 			}
-			err = sendJSON(t, rw, msgType(msgTypeResponse|proc), id, &containerExecuteProcessResponse{
+			err = sendJSON(t, rw, msgTypeResponse|msgType(proc), id, &containerExecuteProcessResponse{
 				ProcessID: 42,
 			})
 			if err != nil {
@@ -119,7 +119,7 @@ func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
 			if err != nil {
 				return err
 			}
-			err = sendJSON(t, rw, msgType(msgTypeResponse|proc), id, &responseBase{})
+			err = sendJSON(t, rw, msgTypeResponse|msgType(proc), id, &responseBase{})
 			if err != nil {
 				return err
 			}

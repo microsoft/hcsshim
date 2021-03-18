@@ -3,7 +3,6 @@
 package hcn
 
 import (
-	"encoding/json"
 	"fmt"
 	"syscall"
 
@@ -64,12 +63,6 @@ import (
 //sys hcnDeleteRoute(id *_guid, result **uint16) (hr error) = computenetwork.HcnDeleteSdnRoute?
 //sys hcnCloseRoute(route hcnRoute) (hr error) = computenetwork.HcnCloseSdnRoute?
 
-// Service
-//sys hcnOpenService(service *hcnService, result **uint16) (hr error) = computenetwork.HcnOpenService?
-//sys hcnRegisterServiceCallback(service hcnService, callback int32, context int32, callbackHandle *hcnCallbackHandle) (hr error) = computenetwork.HcnRegisterServiceCallback?
-//sys hcnUnregisterServiceCallback(callbackHandle hcnCallbackHandle) (hr error) = computenetwork.HcnUnregisterServiceCallback?
-//sys hcnCloseService(service hcnService) (hr error) = computenetwork.HcnCloseService?
-
 type _guid = guid.GUID
 
 type hcnNetwork syscall.Handle
@@ -77,8 +70,6 @@ type hcnEndpoint syscall.Handle
 type hcnNamespace syscall.Handle
 type hcnLoadBalancer syscall.Handle
 type hcnRoute syscall.Handle
-type hcnService syscall.Handle
-type hcnCallbackHandle syscall.Handle
 
 // SchemaVersion for HCN Objects/Queries.
 type SchemaVersion = Version // hcnglobals.go
@@ -126,15 +117,6 @@ func defaultQuery() HostComputeQuery {
 		Flags: HostComputeQueryFlagsNone,
 	}
 	return query
-}
-
-func defaultQueryJson() string {
-	query := defaultQuery()
-	queryJson, err := json.Marshal(query)
-	if err != nil {
-		return ""
-	}
-	return string(queryJson)
 }
 
 // PlatformDoesNotSupportError happens when users are attempting to use a newer shim on an older OS

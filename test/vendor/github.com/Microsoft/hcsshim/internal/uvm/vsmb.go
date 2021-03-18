@@ -79,7 +79,6 @@ func (uvm *UtilityVM) SetSaveableVSMBOptions(opts *hcsschema.VirtualSmbShareOpti
 	opts.NoLocks = true
 	opts.PseudoDirnotify = true
 	opts.NoDirectmap = true
-	return
 }
 
 // findVSMBShare finds a share by `hostPath`. If not found returns `ErrNotAttached`.
@@ -142,7 +141,7 @@ func forceNoDirectMap(path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer windows.CloseHandle(h)
+	defer windows.CloseHandle(h) //nolint:errcheck
 	var info winapi.FILE_ID_INFO
 	// We check for any error, rather than just ERROR_INVALID_PARAMETER. It seems better to also
 	// fall back if e.g. some other backing filesystem is used which returns a different error.

@@ -20,7 +20,7 @@ var (
 
 func init() {
 	if hcsSystem, err := hcs.OpenComputeSystem(context.Background(), lcowGlobalSVMID); err == nil {
-		hcsSystem.Terminate(context.Background())
+		_ = hcsSystem.Terminate(context.Background())
 	}
 }
 

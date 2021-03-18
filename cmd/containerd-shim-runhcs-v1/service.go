@@ -17,11 +17,6 @@ import (
 	"go.opencensus.io/trace"
 )
 
-type cdevent struct {
-	topic string
-	event interface{}
-}
-
 var _ = (task.TaskService)(&service{})
 
 type service struct {
@@ -460,7 +455,7 @@ func (s *service) DiagPid(ctx context.Context, req *shimdiag.PidRequest) (*shimd
 	if s == nil {
 		return nil, nil
 	}
-	ctx, span := trace.StartSpan(ctx, "DiagPid")
+	ctx, span := trace.StartSpan(ctx, "DiagPid") //nolint:ineffassign,staticcheck
 	defer span.End()
 
 	span.AddAttributes(trace.StringAttribute("tid", s.tid))

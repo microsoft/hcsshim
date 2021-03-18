@@ -18,7 +18,7 @@ var (
 // CopyFile is a utility for copying a file using CopyFileW win32 API for
 // performance.
 func CopyFile(ctx context.Context, srcFile, destFile string, overwrite bool) (err error) {
-	ctx, span := trace.StartSpan(ctx, "copyfile::CopyFile")
+	ctx, span := trace.StartSpan(ctx, "copyfile::CopyFile") //nolint:ineffassign,staticcheck
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(

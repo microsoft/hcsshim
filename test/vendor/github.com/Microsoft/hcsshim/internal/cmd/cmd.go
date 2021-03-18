@@ -215,7 +215,10 @@ func (c *Cmd) Start() error {
 				c.stdinErr.Store(err)
 			}
 			// Notify the process that there is no more input.
-			p.CloseStdin(context.TODO())
+			err = p.CloseStdin(context.TODO())
+			if err != nil && c.Log != nil {
+				c.Log.WithError(err).Warn("failed to close pod stdin")
+			}
 		}()
 	}
 
@@ -237,7 +240,7 @@ func (c *Cmd) Start() error {
 		go func() {
 			select {
 			case <-c.Context.Done():
-				c.Process.Kill(context.TODO())
+				c.Process.Kill(context.TODO()) //nolint:errcheck
 			case <-c.allDoneCh:
 			}
 		}()

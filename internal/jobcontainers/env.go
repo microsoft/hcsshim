@@ -23,7 +23,9 @@ func defaultEnvBlock(token windows.Token) (env []string, err error) {
 	if err := windows.CreateEnvironmentBlock(&block, token, false); err != nil {
 		return nil, err
 	}
-	defer windows.DestroyEnvironmentBlock(block)
+	defer func() {
+		_ = windows.DestroyEnvironmentBlock(block)
+	}()
 
 	blockp := uintptr(unsafe.Pointer(block))
 	for {

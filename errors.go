@@ -132,15 +132,6 @@ func (e *ContainerError) Error() string {
 	return s
 }
 
-func makeContainerError(container *container, operation string, extraInfo string, err error) error {
-	// Don't double wrap errors
-	if _, ok := err.(*ContainerError); ok {
-		return err
-	}
-	containerError := &ContainerError{Container: container, Operation: operation, ExtraInfo: extraInfo, Err: err}
-	return containerError
-}
-
 func (e *ProcessError) Error() string {
 	if e == nil {
 		return "<nil>"
@@ -169,15 +160,6 @@ func (e *ProcessError) Error() string {
 	}
 
 	return s
-}
-
-func makeProcessError(process *process, operation string, extraInfo string, err error) error {
-	// Don't double wrap errors
-	if _, ok := err.(*ProcessError); ok {
-		return err
-	}
-	processError := &ProcessError{Process: process, Operation: operation, ExtraInfo: extraInfo, Err: err}
-	return processError
 }
 
 // IsNotExist checks if an error is caused by the Container or Process not existing.

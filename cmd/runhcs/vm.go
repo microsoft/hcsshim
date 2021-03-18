@@ -128,7 +128,7 @@ var vmshimCommand = cli.Command{
 						err = closeWritePipe(pipe)
 					}
 					if err == nil {
-						ioutil.ReadAll(pipe)
+						_, _ = ioutil.ReadAll(pipe)
 					}
 				} else {
 					logrus.WithError(err).
@@ -169,7 +169,7 @@ func processRequest(vm *uvm.UtilityVM, pipe net.Conn) error {
 		c2 := c
 		c = nil
 		go func() {
-			c2.hc.Wait()
+			_ = c2.hc.Wait()
 			c2.Close()
 		}()
 

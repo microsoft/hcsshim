@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
-	"strings"
 	"time"
 
 	winio "github.com/Microsoft/go-winio"
@@ -19,12 +18,7 @@ import (
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
-	"golang.org/x/sys/windows"
 )
-
-func containerPipePath(id string) string {
-	return runhcs.SafePipePath("runhcs-shim-" + id)
-}
 
 func newFile(context *cli.Context, param string) *os.File {
 	fd := uintptr(context.Int(param))
@@ -113,18 +107,18 @@ var shimCommand = cli.Command{
 
 			// Alert the parent process that initialization has completed
 			// successfully.
-			errorOut.Write(runhcs.ShimSuccess)
+			_, _ = errorOut.Write(runhcs.ShimSuccess)
 			errorOut.Close()
 			fatalWriter.Writer = ioutil.Discard
 
 			// When this process exits, clear this process's pid in the registry.
 			defer func() {
-				stateKey.Set(id, keyShimPid, 0)
+				_ = stateKey.Set(id, keyShimPid, 0)
 			}()
 
 			defer func() {
 				if terminateOnFailure {
-					c.hc.Terminate(gcontext.Background())
+					_ = c.hc.Terminate(gcontext.Background())
 					<-containerExitCh
 				}
 			}()
@@ -181,34 +175,35 @@ var shimCommand = cli.Command{
 			err = stateKey.Set(c.ID, keyInitPid, pid)
 			if err != nil {
 				stdin.Close()
-				cmd.Process.Kill(gcontext.Background())
-				cmd.Wait()
+				_, _ = cmd.Process.Kill(gcontext.Background())
+				_ = cmd.Wait()
 				return err
 			}
 		}
 
 		// Store the Guest pid map
 		err = stateKey.Set(c.ID, fmt.Sprintf(keyPidMapFmt, os.Getpid()), pid)
+
 		if err != nil {
 			stdin.Close()
-			cmd.Process.Kill(gcontext.Background())
-			cmd.Wait()
+			_, _ = cmd.Process.Kill(gcontext.Background())
+			_ = cmd.Wait()
 			return err
 		}
 		defer func() {
 			// Remove the Guest pid map when this process is cleaned up
-			stateKey.Clear(c.ID, fmt.Sprintf(keyPidMapFmt, os.Getpid()))
+			_ = stateKey.Clear(c.ID, fmt.Sprintf(keyPidMapFmt, os.Getpid()))
 		}()
 
 		terminateOnFailure = false
 
 		// Alert the connected process that the process was launched
 		// successfully.
-		errorOut.Write(runhcs.ShimSuccess)
+		_, _ = errorOut.Write(runhcs.ShimSuccess)
 		errorOut.Close()
 		fatalWriter.Writer = ioutil.Discard
 
-		cmd.Wait()
+		_ = cmd.Wait()
 		code := cmd.ExitState.ExitCode()
 		if !exec {
 			// Shutdown the container, waiting 5 minutes before terminating is
@@ -225,21 +220,11 @@ var shimCommand = cli.Command{
 			}
 
 			if err != nil {
-				c.hc.Terminate(gcontext.Background())
+				_ = c.hc.Terminate(gcontext.Background())
 			}
 			<-containerExitCh
-			err = containerExitErr
 		}
 
 		return cli.NewExitError("", code)
 	},
-}
-
-// escapeArgs makes a Windows-style escaped command line from a set of arguments
-func escapeArgs(args []string) string {
-	escapedArgs := make([]string, len(args))
-	for i, a := range args {
-		escapedArgs[i] = windows.EscapeArg(a)
-	}
-	return strings.Join(escapedArgs, " ")
 }

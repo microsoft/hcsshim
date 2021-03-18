@@ -98,7 +98,9 @@ var wcowCommand = cli.Command{
 						if err != nil {
 							return err
 						}
-						defer con.Reset()
+						defer func() {
+							_ = con.Reset()
+						}()
 					}
 				} else {
 					cmd.Stdout = os.Stdout
@@ -109,8 +111,8 @@ var wcowCommand = cli.Command{
 					return err
 				}
 			}
-			vm.Terminate(context.TODO())
-			vm.Wait()
+			_ = vm.Terminate(context.TODO())
+			_ = vm.Wait()
 			return vm.ExitError()
 		})
 		return nil

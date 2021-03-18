@@ -66,9 +66,9 @@ type msgType uint32
 
 const (
 	msgTypeRequest  msgType = 0x10100000
-	msgTypeResponse         = 0x20100000
-	msgTypeNotify           = 0x30100000
-	msgTypeMask             = 0xfff00000
+	msgTypeResponse msgType = 0x20100000
+	msgTypeNotify   msgType = 0x30100000
+	msgTypeMask     msgType = 0xfff00000
 
 	notifyContainer = 1<<8 | 1
 )

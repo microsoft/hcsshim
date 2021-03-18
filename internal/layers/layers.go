@@ -83,7 +83,7 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 		}
 		defer func() {
 			if err != nil {
-				wclayer.DeactivateLayer(ctx, path)
+				_ = wclayer.DeactivateLayer(ctx, path)
 			}
 		}()
 
@@ -92,7 +92,7 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 		}
 		defer func() {
 			if err != nil {
-				wclayer.UnprepareLayer(ctx, path)
+				_ = wclayer.UnprepareLayer(ctx, path)
 			}
 		}()
 
@@ -188,7 +188,8 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 	if uvm.OS() == "windows" {
 		// 	Load the filter at the C:\s<ID> location calculated above. We pass into this request each of the
 		// 	read-only layer folders.
-		layers, err := GetHCSLayers(ctx, uvm, layersAdded)
+		var layers []hcsschema.Layer
+		layers, err = GetHCSLayers(ctx, uvm, layersAdded)
 		if err != nil {
 			return "", err
 		}

@@ -73,7 +73,7 @@ func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string,
 	removeSCSI := true
 	defer func() {
 		if removeSCSI {
-			lcowUVM.RemoveSCSI(ctx, destFile)
+			lcowUVM.RemoveSCSI(ctx, destFile) //nolint:errcheck
 		}
 	}()
 

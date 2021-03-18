@@ -88,7 +88,7 @@ func (h *localProcessHost) CreateProcess(ctx context.Context, cfg interface{}) (
 
 func (p *localProcess) Close() error {
 	if p.p != nil {
-		p.p.Release()
+		_ = p.p.Release()
 	}
 	if p.stdin != nil {
 		p.stdin.Close()
@@ -169,7 +169,7 @@ func TestCmdContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd.Process.Wait()
+	_ = cmd.Process.Wait()
 	w.Close()
 	err = cmd.Wait()
 	if e, ok := err.(*ExitError); !ok || e.ExitCode() != 1 || ctx.Err() == nil {
@@ -195,7 +195,7 @@ func TestCmdStdinBlocked(t *testing.T) {
 	defer r.Close()
 	go func() {
 		b := []byte{'\n'}
-		w.Write(b)
+		_, _ = w.Write(b)
 	}()
 	cmd.Stdin = r
 	_, err := cmd.Output()
