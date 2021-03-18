@@ -8,7 +8,6 @@ import (
 
 	"github.com/Microsoft/opengcs/internal/log"
 	"github.com/Microsoft/opengcs/internal/oc"
-	"github.com/opencontainers/runc/libcontainer/configs"
 	"github.com/opencontainers/runc/libcontainer/devices"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -171,7 +170,7 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 	return nil
 }
 
-func addLinuxDeviceToSpec(ctx context.Context, hostDevice *configs.Device, spec *oci.Spec, addCgroupDevice bool) {
+func addLinuxDeviceToSpec(ctx context.Context, hostDevice *devices.Device, spec *oci.Spec, addCgroupDevice bool) {
 	rd := oci.LinuxDevice{
 		Path:  hostDevice.Path,
 		Type:  string(hostDevice.Type),
@@ -203,7 +202,7 @@ func addLinuxDeviceToSpec(ctx context.Context, hostDevice *configs.Device, spec 
 				Type:   string(hostDevice.Type),
 				Major:  &hostDevice.Major,
 				Minor:  &hostDevice.Minor,
-				Access: hostDevice.Permissions,
+				Access: string(hostDevice.Permissions),
 			}
 			spec.Linux.Resources.Devices = append(spec.Linux.Resources.Devices, deviceCgroup)
 		}
