@@ -25,7 +25,6 @@ import (
 // GRPC service exposed for use by a Node Network Service. Holds a mutex for
 // updating global client.
 type grpcService struct {
-	m sync.Mutex
 }
 
 var _ ncproxygrpc.NetworkConfigProxyServer = &grpcService{}
