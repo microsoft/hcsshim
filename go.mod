@@ -3,22 +3,16 @@ module github.com/Microsoft/opengcs
 go 1.13
 
 require (
-	github.com/Microsoft/go-winio v0.4.12 // indirect
-	github.com/Microsoft/hcsshim v0.0.0-20190404205635-cf1c2137fae1 // indirect
-	github.com/containerd/cgroups v0.0.0-20200407151229-7fc7a507c04c
-	github.com/containerd/containerd v1.3.0
-	github.com/containerd/continuity v0.0.0-20190815185530-f2a389ac0a02 // indirect
-	github.com/docker/docker v0.0.0-20190404075923-dbe4a30928d4 // indirect
+	github.com/containerd/cgroups v0.0.0-20210114181951-8a68de567b68
+	github.com/containerd/containerd v1.5.0-beta.4
 	github.com/linuxkit/virtsock v0.0.0-20180830132707-8e79449dea07
 	github.com/mattn/go-shellwords v1.0.6
-	github.com/opencontainers/go-digest v0.0.0-20190228220655-ac19fd6e7483 // indirect
-	github.com/opencontainers/runc v1.0.0-rc2.0.20190926000215-3e425f80a8c9
-	github.com/opencontainers/runtime-spec v1.0.2
+	github.com/opencontainers/runc v1.0.0-rc93
+	github.com/opencontainers/runtime-spec v1.0.3-0.20200929063507-e6143ca7d51d
 	github.com/pkg/errors v0.9.1
-	github.com/sirupsen/logrus v1.4.2
-	github.com/vishvananda/netlink v0.0.0-20190319163122-f504738125a5
-	github.com/vishvananda/netns v0.0.0-20180720170159-13995c7128cc
-	go.opencensus.io v0.22.0
-	golang.org/x/sys v0.0.0-20200406155108-e3b113bbe6a4
-	gotest.tools v2.2.0+incompatible // indirect
+	github.com/sirupsen/logrus v1.7.0
+	github.com/vishvananda/netlink v1.1.0
+	github.com/vishvananda/netns v0.0.0-20191106174202-0a2b9b5464df
+	go.opencensus.io v0.22.3
+	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c
 )

@@ -1,65 +1,72 @@
-# github.com/Microsoft/go-winio v0.4.12
+# github.com/Microsoft/go-winio v0.4.17-0.20210211115548-6eac466e5fa3
 github.com/Microsoft/go-winio
-# github.com/Microsoft/hcsshim v0.0.0-20190404205635-cf1c2137fae1
+github.com/Microsoft/go-winio/pkg/guid
+github.com/Microsoft/go-winio/pkg/security
+github.com/Microsoft/go-winio/vhd
+# github.com/Microsoft/hcsshim v0.8.15
 github.com/Microsoft/hcsshim
-github.com/Microsoft/hcsshim/internal/guid
+github.com/Microsoft/hcsshim/computestorage
+github.com/Microsoft/hcsshim/internal/cow
 github.com/Microsoft/hcsshim/internal/hcs
 github.com/Microsoft/hcsshim/internal/hcserror
 github.com/Microsoft/hcsshim/internal/hns
 github.com/Microsoft/hcsshim/internal/interop
+github.com/Microsoft/hcsshim/internal/log
 github.com/Microsoft/hcsshim/internal/logfields
 github.com/Microsoft/hcsshim/internal/longpath
 github.com/Microsoft/hcsshim/internal/mergemaps
+github.com/Microsoft/hcsshim/internal/oc
 github.com/Microsoft/hcsshim/internal/safefile
 github.com/Microsoft/hcsshim/internal/schema1
 github.com/Microsoft/hcsshim/internal/schema2
 github.com/Microsoft/hcsshim/internal/timeout
+github.com/Microsoft/hcsshim/internal/vmcompute
 github.com/Microsoft/hcsshim/internal/wclayer
-# github.com/containerd/cgroups v0.0.0-20200407151229-7fc7a507c04c
+github.com/Microsoft/hcsshim/internal/winapi
+github.com/Microsoft/hcsshim/osversion
+# github.com/containerd/cgroups v0.0.0-20210114181951-8a68de567b68
 github.com/containerd/cgroups
 github.com/containerd/cgroups/stats/v1
-# github.com/containerd/containerd v1.3.0
+# github.com/containerd/containerd v1.5.0-beta.4
+github.com/containerd/containerd/log
 github.com/containerd/containerd/sys
-# github.com/coreos/go-systemd/v22 v22.0.0
+# github.com/coreos/go-systemd/v22 v22.1.0
 github.com/coreos/go-systemd/v22/dbus
 # github.com/docker/go-units v0.4.0
 github.com/docker/go-units
 # github.com/godbus/dbus/v5 v5.0.3
 github.com/godbus/dbus/v5
-# github.com/gogo/protobuf v1.3.1
+# github.com/gogo/protobuf v1.3.2
 github.com/gogo/protobuf/gogoproto
 github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/protoc-gen-gogo/descriptor
-# github.com/hashicorp/golang-lru v0.5.1
-github.com/hashicorp/golang-lru/simplelru
-# github.com/konsorten/go-windows-terminal-sequences v1.0.2
-github.com/konsorten/go-windows-terminal-sequences
+# github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e
+github.com/golang/groupcache/lru
 # github.com/linuxkit/virtsock v0.0.0-20180830132707-8e79449dea07
 github.com/linuxkit/virtsock/pkg/vsock
 # github.com/mattn/go-shellwords v1.0.6
 github.com/mattn/go-shellwords
-# github.com/opencontainers/runc v1.0.0-rc2.0.20190926000215-3e425f80a8c9
-github.com/opencontainers/runc/libcontainer/configs
+# github.com/opencontainers/runc v1.0.0-rc93
 github.com/opencontainers/runc/libcontainer/devices
-github.com/opencontainers/runc/libcontainer/system
 github.com/opencontainers/runc/libcontainer/user
-# github.com/opencontainers/runtime-spec v1.0.2
+# github.com/opencontainers/runtime-spec v1.0.3-0.20200929063507-e6143ca7d51d
 github.com/opencontainers/runtime-spec/specs-go
 # github.com/pkg/errors v0.9.1
 github.com/pkg/errors
-# github.com/sirupsen/logrus v1.4.2
+# github.com/sirupsen/logrus v1.7.0
 github.com/sirupsen/logrus
-# github.com/vishvananda/netlink v0.0.0-20190319163122-f504738125a5
+# github.com/vishvananda/netlink v1.1.0
 github.com/vishvananda/netlink
 github.com/vishvananda/netlink/nl
-# github.com/vishvananda/netns v0.0.0-20180720170159-13995c7128cc
+# github.com/vishvananda/netns v0.0.0-20191106174202-0a2b9b5464df
 github.com/vishvananda/netns
-# go.opencensus.io v0.22.0
+# go.opencensus.io v0.22.3
 go.opencensus.io
 go.opencensus.io/internal
 go.opencensus.io/trace
 go.opencensus.io/trace/internal
 go.opencensus.io/trace/tracestate
-# golang.org/x/sys v0.0.0-20200406155108-e3b113bbe6a4
+# golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c
+golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
 golang.org/x/sys/windows
