@@ -10,6 +10,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/cow"
@@ -20,6 +21,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/queue"
 	"github.com/Microsoft/hcsshim/internal/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/hcsshim/internal/winapi"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -368,12 +370,91 @@ func (c *JobContainer) shutdown(ctx context.Context) error {
 // to adhere to the interface for containers on Windows it is partially implemented. The only
 // supported property is schema2.PTStatistics.
 func (c *JobContainer) PropertiesV2(ctx context.Context, types ...hcsschema.PropertyType) (*hcsschema.Properties, error) {
-	return nil, errors.New("`PropertiesV2` call is not implemented for job containers")
+	if len(types) == 0 {
+		return nil, errors.New("no property types supplied for PropertiesV2 call")
+	}
+	if types[0] != hcsschema.PTStatistics {
+		return nil, errors.New("PTStatistics is the only supported property type for job containers")
+	}
+
+	memInfo, err := c.job.QueryMemoryStats()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to query for job containers memory information")
+	}
+
+	processorInfo, err := c.job.QueryProcessorStats()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to query for job containers processor information")
+	}
+
+	storageInfo, err := c.job.QueryStorageStats()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to query for job containers storage information")
+	}
+
+	var privateWorkingSet uint64
+	err = forEachProcessInfo(c.job, func(procInfo *winapi.SYSTEM_PROCESS_INFORMATION) {
+		privateWorkingSet += uint64(procInfo.WorkingSetPrivateSize)
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get private working set for container")
+	}
+
+	return &hcsschema.Properties{
+		Statistics: &hcsschema.Statistics{
+			Timestamp:          time.Now(),
+			Uptime100ns:        uint64(time.Since(c.startTimestamp)) / 100,
+			ContainerStartTime: c.startTimestamp,
+			Memory: &hcsschema.MemoryStats{
+				MemoryUsageCommitBytes:            memInfo.JobMemory,
+				MemoryUsageCommitPeakBytes:        memInfo.PeakJobMemoryUsed,
+				MemoryUsagePrivateWorkingSetBytes: privateWorkingSet,
+			},
+			Processor: &hcsschema.ProcessorStats{
+				RuntimeKernel100ns: uint64(processorInfo.TotalKernelTime),
+				RuntimeUser100ns:   uint64(processorInfo.TotalUserTime),
+				TotalRuntime100ns:  uint64(processorInfo.TotalKernelTime + processorInfo.TotalUserTime),
+			},
+			Storage: &hcsschema.StorageStats{
+				ReadCountNormalized:  storageInfo.IoInfo.ReadOperationCount,
+				ReadSizeBytes:        storageInfo.IoInfo.ReadTransferCount,
+				WriteCountNormalized: storageInfo.IoInfo.WriteOperationCount,
+				WriteSizeBytes:       storageInfo.IoInfo.WriteTransferCount,
+			},
+		},
+	}, nil
 }
 
-// Properties is not implemented for job containers. This is just to satisfy the cow.Container interface.
+// Properties returns properties relating to the job container. This is an HCS construct but
+// to adhere to the interface for containers on Windows it is partially implemented. The only
+// supported property is schema1.PropertyTypeProcessList.
 func (c *JobContainer) Properties(ctx context.Context, types ...schema1.PropertyType) (*schema1.ContainerProperties, error) {
-	return nil, errors.New("`Properties` call is not implemented for job containers")
+	if len(types) == 0 {
+		return nil, errors.New("no property types supplied for Properties call")
+	}
+	if types[0] != schema1.PropertyTypeProcessList {
+		return nil, errors.New("ProcessList is the only supported property type for job containers")
+	}
+
+	var processList []schema1.ProcessListItem
+	err := forEachProcessInfo(c.job, func(procInfo *winapi.SYSTEM_PROCESS_INFORMATION) {
+		proc := schema1.ProcessListItem{
+			CreateTimestamp:              time.Unix(0, procInfo.CreateTime),
+			ProcessId:                    uint32(procInfo.UniqueProcessID),
+			ImageName:                    procInfo.ImageName.String(),
+			UserTime100ns:                uint64(procInfo.UserTime),
+			KernelTime100ns:              uint64(procInfo.KernelTime),
+			MemoryCommitBytes:            uint64(procInfo.PrivatePageCount),
+			MemoryWorkingSetPrivateBytes: uint64(procInfo.WorkingSetPrivateSize),
+			MemoryWorkingSetSharedBytes:  uint64(procInfo.WorkingSetSize) - uint64(procInfo.WorkingSetPrivateSize),
+		}
+		processList = append(processList, proc)
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get process ")
+	}
+
+	return &schema1.ContainerProperties{ProcessList: processList}, nil
 }
 
 // Terminate terminates the job object (kills every process in the job).
@@ -446,4 +527,74 @@ func (c *JobContainer) IsOCI() bool {
 // OS returns the operating system name as a string. This should always be windows.
 func (c *JobContainer) OS() string {
 	return "windows"
+}
+
+// For every process in the job `job`, run the function `work`. This can be used to grab/filter the SYSTEM_PROCESS_INFORMATION
+// data from every process in a job.
+func forEachProcessInfo(job *jobobject.JobObject, work func(*winapi.SYSTEM_PROCESS_INFORMATION)) error {
+	procInfos, err := systemProcessInformation()
+	if err != nil {
+		return err
+	}
+
+	pids, err := job.Pids()
+	if err != nil {
+		return err
+	}
+
+	pidsMap := make(map[uint32]struct{})
+	for _, pid := range pids {
+		pidsMap[pid] = struct{}{}
+	}
+
+	for _, procInfo := range procInfos {
+		if _, ok := pidsMap[uint32(procInfo.UniqueProcessID)]; ok {
+			work(procInfo)
+		}
+	}
+	return nil
+}
+
+// Get a slice of SYSTEM_PROCESS_INFORMATION for all of the processes running on the system.
+func systemProcessInformation() ([]*winapi.SYSTEM_PROCESS_INFORMATION, error) {
+	var (
+		systemProcInfo *winapi.SYSTEM_PROCESS_INFORMATION
+		procInfos      []*winapi.SYSTEM_PROCESS_INFORMATION
+		// This happens to be the buffer size hcs uses but there's no really no hard need to keep it
+		// the same, it's just a sane default.
+		size   = uint32(1024 * 512)
+		bounds uintptr
+	)
+	for {
+		b := make([]byte, size)
+		systemProcInfo = (*winapi.SYSTEM_PROCESS_INFORMATION)(unsafe.Pointer(&b[0]))
+		status := winapi.NtQuerySystemInformation(
+			winapi.SystemProcessInformation,
+			uintptr(unsafe.Pointer(systemProcInfo)),
+			size,
+			&size,
+		)
+		if winapi.NTSuccess(status) {
+			// Cache the address of the end of our buffer so we can check we don't go past this
+			// in some odd case.
+			bounds = uintptr(unsafe.Pointer(&b[len(b)-1]))
+			break
+		} else if status != winapi.STATUS_INFO_LENGTH_MISMATCH {
+			return nil, winapi.RtlNtStatusToDosError(status)
+		}
+	}
+
+	for {
+		if uintptr(unsafe.Pointer(systemProcInfo))+uintptr(systemProcInfo.NextEntryOffset) >= bounds {
+			// The next entry is outside of the bounds of our buffer somehow, abort.
+			return nil, errors.New("system process info entry exceeds allocated buffer")
+		}
+		procInfos = append(procInfos, systemProcInfo)
+		if systemProcInfo.NextEntryOffset == 0 {
+			break
+		}
+		systemProcInfo = (*winapi.SYSTEM_PROCESS_INFORMATION)(unsafe.Pointer(uintptr(unsafe.Pointer(systemProcInfo)) + uintptr(systemProcInfo.NextEntryOffset)))
+	}
+
+	return procInfos, nil
 }

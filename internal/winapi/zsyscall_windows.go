@@ -37,13 +37,14 @@ func errnoErr(e syscall.Errno) error {
 }
 
 var (
+	modntdll    = windows.NewLazySystemDLL("ntdll.dll")
 	modiphlpapi = windows.NewLazySystemDLL("iphlpapi.dll")
 	modkernel32 = windows.NewLazySystemDLL("kernel32.dll")
-	modntdll    = windows.NewLazySystemDLL("ntdll.dll")
 	modadvapi32 = windows.NewLazySystemDLL("advapi32.dll")
 	modpsapi    = windows.NewLazySystemDLL("psapi.dll")
 	modcfgmgr32 = windows.NewLazySystemDLL("cfgmgr32.dll")
 
+	procNtQuerySystemInformation               = modntdll.NewProc("NtQuerySystemInformation")
 	procSetJobCompartmentId                    = modiphlpapi.NewProc("SetJobCompartmentId")
 	procSearchPathW                            = modkernel32.NewProc("SearchPathW")
 	procCreateRemoteThread                     = modkernel32.NewProc("CreateRemoteThread")
@@ -72,6 +73,12 @@ var (
 	procNtQueryDirectoryObject                 = modntdll.NewProc("NtQueryDirectoryObject")
 	procRtlNtStatusToDosError                  = modntdll.NewProc("RtlNtStatusToDosError")
 )
+
+func NtQuerySystemInformation(systemInfoClass int, systemInformation uintptr, systemInfoLength uint32, returnLength *uint32) (status uint32) {
+	r0, _, _ := syscall.Syscall6(procNtQuerySystemInformation.Addr(), 4, uintptr(systemInfoClass), uintptr(systemInformation), uintptr(systemInfoLength), uintptr(unsafe.Pointer(returnLength)), 0, 0)
+	status = uint32(r0)
+	return
+}
 
 func SetJobCompartmentId(handle windows.Handle, compartmentId uint32) (win32Err error) {
 	r0, _, _ := syscall.Syscall(procSetJobCompartmentId.Addr(), 2, uintptr(handle), uintptr(compartmentId), 0)
