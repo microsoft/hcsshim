@@ -61,7 +61,11 @@ func NewBinaryIO(ctx context.Context, id string, uri *url.URL) (_ UpstreamIO, er
 	if err != nil {
 		return nil, err
 	}
-	defer waitPipe.Close()
+	defer func() {
+		if err := waitPipe.Close(); err != nil {
+			log.G(ctx).WithError(err).Errorf("error closing wait pipe: %s", waitPipePath)
+		}
+	}()
 
 	envs := []string{
 		"CONTAINER_ID=" + id,
@@ -102,7 +106,7 @@ func NewBinaryIO(ctx context.Context, id string, uri *url.URL) (_ UpstreamIO, er
 	log.G(ctx).WithFields(logrus.Fields{
 		"containerID":        id,
 		"containerNamespace": ns,
-		"binaryCmd":          cmd,
+		"binaryCmd":          cmd.String(),
 		"binaryProcessID":    cmd.Process.Pid,
 	}).Debug("binary io process started")
 
@@ -198,7 +202,7 @@ func (b *binaryIO) Close(ctx context.Context) {
 	})
 }
 
-func (b *binaryIO) CloseStdin(ctx context.Context) {}
+func (b *binaryIO) CloseStdin(_ context.Context) {}
 
 func (b *binaryIO) Stdin() io.Reader {
 	return nil
@@ -273,7 +277,9 @@ func (p *pipe) Read(b []byte) (int, error) {
 }
 
 func (p *pipe) Close() error {
-	p.l.Close()
+	if err := p.l.Close(); err != nil {
+		log.G(context.TODO()).WithError(err).Debug("error closing pipe listener")
+	}
 	p.conWg.Wait()
 	if p.con != nil {
 		return p.con.Close()
