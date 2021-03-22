@@ -17,7 +17,7 @@ import (
 var shareCommand = cli.Command{
 	Name:      "share",
 	Usage:     "Share a file/directory in a shim's hosting utility VM",
-	ArgsUsage: "<shim name> <host_path> <uvm_path>",
+	ArgsUsage: "[flags] <shim name> <host_path> <uvm_path>",
 	Flags: []cli.Flag{
 		cli.BoolFlag{
 			Name:  "readonly,ro",

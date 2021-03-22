@@ -35,7 +35,7 @@ var execTty bool
 var execCommand = cli.Command{
 	Name:      "exec",
 	Usage:     "Executes a command in a shim's hosting utility VM",
-	ArgsUsage: "<shim name> <command> [args...]",
+	ArgsUsage: "[flags] <shim name> <command> [args...]",
 	Flags: []cli.Flag{
 		cli.BoolFlag{
 			Name:        "tty,t",
