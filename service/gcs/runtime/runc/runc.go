@@ -17,7 +17,7 @@ import (
 	"github.com/Microsoft/opengcs/service/gcs/runtime"
 	"github.com/Microsoft/opengcs/service/gcs/stdio"
 	"github.com/Microsoft/opengcs/service/libs/commonutils"
-	containerdsys "github.com/containerd/containerd/sys"
+	containerdsys "github.com/containerd/containerd/sys/reaper"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
