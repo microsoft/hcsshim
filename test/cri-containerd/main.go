@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -117,14 +118,36 @@ func requireFeatures(t *testing.T, features ...string) {
 	}
 }
 
+// requireBinary checks if `binary` exists in the same directory as the test
+// binary.
+// Returns full binary path if it exists, otherwise, skips the test.
+func requireBinary(t *testing.T, binary string) string {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Skipf("error locating executable: %s", err)
+		return ""
+	}
+	baseDir := filepath.Dir(executable)
+	binaryPath := filepath.Join(baseDir, binary)
+	if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
+		t.Skipf("binary not found: %s", binaryPath)
+		return ""
+	}
+	return binaryPath
+}
+
 func getWindowsNanoserverImage(build uint16) string {
 	switch build {
 	case osversion.RS5:
 		return "mcr.microsoft.com/windows/nanoserver:1809"
 	case osversion.V19H1:
 		return "mcr.microsoft.com/windows/nanoserver:1903"
+	case osversion.V19H2:
+		return "mcr.microsoft.com/windows/nanoserver:1909"
 	case osversion.V20H1:
 		return "mcr.microsoft.com/windows/nanoserver:2004"
+	case osversion.V20H2:
+		return "mcr.microsoft.com/windows/nanoserver:2009"
 	default:
 		panic("unsupported build")
 	}
@@ -136,8 +159,12 @@ func getWindowsServerCoreImage(build uint16) string {
 		return "mcr.microsoft.com/windows/servercore:1809"
 	case osversion.V19H1:
 		return "mcr.microsoft.com/windows/servercore:1903"
+	case osversion.V19H2:
+		return "mcr.microsoft.com/windows/servercore:1909"
 	case osversion.V20H1:
 		return "mcr.microsoft.com/windows/servercore:2004"
+	case osversion.V20H2:
+		return "mcr.microsoft.com/windows/servercore:2009"
 	default:
 		panic("unsupported build")
 	}

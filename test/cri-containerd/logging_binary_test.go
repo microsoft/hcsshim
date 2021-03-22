@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -24,18 +25,9 @@ func Test_Run_Container_With_Binary_Logger(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	logBinaryRoot := os.Getenv("TEST_BINARY_ROOT")
-	if logBinaryRoot == "" {
-		logBinaryRoot = "/ContainerPlat"
-	}
+	binaryPath := requireBinary(t, "sample-logging-driver.exe")
 
-	binaryPath := logBinaryRoot + "/sample-logging-driver.exe"
-
-	if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
-		t.Skip("skipping: sample logging driver missing")
-	}
-
-	logPath := "binary://" + binaryPath
+	logPath := "binary:///" + binaryPath
 
 	type config struct {
 		name             string
@@ -97,7 +89,7 @@ func Test_Run_Container_With_Binary_Logger(t *testing.T) {
 			podID := runPodSandbox(t, client, ctx, podReq)
 			defer removePodSandbox(t, client, ctx, podID)
 
-			logFileName := fmt.Sprintf("%s/stdout-%s.txt", logBinaryRoot, test.name)
+			logFileName := fmt.Sprintf(`%s\stdout-%s.txt`, filepath.Dir(binaryPath), test.name)
 			conReq := getCreateContainerRequest(podID, test.containerName, test.containerImage, test.cmd, podReq.Config)
 			conReq.Config.LogPath = logPath + fmt.Sprintf("?%s", logFileName)
 
