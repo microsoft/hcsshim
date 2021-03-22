@@ -12,7 +12,7 @@ import (
 var listCommand = cli.Command{
 	Name:      "list",
 	Usage:     "Lists running shims",
-	ArgsUsage: " ",
+	ArgsUsage: "[flags]",
 	Flags: []cli.Flag{
 		cli.BoolFlag{
 			Name:  "pids",
