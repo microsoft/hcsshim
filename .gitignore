@@ -4,6 +4,9 @@
 *.so
 *.dylib
 
+# Ignore vscode setting files
+.vscode/
+
 # Test binary, build with `go test -c`
 *.test
 
