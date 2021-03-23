@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<WindowsPerformanceRecorder Version="1">
+  <Profiles>
+
+    <EventCollector Id="Collector" Name="Collector">
+      <BufferSize Value="256"/>
+      <Buffers Value="1024"/>
+    </EventCollector>
+    
+    <EventProvider Id="Microsoft-Windows-Host-Network-Service" Name="0C885E0D-6EB6-476C-A048-2457EED3A5C1"/>
+
+    <Profile
+      Id="Test.Verbose.Memory"
+      Name="Test"
+      Description="Test events"
+      LoggingMode="Memory"
+      DetailLevel="Verbose"
+      >
+      <Collectors>
+        <EventCollectorId Value="Collector">
+          <EventProviders>
+            <EventProviderId Value="Microsoft-Windows-Host-Network-Service"/>
+          </EventProviders>
+        </EventCollectorId>
+      </Collectors>
+    </Profile>
+
+    <Profile
+      Id="Test.Verbose.File"
+      Name="Test"
+      Description="Test events"
+      LoggingMode="File"
+      DetailLevel="Verbose"
+      Base="Test.Verbose.Memory"
+    />
+
+  </Profiles>
+</WindowsPerformanceRecorder>
