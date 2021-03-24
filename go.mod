@@ -17,6 +17,6 @@ require (
 	github.com/urfave/cli v1.22.2
 	go.opencensus.io v0.22.3
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
-	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c
+	golang.org/x/sys v0.0.0-20210324051608-47abb6519492
 	google.golang.org/grpc v1.33.2
 )
