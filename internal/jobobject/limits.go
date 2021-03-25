@@ -10,8 +10,7 @@ import (
 )
 
 const (
-	processorWeightMax float64 = 10000
-	memoryLimitMax     uint64  = 0xffffffffffffffff
+	memoryLimitMax uint64 = 0xffffffffffffffff
 )
 
 func isFlagSet(flag, controlFlags uint32) bool {

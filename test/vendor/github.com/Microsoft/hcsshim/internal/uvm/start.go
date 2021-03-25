@@ -153,7 +153,7 @@ func (uvm *UtilityVM) configureHvSocketForGCS(ctx context.Context) (err error) {
 func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	g, gctx := errgroup.WithContext(ctx)
-	defer g.Wait()
+	defer g.Wait() //nolint:errcheck
 	defer cancel()
 
 	// Prepare to provide entropy to the init process in the background. This
@@ -197,6 +197,7 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 		return err
 	}
 	defer func() {
+		//nolint:errcheck
 		if err != nil {
 			uvm.hcsSystem.Terminate(ctx)
 			uvm.hcsSystem.Wait()

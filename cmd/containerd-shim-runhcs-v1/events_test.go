@@ -19,7 +19,3 @@ func (p *fakePublisher) publishEvent(ctx context.Context, topic string, event in
 	p.events = append(p.events, event)
 	return nil
 }
-
-func (p *fakePublisher) getEvents() []interface{} {
-	return p.events
-}

@@ -32,10 +32,12 @@ func Test_LoadPersistedNamespaceConfig_NoConfig(t *testing.T) {
 func Test_LoadPersistedNamespaceConfig_WithConfig(t *testing.T) {
 	pnc := NewPersistedNamespaceConfig(t.Name(), "test-container", newGUID(t))
 	if err := pnc.Store(); err != nil {
-		pnc.Remove()
+		_ = pnc.Remove()
 		t.Fatalf("store failed with: %v", err)
 	}
-	defer pnc.Remove()
+	defer func() {
+		_ = pnc.Remove()
+	}()
 
 	pnc2, err := LoadPersistedNamespaceConfig(t.Name())
 	if err != nil {
@@ -62,24 +64,28 @@ func Test_LoadPersistedNamespaceConfig_WithConfig(t *testing.T) {
 func Test_PersistedNamespaceConfig_StoreNew(t *testing.T) {
 	pnc := NewPersistedNamespaceConfig(t.Name(), "test-container", newGUID(t))
 	if err := pnc.Store(); err != nil {
-		pnc.Remove()
+		_ = pnc.Remove()
 		t.Fatalf("store failed with: %v", err)
 	}
-	defer pnc.Remove()
+	defer func() {
+		_ = pnc.Remove()
+	}()
 }
 
 func Test_PersistedNamespaceConfig_StoreUpdate(t *testing.T) {
 	pnc := NewPersistedNamespaceConfig(t.Name(), "test-container", newGUID(t))
 	if err := pnc.Store(); err != nil {
-		pnc.Remove()
+		_ = pnc.Remove()
 		t.Fatalf("store failed with: %v", err)
 	}
-	defer pnc.Remove()
+	defer func() {
+		_ = pnc.Remove()
+	}()
 
 	pnc.ContainerID = "test-container2"
 	pnc.HostUniqueID = newGUID(t)
 	if err := pnc.Store(); err != nil {
-		pnc.Remove()
+		_ = pnc.Remove()
 		t.Fatalf("store update failed with: %v", err)
 	}
 

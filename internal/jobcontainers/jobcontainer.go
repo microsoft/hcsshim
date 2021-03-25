@@ -138,7 +138,7 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, err
 		if err != nil {
 			container.Close()
 			if path != "" {
-				removeSandboxMountPoint(ctx, path)
+				_ = removeSandboxMountPoint(ctx, path)
 			}
 		}
 	}()
@@ -406,7 +406,7 @@ func (c *JobContainer) waitBackground(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if err := c.Shutdown(ctx); err != nil {
-		c.Terminate(ctx)
+		_ = c.Terminate(ctx)
 	}
 
 	c.closedWaitOnce.Do(func() {

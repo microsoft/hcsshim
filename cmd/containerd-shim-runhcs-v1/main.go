@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"runtime"
 	"strings"
 
 	"github.com/Microsoft/go-winio/pkg/etw"
@@ -44,17 +43,6 @@ var (
 	idFlag string
 )
 
-func stack() []byte {
-	buf := make([]byte, 1024)
-	for {
-		n := runtime.Stack(buf, true) // true means all goroutines
-		if n < len(buf) {
-			return buf[:n]
-		}
-		buf = make([]byte, 2*len(buf))
-	}
-}
-
 func etwCallback(sourceID guid.GUID, state etw.ProviderState, level etw.Level, matchAnyKeyword uint64, matchAllKeyword uint64, filterData uintptr) {
 	if state == etw.ProviderStateCaptureState {
 		resp, err := svc.DiagStacks(context.Background(), &shimdiag.StacksRequest{})
@@ -83,7 +71,7 @@ func main() {
 		}
 	}
 
-	provider.WriteEvent(
+	_ = provider.WriteEvent(
 		"ShimLaunched",
 		nil,
 		etw.WithFields(

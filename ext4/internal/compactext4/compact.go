@@ -732,7 +732,7 @@ func (w *Writer) seekBlock(block uint32) {
 func (w *Writer) nextBlock() {
 	if w.pos%blockSize != 0 {
 		// Simplify callers; w.err is updated on failure.
-		w.zero(blockSize - w.pos%blockSize)
+		_, _ = w.zero(blockSize - w.pos%blockSize)
 	}
 }
 
@@ -782,7 +782,7 @@ func (w *Writer) writeExtents(inode *inode) error {
 			extents [4]format.ExtentLeafNode
 		}
 		fillExtents(&root.hdr, root.extents[:extents], startBlock, 0, blocks)
-		binary.Write(&b, binary.LittleEndian, root)
+		_ = binary.Write(&b, binary.LittleEndian, root)
 	} else if extents <= 4*extentsPerBlock {
 		const extentsPerBlock = blockSize/extentNodeSize - 1
 		extentBlocks := extents/extentsPerBlock + 1
@@ -817,12 +817,12 @@ func (w *Writer) writeExtents(inode *inode) error {
 
 			offset := i * extentsPerBlock * maxBlocksPerExtent
 			fillExtents(&node.hdr, node.extents[:extentsInBlock], startBlock+offset, offset, blocks)
-			binary.Write(&b2, binary.LittleEndian, node)
+			_ = binary.Write(&b2, binary.LittleEndian, node)
 			if _, err := w.write(b2.Next(blockSize)); err != nil {
 				return err
 			}
 		}
-		binary.Write(&b, binary.LittleEndian, root)
+		_ = binary.Write(&b, binary.LittleEndian, root)
 	} else {
 		panic("file too big")
 	}
@@ -1060,12 +1060,12 @@ func (w *Writer) writeInodeTable(tableSize uint32) error {
 				binary.LittleEndian.PutUint32(binode.Block[4:], dev)
 			}
 
-			binary.Write(&b, binary.LittleEndian, binode)
+			_ = binary.Write(&b, binary.LittleEndian, binode)
 			b.Truncate(inodeUsedSize)
 			n, _ := b.Write(inode.XattrInline)
-			io.CopyN(&b, zero, int64(inodeExtraSize-n))
+			_, _ = io.CopyN(&b, zero, int64(inodeExtraSize-n))
 		} else {
-			io.CopyN(&b, zero, inodeSize)
+			_, _ = io.CopyN(&b, zero, inodeSize)
 		}
 		if _, err := w.write(b.Next(inodeSize)); err != nil {
 			return err
@@ -1315,7 +1315,7 @@ func (w *Writer) Close() error {
 	if w.supportInlineData {
 		sb.FeatureIncompat |= format.IncompatInlineData
 	}
-	binary.Write(b, binary.LittleEndian, sb)
+	_ = binary.Write(b, binary.LittleEndian, sb)
 	w.seekBlock(0)
 	if _, err := w.write(blk[:]); err != nil {
 		return err

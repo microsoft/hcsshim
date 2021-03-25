@@ -83,11 +83,6 @@ func cmpSlices(s1, s2 []string) bool {
 	return equal
 }
 
-// Compares to mount structs and returns true if they are equal, returns false otherwise.
-func compareMounts(m1, m2 specs.Mount) bool {
-	return cmpSlices(m1.Options, m2.Options) && (m1.Source == m2.Source) && (m1.Destination == m2.Destination) && (m1.Type == m2.Type)
-}
-
 // verifyCloneContainerSpecs compares the container creation spec provided during the template container
 // creation and the spec provided during cloned container creation and checks that all the fields match
 // (except for the certain fields that are allowed to be different).
@@ -276,7 +271,7 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 	defer func() {
 		if err != nil {
 			if !coi.DoNotReleaseResourcesOnFailure {
-				resources.ReleaseResources(ctx, r, coi.HostingSystem, true)
+				_ = resources.ReleaseResources(ctx, r, coi.HostingSystem, true)
 			}
 		}
 	}()
@@ -393,7 +388,7 @@ func CloneContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.Co
 	defer func() {
 		if err != nil {
 			if !coi.DoNotReleaseResourcesOnFailure {
-				resources.ReleaseResources(ctx, r, coi.HostingSystem, true)
+				_ = resources.ReleaseResources(ctx, r, coi.HostingSystem, true)
 			}
 		}
 	}()

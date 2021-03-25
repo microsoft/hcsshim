@@ -68,9 +68,12 @@ func main() {
 
 		opts := []grpc.DialOption{grpc.WithInsecure(), grpc.WithStatsHandler(&ocgrpc.ClientHandler{})}
 		if conf.Timeout > 0 {
-			opts = append(opts, grpc.WithBlock(), grpc.WithTimeout(time.Duration(conf.Timeout)*time.Second))
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, time.Duration(conf.Timeout)*time.Second)
+			defer cancel()
+			opts = append(opts, grpc.WithBlock())
 		}
-		client, err := grpc.Dial(conf.NodeNetSvcAddr, opts...)
+		client, err := grpc.DialContext(ctx, conf.NodeNetSvcAddr, opts...)
 		if err != nil {
 			log.G(ctx).Fatalf("failed to connect to NodeNetworkService at address %s", conf.NodeNetSvcAddr)
 		}

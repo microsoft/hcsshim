@@ -1,5 +1,6 @@
 package uvm
 
+//nolint:deadcode,varcheck
 const (
 	gpuResourcePath                  string = "VirtualMachine/ComputeTopology/Gpu"
 	memoryResourcePath               string = "VirtualMachine/ComputeTopology/Memory/SizeInMB"

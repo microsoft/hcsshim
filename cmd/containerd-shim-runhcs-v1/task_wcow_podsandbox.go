@@ -136,7 +136,7 @@ func (wpst *wcowPodSandboxTask) DeleteExec(ctx context.Context, eid string) (int
 	status := e.Status()
 
 	// Publish the deleted event
-	wpst.events.publishEvent(
+	if err := wpst.events.publishEvent(
 		ctx,
 		runtime.TaskDeleteEventTopic,
 		&eventstypes.TaskDelete{
@@ -145,7 +145,9 @@ func (wpst *wcowPodSandboxTask) DeleteExec(ctx context.Context, eid string) (int
 			Pid:         status.Pid,
 			ExitStatus:  status.ExitStatus,
 			ExitedAt:    status.ExitedAt,
-		})
+		}); err != nil {
+		return 0, 0, time.Time{}, err
+	}
 
 	return int(status.Pid), status.ExitStatus, status.ExitedAt, nil
 }
@@ -189,7 +191,8 @@ func (wpst *wcowPodSandboxTask) close(ctx context.Context) {
 		}
 		// Send the `init` exec exit notification always.
 		exit := wpst.init.Status()
-		wpst.events.publishEvent(
+
+		if err := wpst.events.publishEvent(
 			ctx,
 			runtime.TaskExitEventTopic,
 			&eventstypes.TaskExit{
@@ -198,7 +201,9 @@ func (wpst *wcowPodSandboxTask) close(ctx context.Context) {
 				Pid:         uint32(exit.Pid),
 				ExitStatus:  exit.ExitStatus,
 				ExitedAt:    exit.ExitedAt,
-			})
+			}); err != nil {
+			log.G(ctx).WithError(err).Error("failed to publish TaskExitEventTopic")
+		}
 		close(wpst.closed)
 	})
 }

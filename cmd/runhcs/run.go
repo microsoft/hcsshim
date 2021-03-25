@@ -56,7 +56,7 @@ command(s) that get executed on start, edit the args parameter of the spec.`,
 			if err != nil {
 				return err
 			}
-			c.Remove()
+			_ = c.Remove()
 			os.Exit(int(state.Sys().(syscall.WaitStatus).ExitCode))
 		}
 		return nil

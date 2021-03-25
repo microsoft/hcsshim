@@ -332,12 +332,3 @@ func getInnerError(err error) error {
 	}
 	return err
 }
-
-func getOperationLogResult(err error) (string, error) {
-	switch err {
-	case nil:
-		return "Success", nil
-	default:
-		return "Error", err
-	}
-}

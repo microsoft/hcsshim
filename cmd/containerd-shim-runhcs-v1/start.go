@@ -154,7 +154,7 @@ The start command can either start a new shim or return an address to an existin
 			w.Close()
 			defer func() {
 				if err != nil {
-					cmd.Process.Kill()
+					_ = cmd.Process.Kill()
 				}
 			}()
 

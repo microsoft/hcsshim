@@ -60,7 +60,9 @@ var execCommand = cli.Command{
 				if err != nil {
 					return err
 				}
-				defer con.Reset()
+				defer func() {
+					_ = con.Reset()
+				}()
 				// Console reads return EOF whenever the user presses Ctrl-Z.
 				// Wrap the reads to translate these EOFs back.
 				osStdin = rawConReader{os.Stdin}
@@ -120,11 +122,12 @@ func makePipe(f interface{}, in bool) (string, error) {
 			logrus.WithError(err).Error("failed to accept pipe")
 			return
 		}
+
 		if in {
-			io.Copy(c, f.(io.Reader))
+			_, _ = io.Copy(c, f.(io.Reader))
 			c.Close()
 		} else {
-			io.Copy(f.(io.Writer), c)
+			_, _ = io.Copy(f.(io.Writer), c)
 		}
 	}()
 	return p, nil

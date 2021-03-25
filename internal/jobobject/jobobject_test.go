@@ -43,7 +43,7 @@ func createProcsAndAssign(num int, job *JobObject) (_ []*exec.Cmd, err error) {
 	defer func() {
 		if err != nil {
 			for _, proc := range procs {
-				proc.Process.Kill()
+				_ = proc.Process.Kill()
 			}
 		}
 	}()
@@ -108,7 +108,7 @@ func TestSetTerminateOnLastHandleClose(t *testing.T) {
 			t.Fatal(err)
 		}
 	case <-time.After(time.Second * 10):
-		procs[0].Process.Kill()
+		_ = procs[0].Process.Kill()
 		t.Fatal("process didn't complete wait within timeout")
 	}
 }

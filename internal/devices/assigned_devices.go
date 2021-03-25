@@ -145,10 +145,7 @@ func readCsPipeOutput(l net.Listener, errChan chan<- error, result *[]string) {
 
 	elementsAsString := strings.TrimSuffix(string(bytes), "\n")
 	elements := strings.Split(elementsAsString, ",")
-
-	for _, elem := range elements {
-		*result = append(*result, elem)
-	}
+	*result = append(*result, elements...)
 
 	if len(*result) == 0 {
 		errChan <- errors.Wrapf(err, "failed to get any pipe output")

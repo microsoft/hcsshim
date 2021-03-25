@@ -54,7 +54,7 @@ The specification file includes an args parameter. The args parameter is used
 to specify command(s) that get run when the container is started. To change the
 command(s) that get executed on start, edit the args parameter of the spec. See
 "runc spec --help" for more explanation.`,
-	Flags:  append(createRunFlags),
+	Flags:  createRunFlags,
 	Before: appargs.Validate(argID),
 	Action: func(context *cli.Context) error {
 		cfg, err := containerConfigFromContext(context)

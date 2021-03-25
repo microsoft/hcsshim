@@ -54,7 +54,7 @@ func main() {
 		}
 
 		// Exhaust the tar stream.
-		io.Copy(ioutil.Discard, in)
+		_, _ = io.Copy(ioutil.Discard, in)
 		return nil
 	}()
 	if err != nil {

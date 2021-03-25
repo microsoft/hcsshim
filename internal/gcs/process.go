@@ -145,7 +145,7 @@ func (p *Process) Close() error {
 
 // CloseStdin causes the process to read EOF on its stdin stream.
 func (p *Process) CloseStdin(ctx context.Context) (err error) {
-	ctx, span := trace.StartSpan(ctx, "gcs::Process::CloseStdin")
+	ctx, span := trace.StartSpan(ctx, "gcs::Process::CloseStdin") //nolint:ineffassign,staticcheck
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(

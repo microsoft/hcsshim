@@ -176,7 +176,7 @@ func Test_hcsTask_DeleteExec_InitExecID_RunningState_Error(t *testing.T) {
 	lt.execs.Delete(second.id)
 
 	// Start the init exec
-	init.Start(context.TODO())
+	_ = init.Start(context.TODO())
 
 	// try to delete the init exec
 	pid, status, at, err := lt.DeleteExec(context.TODO(), "")
@@ -190,7 +190,7 @@ func Test_hcsTask_DeleteExec_InitExecID_ExitedState_Success(t *testing.T) {
 	// remove the 2nd exec so we just check without it.
 	lt.execs.Delete(second.id)
 
-	init.Kill(context.TODO(), 0xf)
+	_ = init.Kill(context.TODO(), 0xf)
 
 	// try to delete the init exec
 	pid, status, at, err := lt.DeleteExec(context.TODO(), "")
@@ -205,7 +205,7 @@ func Test_hcsTask_DeleteExec_InitExecID_2ndExec_CreatedState_Error(t *testing.T)
 	lt, init, second := setupTestHcsTask(t)
 
 	// start the init exec (required to have 2nd exec)
-	init.Start(context.TODO())
+	_ = init.Start(context.TODO())
 
 	// try to delete the init exec
 	pid, status, at, err := lt.DeleteExec(context.TODO(), "")
@@ -221,10 +221,10 @@ func Test_hcsTask_DeleteExec_InitExecID_2ndExec_RunningState_Error(t *testing.T)
 	lt, init, second := setupTestHcsTask(t)
 
 	// start the init exec (required to have 2nd exec)
-	init.Start(context.TODO())
+	_ = init.Start(context.TODO())
 
 	// put the 2nd exec into the running state
-	second.Start(context.TODO())
+	_ = second.Start(context.TODO())
 
 	// try to delete the init exec
 	pid, status, at, err := lt.DeleteExec(context.TODO(), "")
@@ -240,9 +240,9 @@ func Test_hcsTask_DeleteExec_InitExecID_2ndExec_ExitedState_Success(t *testing.T
 	lt, init, second := setupTestHcsTask(t)
 
 	// put the init exec into the exited state
-	init.Kill(context.TODO(), 0xf)
+	_ = init.Kill(context.TODO(), 0xf)
 	// put the 2nd exec into the exited state
-	second.Kill(context.TODO(), 0xf)
+	_ = second.Kill(context.TODO(), 0xf)
 
 	// try to delete the init exec
 	pid, status, at, err := lt.DeleteExec(context.TODO(), "")
@@ -257,7 +257,7 @@ func Test_hcsTask_DeleteExec_2ndExecID_CreatedState_Success(t *testing.T) {
 	lt, init, second := setupTestHcsTask(t)
 
 	// start the init exec (required to have 2nd exec)
-	init.Start(context.TODO())
+	_ = init.Start(context.TODO())
 
 	// try to delete the 2nd exec
 	pid, status, at, err := lt.DeleteExec(context.TODO(), second.id)
@@ -272,10 +272,10 @@ func Test_hcsTask_DeleteExec_2ndExecID_RunningState_Error(t *testing.T) {
 	lt, init, second := setupTestHcsTask(t)
 
 	// start the init exec (required to have 2nd exec)
-	init.Start(context.TODO())
+	_ = init.Start(context.TODO())
 
 	// put the 2nd exec into the running state
-	second.Start(context.TODO())
+	_ = second.Start(context.TODO())
 
 	// try to delete the 2nd exec
 	pid, status, at, err := lt.DeleteExec(context.TODO(), second.id)
@@ -288,10 +288,10 @@ func Test_hcsTask_DeleteExec_2ndExecID_ExitedState_Success(t *testing.T) {
 	lt, init, second := setupTestHcsTask(t)
 
 	// start the init exec (required to have 2nd exec)
-	init.Kill(context.TODO(), 0xf)
+	_ = init.Kill(context.TODO(), 0xf)
 
 	// put the 2nd exec into the exited state
-	second.Kill(context.TODO(), 0xf)
+	_ = second.Kill(context.TODO(), 0xf)
 
 	// try to delete the 2nd exec
 	pid, status, at, err := lt.DeleteExec(context.TODO(), second.id)

@@ -40,9 +40,9 @@ func TestReadOrWaitClose(t *testing.T) {
 	q := NewMessageQueue()
 
 	go func() {
-		q.Write(1)
-		q.Write(2)
-		q.Write(3)
+		_ = q.Write(1)
+		_ = q.Write(2)
+		_ = q.Write(3)
 		time.Sleep(time.Second * 5)
 		q.Close()
 	}()
@@ -65,11 +65,11 @@ func TestReadOrWait(t *testing.T) {
 	q := NewMessageQueue()
 
 	go func() {
-		q.Write(1)
-		q.Write(2)
-		q.Write(3)
+		_ = q.Write(1)
+		_ = q.Write(2)
+		_ = q.Write(3)
 		time.Sleep(time.Second * 5)
-		q.Write(4)
+		_ = q.Write(4)
 	}()
 
 	// Small sleep so that we can give time to ensure a value is written to the queue so we

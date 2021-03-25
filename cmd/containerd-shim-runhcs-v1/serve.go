@@ -282,6 +282,5 @@ func setupDebuggerEvent() {
 		return
 	}
 	logrus.WithField("event", event).Info("Halting until signalled")
-	windows.WaitForSingleObject(handle, windows.INFINITE)
-	return
+	_, _ = windows.WaitForSingleObject(handle, windows.INFINITE)
 }

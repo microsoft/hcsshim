@@ -22,7 +22,7 @@ func (uvm *UtilityVM) Share(ctx context.Context, reqHostPath, reqUVMPath string,
 		}
 		defer func() {
 			if err != nil {
-				vsmbShare.Release(ctx)
+				_ = vsmbShare.Release(ctx)
 			}
 		}()
 
@@ -64,7 +64,7 @@ func (uvm *UtilityVM) Share(ctx context.Context, reqHostPath, reqUVMPath string,
 		}
 		defer func() {
 			if err != nil {
-				plan9Share.Release(ctx)
+				_ = plan9Share.Release(ctx)
 			}
 		}()
 	}

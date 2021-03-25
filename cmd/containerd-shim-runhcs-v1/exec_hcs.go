@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
@@ -22,18 +21,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
-	"golang.org/x/sys/windows"
-)
-
-const (
-	// processStopTimeout is the amount of time after signaling the process with
-	// a signal expected to kill the process that the exec must wait before
-	// forcibly terminating the process.
-	//
-	// For example, sending a SIGKILL is expected to kill a process. If the
-	// process does not stop within `processStopTimeout` we will forcibly
-	// terminate the process without a signal.
-	processStopTimeout = time.Second * 5
 )
 
 // newHcsExec creates an exec to track the lifetime of `spec` in `c` which is
@@ -199,7 +186,7 @@ func (he *hcsExec) startInternal(ctx context.Context, initializeContainer bool) 
 		}
 		defer func() {
 			if err != nil {
-				he.c.Terminate(ctx)
+				_ = he.c.Terminate(ctx)
 				he.c.Close()
 			}
 		}()
@@ -233,22 +220,26 @@ func (he *hcsExec) startInternal(ctx context.Context, initializeContainer bool) 
 	// Publish the task/exec start event. This MUST happen before waitForExit to
 	// avoid publishing the exit previous to the start.
 	if he.id != he.tid {
-		he.events.publishEvent(
+		if err := he.events.publishEvent(
 			ctx,
 			runtime.TaskExecStartedEventTopic,
 			&eventstypes.TaskExecStarted{
 				ContainerID: he.tid,
 				ExecID:      he.id,
 				Pid:         uint32(he.pid),
-			})
+			}); err != nil {
+			return err
+		}
 	} else {
-		he.events.publishEvent(
+		if err := he.events.publishEvent(
 			ctx,
 			runtime.TaskStartEventTopic,
 			&eventstypes.TaskStart{
 				ContainerID: he.tid,
 				Pid:         uint32(he.pid),
-			})
+			}); err != nil {
+			return err
+		}
 	}
 
 	// wait in the background for the exit.
@@ -350,7 +341,7 @@ func (he *hcsExec) ForceExit(ctx context.Context, status int) {
 			he.exitFromCreatedL(ctx, status)
 		case shimExecStateRunning:
 			// Kill the process to unblock `he.waitForExit`
-			he.p.Process.Kill(ctx)
+			_, _ = he.p.Process.Kill(ctx)
 		}
 	}
 }
@@ -451,14 +442,14 @@ func (he *hcsExec) waitForExit() {
 	he.sl.Unlock()
 
 	// Wait for all IO copies to complete and free the resources.
-	he.p.Wait()
+	_ = he.p.Wait()
 	he.io.Close(ctx)
 
 	// Only send the `runtime.TaskExitEventTopic` notification if this is a true
 	// exec. For the `init` exec this is handled in task teardown.
 	if he.tid != he.id {
 		// We had a valid process so send the exited notification.
-		he.events.publishEvent(
+		if err := he.events.publishEvent(
 			ctx,
 			runtime.TaskExitEventTopic,
 			&eventstypes.TaskExit{
@@ -467,7 +458,9 @@ func (he *hcsExec) waitForExit() {
 				Pid:         uint32(he.pid),
 				ExitStatus:  he.exitStatus,
 				ExitedAt:    he.exitedAt,
-			})
+			}); err != nil {
+			log.G(ctx).WithError(err).Error("failed to publish TaskExitEvent")
+		}
 	}
 
 	// Free any waiters.
@@ -490,7 +483,7 @@ func (he *hcsExec) waitForContainerExit() {
 
 	cexit := make(chan struct{})
 	go func() {
-		he.c.Wait()
+		_ = he.c.Wait()
 		close(cexit)
 	}()
 	select {
@@ -503,20 +496,11 @@ func (he *hcsExec) waitForContainerExit() {
 			he.exitFromCreatedL(ctx, 1)
 		case shimExecStateRunning:
 			// Kill the process to unblock `he.waitForExit`.
-			he.p.Process.Kill(ctx)
+			_, _ = he.p.Process.Kill(ctx)
 		}
 		he.sl.Unlock()
 	case <-he.processDone:
 		// Process exited first. This is the normal case do nothing because
 		// `he.waitForExit` will release any waiters.
 	}
-}
-
-// escapeArgs makes a Windows-style escaped command line from a set of arguments
-func escapeArgs(args []string) string {
-	escapedArgs := make([]string, len(args))
-	for i, a := range args {
-		escapedArgs[i] = windows.EscapeArg(a)
-	}
-	return strings.Join(escapedArgs, " ")
 }

@@ -14,8 +14,7 @@ import (
 )
 
 const (
-	bytesPerMB   = 1024 * 1024
-	bytesPerPage = 4096
+	bytesPerMB = 1024 * 1024
 )
 
 var pauseDurationOnCreateContainerFailure time.Duration
@@ -36,7 +35,7 @@ func init() {
 
 	// Try to stop any pre-existing compute processes
 	cmd := exec.Command("powershell", `get-computeprocess | stop-computeprocess -force`)
-	cmd.Run()
+	_ = cmd.Run()
 
 }
 
@@ -48,7 +47,7 @@ func CreateContainerTestWrapper(ctx context.Context, options *hcsoci.CreateOptio
 	if err != nil {
 		logrus.Warnf("Test is pausing for %s for debugging CreateContainer failure", pauseDurationOnCreateContainerFailure)
 		time.Sleep(pauseDurationOnCreateContainerFailure)
-		resources.ReleaseResources(ctx, r, options.HostingSystem, true)
+		_ = resources.ReleaseResources(ctx, r, options.HostingSystem, true)
 	}
 	return s, r, err
 }

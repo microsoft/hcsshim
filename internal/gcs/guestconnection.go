@@ -70,7 +70,7 @@ func (gcc *GuestConnectionConfig) Connect(ctx context.Context, isColdStart bool)
 	gc.brdg = newBridge(gcc.Conn, gc.notify, gcc.Log)
 	gc.brdg.Start()
 	go func() {
-		gc.brdg.Wait()
+		_ = gc.brdg.Wait()
 		gc.clearNotifies()
 	}()
 	err = gc.connect(ctx, isColdStart)
