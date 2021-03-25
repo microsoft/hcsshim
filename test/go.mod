@@ -20,14 +20,4 @@ require (
 	k8s.io/cri-api v0.20.1
 )
 
-replace (
-	github.com/Microsoft/hcsshim => ../
-	// These are all required due to how k8s handles dependencies. The primary k8s.io/kubernetes
-	// module only depends on v0.0.0 for these, which does not exist. Replace directives are
-	// then used to redirect to the actual source for the module. Since replace directives are
-	// not inherited when we depend on k8s.io/kubernetes, we need to put our own in here.
-	//
-	// These replace directives all point to v1.20.4's commit ID. Putting the version tag instead
-	// didn't seem to work.
-	k8s.io/cri-api => k8s.io/kubernetes/staging/src/k8s.io/cri-api v0.0.0-20210218160201-e87da0bd6e03
-)
+replace github.com/Microsoft/hcsshim => ../
