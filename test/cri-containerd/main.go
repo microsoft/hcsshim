@@ -18,12 +18,12 @@ import (
 	"github.com/containerd/containerd"
 	eventtypes "github.com/containerd/containerd/api/events"
 	eventsapi "github.com/containerd/containerd/api/services/events/v1"
+	kubeutil "github.com/containerd/containerd/integration/remote/util"
 	eventruntime "github.com/containerd/containerd/runtime"
 	"github.com/containerd/typeurl"
 	"github.com/gogo/protobuf/types"
 	"google.golang.org/grpc"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
-	kubeutil "k8s.io/kubernetes/pkg/kubelet/util"
 )
 
 const (
