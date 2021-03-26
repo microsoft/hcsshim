@@ -20,7 +20,7 @@ import (
 )
 
 // args hold the command-line arguments, starting with the program name.
-var args []string
+var Args []string
 
 // OsProcAttr holds the attributes that will be applied to a new process
 // started by StartProcess. This is actually os.ProcAttr but since we need
@@ -67,9 +67,8 @@ type SysProcAttr struct {
 // Process stores the information about a process created by StartProcess.
 type Process struct {
 	Pid    int
-	handle uintptr      // handle is accessed atomically on Windows
-	isdone uint32       // process has been successfully waited on, non zero if true
-	sigMu  sync.RWMutex // avoid race between wait and signal
+	handle uintptr // handle is accessed atomically on Windows
+	isdone uint32  // process has been successfully waited on, non zero if true
 }
 
 func newProcess(pid int, handle uintptr) *Process {
@@ -87,7 +86,9 @@ func environForSysProcAttr(sys *SysProcAttr) (env []string, err error) {
 	if err != nil {
 		return nil, err
 	}
-	defer windows.DestroyEnvironmentBlock(block)
+	defer func() {
+		_ = windows.DestroyEnvironmentBlock(block)
+	}()
 	blockp := uintptr(unsafe.Pointer(block))
 	for {
 		entry := (*[(1 << 30) - 1]uint16)(unsafe.Pointer(blockp))[:]
@@ -136,7 +137,7 @@ func StartProcess(name string, argv []string, attr *OsProcAttr) (p *Process, err
 
 	pid, h, e := startProcess(name, argv, sysattr)
 	if e != nil {
-		return nil, &os.PathError{"fork/exec", name, e}
+		return nil, &os.PathError{Op: "fork/exec", Path: name, Err: e}
 	}
 	return newProcess(pid, h), nil
 }
@@ -213,7 +214,7 @@ func startProcess(argv0 string, argv []string, attr *ProcAttr) (pid int, handle 
 	ForkLock.Lock()
 	defer ForkLock.Unlock()
 
-	p, _ := windows.GetCurrentProcess()
+	p := windows.CurrentProcess()
 	fd := make([]windows.Handle, len(attr.Files))
 	for i := range attr.Files {
 		if attr.Files[i] > 0 {
@@ -221,7 +222,9 @@ func startProcess(argv0 string, argv []string, attr *ProcAttr) (pid int, handle 
 			if err != nil {
 				return 0, 0, err
 			}
-			defer windows.CloseHandle(windows.Handle(fd[i]))
+			defer func() {
+				_ = windows.CloseHandle(windows.Handle(fd[i]))
+			}()
 		}
 	}
 
@@ -248,8 +251,9 @@ func startProcess(argv0 string, argv []string, attr *ProcAttr) (pid int, handle 
 	if err != nil {
 		return 0, 0, err
 	}
-	defer windows.CloseHandle(windows.Handle(pi.Thread))
-
+	defer func() {
+		_ = windows.CloseHandle(windows.Handle(pi.Thread))
+	}()
 	return int(pi.ProcessId), uintptr(pi.Process), nil
 }
 
@@ -314,7 +318,9 @@ func (p *Process) wait() (ps *ProcessState, err error) {
 	// the trick sometimes.
 	// See https://golang.org/issue/25965 for details.
 	defer time.Sleep(5 * time.Millisecond)
-	defer p.Release()
+	defer func() {
+		_ = p.Release()
+	}()
 	return &ProcessState{p.Pid, windows.WaitStatus{ExitCode: ec}, &u}, nil
 }
 
@@ -323,7 +329,9 @@ func terminateProcess(pid, exitcode int) error {
 	if e != nil {
 		return os.NewSyscallError("OpenProcess", e)
 	}
-	defer windows.CloseHandle(h)
+	defer func() {
+		_ = windows.CloseHandle(h)
+	}()
 	e = windows.TerminateProcess(h, uint32(exitcode))
 	return os.NewSyscallError("TerminateProcess", e)
 }
@@ -368,24 +376,14 @@ func (p *Process) done() bool {
 	return atomic.LoadUint32(&p.isdone) > 0
 }
 
-func findProcess(pid int) (p *Process, err error) {
-	const da = windows.STANDARD_RIGHTS_READ |
-		windows.PROCESS_QUERY_INFORMATION | windows.SYNCHRONIZE
-	h, e := windows.OpenProcess(da, false, uint32(pid))
-	if e != nil {
-		return nil, os.NewSyscallError("OpenProcess", e)
-	}
-	return newProcess(pid, uintptr(h)), nil
-}
-
 func init() {
 	p := windows.GetCommandLine()
 	cmd := windows.UTF16ToString((*[0xffff]uint16)(unsafe.Pointer(p))[:])
 	if len(cmd) == 0 {
 		arg0, _ := os.Executable()
-		args = []string{arg0}
+		Args = []string{arg0}
 	} else {
-		args = commandLineToArgv(cmd)
+		Args = commandLineToArgv(cmd)
 	}
 }
 
@@ -692,7 +690,7 @@ func createEnvBlock(envv []string) *uint16 {
 }
 
 func CloseOnExec(fd windows.Handle) {
-	windows.SetHandleInformation(windows.Handle(fd), windows.HANDLE_FLAG_INHERIT, 0)
+	_ = windows.SetHandleInformation(windows.Handle(fd), windows.HANDLE_FLAG_INHERIT, 0)
 }
 
 func SetNonblock(fd windows.Handle, nonblocking bool) (err error) {

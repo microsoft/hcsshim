@@ -184,7 +184,7 @@ func command(name string, arg ...string) *Cmd {
 // two interfaces with non-comparable underlying types.
 func interfaceEqual(a, b interface{}) bool {
 	defer func() {
-		recover()
+		_ = recover()
 	}()
 	return a == b
 }
@@ -408,7 +408,7 @@ func (c *Cmd) Start() error {
 		go func() {
 			select {
 			case <-c.ctx.Done():
-				c.Process.Kill()
+				_ = c.Process.Kill()
 			case <-c.waitDone:
 			}
 		}()
