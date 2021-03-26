@@ -25,10 +25,11 @@ type CombinedLayers struct {
 
 // SCSI. Scratch space for remote file-system commands, or R/W layer for containers
 type LCOWMappedVirtualDisk struct {
-	MountPath  string `json:"MountPath,omitempty"`
-	Lun        uint8  `json:"Lun,omitempty"`
-	Controller uint8  `json:"Controller,omitempty"`
-	ReadOnly   bool   `json:"ReadOnly,omitempty"`
+	MountPath  string   `json:"MountPath,omitempty"`
+	Lun        uint8    `json:"Lun,omitempty"`
+	Controller uint8    `json:"Controller,omitempty"`
+	ReadOnly   bool     `json:"ReadOnly,omitempty"`
+	Options    []string `json:"Options,omitempty"`
 }
 
 type WCOWMappedVirtualDisk struct {

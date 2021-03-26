@@ -28,7 +28,8 @@ func FormatDisk(ctx context.Context, lcowUVM *uvm.UtilityVM, destPath string) er
 		"dest": destPath,
 	}).Debug("lcow::FormatDisk opts")
 
-	scsi, err := lcowUVM.AddSCSIPhysicalDisk(ctx, destPath, "", false) // No destination as not formatted
+	var options []string
+	scsi, err := lcowUVM.AddSCSIPhysicalDisk(ctx, destPath, "", false, options) // No destination as not formatted
 	if err != nil {
 		return err
 	}

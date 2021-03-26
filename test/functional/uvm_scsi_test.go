@@ -51,7 +51,8 @@ func testAddSCSI(u *uvm.UtilityVM, disks []string, pathPrefix string, usePath bo
 		if usePath {
 			uvmPath = fmt.Sprintf(`%s%d`, pathPrefix, i)
 		}
-		scsiMount, err := u.AddSCSI(context.Background(), disks[i], uvmPath, false, uvm.VMAccessTypeIndividual)
+		var options []string
+		scsiMount, err := u.AddSCSI(context.Background(), disks[i], uvmPath, false, options, uvm.VMAccessTypeIndividual)
 		if err != nil {
 			return err
 		}
@@ -274,7 +275,9 @@ func TestParallelScsiOps(t *testing.T) {
 					t.Errorf("failed to grantvmaccess for worker: %d, iteration: %d with err: %v", scsiIndex, iteration, err)
 					continue
 				}
-				_, err = u.AddSCSI(context.Background(), path, "", false, uvm.VMAccessTypeIndividual)
+
+				var options []string
+				_, err = u.AddSCSI(context.Background(), path, "", false, options, uvm.VMAccessTypeIndividual)
 				if err != nil {
 					os.Remove(path)
 					t.Errorf("failed to AddSCSI for worker: %d, iteration: %d with err: %v", scsiIndex, iteration, err)
@@ -286,7 +289,8 @@ func TestParallelScsiOps(t *testing.T) {
 					// This worker cant continue because the index is dead. We have to stop
 					break
 				}
-				_, err = u.AddSCSI(context.Background(), path, fmt.Sprintf("/run/gcs/c/0/scsi/%d", iteration), false, uvm.VMAccessTypeIndividual)
+
+				_, err = u.AddSCSI(context.Background(), path, fmt.Sprintf("/run/gcs/c/0/scsi/%d", iteration), false, options, uvm.VMAccessTypeIndividual)
 				if err != nil {
 					os.Remove(path)
 					t.Errorf("failed to AddSCSI for worker: %d, iteration: %d with err: %v", scsiIndex, iteration, err)
