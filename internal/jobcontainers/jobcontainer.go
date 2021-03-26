@@ -4,15 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"regexp"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/exec"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/jobobject"
 	"github.com/Microsoft/hcsshim/internal/layers"
@@ -212,16 +211,26 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 	env = append(env, envMapToSlice(conf.Environment)...)
 	env = append(env, sandboxMountPointEnvVar+"="+c.sandboxMount)
 
+	procAttrList, err := windows.NewProcThreadAttributeList(1)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create new process thread attribute list")
+	}
+
+	if err := c.job.AssignAtStart(procAttrList); err != nil {
+		return nil, errors.Wrap(err, "failed to update process thread attribute list with job handle")
+	}
+
 	cmd := &exec.Cmd{
 		Env:  env,
 		Dir:  c.sandboxMount,
 		Path: absPath,
 		Args: splitArgs(commandLine),
-		SysProcAttr: &syscall.SysProcAttr{
+		SysProcAttr: &exec.SysProcAttr{
 			// CREATE_BREAKAWAY_FROM_JOB to make sure that we're not inheriting the job object (and by extension its limits)
 			// from whatever process is running this code.
-			CreationFlags: windows.CREATE_NEW_PROCESS_GROUP | windows.CREATE_BREAKAWAY_FROM_JOB,
-			Token:         syscall.Token(token),
+			CreationFlags:      windows.CREATE_NEW_PROCESS_GROUP | windows.CREATE_BREAKAWAY_FROM_JOB,
+			Token:              token,
+			ProcThreadAttrList: procAttrList,
 		},
 	}
 	process := newProcess(cmd)
@@ -259,10 +268,6 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 
 	if err = process.Start(); err != nil {
 		return nil, errors.Wrap(err, "failed to start host process")
-	}
-
-	if err = c.job.Assign(uint32(process.Pid())); err != nil {
-		return nil, errors.Wrap(err, "failed to assign process to job object")
 	}
 
 	// Assign the first process made as the init process of the container.
