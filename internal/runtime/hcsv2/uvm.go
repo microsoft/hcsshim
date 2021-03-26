@@ -355,7 +355,7 @@ func modifyMappedVirtualDisk(ctx context.Context, rt prot.ModifyRequestType, mvd
 		mountCtx, cancel := context.WithTimeout(ctx, time.Second*4)
 		defer cancel()
 		if mvd.MountPath != "" {
-			return scsi.Mount(mountCtx, mvd.Controller, mvd.Lun, mvd.MountPath, mvd.ReadOnly)
+			return scsi.Mount(mountCtx, mvd.Controller, mvd.Lun, mvd.MountPath, mvd.ReadOnly, mvd.Options)
 		}
 		return nil
 	case prot.MreqtRemove:

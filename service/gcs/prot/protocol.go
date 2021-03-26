@@ -759,10 +759,11 @@ type MappedVirtualDisk struct {
 // MappedVirtualDiskV2 represents a disk on the host which is mapped into a
 // directory in the guest in the V2 schema.
 type MappedVirtualDiskV2 struct {
-	MountPath  string `json:",omitempty"`
-	Lun        uint8  `json:",omitempty"`
-	Controller uint8  `json:",omitempty"`
-	ReadOnly   bool   `json:",omitempty"`
+	MountPath  string   `json:",omitempty"`
+	Lun        uint8    `json:",omitempty"`
+	Controller uint8    `json:",omitempty"`
+	ReadOnly   bool     `json:",omitempty"`
+	Options    []string `json:",omitempty"`
 }
 
 // MappedDirectory represents a directory on the host which is mapped to a
