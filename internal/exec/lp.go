@@ -56,7 +56,7 @@ func findExecutable(file string, exts []string) (string, error) {
 // LookPath also uses PATHEXT environment variable to match
 // a suitable candidate.
 // The result may be an absolute path or a path relative to the current directory.
-func LookPath(file string) (string, error) {
+func lookPath(file string) (string, error) {
 	var exts []string
 	x := os.Getenv(`PATHEXT`)
 	if x != "" {

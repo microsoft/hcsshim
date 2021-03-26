@@ -165,7 +165,7 @@ type Cmd struct {
 // unquoting algorithm. In these or other similar cases, you can do the
 // quoting yourself and provide the full command line in SysProcAttr.CmdLine,
 // leaving Args empty.
-func Command(name string, arg ...string) *Cmd {
+func command(name string, arg ...string) *Cmd {
 	cmd := &Cmd{
 		Path: name,
 		Args: append([]string{name}, arg...),

@@ -15,6 +15,7 @@ import (
 	"unicode/utf16"
 	"unsafe"
 
+	"github.com/Microsoft/hcsshim/internal/winapi"
 	"golang.org/x/sys/windows"
 )
 
@@ -23,7 +24,7 @@ var args []string
 
 // OsProcAttr holds the attributes that will be applied to a new process
 // started by StartProcess. This is actually os.ProcAttr but since we need
-// syscall.ProcAttr defined here as well we need to rename this.
+// windows.ProcAttr defined here as well we need to rename this.
 type OsProcAttr struct {
 	// If Dir is non-empty, the child changes into the directory before
 	// creating the process.
@@ -54,12 +55,13 @@ type ProcAttr struct {
 }
 
 type SysProcAttr struct {
-	HideWindow        bool
-	CmdLine           string // used if non-empty, else the windows command line is built by escaping the arguments passed to StartProcess
-	CreationFlags     uint32
-	Token             syscall.Token               // if set, runs new process in the security context represented by the token
-	ProcessAttributes *syscall.SecurityAttributes // if set, applies these security attributes as the descriptor for the new process
-	ThreadAttributes  *syscall.SecurityAttributes // if set, applies these security attributes as the descriptor for the main thread of the new process
+	HideWindow         bool
+	CmdLine            string // used if non-empty, else the windows command line is built by escaping the arguments passed to StartProcess
+	CreationFlags      uint32
+	Token              windows.Token                    // if set, runs new process in the security context represented by the token
+	ProcessAttributes  *windows.SecurityAttributes      // if set, applies these security attributes as the descriptor for the new process
+	ThreadAttributes   *windows.SecurityAttributes      // if set, applies these security attributes as the descriptor for the main thread of the new process
+	ProcThreadAttrList *windows.ProcThreadAttributeList // if set, applies these process thread attributes for the new process.
 }
 
 // Process stores the information about a process created by StartProcess.
@@ -174,7 +176,7 @@ func startProcess(argv0 string, argv []string, attr *ProcAttr) (pid int, handle 
 			return 0, 0, err
 		}
 	}
-	argv0p, err := syscall.UTF16PtrFromString(argv0)
+	argv0p, err := windows.UTF16PtrFromString(argv0)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -191,7 +193,7 @@ func startProcess(argv0 string, argv []string, attr *ProcAttr) (pid int, handle 
 
 	var argvp *uint16
 	if len(cmdline) != 0 {
-		argvp, err = syscall.UTF16PtrFromString(cmdline)
+		argvp, err = windows.UTF16PtrFromString(cmdline)
 		if err != nil {
 			return 0, 0, err
 		}
@@ -199,7 +201,7 @@ func startProcess(argv0 string, argv []string, attr *ProcAttr) (pid int, handle 
 
 	var dirp *uint16
 	if len(attr.Dir) != 0 {
-		dirp, err = syscall.UTF16PtrFromString(attr.Dir)
+		dirp, err = windows.UTF16PtrFromString(attr.Dir)
 		if err != nil {
 			return 0, 0, err
 		}
@@ -211,41 +213,42 @@ func startProcess(argv0 string, argv []string, attr *ProcAttr) (pid int, handle 
 	ForkLock.Lock()
 	defer ForkLock.Unlock()
 
-	p, _ := syscall.GetCurrentProcess()
-	fd := make([]syscall.Handle, len(attr.Files))
+	p, _ := windows.GetCurrentProcess()
+	fd := make([]windows.Handle, len(attr.Files))
 	for i := range attr.Files {
 		if attr.Files[i] > 0 {
-			err := syscall.DuplicateHandle(p, syscall.Handle(attr.Files[i]), p, &fd[i], 0, true, syscall.DUPLICATE_SAME_ACCESS)
+			err := windows.DuplicateHandle(p, windows.Handle(attr.Files[i]), p, &fd[i], 0, true, windows.DUPLICATE_SAME_ACCESS)
 			if err != nil {
 				return 0, 0, err
 			}
-			defer syscall.CloseHandle(syscall.Handle(fd[i]))
+			defer windows.CloseHandle(windows.Handle(fd[i]))
 		}
 	}
 
-	si := new(syscall.StartupInfo)
-	si.Cb = uint32(unsafe.Sizeof(*si))
-	si.Flags = syscall.STARTF_USESTDHANDLES
+	si := new(windows.StartupInfoEx)
+	si.StartupInfo.Cb = uint32(unsafe.Sizeof(*si))
+	si.StartupInfo.Flags = windows.STARTF_USESTDHANDLES
 	if sys.HideWindow {
-		si.Flags |= syscall.STARTF_USESHOWWINDOW
-		si.ShowWindow = syscall.SW_HIDE
+		si.StartupInfo.Flags |= windows.STARTF_USESHOWWINDOW
+		si.StartupInfo.ShowWindow = windows.SW_HIDE
 	}
-	si.StdInput = fd[0]
-	si.StdOutput = fd[1]
-	si.StdErr = fd[2]
+	si.StartupInfo.StdInput = fd[0]
+	si.StartupInfo.StdOutput = fd[1]
+	si.StartupInfo.StdErr = fd[2]
+	si.ProcThreadAttributeList = sys.ProcThreadAttrList
 
-	pi := new(syscall.ProcessInformation)
+	pi := new(windows.ProcessInformation)
 
-	flags := sys.CreationFlags | syscall.CREATE_UNICODE_ENVIRONMENT
+	flags := sys.CreationFlags | windows.CREATE_UNICODE_ENVIRONMENT | windows.EXTENDED_STARTUPINFO_PRESENT
 	if sys.Token != 0 {
-		err = syscall.CreateProcessAsUser(sys.Token, argv0p, argvp, sys.ProcessAttributes, sys.ThreadAttributes, true, flags, createEnvBlock(attr.Env), dirp, si, pi)
+		err = winapi.CreateProcessAsUser(sys.Token, argv0p, argvp, sys.ProcessAttributes, sys.ThreadAttributes, true, flags, createEnvBlock(attr.Env), dirp, &si.StartupInfo, pi)
 	} else {
-		err = syscall.CreateProcess(argv0p, argvp, sys.ProcessAttributes, sys.ThreadAttributes, true, flags, createEnvBlock(attr.Env), dirp, si, pi)
+		err = windows.CreateProcess(argv0p, argvp, sys.ProcessAttributes, sys.ThreadAttributes, true, flags, createEnvBlock(attr.Env), dirp, &si.StartupInfo, pi)
 	}
 	if err != nil {
 		return 0, 0, err
 	}
-	defer syscall.CloseHandle(syscall.Handle(pi.Thread))
+	defer windows.CloseHandle(windows.Handle(pi.Thread))
 
 	return int(pi.ProcessId), uintptr(pi.Process), nil
 }
@@ -285,22 +288,22 @@ func (p *Process) Signal(sig os.Signal) error {
 
 func (p *Process) wait() (ps *ProcessState, err error) {
 	handle := atomic.LoadUintptr(&p.handle)
-	s, e := syscall.WaitForSingleObject(syscall.Handle(handle), syscall.INFINITE)
+	s, e := windows.WaitForSingleObject(windows.Handle(handle), windows.INFINITE)
 	switch s {
-	case syscall.WAIT_OBJECT_0:
+	case windows.WAIT_OBJECT_0:
 		break
-	case syscall.WAIT_FAILED:
+	case windows.WAIT_FAILED:
 		return nil, os.NewSyscallError("WaitForSingleObject", e)
 	default:
 		return nil, errors.New("os: unexpected result from WaitForSingleObject")
 	}
 	var ec uint32
-	e = syscall.GetExitCodeProcess(syscall.Handle(handle), &ec)
+	e = windows.GetExitCodeProcess(windows.Handle(handle), &ec)
 	if e != nil {
 		return nil, os.NewSyscallError("GetExitCodeProcess", e)
 	}
-	var u syscall.Rusage
-	e = syscall.GetProcessTimes(syscall.Handle(handle), &u.CreationTime, &u.ExitTime, &u.KernelTime, &u.UserTime)
+	var u windows.Rusage
+	e = windows.GetProcessTimes(windows.Handle(handle), &u.CreationTime, &u.ExitTime, &u.KernelTime, &u.UserTime)
 	if e != nil {
 		return nil, os.NewSyscallError("GetProcessTimes", e)
 	}
@@ -312,22 +315,22 @@ func (p *Process) wait() (ps *ProcessState, err error) {
 	// See https://golang.org/issue/25965 for details.
 	defer time.Sleep(5 * time.Millisecond)
 	defer p.Release()
-	return &ProcessState{p.Pid, syscall.WaitStatus{ExitCode: ec}, &u}, nil
+	return &ProcessState{p.Pid, windows.WaitStatus{ExitCode: ec}, &u}, nil
 }
 
 func terminateProcess(pid, exitcode int) error {
-	h, e := syscall.OpenProcess(syscall.PROCESS_TERMINATE, false, uint32(pid))
+	h, e := windows.OpenProcess(windows.PROCESS_TERMINATE, false, uint32(pid))
 	if e != nil {
 		return os.NewSyscallError("OpenProcess", e)
 	}
-	defer syscall.CloseHandle(h)
-	e = syscall.TerminateProcess(h, uint32(exitcode))
+	defer windows.CloseHandle(h)
+	e = windows.TerminateProcess(h, uint32(exitcode))
 	return os.NewSyscallError("TerminateProcess", e)
 }
 
 func (p *Process) signal(sig os.Signal) error {
 	handle := atomic.LoadUintptr(&p.handle)
-	if handle == uintptr(syscall.InvalidHandle) {
+	if handle == uintptr(windows.InvalidHandle) {
 		return syscall.EINVAL
 	}
 	if p.done() {
@@ -366,9 +369,9 @@ func (p *Process) done() bool {
 }
 
 func findProcess(pid int) (p *Process, err error) {
-	const da = syscall.STANDARD_RIGHTS_READ |
-		syscall.PROCESS_QUERY_INFORMATION | syscall.SYNCHRONIZE
-	h, e := syscall.OpenProcess(da, false, uint32(pid))
+	const da = windows.STANDARD_RIGHTS_READ |
+		windows.PROCESS_QUERY_INFORMATION | windows.SYNCHRONIZE
+	h, e := windows.OpenProcess(da, false, uint32(pid))
 	if e != nil {
 		return nil, os.NewSyscallError("OpenProcess", e)
 	}
@@ -376,8 +379,8 @@ func findProcess(pid int) (p *Process, err error) {
 }
 
 func init() {
-	p := syscall.GetCommandLine()
-	cmd := syscall.UTF16ToString((*[0xffff]uint16)(unsafe.Pointer(p))[:])
+	p := windows.GetCommandLine()
+	cmd := windows.UTF16ToString((*[0xffff]uint16)(unsafe.Pointer(p))[:])
 	if len(cmd) == 0 {
 		arg0, _ := os.Executable()
 		args = []string{arg0}
@@ -466,7 +469,7 @@ func itoa(val int) string { // do it here rather than with fmt to avoid dependen
 	return string(buf[i:])
 }
 
-func ftToDuration(ft *syscall.Filetime) time.Duration {
+func ftToDuration(ft *windows.Filetime) time.Duration {
 	n := int64(ft.HighDateTime)<<32 + int64(ft.LowDateTime) // in 100-nanosecond intervals
 	return time.Duration(n*100) * time.Nanosecond
 }
@@ -474,8 +477,8 @@ func ftToDuration(ft *syscall.Filetime) time.Duration {
 // ProcessState stores information about a process, as reported by Wait.
 type ProcessState struct {
 	pid    int                // The process's id.
-	status syscall.WaitStatus // System-dependent status info.
-	rusage *syscall.Rusage
+	status windows.WaitStatus // System-dependent status info.
+	rusage *windows.Rusage
 }
 
 // UserTime returns the user CPU time of the exited process and its children.
@@ -688,29 +691,29 @@ func createEnvBlock(envv []string) *uint16 {
 	return &utf16.Encode([]rune(string(b)))[0]
 }
 
-func CloseOnExec(fd syscall.Handle) {
-	syscall.SetHandleInformation(syscall.Handle(fd), syscall.HANDLE_FLAG_INHERIT, 0)
+func CloseOnExec(fd windows.Handle) {
+	windows.SetHandleInformation(windows.Handle(fd), windows.HANDLE_FLAG_INHERIT, 0)
 }
 
-func SetNonblock(fd syscall.Handle, nonblocking bool) (err error) {
+func SetNonblock(fd windows.Handle, nonblocking bool) (err error) {
 	return nil
 }
 
 // FullPath retrieves the full path of the specified file.
 func FullPath(name string) (path string, err error) {
-	p, err := syscall.UTF16PtrFromString(name)
+	p, err := windows.UTF16PtrFromString(name)
 	if err != nil {
 		return "", err
 	}
 	n := uint32(100)
 	for {
 		buf := make([]uint16, n)
-		n, err = syscall.GetFullPathName(p, uint32(len(buf)), &buf[0], nil)
+		n, err = windows.GetFullPathName(p, uint32(len(buf)), &buf[0], nil)
 		if err != nil {
 			return "", err
 		}
 		if n <= uint32(len(buf)) {
-			return syscall.UTF16ToString(buf[:n]), nil
+			return windows.UTF16ToString(buf[:n]), nil
 		}
 	}
 }
