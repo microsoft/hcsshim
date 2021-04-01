@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"github.com/pkg/errors"
 	"io"
 	"io/ioutil"
 	"os"
@@ -181,7 +182,7 @@ func Convert(r io.Reader, w io.ReadWriteSeeker, options ...Option) error {
 			return err
 		}
 
-		// Rewind the strean and then read it all into a []byte for
+		// Rewind the stream and then read it all into a []byte for
 		// dmverity processing
 		_, err = w.Seek(0, io.SeekStart)
 		if err != nil {
@@ -191,7 +192,11 @@ func Convert(r io.Reader, w io.ReadWriteSeeker, options ...Option) error {
 		if err != nil {
 			return err
 		}
-		mtree := dmverity.Tree(data)
+
+		mtree, err := dmverity.MerkleTree(data)
+		if err != nil {
+			return errors.Wrap(err, "failed to build merkle tree")
+		}
 
 		// Write dmverity superblock and then the merkle tree after the end of the
 		// ext4 filesystem
@@ -199,7 +204,7 @@ func Convert(r io.Reader, w io.ReadWriteSeeker, options ...Option) error {
 		if err != nil {
 			return err
 		}
-		superblock := dmverity.MakeDMVeritySuperblock(uint64(ext4size))
+		superblock := dmverity.NewDMVeritySuperblock(uint64(ext4size))
 		err = binary.Write(w, binary.LittleEndian, superblock)
 		if err != nil {
 			return err

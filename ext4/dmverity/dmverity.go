@@ -18,8 +18,9 @@ const (
 	blockSize = compactext4.BlockSize
 )
 
+var salt = bytes.Repeat([]byte{0}, 32)
+
 var (
-	salt                      = bytes.Repeat([]byte{0}, 32)
 	ErrSuperBlockReadFailure  = errors.New("failed to read dm-verity super block")
 	ErrSuperBlockParseFailure = errors.New("failed to parse dm-verity super block")
 	ErrRootHashReadFailure    = errors.New("failed to read dm-verity root hash")
@@ -66,42 +67,52 @@ type VerityInfo struct {
 	DataBlocks    uint64
 }
 
-func Tree(data []byte) []byte {
+// MerkleTree constructs dm-verity hash-tree for a given byte array with a fixed salt (0-byte) and algorithm (sha256).
+func MerkleTree(data []byte) ([]byte, error) {
 	layers := make([][]byte, 0)
 
-	var current_level = bytes.NewBuffer(data)
+	currentLevel := bytes.NewBuffer(data)
 
-	for current_level.Len() != blockSize {
-		var blocks = current_level.Len() / blockSize
-		var next_level = bytes.NewBuffer(make([]byte, 0))
+	for currentLevel.Len() != blockSize {
+		blocks := currentLevel.Len() / blockSize
+		nextLevel := bytes.NewBuffer(make([]byte, 0))
 
 		for i := 0; i < blocks; i++ {
 			block := make([]byte, blockSize)
-			_, _ = current_level.Read(block)
+			_, err := currentLevel.Read(block)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to read data block")
+			}
 			h := hash2(salt, block)
-			next_level.Write(h)
+			nextLevel.Write(h)
 		}
 
-		padding := bytes.Repeat([]byte{0}, blockSize-(next_level.Len()%blockSize))
-		next_level.Write(padding)
+		padding := bytes.Repeat([]byte{0}, blockSize-(nextLevel.Len()%blockSize))
+		nextLevel.Write(padding)
 
-		current_level = next_level
-		layers = append(layers, current_level.Bytes())
+		currentLevel = nextLevel
+		layers = append(layers, currentLevel.Bytes())
 	}
 
 	var tree = bytes.NewBuffer(make([]byte, 0))
 	for i := len(layers) - 1; i >= 0; i-- {
-		tree.Write(layers[i])
+		_, err := tree.Write(layers[i])
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to write merkle tree")
+		}
 	}
 
-	return tree.Bytes()
+	return tree.Bytes(), nil
 }
 
+// RootHash computes root hash of dm-verity hash-tree
 func RootHash(tree []byte) []byte {
 	return hash2(salt, tree[:blockSize])
 }
 
-func MakeDMVeritySuperblock(size uint64) *dmveritySuperblock {
+// NewDMVeritySuperblock returns a dm-verity superblock for a device with a given size, salt, algorithm and versions are
+// fixed.
+func NewDMVeritySuperblock(size uint64) *dmveritySuperblock {
 	superblock := &dmveritySuperblock{
 		Version:       1,
 		HashType:      1,
@@ -133,8 +144,8 @@ func generateUUID() [16]byte {
 	return res
 }
 
-// ReadDMVeritySuperBlockAndRootHash extracts dm-verity super block information and merkle tree root hash
-func ReadDMVeritySuperBlockAndRootHash(vhdPath string, offsetInBytes int64) (*VerityInfo, error) {
+// ReadDMVerityInfo extracts dm-verity super block information and merkle tree root hash
+func ReadDMVerityInfo(vhdPath string, offsetInBytes int64) (*VerityInfo, error) {
 	vhd, err := os.OpenFile(vhdPath, os.O_RDONLY, 0)
 	if err != nil {
 		return nil, err
@@ -143,23 +154,32 @@ func ReadDMVeritySuperBlockAndRootHash(vhdPath string, offsetInBytes int64) (*Ve
 
 	// Skip the ext4 data to get to dm-verity super block
 	if s, err := vhd.Seek(offsetInBytes, io.SeekStart); err != nil || s != offsetInBytes {
-		return nil, errors.Wrap(err, "failed to seek dm-verity super block")
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to seek dm-verity super block")
+		}
+		return nil, errors.Errorf("failed to seek dm-verity super block: expected bytes=%d, actual=%d", offsetInBytes, s)
 	}
 
 	block := make([]byte, blockSize)
 	if s, err := vhd.Read(block); err != nil || s != blockSize {
-		return nil, ErrSuperBlockReadFailure
+		if err != nil {
+			return nil, errors.Wrapf(ErrSuperBlockReadFailure, "%s", err)
+		}
+		return nil, errors.Wrapf(ErrSuperBlockReadFailure, "unexpected bytes read: expected=%d, actual=%d", blockSize, s)
 	}
 
-	var dmvSB = &dmveritySuperblock{}
+	dmvSB := &dmveritySuperblock{}
 	b := bytes.NewBuffer(block)
 	if err := binary.Read(b, binary.LittleEndian, dmvSB); err != nil {
-		return nil, ErrSuperBlockParseFailure
+		return nil, errors.Wrapf(ErrSuperBlockParseFailure, "%s", err)
 	}
 
 	// read the merkle tree root
 	if s, err := vhd.Read(block); err != nil || s != blockSize {
-		return nil, ErrRootHashReadFailure
+		if err != nil {
+			return nil, errors.Wrapf(ErrRootHashReadFailure, "%s", err)
+		}
+		return nil, errors.Wrapf(ErrRootHashReadFailure, "unexpected bytes read: expected=%d, actual=%d", blockSize, s)
 	}
 	rootHash := hash2(dmvSB.Salt[:dmvSB.SaltSize], block)
 	return &VerityInfo{

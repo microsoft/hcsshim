@@ -22,6 +22,12 @@ generator.
 
 ## Example usage
 
+Create VHDs:
 ```bash
-dmverity-vhd -i alpine:3.12 -o alpine_3_12_layers
+dmverity-vhd create -i alpine:3.12 -o alpine_3_12_layers
+```
+
+Compute root hashes:
+```bash
+dmverity-vhd roothash -i alpine:3.12
 ```
