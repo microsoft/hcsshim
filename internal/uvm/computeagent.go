@@ -7,10 +7,13 @@ import (
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/computeagent"
 	"github.com/Microsoft/hcsshim/internal/hns"
+	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/pkg/octtrpc"
 	"github.com/containerd/ttrpc"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/Microsoft/hcsshim/internal/log"
 )
@@ -36,6 +39,10 @@ func (ca *computeAgent) AddNIC(ctx context.Context, req *computeagent.AddNICInte
 		"nicID":       req.NicID,
 	}).Info("AddNIC request")
 
+	if req.NicID == "" || req.EndpointName == "" {
+		return nil, status.Error(codes.InvalidArgument, "received empty field in request")
+	}
+
 	endpoint, err := hns.GetHNSEndpointByName(req.EndpointName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get endpoint with name %q", req.EndpointName)
@@ -46,6 +53,44 @@ func (ca *computeAgent) AddNIC(ctx context.Context, req *computeagent.AddNICInte
 	return &computeagent.AddNICInternalResponse{}, nil
 }
 
+// ModifyNIC will modify a NIC from the computeagent services hosting UVM.
+func (ca *computeAgent) ModifyNIC(ctx context.Context, req *computeagent.ModifyNICInternalRequest) (*computeagent.ModifyNICInternalResponse, error) {
+	log.G(ctx).WithFields(logrus.Fields{
+		"nicID":        req.NicID,
+		"endpointName": req.EndpointName,
+	}).Info("ModifyNIC request")
+
+	if req.NicID == "" || req.EndpointName == "" || req.IovPolicySettings == nil {
+		return nil, status.Error(codes.InvalidArgument, "received empty field in request")
+	}
+
+	endpoint, err := hns.GetHNSEndpointByName(req.EndpointName)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get endpoint with name `%s`", req.EndpointName)
+	}
+
+	moderationValue := hcsschema.InterruptModerationValue(req.IovPolicySettings.InterruptModeration)
+	moderationName := hcsschema.InterruptModerationValueToName[moderationValue]
+
+	iovSettings := &hcsschema.IovSettings{
+		OffloadWeight:       &req.IovPolicySettings.IovOffloadWeight,
+		QueuePairsRequested: &req.IovPolicySettings.QueuePairsRequested,
+		InterruptModeration: &moderationName,
+	}
+
+	nic := &hcsschema.NetworkAdapter{
+		EndpointId:  endpoint.Id,
+		MacAddress:  endpoint.MacAddress,
+		IovSettings: iovSettings,
+	}
+
+	if err := ca.uvm.UpdateNIC(ctx, req.NicID, nic); err != nil {
+		return nil, errors.Wrap(err, "failed to update UVM's network adapter")
+	}
+
+	return &computeagent.ModifyNICInternalResponse{}, nil
+}
+
 // DeleteNIC will delete a NIC from the computeagent services hosting UVM.
 func (ca *computeAgent) DeleteNIC(ctx context.Context, req *computeagent.DeleteNICInternalRequest) (*computeagent.DeleteNICInternalResponse, error) {
 	log.G(ctx).WithFields(logrus.Fields{
@@ -53,6 +98,10 @@ func (ca *computeAgent) DeleteNIC(ctx context.Context, req *computeagent.DeleteN
 		"nicID":        req.NicID,
 		"endpointName": req.EndpointName,
 	}).Info("DeleteNIC request")
+
+	if req.NicID == "" || req.EndpointName == "" {
+		return nil, status.Error(codes.InvalidArgument, "received empty field in request")
+	}
 
 	endpoint, err := hns.GetHNSEndpointByName(req.EndpointName)
 	if err != nil {
