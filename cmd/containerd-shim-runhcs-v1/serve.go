@@ -57,7 +57,7 @@ var serveCommand = cli.Command{
 		// new one. If serve is decided it execs this entry point `shim serve`.
 		// The handoff logic is that this shim will serve the ttrpc entrypoint
 		// with only stderr set by the caller. Once the shim has successfully
-		// served the entrypoint it is required to close stderr to alert the
+		// served the entrypoint it is required to close stdout to alert the
 		// caller it has completed to the point of handoff. If it fails it will
 		// write the error to stderr and the caller will forward the error on as
 		// part of the `shim start` failure path. Once successfully served the
