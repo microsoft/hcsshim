@@ -216,10 +216,9 @@ func (uvm *UtilityVM) create(ctx context.Context, doc interface{}) error {
 		return err
 	}
 	defer func() {
-		//nolint:errcheck
 		if system != nil {
-			system.Terminate(ctx)
-			system.Wait()
+			_ = system.Terminate(ctx)
+			_ = system.Wait()
 		}
 	}()
 
@@ -252,8 +251,8 @@ func (uvm *UtilityVM) Close() (err error) {
 		if err := uvm.ReleaseCPUGroup(ctx); err != nil {
 			log.G(ctx).WithError(err).Warn("failed to release VM resource")
 		}
-		uvm.hcsSystem.Terminate(ctx) //nolint:errcheck
-		uvm.Wait()                   //nolint:errcheck
+		_ = uvm.hcsSystem.Terminate(ctx)
+		_ = uvm.Wait()
 	}
 
 	if err := uvm.CloseGCSConnection(); err != nil {

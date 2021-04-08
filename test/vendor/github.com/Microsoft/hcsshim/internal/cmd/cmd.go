@@ -240,7 +240,7 @@ func (c *Cmd) Start() error {
 		go func() {
 			select {
 			case <-c.Context.Done():
-				c.Process.Kill(context.TODO()) //nolint:errcheck
+				_, _ = c.Process.Kill(context.TODO())
 			case <-c.allDoneCh:
 			}
 		}()

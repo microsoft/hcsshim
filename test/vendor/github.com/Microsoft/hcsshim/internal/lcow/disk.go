@@ -34,7 +34,7 @@ func FormatDisk(ctx context.Context, lcowUVM *uvm.UtilityVM, destPath string) er
 	}
 
 	defer func() {
-		scsi.Release(ctx) //nolint:errcheck
+		_ = scsi.Release(ctx)
 	}()
 
 	log.G(ctx).WithFields(logrus.Fields{

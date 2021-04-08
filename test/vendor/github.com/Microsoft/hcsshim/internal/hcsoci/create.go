@@ -271,7 +271,7 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 	defer func() {
 		if err != nil {
 			if !coi.DoNotReleaseResourcesOnFailure {
-				resources.ReleaseResources(ctx, r, coi.HostingSystem, true) //nolint:errcheck
+				_ = resources.ReleaseResources(ctx, r, coi.HostingSystem, true)
 			}
 		}
 	}()
@@ -388,7 +388,7 @@ func CloneContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.Co
 	defer func() {
 		if err != nil {
 			if !coi.DoNotReleaseResourcesOnFailure {
-				resources.ReleaseResources(ctx, r, coi.HostingSystem, true) //nolint:errcheck
+				_ = resources.ReleaseResources(ctx, r, coi.HostingSystem, true)
 			}
 		}
 	}()

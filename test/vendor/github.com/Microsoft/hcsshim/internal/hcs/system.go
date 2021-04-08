@@ -73,7 +73,7 @@ func CreateComputeSystem(ctx context.Context, id string, hcsDocumentInterface in
 		if err = computeSystem.registerCallback(ctx); err != nil {
 			// Terminate the compute system if it still exists. We're okay to
 			// ignore a failure here.
-			computeSystem.Terminate(ctx) //nolint:errcheck
+			_ = computeSystem.Terminate(ctx)
 			return nil, makeSystemError(computeSystem, operation, "", err, nil)
 		}
 	}
@@ -83,7 +83,7 @@ func CreateComputeSystem(ctx context.Context, id string, hcsDocumentInterface in
 		if err == ErrTimeout {
 			// Terminate the compute system if it still exists. We're okay to
 			// ignore a failure here.
-			computeSystem.Terminate(ctx) //nolint:errcheck
+			_ = computeSystem.Terminate(ctx)
 		}
 		return nil, makeSystemError(computeSystem, operation, hcsDocument, err, events)
 	}

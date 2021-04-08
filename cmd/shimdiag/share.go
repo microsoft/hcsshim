@@ -33,7 +33,7 @@ var shareCommand = cli.Command{
 			hostPath = args[1]
 			uvmPath  = args[2]
 		)
-		shim, err := getShim(shimName)
+		shim, err := shimdiag.GetShim(shimName)
 		if err != nil {
 			return err
 		}

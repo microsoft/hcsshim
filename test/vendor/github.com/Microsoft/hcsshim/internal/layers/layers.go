@@ -83,7 +83,7 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 		}
 		defer func() {
 			if err != nil {
-				wclayer.DeactivateLayer(ctx, path) //nolint:errcheck
+				_ = wclayer.DeactivateLayer(ctx, path)
 			}
 		}()
 
@@ -92,7 +92,7 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 		}
 		defer func() {
 			if err != nil {
-				wclayer.UnprepareLayer(ctx, path) //nolint:errcheck
+				_ = wclayer.UnprepareLayer(ctx, path)
 			}
 		}()
 
