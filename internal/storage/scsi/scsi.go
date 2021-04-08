@@ -12,6 +12,7 @@ import (
 
 	"github.com/Microsoft/opengcs/internal/log"
 	"github.com/Microsoft/opengcs/internal/oc"
+	"github.com/Microsoft/opengcs/internal/storage"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
@@ -32,7 +33,7 @@ var (
 //
 // `target` will be created. On mount failure the created `target` will be
 // automatically cleaned up.
-func Mount(ctx context.Context, controller, lun uint8, target string, readonly bool) (err error) {
+func Mount(ctx context.Context, controller, lun uint8, target string, readonly bool, options []string) (err error) {
 	ctx, span := trace.StartSpan(ctx, "scsi::Mount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -53,13 +54,14 @@ func Mount(ctx context.Context, controller, lun uint8, target string, readonly b
 	if err != nil {
 		return err
 	}
+
+	// we only care about readonly mount option when mounting the device
 	var flags uintptr
 	data := ""
 	if readonly {
 		flags |= unix.MS_RDONLY
 		data = "noload"
 	}
-
 	for {
 		if err := unixMount(source, target, "ext4", flags, data); err != nil {
 			// The `source` found by controllerLunToName can take some time
@@ -78,6 +80,17 @@ func Mount(ctx context.Context, controller, lun uint8, target string, readonly b
 		}
 		break
 	}
+
+	// remount the target to account for propagation flags
+	_, pgFlags, _ := storage.ParseMountOptions(options)
+	if len(pgFlags) != 0 {
+		for _, pg := range pgFlags {
+			if err := unixMount(target, target, "", pg, ""); err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -111,7 +124,7 @@ func ControllerLunToName(ctx context.Context, controller, lun uint8) (_ string, 
 				time.Sleep(time.Millisecond * 10)
 				continue
 			}
-		} 
+		}
 		break
 	}
 
