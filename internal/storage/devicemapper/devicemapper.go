@@ -94,11 +94,11 @@ type dmIoctl struct {
 }
 
 type targetSpec struct {
-	SectorStart int64
-	Length      int64
-	Status      int32
-	Next        uint32
-	Type        [16]byte
+	SectorStart    int64
+	LengthInBlocks int64
+	Status         int32
+	Next           uint32
+	Type           [16]byte
 }
 
 // initIoctl initializes a device-mapper ioctl input struct with the given size
@@ -156,9 +156,10 @@ func openMapper() (f *os.File, err error) {
 
 // Target specifies a single entry in a device's target specification.
 type Target struct {
-	Type                string
-	SectorStart, Length int64
-	Params              string
+	Type           string
+	SectorStart    int64
+	LengthInBlocks int64
+	Params         string
 }
 
 // sizeof returns the size of a targetSpec needed to fit this specification.
@@ -170,12 +171,18 @@ func (t *Target) sizeof() int {
 
 // LinearTarget constructs a device-mapper target that maps a portion of a block
 // device at the specified offset.
-func LinearTarget(sectorStart, length int64, path string, deviceStart int64) Target {
+//
+// Example linear target table:
+// 0 20971520 linear /dev/hda 384
+// |     |      |        |     |
+// start |   target   data_dev |
+//     size                 offset
+func LinearTarget(sectorStart, lengthBlocks int64, path string, deviceStart int64) Target {
 	return Target{
-		Type:        "linear",
-		SectorStart: sectorStart,
-		Length:      length,
-		Params:      fmt.Sprintf("%s %d", path, deviceStart),
+		Type:           "linear",
+		SectorStart:    sectorStart,
+		LengthInBlocks: lengthBlocks,
+		Params:         fmt.Sprintf("%s %d", path, deviceStart),
 	}
 }
 
@@ -187,7 +194,7 @@ func PMemLinearTarget(lengthBytes int64, path string, deviceStartBytes int64) Ta
 	return LinearTarget(0, lengthInBlocks, path, startInBlocks)
 }
 
-// makeTableIoctl builds an ioctl input structure with a table of the speicifed
+// makeTableIoctl builds an ioctl input structure with a table of the specified
 // targets.
 func makeTableIoctl(name string, targets []Target) *dmIoctl {
 	off := int(unsafe.Sizeof(dmIoctl{}))
@@ -204,7 +211,7 @@ func makeTableIoctl(name string, targets []Target) *dmIoctl {
 		spec := (*targetSpec)(unsafe.Pointer(&b[off]))
 		sn := t.sizeof()
 		spec.SectorStart = t.SectorStart
-		spec.Length = t.Length
+		spec.LengthInBlocks = t.LengthInBlocks
 		spec.Next = uint32(sn)
 		copy(spec.Type[:], t.Type)
 		copy(b[off+int(unsafe.Sizeof(*spec)):], t.Params)

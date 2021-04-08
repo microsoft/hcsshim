@@ -384,15 +384,9 @@ func modifyMappedDirectory(ctx context.Context, vsock transport.Transport, rt pr
 func modifyMappedVPMemDevice(ctx context.Context, rt prot.ModifyRequestType, vpd *prot.MappedVPMemDeviceV2) (err error) {
 	switch rt {
 	case prot.MreqtAdd:
-		if vpd.MappingInfo != nil {
-			return pmem.MountDM(ctx, vpd.DeviceNumber, vpd.MappingInfo.DeviceOffsetInBytes, vpd.MappingInfo.DeviceSizeInBytes, vpd.MountPath)
-		}
-		return pmem.Mount(ctx, vpd.DeviceNumber, vpd.MountPath)
+		return pmem.Mount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, vpd.VerityInfo)
 	case prot.MreqtRemove:
-		if vpd.MappingInfo != nil {
-			return pmem.UnmountDM(ctx, vpd.DeviceNumber, vpd.MappingInfo.DeviceOffsetInBytes, vpd.MappingInfo.DeviceSizeInBytes, vpd.MountPath)
-		}
-		return storage.UnmountPath(ctx, vpd.MountPath, true)
+		return pmem.Unmount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, vpd.VerityInfo)
 	default:
 		return newInvalidRequestTypeError(rt)
 	}

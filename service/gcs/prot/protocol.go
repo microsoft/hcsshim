@@ -790,6 +790,19 @@ type DeviceMappingInfo struct {
 	DeviceSizeInBytes   int64 `json:",omitempty"`
 }
 
+// DeviceVerityInfo represents dm-verity information of a given data device.
+// The assumption is that the hash device is the same as data device with
+// verity data appended in the end.
+type DeviceVerityInfo struct {
+	Ext4SizeInBytes int64
+	Version         int
+	Algorithm       string
+	SuperBlock      bool
+	RootDigest      string
+	Salt            string
+	BlockSize       int
+}
+
 // MappedVPMemDeviceV2 represents a VPMem device that is mapped into a guest
 // path in the V2 schema.
 type MappedVPMemDeviceV2 struct {
@@ -797,6 +810,7 @@ type MappedVPMemDeviceV2 struct {
 	MountPath    string `json:",omitempty"`
 	// MappingInfo is used when multiple devices are mapped onto a single VPMem device
 	MappingInfo *DeviceMappingInfo `json:",omitempty"`
+	VerityInfo  *DeviceVerityInfo  `json:",omitempty"`
 }
 
 type MappedVPCIDeviceV2 struct {
