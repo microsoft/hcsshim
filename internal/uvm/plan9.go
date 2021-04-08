@@ -34,7 +34,7 @@ func (uvm *UtilityVM) AddPlan9(ctx context.Context, hostPath string, uvmPath str
 	if uvm.operatingSystem != "linux" {
 		return nil, errNotSupported
 	}
-	if restrict && osversion.Get().Build < osversion.V19H1 {
+	if restrict && osversion.Build() < osversion.V19H1 {
 		return nil, errors.New("single-file mappings are not supported on this build of Windows")
 	}
 	if uvmPath == "" {

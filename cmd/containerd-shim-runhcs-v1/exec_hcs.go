@@ -262,7 +262,7 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 		return nil
 	case shimExecStateRunning:
 		supported := false
-		if osversion.Get().Build >= osversion.RS5 {
+		if osversion.Build() >= osversion.RS5 {
 			supported = he.host == nil || he.host.SignalProcessSupported()
 		}
 		var options interface{}

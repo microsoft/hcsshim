@@ -27,7 +27,7 @@ func IsSupported(sv *hcsschema.Version) error {
 		return nil
 	}
 	if IsV21(sv) {
-		if osversion.Get().Build < osversion.RS5 {
+		if osversion.Build() < osversion.RS5 {
 			return fmt.Errorf("unsupported on this Windows build")
 		}
 		return nil
@@ -67,7 +67,7 @@ func String(sv *hcsschema.Version) string {
 // requested option.
 func DetermineSchemaVersion(requestedSV *hcsschema.Version) *hcsschema.Version {
 	sv := SchemaV10()
-	if osversion.Get().Build >= osversion.RS5 {
+	if osversion.Build() >= osversion.RS5 {
 		sv = SchemaV21()
 	}
 	if requestedSV != nil {

@@ -512,7 +512,7 @@ func (uvm *UtilityVM) isNetworkNamespaceSupported() bool {
 }
 
 func getNetworkModifyRequest(adapterID string, requestType string, settings interface{}) interface{} {
-	if osversion.Get().Build >= osversion.RS5 {
+	if osversion.Build() >= osversion.RS5 {
 		return guestrequest.NetworkModifyRequest{
 			AdapterId:   adapterID,
 			RequestType: requestType,

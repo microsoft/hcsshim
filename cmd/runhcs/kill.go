@@ -44,7 +44,7 @@ signal to the init process of the "ubuntu01" container:
 		signalsSupported := false
 
 		// The Signal feature was added in RS5
-		if osversion.Get().Build >= osversion.RS5 {
+		if osversion.Build() >= osversion.RS5 {
 			if c.IsHost || c.HostID != "" {
 				var hostID string
 				if c.IsHost {

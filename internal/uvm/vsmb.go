@@ -134,7 +134,7 @@ func openHostPath(path string) (windows.Handle, error) {
 // To work around this, we attempt to query for FileIdInfo ourselves if on an affected build. If
 // the query fails, we override the specified options to force no direct map to be used.
 func forceNoDirectMap(path string) (bool, error) {
-	if ver := osversion.Get().Build; ver < osversion.V19H1 || ver > osversion.V20H2 {
+	if ver := osversion.Build(); ver < osversion.V19H1 || ver > osversion.V20H2 {
 		return false, nil
 	}
 	h, err := openHostPath(path)
