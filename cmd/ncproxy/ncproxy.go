@@ -23,10 +23,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// GRPC service exposed for use by a Node Network Service. Holds a mutex for
-// updating global client.
-type grpcService struct {
-}
+// GRPC service exposed for use by a Node Network Service.
+type grpcService struct{}
 
 var _ ncproxygrpc.NetworkConfigProxyServer = &grpcService{}
 
