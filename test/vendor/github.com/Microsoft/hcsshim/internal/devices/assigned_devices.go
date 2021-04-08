@@ -9,8 +9,6 @@ import (
 	"net"
 	"strings"
 
-	winio "github.com/Microsoft/go-winio"
-	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
@@ -62,7 +60,7 @@ func AddDevice(ctx context.Context, vm *uvm.UtilityVM, idType, deviceID, deviceU
 // parent bus device for the children devices' location paths from the uvm's view.
 // Returns a slice of strings representing the resulting children location paths
 func getChildrenDeviceLocationPaths(ctx context.Context, vm *uvm.UtilityVM, vmBusInstanceID string, deviceUtilPath string) ([]string, error) {
-	p, l, err := createNamedPipeListener()
+	p, l, err := cmd.CreateNamedPipeListener()
 	if err != nil {
 		return nil, err
 	}
@@ -109,21 +107,6 @@ func createDeviceUtilChildrenCommand(deviceUtilPath string, vmBusInstanceID stri
 	parentIDsFlag := fmt.Sprintf("--parentID=%s", vmBusInstanceID)
 	args := []string{deviceUtilPath, "children", parentIDsFlag, "--property=location"}
 	return args
-}
-
-// createNamedPipeListener is a helper function to create and return a pipe listener
-// and it's created path.
-func createNamedPipeListener() (string, net.Listener, error) {
-	g, err := guid.NewV4()
-	if err != nil {
-		return "", nil, err
-	}
-	p := `\\.\pipe\` + g.String()
-	l, err := winio.ListenPipe(p, nil)
-	if err != nil {
-		return "", nil, err
-	}
-	return p, l, nil
 }
 
 // readCsPipeOutput is a helper function that connects to a listener and reads

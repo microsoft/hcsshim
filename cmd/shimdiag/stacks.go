@@ -15,7 +15,7 @@ var stacksCommand = cli.Command{
 	ArgsUsage: "<shim name>",
 	Before:    appargs.Validate(appargs.String),
 	Action: func(c *cli.Context) error {
-		shim, err := getShim(c.Args()[0])
+		shim, err := shimdiag.GetShim(c.Args()[0])
 		if err != nil {
 			return err
 		}

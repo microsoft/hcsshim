@@ -8,12 +8,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/Microsoft/go-winio"
-	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/appargs"
+	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/containerd/console"
-	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
 
@@ -46,7 +44,7 @@ var execCommand = cli.Command{
 	Before:         appargs.Validate(appargs.String, appargs.String, appargs.Rest(appargs.String)),
 	Action: func(clictx *cli.Context) error {
 		args := clictx.Args()
-		shim, err := getShim(args[0])
+		shim, err := shimdiag.GetShim(args[0])
 		if err != nil {
 			return err
 		}
@@ -69,17 +67,17 @@ var execCommand = cli.Command{
 			}
 		}
 
-		stdin, err := makePipe(osStdin, true)
+		stdin, err := cmd.CreatePipeAndListen(osStdin, true)
 		if err != nil {
 			return err
 		}
-		stdout, err := makePipe(os.Stdout, false)
+		stdout, err := cmd.CreatePipeAndListen(os.Stdout, false)
 		if err != nil {
 			return err
 		}
 		var stderr string
 		if !execTty {
-			stderr, err = makePipe(os.Stderr, false)
+			stderr, err = cmd.CreatePipeAndListen(os.Stderr, false)
 			if err != nil {
 				return err
 			}
@@ -104,31 +102,4 @@ var execCommand = cli.Command{
 		}
 		return cli.NewExitError(errors.New(""), int(resp.ExitCode))
 	},
-}
-
-func makePipe(f interface{}, in bool) (string, error) {
-	r, err := guid.NewV4()
-	if err != nil {
-		return "", err
-	}
-	p := `\\.\pipe\` + r.String()
-	l, err := winio.ListenPipe(p, nil)
-	if err != nil {
-		return "", err
-	}
-	go func() {
-		c, err := l.Accept()
-		if err != nil {
-			logrus.WithError(err).Error("failed to accept pipe")
-			return
-		}
-
-		if in {
-			_, _ = io.Copy(c, f.(io.Reader))
-			c.Close()
-		} else {
-			_, _ = io.Copy(f.(io.Writer), c)
-		}
-	}()
-	return p, nil
 }

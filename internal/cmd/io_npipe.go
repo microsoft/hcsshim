@@ -3,9 +3,11 @@ package cmd
 import (
 	"context"
 	"io"
+	"net"
 	"sync"
 
 	winio "github.com/Microsoft/go-winio"
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/sirupsen/logrus"
 )
@@ -135,4 +137,46 @@ func (nio *npipeio) StderrPath() string {
 
 func (nio *npipeio) Terminal() bool {
 	return nio.terminal
+}
+
+// CreatePipeAndListen is a helper function to create a pipe listener
+// and accept connections. Returns the created pipe path on success.
+//
+// If `in` is true, `f` should implement io.Reader
+// If `in` is false, `f` should implement io.Writer
+func CreatePipeAndListen(f interface{}, in bool) (string, error) {
+	p, l, err := CreateNamedPipeListener()
+	if err != nil {
+		return "", err
+	}
+	go func() {
+		c, err := l.Accept()
+		if err != nil {
+			logrus.WithError(err).Error("failed to accept pipe")
+			return
+		}
+
+		if in {
+			_, _ = io.Copy(c, f.(io.Reader))
+			c.Close()
+		} else {
+			_, _ = io.Copy(f.(io.Writer), c)
+		}
+	}()
+	return p, nil
+}
+
+// CreateNamedPipeListener is a helper function to create and return a pipe listener
+// and it's created path.
+func CreateNamedPipeListener() (string, net.Listener, error) {
+	g, err := guid.NewV4()
+	if err != nil {
+		return "", nil, err
+	}
+	p := `\\.\pipe\` + g.String()
+	l, err := winio.ListenPipe(p, nil)
+	if err != nil {
+		return "", nil, err
+	}
+	return p, l, nil
 }
