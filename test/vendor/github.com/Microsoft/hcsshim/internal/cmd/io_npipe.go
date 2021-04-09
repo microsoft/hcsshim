@@ -141,6 +141,9 @@ func (nio *npipeio) Terminal() bool {
 
 // CreatePipeAndListen is a helper function to create a pipe listener
 // and accept connections. Returns the created pipe path on success.
+//
+// If `in` is true, `f` should implement io.Reader
+// If `in` is false, `f` should implement io.Writer
 func CreatePipeAndListen(f interface{}, in bool) (string, error) {
 	p, l, err := CreateNamedPipeListener()
 	if err != nil {

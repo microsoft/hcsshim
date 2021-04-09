@@ -83,7 +83,6 @@ type NetworkNotFoundError = hns.NetworkNotFoundError
 type ProcessError struct {
 	Process   *process
 	Operation string
-	ExtraInfo string
 	Err       error
 	Events    []hcs.ErrorEvent
 }
@@ -92,7 +91,6 @@ type ProcessError struct {
 type ContainerError struct {
 	Container *container
 	Operation string
-	ExtraInfo string
 	Err       error
 	Events    []hcs.ErrorEvent
 }
@@ -123,10 +121,6 @@ func (e *ContainerError) Error() string {
 
 	for _, ev := range e.Events {
 		s += "\n" + ev.String()
-	}
-
-	if e.ExtraInfo != "" {
-		s += " extra info: " + e.ExtraInfo
 	}
 
 	return s
@@ -238,7 +232,7 @@ func getInnerError(err error) error {
 
 func convertSystemError(err error, c *container) error {
 	if serr, ok := err.(*hcs.SystemError); ok {
-		return &ContainerError{Container: c, Operation: serr.Op, ExtraInfo: serr.Extra, Err: serr.Err, Events: serr.Events}
+		return &ContainerError{Container: c, Operation: serr.Op, Err: serr.Err, Events: serr.Events}
 	}
 	return err
 }

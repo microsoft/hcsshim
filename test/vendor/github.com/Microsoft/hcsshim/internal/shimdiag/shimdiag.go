@@ -1,7 +1,6 @@
 package shimdiag
 
 import (
-	context "context"
 	fmt "fmt"
 	"os"
 	"path/filepath"
@@ -85,19 +84,4 @@ func GetShim(name string) (*ttrpc.Client, error) {
 		return nil, err
 	}
 	return ttrpc.NewClient(conn), nil
-}
-
-func GetPid(shimName string) (int32, error) {
-	shim, err := GetShim(shimName)
-	if err != nil {
-		return 0, err
-	}
-	defer shim.Close()
-
-	svc := NewShimDiagClient(shim)
-	resp, err := svc.DiagPid(context.Background(), &PidRequest{})
-	if err != nil {
-		return 0, err
-	}
-	return resp.Pid, nil
 }

@@ -182,7 +182,7 @@ func (b *binaryIO) Close(ctx context.Context) {
 		}
 	})
 	b.binaryCloser.Do(func() {
-		done := make(chan error)
+		done := make(chan error, 1)
 		go func() {
 			done <- b.cmd.Wait()
 		}()
