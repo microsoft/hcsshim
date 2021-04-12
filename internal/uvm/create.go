@@ -145,11 +145,11 @@ func verifyOptions(ctx context.Context, options interface{}) error {
 				return errors.New("PreferredRootFSTypeVHD requires at least one VPMem device")
 			}
 		}
-		if opts.KernelDirect && osversion.Get().Build < 18286 {
+		if opts.KernelDirect && osversion.Build() < 18286 {
 			return errors.New("KernelDirectBoot is not supported on builds older than 18286")
 		}
 
-		if opts.EnableColdDiscardHint && osversion.Get().Build < 18967 {
+		if opts.EnableColdDiscardHint && osversion.Build() < 18967 {
 			return errors.New("EnableColdDiscardHint is not supported on builds older than 18967")
 		}
 	case *OptionsWCOW:

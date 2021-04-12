@@ -97,7 +97,7 @@ func defaultLCOWOSBootFilesPath() string {
 // executable files name.
 func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 	// Use KernelDirect boot by default on all builds that support it.
-	kernelDirectSupported := osversion.Get().Build >= 18286
+	kernelDirectSupported := osversion.Build() >= 18286
 	opts := &OptionsLCOW{
 		Options:               newDefaultOptions(id, owner),
 		BootFilesPath:         defaultLCOWOSBootFilesPath(),

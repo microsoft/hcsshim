@@ -53,7 +53,7 @@ func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.Creat
 	owner := filepath.Base(os.Args[0])
 
 	var parent *uvm.UtilityVM
-	if osversion.Get().Build >= osversion.RS5 && oci.IsIsolated(s) {
+	if osversion.Build() >= osversion.RS5 && oci.IsIsolated(s) {
 		// Create the UVM parent
 		opts, err := oci.SpecToUVMCreateOpts(ctx, s, fmt.Sprintf("%s@vm", req.ID), owner)
 		if err != nil {
@@ -375,7 +375,7 @@ type hcsTask struct {
 	// host is the hosting VM for this exec if hypervisor isolated. If
 	// `host==nil` this is an Argon task so no UVM cleanup is required.
 	//
-	// NOTE: if `osversion.Get().Build < osversion.RS5` this will always be
+	// NOTE: if `osversion.Build() < osversion.RS5` this will always be
 	// `nil`.
 	host *uvm.UtilityVM
 

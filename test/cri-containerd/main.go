@@ -57,8 +57,8 @@ const (
 
 // Image definitions
 var (
-	imageWindowsNanoserver      = getWindowsNanoserverImage(osversion.Get().Build)
-	imageWindowsServercore      = getWindowsServerCoreImage(osversion.Get().Build)
+	imageWindowsNanoserver      = getWindowsNanoserverImage(osversion.Build())
+	imageWindowsServercore      = getWindowsServerCoreImage(osversion.Build())
 	imageWindowsNanoserver17763 = getWindowsNanoserverImage(osversion.RS5)
 	imageWindowsNanoserver18362 = getWindowsNanoserverImage(osversion.V19H1)
 	imageWindowsNanoserver19041 = getWindowsNanoserverImage(osversion.V20H1)

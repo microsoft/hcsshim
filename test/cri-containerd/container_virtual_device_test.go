@@ -200,7 +200,7 @@ func getGPUContainerRequestWCOW(t *testing.T, podID string, podConfig *runtime.P
 func Test_RunContainer_VirtualDevice_GPU_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW, featureGPU)
 
-	if osversion.Get().Build < osversion.V20H1 {
+	if osversion.Build() < osversion.V20H1 {
 		t.Skip("Requires build +20H1")
 	}
 
@@ -240,7 +240,7 @@ func Test_RunContainer_VirtualDevice_GPU_LCOW(t *testing.T) {
 func Test_RunContainer_VirtualDevice_GPU_Multiple_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW, featureGPU)
 
-	if osversion.Get().Build < osversion.V20H1 {
+	if osversion.Build() < osversion.V20H1 {
 		t.Skip("Requires build +20H1")
 	}
 
@@ -289,7 +289,7 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_LCOW(t *testing.T) {
 func Test_RunContainer_VirtualDevice_GPU_and_NoGPU_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW, featureGPU)
 
-	if osversion.Get().Build < osversion.V20H1 {
+	if osversion.Build() < osversion.V20H1 {
 		t.Skip("Requires build +20H1")
 	}
 
@@ -358,7 +358,7 @@ func Test_RunContainer_VirtualDevice_GPU_and_NoGPU_LCOW(t *testing.T) {
 func Test_RunContainer_VirtualDevice_GPU_Multiple_Removal_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW, featureGPU)
 
-	if osversion.Get().Build < osversion.V20H1 {
+	if osversion.Build() < osversion.V20H1 {
 		t.Skip("Requires build +20H1")
 	}
 
@@ -486,7 +486,7 @@ func Test_RunContainer_VirtualDevice_ClassGUID_WCOW_Process(t *testing.T) {
 func Test_RunContainer_VirtualDevice_GPU_WCOW_Hypervisor(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor, featureGPU)
 
-	if osversion.Get().Build < osversion.V20H1 {
+	if osversion.Build() < osversion.V20H1 {
 		t.Skip("Requires build +20H1")
 	}
 
@@ -531,7 +531,7 @@ func Test_RunContainer_VirtualDevice_GPU_WCOW_Hypervisor(t *testing.T) {
 func Test_RunContainer_VirtualDevice_GPU_and_NoGPU_WCOW_Hypervisor(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor, featureGPU)
 
-	if osversion.Get().Build < osversion.V20H1 {
+	if osversion.Build() < osversion.V20H1 {
 		t.Skip("Requires build +20H1")
 	}
 
@@ -592,7 +592,7 @@ func Test_RunContainer_VirtualDevice_GPU_and_NoGPU_WCOW_Hypervisor(t *testing.T)
 func Test_RunContainer_VirtualDevice_GPU_Multiple_WCOW_Hypervisor(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor, featureGPU)
 
-	if osversion.Get().Build < osversion.V20H1 {
+	if osversion.Build() < osversion.V20H1 {
 		t.Skip("Requires build +20H1")
 	}
 
@@ -645,7 +645,7 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_WCOW_Hypervisor(t *testing.T) 
 func Test_RunContainer_VirtualDevice_GPU_Multiple_Removal_WCOW_Hypervisor(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor, featureGPU)
 
-	if osversion.Get().Build < osversion.V20H1 {
+	if osversion.Build() < osversion.V20H1 {
 		t.Skip("Requires build +20H1")
 	}
 

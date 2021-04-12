@@ -260,7 +260,7 @@ func Test_RunPodSandbox_MemorySize_LCOW(t *testing.T) {
 func Test_RunPodSandbox_MMIO_WCOW_Process(t *testing.T) {
 	requireFeatures(t, featureWCOWProcess)
 
-	if osversion.Get().Build < osversion.V20H1 {
+	if osversion.Build() < osversion.V20H1 {
 		t.Skip("Requires build +20H1")
 	}
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
@@ -277,7 +277,7 @@ func Test_RunPodSandbox_MMIO_WCOW_Process(t *testing.T) {
 func Test_RunPodSandbox_MMIO_WCOW_Hypervisor(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)
 
-	if osversion.Get().Build < osversion.V20H1 {
+	if osversion.Build() < osversion.V20H1 {
 		t.Skip("Requires build +20H1")
 	}
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
@@ -294,7 +294,7 @@ func Test_RunPodSandbox_MMIO_WCOW_Hypervisor(t *testing.T) {
 func Test_RunPodSandbox_MMIO_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	if osversion.Get().Build < osversion.V20H1 {
+	if osversion.Build() < osversion.V20H1 {
 		t.Skip("Requires build +20H1")
 	}
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
@@ -917,7 +917,7 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_WCOW(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)
 	// Prior to 19H1, we aren't able to easily create a formatted VHD, as
 	// HcsFormatWritableLayerVhd requires the VHD to be mounted prior the call.
-	if osversion.Get().Build < osversion.V19H1 {
+	if osversion.Build() < osversion.V19H1 {
 		t.Skip("Requires at least 19H1")
 	}
 

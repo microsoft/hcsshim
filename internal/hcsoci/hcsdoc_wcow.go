@@ -366,7 +366,7 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	}
 	v1.MappedDirectories = mounts.mdsv1
 	v2Container.MappedDirectories = mounts.mdsv2
-	if len(mounts.mpsv1) > 0 && osversion.Get().Build < osversion.RS3 {
+	if len(mounts.mpsv1) > 0 && osversion.Build() < osversion.RS3 {
 		return nil, nil, fmt.Errorf("named pipe mounts are not supported on this version of Windows")
 	}
 	v1.MappedPipes = mounts.mpsv1

@@ -39,7 +39,7 @@ var prepareDiskCommand = cli.Command{
 			return errors.New("'destpath' is required")
 		}
 
-		if osversion.Get().Build < osversion.RS5 {
+		if osversion.Build() < osversion.RS5 {
 			return errors.New("LCOW is not supported pre-RS5")
 		}
 

@@ -307,7 +307,7 @@ func createContainer(cfg *containerConfig) (_ *container, err error) {
 			return nil, fmt.Errorf("host container %s is not a VM host", hostID)
 		}
 		hostUniqueID = host.UniqueID
-	} else if vmisolated && (isSandbox || cfg.Spec.Linux != nil || osversion.Get().Build >= osversion.RS5) {
+	} else if vmisolated && (isSandbox || cfg.Spec.Linux != nil || osversion.Build() >= osversion.RS5) {
 		// This handles all LCOW, Pod Sandbox, and (Windows Xenon V2 for RS5+)
 		hostID = cfg.ID
 		newvm = true
