@@ -222,8 +222,8 @@ func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) error {
 // `readOnly` set to `true` if the vhd/vhdx should be attached read only.
 //
 // `vmAccess` indicates what access to grant the vm for the hostpath
-func (uvm *UtilityVM) AddSCSI(ctx context.Context, hostPath string, uvmPath string, readOnly bool, vmAccess VMAccessType) (*SCSIMount, error) {
-	return uvm.addSCSIActual(ctx, hostPath, uvmPath, "VirtualDisk", readOnly, vmAccess)
+func (uvm *UtilityVM) AddSCSI(ctx context.Context, hostPath string, uvmPath string, readOnly bool, options []string, vmAccess VMAccessType) (*SCSIMount, error) {
+	return uvm.addSCSIActual(ctx, hostPath, uvmPath, "VirtualDisk", readOnly, options, vmAccess)
 }
 
 // AddSCSIPhysicalDisk attaches a physical disk from the host directly to the
@@ -234,8 +234,8 @@ func (uvm *UtilityVM) AddSCSI(ctx context.Context, hostPath string, uvmPath stri
 // `uvmPath` is optional if a guest mount is not requested.
 //
 // `readOnly` set to `true` if the physical disk should be attached read only.
-func (uvm *UtilityVM) AddSCSIPhysicalDisk(ctx context.Context, hostPath, uvmPath string, readOnly bool) (*SCSIMount, error) {
-	return uvm.addSCSIActual(ctx, hostPath, uvmPath, "PassThru", readOnly, VMAccessTypeIndividual)
+func (uvm *UtilityVM) AddSCSIPhysicalDisk(ctx context.Context, hostPath, uvmPath string, readOnly bool, options []string) (*SCSIMount, error) {
+	return uvm.addSCSIActual(ctx, hostPath, uvmPath, "PassThru", readOnly, options, VMAccessTypeIndividual)
 }
 
 // addSCSIActual is the implementation behind the external functions AddSCSI and
@@ -252,7 +252,7 @@ func (uvm *UtilityVM) AddSCSIPhysicalDisk(ctx context.Context, hostPath, uvmPath
 // `vmAccess` indicates what access to grant the vm for the hostpath
 //
 // Returns result from calling modify with the given scsi mount
-func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, attachmentType string, readOnly bool, vmAccess VMAccessType) (sm *SCSIMount, err error) {
+func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, attachmentType string, readOnly bool, options []string, vmAccess VMAccessType) (sm *SCSIMount, err error) {
 	sm, existed, err := uvm.allocateSCSIMount(ctx, readOnly, hostPath, uvmPath, attachmentType, vmAccess)
 	if err != nil {
 		return nil, err
@@ -304,6 +304,7 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, hostPath, uvmPath, atta
 				Lun:        uint8(sm.LUN),
 				Controller: uint8(sm.Controller),
 				ReadOnly:   readOnly,
+				Options:    options,
 			}
 		}
 		SCSIModification.GuestRequest = guestReq

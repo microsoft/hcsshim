@@ -89,11 +89,12 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 					break
 				}
 			}
+
 			l := log.G(ctx).WithField("mount", fmt.Sprintf("%+v", mount))
 			if mount.Type == "physical-disk" {
 				l.Debug("hcsshim::allocateLinuxResources Hot-adding SCSI physical disk for OCI mount")
 				uvmPathForShare = fmt.Sprintf(uvm.LCOWGlobalMountPrefix, coi.HostingSystem.UVMMountCounter())
-				scsiMount, err := coi.HostingSystem.AddSCSIPhysicalDisk(ctx, hostPath, uvmPathForShare, readOnly)
+				scsiMount, err := coi.HostingSystem.AddSCSIPhysicalDisk(ctx, hostPath, uvmPathForShare, readOnly, mount.Options)
 				if err != nil {
 					return errors.Wrapf(err, "adding SCSI physical disk mount %+v", mount)
 				}
@@ -107,7 +108,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 
 				// if the scsi device is already attached then we take the uvm path that the function below returns
 				// that is where it was previously mounted in UVM
-				scsiMount, err := coi.HostingSystem.AddSCSI(ctx, hostPath, uvmPathForShare, readOnly, uvm.VMAccessTypeIndividual)
+				scsiMount, err := coi.HostingSystem.AddSCSI(ctx, hostPath, uvmPathForShare, readOnly, mount.Options, uvm.VMAccessTypeIndividual)
 				if err != nil {
 					return errors.Wrapf(err, "adding SCSI virtual disk mount %+v", mount)
 				}
@@ -136,6 +137,7 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 					uvmPathForFile = path.Join(uvmPathForShare, fileName)
 				}
 				l.Debug("hcsshim::allocateLinuxResources Hot-adding Plan9 for OCI mount")
+
 				share, err := coi.HostingSystem.AddPlan9(ctx, hostPath, uvmPathForShare, readOnly, restrictAccess, allowedNames)
 				if err != nil {
 					return errors.Wrapf(err, "adding plan9 mount %+v", mount)
@@ -172,7 +174,8 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 		// use lcowNvidiaMountPath since we only support nvidia gpus right now
 		// must use scsi here since DDA'ing a hyper-v pci device is not supported on VMs that have ANY virtual memory
 		// gpuvhd must be granted VM Group access.
-		scsiMount, err := coi.HostingSystem.AddSCSI(ctx, gpuSupportVhdPath, uvm.LCOWNvidiaMountPath, true, uvm.VMAccessTypeNoop)
+		options := []string{"ro"}
+		scsiMount, err := coi.HostingSystem.AddSCSI(ctx, gpuSupportVhdPath, uvm.LCOWNvidiaMountPath, true, options, uvm.VMAccessTypeNoop)
 		if err != nil {
 			return errors.Wrapf(err, "failed to add scsi device %s in the UVM %s at %s", gpuSupportVhdPath, coi.HostingSystem.ID(), uvm.LCOWNvidiaMountPath)
 		}

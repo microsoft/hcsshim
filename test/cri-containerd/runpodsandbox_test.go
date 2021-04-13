@@ -913,6 +913,132 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_LCOW(t *testing.T) {
 	}
 }
 
+func Test_RunPodSandbox_MultipleContainersSameVhd_RShared_LCOW(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sbRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
+	sbRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
+		SecurityContext: &runtime.LinuxSandboxSecurityContext{
+			Privileged: true,
+		},
+	}
+
+	podID := runPodSandbox(t, client, ctx, sbRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	// Create a temporary ext4 VHD to mount into the container.
+	vhdHostDir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("failed to create temp directory: %s", err)
+	}
+	defer os.RemoveAll(vhdHostDir)
+	vhdHostPath := filepath.Join(vhdHostDir, "temp.vhdx")
+	createExt4VHD(ctx, t, vhdHostPath)
+
+	vhdContainerPath := "/containerDir"
+	cRequest := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			// Hold this command open until killed
+			Command: []string{
+				"top",
+			},
+			Linux: &runtime.LinuxContainerConfig{
+				SecurityContext: &runtime.LinuxContainerSecurityContext{
+					Privileged: true,
+				},
+			},
+			Mounts: []*runtime.Mount{
+				{
+					HostPath:      "vhd://" + vhdHostPath,
+					ContainerPath: vhdContainerPath,
+					// set 'rshared' propagation
+					Propagation: runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
+				},
+			},
+		},
+		PodSandboxId:  podID,
+		SandboxConfig: sbRequest.Config,
+	}
+
+	containerName := t.Name() + "-Container-0"
+	cRequest.Config.Metadata.Name = containerName
+	containerId0 := createContainer(t, client, ctx, cRequest)
+	defer removeContainer(t, client, ctx, containerId0)
+	startContainer(t, client, ctx, containerId0)
+	defer stopContainer(t, client, ctx, containerId0)
+
+	containerName1 := t.Name() + "-Container-1"
+	cRequest.Config.Metadata.Name = containerName1
+	containerId1 := createContainer(t, client, ctx, cRequest)
+	defer removeContainer(t, client, ctx, containerId1)
+	startContainer(t, client, ctx, containerId1)
+	defer stopContainer(t, client, ctx, containerId1)
+
+	// create a test directory that will be the new mountpoint's source
+	createTestDirCmd := []string{
+		"mkdir",
+		"/tmp/testdir",
+	}
+	_, errorMsg, exitCode := execContainer(t, client, ctx, containerId0, createTestDirCmd)
+	if exitCode != 0 {
+		t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerId0)
+	}
+
+	// create a file in the test directory
+	createTestDirContentCmd := []string{
+		"touch",
+		"/tmp/testdir/test.txt",
+	}
+	_, errorMsg, exitCode = execContainer(t, client, ctx, containerId0, createTestDirContentCmd)
+	if exitCode != 0 {
+		t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerId0)
+	}
+
+	// create a test directory in the vhd that will be the new mountpoint's destination
+	createTestDirVhdCmd := []string{
+		"mkdir",
+		fmt.Sprintf("%s/testdir", vhdContainerPath),
+	}
+	_, errorMsg, exitCode = execContainer(t, client, ctx, containerId0, createTestDirVhdCmd)
+	if exitCode != 0 {
+		t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerId0)
+	}
+
+	// perform rshared mount of test directory into the vhd
+	mountTestDirToVhdCmd := []string{
+		"mount",
+		"-o",
+		"rshared",
+		"/tmp/testdir",
+		fmt.Sprintf("%s/testdir", vhdContainerPath),
+	}
+	_, errorMsg, exitCode = execContainer(t, client, ctx, containerId0, mountTestDirToVhdCmd)
+	if exitCode != 0 {
+		t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerId0)
+	}
+
+	// try to list the test file in the second container to verify it was propagated correctly
+	verifyTestMountCommand := []string{
+		"ls",
+		fmt.Sprintf("%s/testdir/test.txt", vhdContainerPath),
+	}
+	_, errorMsg, exitCode = execContainer(t, client, ctx, containerId1, verifyTestMountCommand)
+	if exitCode != 0 {
+		t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerId1)
+	}
+}
+
 func Test_RunPodSandbox_MultipleContainersSameVhd_WCOW(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)
 	// Prior to 19H1, we aren't able to easily create a formatted VHD, as

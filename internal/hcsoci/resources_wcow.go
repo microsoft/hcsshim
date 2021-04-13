@@ -135,7 +135,7 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 			l := log.G(ctx).WithField("mount", fmt.Sprintf("%+v", mount))
 			if mount.Type == "physical-disk" {
 				l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI physical disk for OCI mount")
-				scsiMount, err := coi.HostingSystem.AddSCSIPhysicalDisk(ctx, mount.Source, uvmPath, readOnly)
+				scsiMount, err := coi.HostingSystem.AddSCSIPhysicalDisk(ctx, mount.Source, uvmPath, readOnly, mount.Options)
 				if err != nil {
 					return errors.Wrapf(err, "adding SCSI physical disk mount %+v", mount)
 				}
@@ -143,7 +143,7 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 				r.Add(scsiMount)
 			} else if mount.Type == "virtual-disk" {
 				l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI virtual disk for OCI mount")
-				scsiMount, err := coi.HostingSystem.AddSCSI(ctx, mount.Source, uvmPath, readOnly, uvm.VMAccessTypeIndividual)
+				scsiMount, err := coi.HostingSystem.AddSCSI(ctx, mount.Source, uvmPath, readOnly, mount.Options, uvm.VMAccessTypeIndividual)
 				if err != nil {
 					return errors.Wrapf(err, "adding SCSI virtual disk mount %+v", mount)
 				}
