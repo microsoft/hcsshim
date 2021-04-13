@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/Microsoft/opengcs/internal/storage/pci"
-	generichook "github.com/Microsoft/opengcs/service/gcsutils/generichook"
+	"github.com/Microsoft/opengcs/service/gcsutils/gcstools/generichook"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
