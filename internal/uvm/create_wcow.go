@@ -11,7 +11,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/mergemaps"
 	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
@@ -315,12 +314,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		uvm.IsTemplate = true
 	}
 
-	fullDoc, err := mergemaps.MergeJSON(doc, ([]byte)(opts.AdditionHCSDocumentJSON))
-	if err != nil {
-		return nil, fmt.Errorf("failed to merge additional JSON '%s': %s", opts.AdditionHCSDocumentJSON, err)
-	}
-
-	err = uvm.create(ctx, fullDoc)
+	err = uvm.create(ctx, doc)
 	if err != nil {
 		return nil, fmt.Errorf("error while creating the compute system: %s", err)
 	}

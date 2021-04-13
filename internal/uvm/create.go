@@ -23,9 +23,8 @@ import (
 
 // Options are the set of options passed to Create() to create a utility vm.
 type Options struct {
-	ID                      string // Identifier for the uvm. Defaults to generated GUID.
-	Owner                   string // Specifies the owner. Defaults to executable name.
-	AdditionHCSDocumentJSON string // Optional additional JSON to merge into the HCS document prior
+	ID    string // Identifier for the uvm. Defaults to generated GUID.
+	Owner string // Specifies the owner. Defaults to executable name.
 
 	// MemorySizeInMB sets the UVM memory. If `0` will default to platform
 	// default.
@@ -105,9 +104,7 @@ func verifyCloneUvmCreateOpts(templateOpts, cloneOpts *OptionsWCOW) bool {
 	// Save the original values of the fields that we want to ignore and replace them with
 	// the same values as that of the other object. So that we can simply use `==` operator.
 	templateIDBackup := templateOpts.ID
-	templateAdditionalJsonBackup := templateOpts.AdditionHCSDocumentJSON
 	templateOpts.ID = cloneOpts.ID
-	templateOpts.AdditionHCSDocumentJSON = cloneOpts.AdditionHCSDocumentJSON
 
 	// We can't use `==` operator on structs which include slices in them. So compare the
 	// Layerfolders separately and then directly compare the Options struct.
@@ -119,7 +116,6 @@ func verifyCloneUvmCreateOpts(templateOpts, cloneOpts *OptionsWCOW) bool {
 
 	// set original values
 	templateOpts.ID = templateIDBackup
-	templateOpts.AdditionHCSDocumentJSON = templateAdditionalJsonBackup
 	return result
 }
 
