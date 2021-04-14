@@ -171,7 +171,7 @@ func createDMVerityTarget(ctx context.Context, devPath, devName, target string, 
 
 	mapperPath, err := dm.CreateDevice(devName, dm.CreateReadOnly, []dm.Target{verityTarget})
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to create dm-verity target: pmem device: %d", devPath)
+		return "", errors.Wrapf(err, "failed to create dm-verity target: pmem device: %s", devPath)
 	}
 
 	return mapperPath, nil
