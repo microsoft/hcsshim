@@ -79,8 +79,8 @@ func TestCreateError(t *testing.T) {
 		t.Skip()
 	}
 	d, err := createDevice("test-device", 0, []Target{
-		{Type: "error", SectorStart: 0, Length: 1},
-		{Type: "error", SectorStart: 1, Length: 2},
+		{Type: "error", SectorStart: 0, LengthInBlocks: 1},
+		{Type: "error", SectorStart: 1, LengthInBlocks: 2},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -98,8 +98,8 @@ func TestReadOnlyError(t *testing.T) {
 		t.Skip()
 	}
 	d, err := createDevice("test-device", CreateReadOnly, []Target{
-		{Type: "error", SectorStart: 0, Length: 1},
-		{Type: "error", SectorStart: 1, Length: 2},
+		{Type: "error", SectorStart: 0, LengthInBlocks: 1},
+		{Type: "error", SectorStart: 1, LengthInBlocks: 2},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -117,7 +117,7 @@ func TestLinearError(t *testing.T) {
 		t.Skip()
 	}
 	b, err := createDevice("base-device", 0, []Target{
-		{Type: "error", SectorStart: 0, Length: 100},
+		{Type: "error", SectorStart: 0, LengthInBlocks: 100},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -30,6 +30,7 @@ clean:
 
 test:
 	cd $(SRCROOT) && go test ./service/gcsutils/...
+	cd $(SRCROOT) && go test ./...
 	cd $(SRCROOT)/service/gcs && ginkgo -r -keepGoing
 
 out/delta.tar.gz: bin/init bin/vsockexec bin/service/gcs bin/service/gcsutils/gcstools Makefile
