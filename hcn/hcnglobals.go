@@ -53,10 +53,9 @@ var (
 	}
 	// HNS 12.0 allows for session affinity for loadbalancing
 	SessionAffinityVersion = VersionRanges{VersionRange{MinVersion: Version{Major: 12, Minor: 0}, MaxVersion: Version{Major: math.MaxInt32, Minor: math.MaxInt32}}}
-	// HNS 10.5 through 11 (not included) and 12.0+ supports Ipv6 dual stack.
+	// HNS 11.10+ supports Ipv6 dual stack.
 	IPv6DualStackVersion = VersionRanges{
-		VersionRange{MinVersion: Version{Major: 10, Minor: 5}, MaxVersion: Version{Major: 10, Minor: math.MaxInt32}},
-		VersionRange{MinVersion: Version{Major: 12, Minor: 0}, MaxVersion: Version{Major: math.MaxInt32, Minor: math.MaxInt32}},
+		VersionRange{MinVersion: Version{Major: 11, Minor: 10}, MaxVersion: Version{Major: math.MaxInt32, Minor: math.MaxInt32}},
 	}
 	// HNS 13.0 allows for Set Policy support
 	SetPolicyVersion = VersionRanges{VersionRange{MinVersion: Version{Major: 13, Minor: 0}, MaxVersion: Version{Major: math.MaxInt32, Minor: math.MaxInt32}}}
