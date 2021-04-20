@@ -1,11 +1,7 @@
 
-# Open Guest Compute Service (opengcs) [![Build Status](https://travis-ci.org/microsoft/opengcs.svg?branch=master)](https://travis-ci.org/Microsoft/opengcs)
+# Open Guest Compute Service (opengcs) [![Build Status](https://github.com/microsoft/opengcs/actions/workflows/ci.yml/badge.svg)](https://github.com/microsoft/opengcs/actions/workflows/ci.yml)
 
 Open Guest Compute Service is a Linux open source project to further the development of a production quality implementation of Linux Hyper-V containers on Windows (LCOW).  It's designed to run inside a custom Linux OS for supporting Linux container payload.
-
-# Getting Started
-
-[How to build GCS binaries](./docs/gcsbuildinstructions.md/)
 
 # LCOW v1 (deprecated)
 
