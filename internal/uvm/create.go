@@ -244,9 +244,6 @@ func (uvm *UtilityVM) Close() (err error) {
 	windows.Close(uvm.vmmemProcess)
 
 	if uvm.hcsSystem != nil {
-		if err := uvm.ReleaseCPUGroup(ctx); err != nil {
-			log.G(ctx).WithError(err).Warn("failed to release VM resource")
-		}
 		_ = uvm.hcsSystem.Terminate(ctx)
 		_ = uvm.Wait()
 	}
