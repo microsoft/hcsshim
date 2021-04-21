@@ -232,10 +232,6 @@ type pod struct {
 	// It MUST be treated as read only in the lifetime of the pod.
 	host *uvm.UtilityVM
 
-	// wcl is the workload create mutex. All calls to CreateTask must hold this
-	// lock while the ID reservation takes place. Once the ID is held it is safe
-	// to release the lock to allow concurrent creates.
-	wcl           sync.Mutex
 	workloadTasks sync.Map
 }
 
@@ -262,17 +258,10 @@ func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *sp
 		return nil, errors.Wrapf(errdefs.ErrFailedPrecondition, "task with id: '%s' cannot be created in pod: '%s' which is not running", req.ID, p.id)
 	}
 
-	p.wcl.Lock()
-	_, loaded := p.workloadTasks.LoadOrStore(req.ID, nil)
-	if loaded {
+	_, ok := p.workloadTasks.Load(req.ID)
+	if ok {
 		return nil, errors.Wrapf(errdefs.ErrAlreadyExists, "task with id: '%s' already exists id pod: '%s'", req.ID, p.id)
 	}
-	p.wcl.Unlock()
-	defer func() {
-		if err != nil {
-			p.workloadTasks.Delete(req.ID)
-		}
-	}()
 
 	ct, sid, err := oci.GetSandboxTypeAndID(s.Annotations)
 	if err != nil {
