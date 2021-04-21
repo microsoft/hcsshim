@@ -65,6 +65,7 @@ type VerityInfo struct {
 	DataBlockSize uint32
 	HashBlockSize uint32
 	DataBlocks    uint64
+	Version       uint32
 }
 
 // MerkleTree constructs dm-verity hash-tree for a given byte array with a fixed salt (0-byte) and algorithm (sha256).
@@ -191,5 +192,6 @@ func ReadDMVerityInfo(vhdPath string, offsetInBytes int64) (*VerityInfo, error) 
 		DataBlocks:         dmvSB.DataBlocks,
 		DataBlockSize:      dmvSB.DataBlockSize,
 		HashBlockSize:      blockSize,
+		Version:            dmvSB.Version,
 	}, nil
 }
