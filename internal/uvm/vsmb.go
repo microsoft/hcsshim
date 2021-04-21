@@ -10,9 +10,10 @@ import (
 	"strconv"
 	"unsafe"
 
+	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/sirupsen/logrus"
@@ -232,7 +233,7 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 				Path:         hostPath,
 				AllowedFiles: newAllowedFiles,
 			},
-			ResourcePath: vSmbShareResourcePath,
+			ResourcePath: resourcepaths.VSMBShareResourcePath,
 		}
 		if err := uvm.modify(ctx, modification); err != nil {
 			return nil, err
@@ -280,7 +281,7 @@ func (uvm *UtilityVM) RemoveVSMB(ctx context.Context, hostPath string, readOnly 
 	modification := &hcsschema.ModifySettingRequest{
 		RequestType:  requesttype.Remove,
 		Settings:     hcsschema.VirtualSmbShare{Name: share.name},
-		ResourcePath: vSmbShareResourcePath,
+		ResourcePath: resourcepaths.VSMBShareResourcePath,
 	}
 	if err := uvm.modify(ctx, modification); err != nil {
 		return fmt.Errorf("failed to remove vsmb share %s from %s: %+v: %s", hostPath, uvm.id, modification, err)

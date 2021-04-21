@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 )
 
 // Modify modifies the compute system by sending a request to HCS.

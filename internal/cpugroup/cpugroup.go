@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
 
 const NullGroupID = "00000000-0000-0000-0000-000000000000"

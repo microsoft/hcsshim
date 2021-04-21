@@ -6,8 +6,8 @@ import (
 	"context"
 	"encoding/json"
 
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
