@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/vmcompute"
 )
 

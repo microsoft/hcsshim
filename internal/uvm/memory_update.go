@@ -4,7 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
 
 const (
@@ -19,7 +20,7 @@ func (uvm *UtilityVM) UpdateMemory(ctx context.Context, sizeInBytes uint64) erro
 	requestedSizeInMB := sizeInBytes / bytesPerMB
 	actual := uvm.normalizeMemorySize(ctx, requestedSizeInMB)
 	req := &hcsschema.ModifySettingRequest{
-		ResourcePath: memoryResourcePath,
+		ResourcePath: resourcepaths.MemoryResourcePath,
 		Settings:     actual,
 	}
 	return uvm.modify(ctx, req)

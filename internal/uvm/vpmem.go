@@ -7,9 +7,10 @@ import (
 	"os"
 
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/sirupsen/logrus"
 )
 
@@ -90,7 +91,7 @@ func (uvm *UtilityVM) AddVPMEM(ctx context.Context, hostPath string) (_ string, 
 				ReadOnly:    true,
 				ImageFormat: "Vhd1",
 			},
-			ResourcePath: fmt.Sprintf(vPMemControllerResourceFormat, deviceNumber),
+			ResourcePath: fmt.Sprintf(resourcepaths.VPMemControllerResourceFormat, deviceNumber),
 		}
 
 		uvmPath := fmt.Sprintf(lcowVPMEMLayerFmt, deviceNumber)
@@ -138,7 +139,7 @@ func (uvm *UtilityVM) RemoveVPMEM(ctx context.Context, hostPath string) (err err
 	if device.refCount == 1 {
 		modification := &hcsschema.ModifySettingRequest{
 			RequestType:  requesttype.Remove,
-			ResourcePath: fmt.Sprintf(vPMemControllerResourceFormat, deviceNumber),
+			ResourcePath: fmt.Sprintf(resourcepaths.VPMemControllerResourceFormat, deviceNumber),
 			GuestRequest: guestrequest.GuestRequest{
 				ResourceType: guestrequest.ResourceTypeVPMemDevice,
 				RequestType:  requesttype.Remove,

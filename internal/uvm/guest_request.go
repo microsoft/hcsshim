@@ -3,7 +3,7 @@ package uvm
 import (
 	"context"
 
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
 
 // GuestRequest send an arbitrary guest request to the UVM.

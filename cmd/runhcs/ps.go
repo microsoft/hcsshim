@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/Microsoft/hcsshim/internal/appargs"
-	"github.com/Microsoft/hcsshim/internal/schema1"
+	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	"github.com/urfave/cli"
 )
 

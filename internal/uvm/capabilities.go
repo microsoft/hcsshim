@@ -1,6 +1,6 @@
 package uvm
 
-import "github.com/Microsoft/hcsshim/internal/schema1"
+import "github.com/Microsoft/hcsshim/internal/hcs/schema1"
 
 // SignalProcessSupported returns `true` if the guest supports the capability to
 // signal a process.
