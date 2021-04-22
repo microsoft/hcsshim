@@ -40,6 +40,15 @@ The delete command will be executed in the container's bundle as its cwd.
 			return errors.New("bundle is required")
 		}
 
+		// hcsshim shim writes panic logs in the bundle directory in a file named "panic.log"
+		// log those messages (if any) on stderr so that it shows up in containerd's log.
+		// This should be done as the first thing so that we don't miss any panic logs even if
+		// something goes wrong during delete op.
+		logs, err := ioutil.ReadFile(filepath.Join(bundleFlag, "panic.log"))
+		if err == nil && len(logs) > 0 {
+			logrus.WithField("log", string(logs)).Error("found shim panic logs during delete")
+		}
+
 		// Attempt to find the hcssystem for this bundle and terminate it.
 		if sys, _ := hcs.OpenComputeSystem(ctx, idFlag); sys != nil {
 			defer sys.Close()
@@ -80,13 +89,6 @@ The delete command will be executed in the container's bundle as its cwd.
 					}
 				}
 			}
-		}
-
-		// hcsshim shim writes panic logs in the bundle directory in a file named "panic.log"
-		// log those messages (if any) on stderr so that it shows up in containerd's log.
-		logs, err := ioutil.ReadFile(filepath.Join(bundleFlag, "panic.log"))
-		if err == nil && len(logs) > 0 {
-			logrus.WithField("log", string(logs)).Error("found shim panic logs during delete")
 		}
 
 		// Remove the bundle on disk
