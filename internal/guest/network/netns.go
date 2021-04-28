@@ -8,8 +8,8 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/Microsoft/opengcs/internal/log"
-	"github.com/Microsoft/opengcs/service/gcs/prot"
+	"github.com/Microsoft/hcsshim/internal/guest/prot"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"

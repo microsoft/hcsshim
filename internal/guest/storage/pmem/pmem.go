@@ -5,13 +5,13 @@ package pmem
 import (
 	"context"
 	"fmt"
-	"github.com/Microsoft/opengcs/internal/log"
-	"github.com/Microsoft/opengcs/service/gcs/prot"
+	"github.com/Microsoft/hcsshim/internal/guest/prot"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"os"
 
-	"github.com/Microsoft/opengcs/internal/oc"
-	"github.com/Microsoft/opengcs/internal/storage"
-	dm "github.com/Microsoft/opengcs/internal/storage/devicemapper"
+	"github.com/Microsoft/hcsshim/internal/guest/storage"
+	dm "github.com/Microsoft/hcsshim/internal/guest/storage/devicemapper"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"

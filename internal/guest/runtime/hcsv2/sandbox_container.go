@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Microsoft/opengcs/internal/network"
-	"github.com/Microsoft/opengcs/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/guest/network"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"

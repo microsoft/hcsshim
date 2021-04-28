@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Microsoft/opengcs/service/gcs/prot"
+	"github.com/Microsoft/hcsshim/internal/guest/prot"
 )
 
 func Test_getNetworkNamespace_NotExist(t *testing.T) {

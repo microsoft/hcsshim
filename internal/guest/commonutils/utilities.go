@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/Microsoft/opengcs/service/gcs/gcserr"
+	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 )
 
 // UnmarshalJSONWithHresult unmarshals the given data into the given interface, and

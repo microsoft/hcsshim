@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/Microsoft/opengcs/internal/log"
-	"github.com/Microsoft/opengcs/internal/oc"
-	"github.com/Microsoft/opengcs/internal/storage"
+	"github.com/Microsoft/hcsshim/internal/guest/storage"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"

@@ -9,8 +9,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/Microsoft/opengcs/internal/storage/pci"
-	"github.com/Microsoft/opengcs/service/gcsutils/gcstools/generichook"
+	"github.com/Microsoft/hcsshim/cmd/gcstools/generichook"
+	"github.com/Microsoft/hcsshim/internal/guest/storage/pci"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )

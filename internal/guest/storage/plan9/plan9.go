@@ -8,8 +8,8 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/Microsoft/opengcs/internal/oc"
-	"github.com/Microsoft/opengcs/service/gcs/transport"
+	"github.com/Microsoft/hcsshim/internal/guest/transport"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"

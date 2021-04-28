@@ -6,7 +6,7 @@ import (
 	"context"
 	"path/filepath"
 
-	"github.com/Microsoft/opengcs/internal/storage"
+	"github.com/Microsoft/hcsshim/internal/guest/storage"
 )
 
 var storageWaitForFileMatchingPattern = storage.WaitForFileMatchingPattern

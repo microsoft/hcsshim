@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Microsoft/opengcs/internal/storage"
-	"github.com/Microsoft/opengcs/internal/storage/vmbus"
+	"github.com/Microsoft/hcsshim/internal/guest/storage"
+	"github.com/Microsoft/hcsshim/internal/guest/storage/vmbus"
 )
 
 var storageWaitForFileMatchingPattern = storage.WaitForFileMatchingPattern

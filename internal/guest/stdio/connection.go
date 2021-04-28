@@ -3,7 +3,7 @@ package stdio
 import (
 	"os"
 
-	"github.com/Microsoft/opengcs/service/gcs/transport"
+	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )

@@ -6,7 +6,7 @@ import (
 	"io"
 	"syscall"
 
-	"github.com/Microsoft/opengcs/service/gcs/stdio"
+	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
 

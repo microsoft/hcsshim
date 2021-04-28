@@ -10,7 +10,7 @@ import (
 	"os/exec"
 	"text/template"
 
-	"github.com/Microsoft/opengcs/service/gcsutils/gcstools/generichook"
+	"github.com/Microsoft/hcsshim/cmd/gcstools/generichook"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )

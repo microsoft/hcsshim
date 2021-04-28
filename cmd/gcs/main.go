@@ -1,3 +1,5 @@
+// +build linux
+
 package main
 
 import (
@@ -9,12 +11,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Microsoft/opengcs/internal/kmsg"
-	"github.com/Microsoft/opengcs/internal/oc"
-	"github.com/Microsoft/opengcs/internal/runtime/hcsv2"
-	"github.com/Microsoft/opengcs/service/gcs/bridge"
-	"github.com/Microsoft/opengcs/service/gcs/runtime/runc"
-	"github.com/Microsoft/opengcs/service/gcs/transport"
+	"github.com/Microsoft/hcsshim/internal/guest/bridge"
+	"github.com/Microsoft/hcsshim/internal/guest/kmsg"
+	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
+	"github.com/Microsoft/hcsshim/internal/guest/runtime/runc"
+	"github.com/Microsoft/hcsshim/internal/guest/transport"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/containerd/cgroups"
 	cgroupstats "github.com/containerd/cgroups/stats/v1"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
