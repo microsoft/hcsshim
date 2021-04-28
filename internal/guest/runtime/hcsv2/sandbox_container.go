@@ -1,3 +1,5 @@
+// +build linux
+
 package hcsv2
 
 import (
