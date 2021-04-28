@@ -17,7 +17,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
-	containerdsys "github.com/containerd/containerd/sys/reaper"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -28,6 +27,10 @@ const (
 	containerFilesDir = "/var/run/gcsrunc"
 	initPidFilename   = "initpid"
 )
+
+func setSubReaper(i int) error {
+	return unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, uintptr(i), 0, 0, 0)
+}
 
 // runcRuntime is an implementation of the Runtime interface which uses runC as
 // the container runtime.
@@ -624,7 +627,7 @@ func (c *container) runExecCommand(processDef *oci.Process, stdioSet *stdio.Conn
 func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioSet *stdio.ConnectionSet, initialArgs ...string) (p *process, err error) {
 	args := initialArgs
 
-	if err := containerdsys.SetSubreaper(1); err != nil {
+	if err := setSubreaper(1); err != nil {
 		return nil, errors.Wrapf(err, "failed to set process as subreaper for process in container %s", c.id)
 	}
 	if err := c.r.makeLogDir(c.id); err != nil {
