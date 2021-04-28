@@ -19,6 +19,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/internal/wcow"
+	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/containerd/ttrpc"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
@@ -122,6 +123,19 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 		}
 	}
 
+	processor := &hcsschema.Processor2{
+		Count:  uvm.processorCount,
+		Limit:  opts.ProcessorLimit,
+		Weight: opts.ProcessorWeight,
+	}
+	// We can set a cpu group for the VM at creation time in recent builds.
+	if opts.CPUGroupID != "" {
+		if osversion.Build() < cpuGroupCreateBuild {
+			return nil, errCPUGroupCreateNotSupported
+		}
+		processor.CpuGroup = &hcsschema.CpuGroup{Id: opts.CPUGroupID}
+	}
+
 	doc := &hcsschema.ComputeSystem{
 		Owner:                             uvm.owner,
 		SchemaVersion:                     schemaversion.SchemaV21(),
@@ -148,11 +162,7 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 					HighMMIOBaseInMB:     opts.HighMMIOBaseInMB,
 					HighMMIOGapInMB:      opts.HighMMIOGapInMB,
 				},
-				Processor: &hcsschema.Processor2{
-					Count:  uvm.processorCount,
-					Limit:  opts.ProcessorLimit,
-					Weight: opts.ProcessorWeight,
-				},
+				Processor: processor,
 			},
 			Devices: &hcsschema.Devices{
 				HvSocket: &hcsschema.HvSocket2{
@@ -215,7 +225,6 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		vpciDevices:             make(map[string]*VPCIDevice),
 		physicallyBacked:        !opts.AllowOvercommit,
 		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
-		cpuGroupID:              opts.CPUGroupID,
 		createOpts:              *opts,
 	}
 

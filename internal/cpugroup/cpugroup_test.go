@@ -14,14 +14,17 @@ func TestCPUGroupCreateWithIDAndDelete(t *testing.T) {
 	lps := []uint32{0, 1}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
 	id, err := guid.NewV4()
 	if err != nil {
 		t.Fatalf("failed to create cpugroup guid with: %v", err)
 	}
+
 	err = Create(ctx, id.String(), lps)
 	if err != nil {
 		t.Fatalf("failed to create cpugroup %s with: %v", id.String(), err)
 	}
+
 	defer func() {
 		if err := Delete(ctx, id.String()); err != nil {
 			t.Fatalf("failed to delete cpugroup %s with: %v", id.String(), err)

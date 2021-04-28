@@ -169,7 +169,6 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		vpciDevices:             make(map[string]*VPCIDevice),
 		physicallyBacked:        !opts.AllowOvercommit,
 		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
-		cpuGroupID:              opts.CPUGroupID,
 		createOpts:              opts,
 	}
 
@@ -204,6 +203,19 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	// Align the requested memory size.
 	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
 
+	processor := &hcsschema.Processor2{
+		Count:  uvm.processorCount,
+		Limit:  opts.ProcessorLimit,
+		Weight: opts.ProcessorWeight,
+	}
+	// We can set a cpu group for the VM at creation time in recent builds.
+	if opts.CPUGroupID != "" {
+		if osversion.Build() < cpuGroupCreateBuild {
+			return nil, errCPUGroupCreateNotSupported
+		}
+		processor.CpuGroup = &hcsschema.CpuGroup{Id: opts.CPUGroupID}
+	}
+
 	doc := &hcsschema.ComputeSystem{
 		Owner:                             uvm.owner,
 		SchemaVersion:                     schemaversion.SchemaV21(),
@@ -221,11 +233,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 					HighMMIOBaseInMB:      opts.HighMMIOBaseInMB,
 					HighMMIOGapInMB:       opts.HighMMIOGapInMB,
 				},
-				Processor: &hcsschema.Processor2{
-					Count:  uvm.processorCount,
-					Limit:  opts.ProcessorLimit,
-					Weight: opts.ProcessorWeight,
-				},
+				Processor: processor,
 			},
 			Devices: &hcsschema.Devices{
 				HvSocket: &hcsschema.HvSocket2{

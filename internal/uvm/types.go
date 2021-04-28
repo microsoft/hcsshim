@@ -115,9 +115,6 @@ type UtilityVM struct {
 	// Access to this variable should be done atomically.
 	mountCounter uint64
 
-	// cpuGroupID is the ID of the cpugroup on the host that this UVM is assigned to
-	cpuGroupID string
-
 	// specifies if this UVM is created to be saved as a template
 	IsTemplate bool
 
