@@ -76,9 +76,9 @@ type SubnetPolicy struct {
 type NatFlags uint32
 
 const (
-	NatFlagsNone            NatFlags = 0
-	NatFlagsLocalRoutedVip  NatFlags = 1
-	NatFlagsIPv6            NatFlags = 2
+	NatFlagsNone            NatFlags = iota
+	NatFlagsLocalRoutedVip
+	NatFlagsIPv6
 )
 
 /// Endpoint Policy objects
