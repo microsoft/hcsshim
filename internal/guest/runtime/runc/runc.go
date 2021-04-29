@@ -30,7 +30,7 @@ const (
 	initPidFilename   = "initpid"
 )
 
-func setSubReaper(i int) error {
+func setSubreaper(i int) error {
 	return unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, uintptr(i), 0, 0, 0)
 }
 

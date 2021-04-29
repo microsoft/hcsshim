@@ -26,12 +26,12 @@ import (
 // III - 12 Bits   Message Id
 // VV  - 8 Bits    Version
 
+//nolint:deadcode,varcheck
 const (
 	messageTypeMask     = 0xF0000000
 	messageCategoryMask = 0x0FF00000
 	messageIDMask       = 0x000FFF00
 	messageVersionMask  = 0x000000FF
-
 	messageIDShift      = 8
 	messageVersionShift = 0
 )

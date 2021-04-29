@@ -10,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+//nolint:deadcode,varcheck
 const (
 	vmaddrCidHost = 2
 	vmaddrCidAny  = 0xffffffff

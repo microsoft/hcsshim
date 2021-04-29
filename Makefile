@@ -29,9 +29,7 @@ clean:
 	rm -rf bin deps rootfs out
 
 test:
-	cd $(SRCROOT) && go test ./service/gcsutils/...
-	cd $(SRCROOT) && go test ./...
-	cd $(SRCROOT)/cmd/gcs && ginkgo -r -keepGoing
+	cd $(SRCROOT) && go test ./internal/guest/...
 
 out/delta.tar.gz: bin/init bin/vsockexec bin/cmd/gcs bin/cmd/gcstools Makefile
 	@mkdir -p out
