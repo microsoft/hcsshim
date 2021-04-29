@@ -135,6 +135,7 @@ type OutboundNatPolicySetting struct {
 	VirtualIP    string   `json:",omitempty"`
 	Exceptions   []string `json:",omitempty"`
 	Destinations []string `json:",omitempty"`
+	Flags        NatFlags `json:",omitempty"`
 }
 
 // SDNRoutePolicySetting sets SDN Route on an Endpoint.
