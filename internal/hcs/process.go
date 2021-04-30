@@ -414,7 +414,7 @@ func (process *Process) Close() (err error) {
 }
 
 func (process *Process) registerCallback(ctx context.Context) error {
-	callbackContext := &notifcationWatcherContext{
+	callbackContext := &notificationWatcherContext{
 		channels:  newProcessChannels(),
 		systemID:  process.SystemID(),
 		processID: process.processID,
