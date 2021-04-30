@@ -554,7 +554,7 @@ func (computeSystem *System) Close() (err error) {
 }
 
 func (computeSystem *System) registerCallback(ctx context.Context) error {
-	callbackContext := &notifcationWatcherContext{
+	callbackContext := &notificationWatcherContext{
 		channels: newSystemChannels(),
 		systemID: computeSystem.id,
 	}
