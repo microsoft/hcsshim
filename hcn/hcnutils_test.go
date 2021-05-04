@@ -236,11 +236,19 @@ func HcnCreateAcls() (*PolicyEndpointRequest, error) {
 func HcnCreateWfpProxyPolicyRequest() (*PolicyEndpointRequest, error) {
 	policySetting := L4WfpProxyPolicySetting{
 		InboundProxyPort:  "80",
-		OutboundProxyPort: "80",
+		OutboundProxyPort: "81",
 		FilterTuple: FiveTuple{
 			Protocols:       "6",
 			RemoteAddresses: "10.0.0.4",
 			Priority:        8,
+		},
+		OutboundExceptions: ProxyExceptions{
+			IpAddressExceptions: []string{"10.0.1.12"},
+			PortExceptions:      []string{"81"},
+		},
+		InboundExceptions: ProxyExceptions{
+			IpAddressExceptions: []string{"12.0.1.12"},
+			PortExceptions:      []string{"8181"},
 		},
 	}
 
