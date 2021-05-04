@@ -11,10 +11,11 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/sirupsen/logrus"
 )
@@ -512,7 +513,7 @@ func (uvm *UtilityVM) isNetworkNamespaceSupported() bool {
 }
 
 func getNetworkModifyRequest(adapterID string, requestType string, settings interface{}) interface{} {
-	if osversion.Get().Build >= osversion.RS5 {
+	if osversion.Build() >= osversion.RS5 {
 		return guestrequest.NetworkModifyRequest{
 			AdapterId:   adapterID,
 			RequestType: requestType,
@@ -548,7 +549,7 @@ func (uvm *UtilityVM) addNIC(ctx context.Context, id string, endpoint *hns.HNSEn
 	// Then the Add itself
 	request := hcsschema.ModifySettingRequest{
 		RequestType:  requesttype.Add,
-		ResourcePath: fmt.Sprintf(networkResourceFormat, id),
+		ResourcePath: fmt.Sprintf(resourcepaths.NetworkResourceFormat, id),
 		Settings: hcsschema.NetworkAdapter{
 			EndpointId: endpoint.Id,
 			MacAddress: endpoint.MacAddress,
@@ -596,7 +597,7 @@ func (uvm *UtilityVM) addNIC(ctx context.Context, id string, endpoint *hns.HNSEn
 func (uvm *UtilityVM) removeNIC(ctx context.Context, id string, endpoint *hns.HNSEndpoint) error {
 	request := hcsschema.ModifySettingRequest{
 		RequestType:  requesttype.Remove,
-		ResourcePath: fmt.Sprintf(networkResourceFormat, id),
+		ResourcePath: fmt.Sprintf(resourcepaths.NetworkResourceFormat, id),
 		Settings: hcsschema.NetworkAdapter{
 			EndpointId: endpoint.Id,
 			MacAddress: endpoint.MacAddress,
@@ -647,7 +648,7 @@ func (uvm *UtilityVM) RemoveAllNICs(ctx context.Context) error {
 func (uvm *UtilityVM) UpdateNIC(ctx context.Context, id string, settings *hcsschema.NetworkAdapter) error {
 	req := &hcsschema.ModifySettingRequest{
 		RequestType:  requesttype.Update,
-		ResourcePath: fmt.Sprintf(networkResourceFormat, id),
+		ResourcePath: fmt.Sprintf(resourcepaths.NetworkResourceFormat, id),
 		Settings:     settings,
 	}
 	return uvm.modify(ctx, req)

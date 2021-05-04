@@ -15,12 +15,11 @@ import (
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/gcs"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/mergemaps"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/pkg/errors"
@@ -97,7 +96,7 @@ func defaultLCOWOSBootFilesPath() string {
 // executable files name.
 func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 	// Use KernelDirect boot by default on all builds that support it.
-	kernelDirectSupported := osversion.Get().Build >= 18286
+	kernelDirectSupported := osversion.Build() >= 18286
 	opts := &OptionsLCOW{
 		Options:               newDefaultOptions(id, owner),
 		BootFilesPath:         defaultLCOWOSBootFilesPath(),
@@ -170,7 +169,6 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		vpciDevices:             make(map[string]*VPCIDevice),
 		physicallyBacked:        !opts.AllowOvercommit,
 		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
-		cpuGroupID:              opts.CPUGroupID,
 		createOpts:              opts,
 	}
 
@@ -205,6 +203,19 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	// Align the requested memory size.
 	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
 
+	processor := &hcsschema.Processor2{
+		Count:  uvm.processorCount,
+		Limit:  opts.ProcessorLimit,
+		Weight: opts.ProcessorWeight,
+	}
+	// We can set a cpu group for the VM at creation time in recent builds.
+	if opts.CPUGroupID != "" {
+		if osversion.Build() < cpuGroupCreateBuild {
+			return nil, errCPUGroupCreateNotSupported
+		}
+		processor.CpuGroup = &hcsschema.CpuGroup{Id: opts.CPUGroupID}
+	}
+
 	doc := &hcsschema.ComputeSystem{
 		Owner:                             uvm.owner,
 		SchemaVersion:                     schemaversion.SchemaV21(),
@@ -222,11 +233,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 					HighMMIOBaseInMB:      opts.HighMMIOBaseInMB,
 					HighMMIOGapInMB:       opts.HighMMIOGapInMB,
 				},
-				Processor: &hcsschema.Processor2{
-					Count:  uvm.processorCount,
-					Limit:  opts.ProcessorLimit,
-					Weight: opts.ProcessorWeight,
-				},
+				Processor: processor,
 			},
 			Devices: &hcsschema.Devices{
 				HvSocket: &hcsschema.HvSocket2{
@@ -377,12 +384,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		}
 	}
 
-	fullDoc, err := mergemaps.MergeJSON(doc, ([]byte)(opts.AdditionHCSDocumentJSON))
-	if err != nil {
-		return nil, fmt.Errorf("failed to merge additional JSON '%s': %s", opts.AdditionHCSDocumentJSON, err)
-	}
-
-	err = uvm.create(ctx, fullDoc)
+	err = uvm.create(ctx, doc)
 	if err != nil {
 		return nil, fmt.Errorf("error while creating the compute system: %s", err)
 	}

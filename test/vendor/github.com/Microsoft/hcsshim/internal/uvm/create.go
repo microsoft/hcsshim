@@ -10,10 +10,10 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/sirupsen/logrus"
@@ -23,9 +23,8 @@ import (
 
 // Options are the set of options passed to Create() to create a utility vm.
 type Options struct {
-	ID                      string // Identifier for the uvm. Defaults to generated GUID.
-	Owner                   string // Specifies the owner. Defaults to executable name.
-	AdditionHCSDocumentJSON string // Optional additional JSON to merge into the HCS document prior
+	ID    string // Identifier for the uvm. Defaults to generated GUID.
+	Owner string // Specifies the owner. Defaults to executable name.
 
 	// MemorySizeInMB sets the UVM memory. If `0` will default to platform
 	// default.
@@ -105,9 +104,7 @@ func verifyCloneUvmCreateOpts(templateOpts, cloneOpts *OptionsWCOW) bool {
 	// Save the original values of the fields that we want to ignore and replace them with
 	// the same values as that of the other object. So that we can simply use `==` operator.
 	templateIDBackup := templateOpts.ID
-	templateAdditionalJsonBackup := templateOpts.AdditionHCSDocumentJSON
 	templateOpts.ID = cloneOpts.ID
-	templateOpts.AdditionHCSDocumentJSON = cloneOpts.AdditionHCSDocumentJSON
 
 	// We can't use `==` operator on structs which include slices in them. So compare the
 	// Layerfolders separately and then directly compare the Options struct.
@@ -119,7 +116,6 @@ func verifyCloneUvmCreateOpts(templateOpts, cloneOpts *OptionsWCOW) bool {
 
 	// set original values
 	templateOpts.ID = templateIDBackup
-	templateOpts.AdditionHCSDocumentJSON = templateAdditionalJsonBackup
 	return result
 }
 
@@ -145,11 +141,11 @@ func verifyOptions(ctx context.Context, options interface{}) error {
 				return errors.New("PreferredRootFSTypeVHD requires at least one VPMem device")
 			}
 		}
-		if opts.KernelDirect && osversion.Get().Build < 18286 {
+		if opts.KernelDirect && osversion.Build() < 18286 {
 			return errors.New("KernelDirectBoot is not supported on builds older than 18286")
 		}
 
-		if opts.EnableColdDiscardHint && osversion.Get().Build < 18967 {
+		if opts.EnableColdDiscardHint && osversion.Build() < 18967 {
 			return errors.New("EnableColdDiscardHint is not supported on builds older than 18967")
 		}
 	case *OptionsWCOW:
@@ -248,9 +244,6 @@ func (uvm *UtilityVM) Close() (err error) {
 	windows.Close(uvm.vmmemProcess)
 
 	if uvm.hcsSystem != nil {
-		if err := uvm.ReleaseCPUGroup(ctx); err != nil {
-			log.G(ctx).WithError(err).Warn("failed to release VM resource")
-		}
 		_ = uvm.hcsSystem.Terminate(ctx)
 		_ = uvm.Wait()
 	}

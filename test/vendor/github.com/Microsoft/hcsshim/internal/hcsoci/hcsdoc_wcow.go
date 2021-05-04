@@ -9,12 +9,12 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
-	"github.com/Microsoft/hcsshim/internal/schema1"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
@@ -366,7 +366,7 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	}
 	v1.MappedDirectories = mounts.mdsv1
 	v2Container.MappedDirectories = mounts.mdsv2
-	if len(mounts.mpsv1) > 0 && osversion.Get().Build < osversion.RS3 {
+	if len(mounts.mpsv1) > 0 && osversion.Build() < osversion.RS3 {
 		return nil, nil, fmt.Errorf("named pipe mounts are not supported on this version of Windows")
 	}
 	v1.MappedPipes = mounts.mpsv1

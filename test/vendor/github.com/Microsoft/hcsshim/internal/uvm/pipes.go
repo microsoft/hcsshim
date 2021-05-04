@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
@@ -31,7 +32,7 @@ func (pipe *PipeMount) Release(ctx context.Context) error {
 func (uvm *UtilityVM) AddPipe(ctx context.Context, hostPath string) (*PipeMount, error) {
 	modification := &hcsschema.ModifySettingRequest{
 		RequestType:  requesttype.Add,
-		ResourcePath: fmt.Sprintf(mappedPipeResourceFormat, hostPath),
+		ResourcePath: fmt.Sprintf(resourcepaths.MappedPipeResourceFormat, hostPath),
 	}
 	if err := uvm.modify(ctx, modification); err != nil {
 		return nil, err
@@ -43,7 +44,7 @@ func (uvm *UtilityVM) AddPipe(ctx context.Context, hostPath string) (*PipeMount,
 func (uvm *UtilityVM) RemovePipe(ctx context.Context, hostPath string) error {
 	modification := &hcsschema.ModifySettingRequest{
 		RequestType:  requesttype.Remove,
-		ResourcePath: fmt.Sprintf(mappedPipeResourceFormat, hostPath),
+		ResourcePath: fmt.Sprintf(resourcepaths.MappedPipeResourceFormat, hostPath),
 	}
 	if err := uvm.modify(ctx, modification); err != nil {
 		return err

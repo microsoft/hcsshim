@@ -15,7 +15,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	layerspkg "github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/resources"
-	"github.com/Microsoft/hcsshim/internal/schema1"
+	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"

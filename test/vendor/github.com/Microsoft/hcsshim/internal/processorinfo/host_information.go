@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
 
 // HostProcessorInfo queries HCS for the host's processor information, including topology

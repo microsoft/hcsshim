@@ -12,8 +12,8 @@ import (
 	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 )
 
 // Container Credential Guard is in HCS's own words "The solution to

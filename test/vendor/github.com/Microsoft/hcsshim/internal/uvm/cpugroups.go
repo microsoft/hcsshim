@@ -6,18 +6,19 @@ import (
 	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/cpugroup"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
+	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
+
+// Build that assigning a cpu group on creation of a vm is supported
+const cpuGroupCreateBuild = 20124
+
+var errCPUGroupCreateNotSupported = fmt.Errorf("cpu group assignment on create requires a build of %d or higher", cpuGroupCreateBuild)
 
 // ReleaseCPUGroup unsets the cpugroup from the VM
 func (uvm *UtilityVM) ReleaseCPUGroup(ctx context.Context) error {
-	groupID := uvm.cpuGroupID
-	if groupID == "" {
-		// not set, don't try to do anything
-		return nil
-	}
 	if err := uvm.unsetCPUGroup(ctx); err != nil {
-		return fmt.Errorf("failed to remove VM %s from cpugroup %s", uvm.ID(), groupID)
+		return fmt.Errorf("failed to remove VM %s from cpugroup", uvm.ID())
 	}
 	return nil
 }
@@ -33,7 +34,7 @@ func (uvm *UtilityVM) SetCPUGroup(ctx context.Context, id string) error {
 // setCPUGroup sets the VM's cpugroup
 func (uvm *UtilityVM) setCPUGroup(ctx context.Context, id string) error {
 	req := &hcsschema.ModifySettingRequest{
-		ResourcePath: cpuGroupResourcePath,
+		ResourcePath: resourcepaths.CPUGroupResourcePath,
 		Settings: &hcsschema.CpuGroup{
 			Id: id,
 		},
@@ -41,7 +42,6 @@ func (uvm *UtilityVM) setCPUGroup(ctx context.Context, id string) error {
 	if err := uvm.modify(ctx, req); err != nil {
 		return err
 	}
-	uvm.cpuGroupID = id
 	return nil
 }
 
