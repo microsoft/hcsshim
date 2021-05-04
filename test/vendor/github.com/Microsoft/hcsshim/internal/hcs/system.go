@@ -9,10 +9,10 @@ import (
 	"syscall"
 
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/Microsoft/hcsshim/internal/schema1"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/vmcompute"
 	"go.opencensus.io/trace"
@@ -554,7 +554,7 @@ func (computeSystem *System) Close() (err error) {
 }
 
 func (computeSystem *System) registerCallback(ctx context.Context) error {
-	callbackContext := &notifcationWatcherContext{
+	callbackContext := &notificationWatcherContext{
 		channels: newSystemChannels(),
 		systemID: computeSystem.id,
 	}

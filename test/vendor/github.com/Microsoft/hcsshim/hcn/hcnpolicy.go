@@ -75,6 +75,12 @@ type SubnetPolicy struct {
 // NatFlags are flags for portmappings.
 type NatFlags uint32
 
+const (
+	NatFlagsNone            NatFlags = iota
+	NatFlagsLocalRoutedVip
+	NatFlagsIPv6
+)
+
 /// Endpoint Policy objects
 
 // PortMappingPolicySetting defines Port Mapping (NAT)
@@ -135,6 +141,7 @@ type OutboundNatPolicySetting struct {
 	VirtualIP    string   `json:",omitempty"`
 	Exceptions   []string `json:",omitempty"`
 	Destinations []string `json:",omitempty"`
+	Flags        NatFlags `json:",omitempty"`
 }
 
 // SDNRoutePolicySetting sets SDN Route on an Endpoint.

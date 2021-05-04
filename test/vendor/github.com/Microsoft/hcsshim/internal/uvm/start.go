@@ -15,11 +15,11 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
-	"github.com/Microsoft/hcsshim/internal/schema1"
-	hcsschema "github.com/Microsoft/hcsshim/internal/schema2"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
@@ -204,13 +204,6 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 			_ = uvm.hcsSystem.Wait()
 		}
 	}()
-
-	// assign the VM to the cpugroup specified, if any
-	if uvm.cpuGroupID != "" {
-		if err := uvm.SetCPUGroup(ctx, uvm.cpuGroupID); err != nil {
-			return err
-		}
-	}
 
 	// Start waiting on the utility VM.
 	uvm.exitCh = make(chan struct{})
