@@ -76,7 +76,7 @@ type SubnetPolicy struct {
 type NatFlags uint32
 
 const (
-	NatFlagsNone            NatFlags = iota
+	NatFlagsNone NatFlags = iota
 	NatFlagsLocalRoutedVip
 	NatFlagsIPv6
 )
@@ -161,12 +161,20 @@ type FiveTuple struct {
 	Priority        uint16 `json:",omitempty"`
 }
 
+// ProxyExceptions exempts traffic to IpAddresses and Ports
+type ProxyExceptions struct {
+	IpAddressExceptions []string `json:",omitempty"`
+	PortExceptions      []string `json:",omitempty"`
+}
+
 // L4WfpProxyPolicySetting sets Layer-4 Proxy on an endpoint.
 type L4WfpProxyPolicySetting struct {
-	InboundProxyPort  string    `json:",omitempty"`
-	OutboundProxyPort string    `json:",omitempty"`
-	FilterTuple       FiveTuple `json:",omitempty"`
-	UserSID           string    `json:",omitempty"`
+	InboundProxyPort   string          `json:",omitempty"`
+	OutboundProxyPort  string          `json:",omitempty"`
+	FilterTuple        FiveTuple       `json:",omitempty"`
+	UserSID            string          `json:",omitempty"`
+	InboundExceptions  ProxyExceptions `json:",omitempty"`
+	OutboundExceptions ProxyExceptions `json:",omitempty"`
 }
 
 // PortnameEndpointPolicySetting sets the port name for an endpoint.
