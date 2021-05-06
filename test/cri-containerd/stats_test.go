@@ -88,7 +88,7 @@ func Test_SandboxStats_Single_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
+	request := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -116,7 +116,7 @@ func Test_SandboxStats_List_ContainerID_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
+	request := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -149,7 +149,7 @@ func Test_SandboxStats_List_PodID_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
+	request := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -223,7 +223,7 @@ func Test_ContainerStats_ContainerID(t *testing.T) {
 				pullRequiredImages(t, []string{test.sandboxImage, test.containerImage})
 			}
 
-			podRequest := getRunPodSandboxRequest(t, test.runtimeHandler)
+			podRequest := getRunPodSandboxRequest(t, test.runtimeHandler, nil)
 
 			client := newTestRuntimeClient(t)
 			ctx, cancel := context.WithCancel(context.Background())
@@ -298,7 +298,7 @@ func Test_ContainerStats_List_ContainerID(t *testing.T) {
 				pullRequiredImages(t, []string{test.sandboxImage, test.containerImage})
 			}
 
-			podRequest := getRunPodSandboxRequest(t, test.runtimeHandler)
+			podRequest := getRunPodSandboxRequest(t, test.runtimeHandler, nil)
 
 			client := newTestRuntimeClient(t)
 			ctx, cancel := context.WithCancel(context.Background())
@@ -364,12 +364,15 @@ func Test_SandboxStats_WorkingSet_PhysicallyBacked(t *testing.T) {
 			// sluggish.
 			var sizeInMB uint64 = 1536
 			sizeInMBStr := strconv.FormatUint(sizeInMB, 10)
-			podRequest := getRunPodSandboxRequest(t, test.runtimeHandler)
-			podRequest.Config.Annotations = map[string]string{
-				"io.microsoft.virtualmachine.computetopology.memory.allowovercommit":      "false",
-				"io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit": "false",
-				"io.microsoft.virtualmachine.computetopology.memory.sizeinmb":             sizeInMBStr,
-			}
+			podRequest := getRunPodSandboxRequest(
+				t,
+				test.runtimeHandler,
+				map[string]string{
+					"io.microsoft.virtualmachine.computetopology.memory.allowovercommit":      "false",
+					"io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit": "false",
+					"io.microsoft.virtualmachine.computetopology.memory.sizeinmb":             sizeInMBStr,
+				},
+			)
 
 			client := newTestRuntimeClient(t)
 			ctx, cancel := context.WithCancel(context.Background())

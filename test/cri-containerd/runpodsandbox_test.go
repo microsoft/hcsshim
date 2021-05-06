@@ -38,7 +38,7 @@ func Test_RunPodSandbox_WCOW_Process(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler)
+	request := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler, nil)
 	runPodSandboxTest(t, request)
 }
 
@@ -47,7 +47,7 @@ func Test_RunPodSandbox_WCOW_Hypervisor(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
+	request := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler, nil)
 	runPodSandboxTest(t, request)
 }
 
@@ -56,10 +56,13 @@ func Test_RunPodSandbox_WCOW_Hypervisor_WithoutExternalBridge(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.useexternalgcsbridge": "false",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		wcowHypervisorRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.useexternalgcsbridge": "false",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -68,7 +71,7 @@ func Test_RunPodSandbox_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
+	request := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
 	runPodSandboxTest(t, request)
 }
 
@@ -83,7 +86,7 @@ func Test_RunPodSandbox_Events_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
+	request := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
 
 	topicNames, filters := getTargetRunTopics()
 	targetNamespace := "k8s.io"
@@ -128,10 +131,13 @@ func Test_RunPodSandbox_VirtualMemory_WCOW_Hypervisor(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "true",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		wcowHypervisorRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "true",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -140,10 +146,13 @@ func Test_RunPodSandbox_VirtualMemory_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "true",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "true",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -152,11 +161,14 @@ func Test_RunPodSandbox_VirtualMemory_DeferredCommit_WCOW_Hypervisor(t *testing.
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.computetopology.memory.allowovercommit":      "true",
-		"io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit": "true",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		wcowHypervisorRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.computetopology.memory.allowovercommit":      "true",
+			"io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit": "true",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -165,11 +177,14 @@ func Test_RunPodSandbox_VirtualMemory_DeferredCommit_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.computetopology.memory.allowovercommit":      "true",
-		"io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit": "true",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.computetopology.memory.allowovercommit":      "true",
+			"io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit": "true",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -178,10 +193,13 @@ func Test_RunPodSandbox_PhysicalMemory_WCOW_Hypervisor(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "false",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		wcowHypervisorRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "false",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -190,10 +208,13 @@ func Test_RunPodSandbox_FullyPhysicallyBacked_WCOW_Hypervisor(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		wcowHypervisorRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -202,10 +223,13 @@ func Test_RunPodSandbox_PhysicalMemory_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "false",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "false",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -214,10 +238,13 @@ func Test_RunPodSandbox_FullyPhysicallyBacked_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -226,10 +253,13 @@ func Test_RunPodSandbox_MemorySize_WCOW_Process(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.container.memory.sizeinmb": "128",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		wcowProcessRuntimeHandler,
+		map[string]string{
+			"io.microsoft.container.memory.sizeinmb": "128",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -238,10 +268,13 @@ func Test_RunPodSandbox_MemorySize_WCOW_Hypervisor(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.computetopology.memory.sizeinmb": "768", // 128 is too small for WCOW. It is really slow boot.
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		wcowHypervisorRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.computetopology.memory.sizeinmb": "768", // 128 is too small for WCOW. It is really slow boot.
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -250,10 +283,13 @@ func Test_RunPodSandbox_MemorySize_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.computetopology.memory.sizeinmb": "200",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.computetopology.memory.sizeinmb": "200",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -265,12 +301,15 @@ func Test_RunPodSandbox_MMIO_WCOW_Process(t *testing.T) {
 	}
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.computetopology.memory.lowmmiogapinmb":   "100",
-		"io.microsoft.virtualmachine.computetopology.memory.highmmiobaseinmb": "100",
-		"io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb":  "100",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		wcowProcessRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.computetopology.memory.lowmmiogapinmb":   "100",
+			"io.microsoft.virtualmachine.computetopology.memory.highmmiobaseinmb": "100",
+			"io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb":  "100",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -282,12 +321,15 @@ func Test_RunPodSandbox_MMIO_WCOW_Hypervisor(t *testing.T) {
 	}
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.computetopology.memory.lowmmiogapinmb":   "100",
-		"io.microsoft.virtualmachine.computetopology.memory.highmmiobaseinmb": "100",
-		"io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb":  "100",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		wcowHypervisorRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.computetopology.memory.lowmmiogapinmb":   "100",
+			"io.microsoft.virtualmachine.computetopology.memory.highmmiobaseinmb": "100",
+			"io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb":  "100",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -299,12 +341,15 @@ func Test_RunPodSandbox_MMIO_LCOW(t *testing.T) {
 	}
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.computetopology.memory.lowmmiogapinmb":   "100",
-		"io.microsoft.virtualmachine.computetopology.memory.highmmiobaseinmb": "100",
-		"io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb":  "100",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.computetopology.memory.lowmmiogapinmb":   "100",
+			"io.microsoft.virtualmachine.computetopology.memory.highmmiobaseinmb": "100",
+			"io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb":  "100",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -313,10 +358,13 @@ func Test_RunPodSandbox_CPUCount_WCOW_Process(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.container.processor.count": "1",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		wcowProcessRuntimeHandler,
+		map[string]string{
+			"io.microsoft.container.processor.count": "1",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -325,10 +373,13 @@ func Test_RunPodSandbox_CPUCount_WCOW_Hypervisor(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.computetopology.processor.count": "1",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		wcowHypervisorRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.computetopology.processor.count": "1",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -337,10 +388,13 @@ func Test_RunPodSandbox_CPUCount_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.computetopology.processor.count": "1",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.computetopology.processor.count": "1",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -349,10 +403,13 @@ func Test_RunPodSandbox_CPULimit_WCOW_Process(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.container.processor.limit": "9000",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		wcowProcessRuntimeHandler,
+		map[string]string{
+			"io.microsoft.container.processor.limit": "9000",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -361,10 +418,13 @@ func Test_RunPodSandbox_CPULimit_WCOW_Hypervisor(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.computetopology.processor.limit": "90000",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		wcowHypervisorRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.computetopology.processor.limit": "90000",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -373,10 +433,13 @@ func Test_RunPodSandbox_CPULimit_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.computetopology.processor.limit": "90000",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.computetopology.processor.limit": "90000",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -385,10 +448,13 @@ func Test_RunPodSandbox_CPUWeight_WCOW_Process(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.container.processor.weight": "500",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		wcowProcessRuntimeHandler,
+		map[string]string{
+			"io.microsoft.container.processor.weight": "500",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -397,10 +463,13 @@ func Test_RunPodSandbox_CPUWeight_WCOW_Hypervisor(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.computetopology.processor.weight": "500",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		wcowHypervisorRuntimeHandler,
+		map[string]string{
+			"io.microsoft.container.processor.weight": "500",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -409,10 +478,13 @@ func Test_RunPodSandbox_CPUWeight_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.computetopology.processor.weight": "500",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.computetopology.processor.weight": "500",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -421,10 +493,13 @@ func Test_RunPodSandbox_StorageQoSBandwithMax_WCOW_Process(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.container.storage.qos.bandwidthmaximum": fmt.Sprintf("%d", 1024*1024), // 1MB/s
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		wcowProcessRuntimeHandler,
+		map[string]string{
+			"io.microsoft.container.storage.qos.bandwidthmaximum": fmt.Sprintf("%d", 1024*1024), // 1MB/s
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -433,10 +508,13 @@ func Test_RunPodSandbox_StorageQoSBandwithMax_WCOW_Hypervisor(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.storageqos.bandwidthmaximum": fmt.Sprintf("%d", 1024*1024), // 1MB/s
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		wcowHypervisorRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.storageqos.bandwidthmaximum": fmt.Sprintf("%d", 1024*1024), // 1MB/s
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -445,10 +523,13 @@ func Test_RunPodSandbox_StorageQoSBandwithMax_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.storageqos.bandwidthmaximum": fmt.Sprintf("%d", 1024*1024), // 1MB/s
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.storageqos.bandwidthmaximum": fmt.Sprintf("%d", 1024*1024), // 1MB/s
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -457,10 +538,13 @@ func Test_RunPodSandbox_StorageQoSIopsMax_WCOW_Process(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.container.storage.qos.iopsmaximum": "300",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		wcowProcessRuntimeHandler,
+		map[string]string{
+			"io.microsoft.container.storage.qos.iopsmaximum": "300",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -469,10 +553,13 @@ func Test_RunPodSandbox_StorageQoSIopsMax_WCOW_Hypervisor(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.storageqos.iopsmaximum": "300",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		wcowHypervisorRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.storageqos.iopsmaximum": "300",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -481,10 +568,13 @@ func Test_RunPodSandbox_StorageQoSIopsMax_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.storageqos.iopsmaximum": "300",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.storageqos.iopsmaximum": "300",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -493,10 +583,13 @@ func Test_RunPodSandbox_InitrdBoot_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.lcow.preferredrootfstype": "initrd",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.lcow.preferredrootfstype": "initrd",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -505,10 +598,13 @@ func Test_RunPodSandbox_RootfsVhdBoot_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.lcow.preferredrootfstype": "vhd",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.lcow.preferredrootfstype": "vhd",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -517,10 +613,13 @@ func Test_RunPodSandbox_VPCIEnabled_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.lcow.vpcienabled": "true",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.lcow.vpcienabled": "true",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -529,10 +628,13 @@ func Test_RunPodSandbox_UEFIBoot_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.lcow.kerneldirectboot": "false",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.lcow.kerneldirectboot": "false",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
@@ -541,7 +643,7 @@ func Test_RunPodSandbox_DnsConfig_WCOW_Process(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler)
+	request := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler, nil)
 	request.Config.DnsConfig = &runtime.DNSConfig{
 		Searches: []string{"8.8.8.8", "8.8.4.4"},
 	}
@@ -556,7 +658,7 @@ func Test_RunPodSandbox_DnsConfig_WCOW_Hypervisor(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
+	request := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler, nil)
 	request.Config.DnsConfig = &runtime.DNSConfig{
 		Searches: []string{"8.8.8.8", "8.8.4.4"},
 	}
@@ -571,7 +673,7 @@ func Test_RunPodSandbox_DnsConfig_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
+	request := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
 	request.Config.DnsConfig = &runtime.DNSConfig{
 		Searches: []string{"8.8.8.8", "8.8.4.4"},
 	}
@@ -586,7 +688,7 @@ func Test_RunPodSandbox_PortMappings_WCOW_Process(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler)
+	request := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler, nil)
 	request.Config.PortMappings = []*runtime.PortMapping{
 		{
 			Protocol:      runtime.Protocol_TCP,
@@ -602,7 +704,7 @@ func Test_RunPodSandbox_PortMappings_WCOW_Hypervisor(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
+	request := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler, nil)
 	request.Config.PortMappings = []*runtime.PortMapping{
 		{
 			Protocol:      runtime.Protocol_TCP,
@@ -618,7 +720,7 @@ func Test_RunPodSandbox_PortMappings_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
+	request := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
 	request.Config.PortMappings = []*runtime.PortMapping{
 		{
 			Protocol:      runtime.Protocol_TCP,
@@ -861,8 +963,7 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_LCOW(t *testing.T) {
 		},
 	}
 
-	sbRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-	sbRequest.Config.Annotations = annotations
+	sbRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, annotations)
 
 	podID := runPodSandbox(t, client, ctx, sbRequest)
 	defer removePodSandbox(t, client, ctx, podID)
@@ -922,7 +1023,7 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_RShared_LCOW(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sbRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
+	sbRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
 	sbRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
 		SecurityContext: &runtime.LinuxSandboxSecurityContext{
 			Privileged: true,
@@ -1078,8 +1179,7 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_WCOW(t *testing.T) {
 		},
 	}
 
-	sbRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
-	sbRequest.Config.Annotations = annotations
+	sbRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler, annotations)
 
 	podID := runPodSandbox(t, client, ctx, sbRequest)
 	defer removePodSandbox(t, client, ctx, podID)
@@ -1174,8 +1274,7 @@ func createSandboxContainerAndExec(t *testing.T, annotations map[string]string, 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sbRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
-	sbRequest.Config.Annotations = annotations
+	sbRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, annotations)
 
 	podID := runPodSandbox(t, client, ctx, sbRequest)
 	defer removePodSandbox(t, client, ctx, podID)

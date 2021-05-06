@@ -20,7 +20,7 @@ func Test_Scale_CPU_Limits_To_Sandbox(t *testing.T) {
 	defer cancel()
 
 	client := newTestRuntimeClient(t)
-	podReq := getRunPodSandboxRequest(t, wcowHypervisor17763RuntimeHandler)
+	podReq := getRunPodSandboxRequest(t, wcowHypervisor17763RuntimeHandler, nil)
 	podID := runPodSandbox(t, client, ctx, podReq)
 	defer removePodSandbox(t, client, ctx, podID)
 
