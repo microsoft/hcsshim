@@ -28,7 +28,7 @@ var (
 )
 
 func init() {
-	data = make([]byte, blockSize*2)
+	data = make([]byte, BlockSize*2)
 	for i := range data {
 		data[i] = uint8(i)
 	}
@@ -200,8 +200,8 @@ func TestBasic(t *testing.T) {
 		{Path: "empty", File: &File{Mode: 0644}},
 		{Path: "small", File: &File{Mode: 0644}, Data: data[:40]},
 		{Path: "time", File: &File{Atime: now, Ctime: now.Add(time.Second), Mtime: now.Add(time.Hour)}},
-		{Path: "block_1", File: &File{Mode: 0644}, Data: data[:blockSize]},
-		{Path: "block_2", File: &File{Mode: 0644}, Data: data[:blockSize*2]},
+		{Path: "block_1", File: &File{Mode: 0644}, Data: data[:BlockSize]},
+		{Path: "block_2", File: &File{Mode: 0644}, Data: data[:BlockSize*2]},
 		{Path: "symlink", File: &File{Linkname: "block_1", Mode: format.S_IFLNK}},
 		{Path: "symlink_59", File: &File{Linkname: name[:59], Mode: format.S_IFLNK}},
 		{Path: "symlink_60", File: &File{Linkname: name[:60], Mode: format.S_IFLNK}},

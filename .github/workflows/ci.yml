@@ -68,6 +68,8 @@ jobs:
       - run: go build ./cmd/wclayer
       - run: go build ./cmd/device-util
       - run: go build ./cmd/ncproxy
+      - run: go build ./cmd/dmverity-vhd
+      - run: go build ./cmd/roothash
       - run: go build ./internal/tools/grantvmgroupaccess
       - run: go build ./internal/tools/uvmboot
       - run: go build ./internal/tools/zapdir
