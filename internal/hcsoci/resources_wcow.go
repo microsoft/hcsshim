@@ -111,7 +111,7 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 	// Validate each of the mounts. If this is a V2 Xenon, we have to add them as
 	// VSMB shares to the utility VM. For V1 Xenon and Argons, there's nothing for
 	// us to do as it's done by HCS.
-	for i, mount := range coi.Spec.Mounts {
+	for _, mount := range coi.Spec.Mounts {
 		if mount.Destination == "" || mount.Source == "" {
 			return fmt.Errorf("invalid OCI spec - a mount must have both source and a destination: %+v", mount)
 		}
@@ -139,7 +139,6 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 				if err != nil {
 					return errors.Wrapf(err, "adding SCSI physical disk mount %+v", mount)
 				}
-				coi.Spec.Mounts[i].Type = ""
 				r.Add(scsiMount)
 			} else if mount.Type == "virtual-disk" {
 				l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI virtual disk for OCI mount")
@@ -147,7 +146,6 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 				if err != nil {
 					return errors.Wrapf(err, "adding SCSI virtual disk mount %+v", mount)
 				}
-				coi.Spec.Mounts[i].Type = ""
 				r.Add(scsiMount)
 			} else {
 				if uvm.IsPipe(mount.Source) {
