@@ -95,7 +95,8 @@ func (uvm *UtilityVM) AssignDevice(ctx context.Context, deviceID string) (*VPCID
 	request := &hcsschema.ModifySettingRequest{
 		ResourcePath: fmt.Sprintf(resourcepaths.VirtualPCIResourceFormat, vmBusGUID),
 		RequestType:  requesttype.Add,
-		Settings:     targetDevice}
+		Settings:     targetDevice,
+	}
 
 	// WCOW (when supported) does not require a guest request as part of the
 	// device assignment
