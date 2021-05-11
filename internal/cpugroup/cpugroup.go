@@ -53,9 +53,8 @@ func Create(ctx context.Context, id string, logicalProcessors []uint32) error {
 	return nil
 }
 
-// getCPUGroupConfig finds the cpugroup config information for group with `id`
-//nolint:unused
-func getCPUGroupConfig(ctx context.Context, id string) (*hcsschema.CpuGroupConfig, error) {
+// GetCPUGroupConfig finds the cpugroup config information for group with `id`
+func GetCPUGroupConfig(ctx context.Context, id string) (*hcsschema.CpuGroupConfig, error) {
 	query := hcsschema.PropertyQuery{
 		PropertyTypes: []hcsschema.PropertyType{hcsschema.PTCPUGroup},
 	}

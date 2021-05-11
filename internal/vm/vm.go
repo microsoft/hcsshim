@@ -9,14 +9,10 @@ import (
 )
 
 var (
-	ErrNotSupported   = errors.New("virtstack does not support the operation")
-	ErrAlreadySet     = errors.New("field has already been set")
-	ErrUnknownGuestOS = errors.New("unknown guest operating system supplied")
-
-	ErrNotInPreCreatedState = errors.New("VM is not in pre-created state")
-	ErrNotInCreatedState    = errors.New("VM is not in created state")
-	ErrNotInRunningState    = errors.New("VM is not in running state")
-	ErrNotInPausedState     = errors.New("VM is not in paused state")
+	ErrNotSupported       = errors.New("virtstack does not support the operation")
+	ErrAlreadySet         = errors.New("field has already been set")
+	ErrUnsupportedGuestOS = errors.New("virtstack does not support the guest operating system")
+	ErrUnknownGuestOS     = errors.New("unknown guest operating system supplied")
 )
 
 const (
@@ -76,6 +72,8 @@ const (
 	VSMB
 	PCI
 	Plan9
+	Memory
+	Processor
 	CPUGroup
 )
 
@@ -94,18 +92,6 @@ type GuestOS string
 const (
 	Windows GuestOS = "windows"
 	Linux   GuestOS = "linux"
-)
-
-// State signifies the states that a Utility VM can be in. The state of the Utility VM should be the source of truth for what
-// operations can be performed at a given moment.
-type State uint8
-
-const (
-	StatePreCreated State = iota
-	StateCreated
-	StateRunning
-	StateTerminated
-	StatePaused
 )
 
 // SCSIDiskType refers to the disk type of the scsi device. This is either a vhd, vhdx, or a physical disk.

@@ -109,7 +109,7 @@ message VMConfig {
 
 // WindowsOptions contains virtual machine configurations that are only present on a Windows host.
 message WindowsOptions {
-    uint32 cpu_group_id = 1;
+    uint64 cpu_group_id = 1;
 }
 
 message SerialConfig {
