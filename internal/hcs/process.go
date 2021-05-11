@@ -361,6 +361,55 @@ func (process *Process) CloseStdin(ctx context.Context) error {
 	return nil
 }
 
+func (process *Process) CloseStdout(ctx context.Context) (err error) {
+	ctx, span := trace.StartSpan(ctx, "hcs::Process::CloseStdout") //nolint:ineffassign,staticcheck
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("cid", process.SystemID()),
+		trace.Int64Attribute("pid", int64(process.processID)))
+
+	process.handleLock.Lock()
+	defer process.handleLock.Unlock()
+
+	if process.handle == 0 {
+		return nil
+	}
+
+	process.stdioLock.Lock()
+	defer process.stdioLock.Unlock()
+	if process.stdout != nil {
+		process.stdout.Close()
+		process.stdout = nil
+	}
+	return nil
+}
+
+func (process *Process) CloseStderr(ctx context.Context) (err error) {
+	ctx, span := trace.StartSpan(ctx, "hcs::Process::CloseStderr") //nolint:ineffassign,staticcheck
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("cid", process.SystemID()),
+		trace.Int64Attribute("pid", int64(process.processID)))
+
+	process.handleLock.Lock()
+	defer process.handleLock.Unlock()
+
+	if process.handle == 0 {
+		return nil
+	}
+
+	process.stdioLock.Lock()
+	defer process.stdioLock.Unlock()
+	if process.stderr != nil {
+		process.stderr.Close()
+		process.stderr = nil
+
+	}
+	return nil
+}
+
 // Close cleans up any state associated with the process but does not kill
 // or wait on it.
 func (process *Process) Close() (err error) {

@@ -17,6 +17,12 @@ type Process interface {
 	// CloseStdin causes the process's stdin handle to receive EOF/EPIPE/whatever
 	// is appropriate to indicate that no more data is available.
 	CloseStdin(ctx context.Context) error
+	// CloseStdout closes the stdout connection to the process. It is used to indicate
+	// that we are done receiving output on the shim side.
+	CloseStdout(ctx context.Context) error
+	// CloseStderr closes the stderr connection to the process. It is used to indicate
+	// that we are done receiving output on the shim side.
+	CloseStderr(ctx context.Context) error
 	// Pid returns the process ID.
 	Pid() int
 	// Stdio returns the stdio streams for a process. These may be nil if a stream
