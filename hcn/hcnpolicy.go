@@ -23,6 +23,7 @@ const (
 	// Endpoint and Network have InterfaceConstraint and ProviderAddress
 	NetworkProviderAddress     EndpointPolicyType = "ProviderAddress"
 	NetworkInterfaceConstraint EndpointPolicyType = "InterfaceConstraint"
+	TierAcl       EndpointPolicyType = "TierAcl"	
 )
 
 // EndpointPolicy is a collection of Policy settings for an Endpoint.
@@ -106,6 +107,8 @@ const (
 	ActionTypeAllow ActionType = "Allow"
 	// Block traffic
 	ActionTypeBlock ActionType = "Block"
+	// Pass traffic
+	ActionTypePass ActionType = "Pass"
 
 	// In is traffic coming to the Endpoint
 	DirectionTypeIn DirectionType = "In"
@@ -303,4 +306,24 @@ type L4ProxyPolicySetting struct {
 	Exceptions  []string     `json:",omitempty"`
 	Destination string
 	OutboundNAT bool `json:",omitempty"`
+}
+
+// TierAclRule represents an ACL within TierAclPolicySetting
+type TierAclRule struct {
+	Id                string        `json:",omitempty"`
+	Protocols         string        `json:",omitempty"`
+	TierAclRuleAction ActionType    `json:","`
+	LocalAddresses    string        `json:",omitempty"`
+	RemoteAddresses   string        `json:",omitempty"`
+	LocalPorts        string        `json:",omitempty"`
+	RemotePorts       string        `json:",omitempty"`
+	Priority          uint16        `json:",omitempty"`
+}
+
+// TierAclPolicySetting represents a Tier containing ACLs
+type TierAclPolicySetting struct {
+	Name            string         `json:","`
+	Direction       DirectionType  `json:","`
+	Order           uint16         `json:""`
+	TierAclRules    []TierAclRule  `json:",omitempty"`
 }

@@ -149,6 +149,17 @@ func TestL4WfpProxyPolicySupport(t *testing.T) {
 	}
 }
 
+func TestTierAclPolicySupport(t *testing.T) {
+	supportedFeatures := GetSupportedFeatures()
+	err := TierAclPolicySupported()
+	if supportedFeatures.TierAcl && err != nil {
+		t.Fatal(err)
+	}
+	if !supportedFeatures.TierAcl && err == nil {
+		t.Fatal(err)
+	}
+}
+
 func TestIsFeatureSupported(t *testing.T) {
 	// HNSVersion1803 testing (single range tests)
 	if isFeatureSupported(Version{Major: 0, Minor: 0}, HNSVersion1803) {

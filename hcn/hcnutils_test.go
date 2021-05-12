@@ -343,3 +343,261 @@ func HcnCreateTestSdnRoute(endpoint *HostComputeEndpoint) (*HostComputeRoute, er
 
 	return route.Create()
 }
+
+func HcnCreateTestL2BridgeNetwork() (*HostComputeNetwork, error) {
+	cleanup(BridgeTestNetworkName)
+	subnet := GetDefaultSubnet()
+	network := &HostComputeNetwork{
+		Type: "L2Bridge",
+		Name: BridgeTestNetworkName,
+		MacPool: MacPool{
+			Ranges: []MacRange{
+				{
+					StartMacAddress: "00-15-5D-52-C0-00",
+					EndMacAddress:   "00-15-5D-52-CF-FF",
+				},
+			},
+		},
+		Ipams: []Ipam{
+			{
+				Type: "Static",
+				Subnets: []Subnet{
+					*subnet,
+				},
+			},
+		},
+		Flags: EnableNonPersistent,
+		SchemaVersion: SchemaVersion{
+			Major: 2,
+			Minor: 0,
+		},
+	}
+
+	return network.Create()
+
+}
+
+func HcnCreateTierAcls() (*PolicyEndpointRequest, error) {
+
+	policy := make([]EndpointPolicy, 6)
+
+	tiers := make([]TierAclPolicySetting, 6)
+
+	//inbound rules
+	tiers[0] = TierAclPolicySetting{
+		Name: "TierIn1",
+		Direction: DirectionTypeIn,
+		Order: 1001,
+	}
+
+	tiers[0].TierAclRules = make([]TierAclRule, 2)
+
+	tiers[0].TierAclRules[0] = TierAclRule{
+		Id: "TierIn1Rule1",
+		Protocols: "6",
+		TierAclRuleAction: ActionTypePass,
+		LocalAddresses: "192.168.100.0/24,10.0.0.21",
+		RemoteAddresses: "192.168.100.0/24,10.0.0.22",
+		LocalPorts: "80",
+		RemotePorts: "80",
+		Priority: 2001,
+	}	
+
+	tiers[0].TierAclRules[1] = TierAclRule{
+		Id: "TierIn1Rule2",
+		TierAclRuleAction: ActionTypeBlock,
+		Priority: 2100,
+	}
+
+	policy[0].Type = TierAcl
+	rawJSON, err := json.Marshal(tiers[0])
+	if err != nil {
+		return nil, err
+	}
+
+	policy[0].Settings = rawJSON
+
+	tiers[1] = TierAclPolicySetting{
+		Name: "TierIn2",
+		Direction: DirectionTypeIn,
+		Order: 1002,
+	}
+
+	tiers[1].TierAclRules = make([]TierAclRule, 3)
+
+	tiers[1].TierAclRules[0] = TierAclRule{
+		Id: "TierIn2Rule1",
+		TierAclRuleAction: ActionTypePass,
+		LocalAddresses: "192.168.100.0/24",
+		RemoteAddresses: "192.168.100.0/24",
+		Priority: 3000,
+	}	
+
+	tiers[1].TierAclRules[1] = TierAclRule{
+		Id: "TierIn2Rule2",
+		TierAclRuleAction: ActionTypePass,
+		LocalAddresses: "10.0.0.21",
+		RemoteAddresses: "10.0.0.21",
+		Priority: 3010,
+	}	
+
+	tiers[1].TierAclRules[2] = TierAclRule{
+		Id: "TierIn2Rule3",
+		TierAclRuleAction: ActionTypeBlock,
+		Priority: 3100,
+	}
+
+	policy[1].Type = TierAcl
+	rawJSON, err = json.Marshal(tiers[1])
+	if err != nil {
+		return nil, err
+	}
+
+	policy[1].Settings = rawJSON
+
+
+	tiers[2] = TierAclPolicySetting{
+		Name: "TierIn3",
+		Direction: DirectionTypeIn,
+		Order: 1013,
+	}
+
+	tiers[2].TierAclRules = make([]TierAclRule, 2)
+
+	tiers[2].TierAclRules[0] = TierAclRule{
+		Id: "TierIn3Rule1",
+		Protocols: "17",
+		TierAclRuleAction: ActionTypeAllow,
+		LocalPorts: "8080",
+		RemotePorts: "8080",
+		Priority: 3000,
+	}	
+
+	tiers[2].TierAclRules[1] = TierAclRule{
+		Id: "TierIn3Rule2",
+		TierAclRuleAction: ActionTypeBlock,
+		Priority: 3010,
+	}
+
+	policy[2].Type = TierAcl
+	rawJSON, err = json.Marshal(tiers[2])
+	if err != nil {
+		return nil, err
+	}
+
+	policy[2].Settings = rawJSON
+
+	//outbound rules
+	tiers[3] = TierAclPolicySetting{
+		Name: "TierOut1",
+		Direction: DirectionTypeOut,
+		Order: 1001,
+	}
+
+	tiers[3].TierAclRules = make([]TierAclRule, 2)
+
+	tiers[3].TierAclRules[0] = TierAclRule{
+		Id: "TierOut1Rule1",
+		Protocols: "6",
+		TierAclRuleAction: ActionTypePass,
+		LocalAddresses: "192.168.100.0/24,10.0.0.21",
+		RemoteAddresses: "192.168.100.0/24,10.0.0.22",
+		LocalPorts: "81",
+		RemotePorts: "81",
+		Priority: 2000,
+	}	
+
+	tiers[3].TierAclRules[1] = TierAclRule{
+		Id: "TierOut1Rule2",
+		TierAclRuleAction: ActionTypeBlock,
+		Priority: 2100,
+	}
+
+	policy[3].Type = TierAcl
+	rawJSON, err = json.Marshal(tiers[3])
+	if err != nil {
+		return nil, err
+	}
+
+	policy[3].Settings = rawJSON
+
+
+	tiers[4] = TierAclPolicySetting{
+		Name: "TierOut2",
+		Direction: DirectionTypeOut,
+		Order: 1002,
+	}
+
+	tiers[4].TierAclRules = make([]TierAclRule, 3)
+
+	tiers[4].TierAclRules[0] = TierAclRule{
+		Id: "TierOut2Rule1",
+		TierAclRuleAction: ActionTypePass,
+		LocalAddresses: "192.168.100.0/24",
+		RemoteAddresses: "192.168.100.0/24",
+		Priority: 3000,
+	}	
+
+	tiers[4].TierAclRules[1] = TierAclRule{
+		Id: "TierOut2Rule2",
+		Protocols: "6",
+		TierAclRuleAction: ActionTypePass,
+		LocalAddresses: "10.0.0.21",
+		RemoteAddresses: "10.0.0.21",
+		LocalPorts: "8082",
+		RemotePorts: "8082",
+		Priority: 3010,
+	}	
+
+	tiers[4].TierAclRules[2] = TierAclRule{
+		Id: "TierOut2Rule3",
+		TierAclRuleAction: ActionTypeBlock,
+		Priority: 3100,
+	}
+
+	policy[4].Type = TierAcl
+	rawJSON, err = json.Marshal(tiers[4])
+	if err != nil {
+		return nil, err
+	}
+
+	policy[4].Settings = rawJSON
+
+
+	tiers[5] = TierAclPolicySetting{
+		Name: "TierOut3",
+		Direction: DirectionTypeOut,
+		Order: 1013,
+	}
+
+	tiers[5].TierAclRules = make([]TierAclRule, 2)
+
+	tiers[5].TierAclRules[0] = TierAclRule{
+		Id: "TierOut3Rule1",
+		Protocols: "6",
+		TierAclRuleAction: ActionTypeAllow,
+		LocalPorts: "90",
+		RemotePorts: "90",
+		Priority: 3000,
+	}	
+
+	tiers[5].TierAclRules[1] = TierAclRule{
+		Id: "TierOut3Rule2",
+		TierAclRuleAction: ActionTypeBlock,
+		Priority: 3010,
+	}
+
+	policy[5].Type = TierAcl
+	rawJSON, err = json.Marshal(tiers[5])
+	if err != nil {
+		return nil, err
+	}
+
+	policy[5].Settings = rawJSON
+
+	endpointRequest := PolicyEndpointRequest{
+		Policies: policy,
+	}
+
+	return &endpointRequest, nil
+}
