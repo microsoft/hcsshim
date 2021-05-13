@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/cmd/ncproxy/ncproxygrpc"
@@ -214,8 +215,8 @@ func (s *grpcService) CreateNetwork(ctx context.Context, req *ncproxygrpc.Create
 		Settings: data,
 	}
 
-	subnets := make([]hcn.Subnet, len(req.SubnetIpadressPrefix))
-	for i, addrPrefix := range req.SubnetIpadressPrefix {
+	subnets := make([]hcn.Subnet, len(req.SubnetIpaddressPrefix))
+	for i, addrPrefix := range req.SubnetIpaddressPrefix {
 		subnet := hcn.Subnet{
 			IpAddressPrefix: addrPrefix,
 			Routes: []hcn.Route{
@@ -342,6 +343,14 @@ func (s *grpcService) CreateEndpoint(ctx context.Context, req *ncproxygrpc.Creat
 		},
 	}
 
+	if req.DnsSetting != nil {
+		endpoint.Dns = hcn.Dns{
+			ServerList: req.DnsSetting.ServerIpAddrs,
+			Domain:     req.DnsSetting.Domain,
+			Search:     req.DnsSetting.Search,
+		}
+	}
+
 	endpoint, err = endpoint.Create()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create HNS endpoint")
@@ -456,6 +465,11 @@ func (s *grpcService) GetEndpoint(ctx context.Context, req *ncproxygrpc.GetEndpo
 		Name:      ep.Name,
 		Network:   ep.HostComputeNetwork,
 		Namespace: ep.HostComputeNamespace,
+		DnsSetting: &ncproxygrpc.DnsSetting{
+			ServerIpAddrs: ep.Dns.ServerList,
+			Domain:        ep.Dns.Domain,
+			Search:        ep.Dns.Search,
+		},
 	}, nil
 }
 
@@ -476,6 +490,11 @@ func (s *grpcService) GetEndpoints(ctx context.Context, req *ncproxygrpc.GetEndp
 			Name:      endpoint.Name,
 			Network:   endpoint.HostComputeNetwork,
 			Namespace: endpoint.HostComputeNamespace,
+			DnsSetting: &ncproxygrpc.DnsSetting{
+				ServerIpAddrs: endpoint.Dns.ServerList,
+				Domain:        endpoint.Dns.Domain,
+				Search:        endpoint.Dns.Search,
+			},
 		}
 		endpoints[i] = resp
 	}
@@ -595,6 +614,8 @@ func (s *ttrpcService) ConfigureNetworking(ctx context.Context, req *ncproxyttrp
 		RequestType: nodenetsvc.RequestType(req.RequestType),
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
 	if _, err := nodeNetSvcClient.client.ConfigureNetworking(ctx, netsvcReq); err != nil {
 		return nil, err
 	}

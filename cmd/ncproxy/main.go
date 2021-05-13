@@ -64,21 +64,22 @@ func main() {
 
 	// If there's a node network service in the config, assign this to our global client.
 	if conf.NodeNetSvcAddr != "" {
-		log.G(ctx).Debugf("connecting to NodeNetworkService at address %s", conf.NodeNetSvcAddr)
+		log.G(ctx).Infof("connecting to NodeNetworkService at address %s", conf.NodeNetSvcAddr)
 
+		dialCtx := ctx
 		opts := []grpc.DialOption{grpc.WithInsecure(), grpc.WithStatsHandler(&ocgrpc.ClientHandler{})}
 		if conf.Timeout > 0 {
 			var cancel context.CancelFunc
-			ctx, cancel = context.WithTimeout(ctx, time.Duration(conf.Timeout)*time.Second)
+			dialCtx, cancel = context.WithTimeout(ctx, time.Duration(conf.Timeout)*time.Second)
 			defer cancel()
 			opts = append(opts, grpc.WithBlock())
 		}
-		client, err := grpc.DialContext(ctx, conf.NodeNetSvcAddr, opts...)
+		client, err := grpc.DialContext(dialCtx, conf.NodeNetSvcAddr, opts...)
 		if err != nil {
 			log.G(ctx).Fatalf("failed to connect to NodeNetworkService at address %s", conf.NodeNetSvcAddr)
 		}
 
-		log.G(ctx).Debugf("successfully connected to NodeNetworkService at address %s", conf.NodeNetSvcAddr)
+		log.G(ctx).Infof("successfully connected to NodeNetworkService at address %s", conf.NodeNetSvcAddr)
 
 		netSvcClient := nodenetsvc.NewNodeNetworkServiceClient(client)
 		nodeNetSvcClient = &nodeNetSvcConn{
