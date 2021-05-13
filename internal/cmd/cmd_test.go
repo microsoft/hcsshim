@@ -106,6 +106,14 @@ func (p *localProcess) CloseStdin(ctx context.Context) error {
 	return p.stdin.Close()
 }
 
+func (p *localProcess) CloseStdout(ctx context.Context) error {
+	return p.stdout.Close()
+}
+
+func (p *localProcess) CloseStderr(ctx context.Context) error {
+	return p.stderr.Close()
+}
+
 func (p *localProcess) ExitCode() (int, error) {
 	select {
 	case <-p.ch:

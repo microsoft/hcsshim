@@ -101,6 +101,7 @@ func Command(host cow.ProcessHost, name string, arg ...string) *Cmd {
 		Spec: &specs.Process{
 			Args: append([]string{name}, arg...),
 		},
+		Log:       logrus.NewEntry(logrus.StandardLogger()),
 		ExitState: &ExitState{},
 	}
 	if host.OS() == "windows" {
@@ -120,7 +121,8 @@ func CommandContext(ctx context.Context, host cow.ProcessHost, name string, arg 
 	return cmd
 }
 
-func copyAndLog(w io.Writer, r io.Reader, log *logrus.Entry, name string) (int64, error) {
+// relayIO is a glorified io.Copy that also logs when the copy has completed.
+func relayIO(w io.Writer, r io.Reader, log *logrus.Entry, name string) (int64, error) {
 	n, err := io.Copy(w, r)
 	if log != nil {
 		lvl := logrus.DebugLevel
@@ -132,7 +134,7 @@ func copyAndLog(w io.Writer, r io.Reader, log *logrus.Entry, name string) (int64
 			lvl = logrus.ErrorLevel
 			log = log.WithError(err)
 		}
-		log.Log(lvl, "command copy complete")
+		log.Log(lvl, "Cmd IO relay complete")
 	}
 	return n, err
 }
@@ -207,7 +209,7 @@ func (c *Cmd) Start() error {
 		// us or the caller to reliably unblock the c.Stdin read when the
 		// process exits.
 		go func() {
-			_, err := copyAndLog(stdin, c.Stdin, c.Log, "stdin")
+			_, err := relayIO(stdin, c.Stdin, c.Log, "stdin")
 			// Report the stdin copy error. If the process has exited, then the
 			// caller may never see it, but if the error was due to a failure in
 			// stdin read, then it is likely the process is still running.
@@ -215,23 +217,28 @@ func (c *Cmd) Start() error {
 				c.stdinErr.Store(err)
 			}
 			// Notify the process that there is no more input.
-			err = p.CloseStdin(context.TODO())
-			if err != nil && c.Log != nil {
-				c.Log.WithError(err).Warn("failed to close pod stdin")
+			if err := p.CloseStdin(context.TODO()); err != nil && c.Log != nil {
+				c.Log.WithError(err).Warn("failed to close Cmd stdin")
 			}
 		}()
 	}
 
 	if c.Stdout != nil {
 		c.iogrp.Go(func() error {
-			_, err := copyAndLog(c.Stdout, stdout, c.Log, "stdout")
+			_, err := relayIO(c.Stdout, stdout, c.Log, "stdout")
+			if err := p.CloseStdout(context.TODO()); err != nil {
+				c.Log.WithError(err).Warn("failed to close Cmd stdout")
+			}
 			return err
 		})
 	}
 
 	if c.Stderr != nil {
 		c.iogrp.Go(func() error {
-			_, err := copyAndLog(c.Stderr, stderr, c.Log, "stderr")
+			_, err := relayIO(c.Stderr, stderr, c.Log, "stderr")
+			if err := p.CloseStderr(context.TODO()); err != nil {
+				c.Log.WithError(err).Warn("failed to close Cmd stderr")
+			}
 			return err
 		})
 	}

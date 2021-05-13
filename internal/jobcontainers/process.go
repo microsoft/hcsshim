@@ -95,6 +95,20 @@ func (p *JobProcess) CloseStdin(ctx context.Context) error {
 	return p.stdin.Close()
 }
 
+// CloseStdout closes the stdout pipe of the process.
+func (p *JobProcess) CloseStdout(ctx context.Context) error {
+	p.stdioLock.Lock()
+	defer p.stdioLock.Unlock()
+	return p.stdout.Close()
+}
+
+// CloseStderr closes the stderr pipe of the process.
+func (p *JobProcess) CloseStderr(ctx context.Context) error {
+	p.stdioLock.Lock()
+	defer p.stdioLock.Unlock()
+	return p.stderr.Close()
+}
+
 // Wait waits for the process to exit. If the process has already exited returns
 // the previous error (if any).
 func (p *JobProcess) Wait() error {
