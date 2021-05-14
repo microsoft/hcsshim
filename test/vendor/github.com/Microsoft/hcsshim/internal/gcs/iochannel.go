@@ -1,7 +1,6 @@
 package gcs
 
 import (
-	"io"
 	"net"
 )
 
@@ -56,13 +55,7 @@ func (c *ioChannel) Read(b []byte) (int, error) {
 	if c.c == nil {
 		return 0, c.err
 	}
-	n, err := c.c.Read(b)
-	if err == io.EOF {
-		// Close the underlying connection so that the VM
-		// knows that all data has been read.
-		c.c.Close()
-	}
-	return n, err
+	return c.c.Read(b)
 }
 
 func (c *ioChannel) Write(b []byte) (int, error) {

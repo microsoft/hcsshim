@@ -128,16 +128,13 @@ func (p *Process) Close() error {
 		trace.StringAttribute("cid", p.cid),
 		trace.Int64Attribute("pid", int64(p.id)))
 
-	err := p.stdin.Close()
-	if err != nil {
+	if err := p.stdin.Close(); err != nil {
 		log.G(ctx).WithError(err).Warn("close stdin failed")
 	}
-	err = p.stdout.Close()
-	if err != nil {
+	if err := p.stdout.Close(); err != nil {
 		log.G(ctx).WithError(err).Warn("close stdout failed")
 	}
-	err = p.stderr.Close()
-	if err != nil {
+	if err := p.stderr.Close(); err != nil {
 		log.G(ctx).WithError(err).Warn("close stderr failed")
 	}
 	return nil
@@ -156,6 +153,28 @@ func (p *Process) CloseStdin(ctx context.Context) (err error) {
 		p.stdinCloseWriteErr = p.stdin.CloseWrite()
 	})
 	return p.stdinCloseWriteErr
+}
+
+func (p *Process) CloseStdout(ctx context.Context) (err error) {
+	ctx, span := trace.StartSpan(ctx, "gcs::Process::CloseStdout") //nolint:ineffassign,staticcheck
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("cid", p.cid),
+		trace.Int64Attribute("pid", int64(p.id)))
+
+	return p.stdout.Close()
+}
+
+func (p *Process) CloseStderr(ctx context.Context) (err error) {
+	ctx, span := trace.StartSpan(ctx, "gcs::Process::CloseStderr") //nolint:ineffassign,staticcheck
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("cid", p.cid),
+		trace.Int64Attribute("pid", int64(p.id)))
+
+	return p.stderr.Close()
 }
 
 // ExitCode returns the process's exit code, or an error if the process is still
