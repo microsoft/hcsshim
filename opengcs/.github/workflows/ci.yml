@@ -1,0 +1,43 @@
+name: CI
+on:
+  - push 
+  - pull_request
+
+env:
+  GOFLAGS: -mod=vendor
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install go
+        uses: actions/setup-go@v2
+        with:
+          go-version: '^1.15.0'
+
+      - name: Install ginkgo
+        run: |
+          go get github.com/onsi/ginkgo/ginkgo
+
+      - name: Turn off goproxy
+        run: |
+          GOPROXY=off
+
+      - name: Pull busybox image
+        run: docker pull busybox
+
+      - name: Run Busybox Container
+        run: docker run --name base_image_container busybox
+
+      - name: Export container to tar file 
+        run: |
+          docker export base_image_container | gzip > base.tar.gz
+
+      - name: Build And Test
+        run: |
+          BASE=./base.tar.gz
+          make all test
