@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Microsoft/hcsshim/osversion"
+	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
@@ -184,7 +186,7 @@ func verifyTemplateContainerState(ctx context.Context, t *testing.T, client runt
 		if templateContainerState == runtime.ContainerState_CONTAINER_EXITED {
 			return
 		}
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(1 * time.Second)
 	}
 	t.Fatalf("template container %s expected state EXITED actual: %s", templateContainerID, runtime.ContainerState_name[int32(templateContainerState)])
 }
@@ -236,6 +238,8 @@ func cleanupContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx con
 // cloned container from that template.
 func Test_CloneContainer_WCOW(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)
+	testutilities.RequiresBuild(t, osversion.V20H2)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	client := newTestRuntimeClient(t)
@@ -259,6 +263,8 @@ func Test_CloneContainer_WCOW(t *testing.T) {
 // A test for creating multiple clones(3 clones) from one template container.
 func Test_MultiplClonedContainers_WCOW(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)
+	testutilities.RequiresBuild(t, osversion.V20H2)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	client := newTestRuntimeClient(t)
@@ -294,6 +300,8 @@ func Test_MultiplClonedContainers_WCOW(t *testing.T) {
 // container.
 func Test_NormalContainerInClonedPod_WCOW(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)
+	testutilities.RequiresBuild(t, osversion.V20H2)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	client := newTestRuntimeClient(t)
@@ -332,6 +340,8 @@ func Test_NormalContainerInClonedPod_WCOW(t *testing.T) {
 // of those pods.
 func Test_CloneContainersWithClonedPodPool_WCOW(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)
+	testutilities.RequiresBuild(t, osversion.V20H2)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	client := newTestRuntimeClient(t)
@@ -378,6 +388,8 @@ func Test_CloneContainersWithClonedPodPool_WCOW(t *testing.T) {
 
 func Test_ClonedContainerRunningAfterDeletingTemplate(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)
+	testutilities.RequiresBuild(t, osversion.V20H2)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	client := newTestRuntimeClient(t)
@@ -410,6 +422,8 @@ func Test_ClonedContainerRunningAfterDeletingTemplate(t *testing.T) {
 // can be made from each of them simultaneously.
 func Test_MultipleTemplateAndClones_WCOW(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)
+	testutilities.RequiresBuild(t, osversion.V20H2)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	client := newTestRuntimeClient(t)
@@ -451,6 +465,8 @@ func Test_MultipleTemplateAndClones_WCOW(t *testing.T) {
 // and verifies that the request correctly fails with an error.
 func Test_VerifyCloneAndTemplateConfig(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)
+	testutilities.RequiresBuild(t, osversion.V20H2)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	client := newTestRuntimeClient(t)
