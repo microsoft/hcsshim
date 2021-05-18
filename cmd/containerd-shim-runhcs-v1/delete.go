@@ -2,9 +2,7 @@ package main
 
 import (
 	gcontext "context"
-	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
@@ -13,10 +11,33 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"go.opencensus.io/trace"
 )
+
+// LimitedRead reads at max `readLimitBytes` bytes from the file at path `filePath`. If the file has
+// more than `readLimitBytes` bytes of data then first `readLimitBytes` will be returned.
+func limitedRead(filePath string, readLimitBytes int64) ([]byte, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "limited read failed to open file: %s", filePath)
+	}
+	defer f.Close()
+	if fi, err := f.Stat(); err == nil {
+		if fi.Size() < readLimitBytes {
+			readLimitBytes = fi.Size()
+		}
+		buf := make([]byte, readLimitBytes)
+		_, err := f.Read(buf)
+		if err != nil {
+			return []byte{}, errors.Wrapf(err, "limited read failed during file read: %s", filePath)
+		}
+		return buf, nil
+	}
+	return []byte{}, errors.Wrapf(err, "limited read failed during file stat: %s", filePath)
+}
 
 var deleteCommand = cli.Command{
 	Name: "delete",
@@ -44,9 +65,16 @@ The delete command will be executed in the container's bundle as its cwd.
 		// log those messages (if any) on stderr so that it shows up in containerd's log.
 		// This should be done as the first thing so that we don't miss any panic logs even if
 		// something goes wrong during delete op.
-		logs, err := ioutil.ReadFile(filepath.Join(bundleFlag, "panic.log"))
-		if err == nil && len(logs) > 0 {
-			logrus.WithField("log", string(logs)).Error("found shim panic logs during delete")
+		// The file can be very large so read only first 1MB of data.
+		readLimit := int64(1024 * 1024) // 1MB
+		logBytes, err := limitedRead(filepath.Join(bundleFlag, "panic.log"), readLimit)
+		if err == nil && len(logBytes) > 0 {
+			if int64(len(logBytes)) == readLimit {
+				logrus.Warnf("shim panic log file %s is larger than 1MB, logging only first 1MB", filepath.Join(bundleFlag, "panic.log"))
+			}
+			logrus.WithField("log", string(logBytes)).Warn("found shim panic logs during delete")
+		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+			logrus.WithError(err).Warn("failed to open shim panic log")
 		}
 
 		// Attempt to find the hcssystem for this bundle and terminate it.
