@@ -46,6 +46,9 @@ type OptionsWCOW struct {
 	// which holds all the information about the template from
 	// which this clone should be created.
 	TemplateConfig *UVMTemplateConfig
+
+	// NoDirectMap specifies that no direct mapping should be used for any VSMBs added to the UVM
+	NoDirectMap bool
 }
 
 // NewDefaultOptionsWCOW creates the default options for a bootable version of
@@ -225,6 +228,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		vpciDevices:             make(map[string]*VPCIDevice),
 		physicallyBacked:        !opts.AllowOvercommit,
 		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
+		vsmbNoDirectMap:         opts.NoDirectMap,
 		createOpts:              *opts,
 	}
 

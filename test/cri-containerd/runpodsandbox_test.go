@@ -197,6 +197,18 @@ func Test_RunPodSandbox_FullyPhysicallyBacked_WCOW_Hypervisor(t *testing.T) {
 	runPodSandboxTest(t, request)
 }
 
+func Test_RunPodSandbox_VSMBNoDirectMap_WCOW_Hypervisor(t *testing.T) {
+	requireFeatures(t, featureWCOWHypervisor)
+
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
+
+	request := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
+	request.Config.Annotations = map[string]string{
+		"io.microsoft.virtualmachine.wcow.virtualSMB.nodirectmap": "true",
+	}
+	runPodSandboxTest(t, request)
+}
+
 func Test_RunPodSandbox_PhysicalMemory_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
