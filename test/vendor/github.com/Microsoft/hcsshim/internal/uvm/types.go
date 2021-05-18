@@ -74,9 +74,10 @@ type UtilityVM struct {
 	// unrestricted mappings of directories. `vsmbFileShares` tracks shares that
 	// are restricted to some subset of files in the directory. This is used as
 	// part of a temporary fix to allow WCOW single-file mapping to function.
-	vsmbDirShares  map[string]*VSMBShare
-	vsmbFileShares map[string]*VSMBShare
-	vsmbCounter    uint64 // Counter to generate a unique share name for each VSMB share.
+	vsmbDirShares   map[string]*VSMBShare
+	vsmbFileShares  map[string]*VSMBShare
+	vsmbCounter     uint64 // Counter to generate a unique share name for each VSMB share.
+	vsmbNoDirectMap bool   // indicates if VSMB devices should be added with the `NoDirectMap` option
 
 	// VPMEM devices that are mapped into a Linux UVM. These are used for read-only layers, or for
 	// booting from VHD.

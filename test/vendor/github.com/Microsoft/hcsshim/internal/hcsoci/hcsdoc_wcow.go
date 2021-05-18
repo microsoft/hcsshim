@@ -37,9 +37,7 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 	// TODO: Mapped pipes to add in v2 schema.
 	var config mountsConfig
 	for _, mount := range coi.Spec.Mounts {
-		if mount.Type != "" {
-			return nil, fmt.Errorf("invalid container spec - Mount.Type '%s' must not be set", mount.Type)
-		}
+
 		if uvm.IsPipe(mount.Source) {
 			src, dst := uvm.GetContainerPipeMapping(coi.HostingSystem, mount)
 			config.mpsv1 = append(config.mpsv1, schema1.MappedPipe{HostPath: src, ContainerPipeName: dst})
@@ -63,18 +61,17 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 					return nil, fmt.Errorf("failed to eval symlinks for mount source %q: %s", mount.Source, err)
 				}
 				mdv2.HostPath = src
+			} else if mount.Type == "virtual-disk" || mount.Type == "physical-disk" {
+				uvmPath, err := coi.HostingSystem.GetScsiUvmPath(ctx, mount.Source)
+				if err != nil {
+					return nil, err
+				}
+				mdv2.HostPath = uvmPath
 			} else {
+				// vsmb mount
 				uvmPath, err := coi.HostingSystem.GetVSMBUvmPath(ctx, mount.Source, readOnly)
 				if err != nil {
-					if err == uvm.ErrNotAttached {
-						// It could also be a scsi mount.
-						uvmPath, err = coi.HostingSystem.GetScsiUvmPath(ctx, mount.Source)
-						if err != nil {
-							return nil, err
-						}
-					} else {
-						return nil, err
-					}
+					return nil, err
 				}
 				mdv2.HostPath = uvmPath
 			}
