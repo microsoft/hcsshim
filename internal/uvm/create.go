@@ -373,6 +373,11 @@ func (uvm *UtilityVM) DevicesPhysicallyBacked() bool {
 	return uvm.devicesPhysicallyBacked
 }
 
+// VSMBNoDirectMap returns if VSMB devices should be mounted with `NoDirectMap` set to true
+func (uvm *UtilityVM) VSMBNoDirectMap() bool {
+	return uvm.vsmbNoDirectMap
+}
+
 // Closes the external GCS connection if it is being used and also closes the
 // listener for GCS connection.
 func (uvm *UtilityVM) CloseGCSConnection() (err error) {
