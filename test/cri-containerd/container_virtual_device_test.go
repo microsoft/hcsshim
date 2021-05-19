@@ -114,28 +114,17 @@ func findTestVirtualDeviceID() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func getGPUPodRequestLCOW(t *testing.T) *runtime.RunPodSandboxRequest {
-	return &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name(),
-				Namespace: testNamespace,
-			},
-			Annotations: map[string]string{
-				"io.microsoft.virtualmachine.lcow.kerneldirectboot":                  "false",
-				"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "false",
-				"io.microsoft.virtualmachine.lcow.preferredrootfstype":               "initrd",
-				"io.microsoft.virtualmachine.devices.virtualpmem.maximumcount":       "0",
-				"io.microsoft.virtualmachine.lcow.vpcienabled":                       "true",
-				// we believe this is a sufficiently large high MMIO space amount for this test.
-				// if a given gpu device needs more, this test will fail to create the container
-				// and may hang.
-				"io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb": "64000",
-				"io.microsoft.virtualmachine.lcow.bootfilesrootpath":                 testGPUBootFiles,
-			},
-		},
-		RuntimeHandler: lcowRuntimeHandler,
-	}
+var lcowPodGPUAnnotations = map[string]string{
+	"io.microsoft.virtualmachine.lcow.kerneldirectboot":                  "false",
+	"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "false",
+	"io.microsoft.virtualmachine.lcow.preferredrootfstype":               "initrd",
+	"io.microsoft.virtualmachine.devices.virtualpmem.maximumcount":       "0",
+	"io.microsoft.virtualmachine.lcow.vpcienabled":                       "true",
+	// we believe this is a sufficiently large high MMIO space amount for this test.
+	// if a given gpu device needs more, this test will fail to create the container
+	// and may hang.
+	"io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb": "64000",
+	"io.microsoft.virtualmachine.lcow.bootfilesrootpath":                 testGPUBootFiles,
 }
 
 func getGPUContainerRequestLCOW(t *testing.T, podID string, podConfig *runtime.PodSandboxConfig, device *runtime.Device) *runtime.CreateContainerRequest {
@@ -216,7 +205,11 @@ func Test_RunContainer_VirtualDevice_GPU_LCOW(t *testing.T) {
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
-	sandboxRequest := getGPUPodRequestLCOW(t)
+	sandboxRequest := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		lcowPodGPUAnnotations,
+	)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
 	defer removePodSandbox(t, client, podctx, podID)
@@ -257,7 +250,11 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_LCOW(t *testing.T) {
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
-	sandboxRequest := getGPUPodRequestLCOW(t)
+	sandboxRequest := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		lcowPodGPUAnnotations,
+	)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
 	defer removePodSandbox(t, client, podctx, podID)
@@ -305,7 +302,11 @@ func Test_RunContainer_VirtualDevice_GPU_and_NoGPU_LCOW(t *testing.T) {
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
-	sandboxRequest := getGPUPodRequestLCOW(t)
+	sandboxRequest := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		lcowPodGPUAnnotations,
+	)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
 	defer removePodSandbox(t, client, podctx, podID)
@@ -374,7 +375,11 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_Removal_LCOW(t *testing.T) {
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
-	sandboxRequest := getGPUPodRequestLCOW(t)
+	sandboxRequest := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		lcowPodGPUAnnotations,
+	)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
 	defer removePodSandbox(t, client, podctx, podID)
@@ -420,7 +425,7 @@ func Test_RunContainer_VirtualDevice_LocationPath_WCOW_Process(t *testing.T) {
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
-	sandboxRequest := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler)
+	sandboxRequest := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler, nil)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
 	defer removePodSandbox(t, client, podctx, podID)
@@ -461,7 +466,7 @@ func Test_RunContainer_VirtualDevice_ClassGUID_WCOW_Process(t *testing.T) {
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
-	sandboxRequest := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler)
+	sandboxRequest := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler, nil)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
 	defer removePodSandbox(t, client, podctx, podID)
@@ -502,10 +507,13 @@ func Test_RunContainer_VirtualDevice_GPU_WCOW_Hypervisor(t *testing.T) {
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
-	sandboxRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
-	sandboxRequest.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
-	}
+	sandboxRequest := getRunPodSandboxRequest(
+		t,
+		wcowHypervisorRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
+		},
+	)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
 	defer removePodSandbox(t, client, podctx, podID)
@@ -547,10 +555,13 @@ func Test_RunContainer_VirtualDevice_GPU_and_NoGPU_WCOW_Hypervisor(t *testing.T)
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
-	sandboxRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
-	sandboxRequest.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
-	}
+	sandboxRequest := getRunPodSandboxRequest(
+		t,
+		wcowHypervisorRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
+		},
+	)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
 	defer removePodSandbox(t, client, podctx, podID)
@@ -609,10 +620,13 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_WCOW_Hypervisor(t *testing.T) 
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
-	sandboxRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
-	sandboxRequest.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
-	}
+	sandboxRequest := getRunPodSandboxRequest(
+		t,
+		wcowHypervisorRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
+		},
+	)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
 	defer removePodSandbox(t, client, podctx, podID)
@@ -661,10 +675,13 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_Removal_WCOW_Hypervisor(t *tes
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
-	sandboxRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
-	sandboxRequest.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
-	}
+	sandboxRequest := getRunPodSandboxRequest(
+		t,
+		wcowHypervisorRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
+		},
+	)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
 	defer removePodSandbox(t, client, podctx, podID)

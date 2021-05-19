@@ -35,14 +35,28 @@ func removePodSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx con
 	}
 }
 
-func getRunPodSandboxRequest(t *testing.T, runtimeHandler string) *runtime.RunPodSandboxRequest {
-	return &runtime.RunPodSandboxRequest{
+func getRunPodSandboxRequest(t *testing.T, runtimeHandler string, annotations map[string]string) *runtime.RunPodSandboxRequest {
+	req := &runtime.RunPodSandboxRequest{
 		Config: &runtime.PodSandboxConfig{
 			Metadata: &runtime.PodSandboxMetadata{
 				Name:      t.Name(),
 				Namespace: testNamespace,
 			},
+			Annotations: annotations,
 		},
 		RuntimeHandler: runtimeHandler,
 	}
+
+	if *flagVirtstack != "" {
+		if req.Config.Annotations == nil {
+			req.Config.Annotations = make(map[string]string)
+		}
+		req.Config.Annotations["io.microsoft.virtualmachine.vmsource"] = *flagVirtstack
+		req.Config.Annotations["io.microsoft.virtualmachine.vmservice.address"] = testVMServiceAddress
+		req.Config.Annotations["io.microsoft.virtualmachine.vmservice.path"] = testVMServiceBinary
+		if *flagVMServiceBinary != "" {
+			req.Config.Annotations["io.microsoft.virtualmachine.vmservice.path"] = *flagVMServiceBinary
+		}
+	}
+	return req
 }

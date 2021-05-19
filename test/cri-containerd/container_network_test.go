@@ -32,7 +32,7 @@ func Test_Container_Network_LCOW(t *testing.T) {
 	}()
 	log := filepath.Join(dir, "ping.txt")
 
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -137,7 +137,7 @@ func Test_Container_Network_Hostname(t *testing.T) {
 				pullRequiredImages(t, []string{test.sandboxImage, test.containerImage})
 			}
 
-			sandboxRequest := getRunPodSandboxRequest(t, test.runtimeHandler)
+			sandboxRequest := getRunPodSandboxRequest(t, test.runtimeHandler, nil)
 			sandboxRequest.Config.Hostname = "TestHost"
 
 			client := newTestRuntimeClient(t)
