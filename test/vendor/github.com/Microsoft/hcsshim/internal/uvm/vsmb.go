@@ -50,7 +50,7 @@ func (vsmb *VSMBShare) Release(ctx context.Context) error {
 // returns the default VSMB options for a readonly share.
 func (uvm *UtilityVM) DefaultVSMBOptions(readOnly bool) *hcsschema.VirtualSmbShareOptions {
 	opts := &hcsschema.VirtualSmbShareOptions{
-		NoDirectmap: uvm.DevicesPhysicallyBacked(),
+		NoDirectmap: uvm.DevicesPhysicallyBacked() || uvm.VSMBNoDirectMap(),
 	}
 	if readOnly {
 		opts.ShareRead = true

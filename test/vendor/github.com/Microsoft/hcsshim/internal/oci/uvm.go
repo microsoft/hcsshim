@@ -138,6 +138,7 @@ const (
 	annotationStorageQoSIopsMaximum       = "io.microsoft.virtualmachine.storageqos.iopsmaximum"
 	annotationFullyPhysicallyBacked       = "io.microsoft.virtualmachine.fullyphysicallybacked"
 	annotationDisableCompartmentNamespace = "io.microsoft.virtualmachine.disablecompartmentnamespace"
+	annotationVSMBNoDirectMap             = "io.microsoft.virtualmachine.wcow.virtualSMB.nodirectmap"
 	// A boolean annotation to control whether to use an external bridge or the
 	// HCS-GCS bridge. Default value is true which means external bridge will be used
 	// by default.
@@ -490,6 +491,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		wopts.DisableCompartmentNamespace = parseAnnotationsBool(ctx, s.Annotations, annotationDisableCompartmentNamespace, wopts.DisableCompartmentNamespace)
 		wopts.CPUGroupID = parseAnnotationsString(s.Annotations, annotationCPUGroupID, wopts.CPUGroupID)
 		wopts.NetworkConfigProxy = parseAnnotationsString(s.Annotations, annotationNetworkConfigProxy, wopts.NetworkConfigProxy)
+		wopts.NoDirectMap = parseAnnotationsBool(ctx, s.Annotations, annotationVSMBNoDirectMap, wopts.NoDirectMap)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, wopts)
 		if err := handleCloneAnnotations(ctx, s.Annotations, wopts); err != nil {
 			return nil, err
