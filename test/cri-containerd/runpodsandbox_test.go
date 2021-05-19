@@ -223,10 +223,13 @@ func Test_RunPodSandbox_VSMBNoDirectMap_WCOW_Hypervisor(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	request := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
-	request.Config.Annotations = map[string]string{
-		"io.microsoft.virtualmachine.wcow.virtualSMB.nodirectmap": "true",
-	}
+	request := getRunPodSandboxRequest(
+		t,
+		wcowHypervisorRuntimeHandler,
+		map[string]string{
+			"io.microsoft.virtualmachine.wcow.virtualSMB.nodirectmap": "true",
+		},
+	)
 	runPodSandboxTest(t, request)
 }
 
