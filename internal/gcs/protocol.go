@@ -361,8 +361,3 @@ type containerGetPropertiesResponseV2 struct {
 	responseBase
 	Properties containerPropertiesV2
 }
-
-type updateContainerRequest struct {
-	requestBase
-	Resources string
-}

@@ -46,10 +46,10 @@ const (
 
 // Processor resource controls
 const (
-	CPULimitMin  = 1
-	CPULimitMax  = 10000
-	CPUWeightMin = 1
-	CPUWeightMax = 9
+	cpuLimitMin  = 1
+	cpuLimitMax  = 10000
+	cpuWeightMin = 1
+	cpuWeightMax = 9
 )
 
 var (

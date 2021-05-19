@@ -119,14 +119,7 @@ func ConvertCPULimits(ctx context.Context, cid string, spec *specs.Spec, maxCPUC
 	if cpuNumSet > 1 {
 		return 0, 0, 0, fmt.Errorf("invalid spec - Windows Container CPU Count: '%d', Limit: '%d', and Weight: '%d' are mutually exclusive", cpuCount, cpuLimit, cpuWeight)
 	} else if cpuNumSet == 1 {
-		if cpuCount > maxCPUCount {
-			log.G(ctx).WithFields(logrus.Fields{
-				"cid":       cid,
-				"requested": cpuCount,
-				"assigned":  maxCPUCount,
-			}).Warn("Changing user requested CPUCount to current number of processors")
-			cpuCount = maxCPUCount
-		}
+		cpuCount = NormalizeProcessorCount(ctx, cid, cpuCount, maxCPUCount)
 	}
 	return cpuCount, cpuLimit, cpuWeight, nil
 }

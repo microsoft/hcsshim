@@ -32,7 +32,7 @@ func execRequest(t *testing.T, client runtime.RuntimeServiceClient, ctx context.
 // `stdinBuf` is an optional parameter to specify an io.Reader that can be used as stdin for the executed program.
 // `stdoutBuf` is an optional parameter to specify an io.Writer that can be used as stdout for the executed program.
 // `stderrBuf` is an optional parameter to specify an io.Writer that can be used as stderr for the executed program.
-func execInHost(t *testing.T, ctx context.Context, client shimdiag.ShimDiagService, args []string, stdinBuf *io.Reader, stdoutBuf, stderrBuf *io.Writer) (_ int32, err error) {
+func execInHost(ctx context.Context, client shimdiag.ShimDiagService, args []string, stdinBuf io.Reader, stdoutBuf, stderrBuf io.Writer) (_ int32, err error) {
 	var (
 		stdin  = ""
 		stdout = ""

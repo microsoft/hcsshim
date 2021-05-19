@@ -16,6 +16,7 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/task"
+	"github.com/containerd/typeurl"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
@@ -255,6 +256,23 @@ func (wpst *wcowPodSandboxTask) DumpGuestStacks(ctx context.Context) string {
 		}
 	}
 	return ""
+}
+
+func (wpst *wcowPodSandboxTask) Update(ctx context.Context, req *task.UpdateTaskRequest) error {
+	if wpst.host == nil {
+		return errTaskNotIsolated
+	}
+
+	resources, err := typeurl.UnmarshalAny(req.Resources)
+	if err != nil {
+		return errors.Wrapf(err, "failed to unmarshal resources for container %s update request", req.ID)
+	}
+
+	if err := verifyTaskUpdateResourcesType(resources); err != nil {
+		return err
+	}
+
+	return wpst.host.UpdateConstraints(ctx, resources, req.Annotations)
 }
 
 func (wpst *wcowPodSandboxTask) Share(ctx context.Context, req *shimdiag.ShareRequest) error {

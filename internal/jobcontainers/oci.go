@@ -12,23 +12,10 @@ import (
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
+const processorWeightMax = 10000
+
 // This file contains helpers for converting parts of the oci spec to useful
 // structures/limits to be applied to a job object.
-func calculateJobCPUWeight(processorWeight uint32) uint32 {
-	if processorWeight == 0 {
-		return 0
-	}
-	return 1 + uint32((8*processorWeight)/jobobject.CPUWeightMax)
-}
-
-func calculateJobCPURate(hostProcs uint32, processorCount uint32) uint32 {
-	rate := (processorCount * 10000) / hostProcs
-	if rate == 0 {
-		return 1
-	}
-	return rate
-}
-
 func getUserTokenInheritAnnotation(annotations map[string]string) bool {
 	val, ok := annotations[oci.AnnotationHostProcessInheritUser]
 	return ok && val == "true"
@@ -69,4 +56,26 @@ func specToLimits(ctx context.Context, cid string, s *specs.Spec) (*jobobject.Jo
 		MaxBandwidth:       maxBandwidth,
 		MemoryLimitInBytes: memLimitMB * 1024 * 1024,
 	}, nil
+}
+
+// calculateJobCPUWeight converts processor cpu weight to job object cpu weight.
+//
+// `processorWeight` is the processor cpu weight to convert.
+func calculateJobCPUWeight(processorWeight uint32) uint32 {
+	if processorWeight == 0 {
+		return 0
+	}
+	return 1 + uint32((8*processorWeight)/processorWeightMax)
+}
+
+// calculateJobCPURate converts processor cpu count to job object cpu rate.
+//
+// `hostProcs` is the total host's processor count.
+// `processorCount` is the processor count to convert to cpu rate.
+func calculateJobCPURate(hostProcs uint32, processorCount uint32) uint32 {
+	rate := (processorCount * 10000) / hostProcs
+	if rate == 0 {
+		return 1
+	}
+	return rate
 }

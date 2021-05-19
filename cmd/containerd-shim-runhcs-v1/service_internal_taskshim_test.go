@@ -11,6 +11,7 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/typeurl"
+	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
 func setupTaskServiceWithFakes(t *testing.T) (*service, *testShimTask, *testShimExec) {
@@ -493,15 +494,47 @@ func Test_TaskShim_closeIOInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
 	}
 }
 
-func Test_TaskShim_updateInternal_Error(t *testing.T) {
-	s := service{
-		tid:       t.Name(),
-		isSandbox: true,
+func Test_TaskShim_updateInternal_Success(t *testing.T) {
+	s, t1, _ := setupTaskServiceWithFakes(t)
+
+	var limit uint64 = 100
+	resources := &specs.WindowsResources{
+		Memory: &specs.WindowsMemoryResources{
+			Limit: &limit,
+		},
 	}
 
-	resp, err := s.updateInternal(context.TODO(), &task.UpdateTaskRequest{ID: t.Name()})
+	any, err := typeurl.MarshalAny(resources)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	verifyExpectedError(t, resp, err, errdefs.ErrNotImplemented)
+	resp, err := s.updateInternal(context.TODO(), &task.UpdateTaskRequest{ID: t1.ID(), Resources: any})
+	if err != nil {
+		t.Fatalf("should not have failed with error, got: %v", err)
+	}
+	if resp == nil {
+		t.Fatalf("should have returned an empty resp")
+	}
+}
+
+func Test_TaskShim_updateInternal_Error(t *testing.T) {
+	s, t1, _ := setupTaskServiceWithFakes(t)
+
+	// resources must be of type *WindowsResources or *LinuxResources
+	resources := &specs.Process{}
+	any, err := typeurl.MarshalAny(resources)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = s.updateInternal(context.TODO(), &task.UpdateTaskRequest{ID: t1.ID(), Resources: any})
+	if err == nil {
+		t.Fatal("expected to get an error for incorrect resource's type")
+	}
+	if err != errNotSupportedResourcesRequest {
+		t.Fatalf("expected to get errNotSupportedResourcesRequest, instead got %v", err)
+	}
 }
 
 func Test_TaskShim_waitInternal_NoTask_Error(t *testing.T) {

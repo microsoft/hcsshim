@@ -23,17 +23,23 @@ import (
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/internal/processorinfo"
+	"github.com/Microsoft/hcsshim/internal/requesttype"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 )
+
+const bytesPerMB = 1024 * 1024
 
 func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
 	log.G(ctx).WithField("tid", req.ID).Debug("newHcsStandaloneTask")
@@ -784,25 +790,7 @@ func (ht *hcsTask) Share(ctx context.Context, req *shimdiag.ShareRequest) error 
 	if ht.host == nil {
 		return errTaskNotIsolated
 	}
-	// For hyper-v isolated WCOW the task used isn't the standard hcsTask so we
-	// only have to deal with the LCOW case here.
-	st, err := os.Stat(req.HostPath)
-	if err != nil {
-		return fmt.Errorf("could not open '%s' path on host: %s", req.HostPath, err)
-	}
-	var (
-		hostPath       string = req.HostPath
-		restrictAccess bool
-		fileName       string
-		allowedNames   []string
-	)
-	if !st.IsDir() {
-		hostPath, fileName = filepath.Split(hostPath)
-		allowedNames = append(allowedNames, fileName)
-		restrictAccess = true
-	}
-	_, err = ht.host.AddPlan9(ctx, hostPath, req.UvmPath, req.ReadOnly, restrictAccess, allowedNames)
-	return err
+	return ht.host.Share(ctx, req.HostPath, req.UvmPath, req.ReadOnly)
 }
 
 func hcsPropertiesToWindowsStats(props *hcsschema.Properties) *stats.Statistics_Windows {
@@ -858,4 +846,111 @@ func (ht *hcsTask) Stats(ctx context.Context) (*stats.Statistics, error) {
 		s.VM = vmStats
 	}
 	return s, nil
+}
+
+func (ht *hcsTask) Update(ctx context.Context, req *task.UpdateTaskRequest) error {
+	resources, err := typeurl.UnmarshalAny(req.Resources)
+	if err != nil {
+		return errors.Wrapf(err, "failed to unmarshal resources for container %s update request", req.ID)
+	}
+
+	if err := verifyTaskUpdateResourcesType(resources); err != nil {
+		return err
+	}
+
+	if ht.ownsHost && ht.host != nil {
+		return ht.host.UpdateConstraints(ctx, resources, req.Annotations)
+	}
+
+	return ht.updateTaskContainerResources(ctx, resources, req.Annotations)
+}
+
+func (ht *hcsTask) updateTaskContainerResources(ctx context.Context, data interface{}, annotations map[string]string) error {
+	if ht.isWCOW {
+		return ht.updateWCOWResources(ctx, data, annotations)
+	}
+
+	return ht.updateLCOWResources(ctx, data, annotations)
+}
+
+func (ht *hcsTask) updateWCOWContainerCPU(ctx context.Context, cpu *specs.WindowsCPUResources) error {
+	// if host is 20h2+ then we can make a request directly to hcs
+	if osversion.Get().Build >= osversion.V20H2 {
+		req := &hcsschema.Processor{}
+		if cpu.Count != nil {
+			procCount := int32(*cpu.Count)
+			hostProcs := processorinfo.ProcessorCount()
+			if ht.host != nil {
+				hostProcs = ht.host.ProcessorCount()
+			}
+			req.Count = hcsoci.NormalizeProcessorCount(ctx, ht.id, procCount, hostProcs)
+		}
+		if cpu.Maximum != nil {
+			req.Maximum = int32(*cpu.Maximum)
+		}
+		if cpu.Shares != nil {
+			req.Weight = int32(*cpu.Shares)
+		}
+		return ht.requestUpdateContainer(ctx, resourcepaths.SiloProcessorResourcePath, req)
+	}
+
+	return errdefs.ErrNotImplemented
+}
+
+func isValidWindowsCPUResources(c *specs.WindowsCPUResources) bool {
+	return (c.Count != nil && (c.Shares == nil && c.Maximum == nil)) ||
+		(c.Shares != nil && (c.Count == nil && c.Maximum == nil)) ||
+		(c.Maximum != nil && (c.Count == nil && c.Shares == nil))
+}
+
+func (ht *hcsTask) updateWCOWResources(ctx context.Context, data interface{}, annotations map[string]string) error {
+	resources, ok := data.(*specs.WindowsResources)
+	if !ok {
+		return errors.New("must have resources be type *WindowsResources when updating a wcow container")
+	}
+	if resources.Memory != nil && resources.Memory.Limit != nil {
+		newMemorySizeInMB := *resources.Memory.Limit / bytesPerMB
+		memoryLimit := hcsoci.NormalizeMemorySize(ctx, ht.id, newMemorySizeInMB)
+		if err := ht.requestUpdateContainer(ctx, resourcepaths.SiloMemoryResourcePath, memoryLimit); err != nil {
+			return err
+		}
+	}
+	if resources.CPU != nil {
+		if !isValidWindowsCPUResources(resources.CPU) {
+			return fmt.Errorf("invalid cpu resources request for container %s: %v", ht.id, resources.CPU)
+		}
+		if err := ht.updateWCOWContainerCPU(ctx, resources.CPU); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (ht *hcsTask) updateLCOWResources(ctx context.Context, data interface{}, annotations map[string]string) error {
+	resources, ok := data.(*specs.LinuxResources)
+	if !ok || resources == nil {
+		return errors.New("must have resources be non-nil and type *LinuxResources when updating a lcow container")
+	}
+	settings := guestrequest.LCOWContainerConstraints{
+		Linux: *resources,
+	}
+	return ht.requestUpdateContainer(ctx, "", settings)
+}
+
+func (ht *hcsTask) requestUpdateContainer(ctx context.Context, resourcePath string, settings interface{}) error {
+	var modification interface{}
+	if ht.isWCOW {
+		modification = &hcsschema.ModifySettingRequest{
+			ResourcePath: resourcePath,
+			RequestType:  requesttype.Update,
+			Settings:     settings,
+		}
+	} else {
+		modification = guestrequest.GuestRequest{
+			ResourceType: guestrequest.ResourceTypeContainerConstraints,
+			RequestType:  requesttype.Update,
+			Settings:     settings,
+		}
+	}
+	return ht.c.Modify(ctx, modification)
 }
