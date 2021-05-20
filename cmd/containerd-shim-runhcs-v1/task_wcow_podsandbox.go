@@ -284,6 +284,9 @@ func (wpst *wcowPodSandboxTask) Share(ctx context.Context, req *shimdiag.ShareRe
 
 func (wpst *wcowPodSandboxTask) Stats(ctx context.Context) (*stats.Statistics, error) {
 	stats := &stats.Statistics{}
+	if wpst.host == nil {
+		return stats, nil
+	}
 	vmStats, err := wpst.host.Stats(ctx)
 	if err != nil && !isStatsNotFound(err) {
 		return nil, err
