@@ -332,7 +332,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.EnableScratchEncryption = parseAnnotationsBool(ctx, s.Annotations, AnnotationEncryptedScratchDisk, lopts.EnableScratchEncryption)
 		lopts.SecurityPolicy = parseAnnotationsString(s.Annotations, AnnotationSecurityPolicy, lopts.SecurityPolicy)
 		lopts.KernelBootOptions = parseAnnotationsString(s.Annotations, AnnotationKernelBootOptions, lopts.KernelBootOptions)
-
+		lopts.ProcessDumpLocation = parseAnnotationsString(s.Annotations, AnnotationContainerProcessDumpLocation, lopts.ProcessDumpLocation)
 		handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
 		handleAnnotationKernelDirectBoot(ctx, s.Annotations, lopts)
 
@@ -357,6 +357,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		wopts.CPUGroupID = parseAnnotationsString(s.Annotations, AnnotationCPUGroupID, wopts.CPUGroupID)
 		wopts.NetworkConfigProxy = parseAnnotationsString(s.Annotations, AnnotationNetworkConfigProxy, wopts.NetworkConfigProxy)
 		wopts.NoDirectMap = parseAnnotationsBool(ctx, s.Annotations, AnnotationVSMBNoDirectMap, wopts.NoDirectMap)
+		wopts.ProcessDumpLocation = parseAnnotationsString(s.Annotations, AnnotationContainerProcessDumpLocation, wopts.ProcessDumpLocation)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, wopts)
 		if err := handleCloneAnnotations(ctx, s.Annotations, wopts); err != nil {
 			return nil, err

@@ -221,4 +221,17 @@ const (
 
 	// AnnotationSecurityPolicy is used to specify a security policy for opengcs to enforce
 	AnnotationSecurityPolicy = "io.microsoft.virtualmachine.lcow.securitypolicy"
+	// AnnotationContainerProcessDumpLocation specifies a path inside of containers to save process dumps to. As
+	// the scratch space for a container is generally cleaned up after exit, this is best set to a volume mount of
+	// some kind (vhd, bind mount, fileshare mount etc.)
+	AnnotationContainerProcessDumpLocation = "io.microsoft.container.processdumplocation"
+
+	// AnnotationWCOWProcessDumpType specifies the type of dump to create when generating a local user mode
+	// process dump for Windows containers. The supported options are "mini", and "full".
+	// See DumpType: https://docs.microsoft.com/en-us/windows/win32/wer/collecting-user-mode-dumps
+	AnnotationWCOWProcessDumpType = "io.microsoft.wcow.processdumptype"
+
+	// AnnotationRLimitCore specifies the core rlimit value for a container. This will need to be set
+	// in order to have core dumps generated for a given container.
+	AnnotationRLimitCore = "io.microsoft.lcow.rlimitcore"
 )

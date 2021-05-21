@@ -161,6 +161,12 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 		return err
 	}
 
+	if rlimCore := spec.Annotations["io.microsoft.lcow.rlimitcore"]; rlimCore != "" {
+		if err := setCoreRLimit(spec, rlimCore); err != nil {
+			return err
+		}
+	}
+
 	// Force the parent cgroup into our /containers root
 	spec.Linux.CgroupsPath = "/containers/" + id
 

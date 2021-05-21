@@ -66,6 +66,9 @@ func (c *Container) ExecProcess(ctx context.Context, process *oci.Process, conSe
 		return -1, err
 	}
 
+	// Add in the core rlimit specified on the container in case there was one set. This makes it so that execed processes can also generate
+	// core dumps.
+	process.Rlimits = c.spec.Process.Rlimits
 	p, err := c.container.ExecProcess(process, stdioSet)
 	if err != nil {
 		stdioSet.Close()
