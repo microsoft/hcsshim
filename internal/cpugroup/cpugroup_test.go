@@ -31,7 +31,7 @@ func TestCPUGroupCreateWithIDAndDelete(t *testing.T) {
 		}
 	}()
 
-	_, err = getCPUGroupConfig(ctx, id.String())
+	_, err = GetCPUGroupConfig(ctx, id.String())
 	if err != nil {
 		t.Fatalf("failed to find cpugroup on host with: %v", err)
 	}

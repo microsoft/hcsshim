@@ -10,6 +10,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+var _ vm.UVMBuilder = &utilityVMBuilder{}
+
 type utilityVMBuilder struct {
 	id      string
 	guestOS vm.GuestOS
@@ -81,7 +83,6 @@ func (uvmb *utilityVMBuilder) Create(ctx context.Context) (_ vm.UVM, err error) 
 		guestOS:     uvmb.guestOS,
 		cs:          cs,
 		backingType: backingType,
-		state:       vm.StateCreated,
 	}
 
 	properties, err := cs.Properties(ctx)

@@ -12,9 +12,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+var _ vm.UVM = &utilityVM{}
+
 type utilityVM struct {
 	id           string
-	state        vm.State
 	guestOS      vm.GuestOS
 	cs           *hcs.System
 	backingType  vm.MemoryBackingType

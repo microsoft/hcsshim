@@ -67,7 +67,7 @@ type StorageQosManager interface {
 // WindowsConfigManager manages options specific to a Windows host (cpugroups etc.)
 type WindowsConfigManager interface {
 	// SetCPUGroup sets the CPU group that the Utility VM will belong to on a Windows host.
-	SetCPUGroup(id string) error
+	SetCPUGroup(ctx context.Context, id string) error
 }
 
 // LinuxConfigManager manages options specific to a Linux host.
