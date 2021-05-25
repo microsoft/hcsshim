@@ -44,6 +44,18 @@ github.com/containerd/typeurl
 github.com/coreos/go-systemd/v22/dbus
 # github.com/cpuguy83/go-md2man/v2 v2.0.0
 github.com/cpuguy83/go-md2man/v2/md2man
+# github.com/docker/cli v0.0.0-20191017083524-a8ff7f821017
+github.com/docker/cli/cli/config
+github.com/docker/cli/cli/config/configfile
+github.com/docker/cli/cli/config/credentials
+github.com/docker/cli/cli/config/types
+# github.com/docker/distribution v2.7.1+incompatible
+github.com/docker/distribution/registry/client/auth/challenge
+# github.com/docker/docker v1.4.2-0.20190924003213-a8608b5b67c7
+github.com/docker/docker/pkg/homedir
+# github.com/docker/docker-credential-helpers v0.6.3
+github.com/docker/docker-credential-helpers/client
+github.com/docker/docker-credential-helpers/credentials
 # github.com/docker/go-units v0.4.0
 github.com/docker/go-units
 # github.com/godbus/dbus/v5 v5.0.3
@@ -62,6 +74,23 @@ github.com/golang/protobuf/ptypes
 github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/timestamp
+# github.com/google/go-containerregistry v0.5.1
+github.com/google/go-containerregistry/internal/and
+github.com/google/go-containerregistry/internal/gzip
+github.com/google/go-containerregistry/internal/redact
+github.com/google/go-containerregistry/internal/retry
+github.com/google/go-containerregistry/internal/retry/wait
+github.com/google/go-containerregistry/internal/verify
+github.com/google/go-containerregistry/pkg/authn
+github.com/google/go-containerregistry/pkg/logs
+github.com/google/go-containerregistry/pkg/name
+github.com/google/go-containerregistry/pkg/v1
+github.com/google/go-containerregistry/pkg/v1/match
+github.com/google/go-containerregistry/pkg/v1/partial
+github.com/google/go-containerregistry/pkg/v1/remote
+github.com/google/go-containerregistry/pkg/v1/remote/transport
+github.com/google/go-containerregistry/pkg/v1/stream
+github.com/google/go-containerregistry/pkg/v1/types
 # github.com/linuxkit/virtsock v0.0.0-20201010232012-f8cee7dfc7a3
 github.com/linuxkit/virtsock/pkg/vsock
 # github.com/mattn/go-shellwords v1.0.6
@@ -70,6 +99,9 @@ github.com/mattn/go-shellwords
 github.com/moby/sys/mountinfo
 # github.com/opencontainers/go-digest v1.0.0
 github.com/opencontainers/go-digest
+# github.com/opencontainers/image-spec v1.0.1
+github.com/opencontainers/image-spec/specs-go
+github.com/opencontainers/image-spec/specs-go/v1
 # github.com/opencontainers/runc v1.0.0-rc93
 github.com/opencontainers/runc/libcontainer/configs
 github.com/opencontainers/runc/libcontainer/devices
