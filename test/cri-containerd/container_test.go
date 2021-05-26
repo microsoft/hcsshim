@@ -600,3 +600,177 @@ func Test_RunContainer_NonDefault_User(t *testing.T) {
 		})
 	}
 }
+
+func Test_RunContainer_ShareScratch_LCOW(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+
+	podID := runPodSandbox(t, client, ctx, sandboxRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	request := &runtime.CreateContainerRequest{
+		PodSandboxId: podID,
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			Command: []string{
+				"top",
+			},
+			Annotations: map[string]string{
+				"containerd.io/snapshot/io.microsoft.container.storage.reuse-scratch": "true",
+			},
+		},
+		SandboxConfig: sandboxRequest.Config,
+	}
+
+	containerID := createContainer(t, client, ctx, request)
+	defer removeContainer(t, client, ctx, containerID)
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID)
+
+	// Verify that we only have one disk mounted. Generally we'd have sda + sdb for two containers
+	// (Pause + 1 workload container).
+	cmd := []string{"ls", "/dev/sdb"}
+	containerExecReq := &runtime.ExecSyncRequest{
+		ContainerId: containerID,
+		Cmd:         cmd,
+		Timeout:     20,
+	}
+	r := execSync(t, client, ctx, containerExecReq)
+	if r.ExitCode == 0 {
+		t.Fatalf("expected /dev/sdb to not be present %d: %s", r.ExitCode, string(r.Stdout))
+	}
+}
+
+func findOverlaySize(t *testing.T, ctx context.Context, client runtime.RuntimeServiceClient, cid string) []string {
+	cmd := []string{"df"}
+	containerExecReq := &runtime.ExecSyncRequest{
+		ContainerId: cid,
+		Cmd:         cmd,
+		Timeout:     20,
+	}
+	r := execSync(t, client, ctx, containerExecReq)
+
+	if r.ExitCode != 0 {
+		t.Fatalf("failed with exit code %d: %s", r.ExitCode, string(r.Stderr))
+	}
+
+	// Format of output for df is below
+	// Filesystem           1K-blocks      Used Available Use% Mounted on
+	// overlay               20642524        36  19577528   0% /
+	// tmpfs                    65536         0     65536   0% /dev
+	var (
+		scanner = bufio.NewScanner(strings.NewReader(string(r.Stdout)))
+		cols    []string
+		found   bool
+	)
+	for scanner.Scan() {
+		outputLine := scanner.Text()
+		if cols = strings.Fields(outputLine); cols[0] == "overlay" && cols[5] == "/" {
+			found = true
+			t.Log(outputLine)
+			break
+		}
+	}
+
+	if !found {
+		t.Fatalf("could not find the correct output line for overlay mount on / n: error: %v, exitcode: %d", string(r.Stdout), r.ExitCode)
+	}
+	return cols
+}
+
+func Test_RunContainer_ShareScratch_CheckSize_LCOW(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+
+	podID := runPodSandbox(t, client, ctx, sandboxRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	request := &runtime.CreateContainerRequest{
+		PodSandboxId: podID,
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: "",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			Command: []string{
+				"top",
+			},
+			Annotations: map[string]string{
+				"containerd.io/snapshot/io.microsoft.container.storage.reuse-scratch": "true",
+			},
+		},
+		SandboxConfig: sandboxRequest.Config,
+	}
+
+	request.Config.Metadata.Name = "Container-1"
+	containerIDOne := createContainer(t, client, ctx, request)
+	defer removeContainer(t, client, ctx, containerIDOne)
+	startContainer(t, client, ctx, containerIDOne)
+	defer stopContainer(t, client, ctx, containerIDOne)
+
+	request.Config.Metadata.Name = "Container-2"
+	containerIDTwo := createContainer(t, client, ctx, request)
+	defer removeContainer(t, client, ctx, containerIDTwo)
+	startContainer(t, client, ctx, containerIDTwo)
+	defer stopContainer(t, client, ctx, containerIDTwo)
+
+	cols := findOverlaySize(t, ctx, client, containerIDOne)
+	availableSizeContainerOne := cols[3]
+
+	cols = findOverlaySize(t, ctx, client, containerIDTwo)
+	availableSizeContainerTwo := cols[3]
+
+	// Check the initial size for both containers.
+	if availableSizeContainerOne != availableSizeContainerTwo {
+		t.Fatalf("expected available rootfs size to be the same, got: %s and %s", availableSizeContainerOne, availableSizeContainerTwo)
+	}
+
+	// Write a 10MB file and then check size available on the root fs in both containers.
+	// It should be the same amount as it's being backed by the same disk.
+	cmd := []string{"dd", "if=/dev/urandom", "of=testfile", "bs=10MB", "count=1"}
+	containerExecReq := &runtime.ExecSyncRequest{
+		ContainerId: containerIDOne,
+		Cmd:         cmd,
+		Timeout:     20,
+	}
+	r := execSync(t, client, ctx, containerExecReq)
+
+	if r.ExitCode != 0 {
+		t.Fatalf("failed with exit code %d: %s", r.ExitCode, string(r.Stderr))
+	}
+
+	// Grab the size available after the first write
+	cols = findOverlaySize(t, ctx, client, containerIDOne)
+	availableSizeContainerOne = cols[3]
+
+	// Now the same for container two
+	cols = findOverlaySize(t, ctx, client, containerIDTwo)
+	availableSizeContainerTwo = cols[3]
+
+	if availableSizeContainerOne != availableSizeContainerTwo {
+		t.Fatalf("expected available rootfs size to be the same, got: %s and %s", availableSizeContainerOne, availableSizeContainerTwo)
+	}
+}
