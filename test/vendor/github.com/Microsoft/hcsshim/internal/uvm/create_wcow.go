@@ -180,10 +180,6 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 		},
 	}
 
-	if !opts.ExternalGuestConnection {
-		doc.VirtualMachine.GuestConnection = &hcsschema.GuestConnection{}
-	}
-
 	// Handle StorageQoS if set
 	if opts.StorageQoSBandwidthMaximum > 0 || opts.StorageQoSIopsMaximum > 0 {
 		doc.VirtualMachine.StorageQoS = &hcsschema.StorageQoS{
@@ -332,11 +328,8 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		return nil, fmt.Errorf("error while creating the compute system: %s", err)
 	}
 
-	// All clones MUST use external gcs connection
-	if opts.ExternalGuestConnection {
-		if err = uvm.startExternalGcsListener(ctx); err != nil {
-			return nil, err
-		}
+	if err = uvm.startExternalGcsListener(ctx); err != nil {
+		return nil, err
 	}
 
 	// If network config proxy address passed in, construct a client.

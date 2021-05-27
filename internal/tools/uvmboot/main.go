@@ -21,7 +21,6 @@ const (
 	countArgName                = "count"
 	debugArgName                = "debug"
 	gcsArgName                  = "gcs"
-	externalBridgeArgName       = "external-bridge"
 
 	execCommandLineArgName = "exec"
 )
@@ -70,10 +69,6 @@ func main() {
 			Name:  gcsArgName,
 			Usage: "Launch the GCS and perform requested operations via its RPC interface",
 		},
-		cli.BoolFlag{
-			Name:  externalBridgeArgName,
-			Usage: "Use the external implementation of the guest connection",
-		},
 	}
 
 	app.Commands = []cli.Command{
@@ -108,9 +103,6 @@ func setGlobalOptions(c *cli.Context, options *uvm.Options) {
 	}
 	if c.GlobalIsSet(enableDeferredCommitArgName) {
 		options.EnableDeferredCommit = c.GlobalBool(enableDeferredCommitArgName)
-	}
-	if c.GlobalIsSet(externalBridgeArgName) {
-		options.ExternalGuestConnection = c.GlobalBool(externalBridgeArgName)
 	}
 }
 

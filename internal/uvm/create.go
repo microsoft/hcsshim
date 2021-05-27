@@ -66,10 +66,6 @@ type Options struct {
 	// will default to the platform default.
 	StorageQoSBandwidthMaximum int32
 
-	// ExternalGuestConnection sets whether the guest RPC connection is performed
-	// internally by the OS platform or externally by this package.
-	ExternalGuestConnection bool
-
 	// DisableCompartmentNamespace sets whether to disable namespacing the network compartment in the UVM
 	// for WCOW. Namespacing makes it so the compartment created for a container is essentially no longer
 	// aware or able to see any of the other compartments on the host (in this case the UVM).
@@ -161,9 +157,6 @@ func verifyOptions(ctx context.Context, options interface{}) error {
 		if opts.IsClone && opts.TemplateConfig == nil {
 			return errors.New("template config can not be nil when creating clone")
 		}
-		if opts.IsClone && !opts.ExternalGuestConnection {
-			return errors.New("External gcs connection can not be disabled for clones")
-		}
 		if opts.IsTemplate && opts.FullyPhysicallyBacked {
 			return errors.New("Template can not be created from a full physically backed UVM")
 		}
@@ -178,14 +171,13 @@ func verifyOptions(ctx context.Context, options interface{}) error {
 // If `owner` is empty it will be set to the calling executables name.
 func newDefaultOptions(id, owner string) *Options {
 	opts := &Options{
-		ID:                      id,
-		Owner:                   owner,
-		MemorySizeInMB:          1024,
-		AllowOvercommit:         true,
-		EnableDeferredCommit:    false,
-		ProcessorCount:          defaultProcessorCount(),
-		ExternalGuestConnection: true,
-		FullyPhysicallyBacked:   false,
+		ID:                    id,
+		Owner:                 owner,
+		MemorySizeInMB:        1024,
+		AllowOvercommit:       true,
+		EnableDeferredCommit:  false,
+		ProcessorCount:        defaultProcessorCount(),
+		FullyPhysicallyBacked: false,
 	}
 
 	if opts.Owner == "" {

@@ -139,10 +139,6 @@ const (
 	annotationFullyPhysicallyBacked       = "io.microsoft.virtualmachine.fullyphysicallybacked"
 	annotationDisableCompartmentNamespace = "io.microsoft.virtualmachine.disablecompartmentnamespace"
 	annotationVSMBNoDirectMap             = "io.microsoft.virtualmachine.wcow.virtualSMB.nodirectmap"
-	// A boolean annotation to control whether to use an external bridge or the
-	// HCS-GCS bridge. Default value is true which means external bridge will be used
-	// by default.
-	annotationUseExternalGCSBridge = "io.microsoft.virtualmachine.useexternalgcsbridge"
 
 	// annotation used to specify the cpugroup ID that a UVM should be assigned to
 	annotationCPUGroupID = "io.microsoft.virtualmachine.cpugroup.id"
@@ -464,7 +460,6 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotationStorageQoSIopsMaximum, lopts.StorageQoSIopsMaximum)
 		lopts.VPCIEnabled = parseAnnotationsBool(ctx, s.Annotations, annotationVPCIEnabled, lopts.VPCIEnabled)
 		lopts.BootFilesPath = parseAnnotationsString(s.Annotations, annotationBootFilesRootPath, lopts.BootFilesPath)
-		lopts.ExternalGuestConnection = parseAnnotationsBool(ctx, s.Annotations, annotationUseExternalGCSBridge, lopts.ExternalGuestConnection)
 		lopts.CPUGroupID = parseAnnotationsString(s.Annotations, annotationCPUGroupID, lopts.CPUGroupID)
 		lopts.NetworkConfigProxy = parseAnnotationsString(s.Annotations, annotationNetworkConfigProxy, lopts.NetworkConfigProxy)
 		handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
@@ -487,7 +482,6 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		wopts.ProcessorWeight = ParseAnnotationsCPUWeight(ctx, s, annotationProcessorWeight, wopts.ProcessorWeight)
 		wopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(ctx, s, annotationStorageQoSBandwidthMaximum, wopts.StorageQoSBandwidthMaximum)
 		wopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotationStorageQoSIopsMaximum, wopts.StorageQoSIopsMaximum)
-		wopts.ExternalGuestConnection = parseAnnotationsBool(ctx, s.Annotations, annotationUseExternalGCSBridge, wopts.ExternalGuestConnection)
 		wopts.DisableCompartmentNamespace = parseAnnotationsBool(ctx, s.Annotations, annotationDisableCompartmentNamespace, wopts.DisableCompartmentNamespace)
 		wopts.CPUGroupID = parseAnnotationsString(s.Annotations, annotationCPUGroupID, wopts.CPUGroupID)
 		wopts.NetworkConfigProxy = parseAnnotationsString(s.Annotations, annotationNetworkConfigProxy, wopts.NetworkConfigProxy)
