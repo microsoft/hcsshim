@@ -1,6 +1,6 @@
-package guestrequest
+ guestrequest
 
-import (
+ (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
@@ -16,7 +16,7 @@ import (
 // since the container path is already the scratch path. For linux, the GCS unions
 // the specified layers and ScratchPath together, placing the resulting union
 // filesystem at ContainerRootPath.
-type CombinedLayers struct {
+CombinedLayers  {
 	ContainerRootPath string            `json:"ContainerRootPath,omitempty"`
 	Layers            []hcsschema.Layer `json:"Layers,omitempty"`
 	ScratchPath       string            `json:"ScratchPath,omitempty"`
@@ -25,7 +25,7 @@ type CombinedLayers struct {
 // Defines the schema for hosted settings passed to GCS and/or OpenGCS
 
 // SCSI. Scratch space for remote file-system commands, or R/W layer for containers
-type LCOWMappedVirtualDisk struct {
+type LCOWMappedVirtualDisk  {
 	MountPath  string   `json:"MountPath,omitempty"`
 	Lun        uint8    `json:"Lun,omitempty"`
 	Controller uint8    `json:"Controller,omitempty"`
@@ -33,12 +33,12 @@ type LCOWMappedVirtualDisk struct {
 	Options    []string `json:"Options,omitempty"`
 }
 
-type WCOWMappedVirtualDisk struct {
+ WCOWMappedVirtualDisk  {
 	ContainerPath string `json:"ContainerPath,omitempty"`
 	Lun           int32  `json:"Lun,omitempty"`
 }
 
-type LCOWMappedDirectory struct {
+ LCOWMappedDirectory  {
 	MountPath string `json:"MountPath,omitempty"`
 	Port      int32  `json:"Port,omitempty"`
 	ShareName string `json:"ShareName,omitempty"` // If empty not using ANames (not currently supported)
@@ -46,16 +46,16 @@ type LCOWMappedDirectory struct {
 }
 
 // Read-only layers over VPMem
-type LCOWMappedVPMemDevice struct {
+ LCOWMappedVPMemDevice  {
 	DeviceNumber uint32 `json:"DeviceNumber,omitempty"`
 	MountPath    string `json:"MountPath,omitempty"`
 }
 
-type LCOWMappedVPCIDevice struct {
+ LCOWMappedVPCIDevice  {
 	VMBusGUID string `json:"VMBusGUID,omitempty"`
 }
 
-type LCOWNetworkAdapter struct {
+ LCOWNetworkAdapter  {
 	NamespaceID     string `json:",omitempty"`
 	ID              string `json:",omitempty"`
 	MacAddress      string `json:",omitempty"`
@@ -68,14 +68,15 @@ type LCOWNetworkAdapter struct {
 	EncapOverhead   uint16 `json:",omitempty"`
 }
 
-type LCOWContainerConstraints struct {
+
+ LCOWContainerConstraints {
 	Windows specs.WindowsResources `json:",omitempty"`
 	Linux   specs.LinuxResources   `json:",omitempty"`
 }
 
-type ResourceType string
+ ResourceType
 
-const (
+ (
 	// These are constants for v2 schema modify guest requests.
 	ResourceTypeMappedDirectory      ResourceType = "MappedDirectory"
 	ResourceTypeMappedVirtualDisk    ResourceType = "MappedVirtualDisk"
@@ -89,19 +90,19 @@ const (
 )
 
 // GuestRequest is for modify commands passed to the guest.
-type GuestRequest struct {
+ GuestRequest struct {
 	RequestType  string       `json:"RequestType,omitempty"`
 	ResourceType ResourceType `json:"ResourceType,omitempty"`
 	Settings     interface{}  `json:"Settings,omitempty"`
 }
 
-type NetworkModifyRequest struct {
+ NetworkModifyRequest {
 	AdapterId   string      `json:"AdapterId,omitempty"`
 	RequestType string      `json:"RequestType,omitempty"`
 	Settings    interface{} `json:"Settings,omitempty"`
 }
 
-type RS4NetworkModifyRequest struct {
+ RS4NetworkModifyRequest  {
 	AdapterInstanceId string      `json:"AdapterInstanceId,omitempty"`
 	RequestType       string      `json:"RequestType,omitempty"`
 	Settings          interface{} `json:"Settings,omitempty"`
@@ -109,22 +110,22 @@ type RS4NetworkModifyRequest struct {
 
 // SignalProcessOptionsLCOW is the options passed to LCOW to signal a given
 // process.
-type SignalProcessOptionsLCOW struct {
+ SignalProcessOptionsLCOW  {
 	Signal int `json:",omitempty"`
 }
 
-type SignalValueWCOW string
+ SignalValueWCOW 
 
-const (
-	SignalValueWCOWCtrlC        SignalValueWCOW = "CtrlC"
-	SignalValueWCOWCtrlBreak    SignalValueWCOW = "CtrlBreak"
-	SignalValueWCOWCtrlClose    SignalValueWCOW = "CtrlClose"
-	SignalValueWCOWCtrlLogOff   SignalValueWCOW = "CtrlLogOff"
-	SignalValueWCOWCtrlShutdown SignalValueWCOW = "CtrlShutdown"
+(
+	SignalValueWCOWCtrlC        SignalValueWCOW  "CtrlC"
+	SignalValueWCOWCtrlBreak    SignalValueWCOW  "CtrlBreak"
+	SignalValueWCOWCtrlClose    SignalValueWCOW  "CtrlClose"
+	SignalValueWCOWCtrlLogOff   SignalValueWCOW  "CtrlLogOff"
+	SignalValueWCOWCtrlShutdown SignalValueWCOW  "CtrlShutdown"
 )
 
 // SignalProcessOptionsWCOW is the options passed to WCOW to signal a given
 // process.
-type SignalProcessOptionsWCOW struct {
+ SignalProcessOptionsWCOW  {
 	Signal SignalValueWCOW `json:",omitempty"`
 }
