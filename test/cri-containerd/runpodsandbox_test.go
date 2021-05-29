@@ -51,21 +51,6 @@ func Test_RunPodSandbox_WCOW_Hypervisor(t *testing.T) {
 	runPodSandboxTest(t, request)
 }
 
-func Test_RunPodSandbox_WCOW_Hypervisor_WithoutExternalBridge(t *testing.T) {
-	requireFeatures(t, featureWCOWHypervisor)
-
-	pullRequiredImages(t, []string{imageWindowsNanoserver})
-
-	request := getRunPodSandboxRequest(
-		t,
-		wcowHypervisorRuntimeHandler,
-		map[string]string{
-			"io.microsoft.virtualmachine.useexternalgcsbridge": "false",
-		},
-	)
-	runPodSandboxTest(t, request)
-}
-
 func Test_RunPodSandbox_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 

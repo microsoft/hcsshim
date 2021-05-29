@@ -256,13 +256,6 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		}
 	}
 
-	if opts.UseGuestConnection && !opts.ExternalGuestConnection {
-		doc.VirtualMachine.GuestConnection = &hcsschema.GuestConnection{
-			UseVsock:            true,
-			UseConnectedSuspend: true,
-		}
-	}
-
 	if uvm.scsiControllerCount > 0 {
 		// TODO: JTERRY75 - this should enumerate scsicount and add an entry per value.
 		doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{
@@ -406,7 +399,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		}
 	}
 
-	if opts.UseGuestConnection && opts.ExternalGuestConnection {
+	if opts.UseGuestConnection {
 		log.G(ctx).WithField("vmID", uvm.runtimeID).Debug("Using external GCS bridge")
 		l, err := uvm.listenVsock(gcs.LinuxGcsVsockPort)
 		if err != nil {
