@@ -71,31 +71,6 @@ The delete command will be executed in the container's bundle as its cwd.
 			}
 		}
 
-		// Determine if the config file was a POD and if so kill the whole POD.
-		if s, err := getSpecAnnotations(bundleFlag); err != nil {
-			if !os.IsNotExist(err) {
-				return err
-			}
-		} else {
-			if containerType := s["io.kubernetes.cri.container-type"]; containerType == "container" {
-				if sandboxID := s["io.kubernetes.cri.sandbox-id"]; sandboxID != "" {
-					if sys, _ := hcs.OpenComputeSystem(ctx, sandboxID); sys != nil {
-						if err := sys.Terminate(ctx); err != nil {
-							fmt.Fprintf(os.Stderr, "failed to terminate '%s': %v", idFlag, err)
-						} else if err := sys.Wait(); err != nil {
-							fmt.Fprintf(os.Stderr, "failed to wait for '%s' to terminate: %v", idFlag, err)
-						}
-						sys.Close()
-					}
-				}
-			}
-		}
-
-		// Remove the bundle on disk
-		if err := os.RemoveAll(bundleFlag); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-
 		if data, err := proto.Marshal(&task.DeleteResponse{
 			ExitedAt:   time.Now(),
 			ExitStatus: 255,
