@@ -6,6 +6,7 @@ service NetworkConfigProxy {
     rpc AddNIC(AddNICRequest) returns (AddNICResponse) {}
     rpc ModifyNIC(ModifyNICRequest) returns (ModifyNICResponse) {}
     rpc DeleteNIC(DeleteNICRequest) returns (DeleteNICResponse) {}
+
     rpc CreateNetwork(CreateNetworkRequest) returns (CreateNetworkResponse) {}
     rpc CreateEndpoint(CreateEndpointRequest) returns (CreateEndpointResponse) {}
     rpc AddEndpoint(AddEndpointRequest) returns (AddEndpointResponse) {}
@@ -29,7 +30,7 @@ message ModifyNICRequest {
     string container_id = 1;
     string nic_id = 2;
     string endpoint_name = 3;
-    IovEndpointPolicySetting iov_policy_settings = 4; 
+    IovEndpointPolicySetting iov_policy_settings = 4;
 }
 
 message ModifyNICResponse {}
@@ -48,17 +49,17 @@ message CreateNetworkRequest {
         Transparent = 0;
     }
 
-    enum IpamType 
+    enum IpamType
     {
         Static = 0;
         DHCP = 1;
     }
 
-    string name = 1; 
+    string name = 1;
     NetworkMode mode = 2;
     string switch_name = 3;
     IpamType ipam_type = 4;
-    repeated string subnet_ipadress_prefix = 5;
+    repeated string subnet_ipaddress_prefix = 5;
     string default_gateway = 6;
 }
 
@@ -71,12 +72,19 @@ message PortNameEndpointPolicySetting {
 }
 
 message IovEndpointPolicySetting {
-    uint32 IovOffloadWeight = 1;
-    uint32 QueuePairsRequested = 2; 
-    uint32 InterruptModeration = 3;
+    uint32 iov_offload_weight = 1;
+    uint32 queue_pairs_requested = 2;
+    uint32 interrupt_moderation = 3;
+}
+
+message DnsSetting {
+    repeated string server_ip_addrs = 1;
+    string domain = 2;
+    repeated string search = 3;
 }
 
 message CreateEndpointRequest {
+    reserved 8 to 15;
     string name = 1;
     string macaddress = 2;
     string ipaddress = 3;
@@ -84,6 +92,7 @@ message CreateEndpointRequest {
     string network_name = 5;
     PortNameEndpointPolicySetting portname_policy_setting = 6;
     IovEndpointPolicySetting iov_policy_settings = 7;
+    DnsSetting dns_setting = 16;
 }
 
 message CreateEndpointResponse{
@@ -118,6 +127,7 @@ message GetEndpointResponse{
     string name = 2;
     string network = 3; // GUID
     string namespace = 4; // GUID
+    DnsSetting dns_setting = 5;
 }
 
 message GetNetworkRequest{
