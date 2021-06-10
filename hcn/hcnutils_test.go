@@ -233,6 +233,35 @@ func HcnCreateAcls() (*PolicyEndpointRequest, error) {
 	return &endpointRequest, nil
 }
 
+func HcnCreateNetworkACLs() (*PolicyNetworkRequest, error) {
+	in := NetworkACLPolicySetting{
+		Protocols:       "6",
+		Action:          ActionTypeAllow,
+		Direction:       DirectionTypeIn,
+		LocalAddresses:  "192.168.100.0/24,10.0.0.21",
+		RemoteAddresses: "192.168.100.0/24,10.0.0.21",
+		LocalPorts:      "80,8080",
+		RemotePorts:     "80,8080",
+		RuleType:        RuleTypeSwitch,
+		Priority:        200,
+	}
+
+	rawJSON, err := json.Marshal(in)
+	if err != nil {
+		return nil, err
+	}
+	inPolicy := NetworkPolicy{
+		Type:     NetworkACL,
+		Settings: rawJSON,
+	}
+
+	networkRequest := PolicyNetworkRequest{
+		Policies: []NetworkPolicy{inPolicy},
+	}
+
+	return &networkRequest, nil
+}
+
 func HcnCreateWfpProxyPolicyRequest() (*PolicyEndpointRequest, error) {
 	policySetting := L4WfpProxyPolicySetting{
 		InboundProxyPort:  "80",
