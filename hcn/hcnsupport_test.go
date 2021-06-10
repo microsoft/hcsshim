@@ -116,6 +116,28 @@ func TestSetPolicySupport(t *testing.T) {
 	}
 }
 
+func TestNestedIpSetSupport(t *testing.T) {
+	supportedFeatures := GetSupportedFeatures()
+	err := NestedIpSetSupported()
+	if supportedFeatures.NestedIpSet && err != nil {
+		t.Fatal(err)
+	}
+	if !supportedFeatures.NestedIpSet && err == nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNetworkACLPolicySupport(t *testing.T){
+	supportedFeatures := GetSupportedFeatures()
+	err := NetworkACLPolicySupported()
+	if supportedFeatures.NetworkACL && err != nil {
+		t.Fatal(err)
+	}
+	if !supportedFeatures.NetworkACL && err == nil {
+		t.Fatal(err)
+	}
+}
+
 func TestVxlanPortSupport(t *testing.T) {
 	supportedFeatures := GetSupportedFeatures()
 	err := VxlanPortSupported()
