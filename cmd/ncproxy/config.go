@@ -49,11 +49,7 @@ func readConfig(path string) (*config, error) {
 
 // Checks to see if there is an ncproxy.json in the directory of the executable.
 func configPresent() (string, bool) {
-	path, err := os.Executable()
-	if err != nil {
-		return "", false
-	}
-	path = filepath.Join(filepath.Dir(path), "ncproxy.json")
+	path := filepath.Join(filepath.Dir(os.Args[0]), "ncproxy.json")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return "", false
 	}
