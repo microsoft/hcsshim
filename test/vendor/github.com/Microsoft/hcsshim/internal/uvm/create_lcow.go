@@ -14,6 +14,10 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
+
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -22,9 +26,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
 )
 
 type PreferredRootFSType int
@@ -70,6 +71,7 @@ type OptionsLCOW struct {
 	OutputHandler         OutputHandler       `json:"-"` // Controls how output received over HVSocket from the UVM is handled. Defaults to parsing output as logrus messages
 	VPMemDeviceCount      uint32              // Number of VPMem devices. Defaults to `DefaultVPMEMCount`. Limit at 128. If booting UVM from VHD, device 0 is taken.
 	VPMemSizeBytes        uint64              // Size of the VPMem devices. Defaults to `DefaultVPMemSizeBytes`.
+	VPMemNoMultiMapping   bool                // Disables LCOW layer multi mapping
 	PreferredRootFSType   PreferredRootFSType // If `KernelFile` is `InitrdFile` use `PreferredRootFSTypeInitRd`. If `KernelFile` is `VhdFile` use `PreferredRootFSTypeVHD`
 	EnableColdDiscardHint bool                // Whether the HCS should use cold discard hints. Defaults to false
 	VPCIEnabled           bool                // Whether the kernel should enable pci
@@ -114,6 +116,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		OutputHandler:         parseLogrus(id),
 		VPMemDeviceCount:      DefaultVPMEMCount,
 		VPMemSizeBytes:        DefaultVPMemSizeBytes,
+		VPMemNoMultiMapping:   osversion.Get().Build < osversion.V19H1,
 		PreferredRootFSType:   PreferredRootFSTypeInitRd,
 		EnableColdDiscardHint: false,
 		VPCIEnabled:           false,
@@ -170,6 +173,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		physicallyBacked:        !opts.AllowOvercommit,
 		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
 		createOpts:              opts,
+		vpmemMultiMapping:       !opts.VPMemNoMultiMapping,
 	}
 
 	defer func() {
@@ -291,11 +295,35 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 				ImageFormat: imageFormat,
 			},
 		}
-		// Add to our internal structure
-		uvm.vpmemDevices[0] = &vpmemInfo{
-			hostPath: opts.RootFSFile,
-			uvmPath:  "/",
-			refCount: 1,
+		if uvm.vpmemMultiMapping {
+			pmem := newPackedVPMemDevice()
+			pmem.maxMappedDeviceCount = 1
+
+			st, err := os.Stat(rootfsFullPath)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to stat rootfs: %q", rootfsFullPath)
+			}
+			devSize := pageAlign(uint64(st.Size()))
+			memReg, err := pmem.Allocate(devSize)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to allocate memory for rootfs")
+			}
+			defer func() {
+				if err != nil {
+					if err = pmem.Release(memReg); err != nil {
+						log.G(ctx).WithError(err).Debug("failed to release memory region")
+					}
+				}
+			}()
+
+			dev := newVPMemMappedDevice(opts.RootFSFile, "/", devSize, memReg)
+			if err := pmem.mapVHDLayer(ctx, dev); err != nil {
+				return nil, errors.Wrapf(err, "failed to save internal state for a multi-mapped rootfs device")
+			}
+			uvm.vpmemDevicesMultiMapped[0] = pmem
+		} else {
+			dev := newDefaultVPMemInfo(opts.RootFSFile, "/")
+			uvm.vpmemDevicesDefault[0] = dev
 		}
 	}
 

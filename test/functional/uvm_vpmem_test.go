@@ -33,7 +33,7 @@ func TestVPMEM(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	for i := 0; i < int(iterations); i++ {
-		uvmPath, err := u.AddVPMEM(ctx, filepath.Join(tempDir, "layer.vhd"))
+		uvmPath, err := u.AddVPMem(ctx, filepath.Join(tempDir, "layer.vhd"))
 		if err != nil {
 			t.Fatalf("AddVPMEM failed: %s", err)
 		}
@@ -42,7 +42,7 @@ func TestVPMEM(t *testing.T) {
 
 	// Remove them all
 	for i := 0; i < int(iterations); i++ {
-		if err := u.RemoveVPMEM(ctx, filepath.Join(tempDir, "layer.vhd")); err != nil {
+		if err := u.RemoveVPMem(ctx, filepath.Join(tempDir, "layer.vhd")); err != nil {
 			t.Fatalf("RemoveVPMEM failed: %s", err)
 		}
 	}

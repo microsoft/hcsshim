@@ -11,6 +11,7 @@ require (
 	github.com/containerd/ttrpc v1.0.2
 	github.com/containerd/typeurl v1.0.2
 	github.com/gogo/protobuf v1.3.2
+	github.com/google/go-containerregistry v0.5.1
 	github.com/linuxkit/virtsock v0.0.0-20201010232012-f8cee7dfc7a3
 	github.com/mattn/go-shellwords v1.0.6
 	github.com/opencontainers/runc v1.0.0-rc93
