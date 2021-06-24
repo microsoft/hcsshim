@@ -149,7 +149,7 @@ func (uvm *UtilityVM) addVPMemDefault(ctx context.Context, hostPath string) (_ s
 		MountPath:    uvmPath,
 	}
 	if v, iErr := readVeritySuperBlock(ctx, hostPath); iErr != nil {
-		log.G(ctx).WithError(err).WithField("hostPath", hostPath).Debug("unable to read dm-verity information from VHD")
+		log.G(ctx).WithError(iErr).WithField("hostPath", hostPath).Debug("unable to read dm-verity information from VHD")
 	} else {
 		if v != nil {
 			log.G(ctx).WithFields(logrus.Fields{
