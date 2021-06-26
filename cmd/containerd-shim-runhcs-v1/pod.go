@@ -83,6 +83,11 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 	owner := filepath.Base(os.Args[0])
 	isWCOW := oci.IsWCOW(s)
 
+	p := pod{
+		events: events,
+		id:     req.ID,
+	}
+
 	var parent *uvm.UtilityVM
 	if oci.IsIsolated(s) {
 		// Create the UVM parent
@@ -125,9 +130,33 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 			parent.Close()
 			return nil, err
 		}
+	} else if oci.IsJobContainer(s) {
+		// If we're making a job container fake a task (i.e reuse the wcowPodSandbox logic)
+		p.sandboxTask = newWcowPodSandboxTask(ctx, events, req.ID, req.Bundle, parent, "")
+		if err := events.publishEvent(
+			ctx,
+			runtime.TaskCreateEventTopic,
+			&eventstypes.TaskCreate{
+				ContainerID: req.ID,
+				Bundle:      req.Bundle,
+				Rootfs:      req.Rootfs,
+				IO: &eventstypes.TaskIO{
+					Stdin:    req.Stdin,
+					Stdout:   req.Stdout,
+					Stderr:   req.Stderr,
+					Terminal: req.Terminal,
+				},
+				Checkpoint: "",
+				Pid:        0,
+			}); err != nil {
+			return nil, err
+		}
+		p.jobContainer = true
+		return &p, nil
 	} else if !isWCOW {
 		return nil, errors.Wrap(errdefs.ErrFailedPrecondition, "oci spec does not contain WCOW or LCOW spec")
 	}
+
 	defer func() {
 		// clean up the uvm if we fail any further operations
 		if err != nil && parent != nil {
@@ -135,12 +164,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		}
 	}()
 
-	p := pod{
-		events: events,
-		id:     req.ID,
-		host:   parent,
-	}
-
+	p.host = parent
 	if parent != nil {
 		cid := req.ID
 		if id, ok := s.Annotations[oci.AnnotationNcproxyContainerID]; ok {
@@ -232,6 +256,11 @@ type pod struct {
 	// It MUST be treated as read only in the lifetime of the pod.
 	host *uvm.UtilityVM
 
+	// jobContainer specifies whether this pod is for WCOW job containers only.
+	//
+	// It MUST be treated as read only in the lifetime of the pod.
+	jobContainer bool
+
 	workloadTasks sync.Map
 }
 
@@ -261,6 +290,17 @@ func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *sp
 	_, ok := p.workloadTasks.Load(req.ID)
 	if ok {
 		return nil, errors.Wrapf(errdefs.ErrAlreadyExists, "task with id: '%s' already exists id pod: '%s'", req.ID, p.id)
+	}
+
+	if p.jobContainer {
+		// This is a short circuit to make sure that all containers in a pod will have
+		// the same IP address/be added to the same compartment.
+		//
+		// There will need to be OS work needed to support this scenario, so for now we need to block on
+		// this.
+		if !oci.IsJobContainer(s) {
+			return nil, errors.New("cannot create a normal process isolated container if the pod sandbox is a job container")
+		}
 	}
 
 	ct, sid, err := oci.GetSandboxTypeAndID(s.Annotations)

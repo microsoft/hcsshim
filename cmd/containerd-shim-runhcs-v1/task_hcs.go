@@ -29,6 +29,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
+	"github.com/Microsoft/hcsshim/internal/jobcontainers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
@@ -113,6 +114,39 @@ func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.Creat
 	return shim, nil
 }
 
+// createContainer is a generic call to return either a process/hypervisor isolated container, or a job container
+//  based on what is set in the OCI spec.
+func createContainer(ctx context.Context, id, owner, netNS string, s *specs.Spec, parent *uvm.UtilityVM, shimOpts *runhcsopts.Options) (cow.Container, *resources.Resources, error) {
+	var (
+		err       error
+		container cow.Container
+		resources *resources.Resources
+	)
+
+	if oci.IsJobContainer(s) {
+		container, resources, err = jobcontainers.Create(ctx, id, s)
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		opts := &hcsoci.CreateOptions{
+			ID:               id,
+			Owner:            owner,
+			Spec:             s,
+			HostingSystem:    parent,
+			NetworkNamespace: netNS,
+		}
+		if shimOpts != nil {
+			opts.ScaleCPULimitsToSandbox = shimOpts.ScaleCpuLimitsToSandbox
+		}
+		container, resources, err = hcsoci.CreateContainer(ctx, opts)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return container, resources, nil
+}
+
 // newHcsTask creates a container within `parent` and its init exec process in
 // the `shimExecCreated` state and returns the task that tracks its lifetime.
 //
@@ -152,19 +186,7 @@ func newHcsTask(
 		shimOpts = v.(*runhcsopts.Options)
 	}
 
-	opts := hcsoci.CreateOptions{
-		ID:               req.ID,
-		Owner:            owner,
-		Spec:             s,
-		HostingSystem:    parent,
-		NetworkNamespace: netNS,
-	}
-
-	if shimOpts != nil {
-		opts.ScaleCPULimitsToSandbox = shimOpts.ScaleCpuLimitsToSandbox
-	}
-
-	system, resources, err := hcsoci.CreateContainer(ctx, &opts)
+	container, resources, err := createContainer(ctx, req.ID, owner, netNS, s, parent, shimOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +195,7 @@ func newHcsTask(
 		events:     events,
 		id:         req.ID,
 		isWCOW:     oci.IsWCOW(s),
-		c:          system,
+		c:          container,
 		cr:         resources,
 		ownsHost:   ownsParent,
 		host:       parent,
@@ -186,7 +208,7 @@ func newHcsTask(
 		events,
 		req.ID,
 		parent,
-		system,
+		container,
 		req.ID,
 		req.Bundle,
 		ht.isWCOW,

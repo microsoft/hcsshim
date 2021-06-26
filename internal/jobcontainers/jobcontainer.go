@@ -21,10 +21,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/queue"
+	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
 )
 
@@ -66,7 +66,6 @@ type JobContainer struct {
 	spec           *specs.Spec          // OCI spec used to create the container
 	job            *jobobject.JobObject // Object representing the job object the container owns
 	sandboxMount   string               // Path to where the sandbox is mounted on the host
-	m              sync.Mutex
 	closedWaitOnce sync.Once
 	init           initProc
 	startTimestamp time.Time
@@ -89,31 +88,19 @@ func newJobContainer(id string, s *specs.Spec) *JobContainer {
 }
 
 // Create creates a new JobContainer from `s`.
-func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, err error) {
+func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *resources.Resources, err error) {
 	log.G(ctx).WithField("id", id).Debug("Creating job container")
 
 	if s == nil {
-		return nil, errors.New("Spec must be supplied")
+		return nil, nil, errors.New("Spec must be supplied")
 	}
 
 	if id == "" {
 		g, err := guid.NewV4()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		id = g.String()
-	}
-
-	if err := mountLayers(ctx, s); err != nil {
-		return nil, errors.Wrap(err, "failed to mount container layers")
-	}
-
-	volumeGUIDRegex := `^\\\\\?\\(Volume)\{{0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}\}(|\\)$`
-	if matched, err := regexp.MatchString(volumeGUIDRegex, s.Root.Path); !matched || err != nil {
-		return nil, fmt.Errorf(`invalid container spec - Root.Path '%s' must be a volume GUID path in the format '\\?\Volume{GUID}\'`, s.Root.Path)
-	}
-	if s.Root.Path[len(s.Root.Path)-1] != '\\' {
-		s.Root.Path += `\` // Be nice to clients and make sure well-formed for back-compat
 	}
 
 	container := newJobContainer(id, s)
@@ -125,52 +112,50 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, err
 	}
 	job, err := jobobject.Create(ctx, options)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create job object")
+		return nil, nil, errors.Wrap(err, "failed to create job object")
 	}
 
 	// Parity with how we handle process isolated containers. We set the same flag which
 	// behaves the same way for a silo.
 	if err := job.SetTerminateOnLastHandleClose(); err != nil {
-		return nil, errors.Wrap(err, "failed to set terminate on last handle close on job container")
+		return nil, nil, errors.Wrap(err, "failed to set terminate on last handle close on job container")
 	}
 	container.job = job
 
-	var path string
+	r := resources.NewContainerResources(id)
 	defer func() {
 		if err != nil {
 			container.Close()
-			if path != "" {
-				_ = removeSandboxMountPoint(ctx, path)
-			}
+			_ = resources.ReleaseResources(ctx, r, nil, true)
 		}
 	}()
 
+	sandboxPath := fmt.Sprintf(sandboxMountFormat, id)
+	if err := mountLayers(ctx, s, sandboxPath); err != nil {
+		return nil, nil, errors.Wrap(err, "failed to mount container layers")
+	}
+	container.sandboxMount = sandboxPath
+
+	layers := layers.NewImageLayers(nil, "", s.Windows.LayerFolders, sandboxPath, false)
+	r.SetLayers(layers)
+
+	volumeGUIDRegex := `^\\\\\?\\(Volume)\{{0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}\}(|\\)$`
+	if matched, err := regexp.MatchString(volumeGUIDRegex, s.Root.Path); !matched || err != nil {
+		return nil, nil, fmt.Errorf(`invalid container spec - Root.Path '%s' must be a volume GUID path in the format '\\?\Volume{GUID}\'`, s.Root.Path)
+	}
+
 	limits, err := specToLimits(ctx, id, s)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to convert OCI spec to job object limits")
+		return nil, nil, errors.Wrap(err, "failed to convert OCI spec to job object limits")
 	}
 
 	// Set resource limits on the job object based off of oci spec.
 	if err := job.SetResourceLimits(limits); err != nil {
-		return nil, errors.Wrap(err, "failed to set resource limits")
+		return nil, nil, errors.Wrap(err, "failed to set resource limits")
 	}
 
-	// Setup directory sandbox volume will be mounted
-	sandboxPath := fmt.Sprintf(sandboxMountFormat, id)
-	if _, err := os.Stat(sandboxPath); os.IsNotExist(err) {
-		if err := os.MkdirAll(sandboxPath, 0777); err != nil {
-			return nil, errors.Wrap(err, "failed to create mounted folder")
-		}
-	}
-	path = sandboxPath
-
-	if err := mountSandboxVolume(ctx, path, s.Root.Path); err != nil {
-		return nil, errors.Wrap(err, "failed to bind payload directory on host")
-	}
-
-	container.sandboxMount = path
 	go container.waitBackground(ctx)
-	return container, nil
+	return container, r, nil
 }
 
 // CreateProcess creates a process on the host, starts it, adds it to the containers
@@ -281,29 +266,6 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 
 func (c *JobContainer) Modify(ctx context.Context, config interface{}) (err error) {
 	return errors.New("modify not supported for job containers")
-}
-
-// Release unmounts all of the container layers. Safe to call multiple times, if no storage
-// is mounted this call will just return nil.
-func (c *JobContainer) Release(ctx context.Context) error {
-	c.m.Lock()
-	defer c.m.Unlock()
-
-	log.G(ctx).WithFields(logrus.Fields{
-		"id":   c.id,
-		"path": c.sandboxMount,
-	}).Warn("removing sandbox volume mount")
-
-	if c.sandboxMount != "" {
-		if err := removeSandboxMountPoint(ctx, c.sandboxMount); err != nil {
-			return errors.Wrap(err, "failed to remove sandbox volume mount path")
-		}
-		if err := layers.UnmountContainerLayers(ctx, c.spec.Windows.LayerFolders, "", nil, layers.UnmountOperationAll); err != nil {
-			return errors.Wrap(err, "failed to unmount container layers")
-		}
-		c.sandboxMount = ""
-	}
-	return nil
 }
 
 // Start starts the container. There's nothing to "start" for job containers, so this just
@@ -484,7 +446,7 @@ func (c *JobContainer) waitBackground(ctx context.Context) {
 	// them to exit.
 	<-c.init.proc.waitBlock
 
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if err := c.Shutdown(ctx); err != nil {
 		_ = c.Terminate(ctx)
