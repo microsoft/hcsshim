@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/guest/storage"
+	"github.com/Microsoft/hcsshim/internal/guest/storage/crypt"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/pkg/errors"
@@ -33,7 +34,10 @@ var (
 //
 // `target` will be created. On mount failure the created `target` will be
 // automatically cleaned up.
-func Mount(ctx context.Context, controller, lun uint8, target string, readonly bool, options []string) (err error) {
+//
+// If `encrypted` is set to true, the SCSI device will be encrypted using
+// dm-crypt.
+func Mount(ctx context.Context, controller, lun uint8, target string, readonly bool, encrypted bool, options []string) (err error) {
 	ctx, span := trace.StartSpan(ctx, "scsi::Mount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -62,6 +66,15 @@ func Mount(ctx context.Context, controller, lun uint8, target string, readonly b
 		flags |= unix.MS_RDONLY
 		data = "noload"
 	}
+
+	if encrypted {
+		encryptedSource, err := crypt.EncryptDevice(ctx, source)
+		if err != nil {
+			return errors.Wrapf(err, "failed to mount encrypted device: "+source)
+		}
+		source = encryptedSource
+	}
+
 	for {
 		if err := unixMount(source, target, "ext4", flags, data); err != nil {
 			// The `source` found by controllerLunToName can take some time
@@ -88,6 +101,33 @@ func Mount(ctx context.Context, controller, lun uint8, target string, readonly b
 			if err := unixMount(target, target, "", pg, ""); err != nil {
 				return err
 			}
+		}
+	}
+
+	return nil
+}
+
+// Unmount unmounts a SCSI device mounted at `target`.
+//
+// If `encrypted` is true, it removes all its associated dm-crypto state.
+func Unmount(ctx context.Context, controller, lun uint8, target string, encrypted bool) (err error) {
+	ctx, span := trace.StartSpan(ctx, "scsi::Unmount")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+
+	span.AddAttributes(
+		trace.Int64Attribute("controller", int64(controller)),
+		trace.Int64Attribute("lun", int64(lun)),
+		trace.StringAttribute("target", target))
+
+	// Unmount unencrypted device
+	if err := storage.UnmountPath(ctx, target, true); err != nil {
+		return errors.Wrapf(err, "unmount failed: "+target)
+	}
+
+	if encrypted {
+		if err := crypt.CleanupCryptDevice(target); err != nil {
+			return errors.Wrapf(err, "failed to cleanup dm-crypt state: "+target)
 		}
 	}
 
