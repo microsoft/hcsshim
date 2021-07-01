@@ -33,7 +33,7 @@ func getJobContainerPodRequestWCOW(t *testing.T) *runtime.RunPodSandboxRequest {
 	}
 }
 
-func getJobContainerRequestWCOW(t *testing.T, podID string, podConfig *runtime.PodSandboxConfig, image string) *runtime.CreateContainerRequest {
+func getJobContainerRequestWCOW(t *testing.T, podID string, podConfig *runtime.PodSandboxConfig, image string, mounts []*runtime.Mount) *runtime.CreateContainerRequest {
 	return &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
 			Metadata: &runtime.ContainerMetadata{
@@ -49,11 +49,12 @@ func getJobContainerRequestWCOW(t *testing.T, podID string, podConfig *runtime.P
 				"-t",
 				"127.0.0.1",
 			},
-
+			Mounts: mounts,
 			Annotations: map[string]string{
 				"microsoft.com/hostprocess-container":    "true",
 				"microsoft.com/hostprocess-inherit-user": "true",
 			},
+			Windows: &runtime.WindowsContainerConfig{},
 		},
 		PodSandboxId:  podID,
 		SandboxConfig: podConfig,
@@ -74,7 +75,7 @@ func Test_RunContainer_InheritUser_JobContainer_WCOW(t *testing.T) {
 	defer removePodSandbox(t, client, podctx, podID)
 	defer stopPodSandbox(t, client, podctx, podID)
 
-	containerRequest := getJobContainerRequestWCOW(t, podID, sandboxRequest.Config, imageWindowsNanoserver)
+	containerRequest := getJobContainerRequestWCOW(t, podID, sandboxRequest.Config, imageWindowsNanoserver, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -113,7 +114,7 @@ func Test_RunContainer_Hostname_JobContainer_WCOW(t *testing.T) {
 	defer removePodSandbox(t, client, podctx, podID)
 	defer stopPodSandbox(t, client, podctx, podID)
 
-	containerRequest := getJobContainerRequestWCOW(t, podID, sandboxRequest.Config, imageWindowsNanoserver)
+	containerRequest := getJobContainerRequestWCOW(t, podID, sandboxRequest.Config, imageWindowsNanoserver, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -146,7 +147,7 @@ func Test_RunContainer_HNS_JobContainer_WCOW(t *testing.T) {
 	defer removePodSandbox(t, client, podctx, podID)
 	defer stopPodSandbox(t, client, podctx, podID)
 
-	containerRequest := getJobContainerRequestWCOW(t, podID, sandboxRequest.Config, imageJobContainerHNS)
+	containerRequest := getJobContainerRequestWCOW(t, podID, sandboxRequest.Config, imageJobContainerHNS, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -193,7 +194,7 @@ func Test_RunContainer_VHD_JobContainer_WCOW(t *testing.T) {
 	defer removePodSandbox(t, client, podctx, podID)
 	defer stopPodSandbox(t, client, podctx, podID)
 
-	containerRequest := getJobContainerRequestWCOW(t, podID, sandboxRequest.Config, imageJobContainerVHD)
+	containerRequest := getJobContainerRequestWCOW(t, podID, sandboxRequest.Config, imageJobContainerVHD, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -244,7 +245,7 @@ func Test_RunContainer_ETW_JobContainer_WCOW(t *testing.T) {
 	defer removePodSandbox(t, client, podctx, podID)
 	defer stopPodSandbox(t, client, podctx, podID)
 
-	containerRequest := getJobContainerRequestWCOW(t, podID, sandboxRequest.Config, imageJobContainerETW)
+	containerRequest := getJobContainerRequestWCOW(t, podID, sandboxRequest.Config, imageJobContainerETW, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -299,7 +300,7 @@ func Test_RunContainer_HostVolumes_JobContainer_WCOW(t *testing.T) {
 	defer removePodSandbox(t, client, podctx, podID)
 	defer stopPodSandbox(t, client, podctx, podID)
 
-	containerRequest := getJobContainerRequestWCOW(t, podID, sandboxRequest.Config, imageWindowsNanoserver)
+	containerRequest := getJobContainerRequestWCOW(t, podID, sandboxRequest.Config, imageWindowsNanoserver, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -324,5 +325,122 @@ func Test_RunContainer_HostVolumes_JobContainer_WCOW(t *testing.T) {
 
 	if hostStdout != containerStdout {
 		t.Fatalf("expected volumes to be the same within job process container. got %q but expected %q", hostStdout, containerStdout)
+	}
+}
+
+func Test_RunContainer_JobContainer_VolumeMount(t *testing.T) {
+	client := newTestRuntimeClient(t)
+
+	dir, err := ioutil.TempDir("", "example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	tmpfn := filepath.Join(dir, "tmpfile")
+	if err := ioutil.WriteFile(tmpfn, []byte("test"), 0777); err != nil {
+		t.Fatal(err)
+	}
+
+	mountDriveLetter := []*runtime.Mount{
+		{
+			HostPath:      dir,
+			ContainerPath: "C:\\path\\in\\container",
+		},
+	}
+
+	mountNoDriveLetter := []*runtime.Mount{
+		{
+			HostPath:      dir,
+			ContainerPath: "/path/in/container",
+		},
+	}
+
+	mountSingleFile := []*runtime.Mount{
+		{
+			HostPath:      tmpfn,
+			ContainerPath: "/path/in/container/testfile",
+		},
+	}
+
+	type config struct {
+		name             string
+		containerName    string
+		requiredFeatures []string
+		runtimeHandler   string
+		sandboxImage     string
+		containerImage   string
+		cmd              []string
+		exec             []string
+		mounts           []*runtime.Mount
+	}
+
+	tests := []config{
+		{
+			name:             "JobContainer_VolumeMount_DriveLetter",
+			containerName:    t.Name() + "-Container-DriveLetter",
+			requiredFeatures: []string{featureWCOWProcess, featureHostProcess},
+			runtimeHandler:   wcowProcessRuntimeHandler,
+			sandboxImage:     imageWindowsNanoserver,
+			containerImage:   imageWindowsNanoserver,
+			cmd:              []string{"ping", "-t", "127.0.0.1"},
+			mounts:           mountDriveLetter,
+			exec:             []string{"cmd", "/c", "dir", "%CONTAINER_SANDBOX_MOUNT_POINT%\\path\\in\\container\\tmpfile"},
+		},
+		{
+			name:             "JobContainer_VolumeMount_NoDriveLetter",
+			containerName:    t.Name() + "-Container-NoDriveLetter",
+			requiredFeatures: []string{featureWCOWProcess, featureHostProcess},
+			runtimeHandler:   wcowProcessRuntimeHandler,
+			sandboxImage:     imageWindowsNanoserver,
+			containerImage:   imageWindowsNanoserver,
+			cmd:              []string{"ping", "-t", "127.0.0.1"},
+			mounts:           mountNoDriveLetter,
+			exec:             []string{"cmd", "/c", "dir", "%CONTAINER_SANDBOX_MOUNT_POINT%\\path\\in\\container\\tmpfile"},
+		},
+		{
+			name:             "JobContainer_VolumeMount_SingleFile",
+			containerName:    t.Name() + "-Container-SingleFile",
+			requiredFeatures: []string{featureWCOWProcess, featureHostProcess},
+			runtimeHandler:   wcowProcessRuntimeHandler,
+			sandboxImage:     imageWindowsNanoserver,
+			containerImage:   imageWindowsNanoserver,
+			cmd:              []string{"ping", "-t", "127.0.0.1"},
+			mounts:           mountSingleFile,
+			exec:             []string{"cmd", "/c", "type", "%CONTAINER_SANDBOX_MOUNT_POINT%\\path\\in\\container\\testfile"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			requireFeatures(t, test.requiredFeatures...)
+
+			requiredImages := []string{test.sandboxImage, test.containerImage}
+			pullRequiredImages(t, requiredImages)
+
+			podctx := context.Background()
+			sandboxRequest := getJobContainerPodRequestWCOW(t)
+
+			podID := runPodSandbox(t, client, podctx, sandboxRequest)
+			defer removePodSandbox(t, client, podctx, podID)
+			defer stopPodSandbox(t, client, podctx, podID)
+
+			containerRequest := getJobContainerRequestWCOW(t, podID, sandboxRequest.Config, imageWindowsNanoserver, test.mounts)
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+
+			containerID := createContainer(t, client, ctx, containerRequest)
+			defer removeContainer(t, client, ctx, containerID)
+			startContainer(t, client, ctx, containerID)
+			defer stopContainer(t, client, ctx, containerID)
+
+			r := execSync(t, client, ctx, &runtime.ExecSyncRequest{
+				ContainerId: containerID,
+				Cmd:         test.exec,
+			})
+			if r.ExitCode != 0 {
+				t.Fatalf("failed with exit code %d checking for job container mount: %s", r.ExitCode, string(r.Stderr))
+			}
+		})
 	}
 }
