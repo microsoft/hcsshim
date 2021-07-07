@@ -6,6 +6,7 @@ package layers
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -16,12 +17,14 @@ import (
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/windows"
 )
 
 // ImageLayers contains all the layers for an image.
 type ImageLayers struct {
 	vm                 *uvm.UtilityVM
 	containerRootInUVM string
+	volumeMountPath    string
 	layers             []string
 	// In some instances we may want to avoid cleaning up the image layers, such as when tearing
 	// down a sandbox container since the UVM will be torn down shortly after and the resources
@@ -29,11 +32,12 @@ type ImageLayers struct {
 	skipCleanup bool
 }
 
-func NewImageLayers(vm *uvm.UtilityVM, containerRootInUVM string, layers []string, skipCleanup bool) *ImageLayers {
+func NewImageLayers(vm *uvm.UtilityVM, containerRootInUVM string, layers []string, volumeMountPath string, skipCleanup bool) *ImageLayers {
 	return &ImageLayers{
 		vm:                 vm,
 		containerRootInUVM: containerRootInUVM,
 		layers:             layers,
+		volumeMountPath:    volumeMountPath,
 		skipCleanup:        skipCleanup,
 	}
 }
@@ -51,7 +55,7 @@ func (layers *ImageLayers) Release(ctx context.Context, all bool) error {
 	if layers.vm != nil {
 		crp = containerRootfsPath(layers.vm, layers.containerRootInUVM)
 	}
-	err := UnmountContainerLayers(ctx, layers.layers, crp, layers.vm, op)
+	err := UnmountContainerLayers(ctx, layers.layers, crp, layers.volumeMountPath, layers.vm, op)
 	if err != nil {
 		return err
 	}
@@ -67,9 +71,11 @@ func (layers *ImageLayers) Release(ctx context.Context, all bool) error {
 // v2:    Xenon WCOW: Returns a CombinedLayersV2 structure where ContainerRootPath is a folder
 //                    inside the utility VM which is a GUID mapping of the scratch folder. Each
 //                    of the layers are the VSMB locations where the read-only layers are mounted.
+// Job container:     Returns the mount path on the host as a volume guid, with the volume mounted on
+// 					  the host at `volumeMountPath`.
 //
 // TODO dcantah: Keep better track of the layers that are added, don't simply discard the SCSI, VSMB, etc. resource types gotten inside.
-func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot string, uvm *uvmpkg.UtilityVM) (_ string, err error) {
+func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot, volumeMountPath string, uvm *uvmpkg.UtilityVM) (_ string, err error) {
 	log.G(ctx).WithField("layerFolders", layerFolders).Debug("hcsshim::mountContainerLayers")
 
 	if uvm == nil {
@@ -100,6 +106,14 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot 
 		if err != nil {
 			return "", err
 		}
+
+		// Mount the volume to a directory on the host if requested. This is the case for job containers.
+		if volumeMountPath != "" {
+			if err := mountSandboxVolume(ctx, volumeMountPath, mountPath); err != nil {
+				return "", err
+			}
+		}
+
 		return mountPath, nil
 	}
 
@@ -276,7 +290,7 @@ const (
 )
 
 // UnmountContainerLayers is a helper for clients to hide all the complexity of layer unmounting
-func UnmountContainerLayers(ctx context.Context, layerFolders []string, containerRootPath string, uvm *uvmpkg.UtilityVM, op UnmountOperation) error {
+func UnmountContainerLayers(ctx context.Context, layerFolders []string, containerRootPath, volumeMountPath string, uvm *uvmpkg.UtilityVM, op UnmountOperation) error {
 	log.G(ctx).WithField("layerFolders", layerFolders).Debug("hcsshim::unmountContainerLayers")
 	if uvm == nil {
 		// Must be an argon - folders are mounted on the host
@@ -286,6 +300,14 @@ func UnmountContainerLayers(ctx context.Context, layerFolders []string, containe
 		if len(layerFolders) < 1 {
 			return errors.New("need at least one layer for Unmount")
 		}
+
+		// Remove the mount point if there is one. This is the case for job containers.
+		if volumeMountPath != "" {
+			if err := removeSandboxMountPoint(ctx, volumeMountPath); err != nil {
+				return err
+			}
+		}
+
 		path := layerFolders[len(layerFolders)-1]
 		if err := wclayer.UnprepareLayer(ctx, path); err != nil {
 			return err
@@ -397,4 +419,49 @@ func getScratchVHDPath(layerFolders []string) (string, error) {
 		return "", errors.Wrap(err, "failed to eval symlinks")
 	}
 	return hostPath, nil
+}
+
+// Mount the sandbox vhd to a user friendly path.
+func mountSandboxVolume(ctx context.Context, hostPath, volumeName string) (err error) {
+	log.G(ctx).WithFields(logrus.Fields{
+		"hostpath":   hostPath,
+		"volumeName": volumeName,
+	}).Debug("mounting volume for container")
+
+	if _, err := os.Stat(hostPath); os.IsNotExist(err) {
+		if err := os.MkdirAll(hostPath, 0777); err != nil {
+			return err
+		}
+	}
+
+	defer func() {
+		if err != nil {
+			os.RemoveAll(hostPath)
+		}
+	}()
+
+	// Make sure volumeName ends with a trailing slash as required.
+	if volumeName[len(volumeName)-1] != '\\' {
+		volumeName += `\` // Be nice to clients and make sure well-formed for back-compat
+	}
+
+	if err = windows.SetVolumeMountPoint(windows.StringToUTF16Ptr(hostPath), windows.StringToUTF16Ptr(volumeName)); err != nil {
+		return errors.Wrapf(err, "failed to mount sandbox volume to %s on host", hostPath)
+	}
+	return nil
+}
+
+// Remove volume mount point. And remove folder afterwards.
+func removeSandboxMountPoint(ctx context.Context, hostPath string) error {
+	log.G(ctx).WithFields(logrus.Fields{
+		"hostpath": hostPath,
+	}).Debug("removing volume mount point for container")
+
+	if err := windows.DeleteVolumeMountPoint(windows.StringToUTF16Ptr(hostPath)); err != nil {
+		return errors.Wrap(err, "failed to delete sandbox volume mount point")
+	}
+	if err := os.Remove(hostPath); err != nil {
+		return errors.Wrapf(err, "failed to remove sandbox mounted folder path %q", hostPath)
+	}
+	return nil
 }

@@ -51,12 +51,31 @@ type LCOWMappedLayer struct {
 	DeviceSizeInBytes   uint64 `json:"DeviceSizeInBytes,omitempty"`
 }
 
+// DeviceVerityInfo represents dm-verity metadata of a block device.
+// Most of the fields can be directly mapped to table entries https://www.kernel.org/doc/html/latest/admin-guide/device-mapper/verity.html
+type DeviceVerityInfo struct {
+	// Ext4SizeInBytes is the size of ext4 file system
+	Ext4SizeInBytes int64 `json:",omitempty"`
+	// Version is the on-disk hash format
+	Version int `json:",omitempty"`
+	// Algorithm is the algo used to produce the hashes for dm-verity hash tree
+	Algorithm string `json:",omitempty"`
+	// SuperBlock is set to true if dm-verity super block is present on the device
+	SuperBlock bool `json:",omitempty"`
+	// RootDigest is the root hash of the dm-verity hash tree
+	RootDigest string `json:",omitempty"`
+	// Salt is the salt used to compute the root hash
+	Salt string `json:",omitempty"`
+	// BlockSize is the data device block size
+	BlockSize int `json:",omitempty"`
+}
+
 // Read-only layers over VPMem
 type LCOWMappedVPMemDevice struct {
-	DeviceNumber uint32 `json:"DeviceNumber,omitempty"`
-	MountPath    string `json:"MountPath,omitempty"`
-	// Mapping is ignored when MountPath is not empty
-	MappingInfo *LCOWMappedLayer `json:"MappingInfo,omitempty"`
+	DeviceNumber uint32            `json:"DeviceNumber,omitempty"`
+	MountPath    string            `json:"MountPath,omitempty"`
+	MappingInfo  *LCOWMappedLayer  `json:"MappingInfo,omitempty"`
+	VerityInfo   *DeviceVerityInfo `json:"VerityInfo,omitempty"`
 }
 
 type LCOWMappedVPCIDevice struct {
