@@ -15,6 +15,7 @@ import (
 
 	"github.com/Microsoft/go-winio/vhd"
 	"github.com/Microsoft/hcsshim/hcn"
+	"github.com/Microsoft/hcsshim/internal/oci"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
@@ -26,7 +27,7 @@ func getJobContainerPodRequestWCOW(t *testing.T) *runtime.RunPodSandboxRequest {
 				Namespace: testNamespace,
 			},
 			Annotations: map[string]string{
-				"microsoft.com/hostprocess-container": "true",
+				oci.AnnotationHostProcessContainer: "true",
 			},
 		},
 		RuntimeHandler: wcowProcessRuntimeHandler,
@@ -51,8 +52,8 @@ func getJobContainerRequestWCOW(t *testing.T, podID string, podConfig *runtime.P
 			},
 
 			Annotations: map[string]string{
-				"microsoft.com/hostprocess-container":    "true",
-				"microsoft.com/hostprocess-inherit-user": "true",
+				oci.AnnotationHostProcessContainer:   "true",
+				oci.AnnotationHostProcessInheritUser: "true",
 			},
 		},
 		PodSandboxId:  podID,

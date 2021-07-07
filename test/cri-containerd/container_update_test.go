@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/osversion"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
@@ -335,7 +336,7 @@ func Test_Container_UpdateResources_Memory(t *testing.T) {
 					},
 					Command: test.cmd,
 					Annotations: map[string]string{
-						"io.microsoft.container.memory.sizeinmb": fmt.Sprintf("%d", startingMemorySize), // 768MB
+						oci.AnnotationContainerMemorySizeInMB: fmt.Sprintf("%d", startingMemorySize), // 768MB
 					},
 				},
 				PodSandboxId:  podID,

@@ -16,152 +16,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const (
-	// AnnotationContainerMemorySizeInMB overrides the container memory size set
-	// via the OCI spec.
-	//
-	// Note: This annotation is in MB. OCI is in Bytes. When using this override
-	// the caller MUST use MB or sizing will be wrong.
-	//
-	// Note: This is only present because CRI does not (currently) have a
-	// `WindowsPodSandboxConfig` for setting this correctly. It should not be
-	// used via OCI runtimes and rather use
-	// `spec.Windows.Resources.Memory.Limit`.
-	AnnotationContainerMemorySizeInMB = "io.microsoft.container.memory.sizeinmb"
-	// AnnotationContainerProcessorCount overrides the container processor count
-	// set via the OCI spec.
-	//
-	// Note: For Windows Process Containers CPU Count/Limit/Weight are mutually
-	// exclusive and the caller MUST only set one of the values.
-	//
-	// Note: This is only present because CRI does not (currently) have a
-	// `WindowsPodSandboxConfig` for setting this correctly. It should not be
-	// used via OCI runtimes and rather use `spec.Windows.Resources.CPU.Count`.
-	AnnotationContainerProcessorCount = "io.microsoft.container.processor.count"
-	// AnnotationContainerProcessorLimit overrides the container processor limit
-	// set via the OCI spec.
-	//
-	// Limit allows values 1 - 10,000 where 10,000 means 100% CPU. (And is the
-	// default if omitted)
-	//
-	// Note: For Windows Process Containers CPU Count/Limit/Weight are mutually
-	// exclusive and the caller MUST only set one of the values.
-	//
-	// Note: This is only present because CRI does not (currently) have a
-	// `WindowsPodSandboxConfig` for setting this correctly. It should not be
-	// used via OCI runtimes and rather use
-	// `spec.Windows.Resources.CPU.Maximum`.
-	AnnotationContainerProcessorLimit = "io.microsoft.container.processor.limit"
-	// AnnotationContainerProcessorWeight overrides the container processor
-	// weight set via the OCI spec.
-	//
-	// Weight allows values 0 - 10,000. (100 is the default)
-	//
-	// Note: For Windows Process Containers CPU Count/Limit/Weight are mutually
-	// exclusive and the caller MUST only set one of the values.
-	//
-	// Note: This is only present because CRI does not (currently) have a
-	// `WindowsPodSandboxConfig` for setting this correctly. It should not be
-	// used via OCI runtimes and rather use `spec.Windows.Resources.CPU.Shares`.
-	AnnotationContainerProcessorWeight = "io.microsoft.container.processor.weight"
-	// AnnotationContainerStorageQoSBandwidthMaximum overrides the container
-	// storage bandwidth per second set via the OCI spec.
-	//
-	// Note: This is only present because CRI does not (currently) have a
-	// `WindowsPodSandboxConfig` for setting this correctly. It should not be
-	// used via OCI runtimes and rather use
-	// `spec.Windows.Resources.Storage.Bps`.
-	AnnotationContainerStorageQoSBandwidthMaximum = "io.microsoft.container.storage.qos.bandwidthmaximum"
-	// AnnotationContainerStorageQoSIopsMaximum overrides the container storage
-	// maximum iops set via the OCI spec.
-	//
-	// Note: This is only present because CRI does not (currently) have a
-	// `WindowsPodSandboxConfig` for setting this correctly. It should not be
-	// used via OCI runtimes and rather use
-	// `spec.Windows.Resources.Storage.Iops`.
-	AnnotationContainerStorageQoSIopsMaximum = "io.microsoft.container.storage.qos.iopsmaximum"
-	// AnnotationGPUVHDPath overrides the default path to search for the gpu vhd
-	AnnotationGPUVHDPath = "io.microsoft.lcow.gpuvhdpath"
-	// AnnotationAssignedDeviceKernelDrivers indicates what drivers to install in the pod during device
-	// assignment. This value should contain a list of comma separated directories containing all
-	// files and information needed to install given driver(s). This may include .sys,
-	// .inf, .cer, and/or other files used during standard installation with pnputil.
-	AnnotationAssignedDeviceKernelDrivers = "io.microsoft.assigneddevice.kerneldrivers"
-	// AnnotationHostProcessInheritUser indicates whether to ignore the username passed in to run a host process
-	// container as and instead inherit the user token from the executable that is launching the container process.
-	AnnotationHostProcessInheritUser = "microsoft.com/hostprocess-inherit-user"
-	// AnnotationHostProcessContainer indicates to launch a host process container (job container in this repository).
-	AnnotationHostProcessContainer = "microsoft.com/hostprocess-container"
-
-	annotationAllowOvercommit       = "io.microsoft.virtualmachine.computetopology.memory.allowovercommit"
-	annotationEnableDeferredCommit  = "io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit"
-	annotationEnableColdDiscardHint = "io.microsoft.virtualmachine.computetopology.memory.enablecolddiscardhint"
-	// annotationMemorySizeInMB overrides the container memory size set via the
-	// OCI spec.
-	//
-	// Note: This annotation is in MB. OCI is in Bytes. When using this override
-	// the caller MUST use MB or sizing will be wrong.
-	annotationMemorySizeInMB         = "io.microsoft.virtualmachine.computetopology.memory.sizeinmb"
-	annotationMemoryLowMMIOGapInMB   = "io.microsoft.virtualmachine.computetopology.memory.lowmmiogapinmb"
-	annotationMemoryHighMMIOBaseInMB = "io.microsoft.virtualmachine.computetopology.memory.highmmiobaseinmb"
-	annotationMemoryHighMMIOGapInMB  = "io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb"
-	// annotationProcessorCount overrides the hypervisor isolated vCPU count set
-	// via the OCI spec.
-	//
-	// Note: Unlike Windows process isolated container QoS Count/Limt/Weight on
-	// the UVM are not mutually exclusive and can be set together.
-	annotationProcessorCount = "io.microsoft.virtualmachine.computetopology.processor.count"
-	// annotationProcessorLimit overrides the hypervisor isolated vCPU limit set
-	// via the OCI spec.
-	//
-	// Limit allows values 1 - 100,000 where 100,000 means 100% CPU. (And is the
-	// default if omitted)
-	//
-	// Note: Unlike Windows process isolated container QoS Count/Limt/Weight on
-	// the UVM are not mutually exclusive and can be set together.
-	annotationProcessorLimit = "io.microsoft.virtualmachine.computetopology.processor.limit"
-	// annotationProcessorWeight overrides the hypervisor isolated vCPU weight set
-	// via the OCI spec.
-	//
-	// Weight allows values 0 - 10,000. (100 is the default if omitted)
-	//
-	// Note: Unlike Windows process isolated container QoS Count/Limt/Weight on
-	// the UVM are not mutually exclusive and can be set together.
-	annotationProcessorWeight             = "io.microsoft.virtualmachine.computetopology.processor.weight"
-	annotationVPMemCount                  = "io.microsoft.virtualmachine.devices.virtualpmem.maximumcount"
-	annotationVPMemSize                   = "io.microsoft.virtualmachine.devices.virtualpmem.maximumsizebytes"
-	annotationPreferredRootFSType         = "io.microsoft.virtualmachine.lcow.preferredrootfstype"
-	annotationBootFilesRootPath           = "io.microsoft.virtualmachine.lcow.bootfilesrootpath"
-	annotationKernelDirectBoot            = "io.microsoft.virtualmachine.lcow.kerneldirectboot"
-	annotationVPCIEnabled                 = "io.microsoft.virtualmachine.lcow.vpcienabled"
-	annotationVPMemNoMultiMapping         = "io.microsoft.virtualmachine.lcow.vpmem.nomultimapping"
-	annotationStorageQoSBandwidthMaximum  = "io.microsoft.virtualmachine.storageqos.bandwidthmaximum"
-	annotationStorageQoSIopsMaximum       = "io.microsoft.virtualmachine.storageqos.iopsmaximum"
-	annotationFullyPhysicallyBacked       = "io.microsoft.virtualmachine.fullyphysicallybacked"
-	annotationDisableCompartmentNamespace = "io.microsoft.virtualmachine.disablecompartmentnamespace"
-	annotationVSMBNoDirectMap             = "io.microsoft.virtualmachine.wcow.virtualSMB.nodirectmap"
-
-	// annotation used to specify the cpugroup ID that a UVM should be assigned to
-	annotationCPUGroupID = "io.microsoft.virtualmachine.cpugroup.id"
-
-	// SaveAsTemplate annotation must be used with a pod & container creation request.
-	// If this annotation is present in the request then it will save the UVM (pod)
-	// and the container(s) inside it as a template. However, this also means that this
-	// pod and the containers inside this pod will permananetly stay in the
-	// paused/templated state and can not be resumed again.
-	annotationSaveAsTemplate = "io.microsoft.virtualmachine.saveastemplate"
-
-	// This annotation should be used when creating a pod or a container from a template.
-	// When creating a pod from a template use the ID of the templated pod as the
-	// TemplateID and when creating a container use the ID of the templated container as
-	// the TemplateID. It is the client's responsibility to make sure that the sandbox
-	// within which a cloned container needs to be created must also be created from the
-	// same template.
-	annotationTemplateID         = "io.microsoft.virtualmachine.templateid"
-	annotationNetworkConfigProxy = "io.microsoft.network.ncproxy"
-	AnnotationNcproxyContainerID = "io.microsoft.network.ncproxy.containerid"
-)
-
 // parseAnnotationsBool searches `a` for `key` and if found verifies that the
 // value is `true` or `false` in any case. If `key` is not found returns `def`.
 func parseAnnotationsBool(ctx context.Context, a map[string]string, key string, def bool) bool {
@@ -354,13 +208,13 @@ func parseAnnotationsString(a map[string]string, key string, def string) string 
 // if this create request should be considered as a template creation request. If value
 // is found the returns the actual value, returns false otherwise.
 func ParseAnnotationsSaveAsTemplate(ctx context.Context, s *specs.Spec) bool {
-	return parseAnnotationsBool(ctx, s.Annotations, annotationSaveAsTemplate, false)
+	return parseAnnotationsBool(ctx, s.Annotations, AnnotationSaveAsTemplate, false)
 }
 
 // ParseAnnotationsTemplateID searches for the templateID in the create request. If the
 // value is found then returns the value otherwise returns the empty string.
 func ParseAnnotationsTemplateID(ctx context.Context, s *specs.Spec) string {
-	return parseAnnotationsString(s.Annotations, annotationTemplateID, "")
+	return parseAnnotationsString(s.Annotations, AnnotationTemplateID, "")
 }
 
 func ParseCloneAnnotations(ctx context.Context, s *specs.Spec) (isTemplate bool, templateID string, err error) {
@@ -379,7 +233,7 @@ func ParseCloneAnnotations(ctx context.Context, s *specs.Spec) (isTemplate bool,
 // handleAnnotationKernelDirectBoot handles parsing annotationKernelDirectBoot and setting
 // implied annotations from the result.
 func handleAnnotationKernelDirectBoot(ctx context.Context, a map[string]string, lopts *uvm.OptionsLCOW) {
-	lopts.KernelDirect = parseAnnotationsBool(ctx, a, annotationKernelDirectBoot, lopts.KernelDirect)
+	lopts.KernelDirect = parseAnnotationsBool(ctx, a, AnnotationKernelDirectBoot, lopts.KernelDirect)
 	if !lopts.KernelDirect {
 		lopts.KernelFile = uvm.KernelFile
 	}
@@ -388,7 +242,7 @@ func handleAnnotationKernelDirectBoot(ctx context.Context, a map[string]string, 
 // handleAnnotationPreferredRootFSType handles parsing annotationPreferredRootFSType and setting
 // implied annotations from the result
 func handleAnnotationPreferredRootFSType(ctx context.Context, a map[string]string, lopts *uvm.OptionsLCOW) {
-	lopts.PreferredRootFSType = parseAnnotationsPreferredRootFSType(ctx, a, annotationPreferredRootFSType, lopts.PreferredRootFSType)
+	lopts.PreferredRootFSType = parseAnnotationsPreferredRootFSType(ctx, a, AnnotationPreferredRootFSType, lopts.PreferredRootFSType)
 	switch lopts.PreferredRootFSType {
 	case uvm.PreferredRootFSTypeInitRd:
 		lopts.RootFSFile = uvm.InitrdFile
@@ -402,7 +256,7 @@ func handleAnnotationPreferredRootFSType(ctx context.Context, a map[string]strin
 func handleAnnotationFullyPhysicallyBacked(ctx context.Context, a map[string]string, opts interface{}) {
 	switch options := opts.(type) {
 	case *uvm.OptionsLCOW:
-		options.FullyPhysicallyBacked = parseAnnotationsBool(ctx, a, annotationFullyPhysicallyBacked, options.FullyPhysicallyBacked)
+		options.FullyPhysicallyBacked = parseAnnotationsBool(ctx, a, AnnotationFullyPhysicallyBacked, options.FullyPhysicallyBacked)
 		if options.FullyPhysicallyBacked {
 			options.AllowOvercommit = false
 			options.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
@@ -410,7 +264,7 @@ func handleAnnotationFullyPhysicallyBacked(ctx context.Context, a map[string]str
 			options.VPMemDeviceCount = 0
 		}
 	case *uvm.OptionsWCOW:
-		options.FullyPhysicallyBacked = parseAnnotationsBool(ctx, a, annotationFullyPhysicallyBacked, options.FullyPhysicallyBacked)
+		options.FullyPhysicallyBacked = parseAnnotationsBool(ctx, a, AnnotationFullyPhysicallyBacked, options.FullyPhysicallyBacked)
 		if options.FullyPhysicallyBacked {
 			options.AllowOvercommit = false
 		}
@@ -420,8 +274,8 @@ func handleAnnotationFullyPhysicallyBacked(ctx context.Context, a map[string]str
 // handleCloneAnnotations handles parsing annotations related to template creation and cloning
 // Since late cloning is only supported for WCOW this function only deals with WCOW options.
 func handleCloneAnnotations(ctx context.Context, a map[string]string, wopts *uvm.OptionsWCOW) (err error) {
-	wopts.IsTemplate = parseAnnotationsBool(ctx, a, annotationSaveAsTemplate, false)
-	templateID := parseAnnotationsString(a, annotationTemplateID, "")
+	wopts.IsTemplate = parseAnnotationsBool(ctx, a, AnnotationSaveAsTemplate, false)
+	templateID := parseAnnotationsString(a, AnnotationTemplateID, "")
 	if templateID != "" {
 		tc, err := clone.FetchTemplateConfig(ctx, templateID)
 		if err != nil {
@@ -445,25 +299,25 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 	}
 	if IsLCOW(s) {
 		lopts := uvm.NewDefaultOptionsLCOW(id, owner)
-		lopts.MemorySizeInMB = ParseAnnotationsMemory(ctx, s, annotationMemorySizeInMB, lopts.MemorySizeInMB)
-		lopts.LowMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, annotationMemoryLowMMIOGapInMB, lopts.LowMMIOGapInMB)
-		lopts.HighMMIOBaseInMB = parseAnnotationsUint64(ctx, s.Annotations, annotationMemoryHighMMIOBaseInMB, lopts.HighMMIOBaseInMB)
-		lopts.HighMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, annotationMemoryHighMMIOGapInMB, lopts.HighMMIOGapInMB)
-		lopts.AllowOvercommit = parseAnnotationsBool(ctx, s.Annotations, annotationAllowOvercommit, lopts.AllowOvercommit)
-		lopts.EnableDeferredCommit = parseAnnotationsBool(ctx, s.Annotations, annotationEnableDeferredCommit, lopts.EnableDeferredCommit)
-		lopts.EnableColdDiscardHint = parseAnnotationsBool(ctx, s.Annotations, annotationEnableColdDiscardHint, lopts.EnableColdDiscardHint)
-		lopts.ProcessorCount = ParseAnnotationsCPUCount(ctx, s, annotationProcessorCount, lopts.ProcessorCount)
-		lopts.ProcessorLimit = ParseAnnotationsCPULimit(ctx, s, annotationProcessorLimit, lopts.ProcessorLimit)
-		lopts.ProcessorWeight = ParseAnnotationsCPUWeight(ctx, s, annotationProcessorWeight, lopts.ProcessorWeight)
-		lopts.VPMemDeviceCount = parseAnnotationsUint32(ctx, s.Annotations, annotationVPMemCount, lopts.VPMemDeviceCount)
-		lopts.VPMemSizeBytes = parseAnnotationsUint64(ctx, s.Annotations, annotationVPMemSize, lopts.VPMemSizeBytes)
-		lopts.VPMemNoMultiMapping = parseAnnotationsBool(ctx, s.Annotations, annotationVPMemNoMultiMapping, lopts.VPMemNoMultiMapping)
-		lopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(ctx, s, annotationStorageQoSBandwidthMaximum, lopts.StorageQoSBandwidthMaximum)
-		lopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotationStorageQoSIopsMaximum, lopts.StorageQoSIopsMaximum)
-		lopts.VPCIEnabled = parseAnnotationsBool(ctx, s.Annotations, annotationVPCIEnabled, lopts.VPCIEnabled)
-		lopts.BootFilesPath = parseAnnotationsString(s.Annotations, annotationBootFilesRootPath, lopts.BootFilesPath)
-		lopts.CPUGroupID = parseAnnotationsString(s.Annotations, annotationCPUGroupID, lopts.CPUGroupID)
-		lopts.NetworkConfigProxy = parseAnnotationsString(s.Annotations, annotationNetworkConfigProxy, lopts.NetworkConfigProxy)
+		lopts.MemorySizeInMB = ParseAnnotationsMemory(ctx, s, AnnotationMemorySizeInMB, lopts.MemorySizeInMB)
+		lopts.LowMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, AnnotationMemoryLowMMIOGapInMB, lopts.LowMMIOGapInMB)
+		lopts.HighMMIOBaseInMB = parseAnnotationsUint64(ctx, s.Annotations, AnnotationMemoryHighMMIOBaseInMB, lopts.HighMMIOBaseInMB)
+		lopts.HighMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, AnnotationMemoryHighMMIOGapInMB, lopts.HighMMIOGapInMB)
+		lopts.AllowOvercommit = parseAnnotationsBool(ctx, s.Annotations, AnnotationAllowOvercommit, lopts.AllowOvercommit)
+		lopts.EnableDeferredCommit = parseAnnotationsBool(ctx, s.Annotations, AnnotationEnableDeferredCommit, lopts.EnableDeferredCommit)
+		lopts.EnableColdDiscardHint = parseAnnotationsBool(ctx, s.Annotations, AnnotationEnableColdDiscardHint, lopts.EnableColdDiscardHint)
+		lopts.ProcessorCount = ParseAnnotationsCPUCount(ctx, s, AnnotationProcessorCount, lopts.ProcessorCount)
+		lopts.ProcessorLimit = ParseAnnotationsCPULimit(ctx, s, AnnotationProcessorLimit, lopts.ProcessorLimit)
+		lopts.ProcessorWeight = ParseAnnotationsCPUWeight(ctx, s, AnnotationProcessorWeight, lopts.ProcessorWeight)
+		lopts.VPMemDeviceCount = parseAnnotationsUint32(ctx, s.Annotations, AnnotationVPMemCount, lopts.VPMemDeviceCount)
+		lopts.VPMemSizeBytes = parseAnnotationsUint64(ctx, s.Annotations, AnnotationVPMemSize, lopts.VPMemSizeBytes)
+		lopts.VPMemNoMultiMapping = parseAnnotationsBool(ctx, s.Annotations, AnnotationVPMemNoMultiMapping, lopts.VPMemNoMultiMapping)
+		lopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(ctx, s, AnnotationStorageQoSBandwidthMaximum, lopts.StorageQoSBandwidthMaximum)
+		lopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, AnnotationStorageQoSIopsMaximum, lopts.StorageQoSIopsMaximum)
+		lopts.VPCIEnabled = parseAnnotationsBool(ctx, s.Annotations, AnnotationVPCIEnabled, lopts.VPCIEnabled)
+		lopts.BootFilesPath = parseAnnotationsString(s.Annotations, AnnotationBootFilesRootPath, lopts.BootFilesPath)
+		lopts.CPUGroupID = parseAnnotationsString(s.Annotations, AnnotationCPUGroupID, lopts.CPUGroupID)
+		lopts.NetworkConfigProxy = parseAnnotationsString(s.Annotations, AnnotationNetworkConfigProxy, lopts.NetworkConfigProxy)
 		handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
 		handleAnnotationKernelDirectBoot(ctx, s.Annotations, lopts)
 
@@ -473,21 +327,21 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		return lopts, nil
 	} else if IsWCOW(s) {
 		wopts := uvm.NewDefaultOptionsWCOW(id, owner)
-		wopts.MemorySizeInMB = ParseAnnotationsMemory(ctx, s, annotationMemorySizeInMB, wopts.MemorySizeInMB)
-		wopts.LowMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, annotationMemoryLowMMIOGapInMB, wopts.LowMMIOGapInMB)
-		wopts.HighMMIOBaseInMB = parseAnnotationsUint64(ctx, s.Annotations, annotationMemoryHighMMIOBaseInMB, wopts.HighMMIOBaseInMB)
-		wopts.HighMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, annotationMemoryHighMMIOGapInMB, wopts.HighMMIOGapInMB)
-		wopts.AllowOvercommit = parseAnnotationsBool(ctx, s.Annotations, annotationAllowOvercommit, wopts.AllowOvercommit)
-		wopts.EnableDeferredCommit = parseAnnotationsBool(ctx, s.Annotations, annotationEnableDeferredCommit, wopts.EnableDeferredCommit)
-		wopts.ProcessorCount = ParseAnnotationsCPUCount(ctx, s, annotationProcessorCount, wopts.ProcessorCount)
-		wopts.ProcessorLimit = ParseAnnotationsCPULimit(ctx, s, annotationProcessorLimit, wopts.ProcessorLimit)
-		wopts.ProcessorWeight = ParseAnnotationsCPUWeight(ctx, s, annotationProcessorWeight, wopts.ProcessorWeight)
-		wopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(ctx, s, annotationStorageQoSBandwidthMaximum, wopts.StorageQoSBandwidthMaximum)
-		wopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotationStorageQoSIopsMaximum, wopts.StorageQoSIopsMaximum)
-		wopts.DisableCompartmentNamespace = parseAnnotationsBool(ctx, s.Annotations, annotationDisableCompartmentNamespace, wopts.DisableCompartmentNamespace)
-		wopts.CPUGroupID = parseAnnotationsString(s.Annotations, annotationCPUGroupID, wopts.CPUGroupID)
-		wopts.NetworkConfigProxy = parseAnnotationsString(s.Annotations, annotationNetworkConfigProxy, wopts.NetworkConfigProxy)
-		wopts.NoDirectMap = parseAnnotationsBool(ctx, s.Annotations, annotationVSMBNoDirectMap, wopts.NoDirectMap)
+		wopts.MemorySizeInMB = ParseAnnotationsMemory(ctx, s, AnnotationMemorySizeInMB, wopts.MemorySizeInMB)
+		wopts.LowMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, AnnotationMemoryLowMMIOGapInMB, wopts.LowMMIOGapInMB)
+		wopts.HighMMIOBaseInMB = parseAnnotationsUint64(ctx, s.Annotations, AnnotationMemoryHighMMIOBaseInMB, wopts.HighMMIOBaseInMB)
+		wopts.HighMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, AnnotationMemoryHighMMIOGapInMB, wopts.HighMMIOGapInMB)
+		wopts.AllowOvercommit = parseAnnotationsBool(ctx, s.Annotations, AnnotationAllowOvercommit, wopts.AllowOvercommit)
+		wopts.EnableDeferredCommit = parseAnnotationsBool(ctx, s.Annotations, AnnotationEnableDeferredCommit, wopts.EnableDeferredCommit)
+		wopts.ProcessorCount = ParseAnnotationsCPUCount(ctx, s, AnnotationProcessorCount, wopts.ProcessorCount)
+		wopts.ProcessorLimit = ParseAnnotationsCPULimit(ctx, s, AnnotationProcessorLimit, wopts.ProcessorLimit)
+		wopts.ProcessorWeight = ParseAnnotationsCPUWeight(ctx, s, AnnotationProcessorWeight, wopts.ProcessorWeight)
+		wopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(ctx, s, AnnotationStorageQoSBandwidthMaximum, wopts.StorageQoSBandwidthMaximum)
+		wopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, AnnotationStorageQoSIopsMaximum, wopts.StorageQoSIopsMaximum)
+		wopts.DisableCompartmentNamespace = parseAnnotationsBool(ctx, s.Annotations, AnnotationDisableCompartmentNamespace, wopts.DisableCompartmentNamespace)
+		wopts.CPUGroupID = parseAnnotationsString(s.Annotations, AnnotationCPUGroupID, wopts.CPUGroupID)
+		wopts.NetworkConfigProxy = parseAnnotationsString(s.Annotations, AnnotationNetworkConfigProxy, wopts.NetworkConfigProxy)
+		wopts.NoDirectMap = parseAnnotationsBool(ctx, s.Annotations, AnnotationVSMBNoDirectMap, wopts.NoDirectMap)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, wopts)
 		if err := handleCloneAnnotations(ctx, s.Annotations, wopts); err != nil {
 			return nil, err
@@ -504,24 +358,24 @@ func UpdateSpecFromOptions(s specs.Spec, opts *runhcsopts.Options) specs.Spec {
 		return s
 	}
 
-	if _, ok := s.Annotations[annotationBootFilesRootPath]; !ok && opts.BootFilesRootPath != "" {
-		s.Annotations[annotationBootFilesRootPath] = opts.BootFilesRootPath
+	if _, ok := s.Annotations[AnnotationBootFilesRootPath]; !ok && opts.BootFilesRootPath != "" {
+		s.Annotations[AnnotationBootFilesRootPath] = opts.BootFilesRootPath
 	}
 
-	if _, ok := s.Annotations[annotationProcessorCount]; !ok && opts.VmProcessorCount != 0 {
-		s.Annotations[annotationProcessorCount] = strconv.FormatInt(int64(opts.VmProcessorCount), 10)
+	if _, ok := s.Annotations[AnnotationProcessorCount]; !ok && opts.VmProcessorCount != 0 {
+		s.Annotations[AnnotationProcessorCount] = strconv.FormatInt(int64(opts.VmProcessorCount), 10)
 	}
 
-	if _, ok := s.Annotations[annotationMemorySizeInMB]; !ok && opts.VmMemorySizeInMb != 0 {
-		s.Annotations[annotationMemorySizeInMB] = strconv.FormatInt(int64(opts.VmMemorySizeInMb), 10)
+	if _, ok := s.Annotations[AnnotationMemorySizeInMB]; !ok && opts.VmMemorySizeInMb != 0 {
+		s.Annotations[AnnotationMemorySizeInMB] = strconv.FormatInt(int64(opts.VmMemorySizeInMb), 10)
 	}
 
 	if _, ok := s.Annotations[AnnotationGPUVHDPath]; !ok && opts.GPUVHDPath != "" {
 		s.Annotations[AnnotationGPUVHDPath] = opts.GPUVHDPath
 	}
 
-	if _, ok := s.Annotations[annotationNetworkConfigProxy]; !ok && opts.NCProxyAddr != "" {
-		s.Annotations[annotationNetworkConfigProxy] = opts.NCProxyAddr
+	if _, ok := s.Annotations[AnnotationNetworkConfigProxy]; !ok && opts.NCProxyAddr != "" {
+		s.Annotations[AnnotationNetworkConfigProxy] = opts.NCProxyAddr
 	}
 
 	return s

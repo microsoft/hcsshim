@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/osversion"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
@@ -101,7 +102,7 @@ func Test_Container_Layer_Packing_On_VPMem(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("PreferredRootFSType-%s", scenario.rootfsType), func(t *testing.T) {
 			annotations := map[string]string{
-				"io.microsoft.virtualmachine.lcow.preferredrootfstype": scenario.rootfsType,
+				oci.AnnotationPreferredRootFSType: scenario.rootfsType,
 			}
 			podReq := getRunPodSandboxRequest(t, lcowRuntimeHandler, annotations)
 			podID := runPodSandbox(t, client, ctx, podReq)
@@ -169,7 +170,7 @@ func Test_Annotation_Disable_Multi_Mapping(t *testing.T) {
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, alpine70ExtraLayers})
 
 	annotations := map[string]string{
-		"io.microsoft.virtualmachine.lcow.vpmem.nomultimapping": "true",
+		oci.AnnotationVPMemNoMultiMapping: "true",
 	}
 	podReq := getRunPodSandboxRequest(t, lcowRuntimeHandler, annotations)
 	podID := runPodSandbox(t, client, ctx, podReq)
