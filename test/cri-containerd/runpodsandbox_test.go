@@ -17,6 +17,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cpugroup"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
+	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/osversion"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
@@ -120,7 +121,7 @@ func Test_RunPodSandbox_VirtualMemory_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "true",
+			oci.AnnotationAllowOvercommit: "true",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -135,7 +136,7 @@ func Test_RunPodSandbox_VirtualMemory_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "true",
+			oci.AnnotationAllowOvercommit: "true",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -150,8 +151,8 @@ func Test_RunPodSandbox_VirtualMemory_DeferredCommit_WCOW_Hypervisor(t *testing.
 		t,
 		wcowHypervisorRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.computetopology.memory.allowovercommit":      "true",
-			"io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit": "true",
+			oci.AnnotationAllowOvercommit:      "true",
+			oci.AnnotationEnableDeferredCommit: "true",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -166,8 +167,8 @@ func Test_RunPodSandbox_VirtualMemory_DeferredCommit_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.computetopology.memory.allowovercommit":      "true",
-			"io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit": "true",
+			oci.AnnotationAllowOvercommit:      "true",
+			oci.AnnotationEnableDeferredCommit: "true",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -182,7 +183,7 @@ func Test_RunPodSandbox_PhysicalMemory_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "false",
+			oci.AnnotationAllowOvercommit: "false",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -197,7 +198,7 @@ func Test_RunPodSandbox_FullyPhysicallyBacked_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
+			oci.AnnotationFullyPhysicallyBacked: "true",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -212,7 +213,7 @@ func Test_RunPodSandbox_VSMBNoDirectMap_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.wcow.virtualSMB.nodirectmap": "true",
+			oci.AnnotationVSMBNoDirectMap: "true",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -227,7 +228,7 @@ func Test_RunPodSandbox_PhysicalMemory_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "false",
+			oci.AnnotationAllowOvercommit: "false",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -242,7 +243,7 @@ func Test_RunPodSandbox_FullyPhysicallyBacked_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
+			oci.AnnotationFullyPhysicallyBacked: "true",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -257,7 +258,7 @@ func Test_RunPodSandbox_MemorySize_WCOW_Process(t *testing.T) {
 		t,
 		wcowProcessRuntimeHandler,
 		map[string]string{
-			"io.microsoft.container.memory.sizeinmb": "128",
+			oci.AnnotationContainerMemorySizeInMB: "128",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -272,7 +273,7 @@ func Test_RunPodSandbox_MemorySize_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.computetopology.memory.sizeinmb": "768", // 128 is too small for WCOW. It is really slow boot.
+			oci.AnnotationMemorySizeInMB: "768", // 128 is too small for WCOW. It is really slow boot.
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -287,7 +288,7 @@ func Test_RunPodSandbox_MemorySize_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.computetopology.memory.sizeinmb": "200",
+			oci.AnnotationMemorySizeInMB: "200",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -305,9 +306,9 @@ func Test_RunPodSandbox_MMIO_WCOW_Process(t *testing.T) {
 		t,
 		wcowProcessRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.computetopology.memory.lowmmiogapinmb":   "100",
-			"io.microsoft.virtualmachine.computetopology.memory.highmmiobaseinmb": "100",
-			"io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb":  "100",
+			oci.AnnotationMemoryLowMMIOGapInMB:   "100",
+			oci.AnnotationMemoryHighMMIOBaseInMB: "100",
+			oci.AnnotationMemoryHighMMIOGapInMB:  "100",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -325,9 +326,9 @@ func Test_RunPodSandbox_MMIO_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.computetopology.memory.lowmmiogapinmb":   "100",
-			"io.microsoft.virtualmachine.computetopology.memory.highmmiobaseinmb": "100",
-			"io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb":  "100",
+			oci.AnnotationMemoryLowMMIOGapInMB:   "100",
+			oci.AnnotationMemoryHighMMIOBaseInMB: "100",
+			oci.AnnotationMemoryHighMMIOGapInMB:  "100",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -345,9 +346,9 @@ func Test_RunPodSandbox_MMIO_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.computetopology.memory.lowmmiogapinmb":   "100",
-			"io.microsoft.virtualmachine.computetopology.memory.highmmiobaseinmb": "100",
-			"io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb":  "100",
+			oci.AnnotationMemoryLowMMIOGapInMB:   "100",
+			oci.AnnotationMemoryHighMMIOBaseInMB: "100",
+			oci.AnnotationMemoryHighMMIOGapInMB:  "100",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -362,7 +363,7 @@ func Test_RunPodSandbox_CPUCount_WCOW_Process(t *testing.T) {
 		t,
 		wcowProcessRuntimeHandler,
 		map[string]string{
-			"io.microsoft.container.processor.count": "1",
+			oci.AnnotationContainerProcessorCount: "1",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -377,7 +378,7 @@ func Test_RunPodSandbox_CPUCount_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.computetopology.processor.count": "1",
+			oci.AnnotationProcessorCount: "1",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -392,7 +393,7 @@ func Test_RunPodSandbox_CPUCount_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.computetopology.processor.count": "1",
+			oci.AnnotationProcessorCount: "1",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -407,7 +408,7 @@ func Test_RunPodSandbox_CPULimit_WCOW_Process(t *testing.T) {
 		t,
 		wcowProcessRuntimeHandler,
 		map[string]string{
-			"io.microsoft.container.processor.limit": "9000",
+			oci.AnnotationContainerProcessorLimit: "9000",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -422,7 +423,7 @@ func Test_RunPodSandbox_CPULimit_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.computetopology.processor.limit": "90000",
+			oci.AnnotationProcessorLimit: "90000",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -437,7 +438,7 @@ func Test_RunPodSandbox_CPULimit_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.computetopology.processor.limit": "90000",
+			oci.AnnotationProcessorLimit: "90000",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -452,7 +453,7 @@ func Test_RunPodSandbox_CPUWeight_WCOW_Process(t *testing.T) {
 		t,
 		wcowProcessRuntimeHandler,
 		map[string]string{
-			"io.microsoft.container.processor.weight": "500",
+			oci.AnnotationContainerProcessorWeight: "500",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -467,7 +468,7 @@ func Test_RunPodSandbox_CPUWeight_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		map[string]string{
-			"io.microsoft.container.processor.weight": "500",
+			oci.AnnotationContainerProcessorWeight: "500",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -482,7 +483,7 @@ func Test_RunPodSandbox_CPUWeight_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.computetopology.processor.weight": "500",
+			oci.AnnotationProcessorWeight: "500",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -497,7 +498,7 @@ func Test_RunPodSandbox_StorageQoSBandwithMax_WCOW_Process(t *testing.T) {
 		t,
 		wcowProcessRuntimeHandler,
 		map[string]string{
-			"io.microsoft.container.storage.qos.bandwidthmaximum": fmt.Sprintf("%d", 1024*1024), // 1MB/s
+			oci.AnnotationContainerStorageQoSBandwidthMaximum: fmt.Sprintf("%d", 1024*1024), // 1MB/s
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -512,7 +513,7 @@ func Test_RunPodSandbox_StorageQoSBandwithMax_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.storageqos.bandwidthmaximum": fmt.Sprintf("%d", 1024*1024), // 1MB/s
+			oci.AnnotationStorageQoSBandwidthMaximum: fmt.Sprintf("%d", 1024*1024), // 1MB/s
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -527,7 +528,7 @@ func Test_RunPodSandbox_StorageQoSBandwithMax_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.storageqos.bandwidthmaximum": fmt.Sprintf("%d", 1024*1024), // 1MB/s
+			oci.AnnotationStorageQoSBandwidthMaximum: fmt.Sprintf("%d", 1024*1024), // 1MB/s
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -542,7 +543,7 @@ func Test_RunPodSandbox_StorageQoSIopsMax_WCOW_Process(t *testing.T) {
 		t,
 		wcowProcessRuntimeHandler,
 		map[string]string{
-			"io.microsoft.container.storage.qos.iopsmaximum": "300",
+			oci.AnnotationContainerStorageQoSIopsMaximum: "300",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -557,7 +558,7 @@ func Test_RunPodSandbox_StorageQoSIopsMax_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.storageqos.iopsmaximum": "300",
+			oci.AnnotationStorageQoSIopsMaximum: "300",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -572,7 +573,7 @@ func Test_RunPodSandbox_StorageQoSIopsMax_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.storageqos.iopsmaximum": "300",
+			oci.AnnotationStorageQoSIopsMaximum: "300",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -587,7 +588,7 @@ func Test_RunPodSandbox_InitrdBoot_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.lcow.preferredrootfstype": "initrd",
+			oci.AnnotationPreferredRootFSType: "initrd",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -602,7 +603,7 @@ func Test_RunPodSandbox_RootfsVhdBoot_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.lcow.preferredrootfstype": "vhd",
+			oci.AnnotationPreferredRootFSType: "vhd",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -617,7 +618,7 @@ func Test_RunPodSandbox_VPCIEnabled_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.lcow.vpcienabled": "true",
+			oci.AnnotationVPCIEnabled: "true",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -632,7 +633,7 @@ func Test_RunPodSandbox_UEFIBoot_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.lcow.kerneldirectboot": "false",
+			oci.AnnotationKernelDirectBoot: "false",
 		},
 	)
 	runPodSandboxTest(t, request)
@@ -737,7 +738,7 @@ func Test_RunPodSandbox_CustomizableScratchDefaultSize_LCOW(t *testing.T) {
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
 	annotations := map[string]string{
-		"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "true",
+		oci.AnnotationAllowOvercommit: "true",
 	}
 
 	output, errorMsg, exitCode := createSandboxContainerAndExecForCustomScratch(t, annotations)
@@ -781,7 +782,7 @@ func Test_RunPodSandbox_CustomizableScratchCustomSize_LCOW(t *testing.T) {
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
 	annotations := map[string]string{
-		"io.microsoft.virtualmachine.computetopology.memory.allowovercommit":   "true",
+		oci.AnnotationAllowOvercommit:                                          "true",
 		"containerd.io/snapshot/io.microsoft.container.storage.rootfs.size-gb": "200",
 	}
 
@@ -828,7 +829,7 @@ func Test_RunPodSandbox_Mount_SandboxDir_LCOW(t *testing.T) {
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	annotations := map[string]string{
-		"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "true",
+		oci.AnnotationAllowOvercommit: "true",
 	}
 
 	mounts := []*runtime.Mount{
@@ -915,7 +916,7 @@ func Test_RunPodSandbox_CPUGroup(t *testing.T) {
 					Namespace: testNamespace,
 				},
 				Annotations: map[string]string{
-					"io.microsoft.virtualmachine.cpugroup.id": presentID,
+					oci.AnnotationCPUGroupID: presentID,
 				},
 			},
 			RuntimeHandler: test.runtimeHandler,
@@ -943,7 +944,7 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_LCOW(t *testing.T) {
 	defer cancel()
 
 	annotations := map[string]string{
-		"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "true",
+		oci.AnnotationAllowOvercommit: "true",
 	}
 
 	// Create a temporary ext4 VHD to mount into the container.
@@ -1156,7 +1157,7 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_WCOW(t *testing.T) {
 	defer cancel()
 
 	annotations := map[string]string{
-		"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "true",
+		oci.AnnotationAllowOvercommit: "true",
 	}
 
 	vhdHostDir, err := ioutil.TempDir("", "")

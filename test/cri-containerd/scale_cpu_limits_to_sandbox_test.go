@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/oci"
 	criruntime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
@@ -31,7 +32,7 @@ func Test_Scale_CPU_Limits_To_Sandbox(t *testing.T) {
 	// set the limit to (roughly) 1 processor
 	processorLimit := 10000 / runtime.NumCPU()
 	contReq.Config.Annotations = map[string]string{
-		"io.microsoft.container.processor.limit": strconv.Itoa(processorLimit),
+		oci.AnnotationContainerProcessorLimit: strconv.Itoa(processorLimit),
 	}
 
 	contID := createContainer(t, client, ctx, contReq)

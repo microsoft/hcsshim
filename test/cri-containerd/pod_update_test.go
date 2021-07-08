@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/Microsoft/hcsshim/internal/oci"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
@@ -49,7 +50,7 @@ func Test_Pod_UpdateResources_Memory(t *testing.T) {
 						Namespace: testNamespace,
 					},
 					Annotations: map[string]string{
-						"io.microsoft.container.memory.sizeinmb": fmt.Sprintf("%d", startingMemorySize),
+						oci.AnnotationContainerMemorySizeInMB: fmt.Sprintf("%d", startingMemorySize),
 					},
 				},
 				RuntimeHandler: test.runtimeHandler,
@@ -125,8 +126,8 @@ func Test_Pod_UpdateResources_Memory_PA(t *testing.T) {
 						Namespace: testNamespace,
 					},
 					Annotations: map[string]string{
-						"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
-						"io.microsoft.container.memory.sizeinmb":            fmt.Sprintf("%d", startingMemorySize),
+						oci.AnnotationFullyPhysicallyBacked:   "true",
+						oci.AnnotationContainerMemorySizeInMB: fmt.Sprintf("%d", startingMemorySize),
 					},
 				},
 				RuntimeHandler: test.runtimeHandler,

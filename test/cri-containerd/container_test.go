@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/sirupsen/logrus"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
@@ -267,8 +268,8 @@ func Test_RunContainer_ZeroVPMEM_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.lcow.preferredrootfstype":         "initrd",
-			"io.microsoft.virtualmachine.devices.virtualpmem.maximumcount": "0",
+			oci.AnnotationPreferredRootFSType: "initrd",
+			oci.AnnotationVPMemCount:          "0",
 		},
 	)
 
@@ -309,8 +310,8 @@ func Test_RunContainer_ZeroVPMEM_Multiple_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.lcow.preferredrootfstype":         "initrd",
-			"io.microsoft.virtualmachine.devices.virtualpmem.maximumcount": "0",
+			oci.AnnotationPreferredRootFSType: "initrd",
+			oci.AnnotationVPMemCount:          "0",
 		},
 	)
 

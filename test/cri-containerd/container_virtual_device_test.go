@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/osversion"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
@@ -115,16 +116,16 @@ func findTestVirtualDeviceID() (string, error) {
 }
 
 var lcowPodGPUAnnotations = map[string]string{
-	"io.microsoft.virtualmachine.lcow.kerneldirectboot":                  "false",
-	"io.microsoft.virtualmachine.computetopology.memory.allowovercommit": "false",
-	"io.microsoft.virtualmachine.lcow.preferredrootfstype":               "initrd",
-	"io.microsoft.virtualmachine.devices.virtualpmem.maximumcount":       "0",
-	"io.microsoft.virtualmachine.lcow.vpcienabled":                       "true",
+	oci.AnnotationKernelDirectBoot:    "false",
+	oci.AnnotationAllowOvercommit:     "false",
+	oci.AnnotationPreferredRootFSType: "initrd",
+	oci.AnnotationVPMemCount:          "0",
+	oci.AnnotationVPCIEnabled:         "true",
 	// we believe this is a sufficiently large high MMIO space amount for this test.
 	// if a given gpu device needs more, this test will fail to create the container
 	// and may hang.
-	"io.microsoft.virtualmachine.computetopology.memory.highmmiogapinmb": "64000",
-	"io.microsoft.virtualmachine.lcow.bootfilesrootpath":                 testGPUBootFiles,
+	oci.AnnotationMemoryHighMMIOGapInMB: "64000",
+	oci.AnnotationBootFilesRootPath:     testGPUBootFiles,
 }
 
 func getGPUContainerRequestLCOW(t *testing.T, podID string, podConfig *runtime.PodSandboxConfig, device *runtime.Device) *runtime.CreateContainerRequest {
@@ -178,7 +179,7 @@ func getGPUContainerRequestWCOW(t *testing.T, podID string, podConfig *runtime.P
 				},
 			},
 			Annotations: map[string]string{
-				"io.microsoft.assigneddevice.kerneldrivers": testDriversPath,
+				oci.AnnotationAssignedDeviceKernelDrivers: testDriversPath,
 			},
 		},
 		PodSandboxId:  podID,
@@ -511,7 +512,7 @@ func Test_RunContainer_VirtualDevice_GPU_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
+			oci.AnnotationFullyPhysicallyBacked: "true",
 		},
 	)
 
@@ -559,7 +560,7 @@ func Test_RunContainer_VirtualDevice_GPU_and_NoGPU_WCOW_Hypervisor(t *testing.T)
 		t,
 		wcowHypervisorRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
+			oci.AnnotationFullyPhysicallyBacked: "true",
 		},
 	)
 
@@ -624,7 +625,7 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_WCOW_Hypervisor(t *testing.T) 
 		t,
 		wcowHypervisorRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
+			oci.AnnotationFullyPhysicallyBacked: "true",
 		},
 	)
 
@@ -679,7 +680,7 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_Removal_WCOW_Hypervisor(t *tes
 		t,
 		wcowHypervisorRuntimeHandler,
 		map[string]string{
-			"io.microsoft.virtualmachine.fullyphysicallybacked": "true",
+			oci.AnnotationFullyPhysicallyBacked: "true",
 		},
 	)
 

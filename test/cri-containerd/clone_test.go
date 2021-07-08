@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/osversion"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
@@ -26,7 +27,7 @@ func getTemplatePodConfig(name string) *runtime.RunPodSandboxRequest {
 				Namespace: testNamespace,
 			},
 			Annotations: map[string]string{
-				"io.microsoft.virtualmachine.saveastemplate": "true",
+				oci.AnnotationSaveAsTemplate: "true",
 			},
 		},
 		RuntimeHandler: wcowHypervisorRuntimeHandler,
@@ -49,7 +50,7 @@ func getTemplateContainerConfig(name string) *runtime.CreateContainerRequest {
 				"127.0.0.1",
 			},
 			Annotations: map[string]string{
-				"io.microsoft.virtualmachine.saveastemplate": "true",
+				oci.AnnotationSaveAsTemplate: "true",
 			},
 		},
 	}
@@ -84,7 +85,7 @@ func getClonedPodConfig(uniqueID int, templateid string) *runtime.RunPodSandboxR
 				Namespace: testNamespace,
 			},
 			Annotations: map[string]string{
-				"io.microsoft.virtualmachine.templateid": templateid + "@vm",
+				oci.AnnotationTemplateID: templateid + "@vm",
 			},
 		},
 		RuntimeHandler: wcowHypervisorRuntimeHandler,
@@ -108,7 +109,7 @@ func getClonedContainerConfig(uniqueID int, templateid string) *runtime.CreateCo
 				"127.0.0.1",
 			},
 			Annotations: map[string]string{
-				"io.microsoft.virtualmachine.templateid": templateid,
+				oci.AnnotationTemplateID: templateid,
 			},
 		},
 	}
@@ -487,7 +488,7 @@ func Test_VerifyCloneAndTemplateConfig(t *testing.T) {
 
 	// change pod config to make sure the request fails
 	cloneSandboxRequest := getClonedPodConfig(0, templatePodID)
-	cloneSandboxRequest.Config.Annotations["io.microsoft.virtualmachine.computetopology.memory.allowovercommit"] = "false"
+	cloneSandboxRequest.Config.Annotations[oci.AnnotationAllowOvercommit] = "false"
 
 	_, err := client.RunPodSandbox(ctx, cloneSandboxRequest)
 	if err == nil {

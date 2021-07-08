@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/Microsoft/hcsshim/internal/oci"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
@@ -368,9 +369,9 @@ func Test_SandboxStats_WorkingSet_PhysicallyBacked(t *testing.T) {
 				t,
 				test.runtimeHandler,
 				map[string]string{
-					"io.microsoft.virtualmachine.computetopology.memory.allowovercommit":      "false",
-					"io.microsoft.virtualmachine.computetopology.memory.enabledeferredcommit": "false",
-					"io.microsoft.virtualmachine.computetopology.memory.sizeinmb":             sizeInMBStr,
+					oci.AnnotationAllowOvercommit:      "false",
+					oci.AnnotationEnableDeferredCommit: "false",
+					oci.AnnotationMemorySizeInMB:       sizeInMBStr,
 				},
 			)
 
