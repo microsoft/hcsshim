@@ -1,3 +1,5 @@
+// +build functional
+
 package cri_containerd
 
 import (
