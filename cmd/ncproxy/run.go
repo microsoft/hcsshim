@@ -11,9 +11,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Microsoft/go-winio/pkg/etw"
 	"github.com/Microsoft/go-winio/pkg/etwlogrus"
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/cmd/ncproxy/nodenetsvc"
 	"github.com/Microsoft/hcsshim/internal/computeagent"
+	"github.com/Microsoft/hcsshim/internal/debug"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/pkg/errors"
@@ -45,14 +48,25 @@ var (
 	runSvc        = flag.Bool("run-service", false, "Run ncproxy as a Windows service.")
 )
 
+func etwCallback(sourceID guid.GUID, state etw.ProviderState, level etw.Level, matchAnyKeyword uint64, matchAllKeyword uint64, filterData uintptr) {
+	if state == etw.ProviderStateCaptureState {
+		stacks := debug.DumpStacks()
+		logrus.WithField("stack", stacks).Info("ncproxy goroutine stack dump")
+	}
+}
+
 // Run ncproxy
 func run() error {
 	flag.Parse()
 
 	// Provider ID: cf9f01fe-87b3-568d-ecef-9f54b7c5ff70
 	// Hook isn't closed explicitly, as it will exist until process exit.
-	if hook, err := etwlogrus.NewHook("Microsoft.Virtualization.NCProxy"); err == nil {
-		logrus.AddHook(hook)
+	if provider, err := etw.NewProvider("Microsoft.Virtualization.NCProxy", etwCallback); err == nil {
+		if hook, err := etwlogrus.NewHookFromProvider(provider); err == nil {
+			logrus.AddHook(hook)
+		} else {
+			logrus.Error(err)
+		}
 	} else {
 		logrus.Error(err)
 	}
