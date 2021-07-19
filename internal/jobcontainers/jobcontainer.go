@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -47,12 +46,7 @@ func envMapToSlice(m map[string]string) []string {
 	return s
 }
 
-const (
-	jobContainerNameFmt = "JobContainer_%s"
-	// Environment variable set in every process in the job detailing where the containers volume
-	// is mounted on the host.
-	sandboxMountPointEnvVar = "CONTAINER_SANDBOX_MOUNT_POINT"
-)
+const jobContainerNameFmt = "JobContainer_%s"
 
 type initProc struct {
 	initDoOnce sync.Once
@@ -92,7 +86,7 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *
 	log.G(ctx).WithField("id", id).Debug("Creating job container")
 
 	if s == nil {
-		return nil, nil, errors.New("Spec must be supplied")
+		return nil, nil, errors.New("spec must be supplied")
 	}
 
 	if id == "" {
@@ -114,13 +108,32 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to create job object")
 	}
+	container.job = job
 
 	// Parity with how we handle process isolated containers. We set the same flag which
-	// behaves the same way for a silo.
-	if err := job.SetTerminateOnLastHandleClose(); err != nil {
+	// behaves the same way for a server silo.
+	// This *has* to be set for promoting to a silo below to function.
+	if err := container.job.SetTerminateOnLastHandleClose(); err != nil {
 		return nil, nil, errors.Wrap(err, "failed to set terminate on last handle close on job container")
 	}
-	container.job = job
+
+	if err := container.job.PromoteToSilo(); err != nil {
+		return nil, nil, err
+	}
+
+	if err := container.netSetup(s.Windows.Network.NetworkNamespace); err != nil {
+		return nil, nil, err
+	}
+
+	limits, err := specToLimits(ctx, id, s)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to convert OCI spec to job object limits")
+	}
+
+	// Set resource limits on the job object based off of oci spec.
+	if err := container.job.SetResourceLimits(limits); err != nil {
+		return nil, nil, errors.Wrap(err, "failed to set resource limits")
+	}
 
 	r := resources.NewContainerResources(id)
 	defer func() {
@@ -130,32 +143,29 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *
 		}
 	}()
 
-	sandboxPath := fmt.Sprintf(sandboxMountFormat, id)
-	if err := mountLayers(ctx, id, s, sandboxPath); err != nil {
+	volumePath, err := mountLayers(ctx, id, s)
+	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to mount container layers")
 	}
-	container.sandboxMount = sandboxPath
+	container.sandboxMount = volumePath
 
-	layers := layers.NewImageLayers(nil, "", s.Windows.LayerFolders, sandboxPath, false)
+	layers := layers.NewImageLayers(nil, "", s.Windows.LayerFolders, "", false)
 	r.SetLayers(layers)
 
-	if err := setupMounts(s, container.sandboxMount); err != nil {
+	// Use the bind filter to setup any directory mounts.
+	if err := container.setupMounts(s); err != nil {
+		return nil, nil, err
+	}
+
+	// And now setup the containers unique file system view by binding every file in the image to the root of
+	// the C drive, exclusively for the silo of the container.
+	if err := container.setupBindings(container.sandboxMount); err != nil {
 		return nil, nil, err
 	}
 
 	volumeGUIDRegex := `^\\\\\?\\(Volume)\{{0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}\}(|\\)$`
 	if matched, err := regexp.MatchString(volumeGUIDRegex, s.Root.Path); !matched || err != nil {
 		return nil, nil, fmt.Errorf(`invalid container spec - Root.Path '%s' must be a volume GUID path in the format '\\?\Volume{GUID}\'`, s.Root.Path)
-	}
-
-	limits, err := specToLimits(ctx, id, s)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to convert OCI spec to job object limits")
-	}
-
-	// Set resource limits on the job object based off of oci spec.
-	if err := job.SetResourceLimits(limits); err != nil {
-		return nil, nil, errors.Wrap(err, "failed to set resource limits")
 	}
 
 	go container.waitBackground(ctx)
@@ -174,18 +184,26 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		return nil, errors.New("console emulation not supported for job containers")
 	}
 
-	// Replace any occurences of the sandbox mount point env variable in the commandline.
-	// %CONTAINER_SANDBOX_MOUNTPOINT%\mybinary.exe -> C:\C\123456789\mybinary.exe
-	commandLine := c.replaceWithMountPoint(conf.CommandLine)
-
-	workDir := c.sandboxMount
-	if conf.WorkingDirectory != "" {
-		workDir = c.replaceWithMountPoint(conf.WorkingDirectory)
+	commandLine := conf.CommandLine
+	// TODO (dcantah): This was a cruddy oversight about this approach for the container commandline. If an end user requested
+	// to launch a program at C:\\mybinary.exe, because they expect C:\\mybinary.exe to exist once the file bindings are done,
+	// it actually won't work. This is because the process is launched on the host first and the bindings are only visible to
+	// processes in that silo specifically, and the shim is not in the silo. So CreateProcess and our commandline resolution logic
+	// won't be able to find the process being asked for.
+	//
+	// A way to get around this is to launch a process that will always exists (cmd) and then just invoke the program with the
+	// cmdline supplied. There's probably a small race on cmd startup and getting assigned to the job so it can actually see
+	// the process being requested also, but this should go away if we move to launching the process in the job directly which
+	// is possible via LPPROC_THREAD_ATTRIBUTE_LIST.
+	if len(commandLine) >= 6 {
+		if commandLine[0:7] != "cmd /c" {
+			commandLine = "cmd /c " + commandLine
+		}
 	}
 
 	// Reassign commandline here in case it needed to be quoted. For example if "foo bar baz" was supplied, and
 	// "foo bar.exe" exists, then return: "\"foo bar\" baz"
-	absPath, commandLine, err := getApplicationName(commandLine, workDir, os.Getenv("PATH"))
+	absPath, commandLine, err := getApplicationName(commandLine, conf.WorkingDirectory, os.Getenv("PATH"))
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get application name from commandline %q", conf.CommandLine)
 	}
@@ -209,11 +227,10 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		return nil, errors.Wrap(err, "failed to get default environment block")
 	}
 	env = append(env, envMapToSlice(conf.Environment)...)
-	env = append(env, sandboxMountPointEnvVar+"="+c.sandboxMount)
 
 	cmd := &exec.Cmd{
 		Env:  env,
-		Dir:  workDir,
+		Dir:  conf.WorkingDirectory,
 		Path: absPath,
 		Args: splitArgs(commandLine),
 		SysProcAttr: &syscall.SysProcAttr{
@@ -573,10 +590,4 @@ func systemProcessInformation() ([]*winapi.SYSTEM_PROCESS_INFORMATION, error) {
 	}
 
 	return procInfos, nil
-}
-
-// Takes a string and replaces any occurences of CONTAINER_SANDBOX_MOUNT_POINT with where the containers volume is mounted.
-func (c *JobContainer) replaceWithMountPoint(str string) string {
-	str = strings.ReplaceAll(str, "%"+sandboxMountPointEnvVar+"%", c.sandboxMount)
-	return strings.ReplaceAll(str, "$env:"+sandboxMountPointEnvVar, c.sandboxMount)
 }

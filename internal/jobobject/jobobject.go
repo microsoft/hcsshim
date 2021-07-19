@@ -24,6 +24,7 @@ import (
 // of the job and a mutex for synchronized handle access.
 type JobObject struct {
 	handle     windows.Handle
+	isAppSilo  bool
 	mq         *queue.MessageQueue
 	handleLock sync.RWMutex
 }
@@ -55,6 +56,7 @@ const (
 var (
 	ErrAlreadyClosed = errors.New("the handle has already been closed")
 	ErrNotRegistered = errors.New("job is not registered to receive notifications")
+	ErrNotSilo       = errors.New("job is not a silo")
 )
 
 // Options represents the set of configurable options when making or opening a job object.
@@ -413,4 +415,80 @@ func (job *JobObject) QueryStorageStats() (*winapi.JOBOBJECT_BASIC_AND_IO_ACCOUN
 		return nil, errors.Wrap(err, "failed to query for job object storage stats")
 	}
 	return &info, nil
+}
+
+func (job *JobObject) SetNetworkCompartment(compartmentID uint32) error {
+	job.handleLock.RLock()
+	defer job.handleLock.RUnlock()
+
+	err := winapi.SetJobCompartmentId(job.handle, compartmentID)
+	if err != nil {
+		return errors.Wrap(err, "failed to set job objects network compartment")
+	}
+	return nil
+}
+
+// ApplyFileBinding makes a file binding using the Bind Filter from root to target. If the job has not been upgraded to a silo
+// this will fail. The binding is only applied and visible for processes running in the job. Any processes on the host or in another job
+// will not be able to see the binding.
+func (job *JobObject) ApplyFileBinding(root, target string, merged bool) error {
+	job.handleLock.RLock()
+	defer job.handleLock.RUnlock()
+
+	if !job.isAppSilo {
+		return ErrNotSilo
+	}
+
+	rootPtr, err := windows.UTF16PtrFromString(root)
+	if err != nil {
+		return err
+	}
+
+	targetPtr, err := windows.UTF16PtrFromString(target)
+	if err != nil {
+		return err
+	}
+
+	flags := winapi.BINDFLT_FLAG_USE_CURRENT_SILO_MAPPING
+	if merged {
+		flags |= winapi.BINDFLT_FLAG_MERGED_BIND_MAPPING
+	}
+
+	if err := winapi.BfSetupFilter(
+		job.handle,
+		flags,
+		rootPtr,
+		targetPtr,
+		nil,
+		0,
+	); err != nil {
+		return errors.Wrap(err, "failed to make file bindings for job container")
+	}
+	return nil
+}
+
+func (job *JobObject) PromoteToSilo() error {
+	job.handleLock.RLock()
+	defer job.handleLock.RUnlock()
+
+	if job.handle == 0 {
+		return ErrAlreadyClosed
+	}
+
+	_, err := windows.SetInformationJobObject(
+		job.handle,
+		winapi.JobObjectCreateSilo,
+		0,
+		0,
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to promote job object to a silo")
+	}
+
+	job.isAppSilo = true
+	return nil
+}
+
+func (job *JobObject) IsSilo() bool {
+	return job.isAppSilo
 }

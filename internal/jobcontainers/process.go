@@ -92,21 +92,33 @@ func (p *JobProcess) Signal(ctx context.Context, options interface{}) (bool, err
 func (p *JobProcess) CloseStdin(ctx context.Context) error {
 	p.stdioLock.Lock()
 	defer p.stdioLock.Unlock()
-	return p.stdin.Close()
+
+	if p.stdin != nil {
+		return p.stdin.Close()
+	}
+	return nil
 }
 
 // CloseStdout closes the stdout pipe of the process.
 func (p *JobProcess) CloseStdout(ctx context.Context) error {
 	p.stdioLock.Lock()
 	defer p.stdioLock.Unlock()
-	return p.stdout.Close()
+
+	if p.stdout != nil {
+		return p.stdout.Close()
+	}
+	return nil
 }
 
 // CloseStderr closes the stderr pipe of the process.
 func (p *JobProcess) CloseStderr(ctx context.Context) error {
 	p.stdioLock.Lock()
 	defer p.stdioLock.Unlock()
-	return p.stderr.Close()
+
+	if p.stderr != nil {
+		return p.stderr.Close()
+	}
+	return nil
 }
 
 // Wait waits for the process to exit. If the process has already exited returns
