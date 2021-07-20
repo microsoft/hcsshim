@@ -83,12 +83,13 @@ var (
 // Features
 // Make sure you update allFeatures below with any new features you add.
 const (
-	featureLCOW           = "LCOW"
-	featureWCOWProcess    = "WCOWProcess"
-	featureWCOWHypervisor = "WCOWHypervisor"
-	featureHostProcess    = "HostProcess"
-	featureGMSA           = "GMSA"
-	featureGPU            = "GPU"
+	featureLCOW               = "LCOW"
+	featureWCOWProcess        = "WCOWProcess"
+	featureWCOWHypervisor     = "WCOWHypervisor"
+	featureHostProcess        = "HostProcess"
+	featureGMSA               = "GMSA"
+	featureGPU                = "GPU"
+	featureCRIUpdateContainer = "UpdateContainer"
 )
 
 var allFeatures = []string{
@@ -98,6 +99,7 @@ var allFeatures = []string{
 	featureHostProcess,
 	featureGMSA,
 	featureGPU,
+	featureCRIUpdateContainer,
 }
 
 func init() {
