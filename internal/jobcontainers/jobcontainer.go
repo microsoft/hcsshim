@@ -174,13 +174,21 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		return nil, errors.New("console emulation not supported for job containers")
 	}
 
-	absPath, commandLine, err := getApplicationName(conf.CommandLine, c.sandboxMount, os.Getenv("PATH"))
+	// Replace any occurences of the sandbox mount point env variable in the commandline.
+	// %CONTAINER_SANDBOX_MOUNTPOINT%\mybinary.exe -> C:\C\123456789\mybinary.exe
+	commandLine := c.replaceWithMountPoint(conf.CommandLine)
+
+	workDir := c.sandboxMount
+	if conf.WorkingDirectory != "" {
+		workDir = c.replaceWithMountPoint(conf.WorkingDirectory)
+	}
+
+	// Reassign commandline here in case it needed to be quoted. For example if "foo bar baz" was supplied, and
+	// "foo bar.exe" exists, then return: "\"foo bar\" baz"
+	absPath, commandLine, err := getApplicationName(commandLine, workDir, os.Getenv("PATH"))
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get application name from commandline %q", conf.CommandLine)
 	}
-
-	commandLine = strings.ReplaceAll(commandLine, "%"+sandboxMountPointEnvVar+"%", c.sandboxMount)
-	commandLine = strings.ReplaceAll(commandLine, "$env:"+sandboxMountPointEnvVar, c.sandboxMount)
 
 	var token windows.Token
 	if getUserTokenInheritAnnotation(c.spec.Annotations) {
@@ -205,12 +213,12 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 
 	cmd := &exec.Cmd{
 		Env:  env,
-		Dir:  c.sandboxMount,
+		Dir:  workDir,
 		Path: absPath,
 		Args: splitArgs(commandLine),
 		SysProcAttr: &syscall.SysProcAttr{
 			// CREATE_BREAKAWAY_FROM_JOB to make sure that we're not inheriting the job object (and by extension its limits)
-			// from whatever process is running this code.
+			// from whatever process is going to launch the container.
 			CreationFlags: windows.CREATE_NEW_PROCESS_GROUP | windows.CREATE_BREAKAWAY_FROM_JOB,
 			Token:         syscall.Token(token),
 		},
@@ -565,4 +573,10 @@ func systemProcessInformation() ([]*winapi.SYSTEM_PROCESS_INFORMATION, error) {
 	}
 
 	return procInfos, nil
+}
+
+// Takes a string and replaces any occurences of CONTAINER_SANDBOX_MOUNT_POINT with where the containers volume is mounted.
+func (c *JobContainer) replaceWithMountPoint(str string) string {
+	str = strings.ReplaceAll(str, "%"+sandboxMountPointEnvVar+"%", c.sandboxMount)
+	return strings.ReplaceAll(str, "$env:"+sandboxMountPointEnvVar, c.sandboxMount)
 }

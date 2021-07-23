@@ -3,6 +3,7 @@ package jobcontainers
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/winapi"
@@ -71,6 +72,10 @@ func getApplicationName(commandLine, workingDirectory, pathEnv string) (string, 
 		searchPath string
 		result     string
 	)
+
+	// Clean the path, to get rid of any . elements
+	commandLine = filepath.Clean(commandLine)
+
 	// First we get the system paths concatenated with semicolons (C:\windows;C:\windows\system32;C:\windows\system;)
 	// and use this as the basis for the directories to search for the application.
 	systemPaths, err := getSystemPaths()
