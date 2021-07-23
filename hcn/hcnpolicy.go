@@ -320,7 +320,7 @@ type L4ProxyPolicySetting struct {
 	Protocol    ProtocolType `json:",omitempty"`
 	Exceptions  []string     `json:",omitempty"`
 	Destination string
-	OutboundNAT bool `json:",omitempty"`
+	OutboundNAT bool         `json:",omitempty"`
 }
 
 // TierAclRule represents an ACL within TierAclPolicySetting
