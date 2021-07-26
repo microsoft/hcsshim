@@ -6,7 +6,7 @@ github.com/Microsoft/go-winio/pkg/guid
 github.com/Microsoft/go-winio/pkg/process
 github.com/Microsoft/go-winio/pkg/security
 github.com/Microsoft/go-winio/vhd
-# github.com/Microsoft/hcsshim v0.8.16 => ../
+# github.com/Microsoft/hcsshim v0.8.18 => ../
 ## explicit
 github.com/Microsoft/hcsshim
 github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options
@@ -72,7 +72,7 @@ github.com/blang/semver
 github.com/containerd/cgroups/stats/v1
 # github.com/containerd/console v1.0.2
 github.com/containerd/console
-# github.com/containerd/containerd v1.5.2
+# github.com/containerd/containerd v1.5.4
 ## explicit
 github.com/containerd/containerd
 github.com/containerd/containerd/api/events
