@@ -75,6 +75,9 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 					return nil, err
 				}
 				mdv2.HostPath = uvmPath
+			} else if strings.HasPrefix(mount.Source, "sandbox://") {
+				// Convert to the path in the guest that was asked for.
+				mdv2.HostPath = convertToWCOWSandboxMountPath(mount.Source)
 			} else {
 				// vsmb mount
 				uvmPath, err := coi.HostingSystem.GetVSMBUvmPath(ctx, mount.Source, readOnly)
