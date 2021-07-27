@@ -10,6 +10,7 @@ require (
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/ttrpc v1.0.2
 	github.com/containerd/typeurl v1.0.2
+	github.com/docker/docker v1.4.2-0.20190924003213-a8608b5b67c7
 	github.com/gogo/protobuf v1.3.2
 	github.com/google/go-containerregistry v0.5.1
 	github.com/linuxkit/virtsock v0.0.0-20201010232012-f8cee7dfc7a3
@@ -21,10 +22,12 @@ require (
 	github.com/urfave/cli v1.22.2
 	github.com/vishvananda/netlink v1.1.1-0.20201029203352-d40f9887b852
 	github.com/vishvananda/netns v0.0.0-20200728191858-db3c7e526aae
+	go.etcd.io/bbolt v1.3.5
 	go.opencensus.io v0.22.3
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
 	golang.org/x/sys v0.0.0-20210324051608-47abb6519492
 	google.golang.org/grpc v1.33.2
+	google.golang.org/protobuf v1.25.0
 )
 
 replace (

@@ -15,9 +15,11 @@ import (
 	"github.com/Microsoft/hcsshim/cmd/ncproxy/nodenetsvc"
 	"github.com/Microsoft/hcsshim/internal/computeagent"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/ncproxy"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	bolt "go.etcd.io/bbolt"
 	"go.opencensus.io/plugin/ocgrpc"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
@@ -29,12 +31,21 @@ type nodeNetSvcConn struct {
 	grpcConn *grpc.ClientConn
 }
 
+type networkProxyStore struct {
+	networkStore  *ncproxy.NetworkStore
+	endpointStore *ncproxy.EndpointStore
+}
+
 var (
 	// Global mapping of network namespace ID to shim compute agent ttrpc service.
 	containerIDToShim = make(map[string]computeagent.ComputeAgentService)
 	// Global object representing the connection to the node network service that
 	// ncproxy will be talking to.
 	nodeNetSvcClient *nodeNetSvcConn
+
+	// store is the global object that is used to represent the database stores used
+	// by ncproxy
+	store *networkProxyStore
 )
 
 var (
@@ -143,6 +154,20 @@ func run() error {
 			client:   netSvcClient,
 			grpcConn: client,
 		}
+	}
+
+	// create the database stores
+	binLocation, err := os.Executable()
+	binDir := filepath.Dir(binLocation)
+	db, err := bolt.Open(filepath.Join(binDir, "networkproxy.db"), 0600, nil)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	store = &networkProxyStore{
+		networkStore:  metadata.NewNetworkStore(db),
+		endpointStore: metadata.NewEndpointStore(db),
 	}
 
 	log.G(ctx).WithFields(logrus.Fields{

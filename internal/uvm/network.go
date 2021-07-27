@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
-
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
@@ -15,6 +13,8 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/ncproxy"
+	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/sirupsen/logrus"
@@ -380,6 +380,52 @@ func (uvm *UtilityVM) AddEndpointToNSWithID(ctx context.Context, nsID, nicID str
 			return err
 		}
 		ns.nics[endpoint.Id] = &nicInfo{
+			ID:       nicID,
+			Endpoint: endpoint,
+		}
+	}
+	return nil
+}
+
+// addNIC adds a nic to the Utility VM.
+func (uvm *UtilityVM) addNetworkProxyNIC(ctx context.Context, id string, endpoint *ncproxy.Endpoint) error {
+	settings, err := endpoint.CreateAddNICRequest(uvm.operatingSystem, id, uvm.isNetworkNamespaceSupported())
+	if err != nil {
+		return err
+	}
+	if settings.PreAddRequest != nil {
+		if err := uvm.modify(ctx, &settings.PreAddRequest); err != nil {
+			return err
+		}
+	}
+
+	if err := uvm.modify(ctx, &settings.Request); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (uvm *UtilityVM) AddNetworkProxyEndpointToNSWithID(ctx context.Context, nsID, nicID string, endpoint *ncproxy.Endpoint) error {
+	uvm.m.Lock()
+	defer uvm.m.Unlock()
+	ns, ok := uvm.namespaces[nsID]
+	if !ok {
+		return ErrNetNSNotFound
+	}
+	endpointID := endpoint.ID()
+	if _, ok := ns.nics[endpointID]; !ok {
+		if nicID == "" {
+			id, err := guid.NewV4()
+			if err != nil {
+				return err
+			}
+			nicID = id.String()
+		}
+		if err := uvm.addNetworkProxyNIC(ctx, nicID, endpoint); err != nil {
+			return err
+		}
+		ns.nics[endpointID] = &nicInfo{
 			ID:       nicID,
 			Endpoint: endpoint,
 		}

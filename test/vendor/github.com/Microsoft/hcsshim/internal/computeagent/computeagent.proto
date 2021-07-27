@@ -13,7 +13,8 @@ service ComputeAgent{
 message AddNICInternalRequest {
     string container_id = 1;
     string nic_id = 2;
-    string endpoint_name = 3;
+    string namespace_id = 3; 
+    string endpoint_name = 4; 
 }
 
 message AddNICInternalResponse {}

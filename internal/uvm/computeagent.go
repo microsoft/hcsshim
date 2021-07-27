@@ -2,34 +2,76 @@ package uvm
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/computeagent"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/ncproxy"
 	"github.com/Microsoft/hcsshim/pkg/octtrpc"
 	"github.com/containerd/ttrpc"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	bolt "go.etcd.io/bbolt"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"github.com/Microsoft/hcsshim/internal/log"
 )
 
 // This file holds the implementation of the Compute Agent service that is exposed for
 // external network configuration.
+
+type internalNetworkProxyStore struct {
+	networkStore  *ncproxy.NetworkStore
+	endpointStore *ncproxy.EndpointStore
+}
 
 const ComputeAgentAddrFmt = "\\\\.\\pipe\\computeagent-%s"
 
 // computeAgent implements the ComputeAgent ttrpc service for adding and deleting NICs to a
 // Utility VM.
 type computeAgent struct {
-	uvm *UtilityVM
+	uvm   *UtilityVM
+	store *internalNetworkProxyStore
 }
 
 var _ computeagent.ComputeAgentService = &computeAgent{}
+
+func (ca *computeAgent) AssignPCI(ctx context.Context, req *computeagent.AssignPCIInternalRequest) (*computeagent.AssignPCIInternalResponse, error) {
+	log.G(ctx).WithFields(logrus.Fields{
+		"containerID":          req.ContainerID,
+		"deviceID":             req.DeviceID,
+		"virtualFunctionIndex": req.VirtualFunctionIndex,
+	}).Info("AssignPCI request")
+
+	if req.DeviceID == "" {
+		return nil, status.Error(codes.InvalidArgument, "received empty field in request")
+	}
+
+	dev, err := ca.uvm.AssignDevice(ctx, req.DeviceID, uint16(req.VirtualFunctionIndex))
+	if err != nil {
+		return nil, err
+	}
+	return &computeagent.AssignPCIInternalResponse{ID: dev.VMBusGUID}, nil
+}
+
+func (ca *computeAgent) RemovePCI(ctx context.Context, req *computeagent.RemovePCIInternalRequest) (*computeagent.RemovePCIInternalResponse, error) {
+	log.G(ctx).WithFields(logrus.Fields{
+		"containerID": req.ContainerID,
+		"deviceID":    req.DeviceID,
+	}).Info("RemovePCI request")
+
+	if req.DeviceID == "" {
+		return nil, status.Error(codes.InvalidArgument, "received empty field in request")
+	}
+	if err := ca.uvm.RemoveDevice(ctx, req.DeviceID, uint16(req.VirtualFunctionIndex)); err != nil {
+		return nil, err
+	}
+	return &computeagent.RemovePCIInternalResponse{}, nil
+}
 
 // AddNIC will add a NIC to the computeagent services hosting UVM.
 func (ca *computeAgent) AddNIC(ctx context.Context, req *computeagent.AddNICInternalRequest) (*computeagent.AddNICInternalResponse, error) {
@@ -43,10 +85,11 @@ func (ca *computeAgent) AddNIC(ctx context.Context, req *computeagent.AddNICInte
 		return nil, status.Error(codes.InvalidArgument, "received empty field in request")
 	}
 
-	endpoint, err := hns.GetHNSEndpointByName(req.EndpointName)
+	endpoint, err := ca.store.endpointStore.Get(ctx, req.EndpointName)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get endpoint with name %q", req.EndpointName)
+		return nil, err
 	}
+
 	if err := ca.uvm.AddEndpointToNSWithID(ctx, endpoint.Namespace.ID, req.NicID, endpoint); err != nil {
 		return nil, err
 	}
@@ -124,7 +167,26 @@ func setupAndServe(ctx context.Context, caAddr string, vm *UtilityVM) error {
 	if err != nil {
 		return err
 	}
-	computeagent.RegisterComputeAgentService(s, &computeAgent{vm})
+	// create the database stores
+	// TODO katiewasnothere: how to make sure this is in the same place as with the ncproxy db file
+	binLocation, err := os.Executable()
+	binDir := filepath.Dir(binLocation)
+	db, err := bolt.Open(filepath.Join(binDir, "networkproxy.db"), 0600, nil)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	store := &internalNetworkProxyStore{
+		networkStore:  ncproxy.NewNetworkStore(db),
+		endpointStore: ncproxy.NewEndpointStore(db),
+	}
+	agent := &computeAgent{
+		uvm:   vm,
+		store: store,
+	}
+
+	computeagent.RegisterComputeAgentService(s, agent)
 
 	log.G(ctx).WithField("address", l.Addr().String()).Info("serving compute agent")
 	go func() {
