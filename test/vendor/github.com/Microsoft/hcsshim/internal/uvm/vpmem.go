@@ -41,18 +41,27 @@ func newDefaultVPMemInfo(hostPath, uvmPath string) *vPMemInfoDefault {
 	}
 }
 
+// fileSystemSize retrieves ext4 fs SuperBlock and returns the file system size and block size
+func fileSystemSize(vhdPath string) (int64, int, error) {
+	sb, err := tar2ext4.ReadExt4SuperBlock(vhdPath)
+	if err != nil {
+		return 0, 0, errors.Wrap(err, "failed to read ext4 super block")
+	}
+	blockSize := 1024 * (1 << sb.LogBlockSize)
+	fsSize := int64(blockSize) * int64(sb.BlocksCountLow)
+	return fsSize, blockSize, nil
+}
+
 // readVeritySuperBlock reads ext4 super block for a given VHD to then further read the dm-verity super block
 // and root hash
 func readVeritySuperBlock(ctx context.Context, layerPath string) (*guestrequest.DeviceVerityInfo, error) {
-	ext4sb, err := tar2ext4.ReadExt4SuperBlock(layerPath)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to read ext4 super block")
-	}
-	// Calculate the size of ext4 file system based on the information from ext4 super block, since
-	// the dm-verity information is expected to be appended, the size of ext4 data will be the offset
+	// dm-verity information is expected to be appended, the size of ext4 data will be the offset
 	// of the dm-verity super block, followed by merkle hash tree
-	ext4BlockSize := 1024 * (1 << ext4sb.LogBlockSize)
-	ext4SizeInBytes := int64(ext4BlockSize) * int64(ext4sb.BlocksCountLow)
+	ext4SizeInBytes, ext4BlockSize, err := fileSystemSize(layerPath)
+	if err != nil {
+		return nil, err
+	}
+
 	dmvsb, err := dmverity.ReadDMVerityInfo(layerPath, ext4SizeInBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read dm-verity super block")
