@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/hcserror"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/ospath"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -84,21 +85,56 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot,
 		}
 		path := layerFolders[len(layerFolders)-1]
 		rest := layerFolders[:len(layerFolders)-1]
-		if err := wclayer.ActivateLayer(ctx, path); err != nil {
-			return "", err
-		}
-		defer func() {
-			if err != nil {
-				_ = wclayer.DeactivateLayer(ctx, path)
-			}
-		}()
+		// Simple retry loop to handle some behavior on RS5. Loopback VHDs used to be mounted in a different manor on RS5 (ws2019) which led to some
+		// very odd cases where things would succeed when they shouldn't have, or we'd simply timeout if an operation took too long. Many
+		// parallel invocations of this code path and stressing the machine seem to bring out the issues, but all of the possible failure paths
+		// that bring about the errors we have observed aren't known.
+		//
+		// On 19h1+ this *shouldn't* be needed, but the logic is to break if everything succeeded so this is harmless and shouldn't need a version check.
+		var lErr error
+		for i := 0; i < 5; i++ {
+			lErr = func() (err error) {
+				if err := wclayer.ActivateLayer(ctx, path); err != nil {
+					return err
+				}
 
-		if err := wclayer.PrepareLayer(ctx, path, rest); err != nil {
-			return "", err
+				defer func() {
+					if err != nil {
+						_ = wclayer.DeactivateLayer(ctx, path)
+					}
+				}()
+
+				return wclayer.PrepareLayer(ctx, path, rest)
+			}()
+
+			if lErr != nil {
+				// Common errors seen from the RS5 behavior mentioned above is ERROR_NOT_READY and ERROR_DEVICE_NOT_CONNECTED. The former occurs when HCS
+				// tries to grab the volume path of the disk but it doesn't succeed, usually because the disk isn't actually mounted. DEVICE_NOT_CONNECTED
+				// has been observed after launching multiple containers in parallel on a machine under high load. This has also been observed to be a trigger
+				// for ERROR_NOT_READY as well.
+				if hcserr, ok := lErr.(*hcserror.HcsError); ok {
+					if hcserr.Err == windows.ERROR_NOT_READY || hcserr.Err == windows.ERROR_DEVICE_NOT_CONNECTED {
+						continue
+					}
+				}
+				// This was a failure case outside of the commonly known error conditions, don't retry here.
+				return "", lErr
+			}
+
+			// No errors in layer setup, we can leave the loop
+			break
 		}
+		// If we got unlucky and ran into one of the two errors mentioned five times in a row and left the loop, we need to check
+		// the loop error here and fail also.
+		if lErr != nil {
+			return "", errors.Wrap(lErr, "layer retry loop failed")
+		}
+
+		// If any of the below fails, we want to detach the filter and unmount the disk.
 		defer func() {
 			if err != nil {
 				_ = wclayer.UnprepareLayer(ctx, path)
+				_ = wclayer.DeactivateLayer(ctx, path)
 			}
 		}()
 
