@@ -15,7 +15,7 @@ import (
 // Trailing backslash required for SetVolumeMountPoint and DeleteVolumeMountPoint
 const sandboxMountFormat = `C:\C\%s\`
 
-func mountLayers(ctx context.Context, s *specs.Spec, volumeMountPath string) error {
+func mountLayers(ctx context.Context, containerId string, s *specs.Spec, volumeMountPath string) error {
 	if s == nil || s.Windows == nil || s.Windows.LayerFolders == nil {
 		return errors.New("field 'Spec.Windows.Layerfolders' is not populated")
 	}
@@ -41,7 +41,7 @@ func mountLayers(ctx context.Context, s *specs.Spec, volumeMountPath string) err
 
 	if s.Root.Path == "" {
 		log.G(ctx).Debug("mounting job container storage")
-		containerRootPath, err := layers.MountContainerLayers(ctx, s.Windows.LayerFolders, "", volumeMountPath, nil)
+		containerRootPath, err := layers.MountContainerLayers(ctx, containerId, s.Windows.LayerFolders, "", volumeMountPath, nil)
 		if err != nil {
 			return errors.Wrap(err, "failed to mount container storage")
 		}

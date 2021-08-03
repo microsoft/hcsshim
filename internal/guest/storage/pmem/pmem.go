@@ -5,9 +5,11 @@ package pmem
 import (
 	"context"
 	"fmt"
+	"os"
+
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"os"
+	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 
 	"github.com/Microsoft/hcsshim/internal/guest/storage"
 	dm "github.com/Microsoft/hcsshim/internal/guest/storage/devicemapper"
@@ -63,7 +65,7 @@ func mountInternal(ctx context.Context, source, target string) (err error) {
 //
 // Note: both mappingInfo and verityInfo can be non-nil at the same time, in that case
 // linear target is created first and it becomes the data/hash device for verity target.
-func Mount(ctx context.Context, device uint32, target string, mappingInfo *prot.DeviceMappingInfo, verityInfo *prot.DeviceVerityInfo) (err error) {
+func Mount(ctx context.Context, device uint32, target string, mappingInfo *prot.DeviceMappingInfo, verityInfo *prot.DeviceVerityInfo, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
 	mCtx, span := trace.StartSpan(ctx, "pmem::Mount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -73,6 +75,16 @@ func Mount(ctx context.Context, device uint32, target string, mappingInfo *prot.
 		trace.StringAttribute("target", target))
 
 	devicePath := fmt.Sprintf(pMemFmt, device)
+
+	var deviceHash string
+	if verityInfo != nil {
+		deviceHash = verityInfo.RootDigest
+	}
+	err = securityPolicy.EnforcePmemMountPolicy(target, deviceHash)
+	if err != nil {
+		return errors.Wrapf(err, "won't mount pmem device %d onto %s", device, target)
+	}
+
 	// dm linear target has to be created first. when verity info is also present, the linear target becomes the data
 	// device instead of the original VPMem.
 	if mappingInfo != nil {
@@ -178,7 +190,7 @@ func createDMVerityTarget(ctx context.Context, devPath, devName, target string, 
 }
 
 // Unmount unmounts `target` and removes corresponding linear and verity targets when needed
-func Unmount(ctx context.Context, devNumber uint32, target string, mappingInfo *prot.DeviceMappingInfo, verityInfo *prot.DeviceVerityInfo) (err error) {
+func Unmount(ctx context.Context, devNumber uint32, target string, mappingInfo *prot.DeviceMappingInfo, verityInfo *prot.DeviceVerityInfo, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
 	_, span := trace.StartSpan(ctx, "pmem::Unmount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()

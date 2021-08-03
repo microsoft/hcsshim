@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/Microsoft/hcsshim/internal/guest/commonutils"
+	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	v1 "github.com/containerd/cgroups/stats/v1"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -519,6 +520,8 @@ const (
 	MrtVPCIDevice = ModifyResourceType("VPCIDevice")
 	// MrtContainerConstraints is the modify resource type for updating container constraints
 	MrtContainerConstraints = ModifyResourceType("ContainerConstraints")
+	// MrtSecurityPolicy is the modify resource type for updating the security policy
+	MrtSecurityPolicy = ModifyResourceType("SecurityPolicy")
 )
 
 // ModifyRequestType is the type of operation to perform on a given modify
@@ -618,6 +621,12 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 			return &request, errors.Wrap(err, "failed to unmarshal settings as ContainerConstraintsV2")
 		}
 		msr.Settings = cc
+	case MrtSecurityPolicy:
+		policy := &securitypolicy.EncodedSecurityPolicy{}
+		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, policy); err != nil {
+			return &request, errors.Wrap(err, "failed to unmarshal settings as EncodedSecurityPolicy")
+		}
+		msr.Settings = policy
 	default:
 		return &request, errors.Errorf("invalid ResourceType '%s'", msr.ResourceType)
 	}
@@ -713,6 +722,7 @@ type CombinedLayersV2 struct {
 	Layers            []Layer `json:",omitempty"`
 	ScratchPath       string  `json:",omitempty"`
 	ContainerRootPath string
+	ContainerId       string `json:",omitempty"`
 }
 
 // NetworkAdapter represents a network interface and its associated

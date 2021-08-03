@@ -89,6 +89,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 	}
 
 	var parent *uvm.UtilityVM
+	var lopts *uvm.OptionsLCOW
 	if oci.IsIsolated(s) {
 		// Create the UVM parent
 		opts, err := oci.SpecToUVMCreateOpts(ctx, s, fmt.Sprintf("%s@vm", req.ID), owner)
@@ -97,7 +98,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		}
 		switch opts.(type) {
 		case *uvm.OptionsLCOW:
-			lopts := (opts).(*uvm.OptionsLCOW)
+			lopts = (opts).(*uvm.OptionsLCOW)
 			parent, err = uvm.CreateLCOW(ctx, lopts)
 			if err != nil {
 				return nil, err
@@ -129,6 +130,13 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		if err != nil {
 			parent.Close()
 			return nil, err
+		}
+
+		if lopts != nil {
+			err := parent.SetSecurityPolicy(ctx, lopts.SecurityPolicy)
+			if err != nil {
+				return nil, errors.Wrap(err, "unable to set security policy")
+			}
 		}
 	} else if oci.IsJobContainer(s) {
 		// If we're making a job container fake a task (i.e reuse the wcowPodSandbox logic)

@@ -16,7 +16,14 @@ import (
 // since the container path is already the scratch path. For linux, the GCS unions
 // the specified layers and ScratchPath together, placing the resulting union
 // filesystem at ContainerRootPath.
-type CombinedLayers struct {
+type LCOWCombinedLayers struct {
+	ContainerID       string            `jason:"ContainerID"`
+	ContainerRootPath string            `json:"ContainerRootPath,omitempty"`
+	Layers            []hcsschema.Layer `json:"Layers,omitempty"`
+	ScratchPath       string            `json:"ScratchPath,omitempty"`
+}
+
+type WCOWCombinedLayers struct {
 	ContainerRootPath string            `json:"ContainerRootPath,omitempty"`
 	Layers            []hcsschema.Layer `json:"Layers,omitempty"`
 	ScratchPath       string            `json:"ScratchPath,omitempty"`
@@ -113,6 +120,7 @@ const (
 	ResourceTypeVPCIDevice           ResourceType = "VPCIDevice"
 	ResourceTypeContainerConstraints ResourceType = "ContainerConstraints"
 	ResourceTypeHvSocket             ResourceType = "HvSocket"
+	ResourceTypeSecurityPolicy       ResourceType = "SecurityPolicy"
 )
 
 // GuestRequest is for modify commands passed to the guest.
