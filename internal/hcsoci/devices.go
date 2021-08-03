@@ -14,6 +14,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/osversion"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
@@ -49,6 +50,11 @@ func getDeviceUtilHostPath() string {
 	return filepath.Join(filepath.Dir(os.Args[0]), deviceUtilExeName)
 }
 
+func isDeviceExtensionsSupported() bool {
+	// device extensions support was added from 20348 onwards.
+	return osversion.Build() >= 20348
+}
+
 // getDeviceExtensions is a helper function to read the files at `extensionPaths` and unmarshal the contents
 // into a `hcsshema.DeviceExtension` to be added to a container's hcs create document.
 func getDeviceExtensions(annotations map[string]string) (*hcsschema.ContainerDefinitionDevice, error) {
@@ -56,6 +62,15 @@ func getDeviceExtensions(annotations map[string]string) (*hcsschema.ContainerDef
 	if err != nil {
 		return nil, err
 	}
+
+	if len(extensionPaths) == 0 {
+		return nil, nil
+	}
+
+	if !isDeviceExtensionsSupported() {
+		return nil, fmt.Errorf("device extensions are not supported on this build (%d)", osversion.Build())
+	}
+
 	results := &hcsschema.ContainerDefinitionDevice{
 		DeviceExtension: []hcsschema.DeviceExtension{},
 	}
