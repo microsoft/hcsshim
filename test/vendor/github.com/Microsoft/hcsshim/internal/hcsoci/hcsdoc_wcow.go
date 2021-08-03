@@ -61,8 +61,16 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 					return nil, fmt.Errorf("failed to eval symlinks for mount source %q: %s", mount.Source, err)
 				}
 				mdv2.HostPath = src
-			} else if mount.Type == "virtual-disk" || mount.Type == "physical-disk" {
-				uvmPath, err := coi.HostingSystem.GetScsiUvmPath(ctx, mount.Source)
+			} else if mount.Type == "virtual-disk" || mount.Type == "physical-disk" || mount.Type == "extensible-virtual-disk" {
+				mountPath := mount.Source
+				var err error
+				if mount.Type == "extensible-virtual-disk" {
+					_, mountPath, err = uvm.ParseExtensibleVirtualDiskPath(mount.Source)
+					if err != nil {
+						return nil, err
+					}
+				}
+				uvmPath, err := coi.HostingSystem.GetScsiUvmPath(ctx, mountPath)
 				if err != nil {
 					return nil, err
 				}
@@ -372,7 +380,11 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	if err != nil {
 		return nil, nil, err
 	}
-	v2Container.AdditionalDeviceNamespace = extensions
+	// Do not add empty extensions. It causes container creation to
+	// fail with invalid config error.
+	if len(extensions.DeviceExtension) > 0 {
+		v2Container.AdditionalDeviceNamespace = extensions
+	}
 
 	return v1, v2Container, nil
 }

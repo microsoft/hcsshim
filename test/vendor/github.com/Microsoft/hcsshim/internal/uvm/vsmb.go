@@ -21,8 +21,8 @@ import (
 )
 
 const (
-	vsmbSharePrefix            = `\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\`
-	vsmbCurrentSerialVersionID = 1
+	vsmbSharePrefix                   = `\\?\VMSMB\VSMB-{dcc079ae-60ba-4d07-847c-3493609c0870}\`
+	vsmbCurrentSerialVersionID uint32 = 1
 )
 
 // VSMBShare contains the host path for a Vsmb Mount
@@ -327,7 +327,9 @@ func (vsmb *VSMBShare) GobEncode() ([]byte, error) {
 	encoder := gob.NewEncoder(&buf)
 	errMsgFmt := "failed to encode VSMBShare: %s"
 	// encode only the fields that can be safely deserialized.
-	if err := encoder.Encode(vsmb.serialVersionID); err != nil {
+	// Always use vsmbCurrentSerialVersionID as vsmb.serialVersionID might not have
+	// been initialized.
+	if err := encoder.Encode(vsmbCurrentSerialVersionID); err != nil {
 		return nil, fmt.Errorf(errMsgFmt, err)
 	}
 	if err := encoder.Encode(vsmb.HostPath); err != nil {
@@ -402,11 +404,11 @@ func (vsmb *VSMBShare) Clone(ctx context.Context, vm *UtilityVM, cd *cloneData) 
 		guestPath:       vsmb.guestPath,
 		serialVersionID: vsmbCurrentSerialVersionID,
 	}
-
+	shareKey := getVSMBShareKey(vsmb.HostPath, vsmb.options.ReadOnly)
 	if vsmb.options.RestrictFileAccess {
-		vm.vsmbFileShares[vsmb.HostPath] = clonedVSMB
+		vm.vsmbFileShares[shareKey] = clonedVSMB
 	} else {
-		vm.vsmbDirShares[vsmb.HostPath] = clonedVSMB
+		vm.vsmbDirShares[shareKey] = clonedVSMB
 	}
 
 	return nil
