@@ -75,6 +75,7 @@ type OptionsLCOW struct {
 	PreferredRootFSType   PreferredRootFSType // If `KernelFile` is `InitrdFile` use `PreferredRootFSTypeInitRd`. If `KernelFile` is `VhdFile` use `PreferredRootFSTypeVHD`
 	EnableColdDiscardHint bool                // Whether the HCS should use cold discard hints. Defaults to false
 	VPCIEnabled           bool                // Whether the kernel should enable pci
+	SecurityPolicy        string              // Optional security policy
 }
 
 // defaultLCOWOSBootFilesPath returns the default path used to locate the LCOW
@@ -120,6 +121,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		PreferredRootFSType:   PreferredRootFSTypeInitRd,
 		EnableColdDiscardHint: false,
 		VPCIEnabled:           false,
+		SecurityPolicy:        "",
 	}
 
 	if _, err := os.Stat(filepath.Join(opts.BootFilesPath, VhdFile)); err == nil {

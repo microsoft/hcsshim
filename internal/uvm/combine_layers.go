@@ -20,7 +20,7 @@ func (uvm *UtilityVM) CombineLayersWCOW(ctx context.Context, layerPaths []hcssch
 		GuestRequest: guestrequest.GuestRequest{
 			ResourceType: guestrequest.ResourceTypeCombinedLayers,
 			RequestType:  requesttype.Add,
-			Settings: guestrequest.CombinedLayers{
+			Settings: guestrequest.WCOWCombinedLayers{
 				ContainerRootPath: containerRootPath,
 				Layers:            layerPaths,
 			},
@@ -35,7 +35,7 @@ func (uvm *UtilityVM) CombineLayersWCOW(ctx context.Context, layerPaths []hcssch
 //
 // NOTE: `layerPaths`, `scrathPath`, and `rootfsPath` are paths from within the
 // UVM.
-func (uvm *UtilityVM) CombineLayersLCOW(ctx context.Context, layerPaths []string, scratchPath, rootfsPath string) error {
+func (uvm *UtilityVM) CombineLayersLCOW(ctx context.Context, containerId string, layerPaths []string, scratchPath, rootfsPath string) error {
 	if uvm.operatingSystem != "linux" {
 		return errNotSupported
 	}
@@ -48,7 +48,8 @@ func (uvm *UtilityVM) CombineLayersLCOW(ctx context.Context, layerPaths []string
 		GuestRequest: guestrequest.GuestRequest{
 			ResourceType: guestrequest.ResourceTypeCombinedLayers,
 			RequestType:  requesttype.Add,
-			Settings: guestrequest.CombinedLayers{
+			Settings: guestrequest.LCOWCombinedLayers{
+				ContainerID:       containerId,
 				ContainerRootPath: rootfsPath,
 				Layers:            layers,
 				ScratchPath:       scratchPath,
@@ -61,12 +62,25 @@ func (uvm *UtilityVM) CombineLayersLCOW(ctx context.Context, layerPaths []string
 // RemoveCombinedLayers removes the previously combined layers at `rootfsPath`.
 //
 // NOTE: `rootfsPath` is the path from within the UVM.
-func (uvm *UtilityVM) RemoveCombinedLayers(ctx context.Context, rootfsPath string) error {
+func (uvm *UtilityVM) RemoveCombinedLayersWCOW(ctx context.Context, rootfsPath string) error {
 	msr := &hcsschema.ModifySettingRequest{
 		GuestRequest: guestrequest.GuestRequest{
 			ResourceType: guestrequest.ResourceTypeCombinedLayers,
 			RequestType:  requesttype.Remove,
-			Settings: guestrequest.CombinedLayers{
+			Settings: guestrequest.WCOWCombinedLayers{
+				ContainerRootPath: rootfsPath,
+			},
+		},
+	}
+	return uvm.modify(ctx, msr)
+}
+
+func (uvm *UtilityVM) RemoveCombinedLayersLCOW(ctx context.Context, rootfsPath string) error {
+	msr := &hcsschema.ModifySettingRequest{
+		GuestRequest: guestrequest.GuestRequest{
+			ResourceType: guestrequest.ResourceTypeCombinedLayers,
+			RequestType:  requesttype.Remove,
+			Settings: guestrequest.LCOWCombinedLayers{
 				ContainerRootPath: rootfsPath,
 			},
 		},

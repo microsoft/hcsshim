@@ -5,6 +5,7 @@ package hcsv2
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -26,6 +27,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/storage/pmem"
 	"github.com/Microsoft/hcsshim/internal/guest/storage/scsi"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
+	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	shellwords "github.com/mattn/go-shellwords"
 	"github.com/pkg/errors"
 )
@@ -46,15 +48,60 @@ type Host struct {
 	// Rtime is the Runtime interface used by the GCS core.
 	rtime runtime.Runtime
 	vsock transport.Transport
+
+	// state required for the security policy enforcement
+	policyMutex               sync.Mutex
+	securityPolicyEnforcer    securitypolicy.SecurityPolicyEnforcer
+	securityPolicyEnforcerSet bool
 }
 
 func NewHost(rtime runtime.Runtime, vsock transport.Transport) *Host {
 	return &Host{
-		containers:        make(map[string]*Container),
-		externalProcesses: make(map[int]*externalProcess),
-		rtime:             rtime,
-		vsock:             vsock,
+		containers:                make(map[string]*Container),
+		externalProcesses:         make(map[int]*externalProcess),
+		rtime:                     rtime,
+		vsock:                     vsock,
+		securityPolicyEnforcerSet: false,
+		securityPolicyEnforcer:    &securitypolicy.OpenDoorSecurityPolicyEnforcer{},
 	}
+}
+
+// SetSecurityPolicy takes a base64 encoded security policy
+// and sets up our internal data structures we use to store
+// said policy.
+// The security policy is transmitted as json in an annotation,
+// so we first have to remove the base64 encoding that allows
+// the JSON based policy to be passed as a string. From there,
+// we decode the JSON and setup our security policy state
+func (h *Host) SetSecurityPolicy(base64_policy string) error {
+	h.policyMutex.Lock()
+	defer h.policyMutex.Unlock()
+	if h.securityPolicyEnforcerSet {
+		return errors.New("security policy has already been set")
+	}
+
+	// base64 decode the incoming policy string
+	// its base64 encoded because it is coming from an annotation
+	// annotations are a map of string to string
+	// we want to store a complex json object so.... base64 it is
+	jsonPolicy, err := base64.StdEncoding.DecodeString(base64_policy)
+	if err != nil {
+		return errors.Wrap(err, "Unable to decode policy from Base64 format")
+	}
+
+	// json unmarshall the decoded to a SecurityPolicy
+	securityPolicy := &securitypolicy.SecurityPolicy{}
+	json.Unmarshal(jsonPolicy, securityPolicy)
+
+	p, err := securitypolicy.NewSecurityPolicyEnforcer(securityPolicy)
+	if err != nil {
+		return err
+	}
+
+	h.securityPolicyEnforcer = p
+	h.securityPolicyEnforcerSet = true
+
+	return nil
 }
 
 func (h *Host) RemoveContainer(id string) {
@@ -200,9 +247,9 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, setti
 	case prot.MrtMappedDirectory:
 		return modifyMappedDirectory(ctx, h.vsock, settings.RequestType, settings.Settings.(*prot.MappedDirectoryV2))
 	case prot.MrtVPMemDevice:
-		return modifyMappedVPMemDevice(ctx, settings.RequestType, settings.Settings.(*prot.MappedVPMemDeviceV2))
+		return modifyMappedVPMemDevice(ctx, settings.RequestType, settings.Settings.(*prot.MappedVPMemDeviceV2), h.securityPolicyEnforcer)
 	case prot.MrtCombinedLayers:
-		return modifyCombinedLayers(ctx, settings.RequestType, settings.Settings.(*prot.CombinedLayersV2))
+		return modifyCombinedLayers(ctx, settings.RequestType, settings.Settings.(*prot.CombinedLayersV2), h.securityPolicyEnforcer)
 	case prot.MrtNetwork:
 		return modifyNetwork(ctx, settings.RequestType, settings.Settings.(*prot.NetworkAdapterV2))
 	case prot.MrtVPCIDevice:
@@ -213,6 +260,13 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, setti
 			return err
 		}
 		return c.modifyContainerConstraints(ctx, settings.RequestType, settings.Settings.(*prot.ContainerConstraintsV2))
+	case prot.MrtSecurityPolicy:
+		policy, ok := settings.Settings.(*securitypolicy.EncodedSecurityPolicy)
+		if !ok {
+			return errors.New("the request's settings are not of type EncodedSecurityPolicy")
+		}
+
+		return h.SetSecurityPolicy(policy.SecurityPolicy)
 	default:
 		return errors.Errorf("the ResourceType \"%s\" is not supported for UVM", settings.ResourceType)
 	}
@@ -381,12 +435,12 @@ func modifyMappedDirectory(ctx context.Context, vsock transport.Transport, rt pr
 	}
 }
 
-func modifyMappedVPMemDevice(ctx context.Context, rt prot.ModifyRequestType, vpd *prot.MappedVPMemDeviceV2) (err error) {
+func modifyMappedVPMemDevice(ctx context.Context, rt prot.ModifyRequestType, vpd *prot.MappedVPMemDeviceV2, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
 	switch rt {
 	case prot.MreqtAdd:
-		return pmem.Mount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, vpd.VerityInfo)
+		return pmem.Mount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, vpd.VerityInfo, securityPolicy)
 	case prot.MreqtRemove:
-		return pmem.Unmount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, vpd.VerityInfo)
+		return pmem.Unmount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, vpd.VerityInfo, securityPolicy)
 	default:
 		return newInvalidRequestTypeError(rt)
 	}
@@ -401,7 +455,7 @@ func modifyMappedVPCIDevice(ctx context.Context, rt prot.ModifyRequestType, vpci
 	}
 }
 
-func modifyCombinedLayers(ctx context.Context, rt prot.ModifyRequestType, cl *prot.CombinedLayersV2) (err error) {
+func modifyCombinedLayers(ctx context.Context, rt prot.ModifyRequestType, cl *prot.CombinedLayersV2, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
 	switch rt {
 	case prot.MreqtAdd:
 		layerPaths := make([]string, len(cl.Layers))
@@ -420,7 +474,7 @@ func modifyCombinedLayers(ctx context.Context, rt prot.ModifyRequestType, cl *pr
 			workdirPath = filepath.Join(cl.ScratchPath, "work")
 		}
 
-		return overlay.Mount(ctx, layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, readonly)
+		return overlay.Mount(ctx, layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, readonly, cl.ContainerId, securityPolicy)
 	case prot.MreqtRemove:
 		return storage.UnmountPath(ctx, cl.ContainerRootPath, true)
 	default:

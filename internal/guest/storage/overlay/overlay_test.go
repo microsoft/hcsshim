@@ -7,6 +7,13 @@ import (
 	"errors"
 	"os"
 	"testing"
+
+	"github.com/Microsoft/hcsshim/internal/guest/storage/test/policy"
+	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
+)
+
+const (
+	fakeContainerId = "1"
 )
 
 type undo struct {
@@ -76,7 +83,7 @@ func Test_Mount_Success(t *testing.T) {
 		return nil
 	}
 
-	err := Mount(context.Background(), []string{"/layer1", "/layer2"}, "/upper", "/work", "/root", false)
+	err := Mount(context.Background(), []string{"/layer1", "/layer2"}, "/upper", "/work", "/root", false, fakeContainerId, openDoorSecurityPolicyEnforcer())
 	if err != nil {
 		t.Fatalf("expected no error got: %v", err)
 	}
@@ -120,11 +127,80 @@ func Test_Mount_Readonly_Success(t *testing.T) {
 		return nil
 	}
 
-	err := Mount(context.Background(), []string{"/layer1", "/layer2"}, "", "", "/root", false)
+	err := Mount(context.Background(), []string{"/layer1", "/layer2"}, "", "", "/root", false, fakeContainerId, openDoorSecurityPolicyEnforcer())
 	if err != nil {
 		t.Fatalf("expected no error got: %v", err)
 	}
 	if !rootCreated {
 		t.Fatal("expected root to be created")
 	}
+}
+
+func Test_Security_Policy_Enforcement(t *testing.T) {
+	undo := captureTestMethods()
+	defer undo.Close()
+
+	var upperCreated, workCreated, rootCreated bool
+	osMkdirAll = func(path string, perm os.FileMode) error {
+		if perm != 0755 {
+			t.Errorf("os.MkdirAll at: %s, perm: %v expected perm: 0755", path, perm)
+		}
+		switch path {
+		case "/upper":
+			upperCreated = true
+			return nil
+		case "/work":
+			workCreated = true
+			return nil
+		case "/root":
+			rootCreated = true
+			return nil
+		}
+		return errors.New("unexpected os.MkdirAll path")
+	}
+	unixMount = func(source string, target string, fstype string, flags uintptr, data string) error {
+		if source != "overlay" {
+			t.Errorf("expected source: 'overlay' got: %v", source)
+		}
+		if target != "/root" {
+			t.Errorf("expected target: '/root' got: %v", target)
+		}
+		if fstype != "overlay" {
+			t.Errorf("expected fstype: 'overlay' got: %v", fstype)
+		}
+		if flags != 0 {
+			t.Errorf("expected flags: '0' got: %v", flags)
+		}
+		if data != "lowerdir=/layer1:/layer2,upperdir=/upper,workdir=/work" {
+			t.Errorf("expected data: 'lowerdir=/layer1:/layer2,upperdir=/upper,workdir=/work' got: %v", data)
+		}
+		return nil
+	}
+
+	enforcer := mountMonitoringSecurityPolicyEnforcer()
+	err := Mount(context.Background(), []string{"/layer1", "/layer2"}, "/upper", "/work", "/root", false, fakeContainerId, enforcer)
+	if err != nil {
+		t.Fatalf("expected no error got: %v", err)
+	}
+	if !upperCreated || !workCreated || !rootCreated {
+		t.Fatalf("expected all upper: %v, work: %v, root: %v to be created", upperCreated, workCreated, rootCreated)
+	}
+
+	expectedPmem := 0
+	if enforcer.PmemMountCalls != expectedPmem {
+		t.Errorf("expected %d attempt at pmem mount enforcement, got %d", expectedPmem, enforcer.PmemMountCalls)
+	}
+
+	expectedOverlay := 1
+	if enforcer.OverlayMountCalls != expectedOverlay {
+		t.Fatalf("expected %d attempts at overlay mount enforcement, got %d", expectedOverlay, enforcer.OverlayMountCalls)
+	}
+}
+
+func openDoorSecurityPolicyEnforcer() securitypolicy.SecurityPolicyEnforcer {
+	return &securitypolicy.OpenDoorSecurityPolicyEnforcer{}
+}
+
+func mountMonitoringSecurityPolicyEnforcer() *policy.MountMonitoringSecurityPolicyEnforcer {
+	return &policy.MountMonitoringSecurityPolicyEnforcer{}
 }

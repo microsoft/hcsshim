@@ -75,7 +75,8 @@ func (layers *ImageLayers) Release(ctx context.Context, all bool) error {
 // 					  the host at `volumeMountPath`.
 //
 // TODO dcantah: Keep better track of the layers that are added, don't simply discard the SCSI, VSMB, etc. resource types gotten inside.
-func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot, volumeMountPath string, uvm *uvmpkg.UtilityVM) (_ string, err error) {
+
+func MountContainerLayers(ctx context.Context, containerId string, layerFolders []string, guestRoot string, volumeMountPath string, uvm *uvmpkg.UtilityVM) (_ string, err error) {
 	log.G(ctx).WithField("layerFolders", layerFolders).Debug("hcsshim::mountContainerLayers")
 
 	if uvm == nil {
@@ -212,7 +213,7 @@ func MountContainerLayers(ctx context.Context, layerFolders []string, guestRoot,
 		rootfs = containerScratchPathInUVM
 	} else {
 		rootfs = ospath.Join(uvm.OS(), guestRoot, uvmpkg.RootfsPath)
-		err = uvm.CombineLayersLCOW(ctx, lcowUvmLayerPaths, containerScratchPathInUVM, rootfs)
+		err = uvm.CombineLayersLCOW(ctx, containerId, lcowUvmLayerPaths, containerScratchPathInUVM, rootfs)
 	}
 	if err != nil {
 		return "", err
@@ -326,9 +327,16 @@ func UnmountContainerLayers(ctx context.Context, layerFolders []string, containe
 
 	// Always remove the combined layers as they are part of scsi/vsmb/vpmem
 	// removals.
-	if err := uvm.RemoveCombinedLayers(ctx, containerRootPath); err != nil {
-		log.G(ctx).WithError(err).Warn("failed guest request to remove combined layers")
-		retError = err
+	if uvm.OS() == "windows" {
+		if err := uvm.RemoveCombinedLayersWCOW(ctx, containerRootPath); err != nil {
+			log.G(ctx).WithError(err).Warn("failed guest request to remove combined layers")
+			retError = err
+		}
+	} else {
+		if err := uvm.RemoveCombinedLayersLCOW(ctx, containerRootPath); err != nil {
+			log.G(ctx).WithError(err).Warn("failed guest request to remove combined layers")
+			retError = err
+		}
 	}
 
 	// Unload the SCSI scratch path

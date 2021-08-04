@@ -131,7 +131,7 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *
 	}()
 
 	sandboxPath := fmt.Sprintf(sandboxMountFormat, id)
-	if err := mountLayers(ctx, s, sandboxPath); err != nil {
+	if err := mountLayers(ctx, id, s, sandboxPath); err != nil {
 		return nil, nil, errors.Wrap(err, "failed to mount container layers")
 	}
 	container.sandboxMount = sandboxPath

@@ -210,4 +210,7 @@ const (
 	// AnnotationNcproxyContainerID indicates whether or not to use the hcsshim container ID
 	// when setting up ncproxy and computeagent
 	AnnotationNcproxyContainerID = "io.microsoft.network.ncproxy.containerid"
+
+	// AnnotationSecurityPolicy is used to specify a security policy for opengcs to enforce
+	AnnotationSecurityPolicy = "io.microsoft.virtualmachine.lcow.securitypolicy"
 )

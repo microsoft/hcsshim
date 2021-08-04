@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
@@ -30,10 +31,14 @@ var (
 //
 // Always creates `rootfsPath`. On mount failure the created `rootfsPath` will
 // be automatically cleaned up.
-func Mount(ctx context.Context, layerPaths []string, upperdirPath, workdirPath, rootfsPath string, readonly bool) (err error) {
+func Mount(ctx context.Context, layerPaths []string, upperdirPath, workdirPath, rootfsPath string, readonly bool, containerId string, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
 	_, span := trace.StartSpan(ctx, "overlay::Mount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
+
+	if err := securityPolicy.EnforceOverlayMountPolicy(containerId, layerPaths); err != nil {
+		return err
+	}
 
 	lowerdir := strings.Join(layerPaths, ":")
 	span.AddAttributes(
