@@ -8,6 +8,8 @@ import (
 	"testing"
 	"testing/quick"
 	"time"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 const (
@@ -15,6 +17,7 @@ const (
 	maxLayersInGeneratedContainer  = 32
 	maxGeneratedContainerID        = 1000000
 	maxGeneratedCommandLength      = 128
+	maxGeneratedCommandArgs        = 12
 	maxGeneratedMountTargetLength  = 256
 	rootHashLength                 = 64
 )
@@ -198,8 +201,9 @@ func Test_EnforceOverlayMountPolicy_Multiple_Instances_Same_Container(t *testing
 		var containers []SecurityPolicyContainer
 
 		for i := 1; i <= int(containersToCreate); i++ {
+			arg := "command " + strconv.Itoa(i)
 			c := SecurityPolicyContainer{
-				Command: "command " + strconv.Itoa(i),
+				Command: []string{arg},
 				Layers:  []string{"1", "2"},
 			}
 
@@ -278,6 +282,175 @@ func Test_EnforceOverlayMountPolicy_Overlay_Single_Container_Twice_With_Differen
 	}
 }
 
+func Test_EnforceCommandPolicy_Matches(t *testing.T) {
+	f := func(p *SecurityPolicy) bool {
+		policy, err := NewStandardSecurityPolicyEnforcer(p)
+		if err != nil {
+			return false
+		}
+
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		containerID := generateContainerId(r)
+		container := selectContainerFromPolicy(p, r)
+
+		layerPaths, err := createValidOverlayForContainer(policy, container, r)
+		if err != nil {
+			return false
+		}
+
+		err = policy.EnforceOverlayMountPolicy(containerID, layerPaths)
+		if err != nil {
+			return false
+		}
+
+		err = policy.EnforceCommandPolicy(containerID, container.Command)
+
+		// getting an error means something is broken
+		return err == nil
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 1000}); err != nil {
+		t.Errorf("Test_EnforceCommandPolicy_Matches: %v", err)
+	}
+}
+
+func Test_EnforceCommandPolicy_NoMatches(t *testing.T) {
+	f := func(p *SecurityPolicy) bool {
+		policy, err := NewStandardSecurityPolicyEnforcer(p)
+		if err != nil {
+			return false
+		}
+
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		containerID := generateContainerId(r)
+		container := selectContainerFromPolicy(p, r)
+
+		layerPaths, err := createValidOverlayForContainer(policy, container, r)
+		if err != nil {
+			return false
+		}
+
+		err = policy.EnforceOverlayMountPolicy(containerID, layerPaths)
+		if err != nil {
+			return false
+		}
+
+		err = policy.EnforceCommandPolicy(containerID, generateCommand(r))
+
+		// not getting an error means something is broken
+		return err != nil
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 1000}); err != nil {
+		t.Errorf("Test_EnforceCommandPolicy_NoMatches: %v", err)
+	}
+}
+
+// This is a tricky test.
+// The key to understanding it is, that when we have multiple containers
+// with the same base aka same mounts and overlay, then we don't know at the
+// time of overlay which container from policy is a given container id refers
+// to. Instead we have a list of possible container ids for the so far matching
+// containers in policy. We can narrow down the list of possible containers
+// at the time that we enforce commands.
+//
+// This test verifies the "narrowing possible container ids that could be
+// the container in our policy" functionality works correctly.
+func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
+	f := func(p *SecurityPolicy) bool {
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		// create two additional containers that "share everything"
+		// except that they have different commands
+		testContainerOne := generateSecurityPolicyContainer(r, 5)
+		testContainerTwo := testContainerOne
+		testContainerTwo.Command = generateCommand(r)
+		// add new containers to policy before creating enforcer
+		p.Containers = append(p.Containers, testContainerOne, testContainerTwo)
+
+		policy, err := NewStandardSecurityPolicyEnforcer(p)
+		if err != nil {
+			return false
+		}
+
+		testContainerOneId := ""
+		testContainerTwoId := ""
+		indexForContainerOne := -1
+		indexForContainerTwo := -1
+
+		// mount and overlay all our containers
+		for index, container := range p.Containers {
+			containerID := generateContainerId(r)
+
+			layerPaths, err := createValidOverlayForContainer(policy, container, r)
+			if err != nil {
+				return false
+			}
+
+			err = policy.EnforceOverlayMountPolicy(containerID, layerPaths)
+			if err != nil {
+				return false
+			}
+
+			if cmp.Equal(container, testContainerOne) {
+				testContainerOneId = containerID
+				indexForContainerOne = index
+			}
+			if cmp.Equal(container, testContainerTwo) {
+				testContainerTwoId = containerID
+				indexForContainerTwo = index
+			}
+		}
+
+		// validate our expectations prior to enforcing command policy
+		containerOneMapping := policy.ContainerIndexToContainerIds[indexForContainerOne]
+		if len(containerOneMapping) != 2 {
+			return false
+		}
+		for _, id := range containerOneMapping {
+			if (id != testContainerOneId) && (id != testContainerTwoId) {
+				return false
+			}
+		}
+
+		containerTwoMapping := policy.ContainerIndexToContainerIds[indexForContainerTwo]
+		if len(containerTwoMapping) != 2 {
+			return false
+		}
+		for _, id := range containerTwoMapping {
+			if (id != testContainerOneId) && (id != testContainerTwoId) {
+				return false
+			}
+		}
+
+		// enforce command policy for containerOne
+		// this will narrow our list of possible ids down
+		err = policy.EnforceCommandPolicy(testContainerOneId, testContainerOne.Command)
+		if err != nil {
+			return false
+		}
+
+		// Ok, we have full setup and we can now verify that when we enforced
+		// command policy above that it correctly narrowed down containerTwo
+		updatedMapping := policy.ContainerIndexToContainerIds[indexForContainerTwo]
+		if len(updatedMapping) != 1 {
+			return false
+		}
+		for _, id := range updatedMapping {
+			if id != testContainerTwoId {
+				return false
+			}
+		}
+
+		return true
+	}
+
+	// This is a more expensive test to run than others, so we run fewer times
+	// for each run,
+	if err := quick.Check(f, &quick.Config{MaxCount: 100}); err != nil {
+		t.Errorf("Test_EnforceCommandPolicy_NarrowingMatches: %v", err)
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //
@@ -313,8 +486,15 @@ func generateRootHash(r *rand.Rand) string {
 	return randString(r, rootHashLength)
 }
 
-func generateCommand(r *rand.Rand) string {
-	return randVariableString(r, maxGeneratedCommandLength)
+func generateCommand(r *rand.Rand) []string {
+	args := []string{}
+
+	numArgs := atLeastOneAtMost(r, maxGeneratedCommandArgs)
+	for i := 0; i < int(numArgs); i++ {
+		args = append(args, randVariableString(r, maxGeneratedCommandLength))
+	}
+
+	return args
 }
 
 func generateMountTarget(r *rand.Rand) string {

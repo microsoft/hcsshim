@@ -19,7 +19,7 @@ be downloaded, turned into an ext4, and finally a dm-verity root hash calculated
 ```toml
 [[image]]
 name = "rust:1.52.1"
-command = "rustc --help"
+command = ["rustc", "--help"]
 ```
 
 ### Converted to JSON
@@ -32,13 +32,13 @@ represented in JSON.
   "allow_all": false,
   "containers": [
     {
-      "command": "/pause",
+      "command": ["/pause"],
       "layers": [
         "16b514057a06ad665f92c02863aca074fd5976c755d26bff16365299169e8415"
       ]
     },
     {
-      "command": "rustc --help",
+      "command": ["rustc", "--help"],
       "layers": [
         "fe84c9d5bfddd07a2624d00333cf13c1a9c941f3a261f13ead44fc6a93bc0e7a",
         "4dedae42847c704da891a28c25d32201a1ae440bce2aecccfa8e6f03b97a6a6c",

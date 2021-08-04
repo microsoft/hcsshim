@@ -145,6 +145,11 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemAlreadyExists)
 	}
 
+	err = h.securityPolicyEnforcer.EnforceCommandPolicy(id, settings.OCISpecification.Process.Args)
+	if err != nil {
+		return nil, errors.Wrapf(err, "container creation denied due to policy")
+	}
+
 	var namespaceID string
 	criType, isCRI := settings.OCISpecification.Annotations["io.kubernetes.cri.container-type"]
 	if isCRI {
