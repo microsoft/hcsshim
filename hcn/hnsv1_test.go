@@ -79,6 +79,39 @@ func TestEndpointGetAll(t *testing.T) {
 	}
 }
 
+func TestEndpointStatsAll(t *testing.T) {
+	network, err := CreateTestNetwork()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	Endpoint := &hcsshim.HNSEndpoint{
+		Name: NatTestEndpointName,
+	}
+
+	Endpoint, err = network.CreateEndpoint(Endpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	epList, err := hcsshim.HNSListEndpointRequest()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, e := range epList {
+		_, err := hcsshim.GetHNSEndpointStats(e.Id)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_, err = network.Delete()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestNetworkGetAll(t *testing.T) {
 	_, err := hcsshim.HNSListNetworkRequest("GET", "", "")
 	if err != nil {
