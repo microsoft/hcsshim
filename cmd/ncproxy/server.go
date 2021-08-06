@@ -40,7 +40,8 @@ func (s *server) setup(ctx context.Context) (net.Listener, net.Listener, error) 
 	gService := newGRPCService(agentCache)
 	ncproxygrpc.RegisterNetworkConfigProxyServer(s.grpc, gService)
 
-	tService := newTTRPCService(agentCache)
+	tService := newTTRPCService(ctx, agentCache, s.db)
+	tService.reconnectComputeAgents(ctx)
 	ncproxyttrpc.RegisterNetworkConfigProxyService(s.ttrpc, tService)
 
 	ttrpcListener, err := winio.ListenPipe(s.conf.TTRPCAddr, nil)

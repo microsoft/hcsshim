@@ -12,7 +12,6 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
@@ -20,7 +19,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/internal/wcow"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/containerd/ttrpc"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 )
@@ -370,15 +368,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		return nil, err
 	}
 
-	// If network config proxy address passed in, construct a client.
-	if opts.NetworkConfigProxy != "" {
-		conn, err := winio.DialPipe(opts.NetworkConfigProxy, nil)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to connect to ncproxy service")
-		}
-		client := ttrpc.NewClient(conn, ttrpc.WithOnClose(func() { conn.Close() }))
-		uvm.ncProxyClient = ncproxyttrpc.NewNetworkConfigProxyClient(client)
-	}
+	uvm.ncProxyClientAddress = opts.NetworkConfigProxy
 
 	return uvm, nil
 }

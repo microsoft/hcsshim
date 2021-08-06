@@ -9,9 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
-	"github.com/containerd/ttrpc"
-
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/pkg/errors"
@@ -446,15 +443,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		uvm.gcListener = l
 	}
 
-	// If network config proxy address passed in, construct a client.
-	if opts.NetworkConfigProxy != "" {
-		conn, err := winio.DialPipe(opts.NetworkConfigProxy, nil)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to connect to ncproxy service")
-		}
-		client := ttrpc.NewClient(conn, ttrpc.WithOnClose(func() { conn.Close() }))
-		uvm.ncProxyClient = ncproxyttrpc.NewNetworkConfigProxyClient(client)
-	}
+	uvm.ncProxyClientAddress = opts.NetworkConfigProxy
 
 	return uvm, nil
 }

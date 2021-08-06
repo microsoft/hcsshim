@@ -14,12 +14,15 @@ import (
 	"github.com/Microsoft/go-winio/pkg/etwlogrus"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/cmd/ncproxy/nodenetsvc"
+	"github.com/Microsoft/hcsshim/internal/computeagent"
 	"github.com/Microsoft/hcsshim/internal/debug"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/containerd/ttrpc"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	bolt "go.etcd.io/bbolt"
 	"go.opencensus.io/plugin/ocgrpc"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
@@ -29,6 +32,15 @@ type nodeNetSvcConn struct {
 	client   nodenetsvc.NodeNetworkServiceClient
 	addr     string
 	grpcConn *grpc.ClientConn
+}
+
+type computeAgentClient struct {
+	raw *ttrpc.Client
+	computeagent.ComputeAgentService
+}
+
+func (c *computeAgentClient) Close() error {
+	return c.raw.Close()
 }
 
 var (
@@ -61,6 +73,10 @@ and 'node network' services.`
 			Name:  "log-directory",
 			Usage: "Directory to write ncproxy logs to. This is just panic logs.",
 		},
+		cli.StringFlag{
+			Name:  "database-path",
+			Usage: "Path to database file storing information on container to compute agent mapping.",
+		},
 		cli.BoolFlag{
 			Name:  "register-service",
 			Usage: "Register ncproxy as a Windows service.",
@@ -89,6 +105,7 @@ func run(clicontext *cli.Context) error {
 	var (
 		configPath    = clicontext.GlobalString("config")
 		logDir        = clicontext.GlobalString("log-directory")
+		dbPath        = clicontext.GlobalString("log-directory")
 		registerSvc   = clicontext.GlobalBool("register-service")
 		unregisterSvc = clicontext.GlobalBool("unregister-service")
 		runSvc        = clicontext.GlobalBool("run-service")
@@ -194,6 +211,29 @@ func run(clicontext *cli.Context) error {
 		}
 	}
 
+	// setup ncproxy databases
+	if dbPath == "" {
+		// default location for ncproxy database
+		binLocation, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		dbPath = filepath.Dir(binLocation) + "networkproxy.db"
+	} else {
+		// If a db path was provided, make sure parent directories exist
+		dir := filepath.Dir(dbPath)
+		if _, err := os.Stat(dir); err != nil {
+			if err := os.MkdirAll(dir, 0); err != nil {
+				return errors.Wrap(err, "failed to make database directory")
+			}
+		}
+	}
+
+	db, err := bolt.Open(dbPath, 0600, nil)
+	if err != nil {
+		return err
+	}
+
 	log.G(ctx).WithFields(logrus.Fields{
 		"TTRPCAddr":      conf.TTRPCAddr,
 		"NodeNetSvcAddr": conf.NodeNetSvcAddr,
@@ -212,7 +252,7 @@ func run(clicontext *cli.Context) error {
 		return errors.New("failed to make new ncproxy server")
 	}
 
-	ttrpcListener, grpcListener, err := server.setup(ctx)
+	ttrpcListener, grpcListener, err := server.setup(ctx, db)
 	if err != nil {
 		return errors.New("failed to setup ncproxy server")
 	}
