@@ -408,7 +408,7 @@ func newInvalidRequestTypeError(rt prot.ModifyRequestType) error {
 func modifyMappedVirtualDisk(ctx context.Context, rt prot.ModifyRequestType, mvd *prot.MappedVirtualDiskV2) (err error) {
 	switch rt {
 	case prot.MreqtAdd:
-		mountCtx, cancel := context.WithTimeout(ctx, time.Second*4)
+		mountCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 		defer cancel()
 		if mvd.MountPath != "" {
 			return scsi.Mount(mountCtx, mvd.Controller, mvd.Lun, mvd.MountPath, mvd.ReadOnly, false, mvd.Options)
