@@ -77,6 +77,8 @@ type SCSIMount struct {
 	// read-only layers. As RO layers are shared, we perform ref-counting.
 	isLayer  bool
 	refCount uint32
+	// specifies if this is an encrypted VHD
+	encrypted bool
 	// specifies if this is a readonly layer
 	readOnly bool
 	// "VirtualDisk" or "PassThru" or "ExtensibleVirtualDisk" disk attachment type.
@@ -102,6 +104,8 @@ type addSCSIRequest struct {
 	// attachments, `PassThru` for physical disk and `ExtensibleVirtualDisk` for
 	// Extensible virtual disks.
 	attachmentType string
+	// indicates if the VHD is encrypted
+	encrypted bool
 	// indicates if the attachment should be added read only.
 	readOnly bool
 	// guestOptions is a slice that contains optional information to pass to the guest
@@ -133,7 +137,7 @@ func (sm *SCSIMount) logFormat() logrus.Fields {
 	}
 }
 
-func newSCSIMount(uvm *UtilityVM, hostPath, uvmPath, attachmentType, evdType string, refCount uint32, controller int, lun int32, readOnly bool) *SCSIMount {
+func newSCSIMount(uvm *UtilityVM, hostPath, uvmPath, attachmentType, evdType string, refCount uint32, controller int, lun int32, readOnly, encrypted bool) *SCSIMount {
 	return &SCSIMount{
 		vm:                        uvm,
 		HostPath:                  hostPath,
@@ -141,6 +145,7 @@ func newSCSIMount(uvm *UtilityVM, hostPath, uvmPath, attachmentType, evdType str
 		refCount:                  refCount,
 		Controller:                controller,
 		LUN:                       int32(lun),
+		encrypted:                 encrypted,
 		readOnly:                  readOnly,
 		attachmentType:            attachmentType,
 		extensibleVirtualDiskType: evdType,
@@ -260,7 +265,7 @@ func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) error {
 }
 
 // AddSCSI adds a SCSI disk to a utility VM at the next available location. This
-// function should be called for a adding a scratch layer, a read-only layer as an
+// function should be called for adding a scratch layer, a read-only layer as an
 // alternative to VPMEM, or for other VHD mounts.
 //
 // `hostPath` is required and must point to a vhd/vhdx path.
@@ -269,16 +274,21 @@ func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) error {
 //
 // `readOnly` set to `true` if the vhd/vhdx should be attached read only.
 //
+// `encrypted` set to `true` if the vhd/vhdx should be attached in encrypted mode.
+// The device will be formatted, so this option must be used only when creating
+// scratch vhd/vhdx.
+//
 // `guestOptions` is a slice that contains optional information to pass
 // to the guest service
 //
 // `vmAccess` indicates what access to grant the vm for the hostpath
-func (uvm *UtilityVM) AddSCSI(ctx context.Context, hostPath string, uvmPath string, readOnly bool, guestOptions []string, vmAccess VMAccessType) (*SCSIMount, error) {
+func (uvm *UtilityVM) AddSCSI(ctx context.Context, hostPath string, uvmPath string, readOnly, encrypted bool, guestOptions []string, vmAccess VMAccessType) (*SCSIMount, error) {
 	addReq := &addSCSIRequest{
 		hostPath:       hostPath,
 		uvmPath:        uvmPath,
 		attachmentType: "VirtualDisk",
 		readOnly:       readOnly,
+		encrypted:      encrypted,
 		guestOptions:   guestOptions,
 		vmAccess:       VMAccessTypeIndividual,
 	}
@@ -350,7 +360,7 @@ func (uvm *UtilityVM) AddSCSIExtensibleVirtualDisk(ctx context.Context, hostPath
 //
 // Returns result from calling modify with the given scsi mount
 func (uvm *UtilityVM) addSCSIActual(ctx context.Context, addReq *addSCSIRequest) (sm *SCSIMount, err error) {
-	sm, existed, err := uvm.allocateSCSIMount(ctx, addReq.readOnly, addReq.hostPath, addReq.uvmPath, addReq.attachmentType, addReq.evdType, addReq.vmAccess)
+	sm, existed, err := uvm.allocateSCSIMount(ctx, addReq.readOnly, addReq.encrypted, addReq.hostPath, addReq.uvmPath, addReq.attachmentType, addReq.evdType, addReq.vmAccess)
 	if err != nil {
 		return nil, err
 	}
@@ -415,6 +425,7 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, addReq *addSCSIRequest)
 				Lun:        uint8(sm.LUN),
 				Controller: uint8(sm.Controller),
 				ReadOnly:   addReq.readOnly,
+				Encrypted:  addReq.encrypted,
 				Options:    addReq.guestOptions,
 				VerityInfo: verity,
 			}
@@ -432,7 +443,7 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, addReq *addSCSIRequest)
 // device or allocates a new one if not already present.
 // Returns the resulting *SCSIMount, a bool indicating if the scsi device was already present,
 // and error if any.
-func (uvm *UtilityVM) allocateSCSIMount(ctx context.Context, readOnly bool, hostPath, uvmPath, attachmentType, evdType string, vmAccess VMAccessType) (*SCSIMount, bool, error) {
+func (uvm *UtilityVM) allocateSCSIMount(ctx context.Context, readOnly, encrypted bool, hostPath, uvmPath, attachmentType, evdType string, vmAccess VMAccessType) (*SCSIMount, bool, error) {
 	if attachmentType != "ExtensibleVirtualDisk" {
 		// Ensure the utility VM has access
 		err := grantAccess(ctx, uvm.id, hostPath, vmAccess)
@@ -456,7 +467,7 @@ func (uvm *UtilityVM) allocateSCSIMount(ctx context.Context, readOnly bool, host
 		return nil, false, err
 	}
 
-	uvm.scsiLocations[controller][lun] = newSCSIMount(uvm, hostPath, uvmPath, attachmentType, evdType, 1, controller, int32(lun), readOnly)
+	uvm.scsiLocations[controller][lun] = newSCSIMount(uvm, hostPath, uvmPath, attachmentType, evdType, 1, controller, int32(lun), readOnly, encrypted)
 
 	log.G(ctx).WithFields(uvm.scsiLocations[controller][lun].logFormat()).Debug("allocated SCSI mount")
 
@@ -475,6 +486,10 @@ func (uvm *UtilityVM) GetScsiUvmPath(ctx context.Context, hostPath string) (stri
 		return "", err
 	}
 	return sm.UVMPath, err
+}
+
+func (uvm *UtilityVM) ScratchEncryptionEnabled() bool {
+	return uvm.encryptScratch
 }
 
 // grantAccess helper function to grant access to a file for the vm or vm group
@@ -635,7 +650,7 @@ func (sm *SCSIMount) Clone(ctx context.Context, vm *UtilityVM, cd *cloneData) er
 		Type_: sm.attachmentType,
 	}
 
-	clonedScsiMount := newSCSIMount(vm, dstVhdPath, sm.UVMPath, sm.attachmentType, sm.extensibleVirtualDiskType, 1, sm.Controller, sm.LUN, sm.readOnly)
+	clonedScsiMount := newSCSIMount(vm, dstVhdPath, sm.UVMPath, sm.attachmentType, sm.extensibleVirtualDiskType, 1, sm.Controller, sm.LUN, sm.readOnly, sm.encrypted)
 
 	vm.scsiLocations[sm.Controller][sm.LUN] = clonedScsiMount
 

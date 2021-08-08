@@ -773,6 +773,7 @@ type MappedVirtualDiskV2 struct {
 	Lun        uint8             `json:",omitempty"`
 	Controller uint8             `json:",omitempty"`
 	ReadOnly   bool              `json:",omitempty"`
+	Encrypted  bool              `json:",omitempty"`
 	Options    []string          `json:",omitempty"`
 	VerityInfo *DeviceVerityInfo `json:",omitempty"`
 }

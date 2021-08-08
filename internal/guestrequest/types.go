@@ -37,6 +37,7 @@ type LCOWMappedVirtualDisk struct {
 	Lun        uint8             `json:"Lun,omitempty"`
 	Controller uint8             `json:"Controller,omitempty"`
 	ReadOnly   bool              `json:"ReadOnly,omitempty"`
+	Encrypted  bool              `json:"Encrypted,omitempty"`
 	Options    []string          `json:"Options,omitempty"`
 	VerityInfo *DeviceVerityInfo `json:"VerityInfo,omitempty"`
 }

@@ -46,7 +46,7 @@ func TestScratchCreateLCOW(t *testing.T) {
 
 	// Make sure it can be added (verifies it has access correctly)
 	var options []string
-	scsiMount, err := targetUVM.AddSCSI(context.Background(), destTwo, "", false, options, uvm.VMAccessTypeIndividual)
+	scsiMount, err := targetUVM.AddSCSI(context.Background(), destTwo, "", false, false, options, uvm.VMAccessTypeIndividual)
 	if err != nil {
 		t.Fatal(err)
 	}

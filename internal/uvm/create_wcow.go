@@ -296,6 +296,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 			1,
 			0,
 			0,
+			false,
 			false)
 	} else {
 		doc.VirtualMachine.RestoreState = &hcsschema.RestoreState{}
