@@ -43,7 +43,7 @@ const (
 	_DM_SUSPEND_FLAG        = 1 << 1
 	_DM_PERSISTENT_DEV_FLAG = 1 << 3
 
-	BlockSize = 512
+	blockSize = 512
 )
 
 const (
@@ -186,11 +186,11 @@ func LinearTarget(sectorStart, lengthBlocks int64, path string, deviceStart int6
 	}
 }
 
-// PMemLinearTarget constructs a LinearTarget for PMem device with 0 sector start and length/device start
+// zeroSectorLinearTarget creates a Target for devices with 0 sector start and length/device start
 // expected to be in bytes rather than blocks
-func PMemLinearTarget(lengthBytes int64, path string, deviceStartBytes int64) Target {
-	lengthInBlocks := lengthBytes / BlockSize
-	startInBlocks := deviceStartBytes / BlockSize
+func zeroSectorLinearTarget(lengthBytes int64, path string, deviceStartBytes int64) Target {
+	lengthInBlocks := lengthBytes / blockSize
+	startInBlocks := deviceStartBytes / blockSize
 	return LinearTarget(0, lengthInBlocks, path, startInBlocks)
 }
 
