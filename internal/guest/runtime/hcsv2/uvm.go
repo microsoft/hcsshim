@@ -73,7 +73,7 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport) *Host {
 // so we first have to remove the base64 encoding that allows
 // the JSON based policy to be passed as a string. From there,
 // we decode the JSON and setup our security policy state
-func (h *Host) SetSecurityPolicy(base64_policy string) error {
+func (h *Host) SetSecurityPolicy(base64Policy string) error {
 	h.policyMutex.Lock()
 	defer h.policyMutex.Unlock()
 	if h.securityPolicyEnforcerSet {
@@ -84,16 +84,18 @@ func (h *Host) SetSecurityPolicy(base64_policy string) error {
 	// its base64 encoded because it is coming from an annotation
 	// annotations are a map of string to string
 	// we want to store a complex json object so.... base64 it is
-	jsonPolicy, err := base64.StdEncoding.DecodeString(base64_policy)
+	jsonPolicy, err := base64.StdEncoding.DecodeString(base64Policy)
 	if err != nil {
 		return errors.Wrap(err, "unable to decode policy from Base64 format")
 	}
 
 	// json unmarshall the decoded to a SecurityPolicy
-	securityPolicy := &securitypolicy.SecurityPolicy{}
-	json.Unmarshal(jsonPolicy, securityPolicy)
+	var securityPolicy securitypolicy.SecurityPolicy
+	if err := json.Unmarshal(jsonPolicy, &securityPolicy); err != nil {
+		return errors.Wrap(err, "unable to unmarshal policy")
+	}
 
-	p, err := securitypolicy.NewSecurityPolicyEnforcer(securityPolicy)
+	p, err := securitypolicy.NewSecurityPolicyEnforcer(&securityPolicy)
 	if err != nil {
 		return err
 	}
