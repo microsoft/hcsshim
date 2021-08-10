@@ -380,11 +380,7 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	if err != nil {
 		return nil, nil, err
 	}
-	// Do not add empty extensions. It causes container creation to
-	// fail with invalid config error.
-	if len(extensions.DeviceExtension) > 0 {
-		v2Container.AdditionalDeviceNamespace = extensions
-	}
+	v2Container.AdditionalDeviceNamespace = extensions
 
 	return v1, v2Container, nil
 }
