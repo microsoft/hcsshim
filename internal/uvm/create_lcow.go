@@ -355,6 +355,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		kernelArgs += " panic=-1 quiet"
 	}
 
+	// Add Kernel Boot options
 	if opts.KernelBootOptions != "" {
 		kernelArgs += " " + opts.KernelBootOptions
 	}
@@ -383,11 +384,6 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	if vmDebugging {
 		// Launch a shell on the console.
 		initArgs = `sh -c "` + initArgs + ` & exec sh"`
-	}
-
-	// Add kernel options
-	if opts.KernelBootOptions != "" {
-		kernelArgs += " " + opts.KernelBootOptions
 	}
 
 	kernelArgs += fmt.Sprintf(" nr_cpus=%d", opts.ProcessorCount)
