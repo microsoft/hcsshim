@@ -355,6 +355,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		kernelArgs += " panic=-1 quiet"
 	}
 
+	// Add Kernel Boot options
 	if opts.KernelBootOptions != "" {
 		kernelArgs += " " + opts.KernelBootOptions
 	}
