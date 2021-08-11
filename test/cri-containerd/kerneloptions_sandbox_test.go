@@ -20,7 +20,9 @@ func Test_KernelOptions_To_LCOW_Sandbox(t *testing.T) {
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, ubuntu1804})
 
 	annotations := map[string]string{
-		oci.AnnotationKernelBootOptions: "vm.nr_hugepages=5",
+		oci.AnnotationFullyPhysicallyBacked: "true",
+		oci.AnnotationMemorySizeInMB:        "2048",
+		oci.AnnotationKernelBootOptions:     "hugepagesz=2M hugepages=10",
 	}
 	podReq := getRunPodSandboxRequest(t, lcowRuntimeHandler, annotations)
 	podID := runPodSandbox(t, client, ctx, podReq)
