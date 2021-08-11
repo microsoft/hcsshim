@@ -1327,3 +1327,26 @@ func createSandboxContainerAndExec(t *testing.T, annotations map[string]string, 
 
 	return output, errorMsg, exitCode
 }
+
+func Test_RunPodSandbox_KernelOptions_LCOW(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	annotations := map[string]string{
+		oci.AnnotationFullyPhysicallyBacked: "true",
+		oci.AnnotationMemorySizeInMB:        "2048",
+		oci.AnnotationKernelBootOptions:     "hugepagesz=2M hugepages=10",
+	}
+
+	hugePagesCmd := []string{"grep", "-i", "huge", "/proc/meminfo"}
+	output, errorMsg, exitCode := createSandboxContainerAndExec(t, annotations, nil, hugePagesCmd)
+
+	if exitCode != 0 {
+		t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, t.Name())
+	}
+
+	if !strings.Contains(string(output), "HugePages_Total:      10") {
+		t.Fatalf("Expected number of hugepages to be 10. Got output instead: %s", string(output))
+	}
+}
