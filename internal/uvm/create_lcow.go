@@ -385,6 +385,11 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		initArgs = `sh -c "` + initArgs + ` & exec sh"`
 	}
 
+	// Add kernel options
+	if opts.KernelBootOptions != "" {
+		kernelArgs += " " + opts.KernelBootOptions
+	}
+
 	kernelArgs += fmt.Sprintf(" nr_cpus=%d", opts.ProcessorCount)
 	kernelArgs += ` brd.rd_nr=0 pmtmr=0 -- ` + initArgs
 
