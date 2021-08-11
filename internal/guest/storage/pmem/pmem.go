@@ -85,14 +85,12 @@ func Mount(ctx context.Context, device uint32, target string, mappingInfo *prot.
 		return errors.Wrapf(err, "won't mount pmem device %d onto %s", device, target)
 	}
 
-	// dm linear target has to be created first. when verity info is also present, the linear target becomes the data
+	// dm-linear target has to be created first. When verity info is also present, the linear target becomes the data
 	// device instead of the original VPMem.
 	if mappingInfo != nil {
 		dmLinearName := fmt.Sprintf(linearDeviceFmt, device, mappingInfo.DeviceOffsetInBytes, mappingInfo.DeviceSizeInBytes)
-		if dmLinearPath, err := createDMLinearTarget(mCtx, devicePath, dmLinearName, target, mappingInfo); err != nil {
+		if devicePath, err = dm.CreateZeroSectorLinearTarget(mCtx, devicePath, dmLinearName, mappingInfo); err != nil {
 			return err
-		} else {
-			devicePath = dmLinearPath
 		}
 		defer func() {
 			if err != nil {
@@ -105,10 +103,8 @@ func Mount(ctx context.Context, device uint32, target string, mappingInfo *prot.
 
 	if verityInfo != nil {
 		dmVerityName := fmt.Sprintf(verityDeviceFmt, device, verityInfo.RootDigest)
-		if dmVerityPath, err := createDMVerityTarget(mCtx, devicePath, dmVerityName, target, verityInfo); err != nil {
+		if devicePath, err = dm.CreateVerityTarget(mCtx, devicePath, dmVerityName, verityInfo); err != nil {
 			return err
-		} else {
-			devicePath = dmVerityPath
 		}
 		defer func() {
 			if err != nil {
@@ -120,73 +116,6 @@ func Mount(ctx context.Context, device uint32, target string, mappingInfo *prot.
 	}
 
 	return mountInternal(mCtx, devicePath, target)
-}
-
-// createDMLinearTarget creates dm-linear target from a given `device` slot location and `mappingInfo`
-func createDMLinearTarget(ctx context.Context, devPath, devName string, target string, mappingInfo *prot.DeviceMappingInfo) (_ string, err error) {
-	_, span := trace.StartSpan(ctx, "pmem::createDMLinearTarget")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	linearTarget := dm.PMemLinearTarget(mappingInfo.DeviceSizeInBytes, devPath, mappingInfo.DeviceOffsetInBytes)
-
-	span.AddAttributes(
-		trace.StringAttribute("devicePath", devPath),
-		trace.Int64Attribute("deviceStart", mappingInfo.DeviceOffsetInBytes),
-		trace.Int64Attribute("sectorSize", mappingInfo.DeviceSizeInBytes),
-		trace.StringAttribute("target", target),
-		trace.StringAttribute("linearTable", fmt.Sprintf("%s: '%d %d %s'", devName, linearTarget.SectorStart, linearTarget.LengthInBlocks, linearTarget.Params)))
-
-	devMapperPath, err := dm.CreateDevice(devName, dm.CreateReadOnly, []dm.Target{linearTarget})
-	if err != nil {
-		return "", errors.Wrapf(err, "failed to create dm-linear target: pmem device: %s, offset: %d", devPath, mappingInfo.DeviceOffsetInBytes)
-	}
-
-	return devMapperPath, nil
-}
-
-// createDMVerityTarget creates a dm-verity target for a given device and mounts that target instead of the device itself
-//
-// verity target table
-// 0 417792 verity 1 /dev/sdb /dev/sdc 4096 4096 52224 1 sha256 2aa4f7b7b6...f4952060e8 762307f4bc8...d2a6b7595d8..
-// |    |     |    |     |     |        |    |    |    |    |              |                        |
-// start|     |    |  data_dev |  data_block | #blocks | hash_alg      root_digest                salt
-//     size   |  version    hash_dev         |     hash_offset
-//          target                       hash_block
-func createDMVerityTarget(ctx context.Context, devPath, devName, target string, verityInfo *prot.DeviceVerityInfo) (_ string, err error) {
-	_, span := trace.StartSpan(ctx, "pmem::createDMVerityTarget")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	dmBlocks := verityInfo.Ext4SizeInBytes / dm.BlockSize
-	dataBlocks := verityInfo.Ext4SizeInBytes / int64(verityInfo.BlockSize)
-	hashOffsetBlocks := dataBlocks
-	if verityInfo.SuperBlock {
-		hashOffsetBlocks++
-	}
-	hashes := fmt.Sprintf("%s %s %s", verityInfo.Algorithm, verityInfo.RootDigest, verityInfo.Salt)
-	blkInfo := fmt.Sprintf("%d %d %d %d", verityInfo.BlockSize, verityInfo.BlockSize, dataBlocks, hashOffsetBlocks)
-	devices := fmt.Sprintf("%s %s", devPath, devPath)
-
-	verityTarget := dm.Target{
-		SectorStart:    0,
-		LengthInBlocks: dmBlocks,
-		Type:           "verity",
-		Params:         fmt.Sprintf("%d %s %s %s", verityInfo.Version, devices, blkInfo, hashes),
-	}
-
-	span.AddAttributes(
-		trace.StringAttribute("devicePath", devPath),
-		trace.StringAttribute("target", target),
-		trace.Int64Attribute("sectorSize", dmBlocks),
-		trace.StringAttribute("verityTable", verityTarget.Params))
-
-	mapperPath, err := dm.CreateDevice(devName, dm.CreateReadOnly, []dm.Target{verityTarget})
-	if err != nil {
-		return "", errors.Wrapf(err, "failed to create dm-verity target: pmem device: %s", devPath)
-	}
-
-	return mapperPath, nil
 }
 
 // Unmount unmounts `target` and removes corresponding linear and verity targets when needed
