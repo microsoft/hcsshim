@@ -86,7 +86,7 @@ func (h *Host) SetSecurityPolicy(base64_policy string) error {
 	// we want to store a complex json object so.... base64 it is
 	jsonPolicy, err := base64.StdEncoding.DecodeString(base64_policy)
 	if err != nil {
-		return errors.Wrap(err, "Unable to decode policy from Base64 format")
+		return errors.Wrap(err, "unable to decode policy from Base64 format")
 	}
 
 	// json unmarshall the decoded to a SecurityPolicy
