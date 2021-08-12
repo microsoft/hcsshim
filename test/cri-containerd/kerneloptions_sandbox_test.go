@@ -40,7 +40,7 @@ func Test_KernelOptions_To_LCOW_Sandbox(t *testing.T) {
 	// check /proc/meminfo, HugePages_Total should be set to 10
 	execResponse := execSync(t, client, ctx, &runtime.ExecSyncRequest{
 		ContainerId: containerID,
-		Cmd:         []string{"grep", "-i", "huge /proc/meminfo"},
+		Cmd:         []string{"grep", "-i", "huge", "/proc/meminfo"},
 	})
 
 	if !strings.Contains(string(execResponse.Stdout), "HugePages_Total:      10") {
