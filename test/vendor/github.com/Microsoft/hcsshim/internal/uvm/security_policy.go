@@ -24,6 +24,10 @@ func (uvm *UtilityVM) SetSecurityPolicy(ctx context.Context, policy string) erro
 		return errNotSupported
 	}
 
+	if policy == "" {
+		return nil
+	}
+
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 
