@@ -4,9 +4,11 @@ package cri_containerd
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/oci"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
 func Test_KernelOptions_To_LCOW_Sandbox(t *testing.T) {
@@ -16,7 +18,6 @@ func Test_KernelOptions_To_LCOW_Sandbox(t *testing.T) {
 	defer cancel()
 	client := newTestRuntimeClient(t)
 
-	// use ubuntu to make sure that multiple container layers will be mapped properly
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, ubuntu1804})
 
 	annotations := map[string]string{
@@ -34,8 +35,15 @@ func Test_KernelOptions_To_LCOW_Sandbox(t *testing.T) {
 	defer removeContainer(t, client, ctx, containerID)
 
 	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID)
 
-	// stop container
-	stopContainer(t, client, ctx, containerID)
+	// check /proc/meminfo, HugePages_Total should be set to 10
+	execResponse := execSync(t, client, ctx, &runtime.ExecSyncRequest{
+		ContainerId: containerID,
+		Cmd:         []string{"grep", "-i", "huge /proc/meminfo"},
+	})
 
+	if !strings.Contains(string(execResponse.Stdout), "HugePages_Total:      10") {
+		t.Fatalf("Expected number of hugepages to be 10. Got output instead: %s", string(execResponse.Stdout))
+	}
 }
