@@ -18,21 +18,21 @@ import (
 )
 
 var (
-	config_file = flag.String("c", "", "config")
-	output_json = flag.Bool("j", false, "json")
+	configFile = flag.String("c", "", "config")
+	outputJson = flag.Bool("j", false, "json")
 	username    = flag.String("u", "", "username")
 	password    = flag.String("p", "", "password")
 )
 
 func main() {
 	flag.Parse()
-	if flag.NArg() != 0 || len(*config_file) == 0 {
+	if flag.NArg() != 0 || len(*configFile) == 0 {
 		flag.Usage()
 		os.Exit(1)
 	}
 
 	err := func() (err error) {
-		configData, err := ioutil.ReadFile(*config_file)
+		configData, err := ioutil.ReadFile(*configFile)
 		if err != nil {
 			return err
 		}
@@ -63,7 +63,7 @@ func main() {
 		if err != nil {
 			return err
 		}
-		if *output_json {
+		if *outputJson {
 			fmt.Printf("%s\n", j)
 		}
 		b := base64.StdEncoding.EncodeToString(j)
