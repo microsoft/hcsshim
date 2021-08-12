@@ -4,8 +4,8 @@ on:
   - pull_request
 
 env:
-  GOPROXY: off
   GOFLAGS: -mod=vendor
+  GOPROXY: off
 
 jobs:
   lint:
@@ -21,6 +21,44 @@ jobs:
         with:
           version: v1.42.0 # Has fixes for stylecheck configuration https://github.com/golangci/golangci-lint/pull/2017/files
           args: --timeout=5m -v
+
+  verify-main-vendor:
+    runs-on: 'windows-2019'
+    env:
+      GOPROXY: "https://proxy.golang.org,direct"
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.15.0'
+      - name: Validate main modules
+        shell: powershell
+        run: |
+          $currentPath = (Get-Location).Path
+          $process = Start-Process powershell.exe -PassThru -Verb runAs -Wait -ArgumentList $currentPath/scripts/Verify-GoModules.ps1, $currentPath
+          if ($process.ExitCode -ne 0) {
+            Write-Error "Main modules are not up to date. Please run `go mod vendor` followed by `go mod tidy` in the repo root path."
+          }
+          exit $process.ExitCode
+          
+  verify-test-vendor:
+    runs-on: 'windows-2019'
+    env:
+      GOPROXY: "https://proxy.golang.org,direct"
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.15.0'
+      - name: Validate test modules
+        shell: powershell
+        run: |
+          $currentPath = (Get-Location).Path
+          $process = Start-Process powershell.exe -PassThru -Verb runAs -Wait -ArgumentList $currentPath/scripts/Verify-GoModules.ps1, $currentPath, "test"
+          if ($process.ExitCode -ne 0) {
+            Write-Error "Test package modules are not up to date. Please run `go mod vendor` followed by `go mod tidy` in hcsshim/test directory."
+          }
+          exit $process.ExitCode
 
   test:
     runs-on: 'windows-2019'
