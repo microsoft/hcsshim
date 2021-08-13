@@ -8,6 +8,31 @@ env:
   GOFLAGS: -mod=vendor
 
 jobs:
+  project:
+    runs-on: 'ubuntu-latest'
+    steps:
+    - uses: actions/setup-go@v2
+      with:
+        go-version: '^1.15.0'
+
+    - uses: actions/checkout@v2
+      with:
+        path: src/github.com/Microsoft/hcsshim
+        fetch-depth: 0
+
+    - name: Get Dependencies
+      shell: bash
+      env:
+        GO111MODULE: off
+      run: |
+        echo "Get dependencies"
+        go get -u -v github.com/vbatts/git-validation
+
+    - name: DCO check
+      working-directory: src/github.com/Microsoft/hcsshim
+      run: |
+        chmod +x ./.github/scripts/dco-check.sh && ./.github/scripts/dco-check.sh
+
   lint:
     runs-on: 'windows-2019'
     steps:
