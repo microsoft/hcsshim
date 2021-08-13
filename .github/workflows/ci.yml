@@ -113,3 +113,4 @@ jobs:
         run: |
           BASE=./base.tar.gz
           make all test
+          echo "hi"
