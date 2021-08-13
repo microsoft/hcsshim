@@ -166,6 +166,9 @@ const (
 	// AnnotationVPMemNoMultiMapping indicates that we should disable LCOW vpmem layer multi mapping
 	AnnotationVPMemNoMultiMapping = "io.microsoft.virtualmachine.lcow.vpmem.nomultimapping"
 
+	// AnnotationKernelBootOptions is used to specify kernel options used while booting a linux kernel
+	AnnotationKernelBootOptions = "io.microsoft.virtualmachine.lcow.kernelbootoptions"
+
 	// AnnotationStorageQoSBandwidthMaximum indicates the maximum number of bytes per second. If `0`
 	// will default to the platform default.
 	AnnotationStorageQoSBandwidthMaximum = "io.microsoft.virtualmachine.storageqos.bandwidthmaximum"
