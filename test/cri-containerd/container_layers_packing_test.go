@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	ubuntu1804          = "ubuntu:18.04"
+	ubuntu1804          = "ubuntu@sha256:07782849f2cff04e9bc29449c27d0fb2076e61e8bdb4475ec5dbc5386ed41a4f"
 	ubuntu70ExtraLayers = "cplatpublic.azurecr.io/ubuntu70extra:18.04"
 	alpine70ExtraLayers = "cplatpublic.azurecr.io/alpine70extra:latest"
 )
@@ -116,8 +116,9 @@ func Test_Container_Layer_Packing_On_VPMem(t *testing.T) {
 			startContainer(t, client, ctx, containerID)
 
 			// check initial targets
-			// NOTE: as of 02/03/2021, ubuntu:18.04 image has 3 image layers and k8s pause container has 1 layer
-			validateTargets(ctx, t, scenario.deviceNumber, podID, 4)
+			// NOTE: as of 08/12/2021, ubuntu:18.04 (digest: sha256:07782849f2cff04e9bc29449c27d0fb2076e61e8bdb4475ec5dbc5386ed41a4f)
+			// image has 1 image layer and k8s pause container has 1 layer
+			validateTargets(ctx, t, scenario.deviceNumber, podID, 2)
 
 			// stop container
 			stopContainer(t, client, ctx, containerID)
