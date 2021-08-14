@@ -7,7 +7,12 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var versionOnce sync.Once
+var (
+	// featuresOnce handles assigning the supported features and printing the supported info to stdout only once to avoid unnecessary work
+	// multiple times.
+	featuresOnce      sync.Once
+	supportedFeatures SupportedFeatures
+)
 
 // SupportedFeatures are the features provided by the Service.
 type SupportedFeatures struct {
@@ -45,54 +50,51 @@ type ApiSupport struct {
 
 // GetSupportedFeatures returns the features supported by the Service.
 func GetSupportedFeatures() SupportedFeatures {
-	var features SupportedFeatures
+	// Only fetch the supported features and print the HCN version and features once, instead of everytime this is invoked.
+	// The logs are useful to debug incidents where there's confusion on if a feature is supported on the host machine. The sync.Once
+	// helps to avoid redundant spam of these anytime a check needs to be made for if an HCN feature is supported. This is a common
+	// occurrence in kubeproxy for example.
+	featuresOnce.Do(func() {
+		globals, err := GetGlobals()
+		if err != nil {
+			// Expected on pre-1803 builds, all features will be false/unsupported
+			logrus.Debugf("Unable to obtain globals: %s", err)
+		} else {
+			supportedFeatures.Acl = AclFeatures{
+				AclAddressLists:       isFeatureSupported(globals.Version, HNSVersion1803),
+				AclNoHostRulePriority: isFeatureSupported(globals.Version, HNSVersion1803),
+				AclPortRanges:         isFeatureSupported(globals.Version, HNSVersion1803),
+				AclRuleId:             isFeatureSupported(globals.Version, HNSVersion1803),
+			}
 
-	globals, err := GetGlobals()
-	if err != nil {
-		// Expected on pre-1803 builds, all features will be false/unsupported
-		logrus.Debugf("Unable to obtain globals: %s", err)
-		return features
-	}
+			supportedFeatures.Api = ApiSupport{
+				V2: isFeatureSupported(globals.Version, V2ApiSupport),
+				V1: true, // HNSCall is still available.
+			}
 
-	features.Acl = AclFeatures{
-		AclAddressLists:       isFeatureSupported(globals.Version, HNSVersion1803),
-		AclNoHostRulePriority: isFeatureSupported(globals.Version, HNSVersion1803),
-		AclPortRanges:         isFeatureSupported(globals.Version, HNSVersion1803),
-		AclRuleId:             isFeatureSupported(globals.Version, HNSVersion1803),
-	}
+			supportedFeatures.RemoteSubnet = isFeatureSupported(globals.Version, RemoteSubnetVersion)
+			supportedFeatures.HostRoute = isFeatureSupported(globals.Version, HostRouteVersion)
+			supportedFeatures.DSR = isFeatureSupported(globals.Version, DSRVersion)
+			supportedFeatures.Slash32EndpointPrefixes = isFeatureSupported(globals.Version, Slash32EndpointPrefixesVersion)
+			supportedFeatures.AclSupportForProtocol252 = isFeatureSupported(globals.Version, AclSupportForProtocol252Version)
+			supportedFeatures.SessionAffinity = isFeatureSupported(globals.Version, SessionAffinityVersion)
+			supportedFeatures.IPv6DualStack = isFeatureSupported(globals.Version, IPv6DualStackVersion)
+			supportedFeatures.SetPolicy = isFeatureSupported(globals.Version, SetPolicyVersion)
+			supportedFeatures.VxlanPort = isFeatureSupported(globals.Version, VxlanPortVersion)
+			supportedFeatures.L4Proxy = isFeatureSupported(globals.Version, L4ProxyPolicyVersion)
+			supportedFeatures.L4WfpProxy = isFeatureSupported(globals.Version, L4WfpProxyPolicyVersion)
+			supportedFeatures.TierAcl = isFeatureSupported(globals.Version, TierAclPolicyVersion)
+			supportedFeatures.NetworkACL = isFeatureSupported(globals.Version, NetworkACLPolicyVersion)
+			supportedFeatures.NestedIpSet = isFeatureSupported(globals.Version, NestedIpSetVersion)
 
-	features.Api = ApiSupport{
-		V2: isFeatureSupported(globals.Version, V2ApiSupport),
-		V1: true, // HNSCall is still available.
-	}
-
-	features.RemoteSubnet = isFeatureSupported(globals.Version, RemoteSubnetVersion)
-	features.HostRoute = isFeatureSupported(globals.Version, HostRouteVersion)
-	features.DSR = isFeatureSupported(globals.Version, DSRVersion)
-	features.Slash32EndpointPrefixes = isFeatureSupported(globals.Version, Slash32EndpointPrefixesVersion)
-	features.AclSupportForProtocol252 = isFeatureSupported(globals.Version, AclSupportForProtocol252Version)
-	features.SessionAffinity = isFeatureSupported(globals.Version, SessionAffinityVersion)
-	features.IPv6DualStack = isFeatureSupported(globals.Version, IPv6DualStackVersion)
-	features.SetPolicy = isFeatureSupported(globals.Version, SetPolicyVersion)
-	features.VxlanPort = isFeatureSupported(globals.Version, VxlanPortVersion)
-	features.L4Proxy = isFeatureSupported(globals.Version, L4ProxyPolicyVersion)
-	features.L4WfpProxy = isFeatureSupported(globals.Version, L4WfpProxyPolicyVersion)
-	features.TierAcl = isFeatureSupported(globals.Version, TierAclPolicyVersion)
-	features.NetworkACL = isFeatureSupported(globals.Version, NetworkACLPolicyVersion)
-	features.NestedIpSet = isFeatureSupported(globals.Version, NestedIpSetVersion)
-
-	// Only print the HCN version and features supported once, instead of everytime this is invoked. These logs are useful to
-	// debug incidents where there's confusion on if a feature is supported on the host machine. The sync.Once helps to avoid redundant
-	// spam of these anytime a check needs to be made for if an HCN feature is supported. This is a common occurrence in kubeproxy
-	// for example.
-	versionOnce.Do(func() {
-		logrus.WithFields(logrus.Fields{
-			"version":           fmt.Sprintf("%+v", globals.Version),
-			"supportedFeatures": fmt.Sprintf("%+v", features),
-		}).Info("HCN feature check")
+			logrus.WithFields(logrus.Fields{
+				"version":           fmt.Sprintf("%+v", globals.Version),
+				"supportedFeatures": fmt.Sprintf("%+v", supportedFeatures),
+			}).Info("HCN feature check")
+		}
 	})
 
-	return features
+	return supportedFeatures
 }
 
 func isFeatureSupported(currentVersion Version, versionsSupported VersionRanges) bool {
