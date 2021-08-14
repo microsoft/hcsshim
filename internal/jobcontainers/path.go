@@ -3,7 +3,6 @@ package jobcontainers
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/winapi"
@@ -16,7 +15,7 @@ import (
 
 // getApplicationName resolves a given command line string and returns the path to the executable that should be launched, and
 // an adjusted commandline if needed. The resolution logic may appear overcomplicated but is designed to match the logic used by
-// standard Windows containers, as well as that used by CreateProcess (see notes for the lpApplicationName parameter).
+// Windows Server containers, as well as that used by CreateProcess (see notes for the lpApplicationName parameter).
 //
 // The logic follows this set of steps:
 // - Construct a list of searchable paths to find the application. This includes the standard Windows system paths
@@ -72,9 +71,6 @@ func getApplicationName(commandLine, workingDirectory, pathEnv string) (string, 
 		searchPath string
 		result     string
 	)
-
-	// Clean the path, to get rid of any . elements
-	commandLine = filepath.Clean(commandLine)
 
 	// First we get the system paths concatenated with semicolons (C:\windows;C:\windows\system32;C:\windows\system;)
 	// and use this as the basis for the directories to search for the application.
@@ -156,7 +152,7 @@ func getApplicationName(commandLine, workingDirectory, pathEnv string) (string, 
 	if quoteCmdLine {
 		trialName = "\"" + trialName + "\""
 		trialName += " " + strings.Join(args[argsIndex+1:], " ")
-		adjustedCommandLine = trialName
+		adjustedCommandLine = strings.TrimSpace(trialName) // Take off trailing space at beginning and end.
 	}
 
 	return result, adjustedCommandLine, nil
