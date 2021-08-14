@@ -16,7 +16,7 @@ import (
 
 // getApplicationName resolves a given command line string and returns the path to the executable that should be launched, and
 // an adjusted commandline if needed. The resolution logic may appear overcomplicated but is designed to match the logic used by
-// standard Windows containers, as well as that used by CreateProcess (see notes for the lpApplicationName parameter).
+// Windows Server containers, as well as that used by CreateProcess (see notes for the lpApplicationName parameter).
 //
 // The logic follows this set of steps:
 // - Construct a list of searchable paths to find the application. This includes the standard Windows system paths
@@ -73,9 +73,6 @@ func getApplicationName(commandLine, workingDirectory, pathEnv string) (string, 
 		result     string
 	)
 
-	// Clean the path, to get rid of any . elements
-	commandLine = filepath.Clean(commandLine)
-
 	// First we get the system paths concatenated with semicolons (C:\windows;C:\windows\system32;C:\windows\system;)
 	// and use this as the basis for the directories to search for the application.
 	systemPaths, err := getSystemPaths()
@@ -107,7 +104,7 @@ func getApplicationName(commandLine, workingDirectory, pathEnv string) (string, 
 		if index == -1 {
 			return "", "", errors.New("no ending quotation mark found in command")
 		}
-		path, err := searchPathForExe(commandLine[1:index+1], searchPath)
+		path, err := searchPathForExe(filepath.Clean(commandLine[1:index+1]), searchPath)
 		if err != nil {
 			return "", "", err
 		}
@@ -130,7 +127,7 @@ func getApplicationName(commandLine, workingDirectory, pathEnv string) (string, 
 	// if foo.exe is successfully found we will stop and return with the full path to 'foo.exe'. If foo doesn't succeed we
 	// then try 'foo bar.exe' and 'foo bar baz.exe'.
 	for argsIndex < len(args) {
-		trialName += args[argsIndex]
+		trialName += filepath.Clean(args[argsIndex])
 		fullPath, err := searchPathForExe(trialName, searchPath)
 		if err == nil {
 			result = fullPath

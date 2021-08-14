@@ -92,21 +92,30 @@ func (p *JobProcess) Signal(ctx context.Context, options interface{}) (bool, err
 func (p *JobProcess) CloseStdin(ctx context.Context) error {
 	p.stdioLock.Lock()
 	defer p.stdioLock.Unlock()
-	return p.stdin.Close()
+	if p.stdin != nil {
+		return p.stdin.Close()
+	}
+	return nil
 }
 
 // CloseStdout closes the stdout pipe of the process.
 func (p *JobProcess) CloseStdout(ctx context.Context) error {
 	p.stdioLock.Lock()
 	defer p.stdioLock.Unlock()
-	return p.stdout.Close()
+	if p.stdout != nil {
+		return p.stdout.Close()
+	}
+	return nil
 }
 
 // CloseStderr closes the stderr pipe of the process.
 func (p *JobProcess) CloseStderr(ctx context.Context) error {
 	p.stdioLock.Lock()
 	defer p.stdioLock.Unlock()
-	return p.stderr.Close()
+	if p.stderr != nil {
+		return p.stderr.Close()
+	}
+	return nil
 }
 
 // Wait waits for the process to exit. If the process has already exited returns
@@ -217,7 +226,9 @@ func signalProcess(pid uint32, signal int) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to open process")
 	}
-	defer windows.Close(hProc)
+	defer func() {
+		_ = windows.Close(hProc)
+	}()
 
 	// We can't use GenerateConsoleCtrlEvent since that only supports CTRL_C_EVENT and CTRL_BREAK_EVENT.
 	// Instead, to handle an arbitrary signal we open a CtrlRoutine thread inside the target process and
@@ -231,7 +242,9 @@ func signalProcess(pid uint32, signal int) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to load kernel32 library")
 	}
-	defer windows.Close(k32)
+	defer func() {
+		_ = windows.FreeLibrary(k32)
+	}()
 
 	proc, err := windows.GetProcAddress(k32, "CtrlRoutine")
 	if err != nil {
@@ -242,6 +255,8 @@ func signalProcess(pid uint32, signal int) error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to open remote thread in target process %d", pid)
 	}
-	defer windows.Close(threadHandle)
+	defer func() {
+		_ = windows.Close(threadHandle)
+	}()
 	return nil
 }
