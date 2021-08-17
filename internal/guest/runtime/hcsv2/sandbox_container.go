@@ -20,6 +20,10 @@ func getSandboxRootDir(id string) string {
 	return filepath.Join("/run/gcs/c", id)
 }
 
+func getSandboxHugePageMountsDir(id string) string {
+	return filepath.Join(getSandboxRootDir(id), "hugepages")
+}
+
 func getSandboxMountsDir(id string) string {
 	return filepath.Join(getSandboxRootDir(id), "sandboxMounts")
 }

@@ -120,6 +120,19 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 				// Mounts that map to a path in UVM are specified with 'sandbox://' prefix.
 				// example: sandbox:///a/dirInUvm destination:/b/dirInContainer
 				uvmPathForFile = mount.Source
+			} else if strings.HasPrefix(mount.Source, "hugepages://") {
+				// currently we only support 2M hugepage size
+				hugePageSubDirs := strings.Split(strings.TrimPrefix(mount.Source, "hugepages://"), "/")
+				if len(hugePageSubDirs) < 2 {
+					return errors.Errorf(`%s mount path is invalid, expected format: hugepages://<hugepage-size>/<hugepage-src-location>`, mount.Source)
+				}
+
+				// hugepages:// should be followed by pagesize
+				if hugePageSubDirs[0] != "2M" {
+					return errors.Errorf(`only 2M (megabytes) pagesize is supported, got %s`, hugePageSubDirs[0])
+				}
+				// Hugepages inside a container are backed by a mount created inside a UVM.
+				uvmPathForFile = mount.Source
 			} else {
 				st, err := os.Stat(hostPath)
 				if err != nil {

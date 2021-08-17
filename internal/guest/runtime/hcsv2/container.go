@@ -125,6 +125,11 @@ func (c *Container) Delete(ctx context.Context) error {
 		if err := storage.UnmountAllInPath(ctx, getSandboxMountsDir(c.id), true); err != nil {
 			log.G(ctx).WithError(err).Error("failed to unmount sandbox mounts")
 		}
+
+		// remove hugepages mounts in sandbox container
+		if err := storage.UnmountAllInPath(ctx, getSandboxHugePageMountsDir(c.id), true); err != nil {
+			log.G(ctx).WithError(err).Error("failed to unmount hugepages mounts")
+		}
 	}
 	return c.container.Delete()
 }
