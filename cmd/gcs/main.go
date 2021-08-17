@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/guest/bridge"
+	"github.com/Microsoft/hcsshim/internal/guest/commonutils"
 	"github.com/Microsoft/hcsshim/internal/guest/kmsg"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/runc"
@@ -248,6 +249,12 @@ func main() {
 	oomFile := os.NewFile(oom, "cefd")
 	defer oomFile.Close()
 
+	// time synchronization service
+	err = commonutils.StartTimeSyncService()
+	if err != nil {
+		logrus.WithError(err).Fatal("failed to start time synchronization service")
+	}
+
 	go readMemoryEvents(startTime, gefdFile, "/gcs", int64(*gcsMemLimitBytes), gcsControl)
 	go readMemoryEvents(startTime, oomFile, "/containers", containersLimit, containersControl)
 	err = b.ListenAndServe(bridgeIn, bridgeOut)
@@ -256,4 +263,5 @@ func main() {
 			logrus.ErrorKey: err,
 		}).Fatal("failed to serve gcs service")
 	}
+
 }
