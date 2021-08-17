@@ -1237,6 +1237,113 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_WCOW(t *testing.T) {
 	}
 }
 
+func Test_RunPodSandbox_CoreDump_LCOW(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sbRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, map[string]string{
+		oci.AnnotationProcessDumpLocation: "/coredumps/core",
+	})
+
+	podID := runPodSandbox(t, client, ctx, sbRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	mounts := []*runtime.Mount{
+		{
+			HostPath:      "sandbox:///coredump",
+			ContainerPath: "/coredumps",
+		},
+	}
+
+	annotations := map[string]string{
+		oci.AnnotationRLimitCore: "18446744073709551615;18446744073709551615",
+	}
+
+	// Setup container 1 that uses an image that stackoverflows shortly after starting.
+	// This should generate a core dump file in the sandbox mount location
+	c1Request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container1",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpineCoreDump,
+			},
+			Command: []string{
+				"./stackoverflow",
+			},
+			Annotations: annotations,
+			Mounts:      mounts,
+		},
+		PodSandboxId:  podID,
+		SandboxConfig: sbRequest.Config,
+	}
+
+	container1ID := createContainer(t, client, ctx, c1Request)
+	defer removeContainer(t, client, ctx, container1ID)
+
+	startContainer(t, client, ctx, container1ID)
+	defer stopContainer(t, client, ctx, container1ID)
+
+	// Then setup a secondary container that will mount the same sandbox mount and
+	// just verify that the core dump file is present.
+	c2Request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container2",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			// Hold this command open until killed
+			Command: []string{
+				"top",
+			},
+			Mounts: mounts,
+		},
+		PodSandboxId:  podID,
+		SandboxConfig: sbRequest.Config,
+	}
+
+	mounts = []*runtime.Mount{
+		{
+			HostPath:      "sandbox:///coredump",
+			ContainerPath: "/coredumps",
+		},
+	}
+
+	// Wait for the first container to die and create the core dump.
+	time.Sleep(time.Second * 5)
+
+	container2ID := createContainer(t, client, ctx, c2Request)
+	defer removeContainer(t, client, ctx, container2ID)
+
+	startContainer(t, client, ctx, container2ID)
+	defer stopContainer(t, client, ctx, container2ID)
+
+	// Check if the core dump file is present
+	execCommand := []string{
+		"ls",
+		"/coredumps/core",
+	}
+	execRequest := &runtime.ExecSyncRequest{
+		ContainerId: container2ID,
+		Cmd:         execCommand,
+		Timeout:     20,
+	}
+
+	r := execSync(t, client, ctx, execRequest)
+	if r.ExitCode != 0 {
+		t.Fatalf("failed with exit code %d running `ls`: %s", r.ExitCode, string(r.Stderr))
+	}
+}
+
 func createSandboxContainerAndExecForCustomScratch(t *testing.T, annotations map[string]string) (string, string, int) {
 	cmd := []string{
 		"df",
