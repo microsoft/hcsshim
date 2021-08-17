@@ -331,6 +331,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.NetworkConfigProxy = parseAnnotationsString(s.Annotations, AnnotationNetworkConfigProxy, lopts.NetworkConfigProxy)
 		lopts.SecurityPolicy = parseAnnotationsString(s.Annotations, AnnotationSecurityPolicy, lopts.SecurityPolicy)
 		lopts.KernelBootOptions = parseAnnotationsString(s.Annotations, AnnotationKernelBootOptions, lopts.KernelBootOptions)
+		lopts.DisableTimeSyncService = parseAnnotationsBool(ctx, s.Annotations, AnnotationDisableLCOWTimeSyncService, lopts.DisableTimeSyncService)
 
 		handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
 		handleAnnotationKernelDirectBoot(ctx, s.Annotations, lopts)

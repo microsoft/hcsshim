@@ -216,4 +216,8 @@ const (
 
 	// AnnotationSecurityPolicy is used to specify a security policy for opengcs to enforce
 	AnnotationSecurityPolicy = "io.microsoft.virtualmachine.lcow.securitypolicy"
+
+	// AnnotationDisableLCOWTimeSyncService is used to disable the chronyd time
+	// synchronization service inside the LCOW UVM.
+	AnnotationDisableLCOWTimeSyncService = "io.microsoft.virtualmachine.lcow.timesync.disable"
 )

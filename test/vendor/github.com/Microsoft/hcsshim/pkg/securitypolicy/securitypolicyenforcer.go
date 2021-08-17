@@ -136,8 +136,8 @@ func (policyState *StandardSecurityPolicyEnforcer) EnforceOverlayMountPolicy(con
 
 	// find maximum number of containers that could share this overlay
 	maxPossibleContainerIdsForOverlay := 0
-	for _, device_list := range policyState.Devices {
-		if equalForOverlay(layerPaths, device_list) {
+	for _, deviceList := range policyState.Devices {
+		if equalForOverlay(layerPaths, deviceList) {
 			maxPossibleContainerIdsForOverlay++
 		}
 	}
@@ -147,8 +147,8 @@ func (policyState *StandardSecurityPolicyEnforcer) EnforceOverlayMountPolicy(con
 		return errors.New(errmsg)
 	}
 
-	for i, device_list := range policyState.Devices {
-		if equalForOverlay(layerPaths, device_list) {
+	for i, deviceList := range policyState.Devices {
+		if equalForOverlay(layerPaths, deviceList) {
 			existing := policyState.ContainerIndexToContainerIds[i]
 			if len(existing) < maxPossibleContainerIdsForOverlay {
 				policyState.ContainerIndexToContainerIds[i] = append(existing, containerID)
@@ -167,9 +167,9 @@ func equalForOverlay(a1 []string, a2 []string) bool {
 	// top to bottom (the order a string gets concatenated for the unix mount
 	// command). W do our check with that in mind.
 	if len(a1) == len(a2) {
-		top_index := len(a2) - 1
+		topIndex := len(a2) - 1
 		for i, v := range a1 {
-			if v != a2[top_index-i] {
+			if v != a2[topIndex-i] {
 				return false
 			}
 		}
