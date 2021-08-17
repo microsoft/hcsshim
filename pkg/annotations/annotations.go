@@ -257,4 +257,8 @@ const (
 
 	// GuestStateFile specifies the path of the vmgs file to use if required. Only applies in SNP mode.
 	GuestStateFile = "io.microsoft.virtualmachine.lcow.gueststatefile"
+
+	// AnnotationDisableLCOWTimeSyncService is used to disable the chronyd time
+	// synchronization service inside the LCOW UVM.
+	DisableLCOWTimeSyncService = "io.microsoft.virtualmachine.lcow.timesync.disable"
 )

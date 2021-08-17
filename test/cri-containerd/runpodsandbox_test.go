@@ -1708,3 +1708,18 @@ func Test_RunPodSandbox_KernelOptions_LCOW(t *testing.T) {
 		t.Fatalf("Expected number of hugepages to be 10. Got output instead: %d", numOfHugePages)
 	}
 }
+
+func Test_RunPodSandbox_TimeSyncService(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+
+	request := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		map[string]string{
+			oci.AnnotationDisableLCOWTimeSyncService: "true",
+		},
+	)
+	runPodSandboxTest(t, request)
+}

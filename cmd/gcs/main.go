@@ -93,6 +93,7 @@ func main() {
 	v4 := flag.Bool("v4", false, "enable the v4 protocol support and v2 schema")
 	rootMemReserveBytes := flag.Uint64("root-mem-reserve-bytes", 75*1024*1024, "the amount of memory reserved for the orchestration, the rest will be assigned to containers")
 	gcsMemLimitBytes := flag.Uint64("gcs-mem-limit-bytes", 50*1024*1024, "the maximum amount of memory the gcs can use")
+	disableTimeSync := flag.Bool("disableTimeSync", false, "If true do not run chronyd time synchronization service inside the UVM")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "\nUsage of %s:\n", os.Args[0])
@@ -250,9 +251,11 @@ func main() {
 	defer oomFile.Close()
 
 	// time synchronization service
-	err = commonutils.StartTimeSyncService()
-	if err != nil {
-		logrus.WithError(err).Fatal("failed to start time synchronization service")
+	if !(*disableTimeSync) {
+		err = commonutils.StartTimeSyncService()
+		if err != nil {
+			logrus.WithError(err).Fatal("failed to start time synchronization service")
+		}
 	}
 
 	go readMemoryEvents(startTime, gefdFile, "/gcs", int64(*gcsMemLimitBytes), gcsControl)
