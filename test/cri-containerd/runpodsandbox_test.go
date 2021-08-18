@@ -4,6 +4,7 @@ package cri_containerd
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
@@ -19,8 +20,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
+	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/osversion"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/containerd/containerd/log"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
@@ -1050,6 +1053,14 @@ func Test_RunPodSandbox_CPUGroup(t *testing.T) {
 }
 
 func createExt4VHD(ctx context.Context, t *testing.T, path string) {
+	// UVM related functions called below produce a lot debug logs. Set the logger
+	// output to Discard if verbose flag is not set. This way we can still capture
+	// these logs in a wpr session.
+	if !testing.Verbose() {
+		origLogOut := log.L.Logger.Out
+		log.L.Logger.SetOutput(io.Discard)
+		defer log.L.Logger.SetOutput(origLogOut)
+	}
 	uvm := testutilities.CreateLCOWUVM(ctx, t, t.Name()+"-createExt4VHD")
 	defer uvm.Close()
 
@@ -1712,6 +1723,55 @@ func Test_RunPodSandbox_KernelOptions_LCOW(t *testing.T) {
 func Test_RunPodSandbox_TimeSyncService(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+
+	request := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+		map[string]string{},
+	)
+
+	podID := runPodSandbox(t, client, ctx, request)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	shimName := fmt.Sprintf("k8s.io-%s", podID)
+
+	shim, err := shimdiag.GetShim(shimName)
+	if err != nil {
+		t.Fatalf("failed to find shim %s: %s", shimName, err)
+	}
+
+	psCmd := []string{"ps"}
+	shimClient := shimdiag.NewShimDiagClient(shim)
+	outBuf := bytes.Buffer{}
+	outw := bufio.NewWriter(&outBuf)
+	errBuf := bytes.Buffer{}
+	errw := bufio.NewWriter(&errBuf)
+	exitCode, err := execInHost(ctx, shimClient, psCmd, nil, outw, errw)
+	if err != nil {
+		t.Fatalf("failed to exec `%s` in the uvm with %s", psCmd[0], err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exec `%s` in the uvm failed with exit code: %d, std error: %s", psCmd[0], exitCode, errBuf.String())
+	}
+	if !strings.Contains(outBuf.String(), "chronyd") {
+		t.Logf("standard output of exec %s is: %s\n", psCmd[0], outBuf.String())
+		t.Fatalf("chronyd is not running inside the uvm")
+	}
+}
+
+func Test_RunPodSandbox_DisableTimeSyncService(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
 
 	request := getRunPodSandboxRequest(
@@ -1721,5 +1781,33 @@ func Test_RunPodSandbox_TimeSyncService(t *testing.T) {
 			oci.AnnotationDisableLCOWTimeSyncService: "true",
 		},
 	)
-	runPodSandboxTest(t, request)
+
+	podID := runPodSandbox(t, client, ctx, request)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	shimName := fmt.Sprintf("k8s.io-%s", podID)
+
+	shim, err := shimdiag.GetShim(shimName)
+	if err != nil {
+		t.Fatalf("failed to find shim %s: %s", shimName, err)
+	}
+
+	psCmd := []string{"ps"}
+	shimClient := shimdiag.NewShimDiagClient(shim)
+	outBuf := bytes.Buffer{}
+	outw := bufio.NewWriter(&outBuf)
+	errBuf := bytes.Buffer{}
+	errw := bufio.NewWriter(&errBuf)
+	exitCode, err := execInHost(ctx, shimClient, psCmd, nil, outw, errw)
+	if err != nil {
+		t.Fatalf("failed to exec `%s` in the uvm with %s", psCmd[0], err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exec `%s` in the uvm failed with exit code: %d, std error: %s", psCmd[0], exitCode, errBuf.String())
+	}
+	if strings.Contains(outBuf.String(), "chronyd") {
+		t.Logf("standard output of exec %s is: %s\n", psCmd[0], outBuf.String())
+		t.Fatalf("chronyd should not be running inside the uvm")
+	}
 }
