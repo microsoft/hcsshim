@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/hcserror"
@@ -115,6 +116,9 @@ func MountContainerLayers(ctx context.Context, containerId string, layerFolders 
 				// for ERROR_NOT_READY as well.
 				if hcserr, ok := lErr.(*hcserror.HcsError); ok {
 					if hcserr.Err == windows.ERROR_NOT_READY || hcserr.Err == windows.ERROR_DEVICE_NOT_CONNECTED {
+						// Sleep for a little before a re-attempt. A probable cause for these issues in the first place is events not getting
+						// reported in time so might be good to give some time for things to "cool down" or get back to a known state.
+						time.Sleep(time.Millisecond * 100)
 						continue
 					}
 				}
