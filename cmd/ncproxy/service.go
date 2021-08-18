@@ -123,9 +123,9 @@ func registerService() error {
 	}
 
 	// Configure the service to launch with the arguments that were just passed.
-	args := []string{"-run-service"}
+	args := []string{"--run-service"}
 	for _, a := range os.Args[1:] {
-		if a != "-register-service" {
+		if a != "--register-service" {
 			args = append(args, a)
 		}
 	}
