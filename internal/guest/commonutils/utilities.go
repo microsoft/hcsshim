@@ -52,6 +52,7 @@ func StartTimeSyncService() error {
 
 	var ptpDirPath string
 	found := false
+	expectedClockName := "hyperv"
 	for _, ptpDirPath = range ptpDirList {
 		clockNameFilePath := filepath.Join(ptpClassDir.Name(), ptpDirPath, "clock_name")
 		clockNameFile, err := os.Open(clockNameFilePath)
@@ -60,24 +61,21 @@ func StartTimeSyncService() error {
 		}
 		// Expected clock name is `hyperv` so read first 6 chars and verify the
 		// name
-		expectedReadLen := len("hyperv")
-		buf := make([]byte, expectedReadLen)
+		buf := make([]byte, len(expectedClockName))
 		fileReader := bufio.NewReader(clockNameFile)
-		nread, err := fileReader.Read(buf)
+		_, err = fileReader.Read(buf)
 		if err != nil {
 			return errors.Wrapf(err, "read file %s failed", clockNameFilePath)
-		} else if nread != expectedReadLen {
-			return errors.Wrapf(err, "read file %s returned %d bytes, expected %d", clockNameFilePath, nread, expectedReadLen)
 		}
 		clockName := string(buf)
-		if strings.EqualFold(clockName, "hyperv") {
+		if strings.EqualFold(clockName, expectedClockName) {
 			found = true
 			break
 		}
 	}
 
 	if !found {
-		return errors.Errorf("no PTP device found with name \"hyperv\"")
+		return errors.Errorf("no PTP device found with name \"%s\"", expectedClockName)
 	}
 
 	// create chronyd config file
