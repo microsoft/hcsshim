@@ -69,7 +69,7 @@ func GetSupportedFeatures() SupportedFeatures {
 	features, err := GetCachedSupportedFeatures()
 	if err != nil {
 		// Expected on pre-1803 builds, all features will be false/unsupported
-		logrus.Errorf("Unable to obtain globals: %s", err)
+		logrus.WithError(err).Errorf("unable to obtain supported features")
 		return features
 	}
 	return features
