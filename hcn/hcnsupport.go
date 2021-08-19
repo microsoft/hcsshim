@@ -12,7 +12,7 @@ var (
 	// featuresOnce handles assigning the supported features and printing the supported info to stdout only once to avoid unnecessary work
 	// multiple times.
 	featuresOnce      sync.Once
-	versionErr        error
+	featuresErr       error
 	supportedFeatures SupportedFeatures
 )
 
@@ -59,60 +59,31 @@ func GetCachedSupportedFeatures() (SupportedFeatures, error) {
 	// spam of these anytime a check needs to be made for if an HCN feature is supported. This is a common occurrence in kube-proxy
 	// for example.
 	featuresOnce.Do(func() {
-		globals, err := GetGlobals()
-		if err != nil {
-			// It's expected if this fails once, it should always fail. It should fail on pre 1803 builds for example.
-			versionErr = errors.Wrap(err, "failed to query HCN version number: this is expected on pre 1803 builds.")
-		} else {
-			supportedFeatures.Acl = AclFeatures{
-				AclAddressLists:       isFeatureSupported(globals.Version, HNSVersion1803),
-				AclNoHostRulePriority: isFeatureSupported(globals.Version, HNSVersion1803),
-				AclPortRanges:         isFeatureSupported(globals.Version, HNSVersion1803),
-				AclRuleId:             isFeatureSupported(globals.Version, HNSVersion1803),
-			}
-
-			supportedFeatures.Api = ApiSupport{
-				V2: isFeatureSupported(globals.Version, V2ApiSupport),
-				V1: true, // HNSCall is still available.
-			}
-
-			supportedFeatures.RemoteSubnet = isFeatureSupported(globals.Version, RemoteSubnetVersion)
-			supportedFeatures.HostRoute = isFeatureSupported(globals.Version, HostRouteVersion)
-			supportedFeatures.DSR = isFeatureSupported(globals.Version, DSRVersion)
-			supportedFeatures.Slash32EndpointPrefixes = isFeatureSupported(globals.Version, Slash32EndpointPrefixesVersion)
-			supportedFeatures.AclSupportForProtocol252 = isFeatureSupported(globals.Version, AclSupportForProtocol252Version)
-			supportedFeatures.SessionAffinity = isFeatureSupported(globals.Version, SessionAffinityVersion)
-			supportedFeatures.IPv6DualStack = isFeatureSupported(globals.Version, IPv6DualStackVersion)
-			supportedFeatures.SetPolicy = isFeatureSupported(globals.Version, SetPolicyVersion)
-			supportedFeatures.VxlanPort = isFeatureSupported(globals.Version, VxlanPortVersion)
-			supportedFeatures.L4Proxy = isFeatureSupported(globals.Version, L4ProxyPolicyVersion)
-			supportedFeatures.L4WfpProxy = isFeatureSupported(globals.Version, L4WfpProxyPolicyVersion)
-			supportedFeatures.TierAcl = isFeatureSupported(globals.Version, TierAclPolicyVersion)
-			supportedFeatures.NetworkACL = isFeatureSupported(globals.Version, NetworkACLPolicyVersion)
-			supportedFeatures.NestedIpSet = isFeatureSupported(globals.Version, NestedIpSetVersion)
-
-			logrus.WithFields(logrus.Fields{
-				"version":           fmt.Sprintf("%+v", globals.Version),
-				"supportedFeatures": fmt.Sprintf("%+v", supportedFeatures),
-			}).Info("HCN feature check")
-		}
+		supportedFeatures, featuresErr = getSupportedFeatures()
 	})
 
-	return supportedFeatures, versionErr
+	return supportedFeatures, featuresErr
 }
 
-// GetSupportedFeatures returns the features supported by the Service. Prefer `GetCachedSupportedFeatures` as this method will query hns and validate
-// every feature is supported on every invocation.
+// Deprecated: Use GetCachedSupportedFeatures instead.
+// GetSupportedFeatures returns the features supported by the Service.
 func GetSupportedFeatures() SupportedFeatures {
-	var features SupportedFeatures
-
-	globals, err := GetGlobals()
+	features, err := GetCachedSupportedFeatures()
 	if err != nil {
 		// Expected on pre-1803 builds, all features will be false/unsupported
-		logrus.Debugf("Unable to obtain globals: %s", err)
+		logrus.Errorf("Unable to obtain globals: %s", err)
 		return features
 	}
+	return features
+}
 
+func getSupportedFeatures() (SupportedFeatures, error) {
+	var features SupportedFeatures
+	globals, err := GetGlobals()
+	if err != nil {
+		// It's expected if this fails once, it should always fail. It should fail on pre 1803 builds for example.
+		return SupportedFeatures{}, errors.Wrap(err, "failed to query HCN version number: this is expected on pre 1803 builds.")
+	}
 	features.Acl = AclFeatures{
 		AclAddressLists:       isFeatureSupported(globals.Version, HNSVersion1803),
 		AclNoHostRulePriority: isFeatureSupported(globals.Version, HNSVersion1803),
@@ -145,7 +116,7 @@ func GetSupportedFeatures() SupportedFeatures {
 		"supportedFeatures": fmt.Sprintf("%+v", features),
 	}).Info("HCN feature check")
 
-	return features
+	return features, nil
 }
 
 func isFeatureSupported(currentVersion Version, versionsSupported VersionRanges) bool {
