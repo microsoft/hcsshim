@@ -178,14 +178,9 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 	// %CONTAINER_SANDBOX_MOUNTPOINT%\mybinary.exe -> C:\C\123456789\mybinary.exe
 	commandLine := c.replaceWithMountPoint(conf.CommandLine)
 
-	workDir := c.sandboxMount
-	if conf.WorkingDirectory != "" {
-		workDir = c.replaceWithMountPoint(conf.WorkingDirectory)
-	}
-
 	// Reassign commandline here in case it needed to be quoted. For example if "foo bar baz" was supplied, and
 	// "foo bar.exe" exists, then return: "\"foo bar\" baz"
-	absPath, commandLine, err := getApplicationName(commandLine, workDir, os.Getenv("PATH"))
+	absPath, commandLine, err := getApplicationName(commandLine, c.sandboxMount, os.Getenv("PATH"))
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get application name from commandline %q", conf.CommandLine)
 	}
@@ -213,7 +208,7 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 
 	cmd := &exec.Cmd{
 		Env:  env,
-		Dir:  workDir,
+		Dir:  c.sandboxMount,
 		Path: absPath,
 		Args: splitArgs(commandLine),
 		SysProcAttr: &syscall.SysProcAttr{
