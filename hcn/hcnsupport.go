@@ -63,8 +63,9 @@ func GetCachedSupportedFeatures() (SupportedFeatures, error) {
 	return supportedFeatures, featuresErr
 }
 
-// Deprecated: Use GetCachedSupportedFeatures instead.
 // GetSupportedFeatures returns the features supported by the Service.
+//
+// Deprecated: Use GetCachedSupportedFeatures instead.
 func GetSupportedFeatures() SupportedFeatures {
 	features, err := GetCachedSupportedFeatures()
 	if err != nil {
