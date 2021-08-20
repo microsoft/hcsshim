@@ -79,13 +79,11 @@ func newMappedVPMemModifyRequest(ctx context.Context, rType string, deviceNumber
 	if verity, err := readVeritySuperBlock(ctx, md.hostPath); err != nil {
 		log.G(ctx).WithError(err).WithField("hostPath", md.hostPath).Debug("unable to read dm-verity information from VHD")
 	} else {
-		if verity != nil {
-			log.G(ctx).WithFields(logrus.Fields{
-				"hostPath":   md.hostPath,
-				"rootDigest": verity.RootDigest,
-			}).Debug("adding multi-mapped VPMem with dm-verity")
-			guestSettings.VerityInfo = verity
-		}
+		log.G(ctx).WithFields(logrus.Fields{
+			"hostPath":   md.hostPath,
+			"rootDigest": verity.RootDigest,
+		}).Debug("adding multi-mapped VPMem with dm-verity")
+		guestSettings.VerityInfo = verity
 	}
 
 	request := &hcsschema.ModifySettingRequest{
