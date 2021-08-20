@@ -488,6 +488,9 @@ func (uvm *UtilityVM) GetScsiUvmPath(ctx context.Context, hostPath string) (stri
 	return sm.UVMPath, err
 }
 
+// ScratchEncryptionEnabled is a getter for `uvm.encryptScratch`.
+//
+// Returns true if the scratch disks should be encrypted, false otherwise.
 func (uvm *UtilityVM) ScratchEncryptionEnabled() bool {
 	return uvm.encryptScratch
 }
