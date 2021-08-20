@@ -54,3 +54,16 @@ func setupMounts(spec *specs.Spec, sandboxVolumePath string) error {
 
 	return nil
 }
+
+func (c *JobContainer) setupMounts(spec *specs.Spec) error {
+	for _, mount := range spec.Mounts {
+		if mount.Destination == "" || mount.Source == "" {
+			return fmt.Errorf("invalid OCI spec - a mount must have both source and a destination: %+v", mount)
+		}
+
+		if err := c.job.ApplyFileBinding(mount.Destination, mount.Source, false); err != nil {
+			return err
+		}
+	}
+	return nil
+}

@@ -52,6 +52,7 @@ const (
 	JobObjectLimitViolationInformation       uint32 = 13
 	JobObjectMemoryUsageInformation          uint32 = 28
 	JobObjectNotificationLimitInformation2   uint32 = 33
+	JobObjectCreateSilo                      uint32 = 35
 	JobObjectIoAttribution                   uint32 = 42
 )
 
@@ -213,3 +214,13 @@ type JOBOBJECT_ASSOCIATE_COMPLETION_PORT struct {
 //     _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes
 // );
 //sys NtCreateJobObject(jobHandle *windows.Handle, desiredAccess uint32, objAttributes *ObjectAttributes) (status uint32) = ntdll.NtCreateJobObject
+
+// NTSTATUS
+// NTAPI
+// NtSetInformationJobObject (
+//     __in HANDLE JobHandle,
+//     __in JOBOBJECTINFOCLASS JobObjectInformationClass,
+//     __in_bcount(JobObjectInformationLength) PVOID JobObjectInformation,
+//     __in ULONG JobObjectInformationLength
+// );
+//sys NtSetInformationJobObject(jobHandle windows.Handle, JobObjectInformationClass uint32, JobObjectInformation uintptr, JobObjectInformationLength uint32) (status uint32) = ntdll.NtSetInformationJobObject

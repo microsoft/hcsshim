@@ -37,13 +37,15 @@ func errnoErr(e syscall.Errno) error {
 }
 
 var (
-	modntdll    = windows.NewLazySystemDLL("ntdll.dll")
-	modiphlpapi = windows.NewLazySystemDLL("iphlpapi.dll")
-	modkernel32 = windows.NewLazySystemDLL("kernel32.dll")
-	modadvapi32 = windows.NewLazySystemDLL("advapi32.dll")
-	modpsapi    = windows.NewLazySystemDLL("psapi.dll")
-	modcfgmgr32 = windows.NewLazySystemDLL("cfgmgr32.dll")
+	modbindfltapi = windows.NewLazySystemDLL("bindfltapi.dll")
+	modntdll      = windows.NewLazySystemDLL("ntdll.dll")
+	modiphlpapi   = windows.NewLazySystemDLL("iphlpapi.dll")
+	modkernel32   = windows.NewLazySystemDLL("kernel32.dll")
+	modadvapi32   = windows.NewLazySystemDLL("advapi32.dll")
+	modpsapi      = windows.NewLazySystemDLL("psapi.dll")
+	modcfgmgr32   = windows.NewLazySystemDLL("cfgmgr32.dll")
 
+	procBfSetupFilter                          = modbindfltapi.NewProc("BfSetupFilter")
 	procNtQuerySystemInformation               = modntdll.NewProc("NtQuerySystemInformation")
 	procSetJobCompartmentId                    = modiphlpapi.NewProc("SetJobCompartmentId")
 	procSearchPathW                            = modkernel32.NewProc("SearchPathW")
@@ -56,6 +58,7 @@ var (
 	procQueryIoRateControlInformationJobObject = modkernel32.NewProc("QueryIoRateControlInformationJobObject")
 	procNtOpenJobObject                        = modntdll.NewProc("NtOpenJobObject")
 	procNtCreateJobObject                      = modntdll.NewProc("NtCreateJobObject")
+	procNtSetInformationJobObject              = modntdll.NewProc("NtSetInformationJobObject")
 	procLogonUserW                             = modadvapi32.NewProc("LogonUserW")
 	procRtlMoveMemory                          = modkernel32.NewProc("RtlMoveMemory")
 	procLocalAlloc                             = modkernel32.NewProc("LocalAlloc")
@@ -73,6 +76,17 @@ var (
 	procNtQueryDirectoryObject                 = modntdll.NewProc("NtQueryDirectoryObject")
 	procRtlNtStatusToDosError                  = modntdll.NewProc("RtlNtStatusToDosError")
 )
+
+func BfSetupFilter(jobHandle windows.Handle, flags uint32, virtRootPath *uint16, virtTargetPath *uint16, virtExceptions **uint16, virtExceptionPathCount uint32) (hr error) {
+	r0, _, _ := syscall.Syscall6(procBfSetupFilter.Addr(), 6, uintptr(jobHandle), uintptr(flags), uintptr(unsafe.Pointer(virtRootPath)), uintptr(unsafe.Pointer(virtTargetPath)), uintptr(unsafe.Pointer(virtExceptions)), uintptr(virtExceptionPathCount))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
 
 func NtQuerySystemInformation(systemInfoClass int, systemInformation uintptr, systemInfoLength uint32, returnLength *uint32) (status uint32) {
 	r0, _, _ := syscall.Syscall6(procNtQuerySystemInformation.Addr(), 4, uintptr(systemInfoClass), uintptr(systemInformation), uintptr(systemInfoLength), uintptr(unsafe.Pointer(returnLength)), 0, 0)
@@ -203,6 +217,12 @@ func NtOpenJobObject(jobHandle *windows.Handle, desiredAccess uint32, objAttribu
 
 func NtCreateJobObject(jobHandle *windows.Handle, desiredAccess uint32, objAttributes *ObjectAttributes) (status uint32) {
 	r0, _, _ := syscall.Syscall(procNtCreateJobObject.Addr(), 3, uintptr(unsafe.Pointer(jobHandle)), uintptr(desiredAccess), uintptr(unsafe.Pointer(objAttributes)))
+	status = uint32(r0)
+	return
+}
+
+func NtSetInformationJobObject(jobHandle windows.Handle, JobObjectInformationClass uint32, JobObjectInformation uintptr, JobObjectInformationLength uint32) (status uint32) {
+	r0, _, _ := syscall.Syscall6(procNtSetInformationJobObject.Addr(), 4, uintptr(jobHandle), uintptr(JobObjectInformationClass), uintptr(JobObjectInformation), uintptr(JobObjectInformationLength), 0, 0)
 	status = uint32(r0)
 	return
 }

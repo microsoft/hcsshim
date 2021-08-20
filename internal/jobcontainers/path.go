@@ -3,7 +3,6 @@ package jobcontainers
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/winapi"
@@ -74,7 +73,10 @@ func getApplicationName(commandLine, workingDirectory, pathEnv string) (string, 
 	)
 
 	// Clean the path, to get rid of any . elements
-	commandLine = filepath.Clean(commandLine)
+	// commandLine = filepath.Clean(commandLine)
+	if len(commandLine) >= 3 && commandLine[0:2] == "./" || commandLine[0:2] == ".\\" {
+		commandLine = commandLine[2:]
+	}
 
 	// First we get the system paths concatenated with semicolons (C:\windows;C:\windows\system32;C:\windows\system;)
 	// and use this as the basis for the directories to search for the application.
