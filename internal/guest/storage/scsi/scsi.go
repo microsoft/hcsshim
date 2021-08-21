@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/guest/storage"
@@ -164,15 +163,6 @@ func ControllerLunToName(ctx context.Context, controller, lun uint8) (_ string, 
 		if len(deviceNames) == 0 {
 			select {
 			case <-ctx.Done():
-				if dirContents, iErr := ioutil.ReadDir(scsiDevicesPath); iErr != nil {
-					log.G(ctx).WithError(iErr).Debug("failed to list scsi devices")
-				} else {
-					var scsiDevices []string
-					for _, elem := range dirContents {
-						scsiDevices = append(scsiDevices, elem.Name())
-					}
-					log.G(ctx).WithField("scsiDevices", strings.Join(scsiDevices, "\n")).Debug("scsi devices at context timeout")
-				}
 				return "", ctx.Err()
 			default:
 				time.Sleep(time.Millisecond * 10)
