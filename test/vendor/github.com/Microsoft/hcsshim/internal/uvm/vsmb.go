@@ -362,7 +362,7 @@ func (vsmb *VSMBShare) GobDecode(data []byte) error {
 		return fmt.Errorf(errMsgFmt, err)
 	}
 	if vsmb.serialVersionID != vsmbCurrentSerialVersionID {
-		return fmt.Errorf("Serialized version of VSMBShare %d doesn't match with the current version %d", vsmb.serialVersionID, vsmbCurrentSerialVersionID)
+		return fmt.Errorf("serialized version of VSMBShare %d doesn't match with the current version %d", vsmb.serialVersionID, vsmbCurrentSerialVersionID)
 	}
 	if err := decoder.Decode(&vsmb.HostPath); err != nil {
 		return fmt.Errorf(errMsgFmt, err)

@@ -18,7 +18,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 
-	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/cmd"
@@ -587,7 +586,7 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, tim
 	return int(status.Pid), status.ExitStatus, status.ExitedAt, nil
 }
 
-func (ht *hcsTask) Pids(ctx context.Context) ([]options.ProcessDetails, error) {
+func (ht *hcsTask) Pids(ctx context.Context) ([]runhcsopts.ProcessDetails, error) {
 	// Map all user created exec's to pid/exec-id
 	pidMap := make(map[int]string)
 	ht.execs.Range(func(key, value interface{}) bool {
@@ -606,7 +605,7 @@ func (ht *hcsTask) Pids(ctx context.Context) ([]options.ProcessDetails, error) {
 	}
 
 	// Copy to pid/exec-id pair's
-	pairs := make([]options.ProcessDetails, len(props.ProcessList))
+	pairs := make([]runhcsopts.ProcessDetails, len(props.ProcessList))
 	for i, p := range props.ProcessList {
 		pairs[i].ImageName = p.ImageName
 		pairs[i].CreatedAt = p.CreateTimestamp

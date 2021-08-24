@@ -135,7 +135,7 @@ func validateContainerConfig(ctx context.Context, coi *createOptionsInternal) er
 	}
 
 	if coi.HostingSystem != nil && coi.templateID != "" && !coi.HostingSystem.IsClone {
-		return fmt.Errorf("A container can not be cloned inside a non cloned POD")
+		return fmt.Errorf("a container can not be cloned inside a non cloned POD")
 	}
 
 	if coi.templateID != "" {
@@ -152,11 +152,11 @@ func validateContainerConfig(ctx context.Context, coi *createOptionsInternal) er
 
 	if coi.HostingSystem != nil && coi.HostingSystem.IsTemplate {
 		if len(coi.Spec.Windows.Devices) != 0 {
-			return fmt.Errorf("Mapped Devices are not supported for template containers")
+			return fmt.Errorf("mapped Devices are not supported for template containers")
 		}
 
 		if _, ok := coi.Spec.Windows.CredentialSpec.(string); ok {
-			return fmt.Errorf("gMSA specifications are not supported for template containers")
+			return fmt.Errorf("gmsa specifications are not supported for template containers")
 		}
 
 		if coi.Spec.Windows.Servicing {
@@ -179,7 +179,7 @@ func initializeCreateOptions(ctx context.Context, createOptions *CreateOptions) 
 	}
 
 	if coi.Spec == nil {
-		return nil, fmt.Errorf("Spec must be supplied")
+		return nil, fmt.Errorf("spec must be supplied")
 	}
 
 	// Defaults if omitted by caller.

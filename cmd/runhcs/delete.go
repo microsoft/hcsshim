@@ -57,7 +57,7 @@ status of "ubuntu01" as "stopped" the following will delete resources held for
 			kill = true
 		default:
 			if !force {
-				return fmt.Errorf("cannot delete container %s that is not stopped: %s\n", id, s)
+				return fmt.Errorf("cannot delete container %s that is not stopped: %s", id, s)
 			}
 			kill = true
 		}

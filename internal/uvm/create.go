@@ -152,13 +152,13 @@ func verifyOptions(ctx context.Context, options interface{}) error {
 			return errors.New("at least 2 LayerFolders must be supplied")
 		}
 		if opts.IsClone && !verifyCloneUvmCreateOpts(&opts.TemplateConfig.CreateOpts, opts) {
-			return errors.New("clone configuration doesn't match with template configuration.")
+			return errors.New("clone configuration doesn't match with template configuration")
 		}
 		if opts.IsClone && opts.TemplateConfig == nil {
 			return errors.New("template config can not be nil when creating clone")
 		}
 		if opts.IsTemplate && opts.FullyPhysicallyBacked {
-			return errors.New("Template can not be created from a full physically backed UVM")
+			return errors.New("template can not be created from a full physically backed UVM")
 		}
 	}
 	return nil

@@ -20,8 +20,8 @@ import (
 var (
 	configFile = flag.String("c", "", "config")
 	outputJson = flag.Bool("j", false, "json")
-	username    = flag.String("u", "", "username")
-	password    = flag.String("p", "", "password")
+	username   = flag.String("u", "", "username")
+	password   = flag.String("p", "", "password")
 )
 
 func main() {
@@ -124,7 +124,7 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 		}
 		ref, err := name.ParseReference(image.Name)
 		if err != nil {
-			return p, fmt.Errorf("'%s' isn't a valid image name\n", image.Name)
+			return p, fmt.Errorf("'%s' isn't a valid image name", image.Name)
 		}
 		img, err := remote.Image(ref, imageOptions...)
 		if err != nil {
