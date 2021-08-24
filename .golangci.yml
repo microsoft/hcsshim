@@ -1,0 +1,8 @@
+linters:
+  enable:
+    - stylecheck
+
+linters-settings:
+  stylecheck:
+    # https://staticcheck.io/docs/checks
+    checks: ["all", "-ST1003"]
