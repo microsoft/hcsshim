@@ -15,7 +15,6 @@ import (
 	"github.com/Microsoft/go-winio/pkg/etwlogrus"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/cmd/ncproxy/nodenetsvc"
-	"github.com/Microsoft/hcsshim/internal/computeagent"
 	"github.com/Microsoft/hcsshim/internal/debug"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
@@ -33,8 +32,6 @@ type nodeNetSvcConn struct {
 }
 
 var (
-	// Global mapping of network namespace ID to shim compute agent ttrpc service.
-	containerIDToShim = make(map[string]computeagent.ComputeAgentService)
 	// Global object representing the connection to the node network service that
 	// ncproxy will be talking to.
 	nodeNetSvcClient *nodeNetSvcConn
