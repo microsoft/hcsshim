@@ -7,8 +7,30 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
+
+// getComputeAgent returns the compute agent address of a single entry in the database for key `containerID`
+// or returns an error if the key does not exist
+func (c *computeAgentStore) getComputeAgent(ctx context.Context, containerID string) (result string, err error) {
+	if err := c.db.View(func(tx *bolt.Tx) error {
+		bkt := getComputeAgentBucket(tx)
+		if bkt == nil {
+			return errors.Wrapf(errBucketNotFound, "bucket %v", bucketKeyComputeAgent)
+		}
+		data := bkt.Get([]byte(containerID))
+		if data == nil {
+			return errors.Wrapf(errKeyNotFound, "key %v", containerID)
+		}
+		result = string(data)
+		return nil
+	}); err != nil {
+		return "", err
+	}
+
+	return result, nil
+}
 
 func TestComputeAgentStore(t *testing.T) {
 	ctx := context.Background()
@@ -78,7 +100,7 @@ func TestComputeAgentStore_GetKeyValueMap(t *testing.T) {
 		}
 	}
 
-	actual, err := store.getActiveComputeAgents(ctx)
+	actual, err := store.getComputeAgents(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -13,7 +13,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	"github.com/Microsoft/hcsshim/internal/hns"
-	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
 )
 
 //                    | WCOW | LCOW
@@ -131,7 +130,7 @@ type UtilityVM struct {
 
 	// Network config proxy client. If nil then this wasn't requested and the
 	// uvms network will be configured locally.
-	ncProxyClient ncproxyttrpc.NetworkConfigProxyService
+	ncProxyClientAddress string
 
 	// networkSetup handles the logic for setting up and tearing down any network configuration
 	// for the Utility VM.
