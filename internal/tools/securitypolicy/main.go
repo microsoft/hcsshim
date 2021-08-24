@@ -79,8 +79,8 @@ func main() {
 }
 
 type Image struct {
-	Name    string `toml:"name"`
-	Command string `toml:"command"`
+	Name    string   `toml:"name"`
+	Command []string `toml:"command"`
 }
 
 type Config struct {
@@ -102,7 +102,7 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 	// as this is a tool for use by developers currently working
 	// on security policy implementation code
 	pausec := sp.SecurityPolicyContainer{
-		Command: "/pause",
+		Command: []string{"/pause"},
 		Layers:  []string{"16b514057a06ad665f92c02863aca074fd5976c755d26bff16365299169e8415"},
 	}
 	p.Containers = append(p.Containers, pausec)
