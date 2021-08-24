@@ -22,7 +22,11 @@ func newComputeAgentStore(db *bolt.DB) *computeAgentStore {
 	return &computeAgentStore{db: db}
 }
 
-// get returns the compute agent address of a single entry in the database for key `containerID`
+func (c *computeAgentStore) Close() error {
+	return c.db.Close()
+}
+
+// getComputeAgent returns the compute agent address of a single entry in the database for key `containerID`
 // or returns an error if the key does not exist
 func (n *computeAgentStore) getComputeAgent(ctx context.Context, containerID string) (result string, err error) {
 	if err := n.db.View(func(tx *bolt.Tx) error {

@@ -22,7 +22,6 @@ import (
 	"github.com/containerd/ttrpc"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	bolt "go.etcd.io/bbolt"
 	"go.opencensus.io/plugin/ocgrpc"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
@@ -187,11 +186,6 @@ func run() error {
 		}
 	}
 
-	db, err := bolt.Open(*dbPath, 0600, nil)
-	if err != nil {
-		return err
-	}
-
 	log.G(ctx).WithFields(logrus.Fields{
 		"TTRPCAddr":      conf.TTRPCAddr,
 		"NodeNetSvcAddr": conf.NodeNetSvcAddr,
@@ -205,12 +199,13 @@ func run() error {
 	defer signal.Stop(sigChan)
 
 	// Create new server and then register NetworkConfigProxyServices.
-	server, err := newServer(ctx, conf)
+	server, err := newServer(ctx, conf, *dbPath)
 	if err != nil {
 		return errors.New("failed to make new ncproxy server")
 	}
+	defer server.cleanupResources(ctx)
 
-	ttrpcListener, grpcListener, err := server.setup(ctx, db)
+	ttrpcListener, grpcListener, err := server.setup(ctx)
 	if err != nil {
 		return errors.New("failed to setup ncproxy server")
 	}
@@ -230,9 +225,7 @@ func run() error {
 	}
 
 	// Cancel inflight requests and shutdown services
-	if err := server.gracefulShutdown(ctx); err != nil {
-		return errors.Wrap(err, "ncproxy failed to shutdown gracefully")
-	}
+	server.gracefulShutdown(ctx)
 
 	return nil
 }

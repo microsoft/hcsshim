@@ -124,13 +124,22 @@ func (uvm *UtilityVM) NCProxyEnabled() bool {
 	return uvm.ncProxyClientAddress != ""
 }
 
-func (uvm *UtilityVM) CreateNCProxyClient() (ncproxyttrpc.NetworkConfigProxyService, error) {
+type ncproxyClient struct {
+	raw *ttrpc.Client
+	ncproxyttrpc.NetworkConfigProxyService
+}
+
+func (n *ncproxyClient) Close() error {
+	return n.raw.Close()
+}
+
+func (uvm *UtilityVM) GetNCProxyClient() (*ncproxyClient, error) {
 	conn, err := winio.DialPipe(uvm.ncProxyClientAddress, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to connect to ncproxy service")
 	}
-	client := ttrpc.NewClient(conn, ttrpc.WithOnClose(func() { conn.Close() }))
-	return ncproxyttrpc.NewNetworkConfigProxyClient(client), nil
+	raw := ttrpc.NewClient(conn, ttrpc.WithOnClose(func() { conn.Close() }))
+	return &ncproxyClient{raw, ncproxyttrpc.NewNetworkConfigProxyClient(raw)}, nil
 }
 
 // NetworkConfigType specifies the action to be performed during network configuration.
@@ -239,10 +248,11 @@ func NewExternalNetworkSetup(ctx context.Context, vm *UtilityVM, caAddr, contain
 }
 
 func (e *externalNetworkSetup) ConfigureNetworking(ctx context.Context, namespaceID string, configType NetworkConfigType) error {
-	client, err := e.vm.CreateNCProxyClient()
+	client, err := e.vm.GetNCProxyClient()
 	if err != nil {
 		return errors.Wrapf(err, "no ncproxy client for UVM %q", e.vm.ID())
 	}
+	defer client.Close()
 
 	netReq := &ncproxyttrpc.ConfigureNetworkingInternalRequest{
 		ContainerID: e.containerID,

@@ -22,7 +22,7 @@ type SecurityPolicy struct {
 // policy and running the command would be rejected.
 type SecurityPolicyContainer struct {
 	// The command that we will allow the container to execute
-	Command string `json:"command"`
+	Command []string `json:"command"`
 	// An ordered list of dm-verity root hashes for each layer that makes up
 	// "a container". Containers are constructed as an overlay file system. The
 	// order that the layers are overlayed is important and needs to be enforced

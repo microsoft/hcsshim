@@ -19,7 +19,6 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/octtrpc"
 	"github.com/containerd/ttrpc"
 	"github.com/pkg/errors"
-	bolt "go.etcd.io/bbolt"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -38,25 +37,55 @@ func newComputeAgentCache() *computeAgentCache {
 	}
 }
 
-func (c *computeAgentCache) get(cid string) (*computeAgentClient, bool) {
+func (c *computeAgentCache) getAllAndClear() ([]*computeAgentClient, error) {
+	// set c.cache to nil first so that subsequent attempts to reads and writes
+	// return an error
+	c.rw.Lock()
+	cacheCopy := c.cache
+	c.cache = nil
+	c.rw.Unlock()
+
+	if cacheCopy == nil {
+		return nil, errors.New("cannot read from a nil cache")
+	}
+
+	results := []*computeAgentClient{}
+	for _, agent := range cacheCopy {
+		results = append(results, agent)
+	}
+	return results, nil
+
+}
+
+func (c *computeAgentCache) get(cid string) (*computeAgentClient, error) {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
-	result, ok := c.cache[cid]
-	return result, ok
+	if c.cache == nil {
+		return nil, errors.New("cannot read from a nil cache")
+	}
+	result := c.cache[cid]
+	return result, nil
 }
 
-func (c *computeAgentCache) put(cid string, agent *computeAgentClient) {
+func (c *computeAgentCache) put(cid string, agent *computeAgentClient) error {
 	c.rw.Lock()
 	defer c.rw.Unlock()
+	if c.cache == nil {
+		return errors.New("cannot write to a nil cache")
+	}
 	c.cache[cid] = agent
+	return nil
 }
 
-func (c *computeAgentCache) getAndDelete(cid string) (*computeAgentClient, bool) {
+func (c *computeAgentCache) getAndDelete(cid string) (*computeAgentClient, error) {
 	c.rw.Lock()
 	defer c.rw.Unlock()
-	result, ok := c.cache[cid]
+	if c.cache == nil {
+		return nil, errors.New("cannot read from a nil cache")
+	}
+	result := c.cache[cid]
 	delete(c.cache, cid)
-	return result, ok
+	return result, nil
 }
 
 // GRPC service exposed for use by a Node Network Service.
@@ -85,7 +114,11 @@ func (s *grpcService) AddNIC(ctx context.Context, req *ncproxygrpc.AddNICRequest
 	if req.ContainerID == "" || req.EndpointName == "" || req.NicID == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
 	}
-	if agent, ok := s.containerIDToComputeAgent.get(req.ContainerID); ok {
+	agent, err := s.containerIDToComputeAgent.get(req.ContainerID)
+	if err != nil {
+		return nil, err
+	}
+	if agent != nil {
 		caReq := &computeagent.AddNICInternalRequest{
 			ContainerID:  req.ContainerID,
 			NicID:        req.NicID,
@@ -115,7 +148,11 @@ func (s *grpcService) ModifyNIC(ctx context.Context, req *ncproxygrpc.ModifyNICR
 		return nil, status.Error(codes.InvalidArgument, "received empty field in request")
 	}
 
-	if agent, ok := s.containerIDToComputeAgent.get(req.ContainerID); ok {
+	agent, err := s.containerIDToComputeAgent.get(req.ContainerID)
+	if err != nil {
+		return nil, err
+	}
+	if agent != nil {
 		caReq := &computeagent.ModifyNICInternalRequest{
 			NicID:        req.NicID,
 			EndpointName: req.EndpointName,
@@ -191,7 +228,11 @@ func (s *grpcService) DeleteNIC(ctx context.Context, req *ncproxygrpc.DeleteNICR
 	if req.ContainerID == "" || req.EndpointName == "" || req.NicID == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
 	}
-	if agent, ok := s.containerIDToComputeAgent.get(req.ContainerID); ok {
+	agent, err := s.containerIDToComputeAgent.get(req.ContainerID)
+	if err != nil {
+		return nil, err
+	}
+	if agent != nil {
 		caReq := &computeagent.DeleteNICInternalRequest{
 			ContainerID:  req.ContainerID,
 			NicID:        req.NicID,
@@ -599,12 +640,10 @@ func (s *grpcService) GetNetworks(ctx context.Context, req *ncproxygrpc.GetNetwo
 // TTRPC service exposed for use by the shim.
 type ttrpcService struct {
 	containerIDToComputeAgent *computeAgentCache
-	// database for containerID to compute agent address
-	agentStore *computeAgentStore
+	agentStore                *computeAgentStore
 }
 
-func newTTRPCService(ctx context.Context, agent *computeAgentCache, db *bolt.DB) *ttrpcService {
-	agentStore := newComputeAgentStore(db)
+func newTTRPCService(ctx context.Context, agent *computeAgentCache, agentStore *computeAgentStore) *ttrpcService {
 	return &ttrpcService{
 		containerIDToComputeAgent: agent,
 		agentStore:                agentStore,
@@ -622,44 +661,6 @@ func getComputeAgentClient(agentAddr string) (*computeAgentClient, error) {
 		ttrpc.WithOnClose(func() { conn.Close() }),
 	)
 	return &computeAgentClient{raw, computeagent.NewComputeAgentClient(raw)}, nil
-}
-
-func (s *ttrpcService) reconnectComputeAgents(ctx context.Context) {
-	computeAgentMap, err := s.agentStore.getActiveComputeAgents(ctx)
-	if err != nil && errors.Is(err, errBucketNotFound) {
-		// no entries in the database yet, return early
-		log.G(ctx).WithError(err).Debug("no entries in database")
-		return
-	} else if err != nil {
-		log.G(ctx).WithError(err).Error("failed to get compute agent information")
-	}
-	var wg sync.WaitGroup
-	for cid, addr := range computeAgentMap {
-		wg.Add(1)
-		go func(agentAddress, containerID string) {
-			defer wg.Done()
-			service, err := getComputeAgentClient(agentAddress)
-			if err != nil {
-				// can't connect to compute agent, remove entry in database
-				log.G(ctx).WithField("agentAddress", agentAddress).WithError(err).Error("failed to create new compute agent client")
-				dErr := s.agentStore.deleteComputeAgent(ctx, containerID)
-				if dErr != nil {
-					log.G(ctx).WithField("key", containerID).WithError(dErr).Warn("failed to delete key from compute agent store")
-				}
-				return
-			}
-			log.G(ctx).WithField("containerID", containerID).Info("reconnected to container's compute agent")
-
-			// connection succeeded, add entry in cache map for later
-			s.containerIDToComputeAgent.put(containerID, service)
-		}(addr, cid)
-	}
-
-	wg.Wait()
-}
-
-func (s *ttrpcService) disconnectComputeAgents(ctx context.Context) {
-	for cid, agent := s.containerIDToComputeAgent.get()
 }
 
 func (s *ttrpcService) RegisterComputeAgent(ctx context.Context, req *ncproxyttrpc.RegisterComputeAgentRequest) (_ *ncproxyttrpc.RegisterComputeAgentResponse, err error) {
@@ -680,9 +681,11 @@ func (s *ttrpcService) RegisterComputeAgent(ctx context.Context, req *ncproxyttr
 		return nil, err
 	}
 
-	// Add to global client map if connection succeeds. Don't check if there's already a map entry
+	// Add to client cache if connection succeeds. Don't check if there's already a map entry
 	// just overwrite as the client may have changed the address of the config agent.
-	s.containerIDToComputeAgent.put(req.ContainerID, agent)
+	if err := s.containerIDToComputeAgent.put(req.ContainerID, agent); err != nil {
+		return nil, err
+	}
 
 	return &ncproxyttrpc.RegisterComputeAgentResponse{}, nil
 }
@@ -701,7 +704,11 @@ func (s *ttrpcService) UnregisterComputeAgent(ctx context.Context, req *ncproxyt
 	}
 
 	// remove the agent from the cache and return it so we can clean up its resources as well
-	if agent, ok := s.containerIDToComputeAgent.getAndDelete(req.ContainerID); ok {
+	agent, err := s.containerIDToComputeAgent.getAndDelete(req.ContainerID)
+	if err != nil {
+		return nil, err
+	}
+	if agent != nil {
 		if err := agent.Close(); err != nil {
 			return nil, err
 		}
