@@ -30,6 +30,7 @@ func (uvm *UtilityVM) Share(ctx context.Context, reqHostPath, reqUVMPath string,
 		if err != nil {
 			return err
 		}
+
 		guestReq := guestrequest.GuestRequest{
 			ResourceType: guestrequest.ResourceTypeMappedDirectory,
 			RequestType:  requesttype.Add,
