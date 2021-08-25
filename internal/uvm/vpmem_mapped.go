@@ -3,11 +3,11 @@ package uvm
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
-	"github.com/Microsoft/hcsshim/ext4/tar2ext4"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -64,33 +64,34 @@ func pageAlign(t uint64) uint64 {
 	return (t/PageSize + 1) * PageSize
 }
 
-// fileSystemSize retrieves ext4 fs SuperBlock and calculates the size of the actual file system
-func fileSystemSize(vhdPath string) (uint64, error) {
-	sb, err := tar2ext4.ReadExt4SuperBlock(vhdPath)
-	if err != nil {
-		return 0, err
-	}
-	blockSize := uint64(1024 * (1 << sb.LogBlockSize))
-	fsSize := blockSize * uint64(sb.BlocksCountLow)
-	return pageAlign(fsSize), nil
-}
-
 // newMappedVPMemModifyRequest creates an hcsschema.ModifySettingsRequest to modify VPMem devices/mappings
 // for the multi-mapping setup
 func newMappedVPMemModifyRequest(ctx context.Context, rType string, deviceNumber uint32, md *mappedDeviceInfo, uvm *UtilityVM) (*hcsschema.ModifySettingRequest, error) {
+	guestSettings := guestrequest.LCOWMappedVPMemDevice{
+		DeviceNumber: deviceNumber,
+		MountPath:    md.uvmPath,
+		MappingInfo: &guestrequest.LCOWMappedLayer{
+			DeviceOffsetInBytes: md.mappedRegion.Offset(),
+			DeviceSizeInBytes:   md.sizeInBytes,
+		},
+	}
+
+	if verity, err := readVeritySuperBlock(ctx, md.hostPath); err != nil {
+		log.G(ctx).WithError(err).WithField("hostPath", md.hostPath).Debug("unable to read dm-verity information from VHD")
+	} else {
+		log.G(ctx).WithFields(logrus.Fields{
+			"hostPath":   md.hostPath,
+			"rootDigest": verity.RootDigest,
+		}).Debug("adding multi-mapped VPMem with dm-verity")
+		guestSettings.VerityInfo = verity
+	}
+
 	request := &hcsschema.ModifySettingRequest{
 		RequestType: rType,
 		GuestRequest: guestrequest.GuestRequest{
 			ResourceType: guestrequest.ResourceTypeVPMemDevice,
 			RequestType:  rType,
-			Settings: guestrequest.LCOWMappedVPMemDevice{
-				DeviceNumber: deviceNumber,
-				MountPath:    md.uvmPath,
-				MappingInfo: &guestrequest.LCOWMappedLayer{
-					DeviceOffsetInBytes: md.mappedRegion.Offset(),
-					DeviceSizeInBytes:   md.sizeInBytes,
-				},
-			},
+			Settings:     guestSettings,
 		},
 	}
 
@@ -234,10 +235,15 @@ func (uvm *UtilityVM) addVPMemMappedDevice(ctx context.Context, hostPath string)
 		return dev.uvmPath, nil
 	}
 
-	devSize, err := fileSystemSize(hostPath)
+	st, err := os.Stat(hostPath)
 	if err != nil {
 		return "", err
 	}
+	// NOTE: On the guest side devSize is used to create a device mapper linear target, which is then used to create
+	// device mapper verity target. Since the dm-verity hash device is appended after ext4 data, we need the full size
+	// on disk (minus VHD footer), otherwise the resulting linear target will have hash device truncated and verity
+	// target creation will fail as a result.
+	devSize := pageAlign(uint64(st.Size()))
 	deviceNumber, memReg, err := uvm.allocateNextVPMemMappedDeviceLocation(ctx, devSize)
 	if err != nil {
 		return "", err
