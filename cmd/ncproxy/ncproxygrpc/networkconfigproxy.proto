@@ -16,7 +16,27 @@ service NetworkConfigProxy {
     rpc GetNetwork(GetNetworkRequest) returns (GetNetworkResponse) {}
     rpc GetEndpoints(GetEndpointsRequest) returns (GetEndpointsResponse) {}
     rpc GetNetworks(GetNetworksRequest) returns (GetNetworksResponse) {}
+    rpc AssignPCI(AssignPCIRequest) returns (AssignPCIResponse) {}
+    rpc RemovePCI(RemovePCIRequest) returns (RemovePCIResponse) {}
 }
+
+message AssignPCIRequest {
+    string container_id = 1;
+    string device_id = 2;
+    uint32 virtual_function_index = 3;
+}
+
+message AssignPCIResponse {
+    string id = 1;
+}
+
+message RemovePCIRequest {
+    string container_id = 1;
+    string device_id = 2;
+    uint32 virtual_function_index = 3;
+}
+
+message RemovePCIResponse {}
 
 message AddNICRequest {
     string container_id = 1;
@@ -30,7 +50,7 @@ message ModifyNICRequest {
     string container_id = 1;
     string nic_id = 2;
     string endpoint_name = 3;
-    IovEndpointPolicySetting iov_policy_settings = 4;
+    EndpointSettings endpoint_settings = 4;
 }
 
 message ModifyNICResponse {}
@@ -44,6 +64,22 @@ message DeleteNICRequest {
 message DeleteNICResponse {}
 
 message CreateNetworkRequest {
+    string container_id = 1;
+    Network network = 2;
+}
+
+message Network {
+    oneof settings {
+        HostComputeNetworkSettings hcn_settings = 4;
+        CustomNetworkSettings custom_network_settings = 5;
+    }
+}
+
+message CustomNetworkSettings {
+    string name = 1; 
+}
+
+message HostComputeNetworkSettings {
     enum NetworkMode
     {
         Transparent = 0;
@@ -84,15 +120,30 @@ message DnsSetting {
 }
 
 message CreateEndpointRequest {
-    reserved 8 to 15;
+    string container_id = 1;
+    EndpointSettings endpoint_settings = 3;
+}
+
+message HcnEndpointSettings {
+    reserved 11 to 15;
     string name = 1;
     string macaddress = 2;
     string ipaddress = 3;
-    string ipaddress_prefixlength = 4;
+    uint32 ipaddress_prefixlength = 4;
     string network_name = 5;
-    PortNameEndpointPolicySetting portname_policy_setting = 6;
-    IovEndpointPolicySetting iov_policy_settings = 7;
-    DnsSetting dns_setting = 16;
+    string default_gateway = 6;
+    PortNameEndpointPolicySetting portname_policy_setting = 7;
+    IovEndpointPolicySetting iov_policy_settings = 8;
+    DnsSetting dns_setting = 9;
+}
+
+message CustomEndpointSettings {
+    string name = 1;
+    string macaddress = 2;
+    string ipaddress = 3;
+    uint32 ipaddress_prefixlength = 4;
+    string network_name = 5;
+    string default_gateway = 6;
 }
 
 message CreateEndpointResponse{
@@ -101,7 +152,6 @@ message CreateEndpointResponse{
 
 message AddEndpointRequest {
     string name = 1;
-    string namespace_id = 2;
 }
 
 message AddEndpointResponse{}
@@ -125,9 +175,15 @@ message GetEndpointRequest{
 message GetEndpointResponse{
     string id = 1;
     string name = 2;
-    string network = 3; // GUID
-    string namespace = 4; // GUID
-    DnsSetting dns_setting = 5;
+    // TODO katiewasnothere: network ID guid 
+    EndpointSettings endpoint_settings = 3;
+}
+
+message EndpointSettings {
+    oneof settings {
+        HcnEndpointSettings hcn_endpoint = 1;
+        CustomEndpointSettings custom_endpoint = 2;
+    }
 }
 
 message GetNetworkRequest{

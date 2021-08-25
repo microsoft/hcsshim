@@ -25,6 +25,165 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
+type AssignPCIInternalRequest struct {
+	ContainerID          string   `protobuf:"bytes,1,opt,name=container_id,json=containerId,proto3" json:"container_id,omitempty"`
+	DeviceID             string   `protobuf:"bytes,2,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	VirtualFunctionIndex uint32   `protobuf:"varint,3,opt,name=virtual_function_index,json=virtualFunctionIndex,proto3" json:"virtual_function_index,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *AssignPCIInternalRequest) Reset()      { *m = AssignPCIInternalRequest{} }
+func (*AssignPCIInternalRequest) ProtoMessage() {}
+func (*AssignPCIInternalRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_7f2f03dc308add4c, []int{0}
+}
+func (m *AssignPCIInternalRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AssignPCIInternalRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_AssignPCIInternalRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *AssignPCIInternalRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AssignPCIInternalRequest.Merge(m, src)
+}
+func (m *AssignPCIInternalRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *AssignPCIInternalRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_AssignPCIInternalRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AssignPCIInternalRequest proto.InternalMessageInfo
+
+type AssignPCIInternalResponse struct {
+	ID                   string   `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *AssignPCIInternalResponse) Reset()      { *m = AssignPCIInternalResponse{} }
+func (*AssignPCIInternalResponse) ProtoMessage() {}
+func (*AssignPCIInternalResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_7f2f03dc308add4c, []int{1}
+}
+func (m *AssignPCIInternalResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AssignPCIInternalResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_AssignPCIInternalResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *AssignPCIInternalResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AssignPCIInternalResponse.Merge(m, src)
+}
+func (m *AssignPCIInternalResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *AssignPCIInternalResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_AssignPCIInternalResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AssignPCIInternalResponse proto.InternalMessageInfo
+
+type RemovePCIInternalRequest struct {
+	ContainerID          string   `protobuf:"bytes,1,opt,name=container_id,json=containerId,proto3" json:"container_id,omitempty"`
+	DeviceID             string   `protobuf:"bytes,2,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	VirtualFunctionIndex uint32   `protobuf:"varint,3,opt,name=virtual_function_index,json=virtualFunctionIndex,proto3" json:"virtual_function_index,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *RemovePCIInternalRequest) Reset()      { *m = RemovePCIInternalRequest{} }
+func (*RemovePCIInternalRequest) ProtoMessage() {}
+func (*RemovePCIInternalRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_7f2f03dc308add4c, []int{2}
+}
+func (m *RemovePCIInternalRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RemovePCIInternalRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_RemovePCIInternalRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *RemovePCIInternalRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RemovePCIInternalRequest.Merge(m, src)
+}
+func (m *RemovePCIInternalRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *RemovePCIInternalRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_RemovePCIInternalRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RemovePCIInternalRequest proto.InternalMessageInfo
+
+type RemovePCIInternalResponse struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *RemovePCIInternalResponse) Reset()      { *m = RemovePCIInternalResponse{} }
+func (*RemovePCIInternalResponse) ProtoMessage() {}
+func (*RemovePCIInternalResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_7f2f03dc308add4c, []int{3}
+}
+func (m *RemovePCIInternalResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RemovePCIInternalResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_RemovePCIInternalResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *RemovePCIInternalResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RemovePCIInternalResponse.Merge(m, src)
+}
+func (m *RemovePCIInternalResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *RemovePCIInternalResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_RemovePCIInternalResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RemovePCIInternalResponse proto.InternalMessageInfo
+
 type AddNICInternalRequest struct {
 	ContainerID          string   `protobuf:"bytes,1,opt,name=container_id,json=containerId,proto3" json:"container_id,omitempty"`
 	NicID                string   `protobuf:"bytes,2,opt,name=nic_id,json=nicId,proto3" json:"nic_id,omitempty"`
@@ -37,7 +196,7 @@ type AddNICInternalRequest struct {
 func (m *AddNICInternalRequest) Reset()      { *m = AddNICInternalRequest{} }
 func (*AddNICInternalRequest) ProtoMessage() {}
 func (*AddNICInternalRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_7f2f03dc308add4c, []int{0}
+	return fileDescriptor_7f2f03dc308add4c, []int{4}
 }
 func (m *AddNICInternalRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -75,7 +234,7 @@ type AddNICInternalResponse struct {
 func (m *AddNICInternalResponse) Reset()      { *m = AddNICInternalResponse{} }
 func (*AddNICInternalResponse) ProtoMessage() {}
 func (*AddNICInternalResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_7f2f03dc308add4c, []int{1}
+	return fileDescriptor_7f2f03dc308add4c, []int{5}
 }
 func (m *AddNICInternalResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -116,7 +275,7 @@ type ModifyNICInternalRequest struct {
 func (m *ModifyNICInternalRequest) Reset()      { *m = ModifyNICInternalRequest{} }
 func (*ModifyNICInternalRequest) ProtoMessage() {}
 func (*ModifyNICInternalRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_7f2f03dc308add4c, []int{2}
+	return fileDescriptor_7f2f03dc308add4c, []int{6}
 }
 func (m *ModifyNICInternalRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -154,7 +313,7 @@ type ModifyNICInternalResponse struct {
 func (m *ModifyNICInternalResponse) Reset()      { *m = ModifyNICInternalResponse{} }
 func (*ModifyNICInternalResponse) ProtoMessage() {}
 func (*ModifyNICInternalResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_7f2f03dc308add4c, []int{3}
+	return fileDescriptor_7f2f03dc308add4c, []int{7}
 }
 func (m *ModifyNICInternalResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -195,7 +354,7 @@ type DeleteNICInternalRequest struct {
 func (m *DeleteNICInternalRequest) Reset()      { *m = DeleteNICInternalRequest{} }
 func (*DeleteNICInternalRequest) ProtoMessage() {}
 func (*DeleteNICInternalRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_7f2f03dc308add4c, []int{4}
+	return fileDescriptor_7f2f03dc308add4c, []int{8}
 }
 func (m *DeleteNICInternalRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -233,7 +392,7 @@ type DeleteNICInternalResponse struct {
 func (m *DeleteNICInternalResponse) Reset()      { *m = DeleteNICInternalResponse{} }
 func (*DeleteNICInternalResponse) ProtoMessage() {}
 func (*DeleteNICInternalResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_7f2f03dc308add4c, []int{5}
+	return fileDescriptor_7f2f03dc308add4c, []int{9}
 }
 func (m *DeleteNICInternalResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -274,7 +433,7 @@ type IovSettings struct {
 func (m *IovSettings) Reset()      { *m = IovSettings{} }
 func (*IovSettings) ProtoMessage() {}
 func (*IovSettings) Descriptor() ([]byte, []int) {
-	return fileDescriptor_7f2f03dc308add4c, []int{6}
+	return fileDescriptor_7f2f03dc308add4c, []int{10}
 }
 func (m *IovSettings) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -304,6 +463,10 @@ func (m *IovSettings) XXX_DiscardUnknown() {
 var xxx_messageInfo_IovSettings proto.InternalMessageInfo
 
 func init() {
+	proto.RegisterType((*AssignPCIInternalRequest)(nil), "AssignPCIInternalRequest")
+	proto.RegisterType((*AssignPCIInternalResponse)(nil), "AssignPCIInternalResponse")
+	proto.RegisterType((*RemovePCIInternalRequest)(nil), "RemovePCIInternalRequest")
+	proto.RegisterType((*RemovePCIInternalResponse)(nil), "RemovePCIInternalResponse")
 	proto.RegisterType((*AddNICInternalRequest)(nil), "AddNICInternalRequest")
 	proto.RegisterType((*AddNICInternalResponse)(nil), "AddNICInternalResponse")
 	proto.RegisterType((*ModifyNICInternalRequest)(nil), "ModifyNICInternalRequest")
@@ -318,38 +481,171 @@ func init() {
 }
 
 var fileDescriptor_7f2f03dc308add4c = []byte{
-	// 492 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x94, 0xcf, 0x6e, 0xd3, 0x40,
-	0x10, 0xc6, 0xb3, 0x45, 0x8d, 0x94, 0x4d, 0x22, 0x60, 0x0b, 0xc5, 0x71, 0x25, 0xb7, 0x0a, 0x17,
-	0xc4, 0xc1, 0x46, 0xe1, 0x58, 0x24, 0xd4, 0x26, 0x1c, 0x7c, 0x48, 0x28, 0xe6, 0xc0, 0x9f, 0x4b,
-	0xe4, 0xda, 0x13, 0x67, 0xa4, 0x78, 0xc7, 0xd8, 0xeb, 0x48, 0xbd, 0xf1, 0x0c, 0x48, 0x1c, 0x11,
-	0xaf, 0xd3, 0x23, 0x37, 0x38, 0x55, 0xd4, 0x4f, 0x82, 0xec, 0x38, 0xa1, 0x50, 0x5b, 0x82, 0x5b,
-	0x6f, 0xde, 0x6f, 0x3f, 0xef, 0xfc, 0x76, 0xe6, 0xd3, 0xf2, 0x17, 0x01, 0xaa, 0x79, 0x7a, 0x6a,
-	0x7a, 0x14, 0x5a, 0x63, 0xf4, 0x62, 0x4a, 0x68, 0xa6, 0xac, 0xb9, 0x97, 0x24, 0x73, 0x0c, 0x2d,
-	0x94, 0x0a, 0x62, 0xe9, 0x2e, 0x2c, 0x8f, 0xc2, 0x28, 0x55, 0xe0, 0x06, 0x20, 0xd5, 0x1f, 0x0b,
-	0x33, 0x8a, 0x49, 0x91, 0x7e, 0x2f, 0xa0, 0x80, 0x8a, 0x4f, 0x2b, 0xff, 0x5a, 0xa9, 0xfd, 0x4f,
-	0x8c, 0xdf, 0x3f, 0xf2, 0xfd, 0x89, 0x3d, 0xb4, 0xcb, 0x83, 0x1c, 0xf8, 0x90, 0x42, 0xa2, 0xc4,
-	0x80, 0x77, 0x3c, 0x92, 0xca, 0x45, 0x09, 0xf1, 0x14, 0x7d, 0x8d, 0x1d, 0xb0, 0x47, 0xad, 0xe3,
-	0xdb, 0xd9, 0xc5, 0x7e, 0x7b, 0xb8, 0xd6, 0xed, 0x91, 0xd3, 0xde, 0x98, 0x6c, 0x5f, 0x1c, 0xf0,
-	0xa6, 0x44, 0x2f, 0x77, 0x6f, 0x15, 0xee, 0x56, 0x76, 0xb1, 0xbf, 0x3d, 0x41, 0xcf, 0x1e, 0x39,
-	0xdb, 0x12, 0x3d, 0xdb, 0x17, 0x0f, 0x79, 0x17, 0xa4, 0x1f, 0x11, 0x4a, 0x35, 0x95, 0x6e, 0x08,
-	0xda, 0xad, 0xdc, 0xe8, 0x74, 0xd6, 0xe2, 0xc4, 0x0d, 0xa1, 0xaf, 0xf1, 0xdd, 0xbf, 0x99, 0x92,
-	0x88, 0x64, 0x02, 0xfd, 0xaf, 0x8c, 0x6b, 0x63, 0xf2, 0x71, 0x76, 0x56, 0x41, 0xfc, 0xbb, 0x3a,
-	0xfb, 0xd7, 0xea, 0x5b, 0xd7, 0xab, 0x8b, 0x67, 0x7c, 0x07, 0x69, 0x39, 0x8d, 0x68, 0x81, 0xde,
-	0xd9, 0x34, 0x01, 0xa5, 0x50, 0x06, 0x49, 0x01, 0xda, 0x1e, 0x74, 0x4c, 0x9b, 0x96, 0xaf, 0x4b,
-	0xcd, 0xb9, 0x8b, 0xb4, 0x3c, 0x29, 0x7c, 0x6b, 0xa9, 0xbf, 0xc7, 0x7b, 0x15, 0x80, 0x25, 0xfe,
-	0x67, 0xc6, 0xb5, 0x11, 0x2c, 0x40, 0xc1, 0xcd, 0x6a, 0xf8, 0x1e, 0xef, 0x55, 0x60, 0x95, 0xd0,
-	0x5f, 0x18, 0x6f, 0x5f, 0xb9, 0xb4, 0x78, 0xcc, 0xef, 0xd8, 0xb4, 0x7c, 0x39, 0x9b, 0x2d, 0xc8,
-	0xf5, 0xdf, 0x00, 0x06, 0x73, 0x55, 0xb0, 0x76, 0x9d, 0x6b, 0xba, 0x78, 0xc2, 0x77, 0x5e, 0xa5,
-	0x90, 0xc2, 0x89, 0x8b, 0x71, 0x52, 0x5e, 0x14, 0x56, 0xb0, 0x5d, 0xa7, 0x6a, 0x2b, 0xff, 0xa3,
-	0x20, 0x88, 0xd3, 0x48, 0x8d, 0xc9, 0x87, 0xd8, 0x55, 0x48, 0xb2, 0xa0, 0xee, 0x3a, 0x55, 0x5b,
-	0x83, 0xef, 0x8c, 0x77, 0x86, 0xab, 0xbc, 0x1f, 0xe5, 0x79, 0x17, 0x87, 0xbc, 0xb9, 0x8a, 0x8f,
-	0xd8, 0x35, 0x2b, 0xb3, 0xad, 0x3f, 0x30, 0x6b, 0xf2, 0xd5, 0x10, 0x23, 0xde, 0xda, 0xcc, 0x4f,
-	0xf4, 0xcc, 0xba, 0xb0, 0xe9, 0xba, 0x59, 0x3f, 0xe6, 0xe2, 0x94, 0x4d, 0x43, 0x45, 0xcf, 0xac,
-	0x9b, 0xb9, 0xae, 0x9b, 0xf5, 0x7d, 0x6f, 0x1c, 0xbf, 0x3b, 0xbf, 0x34, 0x1a, 0x3f, 0x2e, 0x8d,
-	0xc6, 0xc7, 0xcc, 0x60, 0xe7, 0x99, 0xc1, 0xbe, 0x65, 0x06, 0xfb, 0x99, 0x19, 0xec, 0xfd, 0xf3,
-	0xff, 0x7f, 0x13, 0x0e, 0xaf, 0x2e, 0xde, 0x36, 0x4e, 0x9b, 0xc5, 0x03, 0xf0, 0xf4, 0x57, 0x00,
-	0x00, 0x00, 0xff, 0xff, 0x20, 0x70, 0xc7, 0x0f, 0x5f, 0x04, 0x00, 0x00,
+	// 628 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xd4, 0x95, 0xcd, 0x6e, 0xd3, 0x40,
+	0x10, 0xc7, 0xb3, 0x41, 0x8d, 0x9a, 0x4d, 0x22, 0x60, 0x5b, 0x42, 0xec, 0x4a, 0x49, 0x15, 0x2e,
+	0x85, 0xc3, 0x06, 0xb5, 0xdc, 0x8a, 0x84, 0xda, 0x18, 0xa4, 0x3d, 0xb4, 0x14, 0x73, 0xe0, 0xe3,
+	0x12, 0xb9, 0xde, 0x89, 0xb3, 0x52, 0xb2, 0x1b, 0xec, 0xb5, 0x45, 0x6f, 0x3c, 0x03, 0x12, 0x47,
+	0xc4, 0x23, 0xf0, 0x1a, 0x3d, 0x72, 0xe4, 0x14, 0x51, 0xf3, 0x22, 0xc8, 0x1f, 0x4d, 0x0b, 0xb5,
+	0x25, 0x90, 0x38, 0xc0, 0xcd, 0x9e, 0xf1, 0xce, 0xfe, 0xfe, 0xb3, 0xe3, 0xff, 0xe2, 0xc7, 0x9e,
+	0xd0, 0x93, 0xf0, 0x98, 0xba, 0x6a, 0x36, 0x38, 0x10, 0xae, 0xaf, 0x02, 0x35, 0xd6, 0x83, 0x89,
+	0x1b, 0x04, 0x13, 0x31, 0x1b, 0x08, 0xa9, 0xc1, 0x97, 0xce, 0x74, 0xe0, 0xaa, 0xd9, 0x3c, 0xd4,
+	0xe0, 0x78, 0x20, 0xf5, 0x4f, 0x2f, 0x74, 0xee, 0x2b, 0xad, 0xcc, 0x75, 0x4f, 0x79, 0x2a, 0x7d,
+	0x1c, 0x24, 0x4f, 0x59, 0xb4, 0xff, 0x19, 0xe1, 0xce, 0x5e, 0x10, 0x08, 0x4f, 0x1e, 0x0d, 0x19,
+	0xcb, 0x6b, 0xd9, 0xf0, 0x26, 0x84, 0x40, 0x93, 0x6d, 0xdc, 0x74, 0x95, 0xd4, 0x8e, 0x90, 0xe0,
+	0x8f, 0x04, 0xef, 0xa0, 0x4d, 0xb4, 0x55, 0xdf, 0xbf, 0x1e, 0x2f, 0x7a, 0x8d, 0xe1, 0x79, 0x9c,
+	0x59, 0x76, 0x63, 0xf9, 0x11, 0xe3, 0xe4, 0x2e, 0xae, 0x73, 0x88, 0x84, 0x0b, 0xc9, 0x82, 0x6a,
+	0xba, 0xa0, 0x19, 0x2f, 0x7a, 0xab, 0x56, 0x1a, 0x64, 0x96, 0xbd, 0x9a, 0xa5, 0x19, 0x27, 0x0f,
+	0x70, 0x3b, 0x12, 0xbe, 0x0e, 0x9d, 0xe9, 0x68, 0x1c, 0x4a, 0x57, 0x0b, 0x25, 0x47, 0x42, 0x72,
+	0x78, 0xdb, 0xb9, 0xb6, 0x89, 0xb6, 0x5a, 0xf6, 0x7a, 0x9e, 0x7d, 0x92, 0x27, 0x59, 0x92, 0xeb,
+	0xef, 0x60, 0xa3, 0x00, 0x38, 0x98, 0x2b, 0x19, 0x00, 0x69, 0xe3, 0xea, 0x92, 0xb3, 0x16, 0x2f,
+	0x7a, 0x55, 0x66, 0xd9, 0x55, 0xc1, 0x53, 0x99, 0x36, 0xcc, 0x54, 0x04, 0xff, 0x8b, 0xcc, 0x0d,
+	0x6c, 0x14, 0x00, 0x67, 0x32, 0xfb, 0xef, 0x11, 0xbe, 0xb5, 0xc7, 0xf9, 0x21, 0x1b, 0xfe, 0x0d,
+	0x2d, 0x9b, 0xb8, 0x26, 0x85, 0x7b, 0x21, 0xa4, 0x1e, 0x2f, 0x7a, 0x2b, 0x87, 0xc2, 0x65, 0x96,
+	0xbd, 0x22, 0x85, 0xcb, 0x38, 0xb9, 0x83, 0x5b, 0x20, 0xf9, 0x5c, 0x09, 0xa9, 0x47, 0xd2, 0x99,
+	0x41, 0x4a, 0x5e, 0xb7, 0x9b, 0xe7, 0xc1, 0x43, 0x67, 0x06, 0xfd, 0x0e, 0x6e, 0xff, 0xca, 0x94,
+	0xe3, 0x7e, 0x42, 0xb8, 0x73, 0xa0, 0xb8, 0x18, 0x9f, 0x14, 0x10, 0x5f, 0xec, 0x8e, 0x7e, 0x77,
+	0xf7, 0xea, 0xd5, 0xdd, 0xc9, 0x43, 0xbc, 0x26, 0x54, 0x34, 0x9a, 0xab, 0xa9, 0x70, 0x4f, 0x46,
+	0x01, 0x68, 0x2d, 0xa4, 0x17, 0xa4, 0xa0, 0x8d, 0xed, 0x26, 0x65, 0x2a, 0x7a, 0x9e, 0xc7, 0xec,
+	0x9b, 0x42, 0x45, 0x47, 0xe9, 0x77, 0xe7, 0xa1, 0xa4, 0xdb, 0x05, 0x80, 0x39, 0xfe, 0x07, 0x84,
+	0x3b, 0x16, 0x4c, 0x41, 0xc3, 0xbf, 0xd5, 0xf0, 0x0d, 0x6c, 0x14, 0x60, 0xe5, 0xd0, 0x1f, 0x11,
+	0x6e, 0x5c, 0x12, 0x4d, 0xee, 0xe1, 0x1b, 0x4c, 0x45, 0x4f, 0xc7, 0xe3, 0xa9, 0x72, 0xf8, 0x0b,
+	0x10, 0xde, 0x44, 0xa7, 0xac, 0x2d, 0xfb, 0x4a, 0x9c, 0xdc, 0xc7, 0x6b, 0xcf, 0x42, 0x08, 0xe1,
+	0xc8, 0x11, 0x7e, 0x90, 0x0b, 0x85, 0x0c, 0xb6, 0x65, 0x17, 0xa5, 0x92, 0x15, 0x29, 0x81, 0x1f,
+	0xce, 0xf5, 0x81, 0xe2, 0xe0, 0x3b, 0xc9, 0x24, 0xe7, 0x03, 0x5e, 0x94, 0xda, 0xfe, 0x5e, 0xc5,
+	0xcd, 0x61, 0xe6, 0x52, 0x7b, 0x89, 0x4b, 0x91, 0x5d, 0x5c, 0xcb, 0xc6, 0x87, 0xb4, 0x69, 0xe1,
+	0x6c, 0x9b, 0xb7, 0x69, 0xc9, 0x7c, 0x55, 0x88, 0x85, 0xeb, 0xcb, 0xf3, 0x23, 0x06, 0x2d, 0x1b,
+	0x36, 0xd3, 0xa4, 0xe5, 0xc7, 0x9c, 0x56, 0x59, 0x36, 0x94, 0x18, 0xb4, 0xec, 0xcc, 0x4d, 0x93,
+	0x96, 0xf7, 0x3d, 0xad, 0xb2, 0x34, 0x28, 0x62, 0xd0, 0x32, 0x77, 0x35, 0x4d, 0x5a, 0xea, 0x63,
+	0x59, 0x95, 0xe5, 0xff, 0x4f, 0x0c, 0x5a, 0x66, 0x5e, 0xa6, 0x49, 0xcb, 0x6d, 0xa2, 0xb2, 0xff,
+	0xea, 0xf4, 0xac, 0x5b, 0xf9, 0x7a, 0xd6, 0xad, 0xbc, 0x8b, 0xbb, 0xe8, 0x34, 0xee, 0xa2, 0x2f,
+	0x71, 0x17, 0x7d, 0x8b, 0xbb, 0xe8, 0xf5, 0xa3, 0x3f, 0xbf, 0x55, 0x76, 0x2f, 0xbf, 0xbc, 0xac,
+	0x1c, 0xd7, 0xd2, 0x2b, 0x64, 0xe7, 0x47, 0x00, 0x00, 0x00, 0xff, 0xff, 0x28, 0x4d, 0x78, 0x95,
+	0xa1, 0x06, 0x00, 0x00,
+}
+
+func (m *AssignPCIInternalRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *AssignPCIInternalRequest) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.ContainerID) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.ContainerID)))
+		i += copy(dAtA[i:], m.ContainerID)
+	}
+	if len(m.DeviceID) > 0 {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.DeviceID)))
+		i += copy(dAtA[i:], m.DeviceID)
+	}
+	if m.VirtualFunctionIndex != 0 {
+		dAtA[i] = 0x18
+		i++
+		i = encodeVarintComputeagent(dAtA, i, uint64(m.VirtualFunctionIndex))
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *AssignPCIInternalResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *AssignPCIInternalResponse) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.ID) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.ID)))
+		i += copy(dAtA[i:], m.ID)
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *RemovePCIInternalRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RemovePCIInternalRequest) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.ContainerID) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.ContainerID)))
+		i += copy(dAtA[i:], m.ContainerID)
+	}
+	if len(m.DeviceID) > 0 {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.DeviceID)))
+		i += copy(dAtA[i:], m.DeviceID)
+	}
+	if m.VirtualFunctionIndex != 0 {
+		dAtA[i] = 0x18
+		i++
+		i = encodeVarintComputeagent(dAtA, i, uint64(m.VirtualFunctionIndex))
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *RemovePCIInternalResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RemovePCIInternalResponse) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
 }
 
 func (m *AddNICInternalRequest) Marshal() (dAtA []byte, err error) {
@@ -581,6 +877,80 @@ func encodeVarintComputeagent(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return offset + 1
 }
+func (m *AssignPCIInternalRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.ContainerID)
+	if l > 0 {
+		n += 1 + l + sovComputeagent(uint64(l))
+	}
+	l = len(m.DeviceID)
+	if l > 0 {
+		n += 1 + l + sovComputeagent(uint64(l))
+	}
+	if m.VirtualFunctionIndex != 0 {
+		n += 1 + sovComputeagent(uint64(m.VirtualFunctionIndex))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *AssignPCIInternalResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.ID)
+	if l > 0 {
+		n += 1 + l + sovComputeagent(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *RemovePCIInternalRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.ContainerID)
+	if l > 0 {
+		n += 1 + l + sovComputeagent(uint64(l))
+	}
+	l = len(m.DeviceID)
+	if l > 0 {
+		n += 1 + l + sovComputeagent(uint64(l))
+	}
+	if m.VirtualFunctionIndex != 0 {
+		n += 1 + sovComputeagent(uint64(m.VirtualFunctionIndex))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *RemovePCIInternalResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *AddNICInternalRequest) Size() (n int) {
 	if m == nil {
 		return 0
@@ -723,6 +1093,53 @@ func sovComputeagent(x uint64) (n int) {
 func sozComputeagent(x uint64) (n int) {
 	return sovComputeagent(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
+func (this *AssignPCIInternalRequest) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&AssignPCIInternalRequest{`,
+		`ContainerID:` + fmt.Sprintf("%v", this.ContainerID) + `,`,
+		`DeviceID:` + fmt.Sprintf("%v", this.DeviceID) + `,`,
+		`VirtualFunctionIndex:` + fmt.Sprintf("%v", this.VirtualFunctionIndex) + `,`,
+		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *AssignPCIInternalResponse) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&AssignPCIInternalResponse{`,
+		`ID:` + fmt.Sprintf("%v", this.ID) + `,`,
+		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *RemovePCIInternalRequest) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&RemovePCIInternalRequest{`,
+		`ContainerID:` + fmt.Sprintf("%v", this.ContainerID) + `,`,
+		`DeviceID:` + fmt.Sprintf("%v", this.DeviceID) + `,`,
+		`VirtualFunctionIndex:` + fmt.Sprintf("%v", this.VirtualFunctionIndex) + `,`,
+		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *RemovePCIInternalResponse) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&RemovePCIInternalResponse{`,
+		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
+		`}`,
+	}, "")
+	return s
+}
 func (this *AddNICInternalRequest) String() string {
 	if this == nil {
 		return "nil"
@@ -818,6 +1235,8 @@ type ComputeAgentService interface {
 	AddNIC(ctx context.Context, req *AddNICInternalRequest) (*AddNICInternalResponse, error)
 	ModifyNIC(ctx context.Context, req *ModifyNICInternalRequest) (*ModifyNICInternalResponse, error)
 	DeleteNIC(ctx context.Context, req *DeleteNICInternalRequest) (*DeleteNICInternalResponse, error)
+	AssignPCI(ctx context.Context, req *AssignPCIInternalRequest) (*AssignPCIInternalResponse, error)
+	RemovePCI(ctx context.Context, req *RemovePCIInternalRequest) (*RemovePCIInternalResponse, error)
 }
 
 func RegisterComputeAgentService(srv *github_com_containerd_ttrpc.Server, svc ComputeAgentService) {
@@ -842,6 +1261,20 @@ func RegisterComputeAgentService(srv *github_com_containerd_ttrpc.Server, svc Co
 				return nil, err
 			}
 			return svc.DeleteNIC(ctx, &req)
+		},
+		"AssignPCI": func(ctx context.Context, unmarshal func(interface{}) error) (interface{}, error) {
+			var req AssignPCIInternalRequest
+			if err := unmarshal(&req); err != nil {
+				return nil, err
+			}
+			return svc.AssignPCI(ctx, &req)
+		},
+		"RemovePCI": func(ctx context.Context, unmarshal func(interface{}) error) (interface{}, error) {
+			var req RemovePCIInternalRequest
+			if err := unmarshal(&req); err != nil {
+				return nil, err
+			}
+			return svc.RemovePCI(ctx, &req)
 		},
 	})
 }
@@ -878,6 +1311,436 @@ func (c *computeAgentClient) DeleteNIC(ctx context.Context, req *DeleteNICIntern
 		return nil, err
 	}
 	return &resp, nil
+}
+
+func (c *computeAgentClient) AssignPCI(ctx context.Context, req *AssignPCIInternalRequest) (*AssignPCIInternalResponse, error) {
+	var resp AssignPCIInternalResponse
+	if err := c.client.Call(ctx, "ComputeAgent", "AssignPCI", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func (c *computeAgentClient) RemovePCI(ctx context.Context, req *RemovePCIInternalRequest) (*RemovePCIInternalResponse, error) {
+	var resp RemovePCIInternalResponse
+	if err := c.client.Call(ctx, "ComputeAgent", "RemovePCI", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+func (m *AssignPCIInternalRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowComputeagent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AssignPCIInternalRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AssignPCIInternalRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ContainerID", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowComputeagent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthComputeagent
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthComputeagent
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ContainerID = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DeviceID", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowComputeagent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthComputeagent
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthComputeagent
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.DeviceID = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field VirtualFunctionIndex", wireType)
+			}
+			m.VirtualFunctionIndex = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowComputeagent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.VirtualFunctionIndex |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipComputeagent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthComputeagent
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthComputeagent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *AssignPCIInternalResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowComputeagent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AssignPCIInternalResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AssignPCIInternalResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowComputeagent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthComputeagent
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthComputeagent
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ID = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipComputeagent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthComputeagent
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthComputeagent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *RemovePCIInternalRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowComputeagent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RemovePCIInternalRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RemovePCIInternalRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ContainerID", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowComputeagent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthComputeagent
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthComputeagent
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ContainerID = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DeviceID", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowComputeagent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthComputeagent
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthComputeagent
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.DeviceID = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field VirtualFunctionIndex", wireType)
+			}
+			m.VirtualFunctionIndex = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowComputeagent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.VirtualFunctionIndex |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipComputeagent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthComputeagent
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthComputeagent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *RemovePCIInternalResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowComputeagent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RemovePCIInternalResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RemovePCIInternalResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipComputeagent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthComputeagent
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthComputeagent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
 }
 func (m *AddNICInternalRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
