@@ -498,6 +498,9 @@ func (p *process) Wait() (int, error) {
 	if p.pipeRelay != nil {
 		p.pipeRelay.Wait()
 	}
+
+	l.WithField("pid", p.pid).Debug("relay wait completed")
+
 	return exitCode, err
 }
 
@@ -524,6 +527,7 @@ func (c *container) Wait() (int, error) {
 		}
 	}
 	exitCode, err := c.init.Wait()
+	logrus.WithField("cid", c.id).Debug("runc.container::init process wait completed")
 	if err != nil {
 		return -1, err
 	}
