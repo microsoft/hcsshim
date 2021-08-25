@@ -24,8 +24,42 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+type computeAgentCache struct {
+	// lock for synchronizing read/write access to `cache`
+	rw sync.RWMutex
+	// mapping of container ID to shim compute agent ttrpc service
+	cache map[string]computeagent.ComputeAgentService
+}
+
+func newComputeAgentCache() *computeAgentCache {
+	return &computeAgentCache{
+		cache: make(map[string]computeagent.ComputeAgentService),
+	}
+}
+
+func (c *computeAgentCache) get(cid string) (computeagent.ComputeAgentService, bool) {
+	c.rw.RLock()
+	defer c.rw.RUnlock()
+	result, ok := c.cache[cid]
+	return result, ok
+}
+
+func (c *computeAgentCache) put(cid string, agent computeagent.ComputeAgentService) {
+	c.rw.Lock()
+	defer c.rw.Unlock()
+	c.cache[cid] = agent
+}
+
 // GRPC service exposed for use by a Node Network Service.
-type grpcService struct{}
+type grpcService struct {
+	containerIDToComputeAgent *computeAgentCache
+}
+
+func newGRPCService(agentCache *computeAgentCache) *grpcService {
+	return &grpcService{
+		containerIDToComputeAgent: agentCache,
+	}
+}
 
 var _ ncproxygrpc.NetworkConfigProxyServer = &grpcService{}
 
@@ -42,13 +76,13 @@ func (s *grpcService) AddNIC(ctx context.Context, req *ncproxygrpc.AddNICRequest
 	if req.ContainerID == "" || req.EndpointName == "" || req.NicID == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
 	}
-	if client, ok := containerIDToShim[req.ContainerID]; ok {
+	if agent, ok := s.containerIDToComputeAgent.get(req.ContainerID); ok {
 		caReq := &computeagent.AddNICInternalRequest{
 			ContainerID:  req.ContainerID,
 			NicID:        req.NicID,
 			EndpointName: req.EndpointName,
 		}
-		if _, err := client.AddNIC(ctx, caReq); err != nil {
+		if _, err := agent.AddNIC(ctx, caReq); err != nil {
 			return nil, err
 		}
 		return &ncproxygrpc.AddNICResponse{}, nil
@@ -72,7 +106,7 @@ func (s *grpcService) ModifyNIC(ctx context.Context, req *ncproxygrpc.ModifyNICR
 		return nil, status.Error(codes.InvalidArgument, "received empty field in request")
 	}
 
-	if client, ok := containerIDToShim[req.ContainerID]; ok {
+	if agent, ok := s.containerIDToComputeAgent.get(req.ContainerID); ok {
 		caReq := &computeagent.ModifyNICInternalRequest{
 			NicID:        req.NicID,
 			EndpointName: req.EndpointName,
@@ -112,7 +146,7 @@ func (s *grpcService) ModifyNIC(ctx context.Context, req *ncproxygrpc.ModifyNICR
 		//
 		// To turn on iov offload, the reverse order is used.
 		if req.IovPolicySettings.IovOffloadWeight == 0 {
-			if _, err := client.ModifyNIC(ctx, caReq); err != nil {
+			if _, err := agent.ModifyNIC(ctx, caReq); err != nil {
 				return nil, err
 			}
 			if err := modifyEndpoint(ctx, ep.Id, policies, hcn.RequestTypeUpdate); err != nil {
@@ -125,7 +159,7 @@ func (s *grpcService) ModifyNIC(ctx context.Context, req *ncproxygrpc.ModifyNICR
 			if err := modifyEndpoint(ctx, ep.Id, policies, hcn.RequestTypeUpdate); err != nil {
 				return nil, errors.Wrap(err, "failed to modify network adapter")
 			}
-			if _, err := client.ModifyNIC(ctx, caReq); err != nil {
+			if _, err := agent.ModifyNIC(ctx, caReq); err != nil {
 				return nil, err
 			}
 		}
@@ -148,13 +182,13 @@ func (s *grpcService) DeleteNIC(ctx context.Context, req *ncproxygrpc.DeleteNICR
 	if req.ContainerID == "" || req.EndpointName == "" || req.NicID == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
 	}
-	if client, ok := containerIDToShim[req.ContainerID]; ok {
+	if agent, ok := s.containerIDToComputeAgent.get(req.ContainerID); ok {
 		caReq := &computeagent.DeleteNICInternalRequest{
 			ContainerID:  req.ContainerID,
 			NicID:        req.NicID,
 			EndpointName: req.EndpointName,
 		}
-		if _, err := client.DeleteNIC(ctx, caReq); err != nil {
+		if _, err := agent.DeleteNIC(ctx, caReq); err != nil {
 			if err == uvm.ErrNICNotFound || err == uvm.ErrNetNSNotFound {
 				return nil, status.Errorf(codes.NotFound, "failed to remove endpoint %q from namespace %q", req.EndpointName, req.NicID)
 			}
@@ -553,10 +587,15 @@ func (s *grpcService) GetNetworks(ctx context.Context, req *ncproxygrpc.GetNetwo
 	}, nil
 }
 
-// TTRPC service exposed for use by the shim. Holds a mutex for updating map of
-// client connections.
+// TTRPC service exposed for use by the shim.
 type ttrpcService struct {
-	m sync.Mutex
+	containerIDToComputeAgent *computeAgentCache
+}
+
+func newTTRPCService(agentCache *computeAgentCache) *ttrpcService {
+	return &ttrpcService{
+		containerIDToComputeAgent: agentCache,
+	}
 }
 
 func (s *ttrpcService) RegisterComputeAgent(ctx context.Context, req *ncproxyttrpc.RegisterComputeAgentRequest) (_ *ncproxyttrpc.RegisterComputeAgentResponse, err error) {
@@ -579,9 +618,8 @@ func (s *ttrpcService) RegisterComputeAgent(ctx context.Context, req *ncproxyttr
 	)
 	// Add to global client map if connection succeeds. Don't check if there's already a map entry
 	// just overwrite as the client may have changed the address of the config agent.
-	s.m.Lock()
-	defer s.m.Unlock()
-	containerIDToShim[req.ContainerID] = computeagent.NewComputeAgentClient(client)
+	s.containerIDToComputeAgent.put(req.ContainerID, computeagent.NewComputeAgentClient(client))
+
 	return &ncproxyttrpc.RegisterComputeAgentResponse{}, nil
 }
 
