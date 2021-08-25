@@ -135,7 +135,7 @@ type Request struct {
 	// Header is the wire format message header that preceeded the message for
 	// this request.
 	Header *prot.MessageHeader
-	// ContainerID is the id of the container that this message cooresponds to.
+	// ContainerID is the id of the container that this message corresponds to.
 	ContainerID string
 	// ActivityID is the id of the specific activity for this request.
 	ActivityID string
