@@ -145,7 +145,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	}
 
 	var options []string
-	if _, err := lcowUVM.AddSCSI(context.Background(), uvmScratchFile, `/tmp/scratch`, false, options, uvm.VMAccessTypeIndividual); err != nil {
+	if _, err := lcowUVM.AddSCSI(context.Background(), uvmScratchFile, `/tmp/scratch`, false, false, options, uvm.VMAccessTypeIndividual); err != nil {
 		t.Fatal(err)
 	}
 

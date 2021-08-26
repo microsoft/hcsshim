@@ -329,6 +329,7 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.BootFilesPath = parseAnnotationsString(s.Annotations, AnnotationBootFilesRootPath, lopts.BootFilesPath)
 		lopts.CPUGroupID = parseAnnotationsString(s.Annotations, AnnotationCPUGroupID, lopts.CPUGroupID)
 		lopts.NetworkConfigProxy = parseAnnotationsString(s.Annotations, AnnotationNetworkConfigProxy, lopts.NetworkConfigProxy)
+		lopts.EnableScratchEncryption = parseAnnotationsBool(ctx, s.Annotations, AnnotationEncryptedScratchDisk, lopts.EnableScratchEncryption)
 		lopts.SecurityPolicy = parseAnnotationsString(s.Annotations, AnnotationSecurityPolicy, lopts.SecurityPolicy)
 		lopts.KernelBootOptions = parseAnnotationsString(s.Annotations, AnnotationKernelBootOptions, lopts.KernelBootOptions)
 

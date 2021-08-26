@@ -214,6 +214,10 @@ const (
 	// when setting up ncproxy and computeagent
 	AnnotationNcproxyContainerID = "io.microsoft.network.ncproxy.containerid"
 
+	// AnnotationEncryptedScratchDisk indicates whether or not the container scratch disks
+	// should be encrypted or not
+	AnnotationEncryptedScratchDisk = "io.microsoft.virtualmachine.storage.scratch.encrypted"
+
 	// AnnotationSecurityPolicy is used to specify a security policy for opengcs to enforce
 	AnnotationSecurityPolicy = "io.microsoft.virtualmachine.lcow.securitypolicy"
 )

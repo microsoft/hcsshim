@@ -416,12 +416,12 @@ func modifyMappedVirtualDisk(ctx context.Context, rt prot.ModifyRequestType, mvd
 		mountCtx, cancel := context.WithTimeout(ctx, time.Second*4)
 		defer cancel()
 		if mvd.MountPath != "" {
-			return scsi.Mount(mountCtx, mvd.Controller, mvd.Lun, mvd.MountPath, mvd.ReadOnly, false, mvd.Options)
+			return scsi.Mount(mountCtx, mvd.Controller, mvd.Lun, mvd.MountPath, mvd.ReadOnly, mvd.Encrypted, mvd.Options)
 		}
 		return nil
 	case prot.MreqtRemove:
 		if mvd.MountPath != "" {
-			if err := scsi.Unmount(ctx, mvd.Controller, mvd.Lun, mvd.MountPath, false); err != nil {
+			if err := scsi.Unmount(ctx, mvd.Controller, mvd.Lun, mvd.MountPath, mvd.Encrypted); err != nil {
 				return err
 			}
 		}
