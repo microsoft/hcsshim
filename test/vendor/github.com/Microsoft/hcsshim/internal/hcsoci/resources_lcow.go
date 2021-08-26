@@ -116,9 +116,10 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 				uvmPathForFile = scsiMount.UVMPath
 				r.Add(scsiMount)
 				coi.Spec.Mounts[i].Type = "none"
-			} else if strings.HasPrefix(mount.Source, "sandbox://") {
+			} else if strings.HasPrefix(mount.Source, "sandbox://") || strings.HasPrefix(mount.Source, "hugepages://") {
 				// Mounts that map to a path in UVM are specified with 'sandbox://' prefix.
 				// example: sandbox:///a/dirInUvm destination:/b/dirInContainer
+				// Hugepages inside a container are backed by a mount created inside a UVM.
 				uvmPathForFile = mount.Source
 			} else {
 				st, err := os.Stat(hostPath)
