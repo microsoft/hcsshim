@@ -166,7 +166,7 @@ const (
 	// AnnotationVPMemNoMultiMapping indicates that we should disable LCOW vpmem layer multi mapping
 	AnnotationVPMemNoMultiMapping = "io.microsoft.virtualmachine.lcow.vpmem.nomultimapping"
 
-	// AnnotationKernelBootOptions is used to specify kernel options used while booting a linux kernerl
+	// AnnotationKernelBootOptions is used to specify kernel options used while booting a linux kernel
 	AnnotationKernelBootOptions = "io.microsoft.virtualmachine.lcow.kernelbootoptions"
 
 	// AnnotationStorageQoSBandwidthMaximum indicates the maximum number of bytes per second. If `0`
@@ -216,4 +216,8 @@ const (
 
 	// AnnotationSecurityPolicy is used to specify a security policy for opengcs to enforce
 	AnnotationSecurityPolicy = "io.microsoft.virtualmachine.lcow.securitypolicy"
+
+	// AnnotationDisableLCOWTimeSyncService is used to disable the chronyd time
+	// synchronization service inside the LCOW UVM.
+	AnnotationDisableLCOWTimeSyncService = "io.microsoft.virtualmachine.lcow.timesync.disable"
 )
