@@ -6,6 +6,7 @@ import weak "gogoproto/gogo.proto";
 
 service NetworkConfigProxy {
     rpc RegisterComputeAgent(RegisterComputeAgentRequest) returns (RegisterComputeAgentResponse) {}
+    rpc UnregisterComputeAgent(UnregisterComputeAgentRequest) returns (UnregisterComputeAgentResponse) {}
     rpc ConfigureNetworking(ConfigureNetworkingInternalRequest) returns (ConfigureNetworkingInternalResponse) {}
 }
 
@@ -15,6 +16,12 @@ message RegisterComputeAgentRequest {
 }
 
 message RegisterComputeAgentResponse {}
+
+message UnregisterComputeAgentRequest {
+    string container_id = 1;
+}
+
+message UnregisterComputeAgentResponse {}
 
 enum RequestTypeInternal { 
     Setup = 0; 

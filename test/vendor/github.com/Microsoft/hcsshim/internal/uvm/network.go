@@ -2,11 +2,12 @@ package uvm
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 
+	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
+	"github.com/containerd/ttrpc"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/hcn"
@@ -17,6 +18,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -119,12 +121,25 @@ func GetNamespaceEndpoints(ctx context.Context, netNS string) ([]*hns.HNSEndpoin
 
 // NCProxyEnabled returns if there is a network configuration client.
 func (uvm *UtilityVM) NCProxyEnabled() bool {
-	return uvm.ncProxyClient != nil
+	return uvm.ncProxyClientAddress != ""
 }
 
-// NCProxyClient returns the network configuration proxy client.
-func (uvm *UtilityVM) NCProxyClient() ncproxyttrpc.NetworkConfigProxyService {
-	return uvm.ncProxyClient
+type ncproxyClient struct {
+	raw *ttrpc.Client
+	ncproxyttrpc.NetworkConfigProxyService
+}
+
+func (n *ncproxyClient) Close() error {
+	return n.raw.Close()
+}
+
+func (uvm *UtilityVM) GetNCProxyClient() (*ncproxyClient, error) {
+	conn, err := winio.DialPipe(uvm.ncProxyClientAddress, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to connect to ncproxy service")
+	}
+	raw := ttrpc.NewClient(conn, ttrpc.WithOnClose(func() { conn.Close() }))
+	return &ncproxyClient{raw, ncproxyttrpc.NewNetworkConfigProxyClient(raw)}, nil
 }
 
 // NetworkConfigType specifies the action to be performed during network configuration.
@@ -233,10 +248,11 @@ func NewExternalNetworkSetup(ctx context.Context, vm *UtilityVM, caAddr, contain
 }
 
 func (e *externalNetworkSetup) ConfigureNetworking(ctx context.Context, namespaceID string, configType NetworkConfigType) error {
-	client := e.vm.NCProxyClient()
-	if client == nil {
-		return fmt.Errorf("no ncproxy client for UVM %q", e.vm.ID())
+	client, err := e.vm.GetNCProxyClient()
+	if err != nil {
+		return errors.Wrapf(err, "no ncproxy client for UVM %q", e.vm.ID())
 	}
+	defer client.Close()
 
 	netReq := &ncproxyttrpc.ConfigureNetworkingInternalRequest{
 		ContainerID: e.containerID,
@@ -263,6 +279,13 @@ func (e *externalNetworkSetup) ConfigureNetworking(ctx context.Context, namespac
 	case NetworkRequestTearDown:
 		netReq.RequestType = ncproxyttrpc.RequestTypeInternal_Teardown
 		if _, err := client.ConfigureNetworking(ctx, netReq); err != nil {
+			return err
+		}
+		// unregister compute agent with ncproxy
+		unregisterReq := &ncproxyttrpc.UnregisterComputeAgentRequest{
+			ContainerID: e.containerID,
+		}
+		if _, err := client.UnregisterComputeAgent(ctx, unregisterReq); err != nil {
 			return err
 		}
 	default:
