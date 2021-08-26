@@ -9,8 +9,12 @@ package syscall
 import (
 	"runtime"
 	"sync"
+	"syscall"
 	"unicode/utf16"
 	"unsafe"
+
+	"github.com/Microsoft/hcsshim/internal/winapi"
+	"golang.org/x/sys/windows"
 )
 
 var ForkLock sync.RWMutex
@@ -138,29 +142,29 @@ func createEnvBlock(envv []string) *uint16 {
 	return &utf16.Encode([]rune(string(b)))[0]
 }
 
-func CloseOnExec(fd Handle) {
-	SetHandleInformation(Handle(fd), HANDLE_FLAG_INHERIT, 0)
+func CloseOnExec(fd windows.Handle) {
+	windows.SetHandleInformation(windows.Handle(fd), windows.HANDLE_FLAG_INHERIT, 0) // nolint: errcheck
 }
 
-func SetNonblock(fd Handle, nonblocking bool) (err error) {
+func SetNonblock(fd windows.Handle, nonblocking bool) (err error) {
 	return nil
 }
 
 // FullPath retrieves the full path of the specified file.
 func FullPath(name string) (path string, err error) {
-	p, err := UTF16PtrFromString(name)
+	p, err := windows.UTF16PtrFromString(name)
 	if err != nil {
 		return "", err
 	}
 	n := uint32(100)
 	for {
 		buf := make([]uint16, n)
-		n, err = GetFullPathName(p, uint32(len(buf)), &buf[0], nil)
+		n, err = windows.GetFullPathName(p, uint32(len(buf)), &buf[0], nil)
 		if err != nil {
 			return "", err
 		}
 		if n <= uint32(len(buf)) {
-			return UTF16ToString(buf[:n]), nil
+			return windows.UTF16ToString(buf[:n]), nil
 		}
 	}
 }
@@ -176,7 +180,7 @@ func normalizeDir(dir string) (name string, err error) {
 	}
 	if len(ndir) > 2 && isSlash(ndir[0]) && isSlash(ndir[1]) {
 		// dir cannot have \\server\share\path form
-		return "", EINVAL
+		return "", syscall.EINVAL
 	}
 	return ndir, nil
 }
@@ -190,7 +194,7 @@ func volToUpper(ch int) int {
 
 func joinExeDirAndFName(dir, p string) (name string, err error) {
 	if len(p) == 0 {
-		return "", EINVAL
+		return "", syscall.EINVAL
 	}
 	if len(p) > 2 && isSlash(p[0]) && isSlash(p[1]) {
 		// \\server\share\path form
@@ -199,7 +203,7 @@ func joinExeDirAndFName(dir, p string) (name string, err error) {
 	if len(p) > 1 && p[1] == ':' {
 		// has drive letter
 		if len(p) == 2 {
-			return "", EINVAL
+			return "", syscall.EINVAL
 		}
 		if isSlash(p[2]) {
 			return p, nil
@@ -239,12 +243,12 @@ type SysProcAttr struct {
 	HideWindow                 bool
 	CmdLine                    string // used if non-empty, else the windows command line is built by escaping the arguments passed to StartProcess
 	CreationFlags              uint32
-	Token                      Token               // if set, runs new process in the security context represented by the token
-	ProcessAttributes          *SecurityAttributes // if set, applies these security attributes as the descriptor for the new process
-	ThreadAttributes           *SecurityAttributes // if set, applies these security attributes as the descriptor for the main thread of the new process
-	NoInheritHandles           bool                // if set, each inheritable handle in the calling process is not inherited by the new process
-	AdditionalInheritedHandles []Handle            // a list of additional handles, already marked as inheritable, that will be inherited by the new process
-	ParentProcess              Handle              // if non-zero, the new process regards the process given by this handle as its parent process, and AdditionalInheritedHandles, if set, should exist in this parent process
+	Token                      windows.Token               // if set, runs new process in the security context represented by the token
+	ProcessAttributes          *windows.SecurityAttributes // if set, applies these security attributes as the descriptor for the new process
+	ThreadAttributes           *windows.SecurityAttributes // if set, applies these security attributes as the descriptor for the main thread of the new process
+	NoInheritHandles           bool                        // if set, each inheritable handle in the calling process is not inherited by the new process
+	AdditionalInheritedHandles []windows.Handle            // a list of additional handles, already marked as inheritable, that will be inherited by the new process
+	ParentProcess              windows.Handle              // if non-zero, the new process regards the process given by this handle as its parent process, and AdditionalInheritedHandles, if set, should exist in this parent process
 }
 
 var zeroProcAttr ProcAttr
@@ -252,7 +256,7 @@ var zeroSysProcAttr SysProcAttr
 
 func StartProcess(argv0 string, argv []string, attr *ProcAttr) (pid int, handle uintptr, err error) {
 	if len(argv0) == 0 {
-		return 0, 0, EWINDOWS
+		return 0, 0, syscall.EINVAL
 	}
 	if attr == nil {
 		attr = &zeroProcAttr
@@ -263,10 +267,10 @@ func StartProcess(argv0 string, argv []string, attr *ProcAttr) (pid int, handle 
 	}
 
 	if len(attr.Files) > 3 {
-		return 0, 0, EWINDOWS
+		return 0, 0, syscall.EINVAL
 	}
 	if len(attr.Files) < 3 {
-		return 0, 0, EINVAL
+		return 0, 0, syscall.EINVAL
 	}
 
 	if len(attr.Dir) != 0 {
@@ -282,7 +286,7 @@ func StartProcess(argv0 string, argv []string, attr *ProcAttr) (pid int, handle 
 			return 0, 0, err
 		}
 	}
-	argv0p, err := UTF16PtrFromString(argv0)
+	argv0p, err := windows.UTF16PtrFromString(argv0)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -299,7 +303,7 @@ func StartProcess(argv0 string, argv []string, attr *ProcAttr) (pid int, handle 
 
 	var argvp *uint16
 	if len(cmdline) != 0 {
-		argvp, err = UTF16PtrFromString(cmdline)
+		argvp, err = windows.UTF16PtrFromString(cmdline)
 		if err != nil {
 			return 0, 0, err
 		}
@@ -307,14 +311,13 @@ func StartProcess(argv0 string, argv []string, attr *ProcAttr) (pid int, handle 
 
 	var dirp *uint16
 	if len(attr.Dir) != 0 {
-		dirp, err = UTF16PtrFromString(attr.Dir)
+		dirp, err = windows.UTF16PtrFromString(attr.Dir)
 		if err != nil {
 			return 0, 0, err
 		}
 	}
 
-	var maj, min, build uint32
-	rtlGetNtVersionNumbers(&maj, &min, &build)
+	maj, min, _ := windows.RtlGetNtVersionNumbers()
 	isWin7 := maj < 6 || (maj == 6 && min <= 1)
 	// NT kernel handles are divisible by 4, with the bottom 3 bits left as
 	// a tag. The fully set tag correlates with the types of handles we're
@@ -322,45 +325,45 @@ func StartProcess(argv0 string, argv []string, attr *ProcAttr) (pid int, handle 
 	// special handle values, like -1, -2, and so forth, so kernelbase.dll
 	// checks to see that those bottom three bits are checked, but that top
 	// bit is not checked.
-	isLegacyWin7ConsoleHandle := func(handle Handle) bool { return isWin7 && handle&0x10000003 == 3 }
+	isLegacyWin7ConsoleHandle := func(handle windows.Handle) bool { return isWin7 && handle&0x10000003 == 3 }
 
-	p, _ := GetCurrentProcess()
+	p := windows.CurrentProcess()
 	parentProcess := p
 	if sys.ParentProcess != 0 {
 		parentProcess = sys.ParentProcess
 	}
-	fd := make([]Handle, len(attr.Files))
+	fd := make([]windows.Handle, len(attr.Files))
 	for i := range attr.Files {
 		if attr.Files[i] > 0 {
 			destinationProcessHandle := parentProcess
 
 			// On Windows 7, console handles aren't real handles, and can only be duplicated
 			// into the current process, not a parent one, which amounts to the same thing.
-			if parentProcess != p && isLegacyWin7ConsoleHandle(Handle(attr.Files[i])) {
+			if parentProcess != p && isLegacyWin7ConsoleHandle(windows.Handle(attr.Files[i])) {
 				destinationProcessHandle = p
 			}
 
-			err := DuplicateHandle(p, Handle(attr.Files[i]), destinationProcessHandle, &fd[i], 0, true, DUPLICATE_SAME_ACCESS)
+			err := windows.DuplicateHandle(p, windows.Handle(attr.Files[i]), destinationProcessHandle, &fd[i], 0, true, windows.DUPLICATE_SAME_ACCESS)
 			if err != nil {
 				return 0, 0, err
 			}
-			defer DuplicateHandle(parentProcess, fd[i], 0, nil, 0, false, DUPLICATE_CLOSE_SOURCE)
+			defer windows.DuplicateHandle(parentProcess, fd[i], 0, nil, 0, false, windows.DUPLICATE_CLOSE_SOURCE) // nolint: errcheck
 		}
 	}
-	si := new(_STARTUPINFOEXW)
-	si.ProcThreadAttributeList, err = newProcThreadAttributeList(2)
+	si := new(windows.StartupInfoEx)
+	si.ProcThreadAttributeList, err = windows.NewProcThreadAttributeList(2)
 	if err != nil {
 		return 0, 0, err
 	}
-	defer deleteProcThreadAttributeList(si.ProcThreadAttributeList)
+	defer si.ProcThreadAttributeList.Delete()
 	si.Cb = uint32(unsafe.Sizeof(*si))
-	si.Flags = STARTF_USESTDHANDLES
+	si.Flags = windows.STARTF_USESTDHANDLES
 	if sys.HideWindow {
-		si.Flags |= STARTF_USESHOWWINDOW
-		si.ShowWindow = SW_HIDE
+		si.Flags |= windows.STARTF_USESHOWWINDOW
+		si.ShowWindow = windows.SW_HIDE
 	}
 	if sys.ParentProcess != 0 {
-		err = updateProcThreadAttribute(si.ProcThreadAttributeList, 0, _PROC_THREAD_ATTRIBUTE_PARENT_PROCESS, unsafe.Pointer(&sys.ParentProcess), unsafe.Sizeof(sys.ParentProcess), nil, nil)
+		err = si.ProcThreadAttributeList.Update(windows.PROC_THREAD_ATTRIBUTE_PARENT_PROCESS, 0, unsafe.Pointer(&sys.ParentProcess), unsafe.Sizeof(sys.ParentProcess), nil, nil)
 		if err != nil {
 			return 0, 0, err
 		}
@@ -392,23 +395,23 @@ func StartProcess(argv0 string, argv []string, attr *ProcAttr) (pid int, handle 
 
 	// Do not accidentally inherit more than these handles.
 	if len(fd) > 0 {
-		err = updateProcThreadAttribute(si.ProcThreadAttributeList, 0, _PROC_THREAD_ATTRIBUTE_HANDLE_LIST, unsafe.Pointer(&fd[0]), uintptr(len(fd))*unsafe.Sizeof(fd[0]), nil, nil)
+		err = si.ProcThreadAttributeList.Update(windows.PROC_THREAD_ATTRIBUTE_HANDLE_LIST, 0, unsafe.Pointer(&fd[0]), uintptr(len(fd))*unsafe.Sizeof(fd[0]), nil, nil)
 		if err != nil {
 			return 0, 0, err
 		}
 	}
 
-	pi := new(ProcessInformation)
-	flags := sys.CreationFlags | CREATE_UNICODE_ENVIRONMENT | _EXTENDED_STARTUPINFO_PRESENT
+	pi := new(windows.ProcessInformation)
+	flags := sys.CreationFlags | windows.CREATE_UNICODE_ENVIRONMENT | windows.EXTENDED_STARTUPINFO_PRESENT
 	if sys.Token != 0 {
-		err = CreateProcessAsUser(sys.Token, argv0p, argvp, sys.ProcessAttributes, sys.ThreadAttributes, len(fd) > 0 && !sys.NoInheritHandles, flags, createEnvBlock(attr.Env), dirp, &si.StartupInfo, pi)
+		err = winapi.CreateProcessAsUser(sys.Token, argv0p, argvp, sys.ProcessAttributes, sys.ThreadAttributes, len(fd) > 0 && !sys.NoInheritHandles, flags, createEnvBlock(attr.Env), dirp, &si.StartupInfo, pi)
 	} else {
-		err = CreateProcess(argv0p, argvp, sys.ProcessAttributes, sys.ThreadAttributes, len(fd) > 0 && !sys.NoInheritHandles, flags, createEnvBlock(attr.Env), dirp, &si.StartupInfo, pi)
+		err = windows.CreateProcess(argv0p, argvp, sys.ProcessAttributes, sys.ThreadAttributes, len(fd) > 0 && !sys.NoInheritHandles, flags, createEnvBlock(attr.Env), dirp, &si.StartupInfo, pi)
 	}
 	if err != nil {
 		return 0, 0, err
 	}
-	defer CloseHandle(Handle(pi.Thread))
+	defer windows.CloseHandle(windows.Handle(pi.Thread)) // nolint: errcheck
 	runtime.KeepAlive(fd)
 	runtime.KeepAlive(sys)
 
@@ -416,5 +419,5 @@ func StartProcess(argv0 string, argv []string, attr *ProcAttr) (pid int, handle 
 }
 
 func Exec(argv0 string, argv []string, envv []string) (err error) {
-	return EWINDOWS
+	return syscall.EWINDOWS
 }

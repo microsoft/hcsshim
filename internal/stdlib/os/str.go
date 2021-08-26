@@ -6,14 +6,6 @@
 
 package os
 
-// itox converts val (an int) to a hexdecimal string.
-func itox(val int) string {
-	if val < 0 {
-		return "-" + uitox(uint(-val))
-	}
-	return uitox(uint(val))
-}
-
 const hex = "0123456789abcdef"
 
 // uitox converts val (a uint) to a hexdecimal string.

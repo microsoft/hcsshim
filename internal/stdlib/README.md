@@ -22,7 +22,8 @@ and the syscall package is locked down for the most part.
 3. Almost same story as 2, but in this case we'd like to support assigning a [pseudo console](https://docs.microsoft.com/en-us/windows/console/createpseudoconsole)
 to a process. There's no exposed way to pass in the pseudo console handle and there's no syscall package support for making one in the first place.
 
+
 The stdlib packages have been modified to use the x/sys/windows package where needed, removed some unneccesary functionality that we
 don't need, as well as added the additions described above.
 
-The fork is based off of go 1.17 with HEAD at a6ff433d6a927e8ad8eaa6828127233296d12ce5.
+The fork is from Go 1.17 with HEAD at a6ff433d6a927e8ad8eaa6828127233296d12ce5.

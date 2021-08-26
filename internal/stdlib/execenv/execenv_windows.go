@@ -8,11 +8,11 @@
 package execenv
 
 import (
-	"syscall"
 	"unicode/utf16"
 	"unsafe"
 
-	"internal/syscall/windows"
+	"github.com/Microsoft/hcsshim/internal/stdlib/syscall"
+	"golang.org/x/sys/windows"
 )
 
 // Default will return the default environment
@@ -25,14 +25,14 @@ import (
 // will be sourced from syscall.Environ().
 func Default(sys *syscall.SysProcAttr) (env []string, err error) {
 	if sys == nil || sys.Token == 0 {
-		return syscall.Environ(), nil
+		return windows.Environ(), nil
 	}
 	var block *uint16
-	err = windows.CreateEnvironmentBlock(&block, windows.Token(sys.Token), false)
+	err = windows.CreateEnvironmentBlock(&block, sys.Token, false)
 	if err != nil {
 		return nil, err
 	}
-	defer windows.DestroyEnvironmentBlock(block)
+	defer windows.DestroyEnvironmentBlock(block) // nolint: errcheck
 	blockp := uintptr(unsafe.Pointer(block))
 	for {
 

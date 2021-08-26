@@ -6,12 +6,13 @@ package os
 
 import (
 	"errors"
-	"internal/testlog"
+	"os"
 	"runtime"
-	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
+
+	"github.com/Microsoft/hcsshim/internal/stdlib/syscall"
+	"golang.org/x/sys/windows"
 )
 
 // ErrProcessDone indicates a Process has finished.
@@ -20,9 +21,8 @@ var ErrProcessDone = errors.New("os: process already finished")
 // Process stores the information about a process created by StartProcess.
 type Process struct {
 	Pid    int
-	handle uintptr      // handle is accessed atomically on Windows
-	isdone uint32       // process has been successfully waited on, non zero if true
-	sigMu  sync.RWMutex // avoid race between wait and signal
+	handle uintptr // handle is accessed atomically on Windows
+	isdone uint32  // process has been successfully waited on, non zero if true
 }
 
 func newProcess(pid int, handle uintptr) *Process {
@@ -57,7 +57,7 @@ type ProcAttr struct {
 	// On Unix systems, StartProcess will change these File values
 	// to blocking mode, which means that SetDeadline will stop working
 	// and calling Close will not interrupt a Read or Write.
-	Files []*File
+	Files []*os.File
 
 	// Operating system-specific process creation attributes.
 	// Note that setting this field means that your program
@@ -75,10 +75,10 @@ type Signal interface {
 }
 
 // Getpid returns the process id of the caller.
-func Getpid() int { return syscall.Getpid() }
+func Getpid() int { return windows.Getpid() }
 
 // Getppid returns the process id of the caller's parent.
-func Getppid() int { return syscall.Getppid() }
+func Getppid() int { return windows.Getppid() }
 
 // FindProcess looks for a running process by its pid.
 //
@@ -105,7 +105,6 @@ func FindProcess(pid int) (*Process, error) {
 //
 // If there is an error, it will be of type *PathError.
 func StartProcess(name string, argv []string, attr *ProcAttr) (*Process, error) {
-	testlog.Open(name)
 	return startProcess(name, argv, attr)
 }
 

@@ -8,10 +8,14 @@
 package os
 
 import (
-	"internal/itoa"
-	"internal/syscall/execenv"
+	"os"
 	"runtime"
 	"syscall"
+
+	"github.com/Microsoft/hcsshim/internal/stdlib/execenv"
+	syscallfork "github.com/Microsoft/hcsshim/internal/stdlib/syscall"
+
+	"github.com/Microsoft/hcsshim/internal/stdlib/itoa"
 )
 
 // The only signal values guaranteed to be present in the os package on all
@@ -29,14 +33,14 @@ func startProcess(name string, argv []string, attr *ProcAttr) (p *Process, err e
 	// UID/GID), double-check existence of the directory we want
 	// to chdir into. We can make the error clearer this way.
 	if attr != nil && attr.Sys == nil && attr.Dir != "" {
-		if _, err := Stat(attr.Dir); err != nil {
-			pe := err.(*PathError)
+		if _, err := os.Stat(attr.Dir); err != nil {
+			pe := err.(*os.PathError)
 			pe.Op = "chdir"
 			return nil, pe
 		}
 	}
 
-	sysattr := &syscall.ProcAttr{
+	sysattr := &syscallfork.ProcAttr{
 		Dir: attr.Dir,
 		Env: attr.Env,
 		Sys: attr.Sys,
@@ -52,13 +56,13 @@ func startProcess(name string, argv []string, attr *ProcAttr) (p *Process, err e
 		sysattr.Files = append(sysattr.Files, f.Fd())
 	}
 
-	pid, h, e := syscall.StartProcess(name, argv, sysattr)
+	pid, h, e := syscallfork.StartProcess(name, argv, sysattr)
 
 	// Make sure we don't run the finalizers of attr.Files.
 	runtime.KeepAlive(attr)
 
 	if e != nil {
-		return nil, &PathError{Op: "fork/exec", Path: name, Err: e}
+		return nil, &os.PathError{Op: "fork/exec", Path: name, Err: e}
 	}
 
 	return newProcess(pid, h), nil

@@ -24,7 +24,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"internal/syscall/execenv
 	"io"
 	"os"
 	"path/filepath"
@@ -32,7 +31,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
+
+	"github.com/Microsoft/hcsshim/internal/stdlib/execenv"
+	"github.com/Microsoft/hcsshim/internal/stdlib/syscall"
+
+	osfork "github.com/Microsoft/hcsshim/internal/stdlib/os"
 )
 
 // Error is returned by LookPath when it fails to classify a file as an
@@ -127,11 +130,11 @@ type Cmd struct {
 	SysProcAttr *syscall.SysProcAttr
 
 	// Process is the underlying process, once started.
-	Process *os.Process
+	Process *osfork.Process
 
 	// ProcessState contains information about an exited process,
 	// available after a call to Wait or Run.
-	ProcessState *os.ProcessState
+	ProcessState *osfork.ProcessState
 
 	ctx             context.Context // nil means none
 	lookPathErr     error           // LookPath error, if any.
@@ -218,7 +221,7 @@ func (c *Cmd) String() string {
 // two interfaces with non-comparable underlying types.
 func interfaceEqual(a, b interface{}) bool {
 	defer func() {
-		recover()
+		recover() // nolint: errcheck
 	}()
 	return a == b
 }
@@ -419,7 +422,7 @@ func (c *Cmd) Start() error {
 		return err
 	}
 
-	c.Process, err = os.StartProcess(c.Path, c.argv(), &os.ProcAttr{
+	c.Process, err = osfork.StartProcess(c.Path, c.argv(), &osfork.ProcAttr{
 		Dir:   c.Dir,
 		Files: c.childFiles,
 		Env:   addCriticalEnv(dedupEnv(envv)),
@@ -448,7 +451,7 @@ func (c *Cmd) Start() error {
 		go func() {
 			select {
 			case <-c.ctx.Done():
-				c.Process.Kill()
+				c.Process.Kill() // nolint: errcheck
 			case <-c.waitDone:
 			}
 		}()
@@ -459,7 +462,7 @@ func (c *Cmd) Start() error {
 
 // An ExitError reports an unsuccessful exit by a command.
 type ExitError struct {
-	*os.ProcessState
+	*osfork.ProcessState
 
 	// Stderr holds a subset of the standard error output from the
 	// Cmd.Output method if standard error was not otherwise being
