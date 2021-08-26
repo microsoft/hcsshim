@@ -21,8 +21,7 @@ go run main.go -i rust -t 1.52.1 -d local
 
 ### Example output
 
-The above TOML configuration gets translated into the appropriate policy that is
-represented in JSON.
+The above command gets translated into the appropriate rootfs hashes for each layer.
 
 ```bash
 [0]: fe84c9d5bfddd07a2624d00333cf13c1a9c941f3a261f13ead44fc6a93bc0e7a
