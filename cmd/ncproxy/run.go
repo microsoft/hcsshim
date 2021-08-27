@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -20,6 +19,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/urfave/cli"
 	"go.opencensus.io/plugin/ocgrpc"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
@@ -37,14 +37,6 @@ var (
 	nodeNetSvcClient *nodeNetSvcConn
 )
 
-var (
-	configPath    = flag.String("config", "", "Path to JSON configuration file.")
-	logDir        = flag.String("log-directory", "", "Directory to write ncproxy logs to. This is just panic logs.")
-	registerSvc   = flag.Bool("register-service", false, "Register ncproxy as a Windows service.")
-	unregisterSvc = flag.Bool("unregister-service", false, "Unregister ncproxy as a Windows service.")
-	runSvc        = flag.Bool("run-service", false, "Run ncproxy as a Windows service.")
-)
-
 func etwCallback(sourceID guid.GUID, state etw.ProviderState, level etw.Level, matchAnyKeyword uint64, matchAllKeyword uint64, filterData uintptr) {
 	if state == etw.ProviderStateCaptureState {
 		stacks := debug.DumpStacks()
@@ -52,9 +44,55 @@ func etwCallback(sourceID guid.GUID, state etw.ProviderState, level etw.Level, m
 	}
 }
 
+func app() *cli.App {
+	app := cli.NewApp()
+	app.Name = "ncproxy"
+	app.Usage = "Network configuration proxy"
+	app.Description = `
+ncproxy is a network daemon designed to facilitate container network setup on a machine. It's
+designed to communicate with several agents and simply acts as the proxy between the 'compute agent'
+and 'node network' services.`
+	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:  "config,c",
+			Usage: "Path to the configuration file",
+		},
+		cli.StringFlag{
+			Name:  "log-directory",
+			Usage: "Directory to write ncproxy logs to. This is just panic logs.",
+		},
+		cli.BoolFlag{
+			Name:  "register-service",
+			Usage: "Register ncproxy as a Windows service.",
+		},
+		cli.BoolFlag{
+			Name:  "unregister-service",
+			Usage: "Unregister ncproxy as a Windows service.",
+		},
+		cli.BoolFlag{
+			Name:   "run-service",
+			Hidden: true,
+			Usage:  "Run ncproxy as a Windows service.",
+		},
+	}
+	app.Commands = []cli.Command{
+		configCommand,
+	}
+	app.Action = func(ctx *cli.Context) error {
+		return run(ctx)
+	}
+	return app
+}
+
 // Run ncproxy
-func run() error {
-	flag.Parse()
+func run(clicontext *cli.Context) error {
+	var (
+		configPath    = clicontext.GlobalString("config")
+		logDir        = clicontext.GlobalString("log-directory")
+		registerSvc   = clicontext.GlobalBool("register-service")
+		unregisterSvc = clicontext.GlobalBool("unregister-service")
+		runSvc        = clicontext.GlobalBool("run-service")
+	)
 
 	// Provider ID: cf9f01fe-87b3-568d-ecef-9f54b7c5ff70
 	// Hook isn't closed explicitly, as it will exist until process exit.
@@ -73,16 +111,16 @@ func run() error {
 	trace.RegisterExporter(&oc.LogrusExporter{})
 
 	// If no logging directory passed in use where ncproxy is located.
-	if *logDir == "" {
+	if logDir == "" {
 		binLocation, err := os.Executable()
 		if err != nil {
 			return err
 		}
-		*logDir = filepath.Dir(binLocation)
+		logDir = filepath.Dir(binLocation)
 	} else {
 		// If a log dir was provided, make sure it exists.
-		if _, err := os.Stat(*logDir); err != nil {
-			if err := os.MkdirAll(*logDir, 0); err != nil {
+		if _, err := os.Stat(logDir); err != nil {
+			if err := os.MkdirAll(logDir, 0); err != nil {
 				return errors.Wrap(err, "failed to make log directory")
 			}
 		}
@@ -90,22 +128,22 @@ func run() error {
 
 	// For both unregistering and registering the service we need to exit out (even on success). -register-service will register
 	// ncproxy's commandline to launch with the -run-service flag set.
-	if *unregisterSvc {
-		if *registerSvc {
+	if unregisterSvc {
+		if registerSvc {
 			return errors.New("-register-service and -unregister-service cannot be used together")
 		}
 		return unregisterService()
 	}
 
-	if *registerSvc {
+	if registerSvc {
 		return registerService()
 	}
 
 	var serviceDone = make(chan struct{}, 1)
 
 	// Launch as a Windows Service if necessary
-	if *runSvc {
-		panicLog := filepath.Join(*logDir, "ncproxy-panic.log")
+	if runSvc {
+		panicLog := filepath.Join(logDir, "ncproxy-panic.log")
 		if err := initPanicFile(panicLog); err != nil {
 			return err
 		}
@@ -116,7 +154,7 @@ func run() error {
 	}
 
 	ctx := context.Background()
-	conf, err := loadConfig(*configPath)
+	conf, err := loadConfig(configPath)
 	if err != nil {
 		return errors.Wrap(err, "failed getting configuration file")
 	}
