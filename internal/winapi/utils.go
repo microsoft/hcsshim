@@ -29,7 +29,7 @@ type UnicodeString struct {
 }
 
 // NTSTRSAFE_UNICODE_STRING_MAX_CCH is a constant defined in ntstrsafe.h. This value
-// denotes the maximum number of bytes a path can have.
+// denotes the maximum number of wide chars a path can have.
 const NTSTRSAFE_UNICODE_STRING_MAX_CCH = 32767
 
 //String converts a UnicodeString to a golang string
@@ -42,13 +42,13 @@ func (uni UnicodeString) String() string {
 // NewUnicodeString allocates a new UnicodeString and copies `s` into
 // the buffer of the new UnicodeString.
 func NewUnicodeString(s string) (*UnicodeString, error) {
-	if len(s) > NTSTRSAFE_UNICODE_STRING_MAX_CCH {
-		return nil, syscall.ENAMETOOLONG
-	}
-
 	buf, err := windows.UTF16FromString(s)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(buf) > NTSTRSAFE_UNICODE_STRING_MAX_CCH {
+		return nil, syscall.ENAMETOOLONG
 	}
 
 	uni := &UnicodeString{
