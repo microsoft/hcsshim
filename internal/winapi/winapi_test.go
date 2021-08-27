@@ -19,10 +19,11 @@ func wideStringsEqual(target, actual []uint16) bool {
 }
 
 func TestNewUnicodeString(t *testing.T) {
-	targetStrings := []string{"abcde", "abcd\n", "C:\\Test", "\\&_Test"}
+	// include UTF8 chars which take more than 8 bits to encode
+	targetStrings := []string{"abcde", "abcd\n", "C:\\Test", "\\&_Test", "Äb", "\u8483\u119A2\u0041"}
 	for _, target := range targetStrings {
-		targetLength := uint16(len(target) * 2)
 		targetWideString := utf16.Encode(([]rune)(target))
+		targetLength := uint16(len(targetWideString) * 2)
 
 		uni, err := NewUnicodeString(target)
 		if err != nil {
@@ -36,7 +37,7 @@ func TestNewUnicodeString(t *testing.T) {
 			t.Fatalf("Expected new Unicode String maximum length to be %d for target string %s, got %d instead", targetLength, target, uni.MaximumLength)
 		}
 
-		uniBufferStringAsSlice := Uint16BufferToSlice(uni.Buffer, len(target))
+		uniBufferStringAsSlice := Uint16BufferToSlice(uni.Buffer, int(targetLength/2))
 
 		if !wideStringsEqual(targetWideString, uniBufferStringAsSlice) {
 			t.Fatalf("Expected wide string %v, got %v instead", targetWideString, uniBufferStringAsSlice)
@@ -45,7 +46,7 @@ func TestNewUnicodeString(t *testing.T) {
 }
 
 func TestUnicodeToString(t *testing.T) {
-	targetStrings := []string{"abcde", "abcd\n", "C:\\Test", "\\&_Test"}
+	targetStrings := []string{"abcde", "abcd\n", "C:\\Test", "\\&_Test", "Äb", "\u8483\u119A2\u0041"}
 	for _, target := range targetStrings {
 		uni, err := NewUnicodeString(target)
 		if err != nil {
