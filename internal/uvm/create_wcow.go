@@ -316,7 +316,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		if uvm.namespaces == nil {
 			uvm.namespaces = make(map[string]*namespaceInfo)
 		}
-		uvm.namespaces[DEFAULT_CLONE_NETWORK_NAMESPACE_ID] = &namespaceInfo{
+		uvm.namespaces[DefaultCloneNetworkNamespaceID] = &namespaceInfo{
 			nics: make(map[string]*nicInfo),
 		}
 		uvm.IsClone = true

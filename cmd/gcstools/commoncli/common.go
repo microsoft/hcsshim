@@ -20,7 +20,7 @@ func SetFlagsForLogging() []*string {
 // SetupLogging creates the logger from the command line parameters.
 func SetupLogging(args ...*string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("Invalid log params")
+		return fmt.Errorf("invalid log params")
 	}
 	level, err := logrus.ParseLevel(*args[1])
 	if err != nil {

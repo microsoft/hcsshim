@@ -269,7 +269,7 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		// Use the reserved network namespace for containers created inside
 		// cloned or template UVMs.
 		if coi.HostingSystem != nil && (coi.HostingSystem.IsTemplate || coi.HostingSystem.IsClone) {
-			v2Container.Networking.Namespace = uvm.DEFAULT_CLONE_NETWORK_NAMESPACE_ID
+			v2Container.Networking.Namespace = uvm.DefaultCloneNetworkNamespaceID
 		} else {
 			v2Container.Networking.Namespace = coi.actualNetworkNamespace
 		}

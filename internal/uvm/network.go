@@ -43,7 +43,7 @@ var (
 func (uvm *UtilityVM) SetupNetworkNamespace(ctx context.Context, nsid string) error {
 	nsidInsideUVM := nsid
 	if uvm.IsTemplate || uvm.IsClone {
-		nsidInsideUVM = DEFAULT_CLONE_NETWORK_NAMESPACE_ID
+		nsidInsideUVM = DefaultCloneNetworkNamespaceID
 	}
 
 	// Query endpoints with actual nsid

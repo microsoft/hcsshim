@@ -122,7 +122,7 @@ func defaultQuery() HostComputeQuery {
 
 // PlatformDoesNotSupportError happens when users are attempting to use a newer shim on an older OS
 func platformDoesNotSupportError(featureName string) error {
-	return fmt.Errorf("Platform does not support feature %s", featureName)
+	return fmt.Errorf("platform does not support feature %s", featureName)
 }
 
 // V2ApiSupported returns an error if the HCN version does not support the V2 Apis.

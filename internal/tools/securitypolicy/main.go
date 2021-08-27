@@ -19,9 +19,9 @@ import (
 
 var (
 	configFile = flag.String("c", "", "config")
-	outputJson = flag.Bool("j", false, "json")
-	username    = flag.String("u", "", "username")
-	password    = flag.String("p", "", "password")
+	outputJSON = flag.Bool("j", false, "json")
+	username   = flag.String("u", "", "username")
+	password   = flag.String("p", "", "password")
 )
 
 func main() {
@@ -63,7 +63,7 @@ func main() {
 		if err != nil {
 			return err
 		}
-		if *outputJson {
+		if *outputJSON {
 			fmt.Printf("%s\n", j)
 		}
 		b := base64.StdEncoding.EncodeToString(j)
@@ -124,7 +124,7 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 		}
 		ref, err := name.ParseReference(image.Name)
 		if err != nil {
-			return p, fmt.Errorf("'%s' isn't a valid image name\n", image.Name)
+			return p, fmt.Errorf("'%s' isn't a valid image name", image.Name)
 		}
 		img, err := remote.Image(ref, imageOptions...)
 		if err != nil {
@@ -168,8 +168,8 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 				return p, err
 			}
 			hash := dmverity.RootHash(tree)
-			hash_string := fmt.Sprintf("%x", hash)
-			container.Layers = append(container.Layers, hash_string)
+			hashString := fmt.Sprintf("%x", hash)
+			container.Layers = append(container.Layers, hashString)
 		}
 
 		p.Containers = append(p.Containers, container)
