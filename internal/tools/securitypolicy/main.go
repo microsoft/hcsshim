@@ -19,7 +19,7 @@ import (
 
 var (
 	configFile = flag.String("c", "", "config")
-	outputJson = flag.Bool("j", false, "json")
+	outputJSON = flag.Bool("j", false, "json")
 	username   = flag.String("u", "", "username")
 	password   = flag.String("p", "", "password")
 )
@@ -63,7 +63,7 @@ func main() {
 		if err != nil {
 			return err
 		}
-		if *outputJson {
+		if *outputJSON {
 			fmt.Printf("%s\n", j)
 		}
 		b := base64.StdEncoding.EncodeToString(j)
@@ -168,8 +168,8 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 				return p, err
 			}
 			hash := dmverity.RootHash(tree)
-			hash_string := fmt.Sprintf("%x", hash)
-			container.Layers = append(container.Layers, hash_string)
+			hashString := fmt.Sprintf("%x", hash)
+			container.Layers = append(container.Layers, hashString)
 		}
 
 		p.Containers = append(p.Containers, container)

@@ -35,7 +35,7 @@ func (uvm *UtilityVM) CombineLayersWCOW(ctx context.Context, layerPaths []hcssch
 //
 // NOTE: `layerPaths`, `scrathPath`, and `rootfsPath` are paths from within the
 // UVM.
-func (uvm *UtilityVM) CombineLayersLCOW(ctx context.Context, containerId string, layerPaths []string, scratchPath, rootfsPath string) error {
+func (uvm *UtilityVM) CombineLayersLCOW(ctx context.Context, containerID string, layerPaths []string, scratchPath, rootfsPath string) error {
 	if uvm.operatingSystem != "linux" {
 		return errNotSupported
 	}
@@ -49,7 +49,7 @@ func (uvm *UtilityVM) CombineLayersLCOW(ctx context.Context, containerId string,
 			ResourceType: guestrequest.ResourceTypeCombinedLayers,
 			RequestType:  requesttype.Add,
 			Settings: guestrequest.LCOWCombinedLayers{
-				ContainerID:       containerId,
+				ContainerID:       containerID,
 				ContainerRootPath: rootfsPath,
 				Layers:            layers,
 				ScratchPath:       scratchPath,

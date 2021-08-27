@@ -21,8 +21,8 @@ func getSwitchID(endpointID, portID string) (string, error) {
 
 	type ExtraInfo struct {
 		Allocators []struct {
-			SwitchId         string
-			EndpointPortGuid string
+			SwitchID         string `json:"SwitchId"`
+			EndpointPortGUID string `json:"EndpointPortGuid"`
 		}
 	}
 
@@ -40,8 +40,8 @@ func getSwitchID(endpointID, portID string) (string, error) {
 	// that actually contains a switch ID and that has the matching port GUID we made earlier.
 	var switchID string
 	for _, allocator := range exi.Allocators {
-		if allocator.SwitchId != "" && strings.ToLower(allocator.EndpointPortGuid) == portID {
-			switchID = allocator.SwitchId
+		if allocator.SwitchID != "" && strings.ToLower(allocator.EndpointPortGUID) == portID {
+			switchID = allocator.SwitchID
 			break
 		}
 	}

@@ -12,7 +12,7 @@ import (
 const (
 	hcsComputeSystemSaveType = "AsTemplate"
 	// default namespace ID used for all template and clone VMs.
-	DEFAULT_CLONE_NETWORK_NAMESPACE_ID = "89EB8A86-E253-41FD-9800-E6D88EB2E18A"
+	DefaultCloneNetworkNamespaceID = "89EB8A86-E253-41FD-9800-E6D88EB2E18A"
 )
 
 // Cloneable is a generic interface for cloning a specific resource. Not all resources can
