@@ -14,9 +14,9 @@ require (
 	github.com/opencontainers/runtime-tools v0.0.0-20181011054405-1d69bd0f9c39
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.7.0
-	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
-	golang.org/x/sys v0.0.0-20210426230700-d19ff857e887
-	google.golang.org/grpc v1.33.2
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	golang.org/x/sys v0.0.0-20210510120138-977fb7262007
+	google.golang.org/grpc v1.40.0
 	k8s.io/cri-api v0.20.6
 )
 

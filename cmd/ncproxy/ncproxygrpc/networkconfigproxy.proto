@@ -47,6 +47,7 @@ message CreateNetworkRequest {
     enum NetworkMode
     {
         Transparent = 0;
+        NAT = 1;
     }
 
     enum IpamType
