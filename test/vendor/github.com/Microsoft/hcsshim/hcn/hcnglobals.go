@@ -111,7 +111,7 @@ func hnsCall(method, path, request string, returnResponse interface{}) error {
 
 	err := _hnsCall(method, path, request, &responseBuffer)
 	if err != nil {
-		return hcserror.New(err, "hnsCall ", "")
+		return hcserror.New(err, "hnsCall", "")
 	}
 	response := interop.ConvertAndFreeCoTaskMemString(responseBuffer)
 
