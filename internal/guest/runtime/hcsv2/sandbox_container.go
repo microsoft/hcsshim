@@ -47,6 +47,11 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 	if err := os.MkdirAll(rootDir, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create sandbox root directory %q", rootDir)
 	}
+	defer func() {
+		if err != nil {
+			_ = os.RemoveAll(rootDir)
+		}
+	}()
 
 	// Write the hostname
 	hostname := spec.Hostname

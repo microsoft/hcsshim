@@ -128,11 +128,16 @@ func (h *Host) GetContainer(id string) (*Container, error) {
 	return h.getContainerLocked(id)
 }
 
-func setupSandboxMountsPath(id string) error {
+func setupSandboxMountsPath(id string) (err error) {
 	mountPath := getSandboxMountsDir(id)
 	if err := os.MkdirAll(mountPath, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create sandboxMounts dir in sandbox %v", id)
 	}
+	defer func() {
+		if err != nil {
+			_ = os.RemoveAll(mountPath)
+		}
+	}()
 
 	return storage.MountRShared(mountPath)
 }
@@ -158,38 +163,44 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 			// Capture namespaceID if any because setupSandboxContainerSpec clears the Windows section.
 			namespaceID = getNetworkNamespaceID(settings.OCISpecification)
 			err = setupSandboxContainerSpec(ctx, id, settings.OCISpecification)
+			if err != nil {
+				return nil, err
+			}
 			defer func() {
 				if err != nil {
-					defer os.RemoveAll(getSandboxRootDir(id))
+					_ = os.RemoveAll(getSandboxRootDir(id))
 				}
 			}()
-			err = setupSandboxMountsPath(id)
+			if err = setupSandboxMountsPath(id); err != nil {
+				return nil, err
+			}
 		case "container":
 			sid, ok := settings.OCISpecification.Annotations["io.kubernetes.cri.sandbox-id"]
 			if !ok || sid == "" {
 				return nil, errors.Errorf("unsupported 'io.kubernetes.cri.sandbox-id': '%s'", sid)
 			}
-			err = setupWorkloadContainerSpec(ctx, sid, id, settings.OCISpecification)
+			if err := setupWorkloadContainerSpec(ctx, sid, id, settings.OCISpecification); err != nil {
+				return nil, err
+			}
 			defer func() {
 				if err != nil {
-					defer os.RemoveAll(getWorkloadRootDir(id))
+					_ = os.RemoveAll(getWorkloadRootDir(id))
 				}
 			}()
 		default:
-			err = errors.Errorf("unsupported 'io.kubernetes.cri.container-type': '%s'", criType)
+			return nil, errors.Errorf("unsupported 'io.kubernetes.cri.container-type': '%s'", criType)
 		}
 	} else {
 		// Capture namespaceID if any because setupStandaloneContainerSpec clears the Windows section.
 		namespaceID = getNetworkNamespaceID(settings.OCISpecification)
-		err = setupStandaloneContainerSpec(ctx, id, settings.OCISpecification)
+		if err := setupStandaloneContainerSpec(ctx, id, settings.OCISpecification); err != nil {
+			return nil, err
+		}
 		defer func() {
 			if err != nil {
-				os.RemoveAll(getStandaloneRootDir(id))
+				_ = os.RemoveAll(getStandaloneRootDir(id))
 			}
 		}()
-	}
-	if err != nil {
-		return nil, err
 	}
 
 	// Create the BundlePath
