@@ -507,7 +507,7 @@ func (sm *SCSIMount) GobDecode(data []byte) error {
 		return fmt.Errorf(errMsgFmt, err)
 	}
 	if sm.serialVersionID != scsiCurrentSerialVersionID {
-		return fmt.Errorf("Serialized version of SCSIMount: %d doesn't match with the current version: %d", sm.serialVersionID, scsiCurrentSerialVersionID)
+		return fmt.Errorf("serialized version of SCSIMount: %d doesn't match with the current version: %d", sm.serialVersionID, scsiCurrentSerialVersionID)
 	}
 	if err := decoder.Decode(&sm.HostPath); err != nil {
 		return fmt.Errorf(errMsgFmt, err)

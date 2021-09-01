@@ -113,7 +113,7 @@ func Test_EnforceOverlayMountPolicy_No_Matches(t *testing.T) {
 		}
 
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
-		containerID := generateContainerId(r)
+		containerID := generateContainerID(r)
 		container := selectContainerFromPolicy(p, r)
 
 		layerPaths, err := createInvalidOverlayForContainer(policy, container, r)
@@ -143,7 +143,7 @@ func Test_EnforceOverlayMountPolicy_Matches(t *testing.T) {
 		}
 
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
-		containerID := generateContainerId(r)
+		containerID := generateContainerID(r)
 		container := selectContainerFromPolicy(p, r)
 
 		layerPaths, err := createValidOverlayForContainer(policy, container, r)
@@ -172,7 +172,7 @@ func Test_EnforceOverlayMountPolicy_Overlay_Single_Container_Twice(t *testing.T)
 		t.Fatalf("expected nil error got: %v", err)
 	}
 
-	containerID := generateContainerId(r)
+	containerID := generateContainerID(r)
 	container := selectContainerFromPolicy(p, r)
 
 	layerPaths, err := createValidOverlayForContainer(policy, container, r)
@@ -230,7 +230,7 @@ func Test_EnforceOverlayMountPolicy_Multiple_Instances_Same_Container(t *testing
 			idUnique := false
 			var id string
 			for idUnique == false {
-				id = generateContainerId(r)
+				id = generateContainerID(r)
 				_, found := idsUsed[id]
 				idUnique = !found
 				idsUsed[id] = true
@@ -261,8 +261,8 @@ func Test_EnforceOverlayMountPolicy_Overlay_Single_Container_Twice_With_Differen
 	var containerIDOne, containerIDTwo string
 
 	for containerIDOne == containerIDTwo {
-		containerIDOne = generateContainerId(r)
-		containerIDTwo = generateContainerId(r)
+		containerIDOne = generateContainerID(r)
+		containerIDTwo = generateContainerID(r)
 	}
 	container := selectContainerFromPolicy(p, r)
 
@@ -290,7 +290,7 @@ func Test_EnforceCommandPolicy_Matches(t *testing.T) {
 		}
 
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
-		containerID := generateContainerId(r)
+		containerID := generateContainerID(r)
 		container := selectContainerFromPolicy(p, r)
 
 		layerPaths, err := createValidOverlayForContainer(policy, container, r)
@@ -322,7 +322,7 @@ func Test_EnforceCommandPolicy_NoMatches(t *testing.T) {
 		}
 
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
-		containerID := generateContainerId(r)
+		containerID := generateContainerID(r)
 		container := selectContainerFromPolicy(p, r)
 
 		layerPaths, err := createValidOverlayForContainer(policy, container, r)
@@ -372,14 +372,14 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 			return false
 		}
 
-		testContainerOneId := ""
-		testContainerTwoId := ""
+		testcontainerOneID := ""
+		testcontainerTwoID := ""
 		indexForContainerOne := -1
 		indexForContainerTwo := -1
 
 		// mount and overlay all our containers
 		for index, container := range p.Containers {
-			containerID := generateContainerId(r)
+			containerID := generateContainerID(r)
 
 			layerPaths, err := createValidOverlayForContainer(policy, container, r)
 			if err != nil {
@@ -392,11 +392,11 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 			}
 
 			if cmp.Equal(container, testContainerOne) {
-				testContainerOneId = containerID
+				testcontainerOneID = containerID
 				indexForContainerOne = index
 			}
 			if cmp.Equal(container, testContainerTwo) {
-				testContainerTwoId = containerID
+				testcontainerTwoID = containerID
 				indexForContainerTwo = index
 			}
 		}
@@ -407,7 +407,7 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 			return false
 		}
 		for _, id := range containerOneMapping {
-			if (id != testContainerOneId) && (id != testContainerTwoId) {
+			if (id != testcontainerOneID) && (id != testcontainerTwoID) {
 				return false
 			}
 		}
@@ -417,14 +417,14 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 			return false
 		}
 		for _, id := range containerTwoMapping {
-			if (id != testContainerOneId) && (id != testContainerTwoId) {
+			if (id != testcontainerOneID) && (id != testcontainerTwoID) {
 				return false
 			}
 		}
 
 		// enforce command policy for containerOne
 		// this will narrow our list of possible ids down
-		err = policy.EnforceCommandPolicy(testContainerOneId, testContainerOne.Command)
+		err = policy.EnforceCommandPolicy(testcontainerOneID, testContainerOne.Command)
 		if err != nil {
 			return false
 		}
@@ -436,7 +436,7 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 			return false
 		}
 		for _, id := range updatedMapping {
-			if id != testContainerTwoId {
+			if id != testcontainerTwoID {
 				return false
 			}
 		}
@@ -517,7 +517,7 @@ func selectRootHashFromPolicy(policy *SecurityPolicy, r *rand.Rand) string {
 	return container.Layers[r.Intn(numberOfLayersInContainer)]
 }
 
-func generateContainerId(r *rand.Rand) string {
+func generateContainerID(r *rand.Rand) string {
 	id := atLeastOneAtMost(r, maxGeneratedContainerID)
 	return strconv.FormatInt(int64(id), 10)
 }

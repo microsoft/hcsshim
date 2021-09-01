@@ -126,7 +126,7 @@ func (policyState *StandardSecurityPolicyEnforcer) EnforcePmemMountPolicy(target
 	}
 
 	if deviceHash == "" {
-		return errors.New("device is missing verity root hash.")
+		return errors.New("device is missing verity root hash")
 	}
 
 	found := false
