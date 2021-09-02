@@ -893,3 +893,56 @@ func Test_CreateContainer_HugePageMount_LCOW(t *testing.T) {
 		t.Fatalf("output is supposed to contain pagesize=2M, output: %s", output)
 	}
 }
+
+func Test_RunContainer_ExecUser_LCOW(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowCustomUser})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+
+	podID := runPodSandbox(t, client, ctx, sandboxRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	cmd := []string{"sh", "-c", "while true; do sleep 1; done"}
+	request := &runtime.CreateContainerRequest{
+		PodSandboxId: podID,
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowCustomUser,
+			},
+			Command: cmd,
+		},
+		SandboxConfig: sandboxRequest.Config,
+	}
+
+	containerID := createContainer(t, client, ctx, request)
+	defer removeContainer(t, client, ctx, containerID)
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID)
+
+	// The `imageLcowCustomUser` image has a user created in the image named test that is set to run the init process as. This tests that
+	// any execed processes will honor the user set for the container also.
+	cmd = []string{"whoami"}
+	containerExecReq := &runtime.ExecSyncRequest{
+		ContainerId: containerID,
+		Cmd:         cmd,
+		Timeout:     20,
+	}
+	r := execSync(t, client, ctx, containerExecReq)
+	if r.ExitCode != 0 {
+		t.Fatalf("failed with exit code %d: %s", r.ExitCode, string(r.Stderr))
+	}
+
+	if !strings.Contains(string(r.Stdout), "test") {
+		t.Fatalf("expected user for exec to be 'test', got %q", string(r.Stdout))
+	}
+}

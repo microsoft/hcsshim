@@ -66,6 +66,10 @@ func (c *Container) ExecProcess(ctx context.Context, process *oci.Process, conSe
 		return -1, err
 	}
 
+	// Add in anything from the containers OCI spec that might not be set on the exec spec due to the nature of LCOW. There's a couple fields that
+	// we edit on the OCI spec in the guest itself so they won't be present on the process spec for the exec. The user for the container is one example.
+	adjustExecSpec(c.spec.Process, process)
+
 	p, err := c.container.ExecProcess(process, stdioSet)
 	if err != nil {
 		stdioSet.Close()
@@ -180,4 +184,13 @@ func (c *Container) GetStats(ctx context.Context) (*v1.Metrics, error) {
 
 func (c *Container) modifyContainerConstraints(ctx context.Context, rt prot.ModifyRequestType, cc *prot.ContainerConstraintsV2) (err error) {
 	return c.Update(ctx, cc.Linux)
+}
+
+// adjustExecSpec adjusts an OCI runtime specs process field provided for an execed process to contain some of the settings set on the containers spec.
+// Some of the OCI spec settings are configured in the guest as there's not enough information available on the host to set them, so the spec set for the
+// exec may be missing some things that were present in the final version of the containers spec. This includes things such as the containers user configured
+// for the init process as we can't verify that the user exists in the container image on the host. A consequence of the user example is any exec will run as root
+// instead of the user configured for the container which can be problematic.
+func adjustExecSpec(containerSpec *oci.Process, execSpec *oci.Process) {
+	execSpec.User = containerSpec.User
 }
