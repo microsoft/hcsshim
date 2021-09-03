@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"regexp"
 
 	"github.com/BurntSushi/toml"
 	"github.com/Microsoft/hcsshim/ext4/dmverity"
@@ -78,9 +79,15 @@ func main() {
 	}
 }
 
+type EnvironmentVariableRule struct {
+	Strategy string `toml:"strategy"`
+	Rule     string `toml:"rule"`
+}
+
 type Image struct {
-	Name    string   `toml:"name"`
-	Command []string `toml:"command"`
+	Name     string                    `toml:"name"`
+	Command  []string                  `toml:"command"`
+	EnvRules []EnvironmentVariableRule `toml:"env_rule"`
 }
 
 type Config struct {
@@ -97,16 +104,6 @@ func createOpenDoorPolicy() sp.SecurityPolicy {
 func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 	p := sp.SecurityPolicy{}
 
-	// for now, we hardcode the pause container version 3.1 here
-	// in a final end user tool, we would not do it this way.
-	// as this is a tool for use by developers currently working
-	// on security policy implementation code
-	pausec := sp.SecurityPolicyContainer{
-		Command: []string{"/pause"},
-		Layers:  []string{"16b514057a06ad665f92c02863aca074fd5976c755d26bff16365299169e8415"},
-	}
-	p.Containers = append(p.Containers, pausec)
-
 	var imageOptions []remote.Option
 	if len(*username) != 0 && len(*password) != 0 {
 		auth := authn.Basic{
@@ -117,10 +114,25 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 		imageOptions = append(imageOptions, authOption)
 	}
 
+	// Hardcode the pause container version and command. We still pull it
+	// to get the root hash and any environment variable rules we might need.
+	pause := Image{
+		Name:     "k8s.gcr.io/pause:3.1",
+		Command:  []string{"/pause"},
+		EnvRules: []EnvironmentVariableRule{}}
+	config.Images = append(config.Images, pause)
+
 	for _, image := range config.Images {
+		// validate EnvRules
+		err := validateEnvRules(image.EnvRules)
+		if err != nil {
+			return p, err
+		}
+
 		container := sp.SecurityPolicyContainer{
-			Command: image.Command,
-			Layers:  []string{},
+			Command:  image.Command,
+			EnvRules: convertEnvironmentVariableRules(image.EnvRules),
+			Layers:   []string{},
 		}
 		ref, err := name.ParseReference(image.Name)
 		if err != nil {
@@ -172,8 +184,61 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 			container.Layers = append(container.Layers, hashString)
 		}
 
+		// add rules for all known environment variables from the configuration
+		// these are in addition to "other rules" from the policy definition file
+		config, err := img.ConfigFile()
+		if err != nil {
+			return p, err
+		}
+		for _, env := range config.Config.Env {
+			rule := sp.SecurityPolicyEnvironmentVariableRule{
+				Strategy: "string",
+				Rule:     env,
+			}
+
+			container.EnvRules = append(container.EnvRules, rule)
+		}
+
+		// cri adds TERM=xterm for all workload containers. we add to all containers
+		// to prevent any possble erroring
+		rule := sp.SecurityPolicyEnvironmentVariableRule{
+			Strategy: "string",
+			Rule:     "TERM=xterm",
+		}
+
+		container.EnvRules = append(container.EnvRules, rule)
+
 		p.Containers = append(p.Containers, container)
 	}
 
 	return p, nil
+}
+
+func validateEnvRules(rules []EnvironmentVariableRule) error {
+	for _, rule := range rules {
+		switch rule.Strategy {
+		case "re2":
+			_, err := regexp.Compile(rule.Rule)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func convertEnvironmentVariableRules(toml []EnvironmentVariableRule) []sp.SecurityPolicyEnvironmentVariableRule {
+	json := make([]sp.SecurityPolicyEnvironmentVariableRule, len(toml))
+
+	for i, rule := range toml {
+		jsonRule := sp.SecurityPolicyEnvironmentVariableRule{
+			Strategy: rule.Strategy,
+			Rule:     rule.Rule,
+		}
+
+		json[i] = jsonRule
+	}
+
+	return json
 }

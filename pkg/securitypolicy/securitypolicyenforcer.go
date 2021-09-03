@@ -3,6 +3,7 @@ package securitypolicy
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"sync"
 
 	"github.com/google/go-cmp/cmp"
@@ -11,7 +12,7 @@ import (
 type SecurityPolicyEnforcer interface {
 	EnforcePmemMountPolicy(target string, deviceHash string) (err error)
 	EnforceOverlayMountPolicy(containerID string, layerPaths []string) (err error)
-	EnforceCommandPolicy(containerID string, argList []string) (err error)
+	EnforceStartContainerPolicy(containerID string, argList []string, envList []string) (err error)
 }
 
 func NewSecurityPolicyEnforcer(policy *SecurityPolicy) (SecurityPolicyEnforcer, error) {
@@ -72,14 +73,16 @@ type StandardSecurityPolicyEnforcer struct {
 	// Most of the work that this security policy enforcer does it around managing
 	// state needed to map from a container definition in the SecurityPolicy to
 	// a specfic container ID as we bring up each container. See
-	// EnforceCommandPolicy where most of the functionality is handling the case
+	// enforceCommandPolicy where most of the functionality is handling the case
 	// were policy containers share an overlay and have to try to distinguish them
-	// based on the command line arguments.
+	// based on the command line arguments. enforceEnvironmentVariablePolicy can
+	// further narrow based on environment variables if required.
 	//
-	// implementation details are availanle in:
+	// implementation details are available in:
 	// - EnforcePmemMountPolicy
 	// - EnforceOverlayMountPolicy
-	// - EnforceCommandPolicy
+	// - enforceCommandPolicy
+	// - enforceEnvironmentVariablePolicy
 	// - NewStandardSecurityPolicyEnforcer
 	Devices                      [][]string
 	ContainerIndexToContainerIds map[int][]string
@@ -187,7 +190,7 @@ func (policyState *StandardSecurityPolicyEnforcer) EnforceOverlayMountPolicy(con
 	return nil
 }
 
-func (policyState *StandardSecurityPolicyEnforcer) EnforceCommandPolicy(containerID string, argList []string) (err error) {
+func (policyState *StandardSecurityPolicyEnforcer) EnforceStartContainerPolicy(containerID string, argList []string, envList []string) (err error) {
 	policyState.mutex.Lock()
 	defer policyState.mutex.Unlock()
 
@@ -199,6 +202,23 @@ func (policyState *StandardSecurityPolicyEnforcer) EnforceCommandPolicy(containe
 		return errors.New("container has already been started")
 	}
 
+	err = policyState.enforceCommandPolicy(containerID, argList)
+	if err != nil {
+		return err
+	}
+
+	err = policyState.enforceEnvironmentVariablePolicy(containerID, envList)
+	if err != nil {
+		return err
+	}
+
+	// record that we've allowed this container to start
+	policyState.startedContainers[containerID] = struct{}{}
+
+	return nil
+}
+
+func (policyState *StandardSecurityPolicyEnforcer) enforceCommandPolicy(containerID string, argList []string) (err error) {
 	// Get a list of all the indexes into our security policy's list of
 	// containers that are possible matches for this containerID based
 	// on the image overlay layout
@@ -217,14 +237,7 @@ func (policyState *StandardSecurityPolicyEnforcer) EnforceCommandPolicy(containe
 		} else {
 			// a possible matching index turned out not to match, so we
 			// need to update that list and remove it
-			updatedContainerIds := []string{}
-			existingContainerIds := policyState.ContainerIndexToContainerIds[possibleIndex]
-			for _, id := range existingContainerIds {
-				if id != containerID {
-					updatedContainerIds = append(updatedContainerIds, id)
-				}
-			}
-			policyState.ContainerIndexToContainerIds[possibleIndex] = updatedContainerIds
+			policyState.narrowMatchesForContainerIndex(possibleIndex, containerID)
 		}
 	}
 
@@ -233,10 +246,65 @@ func (policyState *StandardSecurityPolicyEnforcer) EnforceCommandPolicy(containe
 		return errors.New(errmsg)
 	}
 
-	// record that we've allowed this container to start
-	policyState.startedContainers[containerID] = struct{}{}
+	return nil
+}
+
+func (policyState *StandardSecurityPolicyEnforcer) enforceEnvironmentVariablePolicy(containerID string, envList []string) (err error) {
+	// Get a list of all the indexes into our security policy's list of
+	// containers that are possible matches for this containerID based
+	// on the image overlay layout and command line
+	possibleIndexes := possibleIndexesForID(containerID, policyState.ContainerIndexToContainerIds)
+
+	for _, envVariable := range envList {
+		matchingRuleFoundForSomeContainer := false
+		for _, possibleIndex := range possibleIndexes {
+			envRules := policyState.SecurityPolicy.Containers[possibleIndex].EnvRules
+			ok := envIsMatchedByRule(envVariable, envRules)
+			if ok {
+				matchingRuleFoundForSomeContainer = true
+			} else {
+				// a possible matching index turned out not to match, so we
+				// need to update that list and remove it
+				policyState.narrowMatchesForContainerIndex(possibleIndex, containerID)
+			}
+		}
+
+		if !matchingRuleFoundForSomeContainer {
+			return fmt.Errorf("env variable %s unmatched by policy rule", envVariable)
+		}
+	}
 
 	return nil
+}
+
+func envIsMatchedByRule(envVariable string, rules []SecurityPolicyEnvironmentVariableRule) bool {
+	for _, rule := range rules {
+		switch rule.Strategy {
+		case "string":
+			if rule.Rule == envVariable {
+				return true
+			}
+		case "re2":
+			// if the match errors out, we don't care. it's not a match
+			matched, _ := regexp.MatchString(rule.Rule, envVariable)
+			if matched {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func (policyState *StandardSecurityPolicyEnforcer) narrowMatchesForContainerIndex(index int, idToRemove string) {
+	updatedContainerIds := []string{}
+	existingContainerIds := policyState.ContainerIndexToContainerIds[index]
+	for _, id := range existingContainerIds {
+		if id != idToRemove {
+			updatedContainerIds = append(updatedContainerIds, id)
+		}
+	}
+	policyState.ContainerIndexToContainerIds[index] = updatedContainerIds
 }
 
 func equalForOverlay(a1 []string, a2 []string) bool {
@@ -281,7 +349,7 @@ func (p *OpenDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID s
 	return nil
 }
 
-func (p *OpenDoorSecurityPolicyEnforcer) EnforceCommandPolicy(containerID string, argList []string) (err error) {
+func (p *OpenDoorSecurityPolicyEnforcer) EnforceStartContainerPolicy(containerID string, argList []string, envList []string) (err error) {
 	return nil
 }
 
@@ -297,6 +365,6 @@ func (p *ClosedDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID
 	return errors.New("creating an overlay fs is denied by policy")
 }
 
-func (p *ClosedDoorSecurityPolicyEnforcer) EnforceCommandPolicy(containerID string, argList []string) (err error) {
+func (p *ClosedDoorSecurityPolicyEnforcer) EnforceStartContainerPolicy(containerID string, argList []string, envList []string) (err error) {
 	return errors.New("running commands is denied by policy")
 }
