@@ -16,8 +16,9 @@ import (
 
 const (
 	blockSize = compactext4.BlockSize
+	// RecommendedVHDSizeGB is the recommended size in GB for VHDs, which is not a hard limit. 
+	RecommendedVHDSizeGB = 128 * 1024 * 1024 * 1024
 )
-
 var salt = bytes.Repeat([]byte{0}, 32)
 
 var (

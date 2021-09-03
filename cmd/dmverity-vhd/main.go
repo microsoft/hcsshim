@@ -27,7 +27,7 @@ const (
 	imageFlag     = "image"
 	verboseFlag   = "verbose"
 	outputDirFlag = "out-dir"
-	maxVHDSize    = 128 * 1024 * 1024 * 1024
+	maxVHDSize    = dmverity.RecommendedVHDSizeGB
 )
 
 func init() {

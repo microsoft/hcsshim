@@ -150,7 +150,7 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 
 			opts := []tar2ext4.Option{
 				tar2ext4.ConvertWhiteout,
-				tar2ext4.MaximumDiskSize(128 * 1024 * 1024 * 1024),
+				tar2ext4.MaximumDiskSize(dmverity.RecommendedVHDSizeGB),
 			}
 
 			err = tar2ext4.Convert(r, out, opts...)
