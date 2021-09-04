@@ -1,0 +1,41 @@
+syntax = "proto3";
+package azure.nodenetworkservice;
+option go_package = "nodenetsvc";
+
+service NodeNetworkService {
+    rpc ConfigureNetworking(ConfigureNetworkingRequest) returns (ConfigureNetworkingResponse);
+    rpc ConfigureContainerNetworking(ConfigureContainerNetworkingRequest) returns (ConfigureContainerNetworkingResponse);
+    rpc PingNodeNetworkService(PingNodeNetworkServiceRequest) returns (PingNodeNetworkServiceResponse);
+}
+ 
+enum RequestType { 
+    Setup = 0; 
+    Teardown = 1; 
+}
+ 
+message ConfigureNetworkingRequest {
+    string container_id = 1;
+    RequestType request_type = 2; // Setup for AddNIC and Teardown for DeleteNIC
+}
+
+message ConfigureNetworkingResponse{}
+
+message PingNodeNetworkServiceRequest {
+    string pingRequestMessage = 1;
+}
+
+message PingNodeNetworkServiceResponse {
+    string pingResponseMessage = 1;
+}
+
+message ConfigureContainerNetworkingRequest{
+    RequestType request_type = 1;
+    string container_id = 2;
+    string network_namespace = 3;
+}
+
+message ConfigureContainerNetworkingResponse { 
+    bool success = 1; 
+    string response_json = 2; 
+    string error_json= 3; 
+}  
