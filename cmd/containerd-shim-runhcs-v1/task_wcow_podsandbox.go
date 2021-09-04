@@ -240,10 +240,18 @@ func (wpst *wcowPodSandboxTask) waitParentExit() {
 }
 
 func (wpst *wcowPodSandboxTask) ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (int, error) {
+	cmdReq := &cmd.CmdProcessRequest{
+		Args:     req.Args,
+		Workdir:  req.Workdir,
+		Terminal: req.Terminal,
+		Stdin:    req.Stdin,
+		Stdout:   req.Stdout,
+		Stderr:   req.Stderr,
+	}
 	if wpst.host == nil {
 		return 0, errTaskNotIsolated
 	}
-	return cmd.ExecInUvm(ctx, wpst.host, req)
+	return cmd.ExecInUvm(ctx, wpst.host, cmdReq)
 }
 
 func (wpst *wcowPodSandboxTask) DumpGuestStacks(ctx context.Context) string {

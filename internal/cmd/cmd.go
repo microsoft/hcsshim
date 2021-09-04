@@ -19,6 +19,16 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// CmdProcessRequest stores information on command requests made through this package.
+type CmdProcessRequest struct {
+	Args     []string
+	Workdir  string
+	Terminal bool
+	Stdin    string
+	Stdout   string
+	Stderr   string
+}
+
 // Cmd represents a command being prepared or run in a process host.
 type Cmd struct {
 	// Host is the process host in which to launch the process.

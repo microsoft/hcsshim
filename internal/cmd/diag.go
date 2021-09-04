@@ -7,12 +7,11 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 )
 
 // ExecInUvm is a helper function used to execute commands specified in `req` inside the given UVM.
-func ExecInUvm(ctx context.Context, vm *uvm.UtilityVM, req *shimdiag.ExecProcessRequest) (int, error) {
+func ExecInUvm(ctx context.Context, vm *uvm.UtilityVM, req *CmdProcessRequest) (int, error) {
 	if len(req.Args) == 0 {
 		return 0, errors.New("missing command")
 	}
@@ -39,7 +38,7 @@ func ExecInUvm(ctx context.Context, vm *uvm.UtilityVM, req *shimdiag.ExecProcess
 
 // ExecInShimHost is a helper function used to execute commands specified in `req` in the shim's
 // hosting system.
-func ExecInShimHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (int, error) {
+func ExecInShimHost(ctx context.Context, req *CmdProcessRequest) (int, error) {
 	if len(req.Args) == 0 {
 		return 0, errors.New("missing command")
 	}
