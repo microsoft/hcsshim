@@ -216,7 +216,15 @@ func MountContainerLayers(ctx context.Context, containerID string, layerFolders 
 	log.G(ctx).WithField("hostPath", hostPath).Debug("mounting scratch VHD")
 
 	var options []string
-	scsiMount, err := vm.AddSCSI(ctx, hostPath, containerScratchPathInUVM, false, vm.ScratchEncryptionEnabled(), options, uvm.VMAccessTypeIndividual)
+	scsiMount, err := vm.AddSCSI(
+		ctx,
+		hostPath,
+		containerScratchPathInUVM,
+		false,
+		vm.ScratchEncryptionEnabled(),
+		options,
+		uvm.VMAccessTypeIndividual,
+	)
 	if err != nil {
 		return "", fmt.Errorf("failed to add SCSI scratch VHD: %s", err)
 	}

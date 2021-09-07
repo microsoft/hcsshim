@@ -159,7 +159,15 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 				r.Add(scsiMount)
 			} else if mount.Type == "virtual-disk" {
 				l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI virtual disk for OCI mount")
-				scsiMount, err := coi.HostingSystem.AddSCSI(ctx, mount.Source, uvmPath, readOnly, false, mount.Options, uvm.VMAccessTypeIndividual)
+				scsiMount, err := coi.HostingSystem.AddSCSI(
+					ctx,
+					mount.Source,
+					uvmPath,
+					readOnly,
+					false,
+					mount.Options,
+					uvm.VMAccessTypeIndividual,
+				)
 				if err != nil {
 					return errors.Wrapf(err, "adding SCSI virtual disk mount %+v", mount)
 				}

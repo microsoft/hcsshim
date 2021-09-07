@@ -137,7 +137,18 @@ func (sm *SCSIMount) logFormat() logrus.Fields {
 	}
 }
 
-func newSCSIMount(uvm *UtilityVM, hostPath, uvmPath, attachmentType, evdType string, refCount uint32, controller int, lun int32, readOnly, encrypted bool) *SCSIMount {
+func newSCSIMount(
+	uvm *UtilityVM,
+	hostPath string,
+	uvmPath string,
+	attachmentType string,
+	evdType string,
+	refCount uint32,
+	controller int,
+	lun int32,
+	readOnly bool,
+	encrypted bool,
+) *SCSIMount {
 	return &SCSIMount{
 		vm:                        uvm,
 		HostPath:                  hostPath,
@@ -282,7 +293,15 @@ func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) error {
 // to the guest service
 //
 // `vmAccess` indicates what access to grant the vm for the hostpath
-func (uvm *UtilityVM) AddSCSI(ctx context.Context, hostPath string, uvmPath string, readOnly, encrypted bool, guestOptions []string, vmAccess VMAccessType) (*SCSIMount, error) {
+func (uvm *UtilityVM) AddSCSI(
+	ctx context.Context,
+	hostPath string,
+	uvmPath string,
+	readOnly bool,
+	encrypted bool,
+	guestOptions []string,
+	vmAccess VMAccessType,
+) (*SCSIMount, error) {
 	addReq := &addSCSIRequest{
 		hostPath:       hostPath,
 		uvmPath:        uvmPath,
@@ -360,7 +379,16 @@ func (uvm *UtilityVM) AddSCSIExtensibleVirtualDisk(ctx context.Context, hostPath
 //
 // Returns result from calling modify with the given scsi mount
 func (uvm *UtilityVM) addSCSIActual(ctx context.Context, addReq *addSCSIRequest) (sm *SCSIMount, err error) {
-	sm, existed, err := uvm.allocateSCSIMount(ctx, addReq.readOnly, addReq.encrypted, addReq.hostPath, addReq.uvmPath, addReq.attachmentType, addReq.evdType, addReq.vmAccess)
+	sm, existed, err := uvm.allocateSCSIMount(
+		ctx,
+		addReq.readOnly,
+		addReq.encrypted,
+		addReq.hostPath,
+		addReq.uvmPath,
+		addReq.attachmentType,
+		addReq.evdType,
+		addReq.vmAccess,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -443,7 +471,16 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, addReq *addSCSIRequest)
 // device or allocates a new one if not already present.
 // Returns the resulting *SCSIMount, a bool indicating if the scsi device was already present,
 // and error if any.
-func (uvm *UtilityVM) allocateSCSIMount(ctx context.Context, readOnly, encrypted bool, hostPath, uvmPath, attachmentType, evdType string, vmAccess VMAccessType) (*SCSIMount, bool, error) {
+func (uvm *UtilityVM) allocateSCSIMount(
+	ctx context.Context,
+	readOnly bool,
+	encrypted bool,
+	hostPath string,
+	uvmPath string,
+	attachmentType string,
+	evdType string,
+	vmAccess VMAccessType,
+) (*SCSIMount, bool, error) {
 	if attachmentType != "ExtensibleVirtualDisk" {
 		// Ensure the utility VM has access
 		err := grantAccess(ctx, uvm.id, hostPath, vmAccess)
@@ -467,7 +504,18 @@ func (uvm *UtilityVM) allocateSCSIMount(ctx context.Context, readOnly, encrypted
 		return nil, false, err
 	}
 
-	uvm.scsiLocations[controller][lun] = newSCSIMount(uvm, hostPath, uvmPath, attachmentType, evdType, 1, controller, int32(lun), readOnly, encrypted)
+	uvm.scsiLocations[controller][lun] = newSCSIMount(
+		uvm,
+		hostPath,
+		uvmPath,
+		attachmentType,
+		evdType,
+		1,
+		controller,
+		int32(lun),
+		readOnly,
+		encrypted,
+	)
 
 	log.G(ctx).WithFields(uvm.scsiLocations[controller][lun].logFormat()).Debug("allocated SCSI mount")
 
@@ -488,6 +536,9 @@ func (uvm *UtilityVM) GetScsiUvmPath(ctx context.Context, hostPath string) (stri
 	return sm.UVMPath, err
 }
 
+// ScratchEncryptionEnabled is a getter for `uvm.encryptScratch`.
+//
+// Returns true if the scratch disks should be encrypted, false otherwise.
 func (uvm *UtilityVM) ScratchEncryptionEnabled() bool {
 	return uvm.encryptScratch
 }
@@ -650,7 +701,18 @@ func (sm *SCSIMount) Clone(ctx context.Context, vm *UtilityVM, cd *cloneData) er
 		Type_: sm.attachmentType,
 	}
 
-	clonedScsiMount := newSCSIMount(vm, dstVhdPath, sm.UVMPath, sm.attachmentType, sm.extensibleVirtualDiskType, 1, sm.Controller, sm.LUN, sm.readOnly, sm.encrypted)
+	clonedScsiMount := newSCSIMount(
+		vm,
+		dstVhdPath,
+		sm.UVMPath,
+		sm.attachmentType,
+		sm.extensibleVirtualDiskType,
+		1,
+		sm.Controller,
+		sm.LUN,
+		sm.readOnly,
+		sm.encrypted,
+	)
 
 	vm.scsiLocations[sm.Controller][sm.LUN] = clonedScsiMount
 
