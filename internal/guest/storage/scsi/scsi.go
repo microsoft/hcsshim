@@ -29,6 +29,10 @@ var (
 	controllerLunToName = ControllerLunToName
 )
 
+const (
+	scsiDevicesPath = "/sys/bus/scsi/devices"
+)
+
 // Mount creates a mount from the SCSI device on `controller` index `lun` to
 // `target`
 //
@@ -38,7 +42,7 @@ var (
 // If `encrypted` is set to true, the SCSI device will be encrypted using
 // dm-crypt.
 func Mount(ctx context.Context, controller, lun uint8, target string, readonly bool, encrypted bool, options []string) (err error) {
-	ctx, span := trace.StartSpan(ctx, "scsi::Mount")
+	spnCtx, span := trace.StartSpan(ctx, "scsi::Mount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
@@ -54,7 +58,7 @@ func Mount(ctx context.Context, controller, lun uint8, target string, readonly b
 			osRemoveAll(target)
 		}
 	}()
-	source, err := controllerLunToName(ctx, controller, lun)
+	source, err := controllerLunToName(spnCtx, controller, lun)
 	if err != nil {
 		return err
 	}
@@ -68,7 +72,7 @@ func Mount(ctx context.Context, controller, lun uint8, target string, readonly b
 	}
 
 	if encrypted {
-		encryptedSource, err := crypt.EncryptDevice(ctx, source)
+		encryptedSource, err := crypt.EncryptDevice(spnCtx, source)
 		if err != nil {
 			return errors.Wrapf(err, "failed to mount encrypted device: "+source)
 		}
@@ -149,7 +153,7 @@ func ControllerLunToName(ctx context.Context, controller, lun uint8) (_ string, 
 
 	// Devices matching the given SCSI code should each have a subdirectory
 	// under /sys/bus/scsi/devices/<scsiID>/block.
-	blockPath := filepath.Join("/sys/bus/scsi/devices", scsiID, "block")
+	blockPath := filepath.Join(scsiDevicesPath, scsiID, "block")
 	var deviceNames []os.FileInfo
 	for {
 		deviceNames, err = ioutil.ReadDir(blockPath)
@@ -168,9 +172,6 @@ func ControllerLunToName(ctx context.Context, controller, lun uint8) (_ string, 
 		break
 	}
 
-	if len(deviceNames) == 0 {
-		return "", errors.Errorf("no matching device names found for SCSI ID \"%s\"", scsiID)
-	}
 	if len(deviceNames) > 1 {
 		return "", errors.Errorf("more than one block device could match SCSI ID \"%s\"", scsiID)
 	}
@@ -194,7 +195,7 @@ func UnplugDevice(ctx context.Context, controller, lun uint8) (err error) {
 		trace.Int64Attribute("lun", int64(lun)))
 
 	scsiID := fmt.Sprintf("0:0:%d:%d", controller, lun)
-	f, err := os.OpenFile(filepath.Join("/sys/bus/scsi/devices", scsiID, "delete"), os.O_WRONLY, 0644)
+	f, err := os.OpenFile(filepath.Join(scsiDevicesPath, scsiID, "delete"), os.O_WRONLY, 0644)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
