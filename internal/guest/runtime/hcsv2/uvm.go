@@ -142,6 +142,15 @@ func setupSandboxMountsPath(id string) (err error) {
 	return storage.MountRShared(mountPath)
 }
 
+func setupSandboxHugePageMountsPath(id string) error {
+	mountPath := getSandboxHugePageMountsDir(id)
+	if err := os.MkdirAll(mountPath, 0755); err != nil {
+		return errors.Wrapf(err, "failed to create hugepage Mounts dir in sandbox %v", id)
+	}
+
+	return storage.MountRShared(mountPath)
+}
+
 func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VMHostedContainerSettingsV2) (_ *Container, err error) {
 	h.containersMutex.Lock()
 	defer h.containersMutex.Unlock()
@@ -171,7 +180,12 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 					_ = os.RemoveAll(getSandboxRootDir(id))
 				}
 			}()
+
 			if err = setupSandboxMountsPath(id); err != nil {
+				return nil, err
+			}
+
+			if err = setupSandboxHugePageMountsPath(id); err != nil {
 				return nil, err
 			}
 		case "container":

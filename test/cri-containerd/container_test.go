@@ -826,3 +826,70 @@ func Test_CreateContainer_DevShmSize(t *testing.T) {
 		t.Fatalf("expected the size of /dev/shm to be 64MB. Got output instead: %s", string(execResponse1.Stdout))
 	}
 }
+
+func Test_CreateContainer_HugePageMount_LCOW(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	annotations := map[string]string{
+		oci.AnnotationFullyPhysicallyBacked: "true",
+		oci.AnnotationMemorySizeInMB:        "2048",
+		oci.AnnotationKernelBootOptions:     "hugepagesz=2M hugepages=10",
+	}
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, annotations)
+
+	podID := runPodSandbox(t, client, ctx, sandboxRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			// Hold this command open until killed
+			Command: []string{
+				"top",
+			},
+			Mounts: []*runtime.Mount{
+				{
+					HostPath:      "hugepages://2M/hugepage2M",
+					ContainerPath: "/mnt/hugepage2M",
+					Readonly:      false,
+					Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
+				},
+			},
+		},
+	}
+
+	request.PodSandboxId = podID
+	request.SandboxConfig = sandboxRequest.Config
+
+	containerId := createContainer(t, client, ctx, request)
+	defer removeContainer(t, client, ctx, containerId)
+	startContainer(t, client, ctx, containerId)
+	defer stopContainer(t, client, ctx, containerId)
+
+	execCommand := []string{"grep", "-i", "/mnt/hugepage2M", "/proc/mounts"}
+
+	output, errorMsg, exitCode := execContainer(t, client, ctx, containerId, execCommand)
+	if exitCode != 0 || len(errorMsg) > 0 {
+		t.Fatalf("failed to exec in hugepage container errorMsg: %s, exitcode: %v\n", errorMsg, exitCode)
+	}
+
+	if !strings.Contains(output, "hugetlbfs") {
+		t.Fatalf("output is supposed to contain hugetlbfs, output: %s", output)
+	}
+
+	if !strings.Contains(output, "pagesize=2M") {
+		t.Fatalf("output is supposed to contain pagesize=2M, output: %s", output)
+	}
+}
