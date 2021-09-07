@@ -577,6 +577,6 @@ func systemProcessInformation() ([]*winapi.SYSTEM_PROCESS_INFORMATION, error) {
 
 // Takes a string and replaces any occurences of CONTAINER_SANDBOX_MOUNT_POINT with where the containers volume is mounted.
 func (c *JobContainer) replaceWithMountPoint(str string) string {
-	str = strings.ReplaceAll(str, "%"+sandboxMountPointEnvVar+"%", c.sandboxMount)
-	return strings.ReplaceAll(str, "$env:"+sandboxMountPointEnvVar, c.sandboxMount)
+	str = strings.ReplaceAll(str, "%"+sandboxMountPointEnvVar+"%", c.sandboxMount[:len(c.sandboxMount)-1])
+	return strings.ReplaceAll(str, "$env:"+sandboxMountPointEnvVar, c.sandboxMount[:len(c.sandboxMount)-1])
 }

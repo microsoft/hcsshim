@@ -1,8 +1,9 @@
 package jobcontainers
 
 import (
+	"io/ioutil"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -31,52 +32,184 @@ func TestSearchPath(t *testing.T) {
 	}
 }
 
-func TestGetApplicationName(t *testing.T) {
+type config struct {
+	name                    string
+	commandLine             string
+	workDir                 string
+	pathEnv                 string
+	expectedApplicationName string
+	expectedCmdline         string
+}
+
+func runGetApplicationNameTests(t *testing.T, tests []*config) {
+	for _, cfg := range tests {
+		t.Run(cfg.name, func(t *testing.T) {
+			path, cmdLine, err := getApplicationName(cfg.commandLine, cfg.workDir, cfg.pathEnv)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertStr(t, cfg.expectedCmdline, cmdLine)
+			assertStr(t, cfg.expectedApplicationName, path)
+		})
+	}
+}
+
+func TestGetApplicationNamePing(t *testing.T) {
 	expected := "C:\\WINDOWS\\system32\\ping.exe"
 
-	cwd, err := os.Getwd()
+	tests := []*config{
+		{
+			name:                    "Ping",
+			commandLine:             "ping",
+			workDir:                 "C:\\",
+			pathEnv:                 "C:\\windows\\system32",
+			expectedCmdline:         "ping",
+			expectedApplicationName: expected,
+		},
+		{
+			name:                    "Ping_Relative_Forward_Slash",
+			commandLine:             "system32/ping",
+			workDir:                 "C:\\windows\\",
+			pathEnv:                 "C:\\windows\\system32",
+			expectedCmdline:         "system32/ping",
+			expectedApplicationName: expected,
+		},
+		{
+			name:                    "Ping_Relative_Back_Slash",
+			commandLine:             "system32\\ping",
+			workDir:                 "C:\\windows",
+			pathEnv:                 "C:\\windows\\system32",
+			expectedCmdline:         "system32\\ping",
+			expectedApplicationName: expected,
+		},
+		{
+			name:                    "Ping_Cwd_Windows_Directory",
+			commandLine:             "system32\\ping",
+			workDir:                 "C:\\Windows",
+			pathEnv:                 "C:\\windows\\system32",
+			expectedCmdline:         "system32\\ping",
+			expectedApplicationName: expected,
+		},
+		{
+			name:                    "Ping_With_Cwd",
+			commandLine:             "cmd /c ping 127.0.0.1",
+			workDir:                 "C:\\",
+			pathEnv:                 "C:\\windows\\system32",
+			expectedCmdline:         "cmd /c ping 127.0.0.1",
+			expectedApplicationName: "C:\\windows\\system32\\cmd.exe",
+		},
+		{
+			name:                    "Ping_With_Cwd_Relative_Path",
+			commandLine:             "system32\\cmd /c ping 127.0.0.1",
+			workDir:                 "C:\\windows\\",
+			pathEnv:                 "C:\\windows\\system32",
+			expectedCmdline:         "system32\\cmd /c ping 127.0.0.1",
+			expectedApplicationName: "C:\\windows\\system32\\cmd.exe",
+		},
+		{
+			name:                    "Ping_With_Space",
+			commandLine:             "ping test",
+			workDir:                 "C:\\",
+			pathEnv:                 "C:\\windows\\system32",
+			expectedCmdline:         "ping test",
+			expectedApplicationName: expected,
+		},
+		{
+			name:                    "Ping_With_Quote",
+			commandLine:             "\"ping\" 127.0.0.1",
+			workDir:                 "C:\\",
+			pathEnv:                 "C:\\windows\\system32",
+			expectedCmdline:         "\"ping\" 127.0.0.1",
+			expectedApplicationName: expected,
+		},
+	}
+
+	runGetApplicationNameTests(t, tests)
+}
+
+func TestGetApplicationNameRandomBinary(t *testing.T) {
+	tempDir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create fake executables in a temporary directory to use for the below tests.
+	testExe := filepath.Join(tempDir, "test.exe")
+	_, err = os.Create(testExe)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	path, _, err := getApplicationName("ping", cwd, os.Getenv("PATH"))
+	test2Exe := filepath.Join(tempDir, "test 2.exe")
+	_, err = os.Create(test2Exe)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertStr(t, expected, path)
 
-	path, _, err = getApplicationName("./ping", cwd, os.Getenv("PATH"))
+	exeWithSpace := filepath.Join(tempDir, "exe with space.exe")
+	_, err = os.Create(exeWithSpace)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertStr(t, expected, path)
 
-	path, _, err = getApplicationName(".\\ping", cwd, os.Getenv("PATH"))
-	if err != nil {
-		t.Fatal(err)
+	tests := []*config{
+		// See if we can successfully find "exe with space.exe" with no quoting, it should first try "exe.exe", then "exe with.exe" and then finally
+		// "exe with space.exe"
+		{
+			name:                    "Spaces_With_No_Quoting",
+			commandLine:             "exe with space.exe",
+			workDir:                 filepath.Dir(testExe),
+			pathEnv:                 "",
+			expectedCmdline:         "\"exe with space.exe\"",
+			expectedApplicationName: exeWithSpace,
+		},
+		// See if we can successfully find "exe with space.exe" with quoting, it should try "exe with space.exe" only.
+		{
+			name:                    "Spaces_With_Quoting",
+			commandLine:             "\"exe with space.exe\"",
+			workDir:                 filepath.Dir(testExe),
+			pathEnv:                 "",
+			expectedCmdline:         "\"exe with space.exe\"",
+			expectedApplicationName: exeWithSpace,
+		},
+		// Try a quoted commandline, so that we find the actual "C:\rest\of\the\path\test 2.exe" binary
+		{
+			name:                    "Test2_Binary_With_Quotes",
+			commandLine:             "\"test 2.exe\"",
+			workDir:                 filepath.Dir(test2Exe),
+			pathEnv:                 "",
+			expectedCmdline:         "\"test 2.exe\"",
+			expectedApplicationName: test2Exe,
+		},
+		// We should find the test.exe binary, and the 2 will be treated as an argument in this case
+		{
+			name:                    "Test2_Binary_No_Quotes",
+			commandLine:             "test 2",
+			workDir:                 filepath.Dir(test2Exe),
+			pathEnv:                 "",
+			expectedCmdline:         "test 2",
+			expectedApplicationName: testExe,
+		},
+		// Test finding test binary with no file extension
+		{
+			name:                    "Test_Binary_No_File_Extension",
+			commandLine:             testExe[0 : len(testExe)-4],
+			workDir:                 filepath.Dir(testExe),
+			pathEnv:                 "",
+			expectedCmdline:         testExe[0 : len(testExe)-4],
+			expectedApplicationName: testExe,
+		},
+		// Test finding the test binary with the PATH containing the directory it lives in.
+		{
+			name:                    "Test_Binary_With_Path_Containing_Location",
+			commandLine:             "test",
+			workDir:                 "C:\\",
+			pathEnv:                 filepath.Dir(testExe),
+			expectedCmdline:         "test",
+			expectedApplicationName: testExe,
+		},
 	}
-	assertStr(t, expected, path)
 
-	// Test that we only find the first element of the commandline if the binary exists.
-	path, _, err = getApplicationName("ping test", cwd, os.Getenv("PATH"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertStr(t, expected, path)
-
-	// Test quoted application name with an argument afterwards.
-	path, cmdLine, err := getApplicationName("\"ping\" 127.0.0.1", cwd, os.Getenv("PATH"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertStr(t, expected, path)
-
-	args := splitArgs(cmdLine)
-	cmd := &exec.Cmd{
-		Path: path,
-		Args: args,
-	}
-	if err := cmd.Run(); err != nil {
-		t.Fatal(err)
-	}
+	runGetApplicationNameTests(t, tests)
 }
