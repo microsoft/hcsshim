@@ -23,11 +23,18 @@ type SecurityPolicy struct {
 type SecurityPolicyContainer struct {
 	// The command that we will allow the container to execute
 	Command []string `json:"command"`
+	// The rules for determining if a given environment variable is allowed
+	EnvRules []SecurityPolicyEnvironmentVariableRule `json:"env_rules"`
 	// An ordered list of dm-verity root hashes for each layer that makes up
 	// "a container". Containers are constructed as an overlay file system. The
 	// order that the layers are overlayed is important and needs to be enforced
 	// as part of policy.
 	Layers []string `json:"layers"`
+}
+
+type SecurityPolicyEnvironmentVariableRule struct {
+	Strategy string `json:"strategy"`
+	Rule     string `json:"rule"`
 }
 
 // EncodedSecurityPolicy is a JSON representation of SecurityPolicy that has

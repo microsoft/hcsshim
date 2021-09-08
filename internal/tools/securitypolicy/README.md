@@ -20,6 +20,10 @@ be downloaded, turned into an ext4, and finally a dm-verity root hash calculated
 [[image]]
 name = "rust:1.52.1"
 command = ["rustc", "--help"]
+
+[[image.env_rule]]
+strategy = "re2"
+rule = "PREFIX_.+=.+"
 ```
 
 ### Converted to JSON
@@ -32,13 +36,54 @@ represented in JSON.
   "allow_all": false,
   "containers": [
     {
-      "command": ["/pause"],
+      "command": [
+        "/pause"
+      ],
+      "env_rules": [
+        {
+          "strategy": "string",
+          "rule": "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        },
+        {
+          "strategy": "string",
+          "rule": "TERM=xterm"
+        }
+      ],
       "layers": [
         "16b514057a06ad665f92c02863aca074fd5976c755d26bff16365299169e8415"
       ]
     },
     {
-      "command": ["rustc", "--help"],
+      "command": [
+        "rustc",
+        "--help"
+      ],
+      "env_rules": [
+        {
+          "strategy": "re2",
+          "rule": "PREFIX_.+=.+"
+        },
+        {
+          "strategy": "string",
+          "rule": "TERM=xterm"
+        },
+        {
+          "strategy": "string",
+          "rule": "PATH=/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        },
+        {
+          "strategy": "string",
+          "rule": "RUSTUP_HOME=/usr/local/rustup"
+        },
+        {
+          "strategy": "string",
+          "rule": "CARGO_HOME=/usr/local/cargo"
+        },
+        {
+          "strategy": "string",
+          "rule": "RUST_VERSION=1.52.1"
+        }
+      ],
       "layers": [
         "fe84c9d5bfddd07a2624d00333cf13c1a9c941f3a261f13ead44fc6a93bc0e7a",
         "4dedae42847c704da891a28c25d32201a1ae440bce2aecccfa8e6f03b97a6a6c",
