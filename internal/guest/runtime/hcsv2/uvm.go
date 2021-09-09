@@ -5,7 +5,6 @@ package hcsv2
 import (
 	"bufio"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -80,22 +79,13 @@ func (h *Host) SetSecurityPolicy(base64Policy string) error {
 		return errors.New("security policy has already been set")
 	}
 
-	// base64 decode the incoming policy string
-	// its base64 encoded because it is coming from an annotation
-	// annotations are a map of string to string
-	// we want to store a complex json object so.... base64 it is
-	jsonPolicy, err := base64.StdEncoding.DecodeString(base64Policy)
+	// construct security policy state
+	securityPolicyState, err := securitypolicy.NewSecurityPolicyState(base64Policy)
 	if err != nil {
-		return errors.Wrap(err, "unable to decode policy from Base64 format")
+		return err
 	}
 
-	// json unmarshall the decoded to a SecurityPolicy
-	var securityPolicy securitypolicy.SecurityPolicy
-	if err := json.Unmarshal(jsonPolicy, &securityPolicy); err != nil {
-		return errors.Wrap(err, "unable to unmarshal policy")
-	}
-
-	p, err := securitypolicy.NewSecurityPolicyEnforcer(&securityPolicy)
+	p, err := securitypolicy.NewSecurityPolicyEnforcer(*securityPolicyState)
 	if err != nil {
 		return err
 	}

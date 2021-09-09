@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"regexp"
+	"strconv"
 
 	"github.com/BurntSushi/toml"
 	"github.com/Microsoft/hcsshim/ext4/dmverity"
@@ -102,7 +103,9 @@ func createOpenDoorPolicy() sp.SecurityPolicy {
 }
 
 func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
-	p := sp.SecurityPolicy{}
+	p := sp.SecurityPolicy{
+		Containers: map[string]sp.SecurityPolicyContainer{},
+	}
 
 	var imageOptions []remote.Option
 	if len(*username) != 0 && len(*password) != 0 {
@@ -129,10 +132,13 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 			return p, err
 		}
 
+		command := convertCommand(image.Command)
+		envRules := convertEnvironmentVariableRules(image.EnvRules)
 		container := sp.SecurityPolicyContainer{
-			Command:  image.Command,
-			EnvRules: convertEnvironmentVariableRules(image.EnvRules),
-			Layers:   []string{},
+			NumCommands: len(command),
+			Command:     command,
+			EnvRules:    envRules,
+			Layers:      map[string]string{},
 		}
 		ref, err := name.ParseReference(image.Name)
 		if err != nil {
@@ -181,8 +187,10 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 			}
 			hash := dmverity.RootHash(tree)
 			hashString := fmt.Sprintf("%x", hash)
-			container.Layers = append(container.Layers, hashString)
+			container.Layers = addLayer(container.Layers, hashString)
 		}
+
+		container.NumLayers = len(layers)
 
 		// add rules for all known environment variables from the configuration
 		// these are in addition to "other rules" from the policy definition file
@@ -196,7 +204,7 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 				Rule:     env,
 			}
 
-			container.EnvRules = append(container.EnvRules, rule)
+			container.EnvRules = addEnvRule(container.EnvRules, rule)
 		}
 
 		// cri adds TERM=xterm for all workload containers. we add to all containers
@@ -206,10 +214,13 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 			Rule:     "TERM=xterm",
 		}
 
-		container.EnvRules = append(container.EnvRules, rule)
+		container.EnvRules = addEnvRule(container.EnvRules, rule)
+		container.NumEnvRules = len(container.EnvRules)
 
-		p.Containers = append(p.Containers, container)
+		p.Containers = addContainer(p.Containers, container)
 	}
+
+	p.NumContainers = len(p.Containers)
 
 	return p, nil
 }
@@ -228,8 +239,18 @@ func validateEnvRules(rules []EnvironmentVariableRule) error {
 	return nil
 }
 
-func convertEnvironmentVariableRules(toml []EnvironmentVariableRule) []sp.SecurityPolicyEnvironmentVariableRule {
-	json := make([]sp.SecurityPolicyEnvironmentVariableRule, len(toml))
+func convertCommand(toml []string) map[string]string {
+	json := map[string]string{}
+
+	for i, arg := range toml {
+		json[strconv.Itoa(i)] = arg
+	}
+
+	return json
+}
+
+func convertEnvironmentVariableRules(toml []EnvironmentVariableRule) map[string]sp.SecurityPolicyEnvironmentVariableRule {
+	json := map[string]sp.SecurityPolicyEnvironmentVariableRule{}
 
 	for i, rule := range toml {
 		jsonRule := sp.SecurityPolicyEnvironmentVariableRule{
@@ -237,8 +258,32 @@ func convertEnvironmentVariableRules(toml []EnvironmentVariableRule) []sp.Securi
 			Rule:     rule.Rule,
 		}
 
-		json[i] = jsonRule
+		json[strconv.Itoa(i)] = jsonRule
 	}
 
 	return json
+}
+
+func addContainer(containers map[string]sp.SecurityPolicyContainer, container sp.SecurityPolicyContainer) map[string]sp.SecurityPolicyContainer {
+	index := strconv.Itoa(len(containers))
+
+	containers[index] = container
+
+	return containers
+}
+
+func addLayer(layers map[string]string, layer string) map[string]string {
+	index := strconv.Itoa(len(layers))
+
+	layers[index] = layer
+
+	return layers
+}
+
+func addEnvRule(rules map[string]sp.SecurityPolicyEnvironmentVariableRule, rule sp.SecurityPolicyEnvironmentVariableRule) map[string]sp.SecurityPolicyEnvironmentVariableRule {
+	index := strconv.Itoa(len(rules))
+
+	rules[index] = rule
+
+	return rules
 }
