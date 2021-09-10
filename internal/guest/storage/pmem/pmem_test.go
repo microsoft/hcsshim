@@ -244,9 +244,9 @@ func Test_Security_Policy_Enforcement(t *testing.T) {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
 
-	expectedPmem := 1
-	if enforcer.PmemMountCalls != expectedPmem {
-		t.Fatalf("expected %d attempt at pmem mount enforcement, got %d", expectedPmem, enforcer.PmemMountCalls)
+	expectedDeviceMountCalls := 1
+	if enforcer.DeviceMountCalls != expectedDeviceMountCalls {
+		t.Fatalf("expected %d attempt at pmem mount enforcement, got %d", expectedDeviceMountCalls, enforcer.DeviceMountCalls)
 	}
 
 	expectedOverlay := 0

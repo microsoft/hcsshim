@@ -186,9 +186,9 @@ func Test_Security_Policy_Enforcement(t *testing.T) {
 		t.Fatalf("expected all upper: %v, work: %v, root: %v to be created", upperCreated, workCreated, rootCreated)
 	}
 
-	expectedPmem := 0
-	if enforcer.PmemMountCalls != expectedPmem {
-		t.Errorf("expected %d attempt at pmem mount enforcement, got %d", expectedPmem, enforcer.PmemMountCalls)
+	expectedDeviceMountCalls := 0
+	if enforcer.DeviceMountCalls != expectedDeviceMountCalls {
+		t.Errorf("expected %d attempt at pmem mount enforcement, got %d", expectedDeviceMountCalls, enforcer.DeviceMountCalls)
 	}
 
 	expectedOverlay := 1
