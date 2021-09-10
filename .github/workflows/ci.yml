@@ -37,7 +37,7 @@ jobs:
           $currentPath = (Get-Location).Path
           $process = Start-Process powershell.exe -PassThru -Verb runAs -Wait -ArgumentList $currentPath/scripts/Verify-GoModules.ps1, $currentPath
           if ($process.ExitCode -ne 0) {
-            Write-Error "Main modules are not up to date. Please run `go mod vendor` followed by `go mod tidy` in the repo root path."
+            Write-Error "Main modules are not up to date. Please validate your go version >= this job's and run `go mod vendor` followed by `go mod tidy` in the repo root path."
           }
           exit $process.ExitCode
           
@@ -56,7 +56,7 @@ jobs:
           $currentPath = (Get-Location).Path
           $process = Start-Process powershell.exe -PassThru -Verb runAs -Wait -ArgumentList $currentPath/scripts/Verify-GoModules.ps1, $currentPath, "test"
           if ($process.ExitCode -ne 0) {
-            Write-Error "Test package modules are not up to date. Please run `go mod vendor` followed by `go mod tidy` in hcsshim/test directory."
+            Write-Error "Test package modules are not up to date. Please validate your go version >= this job's and run `go mod vendor` followed by `go mod tidy` in hcsshim/test directory."
           }
           exit $process.ExitCode
 
