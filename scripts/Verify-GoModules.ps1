@@ -51,7 +51,7 @@ if (-not $?) {
     exit 1
 }
 
-$hashesMatch = matchingHashes $rootPath/$subdir/vendor $tempDir/$subdir/vendor
+$hashesMatch = matchingHashes $rootPath/$subdir $tempDir/$subdir
 if (-not $?) {
     Remove-Item $tempDir -Recurse
     exit 1
