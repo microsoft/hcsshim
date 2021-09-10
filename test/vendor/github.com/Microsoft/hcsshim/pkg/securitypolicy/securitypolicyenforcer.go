@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"sync"
 
 	"github.com/google/go-cmp/cmp"
@@ -15,21 +16,23 @@ type SecurityPolicyEnforcer interface {
 	EnforceStartContainerPolicy(containerID string, argList []string, envList []string) (err error)
 }
 
-func NewSecurityPolicyEnforcer(policy *SecurityPolicy) (SecurityPolicyEnforcer, error) {
-	if policy == nil {
-		return nil, errors.New("security policy can't be nil")
-	}
-
-	if policy.AllowAll {
+func NewSecurityPolicyEnforcer(state SecurityPolicyState) (SecurityPolicyEnforcer, error) {
+	if state.SecurityPolicy.AllowAll {
 		return &OpenDoorSecurityPolicyEnforcer{}, nil
 	} else {
-		return NewStandardSecurityPolicyEnforcer(policy)
+		containers, err := toInternal(&state.SecurityPolicy)
+		if err != nil {
+			return nil, err
+		}
+		return NewStandardSecurityPolicyEnforcer(containers, state.EncodedSecurityPolicy.SecurityPolicy), nil
 	}
 }
 
 type StandardSecurityPolicyEnforcer struct {
-	// The user supplied security policy.
-	SecurityPolicy SecurityPolicy
+	// EncodedSecurityPolicy state is needed for key release
+	EncodedSecurityPolicy string
+	// Containers from the user supplied security policy.
+	Containers []securityPolicyContainer
 	// Devices and ContainerIndexToContainerIds are used to build up an
 	// understanding of the containers running with a UVM as they come up and
 	// map them back to a container definition from the user supplied
@@ -95,36 +98,97 @@ type StandardSecurityPolicyEnforcer struct {
 
 var _ SecurityPolicyEnforcer = (*StandardSecurityPolicyEnforcer)(nil)
 
-func NewStandardSecurityPolicyEnforcer(policy *SecurityPolicy) (*StandardSecurityPolicyEnforcer, error) {
-	if policy == nil {
-		return nil, errors.New("security policy can't be nil")
-	}
-
-	// create new StandardSecurityPolicyEnforcer and add the new SecurityPolicy
+func NewStandardSecurityPolicyEnforcer(containers []securityPolicyContainer, encoded string) *StandardSecurityPolicyEnforcer {
+	// create new StandardSecurityPolicyEnforcer and add the expected containers
 	// to it
 	// fill out corresponding devices structure by creating a "same shapped"
 	// devices listing that corresponds to our container root hash lists
 	// the devices list will get filled out as layers are mounted
-	devices := make([][]string, len(policy.Containers))
+	devices := make([][]string, len(containers))
 
-	for i, container := range policy.Containers {
+	for i, container := range containers {
 		devices[i] = make([]string, len(container.Layers))
 	}
 
 	return &StandardSecurityPolicyEnforcer{
-		SecurityPolicy:               *policy,
+		EncodedSecurityPolicy:        encoded,
+		Containers:                   containers,
 		Devices:                      devices,
 		ContainerIndexToContainerIds: map[int][]string{},
 		startedContainers:            map[string]struct{}{},
 		mutex:                        &sync.Mutex{},
-	}, nil
+	}
+}
+
+func toInternal(external *SecurityPolicy) ([]securityPolicyContainer, error) {
+	containerMapLength := len(external.Containers)
+	if external.NumContainers != containerMapLength {
+		errmsg := fmt.Sprintf("container numbers don't match in policy. expected: %d, actual: %d", external.NumContainers, containerMapLength)
+		return nil, errors.New(errmsg)
+	}
+
+	internal := make([]securityPolicyContainer, containerMapLength)
+
+	for i := 0; i < containerMapLength; i++ {
+		iContainer := securityPolicyContainer{}
+
+		eContainer := external.Containers[strconv.Itoa(i)]
+
+		// Command conversion
+		if eContainer.NumCommands != len(eContainer.Command) {
+			errmsg := fmt.Sprintf("command argument numbers don't match in policy. expected: %d, actual: %d", eContainer.NumCommands, len(eContainer.Command))
+			return nil, errors.New(errmsg)
+		}
+		iContainer.Command = stringMapToStringArray(eContainer.Command)
+
+		// Layers conversion
+		if eContainer.NumLayers != len(eContainer.Layers) {
+			errmsg := fmt.Sprintf("layer numbers don't match in policy. expected: %d, actual: %d", eContainer.NumLayers, len(eContainer.Layers))
+			return nil, errors.New(errmsg)
+		}
+		iContainer.Layers = stringMapToStringArray(eContainer.Layers)
+
+		// EnvRules conversion
+		envRulesMapLength := len(eContainer.EnvRules)
+		if eContainer.NumEnvRules != envRulesMapLength {
+			errmsg := fmt.Sprintf("env rule numbers don't match in policy. expected: %d, actual: %d", eContainer.NumEnvRules, envRulesMapLength)
+			return nil, errors.New(errmsg)
+		}
+
+		envRules := make([]securityPolicyEnvironmentVariableRule, envRulesMapLength)
+		for i := 0; i < envRulesMapLength; i++ {
+			eIndex := strconv.Itoa(i)
+			rule := securityPolicyEnvironmentVariableRule{
+				Strategy: eContainer.EnvRules[eIndex].Strategy,
+				Rule:     eContainer.EnvRules[eIndex].Rule,
+			}
+			envRules[i] = rule
+		}
+		iContainer.EnvRules = envRules
+
+		// save off new container
+		internal[i] = iContainer
+	}
+
+	return internal, nil
+}
+
+func stringMapToStringArray(in map[string]string) []string {
+	inLength := len(in)
+	out := make([]string, inLength)
+
+	for i := 0; i < inLength; i++ {
+		out[i] = in[strconv.Itoa(i)]
+	}
+
+	return out
 }
 
 func (policyState *StandardSecurityPolicyEnforcer) EnforcePmemMountPolicy(target string, deviceHash string) (err error) {
 	policyState.mutex.Lock()
 	defer policyState.mutex.Unlock()
 
-	if len(policyState.SecurityPolicy.Containers) < 1 {
+	if len(policyState.Containers) < 1 {
 		return errors.New("policy doesn't allow mounting containers")
 	}
 
@@ -134,7 +198,7 @@ func (policyState *StandardSecurityPolicyEnforcer) EnforcePmemMountPolicy(target
 
 	found := false
 
-	for i, container := range policyState.SecurityPolicy.Containers {
+	for i, container := range policyState.Containers {
 		for ii, layer := range container.Layers {
 			if deviceHash == layer {
 				policyState.Devices[i][ii] = target
@@ -154,7 +218,7 @@ func (policyState *StandardSecurityPolicyEnforcer) EnforceOverlayMountPolicy(con
 	policyState.mutex.Lock()
 	defer policyState.mutex.Unlock()
 
-	if len(policyState.SecurityPolicy.Containers) < 1 {
+	if len(policyState.Containers) < 1 {
 		return errors.New("policy doesn't allow mounting containers")
 	}
 
@@ -194,7 +258,7 @@ func (policyState *StandardSecurityPolicyEnforcer) EnforceStartContainerPolicy(c
 	policyState.mutex.Lock()
 	defer policyState.mutex.Unlock()
 
-	if len(policyState.SecurityPolicy.Containers) < 1 {
+	if len(policyState.Containers) < 1 {
 		return errors.New("policy doesn't allow mounting containers")
 	}
 
@@ -231,7 +295,7 @@ func (policyState *StandardSecurityPolicyEnforcer) enforceCommandPolicy(containe
 	//    security policy whose command line isn't a match.
 	matchingCommandFound := false
 	for _, possibleIndex := range possibleIndexes {
-		cmd := policyState.SecurityPolicy.Containers[possibleIndex].Command
+		cmd := policyState.Containers[possibleIndex].Command
 		if cmp.Equal(cmd, argList) {
 			matchingCommandFound = true
 		} else {
@@ -258,7 +322,7 @@ func (policyState *StandardSecurityPolicyEnforcer) enforceEnvironmentVariablePol
 	for _, envVariable := range envList {
 		matchingRuleFoundForSomeContainer := false
 		for _, possibleIndex := range possibleIndexes {
-			envRules := policyState.SecurityPolicy.Containers[possibleIndex].EnvRules
+			envRules := policyState.Containers[possibleIndex].EnvRules
 			ok := envIsMatchedByRule(envVariable, envRules)
 			if ok {
 				matchingRuleFoundForSomeContainer = true
@@ -277,7 +341,7 @@ func (policyState *StandardSecurityPolicyEnforcer) enforceEnvironmentVariablePol
 	return nil
 }
 
-func envIsMatchedByRule(envVariable string, rules []SecurityPolicyEnvironmentVariableRule) bool {
+func envIsMatchedByRule(envVariable string, rules []securityPolicyEnvironmentVariableRule) bool {
 	for _, rule := range rules {
 		switch rule.Strategy {
 		case "string":
