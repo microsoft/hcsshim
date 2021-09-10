@@ -24,6 +24,12 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// functions for mocking out in tests
+var (
+	winioDialPipe  = winio.DialPipe
+	ttrpcNewClient = ttrpc.NewClient
+)
+
 type computeAgentCache struct {
 	// lock for synchronizing read/write access to `cache`
 	rw sync.RWMutex
@@ -212,7 +218,7 @@ func (s *grpcService) CreateNetwork(ctx context.Context, req *ncproxygrpc.Create
 		trace.StringAttribute("type", req.Mode.String()),
 		trace.StringAttribute("ipamType", req.IpamType.String()))
 
-	if req.Name == "" || req.Mode.String() == "" || req.IpamType.String() == "" || req.SwitchName == "" {
+	if req.Name == "" || req.Mode.String() == "" || req.IpamType.String() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
 	}
 
@@ -222,31 +228,35 @@ func (s *grpcService) CreateNetwork(ctx context.Context, req *ncproxygrpc.Create
 		return nil, status.Errorf(codes.FailedPrecondition, "network with name %q already exists", req.Name)
 	}
 
-	// Get the layer ID from the external switch. HNS will create a transparent network for
-	// any external switch that is created not through HNS so this is what we're
-	// searching for here. If the network exists, the vSwitch with this name exists.
-	extSwitch, err := hcn.GetNetworkByName(req.SwitchName)
-	if err != nil {
-		if _, ok := err.(hcn.NetworkNotFoundError); ok {
-			return nil, status.Errorf(codes.NotFound, "no network/switch with name `%s` found", req.SwitchName)
+	policies := []hcn.NetworkPolicy{}
+	if req.SwitchName != "" {
+		// Get the layer ID from the external switch. HNS will create a transparent network for
+		// any external switch that is created not through HNS so this is what we're
+		// searching for here. If the network exists, the vSwitch with this name exists.
+		extSwitch, err := hcn.GetNetworkByName(req.SwitchName)
+		if err != nil {
+			if _, ok := err.(hcn.NetworkNotFoundError); ok {
+				return nil, status.Errorf(codes.NotFound, "no network/switch with name `%s` found", req.SwitchName)
+			}
+			return nil, errors.Wrapf(err, "failed to get network/switch with name %q", req.SwitchName)
 		}
-		return nil, errors.Wrapf(err, "failed to get network/switch with name %q", req.SwitchName)
-	}
 
-	// Get layer ID and use this as the basis for what to layer the new network over.
-	if extSwitch.Health.Extra.LayeredOn == "" {
-		return nil, status.Errorf(codes.NotFound, "no layer ID found for network %q found", extSwitch.Id)
-	}
+		// Get layer ID and use this as the basis for what to layer the new network over.
+		if extSwitch.Health.Extra.LayeredOn == "" {
+			return nil, status.Errorf(codes.NotFound, "no layer ID found for network %q found", extSwitch.Id)
+		}
 
-	layerPolicy := hcn.LayerConstraintNetworkPolicySetting{LayerId: extSwitch.Health.Extra.LayeredOn}
-	data, err := json.Marshal(layerPolicy)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal layer policy")
-	}
+		layerPolicy := hcn.LayerConstraintNetworkPolicySetting{LayerId: extSwitch.Health.Extra.LayeredOn}
+		data, err := json.Marshal(layerPolicy)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to marshal layer policy")
+		}
 
-	netPolicy := hcn.NetworkPolicy{
-		Type:     hcn.LayerConstraint,
-		Settings: data,
+		netPolicy := hcn.NetworkPolicy{
+			Type:     hcn.LayerConstraint,
+			Settings: data,
+		}
+		policies = append(policies, netPolicy)
 	}
 
 	subnets := make([]hcn.Subnet, len(req.SubnetIpaddressPrefix))
@@ -272,7 +282,7 @@ func (s *grpcService) CreateNetwork(ctx context.Context, req *ncproxygrpc.Create
 		Name:     req.Name,
 		Type:     hcn.NetworkType(req.Mode.String()),
 		Ipams:    []hcn.Ipam{ipam},
-		Policies: []hcn.NetworkPolicy{netPolicy},
+		Policies: policies,
 		SchemaVersion: hcn.SchemaVersion{
 			Major: 2,
 			Minor: 2,
@@ -384,7 +394,6 @@ func (s *grpcService) CreateEndpoint(ctx context.Context, req *ncproxygrpc.Creat
 			Search:     req.DnsSetting.Search,
 		}
 	}
-
 	endpoint, err = endpoint.Create()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create HNS endpoint")
@@ -607,11 +616,11 @@ func (s *ttrpcService) RegisterComputeAgent(ctx context.Context, req *ncproxyttr
 		trace.StringAttribute("containerID", req.ContainerID),
 		trace.StringAttribute("agentAddress", req.AgentAddress))
 
-	conn, err := winio.DialPipe(req.AgentAddress, nil)
+	conn, err := winioDialPipe(req.AgentAddress, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to connect to compute agent service")
 	}
-	client := ttrpc.NewClient(
+	client := ttrpcNewClient(
 		conn,
 		ttrpc.WithUnaryClientInterceptor(octtrpc.ClientInterceptor()),
 		ttrpc.WithOnClose(func() { conn.Close() }),
