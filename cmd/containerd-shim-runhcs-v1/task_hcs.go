@@ -789,10 +789,19 @@ func (ht *hcsTask) closeHost(ctx context.Context) {
 }
 
 func (ht *hcsTask) ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (int, error) {
-	if ht.host == nil {
-		return cmd.ExecInShimHost(ctx, req)
+	cmdReq := &cmd.CmdProcessRequest{
+		Args:     req.Args,
+		Workdir:  req.Workdir,
+		Terminal: req.Terminal,
+		Stdin:    req.Stdin,
+		Stdout:   req.Stdout,
+		Stderr:   req.Stderr,
 	}
-	return cmd.ExecInUvm(ctx, ht.host, req)
+
+	if ht.host == nil {
+		return cmd.ExecInShimHost(ctx, cmdReq)
+	}
+	return cmd.ExecInUvm(ctx, ht.host, cmdReq)
 }
 
 func (ht *hcsTask) DumpGuestStacks(ctx context.Context) string {

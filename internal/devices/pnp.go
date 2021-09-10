@@ -9,7 +9,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/pkg/errors"
@@ -43,10 +42,10 @@ func createPnPInstallDriverCommand(driverUVMPath string) []string {
 // that installs a driver previously mounted into the uvm.
 func execPnPInstallDriver(ctx context.Context, vm *uvm.UtilityVM, driverDir string) error {
 	args := createPnPInstallDriverCommand(driverDir)
-	req := &shimdiag.ExecProcessRequest{
+	cmdReq := &cmd.CmdProcessRequest{
 		Args: args,
 	}
-	exitCode, err := cmd.ExecInUvm(ctx, vm, req)
+	exitCode, err := cmd.ExecInUvm(ctx, vm, cmdReq)
 	if err != nil && exitCode != winapi.ERROR_NO_MORE_ITEMS {
 		return errors.Wrapf(err, "failed to install driver %s in uvm with exit code %d", driverDir, exitCode)
 	} else if exitCode == winapi.ERROR_NO_MORE_ITEMS {

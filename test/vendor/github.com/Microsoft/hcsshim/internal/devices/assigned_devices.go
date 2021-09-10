@@ -11,7 +11,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/pkg/errors"
 )
@@ -72,11 +71,11 @@ func getChildrenDeviceLocationPaths(ctx context.Context, vm *uvm.UtilityVM, vmBu
 	go readCsPipeOutput(l, errChan, &pipeResults)
 
 	args := createDeviceUtilChildrenCommand(deviceUtilPath, vmBusInstanceID)
-	req := &shimdiag.ExecProcessRequest{
+	cmdReq := &cmd.CmdProcessRequest{
 		Args:   args,
 		Stdout: p,
 	}
-	exitCode, err := cmd.ExecInUvm(ctx, vm, req)
+	exitCode, err := cmd.ExecInUvm(ctx, vm, cmdReq)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to find devices with exit code %d", exitCode)
 	}
