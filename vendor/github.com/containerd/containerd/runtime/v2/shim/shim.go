@@ -51,14 +51,6 @@ type Publisher interface {
 	io.Closer
 }
 
-// StartOpts describes shim start configuration received from containerd
-type StartOpts struct {
-	ID               string
-	ContainerdBinary string
-	Address          string
-	TTRPCAddress     string
-}
-
 // Init func for the creation of a shim server
 type Init func(context.Context, string, Publisher, func()) (Shim, error)
 
@@ -66,7 +58,7 @@ type Init func(context.Context, string, Publisher, func()) (Shim, error)
 type Shim interface {
 	shimapi.TaskService
 	Cleanup(ctx context.Context) (*shimapi.DeleteResponse, error)
-	StartShim(ctx context.Context, opts StartOpts) (string, error)
+	StartShim(ctx context.Context, id, containerdBinary, containerdAddress, containerdTTRPCAddress string) (string, error)
 }
 
 // OptsKey is the context key for the Opts value.
@@ -175,17 +167,12 @@ func run(id string, initFunc Init, config Config) error {
 		return nil
 	}
 
-	if namespaceFlag == "" {
-		return fmt.Errorf("shim namespace cannot be empty")
-	}
-
 	setRuntime()
 
 	signals, err := setupSignals(config)
 	if err != nil {
 		return err
 	}
-
 	if !config.NoSubreaper {
 		if err := subreaper(); err != nil {
 			return err
@@ -193,12 +180,17 @@ func run(id string, initFunc Init, config Config) error {
 	}
 
 	ttrpcAddress := os.Getenv(ttrpcAddressEnv)
+
 	publisher, err := NewPublisher(ttrpcAddress)
 	if err != nil {
 		return err
 	}
+
 	defer publisher.Close()
 
+	if namespaceFlag == "" {
+		return fmt.Errorf("shim namespace cannot be empty")
+	}
 	ctx := namespaces.WithNamespace(context.Background(), namespaceFlag)
 	ctx = context.WithValue(ctx, OptsKey{}, Opts{BundlePath: bundlePath, Debug: debugFlag})
 	ctx = log.WithLogger(ctx, log.G(ctx).WithField("runtime", id))
@@ -207,7 +199,6 @@ func run(id string, initFunc Init, config Config) error {
 	if err != nil {
 		return err
 	}
-
 	switch action {
 	case "delete":
 		logger := logrus.WithFields(logrus.Fields{
@@ -228,13 +219,7 @@ func run(id string, initFunc Init, config Config) error {
 		}
 		return nil
 	case "start":
-		opts := StartOpts{
-			ID:               idFlag,
-			ContainerdBinary: containerdBinaryFlag,
-			Address:          addressFlag,
-			TTRPCAddress:     ttrpcAddress,
-		}
-		address, err := service.StartShim(ctx, opts)
+		address, err := service.StartShim(ctx, idFlag, containerdBinaryFlag, addressFlag, ttrpcAddress)
 		if err != nil {
 			return err
 		}
