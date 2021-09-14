@@ -194,12 +194,10 @@ func adjustExecSpec(containerSpec *oci.Process, execSpec *oci.Process) {
 	// the container image on the host. A consequence of the user example is any exec will run as root instead of the user configured for
 	// the container which can be problematic.
 	//
-	// Currently through cri there's no way to set a user for an exec, so just assigning whatever user the container ran as to the execs spec
-	// is fine for that. However, for any other client that would end up here, that won't hold true. For that scenario, there's no easy way to tell if a
-	// client supplied root as the user for an exec explicitly or they simply just didn't fill in the spec, as uid 0 and gid 0 will be root and
-	// this is the default value for a uint32. To try and please as many camps as possible, if the uid/gid are changed at all and don't match
-	// whatever was set on the containers spec then just use whatever was received. If the exec spec is set to 0/0 for uid/gid, then just inherit
-	// the containers as we assume it just wasn't filled in.
+	// There is no way to tell if a client supplied root as the user for an exec explicitly or if they simply didn't fill in
+	// the spec, as the default values of uid 0 and gid 0 are also the uid & gid values of the root user. To try and cover as many
+	// use cases as possible, we check if the uid/gid are changed at all and if not we just copy whatever user was set in the
+	// container spec to the exec spec.
 	if execSpec.User.UID == 0 && execSpec.User.GID == 0 {
 		execSpec.User = containerSpec.User
 	}
