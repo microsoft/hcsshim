@@ -188,9 +188,19 @@ func (c *Container) modifyContainerConstraints(ctx context.Context, rt prot.Modi
 
 // adjustExecSpec adjusts an OCI runtime specs process field provided for an execed process to contain some of the settings set on the containers spec.
 // Some of the OCI spec settings are configured in the guest as there's not enough information available on the host to set them, so the spec set for the
-// exec may be missing some things that were present in the final version of the containers spec. This includes things such as the containers user configured
-// for the init process as we can't verify that the user exists in the container image on the host. A consequence of the user example is any exec will run as root
-// instead of the user configured for the container which can be problematic.
+// exec may be missing some things that were present in the final version of the containers spec.
 func adjustExecSpec(containerSpec *oci.Process, execSpec *oci.Process) {
-	execSpec.User = containerSpec.User
+	// One of the aforementioned settings is the containers user configured for the init process as we can't verify that the user exists in
+	// the container image on the host. A consequence of the user example is any exec will run as root instead of the user configured for
+	// the container which can be problematic.
+	//
+	// Currently through cri there's no way to set a user for an exec, so just assigning whatever user the container ran as to the execs spec
+	// is fine for that. However, for any other client that would end up here, that won't hold true. For that scenario, there's no easy way to tell if a
+	// client supplied root as the user for an exec explicitly or they simply just didn't fill in the spec, as uid 0 and gid 0 will be root and
+	// this is the default value for a uint32. To try and please as many camps as possible, if the uid/gid are changed at all and don't match
+	// whatever was set on the containers spec then just use whatever was received. If the exec spec is set to 0/0 for uid/gid, then just inherit
+	// the containers as we assume it just wasn't filled in.
+	if execSpec.User.UID == 0 && execSpec.User.GID == 0 {
+		execSpec.User = containerSpec.User
+	}
 }
