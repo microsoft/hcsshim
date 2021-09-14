@@ -159,6 +159,13 @@ func requireBinary(t *testing.T, binary string) string {
 }
 
 func getWindowsNanoserverImage(build uint16) string {
+	// Due to some efforts in improving down-level compatibility for Windows containers (see
+	// https://techcommunity.microsoft.com/t5/containers/windows-server-2022-and-beyond-for-containers/ba-p/2712487)
+	// the ltsc2022 image should continue to work on builds ws2022 and onwards. The panic for "unsupported build"
+	// should only be triggered if the user is on a build older than RS5 or 21h1 now.
+	if build > osversion.V21H2 {
+		build = osversion.V21H2
+	}
 	switch build {
 	case osversion.RS5:
 		return "mcr.microsoft.com/windows/nanoserver:1809"
@@ -170,23 +177,27 @@ func getWindowsNanoserverImage(build uint16) string {
 		return "mcr.microsoft.com/windows/nanoserver:2004"
 	case osversion.V20H2:
 		return "mcr.microsoft.com/windows/nanoserver:2009"
+	case osversion.V21H2:
+		return "mcr.microsoft.com/windows/nanoserver:ltsc2022"
 	default:
 		panic("unsupported build")
 	}
 }
 
 func getWindowsServerCoreImage(build uint16) string {
-	switch build {
-	case osversion.RS5:
+	switch b := build; {
+	case b == osversion.RS5:
 		return "mcr.microsoft.com/windows/servercore:1809"
-	case osversion.V19H1:
+	case b == osversion.V19H1:
 		return "mcr.microsoft.com/windows/servercore:1903"
-	case osversion.V19H2:
+	case b == osversion.V19H2:
 		return "mcr.microsoft.com/windows/servercore:1909"
-	case osversion.V20H1:
+	case b == osversion.V20H1:
 		return "mcr.microsoft.com/windows/servercore:2004"
-	case osversion.V20H2:
+	case b == osversion.V20H2:
 		return "mcr.microsoft.com/windows/servercore:2009"
+	case b >= osversion.V21H2:
+		return "mcr.microsoft.com/windows/servercore:ltsc2022"
 	default:
 		panic("unsupported build")
 	}
