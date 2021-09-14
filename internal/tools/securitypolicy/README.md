@@ -114,13 +114,26 @@ TOML configuration file to process (required)
 
 output raw JSON in addition to the Base64 encoded version
 
-- -u
+## Authorization
 
-username to use to login to remote container services (defaults to anonymous)
+Some images will be pulled from registries that require authorization. To add
+authorization information for a given image, you would add an `[auth]` object
+to the TOML definiton for that image. For example:
 
-- -p
+```toml
+[[image]]
+name = "rust:1.52.1"
+command = ["rustc", "--help"]
 
-password to use to login to remote container services (defaults to anonymous)
+[auth]
+username = "my username"
+password = "my password"
+```
+
+Authorization information needs added on a per-image basis as it can vary from
+image to image and their respective registries.
+
+To pull an image using anonymous access, no `[auth]` object is required.
 
 ## Pause container
 

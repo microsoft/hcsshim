@@ -22,8 +22,6 @@ import (
 var (
 	configFile = flag.String("c", "", "config")
 	outputJSON = flag.Bool("j", false, "json")
-	username   = flag.String("u", "", "username")
-	password   = flag.String("p", "", "password")
 )
 
 func main() {
@@ -87,8 +85,14 @@ type EnvironmentVariableRule struct {
 
 type Image struct {
 	Name     string                    `toml:"name"`
+	Auth     ImageAuth                 `toml:"auth"`
 	Command  []string                  `toml:"command"`
 	EnvRules []EnvironmentVariableRule `toml:"env_rule"`
+}
+
+type ImageAuth struct {
+	Username string `toml:"username"`
+	Password string `toml:"password"`
 }
 
 type Config struct {
@@ -107,16 +111,6 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 		Containers: map[string]sp.SecurityPolicyContainer{},
 	}
 
-	var imageOptions []remote.Option
-	if len(*username) != 0 && len(*password) != 0 {
-		auth := authn.Basic{
-			Username: *username,
-			Password: *password}
-		c, _ := auth.Authorization()
-		authOption := remote.WithAuth(authn.FromConfig(*c))
-		imageOptions = append(imageOptions, authOption)
-	}
-
 	// Hardcode the pause container version and command. We still pull it
 	// to get the root hash and any environment variable rules we might need.
 	pause := Image{
@@ -126,6 +120,17 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 	config.Images = append(config.Images, pause)
 
 	for _, image := range config.Images {
+		var imageOptions []remote.Option
+
+		if image.Auth.Username != "" && image.Auth.Password != "" {
+			auth := authn.Basic{
+				Username: image.Auth.Username,
+				Password: image.Auth.Password}
+			c, _ := auth.Authorization()
+			authOption := remote.WithAuth(authn.FromConfig(*c))
+			imageOptions = append(imageOptions, authOption)
+		}
+
 		// validate EnvRules
 		err := validateEnvRules(image.EnvRules)
 		if err != nil {
