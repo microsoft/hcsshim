@@ -8,6 +8,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/Microsoft/hcsshim/internal/guest/storage/test/policy"
+	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"golang.org/x/sys/unix"
 )
 
@@ -25,7 +27,7 @@ func Test_Mount_Mkdir_Fails_Error(t *testing.T) {
 	osMkdirAll = func(path string, perm os.FileMode) error {
 		return expectedErr
 	}
-	err := Mount(context.Background(), 0, 0, "", false, false, nil)
+	err := Mount(context.Background(), 0, 0, "", false, false, nil, nil, openDoorSecurityPolicyEnforcer())
 	if err != expectedErr {
 		t.Fatalf("expected err: %v, got: %v", expectedErr, err)
 	}
@@ -52,7 +54,7 @@ func Test_Mount_Mkdir_ExpectedPath(t *testing.T) {
 		// Fake the mount success
 		return nil
 	}
-	err := Mount(context.Background(), 0, 0, target, false, false, nil)
+	err := Mount(context.Background(), 0, 0, target, false, false, nil, nil, openDoorSecurityPolicyEnforcer())
 	if err != nil {
 		t.Fatalf("expected nil error got: %v", err)
 	}
@@ -79,7 +81,7 @@ func Test_Mount_Mkdir_ExpectedPerm(t *testing.T) {
 		// Fake the mount success
 		return nil
 	}
-	err := Mount(context.Background(), 0, 0, target, false, false, nil)
+	err := Mount(context.Background(), 0, 0, target, false, false, nil, nil, openDoorSecurityPolicyEnforcer())
 	if err != nil {
 		t.Fatalf("expected nil error got: %v", err)
 	}
@@ -106,7 +108,7 @@ func Test_Mount_ControllerLunToName_Valid_Controller(t *testing.T) {
 		// Fake the mount success
 		return nil
 	}
-	err := Mount(context.Background(), expectedController, 0, "/fake/path", false, false, nil)
+	err := Mount(context.Background(), expectedController, 0, "/fake/path", false, false, nil, nil, openDoorSecurityPolicyEnforcer())
 	if err != nil {
 		t.Fatalf("expected nil error got: %v", err)
 	}
@@ -133,7 +135,7 @@ func Test_Mount_ControllerLunToName_Valid_Lun(t *testing.T) {
 		// Fake the mount success
 		return nil
 	}
-	err := Mount(context.Background(), 0, expectedLun, "/fake/path", false, false, nil)
+	err := Mount(context.Background(), 0, expectedLun, "/fake/path", false, false, nil, nil, openDoorSecurityPolicyEnforcer())
 	if err != nil {
 		t.Fatalf("expected nil error got: %v", err)
 	}
@@ -163,7 +165,7 @@ func Test_Mount_Calls_RemoveAll_OnControllerToLunFailure(t *testing.T) {
 	// NOTE: Do NOT set unixMount because the controller to lun fails. Expect it
 	// not to be called.
 
-	err := Mount(context.Background(), 0, 0, target, false, false, nil)
+	err := Mount(context.Background(), 0, 0, target, false, false, nil, nil, openDoorSecurityPolicyEnforcer())
 	if err != expectedErr {
 		t.Fatalf("expected err: %v, got: %v", expectedErr, err)
 	}
@@ -196,7 +198,7 @@ func Test_Mount_Calls_RemoveAll_OnMountFailure(t *testing.T) {
 		// Fake the mount failure to test remove is called
 		return expectedErr
 	}
-	err := Mount(context.Background(), 0, 0, target, false, false, nil)
+	err := Mount(context.Background(), 0, 0, target, false, false, nil, nil, openDoorSecurityPolicyEnforcer())
 	if err != expectedErr {
 		t.Fatalf("expected err: %v, got: %v", expectedErr, err)
 	}
@@ -225,7 +227,7 @@ func Test_Mount_Valid_Source(t *testing.T) {
 		}
 		return nil
 	}
-	err := Mount(context.Background(), 0, 0, "/fake/path", false, false, nil)
+	err := Mount(context.Background(), 0, 0, "/fake/path", false, false, nil, nil, openDoorSecurityPolicyEnforcer())
 	if err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
@@ -251,7 +253,7 @@ func Test_Mount_Valid_Target(t *testing.T) {
 		}
 		return nil
 	}
-	err := Mount(context.Background(), 0, 0, expectedTarget, false, false, nil)
+	err := Mount(context.Background(), 0, 0, expectedTarget, false, false, nil, nil, openDoorSecurityPolicyEnforcer())
 	if err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
@@ -277,7 +279,7 @@ func Test_Mount_Valid_FSType(t *testing.T) {
 		}
 		return nil
 	}
-	err := Mount(context.Background(), 0, 0, "/fake/path", false, false, nil)
+	err := Mount(context.Background(), 0, 0, "/fake/path", false, false, nil, nil, openDoorSecurityPolicyEnforcer())
 	if err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
@@ -303,7 +305,7 @@ func Test_Mount_Valid_Flags(t *testing.T) {
 		}
 		return nil
 	}
-	err := Mount(context.Background(), 0, 0, "/fake/path", false, false, nil)
+	err := Mount(context.Background(), 0, 0, "/fake/path", false, false, nil, nil, openDoorSecurityPolicyEnforcer())
 	if err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
@@ -329,7 +331,7 @@ func Test_Mount_Readonly_Valid_Flags(t *testing.T) {
 		}
 		return nil
 	}
-	err := Mount(context.Background(), 0, 0, "/fake/path", true, false, nil)
+	err := Mount(context.Background(), 0, 0, "/fake/path", true, false, nil, nil, openDoorSecurityPolicyEnforcer())
 	if err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
@@ -354,7 +356,7 @@ func Test_Mount_Valid_Data(t *testing.T) {
 		}
 		return nil
 	}
-	err := Mount(context.Background(), 0, 0, "/fake/path", false, false, nil)
+	err := Mount(context.Background(), 0, 0, "/fake/path", false, false, nil, nil, openDoorSecurityPolicyEnforcer())
 	if err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
@@ -380,8 +382,92 @@ func Test_Mount_Readonly_Valid_Data(t *testing.T) {
 		}
 		return nil
 	}
-	err := Mount(context.Background(), 0, 0, "/fake/path", true, false, nil)
+	err := Mount(context.Background(), 0, 0, "/fake/path", true, false, nil, nil, openDoorSecurityPolicyEnforcer())
 	if err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
+}
+
+func Test_Read_Only_Security_Policy_Enforcement(t *testing.T) {
+	clearTestDependencies()
+
+	target := "/fake/path"
+	osMkdirAll = func(path string, perm os.FileMode) error {
+		if path != target {
+			t.Errorf("expected path: %v, got: %v", target, path)
+			return errors.New("unexpected path")
+		}
+		return nil
+	}
+
+	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
+		return "", nil
+	}
+
+	unixMount = func(source string, target string, fstype string, flags uintptr, data string) error {
+		// Fake the mount success
+		return nil
+	}
+
+	enforcer := mountMonitoringSecurityPolicyEnforcer()
+	err := Mount(context.Background(), 0, 0, target, true, false, nil, nil, enforcer)
+	if err != nil {
+		t.Fatalf("expected nil err, got: %v", err)
+	}
+
+	expectedDeviceMounts := 1
+	if enforcer.DeviceMountCalls != expectedDeviceMounts {
+		t.Fatalf("expected %d attempt at pmem mount enforcement, got %d", expectedDeviceMounts, enforcer.DeviceMountCalls)
+	}
+
+	expectedOverlay := 0
+	if enforcer.OverlayMountCalls != expectedOverlay {
+		t.Fatalf("expected %d attempts at overlay mount enforcement, got %d", expectedOverlay, enforcer.OverlayMountCalls)
+	}
+}
+
+func Test_Read_Write_Security_Policy_Enforcement(t *testing.T) {
+	clearTestDependencies()
+
+	target := "/fake/path"
+	osMkdirAll = func(path string, perm os.FileMode) error {
+		if path != target {
+			t.Errorf("expected path: %v, got: %v", target, path)
+			return errors.New("unexpected path")
+		}
+		return nil
+	}
+
+	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
+		return "", nil
+	}
+
+	unixMount = func(source string, target string, fstype string, flags uintptr, data string) error {
+		// Fake the mount success
+		return nil
+	}
+
+	enforcer := mountMonitoringSecurityPolicyEnforcer()
+	err := Mount(context.Background(), 0, 0, target, false, false, nil, nil, enforcer)
+	if err != nil {
+		t.Fatalf("expected nil err, got: %v", err)
+	}
+
+	expectedDeviceMounts := 0
+	if enforcer.DeviceMountCalls != expectedDeviceMounts {
+		t.Fatalf("expected %d attempt at pmem mount enforcement, got %d", expectedDeviceMounts, enforcer.DeviceMountCalls)
+	}
+
+	expectedOverlay := 0
+	if enforcer.OverlayMountCalls != expectedOverlay {
+		t.Fatalf("expected %d attempts at overlay mount enforcement, got %d", expectedOverlay, enforcer.OverlayMountCalls)
+	}
+}
+
+func openDoorSecurityPolicyEnforcer() securitypolicy.SecurityPolicyEnforcer {
+	return &securitypolicy.OpenDoorSecurityPolicyEnforcer{}
+}
+
+func mountMonitoringSecurityPolicyEnforcer() *policy.MountMonitoringSecurityPolicyEnforcer {
+	return &policy.MountMonitoringSecurityPolicyEnforcer{}
 }

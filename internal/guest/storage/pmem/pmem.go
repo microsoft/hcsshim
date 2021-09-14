@@ -80,7 +80,7 @@ func Mount(ctx context.Context, device uint32, target string, mappingInfo *prot.
 	if verityInfo != nil {
 		deviceHash = verityInfo.RootDigest
 	}
-	err = securityPolicy.EnforcePmemMountPolicy(target, deviceHash)
+	err = securityPolicy.EnforceDeviceMountPolicy(target, deviceHash)
 	if err != nil {
 		return errors.Wrapf(err, "won't mount pmem device %d onto %s", device, target)
 	}

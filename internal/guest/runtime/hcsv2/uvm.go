@@ -266,7 +266,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 func (h *Host) modifyHostSettings(ctx context.Context, containerID string, settings *prot.ModifySettingRequest) error {
 	switch settings.ResourceType {
 	case prot.MrtMappedVirtualDisk:
-		return modifyMappedVirtualDisk(ctx, settings.RequestType, settings.Settings.(*prot.MappedVirtualDiskV2))
+		return modifyMappedVirtualDisk(ctx, settings.RequestType, settings.Settings.(*prot.MappedVirtualDiskV2), h.securityPolicyEnforcer)
 	case prot.MrtMappedDirectory:
 		return modifyMappedDirectory(ctx, h.vsock, settings.RequestType, settings.Settings.(*prot.MappedDirectoryV2))
 	case prot.MrtVPMemDevice:
@@ -426,13 +426,13 @@ func newInvalidRequestTypeError(rt prot.ModifyRequestType) error {
 	return errors.Errorf("the RequestType \"%s\" is not supported", rt)
 }
 
-func modifyMappedVirtualDisk(ctx context.Context, rt prot.ModifyRequestType, mvd *prot.MappedVirtualDiskV2) (err error) {
+func modifyMappedVirtualDisk(ctx context.Context, rt prot.ModifyRequestType, mvd *prot.MappedVirtualDiskV2, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
 	switch rt {
 	case prot.MreqtAdd:
 		mountCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 		defer cancel()
 		if mvd.MountPath != "" {
-			return scsi.Mount(mountCtx, mvd.Controller, mvd.Lun, mvd.MountPath, mvd.ReadOnly, false, mvd.Options)
+			return scsi.Mount(mountCtx, mvd.Controller, mvd.Lun, mvd.MountPath, mvd.ReadOnly, false, mvd.Options, mvd.VerityInfo, securityPolicy)
 		}
 		return nil
 	case prot.MreqtRemove:

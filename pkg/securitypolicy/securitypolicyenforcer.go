@@ -11,7 +11,7 @@ import (
 )
 
 type SecurityPolicyEnforcer interface {
-	EnforcePmemMountPolicy(target string, deviceHash string) (err error)
+	EnforceDeviceMountPolicy(target string, deviceHash string) (err error)
 	EnforceOverlayMountPolicy(containerID string, layerPaths []string) (err error)
 	EnforceStartContainerPolicy(containerID string, argList []string, envList []string) (err error)
 }
@@ -82,7 +82,7 @@ type StandardSecurityPolicyEnforcer struct {
 	// further narrow based on environment variables if required.
 	//
 	// implementation details are available in:
-	// - EnforcePmemMountPolicy
+	// - EnforceDeviceMountPolicy
 	// - EnforceOverlayMountPolicy
 	// - enforceCommandPolicy
 	// - enforceEnvironmentVariablePolicy
@@ -184,7 +184,7 @@ func stringMapToStringArray(in map[string]string) []string {
 	return out
 }
 
-func (policyState *StandardSecurityPolicyEnforcer) EnforcePmemMountPolicy(target string, deviceHash string) (err error) {
+func (policyState *StandardSecurityPolicyEnforcer) EnforceDeviceMountPolicy(target string, deviceHash string) (err error) {
 	policyState.mutex.Lock()
 	defer policyState.mutex.Unlock()
 
@@ -405,7 +405,7 @@ type OpenDoorSecurityPolicyEnforcer struct{}
 
 var _ SecurityPolicyEnforcer = (*OpenDoorSecurityPolicyEnforcer)(nil)
 
-func (p *OpenDoorSecurityPolicyEnforcer) EnforcePmemMountPolicy(target string, deviceHash string) (err error) {
+func (p *OpenDoorSecurityPolicyEnforcer) EnforceDeviceMountPolicy(target string, deviceHash string) (err error) {
 	return nil
 }
 
@@ -421,7 +421,7 @@ type ClosedDoorSecurityPolicyEnforcer struct{}
 
 var _ SecurityPolicyEnforcer = (*ClosedDoorSecurityPolicyEnforcer)(nil)
 
-func (p *ClosedDoorSecurityPolicyEnforcer) EnforcePmemMountPolicy(target string, deviceHash string) (err error) {
+func (p *ClosedDoorSecurityPolicyEnforcer) EnforceDeviceMountPolicy(target string, deviceHash string) (err error) {
 	return errors.New("mounting is denied by policy")
 }
 

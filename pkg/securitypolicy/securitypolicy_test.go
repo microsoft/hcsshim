@@ -126,27 +126,26 @@ func Test_StandardSecurityPolicyEnforcer_Devices_Initialization(t *testing.T) {
 // an error when there's no matching root hash in the policy
 func Test_EnforcePmemMountPolicy_No_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
-
 		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
 
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		target := generateMountTarget(r)
 		rootHash := generateInvalidRootHash(r)
 
-		err := policy.EnforcePmemMountPolicy(target, rootHash)
+		err := policy.EnforceDeviceMountPolicy(target, rootHash)
 
 		// we expect an error, not getting one means something is broken
 		return err != nil
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 1000}); err != nil {
-		t.Errorf("Test_EnforcePmemMountPolicy_No_Matches failed: %v", err)
+		t.Errorf("Test_EnforceDeviceMountPolicy_No_Matches failed: %v", err)
 	}
 }
 
-// Verify that StandardSecurityPolicyEnforcer.EnforcePmemMountPolicy doesn't return
-// an error when there's a matching root hash in the policy
-func Test_EnforcePmemMountPolicy_Matches(t *testing.T) {
+// Verify that StandardSecurityPolicyEnforcer.EnforceDeviceMountPolicy doesn't
+// return an error when there's a matching root hash in the policy
+func Test_EnforceDeviceMountPolicy_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
 
 		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
@@ -155,19 +154,19 @@ func Test_EnforcePmemMountPolicy_Matches(t *testing.T) {
 		target := generateMountTarget(r)
 		rootHash := selectRootHashFromContainers(p, r)
 
-		err := policy.EnforcePmemMountPolicy(target, rootHash)
+		err := policy.EnforceDeviceMountPolicy(target, rootHash)
 
 		// getting an error means something is broken
 		return err == nil
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 1000}); err != nil {
-		t.Errorf("Test_EnforcePmemMountPolicy_No_Matches failed: %v", err)
+		t.Errorf("Test_EnforceDeviceMountPolicy_No_Matches failed: %v", err)
 	}
 }
 
-// Verify that StandardSecurityPolicyEnforcer.EnforceOverlayMountPolicy will return
-// an error when there's no matching overlay targets.
+// Verify that StandardSecurityPolicyEnforcer.EnforceOverlayMountPolicy will
+// return an error when there's no matching overlay targets.
 func Test_EnforceOverlayMountPolicy_No_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
 
@@ -890,7 +889,7 @@ func createValidOverlayForContainer(enforcer SecurityPolicyEnforcer, container s
 
 	for i := 0; i < len(container.Layers); i++ {
 		mount := generateMountTarget(r)
-		err := enforcer.EnforcePmemMountPolicy(mount, container.Layers[i])
+		err := enforcer.EnforceDeviceMountPolicy(mount, container.Layers[i])
 		if err != nil {
 			return overlay, err
 		}
@@ -918,7 +917,7 @@ func invalidOverlaySameSizeWrongMounts(enforcer SecurityPolicyEnforcer, containe
 
 	for i := 0; i < len(container.Layers); i++ {
 		mount := generateMountTarget(r)
-		err := enforcer.EnforcePmemMountPolicy(mount, container.Layers[i])
+		err := enforcer.EnforceDeviceMountPolicy(mount, container.Layers[i])
 		if err != nil {
 			return overlay, err
 		}
@@ -940,7 +939,7 @@ func invalidOverlayCorrectDevicesWrongOrderSomeMissing(enforcer SecurityPolicyEn
 
 	for i := 0; i < len(container.Layers); i++ {
 		mount := generateMountTarget(r)
-		err := enforcer.EnforcePmemMountPolicy(mount, container.Layers[i])
+		err := enforcer.EnforceDeviceMountPolicy(mount, container.Layers[i])
 		if err != nil {
 			return overlay, err
 		}
@@ -965,7 +964,7 @@ func invalidOverlayRandomJunk(enforcer SecurityPolicyEnforcer, container securit
 	// setup entirely different and "correct" expected mounting
 	for i := 0; i < len(container.Layers); i++ {
 		mount := generateMountTarget(r)
-		err := enforcer.EnforcePmemMountPolicy(mount, container.Layers[i])
+		err := enforcer.EnforceDeviceMountPolicy(mount, container.Layers[i])
 		if err != nil {
 			return overlay, err
 		}

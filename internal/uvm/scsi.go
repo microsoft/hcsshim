@@ -210,6 +210,19 @@ func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) error {
 		ResourcePath: fmt.Sprintf(resourcepaths.SCSIResourceFormat, strconv.Itoa(sm.Controller), sm.LUN),
 	}
 
+	var verity *guestrequest.DeviceVerityInfo
+	if v, iErr := readVeritySuperBlock(ctx, hostPath); iErr != nil {
+		log.G(ctx).WithError(iErr).WithField("hostPath", sm.HostPath).Debug("unable to read dm-verity information from VHD")
+	} else {
+		if v != nil {
+			log.G(ctx).WithFields(logrus.Fields{
+				"hostPath":   hostPath,
+				"rootDigest": v.RootDigest,
+			}).Debug("removing SCSI with dm-verity")
+		}
+		verity = v
+	}
+
 	// Include the GuestRequest so that the GCS ejects the disk cleanly if the
 	// disk was attached/mounted
 	//
@@ -233,6 +246,7 @@ func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) error {
 				MountPath:  sm.UVMPath, // May be blank in attach-only
 				Lun:        uint8(sm.LUN),
 				Controller: uint8(sm.Controller),
+				VerityInfo: verity,
 			},
 		}
 	}
@@ -383,12 +397,26 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, addReq *addSCSIRequest)
 				Lun:           sm.LUN,
 			}
 		} else {
+			var verity *guestrequest.DeviceVerityInfo
+			if v, iErr := readVeritySuperBlock(ctx, sm.HostPath); iErr != nil {
+				log.G(ctx).WithError(iErr).WithField("hostPath", sm.HostPath).Debug("unable to read dm-verity information from VHD")
+			} else {
+				if v != nil {
+					log.G(ctx).WithFields(logrus.Fields{
+						"hostPath":   sm.HostPath,
+						"rootDigest": v.RootDigest,
+					}).Debug("adding VPMem with dm-verity")
+				}
+				verity = v
+			}
+
 			guestReq.Settings = guestrequest.LCOWMappedVirtualDisk{
 				MountPath:  sm.UVMPath,
 				Lun:        uint8(sm.LUN),
 				Controller: uint8(sm.Controller),
 				ReadOnly:   addReq.readOnly,
 				Options:    addReq.guestOptions,
+				VerityInfo: verity,
 			}
 		}
 		SCSIModification.GuestRequest = guestReq

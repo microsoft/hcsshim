@@ -10,10 +10,12 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/storage"
 	"github.com/Microsoft/hcsshim/internal/guest/storage/crypt"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
@@ -41,7 +43,7 @@ const (
 //
 // If `encrypted` is set to true, the SCSI device will be encrypted using
 // dm-crypt.
-func Mount(ctx context.Context, controller, lun uint8, target string, readonly bool, encrypted bool, options []string) (err error) {
+func Mount(ctx context.Context, controller, lun uint8, target string, readonly bool, encrypted bool, options []string, verityInfo *prot.DeviceVerityInfo, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
 	spnCtx, span := trace.StartSpan(ctx, "scsi::Mount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -49,6 +51,18 @@ func Mount(ctx context.Context, controller, lun uint8, target string, readonly b
 	span.AddAttributes(
 		trace.Int64Attribute("controller", int64(controller)),
 		trace.Int64Attribute("lun", int64(lun)))
+
+	if readonly {
+		// containers only have read-only layers so only enforce for them
+		var deviceHash string
+		if verityInfo != nil {
+			deviceHash = verityInfo.RootDigest
+		}
+		err = securityPolicy.EnforceDeviceMountPolicy(target, deviceHash)
+		if err != nil {
+			return errors.Wrapf(err, "won't mount scsi controller %d lun %d onto %s", controller, lun, target)
+		}
+	}
 
 	if err := osMkdirAll(target, 0700); err != nil {
 		return err
