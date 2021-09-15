@@ -128,7 +128,7 @@ func Mount(ctx context.Context, controller, lun uint8, target string, readonly b
 // Unmount unmounts a SCSI device mounted at `target`.
 //
 // If `encrypted` is true, it removes all its associated dm-crypto state.
-func Unmount(ctx context.Context, controller, lun uint8, target string, encrypted bool) (err error) {
+func Unmount(ctx context.Context, controller, lun uint8, target string, encrypted bool, verityInfo *prot.DeviceVerityInfo, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
 	ctx, span := trace.StartSpan(ctx, "scsi::Unmount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -137,6 +137,10 @@ func Unmount(ctx context.Context, controller, lun uint8, target string, encrypte
 		trace.Int64Attribute("controller", int64(controller)),
 		trace.Int64Attribute("lun", int64(lun)),
 		trace.StringAttribute("target", target))
+
+	if err = securityPolicy.EnforceDeviceUnmountPolicy(target); err != nil {
+		return errors.Wrapf(err, "unmounting scsi controller %d lun %d from  %s denied by policy", controller, lun, target)
+	}
 
 	// Unmount unencrypted device
 	if err := storage.UnmountPath(ctx, target, true); err != nil {

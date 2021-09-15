@@ -227,7 +227,7 @@ func Test_Mount_Valid_Data(t *testing.T) {
 	}
 }
 
-func Test_Security_Policy_Enforcement(t *testing.T) {
+func Test_Security_Policy_Enforcement_Mount_Calls(t *testing.T) {
 	clearTestDependencies()
 
 	osMkdirAll = func(path string, perm os.FileMode) error {
@@ -247,6 +247,49 @@ func Test_Security_Policy_Enforcement(t *testing.T) {
 	expectedDeviceMountCalls := 1
 	if enforcer.DeviceMountCalls != expectedDeviceMountCalls {
 		t.Fatalf("expected %d attempt at pmem mount enforcement, got %d", expectedDeviceMountCalls, enforcer.DeviceMountCalls)
+	}
+
+	expectedDeviceUnmountCalls := 0
+	if enforcer.DeviceUnmountCalls != expectedDeviceUnmountCalls {
+		t.Fatalf("expected %d attempt at pmem mount enforcement, got %d", expectedDeviceUnmountCalls, enforcer.DeviceUnmountCalls)
+	}
+
+	expectedOverlay := 0
+	if enforcer.OverlayMountCalls != expectedOverlay {
+		t.Fatalf("expected %d attempts at overlay mount enforcement, got %d", expectedOverlay, enforcer.OverlayMountCalls)
+	}
+}
+
+func Test_Security_Policy_Enforcement_Unmount_Calls(t *testing.T) {
+	clearTestDependencies()
+
+	osMkdirAll = func(path string, perm os.FileMode) error {
+		return nil
+	}
+
+	unixMount = func(source string, target string, fstype string, flags uintptr, data string) error {
+		return nil
+	}
+
+	enforcer := mountMonitoringSecurityPolicyEnforcer()
+	err := Mount(context.Background(), 0, "/fake/path", nil, nil, enforcer)
+	if err != nil {
+		t.Fatalf("expected nil err, got: %v", err)
+	}
+
+	err = Unmount(context.Background(), 0, "/fake/path", nil, nil, enforcer)
+	if err != nil {
+		t.Fatalf("expected nil err, got: %v", err)
+	}
+
+	expectedDeviceMountCalls := 1
+	if enforcer.DeviceMountCalls != expectedDeviceMountCalls {
+		t.Fatalf("expected %d attempt at pmem mount enforcement, got %d", expectedDeviceMountCalls, enforcer.DeviceMountCalls)
+	}
+
+	expectedDeviceUnmountCalls := 1
+	if enforcer.DeviceUnmountCalls != expectedDeviceUnmountCalls {
+		t.Fatalf("expected %d attempt at pmem mount enforcement, got %d", expectedDeviceUnmountCalls, enforcer.DeviceUnmountCalls)
 	}
 
 	expectedOverlay := 0

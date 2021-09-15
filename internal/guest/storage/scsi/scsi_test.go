@@ -388,7 +388,7 @@ func Test_Mount_Readonly_Valid_Data(t *testing.T) {
 	}
 }
 
-func Test_Read_Only_Security_Policy_Enforcement(t *testing.T) {
+func Test_Read_Only_Security_Policy_Enforcement_Mount_Calls(t *testing.T) {
 	clearTestDependencies()
 
 	target := "/fake/path"
@@ -420,13 +420,18 @@ func Test_Read_Only_Security_Policy_Enforcement(t *testing.T) {
 		t.Fatalf("expected %d attempt at pmem mount enforcement, got %d", expectedDeviceMounts, enforcer.DeviceMountCalls)
 	}
 
+	expectedDeviceUnmounts := 0
+	if enforcer.DeviceUnmountCalls != expectedDeviceUnmounts {
+		t.Fatalf("expected %d attempt at pmem mount enforcement, got %d", expectedDeviceUnmounts, enforcer.DeviceUnmountCalls)
+	}
+
 	expectedOverlay := 0
 	if enforcer.OverlayMountCalls != expectedOverlay {
 		t.Fatalf("expected %d attempts at overlay mount enforcement, got %d", expectedOverlay, enforcer.OverlayMountCalls)
 	}
 }
 
-func Test_Read_Write_Security_Policy_Enforcement(t *testing.T) {
+func Test_Read_Write_Security_Policy_Enforcement_Mount_Calls(t *testing.T) {
 	clearTestDependencies()
 
 	target := "/fake/path"
@@ -456,6 +461,59 @@ func Test_Read_Write_Security_Policy_Enforcement(t *testing.T) {
 	expectedDeviceMounts := 0
 	if enforcer.DeviceMountCalls != expectedDeviceMounts {
 		t.Fatalf("expected %d attempt at pmem mount enforcement, got %d", expectedDeviceMounts, enforcer.DeviceMountCalls)
+	}
+
+	expectedDeviceUnmounts := 0
+	if enforcer.DeviceUnmountCalls != expectedDeviceUnmounts {
+		t.Fatalf("expected %d attempt at pmem mount enforcement, got %d", expectedDeviceUnmounts, enforcer.DeviceUnmountCalls)
+	}
+
+	expectedOverlay := 0
+	if enforcer.OverlayMountCalls != expectedOverlay {
+		t.Fatalf("expected %d attempts at overlay mount enforcement, got %d", expectedOverlay, enforcer.OverlayMountCalls)
+	}
+}
+
+func Test_Security_Policy_Enforcement_Unmount_Calls(t *testing.T) {
+	clearTestDependencies()
+
+	target := "/fake/path"
+	osMkdirAll = func(path string, perm os.FileMode) error {
+		if path != target {
+			t.Errorf("expected path: %v, got: %v", target, path)
+			return errors.New("unexpected path")
+		}
+		return nil
+	}
+
+	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
+		return "", nil
+	}
+
+	unixMount = func(source string, target string, fstype string, flags uintptr, data string) error {
+		// Fake the mount success
+		return nil
+	}
+
+	enforcer := mountMonitoringSecurityPolicyEnforcer()
+	err := Mount(context.Background(), 0, 0, target, true, false, nil, nil, enforcer)
+	if err != nil {
+		t.Fatalf("expected nil err, got: %v", err)
+	}
+
+	err = Unmount(context.Background(), 0, 0, target, false, nil, enforcer)
+	if err != nil {
+		t.Fatalf("expected nil err, got: %v", err)
+	}
+
+	expectedDeviceMounts := 1
+	if enforcer.DeviceMountCalls != expectedDeviceMounts {
+		t.Fatalf("expected %d attempt at pmem mount enforcement, got %d", expectedDeviceMounts, enforcer.DeviceMountCalls)
+	}
+
+	expectedDeviceUnmounts := 1
+	if enforcer.DeviceUnmountCalls != expectedDeviceUnmounts {
+		t.Fatalf("expected %d attempt at pmem mount enforcement, got %d", expectedDeviceMounts, enforcer.DeviceUnmountCalls)
 	}
 
 	expectedOverlay := 0

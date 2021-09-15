@@ -122,9 +122,9 @@ func Test_StandardSecurityPolicyEnforcer_Devices_Initialization(t *testing.T) {
 	}
 }
 
-// Verify that StandardSecurityPolicyEnforcer.EnforcePmemMountPolicy will return
-// an error when there's no matching root hash in the policy
-func Test_EnforcePmemMountPolicy_No_Matches(t *testing.T) {
+// Verify that StandardSecurityPolicyEnforcer.EnforceDeviceMountPolicy will
+// return an error when there's no matching root hash in the policy
+func Test_EnforceDeviceMountPolicy_No_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
 		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
 
@@ -162,6 +162,53 @@ func Test_EnforceDeviceMountPolicy_Matches(t *testing.T) {
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 1000}); err != nil {
 		t.Errorf("Test_EnforceDeviceMountPolicy_No_Matches failed: %v", err)
+	}
+}
+
+func Test_EnforceDeviceUmountPolicy_Removes_Device_Entries(t *testing.T) {
+	f := func(p *generatedContainers) bool {
+		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		target := generateMountTarget(r)
+		rootHash := selectRootHashFromContainers(p, r)
+
+		err := policy.EnforceDeviceMountPolicy(target, rootHash)
+		if err != nil {
+			return false
+		}
+
+		// we set up an expected new data structure shape were
+		// the target has been removed, but everything else is
+		// the same
+		setupCorrectlyDone := false
+		expectedDevices := make([][]string, len(policy.Devices))
+		for i, container := range policy.Devices {
+			expectedDevices[i] = make([]string, len(container))
+			for j, storedTarget := range container {
+				if target == storedTarget {
+					setupCorrectlyDone = true
+				} else {
+					expectedDevices[i][j] = storedTarget
+				}
+			}
+		}
+		if !setupCorrectlyDone {
+			// somehow, setup failed. this should never happen without another test
+			// also failing
+			return false
+		}
+
+		err = policy.EnforceDeviceUnmountPolicy(target)
+		if err != nil {
+			return false
+		}
+
+		return cmp.Equal(policy.Devices, expectedDevices)
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 1000}); err != nil {
+		t.Errorf("Test_EnforceDeviceUmountPolicy_Removes_Device_Entries failed: %v", err)
 	}
 }
 
