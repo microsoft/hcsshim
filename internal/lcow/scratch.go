@@ -67,7 +67,15 @@ func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string,
 	}
 
 	var options []string
-	scsi, err := lcowUVM.AddSCSI(ctx, destFile, "", false, options, uvm.VMAccessTypeIndividual) // No destination as not formatted
+	scsi, err := lcowUVM.AddSCSI(
+		ctx,
+		destFile,
+		"", // No destination as not formatted
+		false,
+		lcowUVM.ScratchEncryptionEnabled(),
+		options,
+		uvm.VMAccessTypeIndividual,
+	)
 	if err != nil {
 		return err
 	}
