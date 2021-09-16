@@ -162,7 +162,7 @@ func getWindowsNanoserverImage(build uint16) string {
 	// Due to some efforts in improving down-level compatibility for Windows containers (see
 	// https://techcommunity.microsoft.com/t5/containers/windows-server-2022-and-beyond-for-containers/ba-p/2712487)
 	// the ltsc2022 image should continue to work on builds ws2022 and onwards. The panic for "unsupported build"
-	// should only be triggered if the user is on a build older than RS5 or 21h1 now.
+	// should only be triggered if the user is on 21h1 or a build older than RS5 now.
 	if build > osversion.V21H2 {
 		build = osversion.V21H2
 	}
