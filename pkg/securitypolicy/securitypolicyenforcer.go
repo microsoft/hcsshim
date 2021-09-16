@@ -12,6 +12,7 @@ import (
 
 type SecurityPolicyEnforcer interface {
 	EnforceDeviceMountPolicy(target string, deviceHash string) (err error)
+	EnforceDeviceUnmountPolicy(unmountTarget string) (err error)
 	EnforceOverlayMountPolicy(containerID string, layerPaths []string) (err error)
 	EnforceStartContainerPolicy(containerID string, argList []string, envList []string) (err error)
 }
@@ -38,7 +39,7 @@ type StandardSecurityPolicyEnforcer struct {
 	// map them back to a container definition from the user supplied
 	// SecurityPolicy
 	//
-	// Devices is a listing of dm-verity root hashes seen when mounting a device
+	// Devices is a listing of targets seen when mounting a device
 	// stored in a "per-container basis". As the UVM goes through its process of
 	// bringing up containers, we have to piece together information about what
 	// is going on.
@@ -50,7 +51,7 @@ type StandardSecurityPolicyEnforcer struct {
 	// in the supplied SecurityPolicy. Each "seen" layer is recorded in devices
 	// as it is mounted. So for example, if a root hash mount is found for the
 	// device being mounted and the first layer of the first container then we
-	// record the root hash in Devices[0][0].
+	// record the device target in Devices[0][0].
 	//
 	// Later, when overlay filesystems  created, we verify that the ordered layers
 	// for said overlay filesystem match one of the device orderings in Devices.
@@ -209,6 +210,21 @@ func (policyState *StandardSecurityPolicyEnforcer) EnforceDeviceMountPolicy(targ
 
 	if !found {
 		return fmt.Errorf("roothash %s for mount %s doesn't match policy", deviceHash, target)
+	}
+
+	return nil
+}
+
+func (policyState *StandardSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(unmountTarget string) (err error) {
+	policyState.mutex.Lock()
+	defer policyState.mutex.Unlock()
+
+	for _, container := range policyState.Devices {
+		for j, storedTarget := range container {
+			if unmountTarget == storedTarget {
+				container[j] = ""
+			}
+		}
 	}
 
 	return nil
@@ -409,6 +425,10 @@ func (p *OpenDoorSecurityPolicyEnforcer) EnforceDeviceMountPolicy(target string,
 	return nil
 }
 
+func (p *OpenDoorSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(target string) (err error) {
+	return nil
+}
+
 func (p *OpenDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID string, layerPaths []string) (err error) {
 	return nil
 }
@@ -423,6 +443,10 @@ var _ SecurityPolicyEnforcer = (*ClosedDoorSecurityPolicyEnforcer)(nil)
 
 func (p *ClosedDoorSecurityPolicyEnforcer) EnforceDeviceMountPolicy(target string, deviceHash string) (err error) {
 	return errors.New("mounting is denied by policy")
+}
+
+func (p *ClosedDoorSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(target string) (err error) {
+	return errors.New("unmounting is denied by policy")
 }
 
 func (p *ClosedDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID string, layerPaths []string) (err error) {

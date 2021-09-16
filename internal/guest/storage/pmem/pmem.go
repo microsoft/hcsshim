@@ -128,6 +128,10 @@ func Unmount(ctx context.Context, devNumber uint32, target string, mappingInfo *
 		trace.Int64Attribute("device", int64(devNumber)),
 		trace.StringAttribute("target", target))
 
+	if err := securityPolicy.EnforceDeviceUnmountPolicy(target); err != nil {
+		return errors.Wrapf(err, "unmounting pmem device from %s denied by policy", target)
+	}
+
 	if err := storage.UnmountPath(ctx, target, true); err != nil {
 		return errors.Wrapf(err, "failed to unmount target: %s", target)
 	}
