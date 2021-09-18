@@ -30,7 +30,7 @@ import (
 // this function, `vpci` is released and nil is returned for that value.
 //
 // Returns a slice of strings representing the resulting location path(s) for the specified device.
-func AddDevice(ctx context.Context, vm *uvm.UtilityVM, idType, deviceID, deviceUtilPath string) (vpci *uvm.VPCIDevice, locationPaths []string, err error) {
+func AddDevice(ctx context.Context, vm *uvm.UtilityVM, idType, deviceID string, index uint16, deviceUtilPath string) (vpci *uvm.VPCIDevice, locationPaths []string, err error) {
 	defer func() {
 		if err != nil && vpci != nil {
 			// best effort clean up allocated resource on failure
@@ -41,7 +41,7 @@ func AddDevice(ctx context.Context, vm *uvm.UtilityVM, idType, deviceID, deviceU
 		}
 	}()
 	if idType == uvm.VPCIDeviceIDType || idType == uvm.VPCIDeviceIDTypeLegacy {
-		vpci, err = vm.AssignDevice(ctx, deviceID)
+		vpci, err = vm.AssignDevice(ctx, deviceID, index)
 		if err != nil {
 			return vpci, nil, errors.Wrapf(err, "failed to assign device %s of type %s to pod %s", deviceID, idType, vm.ID())
 		}
