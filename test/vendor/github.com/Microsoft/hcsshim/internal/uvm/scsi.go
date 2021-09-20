@@ -309,7 +309,7 @@ func (uvm *UtilityVM) AddSCSI(
 		readOnly:       readOnly,
 		encrypted:      encrypted,
 		guestOptions:   guestOptions,
-		vmAccess:       VMAccessTypeIndividual,
+		vmAccess:       vmAccess,
 	}
 	return uvm.addSCSIActual(ctx, addReq)
 }
