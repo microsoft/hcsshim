@@ -5,6 +5,7 @@ package scsi
 import (
 	"context"
 	"fmt"
+	dm "github.com/Microsoft/hcsshim/internal/guest/storage/devicemapper"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -33,6 +34,7 @@ var (
 
 const (
 	scsiDevicesPath = "/sys/bus/scsi/devices"
+	verityDeviceFmt = "verity-scsi-contr%d-lun%d-%s"
 )
 
 // Mount creates a mount from the SCSI device on `controller` index `lun` to
@@ -52,15 +54,42 @@ func Mount(ctx context.Context, controller, lun uint8, target string, readonly b
 		trace.Int64Attribute("controller", int64(controller)),
 		trace.Int64Attribute("lun", int64(lun)))
 
+	source, err := controllerLunToName(spnCtx, controller, lun)
+	if err != nil {
+		return err
+	}
+
 	if readonly {
 		// containers only have read-only layers so only enforce for them
 		var deviceHash string
+		verityHandler := func() error {
+			return nil
+		}
 		if verityInfo != nil {
 			deviceHash = verityInfo.RootDigest
+			verityHandler = func() error {
+				dmVerityName := fmt.Sprintf(verityDeviceFmt, controller, lun, deviceHash)
+				if source, err = dm.CreateVerityTarget(ctx, source, dmVerityName, verityInfo); err != nil {
+					return err
+				}
+				defer func() {
+					if err != nil {
+						if err := dm.RemoveDevice(dmVerityName); err != nil {
+							log.G(spnCtx).WithError(err).WithField("verityTarget", dmVerityName).Debug("failed to cleanup verity target")
+						}
+					}
+				}()
+				return nil
+			}
 		}
+
 		err = securityPolicy.EnforceDeviceMountPolicy(target, deviceHash)
 		if err != nil {
 			return errors.Wrapf(err, "won't mount scsi controller %d lun %d onto %s", controller, lun, target)
+		}
+
+		if err := verityHandler(); err != nil {
+			return err
 		}
 	}
 
@@ -72,10 +101,6 @@ func Mount(ctx context.Context, controller, lun uint8, target string, readonly b
 			osRemoveAll(target)
 		}
 	}()
-	source, err := controllerLunToName(spnCtx, controller, lun)
-	if err != nil {
-		return err
-	}
 
 	// we only care about readonly mount option when mounting the device
 	var flags uintptr
@@ -140,6 +165,13 @@ func Unmount(ctx context.Context, controller, lun uint8, target string, encrypte
 
 	if err = securityPolicy.EnforceDeviceUnmountPolicy(target); err != nil {
 		return errors.Wrapf(err, "unmounting scsi controller %d lun %d from  %s denied by policy", controller, lun, target)
+	}
+
+	if verityInfo != nil {
+		dmVerityName := fmt.Sprintf(verityDeviceFmt, controller, lun, verityInfo.RootDigest)
+		if err := dm.RemoveDevice(dmVerityName); err != nil {
+			return errors.Wrapf(err, "failed to remove dm verity target: %s", dmVerityName)
+		}
 	}
 
 	// Unmount unencrypted device

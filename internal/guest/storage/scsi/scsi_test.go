@@ -27,6 +27,11 @@ func Test_Mount_Mkdir_Fails_Error(t *testing.T) {
 	osMkdirAll = func(path string, perm os.FileMode) error {
 		return expectedErr
 	}
+
+	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
+		return "", nil
+	}
+
 	err := Mount(context.Background(), 0, 0, "", false, false, nil, nil, openDoorSecurityPolicyEnforcer())
 	if err != expectedErr {
 		t.Fatalf("expected err: %v, got: %v", expectedErr, err)
@@ -138,39 +143,6 @@ func Test_Mount_ControllerLunToName_Valid_Lun(t *testing.T) {
 	err := Mount(context.Background(), 0, expectedLun, "/fake/path", false, false, nil, nil, openDoorSecurityPolicyEnforcer())
 	if err != nil {
 		t.Fatalf("expected nil error got: %v", err)
-	}
-}
-
-func Test_Mount_Calls_RemoveAll_OnControllerToLunFailure(t *testing.T) {
-	clearTestDependencies()
-
-	osMkdirAll = func(path string, perm os.FileMode) error {
-		return nil
-	}
-	expectedErr := errors.New("expected controller to lun failure")
-	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
-		return "", expectedErr
-	}
-	target := "/fake/path"
-	removeAllCalled := false
-	osRemoveAll = func(path string) error {
-		removeAllCalled = true
-		if path != target {
-			t.Errorf("expected path: %v, got: %v", target, path)
-			return errors.New("unexpected path")
-		}
-		return nil
-	}
-
-	// NOTE: Do NOT set unixMount because the controller to lun fails. Expect it
-	// not to be called.
-
-	err := Mount(context.Background(), 0, 0, target, false, false, nil, nil, openDoorSecurityPolicyEnforcer())
-	if err != expectedErr {
-		t.Fatalf("expected err: %v, got: %v", expectedErr, err)
-	}
-	if !removeAllCalled {
-		t.Fatal("expected os.RemoveAll to be called on mount failure")
 	}
 }
 

@@ -443,7 +443,7 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, addReq *addSCSIRequest)
 					log.G(ctx).WithFields(logrus.Fields{
 						"hostPath":   sm.HostPath,
 						"rootDigest": v.RootDigest,
-					}).Debug("adding VPMem with dm-verity")
+					}).Debug("adding SCSI with dm-verity")
 				}
 				verity = v
 			}
