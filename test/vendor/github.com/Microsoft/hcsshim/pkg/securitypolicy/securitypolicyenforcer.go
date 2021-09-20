@@ -185,11 +185,11 @@ func stringMapToStringArray(in map[string]string) []string {
 	return out
 }
 
-func (policyState *StandardSecurityPolicyEnforcer) EnforceDeviceMountPolicy(target string, deviceHash string) (err error) {
-	policyState.mutex.Lock()
-	defer policyState.mutex.Unlock()
+func (pe *StandardSecurityPolicyEnforcer) EnforceDeviceMountPolicy(target string, deviceHash string) (err error) {
+	pe.mutex.Lock()
+	defer pe.mutex.Unlock()
 
-	if len(policyState.Containers) < 1 {
+	if len(pe.Containers) < 1 {
 		return errors.New("policy doesn't allow mounting containers")
 	}
 
@@ -199,10 +199,10 @@ func (policyState *StandardSecurityPolicyEnforcer) EnforceDeviceMountPolicy(targ
 
 	found := false
 
-	for i, container := range policyState.Containers {
+	for i, container := range pe.Containers {
 		for ii, layer := range container.Layers {
 			if deviceHash == layer {
-				policyState.Devices[i][ii] = target
+				pe.Devices[i][ii] = target
 				found = true
 			}
 		}
@@ -215,11 +215,11 @@ func (policyState *StandardSecurityPolicyEnforcer) EnforceDeviceMountPolicy(targ
 	return nil
 }
 
-func (policyState *StandardSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(unmountTarget string) (err error) {
-	policyState.mutex.Lock()
-	defer policyState.mutex.Unlock()
+func (pe *StandardSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(unmountTarget string) (err error) {
+	pe.mutex.Lock()
+	defer pe.mutex.Unlock()
 
-	for _, container := range policyState.Devices {
+	for _, container := range pe.Devices {
 		for j, storedTarget := range container {
 			if unmountTarget == storedTarget {
 				container[j] = ""
@@ -230,36 +230,36 @@ func (policyState *StandardSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(un
 	return nil
 }
 
-func (policyState *StandardSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID string, layerPaths []string) (err error) {
-	policyState.mutex.Lock()
-	defer policyState.mutex.Unlock()
+func (pe *StandardSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID string, layerPaths []string) (err error) {
+	pe.mutex.Lock()
+	defer pe.mutex.Unlock()
 
-	if len(policyState.Containers) < 1 {
+	if len(pe.Containers) < 1 {
 		return errors.New("policy doesn't allow mounting containers")
 	}
 
-	if _, e := policyState.startedContainers[containerID]; e {
+	if _, e := pe.startedContainers[containerID]; e {
 		return errors.New("container has already been started")
 	}
 
 	// find maximum number of containers that could share this overlay
 	maxPossibleContainerIdsForOverlay := 0
-	for _, deviceList := range policyState.Devices {
+	for _, deviceList := range pe.Devices {
 		if equalForOverlay(layerPaths, deviceList) {
 			maxPossibleContainerIdsForOverlay++
 		}
 	}
 
 	if maxPossibleContainerIdsForOverlay == 0 {
-		errmsg := fmt.Sprintf("layerPaths '%v' doesn't match any valid layer path: '%v'", layerPaths, policyState.Devices)
+		errmsg := fmt.Sprintf("layerPaths '%v' doesn't match any valid layer path: '%v'", layerPaths, pe.Devices)
 		return errors.New(errmsg)
 	}
 
-	for i, deviceList := range policyState.Devices {
+	for i, deviceList := range pe.Devices {
 		if equalForOverlay(layerPaths, deviceList) {
-			existing := policyState.ContainerIndexToContainerIds[i]
+			existing := pe.ContainerIndexToContainerIds[i]
 			if len(existing) < maxPossibleContainerIdsForOverlay {
-				policyState.ContainerIndexToContainerIds[i] = append(existing, containerID)
+				pe.ContainerIndexToContainerIds[i] = append(existing, containerID)
 			} else {
 				errmsg := fmt.Sprintf("layerPaths '%v' already used in maximum number of container overlays", layerPaths)
 				return errors.New(errmsg)
@@ -270,39 +270,39 @@ func (policyState *StandardSecurityPolicyEnforcer) EnforceOverlayMountPolicy(con
 	return nil
 }
 
-func (policyState *StandardSecurityPolicyEnforcer) EnforceStartContainerPolicy(containerID string, argList []string, envList []string) (err error) {
-	policyState.mutex.Lock()
-	defer policyState.mutex.Unlock()
+func (pe *StandardSecurityPolicyEnforcer) EnforceStartContainerPolicy(containerID string, argList []string, envList []string) (err error) {
+	pe.mutex.Lock()
+	defer pe.mutex.Unlock()
 
-	if len(policyState.Containers) < 1 {
+	if len(pe.Containers) < 1 {
 		return errors.New("policy doesn't allow mounting containers")
 	}
 
-	if _, e := policyState.startedContainers[containerID]; e {
+	if _, e := pe.startedContainers[containerID]; e {
 		return errors.New("container has already been started")
 	}
 
-	err = policyState.enforceCommandPolicy(containerID, argList)
+	err = pe.enforceCommandPolicy(containerID, argList)
 	if err != nil {
 		return err
 	}
 
-	err = policyState.enforceEnvironmentVariablePolicy(containerID, envList)
+	err = pe.enforceEnvironmentVariablePolicy(containerID, envList)
 	if err != nil {
 		return err
 	}
 
 	// record that we've allowed this container to start
-	policyState.startedContainers[containerID] = struct{}{}
+	pe.startedContainers[containerID] = struct{}{}
 
 	return nil
 }
 
-func (policyState *StandardSecurityPolicyEnforcer) enforceCommandPolicy(containerID string, argList []string) (err error) {
+func (pe *StandardSecurityPolicyEnforcer) enforceCommandPolicy(containerID string, argList []string) (err error) {
 	// Get a list of all the indexes into our security policy's list of
 	// containers that are possible matches for this containerID based
 	// on the image overlay layout
-	possibleIndexes := possibleIndexesForID(containerID, policyState.ContainerIndexToContainerIds)
+	possibleIndexes := possibleIndexesForID(containerID, pe.ContainerIndexToContainerIds)
 
 	// Loop through every possible match and do two things:
 	// 1- see if any command matches. we need at least one match or
@@ -311,13 +311,13 @@ func (policyState *StandardSecurityPolicyEnforcer) enforceCommandPolicy(containe
 	//    security policy whose command line isn't a match.
 	matchingCommandFound := false
 	for _, possibleIndex := range possibleIndexes {
-		cmd := policyState.Containers[possibleIndex].Command
+		cmd := pe.Containers[possibleIndex].Command
 		if cmp.Equal(cmd, argList) {
 			matchingCommandFound = true
 		} else {
 			// a possible matching index turned out not to match, so we
 			// need to update that list and remove it
-			policyState.narrowMatchesForContainerIndex(possibleIndex, containerID)
+			pe.narrowMatchesForContainerIndex(possibleIndex, containerID)
 		}
 	}
 
@@ -329,23 +329,23 @@ func (policyState *StandardSecurityPolicyEnforcer) enforceCommandPolicy(containe
 	return nil
 }
 
-func (policyState *StandardSecurityPolicyEnforcer) enforceEnvironmentVariablePolicy(containerID string, envList []string) (err error) {
+func (pe *StandardSecurityPolicyEnforcer) enforceEnvironmentVariablePolicy(containerID string, envList []string) (err error) {
 	// Get a list of all the indexes into our security policy's list of
 	// containers that are possible matches for this containerID based
 	// on the image overlay layout and command line
-	possibleIndexes := possibleIndexesForID(containerID, policyState.ContainerIndexToContainerIds)
+	possibleIndexes := possibleIndexesForID(containerID, pe.ContainerIndexToContainerIds)
 
 	for _, envVariable := range envList {
 		matchingRuleFoundForSomeContainer := false
 		for _, possibleIndex := range possibleIndexes {
-			envRules := policyState.Containers[possibleIndex].EnvRules
+			envRules := pe.Containers[possibleIndex].EnvRules
 			ok := envIsMatchedByRule(envVariable, envRules)
 			if ok {
 				matchingRuleFoundForSomeContainer = true
 			} else {
 				// a possible matching index turned out not to match, so we
 				// need to update that list and remove it
-				policyState.narrowMatchesForContainerIndex(possibleIndex, containerID)
+				pe.narrowMatchesForContainerIndex(possibleIndex, containerID)
 			}
 		}
 
@@ -376,15 +376,15 @@ func envIsMatchedByRule(envVariable string, rules []securityPolicyEnvironmentVar
 	return false
 }
 
-func (policyState *StandardSecurityPolicyEnforcer) narrowMatchesForContainerIndex(index int, idToRemove string) {
+func (pe *StandardSecurityPolicyEnforcer) narrowMatchesForContainerIndex(index int, idToRemove string) {
 	updatedContainerIds := []string{}
-	existingContainerIds := policyState.ContainerIndexToContainerIds[index]
+	existingContainerIds := pe.ContainerIndexToContainerIds[index]
 	for _, id := range existingContainerIds {
 		if id != idToRemove {
 			updatedContainerIds = append(updatedContainerIds, id)
 		}
 	}
-	policyState.ContainerIndexToContainerIds[index] = updatedContainerIds
+	pe.ContainerIndexToContainerIds[index] = updatedContainerIds
 }
 
 func equalForOverlay(a1 []string, a2 []string) bool {
