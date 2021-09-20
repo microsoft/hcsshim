@@ -2,17 +2,12 @@ package uvm
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/requesttype"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
-)
-
-var (
-	ErrBadPolicy = errors.New("your policy looks suspicious or is badly formatted")
 )
 
 // SetSecurityPolicy tells the gcs instance in the UVM what policy to apply.
