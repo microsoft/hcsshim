@@ -14,7 +14,7 @@ type SecurityPolicyEnforcer interface {
 	EnforceDeviceMountPolicy(target string, deviceHash string) (err error)
 	EnforceDeviceUnmountPolicy(unmountTarget string) (err error)
 	EnforceOverlayMountPolicy(containerID string, layerPaths []string) (err error)
-	EnforceStartContainerPolicy(containerID string, argList []string, envList []string) (err error)
+	EnforceCreateContainerPolicy(containerID string, argList []string, envList []string) (err error)
 }
 
 func NewSecurityPolicyEnforcer(state SecurityPolicyState) (SecurityPolicyEnforcer, error) {
@@ -270,7 +270,7 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID 
 	return nil
 }
 
-func (pe *StandardSecurityPolicyEnforcer) EnforceStartContainerPolicy(containerID string, argList []string, envList []string) (err error) {
+func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(containerID string, argList []string, envList []string) (err error) {
 	pe.mutex.Lock()
 	defer pe.mutex.Unlock()
 
@@ -433,7 +433,7 @@ func (p *OpenDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID s
 	return nil
 }
 
-func (p *OpenDoorSecurityPolicyEnforcer) EnforceStartContainerPolicy(containerID string, argList []string, envList []string) (err error) {
+func (p *OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(containerID string, argList []string, envList []string) (err error) {
 	return nil
 }
 
@@ -453,6 +453,6 @@ func (p *ClosedDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID
 	return errors.New("creating an overlay fs is denied by policy")
 }
 
-func (p *ClosedDoorSecurityPolicyEnforcer) EnforceStartContainerPolicy(containerID string, argList []string, envList []string) (err error) {
+func (p *ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(containerID string, argList []string, envList []string) (err error) {
 	return errors.New("running commands is denied by policy")
 }
