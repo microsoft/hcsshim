@@ -266,7 +266,7 @@ func (uvm *UtilityVM) AddSCSI(ctx context.Context, hostPath string, uvmPath stri
 		attachmentType: "VirtualDisk",
 		readOnly:       readOnly,
 		guestOptions:   guestOptions,
-		vmAccess:       VMAccessTypeIndividual,
+		vmAccess:       vmAccess,
 	}
 	return uvm.addSCSIActual(ctx, addReq)
 }
