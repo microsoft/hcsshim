@@ -79,8 +79,8 @@ func main() {
 }
 
 type EnvironmentVariableRule struct {
-	Strategy string `toml:"strategy"`
-	Rule     string `toml:"rule"`
+	Strategy sp.EnvVarRule `toml:"strategy"`
+	Rule     string        `toml:"rule"`
 }
 
 type Image struct {
@@ -205,7 +205,7 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 		}
 		for _, env := range config.Config.Env {
 			rule := sp.SecurityPolicyEnvironmentVariableRule{
-				Strategy: "string",
+				Strategy: sp.EnvVarRuleString,
 				Rule:     env,
 			}
 
@@ -215,7 +215,7 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 		// cri adds TERM=xterm for all workload containers. we add to all containers
 		// to prevent any possble erroring
 		rule := sp.SecurityPolicyEnvironmentVariableRule{
-			Strategy: "string",
+			Strategy: sp.EnvVarRuleString,
 			Rule:     "TERM=xterm",
 		}
 
@@ -233,7 +233,7 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 func validateEnvRules(rules []EnvironmentVariableRule) error {
 	for _, rule := range rules {
 		switch rule.Strategy {
-		case "re2":
+		case sp.EnvVarRuleRegex:
 			_, err := regexp.Compile(rule.Rule)
 			if err != nil {
 				return err

@@ -569,7 +569,7 @@ func Test_EnforceEnvironmentVariablePolicy_Re2Match(t *testing.T) {
 	container := generateContainersContainer(r, 1)
 	// add a rule to re2 match
 	re2MatchRule := securityPolicyEnvironmentVariableRule{
-		Strategy: "re2",
+		Strategy: EnvVarRuleRegex,
 		Rule:     "PREFIX_.+=.+"}
 	container.EnvRules = append(container.EnvRules, re2MatchRule)
 	p.containers = append(p.containers, container)

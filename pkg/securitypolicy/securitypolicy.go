@@ -7,6 +7,13 @@ import (
 	"github.com/pkg/errors"
 )
 
+type EnvVarRule string
+
+const (
+	EnvVarRuleString EnvVarRule = "string"
+	EnvVarRuleRegex  EnvVarRule = "re2"
+)
+
 // Internal version of SecurityPolicyContainer
 type securityPolicyContainer struct {
 	// The command that we will allow the container to execute
@@ -22,8 +29,8 @@ type securityPolicyContainer struct {
 
 // Internal versino of SecurityPolicyEnvironmentVariableRule
 type securityPolicyEnvironmentVariableRule struct {
-	Strategy string `json:"type"`
-	Rule     string `json:"rule"`
+	Strategy EnvVarRule `json:"type"`
+	Rule     string     `json:"rule"`
 }
 
 // SecurityPolicyState is a structure that holds user supplied policy to enforce
@@ -83,8 +90,8 @@ type SecurityPolicyContainer struct {
 }
 
 type SecurityPolicyEnvironmentVariableRule struct {
-	Strategy string `json:"strategy"`
-	Rule     string `json:"rule"`
+	Strategy EnvVarRule `json:"strategy"`
+	Rule     string     `json:"rule"`
 }
 
 // Constructs SecurityPolicyState from base64Policy string. It first decodes
