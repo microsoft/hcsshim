@@ -17,11 +17,11 @@ be downloaded, turned into an ext4, and finally a dm-verity root hash calculated
 ## Example TOML configuration file
 
 ```toml
-[[image]]
+[[container]]
 name = "rust:1.52.1"
 command = ["rustc", "--help"]
 
-[[image.env_rule]]
+[[container.env_rule]]
 strategy = "re2"
 rule = "PREFIX_.+=.+"
 ```

@@ -38,8 +38,8 @@ func main() {
 		}
 
 		config := &Config{
-			AllowAll: false,
-			Images:   []Image{},
+			AllowAll:   false,
+			Containers: []Container{},
 		}
 
 		err = toml.Unmarshal(configData, config)
@@ -83,7 +83,7 @@ type EnvironmentVariableRule struct {
 	Rule     string `toml:"rule"`
 }
 
-type Image struct {
+type Container struct {
 	Name     string                    `toml:"name"`
 	Auth     ImageAuth                 `toml:"auth"`
 	Command  []string                  `toml:"command"`
@@ -96,8 +96,8 @@ type ImageAuth struct {
 }
 
 type Config struct {
-	AllowAll bool    `toml:"allow_all"`
-	Images   []Image `toml:"image"`
+	AllowAll   bool        `toml:"allow_all"`
+	Containers []Container `toml:"container"`
 }
 
 func createOpenDoorPolicy() sp.SecurityPolicy {
@@ -113,45 +113,45 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 
 	// Hardcode the pause container version and command. We still pull it
 	// to get the root hash and any environment variable rules we might need.
-	pause := Image{
+	pause := Container{
 		Name:     "k8s.gcr.io/pause:3.1",
 		Command:  []string{"/pause"},
 		EnvRules: []EnvironmentVariableRule{}}
-	config.Images = append(config.Images, pause)
+	config.Containers = append(config.Containers, pause)
 
-	for _, image := range config.Images {
+	for _, configContainer := range config.Containers {
 		var imageOptions []remote.Option
 
-		if image.Auth.Username != "" && image.Auth.Password != "" {
+		if configContainer.Auth.Username != "" && configContainer.Auth.Password != "" {
 			auth := authn.Basic{
-				Username: image.Auth.Username,
-				Password: image.Auth.Password}
+				Username: configContainer.Auth.Username,
+				Password: configContainer.Auth.Password}
 			c, _ := auth.Authorization()
 			authOption := remote.WithAuth(authn.FromConfig(*c))
 			imageOptions = append(imageOptions, authOption)
 		}
 
 		// validate EnvRules
-		err := validateEnvRules(image.EnvRules)
+		err := validateEnvRules(configContainer.EnvRules)
 		if err != nil {
 			return p, err
 		}
 
-		command := convertCommand(image.Command)
-		envRules := convertEnvironmentVariableRules(image.EnvRules)
+		command := convertCommand(configContainer.Command)
+		envRules := convertEnvironmentVariableRules(configContainer.EnvRules)
 		container := sp.SecurityPolicyContainer{
 			NumCommands: len(command),
 			Command:     command,
 			EnvRules:    envRules,
 			Layers:      map[string]string{},
 		}
-		ref, err := name.ParseReference(image.Name)
+		ref, err := name.ParseReference(configContainer.Name)
 		if err != nil {
-			return p, fmt.Errorf("'%s' isn't a valid image name", image.Name)
+			return p, fmt.Errorf("'%s' isn't a valid image name", configContainer.Name)
 		}
 		img, err := remote.Image(ref, imageOptions...)
 		if err != nil {
-			return p, fmt.Errorf("unable to fetch image '%s': %s", image.Name, err.Error())
+			return p, fmt.Errorf("unable to fetch image '%s': %s", configContainer.Name, err.Error())
 		}
 
 		layers, err := img.Layers()
