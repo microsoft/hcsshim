@@ -487,7 +487,7 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 		if len(containerOneMapping) != 2 {
 			return false
 		}
-		for _, id := range containerOneMapping {
+		for id := range containerOneMapping {
 			if (id != testContainerOneID) && (id != testContainerTwoID) {
 				return false
 			}
@@ -497,7 +497,7 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 		if len(containerTwoMapping) != 2 {
 			return false
 		}
-		for _, id := range containerTwoMapping {
+		for id := range containerTwoMapping {
 			if (id != testContainerOneID) && (id != testContainerTwoID) {
 				return false
 			}
@@ -516,7 +516,7 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 		if len(updatedMapping) != 1 {
 			return false
 		}
-		for _, id := range updatedMapping {
+		for id := range updatedMapping {
 			if id != testContainerTwoID {
 				return false
 			}
@@ -686,7 +686,7 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 		if len(containerOneMapping) != 2 {
 			return false
 		}
-		for _, id := range containerOneMapping {
+		for id := range containerOneMapping {
 			if (id != testContainerOneID) && (id != testContainerTwoID) {
 				return false
 			}
@@ -696,7 +696,7 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 		if len(containerTwoMapping) != 2 {
 			return false
 		}
-		for _, id := range containerTwoMapping {
+		for id := range containerTwoMapping {
 			if (id != testContainerOneID) && (id != testContainerTwoID) {
 				return false
 			}
@@ -716,7 +716,7 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 		if len(updatedMapping) != 1 {
 			return false
 		}
-		for _, id := range updatedMapping {
+		for id := range updatedMapping {
 			if id != testContainerTwoID {
 				return false
 			}
