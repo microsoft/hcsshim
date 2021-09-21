@@ -65,8 +65,10 @@ type StandardSecurityPolicyEnforcer struct {
 	// SecurityPolicyContainer instance.
 	//
 	// As containers can have exactly the same base image and be "the same" at
-	// the time we are doing overlay, the ContainerIndexToContainerIds in an
-	// array of possible containers for a given container id.
+	// the time we are doing overlay, the ContainerIndexToContainerIds in a
+	// set of possible containers for a given container id. Go doesn't have a set
+	// type so we are doing the idiomatic go thing of using a map[string]struct{}
+	// to represent the set.
 	//
 	// Containers that share the same base image, and perhaps further
 	// information, will have an entry per container instance in the
@@ -89,7 +91,7 @@ type StandardSecurityPolicyEnforcer struct {
 	// - enforceEnvironmentVariablePolicy
 	// - NewStandardSecurityPolicyEnforcer
 	Devices                      [][]string
-	ContainerIndexToContainerIds map[int][]string
+	ContainerIndexToContainerIds map[int]map[string]struct{}
 	// Set of container IDs that we've allowed to start. Because Go doesn't have
 	// sets as a built-in data structure, we are using a map
 	startedContainers map[string]struct{}
@@ -115,7 +117,7 @@ func NewStandardSecurityPolicyEnforcer(containers []securityPolicyContainer, enc
 		EncodedSecurityPolicy:        encoded,
 		Containers:                   containers,
 		Devices:                      devices,
-		ContainerIndexToContainerIds: map[int][]string{},
+		ContainerIndexToContainerIds: map[int]map[string]struct{}{},
 		startedContainers:            map[string]struct{}{},
 		mutex:                        &sync.Mutex{},
 	}
@@ -259,7 +261,7 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID 
 		if equalForOverlay(layerPaths, deviceList) {
 			existing := pe.ContainerIndexToContainerIds[i]
 			if len(existing) < maxPossibleContainerIdsForOverlay {
-				pe.ContainerIndexToContainerIds[i] = append(existing, containerID)
+				pe.expandMatchesForContainerIndex(i, containerID)
 			} else {
 				errmsg := fmt.Sprintf("layerPaths '%v' already used in maximum number of container overlays", layerPaths)
 				return errors.New(errmsg)
@@ -376,15 +378,17 @@ func envIsMatchedByRule(envVariable string, rules []securityPolicyEnvironmentVar
 	return false
 }
 
-func (pe *StandardSecurityPolicyEnforcer) narrowMatchesForContainerIndex(index int, idToRemove string) {
-	updatedContainerIds := []string{}
-	existingContainerIds := pe.ContainerIndexToContainerIds[index]
-	for _, id := range existingContainerIds {
-		if id != idToRemove {
-			updatedContainerIds = append(updatedContainerIds, id)
-		}
+func (pe *StandardSecurityPolicyEnforcer) expandMatchesForContainerIndex(index int, idToAdd string) {
+	_, keyExists := pe.ContainerIndexToContainerIds[index]
+	if !keyExists {
+		pe.ContainerIndexToContainerIds[index] = map[string]struct{}{}
 	}
-	pe.ContainerIndexToContainerIds[index] = updatedContainerIds
+
+	pe.ContainerIndexToContainerIds[index][idToAdd] = struct{}{}
+}
+
+func (pe *StandardSecurityPolicyEnforcer) narrowMatchesForContainerIndex(index int, idToRemove string) {
+	delete(pe.ContainerIndexToContainerIds[index], idToRemove)
 }
 
 func equalForOverlay(a1 []string, a2 []string) bool {
@@ -404,10 +408,10 @@ func equalForOverlay(a1 []string, a2 []string) bool {
 	return true
 }
 
-func possibleIndexesForID(containerID string, mapping map[int][]string) []int {
+func possibleIndexesForID(containerID string, mapping map[int]map[string]struct{}) []int {
 	possibles := []int{}
 	for index, ids := range mapping {
-		for _, id := range ids {
+		for id := range ids {
 			if containerID == id {
 				possibles = append(possibles, index)
 			}
