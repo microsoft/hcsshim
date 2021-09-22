@@ -5,6 +5,8 @@ package scsi
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"os"
 	"testing"
 
@@ -18,6 +20,7 @@ func clearTestDependencies() {
 	osRemoveAll = nil
 	unixMount = nil
 	controllerLunToName = nil
+	veritySetup = nil
 }
 
 func Test_Mount_Mkdir_Fails_Error(t *testing.T) {
@@ -500,4 +503,99 @@ func openDoorSecurityPolicyEnforcer() securitypolicy.SecurityPolicyEnforcer {
 
 func mountMonitoringSecurityPolicyEnforcer() *policy.MountMonitoringSecurityPolicyEnforcer {
 	return &policy.MountMonitoringSecurityPolicyEnforcer{}
+}
+
+// dm-verity tests
+func Test_CreateVerityTarget_And_Mount_Called_With_Correct_Parameters(t *testing.T) {
+	clearTestDependencies()
+
+	expectedVerityName := fmt.Sprintf(verityDeviceFmt, 0, 0, "hash")
+	expectedSource := "/dev/sdb"
+	expectedMapperPath := fmt.Sprintf("/dev/mapper/%s", expectedVerityName)
+	expectedTarget := "/foo"
+	veritySetupCalled := false
+
+	controllerLunToName = func(_ context.Context, _, _ uint8) (string, error) {
+		return expectedSource, nil
+	}
+
+	osMkdirAll = func(_ string, _ os.FileMode) error {
+		return nil
+	}
+
+	vInfo := &prot.DeviceVerityInfo{
+		RootDigest: "hash",
+	}
+	veritySetup = func(_ context.Context, source, name string, verityInfo *prot.DeviceVerityInfo) (string, error) {
+		veritySetupCalled = true
+		if source != expectedSource {
+			t.Errorf("expected source %s, got %s", expectedSource, source)
+		}
+		if name != expectedVerityName {
+			t.Errorf("expected verity target name %s, got %s", expectedVerityName, name)
+		}
+		return expectedMapperPath, nil
+	}
+
+	unixMount = func(source string, target string, fstype string, flags uintptr, data string) error {
+		if source != expectedMapperPath {
+			t.Errorf("expected unixMount source %s, got %s", expectedMapperPath, source)
+		}
+		if target != expectedTarget {
+			t.Errorf("expected unixMount target %s, got %s", expectedTarget, target)
+		}
+		return nil
+	}
+
+	if err := Mount(
+		context.Background(), 0, 0, expectedTarget, true, false, nil, vInfo,
+		openDoorSecurityPolicyEnforcer(),
+	); err != nil {
+		t.Fatalf("unexpected error during Mount: %s", err)
+	}
+	if !veritySetupCalled {
+		t.Fatalf("expected veritySetup to be called")
+	}
+}
+
+func Test_osMkdirAllFails_And_RemoveDevice_Called(t *testing.T) {
+	clearTestDependencies()
+
+	expectedError := errors.New("osMkdirAll error")
+	expectedVerityName := fmt.Sprintf(verityDeviceFmt, 0, 0, "hash")
+	removeDeviceCalled := false
+
+	controllerLunToName = func(_ context.Context, _, _ uint8) (string, error) {
+		return "/dev/sdb", nil
+	}
+
+	osMkdirAll = func(_ string, _ os.FileMode) error {
+		return expectedError
+	}
+
+	verityInfo := &prot.DeviceVerityInfo{
+		RootDigest: "hash",
+	}
+
+	veritySetup = func(_ context.Context, _, _ string, _ *prot.DeviceVerityInfo) (string, error) {
+		return fmt.Sprintf("/dev/mapper/%s", expectedVerityName), nil
+	}
+
+	removeDevice = func(name string) error {
+		removeDeviceCalled = true
+		if name != expectedVerityName {
+			t.Errorf("expected RemoveDevice name %s, got %s", expectedVerityName, name)
+		}
+		return nil
+	}
+
+	if err := Mount(
+		context.Background(), 0, 0, "/foo", true, false, nil, verityInfo,
+		openDoorSecurityPolicyEnforcer(),
+	); err != expectedError {
+		t.Fatalf("expected Mount error %s, got %s", expectedError, err)
+	}
+	if !removeDeviceCalled {
+		t.Fatal("expected removeDevice to be called")
+	}
 }

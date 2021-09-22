@@ -30,6 +30,10 @@ var (
 
 	// controllerLunToName is stubbed to make testing `Mount` easier.
 	controllerLunToName = ControllerLunToName
+	// veritySetup is stubbed for unit testing `Mount`
+	veritySetup = dm.CreateVerityTarget
+	// removeDevice is stubbed for unit testing `Mount`
+	removeDevice = dm.RemoveDevice
 )
 
 const (
@@ -62,25 +66,8 @@ func Mount(ctx context.Context, controller, lun uint8, target string, readonly b
 	if readonly {
 		// containers only have read-only layers so only enforce for them
 		var deviceHash string
-		verityHandler := func() error {
-			return nil
-		}
 		if verityInfo != nil {
 			deviceHash = verityInfo.RootDigest
-			verityHandler = func() error {
-				dmVerityName := fmt.Sprintf(verityDeviceFmt, controller, lun, deviceHash)
-				if source, err = dm.CreateVerityTarget(ctx, source, dmVerityName, verityInfo); err != nil {
-					return err
-				}
-				defer func() {
-					if err != nil {
-						if err := dm.RemoveDevice(dmVerityName); err != nil {
-							log.G(spnCtx).WithError(err).WithField("verityTarget", dmVerityName).Debug("failed to cleanup verity target")
-						}
-					}
-				}()
-				return nil
-			}
 		}
 
 		err = securityPolicy.EnforceDeviceMountPolicy(target, deviceHash)
@@ -88,8 +75,18 @@ func Mount(ctx context.Context, controller, lun uint8, target string, readonly b
 			return errors.Wrapf(err, "won't mount scsi controller %d lun %d onto %s", controller, lun, target)
 		}
 
-		if err := verityHandler(); err != nil {
-			return err
+		if verityInfo != nil {
+			dmVerityName := fmt.Sprintf(verityDeviceFmt, controller, lun, deviceHash)
+			if source, err = veritySetup(ctx, source, dmVerityName, verityInfo); err != nil {
+				return err
+			}
+			defer func() {
+				if err != nil {
+					if err := removeDevice(dmVerityName); err != nil {
+						log.G(spnCtx).WithError(err).WithField("verityTarget", dmVerityName).Debug("failed to cleanup verity target")
+					}
+				}
+			}()
 		}
 	}
 
@@ -169,7 +166,7 @@ func Unmount(ctx context.Context, controller, lun uint8, target string, encrypte
 
 	if verityInfo != nil {
 		dmVerityName := fmt.Sprintf(verityDeviceFmt, controller, lun, verityInfo.RootDigest)
-		if err := dm.RemoveDevice(dmVerityName); err != nil {
+		if err := removeDevice(dmVerityName); err != nil {
 			return errors.Wrapf(err, "failed to remove dm verity target: %s", dmVerityName)
 		}
 	}
