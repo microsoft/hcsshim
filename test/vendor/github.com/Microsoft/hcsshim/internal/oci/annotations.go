@@ -73,11 +73,12 @@ const (
 	// AnnotationGPUVHDPath overrides the default path to search for the gpu vhd
 	AnnotationGPUVHDPath = "io.microsoft.lcow.gpuvhdpath"
 
-	// AnnotationAssignedDeviceKernelDrivers indicates what drivers to install in the pod during device
-	// assignment. This value should contain a list of comma separated directories containing all
-	// files and information needed to install given driver(s). This may include .sys,
-	// .inf, .cer, and/or other files used during standard installation with pnputil.
-	AnnotationAssignedDeviceKernelDrivers = "io.microsoft.assigneddevice.kerneldrivers"
+	// AnnotationVirtualMachineKernelDrivers indicates what drivers to install in the pod.
+	// This value should contain a list of comma separated directories containing all
+	// files and information needed to install given driver(s). For windows, this may
+	// include .sys, .inf, .cer, and/or other files used during standard installation with pnputil.
+	// For LCOW, this may include a vhd file that contains kernel modules as *.ko files.
+	AnnotationVirtualMachineKernelDrivers = "io.microsoft.virtualmachine.kerneldrivers"
 
 	// AnnotationDeviceExtensions contains a comma separated list of full paths to device extension files.
 	// The content of these are added to a container's hcs create document.

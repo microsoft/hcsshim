@@ -105,7 +105,7 @@ func allocateWindowsResources(ctx context.Context, coi *createOptionsInternal, r
 
 	if coi.HostingSystem != nil {
 		// get the spec specified kernel drivers and install them on the UVM
-		drivers, err := getAssignedDeviceKernelDrivers(coi.Spec.Annotations)
+		drivers, err := getSpecKernelDrivers(coi.Spec.Annotations)
 		if err != nil {
 			return err
 		}

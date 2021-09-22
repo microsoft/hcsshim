@@ -179,7 +179,7 @@ func getGPUContainerRequestWCOW(t *testing.T, podID string, podConfig *runtime.P
 				},
 			},
 			Annotations: map[string]string{
-				oci.AnnotationAssignedDeviceKernelDrivers: testDriversPath,
+				oci.AnnotationVirtualMachineKernelDrivers: testDriversPath,
 			},
 		},
 		PodSandboxId:  podID,

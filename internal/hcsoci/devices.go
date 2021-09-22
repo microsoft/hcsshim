@@ -21,10 +21,10 @@ import (
 
 const deviceUtilExeName = "device-util.exe"
 
-// getAssignedDeviceKernelDrivers gets any device drivers specified on the spec.
+// getSpecKernelDrivers gets any device drivers specified on the spec.
 // Drivers are optional, therefore do not return an error if none are on the spec.
-func getAssignedDeviceKernelDrivers(annotations map[string]string) ([]string, error) {
-	drivers := oci.ParseAnnotationCommaSeparated(oci.AnnotationAssignedDeviceKernelDrivers, annotations)
+func getSpecKernelDrivers(annotations map[string]string) ([]string, error) {
+	drivers := oci.ParseAnnotationCommaSeparated(oci.AnnotationVirtualMachineKernelDrivers, annotations)
 	for _, driver := range drivers {
 		if _, err := os.Stat(driver); err != nil {
 			return nil, errors.Wrapf(err, "failed to find path to drivers at %s", driver)
