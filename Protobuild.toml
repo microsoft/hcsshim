@@ -28,7 +28,7 @@ plugins = ["grpc", "fieldpath"]
   "github/containerd/cgroups/stats/v1/metrics.proto" = "github.com/containerd/cgroups/stats/v1"
 
 [[overrides]]
-prefixes = ["github.com/Microsoft/hcsshim/internal/shimdiag"]
+prefixes = ["github.com/Microsoft/hcsshim/pkg/shimdiag"]
 plugins = ["ttrpc"]
 
 [[overrides]]

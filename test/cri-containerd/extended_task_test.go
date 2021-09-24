@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/extendedtask"
-	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
+	"github.com/Microsoft/hcsshim/pkg/shimdiag"
 )
 
 func getPodProcessorInfo(ctx context.Context, podID string) (*extendedtask.ComputeProcessorInfoResponse, error) {
