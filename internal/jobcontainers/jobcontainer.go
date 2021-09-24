@@ -211,6 +211,16 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 	env = append(env, envMapToSlice(conf.Environment)...)
 	env = append(env, sandboxMountPointEnvVar+"="+c.sandboxMount)
 
+	// exec.Cmd internally does its own path resolution and as part of this checks some well known file extensions on the file given (e.g. if
+	// the user just provided /path/to/mybinary). CreateProcess is perfectly capable of launching an executable that doesn't have the .exe extension
+	// so this adds an empty string entry to the end of what extensions GO checks against so that a binary with no extension can be launched.
+	// The extensions are checked in order, so that if mybinary.exe and mybinary both existed in the same directory, mybinary.exe would be chosen.
+	// This is mostly to handle a common Kubernetes test image named agnhost that has the main entrypoint as a binary named agnhost with no extension.
+	// https://github.com/kubernetes/kubernetes/blob/d64e91878517b1208a0bce7e2b7944645ace8ede/test/images/agnhost/Dockerfile_windows
+	if err := os.Setenv("PATHEXT", ".COM;.EXE;.BAT;.CMD; "); err != nil {
+		return nil, errors.Wrap(err, "failed to set PATHEXT")
+	}
+
 	cmd := &exec.Cmd{
 		Env:  env,
 		Dir:  workDir,
