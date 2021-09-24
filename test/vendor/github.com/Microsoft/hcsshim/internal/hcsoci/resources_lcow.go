@@ -174,7 +174,8 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 		switch d.IDType {
 		case uvm.GPUDeviceIDType:
 			addGPUVHD = true
-			vpci, err := coi.HostingSystem.AssignDevice(ctx, d.ID)
+			pciID, index := getDeviceInfoFromPath(d.ID)
+			vpci, err := coi.HostingSystem.AssignDevice(ctx, pciID, index)
 			if err != nil {
 				return errors.Wrapf(err, "failed to assign gpu device %s to pod %s", d.ID, coi.HostingSystem.ID())
 			}
