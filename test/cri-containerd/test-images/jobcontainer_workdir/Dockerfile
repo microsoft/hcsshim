@@ -8,7 +8,7 @@ FROM golang:1.15.10-nanoserver-1809
 # Get administrator privileges
 USER containeradministrator
 
-WORKDIR C:\\go\\src\\hns
+WORKDIR C:\\go\\src\\workdir
 COPY main.go .
 
 RUN go get -d -v ./...

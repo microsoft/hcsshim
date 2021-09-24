@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -176,11 +177,38 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 
 	// Replace any occurences of the sandbox mount point env variable in the commandline.
 	// %CONTAINER_SANDBOX_MOUNTPOINT%\mybinary.exe -> C:\C\123456789\mybinary.exe
-	commandLine := c.replaceWithMountPoint(conf.CommandLine)
+	commandLine, _ := c.replaceWithMountPoint(conf.CommandLine)
+
+	removeDriveLetter := func(name string) string {
+		// If just the letter and colon (C:) then replace with a single backslash. Else just trim the drive letter and leave the rest of the
+		// path.
+		if len(name) == 2 && name[1] == ':' {
+			name = "\\"
+		} else if len(name) > 2 && name[1] == ':' {
+			name = name[2:]
+		}
+		return name
+	}
 
 	workDir := c.sandboxMount
 	if conf.WorkingDirectory != "" {
-		workDir = c.replaceWithMountPoint(conf.WorkingDirectory)
+		var changed bool
+		// For now, we join the working directory requested with where the sandbox volume is located. It's expected that the default behavior
+		// would be to treat all paths as relative to the volume.
+		//
+		// For example:
+		// A working directory of C:\ would become C:\C\12345678\
+		// A working directory of C:\work\dir would become C:\C\12345678\work\dir
+		//
+		// The below calls replaceWithMountPoint to replace any occurrences of the environment variable that points to where the container image
+		// volume is mounted.
+		workDir, changed = c.replaceWithMountPoint(conf.WorkingDirectory)
+		// If the working directory was changed, that means the user supplied %CONTAINER_SANDBOX_MOUNT_POINT%\\my\dir or something similar.
+		// In that case there's nothing left to do, as we don't want to join it with the mount point again.. If it *wasn't* changed, then we
+		// need to join it with the mount point, as it's some normal path.
+		if !changed {
+			workDir = filepath.Join(c.sandboxMount, removeDriveLetter(workDir))
+		}
 	}
 
 	// Reassign commandline here in case it needed to be quoted. For example if "foo bar baz" was supplied, and
@@ -575,8 +603,10 @@ func systemProcessInformation() ([]*winapi.SYSTEM_PROCESS_INFORMATION, error) {
 	return procInfos, nil
 }
 
-// Takes a string and replaces any occurences of CONTAINER_SANDBOX_MOUNT_POINT with where the containers volume is mounted.
-func (c *JobContainer) replaceWithMountPoint(str string) string {
-	str = strings.ReplaceAll(str, "%"+sandboxMountPointEnvVar+"%", c.sandboxMount[:len(c.sandboxMount)-1])
-	return strings.ReplaceAll(str, "$env:"+sandboxMountPointEnvVar, c.sandboxMount[:len(c.sandboxMount)-1])
+// Takes a string and replaces any occurences of CONTAINER_SANDBOX_MOUNT_POINT with where the containers volume is mounted, as well as returning
+// if the string actually contained the environment variable.
+func (c *JobContainer) replaceWithMountPoint(str string) (string, bool) {
+	newStr := strings.ReplaceAll(str, "%"+sandboxMountPointEnvVar+"%", c.sandboxMount[:len(c.sandboxMount)-1])
+	newStr = strings.ReplaceAll(newStr, "$env:"+sandboxMountPointEnvVar, c.sandboxMount[:len(c.sandboxMount)-1])
+	return newStr, str != newStr
 }
