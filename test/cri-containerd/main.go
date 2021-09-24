@@ -48,6 +48,8 @@ const (
 	lcowRuntimeHandler       = "runhcs-lcow"
 	imageLcowK8sPause        = "k8s.gcr.io/pause:3.1"
 	imageLcowAlpine          = "docker.io/library/alpine:latest"
+	imageLcowAlpineCoreDump  = "cplatpublic.azurecr.io/stackoverflow-alpine:latest"
+	imageWindowsProcessDump  = "cplatpublic.azurecr.io/crashdump:latest"
 	imageLcowCosmos          = "cosmosarno/spark-master:2.4.1_2019-04-18_8e864ce"
 	imageJobContainerHNS     = "cplatpublic.azurecr.io/jobcontainer_hns:latest"
 	imageJobContainerETW     = "cplatpublic.azurecr.io/jobcontainer_etw:latest"
@@ -162,7 +164,7 @@ func getWindowsNanoserverImage(build uint16) string {
 	case osversion.V20H2:
 		return "mcr.microsoft.com/windows/nanoserver:2009"
 	default:
-		panic("unsupported build")
+		return "mcr.microsoft.com/windows/nanoserver:2009"
 	}
 }
 
@@ -179,7 +181,7 @@ func getWindowsServerCoreImage(build uint16) string {
 	case osversion.V20H2:
 		return "mcr.microsoft.com/windows/servercore:2009"
 	default:
-		panic("unsupported build")
+		return "mcr.microsoft.com/windows/nanoserver:2009"
 	}
 }
 
