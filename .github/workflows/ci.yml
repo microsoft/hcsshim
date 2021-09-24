@@ -125,8 +125,6 @@ jobs:
             Write-Error ("Test module should not depend on github.com/Microsoft/hcsshim/internal/... to function." + "`r`n" + $failures)
           }
           exit $failures.Length
-        # TODO: Remove this once this test succeeds.
-        continue-on-error: true
 
   test:
     runs-on: ${{ matrix.os }}
