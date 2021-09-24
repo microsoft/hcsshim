@@ -107,6 +107,27 @@ jobs:
           }
           exit $process.ExitCode
 
+  verify-test-doesnt-use-internal-apis:
+    runs-on: 'windows-2019'
+    env:
+      GOPROXY: "https://proxy.golang.org,direct"
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.15.0'
+      - name: Validate test module doesn't use internal APIs
+        shell: powershell
+        run: |
+          $currentPath = (Get-Location).Path
+          $failures = & ${currentPath}/test/scripts/Verify-NoInternalImports.ps1 "${currentPath}/test"
+          if ($failures.Length -gt 0) {
+            Write-Error ("Test module should not depend on github.com/Microsoft/hcsshim/internal/... to function." + "`r`n" + $failures)
+          }
+          exit $failures.Length
+        # TODO: Remove this once this test succeeds.
+        continue-on-error: true
+
   test:
     runs-on: ${{ matrix.os }}
     strategy:
