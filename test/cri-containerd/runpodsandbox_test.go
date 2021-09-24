@@ -1361,6 +1361,226 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_WCOW(t *testing.T) {
 	}
 }
 
+func Test_RunPodSandbox_ProcessDump_LCOW(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
+	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpineCoreDump})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sbRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, map[string]string{
+		oci.AnnotationContainerProcessDumpLocation: "/coredumps/core",
+	})
+
+	podID := runPodSandbox(t, client, ctx, sbRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	mounts := []*runtime.Mount{
+		{
+			HostPath:      "sandbox:///coredump",
+			ContainerPath: "/coredumps",
+		},
+	}
+
+	annotations := map[string]string{
+		oci.AnnotationRLimitCore: "18446744073709551615;18446744073709551615",
+	}
+
+	// Setup container 1 that uses an image that stackoverflows shortly after starting.
+	// This should generate a core dump file in the sandbox mount location
+	c1Request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container1",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpineCoreDump,
+			},
+			Command: []string{
+				"./stackoverflow",
+			},
+			Annotations: annotations,
+			Mounts:      mounts,
+		},
+		PodSandboxId:  podID,
+		SandboxConfig: sbRequest.Config,
+	}
+
+	container1ID := createContainer(t, client, ctx, c1Request)
+	defer removeContainer(t, client, ctx, container1ID)
+
+	startContainer(t, client, ctx, container1ID)
+	defer stopContainer(t, client, ctx, container1ID)
+
+	// Then setup a secondary container that will mount the same sandbox mount and
+	// just verify that the core dump file is present.
+	c2Request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container2",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpineCoreDump,
+			},
+			// Hold this command open until killed
+			Command: []string{
+				"top",
+			},
+			Mounts: mounts,
+		},
+		PodSandboxId:  podID,
+		SandboxConfig: sbRequest.Config,
+	}
+
+	mounts = []*runtime.Mount{
+		{
+			HostPath:      "sandbox:///coredump",
+			ContainerPath: "/coredumps",
+		},
+	}
+
+	// Wait for the first container to die and create the core dump.
+	time.Sleep(time.Second * 5)
+
+	container2ID := createContainer(t, client, ctx, c2Request)
+	defer removeContainer(t, client, ctx, container2ID)
+
+	startContainer(t, client, ctx, container2ID)
+	defer stopContainer(t, client, ctx, container2ID)
+
+	// Check if the core dump file is present
+	execCommand := []string{
+		"ls",
+		"/coredumps/core",
+	}
+	execRequest := &runtime.ExecSyncRequest{
+		ContainerId: container2ID,
+		Cmd:         execCommand,
+		Timeout:     20,
+	}
+
+	r := execSync(t, client, ctx, execRequest)
+	if r.ExitCode != 0 {
+		t.Fatalf("failed with exit code %d running `ls`: %s", r.ExitCode, string(r.Stderr))
+	}
+}
+
+func Test_RunPodSandbox_ProcessDump_WCOW_Hypervisor(t *testing.T) {
+	requireFeatures(t, featureWCOWHypervisor)
+
+	pullRequiredImages(t, []string{imageWindowsProcessDump})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sbRequest := getRunPodSandboxRequest(t, wcowHypervisor19041RuntimeHandler, map[string]string{
+		oci.AnnotationContainerProcessDumpLocation: "C:\\processdump",
+	})
+
+	podID := runPodSandbox(t, client, ctx, sbRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	mounts := []*runtime.Mount{
+		{
+			HostPath:      "sandbox:///processdump",
+			ContainerPath: "C:\\processdump",
+		},
+	}
+
+	// Setup container 1 that uses an image that throws a user exception shortly after starting.
+	// This should generate a process dump file in the sandbox mount location
+	c1Request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container1",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsProcessDump,
+			},
+			Command: []string{
+				"C:\\app\\crashtest.exe",
+				"ue",
+			},
+			Mounts: mounts,
+		},
+		PodSandboxId:  podID,
+		SandboxConfig: sbRequest.Config,
+	}
+
+	container1ID := createContainer(t, client, ctx, c1Request)
+	defer removeContainer(t, client, ctx, container1ID)
+
+	startContainer(t, client, ctx, container1ID)
+	defer stopContainer(t, client, ctx, container1ID)
+
+	// Then setup a secondary container that will mount the same sandbox mount and
+	// just verify that the process dump file is present.
+	c2Request := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container2",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsProcessDump,
+			},
+			// Hold this command open until killed
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+			Mounts: mounts,
+		},
+		PodSandboxId:  podID,
+		SandboxConfig: sbRequest.Config,
+	}
+
+	mounts = []*runtime.Mount{
+		{
+			HostPath:      "sandbox:///processdump",
+			ContainerPath: "C:\\processdump",
+		},
+	}
+
+	// Wait for the first container to die and create the process dump.
+	time.Sleep(time.Second * 10)
+
+	container2ID := createContainer(t, client, ctx, c2Request)
+	defer removeContainer(t, client, ctx, container2ID)
+
+	startContainer(t, client, ctx, container2ID)
+	defer stopContainer(t, client, ctx, container2ID)
+
+	// Check if the core dump file is present
+	execCommand := []string{
+		"cmd",
+		"/c",
+		"dir",
+		"C:\\processdump",
+	}
+	execRequest := &runtime.ExecSyncRequest{
+		ContainerId: container2ID,
+		Cmd:         execCommand,
+		Timeout:     20,
+	}
+
+	r := execSync(t, client, ctx, execRequest)
+	if r.ExitCode != 0 {
+		t.Fatalf("failed with exit code %d running `dir`: %s", r.ExitCode, string(r.Stderr))
+	}
+
+	if !strings.Contains(string(r.Stdout), ".dmp") {
+		t.Fatalf("expected dmp file to be present in the directory, got: %s", string(r.Stdout))
+	}
+}
+
 func createSandboxContainerAndExecForCustomScratch(t *testing.T, annotations map[string]string) (string, string, int) {
 	cmd := []string{
 		"df",
