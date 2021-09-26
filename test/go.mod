@@ -61,6 +61,7 @@ require (
 
 replace (
 	github.com/Microsoft/hcsshim => ../
+	// Downgrading genproto is needed to fix "panic: protobuf tag not enough fields in Status.state:"
+	// See https://github.com/containerd/ttrpc/pull/89 and https://github.com/containerd/ttrpc/issues/62
 	google.golang.org/genproto => google.golang.org/genproto v0.0.0-20200224152610-e50cd9704f63
-	google.golang.org/grpc => google.golang.org/grpc v1.27.1
 )
