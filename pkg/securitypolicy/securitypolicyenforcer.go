@@ -21,7 +21,7 @@ func NewSecurityPolicyEnforcer(state SecurityPolicyState) (SecurityPolicyEnforce
 	if state.SecurityPolicy.AllowAll {
 		return &OpenDoorSecurityPolicyEnforcer{}, nil
 	} else {
-		containers, err := toInternal(&state.SecurityPolicy)
+		containers, err := state.SecurityPolicy.Containers.toInternal()
 		if err != nil {
 			return nil, err
 		}
@@ -123,57 +123,83 @@ func NewStandardSecurityPolicyEnforcer(containers []securityPolicyContainer, enc
 	}
 }
 
-func toInternal(external *SecurityPolicy) ([]securityPolicyContainer, error) {
-	containerMapLength := len(external.Containers)
-	if external.NumContainers != containerMapLength {
-		errmsg := fmt.Sprintf("container numbers don't match in policy. expected: %d, actual: %d", external.NumContainers, containerMapLength)
-		return nil, errors.New(errmsg)
+func (c Containers) toInternal() ([]securityPolicyContainer, error) {
+	containerMapLength := len(c.Elements)
+	if c.Length != containerMapLength {
+		return nil, fmt.Errorf("container numbers don't match in policy. expected: %d, actual: %d", c.Length, containerMapLength)
 	}
 
 	internal := make([]securityPolicyContainer, containerMapLength)
 
 	for i := 0; i < containerMapLength; i++ {
-		iContainer := securityPolicyContainer{}
-
-		eContainer := external.Containers[strconv.Itoa(i)]
-
-		// Command conversion
-		if eContainer.NumCommands != len(eContainer.Command) {
-			errmsg := fmt.Sprintf("command argument numbers don't match in policy. expected: %d, actual: %d", eContainer.NumCommands, len(eContainer.Command))
-			return nil, errors.New(errmsg)
+		iContainer, err := c.Elements[strconv.Itoa(i)].toInternal()
+		if err != nil {
+			return nil, err
 		}
-		iContainer.Command = stringMapToStringArray(eContainer.Command)
-
-		// Layers conversion
-		if eContainer.NumLayers != len(eContainer.Layers) {
-			errmsg := fmt.Sprintf("layer numbers don't match in policy. expected: %d, actual: %d", eContainer.NumLayers, len(eContainer.Layers))
-			return nil, errors.New(errmsg)
-		}
-		iContainer.Layers = stringMapToStringArray(eContainer.Layers)
-
-		// EnvRules conversion
-		envRulesMapLength := len(eContainer.EnvRules)
-		if eContainer.NumEnvRules != envRulesMapLength {
-			errmsg := fmt.Sprintf("env rule numbers don't match in policy. expected: %d, actual: %d", eContainer.NumEnvRules, envRulesMapLength)
-			return nil, errors.New(errmsg)
-		}
-
-		envRules := make([]securityPolicyEnvironmentVariableRule, envRulesMapLength)
-		for i := 0; i < envRulesMapLength; i++ {
-			eIndex := strconv.Itoa(i)
-			rule := securityPolicyEnvironmentVariableRule{
-				Strategy: eContainer.EnvRules[eIndex].Strategy,
-				Rule:     eContainer.EnvRules[eIndex].Rule,
-			}
-			envRules[i] = rule
-		}
-		iContainer.EnvRules = envRules
 
 		// save off new container
 		internal[i] = iContainer
 	}
 
 	return internal, nil
+}
+
+func (c Container) toInternal() (securityPolicyContainer, error) {
+	command, err := c.Command.toInternal()
+	if err != nil {
+		return securityPolicyContainer{}, err
+	}
+
+	envRules, err := c.EnvRules.toInternal()
+	if err != nil {
+		return securityPolicyContainer{}, err
+	}
+
+	layers, err := c.Layers.toInternal()
+	if err != nil {
+		return securityPolicyContainer{}, err
+	}
+
+	return securityPolicyContainer{
+		Command:  command,
+		EnvRules: envRules,
+		Layers:   layers,
+	}, nil
+}
+
+func (c CommandArgs) toInternal() ([]string, error) {
+	if c.Length != len(c.Elements) {
+		return nil, fmt.Errorf("command argument numbers don't match in policy. expected: %d, actual: %d", c.Length, len(c.Elements))
+	}
+
+	return stringMapToStringArray(c.Elements), nil
+}
+
+func (e EnvRules) toInternal() ([]securityPolicyEnvironmentVariableRule, error) {
+	envRulesMapLength := len(e.Elements)
+	if e.Length != envRulesMapLength {
+		return nil, fmt.Errorf("env rule numbers don't match in policy. expected: %d, actual: %d", e.Length, envRulesMapLength)
+	}
+
+	envRules := make([]securityPolicyEnvironmentVariableRule, envRulesMapLength)
+	for i := 0; i < envRulesMapLength; i++ {
+		eIndex := strconv.Itoa(i)
+		rule := securityPolicyEnvironmentVariableRule{
+			Strategy: e.Elements[eIndex].Strategy,
+			Rule:     e.Elements[eIndex].Rule,
+		}
+		envRules[i] = rule
+	}
+
+	return envRules, nil
+}
+
+func (l Layers) toInternal() ([]string, error) {
+	if l.Length != len(l.Elements) {
+		return nil, fmt.Errorf("layer numbers don't match in policy. expected: %d, actual: %d", l.Length, len(l.Elements))
+	}
+
+	return stringMapToStringArray(l.Elements), nil
 }
 
 func stringMapToStringArray(in map[string]string) []string {

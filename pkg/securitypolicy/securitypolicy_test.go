@@ -34,46 +34,45 @@ const (
 // to our internal format is done correctly.
 func Test_StandardSecurityPolicyEnforcer_From_Security_Policy_Conversion(t *testing.T) {
 	f := func(p *SecurityPolicy) bool {
-
-		containers, err := toInternal(p)
+		containers, err := p.Containers.toInternal()
 		if err != nil {
 			t.Logf("unexpected setup error. this might mean test fixture setup has a bug: %v", err)
 			return false
 		}
 
-		if len(containers) != p.NumContainers {
-			t.Errorf("numContainers don't match. internal: %d, external: %d", len(containers), p.NumContainers)
+		if len(containers) != p.Containers.Length {
+			t.Errorf("number of containers doesn't match. internal: %d, external: %d", len(containers), p.Containers.Length)
 			return false
 		}
 
 		// do by index comparison of containers
 		for i := 0; i < len(containers); i++ {
 			internal := containers[i]
-			external := p.Containers[strconv.Itoa(i)]
+			external := p.Containers.Elements[strconv.Itoa(i)]
 
 			// verify sanity with size
-			if len(internal.Command) != external.NumCommands {
-				t.Errorf("numCommands don't match for container %d. internal: %d, external: %d", i, len(internal.Command), external.NumCommands)
+			if len(internal.Command) != external.Command.Length {
+				t.Errorf("number of command args doesn't match for container %d. internal: %d, external: %d", i, len(internal.Command), external.Command.Length)
 			}
 
-			if len(internal.EnvRules) != external.NumEnvRules {
-				t.Errorf("numEnvRules don't match for container %d. internal: %d, external: %d", i, len(internal.EnvRules), external.NumEnvRules)
+			if len(internal.EnvRules) != external.EnvRules.Length {
+				t.Errorf("number of env rules doesn't match for container %d. internal: %d, external: %d", i, len(internal.EnvRules), external.EnvRules.Length)
 			}
 
-			if len(internal.Layers) != external.NumLayers {
-				t.Errorf("numLayers don't match for container %d. internal: %d, external: %d", i, len(internal.Layers), external.NumLayers)
+			if len(internal.Layers) != external.Layers.Length {
+				t.Errorf("number of layers doesn't match for container %d. internal: %d, external: %d", i, len(internal.Layers), external.Layers.Length)
 			}
 
 			// do by index comparison of sub-items
 			for j := 0; j < len(internal.Command); j++ {
-				if internal.Command[j] != external.Command[strconv.Itoa(j)] {
-					t.Errorf("command entries at index %d for for container %d don't match. internal: %s, external: %s", j, i, internal.Command[j], external.Command[strconv.Itoa(j)])
+				if internal.Command[j] != external.Command.Elements[strconv.Itoa(j)] {
+					t.Errorf("command entries at index %d for for container %d don't match. internal: %s, external: %s", j, i, internal.Command[j], external.Command.Elements[strconv.Itoa(j)])
 				}
 			}
 
 			for j := 0; j < len(internal.EnvRules); j++ {
 				irule := internal.EnvRules[j]
-				erule := external.EnvRules[strconv.Itoa(j)]
+				erule := external.EnvRules.Elements[strconv.Itoa(j)]
 				if (irule.Strategy != erule.Strategy) ||
 					(irule.Rule != erule.Rule) {
 					t.Errorf("env rule entries at index %d for for container %d don't match. internal: %v, external: %v", j, i, irule, erule)
@@ -81,8 +80,8 @@ func Test_StandardSecurityPolicyEnforcer_From_Security_Policy_Conversion(t *test
 			}
 
 			for j := 0; j < len(internal.Layers); j++ {
-				if internal.Layers[j] != external.Layers[strconv.Itoa(j)] {
-					t.Errorf("layer entries at index %d for for container %d don't match. internal: %s, external: %s", j, i, internal.Layers[j], external.Layers[strconv.Itoa(j)])
+				if internal.Layers[j] != external.Layers.Elements[strconv.Itoa(j)] {
+					t.Errorf("layer entries at index %d for for container %d don't match. internal: %s, external: %s", j, i, internal.Layers[j], external.Layers.Elements[strconv.Itoa(j)])
 				}
 			}
 		}
@@ -742,46 +741,54 @@ func (*SecurityPolicy) Generate(r *rand.Rand, size int) reflect.Value {
 	// confusing fixture name functions where we have generate* for both internal
 	// and external versions
 	p := &SecurityPolicy{
-		Containers: map[string]SecurityPolicyContainer{},
+		Containers: Containers{
+			Elements: map[string]Container{},
+		},
 	}
 	p.AllowAll = false
 	numContainers := int(atLeastOneAtMost(r, maxContainersInGeneratedPolicy))
 	for i := 0; i < numContainers; i++ {
-		c := SecurityPolicyContainer{
-			Command:  map[string]string{},
-			EnvRules: map[string]SecurityPolicyEnvironmentVariableRule{},
-			Layers:   map[string]string{},
+		c := Container{
+			Command: CommandArgs{
+				Elements: map[string]string{},
+			},
+			EnvRules: EnvRules{
+				Elements: map[string]EnvRule{},
+			},
+			Layers: Layers{
+				Elements: map[string]string{},
+			},
 		}
 
 		// command
 		numArgs := int(atLeastOneAtMost(r, maxGeneratedCommandArgs))
 		for i := 0; i < numArgs; i++ {
-			c.Command[strconv.Itoa(i)] = randVariableString(r, maxGeneratedCommandLength)
+			c.Command.Elements[strconv.Itoa(i)] = randVariableString(r, maxGeneratedCommandLength)
 		}
-		c.NumCommands = numArgs
+		c.Command.Length = numArgs
 
 		// layers
 		numLayers := int(atLeastOneAtMost(r, maxLayersInGeneratedContainer))
 		for i := 0; i < numLayers; i++ {
-			c.Layers[strconv.Itoa(i)] = generateRootHash(r)
+			c.Layers.Elements[strconv.Itoa(i)] = generateRootHash(r)
 		}
-		c.NumLayers = numLayers
+		c.Layers.Length = numLayers
 
 		// env variable rules
 		numEnvRules := int(atMost(r, maxGeneratedEnvironmentVariableRules))
 		for i := 0; i < numEnvRules; i++ {
-			rule := SecurityPolicyEnvironmentVariableRule{
+			rule := EnvRule{
 				Strategy: "string",
 				Rule:     randVariableString(r, maxGeneratedEnvironmentVariableRuleLength),
 			}
-			c.EnvRules[strconv.Itoa(i)] = rule
+			c.EnvRules.Elements[strconv.Itoa(i)] = rule
 		}
-		c.NumEnvRules = numEnvRules
+		c.EnvRules.Length = numEnvRules
 
-		p.Containers[strconv.Itoa(i)] = c
+		p.Containers.Elements[strconv.Itoa(i)] = c
 	}
 
-	p.NumContainers = numContainers
+	p.Containers.Length = numContainers
 
 	return reflect.ValueOf(p)
 }

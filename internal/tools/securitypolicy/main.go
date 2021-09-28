@@ -13,7 +13,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/Microsoft/hcsshim/ext4/dmverity"
 	"github.com/Microsoft/hcsshim/ext4/tar2ext4"
-	sp "github.com/Microsoft/hcsshim/pkg/securitypolicy"
+	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -47,7 +47,7 @@ func main() {
 			return err
 		}
 
-		policy, err := func() (sp.SecurityPolicy, error) {
+		policy, err := func() (securitypolicy.SecurityPolicy, error) {
 			if config.AllowAll {
 				return createOpenDoorPolicy(), nil
 			} else {
@@ -79,8 +79,8 @@ func main() {
 }
 
 type EnvironmentVariableRule struct {
-	Strategy sp.EnvVarRule `toml:"strategy"`
-	Rule     string        `toml:"rule"`
+	Strategy securitypolicy.EnvVarRule `toml:"strategy"`
+	Rule     string                    `toml:"rule"`
 }
 
 type Container struct {
@@ -100,15 +100,17 @@ type Config struct {
 	Containers []Container `toml:"container"`
 }
 
-func createOpenDoorPolicy() sp.SecurityPolicy {
-	return sp.SecurityPolicy{
+func createOpenDoorPolicy() securitypolicy.SecurityPolicy {
+	return securitypolicy.SecurityPolicy{
 		AllowAll: true,
 	}
 }
 
-func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
-	p := sp.SecurityPolicy{
-		Containers: map[string]sp.SecurityPolicyContainer{},
+func createPolicyFromConfig(config Config) (securitypolicy.SecurityPolicy, error) {
+	p := securitypolicy.SecurityPolicy{
+		Containers: securitypolicy.Containers{
+			Elements: map[string]securitypolicy.Container{},
+		},
 	}
 
 	// Hardcode the pause container version and command. We still pull it
@@ -139,11 +141,12 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 
 		command := convertCommand(configContainer.Command)
 		envRules := convertEnvironmentVariableRules(configContainer.EnvRules)
-		container := sp.SecurityPolicyContainer{
-			NumCommands: len(command),
-			Command:     command,
-			EnvRules:    envRules,
-			Layers:      map[string]string{},
+		container := securitypolicy.Container{
+			Command:  command,
+			EnvRules: envRules,
+			Layers: securitypolicy.Layers{
+				Elements: map[string]string{},
+			},
 		}
 		ref, err := name.ParseReference(configContainer.Name)
 		if err != nil {
@@ -192,10 +195,8 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 			}
 			hash := dmverity.RootHash(tree)
 			hashString := fmt.Sprintf("%x", hash)
-			container.Layers = addLayer(container.Layers, hashString)
+			addLayer(&container.Layers, hashString)
 		}
-
-		container.NumLayers = len(layers)
 
 		// add rules for all known environment variables from the configuration
 		// these are in addition to "other rules" from the policy definition file
@@ -204,28 +205,25 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 			return p, err
 		}
 		for _, env := range config.Config.Env {
-			rule := sp.SecurityPolicyEnvironmentVariableRule{
-				Strategy: sp.EnvVarRuleString,
+			rule := securitypolicy.EnvRule{
+				Strategy: securitypolicy.EnvVarRuleString,
 				Rule:     env,
 			}
 
-			container.EnvRules = addEnvRule(container.EnvRules, rule)
+			addEnvRule(&container.EnvRules, rule)
 		}
 
 		// cri adds TERM=xterm for all workload containers. we add to all containers
 		// to prevent any possble erroring
-		rule := sp.SecurityPolicyEnvironmentVariableRule{
-			Strategy: sp.EnvVarRuleString,
+		rule := securitypolicy.EnvRule{
+			Strategy: securitypolicy.EnvVarRuleString,
 			Rule:     "TERM=xterm",
 		}
 
-		container.EnvRules = addEnvRule(container.EnvRules, rule)
-		container.NumEnvRules = len(container.EnvRules)
+		addEnvRule(&container.EnvRules, rule)
 
-		p.Containers = addContainer(p.Containers, container)
+		addContainer(&p.Containers, container)
 	}
-
-	p.NumContainers = len(p.Containers)
 
 	return p, nil
 }
@@ -233,7 +231,7 @@ func createPolicyFromConfig(config Config) (sp.SecurityPolicy, error) {
 func validateEnvRules(rules []EnvironmentVariableRule) error {
 	for _, rule := range rules {
 		switch rule.Strategy {
-		case sp.EnvVarRuleRegex:
+		case securitypolicy.EnvVarRuleRegex:
 			_, err := regexp.Compile(rule.Rule)
 			if err != nil {
 				return err
@@ -244,21 +242,23 @@ func validateEnvRules(rules []EnvironmentVariableRule) error {
 	return nil
 }
 
-func convertCommand(toml []string) map[string]string {
+func convertCommand(toml []string) securitypolicy.CommandArgs {
 	json := map[string]string{}
 
 	for i, arg := range toml {
 		json[strconv.Itoa(i)] = arg
 	}
 
-	return json
+	return securitypolicy.CommandArgs{
+		Elements: json,
+	}
 }
 
-func convertEnvironmentVariableRules(toml []EnvironmentVariableRule) map[string]sp.SecurityPolicyEnvironmentVariableRule {
-	json := map[string]sp.SecurityPolicyEnvironmentVariableRule{}
+func convertEnvironmentVariableRules(toml []EnvironmentVariableRule) securitypolicy.EnvRules {
+	json := map[string]securitypolicy.EnvRule{}
 
 	for i, rule := range toml {
-		jsonRule := sp.SecurityPolicyEnvironmentVariableRule{
+		jsonRule := securitypolicy.EnvRule{
 			Strategy: rule.Strategy,
 			Rule:     rule.Rule,
 		}
@@ -266,29 +266,25 @@ func convertEnvironmentVariableRules(toml []EnvironmentVariableRule) map[string]
 		json[strconv.Itoa(i)] = jsonRule
 	}
 
-	return json
+	return securitypolicy.EnvRules{
+		Elements: json,
+	}
 }
 
-func addContainer(containers map[string]sp.SecurityPolicyContainer, container sp.SecurityPolicyContainer) map[string]sp.SecurityPolicyContainer {
-	index := strconv.Itoa(len(containers))
+func addContainer(containers *securitypolicy.Containers, container securitypolicy.Container) {
+	index := strconv.Itoa(len(containers.Elements))
 
-	containers[index] = container
-
-	return containers
+	containers.Elements[index] = container
 }
 
-func addLayer(layers map[string]string, layer string) map[string]string {
-	index := strconv.Itoa(len(layers))
+func addLayer(layers *securitypolicy.Layers, layer string) {
+	index := strconv.Itoa(len(layers.Elements))
 
-	layers[index] = layer
-
-	return layers
+	layers.Elements[index] = layer
 }
 
-func addEnvRule(rules map[string]sp.SecurityPolicyEnvironmentVariableRule, rule sp.SecurityPolicyEnvironmentVariableRule) map[string]sp.SecurityPolicyEnvironmentVariableRule {
-	index := strconv.Itoa(len(rules))
+func addEnvRule(rules *securitypolicy.EnvRules, rule securitypolicy.EnvRule) {
+	index := strconv.Itoa(len(rules.Elements))
 
-	rules[index] = rule
-
-	return rules
+	rules.Elements[index] = rule
 }
