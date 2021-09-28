@@ -287,7 +287,7 @@ func pullRequiredImagesWithOptions(t *testing.T, images []string, opts ...Sandbo
 	sb := &runtime.PodSandboxConfig{}
 	for _, o := range opts {
 		if err := o(sb); err != nil {
-			t.Errorf("failed to apply PodSandboxConfig option: %s", err)
+			t.Fatalf("failed to apply PodSandboxConfig option: %s", err)
 		}
 	}
 

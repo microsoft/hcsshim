@@ -85,7 +85,7 @@ func getTestSandboxConfig(t *testing.T, opts ...SandboxConfigOpt) *runtime.PodSa
 
 	for _, o := range opts {
 		if err := o(c); err != nil {
-			t.Errorf("failed to apply PodSandboxConfig option: %s", err)
+			t.Fatalf("failed to apply PodSandboxConfig option: %s", err)
 		}
 	}
 	return c
