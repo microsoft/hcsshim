@@ -18,7 +18,7 @@ func Test_StopContainer_LCOW(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)
@@ -56,7 +56,7 @@ func Test_StopContainer_WithTimeout_LCOW(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)
@@ -94,7 +94,7 @@ func Test_StopContainer_WithExec_LCOW(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)
@@ -140,7 +140,7 @@ func Test_StopContainer_ReusePod_LCOW(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)

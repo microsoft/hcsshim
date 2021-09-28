@@ -18,7 +18,7 @@ import (
 )
 
 func runCreateContainerTest(t *testing.T, runtimeHandler string, request *runtime.CreateContainerRequest) {
-	sandboxRequest := getRunPodSandboxRequest(t, runtimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, runtimeHandler)
 	runCreateContainerTestWithSandbox(t, sandboxRequest, request)
 }
 
@@ -189,7 +189,7 @@ func Test_CreateContainer_LCOW_Privileged(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 	sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
 		SecurityContext: &runtime.LinuxSandboxSecurityContext{
 			Privileged: true,
@@ -223,7 +223,7 @@ func Test_CreateContainer_SandboxDevice_LCOW(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 	sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
 		SecurityContext: &runtime.LinuxSandboxSecurityContext{
 			Privileged: true,
@@ -1228,7 +1228,7 @@ func Test_Mount_ReadOnlyDirReuse_WCOW(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	sandboxRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)

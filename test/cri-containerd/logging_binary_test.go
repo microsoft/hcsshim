@@ -85,7 +85,7 @@ func Test_Run_Container_With_Binary_Logger(t *testing.T) {
 				pullRequiredImages(t, requiredImages)
 			}
 
-			podReq := getRunPodSandboxRequest(t, test.runtimeHandler, nil)
+			podReq := getRunPodSandboxRequest(t, test.runtimeHandler)
 			podID := runPodSandbox(t, client, ctx, podReq)
 			defer removePodSandbox(t, client, ctx, podID)
 
@@ -123,7 +123,7 @@ func Test_Run_Container_With_Binary_Logger(t *testing.T) {
 				pullRequiredImages(t, requiredImages)
 			}
 
-			podReq := getRunPodSandboxRequest(t, test.runtimeHandler, nil)
+			podReq := getRunPodSandboxRequest(t, test.runtimeHandler)
 			podID := runPodSandbox(t, client, ctx, podReq)
 			defer removePodSandbox(t, client, ctx, podID)
 

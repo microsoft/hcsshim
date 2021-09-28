@@ -104,7 +104,7 @@ func Test_Container_Layer_Packing_On_VPMem(t *testing.T) {
 			annotations := map[string]string{
 				oci.AnnotationPreferredRootFSType: scenario.rootfsType,
 			}
-			podReq := getRunPodSandboxRequest(t, lcowRuntimeHandler, annotations)
+			podReq := getRunPodSandboxRequest(t, lcowRuntimeHandler, WithSandboxAnnotations(annotations))
 			podID := runPodSandbox(t, client, ctx, podReq)
 			defer removePodSandbox(t, client, ctx, podID)
 
@@ -139,7 +139,7 @@ func Test_Many_Container_Layers_Supported_On_VPMem(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, alpine70ExtraLayers, ubuntu70ExtraLayers})
 
-	podReq := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	podReq := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 	podID := runPodSandbox(t, client, ctx, podReq)
 	defer removePodSandbox(t, client, ctx, podID)
 
@@ -173,7 +173,7 @@ func Test_Annotation_Disable_Multi_Mapping(t *testing.T) {
 	annotations := map[string]string{
 		oci.AnnotationVPMemNoMultiMapping: "true",
 	}
-	podReq := getRunPodSandboxRequest(t, lcowRuntimeHandler, annotations)
+	podReq := getRunPodSandboxRequest(t, lcowRuntimeHandler, WithSandboxAnnotations(annotations))
 	podID := runPodSandbox(t, client, ctx, podReq)
 	defer removePodSandbox(t, client, ctx, podID)
 

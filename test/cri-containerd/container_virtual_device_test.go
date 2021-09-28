@@ -209,7 +209,7 @@ func Test_RunContainer_VirtualDevice_GPU_LCOW(t *testing.T) {
 	sandboxRequest := getRunPodSandboxRequest(
 		t,
 		lcowRuntimeHandler,
-		lcowPodGPUAnnotations,
+		WithSandboxAnnotations(lcowPodGPUAnnotations),
 	)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
@@ -254,7 +254,7 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_LCOW(t *testing.T) {
 	sandboxRequest := getRunPodSandboxRequest(
 		t,
 		lcowRuntimeHandler,
-		lcowPodGPUAnnotations,
+		WithSandboxAnnotations(lcowPodGPUAnnotations),
 	)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
@@ -306,7 +306,7 @@ func Test_RunContainer_VirtualDevice_GPU_and_NoGPU_LCOW(t *testing.T) {
 	sandboxRequest := getRunPodSandboxRequest(
 		t,
 		lcowRuntimeHandler,
-		lcowPodGPUAnnotations,
+		WithSandboxAnnotations(lcowPodGPUAnnotations),
 	)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
@@ -379,7 +379,7 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_Removal_LCOW(t *testing.T) {
 	sandboxRequest := getRunPodSandboxRequest(
 		t,
 		lcowRuntimeHandler,
-		lcowPodGPUAnnotations,
+		WithSandboxAnnotations(lcowPodGPUAnnotations),
 	)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
@@ -426,7 +426,7 @@ func Test_RunContainer_VirtualDevice_LocationPath_WCOW_Process(t *testing.T) {
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
-	sandboxRequest := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
 	defer removePodSandbox(t, client, podctx, podID)
@@ -467,7 +467,7 @@ func Test_RunContainer_VirtualDevice_ClassGUID_WCOW_Process(t *testing.T) {
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
-	sandboxRequest := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
 	defer removePodSandbox(t, client, podctx, podID)
@@ -511,9 +511,9 @@ func Test_RunContainer_VirtualDevice_GPU_WCOW_Hypervisor(t *testing.T) {
 	sandboxRequest := getRunPodSandboxRequest(
 		t,
 		wcowHypervisorRuntimeHandler,
-		map[string]string{
+		WithSandboxAnnotations(map[string]string{
 			oci.AnnotationFullyPhysicallyBacked: "true",
-		},
+		}),
 	)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
@@ -559,9 +559,9 @@ func Test_RunContainer_VirtualDevice_GPU_and_NoGPU_WCOW_Hypervisor(t *testing.T)
 	sandboxRequest := getRunPodSandboxRequest(
 		t,
 		wcowHypervisorRuntimeHandler,
-		map[string]string{
+		WithSandboxAnnotations(map[string]string{
 			oci.AnnotationFullyPhysicallyBacked: "true",
-		},
+		}),
 	)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
@@ -624,9 +624,9 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_WCOW_Hypervisor(t *testing.T) 
 	sandboxRequest := getRunPodSandboxRequest(
 		t,
 		wcowHypervisorRuntimeHandler,
-		map[string]string{
+		WithSandboxAnnotations(map[string]string{
 			oci.AnnotationFullyPhysicallyBacked: "true",
-		},
+		}),
 	)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
@@ -679,9 +679,9 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_Removal_WCOW_Hypervisor(t *tes
 	sandboxRequest := getRunPodSandboxRequest(
 		t,
 		wcowHypervisorRuntimeHandler,
-		map[string]string{
+		WithSandboxAnnotations(map[string]string{
 			oci.AnnotationFullyPhysicallyBacked: "true",
-		},
+		}),
 	)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)

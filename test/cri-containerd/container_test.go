@@ -81,7 +81,7 @@ func Test_RotateLogs_LCOW(t *testing.T) {
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, image})
 	logrus.SetLevel(logrus.DebugLevel)
 
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -143,7 +143,7 @@ func Test_RunContainer_Events_LCOW(t *testing.T) {
 	defer podcancel()
 	targetNamespace := "k8s.io"
 
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 
 	podID := runPodSandbox(t, client, podctx, sandboxRequest)
 	defer removePodSandbox(t, client, podctx, podID)
@@ -212,7 +212,7 @@ func Test_RunContainer_ForksThenExits_ShowsAsExited_LCOW(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	podRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	podRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 	podID := runPodSandbox(t, client, ctx, podRequest)
 	defer removePodSandbox(t, client, ctx, podID)
 	defer stopPodSandbox(t, client, ctx, podID)
@@ -267,10 +267,10 @@ func Test_RunContainer_ZeroVPMEM_LCOW(t *testing.T) {
 	sandboxRequest := getRunPodSandboxRequest(
 		t,
 		lcowRuntimeHandler,
-		map[string]string{
+		WithSandboxAnnotations(map[string]string{
 			oci.AnnotationPreferredRootFSType: "initrd",
 			oci.AnnotationVPMemCount:          "0",
-		},
+		}),
 	)
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
@@ -309,10 +309,10 @@ func Test_RunContainer_ZeroVPMEM_Multiple_LCOW(t *testing.T) {
 	sandboxRequest := getRunPodSandboxRequest(
 		t,
 		lcowRuntimeHandler,
-		map[string]string{
+		WithSandboxAnnotations(map[string]string{
 			oci.AnnotationPreferredRootFSType: "initrd",
 			oci.AnnotationVPMemCount:          "0",
-		},
+		}),
 	)
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
@@ -357,7 +357,7 @@ func Test_RunContainer_GMSA_WCOW_Process(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sandboxRequest := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler)
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)
@@ -421,7 +421,7 @@ func Test_RunContainer_GMSA_WCOW_Hypervisor(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sandboxRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)
@@ -485,7 +485,7 @@ func Test_RunContainer_SandboxDevice_LCOW(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 	sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
 		SecurityContext: &runtime.LinuxSandboxSecurityContext{
 			Privileged: true,
@@ -551,7 +551,7 @@ func Test_RunContainer_NonDefault_User(t *testing.T) {
 
 	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
-	podReq := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	podReq := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 	podID := runPodSandbox(t, client, ctx, podReq)
 	defer removePodSandbox(t, client, ctx, podID)
 	defer stopPodSandbox(t, client, ctx, podID)
@@ -611,7 +611,7 @@ func Test_RunContainer_ShareScratch_LCOW(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)
@@ -701,7 +701,7 @@ func Test_RunContainer_ShareScratch_CheckSize_LCOW(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)
@@ -785,7 +785,7 @@ func Test_CreateContainer_DevShmSize(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	podReq := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	podReq := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 	podID := runPodSandbox(t, client, ctx, podReq)
 	defer removePodSandbox(t, client, ctx, podID)
 
@@ -841,7 +841,7 @@ func Test_CreateContainer_HugePageMount_LCOW(t *testing.T) {
 		oci.AnnotationMemorySizeInMB:        "2048",
 		oci.AnnotationKernelBootOptions:     "hugepagesz=2M hugepages=10",
 	}
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, annotations)
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, WithSandboxAnnotations(annotations))
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)
