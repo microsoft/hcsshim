@@ -102,8 +102,12 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 		return errors.Wrap(err, "failed to write sandbox resolv.conf")
 	}
 
-	if userstr, ok := spec.Annotations["io.microsoft.lcow.userstr"]; ok {
-		if err := setUserStr(spec, userstr); err != nil {
+	// User.Username is generally only used on Windows, but as there's no (easy/fast at least) way to grab
+	// a uid:gid pairing for a username string on the host, we need to defer this work until we're here in the
+	// guest. The username field is used as a temporary holding place until we can perform this work here when
+	// we actually have the rootfs to inspect.
+	if spec.Process.User.Username != "" {
+		if err := setUserStr(spec, spec.Process.User.Username); err != nil {
 			return err
 		}
 	}

@@ -69,6 +69,22 @@ func (c *Container) ExecProcess(ctx context.Context, process *oci.Process, conSe
 	// Add in the core rlimit specified on the container in case there was one set. This makes it so that execed processes can also generate
 	// core dumps.
 	process.Rlimits = c.spec.Process.Rlimits
+
+	// If the client provided a user for the container to run as, we want to have the exec run as this user as well
+	// unless the exec's spec was explicitly set to a different user. If the Username field is filled in on the containers
+	// spec, at this point that means the work to find a uid:gid pairing for this username has already been done, so simply
+	// assign the uid:gid from the container.
+	if process.User.Username != "" {
+		// The exec provided a user string of it's own. Grab the uid:gid pairing for the string (if one exists).
+		if err := setUserStr(&oci.Spec{Root: c.spec.Root, Process: process}, process.User.Username); err != nil {
+			return -1, err
+		}
+		// Runc doesn't care about this, and just to be safe clear it.
+		process.User.Username = ""
+	} else if c.spec.Process.User.Username != "" {
+		process.User = c.spec.Process.User
+	}
+
 	p, err := c.container.ExecProcess(process, stdioSet)
 	if err != nil {
 		stdioSet.Close()

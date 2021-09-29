@@ -5,12 +5,12 @@ package hcsv2
 import (
 	"context"
 	"fmt"
-	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/opencontainers/runc/libcontainer/devices"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/opencontainers/runc/libcontainer/devices"
 	"github.com/opencontainers/runc/libcontainer/user"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -251,11 +251,5 @@ func applyAnnotationsToSpec(ctx context.Context, spec *oci.Spec) error {
 		}
 	}
 
-	// Check if we need to set non-default user
-	if userstr, ok := spec.Annotations["io.microsoft.lcow.userstr"]; ok {
-		if err := setUserStr(spec, userstr); err != nil {
-			return err
-		}
-	}
 	return nil
 }
