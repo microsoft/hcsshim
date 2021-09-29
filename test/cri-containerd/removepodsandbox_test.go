@@ -42,7 +42,7 @@ func runPodSandboxTestWithoutPodStop(t *testing.T, request *runtime.RunPodSandbo
 
 // Utility function to start sandbox with one container and make sure that sandbox is removed in the end
 func runPodWithContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, tc *TestConfig) (string, string) {
-	request := getRunPodSandboxRequest(t, tc.runtimeHandler, nil)
+	request := getRunPodSandboxRequest(t, tc.runtimeHandler)
 	podID := runPodSandbox(t, client, ctx, request)
 	defer removePodSandbox(t, client, ctx, podID)
 
@@ -107,12 +107,12 @@ func Test_RunPodSandbox_Without_Sandbox_Stop(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
 			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLcowImages(t, []string{test.sandboxImage})
+				pullRequiredLCOWImages(t, []string{test.sandboxImage})
 			} else {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}
 
-			request := getRunPodSandboxRequest(t, test.runtimeHandler, nil)
+			request := getRunPodSandboxRequest(t, test.runtimeHandler)
 			runPodSandboxTestWithoutPodStop(t, request)
 		})
 	}
@@ -154,7 +154,7 @@ func Test_RunContainer_Without_Sandbox_Stop(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
 			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLcowImages(t, []string{test.sandboxImage, test.containerImage})
+				pullRequiredLCOWImages(t, []string{test.sandboxImage, test.containerImage})
 			} else {
 				pullRequiredImages(t, []string{test.sandboxImage, test.containerImage})
 			}

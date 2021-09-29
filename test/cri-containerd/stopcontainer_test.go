@@ -12,13 +12,13 @@ import (
 func Test_StopContainer_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)
@@ -50,13 +50,13 @@ func Test_StopContainer_LCOW(t *testing.T) {
 func Test_StopContainer_WithTimeout_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)
@@ -88,13 +88,13 @@ func Test_StopContainer_WithTimeout_LCOW(t *testing.T) {
 func Test_StopContainer_WithExec_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)
@@ -134,13 +134,13 @@ func Test_StopContainer_WithExec_LCOW(t *testing.T) {
 func Test_StopContainer_ReusePod_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{alpineAspNet, alpineAspnetUpgrade})
+	pullRequiredLCOWImages(t, []string{alpineAspNet, alpineAspnetUpgrade})
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)

@@ -18,7 +18,7 @@ import (
 func Test_Container_Network_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	// create a directory and log file
 	dir, err := ioutil.TempDir("", "")
@@ -32,7 +32,7 @@ func Test_Container_Network_LCOW(t *testing.T) {
 	}()
 	log := filepath.Join(dir, "ping.txt")
 
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -132,12 +132,12 @@ func Test_Container_Network_Hostname(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
 			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLcowImages(t, []string{test.sandboxImage, test.containerImage})
+				pullRequiredLCOWImages(t, []string{test.sandboxImage, test.containerImage})
 			} else {
 				pullRequiredImages(t, []string{test.sandboxImage, test.containerImage})
 			}
 
-			sandboxRequest := getRunPodSandboxRequest(t, test.runtimeHandler, nil)
+			sandboxRequest := getRunPodSandboxRequest(t, test.runtimeHandler)
 			sandboxRequest.Config.Hostname = "TestHost"
 
 			client := newTestRuntimeClient(t)

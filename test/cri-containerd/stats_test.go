@@ -87,9 +87,9 @@ func verifyPhysicallyBackedWorkingSet(t *testing.T, num uint64, stat *runtime.Co
 func Test_SandboxStats_Single_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -115,9 +115,9 @@ func Test_SandboxStats_Single_LCOW(t *testing.T) {
 func Test_SandboxStats_List_ContainerID_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -148,9 +148,9 @@ func Test_SandboxStats_List_ContainerID_LCOW(t *testing.T) {
 func Test_SandboxStats_List_PodID_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause})
 
-	request := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	request := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -219,12 +219,12 @@ func Test_ContainerStats_ContainerID(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
 			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLcowImages(t, []string{test.sandboxImage, test.containerImage})
+				pullRequiredLCOWImages(t, []string{test.sandboxImage, test.containerImage})
 			} else {
 				pullRequiredImages(t, []string{test.sandboxImage, test.containerImage})
 			}
 
-			podRequest := getRunPodSandboxRequest(t, test.runtimeHandler, nil)
+			podRequest := getRunPodSandboxRequest(t, test.runtimeHandler)
 
 			client := newTestRuntimeClient(t)
 			ctx, cancel := context.WithCancel(context.Background())
@@ -294,12 +294,12 @@ func Test_ContainerStats_List_ContainerID(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
 			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLcowImages(t, []string{test.sandboxImage, test.containerImage})
+				pullRequiredLCOWImages(t, []string{test.sandboxImage, test.containerImage})
 			} else {
 				pullRequiredImages(t, []string{test.sandboxImage, test.containerImage})
 			}
 
-			podRequest := getRunPodSandboxRequest(t, test.runtimeHandler, nil)
+			podRequest := getRunPodSandboxRequest(t, test.runtimeHandler)
 
 			client := newTestRuntimeClient(t)
 			ctx, cancel := context.WithCancel(context.Background())
@@ -354,7 +354,7 @@ func Test_SandboxStats_WorkingSet_PhysicallyBacked(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
 			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLcowImages(t, []string{test.sandboxImage})
+				pullRequiredLCOWImages(t, []string{test.sandboxImage})
 			} else {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}
@@ -368,11 +368,11 @@ func Test_SandboxStats_WorkingSet_PhysicallyBacked(t *testing.T) {
 			podRequest := getRunPodSandboxRequest(
 				t,
 				test.runtimeHandler,
-				map[string]string{
+				WithSandboxAnnotations(map[string]string{
 					oci.AnnotationAllowOvercommit:      "false",
 					oci.AnnotationEnableDeferredCommit: "false",
 					oci.AnnotationMemorySizeInMB:       sizeInMBStr,
-				},
+				}),
 			)
 
 			client := newTestRuntimeClient(t)

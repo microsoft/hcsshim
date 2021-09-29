@@ -16,7 +16,7 @@ func Test_CreateContainer_DownLevel_WCOW_Hypervisor(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver17763})
 
-	sandboxRequest := getRunPodSandboxRequest(t, wcowHypervisor17763RuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, wcowHypervisor17763RuntimeHandler)
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{

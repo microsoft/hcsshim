@@ -72,20 +72,12 @@ func Test_Container_UpdateResources_CPUShare(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
 			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLcowImages(t, []string{test.sandboxImage})
+				pullRequiredLCOWImages(t, []string{test.sandboxImage})
 			} else if test.runtimeHandler == wcowHypervisorRuntimeHandler {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}
 
-			podRequest := &runtime.RunPodSandboxRequest{
-				Config: &runtime.PodSandboxConfig{
-					Metadata: &runtime.PodSandboxMetadata{
-						Name:      t.Name(),
-						Namespace: testNamespace,
-					},
-				},
-				RuntimeHandler: test.runtimeHandler,
-			}
+			podRequest := getRunPodSandboxRequest(t, test.runtimeHandler)
 
 			client := newTestRuntimeClient(t)
 			ctx, cancel := context.WithCancel(context.Background())
@@ -187,20 +179,12 @@ func Test_Container_UpdateResources_CPUShare_NotRunning(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
 			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLcowImages(t, []string{test.sandboxImage})
+				pullRequiredLCOWImages(t, []string{test.sandboxImage})
 			} else if test.runtimeHandler == wcowHypervisorRuntimeHandler {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}
 
-			podRequest := &runtime.RunPodSandboxRequest{
-				Config: &runtime.PodSandboxConfig{
-					Metadata: &runtime.PodSandboxMetadata{
-						Name:      t.Name(),
-						Namespace: testNamespace,
-					},
-				},
-				RuntimeHandler: test.runtimeHandler,
-			}
+			podRequest := getRunPodSandboxRequest(t, test.runtimeHandler)
 
 			client := newTestRuntimeClient(t)
 			ctx, cancel := context.WithCancel(context.Background())
@@ -302,20 +286,12 @@ func Test_Container_UpdateResources_Memory(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
 			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLcowImages(t, []string{test.sandboxImage})
+				pullRequiredLCOWImages(t, []string{test.sandboxImage})
 			} else if test.runtimeHandler == wcowHypervisorRuntimeHandler {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}
 
-			podRequest := &runtime.RunPodSandboxRequest{
-				Config: &runtime.PodSandboxConfig{
-					Metadata: &runtime.PodSandboxMetadata{
-						Name:      t.Name(),
-						Namespace: testNamespace,
-					},
-				},
-				RuntimeHandler: test.runtimeHandler,
-			}
+			podRequest := getRunPodSandboxRequest(t, test.runtimeHandler)
 
 			client := newTestRuntimeClient(t)
 			ctx, cancel := context.WithCancel(context.Background())

@@ -20,18 +20,13 @@ import (
 )
 
 func getJobContainerPodRequestWCOW(t *testing.T) *runtime.RunPodSandboxRequest {
-	return &runtime.RunPodSandboxRequest{
-		Config: &runtime.PodSandboxConfig{
-			Metadata: &runtime.PodSandboxMetadata{
-				Name:      t.Name(),
-				Namespace: testNamespace,
-			},
-			Annotations: map[string]string{
-				oci.AnnotationHostProcessContainer: "true",
-			},
-		},
-		RuntimeHandler: wcowProcessRuntimeHandler,
-	}
+	return getRunPodSandboxRequest(
+		t,
+		wcowProcessRuntimeHandler,
+		WithSandboxAnnotations(map[string]string{
+			oci.AnnotationHostProcessContainer: "true",
+		}),
+	)
 }
 
 func getJobContainerRequestWCOW(t *testing.T, podID string, podConfig *runtime.PodSandboxConfig, image string, mounts []*runtime.Mount) *runtime.CreateContainerRequest {

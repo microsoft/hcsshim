@@ -34,10 +34,10 @@ func runexecContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.RunPo
 }
 
 func execContainerLCOW(t *testing.T, uid int64, cmd []string) *runtime.ExecSyncResponse {
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowCosmos})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowCosmos})
 
 	// run podsandbox request
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, nil)
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 	sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
 		SecurityContext: &runtime.LinuxSandboxSecurityContext{
 			Privileged: true,

@@ -38,23 +38,18 @@ func Test_Pod_UpdateResources_Memory(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
 			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLcowImages(t, []string{test.sandboxImage})
+				pullRequiredLCOWImages(t, []string{test.sandboxImage})
 			} else {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}
 			var startingMemorySize int64 = 768 * 1024 * 1024
-			podRequest := &runtime.RunPodSandboxRequest{
-				Config: &runtime.PodSandboxConfig{
-					Metadata: &runtime.PodSandboxMetadata{
-						Name:      t.Name(),
-						Namespace: testNamespace,
-					},
-					Annotations: map[string]string{
-						oci.AnnotationContainerMemorySizeInMB: fmt.Sprintf("%d", startingMemorySize),
-					},
-				},
-				RuntimeHandler: test.runtimeHandler,
-			}
+			podRequest := getRunPodSandboxRequest(
+				t,
+				test.runtimeHandler,
+				WithSandboxAnnotations(map[string]string{
+					oci.AnnotationContainerMemorySizeInMB: fmt.Sprintf("%d", startingMemorySize),
+				}),
+			)
 
 			client := newTestRuntimeClient(t)
 			ctx, cancel := context.WithCancel(context.Background())
@@ -114,24 +109,19 @@ func Test_Pod_UpdateResources_Memory_PA(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
 			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLcowImages(t, []string{test.sandboxImage})
+				pullRequiredLCOWImages(t, []string{test.sandboxImage})
 			} else {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}
 			var startingMemorySize int64 = 200 * 1024 * 1024
-			podRequest := &runtime.RunPodSandboxRequest{
-				Config: &runtime.PodSandboxConfig{
-					Metadata: &runtime.PodSandboxMetadata{
-						Name:      t.Name(),
-						Namespace: testNamespace,
-					},
-					Annotations: map[string]string{
-						oci.AnnotationFullyPhysicallyBacked:   "true",
-						oci.AnnotationContainerMemorySizeInMB: fmt.Sprintf("%d", startingMemorySize),
-					},
-				},
-				RuntimeHandler: test.runtimeHandler,
-			}
+			podRequest := getRunPodSandboxRequest(
+				t,
+				test.runtimeHandler,
+				WithSandboxAnnotations(map[string]string{
+					oci.AnnotationFullyPhysicallyBacked:   "true",
+					oci.AnnotationContainerMemorySizeInMB: fmt.Sprintf("%d", startingMemorySize),
+				}),
+			)
 
 			client := newTestRuntimeClient(t)
 			ctx, cancel := context.WithCancel(context.Background())
@@ -191,19 +181,11 @@ func Test_Pod_UpdateResources_CPUShares(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
 			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLcowImages(t, []string{test.sandboxImage})
+				pullRequiredLCOWImages(t, []string{test.sandboxImage})
 			} else {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}
-			podRequest := &runtime.RunPodSandboxRequest{
-				Config: &runtime.PodSandboxConfig{
-					Metadata: &runtime.PodSandboxMetadata{
-						Name:      t.Name(),
-						Namespace: testNamespace,
-					},
-				},
-				RuntimeHandler: test.runtimeHandler,
-			}
+			podRequest := getRunPodSandboxRequest(t, test.runtimeHandler)
 
 			client := newTestRuntimeClient(t)
 			ctx, cancel := context.WithCancel(context.Background())

@@ -262,19 +262,21 @@ func convertEvent(e *types.Any) (string, interface{}, error) {
 	return id, evt, nil
 }
 
-func pullRequiredImages(t *testing.T, images []string) {
-	pullRequiredImagesWithLabels(t, images, map[string]string{
+func pullRequiredImages(t *testing.T, images []string, opts ...SandboxConfigOpt) {
+	opts = append(opts, WithSandboxLabels(map[string]string{
 		"sandbox-platform": "windows/amd64", // Not required for Windows but makes the test safer depending on defaults in the config.
-	})
+	}))
+	pullRequiredImagesWithOptions(t, images, opts...)
 }
 
-func pullRequiredLcowImages(t *testing.T, images []string) {
-	pullRequiredImagesWithLabels(t, images, map[string]string{
+func pullRequiredLCOWImages(t *testing.T, images []string, opts ...SandboxConfigOpt) {
+	opts = append(opts, WithSandboxLabels(map[string]string{
 		"sandbox-platform": "linux/amd64",
-	})
+	}))
+	pullRequiredImagesWithOptions(t, images, opts...)
 }
 
-func pullRequiredImagesWithLabels(t *testing.T, images []string, labels map[string]string) {
+func pullRequiredImagesWithOptions(t *testing.T, images []string, opts ...SandboxConfigOpt) {
 	if len(images) < 1 {
 		return
 	}
@@ -283,9 +285,13 @@ func pullRequiredImagesWithLabels(t *testing.T, images []string, labels map[stri
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sb := &runtime.PodSandboxConfig{
-		Labels: labels,
+	sb := &runtime.PodSandboxConfig{}
+	for _, o := range opts {
+		if err := o(sb); err != nil {
+			t.Fatalf("failed to apply PodSandboxConfig option: %s", err)
+		}
 	}
+
 	for _, image := range images {
 		_, err := client.PullImage(ctx, &runtime.PullImageRequest{
 			Image: &runtime.ImageSpec{
