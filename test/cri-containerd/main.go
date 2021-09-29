@@ -165,7 +165,7 @@ func getWindowsNanoserverImage(build uint16) string {
 	case osversion.V20H2:
 		return "mcr.microsoft.com/windows/nanoserver:2009"
 	default:
-		return "mcr.microsoft.com/windows/nanoserver:2009"
+		panic("unsupported build")
 	}
 }
 
@@ -182,7 +182,7 @@ func getWindowsServerCoreImage(build uint16) string {
 	case osversion.V20H2:
 		return "mcr.microsoft.com/windows/servercore:2009"
 	default:
-		return "mcr.microsoft.com/windows/nanoserver:2009"
+		panic("unsupported build")
 	}
 }
 
