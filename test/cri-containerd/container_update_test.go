@@ -72,7 +72,7 @@ func Test_Container_UpdateResources_CPUShare(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
 			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLcowImages(t, []string{test.sandboxImage})
+				pullRequiredLCOWImages(t, []string{test.sandboxImage})
 			} else if test.runtimeHandler == wcowHypervisorRuntimeHandler {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}
@@ -179,7 +179,7 @@ func Test_Container_UpdateResources_CPUShare_NotRunning(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
 			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLcowImages(t, []string{test.sandboxImage})
+				pullRequiredLCOWImages(t, []string{test.sandboxImage})
 			} else if test.runtimeHandler == wcowHypervisorRuntimeHandler {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}
@@ -286,7 +286,7 @@ func Test_Container_UpdateResources_Memory(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
 			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLcowImages(t, []string{test.sandboxImage})
+				pullRequiredLCOWImages(t, []string{test.sandboxImage})
 			} else if test.runtimeHandler == wcowHypervisorRuntimeHandler {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}

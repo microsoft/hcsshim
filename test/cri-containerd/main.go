@@ -268,7 +268,7 @@ func pullRequiredImages(t *testing.T, images []string, opts ...SandboxConfigOpt)
 	pullRequiredImagesWithOptions(t, images, opts...)
 }
 
-func pullRequiredLcowImages(t *testing.T, images []string, opts ...SandboxConfigOpt) {
+func pullRequiredLCOWImages(t *testing.T, images []string, opts ...SandboxConfigOpt) {
 	opts = append(opts, WithSandboxLabels(map[string]string{
 		"sandbox-platform": "linux/amd64",
 	}))

@@ -71,16 +71,15 @@ func getTestSandboxConfig(t *testing.T, opts ...SandboxConfigOpt) *runtime.PodSa
 	}
 
 	if *flagVirtstack != "" {
+		vmServicePath := testVMServiceBinary
+		if *flagVMServiceBinary != "" {
+			vmServicePath = *flagVMServiceBinary
+		}
 		opts = append(opts, WithSandboxAnnotations(map[string]string{
 			"io.microsoft.virtualmachine.vmsource":          *flagVirtstack,
 			"io.microsoft.virtualmachine.vmservice.address": testVMServiceAddress,
-			"io.microsoft.virtualmachine.vmservice.path":    testVMServiceBinary,
+			"io.microsoft.virtualmachine.vmservice.path":    vmServicePath,
 		}))
-		if *flagVMServiceBinary != "" {
-			opts = append(opts, WithSandboxAnnotations(map[string]string{
-				"io.microsoft.virtualmachine.vmservice.path": *flagVMServiceBinary,
-			}))
-		}
 	}
 
 	for _, o := range opts {

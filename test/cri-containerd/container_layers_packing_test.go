@@ -83,7 +83,7 @@ func Test_Container_Layer_Packing_On_VPMem(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
 	// use ubuntu to make sure that multiple container layers will be mapped properly
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, ubuntu1804})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, ubuntu1804})
 
 	type config struct {
 		rootfsType   string
@@ -137,7 +137,7 @@ func Test_Many_Container_Layers_Supported_On_VPMem(t *testing.T) {
 
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, alpine70ExtraLayers, ubuntu70ExtraLayers})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, alpine70ExtraLayers, ubuntu70ExtraLayers})
 
 	podReq := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 	podID := runPodSandbox(t, client, ctx, podReq)
@@ -168,7 +168,7 @@ func Test_Annotation_Disable_Multi_Mapping(t *testing.T) {
 
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, alpine70ExtraLayers})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, alpine70ExtraLayers})
 
 	annotations := map[string]string{
 		oci.AnnotationVPMemNoMultiMapping: "true",

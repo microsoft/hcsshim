@@ -96,7 +96,7 @@ func Test_CreateContainer_WCOW_Hypervisor(t *testing.T) {
 func Test_CreateContainer_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -164,7 +164,7 @@ func Test_CreateContainer_WCOW_Hypervisor_Tty(t *testing.T) {
 func Test_CreateContainer_LCOW_Tty(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -187,7 +187,7 @@ func Test_CreateContainer_LCOW_Tty(t *testing.T) {
 func Test_CreateContainer_LCOW_Privileged(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 	sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
@@ -221,7 +221,7 @@ func Test_CreateContainer_LCOW_Privileged(t *testing.T) {
 func Test_CreateContainer_SandboxDevice_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 	sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
@@ -375,7 +375,7 @@ func Test_CreateContainer_MemorySize_Annotation_WCOW_Hypervisor(t *testing.T) {
 func Test_CreateContainer_MemorySize_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -522,7 +522,7 @@ func Test_CreateContainer_CPUCount_Annotation_WCOW_Hypervisor(t *testing.T) {
 func Test_CreateContainer_CPUCount_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -669,7 +669,7 @@ func Test_CreateContainer_CPULimit_Annotation_WCOW_Hypervisor(t *testing.T) {
 func Test_CreateContainer_CPUQuota_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -817,7 +817,7 @@ func Test_CreateContainer_CPUWeight_Annotation_WCOW_Hypervisor(t *testing.T) {
 func Test_CreateContainer_CPUShares_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	request := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -845,7 +845,7 @@ func Test_CreateContainer_Mount_File_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 	testutilities.RequiresBuild(t, osversion.V19H1)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	tempFile, err := ioutil.TempFile("", "test")
 
@@ -890,7 +890,7 @@ func Test_CreateContainer_Mount_ReadOnlyFile_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 	testutilities.RequiresBuild(t, osversion.V19H1)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	tempFile, err := ioutil.TempFile("", "test")
 
@@ -935,7 +935,7 @@ func Test_CreateContainer_Mount_ReadOnlyFile_LCOW(t *testing.T) {
 func Test_CreateContainer_Mount_Dir_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	tempDir, err := ioutil.TempDir("", "")
 	if err != nil {
@@ -971,7 +971,7 @@ func Test_CreateContainer_Mount_Dir_LCOW(t *testing.T) {
 func Test_CreateContainer_Mount_ReadOnlyDir_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	tempDir, err := ioutil.TempDir("", "")
 	if err != nil {

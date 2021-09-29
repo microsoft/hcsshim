@@ -38,7 +38,7 @@ func Test_Pod_UpdateResources_Memory(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
 			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLcowImages(t, []string{test.sandboxImage})
+				pullRequiredLCOWImages(t, []string{test.sandboxImage})
 			} else {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}
@@ -109,7 +109,7 @@ func Test_Pod_UpdateResources_Memory_PA(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
 			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLcowImages(t, []string{test.sandboxImage})
+				pullRequiredLCOWImages(t, []string{test.sandboxImage})
 			} else {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}
@@ -181,7 +181,7 @@ func Test_Pod_UpdateResources_CPUShares(t *testing.T) {
 			requireFeatures(t, test.requiredFeatures...)
 
 			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLcowImages(t, []string{test.sandboxImage})
+				pullRequiredLCOWImages(t, []string{test.sandboxImage})
 			} else {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}

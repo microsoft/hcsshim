@@ -80,7 +80,7 @@ func Test_Run_Container_With_Binary_Logger(t *testing.T) {
 
 			requiredImages := []string{test.sandboxImage, test.containerImage}
 			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLcowImages(t, requiredImages)
+				pullRequiredLCOWImages(t, requiredImages)
 			} else {
 				pullRequiredImages(t, requiredImages)
 			}
@@ -118,7 +118,7 @@ func Test_Run_Container_With_Binary_Logger(t *testing.T) {
 
 			requiredImages := []string{test.sandboxImage, test.containerImage}
 			if test.runtimeHandler == lcowRuntimeHandler {
-				pullRequiredLcowImages(t, requiredImages)
+				pullRequiredLCOWImages(t, requiredImages)
 			} else {
 				pullRequiredImages(t, requiredImages)
 			}

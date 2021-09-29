@@ -202,7 +202,7 @@ func Test_RunContainer_VirtualDevice_GPU_LCOW(t *testing.T) {
 		t.Fatal("skipping test, host has no assignable nvidia gpu devices")
 	}
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
@@ -247,7 +247,7 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_LCOW(t *testing.T) {
 		t.Fatal("skipping test, host has no assignable nvidia gpu devices")
 	}
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
@@ -299,7 +299,7 @@ func Test_RunContainer_VirtualDevice_GPU_and_NoGPU_LCOW(t *testing.T) {
 		t.Fatal("skipping test, host has no assignable nvidia gpu devices")
 	}
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()
@@ -372,7 +372,7 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_Removal_LCOW(t *testing.T) {
 		t.Fatal("skipping test, host has no assignable nvidia gpu devices")
 	}
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 	client := newTestRuntimeClient(t)
 
 	podctx := context.Background()

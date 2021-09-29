@@ -12,7 +12,7 @@ import (
 func Test_StopContainer_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -50,7 +50,7 @@ func Test_StopContainer_LCOW(t *testing.T) {
 func Test_StopContainer_WithTimeout_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -88,7 +88,7 @@ func Test_StopContainer_WithTimeout_LCOW(t *testing.T) {
 func Test_StopContainer_WithExec_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -134,7 +134,7 @@ func Test_StopContainer_WithExec_LCOW(t *testing.T) {
 func Test_StopContainer_ReusePod_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{alpineAspNet, alpineAspnetUpgrade})
+	pullRequiredLCOWImages(t, []string{alpineAspNet, alpineAspnetUpgrade})
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())

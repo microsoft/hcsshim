@@ -78,7 +78,7 @@ func Test_RotateLogs_LCOW(t *testing.T) {
 	log := filepath.Join(dir, "log.txt")
 	logArchive := filepath.Join(dir, "log-archive.txt")
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, image})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, image})
 	logrus.SetLevel(logrus.DebugLevel)
 
 	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)
@@ -136,7 +136,7 @@ func Test_RotateLogs_LCOW(t *testing.T) {
 func Test_RunContainer_Events_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 	client := newTestRuntimeClient(t)
 
 	podctx, podcancel := context.WithCancel(context.Background())
@@ -207,7 +207,7 @@ func Test_RunContainer_Events_LCOW(t *testing.T) {
 func Test_RunContainer_ForksThenExits_ShowsAsExited_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -258,7 +258,7 @@ func Test_RunContainer_ForksThenExits_ShowsAsExited_LCOW(t *testing.T) {
 func Test_RunContainer_ZeroVPMEM_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -300,7 +300,7 @@ func Test_RunContainer_ZeroVPMEM_LCOW(t *testing.T) {
 func Test_RunContainer_ZeroVPMEM_Multiple_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -479,7 +479,7 @@ func Test_RunContainer_GMSA_WCOW_Hypervisor(t *testing.T) {
 func Test_RunContainer_SandboxDevice_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -549,7 +549,7 @@ func Test_RunContainer_NonDefault_User(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	podReq := getRunPodSandboxRequest(t, lcowRuntimeHandler)
 	podID := runPodSandbox(t, client, ctx, podReq)
@@ -605,7 +605,7 @@ func Test_RunContainer_NonDefault_User(t *testing.T) {
 func Test_RunContainer_ShareScratch_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -695,7 +695,7 @@ func findOverlaySize(t *testing.T, ctx context.Context, client runtime.RuntimeSe
 func Test_RunContainer_ShareScratch_CheckSize_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -779,7 +779,7 @@ func Test_RunContainer_ShareScratch_CheckSize_LCOW(t *testing.T) {
 func Test_CreateContainer_DevShmSize(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -834,7 +834,7 @@ func Test_CreateContainer_HugePageMount_LCOW(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	annotations := map[string]string{
 		oci.AnnotationFullyPhysicallyBacked: "true",
