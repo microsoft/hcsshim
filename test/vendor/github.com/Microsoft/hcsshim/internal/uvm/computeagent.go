@@ -23,10 +23,22 @@ import (
 
 const ComputeAgentAddrFmt = "\\\\.\\pipe\\computeagent-%s"
 
+// create an interface here so we can mock out calls to the UtilityVM in our tests
+type agentComputeSystem interface {
+	AddEndpointToNSWithID(context.Context, string, string, *hns.HNSEndpoint) error
+	UpdateNIC(context.Context, string, *hcsschema.NetworkAdapter) error
+	RemoveEndpointFromNS(context.Context, string, *hns.HNSEndpoint) error
+}
+
+var _ agentComputeSystem = &UtilityVM{}
+
+// mock hcn function for tests
+var hnsGetHNSEndpointByName = hns.GetHNSEndpointByName
+
 // computeAgent implements the ComputeAgent ttrpc service for adding and deleting NICs to a
 // Utility VM.
 type computeAgent struct {
-	uvm *UtilityVM
+	uvm agentComputeSystem
 }
 
 var _ computeagent.ComputeAgentService = &computeAgent{}
@@ -43,7 +55,7 @@ func (ca *computeAgent) AddNIC(ctx context.Context, req *computeagent.AddNICInte
 		return nil, status.Error(codes.InvalidArgument, "received empty field in request")
 	}
 
-	endpoint, err := hns.GetHNSEndpointByName(req.EndpointName)
+	endpoint, err := hnsGetHNSEndpointByName(req.EndpointName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get endpoint with name %q", req.EndpointName)
 	}
@@ -64,7 +76,7 @@ func (ca *computeAgent) ModifyNIC(ctx context.Context, req *computeagent.ModifyN
 		return nil, status.Error(codes.InvalidArgument, "received empty field in request")
 	}
 
-	endpoint, err := hns.GetHNSEndpointByName(req.EndpointName)
+	endpoint, err := hnsGetHNSEndpointByName(req.EndpointName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get endpoint with name `%s`", req.EndpointName)
 	}
@@ -103,7 +115,7 @@ func (ca *computeAgent) DeleteNIC(ctx context.Context, req *computeagent.DeleteN
 		return nil, status.Error(codes.InvalidArgument, "received empty field in request")
 	}
 
-	endpoint, err := hns.GetHNSEndpointByName(req.EndpointName)
+	endpoint, err := hnsGetHNSEndpointByName(req.EndpointName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get endpoint with name %q", req.EndpointName)
 	}

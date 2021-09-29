@@ -84,7 +84,6 @@ func (s *grpcService) AddNIC(ctx context.Context, req *ncproxygrpc.AddNICRequest
 	}
 	if agent, ok := s.containerIDToComputeAgent.get(req.ContainerID); ok {
 		caReq := &computeagent.AddNICInternalRequest{
-			ContainerID:  req.ContainerID,
 			NicID:        req.NicID,
 			EndpointName: req.EndpointName,
 		}
@@ -190,7 +189,6 @@ func (s *grpcService) DeleteNIC(ctx context.Context, req *ncproxygrpc.DeleteNICR
 	}
 	if agent, ok := s.containerIDToComputeAgent.get(req.ContainerID); ok {
 		caReq := &computeagent.DeleteNICInternalRequest{
-			ContainerID:  req.ContainerID,
 			NicID:        req.NicID,
 			EndpointName: req.EndpointName,
 		}
