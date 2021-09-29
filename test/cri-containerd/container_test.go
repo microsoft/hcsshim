@@ -897,7 +897,7 @@ func Test_CreateContainer_HugePageMount_LCOW(t *testing.T) {
 func Test_RunContainer_ExecUser_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowCustomUser})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowCustomUser})
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -950,7 +950,7 @@ func Test_RunContainer_ExecUser_LCOW(t *testing.T) {
 func Test_RunContainer_ExecUser_Root_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause, imageLcowCustomUser})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowCustomUser})
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
