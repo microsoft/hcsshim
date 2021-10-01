@@ -107,7 +107,7 @@ func run(clicontext *cli.Context) error {
 	var (
 		configPath    = clicontext.GlobalString("config")
 		logDir        = clicontext.GlobalString("log-directory")
-		dbPath        = clicontext.GlobalString("log-directory")
+		dbPath        = clicontext.GlobalString("database-path")
 		registerSvc   = clicontext.GlobalBool("register-service")
 		unregisterSvc = clicontext.GlobalBool("unregister-service")
 		runSvc        = clicontext.GlobalBool("run-service")

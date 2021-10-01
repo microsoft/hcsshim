@@ -120,17 +120,32 @@ func (s *server) serve(ctx context.Context, ttrpcListener net.Listener, grpcList
 	}()
 }
 
-// reconnectComputeAgents creates new compute agent connections from the database of
-// active compute agent addresses and adds them to the compute agent client cache
-// this MUST be called before the server start serving anything so that we can
-// ensure that the cache is ready when they do.
+// reconnectComputeAgents handles reconnecting to existing compute agents on ncproxy
+// restart.
 //
-// This function first calls into the ncproxy database to enumerate all the stored
-// containerID -> computeagent address mappings. From this, we attempt to reconnect to
-// the compute agents in parallel to reduce startup time. On success, we update the
-// compute agent client cache. On failure, we cleanup the entry in the database to
-// avoid polluting it. Do not block the startup of ncproxy on failure here so that
-// we don't prevent creation of new containers.
+// Ncproxy maintains a cache of active compute agents in order reestablish connections
+// if the service is restarted. The cache is persisted in a bolt database. The schema
+// can be found in `buckets.go`.
+//
+// On restart ncproxy will attempt to create new compute agent connections from the
+// database of active compute agent addresses and add them to its compute agent client
+// cache. Reconnect *MUST* be called before the server is allowed to start serving anything
+// so that we can ensure that the cache is ready. Reconnections are performed in parallel
+// to improve service startup performance.
+//
+// There are a few failure modes for reconnect:
+//
+// 1. If a compute agent entry is stale, connecting to the compute agent client will fail
+//    and we will remove the entry from the database.
+//
+// 2. If an active compute agent exists but we fail to connect to it, we will again remove
+//    the entry from the database. In this case, it is the node network service's
+//    responsibility to cleanup host network resources that are no longer being used.
+//
+// Other failure modes are possible but not expected. In all failure cases we log the failures
+// but allow the service start to proceed. We chose this approach vs just failing service
+// start to avoid blocking service for all containers that had successful reconnection and to
+// avoid blocking the creation of new containers until retry or mitigation.
 func reconnectComputeAgents(ctx context.Context, agentStore *computeAgentStore, agentCache *computeAgentCache) {
 	computeAgentMap, err := agentStore.getComputeAgents(ctx)
 	if err != nil && errors.Is(err, errBucketNotFound) {

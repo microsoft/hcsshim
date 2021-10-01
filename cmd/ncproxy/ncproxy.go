@@ -96,6 +96,9 @@ func (c *computeAgentCache) getAndDelete(cid string) (*computeAgentClient, error
 
 // GRPC service exposed for use by a Node Network Service.
 type grpcService struct {
+	// containerIDToComputeAgent is a cache that stores the mappings from
+	// container ID to compute agent address is memory. This is repopulated
+	// on reconnect and referenced during client calls.
 	containerIDToComputeAgent *computeAgentCache
 }
 
@@ -648,8 +651,14 @@ func (s *grpcService) GetNetworks(ctx context.Context, req *ncproxygrpc.GetNetwo
 
 // TTRPC service exposed for use by the shim.
 type ttrpcService struct {
+	// containerIDToComputeAgent is a cache that stores the mappings from
+	// container ID to compute agent address is memory. This is repopulated
+	// on reconnect and referenced during client calls.
 	containerIDToComputeAgent *computeAgentCache
-	agentStore                *computeAgentStore
+	// agentStore refers to the database that stores the mappings from
+	// containerID to compute agent address persistently. This is referenced
+	// on reconnect and when registering/unregistering a compute agent.
+	agentStore *computeAgentStore
 }
 
 func newTTRPCService(ctx context.Context, agent *computeAgentCache, agentStore *computeAgentStore) *ttrpcService {

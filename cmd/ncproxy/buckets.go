@@ -14,8 +14,9 @@ var (
 // Below is the current database schema. This should be updated any time the schema is
 // changed or updated. The version should be incremented if breaking changes are made.
 //  └──v1                                        - Schema version bucket
-//     └──computeagent
-//			└──containerID : <string>            - Address to the compute agent for containerID
+//     └──computeagent							 - Compute agent bucket
+//			└──containerID : <string>            - Entry in compute agent bucket: Address to
+//												   the compute agent for containerID
 
 // taken from containerd/containerd/metadata/buckets.go
 func getBucket(tx *bolt.Tx, keys ...[]byte) *bolt.Bucket {
