@@ -61,7 +61,10 @@ jobs:
           exit $process.ExitCode
 
   test:
-    runs-on: 'windows-2019'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-2019, windows-2022]
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-go@v2
@@ -84,7 +87,7 @@ jobs:
 
       - uses: actions/upload-artifact@v2
         with:
-          name: test_binaries
+          name: test_binaries_${{ matrix.os }}
           path: |
             test/containerd-shim-runhcs-v1.test.exe
             test/cri-containerd.test.exe
