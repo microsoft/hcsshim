@@ -10,7 +10,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/opencontainers/runc/libcontainer/configs"
+	"github.com/opencontainers/runc/libcontainer/devices"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
@@ -214,7 +214,7 @@ func addLDConfigHook(ctx context.Context, spec *oci.Spec, args, env []string) er
 	return nil
 }
 
-func addLinuxDeviceToSpec(ctx context.Context, hostDevice *configs.Device, spec *oci.Spec, addCgroupDevice bool) {
+func addLinuxDeviceToSpec(ctx context.Context, hostDevice *devices.Device, spec *oci.Spec, addCgroupDevice bool) {
 	rd := oci.LinuxDevice{
 		Path:  hostDevice.Path,
 		Type:  string(hostDevice.Type),
