@@ -603,6 +603,8 @@ func (w *Writer) Create(name string, f *File) error {
 }
 
 // Link adds a hard link to the file system.
+// We support creating hardlinks to symlinks themselves instead of what
+// the symlinks link to, as this is what containerd does upstream.
 func (w *Writer) Link(oldname, newname string) error {
 	if err := w.finishInode(); err != nil {
 		return err
@@ -620,8 +622,8 @@ func (w *Writer) Link(oldname, newname string) error {
 		return err
 	}
 	switch oldfile.Mode & format.TypeMask {
-	case format.S_IFDIR, format.S_IFLNK:
-		return fmt.Errorf("%s: link target cannot be a directory or symlink: %s", newname, oldname)
+	case format.S_IFDIR:
+		return fmt.Errorf("%s: link target cannot be a directory: %s", newname, oldname)
 	}
 
 	if existing != oldfile && oldfile.LinkCount >= format.MaxLinks {
