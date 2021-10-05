@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"io/ioutil"
 	"net"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -17,6 +20,8 @@ import (
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/containerd/ttrpc"
 	"github.com/golang/mock/gomock"
+	"github.com/pkg/errors"
+	bolt "go.etcd.io/bbolt"
 )
 
 func exists(target string, list []string) bool {
@@ -108,9 +113,12 @@ func TestAddNIC(t *testing.T) {
 	computeAgentCtrl := gomock.NewController(t)
 	defer computeAgentCtrl.Finish()
 	mockedService := ncproxyMock.NewMockComputeAgentService(computeAgentCtrl)
+	mockedAgentClient := &computeAgentClient{nil, mockedService}
 
 	// put mocked compute agent in agent cache for test
-	agentCache.put(containerID, mockedService)
+	if err := agentCache.put(containerID, mockedAgentClient); err != nil {
+		t.Fatal(err)
+	}
 
 	// setup expected mocked calls
 	mockedService.EXPECT().AddNIC(gomock.Any(), gomock.Any()).Return(&computeagent.AddNICInternalResponse{}, nil).AnyTimes()
@@ -190,9 +198,12 @@ func TestDeleteNIC(t *testing.T) {
 	computeAgentCtrl := gomock.NewController(t)
 	defer computeAgentCtrl.Finish()
 	mockedService := ncproxyMock.NewMockComputeAgentService(computeAgentCtrl)
+	mockedAgentClient := &computeAgentClient{nil, mockedService}
 
 	// put mocked compute agent in agent cache for test
-	agentCache.put(containerID, mockedService)
+	if err := agentCache.put(containerID, mockedAgentClient); err != nil {
+		t.Fatal(err)
+	}
 
 	// setup expected mocked calls
 	mockedService.EXPECT().DeleteNIC(gomock.Any(), gomock.Any()).Return(&computeagent.DeleteNICInternalResponse{}, nil).AnyTimes()
@@ -274,9 +285,12 @@ func TestModifyNIC(t *testing.T) {
 	computeAgentCtrl := gomock.NewController(t)
 	defer computeAgentCtrl.Finish()
 	mockedService := ncproxyMock.NewMockComputeAgentService(computeAgentCtrl)
+	mockedAgentClient := &computeAgentClient{nil, mockedService}
 
 	// populate agent cache with mocked service for test
-	agentCache.put(containerID, mockedService)
+	if err := agentCache.put(containerID, mockedAgentClient); err != nil {
+		t.Fatal(err)
+	}
 
 	// setup expected mocked calls
 	mockedService.EXPECT().ModifyNIC(gomock.Any(), gomock.Any()).Return(&computeagent.ModifyNICInternalResponse{}, nil).AnyTimes()
@@ -1016,9 +1030,23 @@ func TestGetNetworks_NoError(t *testing.T) {
 func TestRegisterComputeAgent(t *testing.T) {
 	ctx := context.Background()
 
-	// setup test ncproxy ttrpc service
+	// setup test database
+	tempDir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	db, err := bolt.Open(filepath.Join(tempDir, "networkproxy.db.test"), 0600, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// create test TTRPC service
+	store := newComputeAgentStore(db)
 	agentCache := newComputeAgentCache()
-	tService := newTTRPCService(agentCache)
+	tService := newTTRPCService(ctx, agentCache, store)
 
 	// setup mocked calls
 	winioDialPipe = func(path string, timeout *time.Duration) (net.Conn, error) {
@@ -1038,18 +1066,36 @@ func TestRegisterComputeAgent(t *testing.T) {
 		t.Fatalf("expected to get no error, instead got %v", err)
 	}
 
-	// validate that the entry was added to the agent cache
-	if _, exists := agentCache.get(containerID); !exists {
-		t.Fatalf("compute agent client was not put into agent cache")
+	// validate that the entry was added to the agent
+	actual, err := agentCache.get(containerID)
+	if err != nil {
+		t.Fatalf("failed to get the agent entry %v", err)
+	}
+	if actual == nil {
+		t.Fatal("compute agent client was not put into agent cache")
 	}
 }
 
 func TestConfigureNetworking(t *testing.T) {
 	ctx := context.Background()
 
-	// setup test ncproxy ttrpc service
+	// setup test database
+	tempDir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	db, err := bolt.Open(filepath.Join(tempDir, "networkproxy.db.test"), 0600, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// create test TTRPC service
+	store := newComputeAgentStore(db)
 	agentCache := newComputeAgentCache()
-	tService := newTTRPCService(agentCache)
+	tService := newTTRPCService(ctx, agentCache, store)
 
 	// setup mocked client and mocked calls for nodenetsvc
 	nodeNetCtrl := gomock.NewController(t)
@@ -1109,5 +1155,138 @@ func TestConfigureNetworking(t *testing.T) {
 				t.Fatalf("expected ConfigureNetworking to return no error, instead got %v", err)
 			}
 		})
+	}
+}
+
+func TestReconnectComputeAgents_Success(t *testing.T) {
+	ctx := context.Background()
+
+	// setup test database
+	tempDir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	db, err := bolt.Open(filepath.Join(tempDir, "networkproxy.db.test"), 0600, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// create test TTRPC service
+	store := newComputeAgentStore(db)
+	agentCache := newComputeAgentCache()
+
+	// setup mocked calls
+	winioDialPipe = func(path string, timeout *time.Duration) (net.Conn, error) {
+		rPipe, _ := net.Pipe()
+		return rPipe, nil
+	}
+	ttrpcNewClient = func(conn net.Conn, opts ...ttrpc.ClientOpts) *ttrpc.Client {
+		return &ttrpc.Client{}
+	}
+
+	// add test entry in database
+	containerID := "fake-container-id"
+	address := "123412341234"
+
+	if err := store.updateComputeAgent(ctx, containerID, address); err != nil {
+		t.Fatal(err)
+	}
+
+	reconnectComputeAgents(ctx, store, agentCache)
+
+	// validate that the agent cache has the entry now
+	actualClient, err := agentCache.get(containerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actualClient == nil {
+		t.Fatal("no entry added on reconnect to agent client cache")
+	}
+}
+
+func TestReconnectComputeAgents_Failure(t *testing.T) {
+	ctx := context.Background()
+
+	// setup test database
+	tempDir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	db, err := bolt.Open(filepath.Join(tempDir, "networkproxy.db.test"), 0600, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// create test TTRPC service
+	store := newComputeAgentStore(db)
+	agentCache := newComputeAgentCache()
+
+	// setup mocked calls
+	winioDialPipe = func(path string, timeout *time.Duration) (net.Conn, error) {
+		// this will cause the reconnect compute agents call to run into an error
+		// trying to reconnect to the fake container address
+		return nil, errors.New("fake error")
+	}
+	ttrpcNewClient = func(conn net.Conn, opts ...ttrpc.ClientOpts) *ttrpc.Client {
+		return &ttrpc.Client{}
+	}
+
+	// add test entry in database
+	containerID := "fake-container-id"
+	address := "123412341234"
+
+	if err := store.updateComputeAgent(ctx, containerID, address); err != nil {
+		t.Fatal(err)
+	}
+
+	reconnectComputeAgents(ctx, store, agentCache)
+
+	// validate that the agent cache does NOT have an entry
+	actualClient, err := agentCache.get(containerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actualClient != nil {
+		t.Fatalf("expected no entry on failure, instead found %v", actualClient)
+	}
+
+	// validate that the agent store no longer has an entry for this container
+	value, err := store.getComputeAgent(ctx, containerID)
+	if err == nil {
+		t.Fatalf("expected an error, instead found value %s", value)
+	}
+}
+
+func TestDisconnectComputeAgents(t *testing.T) {
+	ctx := context.Background()
+	containerID := "fake-container-id"
+
+	agentCache := newComputeAgentCache()
+
+	// create mocked compute agent service
+	computeAgentCtrl := gomock.NewController(t)
+	defer computeAgentCtrl.Finish()
+	mockedService := ncproxyMock.NewMockComputeAgentService(computeAgentCtrl)
+	mockedAgentClient := &computeAgentClient{nil, mockedService}
+
+	// put mocked compute agent in agent cache for test
+	if err := agentCache.put(containerID, mockedAgentClient); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := disconnectComputeAgents(ctx, agentCache); err != nil {
+		t.Fatal(err)
+	}
+
+	// validate there is no longer an entry for the compute agent client
+	actual, err := agentCache.get(containerID)
+	if err == nil {
+		t.Fatalf("expected to find the cache empty, instead found %v", actual)
 	}
 }
