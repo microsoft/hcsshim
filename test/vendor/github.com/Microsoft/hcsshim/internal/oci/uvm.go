@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"strconv"
 	"strings"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
@@ -393,6 +393,10 @@ func UpdateSpecFromOptions(s specs.Spec, opts *runhcsopts.Options) specs.Spec {
 
 	if _, ok := s.Annotations[annotations.NetworkConfigProxy]; !ok && opts.NCProxyAddr != "" {
 		s.Annotations[annotations.NetworkConfigProxy] = opts.NCProxyAddr
+	}
+
+	if _, ok := s.Annotations[annotations.LCOWDevShmSizeInKb]; !ok && opts.DefaultContainerShmSizeInKb != 0 {
+		s.Annotations[annotations.LCOWDevShmSizeInKb] = strconv.FormatInt(int64(opts.DefaultContainerShmSizeInKb), 10)
 	}
 
 	return s
