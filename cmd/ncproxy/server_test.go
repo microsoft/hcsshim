@@ -68,7 +68,7 @@ func createTestEndpoint(name, networkID string) (*hcn.HostComputeEndpoint, error
 	return endpoint.Create()
 }
 
-func createTestNATNetwork() (*hcn.HostComputeNetwork, error) {
+func createTestNATNetwork(name string) (*hcn.HostComputeNetwork, error) {
 	ipam := hcn.Ipam{
 		Type:    "Static",
 		Subnets: getTestSubnets(),
@@ -76,7 +76,7 @@ func createTestNATNetwork() (*hcn.HostComputeNetwork, error) {
 	ipams := []hcn.Ipam{ipam}
 	network := &hcn.HostComputeNetwork{
 		Type: hcn.NAT,
-		Name: "test-nat-network-name",
+		Name: name,
 		MacPool: hcn.MacPool{
 			Ranges: []hcn.MacRange{
 				{
@@ -99,9 +99,9 @@ func TestAddNIC(t *testing.T) {
 	gService := newGRPCService(agentCache)
 
 	var (
-		containerID      = "test-container"
-		testNICID        = "test-nic-id"
-		testEndpointName = "test-endpoint-name"
+		containerID      = t.Name() + "-containerID"
+		testNICID        = t.Name() + "-nicID"
+		testEndpointName = t.Name() + "-endpoint"
 	)
 
 	// create mocked compute agent service
@@ -181,9 +181,9 @@ func TestDeleteNIC(t *testing.T) {
 	gService := newGRPCService(agentCache)
 
 	var (
-		containerID      = "test-container"
-		testNICID        = "test-nic-id"
-		testEndpointName = "test-endpoint-name"
+		containerID      = t.Name() + "-containerID"
+		testNICID        = t.Name() + "-nicID"
+		testEndpointName = t.Name() + "-endpoint"
 	)
 
 	// create mocked compute agent service
@@ -266,8 +266,8 @@ func TestModifyNIC(t *testing.T) {
 	gService := newGRPCService(agentCache)
 
 	var (
-		containerID = "test-container"
-		testNICID   = "test-nic-id"
+		containerID = t.Name() + "-containerID"
+		testNICID   = t.Name() + "-nicID"
 	)
 
 	// create mock compute agent service
@@ -282,7 +282,8 @@ func TestModifyNIC(t *testing.T) {
 	mockedService.EXPECT().ModifyNIC(gomock.Any(), gomock.Any()).Return(&computeagent.ModifyNICInternalResponse{}, nil).AnyTimes()
 
 	// create test network
-	network, err := createTestNATNetwork()
+	networkName := t.Name() + "-network"
+	network, err := createTestNATNetwork(networkName)
 	if err != nil {
 		t.Fatalf("failed to create test network with %v", err)
 	}
@@ -291,7 +292,7 @@ func TestModifyNIC(t *testing.T) {
 	}()
 
 	// create test endpoint
-	endpointName := "test-endpoint-name"
+	endpointName := t.Name() + "-endpoint"
 	endpoint, err := createTestEndpoint(endpointName, network.Id)
 	if err != nil {
 		t.Fatalf("failed to create test endpoint with %v", err)
@@ -400,7 +401,7 @@ func TestCreateNetwork(t *testing.T) {
 	tests := []config{
 		{
 			name:          "CreateNetwork returns no error",
-			networkName:   "test-network-name",
+			networkName:   t.Name() + "-network",
 			errorExpected: false,
 		},
 		{
@@ -432,7 +433,7 @@ func TestCreateNetwork(t *testing.T) {
 				}
 				// cleanup the created network
 				if err = network.Delete(); err != nil {
-					t.Fatalf("failed to cleanup network %v created by test with %v", network.Name, err)
+					t.Fatalf("failed to cleanup network %v created by test with %v", test.networkName, err)
 				}
 			}
 		})
@@ -447,7 +448,8 @@ func TestCreateEndpoint(t *testing.T) {
 	gService := newGRPCService(agentCache)
 
 	// test network
-	network, err := createTestNATNetwork()
+	networkName := t.Name() + "-network"
+	network, err := createTestNATNetwork(networkName)
 	if err != nil {
 		t.Fatalf("failed to create test network with %v", err)
 	}
@@ -466,7 +468,7 @@ func TestCreateEndpoint(t *testing.T) {
 	tests := []config{
 		{
 			name:          "CreateEndpoint returns no error",
-			networkName:   network.Name,
+			networkName:   networkName,
 			ipaddress:     "192.168.100.4",
 			macaddress:    "00-15-5D-52-C0-00",
 			errorExpected: false,
@@ -480,14 +482,14 @@ func TestCreateEndpoint(t *testing.T) {
 		},
 		{
 			name:          "CreateEndpoint returns error when ip address is empty",
-			networkName:   network.Name,
+			networkName:   networkName,
 			ipaddress:     "",
 			macaddress:    "00-15-5D-52-C0-00",
 			errorExpected: true,
 		},
 		{
 			name:          "CreateEndpoint returns error when mac address is empty",
-			networkName:   network.Name,
+			networkName:   networkName,
 			ipaddress:     "192.168.100.4",
 			macaddress:    "",
 			errorExpected: true,
@@ -496,7 +498,7 @@ func TestCreateEndpoint(t *testing.T) {
 
 	for i, test := range tests {
 		t.Run(test.name, func(_ *testing.T) {
-			endpointName := "test-endpoint-name-" + strconv.Itoa(i)
+			endpointName := t.Name() + "-endpoint-" + strconv.Itoa(i)
 			req := &ncproxygrpc.CreateEndpointRequest{
 				Name:                  endpointName,
 				Macaddress:            test.macaddress,
@@ -545,7 +547,8 @@ func TestAddEndpoint_NoError(t *testing.T) {
 	}()
 
 	// test network
-	network, err := createTestNATNetwork()
+	networkName := t.Name() + "-network"
+	network, err := createTestNATNetwork(networkName)
 	if err != nil {
 		t.Fatalf("failed to create test network with %v", err)
 	}
@@ -553,7 +556,7 @@ func TestAddEndpoint_NoError(t *testing.T) {
 		_ = network.Delete()
 	}()
 
-	endpointName := "test-endpoint-name"
+	endpointName := t.Name() + "-endpoint"
 	endpoint, err := createTestEndpoint(endpointName, network.Id)
 	if err != nil {
 		t.Fatalf("failed to create test endpoint with %v", err)
@@ -627,7 +630,7 @@ func TestAddEndpoint_Error_NoEndpoint(t *testing.T) {
 	}()
 
 	req := &ncproxygrpc.AddEndpointRequest{
-		Name:        "test-endpoint-name",
+		Name:        t.Name() + "-endpoint",
 		NamespaceID: namespace.Id,
 	}
 
@@ -645,7 +648,8 @@ func TestAddEndpoint_Error_EmptyNamespaceID(t *testing.T) {
 	gService := newGRPCService(agentCache)
 
 	// test network
-	network, err := createTestNATNetwork()
+	networkName := t.Name() + "-network"
+	network, err := createTestNATNetwork(networkName)
 	if err != nil {
 		t.Fatalf("failed to create test network with %v", err)
 	}
@@ -653,7 +657,7 @@ func TestAddEndpoint_Error_EmptyNamespaceID(t *testing.T) {
 		_ = network.Delete()
 	}()
 
-	endpointName := "test-endpoint-name"
+	endpointName := t.Name() + "-endpoint"
 	endpoint, err := createTestEndpoint(endpointName, network.Id)
 	if err != nil {
 		t.Fatalf("failed to create test endpoint with %v", err)
@@ -681,7 +685,8 @@ func TestDeleteEndpoint_NoError(t *testing.T) {
 	gService := newGRPCService(agentCache)
 
 	// test network
-	network, err := createTestNATNetwork()
+	networkName := t.Name() + "-network"
+	network, err := createTestNATNetwork(networkName)
 	if err != nil {
 		t.Fatalf("failed to create test network with %v", err)
 	}
@@ -689,7 +694,7 @@ func TestDeleteEndpoint_NoError(t *testing.T) {
 		_ = network.Delete()
 	}()
 
-	endpointName := "test-endpoint-name"
+	endpointName := t.Name() + "-endpoint"
 	endpoint, err := createTestEndpoint(endpointName, network.Id)
 	if err != nil {
 		t.Fatalf("failed to create test endpoint with %v", err)
@@ -722,7 +727,8 @@ func TestDeleteEndpoint_Error_NoEndpoint(t *testing.T) {
 	gService := newGRPCService(agentCache)
 
 	// test network
-	network, err := createTestNATNetwork()
+	networkName := t.Name() + "-network"
+	network, err := createTestNATNetwork(networkName)
 	if err != nil {
 		t.Fatalf("failed to create test network with %v", err)
 	}
@@ -730,7 +736,7 @@ func TestDeleteEndpoint_Error_NoEndpoint(t *testing.T) {
 		_ = network.Delete()
 	}()
 
-	endpointName := "test-endpoint-name"
+	endpointName := t.Name() + "-endpoint"
 	req := &ncproxygrpc.DeleteEndpointRequest{
 		Name: endpointName,
 	}
@@ -767,7 +773,8 @@ func TestDeleteNetwork_NoError(t *testing.T) {
 	gService := newGRPCService(agentCache)
 
 	// create the test network
-	network, err := createTestNATNetwork()
+	networkName := t.Name() + "-network"
+	network, err := createTestNATNetwork(networkName)
 	if err != nil {
 		t.Fatalf("failed to create test network with %v", err)
 	}
@@ -778,7 +785,7 @@ func TestDeleteNetwork_NoError(t *testing.T) {
 	}()
 
 	req := &ncproxygrpc.DeleteNetworkRequest{
-		Name: network.Name,
+		Name: networkName,
 	}
 	_, err = gService.DeleteNetwork(ctx, req)
 	if err != nil {
@@ -793,7 +800,7 @@ func TestDeleteNetwork_Error_NoNetwork(t *testing.T) {
 	agentCache := newComputeAgentCache()
 	gService := newGRPCService(agentCache)
 
-	fakeNetworkName := "test-network-name"
+	fakeNetworkName := t.Name() + "-network"
 
 	req := &ncproxygrpc.DeleteNetworkRequest{
 		Name: fakeNetworkName,
@@ -828,7 +835,8 @@ func TestGetEndpoint_NoError(t *testing.T) {
 	gService := newGRPCService(agentCache)
 
 	// test network
-	network, err := createTestNATNetwork()
+	networkName := t.Name() + "-network"
+	network, err := createTestNATNetwork(networkName)
 	if err != nil {
 		t.Fatalf("failed to create test network with %v", err)
 	}
@@ -836,7 +844,7 @@ func TestGetEndpoint_NoError(t *testing.T) {
 		_ = network.Delete()
 	}()
 
-	endpointName := "test-endpoint-name"
+	endpointName := t.Name() + "-endpoint"
 	endpoint, err := createTestEndpoint(endpointName, network.Id)
 	if err != nil {
 		t.Fatalf("failed to create test endpoint with %v", err)
@@ -861,7 +869,7 @@ func TestGetEndpoint_Error_NoEndpoint(t *testing.T) {
 	agentCache := newComputeAgentCache()
 	gService := newGRPCService(agentCache)
 
-	endpointName := "test-endpoint-name"
+	endpointName := t.Name() + "-endpoint"
 	req := &ncproxygrpc.GetEndpointRequest{
 		Name: endpointName,
 	}
@@ -895,7 +903,8 @@ func TestGetEndpoints_NoError(t *testing.T) {
 	gService := newGRPCService(agentCache)
 
 	// test network
-	network, err := createTestNATNetwork()
+	networkName := t.Name() + "-network"
+	network, err := createTestNATNetwork(networkName)
 	if err != nil {
 		t.Fatalf("failed to create test network with %v", err)
 	}
@@ -904,7 +913,7 @@ func TestGetEndpoints_NoError(t *testing.T) {
 	}()
 
 	// test endpoint
-	endpointName := "test-endpoint-name"
+	endpointName := t.Name() + "-endpoint"
 	endpoint, err := createTestEndpoint(endpointName, network.Id)
 	if err != nil {
 		t.Fatalf("failed to create test endpoint with %v", err)
@@ -932,7 +941,8 @@ func TestGetNetwork_NoError(t *testing.T) {
 	gService := newGRPCService(agentCache)
 
 	// create the test network
-	network, err := createTestNATNetwork()
+	networkName := t.Name() + "-network"
+	network, err := createTestNATNetwork(networkName)
 	if err != nil {
 		t.Fatalf("failed to create test network with %v", err)
 	}
@@ -943,7 +953,7 @@ func TestGetNetwork_NoError(t *testing.T) {
 	}()
 
 	req := &ncproxygrpc.GetNetworkRequest{
-		Name: network.Name,
+		Name: networkName,
 	}
 	_, err = gService.GetNetwork(ctx, req)
 	if err != nil {
@@ -958,7 +968,7 @@ func TestGetNetwork_Error_NoNetwork(t *testing.T) {
 	agentCache := newComputeAgentCache()
 	gService := newGRPCService(agentCache)
 
-	fakeNetworkName := "test-network-name"
+	fakeNetworkName := t.Name() + "-network"
 
 	req := &ncproxygrpc.GetNetworkRequest{
 		Name: fakeNetworkName,
@@ -993,7 +1003,8 @@ func TestGetNetworks_NoError(t *testing.T) {
 	gService := newGRPCService(agentCache)
 
 	// create the test network
-	network, err := createTestNATNetwork()
+	networkName := t.Name() + "-network"
+	network, err := createTestNATNetwork(networkName)
 	if err != nil {
 		t.Fatalf("failed to create test network with %v", err)
 	}
@@ -1008,7 +1019,7 @@ func TestGetNetworks_NoError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, instead got %v", err)
 	}
-	if !networkExists(network.Name, resp.Networks) {
+	if !networkExists(networkName, resp.Networks) {
 		t.Fatalf("failed to find created network")
 	}
 }
@@ -1029,9 +1040,9 @@ func TestRegisterComputeAgent(t *testing.T) {
 		return &ttrpc.Client{}
 	}
 
-	containerID := "test-container-id"
+	containerID := t.Name() + "-containerID"
 	req := &ncproxyttrpc.RegisterComputeAgentRequest{
-		AgentAddress: "test-agent-address",
+		AgentAddress: t.Name() + "-agent-address",
 		ContainerID:  containerID,
 	}
 	if _, err := tService.RegisterComputeAgent(ctx, req); err != nil {
@@ -1067,7 +1078,7 @@ func TestConfigureNetworking(t *testing.T) {
 		requestType   ncproxyttrpc.RequestTypeInternal
 		errorExpected bool
 	}
-	containerID := "test-container-id"
+	containerID := t.Name() + "-containerID"
 	tests := []config{
 		{
 			name:          "Configure Networking setup returns no error",

@@ -32,13 +32,13 @@ func TestAddNIC(t *testing.T) {
 
 	hnsGetHNSEndpointByName = func(endpointName string) (*hns.HNSEndpoint, error) {
 		return &hns.HNSEndpoint{
-			Namespace: &hns.Namespace{ID: "test-namespace-ID"},
+			Namespace: &hns.Namespace{ID: t.Name() + "-namespaceID"},
 		}, nil
 	}
 
 	var (
-		testNICID        = "test-NIC-ID"
-		testEndpointName = "test-endpoint-name"
+		testNICID        = t.Name() + "-nicID"
+		testEndpointName = t.Name() + "-endpoint"
 	)
 
 	type config struct {
@@ -96,14 +96,14 @@ func TestModifyNIC(t *testing.T) {
 
 	hnsGetHNSEndpointByName = func(endpointName string) (*hns.HNSEndpoint, error) {
 		return &hns.HNSEndpoint{
-			Id:         "test-ID",
+			Id:         t.Name() + "-endpoint-ID",
 			MacAddress: "00-00-00-00-00-00",
 		}, nil
 	}
 
 	var (
-		testNICID        = "test-NIC-ID"
-		testEndpointName = "test-endpoint-name"
+		testNICID        = t.Name() + "-nicID"
+		testEndpointName = t.Name() + "-endpoint"
 	)
 
 	iovSettingsOn := &computeagent.IovSettings{
@@ -180,8 +180,8 @@ func TestDeleteNIC(t *testing.T) {
 	}
 
 	var (
-		testNICID        = "test-NIC-ID"
-		testEndpointName = "test-endpoint-name"
+		testNICID        = t.Name() + "-nicID"
+		testEndpointName = t.Name() + "-endpoint"
 	)
 
 	type config struct {
