@@ -261,4 +261,8 @@ const (
 	// AnnotationDisableLCOWTimeSyncService is used to disable the chronyd time
 	// synchronization service inside the LCOW UVM.
 	DisableLCOWTimeSyncService = "io.microsoft.virtualmachine.lcow.timesync.disable"
+
+	// NoInheritHostTimezone specifies for the hosts timezone to not be inherited by the WCOW UVM. The UVM will be set to UTC time
+	// as a default.
+	NoInheritHostTimezone = "io.microsoft.virtualmachine.wcow.timezone.noinherit"
 )

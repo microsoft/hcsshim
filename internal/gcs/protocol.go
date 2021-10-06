@@ -220,7 +220,8 @@ type containerCreate struct {
 }
 
 type uvmConfig struct {
-	SystemType string // must be "Container"
+	SystemType          string // must be "Container"
+	TimeZoneInformation *hcsschema.TimeZoneInformation
 }
 
 type containerNotification struct {

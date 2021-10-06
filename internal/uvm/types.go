@@ -135,4 +135,8 @@ type UtilityVM struct {
 	// networkSetup handles the logic for setting up and tearing down any network configuration
 	// for the Utility VM.
 	networkSetup NetworkSetup
+
+	// noInheritHostTimezone specifies whether to not inherit the hosts timezone for the UVM. UTC will be set as the default instead.
+	// This only applies for WCOW.
+	noInheritHostTimezone bool
 }

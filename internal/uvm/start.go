@@ -229,11 +229,31 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 		if err != nil {
 			return fmt.Errorf("failed to connect to GCS: %s", err)
 		}
+
+		var initGuestState *gcs.InitialGuestState
+		if uvm.OS() == "windows" {
+			// Default to setting the time zone in the UVM to the hosts time zone unless the client asked to avoid this behavior. If so, assign
+			// to UTC.
+			if uvm.noInheritHostTimezone {
+				initGuestState = &gcs.InitialGuestState{
+					Timezone: utcTimezone,
+				}
+			} else {
+				tz, err := getTimezone()
+				if err != nil {
+					return err
+				}
+				initGuestState = &gcs.InitialGuestState{
+					Timezone: tz,
+				}
+			}
+		}
 		// Start the GCS protocol.
 		gcc := &gcs.GuestConnectionConfig{
-			Conn:     conn,
-			Log:      log.G(ctx).WithField(logfields.UVMID, uvm.id),
-			IoListen: gcs.HvsockIoListen(uvm.runtimeID),
+			Conn:           conn,
+			Log:            log.G(ctx).WithField(logfields.UVMID, uvm.id),
+			IoListen:       gcs.HvsockIoListen(uvm.runtimeID),
+			InitGuestState: initGuestState,
 		}
 		uvm.gc, err = gcc.Connect(ctx, !uvm.IsClone)
 		if err != nil {

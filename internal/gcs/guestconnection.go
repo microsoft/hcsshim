@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -16,9 +15,11 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
@@ -45,6 +46,11 @@ func HvsockIoListen(vmID guid.GUID) IoListenFunc {
 	}
 }
 
+type InitialGuestState struct {
+	// Timezone is only honored for Windows guests.
+	Timezone *hcsschema.TimeZoneInformation
+}
+
 // GuestConnectionConfig contains options for creating a guest connection.
 type GuestConnectionConfig struct {
 	// Conn specifies the connection to use for the bridge. It will be closed
@@ -54,6 +60,8 @@ type GuestConnectionConfig struct {
 	Log *logrus.Entry
 	// IoListen is the function to use to create listeners for the stdio connections.
 	IoListen IoListenFunc
+	// InitGuestState specifies settings to apply to the guest on creation/start. This includes things such as the timezone for the VM.
+	InitGuestState *InitialGuestState
 }
 
 // Connect establishes a GCS connection. `gcc.Conn` will be closed by this function.
@@ -73,7 +81,7 @@ func (gcc *GuestConnectionConfig) Connect(ctx context.Context, isColdStart bool)
 		_ = gc.brdg.Wait()
 		gc.clearNotifies()
 	}()
-	err = gc.connect(ctx, isColdStart)
+	err = gc.connect(ctx, isColdStart, gcc.InitGuestState)
 	if err != nil {
 		gc.Close()
 		return nil, err
@@ -108,7 +116,7 @@ func (gc *GuestConnection) Protocol() uint32 {
 // isColdStart should be true when the UVM is being connected to for the first time post-boot.
 // It should be false for subsequent connections (e.g. when connecting to a UVM that has
 // been cloned).
-func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool) (err error) {
+func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool, initGuestState *InitialGuestState) (err error) {
 	req := negotiateProtocolRequest{
 		MinimumVersion: protocolVersion,
 		MaximumVersion: protocolVersion,
@@ -127,11 +135,15 @@ func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool) (err e
 		gc.os = "windows"
 	}
 	if isColdStart && resp.Capabilities.SendHostCreateMessage {
+		conf := &uvmConfig{
+			SystemType: "Container",
+		}
+		if initGuestState != nil && initGuestState.Timezone != nil {
+			conf.TimeZoneInformation = initGuestState.Timezone
+		}
 		createReq := containerCreate{
-			requestBase: makeRequest(ctx, nullContainerID),
-			ContainerConfig: anyInString{&uvmConfig{
-				SystemType: "Container",
-			}},
+			requestBase:     makeRequest(ctx, nullContainerID),
+			ContainerConfig: anyInString{conf},
 		}
 		var createResp responseBase
 		err = gc.brdg.RPC(ctx, rpcCreate, &createReq, &createResp, true)
@@ -173,9 +185,7 @@ func (gc *GuestConnection) DumpStacks(ctx context.Context) (response string, err
 	req := dumpStacksRequest{
 		requestBase: makeRequest(ctx, nullContainerID),
 	}
-
 	var resp dumpStacksResponse
-
 	err = gc.brdg.RPC(ctx, rpcDumpStacks, &req, &resp, false)
 	return resp.GuestStacks, err
 }
