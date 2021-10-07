@@ -19,8 +19,8 @@ func clearTestDependencies() {
 	osMkdirAll = nil
 	osRemoveAll = nil
 	unixMount = nil
-	createLinearTarget = nil
-	veritySetup = nil
+	createZeroSectorLinearTarget = nil
+	createVerityTargetCalled = nil
 	removeDevice = nil
 	mountInternal = mount
 }
@@ -323,7 +323,7 @@ func Test_CreateLinearTarget_And_Mount_Called_With_Correct_Parameters(t *testing
 	expectedSource := "/dev/pmem0"
 	expectedTarget := "/foo"
 	mapperPath := fmt.Sprintf("/dev/mapper/%s", expectedLinearName)
-	createLTCalled := false
+	createZSLTCalled := false
 
 	osMkdirAll = func(_ string, _ os.FileMode) error {
 		return nil
@@ -339,28 +339,33 @@ func Test_CreateLinearTarget_And_Mount_Called_With_Correct_Parameters(t *testing
 		return nil
 	}
 
-	createLinearTarget = func(_ context.Context, source, name string, mapping *prot.DeviceMappingInfo) (string, error) {
-		createLTCalled = true
+	createZeroSectorLinearTarget = func(_ context.Context, source, name string, mapping *prot.DeviceMappingInfo) (string, error) {
+		createZSLTCalled = true
 		if source != expectedSource {
-			t.Errorf("expected createLinearTarget source %s, got %s", expectedSource, source)
+			t.Errorf("expected createZeroSectorLinearTarget source %s, got %s", expectedSource, source)
 		}
 		if name != expectedLinearName {
-			t.Errorf("expected createLinearTarget name %s, got %s", expectedLinearName, name)
+			t.Errorf("expected createZeroSectorLinearTarget name %s, got %s", expectedLinearName, name)
 		}
 		return mapperPath, nil
 	}
 
 	if err := Mount(
-		context.Background(), 0, expectedTarget, mappingInfo, nil, openDoorSecurityPolicyEnforcer(),
+		context.Background(),
+		0,
+		expectedTarget,
+		mappingInfo,
+		nil,
+		openDoorSecurityPolicyEnforcer(),
 	); err != nil {
 		t.Fatalf("unexpected error during Mount: %s", err)
 	}
-	if !createLTCalled {
-		t.Fatalf("createLinearTarget not called")
+	if !createZSLTCalled {
+		t.Fatalf("createZeroSectorLinearTarget not called")
 	}
 }
 
-func Test_VeritySetup_And_Mount_Called_With_Correct_Parameters(t *testing.T) {
+func Test_CreateVerityTargetCalled_And_Mount_Called_With_Correct_Parameters(t *testing.T) {
 	clearTestDependencies()
 
 	verityInfo := &prot.DeviceVerityInfo{
@@ -370,7 +375,7 @@ func Test_VeritySetup_And_Mount_Called_With_Correct_Parameters(t *testing.T) {
 	expectedSource := "/dev/pmem0"
 	expectedTarget := "/foo"
 	mapperPath := fmt.Sprintf("/dev/mapper/%s", expectedVerityName)
-	veritySetupCalled := false
+	createVerityTargetCalledCalled := false
 
 	mountInternal = func(_ context.Context, source, target string) error {
 		if source != mapperPath {
@@ -381,28 +386,33 @@ func Test_VeritySetup_And_Mount_Called_With_Correct_Parameters(t *testing.T) {
 		}
 		return nil
 	}
-	veritySetup = func(_ context.Context, source, name string, verity *prot.DeviceVerityInfo) (string, error) {
-		veritySetupCalled = true
+	createVerityTargetCalled = func(_ context.Context, source, name string, verity *prot.DeviceVerityInfo) (string, error) {
+		createVerityTargetCalledCalled = true
 		if source != expectedSource {
-			t.Errorf("expected veritySetup source %s, got %s", expectedSource, source)
+			t.Errorf("expected createVerityTargetCalled source %s, got %s", expectedSource, source)
 		}
 		if name != expectedVerityName {
-			t.Errorf("expected veritySetup name %s, got %s", expectedVerityName, name)
+			t.Errorf("expected createVerityTargetCalled name %s, got %s", expectedVerityName, name)
 		}
 		return mapperPath, nil
 	}
 
 	if err := Mount(
-		context.Background(), 0, expectedTarget, nil, verityInfo, openDoorSecurityPolicyEnforcer(),
+		context.Background(),
+		0,
+		expectedTarget,
+		nil,
+		verityInfo,
+		openDoorSecurityPolicyEnforcer(),
 	); err != nil {
 		t.Fatalf("unexpected Mount failure: %s", err)
 	}
-	if !veritySetupCalled {
-		t.Fatal("veritySetup not called")
+	if !createVerityTargetCalledCalled {
+		t.Fatal("createVerityTargetCalled not called")
 	}
 }
 
-func Test_CreateLinearTarget_And_VeritySetup_Called_Correctly(t *testing.T) {
+func Test_CreateLinearTarget_And_CreateVerityTargetCalled_Called_Correctly(t *testing.T) {
 	clearTestDependencies()
 
 	verityInfo := &prot.DeviceVerityInfo{
@@ -421,23 +431,23 @@ func Test_CreateLinearTarget_And_VeritySetup_Called_Correctly(t *testing.T) {
 	dmVerityCalled := false
 	mountCalled := false
 
-	createLinearTarget = func(_ context.Context, source, name string, mapping *prot.DeviceMappingInfo) (string, error) {
+	createZeroSectorLinearTarget = func(_ context.Context, source, name string, mapping *prot.DeviceMappingInfo) (string, error) {
 		dmLinearCalled = true
 		if source != expectedPMemDevice {
-			t.Errorf("expected createLinearTarget source %s, got %s", expectedPMemDevice, source)
+			t.Errorf("expected createZeroSectorLinearTarget source %s, got %s", expectedPMemDevice, source)
 		}
 		if name != expectedLinearTarget {
-			t.Errorf("expected createLineartarget name %s, got %s", expectedLinearTarget, name)
+			t.Errorf("expected createZeroSectorLinearTarget name %s, got %s", expectedLinearTarget, name)
 		}
 		return mapperLinearPath, nil
 	}
-	veritySetup = func(_ context.Context, source, name string, verity *prot.DeviceVerityInfo) (string, error) {
+	createVerityTargetCalled = func(_ context.Context, source, name string, verity *prot.DeviceVerityInfo) (string, error) {
 		dmVerityCalled = true
 		if source != mapperLinearPath {
-			t.Errorf("expected veritySetup source %s, got %s", mapperLinearPath, source)
+			t.Errorf("expected createVerityTargetCalled source %s, got %s", mapperLinearPath, source)
 		}
 		if name != expectedVerityTarget {
-			t.Errorf("expected veritySetup target name %s, got %s", expectedVerityTarget, name)
+			t.Errorf("expected createVerityTargetCalled target name %s, got %s", expectedVerityTarget, name)
 		}
 		return mapperVerityPath, nil
 	}
@@ -450,15 +460,20 @@ func Test_CreateLinearTarget_And_VeritySetup_Called_Correctly(t *testing.T) {
 	}
 
 	if err := Mount(
-		context.Background(), 0, "/foo", mapping, verityInfo, openDoorSecurityPolicyEnforcer(),
+		context.Background(),
+		0,
+		"/foo",
+		mapping,
+		verityInfo,
+		openDoorSecurityPolicyEnforcer(),
 	); err != nil {
 		t.Fatalf("unexpected error during Mount call: %s", err)
 	}
 	if !dmLinearCalled {
-		t.Fatal("expected createLinearTarget call")
+		t.Fatal("expected createZeroSectorLinearTarget call")
 	}
 	if !dmVerityCalled {
-		t.Fatal("expected veritySetup call")
+		t.Fatal("expected createVerityTargetCalled call")
 	}
 	if !mountCalled {
 		t.Fatal("expected mountInternal call")
@@ -477,7 +492,7 @@ func Test_RemoveDevice_Called_For_LinearTarget_On_MountInternalFailure(t *testin
 	mapperPath := fmt.Sprintf("/dev/mapper/%s", expectedTarget)
 	removeDeviceCalled := false
 
-	createLinearTarget = func(_ context.Context, source, name string, mapping *prot.DeviceMappingInfo) (string, error) {
+	createZeroSectorLinearTarget = func(_ context.Context, source, name string, mapping *prot.DeviceMappingInfo) (string, error) {
 		return mapperPath, nil
 	}
 	mountInternal = func(_ context.Context, source, target string) error {
@@ -492,7 +507,12 @@ func Test_RemoveDevice_Called_For_LinearTarget_On_MountInternalFailure(t *testin
 	}
 
 	if err := Mount(
-		context.Background(), 0, "/foo", mappingInfo, nil, openDoorSecurityPolicyEnforcer(),
+		context.Background(),
+		0,
+		"/foo",
+		mappingInfo,
+		nil,
+		openDoorSecurityPolicyEnforcer(),
 	); err != expectedError {
 		t.Fatalf("expected Mount error %s, got %s", expectedError, err)
 	}
@@ -512,7 +532,7 @@ func Test_RemoveDevice_Called_For_VerityTarget_On_MountInternalFailure(t *testin
 	mapperPath := fmt.Sprintf("/dev/mapper/%s", expectedVerityTarget)
 	removeDeviceCalled := false
 
-	veritySetup = func(_ context.Context, source, name string, verity *prot.DeviceVerityInfo) (string, error) {
+	createVerityTargetCalled = func(_ context.Context, source, name string, verity *prot.DeviceVerityInfo) (string, error) {
 		return mapperPath, nil
 	}
 	mountInternal = func(_ context.Context, _, _ string) error {
@@ -527,7 +547,12 @@ func Test_RemoveDevice_Called_For_VerityTarget_On_MountInternalFailure(t *testin
 	}
 
 	if err := Mount(
-		context.Background(), 0, "/foo", nil, verity, openDoorSecurityPolicyEnforcer(),
+		context.Background(),
+		0,
+		"/foo",
+		nil,
+		verity,
+		openDoorSecurityPolicyEnforcer(),
 	); err != expectedError {
 		t.Fatalf("expected Mount error %s, got %s", expectedError, err)
 	}
@@ -555,18 +580,18 @@ func Test_RemoveDevice_Called_For_Both_Targets_On_MountInternalFailure(t *testin
 	rmLinearCalled := false
 	rmVerityCalled := false
 
-	createLinearTarget = func(_ context.Context, source, name string, m *prot.DeviceMappingInfo) (string, error) {
+	createZeroSectorLinearTarget = func(_ context.Context, source, name string, m *prot.DeviceMappingInfo) (string, error) {
 		if source != expectedPMemDevice {
-			t.Errorf("expected createLinearTarget source %s, got %s", expectedPMemDevice, source)
+			t.Errorf("expected createZeroSectorLinearTarget source %s, got %s", expectedPMemDevice, source)
 		}
 		return mapperLinearPath, nil
 	}
-	veritySetup = func(_ context.Context, source, name string, v *prot.DeviceVerityInfo) (string, error) {
+	createVerityTargetCalled = func(_ context.Context, source, name string, v *prot.DeviceVerityInfo) (string, error) {
 		if source != mapperLinearPath {
-			t.Errorf("expected veritySetup to be called with %s, got %s", mapperLinearPath, source)
+			t.Errorf("expected createVerityTargetCalled to be called with %s, got %s", mapperLinearPath, source)
 		}
 		if name != expectedVerityTarget {
-			t.Errorf("expected veritySetup target %s, got %s", expectedVerityTarget, name)
+			t.Errorf("expected createVerityTargetCalled target %s, got %s", expectedVerityTarget, name)
 		}
 		return mapperVerityPath, nil
 	}
@@ -587,7 +612,12 @@ func Test_RemoveDevice_Called_For_Both_Targets_On_MountInternalFailure(t *testin
 	}
 
 	if err := Mount(
-		context.Background(), 0, "/foo", mapping, verity, openDoorSecurityPolicyEnforcer(),
+		context.Background(),
+		0,
+		"/foo",
+		mapping,
+		verity,
+		openDoorSecurityPolicyEnforcer(),
 	); err != expectedError {
 		t.Fatalf("expected Mount error %s, got %s", expectedError, err)
 	}

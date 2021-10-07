@@ -30,8 +30,8 @@ var (
 
 	// controllerLunToName is stubbed to make testing `Mount` easier.
 	controllerLunToName = ControllerLunToName
-	// veritySetup is stubbed for unit testing `Mount`
-	veritySetup = dm.CreateVerityTarget
+	// createVerityTarget is stubbed for unit testing `Mount`
+	createVerityTarget = dm.CreateVerityTarget
 	// removeDevice is stubbed for unit testing `Mount`
 	removeDevice = dm.RemoveDevice
 )
@@ -77,7 +77,7 @@ func Mount(ctx context.Context, controller, lun uint8, target string, readonly b
 
 		if verityInfo != nil {
 			dmVerityName := fmt.Sprintf(verityDeviceFmt, controller, lun, deviceHash)
-			if source, err = veritySetup(ctx, source, dmVerityName, verityInfo); err != nil {
+			if source, err = createVerityTarget(spnCtx, source, dmVerityName, verityInfo); err != nil {
 				return err
 			}
 			defer func() {

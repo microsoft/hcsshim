@@ -21,13 +21,13 @@ import (
 
 // Test dependencies
 var (
-	osMkdirAll         = os.MkdirAll
-	osRemoveAll        = os.RemoveAll
-	unixMount          = unix.Mount
-	mountInternal      = mount
-	createLinearTarget = dm.CreateZeroSectorLinearTarget
-	veritySetup        = dm.CreateVerityTarget
-	removeDevice       = dm.RemoveDevice
+	osMkdirAll                   = os.MkdirAll
+	osRemoveAll                  = os.RemoveAll
+	unixMount                    = unix.Mount
+	mountInternal                = mount
+	createZeroSectorLinearTarget = dm.CreateZeroSectorLinearTarget
+	createVerityTargetCalled     = dm.CreateVerityTarget
+	removeDevice                 = dm.RemoveDevice
 )
 
 const (
@@ -93,7 +93,7 @@ func Mount(ctx context.Context, device uint32, target string, mappingInfo *prot.
 	// device instead of the original VPMem.
 	if mappingInfo != nil {
 		dmLinearName := fmt.Sprintf(linearDeviceFmt, device, mappingInfo.DeviceOffsetInBytes, mappingInfo.DeviceSizeInBytes)
-		if devicePath, err = createLinearTarget(mCtx, devicePath, dmLinearName, mappingInfo); err != nil {
+		if devicePath, err = createZeroSectorLinearTarget(mCtx, devicePath, dmLinearName, mappingInfo); err != nil {
 			return err
 		}
 		defer func() {
@@ -107,7 +107,7 @@ func Mount(ctx context.Context, device uint32, target string, mappingInfo *prot.
 
 	if verityInfo != nil {
 		dmVerityName := fmt.Sprintf(verityDeviceFmt, device, verityInfo.RootDigest)
-		if devicePath, err = veritySetup(mCtx, devicePath, dmVerityName, verityInfo); err != nil {
+		if devicePath, err = createVerityTargetCalled(mCtx, devicePath, dmVerityName, verityInfo); err != nil {
 			return err
 		}
 		defer func() {
