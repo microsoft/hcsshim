@@ -72,7 +72,7 @@ func Test_LCOW_Layer_Integrity(t *testing.T) {
 			cmd := []string{"ash", "-c", "while true; do sleep 1; done"}
 			contReq := getCreateContainerRequest(
 				podID,
-				fmt.Sprintf("alpine-%s", scenario.layerType),
+				fmt.Sprintf("alpine-%s-%s", scenario.layerType, scenario.rootFSType),
 				imageLcowAlpine,
 				cmd,
 				podReq.Config,
