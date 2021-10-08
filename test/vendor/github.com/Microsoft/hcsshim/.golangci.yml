@@ -24,6 +24,16 @@ issues:
       linters:
         - stylecheck
       Text: "ST1003:"
+    
+    - path: cmd\\ncproxy\\nodenetsvc\\
+      linters:
+        - stylecheck
+      Text: "ST1003:"
+
+    - path: cmd\\ncproxy_mock\\
+      linters:
+        - stylecheck
+      Text: "ST1003:"
 
     - path: internal\\hcs\\schema2\\
       linters:

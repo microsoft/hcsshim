@@ -111,6 +111,7 @@ jobs:
       - run: go build ./cmd/ncproxy
       - run: go build ./cmd/dmverity-vhd
       - run: go build ./internal/tools/grantvmgroupaccess
+      - run: go build ./internal/tools/networkagent
       - run: go build ./internal/tools/securitypolicy
       - run: go build ./internal/tools/uvmboot
       - run: go build ./internal/tools/zapdir
@@ -125,6 +126,7 @@ jobs:
             device-util.exe
             wclayer.exe
             grantvmgroupaccess.exe
+            networkagent.exe
             uvmboot.exe
             zapdir.exe
             ncproxy.exe
