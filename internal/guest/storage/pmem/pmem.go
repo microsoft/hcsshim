@@ -26,7 +26,7 @@ var (
 	unixMount                    = unix.Mount
 	mountInternal                = mount
 	createZeroSectorLinearTarget = dm.CreateZeroSectorLinearTarget
-	createVerityTargetCalled     = dm.CreateVerityTarget
+	createVerityTarget           = dm.CreateVerityTarget
 	removeDevice                 = dm.RemoveDevice
 )
 
@@ -107,7 +107,7 @@ func Mount(ctx context.Context, device uint32, target string, mappingInfo *prot.
 
 	if verityInfo != nil {
 		dmVerityName := fmt.Sprintf(verityDeviceFmt, device, verityInfo.RootDigest)
-		if devicePath, err = createVerityTargetCalled(mCtx, devicePath, dmVerityName, verityInfo); err != nil {
+		if devicePath, err = createVerityTarget(mCtx, devicePath, dmVerityName, verityInfo); err != nil {
 			return err
 		}
 		defer func() {

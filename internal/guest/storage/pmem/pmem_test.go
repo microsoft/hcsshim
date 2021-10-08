@@ -20,7 +20,7 @@ func clearTestDependencies() {
 	osRemoveAll = nil
 	unixMount = nil
 	createZeroSectorLinearTarget = nil
-	createVerityTargetCalled = nil
+	createVerityTarget = nil
 	removeDevice = nil
 	mountInternal = mount
 }
@@ -375,7 +375,7 @@ func Test_CreateVerityTargetCalled_And_Mount_Called_With_Correct_Parameters(t *t
 	expectedSource := "/dev/pmem0"
 	expectedTarget := "/foo"
 	mapperPath := fmt.Sprintf("/dev/mapper/%s", expectedVerityName)
-	createVerityTargetCalledCalled := false
+	createVerityTargetCalled := false
 
 	mountInternal = func(_ context.Context, source, target string) error {
 		if source != mapperPath {
@@ -386,13 +386,13 @@ func Test_CreateVerityTargetCalled_And_Mount_Called_With_Correct_Parameters(t *t
 		}
 		return nil
 	}
-	createVerityTargetCalled = func(_ context.Context, source, name string, verity *prot.DeviceVerityInfo) (string, error) {
-		createVerityTargetCalledCalled = true
+	createVerityTarget = func(_ context.Context, source, name string, verity *prot.DeviceVerityInfo) (string, error) {
+		createVerityTargetCalled = true
 		if source != expectedSource {
-			t.Errorf("expected createVerityTargetCalled source %s, got %s", expectedSource, source)
+			t.Errorf("expected createVerityTarget source %s, got %s", expectedSource, source)
 		}
 		if name != expectedVerityName {
-			t.Errorf("expected createVerityTargetCalled name %s, got %s", expectedVerityName, name)
+			t.Errorf("expected createVerityTarget name %s, got %s", expectedVerityName, name)
 		}
 		return mapperPath, nil
 	}
@@ -407,8 +407,8 @@ func Test_CreateVerityTargetCalled_And_Mount_Called_With_Correct_Parameters(t *t
 	); err != nil {
 		t.Fatalf("unexpected Mount failure: %s", err)
 	}
-	if !createVerityTargetCalledCalled {
-		t.Fatal("createVerityTargetCalled not called")
+	if !createVerityTargetCalled {
+		t.Fatal("createVerityTarget not called")
 	}
 }
 
@@ -441,13 +441,13 @@ func Test_CreateLinearTarget_And_CreateVerityTargetCalled_Called_Correctly(t *te
 		}
 		return mapperLinearPath, nil
 	}
-	createVerityTargetCalled = func(_ context.Context, source, name string, verity *prot.DeviceVerityInfo) (string, error) {
+	createVerityTarget = func(_ context.Context, source, name string, verity *prot.DeviceVerityInfo) (string, error) {
 		dmVerityCalled = true
 		if source != mapperLinearPath {
-			t.Errorf("expected createVerityTargetCalled source %s, got %s", mapperLinearPath, source)
+			t.Errorf("expected createVerityTarget source %s, got %s", mapperLinearPath, source)
 		}
 		if name != expectedVerityTarget {
-			t.Errorf("expected createVerityTargetCalled target name %s, got %s", expectedVerityTarget, name)
+			t.Errorf("expected createVerityTarget target name %s, got %s", expectedVerityTarget, name)
 		}
 		return mapperVerityPath, nil
 	}
@@ -473,7 +473,7 @@ func Test_CreateLinearTarget_And_CreateVerityTargetCalled_Called_Correctly(t *te
 		t.Fatal("expected createZeroSectorLinearTarget call")
 	}
 	if !dmVerityCalled {
-		t.Fatal("expected createVerityTargetCalled call")
+		t.Fatal("expected createVerityTarget call")
 	}
 	if !mountCalled {
 		t.Fatal("expected mountInternal call")
@@ -532,7 +532,7 @@ func Test_RemoveDevice_Called_For_VerityTarget_On_MountInternalFailure(t *testin
 	mapperPath := fmt.Sprintf("/dev/mapper/%s", expectedVerityTarget)
 	removeDeviceCalled := false
 
-	createVerityTargetCalled = func(_ context.Context, source, name string, verity *prot.DeviceVerityInfo) (string, error) {
+	createVerityTarget = func(_ context.Context, source, name string, verity *prot.DeviceVerityInfo) (string, error) {
 		return mapperPath, nil
 	}
 	mountInternal = func(_ context.Context, _, _ string) error {
@@ -586,12 +586,12 @@ func Test_RemoveDevice_Called_For_Both_Targets_On_MountInternalFailure(t *testin
 		}
 		return mapperLinearPath, nil
 	}
-	createVerityTargetCalled = func(_ context.Context, source, name string, v *prot.DeviceVerityInfo) (string, error) {
+	createVerityTarget = func(_ context.Context, source, name string, v *prot.DeviceVerityInfo) (string, error) {
 		if source != mapperLinearPath {
-			t.Errorf("expected createVerityTargetCalled to be called with %s, got %s", mapperLinearPath, source)
+			t.Errorf("expected createVerityTarget to be called with %s, got %s", mapperLinearPath, source)
 		}
 		if name != expectedVerityTarget {
-			t.Errorf("expected createVerityTargetCalled target %s, got %s", expectedVerityTarget, name)
+			t.Errorf("expected createVerityTarget target %s, got %s", expectedVerityTarget, name)
 		}
 		return mapperVerityPath, nil
 	}

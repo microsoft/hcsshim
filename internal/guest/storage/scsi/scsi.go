@@ -164,16 +164,17 @@ func Unmount(ctx context.Context, controller, lun uint8, target string, encrypte
 		return errors.Wrapf(err, "unmounting scsi controller %d lun %d from  %s denied by policy", controller, lun, target)
 	}
 
-	if verityInfo != nil {
-		dmVerityName := fmt.Sprintf(verityDeviceFmt, controller, lun, verityInfo.RootDigest)
-		if err := removeDevice(dmVerityName); err != nil {
-			return errors.Wrapf(err, "failed to remove dm verity target: %s", dmVerityName)
-		}
-	}
-
 	// Unmount unencrypted device
 	if err := storage.UnmountPath(ctx, target, true); err != nil {
 		return errors.Wrapf(err, "unmount failed: "+target)
+	}
+
+	if verityInfo != nil {
+		dmVerityName := fmt.Sprintf(verityDeviceFmt, controller, lun, verityInfo.RootDigest)
+		if err := removeDevice(dmVerityName); err != nil {
+			// Ignore failures, since the path has been unmounted at this point.
+			log.G(ctx).WithError(err).Debugf("failed to remove dm verity target: %s", dmVerityName)
+		}
 	}
 
 	if encrypted {
