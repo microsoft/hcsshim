@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -270,13 +271,30 @@ func CreateDevice(name string, flags CreateFlags, targets []Target) (_ string, e
 
 // RemoveDevice removes a device-mapper device and its associated device node.
 func RemoveDevice(name string) error {
-	f, err := openMapper()
-	if err != nil {
-		return err
+	rm := func() error {
+		f, err := openMapper()
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		os.Remove(path.Join("/dev/mapper", name))
+		return removeDevice(f, name)
 	}
-	defer f.Close()
-	os.Remove(path.Join("/dev/mapper", name))
-	return removeDevice(f, name)
+
+	// This is workaround for "device or resource busy" error, which occasionally happens after the device mapper
+	// target has been unmounted.
+	for {
+		if err := rm(); err != nil {
+			select {
+			case <-time.After(time.Second):
+				return fmt.Errorf("timeout removing device %s", name)
+			default:
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
+		}
+		return nil
+	}
 }
 
 func removeDevice(f *os.File, name string) error {
