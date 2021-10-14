@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
 func Test_LCOW_Layer_Integrity(t *testing.T) {
@@ -28,8 +28,8 @@ func Test_LCOW_Layer_Integrity(t *testing.T) {
 	pullRequiredLCOWImages(
 		t,
 		[]string{imageLcowAlpine},
-		WithSandboxAnnotations(map[string]string{
-			"containerd.io/diff/io.microsoft.storage.lcow.append-dm-verity": "true",
+		WithSandboxLabels(map[string]string{
+			"containerd.io/diff/io.microsoft.lcow.append-dm-verity": "true",
 		}),
 	)
 
@@ -56,13 +56,13 @@ func Test_LCOW_Layer_Integrity(t *testing.T) {
 			rootFSType: "vhd",
 		},
 	} {
-		t.Run(fmt.Sprintf("Integrity-For-%s", scenario.layerType), func(t *testing.T) {
+		t.Run(fmt.Sprintf("Integrity-For-%s-%s", scenario.layerType, scenario.rootFSType), func(t *testing.T) {
 			podReq := getRunPodSandboxRequest(
 				t,
 				lcowRuntimeHandler,
 				WithSandboxAnnotations(map[string]string{
-					oci.AnnotationVPMemCount:          strconv.Itoa(scenario.vPMemCount),
-					oci.AnnotationPreferredRootFSType: scenario.rootFSType,
+					annotations.VPMemCount:          strconv.Itoa(scenario.vPMemCount),
+					annotations.PreferredRootFSType: scenario.rootFSType,
 				}),
 			)
 			podID := runPodSandbox(t, client, ctx, podReq)
