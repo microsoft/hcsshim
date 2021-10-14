@@ -5,6 +5,9 @@ package devices
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"net"
+	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -21,6 +24,8 @@ const (
 										if drivers were not previously present in the UVM, this
 										is an expected race and can be ignored.`
 )
+
+var noExecOutputErr = errors.New("failed to get any pipe output")
 
 // createPnPInstallDriverCommand creates a pnputil command to add and install drivers
 // present in `driverUVMPath` and all subdirectories.
@@ -60,4 +65,73 @@ func execPnPInstallDriver(ctx context.Context, vm *uvm.UtilityVM, driverDir stri
 
 	log.G(ctx).WithField("added drivers", driverDir).Debug("installed drivers")
 	return nil
+}
+
+func execModprobeInstallDriver(ctx context.Context, vm *uvm.UtilityVM, driverDir string) error {
+	p, l, err := cmd.CreateNamedPipeListener()
+	if err != nil {
+		return err
+	}
+	defer l.Close()
+
+	var pipeResults []string
+	errChan := make(chan error)
+
+	go readCsPipeOutput(l, errChan, &pipeResults)
+
+	args := []string{
+		"/bin/install-drivers",
+		driverDir,
+	}
+	req := &cmd.CmdProcessRequest{
+		Args:   args,
+		Stderr: p,
+	}
+
+	exitCode, err := cmd.ExecInUvm(ctx, vm, req)
+	if err != nil && err != noExecOutputErr {
+		return errors.Wrapf(err, "failed to install driver %s in uvm with exit code %d", driverDir, exitCode)
+	}
+
+	// wait to finish parsing stdout results
+	select {
+	case err := <-errChan:
+		if err != nil {
+			return err
+		}
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	log.G(ctx).WithField("added drivers", driverDir).Debug("installed drivers")
+	return nil
+}
+
+// readCsPipeOutput is a helper function that connects to a listener and reads
+// the connection's comma separated output until done. resulting comma separated
+// values are returned in the `result` param. The `errChan` param is used to
+// propagate an errors to the calling function.
+func readCsPipeOutput(l net.Listener, errChan chan<- error, result *[]string) {
+	defer close(errChan)
+	c, err := l.Accept()
+	if err != nil {
+		errChan <- errors.Wrapf(err, "failed to accept named pipe")
+		return
+	}
+	bytes, err := ioutil.ReadAll(c)
+	if err != nil {
+		errChan <- err
+		return
+	}
+
+	elementsAsString := strings.TrimSuffix(string(bytes), "\n")
+	elements := strings.Split(elementsAsString, ",")
+	*result = append(*result, elements...)
+
+	if len(*result) == 0 {
+		errChan <- noExecOutputErr
+		return
+	}
+
+	errChan <- nil
 }

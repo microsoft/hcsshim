@@ -101,6 +101,8 @@ github.com/google/go-containerregistry/pkg/v1/remote
 github.com/google/go-containerregistry/pkg/v1/remote/transport
 github.com/google/go-containerregistry/pkg/v1/stream
 github.com/google/go-containerregistry/pkg/v1/types
+# github.com/google/uuid v1.3.0
+github.com/google/uuid
 # github.com/linuxkit/virtsock v0.0.0-20201010232012-f8cee7dfc7a3
 github.com/linuxkit/virtsock/pkg/vsock
 # github.com/mattn/go-shellwords v1.0.6
