@@ -24,16 +24,29 @@ func WaitForPCIDeviceFromVMBusGUID(ctx context.Context, vmBusGUID string) error 
 // FindDeviceBusLocationFromVMBusGUID finds device bus location by
 // reading /sys/bus/vmbus/devices/<vmBusGUID>/... for pci specific directories
 func FindDeviceBusLocationFromVMBusGUID(ctx context.Context, vmBusGUID string) (string, error) {
+	fullPath, err := FindDeviceFullPath(ctx, vmBusGUID)
+	if err != nil {
+		return "", err
+	}
+
+	_, busFile := filepath.Split(fullPath)
+	return busFile, nil
+}
+
+// FindDeviceFullPath finds the full PCI device path in the form of
+// /sys/bus/vmbus/devices/<vmBusGUID>/pciXXXX:XX/XXXX:XX*
+func FindDeviceFullPath(ctx context.Context, vmBusGUID string) (string, error) {
 	pciDir, err := findVMBusPCIDir(ctx, vmBusGUID)
 	if err != nil {
 		return "", err
 	}
 
-	pciDeviceLocation, err := findVMBusPCIDevice(ctx, pciDir)
+	pciDevicePath, err := findVMBusPCIDevice(ctx, pciDir)
 	if err != nil {
 		return "", err
 	}
-	return pciDeviceLocation, nil
+
+	return pciDevicePath, nil
 }
 
 // findVMBusPCIDir waits for the pci bus directory matching pattern
@@ -50,7 +63,6 @@ func findVMBusPCIDevice(ctx context.Context, pciDirFullPath string) (string, err
 	// trim /sys/bus/vmbus/devices/<vmBusGUID>/pciXXXX:XX to XXXX:XX
 	_, pciDirName := filepath.Split(pciDirFullPath)
 	busPrefix := strings.TrimPrefix(pciDirName, "pci")
-
 	// under /sys/bus/vmbus/devices/<vmBusGUID>/pciXXXX:XX/ look for directory matching XXXX:XX* pattern
 	busPathPattern := filepath.Join(pciDirFullPath, fmt.Sprintf("%s*", busPrefix))
 	busFileFullPath, err := storageWaitForFileMatchingPattern(ctx, busPathPattern)
@@ -58,7 +70,5 @@ func findVMBusPCIDevice(ctx context.Context, pciDirFullPath string) (string, err
 		return "", err
 	}
 
-	// return the resulting XXXX:XX:YY.Y pci bus location
-	_, busFile := filepath.Split(busFileFullPath)
-	return busFile, nil
+	return busFileFullPath, nil
 }
