@@ -12,7 +12,7 @@ import (
 // CRI will terminate any running containers when it is restarted.
 // Run a container, restart containerd, validate the container is terminated.
 func Test_ContainerdRestart_LCOW(t *testing.T) {
-	requireFeatures(t, featureLCOW)
+	requireFeatures(t, featureLCOW, featureTerminateOnRestart)
 
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 

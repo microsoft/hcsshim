@@ -95,6 +95,7 @@ const (
 	featureGMSA               = "GMSA"
 	featureGPU                = "GPU"
 	featureCRIUpdateContainer = "UpdateContainer"
+	featureTerminateOnRestart = "TerminateOnRestart"
 )
 
 var allFeatures = []string{
@@ -105,6 +106,7 @@ var allFeatures = []string{
 	featureGMSA,
 	featureGPU,
 	featureCRIUpdateContainer,
+	featureTerminateOnRestart,
 }
 
 func init() {
