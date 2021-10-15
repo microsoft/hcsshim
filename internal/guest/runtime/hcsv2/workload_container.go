@@ -179,15 +179,21 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 	// Force the parent cgroup into our /containers root
 	spec.Linux.CgroupsPath = "/containers/" + id
 
-	if spec.Windows != nil && specHasGPUDevice(spec) {
-		// we only support Nvidia gpus right now
-		ldConfigargs := []string{"-l", "/run/nvidia/lib"}
-		env := updateEnvWithNvidiaVariables()
-		if err := addLDConfigHook(ctx, spec, ldConfigargs, env); err != nil {
-			return err
+	if spec.Windows != nil {
+		if specHasGPUDevice(spec) {
+			// we only support Nvidia gpus right now
+			ldConfigargs := []string{"-l", "/run/nvidia/lib"}
+			env := updateEnvWithNvidiaVariables()
+			if err := addLDConfigHook(ctx, spec, ldConfigargs, env); err != nil {
+				return err
+			}
+			if err := addNvidiaDevicePreHook(ctx, spec); err != nil {
+				return err
+			}
 		}
-		if err := addNvidiaDevicePreHook(ctx, spec); err != nil {
-			return err
+		// add other assigned devices to the spec
+		if err := addAssignedDevice(ctx, spec); err != nil {
+			return errors.Wrap(err, "failed to add assigned device(s) to the container spec")
 		}
 	}
 
