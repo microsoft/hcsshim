@@ -1006,3 +1006,243 @@ func Test_RunContainer_ExecUser_Root_LCOW(t *testing.T) {
 		t.Fatalf("expected user for exec to be 'root', got %q", string(r.Stdout))
 	}
 }
+
+func Test_RunContainerWithScratchLocationOverride_WCOW(t *testing.T) {
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	type config struct {
+		hypervisorType   string
+		testName         string
+		requiredFeatures []string
+		containerImage   string
+		sandboxImage     string
+		command          []string
+	}
+
+	tests := []config{
+		{
+			hypervisorType:   wcowHypervisorRuntimeHandler,
+			testName:         "OverrideScratchWcowHypervisor",
+			requiredFeatures: []string{featureWCOWHypervisor},
+			containerImage:   imageWindowsNanoserver,
+			sandboxImage:     imageWindowsNanoserver,
+			command:          []string{"cmd", "/c", "ping", "-t", "127.0.0.1"},
+		},
+		{
+			hypervisorType:   lcowRuntimeHandler,
+			testName:         "OverrideScratchLCOW",
+			requiredFeatures: []string{featureLCOW},
+			containerImage:   imageLcowAlpine,
+			sandboxImage:     imageLcowK8sPause,
+			command:          []string{"top"},
+		},
+		{
+			hypervisorType:   wcowProcessRuntimeHandler,
+			testName:         "OverrideScratchWcowProcess",
+			requiredFeatures: []string{featureWCOWProcess},
+			containerImage:   imageWindowsNanoserver,
+			sandboxImage:     imageWindowsNanoserver,
+			command:          []string{"cmd", "/c", "ping", "-t", "127.0.0.1"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.testName, func(t *testing.T) {
+			requireFeatures(t, test.requiredFeatures...)
+
+			if test.hypervisorType == lcowRuntimeHandler {
+				pullRequiredLCOWImages(t, []string{test.sandboxImage, test.containerImage})
+			} else {
+				pullRequiredImages(t, []string{test.sandboxImage, test.containerImage})
+			}
+
+			sandboxScratchDir := t.TempDir()
+			containerScratchDir := t.TempDir()
+			// sleep for some time before the test exits so that temp directory cleanup doesn't
+			// run before containerd cleans up snapshot directories.
+			defer time.Sleep(10 * time.Second)
+			sandboxRequest := getRunPodSandboxRequest(t, test.hypervisorType,
+				WithSandboxAnnotations(map[string]string{
+					"containerd.io/snapshot/cri.scratch-location": sandboxScratchDir,
+				}))
+
+			podID := runPodSandbox(t, client, ctx, sandboxRequest)
+			defer removePodSandbox(t, client, ctx, podID)
+			defer stopPodSandbox(t, client, ctx, podID)
+
+			// override the scratch location
+			request := &runtime.CreateContainerRequest{
+				PodSandboxId: podID,
+				Config: &runtime.ContainerConfig{
+					Metadata: &runtime.ContainerMetadata{
+						Name: t.Name() + "-Container",
+					},
+					Image: &runtime.ImageSpec{
+						Image: test.containerImage,
+					},
+					Command: []string{},
+					Annotations: map[string]string{
+						"containerd.io/snapshot/cri.scratch-location": containerScratchDir,
+					},
+				},
+				SandboxConfig: sandboxRequest.Config,
+			}
+
+			containerID := createContainer(t, client, ctx, request)
+			defer removeContainer(t, client, ctx, containerID)
+			startContainer(t, client, ctx, containerID)
+			defer stopContainer(t, client, ctx, containerID)
+
+			// verify both scratch locations
+			for _, dir := range []string{sandboxScratchDir, containerScratchDir} {
+				// there should be exactly 1 directory inside `scratchDir` and that directory should have
+				// sandbox.vhdx
+				dirEntries, err := os.ReadDir(dir)
+				if err != nil {
+					t.Fatalf("failed to read directory entries: %s", err)
+				}
+
+				if len(dirEntries) != 1 || !dirEntries[0].IsDir() {
+					t.Fatalf("expected exactly 1 directory under the scratch path")
+				}
+
+				_, err = os.Stat(filepath.Join(dir, dirEntries[0].Name(), "sandbox.vhdx"))
+				if err != nil {
+					t.Fatalf("failed to verify if sandbox.vhdx exists: %s", err)
+				}
+			}
+
+		})
+	}
+}
+
+func Test_RunContainerWithScratchLocationOverrideAndShareScratch_LCOW(t *testing.T) {
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	type config struct {
+		testName             string
+		command              []string
+		sandboxAnnotations   map[string]string
+		containerAnnotations map[string]string
+	}
+
+	// Not using t.TempDir() since we want to control the cleanup of this directory.
+	overrideScratchDir := t.TempDir()
+	defer func() {
+		rerr := os.RemoveAll(overrideScratchDir)
+		if rerr != nil {
+			t.Logf("deferred override scratch cleanup failed with: %s, trying after 10 sec.", rerr)
+			// give some time to containerd to garbage collect.
+			time.Sleep(10 * time.Second)
+			rerr := os.RemoveAll(overrideScratchDir)
+			t.Fatalf("override scratch cleanup retry failed with: %s", rerr)
+		}
+	}()
+
+	tests := []config{
+		{
+			testName: "OverrideScratch",
+			command:  []string{"top"},
+			sandboxAnnotations: map[string]string{
+				"containerd.io/snapshot/cri.scratch-location": overrideScratchDir,
+			},
+			containerAnnotations: map[string]string{
+				"containerd.io/snapshot/cri.scratch-location": overrideScratchDir,
+			},
+		},
+		{
+			testName: "OverrideAndShareScratch",
+			command:  []string{"top"},
+			sandboxAnnotations: map[string]string{
+				"containerd.io/snapshot/cri.scratch-location": overrideScratchDir,
+			},
+			containerAnnotations: map[string]string{
+				"containerd.io/snapshot/cri.scratch-location":                         overrideScratchDir,
+				"containerd.io/snapshot/io.microsoft.container.storage.reuse-scratch": "true",
+			},
+		},
+	}
+
+	// start containers back to back and then stop them all later
+	podIDs := make([]string, len(tests))
+	cIDs := make([]string, len(tests))
+	for i := 0; i < len(podIDs); i++ {
+		defer cleanupPod(t, client, ctx, &podIDs[i])
+		defer cleanupContainer(t, client, ctx, &cIDs[i])
+	}
+
+	for _, test := range tests {
+		t.Run(test.testName, func(t *testing.T) {
+			requireFeatures(t, featureLCOW)
+
+			pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+			sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler,
+				WithSandboxAnnotations(test.sandboxAnnotations))
+
+			podID := runPodSandbox(t, client, ctx, sandboxRequest)
+			podIDs = append(podIDs, podID)
+
+			// override the scratch location
+			request := &runtime.CreateContainerRequest{
+				PodSandboxId: podID,
+				Config: &runtime.ContainerConfig{
+					Metadata: &runtime.ContainerMetadata{
+						Name: t.Name() + "-Container",
+					},
+					Image: &runtime.ImageSpec{
+						Image: imageLcowAlpine,
+					},
+					Command:     []string{"top"},
+					Annotations: test.containerAnnotations,
+				},
+				SandboxConfig: sandboxRequest.Config,
+			}
+
+			containerID := createContainer(t, client, ctx, request)
+			startContainer(t, client, ctx, containerID)
+			cIDs = append(cIDs, containerID)
+		})
+	}
+
+	// verify that each directory entry in the override scratch has a sandbox.vhdx file
+	dirEntries, err := os.ReadDir(overrideScratchDir)
+	if err != nil {
+		t.Fatalf("failed to read directory entries for %s: %s", overrideScratchDir, err)
+	}
+	for _, de := range dirEntries {
+		vhdPath := filepath.Join(overrideScratchDir, de.Name(), "sandbox.vhdx")
+		_, err = os.Stat(vhdPath)
+		if err != nil {
+			t.Fatalf("expected sandbox.vhdx at %s", vhdPath)
+		}
+	}
+
+	// Now cleanup all the containers & sandboxes and verify that override scratch directory
+	// is empty.
+	for i := 0; i < len(podIDs); i++ {
+		cleanupContainer(t, client, ctx, &cIDs[i])
+		// set ID to empty string so that defer function doesn't try to cleanup it up again
+		cIDs[i] = ""
+		cleanupPod(t, client, ctx, &podIDs[i])
+		podIDs[i] = ""
+	}
+
+	// Give containerd some time to garbage collect snapshots If nothing fails until
+	// this point then the deferred scratch directory cleanup function above wouldn't
+	// have to wait for 10 seconds again.
+	time.Sleep(10 * time.Second)
+
+	dirEntries, err = os.ReadDir(overrideScratchDir)
+	if err != nil {
+		t.Fatalf("failed to read directory entries for %s : %s", overrideScratchDir, err)
+	}
+
+	if len(dirEntries) != 0 {
+		t.Fatalf("override scratch directory should be empty, entries found: %+v", dirEntries)
+	}
+}
