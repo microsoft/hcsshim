@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
@@ -27,7 +27,7 @@ func getTemplatePodConfig(name string) *runtime.RunPodSandboxRequest {
 				Namespace: testNamespace,
 			},
 			Annotations: map[string]string{
-				oci.AnnotationSaveAsTemplate: "true",
+				annotations.SaveAsTemplate: "true",
 			},
 		},
 		RuntimeHandler: wcowHypervisorRuntimeHandler,
@@ -50,7 +50,7 @@ func getTemplateContainerConfig(name string) *runtime.CreateContainerRequest {
 				"127.0.0.1",
 			},
 			Annotations: map[string]string{
-				oci.AnnotationSaveAsTemplate: "true",
+				annotations.SaveAsTemplate: "true",
 			},
 		},
 	}
@@ -85,7 +85,7 @@ func getClonedPodConfig(uniqueID int, templateid string) *runtime.RunPodSandboxR
 				Namespace: testNamespace,
 			},
 			Annotations: map[string]string{
-				oci.AnnotationTemplateID: templateid + "@vm",
+				annotations.TemplateID: templateid + "@vm",
 			},
 		},
 		RuntimeHandler: wcowHypervisorRuntimeHandler,
@@ -109,7 +109,7 @@ func getClonedContainerConfig(uniqueID int, templateid string) *runtime.CreateCo
 				"127.0.0.1",
 			},
 			Annotations: map[string]string{
-				oci.AnnotationTemplateID: templateid,
+				annotations.TemplateID: templateid,
 			},
 		},
 	}
@@ -488,7 +488,7 @@ func Test_VerifyCloneAndTemplateConfig(t *testing.T) {
 
 	// change pod config to make sure the request fails
 	cloneSandboxRequest := getClonedPodConfig(0, templatePodID)
-	cloneSandboxRequest.Config.Annotations[oci.AnnotationAllowOvercommit] = "false"
+	cloneSandboxRequest.Config.Annotations[annotations.AllowOvercommit] = "false"
 
 	_, err := client.RunPodSandbox(ctx, cloneSandboxRequest)
 	if err == nil {

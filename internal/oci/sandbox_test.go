@@ -1,10 +1,14 @@
 package oci
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/Microsoft/hcsshim/pkg/annotations"
+)
 
 func Test_GetSandboxTypeAndID_TypeContainer_NoID_Failure(t *testing.T) {
 	a := map[string]string{
-		"io.kubernetes.cri.container-type": "container",
+		annotations.KubernetesContainerType: "container",
 	}
 	ct, id, err := GetSandboxTypeAndID(a)
 	if err == nil {
@@ -20,7 +24,7 @@ func Test_GetSandboxTypeAndID_TypeContainer_NoID_Failure(t *testing.T) {
 
 func Test_GetSandboxTypeAndID_TypeSandbox_NoID_Failure(t *testing.T) {
 	a := map[string]string{
-		"io.kubernetes.cri.container-type": "sandbox",
+		annotations.KubernetesContainerType: "sandbox",
 	}
 	ct, id, err := GetSandboxTypeAndID(a)
 	if err == nil {
@@ -36,7 +40,7 @@ func Test_GetSandboxTypeAndID_TypeSandbox_NoID_Failure(t *testing.T) {
 
 func Test_GetSandboxTypeAndID_NoType_ValidID_Failure(t *testing.T) {
 	a := map[string]string{
-		"io.kubernetes.cri.sandbox-id": t.Name(),
+		annotations.KubernetesSandboxID: t.Name(),
 	}
 	ct, id, err := GetSandboxTypeAndID(a)
 	if err == nil {
@@ -65,8 +69,8 @@ func Test_GetSandboxTypeAndID_NoAnnotations_Success(t *testing.T) {
 
 func Test_GetSandboxTypeAndID_TypeContainer_ValidID_Success(t *testing.T) {
 	a := map[string]string{
-		"io.kubernetes.cri.container-type": "container",
-		"io.kubernetes.cri.sandbox-id":     t.Name(),
+		annotations.KubernetesContainerType: "container",
+		annotations.KubernetesSandboxID:     t.Name(),
 	}
 	ct, id, err := GetSandboxTypeAndID(a)
 	if err != nil {
@@ -82,8 +86,8 @@ func Test_GetSandboxTypeAndID_TypeContainer_ValidID_Success(t *testing.T) {
 
 func Test_GetSandboxTypeAndID_TypeSandbox_ValidID_Success(t *testing.T) {
 	a := map[string]string{
-		"io.kubernetes.cri.container-type": "sandbox",
-		"io.kubernetes.cri.sandbox-id":     t.Name(),
+		annotations.KubernetesContainerType: "sandbox",
+		annotations.KubernetesSandboxID:     t.Name(),
 	}
 	ct, id, err := GetSandboxTypeAndID(a)
 	if err != nil {

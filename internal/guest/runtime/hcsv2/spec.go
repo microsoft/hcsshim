@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/opencontainers/runc/libcontainer/devices"
 	"github.com/opencontainers/runc/libcontainer/user"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
@@ -197,7 +198,7 @@ func getGroup(spec *oci.Spec, filter func(user.Group) bool) (user.Group, error) 
 // applyAnnotationsToSpec modifies the spec based on additional information from annotations
 func applyAnnotationsToSpec(ctx context.Context, spec *oci.Spec) error {
 	// Check if we need to override container's /dev/shm
-	if val, ok := spec.Annotations["io.microsoft.container.storage.shm.size-kb"]; ok {
+	if val, ok := spec.Annotations[annotations.LCOWDevShmSizeInKb]; ok {
 		sz, err := strconv.ParseInt(val, 10, 64)
 		if err != nil {
 			return errors.Wrap(err, "/dev/shm size must be a valid integer")
@@ -220,8 +221,8 @@ func applyAnnotationsToSpec(ctx context.Context, spec *oci.Spec) error {
 	}
 
 	// Check if we need to do any capability/device mappings
-	if spec.Annotations["io.microsoft.virtualmachine.lcow.privileged"] == "true" {
-		log.G(ctx).Debug("'io.microsoft.virtualmachine.lcow.privileged' set for privileged container")
+	if spec.Annotations[annotations.LCOWPrivileged] == "true" {
+		log.G(ctx).Debugf("'%s' set for privileged container", annotations.LCOWPrivileged)
 
 		// Add all host devices
 		hostDevices, err := devices.HostDevices()

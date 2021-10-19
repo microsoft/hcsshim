@@ -10,6 +10,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/opencontainers/runc/libcontainer/devices"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -161,7 +162,7 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 		return err
 	}
 
-	if rlimCore := spec.Annotations["io.microsoft.lcow.rlimitcore"]; rlimCore != "" {
+	if rlimCore := spec.Annotations[annotations.RLimitCore]; rlimCore != "" {
 		if err := setCoreRLimit(spec, rlimCore); err != nil {
 			return err
 		}

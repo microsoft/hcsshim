@@ -11,6 +11,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guest/network"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
@@ -112,7 +113,7 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 		}
 	}
 
-	if rlimCore := spec.Annotations["io.microsoft.lcow.rlimitcore"]; rlimCore != "" {
+	if rlimCore := spec.Annotations[annotations.RLimitCore]; rlimCore != "" {
 		if err := setCoreRLimit(spec, rlimCore); err != nil {
 			return err
 		}

@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/sirupsen/logrus"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
@@ -268,8 +268,8 @@ func Test_RunContainer_ZeroVPMEM_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationPreferredRootFSType: "initrd",
-			oci.AnnotationVPMemCount:          "0",
+			annotations.PreferredRootFSType: "initrd",
+			annotations.VPMemCount:          "0",
 		}),
 	)
 
@@ -310,8 +310,8 @@ func Test_RunContainer_ZeroVPMEM_Multiple_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationPreferredRootFSType: "initrd",
-			oci.AnnotationVPMemCount:          "0",
+			annotations.PreferredRootFSType: "initrd",
+			annotations.VPMemCount:          "0",
 		}),
 	)
 
@@ -794,7 +794,7 @@ func Test_CreateContainer_DevShmSize(t *testing.T) {
 	// the /dev/shm size is expected to be in KB, set it to 256 MB
 	size := 256 * 1024
 	contReq1.Config.Annotations = map[string]string{
-		"io.microsoft.container.storage.shm.size-kb": strconv.Itoa(size),
+		annotations.LCOWDevShmSizeInKb: strconv.Itoa(size),
 	}
 	containerID1 := createContainer(t, client, ctx, contReq1)
 	defer removeContainer(t, client, ctx, containerID1)
@@ -836,12 +836,12 @@ func Test_CreateContainer_HugePageMount_LCOW(t *testing.T) {
 
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
-	annotations := map[string]string{
-		oci.AnnotationFullyPhysicallyBacked: "true",
-		oci.AnnotationMemorySizeInMB:        "2048",
-		oci.AnnotationKernelBootOptions:     "hugepagesz=2M hugepages=10",
+	annots := map[string]string{
+		annotations.FullyPhysicallyBacked: "true",
+		annotations.MemorySizeInMB:        "2048",
+		annotations.KernelBootOptions:     "hugepagesz=2M hugepages=10",
 	}
-	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, WithSandboxAnnotations(annotations))
+	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, WithSandboxAnnotations(annots))
 
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)

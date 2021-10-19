@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/Microsoft/go-winio"
-	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
@@ -305,7 +305,7 @@ func Test_CreateContainer_MemorySize_Annotation_WCOW_Process(t *testing.T) {
 				"127.0.0.1",
 			},
 			Annotations: map[string]string{
-				oci.AnnotationContainerMemorySizeInMB: fmt.Sprintf("%d", 768*1024*1024), // 768MB
+				annotations.ContainerMemorySizeInMB: fmt.Sprintf("%d", 768*1024*1024), // 768MB
 			},
 		},
 	}
@@ -365,7 +365,7 @@ func Test_CreateContainer_MemorySize_Annotation_WCOW_Hypervisor(t *testing.T) {
 				"127.0.0.1",
 			},
 			Annotations: map[string]string{
-				oci.AnnotationContainerMemorySizeInMB: fmt.Sprintf("%d", 768*1024*1024), // 768MB
+				annotations.ContainerMemorySizeInMB: fmt.Sprintf("%d", 768*1024*1024), // 768MB
 			},
 		},
 	}
@@ -452,7 +452,7 @@ func Test_CreateContainer_CPUCount_Annotation_WCOW_Process(t *testing.T) {
 				"127.0.0.1",
 			},
 			Annotations: map[string]string{
-				oci.AnnotationContainerProcessorCount: "1",
+				annotations.ContainerProcessorCount: "1",
 			},
 		},
 	}
@@ -512,7 +512,7 @@ func Test_CreateContainer_CPUCount_Annotation_WCOW_Hypervisor(t *testing.T) {
 				"127.0.0.1",
 			},
 			Annotations: map[string]string{
-				oci.AnnotationContainerProcessorCount: "1",
+				annotations.ContainerProcessorCount: "1",
 			},
 		},
 	}
@@ -599,7 +599,7 @@ func Test_CreateContainer_CPULimit_Annotation_WCOW_Process(t *testing.T) {
 				"127.0.0.1",
 			},
 			Annotations: map[string]string{
-				oci.AnnotationContainerProcessorLimit: "9000",
+				annotations.ContainerProcessorLimit: "9000",
 			},
 		},
 	}
@@ -659,7 +659,7 @@ func Test_CreateContainer_CPULimit_Annotation_WCOW_Hypervisor(t *testing.T) {
 				"127.0.0.1",
 			},
 			Annotations: map[string]string{
-				oci.AnnotationContainerProcessorLimit: "9000",
+				annotations.ContainerProcessorLimit: "9000",
 			},
 		},
 	}
@@ -747,7 +747,7 @@ func Test_CreateContainer_CPUWeight_Annotation_WCOW_Process(t *testing.T) {
 				"127.0.0.1",
 			},
 			Annotations: map[string]string{
-				oci.AnnotationContainerProcessorWeight: "500",
+				annotations.ContainerProcessorWeight: "500",
 			},
 		},
 	}
@@ -807,7 +807,7 @@ func Test_CreateContainer_CPUWeight_Annotation_WCOW_Hypervisor(t *testing.T) {
 				"127.0.0.1",
 			},
 			Annotations: map[string]string{
-				oci.AnnotationContainerProcessorLimit: "500",
+				annotations.ContainerProcessorLimit: "500",
 			},
 		},
 	}

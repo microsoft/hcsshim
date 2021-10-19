@@ -4,10 +4,10 @@ package cri_containerd
 
 import (
 	"context"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"strconv"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/oci"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
@@ -369,9 +369,9 @@ func Test_SandboxStats_WorkingSet_PhysicallyBacked(t *testing.T) {
 				t,
 				test.runtimeHandler,
 				WithSandboxAnnotations(map[string]string{
-					oci.AnnotationAllowOvercommit:      "false",
-					oci.AnnotationEnableDeferredCommit: "false",
-					oci.AnnotationMemorySizeInMB:       sizeInMBStr,
+					annotations.AllowOvercommit:      "false",
+					annotations.EnableDeferredCommit: "false",
+					annotations.MemorySizeInMB:       sizeInMBStr,
 				}),
 			)
 

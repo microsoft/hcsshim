@@ -16,6 +16,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
@@ -24,8 +25,8 @@ const deviceUtilExeName = "device-util.exe"
 
 // getSpecKernelDrivers gets any device drivers specified on the spec.
 // Drivers are optional, therefore do not return an error if none are on the spec.
-func getSpecKernelDrivers(annotations map[string]string) ([]string, error) {
-	drivers := oci.ParseAnnotationCommaSeparated(oci.AnnotationVirtualMachineKernelDrivers, annotations)
+func getSpecKernelDrivers(annots map[string]string) ([]string, error) {
+	drivers := oci.ParseAnnotationCommaSeparated(annotations.VirtualMachineKernelDrivers, annots)
 	for _, driver := range drivers {
 		if _, err := os.Stat(driver); err != nil {
 			return nil, errors.Wrapf(err, "failed to find path to drivers at %s", driver)
@@ -36,8 +37,8 @@ func getSpecKernelDrivers(annotations map[string]string) ([]string, error) {
 
 // getDeviceExtensionPaths gets any device extensions paths specified on the spec.
 // device extensions are optional, therefore if none are on the spec, do not return an error.
-func getDeviceExtensionPaths(annotations map[string]string) ([]string, error) {
-	extensions := oci.ParseAnnotationCommaSeparated(oci.AnnotationDeviceExtensions, annotations)
+func getDeviceExtensionPaths(annots map[string]string) ([]string, error) {
+	extensions := oci.ParseAnnotationCommaSeparated(annotations.DeviceExtensions, annots)
 	for _, ext := range extensions {
 		if _, err := os.Stat(ext); err != nil {
 			return nil, errors.Wrapf(err, "failed to find path to driver extensions at %s", ext)

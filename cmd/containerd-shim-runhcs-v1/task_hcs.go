@@ -37,6 +37,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
 const bytesPerMB = 1024 * 1024
@@ -52,7 +53,7 @@ func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.Creat
 		return nil, errors.Wrapf(
 			errdefs.ErrFailedPrecondition,
 			"cannot create standalone task, expected no annotation: '%s': got '%s'",
-			oci.KubernetesContainerTypeAnnotation,
+			annotations.KubernetesContainerType,
 			ct)
 	}
 

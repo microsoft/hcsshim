@@ -20,6 +20,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
@@ -113,17 +114,17 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 // exclusive.
 func ConvertCPULimits(ctx context.Context, cid string, spec *specs.Spec, maxCPUCount int32) (int32, int32, int32, error) {
 	cpuNumSet := 0
-	cpuCount := oci.ParseAnnotationsCPUCount(ctx, spec, oci.AnnotationContainerProcessorCount, 0)
+	cpuCount := oci.ParseAnnotationsCPUCount(ctx, spec, annotations.ContainerProcessorCount, 0)
 	if cpuCount > 0 {
 		cpuNumSet++
 	}
 
-	cpuLimit := oci.ParseAnnotationsCPULimit(ctx, spec, oci.AnnotationContainerProcessorLimit, 0)
+	cpuLimit := oci.ParseAnnotationsCPULimit(ctx, spec, annotations.ContainerProcessorLimit, 0)
 	if cpuLimit > 0 {
 		cpuNumSet++
 	}
 
-	cpuWeight := oci.ParseAnnotationsCPUWeight(ctx, spec, oci.AnnotationContainerProcessorWeight, 0)
+	cpuWeight := oci.ParseAnnotationsCPUWeight(ctx, spec, annotations.ContainerProcessorWeight, 0)
 	if cpuWeight > 0 {
 		cpuNumSet++
 	}
@@ -244,7 +245,7 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	}
 
 	// Memory Resources
-	memoryMaxInMB := oci.ParseAnnotationsMemory(ctx, coi.Spec, oci.AnnotationContainerMemorySizeInMB, 0)
+	memoryMaxInMB := oci.ParseAnnotationsMemory(ctx, coi.Spec, annotations.ContainerMemorySizeInMB, 0)
 	if memoryMaxInMB > 0 {
 		v1.MemoryMaximumInMB = int64(memoryMaxInMB)
 		v2Container.Memory = &hcsschema.Memory{
@@ -253,8 +254,8 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 	}
 
 	// Storage Resources
-	storageBandwidthMax := oci.ParseAnnotationsStorageBps(ctx, coi.Spec, oci.AnnotationContainerStorageQoSBandwidthMaximum, 0)
-	storageIopsMax := oci.ParseAnnotationsStorageIops(ctx, coi.Spec, oci.AnnotationContainerStorageQoSIopsMaximum, 0)
+	storageBandwidthMax := oci.ParseAnnotationsStorageBps(ctx, coi.Spec, annotations.ContainerStorageQoSBandwidthMaximum, 0)
+	storageIopsMax := oci.ParseAnnotationsStorageIops(ctx, coi.Spec, annotations.ContainerStorageQoSIopsMaximum, 0)
 	if storageBandwidthMax > 0 || storageIopsMax > 0 {
 		v1.StorageBandwidthMaximum = uint64(storageBandwidthMax)
 		v1.StorageIOPSMaximum = uint64(storageIopsMax)
@@ -392,7 +393,7 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		dumpPath = coi.HostingSystem.ProcessDumpLocation()
 	}
 
-	if specDumpPath, ok := coi.Spec.Annotations[oci.AnnotationContainerProcessDumpLocation]; ok {
+	if specDumpPath, ok := coi.Spec.Annotations[annotations.ContainerProcessDumpLocation]; ok {
 		// If a process dump path was specified at pod creation time for a hypervisor isolated pod, then
 		// use this value. If one was specified on the container creation document then override with this
 		// instead. Unlike Linux, Windows containers can set the dump path on a per container basis.
@@ -466,8 +467,8 @@ func parseAssignedDevices(ctx context.Context, coi *createOptionsInternal, v2 *h
 // corresponding value the registry expects to be set.
 //
 // See DumpType at https://docs.microsoft.com/en-us/windows/win32/wer/collecting-user-mode-dumps for the mappings
-func parseDumpType(annotations map[string]string) (int32, error) {
-	dmpTypeStr := annotations[oci.AnnotationWCOWProcessDumpType]
+func parseDumpType(annots map[string]string) (int32, error) {
+	dmpTypeStr := annots[annotations.WCOWProcessDumpType]
 	switch dmpTypeStr {
 	case "":
 		// If no type specified, default to full dumps.

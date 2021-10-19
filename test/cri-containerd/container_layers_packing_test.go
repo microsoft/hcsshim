@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 )
 
@@ -101,10 +101,10 @@ func Test_Container_Layer_Packing_On_VPMem(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("PreferredRootFSType-%s", scenario.rootfsType), func(t *testing.T) {
-			annotations := map[string]string{
-				oci.AnnotationPreferredRootFSType: scenario.rootfsType,
+			annots := map[string]string{
+				annotations.PreferredRootFSType: scenario.rootfsType,
 			}
-			podReq := getRunPodSandboxRequest(t, lcowRuntimeHandler, WithSandboxAnnotations(annotations))
+			podReq := getRunPodSandboxRequest(t, lcowRuntimeHandler, WithSandboxAnnotations(annots))
 			podID := runPodSandbox(t, client, ctx, podReq)
 			defer removePodSandbox(t, client, ctx, podID)
 
@@ -170,10 +170,10 @@ func Test_Annotation_Disable_Multi_Mapping(t *testing.T) {
 
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, alpine70ExtraLayers})
 
-	annotations := map[string]string{
-		oci.AnnotationVPMemNoMultiMapping: "true",
+	annots := map[string]string{
+		annotations.VPMemNoMultiMapping: "true",
 	}
-	podReq := getRunPodSandboxRequest(t, lcowRuntimeHandler, WithSandboxAnnotations(annotations))
+	podReq := getRunPodSandboxRequest(t, lcowRuntimeHandler, WithSandboxAnnotations(annots))
 	podID := runPodSandbox(t, client, ctx, podReq)
 	defer removePodSandbox(t, client, ctx, podID)
 

@@ -4,9 +4,9 @@ import (
 	"context"
 
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
-	"github.com/Microsoft/hcsshim/internal/processorinfo"
-
 	"github.com/Microsoft/hcsshim/internal/jobobject"
+	"github.com/Microsoft/hcsshim/internal/processorinfo"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 
 	"github.com/Microsoft/hcsshim/internal/oci"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -16,8 +16,8 @@ const processorWeightMax = 10000
 
 // This file contains helpers for converting parts of the oci spec to useful
 // structures/limits to be applied to a job object.
-func getUserTokenInheritAnnotation(annotations map[string]string) bool {
-	val, ok := annotations[oci.AnnotationHostProcessInheritUser]
+func getUserTokenInheritAnnotation(annots map[string]string) bool {
+	val, ok := annots[annotations.HostProcessInheritUser]
 	return ok && val == "true"
 }
 
@@ -43,11 +43,11 @@ func specToLimits(ctx context.Context, cid string, s *specs.Spec) (*jobobject.Jo
 	}
 
 	// Memory limit
-	memLimitMB := oci.ParseAnnotationsMemory(ctx, s, oci.AnnotationContainerMemorySizeInMB, 0)
+	memLimitMB := oci.ParseAnnotationsMemory(ctx, s, annotations.ContainerMemorySizeInMB, 0)
 
 	// IO limits
-	maxBandwidth := int64(oci.ParseAnnotationsStorageBps(ctx, s, oci.AnnotationContainerStorageQoSBandwidthMaximum, 0))
-	maxIops := int64(oci.ParseAnnotationsStorageIops(ctx, s, oci.AnnotationContainerStorageQoSIopsMaximum, 0))
+	maxBandwidth := int64(oci.ParseAnnotationsStorageBps(ctx, s, annotations.ContainerStorageQoSBandwidthMaximum, 0))
+	maxIops := int64(oci.ParseAnnotationsStorageIops(ctx, s, annotations.ContainerStorageQoSIopsMaximum, 0))
 
 	return &jobobject.JobLimits{
 		CPULimit:           realCPULimit,

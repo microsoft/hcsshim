@@ -26,6 +26,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/storage/pmem"
 	"github.com/Microsoft/hcsshim/internal/guest/storage/scsi"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	shellwords "github.com/mattn/go-shellwords"
 	"github.com/pkg/errors"
@@ -156,7 +157,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	}
 
 	var namespaceID string
-	criType, isCRI := settings.OCISpecification.Annotations["io.kubernetes.cri.container-type"]
+	criType, isCRI := settings.OCISpecification.Annotations[annotations.KubernetesContainerType]
 	if isCRI {
 		switch criType {
 		case "sandbox":
@@ -180,7 +181,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 				return nil, err
 			}
 		case "container":
-			sid, ok := settings.OCISpecification.Annotations["io.kubernetes.cri.sandbox-id"]
+			sid, ok := settings.OCISpecification.Annotations[annotations.KubernetesSandboxID]
 			if !ok || sid == "" {
 				return nil, errors.Errorf("unsupported 'io.kubernetes.cri.sandbox-id': '%s'", sid)
 			}
