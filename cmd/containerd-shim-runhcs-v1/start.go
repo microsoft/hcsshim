@@ -12,6 +12,7 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/ttrpc"
@@ -102,8 +103,8 @@ The start command can either start a new shim or return an address to an existin
 			if isSandbox && idFlag != sbid {
 				return errors.Errorf(
 					"'id' and '%s' must match for '%s=%s'",
-					oci.KubernetesSandboxIDAnnotation,
-					oci.KubernetesContainerTypeAnnotation,
+					annotations.KubernetesSandboxID,
+					annotations.KubernetesContainerType,
 					oci.KubernetesContainerTypeSandbox)
 			}
 

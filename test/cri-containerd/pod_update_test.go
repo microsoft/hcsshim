@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
@@ -47,7 +47,7 @@ func Test_Pod_UpdateResources_Memory(t *testing.T) {
 				t,
 				test.runtimeHandler,
 				WithSandboxAnnotations(map[string]string{
-					oci.AnnotationContainerMemorySizeInMB: fmt.Sprintf("%d", startingMemorySize),
+					annotations.ContainerMemorySizeInMB: fmt.Sprintf("%d", startingMemorySize),
 				}),
 			)
 
@@ -118,8 +118,8 @@ func Test_Pod_UpdateResources_Memory_PA(t *testing.T) {
 				t,
 				test.runtimeHandler,
 				WithSandboxAnnotations(map[string]string{
-					oci.AnnotationFullyPhysicallyBacked:   "true",
-					oci.AnnotationContainerMemorySizeInMB: fmt.Sprintf("%d", startingMemorySize),
+					annotations.FullyPhysicallyBacked:   "true",
+					annotations.ContainerMemorySizeInMB: fmt.Sprintf("%d", startingMemorySize),
 				}),
 			)
 

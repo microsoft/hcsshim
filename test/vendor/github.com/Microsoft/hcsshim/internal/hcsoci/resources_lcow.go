@@ -14,9 +14,9 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
@@ -25,7 +25,7 @@ import (
 // shim option is set. Right now we only support Nvidia gpus, so this will default to
 // a gpu vhd with nvidia files
 func getGPUVHDPath(coi *createOptionsInternal) (string, error) {
-	gpuVHDPath, ok := coi.Spec.Annotations[oci.AnnotationGPUVHDPath]
+	gpuVHDPath, ok := coi.Spec.Annotations[annotations.GPUVHDPath]
 	if !ok || gpuVHDPath == "" {
 		return "", fmt.Errorf("no gpu vhd specified %s", gpuVHDPath)
 	}

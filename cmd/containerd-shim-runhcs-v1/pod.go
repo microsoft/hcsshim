@@ -11,6 +11,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	eventstypes "github.com/containerd/containerd/api/events"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime"
@@ -67,7 +68,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		return nil, errors.Wrapf(
 			errdefs.ErrFailedPrecondition,
 			"expected annotation: '%s': '%s' got '%s'",
-			oci.KubernetesContainerTypeAnnotation,
+			annotations.KubernetesContainerType,
 			oci.KubernetesContainerTypeSandbox,
 			ct)
 	}
@@ -75,7 +76,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		return nil, errors.Wrapf(
 			errdefs.ErrFailedPrecondition,
 			"expected annotation '%s': '%s' got '%s'",
-			oci.KubernetesSandboxIDAnnotation,
+			annotations.KubernetesSandboxID,
 			req.ID,
 			sid)
 	}
@@ -175,7 +176,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 	p.host = parent
 	if parent != nil {
 		cid := req.ID
-		if id, ok := s.Annotations[oci.AnnotationNcproxyContainerID]; ok {
+		if id, ok := s.Annotations[annotations.NcproxyContainerID]; ok {
 			cid = id
 		}
 		caAddr := fmt.Sprintf(uvm.ComputeAgentAddrFmt, cid)
@@ -319,7 +320,7 @@ func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *sp
 		return nil, errors.Wrapf(
 			errdefs.ErrFailedPrecondition,
 			"expected annotation: '%s': '%s' got '%s'",
-			oci.KubernetesContainerTypeAnnotation,
+			annotations.KubernetesContainerType,
 			oci.KubernetesContainerTypeContainer,
 			ct)
 	}
@@ -327,7 +328,7 @@ func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *sp
 		return nil, errors.Wrapf(
 			errdefs.ErrFailedPrecondition,
 			"expected annotation '%s': '%s' got '%s'",
-			oci.KubernetesSandboxIDAnnotation,
+			annotations.KubernetesSandboxID,
 			p.id,
 			sid)
 	}

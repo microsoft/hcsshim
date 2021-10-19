@@ -23,6 +23,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/runhcs"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
@@ -207,8 +208,8 @@ func launchShim(cmd, pidFile, logFile string, args []string, data interface{}) (
 // returns `("", false)`.
 func parseSandboxAnnotations(a map[string]string) (string, bool) {
 	var t, id string
-	if t = a["io.kubernetes.cri.container-type"]; t != "" {
-		id = a["io.kubernetes.cri.sandbox-id"]
+	if t = a[annotations.KubernetesContainerType]; t != "" {
+		id = a[annotations.KubernetesSandboxID]
 	} else if t = a["io.kubernetes.cri-o.ContainerType"]; t != "" {
 		id = a["io.kubernetes.cri-o.SandboxID"]
 	} else if t = a["io.kubernetes.docker.type"]; t != "" {

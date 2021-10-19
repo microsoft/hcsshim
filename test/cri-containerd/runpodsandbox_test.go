@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -17,7 +18,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cpugroup"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/lcow"
-	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/osversion"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
@@ -121,7 +121,7 @@ func Test_RunPodSandbox_VirtualMemory_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationAllowOvercommit: "true",
+			annotations.AllowOvercommit: "true",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -136,7 +136,7 @@ func Test_RunPodSandbox_VirtualMemory_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationAllowOvercommit: "true",
+			annotations.AllowOvercommit: "true",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -151,8 +151,8 @@ func Test_RunPodSandbox_VirtualMemory_DeferredCommit_WCOW_Hypervisor(t *testing.
 		t,
 		wcowHypervisorRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationAllowOvercommit:      "true",
-			oci.AnnotationEnableDeferredCommit: "true",
+			annotations.AllowOvercommit:      "true",
+			annotations.EnableDeferredCommit: "true",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -167,8 +167,8 @@ func Test_RunPodSandbox_VirtualMemory_DeferredCommit_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationAllowOvercommit:      "true",
-			oci.AnnotationEnableDeferredCommit: "true",
+			annotations.AllowOvercommit:      "true",
+			annotations.EnableDeferredCommit: "true",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -183,7 +183,7 @@ func Test_RunPodSandbox_PhysicalMemory_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationAllowOvercommit: "false",
+			annotations.AllowOvercommit: "false",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -198,7 +198,7 @@ func Test_RunPodSandbox_FullyPhysicallyBacked_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationFullyPhysicallyBacked: "true",
+			annotations.FullyPhysicallyBacked: "true",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -213,7 +213,7 @@ func Test_RunPodSandbox_VSMBNoDirectMap_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationVSMBNoDirectMap: "true",
+			annotations.VSMBNoDirectMap: "true",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -228,7 +228,7 @@ func Test_RunPodSandbox_PhysicalMemory_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationAllowOvercommit: "false",
+			annotations.AllowOvercommit: "false",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -243,7 +243,7 @@ func Test_RunPodSandbox_FullyPhysicallyBacked_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationFullyPhysicallyBacked: "true",
+			annotations.FullyPhysicallyBacked: "true",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -258,7 +258,7 @@ func Test_RunPodSandbox_MemorySize_WCOW_Process(t *testing.T) {
 		t,
 		wcowProcessRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationContainerMemorySizeInMB: "128",
+			annotations.ContainerMemorySizeInMB: "128",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -273,7 +273,7 @@ func Test_RunPodSandbox_MemorySize_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationMemorySizeInMB: "768", // 128 is too small for WCOW. It is really slow boot.
+			annotations.MemorySizeInMB: "768", // 128 is too small for WCOW. It is really slow boot.
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -288,7 +288,7 @@ func Test_RunPodSandbox_MemorySize_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationMemorySizeInMB: "200",
+			annotations.MemorySizeInMB: "200",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -306,9 +306,9 @@ func Test_RunPodSandbox_MMIO_WCOW_Process(t *testing.T) {
 		t,
 		wcowProcessRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationMemoryLowMMIOGapInMB:   "100",
-			oci.AnnotationMemoryHighMMIOBaseInMB: "100",
-			oci.AnnotationMemoryHighMMIOGapInMB:  "100",
+			annotations.MemoryLowMMIOGapInMB:   "100",
+			annotations.MemoryHighMMIOBaseInMB: "100",
+			annotations.MemoryHighMMIOGapInMB:  "100",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -326,9 +326,9 @@ func Test_RunPodSandbox_MMIO_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationMemoryLowMMIOGapInMB:   "100",
-			oci.AnnotationMemoryHighMMIOBaseInMB: "100",
-			oci.AnnotationMemoryHighMMIOGapInMB:  "100",
+			annotations.MemoryLowMMIOGapInMB:   "100",
+			annotations.MemoryHighMMIOBaseInMB: "100",
+			annotations.MemoryHighMMIOGapInMB:  "100",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -346,9 +346,9 @@ func Test_RunPodSandbox_MMIO_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationMemoryLowMMIOGapInMB:   "100",
-			oci.AnnotationMemoryHighMMIOBaseInMB: "100",
-			oci.AnnotationMemoryHighMMIOGapInMB:  "100",
+			annotations.MemoryLowMMIOGapInMB:   "100",
+			annotations.MemoryHighMMIOBaseInMB: "100",
+			annotations.MemoryHighMMIOGapInMB:  "100",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -363,7 +363,7 @@ func Test_RunPodSandbox_CPUCount_WCOW_Process(t *testing.T) {
 		t,
 		wcowProcessRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationContainerProcessorCount: "1",
+			annotations.ContainerProcessorCount: "1",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -378,7 +378,7 @@ func Test_RunPodSandbox_CPUCount_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationProcessorCount: "1",
+			annotations.ProcessorCount: "1",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -393,7 +393,7 @@ func Test_RunPodSandbox_CPUCount_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationProcessorCount: "1",
+			annotations.ProcessorCount: "1",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -408,7 +408,7 @@ func Test_RunPodSandbox_CPULimit_WCOW_Process(t *testing.T) {
 		t,
 		wcowProcessRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationContainerProcessorLimit: "9000",
+			annotations.ContainerProcessorLimit: "9000",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -423,7 +423,7 @@ func Test_RunPodSandbox_CPULimit_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationProcessorLimit: "90000",
+			annotations.ProcessorLimit: "90000",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -438,7 +438,7 @@ func Test_RunPodSandbox_CPULimit_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationProcessorLimit: "90000",
+			annotations.ProcessorLimit: "90000",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -453,7 +453,7 @@ func Test_RunPodSandbox_CPUWeight_WCOW_Process(t *testing.T) {
 		t,
 		wcowProcessRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationContainerProcessorWeight: "500",
+			annotations.ContainerProcessorWeight: "500",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -468,7 +468,7 @@ func Test_RunPodSandbox_CPUWeight_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationContainerProcessorWeight: "500",
+			annotations.ContainerProcessorWeight: "500",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -483,7 +483,7 @@ func Test_RunPodSandbox_CPUWeight_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationProcessorWeight: "500",
+			annotations.ProcessorWeight: "500",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -498,7 +498,7 @@ func Test_RunPodSandbox_StorageQoSBandwithMax_WCOW_Process(t *testing.T) {
 		t,
 		wcowProcessRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationContainerStorageQoSBandwidthMaximum: fmt.Sprintf("%d", 1024*1024), // 1MB/s
+			annotations.ContainerStorageQoSBandwidthMaximum: fmt.Sprintf("%d", 1024*1024), // 1MB/s
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -513,7 +513,7 @@ func Test_RunPodSandbox_StorageQoSBandwithMax_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationStorageQoSBandwidthMaximum: fmt.Sprintf("%d", 1024*1024), // 1MB/s
+			annotations.StorageQoSBandwidthMaximum: fmt.Sprintf("%d", 1024*1024), // 1MB/s
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -528,7 +528,7 @@ func Test_RunPodSandbox_StorageQoSBandwithMax_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationStorageQoSBandwidthMaximum: fmt.Sprintf("%d", 1024*1024), // 1MB/s
+			annotations.StorageQoSBandwidthMaximum: fmt.Sprintf("%d", 1024*1024), // 1MB/s
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -543,7 +543,7 @@ func Test_RunPodSandbox_StorageQoSIopsMax_WCOW_Process(t *testing.T) {
 		t,
 		wcowProcessRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationContainerStorageQoSIopsMaximum: "300",
+			annotations.ContainerStorageQoSIopsMaximum: "300",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -558,7 +558,7 @@ func Test_RunPodSandbox_StorageQoSIopsMax_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisorRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationStorageQoSIopsMaximum: "300",
+			annotations.StorageQoSIopsMaximum: "300",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -573,7 +573,7 @@ func Test_RunPodSandbox_StorageQoSIopsMax_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationStorageQoSIopsMaximum: "300",
+			annotations.StorageQoSIopsMaximum: "300",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -588,7 +588,7 @@ func Test_RunPodSandbox_InitrdBoot_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationPreferredRootFSType: "initrd",
+			annotations.PreferredRootFSType: "initrd",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -603,7 +603,7 @@ func Test_RunPodSandbox_RootfsVhdBoot_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationPreferredRootFSType: "vhd",
+			annotations.PreferredRootFSType: "vhd",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -618,7 +618,7 @@ func Test_RunPodSandbox_VPCIEnabled_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationVPCIEnabled: "true",
+			annotations.VPCIEnabled: "true",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -633,7 +633,7 @@ func Test_RunPodSandbox_UEFIBoot_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationKernelDirectBoot: "false",
+			annotations.KernelDirectBoot: "false",
 		}),
 	)
 	runPodSandboxTest(t, request)
@@ -737,11 +737,11 @@ func Test_RunPodSandbox_CustomizableScratchDefaultSize_LCOW(t *testing.T) {
 
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause})
 
-	annotations := map[string]string{
-		oci.AnnotationAllowOvercommit: "true",
+	annots := map[string]string{
+		annotations.AllowOvercommit: "true",
 	}
 
-	output, errorMsg, exitCode := createSandboxContainerAndExecForCustomScratch(t, annotations)
+	output, errorMsg, exitCode := createSandboxContainerAndExecForCustomScratch(t, annots)
 
 	if exitCode != 0 {
 		t.Fatalf("Exec into container failed with: %v and exit code: %d, Test_RunPodSandbox_CustomizableScratchDefaultSize_LCOW", errorMsg, exitCode)
@@ -781,12 +781,12 @@ func Test_RunPodSandbox_CustomizableScratchCustomSize_LCOW(t *testing.T) {
 
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause})
 
-	annotations := map[string]string{
-		oci.AnnotationAllowOvercommit:                                          "true",
+	annots := map[string]string{
+		annotations.AllowOvercommit: "true",
 		"containerd.io/snapshot/io.microsoft.container.storage.rootfs.size-gb": "200",
 	}
 
-	output, errorMsg, exitCode := createSandboxContainerAndExecForCustomScratch(t, annotations)
+	output, errorMsg, exitCode := createSandboxContainerAndExecForCustomScratch(t, annots)
 
 	if exitCode != 0 {
 		t.Fatalf("Exec into container failed with: %v and exit code: %d, Test_RunPodSandbox_CustomizableScratchDefaultSize_LCOW", errorMsg, exitCode)
@@ -828,8 +828,8 @@ func Test_RunPodSandbox_Mount_SandboxDir_LCOW(t *testing.T) {
 
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
-	annotations := map[string]string{
-		oci.AnnotationAllowOvercommit: "true",
+	annots := map[string]string{
+		annotations.AllowOvercommit: "true",
 	}
 
 	mounts := []*runtime.Mount{
@@ -842,7 +842,7 @@ func Test_RunPodSandbox_Mount_SandboxDir_LCOW(t *testing.T) {
 		"mount",
 	}
 
-	output, errorMsg, exitCode := createSandboxContainerAndExec(t, annotations, mounts, cmd)
+	output, errorMsg, exitCode := createSandboxContainerAndExec(t, annots, mounts, cmd)
 
 	if exitCode != 0 {
 		t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, t.Name())
@@ -1040,7 +1040,7 @@ func Test_RunPodSandbox_CPUGroup(t *testing.T) {
 					Namespace: testNamespace,
 				},
 				Annotations: map[string]string{
-					oci.AnnotationCPUGroupID: presentID,
+					annotations.CPUGroupID: presentID,
 				},
 			},
 			RuntimeHandler: test.runtimeHandler,
@@ -1067,8 +1067,8 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_LCOW(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	annotations := map[string]string{
-		oci.AnnotationAllowOvercommit: "true",
+	annots := map[string]string{
+		annotations.AllowOvercommit: "true",
 	}
 
 	// Create a temporary ext4 VHD to mount into the container.
@@ -1089,7 +1089,7 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_LCOW(t *testing.T) {
 		},
 	}
 
-	sbRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, WithSandboxAnnotations(annotations))
+	sbRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, WithSandboxAnnotations(annots))
 
 	podID := runPodSandbox(t, client, ctx, sbRequest)
 	defer removePodSandbox(t, client, ctx, podID)
@@ -1107,7 +1107,7 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_LCOW(t *testing.T) {
 	// create 2 containers with vhd mounts and verify both can mount vhd
 	for i := 1; i < 3; i++ {
 		containerName := t.Name() + "-Container-" + strconv.Itoa(i)
-		containerId := createContainerInSandbox(t, client, ctx, podID, containerName, imageLcowAlpine, command, annotations, mounts, sbRequest.Config)
+		containerId := createContainerInSandbox(t, client, ctx, podID, containerName, imageLcowAlpine, command, annots, mounts, sbRequest.Config)
 		defer removeContainer(t, client, ctx, containerId)
 
 		startContainer(t, client, ctx, containerId)
@@ -1126,7 +1126,7 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_LCOW(t *testing.T) {
 	// at the same time containers in a pod that don't have any mounts
 	mounts = []*runtime.Mount{}
 	containerName := t.Name() + "-Container-3"
-	containerId := createContainerInSandbox(t, client, ctx, podID, containerName, imageLcowAlpine, command, annotations, mounts, sbRequest.Config)
+	containerId := createContainerInSandbox(t, client, ctx, podID, containerName, imageLcowAlpine, command, annots, mounts, sbRequest.Config)
 	defer removeContainer(t, client, ctx, containerId)
 
 	startContainer(t, client, ctx, containerId)
@@ -1280,8 +1280,8 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_WCOW(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	annotations := map[string]string{
-		oci.AnnotationAllowOvercommit: "true",
+	annots := map[string]string{
+		annotations.AllowOvercommit: "true",
 	}
 
 	vhdHostDir, err := ioutil.TempDir("", "")
@@ -1305,7 +1305,7 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_WCOW(t *testing.T) {
 		},
 	}
 
-	sbRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler, WithSandboxAnnotations(annotations))
+	sbRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler, WithSandboxAnnotations(annots))
 
 	podID := runPodSandbox(t, client, ctx, sbRequest)
 	defer removePodSandbox(t, client, ctx, podID)
@@ -1327,7 +1327,7 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_WCOW(t *testing.T) {
 	// create 2 containers with vhd mounts and verify both can mount vhd
 	for i := 1; i < 3; i++ {
 		containerName := t.Name() + "-Container-" + strconv.Itoa(i)
-		containerId := createContainerInSandbox(t, client, ctx, podID, containerName, imageWindowsNanoserver, command, annotations, mounts, sbRequest.Config)
+		containerId := createContainerInSandbox(t, client, ctx, podID, containerName, imageWindowsNanoserver, command, annots, mounts, sbRequest.Config)
 		defer removeContainer(t, client, ctx, containerId)
 
 		startContainer(t, client, ctx, containerId)
@@ -1347,7 +1347,7 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_WCOW(t *testing.T) {
 	// at the same time containers in a pod that don't have any mounts
 	mounts = []*runtime.Mount{}
 	containerName := t.Name() + "-Container-3"
-	containerId := createContainerInSandbox(t, client, ctx, podID, containerName, imageWindowsNanoserver, command, annotations, mounts, sbRequest.Config)
+	containerId := createContainerInSandbox(t, client, ctx, podID, containerName, imageWindowsNanoserver, command, annots, mounts, sbRequest.Config)
 	defer removeContainer(t, client, ctx, containerId)
 
 	startContainer(t, client, ctx, containerId)
@@ -1374,7 +1374,7 @@ func Test_RunPodSandbox_ProcessDump_LCOW(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationContainerProcessDumpLocation: "/coredumps/core",
+			annotations.ContainerProcessDumpLocation: "/coredumps/core",
 		}),
 	)
 
@@ -1389,8 +1389,8 @@ func Test_RunPodSandbox_ProcessDump_LCOW(t *testing.T) {
 		},
 	}
 
-	annotations := map[string]string{
-		oci.AnnotationRLimitCore: "18446744073709551615;18446744073709551615",
+	annots := map[string]string{
+		annotations.RLimitCore: "18446744073709551615;18446744073709551615",
 	}
 
 	// Setup container 1 that uses an image that stackoverflows shortly after starting.
@@ -1406,7 +1406,7 @@ func Test_RunPodSandbox_ProcessDump_LCOW(t *testing.T) {
 			Command: []string{
 				"./stackoverflow",
 			},
-			Annotations: annotations,
+			Annotations: annots,
 			Mounts:      mounts,
 		},
 		PodSandboxId:  podID,
@@ -1485,7 +1485,7 @@ func Test_RunPodSandbox_ProcessDump_WCOW_Hypervisor(t *testing.T) {
 		t,
 		wcowHypervisor19041RuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			oci.AnnotationContainerProcessDumpLocation: "C:\\processdump",
+			annotations.ContainerProcessDumpLocation: "C:\\processdump",
 		}),
 	)
 
@@ -1589,18 +1589,18 @@ func Test_RunPodSandbox_ProcessDump_WCOW_Hypervisor(t *testing.T) {
 	}
 }
 
-func createSandboxContainerAndExecForCustomScratch(t *testing.T, annotations map[string]string) (string, string, int) {
+func createSandboxContainerAndExecForCustomScratch(t *testing.T, annots map[string]string) (string, string, int) {
 	cmd := []string{
 		"df",
 	}
-	return createSandboxContainerAndExec(t, annotations, nil, cmd)
+	return createSandboxContainerAndExec(t, annots, nil, cmd)
 }
 
 func createContainerInSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, podId, containerName, imageName string, command []string,
-	annotations map[string]string, mounts []*runtime.Mount, podConfig *runtime.PodSandboxConfig) string {
+	annots map[string]string, mounts []*runtime.Mount, podConfig *runtime.PodSandboxConfig) string {
 
 	cRequest := getCreateContainerRequest(podId, containerName, imageName, command, podConfig)
-	cRequest.Config.Annotations = annotations
+	cRequest.Config.Annotations = annots
 	cRequest.Config.Mounts = mounts
 
 	containerID := createContainer(t, client, ctx, cRequest)
@@ -1623,12 +1623,12 @@ func execContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx contex
 	return output, errorMsg, exitCode
 }
 
-func createSandboxContainerAndExec(t *testing.T, annotations map[string]string, mounts []*runtime.Mount, execCommand []string) (output string, errorMsg string, exitCode int) {
+func createSandboxContainerAndExec(t *testing.T, annots map[string]string, mounts []*runtime.Mount, execCommand []string) (output string, errorMsg string, exitCode int) {
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sbRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, WithSandboxAnnotations(annotations))
+	sbRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler, WithSandboxAnnotations(annots))
 
 	podID := runPodSandbox(t, client, ctx, sbRequest)
 	defer removePodSandbox(t, client, ctx, podID)
@@ -1652,7 +1652,7 @@ func createSandboxContainerAndExec(t *testing.T, annotations map[string]string, 
 			Command: []string{
 				"top",
 			},
-			Annotations: annotations,
+			Annotations: annots,
 			Mounts:      testMounts,
 		},
 		PodSandboxId:  podID,
@@ -1685,14 +1685,14 @@ func Test_RunPodSandbox_KernelOptions_LCOW(t *testing.T) {
 
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
-	annotations := map[string]string{
-		oci.AnnotationFullyPhysicallyBacked: "true",
-		oci.AnnotationMemorySizeInMB:        "2048",
-		oci.AnnotationKernelBootOptions:     "hugepagesz=2M hugepages=10",
+	annots := map[string]string{
+		annotations.FullyPhysicallyBacked: "true",
+		annotations.MemorySizeInMB:        "2048",
+		annotations.KernelBootOptions:     "hugepagesz=2M hugepages=10",
 	}
 
 	hugePagesCmd := []string{"grep", "-i", "HugePages_Total", "/proc/meminfo"}
-	output, errorMsg, exitCode := createSandboxContainerAndExec(t, annotations, nil, hugePagesCmd)
+	output, errorMsg, exitCode := createSandboxContainerAndExec(t, annots, nil, hugePagesCmd)
 
 	if exitCode != 0 {
 		t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, t.Name())

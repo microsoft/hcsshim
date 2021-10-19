@@ -11,6 +11,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/cmd/gcstools/generichook"
 	"github.com/Microsoft/hcsshim/internal/guest/storage/pci"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
@@ -19,9 +20,6 @@ import (
 // this MUST match the path mapped to in the shim
 const lcowNvidiaMountPath = "/run/nvidia"
 
-// annotation to find the gpu capabilities on the container spec
-// must match the hcsshim annotation string for gpu capabilities
-const annotationContainerGPUCapabilities = "io.microsoft.container.gpu.capabilities"
 const nvidiaDebugFilePath = "/nvidia-container.log"
 
 const nvidiaToolBinary = "nvidia-container-cli"
@@ -50,7 +48,7 @@ func addNvidiaDevicePreHook(ctx context.Context, spec *oci.Spec) error {
 		"configure",
 		"--ldconfig=@/sbin/ldconfig",
 	}
-	if capabilities, ok := spec.Annotations[annotationContainerGPUCapabilities]; ok {
+	if capabilities, ok := spec.Annotations[annotations.ContainerGPUCapabilities]; ok {
 		caps := strings.Split(capabilities, ",")
 		for _, c := range caps {
 			args = append(args, fmt.Sprintf("--%s", c))

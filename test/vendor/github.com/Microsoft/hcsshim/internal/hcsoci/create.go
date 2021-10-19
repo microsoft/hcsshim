@@ -20,6 +20,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
@@ -97,13 +98,13 @@ func verifyCloneContainerSpecs(templateSpec, cloneSpec *specs.Spec) error {
 	}
 
 	// for annotations check that the values of memory & cpu annotations are same
-	if templateSpec.Annotations[oci.AnnotationContainerMemorySizeInMB] != cloneSpec.Annotations[oci.AnnotationContainerMemorySizeInMB] {
+	if templateSpec.Annotations[annotations.ContainerMemorySizeInMB] != cloneSpec.Annotations[annotations.ContainerMemorySizeInMB] {
 		return fmt.Errorf("memory size limit for template and clone containers can not be different")
 	}
-	if templateSpec.Annotations[oci.AnnotationContainerProcessorCount] != cloneSpec.Annotations[oci.AnnotationContainerProcessorCount] {
+	if templateSpec.Annotations[annotations.ContainerProcessorCount] != cloneSpec.Annotations[annotations.ContainerProcessorCount] {
 		return fmt.Errorf("processor count for template and clone containers can not be different")
 	}
-	if templateSpec.Annotations[oci.AnnotationContainerProcessorLimit] != cloneSpec.Annotations[oci.AnnotationContainerProcessorLimit] {
+	if templateSpec.Annotations[annotations.ContainerProcessorLimit] != cloneSpec.Annotations[annotations.ContainerProcessorLimit] {
 		return fmt.Errorf("processor limit for template and clone containers can not be different")
 	}
 

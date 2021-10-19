@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/ttrpc"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -164,8 +165,8 @@ func Test_Start_Pod_Config(t *testing.T) {
 		t.Fatalf("failed to generate Windows config with error: %v", err)
 	}
 	// Setup the POD annotations
-	g.AddAnnotation("io.kubernetes.cri.container-type", "sandbox")
-	g.AddAnnotation("io.kubernetes.cri.sandbox-id", t.Name())
+	g.AddAnnotation(annotations.KubernetesContainerType, "sandbox")
+	g.AddAnnotation(annotations.KubernetesSandboxID, t.Name())
 
 	writeBundleConfig(t, cmd.Dir, g.Config)
 
@@ -183,8 +184,8 @@ func Test_Start_Container_InPod_Config(t *testing.T) {
 		t.Fatalf("failed to generate Windows config with error: %v", perr)
 	}
 
-	pg.AddAnnotation("io.kubernetes.cri.container-type", "sandbox")
-	pg.AddAnnotation("io.kubernetes.cri.sandbox-id", podID)
+	pg.AddAnnotation(annotations.KubernetesContainerType, "sandbox")
+	pg.AddAnnotation(annotations.KubernetesSandboxID, podID)
 
 	writeBundleConfig(t, pcmd.Dir, pg.Config)
 
@@ -203,8 +204,8 @@ func Test_Start_Container_InPod_Config(t *testing.T) {
 	}
 
 	// Setup the POD Workload container annotations
-	wg.AddAnnotation("io.kubernetes.cri.container-type", "container")
-	wg.AddAnnotation("io.kubernetes.cri.sandbox-id", podID)
+	wg.AddAnnotation(annotations.KubernetesContainerType, "container")
+	wg.AddAnnotation(annotations.KubernetesSandboxID, podID)
 
 	writeBundleConfig(t, wcmd.Dir, wg.Config)
 
@@ -222,7 +223,7 @@ func Test_Start_Container_InPod_Config_PodShim_Gone(t *testing.T) {
 
 	podID := "POD-TEST"
 	// Setup the POD Workload container annotations
-	g.AddAnnotation("io.kubernetes.cri.container-type", "container")
+	g.AddAnnotation(annotations.KubernetesContainerType, "container")
 	g.AddAnnotation("io.kubernetes.cri.sandbox-id", podID)
 
 	writeBundleConfig(t, cmd.Dir, g.Config)
