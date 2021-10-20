@@ -21,6 +21,7 @@ jobs:
         with:
           version: v1.42.1 # Has fixes for stylecheck configuration https://github.com/golangci/golangci-lint/pull/2017/files
           args: --timeout=5m -v
+          only-new-issues: true
 
   verify-main-vendor:
     runs-on: 'windows-2019'
@@ -40,7 +41,7 @@ jobs:
             Write-Error "Main modules are not up to date. Please validate your go version >= this job's and run `go mod vendor` followed by `go mod tidy` in the repo root path."
           }
           exit $process.ExitCode
-          
+
   verify-test-vendor:
     runs-on: 'windows-2019'
     env:
