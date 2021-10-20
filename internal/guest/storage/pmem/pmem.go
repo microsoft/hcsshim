@@ -21,9 +21,13 @@ import (
 
 // Test dependencies
 var (
-	osMkdirAll  = os.MkdirAll
-	osRemoveAll = os.RemoveAll
-	unixMount   = unix.Mount
+	osMkdirAll                   = os.MkdirAll
+	osRemoveAll                  = os.RemoveAll
+	unixMount                    = unix.Mount
+	mountInternal                = mount
+	createZeroSectorLinearTarget = dm.CreateZeroSectorLinearTarget
+	createVerityTarget           = dm.CreateVerityTarget
+	removeDevice                 = dm.RemoveDevice
 )
 
 const (
@@ -32,8 +36,8 @@ const (
 	verityDeviceFmt = "dm-verity-pmem%d-%s"
 )
 
-// mountInternal mounts source to target via unix.Mount
-func mountInternal(ctx context.Context, source, target string) (err error) {
+// mount mounts source to target via unix.Mount
+func mount(ctx context.Context, source, target string) (err error) {
 	if err := osMkdirAll(target, 0700); err != nil {
 		return err
 	}
@@ -89,12 +93,12 @@ func Mount(ctx context.Context, device uint32, target string, mappingInfo *prot.
 	// device instead of the original VPMem.
 	if mappingInfo != nil {
 		dmLinearName := fmt.Sprintf(linearDeviceFmt, device, mappingInfo.DeviceOffsetInBytes, mappingInfo.DeviceSizeInBytes)
-		if devicePath, err = dm.CreateZeroSectorLinearTarget(mCtx, devicePath, dmLinearName, mappingInfo); err != nil {
+		if devicePath, err = createZeroSectorLinearTarget(mCtx, devicePath, dmLinearName, mappingInfo); err != nil {
 			return err
 		}
 		defer func() {
 			if err != nil {
-				if err := dm.RemoveDevice(dmLinearName); err != nil {
+				if err := removeDevice(dmLinearName); err != nil {
 					log.G(mCtx).WithError(err).Debugf("failed to cleanup linear target: %s", dmLinearName)
 				}
 			}
@@ -103,12 +107,12 @@ func Mount(ctx context.Context, device uint32, target string, mappingInfo *prot.
 
 	if verityInfo != nil {
 		dmVerityName := fmt.Sprintf(verityDeviceFmt, device, verityInfo.RootDigest)
-		if devicePath, err = dm.CreateVerityTarget(mCtx, devicePath, dmVerityName, verityInfo); err != nil {
+		if devicePath, err = createVerityTarget(mCtx, devicePath, dmVerityName, verityInfo); err != nil {
 			return err
 		}
 		defer func() {
 			if err != nil {
-				if err := dm.RemoveDevice(dmVerityName); err != nil {
+				if err := removeDevice(dmVerityName); err != nil {
 					log.G(mCtx).WithError(err).Debugf("failed to cleanup verity target: %s", dmVerityName)
 				}
 			}
