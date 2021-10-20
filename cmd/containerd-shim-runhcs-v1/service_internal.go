@@ -206,6 +206,7 @@ func (s *service) startInternal(ctx context.Context, req *task.StartRequest) (*t
 
 func (s *service) deleteInternal(ctx context.Context, req *task.DeleteRequest) (*task.DeleteResponse, error) {
 	// TODO: JTERRY75 we need to send this to the POD for isSandbox
+
 	t, err := s.getTask(req.ID)
 	if err != nil {
 		return nil, err

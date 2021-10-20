@@ -80,7 +80,7 @@ func (nprw *nPipeRetryWriter) Write(p []byte) (n int, err error) {
 		if err != nil {
 			// If the error is one that we can discern calls for a retry, attempt to redial the pipe.
 			if isDisconnectedErr(err) {
-				retryCtx, cancel := context.WithTimeout(context.TODO(), nprw.timeout)
+				retryCtx, cancel := context.WithTimeout(context.Background(), nprw.timeout)
 				defer cancel()
 
 				// Close the old conn.

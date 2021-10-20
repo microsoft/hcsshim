@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"time"
 
@@ -183,12 +182,8 @@ func newHcsTask(
 	}
 
 	var ioRetryTimeout time.Duration
-	if timeoutStr := s.Annotations[annotations.IORetryTimeoutInSec]; timeoutStr != "" {
-		timeout, err := strconv.Atoi(timeoutStr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse IO timeout setting: %w", err)
-		}
-		ioRetryTimeout = time.Duration(timeout) * time.Second
+	if shimOpts != nil {
+		ioRetryTimeout = time.Duration(shimOpts.IORetryTimeoutInSec) * time.Second
 	}
 	io, err := cmd.NewUpstreamIO(ctx, req.ID, req.Stdout, req.Stderr, req.Stdin, req.Terminal, ioRetryTimeout)
 	if err != nil {
@@ -289,13 +284,18 @@ func newClonedHcsTask(
 		return nil, fmt.Errorf("cloned task can only be created inside a windows host")
 	}
 
-	var ioRetryTimeout time.Duration
-	if timeoutStr := s.Annotations[annotations.IORetryTimeoutInSec]; timeoutStr != "" {
-		timeout, err := strconv.Atoi(timeoutStr)
+	var shimOpts *runhcsopts.Options
+	if req.Options != nil {
+		v, err := typeurl.UnmarshalAny(req.Options)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse IO timeout setting: %w", err)
+			return nil, err
 		}
-		ioRetryTimeout = time.Duration(timeout)
+		shimOpts = v.(*runhcsopts.Options)
+	}
+
+	var ioRetryTimeout time.Duration
+	if shimOpts != nil {
+		ioRetryTimeout = time.Duration(shimOpts.IORetryTimeoutInSec) * time.Second
 	}
 	io, err := cmd.NewNpipeIO(ctx, req.Stdin, req.Stdout, req.Stderr, req.Terminal, ioRetryTimeout)
 	if err != nil {

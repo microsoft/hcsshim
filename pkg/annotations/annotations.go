@@ -245,9 +245,6 @@ const (
 	// LCOWPrivileged is used to specify that the container should be run in privileged mode
 	LCOWPrivileged = "io.microsoft.virtualmachine.lcow.privileged"
 
-	// IORetryTimeoutInSec specifies the duration in seconds for how long to try reconnecting to stdio pipes if there is a disconnect.
-	IORetryTimeoutInSec = "io.microsoft.container.stdio.retrytimeout"
-
 	// KubernetesContainerType is the annotation used by CRI to define the `ContainerType`.
 	KubernetesContainerType = "io.kubernetes.cri.container-type"
 

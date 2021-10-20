@@ -396,9 +396,5 @@ func UpdateSpecFromOptions(s specs.Spec, opts *runhcsopts.Options) specs.Spec {
 		s.Annotations[annotations.NetworkConfigProxy] = opts.NCProxyAddr
 	}
 
-	if _, ok := s.Annotations[AnnotationIORetryTimeoutInSec]; !ok && opts.IORetryTimeoutInSec != 0 {
-		s.Annotations[AnnotationIORetryTimeoutInSec] = strconv.FormatInt(int64(opts.IORetryTimeoutInSec), 10)
-	}
-
 	return s
 }
