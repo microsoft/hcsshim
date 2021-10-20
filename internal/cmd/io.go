@@ -4,8 +4,10 @@ import (
 	"context"
 	"io"
 	"net/url"
+	"time"
 
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 // UpstreamIO is an interface describing the IO to connect to above the shim.
@@ -43,12 +45,12 @@ type UpstreamIO interface {
 // NewUpstreamIO returns an UpstreamIO instance. Currently we only support named pipes and binary
 // logging driver for container IO. When using binary logger `stdout` and `stderr` are assumed to be
 // the same and the value of `stderr` is completely ignored.
-func NewUpstreamIO(ctx context.Context, id string, stdout string, stderr string, stdin string, terminal bool) (UpstreamIO, error) {
+func NewUpstreamIO(ctx context.Context, id, stdout, stderr, stdin string, terminal bool, ioRetryTimeout time.Duration) (UpstreamIO, error) {
 	u, err := url.Parse(stdout)
 
 	// Create IO with named pipes.
 	if err != nil || u.Scheme == "" {
-		return NewNpipeIO(ctx, stdin, stdout, stderr, terminal)
+		return NewNpipeIO(ctx, stdin, stdout, stderr, terminal, ioRetryTimeout)
 	}
 
 	// Create IO for binary logging driver.
@@ -57,4 +59,22 @@ func NewUpstreamIO(ctx context.Context, id string, stdout string, stderr string,
 	}
 
 	return NewBinaryIO(ctx, id, u)
+}
+
+// relayIO is a glorified io.Copy that also logs when the copy has completed.
+func relayIO(w io.Writer, r io.Reader, log *logrus.Entry, name string) (int64, error) {
+	n, err := io.Copy(w, r)
+	if log != nil {
+		lvl := logrus.DebugLevel
+		log = log.WithFields(logrus.Fields{
+			"file":  name,
+			"bytes": n,
+		})
+		if err != nil {
+			lvl = logrus.ErrorLevel
+			log = log.WithError(err)
+		}
+		log.Log(lvl, "Cmd IO relay complete")
+	}
+	return n, err
 }

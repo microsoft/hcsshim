@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"strconv"
 	"strings"
+
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/clone"
@@ -393,6 +394,10 @@ func UpdateSpecFromOptions(s specs.Spec, opts *runhcsopts.Options) specs.Spec {
 
 	if _, ok := s.Annotations[annotations.NetworkConfigProxy]; !ok && opts.NCProxyAddr != "" {
 		s.Annotations[annotations.NetworkConfigProxy] = opts.NCProxyAddr
+	}
+
+	if _, ok := s.Annotations[AnnotationIORetryTimeoutInSec]; !ok && opts.IORetryTimeoutInSec != 0 {
+		s.Annotations[AnnotationIORetryTimeoutInSec] = strconv.FormatInt(int64(opts.IORetryTimeoutInSec), 10)
 	}
 
 	return s

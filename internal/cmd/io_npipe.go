@@ -2,24 +2,31 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"sync"
+	"syscall"
+	"time"
 
 	winio "github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/windows"
 )
+
+const defaultIOReconnectTimeout time.Duration = 10 * time.Second
 
 // NewNpipeIO creates connected upstream io. It is the callers responsibility to
 // validate that `if terminal == true`, `stderr == ""`.
-func NewNpipeIO(ctx context.Context, stdin, stdout, stderr string, terminal bool) (_ UpstreamIO, err error) {
+func NewNpipeIO(ctx context.Context, stdin, stdout, stderr string, terminal bool, retryTimeout time.Duration) (_ UpstreamIO, err error) {
 	log.G(ctx).WithFields(logrus.Fields{
 		"stdin":    stdin,
 		"stdout":   stdout,
 		"stderr":   stderr,
-		"terminal": terminal}).Debug("NewNpipeIO")
+		"terminal": terminal,
+	}).Debug("NewNpipeIO")
 
 	nio := &npipeio{
 		stdin:    stdin,
@@ -32,6 +39,11 @@ func NewNpipeIO(ctx context.Context, stdin, stdout, stderr string, terminal bool
 			nio.Close(ctx)
 		}
 	}()
+
+	if retryTimeout == 0 {
+		retryTimeout = defaultIOReconnectTimeout
+	}
+
 	if stdin != "" {
 		c, err := winio.DialPipeContext(ctx, stdin)
 		if err != nil {
@@ -44,16 +56,72 @@ func NewNpipeIO(ctx context.Context, stdin, stdout, stderr string, terminal bool
 		if err != nil {
 			return nil, err
 		}
-		nio.sout = c
+		nio.sout = &nPipeRetryWriter{c, stdout, retryTimeout}
 	}
 	if stderr != "" {
 		c, err := winio.DialPipeContext(ctx, stderr)
 		if err != nil {
 			return nil, err
 		}
-		nio.serr = c
+		nio.serr = &nPipeRetryWriter{c, stderr, retryTimeout}
 	}
 	return nio, nil
+}
+
+type nPipeRetryWriter struct {
+	net.Conn
+	pipePath string
+	timeout  time.Duration
+}
+
+func (nprw *nPipeRetryWriter) Write(p []byte) (n int, err error) {
+	for {
+		n, err = nprw.Conn.Write(p)
+		if err != nil {
+			// If the error is one that we can discern calls for a retry, attempt to redial the pipe.
+			if isDisconnectedErr(err) {
+				retryCtx, cancel := context.WithTimeout(context.TODO(), nprw.timeout)
+				defer cancel()
+
+				// Close the old conn.
+				nprw.Conn.Close()
+				newConn, retryErr := retryDialPipe(retryCtx, nprw.pipePath)
+				if retryErr == nil {
+					nprw.Conn = newConn
+					continue
+				}
+			}
+		}
+		return
+	}
+}
+
+// isDisconnectedErr is a helper to determine if the error received from writing to the server end of a named pipe indicates a disconnect/severed
+// connection. This can be used to attempt a redial if it's expected that the server will come back online at some point.
+func isDisconnectedErr(err error) bool {
+	if serr, ok := err.(syscall.Errno); ok {
+		// Server went away/something went wrong.
+		return serr == windows.ERROR_NO_DATA || serr == windows.ERROR_PIPE_NOT_CONNECTED || serr == windows.ERROR_BROKEN_PIPE
+	}
+	return false
+}
+
+// retryDialPipe is a helper to retry dialing a named pipe until context timeout or a successful connection. This is mainly to
+// assist in scenarios where the server end of the pipe has crashed/went away and is no longer accepting new connections but may
+// come back online.
+func retryDialPipe(ctx context.Context, path string) (net.Conn, error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("failed to reconnect to IO pipe within timeout: %w", ctx.Err())
+		default:
+			conn, err := winio.DialPipe(path, nil)
+			if err == nil {
+				return conn, nil
+			}
+			time.Sleep(time.Millisecond * 100)
+		}
+	}
 }
 
 var _ = (UpstreamIO)(&npipeio{})
