@@ -8,12 +8,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cpugroup"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/osversion"
 )
 
-// Build that assigning a cpu group on creation of a vm is supported
-const cpuGroupCreateBuild = 20124
-
-var errCPUGroupCreateNotSupported = fmt.Errorf("cpu group assignment on create requires a build of %d or higher", cpuGroupCreateBuild)
+var errCPUGroupCreateNotSupported = fmt.Errorf("cpu group assignment on create requires a build of %d or higher", osversion.V21H1)
 
 // ReleaseCPUGroup unsets the cpugroup from the VM
 func (uvm *UtilityVM) ReleaseCPUGroup(ctx context.Context) error {

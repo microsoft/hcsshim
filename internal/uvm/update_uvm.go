@@ -4,10 +4,11 @@ import (
 	"context"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-func (uvm *UtilityVM) UpdateConstraints(ctx context.Context, data interface{}, annotations map[string]string) error {
+func (uvm *UtilityVM) UpdateConstraints(ctx context.Context, data interface{}, annots map[string]string) error {
 	var memoryLimitInBytes *uint64
 	var processorLimits *hcsschema.ProcessorLimits
 
@@ -48,6 +49,13 @@ func (uvm *UtilityVM) UpdateConstraints(ctx context.Context, data interface{}, a
 	}
 	if processorLimits != nil {
 		if err := uvm.UpdateCPULimits(ctx, processorLimits); err != nil {
+			return err
+		}
+	}
+
+	// Check if an annotation was sent to update cpugroup membership
+	if cpuGroupID, ok := annots[annotations.CPUGroupID]; ok {
+		if err := uvm.SetCPUGroup(ctx, cpuGroupID); err != nil {
 			return err
 		}
 	}
