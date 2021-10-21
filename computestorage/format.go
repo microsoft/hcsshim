@@ -53,7 +53,7 @@ func FormatWritableLayerVhd(ctx context.Context, vhdHandle windows.Handle) (err 
 			return err
 		}
 		defer func() {
-			if detachErr := vhd.DetachVirtualDisk(syscall.Handle(vhdHandle)); err != nil {
+			if detachErr := vhd.DetachVirtualDisk(syscall.Handle(vhdHandle)); err == nil && detachErr != nil {
 				err = detachErr
 			}
 		}()
