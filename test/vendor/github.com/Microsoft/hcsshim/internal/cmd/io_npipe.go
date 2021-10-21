@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"sync"
 	"syscall"
@@ -12,9 +13,15 @@ import (
 	winio "github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
 )
+
+func init() {
+	// Need to seed for the rng in backoff.NextBackoff()
+	rand.Seed(time.Now().UnixNano())
+}
 
 const defaultIOReconnectTimeout time.Duration = 10 * time.Second
 
@@ -56,14 +63,14 @@ func NewNpipeIO(ctx context.Context, stdin, stdout, stderr string, terminal bool
 		if err != nil {
 			return nil, err
 		}
-		nio.sout = &nPipeRetryWriter{c, stdout, retryTimeout}
+		nio.sout = &nPipeRetryWriter{c, stdout, newBackOff(retryTimeout)}
 	}
 	if stderr != "" {
 		c, err := winio.DialPipeContext(ctx, stderr)
 		if err != nil {
 			return nil, err
 		}
-		nio.serr = &nPipeRetryWriter{c, stderr, retryTimeout}
+		nio.serr = &nPipeRetryWriter{c, stderr, newBackOff(retryTimeout)}
 	}
 	return nio, nil
 }
@@ -71,7 +78,22 @@ func NewNpipeIO(ctx context.Context, stdin, stdout, stderr string, terminal bool
 type nPipeRetryWriter struct {
 	net.Conn
 	pipePath string
-	timeout  time.Duration
+	backOff  backoff.BackOff
+}
+
+// newBackOff returns a new BackOff interface. The values chosen are fairly conservative, the main use is to get a somewhat random
+// retry timeout on each ask. This can help avoid flooding a server all at once.
+func newBackOff(timeout time.Duration) backoff.BackOff {
+	b := &backoff.ExponentialBackOff{
+		InitialInterval:     time.Millisecond * 200, // First backoff timeout will be somewhere in the 100 - 300 ms range given the default multiplier.
+		RandomizationFactor: backoff.DefaultRandomizationFactor,
+		Multiplier:          backoff.DefaultMultiplier,
+		MaxInterval:         time.Second * 2,
+		MaxElapsedTime:      timeout,
+		Stop:                backoff.Stop,
+		Clock:               backoff.SystemClock,
+	}
+	return b
 }
 
 func (nprw *nPipeRetryWriter) Write(p []byte) (n int, err error) {
@@ -80,19 +102,42 @@ func (nprw *nPipeRetryWriter) Write(p []byte) (n int, err error) {
 		if err != nil {
 			// If the error is one that we can discern calls for a retry, attempt to redial the pipe.
 			if isDisconnectedErr(err) {
-				retryCtx, cancel := context.WithTimeout(context.Background(), nprw.timeout)
-				defer cancel()
-
 				// Close the old conn.
 				nprw.Conn.Close()
-				newConn, retryErr := retryDialPipe(retryCtx, nprw.pipePath)
+				newConn, retryErr := nprw.retryDialPipe()
 				if retryErr == nil {
 					nprw.Conn = newConn
 					continue
 				}
+				err = retryErr
 			}
 		}
 		return
+	}
+}
+
+// retryDialPipe is a helper to retry dialing a named pipe until the timeout of nprw.BackOff or a successful connection. This is mainly to
+// assist in scenarios where the server end of the pipe has crashed/went away and is no longer accepting new connections but may
+// come back online. The backoff used inside is to try and space out connections to the server as to not flood it all at once with connection
+// attempts at the same interval.
+func (nprw *nPipeRetryWriter) retryDialPipe() (net.Conn, error) {
+	// Reset the backoff object as it starts ticking down when it's created. This also ensures we can re-use it in the event the server goes
+	// away more than once.
+	nprw.backOff.Reset()
+	for {
+		backOffTime := nprw.backOff.NextBackOff()
+		// We don't simply use a context with a timeout and pass it to DialPipe because DialPipe only retries the connection (and thus makes use of
+		// the timeout) if it sees that the pipe is busy. If the server isn't up and not listening it will just error out. That's the case we're
+		// most likely in right now so we need our own retry logic on top.
+		conn, err := winio.DialPipe(nprw.pipePath, nil)
+		if err == nil {
+			return conn, nil
+		}
+		// Next backoff would go over our timeout. We've tried once more above due to the ordering of this check, but now we need to bail out.
+		if backOffTime == backoff.Stop {
+			return nil, fmt.Errorf("reached timeout while retrying dial on %s", nprw.pipePath)
+		}
+		time.Sleep(backOffTime)
 	}
 }
 
@@ -104,24 +149,6 @@ func isDisconnectedErr(err error) bool {
 		return serr == windows.ERROR_NO_DATA || serr == windows.ERROR_PIPE_NOT_CONNECTED || serr == windows.ERROR_BROKEN_PIPE
 	}
 	return false
-}
-
-// retryDialPipe is a helper to retry dialing a named pipe until context timeout or a successful connection. This is mainly to
-// assist in scenarios where the server end of the pipe has crashed/went away and is no longer accepting new connections but may
-// come back online.
-func retryDialPipe(ctx context.Context, path string) (net.Conn, error) {
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("failed to reconnect to IO pipe within timeout: %w", ctx.Err())
-		default:
-			conn, err := winio.DialPipe(path, nil)
-			if err == nil {
-				return conn, nil
-			}
-			time.Sleep(time.Millisecond * 100)
-		}
-	}
 }
 
 var _ = (UpstreamIO)(&npipeio{})
