@@ -23,10 +23,9 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-const defaultIOReconnectTimeout time.Duration = 10 * time.Second
-
-// NewNpipeIO creates connected upstream io. It is the callers responsibility to
-// validate that `if terminal == true`, `stderr == ""`.
+// NewNpipeIO creates connected upstream io. It is the callers responsibility to validate that `if terminal == true`, `stderr == ""`. retryTimeout
+// refers to the timeout used to try and reconnect to the server end of the named pipe if the connection is severed. A value of 0 for retryTimeout
+// is treated as an infinite timeout.
 func NewNpipeIO(ctx context.Context, stdin, stdout, stderr string, terminal bool, retryTimeout time.Duration) (_ UpstreamIO, err error) {
 	log.G(ctx).WithFields(logrus.Fields{
 		"stdin":    stdin,
@@ -46,10 +45,6 @@ func NewNpipeIO(ctx context.Context, stdin, stdout, stderr string, terminal bool
 			nio.Close(ctx)
 		}
 	}()
-
-	if retryTimeout == 0 {
-		retryTimeout = defaultIOReconnectTimeout
-	}
 
 	if stdin != "" {
 		c, err := winio.DialPipeContext(ctx, stdin)
@@ -84,16 +79,19 @@ type nPipeRetryWriter struct {
 // newBackOff returns a new BackOff interface. The values chosen are fairly conservative, the main use is to get a somewhat random
 // retry timeout on each ask. This can help avoid flooding a server all at once.
 func newBackOff(timeout time.Duration) backoff.BackOff {
-	b := &backoff.ExponentialBackOff{
-		InitialInterval:     time.Millisecond * 200, // First backoff timeout will be somewhere in the 100 - 300 ms range given the default multiplier.
+	return &backoff.ExponentialBackOff{
+		// First backoff timeout will be somewhere in the 100 - 300 ms range given the default multiplier.
+		InitialInterval:     time.Millisecond * 200,
 		RandomizationFactor: backoff.DefaultRandomizationFactor,
 		Multiplier:          backoff.DefaultMultiplier,
-		MaxInterval:         time.Second * 2,
-		MaxElapsedTime:      timeout,
-		Stop:                backoff.Stop,
-		Clock:               backoff.SystemClock,
+		// Set the max interval to a minute, seems like a sane value. We don't know how long the server will be down for, and if we reached
+		// this point it's been down for quite awhile.
+		MaxInterval: time.Minute * 1,
+		// `backoff.ExponentialBackoff` treats a 0 timeout as infinite, which is ideal as it's the logic we desire.
+		MaxElapsedTime: timeout,
+		Stop:           backoff.Stop,
+		Clock:          backoff.SystemClock,
 	}
-	return b
 }
 
 func (nprw *nPipeRetryWriter) Write(p []byte) (n int, err error) {
@@ -127,7 +125,7 @@ func (nprw *nPipeRetryWriter) retryDialPipe() (net.Conn, error) {
 	for {
 		backOffTime := nprw.backOff.NextBackOff()
 		// We don't simply use a context with a timeout and pass it to DialPipe because DialPipe only retries the connection (and thus makes use of
-		// the timeout) if it sees that the pipe is busy. If the server isn't up and not listening it will just error out. That's the case we're
+		// the timeout) if it sees that the pipe is busy. If the server isn't up/not listening it will just error out. That's the case we're
 		// most likely in right now so we need our own retry logic on top.
 		conn, err := winio.DialPipe(nprw.pipePath, nil)
 		if err == nil {
