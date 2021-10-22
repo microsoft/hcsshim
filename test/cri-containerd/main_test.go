@@ -96,6 +96,7 @@ const (
 	featureGPU                = "GPU"
 	featureCRIUpdateContainer = "UpdateContainer"
 	featureTerminateOnRestart = "TerminateOnRestart"
+	featureLCOWIntegrity      = "LCOWIntegrity"
 )
 
 var allFeatures = []string{
