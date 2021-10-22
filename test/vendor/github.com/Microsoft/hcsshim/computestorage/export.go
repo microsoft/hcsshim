@@ -28,17 +28,17 @@ func ExportLayer(ctx context.Context, layerPath, exportFolderPath string, layerD
 		trace.StringAttribute("exportFolderPath", exportFolderPath),
 	)
 
-	ldbytes, err := json.Marshal(layerData)
+	ldBytes, err := json.Marshal(layerData)
 	if err != nil {
 		return err
 	}
 
-	obytes, err := json.Marshal(options)
+	oBytes, err := json.Marshal(options)
 	if err != nil {
 		return err
 	}
 
-	err = hcsExportLayer(layerPath, exportFolderPath, string(ldbytes), string(obytes))
+	err = hcsExportLayer(layerPath, exportFolderPath, string(ldBytes), string(oBytes))
 	if err != nil {
 		return errors.Wrap(err, "failed to export layer")
 	}
