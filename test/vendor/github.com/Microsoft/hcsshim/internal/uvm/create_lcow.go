@@ -2,6 +2,8 @@ package uvm
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net"
@@ -25,11 +27,33 @@ import (
 	"github.com/Microsoft/hcsshim/osversion"
 )
 
+// General infomation about how this works at a high level.
+//
+// The purpose is to start an LCOW Utility VM or UVM using the Host Compute Service, an API to create and manipulate running virtual machines
+// HCS takes json descriptions of the work to be done.
+//
+// When a pod (there is a one to one mapping of pod to UVM) is to be created various annotations and defaults are combined into an options object which is
+// passed to CreateLCOW (see below) where the options are transformed into a json document to be presented to the HCS VM creation code.
+//
+// There are two paths in CreateLCOW to creating the json document. The most flexible case is makeLCOWDoc which is used where no specialist hardware security
+// applies, then there is makeLCOWSecurityDoc which is used in the case of AMD SEV-SNP memory encryption and integrity protection. There is quite
+// a lot of difference between the two paths, for example the regular path has options about the type of kernel and initrd binary whereas the AMD SEV-SNP
+// path has only one file but there are many other detail differences, so the code is split for clarity.
+//
+// makeLCOW*Doc returns an instance of hcsschema.ComputeSystem. That is then serialised to the json string provided to the flat C api. A similar scheme is used
+// for later adjustments, for example adding a newtwork adpator.
+//
+// Examples of the eventual json are inline as comments by these two functions to show the eventual effect of the code.
+//
+// Note that the schema files, ie the Go objects that represent the json, are generated outside of the local build process.
+
 type PreferredRootFSType int
 
 const (
 	PreferredRootFSTypeInitRd PreferredRootFSType = iota
 	PreferredRootFSTypeVHD
+	PreferredRootFSTypeNA
+
 	entropyVsockPort  = 1
 	linuxLogVsockPort = 109
 )
@@ -47,6 +71,8 @@ const (
 	// UncompressedKernelFile is the default file name for an uncompressed
 	// kernel used to boot LCOW with KernelDirect.
 	UncompressedKernelFile = "vmlinux"
+	// In the SNP case both the kernel (bzImage) and initrd are stored in a vmgs (VM Guest State) file
+	GuestStateFile = "kernelinitrd.vmgs"
 )
 
 // OptionsLCOW are the set of options passed to CreateLCOW() to create a utility vm.
@@ -74,6 +100,9 @@ type OptionsLCOW struct {
 	VPCIEnabled             bool                // Whether the kernel should enable pci
 	EnableScratchEncryption bool                // Whether the scratch should be encrypted
 	SecurityPolicy          string              // Optional security policy
+	SecurityPolicyEnabled   bool                // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
+	UseGuestStateFile       bool                // Use a vmgs file that contains a kernel and initrd, required for SNP
+	GuestStateFile          string              // The vmgs file to load
 }
 
 // defaultLCOWOSBootFilesPath returns the default path used to locate the LCOW
@@ -120,7 +149,9 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		EnableColdDiscardHint:   false,
 		VPCIEnabled:             false,
 		EnableScratchEncryption: false,
+		SecurityPolicyEnabled:   false,
 		SecurityPolicy:          "",
+		GuestStateFile:          "",
 	}
 
 	if _, err := os.Stat(filepath.Join(opts.BootFilesPath, VhdFile)); err == nil {
@@ -141,62 +172,8 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 	return opts
 }
 
-// CreateLCOW creates an HCS compute system representing a utility VM.
-func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error) {
-	ctx, span := trace.StartSpan(ctx, "uvm::CreateLCOW")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	if opts.ID == "" {
-		g, err := guid.NewV4()
-		if err != nil {
-			return nil, err
-		}
-		opts.ID = g.String()
-	}
-
-	span.AddAttributes(trace.StringAttribute(logfields.UVMID, opts.ID))
-	log.G(ctx).WithField("options", fmt.Sprintf("%+v", opts)).Debug("uvm::CreateLCOW options")
-
-	// We dont serialize OutputHandler so if it is missing we need to put it back to the default.
-	if opts.OutputHandler == nil {
-		opts.OutputHandler = parseLogrus(opts.ID)
-	}
-
-	uvm := &UtilityVM{
-		id:                      opts.ID,
-		owner:                   opts.Owner,
-		operatingSystem:         "linux",
-		scsiControllerCount:     opts.SCSIControllerCount,
-		vpmemMaxCount:           opts.VPMemDeviceCount,
-		vpmemMaxSizeBytes:       opts.VPMemSizeBytes,
-		vpciDevices:             make(map[VPCIDeviceKey]*VPCIDevice),
-		physicallyBacked:        !opts.AllowOvercommit,
-		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
-		createOpts:              opts,
-		vpmemMultiMapping:       !opts.VPMemNoMultiMapping,
-		encryptScratch:          opts.EnableScratchEncryption,
-	}
-
-	defer func() {
-		if err != nil {
-			uvm.Close()
-		}
-	}()
-
-	kernelFullPath := filepath.Join(opts.BootFilesPath, opts.KernelFile)
-	if _, err := os.Stat(kernelFullPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("kernel: '%s' not found", kernelFullPath)
-	}
-	rootfsFullPath := filepath.Join(opts.BootFilesPath, opts.RootFSFile)
-	if _, err := os.Stat(rootfsFullPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("boot file: '%s' not found", rootfsFullPath)
-	}
-
-	if err := verifyOptions(ctx, opts); err != nil {
-		return nil, errors.Wrap(err, errBadUVMOpts.Error())
-	}
-
+// Get an acceptable number of processors given option and actual constraints.
+func fetchProcessor(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (*hcsschema.Processor2, error) {
 	processorTopology, err := processorinfo.HostProcessorInfo(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get host processor information: %s", err)
@@ -205,9 +182,6 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	// To maintain compatability with Docker we need to automatically downgrade
 	// a user CPU count if the setting is not possible.
 	uvm.processorCount = uvm.normalizeProcessorCount(ctx, opts.ProcessorCount, processorTopology)
-
-	// Align the requested memory size.
-	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
 
 	processor := &hcsschema.Processor2{
 		Count:  uvm.processorCount,
@@ -221,6 +195,304 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		}
 		processor.CpuGroup = &hcsschema.CpuGroup{Id: opts.CPUGroupID}
 	}
+	return processor, nil
+}
+
+/*
+Example JSON document produced once the hcsschema.ComputeSytem returned by makeLCOWSecurityDoc is serialised:
+{
+    "Owner": "containerd-shim-runhcs-v1.exe",
+    "SchemaVersion": {
+        "Major": 2,
+        "Minor": 5
+    },
+    "ShouldTerminateOnLastHandleClosed": true,
+    "VirtualMachine": {
+        "Chipset": {
+            "Uefi": {
+                "ApplySecureBootTemplate": "Apply",
+                "SecureBootTemplateId": "1734c6e8-3154-4dda-ba5f-a874cc483422"
+            }
+        },
+        "ComputeTopology": {
+            "Memory": {
+                "SizeInMB": 1024
+            },
+            "Processor": {
+                "Count": 2
+            }
+        },
+        "Devices": {
+            "Scsi" : { "0" : {} },
+            "HvSocket": {
+                "HvSocketConfig": {
+                    "DefaultBindSecurityDescriptor":  "D:P(A;;FA;;;WD)",
+                    "DefaultConnectSecurityDescriptor": "D:P(A;;FA;;;SY)(A;;FA;;;BA)",
+                    "ServiceTable" : {
+                         "00000808-facb-11e6-bd58-64006a7986d3" :  {
+                             "AllowWildcardBinds" : true,
+                             "BindSecurityDescriptor":   "D:P(A;;FA;;;WD)",
+                             "ConnectSecurityDescriptor": "D:P(A;;FA;;;SY)(A;;FA;;;BA)"
+                         },
+                         "0000006d-facb-11e6-bd58-64006a7986d3" :  {
+                             "AllowWildcardBinds" : true,
+                             "BindSecurityDescriptor":   "D:P(A;;FA;;;WD)",
+                             "ConnectSecurityDescriptor": "D:P(A;;FA;;;SY)(A;;FA;;;BA)"
+                         },
+                         "00000001-facb-11e6-bd58-64006a7986d3" :  {
+                             "AllowWildcardBinds" : true,
+                             "BindSecurityDescriptor":   "D:P(A;;FA;;;WD)",
+                             "ConnectSecurityDescriptor": "D:P(A;;FA;;;SY)(A;;FA;;;BA)"
+                         },
+                         "40000000-facb-11e6-bd58-64006a7986d3" :  {
+                             "AllowWildcardBinds" : true,
+                             "BindSecurityDescriptor":  "D:P(A;;FA;;;WD)",
+                             "ConnectSecurityDescriptor": "D:P(A;;FA;;;SY)(A;;FA;;;BA)"
+                         }
+                     }
+                }
+            }
+        },
+        "GuestState": {
+            "GuestStateFilePath": "d:\\ken\\aug27\\gcsinitnew.vmgs",
+            "GuestStateFileType": "FileMode",
+			"ForceTransientState": true
+        },
+        "SecuritySettings": {
+            "Isolation": {
+                "IsolationType": "SecureNestedPaging",
+
+                "LaunchData": "BukyDQANVcT5HviNDjU7z1icStE2SARnZHUwfvebd1s="
+            }
+        },
+        "Version": {
+            "Major": 254,
+            "Minor": 0
+        }
+    }
+}
+*/
+
+// A large part of difference between the SNP case and the usual kernel+option+initrd case is to do with booting
+// from a VMGS file. The VMGS part may be used other than with SNP so is split out here.
+
+// Make a hcsschema.ComputeSytem with the parts that target booting from a VMGS file
+func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcsschema.ComputeSystem, err error) {
+
+	// Kernel and initrd are combined into a single vmgs file.
+	vmgsFullPath := filepath.Join(opts.BootFilesPath, opts.GuestStateFile)
+	if _, err := os.Stat(vmgsFullPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("the GuestState vmgs file '%s' was not found", vmgsFullPath)
+	}
+
+	var processor *hcsschema.Processor2
+	processor, err = fetchProcessor(ctx, opts, uvm)
+	if err != nil {
+		return nil, err
+	}
+
+	// Align the requested memory size.
+	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
+
+	doc := &hcsschema.ComputeSystem{
+		Owner:                             uvm.owner,
+		SchemaVersion:                     schemaversion.SchemaV25(),
+		ShouldTerminateOnLastHandleClosed: true,
+		VirtualMachine: &hcsschema.VirtualMachine{
+			StopOnReset: true,
+			Chipset:     &hcsschema.Chipset{},
+			ComputeTopology: &hcsschema.Topology{
+				Memory: &hcsschema.Memory2{
+					SizeInMB:              memorySizeInMB,
+					AllowOvercommit:       opts.AllowOvercommit,
+					EnableDeferredCommit:  opts.EnableDeferredCommit,
+					EnableColdDiscardHint: opts.EnableColdDiscardHint,
+					LowMMIOGapInMB:        opts.LowMMIOGapInMB,
+					HighMMIOBaseInMB:      opts.HighMMIOBaseInMB,
+					HighMMIOGapInMB:       opts.HighMMIOGapInMB,
+				},
+				Processor: processor,
+			},
+			Devices: &hcsschema.Devices{
+				HvSocket: &hcsschema.HvSocket2{
+					HvSocketConfig: &hcsschema.HvSocketSystemConfig{
+						// Allow administrators and SYSTEM to bind to vsock sockets
+						// so that we can create a GCS log socket.
+						DefaultBindSecurityDescriptor:    "D:P(A;;FA;;;WD)", // Differs for SNP
+						DefaultConnectSecurityDescriptor: "D:P(A;;FA;;;SY)(A;;FA;;;BA)",
+						ServiceTable:                     make(map[string]hcsschema.HvSocketServiceConfig),
+					},
+				},
+			},
+		},
+	}
+
+	// Set permissions for the VSock ports:
+	//		entropyVsockPort - 1 is the entropy port,
+	//		linuxLogVsockPort - 109 used by vsockexec to log stdout/stderr logging,
+	//		0x40000000 + 1 (LinuxGcsVsockPort + 1) is the bridge (see guestconnectiuon.go)
+
+	hvSockets := [...]uint32{entropyVsockPort, linuxLogVsockPort, gcs.LinuxGcsVsockPort, gcs.LinuxGcsVsockPort + 1}
+	for _, whichSocket := range hvSockets {
+		key := fmt.Sprintf("%08x-facb-11e6-bd58-64006a7986d3", whichSocket) // format of a linux hvsock GUID is port#-facb-11e6-bd58-64006a7986d3
+		doc.VirtualMachine.Devices.HvSocket.HvSocketConfig.ServiceTable[key] = hcsschema.HvSocketServiceConfig{
+			AllowWildcardBinds:        true,
+			BindSecurityDescriptor:    "D:P(A;;FA;;;WD)",
+			ConnectSecurityDescriptor: "D:P(A;;FA;;;SY)(A;;FA;;;BA)",
+		}
+	}
+
+	// Handle StorageQoS if set
+	if opts.StorageQoSBandwidthMaximum > 0 || opts.StorageQoSIopsMaximum > 0 {
+		doc.VirtualMachine.StorageQoS = &hcsschema.StorageQoS{
+			IopsMaximum:      opts.StorageQoSIopsMaximum,
+			BandwidthMaximum: opts.StorageQoSBandwidthMaximum,
+		}
+	}
+
+	if uvm.scsiControllerCount > 0 {
+		// TODO: JTERRY75 - this should enumerate scsicount and add an entry per value.
+		doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{
+			"0": {
+				Attachments: make(map[string]hcsschema.Attachment),
+			},
+		}
+	}
+
+	// The rootfs must be provided as an initrd within the VMGS file.
+	// Raise an error if instructed to use a particular sort of rootfs.
+
+	if opts.PreferredRootFSType != PreferredRootFSTypeNA {
+		return nil, fmt.Errorf("cannot override rootfs when using VMGS file")
+	}
+
+	// Required by HCS for the isolated boot scheme, see also https://docs.microsoft.com/en-us/windows-server/virtualization/hyper-v/learn-more/generation-2-virtual-machine-security-settings-for-hyper-v
+	// A complete explanation of the why's and wherefores of starting an encrypted, isolated VM are beond the scope of these comments.
+
+	doc.VirtualMachine.Chipset.Uefi = &hcsschema.Uefi{
+		ApplySecureBootTemplate: "Apply",
+		SecureBootTemplateId:    "1734c6e8-3154-4dda-ba5f-a874cc483422", // aka MicrosoftWindowsSecureBootTemplateGUID equivilent to "Microsoft Windows" template from Get-VMHost | select SecureBootTemplates,
+
+	}
+
+	// Point at the file that contains the linux kernel and initrd images.
+
+	doc.VirtualMachine.GuestState = &hcsschema.GuestState{
+		GuestStateFilePath:  vmgsFullPath,
+		GuestStateFileType:  "FileMode",
+		ForceTransientState: true, // tell HCS that this is just the source of the images, not ongoing state
+	}
+
+	return doc, nil
+}
+
+// Programatically make the hcsschema.ComputeSystem document for the SNP case.
+// This is done prior to json seriaisation and sending to the HCS layer to actually do the work of creating the VM.
+// Many details are quite different (see the typical JSON examples), in particular it boots from a VMGS file
+// which contains both the kernel and initrd as well as kernel boot options.
+func makeLCOWSecurityDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcsschema.ComputeSystem, err error) {
+
+	doc, vmgsErr := makeLCOWVMGSDoc(ctx, opts, uvm)
+	if vmgsErr != nil {
+		return nil, vmgsErr
+	}
+
+	// Part of the protocol to ensure that the rules in the user's Security Policy are
+	// respected is to provide a hash of the policy to the hardware. This is immutable
+	// and can be used to check that the policy used by opengcs is the required one as
+	// a condition of releasing secrets to the container.
+
+	// First, decode the base64 string into a human readable (json) string .
+	jsonPolicy, err := base64.StdEncoding.DecodeString(opts.SecurityPolicy)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode base64 SecurityPolicy")
+	}
+
+	// make a sha256 hashing object
+	hostData := sha256.New()
+	// give it the jsaon string to measure
+	hostData.Write(jsonPolicy)
+	// get the measurement out
+	securityPolicyHash := base64.StdEncoding.EncodeToString(hostData.Sum(nil))
+
+	// Put the measurement into the LaunchData field of the HCS creation command.
+	// This will endup in HOST_DATA of SNP_LAUNCH_FINISH command the and ATTESTATION_REPORT
+	// retrieved by the guest later.
+
+	doc.VirtualMachine.SecuritySettings = &hcsschema.SecuritySettings{
+		EnableTpm: false,
+		Isolation: &hcsschema.IsolationSettings{
+			IsolationType: "SecureNestedPaging",
+			LaunchData:    securityPolicyHash,
+		},
+	}
+
+	return doc, nil
+}
+
+/*
+Example JSON document produced once the hcsschema.ComputeSytem returned by makeLCOWDoc is serialised. Note that the boot scheme is entirely different.
+{
+    "Owner": "containerd-shim-runhcs-v1.exe",
+    "SchemaVersion": {
+        "Major": 2,
+        "Minor": 1
+    },
+    "VirtualMachine": {
+        "StopOnReset": true,
+        "Chipset": {
+            "LinuxKernelDirect": {
+                "KernelFilePath": "C:\\ContainerPlat\\LinuxBootFiles\\vmlinux",
+                "InitRdPath": "C:\\ContainerPlat\\LinuxBootFiles\\initrd.img",
+                "KernelCmdLine": " 8250_core.nr_uarts=0 panic=-1 quiet pci=off nr_cpus=2 brd.rd_nr=0 pmtmr=0 -- -e 1 /bin/vsockexec -e 109 /bin/gcs -v4 -log-format json -loglevel debug"
+            }
+        },
+        "ComputeTopology": {
+            "Memory": {
+                "SizeInMB": 1024,
+                "AllowOvercommit": true
+            },
+            "Processor": {
+                "Count": 2
+            }
+        },
+        "Devices": {
+            "Scsi": {
+                "0": {}
+            },
+            "HvSocket": {
+                "HvSocketConfig": {
+                    "DefaultBindSecurityDescriptor": "D:P(A;;FA;;;SY)(A;;FA;;;BA)"
+                }
+            },
+            "Plan9": {}
+        }
+    },
+    "ShouldTerminateOnLastHandleClosed": true
+}
+*/
+
+// Make the ComputeSystem document object that will be serialised to json to be presented to the HCS api.
+func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcsschema.ComputeSystem, err error) {
+	logrus.Tracef("makeLCOWDoc %v\n", opts)
+
+	kernelFullPath := filepath.Join(opts.BootFilesPath, opts.KernelFile)
+	if _, err := os.Stat(kernelFullPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("kernel: '%s' not found", kernelFullPath)
+	}
+	rootfsFullPath := filepath.Join(opts.BootFilesPath, opts.RootFSFile)
+	if _, err := os.Stat(rootfsFullPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("boot file: '%s' not found", rootfsFullPath)
+	}
+
+	var processor *hcsschema.Processor2
+	processor, err = fetchProcessor(ctx, opts, uvm) // must happen after the file existance tests above.
+	if err != nil {
+		return nil, err
+	}
+
+	// Align the requested memory size.
+	memorySizeInMB := uvm.normalizeMemorySize(ctx, opts.MemorySizeInMB)
 
 	doc := &hcsschema.ComputeSystem{
 		Owner:                             uvm.owner,
@@ -411,8 +683,75 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 			doc.VirtualMachine.Chipset.LinuxKernelDirect.InitRdPath = rootfsFullPath
 		}
 	}
+	return doc, nil
+}
+
+// Creates an HCS compute system representing a utility VM. It consumes a set of options derived
+// from various defaults and options expressed as annotations.
+func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error) {
+	ctx, span := trace.StartSpan(ctx, "uvm::CreateLCOW")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+
+	if opts.ID == "" {
+		g, err := guid.NewV4()
+		if err != nil {
+			return nil, err
+		}
+		opts.ID = g.String()
+	}
+
+	span.AddAttributes(trace.StringAttribute(logfields.UVMID, opts.ID))
+	log.G(ctx).WithField("options", fmt.Sprintf("%+v", opts)).Debug("uvm::CreateLCOW options")
+
+	// We dont serialize OutputHandler so if it is missing we need to put it back to the default.
+	if opts.OutputHandler == nil {
+		opts.OutputHandler = parseLogrus(opts.ID)
+	}
+
+	uvm := &UtilityVM{
+
+		id:                      opts.ID,
+		owner:                   opts.Owner,
+		operatingSystem:         "linux",
+		scsiControllerCount:     opts.SCSIControllerCount,
+		vpmemMaxCount:           opts.VPMemDeviceCount,
+		vpmemMaxSizeBytes:       opts.VPMemSizeBytes,
+		vpciDevices:             make(map[VPCIDeviceKey]*VPCIDevice),
+		physicallyBacked:        !opts.AllowOvercommit,
+		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
+		createOpts:              opts,
+		vpmemMultiMapping:       !opts.VPMemNoMultiMapping,
+		encryptScratch:          opts.EnableScratchEncryption,
+	}
+
+	defer func() {
+		if err != nil {
+			uvm.Close()
+		}
+	}()
+
+	if err = verifyOptions(ctx, opts); err != nil {
+		return nil, errors.Wrap(err, errBadUVMOpts.Error())
+	}
+
+	// HCS config for SNP isolated vm is quite different to the usual case
+	var doc *hcsschema.ComputeSystem
+	if opts.SecurityPolicyEnabled {
+		doc, err = makeLCOWSecurityDoc(ctx, opts, uvm)
+		log.G(ctx).Tracef("create_lcow::CreateLCOW makeLCOWSecurityDoc result doc: %v err %v", doc, err)
+	} else {
+		doc, err = makeLCOWDoc(ctx, opts, uvm)
+		log.G(ctx).Tracef("create_lcow::CreateLCOW makeLCOWDoc result doc: %v err %v", doc, err)
+	}
+	if err != nil {
+		return nil, err
+	}
 
 	err = uvm.create(ctx, doc)
+
+	log.G(ctx).Tracef("create_lcow::CreateLCOW uvm.create result uvm: %v err %v", uvm, err)
+
 	if err != nil {
 		return nil, fmt.Errorf("error while creating the compute system: %s", err)
 	}

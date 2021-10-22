@@ -250,4 +250,10 @@ const (
 	// KubernetesSandboxID is the annotation used by CRI to define the
 	// KubernetesContainerType == "sandbox"` ID.
 	KubernetesSandboxID = "io.kubernetes.cri.sandbox-id"
+
+	// NoSecurityHardware allows us, when it is set to true, to do testing and development without requiring SNP hardware
+	NoSecurityHardware = "io.microsoft.virtualmachine.lcow.no_security_hardware"
+
+	// GuestStateFile specifies the path of the vmgs file to use if required. Only applies in SNP mode.
+	GuestStateFile = "io.microsoft.virtualmachine.lcow.gueststatefile"
 )
