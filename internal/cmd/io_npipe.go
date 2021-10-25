@@ -58,19 +58,20 @@ func NewNpipeIO(ctx context.Context, stdin, stdout, stderr string, terminal bool
 		if err != nil {
 			return nil, err
 		}
-		nio.sout = &nPipeRetryWriter{c, stdout, newBackOff(retryTimeout)}
+		nio.sout = &nPipeRetryWriter{ctx, c, stdout, newBackOff(retryTimeout)}
 	}
 	if stderr != "" {
 		c, err := winio.DialPipeContext(ctx, stderr)
 		if err != nil {
 			return nil, err
 		}
-		nio.serr = &nPipeRetryWriter{c, stderr, newBackOff(retryTimeout)}
+		nio.serr = &nPipeRetryWriter{ctx, c, stderr, newBackOff(retryTimeout)}
 	}
 	return nio, nil
 }
 
 type nPipeRetryWriter struct {
+	ctx context.Context
 	net.Conn
 	pipePath string
 	backOff  backoff.BackOff
@@ -100,10 +101,18 @@ func (nprw *nPipeRetryWriter) Write(p []byte) (n int, err error) {
 		if err != nil {
 			// If the error is one that we can discern calls for a retry, attempt to redial the pipe.
 			if isDisconnectedErr(err) {
-				// Close the old conn.
+				// Log that we're going to retry establishing the connection.
+				log.G(nprw.ctx).WithFields(logrus.Fields{
+					"address":       nprw.pipePath,
+					logrus.ErrorKey: err,
+				}).Error("Named pipe disconnected, retrying dial")
+
+				// Close the old conn first.
 				nprw.Conn.Close()
 				newConn, retryErr := nprw.retryDialPipe()
 				if retryErr == nil {
+					log.G(nprw.ctx).WithField("address", nprw.pipePath).Info("Succeeded in reconnecting to named pipe")
+
 					nprw.Conn = newConn
 					continue
 				}
