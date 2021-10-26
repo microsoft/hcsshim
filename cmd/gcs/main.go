@@ -162,8 +162,8 @@ func StartTimeSyncService() error {
 
 	// create chronyd config file
 	ptpDevPath := filepath.Join("/dev", filepath.Base(ptpDirPath))
-	chronydConfigString := fmt.Sprintf("refclock PHC %s poll 3 dpoll -2 offset 0\n", ptpDevPath)
-
+	// chronyd config file take from: https://docs.microsoft.com/en-us/azure/virtual-machines/linux/time-sync
+	chronydConfigString := fmt.Sprintf("refclock PHC %s poll 3 dpoll -2 offset 0 stratum 2\nmakestep 0.1 -1\n", ptpDevPath)
 	chronydConfPath := "/tmp/chronyd.conf"
 	err = ioutil.WriteFile(chronydConfPath, []byte(chronydConfigString), 0644)
 	if err != nil {
@@ -173,7 +173,7 @@ func StartTimeSyncService() error {
 	// start chronyd. Do NOT start chronyd as daemon because creating a daemon
 	// involves double forking the restart monitor will attempt to restart chornyd
 	// after the first fork child exits.
-	go runWithRestartMonitor("chronyd", "-d", "-f", chronydConfPath)
+	go runWithRestartMonitor("chronyd", "-n", "-f", chronydConfPath)
 	return nil
 }
 
