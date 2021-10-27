@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -203,12 +201,6 @@ var rootHashVHDCommand = cli.Command{
 		}
 		log.Debugf("%d layers found", len(layers))
 
-		tmpFile, err := ioutil.TempFile("", "")
-		if err != nil {
-			return errors.Wrap(err, "failed to create temporary file")
-		}
-		defer os.Remove(tmpFile.Name())
-
 		for layerNumber, layer := range layers {
 			diffID, err := layer.DiffID()
 			if err != nil {
@@ -221,32 +213,10 @@ var rootHashVHDCommand = cli.Command{
 				return errors.Wrapf(err, "failed to uncompress layer %s", diffID.String())
 			}
 
-			opts := []tar2ext4.Option{
-				tar2ext4.ConvertWhiteout,
-				tar2ext4.MaximumDiskSize(maxVHDSize),
-			}
-
-			if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
-				return errors.Wrapf(err, "failed seek start on temp file when processing layer %d", layerNumber)
-			}
-			if err := tmpFile.Truncate(0); err != nil {
-				return errors.Wrapf(err, "failed truncate temp file when processing layer %d", layerNumber)
-			}
-
-			if err := tar2ext4.Convert(rc, tmpFile, opts...); err != nil {
-				return errors.Wrap(err, "failed to convert tar to ext4")
-			}
-
-			data, err := ioutil.ReadFile(tmpFile.Name())
+			hash, err := tar2ext4.ConvertAndRootDigest(rc)
 			if err != nil {
-				return errors.Wrap(err, "failed to read temporary VHD file")
+				return errors.Wrapf(err, "failed to compute root hash")
 			}
-
-			tree, err := dmverity.MerkleTree(data)
-			if err != nil {
-				return errors.Wrap(err, "failed to create merkle tree")
-			}
-			hash := dmverity.RootHash(tree)
 			fmt.Fprintf(os.Stdout, "Layer %d\nroot hash: %x\n", layerNumber, hash)
 		}
 		return nil

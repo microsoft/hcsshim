@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -188,42 +189,36 @@ func Convert(r io.Reader, w io.ReadWriteSeeker, options ...Option) error {
 		}
 
 		// Rewind the stream and then read it all into a []byte for
-		// dmverity processing
-		_, err = w.Seek(0, io.SeekStart)
-		if err != nil {
-			return err
-		}
-		data, err := ioutil.ReadAll(w)
-		if err != nil {
+		// dm-verity processing
+		if _, err = w.Seek(0, io.SeekStart); err != nil {
 			return err
 		}
 
-		mtree, err := dmverity.MerkleTree(data)
+		merkleTree, err := dmverity.MerkleTreeWithReader(w)
 		if err != nil {
 			return errors.Wrap(err, "failed to build merkle tree")
 		}
 
-		// Write dmverity superblock and then the merkle tree after the end of the
+		// Write dm-verity super-block and then the merkle tree after the end of the
 		// ext4 filesystem
-		_, err = w.Seek(0, io.SeekEnd)
-		if err != nil {
+		if _, err = w.Seek(0, io.SeekEnd); err != nil {
 			return err
 		}
-		superblock := dmverity.NewDMVeritySuperblock(uint64(ext4size))
-		err = binary.Write(w, binary.LittleEndian, superblock)
-		if err != nil {
+
+		superBlock := dmverity.NewDMVeritySuperblock(uint64(ext4size))
+		if err = binary.Write(w, binary.LittleEndian, superBlock); err != nil {
 			return err
 		}
-		// pad the superblock
-		sbsize := int(unsafe.Sizeof(*superblock))
+
+		// pad the super-block
+		sbsize := int(unsafe.Sizeof(*superBlock))
 		padding := bytes.Repeat([]byte{0}, ext4blocksize-(sbsize%ext4blocksize))
-		_, err = w.Write(padding)
-		if err != nil {
+		if _, err = w.Write(padding); err != nil {
 			return err
 		}
+
 		// write the tree
-		_, err = w.Write(mtree)
-		if err != nil {
+		if _, err = w.Write(merkleTree); err != nil {
 			return err
 		}
 	}
@@ -272,4 +267,38 @@ func ReadExt4SuperBlock(vhdPath string) (*format.SuperBlock, error) {
 		return nil, err
 	}
 	return &sb, nil
+}
+
+// ConvertAndRootDigest writes a compact ext4 file system image that contains the files in the
+// input tar stream, computes and returns its cryptographic digest. Convert is called with minimal
+// options: ConvertWhiteout and MaximumDiskSize set to dmverity.RecommendedVHDSizeGB.
+func ConvertAndRootDigest(r io.Reader) (string, error) {
+	out, err := ioutil.TempFile("", "")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temporary file: %s", err)
+	}
+	defer func() {
+		_ = os.Remove(out.Name())
+	}()
+
+	opts := []Option{
+		ConvertWhiteout,
+		MaximumDiskSize(dmverity.RecommendedVHDSizeGB),
+	}
+
+	if err := Convert(r, out, opts...); err != nil {
+		return "", fmt.Errorf("failed to convert tar to ext4: %s", err)
+	}
+
+	if _, err := out.Seek(0, io.SeekStart); err != nil {
+		return "", fmt.Errorf("failed to seek start on temp file when creating merkle tree: %s", err)
+	}
+
+	tree, err := dmverity.MerkleTreeWithReader(r)
+	if err != nil {
+		return "", fmt.Errorf("failed to create merkle tree: %s", err)
+	}
+
+	hash := dmverity.RootHash(tree)
+	return fmt.Sprintf("%x", hash), nil
 }

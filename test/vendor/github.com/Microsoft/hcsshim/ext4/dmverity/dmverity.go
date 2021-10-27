@@ -1,6 +1,7 @@
 package dmverity
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
@@ -16,9 +17,12 @@ import (
 
 const (
 	blockSize = compactext4.BlockSize
-	// RecommendedVHDSizeGB is the recommended size in GB for VHDs, which is not a hard limit. 
+	// bufioSize is a default buffer size to use with bufio.Reader
+	bufioSize = 1024 * 1024 // 1MB
+	// RecommendedVHDSizeGB is the recommended size in GB for VHDs, which is not a hard limit.
 	RecommendedVHDSizeGB = 128 * 1024 * 1024 * 1024
 )
+
 var salt = bytes.Repeat([]byte{0}, 32)
 
 var (
@@ -69,20 +73,19 @@ type VerityInfo struct {
 	Version       uint32
 }
 
-// MerkleTree constructs dm-verity hash-tree for a given byte array with a fixed salt (0-byte) and algorithm (sha256).
-func MerkleTree(data []byte) ([]byte, error) {
+// MerkleTreeWithReader constructs dm-verity hash-tree for a given io.Reader with a fixed salt (0-byte) and algorithm (sha256).
+func MerkleTreeWithReader(r io.Reader) ([]byte, error) {
 	layers := make([][]byte, 0)
+	currentLevel := bufio.NewReaderSize(r, bufioSize)
 
-	currentLevel := bytes.NewBuffer(data)
-
-	for currentLevel.Len() != blockSize {
-		blocks := currentLevel.Len() / blockSize
+	for {
 		nextLevel := bytes.NewBuffer(make([]byte, 0))
-
-		for i := 0; i < blocks; i++ {
+		for {
 			block := make([]byte, blockSize)
-			_, err := currentLevel.Read(block)
-			if err != nil {
+			if _, err := currentLevel.Read(block); err != nil {
+				if err == io.EOF {
+					break
+				}
 				return nil, errors.Wrap(err, "failed to read data block")
 			}
 			h := hash2(salt, block)
@@ -92,19 +95,28 @@ func MerkleTree(data []byte) ([]byte, error) {
 		padding := bytes.Repeat([]byte{0}, blockSize-(nextLevel.Len()%blockSize))
 		nextLevel.Write(padding)
 
-		currentLevel = nextLevel
-		layers = append(layers, currentLevel.Bytes())
+		layers = append(layers, nextLevel.Bytes())
+		currentLevel = bufio.NewReaderSize(nextLevel, bufioSize)
+
+		// This means that only root hash remains and our job is done
+		if nextLevel.Len() == blockSize {
+			break
+		}
 	}
 
-	var tree = bytes.NewBuffer(make([]byte, 0))
+	tree := bytes.NewBuffer(make([]byte, 0))
 	for i := len(layers) - 1; i >= 0; i-- {
-		_, err := tree.Write(layers[i])
-		if err != nil {
+		if _, err := tree.Write(layers[i]); err != nil {
 			return nil, errors.Wrap(err, "failed to write merkle tree")
 		}
 	}
 
 	return tree.Bytes(), nil
+}
+
+// MerkleTree constructs dm-verity hash-tree for a given byte array with a fixed salt (0-byte) and algorithm (sha256).
+func MerkleTree(data []byte) ([]byte, error) {
+	return MerkleTreeWithReader(bytes.NewBuffer(data))
 }
 
 // RootHash computes root hash of dm-verity hash-tree
