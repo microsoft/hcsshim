@@ -51,6 +51,10 @@ func NewNpipeIO(ctx context.Context, stdin, stdout, stderr string, terminal bool
 		if err != nil {
 			return nil, err
 		}
+		// We don't have any retry logic for stdin as there's no good way to detect that we'd even need to retry. If the process forwarding
+		// stdin to the container (some client interface to exec a process in a container) exited, we'll get EOF which io.Copy treats as
+		// success. For fifos on Linux it seems if all fd's for the write end of the pipe dissappear, which is the same scenario, then
+		// the read end will get EOF as well.
 		nio.sin = c
 	}
 	if stdout != "" {
@@ -98,8 +102,12 @@ func newBackOff(timeout time.Duration) backoff.BackOff {
 }
 
 func (nprw *nPipeRetryWriter) Write(p []byte) (n int, err error) {
+	var currBufPos int
 	for {
-		n, err = nprw.Conn.Write(p)
+		// p[currBufPos:] to handle a case where we wrote n bytes but got disconnected and now we just need to write the rest of the buffer. If this is the
+		// first write then the current position is 0 so we just try and write the whole buffer as usual.
+		n, err = nprw.Conn.Write(p[currBufPos:])
+		currBufPos += n
 		if err != nil {
 			// If the error is one that we can discern calls for a retry, attempt to redial the pipe.
 			if isDisconnectedErr(err) {
@@ -121,7 +129,7 @@ func (nprw *nPipeRetryWriter) Write(p []byte) (n int, err error) {
 				err = retryErr
 			}
 		}
-		return
+		return currBufPos, err
 	}
 }
 
@@ -136,8 +144,8 @@ func (nprw *nPipeRetryWriter) retryDialPipe() (net.Conn, error) {
 	for {
 		backOffTime := nprw.backOff.NextBackOff()
 		// We don't simply use a context with a timeout and pass it to DialPipe because DialPipe only retries the connection (and thus makes use of
-		// the timeout) if it sees that the pipe is busy. If the server isn't up/not listening it will just error out. That's the case we're
-		// most likely in right now so we need our own retry logic on top.
+		// the timeout) if it sees that the pipe is busy. If the server isn't up/not listening it will just error out immediately and not make use
+		// of the timeout passed. That's the case we're most likely in right now so we need our own retry logic on top.
 		conn, err := winio.DialPipe(nprw.pipePath, nil)
 		if err == nil {
 			return conn, nil
