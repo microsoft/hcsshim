@@ -97,7 +97,7 @@ message Options {
 	// io_retry_timeout_in_sec is the timeout in seconds for how long to try and reconnect to an upstream IO provider if a connection is lost.
 	// The typical example is if Containerd has restarted but is expected to come back online. A 0 for this field is interpreted as an infinite
 	// timeout.
-	int32 IO_retry_timeout_in_sec = 17;
+	int32 io_retry_timeout_in_sec = 17;
 }
 
 // ProcessDetails contains additional information about a process. This is the additional
