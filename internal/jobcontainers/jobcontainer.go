@@ -253,12 +253,12 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		Env:  env,
 		Dir:  workDir,
 		Path: absPath,
-		Args: splitArgs(commandLine),
 		SysProcAttr: &syscall.SysProcAttr{
 			// CREATE_BREAKAWAY_FROM_JOB to make sure that we're not inheriting the job object (and by extension its limits)
 			// from whatever process is going to launch the container.
 			CreationFlags: windows.CREATE_NEW_PROCESS_GROUP | windows.CREATE_BREAKAWAY_FROM_JOB,
 			Token:         syscall.Token(token),
+			CmdLine:       commandLine,
 		},
 	}
 	process := newProcess(cmd)

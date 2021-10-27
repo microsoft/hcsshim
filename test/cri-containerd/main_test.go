@@ -1,3 +1,4 @@
+//go:build functional
 // +build functional
 
 package cri_containerd
@@ -55,6 +56,7 @@ const (
 	imageJobContainerHNS     = "cplatpublic.azurecr.io/jobcontainer_hns:latest"
 	imageJobContainerETW     = "cplatpublic.azurecr.io/jobcontainer_etw:latest"
 	imageJobContainerVHD     = "cplatpublic.azurecr.io/jobcontainer_vhd:latest"
+	imageJobContainerCmdline = "cplatpublic.azurecr.io/jobcontainer_cmdline:latest"
 	imageJobContainerWorkDir = "cplatpublic.azurecr.io/jobcontainer_workdir:latest"
 	alpineAspNet             = "mcr.microsoft.com/dotnet/core/aspnet:3.1-alpine3.11"
 	alpineAspnetUpgrade      = "mcr.microsoft.com/dotnet/core/aspnet:3.1.2-alpine3.11"
