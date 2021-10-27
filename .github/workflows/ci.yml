@@ -21,7 +21,6 @@ jobs:
         with:
           version: v1.42.1 # Has fixes for stylecheck configuration https://github.com/golangci/golangci-lint/pull/2017/files
           args: --timeout=5m -v
-          only-new-issues: true
 
   verify-main-vendor:
     runs-on: 'windows-2019'

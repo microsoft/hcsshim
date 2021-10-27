@@ -70,6 +70,8 @@ func NewNpipeIO(ctx context.Context, stdin, stdout, stderr string, terminal bool
 	return nio, nil
 }
 
+// nPipeRetryWriter is an io.Writer that wraps a net.Conn representing a named pipe connection. The retry logic is specifically only for
+// disconnect scenarios (pipe broken, server went away etc.) to attempt to re-establish a connection, and is not for retrying writes on a busy pipe.
 type nPipeRetryWriter struct {
 	ctx context.Context
 	net.Conn
