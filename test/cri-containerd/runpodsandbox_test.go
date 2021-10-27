@@ -978,7 +978,7 @@ func Test_RunPodSandbox_Mount_SandboxDir_NoShare_WCOW(t *testing.T) {
 }
 
 func Test_RunPodSandbox_CPUGroup(t *testing.T) {
-	testutilities.RequiresBuild(t, 20124)
+	testutilities.RequiresBuild(t, osversion.V21H1)
 	ctx := context.Background()
 	presentID := "FA22A12C-36B3-486D-A3E9-BC526C2B450B"
 
