@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -51,12 +50,12 @@ func install(ctx context.Context) error {
 
 		// find all module files, which end with ".ko" extension, and remove extension
 		// for use when calling `modprobe` below.
-		if walkErr := filepath.WalkDir(rootPath, func(path string, d fs.DirEntry, err error) error {
+		if walkErr := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return errors.Wrap(err, "failed to read directory while walking dir")
 			}
-			if !d.IsDir() && filepath.Ext(d.Name()) == moduleExtension {
-				moduleName := strings.TrimSuffix(d.Name(), moduleExtension)
+			if !info.IsDir() && filepath.Ext(info.Name()) == moduleExtension {
+				moduleName := strings.TrimSuffix(info.Name(), moduleExtension)
 				modules = append(modules, moduleName)
 			}
 			return nil
