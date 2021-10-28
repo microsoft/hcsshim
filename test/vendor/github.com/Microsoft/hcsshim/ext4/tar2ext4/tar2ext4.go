@@ -194,7 +194,7 @@ func Convert(r io.Reader, w io.ReadWriteSeeker, options ...Option) error {
 			return err
 		}
 
-		merkleTree, err := dmverity.MerkleTreeWithReader(w)
+		merkleTree, err := dmverity.MerkleTree(bufio.NewReaderSize(w, dmverity.MerkleTreeBufioSize))
 		if err != nil {
 			return errors.Wrap(err, "failed to build merkle tree")
 		}
@@ -269,10 +269,10 @@ func ReadExt4SuperBlock(vhdPath string) (*format.SuperBlock, error) {
 	return &sb, nil
 }
 
-// ConvertAndRootDigest writes a compact ext4 file system image that contains the files in the
+// ConvertAndComputeRootDigest writes a compact ext4 file system image that contains the files in the
 // input tar stream, computes and returns its cryptographic digest. Convert is called with minimal
 // options: ConvertWhiteout and MaximumDiskSize set to dmverity.RecommendedVHDSizeGB.
-func ConvertAndRootDigest(r io.Reader) (string, error) {
+func ConvertAndComputeRootDigest(r io.Reader) (string, error) {
 	out, err := ioutil.TempFile("", "")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary file: %s", err)
@@ -294,7 +294,7 @@ func ConvertAndRootDigest(r io.Reader) (string, error) {
 		return "", fmt.Errorf("failed to seek start on temp file when creating merkle tree: %s", err)
 	}
 
-	tree, err := dmverity.MerkleTreeWithReader(r)
+	tree, err := dmverity.MerkleTree(bufio.NewReaderSize(out, dmverity.MerkleTreeBufioSize))
 	if err != nil {
 		return "", fmt.Errorf("failed to create merkle tree: %s", err)
 	}

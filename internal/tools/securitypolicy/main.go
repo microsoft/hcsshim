@@ -167,7 +167,7 @@ func createPolicyFromConfig(config Config) (securitypolicy.SecurityPolicy, error
 				return p, err
 			}
 
-			hashString, err := tar2ext4.ConvertAndRootDigest(r)
+			hashString, err := tar2ext4.ConvertAndComputeRootDigest(r)
 			if err != nil {
 				return p, err
 			}

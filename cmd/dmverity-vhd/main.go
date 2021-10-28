@@ -213,9 +213,9 @@ var rootHashVHDCommand = cli.Command{
 				return errors.Wrapf(err, "failed to uncompress layer %s", diffID.String())
 			}
 
-			hash, err := tar2ext4.ConvertAndRootDigest(rc)
+			hash, err := tar2ext4.ConvertAndComputeRootDigest(rc)
 			if err != nil {
-				return errors.Wrapf(err, "failed to compute root hash")
+				return errors.Wrap(err, "failed to compute root hash")
 			}
 			fmt.Fprintf(os.Stdout, "Layer %d\nroot hash: %x\n", layerNumber, hash)
 		}
