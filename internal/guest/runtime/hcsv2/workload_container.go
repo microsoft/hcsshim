@@ -40,7 +40,13 @@ func updateSandboxMounts(sbid string, spec *oci.Spec) error {
 
 			_, err := os.Stat(sandboxSource)
 			if os.IsNotExist(err) {
-				if err := os.MkdirAll(sandboxSource, 0755); err != nil {
+				// os.MkdirAll combines the given permissions with the running process's
+				// umask. By default this causes 0777 to become 0755.
+				// Temporarily set the umask of this process to 0 so that we can actually
+				// make all dirs with os.ModePerm permissions.
+				savedUmask := unix.Umask(0)
+				defer unix.Umask(savedUmask)
+				if err := os.MkdirAll(sandboxSource, os.ModePerm); err != nil {
 					return err
 				}
 			}
@@ -68,7 +74,13 @@ func updateHugePageMounts(sbid string, spec *oci.Spec) error {
 
 			_, err := os.Stat(hugePageMountSource)
 			if os.IsNotExist(err) {
-				if err := os.MkdirAll(hugePageMountSource, 0755); err != nil {
+				// os.MkdirAll combines the given permissions with the running process's
+				// umask. By default this causes 0777 to become 0755.
+				// Temporarily set the umask of this process to 0 so that we can actually
+				// make all dirs with os.ModePerm permissions.
+				savedUmask := unix.Umask(0)
+				defer unix.Umask(savedUmask)
+				if err := os.MkdirAll(hugePageMountSource, os.ModePerm); err != nil {
 					return err
 				}
 
