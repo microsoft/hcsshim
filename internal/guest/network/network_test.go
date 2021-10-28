@@ -5,6 +5,7 @@ package network
 import (
 	"context"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -197,7 +198,7 @@ func (t *testFileInfo) Sys() interface{} {
 	return nil
 }
 
-var _ = (fs.FileInfo)(&testFileInfo{})
+var _ = (os.FileInfo)(&testFileInfo{})
 
 func Test_InstanceIDToName(t *testing.T) {
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
@@ -205,8 +206,8 @@ func Test_InstanceIDToName(t *testing.T) {
 	vmBusGUID := "1111-2222-3333-4444"
 	testIfName := "test-eth0"
 
-	vmbusWaitForDevicePath = func(_ context.Context, vmbusGUIDPattern string) (string, error) {
-		vmBusPath := filepath.Join("/sys/bus/vmbus/devices", vmbusGUIDPattern)
+	vmbusWaitForDevicePath = func(_ context.Context, vmBusGUIDPattern string) (string, error) {
+		vmBusPath := filepath.Join("/sys/bus/vmbus/devices", vmBusGUIDPattern)
 		return vmBusPath, nil
 	}
 
@@ -214,7 +215,7 @@ func Test_InstanceIDToName(t *testing.T) {
 		return pattern, nil
 	}
 
-	ioutilReadDir = func(dirname string) ([]fs.FileInfo, error) {
+	ioutilReadDir = func(dirname string) ([]os.FileInfo, error) {
 		info := &testFileInfo{
 			FileName:    testIfName,
 			IsDirectory: false,
@@ -244,12 +245,12 @@ func Test_InstanceIDToName_VPCI(t *testing.T) {
 		return pattern, nil
 	}
 
-	ioutilReadDir = func(dirname string) ([]fs.FileInfo, error) {
+	ioutilReadDir = func(dirname string) ([]os.FileInfo, error) {
 		info := &testFileInfo{
 			FileName:    testIfName,
 			IsDirectory: false,
 		}
-		return []fs.FileInfo{info}, nil
+		return []os.FileInfo{info}, nil
 	}
 	actualIfName, err := InstanceIDToName(ctx, vmBusGUID, true)
 	if err != nil {

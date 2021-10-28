@@ -119,20 +119,23 @@ func InstanceIDToName(ctx context.Context, id string, vpciAssigned bool) (_ stri
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
-	vmbusID := strings.ToLower(id)
-	span.AddAttributes(trace.StringAttribute("adapterInstanceID", vmbusID))
+	vmBusID := strings.ToLower(id)
+	span.AddAttributes(trace.StringAttribute("adapterInstanceID", vmBusID))
 
 	netDevicePath := ""
 	if vpciAssigned {
-		pciDevicePath, err := pciFindDeviceFullPath(ctx, vmbusID)
+		pciDevicePath, err := pciFindDeviceFullPath(ctx, vmBusID)
 		if err != nil {
 			return "", err
 		}
 		pciNetDirPattern := filepath.Join(pciDevicePath, "net")
 		netDevicePath, err = storageWaitForFileMatchingPattern(ctx, pciNetDirPattern)
 	} else {
-		vmBusNetSubPath := filepath.Join(vmbusID, "net")
+		vmBusNetSubPath := filepath.Join(vmBusID, "net")
 		netDevicePath, err = vmbusWaitForDevicePath(ctx, vmBusNetSubPath)
+	}
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to find adapter %v sysfs path", vmBusID)
 	}
 
 	var deviceDirs []os.FileInfo
@@ -148,16 +151,16 @@ func InstanceIDToName(ctx context.Context, id string, vpciAssigned bool) (_ stri
 					continue
 				}
 			} else {
-				return "", errors.Wrapf(err, "failed to read vmbus network device from /sys filesystem for adapter %s", vmbusID)
+				return "", errors.Wrapf(err, "failed to read vmbus network device from /sys filesystem for adapter %s", vmBusID)
 			}
 		}
 		break
 	}
 	if len(deviceDirs) == 0 {
-		return "", errors.Errorf("no interface name found for adapter %s", vmbusID)
+		return "", errors.Errorf("no interface name found for adapter %s", vmBusID)
 	}
 	if len(deviceDirs) > 1 {
-		return "", errors.Errorf("multiple interface names found for adapter %s", vmbusID)
+		return "", errors.Errorf("multiple interface names found for adapter %s", vmBusID)
 	}
 	ifname := deviceDirs[0].Name()
 	log.G(ctx).WithField("ifname", ifname).Debug("resolved ifname")

@@ -41,12 +41,7 @@ func FindDeviceFullPath(ctx context.Context, vmBusGUID string) (string, error) {
 		return "", err
 	}
 
-	pciDevicePath, err := findVMBusPCIDevice(ctx, pciDir)
-	if err != nil {
-		return "", err
-	}
-
-	return pciDevicePath, nil
+	return findVMBusPCIDevice(ctx, pciDir)
 }
 
 // findVMBusPCIDir waits for the pci bus directory matching pattern
