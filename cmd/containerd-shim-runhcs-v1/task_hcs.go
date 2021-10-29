@@ -166,11 +166,6 @@ func newHcsTask(
 	owner := filepath.Base(os.Args[0])
 	isTemplate := oci.ParseAnnotationsSaveAsTemplate(ctx, s)
 
-	io, err := cmd.NewUpstreamIO(ctx, req.ID, req.Stdout, req.Stderr, req.Stdin, req.Terminal)
-	if err != nil {
-		return nil, err
-	}
-
 	var netNS string
 	if s.Windows != nil &&
 		s.Windows.Network != nil {
@@ -186,22 +181,33 @@ func newHcsTask(
 		shimOpts = v.(*runhcsopts.Options)
 	}
 
+	// Default to an infinite timeout (zero value)
+	var ioRetryTimeout time.Duration
+	if shimOpts != nil {
+		ioRetryTimeout = time.Duration(shimOpts.IoRetryTimeoutInSec) * time.Second
+	}
+	io, err := cmd.NewUpstreamIO(ctx, req.ID, req.Stdout, req.Stderr, req.Stdin, req.Terminal, ioRetryTimeout)
+	if err != nil {
+		return nil, err
+	}
+
 	container, resources, err := createContainer(ctx, req.ID, owner, netNS, s, parent, shimOpts)
 	if err != nil {
 		return nil, err
 	}
 
 	ht := &hcsTask{
-		events:     events,
-		id:         req.ID,
-		isWCOW:     oci.IsWCOW(s),
-		c:          container,
-		cr:         resources,
-		ownsHost:   ownsParent,
-		host:       parent,
-		closed:     make(chan struct{}),
-		taskSpec:   s,
-		isTemplate: isTemplate,
+		events:         events,
+		id:             req.ID,
+		isWCOW:         oci.IsWCOW(s),
+		c:              container,
+		cr:             resources,
+		ownsHost:       ownsParent,
+		host:           parent,
+		closed:         make(chan struct{}),
+		taskSpec:       s,
+		isTemplate:     isTemplate,
+		ioRetryTimeout: ioRetryTimeout,
 	}
 	ht.init = newHcsExec(
 		ctx,
@@ -279,7 +285,21 @@ func newClonedHcsTask(
 		return nil, fmt.Errorf("cloned task can only be created inside a windows host")
 	}
 
-	io, err := cmd.NewNpipeIO(ctx, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
+	var shimOpts *runhcsopts.Options
+	if req.Options != nil {
+		v, err := typeurl.UnmarshalAny(req.Options)
+		if err != nil {
+			return nil, err
+		}
+		shimOpts = v.(*runhcsopts.Options)
+	}
+
+	// Default to an infinite timeout (zero value)
+	var ioRetryTimeout time.Duration
+	if shimOpts != nil {
+		ioRetryTimeout = time.Duration(shimOpts.IoRetryTimeoutInSec) * time.Second
+	}
+	io, err := cmd.NewNpipeIO(ctx, req.Stdin, req.Stdout, req.Stderr, req.Terminal, ioRetryTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -433,6 +453,9 @@ type hcsTask struct {
 
 	// taskSpec represents the spec/configuration for this task.
 	taskSpec *specs.Spec
+
+	// ioRetryTimeout is the time for how long to try reconnecting to stdio pipes from containerd.
+	ioRetryTimeout time.Duration
 }
 
 func (ht *hcsTask) ID() string {
@@ -453,7 +476,7 @@ func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest,
 		return errors.Wrapf(errdefs.ErrFailedPrecondition, "exec: '' in task: '%s' must be running to create additional execs", ht.id)
 	}
 
-	io, err := cmd.NewUpstreamIO(ctx, req.ID, req.Stdout, req.Stderr, req.Stdin, req.Terminal)
+	io, err := cmd.NewUpstreamIO(ctx, req.ID, req.Stdout, req.Stderr, req.Stdin, req.Terminal, ht.ioRetryTimeout)
 	if err != nil {
 		return err
 	}

@@ -24,7 +24,7 @@ issues:
       linters:
         - stylecheck
       Text: "ST1003:"
-    
+
     - path: cmd\\ncproxy\\nodenetsvc\\
       linters:
         - stylecheck
