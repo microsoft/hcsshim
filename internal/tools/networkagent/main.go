@@ -23,11 +23,12 @@ import (
 // This is a barebones example of an implementation of the network
 // config agent service that ncproxy talks to. This is solely used to test.
 
-var (
-	configPath = flag.String("config", "", "Path to JSON configuration file.")
+var configPath = flag.String("config", "", "Path to JSON configuration file.")
 
-	prefixLength = "24"
-	ipVersion    = "4"
+const (
+	prefixLengthAsInt uint32 = 24
+	prefixLength             = "24"
+	ipVersion                = "4"
 )
 
 func generateMAC() (string, error) {
@@ -77,12 +78,18 @@ func (s *service) ConfigureContainerNetworking(ctx context.Context, req *nodenet
 		prefixIP, gatewayIP, midIP := generateIPs(prefixLength)
 
 		addNetworkReq := &ncproxygrpc.CreateNetworkRequest{
-			Name:                  req.ContainerID + "_network",
-			Mode:                  ncproxygrpc.CreateNetworkRequest_Transparent,
-			SwitchName:            s.conf.NetworkingSettings.HNSSettings.SwitchName,
-			IpamType:              ncproxygrpc.CreateNetworkRequest_Static,
-			SubnetIpaddressPrefix: []string{prefixIP},
-			DefaultGateway:        gatewayIP,
+			Network: &ncproxygrpc.Network{
+				Settings: &ncproxygrpc.Network_HcnNetwork{
+					HcnNetwork: &ncproxygrpc.HostComputeNetworkSettings{
+						Name:                  req.ContainerID + "_network",
+						Mode:                  ncproxygrpc.HostComputeNetworkSettings_Transparent,
+						SwitchName:            s.conf.NetworkingSettings.HNSSettings.SwitchName,
+						IpamType:              ncproxygrpc.HostComputeNetworkSettings_Static,
+						SubnetIpaddressPrefix: []string{prefixIP},
+						DefaultGateway:        gatewayIP,
+					},
+				},
+			},
 		}
 
 		networkResp, err := s.client.CreateNetwork(ctx, addNetworkReq)
@@ -103,12 +110,20 @@ func (s *service) ConfigureContainerNetworking(ctx context.Context, req *nodenet
 
 		name := req.ContainerID + "_endpoint"
 		endpointCreateReq := &ncproxygrpc.CreateEndpointRequest{
-			Name:                  name,
-			Macaddress:            mac,
-			Ipaddress:             midIP,
-			IpaddressPrefixlength: prefixLength,
-			NetworkName:           network.Name,
-			IovPolicySettings:     s.conf.NetworkingSettings.HNSSettings.IOVSettings,
+			EndpointSettings: &ncproxygrpc.EndpointSettings{
+				Settings: &ncproxygrpc.EndpointSettings_HcnEndpoint{
+					HcnEndpoint: &ncproxygrpc.HcnEndpointSettings{
+						Name:                  name,
+						Macaddress:            mac,
+						Ipaddress:             midIP,
+						IpaddressPrefixlength: prefixLengthAsInt,
+						NetworkName:           network.Name,
+						Policies: &ncproxygrpc.HcnEndpointPolicies{
+							IovPolicySettings: s.conf.NetworkingSettings.HNSSettings.IOVSettings,
+						},
+					},
+				},
+			},
 		}
 
 		endpt, err := s.client.CreateEndpoint(ctx, endpointCreateReq)
@@ -152,12 +167,21 @@ func (s *service) ConfigureContainerNetworking(ctx context.Context, req *nodenet
 		}
 
 		for _, endpoint := range resp.Endpoints {
+			if endpoint.Endpoint == nil {
+				log.G(ctx).WithField("id", endpoint.ID).Warn("failed to get endpoint settings")
+				continue
+			}
+			ep := endpoint.Endpoint.GetHcnEndpoint()
+			if ep == nil {
+				log.G(ctx).WithField("name", endpoint.ID).Warn("failed to find endpoint to delete")
+				continue
+			}
 			if endpoint.Namespace == req.NetworkNamespaceID {
 				deleteEndptReq := &ncproxygrpc.DeleteEndpointRequest{
-					Name: endpoint.Name,
+					Name: ep.Name,
 				}
 				if _, err := s.client.DeleteEndpoint(ctx, deleteEndptReq); err != nil {
-					log.G(ctx).WithField("name", endpoint.Name).Warn("failed to delete endpoint")
+					log.G(ctx).WithField("name", ep.Name).Warn("failed to delete endpoint")
 				}
 			}
 		}
@@ -191,6 +215,15 @@ func (s *service) addHNSHelper(ctx context.Context, req *nodenetsvc.ConfigureNet
 	log.G(ctx).WithField("endpts", resp.Endpoints).Info("ConfigureNetworking addrequest")
 
 	for _, endpoint := range resp.Endpoints {
+		if endpoint.Endpoint == nil {
+			log.G(ctx).WithField("id", endpoint.ID).Warn("failed to get endpoint settings")
+			continue
+		}
+		ep := endpoint.Endpoint.GetHcnEndpoint()
+		if ep == nil {
+			log.G(ctx).WithField("name", endpoint.ID).Warn("failed to find endpoint")
+			continue
+		}
 		if endpoint.Namespace == containerNamespaceID {
 			// add endpoints that are in the namespace as NICs
 			nicID, err := guid.NewV4()
@@ -200,12 +233,12 @@ func (s *service) addHNSHelper(ctx context.Context, req *nodenetsvc.ConfigureNet
 			nsReq := &ncproxygrpc.AddNICRequest{
 				ContainerID:  req.ContainerID,
 				NicID:        nicID.String(),
-				EndpointName: endpoint.Name,
+				EndpointName: ep.Name,
 			}
 			if _, err := s.client.AddNIC(ctx, nsReq); err != nil {
 				return nil, err
 			}
-			s.endpointToNicID[endpoint.Name] = nicID.String()
+			s.endpointToNicID[ep.Name] = nicID.String()
 		}
 
 	}
@@ -227,22 +260,31 @@ func (s *service) teardownHelper(ctx context.Context, req *nodenetsvc.ConfigureN
 		return nil, err
 	}
 	for _, endpoint := range resp.Endpoints {
+		if endpoint.Endpoint == nil {
+			log.G(ctx).WithField("id", endpoint.ID).Warn("failed to get endpoint settings")
+			continue
+		}
+		ep := endpoint.Endpoint.GetHcnEndpoint()
+		if ep == nil {
+			log.G(ctx).WithField("name", endpoint.ID).Warn("failed to find endpoint")
+			continue
+		}
 		if endpoint.Namespace == containerNamespaceID {
-			nicID, ok := s.endpointToNicID[endpoint.Name]
+			nicID, ok := s.endpointToNicID[ep.Name]
 			if !ok {
-				log.G(ctx).WithField("name", endpoint.Name).Warn("endpoint was not assigned a NIC ID previously")
+				log.G(ctx).WithField("name", ep.Name).Warn("endpoint was not assigned a NIC ID previously")
 				continue
 			}
 			// remove endpoints that are in the namespace as NICs
 			nsReq := &ncproxygrpc.DeleteNICRequest{
 				ContainerID:  req.ContainerID,
 				NicID:        nicID,
-				EndpointName: endpoint.Name,
+				EndpointName: ep.Name,
 			}
 			if _, err := s.client.DeleteNIC(ctx, nsReq); err != nil {
-				log.G(ctx).WithField("name", endpoint.Name).Warn("failed to delete endpoint nic")
+				log.G(ctx).WithField("name", ep.Name).Warn("failed to delete endpoint nic")
 			}
-			delete(s.endpointToNicID, endpoint.Name)
+			delete(s.endpointToNicID, ep.Name)
 		}
 	}
 	return &nodenetsvc.ConfigureNetworkingResponse{}, nil

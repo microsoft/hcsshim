@@ -31,7 +31,7 @@ message ModifyNICRequest {
     string container_id = 1;
     string nic_id = 2;
     string endpoint_name = 3;
-    IovEndpointPolicySetting iov_policy_settings = 4;
+    EndpointSettings endpoint_settings = 4;
 }
 
 message ModifyNICResponse {}
@@ -45,12 +45,26 @@ message DeleteNICRequest {
 message DeleteNICResponse {}
 
 message CreateNetworkRequest {
+    Network network = 1;
+}
+
+message Network {
+    oneof settings {
+        HostComputeNetworkSettings hcn_network = 1;
+        NCProxyNetworkSettings ncproxy_network = 2;
+    }
+}
+
+message NCProxyNetworkSettings {
+    string name = 1; 
+}
+
+message HostComputeNetworkSettings {
     enum NetworkMode
     {
         Transparent = 0;
-        NAT = 1;
+        NAT = 1; 
     }
-
     enum IpamType
     {
         Static = 0;
@@ -86,15 +100,53 @@ message DnsSetting {
 }
 
 message CreateEndpointRequest {
-    reserved 8 to 15;
+    EndpointSettings endpoint_settings = 1;
+}
+
+message EndpointSettings {
+    oneof settings {
+        HcnEndpointSettings hcn_endpoint = 1;
+        NCProxyEndpointSettings ncproxy_endpoint = 2;
+    }
+}
+
+message HcnEndpointResponse {
+    string namespace = 1; 
+    string id = 2; 
+    HcnEndpointSettings settings = 3; 
+}
+
+message HcnEndpointSettings {
     string name = 1;
     string macaddress = 2;
     string ipaddress = 3;
-    string ipaddress_prefixlength = 4;
+    uint32 ipaddress_prefixlength = 4;
+    string network_name = 5; 
+    HcnEndpointPolicies policies = 6; 
+    DnsSetting dns_setting = 7;
+}
+
+message HcnEndpointPolicies {
+    reserved 3 to 7; 
+    PortNameEndpointPolicySetting portname_policy_setting = 1;
+    IovEndpointPolicySetting iov_policy_settings = 2;
+}
+
+message NCProxyEndpointSettings {
+    string name = 1;
+    string macaddress = 2;
+    string ipaddress = 3;
+    uint32 ipaddress_prefixlength = 4;
     string network_name = 5;
-    PortNameEndpointPolicySetting portname_policy_setting = 6;
-    IovEndpointPolicySetting iov_policy_settings = 7;
-    DnsSetting dns_setting = 16;
+    string default_gateway = 6;
+    oneof device_details {
+        PCIDeviceDetails pci_device_details = 7;
+    }
+}
+
+message PCIDeviceDetails {
+    string device_id = 1;
+    uint32 virtual_function_index = 2;
 }
 
 message CreateEndpointResponse{
@@ -125,11 +177,9 @@ message GetEndpointRequest{
 }
 
 message GetEndpointResponse{
-    string id = 1;
-    string name = 2;
-    string network = 3; // GUID
-    string namespace = 4; // GUID
-    DnsSetting dns_setting = 5;
+    string namespace = 1; 
+    string id = 2; 
+    EndpointSettings endpoint = 3;
 }
 
 message GetNetworkRequest{
@@ -138,7 +188,7 @@ message GetNetworkRequest{
 
 message GetNetworkResponse{
     string id = 1;
-    string name = 2;
+    Network network = 2;
 }
 
 message GetEndpointsRequest{}

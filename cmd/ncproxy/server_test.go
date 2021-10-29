@@ -35,19 +35,37 @@ func exists(target string, list []string) bool {
 }
 
 func networkExists(targetName string, networks []*ncproxygrpc.GetNetworkResponse) bool {
-	for _, n := range networks {
-		if n.Name == targetName {
-			return true
+	for _, resp := range networks {
+		n := resp.Network.Settings
+		switch network := n.(type) {
+		case *ncproxygrpc.Network_HcnNetwork:
+			if network.HcnNetwork != nil && network.HcnNetwork.Name == targetName {
+				return true
+			}
+		case *ncproxygrpc.Network_NcproxyNetwork:
+			if network.NcproxyNetwork != nil && network.NcproxyNetwork.Name == targetName {
+				return true
+			}
 		}
+
 	}
 	return false
 }
 
 func endpointExists(targetName string, endpoints []*ncproxygrpc.GetEndpointResponse) bool {
-	for _, ep := range endpoints {
-		if ep.Name == targetName {
-			return true
+	for _, resp := range endpoints {
+		ep := resp.Endpoint.Settings
+		switch endpt := ep.(type) {
+		case *ncproxygrpc.EndpointSettings_HcnEndpoint:
+			if endpt.HcnEndpoint != nil && endpt.HcnEndpoint.Name == targetName {
+				return true
+			}
+		case *ncproxygrpc.EndpointSettings_NcproxyEndpoint:
+			if resp.ID == targetName {
+				return true
+			}
 		}
+
 	}
 	return false
 }
@@ -97,18 +115,37 @@ func createTestNATNetwork(name string) (*hcn.HostComputeNetwork, error) {
 	return network.Create()
 }
 
-func TestAddNIC(t *testing.T) {
+func TestAddNIC_HCN(t *testing.T) {
 	ctx := context.Background()
-
-	// setup test ncproxy grpc service
-	agentCache := newComputeAgentCache()
-	gService := newGRPCService(agentCache)
 
 	var (
 		containerID      = t.Name() + "-containerID"
 		testNICID        = t.Name() + "-nicID"
 		testEndpointName = t.Name() + "-endpoint"
 	)
+
+	// setup test ncproxy grpc service
+	agentCache := newComputeAgentCache()
+	gService := newGRPCService(agentCache)
+
+	// test network
+	network, err := createTestNATNetwork(t.Name() + "network")
+	if err != nil {
+		t.Fatalf("failed to create test network with %v", err)
+	}
+	defer func() {
+		_ = network.Delete()
+	}()
+
+	endpoint, err := createTestEndpoint(testEndpointName, network.Id)
+	if err != nil {
+		t.Fatalf("failed to create test endpoint with %v", err)
+	}
+	// defer cleanup in case of error. ignore error from the delete call here
+	// since we may have already successfully deleted the endpoint.
+	defer func() {
+		_ = endpoint.Delete()
+	}()
 
 	// create mocked compute agent service
 	computeAgentCtrl := gomock.NewController(t)
@@ -164,7 +201,6 @@ func TestAddNIC(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(_ *testing.T) {
-
 			req := &ncproxygrpc.AddNICRequest{
 				ContainerID:  test.containerID,
 				NicID:        test.nicID,
@@ -182,18 +218,37 @@ func TestAddNIC(t *testing.T) {
 	}
 }
 
-func TestDeleteNIC(t *testing.T) {
+func TestDeleteNIC_HCN(t *testing.T) {
 	ctx := context.Background()
-
-	// setup test ncproxy grpc service
-	agentCache := newComputeAgentCache()
-	gService := newGRPCService(agentCache)
 
 	var (
 		containerID      = t.Name() + "-containerID"
 		testNICID        = t.Name() + "-nicID"
 		testEndpointName = t.Name() + "-endpoint"
 	)
+
+	// setup test ncproxy grpc service
+	agentCache := newComputeAgentCache()
+	gService := newGRPCService(agentCache)
+
+	// test network
+	network, err := createTestNATNetwork(t.Name() + "network")
+	if err != nil {
+		t.Fatalf("failed to create test network with %v", err)
+	}
+	defer func() {
+		_ = network.Delete()
+	}()
+
+	endpoint, err := createTestEndpoint(testEndpointName, network.Id)
+	if err != nil {
+		t.Fatalf("failed to create test endpoint with %v", err)
+	}
+	// defer cleanup in case of error. ignore error from the delete call here
+	// since we may have already successfully deleted the endpoint.
+	defer func() {
+		_ = endpoint.Delete()
+	}()
 
 	// create mocked compute agent service
 	computeAgentCtrl := gomock.NewController(t)
@@ -266,7 +321,7 @@ func TestDeleteNIC(t *testing.T) {
 	}
 }
 
-func TestModifyNIC(t *testing.T) {
+func TestModifyNIC_HCN(t *testing.T) {
 	// support for setting IOV policy was added in 21H1
 	if osversion.Build() < osversion.V21H1 {
 		t.Skip("Requires build +21H1")
@@ -383,11 +438,20 @@ func TestModifyNIC(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(_ *testing.T) {
+			endpoint := &ncproxygrpc.HcnEndpointSettings{
+				Policies: &ncproxygrpc.HcnEndpointPolicies{
+					IovPolicySettings: test.iovPolicySettings,
+				},
+			}
 			req := &ncproxygrpc.ModifyNICRequest{
-				ContainerID:       test.containerID,
-				NicID:             test.nicID,
-				EndpointName:      test.endpointName,
-				IovPolicySettings: test.iovPolicySettings,
+				ContainerID:  test.containerID,
+				NicID:        test.nicID,
+				EndpointName: test.endpointName,
+				EndpointSettings: &ncproxygrpc.EndpointSettings{
+					Settings: &ncproxygrpc.EndpointSettings_HcnEndpoint{
+						HcnEndpoint: endpoint,
+					},
+				},
 			}
 
 			_, err := gService.ModifyNIC(ctx, req)
@@ -401,7 +465,7 @@ func TestModifyNIC(t *testing.T) {
 	}
 }
 
-func TestCreateNetwork(t *testing.T) {
+func TestCreateNetwork_HCN(t *testing.T) {
 	ctx := context.Background()
 
 	// setup test ncproxy grpc service
@@ -428,9 +492,16 @@ func TestCreateNetwork(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(_ *testing.T) {
-			req := &ncproxygrpc.CreateNetworkRequest{
+			network := &ncproxygrpc.HostComputeNetworkSettings{
 				Name: test.networkName,
-				Mode: ncproxygrpc.CreateNetworkRequest_NAT,
+				Mode: ncproxygrpc.HostComputeNetworkSettings_NAT,
+			}
+			req := &ncproxygrpc.CreateNetworkRequest{
+				Network: &ncproxygrpc.Network{
+					Settings: &ncproxygrpc.Network_HcnNetwork{
+						HcnNetwork: network,
+					},
+				},
 			}
 			_, err := gService.CreateNetwork(ctx, req)
 			if test.errorExpected && err == nil {
@@ -455,7 +526,7 @@ func TestCreateNetwork(t *testing.T) {
 	}
 }
 
-func TestCreateEndpoint(t *testing.T) {
+func TestCreateEndpoint_HCN(t *testing.T) {
 	ctx := context.Background()
 
 	// setup test ncproxy grpc service
@@ -514,12 +585,19 @@ func TestCreateEndpoint(t *testing.T) {
 	for i, test := range tests {
 		t.Run(test.name, func(_ *testing.T) {
 			endpointName := t.Name() + "-endpoint-" + strconv.Itoa(i)
-			req := &ncproxygrpc.CreateEndpointRequest{
+			endpoint := &ncproxygrpc.HcnEndpointSettings{
 				Name:                  endpointName,
 				Macaddress:            test.macaddress,
 				Ipaddress:             test.ipaddress,
-				IpaddressPrefixlength: "24",
+				IpaddressPrefixlength: 24,
 				NetworkName:           test.networkName,
+			}
+			req := &ncproxygrpc.CreateEndpointRequest{
+				EndpointSettings: &ncproxygrpc.EndpointSettings{
+					Settings: &ncproxygrpc.EndpointSettings_HcnEndpoint{
+						HcnEndpoint: endpoint,
+					},
+				},
 			}
 
 			_, err = gService.CreateEndpoint(ctx, req)
