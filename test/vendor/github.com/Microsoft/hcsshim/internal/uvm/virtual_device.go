@@ -74,13 +74,16 @@ func (vpci *VPCIDevice) Release(ctx context.Context) error {
 // and the VPCIDevice is returned.
 // Otherwise, a new request is made to assign the target device indicated by the deviceID
 // onto the UVM. A new VPCIDevice entry is made on the UVM and the VPCIDevice is returned
-// to the caller
-func (uvm *UtilityVM) AssignDevice(ctx context.Context, deviceID string, index uint16) (*VPCIDevice, error) {
-	guid, err := guid.NewV4()
-	if err != nil {
-		return nil, err
+// to the caller.
+// Allow callers to specify the vmbus guid they want the device to show up with.
+func (uvm *UtilityVM) AssignDevice(ctx context.Context, deviceID string, index uint16, vmBusGUID string) (*VPCIDevice, error) {
+	if vmBusGUID == "" {
+		guid, err := guid.NewV4()
+		if err != nil {
+			return nil, err
+		}
+		vmBusGUID = guid.String()
 	}
-	vmBusGUID := guid.String()
 
 	key := VPCIDeviceKey{
 		deviceInstanceID:     deviceID,

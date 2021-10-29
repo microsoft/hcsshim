@@ -13,7 +13,7 @@ type service struct {
 	client               ncproxygrpc.NetworkConfigProxyClient
 	containerToNamespace map[string]string
 	endpointToNicID      map[string]string
-	containerToNetwork   map[string]string
+	containerToNetwork   map[string][]string
 }
 
 type hnsSettings struct {
@@ -21,8 +21,14 @@ type hnsSettings struct {
 	IOVSettings *ncproxygrpc.IovEndpointPolicySetting `json:"iov_settings,omitempty"`
 }
 
+type ncproxynetworkingSettings struct {
+	DeviceID             string `json:"device_id,omitempty"`
+	VirtualFunctionIndex uint32 `json:"virtual_function_index,omitempty"`
+}
+
 type networkingSettings struct {
-	HNSSettings *hnsSettings `json:"hns_settings,omitempty"`
+	HNSSettings               *hnsSettings               `json:"hns_settings,omitempty"`
+	NCProxyNetworkingSettings *ncproxynetworkingSettings `json:"ncproxy_networking_settings,omitempty"`
 }
 
 type config struct {

@@ -1,4 +1,4 @@
-package main
+package ncproxystore
 
 import (
 	bolt "go.etcd.io/bbolt"
@@ -7,7 +7,10 @@ import (
 const schemaVersion = "v1"
 
 var (
-	bucketKeyVersion      = []byte(schemaVersion)
+	bucketKeyVersion = []byte(schemaVersion)
+
+	bucketKeyNetwork      = []byte("network")
+	bucketKeyEndpoint     = []byte("endpoint")
 	bucketKeyComputeAgent = []byte("computeagent")
 )
 
@@ -47,6 +50,22 @@ func createBucketIfNotExists(tx *bolt.Tx, keys ...[]byte) (*bolt.Bucket, error) 
 	}
 
 	return bkt, nil
+}
+
+func createNetworkBucket(tx *bolt.Tx) (*bolt.Bucket, error) {
+	return createBucketIfNotExists(tx, bucketKeyVersion, bucketKeyNetwork)
+}
+
+func getNetworkBucket(tx *bolt.Tx) *bolt.Bucket {
+	return getBucket(tx, bucketKeyVersion, bucketKeyNetwork)
+}
+
+func createEndpointBucket(tx *bolt.Tx) (*bolt.Bucket, error) {
+	return createBucketIfNotExists(tx, bucketKeyVersion, bucketKeyEndpoint)
+}
+
+func getEndpointBucket(tx *bolt.Tx) *bolt.Bucket {
+	return getBucket(tx, bucketKeyVersion, bucketKeyEndpoint)
 }
 
 func createComputeAgentBucket(tx *bolt.Tx) (*bolt.Bucket, error) {

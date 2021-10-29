@@ -95,3 +95,30 @@ func readCsPipeOutput(l net.Listener, errChan chan<- error, result *[]string) {
 
 	errChan <- nil
 }
+
+// readCsPipeOutput is a helper function that connects to a listener and reads
+// the connection's comma separated output until done. resulting comma separated
+// values are returned in the `result` param. The `errChan` param is used to
+// propagate an errors to the calling function.f
+func readAllPipeOutput(l net.Listener, errChan chan<- error, result *string) {
+	defer close(errChan)
+	c, err := l.Accept()
+	if err != nil {
+		errChan <- errors.Wrapf(err, "failed to accept named pipe")
+		return
+	}
+	bytes, err := ioutil.ReadAll(c)
+	if err != nil {
+		errChan <- err
+		return
+	}
+
+	*result = string(bytes)
+
+	if len(*result) == 0 {
+		errChan <- noExecOutputErr
+		return
+	}
+
+	errChan <- nil
+}

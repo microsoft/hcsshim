@@ -59,10 +59,10 @@ func execModprobeInstallDriver(ctx context.Context, vm *uvm.UtilityVM, driverDir
 	}
 	defer l.Close()
 
-	var pipeResults []string
+	var stderrOutput string
 	errChan := make(chan error)
 
-	go readCsPipeOutput(l, errChan, &pipeResults)
+	go readAllPipeOutput(l, errChan, &stderrOutput)
 
 	args := []string{
 		"/bin/install-drivers",
@@ -73,19 +73,24 @@ func execModprobeInstallDriver(ctx context.Context, vm *uvm.UtilityVM, driverDir
 		Stderr: p,
 	}
 
-	exitCode, err := cmd.ExecInUvm(ctx, vm, req)
-	if err != nil && err != noExecOutputErr {
-		return errors.Wrapf(err, "failed to install driver %s in uvm with exit code %d", driverDir, exitCode)
-	}
+	var (
+		execErr  error
+		exitCode int
+	)
+	exitCode, execErr = cmd.ExecInUvm(ctx, vm, req)
 
 	// wait to finish parsing stdout results
 	select {
 	case err := <-errChan:
 		if err != nil {
-			return err
+			return errors.Wrap(err, execErr.Error())
 		}
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.Wrap(ctx.Err(), execErr.Error())
+	}
+
+	if execErr != nil && execErr != noExecOutputErr {
+		return errors.Wrapf(execErr, "failed to install driver %s in uvm with exit code %d: %v", driverDir, exitCode, stderrOutput)
 	}
 
 	log.G(ctx).WithField("added drivers", driverDir).Debug("installed drivers")

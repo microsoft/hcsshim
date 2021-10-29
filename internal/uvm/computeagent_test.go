@@ -6,6 +6,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/computeagent"
+	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/containerd/typeurl"
@@ -28,11 +29,19 @@ func (t *testUtilityVM) UpdateNIC(ctx context.Context, id string, settings *hcss
 	return nil
 }
 
-func (t *testUtilityVM) AssignDevice(ctx context.Context, deviceID string, index uint16) (*VPCIDevice, error) {
+func (t *testUtilityVM) AssignDevice(ctx context.Context, deviceID string, index uint16, vmBusGUID string) (*VPCIDevice, error) {
 	return &VPCIDevice{}, nil
 }
 
 func (t *testUtilityVM) RemoveDevice(ctx context.Context, deviceID string, index uint16) error {
+	return nil
+}
+
+func (t *testUtilityVM) AddNICInGuest(ctx context.Context, cfg *guestrequest.LCOWNetworkAdapter) error {
+	return nil
+}
+
+func (t *testUtilityVM) RemoveNICInGuest(ctx context.Context, cfg *guestrequest.LCOWNetworkAdapter) error {
 	return nil
 }
 
