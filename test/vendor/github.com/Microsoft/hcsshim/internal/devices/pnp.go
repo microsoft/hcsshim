@@ -67,46 +67,6 @@ func execPnPInstallDriver(ctx context.Context, vm *uvm.UtilityVM, driverDir stri
 	return nil
 }
 
-func execModprobeInstallDriver(ctx context.Context, vm *uvm.UtilityVM, driverDir string) error {
-	p, l, err := cmd.CreateNamedPipeListener()
-	if err != nil {
-		return err
-	}
-	defer l.Close()
-
-	var pipeResults []string
-	errChan := make(chan error)
-
-	go readCsPipeOutput(l, errChan, &pipeResults)
-
-	args := []string{
-		"/bin/install-drivers",
-		driverDir,
-	}
-	req := &cmd.CmdProcessRequest{
-		Args:   args,
-		Stderr: p,
-	}
-
-	exitCode, err := cmd.ExecInUvm(ctx, vm, req)
-	if err != nil && err != noExecOutputErr {
-		return errors.Wrapf(err, "failed to install driver %s in uvm with exit code %d", driverDir, exitCode)
-	}
-
-	// wait to finish parsing stdout results
-	select {
-	case err := <-errChan:
-		if err != nil {
-			return err
-		}
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-
-	log.G(ctx).WithField("added drivers", driverDir).Debug("installed drivers")
-	return nil
-}
-
 // readCsPipeOutput is a helper function that connects to a listener and reads
 // the connection's comma separated output until done. resulting comma separated
 // values are returned in the `result` param. The `errChan` param is used to
