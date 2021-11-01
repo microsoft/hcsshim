@@ -21,6 +21,11 @@ const (
 	CreateReadOnly CreateFlags = 1 << iota
 )
 
+var (
+	removeDeviceWrapper = removeDevice
+	openMapperWrapper   = openMapper
+)
+
 const (
 	_IOC_WRITE    = 1
 	_IOC_READ     = 2
@@ -225,7 +230,7 @@ func makeTableIoctl(name string, targets []Target) *dmIoctl {
 // CreateDevice creates a device-mapper device with the given target spec. It returns
 // the path of the new device node.
 func CreateDevice(name string, flags CreateFlags, targets []Target) (_ string, err error) {
-	f, err := openMapper()
+	f, err := openMapperWrapper()
 	if err != nil {
 		return "", err
 	}
@@ -240,7 +245,7 @@ func CreateDevice(name string, flags CreateFlags, targets []Target) (_ string, e
 	}
 	defer func() {
 		if err != nil {
-			removeDevice(f, name)
+			removeDeviceWrapper(f, name)
 		}
 	}()
 
@@ -273,13 +278,13 @@ func CreateDevice(name string, flags CreateFlags, targets []Target) (_ string, e
 // RemoveDevice removes a device-mapper device and its associated device node.
 func RemoveDevice(name string) (err error) {
 	rm := func() error {
-		f, err := openMapper()
+		f, err := openMapperWrapper()
 		if err != nil {
 			return err
 		}
 		defer f.Close()
 		os.Remove(path.Join("/dev/mapper", name))
-		return removeDevice(f, name)
+		return removeDeviceWrapper(f, name)
 	}
 
 	// This is workaround for "device or resource busy" error, which occasionally happens after the device mapper

@@ -4,6 +4,8 @@ package devicemapper
 
 import (
 	"flag"
+	"fmt"
+	"io/ioutil"
 	"os"
 	"testing"
 	"unsafe"
@@ -14,6 +16,11 @@ import (
 var (
 	integration = flag.Bool("integration", false, "run integration tests")
 )
+
+func clearTestDependencies() {
+	removeDeviceWrapper = removeDevice
+	openMapperWrapper = openMapper
+}
 
 func TestMain(m *testing.M) {
 	flag.Parse()
@@ -75,6 +82,8 @@ func createDevice(name string, flags CreateFlags, targets []Target) (*device, er
 }
 
 func TestCreateError(t *testing.T) {
+	clearTestDependencies()
+
 	if !*integration {
 		t.Skip()
 	}
@@ -94,6 +103,8 @@ func TestCreateError(t *testing.T) {
 }
 
 func TestReadOnlyError(t *testing.T) {
+	clearTestDependencies()
+
 	if !*integration {
 		t.Skip()
 	}
@@ -113,6 +124,8 @@ func TestReadOnlyError(t *testing.T) {
 }
 
 func TestLinearError(t *testing.T) {
+	clearTestDependencies()
+
 	if !*integration {
 		t.Skip()
 	}
@@ -138,5 +151,41 @@ func TestLinearError(t *testing.T) {
 	err = b.Close()
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRemoveDeviceRetries(t *testing.T) {
+	clearTestDependencies()
+
+	rmDeviceCalled := false
+	retryCalled := false
+	// Overrides openMapper to return temp file handle
+	openMapperWrapper = func() (*os.File, error) {
+		tmpFile, err := ioutil.TempFile("", "")
+		if err != nil {
+			return nil, err
+		}
+		return tmpFile, nil
+	}
+	removeDeviceWrapper = func(_ *os.File, name string) error {
+		if !rmDeviceCalled {
+			rmDeviceCalled = true
+			return fmt.Errorf("device-mapper device remove: device or resource busy")
+		}
+		if !retryCalled {
+			retryCalled = true
+			return nil
+		}
+		return nil
+	}
+
+	if err := RemoveDevice("test"); err != nil {
+		t.Fatalf("expected no error, got: %s", err)
+	}
+	if !rmDeviceCalled {
+		t.Fatalf("expected removeDevice to be called at least once")
+	}
+	if !retryCalled {
+		t.Fatalf("expected removeDevice to be retried after initial failure")
 	}
 }
