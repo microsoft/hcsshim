@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 	"time"
 	"unsafe"
 
@@ -284,7 +285,7 @@ func RemoveDevice(name string) (err error) {
 	// This is workaround for "device or resource busy" error, which occasionally happens after the device mapper
 	// target has been unmounted.
 	for i := 0; i < 10; i++ {
-		if err = rm(); err != nil {
+		if err = rm(); err != nil && strings.Contains(err.Error(), "device or resource busy") {
 			time.Sleep(10 * time.Millisecond)
 			continue
 		}
