@@ -4,7 +4,11 @@ package network
 
 import (
 	"context"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 )
 
 func Test_GenerateResolvConfContent(t *testing.T) {
@@ -163,5 +167,96 @@ ff02::2 ip6-allrouters
 				t.Fatalf("expected content: %q got: %q", tc.expectedContent, c)
 			}
 		})
+	}
+}
+
+// create a test FileInfo so we can return back a value to ReadDir
+type testFileInfo struct {
+	FileName    string
+	IsDirectory bool
+}
+
+func (t *testFileInfo) Name() string {
+	return t.FileName
+}
+func (t *testFileInfo) Size() int64 {
+	return 0
+}
+func (t *testFileInfo) Mode() fs.FileMode {
+	if t.IsDirectory {
+		return fs.ModeDir
+	}
+	return 0
+}
+func (t *testFileInfo) ModTime() time.Time {
+	return time.Now()
+}
+func (t *testFileInfo) IsDir() bool {
+	return t.IsDirectory
+}
+func (t *testFileInfo) Sys() interface{} {
+	return nil
+}
+
+var _ = (os.FileInfo)(&testFileInfo{})
+
+func Test_InstanceIDToName(t *testing.T) {
+	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+
+	vmBusGUID := "1111-2222-3333-4444"
+	testIfName := "test-eth0"
+
+	vmbusWaitForDevicePath = func(_ context.Context, vmBusGUIDPattern string) (string, error) {
+		vmBusPath := filepath.Join("/sys/bus/vmbus/devices", vmBusGUIDPattern)
+		return vmBusPath, nil
+	}
+
+	storageWaitForFileMatchingPattern = func(_ context.Context, pattern string) (string, error) {
+		return pattern, nil
+	}
+
+	ioutilReadDir = func(dirname string) ([]os.FileInfo, error) {
+		info := &testFileInfo{
+			FileName:    testIfName,
+			IsDirectory: false,
+		}
+		return []fs.FileInfo{info}, nil
+	}
+	actualIfName, err := InstanceIDToName(ctx, vmBusGUID, false)
+	if err != nil {
+		t.Fatalf("expected no error, instead got %v", err)
+	}
+	if actualIfName != testIfName {
+		t.Fatalf("expected to get %v ifname, instead got %v", testIfName, actualIfName)
+	}
+}
+
+func Test_InstanceIDToName_VPCI(t *testing.T) {
+	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+
+	vmBusGUID := "1111-2222-3333-4444"
+	testIfName := "test-eth0-vpci"
+
+	pciFindDeviceFullPath = func(_ context.Context, vmBusGUID string) (string, error) {
+		return filepath.Join("/sys/bus/vmbus/devices", vmBusGUID), nil
+	}
+
+	storageWaitForFileMatchingPattern = func(_ context.Context, pattern string) (string, error) {
+		return pattern, nil
+	}
+
+	ioutilReadDir = func(dirname string) ([]os.FileInfo, error) {
+		info := &testFileInfo{
+			FileName:    testIfName,
+			IsDirectory: false,
+		}
+		return []os.FileInfo{info}, nil
+	}
+	actualIfName, err := InstanceIDToName(ctx, vmBusGUID, true)
+	if err != nil {
+		t.Fatalf("expected no error, instead got %v", err)
+	}
+	if actualIfName != testIfName {
+		t.Fatalf("expected to get %v ifname, instead got %v", testIfName, actualIfName)
 	}
 }
