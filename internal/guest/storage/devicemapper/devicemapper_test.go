@@ -4,9 +4,9 @@ package devicemapper
 
 import (
 	"flag"
-	"fmt"
 	"io/ioutil"
 	"os"
+	"syscall"
 	"testing"
 	"unsafe"
 
@@ -170,7 +170,7 @@ func TestRemoveDeviceRetries(t *testing.T) {
 	removeDeviceWrapper = func(_ *os.File, name string) error {
 		if !rmDeviceCalled {
 			rmDeviceCalled = true
-			return fmt.Errorf("device-mapper device remove: device or resource busy")
+			return syscall.EBUSY
 		}
 		if !retryCalled {
 			retryCalled = true
