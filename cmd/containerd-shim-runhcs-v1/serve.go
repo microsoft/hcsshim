@@ -82,8 +82,24 @@ var serveCommand = cli.Command{
 			shimOpts = newShimOpts
 		}
 
+		if shimOpts.Debug && shimOpts.LogLevel != "" {
+			logrus.Warning("Both Debug and LogLevel specified, Debug will be overriden")
+		}
+
+		// For now keep supporting the debug option, this used to be the only way to specify a different logging
+		// level for the shim.
 		if shimOpts.Debug {
 			logrus.SetLevel(logrus.DebugLevel)
+		}
+
+		// If log level is specified, set the corresponding logrus logging level. This overrides the debug option
+		// (unless the level being asked for IS debug also, then this doesn't do much).
+		if shimOpts.LogLevel != "" {
+			lvl, err := logrus.ParseLevel(shimOpts.LogLevel)
+			if err != nil {
+				return errors.Wrapf(err, "failed to parse shim log level %q", shimOpts.LogLevel)
+			}
+			logrus.SetLevel(lvl)
 		}
 
 		switch shimOpts.DebugType {
