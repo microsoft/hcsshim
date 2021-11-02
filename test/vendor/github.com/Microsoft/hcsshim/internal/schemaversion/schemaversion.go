@@ -21,6 +21,11 @@ func SchemaV21() *hcsschema.Version {
 	return &hcsschema.Version{Major: 2, Minor: 1}
 }
 
+// SchemaV25  makes it easy for callers to get a v2.5 schema version object.
+func SchemaV25() *hcsschema.Version {
+	return &hcsschema.Version{Major: 2, Minor: 5}
+}
+
 // isSupported determines if a given schema version is supported
 func IsSupported(sv *hcsschema.Version) error {
 	if IsV10(sv) {
@@ -28,6 +33,13 @@ func IsSupported(sv *hcsschema.Version) error {
 	}
 	if IsV21(sv) {
 		if osversion.Build() < osversion.RS5 {
+			return fmt.Errorf("unsupported on this Windows build")
+		}
+		return nil
+	}
+
+	if IsV25(sv) {
+		if osversion.Build() < 20348 { // pending solution to quuestion over version numbers re osversion.V21H2
 			return fmt.Errorf("unsupported on this Windows build")
 		}
 		return nil
@@ -49,6 +61,14 @@ func IsV10(sv *hcsschema.Version) bool {
 // onwards.
 func IsV21(sv *hcsschema.Version) bool {
 	if sv.Major == 2 && sv.Minor == 1 {
+		return true
+	}
+	return false
+}
+
+// V25 schema introduced much later. Required to support SNP.
+func IsV25(sv *hcsschema.Version) bool {
+	if sv.Major == 2 && sv.Minor == 5 {
 		return true
 	}
 	return false

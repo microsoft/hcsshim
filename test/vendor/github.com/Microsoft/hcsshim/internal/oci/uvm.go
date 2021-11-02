@@ -303,6 +303,30 @@ func handleCloneAnnotations(ctx context.Context, a map[string]string, wopts *uvm
 	return nil
 }
 
+// handleSecurityPolicy handles parsing SecurityPolicy and NoSecurityHardware and setting
+// implied options from the results. Both LCOW only, not WCOW
+func handleSecurityPolicy(ctx context.Context, a map[string]string, lopts *uvm.OptionsLCOW) {
+	lopts.SecurityPolicy = parseAnnotationsString(a, annotations.SecurityPolicy, lopts.SecurityPolicy)
+	// allow actual isolated boot etc to be ignored if we have no hardware. Required for dev
+	// this is not a security issue as the attestation will fail without a genuine report
+	noSecurityHardware := parseAnnotationsBool(ctx, a, annotations.NoSecurityHardware, false)
+
+	// if there is a security policy (and SNP) we currently boot in a way that doesn't support any boot options
+	// this might change if the building of the vmgs file were to be done on demand but that is likely
+	// much slower and noy very useful. We do respect the filename of the vmgs file so if it is necessary to
+	// have different options then multiple files could be used.
+	if len(lopts.SecurityPolicy) > 0 && !noSecurityHardware {
+		// VPMem not supported by the enlightened kernel for SNP so set count to zero.
+		lopts.VPMemDeviceCount = 0
+		// set the default GuestState filename.
+		lopts.GuestStateFile = uvm.GuestStateFile
+		lopts.KernelBootOptions = ""
+		lopts.PreferredRootFSType = uvm.PreferredRootFSTypeNA
+		lopts.AllowOvercommit = false
+		lopts.SecurityPolicyEnabled = true
+	}
+}
+
 // SpecToUVMCreateOpts parses `s` and returns either `*uvm.OptionsLCOW` or
 // `*uvm.OptionsWCOW`.
 func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (interface{}, error) {
@@ -340,6 +364,13 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		// parsing of FullyPhysicallyBacked needs to go after handling kernel direct boot and
 		// preferred rootfs type since it may overwrite settings created by those
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, lopts)
+
+		// SecurityPolicy is very sensitive to other settings and will silently change those that are incompatible.
+		// Eg VMPem device count, overriden kernel option cannot be respected.
+		handleSecurityPolicy(ctx, s.Annotations, lopts)
+
+		// override the default GuestState filename if specified
+		lopts.GuestStateFile = parseAnnotationsString(s.Annotations, annotations.GuestStateFile, lopts.GuestStateFile)
 		return lopts, nil
 	} else if IsWCOW(s) {
 		wopts := uvm.NewDefaultOptionsWCOW(id, owner)
