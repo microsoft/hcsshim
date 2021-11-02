@@ -4,6 +4,7 @@ package devicemapper
 
 import (
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"syscall"
@@ -154,26 +155,22 @@ func TestLinearError(t *testing.T) {
 	}
 }
 
-func TestRemoveDeviceRetries(t *testing.T) {
+func TestRemoveDeviceRetriesOnSyscallEBUSY(t *testing.T) {
 	clearTestDependencies()
 
 	rmDeviceCalled := false
-	retryCalled := false
+	retryDone := false
 	// Overrides openMapper to return temp file handle
 	openMapperWrapper = func() (*os.File, error) {
-		tmpFile, err := ioutil.TempFile("", "")
-		if err != nil {
-			return nil, err
-		}
-		return tmpFile, nil
+		return ioutil.TempFile("", "")
 	}
-	removeDeviceWrapper = func(_ *os.File, name string) error {
+	removeDeviceWrapper = func(_ *os.File, _ string) error {
 		if !rmDeviceCalled {
 			rmDeviceCalled = true
 			return syscall.EBUSY
 		}
-		if !retryCalled {
-			retryCalled = true
+		if !retryDone {
+			retryDone = true
 			return nil
 		}
 		return nil
@@ -185,7 +182,39 @@ func TestRemoveDeviceRetries(t *testing.T) {
 	if !rmDeviceCalled {
 		t.Fatalf("expected removeDevice to be called at least once")
 	}
-	if !retryCalled {
+	if !retryDone {
 		t.Fatalf("expected removeDevice to be retried after initial failure")
+	}
+}
+
+func TestRemoveDeviceFailsOnNonSyscallEBUSY(t *testing.T) {
+	clearTestDependencies()
+
+	expectedError := fmt.Errorf("non syscall.BUSY error")
+	rmDeviceCalled := false
+	retryDone := false
+	openMapperWrapper = func() (*os.File, error) {
+		return ioutil.TempFile("", "")
+	}
+	removeDeviceWrapper = func(_ *os.File, _ string) error {
+		if !rmDeviceCalled {
+			rmDeviceCalled = true
+			return expectedError
+		}
+		if !retryDone {
+			retryDone = true
+			return nil
+		}
+		return nil
+	}
+
+	if err := RemoveDevice("test"); err != expectedError {
+		t.Fatalf("expected error %q, instead got %q", expectedError, err)
+	}
+	if !rmDeviceCalled {
+		t.Fatalf("expected removeDevice to be called once")
+	}
+	if retryDone {
+		t.Fatalf("no retries should've been attempted")
 	}
 }
