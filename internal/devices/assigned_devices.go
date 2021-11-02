@@ -5,9 +5,6 @@ package devices
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"net"
-	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -106,33 +103,4 @@ func createDeviceUtilChildrenCommand(deviceUtilPath string, vmBusInstanceID stri
 	parentIDsFlag := fmt.Sprintf("--parentID=%s", vmBusInstanceID)
 	args := []string{deviceUtilPath, "children", parentIDsFlag, "--property=location"}
 	return args
-}
-
-// readCsPipeOutput is a helper function that connects to a listener and reads
-// the connection's comma separated output until done. resulting comma separated
-// values are returned in the `result` param. The `errChan` param is used to
-// propagate an errors to the calling function.
-func readCsPipeOutput(l net.Listener, errChan chan<- error, result *[]string) {
-	defer close(errChan)
-	c, err := l.Accept()
-	if err != nil {
-		errChan <- errors.Wrapf(err, "failed to accept named pipe")
-		return
-	}
-	bytes, err := ioutil.ReadAll(c)
-	if err != nil {
-		errChan <- err
-		return
-	}
-
-	elementsAsString := strings.TrimSuffix(string(bytes), "\n")
-	elements := strings.Split(elementsAsString, ",")
-	*result = append(*result, elements...)
-
-	if len(*result) == 0 {
-		errChan <- errors.Wrapf(err, "failed to get any pipe output")
-		return
-	}
-
-	errChan <- nil
 }

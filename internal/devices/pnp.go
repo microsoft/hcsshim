@@ -5,6 +5,9 @@ package devices
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"net"
+	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -21,6 +24,8 @@ const (
 										if drivers were not previously present in the UVM, this
 										is an expected race and can be ignored.`
 )
+
+var noExecOutputErr = errors.New("failed to get any pipe output")
 
 // createPnPInstallDriverCommand creates a pnputil command to add and install drivers
 // present in `driverUVMPath` and all subdirectories.
@@ -60,4 +65,33 @@ func execPnPInstallDriver(ctx context.Context, vm *uvm.UtilityVM, driverDir stri
 
 	log.G(ctx).WithField("added drivers", driverDir).Debug("installed drivers")
 	return nil
+}
+
+// readCsPipeOutput is a helper function that connects to a listener and reads
+// the connection's comma separated output until done. resulting comma separated
+// values are returned in the `result` param. The `errChan` param is used to
+// propagate an errors to the calling function.
+func readCsPipeOutput(l net.Listener, errChan chan<- error, result *[]string) {
+	defer close(errChan)
+	c, err := l.Accept()
+	if err != nil {
+		errChan <- errors.Wrapf(err, "failed to accept named pipe")
+		return
+	}
+	bytes, err := ioutil.ReadAll(c)
+	if err != nil {
+		errChan <- err
+		return
+	}
+
+	elementsAsString := strings.TrimSuffix(string(bytes), "\n")
+	elements := strings.Split(elementsAsString, ",")
+	*result = append(*result, elements...)
+
+	if len(*result) == 0 {
+		errChan <- noExecOutputErr
+		return
+	}
+
+	errChan <- nil
 }

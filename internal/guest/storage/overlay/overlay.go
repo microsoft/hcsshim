@@ -21,7 +21,20 @@ var (
 	unixMount   = unix.Mount
 )
 
-// Mount creates an overlay mount with `layerPaths` at `rootfsPath`.
+// MountLayer first enforces the security policy for the container's layer paths
+// and then calls Mount to mount the layer paths as an overlayfs
+func MountLayer(ctx context.Context, layerPaths []string, upperdirPath, workdirPath, rootfsPath string, readonly bool, containerId string, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
+	_, span := trace.StartSpan(ctx, "overlay::MountLayer")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+
+	if err := securityPolicy.EnforceOverlayMountPolicy(containerId, layerPaths); err != nil {
+		return err
+	}
+	return Mount(ctx, layerPaths, upperdirPath, workdirPath, rootfsPath, readonly)
+}
+
+// Mount creates an overlay mount with `basePaths` at `target`.
 //
 // If `upperdirPath != ""` the path will be created. On mount failure the
 // created `upperdirPath` will be automatically cleaned up.
@@ -29,27 +42,23 @@ var (
 // If `workdirPath != ""` the path will be created. On mount failure the created
 // `workdirPath` will be automatically cleaned up.
 //
-// Always creates `rootfsPath`. On mount failure the created `rootfsPath` will
+// Always creates `target`. On mount failure the created `target` will
 // be automatically cleaned up.
-func Mount(ctx context.Context, layerPaths []string, upperdirPath, workdirPath, rootfsPath string, readonly bool, containerId string, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
+func Mount(ctx context.Context, basePaths []string, upperdirPath, workdirPath, target string, readonly bool) (err error) {
 	_, span := trace.StartSpan(ctx, "overlay::Mount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
-	if err := securityPolicy.EnforceOverlayMountPolicy(containerId, layerPaths); err != nil {
-		return err
-	}
-
-	lowerdir := strings.Join(layerPaths, ":")
+	lowerdir := strings.Join(basePaths, ":")
 	span.AddAttributes(
-		trace.StringAttribute("layerPaths", lowerdir),
+		trace.StringAttribute("lowerdir", lowerdir),
 		trace.StringAttribute("upperdirPath", upperdirPath),
 		trace.StringAttribute("workdirPath", workdirPath),
-		trace.StringAttribute("rootfsPath", rootfsPath),
+		trace.StringAttribute("target", target),
 		trace.BoolAttribute("readonly", readonly))
 
-	if rootfsPath == "" {
-		return errors.New("cannot have empty rootfsPath")
+	if target == "" {
+		return errors.New("cannot have empty target")
 	}
 
 	if readonly && (upperdirPath != "" || workdirPath != "") {
@@ -79,20 +88,20 @@ func Mount(ctx context.Context, layerPaths []string, upperdirPath, workdirPath, 
 		}()
 		options = append(options, "workdir="+workdirPath)
 	}
-	if err := osMkdirAll(rootfsPath, 0755); err != nil {
-		return errors.Wrapf(err, "failed to create directory for container root filesystem %s", rootfsPath)
+	if err := osMkdirAll(target, 0755); err != nil {
+		return errors.Wrapf(err, "failed to create directory for container root filesystem %s", target)
 	}
 	defer func() {
 		if err != nil {
-			osRemoveAll(rootfsPath)
+			osRemoveAll(target)
 		}
 	}()
 	var flags uintptr
 	if readonly {
 		flags |= unix.MS_RDONLY
 	}
-	if err := unixMount("overlay", rootfsPath, "overlay", flags, strings.Join(options, ",")); err != nil {
-		return errors.Wrapf(err, "failed to mount container root filesystem using overlayfs %s", rootfsPath)
+	if err := unixMount("overlay", target, "overlay", flags, strings.Join(options, ",")); err != nil {
+		return errors.Wrapf(err, "failed to mount overlayfs at %s", target)
 	}
 	return nil
 }

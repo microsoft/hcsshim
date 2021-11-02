@@ -284,6 +284,14 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 			n := coi.HostingSystem.ContainerCounter()
 			r.SetContainerRootInUVM(fmt.Sprintf(wcowRootInUVM, strconv.FormatUint(n, 16)))
 		}
+		// install kernel drivers if necessary.
+		// do this before network setup in case any of the drivers requested are
+		// network drivers
+		driverClosers, err := installPodDrivers(ctx, coi.HostingSystem, coi.Spec.Annotations)
+		if err != nil {
+			return nil, r, err
+		}
+		r.Add(driverClosers...)
 	}
 
 	ct, _, err := oci.GetSandboxTypeAndID(coi.Spec.Annotations)

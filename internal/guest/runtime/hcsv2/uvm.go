@@ -498,7 +498,7 @@ func modifyCombinedLayers(ctx context.Context, rt prot.ModifyRequestType, cl *pr
 			workdirPath = filepath.Join(cl.ScratchPath, "work")
 		}
 
-		return overlay.Mount(ctx, layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, readonly, cl.ContainerId, securityPolicy)
+		return overlay.MountLayer(ctx, layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, readonly, cl.ContainerId, securityPolicy)
 	case prot.MreqtRemove:
 		return storage.UnmountPath(ctx, cl.ContainerRootPath, true)
 	default:

@@ -144,6 +144,33 @@ func handleAssignedDevicesWindows(ctx context.Context, vm *uvm.UtilityVM, annota
 	return resultDevs, closers, nil
 }
 
+func installPodDrivers(ctx context.Context, vm *uvm.UtilityVM, annotations map[string]string) (closers []resources.ResourceCloser, err error) {
+	defer func() {
+		if err != nil {
+			// best effort clean up allocated resources on failure
+			for _, r := range closers {
+				if releaseErr := r.Release(ctx); releaseErr != nil {
+					log.G(ctx).WithError(releaseErr).Error("failed to release container resource")
+				}
+			}
+		}
+	}()
+
+	// get the spec specified kernel drivers and install them on the UVM
+	drivers, err := getSpecKernelDrivers(annotations)
+	if err != nil {
+		return closers, err
+	}
+	for _, d := range drivers {
+		driverCloser, err := devices.InstallKernelDriver(ctx, vm, d)
+		if err != nil {
+			return closers, err
+		}
+		closers = append(closers, driverCloser)
+	}
+	return closers, err
+}
+
 func getDeviceInfoFromPath(rawDevicePath string) (string, uint16) {
 	indexString := filepath.Base(rawDevicePath)
 	index, err := strconv.ParseUint(indexString, 10, 16)
