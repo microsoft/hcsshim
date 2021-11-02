@@ -4,7 +4,6 @@ package devicemapper
 
 import (
 	"flag"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"syscall"
@@ -167,7 +166,10 @@ func TestRemoveDeviceRetriesOnSyscallEBUSY(t *testing.T) {
 	removeDeviceWrapper = func(_ *os.File, _ string) error {
 		if !rmDeviceCalled {
 			rmDeviceCalled = true
-			return syscall.EBUSY
+			return &dmError{
+				Op:  1,
+				Err: syscall.EBUSY,
+			}
 		}
 		if !retryDone {
 			retryDone = true
@@ -190,7 +192,10 @@ func TestRemoveDeviceRetriesOnSyscallEBUSY(t *testing.T) {
 func TestRemoveDeviceFailsOnNonSyscallEBUSY(t *testing.T) {
 	clearTestDependencies()
 
-	expectedError := fmt.Errorf("non syscall.BUSY error")
+	expectedError := &dmError{
+		Op:  0,
+		Err: syscall.EACCES,
+	}
 	rmDeviceCalled := false
 	retryDone := false
 	openMapperWrapper = func() (*os.File, error) {
