@@ -3,8 +3,12 @@
 package cri_containerd
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"fmt"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
@@ -68,4 +72,39 @@ func execInHost(ctx context.Context, client shimdiag.ShimDiagService, args []str
 		return 0, err
 	}
 	return resp.ExitCode, nil
+}
+
+// shimDiagExecOutput is a small wrapper on top of execInHost, that returns the exec output
+func shimDiagExecOutput(ctx context.Context, t *testing.T, podID string, cmd []string) string {
+	shimName := fmt.Sprintf("k8s.io-%s", podID)
+	shim, err := shimdiag.GetShim(shimName)
+	if err != nil {
+		t.Fatalf("failed to find shim %v: %v", shimName, err)
+	}
+	shimClient := shimdiag.NewShimDiagClient(shim)
+
+	bufOut := &bytes.Buffer{}
+	bw := bufio.NewWriter(bufOut)
+	bufErr := &bytes.Buffer{}
+	bwErr := bufio.NewWriter(bufErr)
+
+	exitCode, err := execInHost(ctx, shimClient, cmd, nil, bw, bwErr)
+	if err != nil {
+		t.Fatalf("failed to exec request in the host with: %v and %v", err, bufErr.String())
+	}
+	if exitCode != 0 {
+		t.Fatalf("exec request in host failed with exit code %v: %v", exitCode, bufErr.String())
+	}
+
+	return strings.TrimSpace(bufOut.String())
+}
+
+func filterStrings(input []string, include string) []string {
+	var result []string
+	for _, str := range input {
+		if strings.Contains(str, include) {
+			result = append(result, str)
+		}
+	}
+	return result
 }

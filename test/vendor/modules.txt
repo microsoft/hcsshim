@@ -72,6 +72,8 @@ github.com/Microsoft/hcsshim/pkg/securitypolicy
 github.com/bits-and-blooms/bitset
 # github.com/blang/semver v3.5.1+incompatible
 github.com/blang/semver
+# github.com/cenkalti/backoff/v4 v4.1.1
+github.com/cenkalti/backoff/v4
 # github.com/containerd/cgroups v1.0.1
 github.com/containerd/cgroups/stats/v1
 # github.com/containerd/console v1.0.2

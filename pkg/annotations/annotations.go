@@ -224,6 +224,7 @@ const (
 
 	// SecurityPolicy is used to specify a security policy for opengcs to enforce
 	SecurityPolicy = "io.microsoft.virtualmachine.lcow.securitypolicy"
+
 	// ContainerProcessDumpLocation specifies a path inside of containers to save process dumps to. As
 	// the scratch space for a container is generally cleaned up after exit, this is best set to a volume mount of
 	// some kind (vhd, bind mount, fileshare mount etc.)

@@ -160,7 +160,7 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 	}
 	// We can set a cpu group for the VM at creation time in recent builds.
 	if opts.CPUGroupID != "" {
-		if osversion.Build() < cpuGroupCreateBuild {
+		if osversion.Build() < osversion.V21H1 {
 			return nil, errCPUGroupCreateNotSupported
 		}
 		processor.CpuGroup = &hcsschema.CpuGroup{Id: opts.CPUGroupID}

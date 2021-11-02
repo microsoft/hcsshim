@@ -131,24 +131,6 @@ func CommandContext(ctx context.Context, host cow.ProcessHost, name string, arg 
 	return cmd
 }
 
-// relayIO is a glorified io.Copy that also logs when the copy has completed.
-func relayIO(w io.Writer, r io.Reader, log *logrus.Entry, name string) (int64, error) {
-	n, err := io.Copy(w, r)
-	if log != nil {
-		lvl := logrus.DebugLevel
-		log = log.WithFields(logrus.Fields{
-			"file":  name,
-			"bytes": n,
-		})
-		if err != nil {
-			lvl = logrus.ErrorLevel
-			log = log.WithError(err)
-		}
-		log.Log(lvl, "Cmd IO relay complete")
-	}
-	return n, err
-}
-
 // Start starts a command. The caller must ensure that if Start succeeds,
 // Wait is eventually called to clean up resources.
 func (c *Cmd) Start() error {

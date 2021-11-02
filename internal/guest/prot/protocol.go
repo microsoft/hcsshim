@@ -754,6 +754,7 @@ type NetworkAdapterV2 struct {
 	DNSServerList   string `json:",omitempty"`
 	EnableLowMetric bool   `json:",omitempty"`
 	EncapOverhead   uint16 `json:",omitempty"`
+	VPCIAssigned    bool   `json:",omitempty"`
 }
 
 // MappedVirtualDisk represents a disk on the host which is mapped into a
