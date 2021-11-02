@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/Microsoft/go-winio v0.4.17
+	github.com/cenkalti/backoff/v4 v4.1.1
 	github.com/containerd/cgroups v1.0.1
 	github.com/containerd/console v1.0.2
 	github.com/containerd/containerd v1.4.9

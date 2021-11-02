@@ -21,6 +21,7 @@ jobs:
         with:
           version: v1.38.0
           args: --timeout=5m
+          only-new-issues: true
 
   test:
     runs-on: 'windows-2019'

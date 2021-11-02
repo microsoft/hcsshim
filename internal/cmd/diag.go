@@ -17,7 +17,7 @@ func ExecInUvm(ctx context.Context, vm *uvm.UtilityVM, req *shimdiag.ExecProcess
 	if len(req.Args) == 0 {
 		return 0, errors.New("missing command")
 	}
-	np, err := NewNpipeIO(ctx, req.Stdin, req.Stdout, req.Stderr, req.Terminal)
+	np, err := NewNpipeIO(ctx, req.Stdin, req.Stdout, req.Stderr, req.Terminal, 0)
 	if err != nil {
 		return 0, err
 	}
