@@ -143,14 +143,16 @@ func Unmount(ctx context.Context, devNumber uint32, target string, mappingInfo *
 	if verityInfo != nil {
 		dmVerityName := fmt.Sprintf(verityDeviceFmt, devNumber, verityInfo.RootDigest)
 		if err := dm.RemoveDevice(dmVerityName); err != nil {
-			return errors.Wrapf(err, "failed to remove dm verity target: %s", dmVerityName)
+			// The target is already unmounted at this point, ignore potential errors
+			log.G(ctx).WithError(err).Debugf("failed to remove dm verity target: %s", dmVerityName)
 		}
 	}
 
 	if mappingInfo != nil {
 		dmLinearName := fmt.Sprintf(linearDeviceFmt, devNumber, mappingInfo.DeviceOffsetInBytes, mappingInfo.DeviceSizeInBytes)
 		if err := dm.RemoveDevice(dmLinearName); err != nil {
-			return errors.Wrapf(err, "failed to remove dm linear target: %s", dmLinearName)
+			// The target is already unmounted at this point, ignore potential errors
+			log.G(ctx).WithError(err).Debugf("failed to remove dm linear target: %s", dmLinearName)
 		}
 	}
 

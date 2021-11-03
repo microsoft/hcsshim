@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -17,6 +19,11 @@ type CreateFlags int
 const (
 	// CreateReadOnly specifies that the device is not writable
 	CreateReadOnly CreateFlags = 1 << iota
+)
+
+var (
+	removeDeviceWrapper = removeDevice
+	openMapperWrapper   = openMapper
 )
 
 const (
@@ -223,7 +230,7 @@ func makeTableIoctl(name string, targets []Target) *dmIoctl {
 // CreateDevice creates a device-mapper device with the given target spec. It returns
 // the path of the new device node.
 func CreateDevice(name string, flags CreateFlags, targets []Target) (_ string, err error) {
-	f, err := openMapper()
+	f, err := openMapperWrapper()
 	if err != nil {
 		return "", err
 	}
@@ -238,7 +245,7 @@ func CreateDevice(name string, flags CreateFlags, targets []Target) (_ string, e
 	}
 	defer func() {
 		if err != nil {
-			removeDevice(f, name)
+			removeDeviceWrapper(f, name)
 		}
 	}()
 
@@ -269,14 +276,30 @@ func CreateDevice(name string, flags CreateFlags, targets []Target) (_ string, e
 }
 
 // RemoveDevice removes a device-mapper device and its associated device node.
-func RemoveDevice(name string) error {
-	f, err := openMapper()
-	if err != nil {
-		return err
+func RemoveDevice(name string) (err error) {
+	rm := func() error {
+		f, err := openMapperWrapper()
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		os.Remove(path.Join("/dev/mapper", name))
+		return removeDeviceWrapper(f, name)
 	}
-	defer f.Close()
-	os.Remove(path.Join("/dev/mapper", name))
-	return removeDevice(f, name)
+
+	// This is workaround for "device or resource busy" error, which occasionally happens after the device mapper
+	// target has been unmounted.
+	for i := 0; i < 10; i++ {
+		if err = rm(); err != nil {
+			if e, ok := err.(*dmError); !ok || e.Err != syscall.EBUSY {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		break
+	}
+	return
 }
 
 func removeDevice(f *os.File, name string) error {
