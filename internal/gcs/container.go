@@ -10,7 +10,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/notifications"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/queue"
 	"go.opencensus.io/trace"
 )
 
@@ -19,14 +22,49 @@ const hrComputeSystemDoesNotExist = 0xc037010e
 // Container implements the cow.Container interface for containers
 // created via GuestConnection.
 type Container struct {
-	gc        *GuestConnection
-	id        string
-	notifyCh  chan struct{}
-	closeCh   chan struct{}
+	gc *GuestConnection
+	id string
+	// signifies the status of the view of the container on the guest.
+	// waitBackground() or Close() close this, but that does not represent the
+	// status of the container on the guest
+	waitBlock chan struct{}
+	waitError error // set only in closeOnce, read after <-waitBlock
 	closeOnce sync.Once
+	// The channel notifications are received on, via from the guest connection
+	notifyCh chan notifications.Message
+	// Closed by GuestConnection when the container on the guest exists
+	closeCh       chan struct{}
+	notifications *queue.MessageQueue
 }
 
+/*
+need two different close channels because there are two separate situations:
+1. the container on the guest is still running, but the c.Close is called
+2. the container on the guest exits.
+
+if one channel is used for both, then there may be double close errors, where
+c.Close closes the exit channel, and the the GuestConnection attempts to close
+that same channel with the container exits
+also, this allows for additional steps to be taken between GuestConnection closing
+notifying of container exit and unblocking `Wait()` (eg, setting an exit status)
+
+if `notifyCh` is overloaded to both publish notifications and signal container exit,
+then `waitBackground(` and `publishNotifications(` will both have to read the
+same channel and notifications will be dropped
+*/
+
 var _ cow.Container = &Container{}
+
+func newContainer(gc *GuestConnection, id string) *Container {
+	return &Container{
+		gc:            gc,
+		id:            id,
+		waitBlock:     make(chan struct{}),
+		notifyCh:      make(chan notifications.Message),
+		closeCh:       make(chan struct{}),
+		notifications: queue.NewMessageQueue(),
+	}
+}
 
 // CreateContainer creates a container using ID `cid` and `cfg`. The request
 // will likely not be cancellable even if `ctx` becomes done.
@@ -36,13 +74,8 @@ func (gc *GuestConnection) CreateContainer(ctx context.Context, cid string, conf
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", cid))
 
-	c := &Container{
-		gc:       gc,
-		id:       cid,
-		notifyCh: make(chan struct{}),
-		closeCh:  make(chan struct{}),
-	}
-	err = gc.requestNotify(cid, c.notifyCh)
+	c := newContainer(gc, cid)
+	err = gc.requestNotify(cid, c.notifyCh, c.closeCh)
 	if err != nil {
 		return nil, err
 	}
@@ -55,24 +88,21 @@ func (gc *GuestConnection) CreateContainer(ctx context.Context, cid string, conf
 	if err != nil {
 		return nil, err
 	}
-	go c.waitBackground()
+	go c.waitBackground(ctx)
+	go c.publishNotifications(ctx)
 	return c, nil
 }
 
 // CloneContainer just creates the wrappers and sets up notification requests for a
 // container that is already running inside the UVM (after cloning).
 func (gc *GuestConnection) CloneContainer(ctx context.Context, cid string) (_ *Container, err error) {
-	c := &Container{
-		gc:       gc,
-		id:       cid,
-		notifyCh: make(chan struct{}),
-		closeCh:  make(chan struct{}),
-	}
-	err = gc.requestNotify(cid, c.notifyCh)
+	c := newContainer(gc, cid)
+	err = gc.requestNotify(cid, c.notifyCh, c.closeCh)
 	if err != nil {
 		return nil, err
 	}
-	go c.waitBackground()
+	go c.waitBackground(ctx)
+	go c.publishNotifications(ctx)
 	return c, nil
 }
 
@@ -87,12 +117,18 @@ func (c *Container) IsOCI() bool {
 	return c.gc.os != "windows"
 }
 
-// Close releases associated with the container.
+// Close releases resources associated with the container, but does not terminate
+// the container on the guest, or wait for it.
 func (c *Container) Close() error {
+	_, span := trace.StartSpan(context.Background(), "gcs::Container::Close")
+	defer span.End()
+	span.AddAttributes(trace.StringAttribute(logfields.ContainerID, c.id))
+
 	c.closeOnce.Do(func() {
-		_, span := trace.StartSpan(context.Background(), "gcs::Container::Close")
-		defer span.End()
-		span.AddAttributes(trace.StringAttribute("cid", c.id))
+		c.waitError = errors.New("container closed")
+		// `notifyCh` and `closeCh` are closed by `GuestConnection`, so do not close here
+		close(c.waitBlock)
+		c.notifications.Close()
 	})
 	return nil
 }
@@ -186,7 +222,7 @@ func (c *Container) shutdown(ctx context.Context, proc rpcProc) error {
 			return err
 		}
 		select {
-		case <-c.notifyCh:
+		case <-c.waitBlock:
 		default:
 			log.G(ctx).WithError(err).Warn("ignoring missing container")
 		}
@@ -225,20 +261,80 @@ func (c *Container) Terminate(ctx context.Context) (err error) {
 // Wait waits for the container to terminate (or Close to be called, or the
 // guest connection to terminate).
 func (c *Container) Wait() error {
-	select {
-	case <-c.notifyCh:
-		return nil
-	case <-c.closeCh:
-		return errors.New("container closed")
-	}
+	<-c.waitBlock
+	return c.waitError
 }
 
-func (c *Container) waitBackground() {
-	ctx, span := trace.StartSpan(context.Background(), "gcs::Container::waitBackground")
+// waitBackground waits for the GuestConnection to notify of container exit and
+// unblocks other Wait calls
+//
+// This MUST be called via a goroutine to wait on a background thread, and can
+// only be called once
+func (c *Container) waitBackground(ctx context.Context) {
+	var err error
+	ctx, span := trace.StartSpan(ctx, "gcs::Container::waitBackground")
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.ContainerID, c.id))
 
-	err := c.Wait()
+	// wait for container exit
+	select {
+	case <-c.closeCh:
+		// container on the guest was closed
+	case <-c.waitBlock:
+		// `c.Close()` was called
+	}
+
+	c.closeOnce.Do(func() {
+		// `notifyCh` and `closeCh` are closed by `GuestConnection`, so do not close here
+		close(c.waitBlock)
+		c.notifications.Close()
+	})
+
+	err = c.waitError
 	log.G(ctx).Debug("container exited")
-	oc.SetSpanStatus(span, err)
+}
+
+// Notifications returns a list of notifications (including shutdown) about the container
+func (c *Container) Notifications() (*queue.MessageQueue, error) {
+	return c.notifications, nil
+}
+
+// publishNotifications publishes notifications from the sent forwarded by
+// the GuestConnection. Currently only OOM events are published.
+//
+// This MUST be called via a goroutine to wait on a background thread.
+func (c *Container) publishNotifications(ctx context.Context) {
+	var err error
+	ctx, span := trace.StartSpan(ctx, "gcs::Container::publishNotifications")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.ContainerID, c.id))
+
+	// read in notifications while waiting for container to exit
+	for {
+		select {
+		case <-c.waitBlock:
+			// `c.Close` was called
+			err = c.waitError
+			return
+		case <-c.closeCh:
+			// container was closed
+			return
+		case ntf, ok := <-c.notifyCh:
+			if !ok {
+				// GuestConnection should close c.closeCh first, but in case
+				// of a race condition, guard againt reading from a closed channel
+				return
+			}
+			// enqueue the notification; will block until write succeeds
+			err = c.notifications.Write(ntf)
+			if err != nil {
+				log.G(ctx).WithError(err).
+					WithField("notification", ntf.String()).
+					Error("could not enqueue notification")
+			}
+		}
+	}
+
 }

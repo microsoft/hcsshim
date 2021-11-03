@@ -128,6 +128,7 @@ func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
 				requestBase: requestBase{
 					ContainerID: req.ContainerID,
 				},
+				Type: "ForcedExit",
 			})
 			if err != nil {
 				return err

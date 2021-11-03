@@ -24,6 +24,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/containerd/containerd/pkg/oom"
+	oomv1 "github.com/containerd/containerd/pkg/oom/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
@@ -133,7 +135,7 @@ func (mux *Mux) ServeMsg(r *Request) (RequestResponse, error) {
 type Request struct {
 	// Context is the request context received from the bridge.
 	Context context.Context
-	// Header is the wire format message header that preceeded the message for
+	// Header is the wire format message header that preceded the message for
 	// this request.
 	Header *prot.MessageHeader
 	// ContainerID is the id of the container that this message corresponds to.
@@ -160,19 +162,54 @@ type bridgeResponse struct {
 	response interface{}
 }
 
+type bridgeOpts struct {
+	enableV4 bool
+	cgroupV2 bool
+	host     *hcsv2.Host
+}
+
+type BridgeOpt func(*bridgeOpts) error
+
+func WithV4Enabled(enableV4 bool) BridgeOpt {
+	return func(bo *bridgeOpts) error {
+		bo.enableV4 = enableV4
+		return nil
+	}
+}
+
+func WithCgroupVersion(version uint) BridgeOpt {
+	return func(bo *bridgeOpts) error {
+		if version < 1 || version > 2 {
+			return errors.Errorf("unsupported CGroup version %d", version)
+		} else if version == 2 {
+			return errors.New("version 2 CGroups are currently not supported")
+		}
+
+		bo.cgroupV2 = false
+		return nil
+	}
+}
+
+func WithHost(h *hcsv2.Host) BridgeOpt {
+	return func(bo *bridgeOpts) error {
+		bo.host = h
+		return nil
+	}
+}
+
 // Bridge defines the bridge client in the GCS. It acts in many ways analogous
 // to go's `http` package and multiplexer.
 //
 // It has two fundamentally different dispatch options:
 //
 // 1. Request/Response where using the `Handler` a request
-//    of a given type will be dispatched to the apprpriate handler
-//    and an appropriate response will respond to exactly that request that
-//    caused the dispatch.
+// of a given type will be dispatched to the appropriate handler
+// and an appropriate response will respond to exactly that request that
+// caused the dispatch.
 //
 // 2. `PublishNotification` where a notification that was not initiated
-//    by a request from any client can be written to the bridge at any time
-//    in any order.
+// by a request from any client can be written to the bridge at any time
+// in any order.
 type Bridge struct {
 	// Handler to invoke when messages are received.
 	Handler Handler
@@ -190,6 +227,38 @@ type Bridge struct {
 	hasQuitPending uint32
 
 	protVer prot.ProtocolVersion
+
+	// watch for OOM events, new cgroups can be added as they are created
+	// publishes them over responseChan via PublishNotification()
+	OomWatcher oom.Watcher
+}
+
+func NewBridge(opts ...BridgeOpt) (*Bridge, error) {
+	var bo bridgeOpts
+	for _, o := range opts {
+		err := o(&bo)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not initialize bridge")
+		}
+	}
+
+	mux := NewBridgeMux()
+	b := Bridge{
+		Handler:  mux,
+		EnableV4: bo.enableV4,
+	}
+
+	b.AssignHandlers(mux, bo.host)
+
+	publisher := BridgePublisherFunc(b.PublishNotification)
+	// TODO: (helsaawy) add v2 OOM watcher with v2 cgroups support
+	ep, err := oomv1.New(publisher)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create OOM watcher to add to bridge")
+	}
+	b.OomWatcher = ep
+
+	return &b, nil
 }
 
 // AssignHandlers creates and assigns the appropriate bridge

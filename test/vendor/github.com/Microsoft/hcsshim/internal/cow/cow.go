@@ -6,6 +6,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/queue"
 )
 
 // Process is the interface for an OS process running in a container or utility VM.
@@ -88,4 +89,7 @@ type Container interface {
 	Wait() error
 	// Modify sends a request to modify container resources
 	Modify(ctx context.Context, config interface{}) error
+	// Notification returns a MessageQueue of `notifications.Notification` raised
+	// for the container. Currently, only supported for OOM events in LCOW
+	Notifications() (*queue.MessageQueue, error)
 }

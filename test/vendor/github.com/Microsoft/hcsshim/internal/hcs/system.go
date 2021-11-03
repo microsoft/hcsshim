@@ -12,6 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/notifications"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/vmcompute"
@@ -29,7 +30,11 @@ type System struct {
 	waitError      error
 	exitError      error
 	os, typ        string
+
+	notifications.NullNotifications
 }
+
+var _ cow.Container = &(System{})
 
 func newSystem(id string) *System {
 	return &System{

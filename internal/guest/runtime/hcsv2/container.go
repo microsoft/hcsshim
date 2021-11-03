@@ -25,6 +25,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/oc"
 )
 
 type Container struct {
@@ -202,18 +203,35 @@ func (c *Container) setExitType(signal syscall.Signal) {
 }
 
 // GetStats returns the cgroup metrics for the container.
-func (c *Container) GetStats(ctx context.Context) (*v1.Metrics, error) {
+func (c *Container) GetStats(ctx context.Context) (_ *v1.Metrics, err error) {
 	_, span := trace.StartSpan(ctx, "opengcs::Container::GetStats")
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.ContainerID, c.id))
 
-	cgroupPath := c.spec.Linux.CgroupsPath
-	cg, err := cgroups.Load(cgroups.V1, cgroups.StaticPath(cgroupPath))
+	cg, err := c.GetCGroup(ctx)
 	if err != nil {
 		return nil, errors.Errorf("failed to get container stats for %v: %v", c.id, err)
 	}
 
 	return cg.Stat(cgroups.IgnoreNotExist)
+}
+
+// GetCGroup returns the container's cgroup
+func (c *Container) GetCGroup(ctx context.Context) (_ cgroups.Cgroup, err error) {
+	_, span := trace.StartSpan(ctx, "opengcs::Container::GetCGroup")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.ContainerID, c.id))
+
+	cgroupPath := c.spec.Linux.CgroupsPath
+	// TODO: allow for switching to V2
+	cg, err := cgroups.Load(cgroups.V1, cgroups.StaticPath(cgroupPath))
+	if err != nil {
+		return nil, errors.Errorf("failed to load container control group %v: %v", c.id, err)
+	}
+
+	return cg, nil
 }
 
 func (c *Container) modifyContainerConstraints(ctx context.Context, rt guestrequest.RequestType, cc *guestresource.LCOWContainerConstraints) (err error) {

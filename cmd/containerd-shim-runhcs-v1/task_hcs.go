@@ -29,10 +29,14 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/jobcontainers"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/notifications"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/queue"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -255,6 +259,13 @@ func newHcsTask(
 		}); err != nil {
 		return nil, err
 	}
+
+	// wait for event notifications and publish them; goroutine will exit with
+	// ctx, or when container is closed.
+	// event publication does not have an event time stamp, so start this after
+	// after publishing creation event
+	go ht.publishNotifications(ctx)
+
 	return ht, nil
 }
 
@@ -379,6 +390,13 @@ func newClonedHcsTask(
 		}); err != nil {
 		return nil, err
 	}
+
+	// wait for event notifications and publish them; goroutine will exit with
+	// ctx, or when container is closed.
+	// event publication does not have an event time stamp, so start this after
+	// after publishing creation event
+	go ht.publishNotifications(ctx)
+
 	return ht, nil
 }
 
@@ -1062,4 +1080,73 @@ func (ht *hcsTask) ProcessorInfo(ctx context.Context) (*processorInfo, error) {
 	return &processorInfo{
 		count: ht.host.ProcessorCount(),
 	}, nil
+}
+
+// publishNotifications monitors the containers notification queue.
+// Currently only OOM events are published.
+//
+// This MUST be called via a goroutine to wait on a background thread.
+// Returned error is used for scoping, and not meant to be consummed
+func (ht *hcsTask) publishNotifications(ctx context.Context) (err error) {
+	ctx, span := trace.StartSpan(ctx, "hcsTask::publishNotifications")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.TaskID, ht.id))
+	entity := log.G(ctx).WithField(logfields.TaskID, ht.id)
+
+	nq, err := ht.c.Notifications()
+	if err == notifications.ErrNotificationsNotSupported {
+		entity.Debug("container does not support notifications")
+		return
+	} else if err != nil {
+		entity.WithError(err).Warning("could not access notification queue")
+		return
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			var v interface{}
+			v, err = nq.ReadOrWait()
+			if err != nil {
+				if err == queue.ErrQueueClosed {
+					// set err to nil for oc.SetSpanStatus
+					err = nil
+				} else {
+					// this could be a transient fault, but to prevent infinite
+					// erroneous and polluting the log stream, break here as well
+					entity.WithError(err).Warning("could not read from notification queue")
+				}
+
+				return
+			}
+
+			ntf, ok := (v).(notifications.Message)
+			if !ok {
+				err = fmt.Errorf("expected type of 'notifications.Notification{}', received %T", v)
+				entity.WithError(err).Error("improper notification type")
+			}
+
+			entity.WithField("event", ntf.String()).Debug("publishing event notification")
+			switch ntf {
+			case notifications.Oom:
+				if err = ht.events.publishEvent(
+					ctx,
+					runtime.TaskOOMEventTopic,
+					&eventstypes.TaskOOM{
+						ContainerID: ht.id,
+					}); err != nil {
+					entity.Error("failed to publish TaskOOMEventTopic")
+				}
+			case notifications.ForcedExit, notifications.GracefulExit, notifications.UnexpectedExit:
+				// host `GuestConnection` forwards exit notifications from guest
+				// currently published elsewhere
+			default:
+				entity.WithField("event", ntf.String()).Error("unexpected event notification")
+			}
+
+		}
+	}
 }

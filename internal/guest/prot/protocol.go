@@ -350,6 +350,9 @@ const (
 	NtUnexpectedExit = NotificationType("UnexpectedExit")
 	// NtReboot indicates a reboot notification to be sent back to the HCS
 	NtReboot = NotificationType("Reboot")
+	// NtOomEvent indicates an Out of Memory (OOM) notification to be sent back to the
+	// HCS
+	NtOomEvent = NotificationType("OOM")
 	// NtConstructed indicates a constructed notification to be sent back to the
 	// HCS
 	NtConstructed = NotificationType("Constructed")

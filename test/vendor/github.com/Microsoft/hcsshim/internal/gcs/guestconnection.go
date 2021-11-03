@@ -18,6 +18,7 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	nots "github.com/Microsoft/hcsshim/internal/notifications"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -69,10 +70,9 @@ func (gcc *GuestConnectionConfig) Connect(ctx context.Context, isColdStart bool)
 	ctx, span := trace.StartSpan(ctx, "gcs::GuestConnectionConfig::Connect")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
-
 	gc := &GuestConnection{
 		nextPort:   firstIoChannelVsockPort,
-		notifyChs:  make(map[string]chan struct{}),
+		notifyChs:  make(map[string]notifyChans),
 		ioListenFn: gcc.IoListen,
 	}
 	gc.brdg = newBridge(gcc.Conn, gc.notify, gcc.Log)
@@ -95,9 +95,21 @@ type GuestConnection struct {
 	ioListenFn IoListenFunc
 	mu         sync.Mutex
 	nextPort   uint32
-	notifyChs  map[string]chan struct{}
+	notifyChs  map[string]notifyChans
 	caps       schema1.GuestDefinedCapabilities
 	os         string
+}
+
+type notifyChans struct {
+	// the channel to send notifications over
+	notify chan<- nots.Message
+	// the channel to signify that the container on the guest is closed
+	close chan<- struct{}
+}
+
+func (nc notifyChans) Close() {
+	close(nc.close)
+	close(nc.notify)
 }
 
 var _ cow.ProcessHost = &GuestConnection{}
@@ -244,31 +256,86 @@ func (gc *GuestConnection) newIoChannel() (*ioChannel, uint32, error) {
 	return newIoChannel(l), port, nil
 }
 
-func (gc *GuestConnection) requestNotify(cid string, ch chan struct{}) error {
+// requestNotify will use notifyCh to send notifications about container cid.
+// The GuestConnection will close notifyCh after notifying of container exit,
+// or upon close.
+//
+// Currently only OOM and Shutdown events are sent.
+func (gc *GuestConnection) requestNotify(
+	cid string,
+	notifyCh chan<- nots.Message,
+	notifyCloseCh chan<- struct{},
+) error {
 	gc.mu.Lock()
 	defer gc.mu.Unlock()
+
 	if gc.notifyChs == nil {
 		return errors.New("guest connection closed")
 	}
 	if _, ok := gc.notifyChs[cid]; ok {
 		return fmt.Errorf("container %s already exists", cid)
 	}
-	gc.notifyChs[cid] = ch
+
+	gc.notifyChs[cid] = notifyChans{
+		notify: notifyCh,
+		close:  notifyCloseCh,
+	}
+
 	return nil
 }
 
-func (gc *GuestConnection) notify(ntf *containerNotification) error {
-	cid := ntf.ContainerID
+func (gc *GuestConnection) notify(ntf *containerNotification) (err error) {
+	var (
+		cid    = ntf.ContainerID
+		ntType = ntf.Type
+		nntf   = nots.FromString(ntType)
+	)
+
+	entry := logrus.WithField(logfields.ContainerID, cid).WithField("notification-type", nntf.String())
+	entry.Debug("received notification from guest")
+
 	gc.mu.Lock()
-	ch := gc.notifyChs[cid]
-	delete(gc.notifyChs, cid)
+	ch, ok := gc.notifyChs[cid]
 	gc.mu.Unlock()
-	if ch == nil {
-		return fmt.Errorf("container %s not found", cid)
+	if !ok {
+		err = fmt.Errorf("container %s not found", cid)
+		entry.WithError(err).Error("could not notify appropriate container")
+		return
 	}
-	logrus.WithField(logfields.ContainerID, cid).Info("container terminated in guest")
-	close(ch)
-	return nil
+
+	// todo (helsaawy): internal/guest/prot/protocol has its own list of event types
+	// which doesnt match those in internal/notifications. internal/gcs/protocol
+	// has no corresponding list on the receiving end -- standardize all three
+	switch nntf {
+	case nots.ForcedExit, nots.GracefulExit, nots.UnexpectedExit:
+		// delete the entry
+		gc.mu.Lock()
+		delete(gc.notifyChs, cid)
+		gc.mu.Unlock()
+
+		entry.Info("container terminated in guest")
+		// close the channels after sending a container exit notifications
+		defer ch.Close()
+	case nots.Oom:
+		entry.Debug("received OOM notification")
+	case nots.None:
+		// likely a chanel close upstream triggered a receive, which caused an
+		// empty message to propagate up
+		entry.Warning("received empty notification")
+	case nots.Unknown:
+		entry.Warning("unknown notification type")
+		nntf = nots.None
+	default:
+		entry.Warning("unsupported notification type")
+		nntf = nots.None
+	}
+
+	if nntf != nots.None {
+		// should not block here, since gcs.Container has background notification goroutine
+		ch.notify <- nntf
+	}
+
+	return
 }
 
 func (gc *GuestConnection) clearNotifies() {
@@ -277,7 +344,7 @@ func (gc *GuestConnection) clearNotifies() {
 	gc.notifyChs = nil
 	gc.mu.Unlock()
 	for _, ch := range chs {
-		close(ch)
+		ch.Close()
 	}
 }
 

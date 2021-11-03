@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/containerd/cgroups"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
@@ -20,6 +21,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
@@ -136,18 +138,35 @@ func (b *Bridge) createContainerV2(r *Request) (_ RequestResponse, err error) {
 //
 // This is allowed only for protocol version 4+, schema version 2.1+
 func (b *Bridge) startContainerV2(r *Request) (_ RequestResponse, err error) {
-	_, span := trace.StartSpan(r.Context, "opengcs::bridge::startContainerV2")
+	ctx, span := trace.StartSpan(r.Context, "opengcs::bridge::startContainerV2")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
+	span.AddAttributes(trace.StringAttribute(logfields.ContainerID, r.ContainerID))
 
 	// This is just a noop, but needs to be handled so that an error isn't
 	// returned to the HCS.
 	var request prot.MessageBase
-	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
+	if err = commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
 	}
 
+	// add container cgroup to OOM monitoring before starting the container
+	c, err := b.hostState.GetContainer(request.ContainerID)
+	if err == nil {
+		var cg cgroups.Cgroup
+		cg, err = c.GetCGroup(ctx)
+		if err != nil {
+			log.G(ctx).WithError(err).WithField(logfields.ContainerID, request.ContainerID).Error("could not get container cgroup")
+		} else {
+			if err = b.OomWatcher.Add(request.ContainerID, cg); err != nil {
+				log.G(ctx).WithError(err).WithField(logfields.ContainerID, request.ContainerID).Error("could not add container to OOM monitoring")
+			} else {
+				log.G(ctx).WithField(logfields.ContainerID, request.ContainerID).Debug("added container cgroup to OOM monitoring")
+			}
+		}
+	}
+
+	// ignore err, since OOM monitoring is not central to starting a container
 	return &prot.MessageResponseBase{}, nil
 }
 

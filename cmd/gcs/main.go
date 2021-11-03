@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -256,13 +257,14 @@ func main() {
 	if err != nil {
 		logrus.WithError(err).Fatal("failed to initialize new runc runtime")
 	}
-	mux := bridge.NewBridgeMux()
-	b := bridge.Bridge{
-		Handler:  mux,
-		EnableV4: *v4,
-	}
+
 	h := hcsv2.NewHost(rtime, tport)
-	b.AssignHandlers(mux, h)
+	b, err := bridge.NewBridge(bridge.WithHost(h),
+		bridge.WithV4Enabled(*v4),
+		bridge.WithCgroupVersion(1))
+	if err != nil {
+		logrus.WithError(err).Fatal("could not create bridge")
+	}
 
 	var bridgeIn io.ReadCloser
 	var bridgeOut io.WriteCloser
@@ -323,6 +325,9 @@ func main() {
 		logrus.WithError(err).Fatal("failed add gcs pid to gcs cgroup")
 	}
 
+	// an OOM event in the GCS control group will likely kill a process hosting
+	// go-routines (or the entire gcs process tree), so there is a chance the
+	// go-routine reporting OOM events to the host will be killed as well
 	event := cgroups.MemoryThresholdEvent(*gcsMemLimitBytes, false)
 	gefd, err := gcsControl.RegisterMemoryEvent(event)
 	if err != nil {
@@ -345,8 +350,12 @@ func main() {
 		}
 	}
 
+	logrus.Debug("launching out of memory watcher")
+	go b.OomWatcher.Run(context.Background())
+	// have separate monitoring for gcs and the pod as a whole
 	go readMemoryEvents(startTime, gefdFile, "/gcs", int64(*gcsMemLimitBytes), gcsControl)
 	go readMemoryEvents(startTime, oomFile, "/containers", containersLimit, containersControl)
+
 	err = b.ListenAndServe(bridgeIn, bridgeOut)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{

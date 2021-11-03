@@ -1972,3 +1972,157 @@ func Test_RunPodSandbox_DisableTimeSyncService(t *testing.T) {
 		t.Fatalf("chronyd should not be running inside the uvm")
 	}
 }
+
+func Test_RunPodSandbox_OOM_LCOW(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
+	pullRequiredLCOWImages(t, []string{imageLcowAlpine})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sbRequest := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+	)
+
+	podID := runPodSandbox(t, client, ctx, sbRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	// launch a container that will trigger an OOM
+	cRequest := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			Command: []string{
+				"ash",
+				"-c",
+				"a=aaaa; while true; do a=$a$a; done",
+			},
+			Linux: &runtime.LinuxContainerConfig{
+				Resources: &runtime.LinuxContainerResources{
+					MemoryLimitInBytes: int64(32 * 1024 * 1024), // 32 MiB
+				},
+			},
+		},
+		PodSandboxId:  podID,
+		SandboxConfig: sbRequest.Config,
+	}
+
+	containerID := createContainer(t, client, ctx, cRequest)
+	defer removeContainer(t, client, ctx, containerID)
+
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID) // should stop (crash on its own)
+
+	// allow the container to crash
+	time.Sleep(time.Second * 5)
+
+	st := getContainerStatusFull(t, client, ctx, containerID)
+
+	if st.State != runtime.ContainerState_CONTAINER_EXITED {
+		t.Fatalf("Container did not exit, expected state %v, received state %v",
+			runtime.ContainerState_CONTAINER_EXITED,
+			st.State)
+	}
+
+	if st.ExitCode != int32(137) {
+		t.Fatalf("Improper exit code, expected 137, received %d",
+			st.ExitCode)
+	}
+
+	if st.Reason != "OOMKilled" {
+		t.Fatalf("Improper exit reason, expected \"OOMKilled\", received %s",
+			st.Reason)
+	}
+}
+
+func Test_RunPodSandbox_OOM_Exec_LCOW(t *testing.T) {
+	requireFeatures(t, featureLCOW)
+
+	pullRequiredLCOWImages(t, []string{imageLcowAlpine})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sbRequest := getRunPodSandboxRequest(
+		t,
+		lcowRuntimeHandler,
+	)
+
+	podID := runPodSandbox(t, client, ctx, sbRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	// launch a container that will trigger an OOM
+	cRequest := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageLcowAlpine,
+			},
+			Command: []string{
+				"sleep", "3",
+			},
+			Linux: &runtime.LinuxContainerConfig{
+				Resources: &runtime.LinuxContainerResources{
+					MemoryLimitInBytes: int64(32 * 1024 * 1024), // 32 MiB
+				},
+			},
+		},
+		PodSandboxId:  podID,
+		SandboxConfig: sbRequest.Config,
+	}
+
+	containerID := createContainer(t, client, ctx, cRequest)
+	defer removeContainer(t, client, ctx, containerID)
+
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID) // should stop after sleeping
+
+	execCmd := []string{
+		"ash",
+		"-c",
+		"a=aaaa; while true; do a=$a$a; done",
+	}
+	execRequest := &runtime.ExecSyncRequest{
+		ContainerId: containerID,
+		Cmd:         execCmd,
+		Timeout:     5,
+	}
+	r := execSync(t, client, ctx, execRequest)
+
+	if r.ExitCode != int32(137) {
+		t.Fatalf("Improper exec exit code, expected 137, received %d",
+			r.ExitCode)
+	}
+
+	// Wait for the container finish executing
+	time.Sleep(time.Second * 5)
+	st := getContainerStatusFull(t, client, ctx, containerID)
+
+	if st.State != runtime.ContainerState_CONTAINER_EXITED {
+		t.Fatalf("Container did not exit, expected state %v, received state %v",
+			runtime.ContainerState_CONTAINER_EXITED,
+			st.State)
+	}
+
+	if st.ExitCode != int32(0) {
+		t.Fatalf("Improper container exit code, expected 0, received %d",
+			st.ExitCode)
+	}
+
+	// even if a sub process is killed, container will have OOM killed status
+	if st.Reason != "OOMKilled" {
+		t.Fatalf("Improper container exit reason, expected \"OOMKilled\", received %s",
+			st.Reason)
+	}
+}

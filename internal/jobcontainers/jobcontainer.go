@@ -21,6 +21,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/jobobject"
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/notifications"
 	"github.com/Microsoft/hcsshim/internal/queue"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/winapi"
@@ -66,6 +67,8 @@ type JobContainer struct {
 	exited           chan struct{}
 	waitBlock        chan struct{}
 	waitError        error
+
+	notifications.NullNotifications
 }
 
 var _ cow.ProcessHost = &JobContainer{}
