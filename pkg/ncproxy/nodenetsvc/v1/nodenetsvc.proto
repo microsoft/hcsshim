@@ -1,6 +1,6 @@
 syntax = "proto3";
-package azure.nodenetworkservice;
-option go_package = "nodenetsvc";
+package nodenetsvc.v1;
+option go_package = "v1";
 
 service NodeNetworkService {
     rpc ConfigureNetworking(ConfigureNetworkingRequest) returns (ConfigureNetworkingResponse);
