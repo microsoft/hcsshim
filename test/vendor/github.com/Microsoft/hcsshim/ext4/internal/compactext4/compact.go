@@ -414,6 +414,9 @@ func (w *Writer) makeInode(f *File, node *inode) (*inode, error) {
 	node.Devmajor = f.Devmajor
 	node.Devminor = f.Devminor
 	node.Data = nil
+	if f.Xattrs == nil {
+		f.Xattrs = make(map[string][]byte)
+	}
 
 	// copy over existing xattrs first, we need to merge existing xattrs and the passed xattrs.
 	existingXattrs := make(map[string][]byte)
