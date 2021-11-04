@@ -67,16 +67,17 @@ func MaximumDiskSize(size int64) Option {
 const (
 	whiteoutPrefix = ".wh."
 	opaqueWhiteout = ".wh..wh..opq"
-	ext4blocksize  = compactext4.BlockSize
+	ext4BlockSize  = compactext4.BlockSize
 )
 
-// Convert writes a compact ext4 file system image that contains the files in the
+// ConvertTarToExt4 writes a compact ext4 file system image that contains the files in the
 // input tar stream.
-func Convert(r io.Reader, w io.ReadWriteSeeker, options ...Option) error {
+func ConvertTarToExt4(r io.Reader, w io.ReadWriteSeeker, options ...Option) error {
 	var p params
 	for _, opt := range options {
 		opt(&p)
 	}
+
 	t := tar.NewReader(bufio.NewReader(r))
 	fs := compactext4.NewWriter(w, p.ext4opts...)
 	for {
@@ -177,20 +178,24 @@ func Convert(r io.Reader, w io.ReadWriteSeeker, options ...Option) error {
 			}
 		}
 	}
-	err := fs.Close()
-	if err != nil {
+	return fs.Close()
+}
+
+// Convert wraps ConvertTarToExt4 and conditionally computes (and appends) the file image's cryptographic
+// hashes (merkle tree) or/and appends a VHD footer.
+func Convert(r io.Reader, w io.ReadWriteSeeker, options ...Option) error {
+	var p params
+	for _, opt := range options {
+		opt(&p)
+	}
+
+	if err := ConvertTarToExt4(r, w, options...); err != nil {
 		return err
 	}
 
 	if p.appendDMVerity {
-		ext4size, err := w.Seek(0, io.SeekEnd)
-		if err != nil {
-			return err
-		}
-
-		// Rewind the stream and then read it all into a []byte for
-		// dm-verity processing
-		if _, err = w.Seek(0, io.SeekStart); err != nil {
+		// Rewind the stream for dm-verity processing
+		if _, err := w.Seek(0, io.SeekStart); err != nil {
 			return err
 		}
 
@@ -201,7 +206,8 @@ func Convert(r io.Reader, w io.ReadWriteSeeker, options ...Option) error {
 
 		// Write dm-verity super-block and then the merkle tree after the end of the
 		// ext4 filesystem
-		if _, err = w.Seek(0, io.SeekEnd); err != nil {
+		ext4size, err := w.Seek(0, io.SeekEnd)
+		if err != nil {
 			return err
 		}
 
@@ -212,7 +218,7 @@ func Convert(r io.Reader, w io.ReadWriteSeeker, options ...Option) error {
 
 		// pad the super-block
 		sbsize := int(unsafe.Sizeof(*superBlock))
-		padding := bytes.Repeat([]byte{0}, ext4blocksize-(sbsize%ext4blocksize))
+		padding := bytes.Repeat([]byte{0}, ext4BlockSize-(sbsize%ext4BlockSize))
 		if _, err = w.Write(padding); err != nil {
 			return err
 		}
@@ -270,8 +276,9 @@ func ReadExt4SuperBlock(vhdPath string) (*format.SuperBlock, error) {
 }
 
 // ConvertAndComputeRootDigest writes a compact ext4 file system image that contains the files in the
-// input tar stream, computes and returns its cryptographic digest. Convert is called with minimal
-// options: ConvertWhiteout and MaximumDiskSize set to dmverity.RecommendedVHDSizeGB.
+// input tar stream, computes the resulting file image's cryptographic hashes (merkle tree) and returns
+// merkle tree root digest. Convert is called with minimal options: ConvertWhiteout and MaximumDiskSize
+// set to dmverity.RecommendedVHDSizeGB.
 func ConvertAndComputeRootDigest(r io.Reader) (string, error) {
 	out, err := ioutil.TempFile("", "")
 	if err != nil {
@@ -281,12 +288,11 @@ func ConvertAndComputeRootDigest(r io.Reader) (string, error) {
 		_ = os.Remove(out.Name())
 	}()
 
-	opts := []Option{
+	options := []Option{
 		ConvertWhiteout,
 		MaximumDiskSize(dmverity.RecommendedVHDSizeGB),
 	}
-
-	if err := Convert(r, out, opts...); err != nil {
+	if err := ConvertTarToExt4(r, out, options...); err != nil {
 		return "", fmt.Errorf("failed to convert tar to ext4: %s", err)
 	}
 
