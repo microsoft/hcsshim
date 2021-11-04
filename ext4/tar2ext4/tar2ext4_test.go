@@ -28,10 +28,11 @@ func Test_UnorderedTarExpansion(t *testing.T) {
 	var files = []struct {
 		path, body string
 	}{
-		{"foo/bar.txt", "inside bar.txt"},
+		{"foo/.wh.bar.txt", "inside bar.txt"},
 		{"data/", ""},
 		{"root.txt", "inside root.txt"},
 		{"foo/", ""},
+		{"A/.wh..wh..opq", ""},
 		{"A/B/b.txt", "inside b.txt"},
 		{"A/a.txt", "inside a.txt"},
 		{"A/", ""},
