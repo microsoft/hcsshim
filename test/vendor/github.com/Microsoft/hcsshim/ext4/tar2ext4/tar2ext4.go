@@ -5,13 +5,14 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
-	"github.com/pkg/errors"
 	"io"
 	"io/ioutil"
 	"os"
 	"path"
 	"strings"
 	"unsafe"
+
+	"github.com/pkg/errors"
 
 	"github.com/Microsoft/hcsshim/ext4/dmverity"
 	"github.com/Microsoft/hcsshim/ext4/internal/compactext4"
@@ -86,6 +87,10 @@ func Convert(r io.Reader, w io.ReadWriteSeeker, options ...Option) error {
 			return err
 		}
 
+		if err = fs.MakeParents(hdr.Name); err != nil {
+			return errors.Wrapf(err, "failed to ensure parent directories for %s", hdr.Name)
+		}
+
 		if p.convertWhiteout {
 			dir, name := path.Split(hdr.Name)
 			if strings.HasPrefix(name, whiteoutPrefix) {
@@ -93,12 +98,12 @@ func Convert(r io.Reader, w io.ReadWriteSeeker, options ...Option) error {
 					// Update the directory with the appropriate xattr.
 					f, err := fs.Stat(dir)
 					if err != nil {
-						return err
+						return errors.Wrapf(err, "failed to stat parent directory of whiteout %s", hdr.Name)
 					}
 					f.Xattrs["trusted.overlay.opaque"] = []byte("y")
 					err = fs.Create(dir, f)
 					if err != nil {
-						return err
+						return errors.Wrapf(err, "failed to create opaque dir %s", hdr.Name)
 					}
 				} else {
 					// Create an overlay-style whiteout.
@@ -109,7 +114,7 @@ func Convert(r io.Reader, w io.ReadWriteSeeker, options ...Option) error {
 					}
 					err = fs.Create(path.Join(dir, name[len(whiteoutPrefix):]), f)
 					if err != nil {
-						return err
+						return errors.Wrapf(err, "failed to create whiteout file for %s", hdr.Name)
 					}
 				}
 
@@ -161,7 +166,7 @@ func Convert(r io.Reader, w io.ReadWriteSeeker, options ...Option) error {
 			}
 			f.Mode &= ^compactext4.TypeMask
 			f.Mode |= typ
-			err = fs.CreateWithParents(hdr.Name, f)
+			err = fs.Create(hdr.Name, f)
 			if err != nil {
 				return err
 			}
