@@ -101,7 +101,7 @@ contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additio
 
 ## Dependencies
 
-This project requires Golang 1.9 or newer to build.
+This project requires Golang 1.13 or newer to build.
 
 For system requirements to run this project, see the Microsoft docs on [Windows Container requirements](https://docs.microsoft.com/en-us/virtualization/windowscontainers/deploy-containers/system-requirements).
 
