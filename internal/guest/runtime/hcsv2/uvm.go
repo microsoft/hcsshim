@@ -209,6 +209,21 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}()
 	}
 
+	// Export security policy as one of the process's environment variables so that application and sidecar
+	// containers can have access to it. security policy is required by attestation containers which need to
+	// verify the attestation report feched from the PSP and extract init-time attestation claims found in
+	// the security policy. In doing so, an attestation container needs to confirm that the hash digest of
+	// the report's host_data attribute matches the hash digest of the security policy.
+	//
+	// We append the variable after the security policy enforcing logic completes so as to bypass it; the
+	// security policy variable cannot be included in the security policy as its value is not available
+	// security policy construction time.
+	policyEnforcer, ok := (h.securityPolicyEnforcer).(*securitypolicy.StandardSecurityPolicyEnforcer)
+	if ok {
+		secPolicyEnv := fmt.Sprintf("SECURITY_POLICY=%s", policyEnforcer.EncodedSecurityPolicy)
+		settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, secPolicyEnv)
+	}
+
 	// Create the BundlePath
 	if err := os.MkdirAll(settings.OCIBundlePath, 0700); err != nil {
 		return nil, errors.Wrapf(err, "failed to create OCIBundlePath: '%s'", settings.OCIBundlePath)
