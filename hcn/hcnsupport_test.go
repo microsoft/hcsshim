@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package hcn
@@ -127,7 +128,7 @@ func TestNestedIpSetSupport(t *testing.T) {
 	}
 }
 
-func TestNetworkACLPolicySupport(t *testing.T){
+func TestNetworkACLPolicySupport(t *testing.T) {
 	supportedFeatures := GetSupportedFeatures()
 	err := NetworkACLPolicySupported()
 	if supportedFeatures.NetworkACL && err != nil {

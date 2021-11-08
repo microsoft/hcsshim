@@ -1,3 +1,4 @@
+//go:build functional || uvmscsi
 // +build functional uvmscsi
 
 package functional

@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 // Package bridge defines the bridge struct, which implements the control loop

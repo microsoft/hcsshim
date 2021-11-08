@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package hcn
@@ -169,7 +170,7 @@ func TestAddRemoveHostRoutePolicy(t *testing.T) {
 	testNetworkPolicy(t, hostRoutePolicy)
 }
 
-func TestAddRemoveNetworACLPolicy(t *testing.T){
+func TestAddRemoveNetworACLPolicy(t *testing.T) {
 
 	networkACLPolicy, err := HcnCreateNetworkACLs()
 	if err != nil {

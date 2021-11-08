@@ -1,3 +1,4 @@
+//go:build functional || uvmvsmb
 // +build functional uvmvsmb
 
 package functional

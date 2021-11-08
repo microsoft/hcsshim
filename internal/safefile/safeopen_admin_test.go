@@ -1,3 +1,4 @@
+//go:build admin
 // +build admin
 
 package safefile

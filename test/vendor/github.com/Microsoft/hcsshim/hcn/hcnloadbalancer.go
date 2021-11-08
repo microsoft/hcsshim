@@ -35,7 +35,7 @@ var (
 	// LoadBalancerFlagsNone is the default.
 	LoadBalancerFlagsNone LoadBalancerFlags = 0
 	// LoadBalancerFlagsDSR enables Direct Server Return (DSR)
-	LoadBalancerFlagsDSR LoadBalancerFlags = 1
+	LoadBalancerFlagsDSR  LoadBalancerFlags = 1
 	LoadBalancerFlagsIPv6 LoadBalancerFlags = 2
 )
 

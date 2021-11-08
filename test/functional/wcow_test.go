@@ -1,3 +1,4 @@
+//go:build functional || wcow
 // +build functional wcow
 
 package functional

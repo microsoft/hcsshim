@@ -1,3 +1,4 @@
+//go:build functional || uvmvpmem
 // +build functional uvmvpmem
 
 package functional
