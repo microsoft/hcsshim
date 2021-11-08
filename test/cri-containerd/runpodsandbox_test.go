@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/Microsoft/hcsshim/pkg/annotations"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -22,6 +22,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/osversion"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	"github.com/containerd/containerd/log"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
@@ -1727,13 +1728,11 @@ func Test_RunPodSandbox_TimeSyncService(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause})
 
 	request := getRunPodSandboxRequest(
 		t,
-		lcowRuntimeHandler,
-		map[string]string{},
-	)
+		lcowRuntimeHandler)
 
 	podID := runPodSandbox(t, client, ctx, request)
 	defer removePodSandbox(t, client, ctx, podID)
@@ -1772,14 +1771,15 @@ func Test_RunPodSandbox_DisableTimeSyncService(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	pullRequiredLcowImages(t, []string{imageLcowK8sPause})
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause})
 
 	request := getRunPodSandboxRequest(
 		t,
 		lcowRuntimeHandler,
-		map[string]string{
-			oci.AnnotationDisableLCOWTimeSyncService: "true",
-		},
+		WithSandboxAnnotations(
+			map[string]string{
+				annotations.DisableLCOWTimeSyncService: "true",
+			}),
 	)
 
 	podID := runPodSandbox(t, client, ctx, request)
