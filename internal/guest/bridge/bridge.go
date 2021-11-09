@@ -164,7 +164,6 @@ type bridgeResponse struct {
 
 type bridgeOpts struct {
 	enableV4 bool
-	cgroupV2 bool
 	host     *hcsv2.Host
 }
 
@@ -173,19 +172,6 @@ type BridgeOpt func(*bridgeOpts) error
 func WithV4Enabled(enableV4 bool) BridgeOpt {
 	return func(bo *bridgeOpts) error {
 		bo.enableV4 = enableV4
-		return nil
-	}
-}
-
-func WithCgroupVersion(version uint) BridgeOpt {
-	return func(bo *bridgeOpts) error {
-		if version < 1 || version > 2 {
-			return errors.Errorf("unsupported CGroup version %d", version)
-		} else if version == 2 {
-			return errors.New("version 2 CGroups are currently not supported")
-		}
-
-		bo.cgroupV2 = false
 		return nil
 	}
 }
@@ -250,8 +236,8 @@ func NewBridge(opts ...BridgeOpt) (*Bridge, error) {
 
 	b.AssignHandlers(mux, bo.host)
 
-	publisher := BridgePublisherFunc(b.PublishNotification)
-	// TODO: (helsaawy) add v2 OOM watcher with v2 cgroups support
+	publisher := newBridgePublisher(b.PublishNotification)
+	// TODO: (helsaawy) add v2 OOM watcher along with v2 cgroups support
 	ep, err := oomv1.New(publisher)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create OOM watcher to add to bridge")

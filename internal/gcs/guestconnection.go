@@ -101,10 +101,17 @@ type GuestConnection struct {
 }
 
 type notifyChans struct {
-	// the channel to send notifications over
-	notify chan<- nots.Message
-	// the channel to signify that the container on the guest is closed
-	close chan<- struct{}
+	// The channel on which the guest connection sends notifications
+	notify chan nots.Message
+	// Closed by GuestConnection to signal container in the guest exited
+	close chan struct{}
+}
+
+func newNotifyChans() notifyChans {
+	return notifyChans{
+		notify: make(chan nots.Message),
+		close:  make(chan struct{}),
+	}
 }
 
 func (nc notifyChans) Close() {
@@ -261,11 +268,7 @@ func (gc *GuestConnection) newIoChannel() (*ioChannel, uint32, error) {
 // or upon close.
 //
 // Currently only OOM and Shutdown events are sent.
-func (gc *GuestConnection) requestNotify(
-	cid string,
-	notifyCh chan<- nots.Message,
-	notifyCloseCh chan<- struct{},
-) error {
+func (gc *GuestConnection) requestNotify(cid string, notifyChs notifyChans) error {
 	gc.mu.Lock()
 	defer gc.mu.Unlock()
 
@@ -276,10 +279,7 @@ func (gc *GuestConnection) requestNotify(
 		return fmt.Errorf("container %s already exists", cid)
 	}
 
-	gc.notifyChs[cid] = notifyChans{
-		notify: notifyCh,
-		close:  notifyCloseCh,
-	}
+	gc.notifyChs[cid] = notifyChs
 
 	return nil
 }
@@ -291,7 +291,10 @@ func (gc *GuestConnection) notify(ntf *containerNotification) (err error) {
 		nntf   = nots.FromString(ntType)
 	)
 
-	entry := logrus.WithField(logfields.ContainerID, cid).WithField("notification-type", nntf.String())
+	entry := logrus.WithFields(logrus.Fields{
+		logfields.ContainerID: cid,
+		"notification-type":   nntf.String(),
+	})
 	entry.Debug("received notification from guest")
 
 	gc.mu.Lock()
@@ -312,19 +315,20 @@ func (gc *GuestConnection) notify(ntf *containerNotification) (err error) {
 		gc.mu.Lock()
 		delete(gc.notifyChs, cid)
 		gc.mu.Unlock()
+		// close the channels
+		ch.Close()
 
 		entry.Info("container terminated in guest")
-		// close the channels after sending a container exit notifications
-		defer ch.Close()
+
+		// since the TaskExitEventTopic is published elsewhere and task_hcs does
+		// not consume exit notifications, do not publish them here and just return
+		return
 	case nots.Oom:
 		entry.Debug("received OOM notification")
 	case nots.None:
 		// likely a chanel close upstream triggered a receive, which caused an
 		// empty message to propagate up
 		entry.Warning("received empty notification")
-	case nots.Unknown:
-		entry.Warning("unknown notification type")
-		nntf = nots.None
 	default:
 		entry.Warning("unsupported notification type")
 		nntf = nots.None

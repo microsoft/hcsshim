@@ -1086,20 +1086,21 @@ func (ht *hcsTask) ProcessorInfo(ctx context.Context) (*processorInfo, error) {
 // Currently only OOM events are published.
 //
 // This MUST be called via a goroutine to wait on a background thread.
-// Returned error is used for scoping, and not meant to be consummed
-func (ht *hcsTask) publishNotifications(ctx context.Context) (err error) {
+// Returned error is used for scoping, and not meant to be consumed
+func (ht *hcsTask) publishNotifications(ctx context.Context) {
 	ctx, span := trace.StartSpan(ctx, "hcsTask::publishNotifications")
 	defer span.End()
+	var err error
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute(logfields.TaskID, ht.id))
 	entity := log.G(ctx).WithField(logfields.TaskID, ht.id)
 
-	nq, err := ht.c.Notifications()
-	if err == notifications.ErrNotificationsNotSupported {
-		entity.Debug("container does not support notifications")
-		return
-	} else if err != nil {
-		entity.WithError(err).Warning("could not access notification queue")
+	var nq *queue.MessageQueue
+	nq, err = ht.c.Notifications()
+	if err != nil {
+		// includes `notifications.ErrNotificationsNotSupported`, where container
+		// does not publish any notifications
+		entity.WithError(err).Warning("unable to retrieve container notifications channel")
 		return
 	}
 
@@ -1116,7 +1117,7 @@ func (ht *hcsTask) publishNotifications(ctx context.Context) (err error) {
 					err = nil
 				} else {
 					// this could be a transient fault, but to prevent infinite
-					// erroneous and polluting the log stream, break here as well
+					// errors and polluting the log stream, break here as well
 					entity.WithError(err).Warning("could not read from notification queue")
 				}
 
@@ -1127,6 +1128,7 @@ func (ht *hcsTask) publishNotifications(ctx context.Context) (err error) {
 			if !ok {
 				err = fmt.Errorf("expected type of 'notifications.Notification{}', received %T", v)
 				entity.WithError(err).Error("improper notification type")
+				continue
 			}
 
 			entity.WithField("event", ntf.String()).Debug("publishing event notification")

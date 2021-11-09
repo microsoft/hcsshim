@@ -142,31 +142,34 @@ func (b *Bridge) startContainerV2(r *Request) (_ RequestResponse, err error) {
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute(logfields.ContainerID, r.ContainerID))
+	entity := log.G(ctx).WithField(logfields.ContainerID, r.ContainerID)
 
 	// This is just a noop, but needs to be handled so that an error isn't
 	// returned to the HCS.
 	var request prot.MessageBase
-	if err = commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
+	if err := commonutils.UnmarshalJSONWithHresult(r.Message, &request); err != nil {
 		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
 	}
 
-	// add container cgroup to OOM monitoring before starting the container
+	// add container cgroup to OOM monitoring before "starting" the container
 	c, err := b.hostState.GetContainer(request.ContainerID)
-	if err == nil {
-		var cg cgroups.Cgroup
-		cg, err = c.GetCGroup(ctx)
-		if err != nil {
-			log.G(ctx).WithError(err).WithField(logfields.ContainerID, request.ContainerID).Error("could not get container cgroup")
-		} else {
-			if err = b.OomWatcher.Add(request.ContainerID, cg); err != nil {
-				log.G(ctx).WithError(err).WithField(logfields.ContainerID, request.ContainerID).Error("could not add container to OOM monitoring")
-			} else {
-				log.G(ctx).WithField(logfields.ContainerID, request.ContainerID).Debug("added container cgroup to OOM monitoring")
-			}
-		}
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not get container")
 	}
 
-	// ignore err, since OOM monitoring is not central to starting a container
+	var cg cgroups.Cgroup
+	if cg, err = c.GetCgroup(ctx); err != nil {
+		return nil, errors.Wrapf(err, "could not get container's cgroup")
+	}
+
+	if err = b.OomWatcher.Add(request.ContainerID, cg); err != nil {
+		// OOM monitoring is not central to starting a container, so
+		// keep err for span status, but do not return it
+		entity.WithError(err).Error("could not add container to OOM monitoring")
+	} else {
+		entity.Debug("added container cgroup to OOM monitoring")
+	}
+
 	return &prot.MessageResponseBase{}, nil
 }
 

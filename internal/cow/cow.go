@@ -89,7 +89,7 @@ type Container interface {
 	Wait() error
 	// Modify sends a request to modify container resources
 	Modify(ctx context.Context, config interface{}) error
-	// Notification returns a MessageQueue of `notifications.Notification` raised
+	// Notifications returns a MessageQueue of `notifications.Message` raised
 	// for the container. Currently, only supported for OOM events in LCOW
 	Notifications() (*queue.MessageQueue, error)
 }

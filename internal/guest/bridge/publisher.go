@@ -1,4 +1,5 @@
 //go:build linux
+// +build linux
 
 package bridge
 
@@ -13,30 +14,45 @@ import (
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 const emptyActivityID = "00000000-0000-0000-0000-000000000000"
 
+var ErrBridgePublisherClosed = errors.New("bridge publisher closed")
+
 // wraps `bridge.PublishNotification` to conform to `shim.Publish`, so that it can
 // be used by containerd's `oom.Watcher` (github.com/containerd/containerd/pkg/oom)
-type BridgePublisherFunc func(*prot.ContainerNotification)
+type bridgePublisher struct {
+	f func(*prot.ContainerNotification)
+}
 
-var _ shim.Publisher = BridgePublisherFunc(func(_ *prot.ContainerNotification) {})
+var _ shim.Publisher = bridgePublisher{}
 
-func (bp BridgePublisherFunc) Close() error {
-	// noop
+func newBridgePublisher(publisherFunc func(*prot.ContainerNotification)) bridgePublisher {
+	return bridgePublisher{publisherFunc}
+}
+
+func (bp bridgePublisher) Close() error {
+	bp.f = nil
 	return nil
 }
 
-func (bp BridgePublisherFunc) Publish(ctx context.Context, topic string, event events.Event) error {
+func (bp bridgePublisher) Publish(ctx context.Context, topic string, event events.Event) error {
+	if bp.f == nil {
+		return ErrBridgePublisherClosed
+	}
 	n, err := mapEventToNotification(topic, event)
 	if err != nil {
 		return errors.Wrapf(err, "could not handle topic %q and event %+v", topic, event)
 	}
 
-	log.G(ctx).WithField("event", fmt.Sprintf("%+v", event)).WithField("eventTopic", topic).Debug("publishing event over notification channel")
+	log.G(ctx).WithFields(logrus.Fields{
+		"event": fmt.Sprintf("%+v", event),
+		"eventTopic": topic,
+	}).Debug("publishing event over notification channel")
 
-	bp(n)
+	bp.f(n)
 	return nil
 }
 

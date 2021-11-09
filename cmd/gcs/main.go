@@ -260,8 +260,7 @@ func main() {
 
 	h := hcsv2.NewHost(rtime, tport)
 	b, err := bridge.NewBridge(bridge.WithHost(h),
-		bridge.WithV4Enabled(*v4),
-		bridge.WithCgroupVersion(1))
+		bridge.WithV4Enabled(*v4))
 	if err != nil {
 		logrus.WithError(err).Fatal("could not create bridge")
 	}

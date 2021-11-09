@@ -5,13 +5,13 @@ package hcsv2
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"syscall"
 
 	"github.com/containerd/cgroups"
 	v1 "github.com/containerd/cgroups/stats/v1"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 
@@ -23,9 +23,9 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
-	"github.com/Microsoft/hcsshim/internal/oc"
 )
 
 type Container struct {
@@ -209,26 +209,21 @@ func (c *Container) GetStats(ctx context.Context) (_ *v1.Metrics, err error) {
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute(logfields.ContainerID, c.id))
 
-	cg, err := c.GetCGroup(ctx)
+	cg, err := c.GetCgroup(ctx)
 	if err != nil {
-		return nil, errors.Errorf("failed to get container stats for %v: %v", c.id, err)
+		return nil, fmt.Errorf("failed to get container stats: %w", err)
 	}
 
 	return cg.Stat(cgroups.IgnoreNotExist)
 }
 
-// GetCGroup returns the container's cgroup
-func (c *Container) GetCGroup(ctx context.Context) (_ cgroups.Cgroup, err error) {
-	_, span := trace.StartSpan(ctx, "opengcs::Container::GetCGroup")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute(logfields.ContainerID, c.id))
-
+// GetCgroup returns the container's cgroup
+func (c *Container) GetCgroup(ctx context.Context) (_ cgroups.Cgroup, err error) {
 	cgroupPath := c.spec.Linux.CgroupsPath
 	// TODO: allow for switching to V2
 	cg, err := cgroups.Load(cgroups.V1, cgroups.StaticPath(cgroupPath))
 	if err != nil {
-		return nil, errors.Errorf("failed to load container control group %v: %v", c.id, err)
+		return nil, fmt.Errorf("failed to load cgroup for container %v: %w", c.id, err)
 	}
 
 	return cg, nil
