@@ -7,7 +7,7 @@ require (
 	github.com/Microsoft/hcsshim v0.8.21
 	github.com/containerd/containerd v1.5.7
 	github.com/containerd/go-runc v1.0.0
-	github.com/containerd/ttrpc v1.0.2
+	github.com/containerd/ttrpc v1.1.0
 	github.com/containerd/typeurl v1.0.2
 	github.com/gogo/protobuf v1.3.2
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
