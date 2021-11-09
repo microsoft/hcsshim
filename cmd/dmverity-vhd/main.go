@@ -217,7 +217,7 @@ var rootHashVHDCommand = cli.Command{
 			if err != nil {
 				return errors.Wrap(err, "failed to compute root hash")
 			}
-			fmt.Fprintf(os.Stdout, "Layer %d\nroot hash: %x\n", layerNumber, hash)
+			fmt.Fprintf(os.Stdout, "Layer %d\nroot hash: %s\n", layerNumber, hash)
 		}
 		return nil
 	},

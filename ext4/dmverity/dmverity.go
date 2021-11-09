@@ -73,10 +73,10 @@ type VerityInfo struct {
 	Version       uint32
 }
 
-// MerkleTree constructs dm-verity hash-tree for a given bufio.Reader with a fixed salt (0-byte) and algorithm (sha256).
-func MerkleTree(br *bufio.Reader) ([]byte, error) {
+// MerkleTree constructs dm-verity hash-tree for a given io.Reader with a fixed salt (0-byte) and algorithm (sha256).
+func MerkleTree(r io.Reader) ([]byte, error) {
 	layers := make([][]byte, 0)
-	var currentLevel io.Reader = br
+	currentLevel := r
 
 	for {
 		nextLevel := bytes.NewBuffer(make([]byte, 0))
