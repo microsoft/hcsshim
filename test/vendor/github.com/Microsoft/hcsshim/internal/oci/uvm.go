@@ -426,5 +426,11 @@ func UpdateSpecFromOptions(s specs.Spec, opts *runhcsopts.Options) specs.Spec {
 		s.Annotations[annotations.NetworkConfigProxy] = opts.NCProxyAddr
 	}
 
+	for key, value := range opts.DefaultContainerAnnotations {
+		// Make sure not to override any annotations which are set explicitly
+		if _, ok := s.Annotations[key]; !ok {
+			s.Annotations[key] = value
+		}
+	}
 	return s
 }
