@@ -292,7 +292,7 @@ const (
 type SetPolicySetting struct {
 	Id     string
 	Name   string
-	Type   SetPolicyType
+	Type   SetPolicyType `json:"PolicyType"`
 	Values string
 }
 
