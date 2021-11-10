@@ -21,6 +21,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/runc"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/containerd/cgroups"
 	cgroupstats "github.com/containerd/cgroups/stats/v1"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
@@ -91,8 +92,9 @@ func readMemoryEvents(startTime time.Time, efdFile *os.File, cgName string, thre
 // Any stdout or stderr of the command will be split into lines and written as a log with
 // logrus standard logger.  This function must be called in a separate goroutine.
 func runWithRestartMonitor(arg0 string, args ...string) {
-	restartDelay := time.Second * 5
-	backoffFactor := 2
+	backoffSettings := backoff.NewExponentialBackOff()
+	// give after retrying for 10 mins
+	backoffSettings.MaxElapsedTime = time.Minute * 10
 	for {
 		command := exec.Command(arg0, args...)
 		err := command.Start()
@@ -110,8 +112,14 @@ func runWithRestartMonitor(arg0 string, args ...string) {
 				}).Warn("restart monitor: wait returns error")
 			}
 		}
-		time.Sleep(restartDelay * time.Duration(backoffFactor))
-		restartDelay *= time.Duration(backoffFactor)
+		backOffTime := backoffSettings.NextBackOff()
+		if backOffTime == backoffSettings.Stop {
+			logrus.WithFields(logrus.Fields{
+				"command": command.Args,
+			}).Warn("give up restarting after timeout")
+			return
+		}
+		time.Sleep(backOffTime)
 	}
 
 }
