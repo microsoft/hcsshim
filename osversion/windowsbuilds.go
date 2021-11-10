@@ -39,12 +39,12 @@ const (
 	// V21H1 corresponds to Windows Server 21H1 (semi-annual channel).
 	V21H1 = 19043
 
-	// Win10V21H2 corresponds to Windows 10 (November 2021 Update).
-	Win10V21H2 = 19044
+	// V21H2Win10 corresponds to Windows 10 (November 2021 Update).
+	V21H2Win10 = 19044
 
-	// WinServerV21H2 corresponds to Windows Server 2022 (ltsc2022).
-	WinServerV21H2 = 20348
+	// V21H2Server corresponds to Windows Server 2022 (ltsc2022).
+	V21H2Server = 20348
 
-	// Win11V21H2 corresponds to Windows 11 (original release).
-	Win11V21H2 = 22000
+	// V21H2Win11 corresponds to Windows 11 (original release).
+	V21H2Win11 = 22000
 )
