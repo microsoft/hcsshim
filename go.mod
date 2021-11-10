@@ -10,7 +10,7 @@ require (
 	github.com/containerd/console v1.0.2
 	github.com/containerd/containerd v1.5.7
 	github.com/containerd/go-runc v1.0.0
-	github.com/containerd/ttrpc v1.0.2
+	github.com/containerd/ttrpc v1.1.0
 	github.com/containerd/typeurl v1.0.2
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/mock v1.6.0
