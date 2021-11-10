@@ -99,8 +99,8 @@ message Options {
 	// timeout.
 	int32 io_retry_timeout_in_sec = 17;
 	
-	// global_container_annotations specifies a set of annotations that should be set for every workload container
-	map<string, string> global_container_annotations = 18;
+	// default_container_annotations specifies a set of annotations that should be set for every workload container
+	map<string, string> default_container_annotations = 18;
 }
 
 // ProcessDetails contains additional information about a process. This is the additional
