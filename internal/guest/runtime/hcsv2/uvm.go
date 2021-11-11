@@ -218,8 +218,8 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	// We append the variable after the security policy enforcing logic completes so as to bypass it; the
 	// security policy variable cannot be included in the security policy as its value is not available
 	// security policy construction time.
-	policyEnforcer, ok := (h.securityPolicyEnforcer).(*securitypolicy.StandardSecurityPolicyEnforcer)
-	if ok {
+
+	if policyEnforcer, ok := (h.securityPolicyEnforcer).(*securitypolicy.StandardSecurityPolicyEnforcer); ok {
 		secPolicyEnv := fmt.Sprintf("SECURITY_POLICY=%s", policyEnforcer.EncodedSecurityPolicy)
 		settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, secPolicyEnv)
 	}
