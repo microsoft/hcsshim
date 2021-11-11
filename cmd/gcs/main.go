@@ -137,7 +137,7 @@ func startTimeSyncService() error {
 	for _, ptpDirPath = range ptpDirList {
 		clockNameFilePath := filepath.Join(ptpClassDir.Name(), ptpDirPath, "clock_name")
 		clockNameFile, err := os.Open(clockNameFilePath)
-		if err != nil {
+		if err != nil && !os.IsNotExist(err) {
 			return errors.Wrapf(err, "failed to open clock name file at %s", clockNameFilePath)
 		}
 		defer clockNameFile.Close()
