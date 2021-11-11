@@ -95,8 +95,7 @@ func runWithRestartMonitor(arg0 string, args ...string) {
 	backoffSettings.MaxElapsedTime = time.Minute * 10
 	for {
 		command := exec.Command(arg0, args...)
-		err := command.Run()
-		if err != nil {
+		if err := command.Run(); err != nil {
 			logrus.WithFields(logrus.Fields{
 				"error":   err,
 				"command": command.Args,
