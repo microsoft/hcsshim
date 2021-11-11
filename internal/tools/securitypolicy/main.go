@@ -11,7 +11,6 @@ import (
 	"strconv"
 
 	"github.com/BurntSushi/toml"
-	"github.com/Microsoft/hcsshim/ext4/dmverity"
 	"github.com/Microsoft/hcsshim/ext4/tar2ext4"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/google/go-containerregistry/pkg/authn"
@@ -168,43 +167,20 @@ func createPolicyFromConfig(config Config) (securitypolicy.SecurityPolicy, error
 				return p, err
 			}
 
-			out, err := ioutil.TempFile("", "")
+			hashString, err := tar2ext4.ConvertAndComputeRootDigest(r)
 			if err != nil {
 				return p, err
 			}
-			defer os.Remove(out.Name())
-
-			opts := []tar2ext4.Option{
-				tar2ext4.ConvertWhiteout,
-				tar2ext4.MaximumDiskSize(dmverity.RecommendedVHDSizeGB),
-			}
-
-			err = tar2ext4.Convert(r, out, opts...)
-			if err != nil {
-				return p, err
-			}
-
-			data, err := ioutil.ReadFile(out.Name())
-			if err != nil {
-				return p, err
-			}
-
-			tree, err := dmverity.MerkleTree(data)
-			if err != nil {
-				return p, err
-			}
-			hash := dmverity.RootHash(tree)
-			hashString := fmt.Sprintf("%x", hash)
 			addLayer(&container.Layers, hashString)
 		}
 
 		// add rules for all known environment variables from the configuration
 		// these are in addition to "other rules" from the policy definition file
-		config, err := img.ConfigFile()
+		imgConfig, err := img.ConfigFile()
 		if err != nil {
 			return p, err
 		}
-		for _, env := range config.Config.Env {
+		for _, env := range imgConfig.Config.Env {
 			rule := securitypolicy.EnvRule{
 				Strategy: securitypolicy.EnvVarRuleString,
 				Rule:     env,
@@ -214,7 +190,7 @@ func createPolicyFromConfig(config Config) (securitypolicy.SecurityPolicy, error
 		}
 
 		// cri adds TERM=xterm for all workload containers. we add to all containers
-		// to prevent any possble erroring
+		// to prevent any possible error
 		rule := securitypolicy.EnvRule{
 			Strategy: securitypolicy.EnvVarRuleString,
 			Rule:     "TERM=xterm",
@@ -243,19 +219,19 @@ func validateEnvRules(rules []EnvironmentVariableRule) error {
 }
 
 func convertCommand(toml []string) securitypolicy.CommandArgs {
-	json := map[string]string{}
+	jsn := map[string]string{}
 
 	for i, arg := range toml {
-		json[strconv.Itoa(i)] = arg
+		jsn[strconv.Itoa(i)] = arg
 	}
 
 	return securitypolicy.CommandArgs{
-		Elements: json,
+		Elements: jsn,
 	}
 }
 
 func convertEnvironmentVariableRules(toml []EnvironmentVariableRule) securitypolicy.EnvRules {
-	json := map[string]securitypolicy.EnvRule{}
+	jsn := map[string]securitypolicy.EnvRule{}
 
 	for i, rule := range toml {
 		jsonRule := securitypolicy.EnvRule{
@@ -263,11 +239,11 @@ func convertEnvironmentVariableRules(toml []EnvironmentVariableRule) securitypol
 			Rule:     rule.Rule,
 		}
 
-		json[strconv.Itoa(i)] = jsonRule
+		jsn[strconv.Itoa(i)] = jsonRule
 	}
 
 	return securitypolicy.EnvRules{
-		Elements: json,
+		Elements: jsn,
 	}
 }
 
