@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -133,22 +132,16 @@ func startTimeSyncService() error {
 
 	var ptpDirPath string
 	found := false
-	expectedClockName := "hyperv"
+	// The file ends with a new line
+	expectedClockName := "hyperv\n"
 	for _, ptpDirPath = range ptpDirList {
 		clockNameFilePath := filepath.Join(ptpClassDir.Name(), ptpDirPath, "clock_name")
-		clockNameFile, err := os.Open(clockNameFilePath)
+		buf, err := ioutil.ReadFile(clockNameFilePath)
 		if err != nil && !os.IsNotExist(err) {
-			return errors.Wrapf(err, "failed to open clock name file at %s", clockNameFilePath)
+			return errors.Wrapf(err, "failed to read clock name file at %s", clockNameFilePath)
 		}
-		defer clockNameFile.Close()
-		// Expected clock name is `hyperv` so read first 6 chars and verify the
-		// name
-		buf := make([]byte, len(expectedClockName))
-		if _, err = io.ReadFull(clockNameFile, buf); err != nil {
-			return errors.Wrapf(err, "read file %s failed", clockNameFilePath)
-		}
-		clockName := string(buf)
-		if strings.EqualFold(clockName, expectedClockName) {
+
+		if string(buf) == expectedClockName {
 			found = true
 			break
 		}
