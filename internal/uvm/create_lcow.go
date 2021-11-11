@@ -654,7 +654,7 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 	}
 
 	if opts.DisableTimeSyncService {
-		opts.ExecCommandLine = fmt.Sprintf("%s --disableTimeSync", opts.ExecCommandLine)
+		opts.ExecCommandLine = fmt.Sprintf("%s --disable-time-sync", opts.ExecCommandLine)
 	}
 
 	initArgs += " " + opts.ExecCommandLine

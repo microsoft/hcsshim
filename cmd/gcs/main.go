@@ -3,7 +3,6 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"io"
@@ -97,26 +96,18 @@ func runWithRestartMonitor(arg0 string, args ...string) {
 	backoffSettings.MaxElapsedTime = time.Minute * 10
 	for {
 		command := exec.Command(arg0, args...)
-		err := command.Start()
+		err := command.Run()
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
 				"error":   err,
 				"command": command.Args,
-			}).Warn("restart monitor: start returns error")
-		} else {
-			waitErr := command.Wait()
-			if waitErr != nil {
-				logrus.WithFields(logrus.Fields{
-					"error":   waitErr,
-					"command": command.Args,
-				}).Warn("restart monitor: wait returns error")
-			}
+			}).Warn("restart monitor: run command returns error")
 		}
 		backOffTime := backoffSettings.NextBackOff()
 		if backOffTime == backoffSettings.Stop {
 			logrus.WithFields(logrus.Fields{
 				"command": command.Args,
-			}).Warn("give up restarting after timeout")
+			}).Error("give up restarting after timeout")
 			return
 		}
 		time.Sleep(backOffTime)
@@ -124,12 +115,12 @@ func runWithRestartMonitor(arg0 string, args ...string) {
 
 }
 
-// StartTimeSyncService starts the `chronyd` deamon to keep the UVM time synchronized.  We
+// startTimeSyncService starts the `chronyd` deamon to keep the UVM time synchronized.  We
 // use a PTP device provided by the hypervisor as a source of correct time (instead of
 // using a network server). We need to create a configuration file that configures chronyd
 // to use the PTP device.  The system can have multiple PTP devices so we identify the
 // correct PTP device by verifying that the `clock_name` of that device is `hyperv`.
-func StartTimeSyncService() error {
+func startTimeSyncService() error {
 	ptpClassDir, err := os.Open("/sys/class/ptp")
 	if err != nil {
 		return errors.Wrap(err, "failed to open PTP class directory")
@@ -149,12 +140,11 @@ func StartTimeSyncService() error {
 		if err != nil {
 			return errors.Wrapf(err, "failed to open clock name file at %s", clockNameFilePath)
 		}
+		defer clockNameFile.Close()
 		// Expected clock name is `hyperv` so read first 6 chars and verify the
 		// name
 		buf := make([]byte, len(expectedClockName))
-		fileReader := bufio.NewReader(clockNameFile)
-		_, err = fileReader.Read(buf)
-		if err != nil {
+		if _, err = io.ReadFull(clockNameFile, buf); err != nil {
 			return errors.Wrapf(err, "read file %s failed", clockNameFilePath)
 		}
 		clockName := string(buf)
@@ -196,7 +186,7 @@ func main() {
 	v4 := flag.Bool("v4", false, "enable the v4 protocol support and v2 schema")
 	rootMemReserveBytes := flag.Uint64("root-mem-reserve-bytes", 75*1024*1024, "the amount of memory reserved for the orchestration, the rest will be assigned to containers")
 	gcsMemLimitBytes := flag.Uint64("gcs-mem-limit-bytes", 50*1024*1024, "the maximum amount of memory the gcs can use")
-	disableTimeSync := flag.Bool("disableTimeSync", false, "If true do not run chronyd time synchronization service inside the UVM")
+	disableTimeSync := flag.Bool("disable-time-sync", false, "If true do not run chronyd time synchronization service inside the UVM")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "\nUsage of %s:\n", os.Args[0])
@@ -355,8 +345,7 @@ func main() {
 
 	// time synchronization service
 	if !(*disableTimeSync) {
-		err = StartTimeSyncService()
-		if err != nil {
+		if err = startTimeSyncService(); err != nil {
 			logrus.WithError(err).Fatal("failed to start time synchronization service")
 		}
 	}
