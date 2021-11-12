@@ -91,8 +91,9 @@ func readMemoryEvents(startTime time.Time, efdFile *os.File, cgName string, thre
 // logrus standard logger.  This function must be called in a separate goroutine.
 func runWithRestartMonitor(arg0 string, args ...string) {
 	backoffSettings := backoff.NewExponentialBackOff()
-	// give after retrying for 10 mins
-	backoffSettings.MaxElapsedTime = time.Minute * 10
+	// After we hit 10 min retry interval keep retrying after every 10 mins instead of
+	// continuing to increase retry interval.
+	backoffSettings.MaxInterval = time.Minute * 10
 	for {
 		command := exec.Command(arg0, args...)
 		if err := command.Run(); err != nil {
@@ -102,12 +103,7 @@ func runWithRestartMonitor(arg0 string, args ...string) {
 			}).Warn("restart monitor: run command returns error")
 		}
 		backOffTime := backoffSettings.NextBackOff()
-		if backOffTime == backoffSettings.Stop {
-			logrus.WithFields(logrus.Fields{
-				"command": command.Args,
-			}).Error("give up restarting after timeout")
-			return
-		}
+		// since backoffSettings.MaxElapsedTime is set to 0 we will never receive backoff.Stop.
 		time.Sleep(backOffTime)
 	}
 
