@@ -8,6 +8,8 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -17,9 +19,11 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/runc"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/containerd/cgroups"
 	cgroupstats "github.com/containerd/cgroups/stats/v1"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
@@ -81,6 +85,84 @@ func readMemoryEvents(startTime time.Time, efdFile *os.File, cgName string, thre
 	}
 }
 
+// runWithRestartMonitor starts a command with given args and waits for it to exit. If the
+// command exit code is non-zero the command is restarted with with some back off delay.
+// Any stdout or stderr of the command will be split into lines and written as a log with
+// logrus standard logger.  This function must be called in a separate goroutine.
+func runWithRestartMonitor(arg0 string, args ...string) {
+	backoffSettings := backoff.NewExponentialBackOff()
+	// After we hit 10 min retry interval keep retrying after every 10 mins instead of
+	// continuing to increase retry interval.
+	backoffSettings.MaxInterval = time.Minute * 10
+	for {
+		command := exec.Command(arg0, args...)
+		if err := command.Run(); err != nil {
+			logrus.WithFields(logrus.Fields{
+				"error":   err,
+				"command": command.Args,
+			}).Warn("restart monitor: run command returns error")
+		}
+		backOffTime := backoffSettings.NextBackOff()
+		// since backoffSettings.MaxElapsedTime is set to 0 we will never receive backoff.Stop.
+		time.Sleep(backOffTime)
+	}
+
+}
+
+// startTimeSyncService starts the `chronyd` deamon to keep the UVM time synchronized.  We
+// use a PTP device provided by the hypervisor as a source of correct time (instead of
+// using a network server). We need to create a configuration file that configures chronyd
+// to use the PTP device.  The system can have multiple PTP devices so we identify the
+// correct PTP device by verifying that the `clock_name` of that device is `hyperv`.
+func startTimeSyncService() error {
+	ptpClassDir, err := os.Open("/sys/class/ptp")
+	if err != nil {
+		return errors.Wrap(err, "failed to open PTP class directory")
+	}
+
+	ptpDirList, err := ptpClassDir.Readdirnames(-1)
+	if err != nil {
+		return errors.Wrap(err, "failed to list PTP class directory")
+	}
+
+	var ptpDirPath string
+	found := false
+	// The file ends with a new line
+	expectedClockName := "hyperv\n"
+	for _, ptpDirPath = range ptpDirList {
+		clockNameFilePath := filepath.Join(ptpClassDir.Name(), ptpDirPath, "clock_name")
+		buf, err := ioutil.ReadFile(clockNameFilePath)
+		if err != nil && !os.IsNotExist(err) {
+			return errors.Wrapf(err, "failed to read clock name file at %s", clockNameFilePath)
+		}
+
+		if string(buf) == expectedClockName {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return errors.Errorf("no PTP device found with name \"%s\"", expectedClockName)
+	}
+
+	// create chronyd config file
+	ptpDevPath := filepath.Join("/dev", filepath.Base(ptpDirPath))
+	// chronyd config file take from: https://docs.microsoft.com/en-us/azure/virtual-machines/linux/time-sync
+	chronydConfigString := fmt.Sprintf("refclock PHC %s poll 3 dpoll -2 offset 0 stratum 2\nmakestep 0.1 -1\n", ptpDevPath)
+	chronydConfPath := "/tmp/chronyd.conf"
+	err = ioutil.WriteFile(chronydConfPath, []byte(chronydConfigString), 0644)
+	if err != nil {
+		return errors.Wrapf(err, "failed to create chronyd conf file %s", chronydConfPath)
+	}
+
+	// start chronyd. Do NOT start chronyd as daemon because creating a daemon
+	// involves double forking the restart monitor will attempt to restart chornyd
+	// after the first fork child exits.
+	go runWithRestartMonitor("chronyd", "-n", "-f", chronydConfPath)
+	return nil
+}
+
 func main() {
 	startTime := time.Now()
 	logLevel := flag.String("loglevel", "debug", "Logging Level: debug, info, warning, error, fatal, panic.")
@@ -92,6 +174,7 @@ func main() {
 	v4 := flag.Bool("v4", false, "enable the v4 protocol support and v2 schema")
 	rootMemReserveBytes := flag.Uint64("root-mem-reserve-bytes", 75*1024*1024, "the amount of memory reserved for the orchestration, the rest will be assigned to containers")
 	gcsMemLimitBytes := flag.Uint64("gcs-mem-limit-bytes", 50*1024*1024, "the maximum amount of memory the gcs can use")
+	disableTimeSync := flag.Bool("disable-time-sync", false, "If true do not run chronyd time synchronization service inside the UVM")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "\nUsage of %s:\n", os.Args[0])
@@ -248,6 +331,13 @@ func main() {
 	oomFile := os.NewFile(oom, "cefd")
 	defer oomFile.Close()
 
+	// time synchronization service
+	if !(*disableTimeSync) {
+		if err = startTimeSyncService(); err != nil {
+			logrus.WithError(err).Fatal("failed to start time synchronization service")
+		}
+	}
+
 	go readMemoryEvents(startTime, gefdFile, "/gcs", int64(*gcsMemLimitBytes), gcsControl)
 	go readMemoryEvents(startTime, oomFile, "/containers", containersLimit, containersControl)
 	err = b.ListenAndServe(bridgeIn, bridgeOut)
@@ -256,4 +346,5 @@ func main() {
 			logrus.ErrorKey: err,
 		}).Fatal("failed to serve gcs service")
 	}
+
 }

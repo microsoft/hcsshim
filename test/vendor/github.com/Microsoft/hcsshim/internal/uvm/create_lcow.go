@@ -103,6 +103,7 @@ type OptionsLCOW struct {
 	SecurityPolicyEnabled   bool                // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
 	UseGuestStateFile       bool                // Use a vmgs file that contains a kernel and initrd, required for SNP
 	GuestStateFile          string              // The vmgs file to load
+	DisableTimeSyncService  bool                // Disables the time synchronization service
 }
 
 // defaultLCOWOSBootFilesPath returns the default path used to locate the LCOW
@@ -152,6 +153,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		SecurityPolicyEnabled:   false,
 		SecurityPolicy:          "",
 		GuestStateFile:          "",
+		DisableTimeSyncService:  false,
 	}
 
 	if _, err := os.Stat(filepath.Join(opts.BootFilesPath, VhdFile)); err == nil {
@@ -649,6 +651,10 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 
 	if opts.ForwardStderr {
 		initArgs += fmt.Sprintf(" -e %d", linuxLogVsockPort)
+	}
+
+	if opts.DisableTimeSyncService {
+		opts.ExecCommandLine = fmt.Sprintf("%s --disable-time-sync", opts.ExecCommandLine)
 	}
 
 	initArgs += " " + opts.ExecCommandLine
