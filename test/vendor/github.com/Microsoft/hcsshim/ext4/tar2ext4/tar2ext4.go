@@ -272,6 +272,10 @@ func ReadExt4SuperBlock(vhdPath string) (*format.SuperBlock, error) {
 	if err := binary.Read(vhd, binary.LittleEndian, &sb); err != nil {
 		return nil, err
 	}
+	// Make sure the magic bytes are correct.
+	if sb.Magic != format.SuperBlockMagic {
+		return nil, fmt.Errorf("not an ext4 file system")
+	}
 	return &sb, nil
 }
 
