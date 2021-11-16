@@ -274,7 +274,7 @@ func ReadExt4SuperBlock(vhdPath string) (*format.SuperBlock, error) {
 	}
 	// Make sure the magic bytes are correct.
 	if sb.Magic != format.SuperBlockMagic {
-		return nil, fmt.Errorf("not an ext4 file system")
+		return nil, errors.New("not an ext4 file system")
 	}
 	return &sb, nil
 }
