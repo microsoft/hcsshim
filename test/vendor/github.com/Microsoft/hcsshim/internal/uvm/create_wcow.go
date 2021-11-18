@@ -47,6 +47,9 @@ type OptionsWCOW struct {
 
 	// NoDirectMap specifies that no direct mapping should be used for any VSMBs added to the UVM
 	NoDirectMap bool
+
+	// NoInheritHostTimezone specifies whether to not inherit the hosts timezone for the UVM. UTC will be set as the default for the VM instead.
+	NoInheritHostTimezone bool
 }
 
 // NewDefaultOptionsWCOW creates the default options for a bootable version of
@@ -249,6 +252,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		vsmbDirShares:           make(map[string]*VSMBShare),
 		vsmbFileShares:          make(map[string]*VSMBShare),
 		vpciDevices:             make(map[VPCIDeviceKey]*VPCIDevice),
+		noInheritHostTimezone:   opts.NoInheritHostTimezone,
 		physicallyBacked:        !opts.AllowOvercommit,
 		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
 		vsmbNoDirectMap:         opts.NoDirectMap,

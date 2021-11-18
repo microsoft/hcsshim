@@ -1,3 +1,4 @@
+//go:build functional
 // +build functional
 
 package cri_containerd
@@ -25,6 +26,7 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	"github.com/containerd/containerd/log"
+	"golang.org/x/sys/windows"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
@@ -1598,6 +1600,144 @@ func Test_RunPodSandbox_ProcessDump_WCOW_Hypervisor(t *testing.T) {
 
 	if !strings.Contains(string(r.Stdout), ".dmp") {
 		t.Fatalf("expected dmp file to be present in the directory, got: %s", string(r.Stdout))
+	}
+}
+
+func Test_RunPodSandbox_Timezone_Inherit_WCOW_Hypervisor(t *testing.T) {
+	requireFeatures(t, featureWCOWHypervisor)
+
+	pullRequiredImages(t, []string{imageWindowsTimezone})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sbRequest := getRunPodSandboxRequest(
+		t,
+		wcowHypervisor17763RuntimeHandler,
+	)
+
+	podID := runPodSandbox(t, client, ctx, sbRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	cRequest := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsTimezone,
+			},
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+		},
+		PodSandboxId:  podID,
+		SandboxConfig: sbRequest.Config,
+	}
+
+	containerID := createContainer(t, client, ctx, cRequest)
+	defer removeContainer(t, client, ctx, containerID)
+
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID)
+
+	// Run the binary in the image that simply prints the standard name of the time zone
+	execCommand := []string{
+		"C:\\go\\src\\timezone\\timezone.exe",
+	}
+	execRequest := &runtime.ExecSyncRequest{
+		ContainerId: containerID,
+		Cmd:         execCommand,
+		Timeout:     20,
+	}
+
+	var tz windows.Timezoneinformation
+	_, err := windows.GetTimeZoneInformation(&tz)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tzStd := windows.UTF16ToString(tz.StandardName[:])
+
+	r := execSync(t, client, ctx, execRequest)
+	if r.ExitCode != 0 {
+		t.Fatalf("failed with exit code %d: %s", r.ExitCode, string(r.Stderr))
+	}
+
+	if string(r.Stdout) != tzStd {
+		t.Fatalf("expected %s for time zone, got: %s", tzStd, string(r.Stdout))
+	}
+}
+
+func Test_RunPodSandbox_Timezone_NoInherit_WCOW_Hypervisor(t *testing.T) {
+	requireFeatures(t, featureWCOWHypervisor)
+
+	pullRequiredImages(t, []string{imageWindowsTimezone})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sbRequest := getRunPodSandboxRequest(
+		t,
+		wcowHypervisor17763RuntimeHandler,
+		WithSandboxAnnotations(map[string]string{
+			annotations.NoInheritHostTimezone: "true",
+		}),
+	)
+
+	podID := runPodSandbox(t, client, ctx, sbRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	cRequest := &runtime.CreateContainerRequest{
+		Config: &runtime.ContainerConfig{
+			Metadata: &runtime.ContainerMetadata{
+				Name: t.Name() + "-Container",
+			},
+			Image: &runtime.ImageSpec{
+				Image: imageWindowsTimezone,
+			},
+			Command: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+			},
+		},
+		PodSandboxId:  podID,
+		SandboxConfig: sbRequest.Config,
+	}
+
+	containerID := createContainer(t, client, ctx, cRequest)
+	defer removeContainer(t, client, ctx, containerID)
+
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID)
+
+	// Run the binary in the image that simply prints the standard name of the time zone
+	execCommand := []string{
+		"C:\\go\\src\\timezone\\timezone.exe",
+	}
+	execRequest := &runtime.ExecSyncRequest{
+		ContainerId: containerID,
+		Cmd:         execCommand,
+		Timeout:     20,
+	}
+
+	r := execSync(t, client, ctx, execRequest)
+	if r.ExitCode != 0 {
+		t.Fatalf("failed with exit code %d: %s", r.ExitCode, string(r.Stderr))
+	}
+
+	if string(r.Stdout) != "Coordinated Universal Time" {
+		t.Fatalf("expected 'Coordinated Universal Time' for time zone, got: %s", string(r.Stdout))
 	}
 }
 
