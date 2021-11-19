@@ -256,8 +256,8 @@ Example JSON document produced once the hcsschema.ComputeSytem returned by makeL
             }
         },
         "GuestState": {
-            "GuestStateFilePath": "d:\\ken\\aug27\\gcsinitnew.vmgs",
-            "GuestStateFileType": "FileMode",
+            "GuestStateFilePath": "c:\\ContainerPlat\\LinuxBootFiles\\kernelinitrd.vmgs",
+            "GuestStateFileType": "BlockStorage",
 			"ForceTransientState": true
         },
         "SecuritySettings": {
@@ -369,7 +369,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	}
 
 	// Required by HCS for the isolated boot scheme, see also https://docs.microsoft.com/en-us/windows-server/virtualization/hyper-v/learn-more/generation-2-virtual-machine-security-settings-for-hyper-v
-	// A complete explanation of the why's and wherefores of starting an encrypted, isolated VM are beond the scope of these comments.
+	// A complete explanation of the whys and wherefores of starting an encrypted, isolated VM are beond the scope of these comments.
 
 	doc.VirtualMachine.Chipset.Uefi = &hcsschema.Uefi{
 		ApplySecureBootTemplate: "Apply",
@@ -381,7 +381,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 
 	doc.VirtualMachine.GuestState = &hcsschema.GuestState{
 		GuestStateFilePath:  vmgsFullPath,
-		GuestStateFileType:  "FileMode",
+		GuestStateFileType:  "BlockStorage",
 		ForceTransientState: true, // tell HCS that this is just the source of the images, not ongoing state
 	}
 
