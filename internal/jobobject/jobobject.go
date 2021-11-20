@@ -2,6 +2,7 @@ package jobobject
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"unsafe"
 
@@ -235,6 +236,32 @@ func (job *JobObject) PollNotification() (interface{}, error) {
 		return nil, ErrNotRegistered
 	}
 	return job.mq.ReadOrWait()
+}
+
+// UpdateProcThreadAttribute updates the passed in ProcThreadAttributeList to contain what is necessary to
+// launch a process in a job at creation time. This can be used to avoid having to call Assign() after a process
+// has already started running.
+func (job *JobObject) UpdateProcThreadAttribute(attrList *winapi.ProcThreadAttributeList) error {
+	job.handleLock.RLock()
+	defer job.handleLock.RUnlock()
+
+	if job.handle == 0 {
+		return ErrAlreadyClosed
+	}
+
+	err := winapi.UpdateProcThreadAttribute(
+		attrList,
+		0,
+		winapi.PROC_THREAD_ATTRIBUTE_JOB_LIST,
+		unsafe.Pointer(&job.handle),
+		unsafe.Sizeof(job.handle),
+		nil,
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update proc thread attributes for job object: %w", err)
+	}
+	return nil
 }
 
 // Close closes the job object handle.
