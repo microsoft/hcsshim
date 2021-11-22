@@ -1,5 +1,5 @@
-// This package contains the proto and compiled go files for the node
-// network service.
+// Package v1 contains the proto and compiled go files for the node
+// network service v1 implementation.
 //
 // A mock service under `mock` is used for unit testing the various services
 // used for ncproxy.
