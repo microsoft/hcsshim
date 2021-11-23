@@ -28,7 +28,7 @@ type ConPTY struct {
 }
 
 // New returns a new `ConPTY` object. This object is not ready for IO until `UpdateProcThreadAttribute` is called and a process has been started.
-func New(columns, rows int16, flags uint32) (*ConPTY, error) {
+func New(width, height int16, flags uint32) (*ConPTY, error) {
 	// First we need to make both ends of the conpty's pipes, two to get passed into a process to use as input/output, and two for us to keep to
 	// make use of this data.
 	ptyIn, inPipeOurs, err := os.Pipe()
@@ -42,7 +42,7 @@ func New(columns, rows int16, flags uint32) (*ConPTY, error) {
 	}
 
 	var hpc windows.Handle
-	coord := windows.Coord{X: columns, Y: rows}
+	coord := windows.Coord{X: width, Y: height}
 	err = winapi.CreatePseudoConsole(coord, windows.Handle(ptyIn.Fd()), windows.Handle(ptyOut.Fd()), 0, &hpc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create pseudo console: %w", err)
@@ -90,7 +90,7 @@ func (c *ConPTY) UpdateProcThreadAttribute(attributeList *winapi.ProcThreadAttri
 }
 
 // Resize resizes the internal buffers of the pseudo console to the passed in size
-func (c *ConPTY) Resize(columns, rows int16) error {
+func (c *ConPTY) Resize(width, height int16) error {
 	c.handleLock.RLock()
 	defer c.handleLock.RUnlock()
 
@@ -98,7 +98,7 @@ func (c *ConPTY) Resize(columns, rows int16) error {
 		return errClosedConPty
 	}
 
-	coord := windows.Coord{X: columns, Y: rows}
+	coord := windows.Coord{X: width, Y: height}
 	if err := winapi.ResizePseudoConsole(c.hpc, coord); err != nil {
 		return fmt.Errorf("failed to resize pseudo console: %w", err)
 	}
