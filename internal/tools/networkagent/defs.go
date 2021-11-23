@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 
-	"github.com/Microsoft/hcsshim/cmd/ncproxy/ncproxygrpc"
+	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
 	"github.com/pkg/errors"
 )
 

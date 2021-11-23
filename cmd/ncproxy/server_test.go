@@ -11,13 +11,14 @@ import (
 	"testing"
 	"time"
 
-	ncproxyMock "github.com/Microsoft/hcsshim/cmd/ncproxy/ncproxy_mock"
-	"github.com/Microsoft/hcsshim/cmd/ncproxy/ncproxygrpc"
-	"github.com/Microsoft/hcsshim/cmd/ncproxy/nodenetsvc"
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/computeagent"
+	computeagentMock "github.com/Microsoft/hcsshim/internal/computeagent/mock"
 	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
 	"github.com/Microsoft/hcsshim/osversion"
+	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
+	nodenetsvc "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v1"
+	nodenetsvcMock "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v1/mock"
 	"github.com/containerd/ttrpc"
 	"github.com/golang/mock/gomock"
 	"github.com/pkg/errors"
@@ -112,7 +113,7 @@ func TestAddNIC(t *testing.T) {
 	// create mocked compute agent service
 	computeAgentCtrl := gomock.NewController(t)
 	defer computeAgentCtrl.Finish()
-	mockedService := ncproxyMock.NewMockComputeAgentService(computeAgentCtrl)
+	mockedService := computeagentMock.NewMockComputeAgentService(computeAgentCtrl)
 	mockedAgentClient := &computeAgentClient{nil, mockedService}
 
 	// put mocked compute agent in agent cache for test
@@ -197,7 +198,7 @@ func TestDeleteNIC(t *testing.T) {
 	// create mocked compute agent service
 	computeAgentCtrl := gomock.NewController(t)
 	defer computeAgentCtrl.Finish()
-	mockedService := ncproxyMock.NewMockComputeAgentService(computeAgentCtrl)
+	mockedService := computeagentMock.NewMockComputeAgentService(computeAgentCtrl)
 	mockedAgentClient := &computeAgentClient{nil, mockedService}
 
 	// put mocked compute agent in agent cache for test
@@ -284,7 +285,7 @@ func TestModifyNIC(t *testing.T) {
 	// create mock compute agent service
 	computeAgentCtrl := gomock.NewController(t)
 	defer computeAgentCtrl.Finish()
-	mockedService := ncproxyMock.NewMockComputeAgentService(computeAgentCtrl)
+	mockedService := computeagentMock.NewMockComputeAgentService(computeAgentCtrl)
 	mockedAgentClient := &computeAgentClient{nil, mockedService}
 
 	// populate agent cache with mocked service for test
@@ -1111,7 +1112,7 @@ func TestConfigureNetworking(t *testing.T) {
 	// setup mocked client and mocked calls for nodenetsvc
 	nodeNetCtrl := gomock.NewController(t)
 	defer nodeNetCtrl.Finish()
-	mockedClient := ncproxyMock.NewMockNodeNetworkServiceClient(nodeNetCtrl)
+	mockedClient := nodenetsvcMock.NewMockNodeNetworkServiceClient(nodeNetCtrl)
 	nodeNetSvcClient = &nodeNetSvcConn{
 		addr:   "",
 		client: mockedClient,
@@ -1283,7 +1284,7 @@ func TestDisconnectComputeAgents(t *testing.T) {
 	// create mocked compute agent service
 	computeAgentCtrl := gomock.NewController(t)
 	defer computeAgentCtrl.Finish()
-	mockedService := ncproxyMock.NewMockComputeAgentService(computeAgentCtrl)
+	mockedService := computeagentMock.NewMockComputeAgentService(computeAgentCtrl)
 	mockedAgentClient := &computeAgentClient{nil, mockedService}
 
 	// put mocked compute agent in agent cache for test

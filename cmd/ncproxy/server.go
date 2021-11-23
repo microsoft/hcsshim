@@ -7,9 +7,9 @@ import (
 	"sync"
 
 	"github.com/Microsoft/go-winio"
-	"github.com/Microsoft/hcsshim/cmd/ncproxy/ncproxygrpc"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
+	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
 	"github.com/Microsoft/hcsshim/pkg/octtrpc"
 	"github.com/containerd/ttrpc"
 	"github.com/pkg/errors"
