@@ -260,7 +260,7 @@ func LocalFree(ptr uintptr) {
 	return
 }
 
-func InitializeProcThreadAttributeList(lpAttributeList *ProcThreadAttributeList, dwAttributeCount uint32, dwFlags uint32, lpSize *uintptr) (err error) {
+func initializeProcThreadAttributeList(lpAttributeList *ProcThreadAttributeList, dwAttributeCount uint32, dwFlags uint32, lpSize *uintptr) (err error) {
 	r1, _, e1 := syscall.Syscall6(procInitializeProcThreadAttributeList.Addr(), 4, uintptr(unsafe.Pointer(lpAttributeList)), uintptr(dwAttributeCount), uintptr(dwFlags), uintptr(unsafe.Pointer(lpSize)), 0, 0)
 	if r1 == 0 {
 		if e1 != 0 {

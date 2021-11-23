@@ -35,7 +35,7 @@ type StartupInfoEx struct {
 // DeleteProcThreadAttributeList.
 func NewProcThreadAttributeList(maxAttrCount uint32) (*ProcThreadAttributeList, error) {
 	var size uintptr
-	err := InitializeProcThreadAttributeList(nil, maxAttrCount, 0, &size)
+	err := initializeProcThreadAttributeList(nil, maxAttrCount, 0, &size)
 	if err != windows.ERROR_INSUFFICIENT_BUFFER {
 		if err == nil {
 			return nil, errors.New("unable to query buffer size from InitializeProcThreadAttributeList")
@@ -43,7 +43,7 @@ func NewProcThreadAttributeList(maxAttrCount uint32) (*ProcThreadAttributeList, 
 		return nil, err
 	}
 	al := (*ProcThreadAttributeList)(unsafe.Pointer(&make([]byte, size)[0]))
-	err = InitializeProcThreadAttributeList(al, maxAttrCount, 0, &size)
+	err = initializeProcThreadAttributeList(al, maxAttrCount, 0, &size)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func NewProcThreadAttributeList(maxAttrCount uint32) (*ProcThreadAttributeList, 
 // 	[in, out]       PSIZE_T                      lpSize
 // );
 //
-//sys InitializeProcThreadAttributeList(lpAttributeList *ProcThreadAttributeList, dwAttributeCount uint32, dwFlags uint32, lpSize *uintptr) (err error) = kernel32.InitializeProcThreadAttributeList
+//sys initializeProcThreadAttributeList(lpAttributeList *ProcThreadAttributeList, dwAttributeCount uint32, dwFlags uint32, lpSize *uintptr) (err error) = kernel32.InitializeProcThreadAttributeList
 
 // void DeleteProcThreadAttributeList(
 // 	[in, out] LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList
