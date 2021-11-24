@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"unsafe"
 
 	"github.com/pkg/errors"
 
@@ -202,4 +203,39 @@ func ReadDMVerityInfo(vhdPath string, offsetInBytes int64) (*VerityInfo, error) 
 		HashBlockSize:      blockSize,
 		Version:            dmvSB.Version,
 	}, nil
+}
+
+// ComputeAndWriteHashDevice builds merkle tree from a given io.ReadSeeker and writes the result
+// hash device (dm-verity super-block combined with merkle tree) to io.WriteSeeker.
+func ComputeAndWriteHashDevice(r io.ReadSeeker, w io.WriteSeeker) error {
+	if _, err := r.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	tree, err := MerkleTree(r)
+	if err != nil {
+		return errors.Wrap(err, "failed to build merkle tree")
+	}
+
+	devSize, err := r.Seek(0, io.SeekEnd)
+	if err != nil {
+		return err
+	}
+	dmVeritySB := NewDMVeritySuperblock(uint64(devSize))
+	if _, err := w.Seek(0, io.SeekEnd); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, dmVeritySB); err != nil {
+		return errors.Wrap(err, "failed to write dm-verity super-block")
+	}
+	// write super-block padding
+	sbSize := int(unsafe.Sizeof(*dmVeritySB))
+	padding := bytes.Repeat([]byte{0}, blockSize-(sbSize%blockSize))
+	if _, err = w.Write(padding); err != nil {
+		return err
+	}
+	// write tree
+	if _, err := w.Write(tree); err != nil {
+		return errors.Wrap(err, "failed to write merkle tree")
+	}
+	return nil
 }

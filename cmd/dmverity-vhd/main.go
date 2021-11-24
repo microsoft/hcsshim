@@ -20,12 +20,13 @@ import (
 const usage = `dmverity-vhd is a command line tool for creating LCOW layer VHDs with dm-verity hashes.`
 
 const (
-	usernameFlag  = "username"
-	passwordFlag  = "password"
-	imageFlag     = "image"
-	verboseFlag   = "verbose"
-	outputDirFlag = "out-dir"
-	maxVHDSize    = dmverity.RecommendedVHDSizeGB
+	usernameFlag      = "username"
+	passwordFlag      = "password"
+	imageFlag         = "image"
+	verboseFlag       = "verbose"
+	outputDirFlag     = "out-dir"
+	hashDeviceVhdFlag = "hash-dev-vhd"
+	maxVHDSize        = dmverity.RecommendedVHDSizeGB
 )
 
 func init() {
@@ -116,6 +117,10 @@ var createVHDCommand = cli.Command{
 			Name:  passwordFlag + ",p",
 			Usage: "Optional: custom registry password",
 		},
+		cli.BoolFlag{
+			Name:  hashDeviceVhdFlag,
+			Usage: "Optional: save hash-device as a VHD",
+		},
 	},
 	Action: func(ctx *cli.Context) error {
 		verbose := ctx.GlobalBool(verboseFlag)
@@ -159,13 +164,31 @@ var createVHDCommand = cli.Command{
 			opts := []tar2ext4.Option{
 				tar2ext4.ConvertWhiteout,
 				tar2ext4.MaximumDiskSize(maxVHDSize),
-				tar2ext4.AppendVhdFooter,
-				tar2ext4.AppendDMVerity,
+			}
+			if !ctx.Bool(hashDeviceVhdFlag) {
+				opts = append(opts, tar2ext4.AppendDMVerity)
 			}
 			if err := tar2ext4.Convert(rc, out, opts...); err != nil {
 				return errors.Wrap(err, "failed to convert tar to ext4")
 			}
-			fmt.Fprintf(os.Stdout, "Layer %d: %s\n", layerNumber, vhdPath)
+			if ctx.Bool(hashDeviceVhdFlag) {
+				hashDevPath := filepath.Join(ctx.String(outputDirFlag), diffID.Hex+".hash-dev.vhd")
+				hashDev, err := os.Create(hashDevPath)
+				if err != nil {
+					return errors.Wrap(err, "failed to create hash device VHD file")
+				}
+				if err := dmverity.ComputeAndWriteHashDevice(out, hashDev); err != nil {
+					return err
+				}
+				if err := tar2ext4.ConvertToVhd(hashDev); err != nil {
+					return err
+				}
+				fmt.Fprintf(os.Stdout, "Layer %d: hash device created at %s\n", layerNumber, hashDevPath)
+			}
+			if err := tar2ext4.ConvertToVhd(out); err != nil {
+				return errors.Wrap(err, "failed to append VHD footer")
+			}
+			fmt.Fprintf(os.Stdout, "Layer %d: layer VHD created at %s\n", layerNumber, vhdPath)
 		}
 		return nil
 	},
