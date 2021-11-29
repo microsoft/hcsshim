@@ -147,14 +147,6 @@ func (e *Exec) Start() error {
 		}
 	}
 
-	// Update the attribute list for pseudo console and job object setup if requested.
-
-	// if e.conPty != nil {
-	// 	if err := e.conPty.UpdateProcThreadAttribute(siEx.ProcThreadAttributeList); err != nil {
-	// 		return err
-	// 	}
-	// }
-
 	if e.job != nil {
 		if err := e.job.UpdateProcThreadAttribute(siEx.ProcThreadAttributeList); err != nil {
 			return err
@@ -204,6 +196,11 @@ func (e *Exec) Start() error {
 	// process has been launched.
 	e.process, err = os.FindProcess(int(pi.ProcessId))
 	if err != nil {
+		// If we can't find the process via os.FindProcess, terminate the process as that's what we rely on for all further operations on the
+		// exec object.
+		if tErr := windows.TerminateProcess(pi.Process, 1); tErr != nil {
+			return fmt.Errorf("failed to terminate process after process not found: %w", tErr)
+		}
 		return fmt.Errorf("failed to find process after starting: %w", err)
 	}
 	return nil
@@ -297,13 +294,6 @@ func (e *Exec) Stderr() *os.File {
 
 // setupStdio handles setting up stdio for the process.
 func (e *Exec) setupStdio() error {
-	// stdioRequested := e.stdin || e.stderr || e.stdout
-	// If the client requested a pseudo console then there's nothing we need to do pipe wise, as the process inherits the other end of the pty's
-	// pipes.
-	// if e.conPty != nil && stdioRequested {
-	// 	return errors.New("can't setup both stdio pipes and a pseudo console")
-	// }
-
 	if e.stdin {
 		pr, pw, err := os.Pipe()
 		if err != nil {
