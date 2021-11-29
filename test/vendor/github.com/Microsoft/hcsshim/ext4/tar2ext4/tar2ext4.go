@@ -273,14 +273,11 @@ func ConvertAndComputeRootDigest(r io.Reader) (string, error) {
 	return fmt.Sprintf("%x", hash), nil
 }
 
-// ConvertToVhd converts given io.ReadWriteSeeker to VHD, by appending the VHD footer with a fixed size.
-func ConvertToVhd(w io.ReadWriteSeeker) error {
+// ConvertToVhd converts given io.WriteSeeker to VHD, by appending the VHD footer with a fixed size.
+func ConvertToVhd(w io.WriteSeeker) error {
 	size, err := w.Seek(0, io.SeekEnd)
 	if err != nil {
 		return err
 	}
-	if err = binary.Write(w, binary.BigEndian, makeFixedVHDFooter(size)); err != nil {
-		return nil
-	}
-	return nil
+	return binary.Write(w, binary.BigEndian, makeFixedVHDFooter(size))
 }
