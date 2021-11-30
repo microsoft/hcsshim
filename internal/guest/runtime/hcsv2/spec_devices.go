@@ -61,7 +61,7 @@ func devicePathFromPCIPath(pciPath string) (*devices.Device, error) {
 	// get all host dev devices
 	hostDevices, err := devices.HostDevices()
 	if err != nil {
-		return nil, nil
+		return nil, err
 	}
 
 	// find corresponding entry in sysfs
@@ -76,7 +76,7 @@ func devicePathFromPCIPath(pciPath string) (*devices.Device, error) {
 		case devices.CharDevice:
 			deviceTypeString = charType
 		default:
-			return nil, errors.New("unsupport device type")
+			return nil, errors.New("unsupported device type")
 		}
 
 		syfsDevPath := fmt.Sprintf(sysfsDevPathFormat, deviceTypeString, major, minor)
@@ -90,7 +90,7 @@ func devicePathFromPCIPath(pciPath string) (*devices.Device, error) {
 		}
 	}
 
-	return nil, errors.Errorf("failed to find the device node from sysfs pci path")
+	return nil, errors.New("failed to find the device node from sysfs pci path")
 }
 
 func addLinuxDeviceToSpec(ctx context.Context, hostDevice *devices.Device, spec *oci.Spec, addCgroupDevice bool) {

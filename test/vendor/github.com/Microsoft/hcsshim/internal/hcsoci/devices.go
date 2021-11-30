@@ -53,7 +53,7 @@ func getDeviceExtensionPaths(annots map[string]string) ([]string, error) {
 func getGPUVHDPath(annot map[string]string) (string, error) {
 	gpuVHDPath, ok := annot[annotations.GPUVHDPath]
 	if !ok || gpuVHDPath == "" {
-		return "", fmt.Errorf("no gpu vhd specified %s", gpuVHDPath)
+		return "", errors.New("no gpu vhd specified")
 	}
 	if _, err := os.Stat(gpuVHDPath); err != nil {
 		return "", errors.Wrapf(err, "failed to find gpu support vhd %s", gpuVHDPath)
@@ -110,7 +110,12 @@ func getDeviceExtensions(annotations map[string]string) (*hcsschema.ContainerDef
 // Drivers must be installed after the target devices are assigned into the UVM.
 // This ordering allows us to guarantee that driver installation on a device in the UVM is completed
 // before we attempt to create a container.
-func handleAssignedDevicesWindows(ctx context.Context, vm *uvm.UtilityVM, annotations map[string]string, specDevs []specs.WindowsDevice) (resultDevs []specs.WindowsDevice, closers []resources.ResourceCloser, err error) {
+func handleAssignedDevicesWindows(
+	ctx context.Context,
+	vm *uvm.UtilityVM,
+	annotations map[string]string,
+	specDevs []specs.WindowsDevice) (resultDevs []specs.WindowsDevice, closers []resources.ResourceCloser, err error) {
+
 	defer func() {
 		if err != nil {
 			// best effort clean up allocated resources on failure
@@ -163,7 +168,12 @@ func handleAssignedDevicesWindows(ctx context.Context, vm *uvm.UtilityVM, annota
 //
 // For LCOW, drivers must be installed before the target devices are assigned into the UVM so they
 // can be linked on arrival.
-func handleAssignedDevicesLCOW(ctx context.Context, vm *uvm.UtilityVM, annotations map[string]string, specDevs []specs.WindowsDevice) (resultDevs []specs.WindowsDevice, closers []resources.ResourceCloser, err error) {
+func handleAssignedDevicesLCOW(
+	ctx context.Context,
+	vm *uvm.UtilityVM,
+	annotations map[string]string,
+	specDevs []specs.WindowsDevice) (resultDevs []specs.WindowsDevice, closers []resources.ResourceCloser, err error) {
+
 	defer func() {
 		if err != nil {
 			// best effort clean up allocated resources on failure
@@ -183,7 +193,7 @@ func handleAssignedDevicesLCOW(ctx context.Context, vm *uvm.UtilityVM, annotatio
 	for _, d := range specDevs {
 		switch d.IDType {
 		case uvm.VPCIDeviceIDType, uvm.VPCIDeviceIDTypeLegacy, uvm.GPUDeviceIDType:
-			gpuPresent = d.IDType == uvm.GPUDeviceIDType
+			gpuPresent = gpuPresent || d.IDType == uvm.GPUDeviceIDType
 			pciID, index := getDeviceInfoFromPath(d.ID)
 			vpci, err := vm.AssignDevice(ctx, pciID, index)
 			if err != nil {
