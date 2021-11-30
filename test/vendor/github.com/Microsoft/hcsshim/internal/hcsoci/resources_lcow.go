@@ -16,24 +16,9 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/uvm"
-	"github.com/Microsoft/hcsshim/pkg/annotations"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
-
-// getGPUVHDPath gets the gpu vhd path from the shim options or uses the default if no
-// shim option is set. Right now we only support Nvidia gpus, so this will default to
-// a gpu vhd with nvidia files
-func getGPUVHDPath(coi *createOptionsInternal) (string, error) {
-	gpuVHDPath, ok := coi.Spec.Annotations[annotations.GPUVHDPath]
-	if !ok || gpuVHDPath == "" {
-		return "", fmt.Errorf("no gpu vhd specified %s", gpuVHDPath)
-	}
-	if _, err := os.Stat(gpuVHDPath); err != nil {
-		return "", errors.Wrapf(err, "failed to find gpu support vhd %s", gpuVHDPath)
-	}
-	return gpuVHDPath, nil
-}
 
 func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *resources.Resources, isSandbox bool) error {
 	if coi.Spec.Root == nil {
@@ -169,47 +154,15 @@ func allocateLinuxResources(ctx context.Context, coi *createOptionsInternal, r *
 		}
 	}
 
-	addGPUVHD := false
-	for i, d := range coi.Spec.Windows.Devices {
-		switch d.IDType {
-		case uvm.GPUDeviceIDType:
-			addGPUVHD = true
-			pciID, index := getDeviceInfoFromPath(d.ID)
-			vpci, err := coi.HostingSystem.AssignDevice(ctx, pciID, index)
+	if coi.HostingSystem != nil {
+		if coi.hasWindowsAssignedDevices() {
+			windowsDevices, closers, err := handleAssignedDevicesLCOW(ctx, coi.HostingSystem, coi.Spec.Annotations, coi.Spec.Windows.Devices)
 			if err != nil {
-				return errors.Wrapf(err, "failed to assign gpu device %s to pod %s", d.ID, coi.HostingSystem.ID())
+				return err
 			}
-			r.Add(vpci)
-			// update device ID on the spec to the assigned device's resulting vmbus guid so gcs knows which devices to
-			// map into the container
-			coi.Spec.Windows.Devices[i].ID = vpci.VMBusGUID
-		default:
-			return fmt.Errorf("specified device %s has unsupported type %s", d.ID, d.IDType)
+			r.Add(closers...)
+			coi.Spec.Windows.Devices = windowsDevices
 		}
-	}
-
-	if addGPUVHD {
-		gpuSupportVhdPath, err := getGPUVHDPath(coi)
-		if err != nil {
-			return errors.Wrapf(err, "failed to add gpu vhd to %v", coi.HostingSystem.ID())
-		}
-		// use lcowNvidiaMountPath since we only support nvidia gpus right now
-		// must use scsi here since DDA'ing a hyper-v pci device is not supported on VMs that have ANY virtual memory
-		// gpuvhd must be granted VM Group access.
-		options := []string{"ro"}
-		scsiMount, err := coi.HostingSystem.AddSCSI(
-			ctx,
-			gpuSupportVhdPath,
-			uvm.LCOWNvidiaMountPath,
-			true,
-			false,
-			options,
-			uvm.VMAccessTypeNoop,
-		)
-		if err != nil {
-			return errors.Wrapf(err, "failed to add scsi device %s in the UVM %s at %s", gpuSupportVhdPath, coi.HostingSystem.ID(), uvm.LCOWNvidiaMountPath)
-		}
-		r.Add(scsiMount)
 	}
 	return nil
 }

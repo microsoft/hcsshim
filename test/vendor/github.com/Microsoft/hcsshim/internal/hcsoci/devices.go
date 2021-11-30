@@ -47,6 +47,20 @@ func getDeviceExtensionPaths(annots map[string]string) ([]string, error) {
 	return extensions, nil
 }
 
+// getGPUVHDPath gets the gpu vhd path from the shim options or uses the default if no
+// shim option is set. Right now we only support Nvidia gpus, so this will default to
+// a gpu vhd with nvidia files
+func getGPUVHDPath(annot map[string]string) (string, error) {
+	gpuVHDPath, ok := annot[annotations.GPUVHDPath]
+	if !ok || gpuVHDPath == "" {
+		return "", errors.New("no gpu vhd specified")
+	}
+	if _, err := os.Stat(gpuVHDPath); err != nil {
+		return "", errors.Wrapf(err, "failed to find gpu support vhd %s", gpuVHDPath)
+	}
+	return gpuVHDPath, nil
+}
+
 // getDeviceUtilHostPath is a simple helper function to find the host path of the device-util tool
 func getDeviceUtilHostPath() string {
 	return filepath.Join(filepath.Dir(os.Args[0]), deviceUtilExeName)
@@ -96,7 +110,12 @@ func getDeviceExtensions(annotations map[string]string) (*hcsschema.ContainerDef
 // Drivers must be installed after the target devices are assigned into the UVM.
 // This ordering allows us to guarantee that driver installation on a device in the UVM is completed
 // before we attempt to create a container.
-func handleAssignedDevicesWindows(ctx context.Context, vm *uvm.UtilityVM, annotations map[string]string, specDevs []specs.WindowsDevice) (resultDevs []specs.WindowsDevice, closers []resources.ResourceCloser, err error) {
+func handleAssignedDevicesWindows(
+	ctx context.Context,
+	vm *uvm.UtilityVM,
+	annotations map[string]string,
+	specDevs []specs.WindowsDevice) (resultDevs []specs.WindowsDevice, closers []resources.ResourceCloser, err error) {
+
 	defer func() {
 		if err != nil {
 			// best effort clean up allocated resources on failure
@@ -139,6 +158,80 @@ func handleAssignedDevicesWindows(ctx context.Context, vm *uvm.UtilityVM, annota
 			log.G(ctx).WithField("parsed devices", specDev).Info("added windows device to spec")
 			resultDevs = append(resultDevs, specDev)
 		}
+	}
+
+	return resultDevs, closers, nil
+}
+
+// handleAssignedDevicesLCOW does all of the work to setup the hosting UVM, assign in devices
+// specified on the spec
+//
+// For LCOW, drivers must be installed before the target devices are assigned into the UVM so they
+// can be linked on arrival.
+func handleAssignedDevicesLCOW(
+	ctx context.Context,
+	vm *uvm.UtilityVM,
+	annotations map[string]string,
+	specDevs []specs.WindowsDevice) (resultDevs []specs.WindowsDevice, closers []resources.ResourceCloser, err error) {
+
+	defer func() {
+		if err != nil {
+			// best effort clean up allocated resources on failure
+			for _, r := range closers {
+				if releaseErr := r.Release(ctx); releaseErr != nil {
+					log.G(ctx).WithError(releaseErr).Error("failed to release container resource")
+				}
+			}
+			closers = nil
+			resultDevs = nil
+		}
+	}()
+
+	gpuPresent := false
+
+	// assign device into UVM and create corresponding spec windows devices
+	for _, d := range specDevs {
+		switch d.IDType {
+		case uvm.VPCIDeviceIDType, uvm.VPCIDeviceIDTypeLegacy, uvm.GPUDeviceIDType:
+			gpuPresent = gpuPresent || d.IDType == uvm.GPUDeviceIDType
+			pciID, index := getDeviceInfoFromPath(d.ID)
+			vpci, err := vm.AssignDevice(ctx, pciID, index)
+			if err != nil {
+				return resultDevs, closers, errors.Wrapf(err, "failed to assign device %s, function %d to pod %s", pciID, index, vm.ID())
+			}
+			closers = append(closers, vpci)
+
+			// update device ID on the spec to the assigned device's resulting vmbus guid so gcs knows which devices to
+			// map into the container
+			d.ID = vpci.VMBusGUID
+			resultDevs = append(resultDevs, d)
+		default:
+			return resultDevs, closers, errors.Errorf("specified device %s has unsupported type %s", d.ID, d.IDType)
+		}
+	}
+
+	if gpuPresent {
+		gpuSupportVhdPath, err := getGPUVHDPath(annotations)
+		if err != nil {
+			return resultDevs, closers, errors.Wrapf(err, "failed to add gpu vhd to %v", vm.ID())
+		}
+		// use lcowNvidiaMountPath since we only support nvidia gpus right now
+		// must use scsi here since DDA'ing a hyper-v pci device is not supported on VMs that have ANY virtual memory
+		// gpuvhd must be granted VM Group access.
+		options := []string{"ro"}
+		scsiMount, err := vm.AddSCSI(
+			ctx,
+			gpuSupportVhdPath,
+			uvm.LCOWNvidiaMountPath,
+			true,
+			false,
+			options,
+			uvm.VMAccessTypeNoop,
+		)
+		if err != nil {
+			return resultDevs, closers, errors.Wrapf(err, "failed to add scsi device %s in the UVM %s at %s", gpuSupportVhdPath, vm.ID(), uvm.LCOWNvidiaMountPath)
+		}
+		closers = append(closers, scsiMount)
 	}
 
 	return resultDevs, closers, nil
