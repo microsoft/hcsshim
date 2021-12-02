@@ -114,9 +114,9 @@ func (process *Process) processSignalResult(ctx context.Context, err error) (boo
 
 // Signal signals the process with `options`.
 //
-// For LCOW `guestrequest.SignalProcessOptionsLCOW`.
+// For LCOW `protocol.SignalProcessOptionsLCOW`.
 //
-// For WCOW `guestrequest.SignalProcessOptionsWCOW`.
+// For WCOW `protocol.SignalProcessOptionsWCOW`.
 func (process *Process) Signal(ctx context.Context, options interface{}) (bool, error) {
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()

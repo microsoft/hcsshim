@@ -22,7 +22,6 @@ import (
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/cow"
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
@@ -32,12 +31,13 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
-	"github.com/Microsoft/hcsshim/internal/requesttype"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
+	"github.com/Microsoft/hcsshim/pkg/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/pkg/protocol/guestresource"
 )
 
 const bytesPerMB = 1024 * 1024
@@ -1028,7 +1028,7 @@ func (ht *hcsTask) updateLCOWResources(ctx context.Context, data interface{}, an
 	if !ok || resources == nil {
 		return errors.New("must have resources be non-nil and type *LinuxResources when updating a lcow container")
 	}
-	settings := guestrequest.LCOWContainerConstraints{
+	settings := guestresource.LCOWContainerConstraints{
 		Linux: *resources,
 	}
 	return ht.requestUpdateContainer(ctx, "", settings)
@@ -1039,13 +1039,13 @@ func (ht *hcsTask) requestUpdateContainer(ctx context.Context, resourcePath stri
 	if ht.isWCOW {
 		modification = &hcsschema.ModifySettingRequest{
 			ResourcePath: resourcePath,
-			RequestType:  requesttype.Update,
+			RequestType:  guestrequest.RequestTypeUpdate,
 			Settings:     settings,
 		}
 	} else {
-		modification = guestrequest.GuestRequest{
-			ResourceType: guestrequest.ResourceTypeContainerConstraints,
-			RequestType:  requesttype.Update,
+		modification = guestrequest.ModificationRequest{
+			ResourceType: guestresource.ResourceTypeContainerConstraints,
+			RequestType:  guestrequest.RequestTypeUpdate,
 			Settings:     settings,
 		}
 	}

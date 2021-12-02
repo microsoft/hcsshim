@@ -12,7 +12,7 @@ package hcsschema
 type Plan9Share struct {
 	Name string `json:"Name,omitempty"`
 
-	//  The name by which the guest operation system can access this share, via  the aname parameter in the Plan9 protocol.
+	//  The name by which the guest operation system can access this share, via  the aname parameter in the Plan9 guestprotocol.
 	AccessName string `json:"AccessName,omitempty"`
 
 	Path string `json:"Path,omitempty"`

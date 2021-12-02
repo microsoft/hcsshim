@@ -10,14 +10,15 @@ import (
 	"strconv"
 	"unsafe"
 
+	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/windows"
+
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/requesttype"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/sirupsen/logrus"
-	"golang.org/x/sys/windows"
+	"github.com/Microsoft/hcsshim/pkg/protocol/guestrequest"
 )
 
 const (
@@ -193,11 +194,11 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 		options.NoDirectmap = true
 	}
 
-	var requestType = requesttype.Update
+	var requestType = guestrequest.RequestTypeUpdate
 	shareKey := getVSMBShareKey(hostPath, options.ReadOnly)
 	share, err := uvm.findVSMBShare(ctx, m, shareKey)
 	if err == ErrNotAttached {
-		requestType = requesttype.Add
+		requestType = guestrequest.RequestTypeAdd
 		uvm.vsmbCounter++
 		shareName := "s" + strconv.FormatUint(uvm.vsmbCounter, 16)
 
@@ -218,7 +219,7 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 	// AllowedFileList, and in fact will return an error if RestrictFileAccess
 	// isn't set (e.g. if used on an unrestricted share). So we only call Modify
 	// if we are either doing an Add, or if RestrictFileAccess is set.
-	if requestType == requesttype.Add || options.RestrictFileAccess {
+	if requestType == guestrequest.RequestTypeAdd || options.RestrictFileAccess {
 		log.G(ctx).WithFields(logrus.Fields{
 			"name":      share.name,
 			"path":      hostPath,
@@ -279,7 +280,7 @@ func (uvm *UtilityVM) RemoveVSMB(ctx context.Context, hostPath string, readOnly 
 	}
 
 	modification := &hcsschema.ModifySettingRequest{
-		RequestType:  requesttype.Remove,
+		RequestType:  guestrequest.RequestTypeRemove,
 		Settings:     hcsschema.VirtualSmbShare{Name: share.name},
 		ResourcePath: resourcepaths.VSMBShareResourcePath,
 	}
