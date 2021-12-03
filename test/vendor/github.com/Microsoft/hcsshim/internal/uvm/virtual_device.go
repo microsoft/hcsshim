@@ -63,7 +63,7 @@ func (uvm *UtilityVM) GetAssignedDeviceVMBUSInstanceID(vmBusChannelGUID string) 
 
 // Release frees the resources of the corresponding vpci device
 func (vpci *VPCIDevice) Release(ctx context.Context) error {
-	if err := vpci.vm.removeDevice(ctx, vpci.deviceInstanceID, vpci.virtualFunctionIndex); err != nil {
+	if err := vpci.vm.RemoveDevice(ctx, vpci.deviceInstanceID, vpci.virtualFunctionIndex); err != nil {
 		return fmt.Errorf("failed to remove VPCI device: %s", err)
 	}
 	return nil
@@ -140,10 +140,10 @@ func (uvm *UtilityVM) AssignDevice(ctx context.Context, deviceID string, index u
 	return result, nil
 }
 
-// removeDevice removes a vpci device from a uvm when there are
+// RemoveDevice removes a vpci device from a uvm when there are
 // no more references to a given VPCIDevice. Otherwise, decrements
 // the reference count of the stored VPCIDevice and returns nil.
-func (uvm *UtilityVM) removeDevice(ctx context.Context, deviceInstanceID string, index uint16) error {
+func (uvm *UtilityVM) RemoveDevice(ctx context.Context, deviceInstanceID string, index uint16) error {
 	key := VPCIDeviceKey{
 		deviceInstanceID:     deviceInstanceID,
 		virtualFunctionIndex: index,

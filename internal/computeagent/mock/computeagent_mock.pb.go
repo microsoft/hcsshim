@@ -50,6 +50,21 @@ func (mr *MockComputeAgentServiceMockRecorder) AddNIC(ctx, req interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddNIC", reflect.TypeOf((*MockComputeAgentService)(nil).AddNIC), ctx, req)
 }
 
+// AssignPCI mocks base method.
+func (m *MockComputeAgentService) AssignPCI(ctx context.Context, req *computeagent.AssignPCIInternalRequest) (*computeagent.AssignPCIInternalResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AssignPCI", ctx, req)
+	ret0, _ := ret[0].(*computeagent.AssignPCIInternalResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AssignPCI indicates an expected call of AssignPCI.
+func (mr *MockComputeAgentServiceMockRecorder) AssignPCI(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssignPCI", reflect.TypeOf((*MockComputeAgentService)(nil).AssignPCI), ctx, req)
+}
+
 // DeleteNIC mocks base method.
 func (m *MockComputeAgentService) DeleteNIC(ctx context.Context, req *computeagent.DeleteNICInternalRequest) (*computeagent.DeleteNICInternalResponse, error) {
 	m.ctrl.T.Helper()
@@ -78,4 +93,19 @@ func (m *MockComputeAgentService) ModifyNIC(ctx context.Context, req *computeage
 func (mr *MockComputeAgentServiceMockRecorder) ModifyNIC(ctx, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ModifyNIC", reflect.TypeOf((*MockComputeAgentService)(nil).ModifyNIC), ctx, req)
+}
+
+// RemovePCI mocks base method.
+func (m *MockComputeAgentService) RemovePCI(ctx context.Context, req *computeagent.RemovePCIInternalRequest) (*computeagent.RemovePCIInternalResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemovePCI", ctx, req)
+	ret0, _ := ret[0].(*computeagent.RemovePCIInternalResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RemovePCI indicates an expected call of RemovePCI.
+func (mr *MockComputeAgentServiceMockRecorder) RemovePCI(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemovePCI", reflect.TypeOf((*MockComputeAgentService)(nil).RemovePCI), ctx, req)
 }
