@@ -118,7 +118,7 @@ var createVHDCommand = cli.Command{
 			Usage: "Optional: custom registry password",
 		},
 		cli.BoolFlag{
-			Name:  hashDeviceVhdFlag,
+			Name:  hashDeviceVhdFlag + ",hdv",
 			Usage: "Optional: save hash-device as a VHD",
 		},
 	},
