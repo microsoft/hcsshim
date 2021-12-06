@@ -2,17 +2,15 @@ package main
 
 import (
 	"bytes"
-	"os/exec"
-	// "compress/gzip" //
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
-
-	// "time"
 
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -211,19 +209,16 @@ func createImageFromLayerTars(layerTars []string) error {
 func main() {
 	tempDir, err := ioutil.TempDir("", "imagecreator-layerdir")
 	if err != nil {
-		fmt.Printf("failed to create temp dir: %s\n", err)
-		return
+		log.Fatalf("failed to create temp dir: %s\n", err)
 	}
 	defer os.RemoveAll(tempDir)
 
 	layerTars, err := createUnorderedTars(tempDir)
 	if err != nil {
-		fmt.Printf("failed to create unordered tars: %s\n", err)
-		return
+		log.Fatalf("failed to create unordered tars: %s\n", err)
 	}
 
 	if err = createImageFromLayerTars(layerTars); err != nil {
-		fmt.Printf("failed to create image: %s\n", err)
-		return
+		log.Fatalf("failed to create image: %s\n", err)
 	}
 }
