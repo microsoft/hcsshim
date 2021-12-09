@@ -74,6 +74,7 @@ func DefaultContainerConfigs() []securitypolicy.ContainerConfig {
 		[]securitypolicy.EnvRuleConfig{},
 		securitypolicy.AuthConfig{},
 		"",
+		[]string{},
 	)
 	return []securitypolicy.ContainerConfig{pause}
 }

@@ -38,11 +38,12 @@ type EnvRuleConfig struct {
 // ContainerConfig contains toml or JSON config for container described
 // in security policy.
 type ContainerConfig struct {
-	ImageName  string          `json:"image_name" toml:"image_name"`
-	Command    []string        `json:"command" toml:"command"`
-	Auth       AuthConfig      `json:"auth" toml:"auth"`
-	EnvRules   []EnvRuleConfig `json:"env_rules" toml:"env_rule"`
-	WorkingDir string          `json:"working_dir" toml:"working_dir"`
+	ImageName      string          `json:"image_name" toml:"image_name"`
+	Command        []string        `json:"command" toml:"command"`
+	Auth           AuthConfig      `json:"auth" toml:"auth"`
+	EnvRules       []EnvRuleConfig `json:"env_rules" toml:"env_rule"`
+	WorkingDir     string          `json:"working_dir" toml:"working_dir"`
+	ExpectedMounts []string        `json:"expected_mounts" toml:"expected_mounts"`
 }
 
 // NewContainerConfig creates a new ContainerConfig from the given values.
@@ -52,13 +53,15 @@ func NewContainerConfig(
 	envRules []EnvRuleConfig,
 	auth AuthConfig,
 	workingDir string,
+	expectedMounts []string,
 ) ContainerConfig {
 	return ContainerConfig{
-		ImageName:  imageName,
-		Command:    command,
-		EnvRules:   envRules,
-		Auth:       auth,
-		WorkingDir: workingDir,
+		ImageName:      imageName,
+		Command:        command,
+		EnvRules:       envRules,
+		Auth:           auth,
+		WorkingDir:     workingDir,
+		ExpectedMounts: expectedMounts,
 	}
 }
 
@@ -97,6 +100,9 @@ type securityPolicyContainer struct {
 	// WorkingDir is a path to container's working directory, which all the processes
 	// will default to.
 	WorkingDir string
+	// Unordered list of mounts which are expected to be present when the container
+	// starts
+	ExpectedMounts []string `json:"expected_mounts"`
 }
 
 // SecurityPolicyState is a structure that holds user supplied policy to enforce
@@ -119,7 +125,7 @@ type EncodedSecurityPolicy struct {
 // security policy for given policy. The security policy is transmitted as json
 // in an annotation, so we first have to remove the base64 encoding that allows
 // the JSON based policy to be passed as a string. From there, we decode the
-// JSONand setup our security policy struct
+// JSON and setup our security policy struct
 func NewSecurityPolicyState(base64Policy string) (*SecurityPolicyState, error) {
 	// construct an encoded security policy that holds the base64 representation
 	encodedSecurityPolicy := EncodedSecurityPolicy{
@@ -174,10 +180,11 @@ type Containers struct {
 }
 
 type Container struct {
-	Command    CommandArgs `json:"command"`
-	EnvRules   EnvRules    `json:"env_rules"`
-	Layers     Layers      `json:"layers"`
-	WorkingDir string      `json:"working_dir"`
+	Command        CommandArgs    `json:"command"`
+	EnvRules       EnvRules       `json:"env_rules"`
+	Layers         Layers         `json:"layers"`
+	WorkingDir     string         `json:"working_dir"`
+	ExpectedMounts ExpectedMounts `json:"expected_mounts"`
 }
 
 type Layers struct {
@@ -195,6 +202,11 @@ type CommandArgs struct {
 type EnvRules struct {
 	Length   int                      `json:"length"`
 	Elements map[string]EnvRuleConfig `json:"elements"`
+}
+
+type ExpectedMounts struct {
+	Length   int               `json:"length"`
+	Elements map[string]string `json:"elements"`
 }
 
 // NewContainer creates a new Container instance from the provided values
@@ -310,5 +322,16 @@ func (e EnvRules) MarshalJSON() ([]byte, error) {
 	}{
 		Length: len(e.Elements),
 		Alias:  (*Alias)(&e),
+	})
+}
+
+func (em ExpectedMounts) MarshalJSON() ([]byte, error) {
+	type Alias ExpectedMounts
+	return json.Marshal(&struct {
+		Length int `json:"length"`
+		*Alias
+	}{
+		Length: len(em.Elements),
+		Alias:  (*Alias)(&em),
 	})
 }

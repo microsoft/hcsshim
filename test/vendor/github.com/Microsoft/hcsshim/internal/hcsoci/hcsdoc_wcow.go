@@ -11,6 +11,10 @@ import (
 	"regexp"
 	"strings"
 
+	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/sirupsen/logrus"
+
+	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/layers"
@@ -22,8 +26,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/sirupsen/logrus"
 )
 
 // A simple wrapper struct around the container mount configs that should be added to the
@@ -78,7 +80,7 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 					return nil, err
 				}
 				mdv2.HostPath = uvmPath
-			} else if strings.HasPrefix(mount.Source, "sandbox://") {
+			} else if strings.HasPrefix(mount.Source, guestpath.SandboxMountPrefix) {
 				// Convert to the path in the guest that was asked for.
 				mdv2.HostPath = convertToWCOWSandboxMountPath(mount.Source)
 			} else {

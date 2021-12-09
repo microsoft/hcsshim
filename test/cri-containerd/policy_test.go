@@ -47,6 +47,7 @@ func alpineSecurityPolicy(t *testing.T) string {
 		[]securitypolicy.EnvRuleConfig{},
 		securitypolicy.AuthConfig{},
 		"",
+		[]string{},
 	)
 
 	containers := append(defaultContainers, alpineContainer)

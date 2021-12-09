@@ -10,16 +10,18 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/guest/network"
-	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/Microsoft/hcsshim/pkg/annotations"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
+
+	"github.com/Microsoft/hcsshim/internal/guest/network"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
+	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
 func getSandboxRootDir(id string) string {
-	return filepath.Join("/run/gcs/c", id)
+	return filepath.Join(guestpath.LCOWRootPrefixInUVM, id)
 }
 
 func getSandboxHugePageMountsDir(id string) string {

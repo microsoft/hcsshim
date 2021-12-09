@@ -21,6 +21,7 @@ be downloaded, turned into an ext4, and finally a dm-verity root hash calculated
 image_name = "rust:1.52.1"
 command = ["rustc", "--help"]
 working_dir = "/home/user"
+expected_mounts = ["/path/to/container/mount-1", "/path/to/container/mount-2"]
 
 [[container.env_rule]]
 strategy = "re2"
@@ -86,7 +87,14 @@ represented in JSON.
             "5": "1b80f120dbd88e4355d6241b519c3e25290215c469516b49dece9cf07175a766"
           }
         },
-        "working_dir": "/home/user"
+        "working_dir": "/home/user",
+        "expected_mounts": {
+          "length": 2,
+          "elements": {
+            "0": "/path/to/container/mount-1",
+            "1": "/path/to/container/mount-2"
+          }
+        }
       },
       "1": {
         "command": {
@@ -114,7 +122,11 @@ represented in JSON.
             "0": "16b514057a06ad665f92c02863aca074fd5976c755d26bff16365299169e8415"
           }
         },
-        "working_dir": "/"
+        "working_dir": "/",
+        "expected_mounts": {
+          "length": 0,
+          "elements": {}
+        }
       }
     }
   }
@@ -135,11 +147,11 @@ output raw JSON in addition to the Base64 encoded version
 
 Some images will be pulled from registries that require authorization. To add
 authorization information for a given image, you would add an `[auth]` object
-to the TOML definiton for that image. For example:
+to the TOML definition for that image. For example:
 
 ```toml
-[[image]]
-image_name = "rust:1.52.1"
+[[container]]
+name = "rust:1.52.1"
 command = ["rustc", "--help"]
 
 [auth]
@@ -147,8 +159,8 @@ username = "my username"
 password = "my password"
 ```
 
-Authorization information needs added on a per-image basis as it can vary from
-image to image and their respective registries.
+Authorization information needs to be added on a per-image basis as it can vary
+from image to image and their respective registries.
 
 To pull an image using anonymous access, no `[auth]` object is required.
 

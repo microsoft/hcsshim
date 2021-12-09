@@ -9,7 +9,11 @@ import (
 	"path/filepath"
 	"strconv"
 
+	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
+
 	"github.com/Microsoft/hcsshim/internal/devices"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
@@ -17,8 +21,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 )
 
 const deviceUtilExeName = "device-util.exe"
@@ -222,14 +224,14 @@ func handleAssignedDevicesLCOW(
 		scsiMount, err := vm.AddSCSI(
 			ctx,
 			gpuSupportVhdPath,
-			uvm.LCOWNvidiaMountPath,
+			guestpath.LCOWNvidiaMountPath,
 			true,
 			false,
 			options,
 			uvm.VMAccessTypeNoop,
 		)
 		if err != nil {
-			return resultDevs, closers, errors.Wrapf(err, "failed to add scsi device %s in the UVM %s at %s", gpuSupportVhdPath, vm.ID(), uvm.LCOWNvidiaMountPath)
+			return resultDevs, closers, errors.Wrapf(err, "failed to add scsi device %s in the UVM %s at %s", gpuSupportVhdPath, vm.ID(), guestpath.LCOWNvidiaMountPath)
 		}
 		closers = append(closers, scsiMount)
 	}

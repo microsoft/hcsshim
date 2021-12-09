@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -45,7 +46,7 @@ func InstallKernelDriver(ctx context.Context, vm *uvm.UtilityVM, driver string) 
 		}
 		return closer, execPnPInstallDriver(ctx, vm, uvmPath)
 	}
-	uvmPathForShare := fmt.Sprintf(uvm.LCOWGlobalMountPrefix, vm.UVMMountCounter())
+	uvmPathForShare := fmt.Sprintf(guestpath.LCOWGlobalMountPrefixFmt, vm.UVMMountCounter())
 	scsiCloser, err := vm.AddSCSI(ctx, driver, uvmPathForShare, true, false, []string{}, uvm.VMAccessTypeIndividual)
 	if err != nil {
 		return closer, fmt.Errorf("failed to add SCSI disk to utility VM for path %+v: %s", driver, err)

@@ -10,16 +10,15 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/cmd/gcstools/generichook"
-	"github.com/Microsoft/hcsshim/internal/guest/storage/pci"
-	"github.com/Microsoft/hcsshim/pkg/annotations"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
-)
 
-// path that the shim mounts the nvidia gpu vhd to in the uvm
-// this MUST match the path mapped to in the shim
-const lcowNvidiaMountPath = "/run/nvidia"
+	"github.com/Microsoft/hcsshim/cmd/gcstools/generichook"
+	"github.com/Microsoft/hcsshim/internal/guest/storage/pci"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
+	"github.com/Microsoft/hcsshim/internal/hooks"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
+)
 
 const nvidiaDebugFilePath = "/nvidia-container.log"
 
@@ -70,35 +69,33 @@ func addNvidiaDevicePreHook(ctx context.Context, spec *oci.Spec) error {
 	// add template for pid argument to be injected later by the generic hook binary
 	args = append(args, "--no-cgroups", "--pid={{pid}}", spec.Root.Path)
 
-	if spec.Hooks == nil {
-		spec.Hooks = &oci.Hooks{}
-	}
-
 	hookLogDebugFileEnvOpt := fmt.Sprintf("%s=%s", generichook.LogDebugFileEnvKey, nvidiaDebugFilePath)
 	hookEnv := append(updateEnvWithNvidiaVariables(), hookLogDebugFileEnvOpt)
-	nvidiaHook := oci.Hook{
-		Path: genericHookPath,
-		Args: args,
-		Env:  hookEnv,
-	}
-
-	spec.Hooks.Prestart = append(spec.Hooks.Prestart, nvidiaHook)
-	return nil
+	nvidiaHook := hooks.NewOCIHook(genericHookPath, args, hookEnv)
+	return hooks.AddOCIHook(spec, hooks.Prestart, nvidiaHook)
 }
 
 // updateEnvWithNvidiaVariables creates an env with the nvidia gpu vhd in PATH and insecure mode set
 func updateEnvWithNvidiaVariables() []string {
-	pathPrefix := "PATH="
-	nvidiaBin := fmt.Sprintf("%s/bin", lcowNvidiaMountPath)
-	env := os.Environ()
-	for i, v := range env {
-		if strings.HasPrefix(v, pathPrefix) {
-			newPath := fmt.Sprintf("%s:%s", v, nvidiaBin)
-			env[i] = newPath
-		}
-	}
+	nvidiaBin := fmt.Sprintf("%s/bin", guestpath.LCOWNvidiaMountPath)
+	env := updatePathEnv(nvidiaBin)
 	// NVC_INSECURE_MODE allows us to run nvidia-container-cli without seccomp
 	// we don't currently use seccomp in the uvm, so avoid using it here for now as well
 	env = append(env, "NVC_INSECURE_MODE=1")
 	return env
+}
+
+// updatePathEnv adds specified `dirs` to PATH variable and returns the result environment variables.
+func updatePathEnv(dirs ...string) []string {
+	pathPrefix := "PATH="
+	additionalDirs := strings.Join(dirs, ":")
+	env := os.Environ()
+	for i, v := range env {
+		if strings.HasPrefix(v, pathPrefix) {
+			newPath := fmt.Sprintf("%s:%s", v, additionalDirs)
+			env[i] = newPath
+			return env
+		}
+	}
+	return append(env, fmt.Sprintf("PATH=%s", additionalDirs))
 }

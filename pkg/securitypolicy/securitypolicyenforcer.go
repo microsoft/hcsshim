@@ -3,11 +3,19 @@ package securitypolicy
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/google/go-cmp/cmp"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
+
+	"github.com/Microsoft/hcsshim/internal/guestpath"
+	"github.com/Microsoft/hcsshim/internal/hooks"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
 type SecurityPolicyEnforcer interface {
@@ -15,6 +23,7 @@ type SecurityPolicyEnforcer interface {
 	EnforceDeviceUnmountPolicy(unmountTarget string) (err error)
 	EnforceOverlayMountPolicy(containerID string, layerPaths []string) (err error)
 	EnforceCreateContainerPolicy(containerID string, argList []string, envList []string, workingDir string) (err error)
+	EnforceExpectedMountsPolicy(containerID string, spec *oci.Spec) error
 }
 
 func NewSecurityPolicyEnforcer(state SecurityPolicyState) (SecurityPolicyEnforcer, error) {
@@ -160,13 +169,19 @@ func (c Container) toInternal() (securityPolicyContainer, error) {
 		return securityPolicyContainer{}, err
 	}
 
+	expectedMounts, err := c.ExpectedMounts.toInternal()
+	if err != nil {
+		return securityPolicyContainer{}, err
+	}
+
 	return securityPolicyContainer{
 		Command:  command,
 		EnvRules: envRules,
 		Layers:   layers,
 		// No need to have toInternal(), because WorkingDir is a string both
 		// internally and in the policy.
-		WorkingDir: c.WorkingDir,
+		WorkingDir:     c.WorkingDir,
+		ExpectedMounts: expectedMounts,
 	}, nil
 }
 
@@ -203,6 +218,14 @@ func (l Layers) toInternal() ([]string, error) {
 	}
 
 	return stringMapToStringArray(l.Elements), nil
+}
+
+func (em *ExpectedMounts) toInternal() ([]string, error) {
+	if em.Length != len(em.Elements) {
+		return nil, fmt.Errorf("expectedMounts numbers don't match in policy. expected: %d, actual: %d", em.Length, len(em.Elements))
+	}
+
+	return stringMapToStringArray(em.Elements), nil
 }
 
 func stringMapToStringArray(in map[string]string) []string {
@@ -463,7 +486,7 @@ func equalForOverlay(a1 []string, a2 []string) bool {
 }
 
 func possibleIndicesForID(containerID string, mapping map[int]map[string]struct{}) []int {
-	possibles := []int{}
+	var possibles []int
 	for index, ids := range mapping {
 		for id := range ids {
 			if containerID == id {
@@ -473,6 +496,103 @@ func possibleIndicesForID(containerID string, mapping map[int]map[string]struct{
 	}
 
 	return possibles
+}
+
+// EnforceExpectedMountsPolicy for StandardSecurityPolicyEnforcer injects a
+// hooks.CreateRuntime hook into container spec and the hook ensures that
+// the expected mounts appear prior container start. At the moment enforcement
+// is expected to take place inside LCOW UVM.
+//
+// Supported scenarios:
+//   1. expected mount is provided as a path inside the sandbox, and it should resolve inside UVM
+//      e.g, "sandbox://path/on/the/host", which will correspond to "/run/gcs/c/<podID>/sandboxMounts/path/on/the/host"
+//   2. expected mount is provided as a path under a sandbox mount path inside container, e.g.,
+//      sandbox mount is at path "/sandbox/mount" and wait path is "/sandbox/mount/wait/path", which
+//      corresponds to "/run/gcs/c/<podID>/sandboxMounts/path/on/the/host/wait/path"
+//   3. expected mount is provided as an arbitrary path inside container, and it should resolve
+//      inside UVM, e.g., "/arbitrary/container/path", which corresponds to
+//      "/run/gcs/c/<containerID>/rootfs/arbitrary/container/path"
+func (pe *StandardSecurityPolicyEnforcer) EnforceExpectedMountsPolicy(containerID string, spec *oci.Spec) error {
+	pe.mutex.Lock()
+	defer pe.mutex.Unlock()
+
+	if len(pe.Containers) < 1 {
+		return errors.New("policy doesn't allow mounting containers")
+	}
+
+	sandboxID := spec.Annotations[annotations.KubernetesSandboxID]
+	if sandboxID == "" {
+		return errors.New("no sandbox ID present in spec annotations")
+	}
+
+	var wMounts []string
+	pIndices := possibleIndicesForID(containerID, pe.ContainerIndexToContainerIds)
+	if len(pIndices) == 0 {
+		return errors.New("no valid container indices found")
+	}
+
+	// Unlike environment variable and command line enforcement, there isn't anything
+	// to validate here, since we're essentially just injecting hooks when necessary
+	// for all containers.
+	matchFound := false
+	for _, index := range pIndices {
+		if !matchFound {
+			matchFound = true
+			wMounts = pe.Containers[index].ExpectedMounts
+		} else {
+			pe.narrowMatchesForContainerIndex(index, containerID)
+		}
+	}
+
+	if len(wMounts) == 0 {
+		return nil
+	}
+
+	var wPaths []string
+	for _, mount := range wMounts {
+		// By default, handle scenario #3 and resolve container path to the actual path inside UVM.
+		wp := filepath.Join(guestpath.LCOWRootPrefixInUVM, containerID, guestpath.RootfsPath, mount)
+		if strings.HasPrefix(mount, guestpath.SandboxMountPrefix) {
+			// This covers case #1, and we replace sandbox mount prefix with the sandbox
+			// mounts path inside UVM
+			sandboxPath := strings.TrimPrefix(mount, guestpath.SandboxMountPrefix)
+			wp = filepath.Join(guestpath.LCOWRootPrefixInUVM, "sandboxMounts", sandboxPath)
+		} else {
+			// This covers case #2. Iterate through container mounts to identify the
+			// correct sandbox mount where the wait path is nested under. The mount
+			// spec will be something like:
+			// {
+			//    "source": "/run/gcs/c/<podID>/sandboxMounts/path/on/host",
+			//    "destination": "/sandbox/mount"
+			// }
+			// The wait path will be "/sandbox/mount/wait/path". To find the corresponding
+			// sandbox mount do a prefix match on wait path against all container mounts Destination
+			// and resolve the full path inside UVM. For example above it becomes
+			// "/run/gcs/c/<podID>/sandboxMounts/path/on/host/wait/path"
+			for _, m := range spec.Mounts {
+				if strings.HasPrefix(mount, m.Destination) {
+					wp = filepath.Join(m.Source, strings.TrimPrefix(mount, m.Destination))
+					break
+				}
+			}
+			if wp == "" {
+				return fmt.Errorf("invalid mount path: %q", mount)
+			}
+		}
+		wPaths = append(wPaths, filepath.Clean(wp))
+	}
+
+	pathsArg := strings.Join(wPaths, ",")
+	waitPathsBinary := "/bin/wait-paths"
+	args := []string{
+		waitPathsBinary,
+		"--paths",
+		pathsArg,
+		"--timeout",
+		"60",
+	}
+	hook := hooks.NewOCIHook(waitPathsBinary, args, os.Environ())
+	return hooks.AddOCIHook(spec, hooks.CreateRuntime, hook)
 }
 
 type OpenDoorSecurityPolicyEnforcer struct{}
@@ -495,6 +615,10 @@ func (p *OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ string, 
 	return nil
 }
 
+func (p *OpenDoorSecurityPolicyEnforcer) EnforceExpectedMountsPolicy(_ string, _ *oci.Spec) error {
+	return nil
+}
+
 type ClosedDoorSecurityPolicyEnforcer struct{}
 
 var _ SecurityPolicyEnforcer = (*ClosedDoorSecurityPolicyEnforcer)(nil)
@@ -513,4 +637,8 @@ func (p *ClosedDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID
 
 func (p *ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ string, _ []string, _ []string, _ string) (err error) {
 	return errors.New("running commands is denied by policy")
+}
+
+func (p *ClosedDoorSecurityPolicyEnforcer) EnforceExpectedMountsPolicy(_ string, _ *oci.Spec) error {
+	return errors.New("enforcing expected mounts is denied by policy")
 }

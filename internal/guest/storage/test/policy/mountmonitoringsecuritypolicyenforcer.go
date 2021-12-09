@@ -1,6 +1,8 @@
 package policy
 
 import (
+	oci "github.com/opencontainers/runtime-spec/specs-go"
+
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
@@ -30,5 +32,9 @@ func (p *MountMonitoringSecurityPolicyEnforcer) EnforceOverlayMountPolicy(contai
 }
 
 func (p *MountMonitoringSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ string, _ []string, _ []string, _ string) (err error) {
+	return nil
+}
+
+func (p *MountMonitoringSecurityPolicyEnforcer) EnforceExpectedMountsPolicy(_ string, _ *oci.Spec) error {
 	return nil
 }
