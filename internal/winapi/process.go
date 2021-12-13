@@ -26,6 +26,9 @@ type StartupInfoEx struct {
 	// This is a recreation of the same binding from the stdlib. The x/sys/windows variant for whatever reason
 	// doesn't work when updating the list for the pseudo console attribute. It has the process immediately exit
 	// with exit code 0xc0000142 shortly after start.
+	//
+	// TODO (dcantah): Swap to the x/sys/windows definitions after https://go-review.googlesource.com/c/sys/+/371276/1/windows/exec_windows.go#153
+	// gets in.
 	windows.StartupInfo
 	ProcThreadAttributeList *ProcThreadAttributeList
 }
