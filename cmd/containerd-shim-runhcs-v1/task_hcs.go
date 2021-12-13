@@ -1008,3 +1008,15 @@ func (ht *hcsTask) requestUpdateContainer(ctx context.Context, resourcePath stri
 	}
 	return ht.c.Modify(ctx, modification)
 }
+
+func (ht *hcsTask) ProcessorInfo(ctx context.Context) (*processorInfo, error) {
+	if ht.host == nil {
+		return nil, errTaskNotIsolated
+	}
+	if !ht.ownsHost {
+		return nil, errors.New("not implemented")
+	}
+	return &processorInfo{
+		count: ht.host.ProcessorCount(),
+	}, nil
+}

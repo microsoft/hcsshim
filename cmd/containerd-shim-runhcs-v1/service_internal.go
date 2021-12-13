@@ -9,6 +9,7 @@ import (
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/oci"
+	"github.com/Microsoft/hcsshim/internal/querycompute"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
@@ -453,4 +454,18 @@ func (s *service) shutdownInternal(ctx context.Context, req *task.ShutdownReques
 	// connection to drain any active requests.
 	os.Exit(0)
 	return empty, nil
+}
+
+func (s *service) getComputeProcessorInfo(ctx context.Context, req *querycompute.ComputeProcessorInfoRequest) (*querycompute.ComputeProcessorInfoResponse, error) {
+	t, err := s.getTask(req.ContainerID)
+	if err != nil {
+		return nil, err
+	}
+	info, err := t.ProcessorInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &querycompute.ComputeProcessorInfoResponse{
+		Count: info.count,
+	}, nil
 }

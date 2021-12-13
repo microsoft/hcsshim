@@ -302,3 +302,12 @@ func (wpst *wcowPodSandboxTask) Stats(ctx context.Context) (*stats.Statistics, e
 	stats.VM = vmStats
 	return stats, nil
 }
+
+func (wpst *wcowPodSandboxTask) ProcessorInfo(ctx context.Context) (*processorInfo, error) {
+	if wpst.host == nil {
+		return nil, errTaskNotIsolated
+	}
+	return &processorInfo{
+		count: wpst.host.ProcessorCount(),
+	}, nil
+}
