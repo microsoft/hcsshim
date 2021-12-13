@@ -30,6 +30,7 @@ var (
 	ErrSuperBlockReadFailure  = errors.New("failed to read dm-verity super block")
 	ErrSuperBlockParseFailure = errors.New("failed to parse dm-verity super block")
 	ErrRootHashReadFailure    = errors.New("failed to read dm-verity root hash")
+	ErrNotVeritySuperBlock    = errors.New("not dm-verity super-block")
 )
 
 type dmveritySuperblock struct {
@@ -183,7 +184,9 @@ func ReadDMVerityInfo(vhdPath string, offsetInBytes int64) (*VerityInfo, error) 
 	if err := binary.Read(b, binary.LittleEndian, dmvSB); err != nil {
 		return nil, errors.Wrapf(ErrSuperBlockParseFailure, "%s", err)
 	}
-
+	if string(bytes.Trim(dmvSB.Signature[:], "\x00")[:]) != "verity" {
+		return nil, ErrNotVeritySuperBlock
+	}
 	// read the merkle tree root
 	if s, err := vhd.Read(block); err != nil || s != blockSize {
 		if err != nil {
