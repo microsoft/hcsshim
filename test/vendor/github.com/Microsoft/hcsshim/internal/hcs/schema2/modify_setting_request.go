@@ -9,7 +9,7 @@
 
 package hcsschema
 
-import "github.com/Microsoft/hcsshim/pkg/protocol/guestrequest"
+import "github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 
 type ModifySettingRequest struct {
 	ResourcePath string `json:"ResourcePath,omitempty"`

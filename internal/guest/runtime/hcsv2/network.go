@@ -18,7 +18,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/network"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/Microsoft/hcsshim/pkg/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 var (

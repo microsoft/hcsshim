@@ -10,7 +10,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/pkg/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
 // Usually mounts specified in the container config are added in the container doc

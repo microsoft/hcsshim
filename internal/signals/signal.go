@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/pkg/protocol/guestrequest"
-	"github.com/Microsoft/hcsshim/pkg/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 var (

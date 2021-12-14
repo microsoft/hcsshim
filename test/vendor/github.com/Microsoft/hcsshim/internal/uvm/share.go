@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/pkg/protocol/guestrequest"
-	"github.com/Microsoft/hcsshim/pkg/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 // Share shares in file(s) from `reqHostPath` on the host machine to `reqUVMPath` inside the UVM.

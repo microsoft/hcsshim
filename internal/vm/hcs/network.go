@@ -6,7 +6,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/pkg/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
 func (uvm *utilityVM) AddNIC(ctx context.Context, nicID, endpointID, macAddr string) error {

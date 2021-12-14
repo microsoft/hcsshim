@@ -14,8 +14,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/exec"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/winapi"
-	"github.com/Microsoft/hcsshim/pkg/protocol/guestresource"
 )
 
 // JobProcess represents a process run in a job object.

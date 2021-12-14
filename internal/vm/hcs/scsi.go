@@ -9,8 +9,8 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/vm"
-	"github.com/Microsoft/hcsshim/pkg/protocol/guestrequest"
 )
 
 func (uvmb *utilityVMBuilder) AddSCSIController(id uint32) error {

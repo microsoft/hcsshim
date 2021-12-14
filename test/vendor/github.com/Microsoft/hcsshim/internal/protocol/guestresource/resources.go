@@ -1,7 +1,7 @@
 package guestresource
 
 import (
-	"github.com/Microsoft/hcsshim/pkg/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/opencontainers/runtime-spec/specs-go"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"

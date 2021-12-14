@@ -21,7 +21,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/Microsoft/hcsshim/pkg/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
 // The capabilities of this GCS.

@@ -6,7 +6,7 @@ import (
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/pkg/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
 // Modify modifies the compute system by sending a request to HCS.

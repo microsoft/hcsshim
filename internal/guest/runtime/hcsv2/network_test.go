@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/pkg/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 func Test_getNetworkNamespace_NotExist(t *testing.T) {
