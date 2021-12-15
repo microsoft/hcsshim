@@ -64,7 +64,6 @@ func MaximumDiskSize(size int64) Option {
 const (
 	whiteoutPrefix = ".wh."
 	opaqueWhiteout = ".wh..wh..opq"
-	ext4BlockSize  = compactext4.BlockSize
 )
 
 // ConvertTarToExt4 writes a compact ext4 file system image that contains the files in the
