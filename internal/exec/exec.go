@@ -105,13 +105,15 @@ func (e *Exec) Start() error {
 	// 1. Assigning to a job object at creation time
 	// 2. Pseudo console setup if one was requested.
 	// 3. Inherit only stdio handles if ones were requested.
+	// Therefore we need a list of size 3.
 	e.attrList, err = winapi.NewProcThreadAttributeList(3)
 	if err != nil {
 		return fmt.Errorf("failed to initialize process thread attribute list: %w", err)
 	}
 	siEx.ProcThreadAttributeList = e.attrList
 
-	// Need to know whether the process needs to inherit stdio handles.
+	// Need to know whether the process needs to inherit stdio handles. The below setup is so that we only inherit the
+	// stdio pipes and nothing else into the new process.
 	inheritHandles := e.stdioProcEnd[0] != nil || e.stdioProcEnd[1] != nil || e.stdioProcEnd[2] != nil
 	if inheritHandles {
 		var handles []uintptr
@@ -149,6 +151,12 @@ func (e *Exec) Start() error {
 
 	if e.job != nil {
 		if err := e.job.UpdateProcThreadAttribute(siEx.ProcThreadAttributeList); err != nil {
+			return err
+		}
+	}
+
+	if e.cpty != nil {
+		if err := e.cpty.UpdateProcThreadAttribute(siEx.ProcThreadAttributeList); err != nil {
 			return err
 		}
 	}
@@ -294,12 +302,30 @@ func (e *Exec) Stderr() *os.File {
 
 // setupStdio handles setting up stdio for the process.
 func (e *Exec) setupStdio() error {
+	stdioRequested := e.stdin || e.stderr || e.stdout
+	// If the client requested a pseudo console then there's nothing we need to do pipe wise, as the process inherits the other end of the pty's
+	// pipes.
+	if e.cpty != nil && stdioRequested {
+		return errors.New("can't setup both stdio pipes and a pseudo console")
+	}
+
+	// Go 1.16's pipe handles (from os.Pipe()) aren't inheritable, so mark them explicitly as such if any stdio handles are
+	// requested and someone may be building on 1.16.
+
 	if e.stdin {
 		pr, pw, err := os.Pipe()
 		if err != nil {
 			return err
 		}
 		e.stdioOurEnd[0] = pw
+
+		if err := windows.SetHandleInformation(
+			windows.Handle(pr.Fd()),
+			windows.HANDLE_FLAG_INHERIT,
+			windows.HANDLE_FLAG_INHERIT,
+		); err != nil {
+			return fmt.Errorf("failed to make stdin pipe inheritable: %w", err)
+		}
 		e.stdioProcEnd[0] = pr
 	}
 
@@ -309,6 +335,14 @@ func (e *Exec) setupStdio() error {
 			return err
 		}
 		e.stdioOurEnd[1] = pr
+
+		if err := windows.SetHandleInformation(
+			windows.Handle(pw.Fd()),
+			windows.HANDLE_FLAG_INHERIT,
+			windows.HANDLE_FLAG_INHERIT,
+		); err != nil {
+			return fmt.Errorf("failed to make stdout pipe inheritable: %w", err)
+		}
 		e.stdioProcEnd[1] = pw
 	}
 
@@ -318,6 +352,14 @@ func (e *Exec) setupStdio() error {
 			return err
 		}
 		e.stdioOurEnd[2] = pr
+
+		if err := windows.SetHandleInformation(
+			windows.Handle(pw.Fd()),
+			windows.HANDLE_FLAG_INHERIT,
+			windows.HANDLE_FLAG_INHERIT,
+		); err != nil {
+			return fmt.Errorf("failed to make stderr pipe inheritable: %w", err)
+		}
 		e.stdioProcEnd[2] = pw
 	}
 	return nil

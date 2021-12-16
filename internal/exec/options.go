@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"github.com/Microsoft/hcsshim/internal/conpty"
 	"github.com/Microsoft/hcsshim/internal/jobobject"
 	"golang.org/x/sys/windows"
 )
@@ -13,6 +14,7 @@ type execConfig struct {
 	stdout, stderr, stdin bool
 
 	job          *jobobject.JobObject
+	cpty         *conpty.ConPTY
 	token        windows.Token
 	processFlags uint32
 }
@@ -48,6 +50,14 @@ func WithEnv(env []string) ExecOpts {
 func WithJobObject(job *jobobject.JobObject) ExecOpts {
 	return func(e *execConfig) error {
 		e.job = job
+		return nil
+	}
+}
+
+// WithConPty will launch the created process with a pseudo console attached to the process.
+func WithConPty(cpty *conpty.ConPTY) ExecOpts {
+	return func(e *execConfig) error {
+		e.cpty = cpty
 		return nil
 	}
 }
