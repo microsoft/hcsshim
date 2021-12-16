@@ -241,7 +241,7 @@ func (job *JobObject) PollNotification() (interface{}, error) {
 // UpdateProcThreadAttribute updates the passed in ProcThreadAttributeList to contain what is necessary to
 // launch a process in a job at creation time. This can be used to avoid having to call Assign() after a process
 // has already started running.
-func (job *JobObject) UpdateProcThreadAttribute(attrList *winapi.ProcThreadAttributeList) error {
+func (job *JobObject) UpdateProcThreadAttribute(attrList *windows.ProcThreadAttributeListContainer) error {
 	job.handleLock.RLock()
 	defer job.handleLock.RUnlock()
 
@@ -249,18 +249,14 @@ func (job *JobObject) UpdateProcThreadAttribute(attrList *winapi.ProcThreadAttri
 		return ErrAlreadyClosed
 	}
 
-	err := winapi.UpdateProcThreadAttribute(
-		attrList,
-		0,
+	if err := attrList.Update(
 		winapi.PROC_THREAD_ATTRIBUTE_JOB_LIST,
 		unsafe.Pointer(&job.handle),
 		unsafe.Sizeof(job.handle),
-		nil,
-		nil,
-	)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("failed to update proc thread attributes for job object: %w", err)
 	}
+
 	return nil
 }
 

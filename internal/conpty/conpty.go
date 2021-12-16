@@ -66,7 +66,7 @@ func New(width, height int16, flags uint32) (*ConPTY, error) {
 
 // UpdateProcThreadAttribute updates the passed in attribute list to contain the entry necessary for use with
 // CreateProcess.
-func (c *ConPTY) UpdateProcThreadAttribute(attributeList *winapi.ProcThreadAttributeList) error {
+func (c *ConPTY) UpdateProcThreadAttribute(attrList *windows.ProcThreadAttributeListContainer) error {
 	c.handleLock.RLock()
 	defer c.handleLock.RUnlock()
 
@@ -74,18 +74,14 @@ func (c *ConPTY) UpdateProcThreadAttribute(attributeList *winapi.ProcThreadAttri
 		return errClosedConPty
 	}
 
-	err := winapi.UpdateProcThreadAttribute(
-		attributeList,
-		0,
+	if err := attrList.Update(
 		winapi.PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
 		unsafe.Pointer(c.hpc),
 		unsafe.Sizeof(c.hpc),
-		nil,
-		nil,
-	)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("failed to update proc thread attributes for pseudo console: %w", err)
 	}
+
 	return nil
 }
 

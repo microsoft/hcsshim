@@ -10,7 +10,6 @@ import (
 	"unicode/utf16"
 	"unsafe"
 
-	"github.com/Microsoft/hcsshim/internal/winapi"
 	"golang.org/x/sys/windows"
 )
 
@@ -27,7 +26,7 @@ type Exec struct {
 	waitCalled   bool
 	stdioOurEnd  [3]*os.File
 	stdioProcEnd [3]*os.File
-	attrList     *winapi.ProcThreadAttributeList
+	attrList     *windows.ProcThreadAttributeListContainer
 	*execConfig
 }
 
@@ -94,7 +93,7 @@ func (e *Exec) Start() error {
 		}
 	}
 
-	siEx := new(winapi.StartupInfoEx)
+	siEx := new(windows.StartupInfoEx)
 	siEx.Flags = windows.STARTF_USESTDHANDLES
 	pi := new(windows.ProcessInformation)
 
@@ -106,11 +105,10 @@ func (e *Exec) Start() error {
 	// 2. Pseudo console setup if one was requested.
 	// 3. Inherit only stdio handles if ones were requested.
 	// Therefore we need a list of size 3.
-	e.attrList, err = winapi.NewProcThreadAttributeList(3)
+	e.attrList, err = windows.NewProcThreadAttributeList(3)
 	if err != nil {
 		return fmt.Errorf("failed to initialize process thread attribute list: %w", err)
 	}
-	siEx.ProcThreadAttributeList = e.attrList
 
 	// Need to know whether the process needs to inherit stdio handles. The below setup is so that we only inherit the
 	// stdio pipes and nothing else into the new process.
@@ -124,14 +122,10 @@ func (e *Exec) Start() error {
 		}
 
 		// Set up the process to only inherit stdio handles and nothing else.
-		err = winapi.UpdateProcThreadAttribute(
-			siEx.ProcThreadAttributeList,
-			0,
+		err := e.attrList.Update(
 			windows.PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
 			unsafe.Pointer(&handles[0]),
 			uintptr(len(handles))*unsafe.Sizeof(handles[0]),
-			nil,
-			nil,
 		)
 		if err != nil {
 			return err
@@ -150,13 +144,13 @@ func (e *Exec) Start() error {
 	}
 
 	if e.job != nil {
-		if err := e.job.UpdateProcThreadAttribute(siEx.ProcThreadAttributeList); err != nil {
+		if err := e.job.UpdateProcThreadAttribute(e.attrList); err != nil {
 			return err
 		}
 	}
 
 	if e.cpty != nil {
-		if err := e.cpty.UpdateProcThreadAttribute(siEx.ProcThreadAttributeList); err != nil {
+		if err := e.cpty.UpdateProcThreadAttribute(e.attrList); err != nil {
 			return err
 		}
 	}
@@ -165,9 +159,10 @@ func (e *Exec) Start() error {
 	pSec := &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(zeroSec)), InheritHandle: 1}
 	tSec := &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(zeroSec)), InheritHandle: 1}
 
+	siEx.ProcThreadAttributeList = e.attrList.List()
 	siEx.Cb = uint32(unsafe.Sizeof(*siEx))
 	if e.execConfig.token != 0 {
-		err = winapi.CreateProcessAsUser(
+		err = windows.CreateProcessAsUser(
 			e.execConfig.token,
 			argv0p,
 			argvp,
@@ -227,7 +222,7 @@ func (e *Exec) Close() error {
 	if e.procState == nil {
 		return errProcNotFinished
 	}
-	winapi.DeleteProcThreadAttributeList(e.attrList)
+	e.attrList.Delete()
 	e.closeStdio()
 	return nil
 }
