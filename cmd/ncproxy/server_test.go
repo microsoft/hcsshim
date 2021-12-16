@@ -162,11 +162,12 @@ func TestAddNIC_HCN(t *testing.T) {
 	mockedService.EXPECT().AddNIC(gomock.Any(), gomock.Any()).Return(&computeagent.AddNICInternalResponse{}, nil).AnyTimes()
 
 	type config struct {
-		name          string
-		containerID   string
-		nicID         string
-		endpointName  string
-		errorExpected bool
+		name              string
+		containerID       string
+		nicID             string
+		endpointName      string
+		iovPolicySettings *ncproxygrpc.IovEndpointPolicySetting
+		errorExpected     bool
 	}
 	tests := []config{
 		{
@@ -197,22 +198,46 @@ func TestAddNIC_HCN(t *testing.T) {
 			endpointName:  "",
 			errorExpected: true,
 		},
+		{
+			name:         "AddNIC returns no error with iov policy set",
+			containerID:  containerID,
+			nicID:        testNICID,
+			endpointName: "",
+			iovPolicySettings: &ncproxygrpc.IovEndpointPolicySetting{
+				IovOffloadWeight: 100,
+			},
+			errorExpected: true,
+		},
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(_ *testing.T) {
+		t.Run(test.name, func(subtest *testing.T) {
+			endpointSettings := &ncproxygrpc.HcnEndpointSettings{}
+			if test.iovPolicySettings != nil {
+				if osversion.Build() < osversion.V21H1 {
+					subtest.Skip("Requires build +21H1")
+				}
+				endpointSettings.Policies = &ncproxygrpc.HcnEndpointPolicies{
+					IovPolicySettings: test.iovPolicySettings,
+				}
+			}
 			req := &ncproxygrpc.AddNICRequest{
 				ContainerID:  test.containerID,
 				NicID:        test.nicID,
 				EndpointName: test.endpointName,
+				EndpointSettings: &ncproxygrpc.EndpointSettings{
+					Settings: &ncproxygrpc.EndpointSettings_HcnEndpoint{
+						HcnEndpoint: endpointSettings,
+					},
+				},
 			}
 
 			_, err := gService.AddNIC(ctx, req)
 			if test.errorExpected && err == nil {
-				t.Fatalf("expected AddNIC to return an error")
+				subtest.Fatalf("expected AddNIC to return an error")
 			}
 			if !test.errorExpected && err != nil {
-				t.Fatalf("expected AddNIC to return no error, instead got %v", err)
+				subtest.Fatalf("expected AddNIC to return no error, instead got %v", err)
 			}
 		})
 	}

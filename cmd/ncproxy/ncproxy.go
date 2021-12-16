@@ -77,6 +77,33 @@ func (s *grpcService) AddNIC(ctx context.Context, req *ncproxygrpc.AddNICRequest
 		return nil, err
 	}
 
+	settings := req.EndpointSettings.GetHcnEndpoint()
+	if settings != nil && settings.Policies != nil && settings.Policies.IovPolicySettings != nil {
+		log.G(ctx).WithField("iov settings", settings.Policies.IovPolicySettings).Info("AddNIC iov settings")
+		iovReqSettings := settings.Policies.IovPolicySettings
+		if iovReqSettings.IovOffloadWeight != 0 {
+			// IOV policy was set during add nic request, update the hcn endpoint
+			hcnIOVSettings := &hcn.IovPolicySetting{
+				IovOffloadWeight:    iovReqSettings.IovOffloadWeight,
+				QueuePairsRequested: iovReqSettings.QueuePairsRequested,
+				InterruptModeration: iovReqSettings.InterruptModeration,
+			}
+			rawJSON, err := json.Marshal(hcnIOVSettings)
+			if err != nil {
+				return nil, err
+			}
+
+			iovPolicy := hcn.EndpointPolicy{
+				Type:     hcn.IOV,
+				Settings: rawJSON,
+			}
+			policies := []hcn.EndpointPolicy{iovPolicy}
+			if err := modifyEndpoint(ctx, ep.Id, policies, hcn.RequestTypeUpdate); err != nil {
+				return nil, errors.Wrap(err, "failed to add policy to endpointf")
+			}
+		}
+	}
+
 	agent, err := s.containerIDToComputeAgent.get(req.ContainerID)
 	if err == nil {
 		caReq := &computeagent.AddNICInternalRequest{
