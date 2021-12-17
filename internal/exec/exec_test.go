@@ -96,14 +96,12 @@ func TestExecStdinPowershell(t *testing.T) {
 	}()
 
 	go func() {
-		cmd := `ping 127.0.0.1
-		`
-
-		exit := `exit
-		`
+		cmd := "ping 127.0.0.1\r\n"
 		if _, err := e.Stdin().Write([]byte(cmd)); err != nil {
 			errChan <- err
 		}
+
+		exit := "exit\r\n"
 		if _, err := e.Stdin().Write([]byte(exit)); err != nil {
 			errChan <- err
 		}
@@ -151,7 +149,11 @@ func TestExecWithJob(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Should only be one process in the job
+	if len(pids) == 0 {
+		t.Fatal("no pids found in job object")
+	}
+
+	// Should only be one process in the job, being the process we launched and added to it.
 	if pids[0] != uint32(e.Pid()) {
 		t.Fatal(err)
 	}

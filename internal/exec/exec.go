@@ -1,4 +1,5 @@
-// Package exec implements a minimalized process execution wrapper.
+// Package exec implements a minimalized external process launcher. It exists to work around some shortcomings for
+// Windows scenarios that aren't exposed via the os/exec package.
 package exec
 
 import (
@@ -18,15 +19,32 @@ var (
 	errProcNotFinished = errors.New("process has not finished yet")
 )
 
+// Exec is an object that represents an external process. A user should NOT initialize one manually and instead should
+// call New() and pass in the relevant options to retrieve one.
+//
+// The Exec object is not intended to be used across threads and most methods should only be called once per object.
+// It's expected to follow one of two conventions for starting and managing the lifetime of the process.
+//
+// Either: New() -> e.Start() -> e.Wait()
+//
+// or: New() -> e.Run()
+//
+// To capture output or send data to the process, the Stdin(), StdOut() and StdIn() methods can be used.
 type Exec struct {
-	path         string
-	cmdline      string
-	process      *os.Process
-	procState    *os.ProcessState
-	waitCalled   bool
-	stdioOurEnd  [3]*os.File
-	stdioProcEnd [3]*os.File
-	attrList     *windows.ProcThreadAttributeListContainer
+	path    string
+	cmdline string
+	// Process filled in after Start() returns successfully.
+	process *os.Process
+	// procState will be filled in after Wait() returns.
+	procState  *os.ProcessState
+	waitCalled bool
+	// stdioPipesOurSide are the stdio pipes that Exec owns and that we will use to send and receive input from the process.
+	// These are what will be returned from calls to Exec.Stdin()/Stdout()/Stderr().
+	stdioPipesOurSide [3]*os.File
+	// stdioPipesProcSide are the stdio pipes that will be passed into the process. These should not be interacted with at all
+	// and aren't exposed in any way to a user of Exec.
+	stdioPipesProcSide [3]*os.File
+	attrList           *windows.ProcThreadAttributeListContainer
 	*execConfig
 }
 
@@ -112,10 +130,10 @@ func (e *Exec) Start() error {
 
 	// Need to know whether the process needs to inherit stdio handles. The below setup is so that we only inherit the
 	// stdio pipes and nothing else into the new process.
-	inheritHandles := e.stdioProcEnd[0] != nil || e.stdioProcEnd[1] != nil || e.stdioProcEnd[2] != nil
+	inheritHandles := e.stdioPipesProcSide[0] != nil || e.stdioPipesProcSide[1] != nil || e.stdioPipesProcSide[2] != nil
 	if inheritHandles {
 		var handles []uintptr
-		for _, file := range e.stdioProcEnd {
+		for _, file := range e.stdioPipesProcSide {
 			if file.Fd() != uintptr(syscall.InvalidHandle) {
 				handles = append(handles, file.Fd())
 			}
@@ -132,14 +150,14 @@ func (e *Exec) Start() error {
 		}
 
 		// Assign the handles to the startupinfos stdio fields.
-		if e.stdioProcEnd[0] != nil {
-			siEx.StdInput = windows.Handle(e.stdioProcEnd[0].Fd())
+		if e.stdioPipesProcSide[0] != nil {
+			siEx.StdInput = windows.Handle(e.stdioPipesProcSide[0].Fd())
 		}
-		if e.stdioProcEnd[1] != nil {
-			siEx.StdOutput = windows.Handle(e.stdioProcEnd[1].Fd())
+		if e.stdioPipesProcSide[1] != nil {
+			siEx.StdOutput = windows.Handle(e.stdioPipesProcSide[1].Fd())
 		}
-		if e.stdioProcEnd[2] != nil {
-			siEx.StdErr = windows.Handle(e.stdioProcEnd[2].Fd())
+		if e.stdioPipesProcSide[2] != nil {
+			siEx.StdErr = windows.Handle(e.stdioPipesProcSide[2].Fd())
 		}
 	}
 
@@ -200,7 +218,7 @@ func (e *Exec) Start() error {
 	e.process, err = os.FindProcess(int(pi.ProcessId))
 	if err != nil {
 		// If we can't find the process via os.FindProcess, terminate the process as that's what we rely on for all further operations on the
-		// exec object.
+		// object.
 		if tErr := windows.TerminateProcess(pi.Process, 1); tErr != nil {
 			return fmt.Errorf("failed to terminate process after process not found: %w", tErr)
 		}
@@ -218,7 +236,7 @@ func (e *Exec) Run() error {
 }
 
 // Close will release resources tied to the process (stdio etc.)
-func (e *Exec) Close() error {
+func (e *Exec) close() error {
 	if e.procState == nil {
 		return errProcNotFinished
 	}
@@ -253,7 +271,7 @@ func (e *Exec) ExitCode() int {
 
 // Wait synchronously waits for the process to complete and will close the stdio pipes afterwards. This should only be called once per Exec
 // object.
-func (e *Exec) Wait() error {
+func (e *Exec) Wait() (err error) {
 	if e.process == nil {
 		return errProcNotStarted
 	}
@@ -261,13 +279,11 @@ func (e *Exec) Wait() error {
 		return errors.New("exec: Wait was already called")
 	}
 	e.waitCalled = true
-	state, err := e.process.Wait()
+	e.procState, err = e.process.Wait()
 	if err != nil {
 		return err
 	}
-	e.procState = state
-	e.Close()
-	return nil
+	return e.close()
 }
 
 // Kill will forcefully kill the process.
@@ -280,19 +296,19 @@ func (e *Exec) Kill() error {
 
 // Stdin returns the pipe standard input is hooked up to. This will be closed once Wait returns.
 func (e *Exec) Stdin() *os.File {
-	return e.stdioOurEnd[0]
+	return e.stdioPipesOurSide[0]
 }
 
 // Stdout returns the pipe standard output is hooked up to. It's expected that the client will continuously drain the pipe if standard output is requested.
 // The pipe will be closed once Wait returns.
 func (e *Exec) Stdout() *os.File {
-	return e.stdioOurEnd[1]
+	return e.stdioPipesOurSide[1]
 }
 
 // Stderr returns the pipe standard error is hooked up to. It's expected that the client will continuously drain the pipe if standard output is requested.
 // This will be closed once Wait returns.
 func (e *Exec) Stderr() *os.File {
-	return e.stdioOurEnd[2]
+	return e.stdioPipesOurSide[2]
 }
 
 // setupStdio handles setting up stdio for the process.
@@ -312,7 +328,7 @@ func (e *Exec) setupStdio() error {
 		if err != nil {
 			return err
 		}
-		e.stdioOurEnd[0] = pw
+		e.stdioPipesOurSide[0] = pw
 
 		if err := windows.SetHandleInformation(
 			windows.Handle(pr.Fd()),
@@ -321,7 +337,7 @@ func (e *Exec) setupStdio() error {
 		); err != nil {
 			return fmt.Errorf("failed to make stdin pipe inheritable: %w", err)
 		}
-		e.stdioProcEnd[0] = pr
+		e.stdioPipesProcSide[0] = pr
 	}
 
 	if e.stdout {
@@ -329,7 +345,7 @@ func (e *Exec) setupStdio() error {
 		if err != nil {
 			return err
 		}
-		e.stdioOurEnd[1] = pr
+		e.stdioPipesOurSide[1] = pr
 
 		if err := windows.SetHandleInformation(
 			windows.Handle(pw.Fd()),
@@ -338,7 +354,7 @@ func (e *Exec) setupStdio() error {
 		); err != nil {
 			return fmt.Errorf("failed to make stdout pipe inheritable: %w", err)
 		}
-		e.stdioProcEnd[1] = pw
+		e.stdioPipesProcSide[1] = pw
 	}
 
 	if e.stderr {
@@ -346,7 +362,7 @@ func (e *Exec) setupStdio() error {
 		if err != nil {
 			return err
 		}
-		e.stdioOurEnd[2] = pr
+		e.stdioPipesOurSide[2] = pr
 
 		if err := windows.SetHandleInformation(
 			windows.Handle(pw.Fd()),
@@ -355,23 +371,23 @@ func (e *Exec) setupStdio() error {
 		); err != nil {
 			return fmt.Errorf("failed to make stderr pipe inheritable: %w", err)
 		}
-		e.stdioProcEnd[2] = pw
+		e.stdioPipesProcSide[2] = pw
 	}
 	return nil
 }
 
 func (e *Exec) closeStdio() {
-	for i, file := range e.stdioOurEnd {
+	for i, file := range e.stdioPipesOurSide {
 		if file != nil {
 			file.Close()
 		}
-		e.stdioOurEnd[i] = nil
+		e.stdioPipesOurSide[i] = nil
 	}
-	for i, file := range e.stdioProcEnd {
+	for i, file := range e.stdioPipesProcSide {
 		if file != nil {
 			file.Close()
 		}
-		e.stdioProcEnd[i] = nil
+		e.stdioPipesProcSide[i] = nil
 	}
 }
 
