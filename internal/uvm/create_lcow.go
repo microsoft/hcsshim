@@ -257,14 +257,14 @@ Example JSON document produced once the hcsschema.ComputeSytem returned by makeL
         },
         "GuestState": {
             "GuestStateFilePath": "d:\\ken\\aug27\\gcsinitnew.vmgs",
-            "GuestStateFileType": "FileMode",
+            "GuestStateFileType": "BlockStorage",
 			"ForceTransientState": true
         },
         "SecuritySettings": {
             "Isolation": {
                 "IsolationType": "SecureNestedPaging",
-
-                "LaunchData": "BukyDQANVcT5HviNDjU7z1icStE2SARnZHUwfvebd1s="
+                "LaunchData": "kBifgKNijdHjxdSUshmavrNofo2B01LiIi1cr8R4ytI=",
+                "HclEnabled": true
             }
         },
         "Version": {
@@ -381,7 +381,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 
 	doc.VirtualMachine.GuestState = &hcsschema.GuestState{
 		GuestStateFilePath:  vmgsFullPath,
-		GuestStateFileType:  "FileMode",
+		GuestStateFileType:  "BlockStorage",
 		ForceTransientState: true, // tell HCS that this is just the source of the images, not ongoing state
 	}
 
@@ -426,6 +426,7 @@ func makeLCOWSecurityDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM)
 		Isolation: &hcsschema.IsolationSettings{
 			IsolationType: "SecureNestedPaging",
 			LaunchData:    securityPolicyHash,
+			HclEnabled:    true,
 		},
 	}
 
@@ -716,7 +717,6 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	}
 
 	uvm := &UtilityVM{
-
 		id:                      opts.ID,
 		owner:                   opts.Owner,
 		operatingSystem:         "linux",

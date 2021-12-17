@@ -426,6 +426,7 @@ func makeLCOWSecurityDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM)
 		Isolation: &hcsschema.IsolationSettings{
 			IsolationType: "SecureNestedPaging",
 			LaunchData:    securityPolicyHash,
+			HclEnabled:    true,
 		},
 	}
 
