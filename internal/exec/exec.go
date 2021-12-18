@@ -25,9 +25,9 @@ var (
 // The Exec object is not intended to be used across threads and most methods should only be called once per object.
 // It's expected to follow one of two conventions for starting and managing the lifetime of the process.
 //
-// Either: New() -> e.Start() -> e.Wait()
+// Either: New() -> e.Start() -> e.Wait() -> (Optional) e.ExitCode()
 //
-// or: New() -> e.Run()
+// or: New() -> e.Run() -> (Optional) e.ExitCode()
 //
 // To capture output or send data to the process, the Stdin(), StdOut() and StdIn() methods can be used.
 type Exec struct {
@@ -211,7 +211,9 @@ func (e *Exec) Start() error {
 		return fmt.Errorf("failed to create process: %w", err)
 	}
 	// Don't need the thread handle for anything.
-	defer windows.CloseHandle(windows.Handle(pi.Thread)) //nolint:errcheck
+	defer func() {
+		_ = windows.CloseHandle(windows.Handle(pi.Thread))
+	}()
 
 	// Grab an *os.Process to avoid reinventing the wheel here. The stdlib has great logic around waiting, exit code status/cleanup after a
 	// process has been launched.
