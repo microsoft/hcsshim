@@ -61,10 +61,6 @@ var (
 	procLogonUserW                             = modadvapi32.NewProc("LogonUserW")
 	procLocalAlloc                             = modkernel32.NewProc("LocalAlloc")
 	procLocalFree                              = modkernel32.NewProc("LocalFree")
-	procInitializeProcThreadAttributeList      = modkernel32.NewProc("InitializeProcThreadAttributeList")
-	procDeleteProcThreadAttributeList          = modkernel32.NewProc("DeleteProcThreadAttributeList")
-	procUpdateProcThreadAttribute              = modkernel32.NewProc("UpdateProcThreadAttribute")
-	procCreateProcessAsUserW                   = modadvapi32.NewProc("CreateProcessAsUserW")
 	procGetActiveProcessorCount                = modkernel32.NewProc("GetActiveProcessorCount")
 	procCM_Get_Device_ID_List_SizeA            = modcfgmgr32.NewProc("CM_Get_Device_ID_List_SizeA")
 	procCM_Get_Device_ID_ListA                 = modcfgmgr32.NewProc("CM_Get_Device_ID_ListA")
@@ -257,53 +253,6 @@ func LocalAlloc(flags uint32, size int) (ptr uintptr) {
 
 func LocalFree(ptr uintptr) {
 	syscall.Syscall(procLocalFree.Addr(), 1, uintptr(ptr), 0, 0)
-	return
-}
-
-func initializeProcThreadAttributeList(lpAttributeList *ProcThreadAttributeList, dwAttributeCount uint32, dwFlags uint32, lpSize *uintptr) (err error) {
-	r1, _, e1 := syscall.Syscall6(procInitializeProcThreadAttributeList.Addr(), 4, uintptr(unsafe.Pointer(lpAttributeList)), uintptr(dwAttributeCount), uintptr(dwFlags), uintptr(unsafe.Pointer(lpSize)), 0, 0)
-	if r1 == 0 {
-		if e1 != 0 {
-			err = errnoErr(e1)
-		} else {
-			err = syscall.EINVAL
-		}
-	}
-	return
-}
-
-func DeleteProcThreadAttributeList(lpAttributeList *ProcThreadAttributeList) {
-	syscall.Syscall(procDeleteProcThreadAttributeList.Addr(), 1, uintptr(unsafe.Pointer(lpAttributeList)), 0, 0)
-	return
-}
-
-func UpdateProcThreadAttribute(lpAttributeList *ProcThreadAttributeList, dwFlags uint32, attribute uintptr, lpValue unsafe.Pointer, cbSize uintptr, lpPreviousValue unsafe.Pointer, lpReturnSize *uintptr) (err error) {
-	r1, _, e1 := syscall.Syscall9(procUpdateProcThreadAttribute.Addr(), 7, uintptr(unsafe.Pointer(lpAttributeList)), uintptr(dwFlags), uintptr(attribute), uintptr(lpValue), uintptr(cbSize), uintptr(lpPreviousValue), uintptr(unsafe.Pointer(lpReturnSize)), 0, 0)
-	if r1 == 0 {
-		if e1 != 0 {
-			err = errnoErr(e1)
-		} else {
-			err = syscall.EINVAL
-		}
-	}
-	return
-}
-
-func CreateProcessAsUser(token windows.Token, appName *uint16, commandLine *uint16, procSecurity *windows.SecurityAttributes, threadSecurity *windows.SecurityAttributes, inheritHandles bool, creationFlags uint32, env *uint16, currentDir *uint16, startupInfo *windows.StartupInfo, outProcInfo *windows.ProcessInformation) (err error) {
-	var _p0 uint32
-	if inheritHandles {
-		_p0 = 1
-	} else {
-		_p0 = 0
-	}
-	r1, _, e1 := syscall.Syscall12(procCreateProcessAsUserW.Addr(), 11, uintptr(token), uintptr(unsafe.Pointer(appName)), uintptr(unsafe.Pointer(commandLine)), uintptr(unsafe.Pointer(procSecurity)), uintptr(unsafe.Pointer(threadSecurity)), uintptr(_p0), uintptr(creationFlags), uintptr(unsafe.Pointer(env)), uintptr(unsafe.Pointer(currentDir)), uintptr(unsafe.Pointer(startupInfo)), uintptr(unsafe.Pointer(outProcInfo)), 0)
-	if r1 == 0 {
-		if e1 != 0 {
-			err = errnoErr(e1)
-		} else {
-			err = syscall.EINVAL
-		}
-	}
 	return
 }
 
