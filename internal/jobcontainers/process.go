@@ -6,6 +6,7 @@ import (
 	"io"
 	"sync"
 
+	"github.com/Microsoft/hcsshim/internal/conpty"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/exec"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
@@ -19,6 +20,7 @@ import (
 // JobProcess represents a process run in a job object.
 type JobProcess struct {
 	cmd            *exec.Exec
+	cpty           *conpty.ConPTY
 	procLock       sync.Mutex
 	stdioLock      sync.Mutex
 	stdin          io.WriteCloser
@@ -39,14 +41,21 @@ var sigMap = map[string]int{
 
 var _ cow.Process = &JobProcess{}
 
-func newProcess(cmd *exec.Exec) *JobProcess {
+func newProcess(cmd *exec.Exec, cpty *conpty.ConPTY) *JobProcess {
 	return &JobProcess{
 		cmd:       cmd,
+		cpty:      cpty,
 		waitBlock: make(chan struct{}),
 	}
 }
 
 func (p *JobProcess) ResizeConsole(ctx context.Context, width, height uint16) error {
+	if p.cpty == nil {
+		return errors.New("no pseudo console assigned for process")
+	}
+	if err := p.cpty.Resize(int16(width), int16(height)); err != nil {
+		return fmt.Errorf("failed to resize pseudo console for job container: %w", err)
+	}
 	return nil
 }
 
@@ -147,6 +156,11 @@ func (p *JobProcess) waitBackground(ctx context.Context) {
 	err := p.cmd.Wait()
 
 	p.stdioLock.Lock()
+	// Close the pseudo console if one was created for this process. Typical scenario is an exec with -it supplied.
+	if p.cpty != nil {
+		p.cpty.Close()
+		p.cpty = nil
+	}
 	// Wait closes the stdio pipes so theres no need to here.
 	p.stdin = nil
 	p.stdout = nil
@@ -178,6 +192,10 @@ func (p *JobProcess) Pid() int {
 // Close cleans up any state associated with the process but does not kill it.
 func (p *JobProcess) Close() error {
 	p.stdioLock.Lock()
+	if p.cpty != nil {
+		p.cpty.Close()
+		p.cpty = nil
+	}
 	if p.stdin != nil {
 		p.stdin.Close()
 		p.stdin = nil

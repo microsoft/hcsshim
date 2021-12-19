@@ -297,18 +297,27 @@ func (e *Exec) Kill() error {
 
 // Stdin returns the pipe standard input is hooked up to. This will be closed once Wait returns.
 func (e *Exec) Stdin() *os.File {
+	if e.cpty != nil {
+		return e.cpty.InPipe()
+	}
 	return e.stdioPipesOurSide[0]
 }
 
 // Stdout returns the pipe standard output is hooked up to. It's expected that the client will continuously drain the pipe if standard output is requested.
 // The pipe will be closed once Wait returns.
 func (e *Exec) Stdout() *os.File {
+	if e.cpty != nil {
+		return e.cpty.OutPipe()
+	}
 	return e.stdioPipesOurSide[1]
 }
 
 // Stderr returns the pipe standard error is hooked up to. It's expected that the client will continuously drain the pipe if standard output is requested.
 // This will be closed once Wait returns.
 func (e *Exec) Stderr() *os.File {
+	if e.cpty != nil {
+		return e.cpty.OutPipe()
+	}
 	return e.stdioPipesOurSide[2]
 }
 
@@ -318,7 +327,7 @@ func (e *Exec) setupStdio() error {
 	// If the client requested a pseudo console then there's nothing we need to do pipe wise, as the process inherits the other end of the pty's
 	// pipes.
 	if e.cpty != nil && stdioRequested {
-		return errors.New("can't setup both stdio pipes and a pseudo console")
+		return nil
 	}
 
 	// Go 1.16's pipe handles (from os.Pipe()) aren't inheritable, so mark them explicitly as such if any stdio handles are
