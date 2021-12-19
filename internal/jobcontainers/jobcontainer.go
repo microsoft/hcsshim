@@ -12,6 +12,7 @@ import (
 	"unsafe"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/Microsoft/hcsshim/internal/conpty"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/exec"
 	"github.com/Microsoft/hcsshim/internal/hcs"
@@ -170,10 +171,6 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		return nil, errors.New("unsupported process config passed in")
 	}
 
-	if conf.EmulateConsole {
-		return nil, errors.New("console emulation not supported for job containers")
-	}
-
 	// Replace any occurences of the sandbox mount point env variable in the commandline.
 	// %CONTAINER_SANDBOX_MOUNTPOINT%\mybinary.exe -> C:\C\123456789\mybinary.exe
 	commandLine, _ := c.replaceWithMountPoint(conf.CommandLine)
@@ -248,6 +245,14 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		return nil, errors.Wrap(err, "failed to set PATHEXT")
 	}
 
+	var cpty *conpty.ConPTY
+	if conf.EmulateConsole {
+		cpty, err = conpty.New(80, 20, 0)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	cmd, err := exec.New(
 		absPath,
 		commandLine,
@@ -255,13 +260,14 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		exec.WithEnv(env),
 		exec.WithToken(token),
 		exec.WithJobObject(c.job),
+		exec.WithConPty(cpty),
 		exec.WithProcessFlags(windows.CREATE_BREAKAWAY_FROM_JOB),
 		exec.WithStdio(conf.CreateStdOutPipe, conf.CreateStdErrPipe, conf.CreateStdInPipe),
 	)
 	if err != nil {
 		return nil, err
 	}
-	process := newProcess(cmd)
+	process := newProcess(cmd, cpty)
 
 	// Create process pipes if asked for.
 	if conf.CreateStdInPipe {
