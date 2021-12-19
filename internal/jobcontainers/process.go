@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os/exec"
 	"sync"
 
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/exec"
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -18,7 +18,7 @@ import (
 
 // JobProcess represents a process run in a job object.
 type JobProcess struct {
-	cmd            *exec.Cmd
+	cmd            *exec.Exec
 	procLock       sync.Mutex
 	stdioLock      sync.Mutex
 	stdin          io.WriteCloser
@@ -30,7 +30,7 @@ type JobProcess struct {
 }
 
 var sigMap = map[string]int{
-	"CtrlC":        windows.CTRL_BREAK_EVENT,
+	"CtrlC":        windows.CTRL_C_EVENT,
 	"CtrlBreak":    windows.CTRL_BREAK_EVENT,
 	"CtrlClose":    windows.CTRL_CLOSE_EVENT,
 	"CtrlLogOff":   windows.CTRL_LOGOFF_EVENT,
@@ -39,7 +39,7 @@ var sigMap = map[string]int{
 
 var _ cow.Process = &JobProcess{}
 
-func newProcess(cmd *exec.Cmd) *JobProcess {
+func newProcess(cmd *exec.Exec) *JobProcess {
 	return &JobProcess{
 		cmd:       cmd,
 		waitBlock: make(chan struct{}),
@@ -66,7 +66,7 @@ func (p *JobProcess) Signal(ctx context.Context, options interface{}) (bool, err
 
 	// If options is nil it's assumed we got a sigterm
 	if options == nil {
-		if err := p.cmd.Process.Kill(); err != nil {
+		if err := p.cmd.Kill(); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -82,7 +82,7 @@ func (p *JobProcess) Signal(ctx context.Context, options interface{}) (bool, err
 		return false, fmt.Errorf("unknown signal %s encountered", signalOptions.Signal)
 	}
 
-	if err := signalProcess(uint32(p.cmd.Process.Pid), signal); err != nil {
+	if err := signalProcess(uint32(p.cmd.Pid()), signal); err != nil {
 		return false, errors.Wrap(err, "failed to send signal")
 	}
 	return true, nil
@@ -146,8 +146,8 @@ func (p *JobProcess) waitBackground(ctx context.Context) {
 	// Wait for process to get signaled/exit/terminate/.
 	err := p.cmd.Wait()
 
-	// Wait closes the stdio pipes so theres no need to later on.
 	p.stdioLock.Lock()
+	// Wait closes the stdio pipes so theres no need to here.
 	p.stdin = nil
 	p.stdout = nil
 	p.stderr = nil
@@ -167,15 +167,12 @@ func (p *JobProcess) ExitCode() (int, error) {
 	if !p.exited() {
 		return -1, errors.New("process has not exited")
 	}
-	return p.cmd.ProcessState.ExitCode(), nil
+	return p.cmd.ExitCode(), nil
 }
 
 // Pid returns the processes PID
 func (p *JobProcess) Pid() int {
-	if process := p.cmd.Process; process != nil {
-		return process.Pid
-	}
-	return 0
+	return p.cmd.Pid()
 }
 
 // Close cleans up any state associated with the process but does not kill it.
@@ -214,19 +211,14 @@ func (p *JobProcess) Kill(ctx context.Context) (bool, error) {
 		return false, errors.New("kill not sent. process already exited")
 	}
 
-	if p.cmd.Process != nil {
-		if err := p.cmd.Process.Kill(); err != nil {
-			return false, err
-		}
+	if err := p.cmd.Kill(); err != nil {
+		return false, err
 	}
 	return true, nil
 }
 
 func (p *JobProcess) exited() bool {
-	if p.cmd.ProcessState == nil {
-		return false
-	}
-	return p.cmd.ProcessState.Exited()
+	return p.cmd.Exited()
 }
 
 // signalProcess sends the specified signal to a process.
