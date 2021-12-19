@@ -73,7 +73,6 @@ func New(path, cmdLine string, opts ...ExecOpts) (*Exec, error) {
 	if err := e.setupStdio(); err != nil {
 		return nil, err
 	}
-
 	return e, nil
 }
 
