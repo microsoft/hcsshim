@@ -590,6 +590,41 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, tim
 	case shimExecStateRunning:
 		return 0, 0, time.Time{}, newExecInvalidStateError(ht.id, eid, state, "delete")
 	}
+
+	if eid == "" {
+		// We are killing the init task, so we expect the container to be
+		// stopped after this.
+		//
+		// The task process may have already exited, and the status set to
+		// shimExecStateExited, but resources may still be in the process
+		// of being cleaned up. Wait for ht.closed to be closed. This signals
+		// that waitInitExit() has finished destroying container resources,
+		// and layers were umounted.
+		// If the shim exits before resources are cleaned up, those resources
+		// will remain locked and untracked, which leads to lingering sandboxes
+		// and container resources like base vhdx.
+		select {
+		case <-time.After(30 * time.Second):
+			log.G(ctx).Error("timed out waiting for resource cleanup")
+			return 0, 0, time.Time{}, errors.Wrap(hcs.ErrTimeout, "waiting for container resource cleanup")
+		case <-ht.closed:
+		}
+
+		// The init task has now exited. A ForceExit() has already been sent to
+		// execs. Cleanup execs and continue.
+		ht.execs.Range(func(key, value interface{}) bool {
+			if key == "" {
+				// Iterate next.
+				return true
+			}
+			ht.execs.Delete(key)
+
+			// Iterate all. Returning false stops the iteration. See:
+			// https://pkg.go.dev/sync#Map.Range
+			return true
+		})
+	}
+
 	status := e.Status()
 	if eid != "" {
 		ht.execs.Delete(eid)
