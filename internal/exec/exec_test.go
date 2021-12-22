@@ -207,14 +207,14 @@ func TestPseudoConsolePowershell(t *testing.T) {
 	}()
 
 	cmd := "echo \"howdy from conpty\"\r\n"
-	if _, err := cpty.InPipe().Write([]byte(cmd)); err != nil {
+	if _, err := cpty.Write([]byte(cmd)); err != nil {
 		t.Fatal(err)
 	}
 
-	// If after five seconds we haven't read the output we wrote to the pseudo console below then
+	// If after the timeout we haven't read the output we wrote to the pseudo console below then
 	// fail the test.
 	select {
-	case <-time.After(time.Second * 5):
+	case <-time.After(time.Second * 10):
 		t.Fatal("timed out waiting for output to pseudo console")
 	case err := <-errChan:
 		if err != nil {
@@ -223,7 +223,7 @@ func TestPseudoConsolePowershell(t *testing.T) {
 	}
 
 	exit := "exit\r\n"
-	if _, err := cpty.InPipe().Write([]byte(exit)); err != nil {
+	if _, err := cpty.Write([]byte(exit)); err != nil {
 		t.Fatal(err)
 	}
 
