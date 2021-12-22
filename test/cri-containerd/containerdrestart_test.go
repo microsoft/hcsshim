@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Microsoft/hcsshim/pkg/annotations"
+	criAnnotations "github.com/kevpar/cri/pkg/annotations"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
@@ -72,8 +74,6 @@ func Test_ContainerdRestart_LCOW(t *testing.T) {
 
 // test restarting containers and pods
 func Test_Container_CRI_Restart(t *testing.T) {
-	requireFeatures(t, featureLCOW, featureWCOWHypervisor, featureWCOWProcess)
-
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
@@ -97,7 +97,7 @@ func Test_Container_CRI_Restart(t *testing.T) {
 			Feature: featureLCOW,
 			Runtime: lcowRuntimeHandler,
 			SandboxOpts: []SandboxConfigOpt{WithSandboxAnnotations(map[string]string{
-				"io.microsoft.virtualmachine.lcow.timesync.disable": "true",
+				annotations.DisableLCOWTimeSyncService: "true",
 			})},
 			Image: imageLcowAlpine,
 			Command: []string{
@@ -139,12 +139,15 @@ func Test_Container_CRI_Restart(t *testing.T) {
 
 			t.Run(r.Name+suffix, func(subtest *testing.T) {
 				requireFeatures(subtest, r.Feature)
-				sandboxRequest := getRunPodSandboxRequest(subtest, r.Runtime,
-					append(r.SandboxOpts,
-						WithSandboxAnnotations(map[string]string{
-							"io.microsoft.cri.allowreset": "true",
-						}))...)
 
+				opts := r.SandboxOpts
+				if !explicit {
+					opts = append(r.SandboxOpts,
+						WithSandboxAnnotations(map[string]string{
+							criAnnotations.AllowReset: "true",
+						}))
+				}
+				sandboxRequest := getRunPodSandboxRequest(subtest, r.Runtime, opts...)
 				podID := runPodSandbox(subtest, client, ctx, sandboxRequest)
 				defer removePodSandboxWithRetry(subtest, client, ctx, podID, 5, 2*time.Second)
 				defer stopPodSandbox(subtest, client, ctx, podID)
@@ -165,7 +168,7 @@ func Test_Container_CRI_Restart(t *testing.T) {
 				}
 
 				if !explicit {
-					request.Config.Annotations["io.microsoft.cri.allowreset"] = "true"
+					request.Config.Annotations[criAnnotations.AllowReset] = "true"
 				}
 
 				containerID := createContainer(subtest, client, ctx, request)
@@ -249,7 +252,6 @@ func Test_Container_CRI_Restart(t *testing.T) {
 // test preserving state after restarting pod
 func Test_Container_CRI_Restart_State(t *testing.T) {
 	testFile := "t.txt"
-	requireFeatures(t, featureLCOW, featureWCOWHypervisor, featureWCOWProcess)
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
@@ -276,7 +278,7 @@ func Test_Container_CRI_Restart_State(t *testing.T) {
 			Feature: featureLCOW,
 			Runtime: lcowRuntimeHandler,
 			SandboxOpts: []SandboxConfigOpt{WithSandboxAnnotations(map[string]string{
-				"io.microsoft.virtualmachine.lcow.timesync.disable": "true",
+				annotations.DisableLCOWTimeSyncService: "true",
 			})},
 			Image:           imageLcowAlpine,
 			Command:         []string{"ash", "-c", "tail -f /dev/null"},
@@ -322,7 +324,7 @@ func Test_Container_CRI_Restart_State(t *testing.T) {
 				sandboxRequest := getRunPodSandboxRequest(subtest, r.Runtime,
 					append(r.SandboxOpts,
 						WithSandboxAnnotations(map[string]string{
-							"io.microsoft.cri.allowreset": "true",
+							criAnnotations.AllowReset: "true",
 						}))...)
 
 				podID := runPodSandbox(subtest, client, ctx, sandboxRequest)
@@ -340,7 +342,7 @@ func Test_Container_CRI_Restart_State(t *testing.T) {
 						},
 						Command: r.Command,
 						Annotations: map[string]string{
-							"io.microsoft.cri.allowreset": "true",
+							criAnnotations.AllowReset: "true",
 						},
 					},
 					SandboxConfig: sandboxRequest.Config,

@@ -10,6 +10,7 @@ require (
 	github.com/containerd/ttrpc v1.1.0
 	github.com/containerd/typeurl v1.0.2
 	github.com/gogo/protobuf v1.3.2
+	github.com/kevpar/cri v1.11.1
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
 	github.com/opencontainers/runtime-tools v0.0.0-20181011054405-1d69bd0f9c39
 	github.com/pkg/errors v0.9.1
@@ -22,6 +23,7 @@ require (
 
 replace (
 	github.com/Microsoft/hcsshim => ../
+	github.com/kevpar/cri => github.com/helsaawy/cri v1.11.1-0.20211216201950-eff8a6f34d15
 	google.golang.org/genproto => google.golang.org/genproto v0.0.0-20200224152610-e50cd9704f63
 	google.golang.org/grpc => google.golang.org/grpc v1.27.1
 )

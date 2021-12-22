@@ -186,6 +186,10 @@ github.com/google/uuid
 github.com/hashicorp/errwrap
 # github.com/hashicorp/go-multierror v1.0.0
 github.com/hashicorp/go-multierror
+# github.com/kevpar/cri v1.11.1 => github.com/helsaawy/cri v1.11.1-0.20211216201950-eff8a6f34d15
+## explicit
+github.com/kevpar/cri/pkg/annotations
+github.com/kevpar/cri/pkg/api/v1
 # github.com/klauspost/compress v1.11.13
 github.com/klauspost/compress/fse
 github.com/klauspost/compress/huff0
@@ -341,5 +345,6 @@ google.golang.org/protobuf/types/known/timestamppb
 ## explicit
 k8s.io/cri-api/pkg/apis/runtime/v1alpha2
 # github.com/Microsoft/hcsshim => ../
+# github.com/kevpar/cri => github.com/helsaawy/cri v1.11.1-0.20211216201950-eff8a6f34d15
 # google.golang.org/genproto => google.golang.org/genproto v0.0.0-20200224152610-e50cd9704f63
 # google.golang.org/grpc => google.golang.org/grpc v1.27.1

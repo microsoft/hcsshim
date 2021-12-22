@@ -716,7 +716,6 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	}
 
 	uvm := &UtilityVM{
-
 		id:                      opts.ID,
 		owner:                   opts.Owner,
 		operatingSystem:         "linux",
