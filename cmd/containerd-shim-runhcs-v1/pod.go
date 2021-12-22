@@ -51,6 +51,13 @@ type shimPod interface {
 	// the `shimExecStateRunning, shimExecStateExited` states. If the exec is
 	// not in this state this pod MUST return `errdefs.ErrFailedPrecondition`.
 	KillTask(ctx context.Context, tid, eid string, signal uint32, all bool) error
+	// DeleteTask removes a task from being tracked by this pod, and cleans up
+	// and resources the shim allocated to the task.
+	//
+	// The task's init exec (eid == "") must be either `shimExecStateCreated` or
+	// `shimExecStateExited`.  If the exec is not in this state this pod MUST
+	// return `errdefs.ErrFailedPrecondition`.
+	DeleteTask(ctx context.Context, tid string) error
 }
 
 func createPod(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (shimPod, error) {
@@ -388,4 +395,26 @@ func (p *pod) KillTask(ctx context.Context, tid, eid string, signal uint32, all 
 		return t.KillExec(ctx, eid, signal, all)
 	})
 	return eg.Wait()
+}
+
+func (p *pod) DeleteTask(ctx context.Context, tid string) error {
+	t, err := p.GetTask(tid)
+	if err != nil {
+		return errors.Wrapf(err, "could not find task to delete")
+	}
+
+	// although deleting the sandbox task is a no-op, still check that it is not running
+	e, err := t.GetExec("")
+	if err != nil {
+		return errors.Wrapf(err, "could not get initial exec")
+	}
+	if e.State() == shimExecStateRunning {
+		return errors.Wrapf(errdefs.ErrFailedPrecondition, "cannot delete task with running exec")
+	}
+
+	if p.id != tid {
+		p.workloadTasks.Delete(tid)
+	}
+
+	return nil
 }

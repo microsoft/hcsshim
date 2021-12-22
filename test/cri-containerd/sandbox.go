@@ -1,3 +1,4 @@
+//go:build functional
 // +build functional
 
 package cri_containerd
@@ -5,6 +6,7 @@ package cri_containerd
 import (
 	"context"
 	"testing"
+	"time"
 
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
@@ -60,6 +62,35 @@ func removePodSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx con
 	if err != nil {
 		t.Fatalf("failed RemovePodSandbox for sandbox: %s, request with: %v", podID, err)
 	}
+}
+
+func removePodSandboxWithRetry(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, podID string, retry uint, sleep time.Duration) {
+	for i := 1; i <= int(retry); i++ {
+		_, err := client.RemovePodSandbox(ctx, &runtime.RemovePodSandboxRequest{
+			PodSandboxId: podID,
+		})
+		if err != nil {
+			if i == int(retry) {
+				t.Fatalf("failed RemovePodSandbox for sandbox: %s, request with: %v", podID, err)
+			} else {
+				t.Logf("failed RemovePodSandbox request %d of %d for sandbox %q: %v", i, retry, podID, err)
+				t.Logf("sleeping for %v", sleep)
+				time.Sleep(sleep)
+			}
+		} else {
+			break
+		}
+	}
+}
+
+func getPodSandboxStatus(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, podID string) *runtime.PodSandboxStatus {
+	status, err := client.PodSandboxStatus(ctx, &runtime.PodSandboxStatusRequest{
+		PodSandboxId: podID,
+	})
+	if err != nil {
+		t.Fatalf("failed PodSandboxStatus for sandbox: %s, request with: %v", podID, err)
+	}
+	return status.Status
 }
 
 func getTestSandboxConfig(t *testing.T, opts ...SandboxConfigOpt) *runtime.PodSandboxConfig {

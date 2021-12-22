@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package hcsv2
@@ -14,6 +15,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/storage"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/containerd/cgroups"
 	v1 "github.com/containerd/cgroups/stats/v1"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
@@ -39,6 +41,7 @@ type Container struct {
 }
 
 func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSettings) (int, error) {
+	log.G(ctx).WithField(logfields.ContainerID, c.id).Debug("opengcs::Container::Start")
 	stdioSet, err := stdio.Connect(c.vsock, conSettings)
 	if err != nil {
 		return -1, err
@@ -61,6 +64,7 @@ func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSetti
 }
 
 func (c *Container) ExecProcess(ctx context.Context, process *oci.Process, conSettings stdio.ConnectionSettings) (int, error) {
+	log.G(ctx).WithField(logfields.ContainerID, c.id).Debug("opengcs::Container::ExecProcess")
 	stdioSet, err := stdio.Connect(c.vsock, conSettings)
 	if err != nil {
 		return -1, err
@@ -130,6 +134,7 @@ func (c *Container) GetAllProcessPids(ctx context.Context) ([]int, error) {
 
 // Kill sends 'signal' to the container process.
 func (c *Container) Kill(ctx context.Context, signal syscall.Signal) error {
+	log.G(ctx).WithField(logfields.ContainerID, c.id).Debug("opengcs::Container::Kill")
 	err := c.container.Kill(signal)
 	if err != nil {
 		return err
@@ -139,17 +144,20 @@ func (c *Container) Kill(ctx context.Context, signal syscall.Signal) error {
 }
 
 func (c *Container) Delete(ctx context.Context) error {
+	entity := log.G(ctx).WithField(logfields.ContainerID, c.id)
+	entity.Debug("opengcs::Container::Delete")
 	if c.isSandbox {
 		// remove user mounts in sandbox container
 		if err := storage.UnmountAllInPath(ctx, getSandboxMountsDir(c.id), true); err != nil {
-			log.G(ctx).WithError(err).Error("failed to unmount sandbox mounts")
+			entity.WithError(err).Error("failed to unmount sandbox mounts")
 		}
 
 		// remove hugepages mounts in sandbox container
 		if err := storage.UnmountAllInPath(ctx, getSandboxHugePageMountsDir(c.id), true); err != nil {
-			log.G(ctx).WithError(err).Error("failed to unmount hugepages mounts")
+			entity.WithError(err).Error("failed to unmount hugepages mounts")
 		}
 	}
+
 	return c.container.Delete()
 }
 
@@ -161,7 +169,7 @@ func (c *Container) Update(ctx context.Context, resources interface{}) error {
 func (c *Container) Wait() prot.NotificationType {
 	_, span := trace.StartSpan(context.Background(), "opengcs::Container::Wait")
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	span.AddAttributes(trace.StringAttribute(logfields.ContainerID, c.id))
 
 	c.initProcess.writersWg.Wait()
 	c.etL.Lock()
