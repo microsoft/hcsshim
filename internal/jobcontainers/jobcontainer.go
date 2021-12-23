@@ -247,7 +247,7 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 
 	var cpty *conpty.ConPTY
 	if conf.EmulateConsole {
-		cpty, err = conpty.New(80, 20, 0)
+		cpty, err = conpty.Create(80, 20, 0)
 		if err != nil {
 			return nil, err
 		}
