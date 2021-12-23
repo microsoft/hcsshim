@@ -535,8 +535,9 @@ func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all 
 				}).Warn("failed to kill exec in task")
 			}
 
-			// iterate all
-			return false
+			// Iterate all. Returning false stops the iteration. See:
+			// https://pkg.go.dev/sync#Map.Range
+			return true
 		})
 	}
 	if signal == 0x9 && eid == "" && ht.host != nil {
@@ -577,8 +578,9 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, tim
 				ex.ForceExit(ctx, 1)
 			}
 
-			// iterate next
-			return false
+			// Iterate all. Returning false stops the iteration. See:
+			// https://pkg.go.dev/sync#Map.Range
+			return true
 		})
 	}
 	switch state := e.State(); state {
@@ -616,8 +618,9 @@ func (ht *hcsTask) Pids(ctx context.Context) ([]runhcsopts.ProcessDetails, error
 		ex := value.(shimExec)
 		pidMap[ex.Pid()] = ex.ID()
 
-		// Iterate all
-		return false
+		// Iterate all. Returning false stops the iteration. See:
+		// https://pkg.go.dev/sync#Map.Range
+		return true
 	})
 	pidMap[ht.init.Pid()] = ht.init.ID()
 
@@ -698,8 +701,9 @@ func (ht *hcsTask) waitForHostExit() {
 		ex := value.(shimExec)
 		ex.ForceExit(ctx, 1)
 
-		// iterate all
-		return false
+		// Iterate all. Returning false stops the iteration. See:
+		// https://pkg.go.dev/sync#Map.Range
+		return true
 	})
 	ht.init.ForceExit(ctx, 1)
 	ht.closeHost(ctx)
