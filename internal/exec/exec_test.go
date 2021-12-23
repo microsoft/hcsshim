@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -113,10 +112,21 @@ func TestExecStdinPowershell(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = e.Wait()
-	if err != nil {
-		t.Fatalf("error waiting for process: %v", err)
+	waitChan := make(chan error)
+	go func() {
+		waitChan <- e.Wait()
+	}()
+
+	select {
+	case err := <-waitChan:
+		if err != nil {
+			t.Fatalf("error waiting for process: %v", err)
+		}
+	case <-time.After(time.Second * 10):
+		_ = e.Kill()
+		t.Fatal("timed out waiting for process to complete")
 	}
+
 	t.Logf("exit code was: %d", e.ExitCode())
 }
 
@@ -191,45 +201,41 @@ func TestPseudoConsolePowershell(t *testing.T) {
 
 	errChan := make(chan error)
 	go func() {
-		buf := make([]byte, 1000)
-		for {
-			_, err := cpty.Read(buf)
-			if err != nil {
-				errChan <- err
-			}
-
-			if !strings.Contains(string(buf), "howdy from conpty") {
-				continue
-			}
-			close(errChan)
-			break
-		}
+		_, _ = io.Copy(os.Stdout, cpty.OutPipe())
 	}()
 
-	cmd := "echo \"howdy from conpty\"\r\n"
-	if _, err := cpty.InPipe().Write([]byte(cmd)); err != nil {
-		t.Fatal(err)
-	}
-
-	// If after five seconds we haven't read the output we wrote to the pseudo console below then
-	// fail the test.
-	select {
-	case <-time.After(time.Second * 5):
-		t.Fatal("timed out waiting for output to pseudo console")
-	case err := <-errChan:
-		if err != nil {
-			t.Fatal(err)
+	go func() {
+		cmd := "ping 127.0.0.1\r\n"
+		if _, err := cpty.Write([]byte(cmd)); err != nil {
+			errChan <- err
 		}
-	}
 
-	exit := "exit\r\n"
-	if _, err := cpty.InPipe().Write([]byte(exit)); err != nil {
+		exit := "exit\r\n"
+		if _, err := cpty.Write([]byte(exit)); err != nil {
+			errChan <- err
+		}
+		close(errChan)
+	}()
+
+	err = <-errChan
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = e.Wait()
-	if err != nil {
-		t.Fatalf("error waiting for process: %v", err)
+	waitChan := make(chan error)
+	go func() {
+		waitChan <- e.Wait()
+	}()
+
+	select {
+	case err := <-waitChan:
+		if err != nil {
+			t.Fatalf("error waiting for process: %v", err)
+		}
+	case <-time.After(time.Second * 10):
+		_ = e.Kill()
+		t.Fatal("timed out waiting for process to complete")
 	}
+
 	t.Logf("exit code was: %d", e.ExitCode())
 }
