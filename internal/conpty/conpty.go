@@ -16,7 +16,7 @@ var (
 	errNotInitialized = errors.New("pseudo console hasn't been initialized")
 )
 
-// ConPTY is a wrapper around a Windows PseudoConsole handle. Create a new instance by calling `New()`.
+// ConPTY is a wrapper around a Windows PseudoConsole handle. Create a new instance by calling `Create()`.
 type ConPTY struct {
 	// handleLock guards hpc
 	handleLock sync.RWMutex
@@ -27,8 +27,8 @@ type ConPTY struct {
 	outPipe *os.File
 }
 
-// New returns a new `ConPTY` object. This object is not ready for IO until `UpdateProcThreadAttribute` is called and a process has been started.
-func New(width, height int16, flags uint32) (*ConPTY, error) {
+// Create returns a new `ConPTY` object. This object is not ready for IO until `UpdateProcThreadAttribute` is called and a process has been started.
+func Create(width, height int16, flags uint32) (*ConPTY, error) {
 	// First we need to make both ends of the conpty's pipes, two to get passed into a process to use as input/output, and two for us to keep to
 	// make use of this data.
 	ptyIn, inPipeOurs, err := os.Pipe()

@@ -166,7 +166,7 @@ func TestExecWithJob(t *testing.T) {
 }
 
 func TestPseudoConsolePowershell(t *testing.T) {
-	cpty, err := conpty.New(80, 20, 0)
+	cpty, err := conpty.Create(80, 20, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
