@@ -257,6 +257,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		physicallyBacked:        !opts.AllowOvercommit,
 		devicesPhysicallyBacked: opts.FullyPhysicallyBacked,
 		vsmbNoDirectMap:         opts.NoDirectMap,
+		noWritableFileShares:    opts.NoWritableFileShares,
 		createOpts:              *opts,
 	}
 

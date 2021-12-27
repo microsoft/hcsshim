@@ -192,6 +192,9 @@ const (
 	// VSMBNoDirectMap specifies that no direct mapping should be used for any VSMBs added to the UVM
 	VSMBNoDirectMap = "io.microsoft.virtualmachine.wcow.virtualSMB.nodirectmap"
 
+	// DisableWriteableFileShares disables adding any writable fileshares to the UVM
+	DisableWriteableFileShares = "io.microsoft.virtualmachine.fileshares.disablewritable"
+
 	// CPUGroupID specifies the cpugroup ID that a UVM should be assigned to if any
 	CPUGroupID = "io.microsoft.virtualmachine.cpugroup.id"
 

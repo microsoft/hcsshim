@@ -60,6 +60,9 @@ type UtilityVM struct {
 	// NOTE: All accesses to this MUST be done atomically.
 	containerCounter uint64
 
+	// disable mounting any writable shares into the UVM
+	noWritableFileShares bool
+
 	// VSMB shares that are mapped into a Windows UVM. These are used for read-only
 	// layers and mapped directories.
 	// We maintain two sets of maps, `vsmbDirShares` tracks shares that are

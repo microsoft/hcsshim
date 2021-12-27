@@ -91,6 +91,9 @@ type Options struct {
 	// applied to all containers. On Windows it's configurable per container, but we can mimic this for
 	// Windows by just applying the location specified here per container.
 	ProcessDumpLocation string
+
+	// NoWritableFileShares disables adding any writable vSMB shares to the UVM
+	NoWritableFileShares bool
 }
 
 // compares the create opts used during template creation with the create opts
@@ -184,6 +187,7 @@ func newDefaultOptions(id, owner string) *Options {
 		EnableDeferredCommit:  false,
 		ProcessorCount:        defaultProcessorCount(),
 		FullyPhysicallyBacked: false,
+		NoWritableFileShares:  false,
 	}
 
 	if opts.Owner == "" {
@@ -380,6 +384,10 @@ func (uvm *UtilityVM) DevicesPhysicallyBacked() bool {
 // VSMBNoDirectMap returns if VSMB devices should be mounted with `NoDirectMap` set to true
 func (uvm *UtilityVM) VSMBNoDirectMap() bool {
 	return uvm.vsmbNoDirectMap
+}
+
+func (uvm *UtilityVM) NoWritableFileShares() bool {
+	return uvm.noWritableFileShares
 }
 
 // Closes the external GCS connection if it is being used and also closes the

@@ -41,6 +41,9 @@ func (uvm *UtilityVM) AddPlan9(ctx context.Context, hostPath string, uvmPath str
 	if uvmPath == "" {
 		return nil, fmt.Errorf("uvmPath must be passed to AddPlan9")
 	}
+	if !readOnly && uvm.NoWritableFileShares() {
+		return nil, fmt.Errorf("adding writable shares is denied: %w", ErrOperationDenied)
+	}
 
 	// TODO: JTERRY75 - These are marked private in the schema. For now use them
 	// but when there are public variants we need to switch to them.

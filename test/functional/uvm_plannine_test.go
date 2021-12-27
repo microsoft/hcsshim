@@ -7,6 +7,7 @@ package functional
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -42,5 +43,38 @@ func TestPlan9(t *testing.T) {
 		if err := vm.RemovePlan9(context.Background(), share); err != nil {
 			t.Fatalf("RemovePlan9 failed: %s", err)
 		}
+	}
+}
+
+func TestPlan9_Writable(t *testing.T) {
+	testutilities.RequiresBuild(t, osversion.RS5)
+
+	opts := uvm.NewDefaultOptionsLCOW(t.Name(), "")
+	// opts.BootFilesPath = "C:\\ContainerPlat\\LinuxBootFiles"
+	opts.NoWritableFileShares = true
+	vm := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, opts)
+	defer vm.Close()
+
+	dir := testutilities.CreateTempDir(t)
+	defer os.RemoveAll(dir)
+
+	// mount as writable should fail
+	share, err := vm.AddPlan9(context.Background(), dir, fmt.Sprintf("/tmp/%s", filepath.Base(dir)), false, false, nil)
+	defer func() {
+		if share == nil {
+			return
+		}
+		if err := vm.RemovePlan9(context.Background(), share); err != nil {
+			t.Fatalf("RemovePlan9 failed: %s", err)
+		}
+	}()
+	if !errors.Is(err, uvm.ErrOperationDenied) {
+		t.Fatalf("AddPlan9 should have failed with %v instead of: %v", uvm.ErrOperationDenied, err)
+	}
+
+	// mount as read-only should succeed
+	share, err = vm.AddPlan9(context.Background(), dir, fmt.Sprintf("/tmp/%s", filepath.Base(dir)), true, false, nil)
+	if err != nil {
+		t.Fatalf("AddPlan9 failed: %v", err)
 	}
 }

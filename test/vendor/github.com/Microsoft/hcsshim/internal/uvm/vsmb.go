@@ -163,6 +163,10 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 		return nil, errNotSupported
 	}
 
+	if !options.ReadOnly && uvm.NoWritableFileShares() {
+		return nil, fmt.Errorf("adding writable shares is denied: %w", ErrOperationDenied)
+	}
+
 	uvm.m.Lock()
 	defer uvm.m.Unlock()
 

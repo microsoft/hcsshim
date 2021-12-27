@@ -32,6 +32,7 @@ const (
 )
 
 var (
-	errNotSupported = errors.New("not supported")
-	errBadUVMOpts   = errors.New("UVM options incorrect")
+	errNotSupported    = errors.New("not supported")
+	errBadUVMOpts      = errors.New("UVM options incorrect")
+	ErrOperationDenied = errors.New("operation denied")
 )

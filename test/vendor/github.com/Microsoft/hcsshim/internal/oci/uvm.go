@@ -327,6 +327,26 @@ func handleSecurityPolicy(ctx context.Context, a map[string]string, lopts *uvm.O
 	}
 }
 
+// sets options common to both WCOW and LCOW from annotations
+func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *specs.Spec) error {
+	opts.MemorySizeInMB = ParseAnnotationsMemory(ctx, s, annotations.MemorySizeInMB, opts.MemorySizeInMB)
+	opts.LowMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryLowMMIOGapInMB, opts.LowMMIOGapInMB)
+	opts.HighMMIOBaseInMB = parseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryHighMMIOBaseInMB, opts.HighMMIOBaseInMB)
+	opts.HighMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryHighMMIOGapInMB, opts.HighMMIOGapInMB)
+	opts.AllowOvercommit = parseAnnotationsBool(ctx, s.Annotations, annotations.AllowOvercommit, opts.AllowOvercommit)
+	opts.EnableDeferredCommit = parseAnnotationsBool(ctx, s.Annotations, annotations.EnableDeferredCommit, opts.EnableDeferredCommit)
+	opts.ProcessorCount = ParseAnnotationsCPUCount(ctx, s, annotations.ProcessorCount, opts.ProcessorCount)
+	opts.ProcessorLimit = ParseAnnotationsCPULimit(ctx, s, annotations.ProcessorLimit, opts.ProcessorLimit)
+	opts.ProcessorWeight = ParseAnnotationsCPUWeight(ctx, s, annotations.ProcessorWeight, opts.ProcessorWeight)
+	opts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(ctx, s, annotations.StorageQoSBandwidthMaximum, opts.StorageQoSBandwidthMaximum)
+	opts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotations.StorageQoSIopsMaximum, opts.StorageQoSIopsMaximum)
+	opts.CPUGroupID = parseAnnotationsString(s.Annotations, annotations.CPUGroupID, opts.CPUGroupID)
+	opts.NetworkConfigProxy = parseAnnotationsString(s.Annotations, annotations.NetworkConfigProxy, opts.NetworkConfigProxy)
+	opts.ProcessDumpLocation = parseAnnotationsString(s.Annotations, annotations.ContainerProcessDumpLocation, opts.ProcessDumpLocation)
+	opts.NoWritableFileShares = parseAnnotationsBool(ctx, s.Annotations, annotations.DisableWriteableFileShares, opts.NoWritableFileShares)
+	return nil
+}
+
 // SpecToUVMCreateOpts parses `s` and returns either `*uvm.OptionsLCOW` or
 // `*uvm.OptionsWCOW`.
 func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (interface{}, error) {
@@ -335,29 +355,18 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 	}
 	if IsLCOW(s) {
 		lopts := uvm.NewDefaultOptionsLCOW(id, owner)
-		lopts.MemorySizeInMB = ParseAnnotationsMemory(ctx, s, annotations.MemorySizeInMB, lopts.MemorySizeInMB)
-		lopts.LowMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryLowMMIOGapInMB, lopts.LowMMIOGapInMB)
-		lopts.HighMMIOBaseInMB = parseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryHighMMIOBaseInMB, lopts.HighMMIOBaseInMB)
-		lopts.HighMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryHighMMIOGapInMB, lopts.HighMMIOGapInMB)
-		lopts.AllowOvercommit = parseAnnotationsBool(ctx, s.Annotations, annotations.AllowOvercommit, lopts.AllowOvercommit)
-		lopts.EnableDeferredCommit = parseAnnotationsBool(ctx, s.Annotations, annotations.EnableDeferredCommit, lopts.EnableDeferredCommit)
+		if err := specToUVMCreateOptionsCommon(ctx, lopts.Options, s); err != nil {
+			return nil, err
+		}
 		lopts.EnableColdDiscardHint = parseAnnotationsBool(ctx, s.Annotations, annotations.EnableColdDiscardHint, lopts.EnableColdDiscardHint)
-		lopts.ProcessorCount = ParseAnnotationsCPUCount(ctx, s, annotations.ProcessorCount, lopts.ProcessorCount)
-		lopts.ProcessorLimit = ParseAnnotationsCPULimit(ctx, s, annotations.ProcessorLimit, lopts.ProcessorLimit)
-		lopts.ProcessorWeight = ParseAnnotationsCPUWeight(ctx, s, annotations.ProcessorWeight, lopts.ProcessorWeight)
 		lopts.VPMemDeviceCount = parseAnnotationsUint32(ctx, s.Annotations, annotations.VPMemCount, lopts.VPMemDeviceCount)
 		lopts.VPMemSizeBytes = parseAnnotationsUint64(ctx, s.Annotations, annotations.VPMemSize, lopts.VPMemSizeBytes)
 		lopts.VPMemNoMultiMapping = parseAnnotationsBool(ctx, s.Annotations, annotations.VPMemNoMultiMapping, lopts.VPMemNoMultiMapping)
-		lopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(ctx, s, annotations.StorageQoSBandwidthMaximum, lopts.StorageQoSBandwidthMaximum)
-		lopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotations.StorageQoSIopsMaximum, lopts.StorageQoSIopsMaximum)
 		lopts.VPCIEnabled = parseAnnotationsBool(ctx, s.Annotations, annotations.VPCIEnabled, lopts.VPCIEnabled)
 		lopts.BootFilesPath = parseAnnotationsString(s.Annotations, annotations.BootFilesRootPath, lopts.BootFilesPath)
-		lopts.CPUGroupID = parseAnnotationsString(s.Annotations, annotations.CPUGroupID, lopts.CPUGroupID)
-		lopts.NetworkConfigProxy = parseAnnotationsString(s.Annotations, annotations.NetworkConfigProxy, lopts.NetworkConfigProxy)
 		lopts.EnableScratchEncryption = parseAnnotationsBool(ctx, s.Annotations, annotations.EncryptedScratchDisk, lopts.EnableScratchEncryption)
 		lopts.SecurityPolicy = parseAnnotationsString(s.Annotations, annotations.SecurityPolicy, lopts.SecurityPolicy)
 		lopts.KernelBootOptions = parseAnnotationsString(s.Annotations, annotations.KernelBootOptions, lopts.KernelBootOptions)
-		lopts.ProcessDumpLocation = parseAnnotationsString(s.Annotations, annotations.ContainerProcessDumpLocation, lopts.ProcessDumpLocation)
 		lopts.DisableTimeSyncService = parseAnnotationsBool(ctx, s.Annotations, annotations.DisableLCOWTimeSyncService, lopts.DisableTimeSyncService)
 		handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
 		handleAnnotationKernelDirectBoot(ctx, s.Annotations, lopts)
@@ -375,22 +384,11 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		return lopts, nil
 	} else if IsWCOW(s) {
 		wopts := uvm.NewDefaultOptionsWCOW(id, owner)
-		wopts.MemorySizeInMB = ParseAnnotationsMemory(ctx, s, annotations.MemorySizeInMB, wopts.MemorySizeInMB)
-		wopts.LowMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryLowMMIOGapInMB, wopts.LowMMIOGapInMB)
-		wopts.HighMMIOBaseInMB = parseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryHighMMIOBaseInMB, wopts.HighMMIOBaseInMB)
-		wopts.HighMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryHighMMIOGapInMB, wopts.HighMMIOGapInMB)
-		wopts.AllowOvercommit = parseAnnotationsBool(ctx, s.Annotations, annotations.AllowOvercommit, wopts.AllowOvercommit)
-		wopts.EnableDeferredCommit = parseAnnotationsBool(ctx, s.Annotations, annotations.EnableDeferredCommit, wopts.EnableDeferredCommit)
-		wopts.ProcessorCount = ParseAnnotationsCPUCount(ctx, s, annotations.ProcessorCount, wopts.ProcessorCount)
-		wopts.ProcessorLimit = ParseAnnotationsCPULimit(ctx, s, annotations.ProcessorLimit, wopts.ProcessorLimit)
-		wopts.ProcessorWeight = ParseAnnotationsCPUWeight(ctx, s, annotations.ProcessorWeight, wopts.ProcessorWeight)
-		wopts.StorageQoSBandwidthMaximum = ParseAnnotationsStorageBps(ctx, s, annotations.StorageQoSBandwidthMaximum, wopts.StorageQoSBandwidthMaximum)
-		wopts.StorageQoSIopsMaximum = ParseAnnotationsStorageIops(ctx, s, annotations.StorageQoSIopsMaximum, wopts.StorageQoSIopsMaximum)
+		if err := specToUVMCreateOptionsCommon(ctx, wopts.Options, s); err != nil {
+			return nil, err
+		}
 		wopts.DisableCompartmentNamespace = parseAnnotationsBool(ctx, s.Annotations, annotations.DisableCompartmentNamespace, wopts.DisableCompartmentNamespace)
-		wopts.CPUGroupID = parseAnnotationsString(s.Annotations, annotations.CPUGroupID, wopts.CPUGroupID)
-		wopts.NetworkConfigProxy = parseAnnotationsString(s.Annotations, annotations.NetworkConfigProxy, wopts.NetworkConfigProxy)
 		wopts.NoDirectMap = parseAnnotationsBool(ctx, s.Annotations, annotations.VSMBNoDirectMap, wopts.NoDirectMap)
-		wopts.ProcessDumpLocation = parseAnnotationsString(s.Annotations, annotations.ContainerProcessDumpLocation, wopts.ProcessDumpLocation)
 		wopts.NoInheritHostTimezone = parseAnnotationsBool(ctx, s.Annotations, annotations.NoInheritHostTimezone, wopts.NoInheritHostTimezone)
 		handleAnnotationFullyPhysicallyBacked(ctx, s.Annotations, wopts)
 		if err := handleCloneAnnotations(ctx, s.Annotations, wopts); err != nil {
