@@ -3,7 +3,9 @@ package hcs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"os"
 	"sync"
 	"syscall"
 	"time"
@@ -150,6 +152,18 @@ func (process *Process) Kill(ctx context.Context) (bool, error) {
 	}
 
 	resultJSON, err := vmcompute.HcsTerminateProcess(ctx, process.handle)
+	if err != nil && errors.Is(err, os.ErrPermission) {
+		// HcsTerminateProcess ends up calling TerminateProcess in the context
+		// of a container. According to the TerminateProcess documentation:
+		// https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess#remarks
+		// After a process has terminated, call to TerminateProcess with open
+		// handles to the process fails with ERROR_ACCESS_DENIED (5) error code.
+		// It's safe to ignore this error here. HCS should always have permissions
+		// to kill processes inside any container. So an ERROR_ACCESS_DENIED
+		// is unlikely to be anything else than what the ending remarks in the
+		// documentation states.
+		return true, nil
+	}
 	events := processHcsResult(ctx, resultJSON)
 	delivered, err := process.processSignalResult(ctx, err)
 	if err != nil {
