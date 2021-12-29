@@ -14,7 +14,7 @@ type execConfig struct {
 	stdout, stderr, stdin bool
 
 	job          *jobobject.JobObject
-	cpty         *conpty.ConPTY
+	cpty         *conpty.Pty
 	token        windows.Token
 	processFlags uint32
 }
@@ -55,7 +55,7 @@ func WithJobObject(job *jobobject.JobObject) ExecOpts {
 }
 
 // WithConPty will launch the created process with a pseudo console attached to the process.
-func WithConPty(cpty *conpty.ConPTY) ExecOpts {
+func WithConPty(cpty *conpty.Pty) ExecOpts {
 	return func(e *execConfig) error {
 		e.cpty = cpty
 		return nil

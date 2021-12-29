@@ -20,7 +20,7 @@ import (
 // JobProcess represents a process run in a job object.
 type JobProcess struct {
 	cmd            *exec.Exec
-	cpty           *conpty.ConPTY
+	cpty           *conpty.Pty
 	procLock       sync.Mutex
 	stdioLock      sync.Mutex
 	stdin          io.WriteCloser
@@ -41,7 +41,7 @@ var sigMap = map[string]int{
 
 var _ cow.Process = &JobProcess{}
 
-func newProcess(cmd *exec.Exec, cpty *conpty.ConPTY) *JobProcess {
+func newProcess(cmd *exec.Exec, cpty *conpty.Pty) *JobProcess {
 	return &JobProcess{
 		cmd:       cmd,
 		cpty:      cpty,
