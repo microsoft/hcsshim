@@ -59,7 +59,7 @@ func TestInvalidReadEOF(t *testing.T) {
 	if err == nil {
 		t.Fatalf("no error returned")
 	}
-	if errors.Cause(err) != ErrSuperBlockReadFailure || !strings.Contains(err.Error(), "EOF") {
+	if errors.Cause(err) != io.EOF {
 		t.Fatalf("unexpected error: %s", err)
 	}
 }
@@ -96,7 +96,7 @@ func TestNoMerkleTree(t *testing.T) {
 	if err == nil {
 		t.Fatalf("no error returned")
 	}
-	if errors.Cause(err) != ErrRootHashReadFailure {
-		t.Fatalf("expected %q, got %q", ErrRootHashReadFailure, err)
+	if errors.Cause(err) != io.EOF || !strings.Contains(err.Error(), "failed to read dm-verity root hash") {
+		t.Fatalf("expected %q, got %q", io.EOF, err)
 	}
 }

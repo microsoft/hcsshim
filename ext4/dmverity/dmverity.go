@@ -174,7 +174,7 @@ func ReadDMVerityInfo(vhdPath string, offsetInBytes int64) (*VerityInfo, error) 
 	block := make([]byte, blockSize)
 	if s, err := vhd.Read(block); err != nil || s != blockSize {
 		if err != nil {
-			return nil, errors.Wrapf(ErrSuperBlockReadFailure, "%s", err)
+			return nil, errors.Wrapf(err, "%s", ErrSuperBlockReadFailure)
 		}
 		return nil, errors.Wrapf(ErrSuperBlockReadFailure, "unexpected bytes read: expected=%d, actual=%d", blockSize, s)
 	}
@@ -182,7 +182,7 @@ func ReadDMVerityInfo(vhdPath string, offsetInBytes int64) (*VerityInfo, error) 
 	dmvSB := &dmveritySuperblock{}
 	b := bytes.NewBuffer(block)
 	if err := binary.Read(b, binary.LittleEndian, dmvSB); err != nil {
-		return nil, errors.Wrapf(ErrSuperBlockParseFailure, "%s", err)
+		return nil, errors.Wrapf(err, "%s", ErrSuperBlockParseFailure)
 	}
 	if string(bytes.Trim(dmvSB.Signature[:], "\x00")[:]) != "verity" {
 		return nil, ErrNotVeritySuperBlock
@@ -190,7 +190,7 @@ func ReadDMVerityInfo(vhdPath string, offsetInBytes int64) (*VerityInfo, error) 
 	// read the merkle tree root
 	if s, err := vhd.Read(block); err != nil || s != blockSize {
 		if err != nil {
-			return nil, errors.Wrapf(ErrRootHashReadFailure, "%s", err)
+			return nil, errors.Wrapf(err, "%s", ErrRootHashReadFailure)
 		}
 		return nil, errors.Wrapf(ErrRootHashReadFailure, "unexpected bytes read: expected=%d, actual=%d", blockSize, s)
 	}
