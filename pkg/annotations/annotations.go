@@ -268,4 +268,8 @@ const (
 	// NoInheritHostTimezone specifies for the hosts timezone to not be inherited by the WCOW UVM. The UVM will be set to UTC time
 	// as a default.
 	NoInheritHostTimezone = "io.microsoft.virtualmachine.wcow.timezone.noinherit"
+
+	// WCOWDisableGMSA disables providing gMSA (Group Managed Service Accounts) to
+	// a WCOW container
+	WcowDisableGmsa = "io.microsoft.wcow.gmsa.disable"
 )

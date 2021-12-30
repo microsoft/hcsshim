@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
@@ -68,8 +69,8 @@ func TestPlan9_Writable(t *testing.T) {
 			t.Fatalf("RemovePlan9 failed: %s", err)
 		}
 	}()
-	if !errors.Is(err, uvm.ErrOperationDenied) {
-		t.Fatalf("AddPlan9 should have failed with %v instead of: %v", uvm.ErrOperationDenied, err)
+	if !errors.Is(err, hcs.ErrOperationDenied) {
+		t.Fatalf("AddPlan9 should have failed with %v instead of: %v", hcs.ErrOperationDenied, err)
 	}
 
 	// mount as read-only should succeed

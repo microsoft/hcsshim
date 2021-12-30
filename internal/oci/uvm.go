@@ -216,6 +216,13 @@ func parseAnnotationsString(a map[string]string, key string, def string) string 
 	return def
 }
 
+// ParseAnnotationsDisableGMS searches for the boolean value which specifies
+// if providing a gMSA credential should be disallowed
+// is found the returns the actual value, returns false otherwise.
+func ParseAnnotationsDisableGmsa(ctx context.Context, s *specs.Spec) bool {
+	return parseAnnotationsBool(ctx, s.Annotations, annotations.WcowDisableGmsa, false)
+}
+
 // ParseAnnotationsSaveAsTemplate searches for the boolean value which specifies
 // if this create request should be considered as a template creation request. If value
 // is found the returns the actual value, returns false otherwise.
