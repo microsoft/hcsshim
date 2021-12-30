@@ -245,7 +245,7 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		return nil, errors.Wrap(err, "failed to set PATHEXT")
 	}
 
-	var cpty *conpty.ConPTY
+	var cpty *conpty.Pty
 	if conf.EmulateConsole {
 		cpty, err = conpty.Create(80, 20, 0)
 		if err != nil {

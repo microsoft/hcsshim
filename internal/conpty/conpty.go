@@ -16,8 +16,8 @@ var (
 	errNotInitialized = errors.New("pseudo console hasn't been initialized")
 )
 
-// ConPTY is a wrapper around a Windows PseudoConsole handle. Create a new instance by calling `Create()`.
-type ConPTY struct {
+// Pty is a wrapper around a Windows PseudoConsole handle. Create a new instance by calling `Create()`.
+type Pty struct {
 	// handleLock guards hpc
 	handleLock sync.RWMutex
 	// hpc is the pseudo console handle
@@ -27,8 +27,8 @@ type ConPTY struct {
 	outPipe *os.File
 }
 
-// Create returns a new `ConPTY` object. This object is not ready for IO until `UpdateProcThreadAttribute` is called and a process has been started.
-func Create(width, height int16, flags uint32) (*ConPTY, error) {
+// Create returns a new `Pty` object. This object is not ready for IO until `UpdateProcThreadAttribute` is called and a process has been started.
+func Create(width, height int16, flags uint32) (*Pty, error) {
 	// First we need to make both ends of the conpty's pipes, two to get passed into a process to use as input/output, and two for us to keep to
 	// make use of this data.
 	ptyIn, inPipeOurs, err := os.Pipe()
@@ -49,7 +49,7 @@ func Create(width, height int16, flags uint32) (*ConPTY, error) {
 	}
 
 	// The pty's end of its pipes can be closed here without worry. They're duped into the conhost
-	// that will be launched and will be released on a call to ClosePseudoConsole() (Close() on the ConPTY object).
+	// that will be launched and will be released on a call to ClosePseudoConsole() (Close() on the Pty object).
 	if err := ptyOut.Close(); err != nil {
 		return nil, fmt.Errorf("failed to close pseudo console handle: %w", err)
 	}
@@ -57,7 +57,7 @@ func Create(width, height int16, flags uint32) (*ConPTY, error) {
 		return nil, fmt.Errorf("failed to close pseudo console handle: %w", err)
 	}
 
-	return &ConPTY{
+	return &Pty{
 		hpc:     hpc,
 		inPipe:  inPipeOurs,
 		outPipe: outPipeOurs,
@@ -66,7 +66,7 @@ func Create(width, height int16, flags uint32) (*ConPTY, error) {
 
 // UpdateProcThreadAttribute updates the passed in attribute list to contain the entry necessary for use with
 // CreateProcess.
-func (c *ConPTY) UpdateProcThreadAttribute(attrList *windows.ProcThreadAttributeListContainer) error {
+func (c *Pty) UpdateProcThreadAttribute(attrList *windows.ProcThreadAttributeListContainer) error {
 	c.handleLock.RLock()
 	defer c.handleLock.RUnlock()
 
@@ -86,7 +86,7 @@ func (c *ConPTY) UpdateProcThreadAttribute(attrList *windows.ProcThreadAttribute
 }
 
 // Resize resizes the internal buffers of the pseudo console to the passed in size
-func (c *ConPTY) Resize(width, height int16) error {
+func (c *Pty) Resize(width, height int16) error {
 	c.handleLock.RLock()
 	defer c.handleLock.RUnlock()
 
@@ -102,7 +102,7 @@ func (c *ConPTY) Resize(width, height int16) error {
 }
 
 // Close closes the pseudo-terminal and cleans up all attached resources
-func (c *ConPTY) Close() error {
+func (c *Pty) Close() error {
 	c.handleLock.Lock()
 	defer c.handleLock.Unlock()
 
@@ -123,17 +123,17 @@ func (c *ConPTY) Close() error {
 }
 
 // OutPipe returns the output pipe of the pseudo console.
-func (c *ConPTY) OutPipe() *os.File {
+func (c *Pty) OutPipe() *os.File {
 	return c.outPipe
 }
 
 // InPipe returns the input pipe of the pseudo console.
-func (c *ConPTY) InPipe() *os.File {
+func (c *Pty) InPipe() *os.File {
 	return c.inPipe
 }
 
 // Write writes the contents of `buf` to the pseudo console. Returns the number of bytes written and an error if there is one.
-func (c *ConPTY) Write(buf []byte) (int, error) {
+func (c *Pty) Write(buf []byte) (int, error) {
 	if c.inPipe == nil {
 		return 0, errNotInitialized
 	}
@@ -141,7 +141,7 @@ func (c *ConPTY) Write(buf []byte) (int, error) {
 }
 
 // Read reads from the pseudo console into `buf`. Returns the number of bytes read and an error if there is one.
-func (c *ConPTY) Read(buf []byte) (int, error) {
+func (c *Pty) Read(buf []byte) (int, error) {
 	if c.outPipe == nil {
 		return 0, errNotInitialized
 	}
