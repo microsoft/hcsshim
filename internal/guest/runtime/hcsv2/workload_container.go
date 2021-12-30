@@ -20,6 +20,16 @@ func getWorkloadRootDir(id string) string {
 	return filepath.Join("/run/gcs/c", id)
 }
 
+// os.MkdirAll combines the given permissions with the running process's
+// umask. By default this causes 0777 to become 0755.
+// Temporarily set the umask of this process to 0 so that we can actually
+// make all dirs with os.ModePerm permissions.
+func mkdirAllModePerm(target string) error {
+	savedUmask := unix.Umask(0)
+	defer unix.Umask(savedUmask)
+	return os.MkdirAll(target, os.ModePerm)
+}
+
 func updateSandboxMounts(sbid string, spec *oci.Spec) error {
 	sandboxMountPrefix := "sandbox://"
 	for i, m := range spec.Mounts {
@@ -38,13 +48,7 @@ func updateSandboxMounts(sbid string, spec *oci.Spec) error {
 
 			_, err := os.Stat(sandboxSource)
 			if os.IsNotExist(err) {
-				// os.MkdirAll combines the given permissions with the running process's
-				// umask. By default this causes 0777 to become 0755.
-				// Temporarily set the umask of this process to 0 so that we can actually
-				// make all dirs with os.ModePerm permissions.
-				savedUmask := unix.Umask(0)
-				defer unix.Umask(savedUmask)
-				if err := os.MkdirAll(sandboxSource, os.ModePerm); err != nil {
+				if err := mkdirAllModePerm(sandboxSource); err != nil {
 					return err
 				}
 			}
@@ -72,16 +76,9 @@ func updateHugePageMounts(sbid string, spec *oci.Spec) error {
 
 			_, err := os.Stat(hugePageMountSource)
 			if os.IsNotExist(err) {
-				// os.MkdirAll combines the given permissions with the running process's
-				// umask. By default this causes 0777 to become 0755.
-				// Temporarily set the umask of this process to 0 so that we can actually
-				// make all dirs with os.ModePerm permissions.
-				savedUmask := unix.Umask(0)
-				defer unix.Umask(savedUmask)
-				if err := os.MkdirAll(hugePageMountSource, os.ModePerm); err != nil {
+				if err := mkdirAllModePerm(hugePageMountSource); err != nil {
 					return err
 				}
-
 				if err := unix.Mount("none", hugePageMountSource, "hugetlbfs", 0, "pagesize="+pageSize); err != nil {
 					return errors.Errorf("mount operation failed for %v failed with error %v", hugePageMountSource, err)
 				}
