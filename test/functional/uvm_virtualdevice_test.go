@@ -1,3 +1,4 @@
+//go:build functional
 // +build functional
 
 package functional
@@ -42,7 +43,7 @@ func TestVirtualDevice(t *testing.T) {
 	}
 
 	// update opts needed to assign a hyper-v pci device
-	opts := uvm.NewDefaultOptionsLCOW(t.Name(), "")
+	opts := getDefaultLcowUvmOptions(t, t.Name())
 	opts.VPCIEnabled = true
 	opts.AllowOvercommit = false
 	opts.KernelDirect = false

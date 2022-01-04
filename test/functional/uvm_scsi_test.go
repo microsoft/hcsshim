@@ -215,7 +215,7 @@ func testSCSIAddRemoveMultiple(t *testing.T, u *uvm.UtilityVM, pathPrefix string
 
 func TestParallelScsiOps(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	u := testutilities.CreateLCOWUVM(context.Background(), t, t.Name())
+	u := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, getDefaultLcowUvmOptions(t, t.Name()))
 	defer u.Close()
 
 	// Create a sandbox to use

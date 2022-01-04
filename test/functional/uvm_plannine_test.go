@@ -1,3 +1,4 @@
+//go:build functional || uvmp9
 // +build functional uvmp9
 
 // This file isn't called uvm_plan9_test.go as go test skips when a number is in it... go figure (pun intended)
@@ -7,7 +8,6 @@ package functional
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -21,14 +21,14 @@ import (
 func TestPlan9(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 
-	vm := testutilities.CreateLCOWUVM(context.Background(), t, t.Name())
+	vm := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, getDefaultLcowUvmOptions(t, t.Name()))
 	defer vm.Close()
 
-	dir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(dir)
 	var iterations uint32 = 64
 	var shares []*uvm.Plan9Share
 	for i := 0; i < int(iterations); i++ {
+		// create a new temp dir per mount, to avoid "failed to remove plan9 share: device or resource busy" errors
+		dir := t.TempDir()
 		share, err := vm.AddPlan9(context.Background(), dir, fmt.Sprintf("/tmp/%s", filepath.Base(dir)), false, false, nil)
 		if err != nil {
 			t.Fatalf("AddPlan9 failed: %s", err)
@@ -42,4 +42,20 @@ func TestPlan9(t *testing.T) {
 			t.Fatalf("RemovePlan9 failed: %s", err)
 		}
 	}
+}
+
+func Test_Setup(t *testing.T) {
+	client, ctx := getCtrdClient(t)
+
+	is := []string{
+		"mcr.microsoft.com/windows/nanoserver:1903",
+		"mcr.microsoft.com/windows/nanoserver:2004",
+		"mcr.microsoft.com/windows/nanoserver:ltsc2022",
+	}
+	for _, i := range is {
+		cid := testutilities.GetImageChainID(ctx, t, client, i, "windows")
+		ms := testutilities.CreateActiveSnapshot(ctx, t, client, "windows", cid, t.Name())
+		t.Logf("%+v", ms)
+	}
+
 }

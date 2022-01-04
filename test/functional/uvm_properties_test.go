@@ -14,7 +14,7 @@ import (
 func TestPropertiesGuestConnection_LCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 
-	uvm := testutilities.CreateLCOWUVM(context.Background(), t, t.Name())
+	uvm := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, getDefaultLcowUvmOptions(t, t.Name()))
 	defer uvm.Close()
 
 	p, gc := uvm.Capabilities()

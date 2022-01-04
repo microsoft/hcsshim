@@ -1,3 +1,4 @@
+//go:build functional || lcow
 // +build functional lcow
 
 package functional
@@ -6,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -26,7 +26,7 @@ import (
 // TestLCOWUVMNoSCSINoVPMemInitrd starts an LCOW utility VM without a SCSI controller and
 // no VPMem device. Uses initrd.
 func TestLCOWUVMNoSCSINoVPMemInitrd(t *testing.T) {
-	opts := uvm.NewDefaultOptionsLCOW(t.Name(), "")
+	opts := getDefaultLcowUvmOptions(t, t.Name())
 	opts.SCSIControllerCount = 0
 	opts.VPMemDeviceCount = 0
 	opts.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
@@ -38,7 +38,7 @@ func TestLCOWUVMNoSCSINoVPMemInitrd(t *testing.T) {
 // TestLCOWUVMNoSCSISingleVPMemVHD starts an LCOW utility VM without a SCSI controller and
 // only a single VPMem device. Uses VPMEM VHD
 func TestLCOWUVMNoSCSISingleVPMemVHD(t *testing.T) {
-	opts := uvm.NewDefaultOptionsLCOW(t.Name(), "")
+	opts := getDefaultLcowUvmOptions(t, t.Name())
 	opts.SCSIControllerCount = 0
 	opts.VPMemDeviceCount = 1
 	opts.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
@@ -96,7 +96,7 @@ func TestLCOWUVMStart_KernelDirect_InitRd(t *testing.T) {
 
 func testLCOWTimeUVMStart(t *testing.T, kernelDirect bool, rfsType uvm.PreferredRootFSType) {
 	for i := 0; i < 3; i++ {
-		opts := uvm.NewDefaultOptionsLCOW(t.Name(), "")
+		opts := getDefaultLcowUvmOptions(t, t.Name())
 		opts.KernelDirect = kernelDirect
 		opts.VPMemDeviceCount = 32
 		opts.PreferredRootFSType = rfsType
@@ -117,26 +117,22 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 	alpineLayers := testutilities.LayerFolders(t, "alpine")
 
-	cacheDir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(cacheDir)
+	cacheDir := t.TempDir()
 	cacheFile := filepath.Join(cacheDir, "cache.vhdx")
 
 	// This is what gets mounted into /tmp/scratch
-	uvmScratchDir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(uvmScratchDir)
+	uvmScratchDir := t.TempDir()
 	uvmScratchFile := filepath.Join(uvmScratchDir, "uvmscratch.vhdx")
 
 	// Scratch for the first container
-	c1ScratchDir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(c1ScratchDir)
+	c1ScratchDir := t.TempDir()
 	c1ScratchFile := filepath.Join(c1ScratchDir, "sandbox.vhdx")
 
 	// Scratch for the second container
-	c2ScratchDir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(c2ScratchDir)
+	c2ScratchDir := t.TempDir()
 	c2ScratchFile := filepath.Join(c2ScratchDir, "sandbox.vhdx")
 
-	lcowUVM := testutilities.CreateLCOWUVM(context.Background(), t, "uvm")
+	lcowUVM := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, getDefaultLcowUvmOptions(t, "uvm"))
 	defer lcowUVM.Close()
 
 	// Populate the cache and generate the scratch file for /tmp/scratch

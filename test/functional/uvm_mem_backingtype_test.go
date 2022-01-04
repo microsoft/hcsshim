@@ -39,13 +39,13 @@ func runMemTests(t *testing.T, os string) {
 
 	for _, bt := range testCases {
 		if os == "windows" {
-			wopts := uvm.NewDefaultOptionsWCOW(t.Name(), "")
+			wopts := getDefaultWcowUvmOptions(t, t.Name())
 			wopts.MemorySizeInMB = 512
 			wopts.AllowOvercommit = bt.allowOvercommit
 			wopts.EnableDeferredCommit = bt.enableDeferredCommit
 			runMemStartWCOWTest(t, wopts)
 		} else {
-			lopts := uvm.NewDefaultOptionsLCOW(t.Name(), "")
+			lopts := getDefaultLcowUvmOptions(t, t.Name())
 			lopts.MemorySizeInMB = 512
 			lopts.AllowOvercommit = bt.allowOvercommit
 			lopts.EnableDeferredCommit = bt.enableDeferredCommit

@@ -1,3 +1,4 @@
+//go:build functional
 // +build functional
 
 package runhcs
@@ -166,18 +167,15 @@ func testWindows(t *testing.T, version int, isolated bool) {
 	var err error
 
 	// Make the bundle
-	bundle := testutilities.CreateTempDir(t)
+	bundle := t.TempDir()
 	defer func() {
-		if err == nil {
-			os.RemoveAll(bundle)
-		} else {
+		if err != nil {
 			t.Errorf("additional logs at bundle path: %v", bundle)
 		}
 	}()
-	scratch := testutilities.CreateTempDir(t)
+	scratch := t.TempDir()
 	defer func() {
 		vhd.DetachVhd(filepath.Join(scratch, "sandbox.vhdx"))
-		os.RemoveAll(scratch)
 	}()
 
 	// Generate the Spec

@@ -1,3 +1,4 @@
+//go:build functional || uvmvsmb
 // +build functional uvmvsmb
 
 package functional
@@ -18,8 +19,7 @@ func TestVSMB(t *testing.T) {
 	defer os.RemoveAll(uvmScratchDir)
 	defer uvm.Close()
 
-	dir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 	var iterations uint32 = 64
 	options := uvm.DefaultVSMBOptions(true)
 	options.TakeBackupPrivilege = true

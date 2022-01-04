@@ -41,12 +41,7 @@ func CreateWCOWUVMFromOptsWithImage(ctx context.Context, t *testing.T, opts *uvm
 	}
 
 	uvmLayers := LayerFolders(t, image)
-	scratchDir := CreateTempDir(t)
-	defer func() {
-		if t.Failed() {
-			os.RemoveAll(scratchDir)
-		}
-	}()
+	scratchDir := t.TempDir()
 
 	opts.LayerFolders = append(opts.LayerFolders, uvmLayers...)
 	opts.LayerFolders = append(opts.LayerFolders, scratchDir)
@@ -67,11 +62,11 @@ func CreateLCOWUVMFromOpts(ctx context.Context, t *testing.T, opts *uvm.OptionsL
 
 	uvm, err := uvm.CreateLCOW(ctx, opts)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("could not create LCOW UVM: %v", err)
 	}
 	if err := uvm.Start(ctx); err != nil {
 		uvm.Close()
-		t.Fatal(err)
+		t.Fatalf("could not start LCOW UVM: %v", err)
 	}
 	return uvm
 }

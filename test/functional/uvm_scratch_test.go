@@ -1,3 +1,4 @@
+//go:build functional || uvmscratch
 // +build functional uvmscratch
 
 package functional
@@ -16,10 +17,9 @@ import (
 
 func TestScratchCreateLCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	tempDir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
-	firstUVM := testutilities.CreateLCOWUVM(context.Background(), t, "TestCreateLCOWScratch")
+	firstUVM := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, getDefaultLcowUvmOptions(t, "TestCreateLCOWScratch"))
 	defer firstUVM.Close()
 
 	cacheFile := filepath.Join(tempDir, "cache.vhdx")
@@ -36,7 +36,7 @@ func TestScratchCreateLCOW(t *testing.T) {
 		t.Fatalf("cacheFile wasn't created!")
 	}
 
-	targetUVM := testutilities.CreateLCOWUVM(context.Background(), t, "TestCreateLCOWScratch_target")
+	targetUVM := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, getDefaultLcowUvmOptions(t, "TestCreateLCOWScratch_target"))
 	defer targetUVM.Close()
 
 	// A non-cached create
@@ -61,7 +61,7 @@ func TestScratchCreateLCOW(t *testing.T) {
 //// VHDX and format it ext4.
 //func TestCreateLCOWScratch(t *testing.T) {
 //	t.Skip("for now")
-//	cacheDir := createTempDir(t)
+//	cacheDir := t.TempDir()
 //	cacheFile := filepath.Join(cacheDir, "cache.vhdx")
 //	uvm, err := CreateContainer(&CreateOptions{Spec: getDefaultLinuxSpec(t)})
 //	if err != nil {
