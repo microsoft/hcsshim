@@ -4,17 +4,17 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 	"unsafe"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/Microsoft/hcsshim/internal/conpty"
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/exec"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -171,10 +171,6 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		return nil, errors.New("unsupported process config passed in")
 	}
 
-	if conf.EmulateConsole {
-		return nil, errors.New("console emulation not supported for job containers")
-	}
-
 	// Replace any occurences of the sandbox mount point env variable in the commandline.
 	// %CONTAINER_SANDBOX_MOUNTPOINT%\mybinary.exe -> C:\C\123456789\mybinary.exe
 	commandLine, _ := c.replaceWithMountPoint(conf.CommandLine)
@@ -249,43 +245,41 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		return nil, errors.Wrap(err, "failed to set PATHEXT")
 	}
 
-	cmd := &exec.Cmd{
-		Env:  env,
-		Dir:  workDir,
-		Path: absPath,
-		SysProcAttr: &syscall.SysProcAttr{
-			// CREATE_BREAKAWAY_FROM_JOB to make sure that we're not inheriting the job object (and by extension its limits)
-			// from whatever process is going to launch the container.
-			CreationFlags: windows.CREATE_NEW_PROCESS_GROUP | windows.CREATE_BREAKAWAY_FROM_JOB,
-			Token:         syscall.Token(token),
-			CmdLine:       commandLine,
-		},
+	var cpty *conpty.Pty
+	if conf.EmulateConsole {
+		cpty, err = conpty.Create(80, 20, 0)
+		if err != nil {
+			return nil, err
+		}
 	}
-	process := newProcess(cmd)
+
+	cmd, err := exec.New(
+		absPath,
+		commandLine,
+		exec.WithDir(workDir),
+		exec.WithEnv(env),
+		exec.WithToken(token),
+		exec.WithJobObject(c.job),
+		exec.WithConPty(cpty),
+		exec.WithProcessFlags(windows.CREATE_BREAKAWAY_FROM_JOB),
+		exec.WithStdio(conf.CreateStdOutPipe, conf.CreateStdErrPipe, conf.CreateStdInPipe),
+	)
+	if err != nil {
+		return nil, err
+	}
+	process := newProcess(cmd, cpty)
 
 	// Create process pipes if asked for.
 	if conf.CreateStdInPipe {
-		stdin, err := process.cmd.StdinPipe()
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to create stdin pipe")
-		}
-		process.stdin = stdin
+		process.stdin = process.cmd.Stdin()
 	}
 
 	if conf.CreateStdOutPipe {
-		stdout, err := process.cmd.StdoutPipe()
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to create stdout pipe")
-		}
-		process.stdout = stdout
+		process.stdout = process.cmd.Stdout()
 	}
 
 	if conf.CreateStdErrPipe {
-		stderr, err := process.cmd.StderrPipe()
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to create stderr pipe")
-		}
-		process.stderr = stderr
+		process.stderr = process.cmd.Stderr()
 	}
 
 	defer func() {
@@ -296,10 +290,6 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 
 	if err = process.Start(); err != nil {
 		return nil, errors.Wrap(err, "failed to start host process")
-	}
-
-	if err = c.job.Assign(uint32(process.Pid())); err != nil {
-		return nil, errors.Wrap(err, "failed to assign process to job object")
 	}
 
 	// Assign the first process made as the init process of the container.
