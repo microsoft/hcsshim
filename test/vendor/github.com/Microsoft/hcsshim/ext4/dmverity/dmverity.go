@@ -30,7 +30,7 @@ var (
 	ErrSuperBlockReadFailure  = errors.New("failed to read dm-verity super block")
 	ErrSuperBlockParseFailure = errors.New("failed to parse dm-verity super block")
 	ErrRootHashReadFailure    = errors.New("failed to read dm-verity root hash")
-	ErrNotVeritySuperBlock    = errors.New("not dm-verity super-block")
+	ErrNotVeritySuperBlock    = errors.New("invalid dm-verity super-block signature")
 )
 
 type dmveritySuperblock struct {
