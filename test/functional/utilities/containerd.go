@@ -44,11 +44,11 @@ func (cco CtrdClientOptions) NewClient(ctx context.Context, t *testing.T, opts .
 	}
 
 	opts = append(opts, cco.defaultOpts()...)
-	c, err :=  containerd.NewWithConn(conn, opts...)
+	c, err := containerd.NewWithConn(conn, opts...)
 	if err != nil {
 		t.Fatalf("containerd.New() client failed: %v", err)
 	}
-	t.Cleanup(func(){c.Close()})
+	t.Cleanup(func() { c.Close() })
 
 	ctx = namespaces.WithNamespace(ctx, cco.Namespace)
 	ctx, cancel := context.WithCancel(ctx)
@@ -56,7 +56,6 @@ func (cco CtrdClientOptions) NewClient(ctx context.Context, t *testing.T, opts .
 
 	return c, ctx
 }
-
 
 func GetPlatformComparer(t *testing.T, platform string) platforms.MatchComparer {
 	var p platforms.MatchComparer
@@ -92,7 +91,6 @@ func GetImageChainID(ctx context.Context, t *testing.T, client *containerd.Clien
 	return chainID
 }
 
-
 func CreateActiveSnapshot(ctx context.Context, t *testing.T, client *containerd.Client, snapshotter, parent, key string, opts ...snapshots.Opt) []mount.Mount {
 	ss := client.SnapshotService(snapshotter)
 
@@ -101,10 +99,32 @@ func CreateActiveSnapshot(ctx context.Context, t *testing.T, client *containerd.
 		t.Fatalf("could not make active snapshot %q from %q: %v", key, parent, err)
 	}
 
-	t.Cleanup(func(){
+	t.Cleanup(func() {
 		err = ss.Remove(ctx, key)
 		if err != nil {
-			t.Fatalf("failed to remove active commit %q", key)
+			// remove is not idempotent, so do not Fail test
+			t.Logf("failed to remove active snapshot %q: %v", key, err)
+		}
+	})
+
+	return ms
+}
+
+// a view will not not create a new scratch layer/vhd, but instead return only the directory of the
+// committed snapshot `parent`
+func CreateViewSnapshot(ctx context.Context, t *testing.T, client *containerd.Client, snapshotter, parent, key string, opts ...snapshots.Opt) []mount.Mount {
+	ss := client.SnapshotService(snapshotter)
+
+	ms, err := ss.View(ctx, key, parent, opts...)
+	if err != nil {
+		t.Fatalf("could not make active snapshot %q from %q: %v", key, parent, err)
+	}
+
+	t.Cleanup(func() {
+		err = ss.Remove(ctx, key)
+		if err != nil {
+			// remove is not idempotent, so do not Fail test
+			t.Logf("failed to remove view snapshot %q: %v", key, err)
 		}
 	})
 

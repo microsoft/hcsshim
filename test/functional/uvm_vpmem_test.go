@@ -17,10 +17,10 @@ import (
 // TestVPMEM tests adding/removing VPMem Read-Only layers from a v2 Linux utility VM
 func TestVPMEM(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	alpineLayers := testutilities.LayerFolders(t, "alpine")
+	client, ctx := getCtrdClient(context.Background(), t)
+	alpineLayers := testutilities.LayerFolders(ctx, t, client, "alpine")
 
-	ctx := context.Background()
-	u := testutilities.CreateLCOWUVMFromOpts(ctx, t, getDefaultLcowUvmOptions(t, t.Name()))
+	u := testutilities.CreateLCOWUVMFromOpts(ctx, t, client, getDefaultLcowUvmOptions(t, t.Name()))
 	defer u.Close()
 
 	var iterations uint32 = uvm.MaxVPMEMCount

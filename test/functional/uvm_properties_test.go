@@ -1,3 +1,4 @@
+//go:build functional || uvmproperties
 // +build functional uvmproperties
 
 package functional
@@ -14,7 +15,7 @@ import (
 func TestPropertiesGuestConnection_LCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 
-	uvm := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, getDefaultLcowUvmOptions(t, t.Name()))
+	uvm := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, nil, getDefaultLcowUvmOptions(t, t.Name()))
 	defer uvm.Close()
 
 	p, gc := uvm.Capabilities()
@@ -27,7 +28,8 @@ func TestPropertiesGuestConnection_LCOW(t *testing.T) {
 
 func TestPropertiesGuestConnection_WCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	uvm, _, uvmScratchDir := testutilities.CreateWCOWUVM(context.Background(), t, t.Name(), "microsoft/nanoserver")
+	client, ctx := getCtrdClient(context.Background(), t)
+	uvm, _, uvmScratchDir := testutilities.CreateWCOWUVM(ctx, t, client, t.Name(), "microsoft/nanoserver")
 	defer os.RemoveAll(uvmScratchDir)
 	defer uvm.Close()
 

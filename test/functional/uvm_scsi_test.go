@@ -1,3 +1,4 @@
+//go:build functional || uvmscsi
 // +build functional uvmscsi
 
 package functional
@@ -26,7 +27,7 @@ import (
 // from a utility VM in both attach-only and with a container path.
 func TestSCSIAddRemoveLCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	u := testutilities.CreateLCOWUVM(context.Background(), t, t.Name())
+	u := testutilities.CreateLCOWUVM(context.Background(), t, nil, t.Name())
 	defer u.Close()
 
 	testSCSIAddRemoveMultiple(t, u, `/run/gcs/c/0/scsi`, "linux", []string{})
@@ -38,7 +39,8 @@ func TestSCSIAddRemoveLCOW(t *testing.T) {
 func TestSCSIAddRemoveWCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 	// TODO make the image configurable to the build we're testing on
-	u, layers, uvmScratchDir := testutilities.CreateWCOWUVM(context.Background(), t, t.Name(), "mcr.microsoft.com/windows/nanoserver:1903")
+	client, ctx := getCtrdClient(context.Background(), t)
+	u, layers, uvmScratchDir := testutilities.CreateWCOWUVM(ctx, t, client, t.Name(), "mcr.microsoft.com/windows/nanoserver:1903")
 	defer os.RemoveAll(uvmScratchDir)
 	defer u.Close()
 
@@ -215,7 +217,7 @@ func testSCSIAddRemoveMultiple(t *testing.T, u *uvm.UtilityVM, pathPrefix string
 
 func TestParallelScsiOps(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	u := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, getDefaultLcowUvmOptions(t, t.Name()))
+	u := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, nil, getDefaultLcowUvmOptions(t, t.Name()))
 	defer u.Close()
 
 	// Create a sandbox to use

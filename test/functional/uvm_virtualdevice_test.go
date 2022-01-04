@@ -6,6 +6,7 @@ package functional
 import (
 	"context"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -15,7 +16,7 @@ import (
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 )
 
-const lcowGPUBootFilesPath = "C:\\ContainerPlat\\LinuxBootFiles\\nvidiagpu"
+var lcowGPUBootFilesPath = filepath.Join(*flagLinuxBootFilesPath, "\\nvidiagpu")
 
 // findTestDevices returns the first pcip device on the host
 func findTestVirtualDevice() (string, error) {
@@ -54,7 +55,7 @@ func TestVirtualDevice(t *testing.T) {
 	opts.BootFilesPath = lcowGPUBootFilesPath
 
 	// create test uvm and ensure we can assign and remove the device
-	vm := testutilities.CreateLCOWUVMFromOpts(ctx, t, opts)
+	vm := testutilities.CreateLCOWUVMFromOpts(ctx, t, nil, opts)
 	defer vm.Close()
 	vpci, err := vm.AssignDevice(ctx, testDeviceInstanceID, 0)
 	if err != nil {

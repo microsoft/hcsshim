@@ -363,7 +363,8 @@ func generateShimLayersStruct(t *testing.T, imageLayers []string) []hcsshim.Laye
 
 // Argon through HCSShim interface (v1)
 func TestWCOWArgonShim(t *testing.T) {
-	imageLayers := testutilities.LayerFolders(t, imageName)
+	client, ctx := getCtrdClient(context.Background(), t)
+	imageLayers := testutilities.LayerFolders(ctx, t, client, imageName)
 	argonShimMounted := false
 	argonShimScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(context.Background(), argonShimScratchDir, imageLayers); err != nil {
@@ -425,7 +426,8 @@ func TestWCOWArgonShim(t *testing.T) {
 
 // Xenon through HCSShim interface (v1)
 func TestWCOWXenonShim(t *testing.T) {
-	imageLayers := testutilities.LayerFolders(t, imageName)
+	client, ctx := getCtrdClient(context.Background(), t)
+	imageLayers := testutilities.LayerFolders(ctx, t, client, imageName)
 	xenonShimScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(context.Background(), xenonShimScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create xenon scratch layer: %s", err)
@@ -491,7 +493,8 @@ func generateWCOWOciTestSpec(t *testing.T, imageLayers []string, scratchPath, ho
 
 // Argon through HCSOCI interface (v1)
 func TestWCOWArgonOciV1(t *testing.T) {
-	imageLayers := testutilities.LayerFolders(t, imageName)
+	client, ctx := getCtrdClient(context.Background(), t)
+	imageLayers := testutilities.LayerFolders(ctx, t, client, imageName)
 	argonOci1Mounted := false
 	argonOci1ScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(context.Background(), argonOci1ScratchDir, imageLayers); err != nil {
@@ -536,7 +539,8 @@ func TestWCOWArgonOciV1(t *testing.T) {
 
 // Xenon through HCSOCI interface (v1)
 func TestWCOWXenonOciV1(t *testing.T) {
-	imageLayers := testutilities.LayerFolders(t, imageName)
+	client, ctx := getCtrdClient(context.Background(), t)
+	imageLayers := testutilities.LayerFolders(ctx, t, client, imageName)
 	xenonOci1Mounted := false
 	xenonOci1ScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(context.Background(), xenonOci1ScratchDir, imageLayers); err != nil {
@@ -589,7 +593,9 @@ func TestWCOWXenonOciV1(t *testing.T) {
 // Argon through HCSOCI interface (v2)
 func TestWCOWArgonOciV2(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	imageLayers := testutilities.LayerFolders(t, imageName)
+
+	client, ctx := getCtrdClient(context.Background(), t)
+	imageLayers := testutilities.LayerFolders(ctx, t, client, imageName)
 	argonOci2Mounted := false
 	argonOci2ScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(context.Background(), argonOci2ScratchDir, imageLayers); err != nil {
@@ -636,7 +642,8 @@ func TestWCOWArgonOciV2(t *testing.T) {
 // Xenon through HCSOCI interface (v2)
 func TestWCOWXenonOciV2(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	imageLayers := testutilities.LayerFolders(t, imageName)
+	client, ctx := getCtrdClient(context.Background(), t)
+	imageLayers := testutilities.LayerFolders(ctx, t, client, imageName)
 	xenonOci2Mounted := false
 	xenonOci2UVMCreated := false
 	xenonOci2ScratchDir := t.TempDir()

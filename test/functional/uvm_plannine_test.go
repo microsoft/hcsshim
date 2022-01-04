@@ -18,10 +18,10 @@ import (
 
 // TestPlan9 tests adding/removing Plan9 shares to/from a v2 Linux utility VM
 // TODO: This is very basic. Need multiple shares and so-on. Can be iterated on later.
-func TestPlan9(t *testing.T) {
+func Test_Plan9(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 
-	vm := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, getDefaultLcowUvmOptions(t, t.Name()))
+	vm := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, nil, getDefaultLcowUvmOptions(t, t.Name()))
 	defer vm.Close()
 
 	var iterations uint32 = 64
@@ -45,7 +45,7 @@ func TestPlan9(t *testing.T) {
 }
 
 func Test_Setup(t *testing.T) {
-	client, ctx := getCtrdClient(t)
+	client, ctx := getCtrdClient(context.Background(), t)
 
 	is := []string{
 		"mcr.microsoft.com/windows/nanoserver:1903",
@@ -54,8 +54,10 @@ func Test_Setup(t *testing.T) {
 	}
 	for _, i := range is {
 		cid := testutilities.GetImageChainID(ctx, t, client, i, "windows")
-		ms := testutilities.CreateActiveSnapshot(ctx, t, client, "windows", cid, t.Name())
+		ms := testutilities.CreateActiveSnapshot(ctx, t, client, "windows", cid, i+"view")
 		t.Logf("%+v", ms)
+		lf := testutilities.GetLayerFoldersFromMount(t, ms[0])
+		t.Logf("%+v", lf)
 	}
 
 }

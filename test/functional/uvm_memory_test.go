@@ -18,7 +18,7 @@ func TestUVMMemoryUpdateLCOW(t *testing.T) {
 
 	opts := getDefaultLcowUvmOptions(t, t.Name())
 	opts.MemorySizeInMB = 1024 * 2
-	u := testutilities.CreateLCOWUVMFromOpts(ctx, t, opts)
+	u := testutilities.CreateLCOWUVMFromOpts(ctx, t, nil, opts)
 	defer u.Close()
 
 	newMemorySize := uint64(opts.MemorySizeInMB/2) * bytesPerMB
@@ -38,13 +38,14 @@ func TestUVMMemoryUpdateLCOW(t *testing.T) {
 func TestUVMMemoryUpdateWCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	client, ctx := getCtrdClient(context.Background(), t)
+	ctx, cancel := context.WithTimeout(ctx, 40*time.Second)
 	defer cancel()
 
 	opts := getDefaultWcowUvmOptions(t, t.Name())
 	opts.MemorySizeInMB = 1024 * 2
 
-	u, _, uvmScratchDir := testutilities.CreateWCOWUVMFromOptsWithImage(ctx, t, opts, "mcr.microsoft.com/windows/nanoserver:1909")
+	u, _, uvmScratchDir := testutilities.CreateWCOWUVMFromOptsWithImage(ctx, t, client, opts, "mcr.microsoft.com/windows/nanoserver:1909")
 	defer os.RemoveAll(uvmScratchDir)
 	defer u.Close()
 

@@ -49,7 +49,8 @@ func TestLCOWUVMNoSCSISingleVPMemVHD(t *testing.T) {
 
 func testLCOWUVMNoSCSISingleVPMem(t *testing.T, opts *uvm.OptionsLCOW, expected string) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	lcowUVM := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, opts)
+	client, ctx := getCtrdClient(context.Background(), t)
+	lcowUVM := testutilities.CreateLCOWUVMFromOpts(ctx, t, client, opts)
 	defer lcowUVM.Close()
 	out, err := exec.Command(`hcsdiag`, `exec`, `-uvm`, lcowUVM.ID(), `dmesg`).Output() // TODO: Move the CreateProcess.
 	if err != nil {
@@ -107,7 +108,7 @@ func testLCOWTimeUVMStart(t *testing.T, kernelDirect bool, rfsType uvm.Preferred
 			opts.RootFSFile = uvm.VhdFile
 		}
 
-		lcowUVM := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, opts)
+		lcowUVM := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, nil, opts)
 		lcowUVM.Close()
 	}
 }
@@ -115,7 +116,9 @@ func testLCOWTimeUVMStart(t *testing.T, kernelDirect bool, rfsType uvm.Preferred
 func TestLCOWSimplePodScenario(t *testing.T) {
 	t.Skip("Doesn't work quite yet")
 	testutilities.RequiresBuild(t, osversion.RS5)
-	alpineLayers := testutilities.LayerFolders(t, "alpine")
+	client, ctx := getCtrdClient(context.Background(), t)
+
+	alpineLayers := testutilities.LayerFolders(ctx, t, client, "alpine")
 
 	cacheDir := t.TempDir()
 	cacheFile := filepath.Join(cacheDir, "cache.vhdx")
@@ -132,7 +135,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	c2ScratchDir := t.TempDir()
 	c2ScratchFile := filepath.Join(c2ScratchDir, "sandbox.vhdx")
 
-	lcowUVM := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, getDefaultLcowUvmOptions(t, "uvm"))
+	lcowUVM := testutilities.CreateLCOWUVMFromOpts(ctx, t, nil, getDefaultLcowUvmOptions(t, "uvm"))
 	defer lcowUVM.Close()
 
 	// Populate the cache and generate the scratch file for /tmp/scratch

@@ -47,7 +47,7 @@ func CreateWCOWBlankRWLayer(t *testing.T, imageLayers []string) string {
 // for a "service VM".
 func CreateLCOWBlankRWLayer(ctx context.Context, t *testing.T) string {
 	if lcowGlobalSVM == nil {
-		lcowGlobalSVM = CreateLCOWUVM(ctx, t, lcowGlobalSVMID)
+		lcowGlobalSVM = CreateLCOWUVM(ctx, t, nil, lcowGlobalSVMID)
 		lcowCacheScratchFile = filepath.Join(t.TempDir(), "sandbox.vhdx")
 	}
 	tempDir := t.TempDir()

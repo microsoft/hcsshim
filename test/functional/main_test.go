@@ -12,6 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/resources"
+	"github.com/Microsoft/hcsshim/internal/uvm"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	"github.com/containerd/containerd"
 	"github.com/sirupsen/logrus"
@@ -26,7 +27,7 @@ var (
 	pauseDurationOnCreateContainerFailure time.Duration
 
 	// flags
-	flagContainerdEndpoint  = flag.String("ctr-endpoint", "tcp://127.0.0.1:2376", "Address for containerd's GRPC server")
+	flagContainerdAddress   = flag.String("ctr-address", "tcp://127.0.0.1:2376", "Address for containerd's GRPC server")
 	flagContainerdNamespace = flag.String("ctr-namespace", "k8s.io", "Containerd namespace")
 	flagCtrPath             = flag.String("ctr-path", testutilities.DefaultCtrPath(), "Path to ctr.exe")
 	flagLinuxBootFilesPath  = flag.String("linux-bootfiles",
@@ -65,12 +66,6 @@ func init() {
 
 func TestMain(m *testing.M) {
 	flag.Parse()
-
-	ctro := testutilities.GetCtrClientOptions()
-	ctro.Path = *flagCtrPath
-	ctro.Address = *flagContainerdEndpoint
-	ctro.Namespace = *flagContainerdNamespace
-
 	os.Exit(m.Run())
 }
 
@@ -87,20 +82,41 @@ func CreateContainerTestWrapper(ctx context.Context, options *hcsoci.CreateOptio
 	return s, r, err
 }
 
+// default options using command line flags, if any
+
 func getCtrOptions() testutilities.CtrClientOptions {
 	return testutilities.CtrClientOptions{
+		Ctrd: getCtrdOptions(),
 		Path: *flagLinuxBootFilesPath,
-		CtrdClientOptions: getCtrdOptions(),
 	}
 }
 
 func getCtrdOptions() testutilities.CtrdClientOptions {
 	return testutilities.CtrdClientOptions{
-		Address:   *flagContainerdEndpoint,
+		Address:   *flagContainerdAddress,
 		Namespace: *flagContainerdNamespace,
 	}
 }
 
-func getCtrdClient(t *testing.T) (*containerd.Client, context.Context) {
-	return getCtrdOptions().NewClient(context.Background(), t)
+func getDefaultLcowUvmOptions(t *testing.T, name string) *uvm.OptionsLCOW {
+	opts := uvm.NewDefaultOptionsLCOW(name, "")
+	opts.BootFilesPath = *flagLinuxBootFilesPath
+
+	return opts
+}
+
+func getDefaultWcowUvmOptions(t *testing.T, name string) *uvm.OptionsWCOW {
+	opts := uvm.NewDefaultOptionsWCOW(name, "")
+
+	return opts
+}
+
+// convenience wrappers
+
+func getCtrdClient(ctx context.Context, t *testing.T) (*containerd.Client, context.Context) {
+	return getCtrdOptions().NewClient(ctx, t)
+}
+
+func pullImage(ctx context.Context, t *testing.T, snapshotter, image string) {
+	getCtrOptions().PullImage(ctx, t, snapshotter, image)
 }

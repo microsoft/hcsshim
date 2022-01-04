@@ -1,3 +1,4 @@
+//go:build functional || uvmmem
 // +build functional uvmmem
 
 package functional
@@ -15,12 +16,15 @@ import (
 )
 
 func runMemStartLCOWTest(t *testing.T, opts *uvm.OptionsLCOW) {
-	u := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, opts)
+	client, ctx := getCtrdClient(context.Background(), t)
+	u := testutilities.CreateLCOWUVMFromOpts(ctx, t, client, opts)
 	u.Close()
 }
 
 func runMemStartWCOWTest(t *testing.T, opts *uvm.OptionsWCOW) {
-	u, _, scratchDir := testutilities.CreateWCOWUVMFromOptsWithImage(context.Background(), t, opts, "microsoft/nanoserver")
+	client, ctx := getCtrdClient(context.Background(), t)
+
+	u, _, scratchDir := testutilities.CreateWCOWUVMFromOptsWithImage(ctx, t, client, opts, "microsoft/nanoserver")
 	defer os.RemoveAll(scratchDir)
 	u.Close()
 }

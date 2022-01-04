@@ -2,10 +2,10 @@ package testutilities
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"testing"
 )
 
 func DefaultCtrPath() string {
@@ -18,29 +18,23 @@ func DefaultCtrPath() string {
 // or move `utilities/*` into parent path, similar to `tests/cri-containerd`
 
 type CtrClientOptions struct {
-	CtrdClientOptions
-	Path      string
+	Ctrd CtrdClientOptions
+	Path string
 }
 
-var ctro CtrClientOptions
-
-func GetCtrClientOptions() *CtrClientOptions {
-	return &ctro
-}
-
-func (co CtrClientOptions) Command(ctx context.Context,arg ...string) *exec.Cmd {
+func (co CtrClientOptions) Command(ctx context.Context, arg ...string) *exec.Cmd {
 	args := []string{
 		"--address",
-		co.Address,
+		co.Ctrd.Address,
 		"--namespace",
-		co.Namespace,
+		co.Ctrd.Namespace,
 	}
 	args = append(args, arg...)
 	cmd := exec.CommandContext(ctx, co.Path, args...)
 	return cmd
 }
 
-func (co CtrClientOptions) PullImage(ctx context.Context, snapshotter, image string) error {
+func (co CtrClientOptions) PullImage(ctx context.Context, t *testing.T, snapshotter, image string) {
 	cmd := co.Command(ctx, "images",
 		"pull",
 		"--snapshotter",
@@ -48,11 +42,6 @@ func (co CtrClientOptions) PullImage(ctx context.Context, snapshotter, image str
 		"view",
 		image)
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("Failed to pull image %q with %v. Command was %v", image, err, cmd)
+		t.Fatalf("Failed to pull image %q with %v. Command was %v", image, err, cmd)
 	}
-	return nil
-}
-
-func CtrCommand(arg ...string) *exec.Cmd {
-	return ctro.Command(context.Background(), arg...)
 }
