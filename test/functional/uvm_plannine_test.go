@@ -51,7 +51,6 @@ func TestPlan9_Writable(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 
 	opts := uvm.NewDefaultOptionsLCOW(t.Name(), "")
-	// opts.BootFilesPath = "C:\\ContainerPlat\\LinuxBootFiles"
 	opts.NoWritableFileShares = true
 	vm := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, opts)
 	defer vm.Close()

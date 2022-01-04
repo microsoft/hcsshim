@@ -13,7 +13,6 @@ import (
 )
 
 func Test_SpecUpdate_MemorySize_WithAnnotation_WithOpts(t *testing.T) {
-
 	opts := &runhcsopts.Options{
 		VmMemorySizeInMb: 3072,
 	}
@@ -31,7 +30,6 @@ func Test_SpecUpdate_MemorySize_WithAnnotation_WithOpts(t *testing.T) {
 }
 
 func Test_SpecUpdate_MemorySize_NoAnnotation_WithOpts(t *testing.T) {
-
 	opts := &runhcsopts.Options{
 		VmMemorySizeInMb: 3072,
 	}
@@ -83,7 +81,7 @@ func Test_SpecUpdate_ProcessorCount_NoAnnotation_WithOpts(t *testing.T) {
 func Test_SpecToUVMCreateOptions_Default_LCOW(t *testing.T) {
 	s := &specs.Spec{
 		Linux:       &specs.Linux{},
-		Annotations: map[string]string{},
+		Annotations: make(map[string]string),
 	}
 
 	opts, err := SpecToUVMCreateOpts(context.Background(), s, t.Name(), "")
@@ -108,7 +106,7 @@ func Test_SpecToUVMCreateOptions_Default_WCOW(t *testing.T) {
 		Windows: &specs.Windows{
 			HyperV: &specs.WindowsHyperV{},
 		},
-		Annotations: map[string]string{},
+		Annotations: make(map[string]string),
 	}
 
 	opts, err := SpecToUVMCreateOpts(context.Background(), s, t.Name(), "")
@@ -124,72 +122,69 @@ func Test_SpecToUVMCreateOptions_Default_WCOW(t *testing.T) {
 	}
 }
 
-func Test_SpecToUVMCreateOptions_Common_LCOW(t *testing.T) {
+func Test_SpecToUVMCreateOptions_Common(t *testing.T) {
 	cpugroupid := "1"
 	lowmmiogap := 1024
-	s := &specs.Spec{
-		Linux: &specs.Linux{},
-		Annotations: map[string]string{
-			annotations.ProcessorCount:             "8",
-			annotations.CPUGroupID:                 cpugroupid,
-			annotations.DisableWriteableFileShares: "true",
-			annotations.MemoryLowMMIOGapInMB:       fmt.Sprint(lowmmiogap),
+	as := map[string]string{
+		annotations.ProcessorCount:            "8",
+		annotations.CPUGroupID:                cpugroupid,
+		annotations.DisableWritableFileShares: "true",
+		annotations.MemoryLowMMIOGapInMB:      fmt.Sprint(lowmmiogap),
+	}
+
+	tests := []struct {
+		name    string
+		spec    specs.Spec
+		extract func(interface{}) *uvm.Options
+	}{
+		{
+			name: "lcow",
+			spec: specs.Spec{
+				Linux: &specs.Linux{},
+			},
+			// generics would be nice ...
+			extract: func(i interface{}) *uvm.Options {
+				o := (i).(*uvm.OptionsLCOW)
+				return o.Options
+			},
+		},
+		{
+			name: "wcow-hypervisor",
+			spec: specs.Spec{
+				Windows: &specs.Windows{
+					HyperV: &specs.WindowsHyperV{},
+				},
+			},
+			extract: func(i interface{}) *uvm.Options {
+				o := (i).(*uvm.OptionsWCOW)
+				return o.Options
+			},
 		},
 	}
 
-	opts, err := SpecToUVMCreateOpts(context.Background(), s, t.Name(), "")
-	if err != nil {
-		t.Fatalf("could not generate creation options from spec: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.spec.Annotations = as
+			opts, err := SpecToUVMCreateOpts(context.Background(), &tt.spec, t.Name(), "")
+			if err != nil {
+				t.Fatalf("could not generate creation options from spec: %v", err)
+			}
+
+			// get the underlying uvm.Options from uvm.Options[LW]COW
+			copts := tt.extract(opts)
+			if copts.LowMMIOGapInMB != uint64(lowmmiogap) {
+				t.Fatalf("should have updated creation options low MMIO Gap when annotation is provided: %v != %v", copts.LowMMIOGapInMB, lowmmiogap)
+			}
+			if copts.ProcessorCount != 8 {
+				t.Fatalf("should have updated creation options processor count when annotation is provided: %v != 8", copts.ProcessorCount)
+			}
+			if copts.CPUGroupID != cpugroupid {
+				t.Fatalf("should have updated creation options CPU group Id when annotation is provided: %v != %v", copts.CPUGroupID, cpugroupid)
+			}
+			if !copts.NoWritableFileShares {
+				t.Fatal("should have disabled writable in shares creation when annotation is provided")
+			}
+		})
 	}
 
-	lopts := (opts).(*uvm.OptionsLCOW)
-	// todo: move these all into subtests with t.Run?
-	if lopts.LowMMIOGapInMB != uint64(lowmmiogap) {
-		t.Fatalf("should have updated creation options low MMIO Gap when annotation is provided: %v != %v", lopts.LowMMIOGapInMB, lowmmiogap)
-	}
-	if lopts.ProcessorCount != 8 {
-		t.Fatalf("should have updated creation options processor count when annotation is provided: %v != 8", lopts.ProcessorCount)
-	}
-	if lopts.CPUGroupID != cpugroupid {
-		t.Fatalf("should have updated creation options CPU group Id when annotation is provided: %v != %v", lopts.CPUGroupID, cpugroupid)
-	}
-	if !lopts.NoWritableFileShares {
-		t.Fatal("should have disabled writable in shares creation when annotation is provided")
-	}
-}
-
-func Test_SpecToUVMCreateOptions_Common_WCOW(t *testing.T) {
-	cpugroupid := "1"
-	lowmmiogap := 1024
-	s := &specs.Spec{
-		Windows: &specs.Windows{
-			HyperV: &specs.WindowsHyperV{},
-		},
-		Annotations: map[string]string{
-			annotations.ProcessorCount:             "8",
-			annotations.CPUGroupID:                 cpugroupid,
-			annotations.DisableWriteableFileShares: "true",
-			annotations.MemoryLowMMIOGapInMB:       fmt.Sprint(lowmmiogap),
-		},
-	}
-
-	opts, err := SpecToUVMCreateOpts(context.Background(), s, t.Name(), "")
-	if err != nil {
-		t.Fatalf("could not generate creation options from spec: %v", err)
-	}
-
-	wopts := (opts).(*uvm.OptionsWCOW)
-	// todo: move these all into subtests with t.Run?
-	if wopts.LowMMIOGapInMB != uint64(lowmmiogap) {
-		t.Fatalf("should have updated creation options low MMIO Gap when annotation is provided: %v != %v", wopts.LowMMIOGapInMB, lowmmiogap)
-	}
-	if wopts.ProcessorCount != 8 {
-		t.Fatalf("should have updated creation options processor count when annotation is provided: %v != 8", wopts.ProcessorCount)
-	}
-	if wopts.CPUGroupID != cpugroupid {
-		t.Fatalf("should have updated creation options CPU group Id when annotation is provided: %v != %v", wopts.CPUGroupID, cpugroupid)
-	}
-	if !wopts.NoWritableFileShares {
-		t.Fatal("should have disabled writable in shares creation when annotation is provided")
-	}
 }

@@ -25,7 +25,7 @@ func Test_Container_File_Share_Writable_WCOW(t *testing.T) {
 
 	sbRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			annotations.DisableWriteableFileShares: "true",
+			annotations.DisableWritableFileShares: "true",
 		}),
 	)
 	podID := runPodSandbox(t, client, ctx, sbRequest)
@@ -38,11 +38,13 @@ func Test_Container_File_Share_Writable_WCOW(t *testing.T) {
 		testFile      = "t.txt"
 		testContent   = "hello world"
 	)
-	ioutil.WriteFile(
+
+	if err := ioutil.WriteFile(
 		filepath.Join(tempDir, testFile),
 		[]byte(testContent),
-		0644,
-	)
+		0644); err != nil {
+		t.Fatalf("could not create test file: %v", err)
+	}
 
 	cRequest := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -73,13 +75,13 @@ func Test_Container_File_Share_Writable_WCOW(t *testing.T) {
 
 	// container should fail because of writable mount
 	_, err := client.StartContainer(ctx, &runtime.StartContainerRequest{ContainerId: cID})
+	if err == nil {
+		stopContainer(t, client, ctx, cID)
+	}
 	// error is serialized over gRPC then embedded into "rpc error: code = %s desc = %s"
 	//  so error.Is() wont work
-	if !strings.Contains(err.Error(), fmt.Errorf("adding writable shares is denied: %w", hcs.ErrOperationDenied).Error()) {
-		if err == nil {
-			stopContainer(t, client, ctx, cID)
-		}
-		t.Fatalf("StartContainer did not fail with writable fileshare: error is %q", err)
+	if err == nil || !strings.Contains(err.Error(), fmt.Errorf("adding writable shares is denied: %w", hcs.ErrOperationDenied).Error()) {
+		t.Fatalf("StartContainer did not fail with writable fileshare: error is %v", err)
 	}
 
 	// set it to read only
@@ -116,7 +118,7 @@ func Test_Container_File_Share_Writable_LCOW(t *testing.T) {
 
 	sbRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			annotations.DisableWriteableFileShares: "true",
+			annotations.DisableWritableFileShares: "true",
 		}),
 	)
 	podID := runPodSandbox(t, client, ctx, sbRequest)
@@ -129,11 +131,14 @@ func Test_Container_File_Share_Writable_LCOW(t *testing.T) {
 		testFile      = "t.txt"
 		testContent   = "hello world"
 	)
-	ioutil.WriteFile(
+
+	if err := ioutil.WriteFile(
 		filepath.Join(tempDir, testFile),
 		[]byte(testContent),
 		0644,
-	)
+	); err != nil {
+		t.Fatalf("could not create test file: %v", err)
+	}
 
 	cRequest := &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
@@ -164,13 +169,13 @@ func Test_Container_File_Share_Writable_LCOW(t *testing.T) {
 
 	// container should fail because of writable mount
 	_, err := client.StartContainer(ctx, &runtime.StartContainerRequest{ContainerId: cID})
+	if err == nil {
+		stopContainer(t, client, ctx, cID)
+	}
 	// error is serialized over gRPC then embedded into "rpc error: code = %s desc = %s"
 	//  so error.Is() wont work
-	if !strings.Contains(err.Error(), fmt.Errorf("adding writable shares is denied: %w", hcs.ErrOperationDenied).Error()) {
-		if err == nil {
-			stopContainer(t, client, ctx, cID)
-		}
-		t.Fatalf("StartContainer did not fail with writable fileshare: error is %q", err)
+	if err == nil || !strings.Contains(err.Error(), fmt.Errorf("adding writable shares is denied: %w", hcs.ErrOperationDenied).Error()) {
+		t.Fatalf("StartContainer did not fail with writable fileshare: error is %v", err)
 	}
 
 	// set it to read only

@@ -48,9 +48,6 @@ func TestVSMB_Writable(t *testing.T) {
 
 	opts := uvm.NewDefaultOptionsWCOW(t.Name(), "")
 	opts.NoWritableFileShares = true
-	// uvmScratchDir := testutilities.CreateTempDir(t)
-	// opts.LayerFolders = []string{"C:\\ContainerPlatData\\root\\io.containerd.snapshotter.v1.windows\\snapshots\\60", uvmScratchDir}
-	// vm := testutilities.CreateWCOWUVMFromOpts(context.Background(), t, opts)
 	vm, _, uvmScratchDir := testutilities.CreateWCOWUVMFromOptsWithImage(context.Background(), t, opts, "microsoft/nanoserver")
 	defer os.RemoveAll(uvmScratchDir)
 	defer vm.Close()

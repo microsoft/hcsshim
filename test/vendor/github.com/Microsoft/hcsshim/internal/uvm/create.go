@@ -92,7 +92,7 @@ type Options struct {
 	// Windows by just applying the location specified here per container.
 	ProcessDumpLocation string
 
-	// NoWritableFileShares disables adding any writable vSMB shares to the UVM
+	// NoWritableFileShares disables adding any writable vSMB and Plan9 shares to the UVM
 	NoWritableFileShares bool
 }
 

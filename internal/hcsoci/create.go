@@ -55,9 +55,6 @@ type CreateOptions struct {
 	// ScaleCPULimitsToSandbox indicates that the container CPU limits should be adjusted to account
 	// for the difference in CPU count between the host and the UVM.
 	ScaleCPULimitsToSandbox bool
-
-	// disable creating containers with GMSA credentials (Spec.Windows.CredentialSpec)
-	NoGmsa bool
 }
 
 // createOptionsInternal is the set of user-supplied create options, but includes internal
@@ -176,10 +173,10 @@ func validateContainerConfig(ctx context.Context, coi *createOptionsInternal) er
 
 	// check if gMSA is disabled
 	if coi.Spec.Windows != nil {
-		if _, ok := coi.Spec.Windows.CredentialSpec.(string); ok && coi.NoGmsa {
+		disableGMSA := oci.ParseAnnotationsDisableGMSA(ctx, coi.Spec)
+		if _, ok := coi.Spec.Windows.CredentialSpec.(string); ok && disableGMSA {
 			return fmt.Errorf("gMSA credentials are disabled: %w", hcs.ErrOperationDenied)
 		}
-
 	}
 
 	return nil

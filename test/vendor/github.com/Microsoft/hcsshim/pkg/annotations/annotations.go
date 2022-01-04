@@ -192,8 +192,8 @@ const (
 	// VSMBNoDirectMap specifies that no direct mapping should be used for any VSMBs added to the UVM
 	VSMBNoDirectMap = "io.microsoft.virtualmachine.wcow.virtualSMB.nodirectmap"
 
-	// DisableWriteableFileShares disables adding any writable fileshares to the UVM
-	DisableWriteableFileShares = "io.microsoft.virtualmachine.fileshares.disablewritable"
+	// DisableWritableFileShares disables adding any writable fileshares to the UVM
+	DisableWritableFileShares = "io.microsoft.virtualmachine.fileshares.disablewritable"
 
 	// CPUGroupID specifies the cpugroup ID that a UVM should be assigned to if any
 	CPUGroupID = "io.microsoft.virtualmachine.cpugroup.id"
@@ -271,5 +271,22 @@ const (
 
 	// WCOWDisableGMSA disables providing gMSA (Group Managed Service Accounts) to
 	// a WCOW container
-	WcowDisableGmsa = "io.microsoft.wcow.gmsa.disable"
+	WCOWDisableGMSA = "io.microsoft.container.wcow.gmsa.disable"
+
+	// DisableUnsafeOperations disables several unsafe operations, such as writable
+	// file share mounts, for hostile multi-tenant environments. See `AnnotationExpansions`
+	// for more information
+	DisableUnsafeOperations = "io.microsoft.disable-unsafe-operations"
 )
+
+// AnnotationExpansions maps annotations that will be expanded into an array of
+// other annotations. The expanded annotations will have the same value as the
+// original. It is an error for the expansions to already exist and have a value
+// that differs from the original.
+var AnnotationExpansions = map[string][]string{
+	DisableUnsafeOperations: {
+		WCOWDisableGMSA,
+		DisableWritableFileShares,
+		VSMBNoDirectMap,
+	},
+}

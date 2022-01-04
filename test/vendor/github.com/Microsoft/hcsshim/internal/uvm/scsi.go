@@ -630,7 +630,7 @@ func (sm *SCSIMount) GobDecode(data []byte) error {
 
 // Clone function creates a clone of the SCSIMount `sm` and adds the cloned SCSIMount to
 // the uvm `vm`. If `sm` is read only then it is simply added to the `vm`. But if it is a
-// writeable mount(e.g a scratch layer) then a copy of it is made and that copy is added
+// writable mount(e.g a scratch layer) then a copy of it is made and that copy is added
 // to the `vm`.
 func (sm *SCSIMount) Clone(ctx context.Context, vm *UtilityVM, cd *cloneData) error {
 	var (
@@ -642,7 +642,7 @@ func (sm *SCSIMount) Clone(ctx context.Context, vm *UtilityVM, cd *cloneData) er
 	)
 
 	if !sm.readOnly {
-		// This is a writeable SCSI mount. It must be either the
+		// This is a writable SCSI mount. It must be either the
 		// 1. scratch VHD of the UVM or
 		// 2. scratch VHD of the container.
 		// A user provided writable SCSI mount is not allowed on the template UVM

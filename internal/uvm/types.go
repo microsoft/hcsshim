@@ -60,7 +60,11 @@ type UtilityVM struct {
 	// NOTE: All accesses to this MUST be done atomically.
 	containerCounter uint64
 
-	// disable mounting any writable shares into the UVM
+	// noWritableFileShares disables mounting any writable vSMB or Plan9 shares
+	// on the uVM. This prevents containers in the uVM modifying files and directories
+	// made available via the "mounts" options in the container spec, or shared
+	// to the uVM directly.
+	// This option does not prevent writable SCSI mounts.
 	noWritableFileShares bool
 
 	// VSMB shares that are mapped into a Windows UVM. These are used for read-only

@@ -5,48 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/clone"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
 
-// parseAnnotationsBool searches `a` for `key` and if found verifies that the
-// value is `true` or `false` in any case. If `key` is not found returns `def`.
-func parseAnnotationsBool(ctx context.Context, a map[string]string, key string, def bool) bool {
-	if v, ok := a[key]; ok {
-		switch strings.ToLower(v) {
-		case "true":
-			return true
-		case "false":
-			return false
-		default:
-			log.G(ctx).WithFields(logrus.Fields{
-				logfields.OCIAnnotation: key,
-				logfields.Value:         v,
-				logfields.ExpectedType:  logfields.Bool,
-			}).Warning("annotation could not be parsed")
-		}
-	}
-	return def
-}
-
-// ParseAnnotationCommaSeparated searches `annotations` for `annotation` corresponding to a
-// list of comma separated strings
-func ParseAnnotationCommaSeparated(annotation string, annotations map[string]string) []string {
-	cs, ok := annotations[annotation]
-	if !ok || cs == "" {
-		return nil
-	}
-	results := strings.Split(cs, ",")
-	return results
-}
+// UVM specific annotation parsing
 
 // ParseAnnotationsCPUCount searches `s.Annotations` for the CPU annotation. If
 // not found searches `s` for the Windows CPU section. If neither are found
@@ -171,71 +140,6 @@ func parseAnnotationsPreferredRootFSType(ctx context.Context, a map[string]strin
 	return def
 }
 
-// parseAnnotationsUint32 searches `a` for `key` and if found verifies that the
-// value is a 32 bit unsigned integer. If `key` is not found returns `def`.
-func parseAnnotationsUint32(ctx context.Context, a map[string]string, key string, def uint32) uint32 {
-	if v, ok := a[key]; ok {
-		countu, err := strconv.ParseUint(v, 10, 32)
-		if err == nil {
-			v := uint32(countu)
-			return v
-		}
-		log.G(ctx).WithFields(logrus.Fields{
-			logfields.OCIAnnotation: key,
-			logfields.Value:         v,
-			logfields.ExpectedType:  logfields.Uint32,
-			logrus.ErrorKey:         err,
-		}).Warning("annotation could not be parsed")
-	}
-	return def
-}
-
-// parseAnnotationsUint64 searches `a` for `key` and if found verifies that the
-// value is a 64 bit unsigned integer. If `key` is not found returns `def`.
-func parseAnnotationsUint64(ctx context.Context, a map[string]string, key string, def uint64) uint64 {
-	if v, ok := a[key]; ok {
-		countu, err := strconv.ParseUint(v, 10, 64)
-		if err == nil {
-			return countu
-		}
-		log.G(ctx).WithFields(logrus.Fields{
-			logfields.OCIAnnotation: key,
-			logfields.Value:         v,
-			logfields.ExpectedType:  logfields.Uint64,
-			logrus.ErrorKey:         err,
-		}).Warning("annotation could not be parsed")
-	}
-	return def
-}
-
-// parseAnnotationsString searches `a` for `key`. If `key` is not found returns `def`.
-func parseAnnotationsString(a map[string]string, key string, def string) string {
-	if v, ok := a[key]; ok {
-		return v
-	}
-	return def
-}
-
-// ParseAnnotationsDisableGMS searches for the boolean value which specifies
-// if providing a gMSA credential should be disallowed
-// is found the returns the actual value, returns false otherwise.
-func ParseAnnotationsDisableGmsa(ctx context.Context, s *specs.Spec) bool {
-	return parseAnnotationsBool(ctx, s.Annotations, annotations.WcowDisableGmsa, false)
-}
-
-// ParseAnnotationsSaveAsTemplate searches for the boolean value which specifies
-// if this create request should be considered as a template creation request. If value
-// is found the returns the actual value, returns false otherwise.
-func ParseAnnotationsSaveAsTemplate(ctx context.Context, s *specs.Spec) bool {
-	return parseAnnotationsBool(ctx, s.Annotations, annotations.SaveAsTemplate, false)
-}
-
-// ParseAnnotationsTemplateID searches for the templateID in the create request. If the
-// value is found then returns the value otherwise returns the empty string.
-func ParseAnnotationsTemplateID(ctx context.Context, s *specs.Spec) string {
-	return parseAnnotationsString(s.Annotations, annotations.TemplateID, "")
-}
-
 func ParseCloneAnnotations(ctx context.Context, s *specs.Spec) (isTemplate bool, templateID string, err error) {
 	templateID = ParseAnnotationsTemplateID(ctx, s)
 	isTemplate = ParseAnnotationsSaveAsTemplate(ctx, s)
@@ -335,7 +239,7 @@ func handleSecurityPolicy(ctx context.Context, a map[string]string, lopts *uvm.O
 }
 
 // sets options common to both WCOW and LCOW from annotations
-func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *specs.Spec) error {
+func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *specs.Spec) {
 	opts.MemorySizeInMB = ParseAnnotationsMemory(ctx, s, annotations.MemorySizeInMB, opts.MemorySizeInMB)
 	opts.LowMMIOGapInMB = parseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryLowMMIOGapInMB, opts.LowMMIOGapInMB)
 	opts.HighMMIOBaseInMB = parseAnnotationsUint64(ctx, s.Annotations, annotations.MemoryHighMMIOBaseInMB, opts.HighMMIOBaseInMB)
@@ -350,8 +254,7 @@ func specToUVMCreateOptionsCommon(ctx context.Context, opts *uvm.Options, s *spe
 	opts.CPUGroupID = parseAnnotationsString(s.Annotations, annotations.CPUGroupID, opts.CPUGroupID)
 	opts.NetworkConfigProxy = parseAnnotationsString(s.Annotations, annotations.NetworkConfigProxy, opts.NetworkConfigProxy)
 	opts.ProcessDumpLocation = parseAnnotationsString(s.Annotations, annotations.ContainerProcessDumpLocation, opts.ProcessDumpLocation)
-	opts.NoWritableFileShares = parseAnnotationsBool(ctx, s.Annotations, annotations.DisableWriteableFileShares, opts.NoWritableFileShares)
-	return nil
+	opts.NoWritableFileShares = parseAnnotationsBool(ctx, s.Annotations, annotations.DisableWritableFileShares, opts.NoWritableFileShares)
 }
 
 // SpecToUVMCreateOpts parses `s` and returns either `*uvm.OptionsLCOW` or
@@ -362,9 +265,8 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 	}
 	if IsLCOW(s) {
 		lopts := uvm.NewDefaultOptionsLCOW(id, owner)
-		if err := specToUVMCreateOptionsCommon(ctx, lopts.Options, s); err != nil {
-			return nil, err
-		}
+		specToUVMCreateOptionsCommon(ctx, lopts.Options, s)
+
 		lopts.EnableColdDiscardHint = parseAnnotationsBool(ctx, s.Annotations, annotations.EnableColdDiscardHint, lopts.EnableColdDiscardHint)
 		lopts.VPMemDeviceCount = parseAnnotationsUint32(ctx, s.Annotations, annotations.VPMemCount, lopts.VPMemDeviceCount)
 		lopts.VPMemSizeBytes = parseAnnotationsUint64(ctx, s.Annotations, annotations.VPMemSize, lopts.VPMemSizeBytes)
@@ -391,9 +293,8 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		return lopts, nil
 	} else if IsWCOW(s) {
 		wopts := uvm.NewDefaultOptionsWCOW(id, owner)
-		if err := specToUVMCreateOptionsCommon(ctx, wopts.Options, s); err != nil {
-			return nil, err
-		}
+		specToUVMCreateOptionsCommon(ctx, wopts.Options, s)
+
 		wopts.DisableCompartmentNamespace = parseAnnotationsBool(ctx, s.Annotations, annotations.DisableCompartmentNamespace, wopts.DisableCompartmentNamespace)
 		wopts.NoDirectMap = parseAnnotationsBool(ctx, s.Annotations, annotations.VSMBNoDirectMap, wopts.NoDirectMap)
 		wopts.NoInheritHostTimezone = parseAnnotationsBool(ctx, s.Annotations, annotations.NoInheritHostTimezone, wopts.NoInheritHostTimezone)
@@ -439,5 +340,6 @@ func UpdateSpecFromOptions(s specs.Spec, opts *runhcsopts.Options) specs.Spec {
 			s.Annotations[key] = value
 		}
 	}
+
 	return s
 }

@@ -129,14 +129,12 @@ func createContainer(ctx context.Context, id, owner, netNS string, s *specs.Spec
 			return nil, nil, err
 		}
 	} else {
-		disableGmsa := oci.ParseAnnotationsDisableGmsa(ctx, s)
 		opts := &hcsoci.CreateOptions{
 			ID:               id,
 			Owner:            owner,
 			Spec:             s,
 			HostingSystem:    parent,
 			NetworkNamespace: netNS,
-			NoGmsa:           disableGmsa,
 		}
 		if shimOpts != nil {
 			opts.ScaleCPULimitsToSandbox = shimOpts.ScaleCpuLimitsToSandbox
