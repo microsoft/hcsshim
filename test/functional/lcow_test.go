@@ -26,7 +26,7 @@ import (
 // TestLCOWUVMNoSCSINoVPMemInitrd starts an LCOW utility VM without a SCSI controller and
 // no VPMem device. Uses initrd.
 func TestLCOWUVMNoSCSINoVPMemInitrd(t *testing.T) {
-	opts := getDefaultLcowUvmOptions(t, t.Name())
+	opts := getDefaultLCOWUvmOptions(t, t.Name())
 	opts.SCSIControllerCount = 0
 	opts.VPMemDeviceCount = 0
 	opts.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
@@ -38,7 +38,7 @@ func TestLCOWUVMNoSCSINoVPMemInitrd(t *testing.T) {
 // TestLCOWUVMNoSCSISingleVPMemVHD starts an LCOW utility VM without a SCSI controller and
 // only a single VPMem device. Uses VPMEM VHD
 func TestLCOWUVMNoSCSISingleVPMemVHD(t *testing.T) {
-	opts := getDefaultLcowUvmOptions(t, t.Name())
+	opts := getDefaultLCOWUvmOptions(t, t.Name())
 	opts.SCSIControllerCount = 0
 	opts.VPMemDeviceCount = 1
 	opts.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
@@ -49,7 +49,7 @@ func TestLCOWUVMNoSCSISingleVPMemVHD(t *testing.T) {
 
 func testLCOWUVMNoSCSISingleVPMem(t *testing.T, opts *uvm.OptionsLCOW, expected string) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	client, ctx := getCtrdClient(context.Background(), t)
+	client, ctx := newCtrdClient(context.Background(), t)
 	lcowUVM := testutilities.CreateLCOWUVMFromOpts(ctx, t, client, opts)
 	defer lcowUVM.Close()
 	out, err := exec.Command(`hcsdiag`, `exec`, `-uvm`, lcowUVM.ID(), `dmesg`).Output() // TODO: Move the CreateProcess.
@@ -97,7 +97,7 @@ func TestLCOWUVMStart_KernelDirect_InitRd(t *testing.T) {
 
 func testLCOWTimeUVMStart(t *testing.T, kernelDirect bool, rfsType uvm.PreferredRootFSType) {
 	for i := 0; i < 3; i++ {
-		opts := getDefaultLcowUvmOptions(t, t.Name())
+		opts := getDefaultLCOWUvmOptions(t, t.Name())
 		opts.KernelDirect = kernelDirect
 		opts.VPMemDeviceCount = 32
 		opts.PreferredRootFSType = rfsType
@@ -116,9 +116,9 @@ func testLCOWTimeUVMStart(t *testing.T, kernelDirect bool, rfsType uvm.Preferred
 func TestLCOWSimplePodScenario(t *testing.T) {
 	t.Skip("Doesn't work quite yet")
 	testutilities.RequiresBuild(t, osversion.RS5)
-	client, ctx := getCtrdClient(context.Background(), t)
+	client, ctx := newCtrdClient(context.Background(), t)
 
-	alpineLayers := testutilities.LayerFolders(ctx, t, client, "alpine")
+	alpineLayers := testutilities.LayerFoldersPlatform(ctx, t, client, testutilities.ImageLinuxAlpineLatest, testutilities.PlatformLinux)
 
 	cacheDir := t.TempDir()
 	cacheFile := filepath.Join(cacheDir, "cache.vhdx")
@@ -135,7 +135,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	c2ScratchDir := t.TempDir()
 	c2ScratchFile := filepath.Join(c2ScratchDir, "sandbox.vhdx")
 
-	lcowUVM := testutilities.CreateLCOWUVMFromOpts(ctx, t, nil, getDefaultLcowUvmOptions(t, "uvm"))
+	lcowUVM := testutilities.CreateLCOWUVMFromOpts(ctx, t, nil, getDefaultLCOWUvmOptions(t, "uvm"))
 	defer lcowUVM.Close()
 
 	// Populate the cache and generate the scratch file for /tmp/scratch

@@ -10,10 +10,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Microsoft/hcsshim"
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	layerspkg "github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/resources"
@@ -363,11 +366,11 @@ func generateShimLayersStruct(t *testing.T, imageLayers []string) []hcsshim.Laye
 
 // Argon through HCSShim interface (v1)
 func TestWCOWArgonShim(t *testing.T) {
-	client, ctx := getCtrdClient(context.Background(), t)
+	client, ctx := newCtrdClient(context.Background(), t)
 	imageLayers := testutilities.LayerFolders(ctx, t, client, imageName)
 	argonShimMounted := false
 	argonShimScratchDir := t.TempDir()
-	if err := wclayer.CreateScratchLayer(context.Background(), argonShimScratchDir, imageLayers); err != nil {
+	if err := wclayer.CreateScratchLayer(ctx, argonShimScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create argon scratch layer: %s", err)
 	}
 
@@ -378,13 +381,13 @@ func TestWCOWArgonShim(t *testing.T) {
 	// For cleanup on failure
 	defer func() {
 		if argonShimMounted {
-			layerspkg.UnmountContainerLayers(context.Background(), append(imageLayers, argonShimScratchDir), "", "", nil, layerspkg.UnmountOperationAll)
+			layerspkg.UnmountContainerLayers(ctx, append(imageLayers, argonShimScratchDir), "", "", nil, layerspkg.UnmountOperationAll)
 		}
 	}()
 
 	id := "argon"
 	// This is a cheat but stops us re-writing exactly the same code just for test
-	argonShimLocalMountPath, err := layerspkg.MountContainerLayers(context.Background(), id, append(imageLayers, argonShimScratchDir), "", "", nil)
+	argonShimLocalMountPath, err := layerspkg.MountContainerLayers(ctx, id, append(imageLayers, argonShimScratchDir), "", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -417,7 +420,7 @@ func TestWCOWArgonShim(t *testing.T) {
 	}
 	runShimCommands(t, argonShim)
 	stopContainer(t, argonShim)
-	if err := layerspkg.UnmountContainerLayers(context.Background(), append(imageLayers, argonShimScratchDir), "", "", nil, layerspkg.UnmountOperationAll); err != nil {
+	if err := layerspkg.UnmountContainerLayers(ctx, append(imageLayers, argonShimScratchDir), "", "", nil, layerspkg.UnmountOperationAll); err != nil {
 		t.Fatal(err)
 	}
 	argonShimMounted = false
@@ -426,16 +429,16 @@ func TestWCOWArgonShim(t *testing.T) {
 
 // Xenon through HCSShim interface (v1)
 func TestWCOWXenonShim(t *testing.T) {
-	client, ctx := getCtrdClient(context.Background(), t)
+	client, ctx := newCtrdClient(context.Background(), t)
 	imageLayers := testutilities.LayerFolders(ctx, t, client, imageName)
 	xenonShimScratchDir := t.TempDir()
-	if err := wclayer.CreateScratchLayer(context.Background(), xenonShimScratchDir, imageLayers); err != nil {
+	if err := wclayer.CreateScratchLayer(ctx, xenonShimScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create xenon scratch layer: %s", err)
 	}
 
 	hostRWSharedDirectory, hostROSharedDirectory := createTestMounts(t)
 
-	uvmImagePath, err := uvmfolder.LocateUVMFolder(context.Background(), imageLayers)
+	uvmImagePath, err := uvmfolder.LocateUVMFolder(ctx, imageLayers)
 	if err != nil {
 		t.Fatalf("LocateUVMFolder failed %s", err)
 	}
@@ -472,32 +475,48 @@ func TestWCOWXenonShim(t *testing.T) {
 	stopContainer(t, xenonShim)
 }
 
-func generateWCOWOciTestSpec(t *testing.T, imageLayers []string, scratchPath, hostRWSharedDirectory, hostROSharedDirectory string) *specs.Spec {
+func generateWCOWOCITestSpecGeneric(t *testing.T, imageLayers []string, scratchPath string) *specs.Spec {
 	return &specs.Spec{
 		Windows: &specs.Windows{
 			LayerFolders: append(imageLayers, scratchPath),
 		},
-		Mounts: []specs.Mount{
-			{
-				Source:      hostROSharedDirectory,
-				Destination: `c:\mappedro`,
-				Options:     []string{"ro"},
-			},
-			{
-				Source:      hostRWSharedDirectory,
-				Destination: `c:\mappedrw`,
+		Process: &specs.Process{
+			Args: []string{
+				"cmd",
+				"/c",
+				"ping",
+				"-t",
+				"127.0.0.1",
+				">",
+				"nul",
 			},
 		},
 	}
 }
 
+func generateWCOWOCITestSpec(t *testing.T, imageLayers []string, scratchPath, hostRWSharedDirectory, hostROSharedDirectory string) *specs.Spec {
+	newSpec := generateWCOWOCITestSpecGeneric(t, imageLayers, scratchPath)
+	newSpec.Mounts = []specs.Mount{
+		{
+			Source:      hostROSharedDirectory,
+			Destination: `c:\mappedro`,
+			Options:     []string{"ro"},
+		},
+		{
+			Source:      hostRWSharedDirectory,
+			Destination: `c:\mappedrw`,
+		},
+	}
+	return newSpec
+}
+
 // Argon through HCSOCI interface (v1)
 func TestWCOWArgonOciV1(t *testing.T) {
-	client, ctx := getCtrdClient(context.Background(), t)
+	client, ctx := newCtrdClient(context.Background(), t)
 	imageLayers := testutilities.LayerFolders(ctx, t, client, imageName)
 	argonOci1Mounted := false
 	argonOci1ScratchDir := t.TempDir()
-	if err := wclayer.CreateScratchLayer(context.Background(), argonOci1ScratchDir, imageLayers); err != nil {
+	if err := wclayer.CreateScratchLayer(ctx, argonOci1ScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create argon scratch layer: %s", err)
 	}
 
@@ -508,14 +527,14 @@ func TestWCOWArgonOciV1(t *testing.T) {
 	var argonOci1 cow.Container
 	defer func() {
 		if argonOci1Mounted {
-			resources.ReleaseResources(context.Background(), argonOci1Resources, nil, true)
+			resources.ReleaseResources(ctx, argonOci1Resources, nil, true)
 		}
 	}()
 
 	var err error
-	spec := generateWCOWOciTestSpec(t, imageLayers, argonOci1ScratchDir, hostRWSharedDirectory, hostROSharedDirectory)
+	spec := generateWCOWOCITestSpec(t, imageLayers, argonOci1ScratchDir, hostRWSharedDirectory, hostROSharedDirectory)
 	argonOci1, argonOci1Resources, err = hcsoci.CreateContainer(
-		context.Background(),
+		ctx,
 		&hcsoci.CreateOptions{
 			ID:            "argonOci1",
 			SchemaVersion: schemaversion.SchemaV10(),
@@ -525,13 +544,13 @@ func TestWCOWArgonOciV1(t *testing.T) {
 		t.Fatal(err)
 	}
 	argonOci1Mounted = true
-	err = argonOci1.Start(context.Background())
+	err = argonOci1.Start(ctx)
 	if err != nil {
 		t.Fatalf("Failed start: %s", err)
 	}
 	runHcsCommands(t, argonOci1)
 	stopContainer(t, argonOci1)
-	if err := resources.ReleaseResources(context.Background(), argonOci1Resources, nil, true); err != nil {
+	if err := resources.ReleaseResources(ctx, argonOci1Resources, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	argonOci1Mounted = false
@@ -539,11 +558,11 @@ func TestWCOWArgonOciV1(t *testing.T) {
 
 // Xenon through HCSOCI interface (v1)
 func TestWCOWXenonOciV1(t *testing.T) {
-	client, ctx := getCtrdClient(context.Background(), t)
+	client, ctx := newCtrdClient(context.Background(), t)
 	imageLayers := testutilities.LayerFolders(ctx, t, client, imageName)
 	xenonOci1Mounted := false
 	xenonOci1ScratchDir := t.TempDir()
-	if err := wclayer.CreateScratchLayer(context.Background(), xenonOci1ScratchDir, imageLayers); err != nil {
+	if err := wclayer.CreateScratchLayer(ctx, xenonOci1ScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create xenon scratch layer: %s", err)
 	}
 
@@ -560,15 +579,15 @@ func TestWCOWXenonOciV1(t *testing.T) {
 	var xenonOci1 cow.Container
 	defer func() {
 		if xenonOci1Mounted {
-			resources.ReleaseResources(context.Background(), xenonOci1Resources, nil, true)
+			resources.ReleaseResources(ctx, xenonOci1Resources, nil, true)
 		}
 	}()
 
 	var err error
-	spec := generateWCOWOciTestSpec(t, imageLayers, xenonOci1ScratchDir, hostRWSharedDirectory, hostROSharedDirectory)
+	spec := generateWCOWOCITestSpec(t, imageLayers, xenonOci1ScratchDir, hostRWSharedDirectory, hostROSharedDirectory)
 	spec.Windows.HyperV = &specs.WindowsHyperV{}
 	xenonOci1, xenonOci1Resources, err = hcsoci.CreateContainer(
-		context.Background(),
+		ctx,
 		&hcsoci.CreateOptions{
 			ID:            "xenonOci1",
 			SchemaVersion: schemaversion.SchemaV10(),
@@ -578,13 +597,13 @@ func TestWCOWXenonOciV1(t *testing.T) {
 		t.Fatal(err)
 	}
 	xenonOci1Mounted = true
-	err = xenonOci1.Start(context.Background())
+	err = xenonOci1.Start(ctx)
 	if err != nil {
 		t.Fatalf("Failed start: %s", err)
 	}
 	runHcsCommands(t, xenonOci1)
 	stopContainer(t, xenonOci1)
-	if err := resources.ReleaseResources(context.Background(), xenonOci1Resources, nil, true); err != nil {
+	if err := resources.ReleaseResources(ctx, xenonOci1Resources, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	xenonOci1Mounted = false
@@ -594,11 +613,11 @@ func TestWCOWXenonOciV1(t *testing.T) {
 func TestWCOWArgonOciV2(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 
-	client, ctx := getCtrdClient(context.Background(), t)
+	client, ctx := newCtrdClient(context.Background(), t)
 	imageLayers := testutilities.LayerFolders(ctx, t, client, imageName)
 	argonOci2Mounted := false
 	argonOci2ScratchDir := t.TempDir()
-	if err := wclayer.CreateScratchLayer(context.Background(), argonOci2ScratchDir, imageLayers); err != nil {
+	if err := wclayer.CreateScratchLayer(ctx, argonOci2ScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create argon scratch layer: %s", err)
 	}
 
@@ -609,14 +628,14 @@ func TestWCOWArgonOciV2(t *testing.T) {
 	var argonOci2 cow.Container
 	defer func() {
 		if argonOci2Mounted {
-			resources.ReleaseResources(context.Background(), argonOci2Resources, nil, true)
+			resources.ReleaseResources(ctx, argonOci2Resources, nil, true)
 		}
 	}()
 
 	var err error
-	spec := generateWCOWOciTestSpec(t, imageLayers, argonOci2ScratchDir, hostRWSharedDirectory, hostROSharedDirectory)
+	spec := generateWCOWOCITestSpec(t, imageLayers, argonOci2ScratchDir, hostRWSharedDirectory, hostROSharedDirectory)
 	argonOci2, argonOci2Resources, err = hcsoci.CreateContainer(
-		context.Background(),
+		ctx,
 		&hcsoci.CreateOptions{
 			ID:            "argonOci2",
 			SchemaVersion: schemaversion.SchemaV21(),
@@ -626,7 +645,7 @@ func TestWCOWArgonOciV2(t *testing.T) {
 		t.Fatal(err)
 	}
 	argonOci2Mounted = true
-	err = argonOci2.Start(context.Background())
+	err = argonOci2.Start(ctx)
 	if err != nil {
 		t.Fatalf("Failed start: %s", err)
 	}
@@ -642,18 +661,16 @@ func TestWCOWArgonOciV2(t *testing.T) {
 // Xenon through HCSOCI interface (v2)
 func TestWCOWXenonOciV2(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	client, ctx := getCtrdClient(context.Background(), t)
-	imageLayers := testutilities.LayerFolders(ctx, t, client, imageName)
-	xenonOci2Mounted := false
-	xenonOci2UVMCreated := false
+	client, ctx := newCtrdClient(context.Background(), t)
+	imageLayers := testutilities.LayerFolders(ctx, t, client, testutilities.ImageWindowsNanoserver2004)
 	xenonOci2ScratchDir := t.TempDir()
-	if err := wclayer.CreateScratchLayer(context.Background(), xenonOci2ScratchDir, imageLayers); err != nil {
+	if err := wclayer.CreateScratchLayer(ctx, xenonOci2ScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create xenon scratch layer: %s", err)
 	}
 
 	hostRWSharedDirectory, hostROSharedDirectory := createTestMounts(t)
 
-	uvmImagePath, err := uvmfolder.LocateUVMFolder(context.Background(), imageLayers)
+	uvmImagePath, err := uvmfolder.LocateUVMFolder(ctx, imageLayers)
 	if err != nil {
 		t.Fatalf("LocateUVMFolder failed %s", err)
 	}
@@ -661,38 +678,29 @@ func TestWCOWXenonOciV2(t *testing.T) {
 	var xenonOci2Resources *resources.Resources
 	var xenonOci2 cow.Container
 	var xenonOci2UVM *uvm.UtilityVM
-	defer func() {
-		if xenonOci2Mounted {
-			resources.ReleaseResources(context.Background(), xenonOci2Resources, xenonOci2UVM, true)
-		}
-		if xenonOci2UVMCreated {
-			xenonOci2UVM.Close()
-		}
-	}()
 
 	// Create the utility VM.
 	xenonOci2UVMId := "xenonOci2UVM"
 	xenonOci2UVMScratchDir := t.TempDir()
-	if err := wcow.CreateUVMScratch(context.Background(), uvmImagePath, xenonOci2UVMScratchDir, xenonOci2UVMId); err != nil {
+	if err := wcow.CreateUVMScratch(ctx, uvmImagePath, xenonOci2UVMScratchDir, xenonOci2UVMId); err != nil {
 		t.Fatalf("failed to create scratch: %s", err)
 	}
 
 	xenonOciOpts := uvm.NewDefaultOptionsWCOW(xenonOci2UVMId, "")
 	xenonOciOpts.LayerFolders = append(imageLayers, xenonOci2UVMScratchDir)
-	xenonOci2UVM, err = uvm.CreateWCOW(context.Background(), xenonOciOpts)
+	xenonOci2UVM, err = uvm.CreateWCOW(ctx, xenonOciOpts)
 	if err != nil {
 		t.Fatalf("Failed create UVM: %s", err)
 	}
-	xenonOci2UVMCreated = true
-	if err := xenonOci2UVM.Start(context.Background()); err != nil {
+	if err := xenonOci2UVM.Start(ctx); err != nil {
 		xenonOci2UVM.Close()
 		t.Fatalf("Failed start UVM: %s", err)
 
 	}
 
-	spec := generateWCOWOciTestSpec(t, imageLayers, xenonOci2ScratchDir, hostRWSharedDirectory, hostROSharedDirectory)
+	spec := generateWCOWOCITestSpec(t, imageLayers, xenonOci2ScratchDir, hostRWSharedDirectory, hostROSharedDirectory)
 	xenonOci2, xenonOci2Resources, err = hcsoci.CreateContainer(
-		context.Background(),
+		ctx,
 		&hcsoci.CreateOptions{
 			ID:            "xenonOci2",
 			HostingSystem: xenonOci2UVM,
@@ -702,19 +710,85 @@ func TestWCOWXenonOciV2(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	xenonOci2Mounted = true
-	err = xenonOci2.Start(context.Background())
+	defer resources.ReleaseResources(ctx, xenonOci2Resources, xenonOci2UVM, true)
+	err = xenonOci2.Start(ctx)
 	if err != nil {
 		t.Fatalf("Failed start: %s", err)
 	}
 	runHcsCommands(t, xenonOci2)
 	stopContainer(t, xenonOci2)
-	if err := resources.ReleaseResources(context.Background(), xenonOci2Resources, xenonOci2UVM, true); err != nil {
+}
+
+// Xenon through HCSOCI interface (v2) memory update
+func TestWCOWXenonOciV2MemoryUpdate(t *testing.T) {
+	testutilities.RequiresBuild(t, osversion.RS5)
+
+	client, ctx := newCtrdClient(context.Background(), t)
+	imageLayers := testutilities.LayerFolders(ctx, t, client, testutilities.ImageWindowsNanoserver2004)
+
+	ctx, cancel := context.WithTimeout(ctx, 40*time.Second)
+	defer cancel()
+
+	xenonOci2ScratchDir := t.TempDir()
+	if err := wclayer.CreateScratchLayer(ctx, xenonOci2ScratchDir, imageLayers); err != nil {
+		t.Fatalf("failed to create xenon scratch layer: %s", err)
+	}
+
+	uvmImagePath, err := uvmfolder.LocateUVMFolder(ctx, imageLayers)
+	if err != nil {
+		t.Fatalf("LocateUVMFolder failed %s", err)
+	}
+
+	var xenonOci2Resources *resources.Resources
+	var xenonOci2 cow.Container
+	var xenonOci2UVM *uvm.UtilityVM
+
+	// Create the utility VM.
+	xenonOci2UVMId := "xenonOci2UVM"
+	xenonOci2UVMScratchDir := t.TempDir()
+	if err := wcow.CreateUVMScratch(ctx, uvmImagePath, xenonOci2UVMScratchDir, xenonOci2UVMId); err != nil {
+		t.Fatalf("failed to create scratch: %s", err)
+	}
+
+	xenonOciOpts := uvm.NewDefaultOptionsWCOW(xenonOci2UVMId, "")
+	xenonOciOpts.MemorySizeInMB = 1024 * 3
+	xenonOciOpts.LayerFolders = append(imageLayers, xenonOci2UVMScratchDir)
+	xenonOci2UVM, err = uvm.CreateWCOW(ctx, xenonOciOpts)
+	if err != nil {
+		t.Fatalf("Failed create UVM: %s", err)
+	}
+	defer xenonOci2UVM.Close()
+	if err := xenonOci2UVM.Start(ctx); err != nil {
+		xenonOci2UVM.Close()
+		t.Fatalf("Failed start UVM: %s", err)
+
+	}
+
+	spec := generateWCOWOCITestSpecGeneric(t, imageLayers, xenonOci2ScratchDir)
+	spec.Annotations = make(map[string]string)
+	spec.Annotations["io.microsoft.virtualmachine.computetopology.memory.sizeinmb"] = "1024"
+	createOpts := &hcsoci.CreateOptions{
+		ID:            "xenonOci2",
+		HostingSystem: xenonOci2UVM,
+		SchemaVersion: schemaversion.SchemaV21(),
+		Spec:          spec,
+	}
+	xenonOci2, xenonOci2Resources, err = hcsoci.CreateContainer(ctx, createOpts)
+	if err != nil {
 		t.Fatal(err)
 	}
-	xenonOci2Mounted = false
+	defer resources.ReleaseResources(ctx, xenonOci2Resources, xenonOci2UVM, true)
 
-	// Terminate the UVM
-	xenonOci2UVM.Close()
-	xenonOci2UVMCreated = false
+	if err := xenonOci2.Start(ctx); err != nil {
+		t.Fatalf("Failed start: %s", err)
+	}
+
+	memoryLimit := hcsoci.NormalizeMemorySize(ctx, xenonOci2.ID(), uint64(1024*2))
+	req := &hcsschema.ModifySettingRequest{
+		ResourcePath: resourcepaths.SiloMemoryResourcePath,
+		Settings:     memoryLimit,
+	}
+	if err := xenonOci2.Modify(ctx, req); err != nil {
+		t.Fatalf("Failed to update container memory size: %v", err)
+	}
 }

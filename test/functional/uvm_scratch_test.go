@@ -19,7 +19,7 @@ func TestScratchCreateLCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 	tempDir := t.TempDir()
 
-	firstUVM := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, nil, getDefaultLcowUvmOptions(t, "TestCreateLCOWScratch"))
+	firstUVM := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, nil, getDefaultLCOWUvmOptions(t, "TestCreateLCOWScratch"))
 	defer firstUVM.Close()
 
 	cacheFile := filepath.Join(tempDir, "cache.vhdx")
@@ -36,7 +36,7 @@ func TestScratchCreateLCOW(t *testing.T) {
 		t.Fatalf("cacheFile wasn't created!")
 	}
 
-	targetUVM := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, nil, getDefaultLcowUvmOptions(t, "TestCreateLCOWScratch_target"))
+	targetUVM := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, nil, getDefaultLCOWUvmOptions(t, "TestCreateLCOWScratch_target"))
 	defer targetUVM.Close()
 
 	// A non-cached create

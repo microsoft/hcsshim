@@ -1064,7 +1064,7 @@ func createExt4VHD(ctx context.Context, t *testing.T, path string) {
 		log.L.Logger.SetOutput(io.Discard)
 		defer log.L.Logger.SetOutput(origLogOut)
 	}
-	uvm := testutilities.CreateLCOWUVM(ctx, t, t.Name()+"-createExt4VHD")
+	uvm := testutilities.CreateLCOWUVM(ctx, t, nil, t.Name()+"-createExt4VHD")
 	defer uvm.Close()
 
 	if err := lcow.CreateScratch(ctx, uvm, path, 2, ""); err != nil {

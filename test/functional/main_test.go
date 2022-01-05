@@ -98,14 +98,14 @@ func getCtrdOptions() testutilities.CtrdClientOptions {
 	}
 }
 
-func getDefaultLcowUvmOptions(t *testing.T, name string) *uvm.OptionsLCOW {
+func getDefaultLCOWUvmOptions(t *testing.T, name string) *uvm.OptionsLCOW {
 	opts := uvm.NewDefaultOptionsLCOW(name, "")
 	opts.BootFilesPath = *flagLinuxBootFilesPath
 
 	return opts
 }
 
-func getDefaultWcowUvmOptions(t *testing.T, name string) *uvm.OptionsWCOW {
+func getDefaultWCOWUvmOptions(t *testing.T, name string) *uvm.OptionsWCOW {
 	opts := uvm.NewDefaultOptionsWCOW(name, "")
 
 	return opts
@@ -113,7 +113,7 @@ func getDefaultWcowUvmOptions(t *testing.T, name string) *uvm.OptionsWCOW {
 
 // convenience wrappers
 
-func getCtrdClient(ctx context.Context, t *testing.T) (*containerd.Client, context.Context) {
+func newCtrdClient(ctx context.Context, t *testing.T) (*containerd.Client, context.Context) {
 	return getCtrdOptions().NewClient(ctx, t)
 }
 

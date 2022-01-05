@@ -39,8 +39,8 @@ func TestSCSIAddRemoveLCOW(t *testing.T) {
 func TestSCSIAddRemoveWCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 	// TODO make the image configurable to the build we're testing on
-	client, ctx := getCtrdClient(context.Background(), t)
-	u, layers, uvmScratchDir := testutilities.CreateWCOWUVM(ctx, t, client, t.Name(), "mcr.microsoft.com/windows/nanoserver:1903")
+	client, ctx := newCtrdClient(context.Background(), t)
+	u, layers, uvmScratchDir := testutilities.CreateWCOWUVM(ctx, t, client, t.Name(), testutilities.ImageWindowsNanoserver1903)
 	defer os.RemoveAll(uvmScratchDir)
 	defer u.Close()
 
@@ -217,7 +217,7 @@ func testSCSIAddRemoveMultiple(t *testing.T, u *uvm.UtilityVM, pathPrefix string
 
 func TestParallelScsiOps(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	u := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, nil, getDefaultLcowUvmOptions(t, t.Name()))
+	u := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, nil, getDefaultLCOWUvmOptions(t, t.Name()))
 	defer u.Close()
 
 	// Create a sandbox to use

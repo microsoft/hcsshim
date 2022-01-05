@@ -6,7 +6,6 @@ package functional
 import (
 	"context"
 	"io/ioutil"
-	"os"
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -16,17 +15,15 @@ import (
 )
 
 func runMemStartLCOWTest(t *testing.T, opts *uvm.OptionsLCOW) {
-	client, ctx := getCtrdClient(context.Background(), t)
+	client, ctx := newCtrdClient(context.Background(), t)
 	u := testutilities.CreateLCOWUVMFromOpts(ctx, t, client, opts)
 	u.Close()
 }
 
 func runMemStartWCOWTest(t *testing.T, opts *uvm.OptionsWCOW) {
-	client, ctx := getCtrdClient(context.Background(), t)
+	client, ctx := newCtrdClient(context.Background(), t)
 
-	u, _, scratchDir := testutilities.CreateWCOWUVMFromOptsWithImage(ctx, t, client, opts, "microsoft/nanoserver")
-	defer os.RemoveAll(scratchDir)
-	u.Close()
+	testutilities.CreateWCOWUVMFromOptsWithImage(ctx, t, client, opts, testutilities.ImageWindowsNanoserver1809)
 }
 
 func runMemTests(t *testing.T, os string) {
@@ -43,13 +40,13 @@ func runMemTests(t *testing.T, os string) {
 
 	for _, bt := range testCases {
 		if os == "windows" {
-			wopts := getDefaultWcowUvmOptions(t, t.Name())
+			wopts := getDefaultWCOWUvmOptions(t, t.Name())
 			wopts.MemorySizeInMB = 512
 			wopts.AllowOvercommit = bt.allowOvercommit
 			wopts.EnableDeferredCommit = bt.enableDeferredCommit
 			runMemStartWCOWTest(t, wopts)
 		} else {
-			lopts := getDefaultLcowUvmOptions(t, t.Name())
+			lopts := getDefaultLCOWUvmOptions(t, t.Name())
 			lopts.MemorySizeInMB = 512
 			lopts.AllowOvercommit = bt.allowOvercommit
 			lopts.EnableDeferredCommit = bt.enableDeferredCommit

@@ -14,13 +14,13 @@ import (
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 )
 
-// TestVPMEM tests adding/removing VPMem Read-Only layers from a v2 Linux utility VM
-func TestVPMEM(t *testing.T) {
+// Test_VPMEM tests adding/removing VPMem Read-Only layers from a v2 Linux utility VM
+func Test_VPMEM(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	client, ctx := getCtrdClient(context.Background(), t)
-	alpineLayers := testutilities.LayerFolders(ctx, t, client, "alpine")
+	client, ctx := newCtrdClient(context.Background(), t)
+	alpineLayers := testutilities.LayerFoldersPlatform(ctx, t, client, testutilities.ImageLinuxAlpineLatest, testutilities.PlatformLinux)
 
-	u := testutilities.CreateLCOWUVMFromOpts(ctx, t, client, getDefaultLcowUvmOptions(t, t.Name()))
+	u := testutilities.CreateLCOWUVMFromOpts(ctx, t, client, getDefaultLCOWUvmOptions(t, t.Name()))
 	defer u.Close()
 
 	var iterations uint32 = uvm.MaxVPMEMCount
