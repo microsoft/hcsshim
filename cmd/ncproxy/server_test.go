@@ -10,7 +10,7 @@ import (
 	"time"
 
 	computeagentMock "github.com/Microsoft/hcsshim/internal/computeagent/mock"
-	"github.com/Microsoft/hcsshim/internal/ncproxystore"
+	ncproxystore "github.com/Microsoft/hcsshim/internal/ncproxy/store"
 	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
 	nodenetsvc "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v1"
 	nodenetsvcMock "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v1/mock"

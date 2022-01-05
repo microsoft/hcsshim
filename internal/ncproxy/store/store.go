@@ -1,10 +1,10 @@
-package ncproxystore
+package store
 
 import (
 	"context"
 	"encoding/json"
 
-	"github.com/Microsoft/hcsshim/internal/ncproxynetworking"
+	ncproxynetworking "github.com/Microsoft/hcsshim/internal/ncproxy/networking"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )

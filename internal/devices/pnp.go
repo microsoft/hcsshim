@@ -96,10 +96,10 @@ func readCsPipeOutput(l net.Listener, errChan chan<- error, result *[]string) {
 	errChan <- nil
 }
 
-// readCsPipeOutput is a helper function that connects to a listener and reads
-// the connection's comma separated output until done. resulting comma separated
-// values are returned in the `result` param. The `errChan` param is used to
-// propagate an errors to the calling function.f
+// readAllPipeOutput is a helper function that connects to a listener and attempts to
+// read the connection's entire output. Resulting output is returned as a string
+// in the `result` param. The `errChan` param is used to propagate an errors to
+// the calling function.
 func readAllPipeOutput(l net.Listener, errChan chan<- error, result *string) {
 	defer close(errChan)
 	c, err := l.Accept()

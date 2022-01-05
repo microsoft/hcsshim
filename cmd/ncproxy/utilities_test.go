@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Microsoft/hcsshim/internal/ncproxystore"
+	ncproxystore "github.com/Microsoft/hcsshim/internal/ncproxy/store"
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
 	bolt "go.etcd.io/bbolt"
 )

@@ -10,7 +10,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/hns"
-	"github.com/Microsoft/hcsshim/internal/ncproxynetworking"
+	ncproxynetworking "github.com/Microsoft/hcsshim/internal/ncproxy/networking"
 	"github.com/Microsoft/hcsshim/pkg/octtrpc"
 	"github.com/containerd/ttrpc"
 	"github.com/containerd/typeurl"

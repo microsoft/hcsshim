@@ -1,4 +1,4 @@
-package ncproxynetworking
+package networking
 
 type Endpoint struct {
 	EndpointName string

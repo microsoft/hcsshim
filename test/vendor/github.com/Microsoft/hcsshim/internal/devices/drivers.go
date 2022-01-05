@@ -73,11 +73,7 @@ func execModprobeInstallDriver(ctx context.Context, vm *uvm.UtilityVM, driverDir
 		Stderr: p,
 	}
 
-	var (
-		execErr  error
-		exitCode int
-	)
-	exitCode, execErr = cmd.ExecInUvm(ctx, vm, req)
+	exitCode, execErr := cmd.ExecInUvm(ctx, vm, req)
 
 	// wait to finish parsing stdout results
 	select {

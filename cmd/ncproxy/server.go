@@ -8,7 +8,7 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/ncproxystore"
+	ncproxystore "github.com/Microsoft/hcsshim/internal/ncproxy/store"
 	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
 	"github.com/Microsoft/hcsshim/pkg/octtrpc"

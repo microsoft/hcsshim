@@ -1,4 +1,4 @@
-package ncproxystore
+package store
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/ncproxynetworking"
+	ncproxynetworking "github.com/Microsoft/hcsshim/internal/ncproxy/networking"
 	bolt "go.etcd.io/bbolt"
 )
 

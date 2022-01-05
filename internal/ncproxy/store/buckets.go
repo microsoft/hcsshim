@@ -1,4 +1,4 @@
-package ncproxystore
+package store
 
 import (
 	bolt "go.etcd.io/bbolt"

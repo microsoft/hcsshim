@@ -1,4 +1,4 @@
-package ncproxynetworking
+package networking
 
 type Network struct {
 	NetworkName string

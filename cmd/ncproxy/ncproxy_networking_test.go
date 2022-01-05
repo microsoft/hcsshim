@@ -7,7 +7,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/computeagent"
 	computeagentMock "github.com/Microsoft/hcsshim/internal/computeagent/mock"
-	"github.com/Microsoft/hcsshim/internal/ncproxynetworking"
+	ncproxynetworking "github.com/Microsoft/hcsshim/internal/ncproxy/networking"
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
 	"github.com/golang/mock/gomock"
 )
