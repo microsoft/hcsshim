@@ -1,4 +1,4 @@
-package testutilities
+package testutil
 
 import (
 	"fmt"
@@ -21,19 +21,23 @@ const (
 )
 
 var (
+	ImageWindowsNanoserver1709     = NanoserverImage("1709")
+	ImageWindowsNanoserver1803     = NanoserverImage("1803")
 	ImageWindowsNanoserver1809     = NanoserverImage("1809")
 	ImageWindowsNanoserver1903     = NanoserverImage("1903")
 	ImageWindowsNanoserver1909     = NanoserverImage("1909")
 	ImageWindowsNanoserver2004     = NanoserverImage("2004")
 	ImageWindowsNanoserver2009     = NanoserverImage("2009")
-	ImageWindowsNanoserverLtsc2022 = NanoserverImage("ltsc2022")
+	ImageWindowsNanoserverLTSC2022 = NanoserverImage("ltsc2022")
 
+	ImageWindowsServercore1709     = NanoserverImage("1709")
+	ImageWindowsServercore1803     = NanoserverImage("1803")
 	ImageWindowsServercore1809     = ServercoreImage("1809")
 	ImageWindowsServercore1903     = ServercoreImage("1903")
 	ImageWindowsServercore1909     = ServercoreImage("1909")
 	ImageWindowsServercore2004     = ServercoreImage("2004")
 	ImageWindowsServercore2009     = ServercoreImage("2009")
-	ImageWindowsServercoreLtsc2022 = ServercoreImage("ltsc2022")
+	ImageWindowsServercoreLTSC2022 = ServercoreImage("ltsc2022")
 )
 
 // all inputs should be predefined and vetted

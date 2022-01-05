@@ -1,4 +1,4 @@
-package testutilities
+package testutil
 
 // StringSetFlag is a type to be used with the standard library's flag.Var
 // function as a custom flag value. It accumulates the arguments passed each

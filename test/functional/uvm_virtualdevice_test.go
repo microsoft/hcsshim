@@ -13,7 +13,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/Microsoft/hcsshim/test/testutil"
 )
 
 var lcowGPUBootFilesPath = filepath.Join(*flagLinuxBootFilesPath, "\\nvidiagpu")
@@ -31,7 +31,7 @@ func findTestVirtualDevice() (string, error) {
 }
 
 func TestVirtualDevice(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.V20H1)
+	testutil.RequiresBuild(t, osversion.V20H1)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -55,7 +55,7 @@ func TestVirtualDevice(t *testing.T) {
 	opts.BootFilesPath = lcowGPUBootFilesPath
 
 	// create test uvm and ensure we can assign and remove the device
-	vm := testutilities.CreateLCOWUVMFromOpts(ctx, t, nil, opts)
+	vm := testutil.CreateLCOWUVMFromOpts(ctx, t, nil, opts)
 	defer vm.Close()
 	vpci, err := vm.AssignDevice(ctx, testDeviceInstanceID, 0)
 	if err != nil {

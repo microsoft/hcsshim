@@ -13,7 +13,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/uvm"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/Microsoft/hcsshim/test/testutil"
 	"github.com/containerd/containerd"
 	"github.com/sirupsen/logrus"
 )
@@ -29,7 +29,7 @@ var (
 	// flags
 	flagContainerdAddress   = flag.String("ctr-address", "tcp://127.0.0.1:2376", "Address for containerd's GRPC server")
 	flagContainerdNamespace = flag.String("ctr-namespace", "k8s.io", "Containerd namespace")
-	flagCtrPath             = flag.String("ctr-path", testutilities.DefaultCtrPath(), "Path to ctr.exe")
+	flagCtrPath             = flag.String("ctr-path", testutil.DefaultCtrPath(), "Path to ctr.exe")
 	flagLinuxBootFilesPath  = flag.String("linux-bootfiles",
 		"C:\\ContainerPlat\\LinuxBootFiles",
 		"Path to LCOW UVM boot files (rootfs.vhd, initrd.img, kernel, etc.)")
@@ -84,15 +84,15 @@ func CreateContainerTestWrapper(ctx context.Context, options *hcsoci.CreateOptio
 
 // default options using command line flags, if any
 
-func getCtrOptions() testutilities.CtrClientOptions {
-	return testutilities.CtrClientOptions{
+func getCtrOptions() testutil.CtrClientOptions {
+	return testutil.CtrClientOptions{
 		Ctrd: getCtrdOptions(),
 		Path: *flagLinuxBootFilesPath,
 	}
 }
 
-func getCtrdOptions() testutilities.CtrdClientOptions {
-	return testutilities.CtrdClientOptions{
+func getCtrdOptions() testutil.CtrdClientOptions {
+	return testutil.CtrdClientOptions{
 		Address:   *flagContainerdAddress,
 		Namespace: *flagContainerdNamespace,
 	}

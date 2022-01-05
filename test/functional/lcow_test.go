@@ -20,7 +20,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/Microsoft/hcsshim/test/testutil"
 )
 
 // TestLCOWUVMNoSCSINoVPMemInitrd starts an LCOW utility VM without a SCSI controller and
@@ -48,9 +48,9 @@ func TestLCOWUVMNoSCSISingleVPMemVHD(t *testing.T) {
 }
 
 func testLCOWUVMNoSCSISingleVPMem(t *testing.T, opts *uvm.OptionsLCOW, expected string) {
-	testutilities.RequiresBuild(t, osversion.RS5)
+	testutil.RequiresBuild(t, osversion.RS5)
 	client, ctx := newCtrdClient(context.Background(), t)
-	lcowUVM := testutilities.CreateLCOWUVMFromOpts(ctx, t, client, opts)
+	lcowUVM := testutil.CreateLCOWUVMFromOpts(ctx, t, client, opts)
 	defer lcowUVM.Close()
 	out, err := exec.Command(`hcsdiag`, `exec`, `-uvm`, lcowUVM.ID(), `dmesg`).Output() // TODO: Move the CreateProcess.
 	if err != nil {
@@ -64,7 +64,7 @@ func testLCOWUVMNoSCSISingleVPMem(t *testing.T, opts *uvm.OptionsLCOW, expected 
 // TestLCOWTimeUVMStartVHD starts/terminates a utility VM booting from VPMem-
 // attached root filesystem a number of times.
 func TestLCOWTimeUVMStartVHD(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
+	testutil.RequiresBuild(t, osversion.RS5)
 
 	testLCOWTimeUVMStart(t, false, uvm.PreferredRootFSTypeVHD)
 }
@@ -73,7 +73,7 @@ func TestLCOWTimeUVMStartVHD(t *testing.T) {
 // VPMem- attached root filesystem a number of times starting from the Linux
 // Kernel directly and skipping EFI.
 func TestLCOWUVMStart_KernelDirect_VHD(t *testing.T) {
-	testutilities.RequiresBuild(t, 18286)
+	testutil.RequiresBuild(t, 18286)
 
 	testLCOWTimeUVMStart(t, true, uvm.PreferredRootFSTypeVHD)
 }
@@ -81,7 +81,7 @@ func TestLCOWUVMStart_KernelDirect_VHD(t *testing.T) {
 // TestLCOWTimeUVMStartInitRD starts/terminates a utility VM booting from initrd-
 // attached root file system a number of times.
 func TestLCOWTimeUVMStartInitRD(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
+	testutil.RequiresBuild(t, osversion.RS5)
 
 	testLCOWTimeUVMStart(t, false, uvm.PreferredRootFSTypeInitRd)
 }
@@ -90,7 +90,7 @@ func TestLCOWTimeUVMStartInitRD(t *testing.T) {
 // from initrd- attached root file system a number of times starting from the
 // Linux Kernel directly and skipping EFI.
 func TestLCOWUVMStart_KernelDirect_InitRd(t *testing.T) {
-	testutilities.RequiresBuild(t, 18286)
+	testutil.RequiresBuild(t, 18286)
 
 	testLCOWTimeUVMStart(t, true, uvm.PreferredRootFSTypeInitRd)
 }
@@ -108,17 +108,17 @@ func testLCOWTimeUVMStart(t *testing.T, kernelDirect bool, rfsType uvm.Preferred
 			opts.RootFSFile = uvm.VhdFile
 		}
 
-		lcowUVM := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, nil, opts)
+		lcowUVM := testutil.CreateLCOWUVMFromOpts(context.Background(), t, nil, opts)
 		lcowUVM.Close()
 	}
 }
 
 func TestLCOWSimplePodScenario(t *testing.T) {
 	t.Skip("Doesn't work quite yet")
-	testutilities.RequiresBuild(t, osversion.RS5)
+	testutil.RequiresBuild(t, osversion.RS5)
 	client, ctx := newCtrdClient(context.Background(), t)
 
-	alpineLayers := testutilities.LayerFoldersPlatform(ctx, t, client, testutilities.ImageLinuxAlpineLatest, testutilities.PlatformLinux)
+	alpineLayers := testutil.LayerFoldersPlatform(ctx, t, client, testutil.ImageLinuxAlpineLatest, testutil.PlatformLinux)
 
 	cacheDir := t.TempDir()
 	cacheFile := filepath.Join(cacheDir, "cache.vhdx")
@@ -135,7 +135,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	c2ScratchDir := t.TempDir()
 	c2ScratchFile := filepath.Join(c2ScratchDir, "sandbox.vhdx")
 
-	lcowUVM := testutilities.CreateLCOWUVMFromOpts(ctx, t, nil, getDefaultLCOWUvmOptions(t, "uvm"))
+	lcowUVM := testutil.CreateLCOWUVMFromOpts(ctx, t, nil, getDefaultLCOWUvmOptions(t, "uvm"))
 	defer lcowUVM.Close()
 
 	// Populate the cache and generate the scratch file for /tmp/scratch
@@ -152,7 +152,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	if err := lcow.CreateScratch(context.Background(), lcowUVM, c1ScratchFile, lcow.DefaultScratchSizeGB, cacheFile); err != nil {
 		t.Fatal(err)
 	}
-	c1Spec := testutilities.GetDefaultLinuxSpec(t)
+	c1Spec := testutil.GetDefaultLinuxSpec(t)
 	c1Folders := append(alpineLayers, c1ScratchDir)
 	c1Spec.Windows.LayerFolders = c1Folders
 	c1Spec.Process.Args = []string{"echo", "hello", "lcow", "container", "one"}
@@ -165,7 +165,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	if err := lcow.CreateScratch(context.Background(), lcowUVM, c2ScratchFile, lcow.DefaultScratchSizeGB, cacheFile); err != nil {
 		t.Fatal(err)
 	}
-	c2Spec := testutilities.GetDefaultLinuxSpec(t)
+	c2Spec := testutil.GetDefaultLinuxSpec(t)
 	c2Folders := append(alpineLayers, c2ScratchDir)
 	c2Spec.Windows.LayerFolders = c2Folders
 	c2Spec.Process.Args = []string{"echo", "hello", "lcow", "container", "two"}

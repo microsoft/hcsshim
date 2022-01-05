@@ -13,15 +13,15 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/Microsoft/hcsshim/test/testutil"
 )
 
 // TestPlan9 tests adding/removing Plan9 shares to/from a v2 Linux utility VM
 // TODO: This is very basic. Need multiple shares and so-on. Can be iterated on later.
-func Test_Plan9(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
+func TestPlan9(t *testing.T) {
+	testutil.RequiresBuild(t, osversion.RS5)
 
-	vm := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, nil, getDefaultLCOWUvmOptions(t, t.Name()))
+	vm := testutil.CreateLCOWUVMFromOpts(context.Background(), t, nil, getDefaultLCOWUvmOptions(t, t.Name()))
 	defer vm.Close()
 
 	var iterations uint32 = 64

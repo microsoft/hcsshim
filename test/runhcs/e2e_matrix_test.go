@@ -19,7 +19,8 @@ import (
 	"github.com/Microsoft/go-winio/vhd"
 	"github.com/Microsoft/hcsshim/osversion"
 	runhcs "github.com/Microsoft/hcsshim/pkg/go-runhcs"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/Microsoft/hcsshim/test/testutil"
+	"github.com/containerd/containerd"
 	runc "github.com/containerd/go-runc"
 	"github.com/opencontainers/runtime-tools/generate"
 	"github.com/pkg/errors"
@@ -163,6 +164,26 @@ func readPidFile(path string) (int, error) {
 	return p, nil
 }
 
+func newCtrdClient(ctx context.Context, t *testing.T) (*containerd.Client, context.Context) {
+	cdo := testutil.CtrdClientOptions{
+		Address:   "tcp://127.0.0.1:2376",
+		Namespace: "k8s.io",
+	}
+
+	return cdo.NewClient(ctx, t)
+}
+
+func pullImage(ctx context.Context, t *testing.T, snapshotter, image string) {
+	co := testutil.CtrClientOptions{
+		Ctrd: testutil.CtrdClientOptions{
+			Address:   "tcp://127.0.0.1:2376",
+			Namespace: "k8s.io",
+		},
+		Path: filepath.Join(filepath.Dir(os.Args[0]), "ctr.exe"),
+	}
+	co.PullImage(ctx, t, snapshotter, image)
+}
+
 func testWindows(t *testing.T, version int, isolated bool) {
 	var err error
 
@@ -192,7 +213,8 @@ func testWindows(t *testing.T, version int, isolated bool) {
 
 	// Get the LayerFolders
 	imageName := getWindowsImageNameByVersion(t, version)
-	layers := testutilities.LayerFolders(t, imageName)
+	client, ctx := newCtrdClient(context.Background(), t)
+	layers := testutil.LayerFolders(ctx, t, client, imageName)
 	for _, layer := range layers {
 		g.AddWindowsLayerFolders(layer)
 	}
@@ -212,7 +234,6 @@ func testWindows(t *testing.T, version int, isolated bool) {
 	cf.Close()
 
 	// Create the Argon, Xenon, or UVM
-	ctx := context.TODO()
 	rhcs := runhcs.Runhcs{
 		Debug: true,
 	}
@@ -308,25 +329,25 @@ func testLCOWPod(t *testing.T) {
 }
 
 func Test_RS1_Argon(t *testing.T) {
-	testutilities.RequiresExactBuild(t, osversion.RS1)
+	testutil.RequiresExactBuild(t, osversion.RS1)
 
 	testWindows(t, osversion.RS1, false)
 }
 
 func Test_RS1_Xenon(t *testing.T) {
-	testutilities.RequiresExactBuild(t, osversion.RS1)
+	testutil.RequiresExactBuild(t, osversion.RS1)
 
 	testWindows(t, osversion.RS1, true)
 }
 
 func Test_RS3_Argon(t *testing.T) {
-	testutilities.RequiresExactBuild(t, osversion.RS3)
+	testutil.RequiresExactBuild(t, osversion.RS3)
 
 	testWindows(t, osversion.RS3, false)
 }
 
 func Test_RS3_Xenon(t *testing.T) {
-	testutilities.RequiresExactBuild(t, osversion.RS3)
+	testutil.RequiresExactBuild(t, osversion.RS3)
 
 	guests := []int{osversion.RS1, osversion.RS3}
 	for _, g := range guests {
@@ -335,13 +356,13 @@ func Test_RS3_Xenon(t *testing.T) {
 }
 
 func Test_RS4_Argon(t *testing.T) {
-	testutilities.RequiresExactBuild(t, osversion.RS4)
+	testutil.RequiresExactBuild(t, osversion.RS4)
 
 	testWindows(t, osversion.RS4, false)
 }
 
 func Test_RS4_Xenon(t *testing.T) {
-	testutilities.RequiresExactBuild(t, osversion.RS4)
+	testutil.RequiresExactBuild(t, osversion.RS4)
 
 	guests := []int{osversion.RS1, osversion.RS3, osversion.RS4}
 	for _, g := range guests {
@@ -350,19 +371,19 @@ func Test_RS4_Xenon(t *testing.T) {
 }
 
 func Test_RS5_Argon(t *testing.T) {
-	testutilities.RequiresExactBuild(t, osversion.RS5)
+	testutil.RequiresExactBuild(t, osversion.RS5)
 
 	testWindows(t, osversion.RS5, false)
 }
 
 func Test_RS5_ArgonPods(t *testing.T) {
-	testutilities.RequiresExactBuild(t, osversion.RS5)
+	testutil.RequiresExactBuild(t, osversion.RS5)
 
 	testWindowsPod(t, osversion.RS5, false)
 }
 
 func Test_RS5_UVMAndContainer(t *testing.T) {
-	testutilities.RequiresExactBuild(t, osversion.RS5)
+	testutil.RequiresExactBuild(t, osversion.RS5)
 
 	guests := []int{osversion.RS1, osversion.RS3, osversion.RS4, osversion.RS5}
 	for _, g := range guests {
@@ -371,19 +392,19 @@ func Test_RS5_UVMAndContainer(t *testing.T) {
 }
 
 func Test_RS5_UVMPods(t *testing.T) {
-	testutilities.RequiresExactBuild(t, osversion.RS5)
+	testutil.RequiresExactBuild(t, osversion.RS5)
 
 	testWindowsPod(t, osversion.RS5, true)
 }
 
 func Test_RS5_LCOW(t *testing.T) {
-	testutilities.RequiresExactBuild(t, osversion.RS5)
+	testutil.RequiresExactBuild(t, osversion.RS5)
 
 	testLCOW(t)
 }
 
 func Test_RS5_LCOW_UVMPods(t *testing.T) {
-	testutilities.RequiresExactBuild(t, osversion.RS5)
+	testutil.RequiresExactBuild(t, osversion.RS5)
 
 	testLCOWPod(t)
 }

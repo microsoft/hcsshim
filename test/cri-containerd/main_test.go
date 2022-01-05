@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/osversion"
-	_ "github.com/Microsoft/hcsshim/test/functional/manifest"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	_ "github.com/Microsoft/hcsshim/test/testutil/manifest"
+	"github.com/Microsoft/hcsshim/test/testutil"
 	"github.com/containerd/containerd"
 	eventtypes "github.com/containerd/containerd/api/events"
 	eventsapi "github.com/containerd/containerd/api/services/events/v1"
@@ -81,7 +81,7 @@ var (
 
 // Flags
 var (
-	flagFeatures              = testutilities.NewStringSetFlag()
+	flagFeatures              = testutil.NewStringSetFlag()
 	flagCRIEndpoint           = flag.String("cri-endpoint", "tcp://127.0.0.1:2376", "Address of CRI runtime and image service.")
 	flagVirtstack             = flag.String("virtstack", "", "Virtstack to use for hypervisor isolated containers")
 	flagVMServiceBinary       = flag.String("vmservice-binary", "", "Path to a binary implementing the vmservice ttrpc service")

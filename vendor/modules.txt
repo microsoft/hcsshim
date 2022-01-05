@@ -9,6 +9,8 @@ github.com/Microsoft/go-winio/pkg/guid
 github.com/Microsoft/go-winio/pkg/process
 github.com/Microsoft/go-winio/pkg/security
 github.com/Microsoft/go-winio/vhd
+# github.com/Microsoft/hcsshim/test v0.0.0-20210227013316-43a75bb4edd3 => ./test
+github.com/Microsoft/hcsshim/test/testutil/manifest
 # github.com/cenkalti/backoff/v4 v4.1.1
 github.com/cenkalti/backoff/v4
 # github.com/containerd/cgroups v1.0.1
@@ -113,7 +115,7 @@ github.com/mattn/go-shellwords
 github.com/moby/sys/mountinfo
 # github.com/opencontainers/go-digest v1.0.0
 github.com/opencontainers/go-digest
-# github.com/opencontainers/image-spec v1.0.1
+# github.com/opencontainers/image-spec v1.0.2
 github.com/opencontainers/image-spec/specs-go
 github.com/opencontainers/image-spec/specs-go/v1
 # github.com/opencontainers/runc v1.0.2

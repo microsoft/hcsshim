@@ -1,3 +1,4 @@
+//go:build functional
 // +build functional
 
 package cri_containerd
@@ -13,7 +14,7 @@ import (
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/Microsoft/hcsshim/test/testutil"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
@@ -843,7 +844,7 @@ func Test_CreateContainer_CPUShares_LCOW(t *testing.T) {
 
 func Test_CreateContainer_Mount_File_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
-	testutilities.RequiresBuild(t, osversion.V19H1)
+	testutil.RequiresBuild(t, osversion.V19H1)
 
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
@@ -888,7 +889,7 @@ func Test_CreateContainer_Mount_File_LCOW(t *testing.T) {
 
 func Test_CreateContainer_Mount_ReadOnlyFile_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
-	testutilities.RequiresBuild(t, osversion.V19H1)
+	testutil.RequiresBuild(t, osversion.V19H1)
 
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 

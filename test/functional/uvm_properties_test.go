@@ -8,13 +8,13 @@ import (
 	"testing"
 
 	"github.com/Microsoft/hcsshim/osversion"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/Microsoft/hcsshim/test/testutil"
 )
 
 func TestPropertiesGuestConnection_LCOW(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
+	testutil.RequiresBuild(t, osversion.RS5)
 
-	uvm := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, nil, getDefaultLCOWUvmOptions(t, t.Name()))
+	uvm := testutil.CreateLCOWUVMFromOpts(context.Background(), t, nil, getDefaultLCOWUvmOptions(t, t.Name()))
 
 	p, gc := uvm.Capabilities()
 	if gc.NamespaceAddRequestSupported ||
@@ -25,9 +25,9 @@ func TestPropertiesGuestConnection_LCOW(t *testing.T) {
 }
 
 func TestPropertiesGuestConnection_WCOW(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
+	testutil.RequiresBuild(t, osversion.RS5)
 	client, ctx := newCtrdClient(context.Background(), t)
-	uvm, _, _ := testutilities.CreateWCOWUVM(ctx, t, client, t.Name(), testutilities.ImageWindowsNanoserver1809)
+	uvm, _, _ := testutil.CreateWCOWUVM(ctx, t, client, t.Name(), testutil.ImageWindowsNanoserver1809)
 
 	p, gc := uvm.Capabilities()
 	if !gc.NamespaceAddRequestSupported ||

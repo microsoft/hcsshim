@@ -19,15 +19,15 @@ import (
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/Microsoft/hcsshim/test/testutil"
 	"github.com/sirupsen/logrus"
 )
 
 // TestSCSIAddRemovev2LCOW validates adding and removing SCSI disks
 // from a utility VM in both attach-only and with a container path.
 func TestSCSIAddRemoveLCOW(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
-	u := testutilities.CreateLCOWUVM(context.Background(), t, nil, t.Name())
+	testutil.RequiresBuild(t, osversion.RS5)
+	u := testutil.CreateLCOWUVM(context.Background(), t, nil, t.Name())
 	defer u.Close()
 
 	testSCSIAddRemoveMultiple(t, u, `/run/gcs/c/0/scsi`, "linux", []string{})
@@ -37,10 +37,10 @@ func TestSCSIAddRemoveLCOW(t *testing.T) {
 // TestSCSIAddRemoveWCOW validates adding and removing SCSI disks
 // from a utility VM in both attach-only and with a container path.
 func TestSCSIAddRemoveWCOW(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
+	testutil.RequiresBuild(t, osversion.RS5)
 	// TODO make the image configurable to the build we're testing on
 	client, ctx := newCtrdClient(context.Background(), t)
-	u, layers, uvmScratchDir := testutilities.CreateWCOWUVM(ctx, t, client, t.Name(), testutilities.ImageWindowsNanoserver1903)
+	u, layers, uvmScratchDir := testutil.CreateWCOWUVM(ctx, t, client, t.Name(), testutil.ImageWindowsNanoserver1903)
 	defer os.RemoveAll(uvmScratchDir)
 	defer u.Close()
 
@@ -87,9 +87,9 @@ func testSCSIAddRemoveSingle(t *testing.T, u *uvm.UtilityVM, pathPrefix string, 
 	for i := 0; i < numDisks; i++ {
 		tempDir := ""
 		if operatingSystem == "windows" {
-			tempDir = testutilities.CreateWCOWBlankRWLayer(t, wcowImageLayerFolders)
+			tempDir = testutil.CreateWCOWBlankRWLayer(t, wcowImageLayerFolders)
 		} else {
-			tempDir = testutilities.CreateLCOWBlankRWLayer(context.Background(), t)
+			tempDir = testutil.CreateLCOWBlankRWLayer(context.Background(), t)
 		}
 		defer os.RemoveAll(tempDir)
 		disks[i] = filepath.Join(tempDir, `sandbox.vhdx`)
@@ -138,9 +138,9 @@ func testSCSIAddRemoveMultiple(t *testing.T, u *uvm.UtilityVM, pathPrefix string
 	for i := 0; i < numDisks; i++ {
 		tempDir := ""
 		if operatingSystem == "windows" {
-			tempDir = testutilities.CreateWCOWBlankRWLayer(t, wcowImageLayerFolders)
+			tempDir = testutil.CreateWCOWBlankRWLayer(t, wcowImageLayerFolders)
 		} else {
-			tempDir = testutilities.CreateLCOWBlankRWLayer(context.Background(), t)
+			tempDir = testutil.CreateLCOWBlankRWLayer(context.Background(), t)
 		}
 		defer os.RemoveAll(tempDir)
 		disks[i] = filepath.Join(tempDir, `sandbox.vhdx`)
@@ -216,8 +216,8 @@ func testSCSIAddRemoveMultiple(t *testing.T, u *uvm.UtilityVM, pathPrefix string
 }
 
 func TestParallelScsiOps(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
-	u := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, nil, getDefaultLCOWUvmOptions(t, t.Name()))
+	testutil.RequiresBuild(t, osversion.RS5)
+	u := testutil.CreateLCOWUVMFromOpts(context.Background(), t, nil, getDefaultLCOWUvmOptions(t, t.Name()))
 	defer u.Close()
 
 	// Create a sandbox to use

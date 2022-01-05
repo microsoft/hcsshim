@@ -73,8 +73,6 @@ jobs:
           go-version: '^1.15.0'
 
       - run: go test -gcflags=all=-d=checkptr -v ./... -tags admin
-      - run: go test -gcflags=all=-d=checkptr -v ./internal -tags admin
-        working-directory: test
       - run: go test -gcflags=all=-d=checkptr -c ./containerd-shim-runhcs-v1/ -tags functional
         working-directory: test
       - run: go test -gcflags=all=-d=checkptr -c ./cri-containerd/ -tags functional

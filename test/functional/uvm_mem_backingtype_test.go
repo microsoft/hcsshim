@@ -10,20 +10,20 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/Microsoft/hcsshim/test/testutil"
 	"github.com/sirupsen/logrus"
 )
 
 func runMemStartLCOWTest(t *testing.T, opts *uvm.OptionsLCOW) {
 	client, ctx := newCtrdClient(context.Background(), t)
-	u := testutilities.CreateLCOWUVMFromOpts(ctx, t, client, opts)
+	u := testutil.CreateLCOWUVMFromOpts(ctx, t, client, opts)
 	u.Close()
 }
 
 func runMemStartWCOWTest(t *testing.T, opts *uvm.OptionsWCOW) {
 	client, ctx := newCtrdClient(context.Background(), t)
 
-	testutilities.CreateWCOWUVMFromOptsWithImage(ctx, t, client, opts, testutilities.ImageWindowsNanoserver1809)
+	testutil.CreateWCOWUVMFromOptsWithImage(ctx, t, client, opts, testutil.ImageWindowsNanoserver1809)
 }
 
 func runMemTests(t *testing.T, os string) {
@@ -56,17 +56,17 @@ func runMemTests(t *testing.T, os string) {
 }
 
 func TestMemBackingTypeWCOW(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
+	testutil.RequiresBuild(t, osversion.RS5)
 	runMemTests(t, "windows")
 }
 
 func TestMemBackingTypeLCOW(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
+	testutil.RequiresBuild(t, osversion.RS5)
 	runMemTests(t, "linux")
 }
 
 func runBenchMemStartTest(b *testing.B, opts *uvm.OptionsLCOW) {
-	// Cant use testutilities here because its `testing.B` not `testing.T`
+	// Cant use testutil here because its `testing.B` not `testing.T`
 	u, err := uvm.CreateLCOW(context.Background(), opts)
 	if err != nil {
 		b.Fatal(err)
@@ -88,21 +88,21 @@ func runBenchMemStartLcowTest(b *testing.B, allowOvercommit bool, enableDeferred
 }
 
 func BenchmarkMemBackingTypeVirtualLCOW(b *testing.B) {
-	//testutilities.RequiresBuild(t, osversion.RS5)
+	//testutil.RequiresBuild(t, osversion.RS5)
 	logrus.SetOutput(ioutil.Discard)
 
 	runBenchMemStartLcowTest(b, true, false)
 }
 
 func BenchmarkMemBackingTypeVirtualDeferredLCOW(b *testing.B) {
-	//testutilities.RequiresBuild(t, osversion.RS5)
+	//testutil.RequiresBuild(t, osversion.RS5)
 	logrus.SetOutput(ioutil.Discard)
 
 	runBenchMemStartLcowTest(b, true, true)
 }
 
 func BenchmarkMemBackingTypePhyscialLCOW(b *testing.B) {
-	//testutilities.RequiresBuild(t, osversion.RS5)
+	//testutil.RequiresBuild(t, osversion.RS5)
 	logrus.SetOutput(ioutil.Discard)
 
 	runBenchMemStartLcowTest(b, false, false)

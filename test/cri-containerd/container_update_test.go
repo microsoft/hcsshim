@@ -1,3 +1,4 @@
+//go:build functional
 // +build functional
 
 package cri_containerd
@@ -9,7 +10,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/Microsoft/hcsshim/test/testutil"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
@@ -31,7 +32,7 @@ func calculateJobCPURate(hostProcs uint32, processorCount uint32) uint32 {
 }
 
 func Test_Container_UpdateResources_CPUShare(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.V20H2)
+	testutil.RequiresBuild(t, osversion.V20H2)
 	type config struct {
 		name             string
 		requiredFeatures []string

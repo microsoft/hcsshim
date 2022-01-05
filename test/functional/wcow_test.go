@@ -26,7 +26,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/internal/wcow"
 	"github.com/Microsoft/hcsshim/osversion"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/Microsoft/hcsshim/test/testutil"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
@@ -367,7 +367,7 @@ func generateShimLayersStruct(t *testing.T, imageLayers []string) []hcsshim.Laye
 // Argon through HCSShim interface (v1)
 func TestWCOWArgonShim(t *testing.T) {
 	client, ctx := newCtrdClient(context.Background(), t)
-	imageLayers := testutilities.LayerFolders(ctx, t, client, imageName)
+	imageLayers := testutil.LayerFolders(ctx, t, client, imageName)
 	argonShimMounted := false
 	argonShimScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(ctx, argonShimScratchDir, imageLayers); err != nil {
@@ -430,7 +430,7 @@ func TestWCOWArgonShim(t *testing.T) {
 // Xenon through HCSShim interface (v1)
 func TestWCOWXenonShim(t *testing.T) {
 	client, ctx := newCtrdClient(context.Background(), t)
-	imageLayers := testutilities.LayerFolders(ctx, t, client, imageName)
+	imageLayers := testutil.LayerFolders(ctx, t, client, imageName)
 	xenonShimScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(ctx, xenonShimScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create xenon scratch layer: %s", err)
@@ -513,7 +513,7 @@ func generateWCOWOCITestSpec(t *testing.T, imageLayers []string, scratchPath, ho
 // Argon through HCSOCI interface (v1)
 func TestWCOWArgonOciV1(t *testing.T) {
 	client, ctx := newCtrdClient(context.Background(), t)
-	imageLayers := testutilities.LayerFolders(ctx, t, client, imageName)
+	imageLayers := testutil.LayerFolders(ctx, t, client, imageName)
 	argonOci1Mounted := false
 	argonOci1ScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(ctx, argonOci1ScratchDir, imageLayers); err != nil {
@@ -559,7 +559,7 @@ func TestWCOWArgonOciV1(t *testing.T) {
 // Xenon through HCSOCI interface (v1)
 func TestWCOWXenonOciV1(t *testing.T) {
 	client, ctx := newCtrdClient(context.Background(), t)
-	imageLayers := testutilities.LayerFolders(ctx, t, client, imageName)
+	imageLayers := testutil.LayerFolders(ctx, t, client, imageName)
 	xenonOci1Mounted := false
 	xenonOci1ScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(ctx, xenonOci1ScratchDir, imageLayers); err != nil {
@@ -611,10 +611,10 @@ func TestWCOWXenonOciV1(t *testing.T) {
 
 // Argon through HCSOCI interface (v2)
 func TestWCOWArgonOciV2(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
+	testutil.RequiresBuild(t, osversion.RS5)
 
 	client, ctx := newCtrdClient(context.Background(), t)
-	imageLayers := testutilities.LayerFolders(ctx, t, client, imageName)
+	imageLayers := testutil.LayerFolders(ctx, t, client, imageName)
 	argonOci2Mounted := false
 	argonOci2ScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(ctx, argonOci2ScratchDir, imageLayers); err != nil {
@@ -660,9 +660,9 @@ func TestWCOWArgonOciV2(t *testing.T) {
 
 // Xenon through HCSOCI interface (v2)
 func TestWCOWXenonOciV2(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
+	testutil.RequiresBuild(t, osversion.RS5)
 	client, ctx := newCtrdClient(context.Background(), t)
-	imageLayers := testutilities.LayerFolders(ctx, t, client, testutilities.ImageWindowsNanoserver2004)
+	imageLayers := testutil.LayerFolders(ctx, t, client, testutil.ImageWindowsNanoserver2004)
 	xenonOci2ScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(ctx, xenonOci2ScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create xenon scratch layer: %s", err)
@@ -721,10 +721,10 @@ func TestWCOWXenonOciV2(t *testing.T) {
 
 // Xenon through HCSOCI interface (v2) memory update
 func TestWCOWXenonOciV2MemoryUpdate(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
+	testutil.RequiresBuild(t, osversion.RS5)
 
 	client, ctx := newCtrdClient(context.Background(), t)
-	imageLayers := testutilities.LayerFolders(ctx, t, client, testutilities.ImageWindowsNanoserver2004)
+	imageLayers := testutil.LayerFolders(ctx, t, client, testutil.ImageWindowsNanoserver2004)
 
 	ctx, cancel := context.WithTimeout(ctx, 40*time.Second)
 	defer cancel()
