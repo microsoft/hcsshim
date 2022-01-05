@@ -99,7 +99,7 @@ func (s *grpcService) AddNIC(ctx context.Context, req *ncproxygrpc.AddNICRequest
 			}
 			policies := []hcn.EndpointPolicy{iovPolicy}
 			if err := modifyEndpoint(ctx, ep.Id, policies, hcn.RequestTypeUpdate); err != nil {
-				return nil, errors.Wrap(err, "failed to add policy to endpointf")
+				return nil, errors.Wrap(err, "failed to add policy to endpoint")
 			}
 		}
 	}

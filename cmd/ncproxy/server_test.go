@@ -206,7 +206,7 @@ func TestAddNIC_HCN(t *testing.T) {
 			iovPolicySettings: &ncproxygrpc.IovEndpointPolicySetting{
 				IovOffloadWeight: 100,
 			},
-			errorExpected: true,
+			errorExpected: false,
 		},
 	}
 
