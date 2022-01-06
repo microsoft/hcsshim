@@ -23,6 +23,7 @@ message AddNICRequest {
     string container_id = 1;
     string nic_id = 2;
     string endpoint_name = 3;
+    EndpointSettings endpoint_settings = 4;
 }
 
 message AddNICResponse {}
