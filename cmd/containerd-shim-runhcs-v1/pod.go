@@ -379,8 +379,9 @@ func (p *pod) KillTask(ctx context.Context, tid, eid string, signal uint32, all 
 				return wt.KillExec(ctx, eid, signal, all)
 			})
 
-			// iterate all
-			return false
+			// Iterate all. Returning false stops the iteration. See:
+			// https://pkg.go.dev/sync#Map.Range
+			return true
 		})
 	}
 	eg.Go(func() error {
