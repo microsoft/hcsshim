@@ -165,7 +165,7 @@ func readPidFile(path string) (int, error) {
 }
 
 func newCtrdClient(ctx context.Context, t *testing.T) (*containerd.Client, context.Context) {
-	cdo := testutil.CtrdClientOptions{
+	cdo := testutil.ContainerdClientOptions{
 		Address:   "tcp://127.0.0.1:2376",
 		Namespace: "k8s.io",
 	}
@@ -175,7 +175,7 @@ func newCtrdClient(ctx context.Context, t *testing.T) (*containerd.Client, conte
 
 func pullImage(ctx context.Context, t *testing.T, snapshotter, image string) {
 	co := testutil.CtrClientOptions{
-		Ctrd: testutil.CtrdClientOptions{
+		Ctrd: testutil.ContainerdClientOptions{
 			Address:   "tcp://127.0.0.1:2376",
 			Namespace: "k8s.io",
 		},

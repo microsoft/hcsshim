@@ -29,17 +29,20 @@ var (
 	// flags
 	flagContainerdAddress   = flag.String("ctr-address", "tcp://127.0.0.1:2376", "Address for containerd's GRPC server")
 	flagContainerdNamespace = flag.String("ctr-namespace", "k8s.io", "Containerd namespace")
-	flagCtrPath             = flag.String("ctr-path", testutil.DefaultCtrPath(), "Path to ctr.exe")
+	flagCtrExePath          = flag.String("ctr-path", testutil.DefaultCtrPath(), "Path to ctr.exe")
 	flagLinuxBootFilesPath  = flag.String("linux-bootfiles",
 		"C:\\ContainerPlat\\LinuxBootFiles",
 		"Path to LCOW UVM boot files (rootfs.vhd, initrd.img, kernel, etc.)")
 )
 
+// todo: use separate containerd namespace for testing, pull images and create commit snapshots for
+// images as needed, then remove all active and view snapshots at the end in cleanup
+
 func init() {
-	if len(os.Getenv("HCSSHIM_FUNCTIONAL_TESTS_DEBUG")) > 0 {
+	if _, ok := os.LookupEnv("HCSSHIM_FUNCTIONAL_TESTS_DEBUG"); ok {
 		debug = true
 	}
-	flag.BoolVar(&debug, "debug", debug, "Set logging level to debug [%%HCSSHIM_FUNCTIONAL_TESTS_DEBUG%%]")
+	flag.BoolVar(&debug, "debug", debug, "Set logging level to debug [%HCSSHIM_FUNCTIONAL_TESTS_DEBUG%]")
 
 	// This allows for debugging a utility VM.
 	if s := os.Getenv("HCSSHIM_FUNCTIONAL_TESTS_PAUSE_ON_CREATECONTAINER_FAIL_IN_MINUTES"); s != "" {
@@ -51,17 +54,19 @@ func init() {
 		"container-creation-failure-pause",
 		pauseDurationOnCreateContainerFailure,
 		"The number of minutes to wait after a container creation failure to try again "+
-			"[%%HCSSHIM_FUNCTIONAL_TESTS_PAUSE_ON_CREATECONTAINER_FAIL_IN_MINUTES%%]")
+			"[%HCSSHIM_FUNCTIONAL_TESTS_PAUSE_ON_CREATECONTAINER_FAIL_IN_MINUTES%]")
 
+	lvl := logrus.WarnLevel
 	if debug {
-		logrus.SetLevel(logrus.DebugLevel)
-		logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
+		lvl = logrus.DebugLevel
 	}
+	// logrus.SetOutput(ioutil.Discard)
+	logrus.SetLevel(lvl)
+	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 
 	// Try to stop any pre-existing compute processes
 	cmd := exec.Command("powershell", `get-computeprocess | stop-computeprocess -force`)
 	_ = cmd.Run()
-
 }
 
 func TestMain(m *testing.M) {
@@ -86,13 +91,13 @@ func CreateContainerTestWrapper(ctx context.Context, options *hcsoci.CreateOptio
 
 func getCtrOptions() testutil.CtrClientOptions {
 	return testutil.CtrClientOptions{
-		Ctrd: getCtrdOptions(),
-		Path: *flagLinuxBootFilesPath,
+		Ctrd: getContainerdOptions(),
+		Path: *flagCtrExePath,
 	}
 }
 
-func getCtrdOptions() testutil.CtrdClientOptions {
-	return testutil.CtrdClientOptions{
+func getContainerdOptions() testutil.ContainerdClientOptions {
+	return testutil.ContainerdClientOptions{
 		Address:   *flagContainerdAddress,
 		Namespace: *flagContainerdNamespace,
 	}
@@ -114,9 +119,9 @@ func getDefaultWCOWUvmOptions(t *testing.T, name string) *uvm.OptionsWCOW {
 // convenience wrappers
 
 func newCtrdClient(ctx context.Context, t *testing.T) (*containerd.Client, context.Context) {
-	return getCtrdOptions().NewClient(ctx, t)
+	return getContainerdOptions().NewClient(ctx, t)
 }
 
-func pullImage(ctx context.Context, t *testing.T, snapshotter, image string) {
-	getCtrOptions().PullImage(ctx, t, snapshotter, image)
+func pullImage(ctx context.Context, t *testing.T, platform, image string) {
+	getCtrOptions().PullImage(ctx, t, platform, image)
 }

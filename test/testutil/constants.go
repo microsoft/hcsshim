@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-// TODO: move these somewhere common for all tests (functional, cri-containerd, etc.)
-
 const (
 	connectTimeout = time.Second * 10
 
@@ -30,8 +28,8 @@ var (
 	ImageWindowsNanoserver2009     = NanoserverImage("2009")
 	ImageWindowsNanoserverLTSC2022 = NanoserverImage("ltsc2022")
 
-	ImageWindowsServercore1709     = NanoserverImage("1709")
-	ImageWindowsServercore1803     = NanoserverImage("1803")
+	ImageWindowsServercore1709     = ServercoreImage("1709")
+	ImageWindowsServercore1803     = ServercoreImage("1803")
 	ImageWindowsServercore1809     = ServercoreImage("1809")
 	ImageWindowsServercore1903     = ServercoreImage("1903")
 	ImageWindowsServercore1909     = ServercoreImage("1909")

@@ -32,14 +32,14 @@ func TestUVMCPULimitsUpdateWCOW(t *testing.T) {
 	testutil.RequiresBuild(t, osversion.RS5)
 
 	client, ctx := newCtrdClient(context.Background(), t)
-	ctx, cancel := context.WithTimeout(ctx, 40*time.Second)
-	defer cancel()
-
 	opts := getDefaultWCOWUvmOptions(t, t.Name())
 	opts.MemorySizeInMB = 1024 * 2
 
+	// context with time out times out and prevents this from cleaning up and removing snapshots
 	u, _, _ := testutil.CreateWCOWUVMFromOptsWithImage(ctx, t, client, opts, testutil.ImageWindowsNanoserver2004)
 
+	ctx, cancel := context.WithTimeout(ctx, 40*time.Second)
+	defer cancel()
 	limits := &hcsschema.ProcessorLimits{
 		Weight: 10000,
 	}

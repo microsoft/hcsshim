@@ -6,8 +6,10 @@ import (
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/osversion"
-	_ "github.com/Microsoft/hcsshim/test/testutil/manifest"
 	"github.com/sirupsen/logrus"
+
+	// import solely for side-effect; maifest allows access to os version
+	_ "github.com/Microsoft/hcsshim/test/testutil/manifest"
 )
 
 func init() {

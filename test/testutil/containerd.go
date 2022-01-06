@@ -23,17 +23,17 @@ func createGRPCConn(ctx context.Context, address string) (*grpc.ClientConn, erro
 	return grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithContextDialer(dialer))
 }
 
-type CtrdClientOptions struct {
+type ContainerdClientOptions struct {
 	Address   string
 	Namespace string
 }
 
-func (cco CtrdClientOptions) defaultOpts() []containerd.ClientOpt {
+func (cco ContainerdClientOptions) defaultOpts() []containerd.ClientOpt {
 	return []containerd.ClientOpt{containerd.WithDefaultNamespace(cco.Namespace)}
 }
 
 // returned context is how namespaces are passed to various containerd client calls
-func (cco CtrdClientOptions) NewClient(ctx context.Context, t *testing.T, opts ...containerd.ClientOpt) (*containerd.Client, context.Context) {
+func (cco ContainerdClientOptions) NewClient(ctx context.Context, t *testing.T, opts ...containerd.ClientOpt) (*containerd.Client, context.Context) {
 	// regular `New` does not work on windows, need to use `WithConn`
 	cctx, ccancel := context.WithTimeout(ctx, connectTimeout)
 	defer ccancel()
