@@ -78,6 +78,9 @@ var (
 
 	// ErrNotSupported is an error encountered when hcs doesn't support the request
 	ErrPlatformNotSupported = errors.New("unsupported platform request")
+
+	// ErrProcessAlreadyStopped is returned by hcs if the process we're trying to kill has already been stopped.
+	ErrProcessAlreadyStopped = syscall.Errno(0x8037011f)
 )
 
 type ErrorEvent struct {
@@ -281,6 +284,7 @@ func IsTimeout(err error) bool {
 func IsAlreadyStopped(err error) bool {
 	err = getInnerError(err)
 	return err == ErrVmcomputeAlreadyStopped ||
+		err == ErrProcessAlreadyStopped ||
 		err == ErrElementNotFound
 }
 
