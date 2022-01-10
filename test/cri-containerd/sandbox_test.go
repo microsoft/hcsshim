@@ -63,6 +63,16 @@ func removePodSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx con
 	}
 }
 
+func getPodSandboxStatus(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, podID string) *runtime.PodSandboxStatus {
+	status, err := client.PodSandboxStatus(ctx, &runtime.PodSandboxStatusRequest{
+		PodSandboxId: podID,
+	})
+	if err != nil {
+		t.Fatalf("failed PodSandboxStatus for sandbox: %s, request with: %v", podID, err)
+	}
+	return status.Status
+}
+
 func getTestSandboxConfig(t *testing.T, opts ...SandboxConfigOpt) *runtime.PodSandboxConfig {
 	c := &runtime.PodSandboxConfig{
 		Metadata: &runtime.PodSandboxMetadata{

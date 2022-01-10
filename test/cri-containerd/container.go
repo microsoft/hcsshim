@@ -46,7 +46,7 @@ func removeContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx cont
 		ContainerId: containerID,
 	})
 	if err != nil {
-		t.Fatalf("failed StopContainer request for container: %s, with: %v", containerID, err)
+		t.Fatalf("failed RemoveContainer request for container: %s, with: %v", containerID, err)
 	}
 }
 
@@ -67,11 +67,15 @@ func getCreateContainerRequest(podID string, name string, image string, command 
 }
 
 func getContainerStatus(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) runtime.ContainerState {
+	return getContainerStatusFull(t, client, ctx, containerID).State
+}
+
+func getContainerStatusFull(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) *runtime.ContainerStatus {
 	response, err := client.ContainerStatus(ctx, &runtime.ContainerStatusRequest{
 		ContainerId: containerID,
 	})
 	if err != nil {
 		t.Fatalf("failed ContainerStatus request for container: %s, with: %v", containerID, err)
 	}
-	return response.Status.State
+	return response.Status
 }

@@ -234,6 +234,10 @@ github.com/hashicorp/errwrap
 # github.com/hashicorp/go-multierror v1.0.0
 ## explicit
 github.com/hashicorp/go-multierror
+# github.com/kevpar/cri v1.11.1-0.20220302210600-4c5c347230b2
+## explicit
+github.com/kevpar/cri/pkg/annotations
+github.com/kevpar/cri/pkg/api/v1
 # github.com/klauspost/compress v1.11.13
 ## explicit; go 1.13
 github.com/klauspost/compress/fse
