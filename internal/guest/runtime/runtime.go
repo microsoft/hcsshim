@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 // Package runtime defines the interface between the GCS and an OCI container
@@ -5,11 +6,22 @@
 package runtime
 
 import (
+	"errors"
 	"io"
 	"syscall"
 
+	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
+)
+
+var (
+	ContainerAlreadyExistsErr = gcserr.WrapHresult(errors.New("container already exist"), gcserr.HrVmcomputeSystemAlreadyExists)
+	ContainerDoesNotExistErr  = gcserr.WrapHresult(errors.New("container does not exist"), gcserr.HrVmcomputeSystemNotFound)
+	ContainerStillRunningErr  = gcserr.WrapHresult(errors.New("container still running"), gcserr.HrVmcomputeInvalidState)
+	ContainerNotRunningErr    = gcserr.WrapHresult(errors.New("container not running"), gcserr.HrVmcomputeSystemAlreadyStopped)
+	ContainerNotStoppedErr    = gcserr.WrapHresult(errors.New("container not stopped"), gcserr.HrVmcomputeInvalidState)
+	InvalidContainerIDErr     = gcserr.WrapHresult(errors.New("invalid container ID"), gcserr.HrErrInvalidArg)
 )
 
 // ContainerState gives information about a container created by a Runtime.
@@ -62,6 +74,7 @@ type Container interface {
 	GetState() (*ContainerState, error)
 	GetRunningProcesses() ([]ContainerProcessState, error)
 	GetAllProcesses() ([]ContainerProcessState, error)
+	GetInitProcess() (Process, error)
 	Update(resources interface{}) error
 }
 
