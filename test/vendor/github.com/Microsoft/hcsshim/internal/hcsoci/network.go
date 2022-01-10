@@ -3,7 +3,7 @@ package hcsoci
 import (
 	"context"
 
-	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/resources"
@@ -19,31 +19,31 @@ func createNetworkNamespace(ctx context.Context, coi *createOptionsInternal, r *
 		l.Debug(op + " - End")
 	}()
 
-	netID, err := hns.CreateNamespace()
+	ns, err := hcn.NewNamespace("").Create()
 	if err != nil {
 		return err
 	}
 
 	log.G(ctx).WithFields(logrus.Fields{
-		"netID":               netID,
+		"netID":               ns.Id,
 		logfields.ContainerID: coi.ID,
 	}).Info("created network namespace for container")
 
-	r.SetNetNS(netID)
+	r.SetNetNS(ns.Id)
 	r.SetCreatedNetNS(true)
 
 	endpoints := make([]string, 0)
 	for _, endpointID := range coi.Spec.Windows.Network.EndpointList {
-		err = hns.AddNamespaceEndpoint(netID, endpointID)
+		err = hcn.AddNamespaceEndpoint(ns.Id, endpointID)
 		if err != nil {
 			return err
 		}
 		log.G(ctx).WithFields(logrus.Fields{
-			"netID":      netID,
+			"netID":      ns.Id,
 			"endpointID": endpointID,
 		}).Info("added network endpoint to namespace")
 		endpoints = append(endpoints, endpointID)
 	}
-	r.Add(&uvm.NetworkEndpoints{EndpointIDs: endpoints, Namespace: netID})
+	r.Add(&uvm.NetworkEndpoints{EndpointIDs: endpoints, Namespace: ns.Id})
 	return nil
 }
