@@ -1460,29 +1460,47 @@ func Test_RunPodSandbox_ProcessDump_LCOW(t *testing.T) {
 		},
 	}
 
-	// Wait for the first container to die and create the core dump.
-	time.Sleep(time.Second * 5)
-
 	container2ID := createContainer(t, client, ctx, c2Request)
 	defer removeContainer(t, client, ctx, container2ID)
 
 	startContainer(t, client, ctx, container2ID)
 	defer stopContainer(t, client, ctx, container2ID)
 
-	// Check if the core dump file is present
-	execCommand := []string{
-		"ls",
-		"/coredumps/core",
-	}
-	execRequest := &runtime.ExecSyncRequest{
-		ContainerId: container2ID,
-		Cmd:         execCommand,
-		Timeout:     20,
+	checkForDumpFile := func() error {
+		// Check if the core dump file is present
+		execCommand := []string{
+			"ls",
+			"/coredumps/core",
+		}
+		execRequest := &runtime.ExecSyncRequest{
+			ContainerId: container2ID,
+			Cmd:         execCommand,
+			Timeout:     20,
+		}
+
+		r := execSync(t, client, ctx, execRequest)
+		if r.ExitCode != 0 {
+			return fmt.Errorf("failed with exit code %d running `ls`: %s", r.ExitCode, string(r.Stderr))
+		}
+		return nil
 	}
 
-	r := execSync(t, client, ctx, execRequest)
-	if r.ExitCode != 0 {
-		t.Fatalf("failed with exit code %d running `ls`: %s", r.ExitCode, string(r.Stderr))
+	var (
+		done    bool
+		timeout = time.After(time.Second * 10)
+	)
+	for !done {
+		// Keep checking for a core dump until timeout.
+		select {
+		case <-timeout:
+			t.Fatal("failed to find core dump within timeout")
+		default:
+			if err := checkForDumpFile(); err == nil {
+				done = true
+			} else {
+				time.Sleep(time.Millisecond * 500)
+			}
+		}
 	}
 }
 
@@ -1571,35 +1589,53 @@ func Test_RunPodSandbox_ProcessDump_WCOW_Hypervisor(t *testing.T) {
 		},
 	}
 
-	// Wait for the first container to die and create the process dump.
-	time.Sleep(time.Second * 10)
-
 	container2ID := createContainer(t, client, ctx, c2Request)
 	defer removeContainer(t, client, ctx, container2ID)
 
 	startContainer(t, client, ctx, container2ID)
 	defer stopContainer(t, client, ctx, container2ID)
 
-	// Check if the core dump file is present
-	execCommand := []string{
-		"cmd",
-		"/c",
-		"dir",
-		"C:\\processdump",
-	}
-	execRequest := &runtime.ExecSyncRequest{
-		ContainerId: container2ID,
-		Cmd:         execCommand,
-		Timeout:     20,
+	checkForDumpFile := func() error {
+		// Check if the core dump file is present
+		execCommand := []string{
+			"cmd",
+			"/c",
+			"dir",
+			"C:\\processdump",
+		}
+		execRequest := &runtime.ExecSyncRequest{
+			ContainerId: container2ID,
+			Cmd:         execCommand,
+			Timeout:     20,
+		}
+
+		r := execSync(t, client, ctx, execRequest)
+		if r.ExitCode != 0 {
+			return fmt.Errorf("failed with exit code %d running `dir`: %s", r.ExitCode, string(r.Stderr))
+		}
+
+		if !strings.Contains(string(r.Stdout), ".dmp") {
+			return fmt.Errorf("expected dmp file to be present in the directory, got: %s", string(r.Stdout))
+		}
+		return nil
 	}
 
-	r := execSync(t, client, ctx, execRequest)
-	if r.ExitCode != 0 {
-		t.Fatalf("failed with exit code %d running `dir`: %s", r.ExitCode, string(r.Stderr))
-	}
-
-	if !strings.Contains(string(r.Stdout), ".dmp") {
-		t.Fatalf("expected dmp file to be present in the directory, got: %s", string(r.Stdout))
+	var (
+		done    bool
+		timeout = time.After(time.Second * 15)
+	)
+	for !done {
+		// Keep checking for a dump file until timeout.
+		select {
+		case <-timeout:
+			t.Fatal("failed to find dump file before timeout")
+		default:
+			if err := checkForDumpFile(); err == nil {
+				done = true
+			} else {
+				time.Sleep(time.Second * 1)
+			}
+		}
 	}
 }
 
