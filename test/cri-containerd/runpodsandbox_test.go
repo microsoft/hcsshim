@@ -1489,10 +1489,7 @@ func Test_RunPodSandbox_ProcessDump_LCOW(t *testing.T) {
 		done    bool
 		timeout = time.After(time.Second * 10)
 	)
-	for {
-		if done {
-			break
-		}
+	for !done {
 		// Keep checking for a core dump until timeout.
 		select {
 		case <-timeout:
@@ -1627,10 +1624,7 @@ func Test_RunPodSandbox_ProcessDump_WCOW_Hypervisor(t *testing.T) {
 		done    bool
 		timeout = time.After(time.Second * 15)
 	)
-	for {
-		if done {
-			break
-		}
+	for !done {
 		// Keep checking for a dump file until timeout.
 		select {
 		case <-timeout:
