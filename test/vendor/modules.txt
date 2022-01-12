@@ -26,6 +26,7 @@ github.com/Microsoft/hcsshim/internal/cow
 github.com/Microsoft/hcsshim/internal/cpugroup
 github.com/Microsoft/hcsshim/internal/credentials
 github.com/Microsoft/hcsshim/internal/devices
+github.com/Microsoft/hcsshim/internal/extendedtask
 github.com/Microsoft/hcsshim/internal/gcs
 github.com/Microsoft/hcsshim/internal/guestrequest
 github.com/Microsoft/hcsshim/internal/hcs
@@ -48,7 +49,6 @@ github.com/Microsoft/hcsshim/internal/oc
 github.com/Microsoft/hcsshim/internal/oci
 github.com/Microsoft/hcsshim/internal/ospath
 github.com/Microsoft/hcsshim/internal/processorinfo
-github.com/Microsoft/hcsshim/internal/querycompute
 github.com/Microsoft/hcsshim/internal/regstate
 github.com/Microsoft/hcsshim/internal/requesttype
 github.com/Microsoft/hcsshim/internal/resources

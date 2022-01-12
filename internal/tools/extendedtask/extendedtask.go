@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Microsoft/hcsshim/internal/querycompute"
+	"github.com/Microsoft/hcsshim/internal/extendedtask"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/urfave/cli"
 )
 
 func main() {
 	app := cli.NewApp()
-	app.Name = "querycompute"
+	app.Name = "extendedtask"
 	app.Usage = "tool for getting compute info"
 	app.Commands = []cli.Command{
 		processorInfoCommand,
@@ -36,8 +36,8 @@ var processorInfoCommand = cli.Command{
 		if err != nil {
 			return err
 		}
-		svc := querycompute.NewQueryComputeClient(shim)
-		resp, err := svc.ComputeProcessorInfo(context.Background(), &querycompute.ComputeProcessorInfoRequest{ContainerID: containerID})
+		svc := extendedtask.NewExtendedTaskClient(shim)
+		resp, err := svc.ComputeProcessorInfo(context.Background(), &extendedtask.ComputeProcessorInfoRequest{ID: containerID})
 		if err != nil {
 			return err
 		}

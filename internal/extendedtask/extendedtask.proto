@@ -1,15 +1,15 @@
 syntax = "proto3";
 
-option go_package = "github.com/Microsoft/hcsshim/internal/querycompute;querycompute";
+option go_package = "github.com/Microsoft/hcsshim/internal/extendedtask;extendedtask";
 
 import weak "gogoproto/gogo.proto";
 
-service QueryCompute {
+service ExtendedTask {
     rpc ComputeProcessorInfo(ComputeProcessorInfoRequest) returns (ComputeProcessorInfoResponse);
 }
 
 message ComputeProcessorInfoRequest {
-    string container_id = 1;  
+    string id = 1;  
 }
 
 message ComputeProcessorInfoResponse {

@@ -7,22 +7,22 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/querycompute"
+	"github.com/Microsoft/hcsshim/internal/extendedtask"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
-func getPodProcessorInfo(ctx context.Context, podID string) (*querycompute.ComputeProcessorInfoResponse, error) {
+func getPodProcessorInfo(ctx context.Context, podID string) (*extendedtask.ComputeProcessorInfoResponse, error) {
 	shimName := fmt.Sprintf("k8s.io-%s", podID)
 	shim, err := shimdiag.GetShim(shimName)
 	if err != nil {
 		return nil, err
 	}
-	svc := querycompute.NewQueryComputeClient(shim)
-	return svc.ComputeProcessorInfo(ctx, &querycompute.ComputeProcessorInfoRequest{ContainerID: podID})
+	svc := extendedtask.NewExtendedTaskClient(shim)
+	return svc.ComputeProcessorInfo(ctx, &extendedtask.ComputeProcessorInfoRequest{ID: podID})
 }
 
-func Test_QueryCompute_ProcessorInfo(t *testing.T) {
+func Test_ExtendedTask_ProcessorInfo(t *testing.T) {
 	type config struct {
 		name             string
 		requiredFeatures []string

@@ -37,7 +37,7 @@ prefixes = ["github.com/Microsoft/hcsshim/internal/shimdiag"]
 plugins = ["ttrpc"]
 
 [[overrides]]
-prefixes = ["github.com/Microsoft/hcsshim/internal/querycompute"]
+prefixes = ["github.com/Microsoft/hcsshim/internal/extendedtask"]
 plugins = ["ttrpc"]
 
 [[overrides]]
