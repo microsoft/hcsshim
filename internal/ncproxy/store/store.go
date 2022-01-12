@@ -11,7 +11,7 @@ import (
 
 var (
 	ErrBucketNotFound = errors.New("bucket not found")
-	errKeyNotFound    = errors.New("key does not exist")
+	ErrKeyNotFound    = errors.New("key does not exist")
 )
 
 type NetworkingStore struct {
@@ -37,7 +37,7 @@ func (n *NetworkingStore) GetNetworkByName(ctx context.Context, networkName stri
 		}
 		data := bkt.Get([]byte(networkName))
 		if data == nil {
-			return errors.Wrapf(errKeyNotFound, "network %v", networkName)
+			return errors.Wrapf(ErrKeyNotFound, "network %v", networkName)
 		}
 		if err := json.Unmarshal(data, internalData); err != nil {
 			return errors.Wrapf(err, "data is %v", string(data))
@@ -86,13 +86,9 @@ func (n *NetworkingStore) ListNetworks(ctx context.Context) (results []*ncproxyn
 			return errors.Wrapf(ErrBucketNotFound, "network bucket %v", bucketKeyNetwork)
 		}
 		err := bkt.ForEach(func(k, v []byte) error {
-			data := bkt.Get([]byte(k))
-			if data == nil {
-				return errors.Wrapf(errKeyNotFound, "network %v", k)
-			}
 			internalData := &ncproxynetworking.Network{}
-			if err := json.Unmarshal(data, internalData); err != nil {
-				return errors.Wrapf(err, "data is %v", string(data))
+			if err := json.Unmarshal(v, internalData); err != nil {
+				return errors.Wrapf(err, "data is %v", string(v))
 			}
 			results = append(results, internalData)
 			return nil
@@ -114,7 +110,7 @@ func (n *NetworkingStore) GetEndpointByName(ctx context.Context, endpointName st
 		}
 		jsonData := bkt.Get([]byte(endpointName))
 		if jsonData == nil {
-			return errors.Wrapf(errKeyNotFound, "endpoint %v", endpointName)
+			return errors.Wrapf(ErrKeyNotFound, "endpoint %v", endpointName)
 		}
 		if err := json.Unmarshal(jsonData, endpt); err != nil {
 			return err
@@ -172,12 +168,8 @@ func (n *NetworkingStore) ListEndpoints(ctx context.Context) (results []*ncproxy
 			return errors.Wrapf(ErrBucketNotFound, "endpoint bucket %v", bucketKeyEndpoint)
 		}
 		err := bkt.ForEach(func(k, v []byte) error {
-			jsonData := bkt.Get([]byte(k))
-			if jsonData == nil {
-				return errors.Wrapf(errKeyNotFound, "endpoint %v", k)
-			}
 			endptInternal := &ncproxynetworking.Endpoint{}
-			if err := json.Unmarshal(jsonData, endptInternal); err != nil {
+			if err := json.Unmarshal(v, endptInternal); err != nil {
 				return err
 			}
 			results = append(results, endptInternal)
@@ -194,28 +186,28 @@ func (n *NetworkingStore) ListEndpoints(ctx context.Context) (results []*ncproxy
 // ComputeAgentStore is a database that stores a key value pair of container id
 // to compute agent server address
 type ComputeAgentStore struct {
-	DB *bolt.DB
+	db *bolt.DB
 }
 
 func NewComputeAgentStore(db *bolt.DB) *ComputeAgentStore {
-	return &ComputeAgentStore{DB: db}
+	return &ComputeAgentStore{db: db}
 }
 
 func (c *ComputeAgentStore) Close() error {
-	return c.DB.Close()
+	return c.db.Close()
 }
 
 // GetComputeAgent returns the compute agent address of a single entry in the database for key `containerID`
 // or returns an error if the key does not exist
 func (c *ComputeAgentStore) GetComputeAgent(ctx context.Context, containerID string) (result string, err error) {
-	if err := c.DB.View(func(tx *bolt.Tx) error {
+	if err := c.db.View(func(tx *bolt.Tx) error {
 		bkt := getComputeAgentBucket(tx)
 		if bkt == nil {
 			return errors.Wrapf(ErrBucketNotFound, "bucket %v", bucketKeyComputeAgent)
 		}
 		data := bkt.Get([]byte(containerID))
 		if data == nil {
-			return errors.Wrapf(errKeyNotFound, "key %v", containerID)
+			return errors.Wrapf(ErrKeyNotFound, "key %v", containerID)
 		}
 		result = string(data)
 		return nil
@@ -231,14 +223,13 @@ func (c *ComputeAgentStore) GetComputeAgent(ctx context.Context, containerID str
 // server addresses
 func (c *ComputeAgentStore) GetComputeAgents(ctx context.Context) (map[string]string, error) {
 	content := map[string]string{}
-	if err := c.DB.View(func(tx *bolt.Tx) error {
+	if err := c.db.View(func(tx *bolt.Tx) error {
 		bkt := getComputeAgentBucket(tx)
 		if bkt == nil {
 			return errors.Wrapf(ErrBucketNotFound, "bucket %v", bucketKeyComputeAgent)
 		}
 		err := bkt.ForEach(func(k, v []byte) error {
-			data := bkt.Get([]byte(k))
-			content[string(k)] = string(data)
+			content[string(k)] = string(v)
 			return nil
 		})
 		return err
@@ -251,7 +242,7 @@ func (c *ComputeAgentStore) GetComputeAgents(ctx context.Context) (map[string]st
 // UpdateComputeAgent updates or adds an entry (if none already exists) to the database
 // `address` corresponds to the address of the compute agent server for the `containerID`
 func (c *ComputeAgentStore) UpdateComputeAgent(ctx context.Context, containerID string, address string) error {
-	if err := c.DB.Update(func(tx *bolt.Tx) error {
+	if err := c.db.Update(func(tx *bolt.Tx) error {
 		bkt, err := createComputeAgentBucket(tx)
 		if err != nil {
 			return err
@@ -266,7 +257,7 @@ func (c *ComputeAgentStore) UpdateComputeAgent(ctx context.Context, containerID 
 // DeleteComputeAgent deletes an entry in the database or returns an error if none exists
 // `containerID` corresponds to the target key that the entry should be deleted for
 func (c *ComputeAgentStore) DeleteComputeAgent(ctx context.Context, containerID string) error {
-	if err := c.DB.Update(func(tx *bolt.Tx) error {
+	if err := c.db.Update(func(tx *bolt.Tx) error {
 		bkt := getComputeAgentBucket(tx)
 		if bkt == nil {
 			return errors.Wrapf(ErrBucketNotFound, "bucket %v", bucketKeyComputeAgent)

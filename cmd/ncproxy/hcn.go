@@ -9,6 +9,40 @@ import (
 	"github.com/pkg/errors"
 )
 
+func hcnEndpointToEndpointResponse(ep *hcn.HostComputeEndpoint) (_ *ncproxygrpc.GetEndpointResponse, err error) {
+	policies, err := parseEndpointPolicies(ep.Policies)
+	if err != nil {
+		return nil, err
+	}
+	ipConfigInfo := ep.IpConfigurations
+	if len(ipConfigInfo) == 0 {
+		return nil, errors.Errorf("failed to find network %v ip configuration information", ep.Name)
+	}
+
+	return &ncproxygrpc.GetEndpointResponse{
+		Namespace: ep.HostComputeNamespace,
+		ID:        ep.Id,
+		Endpoint: &ncproxygrpc.EndpointSettings{
+			Settings: &ncproxygrpc.EndpointSettings_HcnEndpoint{
+				HcnEndpoint: &ncproxygrpc.HcnEndpointSettings{
+					Name:       ep.Name,
+					Macaddress: ep.MacAddress,
+					// only use the first ip config returned since we only expect there to be one
+					Ipaddress:             ep.IpConfigurations[0].IpAddress,
+					IpaddressPrefixlength: uint32(ep.IpConfigurations[0].PrefixLength),
+					NetworkName:           ep.HostComputeNetwork,
+					Policies:              policies,
+					DnsSetting: &ncproxygrpc.DnsSetting{
+						ServerIpAddrs: ep.Dns.ServerList,
+						Domain:        ep.Dns.Domain,
+						Search:        ep.Dns.Search,
+					},
+				},
+			},
+		},
+	}, nil
+}
+
 func modifyEndpoint(ctx context.Context, id string, policies []hcn.EndpointPolicy, requestType hcn.RequestType) error {
 	endpointRequest := hcn.PolicyEndpointRequest{
 		Policies: policies,
@@ -168,7 +202,7 @@ func createHCNNetwork(ctx context.Context, req *ncproxygrpc.HostComputeNetworkSe
 	return network, nil
 }
 
-func getHCNNetworkResponse(network *hcn.HostComputeNetwork) (*ncproxygrpc.HostComputeNetworkSettings, error) {
+func hcnNetworkToNetworkResponse(network *hcn.HostComputeNetwork) (*ncproxygrpc.GetNetworkResponse, error) {
 	var (
 		ipamType                int32
 		defaultGateway          string
@@ -202,13 +236,22 @@ func getHCNNetworkResponse(network *hcn.HostComputeNetwork) (*ncproxygrpc.HostCo
 		switchName = extSwitch.Name
 	}
 
-	return &ncproxygrpc.HostComputeNetworkSettings{
+	settings := &ncproxygrpc.HostComputeNetworkSettings{
 		Name:                  network.Name,
 		Mode:                  ncproxygrpc.HostComputeNetworkSettings_NetworkMode(mode),
 		SwitchName:            switchName,
 		IpamType:              ncproxygrpc.HostComputeNetworkSettings_IpamType(ipamType),
 		SubnetIpaddressPrefix: subnetIPAddressPrefixes,
 		DefaultGateway:        defaultGateway,
+	}
+
+	return &ncproxygrpc.GetNetworkResponse{
+		ID: network.Id,
+		Network: &ncproxygrpc.Network{
+			Settings: &ncproxygrpc.Network_HcnNetwork{
+				HcnNetwork: settings,
+			},
+		},
 	}, nil
 }
 

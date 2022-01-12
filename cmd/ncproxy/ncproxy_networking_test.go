@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"strconv"
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/computeagent"
@@ -55,7 +54,7 @@ func TestAddNIC_NCProxy(t *testing.T) {
 			},
 		},
 	}
-	if err := gService.ncproxyNetworking.CreatEndpoint(ctx, endpoint); err != nil {
+	if err := gService.ncpNetworkingStore.CreatEndpoint(ctx, endpoint); err != nil {
 		t.Fatal(err)
 	}
 
@@ -98,7 +97,7 @@ func TestAddNIC_NCProxy(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(_ *testing.T) {
+		t.Run(test.name, func(subtest *testing.T) {
 			req := &ncproxygrpc.AddNICRequest{
 				ContainerID:  test.containerID,
 				NicID:        test.nicID,
@@ -107,10 +106,10 @@ func TestAddNIC_NCProxy(t *testing.T) {
 
 			_, err := gService.AddNIC(ctx, req)
 			if test.errorExpected && err == nil {
-				t.Fatalf("expected AddNIC to return an error")
+				subtest.Fatalf("expected AddNIC to return an error")
 			}
 			if !test.errorExpected && err != nil {
-				t.Fatalf("expected AddNIC to return no error, instead got %v", err)
+				subtest.Fatalf("expected AddNIC to return no error, instead got %v", err)
 			}
 		})
 	}
@@ -158,7 +157,7 @@ func TestDeleteNIC_NCProxy(t *testing.T) {
 			},
 		},
 	}
-	_ = gService.ncproxyNetworking.CreatEndpoint(ctx, endpoint)
+	_ = gService.ncpNetworkingStore.CreatEndpoint(ctx, endpoint)
 
 	type config struct {
 		name          string
@@ -199,7 +198,7 @@ func TestDeleteNIC_NCProxy(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(_ *testing.T) {
+		t.Run(test.name, func(subtest *testing.T) {
 			req := &ncproxygrpc.DeleteNICRequest{
 				ContainerID:  test.containerID,
 				NicID:        test.nicID,
@@ -208,10 +207,10 @@ func TestDeleteNIC_NCProxy(t *testing.T) {
 
 			_, err := gService.DeleteNIC(ctx, req)
 			if test.errorExpected && err == nil {
-				t.Fatalf("expected DeleteNIC to return an error")
+				subtest.Fatalf("expected DeleteNIC to return an error")
 			}
 			if !test.errorExpected && err != nil {
-				t.Fatalf("expected DeleteNIC to return no error, instead got %v", err)
+				subtest.Fatalf("expected DeleteNIC to return no error, instead got %v", err)
 			}
 		})
 	}
@@ -259,7 +258,7 @@ func TestModifyNIC_NCProxy_Returns_Error(t *testing.T) {
 			},
 		},
 	}
-	_ = gService.ncproxyNetworking.CreatEndpoint(ctx, endpoint)
+	_ = gService.ncpNetworkingStore.CreatEndpoint(ctx, endpoint)
 
 	// create request
 	settings := &ncproxygrpc.NCProxyEndpointSettings{}
@@ -328,7 +327,7 @@ func TestCreateNetwork_NCProxy(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(_ *testing.T) {
+		t.Run(test.name, func(subtest *testing.T) {
 			network := &ncproxygrpc.NCProxyNetworkSettings{
 				Name: test.networkName,
 			}
@@ -341,13 +340,13 @@ func TestCreateNetwork_NCProxy(t *testing.T) {
 			}
 			_, err := gService.CreateNetwork(ctx, req)
 			if test.errorExpected && err == nil {
-				t.Fatalf("expected CreateNetwork to return an error")
+				subtest.Fatalf("expected CreateNetwork to return an error")
 			}
 
 			if !test.errorExpected {
-				_, err := gService.ncproxyNetworking.GetNetworkByName(ctx, test.networkName)
+				_, err := gService.ncpNetworkingStore.GetNetworkByName(ctx, test.networkName)
 				if err != nil {
-					t.Fatalf("failed to find created network with %v", err)
+					subtest.Fatalf("failed to find created network with %v", err)
 				}
 			}
 		})
@@ -372,7 +371,7 @@ func TestCreateEndpoint_NCProxy(t *testing.T) {
 		NetworkName: networkName,
 		Settings:    &ncproxynetworking.NetworkSettings{},
 	}
-	_ = gService.ncproxyNetworking.CreateNetwork(ctx, network)
+	_ = gService.ncpNetworkingStore.CreateNetwork(ctx, network)
 
 	type config struct {
 		name          string
@@ -413,9 +412,9 @@ func TestCreateEndpoint_NCProxy(t *testing.T) {
 		},
 	}
 
-	for i, test := range tests {
-		t.Run(test.name, func(_ *testing.T) {
-			endpointName := t.Name() + "-endpoint-" + strconv.Itoa(i)
+	for _, test := range tests {
+		t.Run(test.name, func(subtest *testing.T) {
+			endpointName := subtest.Name() + "-endpoint-"
 			endpoint := &ncproxygrpc.NCProxyEndpointSettings{
 				Name:                  endpointName,
 				Macaddress:            test.macaddress,
@@ -436,15 +435,15 @@ func TestCreateEndpoint_NCProxy(t *testing.T) {
 
 			_, err := gService.CreateEndpoint(ctx, req)
 			if test.errorExpected && err == nil {
-				t.Fatalf("expected CreateEndpoint to return an error")
+				subtest.Fatalf("expected CreateEndpoint to return an error")
 			}
 			if !test.errorExpected {
 				if err != nil {
-					t.Fatalf("expected to get no error, instead got %v", err)
+					subtest.Fatalf("expected to get no error, instead got %v", err)
 				}
-				_, err := gService.ncproxyNetworking.GetEndpointByName(ctx, endpointName)
+				_, err := gService.ncpNetworkingStore.GetEndpointByName(ctx, endpointName)
 				if err != nil {
-					t.Fatalf("failed to find created endpoint with %v", err)
+					subtest.Fatalf("failed to find created endpoint with %v", err)
 				}
 			}
 		})

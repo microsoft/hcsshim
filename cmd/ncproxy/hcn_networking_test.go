@@ -184,10 +184,10 @@ func TestAddNIC_HCN(t *testing.T) {
 
 			_, err := gService.AddNIC(ctx, req)
 			if test.errorExpected && err == nil {
-				t.Fatalf("expected AddNIC to return an error")
+				subtest.Fatalf("expected AddNIC to return an error")
 			}
 			if !test.errorExpected && err != nil {
-				t.Fatalf("expected AddNIC to return no error, instead got %v", err)
+				subtest.Fatalf("expected AddNIC to return no error, instead got %v", err)
 			}
 		})
 	}
@@ -284,7 +284,7 @@ func TestDeleteNIC_HCN(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(_ *testing.T) {
+		t.Run(test.name, func(subtest *testing.T) {
 			req := &ncproxygrpc.DeleteNICRequest{
 				ContainerID:  test.containerID,
 				NicID:        test.nicID,
@@ -293,10 +293,10 @@ func TestDeleteNIC_HCN(t *testing.T) {
 
 			_, err := gService.DeleteNIC(ctx, req)
 			if test.errorExpected && err == nil {
-				t.Fatalf("expected DeleteNIC to return an error")
+				subtest.Fatalf("expected DeleteNIC to return an error")
 			}
 			if !test.errorExpected && err != nil {
-				t.Fatalf("expected DeleteNIC to return no error, instead got %v", err)
+				subtest.Fatalf("expected DeleteNIC to return no error, instead got %v", err)
 			}
 		})
 	}
@@ -424,7 +424,7 @@ func TestModifyNIC_HCN(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(_ *testing.T) {
+		t.Run(test.name, func(subtest *testing.T) {
 			endpoint := &ncproxygrpc.HcnEndpointSettings{
 				Policies: &ncproxygrpc.HcnEndpointPolicies{
 					IovPolicySettings: test.iovPolicySettings,
@@ -443,10 +443,10 @@ func TestModifyNIC_HCN(t *testing.T) {
 
 			_, err := gService.ModifyNIC(ctx, req)
 			if test.errorExpected && err == nil {
-				t.Fatalf("expected ModifyNIC to return an error")
+				subtest.Fatalf("expected ModifyNIC to return an error")
 			}
 			if !test.errorExpected && err != nil {
-				t.Fatalf("expected ModifyNIC to return no error, instead got %v", err)
+				subtest.Fatalf("expected ModifyNIC to return no error, instead got %v", err)
 			}
 		})
 	}
@@ -484,7 +484,7 @@ func TestCreateNetwork_HCN(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(_ *testing.T) {
+		t.Run(test.name, func(subtest *testing.T) {
 			network := &ncproxygrpc.HostComputeNetworkSettings{
 				Name: test.networkName,
 				Mode: ncproxygrpc.HostComputeNetworkSettings_NAT,
@@ -498,21 +498,21 @@ func TestCreateNetwork_HCN(t *testing.T) {
 			}
 			_, err := gService.CreateNetwork(ctx, req)
 			if test.errorExpected && err == nil {
-				t.Fatalf("expected CreateNetwork to return an error")
+				subtest.Fatalf("expected CreateNetwork to return an error")
 			}
 
 			if !test.errorExpected {
 				if err != nil {
-					t.Fatalf("expected CreateNetwork to return no error, instead got %v", err)
+					subtest.Fatalf("expected CreateNetwork to return no error, instead got %v", err)
 				}
 				// validate that the network exists
 				network, err := hcn.GetNetworkByName(test.networkName)
 				if err != nil {
-					t.Fatalf("failed to find created network with %v", err)
+					subtest.Fatalf("failed to find created network with %v", err)
 				}
 				// cleanup the created network
 				if err = network.Delete(); err != nil {
-					t.Fatalf("failed to cleanup network %v created by test with %v", test.networkName, err)
+					subtest.Fatalf("failed to cleanup network %v created by test with %v", test.networkName, err)
 				}
 			}
 		})
@@ -582,7 +582,7 @@ func TestCreateEndpoint_HCN(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		t.Run(test.name, func(_ *testing.T) {
+		t.Run(test.name, func(subtest *testing.T) {
 			endpointName := t.Name() + "-endpoint-" + strconv.Itoa(i)
 			endpoint := &ncproxygrpc.HcnEndpointSettings{
 				Name:                  endpointName,
@@ -601,20 +601,20 @@ func TestCreateEndpoint_HCN(t *testing.T) {
 
 			_, err = gService.CreateEndpoint(ctx, req)
 			if test.errorExpected && err == nil {
-				t.Fatalf("expected CreateEndpoint to return an error")
+				subtest.Fatalf("expected CreateEndpoint to return an error")
 			}
 			if !test.errorExpected {
 				if err != nil {
-					t.Fatalf("expected CreateEndpoint to return no error, instead got %v", err)
+					subtest.Fatalf("expected CreateEndpoint to return no error, instead got %v", err)
 				}
 				// validate that the endpoint was created
 				ep, err := hcn.GetEndpointByName(endpointName)
 				if err != nil {
-					t.Fatalf("endpoint was not found: %v", err)
+					subtest.Fatalf("endpoint was not found: %v", err)
 				}
 				// cleanup endpoint
 				if err := ep.Delete(); err != nil {
-					t.Fatalf("failed to delete endpoint created for test %v", err)
+					subtest.Fatalf("failed to delete endpoint created for test %v", err)
 				}
 			}
 		})

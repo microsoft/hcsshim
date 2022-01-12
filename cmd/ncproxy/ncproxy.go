@@ -48,13 +48,13 @@ type grpcService struct {
 
 	// ncproxyNetworking is a database that stores the ncproxy networking networks
 	// and endpoints persistently.
-	ncproxyNetworking *ncproxystore.NetworkingStore
+	ncpNetworkingStore *ncproxystore.NetworkingStore
 }
 
 func newGRPCService(agentCache *computeAgentCache, ncproxyNetworking *ncproxystore.NetworkingStore) *grpcService {
 	return &grpcService{
 		containerIDToComputeAgent: agentCache,
-		ncproxyNetworking:         ncproxyNetworking,
+		ncpNetworkingStore:        ncproxyNetworking,
 	}
 }
 
@@ -80,21 +80,21 @@ func (s *grpcService) AddNIC(ctx context.Context, req *ncproxygrpc.AddNICRequest
 	}
 
 	var anyEndpoint *types.Any
-	if endpt, err := s.ncproxyNetworking.GetEndpointByName(ctx, req.EndpointName); err == nil {
-		if endpt.Settings == nil || endpt.Settings.DeviceDetails == nil || endpt.Settings.DeviceDetails.PCIDeviceDetails == nil {
+	if ep, err := s.ncpNetworkingStore.GetEndpointByName(ctx, req.EndpointName); err == nil {
+		if ep.Settings == nil || ep.Settings.DeviceDetails == nil || ep.Settings.DeviceDetails.PCIDeviceDetails == nil {
 			return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
 		}
 		// if there are device details, assign the device via the compute agent
 		caReq := &computeagent.AssignPCIInternalRequest{
 			ContainerID:          req.ContainerID,
-			DeviceID:             endpt.Settings.DeviceDetails.PCIDeviceDetails.DeviceID,
-			VirtualFunctionIndex: endpt.Settings.DeviceDetails.PCIDeviceDetails.VirtualFunctionIndex,
+			DeviceID:             ep.Settings.DeviceDetails.PCIDeviceDetails.DeviceID,
+			VirtualFunctionIndex: ep.Settings.DeviceDetails.PCIDeviceDetails.VirtualFunctionIndex,
 			NicID:                req.NicID,
 		}
 		if _, err := agent.AssignPCI(ctx, caReq); err != nil {
 			return nil, err
 		}
-		anyEndpoint, err = typeurl.MarshalAny(endpt)
+		anyEndpoint, err = typeurl.MarshalAny(ep)
 		if err != nil {
 			return nil, err
 		}
@@ -166,7 +166,7 @@ func (s *grpcService) ModifyNIC(ctx context.Context, req *ncproxygrpc.ModifyNICR
 		return nil, status.Error(codes.InvalidArgument, "received empty field in request")
 	}
 
-	if _, err := s.ncproxyNetworking.GetEndpointByName(ctx, req.EndpointName); err == nil {
+	if _, err := s.ncpNetworkingStore.GetEndpointByName(ctx, req.EndpointName); err == nil {
 		return nil, status.Errorf(codes.Unimplemented, "cannot modify custom endpoints: %v", req)
 	}
 
@@ -261,7 +261,7 @@ func (s *grpcService) DeleteNIC(ctx context.Context, req *ncproxygrpc.DeleteNICR
 	}
 
 	var anyEndpoint *types.Any
-	if endpt, err := s.ncproxyNetworking.GetEndpointByName(ctx, req.EndpointName); err == nil {
+	if endpt, err := s.ncpNetworkingStore.GetEndpointByName(ctx, req.EndpointName); err == nil {
 		anyEndpoint, err = typeurl.MarshalAny(endpt)
 		if err != nil {
 			return nil, err
@@ -337,7 +337,7 @@ func (s *grpcService) CreateNetwork(ctx context.Context, req *ncproxygrpc.Create
 			NetworkName: settings.Name,
 			Settings:    networkSettings,
 		}
-		if err := s.ncproxyNetworking.CreateNetwork(ctx, network); err != nil {
+		if err := s.ncpNetworkingStore.CreateNetwork(ctx, network); err != nil {
 			return nil, err
 		}
 		return &ncproxygrpc.CreateNetworkResponse{
@@ -392,7 +392,7 @@ func (s *grpcService) CreateEndpoint(ctx context.Context, req *ncproxygrpc.Creat
 			return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
 		}
 
-		network, err := s.ncproxyNetworking.GetNetworkByName(ctx, reqEndpoint.NetworkName)
+		network, err := s.ncpNetworkingStore.GetNetworkByName(ctx, reqEndpoint.NetworkName)
 		if err != nil || network == nil {
 			return nil, errors.Wrapf(err, "network %v does not exist", reqEndpoint.NetworkName)
 		}
@@ -414,7 +414,7 @@ func (s *grpcService) CreateEndpoint(ctx context.Context, req *ncproxygrpc.Creat
 			EndpointName: reqEndpoint.Name,
 			Settings:     epSettings,
 		}
-		if err := s.ncproxyNetworking.CreatEndpoint(ctx, ep); err != nil {
+		if err := s.ncpNetworkingStore.CreatEndpoint(ctx, ep); err != nil {
 			return nil, err
 		}
 		return &ncproxygrpc.CreateEndpointResponse{
@@ -438,9 +438,9 @@ func (s *grpcService) AddEndpoint(ctx context.Context, req *ncproxygrpc.AddEndpo
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
 	}
 
-	if endpt, err := s.ncproxyNetworking.GetEndpointByName(ctx, req.Name); err == nil {
+	if endpt, err := s.ncpNetworkingStore.GetEndpointByName(ctx, req.Name); err == nil {
 		endpt.NamespaceID = req.NamespaceID
-		if err := s.ncproxyNetworking.UpdateEndpoint(ctx, endpt); err != nil {
+		if err := s.ncpNetworkingStore.UpdateEndpoint(ctx, endpt); err != nil {
 			return nil, errors.Wrapf(err, "failed to update endpoint with name `%s`", req.Name)
 		}
 	} else {
@@ -472,8 +472,8 @@ func (s *grpcService) DeleteEndpoint(ctx context.Context, req *ncproxygrpc.Delet
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
 	}
 
-	if _, err := s.ncproxyNetworking.GetEndpointByName(ctx, req.Name); err == nil {
-		if err := s.ncproxyNetworking.DeleteEndpoint(ctx, req.Name); err != nil {
+	if _, err := s.ncpNetworkingStore.GetEndpointByName(ctx, req.Name); err == nil {
+		if err := s.ncpNetworkingStore.DeleteEndpoint(ctx, req.Name); err != nil {
 			return nil, errors.Wrapf(err, "failed to delete endpoint with name %q", req.Name)
 		}
 	} else {
@@ -505,8 +505,8 @@ func (s *grpcService) DeleteNetwork(ctx context.Context, req *ncproxygrpc.Delete
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
 	}
 
-	if _, err := s.ncproxyNetworking.GetNetworkByName(ctx, req.Name); err == nil {
-		if err := s.ncproxyNetworking.DeleteNetwork(ctx, req.Name); err != nil {
+	if _, err := s.ncpNetworkingStore.GetNetworkByName(ctx, req.Name); err == nil {
+		if err := s.ncpNetworkingStore.DeleteNetwork(ctx, req.Name); err != nil {
 			return nil, errors.Wrapf(err, "failed to delete network with name %q", req.Name)
 		}
 	} else {
@@ -526,6 +526,39 @@ func (s *grpcService) DeleteNetwork(ctx context.Context, req *ncproxygrpc.Delete
 	return &ncproxygrpc.DeleteNetworkResponse{}, nil
 }
 
+func ncpNetworkingEndpointToEndpointResponse(ep *ncproxynetworking.Endpoint) (_ *ncproxygrpc.GetEndpointResponse, err error) {
+	result := &ncproxygrpc.GetEndpointResponse{
+		Namespace: ep.NamespaceID,
+		ID:        ep.EndpointName,
+	}
+	if ep.Settings == nil {
+		return result, nil
+	}
+
+	deviceDetails := &ncproxygrpc.NCProxyEndpointSettings_PciDeviceDetails{}
+	if ep.Settings.DeviceDetails != nil && ep.Settings.DeviceDetails.PCIDeviceDetails != nil {
+		deviceDetails.PciDeviceDetails = &ncproxygrpc.PCIDeviceDetails{
+			DeviceID:             ep.Settings.DeviceDetails.PCIDeviceDetails.DeviceID,
+			VirtualFunctionIndex: ep.Settings.DeviceDetails.PCIDeviceDetails.VirtualFunctionIndex,
+		}
+	}
+
+	result.Endpoint = &ncproxygrpc.EndpointSettings{
+		Settings: &ncproxygrpc.EndpointSettings_NcproxyEndpoint{
+			NcproxyEndpoint: &ncproxygrpc.NCProxyEndpointSettings{
+				Name:                  ep.EndpointName,
+				Macaddress:            ep.Settings.Macaddress,
+				Ipaddress:             ep.Settings.IPAddress,
+				IpaddressPrefixlength: ep.Settings.IPAddressPrefixLength,
+				NetworkName:           ep.Settings.NetworkName,
+				DefaultGateway:        ep.Settings.DefaultGateway,
+				DeviceDetails:         deviceDetails,
+			},
+		},
+	}
+	return result, nil
+}
+
 func (s *grpcService) GetEndpoint(ctx context.Context, req *ncproxygrpc.GetEndpointRequest) (_ *ncproxygrpc.GetEndpointResponse, err error) {
 	ctx, span := trace.StartSpan(ctx, "GetEndpoint") //nolint:ineffassign,staticcheck
 	defer span.End()
@@ -538,39 +571,10 @@ func (s *grpcService) GetEndpoint(ctx context.Context, req *ncproxygrpc.GetEndpo
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
 	}
 
-	if endpt, err := s.ncproxyNetworking.GetEndpointByName(ctx, req.Name); err == nil {
-		result := &ncproxygrpc.GetEndpointResponse{
-			Namespace: endpt.NamespaceID,
-			ID:        endpt.EndpointName,
-		}
-		if endpt.Settings == nil {
-			return result, nil
-		}
-
-		deviceDetails := &ncproxygrpc.NCProxyEndpointSettings_PciDeviceDetails{}
-		if endpt.Settings.DeviceDetails != nil && endpt.Settings.DeviceDetails.PCIDeviceDetails != nil {
-			deviceDetails.PciDeviceDetails = &ncproxygrpc.PCIDeviceDetails{
-				DeviceID:             endpt.Settings.DeviceDetails.PCIDeviceDetails.DeviceID,
-				VirtualFunctionIndex: endpt.Settings.DeviceDetails.PCIDeviceDetails.VirtualFunctionIndex,
-			}
-		}
-
-		result.Endpoint = &ncproxygrpc.EndpointSettings{
-			Settings: &ncproxygrpc.EndpointSettings_NcproxyEndpoint{
-				NcproxyEndpoint: &ncproxygrpc.NCProxyEndpointSettings{
-					Name:                  endpt.EndpointName,
-					Macaddress:            endpt.Settings.Macaddress,
-					Ipaddress:             endpt.Settings.IPAddress,
-					IpaddressPrefixlength: endpt.Settings.IPAddressPrefixLength,
-					NetworkName:           endpt.Settings.NetworkName,
-					DefaultGateway:        endpt.Settings.DefaultGateway,
-					DeviceDetails:         deviceDetails,
-				},
-			},
-		}
-
-		return result, nil
+	if ep, err := s.ncpNetworkingStore.GetEndpointByName(ctx, req.Name); err == nil {
+		return ncpNetworkingEndpointToEndpointResponse(ep)
 	}
+
 	ep, err := hcn.GetEndpointByName(req.Name)
 	if err != nil {
 		if _, ok := err.(hcn.EndpointNotFoundError); ok {
@@ -578,37 +582,7 @@ func (s *grpcService) GetEndpoint(ctx context.Context, req *ncproxygrpc.GetEndpo
 		}
 		return nil, errors.Wrapf(err, "failed to get endpoint with name %q", req.Name)
 	}
-	policies, err := parseEndpointPolicies(ep.Policies)
-	if err != nil {
-		return nil, err
-	}
-	ipConfigInfo := ep.IpConfigurations
-	if len(ipConfigInfo) == 0 {
-		return nil, errors.Errorf("failed to find network %v ip configuration information", req.Name)
-	}
-
-	return &ncproxygrpc.GetEndpointResponse{
-		Namespace: ep.HostComputeNamespace,
-		ID:        ep.Id,
-		Endpoint: &ncproxygrpc.EndpointSettings{
-			Settings: &ncproxygrpc.EndpointSettings_HcnEndpoint{
-				HcnEndpoint: &ncproxygrpc.HcnEndpointSettings{
-					Name:       req.Name,
-					Macaddress: ep.MacAddress,
-					// only use the first ip config returned since we only expect there to be one
-					Ipaddress:             ep.IpConfigurations[0].IpAddress,
-					IpaddressPrefixlength: uint32(ep.IpConfigurations[0].PrefixLength),
-					NetworkName:           ep.HostComputeNetwork,
-					Policies:              policies,
-					DnsSetting: &ncproxygrpc.DnsSetting{
-						ServerIpAddrs: ep.Dns.ServerList,
-						Domain:        ep.Dns.Domain,
-						Search:        ep.Dns.Search,
-					},
-				},
-			},
-		},
-	}, nil
+	return hcnEndpointToEndpointResponse(ep)
 }
 
 func (s *grpcService) GetEndpoints(ctx context.Context, req *ncproxygrpc.GetEndpointsRequest) (_ *ncproxygrpc.GetEndpointsResponse, err error) {
@@ -623,16 +597,13 @@ func (s *grpcService) GetEndpoints(ctx context.Context, req *ncproxygrpc.GetEndp
 		return nil, errors.Wrap(err, "failed to get HNS endpoints")
 	}
 
-	rawNCProxyEndpoints, err := s.ncproxyNetworking.ListEndpoints(ctx)
+	rawNCProxyEndpoints, err := s.ncpNetworkingStore.ListEndpoints(ctx)
 	if err != nil && !errors.Is(err, ncproxystore.ErrBucketNotFound) {
 		return nil, errors.Wrap(err, "failed to get ncproxy networking endpoints")
 	}
 
 	for _, endpoint := range rawHCNEndpoints {
-		endpointReq := &ncproxygrpc.GetEndpointRequest{
-			Name: endpoint.Name,
-		}
-		e, err := s.GetEndpoint(ctx, endpointReq)
+		e, err := hcnEndpointToEndpointResponse(&endpoint)
 		if err != nil {
 			return nil, err
 		}
@@ -640,10 +611,7 @@ func (s *grpcService) GetEndpoints(ctx context.Context, req *ncproxygrpc.GetEndp
 	}
 
 	for _, endpoint := range rawNCProxyEndpoints {
-		endpointReq := &ncproxygrpc.GetEndpointRequest{
-			Name: endpoint.EndpointName,
-		}
-		e, err := s.GetEndpoint(ctx, endpointReq)
+		e, err := ncpNetworkingEndpointToEndpointResponse(endpoint)
 		if err != nil {
 			return nil, err
 		}
@@ -652,6 +620,19 @@ func (s *grpcService) GetEndpoints(ctx context.Context, req *ncproxygrpc.GetEndp
 
 	return &ncproxygrpc.GetEndpointsResponse{
 		Endpoints: endpoints,
+	}, nil
+}
+
+func ncpNetworkingNetworkToNetworkResponse(network *ncproxynetworking.Network) (*ncproxygrpc.GetNetworkResponse, error) {
+	return &ncproxygrpc.GetNetworkResponse{
+		ID: network.NetworkName,
+		Network: &ncproxygrpc.Network{
+			Settings: &ncproxygrpc.Network_NcproxyNetwork{
+				NcproxyNetwork: &ncproxygrpc.NCProxyNetworkSettings{
+					Name: network.Settings.Name,
+				},
+			},
+		},
 	}, nil
 }
 
@@ -667,17 +648,8 @@ func (s *grpcService) GetNetwork(ctx context.Context, req *ncproxygrpc.GetNetwor
 		return nil, status.Errorf(codes.InvalidArgument, "received empty field in request: %+v", req)
 	}
 
-	if network, err := s.ncproxyNetworking.GetNetworkByName(ctx, req.Name); err == nil {
-		return &ncproxygrpc.GetNetworkResponse{
-			ID: network.NetworkName,
-			Network: &ncproxygrpc.Network{
-				Settings: &ncproxygrpc.Network_NcproxyNetwork{
-					NcproxyNetwork: &ncproxygrpc.NCProxyNetworkSettings{
-						Name: network.Settings.Name,
-					},
-				},
-			},
-		}, nil
+	if network, err := s.ncpNetworkingStore.GetNetworkByName(ctx, req.Name); err == nil {
+		return ncpNetworkingNetworkToNetworkResponse(network)
 	}
 
 	network, err := hcn.GetNetworkByName(req.Name)
@@ -688,19 +660,7 @@ func (s *grpcService) GetNetwork(ctx context.Context, req *ncproxygrpc.GetNetwor
 		return nil, errors.Wrapf(err, "failed to get network with name %q", req.Name)
 	}
 
-	hcnResp, err := getHCNNetworkResponse(network)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get network information for network with name %q", req.Name)
-	}
-
-	return &ncproxygrpc.GetNetworkResponse{
-		ID: network.Id,
-		Network: &ncproxygrpc.Network{
-			Settings: &ncproxygrpc.Network_HcnNetwork{
-				HcnNetwork: hcnResp,
-			},
-		},
-	}, nil
+	return hcnNetworkToNetworkResponse(network)
 }
 
 func (s *grpcService) GetNetworks(ctx context.Context, req *ncproxygrpc.GetNetworksRequest) (_ *ncproxygrpc.GetNetworksResponse, err error) {
@@ -715,16 +675,13 @@ func (s *grpcService) GetNetworks(ctx context.Context, req *ncproxygrpc.GetNetwo
 		return nil, errors.Wrap(err, "failed to get HNS networks")
 	}
 
-	rawNCProxyNetworks, err := s.ncproxyNetworking.ListNetworks(ctx)
+	rawNCProxyNetworks, err := s.ncpNetworkingStore.ListNetworks(ctx)
 	if err != nil && !errors.Is(err, ncproxystore.ErrBucketNotFound) {
 		return nil, errors.Wrap(err, "failed to get ncproxy networking networks")
 	}
 
 	for _, network := range rawHCNNetworks {
-		networkReq := &ncproxygrpc.GetNetworkRequest{
-			Name: network.Name,
-		}
-		n, err := s.GetNetwork(ctx, networkReq)
+		n, err := hcnNetworkToNetworkResponse(&network)
 		if err != nil {
 			return nil, err
 		}
@@ -732,10 +689,7 @@ func (s *grpcService) GetNetworks(ctx context.Context, req *ncproxygrpc.GetNetwo
 	}
 
 	for _, network := range rawNCProxyNetworks {
-		networkReq := &ncproxygrpc.GetNetworkRequest{
-			Name: network.NetworkName,
-		}
-		n, err := s.GetNetwork(ctx, networkReq)
+		n, err := ncpNetworkingNetworkToNetworkResponse(network)
 		if err != nil {
 			return nil, err
 		}
