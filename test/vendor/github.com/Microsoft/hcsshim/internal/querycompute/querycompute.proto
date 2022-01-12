@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+option go_package = "github.com/Microsoft/hcsshim/internal/querycompute;querycompute";
+
+import weak "gogoproto/gogo.proto";
+
+service QueryCompute {
+    rpc ComputeProcessorInfo(ComputeProcessorInfoRequest) returns (ComputeProcessorInfoResponse);
+}
+
+message ComputeProcessorInfoRequest {
+    string container_id = 1;  
+}
+
+message ComputeProcessorInfoResponse {
+    int32 count = 1; 
+}

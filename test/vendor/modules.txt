@@ -48,6 +48,7 @@ github.com/Microsoft/hcsshim/internal/oc
 github.com/Microsoft/hcsshim/internal/oci
 github.com/Microsoft/hcsshim/internal/ospath
 github.com/Microsoft/hcsshim/internal/processorinfo
+github.com/Microsoft/hcsshim/internal/querycompute
 github.com/Microsoft/hcsshim/internal/regstate
 github.com/Microsoft/hcsshim/internal/requesttype
 github.com/Microsoft/hcsshim/internal/resources

@@ -1,0 +1,95 @@
+// +build functional
+
+package cri_containerd
+
+import (
+	"context"
+	"fmt"
+	"testing"
+
+	"github.com/Microsoft/hcsshim/internal/querycompute"
+	"github.com/Microsoft/hcsshim/internal/shimdiag"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
+)
+
+func getPodProcessorInfo(ctx context.Context, podID string) (*querycompute.ComputeProcessorInfoResponse, error) {
+	shimName := fmt.Sprintf("k8s.io-%s", podID)
+	shim, err := shimdiag.GetShim(shimName)
+	if err != nil {
+		return nil, err
+	}
+	svc := querycompute.NewQueryComputeClient(shim)
+	return svc.ComputeProcessorInfo(ctx, &querycompute.ComputeProcessorInfoRequest{ContainerID: podID})
+}
+
+func Test_QueryCompute_ProcessorInfo(t *testing.T) {
+	type config struct {
+		name             string
+		requiredFeatures []string
+		runtimeHandler   string
+		sandboxImage     string
+		expectedError    bool
+	}
+	tests := []config{
+		{
+			name:             "WCOW_Process returns error",
+			requiredFeatures: []string{featureWCOWProcess},
+			runtimeHandler:   wcowProcessRuntimeHandler,
+			sandboxImage:     imageWindowsNanoserver,
+			expectedError:    true,
+		},
+		{
+			name:             "WCOW_Hypervisor return correct cpu count",
+			requiredFeatures: []string{featureWCOWHypervisor},
+			runtimeHandler:   wcowHypervisorRuntimeHandler,
+			sandboxImage:     imageWindowsNanoserver,
+			expectedError:    false,
+		},
+		{
+			name:             "LCOW returns correct cpu count",
+			requiredFeatures: []string{featureLCOW},
+			runtimeHandler:   lcowRuntimeHandler,
+			sandboxImage:     imageLcowAlpine,
+			expectedError:    false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			requireFeatures(t, test.requiredFeatures...)
+
+			if test.runtimeHandler == lcowRuntimeHandler {
+				pullRequiredLCOWImages(t, []string{test.sandboxImage})
+			} else {
+				pullRequiredImages(t, []string{test.sandboxImage})
+			}
+
+			request := getRunPodSandboxRequest(
+				t,
+				test.runtimeHandler,
+				WithSandboxAnnotations(map[string]string{
+					annotations.ProcessorCount: "2",
+				}),
+			)
+
+			client := newTestRuntimeClient(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			podID := runPodSandbox(t, client, ctx, request)
+			defer removePodSandbox(t, client, ctx, podID)
+			defer stopPodSandbox(t, client, ctx, podID)
+
+			resp, err := getPodProcessorInfo(ctx, podID)
+			if err == nil && test.expectedError {
+				t.Fatalf("expected to get an error, instead got %v response", resp)
+			}
+			if err != nil && !test.expectedError {
+				t.Fatalf("failed to get pod processor info with %v", err)
+			}
+			if resp.Count != 2 {
+				t.Fatalf("expected to see 2 cpus on the pod, instead got %v", resp.Count)
+			}
+		})
+	}
+}
