@@ -22,6 +22,8 @@ const (
 	MerkleTreeBufioSize = 1024 * 1024 // 1MB
 	// RecommendedVHDSizeGB is the recommended size in GB for VHDs, which is not a hard limit.
 	RecommendedVHDSizeGB = 128 * 1024 * 1024 * 1024
+	// VeritySignature is a value written to dm-verity super-block.
+	VeritySignature = "verity"
 )
 
 var salt = bytes.Repeat([]byte{0}, 32)
@@ -30,6 +32,7 @@ var (
 	ErrSuperBlockReadFailure  = errors.New("failed to read dm-verity super block")
 	ErrSuperBlockParseFailure = errors.New("failed to parse dm-verity super block")
 	ErrRootHashReadFailure    = errors.New("failed to read dm-verity root hash")
+	ErrNotVeritySuperBlock    = errors.New("invalid dm-verity super-block signature")
 )
 
 type dmveritySuperblock struct {
@@ -133,7 +136,7 @@ func NewDMVeritySuperblock(size uint64) *dmveritySuperblock {
 		SaltSize:      uint16(len(salt)),
 	}
 
-	copy(superblock.Signature[:], "verity")
+	copy(superblock.Signature[:], VeritySignature)
 	copy(superblock.Algorithm[:], "sha256")
 	copy(superblock.Salt[:], salt)
 
@@ -173,7 +176,7 @@ func ReadDMVerityInfo(vhdPath string, offsetInBytes int64) (*VerityInfo, error) 
 	block := make([]byte, blockSize)
 	if s, err := vhd.Read(block); err != nil || s != blockSize {
 		if err != nil {
-			return nil, errors.Wrapf(ErrSuperBlockReadFailure, "%s", err)
+			return nil, errors.Wrapf(err, "%s", ErrSuperBlockReadFailure)
 		}
 		return nil, errors.Wrapf(ErrSuperBlockReadFailure, "unexpected bytes read: expected=%d, actual=%d", blockSize, s)
 	}
@@ -181,13 +184,15 @@ func ReadDMVerityInfo(vhdPath string, offsetInBytes int64) (*VerityInfo, error) 
 	dmvSB := &dmveritySuperblock{}
 	b := bytes.NewBuffer(block)
 	if err := binary.Read(b, binary.LittleEndian, dmvSB); err != nil {
-		return nil, errors.Wrapf(ErrSuperBlockParseFailure, "%s", err)
+		return nil, errors.Wrapf(err, "%s", ErrSuperBlockParseFailure)
 	}
-
+	if string(bytes.Trim(dmvSB.Signature[:], "\x00")[:]) != VeritySignature {
+		return nil, ErrNotVeritySuperBlock
+	}
 	// read the merkle tree root
 	if s, err := vhd.Read(block); err != nil || s != blockSize {
 		if err != nil {
-			return nil, errors.Wrapf(ErrRootHashReadFailure, "%s", err)
+			return nil, errors.Wrapf(err, "%s", ErrRootHashReadFailure)
 		}
 		return nil, errors.Wrapf(ErrRootHashReadFailure, "unexpected bytes read: expected=%d, actual=%d", blockSize, s)
 	}
