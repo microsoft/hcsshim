@@ -921,9 +921,13 @@ func hcsPropertiesToWindowsStats(props *hcsschema.Properties) *stats.Statistics_
 func (ht *hcsTask) Stats(ctx context.Context) (*stats.Statistics, error) {
 	s := &stats.Statistics{}
 	props, err := ht.c.PropertiesV2(ctx, hcsschema.PTStatistics)
-	if err != nil && !isStatsNotFound(err) {
+	if err != nil {
+		if isStatsNotFound(err) {
+			return nil, errors.Wrapf(errdefs.ErrNotFound, "failed to fetch stats: %s", err)
+		}
 		return nil, err
 	}
+
 	if props != nil {
 		if ht.isWCOW {
 			s.Container = hcsPropertiesToWindowsStats(props)
