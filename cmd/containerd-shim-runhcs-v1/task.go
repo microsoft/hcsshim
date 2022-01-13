@@ -110,5 +110,6 @@ func isStatsNotFound(err error) bool {
 		hcs.IsNotExist(err) ||
 		hcs.IsOperationInvalidState(err) ||
 		gcs.IsNotExist(err) ||
-		hcs.IsAccessIsDenied(err)
+		hcs.IsAccessIsDenied(err) ||
+		hcs.IsErrorInvalidHandle(err)
 }
