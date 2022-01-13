@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 
+	"github.com/Microsoft/hcsshim/ext4/dmverity"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/oc"
 )
@@ -62,7 +63,7 @@ func CreateVerityTarget(ctx context.Context, devPath, devName string, verityInfo
 	verityTarget := Target{
 		SectorStart:    0,
 		LengthInBlocks: dmBlocks,
-		Type:           "verity",
+		Type:           dmverity.VeritySignature,
 		Params:         fmt.Sprintf("%d %s %s %s", verityInfo.Version, devices, blkInfo, hashes),
 	}
 

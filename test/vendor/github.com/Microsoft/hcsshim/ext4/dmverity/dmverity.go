@@ -22,6 +22,8 @@ const (
 	MerkleTreeBufioSize = 1024 * 1024 // 1MB
 	// RecommendedVHDSizeGB is the recommended size in GB for VHDs, which is not a hard limit.
 	RecommendedVHDSizeGB = 128 * 1024 * 1024 * 1024
+	// VeritySignature is a value written to dm-verity super-block.
+	VeritySignature = "verity"
 )
 
 var salt = bytes.Repeat([]byte{0}, 32)
@@ -134,7 +136,7 @@ func NewDMVeritySuperblock(size uint64) *dmveritySuperblock {
 		SaltSize:      uint16(len(salt)),
 	}
 
-	copy(superblock.Signature[:], "verity")
+	copy(superblock.Signature[:], VeritySignature)
 	copy(superblock.Algorithm[:], "sha256")
 	copy(superblock.Salt[:], salt)
 
@@ -184,7 +186,7 @@ func ReadDMVerityInfo(vhdPath string, offsetInBytes int64) (*VerityInfo, error) 
 	if err := binary.Read(b, binary.LittleEndian, dmvSB); err != nil {
 		return nil, errors.Wrapf(err, "%s", ErrSuperBlockParseFailure)
 	}
-	if string(bytes.Trim(dmvSB.Signature[:], "\x00")[:]) != "verity" {
+	if string(bytes.Trim(dmvSB.Signature[:], "\x00")[:]) != VeritySignature {
 		return nil, ErrNotVeritySuperBlock
 	}
 	// read the merkle tree root
