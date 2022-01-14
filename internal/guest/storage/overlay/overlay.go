@@ -23,7 +23,14 @@ var (
 
 // MountLayer first enforces the security policy for the container's layer paths
 // and then calls Mount to mount the layer paths as an overlayfs
-func MountLayer(ctx context.Context, layerPaths []string, upperdirPath, workdirPath, rootfsPath string, readonly bool, containerId string, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
+func MountLayer(
+	ctx context.Context,
+	layerPaths []string,
+	upperdirPath, workdirPath, rootfsPath string,
+	readonly bool,
+	containerId string,
+	securityPolicy securitypolicy.PolicyEnforcer,
+) (err error) {
 	_, span := trace.StartSpan(ctx, "overlay::MountLayer")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()

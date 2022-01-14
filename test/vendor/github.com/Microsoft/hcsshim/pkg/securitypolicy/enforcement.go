@@ -10,87 +10,70 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-type SecurityPolicyEnforcer interface {
+// PolicyEnforcer is an interface that encapsulates the logic necessary for
+// enforcing a security policy
+type PolicyEnforcer interface {
 	EnforceDeviceMountPolicy(target string, deviceHash string) (err error)
 	EnforceDeviceUnmountPolicy(unmountTarget string) (err error)
 	EnforceOverlayMountPolicy(containerID string, layerPaths []string) (err error)
 	EnforceCreateContainerPolicy(containerID string, argList []string, envList []string) (err error)
 }
 
-func NewSecurityPolicyEnforcer(state SecurityPolicyState) (SecurityPolicyEnforcer, error) {
+// NewSecurityPolicyEnforcer is a factory method that returns a corresponding
+// PolicyEnforcer based on the State passed in
+func NewSecurityPolicyEnforcer(state State) (PolicyEnforcer, error) {
 	if state.SecurityPolicy.AllowAll {
-		return &OpenDoorSecurityPolicyEnforcer{}, nil
+		return &OpenDoorEnforcer{}, nil
 	} else {
 		containers, err := state.SecurityPolicy.Containers.toInternal()
 		if err != nil {
 			return nil, err
 		}
-		return NewStandardSecurityPolicyEnforcer(containers, state.EncodedSecurityPolicy.SecurityPolicy), nil
+		return NewStandardEnforcer(containers, state.EncodedSecurityPolicy.SecurityPolicy), nil
 	}
 }
 
-type StandardSecurityPolicyEnforcer struct {
+// StandardEnforcer enforces user provided security policy and tracks the
+// internal state of all containers.
+//
+// Most of the work that this security policy enforcer does is around managing
+// state needed to map from a container definition in the Policy to a specific
+// container ID as we bring up each container.
+//
+// Implementation details are available in:
+// - EnforceDeviceMountPolicy
+// - EnforceDeviceUnmountPolicy
+// - EnforceOverlayMountPolicy
+// - EnforceCreateContainerPolicy
+// - NewStandardEnforcer
+type StandardEnforcer struct {
 	// EncodedSecurityPolicy state is needed for key release
 	EncodedSecurityPolicy string
 	// Containers from the user supplied security policy.
-	Containers []securityPolicyContainer
-	// Devices and ContainerIndexToContainerIds are used to build up an
-	// understanding of the containers running with a UVM as they come up and
-	// map them back to a container definition from the user supplied
-	// SecurityPolicy
-	//
-	// Devices is a listing of targets seen when mounting a device
-	// stored in a "per-container basis". As the UVM goes through its process of
-	// bringing up containers, we have to piece together information about what
-	// is going on.
-	//
-	// At the time that devices are being mounted, we do not know a container
-	// that they will be used for; only that there is a device with a given root
-	// hash that being mounted. We check to make sure that the root hash for the
-	// devices is a root hash that exists for 1 or more layers in any container
-	// in the supplied SecurityPolicy. Each "seen" layer is recorded in devices
-	// as it is mounted. So for example, if a root hash mount is found for the
-	// device being mounted and the first layer of the first container then we
-	// record the device target in Devices[0][0].
-	//
-	// Later, when overlay filesystems  created, we verify that the ordered layers
-	// for said overlay filesystem match one of the device orderings in Devices.
-	// When a match is found, the index in Devices is the same index in
-	// SecurityPolicy.Containers. Overlay filesystem creation is the first time we
-	// have a "container id" available to us. The container id identifies the
-	// container in question going forward. We record the mapping of Container
-	// index to container id so that when we have future operations like "run
-	// command" which come with a container id, we can find the corresponding
-	// container index and use that to look up the command in the appropriate
-	// SecurityPolicyContainer instance.
-	//
-	// As containers can have exactly the same base image and be "the same" at
-	// the time we are doing overlay, the ContainerIndexToContainerIds in a
-	// set of possible containers for a given container id. Go doesn't have a set
-	// type so we are doing the idiomatic go thing of using a map[string]struct{}
-	// to represent the set.
 	//
 	// Containers that share the same base image, and perhaps further
 	// information, will have an entry per container instance in the
 	// SecurityPolicy. For example, a policy that has two containers that
 	// use Ubuntu 18.04 will have an entry for each even if they share the same
 	// command line.
+	Containers []container
+	// Devices is a listing of targets seen when mounting a device
+	// stored in a "per-container basis". As the UVM goes through its process of
+	// bringing up containers, we have to piece together information about what
+	// is going on.
+	Devices [][]string
+	// ContainerIndexToContainerIds is a mapping between a container defined in
+	// the policy to potential container IDs, that were created in the runtime
 	//
-	// Most of the work that this security policy enforcer does it around managing
-	// state needed to map from a container definition in the SecurityPolicy to
-	// a specfic container ID as we bring up each container. See
-	// enforceCommandPolicy where most of the functionality is handling the case
-	// were policy containers share an overlay and have to try to distinguish them
-	// based on the command line arguments. enforceEnvironmentVariablePolicy can
-	// further narrow based on environment variables if required.
+	// Devices and ContainerIndexToContainerIds are used to build up an
+	// understanding of the containers running with a UVM as they come up and
+	// map them back to a container definition from the user supplied Policy
 	//
-	// implementation details are available in:
-	// - EnforceDeviceMountPolicy
-	// - EnforceOverlayMountPolicy
-	// - enforceCommandPolicy
-	// - enforceEnvironmentVariablePolicy
-	// - NewStandardSecurityPolicyEnforcer
-	Devices                      [][]string
+	// As containers can have exactly the same base image and be "the same" at
+	// the time we are doing overlay, the ContainerIndexToContainerIds in a
+	// set of possible containers for a given container id. Go doesn't have a set
+	// type so we are doing the idiomatic go thing of using a map[string]struct{}
+	// to represent the set.
 	ContainerIndexToContainerIds map[int]map[string]struct{}
 	// Set of container IDs that we've allowed to start. Because Go doesn't have
 	// sets as a built-in data structure, we are using a map
@@ -99,21 +82,21 @@ type StandardSecurityPolicyEnforcer struct {
 	mutex *sync.Mutex
 }
 
-var _ SecurityPolicyEnforcer = (*StandardSecurityPolicyEnforcer)(nil)
+var _ PolicyEnforcer = (*StandardEnforcer)(nil)
 
-func NewStandardSecurityPolicyEnforcer(containers []securityPolicyContainer, encoded string) *StandardSecurityPolicyEnforcer {
-	// create new StandardSecurityPolicyEnforcer and add the expected containers
-	// to it
-	// fill out corresponding devices structure by creating a "same shapped"
+// NewStandardEnforcer creates a new StandardEnforcer instance and adds the expected
+// containers to it.
+func NewStandardEnforcer(containers []container, encoded string) *StandardEnforcer {
+	// Fill out corresponding devices structure by creating a "same shaped"
 	// devices listing that corresponds to our container root hash lists
 	// the devices list will get filled out as layers are mounted
 	devices := make([][]string, len(containers))
 
-	for i, container := range containers {
-		devices[i] = make([]string, len(container.Layers))
+	for i, c := range containers {
+		devices[i] = make([]string, len(c.Layers))
 	}
 
-	return &StandardSecurityPolicyEnforcer{
+	return &StandardEnforcer{
 		EncodedSecurityPolicy:        encoded,
 		Containers:                   containers,
 		Devices:                      devices,
@@ -123,13 +106,13 @@ func NewStandardSecurityPolicyEnforcer(containers []securityPolicyContainer, enc
 	}
 }
 
-func (c Containers) toInternal() ([]securityPolicyContainer, error) {
+func (c Containers) toInternal() ([]container, error) {
 	containerMapLength := len(c.Elements)
 	if c.Length != containerMapLength {
 		return nil, fmt.Errorf("container numbers don't match in policy. expected: %d, actual: %d", c.Length, containerMapLength)
 	}
 
-	internal := make([]securityPolicyContainer, containerMapLength)
+	internal := make([]container, containerMapLength)
 
 	for i := 0; i < containerMapLength; i++ {
 		iContainer, err := c.Elements[strconv.Itoa(i)].toInternal()
@@ -144,23 +127,23 @@ func (c Containers) toInternal() ([]securityPolicyContainer, error) {
 	return internal, nil
 }
 
-func (c Container) toInternal() (securityPolicyContainer, error) {
+func (c Container) toInternal() (container, error) {
 	command, err := c.Command.toInternal()
 	if err != nil {
-		return securityPolicyContainer{}, err
+		return container{}, err
 	}
 
 	envRules, err := c.EnvRules.toInternal()
 	if err != nil {
-		return securityPolicyContainer{}, err
+		return container{}, err
 	}
 
 	layers, err := c.Layers.toInternal()
 	if err != nil {
-		return securityPolicyContainer{}, err
+		return container{}, err
 	}
 
-	return securityPolicyContainer{
+	return container{
 		Command:  command,
 		EnvRules: envRules,
 		Layers:   layers,
@@ -175,16 +158,16 @@ func (c CommandArgs) toInternal() ([]string, error) {
 	return stringMapToStringArray(c.Elements), nil
 }
 
-func (e EnvRules) toInternal() ([]securityPolicyEnvironmentVariableRule, error) {
+func (e EnvRules) toInternal() ([]environmentVariableRule, error) {
 	envRulesMapLength := len(e.Elements)
 	if e.Length != envRulesMapLength {
 		return nil, fmt.Errorf("env rule numbers don't match in policy. expected: %d, actual: %d", e.Length, envRulesMapLength)
 	}
 
-	envRules := make([]securityPolicyEnvironmentVariableRule, envRulesMapLength)
+	envRules := make([]environmentVariableRule, envRulesMapLength)
 	for i := 0; i < envRulesMapLength; i++ {
 		eIndex := strconv.Itoa(i)
-		rule := securityPolicyEnvironmentVariableRule{
+		rule := environmentVariableRule{
 			Strategy: e.Elements[eIndex].Strategy,
 			Rule:     e.Elements[eIndex].Rule,
 		}
@@ -213,7 +196,20 @@ func stringMapToStringArray(in map[string]string) []string {
 	return out
 }
 
-func (pe *StandardSecurityPolicyEnforcer) EnforceDeviceMountPolicy(target string, deviceHash string) (err error) {
+// EnforceDeviceMountPolicy for StandardEnforcer validates the target and
+// its deviceHash against the read-only layers described in the security
+// policy and updates internal state when the corresponding layer hash is
+// found.
+//
+// At the time that devices are being mounted, we do not know a container
+// that they will be used for; only that there is a device with a given root
+// hash that being mounted. We check to make sure that the root hash for the
+// devices is a root hash that exists for 1 or more layers in any container
+// in the supplied Policy. Each "seen" layer is recorded in devices as it is
+// mounted. So for example, if a root hash mount is found for the device being
+// mounted and the first layer of the first container then we record the device
+// target in Devices[0][0].
+func (pe *StandardEnforcer) EnforceDeviceMountPolicy(target string, deviceHash string) (err error) {
 	pe.mutex.Lock()
 	defer pe.mutex.Unlock()
 
@@ -227,8 +223,8 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceDeviceMountPolicy(target string
 
 	found := false
 
-	for i, container := range pe.Containers {
-		for ii, layer := range container.Layers {
+	for i, c := range pe.Containers {
+		for ii, layer := range c.Layers {
 			if deviceHash == layer {
 				pe.Devices[i][ii] = target
 				found = true
@@ -243,14 +239,16 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceDeviceMountPolicy(target string
 	return nil
 }
 
-func (pe *StandardSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(unmountTarget string) (err error) {
+// EnforceDeviceUnmountPolicy for StandardEnforcer finds the corresponding layers and resets
+// the internal state.
+func (pe *StandardEnforcer) EnforceDeviceUnmountPolicy(unmountTarget string) (err error) {
 	pe.mutex.Lock()
 	defer pe.mutex.Unlock()
 
-	for _, container := range pe.Devices {
-		for j, storedTarget := range container {
+	for _, targets := range pe.Devices {
+		for j, storedTarget := range targets {
 			if unmountTarget == storedTarget {
-				container[j] = ""
+				targets[j] = ""
 			}
 		}
 	}
@@ -258,7 +256,20 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(unmountTarg
 	return nil
 }
 
-func (pe *StandardSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID string, layerPaths []string) (err error) {
+// EnforceOverlayMountPolicy for StandardEnforcer validates provided layerPaths
+// against internal state.
+//
+// When overlay filesystems  created, we verify that the ordered layers
+// for said overlay filesystem match one of the device orderings in Devices.
+// When a match is found, the index in Devices is the same index in
+// Policy.Containers. Overlay filesystem creation is the first time we
+// have a "container id" available to us. The container id identifies the
+// container in question going forward. We record the mapping of Container
+// index to container id so that when we have future operations like "run
+// command" which come with a container id, we can find the corresponding
+// container index and use that to look up the command in the appropriate
+// Container instance.
+func (pe *StandardEnforcer) EnforceOverlayMountPolicy(containerID string, layerPaths []string) (err error) {
 	pe.mutex.Lock()
 	defer pe.mutex.Unlock()
 
@@ -298,7 +309,16 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID 
 	return nil
 }
 
-func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(containerID string, argList []string, envList []string) (err error) {
+// EnforceCreateContainerPolicy for StandardEnforcer validates the actual init
+// process command line arguments and environment variables passed during
+// container creation. The command line arguments must have an exact match
+// where env vars must match a set of rules defined in the security policy.
+//
+// See enforceCommandPolicy where most of the functionality is handling the
+// case were policy containers share an overlay and have to try to distinguish
+// them based on the command line arguments. enforceEnvironmentVariablePolicy
+// can further narrow based on environment variables if required.
+func (pe *StandardEnforcer) EnforceCreateContainerPolicy(containerID string, argList []string, envList []string) (err error) {
 	pe.mutex.Lock()
 	defer pe.mutex.Unlock()
 
@@ -326,7 +346,7 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(container
 	return nil
 }
 
-func (pe *StandardSecurityPolicyEnforcer) enforceCommandPolicy(containerID string, argList []string) (err error) {
+func (pe *StandardEnforcer) enforceCommandPolicy(containerID string, argList []string) (err error) {
 	// Get a list of all the indexes into our security policy's list of
 	// containers that are possible matches for this containerID based
 	// on the image overlay layout
@@ -357,7 +377,7 @@ func (pe *StandardSecurityPolicyEnforcer) enforceCommandPolicy(containerID strin
 	return nil
 }
 
-func (pe *StandardSecurityPolicyEnforcer) enforceEnvironmentVariablePolicy(containerID string, envList []string) (err error) {
+func (pe *StandardEnforcer) enforceEnvironmentVariablePolicy(containerID string, envList []string) (err error) {
 	// Get a list of all the indexes into our security policy's list of
 	// containers that are possible matches for this containerID based
 	// on the image overlay layout and command line
@@ -385,7 +405,7 @@ func (pe *StandardSecurityPolicyEnforcer) enforceEnvironmentVariablePolicy(conta
 	return nil
 }
 
-func envIsMatchedByRule(envVariable string, rules []securityPolicyEnvironmentVariableRule) bool {
+func envIsMatchedByRule(envVariable string, rules []environmentVariableRule) bool {
 	for _, rule := range rules {
 		switch rule.Strategy {
 		case "string":
@@ -404,7 +424,7 @@ func envIsMatchedByRule(envVariable string, rules []securityPolicyEnvironmentVar
 	return false
 }
 
-func (pe *StandardSecurityPolicyEnforcer) expandMatchesForContainerIndex(index int, idToAdd string) {
+func (pe *StandardEnforcer) expandMatchesForContainerIndex(index int, idToAdd string) {
 	_, keyExists := pe.ContainerIndexToContainerIds[index]
 	if !keyExists {
 		pe.ContainerIndexToContainerIds[index] = map[string]struct{}{}
@@ -413,12 +433,12 @@ func (pe *StandardSecurityPolicyEnforcer) expandMatchesForContainerIndex(index i
 	pe.ContainerIndexToContainerIds[index][idToAdd] = struct{}{}
 }
 
-func (pe *StandardSecurityPolicyEnforcer) narrowMatchesForContainerIndex(index int, idToRemove string) {
+func (pe *StandardEnforcer) narrowMatchesForContainerIndex(index int, idToRemove string) {
 	delete(pe.ContainerIndexToContainerIds[index], idToRemove)
 }
 
 func equalForOverlay(a1 []string, a2 []string) bool {
-	// We've stored the layers from bottom to topl they are in layerPaths as
+	// We've stored the layers from bottom to top, they are in layerPaths as
 	// top to bottom (the order a string gets concatenated for the unix mount
 	// command). W do our check with that in mind.
 	if len(a1) == len(a2) {
@@ -435,7 +455,7 @@ func equalForOverlay(a1 []string, a2 []string) bool {
 }
 
 func possibleIndexesForID(containerID string, mapping map[int]map[string]struct{}) []int {
-	possibles := []int{}
+	var possibles []int
 	for index, ids := range mapping {
 		for id := range ids {
 			if containerID == id {
@@ -447,42 +467,50 @@ func possibleIndexesForID(containerID string, mapping map[int]map[string]struct{
 	return possibles
 }
 
-type OpenDoorSecurityPolicyEnforcer struct{}
+type OpenDoorEnforcer struct{}
 
-var _ SecurityPolicyEnforcer = (*OpenDoorSecurityPolicyEnforcer)(nil)
+var _ PolicyEnforcer = (*OpenDoorEnforcer)(nil)
 
-func (p *OpenDoorSecurityPolicyEnforcer) EnforceDeviceMountPolicy(target string, deviceHash string) (err error) {
+// EnforceDeviceMountPolicy for OpenDoorEnforcer is a noop that allows everything
+func (p *OpenDoorEnforcer) EnforceDeviceMountPolicy(target string, deviceHash string) (err error) {
 	return nil
 }
 
-func (p *OpenDoorSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(target string) (err error) {
+// EnforceDeviceUnmountPolicy for OpenDoorEnforcer is a noop that allows everything
+func (p *OpenDoorEnforcer) EnforceDeviceUnmountPolicy(target string) (err error) {
 	return nil
 }
 
-func (p *OpenDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID string, layerPaths []string) (err error) {
+// EnforceOverlayMountPolicy for OpenDoorEnforcer is a noop that allows everything
+func (p *OpenDoorEnforcer) EnforceOverlayMountPolicy(containerID string, layerPaths []string) (err error) {
 	return nil
 }
 
-func (p *OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(containerID string, argList []string, envList []string) (err error) {
+// EnforceCreateContainerPolicy for OpenDoorEnforcer is a noop that allows everything
+func (p *OpenDoorEnforcer) EnforceCreateContainerPolicy(containerID string, argList []string, envList []string) (err error) {
 	return nil
 }
 
-type ClosedDoorSecurityPolicyEnforcer struct{}
+type ClosedDoorEnforcer struct{}
 
-var _ SecurityPolicyEnforcer = (*ClosedDoorSecurityPolicyEnforcer)(nil)
+var _ PolicyEnforcer = (*ClosedDoorEnforcer)(nil)
 
-func (p *ClosedDoorSecurityPolicyEnforcer) EnforceDeviceMountPolicy(target string, deviceHash string) (err error) {
+// EnforceDeviceMountPolicy for ClosedDoorEnforcer is a noop that rejects everything
+func (p *ClosedDoorEnforcer) EnforceDeviceMountPolicy(target string, deviceHash string) (err error) {
 	return errors.New("mounting is denied by policy")
 }
 
-func (p *ClosedDoorSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(target string) (err error) {
+// EnforceDeviceUnmountPolicy for ClosedDoorEnforcer is a noop that rejects everything
+func (p *ClosedDoorEnforcer) EnforceDeviceUnmountPolicy(target string) (err error) {
 	return errors.New("unmounting is denied by policy")
 }
 
-func (p *ClosedDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID string, layerPaths []string) (err error) {
+// EnforceOverlayMountPolicy for ClosedDoorEnforcer is a noop that rejects everything
+func (p *ClosedDoorEnforcer) EnforceOverlayMountPolicy(containerID string, layerPaths []string) (err error) {
 	return errors.New("creating an overlay fs is denied by policy")
 }
 
-func (p *ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(containerID string, argList []string, envList []string) (err error) {
+// EnforceCreateContainerPolicy for ClosedDoorEnforcer is a noop that rejects everything
+func (p *ClosedDoorEnforcer) EnforceCreateContainerPolicy(containerID string, argList []string, envList []string) (err error) {
 	return errors.New("running commands is denied by policy")
 }

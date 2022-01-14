@@ -197,10 +197,10 @@ func Test_Security_Policy_Enforcement(t *testing.T) {
 	}
 }
 
-func openDoorSecurityPolicyEnforcer() securitypolicy.SecurityPolicyEnforcer {
-	return &securitypolicy.OpenDoorSecurityPolicyEnforcer{}
+func openDoorSecurityPolicyEnforcer() securitypolicy.PolicyEnforcer {
+	return &securitypolicy.OpenDoorEnforcer{}
 }
 
-func mountMonitoringSecurityPolicyEnforcer() *policy.MountMonitoringSecurityPolicyEnforcer {
-	return &policy.MountMonitoringSecurityPolicyEnforcer{}
+func mountMonitoringSecurityPolicyEnforcer() *policy.MountMonitoringEnforcer {
+	return &policy.MountMonitoringEnforcer{}
 }

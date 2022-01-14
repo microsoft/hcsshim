@@ -49,7 +49,7 @@ const (
 //
 // If `encrypted` is set to true, the SCSI device will be encrypted using
 // dm-crypt.
-func Mount(ctx context.Context, controller, lun uint8, target string, readonly bool, encrypted bool, options []string, verityInfo *prot.DeviceVerityInfo, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
+func Mount(ctx context.Context, controller, lun uint8, target string, readonly bool, encrypted bool, options []string, verityInfo *prot.DeviceVerityInfo, securityPolicy securitypolicy.PolicyEnforcer) (err error) {
 	spnCtx, span := trace.StartSpan(ctx, "scsi::Mount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -150,7 +150,7 @@ func Mount(ctx context.Context, controller, lun uint8, target string, readonly b
 // Unmount unmounts a SCSI device mounted at `target`.
 //
 // If `encrypted` is true, it removes all its associated dm-crypto state.
-func Unmount(ctx context.Context, controller, lun uint8, target string, encrypted bool, verityInfo *prot.DeviceVerityInfo, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
+func Unmount(ctx context.Context, controller, lun uint8, target string, encrypted bool, verityInfo *prot.DeviceVerityInfo, securityPolicy securitypolicy.PolicyEnforcer) (err error) {
 	ctx, span := trace.StartSpan(ctx, "scsi::Unmount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()

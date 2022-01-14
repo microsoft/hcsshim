@@ -33,7 +33,7 @@ const (
 // Validate that our conversion from the external SecurityPolicy representation
 // to our internal format is done correctly.
 func Test_StandardSecurityPolicyEnforcer_From_Security_Policy_Conversion(t *testing.T) {
-	f := func(p *SecurityPolicy) bool {
+	f := func(p *Policy) bool {
 		containers, err := p.Containers.toInternal()
 		if err != nil {
 			t.Logf("unexpected setup error. this might mean test fixture setup has a bug: %v", err)
@@ -98,7 +98,7 @@ func Test_StandardSecurityPolicyEnforcer_From_Security_Policy_Conversion(t *test
 // StandardSecurityPolicyEnforcer
 func Test_StandardSecurityPolicyEnforcer_Devices_Initialization(t *testing.T) {
 	f := func(p *generatedContainers) bool {
-		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		policy := NewStandardEnforcer(p.containers, ignoredEncodedPolicyString)
 
 		// there should be a device entry for each container
 		if len(p.containers) != len(policy.Devices) {
@@ -125,7 +125,7 @@ func Test_StandardSecurityPolicyEnforcer_Devices_Initialization(t *testing.T) {
 // return an error when there's no matching root hash in the policy
 func Test_EnforceDeviceMountPolicy_No_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
-		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		policy := NewStandardEnforcer(p.containers, ignoredEncodedPolicyString)
 
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		target := generateMountTarget(r)
@@ -147,7 +147,7 @@ func Test_EnforceDeviceMountPolicy_No_Matches(t *testing.T) {
 func Test_EnforceDeviceMountPolicy_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
 
-		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		policy := NewStandardEnforcer(p.containers, ignoredEncodedPolicyString)
 
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		target := generateMountTarget(r)
@@ -166,7 +166,7 @@ func Test_EnforceDeviceMountPolicy_Matches(t *testing.T) {
 
 func Test_EnforceDeviceUmountPolicy_Removes_Device_Entries(t *testing.T) {
 	f := func(p *generatedContainers) bool {
-		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		policy := NewStandardEnforcer(p.containers, ignoredEncodedPolicyString)
 
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		target := generateMountTarget(r)
@@ -216,7 +216,7 @@ func Test_EnforceDeviceUmountPolicy_Removes_Device_Entries(t *testing.T) {
 func Test_EnforceOverlayMountPolicy_No_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
 
-		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		policy := NewStandardEnforcer(p.containers, ignoredEncodedPolicyString)
 
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		containerID := generateContainerID(r)
@@ -243,7 +243,7 @@ func Test_EnforceOverlayMountPolicy_No_Matches(t *testing.T) {
 func Test_EnforceOverlayMountPolicy_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
 
-		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		policy := NewStandardEnforcer(p.containers, ignoredEncodedPolicyString)
 
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		containerID := generateContainerID(r)
@@ -270,7 +270,7 @@ func Test_EnforceOverlayMountPolicy_Overlay_Single_Container_Twice(t *testing.T)
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	p := generateContainers(r, 1)
 
-	policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+	policy := NewStandardEnforcer(p.containers, ignoredEncodedPolicyString)
 
 	containerID := generateContainerID(r)
 	container := selectContainerFromContainers(p, r)
@@ -298,11 +298,11 @@ func Test_EnforceOverlayMountPolicy_Overlay_Single_Container_Twice(t *testing.T)
 func Test_EnforceOverlayMountPolicy_Multiple_Instances_Same_Container(t *testing.T) {
 	for containersToCreate := 2; containersToCreate <= maxContainersInGeneratedPolicy; containersToCreate++ {
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
-		var containers []securityPolicyContainer
+		var containers []container
 
 		for i := 1; i <= int(containersToCreate); i++ {
 			arg := "command " + strconv.Itoa(i)
-			c := securityPolicyContainer{
+			c := container{
 				Command: []string{arg},
 				Layers:  []string{"1", "2"},
 			}
@@ -310,7 +310,7 @@ func Test_EnforceOverlayMountPolicy_Multiple_Instances_Same_Container(t *testing
 			containers = append(containers, c)
 		}
 
-		policy := NewStandardSecurityPolicyEnforcer(containers, "")
+		policy := NewStandardEnforcer(containers, "")
 
 		idsUsed := map[string]bool{}
 		for i := 0; i < len(containers); i++ {
@@ -345,7 +345,7 @@ func Test_EnforceOverlayMountPolicy_Overlay_Single_Container_Twice_With_Differen
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	p := generateContainers(r, 1)
 
-	policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+	policy := NewStandardEnforcer(p.containers, ignoredEncodedPolicyString)
 
 	var containerIDOne, containerIDTwo string
 
@@ -373,13 +373,13 @@ func Test_EnforceOverlayMountPolicy_Overlay_Single_Container_Twice_With_Differen
 
 func Test_EnforceCommandPolicy_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
-		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		policy := NewStandardEnforcer(p.containers, ignoredEncodedPolicyString)
 
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		containerID := generateContainerID(r)
-		container := selectContainerFromContainers(p, r)
+		c := selectContainerFromContainers(p, r)
 
-		layerPaths, err := createValidOverlayForContainer(policy, container, r)
+		layerPaths, err := createValidOverlayForContainer(policy, c, r)
 		if err != nil {
 			return false
 		}
@@ -389,7 +389,7 @@ func Test_EnforceCommandPolicy_Matches(t *testing.T) {
 			return false
 		}
 
-		err = policy.enforceCommandPolicy(containerID, container.Command)
+		err = policy.enforceCommandPolicy(containerID, c.Command)
 
 		// getting an error means something is broken
 		return err == nil
@@ -402,7 +402,7 @@ func Test_EnforceCommandPolicy_Matches(t *testing.T) {
 
 func Test_EnforceCommandPolicy_NoMatches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
-		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		policy := NewStandardEnforcer(p.containers, ignoredEncodedPolicyString)
 
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		containerID := generateContainerID(r)
@@ -450,7 +450,7 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 		// add new containers to policy before creating enforcer
 		p.containers = append(p.containers, testContainerOne, testContainerTwo)
 
-		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		policy := NewStandardEnforcer(p.containers, ignoredEncodedPolicyString)
 
 		testContainerOneID := ""
 		testContainerTwoID := ""
@@ -533,7 +533,7 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 
 func Test_EnforceEnvironmentVariablePolicy_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
-		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		policy := NewStandardEnforcer(p.containers, ignoredEncodedPolicyString)
 
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		containerID := generateContainerID(r)
@@ -565,19 +565,19 @@ func Test_EnforceEnvironmentVariablePolicy_Re2Match(t *testing.T) {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	p := generateContainers(r, 1)
 
-	container := generateContainersContainer(r, 1)
+	c := generateContainersContainer(r, 1)
 	// add a rule to re2 match
-	re2MatchRule := securityPolicyEnvironmentVariableRule{
+	re2MatchRule := environmentVariableRule{
 		Strategy: EnvVarRuleRegex,
 		Rule:     "PREFIX_.+=.+"}
-	container.EnvRules = append(container.EnvRules, re2MatchRule)
-	p.containers = append(p.containers, container)
+	c.EnvRules = append(c.EnvRules, re2MatchRule)
+	p.containers = append(p.containers, c)
 
-	policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+	policy := NewStandardEnforcer(p.containers, ignoredEncodedPolicyString)
 
 	containerID := generateContainerID(r)
 
-	layerPaths, err := createValidOverlayForContainer(policy, container, r)
+	layerPaths, err := createValidOverlayForContainer(policy, c, r)
 	if err != nil {
 		t.Fatalf("expected nil error got: %v", err)
 	}
@@ -598,7 +598,7 @@ func Test_EnforceEnvironmentVariablePolicy_Re2Match(t *testing.T) {
 
 func Test_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
-		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		policy := NewStandardEnforcer(p.containers, ignoredEncodedPolicyString)
 
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		containerID := generateContainerID(r)
@@ -649,7 +649,7 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 		// add new containers to policy before creating enforcer
 		p.containers = append(p.containers, testContainerOne, testContainerTwo)
 
-		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		policy := NewStandardEnforcer(p.containers, ignoredEncodedPolicyString)
 
 		testContainerOneID := ""
 		testContainerTwoID := ""
@@ -735,12 +735,12 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 // Setup and "fixtures" follow...
 //
 
-func (*SecurityPolicy) Generate(r *rand.Rand, size int) reflect.Value {
+func (*Policy) Generate(r *rand.Rand, size int) reflect.Value {
 	// This fixture setup is used from 1 test. Given the limited scope it is
 	// used from, all functionality is in this single function. That saves having
 	// confusing fixture name functions where we have generate* for both internal
 	// and external versions
-	p := &SecurityPolicy{
+	p := &Policy{
 		Containers: Containers{
 			Elements: map[string]Container{},
 		},
@@ -799,7 +799,7 @@ func (*generatedContainers) Generate(r *rand.Rand, size int) reflect.Value {
 }
 
 func generateContainers(r *rand.Rand, upTo int32) *generatedContainers {
-	containers := []securityPolicyContainer{}
+	var containers []container
 
 	numContainers := (int)(atLeastOneAtMost(r, upTo))
 	for i := 0; i < numContainers; i++ {
@@ -811,8 +811,8 @@ func generateContainers(r *rand.Rand, upTo int32) *generatedContainers {
 	}
 }
 
-func generateContainersContainer(r *rand.Rand, size int32) securityPolicyContainer {
-	c := securityPolicyContainer{}
+func generateContainersContainer(r *rand.Rand, size int32) container {
+	c := container{}
 	c.Command = generateCommand(r)
 	c.EnvRules = generateEnvironmentVariableRules(r)
 	layers := int(atLeastOneAtMost(r, size))
@@ -838,12 +838,12 @@ func generateCommand(r *rand.Rand) []string {
 	return args
 }
 
-func generateEnvironmentVariableRules(r *rand.Rand) []securityPolicyEnvironmentVariableRule {
-	rules := []securityPolicyEnvironmentVariableRule{}
+func generateEnvironmentVariableRules(r *rand.Rand) []environmentVariableRule {
+	var rules []environmentVariableRule
 
 	numArgs := atLeastOneAtMost(r, maxGeneratedEnvironmentVariableRules)
 	for i := 0; i < int(numArgs); i++ {
-		rule := securityPolicyEnvironmentVariableRule{
+		rule := environmentVariableRule{
 			Strategy: "string",
 			Rule:     randVariableString(r, maxGeneratedEnvironmentVariableRuleLength),
 		}
@@ -869,7 +869,7 @@ func generateNeverMatchingEnvironmentVariable(r *rand.Rand) string {
 	return randString(r, maxGeneratedEnvironmentVariableRuleLength+1)
 }
 
-func buildEnvironmentVariablesFromContainerRules(c securityPolicyContainer, r *rand.Rand) []string {
+func buildEnvironmentVariablesFromContainerRules(c container, r *rand.Rand) []string {
 	vars := make([]string, 0)
 
 	// Select some number of the valid, matching rules to be environment
@@ -932,18 +932,18 @@ func generateContainerID(r *rand.Rand) string {
 	return strconv.FormatInt(int64(id), 10)
 }
 
-func selectContainerFromContainers(containers *generatedContainers, r *rand.Rand) securityPolicyContainer {
+func selectContainerFromContainers(containers *generatedContainers, r *rand.Rand) container {
 	numberOfContainersInPolicy := len(containers.containers)
 	return containers.containers[r.Intn(numberOfContainersInPolicy)]
 }
 
-func createValidOverlayForContainer(enforcer SecurityPolicyEnforcer, container securityPolicyContainer, r *rand.Rand) ([]string, error) {
+func createValidOverlayForContainer(enforcer PolicyEnforcer, c container, r *rand.Rand) ([]string, error) {
 	// storage for our mount paths
-	overlay := make([]string, len(container.Layers))
+	overlay := make([]string, len(c.Layers))
 
-	for i := 0; i < len(container.Layers); i++ {
+	for i := 0; i < len(c.Layers); i++ {
 		mount := generateMountTarget(r)
-		err := enforcer.EnforceDeviceMountPolicy(mount, container.Layers[i])
+		err := enforcer.EnforceDeviceMountPolicy(mount, c.Layers[i])
 		if err != nil {
 			return overlay, err
 		}
@@ -954,24 +954,24 @@ func createValidOverlayForContainer(enforcer SecurityPolicyEnforcer, container s
 	return overlay, nil
 }
 
-func createInvalidOverlayForContainer(enforcer SecurityPolicyEnforcer, container securityPolicyContainer, r *rand.Rand) ([]string, error) {
+func createInvalidOverlayForContainer(enforcer PolicyEnforcer, c container, r *rand.Rand) ([]string, error) {
 	method := r.Intn(3)
 	if method == 0 {
-		return invalidOverlaySameSizeWrongMounts(enforcer, container, r)
+		return invalidOverlaySameSizeWrongMounts(enforcer, c, r)
 	} else if method == 1 {
-		return invalidOverlayCorrectDevicesWrongOrderSomeMissing(enforcer, container, r)
+		return invalidOverlayCorrectDevicesWrongOrderSomeMissing(enforcer, c, r)
 	} else {
-		return invalidOverlayRandomJunk(enforcer, container, r)
+		return invalidOverlayRandomJunk(enforcer, c, r)
 	}
 }
 
-func invalidOverlaySameSizeWrongMounts(enforcer SecurityPolicyEnforcer, container securityPolicyContainer, r *rand.Rand) ([]string, error) {
+func invalidOverlaySameSizeWrongMounts(enforcer PolicyEnforcer, c container, r *rand.Rand) ([]string, error) {
 	// storage for our mount paths
-	overlay := make([]string, len(container.Layers))
+	overlay := make([]string, len(c.Layers))
 
-	for i := 0; i < len(container.Layers); i++ {
+	for i := 0; i < len(c.Layers); i++ {
 		mount := generateMountTarget(r)
-		err := enforcer.EnforceDeviceMountPolicy(mount, container.Layers[i])
+		err := enforcer.EnforceDeviceMountPolicy(mount, c.Layers[i])
 		if err != nil {
 			return overlay, err
 		}
@@ -983,17 +983,17 @@ func invalidOverlaySameSizeWrongMounts(enforcer SecurityPolicyEnforcer, containe
 	return overlay, nil
 }
 
-func invalidOverlayCorrectDevicesWrongOrderSomeMissing(enforcer SecurityPolicyEnforcer, container securityPolicyContainer, r *rand.Rand) ([]string, error) {
-	if len(container.Layers) == 1 {
+func invalidOverlayCorrectDevicesWrongOrderSomeMissing(enforcer PolicyEnforcer, c container, r *rand.Rand) ([]string, error) {
+	if len(c.Layers) == 1 {
 		// won't work with only 1, we need to bail out to another method
-		return invalidOverlayRandomJunk(enforcer, container, r)
+		return invalidOverlayRandomJunk(enforcer, c, r)
 	}
 	// storage for our mount paths
 	var overlay []string
 
-	for i := 0; i < len(container.Layers); i++ {
+	for i := 0; i < len(c.Layers); i++ {
 		mount := generateMountTarget(r)
-		err := enforcer.EnforceDeviceMountPolicy(mount, container.Layers[i])
+		err := enforcer.EnforceDeviceMountPolicy(mount, c.Layers[i])
 		if err != nil {
 			return overlay, err
 		}
@@ -1006,7 +1006,7 @@ func invalidOverlayCorrectDevicesWrongOrderSomeMissing(enforcer SecurityPolicyEn
 	return overlay, nil
 }
 
-func invalidOverlayRandomJunk(enforcer SecurityPolicyEnforcer, container securityPolicyContainer, r *rand.Rand) ([]string, error) {
+func invalidOverlayRandomJunk(enforcer PolicyEnforcer, c container, r *rand.Rand) ([]string, error) {
 	// create "junk" for entry
 	layersToCreate := r.Int31n(maxLayersInGeneratedContainer)
 	overlay := make([]string, layersToCreate)
@@ -1016,9 +1016,9 @@ func invalidOverlayRandomJunk(enforcer SecurityPolicyEnforcer, container securit
 	}
 
 	// setup entirely different and "correct" expected mounting
-	for i := 0; i < len(container.Layers); i++ {
+	for i := 0; i < len(c.Layers); i++ {
 		mount := generateMountTarget(r)
-		err := enforcer.EnforceDeviceMountPolicy(mount, container.Layers[i])
+		err := enforcer.EnforceDeviceMountPolicy(mount, c.Layers[i])
 		if err != nil {
 			return overlay, err
 		}
@@ -1054,5 +1054,5 @@ func atMost(r *rand.Rand, most int32) int32 {
 
 // a type to hold a list of generated containers
 type generatedContainers struct {
-	containers []securityPolicyContainer
+	containers []container
 }

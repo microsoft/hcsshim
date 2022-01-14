@@ -14,12 +14,12 @@ const (
 	EnvVarRuleRegex  EnvVarRule = "re2"
 )
 
-// Internal version of SecurityPolicyContainer
-type securityPolicyContainer struct {
+// Internal version of Container
+type container struct {
 	// The command that we will allow the container to execute
 	Command []string `json:"command"`
 	// The rules for determining if a given environment variable is allowed
-	EnvRules []securityPolicyEnvironmentVariableRule `json:"env_rules"`
+	EnvRules []environmentVariableRule `json:"env_rules"`
 	// An ordered list of dm-verity root hashes for each layer that makes up
 	// "a container". Containers are constructed as an overlay file system. The
 	// order that the layers are overlayed is important and needs to be enforced
@@ -27,34 +27,34 @@ type securityPolicyContainer struct {
 	Layers []string `json:"layers"`
 }
 
-// Internal versino of SecurityPolicyEnvironmentVariableRule
-type securityPolicyEnvironmentVariableRule struct {
+// Internal version of EnvRule
+type environmentVariableRule struct {
 	Strategy EnvVarRule `json:"type"`
 	Rule     string     `json:"rule"`
 }
 
-// SecurityPolicyState is a structure that holds user supplied policy to enforce
+// State is a structure that holds user supplied policy to enforce
 // we keep both the encoded representation and the unmarshalled representation
 // because different components need to have access to either of these
-type SecurityPolicyState struct {
+type State struct {
 	EncodedSecurityPolicy EncodedSecurityPolicy `json:"EncodedSecurityPolicy,omitempty"`
-	SecurityPolicy        `json:"SecurityPolicy,omitempty"`
+	SecurityPolicy        Policy                `json:"SecurityPolicy,omitempty"`
 }
 
-// EncodedSecurityPolicy is a JSON representation of SecurityPolicy that has
+// EncodedSecurityPolicy is a JSON representation of Policy that has
 // been base64 encoded for storage in an annotation embedded within another
 // JSON configuration
 type EncodedSecurityPolicy struct {
 	SecurityPolicy string `json:"SecurityPolicy,omitempty"`
 }
 
-// Constructs SecurityPolicyState from base64Policy string. It first decodes
+// NewSecurityPolicyState constructs State from base64Policy string. It first decodes
 // base64 policy and returns the structs security policy struct and encoded
 // security policy for given policy. The security policy is transmitted as json
 // in an annotation, so we first have to remove the base64 encoding that allows
 // the JSON based policy to be passed as a string. From there, we decode the
-// JSONand setup our security policy struct
-func NewSecurityPolicyState(base64Policy string) (*SecurityPolicyState, error) {
+// JSON and setup our security policy struct
+func NewSecurityPolicyState(base64Policy string) (*State, error) {
 	// construct an encoded security policy that holds the base64 representation
 	encodedSecurityPolicy := EncodedSecurityPolicy{
 		SecurityPolicy: base64Policy,
@@ -70,25 +70,25 @@ func NewSecurityPolicyState(base64Policy string) (*SecurityPolicyState, error) {
 	}
 
 	// json unmarshall the decoded to a SecurityPolicy
-	securityPolicy := SecurityPolicy{}
+	securityPolicy := Policy{}
 	err = json.Unmarshal(jsonPolicy, &securityPolicy)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to unmarshal JSON policy")
 	}
 
-	return &SecurityPolicyState{
+	return &State{
 		SecurityPolicy:        securityPolicy,
 		EncodedSecurityPolicy: encodedSecurityPolicy,
 	}, nil
 }
 
-type SecurityPolicy struct {
+type Policy struct {
 	// Flag that when set to true allows for all checks to pass. Currently used
 	// to run with security policy enforcement "running dark"; checks can be in
 	// place but the default policy that is created on startup has AllowAll set
 	// to true, thus making policy enforcement effectively "off" from a logical
 	// standpoint. Policy enforcement isn't actually off as the policy is "allow
-	// everything:.
+	// everything".
 	AllowAll bool `json:"allow_all"`
 	// One or more containers that are allowed to run
 	Containers Containers `json:"containers"`
@@ -127,7 +127,7 @@ type EnvRule struct {
 	Rule     string     `json:"rule"`
 }
 
-// Custom JSON marshalling to add `lenth` field that matches the number of
+// Custom JSON marshalling to add `length` field that matches the number of
 // elements present in the `elements` field.
 func (c Containers) MarshalJSON() ([]byte, error) {
 	type Alias Containers

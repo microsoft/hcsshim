@@ -616,12 +616,12 @@ func Test_Security_Policy_Enforcement_Unmount_Calls(t *testing.T) {
 	}
 }
 
-func openDoorSecurityPolicyEnforcer() securitypolicy.SecurityPolicyEnforcer {
-	return &securitypolicy.OpenDoorSecurityPolicyEnforcer{}
+func openDoorSecurityPolicyEnforcer() securitypolicy.PolicyEnforcer {
+	return &securitypolicy.OpenDoorEnforcer{}
 }
 
-func mountMonitoringSecurityPolicyEnforcer() *policy.MountMonitoringSecurityPolicyEnforcer {
-	return &policy.MountMonitoringSecurityPolicyEnforcer{}
+func mountMonitoringSecurityPolicyEnforcer() *policy.MountMonitoringEnforcer {
+	return &policy.MountMonitoringEnforcer{}
 }
 
 // dm-verity tests

@@ -46,7 +46,7 @@ func main() {
 			return err
 		}
 
-		policy, err := func() (securitypolicy.SecurityPolicy, error) {
+		policy, err := func() (securitypolicy.Policy, error) {
 			if config.AllowAll {
 				return createOpenDoorPolicy(), nil
 			} else {
@@ -99,14 +99,14 @@ type Config struct {
 	Containers []Container `toml:"container"`
 }
 
-func createOpenDoorPolicy() securitypolicy.SecurityPolicy {
-	return securitypolicy.SecurityPolicy{
+func createOpenDoorPolicy() securitypolicy.Policy {
+	return securitypolicy.Policy{
 		AllowAll: true,
 	}
 }
 
-func createPolicyFromConfig(config Config) (securitypolicy.SecurityPolicy, error) {
-	p := securitypolicy.SecurityPolicy{
+func createPolicyFromConfig(config Config) (securitypolicy.Policy, error) {
+	p := securitypolicy.Policy{
 		Containers: securitypolicy.Containers{
 			Elements: map[string]securitypolicy.Container{},
 		},

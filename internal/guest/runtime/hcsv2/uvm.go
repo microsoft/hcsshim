@@ -51,7 +51,7 @@ type Host struct {
 
 	// state required for the security policy enforcement
 	policyMutex               sync.Mutex
-	securityPolicyEnforcer    securitypolicy.SecurityPolicyEnforcer
+	securityPolicyEnforcer    securitypolicy.PolicyEnforcer
 	securityPolicyEnforcerSet bool
 }
 
@@ -62,7 +62,7 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport) *Host {
 		rtime:                     rtime,
 		vsock:                     vsock,
 		securityPolicyEnforcerSet: false,
-		securityPolicyEnforcer:    &securitypolicy.OpenDoorSecurityPolicyEnforcer{},
+		securityPolicyEnforcer:    &securitypolicy.OpenDoorEnforcer{},
 	}
 }
 
@@ -217,7 +217,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	// security policy variable cannot be included in the security policy as its value is not available
 	// security policy construction time.
 
-	if policyEnforcer, ok := (h.securityPolicyEnforcer).(*securitypolicy.StandardSecurityPolicyEnforcer); ok {
+	if policyEnforcer, ok := (h.securityPolicyEnforcer).(*securitypolicy.StandardEnforcer); ok {
 		secPolicyEnv := fmt.Sprintf("SECURITY_POLICY=%s", policyEnforcer.EncodedSecurityPolicy)
 		settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, secPolicyEnv)
 	}
@@ -440,7 +440,7 @@ func newInvalidRequestTypeError(rt prot.ModifyRequestType) error {
 	return errors.Errorf("the RequestType \"%s\" is not supported", rt)
 }
 
-func modifyMappedVirtualDisk(ctx context.Context, rt prot.ModifyRequestType, mvd *prot.MappedVirtualDiskV2, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
+func modifyMappedVirtualDisk(ctx context.Context, rt prot.ModifyRequestType, mvd *prot.MappedVirtualDiskV2, securityPolicy securitypolicy.PolicyEnforcer) (err error) {
 	switch rt {
 	case prot.MreqtAdd:
 		mountCtx, cancel := context.WithTimeout(ctx, time.Second*5)
@@ -472,7 +472,7 @@ func modifyMappedDirectory(ctx context.Context, vsock transport.Transport, rt pr
 	}
 }
 
-func modifyMappedVPMemDevice(ctx context.Context, rt prot.ModifyRequestType, vpd *prot.MappedVPMemDeviceV2, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
+func modifyMappedVPMemDevice(ctx context.Context, rt prot.ModifyRequestType, vpd *prot.MappedVPMemDeviceV2, securityPolicy securitypolicy.PolicyEnforcer) (err error) {
 	switch rt {
 	case prot.MreqtAdd:
 		return pmem.Mount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, vpd.VerityInfo, securityPolicy)
@@ -492,7 +492,7 @@ func modifyMappedVPCIDevice(ctx context.Context, rt prot.ModifyRequestType, vpci
 	}
 }
 
-func modifyCombinedLayers(ctx context.Context, rt prot.ModifyRequestType, cl *prot.CombinedLayersV2, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
+func modifyCombinedLayers(ctx context.Context, rt prot.ModifyRequestType, cl *prot.CombinedLayersV2, securityPolicy securitypolicy.PolicyEnforcer) (err error) {
 	switch rt {
 	case prot.MreqtAdd:
 		layerPaths := make([]string, len(cl.Layers))
