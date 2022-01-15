@@ -1,3 +1,4 @@
+//go:build functional || uvmproperties
 // +build functional uvmproperties
 
 package functional

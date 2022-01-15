@@ -1,3 +1,4 @@
+//go:build functional || uvmp9
 // +build functional uvmp9
 
 // This file isn't called uvm_plan9_test.go as go test skips when a number is in it... go figure (pun intended)

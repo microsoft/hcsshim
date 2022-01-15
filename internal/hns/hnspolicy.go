@@ -93,15 +93,15 @@ type ACLPolicy struct {
 	InternalPort    uint16     `json:",omitempty"`
 	Action          ActionType
 	Direction       DirectionType
-	LocalAddresses  string     `json:",omitempty"`
-	RemoteAddresses string     `json:",omitempty"`
-	LocalPorts      string     `json:"LocalPorts,omitempty"`
-	LocalPort       uint16     `json:",omitempty"`
-	RemotePorts     string     `json:"RemotePorts,omitempty"`
-	RemotePort      uint16     `json:",omitempty"`
-	RuleType        RuleType   `json:"RuleType,omitempty"`
-	Priority        uint16     `json:",omitempty"`
-	ServiceName     string     `json:",omitempty"`
+	LocalAddresses  string   `json:",omitempty"`
+	RemoteAddresses string   `json:",omitempty"`
+	LocalPorts      string   `json:"LocalPorts,omitempty"`
+	LocalPort       uint16   `json:",omitempty"`
+	RemotePorts     string   `json:"RemotePorts,omitempty"`
+	RemotePort      uint16   `json:",omitempty"`
+	RuleType        RuleType `json:"RuleType,omitempty"`
+	Priority        uint16   `json:",omitempty"`
+	ServiceName     string   `json:",omitempty"`
 }
 
 type Policy struct {

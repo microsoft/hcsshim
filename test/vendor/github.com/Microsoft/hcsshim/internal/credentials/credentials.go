@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 // Package credentials holds the necessary structs and functions for adding

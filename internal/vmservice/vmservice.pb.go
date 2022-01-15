@@ -2402,7 +2402,7 @@ func (m *VMConfig) MarshalTo(dAtA []byte) (int, error) {
 		i += n6
 	}
 	if len(m.ExtraData) > 0 {
-		for k, _ := range m.ExtraData {
+		for k := range m.ExtraData {
 			dAtA[i] = 0x42
 			i++
 			v := m.ExtraData[k]
@@ -4281,7 +4281,7 @@ func (this *VMConfig) String() string {
 		return "nil"
 	}
 	keysForExtraData := make([]string, 0, len(this.ExtraData))
-	for k, _ := range this.ExtraData {
+	for k := range this.ExtraData {
 		keysForExtraData = append(keysForExtraData, k)
 	}
 	github_com_gogo_protobuf_sortkeys.Strings(keysForExtraData)

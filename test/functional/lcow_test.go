@@ -1,3 +1,4 @@
+//go:build functional || lcow
 // +build functional lcow
 
 package functional
