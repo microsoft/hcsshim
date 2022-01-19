@@ -456,7 +456,7 @@ func (s *service) shutdownInternal(ctx context.Context, req *task.ShutdownReques
 	return empty, nil
 }
 
-func (s *service) getComputeProcessorInfo(ctx context.Context, req *extendedtask.ComputeProcessorInfoRequest) (*extendedtask.ComputeProcessorInfoResponse, error) {
+func (s *service) computeProcessorInfoInternal(ctx context.Context, req *extendedtask.ComputeProcessorInfoRequest) (*extendedtask.ComputeProcessorInfoResponse, error) {
 	t, err := s.getTask(req.ID)
 	if err != nil {
 		return nil, err

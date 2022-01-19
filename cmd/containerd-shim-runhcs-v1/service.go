@@ -472,6 +472,6 @@ func (s *service) ComputeProcessorInfo(ctx context.Context, req *extendedtask.Co
 
 	span.AddAttributes(trace.StringAttribute("tid", s.tid))
 
-	r, e := s.getComputeProcessorInfo(ctx, req)
+	r, e := s.computeProcessorInfoInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
