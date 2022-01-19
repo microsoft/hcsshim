@@ -99,6 +99,10 @@ func (s *grpcService) AddNIC(ctx context.Context, req *ncproxygrpc.AddNICRequest
 			return nil, err
 		}
 	} else {
+		if !errors.Is(err, ncproxystore.ErrBucketNotFound) && !errors.Is(err, ncproxystore.ErrKeyNotFound) {
+			// log if there was an unexpected error before checking if this is an hcn endpoint
+			log.G(ctx).WithError(err).Warn("Failed to query ncproxy networking database")
+		}
 		ep, err := hcn.GetEndpointByName(req.EndpointName)
 		if err != nil {
 			if _, ok := err.(hcn.EndpointNotFoundError); ok {
@@ -267,7 +271,10 @@ func (s *grpcService) DeleteNIC(ctx context.Context, req *ncproxygrpc.DeleteNICR
 			return nil, err
 		}
 	} else {
-		// see if this is an hcn endpoint
+		if !errors.Is(err, ncproxystore.ErrBucketNotFound) && !errors.Is(err, ncproxystore.ErrKeyNotFound) {
+			// log if there was an unexpected error before checking if this is an hcn endpoint
+			log.G(ctx).WithError(err).Warn("Failed to query ncproxy networking database")
+		}
 		ep, err := hcn.GetEndpointByName(req.EndpointName)
 		if err != nil {
 			if _, ok := err.(hcn.EndpointNotFoundError); ok {
@@ -444,7 +451,10 @@ func (s *grpcService) AddEndpoint(ctx context.Context, req *ncproxygrpc.AddEndpo
 			return nil, errors.Wrapf(err, "failed to update endpoint with name `%s`", req.Name)
 		}
 	} else {
-		// see if this is an hcn endpoint
+		if !errors.Is(err, ncproxystore.ErrBucketNotFound) && !errors.Is(err, ncproxystore.ErrKeyNotFound) {
+			// log if there was an unexpected error before checking if this is an hcn endpoint
+			log.G(ctx).WithError(err).Warn("Failed to query ncproxy networking database")
+		}
 		ep, err := hcn.GetEndpointByName(req.Name)
 		if err != nil {
 			if _, ok := err.(hcn.EndpointNotFoundError); ok {
@@ -477,6 +487,10 @@ func (s *grpcService) DeleteEndpoint(ctx context.Context, req *ncproxygrpc.Delet
 			return nil, errors.Wrapf(err, "failed to delete endpoint with name %q", req.Name)
 		}
 	} else {
+		if !errors.Is(err, ncproxystore.ErrBucketNotFound) && !errors.Is(err, ncproxystore.ErrKeyNotFound) {
+			// log if there was an unexpected error before checking if this is an hcn endpoint
+			log.G(ctx).WithError(err).Warn("Failed to query ncproxy networking database")
+		}
 		ep, err := hcn.GetEndpointByName(req.Name)
 		if err != nil {
 			if _, ok := err.(hcn.EndpointNotFoundError); ok {
@@ -489,7 +503,6 @@ func (s *grpcService) DeleteEndpoint(ctx context.Context, req *ncproxygrpc.Delet
 			return nil, errors.Wrapf(err, "failed to delete endpoint with name %q", req.Name)
 		}
 	}
-
 	return &ncproxygrpc.DeleteEndpointResponse{}, nil
 }
 
@@ -510,6 +523,9 @@ func (s *grpcService) DeleteNetwork(ctx context.Context, req *ncproxygrpc.Delete
 			return nil, errors.Wrapf(err, "failed to delete network with name %q", req.Name)
 		}
 	} else {
+		if !errors.Is(err, ncproxystore.ErrBucketNotFound) && !errors.Is(err, ncproxystore.ErrKeyNotFound) {
+			log.G(ctx).WithError(err).Warn("Failed to query ncproxy networking database")
+		}
 		network, err := hcn.GetNetworkByName(req.Name)
 		if err != nil {
 			if _, ok := err.(hcn.NetworkNotFoundError); ok {
@@ -573,6 +589,8 @@ func (s *grpcService) GetEndpoint(ctx context.Context, req *ncproxygrpc.GetEndpo
 
 	if ep, err := s.ncpNetworkingStore.GetEndpointByName(ctx, req.Name); err == nil {
 		return ncpNetworkingEndpointToEndpointResponse(ep)
+	} else if !errors.Is(err, ncproxystore.ErrBucketNotFound) && !errors.Is(err, ncproxystore.ErrKeyNotFound) {
+		log.G(ctx).WithError(err).Warn("Failed to query ncproxy networking database")
 	}
 
 	ep, err := hcn.GetEndpointByName(req.Name)
@@ -650,6 +668,8 @@ func (s *grpcService) GetNetwork(ctx context.Context, req *ncproxygrpc.GetNetwor
 
 	if network, err := s.ncpNetworkingStore.GetNetworkByName(ctx, req.Name); err == nil {
 		return ncpNetworkingNetworkToNetworkResponse(network)
+	} else if !errors.Is(err, ncproxystore.ErrBucketNotFound) && !errors.Is(err, ncproxystore.ErrKeyNotFound) {
+		log.G(ctx).WithError(err).Warn("Failed to query ncproxy networking database")
 	}
 
 	network, err := hcn.GetNetworkByName(req.Name)
