@@ -13,6 +13,7 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	"github.com/Microsoft/hcsshim/internal/extendedtask"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/pkg/octtrpc"
 	"github.com/containerd/containerd/log"
@@ -192,6 +193,7 @@ var serveCommand = cli.Command{
 		defer s.Close()
 		task.RegisterTaskService(s, svc)
 		shimdiag.RegisterShimDiagService(s, svc)
+		extendedtask.RegisterExtendedTaskService(s, svc)
 
 		sl, err := winio.ListenPipe(socket, nil)
 		if err != nil {

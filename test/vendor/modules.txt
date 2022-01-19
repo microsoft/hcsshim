@@ -26,6 +26,7 @@ github.com/Microsoft/hcsshim/internal/cow
 github.com/Microsoft/hcsshim/internal/cpugroup
 github.com/Microsoft/hcsshim/internal/credentials
 github.com/Microsoft/hcsshim/internal/devices
+github.com/Microsoft/hcsshim/internal/extendedtask
 github.com/Microsoft/hcsshim/internal/gcs
 github.com/Microsoft/hcsshim/internal/guestrequest
 github.com/Microsoft/hcsshim/internal/hcs

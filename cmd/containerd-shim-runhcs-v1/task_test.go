@@ -104,6 +104,10 @@ func (tst *testShimTask) Share(ctx context.Context, req *shimdiag.ShareRequest) 
 	return errors.New("not implemented")
 }
 
+func (tst *testShimTask) ProcessorInfo(ctx context.Context) (*processorInfo, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (tst *testShimTask) Stats(ctx context.Context) (*stats.Statistics, error) {
 	if tst.isWCOW {
 		return getWCOWTestStats(), nil

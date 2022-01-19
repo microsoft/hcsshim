@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	"github.com/Microsoft/hcsshim/internal/extendedtask"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
@@ -453,4 +454,18 @@ func (s *service) shutdownInternal(ctx context.Context, req *task.ShutdownReques
 	// connection to drain any active requests.
 	os.Exit(0)
 	return empty, nil
+}
+
+func (s *service) computeProcessorInfoInternal(ctx context.Context, req *extendedtask.ComputeProcessorInfoRequest) (*extendedtask.ComputeProcessorInfoResponse, error) {
+	t, err := s.getTask(req.ID)
+	if err != nil {
+		return nil, err
+	}
+	info, err := t.ProcessorInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &extendedtask.ComputeProcessorInfoResponse{
+		Count: info.count,
+	}, nil
 }

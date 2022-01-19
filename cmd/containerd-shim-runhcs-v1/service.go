@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/extendedtask"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/containerd/containerd/errdefs"
@@ -463,4 +464,14 @@ func (s *service) DiagPid(ctx context.Context, req *shimdiag.PidRequest) (*shimd
 	return &shimdiag.PidResponse{
 		Pid: int32(os.Getpid()),
 	}, nil
+}
+
+func (s *service) ComputeProcessorInfo(ctx context.Context, req *extendedtask.ComputeProcessorInfoRequest) (*extendedtask.ComputeProcessorInfoResponse, error) {
+	ctx, span := trace.StartSpan(ctx, "ComputeProcessorInfo") //nolint:ineffassign,staticcheck
+	defer span.End()
+
+	span.AddAttributes(trace.StringAttribute("tid", s.tid))
+
+	r, e := s.computeProcessorInfoInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
 }
