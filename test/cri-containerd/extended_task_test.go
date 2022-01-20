@@ -81,14 +81,20 @@ func Test_ExtendedTask_ProcessorInfo(t *testing.T) {
 			defer stopPodSandbox(t, client, ctx, podID)
 
 			resp, err := getPodProcessorInfo(ctx, podID)
-			if err == nil && test.expectedError {
-				t.Fatalf("expected to get an error, instead got %v response", resp)
-			}
-			if err != nil && !test.expectedError {
-				t.Fatalf("failed to get pod processor info with %v", err)
-			}
-			if resp.Count != 2 {
-				t.Fatalf("expected to see 2 cpus on the pod, instead got %v", resp.Count)
+			if test.expectedError {
+				if err == nil {
+					t.Fatalf("expected to get an error, instead got %v response", resp)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("failed to get pod processor info with %v", err)
+				}
+				if resp == nil {
+					t.Fatalf("expected non-nil processor info response")
+				}
+				if resp.Count != 2 {
+					t.Fatalf("expected to see 2 cpus on the pod, instead got %v", resp.Count)
+				}
 			}
 		})
 	}
