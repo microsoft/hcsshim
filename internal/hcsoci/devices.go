@@ -195,7 +195,7 @@ func handleAssignedDevicesLCOW(
 		case uvm.VPCIDeviceIDType, uvm.VPCIDeviceIDTypeLegacy, uvm.GPUDeviceIDType:
 			gpuPresent = gpuPresent || d.IDType == uvm.GPUDeviceIDType
 			pciID, index := getDeviceInfoFromPath(d.ID)
-			vpci, err := vm.AssignDevice(ctx, pciID, index)
+			vpci, err := vm.AssignDevice(ctx, pciID, index, "")
 			if err != nil {
 				return resultDevs, closers, errors.Wrapf(err, "failed to assign device %s, function %d to pod %s", pciID, index, vm.ID())
 			}

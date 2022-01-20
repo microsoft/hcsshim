@@ -44,6 +44,7 @@ github.com/Microsoft/hcsshim/internal/logfields
 github.com/Microsoft/hcsshim/internal/longpath
 github.com/Microsoft/hcsshim/internal/memory
 github.com/Microsoft/hcsshim/internal/mergemaps
+github.com/Microsoft/hcsshim/internal/ncproxy/networking
 github.com/Microsoft/hcsshim/internal/ncproxyttrpc
 github.com/Microsoft/hcsshim/internal/oc
 github.com/Microsoft/hcsshim/internal/oci

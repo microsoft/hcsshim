@@ -12,9 +12,9 @@ import (
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/guest/storage/overlay"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -81,7 +81,7 @@ func install(ctx context.Context) error {
 
 		out, err = cmd.CombinedOutput()
 		if err != nil {
-			return errors.Wrapf(err, "failed to run modporbe with args %v: %s", modprobeArgs, out)
+			return errors.Wrapf(err, "failed to run modprobe with args %v: %s", modprobeArgs, out)
 		}
 	}
 
@@ -90,8 +90,8 @@ func install(ctx context.Context) error {
 
 func installDriversMain() {
 	ctx := context.Background()
-	logrus.SetOutput(os.Stderr)
+	log.G(ctx).Logger.SetOutput(os.Stderr)
 	if err := install(ctx); err != nil {
-		logrus.Fatalf("error in install drivers: %s", err)
+		log.G(ctx).Fatalf("error in install drivers: %s", err)
 	}
 }

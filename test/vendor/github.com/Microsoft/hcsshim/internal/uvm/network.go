@@ -676,3 +676,35 @@ func (uvm *UtilityVM) UpdateNIC(ctx context.Context, id string, settings *hcssch
 	}
 	return uvm.modify(ctx, req)
 }
+
+// AddNICInGuest makes a request to setup a network adapter's interface inside the lcow guest.
+// This is primarily used for adding NICs in the guest that have been VPCI assigned.
+func (uvm *UtilityVM) AddNICInGuest(ctx context.Context, cfg *guestrequest.LCOWNetworkAdapter) error {
+	if !uvm.isNetworkNamespaceSupported() {
+		return fmt.Errorf("guest does not support network namespaces and cannot add VF NIC %+v", cfg)
+	}
+	request := hcsschema.ModifySettingRequest{}
+	request.GuestRequest = guestrequest.GuestRequest{
+		ResourceType: guestrequest.ResourceTypeNetwork,
+		RequestType:  requesttype.Add,
+		Settings:     cfg,
+	}
+
+	return uvm.modify(ctx, &request)
+}
+
+// RemoveNICInGuest makes a request to remove a network interface inside the lcow guest.
+// This is primarily used for removing NICs in the guest that were VPCI assigned.
+func (uvm *UtilityVM) RemoveNICInGuest(ctx context.Context, cfg *guestrequest.LCOWNetworkAdapter) error {
+	if !uvm.isNetworkNamespaceSupported() {
+		return fmt.Errorf("guest does not support network namespaces and cannot remove VF NIC %+v", cfg)
+	}
+	request := hcsschema.ModifySettingRequest{}
+	request.GuestRequest = guestrequest.GuestRequest{
+		ResourceType: guestrequest.ResourceTypeNetwork,
+		RequestType:  requesttype.Remove,
+		Settings:     cfg,
+	}
+
+	return uvm.modify(ctx, &request)
+}
