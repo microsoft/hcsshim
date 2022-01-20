@@ -110,7 +110,7 @@ func (c *Container) GetProcess(pid uint32) (Process, error) {
 	logrus.WithFields(logrus.Fields{
 		logfields.ContainerID: c.id,
 		logfields.ProcessID:   pid,
-	}).Info("opengcs::Container::GetAllProcessPids")
+	}).Info("opengcs::Container::GetProcesss")
 	if c.initProcess.pid == pid {
 		return c.initProcess, nil
 	}
