@@ -364,9 +364,8 @@ func (job *JobObject) Pids() ([]uint32, error) {
 	}
 
 	bufInfo := (*winapi.JOBOBJECT_BASIC_PROCESS_ID_LIST)(unsafe.Pointer(&buf[0]))
-	bufPids := bufInfo.AllPids()
 	pids := make([]uint32, bufInfo.NumberOfProcessIdsInList)
-	for i, bufPid := range bufPids {
+	for i, bufPid := range bufInfo.AllPids() {
 		pids[i] = uint32(bufPid)
 	}
 	return pids, nil

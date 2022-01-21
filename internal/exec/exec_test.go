@@ -130,8 +130,8 @@ func TestExecStdinPowershell(t *testing.T) {
 	t.Logf("exit code was: %d", e.ExitCode())
 }
 
-func TestExecWithJob(t *testing.T) {
-	// Test that we can assign a process to a job object at creation time.
+func TestExecsWithJob(t *testing.T) {
+	// Test that we can assign processes to a job object at creation time.
 	job, err := jobobject.Create(context.Background(), &jobobject.Options{Name: "test"})
 	if err != nil {
 		log.Fatal(err)
@@ -140,9 +140,9 @@ func TestExecWithJob(t *testing.T) {
 
 	e, err := New(
 		`C:\Windows\System32\ping.exe`,
-		"ping 127.0.0.1",
+		"ping -t 127.0.0.1",
 		WithJobObject(job),
-		WithStdio(true, false, false),
+		WithStdio(false, false, false),
 		WithEnv(os.Environ()),
 	)
 	if err != nil {
@@ -154,25 +154,62 @@ func TestExecWithJob(t *testing.T) {
 		t.Fatalf("failed to start process: %v", err)
 	}
 
+	// Launch a second process and check pids.
+	e2, err := New(
+		`C:\Windows\System32\ping.exe`,
+		"ping -t 127.0.0.1",
+		WithJobObject(job),
+		WithStdio(false, false, false),
+		WithEnv(os.Environ()),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = e2.Start()
+	if err != nil {
+		t.Fatalf("failed to start process: %v", err)
+	}
+
+	pidMap := map[int]struct{}{
+		e.Pid():  {},
+		e2.Pid(): {},
+	}
+
 	pids, err := job.Pids()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(pids) == 0 {
-		t.Fatal("no pids found in job object")
+	if len(pids) != 2 {
+		t.Fatalf("should be two pids in job object, got: %d", len(pids))
 	}
 
-	// Should only be one process in the job, being the process we launched and added to it.
-	if pids[0] != uint32(e.Pid()) {
-		t.Fatal(err)
+	for _, pid := range pids {
+		if _, ok := pidMap[int(pid)]; !ok {
+			t.Fatalf("failed to find pid %d in job object", pid)
+		}
 	}
 
-	err = e.Wait()
+	err = e.Kill()
 	if err != nil {
-		t.Fatalf("error waiting for process: %v", err)
+		t.Fatalf("error killing process: %v", err)
 	}
-	t.Logf("exit code was: %d", e.ExitCode())
+
+	err = e2.Kill()
+	if err != nil {
+		t.Fatalf("error killing process: %v", err)
+	}
+
+	_ = e.Wait()
+	_ = e2.Wait()
+
+	if !e.Exited() {
+		t.Fatalf("Process %d should have exited after kill", e.Pid())
+	}
+	if !e2.Exited() {
+		t.Fatalf("Process %d should have exited after kill", e2.Pid())
+	}
 }
 
 func TestPseudoConsolePowershell(t *testing.T) {

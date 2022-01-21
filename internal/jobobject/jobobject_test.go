@@ -261,3 +261,35 @@ func TestNoMoreProcessesMessageTerminate(t *testing.T) {
 		t.Fatal("didn't receive no more processes message within timeout")
 	}
 }
+
+func TestVerifyPidCount(t *testing.T) {
+	// This test verifies that job.Pids() returns the right info and works with > 1 process.
+	options := &Options{
+		Name:          "test",
+		Notifications: true,
+	}
+	job, err := Create(context.Background(), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer job.Close()
+
+	numProcs := 2
+	_, err = createProcsAndAssign(numProcs, job)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pids, err := job.Pids()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(pids) != numProcs {
+		t.Fatalf("expected %d processes in the job, got: %d", numProcs, len(pids))
+	}
+
+	if err := job.Terminate(1); err != nil {
+		t.Fatal(err)
+	}
+}
