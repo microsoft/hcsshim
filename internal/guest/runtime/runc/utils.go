@@ -117,16 +117,16 @@ func (l *standardLogEntry) asError() (err error) {
 
 	if strings.HasPrefix(msg, "container") && strings.HasSuffix(msg, "does not exist") {
 		// currently: "container <container id> does not exist"
-		err = runtime.ContainerDoesNotExistErr
+		err = runtime.ErrContainerDoesNotExist
 	} else if strings.Contains(msg, "container with id exists") ||
 		strings.Contains(msg, "container with given ID already exists") {
-		err = runtime.ContainerAlreadyExistsErr
+		err = runtime.ErrContainerAlreadyExists
 	} else if strings.Contains(msg, "invalid id format") ||
 		strings.Contains(msg, "invalid container ID format") {
-		err = runtime.InvalidContainerIDErr
+		err = runtime.ErrInvalidContainerID
 	} else if strings.Contains(msg, "container") &&
 		strings.Contains(msg, "that is not stopped") {
-		err = runtime.ContainerNotStoppedErr
+		err = runtime.ErrContainerNotStopped
 	} else {
 		err = errors.New(msg)
 	}

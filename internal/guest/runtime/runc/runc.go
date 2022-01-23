@@ -259,7 +259,7 @@ func (c *container) Exists() (bool, error) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		runcErr := getRuncLogError(logPath)
-		if errors.Is(runcErr, runtime.ContainerDoesNotExistErr) {
+		if errors.Is(runcErr, runtime.ErrContainerDoesNotExist) {
 			return false, nil
 		}
 		return false, errors.Wrapf(runcErr, "runc state failed with %v: %s", err, string(out))

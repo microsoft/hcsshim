@@ -16,12 +16,12 @@ import (
 )
 
 var (
-	ContainerAlreadyExistsErr = gcserr.WrapHresult(errors.New("container already exist"), gcserr.HrVmcomputeSystemAlreadyExists)
-	ContainerDoesNotExistErr  = gcserr.WrapHresult(errors.New("container does not exist"), gcserr.HrVmcomputeSystemNotFound)
-	ContainerStillRunningErr  = gcserr.WrapHresult(errors.New("container still running"), gcserr.HrVmcomputeInvalidState)
-	ContainerNotRunningErr    = gcserr.WrapHresult(errors.New("container not running"), gcserr.HrVmcomputeSystemAlreadyStopped)
-	ContainerNotStoppedErr    = gcserr.WrapHresult(errors.New("container not stopped"), gcserr.HrVmcomputeInvalidState)
-	InvalidContainerIDErr     = gcserr.WrapHresult(errors.New("invalid container ID"), gcserr.HrErrInvalidArg)
+	ErrContainerAlreadyExists = gcserr.WrapHresult(errors.New("container already exist"), gcserr.HrVmcomputeSystemAlreadyExists)
+	ErrContainerDoesNotExist  = gcserr.WrapHresult(errors.New("container does not exist"), gcserr.HrVmcomputeSystemNotFound)
+	ErrContainerStillRunning  = gcserr.WrapHresult(errors.New("container still running"), gcserr.HrVmcomputeInvalidState)
+	ErrContainerNotRunning    = gcserr.WrapHresult(errors.New("container not running"), gcserr.HrVmcomputeSystemAlreadyStopped)
+	ErrContainerNotStopped    = gcserr.WrapHresult(errors.New("container not stopped"), gcserr.HrVmcomputeInvalidState)
+	ErrInvalidContainerID     = gcserr.WrapHresult(errors.New("invalid container ID"), gcserr.HrErrInvalidArg)
 )
 
 // ContainerState gives information about a container created by a Runtime.
