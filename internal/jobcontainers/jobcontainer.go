@@ -54,16 +54,18 @@ type initProc struct {
 
 // JobContainer represents a lightweight container composed from a job object.
 type JobContainer struct {
-	id             string
-	spec           *specs.Spec          // OCI spec used to create the container
-	job            *jobobject.JobObject // Object representing the job object the container owns
-	sandboxMount   string               // Path to where the sandbox is mounted on the host
-	closedWaitOnce sync.Once
-	init           initProc
-	startTimestamp time.Time
-	exited         chan struct{}
-	waitBlock      chan struct{}
-	waitError      error
+	id               string
+	spec             *specs.Spec          // OCI spec used to create the container
+	job              *jobobject.JobObject // Object representing the job object the container owns
+	sandboxMount     string               // Path to where the sandbox is mounted on the host
+	closedWaitOnce   sync.Once
+	init             initProc
+	token            windows.Token
+	localUserAccount string
+	startTimestamp   time.Time
+	exited           chan struct{}
+	waitBlock        chan struct{}
+	waitError        error
 }
 
 var _ cow.ProcessHost = &JobContainer{}
@@ -205,21 +207,23 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		return nil, errors.Wrapf(err, "failed to get application name from commandline %q", conf.CommandLine)
 	}
 
-	var token windows.Token
-	if inheritUserTokenIsSet(c.spec.Annotations) {
-		token, err = openCurrentProcessToken()
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		token, err = processToken(conf.User)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to create user process token")
+	// We've already done the user dance already, so this is most likely an exec being launched. Just use the token we
+	// already retrieved when we made the init process.
+	if c.token == 0 {
+		if inheritUserTokenIsSet(c.spec.Annotations) {
+			c.token, err = openCurrentProcessToken()
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			c.token, err = c.processToken(ctx, conf.User)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create user process token: %w", err)
+			}
 		}
 	}
-	defer token.Close()
 
-	env, err := defaultEnvBlock(token)
+	env, err := defaultEnvBlock(c.token)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get default environment block")
 	}
@@ -257,7 +261,7 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		commandLine,
 		exec.WithDir(workDir),
 		exec.WithEnv(env),
-		exec.WithToken(token),
+		exec.WithToken(c.token),
 		exec.WithJobObject(c.job),
 		exec.WithConPty(cpty),
 		exec.WithProcessFlags(windows.CREATE_BREAKAWAY_FROM_JOB),
@@ -314,11 +318,27 @@ func (c *JobContainer) Start(ctx context.Context) error {
 	return nil
 }
 
-// Close closes any open handles.
+// Close free's up any resources (handles, temporary accounts).
 func (c *JobContainer) Close() error {
 	if err := c.job.Close(); err != nil {
 		return err
 	}
+
+	if err := c.token.Close(); err != nil {
+		return fmt.Errorf("failed to close token: %w", err)
+	}
+
+	// Delete the containers local account if one was created
+	if c.localUserAccount != "" {
+		userName, err := windows.UTF16PtrFromString(c.localUserAccount)
+		if err != nil {
+			return fmt.Errorf("failed to encode user name %q to UTF16: %w", c.localUserAccount, err)
+		}
+		if err := winapi.NetUserDel(nil, userName); err != nil {
+			return fmt.Errorf("failed to delete local user account: %w", err)
+		}
+	}
+
 	c.closedWaitOnce.Do(func() {
 		c.waitError = hcs.ErrAlreadyClosed
 		close(c.waitBlock)
