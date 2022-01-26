@@ -93,7 +93,7 @@ type JOBOBJECT_BASIC_PROCESS_ID_LIST struct {
 
 // AllPids returns all the process Ids in the job object.
 func (p *JOBOBJECT_BASIC_PROCESS_ID_LIST) AllPids() []uintptr {
-	return (*[(1 << 27) - 1]uintptr)(unsafe.Pointer(&p.ProcessIdList[0]))[:p.NumberOfProcessIdsInList]
+	return (*[(1 << 27) - 1]uintptr)(unsafe.Pointer(&p.ProcessIdList[0]))[:p.NumberOfProcessIdsInList:p.NumberOfProcessIdsInList]
 }
 
 // https://docs.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_accounting_information
