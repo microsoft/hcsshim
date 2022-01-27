@@ -18,8 +18,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/log"
 	ncproxynetworking "github.com/Microsoft/hcsshim/internal/ncproxy/networking"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/octtrpc"
-	"github.com/Microsoft/hcsshim/pkg/protocol/guestresource"
 )
 
 func init() {

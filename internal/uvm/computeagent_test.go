@@ -6,9 +6,9 @@ import (
 
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/computeagent"
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/containerd/typeurl"
 	"github.com/gogo/protobuf/types"
 )
@@ -37,11 +37,11 @@ func (t *testUtilityVM) RemoveDevice(ctx context.Context, deviceID string, index
 	return nil
 }
 
-func (t *testUtilityVM) AddNICInGuest(ctx context.Context, cfg *guestrequest.LCOWNetworkAdapter) error {
+func (t *testUtilityVM) AddNICInGuest(ctx context.Context, cfg *guestresource.LCOWNetworkAdapter) error {
 	return nil
 }
 
-func (t *testUtilityVM) RemoveNICInGuest(ctx context.Context, cfg *guestrequest.LCOWNetworkAdapter) error {
+func (t *testUtilityVM) RemoveNICInGuest(ctx context.Context, cfg *guestresource.LCOWNetworkAdapter) error {
 	return nil
 }
 
