@@ -567,7 +567,7 @@ func Test_EnforceEnvironmentVariablePolicy_Re2Match(t *testing.T) {
 
 	container := generateContainersContainer(r, 1)
 	// add a rule to re2 match
-	re2MatchRule := securityPolicyEnvironmentVariableRule{
+	re2MatchRule := EnvRule{
 		Strategy: EnvVarRuleRegex,
 		Rule:     "PREFIX_.+=.+"}
 	container.EnvRules = append(container.EnvRules, re2MatchRule)
@@ -838,12 +838,12 @@ func generateCommand(r *rand.Rand) []string {
 	return args
 }
 
-func generateEnvironmentVariableRules(r *rand.Rand) []securityPolicyEnvironmentVariableRule {
-	rules := []securityPolicyEnvironmentVariableRule{}
+func generateEnvironmentVariableRules(r *rand.Rand) []EnvRule {
+	var rules []EnvRule
 
 	numArgs := atLeastOneAtMost(r, maxGeneratedEnvironmentVariableRules)
 	for i := 0; i < int(numArgs); i++ {
-		rule := securityPolicyEnvironmentVariableRule{
+		rule := EnvRule{
 			Strategy: "string",
 			Rule:     randVariableString(r, maxGeneratedEnvironmentVariableRuleLength),
 		}
