@@ -402,16 +402,16 @@ func (p *pod) KillTask(ctx context.Context, tid, eid string, signal uint32, all 
 func (p *pod) DeleteTask(ctx context.Context, tid string) error {
 	t, err := p.GetTask(tid)
 	if err != nil {
-		return errors.Wrapf(err, "could not find task to delete")
+		return errors.Wrap(err, "could not delete task")
 	}
 
 	// although deleting the sandbox task is a no-op, still check that it is not running
 	e, err := t.GetExec("")
 	if err != nil {
-		return errors.Wrapf(err, "could not get initial exec")
+		return errors.Wrap(err, "could not get initial exec")
 	}
 	if e.State() == shimExecStateRunning {
-		return errors.Wrapf(errdefs.ErrFailedPrecondition, "cannot delete task with running exec")
+		return errors.Wrap(errdefs.ErrFailedPrecondition, "cannot delete task with running exec")
 	}
 
 	if p.id != tid {
