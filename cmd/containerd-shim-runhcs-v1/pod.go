@@ -53,7 +53,7 @@ type shimPod interface {
 	KillTask(ctx context.Context, tid, eid string, signal uint32, all bool) error
 }
 
-func createPod(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (shimPod, error) {
+func createPod(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (_ shimPod, err error) {
 	log.G(ctx).WithField("tid", req.ID).Debug("createPod")
 
 	if osversion.Build() < osversion.RS5 {
