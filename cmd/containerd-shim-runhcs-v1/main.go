@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/Microsoft/go-winio/pkg/etw"
 	"github.com/Microsoft/go-winio/pkg/etwlogrus"
@@ -41,6 +42,9 @@ var (
 	containerdBinaryFlag string
 
 	idFlag string
+
+	// gracefulShutdownTimeout is how long to wait for clean-up before just exiting
+	gracefulShutdownTimeout = 3 * time.Second
 )
 
 func etwCallback(sourceID guid.GUID, state etw.ProviderState, level etw.Level, matchAnyKeyword uint64, matchAllKeyword uint64, filterData uintptr) {

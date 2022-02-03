@@ -221,8 +221,7 @@ var serveCommand = cli.Command{
 		case err := <-serrs:
 			return err
 		case <-time.After(2 * time.Millisecond):
-			// TODO: JTERRY75 this is terrible code. Contribute a change to
-			// ttrpc that you can:
+			// TODO: Contribute a change to ttrpc so that you can:
 			//
 			// go func () { errs <- s.Serve() }
 			// select {
@@ -246,8 +245,10 @@ var serveCommand = cli.Command{
 				// Shouldn't need to os.Exit without clean up (ie, deferred `.Close()`s)
 				return nil
 			}
-			// Drain any remaining active ttrpc requests; times out after 200 ms
-			err = s.Shutdown(context.Background())
+			// currently the ttrpc shutdown is the only clean up to wait on
+			sctx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
+			defer cancel()
+			err = s.Shutdown(sctx)
 		}
 
 		return err
