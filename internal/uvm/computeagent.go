@@ -2,7 +2,7 @@ package uvm
 
 import (
 	"context"
-	"strings"
+	"net"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/hcn"
@@ -250,7 +250,7 @@ func setupAndServe(ctx context.Context, caAddr string, vm *UtilityVM) error {
 }
 
 func trapClosedConnErr(err error) error {
-	if err == nil || strings.Contains(err.Error(), "use of closed network connection") {
+	if err == nil || errors.Is(err, net.ErrClosed) {
 		return nil
 	}
 	return err

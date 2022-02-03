@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"net"
-	"strings"
 	"sync"
 
 	"github.com/Microsoft/go-winio"
@@ -103,7 +102,7 @@ func (s *server) cleanupResources(ctx context.Context) {
 }
 
 func trapClosedConnErr(err error) error {
-	if err == nil || strings.Contains(err.Error(), "use of closed network connection") {
+	if err == nil || errors.Is(err, net.ErrClosed) {
 		return nil
 	}
 	return err
