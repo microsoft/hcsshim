@@ -10,8 +10,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 
+	"github.com/Microsoft/hcsshim/internal/guest/runtime"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -82,9 +84,15 @@ func (r *runcRuntime) makeLogDir(id string) error {
 	return nil
 }
 
-// getLogPath returns the path to the log file used by the runC wrapper.
+// getLogPath returns the path to the log file used by the runC wrapper for a particular container
 func (r *runcRuntime) getLogPath(id string) string {
 	return filepath.Join(r.getLogDir(id), "runc.log")
+}
+
+// getLogPath returns the path to the log file used by the runC wrapper.
+func (r *runcRuntime) getGlobalLogPath() string {
+	// runcLogBasePath should be created by r.initialize
+	return filepath.Join(r.runcLogBasePath, "global-runc.log")
 }
 
 // processExists returns true if the given process exists in /proc, false if
@@ -102,6 +110,34 @@ type standardLogEntry struct {
 	Err     error        `json:"error,omitempty"`
 }
 
+func (l *standardLogEntry) asError() (err error) {
+	// TODO (helsaawy): match with errors from
+	// https://github.com/opencontainers/runc/blob/master/libcontainer/error.go
+	msg := l.Message
+
+	if strings.HasPrefix(msg, "container") && strings.HasSuffix(msg, "does not exist") {
+		// currently: "container <container id> does not exist"
+		err = runtime.ErrContainerDoesNotExist
+	} else if strings.Contains(msg, "container with id exists") ||
+		strings.Contains(msg, "container with given ID already exists") {
+		err = runtime.ErrContainerAlreadyExists
+	} else if strings.Contains(msg, "invalid id format") ||
+		strings.Contains(msg, "invalid container ID format") {
+		err = runtime.ErrInvalidContainerID
+	} else if strings.Contains(msg, "container") &&
+		strings.Contains(msg, "that is not stopped") {
+		err = runtime.ErrContainerNotStopped
+	} else {
+		err = errors.New(msg)
+	}
+
+	if l.Err != nil {
+		err = errors.Wrapf(err, l.Err.Error())
+	}
+
+	return
+}
+
 func getRuncLogError(logPath string) error {
 	reader, err := os.OpenFile(logPath, syscall.O_RDONLY, 0644)
 	if err != nil {
@@ -117,10 +153,7 @@ func getRuncLogError(logPath string) error {
 			break
 		}
 		if entry.Level <= logrus.ErrorLevel {
-			lastErr = errors.New(entry.Message)
-			if entry.Err != nil {
-				lastErr = errors.Wrapf(lastErr, entry.Err.Error())
-			}
+			lastErr = entry.asError()
 		}
 	}
 	return lastErr

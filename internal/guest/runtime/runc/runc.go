@@ -17,9 +17,9 @@ import (
 	"syscall"
 
 	"github.com/Microsoft/hcsshim/internal/guest/commonutils"
-	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -52,6 +52,8 @@ type container struct {
 	ownsPidNamespace bool
 }
 
+var _ runtime.Container = &container{}
+
 func (c *container) ID() string {
 	return c.id
 }
@@ -76,6 +78,8 @@ type process struct {
 	ttyRelay  *stdio.TtyRelay
 	pipeRelay *stdio.PipeRelay
 }
+
+var _ runtime.Process = &process{}
 
 func (p *process) Pid() int {
 	return p.pid
@@ -140,7 +144,7 @@ func (c *container) Start() error {
 	if err != nil {
 		runcErr := getRuncLogError(logPath)
 		c.r.cleanupContainer(c.id)
-		return errors.Wrapf(err, "runc start failed with %v: %s", runcErr, string(out))
+		return errors.Wrapf(runcErr, "runc start failed with %v: %s", err, string(out))
 	}
 	return nil
 }
@@ -157,6 +161,7 @@ func (c *container) ExecProcess(process *oci.Process, stdioSet *stdio.Connection
 
 // Kill sends the specified signal to the container's init process.
 func (c *container) Kill(signal syscall.Signal) error {
+	logrus.WithField(logfields.ContainerID, c.id).Debug("runc::container::Kill")
 	logPath := c.r.getLogPath(c.id)
 	args := []string{"kill"}
 	if signal == syscall.SIGTERM || signal == syscall.SIGKILL {
@@ -166,14 +171,8 @@ func (c *container) Kill(signal syscall.Signal) error {
 	cmd := createRuncCommand(logPath, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		if strings.Contains(err.Error(), "os: process already finished") ||
-			strings.Contains(err.Error(), "container not running") ||
-			err == syscall.ESRCH {
-			return gcserr.NewHresultError(gcserr.HrVmcomputeSystemNotFound)
-		}
-
 		runcErr := getRuncLogError(logPath)
-		return errors.Wrapf(err, "unknown runc error after kill %v: %s", runcErr, string(out))
+		return errors.Wrapf(runcErr, "unknown runc error after kill %v: %s", err, string(out))
 	}
 	return nil
 }
@@ -181,13 +180,14 @@ func (c *container) Kill(signal syscall.Signal) error {
 // Delete deletes any state created for the container by either this wrapper or
 // runC itself.
 func (c *container) Delete() error {
+	logrus.WithField(logfields.ContainerID, c.id).Debug("runc::container::Delete")
 	logPath := c.r.getLogPath(c.id)
 	args := []string{"delete", c.id}
 	cmd := createRuncCommand(logPath, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		runcErr := getRuncLogError(logPath)
-		return errors.Wrapf(err, "runc delete failed with %v: %s", runcErr, string(out))
+		return errors.Wrapf(runcErr, "runc delete failed with %v: %s", err, string(out))
 	}
 	if err := c.r.cleanupContainer(c.id); err != nil {
 		return err
@@ -212,7 +212,7 @@ func (c *container) Pause() error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		runcErr := getRuncLogError(logPath)
-		return errors.Wrapf(err, "runc pause failed with %v: %s", runcErr, string(out))
+		return errors.Wrapf(runcErr, "runc pause failed with %v: %s", err, string(out))
 	}
 	return nil
 }
@@ -225,7 +225,7 @@ func (c *container) Resume() error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		runcErr := getRuncLogError(logPath)
-		return errors.Wrapf(err, "runc resume failed with %v: %s", runcErr, string(out))
+		return errors.Wrapf(runcErr, "runc resume failed with %v: %s", err, string(out))
 	}
 	return nil
 }
@@ -238,7 +238,7 @@ func (c *container) GetState() (*runtime.ContainerState, error) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		runcErr := getRuncLogError(logPath)
-		return nil, errors.Wrapf(err, "runc state failed with %v: %s", runcErr, string(out))
+		return nil, errors.Wrapf(runcErr, "runc state failed with %v: %s", err, string(out))
 	}
 	var state runtime.ContainerState
 	if err := json.Unmarshal(out, &state); err != nil {
@@ -252,30 +252,31 @@ func (c *container) GetState() (*runtime.ContainerState, error) {
 // It should be noted that containers that have stopped but have not been
 // deleted are still considered to exist.
 func (c *container) Exists() (bool, error) {
-	states, err := c.r.ListContainerStates()
+	// use global path because container may not exist
+	logPath := c.r.getGlobalLogPath()
+	args := []string{"state", c.id}
+	cmd := createRuncCommand(logPath, args...)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return false, err
-	}
-	// TODO: This is definitely not the most efficient way of doing this. See
-	// about improving it in the future.
-	for _, state := range states {
-		if state.ID == c.id {
-			return true, nil
+		runcErr := getRuncLogError(logPath)
+		if errors.Is(runcErr, runtime.ErrContainerDoesNotExist) {
+			return false, nil
 		}
+		return false, errors.Wrapf(runcErr, "runc state failed with %v: %s", err, string(out))
 	}
-	return false, nil
+	return true, nil
 }
 
 // ListContainerStates returns ContainerState structs for all existing
 // containers, whether they're running or not.
 func (r *runcRuntime) ListContainerStates() ([]runtime.ContainerState, error) {
-	logPath := filepath.Join(r.runcLogBasePath, "global-runc.log")
+	logPath := r.getGlobalLogPath()
 	args := []string{"list", "-f", "json"}
 	cmd := createRuncCommand(logPath, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		runcErr := getRuncLogError(logPath)
-		return nil, errors.Wrapf(err, "runc list failed with %v: %s", runcErr, string(out))
+		return nil, errors.Wrapf(runcErr, "runc list failed with %v: %s", err, string(out))
 	}
 	var states []runtime.ContainerState
 	if err := json.Unmarshal(out, &states); err != nil {
@@ -394,6 +395,15 @@ func (c *container) GetAllProcesses() ([]runtime.ContainerProcessState, error) {
 	return c.r.pidMapToProcessStates(pidMap), nil
 }
 
+// GetInitProcess gets the init processes associated with the given container,
+// including both running and zombie processes.
+func (c *container) GetInitProcess() (runtime.Process, error) {
+	if c.init == nil {
+		return nil, errors.New("container has no init process")
+	}
+	return c.init, nil
+}
+
 // getRunningPids gets the pids of all processes which runC recognizes as
 // running.
 func (r *runcRuntime) getRunningPids(id string) ([]int, error) {
@@ -403,7 +413,7 @@ func (r *runcRuntime) getRunningPids(id string) ([]int, error) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		runcErr := getRuncLogError(logPath)
-		return nil, errors.Wrapf(err, "runc ps failed with %v: %s", runcErr, string(out))
+		return nil, errors.Wrapf(runcErr, "runc ps failed with %v: %s", err, string(out))
 	}
 	var pids []int
 	if err := json.Unmarshal(out, &pids); err != nil {
@@ -459,8 +469,8 @@ func (r *runcRuntime) waitOnProcess(pid int) (int, error) {
 func (p *process) Wait() (int, error) {
 	exitCode, err := p.c.r.waitOnProcess(p.pid)
 
-	l := logrus.WithField("cid", p.c.id)
-	l.WithField("pid", p.pid).Debug("process wait completed")
+	l := logrus.WithField(logfields.ContainerID, p.c.id)
+	l.WithField(logfields.ContainerID, p.pid).Debug("process wait completed")
 
 	// If the init process for the container has exited, kill everything else in
 	// the container. Runc uses the devices cgroup of the container ot determine
@@ -500,7 +510,7 @@ func (p *process) Wait() (int, error) {
 		p.pipeRelay.Wait()
 	}
 
-	l.WithField("pid", p.pid).Debug("relay wait completed")
+	l.WithField(logfields.ProcessID, p.pid).Debug("relay wait completed")
 
 	return exitCode, err
 }
@@ -509,6 +519,7 @@ func (p *process) Wait() (int, error) {
 // final wait on the init process. The exit code returned is the exit code
 // acquired from waiting on the init process.
 func (c *container) Wait() (int, error) {
+	entity := logrus.WithField(logfields.ContainerID, c.id)
 	processes, err := c.GetAllProcesses()
 	if err != nil {
 		return -1, err
@@ -520,15 +531,12 @@ func (c *container) Wait() (int, error) {
 			// well (as in p.Wait()). This may not matter as long as the relays
 			// finish "soon" after Wait() returns since HCS expects the stdio
 			// connections to close before container shutdown can complete.
-			logrus.WithFields(logrus.Fields{
-				"cid": c.id,
-				"pid": process.Pid,
-			}).Debug("waiting on container exec process")
+			entity.WithField(logfields.ProcessID, process.Pid).Debug("waiting on container exec process")
 			c.r.waitOnProcess(process.Pid)
 		}
 	}
 	exitCode, err := c.init.Wait()
-	logrus.WithField("cid", c.id).Debug("runc.container::init process wait completed")
+	entity.Debug("runc::container::init process wait completed")
 	if err != nil {
 		return -1, err
 	}
@@ -684,7 +692,7 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioS
 
 	if err := cmd.Run(); err != nil {
 		runcErr := getRuncLogError(logPath)
-		return nil, errors.Wrapf(err, "failed to run runc create/exec call for container %s with %v", c.id, runcErr)
+		return nil, errors.Wrapf(runcErr, "failed to run runc create/exec call for container %s with %v", c.id, err)
 	}
 
 	var ttyRelay *stdio.TtyRelay
@@ -734,7 +742,7 @@ func (c *container) Update(resources interface{}) error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		runcErr := getRuncLogError(logPath)
-		return errors.Wrapf(err, "runc update request %s failed with %v: %s", string(jsonResources), runcErr, string(out))
+		return errors.Wrapf(runcErr, "runc update request %s failed with %v: %s", string(jsonResources), err, string(out))
 	}
 	return nil
 }

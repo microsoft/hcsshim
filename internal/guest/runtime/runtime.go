@@ -6,11 +6,22 @@
 package runtime
 
 import (
+	"errors"
 	"io"
 	"syscall"
 
+	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
+)
+
+var (
+	ErrContainerAlreadyExists = gcserr.WrapHresult(errors.New("container already exist"), gcserr.HrVmcomputeSystemAlreadyExists)
+	ErrContainerDoesNotExist  = gcserr.WrapHresult(errors.New("container does not exist"), gcserr.HrVmcomputeSystemNotFound)
+	ErrContainerStillRunning  = gcserr.WrapHresult(errors.New("container still running"), gcserr.HrVmcomputeInvalidState)
+	ErrContainerNotRunning    = gcserr.WrapHresult(errors.New("container not running"), gcserr.HrVmcomputeSystemAlreadyStopped)
+	ErrContainerNotStopped    = gcserr.WrapHresult(errors.New("container not stopped"), gcserr.HrVmcomputeInvalidState)
+	ErrInvalidContainerID     = gcserr.WrapHresult(errors.New("invalid container ID"), gcserr.HrErrInvalidArg)
 )
 
 // ContainerState gives information about a container created by a Runtime.
@@ -63,6 +74,7 @@ type Container interface {
 	GetState() (*ContainerState, error)
 	GetRunningProcesses() ([]ContainerProcessState, error)
 	GetAllProcesses() ([]ContainerProcessState, error)
+	GetInitProcess() (Process, error)
 	Update(resources interface{}) error
 }
 

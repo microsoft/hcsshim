@@ -10,13 +10,18 @@ import (
 // Hresult is a type corresponding to the HRESULT error type used on Windows.
 type Hresult int32
 
+// from
+// - https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-erref/705fb797-2175-4a90-b5a3-3918024b10b8
+// - https://docs.microsoft.com/en-us/virtualization/api/hcs/reference/hcshresult
 const (
 	// HrNotImpl is the HRESULT for a not implemented function.
 	HrNotImpl = Hresult(-2147467263) // 0x80004001
-	// HrFail is the HRESULT for an invocation failure.
+	// HrFail is the HRESULT for an invocation or unspecified failure.
 	HrFail = Hresult(-2147467259) // 0x80004005
 	// HrErrNotFound is the HRESULT for an invalid process id.
 	HrErrNotFound = Hresult(-2147023728) // 0x80070490
+	// HrErrInvalidArg is the HRESULT for One or more arguments are invalid.
+	HrErrInvalidArg = Hresult(-2147024809) // 0x80070057
 	// HvVmcomputeTimeout is the HRESULT for operations that timed out.
 	HvVmcomputeTimeout = Hresult(-1070137079) // 0xC0370109
 	// HrVmcomputeInvalidJSON is the HRESULT for failing to unmarshal a json
@@ -37,6 +42,16 @@ const (
 	// HrVmcomputeUnknownMessage is the HRESULT for unknown message types sent
 	// from the HCS.
 	HrVmcomputeUnknownMessage = Hresult(-1070137077) // 0xC037010B
+	// HrVmcomputeInvalidState is the HRESULT for:
+	//
+	// The requested virtual machine or container operation is not valid in the
+	// current state
+	HrVmcomputeInvalidState = Hresult(-2143878907) // 0x80370105
+	// HrVmcomputeSystemAlreadyStopped is the HRESULT for:
+	//
+	// The virtual machine or container with the specified identifier is not
+	// running
+	HrVmcomputeSystemAlreadyStopped = Hresult(-2143878896) // 0x80370110
 )
 
 // StackTracer is an interface originating (but not exported) from the
@@ -136,7 +151,7 @@ func WrapHresult(e error, hresult Hresult) error {
 	}
 }
 
-// GetHresult interates through the error's cause stack (similiarly to how the
+// GetHresult iterates through the error's cause stack (similar to how the
 // Cause function in github.com/pkg/errors operates). At the first error it
 // encounters which implements the Hresult() method, it return's that error's
 // HRESULT. This allows errors higher up in the cause stack to shadow the

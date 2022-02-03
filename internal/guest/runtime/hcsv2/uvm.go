@@ -245,6 +245,10 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create container")
 	}
+	init, err := con.GetInitProcess()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get container init process")
+	}
 
 	c := &Container{
 		id:        id,
@@ -255,7 +259,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		exitType:  prot.NtUnexpectedExit,
 		processes: make(map[uint32]*containerProcess),
 	}
-	c.initProcess = newProcess(c, settings.OCISpecification.Process, con.(runtime.Process), uint32(c.container.Pid()), true)
+	c.initProcess = newProcess(c, settings.OCISpecification.Process, init, uint32(c.container.Pid()), true)
 
 	// Sandbox or standalone, move the networks to the container namespace
 	if criType == "sandbox" || !isCRI {
