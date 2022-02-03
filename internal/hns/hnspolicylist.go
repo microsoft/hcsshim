@@ -143,7 +143,7 @@ func (policylist *PolicyList) RemoveEndpoint(endpoint *HNSEndpoint) (*PolicyList
 func AddLoadBalancer(endpoints []HNSEndpoint, isILB bool, sourceVIP, vip string, protocol uint16, internalPort uint16, externalPort uint16) (*PolicyList, error) {
 	operation := "AddLoadBalancer"
 	title := "hcsshim::PolicyList::" + operation
-	logrus.Debugf(title+" endpointId=%v, isILB=%v, sourceVIP=%s, vip=%s, guestprotocol=%v, internalPort=%v, externalPort=%v", endpoints, isILB, sourceVIP, vip, protocol, internalPort, externalPort)
+	logrus.Debugf(title+" endpointId=%v, isILB=%v, sourceVIP=%s, vip=%s, protocol=%v, internalPort=%v, externalPort=%v", endpoints, isILB, sourceVIP, vip, protocol, internalPort, externalPort)
 
 	policylist := &PolicyList{}
 

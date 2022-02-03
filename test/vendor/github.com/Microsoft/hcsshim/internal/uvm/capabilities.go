@@ -17,7 +17,7 @@ func (uvm *UtilityVM) DeleteContainerStateSupported() bool {
 	return uvm.guestCaps.DeleteContainerStateSupported
 }
 
-// Capabilities returns the guestprotocol version and the guest defined capabilities.
+// Capabilities returns the protocol version and the guest defined capabilities.
 // This should only be used for testing.
 func (uvm *UtilityVM) Capabilities() (uint32, schema1.GuestDefinedCapabilities) {
 	return uvm.protocol, uvm.guestCaps
