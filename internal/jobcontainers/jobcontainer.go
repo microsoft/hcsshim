@@ -39,15 +39,6 @@ func splitArgs(cmdLine string) []string {
 	return r.FindAllString(cmdLine, -1)
 }
 
-// Convert environment map to a slice of environment variables in the form [Key1=val1, key2=val2]
-func envMapToSlice(m map[string]string) []string {
-	var s []string
-	for k, v := range m {
-		s = append(s, k+"="+v)
-	}
-	return s
-}
-
 const (
 	jobContainerNameFmt = "JobContainer_%s"
 	// Environment variable set in every process in the job detailing where the containers volume
@@ -232,7 +223,15 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get default environment block")
 	}
-	env = append(env, envMapToSlice(conf.Environment)...)
+
+	// Convert environment map to a slice of environment variables in the form [Key1=val1, key2=val2]
+	var envs []string
+	for k, v := range conf.Environment {
+		expanded, _ := c.replaceWithMountPoint(v)
+		envs = append(envs, k+"="+expanded)
+	}
+	env = append(env, envs...)
+
 	env = append(env, sandboxMountPointEnvVar+"="+c.sandboxMount)
 
 	// exec.Cmd internally does its own path resolution and as part of this checks some well known file extensions on the file given (e.g. if
@@ -603,7 +602,7 @@ func systemProcessInformation() ([]*winapi.SYSTEM_PROCESS_INFORMATION, error) {
 	return procInfos, nil
 }
 
-// Takes a string and replaces any occurences of CONTAINER_SANDBOX_MOUNT_POINT with where the containers volume is mounted, as well as returning
+// Takes a string and replaces any occurrences of CONTAINER_SANDBOX_MOUNT_POINT with where the containers' volume is mounted, as well as returning
 // if the string actually contained the environment variable.
 func (c *JobContainer) replaceWithMountPoint(str string) (string, bool) {
 	newStr := strings.ReplaceAll(str, "%"+sandboxMountPointEnvVar+"%", c.sandboxMount[:len(c.sandboxMount)-1])
