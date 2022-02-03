@@ -183,7 +183,7 @@ var serveCommand = cli.Command{
 			WithTID(idFlag),
 			WithIsSandbox(ctx.Bool("is-sandbox")))
 		if err != nil {
-			return fmt.Errorf("starting service: %w", err)
+			return fmt.Errorf("failed to create new service: %w", err)
 		}
 
 		s, err := ttrpc.NewServer(ttrpc.WithUnaryServerInterceptor(octtrpc.ServerInterceptor()))
@@ -240,7 +240,7 @@ var serveCommand = cli.Command{
 		case err = <-serrs:
 			// the ttrpc server shutdown without processing a shutdown request
 		case <-svc.Done():
-			if !svc.GracefulShutdown {
+			if !svc.gracefulShutdown {
 				// Return immediately, but still close ttrpc server, pipes, and spans
 				// Shouldn't need to os.Exit without clean up (ie, deferred `.Close()`s)
 				return nil

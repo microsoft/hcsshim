@@ -447,11 +447,11 @@ func (s *service) shutdownInternal(ctx context.Context, req *task.ShutdownReques
 		return empty, nil
 	}
 
-	s.shutOnce.Do(func() {
+	s.shutdownOnce.Do(func() {
 		// TODO: should taskOrPod be deleted/set to nil?
 		// TODO: is there any extra leftovers of the shimTask/Pod to clean? ie: verify all handles are closed?
-		s.GracefulShutdown = !req.Now
-		close(s.shut)
+		s.gracefulShutdown = !req.Now
+		close(s.shutdown)
 	})
 
 	return empty, nil

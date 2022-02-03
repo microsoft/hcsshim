@@ -69,13 +69,13 @@ type service struct {
 	// concurrently.
 	cl sync.Mutex
 
-	// shut is closed to signal a shut request is received
-	shut chan struct{}
-	// shutOnce is responsible for closign `shut` and any other necessary cleanup
-	shutOnce sync.Once
-	// GracefulShutdown dictates whether to shutdown gracefully and clean up resources
+	// shutdown is closed to signal a shutdown request is received
+	shutdown chan struct{}
+	// shutdownOnce is responsible for closing `shutdown` and any other necessary cleanup
+	shutdownOnce sync.Once
+	// gracefulShutdown dictates whether to shutdown gracefully and clean up resources
 	// or exit immediately
-	GracefulShutdown bool
+	gracefulShutdown bool
 }
 
 var _ = (task.TaskService)(&service{})
@@ -90,7 +90,7 @@ func NewService(o ...ServiceOption) (svc *service, err error) {
 		events:    opts.Events,
 		tid:       opts.TID,
 		isSandbox: opts.IsSandbox,
-		shut:      make(chan struct{}),
+		shutdown:  make(chan struct{}),
 	}
 	return svc, nil
 }
@@ -524,12 +524,12 @@ func (s *service) ComputeProcessorInfo(ctx context.Context, req *extendedtask.Co
 }
 
 func (s *service) Done() <-chan struct{} {
-	return s.shut
+	return s.shutdown
 }
 
 func (s *service) IsShutdown() bool {
 	select {
-	case <-s.shut:
+	case <-s.shutdown:
 		return true
 	default:
 		return false

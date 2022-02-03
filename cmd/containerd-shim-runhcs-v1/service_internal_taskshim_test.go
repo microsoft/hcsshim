@@ -26,10 +26,12 @@ func setupTaskServiceWithFakes(t *testing.T) (*service, *testShimTask, *testShim
 
 	// clean up the service
 	t.Cleanup(func() {
-		s.shutdownInternal(context.Background(), &task.ShutdownRequest{
+		if _, err := s.shutdownInternal(context.Background(), &task.ShutdownRequest{
 			ID:  s.tid,
 			Now: true,
-		})
+		}); err != nil {
+			t.Fatalf("could not shutdown service: %v", err)
+		}
 	})
 
 	task := &testShimTask{
