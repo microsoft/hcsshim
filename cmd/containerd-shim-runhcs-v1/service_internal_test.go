@@ -1,16 +1,20 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	v1 "github.com/containerd/cgroups/stats/v1"
+	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/pkg/errors"
 )
 
 func verifyExpectedError(t *testing.T, resp interface{}, actual, expected error) {
-	if actual == nil || errors.Cause(actual) != expected {
+	if actual == nil || errors.Cause(actual) != expected || !errors.Is(actual, expected) {
 		t.Fatalf("expected error: %v, got: %v", expected, actual)
 	}
 
@@ -124,5 +128,40 @@ func verifyExpectedVirtualMachineStatistics(t *testing.T, v *stats.VirtualMachin
 	}
 	if v.Memory.WorkingSetBytes != 100 {
 		t.Fatalf("expected VirtualMachineStatistics.Memory.WorkingSetBytes == 100, got: %d", v.Memory.WorkingSetBytes)
+	}
+}
+
+func Test_Service_shutdownInternal(t *testing.T) {
+	for _, now := range []bool{true, false} {
+		t.Run(fmt.Sprintf("%s_Now_%t", t.Name(), now), func(t *testing.T) {
+			s, err := NewService(WithTID(t.Name()))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if s.IsShutdown() {
+				t.Fatal("service prematurely shutdown")
+			}
+
+			_, err = s.shutdownInternal(context.Background(), &task.ShutdownRequest{
+				ID:  s.tid,
+				Now: now,
+			})
+			if err != nil {
+				t.Fatalf("could not shut down service: %v", err)
+			}
+
+			tm := time.NewTimer(5 * time.Millisecond)
+			select {
+			case <-tm.C:
+				t.Fatalf("shutdown channel did not close")
+			case <-s.Done():
+				tm.Stop()
+			}
+
+			if !s.IsShutdown() {
+				t.Fatal("service did not shutdown")
+			}
+		})
 	}
 }

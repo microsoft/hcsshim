@@ -447,12 +447,13 @@ func (s *service) shutdownInternal(ctx context.Context, req *task.ShutdownReques
 		return empty, nil
 	}
 
-	if req.Now {
-		os.Exit(0)
-	}
-	// TODO: JTERRY75 if we dont use `now` issue a Shutdown to the ttrpc
-	// connection to drain any active requests.
-	os.Exit(0)
+	s.shutdownOnce.Do(func() {
+		// TODO: should taskOrPod be deleted/set to nil?
+		// TODO: is there any extra leftovers of the shimTask/Pod to clean? ie: verify all handles are closed?
+		s.gracefulShutdown = !req.Now
+		close(s.shutdown)
+	})
+
 	return empty, nil
 }
 

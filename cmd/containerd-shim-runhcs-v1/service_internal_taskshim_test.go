@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
@@ -16,10 +18,22 @@ import (
 
 func setupTaskServiceWithFakes(t *testing.T) (*service, *testShimTask, *testShimExec) {
 	tid := strconv.Itoa(rand.Int())
-	s := service{
-		tid:       tid,
-		isSandbox: false,
+
+	s, err := NewService(WithTID(tid), WithIsSandbox(false))
+	if err != nil {
+		t.Fatalf("could not create service: %v", err)
 	}
+
+	// clean up the service
+	t.Cleanup(func() {
+		if _, err := s.shutdownInternal(context.Background(), &task.ShutdownRequest{
+			ID:  s.tid,
+			Now: true,
+		}); err != nil {
+			t.Fatalf("could not shutdown service: %v", err)
+		}
+	})
+
 	task := &testShimTask{
 		id:    tid,
 		exec:  newTestShimExec(tid, tid, 10),
@@ -29,7 +43,7 @@ func setupTaskServiceWithFakes(t *testing.T) (*service, *testShimTask, *testShim
 	secondExec := newTestShimExec(tid, secondExecID, 101)
 	task.execs[secondExecID] = secondExec
 	s.taskOrPod.Store(task)
-	return &s, task, secondExec
+	return s, task, secondExec
 }
 
 func Test_TaskShim_getTask_NotCreated_Error(t *testing.T) {
@@ -616,6 +630,38 @@ func Test_TaskShim_statsInternal_InitTaskID_Sucess(t *testing.T) {
 			}
 			stats := statsI.(*stats.Statistics)
 			verifyExpectedStats(t, t1.isWCOW, true, stats)
+		})
+	}
+}
+
+func Test_TaskShim_shutdownInternal(t *testing.T) {
+	for _, now := range []bool{true, false} {
+		t.Run(fmt.Sprintf("%s_Now_%t", t.Name(), now), func(t *testing.T) {
+			s, _, _ := setupTaskServiceWithFakes(t)
+
+			if s.IsShutdown() {
+				t.Fatal("service prematurely shutdown")
+			}
+
+			_, err := s.shutdownInternal(context.Background(), &task.ShutdownRequest{
+				ID:  s.tid,
+				Now: now,
+			})
+			if err != nil {
+				t.Fatalf("could not shut down service: %v", err)
+			}
+
+			tm := time.NewTimer(5 * time.Millisecond)
+			select {
+			case <-tm.C:
+				t.Fatalf("shutdown channel did not close")
+			case <-s.Done():
+				tm.Stop()
+			}
+
+			if !s.IsShutdown() {
+				t.Fatal("service did not shutdown")
+			}
 		})
 	}
 }

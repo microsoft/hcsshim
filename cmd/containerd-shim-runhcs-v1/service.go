@@ -18,7 +18,29 @@ import (
 	"go.opencensus.io/trace"
 )
 
-var _ = (task.TaskService)(&service{})
+type ServiceOptions struct {
+	Events    publisher
+	TID       string
+	IsSandbox bool
+}
+
+type ServiceOption func(*ServiceOptions)
+
+func WithEventPublisher(e publisher) ServiceOption {
+	return func(o *ServiceOptions) {
+		o.Events = e
+	}
+}
+func WithTID(tid string) ServiceOption {
+	return func(o *ServiceOptions) {
+		o.TID = tid
+	}
+}
+func WithIsSandbox(s bool) ServiceOption {
+	return func(o *ServiceOptions) {
+		o.IsSandbox = s
+	}
+}
 
 type service struct {
 	events publisher
@@ -42,10 +64,35 @@ type service struct {
 	taskOrPod atomic.Value
 
 	// cl is the create lock. Since each shim MUST only track a single task or
-	// POD. `cl` is used to create the task or POD sandbox. It SHOULD not be
+	// POD. `cl` is used to create the task or POD sandbox. It SHOULD NOT be
 	// taken when creating tasks in a POD sandbox as they can happen
 	// concurrently.
 	cl sync.Mutex
+
+	// shutdown is closed to signal a shutdown request is received
+	shutdown chan struct{}
+	// shutdownOnce is responsible for closing `shutdown` and any other necessary cleanup
+	shutdownOnce sync.Once
+	// gracefulShutdown dictates whether to shutdown gracefully and clean up resources
+	// or exit immediately
+	gracefulShutdown bool
+}
+
+var _ = (task.TaskService)(&service{})
+
+func NewService(o ...ServiceOption) (svc *service, err error) {
+	var opts ServiceOptions
+	for _, op := range o {
+		op(&opts)
+	}
+
+	svc = &service{
+		events:    opts.Events,
+		tid:       opts.TID,
+		isSandbox: opts.IsSandbox,
+		shutdown:  make(chan struct{}),
+	}
+	return svc, nil
 }
 
 func (s *service) State(ctx context.Context, req *task.StateRequest) (resp *task.StateResponse, err error) {
@@ -474,4 +521,17 @@ func (s *service) ComputeProcessorInfo(ctx context.Context, req *extendedtask.Co
 
 	r, e := s.computeProcessorInfoInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
+}
+
+func (s *service) Done() <-chan struct{} {
+	return s.shutdown
+}
+
+func (s *service) IsShutdown() bool {
+	select {
+	case <-s.shutdown:
+		return true
+	default:
+		return false
+	}
 }

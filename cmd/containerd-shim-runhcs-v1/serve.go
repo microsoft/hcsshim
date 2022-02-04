@@ -169,11 +169,9 @@ var serveCommand = cli.Command{
 
 		ttrpcAddress := os.Getenv(ttrpcAddressEnv)
 		ttrpcEventPublisher, err := newEventPublisher(ttrpcAddress)
-
 		if err != nil {
 			return err
 		}
-
 		defer func() {
 			if err != nil {
 				ttrpcEventPublisher.close()
@@ -181,11 +179,13 @@ var serveCommand = cli.Command{
 		}()
 
 		// Setup the ttrpc server
-		svc = &service{
-			events:    ttrpcEventPublisher,
-			tid:       idFlag,
-			isSandbox: ctx.Bool("is-sandbox"),
+		svc, err = NewService(WithEventPublisher(ttrpcEventPublisher),
+			WithTID(idFlag),
+			WithIsSandbox(ctx.Bool("is-sandbox")))
+		if err != nil {
+			return fmt.Errorf("failed to create new service: %w", err)
 		}
+
 		s, err := ttrpc.NewServer(ttrpc.WithUnaryServerInterceptor(octtrpc.ServerInterceptor()))
 		if err != nil {
 			return err
@@ -204,10 +204,10 @@ var serveCommand = cli.Command{
 		serrs := make(chan error, 1)
 		defer close(serrs)
 		go func() {
-			// TODO: JTERRY75 We should use a real context with cancellation shared by
-			// the service for shim shutdown gracefully.
-			ctx := context.Background()
-			if err := trapClosedConnErr(s.Serve(ctx, sl)); err != nil {
+			// Serve loops infinitely unless s.Shutdown or s.Close are called.
+			// Passed in context is used as parent context for handling requests,
+			// but canceliing does not bring down ttrpc service.
+			if err := trapClosedConnErr(s.Serve(context.Background(), sl)); err != nil {
 				logrus.WithError(err).Fatal("containerd-shim: ttrpc server failure")
 				serrs <- err
 				return
@@ -221,8 +221,7 @@ var serveCommand = cli.Command{
 		case err := <-serrs:
 			return err
 		case <-time.After(2 * time.Millisecond):
-			// TODO: JTERRY75 this is terrible code. Contribue a change to
-			// ttrpc that you can:
+			// TODO: Contribute a change to ttrpc so that you can:
 			//
 			// go func () { errs <- s.Serve() }
 			// select {
@@ -232,12 +231,27 @@ var serveCommand = cli.Command{
 
 			// This is our best indication that we have not errored on creation
 			// and are successfully serving the API.
+			// Closing stdout signals to containerd that shim started successfully
 			os.Stdout.Close()
 		}
 
 		// Wait for the serve API to be shut down.
-		<-serrs
-		return nil
+		select {
+		case err = <-serrs:
+			// the ttrpc server shutdown without processing a shutdown request
+		case <-svc.Done():
+			if !svc.gracefulShutdown {
+				// Return immediately, but still close ttrpc server, pipes, and spans
+				// Shouldn't need to os.Exit without clean up (ie, deferred `.Close()`s)
+				return nil
+			}
+			// currently the ttrpc shutdown is the only clean up to wait on
+			sctx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
+			defer cancel()
+			err = s.Shutdown(sctx)
+		}
+
+		return err
 	},
 }
 
