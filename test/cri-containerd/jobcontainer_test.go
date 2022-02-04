@@ -434,6 +434,83 @@ func Test_RunContainer_JobContainer_VolumeMount(t *testing.T) {
 	}
 }
 
+func Test_RunContainer_JobContainer_Environment(t *testing.T) {
+	client := newTestRuntimeClient(t)
+
+	type config struct {
+		name             string
+		containerName    string
+		requiredFeatures []string
+		sandboxImage     string
+		containerImage   string
+		env              []*runtime.KeyValue
+		exec             []string
+	}
+
+	tests := []config{
+		{
+			name:             "JobContainer_Env_NoMountPoint",
+			containerName:    t.Name() + "-Container-WithNoMountPoint",
+			requiredFeatures: []string{featureWCOWProcess, featureHostProcess},
+			sandboxImage:     imageWindowsNanoserver,
+			containerImage:   imageWindowsNanoserver,
+			env: []*runtime.KeyValue{
+				{
+					Key: "PATH", Value: "C:\\Windows\\system32;C:\\Windows",
+				},
+			},
+			exec: []string{"cmd", "/c", "IF", "%PATH%", "==", "C:\\Windows\\system32;C:\\Windows", "( exit 0 )", "ELSE", "(exit -1)"},
+		},
+		{
+			name:             "JobContainer_VolumeMount_WithMountPoint",
+			containerName:    t.Name() + "-Container-WithMountPoint",
+			requiredFeatures: []string{featureWCOWProcess, featureHostProcess},
+			sandboxImage:     imageWindowsNanoserver,
+			containerImage:   imageWindowsNanoserver,
+			env: []*runtime.KeyValue{
+				{
+					Key: "PATH", Value: "%CONTAINER_SANDBOX_MOUNT_POINT%\\apps\\vim\\;C:\\Windows\\system32;C:\\Windows",
+				},
+			},
+			exec: []string{"cmd", "/c", "IF", "%PATH%", "==", "%CONTAINER_SANDBOX_MOUNT_POINT%\\apps\\vim\\;C:\\Windows\\system32;C:\\Windows", "( exit -1 )", "ELSE", "(exit 0)"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			requireFeatures(t, test.requiredFeatures...)
+
+			requiredImages := []string{test.sandboxImage, test.containerImage}
+			pullRequiredImages(t, requiredImages)
+
+			podctx := context.Background()
+			sandboxRequest := getJobContainerPodRequestWCOW(t)
+
+			podID := runPodSandbox(t, client, podctx, sandboxRequest)
+			defer removePodSandbox(t, client, podctx, podID)
+			defer stopPodSandbox(t, client, podctx, podID)
+
+			containerRequest := getJobContainerRequestWCOW(t, podID, sandboxRequest.Config, imageWindowsNanoserver, nil)
+			containerRequest.Config.Envs = test.env
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+
+			containerID := createContainer(t, client, ctx, containerRequest)
+			defer removeContainer(t, client, ctx, containerID)
+			startContainer(t, client, ctx, containerID)
+			defer stopContainer(t, client, ctx, containerID)
+
+			r := execSync(t, client, ctx, &runtime.ExecSyncRequest{
+				ContainerId: containerID,
+				Cmd:         test.exec,
+			})
+			if r.ExitCode != 0 {
+				t.Fatalf("failed with exit code %d checking for job container mount: %s", r.ExitCode, string(r.Stderr))
+			}
+		})
+	}
+}
+
 func Test_RunContainer_WorkingDirectory_JobContainer_WCOW(t *testing.T) {
 	client := newTestRuntimeClient(t)
 
