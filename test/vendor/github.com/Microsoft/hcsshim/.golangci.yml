@@ -3,6 +3,7 @@ run:
 
 linters:
   enable:
+    - gofmt
     - stylecheck
 
 linters-settings:
