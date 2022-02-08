@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -206,17 +207,29 @@ func (s *service) startInternal(ctx context.Context, req *task.StartRequest) (*t
 }
 
 func (s *service) deleteInternal(ctx context.Context, req *task.DeleteRequest) (*task.DeleteResponse, error) {
-	// TODO: JTERRY75 we need to send this to the POD for isSandbox
-
 	t, err := s.getTask(req.ID)
 	if err != nil {
 		return nil, err
 	}
+
 	pid, exitStatus, exitedAt, err := t.DeleteExec(ctx, req.ExecID)
 	if err != nil {
 		return nil, err
 	}
-	// TODO: We should be removing the task after this right?
+
+	// if the delete is for a task and not an exec, remove the pod sandbox's reference to the task
+	if s.isSandbox && req.ExecID == "" {
+		p, err := s.getPod()
+		if err != nil {
+			return nil, errors.Wrapf(err, "could not get pod %q to delete task %q", s.tid, req.ID)
+		}
+		err = p.DeleteTask(ctx, req.ID)
+		if err != nil {
+			return nil, fmt.Errorf("could not delete task %q in pod %q: %w", req.ID, s.tid, err)
+		}
+	}
+	// TODO: check if the pod's workload tasks is empty, and, if so, reset p.taskOrPod to nil
+
 	return &task.DeleteResponse{
 		Pid:        uint32(pid),
 		ExitStatus: exitStatus,
