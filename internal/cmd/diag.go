@@ -33,6 +33,12 @@ func ExecInUvm(ctx context.Context, vm *uvm.UtilityVM, req *CmdProcessRequest) (
 	cmd.Stdin = np.Stdin()
 	cmd.Stdout = np.Stdout()
 	cmd.Stderr = np.Stderr()
+	if cmd.Stdin != nil {
+		cmd.RegisterAfterExitFun(func(ctx context.Context) error {
+			np.CloseStdin(ctx)
+			return nil
+		})
+	}
 	cmd.Log = log.G(ctx).WithField(logfields.UVMID, vm.ID())
 	err = cmd.Run()
 	return cmd.ExitState.ExitCode(), err
