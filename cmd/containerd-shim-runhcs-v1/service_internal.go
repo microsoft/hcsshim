@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -215,8 +216,7 @@ func (s *service) deleteInternal(ctx context.Context, req *task.DeleteRequest) (
 		return nil, err
 	}
 
-	// remove the pod sandbox's reference to the task, if the delete is for a
-	// task and not an exec
+	// if the delete is for a task and not an exec, remove the pod sandbox's reference to the task
 	if s.isSandbox && req.ExecID == "" {
 		p, err := s.getPod()
 		if err != nil {
@@ -224,9 +224,10 @@ func (s *service) deleteInternal(ctx context.Context, req *task.DeleteRequest) (
 		}
 		err = p.DeleteTask(ctx, req.ID)
 		if err != nil {
-			return nil, errors.Wrapf(err, "could not delete task %q in pod %q", req.ID, s.tid)
+			return nil, fmt.Errorf("could not delete task %q in pod %q: %w", req.ID, s.tid, err)
 		}
 	}
+	// TODO: check if the pod's workload tasks is empty, and, if so, reset p.taskOrPod to nil
 
 	return &task.DeleteResponse{
 		Pid:        uint32(pid),
