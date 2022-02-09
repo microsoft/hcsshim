@@ -16,7 +16,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"go.opencensus.io/trace"
-	"golang.org/x/sys/windows"
 )
 
 // LimitedRead reads at max `readLimitBytes` bytes from the file at path `filePath`. If the file has
@@ -107,18 +106,14 @@ The delete command will be executed in the container's bundle as its cwd.
 		// The username will be the container ID so try and delete it here. The username character limit is 20, so we need to
 		// slice down the container ID a bit.
 		username := idFlag[:winapi.UserNameCharLimit]
-		usrNameUTF16, err := windows.UTF16PtrFromString(username)
-		if err == nil {
-			// Always try and delete the user, if it doesn't exist we'll get a specific error code that we can use to
-			// not log any warnings.
-			if err := winapi.NetUserDel(
-				nil,
-				usrNameUTF16,
-			); err != nil && err != winapi.NERR_UserNotFound {
-				fmt.Fprintf(os.Stderr, "failed to delete user '%s': %v", username, err)
-			}
-		} else {
-			fmt.Fprintf(os.Stderr, "failed to encode user '%s' to UTF16: %v", username, err)
+
+		// Always try and delete the user, if it doesn't exist we'll get a specific error code that we can use to
+		// not log any warnings.
+		if err := winapi.NetUserDel(
+			"",
+			username,
+		); err != nil && err != winapi.NERR_UserNotFound {
+			fmt.Fprintf(os.Stderr, "failed to delete user %q: %v", username, err)
 		}
 
 		if data, err := proto.Marshal(&task.DeleteResponse{

@@ -78,7 +78,7 @@ var (
 	procRtlNtStatusToDosError                  = modntdll.NewProc("RtlNtStatusToDosError")
 )
 
-func NetLocalGroupGetInfo(serverName *uint16, groupName *uint16, level uint32, bufptr **byte) (status error) {
+func netLocalGroupGetInfo(serverName *uint16, groupName *uint16, level uint32, bufptr **byte) (status error) {
 	r0, _, _ := syscall.Syscall6(procNetLocalGroupGetInfo.Addr(), 4, uintptr(unsafe.Pointer(serverName)), uintptr(unsafe.Pointer(groupName)), uintptr(level), uintptr(unsafe.Pointer(bufptr)), 0, 0)
 	if r0 != 0 {
 		status = syscall.Errno(r0)
@@ -86,7 +86,7 @@ func NetLocalGroupGetInfo(serverName *uint16, groupName *uint16, level uint32, b
 	return
 }
 
-func NetUserAdd(serverName *uint16, level uint32, buf *byte, parm_err *uint32) (status error) {
+func netUserAdd(serverName *uint16, level uint32, buf *byte, parm_err *uint32) (status error) {
 	r0, _, _ := syscall.Syscall6(procNetUserAdd.Addr(), 4, uintptr(unsafe.Pointer(serverName)), uintptr(level), uintptr(unsafe.Pointer(buf)), uintptr(unsafe.Pointer(parm_err)), 0, 0)
 	if r0 != 0 {
 		status = syscall.Errno(r0)
@@ -94,7 +94,7 @@ func NetUserAdd(serverName *uint16, level uint32, buf *byte, parm_err *uint32) (
 	return
 }
 
-func NetUserDel(serverName *uint16, username *uint16) (status error) {
+func netUserDel(serverName *uint16, username *uint16) (status error) {
 	r0, _, _ := syscall.Syscall(procNetUserDel.Addr(), 2, uintptr(unsafe.Pointer(serverName)), uintptr(unsafe.Pointer(username)), 0)
 	if r0 != 0 {
 		status = syscall.Errno(r0)
@@ -102,7 +102,7 @@ func NetUserDel(serverName *uint16, username *uint16) (status error) {
 	return
 }
 
-func NetLocalGroupAddMembers(serverName *uint16, groupName *uint16, level uint32, buf *byte, totalEntries uint32) (status error) {
+func netLocalGroupAddMembers(serverName *uint16, groupName *uint16, level uint32, buf *byte, totalEntries uint32) (status error) {
 	r0, _, _ := syscall.Syscall6(procNetLocalGroupAddMembers.Addr(), 5, uintptr(unsafe.Pointer(serverName)), uintptr(unsafe.Pointer(groupName)), uintptr(level), uintptr(unsafe.Pointer(buf)), uintptr(totalEntries), 0)
 	if r0 != 0 {
 		status = syscall.Errno(r0)

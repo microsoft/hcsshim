@@ -65,7 +65,34 @@ type UserInfo1 struct {
 // 	[out] LPBYTE  *bufptr
 // );
 //
-//sys NetLocalGroupGetInfo(serverName *uint16, groupName *uint16, level uint32, bufptr **byte) (status error) = netapi32.NetLocalGroupGetInfo
+//sys netLocalGroupGetInfo(serverName *uint16, groupName *uint16, level uint32, bufptr **byte) (status error) = netapi32.NetLocalGroupGetInfo
+
+// NetLocalGroupGetInfo is a slightly go friendlier wrapper around the NetLocalGroupGetInfo function. Instead of taking in *uint16's, it takes in
+// go strings and does the conversion internally.
+func NetLocalGroupGetInfo(serverName, groupName string, level uint32, bufPtr **byte) (err error) {
+	var (
+		serverNameUTF16 *uint16
+		groupNameUTF16  *uint16
+	)
+	if serverName != "" {
+		serverNameUTF16, err = windows.UTF16PtrFromString(serverName)
+		if err != nil {
+			return err
+		}
+	}
+	if groupName != "" {
+		groupNameUTF16, err = windows.UTF16PtrFromString(groupName)
+		if err != nil {
+			return err
+		}
+	}
+	return netLocalGroupGetInfo(
+		serverNameUTF16,
+		groupNameUTF16,
+		level,
+		bufPtr,
+	)
+}
 
 // NET_API_STATUS NET_API_FUNCTION NetUserAdd(
 // 	[in]  LPCWSTR servername,
@@ -74,14 +101,57 @@ type UserInfo1 struct {
 // 	[out] LPDWORD parm_err
 // );
 //
-//sys NetUserAdd(serverName *uint16, level uint32, buf *byte, parm_err *uint32) (status error) = netapi32.NetUserAdd
+//sys netUserAdd(serverName *uint16, level uint32, buf *byte, parm_err *uint32) (status error) = netapi32.NetUserAdd
+
+// NetUserAdd is a slightly go friendlier wrapper around the NetUserAdd function. Instead of taking in *uint16's, it takes in
+// go strings and does the conversion internally.
+func NetUserAdd(serverName string, level uint32, buf *byte, parm_err *uint32) (err error) {
+	var serverNameUTF16 *uint16
+	if serverName != "" {
+		serverNameUTF16, err = windows.UTF16PtrFromString(serverName)
+		if err != nil {
+			return err
+		}
+	}
+	return netUserAdd(
+		serverNameUTF16,
+		level,
+		buf,
+		parm_err,
+	)
+}
 
 // NET_API_STATUS NET_API_FUNCTION NetUserDel(
 // 	[in] LPCWSTR servername,
 // 	[in] LPCWSTR username
 // );
 //
-//sys NetUserDel(serverName *uint16, username *uint16) (status error) = netapi32.NetUserDel
+//sys netUserDel(serverName *uint16, username *uint16) (status error) = netapi32.NetUserDel
+
+// NetUserDel is a slightly go friendlier wrapper around the NetUserDel function. Instead of taking in *uint16's, it takes in
+// go strings and does the conversion internally.
+func NetUserDel(serverName, userName string) (err error) {
+	var (
+		serverNameUTF16 *uint16
+		userNameUTF16   *uint16
+	)
+	if serverName != "" {
+		serverNameUTF16, err = windows.UTF16PtrFromString(serverName)
+		if err != nil {
+			return err
+		}
+	}
+	if userName != "" {
+		userNameUTF16, err = windows.UTF16PtrFromString(userName)
+		if err != nil {
+			return err
+		}
+	}
+	return netUserDel(
+		serverNameUTF16,
+		userNameUTF16,
+	)
+}
 
 // NET_API_STATUS NET_API_FUNCTION NetLocalGroupAddMembers(
 // 	[in] LPCWSTR servername,
@@ -91,4 +161,32 @@ type UserInfo1 struct {
 // 	[in] DWORD   totalentries
 // );
 //
-//sys NetLocalGroupAddMembers(serverName *uint16, groupName *uint16, level uint32, buf *byte, totalEntries uint32) (status error) = netapi32.NetLocalGroupAddMembers
+//sys netLocalGroupAddMembers(serverName *uint16, groupName *uint16, level uint32, buf *byte, totalEntries uint32) (status error) = netapi32.NetLocalGroupAddMembers
+
+// NetLocalGroupAddMembers is a slightly go friendlier wrapper around the NetLocalGroupAddMembers function. Instead of taking in *uint16's, it takes in
+// go strings and does the conversion internally.
+func NetLocalGroupAddMembers(serverName, groupName string, level uint32, buf *byte, totalEntries uint32) (err error) {
+	var (
+		serverNameUTF16 *uint16
+		groupNameUTF16  *uint16
+	)
+	if serverName != "" {
+		serverNameUTF16, err = windows.UTF16PtrFromString(serverName)
+		if err != nil {
+			return err
+		}
+	}
+	if groupName != "" {
+		groupNameUTF16, err = windows.UTF16PtrFromString(groupName)
+		if err != nil {
+			return err
+		}
+	}
+	return netLocalGroupAddMembers(
+		serverNameUTF16,
+		groupNameUTF16,
+		level,
+		buf,
+		totalEntries,
+	)
+}

@@ -22,18 +22,13 @@ func randomPswd() (*uint16, error) {
 }
 
 func groupExists(groupName string) bool {
-	groupNameUTF16, err := windows.UTF16PtrFromString(groupName)
-	if err != nil {
-		return false
-	}
 	var p *byte
-	err = winapi.NetLocalGroupGetInfo(
-		nil,
-		groupNameUTF16,
+	if err := winapi.NetLocalGroupGetInfo(
+		"",
+		groupName,
 		1,
 		&p,
-	)
-	if err != nil {
+	); err != nil {
 		return false
 	}
 	defer windows.NetApiBufferFree(p)
@@ -61,7 +56,7 @@ func makeLocalAccount(ctx context.Context, user, groupName string) (*uint16, err
 		Flags:    winapi.UF_NORMAL_ACCOUNT | winapi.UF_DONT_EXPIRE_PASSWD,
 	}
 	if err := winapi.NetUserAdd(
-		nil,
+		"",
 		1,
 		(*byte)(unsafe.Pointer(usr1)),
 		nil,
@@ -76,14 +71,10 @@ func makeLocalAccount(ctx context.Context, user, groupName string) (*uint16, err
 		return nil, fmt.Errorf("failed to lookup SID for user %q: %w", user, err)
 	}
 
-	groupNameUTF16, err := windows.UTF16PtrFromString(groupName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode group name to UTF16: %w", err)
-	}
 	sids := []winapi.LocalGroupMembersInfo0{{Sid: sid}}
 	if err := winapi.NetLocalGroupAddMembers(
-		nil,
-		groupNameUTF16,
+		"",
+		groupName,
 		0,
 		(*byte)(unsafe.Pointer(&sids[0])),
 		1,

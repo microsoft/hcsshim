@@ -207,8 +207,8 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		return nil, errors.Wrapf(err, "failed to get application name from commandline %q", conf.CommandLine)
 	}
 
-	// We've already done the user dance already, so this is most likely an exec being launched. Just use the token we
-	// already retrieved when we made the init process.
+	// If we haven't grabbed a token yet this is the init process being launched. Skip grabbing another token afterwards if we've already
+	// done the work (c.token != 0), this would typically be for an exec being launched.
 	if c.token == 0 {
 		if inheritUserTokenIsSet(c.spec.Annotations) {
 			c.token, err = openCurrentProcessToken()
@@ -330,11 +330,7 @@ func (c *JobContainer) Close() error {
 
 	// Delete the containers local account if one was created
 	if c.localUserAccount != "" {
-		userName, err := windows.UTF16PtrFromString(c.localUserAccount)
-		if err != nil {
-			return fmt.Errorf("failed to encode user name %q to UTF16: %w", c.localUserAccount, err)
-		}
-		if err := winapi.NetUserDel(nil, userName); err != nil {
+		if err := winapi.NetUserDel("", c.localUserAccount); err != nil {
 			return fmt.Errorf("failed to delete local user account: %w", err)
 		}
 	}
