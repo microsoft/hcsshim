@@ -11,23 +11,25 @@ import (
 	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/ext4/dmverity"
-	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 // CreateZeroSectorLinearTarget creates dm-linear target for a device at `devPath` and `mappingInfo`, returns
 // virtual block device path.
-func CreateZeroSectorLinearTarget(ctx context.Context, devPath, devName string, mappingInfo *prot.DeviceMappingInfo) (_ string, err error) {
+func CreateZeroSectorLinearTarget(ctx context.Context, devPath, devName string, mappingInfo *guestresource.LCOWVPMemMappingInfo) (_ string, err error) {
 	_, span := trace.StartSpan(ctx, "devicemapper::CreateZeroSectorLinearTarget")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
-	linearTarget := zeroSectorLinearTarget(mappingInfo.DeviceSizeInBytes, devPath, mappingInfo.DeviceOffsetInBytes)
+	size := int64(mappingInfo.DeviceSizeInBytes)
+	offset := int64(mappingInfo.DeviceOffsetInBytes)
+	linearTarget := zeroSectorLinearTarget(size, devPath, offset)
 
 	span.AddAttributes(
 		trace.StringAttribute("devicePath", devPath),
-		trace.Int64Attribute("deviceStart", mappingInfo.DeviceOffsetInBytes),
-		trace.Int64Attribute("sectorSize", mappingInfo.DeviceSizeInBytes),
+		trace.Int64Attribute("deviceStart", offset),
+		trace.Int64Attribute("sectorSize", size),
 		trace.StringAttribute("linearTable", fmt.Sprintf("%s: '%d %d %s'", devName, linearTarget.SectorStart, linearTarget.LengthInBlocks, linearTarget.Params)))
 
 	devMapperPath, err := CreateDevice(devName, CreateReadOnly, []Target{linearTarget})
@@ -46,7 +48,7 @@ func CreateZeroSectorLinearTarget(ctx context.Context, devPath, devName string, 
 // start|     |    |  data_dev |  data_block | #blocks | hash_alg      root_digest                salt
 //     size   |  version    hash_dev         |     hash_offset
 //          target                       hash_block
-func CreateVerityTarget(ctx context.Context, devPath, devName string, verityInfo *prot.DeviceVerityInfo) (_ string, err error) {
+func CreateVerityTarget(ctx context.Context, devPath, devName string, verityInfo *guestresource.DeviceVerityInfo) (_ string, err error) {
 	_, span := trace.StartSpan(ctx, "devicemapper::CreateVerityTarget")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()

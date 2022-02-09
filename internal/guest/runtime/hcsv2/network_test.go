@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/guest/prot"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 func Test_getNetworkNamespace_NotExist(t *testing.T) {
@@ -101,7 +101,7 @@ func Test_removeNetworkNamespace_HasAdapters(t *testing.T) {
 	networkInstanceIDToName = func(ctx context.Context, id string, _ bool) (string, error) {
 		return "/dev/sdz", nil
 	}
-	err := ns.AddAdapter(context.Background(), &prot.NetworkAdapterV2{ID: "test"})
+	err := ns.AddAdapter(context.Background(), &guestresource.LCOWNetworkAdapter{ID: "test"})
 	if err != nil {
 		t.Fatalf("failed to add adapter: %v", err)
 	}

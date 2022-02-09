@@ -5,13 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/cmd"
-	"github.com/Microsoft/hcsshim/internal/cow"
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
-	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/signals"
-	"github.com/Microsoft/hcsshim/internal/uvm"
-	"github.com/Microsoft/hcsshim/osversion"
 	eventstypes "github.com/containerd/containerd/api/events"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
@@ -21,6 +14,14 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
+
+	"github.com/Microsoft/hcsshim/internal/cmd"
+	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/internal/signals"
+	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/osversion"
 )
 
 // newHcsExec creates an exec to track the lifetime of `spec` in `c` which is
@@ -268,13 +269,13 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 		var options interface{}
 		var err error
 		if he.isWCOW {
-			var opt *guestrequest.SignalProcessOptionsWCOW
+			var opt *guestresource.SignalProcessOptionsWCOW
 			opt, err = signals.ValidateWCOW(int(signal), supported)
 			if opt != nil {
 				options = opt
 			}
 		} else {
-			var opt *guestrequest.SignalProcessOptionsLCOW
+			var opt *guestresource.SignalProcessOptionsLCOW
 			opt, err = signals.ValidateLCOW(int(signal), supported)
 			if opt != nil {
 				options = opt

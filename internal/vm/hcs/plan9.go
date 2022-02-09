@@ -5,12 +5,12 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/requesttype"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
 func (uvm *utilityVM) AddPlan9(ctx context.Context, path, name string, port int32, flags int32, allowed []string) error {
 	modification := &hcsschema.ModifySettingRequest{
-		RequestType: requesttype.Add,
+		RequestType: guestrequest.RequestTypeAdd,
 		Settings: hcsschema.Plan9Share{
 			Name:         name,
 			AccessName:   name,
@@ -26,7 +26,7 @@ func (uvm *utilityVM) AddPlan9(ctx context.Context, path, name string, port int3
 
 func (uvm *utilityVM) RemovePlan9(ctx context.Context, name string, port int32) error {
 	modification := &hcsschema.ModifySettingRequest{
-		RequestType: requesttype.Remove,
+		RequestType: guestrequest.RequestTypeRemove,
 		Settings: hcsschema.Plan9Share{
 			Name:       name,
 			AccessName: name,

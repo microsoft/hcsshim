@@ -6,7 +6,7 @@ import (
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/requesttype"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
 // Modify modifies the compute system by sending a request to HCS.
@@ -17,14 +17,14 @@ func (uvm *UtilityVM) modify(ctx context.Context, doc *hcsschema.ModifySettingRe
 
 	hostdoc := *doc
 	hostdoc.GuestRequest = nil
-	if doc.ResourcePath != "" && doc.RequestType == requesttype.Add {
+	if doc.ResourcePath != "" && doc.RequestType == guestrequest.RequestTypeAdd {
 		err = uvm.hcsSystem.Modify(ctx, &hostdoc)
 		if err != nil {
 			return fmt.Errorf("adding VM resources: %s", err)
 		}
 		defer func() {
 			if err != nil {
-				hostdoc.RequestType = requesttype.Remove
+				hostdoc.RequestType = guestrequest.RequestTypeRemove
 				rerr := uvm.hcsSystem.Modify(ctx, &hostdoc)
 				if rerr != nil {
 					log.G(ctx).WithError(rerr).Error("failed to roll back resource add")
@@ -36,7 +36,7 @@ func (uvm *UtilityVM) modify(ctx context.Context, doc *hcsschema.ModifySettingRe
 	if err != nil {
 		return fmt.Errorf("guest modify: %s", err)
 	}
-	if doc.ResourcePath != "" && doc.RequestType == requesttype.Remove {
+	if doc.ResourcePath != "" && doc.RequestType == guestrequest.RequestTypeRemove {
 		err = uvm.hcsSystem.Modify(ctx, &hostdoc)
 		if err != nil {
 			err = fmt.Errorf("removing VM resources: %s", err)

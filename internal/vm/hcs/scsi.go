@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/pkg/errors"
+
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/requesttype"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/vm"
-	"github.com/pkg/errors"
 )
 
 func (uvmb *utilityVMBuilder) AddSCSIController(id uint32) error {
@@ -55,7 +56,7 @@ func (uvm *utilityVM) AddSCSIDisk(ctx context.Context, controller uint32, lun ui
 		return err
 	}
 	request := &hcsschema.ModifySettingRequest{
-		RequestType: requesttype.Add,
+		RequestType: guestrequest.RequestTypeAdd,
 		Settings: hcsschema.Attachment{
 			Path:     path,
 			Type_:    diskTypeString,
@@ -68,7 +69,7 @@ func (uvm *utilityVM) AddSCSIDisk(ctx context.Context, controller uint32, lun ui
 
 func (uvm *utilityVM) RemoveSCSIDisk(ctx context.Context, controller uint32, lun uint32, path string) error {
 	request := &hcsschema.ModifySettingRequest{
-		RequestType:  requesttype.Remove,
+		RequestType:  guestrequest.RequestTypeRemove,
 		ResourcePath: fmt.Sprintf(resourcepaths.SCSIResourceFormat, strconv.Itoa(int(controller)), lun),
 	}
 

@@ -8,6 +8,10 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
+	"golang.org/x/sys/windows"
+
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -16,9 +20,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
-	"golang.org/x/sys/windows"
 )
 
 // Options are the set of options passed to Create() to create a utility vm.

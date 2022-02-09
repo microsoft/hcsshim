@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/requesttype"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 // Share shares in file(s) from `reqHostPath` on the host machine to `reqUVMPath` inside the UVM.
@@ -30,9 +30,9 @@ func (uvm *UtilityVM) Share(ctx context.Context, reqHostPath, reqUVMPath string,
 		if err != nil {
 			return err
 		}
-		guestReq := guestrequest.GuestRequest{
-			ResourceType: guestrequest.ResourceTypeMappedDirectory,
-			RequestType:  requesttype.Add,
+		guestReq := guestrequest.ModificationRequest{
+			ResourceType: guestresource.ResourceTypeMappedDirectory,
+			RequestType:  guestrequest.RequestTypeAdd,
 			Settings: &hcsschema.MappedDirectory{
 				HostPath:      sharePath,
 				ContainerPath: reqUVMPath,

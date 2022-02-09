@@ -6,15 +6,16 @@ import (
 	"io"
 	"sync"
 
+	"github.com/pkg/errors"
+	"golang.org/x/sys/windows"
+
 	"github.com/Microsoft/hcsshim/internal/conpty"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/exec"
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/winapi"
-	"github.com/pkg/errors"
-	"golang.org/x/sys/windows"
 )
 
 // JobProcess represents a process run in a job object.
@@ -81,7 +82,7 @@ func (p *JobProcess) Signal(ctx context.Context, options interface{}) (bool, err
 		return true, nil
 	}
 
-	signalOptions, ok := options.(*guestrequest.SignalProcessOptionsWCOW)
+	signalOptions, ok := options.(*guestresource.SignalProcessOptionsWCOW)
 	if !ok {
 		return false, errors.New("unknown signal options")
 	}

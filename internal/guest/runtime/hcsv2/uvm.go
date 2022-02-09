@@ -16,6 +16,9 @@ import (
 	"syscall"
 	"time"
 
+	shellwords "github.com/mattn/go-shellwords"
+	"github.com/pkg/errors"
+
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
@@ -27,10 +30,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/storage/pmem"
 	"github.com/Microsoft/hcsshim/internal/guest/storage/scsi"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
-	shellwords "github.com/mattn/go-shellwords"
-	"github.com/pkg/errors"
 )
 
 // UVMContainerID is the ContainerID that will be sent on any prot.MessageBase
@@ -282,57 +285,57 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	return c, nil
 }
 
-func (h *Host) modifyHostSettings(ctx context.Context, containerID string, settings *prot.ModifySettingRequest) error {
-	switch settings.ResourceType {
-	case prot.MrtMappedVirtualDisk:
-		return modifyMappedVirtualDisk(ctx, settings.RequestType, settings.Settings.(*prot.MappedVirtualDiskV2), h.securityPolicyEnforcer)
-	case prot.MrtMappedDirectory:
-		return modifyMappedDirectory(ctx, h.vsock, settings.RequestType, settings.Settings.(*prot.MappedDirectoryV2))
-	case prot.MrtVPMemDevice:
-		return modifyMappedVPMemDevice(ctx, settings.RequestType, settings.Settings.(*prot.MappedVPMemDeviceV2), h.securityPolicyEnforcer)
-	case prot.MrtCombinedLayers:
-		return modifyCombinedLayers(ctx, settings.RequestType, settings.Settings.(*prot.CombinedLayersV2), h.securityPolicyEnforcer)
-	case prot.MrtNetwork:
-		return modifyNetwork(ctx, settings.RequestType, settings.Settings.(*prot.NetworkAdapterV2))
-	case prot.MrtVPCIDevice:
-		return modifyMappedVPCIDevice(ctx, settings.RequestType, settings.Settings.(*prot.MappedVPCIDeviceV2))
-	case prot.MrtContainerConstraints:
+func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *guestrequest.ModificationRequest) error {
+	switch req.ResourceType {
+	case guestresource.ResourceTypeMappedVirtualDisk:
+		return modifyMappedVirtualDisk(ctx, req.RequestType, req.Settings.(*guestresource.LCOWMappedVirtualDisk), h.securityPolicyEnforcer)
+	case guestresource.ResourceTypeMappedDirectory:
+		return modifyMappedDirectory(ctx, h.vsock, req.RequestType, req.Settings.(*guestresource.LCOWMappedDirectory))
+	case guestresource.ResourceTypeVPMemDevice:
+		return modifyMappedVPMemDevice(ctx, req.RequestType, req.Settings.(*guestresource.LCOWMappedVPMemDevice), h.securityPolicyEnforcer)
+	case guestresource.ResourceTypeCombinedLayers:
+		return modifyCombinedLayers(ctx, req.RequestType, req.Settings.(*guestresource.LCOWCombinedLayers), h.securityPolicyEnforcer)
+	case guestresource.ResourceTypeNetwork:
+		return modifyNetwork(ctx, req.RequestType, req.Settings.(*guestresource.LCOWNetworkAdapter))
+	case guestresource.ResourceTypeVPCIDevice:
+		return modifyMappedVPCIDevice(ctx, req.RequestType, req.Settings.(*guestresource.LCOWMappedVPCIDevice))
+	case guestresource.ResourceTypeContainerConstraints:
 		c, err := h.GetContainer(containerID)
 		if err != nil {
 			return err
 		}
-		return c.modifyContainerConstraints(ctx, settings.RequestType, settings.Settings.(*prot.ContainerConstraintsV2))
-	case prot.MrtSecurityPolicy:
-		policy, ok := settings.Settings.(*securitypolicy.EncodedSecurityPolicy)
+		return c.modifyContainerConstraints(ctx, req.RequestType, req.Settings.(*guestresource.LCOWContainerConstraints))
+	case guestresource.ResourceTypeSecurityPolicy:
+		policy, ok := req.Settings.(*securitypolicy.EncodedSecurityPolicy)
 		if !ok {
 			return errors.New("the request's settings are not of type EncodedSecurityPolicy")
 		}
 
 		return h.SetSecurityPolicy(policy.SecurityPolicy)
 	default:
-		return errors.Errorf("the ResourceType \"%s\" is not supported for UVM", settings.ResourceType)
+		return errors.Errorf("the ResourceType \"%s\" is not supported for UVM", req.ResourceType)
 	}
 }
 
-func (h *Host) modifyContainerSettings(ctx context.Context, containerID string, settings *prot.ModifySettingRequest) error {
+func (h *Host) modifyContainerSettings(ctx context.Context, containerID string, req *guestrequest.ModificationRequest) error {
 	c, err := h.GetContainer(containerID)
 	if err != nil {
 		return err
 	}
 
-	switch settings.ResourceType {
-	case prot.MrtContainerConstraints:
-		return c.modifyContainerConstraints(ctx, settings.RequestType, settings.Settings.(*prot.ContainerConstraintsV2))
+	switch req.ResourceType {
+	case guestresource.ResourceTypeContainerConstraints:
+		return c.modifyContainerConstraints(ctx, req.RequestType, req.Settings.(*guestresource.LCOWContainerConstraints))
 	default:
-		return errors.Errorf("the ResourceType \"%s\" is not supported for containers", settings.ResourceType)
+		return errors.Errorf("the ResourceType \"%s\" is not supported for containers", req.ResourceType)
 	}
 }
 
-func (h *Host) ModifySettings(ctx context.Context, containerID string, settings *prot.ModifySettingRequest) error {
+func (h *Host) ModifySettings(ctx context.Context, containerID string, req *guestrequest.ModificationRequest) error {
 	if containerID == UVMContainerID {
-		return h.modifyHostSettings(ctx, containerID, settings)
+		return h.modifyHostSettings(ctx, containerID, req)
 	}
-	return h.modifyContainerSettings(ctx, containerID, settings)
+	return h.modifyContainerSettings(ctx, containerID, req)
 }
 
 // Shutdown terminates this UVM. This is a destructive call and will destroy all
@@ -441,20 +444,20 @@ func (h *Host) GetExternalProcess(pid int) (Process, error) {
 	return p, nil
 }
 
-func newInvalidRequestTypeError(rt prot.ModifyRequestType) error {
-	return errors.Errorf("the RequestType \"%s\" is not supported", rt)
+func newInvalidRequestTypeError(rt guestrequest.RequestType) error {
+	return errors.Errorf("the RequestType %q is not supported", rt)
 }
 
-func modifyMappedVirtualDisk(ctx context.Context, rt prot.ModifyRequestType, mvd *prot.MappedVirtualDiskV2, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
+func modifyMappedVirtualDisk(ctx context.Context, rt guestrequest.RequestType, mvd *guestresource.LCOWMappedVirtualDisk, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
 	switch rt {
-	case prot.MreqtAdd:
+	case guestrequest.RequestTypeAdd:
 		mountCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 		defer cancel()
 		if mvd.MountPath != "" {
 			return scsi.Mount(mountCtx, mvd.Controller, mvd.Lun, mvd.MountPath, mvd.ReadOnly, mvd.Encrypted, mvd.Options, mvd.VerityInfo, securityPolicy)
 		}
 		return nil
-	case prot.MreqtRemove:
+	case guestrequest.RequestTypeRemove:
 		if mvd.MountPath != "" {
 			if err := scsi.Unmount(ctx, mvd.Controller, mvd.Lun, mvd.MountPath, mvd.Encrypted, mvd.VerityInfo, securityPolicy); err != nil {
 				return err
@@ -466,40 +469,40 @@ func modifyMappedVirtualDisk(ctx context.Context, rt prot.ModifyRequestType, mvd
 	}
 }
 
-func modifyMappedDirectory(ctx context.Context, vsock transport.Transport, rt prot.ModifyRequestType, md *prot.MappedDirectoryV2) (err error) {
+func modifyMappedDirectory(ctx context.Context, vsock transport.Transport, rt guestrequest.RequestType, md *guestresource.LCOWMappedDirectory) (err error) {
 	switch rt {
-	case prot.MreqtAdd:
-		return plan9.Mount(ctx, vsock, md.MountPath, md.ShareName, md.Port, md.ReadOnly)
-	case prot.MreqtRemove:
+	case guestrequest.RequestTypeAdd:
+		return plan9.Mount(ctx, vsock, md.MountPath, md.ShareName, uint32(md.Port), md.ReadOnly)
+	case guestrequest.RequestTypeRemove:
 		return storage.UnmountPath(ctx, md.MountPath, true)
 	default:
 		return newInvalidRequestTypeError(rt)
 	}
 }
 
-func modifyMappedVPMemDevice(ctx context.Context, rt prot.ModifyRequestType, vpd *prot.MappedVPMemDeviceV2, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
+func modifyMappedVPMemDevice(ctx context.Context, rt guestrequest.RequestType, vpd *guestresource.LCOWMappedVPMemDevice, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
 	switch rt {
-	case prot.MreqtAdd:
+	case guestrequest.RequestTypeAdd:
 		return pmem.Mount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, vpd.VerityInfo, securityPolicy)
-	case prot.MreqtRemove:
+	case guestrequest.RequestTypeRemove:
 		return pmem.Unmount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, vpd.VerityInfo, securityPolicy)
 	default:
 		return newInvalidRequestTypeError(rt)
 	}
 }
 
-func modifyMappedVPCIDevice(ctx context.Context, rt prot.ModifyRequestType, vpciDev *prot.MappedVPCIDeviceV2) error {
+func modifyMappedVPCIDevice(ctx context.Context, rt guestrequest.RequestType, vpciDev *guestresource.LCOWMappedVPCIDevice) error {
 	switch rt {
-	case prot.MreqtAdd:
+	case guestrequest.RequestTypeAdd:
 		return pci.WaitForPCIDeviceFromVMBusGUID(ctx, vpciDev.VMBusGUID)
 	default:
 		return newInvalidRequestTypeError(rt)
 	}
 }
 
-func modifyCombinedLayers(ctx context.Context, rt prot.ModifyRequestType, cl *prot.CombinedLayersV2, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
+func modifyCombinedLayers(ctx context.Context, rt guestrequest.RequestType, cl *guestresource.LCOWCombinedLayers, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
 	switch rt {
-	case prot.MreqtAdd:
+	case guestrequest.RequestTypeAdd:
 		layerPaths := make([]string, len(cl.Layers))
 		for i, layer := range cl.Layers {
 			layerPaths[i] = layer.Path
@@ -516,17 +519,17 @@ func modifyCombinedLayers(ctx context.Context, rt prot.ModifyRequestType, cl *pr
 			workdirPath = filepath.Join(cl.ScratchPath, "work")
 		}
 
-		return overlay.MountLayer(ctx, layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, readonly, cl.ContainerId, securityPolicy)
-	case prot.MreqtRemove:
+		return overlay.MountLayer(ctx, layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, readonly, cl.ContainerID, securityPolicy)
+	case guestrequest.RequestTypeRemove:
 		return storage.UnmountPath(ctx, cl.ContainerRootPath, true)
 	default:
 		return newInvalidRequestTypeError(rt)
 	}
 }
 
-func modifyNetwork(ctx context.Context, rt prot.ModifyRequestType, na *prot.NetworkAdapterV2) (err error) {
+func modifyNetwork(ctx context.Context, rt guestrequest.RequestType, na *guestresource.LCOWNetworkAdapter) (err error) {
 	switch rt {
-	case prot.MreqtAdd:
+	case guestrequest.RequestTypeAdd:
 		ns := getOrAddNetworkNamespace(na.NamespaceID)
 		if err := ns.AddAdapter(ctx, na); err != nil {
 			return err
@@ -534,7 +537,7 @@ func modifyNetwork(ctx context.Context, rt prot.ModifyRequestType, na *prot.Netw
 		// This code doesnt know if the namespace was already added to the
 		// container or not so it must always call `Sync`.
 		return ns.Sync(ctx)
-	case prot.MreqtRemove:
+	case guestrequest.RequestTypeRemove:
 		ns := getOrAddNetworkNamespace(na.ID)
 		if err := ns.RemoveAdapter(ctx, na.ID); err != nil {
 			return err

@@ -6,13 +6,13 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/requesttype"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
 func (uvm *utilityVM) AddDevice(ctx context.Context, instanceID, vmbusGUID string) error {
 	request := &hcsschema.ModifySettingRequest{
 		ResourcePath: fmt.Sprintf(resourcepaths.VirtualPCIResourceFormat, vmbusGUID),
-		RequestType:  requesttype.Add,
+		RequestType:  guestrequest.RequestTypeAdd,
 		Settings: hcsschema.VirtualPciDevice{
 			Functions: []hcsschema.VirtualPciFunction{
 				{
@@ -27,7 +27,7 @@ func (uvm *utilityVM) AddDevice(ctx context.Context, instanceID, vmbusGUID strin
 func (uvm *utilityVM) RemoveDevice(ctx context.Context, instanceID, vmbusGUID string) error {
 	request := &hcsschema.ModifySettingRequest{
 		ResourcePath: fmt.Sprintf(resourcepaths.VirtualPCIResourceFormat, vmbusGUID),
-		RequestType:  requesttype.Remove,
+		RequestType:  guestrequest.RequestTypeRemove,
 	}
 	return uvm.cs.Modify(ctx, request)
 }

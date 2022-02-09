@@ -1,14 +1,44 @@
-package guestrequest
+package guestresource
 
 import (
-	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/opencontainers/runtime-spec/specs-go"
+
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
 
 // Arguably, many of these (at least CombinedLayers) should have been generated
 // by swagger.
 //
 // This will also change package name due to an inbound breaking change.
+
+const (
+	// These are constants for v2 schema modify guest requests.
+	// ResourceTypeMappedDirectory is the modify resource type for mapped
+	// directories
+	ResourceTypeMappedDirectory guestrequest.ResourceType = "MappedDirectory"
+	// ResourceTypeMappedVirtualDisk is the modify resource type for mapped
+	// virtual disks
+	ResourceTypeMappedVirtualDisk guestrequest.ResourceType = "MappedVirtualDisk"
+	// ResourceTypeNetwork is the modify resource type for the `NetworkAdapterV2`
+	// device.
+	ResourceTypeNetwork          guestrequest.ResourceType = "Network"
+	ResourceTypeNetworkNamespace guestrequest.ResourceType = "NetworkNamespace"
+	// ResourceTypeCombinedLayers is the modify resource type for combined
+	// layers
+	ResourceTypeCombinedLayers guestrequest.ResourceType = "CombinedLayers"
+	// ResourceTypeVPMemDevice is the modify resource type for VPMem devices
+	ResourceTypeVPMemDevice guestrequest.ResourceType = "VPMemDevice"
+	// ResourceTypeVPCIDevice is the modify resource type for vpci devices
+	ResourceTypeVPCIDevice guestrequest.ResourceType = "VPCIDevice"
+	// ResourceTypeContainerConstraints is the modify resource type for updating
+	// container constraints
+	ResourceTypeContainerConstraints guestrequest.ResourceType = "ContainerConstraints"
+	ResourceTypeHvSocket             guestrequest.ResourceType = "HvSocket"
+	// ResourceTypeSecurityPolicy is the modify resource type for updating the security
+	// policy
+	ResourceTypeSecurityPolicy guestrequest.ResourceType = "SecurityPolicy"
+)
 
 // This class is used by a modify request to add or remove a combined layers
 // structure in the guest. For windows, the GCS applies a filter in ContainerRootPath
@@ -17,10 +47,10 @@ import (
 // the specified layers and ScratchPath together, placing the resulting union
 // filesystem at ContainerRootPath.
 type LCOWCombinedLayers struct {
-	ContainerID       string            `jason:"ContainerID"`
-	ContainerRootPath string            `json:"ContainerRootPath,omitempty"`
-	Layers            []hcsschema.Layer `json:"Layers,omitempty"`
-	ScratchPath       string            `json:"ScratchPath,omitempty"`
+	ContainerID       string            `json:",omitempty"`
+	ContainerRootPath string            `json:",omitempty"`
+	Layers            []hcsschema.Layer `json:",omitempty"`
+	ScratchPath       string            `json:",omitempty"`
 }
 
 type WCOWCombinedLayers struct {
@@ -31,7 +61,8 @@ type WCOWCombinedLayers struct {
 
 // Defines the schema for hosted settings passed to GCS and/or OpenGCS
 
-// SCSI. Scratch space for remote file-system commands, or R/W layer for containers
+// LCOWMappedVirtualDisk represents a disk on the host which is mapped into a
+// directory in the guest in the V2 schema.
 type LCOWMappedVirtualDisk struct {
 	MountPath  string            `json:"MountPath,omitempty"`
 	Lun        uint8             `json:"Lun,omitempty"`
@@ -47,6 +78,8 @@ type WCOWMappedVirtualDisk struct {
 	Lun           int32  `json:"Lun,omitempty"`
 }
 
+// LCOWMappedDirectory represents a directory on the host which is mapped to a
+// directory on the guest through Plan9 in the V2 schema.
 type LCOWMappedDirectory struct {
 	MountPath string `json:"MountPath,omitempty"`
 	Port      int32  `json:"Port,omitempty"`
@@ -54,8 +87,8 @@ type LCOWMappedDirectory struct {
 	ReadOnly  bool   `json:"ReadOnly,omitempty"`
 }
 
-// LCOWMappedLayer is one of potentially multiple read-only layers mapped on a VPMem device
-type LCOWMappedLayer struct {
+// LCOWVPMemMappingInfo is one of potentially multiple read-only layers mapped on a VPMem device
+type LCOWVPMemMappingInfo struct {
 	DeviceOffsetInBytes uint64 `json:"DeviceOffsetInBytes,omitempty"`
 	DeviceSizeInBytes   uint64 `json:"DeviceSizeInBytes,omitempty"`
 }
@@ -81,16 +114,20 @@ type DeviceVerityInfo struct {
 
 // Read-only layers over VPMem
 type LCOWMappedVPMemDevice struct {
-	DeviceNumber uint32            `json:"DeviceNumber,omitempty"`
-	MountPath    string            `json:"MountPath,omitempty"`
-	MappingInfo  *LCOWMappedLayer  `json:"MappingInfo,omitempty"`
-	VerityInfo   *DeviceVerityInfo `json:"VerityInfo,omitempty"`
+	DeviceNumber uint32 `json:"DeviceNumber,omitempty"`
+	MountPath    string `json:"MountPath,omitempty"`
+	// MappingInfo is used when multiple devices are mapped onto a single VPMem device
+	MappingInfo *LCOWVPMemMappingInfo `json:"MappingInfo,omitempty"`
+	// VerityInfo is used when the VPMem has read-only integrity protection enabled
+	VerityInfo *DeviceVerityInfo `json:"VerityInfo,omitempty"`
 }
 
 type LCOWMappedVPCIDevice struct {
 	VMBusGUID string `json:"VMBusGUID,omitempty"`
 }
 
+// LCOWNetworkAdapter represents a network interface and its associated
+// configuration in a namespace.
 type LCOWNetworkAdapter struct {
 	NamespaceID     string `json:",omitempty"`
 	ID              string `json:",omitempty"`
@@ -110,59 +147,14 @@ type LCOWContainerConstraints struct {
 	Linux   specs.LinuxResources   `json:",omitempty"`
 }
 
-type ResourceType string
-
-const (
-	// These are constants for v2 schema modify guest requests.
-	ResourceTypeMappedDirectory      ResourceType = "MappedDirectory"
-	ResourceTypeMappedVirtualDisk    ResourceType = "MappedVirtualDisk"
-	ResourceTypeNetwork              ResourceType = "Network"
-	ResourceTypeNetworkNamespace     ResourceType = "NetworkNamespace"
-	ResourceTypeCombinedLayers       ResourceType = "CombinedLayers"
-	ResourceTypeVPMemDevice          ResourceType = "VPMemDevice"
-	ResourceTypeVPCIDevice           ResourceType = "VPCIDevice"
-	ResourceTypeContainerConstraints ResourceType = "ContainerConstraints"
-	ResourceTypeHvSocket             ResourceType = "HvSocket"
-	ResourceTypeSecurityPolicy       ResourceType = "SecurityPolicy"
-)
-
-// GuestRequest is for modify commands passed to the guest.
-type GuestRequest struct {
-	RequestType  string       `json:"RequestType,omitempty"`
-	ResourceType ResourceType `json:"ResourceType,omitempty"`
-	Settings     interface{}  `json:"Settings,omitempty"`
-}
-
-type NetworkModifyRequest struct {
-	AdapterId   string      `json:"AdapterId,omitempty"`
-	RequestType string      `json:"RequestType,omitempty"`
-	Settings    interface{} `json:"Settings,omitempty"`
-}
-
-type RS4NetworkModifyRequest struct {
-	AdapterInstanceId string      `json:"AdapterInstanceId,omitempty"`
-	RequestType       string      `json:"RequestType,omitempty"`
-	Settings          interface{} `json:"Settings,omitempty"`
-}
-
 // SignalProcessOptionsLCOW is the options passed to LCOW to signal a given
 // process.
 type SignalProcessOptionsLCOW struct {
 	Signal int `json:",omitempty"`
 }
 
-type SignalValueWCOW string
-
-const (
-	SignalValueWCOWCtrlC        SignalValueWCOW = "CtrlC"
-	SignalValueWCOWCtrlBreak    SignalValueWCOW = "CtrlBreak"
-	SignalValueWCOWCtrlClose    SignalValueWCOW = "CtrlClose"
-	SignalValueWCOWCtrlLogOff   SignalValueWCOW = "CtrlLogOff"
-	SignalValueWCOWCtrlShutdown SignalValueWCOW = "CtrlShutdown"
-)
-
 // SignalProcessOptionsWCOW is the options passed to WCOW to signal a given
 // process.
 type SignalProcessOptionsWCOW struct {
-	Signal SignalValueWCOW `json:",omitempty"`
+	Signal guestrequest.SignalValueWCOW `json:",omitempty"`
 }

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
 func Test_ValidateSigstr_LCOW_Empty_No_SignalsSupported(t *testing.T) {

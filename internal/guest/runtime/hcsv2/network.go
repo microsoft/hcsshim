@@ -10,13 +10,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
+	"github.com/vishvananda/netns"
+	"go.opencensus.io/trace"
+
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/network"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/pkg/errors"
-	"github.com/vishvananda/netns"
-	"go.opencensus.io/trace"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 var (
@@ -130,11 +132,11 @@ func (n *namespace) AssignContainerPid(ctx context.Context, pid int) (err error)
 
 // Adapters returns a copy of the adapters assigned to `n` at the time of the
 // call.
-func (n *namespace) Adapters() []*prot.NetworkAdapterV2 {
+func (n *namespace) Adapters() []*guestresource.LCOWNetworkAdapter {
 	n.m.Lock()
 	defer n.m.Unlock()
 
-	adps := make([]*prot.NetworkAdapterV2, len(n.nics))
+	adps := make([]*guestresource.LCOWNetworkAdapter, len(n.nics))
 	for i, nin := range n.nics {
 		adps[i] = nin.adapter
 	}
@@ -144,7 +146,7 @@ func (n *namespace) Adapters() []*prot.NetworkAdapterV2 {
 // AddAdapter adds `adp` to `n` but does NOT move the adapter into the network
 // namespace assigned to `n`. A user must call `Sync()` to complete this
 // operation.
-func (n *namespace) AddAdapter(ctx context.Context, adp *prot.NetworkAdapterV2) (err error) {
+func (n *namespace) AddAdapter(ctx context.Context, adp *guestresource.LCOWNetworkAdapter) (err error) {
 	ctx, span := trace.StartSpan(ctx, "namespace::AddAdapter")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -232,7 +234,7 @@ func (n *namespace) Sync(ctx context.Context) (err error) {
 // guest and its mapping to the linux `ifname`.
 type nicInNamespace struct {
 	// adapter captures the network settings when the nic was added
-	adapter *prot.NetworkAdapterV2
+	adapter *guestresource.LCOWNetworkAdapter
 	// ifname is the interface name resolved for this adapter
 	ifname string
 	// assignedPid will be `0` for any nic in this namespace that has not been

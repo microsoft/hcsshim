@@ -9,6 +9,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pkg/errors"
+	"go.opencensus.io/trace"
+	"golang.org/x/sys/unix"
+
 	"github.com/Microsoft/hcsshim/internal/debug"
 	"github.com/Microsoft/hcsshim/internal/guest/commonutils"
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
@@ -17,9 +21,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
-	"golang.org/x/sys/unix"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
 // The capabilities of this GCS.
@@ -480,7 +482,7 @@ func (b *Bridge) modifySettingsV2(r *Request) (_ RequestResponse, err error) {
 		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
 	}
 
-	err = b.hostState.ModifySettings(ctx, request.ContainerID, request.Request.(*prot.ModifySettingRequest))
+	err = b.hostState.ModifySettings(ctx, request.ContainerID, request.Request.(*guestrequest.ModificationRequest))
 	if err != nil {
 		return nil, err
 	}

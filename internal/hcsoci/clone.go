@@ -10,7 +10,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/requesttype"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 )
 
 // Usually mounts specified in the container config are added in the container doc
@@ -22,7 +22,7 @@ func addMountsToClone(ctx context.Context, c cow.Container, mounts *mountsConfig
 	// at the same time to save time
 	for _, md := range mounts.mdsv2 {
 		requestDocument := &hcsschema.ModifySettingRequest{
-			RequestType:  requesttype.Add,
+			RequestType:  guestrequest.RequestTypeAdd,
 			ResourcePath: resourcepaths.SiloMappedDirectoryResourcePath,
 			Settings:     md,
 		}
@@ -34,7 +34,7 @@ func addMountsToClone(ctx context.Context, c cow.Container, mounts *mountsConfig
 
 	for _, mp := range mounts.mpsv2 {
 		requestDocument := &hcsschema.ModifySettingRequest{
-			RequestType:  requesttype.Add,
+			RequestType:  guestrequest.RequestTypeAdd,
 			ResourcePath: resourcepaths.SiloMappedPipeResourcePath,
 			Settings:     mp,
 		}

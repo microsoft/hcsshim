@@ -6,20 +6,20 @@ import (
 	"os"
 
 	"github.com/Microsoft/go-winio"
-	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
-	"github.com/containerd/ttrpc"
-
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/containerd/ttrpc"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+
 	"github.com/Microsoft/hcsshim/hcn"
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/requesttype"
+	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -343,9 +343,9 @@ func (uvm *UtilityVM) AddNetNS(ctx context.Context, hcnNamespace *hcn.HostComput
 		// dynamically.
 		if uvm.operatingSystem == "windows" {
 			guestNamespace := hcsschema.ModifySettingRequest{
-				GuestRequest: guestrequest.GuestRequest{
-					ResourceType: guestrequest.ResourceTypeNetworkNamespace,
-					RequestType:  requesttype.Add,
+				GuestRequest: guestrequest.ModificationRequest{
+					ResourceType: guestresource.ResourceTypeNetworkNamespace,
+					RequestType:  guestrequest.RequestTypeRemove,
 					Settings:     hcnNamespace,
 				},
 			}
@@ -464,9 +464,9 @@ func (uvm *UtilityVM) RemoveNetNS(ctx context.Context, id string) error {
 					return err
 				}
 				guestNamespace := hcsschema.ModifySettingRequest{
-					GuestRequest: guestrequest.GuestRequest{
-						ResourceType: guestrequest.ResourceTypeNetworkNamespace,
-						RequestType:  requesttype.Remove,
+					GuestRequest: guestrequest.ModificationRequest{
+						ResourceType: guestresource.ResourceTypeNetworkNamespace,
+						RequestType:  guestrequest.RequestTypeRemove,
 						Settings:     hcnNamespace,
 					},
 				}
@@ -535,7 +535,7 @@ func (uvm *UtilityVM) isNetworkNamespaceSupported() bool {
 	return uvm.guestCaps.NamespaceAddRequestSupported
 }
 
-func getNetworkModifyRequest(adapterID string, requestType string, settings interface{}) interface{} {
+func getNetworkModifyRequest(adapterID string, requestType guestrequest.RequestType, settings interface{}) interface{} {
 	if osversion.Build() >= osversion.RS5 {
 		return guestrequest.NetworkModifyRequest{
 			AdapterId:   adapterID,
@@ -555,12 +555,12 @@ func (uvm *UtilityVM) addNIC(ctx context.Context, id string, endpoint *hns.HNSEn
 	// First a pre-add. This is a guest-only request and is only done on Windows.
 	if uvm.operatingSystem == "windows" {
 		preAddRequest := hcsschema.ModifySettingRequest{
-			GuestRequest: guestrequest.GuestRequest{
-				ResourceType: guestrequest.ResourceTypeNetwork,
-				RequestType:  requesttype.Add,
+			GuestRequest: guestrequest.ModificationRequest{
+				ResourceType: guestresource.ResourceTypeNetwork,
+				RequestType:  guestrequest.RequestTypeAdd,
 				Settings: getNetworkModifyRequest(
 					id,
-					requesttype.PreAdd,
+					guestrequest.RequestTypePreAdd,
 					endpoint),
 			},
 		}
@@ -571,7 +571,7 @@ func (uvm *UtilityVM) addNIC(ctx context.Context, id string, endpoint *hns.HNSEn
 
 	// Then the Add itself
 	request := hcsschema.ModifySettingRequest{
-		RequestType:  requesttype.Add,
+		RequestType:  guestrequest.RequestTypeAdd,
 		ResourcePath: fmt.Sprintf(resourcepaths.NetworkResourceFormat, id),
 		Settings: hcsschema.NetworkAdapter{
 			EndpointId: endpoint.Id,
@@ -580,21 +580,21 @@ func (uvm *UtilityVM) addNIC(ctx context.Context, id string, endpoint *hns.HNSEn
 	}
 
 	if uvm.operatingSystem == "windows" {
-		request.GuestRequest = guestrequest.GuestRequest{
-			ResourceType: guestrequest.ResourceTypeNetwork,
-			RequestType:  requesttype.Add,
+		request.GuestRequest = guestrequest.ModificationRequest{
+			ResourceType: guestresource.ResourceTypeNetwork,
+			RequestType:  guestrequest.RequestTypeAdd,
 			Settings: getNetworkModifyRequest(
 				id,
-				requesttype.Add,
+				guestrequest.RequestTypeAdd,
 				nil),
 		}
 	} else {
 		// Verify this version of LCOW supports Network HotAdd
 		if uvm.isNetworkNamespaceSupported() {
-			request.GuestRequest = guestrequest.GuestRequest{
-				ResourceType: guestrequest.ResourceTypeNetwork,
-				RequestType:  requesttype.Add,
-				Settings: &guestrequest.LCOWNetworkAdapter{
+			request.GuestRequest = guestrequest.ModificationRequest{
+				ResourceType: guestresource.ResourceTypeNetwork,
+				RequestType:  guestrequest.RequestTypeAdd,
+				Settings: &guestresource.LCOWNetworkAdapter{
 					NamespaceID:     endpoint.Namespace.ID,
 					ID:              id,
 					MacAddress:      endpoint.MacAddress,
@@ -619,7 +619,7 @@ func (uvm *UtilityVM) addNIC(ctx context.Context, id string, endpoint *hns.HNSEn
 
 func (uvm *UtilityVM) removeNIC(ctx context.Context, id string, endpoint *hns.HNSEndpoint) error {
 	request := hcsschema.ModifySettingRequest{
-		RequestType:  requesttype.Remove,
+		RequestType:  guestrequest.RequestTypeRemove,
 		ResourcePath: fmt.Sprintf(resourcepaths.NetworkResourceFormat, id),
 		Settings: hcsschema.NetworkAdapter{
 			EndpointId: endpoint.Id,
@@ -629,19 +629,19 @@ func (uvm *UtilityVM) removeNIC(ctx context.Context, id string, endpoint *hns.HN
 
 	if uvm.operatingSystem == "windows" {
 		request.GuestRequest = hcsschema.ModifySettingRequest{
-			RequestType: requesttype.Remove,
+			RequestType: guestrequest.RequestTypeRemove,
 			Settings: getNetworkModifyRequest(
 				id,
-				requesttype.Remove,
+				guestrequest.RequestTypeRemove,
 				nil),
 		}
 	} else {
 		// Verify this version of LCOW supports Network HotRemove
 		if uvm.isNetworkNamespaceSupported() {
-			request.GuestRequest = guestrequest.GuestRequest{
-				ResourceType: guestrequest.ResourceTypeNetwork,
-				RequestType:  requesttype.Remove,
-				Settings: &guestrequest.LCOWNetworkAdapter{
+			request.GuestRequest = guestrequest.ModificationRequest{
+				ResourceType: guestresource.ResourceTypeNetwork,
+				RequestType:  guestrequest.RequestTypeRemove,
+				Settings: &guestresource.LCOWNetworkAdapter{
 					NamespaceID: endpoint.Namespace.ID,
 					ID:          endpoint.Id,
 				},
@@ -670,7 +670,7 @@ func (uvm *UtilityVM) RemoveAllNICs(ctx context.Context) error {
 // UpdateNIC updates a UVM's network adapter.
 func (uvm *UtilityVM) UpdateNIC(ctx context.Context, id string, settings *hcsschema.NetworkAdapter) error {
 	req := &hcsschema.ModifySettingRequest{
-		RequestType:  requesttype.Update,
+		RequestType:  guestrequest.RequestTypeUpdate,
 		ResourcePath: fmt.Sprintf(resourcepaths.NetworkResourceFormat, id),
 		Settings:     settings,
 	}
@@ -679,14 +679,14 @@ func (uvm *UtilityVM) UpdateNIC(ctx context.Context, id string, settings *hcssch
 
 // AddNICInGuest makes a request to setup a network adapter's interface inside the lcow guest.
 // This is primarily used for adding NICs in the guest that have been VPCI assigned.
-func (uvm *UtilityVM) AddNICInGuest(ctx context.Context, cfg *guestrequest.LCOWNetworkAdapter) error {
+func (uvm *UtilityVM) AddNICInGuest(ctx context.Context, cfg *guestresource.LCOWNetworkAdapter) error {
 	if !uvm.isNetworkNamespaceSupported() {
 		return fmt.Errorf("guest does not support network namespaces and cannot add VF NIC %+v", cfg)
 	}
 	request := hcsschema.ModifySettingRequest{}
-	request.GuestRequest = guestrequest.GuestRequest{
-		ResourceType: guestrequest.ResourceTypeNetwork,
-		RequestType:  requesttype.Add,
+	request.GuestRequest = guestrequest.ModificationRequest{
+		ResourceType: guestresource.ResourceTypeNetwork,
+		RequestType:  guestrequest.RequestTypePreAdd,
 		Settings:     cfg,
 	}
 
@@ -695,14 +695,14 @@ func (uvm *UtilityVM) AddNICInGuest(ctx context.Context, cfg *guestrequest.LCOWN
 
 // RemoveNICInGuest makes a request to remove a network interface inside the lcow guest.
 // This is primarily used for removing NICs in the guest that were VPCI assigned.
-func (uvm *UtilityVM) RemoveNICInGuest(ctx context.Context, cfg *guestrequest.LCOWNetworkAdapter) error {
+func (uvm *UtilityVM) RemoveNICInGuest(ctx context.Context, cfg *guestresource.LCOWNetworkAdapter) error {
 	if !uvm.isNetworkNamespaceSupported() {
 		return fmt.Errorf("guest does not support network namespaces and cannot remove VF NIC %+v", cfg)
 	}
 	request := hcsschema.ModifySettingRequest{}
-	request.GuestRequest = guestrequest.GuestRequest{
-		ResourceType: guestrequest.ResourceTypeNetwork,
-		RequestType:  requesttype.Remove,
+	request.GuestRequest = guestrequest.ModificationRequest{
+		ResourceType: guestresource.ResourceTypeNetwork,
+		RequestType:  guestrequest.RequestTypeRemove,
 		Settings:     cfg,
 	}
 

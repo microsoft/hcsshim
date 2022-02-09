@@ -6,14 +6,15 @@ package pmem
 import (
 	"context"
 	"fmt"
-	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"os"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/guest/storage/test/policy"
-	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
+
+	"github.com/Microsoft/hcsshim/internal/guest/storage/test/policy"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
 func clearTestDependencies() {
@@ -316,7 +317,7 @@ func mountMonitoringSecurityPolicyEnforcer() *policy.MountMonitoringSecurityPoli
 func Test_CreateLinearTarget_And_Mount_Called_With_Correct_Parameters(t *testing.T) {
 	clearTestDependencies()
 
-	mappingInfo := &prot.DeviceMappingInfo{
+	mappingInfo := &guestresource.LCOWVPMemMappingInfo{
 		DeviceOffsetInBytes: 0,
 		DeviceSizeInBytes:   1024,
 	}
@@ -340,7 +341,7 @@ func Test_CreateLinearTarget_And_Mount_Called_With_Correct_Parameters(t *testing
 		return nil
 	}
 
-	createZeroSectorLinearTarget = func(_ context.Context, source, name string, mapping *prot.DeviceMappingInfo) (string, error) {
+	createZeroSectorLinearTarget = func(_ context.Context, source, name string, mapping *guestresource.LCOWVPMemMappingInfo) (string, error) {
 		createZSLTCalled = true
 		if source != expectedSource {
 			t.Errorf("expected createZeroSectorLinearTarget source %s, got %s", expectedSource, source)
@@ -369,7 +370,7 @@ func Test_CreateLinearTarget_And_Mount_Called_With_Correct_Parameters(t *testing
 func Test_CreateVerityTargetCalled_And_Mount_Called_With_Correct_Parameters(t *testing.T) {
 	clearTestDependencies()
 
-	verityInfo := &prot.DeviceVerityInfo{
+	verityInfo := &guestresource.DeviceVerityInfo{
 		RootDigest: "hash",
 	}
 	expectedVerityName := fmt.Sprintf(verityDeviceFmt, 0, verityInfo.RootDigest)
@@ -387,7 +388,7 @@ func Test_CreateVerityTargetCalled_And_Mount_Called_With_Correct_Parameters(t *t
 		}
 		return nil
 	}
-	createVerityTarget = func(_ context.Context, source, name string, verity *prot.DeviceVerityInfo) (string, error) {
+	createVerityTarget = func(_ context.Context, source, name string, verity *guestresource.DeviceVerityInfo) (string, error) {
 		createVerityTargetCalled = true
 		if source != expectedSource {
 			t.Errorf("expected createVerityTarget source %s, got %s", expectedSource, source)
@@ -416,10 +417,10 @@ func Test_CreateVerityTargetCalled_And_Mount_Called_With_Correct_Parameters(t *t
 func Test_CreateLinearTarget_And_CreateVerityTargetCalled_Called_Correctly(t *testing.T) {
 	clearTestDependencies()
 
-	verityInfo := &prot.DeviceVerityInfo{
+	verityInfo := &guestresource.DeviceVerityInfo{
 		RootDigest: "hash",
 	}
-	mapping := &prot.DeviceMappingInfo{
+	mapping := &guestresource.LCOWVPMemMappingInfo{
 		DeviceOffsetInBytes: 0,
 		DeviceSizeInBytes:   1024,
 	}
@@ -432,7 +433,7 @@ func Test_CreateLinearTarget_And_CreateVerityTargetCalled_Called_Correctly(t *te
 	dmVerityCalled := false
 	mountCalled := false
 
-	createZeroSectorLinearTarget = func(_ context.Context, source, name string, mapping *prot.DeviceMappingInfo) (string, error) {
+	createZeroSectorLinearTarget = func(_ context.Context, source, name string, mapping *guestresource.LCOWVPMemMappingInfo) (string, error) {
 		dmLinearCalled = true
 		if source != expectedPMemDevice {
 			t.Errorf("expected createZeroSectorLinearTarget source %s, got %s", expectedPMemDevice, source)
@@ -442,7 +443,7 @@ func Test_CreateLinearTarget_And_CreateVerityTargetCalled_Called_Correctly(t *te
 		}
 		return mapperLinearPath, nil
 	}
-	createVerityTarget = func(_ context.Context, source, name string, verity *prot.DeviceVerityInfo) (string, error) {
+	createVerityTarget = func(_ context.Context, source, name string, verity *guestresource.DeviceVerityInfo) (string, error) {
 		dmVerityCalled = true
 		if source != mapperLinearPath {
 			t.Errorf("expected createVerityTarget source %s, got %s", mapperLinearPath, source)
@@ -484,7 +485,7 @@ func Test_CreateLinearTarget_And_CreateVerityTargetCalled_Called_Correctly(t *te
 func Test_RemoveDevice_Called_For_LinearTarget_On_MountInternalFailure(t *testing.T) {
 	clearTestDependencies()
 
-	mappingInfo := &prot.DeviceMappingInfo{
+	mappingInfo := &guestresource.LCOWVPMemMappingInfo{
 		DeviceOffsetInBytes: 0,
 		DeviceSizeInBytes:   1024,
 	}
@@ -493,7 +494,7 @@ func Test_RemoveDevice_Called_For_LinearTarget_On_MountInternalFailure(t *testin
 	mapperPath := fmt.Sprintf("/dev/mapper/%s", expectedTarget)
 	removeDeviceCalled := false
 
-	createZeroSectorLinearTarget = func(_ context.Context, source, name string, mapping *prot.DeviceMappingInfo) (string, error) {
+	createZeroSectorLinearTarget = func(_ context.Context, source, name string, mapping *guestresource.LCOWVPMemMappingInfo) (string, error) {
 		return mapperPath, nil
 	}
 	mountInternal = func(_ context.Context, source, target string) error {
@@ -525,7 +526,7 @@ func Test_RemoveDevice_Called_For_LinearTarget_On_MountInternalFailure(t *testin
 func Test_RemoveDevice_Called_For_VerityTarget_On_MountInternalFailure(t *testing.T) {
 	clearTestDependencies()
 
-	verity := &prot.DeviceVerityInfo{
+	verity := &guestresource.DeviceVerityInfo{
 		RootDigest: "hash",
 	}
 	expectedVerityTarget := fmt.Sprintf(verityDeviceFmt, 0, verity.RootDigest)
@@ -533,7 +534,7 @@ func Test_RemoveDevice_Called_For_VerityTarget_On_MountInternalFailure(t *testin
 	mapperPath := fmt.Sprintf("/dev/mapper/%s", expectedVerityTarget)
 	removeDeviceCalled := false
 
-	createVerityTarget = func(_ context.Context, source, name string, verity *prot.DeviceVerityInfo) (string, error) {
+	createVerityTarget = func(_ context.Context, source, name string, verity *guestresource.DeviceVerityInfo) (string, error) {
 		return mapperPath, nil
 	}
 	mountInternal = func(_ context.Context, _, _ string) error {
@@ -565,11 +566,11 @@ func Test_RemoveDevice_Called_For_VerityTarget_On_MountInternalFailure(t *testin
 func Test_RemoveDevice_Called_For_Both_Targets_On_MountInternalFailure(t *testing.T) {
 	clearTestDependencies()
 
-	mapping := &prot.DeviceMappingInfo{
+	mapping := &guestresource.LCOWVPMemMappingInfo{
 		DeviceOffsetInBytes: 0,
 		DeviceSizeInBytes:   1024,
 	}
-	verity := &prot.DeviceVerityInfo{
+	verity := &guestresource.DeviceVerityInfo{
 		RootDigest: "hash",
 	}
 	expectedError := errors.New("mountInternal error")
@@ -581,13 +582,13 @@ func Test_RemoveDevice_Called_For_Both_Targets_On_MountInternalFailure(t *testin
 	rmLinearCalled := false
 	rmVerityCalled := false
 
-	createZeroSectorLinearTarget = func(_ context.Context, source, name string, m *prot.DeviceMappingInfo) (string, error) {
+	createZeroSectorLinearTarget = func(_ context.Context, source, name string, m *guestresource.LCOWVPMemMappingInfo) (string, error) {
 		if source != expectedPMemDevice {
 			t.Errorf("expected createZeroSectorLinearTarget source %s, got %s", expectedPMemDevice, source)
 		}
 		return mapperLinearPath, nil
 	}
-	createVerityTarget = func(_ context.Context, source, name string, v *prot.DeviceVerityInfo) (string, error) {
+	createVerityTarget = func(_ context.Context, source, name string, v *guestresource.DeviceVerityInfo) (string, error) {
 		if source != mapperLinearPath {
 			t.Errorf("expected createVerityTarget to be called with %s, got %s", mapperLinearPath, source)
 		}

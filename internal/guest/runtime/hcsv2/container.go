@@ -8,6 +8,13 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/containerd/cgroups"
+	v1 "github.com/containerd/cgroups/stats/v1"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
+
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
@@ -16,12 +23,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/containerd/cgroups"
-	v1 "github.com/containerd/cgroups/stats/v1"
-	oci "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 type Container struct {
@@ -213,6 +216,6 @@ func (c *Container) GetStats(ctx context.Context) (*v1.Metrics, error) {
 	return cg.Stat(cgroups.IgnoreNotExist)
 }
 
-func (c *Container) modifyContainerConstraints(ctx context.Context, rt prot.ModifyRequestType, cc *prot.ContainerConstraintsV2) (err error) {
+func (c *Container) modifyContainerConstraints(ctx context.Context, rt guestrequest.RequestType, cc *guestresource.LCOWContainerConstraints) (err error) {
 	return c.Update(ctx, cc.Linux)
 }

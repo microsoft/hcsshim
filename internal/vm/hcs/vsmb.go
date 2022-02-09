@@ -5,7 +5,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/requesttype"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/vm"
 )
 
@@ -43,7 +43,7 @@ func vmVSMBOptionsToHCS(options *vm.VSMBOptions) *hcsschema.VirtualSmbShareOptio
 
 func (uvm *utilityVM) AddVSMB(ctx context.Context, path string, name string, allowed []string, options *vm.VSMBOptions) error {
 	modification := &hcsschema.ModifySettingRequest{
-		RequestType: requesttype.Add,
+		RequestType: guestrequest.RequestTypeAdd,
 		Settings: hcsschema.VirtualSmbShare{
 			Name:         name,
 			Options:      vmVSMBOptionsToHCS(options),
@@ -57,7 +57,7 @@ func (uvm *utilityVM) AddVSMB(ctx context.Context, path string, name string, all
 
 func (uvm *utilityVM) RemoveVSMB(ctx context.Context, name string) error {
 	modification := &hcsschema.ModifySettingRequest{
-		RequestType:  requesttype.Remove,
+		RequestType:  guestrequest.RequestTypeRemove,
 		Settings:     hcsschema.VirtualSmbShare{Name: name},
 		ResourcePath: resourcepaths.VSMBShareResourcePath,
 	}

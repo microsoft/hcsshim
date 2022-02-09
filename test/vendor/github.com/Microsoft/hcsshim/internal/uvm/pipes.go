@@ -7,7 +7,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/requesttype"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
@@ -31,7 +31,7 @@ func (pipe *PipeMount) Release(ctx context.Context) error {
 // AddPipe shares a named pipe into the UVM.
 func (uvm *UtilityVM) AddPipe(ctx context.Context, hostPath string) (*PipeMount, error) {
 	modification := &hcsschema.ModifySettingRequest{
-		RequestType:  requesttype.Add,
+		RequestType:  guestrequest.RequestTypeAdd,
 		ResourcePath: fmt.Sprintf(resourcepaths.MappedPipeResourceFormat, hostPath),
 	}
 	if err := uvm.modify(ctx, modification); err != nil {
@@ -43,7 +43,7 @@ func (uvm *UtilityVM) AddPipe(ctx context.Context, hostPath string) (*PipeMount,
 // RemovePipe removes a shared named pipe from the UVM.
 func (uvm *UtilityVM) RemovePipe(ctx context.Context, hostPath string) error {
 	modification := &hcsschema.ModifySettingRequest{
-		RequestType:  requesttype.Remove,
+		RequestType:  guestrequest.RequestTypeRemove,
 		ResourcePath: fmt.Sprintf(resourcepaths.MappedPipeResourceFormat, hostPath),
 	}
 	if err := uvm.modify(ctx, modification); err != nil {

@@ -6,12 +6,13 @@ import (
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/go-winio/pkg/process"
-	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
-	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
+
+	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/log"
 )
 
 // checkProcess checks if the process identified by the given pid has a name

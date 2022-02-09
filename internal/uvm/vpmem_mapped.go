@@ -8,12 +8,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/memory"
-	"github.com/Microsoft/hcsshim/internal/requesttype"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 const (
@@ -66,11 +66,17 @@ func pageAlign(t uint64) uint64 {
 
 // newMappedVPMemModifyRequest creates an hcsschema.ModifySettingsRequest to modify VPMem devices/mappings
 // for the multi-mapping setup
-func newMappedVPMemModifyRequest(ctx context.Context, rType string, deviceNumber uint32, md *mappedDeviceInfo, uvm *UtilityVM) (*hcsschema.ModifySettingRequest, error) {
-	guestSettings := guestrequest.LCOWMappedVPMemDevice{
+func newMappedVPMemModifyRequest(
+	ctx context.Context,
+	rType guestrequest.RequestType,
+	deviceNumber uint32,
+	md *mappedDeviceInfo,
+	uvm *UtilityVM,
+) (*hcsschema.ModifySettingRequest, error) {
+	guestSettings := guestresource.LCOWMappedVPMemDevice{
 		DeviceNumber: deviceNumber,
 		MountPath:    md.uvmPath,
-		MappingInfo: &guestrequest.LCOWMappedLayer{
+		MappingInfo: &guestresource.LCOWVPMemMappingInfo{
 			DeviceOffsetInBytes: md.mappedRegion.Offset(),
 			DeviceSizeInBytes:   md.sizeInBytes,
 		},
@@ -88,8 +94,8 @@ func newMappedVPMemModifyRequest(ctx context.Context, rType string, deviceNumber
 
 	request := &hcsschema.ModifySettingRequest{
 		RequestType: rType,
-		GuestRequest: guestrequest.GuestRequest{
-			ResourceType: guestrequest.ResourceTypeVPMemDevice,
+		GuestRequest: guestrequest.ModificationRequest{
+			ResourceType: guestresource.ResourceTypeVPMemDevice,
 			RequestType:  rType,
 			Settings:     guestSettings,
 		},
@@ -97,7 +103,7 @@ func newMappedVPMemModifyRequest(ctx context.Context, rType string, deviceNumber
 
 	pmem := uvm.vpmemDevicesMultiMapped[deviceNumber]
 	switch rType {
-	case requesttype.Add:
+	case guestrequest.RequestTypeAdd:
 		if pmem == nil {
 			request.Settings = hcsschema.VirtualPMemDevice{
 				ReadOnly:    true,
@@ -112,7 +118,7 @@ func newMappedVPMemModifyRequest(ctx context.Context, rType string, deviceNumber
 			}
 			request.ResourcePath = fmt.Sprintf(resourcepaths.VPMemDeviceResourceFormat, deviceNumber, md.mappedRegion.Offset())
 		}
-	case requesttype.Remove:
+	case guestrequest.RequestTypeRemove:
 		if pmem == nil {
 			return nil, errors.Errorf("no device found at location %d", deviceNumber)
 		}
@@ -259,13 +265,13 @@ func (uvm *UtilityVM) addVPMemMappedDevice(ctx context.Context, hostPath string)
 
 	uvmPath := fmt.Sprintf(lcowPackedVPMemLayerFmt, deviceNumber, memReg.Offset(), devSize)
 	md := newVPMemMappedDevice(hostPath, uvmPath, devSize, memReg)
-	modification, err := newMappedVPMemModifyRequest(ctx, requesttype.Add, deviceNumber, md, uvm)
+	modification, err := newMappedVPMemModifyRequest(ctx, guestrequest.RequestTypeAdd, deviceNumber, md, uvm)
 	if err := uvm.modify(ctx, modification); err != nil {
 		return "", errors.Errorf("uvm::addVPMemMappedDevice: failed to modify utility VM configuration: %s", err)
 	}
 	defer func() {
 		if err != nil {
-			rmRequest, _ := newMappedVPMemModifyRequest(ctx, requesttype.Remove, deviceNumber, md, uvm)
+			rmRequest, _ := newMappedVPMemModifyRequest(ctx, guestrequest.RequestTypeRemove, deviceNumber, md, uvm)
 			if err := uvm.modify(ctx, rmRequest); err != nil {
 				log.G(ctx).WithError(err).Debugf("failed to rollback modification")
 			}
@@ -293,7 +299,7 @@ func (uvm *UtilityVM) removeVPMemMappedDevice(ctx context.Context, hostPath stri
 		return nil
 	}
 
-	modification, err := newMappedVPMemModifyRequest(ctx, requesttype.Remove, devNum, md, uvm)
+	modification, err := newMappedVPMemModifyRequest(ctx, guestrequest.RequestTypeRemove, devNum, md, uvm)
 	if err != nil {
 		return err
 	}

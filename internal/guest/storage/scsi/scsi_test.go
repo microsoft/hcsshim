@@ -7,13 +7,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"os"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/guest/storage/test/policy"
-	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"golang.org/x/sys/unix"
+
+	"github.com/Microsoft/hcsshim/internal/guest/storage/test/policy"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
 func clearTestDependencies() {
@@ -643,10 +644,10 @@ func Test_CreateVerityTarget_And_Mount_Called_With_Correct_Parameters(t *testing
 		return nil
 	}
 
-	vInfo := &prot.DeviceVerityInfo{
+	vInfo := &guestresource.DeviceVerityInfo{
 		RootDigest: "hash",
 	}
-	createVerityTarget = func(_ context.Context, source, name string, verityInfo *prot.DeviceVerityInfo) (string, error) {
+	createVerityTarget = func(_ context.Context, source, name string, verityInfo *guestresource.DeviceVerityInfo) (string, error) {
 		createVerityTargetCalled = true
 		if source != expectedSource {
 			t.Errorf("expected source %s, got %s", expectedSource, source)
@@ -700,11 +701,11 @@ func Test_osMkdirAllFails_And_RemoveDevice_Called(t *testing.T) {
 		return expectedError
 	}
 
-	verityInfo := &prot.DeviceVerityInfo{
+	verityInfo := &guestresource.DeviceVerityInfo{
 		RootDigest: "hash",
 	}
 
-	createVerityTarget = func(_ context.Context, _, _ string, _ *prot.DeviceVerityInfo) (string, error) {
+	createVerityTarget = func(_ context.Context, _, _ string, _ *guestresource.DeviceVerityInfo) (string, error) {
 		return fmt.Sprintf("/dev/mapper/%s", expectedVerityName), nil
 	}
 

@@ -10,11 +10,11 @@ import (
 
 	"github.com/Microsoft/hcsshim/ext4/dmverity"
 	"github.com/Microsoft/hcsshim/ext4/tar2ext4"
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/requesttype"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 const (
@@ -54,7 +54,7 @@ func fileSystemSize(vhdPath string) (int64, int, error) {
 
 // readVeritySuperBlock reads ext4 super block for a given VHD to then further read the dm-verity super block
 // and root hash
-func readVeritySuperBlock(ctx context.Context, layerPath string) (*guestrequest.DeviceVerityInfo, error) {
+func readVeritySuperBlock(ctx context.Context, layerPath string) (*guestresource.DeviceVerityInfo, error) {
 	// dm-verity information is expected to be appended, the size of ext4 data will be the offset
 	// of the dm-verity super block, followed by merkle hash tree
 	ext4SizeInBytes, ext4BlockSize, err := fileSystemSize(layerPath)
@@ -75,7 +75,7 @@ func readVeritySuperBlock(ctx context.Context, layerPath string) (*guestrequest.
 		"dataBlockSize": dmvsb.DataBlockSize,
 	}).Debug("dm-verity information")
 
-	return &guestrequest.DeviceVerityInfo{
+	return &guestresource.DeviceVerityInfo{
 		Ext4SizeInBytes: ext4SizeInBytes,
 		BlockSize:       ext4BlockSize,
 		RootDigest:      dmvsb.RootDigest,
@@ -143,7 +143,7 @@ func (uvm *UtilityVM) addVPMemDefault(ctx context.Context, hostPath string) (_ s
 	}
 
 	modification := &hcsschema.ModifySettingRequest{
-		RequestType: requesttype.Add,
+		RequestType: guestrequest.RequestTypeAdd,
 		Settings: hcsschema.VirtualPMemDevice{
 			HostPath:    hostPath,
 			ReadOnly:    true,
@@ -153,7 +153,7 @@ func (uvm *UtilityVM) addVPMemDefault(ctx context.Context, hostPath string) (_ s
 	}
 
 	uvmPath := fmt.Sprintf(lcowDefaultVPMemLayerFmt, deviceNumber)
-	guestSettings := guestrequest.LCOWMappedVPMemDevice{
+	guestSettings := guestresource.LCOWMappedVPMemDevice{
 		DeviceNumber: deviceNumber,
 		MountPath:    uvmPath,
 	}
@@ -169,9 +169,9 @@ func (uvm *UtilityVM) addVPMemDefault(ctx context.Context, hostPath string) (_ s
 		guestSettings.VerityInfo = v
 	}
 
-	modification.GuestRequest = guestrequest.GuestRequest{
-		ResourceType: guestrequest.ResourceTypeVPMemDevice,
-		RequestType:  requesttype.Add,
+	modification.GuestRequest = guestrequest.ModificationRequest{
+		ResourceType: guestresource.ResourceTypeVPMemDevice,
+		RequestType:  guestrequest.RequestTypeAdd,
 		Settings:     guestSettings,
 	}
 
@@ -197,7 +197,7 @@ func (uvm *UtilityVM) removeVPMemDefault(ctx context.Context, hostPath string) e
 		return nil
 	}
 
-	var verity *guestrequest.DeviceVerityInfo
+	var verity *guestresource.DeviceVerityInfo
 	if v, _ := readVeritySuperBlock(ctx, hostPath); v != nil {
 		log.G(ctx).WithFields(logrus.Fields{
 			"hostPath":   hostPath,
@@ -206,12 +206,12 @@ func (uvm *UtilityVM) removeVPMemDefault(ctx context.Context, hostPath string) e
 		verity = v
 	}
 	modification := &hcsschema.ModifySettingRequest{
-		RequestType:  requesttype.Remove,
+		RequestType:  guestrequest.RequestTypeRemove,
 		ResourcePath: fmt.Sprintf(resourcepaths.VPMemControllerResourceFormat, deviceNumber),
-		GuestRequest: guestrequest.GuestRequest{
-			ResourceType: guestrequest.ResourceTypeVPMemDevice,
-			RequestType:  requesttype.Remove,
-			Settings: guestrequest.LCOWMappedVPMemDevice{
+		GuestRequest: guestrequest.ModificationRequest{
+			ResourceType: guestresource.ResourceTypeVPMemDevice,
+			RequestType:  guestrequest.RequestTypeRemove,
+			Settings: guestresource.LCOWMappedVPMemDevice{
 				DeviceNumber: deviceNumber,
 				MountPath:    device.uvmPath,
 				VerityInfo:   verity,

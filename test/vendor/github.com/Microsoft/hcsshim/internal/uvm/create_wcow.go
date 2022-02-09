@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/pkg/errors"
+	"go.opencensus.io/trace"
+
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/gcs"
@@ -19,8 +22,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/internal/wcow"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
 )
 
 // OptionsWCOW are the set of options passed to CreateWCOW() to create a utility vm.

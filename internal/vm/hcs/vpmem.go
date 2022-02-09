@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/pkg/errors"
+
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/requesttype"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/vm"
-	"github.com/pkg/errors"
 )
 
 func (uvmb *utilityVMBuilder) AddVPMemController(maximumDevices uint32, maximumSizeBytes uint64) error {
@@ -51,7 +52,7 @@ func (uvm *utilityVM) AddVPMemDevice(ctx context.Context, id uint32, path string
 		return err
 	}
 	request := &hcsschema.ModifySettingRequest{
-		RequestType: requesttype.Add,
+		RequestType: guestrequest.RequestTypeAdd,
 		Settings: hcsschema.VirtualPMemDevice{
 			HostPath:    path,
 			ReadOnly:    readOnly,
@@ -64,7 +65,7 @@ func (uvm *utilityVM) AddVPMemDevice(ctx context.Context, id uint32, path string
 
 func (uvm *utilityVM) RemoveVPMemDevice(ctx context.Context, id uint32, path string) error {
 	request := &hcsschema.ModifySettingRequest{
-		RequestType:  requesttype.Remove,
+		RequestType:  guestrequest.RequestTypeRemove,
 		ResourcePath: fmt.Sprintf(resourcepaths.VPMemControllerResourceFormat, id),
 	}
 	return uvm.cs.Modify(ctx, request)

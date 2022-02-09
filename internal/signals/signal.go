@@ -5,7 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 var (
@@ -21,11 +22,11 @@ var (
 //
 // If `signalsSupported==false` we verify that only SIGTERM/SIGKILL are sent.
 // All other signals are not supported on downlevel platforms.
-func ValidateSigstrLCOW(sigstr string, signalsSupported bool) (*guestrequest.SignalProcessOptionsLCOW, error) {
+func ValidateSigstrLCOW(sigstr string, signalsSupported bool) (*guestresource.SignalProcessOptionsLCOW, error) {
 	// All flavors including legacy default to SIGTERM on LCOW CtrlC on Windows
 	if sigstr == "" {
 		if signalsSupported {
-			return &guestrequest.SignalProcessOptionsLCOW{Signal: sigTerm}, nil
+			return &guestresource.SignalProcessOptionsLCOW{Signal: sigTerm}, nil
 		}
 		return nil, nil
 	}
@@ -51,7 +52,7 @@ func ValidateSigstrLCOW(sigstr string, signalsSupported bool) (*guestrequest.Sig
 	// Match signal string name
 	for k, v := range signalMapLcow {
 		if sigstr == k {
-			return &guestrequest.SignalProcessOptionsLCOW{Signal: v}, nil
+			return &guestresource.SignalProcessOptionsLCOW{Signal: v}, nil
 		}
 	}
 	return nil, ErrInvalidSignal
@@ -70,11 +71,11 @@ func ValidateSigstrLCOW(sigstr string, signalsSupported bool) (*guestrequest.Sig
 // semantics which will be properly translated to CTRLSHUTDOWN and `Terminate`.
 // To detect when WCOW needs to `Terminate` the return signal will be `nil` and
 // the return error will be `nil`.
-func ValidateSigstrWCOW(sigstr string, signalsSupported bool) (*guestrequest.SignalProcessOptionsWCOW, error) {
+func ValidateSigstrWCOW(sigstr string, signalsSupported bool) (*guestresource.SignalProcessOptionsWCOW, error) {
 	// All flavors including legacy default to SIGTERM on LCOW CtrlC on Windows
 	if sigstr == "" {
 		if signalsSupported {
-			return &guestrequest.SignalProcessOptionsWCOW{Signal: guestrequest.SignalValueWCOWCtrlShutdown}, nil
+			return &guestresource.SignalProcessOptionsWCOW{Signal: guestrequest.SignalValueWCOWCtrlShutdown}, nil
 		}
 		return nil, nil
 	}
@@ -119,7 +120,7 @@ func ValidateSigstrWCOW(sigstr string, signalsSupported bool) (*guestrequest.Sig
 			return nil, ErrInvalidSignal
 		}
 
-		return &guestrequest.SignalProcessOptionsWCOW{Signal: signalString}, nil
+		return &guestresource.SignalProcessOptionsWCOW{Signal: signalString}, nil
 	}
 }
 
@@ -128,7 +129,7 @@ func ValidateSigstrWCOW(sigstr string, signalsSupported bool) (*guestrequest.Sig
 //
 // If `signalsSupported==false` we verify that only SIGTERM/SIGKILL are sent.
 // All other signals are not supported on downlevel platforms.
-func ValidateLCOW(signal int, signalsSupported bool) (*guestrequest.SignalProcessOptionsLCOW, error) {
+func ValidateLCOW(signal int, signalsSupported bool) (*guestresource.SignalProcessOptionsLCOW, error) {
 	if !signalsSupported {
 		// If signals arent supported we just validate that its a known signal.
 		// We already return 0 since we only supported a platform Kill() at that
@@ -144,7 +145,7 @@ func ValidateLCOW(signal int, signalsSupported bool) (*guestrequest.SignalProces
 	// Match signal by value
 	for _, v := range signalMapLcow {
 		if signal == v {
-			return &guestrequest.SignalProcessOptionsLCOW{Signal: signal}, nil
+			return &guestresource.SignalProcessOptionsLCOW{Signal: signal}, nil
 		}
 	}
 	return nil, ErrInvalidSignal
@@ -161,7 +162,7 @@ func ValidateLCOW(signal int, signalsSupported bool) (*guestrequest.SignalProces
 // semantics which will be properly translated to CTRLSHUTDOWN and `Terminate`.
 // To detect when WCOW needs to `Terminate` the return signal will be `nil` and
 // the return error will be `nil`.
-func ValidateWCOW(signal int, signalsSupported bool) (*guestrequest.SignalProcessOptionsWCOW, error) {
+func ValidateWCOW(signal int, signalsSupported bool) (*guestresource.SignalProcessOptionsWCOW, error) {
 	if !signalsSupported {
 		// If signals arent supported we just validate that its a known signal.
 		// We already return 0 since we only supported a platform Kill() at that
@@ -196,6 +197,6 @@ func ValidateWCOW(signal int, signalsSupported bool) (*guestrequest.SignalProces
 			return nil, ErrInvalidSignal
 		}
 
-		return &guestrequest.SignalProcessOptionsWCOW{Signal: signalString}, nil
+		return &guestresource.SignalProcessOptionsWCOW{Signal: signalString}, nil
 	}
 }

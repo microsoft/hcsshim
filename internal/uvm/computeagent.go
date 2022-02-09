@@ -5,13 +5,6 @@ import (
 	"strings"
 
 	"github.com/Microsoft/go-winio"
-	"github.com/Microsoft/hcsshim/hcn"
-	"github.com/Microsoft/hcsshim/internal/computeagent"
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
-	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/hns"
-	ncproxynetworking "github.com/Microsoft/hcsshim/internal/ncproxy/networking"
-	"github.com/Microsoft/hcsshim/pkg/octtrpc"
 	"github.com/containerd/ttrpc"
 	"github.com/containerd/typeurl"
 	"github.com/pkg/errors"
@@ -19,7 +12,14 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/Microsoft/hcsshim/hcn"
+	"github.com/Microsoft/hcsshim/internal/computeagent"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/log"
+	ncproxynetworking "github.com/Microsoft/hcsshim/internal/ncproxy/networking"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/pkg/octtrpc"
 )
 
 func init() {
@@ -41,8 +41,8 @@ type agentComputeSystem interface {
 	RemoveEndpointFromNS(context.Context, string, *hns.HNSEndpoint) error
 	AssignDevice(context.Context, string, uint16, string) (*VPCIDevice, error)
 	RemoveDevice(context.Context, string, uint16) error
-	AddNICInGuest(context.Context, *guestrequest.LCOWNetworkAdapter) error
-	RemoveNICInGuest(context.Context, *guestrequest.LCOWNetworkAdapter) error
+	AddNICInGuest(context.Context, *guestresource.LCOWNetworkAdapter) error
+	RemoveNICInGuest(context.Context, *guestresource.LCOWNetworkAdapter) error
 }
 
 var _ agentComputeSystem = &UtilityVM{}
@@ -110,7 +110,7 @@ func (ca *computeAgent) AddNIC(ctx context.Context, req *computeagent.AddNICInte
 
 	switch endpt := endpoint.(type) {
 	case *ncproxynetworking.Endpoint:
-		cfg := &guestrequest.LCOWNetworkAdapter{
+		cfg := &guestresource.LCOWNetworkAdapter{
 			NamespaceID:    endpt.NamespaceID,
 			ID:             req.NicID,
 			IPAddress:      endpt.Settings.IPAddress,
@@ -205,7 +205,7 @@ func (ca *computeAgent) DeleteNIC(ctx context.Context, req *computeagent.DeleteN
 
 	switch endpt := endpoint.(type) {
 	case *ncproxynetworking.Endpoint:
-		cfg := &guestrequest.LCOWNetworkAdapter{
+		cfg := &guestresource.LCOWNetworkAdapter{
 			ID: req.NicID,
 		}
 		if err := ca.uvm.RemoveNICInGuest(ctx, cfg); err != nil {

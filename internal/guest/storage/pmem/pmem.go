@@ -8,16 +8,16 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Microsoft/hcsshim/internal/guest/prot"
-	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
-
-	"github.com/Microsoft/hcsshim/internal/guest/storage"
-	dm "github.com/Microsoft/hcsshim/internal/guest/storage/devicemapper"
-	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
+
+	"github.com/Microsoft/hcsshim/internal/guest/storage"
+	dm "github.com/Microsoft/hcsshim/internal/guest/storage/devicemapper"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
 // Test dependencies
@@ -70,7 +70,14 @@ func mount(ctx context.Context, source, target string) (err error) {
 //
 // Note: both mappingInfo and verityInfo can be non-nil at the same time, in that case
 // linear target is created first and it becomes the data/hash device for verity target.
-func Mount(ctx context.Context, device uint32, target string, mappingInfo *prot.DeviceMappingInfo, verityInfo *prot.DeviceVerityInfo, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
+func Mount(
+	ctx context.Context,
+	device uint32,
+	target string,
+	mappingInfo *guestresource.LCOWVPMemMappingInfo,
+	verityInfo *guestresource.DeviceVerityInfo,
+	securityPolicy securitypolicy.SecurityPolicyEnforcer,
+) (err error) {
 	mCtx, span := trace.StartSpan(ctx, "pmem::Mount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -124,7 +131,14 @@ func Mount(ctx context.Context, device uint32, target string, mappingInfo *prot.
 }
 
 // Unmount unmounts `target` and removes corresponding linear and verity targets when needed
-func Unmount(ctx context.Context, devNumber uint32, target string, mappingInfo *prot.DeviceMappingInfo, verityInfo *prot.DeviceVerityInfo, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
+func Unmount(
+	ctx context.Context,
+	devNumber uint32,
+	target string,
+	mappingInfo *guestresource.LCOWVPMemMappingInfo,
+	verityInfo *guestresource.DeviceVerityInfo,
+	securityPolicy securitypolicy.SecurityPolicyEnforcer,
+) (err error) {
 	_, span := trace.StartSpan(ctx, "pmem::Unmount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()

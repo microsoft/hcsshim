@@ -6,21 +6,22 @@ package scsi
 import (
 	"context"
 	"fmt"
-	dm "github.com/Microsoft/hcsshim/internal/guest/storage/devicemapper"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/guest/prot"
-	"github.com/Microsoft/hcsshim/internal/guest/storage"
-	"github.com/Microsoft/hcsshim/internal/guest/storage/crypt"
-	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
+
+	"github.com/Microsoft/hcsshim/internal/guest/storage"
+	"github.com/Microsoft/hcsshim/internal/guest/storage/crypt"
+	dm "github.com/Microsoft/hcsshim/internal/guest/storage/devicemapper"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
 // Test dependencies
@@ -50,7 +51,17 @@ const (
 //
 // If `encrypted` is set to true, the SCSI device will be encrypted using
 // dm-crypt.
-func Mount(ctx context.Context, controller, lun uint8, target string, readonly bool, encrypted bool, options []string, verityInfo *prot.DeviceVerityInfo, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
+func Mount(
+	ctx context.Context,
+	controller,
+	lun uint8,
+	target string,
+	readonly bool,
+	encrypted bool,
+	options []string,
+	verityInfo *guestresource.DeviceVerityInfo,
+	securityPolicy securitypolicy.SecurityPolicyEnforcer,
+) (err error) {
 	spnCtx, span := trace.StartSpan(ctx, "scsi::Mount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -151,7 +162,15 @@ func Mount(ctx context.Context, controller, lun uint8, target string, readonly b
 // Unmount unmounts a SCSI device mounted at `target`.
 //
 // If `encrypted` is true, it removes all its associated dm-crypto state.
-func Unmount(ctx context.Context, controller, lun uint8, target string, encrypted bool, verityInfo *prot.DeviceVerityInfo, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
+func Unmount(
+	ctx context.Context,
+	controller,
+	lun uint8,
+	target string,
+	encrypted bool,
+	verityInfo *guestresource.DeviceVerityInfo,
+	securityPolicy securitypolicy.SecurityPolicyEnforcer,
+) (err error) {
 	ctx, span := trace.StartSpan(ctx, "scsi::Unmount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()

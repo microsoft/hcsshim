@@ -13,15 +13,16 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/Microsoft/hcsshim/internal/gcs"
-	"github.com/Microsoft/hcsshim/internal/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
-	"github.com/Microsoft/hcsshim/internal/requesttype"
-	"github.com/sirupsen/logrus"
-	"golang.org/x/sync/errgroup"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 // entropyBytes is the number of bytes of random data to send to a Linux UVM
@@ -135,9 +136,9 @@ func (uvm *UtilityVM) configureHvSocketForGCS(ctx context.Context) (err error) {
 	}
 
 	conSetupReq := &hcsschema.ModifySettingRequest{
-		GuestRequest: guestrequest.GuestRequest{
-			RequestType:  requesttype.Update,
-			ResourceType: guestrequest.ResourceTypeHvSocket,
+		GuestRequest: guestrequest.ModificationRequest{
+			RequestType:  guestrequest.RequestTypeUpdate,
+			ResourceType: guestresource.ResourceTypeHvSocket,
 			Settings:     hvsocketAddress,
 		},
 	}
