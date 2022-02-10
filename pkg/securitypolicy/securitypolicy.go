@@ -38,19 +38,27 @@ type EnvRuleConfig struct {
 // ContainerConfig contains toml or JSON config for container described
 // in security policy.
 type ContainerConfig struct {
-	ImageName string     `json:"image_name" toml:"image_name"`
-	Command   []string   `json:"command" toml:"command"`
-	Auth      AuthConfig `json:"auth" toml:"auth"`
-	EnvRules  []EnvRule  `json:"env_rules" toml:"env_rule"`
+	ImageName  string     `json:"image_name" toml:"image_name"`
+	Command    []string   `json:"command" toml:"command"`
+	Auth       AuthConfig `json:"auth" toml:"auth"`
+	EnvRules   []EnvRule  `json:"env_rules" toml:"env_rule"`
+	WorkingDir string     `json:"working_dir" toml:"working_dir"`
 }
 
 // NewContainerConfig creates a new ContainerConfig from the given values.
-func NewContainerConfig(imageName string, command []string, envRules []EnvRule, auth AuthConfig) ContainerConfig {
+func NewContainerConfig(
+	imageName string,
+	command []string,
+	envRules []EnvRule,
+	auth AuthConfig,
+	workingDir string,
+) ContainerConfig {
 	return ContainerConfig{
-		ImageName: imageName,
-		Command:   command,
-		EnvRules:  envRules,
-		Auth:      auth,
+		ImageName:  imageName,
+		Command:    command,
+		EnvRules:   envRules,
+		Auth:       auth,
+		WorkingDir: workingDir,
 	}
 }
 
@@ -72,6 +80,9 @@ type securityPolicyContainer struct {
 	// order that the layers are overlayed is important and needs to be enforced
 	// as part of policy.
 	Layers []string `json:"layers"`
+	// WorkingDir is a path to container's working directory, which all the processes
+	// will default to.
+	WorkingDir string `json:"working_dir"`
 }
 
 // SecurityPolicyState is a structure that holds user supplied policy to enforce
@@ -141,9 +152,10 @@ type Containers struct {
 }
 
 type Container struct {
-	Command  CommandArgs `json:"command"`
-	EnvRules EnvRules    `json:"env_rules"`
-	Layers   Layers      `json:"layers"`
+	Command    CommandArgs `json:"command"`
+	EnvRules   EnvRules    `json:"env_rules"`
+	Layers     Layers      `json:"layers"`
+	WorkingDir string      `json:"working_dir"`
 }
 
 type Layers struct {
@@ -170,14 +182,15 @@ type EnvRule struct {
 
 // NewContainer creates a new Container instance from the provided values
 // or an error if envRules validation fails.
-func NewContainer(command, layers []string, envRules []EnvRule) (*Container, error) {
+func NewContainer(command, layers []string, envRules []EnvRule, workingDir string) (*Container, error) {
 	if err := validateEnvRules(envRules); err != nil {
 		return nil, err
 	}
 	return &Container{
-		Command:  newCommandArgs(command),
-		Layers:   newLayers(layers),
-		EnvRules: newEnvRules(envRules),
+		Command:    newCommandArgs(command),
+		Layers:     newLayers(layers),
+		EnvRules:   newEnvRules(envRules),
+		WorkingDir: workingDir,
 	}, nil
 }
 

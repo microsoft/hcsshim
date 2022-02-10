@@ -29,6 +29,6 @@ func (p *MountMonitoringSecurityPolicyEnforcer) EnforceOverlayMountPolicy(contai
 	return nil
 }
 
-func (p *MountMonitoringSecurityPolicyEnforcer) EnforceCreateContainerPolicy(containerID string, argList []string, envList []string) (err error) {
+func (p *MountMonitoringSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ string, _ []string, _ []string, _ string) (err error) {
 	return nil
 }

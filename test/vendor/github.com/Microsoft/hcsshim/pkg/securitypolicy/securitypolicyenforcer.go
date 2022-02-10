@@ -14,7 +14,7 @@ type SecurityPolicyEnforcer interface {
 	EnforceDeviceMountPolicy(target string, deviceHash string) (err error)
 	EnforceDeviceUnmountPolicy(unmountTarget string) (err error)
 	EnforceOverlayMountPolicy(containerID string, layerPaths []string) (err error)
-	EnforceCreateContainerPolicy(containerID string, argList []string, envList []string) (err error)
+	EnforceCreateContainerPolicy(containerID string, argList []string, envList []string, workingDir string) (err error)
 }
 
 func NewSecurityPolicyEnforcer(state SecurityPolicyState) (SecurityPolicyEnforcer, error) {
@@ -298,7 +298,12 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID 
 	return nil
 }
 
-func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(containerID string, argList []string, envList []string) (err error) {
+func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(
+	containerID string,
+	argList []string,
+	envList []string,
+	workingDir string,
+) (err error) {
 	pe.mutex.Lock()
 	defer pe.mutex.Unlock()
 
@@ -310,13 +315,15 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(container
 		return errors.New("container has already been started")
 	}
 
-	err = pe.enforceCommandPolicy(containerID, argList)
-	if err != nil {
+	if err = pe.enforceCommandPolicy(containerID, argList); err != nil {
 		return err
 	}
 
-	err = pe.enforceEnvironmentVariablePolicy(containerID, envList)
-	if err != nil {
+	if err = pe.enforceEnvironmentVariablePolicy(containerID, envList); err != nil {
+		return err
+	}
+
+	if err = pe.enforceWorkingDirPolicy(containerID, workingDir); err != nil {
 		return err
 	}
 
@@ -382,6 +389,24 @@ func (pe *StandardSecurityPolicyEnforcer) enforceEnvironmentVariablePolicy(conta
 		}
 	}
 
+	return nil
+}
+
+func (pe *StandardSecurityPolicyEnforcer) enforceWorkingDirPolicy(containerID string, workingDir string) error {
+	possibleIndices := possibleIndexesForID(containerID, pe.ContainerIndexToContainerIds)
+
+	matched := false
+	for _, pIndex := range possibleIndices {
+		pWorkingDir := pe.Containers[pIndex].WorkingDir
+		if pWorkingDir == workingDir {
+			matched = true
+			continue
+		}
+		pe.narrowMatchesForContainerIndex(pIndex, containerID)
+	}
+	if !matched {
+		return fmt.Errorf("working_dir %s unmached by policy rule", workingDir)
+	}
 	return nil
 }
 
@@ -463,7 +488,7 @@ func (p *OpenDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID s
 	return nil
 }
 
-func (p *OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(containerID string, argList []string, envList []string) (err error) {
+func (p *OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ string, _ []string, _ []string, _ string) (err error) {
 	return nil
 }
 
@@ -483,6 +508,6 @@ func (p *ClosedDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID
 	return errors.New("creating an overlay fs is denied by policy")
 }
 
-func (p *ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(containerID string, argList []string, envList []string) (err error) {
+func (p *ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ string, _ []string, _ []string, _ string) (err error) {
 	return errors.New("running commands is denied by policy")
 }

@@ -799,7 +799,7 @@ func (*generatedContainers) Generate(r *rand.Rand, size int) reflect.Value {
 }
 
 func generateContainers(r *rand.Rand, upTo int32) *generatedContainers {
-	containers := []securityPolicyContainer{}
+	var containers []securityPolicyContainer
 
 	numContainers := (int)(atLeastOneAtMost(r, upTo))
 	for i := 0; i < numContainers; i++ {
