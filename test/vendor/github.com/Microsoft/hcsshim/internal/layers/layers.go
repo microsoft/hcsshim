@@ -77,7 +77,6 @@ func (layers *ImageLayers) Release(ctx context.Context, all bool) error {
 // 					  the host at `volumeMountPath`.
 //
 // TODO dcantah: Keep better track of the layers that are added, don't simply discard the SCSI, VSMB, etc. resource types gotten inside.
-
 func MountContainerLayers(ctx context.Context, containerID string, layerFolders []string, guestRoot string, volumeMountPath string, vm *uvm.UtilityVM) (_ string, err error) {
 	log.G(ctx).WithField("layerFolders", layerFolders).Debug("hcsshim::mountContainerLayers")
 
