@@ -12,13 +12,14 @@ import (
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-const processorWeightMax = 10000
-
 // This file contains helpers for converting parts of the oci spec to useful
 // structures/limits to be applied to a job object.
-func getUserTokenInheritAnnotation(annots map[string]string) bool {
-	val, ok := annots[annotations.HostProcessInheritUser]
-	return ok && val == "true"
+
+const processorWeightMax = 10000
+
+// inheritUserTokenIsSet checks if the annotation that specifies whether we should inherit the token of the current process is set.
+func inheritUserTokenIsSet(annots map[string]string) bool {
+	return annots[annotations.HostProcessInheritUser] == "true"
 }
 
 // Oci spec to job object limit information. Will do any conversions to job object specific values from

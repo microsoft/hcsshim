@@ -206,7 +206,7 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 	}
 
 	var token windows.Token
-	if getUserTokenInheritAnnotation(c.spec.Annotations) {
+	if inheritUserTokenIsSet(c.spec.Annotations) {
 		token, err = openCurrentProcessToken()
 		if err != nil {
 			return nil, err
