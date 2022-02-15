@@ -345,7 +345,7 @@ func (uvm *UtilityVM) AddNetNS(ctx context.Context, hcnNamespace *hcn.HostComput
 			guestNamespace := hcsschema.ModifySettingRequest{
 				GuestRequest: guestrequest.ModificationRequest{
 					ResourceType: guestresource.ResourceTypeNetworkNamespace,
-					RequestType:  guestrequest.RequestTypeRemove,
+					RequestType:  guestrequest.RequestTypeAdd,
 					Settings:     hcnNamespace,
 				},
 			}
@@ -686,7 +686,7 @@ func (uvm *UtilityVM) AddNICInGuest(ctx context.Context, cfg *guestresource.LCOW
 	request := hcsschema.ModifySettingRequest{}
 	request.GuestRequest = guestrequest.ModificationRequest{
 		ResourceType: guestresource.ResourceTypeNetwork,
-		RequestType:  guestrequest.RequestTypePreAdd,
+		RequestType:  guestrequest.RequestTypeAdd,
 		Settings:     cfg,
 	}
 
