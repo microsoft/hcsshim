@@ -10,9 +10,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/cpugroup"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
-	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
@@ -222,7 +220,7 @@ func Test_Pod_UpdateResources_CPUShares(t *testing.T) {
 }
 
 func Test_Pod_UpdateResources_CPUGroup(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.V21H1)
+	t.Skip("Skipping for now")
 	ctx := context.Background()
 
 	processorTopology, err := processorinfo.HostProcessorInfo(ctx)
