@@ -48,12 +48,12 @@ func processErrNoSpace(ctx context.Context, path string, err error) {
 	}
 
 	log.G(ctx).WithFields(logrus.Fields{
-		"available-disk-space-GB": toGigabyteStr(available),
-		"free-disk-space-GB":      toGigabyteStr(free),
-		"used-disk-space-GB":      toGigabyteStr(used),
-		"total-inodes":            st.Files,
-		"free-inodes":             st.Ffree,
-		"path":                    path,
+		"available-disk-space-GiB": toGigabyteStr(available),
+		"free-disk-space-GiB":      toGigabyteStr(free),
+		"used-disk-space-GiB":      toGigabyteStr(used),
+		"total-inodes":             st.Files,
+		"free-inodes":              st.Ffree,
+		"path":                     path,
 	}).WithError(err).Warn("got ENOSPC, gathering diagnostics")
 }
 
