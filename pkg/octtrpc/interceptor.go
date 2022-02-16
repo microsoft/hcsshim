@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"strings"
 
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/containerd/ttrpc"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
@@ -67,7 +69,7 @@ func ClientInterceptor(opts ...Option) ttrpc.UnaryClientInterceptor {
 		opt(&o)
 	}
 	return func(ctx context.Context, req *ttrpc.Request, resp *ttrpc.Response, info *ttrpc.UnaryClientInfo, inv ttrpc.Invoker) (err error) {
-		ctx, span := trace.StartSpan(
+		ctx, span := oc.StartSpan(
 			ctx,
 			convertMethodName(info.FullMethod),
 			trace.WithSampler(o.sampler),
@@ -105,8 +107,9 @@ func ServerInterceptor(opts ...Option) ttrpc.UnaryServerInterceptor {
 				trace.WithSpanKind(trace.SpanKindServer),
 				trace.WithSampler(o.sampler),
 			)
+			ctx = log.U(ctx)
 		} else {
-			ctx, span = trace.StartSpan(
+			ctx, span = oc.StartSpan(
 				ctx,
 				name,
 				trace.WithSpanKind(trace.SpanKindServer),

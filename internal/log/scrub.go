@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"strings"
 	"sync/atomic"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -38,6 +37,7 @@ func SetScrubbing(enable bool) {
 // IsScrubbingEnabled checks if scrubbing is enabled
 func IsScrubbingEnabled() bool {
 	v := atomic.LoadInt32(&_scrub)
+
 	return v != 0
 }
 
@@ -56,11 +56,12 @@ func ScrubProcessParameters(s string) (string, error) {
 	}
 	pp.Environment = map[string]string{_scrubbedReplacement: _scrubbedReplacement}
 
-	buf := bytes.NewBuffer(b[:0])
-	if err := encode(buf, pp); err != nil {
+	b, err := encodeBuffer(bytes.NewBuffer(b[:0]), pp)
+	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(buf.String()), nil
+
+	return string(b), nil
 }
 
 // ScrubBridgeCreate scrubs requests sent over the bridge of type
@@ -84,8 +85,10 @@ func scrubBridgeCreate(m genMap) error {
 			return err
 		}
 		m["ContainerConfig"] = string(b)
+
 		return nil
 	}
+
 	return ErrUnknownType
 }
 
@@ -97,10 +100,12 @@ func scrubLinuxHostedSystem(m genMap) error {
 		if m, ok := index(m, "process"); ok {
 			if _, ok := m["env"]; ok {
 				m["env"] = []string{_scrubbedReplacement}
+
 				return nil
 			}
 		}
 	}
+
 	return ErrUnknownType
 }
 
@@ -150,21 +155,12 @@ func scrubBytes(b []byte, scrub scrubberFunc) ([]byte, error) {
 		return nil, err
 	}
 
-	buf := &bytes.Buffer{}
-	if err := encode(buf, m); err != nil {
+	b, err := encode(m)
+	if err != nil {
 		return nil, err
 	}
 
-	return bytes.TrimSpace(buf.Bytes()), nil
-}
-
-func encode(buf *bytes.Buffer, v interface{}) error {
-	enc := json.NewEncoder(buf)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(v); err != nil {
-		return err
-	}
-	return nil
+	return b, nil
 }
 
 func isRequestBase(m genMap) bool {

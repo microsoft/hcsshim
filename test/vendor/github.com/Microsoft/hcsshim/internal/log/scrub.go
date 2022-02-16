@@ -158,14 +158,6 @@ func scrubBytes(b []byte, scrub scrubberFunc) ([]byte, error) {
 	return bytes.TrimSpace(buf.Bytes()), nil
 }
 
-func encode(buf *bytes.Buffer, v interface{}) error {
-	enc := json.NewEncoder(buf)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(v); err != nil {
-		return err
-	}
-	return nil
-}
 
 func isRequestBase(m genMap) bool {
 	// neither of these are (currently) `omitempty`

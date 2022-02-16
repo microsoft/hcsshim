@@ -11,12 +11,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/cow"
-	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/windows"
+
+	"github.com/Microsoft/hcsshim/internal/cow"
+	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/oc"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 // CmdProcessRequest stores information on command requests made through this package.
@@ -28,6 +32,8 @@ type CmdProcessRequest struct {
 	Stdout   string
 	Stderr   string
 }
+
+// todo (helsaawy): replace use of Cmd.Log and switch to log.WithContext
 
 // Cmd represents a command being prepared or run in a process host.
 type Cmd struct {
@@ -111,7 +117,7 @@ func Command(host cow.ProcessHost, name string, arg ...string) *Cmd {
 		Spec: &specs.Process{
 			Args: append([]string{name}, arg...),
 		},
-		Log:       logrus.NewEntry(logrus.StandardLogger()),
+		Log:       log.G(context.Background()),
 		ExitState: &ExitState{},
 	}
 	if host.OS() == "windows" {
@@ -128,12 +134,31 @@ func Command(host cow.ProcessHost, name string, arg ...string) *Cmd {
 func CommandContext(ctx context.Context, host cow.ProcessHost, name string, arg ...string) *Cmd {
 	cmd := Command(host, name, arg...)
 	cmd.Context = ctx
+	cmd.Log = log.G(ctx)
 	return cmd
 }
 
 // Start starts a command. The caller must ensure that if Start succeeds,
 // Wait is eventually called to clean up resources.
-func (c *Cmd) Start() error {
+func (c *Cmd) Start() (err error) {
+	pctx := context.Background()
+	if c.Context != nil {
+		pctx = c.Context
+	}
+	ctx, span := oc.StartSpan(pctx, "cmd::Start")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("cmd", log.Format(ctx, c.Spec.Args)),
+		trace.BoolAttribute("isOCI", c.Host.IsOCI()),
+		trace.StringAttribute("os", c.Host.OS()),
+		trace.StringAttribute("cwd", c.Spec.Cwd),
+		trace.StringAttribute("env", log.Format(ctx, c.Spec.Env)))
+
+	if c.Log == nil {
+		c.Log = log.G(ctx)
+	}
+
 	c.allDoneCh = make(chan struct{})
 	var x interface{}
 	if !c.Host.IsOCI() {
@@ -182,17 +207,15 @@ func (c *Cmd) Start() error {
 		}
 		x = lpp
 	}
-	if c.Context != nil && c.Context.Err() != nil {
-		return c.Context.Err()
+	if err = ctx.Err(); err != nil {
+		return err
 	}
-	p, err := c.Host.CreateProcess(context.TODO(), x)
+	p, err := c.Host.CreateProcess(ctx, x)
 	if err != nil {
 		return err
 	}
 	c.Process = p
-	if c.Log != nil {
-		c.Log = c.Log.WithField("pid", p.Pid())
-	}
+	c.Log = c.Log.WithField("pid", p.Pid())
 
 	// Start relaying process IO.
 	stdin, stdout, stderr := p.Stdio()
@@ -209,7 +232,7 @@ func (c *Cmd) Start() error {
 				c.stdinErr.Store(err)
 			}
 			// Notify the process that there is no more input.
-			if err := p.CloseStdin(context.TODO()); err != nil && c.Log != nil {
+			if err := p.CloseStdin(ctx); err != nil && c.Log != nil {
 				c.Log.WithError(err).Warn("failed to close Cmd stdin")
 			}
 		}()
@@ -218,7 +241,7 @@ func (c *Cmd) Start() error {
 	if c.Stdout != nil {
 		c.iogrp.Go(func() error {
 			_, err := relayIO(c.Stdout, stdout, c.Log, "stdout")
-			if err := p.CloseStdout(context.TODO()); err != nil {
+			if err := p.CloseStdout(ctx); err != nil {
 				c.Log.WithError(err).Warn("failed to close Cmd stdout")
 			}
 			return err
@@ -228,7 +251,7 @@ func (c *Cmd) Start() error {
 	if c.Stderr != nil {
 		c.iogrp.Go(func() error {
 			_, err := relayIO(c.Stderr, stderr, c.Log, "stderr")
-			if err := p.CloseStderr(context.TODO()); err != nil {
+			if err := p.CloseStderr(ctx); err != nil {
 				c.Log.WithError(err).Warn("failed to close Cmd stderr")
 			}
 			return err
@@ -239,20 +262,33 @@ func (c *Cmd) Start() error {
 		go func() {
 			select {
 			case <-c.Context.Done():
-				_, _ = c.Process.Kill(context.TODO())
+				// Process.Kill (via Process.Signal) will not send an RPC if the
+				// provided context in is cancelled (bridge.AsyncRPC will end early)
+				kctx := log.Copy(context.Background(), ctx)
+				_, _ = c.Process.Kill(kctx)
 			case <-c.allDoneCh:
 			}
 		}()
 	}
+
 	return nil
 }
 
 // Wait waits for a command and its IO to complete and closes the underlying
 // process. It can only be called once. It returns an ExitError if the command
 // runs and returns a non-zero exit code.
-func (c *Cmd) Wait() error {
+func (c *Cmd) Wait() (err error) {
+	pctx := context.Background()
+	if c.Context != nil {
+		pctx = c.Context
+	}
+	_, span := oc.StartSpan(pctx, "cmd::Wait")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("cmd", log.Format(pctx, c.Spec.Args)))
+
 	waitErr := c.Process.Wait()
-	if waitErr != nil && c.Log != nil {
+	if waitErr != nil {
 		c.Log.WithError(waitErr).Warn("process wait failed")
 	}
 	state := &ExitState{}
@@ -271,9 +307,7 @@ func (c *Cmd) Wait() error {
 			case <-t.C:
 				// Close the process to cancel any reads to stdout or stderr.
 				c.Process.Close()
-				if c.Log != nil {
-					c.Log.Warn("timed out waiting for stdio relay")
-				}
+				c.Log.Warn("timed out waiting for stdio relay")
 			}
 		}()
 	}

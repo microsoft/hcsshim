@@ -13,8 +13,10 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/vmcompute"
+	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
 
@@ -120,10 +122,14 @@ func (process *Process) processSignalResult(ctx context.Context, err error) (boo
 //
 // For WCOW `guestresource.SignalProcessOptionsWCOW`.
 func (process *Process) Signal(ctx context.Context, options interface{}) (bool, error) {
+	operation := "hcs::Process::Signal"
+	ctx, etr := log.S(ctx, logrus.Fields{
+		logfields.ProcessID:   process.processID,
+		logfields.ContainerID: process.SystemID()})
+	etr.Trace(operation)
+
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
-
-	operation := "hcs::Process::Signal"
 
 	if process.handle == 0 {
 		return false, makeProcessError(process, operation, ErrAlreadyClosed, nil)
@@ -145,10 +151,14 @@ func (process *Process) Signal(ctx context.Context, options interface{}) (bool, 
 
 // Kill signals the process to terminate but does not wait for it to finish terminating.
 func (process *Process) Kill(ctx context.Context) (bool, error) {
+	operation := "hcs::Process::Kill"
+	ctx, etr := log.S(ctx, logrus.Fields{
+		logfields.ProcessID:   process.processID,
+		logfields.ContainerID: process.SystemID()})
+	etr.Trace(operation)
+
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
-
-	operation := "hcs::Process::Kill"
 
 	if process.handle == 0 {
 		return false, makeProcessError(process, operation, ErrAlreadyClosed, nil)
@@ -203,7 +213,7 @@ func (process *Process) Kill(ctx context.Context) (bool, error) {
 // call multiple times.
 func (process *Process) waitBackground() {
 	operation := "hcs::Process::waitBackground"
-	ctx, span := trace.StartSpan(context.Background(), operation)
+	ctx, span := oc.StartSpan(context.Background(), operation)
 	defer span.End()
 	span.AddAttributes(
 		trace.StringAttribute("cid", process.SystemID()),
@@ -245,7 +255,7 @@ func (process *Process) waitBackground() {
 			}
 		}
 	}
-	log.G(ctx).WithField("exitCode", exitCode).Debug("process exited")
+	log.G(ctx).WithField("exitCode", exitCode).Debug("hcs::Process process exited")
 
 	process.closedWaitOnce.Do(func() {
 		process.exitCode = exitCode
@@ -264,10 +274,14 @@ func (process *Process) Wait() error {
 
 // ResizeConsole resizes the console of the process.
 func (process *Process) ResizeConsole(ctx context.Context, width, height uint16) error {
+	operation := "hcs::Process::ResizeConsole"
+	ctx, etr := log.S(ctx, logrus.Fields{
+		logfields.ProcessID:   process.processID,
+		logfields.ContainerID: process.SystemID()})
+	etr.Trace(operation)
+
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
-
-	operation := "hcs::Process::ResizeConsole"
 
 	if process.handle == 0 {
 		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
@@ -314,7 +328,7 @@ func (process *Process) ExitCode() (int, error) {
 // are the responsibility of the caller to close.
 func (process *Process) StdioLegacy() (_ io.WriteCloser, _ io.ReadCloser, _ io.ReadCloser, err error) {
 	operation := "hcs::Process::StdioLegacy"
-	ctx, span := trace.StartSpan(context.Background(), operation)
+	ctx, span := oc.StartSpan(context.Background(), operation)
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
@@ -361,11 +375,17 @@ func (process *Process) Stdio() (stdin io.Writer, stdout, stderr io.Reader) {
 
 // CloseStdin closes the write side of the stdin pipe so that the process is
 // notified on the read side that there is no more data in stdin.
-func (process *Process) CloseStdin(ctx context.Context) error {
+func (process *Process) CloseStdin(ctx context.Context) (err error) {
+	operation := "hcs::Process::CloseStdin"
+	ctx, span := oc.StartSpan(ctx, operation) //nolint:ineffassign,staticcheck
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute("cid", process.SystemID()),
+		trace.Int64Attribute("pid", int64(process.processID)))
+
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
-
-	operation := "hcs::Process::CloseStdin"
 
 	if process.handle == 0 {
 		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
@@ -400,7 +420,7 @@ func (process *Process) CloseStdin(ctx context.Context) error {
 }
 
 func (process *Process) CloseStdout(ctx context.Context) (err error) {
-	ctx, span := trace.StartSpan(ctx, "hcs::Process::CloseStdout") //nolint:ineffassign,staticcheck
+	ctx, span := oc.StartSpan(ctx, "hcs::Process::CloseStdout") //nolint:ineffassign,staticcheck
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
@@ -424,7 +444,7 @@ func (process *Process) CloseStdout(ctx context.Context) (err error) {
 }
 
 func (process *Process) CloseStderr(ctx context.Context) (err error) {
-	ctx, span := trace.StartSpan(ctx, "hcs::Process::CloseStderr") //nolint:ineffassign,staticcheck
+	ctx, span := oc.StartSpan(ctx, "hcs::Process::CloseStderr") //nolint:ineffassign,staticcheck
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
@@ -451,7 +471,7 @@ func (process *Process) CloseStderr(ctx context.Context) (err error) {
 // or wait on it.
 func (process *Process) Close() (err error) {
 	operation := "hcs::Process::Close"
-	ctx, span := trace.StartSpan(context.Background(), operation)
+	ctx, span := oc.StartSpan(context.Background(), operation)
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(

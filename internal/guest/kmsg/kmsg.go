@@ -137,7 +137,7 @@ func ReadForever(logLevel LogLevel) {
 			}).Error("failed to parse kmsg entry")
 		} else {
 			if entry.Priority <= logLevel {
-				logrus.WithFields(entry.logFormat()).Info("kmsg read")
+				logrus.WithFields(entry.logFormat()).Debug("kmsg read")
 			}
 		}
 	}

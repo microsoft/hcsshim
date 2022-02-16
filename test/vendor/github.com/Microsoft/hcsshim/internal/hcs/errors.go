@@ -13,6 +13,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 )
 
+// todo (helsaawy): annotate errors with grpc status code
+
 var (
 	// ErrComputeSystemDoesNotExist is an error encountered when the container being operated on no longer exists
 	ErrComputeSystemDoesNotExist = syscall.Errno(0xc037010e)

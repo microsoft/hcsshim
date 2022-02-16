@@ -65,7 +65,7 @@ func (ca *computeAgent) AssignPCI(ctx context.Context, req *computeagent.AssignP
 		"containerID":          req.ContainerID,
 		"deviceID":             req.DeviceID,
 		"virtualFunctionIndex": req.VirtualFunctionIndex,
-	}).Info("AssignPCI request")
+	}).Trace("computeAgent::AssignPCI")
 
 	if req.DeviceID == "" {
 		return nil, status.Error(codes.InvalidArgument, "received empty field in request")
@@ -82,7 +82,7 @@ func (ca *computeAgent) RemovePCI(ctx context.Context, req *computeagent.RemoveP
 	log.G(ctx).WithFields(logrus.Fields{
 		"containerID": req.ContainerID,
 		"deviceID":    req.DeviceID,
-	}).Info("RemovePCI request")
+	}).Trace("computeAgent::RemovePCI")
 
 	if req.DeviceID == "" {
 		return nil, status.Error(codes.InvalidArgument, "received empty field in request")
@@ -97,9 +97,9 @@ func (ca *computeAgent) RemovePCI(ctx context.Context, req *computeagent.RemoveP
 func (ca *computeAgent) AddNIC(ctx context.Context, req *computeagent.AddNICInternalRequest) (*computeagent.AddNICInternalResponse, error) {
 	log.G(ctx).WithFields(logrus.Fields{
 		"containerID": req.ContainerID,
-		"endpoint":    req.Endpoint,
+		"endpoint":    req.Endpoint.String(),
 		"nicID":       req.NicID,
-	}).Info("AddNIC request")
+	}).Trace("computeAgent::AddNIC")
 
 	if req.NicID == "" || req.Endpoint == nil {
 		return nil, status.Error(codes.InvalidArgument, "received empty field in request")
@@ -141,9 +141,9 @@ func (ca *computeAgent) AddNIC(ctx context.Context, req *computeagent.AddNICInte
 // ModifyNIC will modify a NIC from the computeagent services hosting UVM.
 func (ca *computeAgent) ModifyNIC(ctx context.Context, req *computeagent.ModifyNICInternalRequest) (*computeagent.ModifyNICInternalResponse, error) {
 	log.G(ctx).WithFields(logrus.Fields{
+		"endpoint": req.Endpoint.String(),
 		"nicID":    req.NicID,
-		"endpoint": req.Endpoint,
-	}).Info("ModifyNIC request")
+	}).Trace("computeAgent::ModifyNIC")
 
 	if req.NicID == "" || req.Endpoint == nil || req.IovPolicySettings == nil {
 		return nil, status.Error(codes.InvalidArgument, "received empty field in request")
@@ -191,10 +191,9 @@ func (ca *computeAgent) ModifyNIC(ctx context.Context, req *computeagent.ModifyN
 // DeleteNIC will delete a NIC from the computeagent services hosting UVM.
 func (ca *computeAgent) DeleteNIC(ctx context.Context, req *computeagent.DeleteNICInternalRequest) (*computeagent.DeleteNICInternalResponse, error) {
 	log.G(ctx).WithFields(logrus.Fields{
-		"containerID": req.ContainerID,
-		"nicID":       req.NicID,
-		"endpoint":    req.Endpoint,
-	}).Info("DeleteNIC request")
+		"endpoint": req.Endpoint.String(),
+		"nicID":    req.NicID,
+	}).Trace("computeAgent::DeleteNIC")
 
 	if req.NicID == "" || req.Endpoint == nil {
 		return nil, status.Error(codes.InvalidArgument, "received empty field in request")
@@ -240,7 +239,7 @@ func setupAndServe(ctx context.Context, caAddr string, vm *UtilityVM) error {
 	}
 	computeagent.RegisterComputeAgentService(s, &computeAgent{vm})
 
-	log.G(ctx).WithField("address", l.Addr().String()).Info("serving compute agent")
+	log.G(ctx).WithField("address", log.FormatIO(ctx, l)).Debug("serving compute agent")
 	go func() {
 		defer l.Close()
 		if err := trapClosedConnErr(s.Serve(ctx, l)); err != nil {

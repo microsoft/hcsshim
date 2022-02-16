@@ -243,7 +243,7 @@ func (uvm *UtilityVM) create(ctx context.Context, doc interface{}) error {
 
 // Close terminates and releases resources associated with the utility VM.
 func (uvm *UtilityVM) Close() (err error) {
-	ctx, span := trace.StartSpan(context.Background(), "uvm::Close")
+	ctx, span := oc.StartSpan(context.Background(), "uvm::Close")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute(logfields.UVMID, uvm.id))

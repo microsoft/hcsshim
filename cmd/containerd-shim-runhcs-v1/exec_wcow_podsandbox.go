@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	eventstypes "github.com/containerd/containerd/api/events"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
@@ -22,7 +23,7 @@ func newWcowPodSandboxExec(ctx context.Context, events publisher, tid, bundle st
 		"tid":    tid,
 		"eid":    tid, // Init exec ID is always same as Task ID
 		"bundle": bundle,
-	}).Debug("newWcowPodSandboxExec")
+	}).Trace("newWcowPodSandboxExec")
 
 	wpse := &wcowPodSandboxExec{
 		events:     events,
@@ -123,6 +124,11 @@ func (wpse *wcowPodSandboxExec) Status() *task.StateResponse {
 }
 
 func (wpse *wcowPodSandboxExec) Start(ctx context.Context) error {
+	log.G(ctx).WithFields(logrus.Fields{
+		logfields.TaskID: wpse.tid,
+		logfields.ExecID: wpse.tid,
+	}).Trace("wcowPodSandboxExec::Start")
+
 	wpse.sl.Lock()
 	defer wpse.sl.Unlock()
 	if wpse.state != shimExecStateCreated {
@@ -144,6 +150,12 @@ func (wpse *wcowPodSandboxExec) Start(ctx context.Context) error {
 }
 
 func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) error {
+	log.G(ctx).WithFields(logrus.Fields{
+		logfields.TaskID: wpse.tid,
+		logfields.ExecID: wpse.tid,
+		"signal":         signal,
+	}).Trace("wcowPodSandboxExec::Kill")
+
 	wpse.sl.Lock()
 	defer wpse.sl.Unlock()
 	switch wpse.state {
@@ -172,6 +184,12 @@ func (wpse *wcowPodSandboxExec) Kill(ctx context.Context, signal uint32) error {
 }
 
 func (wpse *wcowPodSandboxExec) ResizePty(ctx context.Context, width, height uint32) error {
+	// useless function, but trace could help track down who is calling it
+	log.G(ctx).WithFields(logrus.Fields{
+		logfields.TaskID: wpse.tid,
+		logfields.ExecID: wpse.tid,
+	}).Trace("wcowPodSandboxExec::ResizePty")
+
 	wpse.sl.Lock()
 	defer wpse.sl.Unlock()
 	// We will never have IO for a sandbox container so we wont have a tty
@@ -189,11 +207,18 @@ func (wpse *wcowPodSandboxExec) Wait() *task.StateResponse {
 }
 
 func (wpse *wcowPodSandboxExec) ForceExit(ctx context.Context, status int) {
+	ctx, etr := log.S(ctx, logrus.Fields{ //nolint:ineffassign,staticcheck
+		logfields.TaskID: wpse.tid,
+		logfields.ExecID: wpse.tid,
+		"status":         status,
+	})
+	etr.Trace("wcowPodSandboxExec::ForceExit")
+
 	wpse.sl.Lock()
 	defer wpse.sl.Unlock()
 	if wpse.state != shimExecStateExited {
 		// Avoid logging the force if we already exited gracefully
-		log.G(ctx).WithField("status", status).Debug("wcowPodSandboxExec::ForceExit")
+		etr.WithField("status", status).Debug("forcing exit")
 
 		wpse.state = shimExecStateExited
 		wpse.exitStatus = 1

@@ -78,12 +78,13 @@ type linuxHostedSystem struct {
 }
 
 func createLinuxContainerDocument(ctx context.Context, coi *createOptionsInternal, guestRoot string) (*linuxHostedSystem, error) {
+	log.G(ctx).WithField("guestRoot", guestRoot).Trace("hcsshim::createLinuxContainerDoc")
+
 	spec, err := createLCOWSpec(coi)
 	if err != nil {
 		return nil, err
 	}
 
-	log.G(ctx).WithField("guestRoot", guestRoot).Debug("hcsshim::createLinuxContainerDoc")
 	return &linuxHostedSystem{
 		SchemaVersion:    schemaversion.SchemaV21(),
 		OciBundlePath:    guestRoot,

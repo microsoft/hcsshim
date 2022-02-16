@@ -9,7 +9,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/credentials"
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"go.opencensus.io/trace"
 )
 
 // NetNS returns the network namespace for the container
@@ -95,8 +98,15 @@ func NewContainerResources(id string) *Resources {
 // ReleaseResources releases/frees all of the resources associated with a container. This includes
 // Plan9 shares, vsmb mounts, pipe mounts, network endpoints, scsi mounts, vpci devices and layers.
 // TODO: make method on Resources struct.
-func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all bool) error {
+// TODO: group together all the different errors into one
+func ReleaseResources(ctx context.Context, r *Resources, vm *uvm.UtilityVM, all bool) (err error) {
+	ctx, span := oc.StartSpan(ctx, "resources::ReleaseResources")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+
 	if vm != nil {
+		span.AddAttributes(trace.StringAttribute(logfields.ID, vm.ID()))
+
 		if r.addedNetNSToVM {
 			if err := vm.TearDownNetworking(ctx, r.netNS); err != nil {
 				log.G(ctx).Warn(err)

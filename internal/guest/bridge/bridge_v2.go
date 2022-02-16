@@ -47,7 +47,7 @@ var capabilities = prot.GcsCapabilities{
 // negotiateProtocolV2 was introduced in v4 so will not be called with a minimum
 // lower than that.
 func (b *Bridge) negotiateProtocolV2(r *Request) (_ RequestResponse, err error) {
-	_, span := trace.StartSpan(r.Context, "opengcs::bridge::negotiateProtocolV2")
+	_, span := oc.StartSpan(r.Context, "opengcs::bridge::negotiateProtocolV2")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
@@ -83,7 +83,7 @@ func (b *Bridge) negotiateProtocolV2(r *Request) (_ RequestResponse, err error) 
 //
 // This is allowed only for protocol version 4+, schema version 2.1+
 func (b *Bridge) createContainerV2(r *Request) (_ RequestResponse, err error) {
-	ctx, span := trace.StartSpan(r.Context, "opengcs::bridge::createContainerV2")
+	ctx, span := oc.StartSpan(r.Context, "opengcs::bridge::createContainerV2")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
@@ -136,7 +136,7 @@ func (b *Bridge) createContainerV2(r *Request) (_ RequestResponse, err error) {
 //
 // This is allowed only for protocol version 4+, schema version 2.1+
 func (b *Bridge) startContainerV2(r *Request) (_ RequestResponse, err error) {
-	_, span := trace.StartSpan(r.Context, "opengcs::bridge::startContainerV2")
+	_, span := oc.StartSpan(r.Context, "opengcs::bridge::startContainerV2")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
@@ -167,7 +167,7 @@ func (b *Bridge) startContainerV2(r *Request) (_ RequestResponse, err error) {
 //
 // This is allowed only for protocol version 4+, schema version 2.1+
 func (b *Bridge) execProcessV2(r *Request) (_ RequestResponse, err error) {
-	ctx, span := trace.StartSpan(r.Context, "opengcs::bridge::execProcessV2")
+	ctx, span := oc.StartSpan(r.Context, "opengcs::bridge::execProcessV2")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
@@ -223,7 +223,7 @@ func (b *Bridge) execProcessV2(r *Request) (_ RequestResponse, err error) {
 //
 // This is allowed only for protocol version 4+, schema version 2.1+
 func (b *Bridge) killContainerV2(r *Request) (RequestResponse, error) {
-	ctx, span := trace.StartSpan(r.Context, "opengcs::bridge::killContainerV2")
+	ctx, span := oc.StartSpan(r.Context, "opengcs::bridge::killContainerV2")
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
 
@@ -236,7 +236,7 @@ func (b *Bridge) killContainerV2(r *Request) (RequestResponse, error) {
 //
 // This is allowed only for protocol version 4+, schema version 2.1+
 func (b *Bridge) shutdownContainerV2(r *Request) (RequestResponse, error) {
-	ctx, span := trace.StartSpan(r.Context, "opengcs::bridge::shutdownContainerV2")
+	ctx, span := oc.StartSpan(r.Context, "opengcs::bridge::shutdownContainerV2")
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
 
@@ -282,7 +282,7 @@ func (b *Bridge) signalContainerV2(ctx context.Context, span *trace.Span, r *Req
 }
 
 func (b *Bridge) signalProcessV2(r *Request) (_ RequestResponse, err error) {
-	ctx, span := trace.StartSpan(r.Context, "opengcs::bridge::signalProcessV2")
+	ctx, span := oc.StartSpan(r.Context, "opengcs::bridge::signalProcessV2")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
@@ -320,7 +320,7 @@ func (b *Bridge) signalProcessV2(r *Request) (_ RequestResponse, err error) {
 }
 
 func (b *Bridge) getPropertiesV2(r *Request) (_ RequestResponse, err error) {
-	ctx, span := trace.StartSpan(r.Context, "opengcs::bridge::getPropertiesV2")
+	ctx, span := oc.StartSpan(r.Context, "opengcs::bridge::getPropertiesV2")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
@@ -383,7 +383,7 @@ func (b *Bridge) getPropertiesV2(r *Request) (_ RequestResponse, err error) {
 }
 
 func (b *Bridge) waitOnProcessV2(r *Request) (_ RequestResponse, err error) {
-	_, span := trace.StartSpan(r.Context, "opengcs::bridge::waitOnProcessV2")
+	_, span := oc.StartSpan(r.Context, "opengcs::bridge::waitOnProcessV2")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
@@ -438,7 +438,7 @@ func (b *Bridge) waitOnProcessV2(r *Request) (_ RequestResponse, err error) {
 }
 
 func (b *Bridge) resizeConsoleV2(r *Request) (_ RequestResponse, err error) {
-	ctx, span := trace.StartSpan(r.Context, "opengcs::bridge::resizeConsoleV2")
+	ctx, span := oc.StartSpan(r.Context, "opengcs::bridge::resizeConsoleV2")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
@@ -472,7 +472,7 @@ func (b *Bridge) resizeConsoleV2(r *Request) (_ RequestResponse, err error) {
 }
 
 func (b *Bridge) modifySettingsV2(r *Request) (_ RequestResponse, err error) {
-	ctx, span := trace.StartSpan(r.Context, "opengcs::bridge::modifySettingsV2")
+	ctx, span := oc.StartSpan(r.Context, "opengcs::bridge::modifySettingsV2")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", r.ContainerID))
@@ -491,7 +491,7 @@ func (b *Bridge) modifySettingsV2(r *Request) (_ RequestResponse, err error) {
 }
 
 func (b *Bridge) dumpStacksV2(r *Request) (_ RequestResponse, err error) {
-	_, span := trace.StartSpan(r.Context, "opengcs::bridge::dumpStacksV2")
+	_, span := oc.StartSpan(r.Context, "opengcs::bridge::dumpStacksV2")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
@@ -503,7 +503,7 @@ func (b *Bridge) dumpStacksV2(r *Request) (_ RequestResponse, err error) {
 }
 
 func (b *Bridge) deleteContainerStateV2(r *Request) (_ RequestResponse, err error) {
-	ctx, span := trace.StartSpan(r.Context, "opengcs::bridge::deleteContainerStateV2")
+	ctx, span := oc.StartSpan(r.Context, "opengcs::bridge::deleteContainerStateV2")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 

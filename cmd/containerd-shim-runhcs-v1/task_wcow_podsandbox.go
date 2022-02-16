@@ -12,6 +12,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/clone"
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	eventstypes "github.com/containerd/containerd/api/events"
@@ -21,6 +23,7 @@ import (
 	"github.com/containerd/typeurl"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
 
@@ -33,7 +36,8 @@ import (
 // `parent`. When the fake WCOW `init` process exits via `Signal` `parent` will
 // be forcibly closed by this task.
 func newWcowPodSandboxTask(ctx context.Context, events publisher, id, bundle string, parent *uvm.UtilityVM, nsid string) shimTask {
-	log.G(ctx).WithField("tid", id).Debug("newWcowPodSandboxTask")
+	ctx, etr := log.S(ctx, logrus.Fields{logfields.TaskID: id})
+	etr.Trace("newWcowPodSandboxTask")
 
 	wpst := &wcowPodSandboxTask{
 		events: events,
@@ -110,7 +114,12 @@ func (wpst *wcowPodSandboxTask) GetExec(eid string) (shimExec, error) {
 	return nil, errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", eid, wpst.id)
 }
 
-func (wpst *wcowPodSandboxTask) KillExec(ctx context.Context, eid string, signal uint32, all bool) error {
+func (wpst *wcowPodSandboxTask) KillExec(ctx context.Context, eid string, signal uint32, all bool) (err error) {
+	ctx, span := oc.StartSpan(ctx, "wcowPodSandboxTask::KillExec")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.TaskID, wpst.id))
+
 	e, err := wpst.GetExec(eid)
 	if err != nil {
 		return err
@@ -125,7 +134,12 @@ func (wpst *wcowPodSandboxTask) KillExec(ctx context.Context, eid string, signal
 	return nil
 }
 
-func (wpst *wcowPodSandboxTask) DeleteExec(ctx context.Context, eid string) (int, uint32, time.Time, error) {
+func (wpst *wcowPodSandboxTask) DeleteExec(ctx context.Context, eid string) (_ int, _ uint32, _ time.Time, err error) {
+	ctx, span := oc.StartSpan(ctx, "wcowPodSandboxTask::DeleteExec")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.TaskID, wpst.id))
+
 	e, err := wpst.GetExec(eid)
 	if err != nil {
 		return 0, 0, time.Time{}, err
@@ -156,6 +170,8 @@ func (wpst *wcowPodSandboxTask) DeleteExec(ctx context.Context, eid string) (int
 }
 
 func (wpst *wcowPodSandboxTask) Pids(ctx context.Context) ([]options.ProcessDetails, error) {
+	log.G(ctx).WithField(logfields.TaskID, wpst.id).Trace("wcowPodSandboxTask::Pids")
+
 	return []options.ProcessDetails{
 		{
 			ProcessID: uint32(wpst.init.Pid()),
@@ -176,26 +192,30 @@ func (wpst *wcowPodSandboxTask) Wait() *task.StateResponse {
 //
 // This call is idempotent and safe to call multiple times.
 func (wpst *wcowPodSandboxTask) close(ctx context.Context) {
-	wpst.closeOnce.Do(func() {
-		log.G(ctx).Debug("wcowPodSandboxTask::closeOnce")
+	ctx, span := oc.StartSpan(ctx, "wcowPodSandboxTask::closeOnce")
+	var err error // this will only save the last error, since we dont return early on error
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.TaskID, wpst.id))
 
+	wpst.closeOnce.Do(func() {
 		if wpst.host != nil {
-			if err := wpst.host.TearDownNetworking(ctx, wpst.nsid); err != nil {
+			if err = wpst.host.TearDownNetworking(ctx, wpst.nsid); err != nil {
 				log.G(ctx).WithError(err).Error("failed to cleanup networking for utility VM")
 			}
 
-			if err := wpst.host.Close(); err != nil {
+			if err = wpst.host.Close(); err != nil {
 				log.G(ctx).WithError(err).Error("failed host vm shutdown")
 			}
 			// cleanup template state if any exists
-			if err := clone.RemoveSavedTemplateConfig(wpst.host.ID()); err != nil {
+			if err = clone.RemoveSavedTemplateConfig(wpst.host.ID()); err != nil {
 				log.G(ctx).WithError(err).Error("failed to cleanup template config state for vm")
 			}
 		}
 		// Send the `init` exec exit notification always.
 		exit := wpst.init.Status()
 
-		if err := wpst.events.publishEvent(
+		if err = wpst.events.publishEvent(
 			ctx,
 			runtime.TaskExitEventTopic,
 			&eventstypes.TaskExit{
@@ -212,7 +232,7 @@ func (wpst *wcowPodSandboxTask) close(ctx context.Context) {
 }
 
 func (wpst *wcowPodSandboxTask) waitInitExit() {
-	ctx, span := trace.StartSpan(context.Background(), "wcowPodSandboxTask::waitInitExit")
+	ctx, span := oc.StartSpan(context.Background(), "wcowPodSandboxTask::waitInitExit")
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("tid", wpst.id))
 
@@ -224,7 +244,7 @@ func (wpst *wcowPodSandboxTask) waitInitExit() {
 }
 
 func (wpst *wcowPodSandboxTask) waitParentExit() {
-	ctx, span := trace.StartSpan(context.Background(), "wcowPodSandboxTask::waitParentExit")
+	ctx, span := oc.StartSpan(context.Background(), "wcowPodSandboxTask::waitParentExit")
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("tid", wpst.id))
 
@@ -242,6 +262,9 @@ func (wpst *wcowPodSandboxTask) waitParentExit() {
 }
 
 func (wpst *wcowPodSandboxTask) ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (int, error) {
+	ctx, etr := log.S(ctx, logrus.Fields{logfields.TaskID: wpst.id})
+	etr.Trace("wcowPodSandboxTask::ExecInHost")
+
 	cmdReq := &cmd.CmdProcessRequest{
 		Args:     req.Args,
 		Workdir:  req.Workdir,
@@ -257,6 +280,9 @@ func (wpst *wcowPodSandboxTask) ExecInHost(ctx context.Context, req *shimdiag.Ex
 }
 
 func (wpst *wcowPodSandboxTask) DumpGuestStacks(ctx context.Context) string {
+	ctx, etr := log.S(ctx, logrus.Fields{logfields.TaskID: wpst.id})
+	etr.Trace("wcowPodSandboxTask::DumpGuestStacks")
+
 	if wpst.host != nil {
 		stacks, err := wpst.host.DumpStacks(ctx)
 		if err != nil {
@@ -268,7 +294,12 @@ func (wpst *wcowPodSandboxTask) DumpGuestStacks(ctx context.Context) string {
 	return ""
 }
 
-func (wpst *wcowPodSandboxTask) Update(ctx context.Context, req *task.UpdateTaskRequest) error {
+func (wpst *wcowPodSandboxTask) Update(ctx context.Context, req *task.UpdateTaskRequest) (err error) {
+	ctx, span := oc.StartSpan(ctx, "wcowPodSandboxTask::Update")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.TaskID, wpst.id))
+
 	if wpst.host == nil {
 		return errTaskNotIsolated
 	}
@@ -286,6 +317,9 @@ func (wpst *wcowPodSandboxTask) Update(ctx context.Context, req *task.UpdateTask
 }
 
 func (wpst *wcowPodSandboxTask) Share(ctx context.Context, req *shimdiag.ShareRequest) error {
+	ctx, etr := log.S(ctx, logrus.Fields{logfields.TaskID: wpst.id})
+	etr.Trace("wcowPodSandboxTask::Share")
+
 	if wpst.host == nil {
 		return errTaskNotIsolated
 	}
@@ -293,6 +327,9 @@ func (wpst *wcowPodSandboxTask) Share(ctx context.Context, req *shimdiag.ShareRe
 }
 
 func (wpst *wcowPodSandboxTask) Stats(ctx context.Context) (*stats.Statistics, error) {
+	ctx, etr := log.S(ctx, logrus.Fields{logfields.TaskID: wpst.id})
+	etr.Trace("wcowPodSandboxTask::Stats")
+
 	stats := &stats.Statistics{}
 	if wpst.host == nil {
 		return stats, nil

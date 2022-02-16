@@ -13,6 +13,7 @@ import (
 
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/hcsshim/internal/devices"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
@@ -158,7 +159,7 @@ func handleAssignedDevicesWindows(
 				ID:     value,
 				IDType: uvm.VPCILocationPathIDType,
 			}
-			log.G(ctx).WithField("parsed devices", specDev).Info("added windows device to spec")
+			log.G(ctx).WithField("parsed devices", log.FormatEnabled(ctx, logrus.DebugLevel, specDev)).Debug("added windows device to spec")
 			resultDevs = append(resultDevs, specDev)
 		}
 	}

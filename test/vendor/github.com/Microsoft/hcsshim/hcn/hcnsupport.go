@@ -3,11 +3,13 @@
 package hcn
 
 import (
-	"fmt"
+	"context"
 	"sync"
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+
+	"github.com/Microsoft/hcsshim/internal/log"
 )
 
 var (
@@ -81,6 +83,7 @@ func GetSupportedFeatures() SupportedFeatures {
 }
 
 func getSupportedFeatures() (SupportedFeatures, error) {
+	ctx := context.Background()
 	var features SupportedFeatures
 	globals, err := GetGlobals()
 	if err != nil {
@@ -114,10 +117,10 @@ func getSupportedFeatures() (SupportedFeatures, error) {
 	features.NetworkACL = isFeatureSupported(globals.Version, NetworkACLPolicyVersion)
 	features.NestedIpSet = isFeatureSupported(globals.Version, NestedIpSetVersion)
 
-	logrus.WithFields(logrus.Fields{
-		"version":           fmt.Sprintf("%+v", globals.Version),
-		"supportedFeatures": fmt.Sprintf("%+v", features),
-	}).Info("HCN feature check")
+	log.G(ctx).WithFields(logrus.Fields{
+		"version":           log.FormatEnabled(ctx, logrus.DebugLevel, globals.Version),
+		"supportedFeatures": log.FormatEnabled(ctx, logrus.DebugLevel, features),
+	}).Debug("HCN feature check")
 
 	return features, nil
 }

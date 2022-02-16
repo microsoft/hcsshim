@@ -13,12 +13,15 @@ import (
 	"unsafe"
 
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/Microsoft/hcsshim/osversion"
@@ -161,7 +164,16 @@ func forceNoDirectMap(path string) (bool, error) {
 // AddVSMB adds a VSMB share to a Windows utility VM. Each VSMB share is ref-counted and
 // only added if it isn't already. This is used for read-only layers, mapped directories
 // to a container, and for mapped pipes.
-func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcsschema.VirtualSmbShareOptions) (*VSMBShare, error) {
+func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcsschema.VirtualSmbShareOptions) (_ *VSMBShare, err error) {
+	ctx, span := oc.StartSpan(ctx, "uvm::AddVSMB")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.UVMID, uvm.id),
+		trace.StringAttribute("hostPath", hostPath),
+		trace.BoolAttribute("readOnly", options.ReadOnly),
+		trace.BoolAttribute("restrict", options.RestrictFileAccess))
+
 	if uvm.operatingSystem != "windows" {
 		return nil, errNotSupported
 	}
@@ -197,7 +209,7 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 	if force, err := forceNoDirectMap(hostPath); err != nil {
 		return nil, err
 	} else if force {
-		log.G(ctx).WithField("path", hostPath).Info("Forcing NoDirectmap for VSMB mount")
+		log.G(ctx).WithField("hostPath", hostPath).Debug("Forcing NoDirectmap for VSMB mount")
 		options.NoDirectmap = true
 	}
 
@@ -230,9 +242,9 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 		log.G(ctx).WithFields(logrus.Fields{
 			"name":      share.name,
 			"path":      hostPath,
-			"options":   fmt.Sprintf("%+#v", options),
+			"options":   options,
 			"operation": requestType,
-		}).Info("Modifying VSMB share")
+		}).Debug("Modifying VSMB share")
 		modification := &hcsschema.ModifySettingRequest{
 			RequestType: requestType,
 			Settings: hcsschema.VirtualSmbShare{
@@ -257,7 +269,15 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 
 // RemoveVSMB removes a VSMB share from a utility VM. Each VSMB share is ref-counted
 // and only actually removed when the ref-count drops to zero.
-func (uvm *UtilityVM) RemoveVSMB(ctx context.Context, hostPath string, readOnly bool) error {
+func (uvm *UtilityVM) RemoveVSMB(ctx context.Context, hostPath string, readOnly bool) (err error) {
+	ctx, span := oc.StartSpan(ctx, "uvm::RemoveVSMB")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.UVMID, uvm.id),
+		trace.BoolAttribute("readOnly", readOnly),
+		trace.StringAttribute("hostPath", hostPath))
+
 	if uvm.operatingSystem != "windows" {
 		return errNotSupported
 	}
@@ -394,6 +414,12 @@ func (vsmb *VSMBShare) GobDecode(data []byte) error {
 // clone VSMB share we just need to add it into the config doc of that VM and increase the
 // vsmb counter.
 func (vsmb *VSMBShare) Clone(ctx context.Context, vm *UtilityVM, cd *cloneData) error {
+	log.G(ctx).WithFields(logrus.Fields{
+		"hostPath":  vsmb.HostPath,
+		"guestPath": vsmb.guestPath,
+		"name":      vsmb.name,
+	}).Trace("vsmb::Clone")
+
 	cd.doc.VirtualMachine.Devices.VirtualSmb.Shares = append(cd.doc.VirtualMachine.Devices.VirtualSmb.Shares, hcsschema.VirtualSmbShare{
 		Name:         vsmb.name,
 		Path:         vsmb.HostPath,

@@ -20,6 +20,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/signals"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -45,7 +47,7 @@ func newHcsExec(
 		"eid":    id, // Init exec ID is always same as Task ID
 		"bundle": bundle,
 		"wcow":   isWCOW,
-	}).Debug("newHcsExec")
+	}).Trace("newHcsExec")
 
 	he := &hcsExec{
 		events:      events,
@@ -251,12 +253,24 @@ func (he *hcsExec) startInternal(ctx context.Context, initializeContainer bool) 
 }
 
 func (he *hcsExec) Start(ctx context.Context) (err error) {
+	ctx, span := oc.StartSpan(ctx, "hcsExec::Start")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.TaskID, he.tid),
+		trace.StringAttribute(logfields.ExecID, he.id))
+
 	// If he.id == he.tid then this is the init exec.
 	// We need to initialize the container itself before starting this exec.
 	return he.startInternal(ctx, he.id == he.tid)
 }
 
-func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
+func (he *hcsExec) Kill(ctx context.Context, signal uint32) (err error) {
+	ctx, span := oc.StartSpan(ctx, "hcsExec::Kill")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.TaskID, he.tid),
+		trace.StringAttribute(logfields.ExecID, he.id))
+
 	he.sl.Lock()
 	defer he.sl.Unlock()
 	switch he.state {
@@ -269,7 +283,6 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 			supported = he.host == nil || he.host.SignalProcessSupported()
 		}
 		var options interface{}
-		var err error
 		if he.isWCOW {
 			var opt *guestresource.SignalProcessOptionsWCOW
 			opt, err = signals.ValidateWCOW(int(signal), supported)
@@ -309,6 +322,14 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 }
 
 func (he *hcsExec) ResizePty(ctx context.Context, width, height uint32) error {
+	ctx, etr := log.S(ctx, logrus.Fields{
+		logfields.TaskID: he.tid,
+		logfields.ExecID: he.id,
+		"width":          width,
+		"height":         height,
+	})
+	etr.Trace("hcsExec::ResizePty")
+
 	he.sl.Lock()
 	defer he.sl.Unlock()
 	if !he.io.Terminal() {
@@ -322,6 +343,11 @@ func (he *hcsExec) ResizePty(ctx context.Context, width, height uint32) error {
 }
 
 func (he *hcsExec) CloseIO(ctx context.Context, stdin bool) error {
+	ctx, etr := log.S(ctx, logrus.Fields{
+		logfields.TaskID: he.tid,
+		logfields.ExecID: he.id,
+	})
+	etr.Trace("hcsExec::CloseIO")
 	// If we have any upstream IO we close the upstream connection. This will
 	// unblock the `io.Copy` in the `Start()` call which will signal
 	// `he.p.CloseStdin()`. If `he.io.Stdin()` is already closed this is safe to
@@ -336,6 +362,13 @@ func (he *hcsExec) Wait() *task.StateResponse {
 }
 
 func (he *hcsExec) ForceExit(ctx context.Context, status int) {
+	ctx, etr := log.S(ctx, logrus.Fields{
+		logfields.TaskID: he.tid,
+		logfields.ExecID: he.id,
+		"status":         status,
+	})
+	etr.Trace("hcsExec::ForceExit")
+
 	he.sl.Lock()
 	defer he.sl.Unlock()
 	if he.state != shimExecStateExited {
@@ -371,10 +404,15 @@ func (he *hcsExec) ForceExit(ctx context.Context, status int) {
 // We DO NOT send the async `TaskExit` event because we never would have sent
 // the `TaskStart`/`TaskExecStarted` event.
 func (he *hcsExec) exitFromCreatedL(ctx context.Context, status int) {
-	if he.state != shimExecStateExited {
-		// Avoid logging the force if we already exited gracefully
-		log.G(ctx).WithField("status", status).Debug("hcsExec::exitFromCreatedL")
+	ctx, etr := log.S(ctx, logrus.Fields{
+		logfields.TaskID: he.tid,
+		logfields.ExecID: he.id,
+		"status":         status,
+		"state":          he.state,
+	})
+	etr.Trace("hcsExec::exitFromCreatedL")
 
+	if he.state != shimExecStateExited {
 		// Unblock the container exit goroutine
 		he.processDoneOnce.Do(func() { close(he.processDone) })
 		// Transition this exec
@@ -416,13 +454,15 @@ func (he *hcsExec) exitFromCreatedL(ctx context.Context, status int) {
 //
 // 7. Finally, save the UVM and this container as a template if specified.
 func (he *hcsExec) waitForExit() {
-	ctx, span := trace.StartSpan(context.Background(), "hcsExec::waitForExit")
+	ctx, span := oc.StartSpan(context.Background(), "hcsExec::waitForExit")
+	var err error // this will only save the last error, since we dont return early on error
 	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
 		trace.StringAttribute("tid", he.tid),
 		trace.StringAttribute("eid", he.id))
 
-	err := he.p.Process.Wait()
+	err = he.p.Process.Wait()
 	if err != nil {
 		log.G(ctx).WithError(err).Error("failed process Wait")
 	}
@@ -433,9 +473,11 @@ func (he *hcsExec) waitForExit() {
 
 	code, err := he.p.Process.ExitCode()
 	if err != nil {
-		log.G(ctx).WithError(err).Error("failed to get ExitCode")
+		log.G(ctx).WithError(err).WithField(logfields.ExecID, he.id).Error("failed to get hcsExec ExitCode")
 	} else {
-		log.G(ctx).WithField("exitCode", code).Debug("exited")
+		log.G(ctx).WithFields(logrus.Fields{
+			"exitCode":       code,
+			logfields.ExecID: he.id}).Debug("hcsExec exited")
 	}
 
 	he.sl.Lock()
@@ -478,7 +520,7 @@ func (he *hcsExec) waitForExit() {
 //
 // This MUST be called via a goroutine at exec create.
 func (he *hcsExec) waitForContainerExit() {
-	ctx, span := trace.StartSpan(context.Background(), "hcsExec::waitForContainerExit")
+	ctx, span := oc.StartSpan(context.Background(), "hcsExec::waitForContainerExit")
 	defer span.End()
 	span.AddAttributes(
 		trace.StringAttribute("tid", he.tid),

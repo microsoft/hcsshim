@@ -7,6 +7,8 @@ import (
 	"errors"
 	"os/exec"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -14,6 +16,9 @@ import (
 
 // ExecInUvm is a helper function used to execute commands specified in `req` inside the given UVM.
 func ExecInUvm(ctx context.Context, vm *uvm.UtilityVM, req *CmdProcessRequest) (int, error) {
+	ctx, etr := log.S(ctx, logrus.Fields{logfields.UVMID: vm.ID()})
+	etr.Trace("cmd::ExecInUVM")
+
 	if len(req.Args) == 0 {
 		return 0, errors.New("missing command")
 	}
@@ -41,6 +46,8 @@ func ExecInUvm(ctx context.Context, vm *uvm.UtilityVM, req *CmdProcessRequest) (
 // ExecInShimHost is a helper function used to execute commands specified in `req` in the shim's
 // hosting system.
 func ExecInShimHost(ctx context.Context, req *CmdProcessRequest) (int, error) {
+	log.G(ctx).Trace("cmd::ExecInUVM")
+
 	if len(req.Args) == 0 {
 		return 0, errors.New("missing command")
 	}

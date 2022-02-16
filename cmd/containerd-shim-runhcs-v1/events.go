@@ -4,8 +4,8 @@ package main
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/containerd/containerd/namespaces"
 	shim "github.com/containerd/containerd/runtime/v2/shim"
@@ -39,12 +39,12 @@ func (e *eventPublisher) close() error {
 }
 
 func (e *eventPublisher) publishEvent(ctx context.Context, topic string, event interface{}) (err error) {
-	ctx, span := trace.StartSpan(ctx, "publishEvent")
+	ctx, span := oc.StartSpan(ctx, "publishEvent")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
 		trace.StringAttribute("topic", topic),
-		trace.StringAttribute("event", fmt.Sprintf("%+v", event)))
+		trace.StringAttribute("event", log.Format(ctx, event)))
 
 	if e == nil {
 		return nil

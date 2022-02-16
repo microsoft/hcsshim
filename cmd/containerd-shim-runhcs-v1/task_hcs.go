@@ -31,7 +31,9 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/jobcontainers"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/memory"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
@@ -43,8 +45,9 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
-func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
-	log.G(ctx).WithField("tid", req.ID).Debug("newHcsStandaloneTask")
+func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (_ shimTask, err error) {
+	ctx, entry := log.S(ctx, logrus.Fields{logfields.TaskID: req.ID})
+	entry.Debug("newHcsStandaloneTask")
 
 	ct, _, err := oci.GetSandboxTypeAndID(s.Annotations)
 	if err != nil {
@@ -117,12 +120,27 @@ func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.Creat
 
 // createContainer is a generic call to return either a process/hypervisor isolated container, or a job container
 //  based on what is set in the OCI spec.
-func createContainer(ctx context.Context, id, owner, netNS string, s *specs.Spec, parent *uvm.UtilityVM, shimOpts *runhcsopts.Options) (cow.Container, *resources.Resources, error) {
-	var (
-		err       error
-		container cow.Container
-		resources *resources.Resources
-	)
+func createContainer(
+	ctx context.Context,
+	id, owner, netNS string,
+	s *specs.Spec,
+	parent *uvm.UtilityVM,
+	shimOpts *runhcsopts.Options) (container cow.Container, resources *resources.Resources, err error) {
+	ctx, span := oc.StartSpan(ctx, "createContainer")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.ID, id),
+		trace.StringAttribute("owner", owner),
+		trace.StringAttribute("netNS", netNS))
+	if parent != nil {
+		span.AddAttributes(trace.StringAttribute("parent", parent.ID()))
+	}
+
+	log.G(ctx).WithFields(logrus.Fields{
+		"spec":        s,
+		"shimOptions": shimOpts,
+	}).Debug("createContainer options")
 
 	if oci.IsJobContainer(s) {
 		container, resources, err = jobcontainers.Create(ctx, id, s)
@@ -159,10 +177,14 @@ func newHcsTask(
 	ownsParent bool,
 	req *task.CreateTaskRequest,
 	s *specs.Spec) (_ shimTask, err error) {
-	log.G(ctx).WithFields(logrus.Fields{
-		"tid":        req.ID,
-		"ownsParent": ownsParent,
-	}).Debug("newHcsTask")
+	ctx, span := oc.StartSpan(ctx, "newHcsTask")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.TaskID, req.ID),
+		trace.BoolAttribute("ownParent", ownsParent))
+	if parent != nil {
+		span.AddAttributes(trace.StringAttribute("parent", parent.ID()))
+	}
 
 	owner := filepath.Base(os.Args[0])
 	isTemplate := oci.ParseAnnotationsSaveAsTemplate(ctx, s)
@@ -274,11 +296,15 @@ func newClonedHcsTask(
 	req *task.CreateTaskRequest,
 	s *specs.Spec,
 	templateID string) (_ shimTask, err error) {
-	log.G(ctx).WithFields(logrus.Fields{
-		"tid":        req.ID,
-		"ownsParent": ownsParent,
-		"templateid": templateID,
-	}).Debug("newClonedHcsTask")
+	ctx, span := oc.StartSpan(ctx, "newClonedHcsTask")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.TaskID, req.ID),
+		trace.BoolAttribute("ownParent", ownsParent),
+		trace.StringAttribute("templateID", templateID))
+	if parent != nil {
+		span.AddAttributes(trace.StringAttribute("parent", parent.ID()))
+	}
 
 	owner := filepath.Base(os.Args[0])
 
@@ -311,7 +337,14 @@ func newClonedHcsTask(
 		netNS = s.Windows.Network.NetworkNamespace
 	}
 
-	// This is a cloned task. Use the templateid as the ID of the container here
+	// cloneHcsTask doesnt rely on createContainer, so it doesnt log spec and shim options
+	log.G(ctx).WithFields(logrus.Fields{
+		"netNS":       netNS,
+		"spec":        s,
+		"shimOptions": shimOpts,
+	}).Debug("newClonedHcsTask options")
+
+	// This is a cloned task. Use the templateID as the ID of the container here
 	// because that's the ID of this container inside the UVM.
 	opts := hcsoci.CreateOptions{
 		ID:               templateID,
@@ -463,7 +496,13 @@ func (ht *hcsTask) ID() string {
 	return ht.id
 }
 
-func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest, spec *specs.Process) error {
+func (ht *hcsTask) CreateExec(ctx context.Context, req *task.ExecProcessRequest, spec *specs.Process) (err error) {
+	ctx, span := oc.StartSpan(ctx, "hcsTask::CreateExec")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.TaskID, ht.id),
+		trace.StringAttribute(logfields.ExecID, req.ExecID))
+
 	ht.ecl.Lock()
 	defer ht.ecl.Unlock()
 
@@ -518,7 +557,15 @@ func (ht *hcsTask) GetExec(eid string) (shimExec, error) {
 	return raw.(shimExec), nil
 }
 
-func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all bool) error {
+func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all bool) (err error) {
+	ctx, span := oc.StartSpan(ctx, "hcsTask::KillExec")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.TaskID, ht.id),
+		trace.StringAttribute(logfields.ExecID, eid),
+		trace.Int64Attribute("signal", int64(signal)),
+		trace.BoolAttribute("all", all))
+
 	e, err := ht.GetExec(eid)
 	if err != nil {
 		return err
@@ -567,7 +614,13 @@ func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all 
 	return e.Kill(ctx, signal)
 }
 
-func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, time.Time, error) {
+func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (_ int, _ uint32, _ time.Time, err error) {
+	ctx, span := oc.StartSpan(ctx, "hcsTask::DeleteExec")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.TaskID, ht.id),
+		trace.StringAttribute(logfields.ExecID, eid))
+
 	e, err := ht.GetExec(eid)
 	if err != nil {
 		return 0, 0, time.Time{}, err
@@ -649,6 +702,9 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, tim
 }
 
 func (ht *hcsTask) Pids(ctx context.Context) ([]runhcsopts.ProcessDetails, error) {
+	ctx, etr := log.S(ctx, logrus.Fields{logfields.TaskID: ht.id})
+	etr.Trace("hcsTask::Pids")
+
 	// Map all user created exec's to pid/exec-id
 	pidMap := make(map[int]string)
 	ht.execs.Range(func(key, value interface{}) bool {
@@ -692,9 +748,10 @@ func (ht *hcsTask) Wait() *task.StateResponse {
 }
 
 func (ht *hcsTask) waitInitExit(destroyContainer bool) {
-	ctx, span := trace.StartSpan(context.Background(), "hcsTask::waitInitExit")
+	ctx, span := oc.StartSpan(context.Background(), "hcsTask::waitInitExit")
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("tid", ht.id))
+	span.AddAttributes(trace.StringAttribute("tid", ht.id),
+		trace.BoolAttribute("destroyContainer", destroyContainer))
 
 	// Wait for it to exit on its own
 	ht.init.Wait()
@@ -723,7 +780,7 @@ func (ht *hcsTask) waitInitExit(destroyContainer bool) {
 // Note: For Windows process isolated containers there is no host virtual
 // machine so this should not be called.
 func (ht *hcsTask) waitForHostExit() {
-	ctx, span := trace.StartSpan(context.Background(), "hcsTask::waitForHostExit")
+	ctx, span := oc.StartSpan(context.Background(), "hcsTask::waitForHostExit")
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("tid", ht.id))
 
@@ -752,9 +809,13 @@ func (ht *hcsTask) waitForHostExit() {
 // NOTE: For Windows process isolated containers `ht.ownsHost==true && ht.host
 // == nil`.
 func (ht *hcsTask) close(ctx context.Context) {
-	ht.closeOnce.Do(func() {
-		log.G(ctx).Debug("hcsTask::closeOnce")
+	ctx, span := oc.StartSpan(ctx, "hcsTask::closeOnce")
+	var err error // this will only save the last error, since we dont return early on error
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.TaskID, ht.id))
 
+	ht.closeOnce.Do(func() {
 		// ht.c should never be nil for a real task but in testing we stub
 		// this to avoid a nil dereference. We really should introduce a
 		// method or interface for ht.c operations that we can stub for
@@ -767,7 +828,7 @@ func (ht *hcsTask) close(ctx context.Context) {
 				werr = ht.c.Wait()
 				close(ch)
 			}()
-			err := ht.c.Shutdown(ctx)
+			err = ht.c.Shutdown(ctx)
 			if err != nil {
 				log.G(ctx).WithError(err).Error("failed to shutdown container")
 			} else {
@@ -804,12 +865,12 @@ func (ht *hcsTask) close(ctx context.Context) {
 			}
 
 			// Release any resources associated with the container.
-			if err := resources.ReleaseResources(ctx, ht.cr, ht.host, true); err != nil {
+			if err = resources.ReleaseResources(ctx, ht.cr, ht.host, true); err != nil {
 				log.G(ctx).WithError(err).Error("failed to release container resources")
 			}
 
 			// Close the container handle invalidating all future access.
-			if err := ht.c.Close(); err != nil {
+			if err = ht.c.Close(); err != nil {
 				log.G(ctx).WithError(err).Error("failed to close container")
 			}
 		}
@@ -825,18 +886,22 @@ func (ht *hcsTask) close(ctx context.Context) {
 //
 // This call is idempotent and safe to call multiple times.
 func (ht *hcsTask) closeHost(ctx context.Context) {
-	ht.closeHostOnce.Do(func() {
-		log.G(ctx).Debug("hcsTask::closeHostOnce")
+	ctx, span := oc.StartSpan(ctx, "hcsTask::closeHostOnce")
+	var err error // this will only save the last error, since we dont return early on error
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.TaskID, ht.id))
 
+	ht.closeHostOnce.Do(func() {
 		if ht.ownsHost && ht.host != nil {
-			if err := ht.host.Close(); err != nil {
+			if err = ht.host.Close(); err != nil {
 				log.G(ctx).WithError(err).Error("failed host vm shutdown")
 			}
 		}
 		// Send the `init` exec exit notification always.
 		exit := ht.init.Status()
 
-		if err := ht.events.publishEvent(
+		if err = ht.events.publishEvent(
 			ctx,
 			runtime.TaskExitEventTopic,
 			&eventstypes.TaskExit{
@@ -853,6 +918,9 @@ func (ht *hcsTask) closeHost(ctx context.Context) {
 }
 
 func (ht *hcsTask) ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (int, error) {
+	ctx, etr := log.S(ctx, logrus.Fields{logfields.TaskID: ht.id})
+	etr.Trace("hcsTask::ExecInHost")
+
 	cmdReq := &cmd.CmdProcessRequest{
 		Args:     req.Args,
 		Workdir:  req.Workdir,
@@ -869,10 +937,13 @@ func (ht *hcsTask) ExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequ
 }
 
 func (ht *hcsTask) DumpGuestStacks(ctx context.Context) string {
+	ctx, etr := log.S(ctx, logrus.Fields{logfields.TaskID: ht.id})
+	etr.Trace("hcsTask::DumpGuestStacks")
+
 	if ht.host != nil {
 		stacks, err := ht.host.DumpStacks(ctx)
 		if err != nil {
-			log.G(ctx).WithError(err).Warn("failed to capture guest stacks")
+			etr.WithError(err).Warn("failed to capture guest stacks")
 		} else {
 			return stacks
 		}
@@ -881,6 +952,9 @@ func (ht *hcsTask) DumpGuestStacks(ctx context.Context) string {
 }
 
 func (ht *hcsTask) Share(ctx context.Context, req *shimdiag.ShareRequest) error {
+	ctx, etr := log.S(ctx, logrus.Fields{logfields.TaskID: ht.id})
+	etr.Trace("hcsTask::Share")
+
 	if ht.host == nil {
 		return errTaskNotIsolated
 	}
@@ -920,6 +994,9 @@ func hcsPropertiesToWindowsStats(props *hcsschema.Properties) *stats.Statistics_
 }
 
 func (ht *hcsTask) Stats(ctx context.Context) (*stats.Statistics, error) {
+	ctx, etr := log.S(ctx, logrus.Fields{logfields.TaskID: ht.id})
+	etr.Trace("hcsTask::Stats")
+
 	s := &stats.Statistics{}
 	props, err := ht.c.PropertiesV2(ctx, hcsschema.PTStatistics)
 	if err != nil {
@@ -946,7 +1023,12 @@ func (ht *hcsTask) Stats(ctx context.Context) (*stats.Statistics, error) {
 	return s, nil
 }
 
-func (ht *hcsTask) Update(ctx context.Context, req *task.UpdateTaskRequest) error {
+func (ht *hcsTask) Update(ctx context.Context, req *task.UpdateTaskRequest) (err error) {
+	ctx, span := oc.StartSpan(ctx, "hcsTask::Update")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.TaskID, ht.id))
+
 	resources, err := typeurl.UnmarshalAny(req.Resources)
 	if err != nil {
 		return errors.Wrapf(err, "failed to unmarshal resources for container %s update request", req.ID)

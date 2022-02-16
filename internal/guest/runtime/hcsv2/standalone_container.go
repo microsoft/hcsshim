@@ -37,7 +37,7 @@ func getStandaloneResolvPath(id string) string {
 }
 
 func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec) (err error) {
-	ctx, span := trace.StartSpan(ctx, "hcsv2::setupStandaloneContainerSpec")
+	ctx, span := oc.StartSpan(ctx, "hcsv2::setupStandaloneContainerSpec")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", id))

@@ -115,7 +115,7 @@ func parseLogrus(vmid string) func(r io.Reader) {
 				break
 			}
 			fields[logfields.UVMID] = vmid
-			fields["vm.time"] = gcsEntry.Time
+			fields["vm.time"] = log.FormatTime(gcsEntry.Time)
 			e.Log(gcsEntry.Level, gcsEntry.Message)
 		}
 	}

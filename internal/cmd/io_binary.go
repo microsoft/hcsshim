@@ -20,6 +20,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 )
 
 const (
@@ -169,17 +170,29 @@ type binaryIO struct {
 
 // Close named pipes for container stdout and stderr and wait for the binary process to finish.
 func (b *binaryIO) Close(ctx context.Context) {
+	ctx, etr := log.S(ctx, logrus.Fields{ //nolint:ineffassign,staticcheck
+		"binaryCmd":       b.cmd.String(),
+		"binaryProcessID": b.cmd.Process.Pid,
+	})
+	etr.Trace("binaryIO::Close")
+
 	b.soutCloser.Do(func() {
 		if b.sout != nil {
+			etr := etr.WithField(logfields.Pipe, b.stdout)
 			err := b.sout.Close()
 			if err != nil {
-				log.G(ctx).WithError(err).Errorf("error while closing stdout npipe")
+				etr.WithError(err).Errorf("error while closing stdout npipe")
+			} else {
+				etr.Debug("binaryIO::soutCloser - stdout")
 			}
 		}
 		if b.serr != nil {
+			etr := etr.WithField(logfields.Pipe, b.stderr)
 			err := b.serr.Close()
 			if err != nil {
-				log.G(ctx).WithError(err).Errorf("error while closing stderr npipe")
+				etr.WithError(err).Errorf("error while closing stderr npipe")
+			} else {
+				etr.Debug("binaryIO::soutCloser - stderr")
 			}
 		}
 	})
@@ -192,13 +205,14 @@ func (b *binaryIO) Close(ctx context.Context) {
 		select {
 		case err := <-done:
 			if err != nil {
-				log.G(ctx).WithError(err).Errorf("error while waiting for binary cmd to finish")
+				etr.WithError(err).Errorf("error while waiting for binary cmd to finish")
 			}
 		case <-time.After(binaryCmdWaitTimeout):
-			log.G(ctx).Errorf("timeout while waiting for binaryIO process to finish. Killing")
+			etr := etr.WithField(logfields.Timeout, binaryCmdWaitTimeout.String())
+			etr.Errorf("timeout while waiting for binaryIO process to finish. Killing")
 			err := b.cmd.Process.Kill()
 			if err != nil {
-				log.G(ctx).WithError(err).Errorf("error while killing binaryIO process")
+				etr.WithError(err).Errorf("error while killing binaryIO process")
 			}
 		}
 	})
@@ -280,7 +294,7 @@ func (p *pipe) Read(b []byte) (int, error) {
 
 func (p *pipe) Close() error {
 	if err := p.l.Close(); err != nil {
-		log.G(context.TODO()).WithError(err).Debug("error closing pipe listener")
+		log.G(context.Background()).WithError(err).Debug("error closing pipe listener")
 	}
 	p.conWg.Wait()
 	if p.con != nil {

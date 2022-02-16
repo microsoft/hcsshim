@@ -707,7 +707,7 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 // consumes a set of options derived from various defaults and options
 // expressed as annotations.
 func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error) {
-	ctx, span := trace.StartSpan(ctx, "uvm::CreateLCOW")
+	ctx, span := oc.StartSpan(ctx, "uvm::CreateLCOW")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
@@ -720,7 +720,10 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	}
 
 	span.AddAttributes(trace.StringAttribute(logfields.UVMID, opts.ID))
-	log.G(ctx).WithField("options", fmt.Sprintf("%+v", opts)).Debug("uvm::CreateLCOW options")
+	log.G(ctx).WithFields(logrus.Fields{
+		logfields.Options: opts.Options,
+		"options-lcow":    opts,
+	}).Debug("uvm::CreateLCOW options")
 
 	// We dont serialize OutputHandler so if it is missing we need to put it back to the default.
 	if opts.OutputHandler == nil {

@@ -12,6 +12,7 @@ import (
 	"github.com/containerd/ttrpc"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
@@ -19,6 +20,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hns"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/ncproxyttrpc"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/osversion"
@@ -98,13 +100,11 @@ func (uvm *UtilityVM) SetupNetworkNamespace(ctx context.Context, nsid string) er
 }
 
 // GetNamespaceEndpoints gets all endpoints in `netNS`
-func GetNamespaceEndpoints(ctx context.Context, netNS string) ([]*hns.HNSEndpoint, error) {
-	op := "uvm::GetNamespaceEndpoints"
-	l := log.G(ctx).WithField("netns-id", netNS)
-	l.Debug(op + " - Begin")
-	defer func() {
-		l.Debug(op + " - End")
-	}()
+func GetNamespaceEndpoints(ctx context.Context, netNS string) (_ []*hns.HNSEndpoint, err error) {
+	ctx, span := oc.StartSpan(ctx, "uvm::GetNamespaceEndpoints") //nolint:ineffassign,staticcheck
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute("netns-id", netNS))
 
 	ids, err := hns.GetNamespaceEndpoints(netNS)
 	if err != nil {

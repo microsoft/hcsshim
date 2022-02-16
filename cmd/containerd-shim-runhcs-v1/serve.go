@@ -23,11 +23,14 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	"go.opencensus.io/trace"
 	"golang.org/x/sys/windows"
 
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/extendedtask"
 	hcslog "github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/pkg/octtrpc"
 )
@@ -48,7 +51,7 @@ var serveCommand = cli.Command{
 			Usage: "is the task id a Kubernetes sandbox id",
 		},
 	},
-	Action: func(ctx *cli.Context) error {
+	Action: func(ctx *cli.Context) (err error) {
 		// On Windows the serve command is internally used to actually create
 		// the process that hosts the containerd/ttrpc entrypoint to the Runtime
 		// V2 API's. The model requires this 2nd invocation of the shim process
@@ -71,6 +74,20 @@ var serveCommand = cli.Command{
 		// the events.
 
 		var lerrs chan error
+		// TODO: use a context WithCancel() context and defer the cancellation
+		// after verying that canceling context/service won't prematurely bring
+		// down service and cleanup in background go-routines
+		cctx, span := oc.StartSpan(context.Background(), ctx.App.Name+"::serve")
+		defer span.End()
+		defer func() { oc.SetSpanStatus(span, err) }()
+		span.AddAttributes(
+			trace.BoolAttribute("isSandbox", ctx.Bool("is-sandbox")),
+			trace.StringAttribute("namespace", namespaceFlag),
+			trace.StringAttribute("address", addressFlag),
+			trace.StringAttribute("binary", containerdBinaryFlag),
+			trace.StringAttribute("socket", ctx.String("socket")),
+			trace.StringAttribute("id", idFlag),
+		)
 
 		// Default values for shim options.
 		shimOpts := &runhcsopts.Options{
@@ -79,6 +96,7 @@ var serveCommand = cli.Command{
 		}
 
 		// containerd passes the shim options protobuf via stdin.
+		// todo: merge defaults, above, with passed in opts
 		newShimOpts, err := readOptions(os.Stdin)
 		if err != nil {
 			return errors.Wrap(err, "failed to read shim options from stdin")
@@ -88,24 +106,24 @@ var serveCommand = cli.Command{
 		}
 
 		if shimOpts.Debug && shimOpts.LogLevel != "" {
-			logrus.Warning("Both Debug and LogLevel specified, Debug will be overridden")
+			hcslog.G(cctx).Warning("Both 'Debug' and 'LogLevel' specified; 'Debug' will be overridden")
 		}
 
+		lvl := logrus.GetLevel()
 		// For now keep supporting the debug option, this used to be the only way to specify a different logging
 		// level for the shim.
 		if shimOpts.Debug {
-			logrus.SetLevel(logrus.DebugLevel)
+			lvl = logrus.DebugLevel
 		}
-
 		// If log level is specified, set the corresponding logrus logging level. This overrides the debug option
 		// (unless the level being asked for IS debug also, then this doesn't do much).
 		if shimOpts.LogLevel != "" {
-			lvl, err := logrus.ParseLevel(shimOpts.LogLevel)
+			lvl, err = logrus.ParseLevel(shimOpts.LogLevel)
 			if err != nil {
 				return errors.Wrapf(err, "failed to parse shim log level %q", shimOpts.LogLevel)
 			}
-			logrus.SetLevel(lvl)
 		}
+		logrus.SetLevel(lvl)
 
 		switch shimOpts.DebugType {
 		case runhcsopts.Options_NPIPE:
@@ -166,6 +184,9 @@ var serveCommand = cli.Command{
 		if shimOpts.ScrubLogs {
 			hcslog.SetScrubbing(true)
 		}
+		hcslog.G(cctx).
+			WithField(logfields.Options, shimOpts).
+			Debug("shim options")
 
 		// Force the cli.ErrWriter to be os.Stdout for this. We use stderr for
 		// the panic.log attached via start.
@@ -216,7 +237,7 @@ var serveCommand = cli.Command{
 			// Serve loops infinitely unless s.Shutdown or s.Close are called.
 			// Passed in context is used as parent context for handling requests,
 			// but canceliing does not bring down ttrpc service.
-			if err := trapClosedConnErr(s.Serve(context.Background(), sl)); err != nil {
+			if err := trapClosedConnErr(s.Serve(cctx, sl)); err != nil {
 				logrus.WithError(err).Fatal("containerd-shim: ttrpc server failure")
 				serrs <- err
 				return
@@ -231,12 +252,11 @@ var serveCommand = cli.Command{
 			return err
 		case <-time.After(2 * time.Millisecond):
 			// TODO: Contribute a change to ttrpc so that you can:
-			//
-			// go func () { errs <- s.Serve() }
-			// select {
-			// case <-errs:
-			// case <-s.Ready():
-			// }
+			//   go func () { errs <- s.Serve() }
+			//   select {
+			//   case <-errs:
+			//   case <-s.Ready():
+			//   }
 
 			// This is our best indication that we have not errored on creation
 			// and are successfully serving the API.

@@ -8,9 +8,12 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
 
 func newClonedExec(
@@ -27,7 +30,7 @@ func newClonedExec(
 		"tid":    tid,
 		"eid":    id, // Init exec ID is always same as Task ID
 		"bundle": bundle,
-	}).Debug("newClonedExec")
+	}).Trace("newClonedExec")
 
 	he := &hcsExec{
 		events:      events,
@@ -63,6 +66,12 @@ type clonedExec struct {
 }
 
 func (ce *clonedExec) Start(ctx context.Context) (err error) {
+	ctx, span := oc.StartSpan(ctx, "clonedExec::Start")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+	span.AddAttributes(trace.StringAttribute(logfields.TaskID, ce.tid),
+		trace.StringAttribute(logfields.ExecID, ce.id))
+
 	// A cloned exec should never initialize the container as it should
 	// already be running.
 	return ce.startInternal(ctx, false)

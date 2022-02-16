@@ -205,7 +205,7 @@ func run(clicontext *cli.Context) error {
 			return fmt.Errorf("failed to connect to NodeNetworkService at address %s", conf.NodeNetSvcAddr)
 		}
 
-		log.G(ctx).Infof("Successfully connected to NodeNetworkService at address %s", conf.NodeNetSvcAddr)
+		log.G(ctx).Debugf("Successfully connected to NodeNetworkService at address %s", conf.NodeNetSvcAddr)
 
 		netSvcClient := nodenetsvc.NewNodeNetworkServiceClient(client)
 		nodeNetSvcClient = &nodeNetSvcConn{

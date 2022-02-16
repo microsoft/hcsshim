@@ -24,6 +24,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
@@ -179,7 +180,7 @@ func (c *Container) Update(ctx context.Context, resources interface{}) error {
 
 // Wait waits for the container's init process to exit.
 func (c *Container) Wait() prot.NotificationType {
-	_, span := trace.StartSpan(context.Background(), "opengcs::Container::Wait")
+	_, span := oc.StartSpan(context.Background(), "opengcs::Container::Wait")
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute(logfields.ContainerID, c.id))
 
@@ -204,7 +205,7 @@ func (c *Container) setExitType(signal syscall.Signal) {
 
 // GetStats returns the cgroup metrics for the container.
 func (c *Container) GetStats(ctx context.Context) (*v1.Metrics, error) {
-	_, span := trace.StartSpan(ctx, "opengcs::Container::GetStats")
+	_, span := oc.StartSpan(ctx, "opengcs::Container::GetStats")
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("cid", c.id))
 
