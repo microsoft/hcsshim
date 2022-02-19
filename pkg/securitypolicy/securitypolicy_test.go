@@ -691,6 +691,50 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 	}
 }
 
+func Test_WorkingDirectoryPolicy_Matches(t *testing.T) {
+	testFunc := func(gc *generatedContainers) bool {
+		tc, err := setupContainerWithOverlay(gc, true)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		if err := tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers); err != nil {
+			t.Errorf("failed to enforce overlay mount policy: %s", err)
+			return false
+		}
+
+		err = tc.policy.enforceWorkingDirPolicy(tc.containerID, tc.container.WorkingDir)
+		return err == nil
+	}
+
+	if err := quick.Check(testFunc, &quick.Config{MaxCount: 1000}); err != nil {
+		t.Errorf("Test_WorkingDirectoryPolicy_Matches: %v", err)
+	}
+}
+
+func Test_WorkingDirectoryPolicy_NoMatches(t *testing.T) {
+	testFunc := func(gc *generatedContainers) bool {
+		tc, err := setupContainerWithOverlay(gc, true)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		if err := tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers); err != nil {
+			t.Errorf("failed to enforce overlay mount policy: %s", err)
+			return false
+		}
+
+		err = tc.policy.enforceWorkingDirPolicy(tc.containerID, randString(testRand, 20))
+		return err != nil
+	}
+
+	if err := quick.Check(testFunc, &quick.Config{MaxCount: 1000}); err != nil {
+		t.Errorf("Test_WorkingDirectoryPolicy_NoMatches: %v", err)
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //
@@ -809,6 +853,7 @@ func generateContainersContainer(r *rand.Rand, size int32) securityPolicyContain
 	c := securityPolicyContainer{}
 	c.Command = generateCommand(r)
 	c.EnvRules = generateEnvironmentVariableRules(r)
+	c.WorkingDir = randVariableString(r, maxGeneratedCommandLength)
 	layers := int(atLeastOneAtMost(r, size))
 	for i := 0; i < layers; i++ {
 		c.Layers = append(c.Layers, generateRootHash(r))
