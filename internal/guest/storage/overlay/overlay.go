@@ -93,15 +93,6 @@ func Mount(ctx context.Context, basePaths []string, upperdirPath, workdirPath, t
 		trace.StringAttribute("target", target),
 		trace.BoolAttribute("readonly", readonly))
 
-	// If we got an ENOSPC error on creating any directories, log disk space and inode info for the mount that the directory belongs to get a better
-	// view of the where the problem lies.
-	defer func() {
-		var perr *os.PathError
-		if errors.As(err, &perr) && perr.Err == unix.ENOSPC {
-			processErrNoSpace(ctx, perr.Path, err)
-		}
-	}()
-
 	if target == "" {
 		return errors.New("cannot have empty target")
 	}
@@ -110,37 +101,38 @@ func Mount(ctx context.Context, basePaths []string, upperdirPath, workdirPath, t
 		return errors.Errorf("upperdirPath: %q, and workdirPath: %q must be empty when readonly==true", upperdirPath, workdirPath)
 	}
 
+	defer func() {
+		if err != nil {
+			var perr *os.PathError
+			if errors.As(err, &perr) && perr.Err == unix.ENOSPC {
+				// If we got an ENOSPC error on creating any directories, log disk space and inode info for the mount that the directory belongs to get a better
+				// view of the where the problem lies.
+				processErrNoSpace(ctx, perr.Path, err)
+			}
+			// Cleanup the three dirs we made if there were any errors. os.RemoveAll is harmless if the path doesn't exist (for example if we failed
+			// on creating the upper dir and never got to creating the target or workdir).
+			_ = osRemoveAll(target)
+			_ = osRemoveAll(workdirPath)
+			_ = osRemoveAll(upperdirPath)
+		}
+	}()
+
 	options := []string{"lowerdir=" + lowerdir}
 	if upperdirPath != "" {
 		if err := osMkdirAll(upperdirPath, 0755); err != nil {
 			return errors.Wrap(err, "failed to create upper directory in scratch space")
 		}
-		defer func() {
-			if err != nil {
-				osRemoveAll(upperdirPath)
-			}
-		}()
 		options = append(options, "upperdir="+upperdirPath)
 	}
 	if workdirPath != "" {
 		if err := osMkdirAll(workdirPath, 0755); err != nil {
 			return errors.Wrap(err, "failed to create workdir in scratch space")
 		}
-		defer func() {
-			if err != nil {
-				osRemoveAll(workdirPath)
-			}
-		}()
 		options = append(options, "workdir="+workdirPath)
 	}
 	if err := osMkdirAll(target, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create directory for container root filesystem %s", target)
 	}
-	defer func() {
-		if err != nil {
-			osRemoveAll(target)
-		}
-	}()
 	var flags uintptr
 	if readonly {
 		flags |= unix.MS_RDONLY
