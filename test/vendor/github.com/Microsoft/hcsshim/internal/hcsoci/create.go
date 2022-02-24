@@ -45,7 +45,7 @@ type CreateOptions struct {
 	HostingSystem    *uvm.UtilityVM     // Utility or service VM in which the container is to be created.
 	NetworkNamespace string             // Host network namespace to use (overrides anything in the spec)
 
-	// This is an advanced debugging parameter. It allows for diagnosibility by leaving a containers
+	// This is an advanced debugging parameter. It allows for diagnosability by leaving a containers
 	// resources allocated in case of a failure. Thus you would be able to use tools such as hcsdiag
 	// to look at the state of a utility VM to see what resources were allocated. Obviously the caller
 	// must a) not tear down the utility VM on failure (or pause in some way) and b) is responsible for
@@ -170,6 +170,15 @@ func validateContainerConfig(ctx context.Context, coi *createOptionsInternal) er
 			return fmt.Errorf("user specified mounts are not permitted for template containers")
 		}
 	}
+
+	// check if gMSA is disabled
+	if coi.Spec.Windows != nil {
+		disableGMSA := oci.ParseAnnotationsDisableGMSA(ctx, coi.Spec)
+		if _, ok := coi.Spec.Windows.CredentialSpec.(string); ok && disableGMSA {
+			return fmt.Errorf("gMSA credentials are disabled: %w", hcs.ErrOperationDenied)
+		}
+	}
+
 	return nil
 }
 

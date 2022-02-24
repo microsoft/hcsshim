@@ -13,6 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
 
+	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -161,6 +162,10 @@ func forceNoDirectMap(path string) (bool, error) {
 func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcsschema.VirtualSmbShareOptions) (*VSMBShare, error) {
 	if uvm.operatingSystem != "windows" {
 		return nil, errNotSupported
+	}
+
+	if !options.ReadOnly && uvm.NoWritableFileShares() {
+		return nil, fmt.Errorf("adding writable shares is denied: %w", hcs.ErrOperationDenied)
 	}
 
 	uvm.m.Lock()

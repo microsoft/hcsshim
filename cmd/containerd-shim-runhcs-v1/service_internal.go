@@ -94,6 +94,13 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 	f.Close()
 
 	spec = oci.UpdateSpecFromOptions(spec, shimOpts)
+	//expand annotations after defaults have been loaded in from options
+	err = oci.ProcessAnnotations(ctx, &spec)
+	// since annotation expansion is used to toggle security features
+	// raise it rather than suppress and move on
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to process OCI Spec annotations")
+	}
 
 	if len(req.Rootfs) == 0 {
 		// If no mounts are passed via the snapshotter its the callers full
