@@ -408,10 +408,10 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, addReq *addSCSIRequest)
 		return nil, ErrNoSCSIControllers
 	}
 
-	// Note: Can remove this check post-RS5 if multiple controllers are supported
-	if sm.Controller > 0 {
-		return nil, ErrTooManyAttachments
-	}
+	// TODO(ambarve): Do this check only if RS5 or lower
+	// if sm.Controller > 0 {
+	// 	return nil, ErrTooManyAttachments
+	// }
 
 	SCSIModification := &hcsschema.ModifySettingRequest{
 		RequestType: guestrequest.RequestTypeAdd,

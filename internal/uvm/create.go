@@ -128,8 +128,8 @@ func verifyOptions(ctx context.Context, options interface{}) error {
 		if opts.EnableDeferredCommit && !opts.AllowOvercommit {
 			return errors.New("EnableDeferredCommit is not supported on physically backed VMs")
 		}
-		if opts.SCSIControllerCount > 1 {
-			return errors.New("SCSI controller count must be 0 or 1") // Future extension here for up to 4
+		if opts.SCSIControllerCount > 4 {
+			return errors.New("SCSI controller count must be less than 4")
 		}
 		if opts.VPMemDeviceCount > MaxVPMEMCount {
 			return fmt.Errorf("VPMem device count cannot be greater than %d", MaxVPMEMCount)

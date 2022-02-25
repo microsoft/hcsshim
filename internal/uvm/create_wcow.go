@@ -249,7 +249,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 		id:                      opts.ID,
 		owner:                   opts.Owner,
 		operatingSystem:         "windows",
-		scsiControllerCount:     1,
+		scsiControllerCount:     4,
 		vsmbDirShares:           make(map[string]*VSMBShare),
 		vsmbFileShares:          make(map[string]*VSMBShare),
 		vpciDevices:             make(map[VPCIDeviceKey]*VPCIDevice),
@@ -309,15 +309,17 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 			}
 		}
 
-		doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{
-			"0": {
-				Attachments: map[string]hcsschema.Attachment{
-					"0": {
-						Path:  scratchPath,
-						Type_: "VirtualDisk",
-					},
-				},
-			},
+		// WCOW will always have at least 1 SCSI controller for the UVM scratch VHD.
+		doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
+		for i := 0; i < int(uvm.scsiControllerCount); i++ {
+			doc.VirtualMachine.Devices.Scsi[fmt.Sprintf("%d", i)] = hcsschema.Scsi{
+				Attachments: make(map[string]hcsschema.Attachment),
+			}
+		}
+
+		doc.VirtualMachine.Devices.Scsi["0"].Attachments["0"] = hcsschema.Attachment{
+			Path:  scratchPath,
+			Type_: "VirtualDisk",
 		}
 
 		uvm.scsiLocations[0][0] = newSCSIMount(uvm,

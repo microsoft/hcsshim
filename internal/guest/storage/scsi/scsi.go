@@ -217,7 +217,10 @@ func ControllerLunToName(ctx context.Context, controller, lun uint8) (_ string, 
 		trace.Int64Attribute("controller", int64(controller)),
 		trace.Int64Attribute("lun", int64(lun)))
 
-	scsiID := fmt.Sprintf("0:0:%d:%d", controller, lun)
+	// Linux uses following format to Identify a SCSI disk:
+	// <scsi controller>:<bus number>:<target id>:<lun number>
+	// In our case bus number and target id will always remain 0.
+	scsiID := fmt.Sprintf("%d:0:0:%d", controller, lun)
 
 	// Devices matching the given SCSI code should each have a subdirectory
 	// under /sys/bus/scsi/devices/<scsiID>/block.

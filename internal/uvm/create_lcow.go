@@ -137,7 +137,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		KernelBootOptions:       "",
 		EnableGraphicsConsole:   false,
 		ConsolePipe:             "",
-		SCSIControllerCount:     1,
+		SCSIControllerCount:     4,
 		UseGuestConnection:      true,
 		ExecCommandLine:         fmt.Sprintf("/bin/gcs -v4 -log-format json -loglevel %s", logrus.StandardLogger().Level.String()),
 		ForwardStdout:           false,
@@ -353,11 +353,11 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	}
 
 	if uvm.scsiControllerCount > 0 {
-		// TODO: JTERRY75 - this should enumerate scsicount and add an entry per value.
-		doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{
-			"0": {
+		doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
+		for i := 0; i < int(uvm.scsiControllerCount); i++ {
+			doc.VirtualMachine.Devices.Scsi[fmt.Sprintf("%d", i)] = hcsschema.Scsi{
 				Attachments: make(map[string]hcsschema.Attachment),
-			},
+			}
 		}
 	}
 
@@ -538,11 +538,11 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 	}
 
 	if uvm.scsiControllerCount > 0 {
-		// TODO: JTERRY75 - this should enumerate scsicount and add an entry per value.
-		doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{
-			"0": {
+		doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
+		for i := 0; i < int(uvm.scsiControllerCount); i++ {
+			doc.VirtualMachine.Devices.Scsi[fmt.Sprintf("%d", i)] = hcsschema.Scsi{
 				Attachments: make(map[string]hcsschema.Attachment),
-			},
+			}
 		}
 	}
 	if uvm.vpmemMaxCount > 0 {
