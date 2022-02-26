@@ -36,8 +36,9 @@ func groupExists(groupName string) bool {
 }
 
 // makeLocalAccount creates a local account with the passed in username and a randomly generated password.
-// If `groupName` is not an empty string the user will be added to group if it exists.
-func makeLocalAccount(ctx context.Context, user, groupName string) (*uint16, error) {
+// The user specified by `user`` will added to the `groupName`. This function does not check if groupName exists, that must be handled
+// the caller.
+func makeLocalAccount(ctx context.Context, user, groupName string) (_ *uint16, err error) {
 	// Create a local account with a random password
 	pswd, err := randomPswd()
 	if err != nil {
@@ -63,6 +64,11 @@ func makeLocalAccount(ctx context.Context, user, groupName string) (*uint16, err
 	); err != nil {
 		return nil, fmt.Errorf("failed to create user %s: %w", user, err)
 	}
+	defer func() {
+		if err != nil {
+			_ = winapi.NetUserDel("", user)
+		}
+	}()
 
 	log.G(ctx).WithField("username", user).Debug("Created local user account for job container")
 

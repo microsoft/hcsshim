@@ -320,18 +320,24 @@ func (c *JobContainer) Start(ctx context.Context) error {
 
 // Close free's up any resources (handles, temporary accounts).
 func (c *JobContainer) Close() error {
+	// Do not return the first error so we can finish cleaning up.
+
+	var closeErr bool
 	if err := c.job.Close(); err != nil {
-		return err
+		log.G(context.Background()).WithError(err).WithField("cid", c.id).Warning("failed to close job object")
+		closeErr = true
 	}
 
 	if err := c.token.Close(); err != nil {
-		return fmt.Errorf("failed to close token: %w", err)
+		log.G(context.Background()).WithError(err).WithField("cid", c.id).Warning("failed to close token")
+		closeErr = true
 	}
 
 	// Delete the containers local account if one was created
 	if c.localUserAccount != "" {
 		if err := winapi.NetUserDel("", c.localUserAccount); err != nil {
-			return fmt.Errorf("failed to delete local user account: %w", err)
+			log.G(context.Background()).WithError(err).WithField("cid", c.id).Warning("failed to delete local account")
+			closeErr = true
 		}
 	}
 
@@ -339,6 +345,9 @@ func (c *JobContainer) Close() error {
 		c.waitError = hcs.ErrAlreadyClosed
 		close(c.waitBlock)
 	})
+	if closeErr {
+		return errors.New("failed to close one or more job container resources")
+	}
 	return nil
 }
 
