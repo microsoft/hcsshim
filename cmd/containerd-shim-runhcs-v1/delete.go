@@ -9,6 +9,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
@@ -49,8 +50,8 @@ The delete command will be executed in the container's bundle as its cwd.
 	SkipArgReorder: true,
 	Action: func(context *cli.Context) (err error) {
 		// We cant write anything to stdout for this cmd other than the
-		// task.DeleteResponse by protcol. We can write to stderr which will be
-		// warning logged in containerd.
+		// task.DeleteResponse by protocol. We can write to stderr which will be
+		// logged as a warning in containerd.
 
 		ctx, span := trace.StartSpan(gcontext.Background(), "delete")
 		defer span.End()
@@ -97,6 +98,22 @@ The delete command will be executed in the container's bundle as its cwd.
 					}
 				}
 			}
+		}
+
+		// For Host Process containers if a group name is passed as the user for the container the shim will create a
+		// temporary user for the container to run as and add it to the specified group. On container exit the account will
+		// be deleted, but if the shim crashed unexpectedly (panic, terminated etc.) then the account may still be around.
+		// The username will be the container ID so try and delete it here. The username character limit is 20, so we need to
+		// slice down the container ID a bit.
+		username := idFlag[:winapi.UserNameCharLimit]
+
+		// Always try and delete the user, if it doesn't exist we'll get a specific error code that we can use to
+		// not log any warnings.
+		if err := winapi.NetUserDel(
+			"",
+			username,
+		); err != nil && err != winapi.NERR_UserNotFound {
+			fmt.Fprintf(os.Stderr, "failed to delete user %q: %v", username, err)
 		}
 
 		if data, err := proto.Marshal(&task.DeleteResponse{
