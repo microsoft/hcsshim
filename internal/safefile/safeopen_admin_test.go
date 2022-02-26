@@ -13,18 +13,16 @@ import (
 )
 
 func TestOpenRelative(t *testing.T) {
-	badroot, err := tempRoot()
+	badroot, err := tempRoot(t)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(badroot.Name())
 	defer badroot.Close()
 
-	root, err := tempRoot()
+	root, err := tempRoot(t)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(root.Name())
 	defer root.Close()
 
 	// Create a file

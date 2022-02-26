@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"io/ioutil"
 	"net"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -24,11 +22,7 @@ func TestRegisterComputeAgent(t *testing.T) {
 	ctx := context.Background()
 
 	// setup test database
-	tempDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	db, err := bolt.Open(filepath.Join(tempDir, "networkproxy.db.test"), 0600, nil)
 	if err != nil {
@@ -73,11 +67,7 @@ func TestConfigureNetworking(t *testing.T) {
 	ctx := context.Background()
 
 	// setup test database
-	tempDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	db, err := bolt.Open(filepath.Join(tempDir, "networkproxy.db.test"), 0600, nil)
 	if err != nil {
@@ -155,11 +145,7 @@ func TestReconnectComputeAgents_Success(t *testing.T) {
 	ctx := context.Background()
 
 	// setup test database
-	tempDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	db, err := bolt.Open(filepath.Join(tempDir, "networkproxy.db.test"), 0600, nil)
 	if err != nil {
@@ -204,11 +190,7 @@ func TestReconnectComputeAgents_Failure(t *testing.T) {
 	ctx := context.Background()
 
 	// setup test database
-	tempDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	db, err := bolt.Open(filepath.Join(tempDir, "networkproxy.db.test"), 0600, nil)
 	if err != nil {

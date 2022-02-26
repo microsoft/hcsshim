@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -220,18 +219,10 @@ func TestParallelScsiOps(t *testing.T) {
 	defer u.Close()
 
 	// Create a sandbox to use
-	tempDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatalf("failed to create tmpdir for test: %v", err)
-	}
+	tempDir := t.TempDir()
 	if err := lcow.CreateScratch(context.Background(), u, filepath.Join(tempDir, "sandbox.vhdx"), lcow.DefaultScratchSizeGB, ""); err != nil {
 		t.Fatalf("failed to create EXT4 scratch for LCOW test cases: %s", err)
 	}
-	defer func() {
-		if err := os.RemoveAll(tempDir); err != nil {
-			t.Errorf("failed to remove sandbox tmpdir: %v", err)
-		}
-	}()
 	copySandbox := func(dir string, workerId, iteration int) (string, error) {
 		orig, err := os.Open(filepath.Join(dir, "sandbox.vhdx"))
 		if err != nil {

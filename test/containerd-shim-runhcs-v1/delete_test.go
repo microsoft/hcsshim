@@ -1,9 +1,9 @@
+//go:build functional
 // +build functional
 
 package main
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -71,13 +71,7 @@ func Test_Delete_No_Bundle_Path(t *testing.T) {
 }
 
 func Test_Delete_HcsSystem_NotFound(t *testing.T) {
-	dir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal("failed to create tmpdir")
-	}
-	defer func() {
-		os.RemoveAll(dir)
-	}()
+	dir := t.TempDir()
 
 	before := time.Now()
 	stdout, stderr, err := runGlobalCommand(

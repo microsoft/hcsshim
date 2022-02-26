@@ -283,11 +283,7 @@ func Test_RunContainer_VHD_JobContainer_WCOW(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	dir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	vhdPath := filepath.Join(dir, "test.vhdx")
 	containerRequest.Config.Command = []string{
@@ -337,11 +333,7 @@ func Test_RunContainer_ETW_JobContainer_WCOW(t *testing.T) {
 	// For this test we'll launch an image that has a wprp file inside that we'll use to take an etw trace.
 	// After the etl file is generated we'll use tracerpt to create a report/dump file of the trace. This is
 	// just to verify that a common use case of grabbing host traces/diagnostics can be achieved.
-	dir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 	// Need for network name is solely because the only provider defined in the image is for HNS, so
 	// we do a simple HNS operation to get some output.
 	var (
@@ -416,11 +408,7 @@ func Test_RunContainer_HostVolumes_JobContainer_WCOW(t *testing.T) {
 func Test_RunContainer_JobContainer_VolumeMount(t *testing.T) {
 	client := newTestRuntimeClient(t)
 
-	dir, err := ioutil.TempDir("", "example")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	tmpfn := filepath.Join(dir, "tmpfile")
 	if err := ioutil.WriteFile(tmpfn, []byte("test"), 0777); err != nil {

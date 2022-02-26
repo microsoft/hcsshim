@@ -1,3 +1,4 @@
+//go:build functional
 // +build functional
 
 package main
@@ -7,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,10 +27,7 @@ func createStartCommand(t *testing.T) (*exec.Cmd, *bytes.Buffer, *bytes.Buffer) 
 }
 
 func createStartCommandWithID(t *testing.T, id string) (*exec.Cmd, *bytes.Buffer, *bytes.Buffer) {
-	bundleDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatalf("failed to create bundle with: %v", err)
-	}
+	bundleDir := t.TempDir()
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("failed os.Getwd() with: %v", err)

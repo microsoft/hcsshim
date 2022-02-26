@@ -6,7 +6,6 @@ package cri_containerd
 import (
 	"bufio"
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,15 +21,7 @@ func Test_Container_Network_LCOW(t *testing.T) {
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	// create a directory and log file
-	dir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatalf("failed creating temp dir: %v", err)
-	}
-	defer func() {
-		if err := os.RemoveAll(dir); err != nil {
-			t.Fatalf("failed deleting temp dir: %v", err)
-		}
-	}()
+	dir := t.TempDir()
 	log := filepath.Join(dir, "ping.txt")
 
 	sandboxRequest := getRunPodSandboxRequest(t, lcowRuntimeHandler)

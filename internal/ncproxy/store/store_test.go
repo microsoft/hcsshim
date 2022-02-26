@@ -2,8 +2,6 @@ package store
 
 import (
 	"context"
-	"io/ioutil"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -13,11 +11,7 @@ import (
 
 func TestComputeAgentStore(t *testing.T) {
 	ctx := context.Background()
-	tempDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	db, err := bolt.Open(filepath.Join(tempDir, "networkproxy.db.test"), 0600, nil)
 	if err != nil {
@@ -54,11 +48,7 @@ func TestComputeAgentStore(t *testing.T) {
 
 func TestComputeAgentStore_GetComputeAgents(t *testing.T) {
 	ctx := context.Background()
-	tempDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	db, err := bolt.Open(filepath.Join(tempDir, "networkproxy.db.test"), 0600, nil)
 	if err != nil {
@@ -93,11 +83,7 @@ func TestComputeAgentStore_GetComputeAgents(t *testing.T) {
 
 func TestEndpointStore(t *testing.T) {
 	ctx := context.Background()
-	tempDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	db, err := bolt.Open(filepath.Join(tempDir, "networkproxy.db.test"), 0600, nil)
 	if err != nil {
@@ -143,11 +129,7 @@ func TestEndpointStore(t *testing.T) {
 
 func TestEndpointStore_GetAll(t *testing.T) {
 	ctx := context.Background()
-	tempDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	db, err := bolt.Open(filepath.Join(tempDir, "networkproxy.db.test"), 0600, nil)
 	if err != nil {
@@ -192,11 +174,7 @@ func TestEndpointStore_GetAll(t *testing.T) {
 
 func TestNetworkStore(t *testing.T) {
 	ctx := context.Background()
-	tempDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	db, err := bolt.Open(filepath.Join(tempDir, "networkproxy.db.test"), 0600, nil)
 	if err != nil {
@@ -236,11 +214,7 @@ func TestNetworkStore(t *testing.T) {
 
 func TestNetworkStore_GetAll(t *testing.T) {
 	ctx := context.Background()
-	tempDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	db, err := bolt.Open(filepath.Join(tempDir, "networkproxy.db.test"), 0600, nil)
 	if err != nil {

@@ -1,10 +1,10 @@
+//go:build functional
 // +build functional
 
 package runhcs
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,14 +29,8 @@ func Test_CreateScratch_DirDestpath_Failure(t *testing.T) {
 		Debug: true,
 	}
 
-	td, err := ioutil.TempDir("", "CreateScratch")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(td)
-
 	ctx := context.TODO()
-	err = rhcs.CreateScratch(ctx, td)
+	err := rhcs.CreateScratch(ctx, t.TempDir())
 	if err == nil {
 		t.Fatal("Should have failed 'CreateScratch' command with dir destpath")
 	}
@@ -47,16 +41,10 @@ func Test_CreateScratch_ValidDestpath_Success(t *testing.T) {
 		Debug: true,
 	}
 
-	td, err := ioutil.TempDir("", "CreateScratch")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(td)
-
-	scratchPath := filepath.Join(td, "scratch.vhdx")
+	scratchPath := filepath.Join(t.TempDir(), "scratch.vhdx")
 
 	ctx := context.TODO()
-	err = rhcs.CreateScratch(ctx, scratchPath)
+	err := rhcs.CreateScratch(ctx, scratchPath)
 	if err != nil {
 		t.Fatalf("Failed 'CreateScratch' command with: %v", err)
 	}
@@ -71,19 +59,13 @@ func Test_CreateScratchWithOpts_SizeGB_Success(t *testing.T) {
 		Debug: true,
 	}
 
-	td, err := ioutil.TempDir("", "CreateScratchWithSize")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(td)
-
-	scratchPath := filepath.Join(td, "scratch.vhdx")
+	scratchPath := filepath.Join(t.TempDir(), "scratch.vhdx")
 
 	ctx := context.TODO()
 	opts := &runhcs.CreateScratchOpts{
 		SizeGB: 30,
 	}
-	err = rhcs.CreateScratchWithOpts(ctx, scratchPath, opts)
+	err := rhcs.CreateScratchWithOpts(ctx, scratchPath, opts)
 	if err != nil {
 		t.Fatalf("Failed 'CreateScratch' command with: %v", err)
 	}

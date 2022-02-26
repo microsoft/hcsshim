@@ -1,7 +1,6 @@
 package jobcontainers
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -128,30 +127,29 @@ func TestGetApplicationNamePing(t *testing.T) {
 }
 
 func TestGetApplicationNameRandomBinary(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Create fake executables in a temporary directory to use for the below tests.
 	testExe := filepath.Join(tempDir, "test.exe")
-	_, err = os.Create(testExe)
+	f1, err := os.Create(testExe)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = f1.Close() })
 
 	test2Exe := filepath.Join(tempDir, "test 2.exe")
-	_, err = os.Create(test2Exe)
+	f2, err := os.Create(test2Exe)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = f2.Close() })
 
 	exeWithSpace := filepath.Join(tempDir, "exe with space.exe")
-	_, err = os.Create(exeWithSpace)
+	f3, err := os.Create(exeWithSpace)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = f3.Close() })
 
 	tests := []*config{
 		// See if we can successfully find "exe with space.exe" with no quoting, it should first try "exe.exe", then "exe with.exe" and then finally
