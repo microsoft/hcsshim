@@ -3,6 +3,7 @@ package securitypolicy
 import (
 	"fmt"
 	"math/rand"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -34,7 +35,9 @@ const (
 var testRand *rand.Rand
 
 func init() {
-	testRand = rand.New(rand.NewSource(time.Now().Unix()))
+	seed := rand.NewSource(time.Now().Unix())
+	testRand = rand.New(seed)
+	fmt.Fprintf(os.Stdout, "securitypolicy_test seed: %d\n", seed.Int63())
 }
 
 // Validate that our conversion from the external SecurityPolicy representation

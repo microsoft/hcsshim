@@ -400,9 +400,9 @@ func (pe *StandardSecurityPolicyEnforcer) enforceWorkingDirPolicy(containerID st
 		pWorkingDir := pe.Containers[pIndex].WorkingDir
 		if pWorkingDir == workingDir {
 			matched = true
-			continue
+		} else {
+			pe.narrowMatchesForContainerIndex(pIndex, containerID)
 		}
-		pe.narrowMatchesForContainerIndex(pIndex, containerID)
 	}
 	if !matched {
 		return fmt.Errorf("working_dir %s unmached by policy rule", workingDir)
