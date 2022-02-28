@@ -535,7 +535,7 @@ func Test_EnforceEnvironmentVariablePolicy_Re2Match(t *testing.T) {
 
 	container := generateContainersContainer(testRand, 1)
 	// add a rule to re2 match
-	re2MatchRule := EnvRule{
+	re2MatchRule := EnvRuleConfig{
 		Strategy: EnvVarRuleRegex,
 		Rule:     "PREFIX_.+=.+",
 	}
@@ -758,7 +758,7 @@ func (*SecurityPolicy) Generate(r *rand.Rand, _ int) reflect.Value {
 				Elements: map[string]string{},
 			},
 			EnvRules: EnvRules{
-				Elements: map[string]EnvRule{},
+				Elements: map[string]EnvRuleConfig{},
 			},
 			Layers: Layers{
 				Elements: map[string]string{},
@@ -782,7 +782,7 @@ func (*SecurityPolicy) Generate(r *rand.Rand, _ int) reflect.Value {
 		// env variable rules
 		numEnvRules := int(atMost(r, maxGeneratedEnvironmentVariableRules))
 		for i := 0; i < numEnvRules; i++ {
-			rule := EnvRule{
+			rule := EnvRuleConfig{
 				Strategy: "string",
 				Rule:     randVariableString(r, maxGeneratedEnvironmentVariableRuleLength),
 			}
@@ -878,12 +878,12 @@ func generateCommand(r *rand.Rand) []string {
 	return args
 }
 
-func generateEnvironmentVariableRules(r *rand.Rand) []EnvRule {
-	var rules []EnvRule
+func generateEnvironmentVariableRules(r *rand.Rand) []EnvRuleConfig {
+	var rules []EnvRuleConfig
 
 	numArgs := atLeastOneAtMost(r, maxGeneratedEnvironmentVariableRules)
 	for i := 0; i < int(numArgs); i++ {
-		rule := EnvRule{
+		rule := EnvRuleConfig{
 			Strategy: "string",
 			Rule:     randVariableString(r, maxGeneratedEnvironmentVariableRuleLength),
 		}
