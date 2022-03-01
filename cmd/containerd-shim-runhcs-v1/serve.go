@@ -84,7 +84,7 @@ var serveCommand = cli.Command{
 		}
 
 		if shimOpts.Debug && shimOpts.LogLevel != "" {
-			logrus.Warning("Both Debug and LogLevel specified, Debug will be overriden")
+			logrus.Warning("Both Debug and LogLevel specified, Debug will be overridden")
 		}
 
 		// For now keep supporting the debug option, this used to be the only way to specify a different logging

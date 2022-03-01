@@ -228,7 +228,7 @@ func IPv6DualStackSupported() error {
 	return platformDoesNotSupportError("IPv6 DualStack")
 }
 
-//L4proxySupported returns an error if the HCN verison does not support L4Proxy
+//L4proxySupported returns an error if the HCN version does not support L4Proxy
 func L4proxyPolicySupported() error {
 	supported, err := GetCachedSupportedFeatures()
 	if err != nil {
@@ -240,7 +240,7 @@ func L4proxyPolicySupported() error {
 	return platformDoesNotSupportError("L4ProxyPolicy")
 }
 
-// L4WfpProxySupported returns an error if the HCN verison does not support L4WfpProxy
+// L4WfpProxySupported returns an error if the HCN version does not support L4WfpProxy
 func L4WfpProxyPolicySupported() error {
 	supported, err := GetCachedSupportedFeatures()
 	if err != nil {
