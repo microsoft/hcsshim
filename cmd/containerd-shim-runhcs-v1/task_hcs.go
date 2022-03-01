@@ -428,7 +428,7 @@ type hcsTask struct {
 	host *uvm.UtilityVM
 
 	// ecl is the exec create lock for all non-init execs and MUST be held
-	// durring create to prevent ID duplication.
+	// during create to prevent ID duplication.
 	ecl   sync.Mutex
 	execs sync.Map
 

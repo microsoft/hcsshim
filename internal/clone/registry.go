@@ -98,7 +98,7 @@ func storePersistedUVMConfig(id string, encodedConfig []byte) error {
 }
 
 // removePersistedUVMConfig removes any persisted state associated with this config. If the config
-// is not found in the registery `Remove` returns no error.
+// is not found in the registry `Remove` returns no error.
 func removePersistedUVMConfig(id string) error {
 	sk, err := regstate.Open(configRoot, false)
 	if err != nil {
