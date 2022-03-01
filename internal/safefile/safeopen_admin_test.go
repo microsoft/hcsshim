@@ -17,13 +17,11 @@ func TestOpenRelative(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer badroot.Close()
 
 	root, err := tempRoot(t)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer root.Close()
 
 	// Create a file
 	f, err := OpenRelative("foo", root, 0, syscall.FILE_SHARE_READ, winapi.FILE_CREATE, 0)

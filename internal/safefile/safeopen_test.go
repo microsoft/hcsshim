@@ -28,7 +28,6 @@ func TestRemoveRelativeReadOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer root.Close()
 
 	p := filepath.Join(root.Name(), "foo")
 	f, err := os.Create(p)
