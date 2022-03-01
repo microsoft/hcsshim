@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/scrub"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
 )
@@ -365,6 +366,7 @@ func (brdg *bridge) recvLoop() error {
 func (brdg *bridge) sendLoop() {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
 	for {
 		select {
 		case <-brdg.waitCh:
@@ -392,11 +394,26 @@ func (brdg *bridge) writeMessage(buf *bytes.Buffer, enc *json.Encoder, typ msgTy
 	}
 	// Update the message header with the size.
 	binary.LittleEndian.PutUint32(buf.Bytes()[hdrOffSize:], uint32(buf.Len()))
+
+	if brdg.log.Logger.GetLevel() >= logrus.DebugLevel {
+		b := buf.Bytes()[hdrSize:]
+		switch typ {
+		// container environment vars are in rpCreate for linux; rpcExecuteProcess for windows
+		case msgType(rpcCreate) | msgTypeRequest:
+			b, err = scrub.BridgeCreate(b)
+		case msgType(rpcExecuteProcess) | msgTypeRequest:
+			b, err = scrub.BridgeExecProcess(b)
+		}
+		if err != nil {
+			brdg.log.WithError(err).Warning("could not scrub bridge payload")
+		}
+		brdg.log.WithFields(logrus.Fields{
+			"payload":    string(b),
+			"type":       typ,
+			"message-id": id}).Debug("bridge send")
+	}
+
 	// Write the message.
-	brdg.log.WithFields(logrus.Fields{
-		"payload":    string(buf.Bytes()[hdrSize:]),
-		"type":       typ,
-		"message-id": id}).Debug("bridge send")
 	_, err = buf.WriteTo(brdg.conn)
 	if err != nil {
 		return fmt.Errorf("bridge write: %s", err)

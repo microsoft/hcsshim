@@ -14,6 +14,7 @@ import (
 	"github.com/Microsoft/go-winio"
 	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/internal/extendedtask"
+	"github.com/Microsoft/hcsshim/internal/scrub"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/pkg/octtrpc"
 	"github.com/containerd/containerd/log"
@@ -84,7 +85,7 @@ var serveCommand = cli.Command{
 		}
 
 		if shimOpts.Debug && shimOpts.LogLevel != "" {
-			logrus.Warning("Both Debug and LogLevel specified, Debug will be overriden")
+			logrus.Warning("Both Debug and LogLevel specified, Debug will be overridden")
 		}
 
 		// For now keep supporting the debug option, this used to be the only way to specify a different logging
@@ -157,6 +158,11 @@ var serveCommand = cli.Command{
 		}
 
 		os.Stdin.Close()
+
+		// enable scrubbing
+		if shimOpts.ScrubLogs {
+			scrub.SetScrubbing(true)
+		}
 
 		// Force the cli.ErrWriter to be os.Stdout for this. We use stderr for
 		// the panic.log attached via start.
