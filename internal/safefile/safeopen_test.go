@@ -1,7 +1,6 @@
 package safefile
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -10,26 +9,25 @@ import (
 	winio "github.com/Microsoft/go-winio"
 )
 
-func tempRoot() (*os.File, error) {
-	name, err := ioutil.TempDir("", "hcsshim-test")
-	if err != nil {
-		return nil, err
-	}
+func tempRoot(t *testing.T) (*os.File, error) {
+	name := t.TempDir()
 	f, err := OpenRoot(name)
 	if err != nil {
-		os.Remove(name)
 		return nil, err
 	}
-	return f, nil
+
+	t.Cleanup(func() {
+		_ = f.Close()
+	})
+
+	return f, err
 }
 
 func TestRemoveRelativeReadOnly(t *testing.T) {
-	root, err := tempRoot()
+	root, err := tempRoot(t)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(root.Name())
-	defer root.Close()
 
 	p := filepath.Join(root.Name(), "foo")
 	f, err := os.Create(p)

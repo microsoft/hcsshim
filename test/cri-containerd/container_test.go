@@ -7,7 +7,6 @@ import (
 	"bufio"
 	"context"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -67,15 +66,7 @@ func Test_RotateLogs_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
 	image := "alpine:latest"
-	dir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatalf("failed creating temp dir: %v", err)
-	}
-	defer func() {
-		if err := os.RemoveAll(dir); err != nil {
-			t.Fatalf("failed deleting temp dir: %v", err)
-		}
-	}()
+	dir := t.TempDir()
 	log := filepath.Join(dir, "log.txt")
 	logArchive := filepath.Join(dir, "log-archive.txt")
 

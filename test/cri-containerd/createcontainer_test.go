@@ -938,11 +938,7 @@ func Test_CreateContainer_Mount_Dir_LCOW(t *testing.T) {
 
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
-	tempDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %s", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	containerFilePath := "/foo"
 
@@ -974,11 +970,7 @@ func Test_CreateContainer_Mount_ReadOnlyDir_LCOW(t *testing.T) {
 
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
-	tempDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %s", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	containerFilePath := "/foo"
 
@@ -1101,11 +1093,7 @@ func Test_CreateContainer_Mount_Dir_WCOW(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	tempDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %s", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	containerFilePath := "C:\\foo"
 
@@ -1138,11 +1126,7 @@ func Test_CreateContainer_Mount_ReadOnlyDir_WCOW(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	tempDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %s", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	containerFilePath := "C:\\foo"
 
@@ -1176,11 +1160,7 @@ func Test_CreateContainer_Mount_EmptyDir_WCOW(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	tempDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %s", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 	path := filepath.Join(tempDir, "kubernetes.io~empty-dir", "volume1")
 	if err := os.MkdirAll(path, 0); err != nil {
 		t.Fatalf("Failed to create kubernetes.io~empty-dir volume path: %s", err)
@@ -1223,11 +1203,7 @@ func Test_Mount_ReadOnlyDirReuse_WCOW(t *testing.T) {
 
 	containerPath := `C:\foo`
 
-	tempDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %s", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	sandboxRequest := getRunPodSandboxRequest(t, wcowHypervisorRuntimeHandler)
 

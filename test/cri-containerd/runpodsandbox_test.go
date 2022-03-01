@@ -9,8 +9,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -1086,11 +1084,7 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_LCOW(t *testing.T) {
 	}
 
 	// Create a temporary ext4 VHD to mount into the container.
-	vhdHostDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatalf("failed to create temp directory: %s", err)
-	}
-	defer os.RemoveAll(vhdHostDir)
+	vhdHostDir := t.TempDir()
 	vhdHostPath := filepath.Join(vhdHostDir, "temp.vhdx")
 	createExt4VHD(ctx, t, vhdHostPath)
 
@@ -1175,11 +1169,7 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_RShared_LCOW(t *testing.T) {
 	defer stopPodSandbox(t, client, ctx, podID)
 
 	// Create a temporary ext4 VHD to mount into the container.
-	vhdHostDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatalf("failed to create temp directory: %s", err)
-	}
-	defer os.RemoveAll(vhdHostDir)
+	vhdHostDir := t.TempDir()
 	vhdHostPath := filepath.Join(vhdHostDir, "temp.vhdx")
 	createExt4VHD(ctx, t, vhdHostPath)
 
@@ -1298,15 +1288,10 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_WCOW(t *testing.T) {
 		annotations.AllowOvercommit: "true",
 	}
 
-	vhdHostDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatalf("failed to create temporary directory: %s", err)
-	}
-	defer os.RemoveAll(vhdHostDir)
-
+	vhdHostDir := t.TempDir()
 	vhdHostPath := filepath.Join(vhdHostDir, "temp.vhdx")
 
-	if err = hcs.CreateNTFSVHD(ctx, vhdHostPath, 10); err != nil {
+	if err := hcs.CreateNTFSVHD(ctx, vhdHostPath, 10); err != nil {
 		t.Fatalf("failed to create NTFS VHD: %s", err)
 	}
 
