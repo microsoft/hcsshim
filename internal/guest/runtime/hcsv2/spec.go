@@ -20,6 +20,10 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
+const (
+	devShmPath = "/dev/shm"
+)
+
 // getNetworkNamespaceID returns the `ToLower` of
 // `spec.Windows.Network.NetworkNamespace` or `""`.
 func getNetworkNamespaceID(spec *oci.Spec) string {
@@ -34,17 +38,6 @@ func getNetworkNamespaceID(spec *oci.Spec) string {
 func isRootReadonly(spec *oci.Spec) bool {
 	if spec.Root != nil {
 		return spec.Root.Readonly
-	}
-	return false
-}
-
-// isInMounts returns `true` if `target` matches a `Destination` in any of
-// `mounts`.
-func isInMounts(target string, mounts []oci.Mount) bool {
-	for _, m := range mounts {
-		if m.Destination == target {
-			return true
-		}
 	}
 	return false
 }
@@ -202,25 +195,13 @@ func getGroup(spec *oci.Spec, filter func(user.Group) bool) (user.Group, error) 
 func applyAnnotationsToSpec(ctx context.Context, spec *oci.Spec) error {
 	// Check if we need to override container's /dev/shm
 	if val, ok := spec.Annotations[annotations.LCOWDevShmSizeInKb]; ok {
-		sz, err := strconv.ParseInt(val, 10, 64)
+		mt, err := devShmMountWithSize(val)
 		if err != nil {
-			return errors.Wrap(err, "/dev/shm size must be a valid integer")
+			return err
 		}
-		if sz <= 0 {
-			return errors.Errorf("/dev/shm size must be a positive integer, got: %d", sz)
-		}
-
-		// Use the same options as in upstream https://github.com/containerd/containerd/blob/0def98e462706286e6eaeff4a90be22fda75e761/oci/mounts.go#L49
-		size := fmt.Sprintf("size=%dk", sz)
-		mt := oci.Mount{
-			Destination: "/dev/shm",
-			Type:        "tmpfs",
-			Source:      "shm",
-			Options:     []string{"nosuid", "noexec", "nodev", "mode=1777", size},
-		}
-		spec.Mounts = removeMount("/dev/shm", spec.Mounts)
-		spec.Mounts = append(spec.Mounts, mt)
-		log.G(ctx).WithField("size", size).Debug("set custom /dev/shm size")
+		spec.Mounts = removeMount(devShmPath, spec.Mounts)
+		spec.Mounts = append(spec.Mounts, *mt)
+		log.G(ctx).WithField("sizeKB", val).Debug("set custom /dev/shm size")
 	}
 
 	// Check if we need to do any capability/device mappings
@@ -262,4 +243,25 @@ func applyAnnotationsToSpec(ctx context.Context, spec *oci.Spec) error {
 func addLDConfigHook(_ context.Context, spec *oci.Spec, args, env []string) error {
 	ldConfigHook := hooks.NewOCIHook("/sbin/ldconfig", args, env)
 	return hooks.AddOCIHook(spec, hooks.Prestart, ldConfigHook)
+}
+
+// devShmMountWithSize returns a /dev/shm device mount with size set to
+// `sizeString` if it represents a valid size in KB, returns error otherwise.
+func devShmMountWithSize(sizeString string) (*oci.Mount, error) {
+	size, err := strconv.ParseUint(sizeString, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("/dev/shm size must be a valid integer: %w", err)
+	}
+	if size == 0 {
+		return nil, errors.New("/dev/shm size must be non-zero")
+	}
+
+	// Use the same options as in upstream https://github.com/containerd/containerd/blob/0def98e462706286e6eaeff4a90be22fda75e761/oci/mounts.go#L49
+	sizeKB := fmt.Sprintf("size=%sk", sizeString)
+	return &oci.Mount{
+		Source:      "shm",
+		Destination: devShmPath,
+		Type:        "tmpfs",
+		Options:     []string{"nosuid", "noexec", "nodev", "mode=1777", sizeKB},
+	}, nil
 }
