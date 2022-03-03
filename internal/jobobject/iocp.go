@@ -38,7 +38,7 @@ func pollIOCP(ctx context.Context, iocpHandle windows.Handle) {
 	)
 
 	for {
-		err := winapi.GetQueuedCompletionStatus(iocpHandle, &code, &key, (**windows.Overlapped)(unsafe.Pointer(&overlapped)), windows.INFINITE)
+		err := windows.GetQueuedCompletionStatus(iocpHandle, &code, &key, (**windows.Overlapped)(unsafe.Pointer(&overlapped)), windows.INFINITE)
 		if err != nil {
 			log.G(ctx).WithError(err).Error("failed to poll for job object message")
 			continue
