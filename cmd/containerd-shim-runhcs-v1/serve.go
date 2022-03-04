@@ -245,10 +245,26 @@ var serveCommand = cli.Command{
 				// Shouldn't need to os.Exit without clean up (ie, deferred `.Close()`s)
 				return nil
 			}
-			// currently the ttrpc shutdown is the only clean up to wait on
+
+			// containerd waits for the ttrpc server to close, then deletes the sanbox
+			// bundle.
+			// However, this (serve) command is started with the bundle path as the cwd
+			// and panic.log (created within the sandbox bundle) as the stderr. This
+			// prevents containerd from deleting the bundle if this process is still
+			// alive.
+			// Change the directory to the parent and close stderr (panic.log) to
+			// allow bundle deletion to succeed.
+			if err := os.Chdir(".."); err != nil {
+				logrus.WithError(err).Warn("could not change working directory to bundle directory parent ")
+			}
+			os.Stderr.Close()
+
 			sctx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
 			defer cancel()
-			err = s.Shutdown(sctx)
+			// ignore the error, since we closed stderr (and stdout)
+			if err := s.Shutdown(sctx); err != nil {
+				logrus.WithError(err).Warning("error while shutting down ttrpc server")
+			}
 		}
 
 		return err
