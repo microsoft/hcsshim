@@ -707,8 +707,7 @@ func Test_WorkingDirectoryPolicy_Matches(t *testing.T) {
 			return false
 		}
 
-		err = tc.policy.enforceWorkingDirPolicy(tc.containerID, tc.container.WorkingDir)
-		return err == nil
+		return tc.policy.enforceWorkingDirPolicy(tc.containerID, tc.container.WorkingDir) == nil
 	}
 
 	if err := quick.Check(testFunc, &quick.Config{MaxCount: 1000}); err != nil {
@@ -729,8 +728,7 @@ func Test_WorkingDirectoryPolicy_NoMatches(t *testing.T) {
 			return false
 		}
 
-		err = tc.policy.enforceWorkingDirPolicy(tc.containerID, randString(testRand, 20))
-		return err != nil
+		return tc.policy.enforceWorkingDirPolicy(tc.containerID, randString(testRand, 20)) != nil
 	}
 
 	if err := quick.Check(testFunc, &quick.Config{MaxCount: 1000}); err != nil {

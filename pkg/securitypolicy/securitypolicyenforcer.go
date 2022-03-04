@@ -334,10 +334,10 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(
 }
 
 func (pe *StandardSecurityPolicyEnforcer) enforceCommandPolicy(containerID string, argList []string) (err error) {
-	// Get a list of all the indexes into our security policy's list of
+	// Get a list of all the indices into our security policy's list of
 	// containers that are possible matches for this containerID based
 	// on the image overlay layout
-	possibleIndexes := possibleIndexesForID(containerID, pe.ContainerIndexToContainerIds)
+	possibleIndices := possibleIndicesForID(containerID, pe.ContainerIndexToContainerIds)
 
 	// Loop through every possible match and do two things:
 	// 1- see if any command matches. we need at least one match or
@@ -345,7 +345,7 @@ func (pe *StandardSecurityPolicyEnforcer) enforceCommandPolicy(containerID strin
 	// 2- remove this containerID as a possible match for any container from the
 	//    security policy whose command line isn't a match.
 	matchingCommandFound := false
-	for _, possibleIndex := range possibleIndexes {
+	for _, possibleIndex := range possibleIndices {
 		cmd := pe.Containers[possibleIndex].Command
 		if cmp.Equal(cmd, argList) {
 			matchingCommandFound = true
@@ -368,11 +368,11 @@ func (pe *StandardSecurityPolicyEnforcer) enforceEnvironmentVariablePolicy(conta
 	// Get a list of all the indexes into our security policy's list of
 	// containers that are possible matches for this containerID based
 	// on the image overlay layout and command line
-	possibleIndexes := possibleIndexesForID(containerID, pe.ContainerIndexToContainerIds)
+	possibleIndices := possibleIndicesForID(containerID, pe.ContainerIndexToContainerIds)
 
 	for _, envVariable := range envList {
 		matchingRuleFoundForSomeContainer := false
-		for _, possibleIndex := range possibleIndexes {
+		for _, possibleIndex := range possibleIndices {
 			envRules := pe.Containers[possibleIndex].EnvRules
 			ok := envIsMatchedByRule(envVariable, envRules)
 			if ok {
@@ -393,7 +393,7 @@ func (pe *StandardSecurityPolicyEnforcer) enforceEnvironmentVariablePolicy(conta
 }
 
 func (pe *StandardSecurityPolicyEnforcer) enforceWorkingDirPolicy(containerID string, workingDir string) error {
-	possibleIndices := possibleIndexesForID(containerID, pe.ContainerIndexToContainerIds)
+	possibleIndices := possibleIndicesForID(containerID, pe.ContainerIndexToContainerIds)
 
 	matched := false
 	for _, pIndex := range possibleIndices {
@@ -459,7 +459,7 @@ func equalForOverlay(a1 []string, a2 []string) bool {
 	return true
 }
 
-func possibleIndexesForID(containerID string, mapping map[int]map[string]struct{}) []int {
+func possibleIndicesForID(containerID string, mapping map[int]map[string]struct{}) []int {
 	possibles := []int{}
 	for index, ids := range mapping {
 		for id := range ids {
