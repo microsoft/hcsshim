@@ -148,9 +148,12 @@ func createPolicyFromConfig(config *securitypolicy.PolicyConfig) (*securitypolic
 		}
 		envRules = append(envRules, rule)
 
-		workingDir := containerConfig.WorkingDir
-		if workingDir == "" {
+		workingDir := "/"
+		if imgConfig.Config.WorkingDir != "" {
 			workingDir = imgConfig.Config.WorkingDir
+		}
+		if containerConfig.WorkingDir != "" {
+			workingDir = containerConfig.WorkingDir
 		}
 		container, err := securitypolicy.NewContainer(containerConfig.Command, layerHashes, envRules, workingDir)
 		if err != nil {
