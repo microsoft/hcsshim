@@ -31,7 +31,9 @@ func groupExists(groupName string) bool {
 	); err != nil {
 		return false
 	}
-	defer windows.NetApiBufferFree(p)
+	defer func() {
+		_ = windows.NetApiBufferFree(p)
+	}()
 	return true
 }
 
