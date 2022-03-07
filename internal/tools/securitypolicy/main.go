@@ -80,6 +80,7 @@ func createPolicyFromConfig(config *securitypolicy.PolicyConfig) (*securitypolic
 		[]string{"/pause"},
 		[]securitypolicy.EnvRule{},
 		securitypolicy.AuthConfig{},
+		"",
 	)
 	config.Containers = append(config.Containers, pause)
 
@@ -147,7 +148,14 @@ func createPolicyFromConfig(config *securitypolicy.PolicyConfig) (*securitypolic
 		}
 		envRules = append(envRules, rule)
 
-		container, err := securitypolicy.NewContainer(containerConfig.Command, layerHashes, envRules)
+		workingDir := "/"
+		if imgConfig.Config.WorkingDir != "" {
+			workingDir = imgConfig.Config.WorkingDir
+		}
+		if containerConfig.WorkingDir != "" {
+			workingDir = containerConfig.WorkingDir
+		}
+		container, err := securitypolicy.NewContainer(containerConfig.Command, layerHashes, envRules, workingDir)
 		if err != nil {
 			return nil, err
 		}

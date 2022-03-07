@@ -154,7 +154,12 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemAlreadyExists)
 	}
 
-	err = h.securityPolicyEnforcer.EnforceCreateContainerPolicy(id, settings.OCISpecification.Process.Args, settings.OCISpecification.Process.Env)
+	err = h.securityPolicyEnforcer.EnforceCreateContainerPolicy(
+		id,
+		settings.OCISpecification.Process.Args,
+		settings.OCISpecification.Process.Env,
+		settings.OCISpecification.Process.Cwd,
+	)
 
 	if err != nil {
 		return nil, errors.Wrapf(err, "container creation denied due to policy")
