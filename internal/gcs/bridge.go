@@ -15,9 +15,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/scrub"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
+
+	"github.com/Microsoft/hcsshim/internal/log"
 )
 
 const (
@@ -400,9 +401,9 @@ func (brdg *bridge) writeMessage(buf *bytes.Buffer, enc *json.Encoder, typ msgTy
 		switch typ {
 		// container environment vars are in rpCreate for linux; rpcExecuteProcess for windows
 		case msgType(rpcCreate) | msgTypeRequest:
-			b, err = scrub.BridgeCreate(b)
+			b, err = log.ScrubBridgeCreate(b)
 		case msgType(rpcExecuteProcess) | msgTypeRequest:
-			b, err = scrub.BridgeExecProcess(b)
+			b, err = log.ScrubBridgeExecProcess(b)
 		}
 		if err != nil {
 			brdg.log.WithError(err).Warning("could not scrub bridge payload")

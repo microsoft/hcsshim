@@ -1,5 +1,4 @@
-// This package scrubs objects of customer information to pass to logging
-package scrub
+package log
 
 import (
 	"bytes"
@@ -10,7 +9,7 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 )
 
-// scrubbing utilities to remove user information from arbitrary objects
+// This package scrubs objects of potentially sensitive information to pass to logging
 
 type genMap = map[string]interface{}
 type scrubberFunc func(genMap) error
@@ -35,18 +34,18 @@ func SetScrubbing(enable bool) {
 	atomic.StoreInt32(&_scrub, v)
 }
 
-// ScrubbingEnabled checks if scrubbing is enabled
-func ScrubbingEnabled() bool {
+// IsScrubbingEnabled checks if scrubbing is enabled
+func IsScrubbingEnabled() bool {
 	v := atomic.LoadInt32(&_scrub)
 	return v != 0
 }
 
-// for HCS Create Process requests with config parameters of
-// type internal/hcs/schema2.ProcessParameters (aka hcsshema.ProcessParameters)
-func ProcessParameters(s string) (string, error) {
+// ScrubProcessParameters scrubs HCS Create Process requests with config parameters of
+// type internal/hcs/schema2.ScrubProcessParameters (aka hcsshema.ScrubProcessParameters)
+func ScrubProcessParameters(s string) (string, error) {
 	// todo: deal with v1 ProcessConfig
 	b := []byte(s)
-	if !ScrubbingEnabled() || !hasKeywords(b) || !json.Valid(b) {
+	if !IsScrubbingEnabled() || !hasKeywords(b) || !json.Valid(b) {
 		return s, nil
 	}
 
@@ -63,9 +62,9 @@ func ProcessParameters(s string) (string, error) {
 	return buf.String(), nil
 }
 
-// for requests sent over the bridge of type
-// internal/gcs/protocol.containerCreate wrapping a internal/hcsoci.linuxHostedSystem
-func BridgeCreate(b []byte) ([]byte, error) {
+// ScrubBridgeCreate scrubs requests sent over the bridge of type
+// internal/gcs/protocol.containerCreate wrapping an internal/hcsoci.linuxHostedSystem
+func ScrubBridgeCreate(b []byte) ([]byte, error) {
 	return scrubBytes(b, scrubLinuxHostedSystem)
 }
 
@@ -86,8 +85,9 @@ func scrubLinuxHostedSystem(m genMap) error {
 	return ErrUnknownType
 }
 
-// for requests sent over the bridge of type internal/gcs/protocol.containerExecuteProcess
-func BridgeExecProcess(b []byte) ([]byte, error) {
+// ScrubBridgeExecProcess scrubs requests sent over the bridge of type
+// internal/gcs/protocol.containerExecuteProcess
+func ScrubBridgeExecProcess(b []byte) ([]byte, error) {
 	return scrubBytes(b, scrubExecuteProcess)
 }
 
@@ -103,7 +103,7 @@ func scrubExecuteProcess(m genMap) error {
 				return ErrUnknownType
 			}
 
-			s, err := ProcessParameters(s)
+			s, err := ScrubProcessParameters(s)
 			if err != nil {
 				return err
 			}
@@ -116,7 +116,7 @@ func scrubExecuteProcess(m genMap) error {
 }
 
 func scrubBytes(b []byte, scrub scrubberFunc) ([]byte, error) {
-	if !ScrubbingEnabled() || !hasKeywords(b) || !json.Valid(b) {
+	if !IsScrubbingEnabled() || !hasKeywords(b) || !json.Valid(b) {
 		return b, nil
 	}
 

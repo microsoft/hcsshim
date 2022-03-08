@@ -56,7 +56,6 @@ github.com/Microsoft/hcsshim/internal/resources
 github.com/Microsoft/hcsshim/internal/runhcs
 github.com/Microsoft/hcsshim/internal/safefile
 github.com/Microsoft/hcsshim/internal/schemaversion
-github.com/Microsoft/hcsshim/internal/scrub
 github.com/Microsoft/hcsshim/internal/shimdiag
 github.com/Microsoft/hcsshim/internal/timeout
 github.com/Microsoft/hcsshim/internal/uvm
