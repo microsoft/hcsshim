@@ -12,10 +12,6 @@ import (
 	"unsafe"
 
 	"github.com/Microsoft/go-winio"
-	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
-	"github.com/Microsoft/hcsshim/internal/extendedtask"
-	"github.com/Microsoft/hcsshim/internal/shimdiag"
-	"github.com/Microsoft/hcsshim/pkg/octtrpc"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/ttrpc"
@@ -26,6 +22,12 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"golang.org/x/sys/windows"
+
+	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	"github.com/Microsoft/hcsshim/internal/extendedtask"
+	hcslog "github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/shimdiag"
+	"github.com/Microsoft/hcsshim/pkg/octtrpc"
 )
 
 var svc *service
@@ -157,6 +159,11 @@ var serveCommand = cli.Command{
 		}
 
 		os.Stdin.Close()
+
+		// enable scrubbing
+		if shimOpts.ScrubLogs {
+			hcslog.SetScrubbing(true)
+		}
 
 		// Force the cli.ErrWriter to be os.Stdout for this. We use stderr for
 		// the panic.log attached via start.

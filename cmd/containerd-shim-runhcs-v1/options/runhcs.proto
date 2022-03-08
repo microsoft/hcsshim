@@ -105,6 +105,9 @@ message Options {
 	// no_inherit_host_timezone specifies to skip inheriting the hosts time zone for WCOW UVMs and instead default to
 	// UTC.
 	bool no_inherit_host_timezone = 19;
+
+	// scrub_logs enables removing environment variables and other protentially sensitive information from logs
+	bool scrub_logs = 20;
 }
 
 // ProcessDetails contains additional information about a process. This is the additional
