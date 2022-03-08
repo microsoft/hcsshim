@@ -300,7 +300,11 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 		}
 		return nil
 	case shimExecStateExited:
-		return errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", he.id, he.tid)
+		log.G(ctx).WithFields(logrus.Fields{
+			"eid": he.id,
+			"tid": he.tid,
+		}).Debug("shimExecStateExited")
+		return nil
 	default:
 		return newExecInvalidStateError(he.tid, he.id, he.state, "kill")
 	}
