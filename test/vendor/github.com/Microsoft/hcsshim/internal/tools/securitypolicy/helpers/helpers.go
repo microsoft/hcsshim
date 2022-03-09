@@ -24,7 +24,7 @@ func RemoteImageFromImageName(imageName string, opts ...remote.Option) (v1.Image
 }
 
 // ComputeLayerHashes computes cryptographic digests of image layers and returns
-// them as an array of string hashes.
+// them as slice of string hashes.
 func ComputeLayerHashes(img v1.Image) ([]string, error) {
 	imgLayers, err := img.Layers()
 	if err != nil {
@@ -64,9 +64,9 @@ func ParseEnvFromImage(img v1.Image) ([]string, error) {
 	return envVars, nil
 }
 
-// DefaultContainerConfigs returns a hardcoded array of container configs, which should
+// DefaultContainerConfigs returns a hardcoded slice of container configs, which should
 // be included by default in the security policy.
-// The list includes only a sandbox pause container.
+// The slice includes only a sandbox pause container.
 func DefaultContainerConfigs() []securitypolicy.ContainerConfig {
 	pause := securitypolicy.NewContainerConfig(
 		"k8s.gcr.io/pause:3.1",
@@ -92,8 +92,8 @@ func ParseWorkingDirFromImage(img v1.Image) (string, error) {
 	return "/", nil
 }
 
-// PolicyContainersFromConfigs returns an array of securitypolicy.Container generated
-// from an array of securitypolicy.ContainerConfig's
+// PolicyContainersFromConfigs returns a slice of securitypolicy.Container generated
+// from a slice of securitypolicy.ContainerConfig's
 func PolicyContainersFromConfigs(containerConfigs []securitypolicy.ContainerConfig) ([]*securitypolicy.Container, error) {
 	var policyContainers []*securitypolicy.Container
 	for _, containerConfig := range containerConfigs {

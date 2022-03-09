@@ -62,7 +62,8 @@ func NewContainerConfig(
 	}
 }
 
-// NewEnvVarRules creates an array of EnvRule's from environment variables array.
+// NewEnvVarRules creates slice of EnvRuleConfig's from environment variables
+// strings slice.
 func NewEnvVarRules(envVars []string) []EnvRuleConfig {
 	var rules []EnvRuleConfig
 	for _, env := range envVars {
