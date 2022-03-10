@@ -405,7 +405,7 @@ func (pe *StandardSecurityPolicyEnforcer) enforceWorkingDirPolicy(containerID st
 		}
 	}
 	if !matched {
-		return fmt.Errorf("working_dir %s unmached by policy rule", workingDir)
+		return fmt.Errorf("working_dir %s unmatched by policy rule", workingDir)
 	}
 	return nil
 }
