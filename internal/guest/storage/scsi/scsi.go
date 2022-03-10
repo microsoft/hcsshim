@@ -43,7 +43,7 @@ const (
 	verityDeviceFmt = "verity-scsi-contr%d-lun%d-%s"
 )
 
-// Mount creates a mount from the SCSI device on `controller` index `lun` to
+// mount creates a mount from the SCSI device on `controller` index `lun` to
 // `target`
 //
 // `target` will be created. On mount failure the created `target` will be
@@ -51,7 +51,7 @@ const (
 //
 // If `encrypted` is set to true, the SCSI device will be encrypted using
 // dm-crypt.
-func Mount(
+func mount(
 	ctx context.Context,
 	controller,
 	lun uint8,
@@ -159,10 +159,10 @@ func Mount(
 	return nil
 }
 
-// Unmount unmounts a SCSI device mounted at `target`.
+// unmount unmounts a SCSI device mounted at `target`.
 //
 // If `encrypted` is true, it removes all its associated dm-crypto state.
-func Unmount(
+func unmount(
 	ctx context.Context,
 	controller,
 	lun uint8,
@@ -252,11 +252,11 @@ func ControllerLunToName(ctx context.Context, controller, lun uint8) (_ string, 
 	return devicePath, nil
 }
 
-// UnplugDevice finds the SCSI device on `controller` index `lun` and issues a
+// unplugDevice finds the SCSI device on `controller` index `lun` and issues a
 // guest initiated unplug.
 //
 // If the device is not attached returns no error.
-func UnplugDevice(ctx context.Context, controller, lun uint8) (err error) {
+func unplugDevice(ctx context.Context, controller, lun uint8) (err error) {
 	_, span := trace.StartSpan(ctx, "scsi::UnplugDevice")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -265,7 +265,7 @@ func UnplugDevice(ctx context.Context, controller, lun uint8) (err error) {
 		trace.Int64Attribute("controller", int64(controller)),
 		trace.Int64Attribute("lun", int64(lun)))
 
-	scsiID := fmt.Sprintf("0:0:%d:%d", controller, lun)
+	scsiID := fmt.Sprintf("%d:0:0:%d", controller, lun)
 	f, err := os.OpenFile(filepath.Join(scsiDevicesPath, scsiID, "delete"), os.O_WRONLY, 0644)
 	if err != nil {
 		if os.IsNotExist(err) {
