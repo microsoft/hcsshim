@@ -175,16 +175,16 @@ func (c CommandArgs) toInternal() ([]string, error) {
 	return stringMapToStringArray(c.Elements), nil
 }
 
-func (e EnvRules) toInternal() ([]EnvRule, error) {
+func (e EnvRules) toInternal() ([]EnvRuleConfig, error) {
 	envRulesMapLength := len(e.Elements)
 	if e.Length != envRulesMapLength {
 		return nil, fmt.Errorf("env rule numbers don't match in policy. expected: %d, actual: %d", e.Length, envRulesMapLength)
 	}
 
-	envRules := make([]EnvRule, envRulesMapLength)
+	envRules := make([]EnvRuleConfig, envRulesMapLength)
 	for i := 0; i < envRulesMapLength; i++ {
 		eIndex := strconv.Itoa(i)
-		rule := EnvRule{
+		rule := EnvRuleConfig{
 			Strategy: e.Elements[eIndex].Strategy,
 			Rule:     e.Elements[eIndex].Rule,
 		}
@@ -410,7 +410,7 @@ func (pe *StandardSecurityPolicyEnforcer) enforceWorkingDirPolicy(containerID st
 	return nil
 }
 
-func envIsMatchedByRule(envVariable string, rules []EnvRule) bool {
+func envIsMatchedByRule(envVariable string, rules []EnvRuleConfig) bool {
 	for _, rule := range rules {
 		switch rule.Strategy {
 		case "string":

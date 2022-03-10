@@ -38,18 +38,18 @@ type EnvRuleConfig struct {
 // ContainerConfig contains toml or JSON config for container described
 // in security policy.
 type ContainerConfig struct {
-	ImageName  string     `json:"image_name" toml:"image_name"`
-	Command    []string   `json:"command" toml:"command"`
-	Auth       AuthConfig `json:"auth" toml:"auth"`
-	EnvRules   []EnvRule  `json:"env_rules" toml:"env_rule"`
-	WorkingDir string     `json:"working_dir" toml:"working_dir"`
+	ImageName  string          `json:"image_name" toml:"image_name"`
+	Command    []string        `json:"command" toml:"command"`
+	Auth       AuthConfig      `json:"auth" toml:"auth"`
+	EnvRules   []EnvRuleConfig `json:"env_rules" toml:"env_rule"`
+	WorkingDir string          `json:"working_dir" toml:"working_dir"`
 }
 
 // NewContainerConfig creates a new ContainerConfig from the given values.
 func NewContainerConfig(
 	imageName string,
 	command []string,
-	envRules []EnvRule,
+	envRules []EnvRuleConfig,
 	auth AuthConfig,
 	workingDir string,
 ) ContainerConfig {
@@ -62,6 +62,20 @@ func NewContainerConfig(
 	}
 }
 
+// NewEnvVarRules creates slice of EnvRuleConfig's from environment variables
+// strings slice.
+func NewEnvVarRules(envVars []string) []EnvRuleConfig {
+	var rules []EnvRuleConfig
+	for _, env := range envVars {
+		r := EnvRuleConfig{
+			Strategy: EnvVarRuleString,
+			Rule:     env,
+		}
+		rules = append(rules, r)
+	}
+	return rules
+}
+
 // NewOpenDoorPolicy creates a new SecurityPolicy with AllowAll set to `true`
 func NewOpenDoorPolicy() *SecurityPolicy {
 	return &SecurityPolicy{
@@ -72,17 +86,17 @@ func NewOpenDoorPolicy() *SecurityPolicy {
 // Internal version of SecurityPolicyContainer
 type securityPolicyContainer struct {
 	// The command that we will allow the container to execute
-	Command []string `json:"command"`
+	Command []string
 	// The rules for determining if a given environment variable is allowed
-	EnvRules []EnvRule `json:"env_rules"`
+	EnvRules []EnvRuleConfig
 	// An ordered list of dm-verity root hashes for each layer that makes up
 	// "a container". Containers are constructed as an overlay file system. The
 	// order that the layers are overlayed is important and needs to be enforced
 	// as part of policy.
-	Layers []string `json:"layers"`
+	Layers []string
 	// WorkingDir is a path to container's working directory, which all the processes
 	// will default to.
-	WorkingDir string `json:"working_dir"`
+	WorkingDir string
 }
 
 // SecurityPolicyState is a structure that holds user supplied policy to enforce
@@ -146,6 +160,14 @@ type SecurityPolicy struct {
 	Containers Containers `json:"containers"`
 }
 
+func (sp *SecurityPolicy) EncodeToString() (string, error) {
+	j, err := json.Marshal(sp)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(j), nil
+}
+
 type Containers struct {
 	Length   int                  `json:"length"`
 	Elements map[string]Container `json:"elements"`
@@ -171,18 +193,13 @@ type CommandArgs struct {
 }
 
 type EnvRules struct {
-	Length   int                `json:"length"`
-	Elements map[string]EnvRule `json:"elements"`
-}
-
-type EnvRule struct {
-	Strategy EnvVarRule `json:"strategy"`
-	Rule     string     `json:"rule"`
+	Length   int                      `json:"length"`
+	Elements map[string]EnvRuleConfig `json:"elements"`
 }
 
 // NewContainer creates a new Container instance from the provided values
 // or an error if envRules validation fails.
-func NewContainer(command, layers []string, envRules []EnvRule, workingDir string) (*Container, error) {
+func NewContainer(command, layers []string, envRules []EnvRuleConfig, workingDir string) (*Container, error) {
 	if err := validateEnvRules(envRules); err != nil {
 		return nil, err
 	}
@@ -208,7 +225,7 @@ func NewSecurityPolicy(allowAll bool, containers []*Container) *SecurityPolicy {
 	}
 }
 
-func validateEnvRules(rules []EnvRule) error {
+func validateEnvRules(rules []EnvRuleConfig) error {
 	for _, rule := range rules {
 		switch rule.Strategy {
 		case EnvVarRuleRegex:
@@ -230,8 +247,8 @@ func newCommandArgs(args []string) CommandArgs {
 	}
 }
 
-func newEnvRules(rs []EnvRule) EnvRules {
-	envRules := map[string]EnvRule{}
+func newEnvRules(rs []EnvRuleConfig) EnvRules {
+	envRules := map[string]EnvRuleConfig{}
 	for i, r := range rs {
 		envRules[strconv.Itoa(i)] = r
 	}
