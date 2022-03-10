@@ -20,7 +20,12 @@ func (uvm *UtilityVM) SetSecurityPolicy(ctx context.Context, policy string) erro
 	}
 
 	if policy == "" {
-		return nil
+		openDoorPolicy := securitypolicy.NewOpenDoorPolicy()
+		policyString, err := openDoorPolicy.EncodeToString()
+		if err != nil {
+			return err
+		}
+		policy = policyString
 	}
 
 	uvm.m.Lock()

@@ -160,12 +160,13 @@ type SecurityPolicy struct {
 	Containers Containers `json:"containers"`
 }
 
+// EncodeToString returns base64 encoded string representation of SecurityPolicy.
 func (sp *SecurityPolicy) EncodeToString() (string, error) {
-	j, err := json.Marshal(sp)
+	jsn, err := json.Marshal(sp)
 	if err != nil {
 		return "", err
 	}
-	return base64.StdEncoding.EncodeToString(j), nil
+	return base64.StdEncoding.EncodeToString(jsn), nil
 }
 
 type Containers struct {

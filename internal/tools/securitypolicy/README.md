@@ -159,4 +159,3 @@ isn't in the TOML configuration.
 If the version of the pause container changes from 3.1, you will need to update
 the hardcoded root hash by running the `dmverity-vhd` to compute the root hash
 for the new container and update this tool accordingly.
-
