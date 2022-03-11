@@ -658,7 +658,7 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 	}
 
 	if log.IsScrubbingEnabled() {
-		opts.ExecCommandLine = fmt.Sprintf("%s --scrub-logs", opts.ExecCommandLine)
+		opts.ExecCommandLine += " --scrub-logs"
 	}
 
 	initArgs += " " + opts.ExecCommandLine

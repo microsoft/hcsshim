@@ -301,18 +301,18 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 					trace.StringAttribute("activityID", base.ActivityID),
 					trace.StringAttribute("cid", base.ContainerID))
 
-				etry := log.G(ctx)
-				if etry.Logger.GetLevel() >= logrus.DebugLevel {
+				entry := log.G(ctx)
+				if entry.Logger.GetLevel() >= logrus.DebugLevel {
 					s := string(message)
 					switch header.Type {
 					case prot.ComputeSystemCreateV1:
 						b, err := log.ScrubBridgeCreate(message)
 						s = string(b)
 						if err != nil {
-							etry.WithError(err).Warning("could not scrub bridge payload")
+							entry.WithError(err).Warning("could not scrub bridge payload")
 						}
 					}
-					etry.WithField("message", s).Debug("request read message")
+					entry.WithField("message", s).Debug("request read message")
 				}
 				requestChan <- &Request{
 					Context:     ctx,

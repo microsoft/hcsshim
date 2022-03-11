@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync/atomic"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -14,7 +15,7 @@ import (
 type genMap = map[string]interface{}
 type scrubberFunc func(genMap) error
 
-const ScrubbedReplacement = "<scrubbed>"
+const _scrubbedReplacement = "<scrubbed>"
 
 var (
 	ErrUnknownType = errors.New("encoded object is of unknown type")
@@ -53,32 +54,50 @@ func ScrubProcessParameters(s string) (string, error) {
 	if err := json.Unmarshal(b, &pp); err != nil {
 		return "", err
 	}
-	pp.Environment = map[string]string{ScrubbedReplacement: ScrubbedReplacement}
+	pp.Environment = map[string]string{_scrubbedReplacement: _scrubbedReplacement}
 
 	buf := bytes.NewBuffer(b[:0])
 	if err := encode(buf, pp); err != nil {
 		return "", err
 	}
-	return buf.String(), nil
+	return strings.TrimSpace(s), nil
 }
 
 // ScrubBridgeCreate scrubs requests sent over the bridge of type
 // internal/gcs/protocol.containerCreate wrapping an internal/hcsoci.linuxHostedSystem
 func ScrubBridgeCreate(b []byte) ([]byte, error) {
-	return scrubBytes(b, scrubLinuxHostedSystem)
+	return scrubBytes(b, scrubBridgeCreate)
 }
 
-func scrubLinuxHostedSystem(m genMap) error {
+func scrubBridgeCreate(m genMap) error {
 	if !isRequestBase(m) {
 		return ErrUnknownType
 	}
-	if m, ok := index(m, "ContainerConfig"); ok {
-		if m, ok := index(m, "OciSpecification"); ok {
-			if m, ok := index(m, "process"); ok {
-				if _, ok := m["env"]; ok {
-					m["env"] = []string{ScrubbedReplacement}
-					return nil
-				}
+	if ss, ok := m["ContainerConfig"]; ok {
+		// ContainerConfig is a json encoded struct passed as a regular string field
+		s, ok := ss.(string)
+		if !ok {
+			return ErrUnknownType
+		}
+		b, err := scrubBytes([]byte(s), scrubLinuxHostedSystem)
+		if err != nil {
+			return err
+		}
+		m["ContainerConfig"] = string(b)
+		return nil
+	}
+	return ErrUnknownType
+}
+
+func scrubLinuxHostedSystem(m genMap) error {
+	if m, ok := index(m, "OciSpecification"); ok {
+		if _, ok := m["annotations"]; ok {
+			m["annotations"] = map[string]string{_scrubbedReplacement: _scrubbedReplacement}
+		}
+		if m, ok := index(m, "process"); ok {
+			if _, ok := m["env"]; ok {
+				m["env"] = []string{_scrubbedReplacement}
+				return nil
 			}
 		}
 	}
@@ -135,7 +154,8 @@ func scrubBytes(b []byte, scrub scrubberFunc) ([]byte, error) {
 	if err := encode(buf, m); err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+
+	return bytes.TrimSpace(buf.Bytes()), nil
 }
 
 func encode(buf *bytes.Buffer, v interface{}) error {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync/atomic"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -59,7 +60,7 @@ func ScrubProcessParameters(s string) (string, error) {
 	if err := encode(buf, pp); err != nil {
 		return "", err
 	}
-	return trimStringNewline(s), nil
+	return strings.TrimSpace(s), nil
 }
 
 // ScrubBridgeCreate scrubs requests sent over the bridge of type
@@ -73,7 +74,7 @@ func scrubBridgeCreate(m genMap) error {
 		return ErrUnknownType
 	}
 	if ss, ok := m["ContainerConfig"]; ok {
-		// ContainerConfig is a json encoded struct passed as a regular sting field
+		// ContainerConfig is a json encoded struct passed as a regular string field
 		s, ok := ss.(string)
 		if !ok {
 			return ErrUnknownType
@@ -154,12 +155,7 @@ func scrubBytes(b []byte, scrub scrubberFunc) ([]byte, error) {
 		return nil, err
 	}
 
-	// remove newline encode appends
-	bb := buf.Bytes()
-	if len(bb) > 0 && bb[len(bb)-1] == '\n' {
-		bb = bb[:len(bb)-1]
-	}
-	return bb, nil
+	return bytes.TrimSpace(buf.Bytes()), nil
 }
 
 func encode(buf *bytes.Buffer, v interface{}) error {
@@ -195,12 +191,4 @@ func hasKeywords(b []byte) bool {
 		}
 	}
 	return false
-}
-
-func trimStringNewline(s string) string {
-	l := len(s)
-	if l > 0 && s[l-1] == '\n' {
-		return s[:l-1]
-	}
-	return s
 }
