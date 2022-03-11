@@ -5,6 +5,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net"
+	"strings"
 
 	"github.com/Microsoft/hcsshim/hcn"
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
@@ -12,13 +15,42 @@ import (
 )
 
 func hcnEndpointToEndpointResponse(ep *hcn.HostComputeEndpoint) (_ *ncproxygrpc.GetEndpointResponse, err error) {
+	hcnEndpointResp := &ncproxygrpc.HcnEndpointSettings{
+		Name:        ep.Name,
+		Macaddress:  ep.MacAddress,
+		NetworkName: ep.HostComputeNetwork,
+		DnsSetting: &ncproxygrpc.DnsSetting{
+			ServerIpAddrs: ep.Dns.ServerList,
+			Domain:        ep.Dns.Domain,
+			Search:        ep.Dns.Search,
+		},
+	}
+
 	policies, err := parseEndpointPolicies(ep.Policies)
 	if err != nil {
 		return nil, err
 	}
-	ipConfigInfo := ep.IpConfigurations
-	if len(ipConfigInfo) == 0 {
-		return nil, errors.Errorf("failed to find network %v ip configuration information", ep.Name)
+	hcnEndpointResp.Policies = policies
+
+	ipConfigInfos := ep.IpConfigurations
+	// there may be one ipv4 and/or one ipv6 configuration for an endpoint
+	if len(ipConfigInfos) == 0 || len(ipConfigInfos) > 2 {
+		return nil, errors.Errorf("invalid number (%v) of ip configuration information for endpoint %v", len(ipConfigInfos), ep.Name)
+	}
+	for _, ipConfig := range ipConfigInfos {
+		ip := net.ParseIP(ipConfig.IpAddress)
+		if ip == nil {
+			return nil, errors.Errorf("failed to parse IP address %v", ipConfig.IpAddress)
+		}
+		if ip.To4() != nil {
+			// this is an IPv4 address
+			hcnEndpointResp.Ipaddress = ipConfig.IpAddress
+			hcnEndpointResp.IpaddressPrefixlength = uint32(ipConfig.PrefixLength)
+		} else {
+			// this is an IPv6 address
+			hcnEndpointResp.Ipv6Address = ipConfig.IpAddress
+			hcnEndpointResp.Ipv6AddressPrefixlength = uint32(ipConfig.PrefixLength)
+		}
 	}
 
 	return &ncproxygrpc.GetEndpointResponse{
@@ -26,20 +58,7 @@ func hcnEndpointToEndpointResponse(ep *hcn.HostComputeEndpoint) (_ *ncproxygrpc.
 		ID:        ep.Id,
 		Endpoint: &ncproxygrpc.EndpointSettings{
 			Settings: &ncproxygrpc.EndpointSettings_HcnEndpoint{
-				HcnEndpoint: &ncproxygrpc.HcnEndpointSettings{
-					Name:       ep.Name,
-					Macaddress: ep.MacAddress,
-					// only use the first ip config returned since we only expect there to be one
-					Ipaddress:             ep.IpConfigurations[0].IpAddress,
-					IpaddressPrefixlength: uint32(ep.IpConfigurations[0].PrefixLength),
-					NetworkName:           ep.HostComputeNetwork,
-					Policies:              policies,
-					DnsSetting: &ncproxygrpc.DnsSetting{
-						ServerIpAddrs: ep.Dns.ServerList,
-						Domain:        ep.Dns.Domain,
-						Search:        ep.Dns.Search,
-					},
-				},
+				HcnEndpoint: hcnEndpointResp,
 			},
 		},
 	}, nil
@@ -166,8 +185,8 @@ func createHCNNetwork(ctx context.Context, req *ncproxygrpc.HostComputeNetworkSe
 		policies = append(policies, netPolicy)
 	}
 
-	subnets := make([]hcn.Subnet, len(req.SubnetIpaddressPrefix))
-	for i, addrPrefix := range req.SubnetIpaddressPrefix {
+	subnets := make([]hcn.Subnet, 0, len(req.SubnetIpaddressPrefix)+len(req.SubnetIpaddressPrefixIpv6))
+	for _, addrPrefix := range req.SubnetIpaddressPrefix {
 		subnet := hcn.Subnet{
 			IpAddressPrefix: addrPrefix,
 			Routes: []hcn.Route{
@@ -177,7 +196,27 @@ func createHCNNetwork(ctx context.Context, req *ncproxygrpc.HostComputeNetworkSe
 				},
 			},
 		}
-		subnets[i] = subnet
+		subnets = append(subnets, subnet)
+	}
+
+	if len(req.SubnetIpaddressPrefixIpv6) != 0 {
+		if err := hcn.IPv6DualStackSupported(); err != nil {
+			// a request was made for an IPv6 address on a system that doesn't support IPv6
+			return nil, fmt.Errorf("IPv6 address requested but not supported: %v", err)
+		}
+	}
+
+	for _, ipv6AddrPrefix := range req.SubnetIpaddressPrefixIpv6 {
+		subnet := hcn.Subnet{
+			IpAddressPrefix: ipv6AddrPrefix,
+			Routes: []hcn.Route{
+				{
+					NextHop:           req.DefaultGatewayIpv6,
+					DestinationPrefix: "::/0",
+				},
+			},
+		}
+		subnets = append(subnets, subnet)
 	}
 
 	ipam := hcn.Ipam{
@@ -206,25 +245,37 @@ func createHCNNetwork(ctx context.Context, req *ncproxygrpc.HostComputeNetworkSe
 
 func hcnNetworkToNetworkResponse(network *hcn.HostComputeNetwork) (*ncproxygrpc.GetNetworkResponse, error) {
 	var (
-		ipamType                int32
-		defaultGateway          string
-		switchName              string
-		subnetIPAddressPrefixes []string
+		ipamType                  int32
+		defaultGateway            string
+		defaultGatewayIPv6        string
+		switchName                string
+		subnetIPAddressPrefixes   []string
+		subnetIPv6AddressPrefixes []string
 	)
 
 	for _, ipam := range network.Ipams {
+		// all ipams should have the same type so just keep the last one
+		ipamType = ncproxygrpc.HostComputeNetworkSettings_IpamType_value[ipam.Type]
 		for _, subnet := range ipam.Subnets {
-			subnetIPAddressPrefixes = append(subnetIPAddressPrefixes, subnet.IpAddressPrefix)
-		}
-	}
-
-	if len(network.Ipams) > 0 {
-		// only use the first ipam type returned since we expect that to the the same type for all subnets added
-		ipamType = ncproxygrpc.HostComputeNetworkSettings_IpamType_value[network.Ipams[0].Type]
-		if len(network.Ipams[0].Subnets) > 0 && len(network.Ipams[0].Subnets[0].Routes) > 0 {
-			// only use the first route as we expect all routes to use the default gateway as the next
-			// see createHCNNetwork.
-			defaultGateway = network.Ipams[0].Subnets[0].Routes[0].NextHop
+			// split prefix off string so we can check if this is ipv4 or ipv6
+			ipParts := strings.Split(subnet.IpAddressPrefix, "/")
+			ipPrefix := net.ParseIP(ipParts[0])
+			if ipPrefix == nil {
+				return nil, fmt.Errorf("failed to parse IP address %v", ipPrefix)
+			}
+			if ipPrefix.To4() != nil {
+				// this is an IPv4 address
+				subnetIPAddressPrefixes = append(subnetIPAddressPrefixes, subnet.IpAddressPrefix)
+				if len(subnet.Routes) != 0 {
+					defaultGateway = subnet.Routes[0].NextHop
+				}
+			} else {
+				// this is an IPv6 address
+				subnetIPv6AddressPrefixes = append(subnetIPv6AddressPrefixes, subnet.IpAddressPrefix)
+				if len(subnet.Routes) != 0 {
+					defaultGatewayIPv6 = subnet.Routes[0].NextHop
+				}
+			}
 		}
 	}
 
@@ -239,12 +290,14 @@ func hcnNetworkToNetworkResponse(network *hcn.HostComputeNetwork) (*ncproxygrpc.
 	}
 
 	settings := &ncproxygrpc.HostComputeNetworkSettings{
-		Name:                  network.Name,
-		Mode:                  ncproxygrpc.HostComputeNetworkSettings_NetworkMode(mode),
-		SwitchName:            switchName,
-		IpamType:              ncproxygrpc.HostComputeNetworkSettings_IpamType(ipamType),
-		SubnetIpaddressPrefix: subnetIPAddressPrefixes,
-		DefaultGateway:        defaultGateway,
+		Name:                      network.Name,
+		Mode:                      ncproxygrpc.HostComputeNetworkSettings_NetworkMode(mode),
+		SwitchName:                switchName,
+		IpamType:                  ncproxygrpc.HostComputeNetworkSettings_IpamType(ipamType),
+		SubnetIpaddressPrefix:     subnetIPAddressPrefixes,
+		DefaultGateway:            defaultGateway,
+		SubnetIpaddressPrefixIpv6: subnetIPv6AddressPrefixes,
+		DefaultGatewayIpv6:        defaultGatewayIPv6,
 	}
 
 	return &ncproxygrpc.GetNetworkResponse{
@@ -259,9 +312,25 @@ func hcnNetworkToNetworkResponse(network *hcn.HostComputeNetwork) (*ncproxygrpc.
 
 func createHCNEndpoint(ctx context.Context, network *hcn.HostComputeNetwork, req *ncproxygrpc.HcnEndpointSettings) (*hcn.HostComputeEndpoint, error) {
 	// Construct ip config.
-	ipConfig := hcn.IpConfig{
-		IpAddress:    req.Ipaddress,
-		PrefixLength: uint8(req.IpaddressPrefixlength),
+	ipConfigs := []hcn.IpConfig{}
+	if req.Ipaddress != "" && req.IpaddressPrefixlength != 0 {
+		ipv4Config := hcn.IpConfig{
+			IpAddress:    req.Ipaddress,
+			PrefixLength: uint8(req.IpaddressPrefixlength),
+		}
+		ipConfigs = append(ipConfigs, ipv4Config)
+	}
+
+	if req.Ipv6Address != "" && req.Ipv6AddressPrefixlength != 0 {
+		if err := hcn.IPv6DualStackSupported(); err != nil {
+			// a request was made for an IPv6 address on a system that doesn't support IPv6
+			return nil, fmt.Errorf("IPv6 address requested but not supported: %v", err)
+		}
+		ipv6Config := hcn.IpConfig{
+			IpAddress:    req.Ipv6Address,
+			PrefixLength: uint8(req.Ipv6AddressPrefixlength),
+		}
+		ipConfigs = append(ipConfigs, ipv6Config)
 	}
 
 	var err error
@@ -277,7 +346,7 @@ func createHCNEndpoint(ctx context.Context, network *hcn.HostComputeNetwork, req
 		Name:               req.Name,
 		HostComputeNetwork: network.Id,
 		MacAddress:         req.Macaddress,
-		IpConfigurations:   []hcn.IpConfig{ipConfig},
+		IpConfigurations:   ipConfigs,
 		Policies:           policies,
 		SchemaVersion: hcn.SchemaVersion{
 			Major: 2,

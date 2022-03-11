@@ -78,6 +78,8 @@ message HostComputeNetworkSettings {
     IpamType ipam_type = 4;
     repeated string subnet_ipaddress_prefix = 5;
     string default_gateway = 6;
+    repeated string subnet_ipaddress_prefix_ipv6 = 7; 
+    string default_gateway_ipv6 = 8;
 }
 
 message CreateNetworkResponse{
@@ -125,6 +127,8 @@ message HcnEndpointSettings {
     string network_name = 5; 
     HcnEndpointPolicies policies = 6; 
     DnsSetting dns_setting = 7;
+    string ipv6address = 8; 
+    uint32 ipv6address_prefixlength = 9; 
 }
 
 message HcnEndpointPolicies {
@@ -143,6 +147,8 @@ message NCProxyEndpointSettings {
     oneof device_details {
         PCIDeviceDetails pci_device_details = 7;
     }
+    string ipv6address = 8; 
+    string ipv6address_prefixlength = 9; 
 }
 
 message PCIDeviceDetails {
