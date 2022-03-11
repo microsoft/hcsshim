@@ -169,8 +169,8 @@ func newSCSIMount(
 // SCSI controllers associated with a utility VM to use.
 // Lock must be held when calling this function
 func (uvm *UtilityVM) allocateSCSISlot(ctx context.Context) (int, int, error) {
-	for controller, luns := range uvm.scsiLocations {
-		for lun, sm := range luns {
+	for controller := 0; controller < int(uvm.scsiControllerCount); controller++ {
+		for lun, sm := range uvm.scsiLocations[controller] {
 			// If sm is nil, we have found an open slot so we allocate a new SCSIMount
 			if sm == nil {
 				return controller, lun, nil
@@ -268,6 +268,11 @@ func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) error {
 		}
 	}
 
+	// Do not remove multiple SCSI discs simultaneously.
+	if uvm.operatingSystem == "linux" {
+		uvm.scsiModificationLock.Lock()
+		defer uvm.scsiModificationLock.Unlock()
+	}
 	if err := uvm.modify(ctx, scsiModification); err != nil {
 		return fmt.Errorf("failed to remove SCSI disk %s from container %s: %s", hostPath, uvm.id, err)
 	}
@@ -408,11 +413,6 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, addReq *addSCSIRequest)
 		return nil, ErrNoSCSIControllers
 	}
 
-	// Note: Can remove this check post-RS5 if multiple controllers are supported
-	if sm.Controller > 0 {
-		return nil, ErrTooManyAttachments
-	}
-
 	SCSIModification := &hcsschema.ModifySettingRequest{
 		RequestType: guestrequest.RequestTypeAdd,
 		Settings: hcsschema.Attachment{
@@ -462,6 +462,11 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, addReq *addSCSIRequest)
 		SCSIModification.GuestRequest = guestReq
 	}
 
+	// Do not add multiple SCSI discs simultaneously.
+	if uvm.operatingSystem == "linux" {
+		uvm.scsiModificationLock.Lock()
+		defer uvm.scsiModificationLock.Unlock()
+	}
 	if err := uvm.modify(ctx, SCSIModification); err != nil {
 		return nil, fmt.Errorf("failed to modify UVM with new SCSI mount: %s", err)
 	}

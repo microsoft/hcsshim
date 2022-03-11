@@ -139,4 +139,11 @@ type UtilityVM struct {
 	// noInheritHostTimezone specifies whether to not inherit the hosts timezone for the UVM. UTC will be set as the default instead.
 	// This only applies for WCOW.
 	noInheritHostTimezone bool
+
+	// scsiModificationLock must be held when attaching or detaching a SCSI device
+	// from the UVM.  This is different than the `m` lock because this lock is only
+	// required for the multiple scsi controller workaround. It can be removed when
+	// the workaround isn't necessary anymore. Also, we don't want to block all other
+	// modification requests by using the same lock.
+	scsiModificationLock sync.Mutex
 }

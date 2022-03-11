@@ -159,6 +159,29 @@ func mount(
 	return nil
 }
 
+// Mount is the wrapper on top of the actual Mount call to detect the correct controller and LUN numbers.
+func Mount(
+	ctx context.Context,
+	controller,
+	lun uint8,
+	target string,
+	readonly bool,
+	encrypted bool,
+	options []string,
+	verityInfo *guestresource.DeviceVerityInfo,
+	securityPolicy securitypolicy.SecurityPolicyEnforcer,
+) (err error) {
+	actualController, actualLUN, err := detectNewScsiDevice(ctx)
+	if err != nil {
+		return err
+	}
+	err = recordActualSCSIMapping(controller, lun, actualController, actualLUN)
+	if err != nil {
+		return err
+	}
+	return mount(ctx, actualController, actualLUN, target, readonly, encrypted, options, verityInfo, securityPolicy)
+}
+
 // unmount unmounts a SCSI device mounted at `target`.
 //
 // If `encrypted` is true, it removes all its associated dm-crypto state.
@@ -204,6 +227,20 @@ func unmount(
 	}
 
 	return nil
+}
+
+// Unmount is the wrapper on top of the actual Unmount call to pass the correct controller and LUN numbers.
+func Unmount(
+	ctx context.Context,
+	controller,
+	lun uint8,
+	target string,
+	encrypted bool,
+	verityInfo *guestresource.DeviceVerityInfo,
+	securityPolicy securitypolicy.SecurityPolicyEnforcer,
+) (err error) {
+	controller, lun = getActualMapping(controller, lun)
+	return unmount(ctx, controller, lun, target, encrypted, verityInfo, securityPolicy)
 }
 
 // ControllerLunToName finds the `/dev/sd*` path to the SCSI device on
@@ -279,4 +316,11 @@ func unplugDevice(ctx context.Context, controller, lun uint8) (err error) {
 		return err
 	}
 	return nil
+}
+
+// UnplugDevice is the wrapper on top of the actual UnplugDevice call to pass the correct controller and LUN numbers.
+func UnplugDevice(ctx context.Context, controller, lun uint8) (err error) {
+	controller, lun = removeActualMapping(controller, lun)
+	removeKnownDevice(controller, lun)
+	return unplugDevice(ctx, controller, lun)
 }

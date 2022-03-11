@@ -86,7 +86,6 @@ type OptionsLCOW struct {
 	KernelBootOptions       string              // Additional boot options for the kernel
 	EnableGraphicsConsole   bool                // If true, enable a graphics console for the utility VM
 	ConsolePipe             string              // The named pipe path to use for the serial console.  eg \\.\pipe\vmpipe
-	SCSIControllerCount     uint32              // The number of SCSI controllers. Defaults to 1. Currently we only support 0 or 1.
 	UseGuestConnection      bool                // Whether the HCS should connect to the UVM's GCS. Defaults to true
 	ExecCommandLine         string              // The command line to exec from init. Defaults to GCS
 	ForwardStdout           bool                // Whether stdout will be forwarded from the executed program. Defaults to false
@@ -137,7 +136,6 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		KernelBootOptions:       "",
 		EnableGraphicsConsole:   false,
 		ConsolePipe:             "",
-		SCSIControllerCount:     4,
 		UseGuestConnection:      true,
 		ExecCommandLine:         fmt.Sprintf("/bin/gcs -v4 -log-format json -loglevel %s", logrus.StandardLogger().Level.String()),
 		ForwardStdout:           false,
@@ -154,6 +152,10 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		SecurityPolicy:          "",
 		GuestStateFile:          "",
 		DisableTimeSyncService:  false,
+	}
+
+	if osversion.Build() > osversion.RS5 {
+		opts.SCSIControllerCount = 4
 	}
 
 	if _, err := os.Stat(filepath.Join(opts.BootFilesPath, VhdFile)); err == nil {

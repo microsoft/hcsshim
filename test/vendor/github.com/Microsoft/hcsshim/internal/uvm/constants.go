@@ -29,6 +29,9 @@ const (
 	WCOWGlobalMountPrefix = "C:\\mounts\\m%d"
 	// RootfsPath is part of the container's rootfs path
 	RootfsPath = "rootfs"
+
+	// Maximum number of SCSI controllers allowed.
+	MaxSCSIControllers = 4
 )
 
 var (

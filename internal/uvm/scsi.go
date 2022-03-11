@@ -169,8 +169,8 @@ func newSCSIMount(
 // SCSI controllers associated with a utility VM to use.
 // Lock must be held when calling this function
 func (uvm *UtilityVM) allocateSCSISlot(ctx context.Context) (int, int, error) {
-	for controller, luns := range uvm.scsiLocations {
-		for lun, sm := range luns {
+	for controller := 0; controller < int(uvm.scsiControllerCount); controller++ {
+		for lun, sm := range uvm.scsiLocations[controller] {
 			// If sm is nil, we have found an open slot so we allocate a new SCSIMount
 			if sm == nil {
 				return controller, lun, nil
@@ -412,11 +412,6 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, addReq *addSCSIRequest)
 	if uvm.scsiControllerCount == 0 {
 		return nil, ErrNoSCSIControllers
 	}
-
-	// TODO(ambarve): Do this check only if RS5 or lower
-	// if sm.Controller > 0 {
-	// 	return nil, ErrTooManyAttachments
-	// }
 
 	SCSIModification := &hcsschema.ModifySettingRequest{
 		RequestType: guestrequest.RequestTypeAdd,

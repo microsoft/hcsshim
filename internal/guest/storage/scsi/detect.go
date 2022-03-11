@@ -12,8 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
-	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/sirupsen/logrus"
 )
 
@@ -55,6 +53,7 @@ func detectNewScsiDevice(ctx context.Context) (uint8, uint8, error) {
 	// <host controller no.>:<bus>:<target>:<LUN>
 	// (Section 3.1 from https://tldp.org/HOWTO/html_single/SCSI-2.4-HOWTO/)
 
+	timer := time.NewTimer(2 * time.Second)
 	for {
 		devices, err := os.ReadDir(scsiDevicesPath)
 		if err != nil {
@@ -74,8 +73,8 @@ func detectNewScsiDevice(ctx context.Context) (uint8, uint8, error) {
 		}
 
 		select {
-		case <-ctx.Done():
-			return 0, 0, fmt.Errorf("context timed out waiting for SCSI device")
+		case <-timer.C:
+			return 0, 0, fmt.Errorf("timed out waiting for SCSI device")
 		default:
 			time.Sleep(time.Millisecond * 10)
 			continue
@@ -121,48 +120,4 @@ func removeActualMapping(origController, origLUN uint8) (actualController, actua
 	actualController, actualLUN = getActualMapping(origController, origLUN)
 	delete(actualMappings, origPath)
 	return
-}
-
-// Mount is the wrapper on top of the actual Mount call to detect the correct controller and LUN numbers.
-func Mount(
-	ctx context.Context,
-	controller,
-	lun uint8,
-	target string,
-	readonly bool,
-	encrypted bool,
-	options []string,
-	verityInfo *guestresource.DeviceVerityInfo,
-	securityPolicy securitypolicy.SecurityPolicyEnforcer,
-) (err error) {
-	actualController, actualLUN, err := detectNewScsiDevice(ctx)
-	if err != nil {
-		return err
-	}
-	err = recordActualSCSIMapping(controller, lun, actualController, actualLUN)
-	if err != nil {
-		return err
-	}
-	return mount(ctx, actualController, actualLUN, target, readonly, encrypted, options, verityInfo, securityPolicy)
-}
-
-// Unmount is the wrapper on top of the actual Unmount call to pass the correct controller and LUN numbers.
-func Unmount(
-	ctx context.Context,
-	controller,
-	lun uint8,
-	target string,
-	encrypted bool,
-	verityInfo *guestresource.DeviceVerityInfo,
-	securityPolicy securitypolicy.SecurityPolicyEnforcer,
-) (err error) {
-	controller, lun = getActualMapping(controller, lun)
-	return unmount(ctx, controller, lun, target, encrypted, verityInfo, securityPolicy)
-}
-
-// UnplugDevice is the wrapper on top of the actual UnplugDevice call to pass the correct controller and LUN numbers.
-func UnplugDevice(ctx context.Context, controller, lun uint8) (err error) {
-	controller, lun = removeActualMapping(controller, lun)
-	removeKnownDevice(controller, lun)
-	return unplugDevice(ctx, controller, lun)
 }

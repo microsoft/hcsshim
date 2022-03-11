@@ -91,6 +91,9 @@ type Options struct {
 	// applied to all containers. On Windows it's configurable per container, but we can mimic this for
 	// Windows by just applying the location specified here per container.
 	ProcessDumpLocation string
+
+	// The number of SCSI controllers. Defaults to 1 for WCOW and 4 for LCOW
+	SCSIControllerCount uint32
 }
 
 // compares the create opts used during template creation with the create opts
@@ -128,8 +131,8 @@ func verifyOptions(ctx context.Context, options interface{}) error {
 		if opts.EnableDeferredCommit && !opts.AllowOvercommit {
 			return errors.New("EnableDeferredCommit is not supported on physically backed VMs")
 		}
-		if opts.SCSIControllerCount > 1 {
-			return errors.New("SCSI controller count must be 0 or 1") // Future extension here for up to 4
+		if opts.SCSIControllerCount > MaxSCSIControllers {
+			return fmt.Errorf("SCSI controller count must be less than %d", MaxSCSIControllers)
 		}
 		if opts.VPMemDeviceCount > MaxVPMEMCount {
 			return fmt.Errorf("VPMem device count cannot be greater than %d", MaxVPMEMCount)
@@ -184,6 +187,7 @@ func newDefaultOptions(id, owner string) *Options {
 		EnableDeferredCommit:  false,
 		ProcessorCount:        defaultProcessorCount(),
 		FullyPhysicallyBacked: false,
+		SCSIControllerCount:   1,
 	}
 
 	if opts.Owner == "" {
