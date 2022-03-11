@@ -164,6 +164,9 @@ func (c Container) toInternal() (securityPolicyContainer, error) {
 		Command:  command,
 		EnvRules: envRules,
 		Layers:   layers,
+		// No need to have toInternal(), because WorkingDir is a string both
+		// internally and in the policy.
+		WorkingDir: c.WorkingDir,
 	}, nil
 }
 

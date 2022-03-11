@@ -18,8 +18,9 @@ be downloaded, turned into an ext4, and finally a dm-verity root hash calculated
 
 ```toml
 [[container]]
-name = "rust:1.52.1"
+image_name = "rust:1.52.1"
 command = ["rustc", "--help"]
+working_dir = "/home/user"
 
 [[container.env_rule]]
 strategy = "re2"
@@ -49,28 +50,28 @@ represented in JSON.
           "length": 6,
           "elements": {
             "0": {
-              "strategy": "re2",
-              "rule": "PREFIX_.+=.+"
-            },
-            "1": {
               "strategy": "string",
               "rule": "PATH=/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
             },
-            "2": {
+            "1": {
               "strategy": "string",
               "rule": "RUSTUP_HOME=/usr/local/rustup"
             },
-            "3": {
+            "2": {
               "strategy": "string",
               "rule": "CARGO_HOME=/usr/local/cargo"
             },
-            "4": {
+            "3": {
               "strategy": "string",
               "rule": "RUST_VERSION=1.52.1"
             },
-            "5": {
+            "4": {
               "strategy": "string",
               "rule": "TERM=xterm"
+            },
+            "5": {
+              "strategy": "re2",
+              "rule": "PREFIX_.+=.+"
             }
           }
         },
@@ -84,7 +85,8 @@ represented in JSON.
             "4": "e769d7487cc314d3ee748a4440805317c19262c7acd2fdbdb0d47d2e4613a15c",
             "5": "1b80f120dbd88e4355d6241b519c3e25290215c469516b49dece9cf07175a766"
           }
-        }
+        },
+        "working_dir": "/home/user"
       },
       "1": {
         "command": {
@@ -111,7 +113,8 @@ represented in JSON.
           "elements": {
             "0": "16b514057a06ad665f92c02863aca074fd5976c755d26bff16365299169e8415"
           }
-        }
+        },
+        "working_dir": "/"
       }
     }
   }
@@ -136,7 +139,7 @@ to the TOML definiton for that image. For example:
 
 ```toml
 [[image]]
-name = "rust:1.52.1"
+image_name = "rust:1.52.1"
 command = ["rustc", "--help"]
 
 [auth]
@@ -159,4 +162,3 @@ isn't in the TOML configuration.
 If the version of the pause container changes from 3.1, you will need to update
 the hardcoded root hash by running the `dmverity-vhd` to compute the root hash
 for the new container and update this tool accordingly.
-
