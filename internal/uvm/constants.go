@@ -2,6 +2,8 @@ package uvm
 
 import (
 	"errors"
+
+	guid "github.com/Microsoft/go-winio/pkg/guid"
 )
 
 const (
@@ -29,9 +31,43 @@ const (
 	WCOWGlobalMountPrefix = "C:\\mounts\\m%d"
 	// RootfsPath is part of the container's rootfs path
 	RootfsPath = "rootfs"
+
+	// Maximum number of SCSI controllers allowed
+	MaxSCSIControllers = 4
 )
 
 var (
 	errNotSupported = errors.New("not supported")
 	errBadUVMOpts   = errors.New("UVM options incorrect")
+
+	// V5 GUIDs for SCSI controllers
+	// These GUIDs are created with namespace GUID "d422512d-2bf2-4752-809d-7b82b5fcb1b4"
+	// and index as names. For example, first GUID is created like this:
+	// guid.NewV5("d422512d-2bf2-4752-809d-7b82b5fcb1b4", []byte("0"))
+	SCSI_CONTROLLER_GUIDS = []guid.GUID{
+		{
+			Data1: 0xdf6d0690,
+			Data2: 0x79e5,
+			Data3: 0x55b6,
+			Data4: [8]byte{0xa5, 0xec, 0xc1, 0xe2, 0xf7, 0x7f, 0x58, 0x0a},
+		},
+		{
+			Data1: 0x0110f83b,
+			Data2: 0xde10,
+			Data3: 0x5172,
+			Data4: [8]byte{0xa2, 0x66, 0x78, 0xbc, 0xa5, 0x6b, 0xf5, 0x0a},
+		},
+		{
+			Data1: 0xb5d2d8d4,
+			Data2: 0x3a75,
+			Data3: 0x51bf,
+			Data4: [8]byte{0x94, 0x5b, 0x34, 0x44, 0xdc, 0x6b, 0x85, 0x79},
+		},
+		{
+			Data1: 0x305891a9,
+			Data2: 0xb251,
+			Data3: 0x5dfe,
+			Data4: [8]byte{0x91, 0xa2, 0xc2, 0x5d, 0x92, 0x12, 0x27, 0x5b},
+		},
+	}
 )

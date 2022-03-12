@@ -66,7 +66,7 @@ type WCOWCombinedLayers struct {
 type LCOWMappedVirtualDisk struct {
 	MountPath  string            `json:"MountPath,omitempty"`
 	Lun        uint8             `json:"Lun,omitempty"`
-	Controller uint8             `json:"Controller,omitempty"`
+	Controller string            `json:"Controller,omitempty"`
 	ReadOnly   bool              `json:"ReadOnly,omitempty"`
 	Encrypted  bool              `json:"Encrypted,omitempty"`
 	Options    []string          `json:"Options,omitempty"`

@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/Microsoft/go-winio/pkg/security"
@@ -169,8 +168,8 @@ func newSCSIMount(
 // SCSI controllers associated with a utility VM to use.
 // Lock must be held when calling this function
 func (uvm *UtilityVM) allocateSCSISlot(ctx context.Context) (int, int, error) {
-	for controller, luns := range uvm.scsiLocations {
-		for lun, sm := range luns {
+	for controller := 0; controller < int(uvm.scsiControllerCount); controller++ {
+		for lun, sm := range uvm.scsiLocations[controller] {
 			// If sm is nil, we have found an open slot so we allocate a new SCSIMount
 			if sm == nil {
 				return controller, lun, nil
@@ -224,7 +223,7 @@ func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) error {
 
 	scsiModification := &hcsschema.ModifySettingRequest{
 		RequestType:  guestrequest.RequestTypeRemove,
-		ResourcePath: fmt.Sprintf(resourcepaths.SCSIResourceFormat, strconv.Itoa(sm.Controller), sm.LUN),
+		ResourcePath: fmt.Sprintf(resourcepaths.SCSIResourceFormat, SCSI_CONTROLLER_GUIDS[sm.Controller].String(), sm.LUN),
 	}
 
 	var verity *guestresource.DeviceVerityInfo
@@ -262,7 +261,7 @@ func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) error {
 			Settings: guestresource.LCOWMappedVirtualDisk{
 				MountPath:  sm.UVMPath, // May be blank in attach-only
 				Lun:        uint8(sm.LUN),
-				Controller: uint8(sm.Controller),
+				Controller: SCSI_CONTROLLER_GUIDS[sm.Controller].String(),
 				VerityInfo: verity,
 			},
 		}
@@ -408,11 +407,6 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, addReq *addSCSIRequest)
 		return nil, ErrNoSCSIControllers
 	}
 
-	// Note: Can remove this check post-RS5 if multiple controllers are supported
-	if sm.Controller > 0 {
-		return nil, ErrTooManyAttachments
-	}
-
 	SCSIModification := &hcsschema.ModifySettingRequest{
 		RequestType: guestrequest.RequestTypeAdd,
 		Settings: hcsschema.Attachment{
@@ -421,7 +415,7 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, addReq *addSCSIRequest)
 			ReadOnly:                  addReq.readOnly,
 			ExtensibleVirtualDiskType: addReq.evdType,
 		},
-		ResourcePath: fmt.Sprintf(resourcepaths.SCSIResourceFormat, strconv.Itoa(sm.Controller), sm.LUN),
+		ResourcePath: fmt.Sprintf(resourcepaths.SCSIResourceFormat, SCSI_CONTROLLER_GUIDS[sm.Controller].String(), sm.LUN),
 	}
 
 	if sm.UVMPath != "" {
@@ -452,7 +446,7 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, addReq *addSCSIRequest)
 			guestReq.Settings = guestresource.LCOWMappedVirtualDisk{
 				MountPath:  sm.UVMPath,
 				Lun:        uint8(sm.LUN),
-				Controller: uint8(sm.Controller),
+				Controller: SCSI_CONTROLLER_GUIDS[sm.Controller].String(),
 				ReadOnly:   addReq.readOnly,
 				Encrypted:  addReq.encrypted,
 				Options:    addReq.guestOptions,
