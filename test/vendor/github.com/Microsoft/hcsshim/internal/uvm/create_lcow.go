@@ -657,6 +657,10 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 		opts.ExecCommandLine = fmt.Sprintf("%s --disable-time-sync", opts.ExecCommandLine)
 	}
 
+	if log.IsScrubbingEnabled() {
+		opts.ExecCommandLine += " --scrub-logs"
+	}
+
 	initArgs += " " + opts.ExecCommandLine
 
 	if opts.ProcessDumpLocation != "" {
