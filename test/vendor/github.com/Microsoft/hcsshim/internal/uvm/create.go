@@ -94,6 +94,9 @@ type Options struct {
 
 	// NoWritableFileShares disables adding any writable vSMB and Plan9 shares to the UVM
 	NoWritableFileShares bool
+
+	// The number of SCSI controllers. Defaults to 1 for WCOW and 4 for LCOW
+	SCSIControllerCount uint32
 }
 
 // compares the create opts used during template creation with the create opts
@@ -131,8 +134,8 @@ func verifyOptions(ctx context.Context, options interface{}) error {
 		if opts.EnableDeferredCommit && !opts.AllowOvercommit {
 			return errors.New("EnableDeferredCommit is not supported on physically backed VMs")
 		}
-		if opts.SCSIControllerCount > 1 {
-			return errors.New("SCSI controller count must be 0 or 1") // Future extension here for up to 4
+		if opts.SCSIControllerCount > MaxSCSIControllers {
+			return fmt.Errorf("SCSI controller count can't be more than %d", MaxSCSIControllers)
 		}
 		if opts.VPMemDeviceCount > MaxVPMEMCount {
 			return fmt.Errorf("VPMem device count cannot be greater than %d", MaxVPMEMCount)
@@ -188,6 +191,7 @@ func newDefaultOptions(id, owner string) *Options {
 		ProcessorCount:        defaultProcessorCount(),
 		FullyPhysicallyBacked: false,
 		NoWritableFileShares:  false,
+		SCSIControllerCount:   1,
 	}
 
 	if opts.Owner == "" {
