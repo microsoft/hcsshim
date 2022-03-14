@@ -37,7 +37,7 @@ func Test_Mount_Mkdir_Fails_Error(t *testing.T) {
 		return "", nil
 	}
 
-	if err := Mount(
+	if err := mount(
 		context.Background(),
 		0,
 		0,
@@ -74,7 +74,7 @@ func Test_Mount_Mkdir_ExpectedPath(t *testing.T) {
 		return nil
 	}
 
-	if err := Mount(
+	if err := mount(
 		context.Background(),
 		0,
 		0,
@@ -111,7 +111,7 @@ func Test_Mount_Mkdir_ExpectedPerm(t *testing.T) {
 		return nil
 	}
 
-	if err := Mount(
+	if err := mount(
 		context.Background(),
 		0,
 		0,
@@ -148,7 +148,7 @@ func Test_Mount_ControllerLunToName_Valid_Controller(t *testing.T) {
 		return nil
 	}
 
-	if err := Mount(
+	if err := mount(
 		context.Background(),
 		expectedController,
 		0,
@@ -185,7 +185,7 @@ func Test_Mount_ControllerLunToName_Valid_Lun(t *testing.T) {
 		return nil
 	}
 
-	if err := Mount(
+	if err := mount(
 		context.Background(),
 		0,
 		expectedLun,
@@ -225,7 +225,7 @@ func Test_Mount_Calls_RemoveAll_OnMountFailure(t *testing.T) {
 		return expectedErr
 	}
 
-	if err := Mount(
+	if err := mount(
 		context.Background(),
 		0,
 		0,
@@ -263,7 +263,7 @@ func Test_Mount_Valid_Source(t *testing.T) {
 		}
 		return nil
 	}
-	err := Mount(context.Background(), 0, 0, "/fake/path", false, false, nil, nil, openDoorSecurityPolicyEnforcer())
+	err := mount(context.Background(), 0, 0, "/fake/path", false, false, nil, nil, openDoorSecurityPolicyEnforcer())
 	if err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
@@ -290,7 +290,7 @@ func Test_Mount_Valid_Target(t *testing.T) {
 		return nil
 	}
 
-	if err := Mount(
+	if err := mount(
 		context.Background(),
 		0,
 		0,
@@ -326,7 +326,7 @@ func Test_Mount_Valid_FSType(t *testing.T) {
 		return nil
 	}
 
-	if err := Mount(
+	if err := mount(
 		context.Background(),
 		0,
 		0,
@@ -362,7 +362,7 @@ func Test_Mount_Valid_Flags(t *testing.T) {
 		return nil
 	}
 
-	if err := Mount(
+	if err := mount(
 		context.Background(),
 		0,
 		0,
@@ -398,7 +398,7 @@ func Test_Mount_Readonly_Valid_Flags(t *testing.T) {
 		return nil
 	}
 
-	if err := Mount(
+	if err := mount(
 		context.Background(),
 		0,
 		0,
@@ -433,7 +433,7 @@ func Test_Mount_Valid_Data(t *testing.T) {
 		return nil
 	}
 
-	if err := Mount(
+	if err := mount(
 		context.Background(),
 		0,
 		0,
@@ -469,7 +469,7 @@ func Test_Mount_Readonly_Valid_Data(t *testing.T) {
 		return nil
 	}
 
-	if err := Mount(
+	if err := mount(
 		context.Background(),
 		0,
 		0,
@@ -506,7 +506,7 @@ func Test_Read_Only_Security_Policy_Enforcement_Mount_Calls(t *testing.T) {
 	}
 
 	enforcer := mountMonitoringSecurityPolicyEnforcer()
-	err := Mount(context.Background(), 0, 0, target, true, false, nil, nil, enforcer)
+	err := mount(context.Background(), 0, 0, target, true, false, nil, nil, enforcer)
 	if err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
@@ -549,7 +549,7 @@ func Test_Read_Write_Security_Policy_Enforcement_Mount_Calls(t *testing.T) {
 	}
 
 	enforcer := mountMonitoringSecurityPolicyEnforcer()
-	err := Mount(context.Background(), 0, 0, target, false, false, nil, nil, enforcer)
+	err := mount(context.Background(), 0, 0, target, false, false, nil, nil, enforcer)
 	if err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
@@ -592,12 +592,12 @@ func Test_Security_Policy_Enforcement_Unmount_Calls(t *testing.T) {
 	}
 
 	enforcer := mountMonitoringSecurityPolicyEnforcer()
-	err := Mount(context.Background(), 0, 0, target, true, false, nil, nil, enforcer)
+	err := mount(context.Background(), 0, 0, target, true, false, nil, nil, enforcer)
 	if err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
 
-	err = Unmount(context.Background(), 0, 0, target, false, nil, enforcer)
+	err = unmount(context.Background(), 0, 0, target, false, nil, enforcer)
 	if err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
@@ -668,7 +668,7 @@ func Test_CreateVerityTarget_And_Mount_Called_With_Correct_Parameters(t *testing
 		return nil
 	}
 
-	if err := Mount(
+	if err := mount(
 		context.Background(),
 		0,
 		0,
@@ -717,7 +717,7 @@ func Test_osMkdirAllFails_And_RemoveDevice_Called(t *testing.T) {
 		return nil
 	}
 
-	if err := Mount(
+	if err := mount(
 		context.Background(),
 		0,
 		0,
