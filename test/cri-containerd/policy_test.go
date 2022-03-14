@@ -103,7 +103,7 @@ func sandboxRequestWithPolicy(t *testing.T, policy string) *runtime.RunPodSandbo
 }
 
 func Test_RunPodSandbox_WithPolicy_Allowed(t *testing.T) {
-	requireFeatures(t, featureLCOW)
+	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause})
 
 	sandboxPolicy := sandboxSecurityPolicy(t)
@@ -120,7 +120,7 @@ func Test_RunPodSandbox_WithPolicy_Allowed(t *testing.T) {
 }
 
 func Test_RunSimpleAlpineContainer_WithPolicy_Allowed(t *testing.T) {
-	requireFeatures(t, featureLCOW)
+	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	alpinePolicy := alpineSecurityPolicy(t)
@@ -290,12 +290,12 @@ func Test_RunContainer_ValidContainerConfigs_Allowed(t *testing.T) {
 		opts []configOpt
 	}
 
+	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	requireFeatures(t, featureLCOW)
-	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	for _, testConfig := range []config{
 		{
@@ -357,12 +357,12 @@ func Test_RunContainer_InvalidContainerConfigs_NotAllowed(t *testing.T) {
 		expectedError string
 	}
 
+	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	requireFeatures(t, featureLCOW)
-	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
 	alpinePolicy := alpineSecurityPolicy(t)
 	for _, testConfig := range []config{
