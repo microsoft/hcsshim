@@ -52,6 +52,9 @@ var createScratchCommand = cli.Command{
 		// 256MB with boot from vhd supported.
 		opts.MemorySizeInMB = 256
 		opts.VPMemDeviceCount = 1
+		// Default SCSI controller count is 4, we don't need that for this UVM,
+		// bring it back to 1 to avoid any confusion with SCSI controller numbers.
+		opts.SCSIControllerCount = 1
 
 		sizeGB := uint32(context.Uint("sizeGB"))
 		if sizeGB == 0 {

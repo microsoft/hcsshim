@@ -5,13 +5,26 @@ package cri_containerd
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
+
+// Use unique names for pods & containers so that if we run this test multiple times in parallel we don't
+// get failures due to same pod/container names.
+func uniqueRef() string {
+	t := time.Now()
+	var b [3]byte
+	// Ignore read failures, just decreases uniqueness
+	rand.Read(b[:])
+	return fmt.Sprintf("%d-%s", t.UnixNano(), base64.URLEncoding.EncodeToString(b[:]))
+}
 
 func Test_70LayerImagesWithNoVPmemForLayers(t *testing.T) {
 	requireFeatures(t, featureLCOW)
@@ -44,13 +57,14 @@ func Test_70LayerImagesWithNoVPmemForLayers(t *testing.T) {
 		}),
 	)
 	// override pod name
-	sandboxRequest.Config.Metadata.Name = fmt.Sprintf("%s-pod", t.Name())
+	sandboxRequest.Config.Metadata.Name = fmt.Sprintf("pod-%s", uniqueRef())
 
 	response, err := client.RunPodSandbox(ctx, sandboxRequest)
 	if err != nil {
 		t.Fatalf("failed RunPodSandbox request with: %v", err)
 	}
 	podID := response.PodSandboxId
+	defer cleanupPod(t, client, ctx, &podID)
 
 	var wg sync.WaitGroup
 	wg.Add(nContainers)
@@ -60,7 +74,7 @@ func Test_70LayerImagesWithNoVPmemForLayers(t *testing.T) {
 				PodSandboxId: podID,
 				Config: &runtime.ContainerConfig{
 					Metadata: &runtime.ContainerMetadata{
-						Name: fmt.Sprintf("%s-container-%d", t.Name(), i),
+						Name: fmt.Sprintf("%s-container", uniqueRef()),
 					},
 					Image: &runtime.ImageSpec{
 						Image: testImages[i%2],

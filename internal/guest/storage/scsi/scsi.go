@@ -11,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -248,35 +249,28 @@ func Unmount(
 }
 
 func controllerGUIDToNum(ctx context.Context, controller string) (uint8, error) {
-	// find the controller number by reading file named `monitor_id` at path
-	// /sys/bus/vmbus/devices/<controller-guid>/monitor_id.
-	monitorIDFilePath := path.Join(vmbusDevicesPath, controller, "monitor_id")
-	var monitorFileData []byte
-	var err error
-	for {
-		monitorFileData, err = ioutil.ReadFile(monitorIDFilePath)
-		if err != nil && !os.IsNotExist(err) {
-			return 0, err
-		}
-		if err != nil {
-			select {
-			case <-ctx.Done():
-				return 0, fmt.Errorf("context expired when waiting for monitor file %s", monitorIDFilePath)
-			default:
-				time.Sleep(time.Millisecond * 10)
-				continue
-			}
-		}
-		break
+	// find the controller number by looking for a file named host<N> (e.g host1, host3 etc.)
+	// `N` is the controller number.
+	// Full file path would be /sys/bus/vmbus/devices/<controller-guid>/host<N>.
+	controllerDirPath := path.Join(vmbusDevicesPath, controller)
+	entries, err := ioutil.ReadDir(controllerDirPath)
+	if err != nil {
+		return 0, err
 	}
 
-	// remove newline
-	monitorFileData = monitorFileData[:len(monitorFileData)-1]
-	controllerNum, err := strconv.ParseInt(string(monitorFileData), 10, 8)
-	if err != nil {
-		return 0, fmt.Errorf("failed to parse monitor file data %s into number", monitorFileData[:2])
+	for _, entry := range entries {
+		baseName := path.Base(entry.Name())
+		if !strings.HasPrefix(baseName, "host") {
+			continue
+		}
+		controllerStr := baseName[len("host"):]
+		controllerNum, err := strconv.ParseUint(controllerStr, 10, 8)
+		if err != nil {
+			return 0, fmt.Errorf("failed to parse controller number from %s: %w", baseName, err)
+		}
+		return uint8(controllerNum), nil
 	}
-	return uint8(controllerNum), nil
+	return 0, fmt.Errorf("host<N> directory not found inside %s", controllerDirPath)
 }
 
 // ControllerLunToName finds the `/dev/sd*` path to the SCSI device on
