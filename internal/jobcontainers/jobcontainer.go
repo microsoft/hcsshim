@@ -250,7 +250,20 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 
 	var cpty *conpty.Pty
 	if conf.EmulateConsole {
-		cpty, err = conpty.Create(80, 20, 0)
+		height := int16(25)
+		width := int16(80)
+		// ConsoleSize is just an empty slice that needs to be filled. First element is expected to
+		// be height, second is width.
+		if len(conf.ConsoleSize) == 2 {
+			if conf.ConsoleSize[0] != 0 {
+				height = int16(conf.ConsoleSize[0])
+			}
+			if conf.ConsoleSize[1] != 0 {
+				width = int16(conf.ConsoleSize[1])
+			}
+		}
+
+		cpty, err = conpty.Create(width, height, 0)
 		if err != nil {
 			return nil, err
 		}
