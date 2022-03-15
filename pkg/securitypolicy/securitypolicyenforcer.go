@@ -164,6 +164,9 @@ func (c Container) toInternal() (securityPolicyContainer, error) {
 		Command:  command,
 		EnvRules: envRules,
 		Layers:   layers,
+		// No need to have toInternal(), because WorkingDir is a string both
+		// internally and in the policy.
+		WorkingDir: c.WorkingDir,
 	}, nil
 }
 
@@ -405,7 +408,7 @@ func (pe *StandardSecurityPolicyEnforcer) enforceWorkingDirPolicy(containerID st
 		}
 	}
 	if !matched {
-		return fmt.Errorf("working_dir %s unmached by policy rule", workingDir)
+		return fmt.Errorf("working_dir %s unmatched by policy rule", workingDir)
 	}
 	return nil
 }

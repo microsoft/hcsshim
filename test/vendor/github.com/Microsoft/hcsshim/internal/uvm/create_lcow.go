@@ -257,14 +257,13 @@ Example JSON document produced once the hcsschema.ComputeSytem returned by makeL
         },
         "GuestState": {
             "GuestStateFilePath": "d:\\ken\\aug27\\gcsinitnew.vmgs",
-            "GuestStateFileType": "BlockStorage",
+            "GuestStateFileType": "FileMode",
 			"ForceTransientState": true
         },
         "SecuritySettings": {
             "Isolation": {
                 "IsolationType": "SecureNestedPaging",
-                "LaunchData": "kBifgKNijdHjxdSUshmavrNofo2B01LiIi1cr8R4ytI=",
-                "HclEnabled": true
+                "LaunchData": "kBifgKNijdHjxdSUshmavrNofo2B01LiIi1cr8R4ytI="
             }
         },
         "Version": {
@@ -381,7 +380,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 
 	doc.VirtualMachine.GuestState = &hcsschema.GuestState{
 		GuestStateFilePath:  vmgsFullPath,
-		GuestStateFileType:  "BlockStorage",
+		GuestStateFileType:  "FileMode",
 		ForceTransientState: true, // tell HCS that this is just the source of the images, not ongoing state
 	}
 
