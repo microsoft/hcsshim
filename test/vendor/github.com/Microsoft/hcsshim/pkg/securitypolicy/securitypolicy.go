@@ -211,15 +211,16 @@ type ExpectedMounts struct {
 
 // NewContainer creates a new Container instance from the provided values
 // or an error if envRules validation fails.
-func NewContainer(command, layers []string, envRules []EnvRuleConfig, workingDir string) (*Container, error) {
+func NewContainer(command, layers []string, envRules []EnvRuleConfig, workingDir string, eMounts []string) (*Container, error) {
 	if err := validateEnvRules(envRules); err != nil {
 		return nil, err
 	}
 	return &Container{
-		Command:    newCommandArgs(command),
-		Layers:     newLayers(layers),
-		EnvRules:   newEnvRules(envRules),
-		WorkingDir: workingDir,
+		Command:        newCommandArgs(command),
+		Layers:         newLayers(layers),
+		EnvRules:       newEnvRules(envRules),
+		WorkingDir:     workingDir,
+		ExpectedMounts: newExpectedMounts(eMounts),
 	}, nil
 }
 
@@ -276,6 +277,16 @@ func newLayers(ls []string) Layers {
 	}
 	return Layers{
 		Elements: layers,
+	}
+}
+
+func newExpectedMounts(em []string) ExpectedMounts {
+	mounts := map[string]string{}
+	for i, m := range em {
+		mounts[strconv.Itoa(i)] = m
+	}
+	return ExpectedMounts{
+		Elements: mounts,
 	}
 }
 

@@ -10,12 +10,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/google/go-cmp/cmp"
-	oci "github.com/opencontainers/runtime-spec/specs-go"
-
-	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/hooks"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
+	"github.com/google/go-cmp/cmp"
+	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 type SecurityPolicyEnforcer interface {
@@ -503,15 +501,22 @@ func possibleIndicesForID(containerID string, mapping map[int]map[string]struct{
 // the expected mounts appear prior container start. At the moment enforcement
 // is expected to take place inside LCOW UVM.
 //
-// Supported scenarios:
-//   1. expected mount is provided as a path inside the sandbox, and it should resolve inside UVM
-//      e.g, "sandbox://path/on/the/host", which will correspond to "/run/gcs/c/<podID>/sandboxMounts/path/on/the/host"
-//   2. expected mount is provided as a path under a sandbox mount path inside container, e.g.,
-//      sandbox mount is at path "/sandbox/mount" and wait path is "/sandbox/mount/wait/path", which
-//      corresponds to "/run/gcs/c/<podID>/sandboxMounts/path/on/the/host/wait/path"
-//   3. expected mount is provided as an arbitrary path inside container, and it should resolve
-//      inside UVM, e.g., "/arbitrary/container/path", which corresponds to
-//      "/run/gcs/c/<containerID>/rootfs/arbitrary/container/path"
+// Expected mount is provided as a path under a sandbox mount path inside
+// container, e.g., sandbox mount is at path "/path/in/container" and wait path
+// is "/path/in/container/wait/path", which corresponds to
+// "/run/gcs/c/<podID>/sandboxMounts/path/on/the/host/wait/path"
+//
+// Iterates through container mounts to identify the correct sandbox
+// mount where the wait path is nested under. The mount spec will
+// be something like:
+// {
+//    "source": "/run/gcs/c/<podID>/sandboxMounts/path/on/host",
+//    "destination": "/path/in/container"
+// }
+// The wait path will be "/path/in/container/wait/path". To find the corresponding
+// sandbox mount do a prefix match on wait path against all container mounts
+// Destination and resolve the full path inside UVM. For example above it becomes
+// "/run/gcs/c/<podID>/sandboxMounts/path/on/host/wait/path"
 func (pe *StandardSecurityPolicyEnforcer) EnforceExpectedMountsPolicy(containerID string, spec *oci.Spec) error {
 	pe.mutex.Lock()
 	defer pe.mutex.Unlock()
@@ -550,34 +555,16 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceExpectedMountsPolicy(containerI
 
 	var wPaths []string
 	for _, mount := range wMounts {
-		// By default, handle scenario #3 and resolve container path to the actual path inside UVM.
-		wp := filepath.Join(guestpath.LCOWRootPrefixInUVM, containerID, guestpath.RootfsPath, mount)
-		if strings.HasPrefix(mount, guestpath.SandboxMountPrefix) {
-			// This covers case #1, and we replace sandbox mount prefix with the sandbox
-			// mounts path inside UVM
-			sandboxPath := strings.TrimPrefix(mount, guestpath.SandboxMountPrefix)
-			wp = filepath.Join(guestpath.LCOWRootPrefixInUVM, "sandboxMounts", sandboxPath)
-		} else {
-			// This covers case #2. Iterate through container mounts to identify the
-			// correct sandbox mount where the wait path is nested under. The mount
-			// spec will be something like:
-			// {
-			//    "source": "/run/gcs/c/<podID>/sandboxMounts/path/on/host",
-			//    "destination": "/sandbox/mount"
-			// }
-			// The wait path will be "/sandbox/mount/wait/path". To find the corresponding
-			// sandbox mount do a prefix match on wait path against all container mounts Destination
-			// and resolve the full path inside UVM. For example above it becomes
-			// "/run/gcs/c/<podID>/sandboxMounts/path/on/host/wait/path"
-			for _, m := range spec.Mounts {
-				if strings.HasPrefix(mount, m.Destination) {
-					wp = filepath.Join(m.Source, strings.TrimPrefix(mount, m.Destination))
-					break
-				}
+		var wp string
+		for _, m := range spec.Mounts {
+			// prefix matching to find correct sandbox mount
+			if strings.HasPrefix(mount, m.Destination) {
+				wp = filepath.Join(m.Source, strings.TrimPrefix(mount, m.Destination))
+				break
 			}
-			if wp == "" {
-				return fmt.Errorf("invalid mount path: %q", mount)
-			}
+		}
+		if wp == "" {
+			return fmt.Errorf("invalid mount path: %q", mount)
 		}
 		wPaths = append(wPaths, filepath.Clean(wp))
 	}
