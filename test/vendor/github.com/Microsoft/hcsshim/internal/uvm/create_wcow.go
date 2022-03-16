@@ -17,6 +17,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
@@ -312,21 +313,21 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 
 		doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
 		for i := 0; i < int(uvm.scsiControllerCount); i++ {
-			doc.VirtualMachine.Devices.Scsi[ScsiControllerGuids[i].String()] = hcsschema.Scsi{
+			doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[i]] = hcsschema.Scsi{
 				Attachments: make(map[string]hcsschema.Attachment),
 			}
 		}
 
-		doc.VirtualMachine.Devices.Scsi[ScsiControllerGuids[0].String()].Attachments["0"] = hcsschema.Attachment{
+		doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["0"] = hcsschema.Attachment{
 
 			Path:  scratchPath,
 			Type_: "VirtualDisk",
 		}
 
 		uvm.scsiLocations[0][0] = newSCSIMount(uvm,
-			doc.VirtualMachine.Devices.Scsi[ScsiControllerGuids[0].String()].Attachments["0"].Path,
+			doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["0"].Path,
 			"",
-			doc.VirtualMachine.Devices.Scsi[ScsiControllerGuids[0].String()].Attachments["0"].Type_,
+			doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["0"].Type_,
 			"",
 			1,
 			0,

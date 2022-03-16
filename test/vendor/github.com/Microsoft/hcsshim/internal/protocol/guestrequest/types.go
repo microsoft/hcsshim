@@ -41,3 +41,16 @@ type RS4NetworkModifyRequest struct {
 	RequestType       RequestType `json:"RequestType,omitempty"`
 	Settings          interface{} `json:"Settings,omitempty"`
 }
+
+var (
+	// V5 GUIDs for SCSI controllers
+	// These GUIDs are created with namespace GUID "d422512d-2bf2-4752-809d-7b82b5fcb1b4"
+	// and index as names. For example, first GUID is created like this:
+	// guid.NewV5("d422512d-2bf2-4752-809d-7b82b5fcb1b4", []byte("0"))
+	ScsiControllerGuids = []string{
+		"df6d0690-79e5-55b6-a5ec-c1e2f77f580a",
+		"0110f83b-de10-5172-a266-78bca56bf50a",
+		"b5d2d8d4-3a75-51bf-945b-3444dc6b8579",
+		"305891a9-b251-5dfe-91a2-c25d9212275b",
+	}
+)

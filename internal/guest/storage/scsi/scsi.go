@@ -23,6 +23,7 @@ import (
 	dm "github.com/Microsoft/hcsshim/internal/guest/storage/devicemapper"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
@@ -46,6 +47,39 @@ const (
 	vmbusDevicesPath = "/sys/bus/vmbus/devices"
 	verityDeviceFmt  = "verity-scsi-contr%d-lun%d-%s"
 )
+
+// fetchActualControllerNumber retrieves the actual controller number assigned to a SCSI controller
+// with number `passedController`.
+// When HCS creates the UVM it adds 4 SCSI controllers to the UVM but the 1st SCSI
+// controller according to HCS can actually show up as 2nd, 3rd or 4th controller inside
+// the UVM. So the i'th controller from HCS' perspective could actually be j'th controller
+// inside the UVM. However, we can refer to the SCSI controllers with their GUIDs (that
+// are hardcoded) and then using that GUID find out the SCSI controller number inside the
+// guest. This function does exactly that.
+func fetchActualControllerNumber(ctx context.Context, passedController uint8) (uint8, error) {
+	// find the controller number by looking for a file named host<N> (e.g host1, host3 etc.)
+	// `N` is the controller number.
+	// Full file path would be /sys/bus/vmbus/devices/<controller-guid>/host<N>.
+	controllerDirPath := path.Join(vmbusDevicesPath, guestrequest.ScsiControllerGuids[passedController])
+	entries, err := ioutil.ReadDir(controllerDirPath)
+	if err != nil {
+		return 0, err
+	}
+
+	for _, entry := range entries {
+		baseName := path.Base(entry.Name())
+		if !strings.HasPrefix(baseName, "host") {
+			continue
+		}
+		controllerStr := baseName[len("host"):]
+		controllerNum, err := strconv.ParseUint(controllerStr, 10, 8)
+		if err != nil {
+			return 0, fmt.Errorf("failed to parse controller number from %s: %w", baseName, err)
+		}
+		return uint8(controllerNum), nil
+	}
+	return 0, fmt.Errorf("host<N> directory not found inside %s", controllerDirPath)
+}
 
 // mount creates a mount from the SCSI device on `controller` index `lun` to
 // `target`
@@ -167,7 +201,7 @@ func mount(
 // number from the controller GUID string and calls mount.
 func Mount(
 	ctx context.Context,
-	controller string,
+	controller,
 	lun uint8,
 	target string,
 	readonly bool,
@@ -176,7 +210,7 @@ func Mount(
 	verityInfo *guestresource.DeviceVerityInfo,
 	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
-	cNum, err := controllerGUIDToNum(ctx, controller)
+	cNum, err := fetchActualControllerNumber(ctx, controller)
 	if err != nil {
 		return err
 	}
@@ -234,43 +268,18 @@ func unmount(
 // number from the controller GUID string and calls mount.
 func Unmount(
 	ctx context.Context,
-	controller string,
+	controller,
 	lun uint8,
 	target string,
 	encrypted bool,
 	verityInfo *guestresource.DeviceVerityInfo,
 	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
-	cNum, err := controllerGUIDToNum(ctx, controller)
+	cNum, err := fetchActualControllerNumber(ctx, controller)
 	if err != nil {
 		return err
 	}
 	return unmount(ctx, cNum, lun, target, encrypted, verityInfo, securityPolicy)
-}
-
-func controllerGUIDToNum(ctx context.Context, controller string) (uint8, error) {
-	// find the controller number by looking for a file named host<N> (e.g host1, host3 etc.)
-	// `N` is the controller number.
-	// Full file path would be /sys/bus/vmbus/devices/<controller-guid>/host<N>.
-	controllerDirPath := path.Join(vmbusDevicesPath, controller)
-	entries, err := ioutil.ReadDir(controllerDirPath)
-	if err != nil {
-		return 0, err
-	}
-
-	for _, entry := range entries {
-		baseName := path.Base(entry.Name())
-		if !strings.HasPrefix(baseName, "host") {
-			continue
-		}
-		controllerStr := baseName[len("host"):]
-		controllerNum, err := strconv.ParseUint(controllerStr, 10, 8)
-		if err != nil {
-			return 0, fmt.Errorf("failed to parse controller number from %s: %w", baseName, err)
-		}
-		return uint8(controllerNum), nil
-	}
-	return 0, fmt.Errorf("host<N> directory not found inside %s", controllerDirPath)
 }
 
 // ControllerLunToName finds the `/dev/sd*` path to the SCSI device on
@@ -346,8 +355,8 @@ func unplugDevice(ctx context.Context, controller, lun uint8) (err error) {
 
 // UnplugDevice is just a wrapper over actual unplugDevice call. This wrapper finds out the controller
 // number from the controller GUID string and calls unplugDevice.
-func UnplugDevice(ctx context.Context, controller string, lun uint8) (err error) {
-	cNum, err := controllerGUIDToNum(ctx, controller)
+func UnplugDevice(ctx context.Context, controller, lun uint8) (err error) {
+	cNum, err := fetchActualControllerNumber(ctx, controller)
 	if err != nil {
 		return err
 	}
