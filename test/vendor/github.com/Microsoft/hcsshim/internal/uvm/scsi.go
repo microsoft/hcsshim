@@ -223,7 +223,7 @@ func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) error {
 
 	scsiModification := &hcsschema.ModifySettingRequest{
 		RequestType:  guestrequest.RequestTypeRemove,
-		ResourcePath: fmt.Sprintf(resourcepaths.SCSIResourceFormat, SCSI_CONTROLLER_GUIDS[sm.Controller].String(), sm.LUN),
+		ResourcePath: fmt.Sprintf(resourcepaths.SCSIResourceFormat, ScsiControllerGuids[sm.Controller].String(), sm.LUN),
 	}
 
 	var verity *guestresource.DeviceVerityInfo
@@ -261,7 +261,7 @@ func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) error {
 			Settings: guestresource.LCOWMappedVirtualDisk{
 				MountPath:  sm.UVMPath, // May be blank in attach-only
 				Lun:        uint8(sm.LUN),
-				Controller: SCSI_CONTROLLER_GUIDS[sm.Controller].String(),
+				Controller: ScsiControllerGuids[sm.Controller].String(),
 				VerityInfo: verity,
 			},
 		}
@@ -415,7 +415,7 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, addReq *addSCSIRequest)
 			ReadOnly:                  addReq.readOnly,
 			ExtensibleVirtualDiskType: addReq.evdType,
 		},
-		ResourcePath: fmt.Sprintf(resourcepaths.SCSIResourceFormat, SCSI_CONTROLLER_GUIDS[sm.Controller].String(), sm.LUN),
+		ResourcePath: fmt.Sprintf(resourcepaths.SCSIResourceFormat, ScsiControllerGuids[sm.Controller].String(), sm.LUN),
 	}
 
 	if sm.UVMPath != "" {
@@ -446,7 +446,7 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, addReq *addSCSIRequest)
 			guestReq.Settings = guestresource.LCOWMappedVirtualDisk{
 				MountPath:  sm.UVMPath,
 				Lun:        uint8(sm.LUN),
-				Controller: SCSI_CONTROLLER_GUIDS[sm.Controller].String(),
+				Controller: ScsiControllerGuids[sm.Controller].String(),
 				ReadOnly:   addReq.readOnly,
 				Encrypted:  addReq.encrypted,
 				Options:    addReq.guestOptions,

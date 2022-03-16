@@ -39,8 +39,10 @@ func Test_70LayerImagesWithNoVPmemForLayers(t *testing.T) {
 	defer cancel()
 
 	nContainers := 4
+	podID := ""
 	containerIDs := make([]string, nContainers)
 
+	defer cleanupPod(t, client, ctx, &podID)
 	for i := 0; i < nContainers; i++ {
 		defer cleanupContainer(t, client, ctx, &containerIDs[i])
 	}
@@ -63,8 +65,7 @@ func Test_70LayerImagesWithNoVPmemForLayers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed RunPodSandbox request with: %v", err)
 	}
-	podID := response.PodSandboxId
-	defer cleanupPod(t, client, ctx, &podID)
+	podID = response.PodSandboxId
 
 	var wg sync.WaitGroup
 	wg.Add(nContainers)

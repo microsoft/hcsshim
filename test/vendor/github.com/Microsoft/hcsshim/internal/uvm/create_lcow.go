@@ -155,7 +155,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 	}
 
 	// for LCOW now we support upto 4 controllers
-	if osversion.Build() > osversion.RS5 {
+	if osversion.Build() >= osversion.RS5 {
 		opts.SCSIControllerCount = 4
 	}
 
@@ -357,7 +357,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 	if uvm.scsiControllerCount > 0 {
 		doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
 		for i := 0; i < int(uvm.scsiControllerCount); i++ {
-			doc.VirtualMachine.Devices.Scsi[SCSI_CONTROLLER_GUIDS[i].String()] = hcsschema.Scsi{
+			doc.VirtualMachine.Devices.Scsi[ScsiControllerGuids[i].String()] = hcsschema.Scsi{
 				Attachments: make(map[string]hcsschema.Attachment),
 			}
 		}
@@ -542,7 +542,7 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 	if uvm.scsiControllerCount > 0 {
 		doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
 		for i := 0; i < int(uvm.scsiControllerCount); i++ {
-			doc.VirtualMachine.Devices.Scsi[SCSI_CONTROLLER_GUIDS[i].String()] = hcsschema.Scsi{
+			doc.VirtualMachine.Devices.Scsi[ScsiControllerGuids[i].String()] = hcsschema.Scsi{
 				Attachments: make(map[string]hcsschema.Attachment),
 			}
 		}

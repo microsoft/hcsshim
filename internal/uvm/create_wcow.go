@@ -312,21 +312,21 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 
 		doc.VirtualMachine.Devices.Scsi = map[string]hcsschema.Scsi{}
 		for i := 0; i < int(uvm.scsiControllerCount); i++ {
-			doc.VirtualMachine.Devices.Scsi[SCSI_CONTROLLER_GUIDS[i].String()] = hcsschema.Scsi{
+			doc.VirtualMachine.Devices.Scsi[ScsiControllerGuids[i].String()] = hcsschema.Scsi{
 				Attachments: make(map[string]hcsschema.Attachment),
 			}
 		}
 
-		doc.VirtualMachine.Devices.Scsi[SCSI_CONTROLLER_GUIDS[0].String()].Attachments["0"] = hcsschema.Attachment{
+		doc.VirtualMachine.Devices.Scsi[ScsiControllerGuids[0].String()].Attachments["0"] = hcsschema.Attachment{
 
 			Path:  scratchPath,
 			Type_: "VirtualDisk",
 		}
 
 		uvm.scsiLocations[0][0] = newSCSIMount(uvm,
-			doc.VirtualMachine.Devices.Scsi[SCSI_CONTROLLER_GUIDS[0].String()].Attachments["0"].Path,
+			doc.VirtualMachine.Devices.Scsi[ScsiControllerGuids[0].String()].Attachments["0"].Path,
 			"",
-			doc.VirtualMachine.Devices.Scsi[SCSI_CONTROLLER_GUIDS[0].String()].Attachments["0"].Type_,
+			doc.VirtualMachine.Devices.Scsi[ScsiControllerGuids[0].String()].Attachments["0"].Type_,
 			"",
 			1,
 			0,
