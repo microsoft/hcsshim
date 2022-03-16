@@ -3,7 +3,10 @@ package jobobject
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/Microsoft/hcsshim/internal/queue"
@@ -24,7 +27,10 @@ import (
 // the job, a queue to receive iocp notifications about the lifecycle
 // of the job and a mutex for synchronized handle access.
 type JobObject struct {
-	handle     windows.Handle
+	handle windows.Handle
+	// All accesses to this MUST be done atomically. 1 signifies that this
+	// job is currently a silo.
+	isAppSilo  uint32
 	mq         *queue.MessageQueue
 	handleLock sync.RWMutex
 }
@@ -56,6 +62,7 @@ const (
 var (
 	ErrAlreadyClosed = errors.New("the handle has already been closed")
 	ErrNotRegistered = errors.New("job is not registered to receive notifications")
+	ErrNotSilo       = errors.New("job is not a silo")
 )
 
 // Options represents the set of configurable options when making or opening a job object.
@@ -68,6 +75,9 @@ type Options struct {
 	// `UseNTVariant` specifies if we should use the `Nt` variant of Open/CreateJobObject.
 	// Defaults to false.
 	UseNTVariant bool
+	// `Silo` specifies to promote the job to a silo. This additionally sets the flag
+	// JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE as it is required for the upgrade to complete.
+	Silo bool
 }
 
 // Create creates a job object.
@@ -132,6 +142,16 @@ func Create(ctx context.Context, options *Options) (_ *JobObject, err error) {
 			return nil, err
 		}
 		job.mq = mq
+	}
+
+	if options.Silo {
+		// This is a required setting for upgrading to a silo.
+		if err := job.SetTerminateOnLastHandleClose(); err != nil {
+			return nil, err
+		}
+		if err := job.PromoteToSilo(); err != nil {
+			return nil, err
+		}
 	}
 
 	return job, nil
@@ -435,4 +455,97 @@ func (job *JobObject) QueryStorageStats() (*winapi.JOBOBJECT_BASIC_AND_IO_ACCOUN
 		return nil, errors.Wrap(err, "failed to query for job object storage stats")
 	}
 	return &info, nil
+}
+
+// ApplyFileBinding makes a file binding using the Bind Filter from target to root. If the job has
+// not been upgraded to a silo this call will fail. The binding is only applied and visible for processes
+// running in the job, any processes on the host or in another job will not be able to see the binding.
+func (job *JobObject) ApplyFileBinding(root, target string, merged bool) error {
+	job.handleLock.RLock()
+	defer job.handleLock.RUnlock()
+
+	if job.handle == 0 {
+		return ErrAlreadyClosed
+	}
+
+	if !job.isSilo() {
+		return ErrNotSilo
+	}
+
+	// The parent directory needs to exist for the bind to work.
+	if _, err := os.Stat(filepath.Dir(root)); os.IsNotExist(err) {
+		if err := os.MkdirAll(filepath.Dir(root), 0); err != nil {
+			return err
+		}
+	}
+
+	rootPtr, err := windows.UTF16PtrFromString(root)
+	if err != nil {
+		return err
+	}
+
+	targetPtr, err := windows.UTF16PtrFromString(target)
+	if err != nil {
+		return err
+	}
+
+	flags := winapi.BINDFLT_FLAG_USE_CURRENT_SILO_MAPPING
+	if merged {
+		flags |= winapi.BINDFLT_FLAG_MERGED_BIND_MAPPING
+	}
+
+	if err := winapi.BfSetupFilterEx(
+		flags,
+		job.handle,
+		nil,
+		rootPtr,
+		targetPtr,
+		nil,
+		0,
+	); err != nil {
+		return fmt.Errorf("failed to bind target %q to root %q for job object: %w", target, root, err)
+	}
+	return nil
+}
+
+// PromoteToSilo promotes a job object to a silo. There must be no running processess
+// in the job for this to succeed. If the job is already a silo this is a no-op.
+func (job *JobObject) PromoteToSilo() error {
+	job.handleLock.RLock()
+	defer job.handleLock.RUnlock()
+
+	if job.handle == 0 {
+		return ErrAlreadyClosed
+	}
+
+	if job.isSilo() {
+		return nil
+	}
+
+	pids, err := job.Pids()
+	if err != nil {
+		return err
+	}
+
+	if len(pids) != 0 {
+		return fmt.Errorf("job cannot have running processes to be promoted to a silo, found %d running processes", len(pids))
+	}
+
+	_, err = windows.SetInformationJobObject(
+		job.handle,
+		winapi.JobObjectCreateSilo,
+		0,
+		0,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to promote job to silo: %w", err)
+	}
+
+	atomic.StoreUint32(&job.isAppSilo, 1)
+	return nil
+}
+
+// isSilo returns if the job object is a silo.
+func (job *JobObject) isSilo() bool {
+	return atomic.LoadUint32(&job.isAppSilo) == 1
 }

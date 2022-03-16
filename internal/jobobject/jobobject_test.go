@@ -2,7 +2,9 @@ package jobobject
 
 import (
 	"context"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 	"testing"
 	"time"
@@ -278,6 +280,73 @@ func TestVerifyPidCount(t *testing.T) {
 	}
 
 	if err := job.Terminate(1); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSilo(t *testing.T) {
+	// Test asking for a silo in the options.
+	options := &Options{
+		Silo: true,
+	}
+	job, err := Create(context.Background(), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer job.Close()
+}
+
+func TestSiloFileBinding(t *testing.T) {
+	// Can't use osversion as the binary needs to be manifested for it to work.
+	// Just stat for the bindflt dll.
+	if _, err := os.Stat(`C:\windows\system32\bindfltapi.dll`); err != nil {
+		t.Skip("Bindflt not present on RS5 or lower, skipping.")
+	}
+	// Test upgrading to a silo and binding a file only the silo can see.
+	options := &Options{
+		Silo: true,
+	}
+	job, err := Create(context.Background(), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer job.Close()
+
+	target := t.TempDir()
+	hostPath := filepath.Join(target, "bind-test.txt")
+	f, err := os.Create(hostPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	root := t.TempDir()
+	siloPath := filepath.Join(root, "silo-path.txt")
+	if err := job.ApplyFileBinding(siloPath, hostPath, false); err != nil {
+		t.Fatal(err)
+	}
+
+	// First check that we can't see the file on the host.
+	if _, err := os.Stat(siloPath); err == nil {
+		t.Fatalf("expected to not be able to see %q on the host", siloPath)
+	}
+
+	// Now check that we can see it in the silo. Couple second timeout (ping something) so
+	// we can be relatively sure the process has been assigned to the job before we go to check
+	// on the file. Unfortunately we can't use our internal/exec package that has support for
+	// assigning a process to a job at creation time as it causes a cyclical import.
+	cmd := exec.Command("cmd", "/c", "ping", "localhost", "&&", "dir", siloPath)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := job.Assign(uint32(cmd.Process.Pid)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Process will have an exit code of 1 if dir couldn't find the file; if we get
+	// no error here we should be A-OK.
+	if err := cmd.Wait(); err != nil {
 		t.Fatal(err)
 	}
 }
