@@ -16,7 +16,7 @@ import (
 	"syscall"
 	"time"
 
-	shellwords "github.com/mattn/go-shellwords"
+	"github.com/mattn/go-shellwords"
 	"github.com/pkg/errors"
 
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
@@ -66,7 +66,7 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport) *Host {
 		rtime:                     rtime,
 		vsock:                     vsock,
 		securityPolicyEnforcerSet: false,
-		securityPolicyEnforcer:    &securitypolicy.OpenDoorSecurityPolicyEnforcer{},
+		securityPolicyEnforcer:    &securitypolicy.ClosedDoorSecurityPolicyEnforcer{},
 	}
 }
 
