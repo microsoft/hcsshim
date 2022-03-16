@@ -92,6 +92,19 @@ func ParseWorkingDirFromImage(img v1.Image) (string, error) {
 	return "/", nil
 }
 
+// ParseCommandFromImage inspects the image and returns the command args, which
+// is a combination of ENTRYPOINT and CMD Docker directives.
+func ParseCommandFromImage(img v1.Image) ([]string, error) {
+	imgConfig, err := img.ConfigFile()
+	if err != nil {
+		return nil, err
+	}
+
+	cmdArgs := imgConfig.Config.Entrypoint
+	cmdArgs = append(cmdArgs, imgConfig.Config.Cmd...)
+	return cmdArgs, nil
+}
+
 // PolicyContainersFromConfigs returns a slice of securitypolicy.Container generated
 // from a slice of securitypolicy.ContainerConfig's
 func PolicyContainersFromConfigs(containerConfigs []securitypolicy.ContainerConfig) ([]*securitypolicy.Container, error) {
@@ -118,6 +131,13 @@ func PolicyContainersFromConfigs(containerConfigs []securitypolicy.ContainerConf
 			return nil, err
 		}
 
+		commandArgs := containerConfig.Command
+		if len(commandArgs) == 0 {
+			commandArgs, err = ParseCommandFromImage(img)
+			if err != nil {
+				return nil, err
+			}
+		}
 		// add rules for all known environment variables from the configuration
 		// these are in addition to "other rules" from the policy definition file
 		envVars, err := ParseEnvFromImage(img)
