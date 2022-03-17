@@ -631,7 +631,7 @@ func (sm *SCSIMount) Clone(ctx context.Context, vm *UtilityVM, cd *cloneData) er
 		dstVhdPath string = sm.HostPath
 		err        error
 		dir        string
-		conStr     string = fmt.Sprintf("%d", sm.Controller)
+		conStr     string = guestrequest.ScsiControllerGuids[sm.Controller]
 		lunStr     string = fmt.Sprintf("%d", sm.LUN)
 	)
 
