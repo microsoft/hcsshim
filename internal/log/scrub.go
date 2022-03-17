@@ -60,7 +60,7 @@ func ScrubProcessParameters(s string) (string, error) {
 	if err := encode(buf, pp); err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(s), nil
+	return strings.TrimSpace(buf.String()), nil
 }
 
 // ScrubBridgeCreate scrubs requests sent over the bridge of type
