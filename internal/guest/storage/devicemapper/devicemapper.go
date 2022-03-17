@@ -12,6 +12,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/Microsoft/hcsshim/internal/guest/linux"
 )
 
 // CreateFlags modify the operation of CreateDevice
@@ -28,24 +30,9 @@ var (
 )
 
 const (
-	_IOC_WRITE    = 1
-	_IOC_READ     = 2
-	_IOC_NRBITS   = 8
-	_IOC_TYPEBITS = 8
-	_IOC_SIZEBITS = 14
-	_IOC_DIRBITS  = 2
-
-	_IOC_NRMASK    = ((1 << _IOC_NRBITS) - 1)
-	_IOC_TYPEMASK  = ((1 << _IOC_TYPEBITS) - 1)
-	_IOC_SIZEMASK  = ((1 << _IOC_SIZEBITS) - 1)
-	_IOC_DIRMASK   = ((1 << _IOC_DIRBITS) - 1)
-	_IOC_TYPESHIFT = (_IOC_NRBITS)
-	_IOC_SIZESHIFT = (_IOC_TYPESHIFT + _IOC_TYPEBITS)
-	_IOC_DIRSHIFT  = (_IOC_SIZESHIFT + _IOC_SIZEBITS)
-
 	_DM_IOCTL      = 0xfd
 	_DM_IOCTL_SIZE = 312
-	_DM_IOCTL_BASE = (_IOC_READ|_IOC_WRITE)<<_IOC_DIRSHIFT | _DM_IOCTL<<_IOC_TYPESHIFT | _DM_IOCTL_SIZE<<_IOC_SIZESHIFT
+	_DM_IOCTL_BASE = linux.IocWRBase | _DM_IOCTL<<linux.IocTypeShift | _DM_IOCTL_SIZE<<linux.IocSizeShift
 
 	_DM_READONLY_FLAG       = 1 << 0
 	_DM_SUSPEND_FLAG        = 1 << 1
@@ -132,11 +119,10 @@ func (err *dmError) Error() string {
 	return "device-mapper " + op + ": " + err.Err.Error()
 }
 
-// ioctl issues the specified device-mapper ioctl
-func ioctl(f *os.File, code int, data *dmIoctl) error {
-	_, _, errno := unix.Syscall(unix.SYS_IOCTL, f.Fd(), uintptr(code|_DM_IOCTL_BASE), uintptr(unsafe.Pointer(data)))
-	if errno != 0 {
-		return &dmError{Op: code, Err: errno}
+// devMapperIoctl issues the specified device-mapper ioctl
+func devMapperIoctl(f *os.File, code int, data *dmIoctl) error {
+	if err := linux.Ioctl(f, code|_DM_IOCTL_BASE, unsafe.Pointer(data)); err != nil {
+		return &dmError{Op: code, Err: err}
 	}
 	return nil
 }
@@ -155,7 +141,7 @@ func openMapper() (f *os.File, err error) {
 	}()
 	var d dmIoctl
 	initIoctl(&d, int(unsafe.Sizeof(d)), "")
-	err = ioctl(f, _DM_VERSION, &d)
+	err = devMapperIoctl(f, _DM_VERSION, &d)
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +226,7 @@ func CreateDevice(name string, flags CreateFlags, targets []Target) (_ string, e
 	var d dmIoctl
 	size := int(unsafe.Sizeof(d))
 	initIoctl(&d, size, name)
-	err = ioctl(f, _DM_DEV_CREATE, &d)
+	err = devMapperIoctl(f, _DM_DEV_CREATE, &d)
 	if err != nil {
 		return "", err
 	}
@@ -256,12 +242,12 @@ func CreateDevice(name string, flags CreateFlags, targets []Target) (_ string, e
 	if flags&CreateReadOnly != 0 {
 		di.Flags |= _DM_READONLY_FLAG
 	}
-	err = ioctl(f, _DM_TABLE_LOAD, di)
+	err = devMapperIoctl(f, _DM_TABLE_LOAD, di)
 	if err != nil {
 		return "", err
 	}
 	initIoctl(&d, size, name)
-	err = ioctl(f, _DM_DEV_SUSPEND, &d)
+	err = devMapperIoctl(f, _DM_DEV_SUSPEND, &d)
 	if err != nil {
 		return "", err
 	}
@@ -306,7 +292,7 @@ func RemoveDevice(name string) (err error) {
 func removeDevice(f *os.File, name string) error {
 	var d dmIoctl
 	initIoctl(&d, int(unsafe.Sizeof(d)), name)
-	err := ioctl(f, _DM_DEV_REMOVE, &d)
+	err := devMapperIoctl(f, _DM_DEV_REMOVE, &d)
 	if err != nil {
 		return err
 	}

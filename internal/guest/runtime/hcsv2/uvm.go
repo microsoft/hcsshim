@@ -95,6 +95,15 @@ func (h *Host) SetSecurityPolicy(base64Policy string) error {
 		return err
 	}
 
+	hostData, err := securitypolicy.NewSecurityPolicyDigest(base64Policy)
+	if err != nil {
+		return err
+	}
+
+	if err := validateHostData(hostData[:]); err != nil {
+		return err
+	}
+
 	h.securityPolicyEnforcer = p
 	h.securityPolicyEnforcerSet = true
 
