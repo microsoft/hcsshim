@@ -23,6 +23,8 @@ GCS_TOOLS=\
 
 .PHONY: all always rootfs test
 
+.DEFAULT_GOAL := all
+
 all: out/initrd.img out/rootfs.tar.gz
 
 clean:
@@ -31,6 +33,12 @@ clean:
 
 test:
 	cd $(SRCROOT) && go test -v ./internal/guest/...
+
+rootfs: out/rootfs.vhd
+
+out/rootfs.vhd: out/rootfs.tar.gz bin/cmd/tar2ext4
+	gzip -f -d ./out/rootfs.tar.gz
+	bin/cmd/tar2ext4 -vhd -i ./out/rootfs.tar -o $@
 
 out/delta.tar.gz: bin/init bin/vsockexec bin/cmd/gcs bin/cmd/gcstools bin/cmd/hooks/wait-paths Makefile
 	@mkdir -p out
@@ -62,6 +70,7 @@ out/initrd.img: $(BASE) out/delta.tar.gz $(SRCROOT)/hack/catcpio.sh
 -include deps/cmd/gcs.gomake
 -include deps/cmd/gcstools.gomake
 -include deps/cmd/hooks/wait-paths.gomake
+-include deps/cmd/tar2ext4.gomake
 
 # Implicit rule for includes that define Go targets.
 %.gomake: $(SRCROOT)/Makefile
