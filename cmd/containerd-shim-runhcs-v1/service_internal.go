@@ -474,6 +474,10 @@ func (s *service) shutdownInternal(ctx context.Context, req *task.ShutdownReques
 		close(s.shutdown)
 	})
 
+	// returning a response triggers containerd to cleanup bundle, but this shim may not be complete yet
+	// so wait forever, and have the event server close when the shim exits
+	select {}
+
 	return empty, nil
 }
 
