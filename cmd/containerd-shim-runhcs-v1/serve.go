@@ -12,10 +12,6 @@ import (
 	"unsafe"
 
 	"github.com/Microsoft/go-winio"
-	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
-	"github.com/Microsoft/hcsshim/internal/extendedtask"
-	"github.com/Microsoft/hcsshim/internal/shimdiag"
-	"github.com/Microsoft/hcsshim/pkg/octtrpc"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/ttrpc"
@@ -26,6 +22,11 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"golang.org/x/sys/windows"
+
+	runhcsopts "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
+	"github.com/Microsoft/hcsshim/internal/extendedtask"
+	"github.com/Microsoft/hcsshim/internal/shimdiag"
+	"github.com/Microsoft/hcsshim/pkg/octtrpc"
 )
 
 var svc *service
@@ -240,30 +241,24 @@ var serveCommand = cli.Command{
 		case err = <-serrs:
 			// the ttrpc server shutdown without processing a shutdown request
 		case <-svc.Done():
-			if !svc.gracefulShutdown {
-				// Return immediately, but still close ttrpc server, pipes, and spans
-				// Shouldn't need to os.Exit without clean up (ie, deferred `.Close()`s)
-				return nil
-			}
-
-			// containerd waits for the ttrpc server to close, then deletes the sanbox
-			// bundle.
+			// containerd waits for the ttrpc server to respons to the shutdown request
+			// or to close, then deletes the sanbox bundle.
 			// However, this (serve) command is started with the bundle path as the cwd
 			// and panic.log (created within the sandbox bundle) as the stderr. This
 			// prevents containerd from deleting the bundle if this process is still
 			// alive.
-			// Change the directory to the parent and close stderr (panic.log) to
-			// allow bundle deletion to succeed.
-			if err := os.Chdir(".."); err != nil {
-				logrus.WithError(err).Warn("could not change working directory to bundle directory parent ")
-			}
-			os.Stderr.Close()
 
+			os.Stderr.Close()
+			// unlike linux, windows locks a process's working directory, so it
+			// cannot be deleted if the process is running
+			// Set wd to dir to finish up cleanup while containerd deletes bundle
+			if err := os.Chdir(os.TempDir()); err != nil {
+				logrus.WithError(err).Warning("error while changing working directory")
+			}
 			sctx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
 			defer cancel()
-			// ignore the error, since we closed stderr (and stdout)
 			if err := s.Shutdown(sctx); err != nil {
-				logrus.WithError(err).Warning("error while shutting down ttrpc server")
+				logrus.WithError(err).Warning("error while closing ttrpc server")
 			}
 		}
 
@@ -272,7 +267,7 @@ var serveCommand = cli.Command{
 }
 
 func trapClosedConnErr(err error) error {
-	if err == nil || strings.Contains(err.Error(), "use of closed network connection") {
+	if err == nil || strings.Contains(err.Error(), "use of closed network connection") || errors.Is(err, ttrpc.ErrServerClosed) {
 		return nil
 	}
 	return err

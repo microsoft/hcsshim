@@ -467,14 +467,21 @@ func (s *service) shutdownInternal(ctx context.Context, req *task.ShutdownReques
 		return empty, nil
 	}
 
-	s.shutdownOnce.Do(func() {
+	if req.Now {
+		os.Exit(0)
+	}
+
+	var err error
+	select {
+	case <-s.shutdown:
+		// already closed
+	default:
 		// TODO: should taskOrPod be deleted/set to nil?
 		// TODO: is there any extra leftovers of the shimTask/Pod to clean? ie: verify all handles are closed?
-		s.gracefulShutdown = !req.Now
 		close(s.shutdown)
-	})
+	}
 
-	return empty, nil
+	return empty, err
 }
 
 func (s *service) computeProcessorInfoInternal(ctx context.Context, req *extendedtask.ComputeProcessorInfoRequest) (*extendedtask.ComputeProcessorInfoResponse, error) {

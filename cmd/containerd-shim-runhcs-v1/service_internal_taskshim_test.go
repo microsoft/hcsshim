@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"strconv"
 	"testing"
@@ -27,8 +26,7 @@ func setupTaskServiceWithFakes(t *testing.T) (*service, *testShimTask, *testShim
 	// clean up the service
 	t.Cleanup(func() {
 		if _, err := s.shutdownInternal(context.Background(), &task.ShutdownRequest{
-			ID:  s.tid,
-			Now: true,
+			ID: s.tid,
 		}); err != nil {
 			t.Fatalf("could not shutdown service: %v", err)
 		}
@@ -635,33 +633,28 @@ func Test_TaskShim_statsInternal_InitTaskID_Sucess(t *testing.T) {
 }
 
 func Test_TaskShim_shutdownInternal(t *testing.T) {
-	for _, now := range []bool{true, false} {
-		t.Run(fmt.Sprintf("%s_Now_%t", t.Name(), now), func(t *testing.T) {
-			s, _, _ := setupTaskServiceWithFakes(t)
+	s, _, _ := setupTaskServiceWithFakes(t)
 
-			if s.IsShutdown() {
-				t.Fatal("service prematurely shutdown")
-			}
+	if s.IsShutdown() {
+		t.Fatal("service prematurely shutdown")
+	}
 
-			_, err := s.shutdownInternal(context.Background(), &task.ShutdownRequest{
-				ID:  s.tid,
-				Now: now,
-			})
-			if err != nil {
-				t.Fatalf("could not shut down service: %v", err)
-			}
+	_, err := s.shutdownInternal(context.Background(), &task.ShutdownRequest{
+		ID: s.tid,
+	})
+	if err != nil {
+		t.Fatalf("could not shut down service: %v", err)
+	}
 
-			tm := time.NewTimer(5 * time.Millisecond)
-			select {
-			case <-tm.C:
-				t.Fatalf("shutdown channel did not close")
-			case <-s.Done():
-				tm.Stop()
-			}
+	tm := time.NewTimer(5 * time.Millisecond)
+	select {
+	case <-tm.C:
+		t.Fatalf("shutdown channel did not close")
+	case <-s.Done():
+		tm.Stop()
+	}
 
-			if !s.IsShutdown() {
-				t.Fatal("service did not shutdown")
-			}
-		})
+	if !s.IsShutdown() {
+		t.Fatal("service did not shutdown")
 	}
 }

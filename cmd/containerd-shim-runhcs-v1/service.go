@@ -9,13 +9,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/extendedtask"
-	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
 	google_protobuf1 "github.com/gogo/protobuf/types"
 	"go.opencensus.io/trace"
+
+	"github.com/Microsoft/hcsshim/internal/extendedtask"
+	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/shimdiag"
 )
 
 type ServiceOptions struct {
@@ -69,13 +70,8 @@ type service struct {
 	// concurrently.
 	cl sync.Mutex
 
-	// shutdown is closed to signal a shutdown request is received
+	// shutdown signals that the service has finished shutting down
 	shutdown chan struct{}
-	// shutdownOnce is responsible for closing `shutdown` and any other necessary cleanup
-	shutdownOnce sync.Once
-	// gracefulShutdown dictates whether to shutdown gracefully and clean up resources
-	// or exit immediately
-	gracefulShutdown bool
 }
 
 var _ = (task.TaskService)(&service{})
