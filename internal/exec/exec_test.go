@@ -3,7 +3,6 @@ package exec
 import (
 	"context"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"testing"
@@ -127,9 +126,9 @@ func TestExecStdinPowershell(t *testing.T) {
 
 func TestExecsWithJob(t *testing.T) {
 	// Test that we can assign processes to a job object at creation time.
-	job, err := jobobject.Create(context.Background(), &jobobject.Options{Name: "test"})
+	job, err := jobobject.Create(context.Background(), nil)
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 	defer job.Close()
 
