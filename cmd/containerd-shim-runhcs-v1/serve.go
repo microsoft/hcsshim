@@ -181,6 +181,8 @@ var serveCommand = cli.Command{
 		}
 		defer func() {
 			if err != nil {
+				// closing the event publisher triggers containerd to cleanup
+				// so keep the event publisher open until shim exits
 				ttrpcEventPublisher.close()
 			}
 		}()
@@ -248,14 +250,27 @@ var serveCommand = cli.Command{
 			// the ttrpc server shutdown without processing a shutdown request
 		case <-svc.Done():
 			if !svc.gracefulShutdown {
-				// Return immediately, but still close ttrpc server, pipes, and spans
-				// Shouldn't need to os.Exit without clean up (ie, deferred `.Close()`s)
-				return nil
+				// Return immediately, without cleaning up
+				os.Exit(0)
 			}
-			// currently the ttrpc shutdown is the only clean up to wait on
-			sctx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
-			defer cancel()
-			err = s.Shutdown(sctx)
+
+			// containerd waits for the ttrpc server to respons to the shutdown request
+			// or to close, then deletes the sanbox bundle.
+			// However, this (serve) command is started with the bundle path as the cwd
+			// and panic.log (created within the sandbox bundle) as the stderr. This
+			// prevents containerd from deleting the bundle if this process is still
+			// alive.
+			// Change the directory to the parent and close stderr (panic.log) to
+			// allow bundle deletion to succeed.
+			// if err := os.Chdir(".."); err != nil {
+			// 	logrus.WithError(err).Warn("could not change working directory to bundle directory parent ")
+			// }
+			os.Stderr.Close()
+
+			// dont wait on shutdown, since svc.Shutdown is spinning indefintely
+			if err := s.Close(); err != nil {
+				logrus.WithError(err).Warning("error while closing ttrpc server")
+			}
 		}
 
 		return err
@@ -263,7 +278,7 @@ var serveCommand = cli.Command{
 }
 
 func trapClosedConnErr(err error) error {
-	if err == nil || strings.Contains(err.Error(), "use of closed network connection") {
+	if err == nil || strings.Contains(err.Error(), "use of closed network connection") || errors.Is(err, ttrpc.ErrServerClosed) {
 		return nil
 	}
 	return err
