@@ -6,6 +6,7 @@
 
 # Ignore vscode setting files
 .vscode/
+.idea/
 
 # Test binary, build with `go test -c`
 *.test
@@ -28,11 +29,9 @@ service/pkg/
 .rootfs-done
 bin/*
 rootfs/*
+rootfs-conv/*
 *.o
 /build/
 
 deps/*
 out/*
-
-.idea/
-.vscode/
