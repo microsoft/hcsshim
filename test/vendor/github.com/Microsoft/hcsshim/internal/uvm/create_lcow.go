@@ -639,18 +639,18 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 	}
 
 	// Inject initial entropy over vsock during init launch.
-	initArgs := fmt.Sprintf("-e %d", entropyVsockPort)
+	entropyArgs := fmt.Sprintf("-e %d", entropyVsockPort)
 
 	// With default options, run GCS with stderr pointing to the vsock port
 	// created below in order to forward guest logs to logrus.
-	initArgs += " /bin/vsockexec"
+	execCmdArgs := "/bin/vsockexec"
 
 	if opts.ForwardStdout {
-		initArgs += fmt.Sprintf(" -o %d", linuxLogVsockPort)
+		execCmdArgs += fmt.Sprintf(" -o %d", linuxLogVsockPort)
 	}
 
 	if opts.ForwardStderr {
-		initArgs += fmt.Sprintf(" -e %d", linuxLogVsockPort)
+		execCmdArgs += fmt.Sprintf(" -e %d", linuxLogVsockPort)
 	}
 
 	if opts.DisableTimeSyncService {
@@ -661,15 +661,16 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 		opts.ExecCommandLine += " --scrub-logs"
 	}
 
-	initArgs += " " + opts.ExecCommandLine
+	execCmdArgs += " " + opts.ExecCommandLine
 
 	if opts.ProcessDumpLocation != "" {
-		initArgs += " -core-dump-location " + opts.ProcessDumpLocation
+		execCmdArgs += " -core-dump-location " + opts.ProcessDumpLocation
 	}
 
+	initArgs := fmt.Sprintf("%s %s", entropyArgs, execCmdArgs)
 	if vmDebugging {
 		// Launch a shell on the console.
-		initArgs = `sh -c "` + initArgs + ` & exec sh"`
+		initArgs = entropyArgs + ` sh -c "` + execCmdArgs + ` & exec sh"`
 	}
 
 	kernelArgs += fmt.Sprintf(" nr_cpus=%d", opts.ProcessorCount)
@@ -696,8 +697,9 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 	return doc, nil
 }
 
-// Creates an HCS compute system representing a utility VM. It consumes a set of options derived
-// from various defaults and options expressed as annotations.
+// CreateLCOW creates an HCS compute system representing a utility VM. It
+// consumes a set of options derived from various defaults and options
+// expressed as annotations.
 func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error) {
 	ctx, span := trace.StartSpan(ctx, "uvm::CreateLCOW")
 	defer span.End()
