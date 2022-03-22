@@ -14,20 +14,22 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/guest/bridge"
-	"github.com/Microsoft/hcsshim/internal/guest/kmsg"
-	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
-	"github.com/Microsoft/hcsshim/internal/guest/runtime/runc"
-	"github.com/Microsoft/hcsshim/internal/guest/transport"
-	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/cenkalti/backoff/v4"
 	"github.com/containerd/cgroups"
 	cgroupstats "github.com/containerd/cgroups/stats/v1"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
+
+	"github.com/Microsoft/hcsshim/internal/guest/bridge"
+	"github.com/Microsoft/hcsshim/internal/guest/kmsg"
+	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
+	"github.com/Microsoft/hcsshim/internal/guest/runtime/runc"
+	"github.com/Microsoft/hcsshim/internal/guest/transport"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/cenkalti/backoff/v4"
 )
 
 func memoryLogFormat(metrics *cgroupstats.Metrics) logrus.Fields {
@@ -229,7 +231,7 @@ func main() {
 
 	log.SetScrubbing(*scrubLogs)
 
-	baseLogPath := "/run/gcs/c"
+	baseLogPath := guestpath.LCOWRootPrefixInUVM
 
 	logrus.Info("GCS started")
 

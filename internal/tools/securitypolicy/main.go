@@ -75,7 +75,6 @@ func createPolicyFromConfig(config *securitypolicy.PolicyConfig) (*securitypolic
 	// and any environment variable rules we might need
 	defaultContainers := helpers.DefaultContainerConfigs()
 	config.Containers = append(config.Containers, defaultContainers...)
-
 	policyContainers, err := helpers.PolicyContainersFromConfigs(config.Containers)
 	if err != nil {
 		return nil, err

@@ -6,6 +6,7 @@ package cri_containerd
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -14,9 +15,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/sirupsen/logrus"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+
+	"github.com/Microsoft/hcsshim/internal/guestpath"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
 func runLogRotationContainer(t *testing.T, sandboxRequest *runtime.RunPodSandboxRequest, request *runtime.CreateContainerRequest, log string, logArchive string) {
@@ -725,7 +728,7 @@ func Test_CreateContainer_HugePageMount_LCOW(t *testing.T) {
 			},
 			Mounts: []*runtime.Mount{
 				{
-					HostPath:      "hugepages://2M/hugepage2M",
+					HostPath:      fmt.Sprintf("%s2M/hugepage2M", guestpath.HugePagesMountPrefix),
 					ContainerPath: "/mnt/hugepage2M",
 					Readonly:      false,
 					Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,

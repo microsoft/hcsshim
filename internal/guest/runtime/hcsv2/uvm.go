@@ -225,10 +225,14 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	// We append the variable after the security policy enforcing logic completes so as to bypass it; the
 	// security policy variable cannot be included in the security policy as its value is not available
 	// security policy construction time.
-
 	if policyEnforcer, ok := (h.securityPolicyEnforcer).(*securitypolicy.StandardSecurityPolicyEnforcer); ok {
 		secPolicyEnv := fmt.Sprintf("SECURITY_POLICY=%s", policyEnforcer.EncodedSecurityPolicy)
 		settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, secPolicyEnv)
+	}
+
+	// Sandbox mount paths need to be resolved in the spec before expected mounts policy can be enforced.
+	if err = h.securityPolicyEnforcer.EnforceExpectedMountsPolicy(id, settings.OCISpecification); err != nil {
+		return nil, errors.Wrapf(err, "container creation denied due to policy")
 	}
 
 	// Create the BundlePath

@@ -74,6 +74,7 @@ func DefaultContainerConfigs() []securitypolicy.ContainerConfig {
 		[]securitypolicy.EnvRuleConfig{},
 		securitypolicy.AuthConfig{},
 		"",
+		[]string{},
 	)
 	return []securitypolicy.ContainerConfig{pause}
 }
@@ -136,7 +137,13 @@ func PolicyContainersFromConfigs(containerConfigs []securitypolicy.ContainerConf
 			workingDir = containerConfig.WorkingDir
 		}
 
-		container, err := securitypolicy.NewContainer(containerConfig.Command, layerHashes, envRules, workingDir)
+		container, err := securitypolicy.NewContainer(
+			containerConfig.Command,
+			layerHashes,
+			envRules,
+			workingDir,
+			containerConfig.ExpectedMounts,
+		)
 		if err != nil {
 			return nil, err
 		}

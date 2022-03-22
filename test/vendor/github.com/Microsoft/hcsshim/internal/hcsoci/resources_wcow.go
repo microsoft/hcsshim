@@ -13,16 +13,18 @@ import (
 	"path/filepath"
 	"strings"
 
+	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
+
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/credentials"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/resources"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 )
 
 const wcowSandboxMountPath = "C:\\SandboxMounts"
@@ -140,7 +142,7 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 		}
 
 		if coi.HostingSystem != nil && schemaversion.IsV21(coi.actualSchemaVersion) {
-			uvmPath := fmt.Sprintf(uvm.WCOWGlobalMountPrefix, coi.HostingSystem.UVMMountCounter())
+			uvmPath := fmt.Sprintf(guestpath.WCOWGlobalMountPrefixFmt, coi.HostingSystem.UVMMountCounter())
 			readOnly := false
 			for _, o := range mount.Options {
 				if strings.ToLower(o) == "ro" {
@@ -178,7 +180,7 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 					return errors.Wrapf(err, "adding SCSI EVD mount failed %+v", mount)
 				}
 				r.Add(scsiMount)
-			} else if strings.HasPrefix(mount.Source, "sandbox://") {
+			} else if strings.HasPrefix(mount.Source, guestpath.SandboxMountPrefix) {
 				// Mounts that map to a path in the UVM are specified with a 'sandbox://' prefix.
 				//
 				// Example: sandbox:///a/dirInUvm destination:C:\\dirInContainer.
@@ -228,6 +230,6 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 }
 
 func convertToWCOWSandboxMountPath(source string) string {
-	subPath := strings.TrimPrefix(source, "sandbox://")
+	subPath := strings.TrimPrefix(source, guestpath.SandboxMountPrefix)
 	return filepath.Join(wcowSandboxMountPath, subPath)
 }

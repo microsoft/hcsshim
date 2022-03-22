@@ -9,16 +9,18 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/Microsoft/hcsshim/pkg/annotations"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
+
+	"github.com/Microsoft/hcsshim/internal/guestpath"
+	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
 func getWorkloadRootDir(id string) string {
-	return filepath.Join("/run/gcs/c", id)
+	return filepath.Join(guestpath.LCOWRootPrefixInUVM, id)
 }
 
 // os.MkdirAll combines the given permissions with the running process's
@@ -32,11 +34,10 @@ func mkdirAllModePerm(target string) error {
 }
 
 func updateSandboxMounts(sbid string, spec *oci.Spec) error {
-	sandboxMountPrefix := "sandbox://"
 	for i, m := range spec.Mounts {
-		if strings.HasPrefix(m.Source, sandboxMountPrefix) {
+		if strings.HasPrefix(m.Source, guestpath.SandboxMountPrefix) {
 			mountsDir := getSandboxMountsDir(sbid)
-			subPath := strings.TrimPrefix(m.Source, sandboxMountPrefix)
+			subPath := strings.TrimPrefix(m.Source, guestpath.SandboxMountPrefix)
 			sandboxSource := filepath.Join(mountsDir, subPath)
 
 			// filepath.Join cleans the resulting path before returning so it would resolve the relative path if one was given.
@@ -59,11 +60,10 @@ func updateSandboxMounts(sbid string, spec *oci.Spec) error {
 }
 
 func updateHugePageMounts(sbid string, spec *oci.Spec) error {
-	mountPrefix := "hugepages://"
 	for i, m := range spec.Mounts {
-		if strings.HasPrefix(m.Source, mountPrefix) {
+		if strings.HasPrefix(m.Source, guestpath.HugePagesMountPrefix) {
 			mountsDir := getSandboxHugePageMountsDir(sbid)
-			subPath := strings.TrimPrefix(m.Source, mountPrefix)
+			subPath := strings.TrimPrefix(m.Source, guestpath.HugePagesMountPrefix)
 			pageSize := strings.Split(subPath, string(os.PathSeparator))[0]
 			hugePageMountSource := filepath.Join(mountsDir, subPath)
 

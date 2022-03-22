@@ -14,6 +14,7 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/clone"
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -27,8 +28,8 @@ import (
 )
 
 var (
-	lcowRootInUVM = "/run/gcs/c/%s"
-	wcowRootInUVM = `C:\c\%s`
+	lcowRootInUVM = guestpath.LCOWRootPrefixInUVM + "/%s"
+	wcowRootInUVM = guestpath.WCOWRootPrefixInUVM + "/%s"
 )
 
 // CreateOptions are the set of fields used to call CreateContainer().

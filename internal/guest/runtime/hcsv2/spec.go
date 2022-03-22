@@ -10,12 +10,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/opencontainers/runc/libcontainer/devices"
 	"github.com/opencontainers/runc/libcontainer/user"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+
+	"github.com/Microsoft/hcsshim/internal/hooks"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
 // getNetworkNamespaceID returns the `ToLower` of
@@ -257,17 +259,7 @@ func applyAnnotationsToSpec(ctx context.Context, spec *oci.Spec) error {
 }
 
 // Helper function to create an oci prestart hook to run ldconfig
-func addLDConfigHook(ctx context.Context, spec *oci.Spec, args, env []string) error {
-	if spec.Hooks == nil {
-		spec.Hooks = &oci.Hooks{}
-	}
-
-	ldConfigHook := oci.Hook{
-		Path: "/sbin/ldconfig",
-		Args: args,
-		Env:  env,
-	}
-
-	spec.Hooks.Prestart = append(spec.Hooks.Prestart, ldConfigHook)
-	return nil
+func addLDConfigHook(_ context.Context, spec *oci.Spec, args, env []string) error {
+	ldConfigHook := hooks.NewOCIHook("/sbin/ldconfig", args, env)
+	return hooks.AddOCIHook(spec, hooks.Prestart, ldConfigHook)
 }
