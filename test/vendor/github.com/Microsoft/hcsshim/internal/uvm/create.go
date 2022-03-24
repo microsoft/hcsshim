@@ -163,8 +163,8 @@ func verifyOptions(ctx context.Context, options interface{}) error {
 		if len(opts.LayerFolders) < 2 {
 			return errors.New("at least 2 LayerFolders must be supplied")
 		}
-		if opts.SCSIControllerCount < 1 {
-			return errors.New("at least 1 SCSI controller is required for WCOW")
+		if opts.SCSIControllerCount != 1 {
+			return errors.New("exactly 1 SCSI controller is required for WCOW")
 		}
 		if opts.IsClone && !verifyCloneUvmCreateOpts(&opts.TemplateConfig.CreateOpts, opts) {
 			return errors.New("clone configuration doesn't match with template configuration")
