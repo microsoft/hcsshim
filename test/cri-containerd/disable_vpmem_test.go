@@ -51,11 +51,8 @@ func Test_70LayerImagesWithNoVPmemForLayers(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			// 1 VPMEM device will be used for UVM VHD and all container layers
-			// will be attached over SCSI.
-			annotations.VPMemCount: "1",
-			// Make sure the 1 VPMEM device isn't used for multimapping.
-			annotations.VPMemNoMultiMapping: "true",
+			annotations.VPMemCount:          "0",
+			annotations.PreferredRootFSType: "initrd",
 		}),
 	)
 	// override pod name
@@ -71,6 +68,7 @@ func Test_70LayerImagesWithNoVPmemForLayers(t *testing.T) {
 	wg.Add(nContainers)
 	for idx := 0; idx < nContainers; idx++ {
 		go func(i int) {
+			defer wg.Done()
 			request := &runtime.CreateContainerRequest{
 				PodSandboxId: podID,
 				Config: &runtime.ContainerConfig{
@@ -91,7 +89,6 @@ func Test_70LayerImagesWithNoVPmemForLayers(t *testing.T) {
 
 			containerIDs[i] = createContainer(t, client, ctx, request)
 			startContainer(t, client, ctx, containerIDs[i])
-			wg.Done()
 		}(idx)
 	}
 	wg.Wait()

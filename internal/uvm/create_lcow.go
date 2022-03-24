@@ -155,9 +155,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		DisableTimeSyncService:  false,
 	}
 
-	// if VPMEM Multimapping is disabled we should enable 4 SCSI controllers so that we can still
-	// support upto 128 container image layers.
-	if osversion.Build() >= osversion.RS5 && opts.VPMemNoMultiMapping {
+	if osversion.Build() >= osversion.RS5 {
 		opts.SCSIControllerCount = 4
 	}
 
