@@ -23,7 +23,6 @@ func TestJobCreateAndOpen(t *testing.T) {
 		ctx     = context.Background()
 		options = &Options{Name: "test"}
 	)
-
 	jobCreate, err := Create(ctx, options)
 	if err != nil {
 		t.Fatal(err)
@@ -67,11 +66,7 @@ func createProcsAndAssign(num int, job *JobObject) (_ []*exec.Cmd, err error) {
 }
 
 func TestSetTerminateOnLastHandleClose(t *testing.T) {
-	options := &Options{
-		Name:          "test",
-		Notifications: true,
-	}
-	job, err := Create(context.Background(), options)
+	job, err := Create(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +94,7 @@ func TestSetTerminateOnLastHandleClose(t *testing.T) {
 		if !procs[0].ProcessState.Exited() {
 			errCh <- errors.New("process should have exited after closing job handle")
 		}
-		errCh <- nil
+		close(errCh)
 	}()
 
 	select {
@@ -116,11 +111,7 @@ func TestSetTerminateOnLastHandleClose(t *testing.T) {
 func TestSetMultipleExtendedLimits(t *testing.T) {
 	// Tests setting two different properties on the job that modify
 	// JOBOBJECT_EXTENDED_LIMIT_INFORMATION
-	options := &Options{
-		Name:          "test",
-		Notifications: true,
-	}
-	job, err := Create(context.Background(), options)
+	job, err := Create(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +149,6 @@ func TestNoMoreProcessesMessageKill(t *testing.T) {
 	// Test that we receive the no more processes in job message after killing all of
 	// the processes in the job.
 	options := &Options{
-		Name:          "test",
 		Notifications: true,
 	}
 	job, err := Create(context.Background(), options)
@@ -192,7 +182,8 @@ func TestNoMoreProcessesMessageKill(t *testing.T) {
 
 			switch notif.(type) {
 			case MsgAllProcessesExited:
-				errCh <- nil
+				close(errCh)
+				return
 			case MsgUnimplemented:
 			default:
 			}
@@ -213,7 +204,6 @@ func TestNoMoreProcessesMessageTerminate(t *testing.T) {
 	// Test that we receive the no more processes in job message after terminating the
 	// job (terminates every process in the job).
 	options := &Options{
-		Name:          "test",
 		Notifications: true,
 	}
 	job, err := Create(context.Background(), options)
@@ -245,7 +235,8 @@ func TestNoMoreProcessesMessageTerminate(t *testing.T) {
 
 			switch notif.(type) {
 			case MsgAllProcessesExited:
-				errCh <- nil
+				close(errCh)
+				return
 			case MsgUnimplemented:
 			default:
 			}
@@ -263,12 +254,9 @@ func TestNoMoreProcessesMessageTerminate(t *testing.T) {
 }
 
 func TestVerifyPidCount(t *testing.T) {
-	// This test verifies that job.Pids() returns the right info and works with > 1 process.
-	options := &Options{
-		Name:          "test",
-		Notifications: true,
-	}
-	job, err := Create(context.Background(), options)
+	// This test verifies that job.Pids() returns the right info and works with > 1
+	// process.
+	job, err := Create(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
