@@ -170,13 +170,15 @@ jobs:
             containerd-shim-runhcs-v1.exe
             runhcs.exe
             tar2ext4.exe
-            device-util.exe
             wclayer.exe
+            device-util.exe
+            ncproxy.exe
+            dmverity-vhd.exe
             grantvmgroupaccess.exe
             networkagent.exe
+            securitypolicy.exe
             uvmboot.exe
             zapdir.exe
-            ncproxy.exe
 
   build_gcs:
     runs-on: ubuntu-latest
