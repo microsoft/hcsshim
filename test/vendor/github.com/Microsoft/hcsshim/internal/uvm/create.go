@@ -144,10 +144,6 @@ func verifyOptions(ctx context.Context, options interface{}) error {
 			if opts.VPMemSizeBytes%4096 != 0 {
 				return errors.New("VPMemSizeBytes must be a multiple of 4096")
 			}
-		} else {
-			if opts.PreferredRootFSType == PreferredRootFSTypeVHD {
-				return errors.New("PreferredRootFSTypeVHD requires at least one VPMem device")
-			}
 		}
 		if opts.KernelDirect && osversion.Build() < 18286 {
 			return errors.New("KernelDirectBoot is not supported on builds older than 18286")
