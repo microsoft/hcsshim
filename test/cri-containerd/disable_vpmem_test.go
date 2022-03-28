@@ -51,12 +51,11 @@ func Test_70LayerImagesWithNoVPmemForLayers(t *testing.T) {
 		t,
 		lcowRuntimeHandler,
 		WithSandboxAnnotations(map[string]string{
-			annotations.VPMemCount:          "0",
-			annotations.PreferredRootFSType: "initrd",
+			annotations.VPMemCount: "0",
 		}),
 	)
 	// override pod name
-	sandboxRequest.Config.Metadata.Name = fmt.Sprintf("pod-%s", uniqueRef())
+	sandboxRequest.Config.Metadata.Name = fmt.Sprintf("%s-pod-%s", t.Name(), uniqueRef())
 
 	response, err := client.RunPodSandbox(ctx, sandboxRequest)
 	if err != nil {

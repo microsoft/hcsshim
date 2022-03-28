@@ -155,10 +155,6 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		DisableTimeSyncService:  false,
 	}
 
-	if osversion.Build() >= osversion.RS5 {
-		opts.SCSIControllerCount = 4
-	}
-
 	if _, err := os.Stat(filepath.Join(opts.BootFilesPath, VhdFile)); err == nil {
 		// We have a rootfs.vhd in the boot files path. Use it over an initrd.img
 		opts.RootFSFile = VhdFile
@@ -562,48 +558,59 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 			kernelArgs = "initrd=/" + opts.RootFSFile
 		}
 	case PreferredRootFSTypeVHD:
-		// Support for VPMem VHD(X) booting rather than initrd..
-		kernelArgs = "root=/dev/pmem0 ro rootwait init=/init"
-		imageFormat := "Vhd1"
-		if strings.ToLower(filepath.Ext(opts.RootFSFile)) == "vhdx" {
-			imageFormat = "Vhdx"
-		}
-		doc.VirtualMachine.Devices.VirtualPMem.Devices = map[string]hcsschema.VirtualPMemDevice{
-			"0": {
-				HostPath:    rootfsFullPath,
-				ReadOnly:    true,
-				ImageFormat: imageFormat,
-			},
-		}
-		if uvm.vpmemMultiMapping {
-			pmem := newPackedVPMemDevice()
-			pmem.maxMappedDeviceCount = 1
+		if uvm.vpmemMaxCount > 0 {
+			// Support for VPMem VHD(X) booting rather than initrd..
+			kernelArgs = "root=/dev/pmem0 ro rootwait init=/init"
+			imageFormat := "Vhd1"
+			if strings.ToLower(filepath.Ext(opts.RootFSFile)) == "vhdx" {
+				imageFormat = "Vhdx"
+			}
+			doc.VirtualMachine.Devices.VirtualPMem.Devices = map[string]hcsschema.VirtualPMemDevice{
+				"0": {
+					HostPath:    rootfsFullPath,
+					ReadOnly:    true,
+					ImageFormat: imageFormat,
+				},
+			}
+			if uvm.vpmemMultiMapping {
+				pmem := newPackedVPMemDevice()
+				pmem.maxMappedDeviceCount = 1
 
-			st, err := os.Stat(rootfsFullPath)
-			if err != nil {
-				return nil, errors.Wrapf(err, "failed to stat rootfs: %q", rootfsFullPath)
-			}
-			devSize := pageAlign(uint64(st.Size()))
-			memReg, err := pmem.Allocate(devSize)
-			if err != nil {
-				return nil, errors.Wrap(err, "failed to allocate memory for rootfs")
-			}
-			defer func() {
+				st, err := os.Stat(rootfsFullPath)
 				if err != nil {
-					if err = pmem.Release(memReg); err != nil {
-						log.G(ctx).WithError(err).Debug("failed to release memory region")
-					}
+					return nil, errors.Wrapf(err, "failed to stat rootfs: %q", rootfsFullPath)
 				}
-			}()
+				devSize := pageAlign(uint64(st.Size()))
+				memReg, err := pmem.Allocate(devSize)
+				if err != nil {
+					return nil, errors.Wrap(err, "failed to allocate memory for rootfs")
+				}
+				defer func() {
+					if err != nil {
+						if err = pmem.Release(memReg); err != nil {
+							log.G(ctx).WithError(err).Debug("failed to release memory region")
+						}
+					}
+				}()
 
-			dev := newVPMemMappedDevice(opts.RootFSFile, "/", devSize, memReg)
-			if err := pmem.mapVHDLayer(ctx, dev); err != nil {
-				return nil, errors.Wrapf(err, "failed to save internal state for a multi-mapped rootfs device")
+				dev := newVPMemMappedDevice(opts.RootFSFile, "/", devSize, memReg)
+				if err := pmem.mapVHDLayer(ctx, dev); err != nil {
+					return nil, errors.Wrapf(err, "failed to save internal state for a multi-mapped rootfs device")
+				}
+				uvm.vpmemDevicesMultiMapped[0] = pmem
+			} else {
+				dev := newDefaultVPMemInfo(opts.RootFSFile, "/")
+				uvm.vpmemDevicesDefault[0] = dev
 			}
-			uvm.vpmemDevicesMultiMapped[0] = pmem
 		} else {
-			dev := newDefaultVPMemInfo(opts.RootFSFile, "/")
-			uvm.vpmemDevicesDefault[0] = dev
+			kernelArgs = "root=/dev/sda ro rootwait init=/init"
+			doc.VirtualMachine.Devices.Scsi[guestrequest.ScsiControllerGuids[0]].Attachments["0"] = hcsschema.Attachment{
+				Type_:    "VirtualDisk",
+				Path:     rootfsFullPath,
+				ReadOnly: true,
+			}
+			uvm.scsiLocations[0][0] = newSCSIMount(uvm, rootfsFullPath, "/", "VirtualDisk", "", 1, 0, 0, true, false)
+
 		}
 	}
 
@@ -740,6 +747,12 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 			uvm.Close()
 		}
 	}()
+
+	// vpmemMaxCount has been set to 0 which means we are going to need multiple SCSI controllers
+	// to support lots of layers.
+	if osversion.Build() >= osversion.RS5 && uvm.vpmemMaxCount == 0 {
+		uvm.scsiControllerCount = 4
+	}
 
 	if err = verifyOptions(ctx, opts); err != nil {
 		return nil, errors.Wrap(err, errBadUVMOpts.Error())
