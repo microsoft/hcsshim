@@ -47,6 +47,45 @@ func HvsockIoListen(vmID guid.GUID) IoListenFunc {
 	}
 }
 
+type notifyChans struct {
+	// The channel on which the guest connection sends notifications
+	notify chan nots.Message
+	// Closed by GuestConnection to signal container in the guest exited
+	close chan struct{}
+	m     sync.Mutex
+}
+
+func newNotifyChans() *notifyChans {
+	return &notifyChans{
+		notify: make(chan nots.Message),
+		close:  make(chan struct{}),
+	}
+}
+
+func (nc *notifyChans) Close() {
+	select {
+	case <-nc.close:
+	default:
+		nc.m.Lock()
+		defer nc.m.Unlock()
+		// close `close` first to unblock on close and not a new notification
+		close(nc.close)
+		close(nc.notify)
+	}
+}
+
+// Notify sends m along nc.notify, but only after acquiring the nc.m, to prevent
+// against the channel being closed before sending
+func (nc *notifyChans) Notify(m nots.Message) {
+	select {
+	case <-nc.close:
+	default:
+		nc.m.Lock()
+		defer nc.m.Unlock()
+		nc.notify <- m
+	}
+}
+
 type InitialGuestState struct {
 	// Timezone is only honored for Windows guests.
 	Timezone *hcsschema.TimeZoneInformation
@@ -72,7 +111,7 @@ func (gcc *GuestConnectionConfig) Connect(ctx context.Context, isColdStart bool)
 	defer func() { oc.SetSpanStatus(span, err) }()
 	gc := &GuestConnection{
 		nextPort:   firstIoChannelVsockPort,
-		notifyChs:  make(map[string]notifyChans),
+		notifyChs:  make(map[string]*notifyChans),
 		ioListenFn: gcc.IoListen,
 	}
 	gc.brdg = newBridge(gcc.Conn, gc.notify, gcc.Log)
@@ -95,28 +134,9 @@ type GuestConnection struct {
 	ioListenFn IoListenFunc
 	mu         sync.Mutex
 	nextPort   uint32
-	notifyChs  map[string]notifyChans
+	notifyChs  map[string]*notifyChans
 	caps       schema1.GuestDefinedCapabilities
 	os         string
-}
-
-type notifyChans struct {
-	// The channel on which the guest connection sends notifications
-	notify chan nots.Message
-	// Closed by GuestConnection to signal container in the guest exited
-	close chan struct{}
-}
-
-func newNotifyChans() notifyChans {
-	return notifyChans{
-		notify: make(chan nots.Message),
-		close:  make(chan struct{}),
-	}
-}
-
-func (nc notifyChans) Close() {
-	close(nc.close)
-	close(nc.notify)
 }
 
 var _ cow.ProcessHost = &GuestConnection{}
@@ -268,7 +288,7 @@ func (gc *GuestConnection) newIoChannel() (*ioChannel, uint32, error) {
 // or upon close.
 //
 // Currently only OOM and Shutdown events are sent.
-func (gc *GuestConnection) requestNotify(cid string, notifyChs notifyChans) error {
+func (gc *GuestConnection) requestNotify(cid string, notifyChs *notifyChans) error {
 	gc.mu.Lock()
 	defer gc.mu.Unlock()
 
@@ -336,7 +356,7 @@ func (gc *GuestConnection) notify(ntf *containerNotification) (err error) {
 
 	if nntf != nots.None {
 		// should not block here, since gcs.Container has background notification goroutine
-		ch.notify <- nntf
+		ch.Notify(nntf)
 	}
 
 	return

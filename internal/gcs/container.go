@@ -30,7 +30,7 @@ type Container struct {
 	waitError error
 	closeOnce sync.Once
 	// communication channels with the guest connection
-	notifyChs     notifyChans
+	notifyChs     *notifyChans
 	notifications *queue.MessageQueue
 }
 
