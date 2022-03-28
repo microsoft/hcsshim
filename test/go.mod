@@ -1,6 +1,6 @@
 module github.com/Microsoft/hcsshim/test
 
-go 1.16
+go 1.17
 
 require (
 	github.com/Microsoft/go-winio v0.4.17
@@ -20,6 +20,43 @@ require (
 	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e
 	google.golang.org/grpc v1.40.0
 	k8s.io/cri-api v0.20.6
+)
+
+require (
+	github.com/bits-and-blooms/bitset v1.2.0 // indirect
+	github.com/blang/semver v3.5.1+incompatible // indirect
+	github.com/cenkalti/backoff/v4 v4.1.1 // indirect
+	github.com/containerd/cgroups v1.0.1 // indirect
+	github.com/containerd/console v1.0.2 // indirect
+	github.com/containerd/continuity v0.1.0 // indirect
+	github.com/containerd/fifo v1.0.0 // indirect
+	github.com/docker/cli v0.0.0-20191017083524-a8ff7f821017 // indirect
+	github.com/docker/distribution v2.7.1+incompatible // indirect
+	github.com/docker/docker v1.4.2-0.20190924003213-a8608b5b67c7 // indirect
+	github.com/docker/docker-credential-helpers v0.6.3 // indirect
+	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
+	github.com/gogo/googleapis v1.4.0 // indirect
+	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
+	github.com/golang/protobuf v1.5.0 // indirect
+	github.com/google/go-cmp v0.5.6 // indirect
+	github.com/google/go-containerregistry v0.5.1 // indirect
+	github.com/google/uuid v1.3.0 // indirect
+	github.com/hashicorp/errwrap v1.0.0 // indirect
+	github.com/hashicorp/go-multierror v1.0.0 // indirect
+	github.com/klauspost/compress v1.11.13 // indirect
+	github.com/moby/locker v1.0.1 // indirect
+	github.com/moby/sys/mountinfo v0.4.1 // indirect
+	github.com/opencontainers/runc v1.0.3 // indirect
+	github.com/opencontainers/selinux v1.8.2 // indirect
+	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635 // indirect
+	github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f // indirect
+	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
+	github.com/xeipuuv/gojsonschema v0.0.0-20180618132009-1d523034197f // indirect
+	go.opencensus.io v0.22.3 // indirect
+	golang.org/x/net v0.0.0-20210825183410-e898025ed96a // indirect
+	golang.org/x/text v0.3.6 // indirect
+	google.golang.org/genproto v0.0.0-20201110150050-8816d57aaa9a // indirect
+	google.golang.org/protobuf v1.27.1 // indirect
 )
 
 replace (
