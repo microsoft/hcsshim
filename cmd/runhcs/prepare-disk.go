@@ -44,6 +44,9 @@ var prepareDiskCommand = cli.Command{
 		}
 
 		opts := uvm.NewDefaultOptionsLCOW("preparedisk-uvm", context.GlobalString("owner"))
+		// Default SCSI controller count is 4, we don't need that for this UVM,
+		// bring it back to 1 to avoid any confusion with SCSI controller numbers.
+		opts.SCSIControllerCount = 1
 
 		preparediskUVM, err := uvm.CreateLCOW(ctx, opts)
 		if err != nil {
