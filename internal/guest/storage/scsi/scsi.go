@@ -45,7 +45,7 @@ var (
 const (
 	scsiDevicesPath  = "/sys/bus/scsi/devices"
 	vmbusDevicesPath = "/sys/bus/vmbus/devices"
-	verityDeviceFmt  = "verity-scsi-contr%d-lun%d-%s"
+	verityDeviceFmt  = "dm-verity-scsi-contr%d-lun%d-%s"
 )
 
 // fetchActualControllerNumber retrieves the actual controller number assigned to a SCSI controller
