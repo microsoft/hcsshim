@@ -1,5 +1,5 @@
-// Package resources handles creating, updating, and releasing resources
-// on a container
+//go:build windows
+
 package resources
 
 import (

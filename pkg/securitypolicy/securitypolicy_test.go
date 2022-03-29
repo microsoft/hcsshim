@@ -156,7 +156,6 @@ func Test_EnforceDeviceMountPolicy_No_Matches(t *testing.T) {
 // return an error when there's a matching root hash in the policy
 func Test_EnforceDeviceMountPolicy_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
-
 		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
 
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -959,7 +958,6 @@ func generateInvalidRootHash(r *rand.Rand) string {
 }
 
 func selectRootHashFromContainers(containers *generatedContainers, r *rand.Rand) string {
-
 	numberOfContainersInPolicy := len(containers.containers)
 	container := containers.containers[r.Intn(numberOfContainersInPolicy)]
 	numberOfLayersInContainer := len(container.Layers)

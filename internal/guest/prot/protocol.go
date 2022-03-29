@@ -47,7 +47,7 @@ type MessageType uint32
 const (
 	// MtNone is the default MessageType.
 	MtNone = 0
-	// MtRequest is the MessageType when a request is recieved.
+	// MtRequest is the MessageType when a request is received.
 	MtRequest = 0x10000000
 	// MtResponse is the MessageType used to send a response.
 	MtResponse = 0x20000000
@@ -144,7 +144,7 @@ const (
 	ComputeSystemNotificationV1 = 0x30100101
 )
 
-// String returns the string representation of the message identifer.
+// String returns the string representation of the message identifier.
 func (mi MessageIdentifier) String() string {
 	switch mi {
 	case MiNone:
@@ -241,7 +241,7 @@ type ProtocolSupport struct {
 	MaximumProtocolVersion uint32
 }
 
-// OsType defines the operating system type identifer of the guest hosting the
+// OsType defines the operating system type identifier of the guest hosting the
 // GCS.
 type OsType string
 
@@ -619,7 +619,7 @@ func (mrp *MessageResponseBase) Base() *MessageResponseBase {
 }
 
 // NegotiateProtocolResponse is the message to the HCS responding to a
-// NegotiateProtocol message. It specifies the prefered protocol version and
+// NegotiateProtocol message. It specifies the preferred protocol version and
 // available capabilities of the GCS.
 type NegotiateProtocolResponse struct {
 	MessageResponseBase

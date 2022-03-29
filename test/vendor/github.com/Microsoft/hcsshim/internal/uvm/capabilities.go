@@ -1,3 +1,5 @@
+//go:build windows
+
 package uvm
 
 import "github.com/Microsoft/hcsshim/internal/hcs/schema1"

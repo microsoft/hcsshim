@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 import (
@@ -609,7 +611,7 @@ func Test_TaskShim_waitInternal_InitTaskID_2ndExecID_Success(t *testing.T) {
 	}
 }
 
-func Test_TaskShim_statsInternal_InitTaskID_Sucess(t *testing.T) {
+func Test_TaskShim_statsInternal_InitTaskID_Success(t *testing.T) {
 	testNames := []string{"WCOW", "LCOW"}
 	for i, isWCOW := range []bool{true, false} {
 		t.Run(testNames[i], func(t *testing.T) {

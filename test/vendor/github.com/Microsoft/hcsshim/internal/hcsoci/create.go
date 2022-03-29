@@ -132,7 +132,6 @@ func verifyCloneContainerSpecs(templateSpec, cloneSpec *specs.Spec) error {
 }
 
 func validateContainerConfig(ctx context.Context, coi *createOptionsInternal) error {
-
 	if coi.HostingSystem != nil && coi.HostingSystem.IsTemplate && !coi.isTemplate {
 		return fmt.Errorf("only a template container can be created inside a template pod. Any other combination is not valid")
 	}

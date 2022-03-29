@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 import (
@@ -36,7 +38,7 @@ type persistedState struct {
 	ID string `json:",omitempty"`
 	// Owner is the owner value passed into the runhcs command and may be `""`.
 	Owner string `json:",omitempty"`
-	// SandboxID is the sandbox identifer passed in via OCI specifications. This
+	// SandboxID is the sandbox identifier passed in via OCI specifications. This
 	// can either be the sandbox itself or the sandbox this container should run
 	// in. See `parseSandboxAnnotations`.
 	SandboxID string `json:",omitempty"`
@@ -203,8 +205,8 @@ func launchShim(cmd, pidFile, logFile string, args []string, data interface{}) (
 // different runtimes to represent a sandbox ID, and sandbox type.
 //
 // If found returns the tuple `(sandboxID, isSandbox)` where `isSandbox == true`
-// indicates the identifer is the sandbox itself; `isSandbox == false` indicates
-// the identifer is the sandbox in which to place this container. Otherwise
+// indicates the identifier is the sandbox itself; `isSandbox == false` indicates
+// the identifier is the sandbox in which to place this container. Otherwise
 // returns `("", false)`.
 func parseSandboxAnnotations(a map[string]string) (string, bool) {
 	var t, id string

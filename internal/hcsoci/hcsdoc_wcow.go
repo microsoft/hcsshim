@@ -42,7 +42,6 @@ func createMountsConfig(ctx context.Context, coi *createOptionsInternal) (*mount
 	// TODO: Mapped pipes to add in v2 schema.
 	var config mountsConfig
 	for _, mount := range coi.Spec.Mounts {
-
 		if uvm.IsPipe(mount.Source) {
 			src, dst := uvm.GetContainerPipeMapping(coi.HostingSystem, mount)
 			config.mpsv1 = append(config.mpsv1, schema1.MappedPipe{HostPath: src, ContainerPipeName: dst})

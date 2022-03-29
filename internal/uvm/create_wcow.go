@@ -1,3 +1,5 @@
+//go:build windows
+
 package uvm
 
 import (
@@ -86,7 +88,7 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 		return nil, fmt.Errorf("failed to get host processor information: %s", err)
 	}
 
-	// To maintain compatability with Docker we need to automatically downgrade
+	// To maintain compatibility with Docker we need to automatically downgrade
 	// a user CPU count if the setting is not possible.
 	uvm.processorCount = uvm.normalizeProcessorCount(ctx, opts.ProcessorCount, processorTopology)
 
@@ -277,10 +279,10 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	}
 
 	// TODO: BUGBUG Remove this. @jhowardmsft
-	//       It should be the responsiblity of the caller to do the creation and population.
+	//       It should be the responsibility of the caller to do the creation and population.
 	//       - Update runhcs too (vm.go).
 	//       - Remove comment in function header
-	//       - Update tests that rely on this current behaviour.
+	//       - Update tests that rely on this current behavior.
 	// Create the RW scratch in the top-most layer folder, creating the folder if it doesn't already exist.
 	scratchFolder := opts.LayerFolders[len(opts.LayerFolders)-1]
 

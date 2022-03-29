@@ -2,6 +2,7 @@ package oci
 
 import (
 	"fmt"
+
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 

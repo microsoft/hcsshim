@@ -1,3 +1,5 @@
+//go:build windows
+
 package hcs
 
 import "github.com/Microsoft/hcsshim/internal/vm"

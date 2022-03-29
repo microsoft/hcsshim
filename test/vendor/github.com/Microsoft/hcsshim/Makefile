@@ -32,7 +32,7 @@ clean:
 	rm -rf bin deps rootfs out
 
 test:
-	cd $(SRCROOT) && go test -v ./internal/guest/...
+	cd $(SRCROOT) && $(GO) test -v ./internal/guest/...
 
 rootfs: out/rootfs.vhd
 

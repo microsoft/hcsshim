@@ -1,3 +1,5 @@
+//go:build windows
+
 package jobcontainers
 
 import (
@@ -164,7 +166,7 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		return nil, errors.New("unsupported process config passed in")
 	}
 
-	// Replace any occurences of the sandbox mount point env variable in the commandline.
+	// Replace any occurrences of the sandbox mount point env variable in the commandline.
 	// %CONTAINER_SANDBOX_MOUNTPOINT%\mybinary.exe -> C:\C\123456789\mybinary.exe
 	commandLine, _ := c.replaceWithMountPoint(conf.CommandLine)
 
