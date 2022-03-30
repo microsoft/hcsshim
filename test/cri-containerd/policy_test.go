@@ -12,7 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/tools/securitypolicy/helpers"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
-	"k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 var (
@@ -69,7 +69,7 @@ func alpineSecurityPolicy(t *testing.T) string {
 	return policyString
 }
 
-func sandboxRequestWithPolicy(t *testing.T, policy string) *v1alpha2.RunPodSandboxRequest {
+func sandboxRequestWithPolicy(t *testing.T, policy string) *runtime.RunPodSandboxRequest {
 	return getRunPodSandboxRequest(
 		t,
 		lcowRuntimeHandler,
@@ -148,8 +148,8 @@ func syncContainerConfigs(writePath, waitPath string) (writer, waiter *securityp
 func syncContainerRequests(
 	writer, waiter *securitypolicy.ContainerConfig,
 	podID string,
-	podConfig *v1alpha2.PodSandboxConfig,
-) (writerReq, waiterReq *v1alpha2.CreateContainerRequest) {
+	podConfig *runtime.PodSandboxConfig,
+) (writerReq, waiterReq *runtime.CreateContainerRequest) {
 	writerReq = getCreateContainerRequest(
 		podID,
 		"alpine-writer",
@@ -157,7 +157,7 @@ func syncContainerRequests(
 		writer.Command,
 		podConfig,
 	)
-	writerReq.Config.Mounts = append(writerReq.Config.Mounts, &v1alpha2.Mount{
+	writerReq.Config.Mounts = append(writerReq.Config.Mounts, &runtime.Mount{
 		HostPath:      "sandbox://host/path",
 		ContainerPath: "/mnt/shared/container-A",
 	})
@@ -169,7 +169,7 @@ func syncContainerRequests(
 		waiter.Command,
 		podConfig,
 	)
-	waiterReq.Config.Mounts = append(waiterReq.Config.Mounts, &v1alpha2.Mount{
+	waiterReq.Config.Mounts = append(waiterReq.Config.Mounts, &runtime.Mount{
 		// The HostPath must be the same as for the "writer" container
 		HostPath:      "sandbox://host/path",
 		ContainerPath: "/mnt/shared/container-B",
@@ -246,7 +246,7 @@ func Test_RunContainers_WithSyncHooks_InvalidWaitPath(t *testing.T) {
 	defer removeContainer(t, client, ctx, cidWriter)
 	defer stopContainer(t, client, ctx, cidWriter)
 
-	_, err = client.StartContainer(ctx, &v1alpha2.StartContainerRequest{
+	_, err = client.StartContainer(ctx, &runtime.StartContainerRequest{
 		ContainerId: cidWaiter,
 	})
 	expectedErrString := "timeout while waiting for path"

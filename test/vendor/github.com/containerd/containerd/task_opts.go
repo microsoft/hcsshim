@@ -45,6 +45,15 @@ func WithRootFS(mounts []mount.Mount) NewTaskOpts {
 	}
 }
 
+// WithRuntimePath will force task service to use a custom path to the runtime binary
+// instead of resolving it from runtime name.
+func WithRuntimePath(absRuntimePath string) NewTaskOpts {
+	return func(ctx context.Context, client *Client, info *TaskInfo) error {
+		info.runtime = absRuntimePath
+		return nil
+	}
+}
+
 // WithTaskCheckpoint allows a task to be created with live runtime and memory data from a
 // previous checkpoint. Additional software such as CRIU may be required to
 // restore a task from a checkpoint
@@ -158,7 +167,17 @@ func WithProcessKill(ctx context.Context, p Process) error {
 		return err
 	}
 	if err := p.Kill(ctx, syscall.SIGKILL, WithKillAll); err != nil {
-		if errdefs.IsFailedPrecondition(err) || errdefs.IsNotFound(err) {
+		// Kill might still return an IsNotFound error, even if it actually
+		// killed the process.
+		if errdefs.IsNotFound(err) {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-s:
+				return nil
+			}
+		}
+		if errdefs.IsFailedPrecondition(err) {
 			return nil
 		}
 		return err

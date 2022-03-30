@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 const podJobObjectUtilPath = "C:\\jobobject-util.exe"

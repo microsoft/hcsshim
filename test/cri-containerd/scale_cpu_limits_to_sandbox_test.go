@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-	criruntime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	criruntime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 const imageWindowsMaxCPUWorkload = "cplatpublic.azurecr.io/golang-1.16.2-nanoserver-1809:max-cpu-workload"

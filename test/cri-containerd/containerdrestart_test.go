@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 // CRI will terminate any running containers when it is restarted.

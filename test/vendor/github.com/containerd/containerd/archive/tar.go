@@ -48,12 +48,15 @@ var errInvalidArchive = errors.New("invalid archive")
 // Produces a tar using OCI style file markers for deletions. Deleted
 // files will be prepended with the prefix ".wh.". This style is
 // based off AUFS whiteouts.
-// See https://github.com/opencontainers/image-spec/blob/master/layer.md
+// See https://github.com/opencontainers/image-spec/blob/main/layer.md
 func Diff(ctx context.Context, a, b string) io.ReadCloser {
 	r, w := io.Pipe()
 
 	go func() {
 		err := WriteDiff(ctx, w, a, b)
+		if err != nil {
+			log.G(ctx).WithError(err).Debugf("write diff failed")
+		}
 		if err = w.CloseWithError(err); err != nil {
 			log.G(ctx).WithError(err).Debugf("closing tar pipe failed")
 		}
@@ -68,7 +71,7 @@ func Diff(ctx context.Context, a, b string) io.ReadCloser {
 // Produces a tar using OCI style file markers for deletions. Deleted
 // files will be prepended with the prefix ".wh.". This style is
 // based off AUFS whiteouts.
-// See https://github.com/opencontainers/image-spec/blob/master/layer.md
+// See https://github.com/opencontainers/image-spec/blob/main/layer.md
 func WriteDiff(ctx context.Context, w io.Writer, a, b string, opts ...WriteDiffOpt) error {
 	var options WriteDiffOptions
 	for _, opt := range opts {
@@ -89,9 +92,9 @@ func WriteDiff(ctx context.Context, w io.Writer, a, b string, opts ...WriteDiffO
 // Produces a tar using OCI style file markers for deletions. Deleted
 // files will be prepended with the prefix ".wh.". This style is
 // based off AUFS whiteouts.
-// See https://github.com/opencontainers/image-spec/blob/master/layer.md
+// See https://github.com/opencontainers/image-spec/blob/main/layer.md
 func writeDiffNaive(ctx context.Context, w io.Writer, a, b string, _ WriteDiffOptions) error {
-	cw := newChangeWriter(w, b)
+	cw := NewChangeWriter(w, b)
 	err := fs.Changes(ctx, a, b, cw.HandleChange)
 	if err != nil {
 		return errors.Wrap(err, "failed to create diff tar stream")
@@ -102,7 +105,7 @@ func writeDiffNaive(ctx context.Context, w io.Writer, a, b string, _ WriteDiffOp
 const (
 	// whiteoutPrefix prefix means file is a whiteout. If this is followed by a
 	// filename this means that file has been removed from the base layer.
-	// See https://github.com/opencontainers/image-spec/blob/master/layer.md#whiteouts
+	// See https://github.com/opencontainers/image-spec/blob/main/layer.md#whiteouts
 	whiteoutPrefix = ".wh."
 
 	// whiteoutMetaPrefix prefix means whiteout has a special meaning and is not
@@ -118,7 +121,7 @@ const (
 )
 
 // Apply applies a tar stream of an OCI style diff tar.
-// See https://github.com/opencontainers/image-spec/blob/master/layer.md#applying-changesets
+// See https://github.com/opencontainers/image-spec/blob/main/layer.md#applying-changesets
 func Apply(ctx context.Context, root string, r io.Reader, opts ...ApplyOpt) (int64, error) {
 	root = filepath.Clean(root)
 
@@ -140,7 +143,7 @@ func Apply(ctx context.Context, root string, r io.Reader, opts ...ApplyOpt) (int
 
 // applyNaive applies a tar stream of an OCI style diff tar to a directory
 // applying each file as either a whole file or whiteout.
-// See https://github.com/opencontainers/image-spec/blob/master/layer.md#applying-changesets
+// See https://github.com/opencontainers/image-spec/blob/main/layer.md#applying-changesets
 func applyNaive(ctx context.Context, root string, r io.Reader, options ApplyOptions) (size int64, err error) {
 	var (
 		dirs []*tar.Header
@@ -461,7 +464,17 @@ func mkparent(ctx context.Context, path, root string, parents []string) error {
 	return nil
 }
 
-type changeWriter struct {
+// ChangeWriter provides tar stream from filesystem change information.
+// The privided tar stream is styled as an OCI layer. Change information
+// (add/modify/delete/unmodified) for each file needs to be passed to this
+// writer through HandleChange method.
+//
+// This should be used combining with continuity's diff computing functionality
+// (e.g. `fs.Change` of github.com/containerd/continuity/fs).
+//
+// See also https://github.com/opencontainers/image-spec/blob/main/layer.md for details
+// about OCI layers
+type ChangeWriter struct {
 	tw        *tar.Writer
 	source    string
 	whiteoutT time.Time
@@ -470,8 +483,11 @@ type changeWriter struct {
 	addedDirs map[string]struct{}
 }
 
-func newChangeWriter(w io.Writer, source string) *changeWriter {
-	return &changeWriter{
+// NewChangeWriter returns ChangeWriter that writes tar stream of the source directory
+// to the privided writer. Change information (add/modify/delete/unmodified) for each
+// file needs to be passed through HandleChange method.
+func NewChangeWriter(w io.Writer, source string) *ChangeWriter {
+	return &ChangeWriter{
 		tw:        tar.NewWriter(w),
 		source:    source,
 		whiteoutT: time.Now(),
@@ -481,7 +497,10 @@ func newChangeWriter(w io.Writer, source string) *changeWriter {
 	}
 }
 
-func (cw *changeWriter) HandleChange(k fs.ChangeKind, p string, f os.FileInfo, err error) error {
+// HandleChange receives filesystem change information and reflect that information to
+// the result tar stream. This function implements `fs.ChangeFunc` of continuity
+// (github.com/containerd/continuity/fs) and should be used with that package.
+func (cw *ChangeWriter) HandleChange(k fs.ChangeKind, p string, f os.FileInfo, err error) error {
 	if err != nil {
 		return err
 	}
@@ -579,7 +598,7 @@ func (cw *changeWriter) HandleChange(k fs.ChangeKind, p string, f os.FileInfo, e
 
 		if capability, err := getxattr(source, "security.capability"); err != nil {
 			return errors.Wrap(err, "failed to get capabilities xattr")
-		} else if capability != nil {
+		} else if len(capability) > 0 {
 			if hdr.PAXRecords == nil {
 				hdr.PAXRecords = map[string]string{}
 			}
@@ -629,14 +648,15 @@ func (cw *changeWriter) HandleChange(k fs.ChangeKind, p string, f os.FileInfo, e
 	return nil
 }
 
-func (cw *changeWriter) Close() error {
+// Close closes this writer.
+func (cw *ChangeWriter) Close() error {
 	if err := cw.tw.Close(); err != nil {
 		return errors.Wrap(err, "failed to close tar writer")
 	}
 	return nil
 }
 
-func (cw *changeWriter) includeParents(hdr *tar.Header) error {
+func (cw *ChangeWriter) includeParents(hdr *tar.Header) error {
 	if cw.addedDirs == nil {
 		return nil
 	}

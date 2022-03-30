@@ -21,7 +21,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"runtime"
 	"strconv"
 	"strings"
@@ -63,9 +62,11 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"golang.org/x/sync/semaphore"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health/grpc_health_v1"
 )
 
@@ -119,23 +120,31 @@ func New(address string, opts ...ClientOpt) (*Client, error) {
 		}
 		gopts := []grpc.DialOption{
 			grpc.WithBlock(),
-			grpc.WithInsecure(),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.FailOnNonTempDialError(true),
 			grpc.WithConnectParams(connParams),
 			grpc.WithContextDialer(dialer.ContextDialer),
-
-			// TODO(stevvooe): We may need to allow configuration of this on the client.
-			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(defaults.DefaultMaxRecvMsgSize)),
-			grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(defaults.DefaultMaxSendMsgSize)),
+			grpc.WithReturnConnectionError(),
 		}
 		if len(copts.dialOptions) > 0 {
 			gopts = copts.dialOptions
 		}
+		gopts = append(gopts, grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(defaults.DefaultMaxRecvMsgSize),
+			grpc.MaxCallSendMsgSize(defaults.DefaultMaxSendMsgSize)))
+		if len(copts.callOptions) > 0 {
+			gopts = append(gopts, grpc.WithDefaultCallOptions(copts.callOptions...))
+		}
 		if copts.defaultns != "" {
 			unary, stream := newNSInterceptors(copts.defaultns)
 			gopts = append(gopts,
-				grpc.WithUnaryInterceptor(unary),
-				grpc.WithStreamInterceptor(stream),
+				grpc.WithChainUnaryInterceptor(unary, otelgrpc.UnaryClientInterceptor()),
+				grpc.WithChainStreamInterceptor(stream, otelgrpc.StreamClientInterceptor()),
+			)
+		} else {
+			gopts = append(gopts,
+				grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
+				grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
 			)
 		}
 		connector := func() (*grpc.ClientConn, error) {
@@ -265,8 +274,8 @@ func (c *Client) Containers(ctx context.Context, filters ...string) ([]Container
 	return out, nil
 }
 
-// NewContainer will create a new container in container with the provided id
-// the id must be unique within the namespace
+// NewContainer will create a new container with the provided id.
+// The id must be unique within the namespace.
 func (c *Client) NewContainer(ctx context.Context, id string, opts ...NewContainerOpts) (Container, error) {
 	ctx, done, err := c.WithLease(ctx)
 	if err != nil {
@@ -369,9 +378,7 @@ type RemoteContext struct {
 
 func defaultRemoteContext() *RemoteContext {
 	return &RemoteContext{
-		Resolver: docker.NewResolver(docker.ResolverOptions{
-			Client: http.DefaultClient,
-		}),
+		Resolver: docker.NewResolver(docker.ResolverOptions{}),
 	}
 }
 
