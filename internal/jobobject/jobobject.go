@@ -473,7 +473,10 @@ func (job *JobObject) ApplyFileBinding(root, target string, merged bool) error {
 	}
 
 	// The parent directory needs to exist for the bind to work.
-	if _, err := os.Stat(filepath.Dir(root)); os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Dir(root)); err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
 		if err := os.MkdirAll(filepath.Dir(root), 0); err != nil {
 			return err
 		}
