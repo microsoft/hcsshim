@@ -37,13 +37,15 @@ func errnoErr(e syscall.Errno) error {
 }
 
 var (
-	modnetapi32 = windows.NewLazySystemDLL("netapi32.dll")
-	modkernel32 = windows.NewLazySystemDLL("kernel32.dll")
-	modntdll    = windows.NewLazySystemDLL("ntdll.dll")
-	modiphlpapi = windows.NewLazySystemDLL("iphlpapi.dll")
-	modadvapi32 = windows.NewLazySystemDLL("advapi32.dll")
-	modcfgmgr32 = windows.NewLazySystemDLL("cfgmgr32.dll")
+	modbindfltapi = windows.NewLazySystemDLL("bindfltapi.dll")
+	modnetapi32   = windows.NewLazySystemDLL("netapi32.dll")
+	modkernel32   = windows.NewLazySystemDLL("kernel32.dll")
+	modntdll      = windows.NewLazySystemDLL("ntdll.dll")
+	modiphlpapi   = windows.NewLazySystemDLL("iphlpapi.dll")
+	modadvapi32   = windows.NewLazySystemDLL("advapi32.dll")
+	modcfgmgr32   = windows.NewLazySystemDLL("cfgmgr32.dll")
 
+	procBfSetupFilterEx                        = modbindfltapi.NewProc("BfSetupFilterEx")
 	procNetLocalGroupGetInfo                   = modnetapi32.NewProc("NetLocalGroupGetInfo")
 	procNetUserAdd                             = modnetapi32.NewProc("NetUserAdd")
 	procNetUserDel                             = modnetapi32.NewProc("NetUserDel")
@@ -76,6 +78,20 @@ var (
 	procNtQueryDirectoryObject                 = modntdll.NewProc("NtQueryDirectoryObject")
 	procRtlNtStatusToDosError                  = modntdll.NewProc("RtlNtStatusToDosError")
 )
+
+func BfSetupFilterEx(flags uint32, jobHandle windows.Handle, sid *windows.SID, virtRootPath *uint16, virtTargetPath *uint16, virtExceptions **uint16, virtExceptionPathCount uint32) (hr error) {
+	if hr = procBfSetupFilterEx.Find(); hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall9(procBfSetupFilterEx.Addr(), 7, uintptr(flags), uintptr(jobHandle), uintptr(unsafe.Pointer(sid)), uintptr(unsafe.Pointer(virtRootPath)), uintptr(unsafe.Pointer(virtTargetPath)), uintptr(unsafe.Pointer(virtExceptions)), uintptr(virtExceptionPathCount), 0, 0)
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
 
 func netLocalGroupGetInfo(serverName *uint16, groupName *uint16, level uint32, bufptr **byte) (status error) {
 	r0, _, _ := syscall.Syscall6(procNetLocalGroupGetInfo.Addr(), 4, uintptr(unsafe.Pointer(serverName)), uintptr(unsafe.Pointer(groupName)), uintptr(level), uintptr(unsafe.Pointer(bufptr)), 0, 0)
