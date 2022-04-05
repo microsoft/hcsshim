@@ -11,6 +11,7 @@ import (
 	types "github.com/gogo/protobuf/types"
 	io "io"
 	math "math"
+	math_bits "math/bits"
 	reflect "reflect"
 	strings "strings"
 )
@@ -24,7 +25,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type AssignPCIInternalRequest struct {
 	ContainerID          string   `protobuf:"bytes,1,opt,name=container_id,json=containerId,proto3" json:"container_id,omitempty"`
@@ -49,7 +50,7 @@ func (m *AssignPCIInternalRequest) XXX_Marshal(b []byte, deterministic bool) ([]
 		return xxx_messageInfo_AssignPCIInternalRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -88,7 +89,7 @@ func (m *AssignPCIInternalResponse) XXX_Marshal(b []byte, deterministic bool) ([
 		return xxx_messageInfo_AssignPCIInternalResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -129,7 +130,7 @@ func (m *RemovePCIInternalRequest) XXX_Marshal(b []byte, deterministic bool) ([]
 		return xxx_messageInfo_RemovePCIInternalRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -167,7 +168,7 @@ func (m *RemovePCIInternalResponse) XXX_Marshal(b []byte, deterministic bool) ([
 		return xxx_messageInfo_RemovePCIInternalResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -208,7 +209,7 @@ func (m *AddNICInternalRequest) XXX_Marshal(b []byte, deterministic bool) ([]byt
 		return xxx_messageInfo_AddNICInternalRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -246,7 +247,7 @@ func (m *AddNICInternalResponse) XXX_Marshal(b []byte, deterministic bool) ([]by
 		return xxx_messageInfo_AddNICInternalResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -287,7 +288,7 @@ func (m *ModifyNICInternalRequest) XXX_Marshal(b []byte, deterministic bool) ([]
 		return xxx_messageInfo_ModifyNICInternalRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -325,7 +326,7 @@ func (m *ModifyNICInternalResponse) XXX_Marshal(b []byte, deterministic bool) ([
 		return xxx_messageInfo_ModifyNICInternalResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -366,7 +367,7 @@ func (m *DeleteNICInternalRequest) XXX_Marshal(b []byte, deterministic bool) ([]
 		return xxx_messageInfo_DeleteNICInternalRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -404,7 +405,7 @@ func (m *DeleteNICInternalResponse) XXX_Marshal(b []byte, deterministic bool) ([
 		return xxx_messageInfo_DeleteNICInternalResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -445,7 +446,7 @@ func (m *IovSettings) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) 
 		return xxx_messageInfo_IovSettings.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -530,7 +531,7 @@ var fileDescriptor_7f2f03dc308add4c = []byte{
 func (m *AssignPCIInternalRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -538,43 +539,52 @@ func (m *AssignPCIInternalRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *AssignPCIInternalRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AssignPCIInternalRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.ContainerID) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.ContainerID)))
-		i += copy(dAtA[i:], m.ContainerID)
-	}
-	if len(m.DeviceID) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.DeviceID)))
-		i += copy(dAtA[i:], m.DeviceID)
-	}
-	if m.VirtualFunctionIndex != 0 {
-		dAtA[i] = 0x18
-		i++
-		i = encodeVarintComputeagent(dAtA, i, uint64(m.VirtualFunctionIndex))
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.NicID) > 0 {
-		dAtA[i] = 0x22
-		i++
+		i -= len(m.NicID)
+		copy(dAtA[i:], m.NicID)
 		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.NicID)))
-		i += copy(dAtA[i:], m.NicID)
+		i--
+		dAtA[i] = 0x22
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.VirtualFunctionIndex != 0 {
+		i = encodeVarintComputeagent(dAtA, i, uint64(m.VirtualFunctionIndex))
+		i--
+		dAtA[i] = 0x18
 	}
-	return i, nil
+	if len(m.DeviceID) > 0 {
+		i -= len(m.DeviceID)
+		copy(dAtA[i:], m.DeviceID)
+		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.DeviceID)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.ContainerID) > 0 {
+		i -= len(m.ContainerID)
+		copy(dAtA[i:], m.ContainerID)
+		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.ContainerID)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *AssignPCIInternalResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -582,26 +592,33 @@ func (m *AssignPCIInternalResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *AssignPCIInternalResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AssignPCIInternalResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.ID) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.ID)))
-		i += copy(dAtA[i:], m.ID)
-	}
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	if len(m.ID) > 0 {
+		i -= len(m.ID)
+		copy(dAtA[i:], m.ID)
+		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.ID)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *RemovePCIInternalRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -609,37 +626,45 @@ func (m *RemovePCIInternalRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *RemovePCIInternalRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RemovePCIInternalRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.ContainerID) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.ContainerID)))
-		i += copy(dAtA[i:], m.ContainerID)
-	}
-	if len(m.DeviceID) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.DeviceID)))
-		i += copy(dAtA[i:], m.DeviceID)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.VirtualFunctionIndex != 0 {
-		dAtA[i] = 0x18
-		i++
 		i = encodeVarintComputeagent(dAtA, i, uint64(m.VirtualFunctionIndex))
+		i--
+		dAtA[i] = 0x18
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if len(m.DeviceID) > 0 {
+		i -= len(m.DeviceID)
+		copy(dAtA[i:], m.DeviceID)
+		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.DeviceID)))
+		i--
+		dAtA[i] = 0x12
 	}
-	return i, nil
+	if len(m.ContainerID) > 0 {
+		i -= len(m.ContainerID)
+		copy(dAtA[i:], m.ContainerID)
+		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.ContainerID)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *RemovePCIInternalResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -647,20 +672,26 @@ func (m *RemovePCIInternalResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *RemovePCIInternalResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RemovePCIInternalResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *AddNICInternalRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -668,42 +699,52 @@ func (m *AddNICInternalRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *AddNICInternalRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AddNICInternalRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.ContainerID) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.ContainerID)))
-		i += copy(dAtA[i:], m.ContainerID)
-	}
-	if len(m.NicID) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.NicID)))
-		i += copy(dAtA[i:], m.NicID)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.Endpoint != nil {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintComputeagent(dAtA, i, uint64(m.Endpoint.Size()))
-		n1, err := m.Endpoint.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.Endpoint.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintComputeagent(dAtA, i, uint64(size))
 		}
-		i += n1
+		i--
+		dAtA[i] = 0x1a
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if len(m.NicID) > 0 {
+		i -= len(m.NicID)
+		copy(dAtA[i:], m.NicID)
+		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.NicID)))
+		i--
+		dAtA[i] = 0x12
 	}
-	return i, nil
+	if len(m.ContainerID) > 0 {
+		i -= len(m.ContainerID)
+		copy(dAtA[i:], m.ContainerID)
+		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.ContainerID)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *AddNICInternalResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -711,20 +752,26 @@ func (m *AddNICInternalResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *AddNICInternalResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AddNICInternalResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *ModifyNICInternalRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -732,46 +779,57 @@ func (m *ModifyNICInternalRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ModifyNICInternalRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ModifyNICInternalRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.NicID) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.NicID)))
-		i += copy(dAtA[i:], m.NicID)
-	}
-	if m.Endpoint != nil {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintComputeagent(dAtA, i, uint64(m.Endpoint.Size()))
-		n2, err := m.Endpoint.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n2
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.IovPolicySettings != nil {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintComputeagent(dAtA, i, uint64(m.IovPolicySettings.Size()))
-		n3, err := m.IovPolicySettings.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.IovPolicySettings.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintComputeagent(dAtA, i, uint64(size))
 		}
-		i += n3
+		i--
+		dAtA[i] = 0x1a
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.Endpoint != nil {
+		{
+			size, err := m.Endpoint.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintComputeagent(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
 	}
-	return i, nil
+	if len(m.NicID) > 0 {
+		i -= len(m.NicID)
+		copy(dAtA[i:], m.NicID)
+		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.NicID)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *ModifyNICInternalResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -779,20 +837,26 @@ func (m *ModifyNICInternalResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ModifyNICInternalResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ModifyNICInternalResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *DeleteNICInternalRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -800,42 +864,52 @@ func (m *DeleteNICInternalRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *DeleteNICInternalRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *DeleteNICInternalRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.ContainerID) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.ContainerID)))
-		i += copy(dAtA[i:], m.ContainerID)
-	}
-	if len(m.NicID) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.NicID)))
-		i += copy(dAtA[i:], m.NicID)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.Endpoint != nil {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintComputeagent(dAtA, i, uint64(m.Endpoint.Size()))
-		n4, err := m.Endpoint.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.Endpoint.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintComputeagent(dAtA, i, uint64(size))
 		}
-		i += n4
+		i--
+		dAtA[i] = 0x1a
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if len(m.NicID) > 0 {
+		i -= len(m.NicID)
+		copy(dAtA[i:], m.NicID)
+		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.NicID)))
+		i--
+		dAtA[i] = 0x12
 	}
-	return i, nil
+	if len(m.ContainerID) > 0 {
+		i -= len(m.ContainerID)
+		copy(dAtA[i:], m.ContainerID)
+		i = encodeVarintComputeagent(dAtA, i, uint64(len(m.ContainerID)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *DeleteNICInternalResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -843,20 +917,26 @@ func (m *DeleteNICInternalResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *DeleteNICInternalResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *DeleteNICInternalResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *IovSettings) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -864,39 +944,47 @@ func (m *IovSettings) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *IovSettings) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *IovSettings) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.IovOffloadWeight != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintComputeagent(dAtA, i, uint64(m.IovOffloadWeight))
-	}
-	if m.QueuePairsRequested != 0 {
-		dAtA[i] = 0x10
-		i++
-		i = encodeVarintComputeagent(dAtA, i, uint64(m.QueuePairsRequested))
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.InterruptModeration != 0 {
-		dAtA[i] = 0x18
-		i++
 		i = encodeVarintComputeagent(dAtA, i, uint64(m.InterruptModeration))
+		i--
+		dAtA[i] = 0x18
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.QueuePairsRequested != 0 {
+		i = encodeVarintComputeagent(dAtA, i, uint64(m.QueuePairsRequested))
+		i--
+		dAtA[i] = 0x10
 	}
-	return i, nil
+	if m.IovOffloadWeight != 0 {
+		i = encodeVarintComputeagent(dAtA, i, uint64(m.IovOffloadWeight))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintComputeagent(dAtA []byte, offset int, v uint64) int {
+	offset -= sovComputeagent(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *AssignPCIInternalRequest) Size() (n int) {
 	if m == nil {
@@ -1106,14 +1194,7 @@ func (m *IovSettings) Size() (n int) {
 }
 
 func sovComputeagent(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozComputeagent(x uint64) (n int) {
 	return sovComputeagent(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -1196,7 +1277,7 @@ func (this *ModifyNICInternalRequest) String() string {
 	s := strings.Join([]string{`&ModifyNICInternalRequest{`,
 		`NicID:` + fmt.Sprintf("%v", this.NicID) + `,`,
 		`Endpoint:` + strings.Replace(fmt.Sprintf("%v", this.Endpoint), "Any", "types.Any", 1) + `,`,
-		`IovPolicySettings:` + strings.Replace(fmt.Sprintf("%v", this.IovPolicySettings), "IovSettings", "IovSettings", 1) + `,`,
+		`IovPolicySettings:` + strings.Replace(this.IovPolicySettings.String(), "IovSettings", "IovSettings", 1) + `,`,
 		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
 		`}`,
 	}, "")
@@ -1504,10 +1585,7 @@ func (m *AssignPCIInternalRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthComputeagent
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthComputeagent
 			}
 			if (iNdEx + skippy) > l {
@@ -1590,10 +1668,7 @@ func (m *AssignPCIInternalResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthComputeagent
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthComputeagent
 			}
 			if (iNdEx + skippy) > l {
@@ -1727,10 +1802,7 @@ func (m *RemovePCIInternalRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthComputeagent
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthComputeagent
 			}
 			if (iNdEx + skippy) > l {
@@ -1781,10 +1853,7 @@ func (m *RemovePCIInternalResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthComputeagent
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthComputeagent
 			}
 			if (iNdEx + skippy) > l {
@@ -1935,10 +2004,7 @@ func (m *AddNICInternalRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthComputeagent
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthComputeagent
 			}
 			if (iNdEx + skippy) > l {
@@ -1989,10 +2055,7 @@ func (m *AddNICInternalResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthComputeagent
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthComputeagent
 			}
 			if (iNdEx + skippy) > l {
@@ -2147,10 +2210,7 @@ func (m *ModifyNICInternalRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthComputeagent
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthComputeagent
 			}
 			if (iNdEx + skippy) > l {
@@ -2201,10 +2261,7 @@ func (m *ModifyNICInternalResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthComputeagent
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthComputeagent
 			}
 			if (iNdEx + skippy) > l {
@@ -2355,10 +2412,7 @@ func (m *DeleteNICInternalRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthComputeagent
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthComputeagent
 			}
 			if (iNdEx + skippy) > l {
@@ -2409,10 +2463,7 @@ func (m *DeleteNICInternalResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthComputeagent
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthComputeagent
 			}
 			if (iNdEx + skippy) > l {
@@ -2520,10 +2571,7 @@ func (m *IovSettings) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthComputeagent
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthComputeagent
 			}
 			if (iNdEx + skippy) > l {
@@ -2542,6 +2590,7 @@ func (m *IovSettings) Unmarshal(dAtA []byte) error {
 func skipComputeagent(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -2573,10 +2622,8 @@ func skipComputeagent(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -2597,55 +2644,30 @@ func skipComputeagent(dAtA []byte) (n int, err error) {
 				return 0, ErrInvalidLengthComputeagent
 			}
 			iNdEx += length
-			if iNdEx < 0 {
-				return 0, ErrInvalidLengthComputeagent
-			}
-			return iNdEx, nil
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowComputeagent
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipComputeagent(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-				if iNdEx < 0 {
-					return 0, ErrInvalidLengthComputeagent
-				}
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupComputeagent
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthComputeagent
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthComputeagent = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowComputeagent   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthComputeagent        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowComputeagent          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupComputeagent = fmt.Errorf("proto: unexpected end of group")
 )

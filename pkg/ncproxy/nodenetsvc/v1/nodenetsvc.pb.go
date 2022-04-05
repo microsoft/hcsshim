@@ -8,8 +8,11 @@ import (
 	fmt "fmt"
 	proto "github.com/gogo/protobuf/proto"
 	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 	io "io"
 	math "math"
+	math_bits "math/bits"
 	reflect "reflect"
 	strings "strings"
 )
@@ -23,7 +26,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type RequestType int32
 
@@ -71,7 +74,7 @@ func (m *ConfigureNetworkingRequest) XXX_Marshal(b []byte, deterministic bool) (
 		return xxx_messageInfo_ConfigureNetworkingRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -109,7 +112,7 @@ func (m *ConfigureNetworkingResponse) XXX_Marshal(b []byte, deterministic bool) 
 		return xxx_messageInfo_ConfigureNetworkingResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -148,7 +151,7 @@ func (m *PingNodeNetworkServiceRequest) XXX_Marshal(b []byte, deterministic bool
 		return xxx_messageInfo_PingNodeNetworkServiceRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -187,7 +190,7 @@ func (m *PingNodeNetworkServiceResponse) XXX_Marshal(b []byte, deterministic boo
 		return xxx_messageInfo_PingNodeNetworkServiceResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -228,7 +231,7 @@ func (m *ConfigureContainerNetworkingRequest) XXX_Marshal(b []byte, deterministi
 		return xxx_messageInfo_ConfigureContainerNetworkingRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -267,7 +270,7 @@ func (m *ConfigureContainerNetworkingResponse) XXX_Marshal(b []byte, determinist
 		return xxx_messageInfo_ConfigureContainerNetworkingResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -309,7 +312,7 @@ func (m *ContainerIPAddress) XXX_Marshal(b []byte, deterministic bool) ([]byte, 
 		return xxx_messageInfo_ContainerIPAddress.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -351,7 +354,7 @@ func (m *ContainerNetworkInterface) XXX_Marshal(b []byte, deterministic bool) ([
 		return xxx_messageInfo_ContainerNetworkInterface.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -390,7 +393,7 @@ func (m *GetHostLocalIpAddressRequest) XXX_Marshal(b []byte, deterministic bool)
 		return xxx_messageInfo_GetHostLocalIpAddressRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -429,7 +432,7 @@ func (m *GetHostLocalIpAddressResponse) XXX_Marshal(b []byte, deterministic bool
 		return xxx_messageInfo_GetHostLocalIpAddressResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
@@ -584,6 +587,23 @@ type NodeNetworkServiceServer interface {
 	GetHostLocalIpAddress(context.Context, *GetHostLocalIpAddressRequest) (*GetHostLocalIpAddressResponse, error)
 }
 
+// UnimplementedNodeNetworkServiceServer can be embedded to have forward compatible implementations.
+type UnimplementedNodeNetworkServiceServer struct {
+}
+
+func (*UnimplementedNodeNetworkServiceServer) ConfigureNetworking(ctx context.Context, req *ConfigureNetworkingRequest) (*ConfigureNetworkingResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ConfigureNetworking not implemented")
+}
+func (*UnimplementedNodeNetworkServiceServer) ConfigureContainerNetworking(ctx context.Context, req *ConfigureContainerNetworkingRequest) (*ConfigureContainerNetworkingResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ConfigureContainerNetworking not implemented")
+}
+func (*UnimplementedNodeNetworkServiceServer) PingNodeNetworkService(ctx context.Context, req *PingNodeNetworkServiceRequest) (*PingNodeNetworkServiceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PingNodeNetworkService not implemented")
+}
+func (*UnimplementedNodeNetworkServiceServer) GetHostLocalIpAddress(ctx context.Context, req *GetHostLocalIpAddressRequest) (*GetHostLocalIpAddressResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetHostLocalIpAddress not implemented")
+}
+
 func RegisterNodeNetworkServiceServer(s *grpc.Server, srv NodeNetworkServiceServer) {
 	s.RegisterService(&_NodeNetworkService_serviceDesc, srv)
 }
@@ -688,7 +708,7 @@ var _NodeNetworkService_serviceDesc = grpc.ServiceDesc{
 func (m *ConfigureNetworkingRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -696,31 +716,38 @@ func (m *ConfigureNetworkingRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ConfigureNetworkingRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ConfigureNetworkingRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.ContainerID) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.ContainerID)))
-		i += copy(dAtA[i:], m.ContainerID)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.RequestType != 0 {
-		dAtA[i] = 0x10
-		i++
 		i = encodeVarintNodenetsvc(dAtA, i, uint64(m.RequestType))
+		i--
+		dAtA[i] = 0x10
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if len(m.ContainerID) > 0 {
+		i -= len(m.ContainerID)
+		copy(dAtA[i:], m.ContainerID)
+		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.ContainerID)))
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *ConfigureNetworkingResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -728,20 +755,26 @@ func (m *ConfigureNetworkingResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ConfigureNetworkingResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ConfigureNetworkingResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *PingNodeNetworkServiceRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -749,26 +782,33 @@ func (m *PingNodeNetworkServiceRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *PingNodeNetworkServiceRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PingNodeNetworkServiceRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.PingRequestMessage) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.PingRequestMessage)))
-		i += copy(dAtA[i:], m.PingRequestMessage)
-	}
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	if len(m.PingRequestMessage) > 0 {
+		i -= len(m.PingRequestMessage)
+		copy(dAtA[i:], m.PingRequestMessage)
+		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.PingRequestMessage)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *PingNodeNetworkServiceResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -776,26 +816,33 @@ func (m *PingNodeNetworkServiceResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *PingNodeNetworkServiceResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PingNodeNetworkServiceResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.PingResponseMessage) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.PingResponseMessage)))
-		i += copy(dAtA[i:], m.PingResponseMessage)
-	}
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	if len(m.PingResponseMessage) > 0 {
+		i -= len(m.PingResponseMessage)
+		copy(dAtA[i:], m.PingResponseMessage)
+		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.PingResponseMessage)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *ConfigureContainerNetworkingRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -803,37 +850,45 @@ func (m *ConfigureContainerNetworkingRequest) Marshal() (dAtA []byte, err error)
 }
 
 func (m *ConfigureContainerNetworkingRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ConfigureContainerNetworkingRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.RequestType != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintNodenetsvc(dAtA, i, uint64(m.RequestType))
-	}
-	if len(m.ContainerID) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.ContainerID)))
-		i += copy(dAtA[i:], m.ContainerID)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.NetworkNamespaceID) > 0 {
-		dAtA[i] = 0x1a
-		i++
+		i -= len(m.NetworkNamespaceID)
+		copy(dAtA[i:], m.NetworkNamespaceID)
 		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.NetworkNamespaceID)))
-		i += copy(dAtA[i:], m.NetworkNamespaceID)
+		i--
+		dAtA[i] = 0x1a
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if len(m.ContainerID) > 0 {
+		i -= len(m.ContainerID)
+		copy(dAtA[i:], m.ContainerID)
+		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.ContainerID)))
+		i--
+		dAtA[i] = 0x12
 	}
-	return i, nil
+	if m.RequestType != 0 {
+		i = encodeVarintNodenetsvc(dAtA, i, uint64(m.RequestType))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *ConfigureContainerNetworkingResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -841,32 +896,40 @@ func (m *ConfigureContainerNetworkingResponse) Marshal() (dAtA []byte, err error
 }
 
 func (m *ConfigureContainerNetworkingResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ConfigureContainerNetworkingResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.Interfaces) > 0 {
-		for _, msg := range m.Interfaces {
-			dAtA[i] = 0xa
-			i++
-			i = encodeVarintNodenetsvc(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
+		for iNdEx := len(m.Interfaces) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Interfaces[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintNodenetsvc(dAtA, i, uint64(size))
 			}
-			i += n
+			i--
+			dAtA[i] = 0xa
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *ContainerIPAddress) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -874,44 +937,54 @@ func (m *ContainerIPAddress) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ContainerIPAddress) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ContainerIPAddress) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.Version) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.Version)))
-		i += copy(dAtA[i:], m.Version)
-	}
-	if len(m.Ip) > 0 {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.Ip)))
-		i += copy(dAtA[i:], m.Ip)
-	}
-	if len(m.PrefixLength) > 0 {
-		dAtA[i] = 0x22
-		i++
-		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.PrefixLength)))
-		i += copy(dAtA[i:], m.PrefixLength)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.DefaultGateway) > 0 {
-		dAtA[i] = 0x2a
-		i++
+		i -= len(m.DefaultGateway)
+		copy(dAtA[i:], m.DefaultGateway)
 		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.DefaultGateway)))
-		i += copy(dAtA[i:], m.DefaultGateway)
+		i--
+		dAtA[i] = 0x2a
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if len(m.PrefixLength) > 0 {
+		i -= len(m.PrefixLength)
+		copy(dAtA[i:], m.PrefixLength)
+		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.PrefixLength)))
+		i--
+		dAtA[i] = 0x22
 	}
-	return i, nil
+	if len(m.Ip) > 0 {
+		i -= len(m.Ip)
+		copy(dAtA[i:], m.Ip)
+		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.Ip)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.Version) > 0 {
+		i -= len(m.Version)
+		copy(dAtA[i:], m.Version)
+		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.Version)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *ContainerNetworkInterface) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -919,50 +992,61 @@ func (m *ContainerNetworkInterface) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ContainerNetworkInterface) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ContainerNetworkInterface) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.Name) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.Name)))
-		i += copy(dAtA[i:], m.Name)
-	}
-	if len(m.MacAddress) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.MacAddress)))
-		i += copy(dAtA[i:], m.MacAddress)
-	}
-	if len(m.NetworkNamespaceID) > 0 {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.NetworkNamespaceID)))
-		i += copy(dAtA[i:], m.NetworkNamespaceID)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.Ipaddresses) > 0 {
-		for _, msg := range m.Ipaddresses {
-			dAtA[i] = 0x22
-			i++
-			i = encodeVarintNodenetsvc(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
+		for iNdEx := len(m.Ipaddresses) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Ipaddresses[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintNodenetsvc(dAtA, i, uint64(size))
 			}
-			i += n
+			i--
+			dAtA[i] = 0x22
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if len(m.NetworkNamespaceID) > 0 {
+		i -= len(m.NetworkNamespaceID)
+		copy(dAtA[i:], m.NetworkNamespaceID)
+		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.NetworkNamespaceID)))
+		i--
+		dAtA[i] = 0x1a
 	}
-	return i, nil
+	if len(m.MacAddress) > 0 {
+		i -= len(m.MacAddress)
+		copy(dAtA[i:], m.MacAddress)
+		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.MacAddress)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.Name) > 0 {
+		i -= len(m.Name)
+		copy(dAtA[i:], m.Name)
+		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.Name)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *GetHostLocalIpAddressRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -970,26 +1054,33 @@ func (m *GetHostLocalIpAddressRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *GetHostLocalIpAddressRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetHostLocalIpAddressRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.ContainerID) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.ContainerID)))
-		i += copy(dAtA[i:], m.ContainerID)
-	}
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	if len(m.ContainerID) > 0 {
+		i -= len(m.ContainerID)
+		copy(dAtA[i:], m.ContainerID)
+		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.ContainerID)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *GetHostLocalIpAddressResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -997,30 +1088,39 @@ func (m *GetHostLocalIpAddressResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *GetHostLocalIpAddressResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetHostLocalIpAddressResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.IpAddr) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.IpAddr)))
-		i += copy(dAtA[i:], m.IpAddr)
-	}
 	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	return i, nil
+	if len(m.IpAddr) > 0 {
+		i -= len(m.IpAddr)
+		copy(dAtA[i:], m.IpAddr)
+		i = encodeVarintNodenetsvc(dAtA, i, uint64(len(m.IpAddr)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintNodenetsvc(dAtA []byte, offset int, v uint64) int {
+	offset -= sovNodenetsvc(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *ConfigureNetworkingRequest) Size() (n int) {
 	if m == nil {
@@ -1217,14 +1317,7 @@ func (m *GetHostLocalIpAddressResponse) Size() (n int) {
 }
 
 func sovNodenetsvc(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozNodenetsvc(x uint64) (n int) {
 	return sovNodenetsvc(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -1290,8 +1383,13 @@ func (this *ConfigureContainerNetworkingResponse) String() string {
 	if this == nil {
 		return "nil"
 	}
+	repeatedStringForInterfaces := "[]*ContainerNetworkInterface{"
+	for _, f := range this.Interfaces {
+		repeatedStringForInterfaces += strings.Replace(f.String(), "ContainerNetworkInterface", "ContainerNetworkInterface", 1) + ","
+	}
+	repeatedStringForInterfaces += "}"
 	s := strings.Join([]string{`&ConfigureContainerNetworkingResponse{`,
-		`Interfaces:` + strings.Replace(fmt.Sprintf("%v", this.Interfaces), "ContainerNetworkInterface", "ContainerNetworkInterface", 1) + `,`,
+		`Interfaces:` + repeatedStringForInterfaces + `,`,
 		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
 		`}`,
 	}, "")
@@ -1315,11 +1413,16 @@ func (this *ContainerNetworkInterface) String() string {
 	if this == nil {
 		return "nil"
 	}
+	repeatedStringForIpaddresses := "[]*ContainerIPAddress{"
+	for _, f := range this.Ipaddresses {
+		repeatedStringForIpaddresses += strings.Replace(f.String(), "ContainerIPAddress", "ContainerIPAddress", 1) + ","
+	}
+	repeatedStringForIpaddresses += "}"
 	s := strings.Join([]string{`&ContainerNetworkInterface{`,
 		`Name:` + fmt.Sprintf("%v", this.Name) + `,`,
 		`MacAddress:` + fmt.Sprintf("%v", this.MacAddress) + `,`,
 		`NetworkNamespaceID:` + fmt.Sprintf("%v", this.NetworkNamespaceID) + `,`,
-		`Ipaddresses:` + strings.Replace(fmt.Sprintf("%v", this.Ipaddresses), "ContainerIPAddress", "ContainerIPAddress", 1) + `,`,
+		`Ipaddresses:` + repeatedStringForIpaddresses + `,`,
 		`XXX_unrecognized:` + fmt.Sprintf("%v", this.XXX_unrecognized) + `,`,
 		`}`,
 	}, "")
@@ -1441,10 +1544,7 @@ func (m *ConfigureNetworkingRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthNodenetsvc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthNodenetsvc
 			}
 			if (iNdEx + skippy) > l {
@@ -1495,10 +1595,7 @@ func (m *ConfigureNetworkingResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthNodenetsvc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthNodenetsvc
 			}
 			if (iNdEx + skippy) > l {
@@ -1581,10 +1678,7 @@ func (m *PingNodeNetworkServiceRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthNodenetsvc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthNodenetsvc
 			}
 			if (iNdEx + skippy) > l {
@@ -1667,10 +1761,7 @@ func (m *PingNodeNetworkServiceResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthNodenetsvc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthNodenetsvc
 			}
 			if (iNdEx + skippy) > l {
@@ -1804,10 +1895,7 @@ func (m *ConfigureContainerNetworkingRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthNodenetsvc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthNodenetsvc
 			}
 			if (iNdEx + skippy) > l {
@@ -1892,10 +1980,7 @@ func (m *ConfigureContainerNetworkingResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthNodenetsvc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthNodenetsvc
 			}
 			if (iNdEx + skippy) > l {
@@ -2074,10 +2159,7 @@ func (m *ContainerIPAddress) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthNodenetsvc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthNodenetsvc
 			}
 			if (iNdEx + skippy) > l {
@@ -2258,10 +2340,7 @@ func (m *ContainerNetworkInterface) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthNodenetsvc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthNodenetsvc
 			}
 			if (iNdEx + skippy) > l {
@@ -2344,10 +2423,7 @@ func (m *GetHostLocalIpAddressRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthNodenetsvc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthNodenetsvc
 			}
 			if (iNdEx + skippy) > l {
@@ -2430,10 +2506,7 @@ func (m *GetHostLocalIpAddressResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthNodenetsvc
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthNodenetsvc
 			}
 			if (iNdEx + skippy) > l {
@@ -2452,6 +2525,7 @@ func (m *GetHostLocalIpAddressResponse) Unmarshal(dAtA []byte) error {
 func skipNodenetsvc(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -2483,10 +2557,8 @@ func skipNodenetsvc(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -2507,55 +2579,30 @@ func skipNodenetsvc(dAtA []byte) (n int, err error) {
 				return 0, ErrInvalidLengthNodenetsvc
 			}
 			iNdEx += length
-			if iNdEx < 0 {
-				return 0, ErrInvalidLengthNodenetsvc
-			}
-			return iNdEx, nil
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowNodenetsvc
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipNodenetsvc(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-				if iNdEx < 0 {
-					return 0, ErrInvalidLengthNodenetsvc
-				}
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupNodenetsvc
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthNodenetsvc
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthNodenetsvc = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowNodenetsvc   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthNodenetsvc        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowNodenetsvc          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupNodenetsvc = fmt.Errorf("proto: unexpected end of group")
 )
