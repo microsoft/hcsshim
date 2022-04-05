@@ -1,3 +1,5 @@
+//go:build windows
+
 package uvm
 
 import (
@@ -28,7 +30,7 @@ import (
 	"github.com/Microsoft/hcsshim/osversion"
 )
 
-// General infomation about how this works at a high level.
+// General information about how this works at a high level.
 //
 // The purpose is to start an LCOW Utility VM or UVM using the Host Compute Service, an API to create and manipulate running virtual machines
 // HCS takes json descriptions of the work to be done.
@@ -180,7 +182,7 @@ func fetchProcessor(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (*hc
 		return nil, fmt.Errorf("failed to get host processor information: %s", err)
 	}
 
-	// To maintain compatability with Docker we need to automatically downgrade
+	// To maintain compatibility with Docker we need to automatically downgrade
 	// a user CPU count if the setting is not possible.
 	uvm.processorCount = uvm.normalizeProcessorCount(ctx, opts.ProcessorCount, processorTopology)
 
@@ -278,7 +280,6 @@ Example JSON document produced once the hcsschema.ComputeSytem returned by makeL
 
 // Make a hcsschema.ComputeSytem with the parts that target booting from a VMGS file
 func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcsschema.ComputeSystem, err error) {
-
 	// Kernel and initrd are combined into a single vmgs file.
 	vmgsFullPath := filepath.Join(opts.BootFilesPath, opts.GuestStateFile)
 	if _, err := os.Stat(vmgsFullPath); os.IsNotExist(err) {
@@ -371,7 +372,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 
 	doc.VirtualMachine.Chipset.Uefi = &hcsschema.Uefi{
 		ApplySecureBootTemplate: "Apply",
-		SecureBootTemplateId:    "1734c6e8-3154-4dda-ba5f-a874cc483422", // aka MicrosoftWindowsSecureBootTemplateGUID equivilent to "Microsoft Windows" template from Get-VMHost | select SecureBootTemplates,
+		SecureBootTemplateId:    "1734c6e8-3154-4dda-ba5f-a874cc483422", // aka MicrosoftWindowsSecureBootTemplateGUID equivalent to "Microsoft Windows" template from Get-VMHost | select SecureBootTemplates,
 
 	}
 
@@ -391,7 +392,6 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 // Many details are quite different (see the typical JSON examples), in particular it boots from a VMGS file
 // which contains both the kernel and initrd as well as kernel boot options.
 func makeLCOWSecurityDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcsschema.ComputeSystem, err error) {
-
 	doc, vmgsErr := makeLCOWVMGSDoc(ctx, opts, uvm)
 	if vmgsErr != nil {
 		return nil, vmgsErr
@@ -487,7 +487,7 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 	}
 
 	var processor *hcsschema.Processor2
-	processor, err = fetchProcessor(ctx, opts, uvm) // must happen after the file existance tests above.
+	processor, err = fetchProcessor(ctx, opts, uvm) // must happen after the file existence tests above.
 	if err != nil {
 		return nil, err
 	}

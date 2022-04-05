@@ -1,3 +1,5 @@
+//go:build windows
+
 package safefile
 
 import (
@@ -156,7 +158,6 @@ func LinkRelative(oldname string, oldroot *os.File, newname string, newroot *os.
 		if (fi.FileAttributes & syscall.FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
 			return &os.LinkError{Op: "link", Old: oldf.Name(), New: filepath.Join(newroot.Name(), newname), Err: winapi.RtlNtStatusToDosError(winapi.STATUS_REPARSE_POINT_ENCOUNTERED)}
 		}
-
 	} else {
 		parent = newroot
 	}

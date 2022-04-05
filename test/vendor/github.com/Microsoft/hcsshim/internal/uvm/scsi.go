@@ -1,3 +1,5 @@
+//go:build windows
+
 package uvm
 
 import (
@@ -515,7 +517,6 @@ func (uvm *UtilityVM) allocateSCSIMount(
 	log.G(ctx).WithFields(uvm.scsiLocations[controller][lun].logFormat()).Debug("allocated SCSI mount")
 
 	return uvm.scsiLocations[controller][lun], false, nil
-
 }
 
 // GetScsiUvmPath returns the guest mounted path of a SCSI drive.

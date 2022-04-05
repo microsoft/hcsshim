@@ -1,5 +1,5 @@
-//go:build integration
-// +build integration
+//go:build windows && integration
+// +build windows,integration
 
 package hcn
 

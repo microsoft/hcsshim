@@ -35,3 +35,6 @@ rootfs-conv/*
 
 deps/*
 out/*
+
+go.work
+go.work.sum

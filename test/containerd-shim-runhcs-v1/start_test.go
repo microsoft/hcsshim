@@ -1,5 +1,5 @@
-//go:build functional
-// +build functional
+//go:build windows && functional
+// +build windows,functional
 
 package main
 

@@ -1,5 +1,5 @@
-// Package hcn is a shim for the Host Compute Networking (HCN) service, which manages networking for Windows Server
-// containers and Hyper-V containers. Previous to RS5, HCN was referred to as Host Networking Service (HNS).
+//go:build windows
+
 package hcn
 
 import (
@@ -87,7 +87,7 @@ func new(hr error, title string, rest string) error {
 
 //
 // Note that the below errors are not errors returned by hcn itself
-// we wish to seperate them as they are shim usage error
+// we wish to separate them as they are shim usage error
 //
 
 // NetworkNotFoundError results from a failed search for a network by Id or Name

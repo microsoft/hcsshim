@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 import (
@@ -38,7 +40,6 @@ func (c *computeAgentCache) getAllAndClear() ([]*computeAgentClient, error) {
 		results = append(results, agent)
 	}
 	return results, nil
-
 }
 
 func (c *computeAgentCache) get(cid string) (*computeAgentClient, error) {

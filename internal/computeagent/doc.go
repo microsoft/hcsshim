@@ -7,5 +7,4 @@
 // The mock service is compiled using the following command:
 //
 // mockgen -source="computeagent.pb.go" -package="computeagent_mock" > mock\computeagent_mock.pb.go
-
 package computeagent

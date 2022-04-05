@@ -1,3 +1,5 @@
+//go:build windows && functional
+
 package cri_containerd
 
 import (

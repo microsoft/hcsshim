@@ -1,3 +1,5 @@
+//go:build windows
+
 package uvm
 
 import (
@@ -41,7 +43,7 @@ var (
 // In this function we take the namespace ID of the namespace that was created for this
 // UVM. We hot add the namespace (with the default ID if this is a template). We get the
 // endpoints associated with this namespace and then hot add those endpoints (by changing
-// their namespace IDs by the deafult IDs if it is a template).
+// their namespace IDs by the default IDs if it is a template).
 func (uvm *UtilityVM) SetupNetworkNamespace(ctx context.Context, nsid string) error {
 	nsidInsideUVM := nsid
 	if uvm.IsTemplate || uvm.IsClone {

@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 import (
@@ -153,7 +155,6 @@ func (s *grpcService) AddNIC(ctx context.Context, req *ncproxygrpc.AddNICRequest
 		return nil, err
 	}
 	return &ncproxygrpc.AddNICResponse{}, nil
-
 }
 
 func (s *grpcService) ModifyNIC(ctx context.Context, req *ncproxygrpc.ModifyNICRequest) (_ *ncproxygrpc.ModifyNICResponse, err error) {

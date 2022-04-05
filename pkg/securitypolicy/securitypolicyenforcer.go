@@ -85,7 +85,7 @@ type StandardSecurityPolicyEnforcer struct {
 	//
 	// Most of the work that this security policy enforcer does it around managing
 	// state needed to map from a container definition in the SecurityPolicy to
-	// a specfic container ID as we bring up each container. See
+	// a specific container ID as we bring up each container. See
 	// enforceCommandPolicy where most of the functionality is handling the case
 	// were policy containers share an overlay and have to try to distinguish them
 	// based on the command line arguments. enforceEnvironmentVariablePolicy can

@@ -1,3 +1,5 @@
+//go:build windows
+
 package cmd
 
 import (
@@ -53,7 +55,7 @@ func NewNpipeIO(ctx context.Context, stdin, stdout, stderr string, terminal bool
 		}
 		// We don't have any retry logic for stdin as there's no good way to detect that we'd even need to retry. If the process forwarding
 		// stdin to the container (some client interface to exec a process in a container) exited, we'll get EOF which io.Copy treats as
-		// success. For fifos on Linux it seems if all fd's for the write end of the pipe dissappear, which is the same scenario, then
+		// success. For fifos on Linux it seems if all fd's for the write end of the pipe disappear, which is the same scenario, then
 		// the read end will get EOF as well.
 		nio.sin = c
 	}
