@@ -8,6 +8,51 @@ env:
   GOPROXY: off
 
 jobs:
+  protos:
+    runs-on: 'windows-2019'
+    steps:
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.15.0'
+      - uses: actions/checkout@v2
+        with:
+          path: 'go/src/github.com/Microsoft/hcsshim'
+      # Install protoc-gen-gogoctrd in D:\bin
+      - uses: actions/checkout@v2
+        with:
+          repository: containerd/containerd
+          ref: v1.6.2
+          path: 'containerd'
+      - name: Install protoc-gen-gogoctrd
+        shell: powershell
+        run: |
+          cd containerd
+          go build ./cmd/protoc-gen-gogoctrd
+          mkdir D:\bin
+          mv protoc-gen-gogoctrd.exe D:\bin
+      # Install protoc in D:\bin
+      - name: Install protoc
+        shell: powershell
+        run: |
+          Invoke-WebRequest -OutFile protoc.zip -Uri https://github.com/protocolbuffers/protobuf/releases/download/v3.19.4/protoc-3.19.4-win32.zip
+          Expand-Archive -Path protoc.zip -DestinationPath .
+          mv include go/src/github.com/Microsoft/hcsshim/protobuf
+          mv bin\protoc.exe D:\bin
+      - name: Run Protobuild
+        shell: powershell
+        run: |
+          go install github.com/containerd/protobuild@v0.2.0
+          cd go\src\github.com\Microsoft\hcsshim
+
+          $Env:Path += ";D:\bin;" + $Env:GOPATH + "\bin"
+          protobuild $(go list ./... | grep -v /vendor/)
+
+          git diff --exit-code
+        env:
+          GOPATH: '${{ github.workspace }}\go'
+          GOFLAGS:
+          GOPROXY:
+
   lint:
     runs-on: 'windows-2019'
     steps:
