@@ -4,6 +4,7 @@ package jobcontainers
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -14,10 +15,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Trailing backslash required for SetVolumeMountPoint and DeleteVolumeMountPoint
-const sandboxMountFormat = `C:\C\%s\`
+// fallbackRootfsFormat is the fallback location for the rootfs if file binding support isn't available.
+// %s will be expanded with the container ID. Trailing backslash required for SetVolumeMountPoint and
+// DeleteVolumeMountPoint
+const fallbackRootfsFormat = `C:\C\%s\`
 
-func mountLayers(ctx context.Context, containerID string, s *specs.Spec, volumeMountPath string) error {
+// defaultSiloRootfsLocation is the default location the rootfs for the container will show up
+// inside of a given silo. If bind filter support isn't available the rootfs will be
+// C:\C\<containerID>
+const defaultSiloRootfsLocation = `C:\payload\`
+
+func (c *JobContainer) mountLayers(ctx context.Context, containerID string, s *specs.Spec, volumeMountPath string) (err error) {
 	if s == nil || s.Windows == nil || s.Windows.LayerFolders == nil {
 		return errors.New("field 'Spec.Windows.Layerfolders' is not populated")
 	}
@@ -26,14 +34,14 @@ func mountLayers(ctx context.Context, containerID string, s *specs.Spec, volumeM
 	scratchFolder := s.Windows.LayerFolders[len(s.Windows.LayerFolders)-1]
 	if _, err := os.Stat(scratchFolder); os.IsNotExist(err) {
 		if err := os.MkdirAll(scratchFolder, 0777); err != nil {
-			return errors.Wrapf(err, "failed to auto-create container scratch folder %s", scratchFolder)
+			return fmt.Errorf("failed to auto-create container scratch folder %s: %w", scratchFolder, err)
 		}
 	}
 
 	// Create sandbox.vhdx if it doesn't exist in the scratch folder.
 	if _, err := os.Stat(filepath.Join(scratchFolder, "sandbox.vhdx")); os.IsNotExist(err) {
 		if err := wclayer.CreateScratchLayer(ctx, scratchFolder, s.Windows.LayerFolders[:len(s.Windows.LayerFolders)-1]); err != nil {
-			return errors.Wrap(err, "failed to CreateSandboxLayer")
+			return fmt.Errorf("failed to CreateSandboxLayer: %w", err)
 		}
 	}
 
@@ -43,11 +51,20 @@ func mountLayers(ctx context.Context, containerID string, s *specs.Spec, volumeM
 
 	if s.Root.Path == "" {
 		log.G(ctx).Debug("mounting job container storage")
-		containerRootPath, err := layers.MountWCOWLayers(ctx, containerID, s.Windows.LayerFolders, "", volumeMountPath, nil)
+		s.Root.Path, err = layers.MountWCOWLayers(ctx, containerID, s.Windows.LayerFolders, "", volumeMountPath, nil)
 		if err != nil {
-			return errors.Wrap(err, "failed to mount container storage")
+			return fmt.Errorf("failed to mount job container storage: %w", err)
 		}
-		s.Root.Path = containerRootPath
+	}
+
+	return nil
+}
+
+// setupRootfsBinding binds the copy on write volume for the container to a static path
+// in the container specified by 'root'.
+func (c *JobContainer) setupRootfsBinding(root, target string) error {
+	if err := c.job.ApplyFileBinding(root, target, false); err != nil {
+		return fmt.Errorf("failed to bind rootfs to %s: %w", root, err)
 	}
 	return nil
 }

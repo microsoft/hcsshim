@@ -31,6 +31,15 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+var fileBindingSupport bool
+
+func init() {
+	bindDLL := `C:\windows\system32\bindfltapi.dll`
+	if _, err := os.Stat(bindDLL); err == nil {
+		fileBindingSupport = true
+	}
+}
+
 // Split arguments but ignore spaces in quotes.
 //
 // For example instead of:
@@ -42,6 +51,7 @@ func splitArgs(cmdLine string) []string {
 }
 
 const (
+	// jobContainerNameFmt is the naming format that job objects for job containers will follow.
 	jobContainerNameFmt = "JobContainer_%s"
 	// Environment variable set in every process in the job detailing where the containers volume
 	// is mounted on the host.
@@ -56,10 +66,16 @@ type initProc struct {
 
 // JobContainer represents a lightweight container composed from a job object.
 type JobContainer struct {
-	id               string
-	spec             *specs.Spec          // OCI spec used to create the container
-	job              *jobobject.JobObject // Object representing the job object the container owns
-	sandboxMount     string               // Path to where the sandbox is mounted on the host
+	id string
+	// OCI spec used to create the container.
+	spec *specs.Spec
+	// The job object the container owns.
+	job *jobobject.JobObject
+	// Path to where the rootfs is located on the host
+	// if no file binding support is available, or in the
+	// silo if it is.
+	rootfsLocation string
+
 	closedWaitOnce   sync.Once
 	init             initProc
 	token            windows.Token
@@ -70,8 +86,11 @@ type JobContainer struct {
 	waitError        error
 }
 
-var _ cow.ProcessHost = &JobContainer{}
-var _ cow.Container = &JobContainer{}
+// Compile time checks for interface adherance.
+var (
+	_ cow.ProcessHost = &JobContainer{}
+	_ cow.Container   = &JobContainer{}
+)
 
 func newJobContainer(id string, s *specs.Spec) *JobContainer {
 	return &JobContainer{
@@ -83,7 +102,7 @@ func newJobContainer(id string, s *specs.Spec) *JobContainer {
 	}
 }
 
-// Create creates a new JobContainer from `s`.
+// Create creates a new JobContainer from the OCI runtime spec `s`.
 func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *resources.Resources, err error) {
 	log.G(ctx).WithField("id", id).Debug("Creating job container")
 
@@ -106,17 +125,16 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *
 		Name:          fmt.Sprintf(jobContainerNameFmt, id),
 		Notifications: true,
 	}
-	job, err := jobobject.Create(ctx, options)
+	container.job, err = jobobject.Create(ctx, options)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to create job object")
+		return nil, nil, fmt.Errorf("failed to create job object: %w", err)
 	}
 
 	// Parity with how we handle process isolated containers. We set the same flag which
-	// behaves the same way for a silo.
-	if err := job.SetTerminateOnLastHandleClose(); err != nil {
-		return nil, nil, errors.Wrap(err, "failed to set terminate on last handle close on job container")
+	// behaves the same way for a server silo.
+	if err := container.job.SetTerminateOnLastHandleClose(); err != nil {
+		return nil, nil, fmt.Errorf("failed to set terminate on last handle close on job container: %w", err)
 	}
-	container.job = job
 
 	r := resources.NewContainerResources(id)
 	defer func() {
@@ -126,18 +144,30 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *
 		}
 	}()
 
-	sandboxPath := fmt.Sprintf(sandboxMountFormat, id)
-	if err := mountLayers(ctx, id, s, sandboxPath); err != nil {
-		return nil, nil, errors.Wrap(err, "failed to mount container layers")
+	// If bind mount support is available on the host, there's a lot of new functionality we
+	// can make use of that improves the UX for volume mounts and where the containers rootfs
+	// shows up on the host. You can do per silo bindings so every container can have a static
+	// path for its rootfs location and avoid having to make liberal use of the
+	// CONTAINER_SANDBOX_MOUNT_POINT environment variable.
+	if fileBindingSupport {
+		if err := container.bindSetup(ctx, s); err != nil {
+			return nil, nil, err
+		}
+	} else {
+		if err := container.fallbackSetup(ctx, s); err != nil {
+			return nil, nil, err
+		}
 	}
-	container.sandboxMount = sandboxPath
 
-	layers := layers.NewImageLayers(nil, "", s.Windows.LayerFolders, sandboxPath, false)
+	// We actually don't need to pass in anything for volumeMountPath below if we have file binding support,
+	// the filter allows us to pass in a raw volume path and it can use that to bind a volume to a friendly path
+	// instead so we can skip calling SetVolumeMountPoint.
+	var rootfsMountPoint string
+	if !fileBindingSupport {
+		rootfsMountPoint = container.rootfsLocation
+	}
+	layers := layers.NewImageLayers(nil, "", s.Windows.LayerFolders, rootfsMountPoint, false)
 	r.SetLayers(layers)
-
-	if err := setupMounts(s, container.sandboxMount); err != nil {
-		return nil, nil, err
-	}
 
 	volumeGUIDRegex := `^\\\\\?\\(Volume)\{{0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}\}(|\\)$`
 	if matched, err := regexp.MatchString(volumeGUIDRegex, s.Root.Path); !matched || err != nil {
@@ -146,12 +176,12 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *
 
 	limits, err := specToLimits(ctx, id, s)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to convert OCI spec to job object limits")
+		return nil, nil, fmt.Errorf("failed to convert OCI spec to job object limits: %w", err)
 	}
 
 	// Set resource limits on the job object based off of oci spec.
-	if err := job.SetResourceLimits(limits); err != nil {
-		return nil, nil, errors.Wrap(err, "failed to set resource limits")
+	if err := container.job.SetResourceLimits(limits); err != nil {
+		return nil, nil, fmt.Errorf("failed to set resource limits: %w", err)
 	}
 
 	go container.waitBackground(ctx)
@@ -166,9 +196,28 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		return nil, errors.New("unsupported process config passed in")
 	}
 
-	// Replace any occurrences of the sandbox mount point env variable in the commandline.
-	// %CONTAINER_SANDBOX_MOUNTPOINT%\mybinary.exe -> C:\C\123456789\mybinary.exe
+	// Replace any occurences of the sandbox mount env variable in the commandline.
+	// For example: %CONTAINER_SANDBOX_MOUNTPOINT%\mybinary.exe -> C:\<rootfslocation>\mybinary.exe.
 	commandLine, _ := c.replaceWithMountPoint(conf.CommandLine)
+
+	// This is to workaround a rather unfortunate outcome with launching a process in a silo that
+	// has bound files.
+	// If a user requested to launch a program at C:\<rootfslocation>\mybinary.exe because they
+	// expect C:\<rootfslocation>\mybinary.exe to exist once the file bindings are done, it actually
+	// won't work. This is because the process is launched on the host first and the
+	// bindings are only visible to processes in that silo specifically. The shim is not
+	// one of these processes, and this is where we're invoking CreateProcess. So CreateProcess
+	// and our commandline resolution logic won't be able to find the process being asked for.
+	// Deep down in the depths of CreateProcess the culprit is a NtQueryAttributesFile call that
+	// fails as it doesn't have any context surrounding paths available to our silo.
+	//
+	// A way to get around this is to launch a process that will always exist (cmd) and is in our
+	// path, and then just invoke the program with the cmdline supplied. We could also add a new
+	// mode/flag for the shim where it's just a dummy process launcher, so we can invoke the shim
+	// instead of cmd and have more control over things.
+	if fileBindingSupport {
+		commandLine = "cmd /c " + commandLine
+	}
 
 	removeDriveLetter := func(name string) string {
 		// If just the letter and colon (C:) then replace with a single backslash. Else just trim the drive letter and leave the rest of the
@@ -181,24 +230,40 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		return name
 	}
 
-	workDir := c.sandboxMount
-	if conf.WorkingDirectory != "" {
-		var changed bool
-		// For now, we join the working directory requested with where the sandbox volume is located. It's expected that the default behavior
-		// would be to treat all paths as relative to the volume.
-		//
-		// For example:
-		// A working directory of C:\ would become C:\C\12345678\
-		// A working directory of C:\work\dir would become C:\C\12345678\work\dir
-		//
-		// The below calls replaceWithMountPoint to replace any occurrences of the environment variable that points to where the container image
-		// volume is mounted.
-		workDir, changed = c.replaceWithMountPoint(conf.WorkingDirectory)
-		// If the working directory was changed, that means the user supplied %CONTAINER_SANDBOX_MOUNT_POINT%\\my\dir or something similar.
-		// In that case there's nothing left to do, as we don't want to join it with the mount point again.. If it *wasn't* changed, then we
-		// need to join it with the mount point, as it's some normal path.
-		if !changed {
-			workDir = filepath.Join(c.sandboxMount, removeDriveLetter(workDir))
+	workDir := c.rootfsLocation
+	// Only need to adjust the working directory in the case where bind support isn't available.
+	if !fileBindingSupport {
+		if conf.WorkingDirectory != "" {
+			var changed bool
+			// For now, we join the working directory requested with where the sandbox volume is located. It's expected that the default behavior
+			// would be to treat all paths as relative to the volume.
+			//
+			// For example:
+			// A working directory of C:\ would become C:\C\12345678\
+			// A working directory of C:\work\dir would become C:\C\12345678\work\dir
+			//
+			// The below calls replaceWithMountPoint to replace any occurrences of the environment variable that points to where the container image
+			// volume is mounted.
+			workDir, changed = c.replaceWithMountPoint(conf.WorkingDirectory)
+			// If the working directory was changed, that means the user supplied %CONTAINER_SANDBOX_MOUNT_POINT%\\my\dir or something similar.
+			// In that case there's nothing left to do, as we don't want to join it with the mount point again.. If it *wasn't* changed, then we
+			// need to join it with the mount point, as it's some normal path.
+			if !changed {
+				workDir = filepath.Join(c.rootfsLocation, removeDriveLetter(workDir))
+			}
+		}
+	} else {
+		// Bind support is available, set the default working directory to C:\payload if
+		// nothing is set.
+		if conf.WorkingDirectory != "" {
+			workDir, _ = c.replaceWithMountPoint(conf.WorkingDirectory)
+		}
+	}
+
+	// Make sure the working directory exists.
+	if _, err := os.Stat(workDir); os.IsNotExist(err) {
+		if err := os.MkdirAll(workDir, 0700); err != nil {
+			return nil, err
 		}
 	}
 
@@ -237,8 +302,19 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		envs = append(envs, k+"="+expanded)
 	}
 	env = append(env, envs...)
+	env = append(env, sandboxMountPointEnvVar+"="+c.rootfsLocation)
 
-	env = append(env, sandboxMountPointEnvVar+"="+c.sandboxMount)
+	// Add the rootfs location to PATH so you can run things from the root of the image.
+	for idx, envVar := range env {
+		ev := strings.TrimSpace(strings.ToLower(envVar))
+		if len(ev) >= 4 && strings.ToLower(ev[:4]) == "path" {
+			rootfsLoc := c.rootfsLocation
+			if ev[len(ev):] != ";" {
+				rootfsLoc = ";" + rootfsLoc
+			}
+			env[idx] = ev + rootfsLoc
+		}
+	}
 
 	// exec.Cmd internally does its own path resolution and as part of this checks some well known file extensions on the file given (e.g. if
 	// the user just provided /path/to/mybinary). CreateProcess is perfectly capable of launching an executable that doesn't have the .exe extension
@@ -645,7 +721,36 @@ func systemProcessInformation() ([]*winapi.SYSTEM_PROCESS_INFORMATION, error) {
 // Takes a string and replaces any occurrences of CONTAINER_SANDBOX_MOUNT_POINT with where the containers' volume is mounted, as well as returning
 // if the string actually contained the environment variable.
 func (c *JobContainer) replaceWithMountPoint(str string) (string, bool) {
-	newStr := strings.ReplaceAll(str, "%"+sandboxMountPointEnvVar+"%", c.sandboxMount[:len(c.sandboxMount)-1])
-	newStr = strings.ReplaceAll(newStr, "$env:"+sandboxMountPointEnvVar, c.sandboxMount[:len(c.sandboxMount)-1])
+	mountPoint := c.rootfsLocation
+	newStr := strings.ReplaceAll(str, "%"+sandboxMountPointEnvVar+"%", mountPoint[:len(mountPoint)-1])
+	newStr = strings.ReplaceAll(newStr, "$env:"+sandboxMountPointEnvVar, mountPoint[:len(mountPoint)-1])
 	return newStr, str != newStr
+}
+
+func (c *JobContainer) bindSetup(ctx context.Context, s *specs.Spec) (err error) {
+	// Must be upgraded to a silo so we can get per silo bindings for the container.
+	if err := c.job.PromoteToSilo(); err != nil {
+		return err
+	}
+	// Union the container layers. Luckily bindflt works fine with \\?\volume paths, so we don't need to
+	// mount the volume anywhere friendly (for example, somewhere under C:\) first.
+	if err := c.mountLayers(ctx, c.id, s, ""); err != nil {
+		return fmt.Errorf("failed to mount container layers: %w", err)
+	}
+	if err := c.setupRootfsBinding(defaultSiloRootfsLocation, s.Root.Path+"\\"); err != nil {
+		return err
+	}
+	c.rootfsLocation = defaultSiloRootfsLocation
+	return c.setupMounts(s)
+}
+
+// This handles the fallback case where bind mounting isn't available on the machine. This mounts the
+// container layers on the host and sets up any mounts present in the OCI runtime spec.
+func (c *JobContainer) fallbackSetup(ctx context.Context, s *specs.Spec) (err error) {
+	sandboxPath := fmt.Sprintf(fallbackRootfsFormat, c.id)
+	if err := c.mountLayers(ctx, c.id, s, sandboxPath); err != nil {
+		return fmt.Errorf("failed to mount container layers: %w", err)
+	}
+	c.rootfsLocation = sandboxPath
+	return fallbackMountSetup(s, c.rootfsLocation)
 }

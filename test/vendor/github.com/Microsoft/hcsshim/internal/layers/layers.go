@@ -10,10 +10,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"golang.org/x/sys/windows"
-
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/hcserror"
@@ -21,6 +17,9 @@ import (
 	"github.com/Microsoft/hcsshim/internal/ospath"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/windows"
 )
 
 // ImageLayers contains all the layers for an image.
@@ -402,7 +401,8 @@ func UnmountContainerLayers(ctx context.Context, layerFolders []string, containe
 			return errors.New("need at least one layer for Unmount")
 		}
 
-		// Remove the mount point if there is one. This is the case for job containers.
+		// Remove the mount point if there is one. This is the fallback case for job containers
+		// if no bind mount support is available.
 		if volumeMountPath != "" {
 			if err := removeSandboxMountPoint(ctx, volumeMountPath); err != nil {
 				return err
