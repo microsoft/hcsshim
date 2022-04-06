@@ -1,6 +1,6 @@
 syntax = "proto3";
 package nodenetsvc.v1;
-option go_package = "v1";
+option go_package = "github.com/Microsoft/hcsshim/pkg/ncproxy/nodenetsvc/v1";
 
 service NodeNetworkService {
     rpc ConfigureNetworking(ConfigureNetworkingRequest) returns (ConfigureNetworkingResponse);
