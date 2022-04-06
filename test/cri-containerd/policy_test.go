@@ -20,29 +20,6 @@ var (
 	validPolicyAlpineCommand = []string{"ash", "-c", "echo 'Hello'"}
 )
 
-type configOpt func(*securitypolicy.ContainerConfig) error
-
-func withExpectedMounts(em []string) configOpt {
-	return func(conf *securitypolicy.ContainerConfig) error {
-		conf.ExpectedMounts = append(conf.ExpectedMounts, em...)
-		return nil
-	}
-}
-
-func withEnvVarRules(envRules []securitypolicy.EnvRuleConfig) configOpt {
-	return func(config *securitypolicy.ContainerConfig) error {
-		config.EnvRules = append(config.EnvRules, envRules...)
-		return nil
-	}
-}
-
-func withWorkingDir(workingDir string) configOpt {
-	return func(config *securitypolicy.ContainerConfig) error {
-		config.WorkingDir = workingDir
-		return nil
-	}
-}
-
 func securityPolicyFromContainers(containers []securitypolicy.ContainerConfig) (string, error) {
 	pc, err := helpers.PolicyContainersFromConfigs(containers)
 	if err != nil {
@@ -65,7 +42,7 @@ func sandboxSecurityPolicy(t *testing.T) string {
 	return policyString
 }
 
-func alpineSecurityPolicy(t *testing.T, opts ...configOpt) string {
+func alpineSecurityPolicy(t *testing.T, opts ...securitypolicy.ContainerConfigOpt) string {
 	defaultContainers := helpers.DefaultContainerConfigs()
 	alpineContainer := securitypolicy.NewContainerConfig(
 		"alpine:latest",
@@ -287,7 +264,7 @@ func Test_RunContainer_ValidContainerConfigs_Allowed(t *testing.T) {
 	type config struct {
 		name string
 		sf   sideEffect
-		opts []configOpt
+		opts []securitypolicy.ContainerConfigOpt
 	}
 
 	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
@@ -303,7 +280,7 @@ func Test_RunContainer_ValidContainerConfigs_Allowed(t *testing.T) {
 			sf: func(req *runtime.CreateContainerRequest) {
 				req.Config.WorkingDir = "/root"
 			},
-			opts: []configOpt{withWorkingDir("/root")},
+			opts: []securitypolicy.ContainerConfigOpt{securitypolicy.WithWorkingDir("/root")},
 		},
 		{
 			name: "EnvironmentVariable",
@@ -313,8 +290,8 @@ func Test_RunContainer_ValidContainerConfigs_Allowed(t *testing.T) {
 					Value: "VALUE",
 				})
 			},
-			opts: []configOpt{
-				withEnvVarRules(
+			opts: []securitypolicy.ContainerConfigOpt{
+				securitypolicy.WithEnvVarRules(
 					[]securitypolicy.EnvRuleConfig{
 						{
 							Strategy: securitypolicy.EnvVarRuleString,
