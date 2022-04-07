@@ -8,11 +8,12 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/Microsoft/go-winio/pkg/security"
 	"github.com/Microsoft/go-winio/vhd"
 	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
+
+	"github.com/Microsoft/hcsshim/internal/security"
 )
 
 const defaultVHDXBlockSizeInMB = 1
