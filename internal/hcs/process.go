@@ -368,6 +368,8 @@ func (process *Process) StdioLegacy() (_ io.WriteCloser, _ io.ReadCloser, _ io.R
 // Stdio returns the stdin, stdout, and stderr pipes, respectively.
 // To close them, close the process handle, or use the `CloseStd*` functions.
 func (process *Process) Stdio() (stdin io.Writer, stdout, stderr io.Reader) {
+	process.stdioLock.Lock()
+	defer process.stdioLock.Unlock()
 	return process.stdin, process.stdout, process.stderr
 }
 
@@ -375,7 +377,7 @@ func (process *Process) Stdio() (stdin io.Writer, stdout, stderr io.Reader) {
 // notified on the read side that there is no more data in stdin.
 func (process *Process) CloseStdin(ctx context.Context) (err error) {
 	operation := "hcs::Process::CloseStdin"
-	ctx, span := trace.StartSpan(ctx, operation) //nolint:ineffassign,staticcheck
+	ctx, span := trace.StartSpan(ctx, operation)
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
@@ -405,19 +407,20 @@ func (process *Process) CloseStdin(ctx context.Context) (err error) {
 			},
 		}
 
-		modifyRequestB, err := json.Marshal(modifyRequest)
-		if err != nil {
-			return err
-		}
-
-		resultJSON, err := vmcompute.HcsModifyProcess(ctx, process.handle, string(modifyRequestB))
-		events := processHcsResult(ctx, resultJSON)
-		if err != nil {
-			return makeProcessError(process, operation, err, events)
+		var b []byte
+		b, err = json.Marshal(modifyRequest)
+		// don't return on errors, and still try to close the stream from the host
+		if err == nil {
+			var resultJSON string
+			resultJSON, err = vmcompute.HcsModifyProcess(ctx, process.handle, string(b))
+			events := processHcsResult(ctx, resultJSON)
+			if err != nil {
+				err = makeProcessError(process, operation, err, events)
+			}
 		}
 	}
 
-	err = process.stdin.Close()
+	process.stdin.Close()
 	process.stdin = nil
 
 	return err

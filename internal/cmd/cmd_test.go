@@ -156,8 +156,9 @@ func (p *localProcess) Wait() error {
 func TestCmdExitCode(t *testing.T) {
 	cmd := Command(&localProcessHost{}, "cmd", "/c", "exit", "/b", "64")
 	err := cmd.Run()
-	if e, ok := err.(*ExitError); !ok || e.ExitCode() != 64 {
-		t.Fatal("expected exit code 64, got ", err)
+	eerr := &ExitError{}
+	if !errors.As(err, &eerr) || eerr.ExitCode() != 64 {
+		t.Fatalf("expected exit code 64, got %v", err)
 	}
 }
 
@@ -172,14 +173,15 @@ func TestCmdOutput(t *testing.T) {
 	}
 }
 
-func TestCmdContext(t *testing.T) {
+func TestCmdContextCloseStdIn(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()
 
 	cmd := CommandContext(ctx, &localProcessHost{}, "cmd", "/c", "pause")
 	r, w := io.Pipe()
+	defer w.Close()
 	cmd.Stdin = r
-	cmd.RegisterAfterExitFun(func(_ context.Context) error { return w.Close() })
+	cmd.CloseStdIn = true
 
 	err := cmd.Start()
 	if err != nil {
@@ -187,8 +189,9 @@ func TestCmdContext(t *testing.T) {
 	}
 
 	err = cmd.Wait()
-	if e, ok := err.(*ExitError); !ok || e.ExitCode() != 1 || ctx.Err() == nil {
-		t.Fatal(err)
+	eerr := &ExitError{}
+	if !errors.As(err, &eerr) || eerr.ExitCode() != 1 || ctx.Err() == nil {
+		t.Fatalf("expected context timeout or exit code 1, got: %v", err)
 	}
 }
 
@@ -216,72 +219,6 @@ func TestCmdStdinBlocked(t *testing.T) {
 	_, err := cmd.Output()
 	if err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestCmdAfterExitFun(t *testing.T) {
-	cmd := Command(&localProcessHost{}, "cmd", "/c")
-
-	c := make(chan struct{})
-	cmd.RegisterAfterExitFun(func(_ context.Context) error {
-		close(c)
-		time.Sleep(50 * time.Millisecond)
-		return nil
-	})
-
-	err := cmd.Start()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// call cmd.Wait to make sure after funs are called
-	done := make(chan error)
-	go func() {
-		done <- cmd.Wait()
-		close(done)
-	}()
-
-	err = cmd.Process.Wait()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	select {
-	case <-c:
-		// if they both finish at the same time, it is undefined which case is chosen...
-	case <-cmd.allDoneCh:
-		t.Fatalf("after exit did not finish before cmd.Wait returned")
-	}
-
-	// still check for errors during cmd.Wait():
-	err = <-done
-	if err != nil {
-		t.Fatalf("cmd failed: %v", err)
-	}
-}
-
-func TestCmdAfterExitFunRegistration(t *testing.T) {
-	cmd := Command(&localProcessHost{}, "cmd", "/c", "echo", "hello")
-
-	l := len(cmd.afterExitFuns)
-	cmd.RegisterAfterExitFun(func(_ context.Context) error {
-		return nil
-	})
-	if len(cmd.afterExitFuns) != l+1 {
-		t.Fatalf("function registration failed")
-	}
-
-	err := cmd.Start()
-	if err != nil {
-		t.Fatalf("cmd Run failed: %v", err)
-	}
-
-	cmd.RegisterAfterExitFun(func(_ context.Context) error {
-		return errors.New("this error should never be raised")
-	})
-
-	if len(cmd.afterExitFuns) != l+1 {
-		t.Fatalf("function should not have been registered")
 	}
 }
 
@@ -324,7 +261,7 @@ func TestCmdStuckIo(t *testing.T) {
 	cmd := Command(&stuckIoProcessHost{&localProcessHost{}}, "cmd", "/c", "echo", "hello")
 	cmd.CopyAfterExitTimeout = time.Millisecond * 200
 	_, err := cmd.Output()
-	if err != io.ErrClosedPipe {
+	if !errors.Is(err, io.ErrClosedPipe) {
 		t.Fatal(err)
 	}
 }
@@ -351,33 +288,5 @@ func TestCmdStuckStdoutNotClosed(t *testing.T) {
 		}
 		t.Fatal("command should have blocked indefinitely")
 	case <-tr.C:
-	}
-}
-
-func TestCmdStuckStdoutClosed(t *testing.T) {
-	cmd := Command(&stuckIoProcessHost{&localProcessHost{}}, "cmd", "/c")
-	r, w := io.Pipe()
-	defer r.Close()
-	cmd.Stdout = w
-	cmd.RegisterAfterExitFun(func(ctx context.Context) error {
-		p := cmd.Process.(*stuckIoProcess)
-		return p.stdout.Close()
-	})
-
-	done := make(chan error)
-	go func() {
-		done <- cmd.Run()
-		close(done)
-	}()
-
-	tr := time.NewTimer(250 * time.Millisecond)
-	defer tr.Stop()
-	select {
-	case err := <-done:
-		if err != io.ErrClosedPipe {
-			t.Fatalf("cmd run failed: %v", err)
-		}
-	case <-tr.C:
-		t.Fatal("command did not exit")
 	}
 }

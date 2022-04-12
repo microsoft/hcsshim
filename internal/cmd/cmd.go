@@ -47,6 +47,10 @@ type Cmd struct {
 	Stdout io.Writer
 	Stderr io.Writer
 
+	// CloseStdIn attempts to cast `Stdin` to call `CloseRead() error` or `Close() error`
+	// on the upstream StdIn IO stream after the process ends but before `Wait` completes.
+	CloseStdIn bool
+
 	// Log provides a logrus entry to use in logging IO copying status.
 	Log *logrus.Entry
 
@@ -65,10 +69,6 @@ type Cmd struct {
 
 	// ExitState is filled out after Wait() (or Run() or Output()) completes.
 	ExitState *ExitState
-
-	// afterExitFuns are run after the process exits, but before wait returns and
-	// IO is waited on
-	afterExitFuns []func(context.Context) error
 
 	iogrp     errgroup.Group
 	stdinErr  atomic.Value
@@ -144,9 +144,12 @@ func CommandContext(ctx context.Context, host cow.ProcessHost, name string, arg 
 // Start starts a command. The caller must ensure that if Start succeeds,
 // Wait is eventually called to clean up resources.
 func (c *Cmd) Start() error {
-	ctx := context.Background()
-	if c.Context != nil {
-		ctx = c.Context
+	ctx := c.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if c.Log == nil {
+		c.Log = log.L.Dup()
 	}
 
 	c.allDoneCh = make(chan struct{})
@@ -288,11 +291,8 @@ func (c *Cmd) Start() error {
 // Wait waits for a command and its IO to complete and closes the underlying
 // process. It can only be called once. It returns an ExitError if the command
 // runs and returns a non-zero exit code.
-func (c *Cmd) Wait() error {
-	ctx := context.Background()
-	if c.Context != nil {
-		ctx = c.Context
-	}
+func (c *Cmd) Wait() (err error) {
+	// c.Context and c.Log should have been properly initialized in c.Start()
 
 	waitErr := c.Process.Wait()
 	if waitErr != nil && c.Log != nil {
@@ -305,9 +305,21 @@ func (c *Cmd) Wait() error {
 		state.code = code
 	}
 
-	err := c.afterExit(ctx)
-	if err != nil {
-		log.G(ctx).WithError(err).Warn("error when running after exit functions")
+	if c.Stdin != nil && c.CloseStdIn {
+		// try to close the stdin to end the `relayIO`/`io.Copy` go routine
+		if cstdin, ok := c.Stdin.(interface{ CloseRead() error }); ok {
+			if stdinErr := cstdin.CloseRead(); !isIOChannelClosedErr(stdinErr) {
+				err = stdinErr
+			}
+		} else if cstdin, ok := c.Stdin.(io.Closer); ok {
+			if stdinErr := cstdin.Close(); !isIOChannelClosedErr(stdinErr) {
+				err = stdinErr
+			}
+		}
+
+		if err != nil {
+			c.Log.WithError(err).Warn("could not close upstram Stdin after process finished")
+		}
 	}
 
 	// Terminate the IO if the copy does not complete in the requested time.
@@ -321,13 +333,13 @@ func (c *Cmd) Wait() error {
 				// Close the process to cancel any reads to stdout or stderr.
 				c.Process.Close()
 				if c.Log != nil {
-					c.Log.
-						WithField(logfields.Timeout, c.CopyAfterExitTimeout.String()).
+					c.Log.WithField(logfields.Timeout, c.CopyAfterExitTimeout.String()).
 						Warn("timed out waiting for stdio relay")
 				}
 			}
 		}()
 	}
+
 	ioErr := c.iogrp.Wait()
 	if inErr, _ := c.stdinErr.Load().(error); inErr != nil {
 		if ioErr == nil {
@@ -383,24 +395,4 @@ func (c *Cmd) Output() ([]byte, error) {
 	c.Stdout = &b
 	err := c.Run()
 	return b.Bytes(), err
-}
-
-func (c *Cmd) afterExit(ctx context.Context) (err error) {
-	for _, f := range c.afterExitFuns {
-		if ferr := f(ctx); err != nil {
-			err = ferr
-			log.G(ctx).WithError(err).Warn("error running function after process exit")
-		}
-	}
-	return err
-}
-
-// RegisterAfterExitFun registers a function to be run after the process exits, but
-// before the IO copy operations are waited on and the process is closed
-func (c *Cmd) RegisterAfterExitFun(f func(context.Context) error) {
-	// TODO: find a better way to check if the process is started
-	if c.allDoneCh != nil {
-		return
-	}
-	c.afterExitFuns = append(c.afterExitFuns, f)
 }

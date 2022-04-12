@@ -135,12 +135,9 @@ func (p *Process) Close() (err error) {
 		trace.StringAttribute("cid", p.cid),
 		trace.Int64Attribute("pid", int64(p.id)))
 
-	p.gcLock.RLock()
-	if p.gc == nil {
-		p.gcLock.RUnlock()
+	if p.gcClosed() {
 		return hcs.ErrAlreadyClosed
 	}
-	p.gcLock.RUnlock()
 
 	p.stdioLock.Lock()
 	if p.stdin != nil {
@@ -185,23 +182,18 @@ func (p *Process) CloseStdin(ctx context.Context) (err error) {
 		trace.StringAttribute("cid", p.cid),
 		trace.Int64Attribute("pid", int64(p.id)))
 
-	p.gcLock.RLock()
-	if p.gc == nil {
-		p.gcLock.RUnlock()
+	if p.gcClosed() {
 		return hcs.ErrAlreadyClosed
 	}
-	p.gcLock.RUnlock()
 
 	p.stdioLock.Lock()
 	defer p.stdioLock.Unlock()
 	if p.stdin != nil {
-		// First close the channel for writing, sending an EOF to readers, then
-		// close the file.
-		if err = p.stdin.CloseWrite(); err != nil {
-			return err
-		}
-		if err = p.stdin.Close(); err == nil {
-			return err
+		// First (try to) close the channel for writing, sending an EOF to readers, then
+		// close the file. If CloseWrite fails, close the stream regardless.
+		err = p.stdin.CloseWrite()
+		if cerr := p.stdin.Close(); cerr != nil {
+			err = cerr
 		}
 		p.stdin = nil
 	}
@@ -216,12 +208,9 @@ func (p *Process) CloseStdout(ctx context.Context) (err error) {
 		trace.StringAttribute("cid", p.cid),
 		trace.Int64Attribute("pid", int64(p.id)))
 
-	p.gcLock.RLock()
-	if p.gc == nil {
-		p.gcLock.RUnlock()
+	if p.gcClosed() {
 		return hcs.ErrAlreadyClosed
 	}
-	p.gcLock.RUnlock()
 
 	p.stdioLock.Lock()
 	defer p.stdioLock.Unlock()
@@ -240,12 +229,9 @@ func (p *Process) CloseStderr(ctx context.Context) (err error) {
 		trace.StringAttribute("cid", p.cid),
 		trace.Int64Attribute("pid", int64(p.id)))
 
-	p.gcLock.RLock()
-	if p.gc == nil {
-		p.gcLock.RUnlock()
+	if p.gcClosed() {
 		return hcs.ErrAlreadyClosed
 	}
-	p.gcLock.RUnlock()
 
 	p.stdioLock.Lock()
 	defer p.stdioLock.Unlock()
@@ -381,4 +367,12 @@ func (p *Process) waitBackground() {
 	}
 	log.G(ctx).WithField("exitCode", ec).Debug("process exited")
 	oc.SetSpanStatus(span, err)
+}
+
+// gcClosed checks if the guest connection has been set to `nil`.
+// Must be able to acquire `gcLock` for reading
+func (p *Process) gcClosed() bool {
+	p.gcLock.RLock()
+	defer p.gcLock.RUnlock()
+	return p.gc == nil
 }

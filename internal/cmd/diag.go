@@ -31,14 +31,11 @@ func ExecInUvm(ctx context.Context, vm *uvm.UtilityVM, req *CmdProcessRequest) (
 	}
 	cmd.Spec.Terminal = req.Terminal
 	cmd.Stdin = np.Stdin()
+	if cmd.Stdin != nil {
+		cmd.CloseStdIn = true
+	}
 	cmd.Stdout = np.Stdout()
 	cmd.Stderr = np.Stderr()
-	if cmd.Stdin != nil {
-		cmd.RegisterAfterExitFun(func(ctx context.Context) error {
-			np.CloseStdin(ctx)
-			return nil
-		})
-	}
 	cmd.Log = log.G(ctx).WithField(logfields.UVMID, vm.ID())
 	err = cmd.Run()
 	return cmd.ExitState.ExitCode(), err
@@ -65,7 +62,8 @@ func ExecInShimHost(ctx context.Context, req *CmdProcessRequest) (int, error) {
 	cmd.Stderr = np.Stderr()
 	err = cmd.Run()
 	if err != nil {
-		if exiterr, ok := err.(*exec.ExitError); ok {
+		exiterr := &ExitError{}
+		if errors.As(err, &exiterr) {
 			return exiterr.ExitCode(), exiterr
 		}
 		return -1, err
