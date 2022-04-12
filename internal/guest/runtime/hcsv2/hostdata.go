@@ -8,13 +8,13 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Microsoft/hcsshim/internal/guest/amdsev"
+	"github.com/Microsoft/hcsshim/pkg/amdsevsnp"
 )
 
 // validateHostData fetches SNP report (if applicable) and validates `hostData` against
 // HostData set at UVM launch.
 func validateHostData(hostData []byte) error {
-	report, err := amdsev.FetchParsedSNPReport("")
+	report, err := amdsevsnp.FetchParsedSNPReport(nil)
 	if err != nil {
 		// For non-SNP hardware /dev/sev will not exist
 		if os.IsNotExist(err) {

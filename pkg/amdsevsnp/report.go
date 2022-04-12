@@ -1,9 +1,9 @@
 //go:build linux
 // +build linux
 
-// Package amdsev contains minimal functionality required to fetch
+// Package amdsevsnp contains minimal functionality required to fetch
 // attestation reports inside an enlightened guest.
-package amdsev
+package amdsevsnp
 
 import (
 	"bytes"
@@ -143,7 +143,7 @@ type reportResponse struct {
 }
 
 // FetchRawSNPReport returns attestation report bytes.
-func FetchRawSNPReport(reportData string) ([]byte, error) {
+func FetchRawSNPReport(reportData []byte) ([]byte, error) {
 	f, err := os.OpenFile("/dev/sev", os.O_RDWR, 0)
 	if err != nil {
 		return nil, err
@@ -157,15 +157,11 @@ func FetchRawSNPReport(reportData string) ([]byte, error) {
 		msgReportOut reportResponse
 	)
 
-	if reportData != "" {
+	if reportData != nil {
 		if len(reportData) > len(msgReportIn.ReportData) {
 			return nil, fmt.Errorf("reportData too large: %s", reportData)
 		}
-		rd, err := hex.DecodeString(reportData)
-		if err != nil {
-			return nil, err
-		}
-		copy(msgReportIn.ReportData[:], rd[:])
+		copy(msgReportIn.ReportData[:], reportData)
 	}
 
 	payload := &guestRequest{
@@ -212,36 +208,6 @@ type Report struct {
 	Signature        string
 }
 
-// PrettyString returns formatted attestation report.
-func (r Report) PrettyString() string {
-	fieldNameFmt := "%-20s"
-	pretty := ""
-	pretty += fmt.Sprintf(fieldNameFmt+"%08x\n", "Version", r.Version)
-	pretty += fmt.Sprintf(fieldNameFmt+"%08x\n", "GuestSVN", r.GuestSVN)
-	pretty += fmt.Sprintf(fieldNameFmt+"%016x\n", "Policy", r.Policy)
-	pretty += fmt.Sprintf(fieldNameFmt+"%s\n", "FamilyID", r.FamilyID)
-	pretty += fmt.Sprintf(fieldNameFmt+"%s\n", "ImageID", r.ImageID)
-	pretty += fmt.Sprintf(fieldNameFmt+"%08x\n", "VMPL", r.VMPL)
-	pretty += fmt.Sprintf(fieldNameFmt+"%08x\n", "SignatureAlgo", r.SignatureAlgo)
-	pretty += fmt.Sprintf(fieldNameFmt+"%016x\n", "PlatformVersion", r.PlatformVersion)
-	pretty += fmt.Sprintf(fieldNameFmt+"%016x\n", "PlatformInfo", r.PlatformInfo)
-	pretty += fmt.Sprintf(fieldNameFmt+"%08x\n", "AuthorKeyEn", r.AuthorKeyEn)
-	pretty += fmt.Sprintf(fieldNameFmt+"%s\n", "ReportData", r.ReportData)
-	pretty += fmt.Sprintf(fieldNameFmt+"%s\n", "Measurement", r.Measurement)
-	pretty += fmt.Sprintf(fieldNameFmt+"%x\n", "HostData", r.HostData)
-	pretty += fmt.Sprintf(fieldNameFmt+"%s\n", "IDKeyDigest", r.IDKeyDigest)
-	pretty += fmt.Sprintf(fieldNameFmt+"%s\n", "AuthorKeyDigest", r.AuthorKeyDigest)
-	pretty += fmt.Sprintf(fieldNameFmt+"%s\n", "ReportID", r.ReportID)
-	pretty += fmt.Sprintf(fieldNameFmt+"%s\n", "ReportIDMA", r.ReportIDMA)
-	pretty += fmt.Sprintf(fieldNameFmt+"%016x\n", "ReportTCB", r.ReportTCB)
-	pretty += fmt.Sprintf(fieldNameFmt+"%s\n", "ChipID", r.ChipID)
-	pretty += fmt.Sprintf(fieldNameFmt+"%s\n", "CommittedSVN", r.CommittedSVN)
-	pretty += fmt.Sprintf(fieldNameFmt+"%s\n", "CommittedVersion", r.CommittedVersion)
-	pretty += fmt.Sprintf(fieldNameFmt+"%s\n", "LaunchSVN", r.LaunchSVN)
-	pretty += fmt.Sprintf(fieldNameFmt+"%s\n", "Signature", r.Signature)
-	return pretty
-}
-
 // mirrorBytes mirrors the byte ordering so that hex-encoding little endian
 // ordered bytes come out in the readable order.
 func mirrorBytes(b []byte) []byte {
@@ -253,7 +219,7 @@ func mirrorBytes(b []byte) []byte {
 }
 
 // FetchParsedSNPReport parses raw attestation response into proper structs.
-func FetchParsedSNPReport(reportData string) (Report, error) {
+func FetchParsedSNPReport(reportData []byte) (Report, error) {
 	rawBytes, err := FetchRawSNPReport(reportData)
 	if err != nil {
 		return Report{}, err

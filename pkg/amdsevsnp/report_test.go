@@ -1,7 +1,7 @@
 //go:build linux
 // +build linux
 
-package amdsev
+package amdsevsnp
 
 import (
 	"testing"
