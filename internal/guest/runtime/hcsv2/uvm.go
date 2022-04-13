@@ -116,9 +116,28 @@ func (h *Host) SetSecurityPolicy(base64Policy string) error {
 	return nil
 }
 
+func (h *Host) SecurityPolicyEnforcer() securitypolicy.SecurityPolicyEnforcer {
+	return h.securityPolicyEnforcer
+}
+
+func (h *Host) Transport() transport.Transport {
+	return h.vsock
+}
+
 func (h *Host) RemoveContainer(id string) {
 	h.containersMutex.Lock()
 	defer h.containersMutex.Unlock()
+
+	c, ok := h.containers[id]
+	if !ok {
+		return
+	}
+
+	// delete the network namespace for standalone and sandbox containers
+	criType, isCRI := c.spec.Annotations[annotations.KubernetesContainerType]
+	if !isCRI || criType == "sandbox" {
+		RemoveNetworkNamespace(context.Background(), id)
+	}
 
 	delete(h.containers, id)
 }
@@ -567,7 +586,7 @@ func modifyCombinedLayers(ctx context.Context, rt guestrequest.RequestType, cl *
 func modifyNetwork(ctx context.Context, rt guestrequest.RequestType, na *guestresource.LCOWNetworkAdapter) (err error) {
 	switch rt {
 	case guestrequest.RequestTypeAdd:
-		ns := getOrAddNetworkNamespace(na.NamespaceID)
+		ns := GetOrAddNetworkNamespace(na.NamespaceID)
 		if err := ns.AddAdapter(ctx, na); err != nil {
 			return err
 		}
@@ -575,7 +594,7 @@ func modifyNetwork(ctx context.Context, rt guestrequest.RequestType, na *guestre
 		// container or not so it must always call `Sync`.
 		return ns.Sync(ctx)
 	case guestrequest.RequestTypeRemove:
-		ns := getOrAddNetworkNamespace(na.ID)
+		ns := GetOrAddNetworkNamespace(na.ID)
 		if err := ns.RemoveAdapter(ctx, na.ID); err != nil {
 			return err
 		}

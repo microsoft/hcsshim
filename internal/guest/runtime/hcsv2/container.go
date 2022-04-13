@@ -107,6 +107,16 @@ func (c *Container) ExecProcess(ctx context.Context, process *oci.Process, conSe
 	return pid, nil
 }
 
+// InitProcess returns the container's init process
+func (c *Container) InitProcess() Process {
+	//todo: thread a context to this function call
+	logrus.WithFields(logrus.Fields{
+		logfields.ContainerID: c.id,
+	}).Info("opengcs::Container::InitProcess")
+
+	return c.initProcess
+}
+
 // GetProcess returns the Process with the matching 'pid'. If the 'pid' does
 // not exit returns error.
 func (c *Container) GetProcess(pid uint32) (Process, error) {
@@ -114,7 +124,7 @@ func (c *Container) GetProcess(pid uint32) (Process, error) {
 	logrus.WithFields(logrus.Fields{
 		logfields.ContainerID: c.id,
 		logfields.ProcessID:   pid,
-	}).Info("opengcs::Container::GetProcesss")
+	}).Info("opengcs::Container::GetProcess")
 	if c.initProcess.pid == pid {
 		return c.initProcess, nil
 	}
@@ -219,4 +229,8 @@ func (c *Container) GetStats(ctx context.Context) (*v1.Metrics, error) {
 
 func (c *Container) modifyContainerConstraints(ctx context.Context, rt guestrequest.RequestType, cc *guestresource.LCOWContainerConstraints) (err error) {
 	return c.Update(ctx, cc.Linux)
+}
+
+func (c *Container) ID() string {
+	return c.id
 }

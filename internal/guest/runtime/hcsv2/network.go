@@ -51,9 +51,9 @@ func getNetworkNamespace(id string) (*namespace, error) {
 	return ns, nil
 }
 
-// getOrAddNetworkNamespace returns the namespace found by `id` or creates a new
+// GetOrAddNetworkNamespace returns the namespace found by `id` or creates a new
 // one and assigns `id.
-func getOrAddNetworkNamespace(id string) *namespace {
+func GetOrAddNetworkNamespace(id string) *namespace {
 	id = strings.ToLower(id)
 
 	namespaceSync.Lock()
@@ -69,8 +69,8 @@ func getOrAddNetworkNamespace(id string) *namespace {
 	return ns
 }
 
-// removeNetworkNamespace removes the in-memory `namespace` found by `id`.
-func removeNetworkNamespace(ctx context.Context, id string) (err error) {
+// RemoveNetworkNamespace removes the in-memory `namespace` found by `id`.
+func RemoveNetworkNamespace(ctx context.Context, id string) (err error) {
 	_, span := trace.StartSpan(ctx, "hcsv2::removeNetworkNamespace")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -123,7 +123,7 @@ func (n *namespace) AssignContainerPid(ctx context.Context, pid int) (err error)
 	defer n.m.Unlock()
 
 	if n.pid != 0 {
-		return errors.Errorf("previously assigned container pid: %d", n.pid)
+		return errors.Errorf("previously assigned container pid to network namespace %q: %d", n.id, n.pid)
 	}
 
 	n.pid = pid

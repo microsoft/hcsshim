@@ -32,7 +32,7 @@ const (
 // requested size. It has a caching capability. If the cacheFile exists, and the
 // request is for a default size, a copy of that is made to the target. If the
 // size is non-default, or the cache file does not exist, it uses a utility VM
-// to create target. It is the responsibility of the caller to synchronise
+// to create target. It is the responsibility of the caller to synchronize
 // simultaneous attempts to create the cache file.
 func CreateScratch(ctx context.Context, lcowUVM *uvm.UtilityVM, destFile string, sizeGB uint32, cacheFile string) error {
 	if lcowUVM == nil {

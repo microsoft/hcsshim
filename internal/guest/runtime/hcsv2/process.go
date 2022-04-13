@@ -55,7 +55,7 @@ type containerProcess struct {
 	// (runtime.Process).Wait() call returns, and exitCode has been updated.
 	exitWg sync.WaitGroup
 
-	// Used to allow addtion/removal to the writersWg after an initial wait has
+	// Used to allow addition/removal to the writersWg after an initial wait has
 	// already been issued. It is not safe to call Add/Done without holding this
 	// lock.
 	writersSyncRoot sync.Mutex
@@ -66,6 +66,8 @@ type containerProcess struct {
 	// acknowledges it wrote the exit response.
 	writersCalled bool
 }
+
+var _ Process = &containerProcess{}
 
 // newProcess returns a containerProcess struct that has been initialized with
 // an outstanding wait for process exit, and post exit an outstanding wait for
@@ -261,6 +263,8 @@ type externalProcess struct {
 	removeOnce sync.Once
 	remove     func(pid int)
 }
+
+var _ Process = &containerProcess{}
 
 func (ep *externalProcess) Kill(ctx context.Context, signal syscall.Signal) error {
 	if err := syscall.Kill(int(ep.cmd.Process.Pid), signal); err != nil {
