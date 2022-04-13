@@ -1,4 +1,5 @@
 BASE:=base.tar.gz
+DEV_BUILD:=0
 
 GO:=go
 GO_FLAGS:=-ldflags "-s -w" # strip Go binaries
@@ -15,6 +16,12 @@ endif
 GO_BUILD:=CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(GO_FLAGS) $(GO_FLAGS_EXTRA)
 
 SRCROOT=$(dir $(abspath $(firstword $(MAKEFILE_LIST))))
+
+DELTA_TARGET=out/delta.tar.gz
+
+ifeq "$(DEV_BUILD)" "1"
+DELTA_TARGET=out/delta-dev.tar.gz
+endif
 
 # The link aliases for gcstools
 GCS_TOOLS=\
@@ -55,6 +62,15 @@ out/delta.tar.gz: bin/init bin/vsockexec bin/cmd/gcs bin/cmd/gcstools bin/cmd/ho
 	tar -zcf $@ -C rootfs .
 	rm -rf rootfs
 
+# This target includes utilities which may be useful for testing purposes.
+out/delta-dev.tar.gz: out/delta.tar.gz bin/internal/tools/snp-report
+	rm -rf rootfs-dev
+	mkdir rootfs-dev
+	tar -xzf out/delta.tar.gz -C rootfs-dev
+	cp bin/internal/tools/snp-report rootfs-dev/bin/
+	tar -zcf $@ -C rootfs-dev .
+	rm -rf rootfs-dev
+
 out/rootfs.tar.gz: out/initrd.img
 	rm -rf rootfs-conv
 	mkdir rootfs-conv
@@ -62,8 +78,8 @@ out/rootfs.tar.gz: out/initrd.img
 	tar -zcf $@ -C rootfs-conv .
 	rm -rf rootfs-conv
 
-out/initrd.img: $(BASE) out/delta.tar.gz $(SRCROOT)/hack/catcpio.sh
-	$(SRCROOT)/hack/catcpio.sh "$(BASE)" out/delta.tar.gz > out/initrd.img.uncompressed
+out/initrd.img: $(BASE) $(DELTA_TARGET) $(SRCROOT)/hack/catcpio.sh
+	$(SRCROOT)/hack/catcpio.sh "$(BASE)" $(DELTA_TARGET) > out/initrd.img.uncompressed
 	gzip -c out/initrd.img.uncompressed > $@
 	rm out/initrd.img.uncompressed
 
@@ -71,6 +87,7 @@ out/initrd.img: $(BASE) out/delta.tar.gz $(SRCROOT)/hack/catcpio.sh
 -include deps/cmd/gcstools.gomake
 -include deps/cmd/hooks/wait-paths.gomake
 -include deps/cmd/tar2ext4.gomake
+-include deps/internal/tools/snp-report.gomake
 
 # Implicit rule for includes that define Go targets.
 %.gomake: $(SRCROOT)/Makefile

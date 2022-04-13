@@ -4,7 +4,6 @@ package uvm
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
@@ -402,28 +402,23 @@ func makeLCOWSecurityDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM)
 	// and can be used to check that the policy used by opengcs is the required one as
 	// a condition of releasing secrets to the container.
 
-	// First, decode the base64 string into a human readable (json) string .
-	jsonPolicy, err := base64.StdEncoding.DecodeString(opts.SecurityPolicy)
+	policyDigest, err := securitypolicy.NewSecurityPolicyDigest(opts.SecurityPolicy)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode base64 SecurityPolicy")
+		return nil, err
 	}
-
-	// make a sha256 hashing object
-	hostData := sha256.New()
-	// give it the jsaon string to measure
-	hostData.Write(jsonPolicy)
-	// get the measurement out
-	securityPolicyHash := base64.StdEncoding.EncodeToString(hostData.Sum(nil))
+	// HCS API expect a base64 encoded string as LaunchData. Internally it
+	// decodes it to bytes. SEV later returns the decoded byte blob as HostData
+	// field of the report.
+	hostData := base64.StdEncoding.EncodeToString(policyDigest)
 
 	// Put the measurement into the LaunchData field of the HCS creation command.
-	// This will endup in HOST_DATA of SNP_LAUNCH_FINISH command the and ATTESTATION_REPORT
+	// This will end-up in HOST_DATA of SNP_LAUNCH_FINISH command the and ATTESTATION_REPORT
 	// retrieved by the guest later.
-
 	doc.VirtualMachine.SecuritySettings = &hcsschema.SecuritySettings{
 		EnableTpm: false,
 		Isolation: &hcsschema.IsolationSettings{
 			IsolationType: "SecureNestedPaging",
-			LaunchData:    securityPolicyHash,
+			LaunchData:    hostData,
 			// HclEnabled:    true, /* Not available in schema 2.5 - REQUIRED when using BlockStorage in 2.6 */
 		},
 	}

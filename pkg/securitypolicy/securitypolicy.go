@@ -1,8 +1,10 @@
 package securitypolicy
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strconv"
 
@@ -84,6 +86,19 @@ func NewOpenDoorPolicy() *SecurityPolicy {
 	return &SecurityPolicy{
 		AllowAll: true,
 	}
+}
+
+// NewSecurityPolicyDigest decodes base64 encoded policy string, computes
+// and returns sha256 digest
+func NewSecurityPolicyDigest(base64policy string) ([]byte, error) {
+	jsonPolicy, err := base64.StdEncoding.DecodeString(base64policy)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode base64 security policy: %w", err)
+	}
+	digest := sha256.New()
+	digest.Write(jsonPolicy)
+	digestBytes := digest.Sum(nil)
+	return digestBytes, nil
 }
 
 // Internal version of SecurityPolicyContainer
