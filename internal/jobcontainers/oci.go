@@ -20,6 +20,11 @@ import (
 
 const processorWeightMax = 10000
 
+// customRootfsLocation grabs the value of the annotation exposed that sets a custom rootfs location for the job container.
+func customRootfsLocation(annots map[string]string) string {
+	return annots[annotations.HostProcessRootfsLocation]
+}
+
 // inheritUserTokenIsSet checks if the annotation that specifies whether we should inherit the token of the current process is set.
 func inheritUserTokenIsSet(annots map[string]string) bool {
 	return annots[annotations.HostProcessInheritUser] == "true"

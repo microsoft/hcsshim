@@ -742,20 +742,27 @@ func (c *JobContainer) bindSetup(ctx context.Context, s *specs.Spec) (err error)
 	if err := c.mountLayers(ctx, c.id, s, ""); err != nil {
 		return fmt.Errorf("failed to mount container layers: %w", err)
 	}
-	if err := c.setupRootfsBinding(defaultSiloRootfsLocation, s.Root.Path+"\\"); err != nil {
+	rootfsLocation := defaultSiloRootfsLocation
+	if loc := customRootfsLocation(s.Annotations); loc != "" {
+		rootfsLocation = loc
+	}
+	if err := c.setupRootfsBinding(rootfsLocation, s.Root.Path+"\\"); err != nil {
 		return err
 	}
-	c.rootfsLocation = defaultSiloRootfsLocation
+	c.rootfsLocation = rootfsLocation
 	return c.setupMounts(s)
 }
 
 // This handles the fallback case where bind mounting isn't available on the machine. This mounts the
 // container layers on the host and sets up any mounts present in the OCI runtime spec.
 func (c *JobContainer) fallbackSetup(ctx context.Context, s *specs.Spec) (err error) {
-	sandboxPath := fmt.Sprintf(fallbackRootfsFormat, c.id)
-	if err := c.mountLayers(ctx, c.id, s, sandboxPath); err != nil {
+	rootfsLocation := fmt.Sprintf(fallbackRootfsFormat, c.id)
+	if loc := customRootfsLocation(s.Annotations); loc != "" {
+		rootfsLocation = filepath.Join(loc, c.id)
+	}
+	if err := c.mountLayers(ctx, c.id, s, rootfsLocation); err != nil {
 		return fmt.Errorf("failed to mount container layers: %w", err)
 	}
-	c.rootfsLocation = sandboxPath
+	c.rootfsLocation = rootfsLocation
 	return fallbackMountSetup(s, c.rootfsLocation)
 }
