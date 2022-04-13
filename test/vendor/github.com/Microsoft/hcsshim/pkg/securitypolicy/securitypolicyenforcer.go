@@ -27,13 +27,7 @@ type SecurityPolicyEnforcer interface {
 	EnforceCreateContainerPolicy(containerID string, argList []string, envList []string, workingDir string) (err error)
 	EnforceExpectedMountsPolicy(containerID string, spec *oci.Spec) error
 	EnforceMountPolicy(sandboxID, containerID string, spec *oci.Spec) error
-}
-
-type DefaultConstraintEnforcer interface {
 	ExtendDefaultMounts([]oci.Mount) error
-	EnforceDefaultMounts(mnt oci.Mount) error
-	ExtendDefaultEnv([]string) error
-	EnforceDefaultEnv(envVar string) error
 }
 
 func NewSecurityPolicyEnforcer(state SecurityPolicyState) (SecurityPolicyEnforcer, error) {
@@ -163,7 +157,6 @@ type StandardSecurityPolicyEnforcer struct {
 }
 
 var _ SecurityPolicyEnforcer = (*StandardSecurityPolicyEnforcer)(nil)
-var _ DefaultConstraintEnforcer = (*StandardSecurityPolicyEnforcer)(nil)
 
 func NewStandardSecurityPolicyEnforcer(containers []securityPolicyContainer, encoded string) *StandardSecurityPolicyEnforcer {
 	// create new StandardSecurityPolicyEnforcer and add the expected containers
@@ -503,23 +496,6 @@ func (pe *StandardSecurityPolicyEnforcer) enforceCommandPolicy(containerID strin
 	return nil
 }
 
-func (pe *StandardSecurityPolicyEnforcer) ExtendDefaultEnv(envs []string) error {
-	for _, env := range envs {
-		pe.DefaultEnvs = append(pe.DefaultEnvs, EnvRuleConfig{
-			Strategy: EnvVarRuleString,
-			Rule:     env,
-		})
-	}
-	return nil
-}
-
-func (pe *StandardSecurityPolicyEnforcer) EnforceDefaultEnv(env string) error {
-	if !envIsMatchedByRule(env, pe.DefaultEnvs) {
-		return fmt.Errorf("env var %s is not matched by default constraints", env)
-	}
-	return nil
-}
-
 func (pe *StandardSecurityPolicyEnforcer) enforceEnvironmentVariablePolicy(containerID string, envList []string) (err error) {
 	// Get a list of all the indexes into our security policy's list of
 	// containers that are possible matches for this containerID based
@@ -527,11 +503,6 @@ func (pe *StandardSecurityPolicyEnforcer) enforceEnvironmentVariablePolicy(conta
 	possibleIndices := pe.possibleIndicesForID(containerID)
 
 	for _, envVariable := range envList {
-		// First match against default environment variable rules
-		if err := pe.EnforceDefaultEnv(envVariable); err == nil {
-			continue
-		}
-
 		matchingRuleFoundForSomeContainer := false
 		for _, possibleIndex := range possibleIndices {
 			envRules := pe.Containers[possibleIndex].EnvRules
@@ -635,7 +606,7 @@ func (pe *StandardSecurityPolicyEnforcer) possibleIndicesForID(containerID strin
 	return possibleIndices
 }
 
-func (pe *StandardSecurityPolicyEnforcer) EnforceDefaultMounts(specMount oci.Mount) error {
+func (pe *StandardSecurityPolicyEnforcer) enforceDefaultMounts(specMount oci.Mount) error {
 	for _, mountConstraint := range pe.DefaultMounts {
 		if err := mountConstraint.validate(specMount); err == nil {
 			return nil
@@ -666,7 +637,7 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceMountPolicy(sandboxID, containe
 
 	for _, specMnt := range spec.Mounts {
 		// first check against default mounts
-		if err := pe.EnforceDefaultMounts(specMnt); err == nil {
+		if err := pe.enforceDefaultMounts(specMnt); err == nil {
 			continue
 		}
 
@@ -859,11 +830,15 @@ func (p *OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ string, 
 	return nil
 }
 
-func (p *OpenDoorSecurityPolicyEnforcer) EnforceMountPolicy(_, _ string, _ *oci.Spec) error {
+func (OpenDoorSecurityPolicyEnforcer) EnforceMountPolicy(_, _ string, _ *oci.Spec) error {
 	return nil
 }
 
 func (p *OpenDoorSecurityPolicyEnforcer) EnforceExpectedMountsPolicy(_ string, _ *oci.Spec) error {
+	return nil
+}
+
+func (OpenDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
 	return nil
 }
 
@@ -891,6 +866,10 @@ func (p *ClosedDoorSecurityPolicyEnforcer) EnforceExpectedMountsPolicy(_ string,
 	return errors.New("enforcing expected mounts is denied by policy")
 }
 
-func (p *ClosedDoorSecurityPolicyEnforcer) EnforceMountPolicy(_, _ string, _ *oci.Spec) error {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceMountPolicy(_, _ string, _ *oci.Spec) error {
 	return errors.New("container mounts are denied by policy")
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
+	return nil
 }

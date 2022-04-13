@@ -39,10 +39,14 @@ func (p *MountMonitoringSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ s
 	return nil
 }
 
-func (p *MountMonitoringSecurityPolicyEnforcer) EnforceMountPolicy(_, _ string, _ *oci.Spec) error {
+func (MountMonitoringSecurityPolicyEnforcer) EnforceMountPolicy(_, _ string, _ *oci.Spec) error {
 	return nil
 }
 
 func (p *MountMonitoringSecurityPolicyEnforcer) EnforceExpectedMountsPolicy(_ string, _ *oci.Spec) error {
+	return nil
+}
+
+func (MountMonitoringSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
 	return nil
 }

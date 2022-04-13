@@ -106,13 +106,8 @@ func (h *Host) SetSecurityPolicy(base64Policy string) error {
 		return err
 	}
 
-	if enforcer, ok := p.(securitypolicy.DefaultConstraintEnforcer); ok {
-		if err := enforcer.ExtendDefaultMounts(policy.DefaultCRIMounts()); err != nil {
-			return err
-		}
-		if err := enforcer.ExtendDefaultEnv(policy.DefaultEnv()); err != nil {
-			return err
-		}
+	if err := p.ExtendDefaultMounts(policy.DefaultCRIMounts()); err != nil {
+		return err
 	}
 
 	h.securityPolicyEnforcer = p

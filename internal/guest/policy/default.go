@@ -11,28 +11,14 @@ import (
 )
 
 func ExtendPolicyWithNetworkingMounts(sandboxID string, enforcer securitypolicy.SecurityPolicyEnforcer, spec *oci.Spec) error {
-	dce, ok := enforcer.(securitypolicy.DefaultConstraintEnforcer)
-	// Don't do anything if default constraint enforcement isn't supported
-	if !ok {
-		return nil
-	}
 	roSpec := &oci.Spec{
 		Root: spec.Root,
 	}
 	networkingMounts := internalSpec.GenerateWorkloadContainerNetworkMounts(sandboxID, roSpec)
-	if err := dce.ExtendDefaultMounts(networkingMounts); err != nil {
+	if err := enforcer.ExtendDefaultMounts(networkingMounts); err != nil {
 		return err
 	}
 	return nil
-}
-
-// DefaultEnv returns a slice with default environment variables added to
-// linux container spec by containerD or GCS.
-func DefaultEnv() []string {
-	return []string{
-		"TERM=xterm",
-		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-	}
 }
 
 // DefaultCRIMounts returns default mounts added to linux spec by containerD.
