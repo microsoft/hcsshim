@@ -18,12 +18,12 @@ import (
 // fallbackRootfsFormat is the fallback location for the rootfs if file binding support isn't available.
 // %s will be expanded with the container ID. Trailing backslash required for SetVolumeMountPoint and
 // DeleteVolumeMountPoint
-const fallbackRootfsFormat = `C:\C\%s\`
+const fallbackRootfsFormat = `C:\hpc\%s\`
 
 // defaultSiloRootfsLocation is the default location the rootfs for the container will show up
 // inside of a given silo. If bind filter support isn't available the rootfs will be
 // C:\C\<containerID>
-const defaultSiloRootfsLocation = `C:\payload\`
+const defaultSiloRootfsLocation = `C:\hpc\`
 
 func (c *JobContainer) mountLayers(ctx context.Context, containerID string, s *specs.Spec, volumeMountPath string) (err error) {
 	if s == nil || s.Windows == nil || s.Windows.LayerFolders == nil {

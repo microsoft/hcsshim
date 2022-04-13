@@ -31,14 +31,18 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-var fileBindingSupport bool
+var (
+	fileBindingSupport   bool
+	checkBindSupportOnce sync.Once
+)
 
-func init() {
-	bindDLL := `C:\windows\system32\bindfltapi.dll`
-	if _, err := os.Stat(bindDLL); err == nil {
-		fileBindingSupport = true
-	}
-}
+const (
+	// jobContainerNameFmt is the naming format that job objects for job containers will follow.
+	jobContainerNameFmt = "JobContainer_%s"
+	// Environment variable set in every process in the job detailing where the containers volume
+	// is mounted on the host.
+	sandboxMountPointEnvVar = "CONTAINER_SANDBOX_MOUNT_POINT"
+)
 
 // Split arguments but ignore spaces in quotes.
 //
@@ -49,14 +53,6 @@ func splitArgs(cmdLine string) []string {
 	r := regexp.MustCompile(`[^\s"]+|"([^"]*)"`)
 	return r.FindAllString(cmdLine, -1)
 }
-
-const (
-	// jobContainerNameFmt is the naming format that job objects for job containers will follow.
-	jobContainerNameFmt = "JobContainer_%s"
-	// Environment variable set in every process in the job detailing where the containers volume
-	// is mounted on the host.
-	sandboxMountPointEnvVar = "CONTAINER_SANDBOX_MOUNT_POINT"
-)
 
 type initProc struct {
 	initDoOnce sync.Once
@@ -144,6 +140,15 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *
 		}
 	}()
 
+	// Check if we support file binding once to avoid needing to stat for the dll on
+	// every container creation.
+	checkBindSupportOnce.Do(func() {
+		bindDLL := `C:\windows\system32\bindfltapi.dll`
+		if _, err := os.Stat(bindDLL); err == nil {
+			fileBindingSupport = true
+		}
+	})
+
 	// If bind mount support is available on the host, there's a lot of new functionality we
 	// can make use of that improves the UX for volume mounts and where the containers rootfs
 	// shows up on the host. You can do per silo bindings so every container can have a static
@@ -204,10 +209,10 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 	// has bound files.
 	// If a user requested to launch a program at C:\<rootfslocation>\mybinary.exe because they
 	// expect C:\<rootfslocation>\mybinary.exe to exist once the file bindings are done, it actually
-	// won't work. This is because the process is launched on the host first and the
-	// bindings are only visible to processes in that silo specifically. The shim is not
-	// one of these processes, and this is where we're invoking CreateProcess. So CreateProcess
-	// and our commandline resolution logic won't be able to find the process being asked for.
+	// won't work. This is because the executable is searched for using the parent processes filesystem view
+	// and not the containers/silos (that has access to these bound in files). Our Containerd shim is not
+	// one of these processes for example, and this is the parent process that is invoking CreateProcess so
+	// CreateProcess and our commandline resolution logic won't be able to find the process being asked for.
 	// Deep down in the depths of CreateProcess the culprit is a NtQueryAttributesFile call that
 	// fails as it doesn't have any context surrounding paths available to our silo.
 	//
@@ -306,10 +311,10 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 
 	// Add the rootfs location to PATH so you can run things from the root of the image.
 	for idx, envVar := range env {
-		ev := strings.TrimSpace(strings.ToLower(envVar))
-		if len(ev) >= 4 && strings.ToLower(ev[:4]) == "path" {
+		ev := strings.TrimSpace(envVar)
+		if len(ev) >= 5 && strings.ToLower(ev[:5]) == "path=" {
 			rootfsLoc := c.rootfsLocation
-			if ev[len(ev):] != ";" {
+			if rune(ev[len(ev)-1]) != ';' {
 				rootfsLoc = ";" + rootfsLoc
 			}
 			env[idx] = ev + rootfsLoc
