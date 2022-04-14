@@ -3,11 +3,11 @@
 package jobobject
 
 import (
+	"errors"
 	"fmt"
 	"unsafe"
 
 	"github.com/Microsoft/hcsshim/internal/winapi"
-	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
 )
 
@@ -24,23 +24,23 @@ func (job *JobObject) SetResourceLimits(limits *JobLimits) error {
 	// Go through and check what limits were specified and apply them to the job.
 	if limits.MemoryLimitInBytes != 0 {
 		if err := job.SetMemoryLimit(limits.MemoryLimitInBytes); err != nil {
-			return errors.Wrap(err, "failed to set job object memory limit")
+			return fmt.Errorf("failed to set job object memory limit: %w", err)
 		}
 	}
 
 	if limits.CPULimit != 0 {
 		if err := job.SetCPULimit(RateBased, limits.CPULimit); err != nil {
-			return errors.Wrap(err, "failed to set job object cpu limit")
+			return fmt.Errorf("failed to set job object cpu limit: %w", err)
 		}
 	} else if limits.CPUWeight != 0 {
 		if err := job.SetCPULimit(WeightBased, limits.CPUWeight); err != nil {
-			return errors.Wrap(err, "failed to set job object cpu limit")
+			return fmt.Errorf("failed to set job object cpu limit: %w", err)
 		}
 	}
 
 	if limits.MaxBandwidth != 0 || limits.MaxIOPS != 0 {
 		if err := job.SetIOLimit(limits.MaxBandwidth, limits.MaxIOPS); err != nil {
-			return errors.Wrap(err, "failed to set io limit on job object")
+			return fmt.Errorf("failed to set io limit on job object: %w", err)
 		}
 	}
 	return nil
@@ -208,7 +208,7 @@ func (job *JobObject) getExtendedInformation() (*windows.JOBOBJECT_EXTENDED_LIMI
 		uint32(unsafe.Sizeof(info)),
 		nil,
 	); err != nil {
-		return nil, errors.Wrapf(err, "query %v returned error", info)
+		return nil, fmt.Errorf("query %v returned error: %w", info, err)
 	}
 	return &info, nil
 }
@@ -230,7 +230,7 @@ func (job *JobObject) getCPURateControlInformation() (*winapi.JOBOBJECT_CPU_RATE
 		uint32(unsafe.Sizeof(info)),
 		nil,
 	); err != nil {
-		return nil, errors.Wrapf(err, "query %v returned error", info)
+		return nil, fmt.Errorf("query %v returned error: %w", info, err)
 	}
 	return &info, nil
 }
@@ -250,7 +250,7 @@ func (job *JobObject) setExtendedInformation(info *windows.JOBOBJECT_EXTENDED_LI
 		uintptr(unsafe.Pointer(info)),
 		uint32(unsafe.Sizeof(*info)),
 	); err != nil {
-		return errors.Wrapf(err, "failed to set Extended info %v on job object", info)
+		return fmt.Errorf("failed to set Extended info %v on job object: %w", info, err)
 	}
 	return nil
 }
@@ -273,7 +273,7 @@ func (job *JobObject) getIOLimit() (*winapi.JOBOBJECT_IO_RATE_CONTROL_INFORMATIO
 		&ioInfo,
 		&blockCount,
 	); err != nil {
-		return nil, errors.Wrapf(err, "query %v returned error", ioInfo)
+		return nil, fmt.Errorf("query %v returned error: %w", ioInfo, err)
 	}
 
 	if !isFlagSet(winapi.JOB_OBJECT_IO_RATE_CONTROL_ENABLE, ioInfo.ControlFlags) {
@@ -292,7 +292,7 @@ func (job *JobObject) setIORateControlInfo(ioInfo *winapi.JOBOBJECT_IO_RATE_CONT
 	}
 
 	if _, err := winapi.SetIoRateControlInformationJobObject(job.handle, ioInfo); err != nil {
-		return errors.Wrapf(err, "failed to set IO limit info %v on job object", ioInfo)
+		return fmt.Errorf("failed to set IO limit info %v on job object: %w", ioInfo, err)
 	}
 	return nil
 }
@@ -311,7 +311,7 @@ func (job *JobObject) setCPURateControlInfo(cpuInfo *winapi.JOBOBJECT_CPU_RATE_C
 		uintptr(unsafe.Pointer(cpuInfo)),
 		uint32(unsafe.Sizeof(cpuInfo)),
 	); err != nil {
-		return errors.Wrapf(err, "failed to set cpu limit info %v on job object", cpuInfo)
+		return fmt.Errorf("failed to set cpu limit info %v on job object: %w", cpuInfo, err)
 	}
 	return nil
 }
