@@ -2,12 +2,12 @@ package jobobject
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"syscall"
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
 )
 

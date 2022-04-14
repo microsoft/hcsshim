@@ -2,13 +2,13 @@ package jobobject
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"unsafe"
 
 	"github.com/Microsoft/hcsshim/internal/queue"
 	"github.com/Microsoft/hcsshim/internal/winapi"
-	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
 )
 
@@ -221,7 +221,7 @@ func setupNotifications(ctx context.Context, job *JobObject) (*queue.MessageQueu
 	jobMap.Store(uintptr(job.handle), mq)
 	if err := attachIOCP(job.handle, ioCompletionPort); err != nil {
 		jobMap.Delete(uintptr(job.handle))
-		return nil, errors.Wrap(err, "failed to attach job to IO completion port")
+		return nil, fmt.Errorf("failed to attach job to IO completion port: %w", err)
 	}
 	return mq, nil
 }
@@ -348,7 +348,7 @@ func (job *JobObject) Pids() ([]uint32, error) {
 	}
 
 	if err != winapi.ERROR_MORE_DATA {
-		return nil, errors.Wrap(err, "failed initial query for PIDs in job object")
+		return nil, fmt.Errorf("failed initial query for PIDs in job object: %w", err)
 	}
 
 	jobBasicProcessIDListSize := unsafe.Sizeof(info) + (unsafe.Sizeof(info.ProcessIdList[0]) * uintptr(info.NumberOfAssignedProcesses-1))
@@ -360,7 +360,7 @@ func (job *JobObject) Pids() ([]uint32, error) {
 		uint32(len(buf)),
 		nil,
 	); err != nil {
-		return nil, errors.Wrap(err, "failed to query for PIDs in job object")
+		return nil, fmt.Errorf("failed to query for PIDs in job object: %w", err)
 	}
 
 	bufInfo := (*winapi.JOBOBJECT_BASIC_PROCESS_ID_LIST)(unsafe.Pointer(&buf[0]))
@@ -388,7 +388,7 @@ func (job *JobObject) QueryMemoryStats() (*winapi.JOBOBJECT_MEMORY_USAGE_INFORMA
 		uint32(unsafe.Sizeof(info)),
 		nil,
 	); err != nil {
-		return nil, errors.Wrap(err, "failed to query for job object memory stats")
+		return nil, fmt.Errorf("failed to query for job object memory stats: %w", err)
 	}
 	return &info, nil
 }
@@ -410,7 +410,7 @@ func (job *JobObject) QueryProcessorStats() (*winapi.JOBOBJECT_BASIC_ACCOUNTING_
 		uint32(unsafe.Sizeof(info)),
 		nil,
 	); err != nil {
-		return nil, errors.Wrap(err, "failed to query for job object process stats")
+		return nil, fmt.Errorf("failed to query for job object process stats: %w", err)
 	}
 	return &info, nil
 }
@@ -432,7 +432,7 @@ func (job *JobObject) QueryStorageStats() (*winapi.JOBOBJECT_BASIC_AND_IO_ACCOUN
 		uint32(unsafe.Sizeof(info)),
 		nil,
 	); err != nil {
-		return nil, errors.Wrap(err, "failed to query for job object storage stats")
+		return nil, fmt.Errorf("failed to query for job object storage stats: %w", err)
 	}
 	return &info, nil
 }
