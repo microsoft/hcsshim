@@ -277,7 +277,7 @@ func Test_CreateContainer_MemorySize_Config_WCOW_Process(t *testing.T) {
 			},
 			Windows: &runtime.WindowsContainerConfig{
 				Resources: &runtime.WindowsContainerResources{
-					MemoryLimitInBytes: 768 * int64(memory.MegaByte), // 768MB
+					MemoryLimitInBytes: 768 * memory.MiB, // 768MB
 				},
 			},
 		},
@@ -337,7 +337,7 @@ func Test_CreateContainer_MemorySize_Config_WCOW_Hypervisor(t *testing.T) {
 			},
 			Windows: &runtime.WindowsContainerConfig{
 				Resources: &runtime.WindowsContainerResources{
-					MemoryLimitInBytes: 768 * int64(memory.MegaByte), // 768MB
+					MemoryLimitInBytes: 768 * memory.MiB, // 768MB
 				},
 			},
 		},
@@ -393,7 +393,7 @@ func Test_CreateContainer_MemorySize_LCOW(t *testing.T) {
 			},
 			Linux: &runtime.LinuxContainerConfig{
 				Resources: &runtime.LinuxContainerResources{
-					MemoryLimitInBytes: 768 * int64(memory.MegaByte), // 768MB
+					MemoryLimitInBytes: 768 * memory.MiB, // 768MB
 				},
 			},
 		},

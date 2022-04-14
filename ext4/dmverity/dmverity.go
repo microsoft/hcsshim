@@ -20,9 +20,9 @@ import (
 const (
 	blockSize = compactext4.BlockSize
 	// MerkleTreeBufioSize is a default buffer size to use with bufio.Reader
-	MerkleTreeBufioSize = int(memory.MegaByte) // 1MB
+	MerkleTreeBufioSize = memory.MiB // 1MB
 	// RecommendedVHDSizeGB is the recommended size in GB for VHDs, which is not a hard limit.
-	RecommendedVHDSizeGB = 128 * int64(memory.GigaByte)
+	RecommendedVHDSizeGB = 128 * memory.GiB
 	// VeritySignature is a value written to dm-verity super-block.
 	VeritySignature = "verity"
 )

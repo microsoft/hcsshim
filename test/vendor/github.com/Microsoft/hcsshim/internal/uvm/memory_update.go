@@ -17,7 +17,7 @@ const bytesPerPage = 4096
 // Internally, HCS will get the number of pages this corresponds to and attempt to assign
 // pages to numa nodes evenly
 func (uvm *UtilityVM) UpdateMemory(ctx context.Context, sizeInBytes uint64) error {
-	requestedSizeInMB := sizeInBytes / memory.MegaByte
+	requestedSizeInMB := sizeInBytes / memory.MiB
 	actual := uvm.normalizeMemorySize(ctx, requestedSizeInMB)
 	req := &hcsschema.ModifySettingRequest{
 		ResourcePath: resourcepaths.MemoryResourcePath,

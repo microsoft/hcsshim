@@ -18,7 +18,7 @@ const (
 
 	// DefaultVPMemSizeBytes is the default size of a VPMem device if the create request
 	// doesn't specify.
-	DefaultVPMemSizeBytes = 4 * memory.GigaByte // 4GB
+	DefaultVPMemSizeBytes = 4 * memory.GiB // 4GB
 )
 
 var (

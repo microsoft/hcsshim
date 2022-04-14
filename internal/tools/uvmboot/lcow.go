@@ -112,7 +112,7 @@ var lcowCommand = cli.Command{
 				options.VPMemDeviceCount = uint32(c.Uint(vpMemMaxCountArgName))
 			}
 			if c.IsSet(vpMemMaxSizeArgName) {
-				options.VPMemSizeBytes = c.Uint64(vpMemMaxSizeArgName) * memory.MegaByte // convert from MB to bytes
+				options.VPMemSizeBytes = c.Uint64(vpMemMaxSizeArgName) * memory.MiB // convert from MB to bytes
 			}
 			if !useGcs {
 				if c.IsSet(execCommandLineArgName) {

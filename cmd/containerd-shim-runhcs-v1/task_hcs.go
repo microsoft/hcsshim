@@ -1007,7 +1007,7 @@ func (ht *hcsTask) updateWCOWResources(ctx context.Context, data interface{}, an
 		return errors.New("must have resources be type *WindowsResources when updating a wcow container")
 	}
 	if resources.Memory != nil && resources.Memory.Limit != nil {
-		newMemorySizeInMB := *resources.Memory.Limit / memory.MegaByte
+		newMemorySizeInMB := *resources.Memory.Limit / memory.MiB
 		memoryLimit := hcsoci.NormalizeMemorySize(ctx, ht.id, newMemorySizeInMB)
 		if err := ht.requestUpdateContainer(ctx, resourcepaths.SiloMemoryResourcePath, memoryLimit); err != nil {
 			return err

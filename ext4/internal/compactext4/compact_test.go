@@ -319,9 +319,9 @@ func TestTime(t *testing.T) {
 
 func TestLargeFile(t *testing.T) {
 	testFiles := []testFile{
-		{Path: "small", File: &File{}, DataSize: int64(memory.MegaByte)},        // can't change type
-		{Path: "medium", File: &File{}, DataSize: 200 * int64(memory.MegaByte)}, // can't change type
-		{Path: "large", File: &File{}, DataSize: 600 * int64(memory.MegaByte)},  // can't change type
+		{Path: "small", File: &File{}, DataSize: memory.MiB},        // can't change type
+		{Path: "medium", File: &File{}, DataSize: 200 * memory.MiB}, // can't change type
+		{Path: "large", File: &File{}, DataSize: 600 * memory.MiB},  // can't change type
 	}
 	runTestsOnFiles(t, testFiles)
 }

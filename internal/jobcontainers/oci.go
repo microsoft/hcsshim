@@ -58,7 +58,7 @@ func specToLimits(ctx context.Context, cid string, s *specs.Spec) (*jobobject.Jo
 		CPUWeight:          realCPUWeight,
 		MaxIOPS:            maxIops,
 		MaxBandwidth:       maxBandwidth,
-		MemoryLimitInBytes: memLimitMB * memory.MegaByte,
+		MemoryLimitInBytes: memLimitMB * memory.MiB,
 	}, nil
 }
 

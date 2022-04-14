@@ -46,7 +46,7 @@ func Test_Pod_UpdateResources_Memory(t *testing.T) {
 			} else {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}
-			var startingMemorySize int64 = 768 * int64(memory.MegaByte)
+			var startingMemorySize int64 = 768 * memory.MiB
 			podRequest := getRunPodSandboxRequest(
 				t,
 				test.runtimeHandler,
@@ -117,7 +117,7 @@ func Test_Pod_UpdateResources_Memory_PA(t *testing.T) {
 			} else {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}
-			var startingMemorySize int64 = 200 * int64(memory.MegaByte)
+			var startingMemorySize int64 = 200 * memory.MiB
 			podRequest := getRunPodSandboxRequest(
 				t,
 				test.runtimeHandler,

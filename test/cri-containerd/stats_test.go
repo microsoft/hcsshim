@@ -81,7 +81,7 @@ func verifyPhysicallyBackedWorkingSet(t *testing.T, num uint64, stat *runtime.Co
 	if stat == nil {
 		t.Fatal("expected stat to be non nil")
 	}
-	numInBytes := num * memory.MegaByte
+	numInBytes := num * memory.MiB
 	if stat.Memory.WorkingSetBytes.Value != numInBytes {
 		t.Fatalf("expected working set size to be %d bytes but got: %d", numInBytes, stat.Memory.WorkingSetBytes.Value)
 	}

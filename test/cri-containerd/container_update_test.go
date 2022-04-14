@@ -303,7 +303,7 @@ func Test_Container_UpdateResources_Memory(t *testing.T) {
 			defer removePodSandbox(t, client, ctx, podID)
 			defer stopPodSandbox(t, client, ctx, podID)
 
-			var startingMemorySize int64 = 768 * int64(memory.MegaByte)
+			var startingMemorySize int64 = 768 * memory.MiB
 			containerRequest := &runtime.CreateContainerRequest{
 				Config: &runtime.ContainerConfig{
 					Metadata: &runtime.ContainerMetadata{

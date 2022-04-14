@@ -5,8 +5,8 @@ import (
 )
 
 const (
-	minimumClassSize  = MegaByte
-	maximumClassSize  = 4 * GigaByte
+	minimumClassSize  = MiB
+	maximumClassSize  = 4 * GiB
 	memoryClassNumber = 7
 )
 
@@ -179,7 +179,7 @@ func (pa *PoolAllocator) findNextOffset(memCls classType) (classType, uint64, er
 			continue
 		}
 
-		target := maximumClassSize
+		target := uint64(maximumClassSize)
 		for offset := range pi.free {
 			if offset < target {
 				target = offset

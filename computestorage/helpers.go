@@ -62,8 +62,8 @@ func SetupContainerBaseLayer(ctx context.Context, layerPath, baseVhdPath, diffVh
 	createParams := &vhd.CreateVirtualDiskParameters{
 		Version: 2,
 		Version2: vhd.CreateVersion2{
-			MaximumSize:      sizeInGB * memory.GigaByte,
-			BlockSizeInBytes: defaultVHDXBlockSizeInMB * uint32(memory.MegaByte),
+			MaximumSize:      sizeInGB * memory.GiB,
+			BlockSizeInBytes: defaultVHDXBlockSizeInMB * memory.MiB,
 		},
 	}
 	handle, err := vhd.CreateVirtualDisk(baseVhdPath, vhd.VirtualDiskAccessNone, vhd.CreateVirtualDiskFlagNone, createParams)
@@ -138,8 +138,8 @@ func SetupUtilityVMBaseLayer(ctx context.Context, uvmPath, baseVhdPath, diffVhdP
 	createParams := &vhd.CreateVirtualDiskParameters{
 		Version: 2,
 		Version2: vhd.CreateVersion2{
-			MaximumSize:      sizeInGB * memory.GigaByte,
-			BlockSizeInBytes: defaultVHDXBlockSizeInMB * uint32(memory.MegaByte),
+			MaximumSize:      sizeInGB * memory.GiB,
+			BlockSizeInBytes: defaultVHDXBlockSizeInMB * memory.MiB,
 		},
 	}
 	handle, err := vhd.CreateVirtualDisk(baseVhdPath, vhd.VirtualDiskAccessNone, vhd.CreateVirtualDiskFlagNone, createParams)

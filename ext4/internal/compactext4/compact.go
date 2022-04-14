@@ -102,15 +102,15 @@ const (
 	maxInodesPerGroup       = BlockSize * 8 // Limited by the inode bitmap
 	inodesPerGroupIncrement = BlockSize / inodeSize
 
-	defaultMaxDiskSize = 16 * int64(memory.GigaByte)    // 16GB
+	defaultMaxDiskSize = 16 * memory.GiB                // 16GB
 	maxMaxDiskSize     = 16 * 1024 * 1024 * 1024 * 1024 // 16TB
 
 	groupDescriptorSize      = 32 // Use the small group descriptor
 	groupsPerDescriptorBlock = BlockSize / groupDescriptorSize
 
-	maxFileSize             = 128 * int64(memory.GigaByte) // 128GB file size maximum for now
-	smallSymlinkSize        = 59                           // max symlink size that goes directly in the inode
-	maxBlocksPerExtent      = 0x8000                       // maximum number of blocks in an extent
+	maxFileSize             = 128 * memory.GiB // 128GB file size maximum for now
+	smallSymlinkSize        = 59               // max symlink size that goes directly in the inode
+	maxBlocksPerExtent      = 0x8000           // maximum number of blocks in an extent
 	inodeDataSize           = 60
 	inodeUsedSize           = 152 // fields through CrtimeExtra
 	inodeExtraSize          = inodeSize - inodeUsedSize
