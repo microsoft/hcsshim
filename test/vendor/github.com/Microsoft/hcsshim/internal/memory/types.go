@@ -5,8 +5,8 @@ import "github.com/pkg/errors"
 type classType uint32
 
 const (
-	MegaByte = uint64(1024 * 1024)
-	GigaByte = 1024 * MegaByte
+	MegaByte uint64 = 1024 * 1024
+	GigaByte uint64 = 1024 * MegaByte
 )
 
 var (

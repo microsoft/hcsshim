@@ -14,14 +14,15 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/Microsoft/hcsshim/ext4/internal/compactext4"
+	"github.com/Microsoft/hcsshim/internal/memory"
 )
 
 const (
 	blockSize = compactext4.BlockSize
 	// MerkleTreeBufioSize is a default buffer size to use with bufio.Reader
-	MerkleTreeBufioSize = 1024 * 1024 // 1MB
+	MerkleTreeBufioSize = int(memory.MegaByte) // 1MB
 	// RecommendedVHDSizeGB is the recommended size in GB for VHDs, which is not a hard limit.
-	RecommendedVHDSizeGB = 128 * 1024 * 1024 * 1024
+	RecommendedVHDSizeGB = 128 * int64(memory.GigaByte)
 	// VeritySignature is a value written to dm-verity super-block.
 	VeritySignature = "verity"
 )
