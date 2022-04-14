@@ -20,22 +20,22 @@ type MountMonitoringSecurityPolicyEnforcer struct {
 
 var _ securitypolicy.SecurityPolicyEnforcer = (*MountMonitoringSecurityPolicyEnforcer)(nil)
 
-func (p *MountMonitoringSecurityPolicyEnforcer) EnforceDeviceMountPolicy(target string, deviceHash string) (err error) {
+func (p *MountMonitoringSecurityPolicyEnforcer) EnforceDeviceMountPolicy(_ string, _ string) (err error) {
 	p.DeviceMountCalls++
 	return nil
 }
 
-func (p *MountMonitoringSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(target string) (err error) {
+func (p *MountMonitoringSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(_ string) (err error) {
 	p.DeviceUnmountCalls++
 	return nil
 }
 
-func (p *MountMonitoringSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID string, layerPaths []string) (err error) {
+func (p *MountMonitoringSecurityPolicyEnforcer) EnforceOverlayMountPolicy(_ string, _ []string) (err error) {
 	p.OverlayMountCalls++
 	return nil
 }
 
-func (p *MountMonitoringSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ string, _ []string, _ []string, _ string) (err error) {
+func (MountMonitoringSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ string, _ []string, _ []string, _ string) (err error) {
 	return nil
 }
 
@@ -43,7 +43,7 @@ func (MountMonitoringSecurityPolicyEnforcer) EnforceMountPolicy(_, _ string, _ *
 	return nil
 }
 
-func (p *MountMonitoringSecurityPolicyEnforcer) EnforceExpectedMountsPolicy(_ string, _ *oci.Spec) error {
+func (MountMonitoringSecurityPolicyEnforcer) EnforceExpectedMountsPolicy(_ string, _ *oci.Spec) error {
 	return nil
 }
 
