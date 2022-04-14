@@ -3,11 +3,11 @@
 package jobobject
 
 import (
+	"errors"
 	"fmt"
 	"unsafe"
 
 	"github.com/Microsoft/hcsshim/internal/winapi"
-	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
 )
 

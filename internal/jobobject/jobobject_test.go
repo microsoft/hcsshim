@@ -4,6 +4,7 @@ package jobobject
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
 )
 

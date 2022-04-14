@@ -4,6 +4,7 @@ package jobobject
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,7 +14,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/queue"
 	"github.com/Microsoft/hcsshim/internal/winapi"
-	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
 )
 
