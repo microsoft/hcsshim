@@ -123,19 +123,29 @@ func (h *Host) RemoveContainer(id string) {
 	delete(h.containers, id)
 }
 
-func (h *Host) getContainerLocked(id string) (*Container, error) {
+func (h *Host) GetRunningContainer(id string) (*Container, error) {
+	h.containersMutex.Lock()
+	defer h.containersMutex.Unlock()
+
 	if c, ok := h.containers[id]; !ok {
 		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemNotFound)
 	} else {
+		if c.Status != containerRunning {
+			return nil, gcserr.NewHresultError(gcserr.HrVmcomputeInvalidState)
+		}
 		return c, nil
 	}
 }
 
-func (h *Host) GetContainer(id string) (*Container, error) {
+func (h *Host) AddContainer(id string, c *Container) error {
 	h.containersMutex.Lock()
 	defer h.containersMutex.Unlock()
 
-	return h.getContainerLocked(id)
+	if _, ok := h.containers[id]; ok {
+		return gcserr.NewHresultError(gcserr.HrVmcomputeSystemAlreadyExists)
+	}
+	h.containers[id] = c
+	return nil
 }
 
 func setupSandboxMountsPath(id string) (err error) {
@@ -162,11 +172,13 @@ func setupSandboxHugePageMountsPath(id string) error {
 }
 
 func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VMHostedContainerSettingsV2) (_ *Container, err error) {
-	h.containersMutex.Lock()
-	defer h.containersMutex.Unlock()
-
-	if _, ok := h.containers[id]; ok {
+	if _, err := h.GetRunningContainer(id); err == nil {
 		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemAlreadyExists)
+	} else {
+		herr := err.(*gcserr.BaseHresultError)
+		if herr.Hresult() == gcserr.HrVmcomputeInvalidState {
+			return nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemAlreadyExists)
+		}
 	}
 
 	err = h.securityPolicyEnforcer.EnforceCreateContainerPolicy(
@@ -180,8 +192,26 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		return nil, errors.Wrapf(err, "container creation denied due to policy")
 	}
 
-	var namespaceID string
 	criType, isCRI := settings.OCISpecification.Annotations[annotations.KubernetesContainerType]
+	c := &Container{
+		id:        id,
+		vsock:     h.vsock,
+		spec:      settings.OCISpecification,
+		isSandbox: criType == "sandbox",
+		exitType:  prot.NtUnexpectedExit,
+		processes: make(map[uint32]*containerProcess),
+		Status:    containerCreating,
+	}
+	if err := h.AddContainer(id, c); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			h.RemoveContainer(id)
+		}
+	}()
+
+	var namespaceID string
 	// for sandbox container sandboxID is same as container id
 	sandboxID := id
 	if isCRI {
@@ -290,15 +320,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		return nil, errors.Wrapf(err, "failed to get container init process")
 	}
 
-	c := &Container{
-		id:        id,
-		vsock:     h.vsock,
-		spec:      settings.OCISpecification,
-		isSandbox: criType == "sandbox",
-		container: con,
-		exitType:  prot.NtUnexpectedExit,
-		processes: make(map[uint32]*containerProcess),
-	}
+	c.container = con
 	c.initProcess = newProcess(c, settings.OCISpecification.Process, init, uint32(c.container.Pid()), true)
 
 	// Sandbox or standalone, move the networks to the container namespace
@@ -318,7 +340,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}
 	}
 
-	h.containers[id] = c
+	c.Status = containerRunning
 	return c, nil
 }
 
@@ -337,7 +359,7 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 	case guestresource.ResourceTypeVPCIDevice:
 		return modifyMappedVPCIDevice(ctx, req.RequestType, req.Settings.(*guestresource.LCOWMappedVPCIDevice))
 	case guestresource.ResourceTypeContainerConstraints:
-		c, err := h.GetContainer(containerID)
+		c, err := h.GetRunningContainer(containerID)
 		if err != nil {
 			return err
 		}
@@ -355,7 +377,7 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 }
 
 func (h *Host) modifyContainerSettings(ctx context.Context, containerID string, req *guestrequest.ModificationRequest) error {
-	c, err := h.GetContainer(containerID)
+	c, err := h.GetRunningContainer(containerID)
 	if err != nil {
 		return err
 	}

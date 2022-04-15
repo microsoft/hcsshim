@@ -232,13 +232,13 @@ func Test_RunContainers_WithSyncHooks_ValidWaitPath(t *testing.T) {
 	cidWriter := createContainer(t, client, ctx, writerReq)
 	cidWaiter := createContainer(t, client, ctx, waiterReq)
 
-	startContainer(t, client, ctx, cidWriter)
-	defer removeContainer(t, client, ctx, cidWriter)
-	defer stopContainer(t, client, ctx, cidWriter)
-
 	startContainer(t, client, ctx, cidWaiter)
 	defer removeContainer(t, client, ctx, cidWaiter)
 	defer stopContainer(t, client, ctx, cidWaiter)
+
+	startContainer(t, client, ctx, cidWriter)
+	defer removeContainer(t, client, ctx, cidWriter)
+	defer stopContainer(t, client, ctx, cidWriter)
 }
 
 func Test_RunContainers_WithSyncHooks_InvalidWaitPath(t *testing.T) {
