@@ -8,7 +8,7 @@ type fakePublisher struct {
 	events []interface{}
 }
 
-var _ = (publisher)(&fakePublisher{})
+var _ publisher = &fakePublisher{}
 
 func newFakePublisher() *fakePublisher {
 	return &fakePublisher{}

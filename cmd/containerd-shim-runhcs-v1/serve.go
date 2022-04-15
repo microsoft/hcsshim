@@ -177,7 +177,7 @@ var serveCommand = cli.Command{
 		}
 
 		ttrpcAddress := os.Getenv(ttrpcAddressEnv)
-		ttrpcEventPublisher, err := newEventPublisher(ttrpcAddress)
+		ttrpcEventPublisher, err := newEventPublisher(ttrpcAddress, namespaceFlag)
 		if err != nil {
 			return err
 		}
