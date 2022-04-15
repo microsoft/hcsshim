@@ -25,3 +25,12 @@ func WithWorkingDir(wd string) ContainerConfigOpt {
 		return nil
 	}
 }
+
+// WithMountConstraints extends ContainerConfig.Mounts with provided mount
+// constraints.
+func WithMountConstraints(mc []MountConfig) ContainerConfigOpt {
+	return func(c *ContainerConfig) error {
+		c.Mounts = append(c.Mounts, mc...)
+		return nil
+	}
+}

@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 
+	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/pkg/errors"
 )
 
@@ -46,6 +48,15 @@ type ContainerConfig struct {
 	EnvRules       []EnvRuleConfig `json:"env_rules" toml:"env_rule"`
 	WorkingDir     string          `json:"working_dir" toml:"working_dir"`
 	ExpectedMounts []string        `json:"expected_mounts" toml:"expected_mounts"`
+	Mounts         []MountConfig   `json:"mounts" toml:"mount"`
+}
+
+// MountConfig contains toml or JSON config for mount security policy
+// constraint description.
+type MountConfig struct {
+	HostPath      string `json:"host_path" toml:"host_path"`
+	ContainerPath string `json:"container_path" toml:"container_path"`
+	Readonly      bool   `json:"readonly" toml:"readonly"`
 }
 
 // NewContainerConfig creates a new ContainerConfig from the given values.
@@ -56,6 +67,7 @@ func NewContainerConfig(
 	auth AuthConfig,
 	workingDir string,
 	expectedMounts []string,
+	mounts []MountConfig,
 ) ContainerConfig {
 	return ContainerConfig{
 		ImageName:      imageName,
@@ -64,6 +76,7 @@ func NewContainerConfig(
 		Auth:           auth,
 		WorkingDir:     workingDir,
 		ExpectedMounts: expectedMounts,
+		Mounts:         mounts,
 	}
 }
 
@@ -101,25 +114,6 @@ func NewSecurityPolicyDigest(base64policy string) ([]byte, error) {
 	return digestBytes, nil
 }
 
-// Internal version of SecurityPolicyContainer
-type securityPolicyContainer struct {
-	// The command that we will allow the container to execute
-	Command []string
-	// The rules for determining if a given environment variable is allowed
-	EnvRules []EnvRuleConfig
-	// An ordered list of dm-verity root hashes for each layer that makes up
-	// "a container". Containers are constructed as an overlay file system. The
-	// order that the layers are overlayed is important and needs to be enforced
-	// as part of policy.
-	Layers []string
-	// WorkingDir is a path to container's working directory, which all the processes
-	// will default to.
-	WorkingDir string
-	// Unordered list of mounts which are expected to be present when the container
-	// starts
-	ExpectedMounts []string `json:"expected_mounts"`
-}
-
 // SecurityPolicyState is a structure that holds user supplied policy to enforce
 // we keep both the encoded representation and the unmarshalled representation
 // because different components need to have access to either of these
@@ -135,12 +129,12 @@ type EncodedSecurityPolicy struct {
 	SecurityPolicy string `json:"SecurityPolicy,omitempty"`
 }
 
-// Constructs SecurityPolicyState from base64Policy string. It first decodes
-// base64 policy and returns the structs security policy struct and encoded
-// security policy for given policy. The security policy is transmitted as json
-// in an annotation, so we first have to remove the base64 encoding that allows
-// the JSON based policy to be passed as a string. From there, we decode the
-// JSON and setup our security policy struct
+// NewSecurityPolicyState constructs SecurityPolicyState from base64Policy
+// string. It first decodes base64 policy and returns the security policy
+// struct and encoded security policy for given policy. The security policy
+// is transmitted as json in an annotation, so we first have to remove the
+// base64 encoding that allows the JSON based policy to be passed as a string.
+// From there, we decode the JSON and set up our security policy struct
 func NewSecurityPolicyState(base64Policy string) (*SecurityPolicyState, error) {
 	// construct an encoded security policy that holds the base64 representation
 	encodedSecurityPolicy := EncodedSecurityPolicy{
@@ -170,12 +164,12 @@ func NewSecurityPolicyState(base64Policy string) (*SecurityPolicyState, error) {
 }
 
 type SecurityPolicy struct {
-	// Flag that when set to true allows for all checks to pass. Currently used
+	// Flag that when set to true allows for all checks to pass. Currently, used
 	// to run with security policy enforcement "running dark"; checks can be in
 	// place but the default policy that is created on startup has AllowAll set
 	// to true, thus making policy enforcement effectively "off" from a logical
 	// standpoint. Policy enforcement isn't actually off as the policy is "allow
-	// everything:.
+	// everything".
 	AllowAll bool `json:"allow_all"`
 	// One or more containers that are allowed to run
 	Containers Containers `json:"containers"`
@@ -201,34 +195,53 @@ type Container struct {
 	Layers         Layers         `json:"layers"`
 	WorkingDir     string         `json:"working_dir"`
 	ExpectedMounts ExpectedMounts `json:"expected_mounts"`
+	Mounts         Mounts         `json:"mounts"`
 }
 
-type Layers struct {
-	Length int `json:"length"`
-	// an ordered list of args where the key is in the index for ordering
+// StringArrayMap wraps an array of strings as a string map.
+type StringArrayMap struct {
+	Length   int               `json:"length"`
 	Elements map[string]string `json:"elements"`
 }
 
-type CommandArgs struct {
-	Length int `json:"length"`
-	// an ordered list of args where the key is in the index for ordering
-	Elements map[string]string `json:"elements"`
-}
+type Layers StringArrayMap
+
+type CommandArgs StringArrayMap
+
+type ExpectedMounts StringArrayMap
+
+type Options StringArrayMap
 
 type EnvRules struct {
 	Length   int                      `json:"length"`
 	Elements map[string]EnvRuleConfig `json:"elements"`
 }
 
-type ExpectedMounts struct {
-	Length   int               `json:"length"`
-	Elements map[string]string `json:"elements"`
+type Mount struct {
+	Source      string  `json:"source"`
+	Destination string  `json:"destination"`
+	Type        string  `json:"type"`
+	Options     Options `json:"options"`
 }
 
-// NewContainer creates a new Container instance from the provided values
-// or an error if envRules validation fails.
-func NewContainer(command, layers []string, envRules []EnvRuleConfig, workingDir string, eMounts []string) (*Container, error) {
+type Mounts struct {
+	Length   int              `json:"length"`
+	Elements map[string]Mount `json:"elements"`
+}
+
+// CreateContainerPolicy creates a new Container policy instance from the
+// provided constraints or an error if parameter validation fails.
+func CreateContainerPolicy(
+	command, layers []string,
+	envRules []EnvRuleConfig,
+	workingDir string,
+	eMounts []string,
+	mounts []MountConfig,
+) (*Container, error) {
 	if err := validateEnvRules(envRules); err != nil {
+		return nil, err
+	}
+	if err := validateMountConstraint(mounts); err != nil {
 		return nil, err
 	}
 	return &Container{
@@ -237,6 +250,7 @@ func NewContainer(command, layers []string, envRules []EnvRuleConfig, workingDir
 		EnvRules:       newEnvRules(envRules),
 		WorkingDir:     workingDir,
 		ExpectedMounts: newExpectedMounts(eMounts),
+		Mounts:         newMountConstraints(mounts),
 	}, nil
 }
 
@@ -261,6 +275,15 @@ func validateEnvRules(rules []EnvRuleConfig) error {
 			if _, err := regexp.Compile(rule.Rule); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+func validateMountConstraint(mounts []MountConfig) error {
+	for _, m := range mounts {
+		if _, err := regexp.Compile(m.HostPath); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -306,32 +329,79 @@ func newExpectedMounts(em []string) ExpectedMounts {
 	}
 }
 
+func newMountOptions(opts []string) Options {
+	mountOpts := map[string]string{}
+	for i, o := range opts {
+		mountOpts[strconv.Itoa(i)] = o
+	}
+	return Options{
+		Elements: mountOpts,
+	}
+}
+
+// newOptionsFromConfig applies the same logic as CRI plugin to generate
+// mount options given readonly and propagation config.
+// TODO: (anmaxvl) update when support for other mount types is added,
+//   e.g., vhd:// or evd://
+// TODO: (anmaxvl) Do we need to set/validate Linux rootfs propagation?
+//   In case we do, update securityPolicyContainer and Container structs
+//   as well as mount enforcement logic.
+func newOptionsFromConfig(mCfg *MountConfig) []string {
+	mountOpts := []string{"rbind"}
+
+	if strings.HasPrefix(mCfg.HostPath, guestpath.SandboxMountPrefix) ||
+		strings.HasPrefix(mCfg.HostPath, guestpath.HugePagesMountPrefix) {
+		mountOpts = append(mountOpts, "rshared")
+	} else {
+		mountOpts = append(mountOpts, "rprivate")
+	}
+
+	if mCfg.Readonly {
+		mountOpts = append(mountOpts, "ro")
+	} else {
+		mountOpts = append(mountOpts, "rw")
+	}
+	return mountOpts
+}
+
+// newMountTypeFromConfig mimics the behavior in CRI when figuring out OCI
+// mount type.
+func newMountTypeFromConfig(mCfg *MountConfig) string {
+	if strings.HasPrefix(mCfg.HostPath, guestpath.SandboxMountPrefix) ||
+		strings.HasPrefix(mCfg.HostPath, guestpath.HugePagesMountPrefix) {
+		return "bind"
+	}
+	return "none"
+}
+
+// newMountFromConfig converts user provided MountConfig into internal representation
+// of mount constraint.
+func newMountFromConfig(mCfg *MountConfig) Mount {
+	opts := newOptionsFromConfig(mCfg)
+	return Mount{
+		Source:      mCfg.HostPath,
+		Destination: mCfg.ContainerPath,
+		Type:        newMountTypeFromConfig(mCfg),
+		Options:     newMountOptions(opts),
+	}
+}
+
+// newMountConstraints creates Mounts from a given array of MountConfig's.
+func newMountConstraints(mountConfigs []MountConfig) Mounts {
+	mounts := map[string]Mount{}
+	for i, mc := range mountConfigs {
+		mounts[strconv.Itoa(i)] = newMountFromConfig(&mc)
+	}
+	return Mounts{
+		Elements: mounts,
+	}
+}
+
 // Custom JSON marshalling to add `lenth` field that matches the number of
 // elements present in the `elements` field.
+
 func (c Containers) MarshalJSON() ([]byte, error) {
 	type Alias Containers
-	return json.Marshal(&struct {
-		Length int `json:"length"`
-		*Alias
-	}{
-		Length: len(c.Elements),
-		Alias:  (*Alias)(&c),
-	})
-}
-
-func (l Layers) MarshalJSON() ([]byte, error) {
-	type Alias Layers
-	return json.Marshal(&struct {
-		Length int `json:"length"`
-		*Alias
-	}{
-		Length: len(l.Elements),
-		Alias:  (*Alias)(&l),
-	})
-}
-
-func (c CommandArgs) MarshalJSON() ([]byte, error) {
-	type Alias CommandArgs
 	return json.Marshal(&struct {
 		Length int `json:"length"`
 		*Alias
@@ -352,13 +422,40 @@ func (e EnvRules) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func (em ExpectedMounts) MarshalJSON() ([]byte, error) {
-	type Alias ExpectedMounts
+func (s StringArrayMap) MarshalJSON() ([]byte, error) {
+	type Alias StringArrayMap
 	return json.Marshal(&struct {
 		Length int `json:"length"`
 		*Alias
 	}{
-		Length: len(em.Elements),
-		Alias:  (*Alias)(&em),
+		Length: len(s.Elements),
+		Alias:  (*Alias)(&s),
+	})
+}
+
+func (c CommandArgs) MarshalJSON() ([]byte, error) {
+	return json.Marshal(StringArrayMap(c))
+}
+
+func (l Layers) MarshalJSON() ([]byte, error) {
+	return json.Marshal(StringArrayMap(l))
+}
+
+func (o Options) MarshalJSON() ([]byte, error) {
+	return json.Marshal(StringArrayMap(o))
+}
+
+func (em ExpectedMounts) MarshalJSON() ([]byte, error) {
+	return json.Marshal(StringArrayMap(em))
+}
+
+func (m Mounts) MarshalJSON() ([]byte, error) {
+	type Alias Mounts
+	return json.Marshal(&struct {
+		Length int `json:"length"`
+		*Alias
+	}{
+		Length: len(m.Elements),
+		Alias:  (*Alias)(&m),
 	})
 }

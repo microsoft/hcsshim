@@ -20,6 +20,8 @@ var (
 	validPolicyAlpineCommand = []string{"ash", "-c", "echo 'Hello'"}
 )
 
+type configSideEffect func(*runtime.CreateContainerRequest) error
+
 func securityPolicyFromContainers(containers []securitypolicy.ContainerConfig) (string, error) {
 	pc, err := helpers.PolicyContainersFromConfigs(containers)
 	if err != nil {
@@ -51,6 +53,7 @@ func alpineSecurityPolicy(t *testing.T, opts ...securitypolicy.ContainerConfigOp
 		securitypolicy.AuthConfig{},
 		"",
 		[]string{},
+		[]securitypolicy.MountConfig{},
 	)
 
 	for _, o := range opts {
@@ -71,11 +74,13 @@ func sandboxRequestWithPolicy(t *testing.T, policy string) *runtime.RunPodSandbo
 	return getRunPodSandboxRequest(
 		t,
 		lcowRuntimeHandler,
-		WithSandboxAnnotations(map[string]string{
-			annotations.NoSecurityHardware:  "true",
-			annotations.SecurityPolicy:      policy,
-			annotations.VPMemNoMultiMapping: "true",
-		}),
+		WithSandboxAnnotations(
+			map[string]string{
+				annotations.NoSecurityHardware:  "true",
+				annotations.SecurityPolicy:      policy,
+				annotations.VPMemNoMultiMapping: "true",
+			},
+		),
 	)
 }
 
@@ -128,10 +133,22 @@ func Test_RunSimpleAlpineContainer_WithPolicy_Allowed(t *testing.T) {
 }
 
 func syncContainerConfigs(writePath, waitPath string) (writer, waiter *securitypolicy.ContainerConfig) {
-	writerCmdArgs := []string{"ash", "-c", fmt.Sprintf("touch %s && while true; do echo hello1; sleep 1; done", writePath)}
+	writerCmdArgs := []string{
+		"ash",
+		"-c",
+		fmt.Sprintf(
+			"touch %s && while true; do echo hello1; sleep 1; done",
+			writePath,
+		)}
 	writer = &securitypolicy.ContainerConfig{
 		ImageName: "alpine:latest",
 		Command:   writerCmdArgs,
+		Mounts: []securitypolicy.MountConfig{
+			{
+				HostPath:      "sandbox://host/path",
+				ContainerPath: "/mnt/shared/container-A",
+			},
+		},
 	}
 	// create container #2 that waits for a path to appear
 	echoCmdArgs := []string{"ash", "-c", "while true; do echo hello2; sleep 1; done"}
@@ -139,6 +156,12 @@ func syncContainerConfigs(writePath, waitPath string) (writer, waiter *securityp
 		ImageName:      "alpine:latest",
 		Command:        echoCmdArgs,
 		ExpectedMounts: []string{waitPath},
+		Mounts: []securitypolicy.MountConfig{
+			{
+				HostPath:      "sandbox://host/path",
+				ContainerPath: "/mnt/shared/container-B",
+			},
+		},
 	}
 	return writer, waiter
 }
@@ -155,10 +178,13 @@ func syncContainerRequests(
 		writer.Command,
 		podConfig,
 	)
-	writerReq.Config.Mounts = append(writerReq.Config.Mounts, &runtime.Mount{
-		HostPath:      "sandbox://host/path",
-		ContainerPath: "/mnt/shared/container-A",
-	})
+	writerReq.Config.Mounts = append(
+		writerReq.Config.Mounts, &runtime.Mount{
+			HostPath:      "sandbox://host/path",
+			ContainerPath: "/mnt/shared/container-A",
+			Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
+		},
+	)
 
 	waiterReq = getCreateContainerRequest(
 		podID,
@@ -167,11 +193,14 @@ func syncContainerRequests(
 		waiter.Command,
 		podConfig,
 	)
-	waiterReq.Config.Mounts = append(waiterReq.Config.Mounts, &runtime.Mount{
-		// The HostPath must be the same as for the "writer" container
-		HostPath:      "sandbox://host/path",
-		ContainerPath: "/mnt/shared/container-B",
-	})
+	waiterReq.Config.Mounts = append(
+		waiterReq.Config.Mounts, &runtime.Mount{
+			// The HostPath must be the same as for the "writer" container
+			HostPath:      "sandbox://host/path",
+			ContainerPath: "/mnt/shared/container-B",
+			Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
+		},
+	)
 
 	return writerReq, waiterReq
 }
@@ -180,14 +209,14 @@ func Test_RunContainers_WithSyncHooks_ValidWaitPath(t *testing.T) {
 	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
 
 	writerCfg, waiterCfg := syncContainerConfigs(
-		"/mnt/shared/container-A/sync-file", "/mnt/shared/container-B/sync-file")
+		"/mnt/shared/container-A/sync-file", "/mnt/shared/container-B/sync-file",
+	)
 
 	containerConfigs := append(helpers.DefaultContainerConfigs(), *writerCfg, *waiterCfg)
 	policyString, err := securityPolicyFromContainers(containerConfigs)
 	if err != nil {
 		t.Fatalf("failed to generate security policy string: %s", err)
 	}
-
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -244,9 +273,11 @@ func Test_RunContainers_WithSyncHooks_InvalidWaitPath(t *testing.T) {
 	defer removeContainer(t, client, ctx, cidWriter)
 	defer stopContainer(t, client, ctx, cidWriter)
 
-	_, err = client.StartContainer(ctx, &runtime.StartContainerRequest{
-		ContainerId: cidWaiter,
-	})
+	_, err = client.StartContainer(
+		ctx, &runtime.StartContainerRequest{
+			ContainerId: cidWaiter,
+		},
+	)
 	expectedErrString := "timeout while waiting for path"
 	if err == nil {
 		defer removeContainer(t, client, ctx, cidWaiter)
@@ -285,10 +316,12 @@ func Test_RunContainer_ValidContainerConfigs_Allowed(t *testing.T) {
 		{
 			name: "EnvironmentVariable",
 			sf: func(req *runtime.CreateContainerRequest) {
-				req.Config.Envs = append(req.Config.Envs, &runtime.KeyValue{
-					Key:   "KEY",
-					Value: "VALUE",
-				})
+				req.Config.Envs = append(
+					req.Config.Envs, &runtime.KeyValue{
+						Key:   "KEY",
+						Value: "VALUE",
+					},
+				)
 			},
 			opts: []securitypolicy.ContainerConfigOpt{
 				securitypolicy.WithEnvVarRules(
@@ -297,7 +330,8 @@ func Test_RunContainer_ValidContainerConfigs_Allowed(t *testing.T) {
 							Strategy: securitypolicy.EnvVarRuleString,
 							Rule:     "KEY=VALUE",
 						},
-					}),
+					},
+				),
 			},
 		},
 	} {
@@ -327,10 +361,9 @@ func Test_RunContainer_ValidContainerConfigs_Allowed(t *testing.T) {
 }
 
 func Test_RunContainer_InvalidContainerConfigs_NotAllowed(t *testing.T) {
-	type sideEffect func(*runtime.CreateContainerRequest)
 	type config struct {
 		name          string
-		sf            sideEffect
+		sf            configSideEffect
 		expectedError string
 	}
 
@@ -345,25 +378,30 @@ func Test_RunContainer_InvalidContainerConfigs_NotAllowed(t *testing.T) {
 	for _, testConfig := range []config{
 		{
 			name: "InvalidWorkingDir",
-			sf: func(req *runtime.CreateContainerRequest) {
+			sf: func(req *runtime.CreateContainerRequest) error {
 				req.Config.WorkingDir = "/non/existent"
+				return nil
 			},
 			expectedError: "working_dir /non/existent unmatched by policy rule",
 		},
 		{
 			name: "InvalidCommand",
-			sf: func(req *runtime.CreateContainerRequest) {
+			sf: func(req *runtime.CreateContainerRequest) error {
 				req.Config.Command = []string{"ash", "-c", "echo 'invalid command'"}
+				return nil
 			},
 			expectedError: "command [ash -c echo 'invalid command'] doesn't match policy",
 		},
 		{
 			name: "InvalidEnvironmentVariable",
-			sf: func(req *runtime.CreateContainerRequest) {
-				req.Config.Envs = append(req.Config.Envs, &runtime.KeyValue{
-					Key:   "KEY",
-					Value: "VALUE",
-				})
+			sf: func(req *runtime.CreateContainerRequest) error {
+				req.Config.Envs = append(
+					req.Config.Envs, &runtime.KeyValue{
+						Key:   "KEY",
+						Value: "VALUE",
+					},
+				)
+				return nil
 			},
 			expectedError: "env variable KEY=VALUE unmatched by policy rule",
 		},
@@ -382,12 +420,292 @@ func Test_RunContainer_InvalidContainerConfigs_NotAllowed(t *testing.T) {
 				validPolicyAlpineCommand,
 				sandboxRequest.Config,
 			)
-			testConfig.sf(containerRequest)
+
+			if err := testConfig.sf(containerRequest); err != nil {
+				t.Fatalf("failed to apply containerRequest side effect: %s", err)
+			}
 
 			containerID := createContainer(t, client, ctx, containerRequest)
-			_, err := client.StartContainer(ctx, &runtime.StartContainerRequest{
-				ContainerId: containerID,
-			})
+			_, err := client.StartContainer(
+				ctx, &runtime.StartContainerRequest{
+					ContainerId: containerID,
+				},
+			)
+			if err == nil {
+				t.Fatal("expected container start failure")
+			}
+			if !strings.Contains(err.Error(), testConfig.expectedError) {
+				t.Fatalf("expected %q in error message, got: %q", testConfig.expectedError, err)
+			}
+		})
+	}
+}
+
+func Test_RunContainer_WithMountConstraints_Allowed(t *testing.T) {
+	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	type config struct {
+		name       string
+		sideEffect configSideEffect
+		opts       []securitypolicy.ContainerConfigOpt
+	}
+
+	for _, testConfig := range []config{
+		{
+			name: "DefaultMounts",
+			sideEffect: func(_ *runtime.CreateContainerRequest) error {
+				return nil
+			},
+			opts: []securitypolicy.ContainerConfigOpt{},
+		},
+		{
+			name: "SandboxMountRW",
+			sideEffect: func(req *runtime.CreateContainerRequest) error {
+				req.Config.Mounts = append(
+					req.Config.Mounts, &runtime.Mount{
+						HostPath:      "sandbox://sandbox/path",
+						ContainerPath: "/container/path",
+						Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
+					},
+				)
+				return nil
+			},
+			opts: []securitypolicy.ContainerConfigOpt{
+				securitypolicy.WithMountConstraints(
+					[]securitypolicy.MountConfig{
+						{
+							HostPath:      "sandbox://sandbox/path",
+							ContainerPath: "/container/path",
+						},
+					},
+				)},
+		},
+		{
+			name: "SandboxMountRO",
+			sideEffect: func(req *runtime.CreateContainerRequest) error {
+				req.Config.Mounts = append(
+					req.Config.Mounts, &runtime.Mount{
+						HostPath:      "sandbox://sandbox/path",
+						ContainerPath: "/container/path",
+						Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
+						Readonly:      true,
+					},
+				)
+				return nil
+			},
+			opts: []securitypolicy.ContainerConfigOpt{
+				securitypolicy.WithMountConstraints(
+					[]securitypolicy.MountConfig{
+						{
+							HostPath:      "sandbox://sandbox/path",
+							ContainerPath: "/container/path",
+							Readonly:      true,
+						},
+					},
+				)},
+		},
+		{
+			name: "SandboxMountRegex",
+			sideEffect: func(req *runtime.CreateContainerRequest) error {
+				req.Config.Mounts = append(
+					req.Config.Mounts, &runtime.Mount{
+						HostPath:      "sandbox://sandbox/path/regexp",
+						ContainerPath: "/container/path",
+						Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
+					},
+				)
+				return nil
+			},
+			opts: []securitypolicy.ContainerConfigOpt{
+				securitypolicy.WithMountConstraints(
+					[]securitypolicy.MountConfig{
+						{
+							HostPath:      "sandbox://sandbox/path/r.+",
+							ContainerPath: "/container/path",
+						},
+					},
+				)},
+		},
+	} {
+		t.Run(testConfig.name, func(t *testing.T) {
+			alpinePolicy := alpineSecurityPolicy(t, testConfig.opts...)
+			sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
+
+			podID := runPodSandbox(t, client, ctx, sandboxRequest)
+			defer removePodSandbox(t, client, ctx, podID)
+			defer stopPodSandbox(t, client, ctx, podID)
+
+			containerRequest := getCreateContainerRequest(
+				podID,
+				"alpine-with-policy",
+				"alpine:latest",
+				validPolicyAlpineCommand,
+				sandboxRequest.Config,
+			)
+
+			if err := testConfig.sideEffect(containerRequest); err != nil {
+				t.Fatalf("failed to apply containerRequest side effect: %s", err)
+			}
+
+			containerID := createContainer(t, client, ctx, containerRequest)
+			startContainer(t, client, ctx, containerID)
+			defer removeContainer(t, client, ctx, containerID)
+			defer stopContainer(t, client, ctx, containerID)
+		})
+	}
+}
+
+func Test_RunContainer_WithMountConstraints_NotAllowed(t *testing.T) {
+	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	type config struct {
+		name          string
+		sideEffect    configSideEffect
+		opts          []securitypolicy.ContainerConfigOpt
+		expectedError string
+	}
+
+	testSandboxMountOpts := []securitypolicy.ContainerConfigOpt{
+		securitypolicy.WithMountConstraints(
+			[]securitypolicy.MountConfig{
+				{
+					HostPath:      "sandbox://sandbox/path",
+					ContainerPath: "/container/path",
+				},
+			},
+		),
+	}
+	for _, testConfig := range []config{
+		{
+			name: "InvalidSandboxMountSource",
+			sideEffect: func(req *runtime.CreateContainerRequest) error {
+				req.Config.Mounts = append(
+					req.Config.Mounts, &runtime.Mount{
+						HostPath:      "sandbox://sandbox/invalid/path",
+						ContainerPath: "/container/path",
+						Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
+					},
+				)
+				return nil
+			},
+			opts:          testSandboxMountOpts,
+			expectedError: "is not allowed by mount constraints",
+		},
+		{
+			name: "InvalidSandboxMountDestination",
+			sideEffect: func(req *runtime.CreateContainerRequest) error {
+				req.Config.Mounts = append(
+					req.Config.Mounts, &runtime.Mount{
+						HostPath:      "sandbox://sandbox/path",
+						ContainerPath: "/container/path/invalid",
+						Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
+					},
+				)
+				return nil
+			},
+			opts:          testSandboxMountOpts,
+			expectedError: "is not allowed by mount constraints",
+		},
+		{
+			name: "InvalidSandboxMountFlagRO",
+			sideEffect: func(req *runtime.CreateContainerRequest) error {
+				req.Config.Mounts = append(
+					req.Config.Mounts, &runtime.Mount{
+						HostPath:      "sandbox://sandbox/path",
+						ContainerPath: "/container/path",
+						Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
+						Readonly:      true,
+					},
+				)
+				return nil
+			},
+			opts:          testSandboxMountOpts,
+			expectedError: "is not allowed by mount constraints",
+		},
+		{
+			name: "InvalidSandboxMountFlagRW",
+			sideEffect: func(req *runtime.CreateContainerRequest) error {
+				req.Config.Mounts = append(
+					req.Config.Mounts, &runtime.Mount{
+						HostPath:      "sandbox://sandbox/path",
+						ContainerPath: "/container/path",
+						Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
+					},
+				)
+				return nil
+			},
+			opts: []securitypolicy.ContainerConfigOpt{
+				securitypolicy.WithMountConstraints(
+					[]securitypolicy.MountConfig{
+						{
+							HostPath:      "sandbox://sandbox/path",
+							ContainerPath: "/container/path",
+							Readonly:      true,
+						},
+					},
+				)},
+			expectedError: "is not allowed by mount constraints",
+		},
+		{
+			name: "InvalidHostPathForRegex",
+			sideEffect: func(req *runtime.CreateContainerRequest) error {
+				req.Config.Mounts = append(
+					req.Config.Mounts, &runtime.Mount{
+						HostPath:      "sandbox://sandbox/path/regex/no/match",
+						ContainerPath: "/container/path",
+						Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
+					},
+				)
+				return nil
+			},
+			opts: []securitypolicy.ContainerConfigOpt{
+				securitypolicy.WithMountConstraints(
+					[]securitypolicy.MountConfig{
+						{
+							HostPath:      "sandbox://sandbox/path/R.+",
+							ContainerPath: "/container/path",
+						},
+					},
+				)},
+			expectedError: "is not allowed by mount constraints",
+		},
+	} {
+		t.Run(testConfig.name, func(t *testing.T) {
+			alpinePolicy := alpineSecurityPolicy(t, testConfig.opts...)
+			sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
+
+			podID := runPodSandbox(t, client, ctx, sandboxRequest)
+			defer removePodSandbox(t, client, ctx, podID)
+			defer stopPodSandbox(t, client, ctx, podID)
+
+			containerRequest := getCreateContainerRequest(
+				podID,
+				"alpine-with-policy",
+				"alpine:latest",
+				validPolicyAlpineCommand,
+				sandboxRequest.Config,
+			)
+
+			if err := testConfig.sideEffect(containerRequest); err != nil {
+				t.Fatalf("failed to apply containerRequest side effect: %s", err)
+			}
+
+			containerID := createContainer(t, client, ctx, containerRequest)
+			_, err := client.StartContainer(
+				ctx, &runtime.StartContainerRequest{
+					ContainerId: containerID,
+				},
+			)
 			if err == nil {
 				t.Fatal("expected container start failure")
 			}

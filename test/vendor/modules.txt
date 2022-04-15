@@ -28,6 +28,7 @@ github.com/Microsoft/hcsshim/internal/credentials
 github.com/Microsoft/hcsshim/internal/devices
 github.com/Microsoft/hcsshim/internal/extendedtask
 github.com/Microsoft/hcsshim/internal/gcs
+github.com/Microsoft/hcsshim/internal/guest/spec
 github.com/Microsoft/hcsshim/internal/guestpath
 github.com/Microsoft/hcsshim/internal/hcs
 github.com/Microsoft/hcsshim/internal/hcs/resourcepaths
@@ -206,13 +207,6 @@ github.com/golang/protobuf/ptypes
 github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/timestamp
-# github.com/google/go-cmp v0.5.6
-## explicit; go 1.8
-github.com/google/go-cmp/cmp
-github.com/google/go-cmp/cmp/internal/diff
-github.com/google/go-cmp/cmp/internal/flags
-github.com/google/go-cmp/cmp/internal/function
-github.com/google/go-cmp/cmp/internal/value
 # github.com/google/go-containerregistry v0.5.1
 ## explicit; go 1.14
 github.com/google/go-containerregistry/internal/and

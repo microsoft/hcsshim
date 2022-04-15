@@ -15,33 +15,21 @@ import (
 	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/guest/network"
-	"github.com/Microsoft/hcsshim/internal/guestpath"
+	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
-func getSandboxRootDir(id string) string {
-	return filepath.Join(guestpath.LCOWRootPrefixInUVM, id)
-}
-
-func getSandboxHugePageMountsDir(id string) string {
-	return filepath.Join(getSandboxRootDir(id), "hugepages")
-}
-
-func getSandboxMountsDir(id string) string {
-	return filepath.Join(getSandboxRootDir(id), "sandboxMounts")
-}
-
 func getSandboxHostnamePath(id string) string {
-	return filepath.Join(getSandboxRootDir(id), "hostname")
+	return filepath.Join(specInternal.SandboxRootDir(id), "hostname")
 }
 
 func getSandboxHostsPath(id string) string {
-	return filepath.Join(getSandboxRootDir(id), "hosts")
+	return filepath.Join(specInternal.SandboxRootDir(id), "hosts")
 }
 
 func getSandboxResolvPath(id string) string {
-	return filepath.Join(getSandboxRootDir(id), "resolv.conf")
+	return filepath.Join(specInternal.SandboxRootDir(id), "resolv.conf")
 }
 
 func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (err error) {
@@ -51,7 +39,7 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 	span.AddAttributes(trace.StringAttribute("cid", id))
 
 	// Generate the sandbox root dir
-	rootDir := getSandboxRootDir(id)
+	rootDir := specInternal.SandboxRootDir(id)
 	if err := os.MkdirAll(rootDir, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create sandbox root directory %q", rootDir)
 	}

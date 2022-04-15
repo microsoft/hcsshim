@@ -16,12 +16,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/guest/policy"
 	"github.com/mattn/go-shellwords"
 	"github.com/pkg/errors"
 
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
+	"github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	"github.com/Microsoft/hcsshim/internal/guest/storage"
 	"github.com/Microsoft/hcsshim/internal/guest/storage/overlay"
@@ -104,6 +106,10 @@ func (h *Host) SetSecurityPolicy(base64Policy string) error {
 		return err
 	}
 
+	if err := p.ExtendDefaultMounts(policy.DefaultCRIMounts()); err != nil {
+		return err
+	}
+
 	h.securityPolicyEnforcer = p
 	h.securityPolicyEnforcerSet = true
 
@@ -133,7 +139,7 @@ func (h *Host) GetContainer(id string) (*Container, error) {
 }
 
 func setupSandboxMountsPath(id string) (err error) {
-	mountPath := getSandboxMountsDir(id)
+	mountPath := spec.SandboxMountsDir(id)
 	if err := os.MkdirAll(mountPath, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create sandboxMounts dir in sandbox %v", id)
 	}
@@ -147,7 +153,7 @@ func setupSandboxMountsPath(id string) (err error) {
 }
 
 func setupSandboxHugePageMountsPath(id string) error {
-	mountPath := getSandboxHugePageMountsDir(id)
+	mountPath := spec.HugePagesMountsDir(id)
 	if err := os.MkdirAll(mountPath, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create hugepage Mounts dir in sandbox %v", id)
 	}
@@ -176,6 +182,8 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 
 	var namespaceID string
 	criType, isCRI := settings.OCISpecification.Annotations[annotations.KubernetesContainerType]
+	// for sandbox container sandboxID is same as container id
+	sandboxID := id
 	if isCRI {
 		switch criType {
 		case "sandbox":
@@ -187,7 +195,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 			}
 			defer func() {
 				if err != nil {
-					_ = os.RemoveAll(getSandboxRootDir(id))
+					_ = os.RemoveAll(spec.SandboxRootDir(id))
 				}
 			}()
 
@@ -198,8 +206,13 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 			if err = setupSandboxHugePageMountsPath(id); err != nil {
 				return nil, err
 			}
+
+			if err := policy.ExtendPolicyWithNetworkingMounts(id, h.securityPolicyEnforcer, settings.OCISpecification); err != nil {
+				return nil, err
+			}
 		case "container":
 			sid, ok := settings.OCISpecification.Annotations[annotations.KubernetesSandboxID]
+			sandboxID = sid
 			if !ok || sid == "" {
 				return nil, errors.Errorf("unsupported 'io.kubernetes.cri.sandbox-id': '%s'", sid)
 			}
@@ -211,6 +224,9 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 					_ = os.RemoveAll(getWorkloadRootDir(id))
 				}
 			}()
+			if err := policy.ExtendPolicyWithNetworkingMounts(sandboxID, h.securityPolicyEnforcer, settings.OCISpecification); err != nil {
+				return nil, err
+			}
 		default:
 			return nil, errors.Errorf("unsupported 'io.kubernetes.cri.container-type': '%s'", criType)
 		}
@@ -227,6 +243,9 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}()
 	}
 
+	if err := h.securityPolicyEnforcer.EnforceMountPolicy(sandboxID, id, settings.OCISpecification); err != nil {
+		return nil, err
+	}
 	// Export security policy as one of the process's environment variables so that application and sidecar
 	// containers can have access to it. The security policy is required by containers which need to extract
 	// init-time claims found in the security policy.

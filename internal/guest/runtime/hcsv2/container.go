@@ -18,6 +18,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
+	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	"github.com/Microsoft/hcsshim/internal/guest/storage"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
@@ -158,12 +159,12 @@ func (c *Container) Delete(ctx context.Context) error {
 	entity.Info("opengcs::Container::Delete")
 	if c.isSandbox {
 		// remove user mounts in sandbox container
-		if err := storage.UnmountAllInPath(ctx, getSandboxMountsDir(c.id), true); err != nil {
+		if err := storage.UnmountAllInPath(ctx, specInternal.SandboxMountsDir(c.id), true); err != nil {
 			entity.WithError(err).Error("failed to unmount sandbox mounts")
 		}
 
 		// remove hugepages mounts in sandbox container
-		if err := storage.UnmountAllInPath(ctx, getSandboxHugePageMountsDir(c.id), true); err != nil {
+		if err := storage.UnmountAllInPath(ctx, specInternal.HugePagesMountsDir(c.id), true); err != nil {
 			entity.WithError(err).Error("failed to unmount hugepages mounts")
 		}
 	}

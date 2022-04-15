@@ -1,3 +1,6 @@
+//go:build linux
+// +build linux
+
 package policy
 
 import (
@@ -6,8 +9,9 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
-// For testing. Records the number of calls to each method so we can verify
-// the expected interactions took place.
+// MountMonitoringSecurityPolicyEnforcer is used for testing and records the
+// number of calls to each method, so we can verify the expected interactions
+// took place.
 type MountMonitoringSecurityPolicyEnforcer struct {
 	DeviceMountCalls   int
 	DeviceUnmountCalls int
@@ -35,6 +39,14 @@ func (p *MountMonitoringSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ s
 	return nil
 }
 
+func (MountMonitoringSecurityPolicyEnforcer) EnforceMountPolicy(_, _ string, _ *oci.Spec) error {
+	return nil
+}
+
 func (p *MountMonitoringSecurityPolicyEnforcer) EnforceExpectedMountsPolicy(_ string, _ *oci.Spec) error {
+	return nil
+}
+
+func (MountMonitoringSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
 	return nil
 }
