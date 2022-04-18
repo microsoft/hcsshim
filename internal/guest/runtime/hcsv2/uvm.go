@@ -172,26 +172,6 @@ func setupSandboxHugePageMountsPath(id string) error {
 }
 
 func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VMHostedContainerSettingsV2) (_ *Container, err error) {
-	if _, err := h.GetRunningContainer(id); err == nil {
-		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemAlreadyExists)
-	} else {
-		herr := err.(*gcserr.BaseHresultError)
-		if herr.Hresult() == gcserr.HrVmcomputeInvalidState {
-			return nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemAlreadyExists)
-		}
-	}
-
-	err = h.securityPolicyEnforcer.EnforceCreateContainerPolicy(
-		id,
-		settings.OCISpecification.Process.Args,
-		settings.OCISpecification.Process.Env,
-		settings.OCISpecification.Process.Cwd,
-	)
-
-	if err != nil {
-		return nil, errors.Wrapf(err, "container creation denied due to policy")
-	}
-
 	criType, isCRI := settings.OCISpecification.Annotations[annotations.KubernetesContainerType]
 	c := &Container{
 		id:        id,
@@ -202,6 +182,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		processes: make(map[uint32]*containerProcess),
 		Status:    containerCreating,
 	}
+
 	if err := h.AddContainer(id, c); err != nil {
 		return nil, err
 	}
@@ -210,6 +191,16 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 			h.RemoveContainer(id)
 		}
 	}()
+
+	err = h.securityPolicyEnforcer.EnforceCreateContainerPolicy(
+		id,
+		settings.OCISpecification.Process.Args,
+		settings.OCISpecification.Process.Env,
+		settings.OCISpecification.Process.Cwd,
+	)
+	if err != nil {
+		return nil, errors.Wrapf(err, "container creation denied due to policy")
+	}
 
 	var namespaceID string
 	// for sandbox container sandboxID is same as container id

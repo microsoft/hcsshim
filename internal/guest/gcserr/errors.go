@@ -87,14 +87,14 @@ func BaseStackTrace(e error) errors.StackTrace {
 	return tracer.StackTrace()
 }
 
-type BaseHresultError struct {
+type baseHresultError struct {
 	hresult Hresult
 }
 
-func (e *BaseHresultError) Error() string {
+func (e *baseHresultError) Error() string {
 	return fmt.Sprintf("HRESULT: 0x%x", uint32(e.Hresult()))
 }
-func (e *BaseHresultError) Hresult() Hresult {
+func (e *baseHresultError) Hresult() Hresult {
 	return e.hresult
 }
 
@@ -139,7 +139,7 @@ func (e *wrappingHresultError) StackTrace() errors.StackTrace {
 
 // NewHresultError produces a new error with the given HRESULT.
 func NewHresultError(hresult Hresult) error {
-	return &BaseHresultError{hresult: hresult}
+	return &baseHresultError{hresult: hresult}
 }
 
 // WrapHresult produces a new error with the given HRESULT and wrapping the
