@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/ext4/internal/format"
+	"github.com/Microsoft/hcsshim/internal/memory"
 )
 
 // Writer writes a compact ext4 file system.
@@ -101,15 +102,15 @@ const (
 	maxInodesPerGroup       = BlockSize * 8 // Limited by the inode bitmap
 	inodesPerGroupIncrement = BlockSize / inodeSize
 
-	defaultMaxDiskSize = 16 * 1024 * 1024 * 1024        // 16GB
+	defaultMaxDiskSize = 16 * memory.GiB                // 16GB
 	maxMaxDiskSize     = 16 * 1024 * 1024 * 1024 * 1024 // 16TB
 
 	groupDescriptorSize      = 32 // Use the small group descriptor
 	groupsPerDescriptorBlock = BlockSize / groupDescriptorSize
 
-	maxFileSize             = 128 * 1024 * 1024 * 1024 // 128GB file size maximum for now
-	smallSymlinkSize        = 59                       // max symlink size that goes directly in the inode
-	maxBlocksPerExtent      = 0x8000                   // maximum number of blocks in an extent
+	maxFileSize             = 128 * memory.GiB // 128GB file size maximum for now
+	smallSymlinkSize        = 59               // max symlink size that goes directly in the inode
+	maxBlocksPerExtent      = 0x8000           // maximum number of blocks in an extent
 	inodeDataSize           = 60
 	inodeUsedSize           = 152 // fields through CrtimeExtra
 	inodeExtraSize          = inodeSize - inodeUsedSize

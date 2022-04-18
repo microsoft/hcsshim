@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
@@ -276,7 +277,7 @@ func Test_CreateContainer_MemorySize_Config_WCOW_Process(t *testing.T) {
 			},
 			Windows: &runtime.WindowsContainerConfig{
 				Resources: &runtime.WindowsContainerResources{
-					MemoryLimitInBytes: 768 * 1024 * 1024, // 768MB
+					MemoryLimitInBytes: 768 * memory.MiB, // 768MB
 				},
 			},
 		},
@@ -336,7 +337,7 @@ func Test_CreateContainer_MemorySize_Config_WCOW_Hypervisor(t *testing.T) {
 			},
 			Windows: &runtime.WindowsContainerConfig{
 				Resources: &runtime.WindowsContainerResources{
-					MemoryLimitInBytes: 768 * 1024 * 1024, // 768MB
+					MemoryLimitInBytes: 768 * memory.MiB, // 768MB
 				},
 			},
 		},
@@ -392,7 +393,7 @@ func Test_CreateContainer_MemorySize_LCOW(t *testing.T) {
 			},
 			Linux: &runtime.LinuxContainerConfig{
 				Resources: &runtime.LinuxContainerResources{
-					MemoryLimitInBytes: 768 * 1024 * 1024, // 768MB
+					MemoryLimitInBytes: 768 * memory.MiB, // 768MB
 				},
 			},
 		},

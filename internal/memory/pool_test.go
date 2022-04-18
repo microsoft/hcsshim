@@ -38,13 +38,13 @@ func Test_MemAlloc_allocate_without_expand(t *testing.T) {
 		offset: 0,
 	}
 
-	testAllocate(t, ma, MegaByte)
+	testAllocate(t, ma, MiB)
 }
 
 func Test_MemAlloc_allocate_not_enough_space(t *testing.T) {
 	ma := &PoolAllocator{}
 
-	_, err := ma.Allocate(MegaByte)
+	_, err := ma.Allocate(MiB)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -72,7 +72,7 @@ func Test_MemAlloc_expand(t *testing.T) {
 
 	poolCls0 := pa.pools[0]
 	for i := 0; i < 4; i++ {
-		offset := uint64(i) * MegaByte
+		offset := uint64(i) * MiB
 		_, ok := poolCls0.free[offset]
 		if !ok {
 			t.Fatalf("did not find region with offset=%d", offset)
@@ -88,12 +88,12 @@ func Test_MemAlloc_expand(t *testing.T) {
 func Test_MemAlloc_allocate_automatically_expands(t *testing.T) {
 	pa := &PoolAllocator{}
 	pa.pools[2] = newEmptyMemoryPool()
-	pa.pools[2].free[MegaByte] = &region{
+	pa.pools[2].free[MiB] = &region{
 		class:  2,
-		offset: MegaByte,
+		offset: MiB,
 	}
 
-	testAllocate(t, pa, MegaByte)
+	testAllocate(t, pa, MiB)
 
 	if pa.pools[1] == nil {
 		t.Fatalf("memory not extended for class type 1")
@@ -112,7 +112,7 @@ func Test_MemAlloc_alloc_and_release(t *testing.T) {
 	}
 	pa.pools[0].free[0] = r
 
-	testAllocate(t, pa, MegaByte)
+	testAllocate(t, pa, MiB)
 
 	err := pa.Release(r)
 	if err != nil {
@@ -147,10 +147,10 @@ func Test_MemAlloc_release_invalid_offset(t *testing.T) {
 	}
 	pa.pools[0].free[0] = r
 
-	testAllocate(t, pa, MegaByte)
+	testAllocate(t, pa, MiB)
 
 	// change the actual offset
-	r.offset = MegaByte
+	r.offset = MiB
 	err := pa.Release(r)
 	if err == nil {
 		t.Fatal("no error returned")
@@ -163,7 +163,7 @@ func Test_MemAlloc_release_invalid_offset(t *testing.T) {
 func Test_MemAlloc_Max_Out(t *testing.T) {
 	ma := NewPoolMemoryAllocator()
 	for i := 0; i < 4096; i++ {
-		_, err := ma.Allocate(MegaByte)
+		_, err := ma.Allocate(MiB)
 		if err != nil {
 			t.Fatalf("unexpected error during memory allocation: %s", err)
 		}
@@ -172,7 +172,7 @@ func Test_MemAlloc_Max_Out(t *testing.T) {
 		t.Fatalf("expected 4096 busy blocks of class 0, got %d instead", len(ma.pools[0].busy))
 	}
 	for i := 0; i < 4096; i++ {
-		offset := uint64(i) * MegaByte
+		offset := uint64(i) * MiB
 		if _, ok := ma.pools[0].busy[offset]; !ok {
 			t.Fatalf("expected to find offset %d", offset)
 		}
@@ -189,17 +189,17 @@ func Test_GetMemoryClass(t *testing.T) {
 	testCases := []config{
 		{
 			name:     "Size_1MB_Class_0",
-			size:     MegaByte,
+			size:     MiB,
 			expected: 0,
 		},
 		{
 			name:     "Size_6MB_Class_2",
-			size:     6 * MegaByte,
+			size:     6 * MiB,
 			expected: 2,
 		},
 		{
 			name:     "Size_2GB_Class_6",
-			size:     2 * GigaByte,
+			size:     2 * GiB,
 			expected: 6,
 		},
 	}

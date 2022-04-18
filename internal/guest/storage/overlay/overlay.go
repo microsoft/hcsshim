@@ -44,7 +44,7 @@ func processErrNoSpace(ctx context.Context, path string, err error) {
 	used := all - free
 
 	toGigabyteStr := func(val uint64) string {
-		return fmt.Sprintf("%.1f", float64(val)/float64(memory.GigaByte))
+		return fmt.Sprintf("%.1f", float64(val)/float64(memory.GiB))
 	}
 
 	log.G(ctx).WithFields(logrus.Fields{

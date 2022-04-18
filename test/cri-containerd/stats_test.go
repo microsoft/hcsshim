@@ -5,9 +5,11 @@ package cri_containerd
 
 import (
 	"context"
-	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"strconv"
 	"testing"
+
+	"github.com/Microsoft/hcsshim/internal/memory"
+	"github.com/Microsoft/hcsshim/pkg/annotations"
 
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
@@ -79,7 +81,7 @@ func verifyPhysicallyBackedWorkingSet(t *testing.T, num uint64, stat *runtime.Co
 	if stat == nil {
 		t.Fatal("expected stat to be non nil")
 	}
-	numInBytes := num * 1024 * 1024
+	numInBytes := num * memory.MiB
 	if stat.Memory.WorkingSetBytes.Value != numInBytes {
 		t.Fatalf("expected working set size to be %d bytes but got: %d", numInBytes, stat.Memory.WorkingSetBytes.Value)
 	}

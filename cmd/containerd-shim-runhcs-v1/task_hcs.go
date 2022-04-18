@@ -31,6 +31,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/jobcontainers"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
@@ -41,8 +42,6 @@ import (
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
-
-const bytesPerMB = 1024 * 1024
 
 func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
 	log.G(ctx).WithField("tid", req.ID).Debug("newHcsStandaloneTask")
@@ -1008,7 +1007,7 @@ func (ht *hcsTask) updateWCOWResources(ctx context.Context, data interface{}, an
 		return errors.New("must have resources be type *WindowsResources when updating a wcow container")
 	}
 	if resources.Memory != nil && resources.Memory.Limit != nil {
-		newMemorySizeInMB := *resources.Memory.Limit / bytesPerMB
+		newMemorySizeInMB := *resources.Memory.Limit / memory.MiB
 		memoryLimit := hcsoci.NormalizeMemorySize(ctx, ht.id, newMemorySizeInMB)
 		if err := ht.requestUpdateContainer(ctx, resourcepaths.SiloMemoryResourcePath, memoryLimit); err != nil {
 			return err

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
+	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/containerd/console"
 	"github.com/sirupsen/logrus"
@@ -111,7 +112,7 @@ var lcowCommand = cli.Command{
 				options.VPMemDeviceCount = uint32(c.Uint(vpMemMaxCountArgName))
 			}
 			if c.IsSet(vpMemMaxSizeArgName) {
-				options.VPMemSizeBytes = c.Uint64(vpMemMaxSizeArgName) * 1024 * 1024 // convert from MB to bytes
+				options.VPMemSizeBytes = c.Uint64(vpMemMaxSizeArgName) * memory.MiB // convert from MB to bytes
 			}
 			if !useGcs {
 				if c.IsSet(execCommandLineArgName) {

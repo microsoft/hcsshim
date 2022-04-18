@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
@@ -22,7 +23,7 @@ func TestUVMMemoryUpdateLCOW(t *testing.T) {
 	u := testutilities.CreateLCOWUVMFromOpts(ctx, t, opts)
 	defer u.Close()
 
-	newMemorySize := uint64(opts.MemorySizeInMB/2) * bytesPerMB
+	newMemorySize := uint64(opts.MemorySizeInMB/2) * memory.MiB
 
 	if err := u.UpdateMemory(ctx, newMemorySize); err != nil {
 		t.Fatalf("failed to make call to modify UVM memory size in MB with: %v", err)
@@ -49,7 +50,7 @@ func TestUVMMemoryUpdateWCOW(t *testing.T) {
 	defer os.RemoveAll(uvmScratchDir)
 	defer u.Close()
 
-	newMemoryInBytes := uint64(opts.MemorySizeInMB/2) * bytesPerMB
+	newMemoryInBytes := uint64(opts.MemorySizeInMB/2) * memory.MiB
 	if err := u.UpdateMemory(ctx, newMemoryInBytes); err != nil {
 		t.Fatalf("failed to make call to modify UVM memory size in MB with: %v", err)
 	}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/containerd/containerd/runtime/v2/task"
@@ -69,7 +70,7 @@ The delete command will be executed in the container's bundle as its cwd.
 		// This should be done as the first thing so that we don't miss any panic logs even if
 		// something goes wrong during delete op.
 		// The file can be very large so read only first 1MB of data.
-		readLimit := int64(1024 * 1024) // 1MB
+		readLimit := int64(memory.MiB) // 1MB
 		logBytes, err := limitedRead(filepath.Join(bundleFlag, "panic.log"), readLimit)
 		if err == nil && len(logBytes) > 0 {
 			if int64(len(logBytes)) == readLimit {

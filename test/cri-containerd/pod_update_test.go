@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/cpugroup"
+	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
@@ -45,7 +46,7 @@ func Test_Pod_UpdateResources_Memory(t *testing.T) {
 			} else {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}
-			var startingMemorySize int64 = 768 * 1024 * 1024
+			var startingMemorySize int64 = 768 * memory.MiB
 			podRequest := getRunPodSandboxRequest(
 				t,
 				test.runtimeHandler,
@@ -116,7 +117,7 @@ func Test_Pod_UpdateResources_Memory_PA(t *testing.T) {
 			} else {
 				pullRequiredImages(t, []string{test.sandboxImage})
 			}
-			var startingMemorySize int64 = 200 * 1024 * 1024
+			var startingMemorySize int64 = 200 * memory.MiB
 			podRequest := getRunPodSandboxRequest(
 				t,
 				test.runtimeHandler,

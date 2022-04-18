@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/ext4/internal/format"
+	"github.com/Microsoft/hcsshim/internal/memory"
 )
 
 type testFile struct {
@@ -318,9 +319,9 @@ func TestTime(t *testing.T) {
 
 func TestLargeFile(t *testing.T) {
 	testFiles := []testFile{
-		{Path: "small", File: &File{}, DataSize: 1024 * 1024},        // can't change type
-		{Path: "medium", File: &File{}, DataSize: 200 * 1024 * 1024}, // can't change type
-		{Path: "large", File: &File{}, DataSize: 600 * 1024 * 1024},  // can't change type
+		{Path: "small", File: &File{}, DataSize: memory.MiB},        // can't change type
+		{Path: "medium", File: &File{}, DataSize: 200 * memory.MiB}, // can't change type
+		{Path: "large", File: &File{}, DataSize: 600 * memory.MiB},  // can't change type
 	}
 	runTestsOnFiles(t, testFiles)
 }

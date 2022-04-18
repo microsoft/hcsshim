@@ -8,18 +8,16 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/memory"
 )
 
-const (
-	bytesPerPage = 4096
-	bytesPerMB   = 1024 * 1024
-)
+const bytesPerPage = 4096
 
 // UpdateMemory makes a call to the VM's orchestrator to update the VM's size in MB
 // Internally, HCS will get the number of pages this corresponds to and attempt to assign
 // pages to numa nodes evenly
 func (uvm *UtilityVM) UpdateMemory(ctx context.Context, sizeInBytes uint64) error {
-	requestedSizeInMB := sizeInBytes / bytesPerMB
+	requestedSizeInMB := sizeInBytes / memory.MiB
 	actual := uvm.normalizeMemorySize(ctx, requestedSizeInMB)
 	req := &hcsschema.ModifySettingRequest{
 		ResourcePath: resourcepaths.MemoryResourcePath,

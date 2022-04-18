@@ -7,6 +7,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/jobobject"
+	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 
@@ -57,7 +58,7 @@ func specToLimits(ctx context.Context, cid string, s *specs.Spec) (*jobobject.Jo
 		CPUWeight:          realCPUWeight,
 		MaxIOPS:            maxIops,
 		MaxBandwidth:       maxBandwidth,
-		MemoryLimitInBytes: memLimitMB * 1024 * 1024,
+		MemoryLimitInBytes: memLimitMB * memory.MiB,
 	}, nil
 }
 

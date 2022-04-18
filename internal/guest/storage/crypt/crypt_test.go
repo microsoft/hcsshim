@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/pkg/errors"
 )
 
@@ -194,7 +195,7 @@ func Test_Encrypt_Create_Sparse_File_Error(t *testing.T) {
 	// Test what happens when it isn't possible to create a sparse file, and
 	// make sure that _createSparseEmptyFile receives the right arguments.
 
-	blockDeviceSize := int64(1024 * 1024 * 1024)
+	blockDeviceSize := int64(memory.GiB)
 
 	_generateKeyFile = func(path string, size int64) error {
 		return nil
@@ -246,7 +247,7 @@ func Test_Encrypt_Mkfs_Error(t *testing.T) {
 	// Test what happens when mkfs fails to format the unencrypted device.
 	// Verify that the arguments passed to it are the right ones.
 
-	blockDeviceSize := int64(1024 * 1024 * 1024)
+	blockDeviceSize := int64(memory.GiB)
 
 	_generateKeyFile = func(path string, size int64) error {
 		return nil
@@ -296,7 +297,7 @@ func Test_Encrypt_Sparse_Copy_Error(t *testing.T) {
 	// Test what happens when the sparse copy fails. Verify that the arguments
 	// passed to it are the right ones.
 
-	blockDeviceSize := int64(1024 * 1024 * 1024)
+	blockDeviceSize := int64(memory.GiB)
 
 	_generateKeyFile = func(path string, size int64) error {
 		return nil
@@ -354,7 +355,7 @@ func Test_Encrypt_Success(t *testing.T) {
 
 	// Test what happens when everything goes right.
 
-	blockDeviceSize := int64(1024 * 1024 * 1024)
+	blockDeviceSize := int64(memory.GiB)
 
 	_generateKeyFile = func(path string, size int64) error {
 		return nil

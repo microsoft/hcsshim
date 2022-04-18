@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
@@ -302,7 +303,7 @@ func Test_Container_UpdateResources_Memory(t *testing.T) {
 			defer removePodSandbox(t, client, ctx, podID)
 			defer stopPodSandbox(t, client, ctx, podID)
 
-			var startingMemorySize int64 = 768 * 1024 * 1024
+			var startingMemorySize int64 = 768 * memory.MiB
 			containerRequest := &runtime.CreateContainerRequest{
 				Config: &runtime.ContainerConfig{
 					Metadata: &runtime.ContainerMetadata{

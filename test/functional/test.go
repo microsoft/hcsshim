@@ -13,10 +13,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const (
-	bytesPerMB = 1024 * 1024
-)
-
 var pauseDurationOnCreateContainerFailure time.Duration
 
 func init() {
