@@ -130,8 +130,9 @@ func (h *Host) GetRunningContainer(id string) (*Container, error) {
 	if c, ok := h.containers[id]; !ok {
 		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemNotFound)
 	} else {
-		if c.Status != containerRunning {
-			return nil, gcserr.NewHresultError(gcserr.HrVmcomputeInvalidState)
+		if c.status != containerRunning {
+			return nil, fmt.Errorf("container is not in state running: %w",
+				gcserr.NewHresultError(gcserr.HrVmcomputeInvalidState))
 		}
 		return c, nil
 	}
@@ -180,7 +181,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		isSandbox: criType == "sandbox",
 		exitType:  prot.NtUnexpectedExit,
 		processes: make(map[uint32]*containerProcess),
-		Status:    containerCreating,
+		status:    containerCreating,
 	}
 
 	if err := h.AddContainer(id, c); err != nil {
@@ -331,7 +332,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}
 	}
 
-	c.Status = containerRunning
+	c.status = containerRunning
 	return c, nil
 }
 

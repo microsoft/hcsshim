@@ -28,7 +28,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
-type containerStatus int
+type containerStatus uint8
 
 const (
 	containerCreating containerStatus = iota
@@ -51,7 +51,7 @@ type Container struct {
 	processesMutex sync.Mutex
 	processes      map[uint32]*containerProcess
 
-	Status containerStatus
+	status containerStatus
 }
 
 func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSettings) (int, error) {
