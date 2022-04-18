@@ -84,9 +84,9 @@ out/delta.tar.gz: bin/init bin/vsockexec bin/cmd/gcs bin/cmd/gcstools bin/cmd/ho
 	git -C $(SRCROOT) rev-parse HEAD > rootfs/info/gcs.commit && \
 	git -C $(SRCROOT) rev-parse --abbrev-ref HEAD > rootfs/info/gcs.branch && \
 	date --iso-8601=minute --utc > rootfs/info/tar.date
-	$(if $(realpath $(subst .tar,.testdata.json,$(BASE))), \
+	$(if $(and $(realpath $(subst .tar,.testdata.json,$(BASE))), $(shell which jq)), \
 		jq -r '.IMAGE_NAME' $(subst .tar,.testdata.json,$(BASE)) 2>/dev/null > rootfs/info/image.name && \
-		jq -r '.DATETIME' $(subst .tar,.testdata.json,$(BASE)) 2>/dev/null > rootfs/info/build.date )
+		jq -r '.DATETIME' $(subst .tar,.testdata.json,$(BASE)) 2>/dev/null > rootfs/info/build.date)
 	tar -zcf $@ -C rootfs .
 	rm -rf rootfs
 
