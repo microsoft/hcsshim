@@ -24,6 +24,7 @@ service/pkg/
 *.img
 *.vhd
 *.tar.gz
+*.tar
 
 # Make stuff
 .rootfs-done
@@ -31,10 +32,18 @@ bin/*
 rootfs/*
 rootfs-conv/*
 *.o
-/build/
+build
+protobuf
 
 deps/*
 out/*
+tmp
+
+test/results
 
 go.work
 go.work.sum
+
+# ninja build
+.ninja_log
+build.ninja
