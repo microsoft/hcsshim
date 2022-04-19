@@ -435,12 +435,9 @@ func (c *JobContainer) PropertiesV2(ctx context.Context, types ...hcsschema.Prop
 		return nil, errors.Wrap(err, "failed to query for job containers storage information")
 	}
 
-	var privateWorkingSet uint64
-	err = forEachProcessInfo(c.job, func(procInfo *winapi.SYSTEM_PROCESS_INFORMATION) {
-		privateWorkingSet += uint64(procInfo.WorkingSetPrivateSize)
-	})
+	privateWorkingSet, err := c.job.PrivateWorkingSet()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get private working set for container")
+		return nil, fmt.Errorf("failed to get private working set for container: %w", err)
 	}
 
 	return &hcsschema.Properties{
@@ -459,10 +456,10 @@ func (c *JobContainer) PropertiesV2(ctx context.Context, types ...hcsschema.Prop
 				TotalRuntime100ns:  uint64(processorInfo.TotalKernelTime + processorInfo.TotalUserTime),
 			},
 			Storage: &hcsschema.StorageStats{
-				ReadCountNormalized:  storageInfo.IoInfo.ReadOperationCount,
-				ReadSizeBytes:        storageInfo.IoInfo.ReadTransferCount,
-				WriteCountNormalized: storageInfo.IoInfo.WriteOperationCount,
-				WriteSizeBytes:       storageInfo.IoInfo.WriteTransferCount,
+				ReadCountNormalized:  uint64(storageInfo.ReadStats.IoCount),
+				ReadSizeBytes:        storageInfo.ReadStats.TotalSize,
+				WriteCountNormalized: uint64(storageInfo.WriteStats.IoCount),
+				WriteSizeBytes:       storageInfo.WriteStats.TotalSize,
 			},
 		},
 	}, nil

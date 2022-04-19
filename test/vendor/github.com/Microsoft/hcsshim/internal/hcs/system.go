@@ -6,18 +6,22 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/jobobject"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/vmcompute"
 	"go.opencensus.io/trace"
+	"golang.org/x/sys/windows"
 )
 
 type System struct {
@@ -31,6 +35,7 @@ type System struct {
 	waitError      error
 	exitError      error
 	os, typ        string
+	startTime      time.Time
 }
 
 func newSystem(id string) *System {
@@ -38,6 +43,11 @@ func newSystem(id string) *System {
 		id:        id,
 		waitBlock: make(chan struct{}),
 	}
+}
+
+// Implementation detail for silo naming, this should NOT be relied upon very heavily.
+func siloNameFmt(containerID string) string {
+	return fmt.Sprintf(`\Container_%s`, containerID)
 }
 
 // CreateComputeSystem creates a new compute system with the given configuration but does not start it.
@@ -197,7 +207,7 @@ func (computeSystem *System) Start(ctx context.Context) (err error) {
 	if err != nil {
 		return makeSystemError(computeSystem, operation, err, events)
 	}
-
+	computeSystem.startTime = time.Now()
 	return nil
 }
 
@@ -326,12 +336,112 @@ func (computeSystem *System) Properties(ctx context.Context, types ...schema1.Pr
 	return properties, nil
 }
 
+// statisticsInProc emulates what HCS does to grab statistics for a given container with a small
+// change to make grabbing the private working set total much more efficient.
+func (computeSystem *System) statisticsInProc(ctx context.Context) (*hcsschema.Properties, error) {
+	// See if we'd even be able to open the silo. We'll need to be local
+	// system/system so check first.
+	usr, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		return nil, err
+	}
+	if !usr.User.Sid.IsWellKnown(windows.WinLocalSystemSid) {
+		return nil, errors.New("process does not have the right permissions to open the silo")
+	}
+
+	jobOptions := &jobobject.Options{
+		UseNTVariant: true,
+		Name:         siloNameFmt(computeSystem.id),
+	}
+	job, err := jobobject.Open(ctx, jobOptions)
+	if err != nil {
+		return nil, err
+	}
+	defer job.Close()
+
+	memInfo, err := job.QueryMemoryStats()
+	if err != nil {
+		return nil, err
+	}
+
+	processorInfo, err := job.QueryProcessorStats()
+	if err != nil {
+		return nil, err
+	}
+
+	storageInfo, err := job.QueryStorageStats()
+	if err != nil {
+		return nil, err
+	}
+
+	privateWorkingSet, err := job.PrivateWorkingSet()
+	if err != nil {
+		return nil, err
+	}
+
+	return &hcsschema.Properties{
+		Statistics: &hcsschema.Statistics{
+			Timestamp:          time.Now(),
+			ContainerStartTime: computeSystem.startTime,
+			Uptime100ns:        uint64(time.Since(computeSystem.startTime)) / 100,
+			Memory: &hcsschema.MemoryStats{
+				MemoryUsageCommitBytes:            memInfo.JobMemory,
+				MemoryUsageCommitPeakBytes:        memInfo.PeakJobMemoryUsed,
+				MemoryUsagePrivateWorkingSetBytes: privateWorkingSet,
+			},
+			Processor: &hcsschema.ProcessorStats{
+				RuntimeKernel100ns: uint64(processorInfo.TotalKernelTime),
+				RuntimeUser100ns:   uint64(processorInfo.TotalUserTime),
+				TotalRuntime100ns:  uint64(processorInfo.TotalKernelTime + processorInfo.TotalUserTime),
+			},
+			Storage: &hcsschema.StorageStats{
+				ReadCountNormalized:  uint64(storageInfo.ReadStats.IoCount),
+				ReadSizeBytes:        storageInfo.ReadStats.TotalSize,
+				WriteCountNormalized: uint64(storageInfo.WriteStats.IoCount),
+				WriteSizeBytes:       storageInfo.WriteStats.TotalSize,
+			},
+		},
+	}, nil
+}
+
 // PropertiesV2 returns the requested container properties targeting a V2 schema container.
 func (computeSystem *System) PropertiesV2(ctx context.Context, types ...hcsschema.PropertyType) (*hcsschema.Properties, error) {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
 
 	operation := "hcs::System::PropertiesV2"
+
+	// There's an optimization we can make here if the user is asking for Statistics only, and this is due to
+	// an inefficient way that HCS calculates the private working set total for a given container. HCS
+	// calls NtQuerySystemInformation with the class SystemProcessInformation which returns an array containing
+	// system information for *every* process running on the machine. They then grab the pids that are running in
+	// the container and filter down the entries in the array to only what's running in that silo and start tallying
+	// up the total. This doesn't work well as performance should get worse if more processess are running on the
+	// machine in general and not just in the container. All of the additional information besides the
+	// WorkingSetPrivateSize field is ignored as well which isn't great and is wasted work to fetch.
+	//
+	// HCS only let's you grab statistics in an all or nothing fashion, so we can't just grab the private
+	// working set ourselves and ask for everything else seperately. The optimization we can make here is
+	// to open the silo ourselves and do the same queries for the rest of the info, as well as calculating
+	// the private working set in a more efficient manner by:
+	//
+	// 1. Find the pids running in the silo
+	// 2. Get a process handle for every process (only need PROCESS_QUERY_LIMITED_INFORMATION access)
+	// 3. Call NtQueryInformationProcess on each process with the class ProcessVmCounters
+	// 4. Tally up the total using the field PrivateWorkingSetSize in VM_COUNTERS_EX2.
+	//
+	// The only caveat is the process invoking this code must be running as SYSTEM to open the silo,
+	// otherwise we'll fallback to asking HCS for the information.
+
+	// First check if we're only asking for Stats to see if we can apply the above optimization. We should
+	// only do this for containers and not UVMs.
+	if (len(types) == 1 && types[0] == hcsschema.PTStatistics) && computeSystem.typ == "container" {
+		properties, err := computeSystem.statisticsInProc(ctx)
+		// If no errors just return the info as is, if not we'll fallback to the HCS route.
+		if err == nil {
+			return properties, nil
+		}
+	}
 
 	queryBytes, err := json.Marshal(hcsschema.PropertyQuery{PropertyTypes: types})
 	if err != nil {
