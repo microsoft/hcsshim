@@ -73,6 +73,12 @@ func getPodSandboxStatus(t *testing.T, client runtime.RuntimeServiceClient, ctx 
 	return status.Status
 }
 
+func assertPodSandboxState(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, podID string, state runtime.PodSandboxState) {
+	if st := getPodSandboxStatus(t, client, ctx, podID).State; st != state {
+		t.Fatalf("got pod sandbox %q state %q; wanted %v", podID, st.String(), state.String())
+	}
+}
+
 func getTestSandboxConfig(t *testing.T, opts ...SandboxConfigOpt) *runtime.PodSandboxConfig {
 	c := &runtime.PodSandboxConfig{
 		Metadata: &runtime.PodSandboxMetadata{

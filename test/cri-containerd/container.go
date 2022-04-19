@@ -70,6 +70,12 @@ func getContainerStatus(t *testing.T, client runtime.RuntimeServiceClient, ctx c
 	return getContainerStatusFull(t, client, ctx, containerID).State
 }
 
+func assertContainerState(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string, state runtime.ContainerState) {
+	if st := getContainerStatus(t, client, ctx, containerID); st != state {
+		t.Fatalf("got container %q state %q; wanted %v", containerID, st.String(), state.String())
+	}
+}
+
 func getContainerStatusFull(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) *runtime.ContainerStatus {
 	response, err := client.ContainerStatus(ctx, &runtime.ContainerStatusRequest{
 		ContainerId: containerID,

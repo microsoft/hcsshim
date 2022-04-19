@@ -129,14 +129,19 @@ func Test_Container_CRI_Restart(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		// Test both implicit and explicit restart
+		// Implicit restart uses a container annotation to cause pod run and container start
+		// to automatically restart exited pods and containers.
+		// Explicit requires an intervening call to the restart pod or container CRI extension
+		// command between stoping the pod or container, and then calling run or start again.
 		for _, explicit := range []bool{false, true} {
 			suffix := "_Implicit"
 			if explicit {
 				suffix = "_Explicit"
 			}
 
-			t.Run(tt.Name+suffix, func(subtest *testing.T) {
-				requireFeatures(subtest, tt.Feature)
+			t.Run(tt.Name+suffix, func(t *testing.T) {
+				requireFeatures(t, tt.Feature)
 
 				opts := tt.SandboxOpts
 				if !explicit {
@@ -145,99 +150,62 @@ func Test_Container_CRI_Restart(t *testing.T) {
 							criAnnotations.EnableReset: "true",
 						}))
 				}
-				sandboxRequest := getRunPodSandboxRequest(subtest, tt.Runtime, opts...)
-				podID := runPodSandbox(subtest, client, ctx, sandboxRequest)
-				defer removePodSandbox(subtest, client, ctx, podID)
-				defer stopPodSandbox(subtest, client, ctx, podID)
+				sandboxRequest := getRunPodSandboxRequest(t, tt.Runtime, opts...)
+				podID := runPodSandbox(t, client, ctx, sandboxRequest)
+				defer removePodSandbox(t, client, ctx, podID)
+				defer stopPodSandbox(t, client, ctx, podID)
 
-				request := &runtime.CreateContainerRequest{
-					PodSandboxId: podID,
-					Config: &runtime.ContainerConfig{
-						Metadata: &runtime.ContainerMetadata{
-							Name: subtest.Name() + "-Container",
-						},
-						Image: &runtime.ImageSpec{
-							Image: tt.Image,
-						},
-						Command:     tt.Command,
-						Annotations: map[string]string{},
-					},
-					SandboxConfig: sandboxRequest.Config,
-				}
+				request := getCreateContainerRequest(podID, t.Name()+"-Container", tt.Image, tt.Command, sandboxRequest.Config)
+				request.Config.Annotations = map[string]string{}
 
 				if !explicit {
 					request.Config.Annotations[criAnnotations.EnableReset] = "true"
 				}
 
-				containerID := createContainer(subtest, client, ctx, request)
-				startContainer(subtest, client, ctx, containerID)
-				defer removeContainer(subtest, client, ctx, containerID)
-				defer stopContainer(subtest, client, ctx, containerID)
+				containerID := createContainer(t, client, ctx, request)
+				startContainer(t, client, ctx, containerID)
+				defer removeContainer(t, client, ctx, containerID)
+				defer stopContainer(t, client, ctx, containerID)
 
 				/*******************************************************************
 				* restart container
 				*******************************************************************/
-				stopContainer(subtest, client, ctx, containerID)
-				state := getContainerStatus(subtest, client, ctx, containerID)
-				if state != runtime.ContainerState_CONTAINER_EXITED {
-					subtest.Fatalf("failed to initally stop container, state is %v", state)
-				}
+				stopContainer(t, client, ctx, containerID)
+				assertContainerState(t, client, ctx, containerID, runtime.ContainerState_CONTAINER_EXITED)
 
 				if explicit {
 					resetContainer(t, pluginClient, ctx, containerID)
-					state = getContainerStatus(subtest, client, ctx, containerID)
-					if state != runtime.ContainerState_CONTAINER_CREATED {
-						subtest.Fatalf("failed to reset container, state is %v", state)
-					}
+					assertContainerState(t, client, ctx, containerID, runtime.ContainerState_CONTAINER_CREATED)
 				}
 
-				startContainer(subtest, client, ctx, containerID)
-				state = getContainerStatus(subtest, client, ctx, containerID)
-				if state != runtime.ContainerState_CONTAINER_RUNNING {
-					subtest.Fatalf("failed to restart container, state is %v", state)
-				}
+				startContainer(t, client, ctx, containerID)
+				assertContainerState(t, client, ctx, containerID, runtime.ContainerState_CONTAINER_RUNNING)
 
 				/*******************************************************************
 				* restart pod
 				*******************************************************************/
-				stopContainer(subtest, client, ctx, containerID)
-				state = getContainerStatus(subtest, client, ctx, containerID)
-				if state != runtime.ContainerState_CONTAINER_EXITED {
-					subtest.Fatalf("failed to stop container, state is %v", state)
-				}
+				stopContainer(t, client, ctx, containerID)
+				assertContainerState(t, client, ctx, containerID, runtime.ContainerState_CONTAINER_EXITED)
 
-				stopPodSandbox(subtest, client, ctx, podID)
-				podState := getPodSandboxStatus(subtest, client, ctx, podID).State
-				if podState != runtime.PodSandboxState_SANDBOX_NOTREADY {
-					subtest.Fatalf("failed to stop pod sandbox, state is %v", podState)
-				}
+				stopPodSandbox(t, client, ctx, podID)
+				assertPodSandboxState(t, client, ctx, podID, runtime.PodSandboxState_SANDBOX_NOTREADY)
 
 				if explicit {
 					resetPodSandbox(t, pluginClient, ctx, podID)
 				} else {
-					newPodID := runPodSandbox(subtest, client, ctx, sandboxRequest)
+					newPodID := runPodSandbox(t, client, ctx, sandboxRequest)
 					if newPodID != podID {
-						defer removePodSandbox(subtest, client, ctx, newPodID)
-						defer stopPodSandbox(subtest, client, ctx, newPodID)
-						subtest.Fatalf("pod restarted with different id (%q) from original (%q)", newPodID, podID)
+						defer removePodSandbox(t, client, ctx, newPodID)
+						defer stopPodSandbox(t, client, ctx, newPodID)
+						t.Fatalf("pod restarted with different id (%q) from original (%q)", newPodID, podID)
 					}
 				}
 
-				podState = getPodSandboxStatus(subtest, client, ctx, podID).State
-				if podState != runtime.PodSandboxState_SANDBOX_READY {
-					subtest.Fatalf("failed to restart pod sandbox, state is %v", podState)
-				}
+				assertPodSandboxState(t, client, ctx, podID, runtime.PodSandboxState_SANDBOX_READY)
+				assertContainerState(t, client, ctx, containerID, runtime.ContainerState_CONTAINER_CREATED)
 
-				state = getContainerStatus(subtest, client, ctx, containerID)
-				if state != runtime.ContainerState_CONTAINER_CREATED {
-					subtest.Fatalf("failed to reset container, state is %v", state)
-				}
-
-				startContainer(subtest, client, ctx, containerID)
-				state = getContainerStatus(subtest, client, ctx, containerID)
-				if state != runtime.ContainerState_CONTAINER_RUNNING {
-					subtest.Fatalf("failed to restart container, state is %v", state)
-				}
+				startContainer(t, client, ctx, containerID)
+				assertContainerState(t, client, ctx, containerID, runtime.ContainerState_CONTAINER_RUNNING)
 			})
 		}
 	}
@@ -307,107 +275,88 @@ func Test_Container_CRI_Restart_State(t *testing.T) {
 				suffix = "_No" + suffix
 			}
 
-			t.Run(tt.Name+suffix, func(subtest *testing.T) {
-				requireFeatures(subtest, tt.Feature)
+			t.Run(tt.Name+suffix, func(t *testing.T) {
+				requireFeatures(t, tt.Feature)
 				if restart {
-					requireFeatures(subtest, featureTerminateOnRestart)
+					requireFeatures(t, featureTerminateOnRestart)
 				}
 
-				sandboxRequest := getRunPodSandboxRequest(subtest, tt.Runtime,
+				sandboxRequest := getRunPodSandboxRequest(t, tt.Runtime,
 					append(tt.SandboxOpts,
 						WithSandboxAnnotations(map[string]string{
 							criAnnotations.EnableReset: "true",
 						}))...)
 
-				podID := runPodSandbox(subtest, client, ctx, sandboxRequest)
-				defer removePodSandbox(subtest, client, ctx, podID)
-				defer stopPodSandbox(subtest, client, ctx, podID)
+				podID := runPodSandbox(t, client, ctx, sandboxRequest)
+				defer removePodSandbox(t, client, ctx, podID)
+				defer stopPodSandbox(t, client, ctx, podID)
 
-				request := &runtime.CreateContainerRequest{
-					PodSandboxId: podID,
-					Config: &runtime.ContainerConfig{
-						Metadata: &runtime.ContainerMetadata{
-							Name: subtest.Name() + "-Container",
-						},
-						Image: &runtime.ImageSpec{
-							Image: tt.Image,
-						},
-						Command: tt.Command,
-						Annotations: map[string]string{
-							criAnnotations.EnableReset: "true",
-						},
-					},
-					SandboxConfig: sandboxRequest.Config,
+				request := getCreateContainerRequest(podID, t.Name()+"-Container", tt.Image, tt.Command, sandboxRequest.Config)
+				request.Config.Annotations = map[string]string{
+					criAnnotations.EnableReset: "true",
 				}
 
-				containerID := createContainer(subtest, client, ctx, request)
-				startContainer(subtest, client, ctx, containerID)
-				defer removeContainer(subtest, client, ctx, containerID)
+				containerID := createContainer(t, client, ctx, request)
+				startContainer(t, client, ctx, containerID)
+				defer removeContainer(t, client, ctx, containerID)
 				defer func() {
-					stopContainer(subtest, client, ctx, containerID)
+					stopContainer(t, client, ctx, containerID)
 				}()
 
-				execRequest := &runtime.ExecSyncRequest{
+				startExecRequest := &runtime.ExecSyncRequest{
 					ContainerId: containerID,
 					Cmd:         tt.SetStateCommand,
 					Timeout:     1,
 				}
-				req := execSync(subtest, client, ctx, execRequest)
+				req := execSync(t, client, ctx, startExecRequest)
 				if req.ExitCode != 0 {
-					subtest.Fatalf("exec %v failed with exit code %d: %s", execRequest.Cmd, req.ExitCode, string(req.Stderr))
+					t.Fatalf("exec %v failed with exit code %d: %s", startExecRequest.Cmd, req.ExitCode, string(req.Stderr))
 				}
 
 				// check the write worked
-				execRequest = &runtime.ExecSyncRequest{
+				startExecRequest = &runtime.ExecSyncRequest{
 					ContainerId: containerID,
 					Cmd:         tt.GetStateCommand,
 					Timeout:     1,
 				}
 
-				req = execSync(subtest, client, ctx, execRequest)
+				req = execSync(t, client, ctx, startExecRequest)
 				if req.ExitCode != 0 {
-					subtest.Fatalf("exec %v failed with exit code %d: %s %s", execRequest.Cmd, req.ExitCode, string(req.Stdout), string(req.Stderr))
+					t.Fatalf("exec %v failed with exit code %d: %s %s", startExecRequest.Cmd, req.ExitCode, string(req.Stdout), string(req.Stderr))
 				}
 
 				if string(req.Stdout) != tt.ExpectedResult {
-					subtest.Fatalf("did not properly set container state; expected %q, got: %q", tt.ExpectedResult, string(req.Stdout))
+					t.Fatalf("did not properly set container state; expected %q, got: %q", tt.ExpectedResult, string(req.Stdout))
 				}
 
 				/*******************************************************************
 				* restart pod
 				*******************************************************************/
-				stopContainer(subtest, client, ctx, containerID)
-				stopPodSandbox(subtest, client, ctx, podID)
+				stopContainer(t, client, ctx, containerID)
+				stopPodSandbox(t, client, ctx, podID)
 
 				if restart {
 					// allow for any garbage collection and clean up to happen
 					time.Sleep(time.Second * 1)
-					stopContainerd(subtest)
-					startContainerd(subtest)
+					stopContainerd(t)
+					startContainerd(t)
 				}
 
-				newPodID := runPodSandbox(subtest, client, ctx, sandboxRequest)
+				newPodID := runPodSandbox(t, client, ctx, sandboxRequest)
 				if newPodID != podID {
-					defer removePodSandbox(subtest, client, ctx, newPodID)
-					defer stopPodSandbox(subtest, client, ctx, newPodID)
-					subtest.Fatalf("pod restarted with different id (%q) from original (%q)", newPodID, podID)
+					defer removePodSandbox(t, client, ctx, newPodID)
+					defer stopPodSandbox(t, client, ctx, newPodID)
+					t.Fatalf("pod restarted with different id (%q) from original (%q)", newPodID, podID)
 				}
 
-				startContainer(subtest, client, ctx, containerID)
-
-				execRequest = &runtime.ExecSyncRequest{
-					ContainerId: containerID,
-					Cmd:         tt.GetStateCommand,
-					Timeout:     1,
-				}
-
-				req = execSync(subtest, client, ctx, execRequest)
+				startContainer(t, client, ctx, containerID)
+				req = execSync(t, client, ctx, startExecRequest)
 				if req.ExitCode != 0 {
-					subtest.Fatalf("exec %v failed with exit code %d: %s %s", execRequest.Cmd, req.ExitCode, string(req.Stdout), string(req.Stderr))
+					t.Fatalf("exec %v failed with exit code %d: %s %s", startExecRequest.Cmd, req.ExitCode, string(req.Stdout), string(req.Stderr))
 				}
 
 				if string(req.Stdout) != tt.ExpectedResult {
-					subtest.Fatalf("expected %q, got: %q", tt.ExpectedResult, string(req.Stdout))
+					t.Fatalf("expected %q, got: %q", tt.ExpectedResult, string(req.Stdout))
 				}
 			})
 		}
