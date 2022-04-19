@@ -103,7 +103,7 @@ func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec
 
 	// Write resolv.conf
 	if !specInternal.MountPresent("/etc/resolv.conf", spec.Mounts) {
-		ns := getOrAddNetworkNamespace(getNetworkNamespaceID(spec))
+		ns := GetOrAddNetworkNamespace(getNetworkNamespaceID(spec))
 		var searches, servers []string
 		for _, n := range ns.Adapters() {
 			if len(n.DNSSuffix) > 0 {

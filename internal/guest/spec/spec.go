@@ -1,10 +1,8 @@
 //go:build linux
 // +build linux
 
-// Package spec encapsulates a number of GCS specific oci spec modifications, e.g.,
-// networking mounts, sandbox path substitutions in guest etc.
-//
 // TODO: consider moving oci spec specific code from /internal/guest/runtime/hcsv2/spec.go
+
 package spec
 
 import (
