@@ -32,9 +32,12 @@ bin/*
 rootfs/*
 rootfs-conv/*
 *.o
-/build/
+build
+protobuf
+
 deps/*
 out/*
+tmp
 
 # test results
 test/results
@@ -46,3 +49,7 @@ build.ninja
 # go workspaces
 go.work
 go.work.sum
+
+# ninja build
+.ninja_log
+build.ninja

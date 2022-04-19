@@ -264,7 +264,7 @@ type externalProcess struct {
 	remove     func(pid int)
 }
 
-var _ Process = &containerProcess{}
+var _ Process = &externalProcess{}
 
 func (ep *externalProcess) Kill(ctx context.Context, signal syscall.Signal) error {
 	if err := syscall.Kill(int(ep.cmd.Process.Pid), signal); err != nil {

@@ -109,7 +109,7 @@ var lcowCommand = cli.Command{
 		cli.StringSliceFlag{
 			Name: scsiMountsArgName,
 			Usage: "List of VHDs to SCSI mount into the UVM. Use repeat instances to add multiple. " +
-				"Value is of the form `host,guest[,w]`, where `host` is path to the VHD, " +
+				"Value is of the form `host[,guest[,w]]`, where `host` is path to the VHD, " +
 				"`guest` is the mount path inside the UVM, and `w` optionally mounts as writeable",
 		},
 		cli.StringSliceFlag{
@@ -221,6 +221,7 @@ func createLCOWOptions(_ context.Context, c *cli.Context, id string) (*uvm.Optio
 
 	if c.IsSet(securityPolicyArgName) {
 		options.SecurityPolicy = c.String(options.SecurityPolicy)
+		options.SecurityPolicyEnabled = true
 	}
 
 	return options, nil

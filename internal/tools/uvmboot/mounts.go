@@ -48,6 +48,10 @@ func shareFiles(ctx context.Context, c *cli.Context, vm *uvm.UtilityVM) error {
 
 func shareFilesLCOW(ctx context.Context, c *cli.Context, vm *uvm.UtilityVM) error {
 	for _, s := range parseMounts(c, shareFilesArgName) {
+		if s.guest == "" {
+			return fmt.Errorf("file shares %q has invalid quest destination: %q", s.host, s.guest)
+		}
+
 		if err := vm.Share(ctx, s.host, s.guest, !s.writable); err != nil {
 			return fmt.Errorf("could not share file or directory %s: %w", s.host, err)
 		} else {
@@ -90,12 +94,15 @@ func parseMounts(c *cli.Context, n string) []mount {
 func mountFromString(s string) (m mount, _ error) {
 	ps := strings.Split(s, ",")
 
-	if len(ps) != 2 && len(ps) != 3 {
+	if len(ps) >= 3 {
 		return m, errors.New("too many parts")
 	}
 
 	m.host = ps[0]
-	m.guest = ps[1]
+
+	if len(ps) == 2 {
+		m.guest = ps[1]
+	}
 
 	if len(ps) == 3 && strings.ToLower(ps[2]) == "w" {
 		m.writable = true
