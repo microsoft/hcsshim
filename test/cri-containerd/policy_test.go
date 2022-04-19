@@ -382,7 +382,7 @@ func Test_RunContainer_InvalidContainerConfigs_NotAllowed(t *testing.T) {
 				req.Config.WorkingDir = "/non/existent"
 				return nil
 			},
-			expectedError: "working_dir /non/existent unmatched by policy rule",
+			expectedError: "working_dir \"/non/existent\" unmatched by policy rule",
 		},
 		{
 			name: "InvalidCommand",
