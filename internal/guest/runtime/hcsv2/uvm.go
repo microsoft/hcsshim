@@ -16,11 +16,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Microsoft/hcsshim/internal/guest/policy"
-	"github.com/mattn/go-shellwords"
-	"github.com/pkg/errors"
-
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
+	"github.com/Microsoft/hcsshim/internal/guest/policy"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
 	"github.com/Microsoft/hcsshim/internal/guest/spec"
@@ -36,6 +33,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
+	"github.com/mattn/go-shellwords"
+	"github.com/pkg/errors"
 )
 
 // UVMContainerID is the ContainerID that will be sent on any prot.MessageBase
@@ -123,15 +122,15 @@ func (h *Host) RemoveContainer(id string) {
 	delete(h.containers, id)
 }
 
-func (h *Host) GetRunningContainer(id string) (*Container, error) {
+func (h *Host) GetCreatedContainer(id string) (*Container, error) {
 	h.containersMutex.Lock()
 	defer h.containersMutex.Unlock()
 
 	if c, ok := h.containers[id]; !ok {
 		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemNotFound)
 	} else {
-		if c.status != containerRunning {
-			return nil, fmt.Errorf("container is not in state running: %w",
+		if c.status != containerCreated {
+			return nil, fmt.Errorf("container is not in state \"created\": %w",
 				gcserr.NewHresultError(gcserr.HrVmcomputeInvalidState))
 		}
 		return c, nil
@@ -332,7 +331,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}
 	}
 
-	c.status = containerRunning
+	c.status = containerCreated
 	return c, nil
 }
 
@@ -351,7 +350,7 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 	case guestresource.ResourceTypeVPCIDevice:
 		return modifyMappedVPCIDevice(ctx, req.RequestType, req.Settings.(*guestresource.LCOWMappedVPCIDevice))
 	case guestresource.ResourceTypeContainerConstraints:
-		c, err := h.GetRunningContainer(containerID)
+		c, err := h.GetCreatedContainer(containerID)
 		if err != nil {
 			return err
 		}
@@ -369,7 +368,7 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 }
 
 func (h *Host) modifyContainerSettings(ctx context.Context, containerID string, req *guestrequest.ModificationRequest) error {
-	c, err := h.GetRunningContainer(containerID)
+	c, err := h.GetCreatedContainer(containerID)
 	if err != nil {
 		return err
 	}
