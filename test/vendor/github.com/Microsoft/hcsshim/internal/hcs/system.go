@@ -21,7 +21,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/vmcompute"
 	"go.opencensus.io/trace"
-	"golang.org/x/sys/windows"
 )
 
 type System struct {
@@ -339,16 +338,11 @@ func (computeSystem *System) Properties(ctx context.Context, types ...schema1.Pr
 // statisticsInProc emulates what HCS does to grab statistics for a given container with a small
 // change to make grabbing the private working set total much more efficient.
 func (computeSystem *System) statisticsInProc(ctx context.Context) (*hcsschema.Properties, error) {
-	// See if we'd even be able to open the silo. We'll need to be local
-	// system/system so check first.
-	usr, err := windows.GetCurrentProcessToken().GetTokenUser()
-	if err != nil {
-		return nil, err
-	}
-	if !usr.User.Sid.IsWellKnown(windows.WinLocalSystemSid) {
-		return nil, errors.New("process does not have the right permissions to open the silo")
-	}
-
+	// Start timestamp for these stats before we grab them to match HCS
+	timestamp := time.Now()
+	// In the future we can make use of some new functionality in the HCS that allows you
+	// to pass a job object for HCS to use for the container. Currently, the only way we'll
+	// be able to open the job/silo is if we're running as SYSTEM.
 	jobOptions := &jobobject.Options{
 		UseNTVariant: true,
 		Name:         siloNameFmt(computeSystem.id),
@@ -381,9 +375,9 @@ func (computeSystem *System) statisticsInProc(ctx context.Context) (*hcsschema.P
 
 	return &hcsschema.Properties{
 		Statistics: &hcsschema.Statistics{
-			Timestamp:          time.Now(),
+			Timestamp:          timestamp,
 			ContainerStartTime: computeSystem.startTime,
-			Uptime100ns:        uint64(time.Since(computeSystem.startTime)) / 100,
+			Uptime100ns:        uint64(time.Since(computeSystem.startTime).Nanoseconds()) / 100,
 			Memory: &hcsschema.MemoryStats{
 				MemoryUsageCommitBytes:            memInfo.JobMemory,
 				MemoryUsageCommitPeakBytes:        memInfo.PeakJobMemoryUsed,

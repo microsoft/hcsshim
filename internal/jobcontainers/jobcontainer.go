@@ -420,6 +420,9 @@ func (c *JobContainer) PropertiesV2(ctx context.Context, types ...hcsschema.Prop
 		return nil, errors.New("PTStatistics is the only supported property type for job containers")
 	}
 
+	// Start timestamp before we grab the stats to match HCS' behavior
+	timestamp := time.Now()
+
 	memInfo, err := c.job.QueryMemoryStats()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to query for job containers memory information")
@@ -442,8 +445,8 @@ func (c *JobContainer) PropertiesV2(ctx context.Context, types ...hcsschema.Prop
 
 	return &hcsschema.Properties{
 		Statistics: &hcsschema.Statistics{
-			Timestamp:          time.Now(),
-			Uptime100ns:        uint64(time.Since(c.startTimestamp)) / 100,
+			Timestamp:          timestamp,
+			Uptime100ns:        uint64(time.Since(c.startTimestamp).Nanoseconds()) / 100,
 			ContainerStartTime: c.startTimestamp,
 			Memory: &hcsschema.MemoryStats{
 				MemoryUsageCommitBytes:            memInfo.JobMemory,

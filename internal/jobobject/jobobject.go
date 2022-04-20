@@ -431,6 +431,13 @@ func (job *JobObject) QueryProcessorStats() (*winapi.JOBOBJECT_BASIC_ACCOUNTING_
 
 // QueryStorageStats gets the storage (I/O) stats for the job object.
 func (job *JobObject) QueryStorageStats() (*winapi.JOBOBJECT_IO_ATTRIBUTION_INFORMATION, error) {
+	job.handleLock.RLock()
+	defer job.handleLock.RUnlock()
+
+	if job.handle == 0 {
+		return nil, ErrAlreadyClosed
+	}
+
 	info := winapi.JOBOBJECT_IO_ATTRIBUTION_INFORMATION{
 		ControlFlags: winapi.JOBOBJECT_IO_ATTRIBUTION_CONTROL_ENABLE,
 	}
@@ -550,10 +557,12 @@ func (job *JobObject) PrivateWorkingSet() (uint64, error) {
 		return 0, err
 	}
 
-	openAndQuery := func(pid uint32) (uint64, error) {
+	openAndQueryWorkingSet := func(pid uint32) (uint64, error) {
 		h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
 		if err != nil {
-			return 0, fmt.Errorf("failed to open process with pid %d: %w", pid, err)
+			// Match HCS' behavior, just bail if if OpenProcess doesn't return a valid handle (fails).
+			// Could be to handle the case where one of the pids in the job exited before we open here.
+			return 0, nil
 		}
 		defer func() {
 			_ = windows.Close(h)
@@ -575,7 +584,7 @@ func (job *JobObject) PrivateWorkingSet() (uint64, error) {
 
 	var jobWorkingSetSize uint64
 	for _, pid := range pids {
-		workingSet, err := openAndQuery(pid)
+		workingSet, err := openAndQueryWorkingSet(pid)
 		if err != nil {
 			return 0, err
 		}
