@@ -9,13 +9,12 @@ import (
 	"os"
 
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
 	"github.com/Microsoft/hcsshim/internal/guest/storage"
 	dm "github.com/Microsoft/hcsshim/internal/guest/storage/devicemapper"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
@@ -78,13 +77,10 @@ func Mount(
 	verityInfo *guestresource.DeviceVerityInfo,
 	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
-	mCtx, span := oc.StartSpan(ctx, "pmem::Mount")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.Int64Attribute("deviceNumber", int64(device)),
-		trace.StringAttribute("target", target))
+	log.G(ctx).WithFields(logrus.Fields{
+		"device": device,
+		"target": target,
+	}).Trace("pmem::Mount")
 
 	devicePath := fmt.Sprintf(pMemFmt, device)
 
@@ -101,13 +97,13 @@ func Mount(
 	// device instead of the original VPMem.
 	if mappingInfo != nil {
 		dmLinearName := fmt.Sprintf(linearDeviceFmt, device, mappingInfo.DeviceOffsetInBytes, mappingInfo.DeviceSizeInBytes)
-		if devicePath, err = createZeroSectorLinearTarget(mCtx, devicePath, dmLinearName, mappingInfo); err != nil {
+		if devicePath, err = createZeroSectorLinearTarget(ctx, devicePath, dmLinearName, mappingInfo); err != nil {
 			return err
 		}
 		defer func() {
 			if err != nil {
 				if err := removeDevice(dmLinearName); err != nil {
-					log.G(mCtx).WithError(err).Debugf("failed to cleanup linear target: %s", dmLinearName)
+					log.G(ctx).WithError(err).Debugf("failed to cleanup linear target: %s", dmLinearName)
 				}
 			}
 		}()
@@ -115,19 +111,19 @@ func Mount(
 
 	if verityInfo != nil {
 		dmVerityName := fmt.Sprintf(verityDeviceFmt, device, verityInfo.RootDigest)
-		if devicePath, err = createVerityTarget(mCtx, devicePath, dmVerityName, verityInfo); err != nil {
+		if devicePath, err = createVerityTarget(ctx, devicePath, dmVerityName, verityInfo); err != nil {
 			return err
 		}
 		defer func() {
 			if err != nil {
 				if err := removeDevice(dmVerityName); err != nil {
-					log.G(mCtx).WithError(err).Debugf("failed to cleanup verity target: %s", dmVerityName)
+					log.G(ctx).WithError(err).Debugf("failed to cleanup verity target: %s", dmVerityName)
 				}
 			}
 		}()
 	}
 
-	return mountInternal(mCtx, devicePath, target)
+	return mountInternal(ctx, devicePath, target)
 }
 
 // Unmount unmounts `target` and removes corresponding linear and verity targets when needed
@@ -139,13 +135,10 @@ func Unmount(
 	verityInfo *guestresource.DeviceVerityInfo,
 	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
-	_, span := oc.StartSpan(ctx, "pmem::Unmount")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.Int64Attribute("device", int64(devNumber)),
-		trace.StringAttribute("target", target))
+	log.G(ctx).WithFields(logrus.Fields{
+		"device": devNumber,
+		"target": target,
+	}).Trace(ctx, "pmem::Unmount")
 
 	if err := securityPolicy.EnforceDeviceUnmountPolicy(target); err != nil {
 		return errors.Wrapf(err, "unmounting pmem device from %s denied by policy", target)

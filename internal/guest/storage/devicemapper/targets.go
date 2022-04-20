@@ -8,29 +8,26 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
+	"github.com/sirupsen/logrus"
 
 	"github.com/Microsoft/hcsshim/ext4/dmverity"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
 // CreateZeroSectorLinearTarget creates dm-linear target for a device at `devPath` and `mappingInfo`, returns
 // virtual block device path.
 func CreateZeroSectorLinearTarget(ctx context.Context, devPath, devName string, mappingInfo *guestresource.LCOWVPMemMappingInfo) (_ string, err error) {
-	_, span := oc.StartSpan(ctx, "devicemapper::CreateZeroSectorLinearTarget")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
 	size := int64(mappingInfo.DeviceSizeInBytes)
 	offset := int64(mappingInfo.DeviceOffsetInBytes)
 	linearTarget := zeroSectorLinearTarget(size, devPath, offset)
 
-	span.AddAttributes(
-		trace.StringAttribute("devicePath", devPath),
-		trace.Int64Attribute("deviceStart", offset),
-		trace.Int64Attribute("sectorSize", size),
-		trace.StringAttribute("linearTable", fmt.Sprintf("%s: '%d %d %s'", devName, linearTarget.SectorStart, linearTarget.LengthInBlocks, linearTarget.Params)))
+	log.G(ctx).WithFields(logrus.Fields{
+		"devicePath":  devPath,
+		"deviceStart": offset,
+		"sectorSize":  size,
+		"linearTable": fmt.Sprintf("%s: '%d %d %s'", devName, linearTarget.SectorStart, linearTarget.LengthInBlocks, linearTarget.Params),
+	}).Trace("devicemapper::CreateZeroSectorLinearTarget")
 
 	devMapperPath, err := CreateDevice(devName, CreateReadOnly, []Target{linearTarget})
 	if err != nil {
@@ -49,9 +46,11 @@ func CreateZeroSectorLinearTarget(ctx context.Context, devPath, devName string, 
 //     size   |  version    hash_dev         |     hash_offset
 //          target                       hash_block
 func CreateVerityTarget(ctx context.Context, devPath, devName string, verityInfo *guestresource.DeviceVerityInfo) (_ string, err error) {
-	_, span := oc.StartSpan(ctx, "devicemapper::CreateVerityTarget")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	entity := log.G(ctx).WithFields(logrus.Fields{
+		"devicePath": devPath,
+		"deviceName": devName,
+	})
+	entity.Trace("devicemapper::CreateVerityTarget")
 
 	dmBlocks := verityInfo.Ext4SizeInBytes / blockSize
 	dataBlocks := verityInfo.Ext4SizeInBytes / int64(verityInfo.BlockSize)
@@ -70,10 +69,10 @@ func CreateVerityTarget(ctx context.Context, devPath, devName string, verityInfo
 		Params:         fmt.Sprintf("%d %s %s %s", verityInfo.Version, devices, blkInfo, hashes),
 	}
 
-	span.AddAttributes(
-		trace.StringAttribute("devicePath", devPath),
-		trace.Int64Attribute("sectorSize", dmBlocks),
-		trace.StringAttribute("verityTable", verityTarget.Params))
+	entity.WithFields(logrus.Fields{
+		"sectorSize":  dmBlocks,
+		"verityTable": verityTarget.Params,
+	}).Debug("created dm-verity target")
 
 	mapperPath, err := CreateDevice(devName, CreateReadOnly, []Target{verityTarget})
 	if err != nil {

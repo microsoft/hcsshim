@@ -17,15 +17,16 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
+	"go.opencensus.io/trace/tracestate"
+
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
-	"go.opencensus.io/trace/tracestate"
 )
 
 // UnknownMessage represents the default handler logic for an unmatched request
@@ -291,16 +292,18 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 							}
 						}
 					}
-					ctx, span = trace.StartSpanWithRemoteParent(context.Background(),
+					ctx, span = oc.StartSpanWithRemoteParent(
+						context.Background(),
 						"opengcs::bridge::request",
 						sc,
-						oc.WithTraceLevelSampler,
-						oc.WithServerSpanKind)
-					ctx = log.U(ctx)
+						oc.WithServerSpanKind,
+					)
 				} else {
-					ctx, span = oc.StartSpan(context.Background(),
+					ctx, span = oc.StartSpan(
+						context.Background(),
 						"opengcs::bridge::request",
-						oc.WithServerSpanKind)
+						oc.WithServerSpanKind,
+					)
 				}
 
 				span.AddAttributes(

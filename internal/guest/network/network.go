@@ -13,13 +13,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+
 	"github.com/Microsoft/hcsshim/internal/guest/storage"
 	"github.com/Microsoft/hcsshim/internal/guest/storage/pci"
 	"github.com/Microsoft/hcsshim/internal/guest/storage/vmbus"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
 )
 
 // mock out calls for testing
@@ -35,9 +35,9 @@ const maxDNSSearches = 6
 
 // GenerateEtcHostsContent generates a /etc/hosts file based on `hostname`.
 func GenerateEtcHostsContent(ctx context.Context, hostname string) string {
-	_, span := oc.StartSpan(ctx, "network::GenerateEtcHostsContent")
-	defer span.End()
-	span.AddAttributes(trace.StringAttribute("hostname", hostname))
+	log.G(ctx).WithFields(logrus.Fields{
+		"hostname": hostname,
+	}).Trace("network::GenerateEtcHostsContent")
 
 	nameParts := strings.Split(hostname, ".")
 	buf := bytes.Buffer{}
@@ -60,14 +60,11 @@ func GenerateEtcHostsContent(ctx context.Context, hostname string) string {
 // GenerateResolvConfContent generates the resolv.conf file content based on
 // `searches`, `servers`, and `options`.
 func GenerateResolvConfContent(ctx context.Context, searches, servers, options []string) (_ string, err error) {
-	_, span := oc.StartSpan(ctx, "network::GenerateResolvConfContent")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("searches", strings.Join(searches, ", ")),
-		trace.StringAttribute("servers", strings.Join(servers, ", ")),
-		trace.StringAttribute("options", strings.Join(options, ", ")))
+	log.G(ctx).WithFields(logrus.Fields{
+		"searches": searches,
+		"servers":  servers,
+		"options":  options,
+	}).Trace("network::GenerateResolvConfContent")
 
 	if len(searches) > maxDNSSearches {
 		return "", errors.Errorf("searches has more than %d domains", maxDNSSearches)
@@ -116,12 +113,10 @@ func MergeValues(first, second []string) []string {
 //
 // Will retry the operation until `ctx` is exceeded or canceled.
 func InstanceIDToName(ctx context.Context, id string, vpciAssigned bool) (_ string, err error) {
-	ctx, span := oc.StartSpan(ctx, "network::InstanceIDToName")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
 	vmBusID := strings.ToLower(id)
-	span.AddAttributes(trace.StringAttribute("adapterInstanceID", vmBusID))
+	log.G(ctx).WithFields(logrus.Fields{
+		"adapterInstanceID": vmBusID,
+	}).Trace("network::InstanceIDToName")
 
 	netDevicePath := ""
 	if vpciAssigned {

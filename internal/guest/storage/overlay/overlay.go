@@ -12,11 +12,9 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/memory"
-	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
 )
 
@@ -60,9 +58,7 @@ func processErrNoSpace(ctx context.Context, path string, err error) {
 // MountLayer first enforces the security policy for the container's layer paths
 // and then calls Mount to mount the layer paths as an overlayfs
 func MountLayer(ctx context.Context, layerPaths []string, upperdirPath, workdirPath, rootfsPath string, readonly bool, containerId string, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
-	_, span := oc.StartSpan(ctx, "overlay::MountLayer")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	log.G(ctx).Trace("overlay::MountLayer")
 
 	if err := securityPolicy.EnforceOverlayMountPolicy(containerId, layerPaths); err != nil {
 		return err
@@ -81,17 +77,14 @@ func MountLayer(ctx context.Context, layerPaths []string, upperdirPath, workdirP
 // Always creates `target`. On mount failure the created `target` will
 // be automatically cleaned up.
 func Mount(ctx context.Context, basePaths []string, upperdirPath, workdirPath, target string, readonly bool) (err error) {
-	_, span := oc.StartSpan(ctx, "overlay::Mount")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
 	lowerdir := strings.Join(basePaths, ":")
-	span.AddAttributes(
-		trace.StringAttribute("lowerdir", lowerdir),
-		trace.StringAttribute("upperdirPath", upperdirPath),
-		trace.StringAttribute("workdirPath", workdirPath),
-		trace.StringAttribute("target", target),
-		trace.BoolAttribute("readonly", readonly))
+	log.G(ctx).WithFields(logrus.Fields{
+		"lowerdir":     lowerdir,
+		"upperdirPath": upperdirPath,
+		"workdirPath":  workdirPath,
+		"target":       target,
+		"readonly":     readonly,
+	}).Trace("overlay::Mount")
 
 	// If we got an ENOSPC error on creating any directories, log disk space and inode info for the mount that the directory belongs to get a better
 	// view of the where the problem lies.

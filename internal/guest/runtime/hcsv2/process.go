@@ -14,6 +14,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -87,8 +88,8 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 		ctx, span := oc.StartSpan(context.Background(), "newProcess::waitBackground")
 		defer span.End()
 		span.AddAttributes(
-			trace.StringAttribute("cid", p.cid),
-			trace.Int64Attribute("pid", int64(p.pid)))
+			trace.StringAttribute(logfields.ContainerID, p.cid),
+			trace.Int64Attribute(logfields.ProcessID, int64(p.pid)))
 
 		// Wait for the process to exit
 		exitCode, err := p.process.Wait()

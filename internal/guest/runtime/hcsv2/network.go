@@ -5,19 +5,19 @@ package hcsv2
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netns"
-	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/network"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
@@ -71,12 +71,8 @@ func getOrAddNetworkNamespace(id string) *namespace {
 
 // removeNetworkNamespace removes the in-memory `namespace` found by `id`.
 func removeNetworkNamespace(ctx context.Context, id string) (err error) {
-	_, span := oc.StartSpan(ctx, "hcsv2::removeNetworkNamespace")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
 	id = strings.ToLower(id)
-	span.AddAttributes(trace.StringAttribute("id", id))
+	log.G(ctx).WithField(logfields.ID, id).Trace("hcsv2::removeNetworkNamespace")
 
 	namespaceSync.Lock()
 	defer namespaceSync.Unlock()
@@ -112,12 +108,10 @@ func (n *namespace) ID() string {
 // assigned adapters into this namespace. The caller MUST call `Sync()` to
 // complete this operation.
 func (n *namespace) AssignContainerPid(ctx context.Context, pid int) (err error) {
-	_, span := oc.StartSpan(ctx, "namespace::AssignContainerPid")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("namespace", n.id),
-		trace.Int64Attribute("pid", int64(pid)))
+	log.G(ctx).WithFields(logrus.Fields{
+		logfields.ProcessID: pid,
+		logfields.Namespace: n.id,
+	}).Trace("namespace::AssignContainerPid")
 
 	n.m.Lock()
 	defer n.m.Unlock()
@@ -147,12 +141,10 @@ func (n *namespace) Adapters() []*guestresource.LCOWNetworkAdapter {
 // namespace assigned to `n`. A user must call `Sync()` to complete this
 // operation.
 func (n *namespace) AddAdapter(ctx context.Context, adp *guestresource.LCOWNetworkAdapter) (err error) {
-	ctx, span := oc.StartSpan(ctx, "namespace::AddAdapter")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("namespace", n.id),
-		trace.StringAttribute("adapter", log.Format(ctx, adp)))
+	log.G(ctx).WithFields(logrus.Fields{
+		logfields.Namespace: n.id,
+		"adapter":           adp,
+	}).Trace("namespace::AddAdapter")
 
 	n.m.Lock()
 	defer n.m.Unlock()
@@ -179,12 +171,10 @@ func (n *namespace) AddAdapter(ctx context.Context, adp *guestresource.LCOWNetwo
 // RemoveAdapter removes the adapter matching `id` from `n`. If `id` is not
 // found returns no error.
 func (n *namespace) RemoveAdapter(ctx context.Context, id string) (err error) {
-	_, span := oc.StartSpan(ctx, "namespace::RemoveAdapter")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("namespace", n.id),
-		trace.StringAttribute("adapterID", id))
+	log.G(ctx).WithFields(logrus.Fields{
+		logfields.Namespace: n.id,
+		"adapterID":         id,
+	}).Trace("namespace::RemoveAdapter")
 
 	n.m.Lock()
 	defer n.m.Unlock()
@@ -206,10 +196,7 @@ func (n *namespace) RemoveAdapter(ctx context.Context, id string) (err error) {
 
 // Sync moves all adapters to the network namespace of `n` if assigned.
 func (n *namespace) Sync(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "namespace::Sync")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("namespace", n.id))
+	log.G(ctx).WithField(logfields.Namespace, n.id).Trace("namespace::Sync")
 
 	n.m.Lock()
 	defer n.m.Unlock()
@@ -244,13 +231,11 @@ type nicInNamespace struct {
 
 // assignToPid assigns `nin.adapter`, represented by `nin.ifname` to `pid`.
 func (nin *nicInNamespace) assignToPid(ctx context.Context, pid int) (err error) {
-	ctx, span := oc.StartSpan(ctx, "nicInNamespace::assignToPid")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("adapterID", nin.adapter.ID),
-		trace.StringAttribute("ifname", nin.ifname),
-		trace.Int64Attribute("pid", int64(pid)))
+	log.G(ctx).WithFields(logrus.Fields{
+		"adapterID":         nin.adapter.ID,
+		"ifname":            nin.ifname,
+		logfields.ProcessID: int64(pid),
+	}).Trace("nicInNamespace::assignToPid")
 
 	v1Adapter := &prot.NetworkAdapter{
 		NatEnabled:         nin.adapter.IPAddress != "",

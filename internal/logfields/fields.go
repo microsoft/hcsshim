@@ -4,9 +4,11 @@ const (
 	// Identifiers
 
 	Name      = "name"
+	Namespace = "namespace"
 	Operation = "operation"
 
 	ID          = "id"
+	SandboxID   = "sid"
 	ContainerID = "cid"
 	ExecID      = "eid"
 	ProcessID   = "pid"

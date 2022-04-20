@@ -81,20 +81,17 @@ func (h *Hook) encode(e *logrus.Entry) {
 				d[k] = vv.Format(h.TimeFormat)
 			}
 			continue
-		case bytes.Buffer, *bytes.Buffer:
-			// this resolves `vv` to `interface{}`, so cannot use `vv.Bytes`
-			// Could move to below the `reflect.Indirect()` call below, but
-			// that would require additional typematching and dereferencing,
-			// regardless. Easier to keep these duplicate
-			// branches here
-			if vp, ok := vv.(bytes.Buffer); ok {
-				vv = &vp
-			}
-			v = (vv.(*bytes.Buffer)).Bytes()
-			// case bytes.Buffer:
-			// 	v = vv.Bytes()
-			// case *bytes.Buffer:
-			// 	v = vv.Bytes()
+
+		// `case bytes.Buffer,*bytes.Buffer` resolves `vv` to `interface{}`,
+		// so cannot use `vv.Bytes`.
+		// Could move to below the `reflect.Indirect()` call below, but
+		// that would require additional typematching and dereferencing,
+		// regardless.
+		// Easier to keep these duplicate branches here.
+		case bytes.Buffer:
+			v = vv.Bytes()
+		case *bytes.Buffer:
+			v = vv.Bytes()
 		}
 		if !h.EncodeAsJSON {
 			continue
