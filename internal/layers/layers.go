@@ -79,7 +79,7 @@ func (layers *ImageLayers) Release(ctx context.Context, all bool) error {
 //
 // TODO dcantah: Keep better track of the layers that are added, don't simply discard the SCSI, VSMB, etc. resource types gotten inside.
 func MountContainerLayers(ctx context.Context, containerID string, layerFolders []string, guestRoot string, volumeMountPath string, vm *uvm.UtilityVM) (_ string, err error) {
-	log.G(ctx).WithField("layerFolders", layerFolders).Debug("hcsshim::mountContainerLayers")
+	log.G(ctx).WithField("layerFolders", layerFolders).Trace("layers::MountContainerLayers")
 
 	if vm == nil {
 		if len(layerFolders) < 2 {
@@ -161,7 +161,7 @@ func MountContainerLayers(ctx context.Context, containerID string, layerFolders 
 	}
 
 	// V2 UVM
-	log.G(ctx).WithField("os", vm.OS()).Debug("hcsshim::mountContainerLayers V2 UVM")
+	log.G(ctx).WithField("os", vm.OS()).Debug("layers::MountContainerLayers V2 UVM")
 
 	var (
 		layersAdded       []string
@@ -268,7 +268,6 @@ func MountContainerLayers(ctx context.Context, containerID string, layerFolders 
 	if err != nil {
 		return "", err
 	}
-	log.G(ctx).Debug("hcsshim::mountContainerLayers Succeeded")
 	return rootfs, nil
 }
 
@@ -342,7 +341,7 @@ const (
 
 // UnmountContainerLayers is a helper for clients to hide all the complexity of layer unmounting
 func UnmountContainerLayers(ctx context.Context, layerFolders []string, containerRootPath, volumeMountPath string, vm *uvm.UtilityVM, op UnmountOperation) error {
-	log.G(ctx).WithField("layerFolders", layerFolders).Debug("hcsshim::unmountContainerLayers")
+	log.G(ctx).WithField("layerFolders", layerFolders).Trace("layers::unmountContainerLayers")
 	if vm == nil {
 		// Must be an argon - folders are mounted on the host
 		if op != UnmountOperationAll {
@@ -484,7 +483,7 @@ func mountSandboxVolume(ctx context.Context, hostPath, volumeName string) (err e
 	log.G(ctx).WithFields(logrus.Fields{
 		"hostpath":   hostPath,
 		"volumeName": volumeName,
-	}).Debug("mounting volume for container")
+	}).Trace("layers::mountSandboxVolume")
 
 	if _, err := os.Stat(hostPath); os.IsNotExist(err) {
 		if err := os.MkdirAll(hostPath, 0777); err != nil {
@@ -513,7 +512,7 @@ func mountSandboxVolume(ctx context.Context, hostPath, volumeName string) (err e
 func removeSandboxMountPoint(ctx context.Context, hostPath string) error {
 	log.G(ctx).WithFields(logrus.Fields{
 		"hostpath": hostPath,
-	}).Debug("removing volume mount point for container")
+	}).Trace("layers::removeSandboxMountPoint")
 
 	if err := windows.DeleteVolumeMountPoint(windows.StringToUTF16Ptr(hostPath)); err != nil {
 		return errors.Wrap(err, "failed to delete sandbox volume mount point")

@@ -230,10 +230,10 @@ func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) error {
 
 	var verity *guestresource.DeviceVerityInfo
 	if v, iErr := readVeritySuperBlock(ctx, hostPath); iErr != nil {
-		log.G(ctx).WithError(iErr).WithField("hostPath", sm.HostPath).Debug("unable to read dm-verity information from VHD")
+		uvm.logEntry(ctx).WithError(iErr).WithField("hostPath", sm.HostPath).Debug("unable to read dm-verity information from VHD")
 	} else {
 		if v != nil {
-			log.G(ctx).WithFields(logrus.Fields{
+			uvm.logEntry(ctx).WithFields(logrus.Fields{
 				"hostPath":   hostPath,
 				"rootDigest": v.RootDigest,
 			}).Debug("removing SCSI with dm-verity")
@@ -272,7 +272,7 @@ func (uvm *UtilityVM) RemoveSCSI(ctx context.Context, hostPath string) error {
 	if err := uvm.modify(ctx, scsiModification); err != nil {
 		return fmt.Errorf("failed to remove SCSI disk %s from container %s: %s", hostPath, uvm.id, err)
 	}
-	log.G(ctx).WithFields(sm.logFormat()).Debug("removed SCSI location")
+	uvm.logEntry(ctx).WithFields(sm.logFormat()).Debug("removed SCSI location")
 	uvm.scsiLocations[sm.Controller][sm.LUN] = nil
 	return nil
 }
@@ -434,10 +434,13 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, addReq *addSCSIRequest)
 		} else {
 			var verity *guestresource.DeviceVerityInfo
 			if v, iErr := readVeritySuperBlock(ctx, sm.HostPath); iErr != nil {
-				log.G(ctx).WithError(iErr).WithField("hostPath", sm.HostPath).Debug("unable to read dm-verity information from VHD")
+				uvm.logEntry(ctx).WithFields(logrus.Fields{
+					logrus.ErrorKey: iErr,
+					"hostPath":      sm.HostPath,
+				}).Debug("unable to read dm-verity information from VHD")
 			} else {
 				if v != nil {
-					log.G(ctx).WithFields(logrus.Fields{
+					uvm.logEntry(ctx).WithFields(logrus.Fields{
 						"hostPath":   sm.HostPath,
 						"rootDigest": v.RootDigest,
 					}).Debug("adding SCSI with dm-verity")

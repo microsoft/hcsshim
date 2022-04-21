@@ -11,6 +11,7 @@ import (
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/gcs"
@@ -246,7 +247,8 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	}
 
 	span.AddAttributes(trace.StringAttribute(logfields.UVMID, opts.ID))
-	log.G(ctx).WithField("options", fmt.Sprintf("%+v", opts)).Debug("uvm::CreateWCOW options")
+	ctx, entry := log.S(ctx, logrus.Fields{logfields.UVMID: opts.ID})
+	entry.WithField(logfields.Options, opts).Debug("uvm::CreateWCOW options")
 
 	uvm := &UtilityVM{
 		id:                      opts.ID,
@@ -298,6 +300,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	if err != nil {
 		return nil, fmt.Errorf("error in preparing config doc: %s", err)
 	}
+	entry.WithField(logfields.Doc, doc).Trace("uvm::CreateWCOW prepared config doc")
 
 	if !opts.IsClone {
 		// Create sandbox.vhdx in the scratch folder based on the template, granting the correct permissions to it

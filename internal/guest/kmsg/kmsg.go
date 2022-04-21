@@ -26,6 +26,26 @@ func (logLevel LogLevel) String() string {
 	return levels[logLevel]
 }
 
+func (l LogLevel) LogrusLevel() logrus.Level {
+	switch l {
+	case Emerg, Alert:
+		return logrus.PanicLevel
+	case Crit:
+		return logrus.FatalLevel
+	case Err:
+		return logrus.ErrorLevel
+	case Warning, Notice:
+		return logrus.WarnLevel
+	case Info:
+		return logrus.InfoLevel
+	case Debug:
+		return logrus.DebugLevel
+	default:
+		// for levels above Debug (which shouldn't exist), saturate at Trace
+		return logrus.TraceLevel
+	}
+}
+
 const (
 	Emerg LogLevel = iota
 	Alert
@@ -137,7 +157,7 @@ func ReadForever(logLevel LogLevel) {
 			}).Error("failed to parse kmsg entry")
 		} else {
 			if entry.Priority <= logLevel {
-				logrus.WithFields(entry.logFormat()).Info("kmsg read")
+				logrus.WithFields(entry.logFormat()).Log(entry.Priority.LogrusLevel(), "kmsg read")
 			}
 		}
 	}

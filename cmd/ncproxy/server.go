@@ -115,7 +115,7 @@ func (s *server) serve(ctx context.Context, ttrpcListener net.Listener, grpcList
 	go func() {
 		log.G(ctx).WithFields(logrus.Fields{
 			"address": s.conf.TTRPCAddr,
-		}).Info("Serving ncproxy TTRPC service")
+		}).Debug("Serving ncproxy TTRPC service")
 
 		// No need to defer close the listener as ttrpc.Serve does this internally.
 		serveErr <- trapClosedConnErr(s.ttrpc.Serve(ctx, ttrpcListener))
@@ -124,7 +124,7 @@ func (s *server) serve(ctx context.Context, ttrpcListener net.Listener, grpcList
 	go func() {
 		log.G(ctx).WithFields(logrus.Fields{
 			"address": s.conf.GRPCAddr,
-		}).Info("Serving ncproxy GRPC service")
+		}).Debug("Serving ncproxy GRPC service")
 
 		defer grpcListener.Close()
 		serveErr <- trapClosedConnErr(s.grpc.Serve(grpcListener))
@@ -182,7 +182,7 @@ func reconnectComputeAgents(ctx context.Context, agentStore *ncproxystore.Comput
 				}
 				return
 			}
-			log.G(ctx).WithField("containerID", containerID).Info("reconnected to container's compute agent")
+			log.G(ctx).WithField("containerID", containerID).Debug("reconnected to container's compute agent")
 
 			// connection succeeded, add entry in cache map for later
 			// since the servers have not started running, we know that the cache cannot be empty

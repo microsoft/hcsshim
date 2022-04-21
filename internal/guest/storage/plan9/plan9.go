@@ -9,10 +9,11 @@ import (
 	"os"
 	"syscall"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
 )
 
@@ -30,15 +31,12 @@ var (
 // `target` will be created. On mount failure the created `target` will be
 // automatically cleaned up.
 func Mount(ctx context.Context, vsock transport.Transport, target, share string, port uint32, readonly bool) (err error) {
-	_, span := oc.StartSpan(ctx, "plan9::Mount")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("target", target),
-		trace.StringAttribute("share", share),
-		trace.Int64Attribute("port", int64(port)),
-		trace.BoolAttribute("readonly", readonly))
+	log.G(ctx).WithFields(logrus.Fields{
+		"target":   target,
+		"share":    share,
+		"port":     port,
+		"readonly": readonly,
+	}).Trace("plan9::Mount")
 
 	if err := osMkdirAll(target, 0700); err != nil {
 		return err

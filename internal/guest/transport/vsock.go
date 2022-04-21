@@ -8,6 +8,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/linuxkit/virtsock/pkg/vsock"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -25,12 +27,15 @@ type VsockTransport struct{}
 
 var _ Transport = &VsockTransport{}
 
+const _dialRetrySleepTime = 100 * time.Millisecond
+
 // Dial accepts a vsock socket port number as configuration, and
 // returns an unconnected VsockConnection struct.
 func (t *VsockTransport) Dial(port uint32) (Connection, error) {
-	logrus.WithFields(logrus.Fields{
+	entry := log.L.WithFields(logrus.Fields{
 		"port": port,
-	}).Info("opengcs::VsockTransport::Dial - vsock dial port")
+	})
+	entry.Trace("opengcs::VsockTransport::Dial")
 
 	// HACK: Remove loop when vsock bugs are fixed!
 	// Retry 10 times because vsock.Dial can return connection time out
@@ -43,7 +48,11 @@ func (t *VsockTransport) Dial(port uint32) (Connection, error) {
 		// If the error was ETIMEDOUT retry, otherwise fail.
 		cause := errors.Cause(err)
 		if errno, ok := cause.(syscall.Errno); ok && errno == syscall.ETIMEDOUT {
-			time.Sleep(100 * time.Millisecond)
+			entry.WithFields(logrus.Fields{
+				logfields.Attempt:  i + 1,
+				logfields.Duration: _dialRetrySleepTime,
+			}).Debug("vsock dial timed out; sleeping before retrying")
+			time.Sleep(_dialRetrySleepTime)
 			continue
 		} else {
 			return nil, errors.Wrapf(err, "vsock Dial port (%d) failed", port)

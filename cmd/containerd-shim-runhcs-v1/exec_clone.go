@@ -8,6 +8,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
@@ -24,10 +25,10 @@ func newClonedExec(
 	spec *specs.Process,
 	io cmd.UpstreamIO) *clonedExec {
 	log.G(ctx).WithFields(logrus.Fields{
-		"tid":    tid,
-		"eid":    id, // Init exec ID is always same as Task ID
-		"bundle": bundle,
-	}).Debug("newClonedExec")
+		logfields.TaskID: tid,
+		logfields.ExecID: id, // Init exec ID is always same as Task ID
+		"bundle":         bundle,
+	}).Trace("newClonedExec")
 
 	he := &hcsExec{
 		events:      events,

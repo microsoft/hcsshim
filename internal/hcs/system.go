@@ -10,14 +10,17 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
+
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/vmcompute"
-	"go.opencensus.io/trace"
 )
 
 type System struct {
@@ -254,12 +257,14 @@ func (computeSystem *System) Terminate(ctx context.Context) error {
 // This MUST be called exactly once per `computeSystem.handle` but `Wait` is
 // safe to call multiple times.
 func (computeSystem *System) waitBackground() {
+	var err error
 	operation := "hcs::System::waitBackground"
 	ctx, span := oc.StartSpan(context.Background(), operation)
 	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
 
-	err := waitForNotification(ctx, computeSystem.callbackNumber, hcsNotificationSystemExited, nil)
+	err = waitForNotification(ctx, computeSystem.callbackNumber, hcsNotificationSystemExited, nil)
 	switch err {
 	case nil:
 		log.G(ctx).Debug("system exited")
@@ -274,7 +279,6 @@ func (computeSystem *System) waitBackground() {
 		computeSystem.waitError = err
 		close(computeSystem.waitBlock)
 	})
-	oc.SetSpanStatus(span, err)
 }
 
 // Wait synchronously waits for the compute system to shutdown or terminate. If
@@ -359,7 +363,7 @@ func (computeSystem *System) PropertiesV2(ctx context.Context, types ...hcsschem
 func (computeSystem *System) Pause(ctx context.Context) (err error) {
 	operation := "hcs::System::Pause"
 
-	// hcsPauseComputeSystemContext is an async peration. Start the outer span
+	// hcsPauseComputeSystemContext is an async operation. Start the outer span
 	// here to measure the full pause time.
 	ctx, span := oc.StartSpan(ctx, operation)
 	defer span.End()
@@ -529,10 +533,10 @@ func (computeSystem *System) OpenProcess(ctx context.Context, pid int) (*Process
 // Close cleans up any state associated with the compute system but does not terminate or wait for it.
 func (computeSystem *System) Close() (err error) {
 	operation := "hcs::System::Close"
-	ctx, span := oc.StartSpan(context.Background(), operation)
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", computeSystem.id))
+	ctx, entry := log.S(context.Background(), logrus.Fields{
+		logfields.ContainerID: computeSystem.id,
+	})
+	entry.Trace(operation)
 
 	computeSystem.handleLock.Lock()
 	defer computeSystem.handleLock.Unlock()

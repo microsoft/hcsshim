@@ -17,9 +17,9 @@ const (
 
 	// networking and IO
 
+	Bytes = "bytes"
 	File  = "file"
 	Path  = "path"
-	Bytes = "bytes"
 	Pipe  = "pipe"
 
 	// Common Misc
@@ -27,20 +27,25 @@ const (
 	Attempt = "attemptNo"
 	JSON    = "json"
 
+	// Status
+
+	ExitCode = "exitCode"
+
 	// Time
 
-	StartTime = "startTime"
-	EndTime   = "endTime"
 	Duration  = "duration"
+	EndTime   = "endTime"
+	StartTime = "startTime"
 	Timeout   = "timeout"
 
-	// Keys/values
+	// Keys/Values
 
+	Doc           = "document"
 	Field         = "field"
 	Key           = "key"
 	OCIAnnotation = "oci-annotation"
-	Value         = "value"
 	Options       = "options"
+	Value         = "value"
 
 	// Golang type's
 

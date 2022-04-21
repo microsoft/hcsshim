@@ -118,7 +118,7 @@ func getSupportedFeatures() (SupportedFeatures, error) {
 	log.L.WithFields(logrus.Fields{
 		"version":           globals.Version,
 		"supportedFeatures": features,
-	}).Info("HCN feature check")
+	}).Debug("HCN feature check")
 
 	return features, nil
 }

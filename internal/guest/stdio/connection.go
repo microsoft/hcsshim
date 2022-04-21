@@ -35,7 +35,7 @@ func (lc *logConnection) Write(b []byte) (int, error) {
 func (lc *logConnection) Close() error {
 	logrus.WithFields(logrus.Fields{
 		"port": lc.port,
-	}).Debug("opengcs::logConnection::Close - closing connection")
+	}).Trace("opengcs::logConnection::Close")
 
 	return lc.con.Close()
 }
@@ -43,7 +43,7 @@ func (lc *logConnection) Close() error {
 func (lc *logConnection) CloseRead() error {
 	logrus.WithFields(logrus.Fields{
 		"port": lc.port,
-	}).Debug("opengcs::logConnection::Close - closing read connection")
+	}).Trace("opengcs::logConnection::CloseRead")
 
 	return lc.con.CloseRead()
 }
@@ -51,7 +51,7 @@ func (lc *logConnection) CloseRead() error {
 func (lc *logConnection) CloseWrite() error {
 	logrus.WithFields(logrus.Fields{
 		"port": lc.port,
-	}).Debug("opengcs::logConnection::Close - closing write connection")
+	}).Trace("opengcs::logConnection::CloseWrite")
 
 	return lc.con.CloseWrite()
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/clone"
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -22,6 +23,7 @@ import (
 	"github.com/containerd/typeurl"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
 
@@ -34,7 +36,7 @@ import (
 // `parent`. When the fake WCOW `init` process exits via `Signal` `parent` will
 // be forcibly closed by this task.
 func newWcowPodSandboxTask(ctx context.Context, events publisher, id, bundle string, parent *uvm.UtilityVM, nsid string) shimTask {
-	log.G(ctx).WithField("tid", id).Debug("newWcowPodSandboxTask")
+	log.G(ctx).WithFields(logrus.Fields{logfields.TaskID: id}).Trace("newWcowPodSandboxTask")
 
 	wpst := &wcowPodSandboxTask{
 		events: events,
@@ -177,20 +179,24 @@ func (wpst *wcowPodSandboxTask) Wait() *task.StateResponse {
 //
 // This call is idempotent and safe to call multiple times.
 func (wpst *wcowPodSandboxTask) close(ctx context.Context) {
+	entry := log.G(ctx).WithFields(logrus.Fields{
+		logfields.TaskID: wpst.id,
+	})
+
 	wpst.closeOnce.Do(func() {
-		log.G(ctx).Debug("wcowPodSandboxTask::closeOnce")
+		entry.Trace("wcowPodSandboxTask::closeOnce")
 
 		if wpst.host != nil {
 			if err := wpst.host.TearDownNetworking(ctx, wpst.nsid); err != nil {
-				log.G(ctx).WithError(err).Error("failed to cleanup networking for utility VM")
+				entry.WithError(err).Error("failed to cleanup networking for utility VM")
 			}
 
 			if err := wpst.host.Close(); err != nil {
-				log.G(ctx).WithError(err).Error("failed host vm shutdown")
+				entry.WithError(err).Error("failed host vm shutdown")
 			}
 			// cleanup template state if any exists
 			if err := clone.RemoveSavedTemplateConfig(wpst.host.ID()); err != nil {
-				log.G(ctx).WithError(err).Error("failed to cleanup template config state for vm")
+				entry.WithError(err).Error("failed to cleanup template config state for vm")
 			}
 		}
 		// Send the `init` exec exit notification always.
@@ -206,7 +212,7 @@ func (wpst *wcowPodSandboxTask) close(ctx context.Context) {
 				ExitStatus:  exit.ExitStatus,
 				ExitedAt:    exit.ExitedAt,
 			}); err != nil {
-			log.G(ctx).WithError(err).Error("failed to publish TaskExitEventTopic")
+			entry.WithError(err).Error("failed to publish TaskExitEventTopic")
 		}
 		close(wpst.closed)
 	})

@@ -44,7 +44,7 @@ func AddDevice(ctx context.Context, vm *uvm.UtilityVM, idType, deviceID string, 
 			return vpci, nil, errors.Wrapf(err, "failed to assign device %s of type %s to pod %s", deviceID, idType, vm.ID())
 		}
 		vmBusInstanceID := vm.GetAssignedDeviceVMBUSInstanceID(vpci.VMBusGUID)
-		log.G(ctx).WithField("vmbus id", vmBusInstanceID).Info("vmbus instance ID")
+		log.G(ctx).WithField("vmbus id", vmBusInstanceID).Debug("vmbus instance ID")
 
 		locationPaths, err = getChildrenDeviceLocationPaths(ctx, vm, vmBusInstanceID, deviceUtilPath)
 		return vpci, locationPaths, err

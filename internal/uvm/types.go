@@ -3,16 +3,20 @@
 package uvm
 
 import (
+	"context"
 	"net"
 	"sync"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	"github.com/Microsoft/hcsshim/internal/hns"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 )
 
 //                    | WCOW | LCOW
@@ -146,4 +150,10 @@ type UtilityVM struct {
 	// noInheritHostTimezone specifies whether to not inherit the hosts timezone for the UVM. UTC will be set as the default instead.
 	// This only applies for WCOW.
 	noInheritHostTimezone bool
+}
+
+func (vm *UtilityVM) logEntry(ctx context.Context) *logrus.Entry {
+	return log.G(ctx).WithFields(logrus.Fields{
+		logfields.UVMID: vm.id,
+	})
 }

@@ -12,10 +12,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
+
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/vmcompute"
-	"go.opencensus.io/trace"
 )
 
 // ContainerError is an error encountered in HCS
@@ -202,19 +205,23 @@ func (process *Process) Kill(ctx context.Context) (bool, error) {
 // This MUST be called exactly once per `process.handle` but `Wait` is safe to
 // call multiple times.
 func (process *Process) waitBackground() {
-	operation := "hcs::Process::waitBackground"
-	ctx, span := oc.StartSpan(context.Background(), operation)
-	defer span.End()
-	span.AddAttributes(
-		trace.StringAttribute("cid", process.SystemID()),
-		trace.Int64Attribute("pid", int64(process.processID)))
-
 	var (
 		err            error
 		exitCode       = -1
 		propertiesJSON string
 		resultJSON     string
 	)
+
+	operation := "hcs::Process::waitBackground"
+	ctx, span := oc.StartSpan(context.Background(), operation)
+	defer span.End()
+	defer func() {
+		span.AddAttributes(trace.Int64Attribute(logfields.ExitCode, int64(exitCode)))
+		oc.SetSpanStatus(span, err)
+	}()
+	span.AddAttributes(
+		trace.StringAttribute(logfields.ContainerID, process.SystemID()),
+		trace.Int64Attribute(logfields.ProcessID, int64(process.processID)))
 
 	err = waitForNotification(ctx, process.callbackNumber, hcsNotificationProcessExited, nil)
 	if err != nil {
@@ -245,14 +252,12 @@ func (process *Process) waitBackground() {
 			}
 		}
 	}
-	log.G(ctx).WithField("exitCode", exitCode).Debug("process exited")
 
 	process.closedWaitOnce.Do(func() {
 		process.exitCode = exitCode
 		process.waitError = err
 		close(process.waitBlock)
 	})
-	oc.SetSpanStatus(span, err)
 }
 
 // Wait waits for the process to exit. If the process has already exited returns
@@ -312,14 +317,10 @@ func (process *Process) ExitCode() (int, error) {
 // StdioLegacy returns the stdin, stdout, and stderr pipes, respectively. Closing
 // these pipes does not close the underlying pipes. Once returned, these pipes
 // are the responsibility of the caller to close.
-func (process *Process) StdioLegacy() (_ io.WriteCloser, _ io.ReadCloser, _ io.ReadCloser, err error) {
+func (process *Process) StdioLegacy() (io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
+	ctx := context.Background()
 	operation := "hcs::Process::StdioLegacy"
-	ctx, span := oc.StartSpan(context.Background(), operation)
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("cid", process.SystemID()),
-		trace.Int64Attribute("pid", int64(process.processID)))
+	process.logEntry(ctx).Trace(operation)
 
 	process.handleLock.RLock()
 	defer process.handleLock.RUnlock()
@@ -399,13 +400,8 @@ func (process *Process) CloseStdin(ctx context.Context) error {
 	return nil
 }
 
-func (process *Process) CloseStdout(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "hcs::Process::CloseStdout") //nolint:ineffassign,staticcheck
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("cid", process.SystemID()),
-		trace.Int64Attribute("pid", int64(process.processID)))
+func (process *Process) CloseStdout(ctx context.Context) error {
+	process.logEntry(ctx).Trace("hcs::Process::CloseStdout")
 
 	process.handleLock.Lock()
 	defer process.handleLock.Unlock()
@@ -424,12 +420,7 @@ func (process *Process) CloseStdout(ctx context.Context) (err error) {
 }
 
 func (process *Process) CloseStderr(ctx context.Context) (err error) {
-	ctx, span := oc.StartSpan(ctx, "hcs::Process::CloseStderr") //nolint:ineffassign,staticcheck
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("cid", process.SystemID()),
-		trace.Int64Attribute("pid", int64(process.processID)))
+	process.logEntry(ctx).Trace("hcs::Process::CloseStderr")
 
 	process.handleLock.Lock()
 	defer process.handleLock.Unlock()
@@ -451,12 +442,9 @@ func (process *Process) CloseStderr(ctx context.Context) (err error) {
 // or wait on it.
 func (process *Process) Close() (err error) {
 	operation := "hcs::Process::Close"
-	ctx, span := oc.StartSpan(context.Background(), operation)
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("cid", process.SystemID()),
-		trace.Int64Attribute("pid", int64(process.processID)))
+	ctx := context.Background()
+	ctx, entry := log.WithContext(ctx, process.logEntry(ctx))
+	entry.Trace(operation)
 
 	process.handleLock.Lock()
 	defer process.handleLock.Unlock()
@@ -555,4 +543,11 @@ func (process *Process) unregisterCallback(ctx context.Context) error {
 	handle = 0 //nolint:ineffassign
 
 	return nil
+}
+
+func (p *Process) logEntry(ctx context.Context) *logrus.Entry {
+	return log.G(ctx).WithFields(logrus.Fields{
+		logfields.ContainerID: p.SystemID(),
+		logfields.ProcessID:   p.processID,
+	})
 }

@@ -52,6 +52,8 @@ func (c *container) PipeRelay() *stdio.PipeRelay {
 // Start unblocks the container's init process created by the call to
 // CreateContainer.
 func (c *container) Start() error {
+	logrus.WithField(logfields.ContainerID, c.id).Trace("runc::container::Start")
+
 	logPath := c.r.getLogPath(c.id)
 	args := []string{"start", c.id}
 	cmd := createRuncCommand(logPath, args...)
@@ -78,7 +80,8 @@ func (c *container) ExecProcess(process *oci.Process, stdioSet *stdio.Connection
 
 // Kill sends the specified signal to the container's init process.
 func (c *container) Kill(signal syscall.Signal) error {
-	logrus.WithField(logfields.ContainerID, c.id).Debug("runc::container::Kill")
+	logrus.WithField(logfields.ContainerID, c.id).Trace("runc::container::Kill")
+
 	logPath := c.r.getLogPath(c.id)
 	args := []string{"kill"}
 	if signal == syscall.SIGTERM || signal == syscall.SIGKILL {
@@ -98,7 +101,8 @@ func (c *container) Kill(signal syscall.Signal) error {
 // Delete deletes any state created for the container by either this wrapper or
 // runC itself.
 func (c *container) Delete() error {
-	logrus.WithField(logfields.ContainerID, c.id).Debug("runc::container::Delete")
+	logrus.WithField(logfields.ContainerID, c.id).Trace("runc::container::Delete")
+
 	logPath := c.r.getLogPath(c.id)
 	args := []string{"delete", c.id}
 	cmd := createRuncCommand(logPath, args...)
@@ -300,7 +304,7 @@ func (c *container) GetInitProcess() (runtime.Process, error) {
 // final wait on the init process. The exit code returned is the exit code
 // acquired from waiting on the init process.
 func (c *container) Wait() (int, error) {
-	entity := logrus.WithField(logfields.ContainerID, c.id)
+	entry := logrus.WithField(logfields.ContainerID, c.id)
 	processes, err := c.GetAllProcesses()
 	if err != nil {
 		return -1, err
@@ -312,12 +316,12 @@ func (c *container) Wait() (int, error) {
 			// well (as in p.Wait()). This may not matter as long as the relays
 			// finish "soon" after Wait() returns since HCS expects the stdio
 			// connections to close before container shutdown can complete.
-			entity.WithField(logfields.ProcessID, process.Pid).Debug("waiting on container exec process")
+			entry.WithField(logfields.ProcessID, process.Pid).Debug("waiting on container exec process")
 			c.r.waitOnProcess(process.Pid)
 		}
 	}
 	exitCode, err := c.init.Wait()
-	entity.Debug("runc::container::init process wait completed")
+	entry.Debug("runc::container::init process wait completed")
 	if err != nil {
 		return -1, err
 	}

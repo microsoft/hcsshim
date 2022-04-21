@@ -424,7 +424,6 @@ func (brdg *bridge) writeMessage(buf *bytes.Buffer, enc *json.Encoder, typ msgTy
 			"message-id": id}).Debug("bridge send")
 	}
 
-	// Write the message.
 	_, err = buf.WriteTo(brdg.conn)
 	if err != nil {
 		return fmt.Errorf("bridge write: %s", err)

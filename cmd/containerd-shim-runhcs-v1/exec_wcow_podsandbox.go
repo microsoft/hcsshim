@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	eventstypes "github.com/containerd/containerd/api/events"
 	containerd_v1_types "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
@@ -22,7 +23,7 @@ func newWcowPodSandboxExec(ctx context.Context, events publisher, tid, bundle st
 		"tid":    tid,
 		"eid":    tid, // Init exec ID is always same as Task ID
 		"bundle": bundle,
-	}).Debug("newWcowPodSandboxExec")
+	}).Trace("newWcowPodSandboxExec")
 
 	wpse := &wcowPodSandboxExec{
 		events:     events,
@@ -193,7 +194,11 @@ func (wpse *wcowPodSandboxExec) ForceExit(ctx context.Context, status int) {
 	defer wpse.sl.Unlock()
 	if wpse.state != shimExecStateExited {
 		// Avoid logging the force if we already exited gracefully
-		log.G(ctx).WithField("status", status).Debug("wcowPodSandboxExec::ForceExit")
+		log.G(ctx).WithFields(logrus.Fields{
+			logfields.TaskID: wpse.tid,
+			logfields.ExecID: wpse.tid,
+			"status":         status,
+		}).Trace("wcowPodSandboxExec::ForceExit")
 
 		wpse.state = shimExecStateExited
 		wpse.exitStatus = 1

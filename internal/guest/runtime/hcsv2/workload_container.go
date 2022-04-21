@@ -11,12 +11,13 @@ import (
 
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
 	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
@@ -98,12 +99,10 @@ func specHasGPUDevice(spec *oci.Spec) bool {
 }
 
 func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.Spec) (err error) {
-	ctx, span := oc.StartSpan(ctx, "hcsv2::setupWorkloadContainerSpec")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(
-		trace.StringAttribute("sandboxID", sbid),
-		trace.StringAttribute("cid", id))
+	log.G(ctx).WithFields(logrus.Fields{
+		logfields.SandboxID:   sbid,
+		logfields.ContainerID: id,
+	}).Trace("hcsv2::setupWorkloadContainerSpec")
 
 	// Verify no hostname
 	if spec.Hostname != "" {
