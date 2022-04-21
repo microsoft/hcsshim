@@ -15,6 +15,10 @@ const (
 	TaskID      = "tid"
 	UVMID       = "uvm-id"
 
+	// shim service specific
+	ShimID    = "shim-id"
+	IsSandbox = "is-sandbox"
+
 	// networking and IO
 
 	File  = "file"

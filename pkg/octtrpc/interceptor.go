@@ -11,11 +11,13 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 )
 
 type options struct {
 	sampler trace.Sampler
+	attrs   []trace.Attribute
 }
 
 // Option represents an option function that can be used with the OC TTRPC
@@ -27,6 +29,13 @@ type Option func(*options)
 func WithSampler(sampler trace.Sampler) Option {
 	return func(opts *options) {
 		opts.sampler = sampler
+	}
+}
+
+// WithAttributes specifies additional attributes to add to spans created by the interceptor.
+func WithAttributes(attr ...trace.Attribute) Option {
+	return func(opts *options) {
+		opts.attrs = append(opts.attrs, attr...)
 	}
 }
 
@@ -70,6 +79,7 @@ func ClientInterceptor(opts ...Option) ttrpc.UnaryClientInterceptor {
 	for _, opt := range opts {
 		opt(&o)
 	}
+
 	return func(ctx context.Context, req *ttrpc.Request, resp *ttrpc.Response, info *ttrpc.UnaryClientInfo, inv ttrpc.Invoker) (err error) {
 		ctx, span := oc.StartSpan(
 			ctx,
@@ -78,6 +88,9 @@ func ClientInterceptor(opts ...Option) ttrpc.UnaryClientInterceptor {
 			oc.WithClientSpanKind)
 		defer span.End()
 		defer setSpanStatus(span, err)
+		if len(o.attrs) > 0 {
+			span.AddAttributes(o.attrs...)
+		}
 
 		spanContextBinary := propagation.Binary(span.SpanContext())
 		b64 := base64.StdEncoding.EncodeToString(spanContextBinary)
@@ -98,20 +111,33 @@ func ServerInterceptor(opts ...Option) ttrpc.UnaryServerInterceptor {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	return func(ctx context.Context, unmarshal ttrpc.Unmarshaler, info *ttrpc.UnaryServerInfo, method ttrpc.Method) (_ interface{}, err error) {
+
+	return func(ctx context.Context, unmarshal ttrpc.Unmarshaler, info *ttrpc.UnaryServerInfo, method ttrpc.Method) (resp interface{}, err error) {
 		name := convertMethodName(info.FullMethod)
 
 		var span *trace.Span
 		opts := []trace.StartOption{trace.WithSampler(o.sampler), oc.WithServerSpanKind}
-		parent, ok := getParentSpanFromContext(ctx)
-		if ok {
+		if parent, ok := getParentSpanFromContext(ctx); ok {
 			ctx, span = oc.StartSpanWithRemoteParent(ctx, name, parent, opts...)
 		} else {
 			ctx, span = oc.StartSpan(ctx, name, opts...)
 		}
 		defer span.End()
-		defer setSpanStatus(span, err)
+		defer func() {
+			if err == nil {
+				span.AddAttributes(trace.StringAttribute("response", log.Format(ctx, resp)))
+			}
+			setSpanStatus(span, err)
+		}()
+		if len(o.attrs) > 0 {
+			span.AddAttributes(o.attrs...)
+		}
 
-		return method(ctx, unmarshal)
+		return method(ctx, func(req interface{}) (err error) {
+			if err = unmarshal(req); err == nil {
+				span.AddAttributes(trace.StringAttribute("request", log.Format(ctx, req)))
+			}
+			return err
+		})
 	}
 }
