@@ -21,6 +21,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/oc"
 )
 
 const (
@@ -229,7 +230,11 @@ func (call *rpc) Wait() {
 // If allowCancel is set and the context becomes done, returns an error without
 // waiting for a response. Avoid this on messages that are not idempotent or
 // otherwise safe to ignore the response of.
-func (brdg *bridge) RPC(ctx context.Context, proc rpcProc, req requestMessage, resp responseMessage, allowCancel bool) error {
+func (brdg *bridge) RPC(ctx context.Context, proc rpcProc, req requestMessage, resp responseMessage, allowCancel bool) (err error) {
+	ctx, span := oc.StartSpan(ctx, "gcs::bridge::RPC::"+proc.String(), oc.WithClientSpanKind)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+
 	call, err := brdg.AsyncRPC(ctx, proc, req, resp)
 	if err != nil {
 		return err

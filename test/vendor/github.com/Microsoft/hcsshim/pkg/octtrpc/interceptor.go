@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 )
 
@@ -98,7 +99,7 @@ func ServerInterceptor(opts ...Option) ttrpc.UnaryServerInterceptor {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	return func(ctx context.Context, unmarshal ttrpc.Unmarshaler, info *ttrpc.UnaryServerInfo, method ttrpc.Method) (_ interface{}, err error) {
+	return func(ctx context.Context, unmarshal ttrpc.Unmarshaler, info *ttrpc.UnaryServerInfo, method ttrpc.Method) (resp interface{}, err error) {
 		name := convertMethodName(info.FullMethod)
 
 		var span *trace.Span
@@ -110,8 +111,20 @@ func ServerInterceptor(opts ...Option) ttrpc.UnaryServerInterceptor {
 			ctx, span = oc.StartSpan(ctx, name, opts...)
 		}
 		defer span.End()
-		defer setSpanStatus(span, err)
+		defer func() {
+			if err == nil {
+				span.AddAttributes(trace.StringAttribute("response", log.Format(ctx, resp)))
+			}
+			setSpanStatus(span, err)
+		}()
 
-		return method(ctx, unmarshal)
+		um := func(req interface{}) (err error) {
+			if err = unmarshal(req); err == nil {
+				span.AddAttributes(trace.StringAttribute("request", log.Format(ctx, req)))
+			}
+			return err
+		}
+
+		return method(ctx, um)
 	}
 }
