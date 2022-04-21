@@ -69,7 +69,7 @@ param (
 # paths for $in and $out, but not for other variables.
 # So, for now, build targets and dependencies will all be relative to package root
 
-Import-Module ( Join-Path $PSScriptRoot NinjaBuild.psm1 ) -Force
+Import-Module ( Join-Path $PSScriptRoot NinjaBuild ) -Force
 
 if ( $Info ) {
     Get-Help Update-NinjaFile
@@ -105,7 +105,7 @@ if ( -not $GoModule ) {
 Write-Verbose "Found module name `"$GoModule`""
 
 $GoPath = Get-GoEnv 'GOPATH'
-Write-Verbose "Using GOPTH `"$GoPath`""
+Write-Verbose "Using GOPATH `"$GoPath`""
 
 $Bin = 'bin'
 $CmdsBin = "$Bin\cmd"
@@ -166,7 +166,7 @@ if ( -not $NoProto ) {
                 I = ([ref]$installprotobuild) ; L = $LocalProtobuildSource
             },
             @{
-                N = 'protocs.exe'; S = ([ref]$ProtocSource); V = $ProtocVersion;
+                N = 'protoc.exe'; S = ([ref]$ProtocSource); V = $ProtocVersion;
                 I = ([ref]$installprotoc) ; L = $LocalProtocSource
             }) ) {
         try {
@@ -222,9 +222,7 @@ $Path |
 
 Write-Verbose 'adding powershell variables'
 
-$PwshVar = 'PWSH'
 $PwshFlags = ('-NoProfile', '-NoLogo', '-NonInteractive') + $PwshFlags
-$PwshFlagsVar = 'PWSH_FLAGS'
 $PwshCmd = [string[]](fv $PwshVar -q '"') + $PwshFlags + (fv $PwshFlagsVar) + '-Command'
 
 $Path |
@@ -237,12 +235,6 @@ $Path |
 ####################################################################################################
 
 Write-Verbose 'adding miscellaneous rules and builds'
-
-$CmdFlagsVar = 'CMD_FLAGS'
-$SourceVar = 'SOURCE'
-$DestVar = 'DESTINATION'
-$UrlVar = 'URL'
-$VersionVar = 'VERSION'
 
 $Path |
     Update-NinjaFile -Comment |
@@ -260,7 +252,7 @@ $Path |
     # unzip
 
     Update-NinjaFile -Rule unzip `
-        -Description ('unziping "$in" to', (fv $DestVar `"), 'with flags', (fv $CmdFlagsVar `")) `
+        -Description ('unziping "$in" to', (fv $DestVar `"), 'with flags:', (fv $CmdFlagsVar)) `
         @PwshCmd 'Expand-Archive' '-Force' '-DestinationPath' (fv $DestVar "'") `
     (fv $CmdFlagsVar) '''$in''' |
     Update-NinjaFile -NewLine |
@@ -268,27 +260,27 @@ $Path |
     # tar
 
     Update-NinjaFile -Rule tar `
-        -Description ('taring "$in" with flags', (fv $CmdFlagsVar `")) `
+        -Description ('taring "$in" with flags:', (fv $CmdFlagsVar)) `
         @PwshCmd 'tar' '-f' '''$in''' (fv $CmdFlagsVar) |
     Update-NinjaFile -NewLine |
 
     # download
 
     Update-NinjaFile -Rule web-download `
-        -Description ('downloading "$out" from ', (fv $UrlVar `"), 'with flags', (fv $CmdFlagsVar `")) `
+        -Description ('downloading "$out" from ', (fv $UrlVar `"), 'with flags:', (fv $CmdFlagsVar)) `
         @PwshCmd 'Invoke-WebRequest' '-Method GET' '-OutFile ''$out''' '-Uri' (fv $UrlVar `') |
     Update-NinjaFile -NewLine |
 
     # todo: when the build rules are updated, change this to $in vs $Source
     Update-NinjaFile -Rule mv `
-        -Description ('moving "$in" to', (fv $DestVar '"'), 'with flags', (fv $CmdFlagsVar '"')) `
+        -Description ('moving "$in" to', (fv $DestVar '"'), 'with flags:', (fv $CmdFlagsVar)) `
         @PwshCmd 'Move-Item' (fv $SourceVar "'") (fv $CmdFlagsVar) (fv $DestVar "'") |
     Update-NinjaFile -NewLine |
 
     # mkdir
 
     Update-NinjaFile -Rule mkdir `
-        -Description ('creating directory $out with flags', (fv $CmdFlagsVar '"')) `
+        -Description ('creating directory $out with flags:', (fv $CmdFlagsVar)) `
         @PwshCmd '(Test-Path' '-PathType Container' '-Path ''$out'')' '-or' `
         '(New-Item ''$out''' $(fv $CmdFlagsVar) '-ItemType Directory)' '> $$null' |
     Update-NinjaFile -NewLine |
@@ -298,7 +290,7 @@ $Path |
     Update-NinjaFile -Comment Use (fv $DestVar) rather than '$in' because the latter `
         would force the directory to be created if it did not exist |
     Update-NinjaFile -Rule clean `
-        -Description ('removing directory', (fv $DestVar '"'), 'with flags', $(fv $CmdFlagsVar '"')) `
+        -Description ('removing directory', (fv $DestVar '"'), 'with flags:', $(fv $CmdFlagsVar)) `
         @PwshCmd '(Test-Path' "-Path $(fv $DestVar "'"))" '-and' `
         '(Remove-Item' $(fv $DestVar "'") '-Recurse' '-Force' $(fv $CmdFlagsVar) ')' '> $$null' |
     Update-NinjaFile -NewLine -q
@@ -311,7 +303,9 @@ foreach ($dir in $dirs ) {
         Update-NinjaFile -NewLine -q
 }
 
-Update-NinjaFile -Path $Path -Build clean -Rule phony @($dirs | ForEach-Object { "rm-$($_.Replace('\','-'))" }) -q
+$Path |
+    Update-NinjaFile -Build clean -Rule phony @($dirs | ForEach-Object { "rm-$($_.Replace('\','-'))" }) |
+    Update-NinjaFile -NewLine -q
 
 ####################################################################################################
 # go
@@ -323,14 +317,8 @@ $GoFlags = [string[]]('')
 $GoBuildFlags = (, "-ldflags='-s -w'") + $GoBuildFlags
 $GoTestFlags = ("-gcflags='all=-d=checkptr'", '-tags functional') + $GoTestFlags
 
-$GoVar = 'GO'
-$GOOSVar = 'GOOS'
-$GoFlagsVar = 'GO_FLAGS'
-
 $GoCmd = [string[]]('&', (fv $GoVar `'))
 $GoCmdEnv = [string[]](('$$env:GOOS=' + (fv $GOOSVar `')), ';', $GoCmd)
-# pulls the exe ending based on GOOS
-$GoExeCmd = ('&', (fv $GoVar `'), 'env GOEXE') -join ' '
 
 $Path |
     Update-NinjaFile -Comment |
@@ -353,7 +341,8 @@ $Path |
     Update-NinjaFile -Comment install modules -NewLine |
 
     Update-NinjaFile -Rule go-install `
-        -Description 'installing "$out" from', "`"$(fv $UrlVar)@$(fv $VersionVar)`"" `
+        -Description ('installing "$out" from', "`"$(fv $UrlVar)@$(fv $VersionVar)`"", `
+            'with flags:', "GOOS=$(fv $GOOSVar -q `')", (fv $GoFlagsVar)) `
         @PwshCmd @GoCmdEnv 'install' (fv $GoFlagsVar) `
         "'$(fv $UrlVar)@$(fv $VersionVar)'" |
     Update-NinjaFile -NewLine |
@@ -379,63 +368,45 @@ $Path |
 # go builds
 ####################################################################################################
 
-# todo: break this up into "phony rule name", "exe name", "build source dir", "dest dir"
-
 Write-Verbose 'adding go exe rules, and builds'
 
 $builds = @(
-    @{Build = 'shim'; Value = 'cmd\containerd-shim-runhcs-v1' }
-    @{Build = 'runhcs'; Value = 'cmd\runhcs'; Variables = @{ $DestVar = $CmdsBin } }
-    @{Build = 'ncproxy'; Value = 'cmd\ncproxy'; Variables = @{ $DestVar = $CmdsBin } }
-    @{Build = 'wclayer'; Value = 'cmd\wclayer'; Variables = @{ $DestVar = $CmdsBin } }
-    @{Build = 'tar2ext4'; Value = 'cmd\tar2ext4'; Variables = @{ $DestVar = $CmdsBin } }
-    @{Build = 'shimdiag'; Value = 'cmd\shimdiag'; Variables = @{ $DestVar = $CmdsBin } }
+    @{Name = 'shim'; Source = 'cmd\containerd-shim-runhcs-v1'; Move = $CPlatPath }
+    @{Name = 'runhcs'; Source = 'cmd\runhcs'; Dest = $CmdsBin }
+    @{Name = 'ncproxy'; Source = 'cmd\ncproxy'; Dest = $CmdsBin }
+    @{Name = 'wclayer'; Source = 'cmd\wclayer'; Dest = $CmdsBin }
+    @{Name = 'tar2ext4'; Source = 'cmd\tar2ext4'; Dest = $CmdsBin }
+    @{Name = 'shimdiag'; Source = 'cmd\shimdiag'; Dest = $CmdsBin }
 
-    @{Build = 'uvmboot'; Value = 'internal\tools\uvmboot'; Variables = @{ $DestVar = $ToolsBin } }
-    @{Build = 'zapdir'; Value = 'internal\tools\zapdir'; Variables = @{ $DestVar = $ToolsBin } }
+    @{Name = 'uvmboot'; Source = 'internal\tools\uvmboot'; Dest = $ToolsBin }
+    @{Name = 'zapdir'; Source = 'internal\tools\zapdir'; Dest = $ToolsBin }
 
-    @{Build = 'gcs'; Value = 'cmd\gcs'; Variables = @{ $DestVar = $CmdsBin; $GOOSVar = 'linux' } }
+    @{Name = 'gcs'; Source = 'cmd\gcs'; Dest = $CmdsBin; GOOS = 'linux' }
 )
 
 $Path |
     Update-NinjaFile -Comment go builds -NewLine |
 
     Update-NinjaFile -Rule 'go-build' `
-        -Description ('building', ('".\' + (fv $DestVar) + '\$out"'), 'from ".\$in"', `
-            'with flags', "`"GOOS=$(fv $GOOSVar -q `')", (fv $GoFlagsVar -r `")) `
-        @PwshCmd @GoCmdEnv 'build' @GoBuildFlags @GoFlags (fv $GoFlagsVar) '-o' `
-        ".\$(fv $DestVar)" '.\$in' |
+        -Description ('building $out as', (fv $DestVar -q '"'), 'from', (fv $SourceVar '"'), `
+            'with flags:', "$GoFlags" , "$GoTestFlags", `
+            "GOOS=$(fv $GOOSVar -q `')", (fv $GoFlagsVar)) `
+        @PwshCmd @GoCmdEnv 'build' @GoBuildFlags @GoFlags (fv $GoFlagsVar) `
+        '-o' $(fv $DestVar -q "'") $(fv $SourceVar "'") |
     Update-NinjaFile -NewLine |
 
     Update-NinjaFile -Build tools -Rule phony uvmboot zapdir tar2ext4 shimdiag |
     Update-NinjaFile -NewLine -q
 
 foreach ( $build in $builds ) {
-    $loc = $build['Variables']?[$DestVar]
-    if ( $loc ) {
-        $build['OrderOnly'] = @($build['OrderOnly'], $loc)
+    if ( $build['Move'] -and ( -not $moverules ) ) {
+        $build['Move'] = $null
     }
 
-    Update-NinjaFile -Path $Path -Rule 'go-build' @build -q
+    $Path |
+        Add-GoBuildRule -Rule go-build @build -MoveImplicit (($NoCrictl) ? '' : 'rmpods') |
+        Update-NinjaFile -NewLine -q
 }
-
-Update-NinjaFile -Path $Path -NewLine -q
-
-if ( $moverules ) {
-    $moves = @( @{Name = 'shim'; Exe = 'containerd-shim-runhcs-v1.exe' } )
-
-    foreach ( $mv in $moves ) {
-        Update-NinjaFile -Path $Path -Build "mv-$($mv['Name'])" -Rule mv `
-            -Implicit (($NoCrictl) ? '' :  'rmpods') `
-            -Value ($mv['Name']) `
-            -Variables @{
-            $SourceVar   = ($mv['Exe'])
-            $DestVar     = (Join-Path $CPlatPath ($mv['Dest'] ?? '') $mv['Exe'])
-            $CmdFlagsVar = '-Force'
-        } -q
-    }
-}
-Update-NinjaFile -Path $Path -NewLine -q
 
 ####################################################################################################
 # go test builds
@@ -443,40 +414,39 @@ Update-NinjaFile -Path $Path -NewLine -q
 
 Write-Verbose 'adding go test exe rules, and builds'
 
-$tests = @(
-    @{Build = 'shimtest'; Value = 'test\containerd-shim-runhcs-v1'; Variables = @{ $DestVar = $TestsBin } }
-    @{Build = 'critest'; Value = 'test\cri-containerd'; Variables = @{ $DestVar = $TestsBin } }
-    @{Build = 'functional'; Value = 'test\functional'; Variables = @{ $DestVar = $TestsBin } }
-    @{Build = 'runhcstest'; Value = 'test\runhcs'; Variables = @{ $DestVar = $TestsBin } }
-    # @{Build = 'gcstest'; Value = 'test\gcs'; Variables = @{ $DestVar = $TestsBin; $GOOSVar = 'linux' } }
+$test_builds = @(
+    @{Name = 'shimtest'; Source = 'test\containerd-shim-runhcs-v1' } #; Dest = $TestsBin }
+    @{Name = 'critest'; Source = 'test\cri-containerd'; Dest = $TestsBin }
+    @{Name = 'functional'; Source = 'test\functional'; Dest = $TestsBin }
+    @{Name = 'runhcstest'; Source = 'test\runhcs'; Dest = $TestsBin }
+    @{Name = 'gcstest'; Source = 'test\gcs'; Dest = $TestsBin; GOOS = 'linux' }
 )
 
 $Path |
     Update-NinjaFile -Comment go test builds |
-    Update-NinjaFile -Comment '`go build`' accepts '`-o <directory>`,' but '`test -c`' requires '`-o <filename>`' |
     Update-NinjaFile -NewLine |
 
 
     Update-NinjaFile -Rule 'go-build-test' `
-        -Description ('building test binary', ('".\' + (fv $DestVar) + '\$out"'), `
-            'from ".\$in"', 'with flags', "`"GOOS=$(fv $GOOSVar -q `')", `
-        (fv $GoFlagsVar -r `")) `
+        -Description ('building test binary $out as', (fv $DestVar -q '"'), `
+            'from', (fv $SourceVar '"'), 'with flags:', $GoFlags, $GoTestFlags, `
+            "GOOS=$(fv $GOOSVar -q `')", (fv $GoFlagsVar)) `
         @PwshCmd @GoCmdEnv 'test' @GoTestFlags @GoFlags (fv $GoFlagsVar) `
-        '-o' ".\$(fv $DestVar)\`$out`$`$($GoExeCmd)" '-c .\$in' |
+        '-o' $(fv $DestVar -q "'") '-c' $(fv $SourceVar "'") |
     Update-NinjaFile -NewLine |
 
-    Update-NinjaFile -Build tests -Rule phony @($tests | ForEach-Object { $_['Build'] }) |
+    Update-NinjaFile -Build tests -Rule phony @($test_builds | ForEach-Object { $_['Name'] }) |
     Update-NinjaFile -NewLine -q
 
-foreach ( $test in $tests ) {
-    $loc = $test['Variables']?[$DestVar]
-    if ( $loc ) {
-        $test['OrderOnly'] = @($test['OrderOnly'], $loc)
+foreach ( $build in $test_builds ) {
+    if ( $build['Move'] -and ( -not $moverules ) ) {
+        $build['Move'] = $null
     }
 
-    Update-NinjaFile -Path $Path -Rule 'go-build-test' @test -q
+    $Path |
+        Add-GoBuildRule -Rule go-build-test @build -MoveImplicit (($NoCrictl) ? '' : 'rmpods') |
+        Update-NinjaFile -NewLine -q
 }
-Update-NinjaFile -NewLine -Path $Path -q
 
 ####################################################################################################
 # go generate
@@ -509,8 +479,8 @@ Update-NinjaFile -Path $Path -NewLine -q
 
 $Path |
     Update-NinjaFile -Rule 'go-gen' `
-        -Description ('calling go generate on package ".\$in"', 'with flags', `
-            "`"GOOS=$(fv $GOOSVar -q `')", (fv $GoFlagsVar -r `")) `
+        -Description ('calling go generate on package ".\$in"', 'with flags:', `
+            $GoFlags, "GOOS=$(fv $GOOSVar -q `')", (fv $GoFlagsVar)) `
         @PwshCmd @GoCmdEnv 'generate' @GoFlags (fv $GoFlagsVar) '.\$in' |
     Update-NinjaFile -NewLine -q
 
@@ -530,9 +500,6 @@ Update-NinjaFile -Path $Path -NewLine -q
 ####################################################################################################
 
 if ( -not $NoCrict ) {
-    $CrictlVar = 'CRICTL'
-    $CrictlFlagsVar = 'CRICTL_FLAGS'
-
     $CrictlCmd = "& $(fv $CrictlVar "'")"
 
     $Path |
@@ -549,10 +516,13 @@ if ( -not $NoCrict ) {
         # crictl commands
 
         Update-NinjaFile -Rule rmpods `
-            -Description ('removing CRI podswith flags', "`"$CrictlFlags`"", (fv $CrictlFlagsVar `")) `
-            @PwshCmd $CrictlCmd (fv $CrictlFlagsVar) 'pods --quiet' '| ForEach-Object' `
-            "{ $CrictlCmd" $CrictlFlags 'stopp' (fv $CrictlFlagsVar) '$$_' ';' `
-            $CrictlCmd $CrictlFlags 'rmp' (fv $CrictlFlagsVar) '--force' '$$_}' |
+            -Description ('removing CRI pods with flags:', $CrictlFlags, (fv $CrictlFlagsVar)) `
+            @PwshCmd `
+            $CrictlCmd @CrictlFlags (fv $CrictlFlagsVar) 'pods' '--quiet' `
+            '| ForEach-Object' '{' `
+            $CrictlCmd @CrictlFlags 'stopp' (fv $CrictlFlagsVar) '$$_' ';' `
+            $CrictlCmd @CrictlFlags 'rmp' (fv $CrictlFlagsVar) '--force' '$$_' `
+            '}' |
         Update-NinjaFile -NewLine |
         Update-NinjaFile -Build rmpods -Rule rmpods |
         Update-NinjaFile -NewLine -q
@@ -564,9 +534,6 @@ if ( -not $NoCrict ) {
 
 if ( -not $NoProto ) {
     Write-Verbose 'adding protobuf variables, rules, and builds'
-
-    $ProtobuildVar = 'PROTOBUILD'
-    $ProtobuildFlagsVar = 'PROTOBUILD_FLAGS'
 
     $ProtoCmd = "& $(fv $ProtobuildVar "'")"
 
@@ -637,8 +604,8 @@ if ( -not $NoProto ) {
 
     $Path |
         Update-NinjaFile -Rule protobuild `
-            -Description ('building proto files "$MODULE" with flags', (fv $ProtobuildFlagsVar `")) `
-            @PwshCmd @ProtoEnv $ProtoCmd (fv $ProtobuildFlagsVar) '$MODULE' |
+            -Description ('building proto files', (fv $ModuleVar -q '"'), 'with flags', (fv $ProtobuildFlagsVar `")) `
+            @PwshCmd @ProtoEnv $ProtoCmd (fv $ProtobuildFlagsVar) (fv $ModuleVar -q "'") |
         Update-NinjaFile -NewLine |
 
         Update-NinjaFile -Build proto -Rule phony @($protos | ForEach-Object { $_['Proto'] }) |
@@ -650,6 +617,6 @@ if ( -not $NoProto ) {
             Update-NinjaFile -Path $Path -Rule protobuild -Build $_['Proto'] -Implicit $_['Go'] `
                 -OrderOnly (($installprotobuild ? (fv $ProtobuildVar) : ''), `
                 ($installprotoc ? $ProtocSource : '')) `
-                -Variables @{MODULE = $M } -q
+                -Variables @{$ModuleVar = $M } -q
         }
 }

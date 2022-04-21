@@ -8,6 +8,7 @@
 .vscode/
 .idea/
 
+test/results/
 # Test binary, build with `go test -c`
 *.test
 
@@ -28,22 +29,14 @@ service/pkg/
 
 # Make stuff
 .rootfs-done
-bin/*
-rootfs/*
-rootfs-conv/*
 *.o
-build
-protobuf
-
-deps/*
-out/*
-tmp
-
-test/results
+bin/
+build/
+deps/
+out/
+protobuf/
+rootfs/
+rootfs-conv/
 
 go.work
 go.work.sum
-
-# ninja build
-.ninja_log
-build.ninja

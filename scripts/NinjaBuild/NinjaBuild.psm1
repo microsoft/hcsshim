@@ -1,17 +1,20 @@
 # see details https://ninja-build.org/manual.html
 # based off of https://github.com/ninja-build/ninja/blob/master/misc/ninja_syntax.py
 
-Set-Variable EmptyStringArray -WhatIf:$false -Option Constant -Value ([string[]]'')
-Set-Variable CommentPrefix -WhatIf:$false -Option Constant -Value ([string[]]'#')
-Set-Variable PoolPrefix -WhatIf:$false -Option Constant -Value ([string[]]'pool')
-Set-Variable RulePrefix -WhatIf:$false -Option Constant -Value ([string[]]'rule')
-Set-Variable BuildPrefix -WhatIf:$false -Option Constant -Value ([string[]]'build')
-Set-Variable IncludePrefix -WhatIf:$false -Option Constant -Value ([string[]]'include')
-Set-Variable SubNinjaPrefix -WhatIf:$false -Option Constant -Value ([string[]]'subninja')
-Set-Variable DefaultPrefix -WhatIf:$false -Option Constant -Value ([string[]]'default')
-
-Set-Variable IndentValue -WhatIf:$false -Option Constant -Value '  '
-Set-Variable DefaultLineWidth -WhatIf:$false -Option Constant -Value 80
+foreach ($d in @(
+        @{ N = 'EmptyStringArray'  ; V = ([string[]]'') }
+        @{ N = 'CommentPrefix' ; V = ([string[]]'#') }
+        @{ N = 'PoolPrefix'; V = ([string[]]'pool') }
+        @{ N = 'RulePrefix' ; V = ([string[]]'rule') }
+        @{ N = 'BuildPrefix' ; V = ([string[]]'build') }
+        @{ N = 'IncludePrefix' ; V = ([string[]]'include') }
+        @{ N = 'SubNinjaPrefix' ; V = ([string[]]'subninja') }
+        @{ N = 'DefaultPrefix' ; V = ([string[]]'default') }
+        @{ N = 'IndentValue' ; V = ' ' }
+        @{ N = 'DefaultLineWidth' ; V = 80 }
+    ) ) {
+    Set-Variable -Name $d['N'] -Value $d['V'] -Option Constant -Force
+}
 
 # build and rule parameter sets can be undistinguishable, so often a decsription or depfile is needed
 
@@ -728,10 +731,3 @@ function Format-Variable {
     }
 }
 New-Alias -Name fv -Value Format-Variable
-
-Export-ModuleMember `
-    -Function Update-NinjaFile, `
-    Get-GoModuleName, Get-GoEnv, Get-GoGenPackage, Get-ProtoFile, `
-    Resolve-Command, Resolve-PathError `
-    Format-Path, Format-Variable `
-    -Alias unja, fv, fp
