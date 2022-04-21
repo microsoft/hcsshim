@@ -423,7 +423,7 @@ func (b *Bridge) PublishNotification(n *prot.ContainerNotification) {
 	ctx, span := oc.StartSpan(context.Background(),
 		"opengcs::bridge::PublishNotification",
 		oc.WithClientSpanKind)
-	span.AddAttributes(trace.StringAttribute("notification", fmt.Sprintf("%+v", n)))
+	span.AddAttributes(trace.StringAttribute("notification", log.Format(ctx, n)))
 	// DONT defer span.End() here. Publish is odd because bridgeResponse calls
 	// `End` on the `ctx` after the response is sent.
 

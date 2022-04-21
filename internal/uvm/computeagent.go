@@ -240,7 +240,7 @@ func setupAndServe(ctx context.Context, caAddr string, vm *UtilityVM) error {
 	}
 	computeagent.RegisterComputeAgentService(s, &computeAgent{vm})
 
-	log.G(ctx).WithField("address", l.Addr().String()).Info("serving compute agent")
+	log.G(ctx).WithField("address", log.FormatIO(ctx, l)).Debug("serving compute agent")
 	go func() {
 		defer l.Close()
 		if err := trapClosedConnErr(s.Serve(ctx, l)); err != nil {

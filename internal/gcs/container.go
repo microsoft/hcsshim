@@ -91,11 +91,11 @@ func (c *Container) IsOCI() bool {
 
 // Close releases associated with the container.
 func (c *Container) Close() error {
-	c.closeOnce.Do(func() {
-		_, span := oc.StartSpan(context.Background(), "gcs::Container::Close")
-		defer span.End()
-		span.AddAttributes(trace.StringAttribute("cid", c.id))
-	})
+	_, span := oc.StartSpan(context.Background(), "gcs::Container::Close")
+	defer span.End()
+	span.AddAttributes(trace.StringAttribute("cid", c.id))
+
+	c.closeOnce.Do(func() {})
 	return nil
 }
 
