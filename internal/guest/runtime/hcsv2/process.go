@@ -55,7 +55,7 @@ type containerProcess struct {
 	// (runtime.Process).Wait() call returns, and exitCode has been updated.
 	exitWg sync.WaitGroup
 
-	// Used to allow addtion/removal to the writersWg after an initial wait has
+	// Used to allow addition/removal to the writersWg after an initial wait has
 	// already been issued. It is not safe to call Add/Done without holding this
 	// lock.
 	writersSyncRoot sync.Mutex
