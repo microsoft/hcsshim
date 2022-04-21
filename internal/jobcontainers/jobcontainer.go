@@ -258,8 +258,9 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 			}
 		}
 	} else {
-		// Bind support is available, set the default working directory to C:\payload if
-		// nothing is set.
+		// Just use the exact working directory the user asked for if we have file binding support.
+		// Still support replacing %CONTAINER_SANDBOX_MOUNT_POINT% in the string for backwards compat
+		// however.
 		if conf.WorkingDirectory != "" {
 			workDir, _ = c.replaceWithMountPoint(conf.WorkingDirectory)
 		}
@@ -312,7 +313,7 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 	// Add the rootfs location to PATH so you can run things from the root of the image.
 	for idx, envVar := range env {
 		ev := strings.TrimSpace(envVar)
-		if len(ev) >= 5 && strings.ToLower(ev[:5]) == "path=" {
+		if strings.HasPrefix(strings.ToLower(ev), "path=") {
 			rootfsLoc := c.rootfsLocation
 			if rune(ev[len(ev)-1]) != ';' {
 				rootfsLoc = ";" + rootfsLoc
