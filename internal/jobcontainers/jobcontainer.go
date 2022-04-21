@@ -142,6 +142,45 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *
 
 	// Check if we support file binding once to avoid needing to stat for the dll on
 	// every container creation.
+	//
+	// If file/directory binding support is available on the host, there's a lot of new functionality we
+	// can make use of that improves the UX for volume mounts and where the containers rootfs
+	// shows up on the host. The exhaustive list of differences in functionality would be:
+	//
+	// 1. The containers job object is now upgraded to a silo. This is so we can make use of
+	// some functionality for silos that allows you to bind in a filesystem path and have it
+	// be unique to that silo and not viewable outside of the silo or in any other silos. This
+	// is the building block for the other changes below.
+	//
+	// 2. Directory and file mounts will now show up exactly where the container_path is
+	// pointing to. For example, with the below mount C:\path would show up in the container
+	// at C:\path\in\container just as you'd expect.
+	//
+	// {"host_path": "C:\path", "container_path": "C:\path\in\container"}
+	//
+	// Without file binding support mounts will be symlinks under a relative path in the containers
+	// rootfs location on the host. For example, using the same request as above, C:\path\in\container
+	// would end up being placed at C:\<rootfslocation>\path\in\container. This is due to
+	// there being no way for us to have the path be unique in the face of multiple containers, or just
+	// the same file existing on the host. If two containers asked for two different paths to show up
+	// at C:\path\in\container, we can't symlink them both to that location. Another thing to note however
+	// is as a backwards compatability measure for machines that don't have file binding support
+	// (ws2019 at the moment) we *also* bind the path under the containers rootfs location so checking
+	// for your mount in either the old or new location will work.
+	//
+	// 3. The containers rootfs location (C:\ in a typical Windows Server Container) can now be the
+	// same path in every container, and the default location is C:\hpc. This is possible because of the
+	// same per silo file binding support mentioned above, we can take the unioned view of the containers
+	// layers and bind them to C:\hpc in the container and have a unique C:\hpc in every one. On machines
+	// where file binding isn't available the path has to be unique, as there is no form of filesystem
+	// virtualization or namespacing available to regular job objects. The format for machines with no
+	// file binding support is C:\hpc\<ContainerID>.
+	//
+	// 4. Users working directory will be respected instead of taken as a relative path under C:\<rootfslocation>.
+	// On machines without file binding there was no way to know the path that the rootfs for the container would
+	// show up at beforehand as you would need to know the containers ID before you launched it. Now that the
+	// rootfs location can be static, a user can easily supply C:\hpc\rest\of\path as their work dir and still
+	// supply anything outside of C:\hpc if they want another location on the host.
 	checkBindSupportOnce.Do(func() {
 		bindDLL := `C:\windows\system32\bindfltapi.dll`
 		if _, err := os.Stat(bindDLL); err == nil {
@@ -149,11 +188,6 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *
 		}
 	})
 
-	// If bind mount support is available on the host, there's a lot of new functionality we
-	// can make use of that improves the UX for volume mounts and where the containers rootfs
-	// shows up on the host. You can do per silo bindings so every container can have a static
-	// path for its rootfs location and avoid having to make liberal use of the
-	// CONTAINER_SANDBOX_MOUNT_POINT environment variable.
 	if fileBindingSupport {
 		if err := container.bindSetup(ctx, s); err != nil {
 			return nil, nil, err
@@ -207,26 +241,28 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 
 	// This is to workaround a rather unfortunate outcome with launching a process in a silo that
 	// has bound files.
+	//
 	// If a user requested to launch a program at C:\<rootfslocation>\mybinary.exe because they
-	// expect C:\<rootfslocation>\mybinary.exe to exist once the file bindings are done, it actually
+	// expect C:\<rootfslocation>\mybinary.exe to exist once the file bindings are done, this
 	// won't work. This is because the executable is searched for using the parent processes filesystem view
-	// and not the containers/silos (that has access to these bound in files). Our Containerd shim is not
-	// one of these processes for example, and this is the parent process that is invoking CreateProcess so
-	// CreateProcess and our commandline resolution logic won't be able to find the process being asked for.
-	// Deep down in the depths of CreateProcess the culprit is a NtQueryAttributesFile call that
+	// and not the containers/silos that has access to these bound in files. Our Containerd shim is not
+	// running in the containers silo, and by virtue of this we won't be able to find the process being asked
+	// for as C:\<rootfslocation> is not viewable to processes outside of the silo. Deep down in the depths
+	// of CreateProcessW the culprit is a NtQueryAttributesFile call on the binary we're asking to run that
 	// fails as it doesn't have any context surrounding paths available to our silo.
 	//
 	// A way to get around this is to launch a process that will always exist (cmd) and is in our
-	// path, and then just invoke the program with the cmdline supplied. We could also add a new
-	// mode/flag for the shim where it's just a dummy process launcher, so we can invoke the shim
-	// instead of cmd and have more control over things.
+	// path, and then just invoke the program with the cmdline supplied. This works as the process
+	// (cmd in this case) after launch can now see C:\<rootfslocation> as it's in the silo. We could
+	// also add a new mode/flag for the shim where it's just a dummy process launcher, so we can invoke
+	// the shim instead of cmd and have more control over things.
 	if fileBindingSupport {
 		commandLine = "cmd /c " + commandLine
 	}
 
 	removeDriveLetter := func(name string) string {
-		// If just the letter and colon (C:) then replace with a single backslash. Else just trim the drive letter and leave the rest of the
-		// path.
+		// If just the letter and colon (C:) then replace with a single backslash. Else just trim the drive letter and
+		// leave the rest of the path.
 		if len(name) == 2 && name[1] == ':' {
 			name = "\\"
 		} else if len(name) > 2 && name[1] == ':' {
