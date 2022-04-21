@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/Microsoft/hcsshim/internal/queue"
@@ -552,6 +553,14 @@ func (job *JobObject) isSilo() bool {
 // PrivateWorkingSet returns the private working set size for the job. This is calculated by adding up the
 // private working set for every process running in the job.
 func (job *JobObject) PrivateWorkingSet() (uint64, error) {
+	// Grab a timestamp before we call pids. This will be used below to handle a rare case where a pid
+	// in the job could exit and get re-used for another process and we end up reporting its
+	// memory info instead. We'll compare the creation time for the process we open against this
+	// timestamp to see if it was created after; if it is, we'll ignore the working set reading and
+	// move on to the next process. This isn't perfect, and the timestamp could be before or after
+	// we call pids, both with drawbacks, but this should be rare enough that missing a processes
+	// reading or missing a newly started process should be acceptable.
+	t := time.Now()
 	pids, err := job.Pids()
 	if err != nil {
 		return 0, err
@@ -560,13 +569,24 @@ func (job *JobObject) PrivateWorkingSet() (uint64, error) {
 	openAndQueryWorkingSet := func(pid uint32) (uint64, error) {
 		h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
 		if err != nil {
-			// Match HCS' behavior, just bail if if OpenProcess doesn't return a valid handle (fails).
-			// Could be to handle the case where one of the pids in the job exited before we open here.
+			// Bail if OpenProcess doesn't return a valid handle (fails). Handles a
+			// case where one of the pids in the job exited before we open.
 			return 0, nil
 		}
 		defer func() {
 			_ = windows.Close(h)
 		}()
+
+		var createTime, exitTime, kernelTime, userTime windows.Filetime
+		if err := windows.GetProcessTimes(h, &createTime, &exitTime, &kernelTime, &userTime); err != nil {
+			return 0, fmt.Errorf("failed to get creation time for pid %d: %w", pid, err)
+		}
+
+		// If the process was created after our timestamp we took before Pids(), don't report the total. Pid
+		// may have been re-used for another process.
+		if createTime.Nanoseconds() > t.UnixNano() {
+			return 0, nil
+		}
 
 		var vmCounters winapi.VM_COUNTERS_EX2
 		status := winapi.NtQueryInformationProcess(
