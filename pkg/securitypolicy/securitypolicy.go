@@ -397,7 +397,7 @@ func newMountConstraints(mountConfigs []MountConfig) Mounts {
 	}
 }
 
-// Custom JSON marshalling to add `lenth` field that matches the number of
+// Custom JSON marshalling to add `length` field that matches the number of
 // elements present in the `elements` field.
 
 func (c Containers) MarshalJSON() ([]byte, error) {

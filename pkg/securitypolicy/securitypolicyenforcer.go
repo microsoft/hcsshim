@@ -161,7 +161,7 @@ var _ SecurityPolicyEnforcer = (*StandardSecurityPolicyEnforcer)(nil)
 func NewStandardSecurityPolicyEnforcer(containers []securityPolicyContainer, encoded string) *StandardSecurityPolicyEnforcer {
 	// create new StandardSecurityPolicyEnforcer and add the expected containers
 	// to it
-	// fill out corresponding devices structure by creating a "same shapped"
+	// fill out corresponding devices structure by creating a "same shaped"
 	// devices listing that corresponds to our container root hash lists
 	// the devices list will get filled out as layers are mounted
 	devices := make([][]string, len(containers))

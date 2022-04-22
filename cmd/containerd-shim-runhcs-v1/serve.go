@@ -281,11 +281,11 @@ func readOptions(r io.Reader) (*runhcsopts.Options, error) {
 	if len(d) > 0 {
 		var a types.Any
 		if err := proto.Unmarshal(d, &a); err != nil {
-			return nil, errors.Wrap(err, "failed unmarshaling into Any")
+			return nil, errors.Wrap(err, "failed unmarshalling into Any")
 		}
 		v, err := typeurl.UnmarshalAny(&a)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed unmarshaling by typeurl")
+			return nil, errors.Wrap(err, "failed unmarshalling by typeurl")
 		}
 		return v.(*runhcsopts.Options), nil
 	}
