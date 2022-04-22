@@ -9,7 +9,7 @@
 @{
 
     # Script module or binary module file associated with this manifest.
-    RootModule = 'NinjaBuild.psm1'
+    RootModule        = 'NinjaBuild.psm1'
 
     # Version number of this module.
     ModuleVersion     = '0.5'
@@ -66,15 +66,21 @@
     # FormatsToProcess = @()
 
     # Modules to import as nested modules of the module specified in RootModule/ModuleToProcess
-    NestedModules = @(
-        'NinjaGo.psm1'
+    NestedModules     = @(
+        'Utils.psm1'
+        'BuildRules.psm1'
     )
 
     # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-    FunctionsToExport = @('Update-NinjaFile', 'Get-GoModuleName', 'Get-GoEnv', `
-            'Add-GoBuildRule', `
-            'Get-GoGenPackage', 'Get-ProtoFile', 'Resolve-Command', 'Resolve-PathError', `
-            'Format-Path', 'Format-Variable')
+    FunctionsToExport = @(
+        'New-NinjaBuildFile', 'Update-NinjaFile'
+        'Add-GoBuildDeclaration'
+        'Add-GoRule', 'Add-CrictlRule'
+        'Add-MiscRule', 'Add-PwshRule'
+        'Get-GoGenPackage', 'Get-ProtoFile'
+        'Get-GoModuleName', 'Get-GoEnv'
+        'Resolve-Command', 'Resolve-PathError', 'Format-Path', 'Format-Variable'
+    )
 
     # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
     CmdletsToExport   = @()
