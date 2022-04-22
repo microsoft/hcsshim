@@ -13,7 +13,6 @@ import (
 	"path"
 	"path/filepath"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -130,7 +129,7 @@ func (h *Host) GetCreatedContainer(id string) (*Container, error) {
 	if c, ok := h.containers[id]; !ok {
 		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemNotFound)
 	} else {
-		if c.status != containerCreated {
+		if c.getStatus() != containerCreated {
 			return nil, fmt.Errorf("container is not in state \"created\": %w",
 				gcserr.NewHresultError(gcserr.HrVmcomputeInvalidState))
 		}
@@ -332,7 +331,9 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}
 	}
 
-	atomic.StoreUint32(&c.status, containerCreated)
+	if err := c.setStatus(containerCreated); err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
