@@ -814,19 +814,19 @@ type OpenDoorSecurityPolicyEnforcer struct{}
 
 var _ SecurityPolicyEnforcer = (*OpenDoorSecurityPolicyEnforcer)(nil)
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceDeviceMountPolicy(_ string, _ string) (err error) {
+func (OpenDoorSecurityPolicyEnforcer) EnforceDeviceMountPolicy(_ string, _ string) error {
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(_ string) (err error) {
+func (OpenDoorSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(_ string) error {
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(_ string, _ []string) (err error) {
+func (OpenDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(_ string, _ []string) error {
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ string, _ []string, _ []string, _ string) (err error) {
+func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ string, _ []string, _ []string, _ string) error {
 	return nil
 }
 
@@ -846,19 +846,19 @@ type ClosedDoorSecurityPolicyEnforcer struct{}
 
 var _ SecurityPolicyEnforcer = (*ClosedDoorSecurityPolicyEnforcer)(nil)
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceDeviceMountPolicy(_ string, _ string) (err error) {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceDeviceMountPolicy(_ string, _ string) error {
 	return errors.New("mounting is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(_ string) (err error) {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(_ string) error {
 	return errors.New("unmounting is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(_ string, _ []string) (err error) {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(_ string, _ []string) error {
 	return errors.New("creating an overlay fs is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ string, _ []string, _ []string, _ string) (err error) {
+func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ string, _ []string, _ []string, _ string) error {
 	return errors.New("running commands is denied by policy")
 }
 

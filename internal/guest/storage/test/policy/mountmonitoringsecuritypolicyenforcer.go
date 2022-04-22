@@ -20,22 +20,22 @@ type MountMonitoringSecurityPolicyEnforcer struct {
 
 var _ securitypolicy.SecurityPolicyEnforcer = (*MountMonitoringSecurityPolicyEnforcer)(nil)
 
-func (p *MountMonitoringSecurityPolicyEnforcer) EnforceDeviceMountPolicy(_ string, _ string) (err error) {
+func (p *MountMonitoringSecurityPolicyEnforcer) EnforceDeviceMountPolicy(_ string, _ string) error {
 	p.DeviceMountCalls++
 	return nil
 }
 
-func (p *MountMonitoringSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(_ string) (err error) {
+func (p *MountMonitoringSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(_ string) error {
 	p.DeviceUnmountCalls++
 	return nil
 }
 
-func (p *MountMonitoringSecurityPolicyEnforcer) EnforceOverlayMountPolicy(_ string, _ []string) (err error) {
+func (p *MountMonitoringSecurityPolicyEnforcer) EnforceOverlayMountPolicy(_ string, _ []string) error {
 	p.OverlayMountCalls++
 	return nil
 }
 
-func (MountMonitoringSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ string, _ []string, _ []string, _ string) (err error) {
+func (MountMonitoringSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ string, _ []string, _ []string, _ string) error {
 	return nil
 }
 
