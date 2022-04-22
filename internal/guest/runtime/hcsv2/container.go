@@ -6,6 +6,7 @@ package hcsv2
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/containerd/cgroups"
@@ -28,6 +29,18 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
+// containerStatus has been introduced to enable parallel container creation
+type containerStatus uint32
+
+const (
+	// containerCreating is the default status set on a Container object, when
+	// no underlying runtime container or init process has been assigned
+	containerCreating containerStatus = iota
+	// containerCreated is the status when a runtime container and init process
+	// have been assigned, but runtime start command has not been issued yet
+	containerCreated
+)
+
 type Container struct {
 	id    string
 	vsock transport.Transport
@@ -43,6 +56,9 @@ type Container struct {
 
 	processesMutex sync.Mutex
 	processes      map[uint32]*containerProcess
+
+	// Only access atomically through getStatus/setStatus.
+	status containerStatus
 }
 
 func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSettings) (int, error) {
@@ -219,4 +235,13 @@ func (c *Container) GetStats(ctx context.Context) (*v1.Metrics, error) {
 
 func (c *Container) modifyContainerConstraints(ctx context.Context, rt guestrequest.RequestType, cc *guestresource.LCOWContainerConstraints) (err error) {
 	return c.Update(ctx, cc.Linux)
+}
+
+func (c *Container) getStatus() containerStatus {
+	val := atomic.LoadUint32((*uint32)(&c.status))
+	return containerStatus(val)
+}
+
+func (c *Container) setStatus(st containerStatus) {
+	atomic.StoreUint32((*uint32)(&c.status), uint32(st))
 }

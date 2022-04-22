@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 
@@ -232,13 +233,30 @@ func Test_RunContainers_WithSyncHooks_ValidWaitPath(t *testing.T) {
 	cidWriter := createContainer(t, client, ctx, writerReq)
 	cidWaiter := createContainer(t, client, ctx, waiterReq)
 
-	startContainer(t, client, ctx, cidWriter)
-	defer removeContainer(t, client, ctx, cidWriter)
-	defer stopContainer(t, client, ctx, cidWriter)
+	errChan := make(chan error)
+	go func() {
+		_, err := client.StartContainer(ctx, &runtime.StartContainerRequest{ContainerId: cidWaiter})
+		errChan <- err
+		defer removeContainer(t, client, ctx, cidWaiter)
+		defer stopContainer(t, client, ctx, cidWaiter)
+	}()
 
-	startContainer(t, client, ctx, cidWaiter)
-	defer removeContainer(t, client, ctx, cidWaiter)
-	defer stopContainer(t, client, ctx, cidWaiter)
+	// give some time for the first go routine to kick in.
+	time.Sleep(time.Second)
+
+	go func() {
+		_, err := client.StartContainer(ctx, &runtime.StartContainerRequest{ContainerId: cidWriter})
+		errChan <- err
+		defer removeContainer(t, client, ctx, cidWriter)
+		defer stopContainer(t, client, ctx, cidWriter)
+	}()
+
+	for i := 0; i < 2; i++ {
+		if err := <-errChan; err != nil {
+			close(errChan)
+			t.Fatalf("failed to start container: %s", err)
+		}
+	}
 }
 
 func Test_RunContainers_WithSyncHooks_InvalidWaitPath(t *testing.T) {

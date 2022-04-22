@@ -199,7 +199,7 @@ func (b *Bridge) execProcessV2(r *Request) (_ RequestResponse, err error) {
 	var c *hcsv2.Container
 	if params.IsExternal || request.ContainerID == hcsv2.UVMContainerID {
 		pid, err = b.hostState.RunExternalProcess(ctx, params, conSettings)
-	} else if c, err = b.hostState.GetContainer(request.ContainerID); err == nil {
+	} else if c, err = b.hostState.GetCreatedContainer(request.ContainerID); err == nil {
 		// We found a V2 container. Treat this as a V2 process.
 		if params.OCIProcess == nil {
 			pid, err = c.Start(ctx, conSettings)
@@ -267,7 +267,7 @@ func (b *Bridge) signalContainerV2(ctx context.Context, span *trace.Span, r *Req
 		b.quitChan <- true
 		b.hostState.Shutdown()
 	} else {
-		c, err := b.hostState.GetContainer(request.ContainerID)
+		c, err := b.hostState.GetCreatedContainer(request.ContainerID)
 		if err != nil {
 			return nil, err
 		}
@@ -296,7 +296,7 @@ func (b *Bridge) signalProcessV2(r *Request) (_ RequestResponse, err error) {
 		trace.Int64Attribute("pid", int64(request.ProcessID)),
 		trace.Int64Attribute("signal", int64(request.Options.Signal)))
 
-	c, err := b.hostState.GetContainer(request.ContainerID)
+	c, err := b.hostState.GetCreatedContainer(request.ContainerID)
 	if err != nil {
 		return nil, err
 	}
@@ -344,7 +344,7 @@ func (b *Bridge) getPropertiesV2(r *Request) (_ RequestResponse, err error) {
 		return nil, errors.New("getPropertiesV2 is not supported against the UVM")
 	}
 
-	c, err := b.hostState.GetContainer(request.ContainerID)
+	c, err := b.hostState.GetCreatedContainer(request.ContainerID)
 	if err != nil {
 		return nil, err
 	}
@@ -407,7 +407,7 @@ func (b *Bridge) waitOnProcessV2(r *Request) (_ RequestResponse, err error) {
 		}
 		exitCodeChan, doneChan = p.Wait()
 	} else {
-		c, err := b.hostState.GetContainer(request.ContainerID)
+		c, err := b.hostState.GetCreatedContainer(request.ContainerID)
 		if err != nil {
 			return nil, err
 		}
@@ -453,7 +453,7 @@ func (b *Bridge) resizeConsoleV2(r *Request) (_ RequestResponse, err error) {
 		trace.Int64Attribute("height", int64(request.Height)),
 		trace.Int64Attribute("width", int64(request.Width)))
 
-	c, err := b.hostState.GetContainer(request.ContainerID)
+	c, err := b.hostState.GetCreatedContainer(request.ContainerID)
 	if err != nil {
 		return nil, err
 	}
@@ -514,7 +514,7 @@ func (b *Bridge) deleteContainerStateV2(r *Request) (_ RequestResponse, err erro
 		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%s\"", r.Message)
 	}
 
-	c, err := b.hostState.GetContainer(request.ContainerID)
+	c, err := b.hostState.GetCreatedContainer(request.ContainerID)
 	if err != nil {
 		return nil, err
 	}
