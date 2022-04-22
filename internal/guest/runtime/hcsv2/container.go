@@ -28,13 +28,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
 
-// containerStatus has been introduced to enable parallel container creation
-type containerStatus uint8
-
 const (
 	// containerCreating is the default status set on a Container object, when
 	// no underlying runtime container or init process has been assigned
-	containerCreating containerStatus = iota
+	containerCreating uint32 = iota
 	// containerCreated is the status when a runtime container and init process
 	// have been assigned, but runtime start command has not been issued yet
 	containerCreated
@@ -56,7 +53,7 @@ type Container struct {
 	processesMutex sync.Mutex
 	processes      map[uint32]*containerProcess
 
-	status containerStatus
+	status uint32
 }
 
 func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSettings) (int, error) {

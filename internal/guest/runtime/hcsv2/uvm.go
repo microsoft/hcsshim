@@ -13,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -331,7 +332,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}
 	}
 
-	c.status = containerCreated
+	atomic.StoreUint32(&c.status, containerCreated)
 	return c, nil
 }
 
