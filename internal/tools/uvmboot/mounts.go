@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -94,17 +93,22 @@ func parseMounts(c *cli.Context, n string) []mount {
 func mountFromString(s string) (m mount, _ error) {
 	ps := strings.Split(s, ",")
 
-	if len(ps) >= 3 {
-		return m, errors.New("too many parts")
+	l := len(ps)
+	if l == 0 { // shouldn't happen, but just in case
+		return m, fmt.Errorf("could not parse string %q", s)
+	}
+
+	if l > 3 {
+		return m, fmt.Errorf("too many parts in %q", s)
 	}
 
 	m.host = ps[0]
 
-	if len(ps) == 2 {
+	if l >= 2 {
 		m.guest = ps[1]
 	}
 
-	if len(ps) == 3 && strings.ToLower(ps[2]) == "w" {
+	if l == 3 && strings.ToLower(ps[2]) == "w" {
 		m.writable = true
 	}
 
