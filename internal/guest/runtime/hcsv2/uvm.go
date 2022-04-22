@@ -331,9 +331,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}
 	}
 
-	if err := c.setStatus(containerCreated); err != nil {
-		return nil, err
-	}
+	c.setStatus(containerCreated)
 	return c, nil
 }
 

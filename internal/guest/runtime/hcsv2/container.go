@@ -5,7 +5,6 @@ package hcsv2
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -58,6 +57,7 @@ type Container struct {
 	processesMutex sync.Mutex
 	processes      map[uint32]*containerProcess
 
+	// Only access atomically through getStatus/setStatus.
 	status containerStatus
 }
 
@@ -242,13 +242,6 @@ func (c *Container) getStatus() containerStatus {
 	return containerStatus(val)
 }
 
-func (c *Container) setStatus(st containerStatus) error {
-	switch st {
-	case containerCreating, containerCreated:
-		break
-	default:
-		return fmt.Errorf("unknown status: %d", st)
-	}
+func (c *Container) setStatus(st containerStatus) {
 	atomic.StoreUint32((*uint32)(&c.status), uint32(st))
-	return nil
 }
