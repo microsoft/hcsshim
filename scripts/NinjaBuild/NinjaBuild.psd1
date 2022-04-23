@@ -67,14 +67,15 @@
 
     # Modules to import as nested modules of the module specified in RootModule/ModuleToProcess
     NestedModules     = @(
-        'Utils.psm1'
         'BuildRules.psm1'
+        'GoUtils.psm1'
+        'Utils.psm1'
     )
 
     # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
     FunctionsToExport = @(
-        'New-NinjaBuildFile', 'Update-NinjaFile'
-        'Add-GoBuildDeclaration'
+        'New-DynDepFile', 'New-NinjaBuildFile'
+        'Update-NinjaFile', 'Add-GoBuildDeclaration'
         'Add-GoRule', 'Add-CrictlRule'
         'Add-MiscRule', 'Add-PwshRule'
         'Get-GoGenPackage', 'Get-ProtoFile'

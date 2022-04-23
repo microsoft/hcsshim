@@ -59,16 +59,6 @@ function Resolve-PathError {
 
 <#
 .SYNOPSIS
-Trims strings and returns the non-empty and non-null results.
-#>
-filter Get-NonEmpty {
-    $s = ( $_ -is [string] ) ? $_.Trim() : $_
-    if ( $s ) { $s }
-}
-New-Alias -Name gne -Value Get-NonEmpty
-
-<#
-.SYNOPSIS
 Escape spaces(' ') and colons (':') within a string (but not '$')
 #>
 function Format-Path {
@@ -140,3 +130,15 @@ function Format-Variable {
     }
 }
 New-Alias -Name fv -Value Format-Variable
+
+# Trims strings and returns the non-empty and non-null results.
+<#
+.SYNOPSIS
+Filters out empty and null members.
+#>
+filter Get-NonEmpty {
+    $s = $_
+    # $s = ( $_ -is [string] ) ? $_.Trim() : $_
+    if ( $s ) { $s }
+}
+New-Alias -Name gne -Value Get-NonEmpty

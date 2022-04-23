@@ -115,7 +115,8 @@ $CmdsBin = "$Bin\cmd"
 $ToolsBin = "$Bin\tools"
 $TestsBin = "$Bin\test"
 $OutDir = 'out'
-$dirs = [string[]]($CmdsBin, $ToolsBin, $TestsBin, $OutDir)
+$DepsDir = 'deps'
+$dirs = [string[]]($CmdsBin, $ToolsBin, $TestsBin, $OutDir, $DepsDir)
 
 $PwshSource = Resolve-Command -Name 'pwsh.exe' -Path $PwshSource
 Write-Verbose "Using powershell `"$PwshSource`""
@@ -144,8 +145,8 @@ try {
 # proto setup
 ####################################################################################################
 
-$ProtoBin = 'bin\protobuf'
 $ProtoDir = 'protobuf'
+$ProtoBin = 'bin\protobuf'
 
 $ProtocZip = "$OutDir\protoc.zip"
 $LocalProtocSource = "$ProtoBin\protoc.exe"
@@ -189,8 +190,9 @@ if ( -not $NoProto ) {
     }
 }
 
+$dirs += $ProtoDir
 if ( -not $NoProto ) {
-    $dirs = [string[]]( $dirs + $ProtoBin + $ProtoDir )
+    $dirs += $ProtoBin
 }
 
 ####################################################################################################
@@ -207,6 +209,7 @@ $misc = Add-MiscRule -Path $Path -PwshCmd $PwshCmd
 # installation directories
 ####################################################################################################
 
+$dirs = $dirs | Get-Unique
 foreach ($dir in $dirs ) {
     $Path |
         Update-NinjaFile -Build $dir -Rule $misc.MakeDir |
@@ -340,15 +343,15 @@ foreach ( $d in $gogen_deps ) {
 
 Update-NinjaFile -Path $Path -NewLine -Quiet
 
-$gens = Get-GoGenPackage '.' | ForEach-Object {
-    $Dir = $_
-    $Name = "gogen-$($Dir.Replace('\','-'))"
+Write-Verbose 'Creating go generat declarations for go packages files'
+$gens = foreach ( $pkg in Get-GoGenPackage '.' ) {
+    $name = "gogen-$($pkg.Replace('\','-'))"
 
-    Update-NinjaFile -Path $Path -Rule $gocmds.Generate -Build $Name `
+    Update-NinjaFile -Path $Path -Rule $gocmds.Generate -Build $name `
         -OrderOnly ($gogen_deps | ForEach-Object { $_['Path'] }) `
-        $Dir -Quiet
+        $pkg -Quiet
 
-    $Name
+    $name
 }
 
 $Path |
@@ -362,9 +365,16 @@ $Path |
 if ( -not $NoProto ) {
     Write-Verbose 'Adding protobuf variables, rules, and builds'
 
+    $ProtobuildModule = 'github.com/containerd/protobuild'
+    $ProtocURL = 'https://github.com/protocolbuffers/protobuf/releases/download/' + `
+        "v$ProtocVersion/protoc-$ProtocVersion-win32.zip"
+    $ProtocIncludeStamp = Join-Path $DepsDir 'protoc.include.stamp'
+    $ProtocIncludeDynDep = Join-Path $DepsDir 'protoc.include.dd'
+    $ProtoEnv = [string[]]''
+    $ProtoDeps = [string[]]$ProtocIncludeStamp
+
     $ProtoCmd = "& $(fv $ProtobuildVar "'")"
 
-    [string[]]$ProtoEnv = ''
     $Path |
         Update-NinjaFile -Comment |
         Update-NinjaFile -Comment protobuild |
@@ -374,77 +384,80 @@ if ( -not $NoProto ) {
         # variables
 
         Update-NinjaFile -Variable $ProtobuildVar $ProtobuildSource |
-        Update-NinjaFile -Variable $ProtobuildFlagsVar $ProtobuildFlags |
-        Update-NinjaFile -NewLine -q
+        Update-NinjaFile -Variable $ProtobuildFlagsVar |
+        Update-NinjaFile -NewLine |
 
-    # install dependencies
+        # install dependencies
+
+        Update-NinjaFile -Comment download and unzip protoc.zip |
+        Update-NinjaFile -Build $ProtocZip -Rule $misc.Download `
+            -OrderOnly (Split-Path $ProtocZip) `
+            -Variables @{$UrlVar = $ProtocURL } |
+        Update-NinjaFile -NewLine |
+
+        Update-NinjaFile -Build $ProtocIncludeDynDep -Rule $misc.TarDD $ProtocZip `
+            -OrderOnly ($ProtoDir, (Split-Path $ProtocIncludeDynDep)) `
+            -Variables @{
+            $StampVar     = $ProtocIncludeStamp
+            $StripCompVar = 1
+            $DestVar      = $ProtoDir
+        } |
+        Update-NinjaFile -NewLine |
+        Update-NinjaFile -Comment extract include files |
+        Update-NinjaFile -Build $ProtocIncludeStamp -Rule $misc.Tar $ProtocZip `
+            -OrderOnly ($ProtoDir, (Split-Path $ProtocIncludeStamp), $ProtocIncludeDynDep) `
+            -DynDep $ProtocIncludeDynDep `
+            -Variables @{$CmdFlagsVar = "-xm -C $ProtoDir --strip-components 1 include" } |
+        Update-NinjaFile -NewLine -Quiet
+
+    if ( $installprotoc ) {
+        Write-Verbose 'Adding protoc.exe build declaration'
+        $ProtoEnv += ('$$env:Path +=', "';$(Split-Path (Join-Path (Resolve-Path .) $ProtocSource))'", ';')
+        $ProtoDeps += $ProtocSource
+
+        $Path |
+            Update-NinjaFile -Comment install protoc.exe -NewLine |
+            Update-NinjaFile -Build '' -Rule $misc.Tar $ProtocZip `
+                -ImplicitOutputs $ProtocSource `
+                -OrderOnly (Split-Path $ProtocSource) `
+                -Variables @{$CmdFlagsVar = "-xm -C '$(Split-Path $ProtocSource)' --strip-components 1 bin" } |
+            Update-NinjaFile -NewLine -q
+    }
 
     if ( $installprotobuild ) {
         Write-Verbose 'adding protobuild installation build'
-
-        $ProtobuildModule = 'github.com/containerd/protobuild'
+        $ProtoEnv += ('$$env:Path +=', "';$(Split-Path $ProtobuildSource )'", ';')
+        $ProtoDeps += (fv $ProtobuildVar)
 
         $Path |
             Update-NinjaFile -Comment install protobuild -NewLine |
-
             Update-NinjaFile -Build (fv $ProtobuildVar) -Rule go-install `
                 -Variables @{$UrlVar = $ProtobuildModule ; $VersionVar = "v$ProtobuildVersion" } |
             Update-NinjaFile -NewLine -q
-
-        $ProtoEnv += ('$$env:Path +=', "';$(Split-Path $ProtobuildSource )'", ';')
     }
 
-    if ( $installprotoc ) {
-        Write-Verbose 'adding protoc installation variables, rules, and build'
-
-        $ProtocURL = 'https://github.com/protocolbuffers/protobuf/releases/download/' + `
-            "v$ProtocVersion/protoc-$ProtocVersion-win32.zip"
-
-        $Path |
-            Update-NinjaFile -Comment download and install protoc -NewLine |
-
-            # variables
-
-            Update-NinjaFile -Build $ProtocZip -Rule $misc.Download -OrderOnly (Split-Path $ProtocZip) `
-                -Variables @{$UrlVar = $ProtocURL } |
-            Update-NinjaFile -NewLine |
-
-            # todo: split this up
-            Update-NinjaFile -Rule install-protoc `
-                -Description 'unpacking "protoc.exe" and include files from "$in"' `
-                @PwshCmd 'tar' '-f $in' (fv $CmdFlagsVar) '-xmv -C $PROTOC_BIN' '--strip-components 1' 'bin' `
-                ';' 'tar' '-f $in' (fv $CmdFlagsVar) '-xmv -C $PROTOC_INCLUDE' '--strip-components 1' 'include' |
-            Update-NinjaFile -NewLine |
-
-            Update-NinjaFile -Build $ProtocSource -Rule install-protoc $ProtocZip `
-                -Variables @{'PROTOC_BIN' = (Split-Path $ProtocSource); 'PROTOC_INCLUDE' = $ProtoDir } `
-                -OrderOnly ($ProtoBin, $ProtoDir) |
-            Update-NinjaFile -NewLine -q
-
-        $ProtoEnv += ('$$env:Path +=', "';$(Split-Path (Join-Path (Resolve-Path .) $ProtocSource))'", ';')
-    }
+    Update-NinjaFile -Path $Path -Build proto-deps -Rule phony @ProtoDeps -NewLine -Quiet
 
     # protobuild proper
-    # need the protoenv variable set for local protobuild/c installs
+    Update-NinjaFile -Path $Path -Rule protobuild `
+        -Description ('building proto files', (fv $ModuleVar -q '"'), 'with flags:', `
+            $ProtobuildFlags, (fv $ProtobuildFlagsVar `")) `
+        @PwshCmd @ProtoEnv $ProtoCmd $ProtobuildFlags (fv $ProtobuildFlagsVar) (fv $ModuleVar -q "'") `
+        -NewLine -Quiet
 
-    $protos = Get-ProtoFile -Module '.' |
-        ForEach-Object { @{ Proto = $_.replace('.proto', '.pb.go'); Go = $_; Dir = (Split-Path -Parent $_) } }
+    Write-Verbose 'Creating protobuild declarations for *.proto files'
+    $protos = foreach ( $f in Get-ProtoFile -Module '.') {
+        $Proto = $f.replace('.proto', '.pb.go')
+        $Dir = (Split-Path -Parent $f)
 
-    $Path |
-        Update-NinjaFile -Rule protobuild `
-            -Description ('building proto files', (fv $ModuleVar -q '"'), 'with flags', (fv $ProtobuildFlagsVar `")) `
-            @PwshCmd @ProtoEnv $ProtoCmd (fv $ProtobuildFlagsVar) (fv $ModuleVar -q "'") |
-        Update-NinjaFile -NewLine |
+        $M = Get-GoModuleName -Path ".\$Dir"
+        Update-NinjaFile -Path $Path -Rule protobuild -Build $Proto `
+            -Implicit $f `
+            -OrderOnly 'proto-deps' `
+            -Variables @{$ModuleVar = $M } `
+            -NewLine -Quiet
 
-        Update-NinjaFile -Build proto -Rule phony @($protos | ForEach-Object { $_['Proto'] }) |
-        Update-NinjaFile -NewLine -q
-
-    $protos |
-        ForEach-Object {
-            $M = Get-GoModuleName -Path ".\$($_['Dir'])"
-            Update-NinjaFile -Path $Path -Rule protobuild -Build $_['Proto'] -Implicit $_['Go'] `
-                -OrderOnly (($installprotobuild ? (fv $ProtobuildVar) : ''), `
-                ($installprotoc ? $ProtocSource : '')) `
-                -Variables @{$ModuleVar = $M } -q
-        }
+        $Proto
+    }
+    Update-NinjaFile -Path $Path -Build proto -Rule phony @protos -NewLine -Quiet
 }

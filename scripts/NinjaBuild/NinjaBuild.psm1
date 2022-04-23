@@ -1,11 +1,17 @@
 
 # global variables for commands
 foreach ($d in @(
+        @{ N = 'In' ; V = '$in' }
+        @{ N = 'Out' ; V = '$out' }
+
         # miscellaneous
         @{ N = 'CmdFlagsVar' ; V = 'CMD_FLAGS' }
         @{ N = 'DestVar' ; V = 'DESTINATION' }
         @{ N = 'ModuleVar' ; V = 'MODULE' }
+        @{ N = 'NinjaModuleVar' ; V = 'NINJA_MODULE' }
         @{ N = 'SourceVar' ; V = 'SOURCE' }
+        @{ N = 'StampVar' ; V = 'STAMP' }
+        @{ N = 'StripCompVar' ; V = 'STRIP_COMPONENTS' }
         @{ N = 'UrlVar' ; V = 'URL' }
         @{ N = 'VersionVar' ; V = 'VERSION' }
 
@@ -295,7 +301,7 @@ function Add-CrictlRule {
 
         # variables
 
-        Update-NinjaFile -Variable $CrictlVar $CrictlSource  -NewLine |
+        Update-NinjaFile -Variable $CrictlVar $CrictlSource -NewLine |
 
         # crictl commands
 
@@ -332,6 +338,7 @@ function Add-MiscRule {
     $cmds = [PSCustomObject]@{
         Unzip    = 'unzip'
         Tar      = 'tar'
+        TarDD    = 'tar-dd'
         Download = 'web-download'
         Move     = 'mv'
         MakeDir  = 'mkdir'
@@ -343,9 +350,10 @@ function Add-MiscRule {
     }
 
     $Path |
-        Update-NinjaFile -Comment -WhatIfPreference $WhatIfPreference |
-        Update-NinjaFile -Comment miscellaneous utilities -WhatIfPreference $WhatIfPreference |
-        Update-NinjaFile -Comment -NewLine -WhatIfPreference $WhatIfPreference -Quiet
+        Update-NinjaFile -Comment |
+        Update-NinjaFile -Comment miscellaneous utilities |
+        Update-NinjaFile -Comment -NewLine |
+        Update-NinjaFile -Variable $NinjaModuleVar $PSScriptRoot -NewLine -Quiet
 
     # unzip
     Write-Verbose 'Adding unzip rule'
@@ -354,16 +362,40 @@ function Add-MiscRule {
             -Description ('unziping "$in" to', (fv $DestVar `"), 'with flags:', (fv $CmdFlagsVar)) `
             @PwshCmd 'Expand-Archive' '-Force' '-DestinationPath' (fv $DestVar "'") (fv $CmdFlagsVar) `
             '''$in''' `
-            -WhatIfPreference $WhatIfPreference -NewLine -Quiet
+            -NewLine -Quiet
 
     # tar
-    Write-Verbose 'Adding tar rule'
+
+
+    Write-Verbose 'Adding tar rules'
     $Path |
         Update-NinjaFile -Rule $cmds.Tar `
-            -Description ('taring "$in" with flags:', (fv $CmdFlagsVar)) `
-            @PwshCmd 'tar' '-f' '''$in''' (fv $CmdFlagsVar) `
-            -WhatIfPreference $WhatIfPreference -NewLine -Quiet
+            -Description ('taring "$in" (and updating stamp "$out") with flags:', (fv $CmdFlagsVar)) `
+            @PwshCmd 'tar' '-f' '''$in''' (fv $CmdFlagsVar) '>' '(''$out'' ? ''$out'' $: $$null) ' `
+            -NewLine -Quiet
 
+    $tardd = @"
+Import-Module $(fv $NinjaModuleVar -q "'") ;
+`$`$fs = (tar -f '$in' -t '*.proto' | ForEach-Object {
+Join-Path $(fv $DestVar -q "'") (`$`$_ -split '[/\\]', ($(fv $StripCompVar) + 1))[$(fv $StripCompVar)]
+});
+'$out' | New-DynDepFile -CreatedFor '$in' |
+Update-NinjaFile -Build $(fv $StampVar -q "'") -ImplicitOutputs `$`$fs -Rule dyndep -Restat -Quiet
+"@ -split "(`n)" -split ' '
+        $Path |
+        Update-NinjaFile -Rule $cmds.TarDD `
+            -Description @('creating dyndep file "$out" for stamp', (fv $StampVar -q '"')
+            'with files in "$in" using flags:', (fv $CmdFlagsVar)) `
+            @PwshCmd @tardd -NewLine -Quiet
+    # @PwshCmd `
+    # "Import-Module $(fv $NinjaModuleVar -q "'")" ';' `
+    # '$$fs = (tar -f ''$in''' '-t' "'*.proto'" '|' 'ForEach-Object' '{' `
+    # 'Join-Path' (fv $DestVar -q "'") `
+    # '' ('($$_ -split ''[/\\]'',' + "($(fv $StripCompVar) + 1))[$(fv $StripCompVar)]") `
+    # '}' ')' ';'  `
+    # '''$out''' '|' 'New-DynDepFile' '-CreatedFor' '$in' '|' `
+    # 'Update-NinjaFile' '-Build' (fv $StampVar -q "'") '-ImplicitOutputs' '$$fs' `
+    # '-Rule' 'dyndep' '-Restat' '-Quiet' `
 
     # download
     Write-Verbose 'Adding download rule'
@@ -371,7 +403,7 @@ function Add-MiscRule {
         Update-NinjaFile -Rule $cmds.Download `
             -Description ('downloading "$out" from ', (fv $UrlVar `"), 'with flags:', (fv $CmdFlagsVar)) `
             @PwshCmd 'Invoke-WebRequest' '-Method GET' '-OutFile ''$out''' '-Uri' (fv $UrlVar `') `
-            -WhatIfPreference $WhatIfPreference -NewLine -Quiet
+            -NewLine -Quiet
 
     # move
     Write-Verbose 'Adding move rule'
@@ -379,7 +411,7 @@ function Add-MiscRule {
         Update-NinjaFile -Rule $cmds.Move `
             -Description ('moving "$in" to', (fv $DestVar '"'), 'with flags:', (fv $CmdFlagsVar)) `
             @PwshCmd 'Move-Item' (fv $SourceVar "'") (fv $CmdFlagsVar) (fv $DestVar "'") `
-            -WhatIfPreference $WhatIfPreference -NewLine -Quiet
+            -NewLine -Quiet
 
     # make dir
     Write-Verbose 'Adding make dir rule'
@@ -388,19 +420,19 @@ function Add-MiscRule {
             -Description ('creating directory $out with flags:', (fv $CmdFlagsVar)) `
             @PwshCmd '(Test-Path' '-PathType Container' '-Path ''$out'')' '-or' `
             '(New-Item ''$out''' $(fv $CmdFlagsVar) '-ItemType Directory)' '> $$null' `
-            -WhatIfPreference $WhatIfPreference -NewLine -Quiet
+            -NewLine -Quiet
 
     # remove
     Write-Verbose 'Adding remove rule'
     $Path |
         Update-NinjaFile -Comment Use (fv $DestVar) rather than '$in' because the latter `
             would force the directory to be created if it did not exist `
-            -WhatIfPreference $WhatIfPreference |
+             |
         Update-NinjaFile -Rule $cmds.Remove `
             -Description ('removing item', (fv $DestVar '"'), 'with flags:', $(fv $CmdFlagsVar)) `
             @PwshCmd '(Test-Path' "-Path $(fv $DestVar "'"))" '-and' `
             '(Remove-Item' $(fv $DestVar "'") '-Recurse' '-Force' $(fv $CmdFlagsVar) ')' '> $$null' `
-            -WhatIfPreference $WhatIfPreference -NewLine -Quiet
+            -NewLine -Quiet
 
     $cmds
 }
@@ -438,9 +470,6 @@ function New-NinjaBuildFile {
     [CmdletBinding(PositionalBinding = $False, SupportsShouldProcess)]
     [OutputType([string])]
     param (
-        [DateTime]
-        $Date = (Get-Date),
-
         [Parameter(Mandatory)]
         [string]
         $GoModule,
@@ -472,12 +501,52 @@ function New-NinjaBuildFile {
 
     if ( $PSCmdlet.ShouldProcess("Adding header to ninja build file `"$Path`"", $Path, 'Update-NinjaFile') ) {
         $Path |
+            Update-NinjaFile -Comment 'This file is autogenerated; DO NOT EDIT.' |
             Update-NinjaFile -Comment |
             Update-NinjaFile -Comment ninja.build for $GoModule |
-            Update-NinjaFile -Comment |
-            Update-NinjaFile -Comment This file is autogenerated. Do not edit. |
             Update-NinjaFile -Comment Created by $CreatedBy |
-            Update-NinjaFile -Comment Created on $Date -NewLine |
             Update-NinjaFile -Variable ninja_required_version $NinjaVersion -NewLine -Quiet:$Quiet
     }
+
+    if ( -not $Quiet ) { $Path }
+}
+
+function New-DynDepFile {
+    [CmdletBinding(PositionalBinding = $False, SupportsShouldProcess)]
+    [OutputType([string])]
+    param (
+        [string]
+        $CreatedFor = '',
+
+        [string]
+        $DynDepVersion = '1.0',
+
+        [Parameter(ValueFromPipeline, ValueFromPipelineByPropertyName, Mandatory)]
+        [Alias('p')]
+        [string]
+        # The ninja build file to update.
+        $Path,
+
+        [Alias('q')]
+        [switch]
+        # Supress returning the path.
+        $Quiet,
+
+        $DebugPreference = $PSCmdlet.GetVariableValue('DebugPreference'),
+        $VerbosePreference = $PSCmdlet.GetVariableValue('VerbosePreference'),
+        $WhatIfPreference = $PSCmdlet.GetVariableValue('WhatIfPreference')
+    )
+    if ( $PSCmdlet.ShouldProcess("Creating new ninja build file `"$Path`"", $Path, 'Out-File') ) {
+        '' | Out-File -FilePath $Path -NoNewline
+    }
+
+    if ( $PSCmdlet.ShouldProcess("Adding header to ninja build file `"$Path`"", $Path, 'Update-NinjaFile') ) {
+        $Path |
+            Update-NinjaFile -Comment 'This file is autogenerated; DO NOT EDIT.' |
+            Update-NinjaFile -Comment |
+            Update-NinjaFile -Comment dyndep ninja file created for $CreatedFor |
+            Update-NinjaFile -Variable 'ninja_dyndep_version' $DynDepVersion -NewLine -Quiet
+    }
+
+    if ( -not $Quiet ) { $Path }
 }
