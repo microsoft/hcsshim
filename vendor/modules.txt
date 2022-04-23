@@ -9,7 +9,6 @@ github.com/Microsoft/go-winio/pkg/etw
 github.com/Microsoft/go-winio/pkg/etwlogrus
 github.com/Microsoft/go-winio/pkg/guid
 github.com/Microsoft/go-winio/pkg/process
-github.com/Microsoft/go-winio/pkg/security
 github.com/Microsoft/go-winio/vhd
 # github.com/cenkalti/backoff/v4 v4.1.1
 ## explicit; go 1.13

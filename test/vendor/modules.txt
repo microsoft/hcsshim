@@ -4,7 +4,6 @@ github.com/Microsoft/go-winio
 github.com/Microsoft/go-winio/backuptar
 github.com/Microsoft/go-winio/pkg/guid
 github.com/Microsoft/go-winio/pkg/process
-github.com/Microsoft/go-winio/pkg/security
 github.com/Microsoft/go-winio/vhd
 # github.com/Microsoft/hcsshim v0.8.23 => ../
 ## explicit; go 1.17
@@ -59,6 +58,7 @@ github.com/Microsoft/hcsshim/internal/resources
 github.com/Microsoft/hcsshim/internal/runhcs
 github.com/Microsoft/hcsshim/internal/safefile
 github.com/Microsoft/hcsshim/internal/schemaversion
+github.com/Microsoft/hcsshim/internal/security
 github.com/Microsoft/hcsshim/internal/shimdiag
 github.com/Microsoft/hcsshim/internal/timeout
 github.com/Microsoft/hcsshim/internal/tools/securitypolicy/helpers
