@@ -75,7 +75,12 @@
     # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
     FunctionsToExport = @(
         'New-DynDepFile', 'New-NinjaBuildFile'
-        'Update-NinjaFile', 'Add-GoBuildDeclaration'
+        'Add-Build', 'Add-Comment', 'Add-Default', 'Add-Dyndep'
+        'Add-Include', 'Add-NewLine', 'Add-Phony', 'Add-Pool'
+        'Add-Rule', 'Add-SubNinja', 'Add-Variable'
+
+        'Add-Self'
+        'Add-GoBuildDeclaration'
         'Add-GoRule', 'Add-CrictlRule'
         'Add-MiscRule', 'Add-PwshRule'
         'Get-GoGenPackage', 'Get-ProtoFile'
@@ -135,7 +140,7 @@
     } # End of PrivateData hashtable
 
     # HelpInfo URI of this module
-    # HelpInfoURI = ''
+    HelpInfoURI = 'https://ninja-build.org/manual.html'
 
     # Default prefix for commands exported from this module. Override the default prefix using Import-Module -Prefix.
     # DefaultCommandPrefix = ''

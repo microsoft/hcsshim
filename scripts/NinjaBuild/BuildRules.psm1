@@ -3,9 +3,12 @@
 
 Import-Module (Join-Path $PSScriptRoot GoUtils) -Scope Local -Force
 Import-Module (Join-Path $PSScriptRoot Utils) -Scope Local -Force
+# . "$PSScriptRoot\Utils.ps1"
+# . "$PSScriptRoot\GoUtils.ps1"
 
 foreach ($d in @(
         @{ N = 'EmptyStringArray'  ; V = ([string[]]'') }
+
         @{ N = 'CommentPrefix' ; V = ([string[]]'#') }
         @{ N = 'PoolPrefix'; V = ([string[]]'pool') }
         @{ N = 'RulePrefix' ; V = ([string[]]'rule') }
@@ -13,185 +16,407 @@ foreach ($d in @(
         @{ N = 'IncludePrefix' ; V = ([string[]]'include') }
         @{ N = 'SubNinjaPrefix' ; V = ([string[]]'subninja') }
         @{ N = 'DefaultPrefix' ; V = ([string[]]'default') }
+
         @{ N = 'IndentValue' ; V = '  ' }
+        @{ N = 'DefaultLineWidthMin' ; V = 60 }
         @{ N = 'DefaultLineWidth' ; V = 80 }
+
+        @{ N = 'PhonyRule' ; V = 'phony' }
+        @{ N = 'DynDepRule' ; V = 'dyndep' }
     ) ) {
-    Set-Variable -Name $d['N'] -Value $d['V'] -Option Constant -Force
+    Set-Variable -Name $d['N'] -Value $d['V'] -Option Readonly
 }
 
-# build and rule parameter sets can be undistinguishable, so often a decsription or depfile is needed
+# #
+# .SYNOPSIS
 
-<#
-.SYNOPSIS
+# Updates a ninja build with a declaration.
 
-Updates a ninja build with a declaration.
+# .DESCRIPTION
 
-.DESCRIPTION
+# Appends a declations (new line, commend, pool, rule, build, etc.) to the specified
+# ninja build file ("ninja.build") be default.
 
-Appends a declations (new line, commend, pool, rule, build, etc.) to the specified
-ninja build file ("ninja.build") be default.
+# .LINK
 
-.LINK
+# https://ninja-build.org/manual.html
 
-https://ninja-build.org/manual.html
+# #
 
-#>
-function Update-NinjaFile {
-    [CmdletBinding(PositionalBinding = $False,
-        DefaultParameterSetName = 'NewLine',
-        SupportsShouldProcess)]
+
+function Add-Default {
+    [CmdletBinding(PositionalBinding = $False, SupportsShouldProcess)]
     [OutputType([string])]
     param (
-        # Newline
+        [Parameter(Position = 0, ValueFromRemainingArguments)]
+        [string[]]
+        # The build targets to set as default
+        $Value,
 
-        [Parameter(ParameterSetName = 'Comment')]
-        [Parameter(ParameterSetName = 'Variable')]
-        [Parameter(ParameterSetName = 'Pool')]
-        [Parameter(ParameterSetName = 'Rule')]
-        [Parameter(ParameterSetName = 'Build')]
-        [Parameter(ParameterSetName = 'Include')]
-        [Parameter(ParameterSetName = 'SubNinja')]
-        [Parameter(ParameterSetName = 'Default')]
-        [Parameter(ParameterSetName = 'NewLine', Mandatory)]
+        [Parameter(ValueFromPipeline, ValueFromPipelineByPropertyName, Mandatory)]
+        [Alias('p')]
+        [string]
+        # The ninja build file to update.
+        $Path,
+
         [Alias('nl')]
         [switch]
         # Add a newline.
         $NewLine,
 
-        # Comment
-
-        [Parameter(ParameterSetName = 'Comment', Mandatory)]
+        [Alias('q')]
         [switch]
-        # Add a comment.
-        $Comment,
+        # Surpress returning the path.
+        $Quiet,
 
-        # Variable
+        $DebugPreference = $PSCmdlet.GetVariableValue('DebugPreference'),
+        $VerbosePreference = $PSCmdlet.GetVariableValue('VerbosePreference'),
+        $WhatIfPreference = $PSCmdlet.GetVariableValue('WhatIfPreference')
+    )
+    process {
+        $Value = [string[]]($Value | Get-NonEmpty)
+        Write-Debug "Adding defaults to `"$Path`" : [$($Value -join ',')]."
 
-        [Parameter(ParameterSetName = 'Variable', Mandatory)]
+        $DefaultPrefix + $Value | Write-Line -Path $Path
+
+        Update-File -Path $Path -Quiet:$Quiet -NewLine:$NewLine
+    }
+}
+
+function Add-SubNinja {
+    [CmdletBinding(PositionalBinding = $False, SupportsShouldProcess)]
+    [OutputType([string])]
+    param (
+        [Parameter(Position = 0, Mandatory)]
         [string]
-        # Add a variable declaration.
-        $Variable,
+        # The subninja file to include
+        $SubNinja,
 
-        [Parameter(ParameterSetName = 'Variable')]
-        [int]
-        $Indent,
-
-        # Pool
-
-        [Parameter(ParameterSetName = 'Rule')]
-        [Parameter(ParameterSetName = 'Build')]
-        [Parameter(ParameterSetName = 'Pool', Mandatory)]
+        [Parameter(ValueFromPipeline, ValueFromPipelineByPropertyName, Mandatory)]
+        [Alias('p')]
         [string]
-        # Add a pool declaration, or specify the pool for a rule or build.
-        $Pool,
+        # The ninja build file to update.
+        $Path,
 
-        [Parameter(ParameterSetName = 'Pool', Mandatory)]
-        [int]
-        $Depth,
+        [Alias('nl')]
+        [switch]
+        # Add a newline.
+        $NewLine,
 
-        # Rule
+        [Alias('q')]
+        [switch]
+        # Surpress returning the path.
+        $Quiet,
 
-        [Parameter(ParameterSetName = 'Build', Mandatory)]
-        [Parameter(ParameterSetName = 'Rule', Mandatory)]
+        $DebugPreference = $PSCmdlet.GetVariableValue('DebugPreference'),
+        $VerbosePreference = $PSCmdlet.GetVariableValue('VerbosePreference'),
+        $WhatIfPreference = $PSCmdlet.GetVariableValue('WhatIfPreference')
+    )
+    process {
+        Write-Debug "Adding subninja `"$SubNinja`" to `"$Path`""
+
+        $SubNinjaPrefix + $SubNinja | Write-Line -Path $Path
+
+        Update-File -Path $Path -Quiet:$Quiet -NewLine:$NewLine
+    }
+}
+
+function Add-Include {
+    [CmdletBinding(PositionalBinding = $False, SupportsShouldProcess)]
+    [OutputType([string])]
+    param (
+        [Parameter(Position = 0, Mandatory)]
         [string]
-        # Add a rule declaration, or specify the rule for a build.
-        $Rule,
+        # The file to include
+        $Include,
 
-        [Parameter(ParameterSetName = 'Rule')]
+        [Parameter(ValueFromPipeline, ValueFromPipelineByPropertyName, Mandatory)]
+        [Alias('p')]
+        [string]
+        # The ninja build file to update.
+        $Path,
+
+        [Alias('nl')]
+        [switch]
+        # Add a newline.
+        $NewLine,
+
+        [Alias('q')]
+        [switch]
+        # Surpress returning the path.
+        $Quiet,
+
+        $DebugPreference = $PSCmdlet.GetVariableValue('DebugPreference'),
+        $VerbosePreference = $PSCmdlet.GetVariableValue('VerbosePreference'),
+        $WhatIfPreference = $PSCmdlet.GetVariableValue('WhatIfPreference')
+    )
+    process {
+        Write-Debug "Adding include `"$Include`" to `"$Path`""
+
+        $IncludePrefix + $Include | Write-Line -Path $Path
+
+        Update-File -Path $Path -Quiet:$Quiet -NewLine:$NewLine
+    }
+}
+
+function Add-Phony {
+    [CmdletBinding(PositionalBinding = $False, SupportsShouldProcess)]
+    [OutputType([string])]
+    param (
+        [Parameter(Position = 0, Mandatory)]
+        [string]
+        # The phony build target
+        $Build,
+
         [string[]]
-        $Description = '',
+        $Implicit,
 
-        [Parameter(ParameterSetName = 'Rule')]
-        [string]
-        $Depfile = '',
+        [string[]]
+        $ImplicitOutput,
 
-        [Parameter(ParameterSetName = 'Rule')]
+        [string[]]
+        $OrderOnly,
+
         [switch]
-        $Generator,
+        # Add a default declaration for this build
+        $Default,
 
-        [Parameter(ParameterSetName = 'Build')] # for dyndeps
-        [Parameter(ParameterSetName = 'Rule')]
+        [Parameter(Position = 1, ValueFromRemainingArguments)]
+        [string[]]
+        # The phony build dependencies
+        $Value,
+
+        [Parameter(ValueFromPipeline, ValueFromPipelineByPropertyName, Mandatory)]
+        [Alias('p')]
+        [string]
+        # The ninja build file to update.
+        $Path,
+
+        [Alias('nl')]
+        [switch]
+        # Add a newline.
+        $NewLine,
+
+        [Alias('q')]
+        [switch]
+        # Surpress returning the path.
+        $Quiet,
+
+        $DebugPreference = $PSCmdlet.GetVariableValue('DebugPreference'),
+        $VerbosePreference = $PSCmdlet.GetVariableValue('VerbosePreference'),
+        $WhatIfPreference = $PSCmdlet.GetVariableValue('WhatIfPreference')
+    )
+    process {
+        $Value = [string[]]($Value | Get-NonEmpty)
+        Write-Debug "Adding phony statement `"$Build`" to `"$Path`": [$($Value -join ',')]."
+
+        Add-Build -Quiet -Path $Path -Build $Build -Rule $PhonyRule -Value $Value `
+            -Implicit $Implicit -ImplicitOutput $ImplicitOutput -OrderOnly $OrderOnly `
+            -Default:$Default
+
+        Update-File -Path $Path -Quiet:$Quiet -NewLine:$NewLine
+    }
+}
+function Add-Dyndep {
+    [CmdletBinding(PositionalBinding = $False, SupportsShouldProcess)]
+    [OutputType([string])]
+    param (
+        [Parameter(Position = 0, Mandatory)]
+        [string]
+        # The dyndep build target
+        $Build,
+
+        [string[]]
+        $Implicit,
+
+        [string[]]
+        $ImplicitOutput,
+
         [switch]
         $Restat,
 
-        [Parameter(ParameterSetName = 'Rule')]
+        [Parameter(ValueFromPipeline, ValueFromPipelineByPropertyName, Mandatory)]
+        [Alias('p')]
+        [string]
+        # The ninja build file to update.
+        $Path,
+
+        [Alias('nl')]
+        [switch]
+        # Add a newline.
+        $NewLine,
+
+        [Alias('q')]
+        [switch]
+        # Surpress returning the path.
+        $Quiet,
+
+        $DebugPreference = $PSCmdlet.GetVariableValue('DebugPreference'),
+        $VerbosePreference = $PSCmdlet.GetVariableValue('VerbosePreference'),
+        $WhatIfPreference = $PSCmdlet.GetVariableValue('WhatIfPreference')
+    )
+    process {
+        Write-Debug "Adding dyndep build `"$Build`" to `"$Path`""
+
+        Add-Build -Quiet -Path $Path -Build $Build -Rule $DynDepRule `
+            -Implicit $Implicit -ImplicitOutput $ImplicitOutput
+        if ( $Restat ) {
+            Add-Variable -Quiet -Path $Path -Indent 1 restat -Value 1
+        }
+
+        Update-File -Path $Path -Quiet:$Quiet -NewLine:$NewLine
+    }
+}
+
+
+function Add-Build {
+    [CmdletBinding(PositionalBinding = $False, SupportsShouldProcess)]
+    [OutputType([string])]
+    param (
+        [Parameter(Position = 0, Mandatory)]
+        [AllowEmptyString()]
+        [string[]]
+        # The build targets
+        $Build,
+
+        [string]
+        # The rule name
+        $Rule,
+
+        [string[]]
+        $Implicit,
+
+        [string[]]
+        $OrderOnly,
+
+        [hashtable]
+        $Variables,
+
+        [string[]]
+        $ImplicitOutput,
+
+        [string]
+        $DynDep,
+
+        [string]
+        # Specify the pool to use
+        $Pool,
+
+        [switch]
+        # Add a default declaration for this build
+        $Default,
+
+        [Parameter(Position = 1, ValueFromRemainingArguments)]
+        [string[]]
+        # The build statment dependencies
+        $Value,
+
+        [Parameter(ValueFromPipeline, ValueFromPipelineByPropertyName, Mandatory)]
+        [Alias('p')]
+        [string]
+        # The ninja build file to update.
+        $Path,
+
+        [Alias('nl')]
+        [switch]
+        # Add a newline.
+        $NewLine,
+
+        [Alias('q')]
+        [switch]
+        # Surpress returning the path.
+        $Quiet,
+
+        $DebugPreference = $PSCmdlet.GetVariableValue('DebugPreference'),
+        $VerbosePreference = $PSCmdlet.GetVariableValue('VerbosePreference'),
+        $WhatIfPreference = $PSCmdlet.GetVariableValue('WhatIfPreference')
+    )
+    process {
+        $Value = [string[]]($Value | Get-NonEmpty)
+        Write-Debug "Adding build statement `"$Build`" to `"$Path`" : [$($Value -join ',')]."
+
+        [string[]]$Build = $Build | Get-NonEmpty | Format-Path
+        [string[]]$ImplicitOutput = $ImplicitOutput | Get-NonEmpty | Format-Path
+        if ( -not ($Build -or $ImplicitOutput) ) {
+            throw 'Build targets cannot be empty.'
+        }
+
+        [string[]]$Implicit = $Implicit | Get-NonEmpty | Format-Path
+        [string[]]$OrderOnly = $OrderOnly | Get-NonEmpty | Format-Path
+
+        [string[]]$out = $BuildPrefix + $Build
+        if ( $ImplicitOutput ) {
+            [string[]]$out = $out + '|' + $ImplicitOutput
+        }
+        $out[-1] = $out[-1] + ':' # format is build <target>: <deps>
+
+        [string[]]$in = ($Value ?? $EmptyStringArray) | Format-Path
+        if ( $Implicit ) {
+            [string[]]$in = $in + '|' + $Implicit
+        }
+        if ( $OrderOnly ) {
+            [string[]]$in = $in + '||' + $OrderOnly
+        }
+
+        $out + $Rule + $in | Write-Line -Path $Path
+
+        if ( $Pool ) {
+            Add-Variable -Quiet -Path $Path -Indent 1 pool -Value $Pool
+        }
+        if ( $DynDep ) {
+            Add-Variable -Quiet -Path $Path -Indent 1 dyndep -Value $DynDep
+        }
+
+        if ( $Variables ) {
+            foreach ($v in $Variables.GetEnumerator()) {
+                Add-Variable -Quiet -Path $Path -Indent 1 $v.Key -Value $v.Value
+            }
+        }
+
+        if ( $Default ) {
+            Add-Default -Quiet -Path $Path -Value $Value
+        }
+
+        Update-File -Path $Path -Quiet:$Quiet -NewLine:$NewLine
+    }
+}
+
+function Add-Rule {
+    [CmdletBinding(PositionalBinding = $False, SupportsShouldProcess)]
+    [OutputType([string])]
+    param (
+        [Parameter(Position = 0, Mandatory)]
+        [string]
+        # The rule name
+        $Rule,
+
+        [string[]]
+        $Description = '',
+
+        [string]
+        $Depfile = '',
+
+        [switch]
+        $Generator,
+
+        [switch]
+        $Restat,
+
         [string]
         $Rspfile = '',
 
-        [Parameter(ParameterSetName = 'Rule')]
         [string[]]
         $Rspfile_content = '',
 
-        [Parameter(ParameterSetName = 'Rule')]
         [ValidateSet('gcc', 'msvc')]
         [string]
         $Deps = '',
 
-        # Build
-
-        [Parameter(ParameterSetName = 'Build', Mandatory)]
-        [AllowEmptyString()]
-        [string[]]
-        # Add a build declaration
-        $Build,
-
-        [Parameter(ParameterSetName = 'Build')]
-        [string[]]
-        $Implicit,
-
-        [Parameter(ParameterSetName = 'Build')]
-        [string[]]
-        $OrderOnly,
-
-        [Parameter(ParameterSetName = 'Build')]
-        [hashtable]
-        $Variables,
-
-        [Parameter(ParameterSetName = 'Build')]
-        [string[]]
-        $ImplicitOutputs,
-
-        [Parameter(ParameterSetName = 'Build')]
         [string]
-        $DynDep,
+        # Specify the pool to use
+        $Pool,
 
-        # Include
-
-        [Parameter(ParameterSetName = 'Include', Mandatory)]
-        [string]
-        # Add a include declaration
-        $Include,
-
-        # SubNinja
-
-        [Parameter(ParameterSetName = 'SubNinja', Mandatory)]
-        [string]
-        # Add a subninja declaration
-        $SubNinja,
-
-        # Default
-
-        [Parameter(ParameterSetName = 'Build')]
-        [Parameter(ParameterSetName = 'Default', Mandatory)]
-        [switch]
-        # Add a default declaration, are sets a build declaration as default
-        $Default,
-
-        [Parameter(ParameterSetName = 'Comment',
-            Position = 0,
-            ValueFromRemainingArguments)]
-        [Parameter(ParameterSetName = 'Variable',
-            Position = 0,
-            ValueFromRemainingArguments)]
-        [Parameter(ParameterSetName = 'Build',
-            Position = 0,
-            ValueFromRemainingArguments)]
-        [Parameter(ParameterSetName = 'Rule',
-            Position = 0,
-            ValueFromRemainingArguments)]
-        [Parameter(ParameterSetName = 'Default',
-            Position = 0,
-            ValueFromRemainingArguments)]
+        [Parameter(Position = 1, ValueFromRemainingArguments)]
         [string[]]
         # The value of the comment, variable, build, rule, or default declaration
         $Value,
@@ -202,9 +427,14 @@ function Update-NinjaFile {
         # The ninja build file to update.
         $Path,
 
+        [Alias('nl')]
+        [switch]
+        # Add a newline.
+        $NewLine,
+
         [Alias('q')]
         [switch]
-        # Supress returning the path.
+        # Surpress returning the path.
         $Quiet,
 
         $DebugPreference = $PSCmdlet.GetVariableValue('DebugPreference'),
@@ -212,120 +442,223 @@ function Update-NinjaFile {
         $WhatIfPreference = $PSCmdlet.GetVariableValue('WhatIfPreference')
     )
     process {
-        [string[]]$Value = $Value | Get-NonEmpty
-        Write-Debug "Updating `"$Path`" with declation $($PSCmdlet.ParameterSetName): [$($Value -join ',')]."
-        switch ($PSCmdlet.ParameterSetName) {
-            # 'NewLine' {
-            #     $EmptyStringArray | Write-Line -Path $Path
-            # }
-            'Comment' {
-                # $CommentPrefix + ($Value ?? $EmptyStringArray) | # Value can be null here
-                $CommentPrefix + ($Value ?? $EmptyStringArray) |
-                    Write-Line -Path $Path -LineContinuation '#' -LineBreak '' -NoIndentBreak
-            }
-            'Variable' {
-                [string[]]$Variable + '=' + ($Value ?? $EmptyStringArray) |
-                    Write-Line -Indent $Indent -Path $Path
-            }
-            'Pool' {
-                $PoolPrefix + $Pool | Write-Line -Path $Path
-                Update-NinjaFile -Quiet -Path $Path -Indent 1 -Variable depth -Value $Depth > $null
-            }
-            'Rule' {
-                $RulePrefix + $Rule | Write-Line -Path $Path
-                Update-NinjaFile -Quiet -Path $Path -Indent 1 -Variable command -Value $Value
-                if ( $Description ) {
-                    Update-NinjaFile -Quiet -Path $Path -Indent 1 -Variable description -Value $Description
-                }
-                if ( $Depfile ) {
-                    Update-NinjaFile -Quiet -Path $Path -Indent 1 -Variable depfile -Value $Depfile
-                }
-                if ( $Generator ) {
-                    Update-NinjaFile -Quiet -Path $Path -Indent 1 -Variable generator -Value 1
-                }
-                if ( $Pool ) {
-                    Update-NinjaFile -Quiet -Path $Path -Indent 1 -Variable pool -Value $Pool
-                }
-                if ( $Restat ) {
-                    Update-NinjaFile -Quiet -Path $Path -Indent 1 -Variable restat -Value 1
-                }
-                if ( $Rspfile ) {
-                    Update-NinjaFile -Quiet -Path $Path -Indent 1 -Variable rspfile -Value $Rspfile
-                }
-                if ( $Rspfile_content ) {
-                    Update-NinjaFile -Quiet -Path $Path -Indent 1 -Variable rspfile_content -Value $Rspfile_content
-                }
-                if ( $Deps ) {
-                    Update-NinjaFile -Quiet -Path $Path -Indent 1 -Variable deps -Value $deps
-                }
-            }
-            'Build' {
-                [string[]]$Build = $Build | Get-NonEmpty | Format-Path
-                [string[]]$ImplicitOutputs = $ImplicitOutputs | Get-NonEmpty | Format-Path
-                if ( -not ($Build -or $ImplicitOutputs) ) {
-                    throw 'Build targets cannot be empty.'
-                }
+        $Value = [string[]]($Value | Get-NonEmpty)
+        Write-Debug "Adding  `"`" to `"$Path`" : [$($Value -join ',')]."
 
-                [string[]]$Implicit = $Implicit | Get-NonEmpty | Format-Path
-                [string[]]$OrderOnly = $OrderOnly | Get-NonEmpty | Format-Path
+        $RulePrefix + $Rule | Write-Line -Path $Path
+        Add-Variable -Quiet -Path $Path -Indent 1 command -Value $Value
 
-                [string[]]$out = $BuildPrefix + $Build
-                if ( $ImplicitOutputs ) {
-                    [string[]]$out = $out + '|' + $ImplicitOutputs
-                }
-                $out[-1] = $out[-1] + ':' # format is build <target>: <deps>
-
-                [string[]]$in = ($Value ?? $EmptyStringArray) | Format-Path
-                if ( $Implicit ) {
-                    [string[]]$in = $in + '|' + $Implicit
-                }
-                if ( $OrderOnly ) {
-                    [string[]]$in = $in + '||' + $OrderOnly
-                }
-
-                $out + $Rule + $in | Write-Line -Path $Path
-
-                if ( $Pool ) {
-                    Update-NinjaFile -Quiet -Path $Path -Indent 1 -Variable pool -Value $Pool
-                }
-                if ( $DynDep ) {
-                    Update-NinjaFile -Quiet -Path $Path -Indent 1 -Variable dyndep -Value $DynDep
-                }
-
-                if ( $Restat ) {
-                    Update-NinjaFile -Quiet -Path $Path -Indent 1 -Variable restat -Value 1
-                }
-
-                if ( $Variables ) {
-                    foreach ($v in $Variables.GetEnumerator()) {
-                        Update-NinjaFile -Quiet -Path $Path -Indent 1 -Variable $v.Key -Value $v.Value
-                    }
-                }
-
-                if ( $Default ) {
-                    Update-NinjaFile -Quiet -Path $Path -Default -Value $Value
-                }
-            }
-            'Include' {
-                $IncludePrefix + $Include | Write-Line -Path $Path
-            }
-            'Subninja' {
-                $SubNinjaPrefix + $SubNinja | Write-Line -Path $Path
-            }
-            'Default' {
-                $DefaultPrefix + $Value | Write-Line -Path $Path
-            }
+        if ( $Description ) {
+            Add-Variable -Quiet -Path $Path -Indent 1 description -Value $Description
+        }
+        if ( $Depfile ) {
+            Add-Variable -Quiet -Path $Path -Indent 1 depfile -Value $Depfile
+        }
+        if ( $Generator ) {
+            Add-Variable -Quiet -Path $Path -Indent 1 generator -Value 1
+        }
+        if ( $Pool ) {
+            Add-Variable -Quiet -Path $Path -Indent 1 pool -Value $Pool
+        }
+        if ( $Restat ) {
+            Add-Variable -Quiet -Path $Path -Indent 1 restat -Value 1
+        }
+        if ( $Rspfile ) {
+            Add-Variable -Quiet -Path $Path -Indent 1 rspfile -Value $Rspfile
+        }
+        if ( $Rspfile_content ) {
+            Add-Variable -Quiet -Path $Path -Indent 1 rspfile_content -Value $Rspfile_content
+        }
+        if ( $Deps ) {
+            Add-Variable -Quiet -Path $Path -Indent 1 deps -Value $deps
         }
 
-        if ( $NewLine ) {
-            '' | Out-File -FilePath $Path -Append
-        }
-
-        if ( -not $Quiet ) { $Path }
+        Update-File -Path $Path -Quiet:$Quiet -NewLine:$NewLine
     }
 }
 
-New-Alias -Name unja -Value Update-NinjaFile
+function Add-Pool {
+    [CmdletBinding(PositionalBinding = $False, SupportsShouldProcess)]
+    [OutputType([string])]
+    param (
+        [Parameter(Position = 0, Mandatory)]
+        [string]
+        # The pool name
+        $Pool,
+
+        [Parameter(Mandatory)]
+        [int]
+        $Depth,
+
+        [Parameter(ValueFromPipeline, ValueFromPipelineByPropertyName, Mandatory)]
+        [Alias('p')]
+        [string]
+        # The ninja build file to update.
+        $Path,
+
+        [Alias('nl')]
+        [switch]
+        # Add a newline.
+        $NewLine,
+
+        [Alias('q')]
+        [switch]
+        # Surpress returning the path.
+        $Quiet,
+
+        $DebugPreference = $PSCmdlet.GetVariableValue('DebugPreference'),
+        $VerbosePreference = $PSCmdlet.GetVariableValue('VerbosePreference'),
+        $WhatIfPreference = $PSCmdlet.GetVariableValue('WhatIfPreference')
+    )
+    process {
+        $Value = [string[]]($Value | Get-NonEmpty)
+        Write-Debug "Adding pool `"$Pool`" to `"$Path`" : [$($Value -join ',')]."
+
+        $PoolPrefix + $Pool | Write-Line -Path $Path
+        Add-Variable -Quiet -Path $Path -Indent 1 depth -Value $Depth
+
+        Update-File -Path $Path -Quiet:$Quiet -NewLine:$NewLine
+    }
+}
+
+function Add-Variable {
+    [CmdletBinding(PositionalBinding = $False, SupportsShouldProcess)]
+    [OutputType([string])]
+    param (
+        [Parameter(Position = 0, Mandatory)]
+        [string]
+        # The variable name
+        $Variable,
+
+        [Parameter(Position = 1, ValueFromRemainingArguments)]
+        [string[]]
+        # The value of the variable
+        $Value,
+
+        [int]
+        $Indent = 0,
+
+        [Parameter(ValueFromPipeline, ValueFromPipelineByPropertyName, Mandatory)]
+        [Alias('p')]
+        [string]
+        # The ninja build file to update.
+        $Path,
+
+        [Alias('nl')]
+        [switch]
+        # Add a newline.
+        $NewLine,
+
+        [Alias('q')]
+        [switch]
+        # Surpress returning the path.
+        $Quiet,
+
+        $DebugPreference = $PSCmdlet.GetVariableValue('DebugPreference'),
+        $VerbosePreference = $PSCmdlet.GetVariableValue('VerbosePreference'),
+        $WhatIfPreference = $PSCmdlet.GetVariableValue('WhatIfPreference')
+    )
+    process {
+        $Value = [string[]](($Value | Get-NonEmpty) ?? $EmptyStringArray)
+        Write-Debug "Adding variable `"$Variable`" to `"$Path`" : [$($Value -join ',')]."
+
+        [string[]]$Variable + '=' + $Value |
+            Write-Line -Indent $Indent -Path $Path
+
+        Update-File -Path $Path -Quiet:$Quiet -NewLine:$NewLine
+    }
+}
+
+function Add-Comment {
+    [CmdletBinding(PositionalBinding = $False, SupportsShouldProcess)]
+    [OutputType([string])]
+    param (
+        [Parameter(Position = 0, ValueFromRemainingArguments)]
+        [string[]]
+        # The value of the comment
+        $Value,
+
+        [Parameter(ValueFromPipeline, ValueFromPipelineByPropertyName, Mandatory)]
+        [Alias('p')]
+        [string]
+        # The ninja build file to update.
+        $Path,
+
+        [Alias('nl')]
+        [switch]
+        # Add a newline.
+        $NewLine,
+
+        [Alias('q')]
+        [switch]
+        # Surpress returning the path.
+        $Quiet,
+
+        $DebugPreference = $PSCmdlet.GetVariableValue('DebugPreference'),
+        $VerbosePreference = $PSCmdlet.GetVariableValue('VerbosePreference'),
+        $WhatIfPreference = $PSCmdlet.GetVariableValue('WhatIfPreference')
+    )
+    process {
+        $Value = [string[]]($Value | Get-NonEmpty)
+        Write-Debug "Adding comment to `"$Path`" : [$($Value -join ',')]."
+
+        $CommentPrefix + ($Value ?? $EmptyStringArray) |
+            Write-Line -Path $Path -LineContinuation '#' -LineBreak '' -NoIndentBreak
+
+        Update-File -Path $Path -Quiet:$Quiet -NewLine:$NewLine
+    }
+}
+
+function Add-NewLine {
+    [CmdletBinding(PositionalBinding = $False, SupportsShouldProcess)]
+    [OutputType([string])]
+    param (
+        [Parameter(ValueFromPipeline, ValueFromPipelineByPropertyName, Mandatory)]
+        [Alias('p')]
+        [string]
+        # The ninja build file to update.
+        $Path,
+
+        [Alias('q')]
+        [switch]
+        # Surpress returning the path.
+        $Quiet,
+
+        $DebugPreference = $PSCmdlet.GetVariableValue('DebugPreference'),
+        $VerbosePreference = $PSCmdlet.GetVariableValue('VerbosePreference'),
+        $WhatIfPreference = $PSCmdlet.GetVariableValue('WhatIfPreference')
+    )
+    process {
+        Write-Debug "Adding newline to `"$Path`"."
+        Update-File -Path $Path -Quiet:$Quiet -NewLine
+    }
+}
+
+function Update-File {
+    [CmdletBinding(PositionalBinding = $False, SupportsShouldProcess)]
+    [OutputType([string])]
+    param (
+        [switch]
+        $NewLine,
+
+        [Parameter(Mandatory)]
+        [Alias('p')]
+        [string]
+        # The ninja build file to update.
+        $Path,
+
+        [Alias('q')]
+        [switch]
+        # Surpress returning the path.
+        $Quiet
+    )
+
+    if ( $NewLine ) {
+        '' | Out-File -FilePath $Path -Append
+    }
+
+    if ( -not $Quiet ) { $Path }
+}
 
 function Write-Line {
     [CmdletBinding(PositionalBinding = $False,
@@ -342,9 +675,14 @@ function Write-Line {
         [int]
         $Indent = 0,
 
-        # triggers a line break if the current width is over this
         [int]
+        # Triggers a line break if the current width is over this
         $LineWidth = $DefaultLineWidth,
+
+        # Triggers a line break if the current width is over this and text to
+        # write will be over $LineWidth
+        [int]
+        $LineWidthMin = $DefaultLineWidthMin,
 
         [string]
         $LineBreak = '$',
@@ -389,7 +727,11 @@ function Write-Line {
             return
         }
 
-        if ( ($n -ge $LineWidth) -or ($break) ) {
+        if (
+            ($break) -or
+            ($n -ge $LineWidth) -or
+            (($n -ge $LineWidthMin) -and (($n + $l.Length) -ge $LineWidth))
+        ) {
             [void]$s.AppendJoin('', $newline, $ind)
             $n = $ind_n
             if ( -not $LineContinuation ) {

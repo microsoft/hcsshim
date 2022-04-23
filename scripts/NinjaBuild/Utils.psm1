@@ -1,4 +1,35 @@
 
+function Export-Parameter {
+    [CmdletBinding()]
+    param (
+        # [System.Collections.Generic.KeyValuePair]
+        [Parameter(ValueFromPipeline)]
+        [hashtable]
+        $params,
+
+        [switch]
+        $KeepNull
+    )
+    begin {
+        $d = @{}
+    }
+    process {
+        foreach ( $k in $params.Keys ) {
+            $v = $params[$k]
+            if ( -not ($v -or  $KeepNull) ) {
+                return
+            }
+            if ( $v -is [System.Management.Automation.SwitchParameter] ) {
+                $v = $v.ToBool()
+            }
+            $d[$k] = $v
+        }
+    }
+    end {
+        $d | ConvertTo-Json -Compress
+    }
+}
+
 function Resolve-Command {
     [CmdletBinding()]
     [OutputType([string])]
@@ -22,11 +53,11 @@ function Resolve-Command {
     if ( -not (Test-Path -Path $Path) ) {
         Write-Warning "Invalid path `"$Path`" to executable `"$Name`"."
         # try again, but search for the command instead
-        # hopefully this isnt a stack overflow...
+        # hopefully this isn't a stack overflow...
         return Resolve-Command $Name
     }
 
-    return $Path
+    $Path
 }
 
 function Resolve-PathError {
@@ -54,7 +85,7 @@ function Resolve-PathError {
         throw "Could not resolve $Name (`"$Path`") on the system."
     }
 
-    return $p
+    $p.Path
 }
 
 <#
@@ -69,7 +100,6 @@ function Format-Path {
             ValueFromPipelineByPropertyName)]
         $Path
     )
-
     process {
         if ( $Path -and $Path -is [string]) {
             $Path = $Path.Trim().Replace(' ', '$ ').Replace(':', '$:')
@@ -114,7 +144,6 @@ function Format-Variable {
         [string]
         $Right = ''
     )
-
     process {
         if ( $Bracket ) {
             $Value = "{$Value}"

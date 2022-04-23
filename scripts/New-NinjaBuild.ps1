@@ -1,8 +1,12 @@
-[CmdletBinding(SupportsShouldProcess)]
+[CmdletBinding(PositionalBinding = $False, SupportsShouldProcess)]
 param (
     [string]
     # The path to the build file. Do not include `~` in the path
     $Path = '.\build.ninja',
+
+    [string]
+    # The path to the root of the code directory
+    $Root = '.',
 
     [string]
     $PwshSource = '',
@@ -72,31 +76,22 @@ param (
 # So, for now, build targets and dependencies will all be relative to package root
 # todo: absolute paths everythwhere -  https://github.com/ninja-build/ninja/issues/1251
 
-Import-Module ( Join-Path $PSScriptRoot NinjaBuild ) -Force
-
-if ( $Info ) {
-    Get-Help Update-NinjaFile
-
-    Write-Output '' ''
-
-    (Get-Command Update-NinjaFile).ParameterSets |
-        Select-Object -Property @{n = 'ParameterSetName'; e = { $_.name } },
-        @{n = 'Parameters'; e = { $_.ToString() } }
-
-    return
-}
-
 ####################################################################################################
 # setup
 ####################################################################################################
 
+Import-Module ( Join-Path $PSScriptRoot NinjaBuild ) -Force -Verbose:$false
+
 Write-Verbose 'Resolving paths and commands'
+
+$Root = Resolve-PathError $Root
+Write-Verbose "Using root path `"$Root`""
 
 if ( -not (Test-Path $Path -IsValid) ) {
     throw "`"$Path`" is not a valid path"
 }
 if ( -not ( [System.IO.Path]::IsPathRooted($Path) ) ) {
-    $Path = Join-Path (Get-Location) $Path
+    $Path = Join-Path $Root $Path
 }
 $Path = [IO.Path]::GetFullPath($Path)
 Write-Verbose "Using build file path `"$Path`""
@@ -110,12 +105,12 @@ Write-Verbose "Found module name `"$GoModule`""
 $GoPath = Get-GoEnv 'GOPATH'
 Write-Verbose "Using GOPATH `"$GoPath`""
 
-$Bin = 'bin'
+$Bin = Join-Path $Root 'bin'
 $CmdsBin = "$Bin\cmd"
 $ToolsBin = "$Bin\tools"
 $TestsBin = "$Bin\test"
-$OutDir = 'out'
-$DepsDir = 'deps'
+$OutDir = Join-Path $Root 'out'
+$DepsDir = Join-Path $Root 'deps'
 $dirs = [string[]]($CmdsBin, $ToolsBin, $TestsBin, $OutDir, $DepsDir)
 
 $PwshSource = Resolve-Command -Name 'pwsh.exe' -Path $PwshSource
@@ -123,6 +118,8 @@ Write-Verbose "Using powershell `"$PwshSource`""
 
 $GoSource = Resolve-Command -Name 'go.exe' -Path $GoSource
 Write-Verbose "Using go `"$GoSource`""
+
+$AllDeps = [string[]]''
 
 ####################################################################################################
 # move setup
@@ -140,13 +137,12 @@ try {
     $moverules = $False
 }
 
-
 ####################################################################################################
 # proto setup
 ####################################################################################################
 
-$ProtoDir = 'protobuf'
-$ProtoBin = 'bin\protobuf'
+$ProtoDir = Join-Path $Root 'protobuf'
+$ProtoBin = Join-Path $Root 'bin\protobuf'
 
 $ProtocZip = "$OutDir\protoc.zip"
 $LocalProtocSource = "$ProtoBin\protoc.exe"
@@ -199,28 +195,36 @@ if ( -not $NoProto ) {
 # file preamble
 ####################################################################################################
 
-New-NinjaBuildFile -Path $Path -GoModule $GoModule -CreatedBy $PSCommandPath -Quiet
+New-NinjaBuildFile -Path $Path -GoModule $GoModule -Quiet
 
 $PwshCmd = Add-PwshRule -Path $Path -Source $PwshSource `
     -Flags (('-NoProfile', '-NoLogo', '-NonInteractive') + $PwshFlags)
+Add-NewLine -Path $Path -Quiet
+
+Add-Self -Path $Path -PwshCmd $PwshCmd -Invocation $MyInvocation -Location (Get-Location)
+Add-NewLine -Path $Path -Quiet
+
 $misc = Add-MiscRule -Path $Path -PwshCmd $PwshCmd
+Add-NewLine -Path $Path -Quiet
 
 ####################################################################################################
 # installation directories
 ####################################################################################################
 
 $dirs = $dirs | Get-Unique
-foreach ($dir in $dirs ) {
+$rmdirs = foreach ($dir in $dirs ) {
+    $n = 'rm' + $dir.Replace($Root, '').Replace('\', '-')
+
     $Path |
-        Update-NinjaFile -Build $dir -Rule $misc.MakeDir |
-        Update-NinjaFile -Build "rm-$($dir.Replace('\','-'))" -Rule $misc.Remove `
-            -Variables @{$DestVar = $dir } |
-        Update-NinjaFile -NewLine -q
+        Add-Build $dir -Rule $misc.MakeDir |
+        Add-Build $n -Rule $misc.Remove `
+            -Variables @{$SourceVar = $dir } |
+        Add-NewLine -q
+
+    $n
 }
 
-$Path |
-    Update-NinjaFile -Build clean -Rule phony @($dirs | ForEach-Object { "rm-$($_.Replace('\','-'))" }) |
-    Update-NinjaFile -NewLine -q
+Add-Phony -Path $Path clean @rmdirs -NewLine -Quiet
 
 ####################################################################################################
 # crictl: needed for go-build move commands
@@ -235,7 +239,7 @@ if ( -not $NoCrict ) {
         $crictlcmds = Add-CrictlRule -Path $Path -PwshCmd $PwshCmd `
             -CrictlFlags $CrictlFlags -CrictlSource $CrictlSource
 
-        Update-NinjaFile -Path $Path -Build rmpods -Rule $crictlcmds.RemovePods `
+        Add-Build -Path $Path -Build rmpods -Rule $crictlcmds.RemovePods `
             -NewLine -Quiet
     } catch {
         Write-Warning "$_ Skipping crictl rules."
@@ -251,11 +255,34 @@ $gocmds = Add-GoRule -Path $Path -PwshCmd $PwshCmd -GoSource $GoSource `
     -GoFlags $GoFlags -GoBuildFlags $GoBuildFlags -GoTestFlags $GoTestFlags
 
 $Path |
-    Update-NinjaFile -Build vend -Rule phony vendmain vendtest -Default |
-    Update-NinjaFile -NewLine |
-    Update-NinjaFile -Build vendmain -Rule $gocmds.Vendor '.' |
-    Update-NinjaFile -Build vendtest -Rule $gocmds.Vendor '.\test' |
-    Update-NinjaFile -NewLine -q
+    Add-Phony vend vendmain vendtest -Default |
+    Add-NewLine |
+    Add-Build vendmain -Rule $gocmds.Vendor '.' |
+    Add-Build vendtest -Rule $gocmds.Vendor '.\test' |
+    Add-NewLine -q
+
+####################################################################################################
+# go general
+####################################################################################################
+
+Write-Verbose 'Adding general go dependencies'
+
+$deps = foreach ( $d in @(
+        @{URL = 'golang.org/x/perf/cmd/benchseries'; Version = 'latest' }
+        @{URL = 'golang.org/x/perf/cmd/benchstat'; Version = 'latest' }
+    )) {
+    $n = Split-Path $d['URL'] -Leaf
+    $p = Join-Path $GoPath 'bin' ($n + $GoExe['windows'])
+
+    Add-Build -Path $Path -Build $p -Rule $gocmds.Install `
+        -Variables @{$UrlVar = $d['URL'] ; $VersionVar = $d['Version'] } -Quiet
+
+    $p
+}
+
+
+Add-Phony -Path $Path -Build go-deps @deps -NewLine -Quiet
+$AllDeps += 'go-deps'
 
 ####################################################################################################
 # go builds
@@ -265,21 +292,27 @@ Write-Verbose 'Adding go build declarations'
 
 $builds = @(
     @{Name = 'shim'; Source = 'cmd\containerd-shim-runhcs-v1'; Move = $CPlatPath }
-    @{Name = 'runhcs'; Source = 'cmd\runhcs'; Dest = $CmdsBin }
-    @{Name = 'ncproxy'; Source = 'cmd\ncproxy'; Dest = $CmdsBin }
-    @{Name = 'wclayer'; Source = 'cmd\wclayer'; Dest = $CmdsBin }
-    @{Name = 'tar2ext4'; Source = 'cmd\tar2ext4'; Dest = $CmdsBin }
-    @{Name = 'shimdiag'; Source = 'cmd\shimdiag'; Dest = $CmdsBin }
+    @{Source = 'cmd\runhcs'; Dest = $CmdsBin }
+    @{Source = 'cmd\ncproxy'; Dest = $CmdsBin }
+    @{Source = 'cmd\wclayer'; Dest = $CmdsBin }
+    @{Source = 'cmd\tar2ext4'; Dest = $CmdsBin }
+    @{Source = 'cmd\shimdiag'; Dest = $CmdsBin }
 
-    @{Name = 'uvmboot'; Source = 'internal\tools\uvmboot'; Dest = $ToolsBin }
-    @{Name = 'zapdir'; Source = 'internal\tools\zapdir'; Dest = $ToolsBin }
+    @{Source = 'internal\tools\uvmboot'; Dest = $ToolsBin }
+    @{Source = 'internal\tools\zapdir'; Dest = $ToolsBin }
 
-    @{Name = 'gcs'; Source = 'cmd\gcs'; Dest = $CmdsBin; GOOS = 'linux' }
+    @{Source = 'cmd\gcs'; Dest = $CmdsBin; GOOS = 'linux' }
+    @{Source = 'cmd\gcstools'; Dest = $CmdsBin; GOOS = 'linux' }
+    @{Source = 'cmd\hooks\wait-paths'; Dest = $CmdsBin; GOOS = 'linux' }
 )
 
-Update-NinjaFile -Path $Path -Comment go executable build declarations -NewLine -Quiet
+Add-Comment -Path $Path go executable build declarations -NewLine -Quiet
 
 foreach ( $build in $builds ) {
+    $build['Source'] = Join-Path $Root $build['Source']
+    ( $build['Dest'] -or ($build['Dest'] = $Root)) > $null
+    ( $build['Name'] -or ($build['Name'] = Split-Path $build['Source'] -Leaf)) > $null
+
     if ( $build['Move'] -and ( -not $moverules ) ) {
         $build['Move'] = $null
     }
@@ -287,11 +320,11 @@ foreach ( $build in $builds ) {
     Add-GoBuildDeclaration -Path $Path -Rule $gocmds.Build @build `
         -MoveImplicit (($NoCrictl) ? '' : $crictlcmds.RemovePods) `
         -MoveRule $misc.Move > $null
-    Update-NinjaFile -Path $Path -NewLine -Quiet
+    Add-NewLine -Path $Path -Quiet
 }
 
-Update-NinjaFile -Path $Path `
-    -Build tools -Rule phony uvmboot zapdir tar2ext4 shimdiag `
+Add-Phony -Path $Path `
+    -Build tools uvmboot zapdir tar2ext4 shimdiag `
     -NewLine -q
 
 ####################################################################################################
@@ -301,26 +334,34 @@ Update-NinjaFile -Path $Path `
 Write-Verbose 'Adding go test build declarations'
 
 $test_builds = @(
-    @{Name = 'shimtest'; Source = 'test\containerd-shim-runhcs-v1' } #; Dest = $TestsBin }
+    @{Name = 'shimtest'; Source = 'test\containerd-shim-runhcs-v1'; Dest = $TestsBin }
     @{Name = 'critest'; Source = 'test\cri-containerd'; Dest = $TestsBin }
-    @{Name = 'functional'; Source = 'test\functional'; Dest = $TestsBin }
+    @{Source = 'test\functional'; Dest = $TestsBin }
     @{Name = 'runhcstest'; Source = 'test\runhcs'; Dest = $TestsBin }
+
     @{Name = 'gcstest'; Source = 'test\gcs'; Dest = $TestsBin; GOOS = 'linux' }
 )
 
-Update-NinjaFile -Path $Path -Comment go test-executable build declarations -NewLine -Quiet
+Add-Comment -Path $Path go test-executable build declarations -NewLine -Quiet
 
 $tests = foreach ( $build in $test_builds ) {
+    $build['Source'] = Join-Path $Root $build['Source']
+    ( $build['Dest'] -or ($build['Dest'] = $Root)) > $null
+    ( $build['Name'] -or ($build['Name'] = Split-Path $build['Source'] -Leaf)) > $null
+
     if ( $build['Move'] -and ( -not $moverules ) ) {
         $build['Move'] = $null
     }
 
-    Add-GoBuildDeclaration -Path $Path -Rule $gocmds.TestBuild @build `
-        -MoveImplicit (($NoCrictl) ? '' : 'rmpods')
-    Update-NinjaFile -Path $Path -NewLine -Quiet
+    $t = Add-GoBuildDeclaration -Path $Path -Rule $gocmds.TestBuild @build `
+        -MoveImplicit (($NoCrictl) ? '' : $crictlcmds.RemovePods) `
+        -MoveRule $misc.Move
+
+    if ( $t ) { Add-NewLine -Path $Path -Quiet }
+    $t
 }
 
-Update-NinjaFile -Path $Path -Build tests -Rule phony @tests -NewLine -Quiet
+Add-Phony -Path $Path tests @tests -NewLine -Quiet
 
 ####################################################################################################
 # go generate
@@ -328,35 +369,35 @@ Update-NinjaFile -Path $Path -Build tests -Rule phony @tests -NewLine -Quiet
 
 Write-Verbose 'Adding go generate build declarations'
 
-$gogen_deps = @(
-    @{URL = 'github.com/josephspurrier/goversioninfo/cmd/goversioninfo'; Version = 'latest' }
-)
-
-foreach ( $d in $gogen_deps ) {
+$gogen_deps = foreach ( $d in @(
+        @{URL = 'github.com/josephspurrier/goversioninfo/cmd/goversioninfo'; Version = 'latest' }
+    )) {
     $n = Split-Path $d['URL'] -Leaf
-    $d['Name'] = $n
-    $d['Path'] = Join-Path $GoPath 'bin' ($n + $GoExe['windows'])
+    $p = Join-Path $GoPath 'bin' ($n + $GoExe['windows'])
 
-    Update-NinjaFile -Path $Path -Build $d['Path'] -Rule $gocmds.Install `
+    Add-Build -Path $Path -Build $p -Rule $gocmds.Install `
         -Variables @{$UrlVar = $d['URL'] ; $VersionVar = $d['Version'] } -Quiet
+
+    $p
 }
 
-Update-NinjaFile -Path $Path -NewLine -Quiet
+Add-Phony -Path $Path -Build go-gen-deps -Value $gogen_deps -NewLine -Quiet
+$AllDeps += 'go-gen-deps'
 
-Write-Verbose 'Creating go generat declarations for go packages files'
-$gens = foreach ( $pkg in Get-GoGenPackage '.' ) {
-    $name = "gogen-$($pkg.Replace('\','-'))"
+Write-Verbose 'Creating go generate declarations for go packages files'
+$gens = foreach ( $pkg in Get-GoGenPackage $Root ) {
+    $name = "gogen" + $pkg.Replace($Root, '').Replace('\', '-')
 
-    Update-NinjaFile -Path $Path -Rule $gocmds.Generate -Build $name `
-        -OrderOnly ($gogen_deps | ForEach-Object { $_['Path'] }) `
+    Add-Build -Path $Path -Rule $gocmds.Generate -Build $name `
+        -OrderOnly go-gen-deps `
         $pkg -Quiet
 
     $name
 }
 
 $Path |
-    Update-NinjaFile -NewLine |
-    Update-NinjaFile -Build go-gen -Rule phony @gens -NewLine -Quiet
+    Add-NewLine |
+    Add-Phony -Build go-gen @gens -NewLine -Quiet
 
 ####################################################################################################
 # proto
@@ -376,52 +417,49 @@ if ( -not $NoProto ) {
     $ProtoCmd = "& $(fv $ProtobuildVar "'")"
 
     $Path |
-        Update-NinjaFile -Comment |
-        Update-NinjaFile -Comment protobuild |
-        Update-NinjaFile -Comment |
-        Update-NinjaFile -NewLine |
+        Add-Comment |
+        Add-Comment protobuild |
+        Add-Comment -NewLine |
 
         # variables
 
-        Update-NinjaFile -Variable $ProtobuildVar $ProtobuildSource |
-        Update-NinjaFile -Variable $ProtobuildFlagsVar |
-        Update-NinjaFile -NewLine |
+        Add-Variable $ProtobuildVar $ProtobuildSource -NewLine |
 
         # install dependencies
 
-        Update-NinjaFile -Comment download and unzip protoc.zip |
-        Update-NinjaFile -Build $ProtocZip -Rule $misc.Download `
+        Add-Comment download and unzip protoc.zip |
+        Add-Build $ProtocZip -Rule $misc.Download `
             -OrderOnly (Split-Path $ProtocZip) `
             -Variables @{$UrlVar = $ProtocURL } |
-        Update-NinjaFile -NewLine |
+        Add-NewLine |
 
-        Update-NinjaFile -Build $ProtocIncludeDynDep -Rule $misc.TarDD $ProtocZip `
+        Add-Build $ProtocIncludeDynDep -Rule $misc.TarDD $ProtocZip `
             -OrderOnly ($ProtoDir, (Split-Path $ProtocIncludeDynDep)) `
             -Variables @{
             $StampVar     = $ProtocIncludeStamp
             $StripCompVar = 1
             $DestVar      = $ProtoDir
         } |
-        Update-NinjaFile -NewLine |
-        Update-NinjaFile -Comment extract include files |
-        Update-NinjaFile -Build $ProtocIncludeStamp -Rule $misc.Tar $ProtocZip `
+        Add-NewLine |
+        Add-Comment extract include files |
+        Add-Build $ProtocIncludeStamp -Rule $misc.Tar $ProtocZip `
             -OrderOnly ($ProtoDir, (Split-Path $ProtocIncludeStamp), $ProtocIncludeDynDep) `
             -DynDep $ProtocIncludeDynDep `
             -Variables @{$CmdFlagsVar = "-xm -C $ProtoDir --strip-components 1 include" } |
-        Update-NinjaFile -NewLine -Quiet
+        Add-NewLine -Quiet
 
     if ( $installprotoc ) {
         Write-Verbose 'Adding protoc.exe build declaration'
-        $ProtoEnv += ('$$env:Path +=', "';$(Split-Path (Join-Path (Resolve-Path .) $ProtocSource))'", ';')
+        $ProtoEnv += ('$$env:Path +=', "';$(Split-Path $ProtocSource)'", ';')
         $ProtoDeps += $ProtocSource
 
         $Path |
-            Update-NinjaFile -Comment install protoc.exe -NewLine |
-            Update-NinjaFile -Build '' -Rule $misc.Tar $ProtocZip `
-                -ImplicitOutputs $ProtocSource `
+            Add-Comment install protoc.exe -NewLine |
+            Add-Build '' -Rule $misc.Tar $ProtocZip `
+                -ImplicitOutput $ProtocSource `
                 -OrderOnly (Split-Path $ProtocSource) `
                 -Variables @{$CmdFlagsVar = "-xm -C '$(Split-Path $ProtocSource)' --strip-components 1 bin" } |
-            Update-NinjaFile -NewLine -q
+            Add-NewLine -q
     }
 
     if ( $installprotobuild ) {
@@ -430,28 +468,29 @@ if ( -not $NoProto ) {
         $ProtoDeps += (fv $ProtobuildVar)
 
         $Path |
-            Update-NinjaFile -Comment install protobuild -NewLine |
-            Update-NinjaFile -Build (fv $ProtobuildVar) -Rule go-install `
+            Add-Comment install protobuild -NewLine |
+            Add-Build (fv $ProtobuildVar) -Rule go-install `
                 -Variables @{$UrlVar = $ProtobuildModule ; $VersionVar = "v$ProtobuildVersion" } |
-            Update-NinjaFile -NewLine -q
+            Add-NewLine -q
     }
 
-    Update-NinjaFile -Path $Path -Build proto-deps -Rule phony @ProtoDeps -NewLine -Quiet
+    Add-Phony -Path $Path -Build proto-deps @ProtoDeps -NewLine -Quiet
+    $AllDeps += 'proto-deps'
 
     # protobuild proper
-    Update-NinjaFile -Path $Path -Rule protobuild `
+    Add-Rule -Path $Path -Rule protobuild `
         -Description ('building proto files', (fv $ModuleVar -q '"'), 'with flags:', `
             $ProtobuildFlags, (fv $ProtobuildFlagsVar `")) `
         @PwshCmd @ProtoEnv $ProtoCmd $ProtobuildFlags (fv $ProtobuildFlagsVar) (fv $ModuleVar -q "'") `
         -NewLine -Quiet
 
     Write-Verbose 'Creating protobuild declarations for *.proto files'
-    $protos = foreach ( $f in Get-ProtoFile -Module '.') {
+    $protos = foreach ( $f in Get-ProtoFile -Module $Root ) {
         $Proto = $f.replace('.proto', '.pb.go')
         $Dir = (Split-Path -Parent $f)
+        $M = Get-GoModuleName -Path $Dir
 
-        $M = Get-GoModuleName -Path ".\$Dir"
-        Update-NinjaFile -Path $Path -Rule protobuild -Build $Proto `
+        Add-Build -Path $Path -Rule protobuild -Build $Proto `
             -Implicit $f `
             -OrderOnly 'proto-deps' `
             -Variables @{$ModuleVar = $M } `
@@ -459,5 +498,11 @@ if ( -not $NoProto ) {
 
         $Proto
     }
-    Update-NinjaFile -Path $Path -Build proto -Rule phony @protos -NewLine -Quiet
+    Add-Phony -Path $Path -Build proto @protos -NewLine -Quiet
 }
+
+####################################################################################################
+# dependencies
+####################################################################################################
+
+Add-Phony -Path $Path deps @AllDeps -Quiet

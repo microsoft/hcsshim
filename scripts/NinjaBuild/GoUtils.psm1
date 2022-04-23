@@ -1,5 +1,6 @@
 
 Import-Module (Join-Path $PSScriptRoot Utils) -Scope Local -Force
+# . "$PSScriptRoot\Utils.ps1"
 
 function Get-GoGenPackage {
     [CmdletBinding()]
@@ -57,15 +58,13 @@ function Get-GoFile {
         $Module
     )
 
-    # dont use .FullName, need relative to module path
-
     [string[]] $a = foreach ( $p in Get-ChildItem -Path . -Exclude .git, .github, .vscode, bin, deps, hack, out, protobuf, scripts, vendor ) {
         if ( $p.Attributes -eq [System.IO.FileAttributes]::Directory ) {
-            foreach ($f in Get-ChildItem -Path $p -Exclude vendor -Name) {
-                Join-Path $p.Name $f
+            foreach ($f in Get-ChildItem -Path $p -Exclude vendor) {
+                $f.FullName
             }
         } else {
-            $p.Name
+            $p.FullName
         }
     }
     return $a
