@@ -212,19 +212,9 @@ Add-NewLine -Path $Path -Quiet
 ####################################################################################################
 
 $dirs = $dirs | Get-Unique
-$rmdirs = foreach ($dir in $dirs ) {
-    $n = 'rm' + $dir.Replace($Root, '').Replace('\', '-')
-
-    $Path |
-        Add-Build $dir -Rule $misc.MakeDir |
-        Add-Build $n -Rule $misc.Remove `
-            -Variables @{$SourceVar = $dir } |
-        Add-NewLine -q
-
-    $n
+foreach ($dir in $dirs ) {
+    Add-Build -Path $Path $dir -Rule $misc.MakeDir -Quiet
 }
-
-Add-Phony -Path $Path clean @rmdirs -NewLine -Quiet
 
 ####################################################################################################
 # crictl: needed for go-build move commands
@@ -436,6 +426,7 @@ if ( -not $NoProto ) {
         Add-Build $ProtocIncludeDynDep -Rule $misc.TarDD $ProtocZip `
             -OrderOnly ($ProtoDir, (Split-Path $ProtocIncludeDynDep)) `
             -Variables @{
+            $CmdFlagsVar = '*.proto'
             $StampVar     = $ProtocIncludeStamp
             $StripCompVar = 1
             $DestVar      = $ProtoDir
@@ -482,6 +473,7 @@ if ( -not $NoProto ) {
         -Description ('building proto files', (fv $ModuleVar -q '"'), 'with flags:', `
             $ProtobuildFlags, (fv $ProtobuildFlagsVar `")) `
         @PwshCmd @ProtoEnv $ProtoCmd $ProtobuildFlags (fv $ProtobuildFlagsVar) (fv $ModuleVar -q "'") `
+        -Generator `
         -NewLine -Quiet
 
     Write-Verbose 'Creating protobuild declarations for *.proto files'

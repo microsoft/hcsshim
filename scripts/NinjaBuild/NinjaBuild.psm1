@@ -1,6 +1,4 @@
 
-# . "$PSScriptRoot\BuildRules.ps1"
-
 # global variables for commands
 foreach ($d in @(
         @{ N = 'In' ; V = '$in' }
@@ -104,16 +102,14 @@ function Add-GoBuildDeclaration {
         return
     }
 
-    $OrderOnly = [string[]]$OrderOnly + $Dest
     $Variables[$GOOSVar] = $GOOS
-    $Variables[$DestVar] = Join-Path $Dest ((Split-Path $Source -Leaf) + $GoExe[$GOOS])
-    $Variables[$SourceVar] = $src
+    $DestExe = Join-Path $Dest ((Split-Path $Source -Leaf) + $GoExe[$GOOS])
 
     if ( $PSCmdlet.ShouldProcess($Path, "Adding go build statement `"$Rule`" for `"$Name`"") ) {
-        Add-Build -Path $Path -Rule $Rule -Build $Name `
-            -Implicit $Implicit -ImplicitOutput ($ImplicitOutput + $Variables[$DestVar]) `
-            -DynDep $DynDep `
-            -OrderOnly $OrderOnly -Variables $Variables `
+        Add-Build -Path $Path -Rule $Rule -Build $DestExe $src `
+            -ImplicitOutput ($ImplicitOutput + $Name) `
+            -Implicit $Implicit -OrderOnly ($OrderOnly + $Dest) `
+            -Variables $Variables -DynDep $DynDep `
             -Quiet
     }
 
@@ -124,17 +120,14 @@ function Add-GoBuildDeclaration {
             return
         }
 
-        $mvvars = @{
-            $SourceVar   = $Variables[$DestVar]
-            $DestVar     = (Join-Path $Move (Split-Path $Variables[$DestVar] -Leaf))
-            $CmdFlagsVar = '-Force'
-        }
+        $MvDest = Join-Path $Move (Split-Path $DestExe -Leaf)
+        $mvvars = @{ $CmdFlagsVar = '-Force' }
 
         if ( $PSCmdlet.ShouldProcess($Path,
-                "Adding build statement to move `"$Name`" to `"$($mvvars[$DestVar])`"") ) {
-            Add-Build -Path $Path -Build "mv-$Name" -Rule $MoveRule `
-                -Implicit ($MoveImplicit + $mvvars[$SourceVar]) `
-                -Variables $mvvars `
+                "Adding build statement to move `"$DestExe`" to `"$MvDest`"") ) {
+            Add-Build -Path $Path -Build $MvDest $DestExe -Rule $MoveRule `
+                -Implicit $MoveImplicit `
+                -Variables $mvvars -Phony "mv-$Name"`
                 -Quiet
         }
     }
@@ -212,6 +205,7 @@ function Add-GoRule {
                 'with flags:', "GOOS=$(fv $GOOSVar -q `')", (fv $GoFlagsVar)) `
             @PwshCmd @GoCmdEnv 'install' (fv $GoFlagsVar) `
             "'$(fv $UrlVar)@$(fv $VersionVar)'" `
+            -Generator `
             -NewLine -Quiet
 
     # vendoring
@@ -234,8 +228,8 @@ function Add-GoRule {
                 'fake targets to specify the directories' -split ' ') -NewLine |
         Add-Rule $cmds.Generate `
             -Description ('calling go generate on package ".\$in"', 'with flags:', `
-                $GoFlags, "GOOS=$(fv $GOOSVar -q `')", (fv $GoFlagsVar)) `
-            @PwshCmd @GoCmdEnv 'generate' @GoFlags (fv $GoFlagsVar) '.\$in' `
+                $GoFlags, "GOOS=$(fv $GOOSVar -q "'")", (fv $GoFlagsVar)) `
+            @PwshCmd @GoCmdEnv 'generate' @GoFlags (fv $GoFlagsVar) '$in' `
             -NewLine -Quiet
 
     # build
@@ -243,11 +237,10 @@ function Add-GoRule {
     $Path |
         Add-Comment build go executable -NewLine |
         Add-Rule $cmds.Build `
-            -Description ('building $out as', (fv $DestVar -q '"'), 'from', (fv $SourceVar '"'), `
-                'with flags:', "$GoFlags" , "$GoTestFlags", `
-                "GOOS=$(fv $GOOSVar -q `')", (fv $GoFlagsVar)) `
+            -Description ('building "$out" from "$in"', 'with flags:', `
+                "$GoFlags" , "$GoTestFlags", "GOOS=$(fv $GOOSVar -q "'")", (fv $GoFlagsVar)) `
             @PwshCmd @GoCmdEnv 'build' @GoBuildFlags @GoFlags (fv $GoFlagsVar) `
-            '-o' $(fv $DestVar -q "'") $(fv $SourceVar "'") `
+            '-o' "'$Out'" "'$In'" `
             -NewLine -Quiet
 
 
@@ -257,11 +250,10 @@ function Add-GoRule {
         Add-Comment build go test executable |
         Add-NewLine |
         Add-Rule $cmds.TestBuild `
-            -Description ('building test binary $out as', (fv $DestVar -q '"'), `
-                'from', (fv $SourceVar '"'), 'with flags:', $GoFlags, $GoTestFlags, `
-                "GOOS=$(fv $GOOSVar -q `')", (fv $GoFlagsVar)) `
+            -Description ('building test "$out" from "$in"', 'with flags:', `
+                $GoFlags, $GoTestFlags, "GOOS=$(fv $GOOSVar -q "'")", (fv $GoFlagsVar)) `
             @PwshCmd @GoCmdEnv 'test' @GoTestFlags @GoFlags (fv $GoFlagsVar) `
-            '-o' $(fv $DestVar -q "'") '-c' $(fv $SourceVar "'") `
+            '-o' "'$Out'" '-c' "'$In'" `
             -NewLine -Quiet
 
     $cmds
@@ -360,15 +352,14 @@ function Add-Self {
     }
 
     $Path |
-        Add-Rule configure -Generator `
+        Add-Rule ninja -Generator `
             -Description ('Rebuilding NinjaFile with flags:', (fv $CmdFlagsVar)) `
             @PwshCmd 'Set-Location' (fv $DestVar -q "'") ';' `
             '$$d =' (fv $CmdFlagsVar -q "'") '|' 'ConvertFrom-Json' '-AsHashtable' ';' `
-            '&' (fv $SourceVar -q "'") '@d' |
-        Add-Build configure -Rule configure `
+            '&' "'$In'" '@d' |
+        Add-Build ninja -Rule ninja $s `
             -Variables @{
             $DestVar     = $Location
-            $SourceVar   = $s
             $CmdFlagsVar = $c
         } -Quiet
 }
@@ -398,6 +389,7 @@ function Add-MiscRule {
         TarDD    = 'tar-dd'
         Download = 'web-download'
         Move     = 'mv'
+        Copy     = 'cp'
         MakeDir  = 'mkdir'
         Remove   = 'rm'
     }
@@ -417,8 +409,8 @@ function Add-MiscRule {
     Write-Verbose 'Adding script call rule'
     $Path |
         Add-Rule $cmds.Script `
-            -Description ("script $(fv $SourceVar '"') with flags:", (fv $CmdFlagsVar)) `
-            @PwshCmd '&' (fv $SourceVar -q "'") (fv $CmdFlagsVar) `
+            -Description ("script $In with flags:", (fv $CmdFlagsVar)) `
+            @PwshCmd '&' (fv $In -q "'") (fv $CmdFlagsVar) `
             -NewLine -Quiet
 
     # unzip
@@ -426,7 +418,7 @@ function Add-MiscRule {
     Write-Verbose 'Adding unzip rule'
     $Path |
         Add-Rule $cmds.Unzip `
-            -Description ('unziping "$in" to', (fv $DestVar `"), 'with flags:', (fv $CmdFlagsVar)) `
+            -Description ('unziping "$in" to', (fv $DestVar '"'), 'with flags:', (fv $CmdFlagsVar)) `
             @PwshCmd 'Expand-Archive' '-Force' '-DestinationPath' (fv $DestVar "'") (fv $CmdFlagsVar) `
             "'$In'" `
             -NewLine -Quiet
@@ -442,10 +434,10 @@ function Add-MiscRule {
 
     $tardd = @"
 Import-Module $(fv $NinjaModuleVar -q "'") ;
-`$`$fs = (tar -f '$in' -t '*.proto' | ForEach-Object {
+`$`$fs = (tar -f '$in' -t $(fv $CmdFlagsVar) | ForEach-Object {
 Join-Path $(fv $DestVar -q "'") (`$`$_ -split '[/\\]', ($(fv $StripCompVar) + 1))[$(fv $StripCompVar)]
 });
-'$out' | New-DynDepFile -CreatedFor '$in' |
+'$Out' | New-DynDepFile -CreatedFor '$In' |
 Add-Dyndep -Build $(fv $StampVar -q "'") -ImplicitOutput `$`$fs -Restat -Quiet
 "@ -split "(`n)" -split ' '
     $Path |
@@ -459,8 +451,8 @@ Add-Dyndep -Build $(fv $StampVar -q "'") -ImplicitOutput `$`$fs -Restat -Quiet
     Write-Verbose 'Adding download rule'
     $Path |
         Add-Rule $cmds.Download `
-            -Description ('downloading "$out" from ', (fv $UrlVar `"), 'with flags:', (fv $CmdFlagsVar)) `
-            @PwshCmd 'Invoke-WebRequest' '-Method GET' '-OutFile ''$out''' '-Uri' (fv $UrlVar `') `
+            -Description ('downloading "$out" from ', (fv $UrlVar '"'), 'with flags:', (fv $CmdFlagsVar)) `
+            @PwshCmd 'Invoke-WebRequest' '-Method GET' '-OutFile' "'$Out'" '-Uri' (fv $UrlVar "'") `
             -NewLine -Quiet
 
     # move
@@ -468,8 +460,8 @@ Add-Dyndep -Build $(fv $StampVar -q "'") -ImplicitOutput `$`$fs -Restat -Quiet
     Write-Verbose 'Adding move rule'
     $Path |
         Add-Rule $cmds.Move `
-            -Description ('moving', (fv $SourceVar "'"), 'to', (fv $DestVar '"'), 'with flags:', (fv $CmdFlagsVar)) `
-            @PwshCmd 'Move-Item' (fv $SourceVar "'") (fv $CmdFlagsVar) (fv $DestVar "'") `
+            -Description ('moving "$in" to "$out" with flags:', (fv $CmdFlagsVar)) `
+            @PwshCmd 'Move-Item' "'$In'" (fv $CmdFlagsVar) "'$Out'" -Generator `
             -NewLine -Quiet
 
     # make dir
@@ -478,8 +470,9 @@ Add-Dyndep -Build $(fv $StampVar -q "'") -ImplicitOutput `$`$fs -Restat -Quiet
     $Path |
         Add-Rule $cmds.MakeDir `
             -Description ('creating directory $out with flags:', (fv $CmdFlagsVar)) `
-            @PwshCmd '(Test-Path' '-PathType Container' '-Path ''$out'')' '-or' `
-            '(New-Item ''$out''' $(fv $CmdFlagsVar) '-ItemType Directory)' '> $$null' `
+            @PwshCmd '(' 'Test-Path' '-PathType Container' '-Path' "'$Out'" ')' '-or' `
+            '(' 'New-Item' "'$Out'" $(fv $CmdFlagsVar) '-ItemType' 'Directory' ')' '> $$null' `
+            -Generator `
             -NewLine -Quiet
 
     # remove

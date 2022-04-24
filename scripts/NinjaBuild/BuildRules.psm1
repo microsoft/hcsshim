@@ -181,6 +181,10 @@ function Add-Phony {
         # Add a default declaration for this build
         $Default,
 
+        [switch]
+        # Don't escape paths
+        $NoEscape,
+
         [Parameter(Position = 1, ValueFromRemainingArguments)]
         [string[]]
         # The phony build dependencies
@@ -210,9 +214,13 @@ function Add-Phony {
         $Value = [string[]]($Value | Get-NonEmpty)
         Write-Debug "Adding phony statement `"$Build`" to `"$Path`": [$($Value -join ',')]."
 
+        if ( -not ($Value) ) {
+            throw 'Phony targets cannot be empty.'
+        }
+
         Add-Build -Quiet -Path $Path -Build $Build -Rule $PhonyRule -Value $Value `
             -Implicit $Implicit -ImplicitOutput $ImplicitOutput -OrderOnly $OrderOnly `
-            -Default:$Default
+            -Default:$Default -NoEscape:$NoEscape
 
         Update-File -Path $Path -Quiet:$Quiet -NewLine:$NewLine
     }
@@ -303,12 +311,20 @@ function Add-Build {
         $Pool,
 
         [switch]
-        # Add a default declaration for this build
+        # Add a default declaration for this build statement
         $Default,
+
+        [string]
+        # Add a phony declaration for this build statement
+        $Phony,
+
+        [switch]
+        # Don't escape paths
+        $NoEscape,
 
         [Parameter(Position = 1, ValueFromRemainingArguments)]
         [string[]]
-        # The build statment dependencies
+        # The build statement dependencies
         $Value,
 
         [Parameter(ValueFromPipeline, ValueFromPipelineByPropertyName, Mandatory)]
@@ -335,14 +351,27 @@ function Add-Build {
         $Value = [string[]]($Value | Get-NonEmpty)
         Write-Debug "Adding build statement `"$Build`" to `"$Path`" : [$($Value -join ',')]."
 
-        [string[]]$Build = $Build | Get-NonEmpty | Format-Path
-        [string[]]$ImplicitOutput = $ImplicitOutput | Get-NonEmpty | Format-Path
+        $Build = [string[]]($Build | Get-NonEmpty)
+        $ImplicitOutput = [string[]]($ImplicitOutput | Get-NonEmpty)
         if ( -not ($Build -or $ImplicitOutput) ) {
             throw 'Build targets cannot be empty.'
         }
 
-        [string[]]$Implicit = $Implicit | Get-NonEmpty | Format-Path
-        [string[]]$OrderOnly = $OrderOnly | Get-NonEmpty | Format-Path
+        $Implicit = [string[]]($Implicit | Get-NonEmpty)
+        $OrderOnly = [string[]]($OrderOnly | Get-NonEmpty)
+
+        if ( -not $NoEscape ) {
+            # $Build = ($Build ?? $EmptyStringArray) | Format-Path
+            # $ImplicitOutput = ($ImplicitOutput ?? $EmptyStringArray) | Format-Path
+            # $Implicit = ($Implicit ?? $EmptyStringArray) | Format-Path
+            # $OrderOnly = ($OrderOnly ?? $EmptyStringArray) | Format-Path
+            # $Value = ($Value ?? $EmptyStringArray) | Format-Path
+            $Build = $Build | Format-Path
+            $ImplicitOutput = $ImplicitOutput | Format-Path
+            $Implicit = $Implicit | Format-Path
+            $OrderOnly = $OrderOnly | Format-Path
+            $Value = $Value | Format-Path
+        }
 
         [string[]]$out = $BuildPrefix + $Build
         if ( $ImplicitOutput ) {
@@ -350,7 +379,7 @@ function Add-Build {
         }
         $out[-1] = $out[-1] + ':' # format is build <target>: <deps>
 
-        [string[]]$in = ($Value ?? $EmptyStringArray) | Format-Path
+        $in = [string[]]($Value ?? $EmptyStringArray)
         if ( $Implicit ) {
             [string[]]$in = $in + '|' + $Implicit
         }
@@ -375,6 +404,10 @@ function Add-Build {
 
         if ( $Default ) {
             Add-Default -Quiet -Path $Path -Value $Value
+        }
+
+        if ( $Phony  ) {
+            Add-Phony -Quiet -Path $Path -Build $Phony -Value $Build -NoEscape
         }
 
         Update-File -Path $Path -Quiet:$Quiet -NewLine:$NewLine

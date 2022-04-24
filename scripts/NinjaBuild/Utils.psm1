@@ -16,7 +16,7 @@ function Export-Parameter {
     process {
         foreach ( $k in $params.Keys ) {
             $v = $params[$k]
-            if ( -not ($v -or  $KeepNull) ) {
+            if ( -not ($v -or $KeepNull) ) {
                 return
             }
             if ( $v -is [System.Management.Automation.SwitchParameter] ) {
@@ -95,13 +95,14 @@ Escape spaces(' ') and colons (':') within a string (but not '$')
 function Format-Path {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory,
-            ValueFromPipeline,
-            ValueFromPipelineByPropertyName)]
+        [Parameter(ValueFromPipeline)]
+        [AllowNull()]
+        [AllowEmptyCollection()]
+        [string[]]
         $Path
     )
     process {
-        if ( $Path -and $Path -is [string]) {
+        if ( $Path ) {
             $Path = $Path.Trim().Replace(' ', '$ ').Replace(':', '$:')
         }
         $Path
