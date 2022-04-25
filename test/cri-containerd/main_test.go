@@ -53,6 +53,7 @@ const (
 	imageLcowCosmos          = "cosmosarno/spark-master:2.4.1_2019-04-18_8e864ce"
 	imageLcowCustomUser      = "cplatpublic.azurecr.io/linux_custom_user:latest"
 	imageWindowsProcessDump  = "cplatpublic.azurecr.io/crashdump:latest"
+	imageWindowsArgsEscaped  = "cplatpublic.azurecr.io/argsescaped:latest"
 	imageWindowsTimezone     = "cplatpublic.azurecr.io/timezone:latest"
 	imageJobContainerHNS     = "cplatpublic.azurecr.io/jobcontainer_hns:latest"
 	imageJobContainerETW     = "cplatpublic.azurecr.io/jobcontainer_etw:latest"
