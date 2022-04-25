@@ -77,3 +77,21 @@ func DefaultCRIMounts() []oci.Mount {
 		},
 	}
 }
+
+// DefaultCRIPrivilegedMounts returns a slice of mounts that
+func DefaultCRIPrivilegedMounts() []oci.Mount {
+	return []oci.Mount{
+		{
+			Source:      "cgroup",
+			Destination: "/sys/fs/cgroup",
+			Type:        "cgroup",
+			Options:     []string{"nosuid", "noexec", "nodev", "relatime", "rw"},
+		},
+		{
+			Destination: "/sys",
+			Type:        "sysfs",
+			Source:      "sysfs",
+			Options:     []string{"nosuid", "noexec", "nodev", "rw"},
+		},
+	}
+}

@@ -34,3 +34,11 @@ func WithMountConstraints(mc []MountConfig) ContainerConfigOpt {
 		return nil
 	}
 }
+
+// WithAllowElevated allows container to run in an elevated/privileged mode.
+func WithAllowElevated(elevated bool) ContainerConfigOpt {
+	return func(c *ContainerConfig) error {
+		c.AllowElevated = elevated
+		return nil
+	}
+}

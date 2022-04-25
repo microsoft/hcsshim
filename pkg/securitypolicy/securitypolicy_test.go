@@ -288,11 +288,11 @@ func Test_EnforceOverlayMountPolicy_Overlay_Single_Container_Twice(t *testing.T)
 // all 13 should be allowed.
 func Test_EnforceOverlayMountPolicy_Multiple_Instances_Same_Container(t *testing.T) {
 	for containersToCreate := 2; containersToCreate <= maxContainersInGeneratedPolicy; containersToCreate++ {
-		var containers []securityPolicyContainer
+		var containers []*securityPolicyContainer
 
 		for i := 1; i <= containersToCreate; i++ {
 			arg := "command " + strconv.Itoa(i)
-			c := securityPolicyContainer{
+			c := &securityPolicyContainer{
 				Command: []string{arg},
 				Layers:  []string{"1", "2"},
 			}
@@ -806,7 +806,7 @@ func (*generatedContainers) Generate(r *rand.Rand, _ int) reflect.Value {
 }
 
 type testConfig struct {
-	container   securityPolicyContainer
+	container   *securityPolicyContainer
 	layers      []string
 	containerID string
 	policy      *StandardSecurityPolicyEnforcer
@@ -840,7 +840,7 @@ func setupContainerWithOverlay(gc *generatedContainers, valid bool) (tc *testCon
 }
 
 func generateContainers(r *rand.Rand, upTo int32) *generatedContainers {
-	var containers []securityPolicyContainer
+	var containers []*securityPolicyContainer
 
 	numContainers := (int)(atLeastOneAtMost(r, upTo))
 	for i := 0; i < numContainers; i++ {
@@ -852,7 +852,7 @@ func generateContainers(r *rand.Rand, upTo int32) *generatedContainers {
 	}
 }
 
-func generateContainersContainer(r *rand.Rand, size int32) securityPolicyContainer {
+func generateContainersContainer(r *rand.Rand, size int32) *securityPolicyContainer {
 	c := securityPolicyContainer{}
 	c.Command = generateCommand(r)
 	c.EnvRules = generateEnvironmentVariableRules(r)
@@ -862,7 +862,7 @@ func generateContainersContainer(r *rand.Rand, size int32) securityPolicyContain
 		c.Layers = append(c.Layers, generateRootHash(r))
 	}
 
-	return c
+	return &c
 }
 
 func generateRootHash(r *rand.Rand) string {
@@ -911,7 +911,7 @@ func generateNeverMatchingEnvironmentVariable(r *rand.Rand) string {
 	return randString(r, maxGeneratedEnvironmentVariableRuleLength+1)
 }
 
-func buildEnvironmentVariablesFromContainerRules(c securityPolicyContainer, r *rand.Rand) []string {
+func buildEnvironmentVariablesFromContainerRules(c *securityPolicyContainer, r *rand.Rand) []string {
 	vars := make([]string, 0)
 
 	// Select some number of the valid, matching rules to be environment
@@ -973,12 +973,12 @@ func generateContainerID(r *rand.Rand) string {
 	return strconv.FormatInt(int64(id), 10)
 }
 
-func selectContainerFromContainers(containers *generatedContainers, r *rand.Rand) securityPolicyContainer {
+func selectContainerFromContainers(containers *generatedContainers, r *rand.Rand) *securityPolicyContainer {
 	numberOfContainersInPolicy := len(containers.containers)
 	return containers.containers[r.Intn(numberOfContainersInPolicy)]
 }
 
-func createValidOverlayForContainer(enforcer SecurityPolicyEnforcer, container securityPolicyContainer, r *rand.Rand) ([]string, error) {
+func createValidOverlayForContainer(enforcer SecurityPolicyEnforcer, container *securityPolicyContainer, r *rand.Rand) ([]string, error) {
 	// storage for our mount paths
 	overlay := make([]string, len(container.Layers))
 
@@ -995,7 +995,7 @@ func createValidOverlayForContainer(enforcer SecurityPolicyEnforcer, container s
 	return overlay, nil
 }
 
-func createInvalidOverlayForContainer(enforcer SecurityPolicyEnforcer, container securityPolicyContainer, r *rand.Rand) ([]string, error) {
+func createInvalidOverlayForContainer(enforcer SecurityPolicyEnforcer, container *securityPolicyContainer, r *rand.Rand) ([]string, error) {
 	method := r.Intn(3)
 	if method == 0 {
 		return invalidOverlaySameSizeWrongMounts(enforcer, container, r)
@@ -1006,7 +1006,7 @@ func createInvalidOverlayForContainer(enforcer SecurityPolicyEnforcer, container
 	}
 }
 
-func invalidOverlaySameSizeWrongMounts(enforcer SecurityPolicyEnforcer, container securityPolicyContainer, r *rand.Rand) ([]string, error) {
+func invalidOverlaySameSizeWrongMounts(enforcer SecurityPolicyEnforcer, container *securityPolicyContainer, r *rand.Rand) ([]string, error) {
 	// storage for our mount paths
 	overlay := make([]string, len(container.Layers))
 
@@ -1024,7 +1024,7 @@ func invalidOverlaySameSizeWrongMounts(enforcer SecurityPolicyEnforcer, containe
 	return overlay, nil
 }
 
-func invalidOverlayCorrectDevicesWrongOrderSomeMissing(enforcer SecurityPolicyEnforcer, container securityPolicyContainer, r *rand.Rand) ([]string, error) {
+func invalidOverlayCorrectDevicesWrongOrderSomeMissing(enforcer SecurityPolicyEnforcer, container *securityPolicyContainer, r *rand.Rand) ([]string, error) {
 	if len(container.Layers) == 1 {
 		// won't work with only 1, we need to bail out to another method
 		return invalidOverlayRandomJunk(enforcer, container, r)
@@ -1047,7 +1047,7 @@ func invalidOverlayCorrectDevicesWrongOrderSomeMissing(enforcer SecurityPolicyEn
 	return overlay, nil
 }
 
-func invalidOverlayRandomJunk(enforcer SecurityPolicyEnforcer, container securityPolicyContainer, r *rand.Rand) ([]string, error) {
+func invalidOverlayRandomJunk(enforcer SecurityPolicyEnforcer, container *securityPolicyContainer, r *rand.Rand) ([]string, error) {
 	// create "junk" for entry
 	layersToCreate := r.Int31n(maxLayersInGeneratedContainer)
 	overlay := make([]string, layersToCreate)
@@ -1095,5 +1095,5 @@ func atMost(r *rand.Rand, most int32) int32 {
 
 // a type to hold a list of generated containers
 type generatedContainers struct {
-	containers []securityPolicyContainer
+	containers []*securityPolicyContainer
 }

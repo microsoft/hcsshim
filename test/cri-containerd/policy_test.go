@@ -47,15 +47,11 @@ func sandboxSecurityPolicy(t *testing.T) string {
 
 func alpineSecurityPolicy(t *testing.T, opts ...securitypolicy.ContainerConfigOpt) string {
 	defaultContainers := helpers.DefaultContainerConfigs()
-	alpineContainer := securitypolicy.NewContainerConfig(
-		"alpine:latest",
-		validPolicyAlpineCommand,
-		[]securitypolicy.EnvRuleConfig{},
-		securitypolicy.AuthConfig{},
-		"",
-		[]string{},
-		[]securitypolicy.MountConfig{},
-	)
+
+	alpineContainer := securitypolicy.ContainerConfig{
+		ImageName: "alpine:latest",
+		Command:   validPolicyAlpineCommand,
+	}
 
 	for _, o := range opts {
 		if err := o(&alpineContainer); err != nil {
@@ -731,5 +727,89 @@ func Test_RunContainer_WithMountConstraints_NotAllowed(t *testing.T) {
 				t.Fatalf("expected %q in error message, got: %q", testConfig.expectedError, err)
 			}
 		})
+	}
+}
+
+func Test_RunPrivilegedContainer_AllowElevated_Set(t *testing.T) {
+	requireFeatures(t, featureLCOWIntegrity)
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	alpinePolicy := alpineSecurityPolicy(t, securitypolicy.WithAllowElevated(true))
+	sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
+	sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
+		SecurityContext: &runtime.LinuxSandboxSecurityContext{
+			Privileged: true,
+		},
+	}
+	podID := runPodSandbox(t, client, ctx, sandboxRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	contRequest := getCreateContainerRequest(
+		podID,
+		"alpine-privileged",
+		"alpine:latest",
+		validPolicyAlpineCommand,
+		sandboxRequest.Config,
+	)
+	contRequest.Config.Linux = &runtime.LinuxContainerConfig{
+		SecurityContext: &runtime.LinuxContainerSecurityContext{
+			Privileged: true,
+		},
+	}
+	containerID := createContainer(t, client, ctx, contRequest)
+	defer removeContainer(t, client, ctx, containerID)
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID)
+}
+
+func Test_RunPrivilegedContainer_AllowElevated_NotSet(t *testing.T) {
+	requireFeatures(t, featureLCOWIntegrity)
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	alpinePolicy := alpineSecurityPolicy(t)
+	sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
+	sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
+		SecurityContext: &runtime.LinuxSandboxSecurityContext{
+			Privileged: true,
+		},
+	}
+	podID := runPodSandbox(t, client, ctx, sandboxRequest)
+	defer removePodSandbox(t, client, ctx, podID)
+	defer stopPodSandbox(t, client, ctx, podID)
+
+	contRequest := getCreateContainerRequest(
+		podID,
+		"alpine-privileged",
+		"alpine:latest",
+		validPolicyAlpineCommand,
+		sandboxRequest.Config,
+	)
+	contRequest.Config.Linux = &runtime.LinuxContainerConfig{
+		SecurityContext: &runtime.LinuxContainerSecurityContext{
+			Privileged: true,
+		},
+	}
+	containerID := createContainer(t, client, ctx, contRequest)
+	defer removeContainer(t, client, ctx, containerID)
+	if _, err := client.StartContainer(
+		ctx,
+		&runtime.StartContainerRequest{ContainerId: containerID},
+	); err == nil {
+		t.Fatalf("expected to fail")
+	} else {
+		expectedStr1 := "Destination:/sys"
+		expectedStr2 := "is not allowed by mount constraints"
+		if !strings.Contains(err.Error(), expectedStr1) || !strings.Contains(err.Error(), expectedStr2) {
+			t.Fatalf("expected different error: %s", err)
+		}
 	}
 }
