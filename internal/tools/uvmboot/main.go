@@ -4,11 +4,13 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -21,11 +23,16 @@ const (
 	measureArgName              = "measure"
 	parallelArgName             = "parallel"
 	countArgName                = "count"
-	debugArgName                = "debug"
-	gcsArgName                  = "gcs"
 
 	execCommandLineArgName = "exec"
 )
+
+var (
+	debug  bool
+	useGCS bool
+)
+
+type uvmRunFunc func(string) error
 
 func main() {
 	app := cli.NewApp()
@@ -64,12 +71,14 @@ func main() {
 			Usage: "Enable deferred commit on the UVM",
 		},
 		cli.BoolFlag{
-			Name:  debugArgName,
-			Usage: "Enable debug level logging in HCSShim",
+			Name:        "debug",
+			Usage:       "Enable debug information",
+			Destination: &debug,
 		},
 		cli.BoolFlag{
-			Name:  gcsArgName,
-			Usage: "Launch the GCS and perform requested operations via its RPC interface",
+			Name:        "gcs",
+			Usage:       "Launch the GCS and perform requested operations via its RPC interface",
+			Destination: &useGCS,
 		},
 	}
 
@@ -79,17 +88,21 @@ func main() {
 	}
 
 	app.Before = func(c *cli.Context) error {
-		if c.GlobalBool("debug") {
+		if !winapi.IsElevated() {
+			log.Fatal(c.App.Name + " must be run in an elevated context")
+		}
+
+		if debug {
 			logrus.SetLevel(logrus.DebugLevel)
 		} else {
 			logrus.SetLevel(logrus.WarnLevel)
 		}
+
 		return nil
 	}
 
-	err := app.Run(os.Args)
-	if err != nil {
-		logrus.Fatal(err)
+	if err := app.Run(os.Args); err != nil {
+		logrus.Fatalf("%v\n", err)
 	}
 }
 
@@ -108,7 +121,9 @@ func setGlobalOptions(c *cli.Context, options *uvm.Options) {
 	}
 }
 
-func runMany(c *cli.Context, runFunc func(id string) error) {
+// todo: add a context here to propagate cancel/timeouts to runFunc uvm
+
+func runMany(c *cli.Context, runFunc uvmRunFunc) {
 	parallelCount := c.GlobalInt(parallelArgName)
 
 	var wg sync.WaitGroup
@@ -118,8 +133,7 @@ func runMany(c *cli.Context, runFunc func(id string) error) {
 		go func() {
 			for i := range workChan {
 				id := fmt.Sprintf("uvmboot-%d", i)
-				err := runFunc(id)
-				if err != nil {
+				if err := runFunc(id); err != nil {
 					logrus.WithField("uvm-id", id).WithError(err).Error("failed to run UVM")
 				}
 			}
@@ -137,4 +151,8 @@ func runMany(c *cli.Context, runFunc func(id string) error) {
 	if c.GlobalBool(measureArgName) {
 		fmt.Println("Elapsed time:", time.Since(start))
 	}
+}
+
+func unrecognizedError(name, value string) error {
+	return fmt.Errorf("unrecognized value '%s' for option %s", name, value)
 }
