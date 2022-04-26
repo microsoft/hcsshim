@@ -6,6 +6,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func IsEvelated() bool {
+func IsElevated() bool {
 	return windows.GetCurrentProcessToken().IsElevated()
 }

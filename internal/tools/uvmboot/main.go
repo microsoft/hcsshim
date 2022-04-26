@@ -88,7 +88,7 @@ func main() {
 	}
 
 	app.Before = func(c *cli.Context) error {
-		if !winapi.IsEvelated() {
+		if !winapi.IsElevated() {
 			log.Fatal(c.App.Name + " must be run in an elevated context")
 		}
 
