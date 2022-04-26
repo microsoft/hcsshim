@@ -458,6 +458,11 @@ func (computeSystem *System) createProcess(ctx context.Context, operation string
 	processInfo, processHandle, resultJSON, err := vmcompute.HcsCreateProcess(ctx, computeSystem.handle, configuration)
 	events := processHcsResult(ctx, resultJSON)
 	if err != nil {
+		if v2, ok := c.(*hcsschema.ProcessParameters); ok {
+			operation += ": " + v2.CommandLine
+		} else if v1, ok := c.(*schema1.ProcessConfig); ok {
+			operation += ": " + v1.CommandLine
+		}
 		return nil, nil, makeSystemError(computeSystem, operation, err, events)
 	}
 
