@@ -616,6 +616,9 @@ func (pe *StandardSecurityPolicyEnforcer) enforceDefaultMounts(specMount oci.Mou
 }
 
 func (pe *StandardSecurityPolicyEnforcer) ExtendDefaultMounts(defaultMounts []oci.Mount) error {
+	pe.mutex.Lock()
+	defer pe.mutex.Unlock()
+
 	for _, mnt := range defaultMounts {
 		pe.DefaultMounts = append(pe.DefaultMounts, newMountConstraint(
 			mnt.Source,
