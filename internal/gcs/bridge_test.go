@@ -33,7 +33,7 @@ func pipeConn() (*stitched, *stitched) {
 	return &stitched{r1, w2}, &stitched{r2, w1}
 }
 
-func sendMessage(t *testing.T, w io.Writer, typ msgType, id int64, msg []byte) {
+func sendMessage(t *testing.T, w io.Writer, typ msgIdentifier, id int64, msg []byte) {
 	var h [16]byte
 	binary.LittleEndian.PutUint32(h[:], uint32(typ))
 	binary.LittleEndian.PutUint32(h[4:], uint32(len(msg)+16))
@@ -61,7 +61,7 @@ func reflector(t *testing.T, rw io.ReadWriteCloser, delay time.Duration) {
 			return
 		}
 		time.Sleep(delay) // delay is used to test timeouts (when non-zero)
-		typ ^= msgTypeResponse ^ msgTypeRequest
+		typ ^= msgIdentifier(msgTypeResponse ^ msgTypeRequest)
 		sendMessage(t, rw, typ, id, msg)
 	}
 }
@@ -148,7 +148,7 @@ func TestBridgeRPCBridgeClosed(t *testing.T) {
 	}
 }
 
-func sendJSON(t *testing.T, w io.Writer, typ msgType, id int64, msg interface{}) error {
+func sendJSON(t *testing.T, w io.Writer, typ msgIdentifier, id int64, msg interface{}) error {
 	msgb, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -157,7 +157,7 @@ func sendJSON(t *testing.T, w io.Writer, typ msgType, id int64, msg interface{})
 	return nil
 }
 
-func notifyThroughBridge(t *testing.T, typ msgType, msg interface{}, fn notifyFunc) error {
+func notifyThroughBridge(t *testing.T, typ msgIdentifier, msg interface{}, fn notifyFunc) error {
 	s, c := pipeConn()
 	b := newBridge(s, fn, logrus.NewEntry(logrus.StandardLogger()))
 	b.Start()
@@ -173,7 +173,7 @@ func notifyThroughBridge(t *testing.T, typ msgType, msg interface{}, fn notifyFu
 func TestBridgeNotify(t *testing.T) {
 	ntf := &containerNotification{Operation: "testing"}
 	recvd := false
-	err := notifyThroughBridge(t, msgTypeNotify|notifyContainer, ntf, func(nntf *containerNotification) error {
+	err := notifyThroughBridge(t, newMsgIdentifier(msgTypeNotify, notifyContainer), ntf, func(nntf *containerNotification) error {
 		if !reflect.DeepEqual(ntf, nntf) {
 			t.Errorf("%+v != %+v", ntf, nntf)
 		}
@@ -191,7 +191,7 @@ func TestBridgeNotify(t *testing.T) {
 func TestBridgeNotifyFailure(t *testing.T) {
 	ntf := &containerNotification{Operation: "testing"}
 	errMsg := "notify should have failed"
-	err := notifyThroughBridge(t, msgTypeNotify|notifyContainer, ntf, func(nntf *containerNotification) error {
+	err := notifyThroughBridge(t, newMsgIdentifier(msgTypeNotify, notifyContainer), ntf, func(nntf *containerNotification) error {
 		return errors.New(errMsg)
 	})
 	if err == nil || !strings.Contains(err.Error(), errMsg) {

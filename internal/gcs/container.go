@@ -180,7 +180,7 @@ func (c *Container) Start(ctx context.Context) (err error) {
 	return c.gc.brdg.RPC(ctx, rpcStart, &req, &resp, false)
 }
 
-func (c *Container) shutdown(ctx context.Context, proc rpcProc) error {
+func (c *Container) shutdown(ctx context.Context, proc msgID) error {
 	req := makeRequest(ctx, c.id)
 	var resp responseBase
 	err := c.gc.brdg.RPC(ctx, proc, &req, &resp, true)

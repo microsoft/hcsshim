@@ -44,16 +44,16 @@ func simpleGcs(t *testing.T, rwc io.ReadWriteCloser) {
 
 func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
 	for {
-		id, typ, b, err := readMessage(rw)
+		id, hdr, b, err := readMessage(rw)
 		if err != nil {
 			if err == io.EOF || err == io.ErrClosedPipe {
 				err = nil
 			}
 			return err
 		}
-		switch proc := rpcProc(typ &^ msgTypeRequest); proc {
+		switch proc := hdr.msgID(); proc {
 		case rpcNegotiateProtocol:
-			err := sendJSON(t, rw, msgTypeResponse|msgType(proc), id, &negotiateProtocolResponse{
+			err := sendJSON(t, rw, newMsgIdentifier(msgTypeResponse, proc), id, &negotiateProtocolResponse{
 				Version: protocolVersion,
 				Capabilities: gcsCapabilities{
 					RuntimeOsType: "linux",
@@ -63,7 +63,7 @@ func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
 				return err
 			}
 		case rpcCreate:
-			err := sendJSON(t, rw, msgTypeResponse|msgType(proc), id, &containerCreateResponse{})
+			err := sendJSON(t, rw, newMsgIdentifier(msgTypeResponse, proc), id, &containerCreateResponse{})
 			if err != nil {
 				return err
 			}
@@ -107,7 +107,7 @@ func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
 					stdout.Close()
 				}()
 			}
-			err = sendJSON(t, rw, msgTypeResponse|msgType(proc), id, &containerExecuteProcessResponse{
+			err = sendJSON(t, rw, newMsgIdentifier(msgTypeResponse, proc), id, &containerExecuteProcessResponse{
 				ProcessID: 42,
 			})
 			if err != nil {
@@ -121,12 +121,12 @@ func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
 			if err != nil {
 				return err
 			}
-			err = sendJSON(t, rw, msgTypeResponse|msgType(proc), id, &responseBase{})
+			err = sendJSON(t, rw, newMsgIdentifier(msgTypeResponse, proc), id, &responseBase{})
 			if err != nil {
 				return err
 			}
 			time.Sleep(50 * time.Millisecond)
-			err = sendJSON(t, rw, msgType(msgTypeNotify|notifyContainer), 0, &containerNotification{
+			err = sendJSON(t, rw, newMsgIdentifier(msgTypeNotify, notifyContainer), 0, &containerNotification{
 				requestBase: requestBase{
 					ContainerID: req.ContainerID,
 				},
@@ -135,7 +135,7 @@ func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
 				return err
 			}
 		default:
-			return fmt.Errorf("unsupported msg %s", typ)
+			return fmt.Errorf("unsupported msg %s", hdr)
 		}
 	}
 }
