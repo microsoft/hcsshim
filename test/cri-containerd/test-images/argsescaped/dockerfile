@@ -1,0 +1,4 @@
+# Test image for ArgsEscaped behavior.
+FROM mcr.microsoft.com/windows/nanoserver:1809
+ENTRYPOINT cmd.exe /c
+CMD ping -t 127.0.0.1
