@@ -197,6 +197,8 @@ func main() {
 		trace.RegisterExporter(&oc.LogrusExporter{})
 	}
 
+	logrus.AddHook(log.NewHook())
+
 	// Use a file instead of stdout
 	if *logFile != "" {
 		logFileHandle, err := os.OpenFile(*logFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)

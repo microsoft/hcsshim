@@ -10,6 +10,8 @@ import (
 	"go.opencensus.io/trace/propagation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/Microsoft/hcsshim/internal/oc"
 )
 
 type options struct {
@@ -62,16 +64,18 @@ func setSpanStatus(span *trace.Span, err error) {
 // creates a new span for outgoing TTRPC calls, and passes the span context as
 // metadata on the call.
 func ClientInterceptor(opts ...Option) ttrpc.UnaryClientInterceptor {
-	o := options{}
+	o := options{
+		sampler: oc.DefaultSampler,
+	}
 	for _, opt := range opts {
 		opt(&o)
 	}
 	return func(ctx context.Context, req *ttrpc.Request, resp *ttrpc.Response, info *ttrpc.UnaryClientInfo, inv ttrpc.Invoker) (err error) {
-		ctx, span := trace.StartSpan(
+		ctx, span := oc.StartSpan(
 			ctx,
 			convertMethodName(info.FullMethod),
 			trace.WithSampler(o.sampler),
-			trace.WithSpanKind(trace.SpanKindClient))
+			oc.WithClientSpanKind)
 		defer span.End()
 		defer setSpanStatus(span, err)
 
@@ -88,7 +92,9 @@ func ClientInterceptor(opts ...Option) ttrpc.UnaryClientInterceptor {
 // creates a new span for incoming TTRPC calls, and parents the span to the
 // span context received via metadata, if it exists.
 func ServerInterceptor(opts ...Option) ttrpc.UnaryServerInterceptor {
-	o := options{}
+	o := options{
+		sampler: oc.DefaultSampler,
+	}
 	for _, opt := range opts {
 		opt(&o)
 	}
@@ -96,22 +102,12 @@ func ServerInterceptor(opts ...Option) ttrpc.UnaryServerInterceptor {
 		name := convertMethodName(info.FullMethod)
 
 		var span *trace.Span
+		opts := []trace.StartOption{trace.WithSampler(o.sampler), oc.WithServerSpanKind}
 		parent, ok := getParentSpanFromContext(ctx)
 		if ok {
-			ctx, span = trace.StartSpanWithRemoteParent(
-				ctx,
-				name,
-				parent,
-				trace.WithSpanKind(trace.SpanKindServer),
-				trace.WithSampler(o.sampler),
-			)
+			ctx, span = oc.StartSpanWithRemoteParent(ctx, name, parent, opts...)
 		} else {
-			ctx, span = trace.StartSpan(
-				ctx,
-				name,
-				trace.WithSpanKind(trace.SpanKindServer),
-				trace.WithSampler(o.sampler),
-			)
+			ctx, span = oc.StartSpan(ctx, name, opts...)
 		}
 		defer span.End()
 		defer setSpanStatus(span, err)
