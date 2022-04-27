@@ -9,7 +9,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 type TestConfig struct {

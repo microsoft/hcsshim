@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 func runexecContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.RunPodSandboxRequest, request *runtime.CreateContainerRequest, execReq *runtime.ExecSyncRequest) *runtime.ExecSyncResponse {

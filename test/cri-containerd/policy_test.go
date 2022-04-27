@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 
 	"github.com/Microsoft/hcsshim/internal/tools/securitypolicy/helpers"
 	"github.com/Microsoft/hcsshim/pkg/annotations"

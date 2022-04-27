@@ -14,7 +14,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 func execSync(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.ExecSyncRequest) *runtime.ExecSyncResponse {

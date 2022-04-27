@@ -12,7 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 func Test_Pod_UpdateResources_Memory(t *testing.T) {

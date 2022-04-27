@@ -13,7 +13,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 func Test_Container_File_Share_Writable_WCOW(t *testing.T) {

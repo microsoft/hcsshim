@@ -25,7 +25,7 @@ import (
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	"github.com/containerd/containerd/log"
 	"golang.org/x/sys/windows"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 func runPodSandboxTest(t *testing.T, request *runtime.RunPodSandboxRequest) {

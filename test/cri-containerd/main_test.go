@@ -24,7 +24,7 @@ import (
 	"github.com/containerd/typeurl"
 	"github.com/gogo/protobuf/types"
 	"google.golang.org/grpc"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 const (

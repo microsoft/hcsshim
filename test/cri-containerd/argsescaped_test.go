@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 func Test_ArgsEscaped_Exec(t *testing.T) {
