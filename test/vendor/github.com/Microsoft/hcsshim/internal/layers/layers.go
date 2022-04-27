@@ -87,7 +87,7 @@ func MountContainerLayers(ctx context.Context, containerID string, layerFolders 
 		}
 		path := layerFolders[len(layerFolders)-1]
 		rest := layerFolders[:len(layerFolders)-1]
-		// Simple retry loop to handle some behavior on RS5. Loopback VHDs used to be mounted in a different manor on RS5 (ws2019) which led to some
+		// Simple retry loop to handle some behavior on RS5. Loopback VHDs used to be mounted in a different manner on RS5 (ws2019) which led to some
 		// very odd cases where things would succeed when they shouldn't have, or we'd simply timeout if an operation took too long. Many
 		// parallel invocations of this code path and stressing the machine seem to bring out the issues, but all of the possible failure paths
 		// that bring about the errors we have observed aren't known.
