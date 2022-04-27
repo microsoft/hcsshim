@@ -42,9 +42,14 @@ func ExportLayer(ctx context.Context, path string, exportFolderPath string, pare
 	return nil
 }
 
+// LayerReader is an interface that supports reading an existing container image layer.
 type LayerReader interface {
+	// Next advances to the next file and returns the name, size, and file info
 	Next() (string, int64, *winio.FileBasicInfo, error)
+	// Read reads data from the current file, in the format of a Win32 backup stream, and
+	// returns the number of bytes read.
 	Read(b []byte) (int, error)
+	// Close finishes the layer reading process and releases any resources.
 	Close() error
 }
 

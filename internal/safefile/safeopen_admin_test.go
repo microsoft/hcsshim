@@ -36,6 +36,12 @@ func TestOpenRelative(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Create a directory stack
+	err = MkdirAllRelative("dir/and/then/some/subdir", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Create a file in the bad root
 	f, err = os.Create(filepath.Join(badroot.Name(), "badfile"))
 	if err != nil {
@@ -60,6 +66,13 @@ func TestOpenRelative(t *testing.T) {
 	if err == nil {
 		f.Close()
 		t.Fatal("created file in wrong tree!")
+	}
+	t.Log(err)
+
+	// Make sure directory stacks cannot pass through a symlink
+	err = MkdirAllRelative("dsymlink/and/then/some/subdir", root)
+	if err == nil {
+		t.Fatal("created a directory tree through a symlink")
 	}
 	t.Log(err)
 
