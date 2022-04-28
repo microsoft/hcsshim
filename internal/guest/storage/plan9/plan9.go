@@ -30,7 +30,7 @@ var (
 // `target` will be created. On mount failure the created `target` will be
 // automatically cleaned up.
 func Mount(ctx context.Context, vsock transport.Transport, target, share string, port uint32, readonly bool) (err error) {
-	_, span := trace.StartSpan(ctx, "plan9::Mount")
+	_, span := oc.StartSpan(ctx, "plan9::Mount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 

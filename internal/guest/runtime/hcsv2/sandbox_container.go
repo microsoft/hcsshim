@@ -33,7 +33,7 @@ func getSandboxResolvPath(id string) string {
 }
 
 func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (err error) {
-	ctx, span := trace.StartSpan(ctx, "hcsv2::setupSandboxContainerSpec")
+	ctx, span := oc.StartSpan(ctx, "hcsv2::setupSandboxContainerSpec")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", id))

@@ -14,6 +14,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/runtime"
 	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -85,11 +87,11 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 	p.exitWg.Add(1)
 	p.writersWg.Add(1)
 	go func() {
-		ctx, span := trace.StartSpan(context.Background(), "newProcess::waitBackground")
+		ctx, span := oc.StartSpan(context.Background(), "newProcess::waitBackground")
 		defer span.End()
 		span.AddAttributes(
-			trace.StringAttribute("cid", p.cid),
-			trace.Int64Attribute("pid", int64(p.pid)))
+			trace.StringAttribute(logfields.ContainerID, p.cid),
+			trace.Int64Attribute(logfields.ProcessID, int64(p.pid)))
 
 		// Wait for the process to exit
 		exitCode, err := p.process.Wait()
@@ -115,7 +117,7 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 			}
 			c.processesMutex.Lock()
 
-			_, span := trace.StartSpan(context.Background(), "newProcess::waitBackground::waitAllWaiters")
+			_, span := oc.StartSpan(context.Background(), "newProcess::waitBackground::waitAllWaiters")
 			defer span.End()
 			span.AddAttributes(
 				trace.StringAttribute("cid", p.cid),
@@ -163,7 +165,7 @@ func (p *containerProcess) ResizeConsole(ctx context.Context, height, width uint
 // gather the exit code. The second channel must be signaled from the caller
 // when the caller has completed its use of this call to Wait.
 func (p *containerProcess) Wait() (<-chan int, chan<- bool) {
-	ctx, span := trace.StartSpan(context.Background(), "opengcs::containerProcess::Wait")
+	ctx, span := oc.StartSpan(context.Background(), "opengcs::containerProcess::Wait")
 	span.AddAttributes(
 		trace.StringAttribute("cid", p.cid),
 		trace.Int64Attribute("pid", int64(p.pid)))
@@ -288,7 +290,7 @@ func (ep *externalProcess) ResizeConsole(ctx context.Context, height, width uint
 }
 
 func (ep *externalProcess) Wait() (<-chan int, chan<- bool) {
-	_, span := trace.StartSpan(context.Background(), "opengcs::externalProcess::Wait")
+	_, span := oc.StartSpan(context.Background(), "opengcs::externalProcess::Wait")
 	span.AddAttributes(trace.Int64Attribute("pid", int64(ep.cmd.Process.Pid)))
 
 	exitCodeChan := make(chan int, 1)

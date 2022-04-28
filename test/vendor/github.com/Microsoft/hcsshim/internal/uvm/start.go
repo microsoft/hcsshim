@@ -87,7 +87,7 @@ func isDisconnectError(err error) bool {
 func parseLogrus(vmid string) func(r io.Reader) {
 	return func(r io.Reader) {
 		j := json.NewDecoder(r)
-		e := logrus.NewEntry(logrus.StandardLogger())
+		e := log.L.Dup()
 		fields := e.Data
 		for {
 			for k := range fields {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/cow"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/log"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -111,7 +112,7 @@ func Command(host cow.ProcessHost, name string, arg ...string) *Cmd {
 		Spec: &specs.Process{
 			Args: append([]string{name}, arg...),
 		},
-		Log:       logrus.NewEntry(logrus.StandardLogger()),
+		Log:       log.L.Dup(),
 		ExitState: &ExitState{},
 	}
 	if host.OS() == "windows" {
@@ -128,6 +129,7 @@ func Command(host cow.ProcessHost, name string, arg ...string) *Cmd {
 func CommandContext(ctx context.Context, host cow.ProcessHost, name string, arg ...string) *Cmd {
 	cmd := Command(host, name, arg...)
 	cmd.Context = ctx
+	cmd.Log = log.G(ctx)
 	return cmd
 }
 
@@ -239,7 +241,14 @@ func (c *Cmd) Start() error {
 		go func() {
 			select {
 			case <-c.Context.Done():
-				_, _ = c.Process.Kill(context.TODO())
+				// Process.Kill (via Process.Signal) will not send an RPC if the
+				// provided context in is cancelled (bridge.AsyncRPC will end early)
+				ctx := c.Context
+				if ctx == nil {
+					ctx = context.Background()
+				}
+				kctx := log.Copy(context.Background(), ctx)
+				_, _ = c.Process.Kill(kctx)
 			case <-c.allDoneCh:
 			}
 		}()

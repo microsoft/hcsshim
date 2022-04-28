@@ -18,7 +18,7 @@ import (
 // CreateZeroSectorLinearTarget creates dm-linear target for a device at `devPath` and `mappingInfo`, returns
 // virtual block device path.
 func CreateZeroSectorLinearTarget(ctx context.Context, devPath, devName string, mappingInfo *guestresource.LCOWVPMemMappingInfo) (_ string, err error) {
-	_, span := trace.StartSpan(ctx, "devicemapper::CreateZeroSectorLinearTarget")
+	_, span := oc.StartSpan(ctx, "devicemapper::CreateZeroSectorLinearTarget")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
@@ -49,7 +49,7 @@ func CreateZeroSectorLinearTarget(ctx context.Context, devPath, devName string, 
 //     size   |  version    hash_dev         |     hash_offset
 //          target                       hash_block
 func CreateVerityTarget(ctx context.Context, devPath, devName string, verityInfo *guestresource.DeviceVerityInfo) (_ string, err error) {
-	_, span := trace.StartSpan(ctx, "devicemapper::CreateVerityTarget")
+	_, span := oc.StartSpan(ctx, "devicemapper::CreateVerityTarget")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 

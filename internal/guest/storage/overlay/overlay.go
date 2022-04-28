@@ -60,7 +60,7 @@ func processErrNoSpace(ctx context.Context, path string, err error) {
 // MountLayer first enforces the security policy for the container's layer paths
 // and then calls Mount to mount the layer paths as an overlayfs
 func MountLayer(ctx context.Context, layerPaths []string, upperdirPath, workdirPath, rootfsPath string, readonly bool, containerId string, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
-	_, span := trace.StartSpan(ctx, "overlay::MountLayer")
+	_, span := oc.StartSpan(ctx, "overlay::MountLayer")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
@@ -81,7 +81,7 @@ func MountLayer(ctx context.Context, layerPaths []string, upperdirPath, workdirP
 // Always creates `target`. On mount failure the created `target` will
 // be automatically cleaned up.
 func Mount(ctx context.Context, basePaths []string, upperdirPath, workdirPath, target string, readonly bool) (err error) {
-	_, span := trace.StartSpan(ctx, "overlay::Mount")
+	_, span := oc.StartSpan(ctx, "overlay::Mount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 

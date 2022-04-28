@@ -100,7 +100,7 @@ func mount(
 	verityInfo *guestresource.DeviceVerityInfo,
 	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
-	spnCtx, span := trace.StartSpan(ctx, "scsi::Mount")
+	spnCtx, span := oc.StartSpan(ctx, "scsi::Mount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
@@ -229,7 +229,7 @@ func unmount(
 	verityInfo *guestresource.DeviceVerityInfo,
 	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
-	ctx, span := trace.StartSpan(ctx, "scsi::Unmount")
+	ctx, span := oc.StartSpan(ctx, "scsi::Unmount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
@@ -285,7 +285,7 @@ func Unmount(
 // ControllerLunToName finds the `/dev/sd*` path to the SCSI device on
 // `controller` index `lun`.
 func ControllerLunToName(ctx context.Context, controller, lun uint8) (_ string, err error) {
-	ctx, span := trace.StartSpan(ctx, "scsi::ControllerLunToName")
+	ctx, span := oc.StartSpan(ctx, "scsi::ControllerLunToName")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
@@ -329,7 +329,7 @@ func ControllerLunToName(ctx context.Context, controller, lun uint8) (_ string, 
 //
 // If the device is not attached returns no error.
 func unplugDevice(ctx context.Context, controller, lun uint8) (err error) {
-	_, span := trace.StartSpan(ctx, "scsi::UnplugDevice")
+	_, span := oc.StartSpan(ctx, "scsi::UnplugDevice")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 

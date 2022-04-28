@@ -707,7 +707,7 @@ func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcs
 // consumes a set of options derived from various defaults and options
 // expressed as annotations.
 func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error) {
-	ctx, span := trace.StartSpan(ctx, "uvm::CreateLCOW")
+	ctx, span := oc.StartSpan(ctx, "uvm::CreateLCOW")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 

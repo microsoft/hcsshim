@@ -18,7 +18,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
-	"go.opencensus.io/trace"
 )
 
 // LimitedRead reads at max `readLimitBytes` bytes from the file at path `filePath`. If the file has
@@ -56,7 +55,7 @@ The delete command will be executed in the container's bundle as its cwd.
 		// task.DeleteResponse by protocol. We can write to stderr which will be
 		// logged as a warning in containerd.
 
-		ctx, span := trace.StartSpan(gcontext.Background(), "delete")
+		ctx, span := oc.StartSpan(gcontext.Background(), "delete")
 		defer span.End()
 		defer func() { oc.SetSpanStatus(span, err) }()
 

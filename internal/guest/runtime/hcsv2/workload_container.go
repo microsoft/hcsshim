@@ -98,7 +98,7 @@ func specHasGPUDevice(spec *oci.Spec) bool {
 }
 
 func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.Spec) (err error) {
-	ctx, span := trace.StartSpan(ctx, "hcsv2::setupWorkloadContainerSpec")
+	ctx, span := oc.StartSpan(ctx, "hcsv2::setupWorkloadContainerSpec")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(

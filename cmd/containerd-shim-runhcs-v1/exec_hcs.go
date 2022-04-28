@@ -20,6 +20,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/signals"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -416,13 +417,15 @@ func (he *hcsExec) exitFromCreatedL(ctx context.Context, status int) {
 //
 // 7. Finally, save the UVM and this container as a template if specified.
 func (he *hcsExec) waitForExit() {
-	ctx, span := trace.StartSpan(context.Background(), "hcsExec::waitForExit")
+	var err error // this will only save the last error, since we dont return early on error
+	ctx, span := oc.StartSpan(context.Background(), "hcsExec::waitForExit")
 	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
 		trace.StringAttribute("tid", he.tid),
 		trace.StringAttribute("eid", he.id))
 
-	err := he.p.Process.Wait()
+	err = he.p.Process.Wait()
 	if err != nil {
 		log.G(ctx).WithError(err).Error("failed process Wait")
 	}
@@ -478,7 +481,7 @@ func (he *hcsExec) waitForExit() {
 //
 // This MUST be called via a goroutine at exec create.
 func (he *hcsExec) waitForContainerExit() {
-	ctx, span := trace.StartSpan(context.Background(), "hcsExec::waitForContainerExit")
+	ctx, span := oc.StartSpan(context.Background(), "hcsExec::waitForContainerExit")
 	defer span.End()
 	span.AddAttributes(
 		trace.StringAttribute("tid", he.tid),
