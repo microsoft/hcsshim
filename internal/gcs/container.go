@@ -8,15 +8,16 @@ import (
 	"sync"
 	"time"
 
+	"go.opencensus.io/trace"
+	"golang.org/x/sys/windows"
+
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/errdefs"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"go.opencensus.io/trace"
 )
-
-const hrComputeSystemDoesNotExist = 0xc037010e
 
 // Container implements the cow.Container interface for containers
 // created via GuestConnection.
@@ -184,7 +185,7 @@ func (c *Container) shutdown(ctx context.Context, proc rpcProc) error {
 	var resp responseBase
 	err := c.gc.brdg.RPC(ctx, proc, &req, &resp, true)
 	if err != nil {
-		if uint32(resp.Result) != hrComputeSystemDoesNotExist {
+		if windows.Errno(resp.Result) != errdefs.ErrComputeSystemDoesNotExist {
 			return err
 		}
 		select {

@@ -24,7 +24,7 @@ import (
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/cow"
-	"github.com/Microsoft/hcsshim/internal/hcs"
+	hcserrdefs "github.com/Microsoft/hcsshim/internal/errdefs"
 	"github.com/Microsoft/hcsshim/internal/hcs/resourcepaths"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -608,7 +608,7 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, tim
 		select {
 		case <-time.After(30 * time.Second):
 			log.G(ctx).Error("timed out waiting for resource cleanup")
-			return 0, 0, time.Time{}, errors.Wrap(hcs.ErrTimeout, "waiting for container resource cleanup")
+			return 0, 0, time.Time{}, errors.Wrap(hcserrdefs.ErrTimeout, "waiting for container resource cleanup")
 		case <-ht.closed:
 		}
 
@@ -788,7 +788,7 @@ func (ht *hcsTask) close(ctx context.Context) {
 						log.G(ctx).WithError(err).Error("failed to wait for container shutdown")
 					}
 				case <-t.C:
-					log.G(ctx).WithError(hcs.ErrTimeout).Error("failed to wait for container shutdown")
+					log.G(ctx).WithError(hcserrdefs.ErrTimeout).Error("failed to wait for container shutdown")
 				}
 			}
 
@@ -806,7 +806,7 @@ func (ht *hcsTask) close(ctx context.Context) {
 							log.G(ctx).WithError(err).Error("failed to wait for container terminate")
 						}
 					case <-t.C:
-						log.G(ctx).WithError(hcs.ErrTimeout).Error("failed to wait for container terminate")
+						log.G(ctx).WithError(hcserrdefs.ErrTimeout).Error("failed to wait for container terminate")
 					}
 				}
 			}

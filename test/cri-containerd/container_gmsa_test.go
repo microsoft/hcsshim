@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/errdefs"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
@@ -169,7 +169,7 @@ func Test_RunContainer_GMSA_Disabled(t *testing.T) {
 			//  so error.Is() wont work
 			if !strings.Contains(
 				err.Error(),
-				fmt.Errorf("gMSA credentials are disabled: %w", hcs.ErrOperationDenied).Error(),
+				fmt.Errorf("gMSA credentials are disabled: %w", errdefs.ErrOperationDenied).Error(),
 			) {
 				t.Fatalf("StartContainer did not fail with gMSA credentials: error is %q", err)
 			}

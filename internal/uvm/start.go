@@ -7,17 +7,18 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
-	"os"
-	"syscall"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sys/windows"
 
+	"github.com/Microsoft/hcsshim/internal/errdefs"
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -76,12 +77,7 @@ func (e *gcsLogEntry) UnmarshalJSON(b []byte) error {
 }
 
 func isDisconnectError(err error) bool {
-	if o, ok := err.(*net.OpError); ok {
-		if s, ok := o.Err.(*os.SyscallError); ok {
-			return s.Err == syscall.WSAECONNABORTED || s.Err == syscall.WSAECONNRESET
-		}
-	}
-	return false
+	return errdefs.IsAny(err, windows.WSAECONNABORTED, windows.WSAECONNRESET)
 }
 
 func parseLogrus(vmid string) func(r io.Reader) {
@@ -98,7 +94,7 @@ func parseLogrus(vmid string) func(r io.Reader) {
 			if err != nil {
 				// Something went wrong. Read the rest of the data as a single
 				// string and log it at once -- it's probably a GCS panic stack.
-				if err != io.EOF && !isDisconnectError(err) {
+				if errors.Is(err, io.EOF) && !isDisconnectError(err) {
 					logrus.WithFields(logrus.Fields{
 						logfields.UVMID: vmid,
 						logrus.ErrorKey: err,

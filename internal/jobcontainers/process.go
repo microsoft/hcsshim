@@ -14,8 +14,8 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/conpty"
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/errdefs"
 	"github.com/Microsoft/hcsshim/internal/exec"
-	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/winapi"
@@ -74,7 +74,7 @@ func (p *JobProcess) Signal(ctx context.Context, options interface{}) (bool, err
 	defer p.procLock.Unlock()
 
 	if p.exited() {
-		return false, fmt.Errorf("signal not sent. process has already exited: %w", hcs.ErrProcessAlreadyStopped)
+		return false, fmt.Errorf("signal not sent. process has already exited: %w", errdefs.ErrProcessAlreadyStopped)
 	}
 
 	// If options is nil it's assumed we got a sigterm
@@ -96,9 +96,9 @@ func (p *JobProcess) Signal(ctx context.Context, options interface{}) (bool, err
 	}
 
 	if err := signalProcess(uint32(p.cmd.Pid()), signal); err != nil {
-		if errors.Is(err, os.ErrPermission) || hcs.IsAlreadyStopped(err) {
+		if errors.Is(err, os.ErrPermission) || errdefs.IsAlreadyStopped(err) {
 			// The process we are signaling has stopped. Return a proper error that signals this condition.
-			return false, fmt.Errorf("failed to send signal: %w", hcs.ErrProcessAlreadyStopped)
+			return false, fmt.Errorf("failed to send signal: %w", errdefs.ErrProcessAlreadyStopped)
 		}
 		return false, errors.Wrap(err, "failed to send signal")
 	}
@@ -219,7 +219,7 @@ func (p *JobProcess) Close() error {
 	p.stdioLock.Unlock()
 
 	p.closedWaitOnce.Do(func() {
-		p.waitError = hcs.ErrAlreadyClosed
+		p.waitError = errdefs.ErrAlreadyClosed
 		close(p.waitBlock)
 	})
 	return nil

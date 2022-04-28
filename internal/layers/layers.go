@@ -15,8 +15,8 @@ import (
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/guestpath"
+	hcserror "github.com/Microsoft/hcsshim/internal/hcs/errors/legacy"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/hcserror"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/ospath"
 	"github.com/Microsoft/hcsshim/internal/uvm"

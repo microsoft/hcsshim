@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/errdefs"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/vmcompute"
@@ -87,10 +88,10 @@ func (process *Process) SystemID() string {
 }
 
 func (process *Process) processSignalResult(ctx context.Context, err error) (bool, error) {
-	switch err {
-	case nil:
+	switch {
+	case err == nil:
 		return true, nil
-	case ErrVmcomputeOperationInvalidState, ErrComputeSystemDoesNotExist, ErrElementNotFound:
+	case errdefs.IsAny(errdefs.ErrVmcomputeOperationInvalidState, errdefs.ErrComputeSystemDoesNotExist, errdefs.ErrElementNotFound):
 		select {
 		case <-process.waitBlock:
 			// The process exit notification has already arrived.
@@ -126,7 +127,7 @@ func (process *Process) Signal(ctx context.Context, options interface{}) (bool, 
 	operation := "hcs::Process::Signal"
 
 	if process.handle == 0 {
-		return false, makeProcessError(process, operation, ErrAlreadyClosed, nil)
+		return false, makeProcessError(process, operation, errdefs.ErrAlreadyClosed, nil)
 	}
 
 	optionsb, err := json.Marshal(options)
@@ -151,7 +152,7 @@ func (process *Process) Kill(ctx context.Context) (bool, error) {
 	operation := "hcs::Process::Kill"
 
 	if process.handle == 0 {
-		return false, makeProcessError(process, operation, ErrAlreadyClosed, nil)
+		return false, makeProcessError(process, operation, errdefs.ErrAlreadyClosed, nil)
 	}
 
 	if process.killSignalDelivered {
@@ -167,7 +168,7 @@ func (process *Process) Kill(ctx context.Context) (bool, error) {
 	if err != nil {
 		// We still need to check these two cases, as processes may still be killed by an
 		// external actor (human operator, OOM, random script etc).
-		if errors.Is(err, os.ErrPermission) || IsAlreadyStopped(err) {
+		if errors.Is(err, os.ErrPermission) || errdefs.IsAlreadyStopped(err) {
 			// There are two cases where it should be safe to ignore an error returned
 			// by HcsTerminateProcess. The first one is cause by the fact that
 			// HcsTerminateProcess ends up calling TerminateProcess in the context
@@ -270,7 +271,7 @@ func (process *Process) ResizeConsole(ctx context.Context, width, height uint16)
 	operation := "hcs::Process::ResizeConsole"
 
 	if process.handle == 0 {
-		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
+		return makeProcessError(process, operation, errdefs.ErrAlreadyClosed, nil)
 	}
 
 	modifyRequest := processModifyRequest{
@@ -305,7 +306,7 @@ func (process *Process) ExitCode() (int, error) {
 		}
 		return process.exitCode, nil
 	default:
-		return -1, makeProcessError(process, "hcs::Process::ExitCode", ErrInvalidProcessState, nil)
+		return -1, makeProcessError(process, "hcs::Process::ExitCode", errdefs.ErrInvalidProcessState, nil)
 	}
 }
 
@@ -325,7 +326,7 @@ func (process *Process) StdioLegacy() (_ io.WriteCloser, _ io.ReadCloser, _ io.R
 	defer process.handleLock.RUnlock()
 
 	if process.handle == 0 {
-		return nil, nil, nil, makeProcessError(process, operation, ErrAlreadyClosed, nil)
+		return nil, nil, nil, makeProcessError(process, operation, errdefs.ErrAlreadyClosed, nil)
 	}
 
 	process.stdioLock.Lock()
@@ -368,7 +369,7 @@ func (process *Process) CloseStdin(ctx context.Context) error {
 	operation := "hcs::Process::CloseStdin"
 
 	if process.handle == 0 {
-		return makeProcessError(process, operation, ErrAlreadyClosed, nil)
+		return makeProcessError(process, operation, errdefs.ErrAlreadyClosed, nil)
 	}
 
 	modifyRequest := processModifyRequest{
@@ -492,7 +493,7 @@ func (process *Process) Close() (err error) {
 	process.handle = 0
 	process.closedWaitOnce.Do(func() {
 		process.exitCode = -1
-		process.waitError = ErrAlreadyClosed
+		process.waitError = errdefs.ErrAlreadyClosed
 		close(process.waitBlock)
 	})
 

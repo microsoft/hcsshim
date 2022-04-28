@@ -9,7 +9,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/errdefs"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
 	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
@@ -67,8 +67,8 @@ func TestVSMB_Writable(t *testing.T) {
 		}
 	}()
 
-	if !errors.Is(err, hcs.ErrOperationDenied) {
-		t.Fatalf("AddVSMB should have failed with %v instead of: %v", hcs.ErrOperationDenied, err)
+	if !errors.Is(err, errdefs.ErrOperationDenied) {
+		t.Fatalf("AddVSMB should have failed with %v instead of: %v", errdefs.ErrOperationDenied, err)
 	}
 
 	options.ReadOnly = true

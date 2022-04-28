@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/Microsoft/hcsshim/internal/hcserror"
+	hcserror "github.com/Microsoft/hcsshim/internal/hcs/errors/legacy"
 	"github.com/Microsoft/hcsshim/internal/interop"
 	"github.com/sirupsen/logrus"
 )

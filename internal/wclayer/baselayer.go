@@ -10,7 +10,7 @@ import (
 	"syscall"
 
 	"github.com/Microsoft/go-winio"
-	"github.com/Microsoft/hcsshim/internal/hcserror"
+	hcserror "github.com/Microsoft/hcsshim/internal/hcs/errors/legacy"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/safefile"
 	"github.com/Microsoft/hcsshim/internal/winapi"

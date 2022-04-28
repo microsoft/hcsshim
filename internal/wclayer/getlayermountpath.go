@@ -6,7 +6,7 @@ import (
 	"context"
 	"syscall"
 
-	"github.com/Microsoft/hcsshim/internal/hcserror"
+	hcserror "github.com/Microsoft/hcsshim/internal/hcs/errors/legacy"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"go.opencensus.io/trace"
