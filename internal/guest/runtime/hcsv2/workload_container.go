@@ -16,6 +16,7 @@ import (
 
 	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
+	"github.com/Microsoft/hcsshim/internal/hooks"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
@@ -152,14 +153,16 @@ func setupWorkloadContainerSpec(ctx context.Context, sbid, id string, spec *oci.
 	spec.Linux.CgroupsPath = "/containers/" + id
 
 	if spec.Windows != nil {
+		// we only support Nvidia gpus right now
 		if specHasGPUDevice(spec) {
-			// we only support Nvidia gpus right now
-			ldConfigargs := []string{"-l", "/run/nvidia/lib"}
-			env := updateEnvWithNvidiaVariables()
-			if err := addLDConfigHook(ctx, spec, ldConfigargs, env); err != nil {
+			// run ldconfig as a `CreateRuntime` hook so that it's executed in the runtime namespace. This is
+			// necessary so that when we execute the nvidia hook to assign the device, the runtime can
+			// find the nvidia library files.
+			ldconfigHook := hooks.NewOCIHook("/sbin/ldconfig", []string{getNvidiaDriversUsrLibPath()}, os.Environ())
+			if err := hooks.AddOCIHook(spec, hooks.CreateRuntime, ldconfigHook); err != nil {
 				return err
 			}
-			if err := addNvidiaDevicePreHook(ctx, spec); err != nil {
+			if err := addNvidiaDeviceHook(ctx, spec); err != nil {
 				return err
 			}
 		}

@@ -14,7 +14,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/Microsoft/hcsshim/internal/devices"
-	"github.com/Microsoft/hcsshim/internal/guestpath"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
@@ -216,29 +215,21 @@ func handleAssignedDevicesLCOW(
 		if err != nil {
 			return resultDevs, closers, errors.Wrapf(err, "failed to add gpu vhd to %v", vm.ID())
 		}
-		// use lcowNvidiaMountPath since we only support nvidia gpus right now
-		// must use scsi here since DDA'ing a hyper-v pci device is not supported on VMs that have ANY virtual memory
 		// gpuvhd must be granted VM Group access.
-		options := []string{"ro"}
-		scsiMount, err := vm.AddSCSI(
-			ctx,
-			gpuSupportVhdPath,
-			guestpath.LCOWNvidiaMountPath,
-			true,
-			false,
-			options,
-			uvm.VMAccessTypeNoop,
-		)
+		driverCloser, err := devices.InstallDrivers(ctx, vm, gpuSupportVhdPath, true)
 		if err != nil {
-			return resultDevs, closers, errors.Wrapf(err, "failed to add scsi device %s in the UVM %s at %s", gpuSupportVhdPath, vm.ID(), guestpath.LCOWNvidiaMountPath)
+			return resultDevs, closers, err
 		}
-		closers = append(closers, scsiMount)
+		if driverCloser != nil {
+			closers = append(closers, driverCloser)
+		}
 	}
 
 	return resultDevs, closers, nil
 }
 
-func installPodDrivers(ctx context.Context, vm *uvm.UtilityVM, annotations map[string]string) (closers []resources.ResourceCloser, err error) {
+// addSpecGuestDrivers is a helper function to install kernel drivers specified on a spec into the guest
+func addSpecGuestDrivers(ctx context.Context, vm *uvm.UtilityVM, annotations map[string]string) (closers []resources.ResourceCloser, err error) {
 	defer func() {
 		if err != nil {
 			// best effort clean up allocated resources on failure
@@ -256,11 +247,13 @@ func installPodDrivers(ctx context.Context, vm *uvm.UtilityVM, annotations map[s
 		return closers, err
 	}
 	for _, d := range drivers {
-		driverCloser, err := devices.InstallKernelDriver(ctx, vm, d)
+		driverCloser, err := devices.InstallDrivers(ctx, vm, d, false)
 		if err != nil {
 			return closers, err
 		}
-		closers = append(closers, driverCloser)
+		if driverCloser != nil {
+			closers = append(closers, driverCloser)
+		}
 	}
 	return closers, err
 }

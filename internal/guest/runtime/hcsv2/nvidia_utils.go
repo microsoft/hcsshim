@@ -24,10 +24,9 @@ const nvidiaDebugFilePath = "/nvidia-container.log"
 
 const nvidiaToolBinary = "nvidia-container-cli"
 
-// TODO katiewasnothere: prestart hooks will be depracated, this needs to be moved to a createRuntime hook
 // described here: https://github.com/opencontainers/runtime-spec/blob/39c287c415bf86fb5b7506528d471db5405f8ca8/config.md#posix-platform-hooks
-// addNvidiaDevicePreHook builds the arguments for nvidia-container-cli and creates the prestart hook
-func addNvidiaDevicePreHook(ctx context.Context, spec *oci.Spec) error {
+// addNvidiaDeviceHook builds the arguments for nvidia-container-cli and creates the prestart hook
+func addNvidiaDeviceHook(ctx context.Context, spec *oci.Spec) error {
 	genericHookBinary := "generichook"
 	genericHookPath, err := exec.LookPath(genericHookBinary)
 	if err != nil {
@@ -72,13 +71,27 @@ func addNvidiaDevicePreHook(ctx context.Context, spec *oci.Spec) error {
 	hookLogDebugFileEnvOpt := fmt.Sprintf("%s=%s", generichook.LogDebugFileEnvKey, nvidiaDebugFilePath)
 	hookEnv := append(updateEnvWithNvidiaVariables(), hookLogDebugFileEnvOpt)
 	nvidiaHook := hooks.NewOCIHook(genericHookPath, args, hookEnv)
-	return hooks.AddOCIHook(spec, hooks.Prestart, nvidiaHook)
+	return hooks.AddOCIHook(spec, hooks.CreateRuntime, nvidiaHook)
+}
+
+// Helper function to find the usr/lib path for the installed nvidia library files.
+// This function assumes that the drivers have been installed using
+// gcstool's `install-drivers` binary.
+func getNvidiaDriversUsrLibPath() string {
+	return fmt.Sprintf("%s/content/usr/lib", guestpath.LCOWNvidiaMountPath)
+
+}
+
+// Helper function to find the usr/bin path for the installed nvidia tools.
+// This function assumes that the drivers have been installed using
+// gcstool's `install-drivers` binary.
+func getNvidiaDriverUsrBinPath() string {
+	return fmt.Sprintf("%s/content/usr/bin", guestpath.LCOWNvidiaMountPath)
 }
 
 // updateEnvWithNvidiaVariables creates an env with the nvidia gpu vhd in PATH and insecure mode set
 func updateEnvWithNvidiaVariables() []string {
-	nvidiaBin := fmt.Sprintf("%s/bin", guestpath.LCOWNvidiaMountPath)
-	env := updatePathEnv(nvidiaBin)
+	env := updatePathEnv(getNvidiaDriverUsrBinPath())
 	// NVC_INSECURE_MODE allows us to run nvidia-container-cli without seccomp
 	// we don't currently use seccomp in the uvm, so avoid using it here for now as well
 	env = append(env, "NVC_INSECURE_MODE=1")
