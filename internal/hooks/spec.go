@@ -25,13 +25,6 @@ const (
 	// CreateRuntime is called immediately after the deprecated Prestart hook.
 	// CreateRuntime commands are called in the Runtime Namespace.
 	CreateRuntime HookName = "createRuntime"
-
-	// StartContainer hooks MUST be called before the user-specified process is executed as
-	// part of the start operation. This hook can be used to execute some operations in the
-	// container, for example running the ldconfig binary on linux before the container process
-	// is spawned. The StartContainer hooks' path MUST resolve in the container namespace.
-	// The StartContainer hooks MUST be executed in the container namespace.
-	StartContainer HookName = "startContainer"
 )
 
 // NewOCIHook creates a new oci.Hook with given parameters
@@ -53,8 +46,6 @@ func AddOCIHook(spec *oci.Spec, hn HookName, hk oci.Hook) error {
 		spec.Hooks.Prestart = append(spec.Hooks.Prestart, hk)
 	case CreateRuntime:
 		spec.Hooks.CreateRuntime = append(spec.Hooks.CreateRuntime, hk)
-	case StartContainer:
-		spec.Hooks.StartContainer = append(spec.Hooks.StartContainer, hk)
 	default:
 		return fmt.Errorf("hook %q is not supported", hn)
 	}
