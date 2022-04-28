@@ -12,9 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -71,9 +69,7 @@ type bridge struct {
 	waitCh  chan struct{}
 }
 
-var (
-	errBridgeClosed = errors.New("bridge closed")
-)
+var errBridgeClosed = fmt.Errorf("bridge closed: %w", net.ErrClosed)
 
 const (
 	// bridgeFailureTimeout is the default value for bridge.Timeout
@@ -186,13 +182,8 @@ func (err *rpcError) Error() string {
 	return "guest RPC failure: " + msg
 }
 
-// IsNotExist is a helper function to determine if the inner rpc error is Not Exist
-func IsNotExist(err error) bool {
-	switch rerr := err.(type) {
-	case *rpcError:
-		return uint32(rerr.result) == hrComputeSystemDoesNotExist
-	}
-	return false
+func (err *rpcError) Unwrap() error {
+	return windows.Errno(err.result)
 }
 
 // Err returns the RPC's result. This may be a transport error or an error from
@@ -291,12 +282,7 @@ func readMessage(r io.Reader) (int64, msgType, []byte, error) {
 }
 
 func isLocalDisconnectError(err error) bool {
-	if o, ok := err.(*net.OpError); ok {
-		if s, ok := o.Err.(*os.SyscallError); ok {
-			return s.Err == syscall.WSAECONNABORTED
-		}
-	}
-	return false
+	return errors.Is(err, windows.WSAECONNABORTED)
 }
 
 func (brdg *bridge) recvLoop() error {
