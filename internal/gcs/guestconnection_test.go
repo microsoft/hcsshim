@@ -20,6 +20,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/tracestate"
+
+	prot "github.com/Microsoft/hcsshim/internal/protocol/bridge"
 )
 
 const pipePortFmt = `\\.\pipe\gctest-port-%d`
@@ -51,9 +53,9 @@ func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
 			}
 			return err
 		}
-		switch proc := hdr.msgID(); proc {
-		case rpcNegotiateProtocol:
-			err := sendJSON(t, rw, newMsgIdentifier(msgTypeResponse, proc), id, &negotiateProtocolResponse{
+		switch proc := hdr.ID(); proc {
+		case prot.RPCNegotiateProtocol:
+			err := sendJSON(t, rw, prot.NewIdentifier(prot.TypeResponse, proc), id, &negotiateProtocolResponse{
 				Version: protocolVersion,
 				Capabilities: gcsCapabilities{
 					RuntimeOsType: "linux",
@@ -62,12 +64,12 @@ func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
 			if err != nil {
 				return err
 			}
-		case rpcCreate:
-			err := sendJSON(t, rw, newMsgIdentifier(msgTypeResponse, proc), id, &containerCreateResponse{})
+		case prot.RPCCreate:
+			err := sendJSON(t, rw, prot.NewIdentifier(prot.TypeResponse, proc), id, &containerCreateResponse{})
 			if err != nil {
 				return err
 			}
-		case rpcExecuteProcess:
+		case prot.RPCExecuteProcess:
 			var req containerExecuteProcess
 			var params baseProcessParams
 			req.Settings.ProcessParameters.Value = &params
@@ -107,26 +109,26 @@ func simpleGcsLoop(t *testing.T, rw io.ReadWriter) error {
 					stdout.Close()
 				}()
 			}
-			err = sendJSON(t, rw, newMsgIdentifier(msgTypeResponse, proc), id, &containerExecuteProcessResponse{
+			err = sendJSON(t, rw, prot.NewIdentifier(prot.TypeResponse, proc), id, &containerExecuteProcessResponse{
 				ProcessID: 42,
 			})
 			if err != nil {
 				return err
 			}
-		case rpcWaitForProcess:
+		case prot.RPCWaitForProcess:
 			// nothing
-		case rpcShutdownForced:
+		case prot.RPCShutdownForced:
 			var req requestBase
 			err = json.Unmarshal(b, &req)
 			if err != nil {
 				return err
 			}
-			err = sendJSON(t, rw, newMsgIdentifier(msgTypeResponse, proc), id, &responseBase{})
+			err = sendJSON(t, rw, prot.NewIdentifier(prot.TypeResponse, proc), id, &responseBase{})
 			if err != nil {
 				return err
 			}
 			time.Sleep(50 * time.Millisecond)
-			err = sendJSON(t, rw, newMsgIdentifier(msgTypeNotify, notifyContainer), 0, &containerNotification{
+			err = sendJSON(t, rw, prot.NewIdentifier(prot.TypeNotify, prot.NotifyContainer), 0, &containerNotification{
 				requestBase: requestBase{
 					ContainerID: req.ContainerID,
 				},

@@ -17,6 +17,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
+
+	prot "github.com/Microsoft/hcsshim/internal/protocol/bridge"
 )
 
 const (
@@ -101,7 +103,7 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 	}
 
 	var resp containerExecuteProcessResponse
-	err = gc.brdg.RPC(ctx, rpcExecuteProcess, &req, &resp, false)
+	err = gc.brdg.RPC(ctx, prot.RPCExecuteProcess, &req, &resp, false)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +115,7 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 		ProcessID:   p.id,
 		TimeoutInMs: 0xffffffff,
 	}
-	p.waitCall, err = gc.brdg.AsyncRPC(ctx, rpcWaitForProcess, &waitReq, &p.waitResp)
+	p.waitCall, err = gc.brdg.AsyncRPC(ctx, prot.RPCWaitForProcess, &waitReq, &p.waitResp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait on process, leaking process: %s", err)
 	}
@@ -227,7 +229,7 @@ func (p *Process) ResizeConsole(ctx context.Context, width, height uint16) (err 
 		Width:       width,
 	}
 	var resp responseBase
-	return p.gc.brdg.RPC(ctx, rpcResizeConsole, &req, &resp, true)
+	return p.gc.brdg.RPC(ctx, prot.RPCResizeConsole, &req, &resp, true)
 }
 
 // Signal sends a signal to the process, returning whether it was delivered.
@@ -247,7 +249,7 @@ func (p *Process) Signal(ctx context.Context, options interface{}) (_ bool, err 
 	var resp responseBase
 	// FUTURE: SIGKILL is idempotent and can safely be cancelled, but this interface
 	//		   does currently make it easy to determine what signal is being sent.
-	err = p.gc.brdg.RPC(ctx, rpcSignalProcess, &req, &resp, false)
+	err = p.gc.brdg.RPC(ctx, prot.RPCSignalProcess, &req, &resp, false)
 	if err != nil {
 		if uint32(resp.Result) != hrNotFound {
 			return false, err

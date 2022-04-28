@@ -8,12 +8,14 @@ import (
 	"sync"
 	"time"
 
+	"go.opencensus.io/trace"
+
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"go.opencensus.io/trace"
+	prot "github.com/Microsoft/hcsshim/internal/protocol/bridge"
 )
 
 const hrComputeSystemDoesNotExist = 0xc037010e
@@ -53,7 +55,7 @@ func (gc *GuestConnection) CreateContainer(ctx context.Context, cid string, conf
 		ContainerConfig: anyInString{config},
 	}
 	var resp containerCreateResponse
-	err = gc.brdg.RPC(ctx, rpcCreate, &req, &resp, false)
+	err = gc.brdg.RPC(ctx, prot.RPCCreate, &req, &resp, false)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +128,7 @@ func (c *Container) Modify(ctx context.Context, config interface{}) (err error) 
 		Request:     config,
 	}
 	var resp responseBase
-	return c.gc.brdg.RPC(ctx, rpcModifySettings, &req, &resp, false)
+	return c.gc.brdg.RPC(ctx, prot.RPCModifySettings, &req, &resp, false)
 }
 
 // Properties returns the requested container properties targeting a V1 schema container.
@@ -141,7 +143,7 @@ func (c *Container) Properties(ctx context.Context, types ...schema1.PropertyTyp
 		Query:       containerPropertiesQuery{PropertyTypes: types},
 	}
 	var resp containerGetPropertiesResponse
-	err = c.gc.brdg.RPC(ctx, rpcGetProperties, &req, &resp, true)
+	err = c.gc.brdg.RPC(ctx, prot.RPCGetProperties, &req, &resp, true)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +162,7 @@ func (c *Container) PropertiesV2(ctx context.Context, types ...hcsschema.Propert
 		Query:       containerPropertiesQueryV2{PropertyTypes: types},
 	}
 	var resp containerGetPropertiesResponseV2
-	err = c.gc.brdg.RPC(ctx, rpcGetProperties, &req, &resp, true)
+	err = c.gc.brdg.RPC(ctx, prot.RPCGetProperties, &req, &resp, true)
 	if err != nil {
 		return nil, err
 	}
@@ -176,10 +178,10 @@ func (c *Container) Start(ctx context.Context) (err error) {
 
 	req := makeRequest(ctx, c.id)
 	var resp responseBase
-	return c.gc.brdg.RPC(ctx, rpcStart, &req, &resp, false)
+	return c.gc.brdg.RPC(ctx, prot.RPCStart, &req, &resp, false)
 }
 
-func (c *Container) shutdown(ctx context.Context, proc msgID) error {
+func (c *Container) shutdown(ctx context.Context, proc prot.ID) error {
 	req := makeRequest(ctx, c.id)
 	var resp responseBase
 	err := c.gc.brdg.RPC(ctx, proc, &req, &resp, true)
@@ -207,7 +209,7 @@ func (c *Container) Shutdown(ctx context.Context) (err error) {
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	return c.shutdown(ctx, rpcShutdownGraceful)
+	return c.shutdown(ctx, prot.RPCShutdownGraceful)
 }
 
 // Terminate sends a forceful terminate request to the container. The container
@@ -221,7 +223,7 @@ func (c *Container) Terminate(ctx context.Context) (err error) {
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	return c.shutdown(ctx, rpcShutdownForced)
+	return c.shutdown(ctx, prot.RPCShutdownForced)
 }
 
 // Wait waits for the container to terminate (or Close to be called, or the

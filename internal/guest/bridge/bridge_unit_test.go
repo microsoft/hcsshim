@@ -13,11 +13,13 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
+	"github.com/Microsoft/hcsshim/internal/protocol/bridge"
 )
 
 func Test_Bridge_Mux_New(t *testing.T) {
@@ -192,10 +194,10 @@ func Test_Bridge_Mux_Handler_NotAdded_Default(t *testing.T) {
 	m := NewBridgeMux()
 
 	req := &Request{
-		Header: &prot.MessageHeader{
+		Header: &bridge.MessageHeader{
 			Type: prot.ComputeSystemCreateV1,
 			Size: 0,
-			ID:   prot.SequenceID(1),
+			ID:   bridge.SequenceID(1),
 		},
 	}
 
@@ -221,10 +223,10 @@ func Test_Bridge_Mux_Handler_Added_NotMatched(t *testing.T) {
 	m.Handle(prot.ComputeSystemCreateV1, prot.PvInvalid, th)
 
 	req := &Request{
-		Header: &prot.MessageHeader{
+		Header: &bridge.MessageHeader{
 			Type: prot.ComputeSystemExecuteProcessV1,
 			Size: 0,
-			ID:   prot.SequenceID(1),
+			ID:   bridge.SequenceID(1),
 		},
 	}
 
@@ -254,10 +256,10 @@ func Test_Bridge_Mux_Handler_Success(t *testing.T) {
 	m.Handle(prot.ComputeSystemCreateV1, prot.PvInvalid, th)
 
 	req := &Request{
-		Header: &prot.MessageHeader{
+		Header: &bridge.MessageHeader{
 			Type: prot.ComputeSystemCreateV1,
 			Size: 0,
-			ID:   prot.SequenceID(1),
+			ID:   bridge.SequenceID(1),
 		},
 	}
 
@@ -284,10 +286,10 @@ func Test_Bridge_Mux_ServeMsg_NotAdded_Default(t *testing.T) {
 	m := NewBridgeMux()
 
 	req := &Request{
-		Header: &prot.MessageHeader{
+		Header: &bridge.MessageHeader{
 			Type: prot.ComputeSystemCreateV1,
 			Size: 0,
-			ID:   prot.SequenceID(1),
+			ID:   bridge.SequenceID(1),
 		},
 	}
 
@@ -315,10 +317,10 @@ func Test_Bridge_Mux_ServeMsg_Added_NotMatched(t *testing.T) {
 	m.Handle(prot.ComputeSystemCreateV1, prot.PvInvalid, th)
 
 	req := &Request{
-		Header: &prot.MessageHeader{
+		Header: &bridge.MessageHeader{
 			Type: prot.ComputeSystemExecuteProcessV1,
 			Size: 0,
-			ID:   prot.SequenceID(1),
+			ID:   bridge.SequenceID(1),
 		},
 	}
 
@@ -347,10 +349,10 @@ func Test_Bridge_Mux_ServeMsg_Success(t *testing.T) {
 	m.Handle(prot.ComputeSystemCreateV1, prot.PvInvalid, th)
 
 	req := &Request{
-		Header: &prot.MessageHeader{
+		Header: &bridge.MessageHeader{
 			Type: prot.ComputeSystemCreateV1,
 			Size: 0,
-			ID:   prot.SequenceID(1),
+			ID:   bridge.SequenceID(1),
 		},
 	}
 
@@ -377,7 +379,7 @@ func (e *errorTransport) Dial(_ uint32) (transport.Connection, error) {
 	return nil, e.e
 }
 
-func serverSend(conn io.Writer, messageType prot.MessageIdentifier, messageID prot.SequenceID, i interface{}) error {
+func serverSend(conn io.Writer, messageType bridge.MessageIdentifier, messageID bridge.SequenceID, i interface{}) error {
 	body := make([]byte, 0)
 	if i != nil {
 		var err error
@@ -387,10 +389,10 @@ func serverSend(conn io.Writer, messageType prot.MessageIdentifier, messageID pr
 		}
 	}
 
-	header := prot.MessageHeader{
+	header := bridge.MessageHeader{
 		Type: messageType,
 		ID:   messageID,
-		Size: uint32(len(body) + prot.MessageHeaderSize),
+		Size: uint32(len(body) + bridge.MessageHeaderSize),
 	}
 
 	// Send the header.
@@ -404,13 +406,13 @@ func serverSend(conn io.Writer, messageType prot.MessageIdentifier, messageID pr
 	return nil
 }
 
-func serverRead(conn io.Reader) (*prot.MessageHeader, []byte, error) {
-	header := &prot.MessageHeader{}
+func serverRead(conn io.Reader) (*bridge.MessageHeader, []byte, error) {
+	header := &bridge.MessageHeader{}
 	// Read the header.
 	if err := binary.Read(conn, binary.LittleEndian, header); err != nil {
 		return nil, nil, errors.Wrap(err, "bridge_test: failed to read message header")
 	}
-	message := make([]byte, header.Size-prot.MessageHeaderSize)
+	message := make([]byte, int(header.Size)-bridge.MessageHeaderSize)
 	// Read the body.
 	if _, err := io.ReadFull(conn, message); err != nil {
 		return nil, nil, errors.Wrap(err, "bridge_test: failed to read the message body")
@@ -479,7 +481,7 @@ func Test_Bridge_ListenAndServe_UnknownMessageHandler_Success(t *testing.T) {
 			ActivityID:  "00000000-0000-0000-0000-000000000001",
 		},
 	}
-	if err := serverSend(lc.CWrite(), prot.ComputeSystemResizeConsoleV1, prot.SequenceID(1), message); err != nil {
+	if err := serverSend(lc.CWrite(), prot.ComputeSystemResizeConsoleV1, bridge.SequenceID(1), message); err != nil {
 		t.Error("Failed to send message to server")
 		return
 	}
@@ -498,7 +500,7 @@ func Test_Bridge_ListenAndServe_UnknownMessageHandler_Success(t *testing.T) {
 	if header.Type != prot.ComputeSystemResponseResizeConsoleV1 {
 		t.Error("Response header was not resize console response.")
 	}
-	if header.ID != prot.SequenceID(1) {
+	if header.ID != bridge.SequenceID(1) {
 		t.Error("Response header had wrong sequence id")
 	}
 	verifyResponseIsDefaultHandler(t, response)
@@ -526,7 +528,7 @@ func Test_Bridge_ListenAndServe_CorrectHandler_Success(t *testing.T) {
 		if r.Header.Type != prot.ComputeSystemResizeConsoleV1 {
 			return nil, errors.New("bridge_test: wrong request type")
 		}
-		if r.Header.ID != prot.SequenceID(1) {
+		if r.Header.ID != bridge.SequenceID(1) {
 			return nil, errors.New("bridge_test: wrong sequence id")
 		}
 
@@ -559,7 +561,7 @@ func Test_Bridge_ListenAndServe_CorrectHandler_Success(t *testing.T) {
 		b.quitChan <- true
 	}()
 
-	if err := serverSend(lc.CWrite(), prot.ComputeSystemResizeConsoleV1, prot.SequenceID(1), message); err != nil {
+	if err := serverSend(lc.CWrite(), prot.ComputeSystemResizeConsoleV1, bridge.SequenceID(1), message); err != nil {
 		t.Error("Failed to send message to server")
 		return
 	}
@@ -577,7 +579,7 @@ func Test_Bridge_ListenAndServe_CorrectHandler_Success(t *testing.T) {
 	if header.Type != prot.ComputeSystemResponseResizeConsoleV1 {
 		t.Error("response header was not resize console response.")
 	}
-	if header.ID != prot.SequenceID(1) {
+	if header.ID != bridge.SequenceID(1) {
 		t.Error("response header had wrong sequence id")
 	}
 	if response.ActivityID != message.ActivityID {
@@ -630,11 +632,11 @@ func Test_Bridge_ListenAndServe_HandlersAreAsync_Success(t *testing.T) {
 		b.quitChan <- true
 	}()
 
-	if err := serverSend(lc.CWrite(), prot.ComputeSystemResizeConsoleV1, prot.SequenceID(0), nil); err != nil {
+	if err := serverSend(lc.CWrite(), prot.ComputeSystemResizeConsoleV1, bridge.SequenceID(0), nil); err != nil {
 		t.Error("Failed to send first message to server")
 		return
 	}
-	if err := serverSend(lc.CWrite(), prot.ComputeSystemModifySettingsV1, prot.SequenceID(1), nil); err != nil {
+	if err := serverSend(lc.CWrite(), prot.ComputeSystemModifySettingsV1, bridge.SequenceID(1), nil); err != nil {
 		t.Error("Failed to send second message to server")
 		return
 	}
@@ -653,14 +655,14 @@ func Test_Bridge_ListenAndServe_HandlersAreAsync_Success(t *testing.T) {
 	if headerFirst.Type != prot.ComputeSystemResponseModifySettingsV1 {
 		t.Error("Incorrect response type for 2nd request")
 	}
-	if headerFirst.ID != prot.SequenceID(1) {
+	if headerFirst.ID != bridge.SequenceID(1) {
 		t.Error("Incorrect response order for 2nd request")
 	}
 	// headerSecond should match the 1st request.
 	if headerSecond.Type != prot.ComputeSystemResponseResizeConsoleV1 {
 		t.Error("Incorrect response for 1st request")
 	}
-	if headerSecond.ID != prot.SequenceID(0) {
+	if headerSecond.ID != bridge.SequenceID(0) {
 		t.Error("Incorrect response order for 1st request")
 	}
 }

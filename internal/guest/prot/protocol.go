@@ -5,7 +5,6 @@ package prot
 
 import (
 	"encoding/json"
-	"strconv"
 
 	v1 "github.com/containerd/cgroups/stats/v1"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
@@ -13,213 +12,77 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guest/commonutils"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
+	"github.com/Microsoft/hcsshim/internal/protocol/bridge"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
-//////////// Code for the Message Header ////////////
-// Message Identifiers as present in the message header are subdivided into
-// various pieces of information.
-//
-// +---+----+-----+----+
-// | T | CC | III | VV |
-// +---+----+-----+----+
-//
-// T   - 4 Bits    Type
-// CC  - 8 Bits    Category
-// III - 12 Bits   Message Id
-// VV  - 8 Bits    Version
-
-//nolint:deadcode,varcheck
-const (
-	messageTypeMask     = 0xF0000000
-	messageCategoryMask = 0x0FF00000
-	messageIDMask       = 0x000FFF00
-	messageVersionMask  = 0x000000FF
-	messageIDShift      = 8
-	messageVersionShift = 0
-)
-
-// MessageType is the type of the message.
-type MessageType uint32
-
-const (
-	// MtNone is the default MessageType.
-	MtNone = 0
-	// MtRequest is the MessageType when a request is received.
-	MtRequest = 0x10000000
-	// MtResponse is the MessageType used to send a response.
-	MtResponse = 0x20000000
-	// MtNotification is the MessageType used to send a notification not
-	// initiated by a request.
-	MtNotification = 0x30000000
-)
-
-// MessageCategory allows splitting the identifier namespace to easily route
-// similar messages for common processing.
-type MessageCategory uint32
-
-const (
-	// McNone is the default category.
-	McNone = 0
-	// McComputeSystem is the category to define message types for compute
-	// systems.
-	McComputeSystem = 0x00100000
-)
-
-// GetResponseIdentifier returns the response version of the given request
-// identifier. So, for example, an input of ComputeSystemCreateV1 would result
-// in an output of ComputeSystemResponseCreateV1.
-func GetResponseIdentifier(identifier MessageIdentifier) MessageIdentifier {
-	return MessageIdentifier(MtResponse | (uint32(identifier) & ^uint32(messageTypeMask)))
-}
-
-// MessageIdentifier describes the Type field of a MessageHeader struct.
-type MessageIdentifier uint32
-
-const (
+var (
 	// MiNone is the unknown identifier.
 	MiNone = 0
 
 	// ComputeSystemCreateV1 is the create container request.
-	ComputeSystemCreateV1 = 0x10100101
+	ComputeSystemCreateV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCCreate)
 	// ComputeSystemStartV1 is the start container request.
-	ComputeSystemStartV1 = 0x10100201
+	ComputeSystemStartV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCStart)
 	// ComputeSystemShutdownGracefulV1 is the graceful shutdown container
 	// request.
-	ComputeSystemShutdownGracefulV1 = 0x10100301
+	ComputeSystemShutdownGracefulV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCShutdownGraceful)
 	// ComputeSystemShutdownForcedV1 is the forceful shutdown container request.
-	ComputeSystemShutdownForcedV1 = 0x10100401
+	ComputeSystemShutdownForcedV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCShutdownForced)
 	// ComputeSystemExecuteProcessV1 is the execute process request.
-	ComputeSystemExecuteProcessV1 = 0x10100501
+	ComputeSystemExecuteProcessV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCExecuteProcess)
 	// ComputeSystemWaitForProcessV1 is the wait for process exit request.
-	ComputeSystemWaitForProcessV1 = 0x10100601
+	ComputeSystemWaitForProcessV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCWaitForProcess)
 	// ComputeSystemSignalProcessV1 is the signal process request.
-	ComputeSystemSignalProcessV1 = 0x10100701
+	ComputeSystemSignalProcessV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCSignalProcess)
 	// ComputeSystemResizeConsoleV1 is the resize console tty request.
-	ComputeSystemResizeConsoleV1 = 0x10100801
+	ComputeSystemResizeConsoleV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCResizeConsole)
 	// ComputeSystemGetPropertiesV1 is the list process properties request.
-	ComputeSystemGetPropertiesV1 = 0x10100901
+	ComputeSystemGetPropertiesV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCGetProperties)
 	// ComputeSystemModifySettingsV1 is the modify container request.
-	ComputeSystemModifySettingsV1 = 0x10100a01
+	ComputeSystemModifySettingsV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCModifySettings)
 	// ComputeSystemNegotiateProtocolV1 is the protocol negotiation request.
-	ComputeSystemNegotiateProtocolV1 = 0x10100b01
+	ComputeSystemNegotiateProtocolV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCNegotiateProtocol)
 	// ComputeSystemDumpStacksV1 is the dump stack request
-	ComputeSystemDumpStacksV1 = 0x10100c01
+	ComputeSystemDumpStacksV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCDumpStacks)
 	// ComputeSystemDeleteContainerStateV1 is the delete container request.
-	ComputeSystemDeleteContainerStateV1 = 0x10100d01
+	ComputeSystemDeleteContainerStateV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCDeleteContainerState)
 
 	// ComputeSystemResponseCreateV1 is the create container response.
-	ComputeSystemResponseCreateV1 = 0x20100101
+	ComputeSystemResponseCreateV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCCreate)
 	// ComputeSystemResponseStartV1 is the start container response.
-	ComputeSystemResponseStartV1 = 0x20100201
+	ComputeSystemResponseStartV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCStart)
 	// ComputeSystemResponseShutdownGracefulV1 is the graceful shutdown
 	// container response.
-	ComputeSystemResponseShutdownGracefulV1 = 0x20100301
+	ComputeSystemResponseShutdownGracefulV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCShutdownGraceful)
 	// ComputeSystemResponseShutdownForcedV1 is the forceful shutdown container
 	// response.
-	ComputeSystemResponseShutdownForcedV1 = 0x20100401
+	ComputeSystemResponseShutdownForcedV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCShutdownForced)
 	// ComputeSystemResponseExecuteProcessV1 is the execute process response.
-	ComputeSystemResponseExecuteProcessV1 = 0x20100501
+	ComputeSystemResponseExecuteProcessV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCExecuteProcess)
 	// ComputeSystemResponseWaitForProcessV1 is the wait for process exit
 	// response.
-	ComputeSystemResponseWaitForProcessV1 = 0x20100601
+	ComputeSystemResponseWaitForProcessV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCWaitForProcess)
 	// ComputeSystemResponseSignalProcessV1 is the signal process response.
-	ComputeSystemResponseSignalProcessV1 = 0x20100701
+	ComputeSystemResponseSignalProcessV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCSignalProcess)
 	// ComputeSystemResponseResizeConsoleV1 is the resize console tty response.
-	ComputeSystemResponseResizeConsoleV1 = 0x20100801
+	ComputeSystemResponseResizeConsoleV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCResizeConsole)
 	// ComputeSystemResponseGetPropertiesV1 is the list process properties
 	// response.
-	ComputeSystemResponseGetPropertiesV1 = 0x20100901
+	ComputeSystemResponseGetPropertiesV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCGetProperties)
 	// ComputeSystemResponseModifySettingsV1 is the modify container response.
-	ComputeSystemResponseModifySettingsV1 = 0x20100a01
+	ComputeSystemResponseModifySettingsV1 = bridge.NewIdentifier(bridge.TypeRequest, bridge.RPCModifySettings)
 	// ComputeSystemResponseNegotiateProtocolV1 is the protocol negotiation
 	// response.
-	ComputeSystemResponseNegotiateProtocolV1 = 0x20100b01
+	ComputeSystemResponseNegotiateProtocolV1 = bridge.NewIdentifier(bridge.TypeResponse, bridge.RPCNegotiateProtocol)
 	// ComputeSystemResponseDumpStacksV1 is the dump stack response
-	ComputeSystemResponseDumpStacksV1 = 0x20100c01
+	ComputeSystemResponseDumpStacksV1 = bridge.NewIdentifier(bridge.TypeResponse, bridge.RPCDumpStacks)
 
 	// ComputeSystemNotificationV1 is the notification identifier.
-	ComputeSystemNotificationV1 = 0x30100101
+	ComputeSystemNotificationV1 = bridge.NewIdentifier(bridge.TypeNotify, bridge.NotifyContainer)
 )
-
-// String returns the string representation of the message identifier.
-func (mi MessageIdentifier) String() string {
-	switch mi {
-	case MiNone:
-		return "None"
-	case ComputeSystemCreateV1:
-		return "ComputeSystemCreateV1"
-	case ComputeSystemStartV1:
-		return "ComputeSystemStartV1"
-	case ComputeSystemShutdownGracefulV1:
-		return "ComputeSystemShutdownGracefulV1"
-	case ComputeSystemShutdownForcedV1:
-		return "ComputeSystemShutdownForcedV1"
-	case ComputeSystemExecuteProcessV1:
-		return "ComputeSystemExecuteProcessV1"
-	case ComputeSystemWaitForProcessV1:
-		return "ComputeSystemWaitForProcessV1"
-	case ComputeSystemSignalProcessV1:
-		return "ComputeSystemSignalProcessV1"
-	case ComputeSystemResizeConsoleV1:
-		return "ComputeSystemResizeConsoleV1"
-	case ComputeSystemGetPropertiesV1:
-		return "ComputeSystemGetPropertiesV1"
-	case ComputeSystemModifySettingsV1:
-		return "ComputeSystemModifySettingsV1"
-	case ComputeSystemNegotiateProtocolV1:
-		return "ComputeSystemNegotiateProtocolV1"
-	case ComputeSystemDumpStacksV1:
-		return "ComputeSystemDumpStacksV1"
-	case ComputeSystemDeleteContainerStateV1:
-		return "ComputeSystemDeleteContainerStateV1"
-	case ComputeSystemResponseCreateV1:
-		return "ComputeSystemResponseCreateV1"
-	case ComputeSystemResponseStartV1:
-		return "ComputeSystemResponseStartV1"
-	case ComputeSystemResponseShutdownGracefulV1:
-		return "ComputeSystemResponseShutdownGracefulV1"
-	case ComputeSystemResponseShutdownForcedV1:
-		return "ComputeSystemResponseShutdownForcedV1"
-	case ComputeSystemResponseExecuteProcessV1:
-		return "ComputeSystemResponseExecuteProcessV1"
-	case ComputeSystemResponseWaitForProcessV1:
-		return "ComputeSystemResponseWaitForProcessV1"
-	case ComputeSystemResponseSignalProcessV1:
-		return "ComputeSystemResponseSignalProcessV1"
-	case ComputeSystemResponseResizeConsoleV1:
-		return "ComputeSystemResponseResizeConsoleV1"
-	case ComputeSystemResponseGetPropertiesV1:
-		return "ComputeSystemResponseGetPropertiesV1"
-	case ComputeSystemResponseModifySettingsV1:
-		return "ComputeSystemResponseModifySettingsV1"
-	case ComputeSystemResponseNegotiateProtocolV1:
-		return "ComputeSystemResponseNegotiateProtocolV1"
-	case ComputeSystemResponseDumpStacksV1:
-		return "ComputeSystemResponseDumpStacksV1"
-	case ComputeSystemNotificationV1:
-		return "ComputeSystemNotificationV1"
-	default:
-		return strconv.FormatUint(uint64(mi), 10)
-	}
-}
-
-// SequenceID is used to correlate requests and responses.
-type SequenceID uint64
-
-// MessageHeader is the common header present in all communications messages.
-type MessageHeader struct {
-	Type MessageIdentifier
-	Size uint32
-	ID   SequenceID
-}
-
-// MessageHeaderSize is the size in bytes of the MessageHeader struct.
-const MessageHeaderSize = 16
-
-/////////////////////////////////////////////////////
 
 // ProtocolVersion is a type for the selected HCS<->GCS protocol version of
 // messages

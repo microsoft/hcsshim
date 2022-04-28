@@ -24,6 +24,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
+
+	prot "github.com/Microsoft/hcsshim/internal/protocol/bridge"
 )
 
 const (
@@ -125,7 +127,7 @@ func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool, initGu
 	}
 	var resp negotiateProtocolResponse
 	resp.Capabilities.GuestDefinedCapabilities = &gc.caps
-	err = gc.brdg.RPC(ctx, rpcNegotiateProtocol, &req, &resp, true)
+	err = gc.brdg.RPC(ctx, prot.RPCNegotiateProtocol, &req, &resp, true)
 	if err != nil {
 		return err
 	}
@@ -148,14 +150,14 @@ func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool, initGu
 			ContainerConfig: anyInString{conf},
 		}
 		var createResp responseBase
-		err = gc.brdg.RPC(ctx, rpcCreate, &createReq, &createResp, true)
+		err = gc.brdg.RPC(ctx, prot.RPCCreate, &createReq, &createResp, true)
 		if err != nil {
 			return err
 		}
 		if resp.Capabilities.SendHostStartMessage {
 			startReq := makeRequest(ctx, nullContainerID)
 			var startResp responseBase
-			err = gc.brdg.RPC(ctx, rpcStart, &startReq, &startResp, true)
+			err = gc.brdg.RPC(ctx, prot.RPCStart, &startReq, &startResp, true)
 			if err != nil {
 				return err
 			}
@@ -176,7 +178,7 @@ func (gc *GuestConnection) Modify(ctx context.Context, settings interface{}) (er
 		Request:     settings,
 	}
 	var resp responseBase
-	return gc.brdg.RPC(ctx, rpcModifySettings, &req, &resp, false)
+	return gc.brdg.RPC(ctx, prot.RPCModifySettings, &req, &resp, false)
 }
 
 func (gc *GuestConnection) DumpStacks(ctx context.Context) (response string, err error) {
@@ -188,7 +190,7 @@ func (gc *GuestConnection) DumpStacks(ctx context.Context) (response string, err
 		requestBase: makeRequest(ctx, nullContainerID),
 	}
 	var resp dumpStacksResponse
-	err = gc.brdg.RPC(ctx, rpcDumpStacks, &req, &resp, false)
+	err = gc.brdg.RPC(ctx, prot.RPCDumpStacks, &req, &resp, false)
 	return resp.GuestStacks, err
 }
 
@@ -202,7 +204,7 @@ func (gc *GuestConnection) DeleteContainerState(ctx context.Context, cid string)
 		requestBase: makeRequest(ctx, cid),
 	}
 	var resp responseBase
-	return gc.brdg.RPC(ctx, rpcDeleteContainerState, &req, &resp, false)
+	return gc.brdg.RPC(ctx, prot.RPCDeleteContainerState, &req, &resp, false)
 }
 
 // Close terminates the guest connection. It is undefined to call any other

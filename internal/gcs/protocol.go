@@ -4,7 +4,6 @@ package gcs
 
 import (
 	"encoding/json"
-	"strconv"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
@@ -44,202 +43,6 @@ func (a *anyInString) UnmarshalText(b []byte) error {
 	return json.Unmarshal(b, &a.Value)
 }
 
-// todo (helsaawy):
-//  - add types for msg, msgCategory, and msgVersion
-//  - remove version number from notifyContainer and rpcProcs
-//  - add constructor to msg from rpc/msgType
-//  - break out mstType.String() into .String for component types
-
-/*
-bridge message identifiers in message header:
-
-+---+----+-----+----+
-| T | CC | III | VV |
-+---+----+-----+----+
-
-T	4 Bits		Type
-CC	8 Bits		Category
-III	12 Bits		Message Id
-VV	8 Bits		Version
-
-Type:
-	None			0x0
-	Request			0x1
-	Response		0x2
-	Notify 			0x3
-
-Category:
-	None			0x00
-	ComputeSystem 	0x01
-
-Message ID:
-	request, response, or notification type
-
-Version:
-	v1				0x01
-*/
-
-const (
-	msgIDShift   = 8
-	msgTypeShift = 28
-
-	msgTypeMask     = 0xf0000000
-	msgCategoryMask = 0x0ff00000
-	msgIDMask       = 0x000fff00
-	msgVersionMask  = 0x000000ff
-)
-
-type msgIdentifier uint32
-
-func newMsgIdentifier(t msgType, id msgID) msgIdentifier {
-	return msgIdentifier(t) | msgIdentifier(msgCatContainer) | msgIdentifier(id) | msgIdentifier(msgVersionV1)
-}
-
-func (h msgIdentifier) toMsgType(t msgType) msgIdentifier {
-	return msgIdentifier(t) | (h &^ msgTypeMask)
-}
-
-// cannot call this `type`, since its a keyword
-// so name all getters as `msg*`
-func (h msgIdentifier) msgType() msgType {
-	return msgType(h & msgTypeMask)
-}
-
-func (h msgIdentifier) msgCategory() msgCategory {
-	return msgCategory(h & msgCategoryMask)
-}
-
-func (h msgIdentifier) msgID() msgID {
-	return msgID(h & msgIDMask)
-}
-
-func (h msgIdentifier) msgVersion() msgVersion {
-	return msgVersion(h & msgVersionMask)
-}
-
-func (h msgIdentifier) String() string {
-	t := h.msgType()
-	id := h.msgID()
-	s := ""
-	switch t {
-	case msgTypeRequest, msgTypeResponse:
-		s = id.rpcString()
-	case msgTypeNotify:
-		s = id.notifyString()
-	default:
-		s = id.String()
-	}
-	return t.String() + "(" + s + ")"
-}
-
-type msgType uint32
-
-const (
-	msgTypeNone msgType = iota << msgTypeShift
-	msgTypeRequest
-	msgTypeResponse
-	msgTypeNotify
-)
-
-func (t msgType) String() string {
-	switch t {
-	case msgTypeRequest:
-		return "Request"
-	case msgTypeResponse:
-		return "Response"
-	case msgTypeNotify:
-		return "Notify"
-	default:
-		return "0x" + strconv.FormatUint(uint64(t), 16)
-	}
-}
-
-type msgCategory uint32
-
-const msgCatContainer msgCategory = 0x00100000
-
-type msgID uint32
-
-const (
-	msgIDNone msgID = iota << msgIDShift
-
-	// for request and response message types
-
-	rpcCreate
-	rpcStart
-	rpcShutdownGraceful
-	rpcShutdownForced
-	rpcExecuteProcess
-	rpcWaitForProcess
-	rpcSignalProcess
-	rpcResizeConsole
-	rpcGetProperties
-	rpcModifySettings
-	rpcNegotiateProtocol
-	rpcDumpStacks
-	rpcDeleteContainerState
-	rpcUpdateContainer
-	rpcLifecycleNotification
-
-	// for notify message types
-
-	notifyContainer = 1 << msgIDShift
-)
-
-func (id msgID) String() string {
-	return "0x" + strconv.FormatUint(uint64(id), 16)
-}
-
-func (rpc msgID) rpcString() string {
-	switch rpc {
-	case rpcCreate:
-		return "Create"
-	case rpcStart:
-		return "Start"
-	case rpcShutdownGraceful:
-		return "ShutdownGraceful"
-	case rpcShutdownForced:
-		return "ShutdownForced"
-	case rpcExecuteProcess:
-		return "ExecuteProcess"
-	case rpcWaitForProcess:
-		return "WaitForProcess"
-	case rpcSignalProcess:
-		return "SignalProcess"
-	case rpcResizeConsole:
-		return "ResizeConsole"
-	case rpcGetProperties:
-		return "GetProperties"
-	case rpcModifySettings:
-		return "ModifySettings"
-	case rpcNegotiateProtocol:
-		return "NegotiateProtocol"
-	case rpcDumpStacks:
-		return "DumpStacks"
-	case rpcDeleteContainerState:
-		return "DeleteContainerState"
-	case rpcUpdateContainer:
-		return "UpdateContainer"
-	case rpcLifecycleNotification:
-		return "LifecycleNotification"
-	default:
-		return "<unknown RPC>"
-	}
-}
-
-func (n msgID) notifyString() string {
-	switch n {
-	case notifyContainer:
-		return "Container"
-	default:
-		return "<unknown notification>"
-	}
-}
-
-type msgVersion uint32
-
-const msgVersionV1 msgVersion = 0x1
-
 // ocspancontext is the internal JSON representation of the OpenCensus
 // `trace.SpanContext` for fowarding to a GCS that supports it.
 type ocspancontext struct {
@@ -260,6 +63,14 @@ type ocspancontext struct {
 	// If `SpanContext.Tracestate == nil ||
 	// len(SpanContext.Tracestate.Entries()) == 0` this will be `""`.
 	Tracestate string `json:",omitempty"`
+}
+
+type requestMessage interface {
+	Base() *requestBase
+}
+
+type responseMessage interface {
+	Base() *responseBase
 }
 
 type requestBase struct {
