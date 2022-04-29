@@ -68,12 +68,12 @@ func reflector(t *testing.T, rw io.ReadWriteCloser, delay time.Duration) {
 }
 
 type testReq struct {
-	requestBase
+	prot.RequestBase
 	X, Y int
 }
 
 type testResp struct {
-	responseBase
+	prot.ResponseBase
 	X, Y int
 }
 
@@ -172,9 +172,9 @@ func notifyThroughBridge(t *testing.T, mi prot.MessageIdentifier, msg interface{
 }
 
 func TestBridgeNotify(t *testing.T) {
-	ntf := &containerNotification{Operation: "testing"}
+	ntf := &prot.ContainerNotification{Operation: "testing"}
 	recvd := false
-	err := notifyThroughBridge(t, prot.NewIdentifier(prot.TypeNotify, prot.NotifyContainer), ntf, func(nntf *containerNotification) error {
+	err := notifyThroughBridge(t, prot.NewIdentifier(prot.TypeNotify, prot.NotifyContainer), ntf, func(nntf *prot.ContainerNotification) error {
 		if !reflect.DeepEqual(ntf, nntf) {
 			t.Errorf("%+v != %+v", ntf, nntf)
 		}
@@ -190,9 +190,9 @@ func TestBridgeNotify(t *testing.T) {
 }
 
 func TestBridgeNotifyFailure(t *testing.T) {
-	ntf := &containerNotification{Operation: "testing"}
+	ntf := &prot.ContainerNotification{Operation: "testing"}
 	errMsg := "notify should have failed"
-	err := notifyThroughBridge(t, prot.NewIdentifier(prot.TypeNotify, prot.NotifyContainer), ntf, func(nntf *containerNotification) error {
+	err := notifyThroughBridge(t, prot.NewIdentifier(prot.TypeNotify, prot.NotifyContainer), ntf, func(nntf *prot.ContainerNotification) error {
 		return errors.New(errMsg)
 	})
 	if err == nil || !strings.Contains(err.Error(), errMsg) {

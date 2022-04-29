@@ -2,16 +2,15 @@ package bridge
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
-	octrace "go.opencensus.io/trace"
-	"go.opentelemetry.io/otel/trace"
+	otel "go.opentelemetry.io/otel/trace"
 
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/protocol/errdefs"
+	"github.com/Microsoft/hcsshim/internal/trace"
 )
 
 type RequestMessage interface {
@@ -28,7 +27,7 @@ type RequestBase struct {
 	// NOTE: This is not a part of the protocol but because its a JSON protocol
 	// adding fields is a non-breaking change. If the guest supports it this is
 	// just additive context.
-	OpenCensusSpanContext *trace.SpanContext `json:"ocsc,omitempty"`
+	OpenCensusSpanContext *otel.SpanContext `json:"ocsc,omitempty"`
 }
 
 var _ RequestMessage = &RequestBase{}
@@ -37,31 +36,15 @@ func (req *RequestBase) Base() *RequestBase {
 	return req
 }
 
-func NewRequestBase(ctx context.Context, cid string) {
-	r := RequestBase{
-		ContainerID: cid,
+func NewRequestBase(ctx context.Context, cid string) RequestBase {
+	if cid == "" {
+		cid = NullContainerID
 	}
-	if span := octrace.FromContext(ctx); span != nil {
-		sc := span.SpanContext()
-		scc := trace.NewSpanContext(trace.SpanContextConfig{
-			TraceID: trace.TraceID(sc.TraceID),
-			SpanID:  trace.SpanID(sc.SpanID),
-		})
 
-		r.OpenCensusSpanContext = &scc
-
-		if sc.Tracestate != nil {
-			entries := sc.Tracestate.Entries()
-			if len(entries) > 0 {
-				if bytes, err := json.Marshal(sc.Tracestate.Entries()); err == nil {
-					r.OpenCensusSpanContext.Tracestate = base64.StdEncoding.EncodeToString(bytes)
-				} else {
-					log.G(ctx).WithError(err).Warn("failed to encode OpenCensus Tracestate")
-				}
-			}
-		}
+	return RequestBase{
+		ContainerID:           cid,
+		OpenCensusSpanContext: trace.GetSpanContext(ctx),
 	}
-	return r
 }
 
 type NegotiateProtocolRequest struct {
@@ -102,8 +85,8 @@ type ContainerNotification struct {
 	RequestBase
 	Type       string // Compute.System.NotificationType
 	Operation  string // Compute.System.ActiveOperation
-	Result     int32  // HResult
-	ResultInfo Any    `json:",omitempty"`
+	Result     errdefs.HResult
+	ResultInfo Any `json:",omitempty"`
 }
 
 type ContainerExecuteProcess struct {

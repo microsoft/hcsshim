@@ -50,11 +50,11 @@ func (gc *GuestConnection) CreateContainer(ctx context.Context, cid string, conf
 	if err != nil {
 		return nil, err
 	}
-	req := containerCreate{
-		requestBase:     makeRequest(ctx, cid),
-		ContainerConfig: anyInString{config},
+	req := prot.ContainerCreate{
+		RequestBase:     prot.NewRequestBase(ctx, cid),
+		ContainerConfig: prot.Any{config},
 	}
-	var resp containerCreateResponse
+	var resp prot.ContainerCreateResponse
 	err = gc.brdg.RPC(ctx, prot.RPCCreate, &req, &resp, false)
 	if err != nil {
 		return nil, err
@@ -123,11 +123,11 @@ func (c *Container) Modify(ctx context.Context, config interface{}) (err error) 
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", c.id))
 
-	req := containerModifySettings{
-		requestBase: makeRequest(ctx, c.id),
+	req := prot.ContainerModifySettings{
+		RequestBase: prot.NewRequestBase(ctx, c.id),
 		Request:     config,
 	}
-	var resp responseBase
+	var resp prot.ResponseBase
 	return c.gc.brdg.RPC(ctx, prot.RPCModifySettings, &req, &resp, false)
 }
 
@@ -138,11 +138,11 @@ func (c *Container) Properties(ctx context.Context, types ...schema1.PropertyTyp
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", c.id))
 
-	req := containerGetProperties{
-		requestBase: makeRequest(ctx, c.id),
-		Query:       containerPropertiesQuery{PropertyTypes: types},
+	req := prot.ContainerGetProperties{
+		RequestBase: prot.NewRequestBase(ctx, c.id),
+		Query:       prot.ContainerPropertiesQuery{PropertyTypes: types},
 	}
-	var resp containerGetPropertiesResponse
+	var resp prot.ContainerGetPropertiesResponse
 	err = c.gc.brdg.RPC(ctx, prot.RPCGetProperties, &req, &resp, true)
 	if err != nil {
 		return nil, err
@@ -157,11 +157,11 @@ func (c *Container) PropertiesV2(ctx context.Context, types ...hcsschema.Propert
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", c.id))
 
-	req := containerGetPropertiesV2{
-		requestBase: makeRequest(ctx, c.id),
-		Query:       containerPropertiesQueryV2{PropertyTypes: types},
+	req := prot.ContainerGetPropertiesV2{
+		RequestBase: prot.NewRequestBase(ctx, c.id),
+		Query:       prot.ContainerPropertiesQueryV2{PropertyTypes: types},
 	}
-	var resp containerGetPropertiesResponseV2
+	var resp prot.ContainerGetPropertiesResponseV2
 	err = c.gc.brdg.RPC(ctx, prot.RPCGetProperties, &req, &resp, true)
 	if err != nil {
 		return nil, err
@@ -176,14 +176,14 @@ func (c *Container) Start(ctx context.Context) (err error) {
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", c.id))
 
-	req := makeRequest(ctx, c.id)
-	var resp responseBase
+	req := prot.NewRequestBase(ctx, c.id)
+	var resp prot.ResponseBase
 	return c.gc.brdg.RPC(ctx, prot.RPCStart, &req, &resp, false)
 }
 
 func (c *Container) shutdown(ctx context.Context, proc prot.ID) error {
-	req := makeRequest(ctx, c.id)
-	var resp responseBase
+	req := prot.NewRequestBase(ctx, c.id)
+	var resp prot.ResponseBase
 	err := c.gc.brdg.RPC(ctx, proc, &req, &resp, true)
 	if err != nil {
 		if windows.Errno(resp.Result) != hcs.ErrComputeSystemDoesNotExist {

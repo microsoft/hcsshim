@@ -31,7 +31,7 @@ type Process struct {
 	cid                   string
 	id                    uint32
 	waitCall              *rpc
-	waitResp              containerWaitForProcessResponse
+	waitResp              prot.ContainerWaitForProcessResponse
 	stdin, stdout, stderr *ioChannel
 	stdinCloseWriteOnce   sync.Once
 	stdinCloseWriteErr    error
@@ -54,10 +54,10 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 		return nil, err
 	}
 
-	req := containerExecuteProcess{
-		requestBase: makeRequest(ctx, cid),
-		Settings: executeProcessSettings{
-			ProcessParameters: anyInString{params},
+	req := prot.ContainerExecuteProcess{
+		RequestBase: prot.NewRequestBase(ctx, cid),
+		Settings: prot.ExecuteProcessSettings{
+			ProcessParameters: prot.Any{params},
 		},
 	}
 
@@ -70,8 +70,8 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 
 	// Construct the stdio channels. Windows guests expect hvsock service IDs
 	// instead of vsock ports.
-	var hvsockSettings executeProcessStdioRelaySettings
-	var vsockSettings executeProcessVsockStdioRelaySettings
+	var hvsockSettings prot.ExecuteProcessStdioRelaySettings
+	var vsockSettings prot.ExecuteProcessVsockStdioRelaySettings
 	if gc.os == "windows" {
 		req.Settings.StdioRelaySettings = &hvsockSettings
 	} else {
@@ -102,7 +102,7 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 		hvsockSettings.StdErr = &g
 	}
 
-	var resp containerExecuteProcessResponse
+	var resp prot.ContainerExecuteProcessResponse
 	err = gc.brdg.RPC(ctx, prot.RPCExecuteProcess, &req, &resp, false)
 	if err != nil {
 		return nil, err
@@ -110,8 +110,8 @@ func (gc *GuestConnection) exec(ctx context.Context, cid string, params interfac
 	p.id = resp.ProcessID
 	log.G(ctx).WithField("pid", p.id).Debug("created process pid")
 	// Start a wait message.
-	waitReq := containerWaitForProcess{
-		requestBase: makeRequest(ctx, cid),
+	waitReq := prot.ContainerWaitForProcess{
+		RequestBase: prot.NewRequestBase(ctx, cid),
 		ProcessID:   p.id,
 		TimeoutInMs: 0xffffffff,
 	}
@@ -222,13 +222,13 @@ func (p *Process) ResizeConsole(ctx context.Context, width, height uint16) (err 
 		trace.StringAttribute("cid", p.cid),
 		trace.Int64Attribute("pid", int64(p.id)))
 
-	req := containerResizeConsole{
-		requestBase: makeRequest(ctx, p.cid),
+	req := prot.ContainerResizeConsole{
+		RequestBase: prot.NewRequestBase(ctx, p.cid),
 		ProcessID:   p.id,
 		Height:      height,
 		Width:       width,
 	}
-	var resp responseBase
+	var resp prot.ResponseBase
 	return p.gc.brdg.RPC(ctx, prot.RPCResizeConsole, &req, &resp, true)
 }
 
@@ -241,12 +241,12 @@ func (p *Process) Signal(ctx context.Context, options interface{}) (_ bool, err 
 		trace.StringAttribute("cid", p.cid),
 		trace.Int64Attribute("pid", int64(p.id)))
 
-	req := containerSignalProcess{
-		requestBase: makeRequest(ctx, p.cid),
+	req := prot.ContainerSignalProcess{
+		RequestBase: prot.NewRequestBase(ctx, p.cid),
 		ProcessID:   p.id,
 		Options:     options,
 	}
-	var resp responseBase
+	var resp prot.ResponseBase
 	// FUTURE: SIGKILL is idempotent and can safely be cancelled, but this interface
 	//		   does currently make it easy to determine what signal is being sent.
 	err = p.gc.brdg.RPC(ctx, prot.RPCSignalProcess, &req, &resp, false)

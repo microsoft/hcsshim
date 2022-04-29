@@ -20,6 +20,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/log"
 	prot "github.com/Microsoft/hcsshim/internal/protocol/bridge"
+	"github.com/Microsoft/hcsshim/internal/protocol/errdefs"
 )
 
 // bridge protocol header is:
@@ -44,7 +45,7 @@ const (
 
 var errBridgeClosed = fmt.Errorf("bridge closed: %w", net.ErrClosed)
 
-type notifyFunc func(*containerNotification) error
+type notifyFunc func(*prot.ContainerNotification) error
 
 // bridge represents a communcations bridge with the guest. It handles the
 // transport layer but (mostly) does not parse or construct the message payload.
@@ -152,7 +153,7 @@ func (brdg *bridge) recvLoop() error {
 			if mi.ID() != prot.NotifyContainer {
 				return fmt.Errorf("bridge received unknown notification message %s", mi)
 			}
-			var ntf containerNotification
+			var ntf prot.ContainerNotification
 			ntf.ResultInfo.Value = &json.RawMessage{}
 			err := json.Unmarshal(b, &ntf)
 			if err != nil {
@@ -333,7 +334,7 @@ func (brdg *bridge) kill(err error) {
 // If allowCancel is set and the context becomes done, returns an error without
 // waiting for a response. Avoid this on messages that are not idempotent or
 // otherwise safe to ignore the response of.
-func (brdg *bridge) RPC(ctx context.Context, proc prot.ID, req requestMessage, resp responseMessage, allowCancel bool) error {
+func (brdg *bridge) RPC(ctx context.Context, proc prot.ID, req prot.RequestMessage, resp prot.ResponseMessage, allowCancel bool) error {
 	call, err := brdg.AsyncRPC(ctx, proc, req, resp)
 	if err != nil {
 		return err
@@ -361,7 +362,7 @@ func (brdg *bridge) RPC(ctx context.Context, proc prot.ID, req requestMessage, r
 // AsyncRPC sends an RPC request to the guest but does not wait for a response.
 // If the message cannot be sent before the context is done, then an error is
 // returned.
-func (brdg *bridge) AsyncRPC(ctx context.Context, proc prot.ID, req requestMessage, resp responseMessage) (*rpc, error) {
+func (brdg *bridge) AsyncRPC(ctx context.Context, proc prot.ID, req prot.RequestMessage, resp prot.ResponseMessage) (*rpc, error) {
 	call := &rpc{
 		ch:   make(chan struct{}),
 		proc: proc,
@@ -390,8 +391,8 @@ func (brdg *bridge) AsyncRPC(ctx context.Context, proc prot.ID, req requestMessa
 type rpc struct {
 	proc    prot.ID
 	id      int64
-	req     requestMessage
-	resp    responseMessage
+	req     prot.RequestMessage
+	resp    prot.ResponseMessage
 	brdgErr error // error encountered when sending the request or unmarshaling the result
 	ch      chan struct{}
 }
@@ -430,18 +431,18 @@ func (call *rpc) Err() error {
 }
 
 type rpcError struct {
-	result  int32
+	result  errdefs.HResult
 	message string
 }
 
 func (err *rpcError) Error() string {
 	msg := err.message
 	if msg == "" {
-		msg = windows.Errno(err.result).Error()
+		msg = err.result.AsError().Error()
 	}
 	return "guest RPC failure: " + msg
 }
 
 func (err *rpcError) Unwrap() error {
-	return windows.Errno(err.result)
+	return err.result.AsError()
 }

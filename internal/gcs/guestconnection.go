@@ -4,9 +4,6 @@ package gcs
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -18,7 +15,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
-	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/pkg/errors"
@@ -121,11 +117,11 @@ func (gc *GuestConnection) Protocol() uint32 {
 // It should be false for subsequent connections (e.g. when connecting to a UVM that has
 // been cloned).
 func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool, initGuestState *InitialGuestState) (err error) {
-	req := negotiateProtocolRequest{
+	req := prot.NegotiateProtocolRequest{
 		MinimumVersion: protocolVersion,
 		MaximumVersion: protocolVersion,
 	}
-	var resp negotiateProtocolResponse
+	var resp prot.NegotiateProtocolResponse
 	resp.Capabilities.GuestDefinedCapabilities = &gc.caps
 	err = gc.brdg.RPC(ctx, prot.RPCNegotiateProtocol, &req, &resp, true)
 	if err != nil {
@@ -139,24 +135,24 @@ func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool, initGu
 		gc.os = "windows"
 	}
 	if isColdStart && resp.Capabilities.SendHostCreateMessage {
-		conf := &uvmConfig{
+		conf := &prot.UVMConfig{
 			SystemType: "Container",
 		}
 		if initGuestState != nil && initGuestState.Timezone != nil {
 			conf.TimeZoneInformation = initGuestState.Timezone
 		}
-		createReq := containerCreate{
-			requestBase:     makeRequest(ctx, nullContainerID),
-			ContainerConfig: anyInString{conf},
+		createReq := prot.ContainerCreate{
+			RequestBase:     prot.NewRequestBase(ctx, nullContainerID),
+			ContainerConfig: prot.Any{conf},
 		}
-		var createResp responseBase
+		var createResp prot.ResponseBase
 		err = gc.brdg.RPC(ctx, prot.RPCCreate, &createReq, &createResp, true)
 		if err != nil {
 			return err
 		}
 		if resp.Capabilities.SendHostStartMessage {
-			startReq := makeRequest(ctx, nullContainerID)
-			var startResp responseBase
+			startReq := prot.NewRequestBase(ctx, nullContainerID)
+			var startResp prot.ResponseBase
 			err = gc.brdg.RPC(ctx, prot.RPCStart, &startReq, &startResp, true)
 			if err != nil {
 				return err
@@ -173,11 +169,11 @@ func (gc *GuestConnection) Modify(ctx context.Context, settings interface{}) (er
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
-	req := containerModifySettings{
-		requestBase: makeRequest(ctx, nullContainerID),
+	req := prot.ContainerModifySettings{
+		RequestBase: prot.NewRequestBase(ctx, nullContainerID),
 		Request:     settings,
 	}
-	var resp responseBase
+	var resp prot.ResponseBase
 	return gc.brdg.RPC(ctx, prot.RPCModifySettings, &req, &resp, false)
 }
 
@@ -186,10 +182,10 @@ func (gc *GuestConnection) DumpStacks(ctx context.Context) (response string, err
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
-	req := dumpStacksRequest{
-		requestBase: makeRequest(ctx, nullContainerID),
+	req := prot.DumpStacksRequest{
+		RequestBase: prot.NewRequestBase(ctx, nullContainerID),
 	}
-	var resp dumpStacksResponse
+	var resp prot.DumpStacksResponse
 	err = gc.brdg.RPC(ctx, prot.RPCDumpStacks, &req, &resp, false)
 	return resp.GuestStacks, err
 }
@@ -200,10 +196,10 @@ func (gc *GuestConnection) DeleteContainerState(ctx context.Context, cid string)
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("cid", cid))
 
-	req := deleteContainerStateRequest{
-		requestBase: makeRequest(ctx, cid),
+	req := prot.DeleteContainerStateRequest{
+		RequestBase: prot.NewRequestBase(ctx, cid),
 	}
-	var resp responseBase
+	var resp prot.ResponseBase
 	return gc.brdg.RPC(ctx, prot.RPCDeleteContainerState, &req, &resp, false)
 }
 
@@ -261,7 +257,7 @@ func (gc *GuestConnection) requestNotify(cid string, ch chan struct{}) error {
 	return nil
 }
 
-func (gc *GuestConnection) notify(ntf *containerNotification) error {
+func (gc *GuestConnection) notify(ntf *prot.ContainerNotification) error {
 	cid := ntf.ContainerID
 	gc.mu.Lock()
 	ch := gc.notifyChs[cid]
@@ -283,30 +279,4 @@ func (gc *GuestConnection) clearNotifies() {
 	for _, ch := range chs {
 		close(ch)
 	}
-}
-
-func makeRequest(ctx context.Context, cid string) requestBase {
-	r := requestBase{
-		ContainerID: cid,
-	}
-	span := trace.FromContext(ctx)
-	if span != nil {
-		sc := span.SpanContext()
-		r.OpenCensusSpanContext = &ocspancontext{
-			TraceID:      hex.EncodeToString(sc.TraceID[:]),
-			SpanID:       hex.EncodeToString(sc.SpanID[:]),
-			TraceOptions: uint32(sc.TraceOptions),
-		}
-		if sc.Tracestate != nil {
-			entries := sc.Tracestate.Entries()
-			if len(entries) > 0 {
-				if bytes, err := json.Marshal(sc.Tracestate.Entries()); err == nil {
-					r.OpenCensusSpanContext.Tracestate = base64.StdEncoding.EncodeToString(bytes)
-				} else {
-					log.G(ctx).WithError(err).Warn("failed to encode OpenCensus Tracestate")
-				}
-			}
-		}
-	}
-	return r
 }

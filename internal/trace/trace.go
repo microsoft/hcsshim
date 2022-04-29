@@ -6,6 +6,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/Microsoft/hcsshim/internal/log"
 	oc "go.opencensus.io/trace"
 	"go.opencensus.io/trace/tracestate"
 	otel "go.opentelemetry.io/otel/trace"
@@ -20,7 +21,8 @@ func GetSpanContext(ctx context.Context) *otel.SpanContext {
 
 func otelSpanContext(ctx context.Context) *otel.SpanContext {
 	span := otel.SpanFromContext(ctx)
-	if span == nil {
+	// otel returns a noop span, not nil
+	if span.TracerProvider() == otel.NewNoopTracerProvider() {
 		return nil
 	}
 	sc := span.SpanContext()
@@ -28,19 +30,22 @@ func otelSpanContext(ctx context.Context) *otel.SpanContext {
 }
 
 func ocSpanContext(ctx context.Context) *otel.SpanContext {
-	ocSpan := oc.FromContext(ctx)
-	if ocSpan == nil {
+	span := oc.FromContext(ctx)
+	if span == nil {
 		return nil
 	}
 
-	ocSC := ocSpan.SpanContext()
+	sc := span.SpanContext()
 	config := otel.SpanContextConfig{
-		TraceID:    otel.TraceID(ocSC.TraceID),
-		SpanID:     otel.SpanID(ocSC.SpanID),
-		TraceFlags: otel.TraceFlags(ocSC.TraceOptions),
+		TraceID:    otel.TraceID(sc.TraceID),
+		SpanID:     otel.SpanID(sc.SpanID),
+		TraceFlags: otel.TraceFlags(sc.TraceOptions),
 	}
 
-	if ts, err := otel.ParseTraceState(exportOCTracestate(ocSC.Tracestate)); err == nil {
+	ts, err := otel.ParseTraceState(exportOCTracestate(sc.Tracestate))
+	if err != nil {
+		log.G(ctx).WithError(err).Warn("failed to encode OpenCensus Tracestate")
+	} else {
 		config.TraceState = ts
 	}
 
@@ -49,10 +54,16 @@ func ocSpanContext(ctx context.Context) *otel.SpanContext {
 }
 
 func exportOCTracestate(ts *tracestate.Tracestate) string {
-	b := &strings.Builder{}
-	defer b.Reset()
+	es := ts.Entries()
+	if len(es) == 0 {
+		return ""
+	}
 
-	for i, e := range ts.Entries() {
+	b := &strings.Builder{}
+	// random assumption that entries are about 32 bytes total
+	b.Grow(len(es) * 32)
+
+	for i, e := range es {
 		if i > 0 {
 			if err := b.WriteByte(','); err != nil {
 				return ""
