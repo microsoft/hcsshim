@@ -27,7 +27,7 @@ import (
 const (
 	protocolVersion = 4
 
-	firstIoChannelVsockPort = LinuxGcsVsockPort + 1
+	firstIoChannelVsockPort = prot.LinuxGcsVsockPort + 1
 	nullContainerID         = "00000000-0000-0000-0000-000000000000"
 )
 

@@ -24,6 +24,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcserror"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
+	"github.com/Microsoft/hcsshim/internal/protocol/bridge"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 )
@@ -130,7 +131,7 @@ func (uvm *UtilityVM) configureHvSocketForGCS(ctx context.Context) (err error) {
 
 	hvsocketAddress := &hcsschema.HvSocketAddress{
 		LocalAddress:  uvm.runtimeID.String(),
-		ParentAddress: gcs.WindowsGcsHvHostID.String(),
+		ParentAddress: bridge.WindowsGcsHvHostID.String(),
 	}
 
 	conSetupReq := &hcsschema.ModifySettingRequest{
