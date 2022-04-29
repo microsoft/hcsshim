@@ -168,7 +168,7 @@ type JOBOBJECT_ASSOCIATE_COMPLETION_PORT struct {
 // 		PBOOL  Result
 // );
 //
-//sys IsProcessInJob(procHandle windows.Handle, jobHandle windows.Handle, result *bool) (err error) = kernel32.IsProcessInJob
+//sys IsProcessInJob(procHandle windows.Handle, jobHandle windows.Handle, result *int32) (err error) = kernel32.IsProcessInJob
 
 // BOOL QueryInformationJobObject(
 //		HANDLE             hJob,

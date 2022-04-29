@@ -193,7 +193,7 @@ func CreateRemoteThread(process windows.Handle, sa *windows.SecurityAttributes, 
 	return
 }
 
-func IsProcessInJob(procHandle windows.Handle, jobHandle windows.Handle, result *bool) (err error) {
+func IsProcessInJob(procHandle windows.Handle, jobHandle windows.Handle, result *int32) (err error) {
 	r1, _, e1 := syscall.Syscall(procIsProcessInJob.Addr(), 3, uintptr(procHandle), uintptr(jobHandle), uintptr(unsafe.Pointer(result)))
 	if r1 == 0 {
 		if e1 != 0 {
