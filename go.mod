@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/BurntSushi/toml v0.3.1
-	github.com/Microsoft/go-winio v0.4.17
+	github.com/Microsoft/go-winio v0.5.3-0.20220427190013-87532d1cfeca
 	github.com/cenkalti/backoff/v4 v4.1.1
 	github.com/containerd/cgroups v1.0.1
 	github.com/containerd/console v1.0.2
@@ -14,7 +14,7 @@ require (
 	github.com/containerd/typeurl v1.0.2
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/mock v1.6.0
-	github.com/google/go-cmp v0.5.6
+	github.com/google/go-cmp v0.5.7
 	github.com/google/go-containerregistry v0.5.1
 	github.com/google/uuid v1.3.0
 	github.com/linuxkit/virtsock v0.0.0-20201010232012-f8cee7dfc7a3
@@ -50,6 +50,8 @@ require (
 	github.com/opencontainers/image-spec v1.0.2 // indirect
 	github.com/russross/blackfriday/v2 v2.0.1 // indirect
 	github.com/shurcooL/sanitized_anchor_name v1.0.0 // indirect
+	go.opentelemetry.io/otel v1.7.0 // indirect
+	go.opentelemetry.io/otel/trace v1.7.0 // indirect
 	golang.org/x/net v0.0.0-20210825183410-e898025ed96a // indirect
 	golang.org/x/text v0.3.6 // indirect
 	google.golang.org/genproto v0.0.0-20201110150050-8816d57aaa9a // indirect

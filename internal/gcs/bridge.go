@@ -260,7 +260,7 @@ func (brdg *bridge) writeMessage(buf *bytes.Buffer, enc *json.Encoder, mi prot.M
 
 	// Update the buffer with the message header
 	mh := prot.NewHeader(mi, buf.Len(), id)
-	if err = mh.ToBytes(buf.Bytes()[:prot.MessageHeaderSize]); err != nil {
+	if _, err = mh.MarshalTo(buf.Bytes()[:prot.MessageHeaderSize]); err != nil {
 		return fmt.Errorf("bridge request header encode: %w", err)
 	}
 
