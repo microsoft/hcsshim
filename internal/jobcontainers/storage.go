@@ -22,7 +22,7 @@ const fallbackRootfsFormat = `C:\hpc\%s\`
 
 // defaultSiloRootfsLocation is the default location the rootfs for the container will show up
 // inside of a given silo. If bind filter support isn't available the rootfs will be
-// C:\C\<containerID>
+// C:\hpc\<containerID>
 const defaultSiloRootfsLocation = `C:\hpc\`
 
 func (c *JobContainer) mountLayers(ctx context.Context, containerID string, s *specs.Spec, volumeMountPath string) (err error) {

@@ -468,14 +468,11 @@ func (job *JobObject) ApplyFileBinding(root, target string, merged bool) error {
 		return ErrNotSilo
 	}
 
-	// The parent directory needs to exist for the bind to work.
-	if _, err := os.Stat(filepath.Dir(root)); err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		if err := os.MkdirAll(filepath.Dir(root), 0); err != nil {
-			return err
-		}
+	// The parent directory needs to exist for the bind to work. MkdirAll stats and
+	// returns nil if the directory exists internally so we should be fine to mkdirall
+	// every time.
+	if err := os.MkdirAll(filepath.Dir(root), 0); err != nil {
+		return err
 	}
 
 	rootPtr, err := windows.UTF16PtrFromString(root)

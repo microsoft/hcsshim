@@ -280,8 +280,8 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 			// would be to treat all paths as relative to the volume.
 			//
 			// For example:
-			// A working directory of C:\ would become C:\C\12345678\
-			// A working directory of C:\work\dir would become C:\C\12345678\work\dir
+			// A working directory of C:\ would become C:\hpc\12345678\
+			// A working directory of C:\work\dir would become C:\hpc\12345678\work\dir
 			//
 			// The below calls replaceWithMountPoint to replace any occurrences of the environment variable that points to where the container image
 			// volume is mounted.
