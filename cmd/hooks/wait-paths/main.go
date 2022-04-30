@@ -1,9 +1,8 @@
-// +build linux
-
 package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -22,6 +21,14 @@ const (
 // The hook has required list of comma-separated paths and a default timeout in seconds.
 
 func main() {
+	app := newCliApp()
+	if err := app.Run(os.Args); err != nil {
+		logrus.Fatalf("%s\n", err)
+	}
+	os.Exit(0)
+}
+
+func newCliApp() *cli.App {
 	app := cli.NewApp()
 	app.Name = "wait-paths"
 	app.Usage = "Provide a list paths and an optional timeout"
@@ -38,14 +45,16 @@ func main() {
 		},
 	}
 	app.Action = run
-	if err := app.Run(os.Args); err != nil {
-		logrus.Fatalf("%s\n", err)
-	}
-	os.Exit(0)
+	return app
 }
 
 func run(cCtx *cli.Context) error {
 	timeout := cCtx.GlobalInt(timeoutFlag)
+
+	pathsVal := cCtx.GlobalString(pathsFlag)
+	if pathsVal == "" {
+		return errors.New("paths cannot be empty")
+	}
 	paths := strings.Split(cCtx.GlobalString(pathsFlag), ",")
 
 	waitCtx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
