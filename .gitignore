@@ -24,6 +24,7 @@ service/pkg/
 *.img
 *.vhd
 *.tar.gz
+*.tar
 
 # Make stuff
 .rootfs-done
@@ -36,5 +37,9 @@ rootfs-conv/*
 deps/*
 out/*
 
+# test results
+test/results
+
+# go workspace files
 go.work
 go.work.sum

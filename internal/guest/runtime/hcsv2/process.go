@@ -67,6 +67,8 @@ type containerProcess struct {
 	writersCalled bool
 }
 
+var _ Process = &containerProcess{}
+
 // newProcess returns a containerProcess struct that has been initialized with
 // an outstanding wait for process exit, and post exit an outstanding wait for
 // process cleanup to release all resources once at least 1 waiter has
@@ -261,6 +263,8 @@ type externalProcess struct {
 	removeOnce sync.Once
 	remove     func(pid int)
 }
+
+var _ Process = &externalProcess{}
 
 func (ep *externalProcess) Kill(ctx context.Context, signal syscall.Signal) error {
 	if err := syscall.Kill(int(ep.cmd.Process.Pid), signal); err != nil {

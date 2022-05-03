@@ -1,7 +1,6 @@
 //go:build linux
 // +build linux
 
-// Package linux contains definitions required for making a linux ioctl.
 package linux
 
 import (
