@@ -17,6 +17,8 @@ const (
 	timeoutFlag = "timeout"
 )
 
+var errEmptyPaths = errors.New("paths cannot be empty")
+
 // This is a hook that waits for a specific path to appear.
 // The hook has required list of comma-separated paths and a default timeout in seconds.
 
@@ -53,7 +55,7 @@ func run(cCtx *cli.Context) error {
 
 	pathsVal := cCtx.GlobalString(pathsFlag)
 	if pathsVal == "" {
-		return errors.New("paths cannot be empty")
+		return errEmptyPaths
 	}
 	paths := strings.Split(cCtx.GlobalString(pathsFlag), ",")
 
@@ -68,7 +70,7 @@ func run(cCtx *cli.Context) error {
 				}
 				select {
 				case <-waitCtx.Done():
-					return fmt.Errorf("timeout while waiting for path %q to appear", path)
+					return fmt.Errorf("timeout while waiting for path %q to appear: %w", path, context.DeadlineExceeded)
 				default:
 					time.Sleep(time.Millisecond * 10)
 					continue

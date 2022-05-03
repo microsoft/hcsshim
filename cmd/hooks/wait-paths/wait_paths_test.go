@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -17,10 +20,7 @@ func Test_Paths_EmptyString_NotAllowed(t *testing.T) {
 	}
 	app := newCliApp()
 	err := app.Run(args)
-	if err == nil {
-		t.Fatal("expected error, got nothing")
-	}
-	if !strings.Contains(err.Error(), "cannot be empty") {
+	if !errors.Is(err, errEmptyPaths) {
 		t.Fatalf("expected 'cannot be empty' error, got: %s", err)
 	}
 }
@@ -33,10 +33,7 @@ func Test_InvalidWaitPath_DefaultTimeout(t *testing.T) {
 	}
 	app := newCliApp()
 	err := app.Run(args)
-	if err == nil {
-		t.Fatalf("expected error, got nothing")
-	}
-	if !strings.Contains(err.Error(), "timeout while waiting") {
+	if cause := errors.Unwrap(err); !errors.Is(cause, context.DeadlineExceeded) {
 		t.Fatalf("expected 'timeout error', got: %s", err)
 	}
 }
@@ -52,10 +49,7 @@ func Test_InvalidWaitPath_5SecondTimeout(t *testing.T) {
 	app := newCliApp()
 	start := time.Now()
 	err := app.Run(args)
-	if err == nil {
-		t.Fatal("expected timeout error, got nothing")
-	}
-	if !strings.Contains(err.Error(), "timeout while waiting") {
+	if cause := errors.Unwrap(err); !errors.Is(cause, context.DeadlineExceeded) {
 		t.Fatalf("expected 'timeout error', got: %s", err)
 	}
 
@@ -79,9 +73,6 @@ func Test_Valid_Paths_AlreadyPresent(t *testing.T) {
 		}
 		files = append(files, filePath)
 	}
-	defer func() {
-		_ = os.RemoveAll(tmpDir)
-	}()
 	pathsArg := strings.Join(files, ",")
 
 	args := []string{
@@ -102,22 +93,29 @@ func Test_Valid_Paths_BecomeAvailableLater(t *testing.T) {
 		files = append(files, filepath.Join(tmpDir, name))
 	}
 	pathsArg := strings.Join(files, ",")
-	defer func() {
-		_ = os.RemoveAll(tmpDir)
-	}()
 
 	errChan := make(chan error)
+	var wg sync.WaitGroup
+	defer func() {
+		wg.Wait()
+		close(errChan)
+	}()
+
 	args := []string{
 		"wait-paths",
 		"-p",
 		pathsArg,
 	}
 	app := newCliApp()
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		errChan <- app.Run(args)
 	}()
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		time.Sleep(5 * time.Second)
 		for _, fileName := range files {
 			if f, err := os.Create(fileName); err != nil {
@@ -130,7 +128,6 @@ func Test_Valid_Paths_BecomeAvailableLater(t *testing.T) {
 	}()
 
 	if err := <-errChan; err != nil {
-		close(errChan)
 		t.Fatalf("expected no error, got: %s", err)
 	}
 }
