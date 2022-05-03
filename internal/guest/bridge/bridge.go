@@ -17,15 +17,17 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
+	"go.opencensus.io/trace/tracestate"
+
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/guest/runtime/hcsv2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
-	"go.opencensus.io/trace/tracestate"
+	"github.com/Microsoft/hcsshim/internal/protocol/bridge"
 )
 
 // UnknownMessage represents the default handler logic for an unmatched request
@@ -57,16 +59,16 @@ func (f HandlerFunc) ServeMsg(r *Request) (RequestResponse, error) {
 // following the bridge protocol.
 type Mux struct {
 	mu sync.Mutex
-	m  map[prot.MessageIdentifier]map[prot.ProtocolVersion]Handler
+	m  map[bridge.MessageIdentifier]map[prot.ProtocolVersion]Handler
 }
 
 // NewBridgeMux creates a default bridge multiplexer.
 func NewBridgeMux() *Mux {
-	return &Mux{m: make(map[prot.MessageIdentifier]map[prot.ProtocolVersion]Handler)}
+	return &Mux{m: make(map[bridge.MessageIdentifier]map[prot.ProtocolVersion]Handler)}
 }
 
 // Handle registers the handler for the given message id and protocol version.
-func (mux *Mux) Handle(id prot.MessageIdentifier, ver prot.ProtocolVersion, handler Handler) {
+func (mux *Mux) Handle(id bridge.MessageIdentifier, ver prot.ProtocolVersion, handler Handler) {
 	mux.mu.Lock()
 	defer mux.mu.Unlock()
 
@@ -89,7 +91,7 @@ func (mux *Mux) Handle(id prot.MessageIdentifier, ver prot.ProtocolVersion, hand
 }
 
 // HandleFunc registers the handler function for the given message id and protocol version.
-func (mux *Mux) HandleFunc(id prot.MessageIdentifier, ver prot.ProtocolVersion, handler func(*Request) (RequestResponse, error)) {
+func (mux *Mux) HandleFunc(id bridge.MessageIdentifier, ver prot.ProtocolVersion, handler func(*Request) (RequestResponse, error)) {
 	if handler == nil {
 		panic("bridge: nil handler func")
 	}
@@ -131,9 +133,9 @@ func (mux *Mux) ServeMsg(r *Request) (RequestResponse, error) {
 type Request struct {
 	// Context is the request context received from the bridge.
 	Context context.Context
-	// Header is the wire format message header that preceeded the message for
+	// Header is the wire format message header that preceded the message for
 	// this request.
-	Header *prot.MessageHeader
+	Header *bridge.MessageHeader
 	// ContainerID is the id of the container that this message corresponds to.
 	ContainerID string
 	// ActivityID is the id of the specific activity for this request.
@@ -154,7 +156,7 @@ type RequestResponse interface {
 type bridgeResponse struct {
 	// ctx is the context created on request read
 	ctx      context.Context
-	header   *prot.MessageHeader
+	header   *bridge.MessageHeader
 	response interface{}
 }
 
@@ -242,7 +244,7 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 		var recverr error
 		for {
 			if atomic.LoadUint32(&b.hasQuitPending) == 0 {
-				header := &prot.MessageHeader{}
+				header := &bridge.MessageHeader{}
 				if err := binary.Read(bridgeIn, binary.LittleEndian, header); err != nil {
 					if err == io.ErrUnexpectedEOF || err == os.ErrClosed {
 						break
@@ -250,7 +252,7 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 					recverr = errors.Wrap(err, "bridge: failed reading message header")
 					break
 				}
-				message := make([]byte, header.Size-prot.MessageHeaderSize)
+				message := make([]byte, int(header.Size)-bridge.MessageHeaderSize)
 				if _, err := io.ReadFull(bridgeIn, message); err != nil {
 					if err == io.ErrUnexpectedEOF || err == os.ErrClosed {
 						break
@@ -330,8 +332,8 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 			go func(r *Request) {
 				br := bridgeResponse{
 					ctx: r.Context,
-					header: &prot.MessageHeader{
-						Type: prot.GetResponseIdentifier(r.Header.Type),
+					header: &bridge.MessageHeader{
+						Type: r.Header.Type.ToResponse(),
 						ID:   r.Header.ID,
 					},
 				}
@@ -361,7 +363,7 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 				resperr = errors.Wrapf(err, "bridge: failed to marshal JSON for response \"%v\"", resp.response)
 				break
 			}
-			resp.header.Size = uint32(len(responseBytes) + prot.MessageHeaderSize)
+			resp.header.Size = uint32(len(responseBytes) + bridge.MessageHeaderSize)
 			if err := binary.Write(bridgeOut, binary.LittleEndian, resp.header); err != nil {
 				resperr = errors.Wrap(err, "bridge: failed writing message header")
 				break
@@ -417,7 +419,7 @@ func (b *Bridge) PublishNotification(n *prot.ContainerNotification) {
 
 	resp := bridgeResponse{
 		ctx: ctx,
-		header: &prot.MessageHeader{
+		header: &bridge.MessageHeader{
 			Type: prot.ComputeSystemNotificationV1,
 			ID:   0,
 		},

@@ -4,7 +4,6 @@ package gcs
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
@@ -42,93 +41,6 @@ func (a *anyInString) MarshalText() ([]byte, error) {
 
 func (a *anyInString) UnmarshalText(b []byte) error {
 	return json.Unmarshal(b, &a.Value)
-}
-
-type rpcProc uint32
-
-const (
-	rpcCreate rpcProc = (iota+1)<<8 | 1
-	rpcStart
-	rpcShutdownGraceful
-	rpcShutdownForced
-	rpcExecuteProcess
-	rpcWaitForProcess
-	rpcSignalProcess
-	rpcResizeConsole
-	rpcGetProperties
-	rpcModifySettings
-	rpcNegotiateProtocol
-	rpcDumpStacks
-	rpcDeleteContainerState
-	rpcUpdateContainer
-	rpcLifecycleNotification
-)
-
-type msgType uint32
-
-const (
-	msgTypeRequest  msgType = 0x10100000
-	msgTypeResponse msgType = 0x20100000
-	msgTypeNotify   msgType = 0x30100000
-	msgTypeMask     msgType = 0xfff00000
-
-	notifyContainer = 1<<8 | 1
-)
-
-func (typ msgType) String() string {
-	var s string
-	switch typ & msgTypeMask {
-	case msgTypeRequest:
-		s = "Request("
-	case msgTypeResponse:
-		s = "Response("
-	case msgTypeNotify:
-		s = "Notify("
-		switch typ - msgTypeNotify {
-		case notifyContainer:
-			s += "Container"
-		default:
-			s += fmt.Sprintf("%#x", uint32(typ))
-		}
-		return s + ")"
-	default:
-		return fmt.Sprintf("%#x", uint32(typ))
-	}
-	switch rpcProc(typ &^ msgTypeMask) {
-	case rpcCreate:
-		s += "Create"
-	case rpcStart:
-		s += "Start"
-	case rpcShutdownGraceful:
-		s += "ShutdownGraceful"
-	case rpcShutdownForced:
-		s += "ShutdownForced"
-	case rpcExecuteProcess:
-		s += "ExecuteProcess"
-	case rpcWaitForProcess:
-		s += "WaitForProcess"
-	case rpcSignalProcess:
-		s += "SignalProcess"
-	case rpcResizeConsole:
-		s += "ResizeConsole"
-	case rpcGetProperties:
-		s += "GetProperties"
-	case rpcModifySettings:
-		s += "ModifySettings"
-	case rpcNegotiateProtocol:
-		s += "NegotiateProtocol"
-	case rpcDumpStacks:
-		s += "DumpStacks"
-	case rpcDeleteContainerState:
-		s += "DeleteContainerState"
-	case rpcUpdateContainer:
-		s += "UpdateContainer"
-	case rpcLifecycleNotification:
-		s += "LifecycleNotification"
-	default:
-		s += fmt.Sprintf("%#x", uint32(typ))
-	}
-	return s + ")"
 }
 
 // ocspancontext is the internal JSON representation of the OpenCensus

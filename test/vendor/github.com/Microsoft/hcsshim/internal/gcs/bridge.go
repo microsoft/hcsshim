@@ -21,7 +21,13 @@ import (
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/log"
+	prot "github.com/Microsoft/hcsshim/internal/protocol/bridge"
 )
+
+// bridge protocol header is:
+//  uint32 Message Identifier
+//  uint32 Message Length
+//  uint64 Sequence ID
 
 const (
 	hdrSize    = 16
@@ -45,7 +51,7 @@ type responseMessage interface {
 
 // rpc represents an outstanding rpc request to the guest
 type rpc struct {
-	proc    rpcProc
+	proc    prot.ID
 	id      int64
 	req     requestMessage
 	resp    responseMessage
@@ -143,7 +149,7 @@ func (brdg *bridge) Wait() error {
 // AsyncRPC sends an RPC request to the guest but does not wait for a response.
 // If the message cannot be sent before the context is done, then an error is
 // returned.
-func (brdg *bridge) AsyncRPC(ctx context.Context, proc rpcProc, req requestMessage, resp responseMessage) (*rpc, error) {
+func (brdg *bridge) AsyncRPC(ctx context.Context, proc prot.ID, req requestMessage, resp responseMessage) (*rpc, error) {
 	call := &rpc{
 		ch:   make(chan struct{}),
 		proc: proc,
@@ -229,7 +235,7 @@ func (call *rpc) Wait() {
 // If allowCancel is set and the context becomes done, returns an error without
 // waiting for a response. Avoid this on messages that are not idempotent or
 // otherwise safe to ignore the response of.
-func (brdg *bridge) RPC(ctx context.Context, proc rpcProc, req requestMessage, resp responseMessage, allowCancel bool) error {
+func (brdg *bridge) RPC(ctx context.Context, proc prot.ID, req requestMessage, resp responseMessage, allowCancel bool) error {
 	call, err := brdg.AsyncRPC(ctx, proc, req, resp)
 	if err != nil {
 		return err
@@ -266,13 +272,13 @@ func (brdg *bridge) recvLoopRoutine() {
 	}
 }
 
-func readMessage(r io.Reader) (int64, msgType, []byte, error) {
+func readMessage(r io.Reader) (int64, prot.MessageIdentifier, []byte, error) {
 	var h [hdrSize]byte
 	_, err := io.ReadFull(r, h[:])
 	if err != nil {
 		return 0, 0, nil, err
 	}
-	typ := msgType(binary.LittleEndian.Uint32(h[hdrOffType:]))
+	typ := prot.MessageIdentifier(binary.LittleEndian.Uint32(h[hdrOffType:]))
 	n := binary.LittleEndian.Uint32(h[hdrOffSize:])
 	id := int64(binary.LittleEndian.Uint64(h[hdrOffID:]))
 	if n < hdrSize || n > maxMsgSize {
@@ -302,7 +308,7 @@ func isLocalDisconnectError(err error) bool {
 func (brdg *bridge) recvLoop() error {
 	br := bufio.NewReader(brdg.conn)
 	for {
-		id, typ, b, err := readMessage(br)
+		id, mi, b, err := readMessage(br)
 		if err != nil {
 			if err == io.EOF || isLocalDisconnectError(err) {
 				return nil
@@ -311,17 +317,17 @@ func (brdg *bridge) recvLoop() error {
 		}
 		brdg.log.WithFields(logrus.Fields{
 			"payload":    string(b),
-			"type":       typ,
+			"type":       mi.String(),
 			"message-id": id}).Debug("bridge receive")
-		switch typ & msgTypeMask {
-		case msgTypeResponse:
+		switch mi.Type() {
+		case prot.TypeResponse:
 			// Find the request associated with this response.
 			brdg.mu.Lock()
 			call := brdg.rpcs[id]
 			delete(brdg.rpcs, id)
 			brdg.mu.Unlock()
 			if call == nil {
-				return fmt.Errorf("bridge received unknown rpc response for id %d, type %s", id, typ)
+				return fmt.Errorf("bridge received unknown rpc response for id %d, type %s", id, mi)
 			}
 			err := json.Unmarshal(b, call.resp)
 			if err != nil {
@@ -346,9 +352,9 @@ func (brdg *bridge) recvLoop() error {
 				return err
 			}
 
-		case msgTypeNotify:
-			if typ != notifyContainer|msgTypeNotify {
-				return fmt.Errorf("bridge received unknown unknown notification message %s", typ)
+		case prot.TypeNotify:
+			if mi.ID() != prot.NotifyContainer {
+				return fmt.Errorf("bridge received unknown notification message %s", mi)
 			}
 			var ntf containerNotification
 			ntf.ResultInfo.Value = &json.RawMessage{}
@@ -361,7 +367,7 @@ func (brdg *bridge) recvLoop() error {
 				return fmt.Errorf("bridge notification failed: %s", err)
 			}
 		default:
-			return fmt.Errorf("bridge received unknown unknown message type %s", typ)
+			return fmt.Errorf("bridge received unknown message type %s", mi)
 		}
 	}
 }
@@ -385,10 +391,10 @@ func (brdg *bridge) sendLoop() {
 	}
 }
 
-func (brdg *bridge) writeMessage(buf *bytes.Buffer, enc *json.Encoder, typ msgType, id int64, req interface{}) error {
+func (brdg *bridge) writeMessage(buf *bytes.Buffer, enc *json.Encoder, mi prot.MessageIdentifier, id int64, req interface{}) error {
 	// Prepare the buffer with the message.
 	var h [hdrSize]byte
-	binary.LittleEndian.PutUint32(h[hdrOffType:], uint32(typ))
+	binary.LittleEndian.PutUint32(h[hdrOffType:], uint32(mi))
 	binary.LittleEndian.PutUint64(h[hdrOffID:], uint64(id))
 	buf.Write(h[:])
 	err := enc.Encode(req)
@@ -400,11 +406,11 @@ func (brdg *bridge) writeMessage(buf *bytes.Buffer, enc *json.Encoder, typ msgTy
 
 	if brdg.log.Logger.GetLevel() >= logrus.DebugLevel {
 		b := buf.Bytes()[hdrSize:]
-		switch typ {
+		switch mi.ID() {
 		// container environment vars are in rpCreate for linux; rpcExecuteProcess for windows
-		case msgType(rpcCreate) | msgTypeRequest:
+		case prot.RPCCreate:
 			b, err = log.ScrubBridgeCreate(b)
-		case msgType(rpcExecuteProcess) | msgTypeRequest:
+		case prot.RPCExecuteProcess:
 			b, err = log.ScrubBridgeExecProcess(b)
 		}
 		if err != nil {
@@ -412,7 +418,7 @@ func (brdg *bridge) writeMessage(buf *bytes.Buffer, enc *json.Encoder, typ msgTy
 		}
 		brdg.log.WithFields(logrus.Fields{
 			"payload":    string(b),
-			"type":       typ,
+			"type":       mi.String(),
 			"message-id": id}).Debug("bridge send")
 	}
 
@@ -437,7 +443,7 @@ func (brdg *bridge) sendRPC(buf *bytes.Buffer, enc *json.Encoder, call *rpc) err
 	brdg.rpcs[id] = call
 	brdg.nextID++
 	brdg.mu.Unlock()
-	typ := msgType(call.proc) | msgTypeRequest
+	typ := prot.NewIdentifier(prot.TypeRequest, call.proc)
 	err := brdg.writeMessage(buf, enc, typ, id, call.req)
 	if err != nil {
 		// Try to reclaim this request and fail it.

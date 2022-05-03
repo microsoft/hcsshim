@@ -13,12 +13,12 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
-	"github.com/Microsoft/hcsshim/internal/gcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
+	"github.com/Microsoft/hcsshim/internal/protocol/bridge"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/schemaversion"
 	"github.com/Microsoft/hcsshim/internal/uvmfolder"
@@ -74,7 +74,7 @@ func (uvm *UtilityVM) startExternalGcsListener(ctx context.Context) error {
 
 	l, err := winio.ListenHvsock(&winio.HvsockAddr{
 		VMID:      uvm.runtimeID,
-		ServiceID: gcs.WindowsGcsHvsockServiceID,
+		ServiceID: bridge.WindowsGcsHvsockServiceID,
 	})
 	if err != nil {
 		return err
