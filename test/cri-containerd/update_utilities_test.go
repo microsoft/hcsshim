@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/shimdiag"
+	"github.com/Microsoft/hcsshim/pkg/shimdiag"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 

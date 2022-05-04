@@ -12,7 +12,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/Microsoft/hcsshim/internal/cmd"
-	"github.com/Microsoft/hcsshim/internal/shimdiag"
+	"github.com/Microsoft/hcsshim/pkg/shimdiag"
 	"github.com/containerd/console"
 	"github.com/urfave/cli"
 )

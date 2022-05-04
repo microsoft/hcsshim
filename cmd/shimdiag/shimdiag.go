@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Microsoft/hcsshim/internal/shimdiag"
+	"github.com/Microsoft/hcsshim/pkg/shimdiag"
 	"github.com/urfave/cli"
 )
 

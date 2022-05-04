@@ -6,7 +6,7 @@ package cri_containerd
 import (
 	"context"
 
-	"github.com/Microsoft/hcsshim/internal/shimdiag"
+	"github.com/Microsoft/hcsshim/pkg/shimdiag"
 )
 
 func shareInUVM(ctx context.Context, client shimdiag.ShimDiagService, hostPath, uvmPath string, readOnly bool) error {
