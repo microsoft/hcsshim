@@ -1,9 +1,8 @@
-// +build linux
-
 package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -18,10 +17,20 @@ const (
 	timeoutFlag = "timeout"
 )
 
+var errEmptyPaths = errors.New("paths cannot be empty")
+
 // This is a hook that waits for a specific path to appear.
 // The hook has required list of comma-separated paths and a default timeout in seconds.
 
 func main() {
+	app := newCliApp()
+	if err := app.Run(os.Args); err != nil {
+		logrus.Fatalf("%s\n", err)
+	}
+	os.Exit(0)
+}
+
+func newCliApp() *cli.App {
 	app := cli.NewApp()
 	app.Name = "wait-paths"
 	app.Usage = "Provide a list paths and an optional timeout"
@@ -38,14 +47,16 @@ func main() {
 		},
 	}
 	app.Action = run
-	if err := app.Run(os.Args); err != nil {
-		logrus.Fatalf("%s\n", err)
-	}
-	os.Exit(0)
+	return app
 }
 
 func run(cCtx *cli.Context) error {
 	timeout := cCtx.GlobalInt(timeoutFlag)
+
+	pathsVal := cCtx.GlobalString(pathsFlag)
+	if pathsVal == "" {
+		return errEmptyPaths
+	}
 	paths := strings.Split(cCtx.GlobalString(pathsFlag), ",")
 
 	waitCtx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
@@ -59,7 +70,7 @@ func run(cCtx *cli.Context) error {
 				}
 				select {
 				case <-waitCtx.Done():
-					return fmt.Errorf("timeout while waiting for path %q to appear", path)
+					return fmt.Errorf("timeout while waiting for path %q to appear: %w", path, context.DeadlineExceeded)
 				default:
 					time.Sleep(time.Millisecond * 10)
 					continue
