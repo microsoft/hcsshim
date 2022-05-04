@@ -48,8 +48,8 @@ type Exec struct {
 	*execConfig
 }
 
-// New returns a new instance of an `Exec` object. A process is not running at this point and must be started via either Run(), or a combination
-// of Start() + Wait().
+// New returns a new instance of an `Exec` object. A process is not running at this point and
+// must be started via either Run(), or a combination of Start() + Wait().
 func New(path, cmdLine string, opts ...ExecOpts) (*Exec, error) {
 	// Path is the only required parameter here, as we need something to launch.
 	if path == "" {

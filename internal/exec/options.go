@@ -15,10 +15,11 @@ type execConfig struct {
 	env                   []string
 	stdout, stderr, stdin bool
 
-	job          *jobobject.JobObject
-	cpty         *conpty.Pty
-	token        windows.Token
-	processFlags uint32
+	job               *jobobject.JobObject
+	cpty              *conpty.Pty
+	token             windows.Token
+	processFlags      uint32
+	processAttributes *windows.ProcThreadAttributeListContainer
 }
 
 // WithDir will use `dir` as the working directory for the process.
@@ -76,6 +77,14 @@ func WithToken(token windows.Token) ExecOpts {
 func WithProcessFlags(flags uint32) ExecOpts {
 	return func(e *execConfig) error {
 		e.processFlags = flags
+		return nil
+	}
+}
+
+// WithProcessAttributes will append `attr` to the attributes passed to CreateProcess.
+func WithProcessAttributes(attr *windows.ProcThreadAttributeListContainer) ExecOpts {
+	return func(e *execConfig) error {
+		e.processAttributes = attr
 		return nil
 	}
 }

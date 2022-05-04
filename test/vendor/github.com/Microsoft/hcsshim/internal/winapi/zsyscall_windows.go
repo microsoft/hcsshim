@@ -69,6 +69,7 @@ var (
 	procLocalFree                              = modkernel32.NewProc("LocalFree")
 	procNtQueryInformationProcess              = modntdll.NewProc("NtQueryInformationProcess")
 	procGetActiveProcessorCount                = modkernel32.NewProc("GetActiveProcessorCount")
+	procCreateRestrictedToken                  = modadvapi32.NewProc("CreateRestrictedToken")
 	procCM_Get_Device_ID_List_SizeA            = modcfgmgr32.NewProc("CM_Get_Device_ID_List_SizeA")
 	procCM_Get_Device_ID_ListA                 = modcfgmgr32.NewProc("CM_Get_Device_ID_ListA")
 	procCM_Locate_DevNodeW                     = modcfgmgr32.NewProc("CM_Locate_DevNodeW")
@@ -306,6 +307,18 @@ func NtQueryInformationProcess(processHandle windows.Handle, processInfoClass ui
 func GetActiveProcessorCount(groupNumber uint16) (amount uint32) {
 	r0, _, _ := syscall.Syscall(procGetActiveProcessorCount.Addr(), 1, uintptr(groupNumber), 0, 0)
 	amount = uint32(r0)
+	return
+}
+
+func createRestrictedToken(existing windows.Token, flags uint32, disableSidCount uint32, sidsToDisable *windows.SIDAndAttributes, deletePrivilegeCount uint32, privilegesToDelete *windows.LUIDAndAttributes, restrictedSidCount uint32, sidsToRestrict *windows.SIDAndAttributes, newToken *windows.Token) (err error) {
+	r1, _, e1 := syscall.Syscall9(procCreateRestrictedToken.Addr(), 9, uintptr(existing), uintptr(flags), uintptr(disableSidCount), uintptr(unsafe.Pointer(sidsToDisable)), uintptr(deletePrivilegeCount), uintptr(unsafe.Pointer(privilegesToDelete)), uintptr(restrictedSidCount), uintptr(unsafe.Pointer(sidsToRestrict)), uintptr(unsafe.Pointer(newToken)))
+	if r1 == 0 {
+		if e1 != 0 {
+			err = errnoErr(e1)
+		} else {
+			err = syscall.EINVAL
+		}
+	}
 	return
 }
 
