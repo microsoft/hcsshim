@@ -11,7 +11,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/Microsoft/hcsshim/test/internal/require"
 )
 
 const (
@@ -38,7 +38,7 @@ func validateTargets(ctx context.Context, t *testing.T, deviceNumber int, podID 
 }
 
 func Test_Container_Layer_Packing_On_VPMem(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.V19H1)
+	require.Build(t, osversion.V19H1)
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -93,7 +93,7 @@ func Test_Container_Layer_Packing_On_VPMem(t *testing.T) {
 }
 
 func Test_Many_Container_Layers_Supported_On_VPMem(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.V19H1)
+	require.Build(t, osversion.V19H1)
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -124,7 +124,7 @@ func Test_Many_Container_Layers_Supported_On_VPMem(t *testing.T) {
 }
 
 func Test_Annotation_Disable_Multi_Mapping(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.V19H1)
+	require.Build(t, osversion.V19H1)
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())

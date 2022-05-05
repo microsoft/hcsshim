@@ -14,8 +14,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/osversion"
-	_ "github.com/Microsoft/hcsshim/test/functional/manifest"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	testutilities "github.com/Microsoft/hcsshim/test/internal"
 	"github.com/containerd/containerd"
 	eventtypes "github.com/containerd/containerd/api/events"
 	eventsapi "github.com/containerd/containerd/api/services/events/v1"
@@ -25,6 +24,8 @@ import (
 	"github.com/gogo/protobuf/types"
 	"google.golang.org/grpc"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+
+	_ "github.com/Microsoft/hcsshim/test/internal/manifest"
 )
 
 const (

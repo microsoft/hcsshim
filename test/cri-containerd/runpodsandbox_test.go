@@ -22,7 +22,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/Microsoft/hcsshim/test/internal/require"
+	testuvm "github.com/Microsoft/hcsshim/test/internal/uvm"
 	"github.com/containerd/containerd/log"
 	"golang.org/x/sys/windows"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
@@ -982,7 +983,7 @@ func Test_RunPodSandbox_Mount_SandboxDir_NoShare_WCOW(t *testing.T) {
 }
 
 func Test_RunPodSandbox_CPUGroup(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.V21H1)
+	require.Build(t, osversion.V21H1)
 	ctx := context.Background()
 	presentID := "FA22A12C-36B3-486D-A3E9-BC526C2B450B"
 
@@ -1062,7 +1063,7 @@ func createExt4VHD(ctx context.Context, t *testing.T, path string) {
 		log.L.Logger.SetOutput(io.Discard)
 		defer log.L.Logger.SetOutput(origLogOut)
 	}
-	uvm := testutilities.CreateLCOWUVM(ctx, t, t.Name()+"-createExt4VHD")
+	uvm := testuvm.CreateAndStartLCOW(ctx, t, t.Name()+"-createExt4VHD")
 	defer uvm.Close()
 
 	if err := lcow.CreateScratch(ctx, uvm, path, 2, ""); err != nil {
