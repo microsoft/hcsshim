@@ -1,10 +1,14 @@
-package testutilities
+//go:build windows
+
+package internal
+
+import "github.com/Microsoft/hcsshim/test/internal/flag"
 
 // StringSetFlag is a type to be used with the standard library's flag.Var
 // function as a custom flag value. It accumulates the arguments passed each
 // time the flag is used into a set.
 type StringSetFlag struct {
-	set map[string]struct{}
+	set flag.StringSet
 }
 
 // NewStringSetFlag returns a new StringSetFlag with an empty set.
@@ -36,6 +40,6 @@ func (ssf StringSetFlag) Set(s string) error {
 }
 
 // ValueSet returns the internal set of what values have been seen.
-func (ssf StringSetFlag) ValueSet() map[string]struct{} {
+func (ssf StringSetFlag) ValueSet() flag.StringSet {
 	return ssf.set
 }

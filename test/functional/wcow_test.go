@@ -1,4 +1,5 @@
-//go:build functional || wcow
+//go:build windows && (functional || wcow)
+// +build windows
 // +build functional wcow
 
 package functional
@@ -23,7 +24,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 	"github.com/Microsoft/hcsshim/internal/wcow"
 	"github.com/Microsoft/hcsshim/osversion"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/Microsoft/hcsshim/test/internal/layers"
+	"github.com/Microsoft/hcsshim/test/internal/require"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
@@ -363,7 +365,11 @@ func generateShimLayersStruct(t *testing.T, imageLayers []string) []hcsshim.Laye
 
 // Argon through HCSShim interface (v1)
 func TestWCOWArgonShim(t *testing.T) {
-	imageLayers := testutilities.LayerFolders(t, imageName)
+	t.Skip("not yet updated")
+
+	requireFeatures(t, featureWCOW)
+
+	imageLayers := layers.LayerFolders(t, imageName)
 	argonShimMounted := false
 
 	argonShimScratchDir := t.TempDir()
@@ -372,9 +378,6 @@ func TestWCOWArgonShim(t *testing.T) {
 	}
 
 	hostRWSharedDirectory, hostROSharedDirectory := createTestMounts(t)
-	defer os.RemoveAll(hostRWSharedDirectory)
-	defer os.RemoveAll(hostROSharedDirectory)
-
 	layers := generateShimLayersStruct(t, imageLayers)
 
 	// For cleanup on failure
@@ -428,7 +431,11 @@ func TestWCOWArgonShim(t *testing.T) {
 
 // Xenon through HCSShim interface (v1)
 func TestWCOWXenonShim(t *testing.T) {
-	imageLayers := testutilities.LayerFolders(t, imageName)
+	t.Skip("not yet updated")
+
+	requireFeatures(t, featureWCOW)
+
+	imageLayers := layers.LayerFolders(t, imageName)
 
 	xenonShimScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(context.Background(), xenonShimScratchDir, imageLayers); err != nil {
@@ -436,9 +443,6 @@ func TestWCOWXenonShim(t *testing.T) {
 	}
 
 	hostRWSharedDirectory, hostROSharedDirectory := createTestMounts(t)
-	defer os.RemoveAll(hostRWSharedDirectory)
-	defer os.RemoveAll(hostROSharedDirectory)
-
 	uvmImagePath, err := uvmfolder.LocateUVMFolder(context.Background(), imageLayers)
 	if err != nil {
 		t.Fatalf("LocateUVMFolder failed %s", err)
@@ -497,7 +501,11 @@ func generateWCOWOciTestSpec(t *testing.T, imageLayers []string, scratchPath, ho
 
 // Argon through HCSOCI interface (v1)
 func TestWCOWArgonOciV1(t *testing.T) {
-	imageLayers := testutilities.LayerFolders(t, imageName)
+	t.Skip("not yet updated")
+
+	requireFeatures(t, featureWCOW)
+
+	imageLayers := layers.LayerFolders(t, imageName)
 	argonOci1Mounted := false
 	argonOci1ScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(context.Background(), argonOci1ScratchDir, imageLayers); err != nil {
@@ -505,9 +513,6 @@ func TestWCOWArgonOciV1(t *testing.T) {
 	}
 
 	hostRWSharedDirectory, hostROSharedDirectory := createTestMounts(t)
-	defer os.RemoveAll(hostRWSharedDirectory)
-	defer os.RemoveAll(hostROSharedDirectory)
-
 	// For cleanup on failure
 	var argonOci1Resources *resources.Resources
 	var argonOci1 cow.Container
@@ -544,7 +549,11 @@ func TestWCOWArgonOciV1(t *testing.T) {
 
 // Xenon through HCSOCI interface (v1)
 func TestWCOWXenonOciV1(t *testing.T) {
-	imageLayers := testutilities.LayerFolders(t, imageName)
+	t.Skip("not yet updated")
+
+	requireFeatures(t, featureWCOW)
+
+	imageLayers := layers.LayerFolders(t, imageName)
 	xenonOci1Mounted := false
 
 	xenonOci1ScratchDir := t.TempDir()
@@ -553,9 +562,6 @@ func TestWCOWXenonOciV1(t *testing.T) {
 	}
 
 	hostRWSharedDirectory, hostROSharedDirectory := createTestMounts(t)
-	defer os.RemoveAll(hostRWSharedDirectory)
-	defer os.RemoveAll(hostROSharedDirectory)
-
 	// TODO: This isn't currently used.
 	//	uvmImagePath, err := uvmfolder.LocateUVMFolder(imageLayers)
 	//	if err != nil {
@@ -599,8 +605,12 @@ func TestWCOWXenonOciV1(t *testing.T) {
 
 // Argon through HCSOCI interface (v2)
 func TestWCOWArgonOciV2(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
-	imageLayers := testutilities.LayerFolders(t, imageName)
+	t.Skip("not yet updated")
+
+	require.Build(t, osversion.RS5)
+	requireFeatures(t, featureWCOW)
+
+	imageLayers := layers.LayerFolders(t, imageName)
 	argonOci2Mounted := false
 
 	argonOci2ScratchDir := t.TempDir()
@@ -609,9 +619,6 @@ func TestWCOWArgonOciV2(t *testing.T) {
 	}
 
 	hostRWSharedDirectory, hostROSharedDirectory := createTestMounts(t)
-	defer os.RemoveAll(hostRWSharedDirectory)
-	defer os.RemoveAll(hostROSharedDirectory)
-
 	// For cleanup on failure
 	var argonOci2Resources *resources.Resources
 	var argonOci2 cow.Container
@@ -649,8 +656,12 @@ func TestWCOWArgonOciV2(t *testing.T) {
 
 // Xenon through HCSOCI interface (v2)
 func TestWCOWXenonOciV2(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
-	imageLayers := testutilities.LayerFolders(t, imageName)
+	t.Skip("not yet updated")
+
+	require.Build(t, osversion.RS5)
+	requireFeatures(t, featureWCOW)
+
+	imageLayers := layers.LayerFolders(t, imageName)
 	xenonOci2Mounted := false
 	xenonOci2UVMCreated := false
 
@@ -660,9 +671,6 @@ func TestWCOWXenonOciV2(t *testing.T) {
 	}
 
 	hostRWSharedDirectory, hostROSharedDirectory := createTestMounts(t)
-	defer os.RemoveAll(hostRWSharedDirectory)
-	defer os.RemoveAll(hostROSharedDirectory)
-
 	uvmImagePath, err := uvmfolder.LocateUVMFolder(context.Background(), imageLayers)
 	if err != nil {
 		t.Fatalf("LocateUVMFolder failed %s", err)

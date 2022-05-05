@@ -1,0 +1,49 @@
+//go:build windows
+
+package layers
+
+import (
+	"context"
+	"path/filepath"
+	"testing"
+
+	"github.com/Microsoft/hcsshim/internal/lcow"
+	"github.com/Microsoft/hcsshim/internal/uvm"
+)
+
+const (
+	CacheFileName       = "cache.vhdx"
+	ScratchSpaceName    = "sandbox.vhdx"
+	UVMScratchSpaceName = "uvmscratch.vhdx"
+)
+
+func CacheFile(_ context.Context, t testing.TB, dir string) string {
+	if dir == "" {
+		dir = t.TempDir()
+	}
+	cache := filepath.Join(dir, CacheFileName)
+	return cache
+}
+
+// ScratchSpace creates an LCOW scratch space VHD at `dir\name`, and returns the dir and name.
+// If name, dir, or chache are empty, ScratchSpace uses a default name or creates a temporary
+// directory, respectively.
+func ScratchSpace(ctx context.Context, t testing.TB, vm *uvm.UtilityVM, name, dir, cache string) (string, string) {
+	if dir == "" {
+		dir = t.TempDir()
+	}
+	if cache == "" {
+		cache = CacheFile(ctx, t, dir)
+	}
+	if name == "" {
+		name = ScratchSpaceName
+	}
+	scratch := filepath.Join(dir, name)
+
+	if err := lcow.CreateScratch(ctx, vm, scratch, lcow.DefaultScratchSizeGB, cache); err != nil {
+		t.Helper()
+		t.Fatalf("could not create scratch space %q using vm %q and cache file %q: %v", scratch, vm.ID(), cache, err)
+	}
+
+	return dir, scratch
+}

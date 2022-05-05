@@ -1,5 +1,5 @@
-//go:build functional || uvmp9
-// +build functional uvmp9
+//go:build windows && functional
+// +build windows,functional
 
 // This file isn't called uvm_plan9_test.go as go test skips when a number is in it... go figure (pun intended)
 
@@ -15,16 +15,23 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+
+	"github.com/Microsoft/hcsshim/test/internal/require"
+	testuvm "github.com/Microsoft/hcsshim/test/internal/uvm"
 )
 
 // TestPlan9 tests adding/removing Plan9 shares to/from a v2 Linux utility VM
 // TODO: This is very basic. Need multiple shares and so-on. Can be iterated on later.
 func TestPlan9(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
+	t.Skip("not yet updated")
 
-	vm := testutilities.CreateLCOWUVM(context.Background(), t, t.Name())
+	require.Build(t, osversion.RS5)
+	requireFeatures(t, featureLCOW, featurePlan9)
+	ctx := context.Background()
+
+	vm := testuvm.CreateAndStartLCOWFromOpts(ctx, t, defaultLCOWOptions(t, t.Name()))
 	defer vm.Close()
+	testuvm.SetSecurityPolicy(ctx, t, vm, "")
 
 	dir := t.TempDir()
 	var iterations uint32 = 64
@@ -46,12 +53,17 @@ func TestPlan9(t *testing.T) {
 }
 
 func TestPlan9_Writable(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
+	// t.Skip("not yet updated")
 
-	opts := uvm.NewDefaultOptionsLCOW(t.Name(), "")
+	require.Build(t, osversion.RS5)
+	requireFeatures(t, featureLCOW, featurePlan9)
+	ctx := context.Background()
+
+	opts := defaultLCOWOptions(t, t.Name())
 	opts.NoWritableFileShares = true
-	vm := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, opts)
+	vm := testuvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
 	defer vm.Close()
+	testuvm.SetSecurityPolicy(ctx, t, vm, "")
 
 	dir := t.TempDir()
 

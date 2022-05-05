@@ -1,4 +1,5 @@
-//go:build functional || uvmmem
+//go:build windows && (functional || uvmmem)
+// +build windows
 // +build functional uvmmem
 
 package functional
@@ -6,23 +7,23 @@ package functional
 import (
 	"context"
 	"io"
-	"os"
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/Microsoft/hcsshim/test/internal/require"
 	"github.com/sirupsen/logrus"
+
+	tuvm "github.com/Microsoft/hcsshim/test/internal/uvm"
 )
 
 func runMemStartLCOWTest(t *testing.T, opts *uvm.OptionsLCOW) {
-	u := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, opts)
+	u := tuvm.CreateAndStartLCOWFromOpts(context.Background(), t, opts)
 	u.Close()
 }
 
 func runMemStartWCOWTest(t *testing.T, opts *uvm.OptionsWCOW) {
-	u, _, scratchDir := testutilities.CreateWCOWUVMFromOptsWithImage(context.Background(), t, opts, "microsoft/nanoserver")
-	defer os.RemoveAll(scratchDir)
+	u, _, _ := tuvm.CreateWCOWUVMFromOptsWithImage(context.Background(), t, opts, "microsoft/nanoserver")
 	u.Close()
 }
 
@@ -46,7 +47,7 @@ func runMemTests(t *testing.T, os string) {
 			wopts.EnableDeferredCommit = bt.enableDeferredCommit
 			runMemStartWCOWTest(t, wopts)
 		} else {
-			lopts := uvm.NewDefaultOptionsLCOW(t.Name(), "")
+			lopts := defaultLCOWOptions(t, t.Name())
 			lopts.MemorySizeInMB = 512
 			lopts.AllowOvercommit = bt.allowOvercommit
 			lopts.EnableDeferredCommit = bt.enableDeferredCommit
@@ -56,12 +57,18 @@ func runMemTests(t *testing.T, os string) {
 }
 
 func TestMemBackingTypeWCOW(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
+	t.Skip("not yet updated")
+
+	require.Build(t, osversion.RS5)
+	requireFeatures(t, featureWCOW)
 	runMemTests(t, "windows")
 }
 
 func TestMemBackingTypeLCOW(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
+	t.Skip("not yet updated")
+
+	require.Build(t, osversion.RS5)
+	requireFeatures(t, featureLCOW)
 	runMemTests(t, "linux")
 }
 
@@ -88,21 +95,30 @@ func runBenchMemStartLcowTest(b *testing.B, allowOvercommit bool, enableDeferred
 }
 
 func BenchmarkMemBackingTypeVirtualLCOW(b *testing.B) {
-	//testutilities.RequiresBuild(t, osversion.RS5)
+	b.Skip("not yet updated")
+
+	require.Build(b, osversion.RS5)
+	requireFeatures(b, featureLCOW)
 	logrus.SetOutput(io.Discard)
 
 	runBenchMemStartLcowTest(b, true, false)
 }
 
 func BenchmarkMemBackingTypeVirtualDeferredLCOW(b *testing.B) {
-	//testutilities.RequiresBuild(t, osversion.RS5)
+	b.Skip("not yet updated")
+
+	require.Build(b, osversion.RS5)
+	requireFeatures(b, featureLCOW)
 	logrus.SetOutput(io.Discard)
 
 	runBenchMemStartLcowTest(b, true, true)
 }
 
 func BenchmarkMemBackingTypePhyscialLCOW(b *testing.B) {
-	//testutilities.RequiresBuild(t, osversion.RS5)
+	b.Skip("not yet updated")
+
+	require.Build(b, osversion.RS5)
+	requireFeatures(b, featureLCOW)
 	logrus.SetOutput(io.Discard)
 
 	runBenchMemStartLcowTest(b, false, false)

@@ -1,4 +1,6 @@
-package testutilities
+//go:build windows
+
+package internal
 
 import (
 	"encoding/json"

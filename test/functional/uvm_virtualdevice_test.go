@@ -1,5 +1,5 @@
-//go:build functional
-// +build functional
+//go:build windows && functional
+// +build windows,functional
 
 package functional
 
@@ -12,7 +12,8 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/Microsoft/hcsshim/test/internal/require"
+	tuvm "github.com/Microsoft/hcsshim/test/internal/uvm"
 )
 
 const lcowGPUBootFilesPath = "C:\\ContainerPlat\\LinuxBootFiles\\nvidiagpu"
@@ -30,7 +31,11 @@ func findTestVirtualDevice() (string, error) {
 }
 
 func TestVirtualDevice(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.V20H1)
+	t.Skip("not yet updated")
+
+	require.Build(t, osversion.V20H1)
+	requireFeatures(t, featureLCOW)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -54,7 +59,7 @@ func TestVirtualDevice(t *testing.T) {
 	opts.BootFilesPath = lcowGPUBootFilesPath
 
 	// create test uvm and ensure we can assign and remove the device
-	vm := testutilities.CreateLCOWUVMFromOpts(ctx, t, opts)
+	vm := tuvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
 	defer vm.Close()
 	vpci, err := vm.AssignDevice(ctx, testDeviceInstanceID, 0, "")
 	if err != nil {

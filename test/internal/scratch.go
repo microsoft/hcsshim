@@ -1,4 +1,6 @@
-package testutilities
+//go:build windows
+
+package internal
 
 import (
 	"context"
@@ -9,6 +11,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
+
+	tuvm "github.com/Microsoft/hcsshim/test/internal/uvm"
 )
 
 const lcowGlobalSVMID = "test.lcowglobalsvm"
@@ -47,7 +51,7 @@ func CreateWCOWBlankRWLayer(t *testing.T, imageLayers []string) string {
 // for a "service VM".
 func CreateLCOWBlankRWLayer(ctx context.Context, t *testing.T) string {
 	if lcowGlobalSVM == nil {
-		lcowGlobalSVM = CreateLCOWUVM(ctx, t, lcowGlobalSVMID)
+		lcowGlobalSVM = tuvm.CreateAndStartLCOW(ctx, t, lcowGlobalSVMID)
 		lcowCacheScratchFile = filepath.Join(t.TempDir(), "sandbox.vhdx")
 	}
 	tempDir := t.TempDir()

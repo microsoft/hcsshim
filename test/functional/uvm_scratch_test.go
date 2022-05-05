@@ -1,4 +1,5 @@
-//go:build functional || uvmscratch
+//go:build windows && (functional || uvmscratch)
+// +build windows
 // +build functional uvmscratch
 
 package functional
@@ -12,14 +13,18 @@ import (
 	"github.com/Microsoft/hcsshim/internal/lcow"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/Microsoft/hcsshim/test/internal/require"
+	tuvm "github.com/Microsoft/hcsshim/test/internal/uvm"
 )
 
 func TestScratchCreateLCOW(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
-	tempDir := t.TempDir()
+	t.Skip("not yet updated")
 
-	firstUVM := testutilities.CreateLCOWUVM(context.Background(), t, "TestCreateLCOWScratch")
+	require.Build(t, osversion.RS5)
+	requireFeatures(t, featureLCOW, featureScratch)
+
+	tempDir := t.TempDir()
+	firstUVM := tuvm.CreateAndStartLCOW(context.Background(), t, "TestCreateLCOWScratch")
 	defer firstUVM.Close()
 
 	cacheFile := filepath.Join(tempDir, "cache.vhdx")
@@ -36,7 +41,7 @@ func TestScratchCreateLCOW(t *testing.T) {
 		t.Fatalf("cacheFile wasn't created!")
 	}
 
-	targetUVM := testutilities.CreateLCOWUVM(context.Background(), t, "TestCreateLCOWScratch_target")
+	targetUVM := tuvm.CreateAndStartLCOW(context.Background(), t, "TestCreateLCOWScratch_target")
 	defer targetUVM.Close()
 
 	// A non-cached create
