@@ -28,33 +28,33 @@ func createJobObjectsGetUtilArgs(ctx context.Context, cid, toolPath string, opti
 	return args
 }
 
-func checkLCOWResourceLimit(t *testing.T, ctx context.Context, client runtime.RuntimeServiceClient, cid, path string, expected uint64) {
-	t.Helper()
+func checkLCOWResourceLimit(tb testing.TB, ctx context.Context, client runtime.RuntimeServiceClient, cid, path string, expected uint64) {
+	tb.Helper()
 	cmd := []string{"cat", path}
 	containerExecReq := &runtime.ExecSyncRequest{
 		ContainerId: cid,
 		Cmd:         cmd,
 		Timeout:     20,
 	}
-	r := execSync(t, client, ctx, containerExecReq)
+	r := execSync(tb, client, ctx, containerExecReq)
 	if r.ExitCode != 0 {
-		t.Fatalf("failed with exit code %d to cat path: %s", r.ExitCode, r.Stderr)
+		tb.Fatalf("failed with exit code %d to cat path: %s", r.ExitCode, r.Stderr)
 	}
 	output := strings.TrimSpace(string(r.Stdout))
 	bytesActual, err := strconv.ParseUint(output, 10, 0)
 	if err != nil {
-		t.Fatalf("could not parse output %s: %s", output, err)
+		tb.Fatalf("could not parse output %s: %s", output, err)
 	}
 	if bytesActual != expected {
-		t.Fatalf("expected to have a memory limit of %v, instead got %v", expected, bytesActual)
+		tb.Fatalf("expected to have a memory limit of %v, instead got %v", expected, bytesActual)
 	}
 }
 
-func checkWCOWResourceLimit(t *testing.T, ctx context.Context, runtimeHandler, shimName, cid, query string, expected uint64) {
-	t.Helper()
+func checkWCOWResourceLimit(tb testing.TB, ctx context.Context, runtimeHandler, shimName, cid, query string, expected uint64) {
+	tb.Helper()
 	shim, err := shimdiag.GetShim(shimName)
 	if err != nil {
-		t.Fatalf("failed to find shim %v: %v", shimName, err)
+		tb.Fatalf("failed to find shim %v: %v", shimName, err)
 	}
 	shimClient := shimdiag.NewShimDiagClient(shim)
 
@@ -65,7 +65,7 @@ func checkWCOWResourceLimit(t *testing.T, ctx context.Context, runtimeHandler, s
 	} else {
 		guestPath = podJobObjectUtilPath
 		if err := shareInUVM(ctx, shimClient, testJobObjectUtilFilePath, guestPath, false); err != nil {
-			t.Fatalf("failed to share test utility into pod: %v", err)
+			tb.Fatalf("failed to share test utility into pod: %v", err)
 		}
 	}
 
@@ -80,19 +80,19 @@ func checkWCOWResourceLimit(t *testing.T, ctx context.Context, runtimeHandler, s
 
 	exitCode, err := execInHost(ctx, shimClient, args, nil, bw, bwErr)
 	if err != nil {
-		t.Fatalf("failed to exec request in the host with: %v and %v", err, bufErr.String())
+		tb.Fatalf("failed to exec request in the host with: %v and %v", err, bufErr.String())
 	}
 	if exitCode != 0 {
-		t.Fatalf("exec request in host failed with exit code %v: %v", exitCode, bufErr.String())
+		tb.Fatalf("exec request in host failed with exit code %v: %v", exitCode, bufErr.String())
 	}
 
 	// validate the results
 	value := strings.TrimSpace(strings.TrimPrefix(buf.String(), query+": "))
 	limitActual, err := strconv.ParseUint(value, 10, 0)
 	if err != nil {
-		t.Fatalf("could not parse output %s: %s", buf.String(), err)
+		tb.Fatalf("could not parse output %s: %s", buf.String(), err)
 	}
 	if limitActual != expected {
-		t.Fatalf("expected to have a limit of %v, instead got %v", expected, limitActual)
+		tb.Fatalf("expected to have a limit of %v, instead got %v", expected, limitActual)
 	}
 }

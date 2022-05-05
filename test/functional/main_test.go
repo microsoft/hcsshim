@@ -90,13 +90,13 @@ var (
 	flagFeatures            = testflag.NewFeatureFlag(allFeatures)
 	flagContainerdNamespace = flag.String("ctr-namespace", hcsOwner,
 		"containerd `namespace` to use when creating OCI specs")
-	flagLCOWLayerPaths = testflag.NewStringSlice("lcow-layer-paths",
+	flagLCOWLayerPaths = testflag.NewStringSet("lcow-layer-paths",
 		"comma separated list of image layer `paths` to use as LCOW container rootfs. "+
-			"If empty, \""+alpineImagePaths.Image+"\" will be pulled and unpacked.")
+			"If empty, \""+alpineImagePaths.Image+"\" will be pulled and unpacked.", true)
 	//nolint:unused // will be used when WCOW tests are updated
-	flagWCOWLayerPaths = testflag.NewStringSlice("wcow-layer-paths",
+	flagWCOWLayerPaths = testflag.NewStringSet("wcow-layer-paths",
 		"comma separated list of image layer `paths` to use as WCOW uVM and container rootfs. "+
-			"If empty, \""+nanoserverImagePaths.Image+"\" will be pulled and unpacked.")
+			"If empty, \""+nanoserverImagePaths.Image+"\" will be pulled and unpacked.", true)
 	flagLayerTempDir = flag.String("layer-temp-dir", "",
 		"`directory` to unpack image layers to, if not provided. Leave empty to use os.TempDir.")
 	flagLinuxBootFilesPath = flag.String("linux-bootfiles", "",
@@ -133,7 +133,7 @@ func TestMain(m *testing.M) {
 	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 	logrus.SetLevel(flagLogLevel.Level)
 
-	logrus.Debugf("using features %q", flagFeatures.S.Strings())
+	logrus.Debugf("using features: %s", flagFeatures.Strings())
 
 	images := []*layers.LazyImageLayers{alpineImagePaths, nanoserverImagePaths, servercoreImagePaths}
 	for _, l := range images {
@@ -179,7 +179,7 @@ func CreateContainerTestWrapper(ctx context.Context, options *hcsoci.CreateOptio
 
 func requireFeatures(tb testing.TB, features ...string) {
 	tb.Helper()
-	require.Features(tb, flagFeatures.S, features...)
+	require.Features(tb, flagFeatures, features...)
 }
 
 func defaultLCOWOptions(tb testing.TB) *uvm.OptionsLCOW {
@@ -202,7 +202,7 @@ func defaultWCOWOptions(tb testing.TB) *uvm.OptionsWCOW {
 // Otherwise, it pulls an appropriate image.
 func linuxImageLayers(ctx context.Context, tb testing.TB) []string {
 	tb.Helper()
-	if ss := flagLCOWLayerPaths.S.Strings(); len(ss) > 0 {
+	if ss := flagLCOWLayerPaths.Strings(); len(ss) > 0 {
 		return ss
 	}
 	return alpineImagePaths.Layers(ctx, tb)
@@ -215,7 +215,7 @@ func linuxImageLayers(ctx context.Context, tb testing.TB) []string {
 //nolint:deadcode,unused // will be used when WCOW tests are updated
 func windowsImageLayers(ctx context.Context, tb testing.TB) []string {
 	tb.Helper()
-	if ss := flagWCOWLayerPaths.S.Strings(); len(ss) > 0 {
+	if ss := flagWCOWLayerPaths.Strings(); len(ss) > 0 {
 		return ss
 	}
 	return nanoserverImagePaths.Layers(ctx, tb)

@@ -37,58 +37,58 @@ func WithSandboxLabels(labels map[string]string) SandboxConfigOpt {
 	}
 }
 
-func runPodSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.RunPodSandboxRequest) string {
-	t.Helper()
+func runPodSandbox(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.RunPodSandboxRequest) string {
+	tb.Helper()
 	response, err := client.RunPodSandbox(ctx, request)
 	if err != nil {
-		t.Fatalf("failed RunPodSandbox request with: %v", err)
+		tb.Fatalf("failed RunPodSandbox request with: %v", err)
 	}
 	return response.PodSandboxId
 }
 
-func stopPodSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, podID string) {
-	t.Helper()
+func stopPodSandbox(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, podID string) {
+	tb.Helper()
 	_, err := client.StopPodSandbox(ctx, &runtime.StopPodSandboxRequest{
 		PodSandboxId: podID,
 	})
 	if err != nil {
-		t.Fatalf("failed StopPodSandbox for sandbox: %s, request with: %v", podID, err)
+		tb.Fatalf("failed StopPodSandbox for sandbox: %s, request with: %v", podID, err)
 	}
 }
 
-func removePodSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, podID string) {
-	t.Helper()
+func removePodSandbox(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, podID string) {
+	tb.Helper()
 	_, err := client.RemovePodSandbox(ctx, &runtime.RemovePodSandboxRequest{
 		PodSandboxId: podID,
 	})
 	if err != nil {
-		t.Fatalf("failed RemovePodSandbox for sandbox: %s, request with: %v", podID, err)
+		tb.Fatalf("failed RemovePodSandbox for sandbox: %s, request with: %v", podID, err)
 	}
 }
 
-func getPodSandboxStatus(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, podID string) *runtime.PodSandboxStatus {
-	t.Helper()
+func getPodSandboxStatus(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, podID string) *runtime.PodSandboxStatus {
+	tb.Helper()
 	status, err := client.PodSandboxStatus(ctx, &runtime.PodSandboxStatusRequest{
 		PodSandboxId: podID,
 	})
 	if err != nil {
-		t.Fatalf("failed PodSandboxStatus for sandbox: %s, request with: %v", podID, err)
+		tb.Fatalf("failed PodSandboxStatus for sandbox: %s, request with: %v", podID, err)
 	}
 	return status.Status
 }
 
-func assertPodSandboxState(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, podID string, state runtime.PodSandboxState) {
-	t.Helper()
-	if st := getPodSandboxStatus(t, client, ctx, podID).State; st != state {
-		t.Fatalf("got pod sandbox %q state %q; wanted %v", podID, st.String(), state.String())
+func assertPodSandboxState(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, podID string, state runtime.PodSandboxState) {
+	tb.Helper()
+	if st := getPodSandboxStatus(tb, client, ctx, podID).State; st != state {
+		tb.Fatalf("got pod sandbox %q state %q; wanted %v", podID, st.String(), state.String())
 	}
 }
 
-func getTestSandboxConfig(t *testing.T, opts ...SandboxConfigOpt) *runtime.PodSandboxConfig {
-	t.Helper()
+func getTestSandboxConfig(tb testing.TB, opts ...SandboxConfigOpt) *runtime.PodSandboxConfig {
+	tb.Helper()
 	c := &runtime.PodSandboxConfig{
 		Metadata: &runtime.PodSandboxMetadata{
-			Name:      t.Name(),
+			Name:      tb.Name(),
 			Namespace: testNamespace,
 		},
 	}
@@ -107,17 +107,17 @@ func getTestSandboxConfig(t *testing.T, opts ...SandboxConfigOpt) *runtime.PodSa
 
 	for _, o := range opts {
 		if err := o(c); err != nil {
-			t.Helper()
-			t.Fatalf("failed to apply PodSandboxConfig option: %s", err)
+			tb.Helper()
+			tb.Fatalf("failed to apply PodSandboxConfig option: %s", err)
 		}
 	}
 	return c
 }
 
-func getRunPodSandboxRequest(t *testing.T, runtimeHandler string, sandboxOpts ...SandboxConfigOpt) *runtime.RunPodSandboxRequest {
-	t.Helper()
+func getRunPodSandboxRequest(tb testing.TB, runtimeHandler string, sandboxOpts ...SandboxConfigOpt) *runtime.RunPodSandboxRequest {
+	tb.Helper()
 	return &runtime.RunPodSandboxRequest{
-		Config:         getTestSandboxConfig(t, sandboxOpts...),
+		Config:         getTestSandboxConfig(tb, sandboxOpts...),
 		RuntimeHandler: runtimeHandler,
 	}
 }

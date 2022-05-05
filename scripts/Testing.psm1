@@ -1,10 +1,10 @@
 function New-TestCommand {
     [CmdletBinding()]
     param (
+        [Parameter(Mandatory)]
         [ValidateSet('Test', 'Bench', 'List')]
-        [alias('a')]
         [string]
-        $Action = 'Bench',
+        $Action,
 
         [Parameter(Mandatory)]
         [string]
@@ -16,73 +16,82 @@ function New-TestCommand {
 
         [Parameter(Mandatory)]
         [string]
-        $OutDirectory ,
+        $OutDirectory,
+
+        [string]
+        $OutFile,
 
         [DateTime]
         $Date = (Get-Date),
 
         [string]
-        $Note = '',
+        $Note,
 
         # test parameters
-        [alias('tv')]
         [switch]
-        $TestVerbose = $false,
+        $Shuffle,
+
+        [switch]
+        $TestVerbose,
 
         [int]
-        $Count = 1,
+        $Count,
 
         [string]
-        $BenchTime = '5s',
+        $BenchTime,
 
         [string]
-        $Timeout = '10m',
+        $Timeout,
 
         [string]
-        $Run = '',
+        $Run,
 
-        [string]
-        $Feature = ''
+        [string[]]
+        $Features
     )
-
-    $OutDirectory = Resolve-Path $OutDirectory
     Write-Verbose "creating $OutDirectory"
-
     New-Item -ItemType 'directory' -Path $OutDirectory -Force > $null
 
-    $testcmd = "$Path `'-test.timeout=$Timeout`' `'-test.shuffle=on`' `'-test.count=$Count`' "
+    $testcmd = "$Path `'-test.timeout=$Timeout`' `'-test.count=$Count`' "
+
+    if ( $Shuffle ) {
+        $testcmd += '''-test.shuffle=on'' '
+    }
 
     if ( $TestVerbose ) {
-        $testcmd += ' ''-test.v'' '
+        $testcmd += '''-test.v'' '
     }
 
     switch ( $Action ) {
         'List' {
-            if ( $Run -eq '' ) {
+            if ( -not $Run ) {
                 $Run = '.'
             }
-            $testcmd += " `'-test.list=$Run`' "
+            $testcmd += "`'-test.list=$Run`' "
         }
         'Test' {
-            if ( $Run -ne '' ) {
-                $testcmd += " `'-test.run=$Run`' "
+            if ( $Run ) {
+                $testcmd += "`'-test.run=$Run`' "
             }
         }
         'Bench' {
-            if ( $Run -eq '' ) {
+            if ( -not $Run ) {
                 $Run = '.'
             }
-            $testcmd += ' ''-test.run=^#'' ''-test.benchmem'' ' + `
-                " `'-test.bench=$Run`' `'-test.benchtime=$BenchTime`' "
+            $testcmd += '''-test.run=^#'' ''-test.benchmem'' ' + `
+                "`'-test.bench=$Run`' `'-test.benchtime=$BenchTime`' "
         }
     }
 
-    if ( $Feature -ne '' ) {
-        $testcmd += " `'-feature=$Feature`' "
+    foreach ( $Feature in $Features ) {
+        $Feature = $Feature -replace ' ', ''
+        if ( $Feature ) {
+            $testcmd += "`'-feature=$Feature`' "
+        }
     }
 
-    $f = $Name + '-' + $Action
-    if ($Note -ne '' ) {
+    $f = $Name + '-' + ($Action.ToLower())
+    if ( $Note ) {
         $f += '-' + $Note
     }
     $out = Join-Path $OutDirectory "$f-$(Get-Date -Date $date -Format FileDateTime).txt"
@@ -101,7 +110,7 @@ function Invoke-TestCommand {
         $TestCmdPreamble = $TestCmd,
 
         [string]
-        $OutputFile = 'nul',
+        $OutputFile = '',
 
         [string]
         $OutputCmd,
@@ -115,30 +124,33 @@ function Invoke-TestCommand {
         [string]
         $Note
     )
+    Write-Verbose "Running command: $TestCmd"
 
-    if ($OutputFile -eq '' ) {
+    if ( -not $OutputFile ) {
         $OutputFile = 'nul'
+    } else {
+        Write-Verbose "Saving output to: $OutputFile"
     }
 
-    Write-Verbose "Saving output to: $OutputFile"
+
     if ( $Preamble ) {
         & {
             Write-Output "test.date: $(Get-Date -Date $Date -UFormat '%FT%R%Z' -AsUTC)"
-            if ( $Note -ne '' ) {
+            if ( $Note ) {
                 Write-Output "note: $Note"
             }
             Write-Output "test.command: $TestCmdPreamble"
-            Write-Output "pkg.commit: $(git rev-parse HEAD)"
-        } | Tee-Object -Append -FilePath $OutputFile
+            if ( Get-Command -ErrorAction Ignore 'git' ) {
+                Write-Output "pkg.commit: $(git rev-parse HEAD 2>$null)"
+            }
+        } | Tee-Object -Encoding utf8 -FilePath $OutputFile
     }
+    Invoke-Expression $TestCmd |
+        Tee-Object -Encoding utf8 -Append -FilePath $OutputFile
 
-    Write-Verbose "Running command: $TestCmd"
-    Invoke-Expression $TestCmd | Tee-Object -Append -FilePath $OutputFile
-
-    if ( $OutputCmd -ne '' -and $OutputFile -ne 'nul' ) {
+    if ( $OutputCmd -and $OutputFile -ne 'nul' ) {
         $oc = "$OutputCmd $OutputFile"
         Write-Verbose "Running command: $oc"
         Invoke-Expression $oc
     }
-
 }

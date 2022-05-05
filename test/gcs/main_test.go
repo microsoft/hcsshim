@@ -86,7 +86,7 @@ func setup() (err error) {
 	// test2json does not consume stderr
 	logrus.SetOutput(os.Stdout)
 	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
-	logrus.Infof("using features %q", flagFeatures.S.Strings())
+	logrus.Debugf("using features: %s", flagFeatures.Strings())
 
 	// should already start in gcs cgroup
 	if !*flagJoinGCSCgroup {
@@ -171,5 +171,5 @@ func getTransport() transport.Transport {
 
 func requireFeatures(tb testing.TB, features ...string) {
 	tb.Helper()
-	require.Features(tb, flagFeatures.S, features...)
+	require.Features(tb, flagFeatures, features...)
 }

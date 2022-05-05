@@ -11,14 +11,13 @@ import (
 // Features checks the wanted features are present in given,
 // and skips the test if any are missing. If the given set is empty,
 // the function returns (by default all features are enabled).
-func Features(tb testing.TB, given flag.StringSet, want ...string) {
+func Features(tb testing.TB, given *flag.StringSet, want ...string) {
 	tb.Helper()
-	if len(given) == 0 {
+	if given.Len() == 0 {
 		return
 	}
 	for _, f := range want {
-		ff := flag.Standardize(f)
-		if _, ok := given[ff]; !ok {
+		if !given.IsSet(f) {
 			tb.Skipf("skipping test due to feature not set: %s", f)
 		}
 	}

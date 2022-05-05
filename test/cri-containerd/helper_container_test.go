@@ -13,48 +13,48 @@ import (
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
-func createContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.CreateContainerRequest) string {
-	t.Helper()
+func createContainer(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.CreateContainerRequest) string {
+	tb.Helper()
 	response, err := client.CreateContainer(ctx, request)
 	if err != nil {
-		t.Fatalf("failed CreateContainer in sandbox: %s, with: %v", request.PodSandboxId, err)
+		tb.Fatalf("failed CreateContainer in sandbox: %s, with: %v", request.PodSandboxId, err)
 	}
 	return response.ContainerId
 }
 
-func startContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) {
-	t.Helper()
+func startContainer(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) {
+	tb.Helper()
 	_, err := client.StartContainer(ctx, &runtime.StartContainerRequest{
 		ContainerId: containerID,
 	})
 	if err != nil {
-		t.Fatalf("failed StartContainer request for container: %s, with: %v", containerID, err)
+		tb.Fatalf("failed StartContainer request for container: %s, with: %v", containerID, err)
 	}
 }
 
-func stopContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) {
-	t.Helper()
-	stopContainerWithTimeout(t, client, ctx, containerID, 0)
+func stopContainer(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) {
+	tb.Helper()
+	stopContainerWithTimeout(tb, client, ctx, containerID, 0)
 }
 
-func stopContainerWithTimeout(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string, timeout int64) {
-	t.Helper()
+func stopContainerWithTimeout(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, containerID string, timeout int64) {
+	tb.Helper()
 	_, err := client.StopContainer(ctx, &runtime.StopContainerRequest{
 		ContainerId: containerID,
 		Timeout:     timeout,
 	})
 	if err != nil {
-		t.Fatalf("failed StopContainer request for container: %s, with: %v", containerID, err)
+		tb.Fatalf("failed StopContainer request for container: %s, with: %v", containerID, err)
 	}
 }
 
-func removeContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) {
-	t.Helper()
+func removeContainer(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) {
+	tb.Helper()
 	_, err := client.RemoveContainer(ctx, &runtime.RemoveContainerRequest{
 		ContainerId: containerID,
 	})
 	if err != nil {
-		t.Fatalf("failed RemoveContainer request for container: %s, with: %v", containerID, err)
+		tb.Fatalf("failed RemoveContainer request for container: %s, with: %v", containerID, err)
 	}
 }
 
@@ -74,25 +74,25 @@ func getCreateContainerRequest(podID string, name string, image string, command 
 	}
 }
 
-func getContainerStatus(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) runtime.ContainerState {
-	t.Helper()
-	return getContainerStatusFull(t, client, ctx, containerID).State
+func getContainerStatus(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) runtime.ContainerState {
+	tb.Helper()
+	return getContainerStatusFull(tb, client, ctx, containerID).State
 }
 
-func assertContainerState(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string, state runtime.ContainerState) {
-	t.Helper()
-	if st := getContainerStatus(t, client, ctx, containerID); st != state {
-		t.Fatalf("got container %q state %q; wanted %v", containerID, st.String(), state.String())
+func assertContainerState(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, containerID string, state runtime.ContainerState) {
+	tb.Helper()
+	if st := getContainerStatus(tb, client, ctx, containerID); st != state {
+		tb.Fatalf("got container %q state %q; wanted %v", containerID, st.String(), state.String())
 	}
 }
 
-func getContainerStatusFull(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) *runtime.ContainerStatus {
-	t.Helper()
+func getContainerStatusFull(tb testing.TB, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) *runtime.ContainerStatus {
+	tb.Helper()
 	response, err := client.ContainerStatus(ctx, &runtime.ContainerStatusRequest{
 		ContainerId: containerID,
 	})
 	if err != nil {
-		t.Fatalf("failed ContainerStatus request for container: %s, with: %v", containerID, err)
+		tb.Fatalf("failed ContainerStatus request for container: %s, with: %v", containerID, err)
 	}
 	return response.Status
 }
@@ -101,17 +101,17 @@ func getContainerStatusFull(t *testing.T, client runtime.RuntimeServiceClient, c
 // an error if the expected container state isn't reached within 30 seconds.
 func requireContainerState(
 	ctx context.Context,
-	t *testing.T,
+	tb testing.TB,
 	client runtime.RuntimeServiceClient,
 	containerID string,
 	expectedState runtime.ContainerState,
 ) {
-	t.Helper()
-	require.NoError(t, func() error {
+	tb.Helper()
+	require.NoError(tb, func() error {
 		start := time.Now()
 		var lastState runtime.ContainerState
 		for {
-			lastState = getContainerStatus(t, client, ctx, containerID)
+			lastState = getContainerStatus(tb, client, ctx, containerID)
 			if lastState == expectedState {
 				return nil
 			}

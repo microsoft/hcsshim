@@ -79,16 +79,16 @@ func stopService(serviceName string) error {
 	return nil
 }
 
-func startContainerd(t *testing.T) {
-	t.Helper()
+func startContainerd(tb testing.TB) {
+	tb.Helper()
 	if err := startService(*flagContainerdServiceName); err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 }
 
-func stopContainerd(t *testing.T) {
-	t.Helper()
+func stopContainerd(tb testing.TB) {
+	tb.Helper()
 	if err := stopService(*flagContainerdServiceName); err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 }
