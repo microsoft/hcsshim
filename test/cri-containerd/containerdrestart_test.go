@@ -74,9 +74,6 @@ func Test_ContainerdRestart_LCOW(t *testing.T) {
 
 // test restarting containers and pods
 func Test_Container_CRI_Restart(t *testing.T) {
-	pullRequiredImages(t, []string{imageWindowsNanoserver})
-	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
-
 	client := newTestRuntimeClient(t)
 	pluginClient := newTestPluginClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -142,6 +139,13 @@ func Test_Container_CRI_Restart(t *testing.T) {
 
 			t.Run(tt.Name+suffix, func(t *testing.T) {
 				requireFeatures(t, tt.Feature)
+
+				switch tt.Feature {
+				case featureLCOW:
+					pullRequiredLCOWImages(t, append([]string{imageLcowK8sPause}, tt.Image))
+				case featureWCOWHypervisor, featureWCOWProcess:
+					pullRequiredImages(t, []string{tt.Image})
+				}
 
 				opts := tt.SandboxOpts
 				if !explicit {
@@ -215,9 +219,6 @@ func Test_Container_CRI_Restart(t *testing.T) {
 func Test_Container_CRI_Restart_State(t *testing.T) {
 	testFile := "t.txt"
 
-	pullRequiredImages(t, []string{imageWindowsNanoserver})
-	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
-
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -279,6 +280,13 @@ func Test_Container_CRI_Restart_State(t *testing.T) {
 				requireFeatures(t, tt.Feature)
 				if restart {
 					requireFeatures(t, featureTerminateOnRestart)
+				}
+
+				switch tt.Feature {
+				case featureLCOW:
+					pullRequiredLCOWImages(t, append([]string{imageLcowK8sPause}, tt.Image))
+				case featureWCOWHypervisor, featureWCOWProcess:
+					pullRequiredImages(t, []string{tt.Image})
 				}
 
 				sandboxRequest := getRunPodSandboxRequest(t, tt.Runtime,
