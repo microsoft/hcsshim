@@ -218,6 +218,7 @@ func Test_Container_CRI_Restart(t *testing.T) {
 // test preserving state after restarting pod
 func Test_Container_CRI_Restart_State(t *testing.T) {
 	testFile := "t.txt"
+	wcowTestFile := `C:\Users\ContainerUser\t.txt`
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -253,8 +254,8 @@ func Test_Container_CRI_Restart_State(t *testing.T) {
 			Runtime:         wcowHypervisorRuntimeHandler,
 			Image:           imageWindowsNanoserver,
 			Command:         []string{"cmd", "/c", "ping -t 127.0.0.1"},
-			SetStateCommand: []string{"cmd", "/c", "echo - >> " + testFile},
-			GetStateCommand: []string{"cmd", "/c", "type", testFile},
+			SetStateCommand: []string{"cmd", "/c", "echo - >> " + wcowTestFile},
+			GetStateCommand: []string{"cmd", "/c", "type", wcowTestFile},
 			ExpectedResult:  "- \r\n",
 		},
 		{
@@ -263,8 +264,8 @@ func Test_Container_CRI_Restart_State(t *testing.T) {
 			Runtime:         wcowHypervisorRuntimeHandler,
 			Image:           imageWindowsNanoserver,
 			Command:         []string{"cmd", "/c", "ping -t 127.0.0.1"},
-			SetStateCommand: []string{"cmd", "/c", "echo - >> " + testFile},
-			GetStateCommand: []string{"cmd", "/c", "type", testFile},
+			SetStateCommand: []string{"cmd", "/c", "echo - >> " + wcowTestFile},
+			GetStateCommand: []string{"cmd", "/c", "type", wcowTestFile},
 			ExpectedResult:  "- \r\n",
 		},
 	}
@@ -320,6 +321,7 @@ func Test_Container_CRI_Restart_State(t *testing.T) {
 				if req.ExitCode != 0 {
 					t.Fatalf("exec %v failed with exit code %d: %s", startExecRequest.Cmd, req.ExitCode, string(req.Stderr))
 				}
+				t.Logf("exec: %s", tt.SetStateCommand)
 
 				// check the write worked
 				startExecRequest = &runtime.ExecSyncRequest{
