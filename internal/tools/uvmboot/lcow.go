@@ -12,6 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/uvm"
+	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/containerd/console"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -32,6 +33,7 @@ const (
 	scsiMountsArgName     = "mount"
 	shareFilesArgName     = "share"
 	securityPolicyArgName = "security-policy"
+	securityHardwareFlag  = "security-hardware"
 )
 
 var (
@@ -50,7 +52,7 @@ var lcowCommand = cli.Command{
 		},
 		cli.StringFlag{
 			Name:  rootFSTypeArgName,
-			Usage: "Either 'initrd' or 'vhd'. (default: 'vhd' if rootfs.vhd exists)",
+			Usage: "Either 'initrd', 'vhd' or 'none'. (default: 'vhd' if rootfs.vhd exists)",
 		},
 		cli.StringFlag{
 			Name:  bootFilesPathArgName,
@@ -80,6 +82,10 @@ var lcowCommand = cli.Command{
 		cli.StringFlag{
 			Name:  securityPolicyArgName,
 			Usage: "Security policy to set on the UVM. Leave empty to use an open door policy",
+		},
+		cli.BoolFlag{
+			Name:  securityHardwareFlag,
+			Usage: "Use VMGS file to run on secure hardware. ('root-fs-type' must be set to 'none')",
 		},
 		cli.StringFlag{
 			Name:  execCommandLineArgName,
@@ -180,6 +186,9 @@ func createLCOWOptions(_ context.Context, c *cli.Context, id string) (*uvm.Optio
 		case "vhd":
 			options.RootFSFile = uvm.VhdFile
 			options.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
+		case "none":
+			options.RootFSFile = ""
+			options.PreferredRootFSType = uvm.PreferredRootFSTypeNA
 		default:
 			return nil, unrecognizedError(c.String(rootFSTypeArgName), rootFSTypeArgName)
 		}
@@ -224,9 +233,20 @@ func createLCOWOptions(_ context.Context, c *cli.Context, id string) (*uvm.Optio
 		options.DisableTimeSyncService = true
 	}
 
+	// default to open door security policy to allow resource modifications in
+	// non-snp uvmboot scenarios.
+	openPolicy, err := securitypolicy.NewOpenDoorPolicy().EncodeToString()
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode open door policy: %s", err)
+	}
+	options.SecurityPolicy = openPolicy
 	if c.IsSet(securityPolicyArgName) {
 		options.SecurityPolicy = c.String(options.SecurityPolicy)
+	}
+	if c.IsSet(securityHardwareFlag) {
+		options.GuestStateFile = uvm.GuestStateFile
 		options.SecurityPolicyEnabled = true
+		options.AllowOvercommit = false
 	}
 
 	return options, nil
@@ -243,11 +263,8 @@ func runLCOW(ctx context.Context, options *uvm.OptionsLCOW, c *cli.Context) erro
 		return err
 	}
 
-	if c.IsSet(securityPolicyArgName) {
-		if err := vm.SetSecurityPolicy(ctx, options.SecurityPolicy); err != nil {
-			return fmt.Errorf("could not set UVM security policy: %w", err)
-		}
-		logrus.WithField("policy", options.SecurityPolicy).Debug("Set UVM security policy")
+	if err := vm.SetSecurityPolicy(ctx, options.SecurityPolicy); err != nil {
+		return fmt.Errorf("could not set UVM security policy: %w", err)
 	}
 
 	if err := mountSCSI(ctx, c, vm); err != nil {
