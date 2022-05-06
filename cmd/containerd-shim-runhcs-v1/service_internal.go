@@ -104,6 +104,18 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 		return nil, errors.Wrap(err, "unable to process OCI Spec annotations")
 	}
 
+	// If sandbox isolation is set to hypervisor, make sure the HyperV option
+	// is filled in. This lessens the burden on Containerd to parse our shims
+	// options if we can set this ourselves.
+	if shimOpts.SandboxIsolation == runhcsopts.Options_HYPERVISOR {
+		if spec.Windows == nil {
+			spec.Windows = &specs.Windows{}
+		}
+		if spec.Windows.HyperV == nil {
+			spec.Windows.HyperV = &specs.WindowsHyperV{}
+		}
+	}
+
 	if len(req.Rootfs) == 0 {
 		// If no mounts are passed via the snapshotter its the callers full
 		// responsibility to manage the storage. Just move on without affecting
@@ -133,17 +145,8 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 			}
 		}
 
-		if m.Type == "lcow-layer" {
-			// If we are creating LCOW make sure that spec.Windows is filled out before
-			// appending layer folders.
-			if spec.Windows == nil {
-				spec.Windows = &specs.Windows{}
-			}
-			if spec.Windows.HyperV == nil {
-				spec.Windows.HyperV = &specs.WindowsHyperV{}
-			}
-		} else if spec.Windows.HyperV == nil {
-			// This is a Windows Argon make sure that we have a Root filled in.
+		// This is a Windows Argon make sure that we have a Root filled in.
+		if spec.Windows.HyperV == nil {
 			if spec.Root == nil {
 				spec.Root = &specs.Root{}
 			}
