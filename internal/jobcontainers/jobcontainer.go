@@ -787,7 +787,7 @@ func (c *JobContainer) bindSetup(ctx context.Context, s *specs.Spec) (err error)
 		return err
 	}
 	c.rootfsLocation = rootfsLocation
-	return c.setupMounts(s)
+	return c.setupMounts(ctx, s)
 }
 
 // This handles the fallback case where bind mounting isn't available on the machine. This mounts the
