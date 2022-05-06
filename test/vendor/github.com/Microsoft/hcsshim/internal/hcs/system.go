@@ -425,11 +425,10 @@ func (computeSystem *System) PropertiesV2(ctx context.Context, types ...hcsschem
 
 	// Check if any of the queries are for stats. We can grab these in process and skip the hop to
 	// HCS.
-	var statsPresent, onlyStats bool
+	var statsPresent bool
 	for i, prop := range types {
 		if prop == hcsschema.PTStatistics {
 			statsPresent = true
-			onlyStats = len(types) == 1
 			// Remove stats from the query types.
 			types = append(types[:i], types[i+1:]...)
 		}
@@ -440,7 +439,7 @@ func (computeSystem *System) PropertiesV2(ctx context.Context, types ...hcsschem
 		properties.Statistics, err = computeSystem.statisticsInProc(ctx)
 		if err == nil {
 			// Early return if this was the only thing we were querying for.
-			if onlyStats {
+			if len(types) == 0 {
 				properties.Id = computeSystem.id
 				properties.SystemType = computeSystem.typ
 				properties.RuntimeOsType = computeSystem.os
@@ -472,7 +471,7 @@ func (computeSystem *System) PropertiesV2(ctx context.Context, types ...hcsschem
 	if err := json.Unmarshal([]byte(propertiesJSON), hcsProps); err != nil {
 		return nil, makeSystemError(computeSystem, operation, err, nil)
 	}
-	// Copy over stats if we might've failed the inProc query.
+	// Copy over stats if we grabbed these in proc
 	if properties.Statistics != nil {
 		hcsProps.Statistics = properties.Statistics
 		hcsProps.Owner = computeSystem.owner
