@@ -388,7 +388,7 @@ func (computeSystem *System) statisticsInProc(ctx context.Context) (*hcsschema.S
 	// 2. Get a process handle for every process (only need PROCESS_QUERY_LIMITED_INFORMATION access)
 	// 3. Call NtQueryInformationProcess on each process with the class ProcessVmCounters
 	// 4. Tally up the total using the field PrivateWorkingSetSize in VM_COUNTERS_EX2.
-	privateWorkingSet, err := job.PrivateWorkingSet()
+	privateWorkingSet, err := job.QueryPrivateWorkingSet()
 	if err != nil {
 		return nil, err
 	}

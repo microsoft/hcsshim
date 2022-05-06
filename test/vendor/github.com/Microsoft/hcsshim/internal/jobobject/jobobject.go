@@ -549,9 +549,9 @@ func (job *JobObject) isSilo() bool {
 	return atomic.LoadUint32(&job.isAppSilo) == 1
 }
 
-// PrivateWorkingSet returns the private working set size for the job. This is calculated by adding up the
+// QueryPrivateWorkingSet returns the private working set size for the job. This is calculated by adding up the
 // private working set for every process running in the job.
-func (job *JobObject) PrivateWorkingSet() (uint64, error) {
+func (job *JobObject) QueryPrivateWorkingSet() (uint64, error) {
 	pids, err := job.Pids()
 	if err != nil {
 		return 0, err

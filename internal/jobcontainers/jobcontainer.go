@@ -438,7 +438,7 @@ func (c *JobContainer) PropertiesV2(ctx context.Context, types ...hcsschema.Prop
 		return nil, errors.Wrap(err, "failed to query for job containers storage information")
 	}
 
-	privateWorkingSet, err := c.job.PrivateWorkingSet()
+	privateWorkingSet, err := c.job.QueryPrivateWorkingSet()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get private working set for container: %w", err)
 	}
