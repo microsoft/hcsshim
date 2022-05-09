@@ -13,6 +13,7 @@ import (
 	"github.com/Microsoft/go-winio/pkg/etw"
 	"github.com/Microsoft/go-winio/pkg/etwlogrus"
 	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -64,6 +65,8 @@ func etwCallback(sourceID guid.GUID, state etw.ProviderState, level etw.Level, m
 }
 
 func main() {
+	logrus.AddHook(log.NewHook())
+
 	// Provider ID: 0b52781f-b24d-5685-ddf6-69830ed40ec3
 	// Provider and hook aren't closed explicitly, as they will exist until process exit.
 	provider, err := etw.NewProvider("Microsoft.Virtualization.RunHCS", etwCallback)
@@ -86,7 +89,7 @@ func main() {
 	)
 
 	// Register our OpenCensus logrus exporter
-	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
+	trace.ApplyConfig(trace.Config{DefaultSampler: oc.DefaultSampler})
 	trace.RegisterExporter(&oc.LogrusExporter{})
 
 	app := cli.NewApp()

@@ -78,7 +78,7 @@ func Mount(
 	verityInfo *guestresource.DeviceVerityInfo,
 	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
-	mCtx, span := trace.StartSpan(ctx, "pmem::Mount")
+	mCtx, span := oc.StartSpan(ctx, "pmem::Mount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
@@ -139,7 +139,7 @@ func Unmount(
 	verityInfo *guestresource.DeviceVerityInfo,
 	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
-	_, span := trace.StartSpan(ctx, "pmem::Unmount")
+	_, span := oc.StartSpan(ctx, "pmem::Unmount")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 

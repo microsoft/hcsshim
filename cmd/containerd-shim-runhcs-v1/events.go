@@ -39,7 +39,7 @@ func (e *eventPublisher) close() error {
 }
 
 func (e *eventPublisher) publishEvent(ctx context.Context, topic string, event interface{}) (err error) {
-	ctx, span := trace.StartSpan(ctx, "publishEvent")
+	ctx, span := oc.StartSpan(ctx, "publishEvent")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(

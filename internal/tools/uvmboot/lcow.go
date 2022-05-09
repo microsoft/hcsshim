@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/containerd/console"
@@ -273,7 +274,7 @@ func runLCOW(ctx context.Context, options *uvm.OptionsLCOW, c *cli.Context) erro
 
 func execViaGcs(vm *uvm.UtilityVM, c *cli.Context) error {
 	cmd := cmd.Command(vm, "/bin/sh", "-c", c.String(execCommandLineArgName))
-	cmd.Log = logrus.NewEntry(logrus.StandardLogger())
+	cmd.Log = log.L.Dup()
 	if lcowUseTerminal {
 		cmd.Spec.Terminal = true
 		cmd.Stdin = os.Stdin

@@ -311,7 +311,7 @@ func (brdg *bridge) recvLoop() error {
 		}
 		brdg.log.WithFields(logrus.Fields{
 			"payload":    string(b),
-			"type":       typ,
+			"type":       typ.String(),
 			"message-id": id}).Debug("bridge receive")
 		switch typ & msgTypeMask {
 		case msgTypeResponse:
@@ -412,7 +412,7 @@ func (brdg *bridge) writeMessage(buf *bytes.Buffer, enc *json.Encoder, typ msgTy
 		}
 		brdg.log.WithFields(logrus.Fields{
 			"payload":    string(b),
-			"type":       typ,
+			"type":       typ.String(),
 			"message-id": id}).Debug("bridge send")
 	}
 

@@ -23,8 +23,8 @@ import (
 //
 // `options` are the options applied while processing the layer.
 func SetupBaseOSLayer(ctx context.Context, layerPath string, vhdHandle windows.Handle, options OsLayerOptions) (err error) {
-	title := "hcsshim.SetupBaseOSLayer"
-	ctx, span := trace.StartSpan(ctx, title) //nolint:ineffassign,staticcheck
+	title := "hcsshim::SetupBaseOSLayer"
+	ctx, span := oc.StartSpan(ctx, title) //nolint:ineffassign,staticcheck
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
@@ -54,8 +54,8 @@ func SetupBaseOSVolume(ctx context.Context, layerPath, volumePath string, option
 	if osversion.Build() < 19645 {
 		return errors.New("SetupBaseOSVolume is not present on builds older than 19645")
 	}
-	title := "hcsshim.SetupBaseOSVolume"
-	ctx, span := trace.StartSpan(ctx, title) //nolint:ineffassign,staticcheck
+	title := "hcsshim::SetupBaseOSVolume"
+	ctx, span := oc.StartSpan(ctx, title) //nolint:ineffassign,staticcheck
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(

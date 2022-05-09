@@ -11,10 +11,11 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
+
+	"github.com/Microsoft/hcsshim/internal/oc"
 )
 
 const procMountFile = "/proc/mounts"
@@ -114,7 +115,7 @@ func MountRShared(path string) error {
 // UnmountPath unmounts the target path if it exists and is a mount path. If
 // removeTarget this will remove the previously mounted folder.
 func UnmountPath(ctx context.Context, target string, removeTarget bool) (err error) {
-	_, span := trace.StartSpan(ctx, "storage::UnmountPath")
+	_, span := oc.StartSpan(ctx, "storage::UnmountPath")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 

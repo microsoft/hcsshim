@@ -12,6 +12,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/clone"
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	eventstypes "github.com/containerd/containerd/api/events"
@@ -212,7 +213,7 @@ func (wpst *wcowPodSandboxTask) close(ctx context.Context) {
 }
 
 func (wpst *wcowPodSandboxTask) waitInitExit() {
-	ctx, span := trace.StartSpan(context.Background(), "wcowPodSandboxTask::waitInitExit")
+	ctx, span := oc.StartSpan(context.Background(), "wcowPodSandboxTask::waitInitExit")
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("tid", wpst.id))
 
@@ -224,7 +225,7 @@ func (wpst *wcowPodSandboxTask) waitInitExit() {
 }
 
 func (wpst *wcowPodSandboxTask) waitParentExit() {
-	ctx, span := trace.StartSpan(context.Background(), "wcowPodSandboxTask::waitParentExit")
+	ctx, span := oc.StartSpan(context.Background(), "wcowPodSandboxTask::waitParentExit")
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("tid", wpst.id))
 

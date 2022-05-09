@@ -35,7 +35,7 @@ const maxDNSSearches = 6
 
 // GenerateEtcHostsContent generates a /etc/hosts file based on `hostname`.
 func GenerateEtcHostsContent(ctx context.Context, hostname string) string {
-	_, span := trace.StartSpan(ctx, "network::GenerateEtcHostsContent")
+	_, span := oc.StartSpan(ctx, "network::GenerateEtcHostsContent")
 	defer span.End()
 	span.AddAttributes(trace.StringAttribute("hostname", hostname))
 
@@ -60,7 +60,7 @@ func GenerateEtcHostsContent(ctx context.Context, hostname string) string {
 // GenerateResolvConfContent generates the resolv.conf file content based on
 // `searches`, `servers`, and `options`.
 func GenerateResolvConfContent(ctx context.Context, searches, servers, options []string) (_ string, err error) {
-	_, span := trace.StartSpan(ctx, "network::GenerateResolvConfContent")
+	_, span := oc.StartSpan(ctx, "network::GenerateResolvConfContent")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
@@ -116,7 +116,7 @@ func MergeValues(first, second []string) []string {
 //
 // Will retry the operation until `ctx` is exceeded or canceled.
 func InstanceIDToName(ctx context.Context, id string, vpciAssigned bool) (_ string, err error) {
-	ctx, span := trace.StartSpan(ctx, "network::InstanceIDToName")
+	ctx, span := oc.StartSpan(ctx, "network::InstanceIDToName")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 

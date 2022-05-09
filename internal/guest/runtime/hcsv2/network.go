@@ -71,7 +71,7 @@ func GetOrAddNetworkNamespace(id string) *namespace {
 
 // RemoveNetworkNamespace removes the in-memory `namespace` found by `id`.
 func RemoveNetworkNamespace(ctx context.Context, id string) (err error) {
-	_, span := trace.StartSpan(ctx, "hcsv2::removeNetworkNamespace")
+	_, span := oc.StartSpan(ctx, "hcsv2::RemoveNetworkNamespace")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
@@ -112,7 +112,7 @@ func (n *namespace) ID() string {
 // assigned adapters into this namespace. The caller MUST call `Sync()` to
 // complete this operation.
 func (n *namespace) AssignContainerPid(ctx context.Context, pid int) (err error) {
-	_, span := trace.StartSpan(ctx, "namespace::AssignContainerPid")
+	_, span := oc.StartSpan(ctx, "namespace::AssignContainerPid")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
@@ -147,7 +147,7 @@ func (n *namespace) Adapters() []*guestresource.LCOWNetworkAdapter {
 // namespace assigned to `n`. A user must call `Sync()` to complete this
 // operation.
 func (n *namespace) AddAdapter(ctx context.Context, adp *guestresource.LCOWNetworkAdapter) (err error) {
-	ctx, span := trace.StartSpan(ctx, "namespace::AddAdapter")
+	ctx, span := oc.StartSpan(ctx, "namespace::AddAdapter")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
@@ -179,7 +179,7 @@ func (n *namespace) AddAdapter(ctx context.Context, adp *guestresource.LCOWNetwo
 // RemoveAdapter removes the adapter matching `id` from `n`. If `id` is not
 // found returns no error.
 func (n *namespace) RemoveAdapter(ctx context.Context, id string) (err error) {
-	_, span := trace.StartSpan(ctx, "namespace::RemoveAdapter")
+	_, span := oc.StartSpan(ctx, "namespace::RemoveAdapter")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
@@ -206,7 +206,7 @@ func (n *namespace) RemoveAdapter(ctx context.Context, id string) (err error) {
 
 // Sync moves all adapters to the network namespace of `n` if assigned.
 func (n *namespace) Sync(ctx context.Context) (err error) {
-	ctx, span := trace.StartSpan(ctx, "namespace::Sync")
+	ctx, span := oc.StartSpan(ctx, "namespace::Sync")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(trace.StringAttribute("namespace", n.id))
@@ -244,7 +244,7 @@ type nicInNamespace struct {
 
 // assignToPid assigns `nin.adapter`, represented by `nin.ifname` to `pid`.
 func (nin *nicInNamespace) assignToPid(ctx context.Context, pid int) (err error) {
-	ctx, span := trace.StartSpan(ctx, "nicInNamespace::assignToPid")
+	ctx, span := oc.StartSpan(ctx, "nicInNamespace::assignToPid")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(

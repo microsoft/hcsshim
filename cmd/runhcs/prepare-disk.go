@@ -12,7 +12,6 @@ import (
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
-	"go.opencensus.io/trace"
 )
 
 const (
@@ -32,7 +31,7 @@ var prepareDiskCommand = cli.Command{
 	},
 	Before: appargs.Validate(),
 	Action: func(context *cli.Context) (err error) {
-		ctx, span := trace.StartSpan(gcontext.Background(), prepareDiskStr)
+		ctx, span := oc.StartSpan(gcontext.Background(), prepareDiskStr)
 		defer span.End()
 		defer func() { oc.SetSpanStatus(span, err) }()
 
