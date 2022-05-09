@@ -167,9 +167,7 @@ func (gc *GuestConnection) connect(ctx context.Context, isColdStart bool, initGu
 // Modify sends a modify settings request to the null container. This is
 // generally used to prepare virtual hardware that has been added to the guest.
 func (gc *GuestConnection) Modify(ctx context.Context, settings interface{}) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::GuestConnection::Modify", oc.WithClientSpanKind)
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	log.G(ctx).Trace("gcs::GuestConnection::Modify")
 
 	req := containerModifySettings{
 		requestBase: makeRequest(ctx, nullContainerID),
@@ -180,9 +178,7 @@ func (gc *GuestConnection) Modify(ctx context.Context, settings interface{}) (er
 }
 
 func (gc *GuestConnection) DumpStacks(ctx context.Context) (response string, err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::GuestConnection::DumpStacks", oc.WithClientSpanKind)
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	log.G(ctx).Trace("gcs::GuestConnection::DumpStacks")
 
 	req := dumpStacksRequest{
 		requestBase: makeRequest(ctx, nullContainerID),
@@ -193,10 +189,7 @@ func (gc *GuestConnection) DumpStacks(ctx context.Context) (response string, err
 }
 
 func (gc *GuestConnection) DeleteContainerState(ctx context.Context, cid string) (err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::GuestConnection::DeleteContainerState", oc.WithClientSpanKind)
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", cid))
+	log.G(ctx).Trace("gcs::GuestConnection::DeleteContainerState")
 
 	req := deleteContainerStateRequest{
 		requestBase: makeRequest(ctx, cid),
@@ -216,9 +209,7 @@ func (gc *GuestConnection) Close() error {
 
 // CreateProcess creates a process in the container host.
 func (gc *GuestConnection) CreateProcess(ctx context.Context, settings interface{}) (_ cow.Process, err error) {
-	ctx, span := oc.StartSpan(ctx, "gcs::GuestConnection::CreateProcess", oc.WithClientSpanKind)
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	log.G(ctx).Trace("gcs::GuestConnection::CreateProcess")
 
 	return gc.exec(ctx, nullContainerID, settings)
 }
@@ -268,7 +259,7 @@ func (gc *GuestConnection) notify(ntf *containerNotification) error {
 	if ch == nil {
 		return fmt.Errorf("container %s not found", cid)
 	}
-	logrus.WithField(logfields.ContainerID, cid).Info("container terminated in guest")
+	logrus.WithField(logfields.ContainerID, cid).Debug("container terminated in guest")
 	close(ch)
 	return nil
 }

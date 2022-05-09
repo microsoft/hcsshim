@@ -54,6 +54,9 @@ type rpc struct {
 	ch      chan struct{}
 }
 
+// todo(helsaawy): remove bridge.log entry and log based on per-request context, not
+// the context that started the bridge
+
 // bridge represents a communcations bridge with the guest. It handles the
 // transport layer but (mostly) does not parse or construct the message payload.
 type bridge struct {
