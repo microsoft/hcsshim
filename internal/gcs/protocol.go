@@ -5,6 +5,7 @@ package gcs
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
@@ -64,6 +65,43 @@ const (
 	rpcLifecycleNotification
 )
 
+func (rpc rpcProc) String() string {
+	switch rpc {
+	case rpcCreate:
+		return "Create"
+	case rpcStart:
+		return "Start"
+	case rpcShutdownGraceful:
+		return "ShutdownGraceful"
+	case rpcShutdownForced:
+		return "ShutdownForced"
+	case rpcExecuteProcess:
+		return "ExecuteProcess"
+	case rpcWaitForProcess:
+		return "WaitForProcess"
+	case rpcSignalProcess:
+		return "SignalProcess"
+	case rpcResizeConsole:
+		return "ResizeConsole"
+	case rpcGetProperties:
+		return "GetProperties"
+	case rpcModifySettings:
+		return "ModifySettings"
+	case rpcNegotiateProtocol:
+		return "NegotiateProtocol"
+	case rpcDumpStacks:
+		return "DumpStacks"
+	case rpcDeleteContainerState:
+		return "DeleteContainerState"
+	case rpcUpdateContainer:
+		return "UpdateContainer"
+	case rpcLifecycleNotification:
+		return "LifecycleNotification"
+	default:
+		return "0x" + strconv.FormatUint(uint64(rpc), 16)
+	}
+}
+
 type msgType uint32
 
 const (
@@ -94,40 +132,7 @@ func (typ msgType) String() string {
 	default:
 		return fmt.Sprintf("%#x", uint32(typ))
 	}
-	switch rpcProc(typ &^ msgTypeMask) {
-	case rpcCreate:
-		s += "Create"
-	case rpcStart:
-		s += "Start"
-	case rpcShutdownGraceful:
-		s += "ShutdownGraceful"
-	case rpcShutdownForced:
-		s += "ShutdownForced"
-	case rpcExecuteProcess:
-		s += "ExecuteProcess"
-	case rpcWaitForProcess:
-		s += "WaitForProcess"
-	case rpcSignalProcess:
-		s += "SignalProcess"
-	case rpcResizeConsole:
-		s += "ResizeConsole"
-	case rpcGetProperties:
-		s += "GetProperties"
-	case rpcModifySettings:
-		s += "ModifySettings"
-	case rpcNegotiateProtocol:
-		s += "NegotiateProtocol"
-	case rpcDumpStacks:
-		s += "DumpStacks"
-	case rpcDeleteContainerState:
-		s += "DeleteContainerState"
-	case rpcUpdateContainer:
-		s += "UpdateContainer"
-	case rpcLifecycleNotification:
-		s += "LifecycleNotification"
-	default:
-		s += fmt.Sprintf("%#x", uint32(typ))
-	}
+	s += rpcProc(typ &^ msgTypeMask).String()
 	return s + ")"
 }
 
