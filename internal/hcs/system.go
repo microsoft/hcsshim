@@ -21,6 +21,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/timeout"
 	"github.com/Microsoft/hcsshim/internal/vmcompute"
+	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
 
@@ -337,12 +338,12 @@ func (computeSystem *System) Properties(ctx context.Context, types ...schema1.Pr
 	return properties, nil
 }
 
-// statisticsInProc emulates what HCS does to grab statistics for a given container with a small
-// change to make grabbing the private working set total much more efficient.
-func (computeSystem *System) statisticsInProc(ctx context.Context) (*hcsschema.Statistics, error) {
-	// Start timestamp for these stats before we grab them to match HCS
-	timestamp := time.Now()
-
+// queryInProc handles querying for container properties without reaching out to HCS. `props`
+// will be updated to contain any data returned from the queries present in `types`. If any properties
+// failed to be queried they will be tallied up and returned in as the first return value. Failures on
+// query are NOT considered errors; the only failure case for this method is if the containers job object
+// cannot be opened.
+func (computeSystem *System) queryInProc(ctx context.Context, props *hcsschema.Properties, types []hcsschema.PropertyType) ([]hcsschema.PropertyType, error) {
 	// In the future we can make use of some new functionality in the HCS that allows you
 	// to pass a job object for HCS to use for the container. Currently, the only way we'll
 	// be able to open the job/silo is if we're running as SYSTEM.
@@ -355,6 +356,33 @@ func (computeSystem *System) statisticsInProc(ctx context.Context) (*hcsschema.S
 		return nil, err
 	}
 	defer job.Close()
+
+	var fallbackQueryTypes []hcsschema.PropertyType
+	for _, propType := range types {
+		switch propType {
+		case hcsschema.PTStatistics:
+			// Handle a bad caller asking for the same type twice. No use in re-querying if this is
+			// filled in already.
+			if props.Statistics == nil {
+				props.Statistics, err = computeSystem.statisticsInProc(job)
+				if err != nil {
+					fallbackQueryTypes = append(fallbackQueryTypes, propType)
+				}
+			}
+		default:
+			fallbackQueryTypes = append(fallbackQueryTypes, propType)
+		}
+	}
+
+	return fallbackQueryTypes, nil
+
+}
+
+// statisticsInProc emulates what HCS does to grab statistics for a given container with a small
+// change to make grabbing the private working set total much more efficient.
+func (computeSystem *System) statisticsInProc(job *jobobject.JobObject) (*hcsschema.Statistics, error) {
+	// Start timestamp for these stats before we grab them to match HCS
+	timestamp := time.Now()
 
 	memInfo, err := job.QueryMemoryStats()
 	if err != nil {
@@ -416,42 +444,9 @@ func (computeSystem *System) statisticsInProc(ctx context.Context) (*hcsschema.S
 	}, nil
 }
 
-// PropertiesV2 returns the requested container properties targeting a V2 schema container.
-func (computeSystem *System) PropertiesV2(ctx context.Context, types ...hcsschema.PropertyType) (_ *hcsschema.Properties, err error) {
-	computeSystem.handleLock.RLock()
-	defer computeSystem.handleLock.RUnlock()
-
+// hcsPropertiesV2Query is a helper to make a HcsGetComputeSystemProperties call using the V2 schema property types.
+func (computeSystem *System) hcsPropertiesV2Query(ctx context.Context, types []hcsschema.PropertyType) (*hcsschema.Properties, error) {
 	operation := "hcs::System::PropertiesV2"
-
-	// Check if any of the queries are for stats. We can grab these in process and skip the hop to
-	// HCS.
-	var statsPresent bool
-	for i, prop := range types {
-		if prop == hcsschema.PTStatistics {
-			statsPresent = true
-			// Remove stats from the query types.
-			types = append(types[:i], types[i+1:]...)
-		}
-	}
-
-	properties := &hcsschema.Properties{}
-	if statsPresent && computeSystem.typ == "container" {
-		properties.Statistics, err = computeSystem.statisticsInProc(ctx)
-		if err == nil {
-			// Early return if this was the only thing we were querying for.
-			if len(types) == 0 {
-				properties.Id = computeSystem.id
-				properties.SystemType = computeSystem.typ
-				properties.RuntimeOsType = computeSystem.os
-				properties.Owner = computeSystem.owner
-				return properties, nil
-			}
-		} else {
-			logTxt := "failed to grab statistics in process - falling back to HCS"
-			log.G(ctx).WithError(err).WithField(logfields.ContainerID, computeSystem.id).Warn(logTxt)
-			types = append(types, hcsschema.PTStatistics)
-		}
-	}
 
 	queryBytes, err := json.Marshal(hcsschema.PropertyQuery{PropertyTypes: types})
 	if err != nil {
@@ -467,17 +462,69 @@ func (computeSystem *System) PropertiesV2(ctx context.Context, types ...hcsschem
 	if propertiesJSON == "" {
 		return nil, ErrUnexpectedValue
 	}
-	hcsProps := &hcsschema.Properties{}
-	if err := json.Unmarshal([]byte(propertiesJSON), hcsProps); err != nil {
+	props := &hcsschema.Properties{}
+	if err := json.Unmarshal([]byte(propertiesJSON), props); err != nil {
 		return nil, makeSystemError(computeSystem, operation, err, nil)
 	}
-	// Copy over stats if we grabbed these in proc
-	if properties.Statistics != nil {
-		hcsProps.Statistics = properties.Statistics
-		hcsProps.Owner = computeSystem.owner
+
+	return props, nil
+}
+
+// PropertiesV2 returns the requested container properties targeting a V2 schema container.
+func (computeSystem *System) PropertiesV2(ctx context.Context, types ...hcsschema.PropertyType) (_ *hcsschema.Properties, err error) {
+	computeSystem.handleLock.RLock()
+	defer computeSystem.handleLock.RUnlock()
+
+	// Let HCS tally up the total for VM based queries instead of querying ourselves.
+	if computeSystem.typ != "container" {
+		return computeSystem.hcsPropertiesV2Query(ctx, types)
 	}
 
-	return hcsProps, nil
+	// Define a starter Properties struct with the default fields returned from every
+	// query. Owner is only returned from Statistics but it's harmless to include.
+	properties := &hcsschema.Properties{
+		Id:            computeSystem.id,
+		SystemType:    computeSystem.typ,
+		RuntimeOsType: computeSystem.os,
+		Owner:         computeSystem.owner,
+	}
+
+	logEntry := log.G(ctx)
+	// First lets try and query ourselves without reaching to HCS. If any of the queries fail
+	// we'll take note and fallback to querying HCS for any of the failed types.
+	fallbackTypes, err := computeSystem.queryInProc(ctx, properties, types)
+	if err == nil && len(fallbackTypes) == 0 {
+		return properties, nil
+	} else if err != nil {
+		logEntry.WithError(err)
+		fallbackTypes = types
+	}
+
+	logEntry.WithFields(logrus.Fields{
+		logfields.ContainerID: computeSystem.id,
+		"propertyTypes":       fallbackTypes,
+	}).Warn("falling back to HCS for property type queries")
+
+	hcsProperties, err := computeSystem.hcsPropertiesV2Query(ctx, fallbackTypes)
+	if err != nil {
+		return nil, err
+	}
+
+	// Now loop through the fallback types and fill in any fields on the Properties struct. These are the set of
+	// queries that we have defined types for and that are handled in the V2 schema query code path in HCS.
+	for _, propType := range fallbackTypes {
+		switch propType {
+		case hcsschema.PTStatistics:
+			properties.Statistics = hcsProperties.Statistics
+		case hcsschema.PTProcessList:
+			properties.ProcessList = hcsProperties.ProcessList
+		case hcsschema.PTTerminateOnLastHandleClosed:
+			properties.TerminateOnLastHandleClosed = hcsProperties.TerminateOnLastHandleClosed
+		default:
+		}
+	}
+
+	return properties, nil
 }
 
 // Pause pauses the execution of the computeSystem. This feature is not enabled in TP5.
