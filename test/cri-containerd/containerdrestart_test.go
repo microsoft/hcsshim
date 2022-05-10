@@ -115,7 +115,7 @@ func Test_Container_CRI_Restart(t *testing.T) {
 		{
 			Name:    "WCOW_Process",
 			Feature: featureWCOWProcess,
-			Runtime: wcowHypervisorRuntimeHandler,
+			Runtime: wcowProcessRuntimeHandler,
 			Image:   imageWindowsNanoserver,
 			Command: []string{
 				"cmd",
@@ -261,7 +261,7 @@ func Test_Container_CRI_Restart_State(t *testing.T) {
 		{
 			Name:            "WCOW_Process",
 			Feature:         featureWCOWProcess,
-			Runtime:         wcowHypervisorRuntimeHandler,
+			Runtime:         wcowProcessRuntimeHandler,
 			Image:           imageWindowsNanoserver,
 			Command:         []string{"cmd", "/c", "ping -t 127.0.0.1"},
 			SetStateCommand: []string{"cmd", "/c", "echo - >> " + wcowTestFile},
