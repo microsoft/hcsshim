@@ -13,12 +13,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-//nolint:deadcode,varcheck
-const (
-	vmaddrCidHost = 2
-	vmaddrCidAny  = 0xffffffff
-)
-
 // VsockTransport is an implementation of Transport which uses vsock
 // sockets.
 type VsockTransport struct{}
@@ -36,7 +30,7 @@ func (t *VsockTransport) Dial(port uint32) (Connection, error) {
 	// Retry 10 times because vsock.Dial can return connection time out
 	// due to some underlying kernel bug.
 	for i := 0; i < 10; i++ {
-		conn, err := vsock.Dial(vmaddrCidHost, port)
+		conn, err := vsock.Dial(vsock.CIDHost, port)
 		if err == nil {
 			return conn, nil
 		}
