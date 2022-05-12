@@ -511,22 +511,17 @@ func (computeSystem *System) PropertiesV2(ctx context.Context, types ...hcsschem
 		return nil, err
 	}
 
-	// Now loop through the fallback types and fill in any fields on the Properties struct. These are the set of
-	// queries that we have defined types for and that are handled in the V2 schema query code path in HCS.
-	for _, propType := range fallbackTypes {
-		switch propType {
-		case hcsschema.PTStatistics:
-			properties.Statistics = hcsProperties.Statistics
-		case hcsschema.PTProcessList:
-			properties.ProcessList = hcsProperties.ProcessList
-		case hcsschema.PTTerminateOnLastHandleClosed:
-			properties.TerminateOnLastHandleClosed = hcsProperties.TerminateOnLastHandleClosed
-		default:
-			return nil, fmt.Errorf("unknown property type ecountered %q", propType)
-		}
+	// Now add in anything that we might have successfully queried in process.
+	if properties.Statistics != nil {
+		hcsProperties.Statistics = properties.Statistics
+		hcsProperties.Owner = properties.Owner
 	}
 
-	return properties, nil
+	if properties.ProcessList != nil {
+		hcsProperties.ProcessList = properties.ProcessList
+	}
+
+	return hcsProperties, nil
 }
 
 // Pause pauses the execution of the computeSystem. This feature is not enabled in TP5.
