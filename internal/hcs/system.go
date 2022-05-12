@@ -366,6 +366,8 @@ func (computeSystem *System) queryInProc(ctx context.Context, props *hcsschema.P
 			if props.Statistics == nil {
 				props.Statistics, err = computeSystem.statisticsInProc(job)
 				if err != nil {
+					log.G(ctx).WithError(err).Warn("failed to get statistics in-proc")
+
 					fallbackQueryTypes = append(fallbackQueryTypes, propType)
 				}
 			}
@@ -375,7 +377,6 @@ func (computeSystem *System) queryInProc(ctx context.Context, props *hcsschema.P
 	}
 
 	return fallbackQueryTypes, nil
-
 }
 
 // statisticsInProc emulates what HCS does to grab statistics for a given container with a small
@@ -470,7 +471,7 @@ func (computeSystem *System) hcsPropertiesV2Query(ctx context.Context, types []h
 	return props, nil
 }
 
-// PropertiesV2 returns the requested container properties targeting a V2 schema container.
+// PropertiesV2 returns the requested compute systems properties targeting a V2 schema compute system.
 func (computeSystem *System) PropertiesV2(ctx context.Context, types ...hcsschema.PropertyType) (_ *hcsschema.Properties, err error) {
 	computeSystem.handleLock.RLock()
 	defer computeSystem.handleLock.RUnlock()
@@ -496,7 +497,7 @@ func (computeSystem *System) PropertiesV2(ctx context.Context, types ...hcsschem
 	if err == nil && len(fallbackTypes) == 0 {
 		return properties, nil
 	} else if err != nil {
-		logEntry.WithError(err)
+		logEntry.WithError(fmt.Errorf("failed to query compute system properties in-proc: %s", err))
 		fallbackTypes = types
 	}
 
@@ -521,6 +522,7 @@ func (computeSystem *System) PropertiesV2(ctx context.Context, types ...hcsschem
 		case hcsschema.PTTerminateOnLastHandleClosed:
 			properties.TerminateOnLastHandleClosed = hcsProperties.TerminateOnLastHandleClosed
 		default:
+			return nil, fmt.Errorf("unknown property type ecountered %q", propType)
 		}
 	}
 
