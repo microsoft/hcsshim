@@ -497,14 +497,14 @@ func (computeSystem *System) PropertiesV2(ctx context.Context, types ...hcsschem
 	if err == nil && len(fallbackTypes) == 0 {
 		return properties, nil
 	} else if err != nil {
-		logEntry.WithError(fmt.Errorf("failed to query compute system properties in-proc: %s", err))
+		logEntry.WithError(fmt.Errorf("failed to query compute system properties in-proc: %w", err))
 		fallbackTypes = types
 	}
 
 	logEntry.WithFields(logrus.Fields{
 		logfields.ContainerID: computeSystem.id,
 		"propertyTypes":       fallbackTypes,
-	}).Warn("falling back to HCS for property type queries")
+	}).Info("falling back to HCS for property type queries")
 
 	hcsProperties, err := computeSystem.hcsPropertiesV2Query(ctx, fallbackTypes)
 	if err != nil {
@@ -517,6 +517,7 @@ func (computeSystem *System) PropertiesV2(ctx context.Context, types ...hcsschem
 		hcsProperties.Owner = properties.Owner
 	}
 
+	// For future support for querying processlist in-proc as well.
 	if properties.ProcessList != nil {
 		hcsProperties.ProcessList = properties.ProcessList
 	}
