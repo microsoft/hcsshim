@@ -107,7 +107,7 @@ func (s *service) createInternal(ctx context.Context, req *task.CreateTaskReques
 	// If sandbox isolation is set to hypervisor, make sure the HyperV option
 	// is filled in. This lessens the burden on Containerd to parse our shims
 	// options if we can set this ourselves.
-	if shimOpts.SandboxIsolation == runhcsopts.Options_HYPERVISOR {
+	if shimOpts != nil && shimOpts.SandboxIsolation == runhcsopts.Options_HYPERVISOR {
 		if spec.Windows == nil {
 			spec.Windows = &specs.Windows{}
 		}
