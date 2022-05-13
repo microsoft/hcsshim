@@ -15,14 +15,13 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
 	"github.com/Microsoft/hcsshim/internal/guest/storage"
 	"github.com/Microsoft/hcsshim/internal/guest/storage/crypt"
 	dm "github.com/Microsoft/hcsshim/internal/guest/storage/devicemapper"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
@@ -100,15 +99,12 @@ func mount(
 	verityInfo *guestresource.DeviceVerityInfo,
 	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
-	spnCtx, span := oc.StartSpan(ctx, "scsi::Mount")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
+	log.G(ctx).WithFields(logrus.Fields{
+		"controller": controller,
+		"lun":        lun,
+	}).Trace("scsi::Mount")
 
-	span.AddAttributes(
-		trace.Int64Attribute("controller", int64(controller)),
-		trace.Int64Attribute("lun", int64(lun)))
-
-	source, err := controllerLunToName(spnCtx, controller, lun)
+	source, err := controllerLunToName(ctx, controller, lun)
 	if err != nil {
 		return err
 	}
@@ -127,13 +123,13 @@ func mount(
 
 		if verityInfo != nil {
 			dmVerityName := fmt.Sprintf(verityDeviceFmt, controller, lun, deviceHash)
-			if source, err = createVerityTarget(spnCtx, source, dmVerityName, verityInfo); err != nil {
+			if source, err = createVerityTarget(ctx, source, dmVerityName, verityInfo); err != nil {
 				return err
 			}
 			defer func() {
 				if err != nil {
 					if err := removeDevice(dmVerityName); err != nil {
-						log.G(spnCtx).WithError(err).WithField("verityTarget", dmVerityName).Debug("failed to cleanup verity target")
+						log.G(ctx).WithError(err).WithField("verityTarget", dmVerityName).Debug("failed to cleanup verity target")
 					}
 				}
 			}()
@@ -158,7 +154,7 @@ func mount(
 	}
 
 	if encrypted {
-		encryptedSource, err := crypt.EncryptDevice(spnCtx, source)
+		encryptedSource, err := crypt.EncryptDevice(ctx, source)
 		if err != nil {
 			return errors.Wrapf(err, "failed to mount encrypted device: "+source)
 		}
@@ -229,14 +225,11 @@ func unmount(
 	verityInfo *guestresource.DeviceVerityInfo,
 	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
-	ctx, span := oc.StartSpan(ctx, "scsi::Unmount")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.Int64Attribute("controller", int64(controller)),
-		trace.Int64Attribute("lun", int64(lun)),
-		trace.StringAttribute("target", target))
+	log.G(ctx).WithFields(logrus.Fields{
+		"controller": controller,
+		"lun":        lun,
+		"target":     target,
+	}).Trace("scsi::Unmount")
 
 	if err = securityPolicy.EnforceDeviceUnmountPolicy(target); err != nil {
 		return errors.Wrapf(err, "unmounting scsi controller %d lun %d from  %s denied by policy", controller, lun, target)
@@ -285,13 +278,10 @@ func Unmount(
 // ControllerLunToName finds the `/dev/sd*` path to the SCSI device on
 // `controller` index `lun`.
 func ControllerLunToName(ctx context.Context, controller, lun uint8) (_ string, err error) {
-	ctx, span := oc.StartSpan(ctx, "scsi::ControllerLunToName")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.Int64Attribute("controller", int64(controller)),
-		trace.Int64Attribute("lun", int64(lun)))
+	log.G(ctx).WithFields(logrus.Fields{
+		"controller": controller,
+		"lun":        lun,
+	}).Trace("scsi::ControllerLunToName")
 
 	scsiID := fmt.Sprintf("%d:0:0:%d", controller, lun)
 	// Devices matching the given SCSI code should each have a subdirectory
@@ -329,13 +319,10 @@ func ControllerLunToName(ctx context.Context, controller, lun uint8) (_ string, 
 //
 // If the device is not attached returns no error.
 func unplugDevice(ctx context.Context, controller, lun uint8) (err error) {
-	_, span := oc.StartSpan(ctx, "scsi::UnplugDevice")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.Int64Attribute("controller", int64(controller)),
-		trace.Int64Attribute("lun", int64(lun)))
+	log.G(ctx).WithFields(logrus.Fields{
+		"controller": controller,
+		"lun":        lun,
+	}).Trace("scsi::UnplugDevice")
 
 	scsiID := fmt.Sprintf("%d:0:0:%d", controller, lun)
 	f, err := os.OpenFile(filepath.Join(scsiDevicesPath, scsiID, "delete"), os.O_WRONLY, 0644)

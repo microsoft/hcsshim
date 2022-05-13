@@ -12,11 +12,11 @@ import (
 
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
 
 	"github.com/Microsoft/hcsshim/internal/guest/network"
 	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
@@ -33,10 +33,7 @@ func getSandboxResolvPath(id string) string {
 }
 
 func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (err error) {
-	ctx, span := oc.StartSpan(ctx, "hcsv2::setupSandboxContainerSpec")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-	span.AddAttributes(trace.StringAttribute("cid", id))
+	log.G(ctx).WithField(logfields.ContainerID, id).Trace("hcsv2::setupSandboxContainerSpec")
 
 	// Generate the sandbox root dir
 	rootDir := specInternal.SandboxRootDir(id)

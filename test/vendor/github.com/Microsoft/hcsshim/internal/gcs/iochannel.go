@@ -65,3 +65,7 @@ func (c *ioChannel) Write(b []byte) (int, error) {
 	}
 	return c.c.Write(b)
 }
+
+func (c *ioChannel) Addr() net.Addr {
+	return c.l.Addr()
+}

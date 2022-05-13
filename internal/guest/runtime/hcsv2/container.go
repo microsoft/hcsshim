@@ -63,7 +63,7 @@ type Container struct {
 }
 
 func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSettings) (int, error) {
-	log.G(ctx).WithField(logfields.ContainerID, c.id).Info("opengcs::Container::Start")
+	log.G(ctx).WithField(logfields.ContainerID, c.id).Trace("opengcs::Container::Start")
 	stdioSet, err := stdio.Connect(c.vsock, conSettings)
 	if err != nil {
 		return -1, err
@@ -86,7 +86,7 @@ func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSetti
 }
 
 func (c *Container) ExecProcess(ctx context.Context, process *oci.Process, conSettings stdio.ConnectionSettings) (int, error) {
-	log.G(ctx).WithField(logfields.ContainerID, c.id).Info("opengcs::Container::ExecProcess")
+	log.G(ctx).WithField(logfields.ContainerID, c.id).Trace("opengcs::Container::ExecProcess")
 	stdioSet, err := stdio.Connect(c.vsock, conSettings)
 	if err != nil {
 		return -1, err
@@ -136,7 +136,8 @@ func (c *Container) GetProcess(pid uint32) (Process, error) {
 	logrus.WithFields(logrus.Fields{
 		logfields.ContainerID: c.id,
 		logfields.ProcessID:   pid,
-	}).Info("opengcs::Container::GetProcess")
+	}).Trace("opengcs::Container::GetProcesss")
+
 	if c.initProcess.pid == pid {
 		return c.initProcess, nil
 	}
@@ -153,7 +154,8 @@ func (c *Container) GetProcess(pid uint32) (Process, error) {
 
 // GetAllProcessPids returns all process pids in the container namespace.
 func (c *Container) GetAllProcessPids(ctx context.Context) ([]int, error) {
-	log.G(ctx).WithField(logfields.ContainerID, c.id).Info("opengcs::Container::GetAllProcessPids")
+	log.G(ctx).WithField(logfields.ContainerID, c.id).Trace("opengcs::Container::GetAllProcessPids")
+
 	state, err := c.container.GetAllProcesses()
 	if err != nil {
 		return nil, err
@@ -167,7 +169,7 @@ func (c *Container) GetAllProcessPids(ctx context.Context) ([]int, error) {
 
 // Kill sends 'signal' to the container process.
 func (c *Container) Kill(ctx context.Context, signal syscall.Signal) error {
-	log.G(ctx).WithField(logfields.ContainerID, c.id).Info("opengcs::Container::Kill")
+	log.G(ctx).WithField(logfields.ContainerID, c.id).Trace("opengcs::Container::Kill")
 	err := c.container.Kill(signal)
 	if err != nil {
 		return err
@@ -177,17 +179,17 @@ func (c *Container) Kill(ctx context.Context, signal syscall.Signal) error {
 }
 
 func (c *Container) Delete(ctx context.Context) error {
-	entity := log.G(ctx).WithField(logfields.ContainerID, c.id)
-	entity.Info("opengcs::Container::Delete")
+	entry := log.G(ctx).WithField(logfields.ContainerID, c.id)
+	entry.Trace("opengcs::Container::Delete")
 	if c.isSandbox {
 		// remove user mounts in sandbox container
 		if err := storage.UnmountAllInPath(ctx, specInternal.SandboxMountsDir(c.id), true); err != nil {
-			entity.WithError(err).Error("failed to unmount sandbox mounts")
+			entry.WithError(err).Error("failed to unmount sandbox mounts")
 		}
 
 		// remove hugepages mounts in sandbox container
 		if err := storage.UnmountAllInPath(ctx, specInternal.HugePagesMountsDir(c.id), true); err != nil {
-			entity.WithError(err).Error("failed to unmount hugepages mounts")
+			entry.WithError(err).Error("failed to unmount hugepages mounts")
 		}
 	}
 
@@ -195,7 +197,7 @@ func (c *Container) Delete(ctx context.Context) error {
 }
 
 func (c *Container) Update(ctx context.Context, resources interface{}) error {
-	log.G(ctx).WithField(logfields.ContainerID, c.id).Info("opengcs::Container::Update")
+	log.G(ctx).WithField(logfields.ContainerID, c.id).Trace("opengcs::Container::Update")
 	return c.container.Update(resources)
 }
 
@@ -226,9 +228,7 @@ func (c *Container) setExitType(signal syscall.Signal) {
 
 // GetStats returns the cgroup metrics for the container.
 func (c *Container) GetStats(ctx context.Context) (*v1.Metrics, error) {
-	_, span := oc.StartSpan(ctx, "opengcs::Container::GetStats")
-	defer span.End()
-	span.AddAttributes(trace.StringAttribute("cid", c.id))
+	log.G(ctx).WithField(logfields.ContainerID, c.id).Trace("opengcs::Container::GetStats")
 
 	cgroupPath := c.spec.Linux.CgroupsPath
 	cg, err := cgroups.Load(cgroups.V1, cgroups.StaticPath(cgroupPath))

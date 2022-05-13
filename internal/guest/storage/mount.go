@@ -12,10 +12,10 @@ import (
 	"syscall"
 
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/log"
 )
 
 const procMountFile = "/proc/mounts"
@@ -115,13 +115,10 @@ func MountRShared(path string) error {
 // UnmountPath unmounts the target path if it exists and is a mount path. If
 // removeTarget this will remove the previously mounted folder.
 func UnmountPath(ctx context.Context, target string, removeTarget bool) (err error) {
-	_, span := oc.StartSpan(ctx, "storage::UnmountPath")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("target", target),
-		trace.BoolAttribute("remove", removeTarget))
+	log.G(ctx).WithFields(logrus.Fields{
+		"target": target,
+		"remove": removeTarget,
+	}).Trace("storage::UnmountPath")
 
 	if _, err := osStat(target); err != nil {
 		if os.IsNotExist(err) {

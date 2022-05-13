@@ -10,6 +10,9 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 )
 
 // UpstreamIO is an interface describing the IO to connect to above the shim.
@@ -64,19 +67,26 @@ func NewUpstreamIO(ctx context.Context, id, stdout, stderr, stdin string, termin
 }
 
 // relayIO is a glorified io.Copy that also logs when the copy has completed.
-func relayIO(w io.Writer, r io.Reader, log *logrus.Entry, name string) (int64, error) {
+func relayIO(w io.Writer, r io.Reader, entry *logrus.Entry, name string) (int64, error) {
 	n, err := io.Copy(w, r)
-	if log != nil {
+	if entry != nil {
+		ctx := entry.Context
+		if ctx == nil {
+			ctx = context.Background()
+		}
+
 		lvl := logrus.DebugLevel
-		log = log.WithFields(logrus.Fields{
-			"file":  name,
-			"bytes": n,
+		entry = entry.WithFields(logrus.Fields{
+			logfields.File: name,
+			"bytes":        n,
+			"reader":       log.FormatIO(ctx, r),
+			"writer":       log.FormatIO(ctx, w),
 		})
 		if err != nil {
 			lvl = logrus.ErrorLevel
-			log = log.WithError(err)
+			entry = entry.WithError(err)
 		}
-		log.Log(lvl, "Cmd IO relay complete")
+		entry.Log(lvl, "Cmd IO relay complete")
 	}
 	return n, err
 }

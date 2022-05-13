@@ -14,7 +14,7 @@ func NormalizeProcessorCount(ctx context.Context, cid string, requestedCount, ho
 			"id":              cid,
 			"requested count": requestedCount,
 			"assigned count":  hostCount,
-		}).Warn("Changing user requested  cpu count to current number of processors on the host")
+		}).Warn("Changing user requested cpu count to current number of processors on the host")
 		return hostCount
 	} else {
 		return requestedCount

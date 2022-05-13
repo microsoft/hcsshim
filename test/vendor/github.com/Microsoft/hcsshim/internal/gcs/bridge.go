@@ -21,6 +21,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/oc"
 )
 
 const (
@@ -52,6 +53,9 @@ type rpc struct {
 	brdgErr error // error encountered when sending the request or unmarshaling the result
 	ch      chan struct{}
 }
+
+// todo(helsaawy): remove bridge.log entry and log based on per-request context, not
+// the context that started the bridge
 
 // bridge represents a communcations bridge with the guest. It handles the
 // transport layer but (mostly) does not parse or construct the message payload.
@@ -229,7 +233,11 @@ func (call *rpc) Wait() {
 // If allowCancel is set and the context becomes done, returns an error without
 // waiting for a response. Avoid this on messages that are not idempotent or
 // otherwise safe to ignore the response of.
-func (brdg *bridge) RPC(ctx context.Context, proc rpcProc, req requestMessage, resp responseMessage, allowCancel bool) error {
+func (brdg *bridge) RPC(ctx context.Context, proc rpcProc, req requestMessage, resp responseMessage, allowCancel bool) (err error) {
+	ctx, span := oc.StartSpan(ctx, "gcs::bridge::RPC::"+proc.String(), oc.WithClientSpanKind)
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+
 	call, err := brdg.AsyncRPC(ctx, proc, req, resp)
 	if err != nil {
 		return err
@@ -416,7 +424,6 @@ func (brdg *bridge) writeMessage(buf *bytes.Buffer, enc *json.Encoder, typ msgTy
 			"message-id": id}).Debug("bridge send")
 	}
 
-	// Write the message.
 	_, err = buf.WriteTo(brdg.conn)
 	if err != nil {
 		return fmt.Errorf("bridge write: %s", err)

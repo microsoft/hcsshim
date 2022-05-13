@@ -99,7 +99,7 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 			log.G(ctx).WithError(err).Error("failed to wait for runc process")
 		}
 		p.exitCode = exitCode
-		log.G(ctx).WithField("exitCode", p.exitCode).Debug("process exited")
+		log.G(ctx).WithField(logfields.ExitCode, p.exitCode).Debug("process exited")
 
 		// Free any process waiters
 		p.exitWg.Done()
@@ -117,7 +117,7 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 			}
 			c.processesMutex.Lock()
 
-			_, span := oc.StartSpan(context.Background(), "newProcess::waitBackground::waitAllWaiters")
+			_, span := oc.StartSpan(ctx, "newProcess::waitBackground::waitAllWaiters")
 			defer span.End()
 			span.AddAttributes(
 				trace.StringAttribute("cid", p.cid),
@@ -244,8 +244,8 @@ func newExternalProcess(ctx context.Context, cmd *exec.Cmd, tty *stdio.TtyRelay,
 		cmd.Wait()
 		ep.exitCode = cmd.ProcessState.ExitCode()
 		log.G(ctx).WithFields(logrus.Fields{
-			"pid":      cmd.Process.Pid,
-			"exitCode": ep.exitCode,
+			logfields.ProcessID: cmd.Process.Pid,
+			logfields.ExitCode:  ep.exitCode,
 		}).Debug("external process exited")
 		if ep.tty != nil {
 			ep.tty.Wait()

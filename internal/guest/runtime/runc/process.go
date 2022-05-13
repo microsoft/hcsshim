@@ -47,8 +47,8 @@ func (p *process) Delete() error {
 func (p *process) Wait() (int, error) {
 	exitCode, err := p.c.r.waitOnProcess(p.pid)
 
-	l := logrus.WithField(logfields.ContainerID, p.c.id)
-	l.WithField(logfields.ContainerID, p.pid).Debug("process wait completed")
+	entry := logrus.WithField(logfields.ContainerID, p.c.id)
+	entry.WithField(logfields.ContainerID, p.pid).Debug("process wait completed")
 
 	// If the init process for the container has exited, kill everything else in
 	// the container. Runc uses the devices cgroup of the container ot determine
@@ -66,7 +66,7 @@ func (p *process) Wait() (int, error) {
 		// terminates all other processes in the namespace with SIGKILL. We
 		// simulate the same behavior.
 		if err := p.c.Kill(syscall.SIGKILL); err != nil {
-			l.WithError(err).Error("failed to terminate container after process wait")
+			entry.WithError(err).Error("failed to terminate container after process wait")
 		}
 	}
 
@@ -88,7 +88,7 @@ func (p *process) Wait() (int, error) {
 		p.pipeRelay.Wait()
 	}
 
-	l.WithField(logfields.ProcessID, p.pid).Debug("relay wait completed")
+	entry.WithField(logfields.ProcessID, p.pid).Debug("relay wait completed")
 
 	return exitCode, err
 }

@@ -108,10 +108,16 @@ const (
 	msgTypeRequest  msgType = 0x10100000
 	msgTypeResponse msgType = 0x20100000
 	msgTypeNotify   msgType = 0x30100000
-	msgTypeMask     msgType = 0xfff00000
+
+	msgTypeMask msgType = 0xfff00000
+	rpcProcMask msgType = ^msgTypeMask
 
 	notifyContainer = 1<<8 | 1
 )
+
+func (t msgType) rpcProc() rpcProc {
+	return rpcProc(t & rpcProcMask)
+}
 
 func (typ msgType) String() string {
 	var s string
@@ -136,8 +142,11 @@ func (typ msgType) String() string {
 	return s + ")"
 }
 
+// todo: switch to "go.opentelemetry.io/otel/trace"
+// todo: move this to .\internal\oc?
+
 // ocspancontext is the internal JSON representation of the OpenCensus
-// `trace.SpanContext` for fowarding to a GCS that supports it.
+// `trace.SpanContext` for forwarding to a GCS that supports it.
 type ocspancontext struct {
 	// TraceID is the `hex` encoded string of the OpenCensus
 	// `SpanContext.TraceID` to propagate to the guest.

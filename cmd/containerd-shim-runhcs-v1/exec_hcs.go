@@ -20,6 +20,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/cow"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/internal/signals"
@@ -46,7 +47,7 @@ func newHcsExec(
 		"eid":    id, // Init exec ID is always same as Task ID
 		"bundle": bundle,
 		"wcow":   isWCOW,
-	}).Debug("newHcsExec")
+	}).Trace("newHcsExec")
 
 	he := &hcsExec{
 		events:      events,
@@ -374,8 +375,12 @@ func (he *hcsExec) ForceExit(ctx context.Context, status int) {
 func (he *hcsExec) exitFromCreatedL(ctx context.Context, status int) {
 	if he.state != shimExecStateExited {
 		// Avoid logging the force if we already exited gracefully
-		log.G(ctx).WithField("status", status).Debug("hcsExec::exitFromCreatedL")
-
+		log.G(ctx).WithFields(logrus.Fields{
+			logfields.TaskID: he.tid,
+			logfields.ExecID: he.id,
+			"status":         status,
+			"state":          he.state,
+		}).Trace("hcsExec::exitFromCreatedL")
 		// Unblock the container exit goroutine
 		he.processDoneOnce.Do(func() { close(he.processDone) })
 		// Transition this exec
@@ -422,12 +427,13 @@ func (he *hcsExec) waitForExit() {
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
-		trace.StringAttribute("tid", he.tid),
-		trace.StringAttribute("eid", he.id))
+		trace.StringAttribute(logfields.TaskID, he.tid),
+		trace.StringAttribute(logfields.ExecID, he.id))
+	entry := log.G(ctx)
 
 	err = he.p.Process.Wait()
 	if err != nil {
-		log.G(ctx).WithError(err).Error("failed process Wait")
+		entry.WithError(err).Error("failed process Wait")
 	}
 
 	// Issue the process cancellation to unblock the container wait as early as
@@ -436,9 +442,11 @@ func (he *hcsExec) waitForExit() {
 
 	code, err := he.p.Process.ExitCode()
 	if err != nil {
-		log.G(ctx).WithError(err).Error("failed to get ExitCode")
+		entry.WithError(err).Error("failed to get hcsExec ExitCode")
 	} else {
-		log.G(ctx).WithField("exitCode", code).Debug("exited")
+		entry.WithFields(logrus.Fields{
+			logfields.ExitCode: code,
+		}).Debug("hcsExec exited")
 	}
 
 	he.sl.Lock()
@@ -465,7 +473,7 @@ func (he *hcsExec) waitForExit() {
 				ExitStatus:  he.exitStatus,
 				ExitedAt:    he.exitedAt,
 			}); err != nil {
-			log.G(ctx).WithError(err).Error("failed to publish TaskExitEvent")
+			entry.WithError(err).Error("failed to publish TaskExitEvent")
 		}
 	}
 
@@ -481,11 +489,13 @@ func (he *hcsExec) waitForExit() {
 //
 // This MUST be called via a goroutine at exec create.
 func (he *hcsExec) waitForContainerExit() {
+	var err error // this will only save the last error, since we dont return early on error
 	ctx, span := oc.StartSpan(context.Background(), "hcsExec::waitForContainerExit")
 	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
 	span.AddAttributes(
-		trace.StringAttribute("tid", he.tid),
-		trace.StringAttribute("eid", he.id))
+		trace.StringAttribute(logfields.TaskID, he.tid),
+		trace.StringAttribute(logfields.ExecID, he.id))
 
 	cexit := make(chan struct{})
 	go func() {

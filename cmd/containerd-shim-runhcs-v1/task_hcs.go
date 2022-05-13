@@ -31,6 +31,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/jobcontainers"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/oci"
@@ -45,7 +46,7 @@ import (
 )
 
 func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.CreateTaskRequest, s *specs.Spec) (shimTask, error) {
-	log.G(ctx).WithField("tid", req.ID).Debug("newHcsStandaloneTask")
+	log.G(ctx).WithField(logfields.TaskID, req.ID).Trace("newHcsStandaloneTask")
 
 	ct, _, err := oci.GetSandboxTypeAndID(s.Annotations)
 	if err != nil {
@@ -160,10 +161,16 @@ func newHcsTask(
 	ownsParent bool,
 	req *task.CreateTaskRequest,
 	s *specs.Spec) (_ shimTask, err error) {
+	uvmID := ""
+	if parent != nil {
+		uvmID = parent.ID()
+	}
+
 	log.G(ctx).WithFields(logrus.Fields{
-		"tid":        req.ID,
-		"ownsParent": ownsParent,
-	}).Debug("newHcsTask")
+		logfields.TaskID: req.ID,
+		logfields.UVMID:  uvmID,
+		"ownsParent":     ownsParent,
+	}).Trace("newHcsTask")
 
 	owner := filepath.Base(os.Args[0])
 	isTemplate := oci.ParseAnnotationsSaveAsTemplate(ctx, s)
@@ -275,11 +282,17 @@ func newClonedHcsTask(
 	req *task.CreateTaskRequest,
 	s *specs.Spec,
 	templateID string) (_ shimTask, err error) {
+	uvmID := ""
+	if parent != nil {
+		uvmID = parent.ID()
+	}
+
 	log.G(ctx).WithFields(logrus.Fields{
-		"tid":        req.ID,
-		"ownsParent": ownsParent,
-		"templateid": templateID,
-	}).Debug("newClonedHcsTask")
+		logfields.TaskID: req.ID,
+		logfields.UVMID:  uvmID,
+		"ownsParent":     ownsParent,
+		"templateID":     templateID,
+	}).Trace("newClonedHcsTask")
 
 	owner := filepath.Base(os.Args[0])
 
@@ -695,7 +708,8 @@ func (ht *hcsTask) Wait() *task.StateResponse {
 func (ht *hcsTask) waitInitExit(destroyContainer bool) {
 	ctx, span := oc.StartSpan(context.Background(), "hcsTask::waitInitExit")
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("tid", ht.id))
+	span.AddAttributes(trace.StringAttribute("tid", ht.id),
+		trace.BoolAttribute("destroyContainer", destroyContainer))
 
 	// Wait for it to exit on its own
 	ht.init.Wait()
@@ -753,8 +767,12 @@ func (ht *hcsTask) waitForHostExit() {
 // NOTE: For Windows process isolated containers `ht.ownsHost==true && ht.host
 // == nil`.
 func (ht *hcsTask) close(ctx context.Context) {
+	entry := log.G(ctx).WithFields(logrus.Fields{
+		logfields.TaskID: ht.id,
+	})
+
 	ht.closeOnce.Do(func() {
-		log.G(ctx).Debug("hcsTask::closeOnce")
+		entry.Trace("hcsTask::closeOnce")
 
 		// ht.c should never be nil for a real task but in testing we stub
 		// this to avoid a nil dereference. We really should introduce a
@@ -770,7 +788,7 @@ func (ht *hcsTask) close(ctx context.Context) {
 			}()
 			err := ht.c.Shutdown(ctx)
 			if err != nil {
-				log.G(ctx).WithError(err).Error("failed to shutdown container")
+				entry.WithError(err).Error("failed to shutdown container")
 			} else {
 				t := time.NewTimer(time.Second * 30)
 				select {
@@ -778,10 +796,10 @@ func (ht *hcsTask) close(ctx context.Context) {
 					err = werr
 					t.Stop()
 					if err != nil {
-						log.G(ctx).WithError(err).Error("failed to wait for container shutdown")
+						entry.WithError(err).Error("failed to wait for container shutdown")
 					}
 				case <-t.C:
-					log.G(ctx).WithError(hcs.ErrTimeout).Error("failed to wait for container shutdown")
+					entry.WithError(hcs.ErrTimeout).Error("failed to wait for container shutdown")
 				}
 			}
 
@@ -796,22 +814,22 @@ func (ht *hcsTask) close(ctx context.Context) {
 						err = werr
 						t.Stop()
 						if err != nil {
-							log.G(ctx).WithError(err).Error("failed to wait for container terminate")
+							entry.WithError(err).Error("failed to wait for container terminate")
 						}
 					case <-t.C:
-						log.G(ctx).WithError(hcs.ErrTimeout).Error("failed to wait for container terminate")
+						entry.WithError(hcs.ErrTimeout).Error("failed to wait for container terminate")
 					}
 				}
 			}
 
 			// Release any resources associated with the container.
 			if err := resources.ReleaseResources(ctx, ht.cr, ht.host, true); err != nil {
-				log.G(ctx).WithError(err).Error("failed to release container resources")
+				entry.WithError(err).Error("failed to release container resources")
 			}
 
 			// Close the container handle invalidating all future access.
 			if err := ht.c.Close(); err != nil {
-				log.G(ctx).WithError(err).Error("failed to close container")
+				entry.WithError(err).Error("failed to close container")
 			}
 		}
 		ht.closeHost(ctx)
@@ -826,8 +844,12 @@ func (ht *hcsTask) close(ctx context.Context) {
 //
 // This call is idempotent and safe to call multiple times.
 func (ht *hcsTask) closeHost(ctx context.Context) {
+	entry := log.G(ctx).WithFields(logrus.Fields{
+		logfields.TaskID: ht.id,
+	})
+
 	ht.closeHostOnce.Do(func() {
-		log.G(ctx).Debug("hcsTask::closeHostOnce")
+		entry.Trace("hcsTask::closeHostOce")
 
 		if ht.ownsHost && ht.host != nil {
 			if err := ht.host.Close(); err != nil {
@@ -847,7 +869,7 @@ func (ht *hcsTask) closeHost(ctx context.Context) {
 				ExitStatus:  exit.ExitStatus,
 				ExitedAt:    exit.ExitedAt,
 			}); err != nil {
-			log.G(ctx).WithError(err).Error("failed to publish TaskExitEventTopic")
+			entry.WithError(err).Error("failed to publish TaskExitEventTopic")
 		}
 		close(ht.closed)
 	})
@@ -873,7 +895,10 @@ func (ht *hcsTask) DumpGuestStacks(ctx context.Context) string {
 	if ht.host != nil {
 		stacks, err := ht.host.DumpStacks(ctx)
 		if err != nil {
-			log.G(ctx).WithError(err).Warn("failed to capture guest stacks")
+			log.G(ctx).WithFields(logrus.Fields{
+				logfields.TaskID: ht.id,
+				logrus.ErrorKey:  err,
+			}).Warn("failed to capture guest stacks")
 		} else {
 			return stacks
 		}

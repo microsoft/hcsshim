@@ -470,7 +470,7 @@ Example JSON document produced once the hcsschema.ComputeSytem returned by makeL
 
 // Make the ComputeSystem document object that will be serialised to json to be presented to the HCS api.
 func makeLCOWDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ *hcsschema.ComputeSystem, err error) {
-	logrus.Tracef("makeLCOWDoc %v\n", opts)
+	log.G(ctx).Trace("uvm::makeLCOWSecurityDoc")
 
 	kernelFullPath := filepath.Join(opts.BootFilesPath, opts.KernelFile)
 	if _, err := os.Stat(kernelFullPath); os.IsNotExist(err) {
@@ -720,7 +720,8 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	}
 
 	span.AddAttributes(trace.StringAttribute(logfields.UVMID, opts.ID))
-	log.G(ctx).WithField("options", fmt.Sprintf("%+v", opts)).Debug("uvm::CreateLCOW options")
+	ctx, entry := log.S(ctx, logrus.Fields{logfields.UVMID: opts.ID})
+	entry.WithField(logfields.Options, opts).Debug("uvm::CreateLCOW options")
 
 	// We dont serialize OutputHandler so if it is missing we need to put it back to the default.
 	if opts.OutputHandler == nil {
@@ -763,22 +764,20 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	var doc *hcsschema.ComputeSystem
 	if opts.SecurityPolicyEnabled {
 		doc, err = makeLCOWSecurityDoc(ctx, opts, uvm)
-		log.G(ctx).Tracef("create_lcow::CreateLCOW makeLCOWSecurityDoc result doc: %v err %v", doc, err)
 	} else {
 		doc, err = makeLCOWDoc(ctx, opts, uvm)
-		log.G(ctx).Tracef("create_lcow::CreateLCOW makeLCOWDoc result doc: %v err %v", doc, err)
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error while creating LCOW document: %w", err)
 	}
+
+	entry.WithField(logfields.Doc, doc).Trace("uvm::CreateLCOW created LCOW doc")
 
 	err = uvm.create(ctx, doc)
-
-	log.G(ctx).Tracef("create_lcow::CreateLCOW uvm.create result uvm: %v err %v", uvm, err)
-
 	if err != nil {
-		return nil, fmt.Errorf("error while creating the compute system: %s", err)
+		return nil, fmt.Errorf("error while creating the compute system: %w", err)
 	}
+	entry.WithField("uvm", uvm).Trace("uvm::CreateLCOW result")
 
 	// Cerate a socket to inject entropy during boot.
 	uvm.entropyListener, err = uvm.listenVsock(entropyVsockPort)
@@ -798,7 +797,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 	}
 
 	if opts.UseGuestConnection {
-		log.G(ctx).WithField("vmID", uvm.runtimeID).Debug("Using external GCS bridge")
+		entry.Debug("Using external GCS bridge")
 		l, err := uvm.listenVsock(gcs.LinuxGcsVsockPort)
 		if err != nil {
 			return nil, err

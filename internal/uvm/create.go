@@ -234,9 +234,10 @@ func (uvm *UtilityVM) create(ctx context.Context, doc interface{}) error {
 	uvm.hcsSystem = system
 	system = nil
 
-	log.G(ctx).WithFields(logrus.Fields{
-		logfields.UVMID: uvm.id,
-		"runtime-id":    uvm.runtimeID.String(),
+	uvm.logEntry(ctx).WithFields(logrus.Fields{
+		"runtime-id": uvm.runtimeID.String(),
+		"owner":      uvm.owner,
+		"os":         uvm.operatingSystem,
 	}).Debug("created utility VM")
 	return nil
 }
@@ -340,10 +341,9 @@ func (uvm *UtilityVM) normalizeProcessorCount(ctx context.Context, requested int
 	// (https://docs.microsoft.com/en-us/windows-server/virtualization/hyper-v/manage/manage-hyper-v-minroot-2016)
 	hostCount := int32(processorTopology.LogicalProcessorCount)
 	if requested > hostCount {
-		log.G(ctx).WithFields(logrus.Fields{
-			logfields.UVMID: uvm.id,
-			"requested":     requested,
-			"assigned":      hostCount,
+		uvm.logEntry(ctx).WithFields(logrus.Fields{
+			"requested": requested,
+			"assigned":  hostCount,
 		}).Warn("Changing user requested CPUCount to current number of processors")
 		return hostCount
 	} else {
@@ -371,10 +371,9 @@ func (uvm *UtilityVM) ProcessDumpLocation() string {
 func (uvm *UtilityVM) normalizeMemorySize(ctx context.Context, requested uint64) uint64 {
 	actual := (requested + 1) &^ 1 // align up to an even number
 	if requested != actual {
-		log.G(ctx).WithFields(logrus.Fields{
-			logfields.UVMID: uvm.id,
-			"requested":     requested,
-			"assigned":      actual,
+		uvm.logEntry(ctx).WithFields(logrus.Fields{
+			"requested": requested,
+			"assigned":  actual,
 		}).Warn("Changing user requested MemorySizeInMB to align to 2MB")
 	}
 	return actual

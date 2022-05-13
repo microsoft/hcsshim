@@ -6,18 +6,17 @@ import (
 	"context"
 	"os"
 	"runtime"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/extendedtask"
-	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
 	google_protobuf1 "github.com/gogo/protobuf/types"
-	"go.opencensus.io/trace"
+	"github.com/sirupsen/logrus"
 )
 
 type ServiceOptions struct {
@@ -98,388 +97,142 @@ func NewService(o ...ServiceOption) (svc *service, err error) {
 }
 
 func (s *service) State(ctx context.Context, req *task.StateRequest) (resp *task.StateResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "State")
-	defer span.End()
-	defer func() {
-		if resp != nil {
-			span.AddAttributes(
-				trace.StringAttribute("status", resp.Status.String()),
-				trace.Int64Attribute("exitStatus", int64(resp.ExitStatus)),
-				trace.StringAttribute("exitedAt", resp.ExitedAt.String()))
-		}
-		oc.SetSpanStatus(span, err)
-	}()
-
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.StringAttribute("eid", req.ExecID))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
-	}
+	s.logEntry(ctx).Trace("State")
 
 	r, e := s.stateInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Create(ctx context.Context, req *task.CreateTaskRequest) (resp *task.CreateTaskResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "Create")
-	defer span.End()
-	defer func() {
-		if resp != nil {
-			span.AddAttributes(trace.Int64Attribute("pid", int64(resp.Pid)))
-		}
-		oc.SetSpanStatus(span, err)
-	}()
-
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.StringAttribute("bundle", req.Bundle),
-		// trace.StringAttribute("rootfs", req.Rootfs), TODO: JTERRY75 -
-		// OpenCensus doesnt support slice like our logrus hook
-		trace.BoolAttribute("terminal", req.Terminal),
-		trace.StringAttribute("stdin", req.Stdin),
-		trace.StringAttribute("stdout", req.Stdout),
-		trace.StringAttribute("stderr", req.Stderr),
-		trace.StringAttribute("checkpoint", req.Checkpoint),
-		trace.StringAttribute("parentcheckpoint", req.ParentCheckpoint))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
-	}
+	s.logEntry(ctx).Trace("Create")
 
 	r, e := s.createInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Start(ctx context.Context, req *task.StartRequest) (resp *task.StartResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "Start")
-	defer span.End()
-	defer func() {
-		if resp != nil {
-			span.AddAttributes(trace.Int64Attribute("pid", int64(resp.Pid)))
-		}
-		oc.SetSpanStatus(span, err)
-	}()
-
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.StringAttribute("eid", req.ExecID))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
-	}
+	s.logEntry(ctx).Trace("Start")
 
 	r, e := s.startInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (resp *task.DeleteResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "Delete")
-	defer span.End()
-	defer func() {
-		if resp != nil {
-			span.AddAttributes(
-				trace.Int64Attribute("pid", int64(resp.Pid)),
-				trace.Int64Attribute("exitStatus", int64(resp.ExitStatus)),
-				trace.StringAttribute("exitedAt", resp.ExitedAt.String()))
-		}
-		oc.SetSpanStatus(span, err)
-	}()
-
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.StringAttribute("eid", req.ExecID))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
-	}
+	s.logEntry(ctx).Trace("Delete")
 
 	r, e := s.deleteInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Pids(ctx context.Context, req *task.PidsRequest) (_ *task.PidsResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "Pids")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(trace.StringAttribute("tid", req.ID))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
-	}
+	s.logEntry(ctx).Trace("Pids")
 
 	r, e := s.pidsInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Pause(ctx context.Context, req *task.PauseRequest) (_ *google_protobuf1.Empty, err error) {
-	ctx, span := oc.StartSpan(ctx, "Pause")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(trace.StringAttribute("tid", req.ID))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
-	}
+	s.logEntry(ctx).Trace("Pause")
 
 	r, e := s.pauseInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Resume(ctx context.Context, req *task.ResumeRequest) (_ *google_protobuf1.Empty, err error) {
-	ctx, span := oc.StartSpan(ctx, "Resume")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(trace.StringAttribute("tid", req.ID))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
-	}
+	s.logEntry(ctx).Trace("Resume")
 
 	r, e := s.resumeInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Checkpoint(ctx context.Context, req *task.CheckpointTaskRequest) (_ *google_protobuf1.Empty, err error) {
-	ctx, span := oc.StartSpan(ctx, "Checkpoint")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.StringAttribute("path", req.Path))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
-	}
+	s.logEntry(ctx).Trace("Checkpoint")
 
 	r, e := s.checkpointInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Kill(ctx context.Context, req *task.KillRequest) (_ *google_protobuf1.Empty, err error) {
-	ctx, span := oc.StartSpan(ctx, "Kill")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.StringAttribute("eid", req.ExecID),
-		trace.Int64Attribute("signal", int64(req.Signal)),
-		trace.BoolAttribute("all", req.All))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
-	}
+	s.logEntry(ctx).Trace("Kill")
 
 	r, e := s.killInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Exec(ctx context.Context, req *task.ExecProcessRequest) (_ *google_protobuf1.Empty, err error) {
-	ctx, span := oc.StartSpan(ctx, "Exec")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.StringAttribute("eid", req.ExecID),
-		trace.BoolAttribute("terminal", req.Terminal),
-		trace.StringAttribute("stdin", req.Stdin),
-		trace.StringAttribute("stdout", req.Stdout),
-		trace.StringAttribute("stderr", req.Stderr))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
-	}
+	s.logEntry(ctx).Trace("Exec")
 
 	r, e := s.execInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) DiagExecInHost(ctx context.Context, req *shimdiag.ExecProcessRequest) (_ *shimdiag.ExecProcessResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "DiagExecInHost")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("args", strings.Join(req.Args, " ")),
-		trace.StringAttribute("workdir", req.Workdir),
-		trace.BoolAttribute("terminal", req.Terminal),
-		trace.StringAttribute("stdin", req.Stdin),
-		trace.StringAttribute("stdout", req.Stdout),
-		trace.StringAttribute("stderr", req.Stderr))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
-	}
+	s.logEntry(ctx).Trace("DiagExecInHost")
 
 	r, e := s.diagExecInHostInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) DiagShare(ctx context.Context, req *shimdiag.ShareRequest) (_ *shimdiag.ShareResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "DiagShare")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("hostpath", req.HostPath),
-		trace.StringAttribute("uvmpath", req.UvmPath),
-		trace.BoolAttribute("readonly", req.ReadOnly))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
-	}
+	s.logEntry(ctx).Trace("DiagShare")
 
 	r, e := s.diagShareInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ *google_protobuf1.Empty, err error) {
-	ctx, span := oc.StartSpan(ctx, "ResizePty")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.StringAttribute("eid", req.ExecID),
-		trace.Int64Attribute("width", int64(req.Width)),
-		trace.Int64Attribute("height", int64(req.Height)))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
-	}
+	s.logEntry(ctx).Trace("ResizePty")
 
 	r, e := s.resizePtyInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) CloseIO(ctx context.Context, req *task.CloseIORequest) (_ *google_protobuf1.Empty, err error) {
-	ctx, span := oc.StartSpan(ctx, "CloseIO")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.StringAttribute("eid", req.ExecID),
-		trace.BoolAttribute("stdin", req.Stdin))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
-	}
+	s.logEntry(ctx).Trace("CloseIO")
 
 	r, e := s.closeIOInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Update(ctx context.Context, req *task.UpdateTaskRequest) (_ *google_protobuf1.Empty, err error) {
-	ctx, span := oc.StartSpan(ctx, "Update")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(trace.StringAttribute("tid", req.ID))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
-	}
+	s.logEntry(ctx).Trace("Update")
 
 	r, e := s.updateInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Wait(ctx context.Context, req *task.WaitRequest) (resp *task.WaitResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "Wait")
-	defer span.End()
-	defer func() {
-		if resp != nil {
-			span.AddAttributes(
-				trace.Int64Attribute("exitStatus", int64(resp.ExitStatus)),
-				trace.StringAttribute("exitedAt", resp.ExitedAt.String()))
-		}
-		oc.SetSpanStatus(span, err)
-	}()
-
-	span.AddAttributes(
-		trace.StringAttribute("tid", req.ID),
-		trace.StringAttribute("eid", req.ExecID))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
-	}
+	s.logEntry(ctx).Trace("Wait")
 
 	r, e := s.waitInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Stats(ctx context.Context, req *task.StatsRequest) (_ *task.StatsResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "Stats")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(trace.StringAttribute("tid", req.ID))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
-	}
+	s.logEntry(ctx).Trace("Stats")
 
 	r, e := s.statsInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Connect(ctx context.Context, req *task.ConnectRequest) (resp *task.ConnectResponse, err error) {
-	ctx, span := oc.StartSpan(ctx, "Connect")
-	defer span.End()
-	defer func() {
-		if resp != nil {
-			span.AddAttributes(
-				trace.Int64Attribute("shimPid", int64(resp.ShimPid)),
-				trace.Int64Attribute("taskPid", int64(resp.TaskPid)),
-				trace.StringAttribute("version", resp.Version))
-		}
-		oc.SetSpanStatus(span, err)
-	}()
-
-	span.AddAttributes(trace.StringAttribute("tid", req.ID))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
-	}
+	s.logEntry(ctx).Trace("Connect")
 
 	r, e := s.connectInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) Shutdown(ctx context.Context, req *task.ShutdownRequest) (_ *google_protobuf1.Empty, err error) {
-	ctx, span := oc.StartSpan(ctx, "Shutdown")
-	defer span.End()
-	defer func() { oc.SetSpanStatus(span, err) }()
-
-	span.AddAttributes(trace.StringAttribute("tid", req.ID))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
-	}
+	s.logEntry(ctx).Trace("Shutdown")
 
 	r, e := s.shutdownInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
 }
 
 func (s *service) DiagStacks(ctx context.Context, req *shimdiag.StacksRequest) (*shimdiag.StacksResponse, error) {
+	s.logEntry(ctx).Trace("DiagStacks")
 	if s == nil {
 		return nil, nil
-	}
-	ctx, span := oc.StartSpan(ctx, "DiagStacks")
-	defer span.End()
-
-	span.AddAttributes(trace.StringAttribute("tid", s.tid))
-
-	if s.isSandbox {
-		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
 	}
 
 	buf := make([]byte, 4096)
@@ -505,10 +258,7 @@ func (s *service) DiagPid(ctx context.Context, req *shimdiag.PidRequest) (*shimd
 	if s == nil {
 		return nil, nil
 	}
-	ctx, span := oc.StartSpan(ctx, "DiagPid") //nolint:ineffassign,staticcheck
-	defer span.End()
-
-	span.AddAttributes(trace.StringAttribute("tid", s.tid))
+	s.logEntry(ctx).Trace("DiagPid") //nolint:ineffassign,staticcheck
 
 	return &shimdiag.PidResponse{
 		Pid: int32(os.Getpid()),
@@ -516,10 +266,7 @@ func (s *service) DiagPid(ctx context.Context, req *shimdiag.PidRequest) (*shimd
 }
 
 func (s *service) ComputeProcessorInfo(ctx context.Context, req *extendedtask.ComputeProcessorInfoRequest) (*extendedtask.ComputeProcessorInfoResponse, error) {
-	ctx, span := oc.StartSpan(ctx, "ComputeProcessorInfo") //nolint:ineffassign,staticcheck
-	defer span.End()
-
-	span.AddAttributes(trace.StringAttribute("tid", s.tid))
+	s.logEntry(ctx).Trace("ComputeProcessorInfo")
 
 	r, e := s.computeProcessorInfoInternal(ctx, req)
 	return r, errdefs.ToGRPC(e)
@@ -536,4 +283,15 @@ func (s *service) IsShutdown() bool {
 	default:
 		return false
 	}
+}
+
+func (s *service) logEntry(ctx context.Context) *logrus.Entry {
+	e := log.G(ctx)
+	if s != nil && s.isSandbox {
+		e = e.WithFields(logrus.Fields{
+			"pod-id": s.tid,
+		})
+	}
+
+	return e
 }
