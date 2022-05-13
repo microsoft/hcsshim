@@ -13,6 +13,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+var ErrInvalidAllowAllPolicy = errors.New("allow_all cannot be set to 'true' when Containers are non-empty")
+
 type EnvVarRule string
 
 const (

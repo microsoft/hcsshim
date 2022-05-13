@@ -6,6 +6,8 @@ package cri_containerd
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -811,5 +813,104 @@ func Test_RunPrivilegedContainer_AllowElevated_NotSet(t *testing.T) {
 		if !strings.Contains(err.Error(), expectedStr1) || !strings.Contains(err.Error(), expectedStr2) {
 			t.Fatalf("expected different error: %s", err)
 		}
+	}
+}
+
+func Test_CannotSet_AllowAll_And_Containers(t *testing.T) {
+	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	defaultContainers, err := helpers.PolicyContainersFromConfigs(helpers.DefaultContainerConfigs())
+	if err != nil {
+		t.Fatalf("failed to create policy for default containers: %s", err)
+	}
+
+	policy := securitypolicy.NewSecurityPolicy(true, defaultContainers)
+	stringPolicy, err := policy.EncodeToString()
+	if err != nil {
+		t.Fatalf("failed to encode policy to base64 string: %s", err)
+	}
+
+	sandboxRequest := sandboxRequestWithPolicy(t, stringPolicy)
+	_, err = client.RunPodSandbox(ctx, sandboxRequest)
+	if err == nil {
+		t.Fatal("expected to fail")
+	}
+	if !strings.Contains(err.Error(), securitypolicy.ErrInvalidAllowAllPolicy.Error()) {
+		t.Fatalf("expected error %s, got %s", securitypolicy.ErrInvalidAllowAllPolicy, err)
+	}
+}
+
+func Test_SecurityPolicy_Env_Set(t *testing.T) {
+	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	openDoorPolicy, err := securitypolicy.NewOpenDoorPolicy().EncodeToString()
+	if err != nil {
+		t.Fatalf("failed to create open door policy string: %s", err)
+	}
+
+	// The command prints environment variables to stdout, which we can capture
+	// and validate later
+	alpineCmd := []string{"ash", "-c", "env"}
+	alpinePolicy := alpineSecurityPolicy(
+		t,
+		securitypolicy.WithCommand(alpineCmd),
+	)
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	for _, config := range []struct {
+		name   string
+		policy string
+	}{
+		{
+			name:   "For_OpenDoorPolicy",
+			policy: openDoorPolicy,
+		},
+		{
+			name:   "For_StandardPolicy",
+			policy: alpinePolicy,
+		},
+	} {
+		t.Run(config.name, func(t *testing.T) {
+			sandboxRequest := sandboxRequestWithPolicy(t, config.policy)
+
+			podID := runPodSandbox(t, client, ctx, sandboxRequest)
+			defer removePodSandbox(t, client, ctx, podID)
+			defer stopPodSandbox(t, client, ctx, podID)
+
+			containerRequest := getCreateContainerRequest(
+				podID,
+				"alpine-with-policy",
+				"alpine:latest",
+				alpineCmd,
+				sandboxRequest.Config,
+			)
+			// setup logfile to capture stdout
+			logPath := filepath.Join(t.TempDir(), "log.txt")
+			containerRequest.Config.LogPath = logPath
+
+			containerID := createContainer(t, client, ctx, containerRequest)
+			startContainer(t, client, ctx, containerID)
+			defer removeContainer(t, client, ctx, containerID)
+			defer stopContainer(t, client, ctx, containerID)
+
+			content, err := os.ReadFile(logPath)
+			if err != nil {
+				t.Fatalf("error reading log file: %s", err)
+			}
+			// make sure that the expected environment variable was set
+			expectedEnv := fmt.Sprintf("SECURITY_POLICY=%s", config.policy)
+			if !strings.Contains(string(content), expectedEnv) {
+				t.Fatalf("SECURITY_POLICY env var wasn't set for init process:\n%s\n", string(content))
+			}
+		})
 	}
 }

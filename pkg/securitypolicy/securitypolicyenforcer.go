@@ -29,11 +29,17 @@ type SecurityPolicyEnforcer interface {
 	EnforceWaitMountPointsPolicy(containerID string, spec *oci.Spec) error
 	EnforceMountPolicy(sandboxID, containerID string, spec *oci.Spec) error
 	ExtendDefaultMounts([]oci.Mount) error
+	EncodedSecurityPolicy() string
 }
 
 func NewSecurityPolicyEnforcer(state SecurityPolicyState, eOpts ...standardEnforcerOpt) (SecurityPolicyEnforcer, error) {
 	if state.SecurityPolicy.AllowAll {
-		return &OpenDoorSecurityPolicyEnforcer{}, nil
+		if state.SecurityPolicy.Containers.Length > 0 || len(state.SecurityPolicy.Containers.Elements) > 0 {
+			return nil, ErrInvalidAllowAllPolicy
+		}
+		return &OpenDoorSecurityPolicyEnforcer{
+			encodedSecurityPolicy: state.EncodedSecurityPolicy.SecurityPolicy,
+		}, nil
 	} else {
 		containers, err := state.SecurityPolicy.Containers.toInternal()
 		if err != nil {
@@ -114,8 +120,8 @@ type securityPolicyContainer struct {
 }
 
 type StandardSecurityPolicyEnforcer struct {
-	// EncodedSecurityPolicy state is needed for key release
-	EncodedSecurityPolicy string
+	// encodedSecurityPolicy state is needed for key release
+	encodedSecurityPolicy string
 	// Containers from the user supplied security policy.
 	Containers []*securityPolicyContainer
 	// Devices and ContainerIndexToContainerIds are used to build up an
@@ -206,7 +212,7 @@ func NewStandardSecurityPolicyEnforcer(
 	}
 
 	return &StandardSecurityPolicyEnforcer{
-		EncodedSecurityPolicy:        encoded,
+		encodedSecurityPolicy:        encoded,
 		Containers:                   containers,
 		Devices:                      devices,
 		ContainerIndexToContainerIds: map[int]map[string]struct{}{},
@@ -849,7 +855,13 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceWaitMountPointsPolicy(container
 	return hooks.AddOCIHook(spec, hooks.CreateRuntime, hook)
 }
 
-type OpenDoorSecurityPolicyEnforcer struct{}
+func (pe *StandardSecurityPolicyEnforcer) EncodedSecurityPolicy() string {
+	return pe.encodedSecurityPolicy
+}
+
+type OpenDoorSecurityPolicyEnforcer struct {
+	encodedSecurityPolicy string
+}
 
 var _ SecurityPolicyEnforcer = (*OpenDoorSecurityPolicyEnforcer)(nil)
 
@@ -881,7 +893,13 @@ func (OpenDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
 	return nil
 }
 
-type ClosedDoorSecurityPolicyEnforcer struct{}
+func (oe *OpenDoorSecurityPolicyEnforcer) EncodedSecurityPolicy() string {
+	return oe.encodedSecurityPolicy
+}
+
+type ClosedDoorSecurityPolicyEnforcer struct {
+	encodedSecurityPolicy string
+}
 
 var _ SecurityPolicyEnforcer = (*ClosedDoorSecurityPolicyEnforcer)(nil)
 
@@ -911,4 +929,8 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceMountPolicy(_, _ string, _ *oci.S
 
 func (ClosedDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
 	return nil
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) EncodedSecurityPolicy() string {
+	return ""
 }

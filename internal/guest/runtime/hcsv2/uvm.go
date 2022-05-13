@@ -294,13 +294,11 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	// containers can have access to it. The security policy is required by containers which need to extract
 	// init-time claims found in the security policy.
 	//
-	// We append the variable after the security policy enforcing logic completes so as to bypass it; the
+	// We append the variable after the security policy enforcing logic completes to bypass it; the
 	// security policy variable cannot be included in the security policy as its value is not available
 	// security policy construction time.
-	if policyEnforcer, ok := (h.securityPolicyEnforcer).(*securitypolicy.StandardSecurityPolicyEnforcer); ok {
-		secPolicyEnv := fmt.Sprintf("SECURITY_POLICY=%s", policyEnforcer.EncodedSecurityPolicy)
-		settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, secPolicyEnv)
-	}
+	secPolicyEnv := fmt.Sprintf("SECURITY_POLICY=%s", h.securityPolicyEnforcer.EncodedSecurityPolicy())
+	settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, secPolicyEnv)
 
 	// Sandbox mount paths need to be resolved in the spec before expected mounts policy can be enforced.
 	if err = h.securityPolicyEnforcer.EnforceWaitMountPointsPolicy(id, settings.OCISpecification); err != nil {

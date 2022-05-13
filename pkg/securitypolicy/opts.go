@@ -42,3 +42,11 @@ func WithAllowElevated(elevated bool) ContainerConfigOpt {
 		return nil
 	}
 }
+
+// WithCommand sets ContainerConfig.Command in container policy config.
+func WithCommand(cmd []string) ContainerConfigOpt {
+	return func(c *ContainerConfig) error {
+		c.Command = cmd
+		return nil
+	}
+}
