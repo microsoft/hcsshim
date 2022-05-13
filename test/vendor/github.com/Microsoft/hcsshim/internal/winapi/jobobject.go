@@ -26,7 +26,10 @@ const (
 // Access rights for creating or opening job objects.
 //
 // https://docs.microsoft.com/en-us/windows/win32/procthread/job-object-security-and-access-rights
-const JOB_OBJECT_ALL_ACCESS = 0x1F001F
+const (
+	JOB_OBJECT_QUERY      = 0x0004
+	JOB_OBJECT_ALL_ACCESS = 0x1F001F
+)
 
 // IO limit flags
 //
@@ -165,7 +168,7 @@ type JOBOBJECT_ASSOCIATE_COMPLETION_PORT struct {
 // 		PBOOL  Result
 // );
 //
-//sys IsProcessInJob(procHandle windows.Handle, jobHandle windows.Handle, result *bool) (err error) = kernel32.IsProcessInJob
+//sys IsProcessInJob(procHandle windows.Handle, jobHandle windows.Handle, result *int32) (err error) = kernel32.IsProcessInJob
 
 // BOOL QueryInformationJobObject(
 //		HANDLE             hJob,
