@@ -15,7 +15,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/containerd/console"
-	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
 
