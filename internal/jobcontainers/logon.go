@@ -40,7 +40,7 @@ func groupExists(groupName string) bool {
 }
 
 // makeLocalAccount creates a local account with the passed in username and a randomly generated password.
-// The user specified by `user`` will added to the `groupName`. This function does not check if groupName exists, that must be handled
+// The user specified by `user` will added to the `groupName`. This function does not check if groupName exists, that must be handled
 // the caller.
 func makeLocalAccount(ctx context.Context, user, groupName string) (_ *uint16, err error) {
 	// Create a local account with a random password
