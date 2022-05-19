@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"unsafe"
 
 	"github.com/pkg/errors"
 
@@ -27,7 +26,10 @@ const (
 	VeritySignature = "verity"
 )
 
-var salt = bytes.Repeat([]byte{0}, 32)
+var (
+	salt   = bytes.Repeat([]byte{0}, 32)
+	sbSize = binary.Size(dmveritySuperblock{})
+)
 
 var (
 	ErrSuperBlockReadFailure  = errors.New("failed to read dm-verity super block")
@@ -234,7 +236,6 @@ func ComputeAndWriteHashDevice(r io.ReadSeeker, w io.WriteSeeker) error {
 		return errors.Wrap(err, "failed to write dm-verity super-block")
 	}
 	// write super-block padding
-	sbSize := int(unsafe.Sizeof(*dmVeritySB))
 	padding := bytes.Repeat([]byte{0}, blockSize-(sbSize%blockSize))
 	if _, err = w.Write(padding); err != nil {
 		return err
