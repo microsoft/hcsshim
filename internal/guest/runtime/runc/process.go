@@ -51,7 +51,7 @@ func (p *process) Wait() (int, error) {
 	l.WithField(logfields.ContainerID, p.pid).Debug("process wait completed")
 
 	// If the init process for the container has exited, kill everything else in
-	// the container. Runc uses the devices cgroup of the container ot determine
+	// the container. Runc uses the devices cgroup of the container to determine
 	// what other processes to kill.
 	//
 	// We don't issue the kill if the container owns its own pid namespace,
