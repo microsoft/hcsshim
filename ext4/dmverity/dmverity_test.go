@@ -9,7 +9,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"unsafe"
 
 	"github.com/pkg/errors"
 )
@@ -45,7 +44,6 @@ func writeDMVeritySuperBlock(filename string) (*os.File, error) {
 	if err := binary.Write(out, binary.LittleEndian, sb); err != nil {
 		return nil, err
 	}
-	sbSize := int(unsafe.Sizeof(*sb))
 	padding := bytes.Repeat([]byte{0}, blockSize-(sbSize%blockSize))
 	if _, err = out.Write(padding); err != nil {
 		return nil, err
