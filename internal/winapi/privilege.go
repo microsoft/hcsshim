@@ -9,25 +9,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// BOOL LookupPrivilegeNameW(
-//   [in, optional]  LPCWSTR lpSystemName,
-//   [in]            PLUID   lpLuid,
-//   [out, optional] LPWSTR  lpName,
-//   [in, out]       LPDWORD cchName
-// );
-//
-//sys lookupPrivilegeName(systemName string, luid *windows.LUID, buffer *uint16, size *uint32) (err error) = advapi32.LookupPrivilegeNameW
-
-// BOOL LookupPrivilegeDisplayNameW(
-//   [in, optional]  LPCWSTR lpSystemName,
-//   [in]            LPCWSTR lpName,
-//   [out, optional] LPWSTR  lpDisplayName,
-//   [in, out]       LPDWORD cchDisplayName,
-//   [out]           LPDWORD lpLanguageId
-// );
-//
-//sys lookupPrivilegeDisplayName(systemName string, name *uint16, buffer *uint16, size *uint32, languageId *uint32) (err error) = advapi32.LookupPrivilegeDisplayNameW
-
 const (
 	SeChangeNotifyPrivilege = "SeChangeNotifyPrivilege"
 	SeBackupPrivilege       = winio.SeBackupPrivilege
@@ -41,6 +22,15 @@ func LookupPrivilegeValue(p string) (l windows.LUID, err error) {
 	return l, err
 }
 
+// BOOL LookupPrivilegeNameW(
+//   [in, optional]  LPCWSTR lpSystemName,
+//   [in]            PLUID   lpLuid,
+//   [out, optional] LPWSTR  lpName,
+//   [in, out]       LPDWORD cchName
+// );
+//
+//sys lookupPrivilegeName(systemName string, luid *windows.LUID, buffer *uint16, size *uint32) (err error) = advapi32.LookupPrivilegeNameW
+
 func LookupPrivilegeName(luid windows.LUID) (string, error) {
 	s, err := retryLStr(-2, func(b *uint16, l *uint32) error {
 		return lookupPrivilegeName("", &luid, b, l)
@@ -51,14 +41,20 @@ func LookupPrivilegeName(luid windows.LUID) (string, error) {
 	return windows.UTF16ToString(s), nil
 }
 
+// BOOL LookupPrivilegeDisplayNameW(
+//   [in, optional]  LPCWSTR lpSystemName,
+//   [in]            LPCWSTR lpName,
+//   [out, optional] LPWSTR  lpDisplayName,
+//   [in, out]       LPDWORD cchDisplayName,
+//   [out]           LPDWORD lpLanguageId
+// );
+//
+//sys lookupPrivilegeDisplayName(systemName string, name string, buffer *uint16, size *uint32, languageId *uint32) (err error) = advapi32.LookupPrivilegeDisplayNameW
+
 func LookupPrivilegeDisplayName(s string) (string, error) {
 	var langID uint32
-	p, err := windows.UTF16PtrFromString(s)
-	if err != nil {
-		return "", fmt.Errorf("could not convert privilege %s to UTF-16: %w", s, err)
-	}
 	ss, err := retryLStr(0, func(b *uint16, l *uint32) error {
-		return lookupPrivilegeDisplayName("", p, b, l, &langID)
+		return lookupPrivilegeDisplayName("", s, b, l, &langID)
 	})
 	if err != nil {
 		return "", fmt.Errorf("could not lookup privilege %s: %w", s, err)

@@ -14,6 +14,7 @@ type reExecOpt func(*reExecConfig) error
 
 func defaultReExecOpts() []reExecOpt {
 	return []reExecOpt{
+		useLPAC(true),
 		withPrivileges([]string{winapi.SeChangeNotifyPrivilege}),
 		usingEnv([]string{
 			mediaTypeEnvVar,
@@ -21,6 +22,15 @@ func defaultReExecOpts() []reExecOpt {
 			logLevelEnvVar,
 			logETWProviderEnvVar,
 		}),
+	}
+}
+
+// useLPAC enables or disables usinging Less Privileged App Containers. If false,, a restricted
+// token will be uses instead
+func useLPAC(b bool) reExecOpt {
+	return func(c *reExecConfig) error {
+		c.lpac = b
+		return nil
 	}
 }
 

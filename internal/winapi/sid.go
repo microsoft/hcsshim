@@ -8,15 +8,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// BOOL DeriveCapabilitySidsFromName(
-//   [in]  LPCWSTR CapName,
-//   [out] PSID    **CapabilityGroupSids,
-//   [out] DWORD   *CapabilityGroupSidCount,
-//   [out] PSID    **CapabilitySids,
-//   [out] DWORD   *CapabilitySidCount
-// );
-//sys deriveCapabilitySIDsFromName(capability string, groupSIDs ***windows.SID, groupSIDsCount *uint32,  sids ***windows.SID, sidsCount *uint32) (err error) = kernelbase.DeriveCapabilitySidsFromName
-
 const (
 	CapabilityLPACAppExperience                       = "lpacAppExperience"
 	CapabilityLPACCryptoServices                      = "lpacCryptoServices"
@@ -25,6 +16,21 @@ const (
 	CapabilityLPACEnterprisePolicyChangeNotifications = "lpacEnterprisePolicyChangeNotifications"
 	CapabilityRegistryRead                            = "registryRead"
 )
+
+// PVOID FreeSid(
+//   [in] PSID pSid
+// );
+//
+//sys FreeSID(s *windows.SID) (err error) [failretval!=0] = advapi32.FreeSid
+
+// BOOL DeriveCapabilitySidsFromName(
+//   [in]  LPCWSTR CapName,
+//   [out] PSID    **CapabilityGroupSids,
+//   [out] DWORD   *CapabilityGroupSidCount,
+//   [out] PSID    **CapabilitySids,
+//   [out] DWORD   *CapabilitySidCount
+// );
+//sys deriveCapabilitySIDsFromName(capability string, groupSIDs ***windows.SID, groupSIDsCount *uint32,  sids ***windows.SID, sidsCount *uint32) (err error) = kernelbase.DeriveCapabilitySidsFromName
 
 func DeriveCapabilitySIDsFromName(c string) ([]*windows.SID, []*windows.SID, error) {
 	var gsPtr, ssPtr **windows.SID

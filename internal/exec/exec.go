@@ -5,12 +5,15 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"syscall"
 	"unicode/utf16"
 	"unsafe"
 
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
 )
 
@@ -38,18 +41,24 @@ type Exec struct {
 	// procState will be filled in after Wait() returns.
 	procState  *os.ProcessState
 	waitCalled bool
+
+	// files to close after wait is finished
+	closers []io.Closer
 	// stdioPipesOurSide are the stdio pipes that Exec owns and that we will use to send and receive input from the process.
 	// These are what will be returned from calls to Exec.Stdin()/Stdout()/Stderr().
 	stdioPipesOurSide [3]*os.File
 	// stdioPipesProcSide are the stdio pipes that will be passed into the process. These should not be interacted with at all
 	// and aren't exposed in any way to a user of Exec.
 	stdioPipesProcSide [3]*os.File
-	attrList           *windows.ProcThreadAttributeListContainer
+
 	*execConfig
 }
 
 // New returns a new instance of an `Exec` object. A process is not running at this point and
 // must be started via either Run(), or a combination of Start() + Wait().
+//
+// Note: unlike "os/exec".Cmd, the Exec will launch a process without the executable path
+// as the first argument to its command line.
 func New(path, cmdLine string, opts ...ExecOpts) (*Exec, error) {
 	// Path is the only required parameter here, as we need something to launch.
 	if path == "" {
@@ -117,14 +126,17 @@ func (e *Exec) Start() error {
 	// Need EXTENDED_STARTUPINFO_PRESENT as we're making use of the attribute list field.
 	flags := uint32(windows.CREATE_UNICODE_ENVIRONMENT) | windows.EXTENDED_STARTUPINFO_PRESENT | e.execConfig.processFlags
 
-	// Allocate an attribute list that's large enough to do the operations we care about
-	// 1. Assigning to a job object at creation time
-	// 2. Pseudo console setup if one was requested.
-	// 3. Inherit only stdio handles if ones were requested.
-	// Therefore we need a list of size 3.
-	e.attrList, err = windows.NewProcThreadAttributeList(3)
-	if err != nil {
-		return fmt.Errorf("failed to initialize process thread attribute list: %w", err)
+	// if attrList hasn't been passed in via ExecOpts
+	if e.attrList == nil {
+		// Allocate an attribute list that's large enough to do the operations we care about
+		// 1. Assigning to a job object at creation time
+		// 2. Pseudo console setup if one was requested.
+		// 3. Inherit only stdio handles if ones were requested.
+		// Therefore we need a list of size 3.
+		e.attrList, err = windows.NewProcThreadAttributeList(3)
+		if err != nil {
+			return fmt.Errorf("failed to initialize process thread attribute list: %w", err)
+		}
 	}
 
 	// Need to know whether the process needs to inherit stdio handles. The below setup is so that we only inherit the
@@ -159,6 +171,11 @@ func (e *Exec) Start() error {
 			siEx.StdErr = windows.Handle(e.stdioPipesProcSide[2].Fd())
 		}
 	}
+	log.L.WithFields(logrus.Fields{
+		"in":  siEx.StdInput,
+		"out": siEx.StdOutput,
+		"err": siEx.StdErr,
+	}).Info("created handles")
 
 	if e.job != nil {
 		if err := e.job.UpdateProcThreadAttribute(e.attrList); err != nil {
@@ -211,7 +228,7 @@ func (e *Exec) Start() error {
 	}
 	// Don't need the thread handle for anything.
 	defer func() {
-		_ = windows.CloseHandle(windows.Handle(pi.Thread))
+		_ = windows.CloseHandle(pi.Thread)
 	}()
 
 	// Grab an *os.Process to avoid reinventing the wheel here. The stdlib has great logic around waiting, exit code status/cleanup after a
@@ -322,7 +339,7 @@ func (e *Exec) Stderr() *os.File {
 }
 
 // setupStdio handles setting up stdio for the process.
-func (e *Exec) setupStdio() error {
+func (e *Exec) setupStdio() (err error) {
 	stdioRequested := e.stdin || e.stderr || e.stdout
 	// If the client requested a pseudo console then there's nothing we need to do pipe wise, as the process inherits the other end of the pty's
 	// pipes.
@@ -330,75 +347,89 @@ func (e *Exec) setupStdio() error {
 		return nil
 	}
 
+	e.closers = make([]io.Closer, 0, 6)
+	defer func() {
+		if err != nil {
+			e.closeStdio()
+		}
+	}()
+
+	// todo: is this still relevant, since we build only on 1.17+
 	// Go 1.16's pipe handles (from os.Pipe()) aren't inheritable, so mark them explicitly as such if any stdio handles are
 	// requested and someone may be building on 1.16.
 
-	if e.stdin {
-		pr, pw, err := os.Pipe()
-		if err != nil {
-			return err
-		}
-		e.stdioPipesOurSide[0] = pw
-
-		if err := windows.SetHandleInformation(
-			windows.Handle(pr.Fd()),
-			windows.HANDLE_FLAG_INHERIT,
-			windows.HANDLE_FLAG_INHERIT,
-		); err != nil {
-			return fmt.Errorf("failed to make stdin pipe inheritable: %w", err)
-		}
-		e.stdioPipesProcSide[0] = pr
+	ios := []struct {
+		name string
+		pipe bool
+		file *os.File
+		read bool
+	}{
+		{"stdin", e.stdin, e.stdinF, true},
+		{"stdout", e.stdout, e.stdoutF, false},
+		{"stderr", e.stderr, e.stderrF, false},
 	}
-
-	if e.stdout {
-		pr, pw, err := os.Pipe()
-		if err != nil {
+	for i, io := range ios {
+		if err := e.setupIOChanel(io.name, io.pipe, io.file, &e.stdioPipesOurSide[i], &e.stdioPipesProcSide[i], io.read); err != nil {
 			return err
 		}
-		e.stdioPipesOurSide[1] = pr
-
-		if err := windows.SetHandleInformation(
-			windows.Handle(pw.Fd()),
-			windows.HANDLE_FLAG_INHERIT,
-			windows.HANDLE_FLAG_INHERIT,
-		); err != nil {
-			return fmt.Errorf("failed to make stdout pipe inheritable: %w", err)
-		}
-		e.stdioPipesProcSide[1] = pw
-	}
-
-	if e.stderr {
-		pr, pw, err := os.Pipe()
-		if err != nil {
-			return err
-		}
-		e.stdioPipesOurSide[2] = pr
-
-		if err := windows.SetHandleInformation(
-			windows.Handle(pw.Fd()),
-			windows.HANDLE_FLAG_INHERIT,
-			windows.HANDLE_FLAG_INHERIT,
-		); err != nil {
-			return fmt.Errorf("failed to make stderr pipe inheritable: %w", err)
-		}
-		e.stdioPipesProcSide[2] = pw
 	}
 	return nil
 }
 
+func (e *Exec) setupIOChanel(name string, pipe bool, file *os.File, ours, procs **os.File, read bool) error {
+	if !pipe && file == nil {
+		return nil
+	}
+
+	if pipe {
+		pr, pw, err := os.Pipe()
+		if err != nil {
+			return err
+		}
+
+		e.closers = append(e.closers, pr, pw)
+		if read {
+			*ours, *procs = pw, pr
+		} else {
+			*ours, *procs = pr, pw
+		}
+	} else if file != nil {
+		*ours, *procs = file, file
+	}
+
+	if err := windows.SetHandleInformation(
+		windows.Handle((*procs).Fd()),
+		windows.HANDLE_FLAG_INHERIT,
+		windows.HANDLE_FLAG_INHERIT,
+	); err != nil {
+		return fmt.Errorf("failed to make %s pipe inheritable: %w", name, err)
+	}
+
+	return nil
+}
+
 func (e *Exec) closeStdio() {
-	for i, file := range e.stdioPipesOurSide {
-		if file != nil {
-			file.Close()
+	for _, c := range e.closers {
+		if c != nil {
+			c.Close()
 		}
-		e.stdioPipesOurSide[i] = nil
 	}
-	for i, file := range e.stdioPipesProcSide {
-		if file != nil {
-			file.Close()
-		}
-		e.stdioPipesProcSide[i] = nil
+	emptyStdioArray(e.stdioPipesOurSide[:])
+	emptyStdioArray(e.stdioPipesProcSide[:])
+}
+
+func emptyStdioArray(ios []*os.File) {
+	for i := range ios {
+		ios[i] = nil
 	}
+}
+
+func (e *Exec) String() string {
+	s := e.path
+	if e.cmdline != "" {
+		s += " " + e.cmdline
+	}
+	return s
 }
 
 //

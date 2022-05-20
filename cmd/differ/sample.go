@@ -47,6 +47,7 @@ func test(c *cli.Context) error {
 		fmt.Printf("%-32s %-48s [%d]\n", n+":", d, o.Attributes)
 	}
 
+	fmt.Println("\nSIDs:")
 	gs, ss, err := winapi.DeriveCapabilitySIDsFromName("lpacCom")
 	fmt.Printf("%v\n%v\n%v", gs, ss, err)
 

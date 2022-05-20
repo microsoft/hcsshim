@@ -111,7 +111,7 @@ func actionReExecWrapper(f cli.ActionFunc, opts ...reExecOpt) cli.ActionFunc {
 		defer span.End()
 		defer func() { oc.SetSpanStatus(span, err) }()
 
-		cmd, cleanup, err := conf.cmd(c.Context)
+		cmd, cleanup, err := conf.cmd(c)
 		if err != nil {
 			return fmt.Errorf("could not create re-exec command: %w", err)
 		}
