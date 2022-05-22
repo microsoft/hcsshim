@@ -40,32 +40,74 @@ func errnoErr(e syscall.Errno) error {
 }
 
 var (
-	modvmcompute = windows.NewLazySystemDLL("vmcompute.dll")
-	modvirtdisk  = windows.NewLazySystemDLL("virtdisk.dll")
 	modkernel32  = windows.NewLazySystemDLL("kernel32.dll")
+	modvirtdisk  = windows.NewLazySystemDLL("virtdisk.dll")
+	modvmcompute = windows.NewLazySystemDLL("vmcompute.dll")
 
+	procGetDiskFreeSpaceExW = modkernel32.NewProc("GetDiskFreeSpaceExW")
+	procAttachVirtualDisk   = modvirtdisk.NewProc("AttachVirtualDisk")
+	procOpenVirtualDisk     = modvirtdisk.NewProc("OpenVirtualDisk")
 	procActivateLayer       = modvmcompute.NewProc("ActivateLayer")
 	procCopyLayer           = modvmcompute.NewProc("CopyLayer")
 	procCreateLayer         = modvmcompute.NewProc("CreateLayer")
 	procCreateSandboxLayer  = modvmcompute.NewProc("CreateSandboxLayer")
-	procExpandSandboxSize   = modvmcompute.NewProc("ExpandSandboxSize")
 	procDeactivateLayer     = modvmcompute.NewProc("DeactivateLayer")
 	procDestroyLayer        = modvmcompute.NewProc("DestroyLayer")
+	procExpandSandboxSize   = modvmcompute.NewProc("ExpandSandboxSize")
 	procExportLayer         = modvmcompute.NewProc("ExportLayer")
-	procGetLayerMountPath   = modvmcompute.NewProc("GetLayerMountPath")
 	procGetBaseImages       = modvmcompute.NewProc("GetBaseImages")
+	procGetLayerMountPath   = modvmcompute.NewProc("GetLayerMountPath")
+	procGrantVmAccess       = modvmcompute.NewProc("GrantVmAccess")
 	procImportLayer         = modvmcompute.NewProc("ImportLayer")
 	procLayerExists         = modvmcompute.NewProc("LayerExists")
 	procNameToGuid          = modvmcompute.NewProc("NameToGuid")
 	procPrepareLayer        = modvmcompute.NewProc("PrepareLayer")
-	procUnprepareLayer      = modvmcompute.NewProc("UnprepareLayer")
 	procProcessBaseImage    = modvmcompute.NewProc("ProcessBaseImage")
 	procProcessUtilityImage = modvmcompute.NewProc("ProcessUtilityImage")
-	procGrantVmAccess       = modvmcompute.NewProc("GrantVmAccess")
-	procOpenVirtualDisk     = modvirtdisk.NewProc("OpenVirtualDisk")
-	procAttachVirtualDisk   = modvirtdisk.NewProc("AttachVirtualDisk")
-	procGetDiskFreeSpaceExW = modkernel32.NewProc("GetDiskFreeSpaceExW")
+	procUnprepareLayer      = modvmcompute.NewProc("UnprepareLayer")
 )
+
+func getDiskFreeSpaceEx(directoryName string, freeBytesAvailableToCaller *int64, totalNumberOfBytes *int64, totalNumberOfFreeBytes *int64) (err error) {
+	var _p0 *uint16
+	_p0, err = syscall.UTF16PtrFromString(directoryName)
+	if err != nil {
+		return
+	}
+	return _getDiskFreeSpaceEx(_p0, freeBytesAvailableToCaller, totalNumberOfBytes, totalNumberOfFreeBytes)
+}
+
+func _getDiskFreeSpaceEx(directoryName *uint16, freeBytesAvailableToCaller *int64, totalNumberOfBytes *int64, totalNumberOfFreeBytes *int64) (err error) {
+	r1, _, e1 := syscall.Syscall6(procGetDiskFreeSpaceExW.Addr(), 4, uintptr(unsafe.Pointer(directoryName)), uintptr(unsafe.Pointer(freeBytesAvailableToCaller)), uintptr(unsafe.Pointer(totalNumberOfBytes)), uintptr(unsafe.Pointer(totalNumberOfFreeBytes)), 0, 0)
+	if r1 == 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+func attachVirtualDisk(handle syscall.Handle, sd uintptr, flags uint32, providerFlags uint32, params uintptr, overlapped uintptr) (err error) {
+	r1, _, e1 := syscall.Syscall6(procAttachVirtualDisk.Addr(), 6, uintptr(handle), uintptr(sd), uintptr(flags), uintptr(providerFlags), uintptr(params), uintptr(overlapped))
+	if r1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+func openVirtualDisk(virtualStorageType *virtualStorageType, path string, virtualDiskAccessMask uint32, flags uint32, parameters *openVirtualDiskParameters, handle *syscall.Handle) (err error) {
+	var _p0 *uint16
+	_p0, err = syscall.UTF16PtrFromString(path)
+	if err != nil {
+		return
+	}
+	return _openVirtualDisk(virtualStorageType, _p0, virtualDiskAccessMask, flags, parameters, handle)
+}
+
+func _openVirtualDisk(virtualStorageType *virtualStorageType, path *uint16, virtualDiskAccessMask uint32, flags uint32, parameters *openVirtualDiskParameters, handle *syscall.Handle) (err error) {
+	r1, _, e1 := syscall.Syscall6(procOpenVirtualDisk.Addr(), 6, uintptr(unsafe.Pointer(virtualStorageType)), uintptr(unsafe.Pointer(path)), uintptr(virtualDiskAccessMask), uintptr(flags), uintptr(unsafe.Pointer(parameters)), uintptr(unsafe.Pointer(handle)))
+	if r1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
 
 func activateLayer(info *driverInfo, id string) (hr error) {
 	var _p0 *uint16
@@ -181,30 +223,6 @@ func _createSandboxLayer(info *driverInfo, id *uint16, parent uintptr, descripto
 	return
 }
 
-func expandSandboxSize(info *driverInfo, id string, size uint64) (hr error) {
-	var _p0 *uint16
-	_p0, hr = syscall.UTF16PtrFromString(id)
-	if hr != nil {
-		return
-	}
-	return _expandSandboxSize(info, _p0, size)
-}
-
-func _expandSandboxSize(info *driverInfo, id *uint16, size uint64) (hr error) {
-	hr = procExpandSandboxSize.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall(procExpandSandboxSize.Addr(), 3, uintptr(unsafe.Pointer(info)), uintptr(unsafe.Pointer(id)), uintptr(size))
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
 func deactivateLayer(info *driverInfo, id string) (hr error) {
 	var _p0 *uint16
 	_p0, hr = syscall.UTF16PtrFromString(id)
@@ -253,6 +271,30 @@ func _destroyLayer(info *driverInfo, id *uint16) (hr error) {
 	return
 }
 
+func expandSandboxSize(info *driverInfo, id string, size uint64) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(id)
+	if hr != nil {
+		return
+	}
+	return _expandSandboxSize(info, _p0, size)
+}
+
+func _expandSandboxSize(info *driverInfo, id *uint16, size uint64) (hr error) {
+	hr = procExpandSandboxSize.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procExpandSandboxSize.Addr(), 3, uintptr(unsafe.Pointer(info)), uintptr(unsafe.Pointer(id)), uintptr(size))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
 func exportLayer(info *driverInfo, id string, path string, descriptors []WC_LAYER_DESCRIPTOR) (hr error) {
 	var _p0 *uint16
 	_p0, hr = syscall.UTF16PtrFromString(id)
@@ -286,6 +328,21 @@ func _exportLayer(info *driverInfo, id *uint16, path *uint16, descriptors []WC_L
 	return
 }
 
+func getBaseImages(buffer **uint16) (hr error) {
+	hr = procGetBaseImages.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procGetBaseImages.Addr(), 1, uintptr(unsafe.Pointer(buffer)), 0, 0)
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
 func getLayerMountPath(info *driverInfo, id string, length *uintptr, buffer *uint16) (hr error) {
 	var _p0 *uint16
 	_p0, hr = syscall.UTF16PtrFromString(id)
@@ -310,12 +367,26 @@ func _getLayerMountPath(info *driverInfo, id *uint16, length *uintptr, buffer *u
 	return
 }
 
-func getBaseImages(buffer **uint16) (hr error) {
-	hr = procGetBaseImages.Find()
+func grantVmAccess(vmid string, filepath string) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(vmid)
 	if hr != nil {
 		return
 	}
-	r0, _, _ := syscall.Syscall(procGetBaseImages.Addr(), 1, uintptr(unsafe.Pointer(buffer)), 0, 0)
+	var _p1 *uint16
+	_p1, hr = syscall.UTF16PtrFromString(filepath)
+	if hr != nil {
+		return
+	}
+	return _grantVmAccess(_p0, _p1)
+}
+
+func _grantVmAccess(vmid *uint16, filepath *uint16) (hr error) {
+	hr = procGrantVmAccess.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procGrantVmAccess.Addr(), 2, uintptr(unsafe.Pointer(vmid)), uintptr(unsafe.Pointer(filepath)), 0)
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
 			r0 &= 0xffff
@@ -434,30 +505,6 @@ func _prepareLayer(info *driverInfo, id *uint16, descriptors []WC_LAYER_DESCRIPT
 	return
 }
 
-func unprepareLayer(info *driverInfo, id string) (hr error) {
-	var _p0 *uint16
-	_p0, hr = syscall.UTF16PtrFromString(id)
-	if hr != nil {
-		return
-	}
-	return _unprepareLayer(info, _p0)
-}
-
-func _unprepareLayer(info *driverInfo, id *uint16) (hr error) {
-	hr = procUnprepareLayer.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall(procUnprepareLayer.Addr(), 2, uintptr(unsafe.Pointer(info)), uintptr(unsafe.Pointer(id)), 0)
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
 func processBaseImage(path string) (hr error) {
 	var _p0 *uint16
 	_p0, hr = syscall.UTF16PtrFromString(path)
@@ -506,73 +553,26 @@ func _processUtilityImage(path *uint16) (hr error) {
 	return
 }
 
-func grantVmAccess(vmid string, filepath string) (hr error) {
+func unprepareLayer(info *driverInfo, id string) (hr error) {
 	var _p0 *uint16
-	_p0, hr = syscall.UTF16PtrFromString(vmid)
+	_p0, hr = syscall.UTF16PtrFromString(id)
 	if hr != nil {
 		return
 	}
-	var _p1 *uint16
-	_p1, hr = syscall.UTF16PtrFromString(filepath)
-	if hr != nil {
-		return
-	}
-	return _grantVmAccess(_p0, _p1)
+	return _unprepareLayer(info, _p0)
 }
 
-func _grantVmAccess(vmid *uint16, filepath *uint16) (hr error) {
-	hr = procGrantVmAccess.Find()
+func _unprepareLayer(info *driverInfo, id *uint16) (hr error) {
+	hr = procUnprepareLayer.Find()
 	if hr != nil {
 		return
 	}
-	r0, _, _ := syscall.Syscall(procGrantVmAccess.Addr(), 2, uintptr(unsafe.Pointer(vmid)), uintptr(unsafe.Pointer(filepath)), 0)
+	r0, _, _ := syscall.Syscall(procUnprepareLayer.Addr(), 2, uintptr(unsafe.Pointer(info)), uintptr(unsafe.Pointer(id)), 0)
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
 			r0 &= 0xffff
 		}
 		hr = syscall.Errno(r0)
-	}
-	return
-}
-
-func openVirtualDisk(virtualStorageType *virtualStorageType, path string, virtualDiskAccessMask uint32, flags uint32, parameters *openVirtualDiskParameters, handle *syscall.Handle) (err error) {
-	var _p0 *uint16
-	_p0, err = syscall.UTF16PtrFromString(path)
-	if err != nil {
-		return
-	}
-	return _openVirtualDisk(virtualStorageType, _p0, virtualDiskAccessMask, flags, parameters, handle)
-}
-
-func _openVirtualDisk(virtualStorageType *virtualStorageType, path *uint16, virtualDiskAccessMask uint32, flags uint32, parameters *openVirtualDiskParameters, handle *syscall.Handle) (err error) {
-	r1, _, e1 := syscall.Syscall6(procOpenVirtualDisk.Addr(), 6, uintptr(unsafe.Pointer(virtualStorageType)), uintptr(unsafe.Pointer(path)), uintptr(virtualDiskAccessMask), uintptr(flags), uintptr(unsafe.Pointer(parameters)), uintptr(unsafe.Pointer(handle)))
-	if r1 != 0 {
-		err = errnoErr(e1)
-	}
-	return
-}
-
-func attachVirtualDisk(handle syscall.Handle, sd uintptr, flags uint32, providerFlags uint32, params uintptr, overlapped uintptr) (err error) {
-	r1, _, e1 := syscall.Syscall6(procAttachVirtualDisk.Addr(), 6, uintptr(handle), uintptr(sd), uintptr(flags), uintptr(providerFlags), uintptr(params), uintptr(overlapped))
-	if r1 != 0 {
-		err = errnoErr(e1)
-	}
-	return
-}
-
-func getDiskFreeSpaceEx(directoryName string, freeBytesAvailableToCaller *int64, totalNumberOfBytes *int64, totalNumberOfFreeBytes *int64) (err error) {
-	var _p0 *uint16
-	_p0, err = syscall.UTF16PtrFromString(directoryName)
-	if err != nil {
-		return
-	}
-	return _getDiskFreeSpaceEx(_p0, freeBytesAvailableToCaller, totalNumberOfBytes, totalNumberOfFreeBytes)
-}
-
-func _getDiskFreeSpaceEx(directoryName *uint16, freeBytesAvailableToCaller *int64, totalNumberOfBytes *int64, totalNumberOfFreeBytes *int64) (err error) {
-	r1, _, e1 := syscall.Syscall6(procGetDiskFreeSpaceExW.Addr(), 4, uintptr(unsafe.Pointer(directoryName)), uintptr(unsafe.Pointer(freeBytesAvailableToCaller)), uintptr(unsafe.Pointer(totalNumberOfBytes)), uintptr(unsafe.Pointer(totalNumberOfFreeBytes)), 0, 0)
-	if r1 == 0 {
-		err = errnoErr(e1)
 	}
 	return
 }

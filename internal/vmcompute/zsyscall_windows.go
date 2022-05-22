@@ -42,49 +42,55 @@ func errnoErr(e syscall.Errno) error {
 var (
 	modvmcompute = windows.NewLazySystemDLL("vmcompute.dll")
 
-	procHcsEnumerateComputeSystems         = modvmcompute.NewProc("HcsEnumerateComputeSystems")
-	procHcsCreateComputeSystem             = modvmcompute.NewProc("HcsCreateComputeSystem")
-	procHcsOpenComputeSystem               = modvmcompute.NewProc("HcsOpenComputeSystem")
 	procHcsCloseComputeSystem              = modvmcompute.NewProc("HcsCloseComputeSystem")
-	procHcsStartComputeSystem              = modvmcompute.NewProc("HcsStartComputeSystem")
-	procHcsShutdownComputeSystem           = modvmcompute.NewProc("HcsShutdownComputeSystem")
-	procHcsTerminateComputeSystem          = modvmcompute.NewProc("HcsTerminateComputeSystem")
-	procHcsPauseComputeSystem              = modvmcompute.NewProc("HcsPauseComputeSystem")
-	procHcsResumeComputeSystem             = modvmcompute.NewProc("HcsResumeComputeSystem")
-	procHcsGetComputeSystemProperties      = modvmcompute.NewProc("HcsGetComputeSystemProperties")
-	procHcsModifyComputeSystem             = modvmcompute.NewProc("HcsModifyComputeSystem")
-	procHcsModifyServiceSettings           = modvmcompute.NewProc("HcsModifyServiceSettings")
-	procHcsRegisterComputeSystemCallback   = modvmcompute.NewProc("HcsRegisterComputeSystemCallback")
-	procHcsUnregisterComputeSystemCallback = modvmcompute.NewProc("HcsUnregisterComputeSystemCallback")
-	procHcsSaveComputeSystem               = modvmcompute.NewProc("HcsSaveComputeSystem")
-	procHcsCreateProcess                   = modvmcompute.NewProc("HcsCreateProcess")
-	procHcsOpenProcess                     = modvmcompute.NewProc("HcsOpenProcess")
 	procHcsCloseProcess                    = modvmcompute.NewProc("HcsCloseProcess")
-	procHcsTerminateProcess                = modvmcompute.NewProc("HcsTerminateProcess")
-	procHcsSignalProcess                   = modvmcompute.NewProc("HcsSignalProcess")
+	procHcsCreateComputeSystem             = modvmcompute.NewProc("HcsCreateComputeSystem")
+	procHcsCreateProcess                   = modvmcompute.NewProc("HcsCreateProcess")
+	procHcsEnumerateComputeSystems         = modvmcompute.NewProc("HcsEnumerateComputeSystems")
+	procHcsGetComputeSystemProperties      = modvmcompute.NewProc("HcsGetComputeSystemProperties")
 	procHcsGetProcessInfo                  = modvmcompute.NewProc("HcsGetProcessInfo")
 	procHcsGetProcessProperties            = modvmcompute.NewProc("HcsGetProcessProperties")
-	procHcsModifyProcess                   = modvmcompute.NewProc("HcsModifyProcess")
 	procHcsGetServiceProperties            = modvmcompute.NewProc("HcsGetServiceProperties")
+	procHcsModifyComputeSystem             = modvmcompute.NewProc("HcsModifyComputeSystem")
+	procHcsModifyProcess                   = modvmcompute.NewProc("HcsModifyProcess")
+	procHcsModifyServiceSettings           = modvmcompute.NewProc("HcsModifyServiceSettings")
+	procHcsOpenComputeSystem               = modvmcompute.NewProc("HcsOpenComputeSystem")
+	procHcsOpenProcess                     = modvmcompute.NewProc("HcsOpenProcess")
+	procHcsPauseComputeSystem              = modvmcompute.NewProc("HcsPauseComputeSystem")
+	procHcsRegisterComputeSystemCallback   = modvmcompute.NewProc("HcsRegisterComputeSystemCallback")
 	procHcsRegisterProcessCallback         = modvmcompute.NewProc("HcsRegisterProcessCallback")
+	procHcsResumeComputeSystem             = modvmcompute.NewProc("HcsResumeComputeSystem")
+	procHcsSaveComputeSystem               = modvmcompute.NewProc("HcsSaveComputeSystem")
+	procHcsShutdownComputeSystem           = modvmcompute.NewProc("HcsShutdownComputeSystem")
+	procHcsSignalProcess                   = modvmcompute.NewProc("HcsSignalProcess")
+	procHcsStartComputeSystem              = modvmcompute.NewProc("HcsStartComputeSystem")
+	procHcsTerminateComputeSystem          = modvmcompute.NewProc("HcsTerminateComputeSystem")
+	procHcsTerminateProcess                = modvmcompute.NewProc("HcsTerminateProcess")
+	procHcsUnregisterComputeSystemCallback = modvmcompute.NewProc("HcsUnregisterComputeSystemCallback")
 	procHcsUnregisterProcessCallback       = modvmcompute.NewProc("HcsUnregisterProcessCallback")
 )
 
-func hcsEnumerateComputeSystems(query string, computeSystems **uint16, result **uint16) (hr error) {
-	var _p0 *uint16
-	_p0, hr = syscall.UTF16PtrFromString(query)
+func hcsCloseComputeSystem(computeSystem HcsSystem) (hr error) {
+	hr = procHcsCloseComputeSystem.Find()
 	if hr != nil {
 		return
 	}
-	return _hcsEnumerateComputeSystems(_p0, computeSystems, result)
+	r0, _, _ := syscall.Syscall(procHcsCloseComputeSystem.Addr(), 1, uintptr(computeSystem), 0, 0)
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
 }
 
-func _hcsEnumerateComputeSystems(query *uint16, computeSystems **uint16, result **uint16) (hr error) {
-	hr = procHcsEnumerateComputeSystems.Find()
+func hcsCloseProcess(process HcsProcess) (hr error) {
+	hr = procHcsCloseProcess.Find()
 	if hr != nil {
 		return
 	}
-	r0, _, _ := syscall.Syscall(procHcsEnumerateComputeSystems.Addr(), 3, uintptr(unsafe.Pointer(query)), uintptr(unsafe.Pointer(computeSystems)), uintptr(unsafe.Pointer(result)))
+	r0, _, _ := syscall.Syscall(procHcsCloseProcess.Addr(), 1, uintptr(process), 0, 0)
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
 			r0 &= 0xffff
@@ -123,291 +129,6 @@ func _hcsCreateComputeSystem(id *uint16, configuration *uint16, identity syscall
 	return
 }
 
-func hcsOpenComputeSystem(id string, computeSystem *HcsSystem, result **uint16) (hr error) {
-	var _p0 *uint16
-	_p0, hr = syscall.UTF16PtrFromString(id)
-	if hr != nil {
-		return
-	}
-	return _hcsOpenComputeSystem(_p0, computeSystem, result)
-}
-
-func _hcsOpenComputeSystem(id *uint16, computeSystem *HcsSystem, result **uint16) (hr error) {
-	hr = procHcsOpenComputeSystem.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall(procHcsOpenComputeSystem.Addr(), 3, uintptr(unsafe.Pointer(id)), uintptr(unsafe.Pointer(computeSystem)), uintptr(unsafe.Pointer(result)))
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
-func hcsCloseComputeSystem(computeSystem HcsSystem) (hr error) {
-	hr = procHcsCloseComputeSystem.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall(procHcsCloseComputeSystem.Addr(), 1, uintptr(computeSystem), 0, 0)
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
-func hcsStartComputeSystem(computeSystem HcsSystem, options string, result **uint16) (hr error) {
-	var _p0 *uint16
-	_p0, hr = syscall.UTF16PtrFromString(options)
-	if hr != nil {
-		return
-	}
-	return _hcsStartComputeSystem(computeSystem, _p0, result)
-}
-
-func _hcsStartComputeSystem(computeSystem HcsSystem, options *uint16, result **uint16) (hr error) {
-	hr = procHcsStartComputeSystem.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall(procHcsStartComputeSystem.Addr(), 3, uintptr(computeSystem), uintptr(unsafe.Pointer(options)), uintptr(unsafe.Pointer(result)))
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
-func hcsShutdownComputeSystem(computeSystem HcsSystem, options string, result **uint16) (hr error) {
-	var _p0 *uint16
-	_p0, hr = syscall.UTF16PtrFromString(options)
-	if hr != nil {
-		return
-	}
-	return _hcsShutdownComputeSystem(computeSystem, _p0, result)
-}
-
-func _hcsShutdownComputeSystem(computeSystem HcsSystem, options *uint16, result **uint16) (hr error) {
-	hr = procHcsShutdownComputeSystem.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall(procHcsShutdownComputeSystem.Addr(), 3, uintptr(computeSystem), uintptr(unsafe.Pointer(options)), uintptr(unsafe.Pointer(result)))
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
-func hcsTerminateComputeSystem(computeSystem HcsSystem, options string, result **uint16) (hr error) {
-	var _p0 *uint16
-	_p0, hr = syscall.UTF16PtrFromString(options)
-	if hr != nil {
-		return
-	}
-	return _hcsTerminateComputeSystem(computeSystem, _p0, result)
-}
-
-func _hcsTerminateComputeSystem(computeSystem HcsSystem, options *uint16, result **uint16) (hr error) {
-	hr = procHcsTerminateComputeSystem.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall(procHcsTerminateComputeSystem.Addr(), 3, uintptr(computeSystem), uintptr(unsafe.Pointer(options)), uintptr(unsafe.Pointer(result)))
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
-func hcsPauseComputeSystem(computeSystem HcsSystem, options string, result **uint16) (hr error) {
-	var _p0 *uint16
-	_p0, hr = syscall.UTF16PtrFromString(options)
-	if hr != nil {
-		return
-	}
-	return _hcsPauseComputeSystem(computeSystem, _p0, result)
-}
-
-func _hcsPauseComputeSystem(computeSystem HcsSystem, options *uint16, result **uint16) (hr error) {
-	hr = procHcsPauseComputeSystem.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall(procHcsPauseComputeSystem.Addr(), 3, uintptr(computeSystem), uintptr(unsafe.Pointer(options)), uintptr(unsafe.Pointer(result)))
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
-func hcsResumeComputeSystem(computeSystem HcsSystem, options string, result **uint16) (hr error) {
-	var _p0 *uint16
-	_p0, hr = syscall.UTF16PtrFromString(options)
-	if hr != nil {
-		return
-	}
-	return _hcsResumeComputeSystem(computeSystem, _p0, result)
-}
-
-func _hcsResumeComputeSystem(computeSystem HcsSystem, options *uint16, result **uint16) (hr error) {
-	hr = procHcsResumeComputeSystem.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall(procHcsResumeComputeSystem.Addr(), 3, uintptr(computeSystem), uintptr(unsafe.Pointer(options)), uintptr(unsafe.Pointer(result)))
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
-func hcsGetComputeSystemProperties(computeSystem HcsSystem, propertyQuery string, properties **uint16, result **uint16) (hr error) {
-	var _p0 *uint16
-	_p0, hr = syscall.UTF16PtrFromString(propertyQuery)
-	if hr != nil {
-		return
-	}
-	return _hcsGetComputeSystemProperties(computeSystem, _p0, properties, result)
-}
-
-func _hcsGetComputeSystemProperties(computeSystem HcsSystem, propertyQuery *uint16, properties **uint16, result **uint16) (hr error) {
-	hr = procHcsGetComputeSystemProperties.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall6(procHcsGetComputeSystemProperties.Addr(), 4, uintptr(computeSystem), uintptr(unsafe.Pointer(propertyQuery)), uintptr(unsafe.Pointer(properties)), uintptr(unsafe.Pointer(result)), 0, 0)
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
-func hcsModifyComputeSystem(computeSystem HcsSystem, configuration string, result **uint16) (hr error) {
-	var _p0 *uint16
-	_p0, hr = syscall.UTF16PtrFromString(configuration)
-	if hr != nil {
-		return
-	}
-	return _hcsModifyComputeSystem(computeSystem, _p0, result)
-}
-
-func _hcsModifyComputeSystem(computeSystem HcsSystem, configuration *uint16, result **uint16) (hr error) {
-	hr = procHcsModifyComputeSystem.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall(procHcsModifyComputeSystem.Addr(), 3, uintptr(computeSystem), uintptr(unsafe.Pointer(configuration)), uintptr(unsafe.Pointer(result)))
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
-func hcsModifyServiceSettings(settings string, result **uint16) (hr error) {
-	var _p0 *uint16
-	_p0, hr = syscall.UTF16PtrFromString(settings)
-	if hr != nil {
-		return
-	}
-	return _hcsModifyServiceSettings(_p0, result)
-}
-
-func _hcsModifyServiceSettings(settings *uint16, result **uint16) (hr error) {
-	hr = procHcsModifyServiceSettings.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall(procHcsModifyServiceSettings.Addr(), 2, uintptr(unsafe.Pointer(settings)), uintptr(unsafe.Pointer(result)), 0)
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
-func hcsRegisterComputeSystemCallback(computeSystem HcsSystem, callback uintptr, context uintptr, callbackHandle *HcsCallback) (hr error) {
-	hr = procHcsRegisterComputeSystemCallback.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall6(procHcsRegisterComputeSystemCallback.Addr(), 4, uintptr(computeSystem), uintptr(callback), uintptr(context), uintptr(unsafe.Pointer(callbackHandle)), 0, 0)
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
-func hcsUnregisterComputeSystemCallback(callbackHandle HcsCallback) (hr error) {
-	hr = procHcsUnregisterComputeSystemCallback.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall(procHcsUnregisterComputeSystemCallback.Addr(), 1, uintptr(callbackHandle), 0, 0)
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
-func hcsSaveComputeSystem(computeSystem HcsSystem, options string, result **uint16) (hr error) {
-	var _p0 *uint16
-	_p0, hr = syscall.UTF16PtrFromString(options)
-	if hr != nil {
-		return
-	}
-	return _hcsSaveComputeSystem(computeSystem, _p0, result)
-}
-
-func _hcsSaveComputeSystem(computeSystem HcsSystem, options *uint16, result **uint16) (hr error) {
-	hr = procHcsSaveComputeSystem.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall(procHcsSaveComputeSystem.Addr(), 3, uintptr(computeSystem), uintptr(unsafe.Pointer(options)), uintptr(unsafe.Pointer(result)))
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
 func hcsCreateProcess(computeSystem HcsSystem, processParameters string, processInformation *HcsProcessInformation, process *HcsProcess, result **uint16) (hr error) {
 	var _p0 *uint16
 	_p0, hr = syscall.UTF16PtrFromString(processParameters)
@@ -432,66 +153,45 @@ func _hcsCreateProcess(computeSystem HcsSystem, processParameters *uint16, proce
 	return
 }
 
-func hcsOpenProcess(computeSystem HcsSystem, pid uint32, process *HcsProcess, result **uint16) (hr error) {
-	hr = procHcsOpenProcess.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall6(procHcsOpenProcess.Addr(), 4, uintptr(computeSystem), uintptr(pid), uintptr(unsafe.Pointer(process)), uintptr(unsafe.Pointer(result)), 0, 0)
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
-func hcsCloseProcess(process HcsProcess) (hr error) {
-	hr = procHcsCloseProcess.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall(procHcsCloseProcess.Addr(), 1, uintptr(process), 0, 0)
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
-func hcsTerminateProcess(process HcsProcess, result **uint16) (hr error) {
-	hr = procHcsTerminateProcess.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall(procHcsTerminateProcess.Addr(), 2, uintptr(process), uintptr(unsafe.Pointer(result)), 0)
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
-func hcsSignalProcess(process HcsProcess, options string, result **uint16) (hr error) {
+func hcsEnumerateComputeSystems(query string, computeSystems **uint16, result **uint16) (hr error) {
 	var _p0 *uint16
-	_p0, hr = syscall.UTF16PtrFromString(options)
+	_p0, hr = syscall.UTF16PtrFromString(query)
 	if hr != nil {
 		return
 	}
-	return _hcsSignalProcess(process, _p0, result)
+	return _hcsEnumerateComputeSystems(_p0, computeSystems, result)
 }
 
-func _hcsSignalProcess(process HcsProcess, options *uint16, result **uint16) (hr error) {
-	hr = procHcsSignalProcess.Find()
+func _hcsEnumerateComputeSystems(query *uint16, computeSystems **uint16, result **uint16) (hr error) {
+	hr = procHcsEnumerateComputeSystems.Find()
 	if hr != nil {
 		return
 	}
-	r0, _, _ := syscall.Syscall(procHcsSignalProcess.Addr(), 3, uintptr(process), uintptr(unsafe.Pointer(options)), uintptr(unsafe.Pointer(result)))
+	r0, _, _ := syscall.Syscall(procHcsEnumerateComputeSystems.Addr(), 3, uintptr(unsafe.Pointer(query)), uintptr(unsafe.Pointer(computeSystems)), uintptr(unsafe.Pointer(result)))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func hcsGetComputeSystemProperties(computeSystem HcsSystem, propertyQuery string, properties **uint16, result **uint16) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(propertyQuery)
+	if hr != nil {
+		return
+	}
+	return _hcsGetComputeSystemProperties(computeSystem, _p0, properties, result)
+}
+
+func _hcsGetComputeSystemProperties(computeSystem HcsSystem, propertyQuery *uint16, properties **uint16, result **uint16) (hr error) {
+	hr = procHcsGetComputeSystemProperties.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall6(procHcsGetComputeSystemProperties.Addr(), 4, uintptr(computeSystem), uintptr(unsafe.Pointer(propertyQuery)), uintptr(unsafe.Pointer(properties)), uintptr(unsafe.Pointer(result)), 0, 0)
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
 			r0 &= 0xffff
@@ -531,30 +231,6 @@ func hcsGetProcessProperties(process HcsProcess, processProperties **uint16, res
 	return
 }
 
-func hcsModifyProcess(process HcsProcess, settings string, result **uint16) (hr error) {
-	var _p0 *uint16
-	_p0, hr = syscall.UTF16PtrFromString(settings)
-	if hr != nil {
-		return
-	}
-	return _hcsModifyProcess(process, _p0, result)
-}
-
-func _hcsModifyProcess(process HcsProcess, settings *uint16, result **uint16) (hr error) {
-	hr = procHcsModifyProcess.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall(procHcsModifyProcess.Addr(), 3, uintptr(process), uintptr(unsafe.Pointer(settings)), uintptr(unsafe.Pointer(result)))
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
 func hcsGetServiceProperties(propertyQuery string, properties **uint16, result **uint16) (hr error) {
 	var _p0 *uint16
 	_p0, hr = syscall.UTF16PtrFromString(propertyQuery)
@@ -579,12 +255,336 @@ func _hcsGetServiceProperties(propertyQuery *uint16, properties **uint16, result
 	return
 }
 
+func hcsModifyComputeSystem(computeSystem HcsSystem, configuration string, result **uint16) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(configuration)
+	if hr != nil {
+		return
+	}
+	return _hcsModifyComputeSystem(computeSystem, _p0, result)
+}
+
+func _hcsModifyComputeSystem(computeSystem HcsSystem, configuration *uint16, result **uint16) (hr error) {
+	hr = procHcsModifyComputeSystem.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procHcsModifyComputeSystem.Addr(), 3, uintptr(computeSystem), uintptr(unsafe.Pointer(configuration)), uintptr(unsafe.Pointer(result)))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func hcsModifyProcess(process HcsProcess, settings string, result **uint16) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(settings)
+	if hr != nil {
+		return
+	}
+	return _hcsModifyProcess(process, _p0, result)
+}
+
+func _hcsModifyProcess(process HcsProcess, settings *uint16, result **uint16) (hr error) {
+	hr = procHcsModifyProcess.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procHcsModifyProcess.Addr(), 3, uintptr(process), uintptr(unsafe.Pointer(settings)), uintptr(unsafe.Pointer(result)))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func hcsModifyServiceSettings(settings string, result **uint16) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(settings)
+	if hr != nil {
+		return
+	}
+	return _hcsModifyServiceSettings(_p0, result)
+}
+
+func _hcsModifyServiceSettings(settings *uint16, result **uint16) (hr error) {
+	hr = procHcsModifyServiceSettings.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procHcsModifyServiceSettings.Addr(), 2, uintptr(unsafe.Pointer(settings)), uintptr(unsafe.Pointer(result)), 0)
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func hcsOpenComputeSystem(id string, computeSystem *HcsSystem, result **uint16) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(id)
+	if hr != nil {
+		return
+	}
+	return _hcsOpenComputeSystem(_p0, computeSystem, result)
+}
+
+func _hcsOpenComputeSystem(id *uint16, computeSystem *HcsSystem, result **uint16) (hr error) {
+	hr = procHcsOpenComputeSystem.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procHcsOpenComputeSystem.Addr(), 3, uintptr(unsafe.Pointer(id)), uintptr(unsafe.Pointer(computeSystem)), uintptr(unsafe.Pointer(result)))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func hcsOpenProcess(computeSystem HcsSystem, pid uint32, process *HcsProcess, result **uint16) (hr error) {
+	hr = procHcsOpenProcess.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall6(procHcsOpenProcess.Addr(), 4, uintptr(computeSystem), uintptr(pid), uintptr(unsafe.Pointer(process)), uintptr(unsafe.Pointer(result)), 0, 0)
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func hcsPauseComputeSystem(computeSystem HcsSystem, options string, result **uint16) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(options)
+	if hr != nil {
+		return
+	}
+	return _hcsPauseComputeSystem(computeSystem, _p0, result)
+}
+
+func _hcsPauseComputeSystem(computeSystem HcsSystem, options *uint16, result **uint16) (hr error) {
+	hr = procHcsPauseComputeSystem.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procHcsPauseComputeSystem.Addr(), 3, uintptr(computeSystem), uintptr(unsafe.Pointer(options)), uintptr(unsafe.Pointer(result)))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func hcsRegisterComputeSystemCallback(computeSystem HcsSystem, callback uintptr, context uintptr, callbackHandle *HcsCallback) (hr error) {
+	hr = procHcsRegisterComputeSystemCallback.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall6(procHcsRegisterComputeSystemCallback.Addr(), 4, uintptr(computeSystem), uintptr(callback), uintptr(context), uintptr(unsafe.Pointer(callbackHandle)), 0, 0)
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
 func hcsRegisterProcessCallback(process HcsProcess, callback uintptr, context uintptr, callbackHandle *HcsCallback) (hr error) {
 	hr = procHcsRegisterProcessCallback.Find()
 	if hr != nil {
 		return
 	}
 	r0, _, _ := syscall.Syscall6(procHcsRegisterProcessCallback.Addr(), 4, uintptr(process), uintptr(callback), uintptr(context), uintptr(unsafe.Pointer(callbackHandle)), 0, 0)
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func hcsResumeComputeSystem(computeSystem HcsSystem, options string, result **uint16) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(options)
+	if hr != nil {
+		return
+	}
+	return _hcsResumeComputeSystem(computeSystem, _p0, result)
+}
+
+func _hcsResumeComputeSystem(computeSystem HcsSystem, options *uint16, result **uint16) (hr error) {
+	hr = procHcsResumeComputeSystem.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procHcsResumeComputeSystem.Addr(), 3, uintptr(computeSystem), uintptr(unsafe.Pointer(options)), uintptr(unsafe.Pointer(result)))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func hcsSaveComputeSystem(computeSystem HcsSystem, options string, result **uint16) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(options)
+	if hr != nil {
+		return
+	}
+	return _hcsSaveComputeSystem(computeSystem, _p0, result)
+}
+
+func _hcsSaveComputeSystem(computeSystem HcsSystem, options *uint16, result **uint16) (hr error) {
+	hr = procHcsSaveComputeSystem.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procHcsSaveComputeSystem.Addr(), 3, uintptr(computeSystem), uintptr(unsafe.Pointer(options)), uintptr(unsafe.Pointer(result)))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func hcsShutdownComputeSystem(computeSystem HcsSystem, options string, result **uint16) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(options)
+	if hr != nil {
+		return
+	}
+	return _hcsShutdownComputeSystem(computeSystem, _p0, result)
+}
+
+func _hcsShutdownComputeSystem(computeSystem HcsSystem, options *uint16, result **uint16) (hr error) {
+	hr = procHcsShutdownComputeSystem.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procHcsShutdownComputeSystem.Addr(), 3, uintptr(computeSystem), uintptr(unsafe.Pointer(options)), uintptr(unsafe.Pointer(result)))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func hcsSignalProcess(process HcsProcess, options string, result **uint16) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(options)
+	if hr != nil {
+		return
+	}
+	return _hcsSignalProcess(process, _p0, result)
+}
+
+func _hcsSignalProcess(process HcsProcess, options *uint16, result **uint16) (hr error) {
+	hr = procHcsSignalProcess.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procHcsSignalProcess.Addr(), 3, uintptr(process), uintptr(unsafe.Pointer(options)), uintptr(unsafe.Pointer(result)))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func hcsStartComputeSystem(computeSystem HcsSystem, options string, result **uint16) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(options)
+	if hr != nil {
+		return
+	}
+	return _hcsStartComputeSystem(computeSystem, _p0, result)
+}
+
+func _hcsStartComputeSystem(computeSystem HcsSystem, options *uint16, result **uint16) (hr error) {
+	hr = procHcsStartComputeSystem.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procHcsStartComputeSystem.Addr(), 3, uintptr(computeSystem), uintptr(unsafe.Pointer(options)), uintptr(unsafe.Pointer(result)))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func hcsTerminateComputeSystem(computeSystem HcsSystem, options string, result **uint16) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(options)
+	if hr != nil {
+		return
+	}
+	return _hcsTerminateComputeSystem(computeSystem, _p0, result)
+}
+
+func _hcsTerminateComputeSystem(computeSystem HcsSystem, options *uint16, result **uint16) (hr error) {
+	hr = procHcsTerminateComputeSystem.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procHcsTerminateComputeSystem.Addr(), 3, uintptr(computeSystem), uintptr(unsafe.Pointer(options)), uintptr(unsafe.Pointer(result)))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func hcsTerminateProcess(process HcsProcess, result **uint16) (hr error) {
+	hr = procHcsTerminateProcess.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procHcsTerminateProcess.Addr(), 2, uintptr(process), uintptr(unsafe.Pointer(result)), 0)
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func hcsUnregisterComputeSystemCallback(callbackHandle HcsCallback) (hr error) {
+	hr = procHcsUnregisterComputeSystemCallback.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procHcsUnregisterComputeSystemCallback.Addr(), 1, uintptr(callbackHandle), 0, 0)
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
 			r0 &= 0xffff

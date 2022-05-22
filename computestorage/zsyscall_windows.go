@@ -42,43 +42,86 @@ func errnoErr(e syscall.Errno) error {
 var (
 	modcomputestorage = windows.NewLazySystemDLL("computestorage.dll")
 
-	procHcsImportLayer              = modcomputestorage.NewProc("HcsImportLayer")
-	procHcsExportLayer              = modcomputestorage.NewProc("HcsExportLayer")
-	procHcsDestoryLayer             = modcomputestorage.NewProc("HcsDestoryLayer")
-	procHcsSetupBaseOSLayer         = modcomputestorage.NewProc("HcsSetupBaseOSLayer")
-	procHcsInitializeWritableLayer  = modcomputestorage.NewProc("HcsInitializeWritableLayer")
 	procHcsAttachLayerStorageFilter = modcomputestorage.NewProc("HcsAttachLayerStorageFilter")
+	procHcsDestoryLayer             = modcomputestorage.NewProc("HcsDestoryLayer")
 	procHcsDetachLayerStorageFilter = modcomputestorage.NewProc("HcsDetachLayerStorageFilter")
+	procHcsExportLayer              = modcomputestorage.NewProc("HcsExportLayer")
 	procHcsFormatWritableLayerVhd   = modcomputestorage.NewProc("HcsFormatWritableLayerVhd")
 	procHcsGetLayerVhdMountPath     = modcomputestorage.NewProc("HcsGetLayerVhdMountPath")
+	procHcsImportLayer              = modcomputestorage.NewProc("HcsImportLayer")
+	procHcsInitializeWritableLayer  = modcomputestorage.NewProc("HcsInitializeWritableLayer")
+	procHcsSetupBaseOSLayer         = modcomputestorage.NewProc("HcsSetupBaseOSLayer")
 	procHcsSetupBaseOSVolume        = modcomputestorage.NewProc("HcsSetupBaseOSVolume")
 )
 
-func hcsImportLayer(layerPath string, sourceFolderPath string, layerData string) (hr error) {
+func hcsAttachLayerStorageFilter(layerPath string, layerData string) (hr error) {
 	var _p0 *uint16
 	_p0, hr = syscall.UTF16PtrFromString(layerPath)
 	if hr != nil {
 		return
 	}
 	var _p1 *uint16
-	_p1, hr = syscall.UTF16PtrFromString(sourceFolderPath)
+	_p1, hr = syscall.UTF16PtrFromString(layerData)
 	if hr != nil {
 		return
 	}
-	var _p2 *uint16
-	_p2, hr = syscall.UTF16PtrFromString(layerData)
-	if hr != nil {
-		return
-	}
-	return _hcsImportLayer(_p0, _p1, _p2)
+	return _hcsAttachLayerStorageFilter(_p0, _p1)
 }
 
-func _hcsImportLayer(layerPath *uint16, sourceFolderPath *uint16, layerData *uint16) (hr error) {
-	hr = procHcsImportLayer.Find()
+func _hcsAttachLayerStorageFilter(layerPath *uint16, layerData *uint16) (hr error) {
+	hr = procHcsAttachLayerStorageFilter.Find()
 	if hr != nil {
 		return
 	}
-	r0, _, _ := syscall.Syscall(procHcsImportLayer.Addr(), 3, uintptr(unsafe.Pointer(layerPath)), uintptr(unsafe.Pointer(sourceFolderPath)), uintptr(unsafe.Pointer(layerData)))
+	r0, _, _ := syscall.Syscall(procHcsAttachLayerStorageFilter.Addr(), 2, uintptr(unsafe.Pointer(layerPath)), uintptr(unsafe.Pointer(layerData)), 0)
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func hcsDestroyLayer(layerPath string) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(layerPath)
+	if hr != nil {
+		return
+	}
+	return _hcsDestroyLayer(_p0)
+}
+
+func _hcsDestroyLayer(layerPath *uint16) (hr error) {
+	hr = procHcsDestoryLayer.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procHcsDestoryLayer.Addr(), 1, uintptr(unsafe.Pointer(layerPath)), 0, 0)
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func hcsDetachLayerStorageFilter(layerPath string) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(layerPath)
+	if hr != nil {
+		return
+	}
+	return _hcsDetachLayerStorageFilter(_p0)
+}
+
+func _hcsDetachLayerStorageFilter(layerPath *uint16) (hr error) {
+	hr = procHcsDetachLayerStorageFilter.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procHcsDetachLayerStorageFilter.Addr(), 1, uintptr(unsafe.Pointer(layerPath)), 0, 0)
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
 			r0 &= 0xffff
@@ -127,21 +170,12 @@ func _hcsExportLayer(layerPath *uint16, exportFolderPath *uint16, layerData *uin
 	return
 }
 
-func hcsDestroyLayer(layerPath string) (hr error) {
-	var _p0 *uint16
-	_p0, hr = syscall.UTF16PtrFromString(layerPath)
+func hcsFormatWritableLayerVhd(handle windows.Handle) (hr error) {
+	hr = procHcsFormatWritableLayerVhd.Find()
 	if hr != nil {
 		return
 	}
-	return _hcsDestroyLayer(_p0)
-}
-
-func _hcsDestroyLayer(layerPath *uint16) (hr error) {
-	hr = procHcsDestoryLayer.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall(procHcsDestoryLayer.Addr(), 1, uintptr(unsafe.Pointer(layerPath)), 0, 0)
+	r0, _, _ := syscall.Syscall(procHcsFormatWritableLayerVhd.Addr(), 1, uintptr(handle), 0, 0)
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
 			r0 &= 0xffff
@@ -151,26 +185,46 @@ func _hcsDestroyLayer(layerPath *uint16) (hr error) {
 	return
 }
 
-func hcsSetupBaseOSLayer(layerPath string, handle windows.Handle, options string) (hr error) {
+func hcsGetLayerVhdMountPath(vhdHandle windows.Handle, mountPath **uint16) (hr error) {
+	hr = procHcsGetLayerVhdMountPath.Find()
+	if hr != nil {
+		return
+	}
+	r0, _, _ := syscall.Syscall(procHcsGetLayerVhdMountPath.Addr(), 2, uintptr(vhdHandle), uintptr(unsafe.Pointer(mountPath)), 0)
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func hcsImportLayer(layerPath string, sourceFolderPath string, layerData string) (hr error) {
 	var _p0 *uint16
 	_p0, hr = syscall.UTF16PtrFromString(layerPath)
 	if hr != nil {
 		return
 	}
 	var _p1 *uint16
-	_p1, hr = syscall.UTF16PtrFromString(options)
+	_p1, hr = syscall.UTF16PtrFromString(sourceFolderPath)
 	if hr != nil {
 		return
 	}
-	return _hcsSetupBaseOSLayer(_p0, handle, _p1)
+	var _p2 *uint16
+	_p2, hr = syscall.UTF16PtrFromString(layerData)
+	if hr != nil {
+		return
+	}
+	return _hcsImportLayer(_p0, _p1, _p2)
 }
 
-func _hcsSetupBaseOSLayer(layerPath *uint16, handle windows.Handle, options *uint16) (hr error) {
-	hr = procHcsSetupBaseOSLayer.Find()
+func _hcsImportLayer(layerPath *uint16, sourceFolderPath *uint16, layerData *uint16) (hr error) {
+	hr = procHcsImportLayer.Find()
 	if hr != nil {
 		return
 	}
-	r0, _, _ := syscall.Syscall(procHcsSetupBaseOSLayer.Addr(), 3, uintptr(unsafe.Pointer(layerPath)), uintptr(handle), uintptr(unsafe.Pointer(options)))
+	r0, _, _ := syscall.Syscall(procHcsImportLayer.Addr(), 3, uintptr(unsafe.Pointer(layerPath)), uintptr(unsafe.Pointer(sourceFolderPath)), uintptr(unsafe.Pointer(layerData)))
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
 			r0 &= 0xffff
@@ -214,80 +268,26 @@ func _hcsInitializeWritableLayer(writableLayerPath *uint16, layerData *uint16, o
 	return
 }
 
-func hcsAttachLayerStorageFilter(layerPath string, layerData string) (hr error) {
+func hcsSetupBaseOSLayer(layerPath string, handle windows.Handle, options string) (hr error) {
 	var _p0 *uint16
 	_p0, hr = syscall.UTF16PtrFromString(layerPath)
 	if hr != nil {
 		return
 	}
 	var _p1 *uint16
-	_p1, hr = syscall.UTF16PtrFromString(layerData)
+	_p1, hr = syscall.UTF16PtrFromString(options)
 	if hr != nil {
 		return
 	}
-	return _hcsAttachLayerStorageFilter(_p0, _p1)
+	return _hcsSetupBaseOSLayer(_p0, handle, _p1)
 }
 
-func _hcsAttachLayerStorageFilter(layerPath *uint16, layerData *uint16) (hr error) {
-	hr = procHcsAttachLayerStorageFilter.Find()
+func _hcsSetupBaseOSLayer(layerPath *uint16, handle windows.Handle, options *uint16) (hr error) {
+	hr = procHcsSetupBaseOSLayer.Find()
 	if hr != nil {
 		return
 	}
-	r0, _, _ := syscall.Syscall(procHcsAttachLayerStorageFilter.Addr(), 2, uintptr(unsafe.Pointer(layerPath)), uintptr(unsafe.Pointer(layerData)), 0)
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
-func hcsDetachLayerStorageFilter(layerPath string) (hr error) {
-	var _p0 *uint16
-	_p0, hr = syscall.UTF16PtrFromString(layerPath)
-	if hr != nil {
-		return
-	}
-	return _hcsDetachLayerStorageFilter(_p0)
-}
-
-func _hcsDetachLayerStorageFilter(layerPath *uint16) (hr error) {
-	hr = procHcsDetachLayerStorageFilter.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall(procHcsDetachLayerStorageFilter.Addr(), 1, uintptr(unsafe.Pointer(layerPath)), 0, 0)
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
-func hcsFormatWritableLayerVhd(handle windows.Handle) (hr error) {
-	hr = procHcsFormatWritableLayerVhd.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall(procHcsFormatWritableLayerVhd.Addr(), 1, uintptr(handle), 0, 0)
-	if int32(r0) < 0 {
-		if r0&0x1fff0000 == 0x00070000 {
-			r0 &= 0xffff
-		}
-		hr = syscall.Errno(r0)
-	}
-	return
-}
-
-func hcsGetLayerVhdMountPath(vhdHandle windows.Handle, mountPath **uint16) (hr error) {
-	hr = procHcsGetLayerVhdMountPath.Find()
-	if hr != nil {
-		return
-	}
-	r0, _, _ := syscall.Syscall(procHcsGetLayerVhdMountPath.Addr(), 2, uintptr(vhdHandle), uintptr(unsafe.Pointer(mountPath)), 0)
+	r0, _, _ := syscall.Syscall(procHcsSetupBaseOSLayer.Addr(), 3, uintptr(unsafe.Pointer(layerPath)), uintptr(handle), uintptr(unsafe.Pointer(options)))
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
 			r0 &= 0xffff
