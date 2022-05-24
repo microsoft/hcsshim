@@ -159,7 +159,7 @@ func PolicyContainersFromConfigs(containerConfigs []securitypolicy.ContainerConf
 		}
 
 		container, err := securitypolicy.CreateContainerPolicy(
-			containerConfig.Command,
+			commandArgs,
 			layerHashes,
 			envRules,
 			workingDir,
