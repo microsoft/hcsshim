@@ -78,7 +78,8 @@ func DefaultCRIMounts() []oci.Mount {
 	}
 }
 
-// DefaultCRIPrivilegedMounts returns a slice of mounts that
+// DefaultCRIPrivilegedMounts returns a slice of mounts which are added to the
+// linux container spec when a container runs in a privileged mode.
 func DefaultCRIPrivilegedMounts() []oci.Mount {
 	return []oci.Mount{
 		{
