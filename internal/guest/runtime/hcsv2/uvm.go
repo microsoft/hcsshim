@@ -91,7 +91,10 @@ func (h *Host) SetSecurityPolicy(base64Policy string) error {
 		return err
 	}
 
-	p, err := securitypolicy.NewSecurityPolicyEnforcer(*securityPolicyState)
+	p, err := securitypolicy.NewSecurityPolicyEnforcer(
+		*securityPolicyState,
+		securitypolicy.WithPrivilegedMounts(policy.DefaultCRIPrivilegedMounts()),
+	)
 	if err != nil {
 		return err
 	}

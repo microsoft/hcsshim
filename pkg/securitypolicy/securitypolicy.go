@@ -49,6 +49,7 @@ type ContainerConfig struct {
 	WorkingDir     string          `json:"working_dir" toml:"working_dir"`
 	ExpectedMounts []string        `json:"expected_mounts" toml:"expected_mounts"`
 	Mounts         []MountConfig   `json:"mounts" toml:"mount"`
+	AllowElevated  bool            `json:"allow_elevated" toml:"allow_elevated"`
 }
 
 // MountConfig contains toml or JSON config for mount security policy
@@ -57,27 +58,6 @@ type MountConfig struct {
 	HostPath      string `json:"host_path" toml:"host_path"`
 	ContainerPath string `json:"container_path" toml:"container_path"`
 	Readonly      bool   `json:"readonly" toml:"readonly"`
-}
-
-// NewContainerConfig creates a new ContainerConfig from the given values.
-func NewContainerConfig(
-	imageName string,
-	command []string,
-	envRules []EnvRuleConfig,
-	auth AuthConfig,
-	workingDir string,
-	expectedMounts []string,
-	mounts []MountConfig,
-) ContainerConfig {
-	return ContainerConfig{
-		ImageName:      imageName,
-		Command:        command,
-		EnvRules:       envRules,
-		Auth:           auth,
-		WorkingDir:     workingDir,
-		ExpectedMounts: expectedMounts,
-		Mounts:         mounts,
-	}
 }
 
 // NewEnvVarRules creates slice of EnvRuleConfig's from environment variables
@@ -196,6 +176,7 @@ type Container struct {
 	WorkingDir     string         `json:"working_dir"`
 	ExpectedMounts ExpectedMounts `json:"expected_mounts"`
 	Mounts         Mounts         `json:"mounts"`
+	AllowElevated  bool           `json:"allow_elevated"`
 }
 
 // StringArrayMap wraps an array of strings as a string map.
@@ -237,6 +218,7 @@ func CreateContainerPolicy(
 	workingDir string,
 	eMounts []string,
 	mounts []MountConfig,
+	allowElevated bool,
 ) (*Container, error) {
 	if err := validateEnvRules(envRules); err != nil {
 		return nil, err
@@ -251,6 +233,7 @@ func CreateContainerPolicy(
 		WorkingDir:     workingDir,
 		ExpectedMounts: newExpectedMounts(eMounts),
 		Mounts:         newMountConstraints(mounts),
+		AllowElevated:  allowElevated,
 	}, nil
 }
 

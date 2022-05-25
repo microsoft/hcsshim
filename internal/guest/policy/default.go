@@ -77,3 +77,22 @@ func DefaultCRIMounts() []oci.Mount {
 		},
 	}
 }
+
+// DefaultCRIPrivilegedMounts returns a slice of mounts which are added to the
+// linux container spec when a container runs in a privileged mode.
+func DefaultCRIPrivilegedMounts() []oci.Mount {
+	return []oci.Mount{
+		{
+			Source:      "cgroup",
+			Destination: "/sys/fs/cgroup",
+			Type:        "cgroup",
+			Options:     []string{"nosuid", "noexec", "nodev", "relatime", "rw"},
+		},
+		{
+			Destination: "/sys",
+			Type:        "sysfs",
+			Source:      "sysfs",
+			Options:     []string{"nosuid", "noexec", "nodev", "rw"},
+		},
+	}
+}

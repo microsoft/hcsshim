@@ -13,11 +13,12 @@ import (
 	"strings"
 	"sync"
 
+	oci "github.com/opencontainers/runtime-spec/specs-go"
+
 	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/hooks"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 type SecurityPolicyEnforcer interface {
@@ -30,7 +31,7 @@ type SecurityPolicyEnforcer interface {
 	ExtendDefaultMounts([]oci.Mount) error
 }
 
-func NewSecurityPolicyEnforcer(state SecurityPolicyState) (SecurityPolicyEnforcer, error) {
+func NewSecurityPolicyEnforcer(state SecurityPolicyState, eOpts ...standardEnforcerOpt) (SecurityPolicyEnforcer, error) {
 	if state.SecurityPolicy.AllowAll {
 		return &OpenDoorSecurityPolicyEnforcer{}, nil
 	} else {
@@ -38,7 +39,13 @@ func NewSecurityPolicyEnforcer(state SecurityPolicyState) (SecurityPolicyEnforce
 		if err != nil {
 			return nil, err
 		}
-		return NewStandardSecurityPolicyEnforcer(containers, state.EncodedSecurityPolicy.SecurityPolicy), nil
+		enforcer := NewStandardSecurityPolicyEnforcer(containers, state.EncodedSecurityPolicy.SecurityPolicy)
+		for _, o := range eOpts {
+			if err := o(enforcer); err != nil {
+				return nil, err
+			}
+		}
+		return enforcer, nil
 	}
 }
 
@@ -60,6 +67,30 @@ func newMountConstraint(src, dst string, mType string, mOpts []string) mountInte
 	}
 }
 
+type standardEnforcerOpt func(e *StandardSecurityPolicyEnforcer) error
+
+// WithPrivilegedMounts converts the input mounts to internal mount constraints
+// and extends existing internal mount constraints if the container is allowed
+// to be executed in elevated mode.
+func WithPrivilegedMounts(mounts []oci.Mount) standardEnforcerOpt {
+	return func(e *StandardSecurityPolicyEnforcer) error {
+		for _, c := range e.Containers {
+			if c.allowElevated {
+				for _, m := range mounts {
+					mi := mountInternal{
+						Source:      m.Source,
+						Destination: m.Destination,
+						Type:        m.Type,
+						Options:     m.Options,
+					}
+					c.Mounts = append(c.Mounts, mi)
+				}
+			}
+		}
+		return nil
+	}
+}
+
 // Internal version of Container
 type securityPolicyContainer struct {
 	// The command that we will allow the container to execute
@@ -78,14 +109,15 @@ type securityPolicyContainer struct {
 	// starts
 	ExpectedMounts []string `json:"expected_mounts"`
 	// A list of constraints for determining if a given mount is allowed.
-	Mounts []mountInternal
+	Mounts        []mountInternal
+	allowElevated bool
 }
 
 type StandardSecurityPolicyEnforcer struct {
 	// EncodedSecurityPolicy state is needed for key release
 	EncodedSecurityPolicy string
 	// Containers from the user supplied security policy.
-	Containers []securityPolicyContainer
+	Containers []*securityPolicyContainer
 	// Devices and ContainerIndexToContainerIds are used to build up an
 	// understanding of the containers running with a UVM as they come up and
 	// map them back to a container definition from the user supplied
@@ -158,7 +190,10 @@ type StandardSecurityPolicyEnforcer struct {
 
 var _ SecurityPolicyEnforcer = (*StandardSecurityPolicyEnforcer)(nil)
 
-func NewStandardSecurityPolicyEnforcer(containers []securityPolicyContainer, encoded string) *StandardSecurityPolicyEnforcer {
+func NewStandardSecurityPolicyEnforcer(
+	containers []*securityPolicyContainer,
+	encoded string,
+) *StandardSecurityPolicyEnforcer {
 	// create new StandardSecurityPolicyEnforcer and add the expected containers
 	// to it
 	// fill out corresponding devices structure by creating a "same shaped"
@@ -180,7 +215,7 @@ func NewStandardSecurityPolicyEnforcer(containers []securityPolicyContainer, enc
 	}
 }
 
-func (c Containers) toInternal() ([]securityPolicyContainer, error) {
+func (c Containers) toInternal() ([]*securityPolicyContainer, error) {
 	containerMapLength := len(c.Elements)
 	if c.Length != containerMapLength {
 		err := fmt.Errorf(
@@ -191,7 +226,7 @@ func (c Containers) toInternal() ([]securityPolicyContainer, error) {
 		return nil, err
 	}
 
-	internal := make([]securityPolicyContainer, containerMapLength)
+	internal := make([]*securityPolicyContainer, containerMapLength)
 
 	for i := 0; i < containerMapLength; i++ {
 		index := strconv.Itoa(i)
@@ -204,7 +239,7 @@ func (c Containers) toInternal() ([]securityPolicyContainer, error) {
 			return nil, err
 		}
 		// save off new container
-		internal[i] = cInternal
+		internal[i] = &cInternal
 	}
 
 	return internal, nil
@@ -244,6 +279,7 @@ func (c Container) toInternal() (securityPolicyContainer, error) {
 		WorkingDir:     c.WorkingDir,
 		ExpectedMounts: expectedMounts,
 		Mounts:         mounts,
+		allowElevated:  c.AllowElevated,
 	}, nil
 }
 

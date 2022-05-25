@@ -68,15 +68,10 @@ func ParseEnvFromImage(img v1.Image) ([]string, error) {
 // be included by default in the security policy.
 // The slice includes only a sandbox pause container.
 func DefaultContainerConfigs() []securitypolicy.ContainerConfig {
-	pause := securitypolicy.NewContainerConfig(
-		"k8s.gcr.io/pause:3.1",
-		[]string{"/pause"},
-		[]securitypolicy.EnvRuleConfig{},
-		securitypolicy.AuthConfig{},
-		"",
-		[]string{},
-		[]securitypolicy.MountConfig{},
-	)
+	pause := securitypolicy.ContainerConfig{
+		ImageName: "k8s.gcr.io/pause:3.1",
+		Command:   []string{"/pause"},
+	}
 	return []securitypolicy.ContainerConfig{pause}
 }
 
@@ -165,6 +160,7 @@ func PolicyContainersFromConfigs(containerConfigs []securitypolicy.ContainerConf
 			workingDir,
 			containerConfig.ExpectedMounts,
 			containerConfig.Mounts,
+			containerConfig.AllowElevated,
 		)
 		if err != nil {
 			return nil, err
