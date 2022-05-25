@@ -62,6 +62,7 @@ var (
 	procCM_Locate_DevNodeW                        = modcfgmgr32.NewProc("CM_Locate_DevNodeW")
 	procSetJobCompartmentId                       = modiphlpapi.NewProc("SetJobCompartmentId")
 	procClosePseudoConsole                        = modkernel32.NewProc("ClosePseudoConsole")
+	procCreateFileW                               = modkernel32.NewProc("CreateFileW")
 	procCreatePseudoConsole                       = modkernel32.NewProc("CreatePseudoConsole")
 	procCreateRemoteThread                        = modkernel32.NewProc("CreateRemoteThread")
 	procGetActiveProcessorCount                   = modkernel32.NewProc("GetActiveProcessorCount")
@@ -89,6 +90,7 @@ var (
 	procNtSetInformationFile                      = modntdll.NewProc("NtSetInformationFile")
 	procRtlNtStatusToDosError                     = modntdll.NewProc("RtlNtStatusToDosError")
 	procCreateAppContainerProfile                 = moduserenv.NewProc("CreateAppContainerProfile")
+	procDeleteAppContainerProfile                 = moduserenv.NewProc("DeleteAppContainerProfile")
 	procDeriveAppContainerSidFromAppContainerName = moduserenv.NewProc("DeriveAppContainerSidFromAppContainerName")
 )
 
@@ -233,6 +235,24 @@ func SetJobCompartmentId(handle windows.Handle, compartmentId uint32) (win32Err 
 
 func ClosePseudoConsole(hpc windows.Handle) {
 	syscall.Syscall(procClosePseudoConsole.Addr(), 1, uintptr(hpc), 0, 0)
+	return
+}
+
+func CreateFile(name string, access uint32, mode uint32, sa *windows.SecurityAttributes, createmode uint32, attrs uint32, templatefile windows.Handle) (handle windows.Handle, err error) {
+	var _p0 *uint16
+	_p0, err = syscall.UTF16PtrFromString(name)
+	if err != nil {
+		return
+	}
+	return _CreateFile(_p0, access, mode, sa, createmode, attrs, templatefile)
+}
+
+func _CreateFile(name *uint16, access uint32, mode uint32, sa *windows.SecurityAttributes, createmode uint32, attrs uint32, templatefile windows.Handle) (handle windows.Handle, err error) {
+	r0, _, e1 := syscall.Syscall9(procCreateFileW.Addr(), 7, uintptr(unsafe.Pointer(name)), uintptr(access), uintptr(mode), uintptr(unsafe.Pointer(sa)), uintptr(createmode), uintptr(attrs), uintptr(templatefile), 0, 0)
+	handle = windows.Handle(r0)
+	if handle == windows.InvalidHandle {
+		err = errnoErr(e1)
+	}
 	return
 }
 
@@ -474,6 +494,26 @@ func createAppContainerProfile(appContainerName string, displayName string, desc
 
 func _createAppContainerProfile(appContainerName *uint16, displayName *uint16, description *uint16, capabilities *windows.SIDAndAttributes, capabilitiesCount uint32, sidAppContainerSid **windows.SID) (hr error) {
 	r0, _, _ := syscall.Syscall6(procCreateAppContainerProfile.Addr(), 6, uintptr(unsafe.Pointer(appContainerName)), uintptr(unsafe.Pointer(displayName)), uintptr(unsafe.Pointer(description)), uintptr(unsafe.Pointer(capabilities)), uintptr(capabilitiesCount), uintptr(unsafe.Pointer(sidAppContainerSid)))
+	if int32(r0) < 0 {
+		if r0&0x1fff0000 == 0x00070000 {
+			r0 &= 0xffff
+		}
+		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func DeleteAppContainerProfile(appContainerName string) (hr error) {
+	var _p0 *uint16
+	_p0, hr = syscall.UTF16PtrFromString(appContainerName)
+	if hr != nil {
+		return
+	}
+	return _DeleteAppContainerProfile(_p0)
+}
+
+func _DeleteAppContainerProfile(appContainerName *uint16) (hr error) {
+	r0, _, _ := syscall.Syscall(procDeleteAppContainerProfile.Addr(), 1, uintptr(unsafe.Pointer(appContainerName)), 0, 0)
 	if int32(r0) < 0 {
 		if r0&0x1fff0000 == 0x00070000 {
 			r0 &= 0xffff

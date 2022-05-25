@@ -141,12 +141,17 @@ func (e *Exec) Start() error {
 
 	// Need to know whether the process needs to inherit stdio handles. The below setup is so that we only inherit the
 	// stdio pipes and nothing else into the new process.
-	inheritHandles := e.stdioPipesProcSide[0] != nil || e.stdioPipesProcSide[1] != nil || e.stdioPipesProcSide[2] != nil
+	inheritHandles := e.stdioPipesProcSide[0] != nil || e.stdioPipesProcSide[1] != nil || e.stdioPipesProcSide[2] != nil || len(e.handles) > 0
 	if inheritHandles {
-		var handles []uintptr
+		handles := make([]uintptr, 0, len(e.stdioPipesOurSide)+len(e.handles))
 		for _, file := range e.stdioPipesProcSide {
 			if file.Fd() != uintptr(syscall.InvalidHandle) {
 				handles = append(handles, file.Fd())
+			}
+		}
+		for _, h := range e.handles {
+			if h != windows.InvalidHandle {
+				handles = append(handles, uintptr(h))
 			}
 		}
 

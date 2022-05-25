@@ -4,7 +4,7 @@ const PROCESS_ALL_ACCESS uint32 = 2097151
 
 // process attribute values
 // see https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute
-//
+
 //nolint:revive,stylecheck
 const (
 	PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE                   = 0x20016

@@ -9,6 +9,17 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-smb2/2158be91-3b85-4e49-9f0e-2538856f5c55
+//nolint:revive,stylecheck
+const (
+	SE_GROUP_MANDATORY          = uint32(0x00000001)
+	SE_GROUP_ENABLED_BY_DEFAULT = uint32(0x00000002)
+	SE_GROUP_ENABLED            = uint32(0x00000004)
+	SE_GROUP_OWNER              = uint32(0x00000008)
+	SE_GROUP_USE_FOR_DENY_ONLY  = uint32(0x00000010)
+)
+
+// privilege names
 const (
 	SeChangeNotifyPrivilege = "SeChangeNotifyPrivilege"
 	SeBackupPrivilege       = winio.SeBackupPrivilege

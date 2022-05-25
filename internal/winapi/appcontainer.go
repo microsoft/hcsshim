@@ -12,6 +12,14 @@ import (
 //nolint:revive,stylecheck
 const (
 	PROCESS_CREATION_ALL_APPLICATION_PACKAGES_OPT_OUT = uint32(0x01)
+	SECURITY_CAPABILITY_BASE_RID                      = 0x3
+)
+
+//nolint:revive,stylecheck
+var (
+	SECURITY_APP_PACKAGE_AUTHORITY = windows.SidIdentifierAuthority{
+		Value: [6]byte{0, 0, 0, 0, 0, 15},
+	}
 )
 
 // typedef struct _SECURITY_CAPABILITIES {
@@ -37,7 +45,7 @@ type SecurityCapabilities struct {
 //   [out] PSID                *ppSidAppContainerSid
 // );
 //
-//sys createAppContainerProfile(appContainerName string, displayName string, description string, capabilities *windows.SIDAndAttributes, capabilitiesCount uint32, sidAppContainerSid **windows.SID) (hr error) [failretval!=uintptr(windows.S_OK)] = userenv.CreateAppContainerProfile
+//sys createAppContainerProfile(appContainerName string, displayName string, description string, capabilities *windows.SIDAndAttributes, capabilitiesCount uint32, sidAppContainerSid **windows.SID) (hr error) = userenv.CreateAppContainerProfile
 
 func CreateAppContainerProfile(name string, displayName string, description string, capabilities []windows.SIDAndAttributes) (*windows.SID, error) {
 	sid := &windows.SID{}
@@ -51,10 +59,8 @@ func CreateAppContainerProfile(name string, displayName string, description stri
 		pcaps = &capabilities[0]
 	}
 
-	fmt.Println("creating app container profile")
 	err := createAppContainerProfile(name, displayName, description, pcaps, lcaps, &sid)
 	if errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
-		fmt.Println("app container already exists")
 		if err = deriveAppContainerSidFromAppContainerName(name, &sid); err != nil {
 			return nil, err
 		}
@@ -76,12 +82,18 @@ func trimLen(s string, l int) string {
 	return s[:l]
 }
 
+// USERENVAPI HRESULT DeleteAppContainerProfile(
+//   [in] PCWSTR pszAppContainerName
+// );
+//
+//sys DeleteAppContainerProfile(appContainerName string) (hr error) = userenv.DeleteAppContainerProfile
+
 // USERENVAPI HRESULT DeriveAppContainerSidFromAppContainerName(
 //   [in]  PCWSTR pszAppContainerName,
 //   [out] PSID   *ppsidAppContainerSid
 // );
 //
-//sys deriveAppContainerSidFromAppContainerName(appContainerName string, appContainerSid **windows.SID) (hr error) [failretval!=uintptr(windows.S_OK)] = userenv.DeriveAppContainerSidFromAppContainerName
+//sys deriveAppContainerSidFromAppContainerName(appContainerName string, appContainerSid **windows.SID) (hr error) = userenv.DeriveAppContainerSidFromAppContainerName
 
 func DeriveAppContainerSidFromAppContainerName(name string) (*windows.SID, error) {
 	sid := &windows.SID{}

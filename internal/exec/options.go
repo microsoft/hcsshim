@@ -25,6 +25,7 @@ type execConfig struct {
 	token        windows.Token
 	processFlags uint32
 	attrList     *windows.ProcThreadAttributeListContainer
+	handles      []windows.Handle
 }
 
 // WithDir will use `dir` as the working directory for the process.
@@ -102,6 +103,14 @@ func WithProcessFlags(flags uint32) ExecOpts {
 func WithProcessAttributes(attr *windows.ProcThreadAttributeListContainer) ExecOpts {
 	return func(e *execConfig) error {
 		e.attrList = attr
+		return nil
+	}
+}
+
+// WithHandles specifies additional handles for the process to inherit
+func WithHandles(hs []windows.Handle) ExecOpts {
+	return func(e *execConfig) error {
+		e.handles = hs
 		return nil
 	}
 }

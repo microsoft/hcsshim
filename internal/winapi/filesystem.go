@@ -2,6 +2,18 @@
 
 package winapi
 
+// HANDLE CreateFileA(
+//   [in]           LPCSTR                lpFileName,
+//   [in]           DWORD                 dwDesiredAccess,
+//   [in]           DWORD                 dwShareMode,
+//   [in, optional] LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+//   [in]           DWORD                 dwCreationDisposition,
+//   [in]           DWORD                 dwFlagsAndAttributes,
+//   [in, optional] HANDLE                hTemplateFile
+// );
+//
+//sys CreateFile(name string, access uint32, mode uint32, sa *windows.SecurityAttributes, createmode uint32, attrs uint32, templatefile windows.Handle) (handle windows.Handle, err error) [failretval==windows.InvalidHandle] = CreateFileW
+
 //sys NtCreateFile(handle *uintptr, accessMask uint32, oa *ObjectAttributes, iosb *IOStatusBlock, allocationSize *uint64, fileAttributes uint32, shareAccess uint32, createDisposition uint32, createOptions uint32, eaBuffer *byte, eaLength uint32) (status uint32) = ntdll.NtCreateFile
 //sys NtSetInformationFile(handle uintptr, iosb *IOStatusBlock, information uintptr, length uint32, class uint32) (status uint32) = ntdll.NtSetInformationFile
 

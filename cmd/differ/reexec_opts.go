@@ -15,8 +15,14 @@ type reExecOpt func(*reExecConfig) error
 func defaultReExecOpts() []reExecOpt {
 	return []reExecOpt{
 		useLPAC(true),
-		withPrivileges([]string{winapi.SeChangeNotifyPrivilege}),
+		withPrivileges([]string{
+			winapi.SeChangeNotifyPrivilege,
+			"SeIncreaseWorkingSetPrivilege",
+			"lpacInstrumentation",
+			"registryRead",
+		}),
 		usingEnv([]string{
+			"LOCALAPPDATA", // needed for app containers
 			mediaTypeEnvVar,
 			payloadPineEnvVar,
 			logLevelEnvVar,

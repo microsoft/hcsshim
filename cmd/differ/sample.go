@@ -4,8 +4,9 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"os"
 
-	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/urfave/cli/v2"
@@ -20,14 +21,23 @@ var testCommand = &cli.Command{
 }
 
 func test(c *cli.Context) error {
-	log.G(c.Context).Debug("testing re-exec")
-
-	token := windows.GetCurrentProcessToken()
-	if err := winio.EnableProcessPrivileges(privs); err != nil {
-		return fmt.Errorf("enable process privileges: %w", err)
+	log.G(c.Context).Warning("testing re-exec")
+	f, err := os.Open(filename)
+	if err == nil {
+		if b, err := io.ReadAll(f); err == nil {
+			fmt.Println("\nFile:\n" + string(b))
+		}
+		f.Close()
+	} else {
+		fmt.Printf("open error %v\n", err)
 	}
 
-	fmt.Println("Is Elevated?", winapi.IsElevated())
+	token := windows.GetCurrentProcessToken()
+	// if err := winio.EnableProcessPrivileges(privs); err != nil {
+	// 	return fmt.Errorf("enable process privileges: %w", err)
+	// }
+
+	fmt.Println("\nIs Elevated?", winapi.IsElevated())
 
 	fmt.Println("\nPrivileges:")
 	pv, err := winapi.GetTokenPrivileges(token)
@@ -47,9 +57,19 @@ func test(c *cli.Context) error {
 		fmt.Printf("%-32s %-48s [%d]\n", n+":", d, o.Attributes)
 	}
 
-	fmt.Println("\nSIDs:")
-	gs, ss, err := winapi.DeriveCapabilitySIDsFromName("lpacCom")
-	fmt.Printf("%v\n%v\n%v", gs, ss, err)
+	fmt.Println("\nEnvironment:")
+	for _, e := range os.Environ() {
+		fmt.Println(e)
+		// vs := strings.Split(e, "=")
+		// fmt.Printf("%q,\n", vs[0])
+	}
+
+	// fmt.Println("\nSIDs:")
+
+	// cap := winapi.SeChangeNotifyPrivilege // "lpacCom"
+	// gs, ss, err := winapi.DeriveCapabilitySIDsFromName(cap)
+	// fmt.Println(cap)
+	// fmt.Printf("%v\n%v\n%v", gs, ss, err)
 
 	log.G(c.Context).Info("successfully re-exec'ed")
 

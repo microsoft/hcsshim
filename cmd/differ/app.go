@@ -30,6 +30,8 @@ intercept pipe and pass along command-specific payload to re-exec
 do not allow access to upstream containerd pipe for payload
 */
 
+const appName = "hcsshim-differr"
+
 var appCommands = []*cli.Command{
 	decompressCommand,
 	convertCommand,
@@ -39,7 +41,7 @@ var appCommands = []*cli.Command{
 
 func app() *cli.App {
 	app := &cli.App{
-		Name:           "hcsshim-differ",
+		Name:           appName,
 		Usage:          "Containerd stream processors for applying for Windows container (WCOW and LCOW) diffs and layers",
 		Commands:       appCommands,
 		ExitErrHandler: errHandler,
@@ -59,6 +61,7 @@ func beforeApp(c *cli.Context) (err error) {
 	if err := setupLogging(); err != nil {
 		return fmt.Errorf("logging setup: %w", err)
 	}
+	log.G(c.Context).Info("set up logging")
 	return nil
 }
 
@@ -79,23 +82,15 @@ func errHandler(c *cli.Context, err error) {
 	cli.HandleExitCoder(err)
 }
 
+// TODO: make this a BeforeFunc and change ctx.Command.Action for the non-re-exec part
+
 // actionReExecWrapper returns a cli.ActionFunc that first checks if the re-exec flag
 // is set, and if not, re-execs the command, with the flag set, and a stripped
-// set of permissions. If r != nil, it will be run after creating the cmd to re-exec
+// set of permissions.
 func actionReExecWrapper(f cli.ActionFunc, opts ...reExecOpt) cli.ActionFunc {
-	conf := reExecConfig{}
-	var confErr error // cant return an error here, so punt error checking till action
 	opts = append(defaultReExecOpts(), opts...)
-	for _, o := range opts {
-		if confErr := o(&conf); confErr != nil {
-			break
-		}
-	}
-	return func(c *cli.Context) (err error) {
-		if confErr != nil {
-			return fmt.Errorf("could not properly initialize re-exec config: %w", confErr)
-		}
 
+	return func(c *cli.Context) (err error) {
 		if c.Bool(reExecFlagName) {
 			if sc, ok := spanContextFromEnv(); ok {
 				// rather than starting a new span, fake it by adding span and trace ID to all logs
@@ -107,6 +102,13 @@ func actionReExecWrapper(f cli.ActionFunc, opts ...reExecOpt) cli.ActionFunc {
 			return f(c)
 		}
 
+		conf := reExecConfig{}
+		for _, o := range opts {
+			if err := o(&conf); err != nil {
+				return fmt.Errorf("could not properly initialize re-exec config: %w", err)
+			}
+		}
+
 		span := startSpan(c, c.App.Name+"::"+c.Command.FullName())
 		defer span.End()
 		defer func() { oc.SetSpanStatus(span, err) }()
@@ -116,6 +118,7 @@ func actionReExecWrapper(f cli.ActionFunc, opts ...reExecOpt) cli.ActionFunc {
 			return fmt.Errorf("could not create re-exec command: %w", err)
 		}
 		defer cleanup()
+		// go conf.pipes.Copy()
 
 		if err := cmd.Start(); err != nil {
 			return fmt.Errorf("could not start command: %w", err)
