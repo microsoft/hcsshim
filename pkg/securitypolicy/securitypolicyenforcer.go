@@ -6,6 +6,7 @@ package securitypolicy
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,6 +15,7 @@ import (
 	"sync"
 
 	oci "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/sirupsen/logrus"
 
 	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
@@ -29,9 +31,11 @@ type SecurityPolicyEnforcer interface {
 	EnforceWaitMountPointsPolicy(containerID string, spec *oci.Spec) error
 	EnforceMountPolicy(sandboxID, containerID string, spec *oci.Spec) error
 	ExtendDefaultMounts([]oci.Mount) error
+	EnforceLogging() error
 }
 
-func NewSecurityPolicyEnforcer(state SecurityPolicyState, eOpts ...standardEnforcerOpt) (SecurityPolicyEnforcer, error) {
+func NewSecurityPolicyEnforcer(state SecurityPolicyState, eOpts ...StandardEnforcerOpt) (SecurityPolicyEnforcer,
+	error) {
 	if state.SecurityPolicy.AllowAll {
 		return &OpenDoorSecurityPolicyEnforcer{}, nil
 	} else {
@@ -39,6 +43,7 @@ func NewSecurityPolicyEnforcer(state SecurityPolicyState, eOpts ...standardEnfor
 		if err != nil {
 			return nil, err
 		}
+
 		enforcer := NewStandardSecurityPolicyEnforcer(containers, state.EncodedSecurityPolicy.SecurityPolicy)
 		for _, o := range eOpts {
 			if err := o(enforcer); err != nil {
@@ -67,12 +72,12 @@ func newMountConstraint(src, dst string, mType string, mOpts []string) mountInte
 	}
 }
 
-type standardEnforcerOpt func(e *StandardSecurityPolicyEnforcer) error
+type StandardEnforcerOpt func(e *StandardSecurityPolicyEnforcer) error
 
 // WithPrivilegedMounts converts the input mounts to internal mount constraints
 // and extends existing internal mount constraints if the container is allowed
 // to be executed in elevated mode.
-func WithPrivilegedMounts(mounts []oci.Mount) standardEnforcerOpt {
+func WithPrivilegedMounts(mounts []oci.Mount) StandardEnforcerOpt {
 	return func(e *StandardSecurityPolicyEnforcer) error {
 		for _, c := range e.Containers {
 			if c.allowElevated {
@@ -87,6 +92,14 @@ func WithPrivilegedMounts(mounts []oci.Mount) standardEnforcerOpt {
 				}
 			}
 		}
+		return nil
+	}
+}
+
+// WithLoggingEnabled enables logging inside GCS.
+func WithLoggingEnabled() StandardEnforcerOpt {
+	return func(enforcer *StandardSecurityPolicyEnforcer) error {
+		enforcer.LoggingEnabled = true
 		return nil
 	}
 }
@@ -185,7 +198,8 @@ type StandardSecurityPolicyEnforcer struct {
 	DefaultMounts []mountInternal
 	// DefaultEnvs are environment variable constraints for variables added
 	// by CRI and GCS
-	DefaultEnvs []EnvRuleConfig
+	DefaultEnvs    []EnvRuleConfig
+	LoggingEnabled bool
 }
 
 var _ SecurityPolicyEnforcer = (*StandardSecurityPolicyEnforcer)(nil)
@@ -849,6 +863,14 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceWaitMountPointsPolicy(container
 	return hooks.AddOCIHook(spec, hooks.CreateRuntime, hook)
 }
 
+func (pe *StandardSecurityPolicyEnforcer) EnforceLogging() error {
+	if !pe.LoggingEnabled {
+		logrus.Debug("Logging is disabled in the policy")
+		logrus.SetOutput(io.Discard)
+	}
+	return nil
+}
+
 type OpenDoorSecurityPolicyEnforcer struct{}
 
 var _ SecurityPolicyEnforcer = (*OpenDoorSecurityPolicyEnforcer)(nil)
@@ -881,6 +903,10 @@ func (OpenDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
 	return nil
 }
 
+func (OpenDoorSecurityPolicyEnforcer) EnforceLogging() error {
+	return nil
+}
+
 type ClosedDoorSecurityPolicyEnforcer struct{}
 
 var _ SecurityPolicyEnforcer = (*ClosedDoorSecurityPolicyEnforcer)(nil)
@@ -910,5 +936,9 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceMountPolicy(_, _ string, _ *oci.S
 }
 
 func (ClosedDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
+	return nil
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) EnforceLogging() error {
 	return nil
 }

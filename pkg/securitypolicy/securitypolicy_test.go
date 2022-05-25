@@ -111,7 +111,10 @@ func Test_StandardSecurityPolicyEnforcer_From_Security_Policy_Conversion(t *test
 // StandardSecurityPolicyEnforcer
 func Test_StandardSecurityPolicyEnforcer_Devices_Initialization(t *testing.T) {
 	f := func(p *generatedContainers) bool {
-		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		policy, err := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		if err != nil {
+			return false
+		}
 
 		// there should be a device entry for each container
 		if len(p.containers) != len(policy.Devices) {
@@ -138,13 +141,16 @@ func Test_StandardSecurityPolicyEnforcer_Devices_Initialization(t *testing.T) {
 // return an error when there's no matching root hash in the policy
 func Test_EnforceDeviceMountPolicy_No_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
-		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		policy, err := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		if err != nil {
+			return false
+		}
 
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		target := generateMountTarget(r)
 		rootHash := generateInvalidRootHash(r)
 
-		err := policy.EnforceDeviceMountPolicy(target, rootHash)
+		err = policy.EnforceDeviceMountPolicy(target, rootHash)
 
 		// we expect an error, not getting one means something is broken
 		return err != nil
@@ -159,13 +165,16 @@ func Test_EnforceDeviceMountPolicy_No_Matches(t *testing.T) {
 // return an error when there's a matching root hash in the policy
 func Test_EnforceDeviceMountPolicy_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
-		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		policy, err := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		if err != nil {
+			return false
+		}
 
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		target := generateMountTarget(r)
 		rootHash := selectRootHashFromContainers(p, r)
 
-		err := policy.EnforceDeviceMountPolicy(target, rootHash)
+		err = policy.EnforceDeviceMountPolicy(target, rootHash)
 
 		// getting an error means something is broken
 		return err == nil
@@ -178,13 +187,16 @@ func Test_EnforceDeviceMountPolicy_Matches(t *testing.T) {
 
 func Test_EnforceDeviceUmountPolicy_Removes_Device_Entries(t *testing.T) {
 	f := func(p *generatedContainers) bool {
-		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		policy, err := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		if err != nil {
+			return false
+		}
 
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		target := generateMountTarget(r)
 		rootHash := selectRootHashFromContainers(p, r)
 
-		err := policy.EnforceDeviceMountPolicy(target, rootHash)
+		err = policy.EnforceDeviceMountPolicy(target, rootHash)
 		if err != nil {
 			return false
 		}
@@ -300,7 +312,10 @@ func Test_EnforceOverlayMountPolicy_Multiple_Instances_Same_Container(t *testing
 			containers = append(containers, c)
 		}
 
-		sp := NewStandardSecurityPolicyEnforcer(containers, "")
+		sp, err := NewStandardSecurityPolicyEnforcer(containers, "")
+		if err != nil {
+			t.Fatalf("failed to create standard enforcer: %s", err)
+		}
 
 		idsUsed := map[string]bool{}
 		for i := 0; i < len(containers); i++ {
@@ -333,7 +348,10 @@ func Test_EnforceOverlayMountPolicy_Multiple_Instances_Same_Container(t *testing
 // but no more than that one.
 func Test_EnforceOverlayMountPolicy_Overlay_Single_Container_Twice_With_Different_IDs(t *testing.T) {
 	p := generateContainers(testRand, 1)
-	sp := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+	sp, err := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+	if err != nil {
+		t.Fatalf("failed to create standard enforcer: %s", err)
+	}
 
 	var containerIDOne, containerIDTwo string
 
@@ -427,7 +445,10 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 		// add new containers to policy before creating enforcer
 		p.containers = append(p.containers, testContainerOne, testContainerTwo)
 
-		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		policy, err := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		if err != nil {
+			return false
+		}
 
 		testContainerOneID := ""
 		testContainerTwoID := ""
@@ -481,7 +502,7 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 
 		// enforce command policy for containerOne
 		// this will narrow our list of possible ids down
-		err := policy.enforceCommandPolicy(testContainerOneID, testContainerOne.Command)
+		err = policy.enforceCommandPolicy(testContainerOneID, testContainerOne.Command)
 		if err != nil {
 			return false
 		}
@@ -544,7 +565,10 @@ func Test_EnforceEnvironmentVariablePolicy_Re2Match(t *testing.T) {
 	container.EnvRules = append(container.EnvRules, re2MatchRule)
 	p.containers = append(p.containers, container)
 
-	policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+	policy, err := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+	if err != nil {
+		t.Fatalf("failed to create standard enforcer: %s", err)
+	}
 
 	containerID := generateContainerID(testRand)
 
@@ -614,7 +638,10 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 		// add new containers to policy before creating enforcer
 		p.containers = append(p.containers, testContainerOne, testContainerTwo)
 
-		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		policy, err := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		if err != nil {
+			return false
+		}
 
 		testContainerOneID := ""
 		testContainerTwoID := ""
@@ -669,7 +696,7 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 		// enforce command policy for containerOne
 		// this will narrow our list of possible ids down
 		envVars := buildEnvironmentVariablesFromContainerRules(testContainerOne, r)
-		err := policy.enforceEnvironmentVariablePolicy(testContainerOneID, envVars)
+		err = policy.enforceEnvironmentVariablePolicy(testContainerOneID, envVars)
 		if err != nil {
 			return false
 		}
@@ -813,7 +840,10 @@ type testConfig struct {
 }
 
 func setupContainerWithOverlay(gc *generatedContainers, valid bool) (tc *testConfig, err error) {
-	sp := NewStandardSecurityPolicyEnforcer(gc.containers, ignoredEncodedPolicyString)
+	sp, err := NewStandardSecurityPolicyEnforcer(gc.containers, ignoredEncodedPolicyString)
+	if err != nil {
+		return nil, err
+	}
 
 	containerID := generateContainerID(testRand)
 	c := selectContainerFromContainers(gc, testRand)

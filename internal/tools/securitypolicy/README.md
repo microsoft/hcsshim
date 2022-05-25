@@ -17,6 +17,8 @@ be downloaded, turned into an ext4, and finally a dm-verity root hash calculated
 ## Example TOML configuration file
 
 ```toml
+logging = true
+
 [[container]]
 image_name = "rust:1.52.1"
 command = ["rustc", "--help"]
@@ -46,6 +48,7 @@ represented in JSON.
 ```json
 {
   "allow_all": false,
+  "logging": true,
   "containers": {
     "length": 2,
     "elements": {
@@ -116,7 +119,7 @@ represented in JSON.
                 "length": 3,
                 "elements": {
                   "0": "rbind",
-                  "1": "rprivate",
+                  "1": "rshared",
                   "2": "rw"
                 }
               }
@@ -129,13 +132,14 @@ represented in JSON.
                 "length": 3,
                 "elements": {
                   "0": "rbind",
-                  "1": "rprivate",
+                  "1": "rshared",
                   "2": "ro"
                 }
               }
             }
           }
-        }
+        },
+        "allow_elevated": false
       },
       "1": {
         "command": {
@@ -171,7 +175,8 @@ represented in JSON.
         "mounts": {
           "length": 0,
           "elements": {}
-        }
+        },
+        "allow_elevated": false
       }
     }
   }

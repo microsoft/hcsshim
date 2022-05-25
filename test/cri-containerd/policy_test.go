@@ -28,7 +28,7 @@ func securityPolicyFromContainers(containers []securitypolicy.ContainerConfig) (
 	if err != nil {
 		return "", err
 	}
-	p := securitypolicy.NewSecurityPolicy(false, pc)
+	p := securitypolicy.NewSecurityPolicy(false, true, pc)
 	pString, err := p.EncodeToString()
 	if err != nil {
 		return "", err
