@@ -22,9 +22,9 @@ const (
 
 // PolicyConfig contains toml or JSON config for security policy.
 type PolicyConfig struct {
-	AllowAll       bool              `json:"allow_all" toml:"allow_all"`
-	LoggingEnabled bool              `json:"logging" toml:"logging"`
-	Containers     []ContainerConfig `json:"containers" toml:"container"`
+	AllowAll     bool              `json:"allow_all" toml:"allow_all"`
+	AllowLogging bool              `json:"allow_logging" toml:"allow_logging"`
+	Containers   []ContainerConfig `json:"containers" toml:"container"`
 }
 
 // AuthConfig contains toml or JSON config for registry authentication.
@@ -78,8 +78,8 @@ func NewEnvVarRules(envVars []string) []EnvRuleConfig {
 // NewOpenDoorPolicy creates a new SecurityPolicy with AllowAll set to `true`
 func NewOpenDoorPolicy() *SecurityPolicy {
 	return &SecurityPolicy{
-		AllowAll:       true,
-		LoggingEnabled: true,
+		AllowAll:     true,
+		AllowLogging: true,
 	}
 }
 
@@ -152,8 +152,8 @@ type SecurityPolicy struct {
 	// to true, thus making policy enforcement effectively "off" from a logical
 	// standpoint. Policy enforcement isn't actually off as the policy is "allow
 	// everything".
-	AllowAll       bool `json:"allow_all"`
-	LoggingEnabled bool `json:"logging"`
+	AllowAll     bool `json:"allow_all"`
+	AllowLogging bool `json:"allow_logging"`
 	// One or more containers that are allowed to run
 	Containers Containers `json:"containers"`
 }
@@ -241,14 +241,14 @@ func CreateContainerPolicy(
 }
 
 // NewSecurityPolicy creates a new SecurityPolicy from the provided values.
-func NewSecurityPolicy(allowAll bool, logging bool, containers []*Container) *SecurityPolicy {
+func NewSecurityPolicy(allowAll bool, allowLogging bool, containers []*Container) *SecurityPolicy {
 	containersMap := map[string]Container{}
 	for i, c := range containers {
 		containersMap[strconv.Itoa(i)] = *c
 	}
 	return &SecurityPolicy{
-		AllowAll:       allowAll,
-		LoggingEnabled: logging,
+		AllowAll:     allowAll,
+		AllowLogging: allowLogging,
 		Containers: Containers{
 			Elements: containersMap,
 		},

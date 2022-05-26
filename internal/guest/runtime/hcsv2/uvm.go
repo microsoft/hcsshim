@@ -94,10 +94,10 @@ func (h *Host) SetSecurityPolicy(base64Policy string) error {
 	opts := []securitypolicy.StandardEnforcerOpt{
 		securitypolicy.WithPrivilegedMounts(policy.DefaultCRIPrivilegedMounts()),
 	}
-	if securityPolicyState.SecurityPolicy.LoggingEnabled {
-		opts = append(opts, securitypolicy.WithLoggingEnabled())
+	if securityPolicyState.SecurityPolicy.AllowLogging {
+		opts = append(opts, securitypolicy.WithAllowLogging())
 	}
-	p, err := securitypolicy.NewSecurityPolicyEnforcer(*securityPolicyState, opts...)
+	p, err := securitypolicy.CreateSecurityPolicyEnforcer(*securityPolicyState, opts...)
 	if err != nil {
 		return err
 	}
@@ -115,7 +115,7 @@ func (h *Host) SetSecurityPolicy(base64Policy string) error {
 		return err
 	}
 
-	if err := p.EnforceLogging(); err != nil {
+	if err := p.EnforceLoggingPolicy(); err != nil {
 		return err
 	}
 

@@ -31,11 +31,15 @@ type SecurityPolicyEnforcer interface {
 	EnforceWaitMountPointsPolicy(containerID string, spec *oci.Spec) error
 	EnforceMountPolicy(sandboxID, containerID string, spec *oci.Spec) error
 	ExtendDefaultMounts([]oci.Mount) error
-	EnforceLogging() error
+	EnforceLoggingPolicy() error
 }
 
-func NewSecurityPolicyEnforcer(state SecurityPolicyState, eOpts ...StandardEnforcerOpt) (SecurityPolicyEnforcer,
-	error) {
+// CreateSecurityPolicyEnforcer returns an enforcer corresponding to the
+// provided SecurityPolicyState and applies enforcer opts.
+func CreateSecurityPolicyEnforcer(
+	state SecurityPolicyState,
+	eOpts ...StandardEnforcerOpt,
+) (SecurityPolicyEnforcer, error) {
 	if state.SecurityPolicy.AllowAll {
 		return &OpenDoorSecurityPolicyEnforcer{}, nil
 	} else {
@@ -96,10 +100,10 @@ func WithPrivilegedMounts(mounts []oci.Mount) StandardEnforcerOpt {
 	}
 }
 
-// WithLoggingEnabled enables logging inside GCS.
-func WithLoggingEnabled() StandardEnforcerOpt {
+// WithAllowLogging enables logging inside GCS.
+func WithAllowLogging() StandardEnforcerOpt {
 	return func(enforcer *StandardSecurityPolicyEnforcer) error {
-		enforcer.LoggingEnabled = true
+		enforcer.AllowLogging = true
 		return nil
 	}
 }
@@ -198,8 +202,8 @@ type StandardSecurityPolicyEnforcer struct {
 	DefaultMounts []mountInternal
 	// DefaultEnvs are environment variable constraints for variables added
 	// by CRI and GCS
-	DefaultEnvs    []EnvRuleConfig
-	LoggingEnabled bool
+	DefaultEnvs  []EnvRuleConfig
+	AllowLogging bool
 }
 
 var _ SecurityPolicyEnforcer = (*StandardSecurityPolicyEnforcer)(nil)
@@ -863,10 +867,17 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceWaitMountPointsPolicy(container
 	return hooks.AddOCIHook(spec, hooks.CreateRuntime, hook)
 }
 
-func (pe *StandardSecurityPolicyEnforcer) EnforceLogging() error {
-	if !pe.LoggingEnabled {
-		logrus.Debug("Logging is disabled in the policy")
-		logrus.SetOutput(io.Discard)
+func disableLogging() {
+	logrus.Debug("Logging is not allowed by the policy")
+	logrus.SetOutput(io.Discard)
+	logrus.StandardLogger().Hooks = nil
+}
+
+// EnforceLoggingPolicy for StandardSecurityPolicyEnforcer checks whether
+// logging is allowed by the policy and disables it when applicable.
+func (pe *StandardSecurityPolicyEnforcer) EnforceLoggingPolicy() error {
+	if !pe.AllowLogging {
+		disableLogging()
 	}
 	return nil
 }
@@ -903,7 +914,7 @@ func (OpenDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceLogging() error {
+func (OpenDoorSecurityPolicyEnforcer) EnforceLoggingPolicy() error {
 	return nil
 }
 
@@ -939,6 +950,9 @@ func (ClosedDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error
 	return nil
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EnforceLogging() error {
+// EnforceLoggingPolicy for ClosedDoorSecurityPolicyEnforcer always disables
+// logging.
+func (ClosedDoorSecurityPolicyEnforcer) EnforceLoggingPolicy() error {
+	disableLogging()
 	return nil
 }

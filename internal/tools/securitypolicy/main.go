@@ -79,5 +79,5 @@ func createPolicyFromConfig(config *securitypolicy.PolicyConfig) (*securitypolic
 	if err != nil {
 		return nil, err
 	}
-	return securitypolicy.NewSecurityPolicy(false, config.LoggingEnabled, policyContainers), nil
+	return securitypolicy.NewSecurityPolicy(false, config.AllowLogging, policyContainers), nil
 }

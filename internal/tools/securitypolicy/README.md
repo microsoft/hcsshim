@@ -48,7 +48,7 @@ represented in JSON.
 ```json
 {
   "allow_all": false,
-  "logging": true,
+  "allow_logging": true,
   "containers": {
     "length": 2,
     "elements": {

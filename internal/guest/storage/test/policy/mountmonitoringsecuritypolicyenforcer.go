@@ -51,6 +51,6 @@ func (MountMonitoringSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) 
 	return nil
 }
 
-func (MountMonitoringSecurityPolicyEnforcer) EnforceLogging() error {
+func (MountMonitoringSecurityPolicyEnforcer) EnforceLoggingPolicy() error {
 	return nil
 }
