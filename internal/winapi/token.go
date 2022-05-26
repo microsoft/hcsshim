@@ -9,6 +9,52 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// "golang.org/x/sys/windows" does not have the complete list
+// https://docs.microsoft.com/en-us/windows/win32/api/winnt/ne-winnt-token_information_class#constants
+const (
+	TokenUser = iota + 1
+	TokenGroups
+	TokenPrivileges
+	TokenOwner
+	TokenPrimaryGroup
+	TokenDefaultDacl
+	TokenSource
+	TokenType
+	TokenImpersonationLevel
+	TokenStatistics
+	TokenRestrictedSids
+	TokenSessionId
+	TokenGroupsAndPrivileges
+	TokenSessionReference
+	TokenSandBoxInert
+	TokenAuditPolicy
+	TokenOrigin
+	TokenElevationType
+	TokenLinkedToken
+	TokenElevation
+	TokenHasRestrictions
+	TokenAccessInformation
+	TokenVirtualizationAllowed
+	TokenVirtualizationEnabled
+	TokenIntegrityLevel
+	TokenUIAccess
+	TokenMandatoryPolicy
+	TokenLogonSid
+	TokenIsAppContainer
+	TokenCapabilities
+	TokenAppContainerSid
+	TokenAppContainerNumber
+	TokenUserClaimAttributes
+	TokenDeviceClaimAttributes
+	TokenRestrictedUserClaimAttributes
+	TokenRestrictedDeviceClaimAttributes
+	TokenDeviceGroups
+	TokenRestrictedDeviceGroups
+	TokenSecurityAttributes
+	TokenIsRestricted
+	MaxTokenInfoClass // MaxTokenInfoClass should always be the last enum
+)
+
 // for use with CreateRestrictedToken and other token functions
 //nolint:revive,stylecheck
 const (
@@ -32,8 +78,8 @@ const (
 //
 //sys createRestrictedToken(existing windows.Token, flags uint32, disableSidCount uint32, sidsToDisable *windows.SIDAndAttributes, deletePrivilegeCount uint32, privilegesToDelete *windows.LUIDAndAttributes, restrictedSidCount uint32, sidsToRestrict *windows.SIDAndAttributes, newToken *windows.Token) (err error) = advapi32.CreateRestrictedToken
 
-// todo: use unslice in CreateRestrictedToken when switching to go1.18+
-// func unslice[T any](b []T) (p *T, l int) {
+// todo: use unSlice in CreateRestrictedToken when switching to go1.18+
+// func unSlice[T any](b []T) (p *T, l int) {
 // 	l = len(b)
 // 	if l > 0 {
 // 		p = &b[0]
@@ -63,14 +109,20 @@ func CreateRestrictedToken(existing windows.Token, flags uint32, sidsToDisable [
 	return createRestrictedToken(existing, flags, lSIDDis, pSIDDis, lPrivDel, pPrivDel, lSIDRes, pSIDRes, newToken)
 }
 
+// BOOL IsTokenRestricted(
+//   [in] HANDLE TokenHandle
+// );
+//
+//sys IsTokenRestricted(token windows.Token) (b bool) = advapi32.IsTokenRestricted
+
 func GetTokenPrivileges(token windows.Token) (*windows.Tokenprivileges, error) {
 	b, err := retryBuffer(8, func(b *byte, l *uint32) error {
-		return windows.GetTokenInformation(token, windows.TokenPrivileges, b, *l, l)
+		return windows.GetTokenInformation(token, TokenPrivileges, b, *l, l)
 	})
 	if err == nil {
 		return (*windows.Tokenprivileges)(unsafe.Pointer(&b[0])), nil
 	}
-	return nil, fmt.Errorf("could not get token privileges: %w", err)
+	return nil, fmt.Errorf("get token privileges: %w", err)
 }
 
 func GetTokenPrivilegeNames(token windows.Token) []string {

@@ -201,6 +201,7 @@ func (e *Exec) Start() error {
 	siEx.ProcThreadAttributeList = e.attrList.List()
 	siEx.Cb = uint32(unsafe.Sizeof(*siEx))
 	if e.execConfig.token != 0 {
+		fmt.Println("creating with token")
 		err = windows.CreateProcessAsUser(
 			e.execConfig.token,
 			argv0p,

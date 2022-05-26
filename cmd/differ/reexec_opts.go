@@ -14,15 +14,16 @@ type reExecOpt func(*reExecConfig) error
 
 func defaultReExecOpts() []reExecOpt {
 	return []reExecOpt{
-		useLPAC(true),
-		withPrivileges([]string{
-			winapi.SeChangeNotifyPrivilege,
-			"SeIncreaseWorkingSetPrivilege",
+		withCapabilities([]string{
 			"lpacInstrumentation",
 			"registryRead",
 		}),
+		withPrivileges([]string{
+			winapi.SeChangeNotifyPrivilege,
+			"SeIncreaseWorkingSetPrivilege",
+		}),
+		usingEnv(winapi.AppContainerRequiredEnvKeys()),
 		usingEnv([]string{
-			"LOCALAPPDATA", // needed for app containers
 			mediaTypeEnvVar,
 			payloadPineEnvVar,
 			logLevelEnvVar,
@@ -31,18 +32,16 @@ func defaultReExecOpts() []reExecOpt {
 	}
 }
 
-// useLPAC enables or disables usinging Less Privileged App Containers. If false,, a restricted
-// token will be uses instead
-func useLPAC(b bool) reExecOpt {
+func withCapabilities(caps []string) reExecOpt {
 	return func(c *reExecConfig) error {
-		c.lpac = b
+		c.caps = append(c.caps, caps...)
 		return nil
 	}
 }
 
-func withPrivileges(keep []string) reExecOpt {
+func withPrivileges(privs []string) reExecOpt {
 	return func(c *reExecConfig) error {
-		c.privs = append(c.privs, keep...)
+		c.privs = append(c.privs, privs...)
 		return nil
 	}
 }

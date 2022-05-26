@@ -1,21 +1,38 @@
 package winapi
 
+import "golang.org/x/sys/windows"
+
 const PROCESS_ALL_ACCESS uint32 = 2097151
 
 // process attribute values
 // see https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute
 
-//nolint:revive,stylecheck
+// constants for creating process thread attribute keys
+//nolint:revive,stylecheck,deadcode
 const (
-	PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE                   = 0x20016
-	PROC_THREAD_ATTRIBUTE_JOB_LIST                        = 0x2000D
-	PROC_THREAD_ATTRIBUTE_CHILD_PROCESS_POLICY            = 0x0002000E
-	PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES           = 0x00020009
-	PROC_THREAD_ATTRIBUTE_ALL_APPLICATION_PACKAGES_POLICY = 0x0002000F
+	_PROC_THREAD_ATTRIBUTE_NUMBER   = 0x0000FFFF
+	_PROC_THREAD_ATTRIBUTE_THREAD   = 0x00010000 // Attribute may be used with thread creation
+	_PROC_THREAD_ATTRIBUTE_INPUT    = 0x00020000 // Attribute is input only
+	_PROC_THREAD_ATTRIBUTE_ADDITIVE = 0x00040000 // Attribute may be "accumulated," e.g. bitmasks, counters, etc.
 )
 
-//nolint:revive,stylecheck
+// ProcThreadAttributeValue(Number, Thread, Input, Additive) =
+// 	(((Number) & PROC_THREAD_ATTRIBUTE_NUMBER) | \
+// 	 ((Thread != FALSE) ? PROC_THREAD_ATTRIBUTE_THREAD : 0) | \
+// 	 ((Input != FALSE) ? PROC_THREAD_ATTRIBUTE_INPUT : 0) | \
+//	 ((Additive != FALSE) ? PROC_THREAD_ATTRIBUTE_ADDITIVE : 0))
+
+//nolint:revive,stylecheck,deadcode
 const (
+	PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE         = 0x20016
+	PROC_THREAD_ATTRIBUTE_JOB_LIST              = 0x2000D
+	PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES = 0x20009
+)
+
+//nolint:revive,stylecheck,deadcode
+const (
+	PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY = windows.PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY
+
 	PROCESS_CREATION_MITIGATION_POLICY_DEP_ENABLE           = 0x01
 	PROCESS_CREATION_MITIGATION_POLICY_DEP_ATL_THUNK_ENABLE = 0x02
 	PROCESS_CREATION_MITIGATION_POLICY_SEHOP_ENABLE         = 0x04
@@ -55,10 +72,21 @@ const (
 	PROCESS_CREATION_MITIGATION_POLICY_CONTROL_FLOW_GUARD_EXPORT_SUPPRESSION      = 0x00000003 << 40
 )
 
-//nolint:revive,stylecheck
+//nolint:revive,stylecheck,deadcode
 const (
+	PROC_THREAD_ATTRIBUTE_CHILD_PROCESS_POLICY = 0x2000E
+
 	PROCESS_CREATION_CHILD_PROCESS_RESTRICTED = uint32(0x01)
 	PROCESS_CREATION_CHILD_PROCESS_OVERRIDE   = uint32(0x02)
+)
+
+//nolint:revive,stylecheck,deadcode
+const (
+	PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY = (18 & _PROC_THREAD_ATTRIBUTE_NUMBER) | _PROC_THREAD_ATTRIBUTE_INPUT
+
+	PROCESS_CREATION_DESKTOP_APP_BREAKAWAY_ENABLE_PROCESS_TREE  = 0x01
+	PROCESS_CREATION_DESKTOP_APP_BREAKAWAY_DISABLE_PROCESS_TREE = 0x02
+	PROCESS_CREATION_DESKTOP_APP_BREAKAWAY_OVERRIDE             = 0x04
 )
 
 // ProcessVmCounters corresponds to the _VM_COUNTERS_EX and _VM_COUNTERS_EX2 structures.

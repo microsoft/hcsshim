@@ -3,10 +3,38 @@ package security
 import (
 	"fmt"
 
+	"github.com/Microsoft/hcsshim/internal/winapi"
 	"golang.org/x/sys/windows"
 )
 
-func UpdateFileDACL(name string, isDir bool, eas []windows.EXPLICIT_ACCESS) error {
+func GrantSIDFileAccess(name string, sid *windows.SID, access windows.ACCESS_MASK) error {
+	isDir, err := winapi.IsDir(name)
+	if err != nil {
+		return fmt.Errorf("check if %q is directory: %w", name, err)
+	}
+
+	inh := uint32(windows.NO_INHERITANCE)
+	if isDir {
+		inh = windows.SUB_CONTAINERS_AND_OBJECTS_INHERIT
+	}
+	h, err := openFile(name, isDir, true)
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(h) //nolint:errcheck
+
+	eas := []windows.EXPLICIT_ACCESS{
+		AllowAccessForSID(sid, access, inh),
+	}
+	return UpdateHandleDACL(h, eas, windows.SE_FILE_OBJECT)
+}
+
+func UpdateFileDACL(name string, eas []windows.EXPLICIT_ACCESS) error {
+	isDir, err := winapi.IsDir(name)
+	if err != nil {
+		return fmt.Errorf("check if %q is directory: %w", name, err)
+	}
+
 	h, err := openFile(name, isDir, true)
 	if err != nil {
 		return err
@@ -34,8 +62,22 @@ func UpdateHandleDACL(h windows.Handle, eas []windows.EXPLICIT_ACCESS, t windows
 }
 
 // GetFileDACL returns the discretional access control list for the file or directory.
-func GetFileDACL(name string, isDir bool) (*windows.SECURITY_DESCRIPTOR, error) {
-	h, err := openFile(name, isDir, false)
+func GetFileDACL(name string) (*windows.ACL, error) {
+	sd, err := GetFileSD(name)
+	if err != nil {
+		return nil, err
+	}
+	acl, _, err := sd.DACL()
+	return acl, err
+}
+
+func GetFileSD(name string) (*windows.SECURITY_DESCRIPTOR, error) {
+	isDir, err := winapi.IsDir(name)
+	if err != nil {
+		return nil, fmt.Errorf("check if %q is directory: %w", name, err)
+	}
+
+	h, err := openFile(name, false, isDir)
 	if err != nil {
 		return nil, err
 	}
@@ -44,10 +86,6 @@ func GetFileDACL(name string, isDir bool) (*windows.SECURITY_DESCRIPTOR, error) 
 }
 
 func openFile(name string, isDir, write bool) (windows.Handle, error) {
-	namep, err := windows.UTF16FromString(name)
-	if err != nil {
-		return windows.InvalidHandle, fmt.Errorf("UTF16FromString %s: %w", name, err)
-	}
 	da := uint32(windows.READ_CONTROL)
 	if write {
 		da |= windows.WRITE_DAC
@@ -57,9 +95,15 @@ func openFile(name string, isDir, write bool) (windows.Handle, error) {
 		fa |= windows.FILE_FLAG_BACKUP_SEMANTICS
 	}
 
-	h, err := windows.CreateFile(&namep[0], da,
+	h, err := winapi.CreateFile(
+		name,
+		da,
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE,
-		nil, windows.OPEN_EXISTING, fa, 0)
+		nil, // security attributes
+		windows.OPEN_EXISTING,
+		fa,
+		0, //template file
+	)
 	if err != nil {
 		return windows.InvalidHandle, fmt.Errorf("CreateFile %s: %w", name, err)
 	}

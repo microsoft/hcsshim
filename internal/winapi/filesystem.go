@@ -2,8 +2,10 @@
 
 package winapi
 
-// HANDLE CreateFileA(
-//   [in]           LPCSTR                lpFileName,
+import "golang.org/x/sys/windows"
+
+// HANDLE CreateFileW(
+//   [in]           LPCWSTR               lpFileName,
 //   [in]           DWORD                 dwDesiredAccess,
 //   [in]           DWORD                 dwShareMode,
 //   [in, optional] LPSECURITY_ATTRIBUTES lpSecurityAttributes,
@@ -121,4 +123,22 @@ type FileLinkInformation struct {
 type FILE_ID_INFO struct {
 	VolumeSerialNumber uint64
 	FileID             [16]byte
+}
+
+// DWORD GetFileAttributesW(
+//   [in] LPCWSTR lpFileName
+// );
+//
+// this is corner case in mkwinsyscall, where INVALID_FILE_ATTRIBUTES signals both an error and invalid file attributes
+// mkwinsyscall transforms errono==0 to EINVAL
+//
+//sys getFileAttributes(name string) (attr uint32, err error) [failretval==windows.INVALID_FILE_ATTRIBUTES] = GetFileAttributesW
+
+// IsDir checks if the file has the FILE_ATTRIBUTE_DIRECTORY flag set.
+func IsDir(file string) (bool, error) {
+	a, err := getFileAttributes(file)
+	if err != nil {
+		return false, err
+	}
+	return (a & windows.FILE_ATTRIBUTE_DIRECTORY) != 0, nil
 }

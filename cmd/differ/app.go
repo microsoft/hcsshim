@@ -22,15 +22,20 @@ run on not default-desktop
  https://docs.microsoft.com/en-us/windows/win32/secauthz/restricted-tokens
 
 todo:
-do not inherit handles, only open new handles for stdin/out/err, and files/directories needed
-
-todo:
 before re-exec would need runtime parameters from payload (ie, tracing, files to allow access to)
 intercept pipe and pass along command-specific payload to re-exec
 do not allow access to upstream containerd pipe for payload
 */
 
-const appName = "hcsshim-differr"
+const (
+	appName           = "hcsshim-differr"
+	appCapabilityName = appName + "-capability"
+)
+
+var (
+	_useAppContainer bool
+	_useLPAC         bool
+)
 
 var appCommands = []*cli.Command{
 	decompressCommand,
@@ -47,6 +52,19 @@ func app() *cli.App {
 		ExitErrHandler: errHandler,
 		Before:         beforeApp,
 		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:        "app-container",
+				Aliases:     []string{"ac"},
+				Usage:       "isolate using app containers; will use a restricted token if false",
+				Destination: &_useAppContainer,
+				Value:       true,
+			},
+			&cli.BoolFlag{
+				Name:        "lpac",
+				Aliases:     []string{"l"},
+				Usage:       "isolate using less privileged app containers (LPAC); only valid with 'app-container' flag",
+				Destination: &_useLPAC,
+			},
 			&cli.BoolFlag{
 				Name:   reExecFlagName,
 				Usage:  "set after re-execing into this command with proper permissions and environment variables",
@@ -90,35 +108,38 @@ func errHandler(c *cli.Context, err error) {
 func actionReExecWrapper(f cli.ActionFunc, opts ...reExecOpt) cli.ActionFunc {
 	opts = append(defaultReExecOpts(), opts...)
 
-	return func(c *cli.Context) (err error) {
-		if c.Bool(reExecFlagName) {
+	return func(ctx *cli.Context) (err error) {
+		if ctx.Bool(reExecFlagName) {
 			if sc, ok := spanContextFromEnv(); ok {
 				// rather than starting a new span, fake it by adding span and trace ID to all logs
-				c.Context, _ = log.S(c.Context, logrus.Fields{
+				ctx.Context, _ = log.S(ctx.Context, logrus.Fields{
 					logfields.TraceID: sc.TraceID.String(),
 					logfields.SpanID:  sc.SpanID.String(),
 				})
 			}
-			return f(c)
+			return f(ctx)
 		}
 
-		conf := reExecConfig{}
+		conf := reExecConfig{
+			ac:   _useAppContainer,
+			lpac: _useLPAC,
+		}
 		for _, o := range opts {
 			if err := o(&conf); err != nil {
 				return fmt.Errorf("could not properly initialize re-exec config: %w", err)
 			}
 		}
 
-		span := startSpan(c, c.App.Name+"::"+c.Command.FullName())
+		span := startSpan(ctx, ctx.App.Name+"::"+ctx.Command.FullName())
 		defer span.End()
 		defer func() { oc.SetSpanStatus(span, err) }()
+		conf.updateEnvWithTracing(ctx.Context)
 
-		cmd, cleanup, err := conf.cmd(c)
+		cmd, cleanup, err := conf.cmd(ctx)
 		if err != nil {
 			return fmt.Errorf("could not create re-exec command: %w", err)
 		}
 		defer cleanup()
-		// go conf.pipes.Copy()
 
 		if err := cmd.Start(); err != nil {
 			return fmt.Errorf("could not start command: %w", err)

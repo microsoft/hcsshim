@@ -5,22 +5,25 @@ package winapi
 import (
 	"errors"
 	"fmt"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
-//nolint:revive,stylecheck
+//nolint:revive,stylecheck,deadcode
 const (
+	PROC_THREAD_ATTRIBUTE_ALL_APPLICATION_PACKAGES_POLICY = (15 & _PROC_THREAD_ATTRIBUTE_NUMBER) | _PROC_THREAD_ATTRIBUTE_INPUT
+
 	PROCESS_CREATION_ALL_APPLICATION_PACKAGES_OPT_OUT = uint32(0x01)
-	SECURITY_CAPABILITY_BASE_RID                      = 0x3
 )
 
-//nolint:revive,stylecheck
-var (
-	SECURITY_APP_PACKAGE_AUTHORITY = windows.SidIdentifierAuthority{
-		Value: [6]byte{0, 0, 0, 0, 0, 15},
+// RequiredAppContainerEnvKeys are the needed environment variable keys for an app container.
+// The value can be populated from the current environment.
+func AppContainerRequiredEnvKeys() []string {
+	return []string{
+		"LOCALAPPDATA",
 	}
-)
+}
 
 // typedef struct _SECURITY_CAPABILITIES {
 //     PSID AppContainerSid;
@@ -104,4 +107,16 @@ func DeriveAppContainerSidFromAppContainerName(name string) (*windows.SID, error
 		_ = FreeSID(sid)
 	}()
 	return sid, nil
+}
+
+func IsAppContainerToken(token windows.Token) (bool, error) {
+	// todo:  If the current token is not an app container but is an identity level token, you should return AccessDenied.
+	// (from https://docs.microsoft.com/en-us/windows/win32/api/winnt/ne-winnt-token_information_class#constants)
+	var r uint64
+	b := (*byte)(unsafe.Pointer(&r))
+	l := uint32(unsafe.Sizeof(r))
+	if err := windows.GetTokenInformation(token, TokenIsAppContainer, b, l, &l); err != nil {
+		return false, fmt.Errorf("get token information: %w", err)
+	}
+	return r != 0, nil
 }

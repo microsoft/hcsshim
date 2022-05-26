@@ -7,10 +7,12 @@ import (
 	"io"
 	"os"
 
-	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/sys/windows"
+
+	"github.com/Microsoft/go-winio"
+	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/winapi"
 )
 
 var testCommand = &cli.Command{
@@ -22,8 +24,11 @@ var testCommand = &cli.Command{
 
 func test(c *cli.Context) error {
 	log.G(c.Context).Warning("testing re-exec")
-	f, err := os.Open(filename)
+	f, err := os.Create(filename)
 	if err == nil {
+		f.Write([]byte("howdy yall"))
+		f.Seek(0, 0)
+
 		if b, err := io.ReadAll(f); err == nil {
 			fmt.Println("\nFile:\n" + string(b))
 		}
@@ -33,11 +38,17 @@ func test(c *cli.Context) error {
 	}
 
 	token := windows.GetCurrentProcessToken()
-	// if err := winio.EnableProcessPrivileges(privs); err != nil {
-	// 	return fmt.Errorf("enable process privileges: %w", err)
-	// }
+	for i := range privs {
+		p := privs[i : i+1]
+		if err := winio.EnableProcessPrivileges(p); err != nil {
+			fmt.Printf("count not enable enable process privileges %q: %v\n", privs[i], err)
+		}
+	}
 
 	fmt.Println("\nIs Elevated?", winapi.IsElevated())
+	b, err := winapi.IsAppContainerToken(token)
+	fmt.Println("\nIs AC?", b, err)
+	fmt.Println("\nIs Restricted?", winapi.IsTokenRestricted(token))
 
 	fmt.Println("\nPrivileges:")
 	pv, err := winapi.GetTokenPrivileges(token)
@@ -48,10 +59,12 @@ func test(c *cli.Context) error {
 	for _, o := range pv.AllPrivileges() {
 		n, err := winapi.LookupPrivilegeName(o.Luid)
 		if err != nil {
+			fmt.Printf("failed to lookup %v\n", o.Luid)
 			continue
 		}
 		d, err := winapi.LookupPrivilegeDisplayName(n)
 		if err != nil {
+			fmt.Printf("failed to lookup name %q\n", n)
 			continue
 		}
 		fmt.Printf("%-32s %-48s [%d]\n", n+":", d, o.Attributes)

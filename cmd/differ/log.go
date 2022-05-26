@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 //
@@ -23,6 +25,7 @@ import (
 
 func setupLogging() error {
 	logrus.SetOutput(ioutil.Discard)
+	logrus.Info()
 	logrus.AddHook(log.NewHook())
 	if lvl, err := logrus.ParseLevel(os.Getenv(logLevelEnvVar)); err == nil {
 		logrus.SetLevel(lvl)
@@ -39,10 +42,12 @@ func setupLogging() error {
 	}
 
 	hook, err := etwlogrus.NewHookFromProvider(provider)
+
 	if err != nil {
 		return err
 	}
 	logrus.AddHook(hook)
+	logrus.StandardLogger().Hooks = nil
 
 	trace.ApplyConfig(trace.Config{DefaultSampler: oc.DefaultSampler})
 	trace.RegisterExporter(&oc.LogrusExporter{})

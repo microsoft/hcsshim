@@ -15,12 +15,13 @@ import (
 	"golang.org/x/sys/execabs"
 	"golang.org/x/sys/windows"
 
-	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/exec"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/security"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 )
+
+// add privliges via restricted token?
 
 type reExec interface {
 	Start() error
@@ -30,68 +31,63 @@ type reExec interface {
 
 // reExecOpts are options to change how a subcommand is re-exec'ed
 type reExecConfig struct {
+	ac    bool
 	lpac  bool
+	caps  []string
 	privs []string
 	env   []string
-	pipes *ioPipes
 }
 
 func (c *reExecConfig) cmd(ctx *cli.Context) (reExec, func(), error) {
-	if c.lpac {
-		return c.cmdLPAC(ctx)
+	h, err := createTemp()
+	if err != nil {
+		fmt.Println("could not create temp", err)
+	}
+	defer windows.Close(h)
+
+	if c.ac {
+		return c.cmdAppContainer(ctx)
 	}
 	return c.cmdToken(ctx)
 }
 
-func (c *reExecConfig) cmdLPAC(ctx *cli.Context) (reExec, func(), error) {
-	c.updateEnvWithTracing(ctx.Context)
+func (c *reExecConfig) cmdAppContainer(ctx *cli.Context) (reExec, func(), error) {
+	log.G(ctx.Context).WithField("LPAC", c.lpac).Info("using app containers")
 
-	g, err := guid.NewV5(guid.FromArray([16]byte{}), []byte(appName))
-	ba := g.ToArray()
-	b := unsafe.Slice((*uint32)(unsafe.Pointer(&ba[0])), 4)
+	caps := make([]windows.SIDAndAttributes, 1, len(c.caps)+1)
+	capAttribs := winapi.SE_GROUP_ENABLED_BY_DEFAULT | winapi.SE_GROUP_ENABLED
+
+	appCapSID, err := winapi.GetAppAuthoritySIDFromName(appCapabilityName)
 	if err != nil {
-		return nil, nil, fmt.Errorf("creat capability guid: %w", err)
+		return nil, nil, err
 	}
-	fmt.Println("guid:", g)
-	appCapSID := &windows.SID{}
-	if err := windows.AllocateAndInitializeSid(
-		&winapi.SECURITY_APP_PACKAGE_AUTHORITY,
-		5,
-		winapi.SECURITY_CAPABILITY_BASE_RID,
-		b[0],
-		b[1],
-		b[2],
-		b[3],
-		0, 0, 0,
-		&appCapSID,
-	); err != nil {
-		return nil, nil, fmt.Errorf("allocate capability SID: %w", err)
-	}
-	fmt.Println("cap sid is:", appCapSID.String())
+	log.G(ctx.Context).WithField("sid", appCapSID.String()).Debug("created app container capability SID")
+	// appCapNTSID, err := winapi.GetGroupSIDFromName(appCapabilityName)
+	// if err != nil {
+	// 	return nil, nil, err
+	// }
 
-	caps := make([]windows.SIDAndAttributes, 0, len(c.privs)+1)
-	for _, p := range c.privs {
-		_, ss, err := winapi.DeriveCapabilitySIDsFromName(p)
-		// l, err := winapi.LookupPrivilegeValue(p)
-		if err != nil {
-			log.G(ctx.Context).WithError(err).Warningf("could not lookup privilege %q", p)
-			continue
-		}
-		if len(ss) == 0 {
-			log.G(ctx.Context).Warningf("did not receive a SID for privilege %q", p)
-			continue
-		}
-
-		s := windows.SIDAndAttributes{
-			Sid:        ss[0],
-			Attributes: winapi.SE_GROUP_ENABLED_BY_DEFAULT | winapi.SE_GROUP_ENABLED,
-		}
-		caps = append(caps, s)
-	}
-	caps = append(caps, windows.SIDAndAttributes{
+	caps[0] = windows.SIDAndAttributes{
 		Sid:        appCapSID,
-		Attributes: winapi.SE_GROUP_ENABLED_BY_DEFAULT | winapi.SE_GROUP_ENABLED,
-	})
+		Attributes: capAttribs,
+	}
+	log.G(ctx.Context).WithField("capabilities", c.caps).Debug("adding other app container capabilities")
+	for _, c := range c.caps {
+		ss, err := winapi.GetAppAuthoritySIDFromName(c)
+		if err != nil {
+			log.G(ctx.Context).WithFields(logrus.Fields{
+				logrus.ErrorKey: err,
+				"capability":    c,
+			}).Warning("could not get capability SID")
+			continue
+		}
+
+		sa := windows.SIDAndAttributes{
+			Sid:        ss,
+			Attributes: capAttribs,
+		}
+		caps = append(caps, sa)
+	}
 
 	if err := winapi.DeleteAppContainerProfile(ctx.App.Name); err != nil {
 		return nil, nil, fmt.Errorf("delete prior app container profile: %w", err)
@@ -102,31 +98,28 @@ func (c *reExecConfig) cmdLPAC(ctx *cli.Context) (reExec, func(), error) {
 	}
 	fmt.Println("sid is:", sid.String())
 
-	// sidc, err := windows.CreateWellKnownSid(windows.WinWorldSid)
-	// sidc, err := windows.CreateWellKnownSid(windows.WinCreatorOwnerRightsSid)
+	// lsaH, err := winapi.LSAOpenPolicy(winapi.LSA_POLICY_READ | winapi.LSA_POLICY_WRITE)
 	// if err != nil {
-	// 	return nil, nil, fmt.Errorf("create well know SID for creator group: %w", err)
+	// 	fmt.Println("could not open lsa h", err)
 	// }
+	// defer winapi.LSAClose(lsaH)
 
-	h, err := createTemp()
-	if err != nil {
-		fmt.Println("could not create temp", err)
-	}
-	err = security.UpdateHandleDACL(h,
-		[]windows.EXPLICIT_ACCESS{
-			security.AllowAccessForSID(sid, windows.GENERIC_ALL, windows.NO_INHERITANCE),
-			// security.AllowAccessForSID(appCapSID, windows.GENERIC_ALL, windows.NO_INHERITANCE),
-		},
-		windows.SE_FILE_OBJECT)
+	// fmt.Println("")
+	// for _, p := range c.privs {
+	// 	ps := []string{p}
+	// 	if err = winapi.LSAAddAccountRightsString(lsaH, sid, ps); err != nil {
+	// 		fmt.Printf("could not add privileges %q: %v\n", p, err)
+	// 	} else {
+	// 		fmt.Println("added priv", p)
+	// 	}
+	// }
+	// fmt.Println("")
+
+	err = security.GrantSIDFileAccess(filename, appCapSID, windows.GENERIC_ALL)
 	fmt.Println("update acls", err)
-	readSD(h)
-	windows.Close(h)
-	// c.pipes, err = newIOPipes(sd)
-	// if err != nil {
-	// 	return nil, nil, fmt.Errorf("could not create io pipes: %w", err)
-	// }
+	readSD(filename)
 
-	attrs, err := windows.NewProcThreadAttributeList(7)
+	attrs, err := windows.NewProcThreadAttributeList(10)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create process attribute list: %w", err)
 	}
@@ -138,7 +131,11 @@ func (c *reExecConfig) cmdLPAC(ctx *cli.Context) (reExec, func(), error) {
 	if len(caps) > 0 {
 		sc.Capabilities = &caps[0]
 	}
-	if err := attrs.Update(winapi.PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES, unsafe.Pointer(&sc), unsafe.Sizeof(sc)); err != nil {
+	if err := attrs.Update(
+		winapi.PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
+		unsafe.Pointer(&sc),
+		unsafe.Sizeof(sc),
+	); err != nil {
 		return nil, nil, fmt.Errorf("updating process attributes with security capabilities: %w", err)
 	}
 
@@ -149,40 +146,80 @@ func (c *reExecConfig) cmdLPAC(ctx *cli.Context) (reExec, func(), error) {
 		winapi.PROCESS_CREATION_MITIGATION_POLICY_BOTTOM_UP_ASLR_ALWAYS_ON | // bottom-up randomization policy
 		winapi.PROCESS_CREATION_MITIGATION_POLICY_HIGH_ENTROPY_ASLR_ALWAYS_ON | // up to 1TB of bottom-up variance to be used
 		winapi.PROCESS_CREATION_MITIGATION_POLICY_STRICT_HANDLE_CHECKS_ALWAYS_ON //  exception raised immediately on a bad handle reference
-	if err := attrs.Update(windows.PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY, unsafe.Pointer(&mitigation), unsafe.Sizeof(mitigation)); err != nil {
+	if err := attrs.Update(
+		windows.PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY,
+		unsafe.Pointer(&mitigation),
+		unsafe.Sizeof(mitigation),
+	); err != nil {
 		return nil, nil, fmt.Errorf("updating process attributes with mitigation policy: %w", err)
 	}
 
 	// prevent from creating child processes
 	child := winapi.PROCESS_CREATION_CHILD_PROCESS_RESTRICTED
-	if err := attrs.Update(winapi.PROC_THREAD_ATTRIBUTE_CHILD_PROCESS_POLICY, unsafe.Pointer(&child), unsafe.Sizeof(child)); err != nil {
+	if err := attrs.Update(
+		winapi.PROC_THREAD_ATTRIBUTE_CHILD_PROCESS_POLICY,
+		unsafe.Pointer(&child),
+		unsafe.Sizeof(child),
+	); err != nil {
 		return nil, nil, fmt.Errorf("updating process attributes with child process policy: %w", err)
 	}
 
-	// enable less privileged app container
-	lpac := winapi.PROCESS_CREATION_ALL_APPLICATION_PACKAGES_OPT_OUT
-	if err := attrs.Update(winapi.PROC_THREAD_ATTRIBUTE_ALL_APPLICATION_PACKAGES_POLICY, unsafe.Pointer(&lpac), unsafe.Sizeof(lpac)); err != nil {
-		return nil, nil, fmt.Errorf("updating process attributes with mitigation policy: %w", err)
+	// create process outside desktop environment
+	desktop := uint32(winapi.PROCESS_CREATION_DESKTOP_APP_BREAKAWAY_ENABLE_PROCESS_TREE)
+	if err := attrs.Update(
+		winapi.PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY,
+		unsafe.Pointer(&desktop),
+		unsafe.Sizeof(desktop),
+	); err != nil {
+		return nil, nil, fmt.Errorf("updating process attributes with desktop policy: %w", err)
 	}
 
-	// sd, err := windows.GetNamedSecurityInfo("stdout", windows.SE_OBJECT_TYPE(windows.SE_FILE_OBJECT), windows.SECURITY_INFORMATION(windows.DACL_SECURITY_INFORMATION))
-	// sd, err := windows.GetSecurityInfo(windows.Handle(c.pipes.proc[1].Fd()), windows.SE_OBJECT_TYPE(windows.SE_FILE_OBJECT), windows.SECURITY_INFORMATION(windows.DACL_SECURITY_INFORMATION))
+	// enable less privileged app container
+	if c.lpac {
+		lpac := winapi.PROCESS_CREATION_ALL_APPLICATION_PACKAGES_OPT_OUT
+		if err := attrs.Update(
+			winapi.PROC_THREAD_ATTRIBUTE_ALL_APPLICATION_PACKAGES_POLICY,
+			unsafe.Pointer(&lpac),
+			unsafe.Sizeof(lpac),
+		); err != nil {
+			return nil, nil, fmt.Errorf("updating process attributes with mitigation policy: %w", err)
+		}
+	}
+
+	token := windows.GetCurrentProcessToken()
+
+	// token, err := restrictedToken(c.privs)
 	// if err != nil {
-	// 	fmt.Printf("could not get security description: %v\n", err)
-	// } else {
-	// 	fmt.Printf("%v", sd)
+	// 	return nil, nil, err
 	// }
+	pv, err := winapi.GetTokenPrivileges(token)
+	if err != nil {
+		return nil, nil, fmt.Errorf("get token privileges: %w", err)
+	}
+
+	for _, o := range pv.AllPrivileges() {
+		n, err := winapi.LookupPrivilegeName(o.Luid)
+		if err != nil {
+			fmt.Printf("failed to lookup %v\n", o.Luid)
+			continue
+		}
+		d, err := winapi.LookupPrivilegeDisplayName(n)
+		if err != nil {
+			fmt.Printf("failed to lookup name %q\n", n)
+			continue
+		}
+		fmt.Printf("rt -> %-32s %-48s [%d]\n", n+":", d, o.Attributes)
+	}
 
 	path, args := c.cmdLine()
 	// the command line is passed directly to create process, so (unlike "os/exec"), the path
 	// is not automatically appended as the first argument
 	args = append([]string{path}, args...)
 	opts := []exec.ExecOpts{
-		// exec.UsingStdio(c.pipes.proc[0], c.pipes.proc[1], c.pipes.proc[2]),
 		exec.UsingStdio(os.Stdin, os.Stdout, os.Stderr),
-		// exec.WithStdio(true, true, true),
 		exec.WithEnv(c.env),
 		exec.WithProcessAttributes(attrs),
+		exec.WithToken(token),
 	}
 
 	cmd, err := exec.New(path, strings.Join(args, " "), opts...)
@@ -195,16 +232,14 @@ func (c *reExecConfig) cmdLPAC(ctx *cli.Context) (reExec, func(), error) {
 		"args": args,
 		"env":  c.env,
 	}).Debug("re-execing command")
-	cleanup := func() {
-		// c.pipes.Close()
-		// close stdin to stop IO pipe copy from Stdin (which may be blocked on read)
-		// os.Stdin.Close()
-	}
+	cleanup := func() {}
 
 	return cmd, cleanup, nil
 }
 
 const filename = `C:\Users\hamzaelsaawy\Downloads\temp.txt`
+const filename2 = `C:\Users\hamzaelsaawy\Downloads\t\temp.txt`
+const dirname = `C:\Users\hamzaelsaawy\Downloads\t`
 
 func createTemp() (windows.Handle, error) {
 	if err := os.Remove(filename); err != nil {
@@ -233,7 +268,7 @@ func createTemp() (windows.Handle, error) {
 	}
 	f := os.NewFile(uintptr(h), "t")
 	fmt.Fprintf(f, "test test ?")
-	readSD(h)
+	readSD(filename)
 	return h, nil
 }
 
@@ -256,25 +291,17 @@ func openTemph() (windows.Handle, error) {
 	}
 	return h, nil
 }
-func openTemp() (*os.File, error) {
-	h, err := openTemph()
-	return os.NewFile(uintptr(h), filename), err
-}
 
-func readSD(h windows.Handle) {
-	sd, err := windows.GetSecurityInfo(h,
-		windows.SE_OBJECT_TYPE(windows.SE_FILE_OBJECT),
-		windows.SECURITY_INFORMATION(windows.DACL_SECURITY_INFORMATION))
+func readSD(s string) {
+	sd, err := security.GetFileSD(s)
 	if err != nil {
-		fmt.Printf("could not get security description: %v\n", err)
+		fmt.Printf("could not get %q security description: %v\n", s, err)
 	} else {
 		fmt.Printf("security descriptor: %v\n", sd)
 	}
 }
 
 func (c *reExecConfig) cmdToken(ctx *cli.Context) (reExec, func(), error) {
-	c.updateEnvWithTracing(ctx.Context)
-	createTemp()
 	path, args := c.cmdLine()
 
 	log.G(ctx.Context).WithFields(logrus.Fields{
