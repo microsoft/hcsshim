@@ -64,6 +64,12 @@ const (
 	TOKEN_WRITE_RESTRICTED      = 0x8
 )
 
+func OpenProcessToken(process windows.Handle, access uint32) (windows.Token, error) {
+	var token windows.Token
+	err := windows.OpenProcessToken(process, access, &token)
+	return token, err
+}
+
 // BOOL CreateRestrictedToken(
 //   [in]           HANDLE               ExistingTokenHandle,
 //   [in]           DWORD                Flags,
@@ -87,8 +93,10 @@ const (
 // 	return p, l
 // }
 
-func CreateRestrictedToken(existing windows.Token, flags uint32, sidsToDisable []windows.SIDAndAttributes, privilegesToDelete []windows.LUIDAndAttributes, sidsToRestrict []windows.SIDAndAttributes, newToken *windows.Token) (err error) {
+func CreateRestrictedToken(existing windows.Token, flags uint32, sidsToDisable []windows.SIDAndAttributes, privilegesToDelete []windows.LUIDAndAttributes, sidsToRestrict []windows.SIDAndAttributes) (windows.Token, error) {
 	var (
+		token windows.Token
+
 		lSIDDis  = uint32(len(sidsToDisable))
 		lPrivDel = uint32(len(privilegesToDelete))
 		lSIDRes  = uint32(len(sidsToRestrict))
@@ -106,7 +114,8 @@ func CreateRestrictedToken(existing windows.Token, flags uint32, sidsToDisable [
 		pSIDRes = &sidsToRestrict[0]
 	}
 
-	return createRestrictedToken(existing, flags, lSIDDis, pSIDDis, lPrivDel, pPrivDel, lSIDRes, pSIDRes, newToken)
+	err := createRestrictedToken(existing, flags, lSIDDis, pSIDDis, lPrivDel, pPrivDel, lSIDRes, pSIDRes, &token)
+	return token, err
 }
 
 // BOOL IsTokenRestricted(
@@ -119,21 +128,50 @@ func GetTokenPrivileges(token windows.Token) (*windows.Tokenprivileges, error) {
 	b, err := retryBuffer(8, func(b *byte, l *uint32) error {
 		return windows.GetTokenInformation(token, TokenPrivileges, b, *l, l)
 	})
-	if err == nil {
-		return (*windows.Tokenprivileges)(unsafe.Pointer(&b[0])), nil
+	if err != nil {
+		return nil, fmt.Errorf("get token information: %w", err)
 	}
-	return nil, fmt.Errorf("get token privileges: %w", err)
+	return (*windows.Tokenprivileges)(unsafe.Pointer(&b[0])), nil
 }
 
-func GetTokenPrivilegeNames(token windows.Token) []string {
-	ps := make([]string, 0)
+func GetTokenPrivilegeNames(token windows.Token) ([]string, error) {
 	pv, err := GetTokenPrivileges(token)
-	if err == nil {
-		for _, o := range pv.AllPrivileges() {
-			if s, err := LookupPrivilegeName(o.Luid); err == nil {
-				ps = append(ps, fmt.Sprintf("%s [%d]", s, o.Attributes))
-			}
-		}
+	if err != nil {
+		return nil, fmt.Errorf("get token information: %w", err)
 	}
-	return ps
+	privs := pv.AllPrivileges()
+	ps := make([]string, 0, len(privs))
+	for _, o := range privs {
+		s, err := LookupPrivilegeName(o.Luid)
+		if err != nil {
+			return nil, fmt.Errorf("lookup privilege %v name: %w", o.Luid, err)
+		}
+		ps = append(ps, s)
+	}
+	return ps, nil
+}
+
+// GetTokenUserSID returns user associated with the access token. There are currently no
+// attributes defined for user SIDs.
+func GetTokenUserSID(token windows.Token) (windows.SIDAndAttributes, error) {
+	tu := &windows.Tokenuser{}
+	b, err := retryBuffer(int(unsafe.Sizeof(*tu)), func(b *byte, l *uint32) error {
+		return windows.GetTokenInformation(token, TokenUser, b, *l, l)
+	})
+	if err == nil {
+		return tu.User, fmt.Errorf("get token information: %w", err)
+	}
+	tu = (*windows.Tokenuser)(unsafe.Pointer(&b[0]))
+	return tu.User, nil
+}
+
+func GetTokenGroupSIDs(token windows.Token) ([]windows.SIDAndAttributes, error) {
+	b, err := retryBuffer(256, func(b *byte, l *uint32) error {
+		return windows.GetTokenInformation(token, TokenGroups, b, *l, l)
+	})
+	if err == nil {
+		return nil, fmt.Errorf("get token information: %w", err)
+	}
+	tg := (*windows.Tokengroups)(unsafe.Pointer(&b[0]))
+	return tg.AllGroups(), nil
 }

@@ -5,11 +5,14 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
+	osExec "os/exec"
 
 	"github.com/sirupsen/logrus"
 	cli "github.com/urfave/cli/v2"
-	exec "golang.org/x/sys/execabs"
+	"golang.org/x/sys/windows"
 
+	"github.com/Microsoft/hcsshim/internal/exec"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oc"
@@ -45,6 +48,11 @@ var appCommands = []*cli.Command{
 }
 
 func app() *cli.App {
+	for _, c := range appCommands {
+		if c.Before == nil {
+			c.Before = createCommandBeforeFunc()
+		}
+	}
 	app := &cli.App{
 		Name:           appName,
 		Usage:          "Containerd stream processors for applying for Windows container (WCOW and LCOW) diffs and layers",
@@ -79,7 +87,6 @@ func beforeApp(c *cli.Context) (err error) {
 	if err := setupLogging(); err != nil {
 		return fmt.Errorf("logging setup: %w", err)
 	}
-	log.G(c.Context).Info("set up logging")
 	return nil
 }
 
@@ -88,7 +95,7 @@ func errHandler(c *cli.Context, err error) {
 		return
 	}
 	// reexec will return an exit code, so check for that edge case and
-	if ee := (&exec.ExitError{}); errors.As(err, &ee) {
+	if ee := (&osExec.ExitError{}); errors.As(err, &ee) {
 		err = cli.Exit("", ee.ExitCode())
 	} else {
 		n := c.App.Name
@@ -100,15 +107,12 @@ func errHandler(c *cli.Context, err error) {
 	cli.HandleExitCoder(err)
 }
 
-// TODO: make this a BeforeFunc and change ctx.Command.Action for the non-re-exec part
-
-// actionReExecWrapper returns a cli.ActionFunc that first checks if the re-exec flag
-// is set, and if not, re-execs the command, with the flag set, and a stripped
-// set of permissions.
-func actionReExecWrapper(f cli.ActionFunc, opts ...reExecOpt) cli.ActionFunc {
+// createCommandBeforeFunc returns a cli.BeforeFunc that first checks if the re-exec flag
+// is set, and if not, creates a re-exec with the flag set, and changes the command's ActionFunc
+// to run and wait for that command to finish.
+func createCommandBeforeFunc(opts ...reExecOpt) cli.BeforeFunc {
 	opts = append(defaultReExecOpts(), opts...)
-
-	return func(ctx *cli.Context) (err error) {
+	return func(ctx *cli.Context) error {
 		if ctx.Bool(reExecFlagName) {
 			if sc, ok := spanContextFromEnv(); ok {
 				// rather than starting a new span, fake it by adding span and trace ID to all logs
@@ -117,7 +121,7 @@ func actionReExecWrapper(f cli.ActionFunc, opts ...reExecOpt) cli.ActionFunc {
 					logfields.SpanID:  sc.SpanID.String(),
 				})
 			}
-			return f(ctx)
+			return nil
 		}
 
 		conf := reExecConfig{
@@ -131,19 +135,58 @@ func actionReExecWrapper(f cli.ActionFunc, opts ...reExecOpt) cli.ActionFunc {
 		}
 
 		span := startSpan(ctx, ctx.App.Name+"::"+ctx.Command.FullName())
-		defer span.End()
-		defer func() { oc.SetSpanStatus(span, err) }()
 		conf.updateEnvWithTracing(ctx.Context)
 
-		cmd, cleanup, err := conf.cmd(ctx)
+		sids, err := conf.capabilitySIDs()
 		if err != nil {
-			return fmt.Errorf("could not create re-exec command: %w", err)
+			return err
 		}
-		defer cleanup()
+		log.G(ctx.Context).WithFields(logrus.Fields{
+			"sids": sids,
+		}).Debug("Created capability SIDs")
 
-		if err := cmd.Start(); err != nil {
-			return fmt.Errorf("could not start command: %w", err)
+		sd, err := conf.pipeSecurityDescriptor(sids, windows.GENERIC_ALL)
+		if err != nil {
+			return fmt.Errorf("create pipe security descriptor: %w", err)
 		}
-		return cmd.Wait()
+		pipes, err := newIOPipes(sd)
+		if err != nil {
+			return fmt.Errorf("create StdIO pipes: %w", err)
+		}
+
+		files := []string{filename, dirname}
+		if err := grantSIDsFileAccess(sids, files, windows.GENERIC_READ|windows.GENERIC_EXECUTE|windows.GENERIC_WRITE); err != nil {
+			return err
+		}
+
+		cmd, cleanup, err := conf.cmd(ctx, sids,
+			exec.UsingStdio(pipes.proc[0], pipes.proc[1], pipes.proc[2]),
+			exec.WithEnv(conf.env))
+		if err != nil {
+			return fmt.Errorf("create re-exec command: %w", err)
+		}
+
+		ctx.Command.Action = func(ctx *cli.Context) (err error) {
+			defer span.End()
+			defer func() { oc.SetSpanStatus(span, err) }()
+			defer revokeSIDsFileAccess(sids, files) //nolint:errcheck
+			defer cleanup()
+
+			ch := make(chan error)
+			go func() {
+				defer close(ch)
+				ch <- pipes.Copy()
+			}()
+			if err := cmd.Start(); err != nil {
+				return fmt.Errorf("could not start command: %w", err)
+			}
+			if err := cmd.Wait(); err != nil {
+				return err
+			}
+			pipes.Close()
+			os.Stdin.Close()
+			return <-ch
+		}
+		return nil
 	}
 }

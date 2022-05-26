@@ -1,14 +1,14 @@
-package security
+package winapi
 
 import (
 	"fmt"
+	"unsafe"
 
-	"github.com/Microsoft/hcsshim/internal/winapi"
 	"golang.org/x/sys/windows"
 )
 
 func GrantSIDFileAccess(name string, sid *windows.SID, access windows.ACCESS_MASK) error {
-	isDir, err := winapi.IsDir(name)
+	isDir, err := IsDir(name)
 	if err != nil {
 		return fmt.Errorf("check if %q is directory: %w", name, err)
 	}
@@ -22,15 +22,54 @@ func GrantSIDFileAccess(name string, sid *windows.SID, access windows.ACCESS_MAS
 		return err
 	}
 	defer windows.CloseHandle(h) //nolint:errcheck
+	return GrantSIDHandleAccess(h, sid, access, inh, windows.SE_FILE_OBJECT)
+}
 
+func GrantSIDHandleAccess(
+	h windows.Handle,
+	sid *windows.SID,
+	access windows.ACCESS_MASK,
+	inheritance uint32,
+	t windows.SE_OBJECT_TYPE,
+) error {
 	eas := []windows.EXPLICIT_ACCESS{
-		AllowAccessForSID(sid, access, inh),
+		AllowAccessForSID(sid, access, inheritance),
 	}
-	return UpdateHandleDACL(h, eas, windows.SE_FILE_OBJECT)
+	return UpdateHandleDACL(h, eas, t)
+}
+
+func RevokeSIDFileAccess(name string, sid *windows.SID) error {
+	isDir, err := IsDir(name)
+	if err != nil {
+		return fmt.Errorf("check if %q is directory: %w", name, err)
+	}
+
+	inh := uint32(windows.NO_INHERITANCE)
+	if isDir {
+		inh = windows.SUB_CONTAINERS_AND_OBJECTS_INHERIT
+	}
+	h, err := openFile(name, isDir, true)
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(h) //nolint:errcheck
+	return RevokeSIDHandleAccess(h, sid, inh, windows.SE_FILE_OBJECT)
+}
+
+func RevokeSIDHandleAccess(
+	h windows.Handle,
+	sid *windows.SID,
+	inheritance uint32,
+	t windows.SE_OBJECT_TYPE,
+) error {
+	eas := []windows.EXPLICIT_ACCESS{
+		RevokeAccessForSID(sid, inheritance),
+	}
+	return UpdateHandleDACL(h, eas, t)
 }
 
 func UpdateFileDACL(name string, eas []windows.EXPLICIT_ACCESS) error {
-	isDir, err := winapi.IsDir(name)
+	isDir, err := IsDir(name)
 	if err != nil {
 		return fmt.Errorf("check if %q is directory: %w", name, err)
 	}
@@ -72,7 +111,7 @@ func GetFileDACL(name string) (*windows.ACL, error) {
 }
 
 func GetFileSD(name string) (*windows.SECURITY_DESCRIPTOR, error) {
-	isDir, err := winapi.IsDir(name)
+	isDir, err := IsDir(name)
 	if err != nil {
 		return nil, fmt.Errorf("check if %q is directory: %w", name, err)
 	}
@@ -95,7 +134,7 @@ func openFile(name string, isDir, write bool) (windows.Handle, error) {
 		fa |= windows.FILE_FLAG_BACKUP_SEMANTICS
 	}
 
-	h, err := winapi.CreateFile(
+	h, err := CreateFile(
 		name,
 		da,
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE,
@@ -127,11 +166,36 @@ func GetHandleSD(h windows.Handle, t windows.SE_OBJECT_TYPE) (*windows.SECURITY_
 	return sd, nil
 }
 
+func NewSecurityAttributes(descriptor *windows.SECURITY_DESCRIPTOR, inherit bool) *windows.SecurityAttributes {
+	i := uint32(0)
+	if inherit {
+		i = 1
+	}
+	sa := &windows.SecurityAttributes{
+		SecurityDescriptor: descriptor,
+		InheritHandle:      i,
+	}
+	sa.Length = uint32(unsafe.Sizeof(sa))
+	return sa
+}
+
 func AllowAccessForSID(sid *windows.SID, access windows.ACCESS_MASK, inheritance uint32) windows.EXPLICIT_ACCESS {
 	return windows.EXPLICIT_ACCESS{
 		AccessPermissions: access,
 		AccessMode:        windows.SET_ACCESS,
 		Inheritance:       inheritance,
+		Trustee: windows.TRUSTEE{
+			TrusteeForm:  windows.TRUSTEE_IS_SID,
+			TrusteeType:  windows.TRUSTEE_IS_UNKNOWN,
+			TrusteeValue: windows.TrusteeValueFromSID(sid),
+		},
+	}
+}
+
+func RevokeAccessForSID(sid *windows.SID, inheritance uint32) windows.EXPLICIT_ACCESS {
+	return windows.EXPLICIT_ACCESS{
+		AccessMode:  windows.REVOKE_ACCESS,
+		Inheritance: inheritance,
 		Trustee: windows.TRUSTEE{
 			TrusteeForm:  windows.TRUSTEE_IS_SID,
 			TrusteeType:  windows.TRUSTEE_IS_UNKNOWN,

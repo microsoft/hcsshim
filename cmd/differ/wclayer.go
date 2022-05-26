@@ -36,7 +36,8 @@ var wclayerCommand = &cli.Command{
 	Aliases: []string{"wc"},
 	Usage: fmt.Sprintf("Convert a %q stream and extract it into a Windows layer, %q",
 		ocispec.MediaTypeImageLayer, mediatype.MediaTypeMicrosoftImageLayerVHD),
-	Action: actionReExecWrapper(importFromTar, withPrivileges(privs)),
+	Before: createCommandBeforeFunc(withPrivileges(privs)),
+	Action: importFromTar,
 }
 
 func importFromTar(c *cli.Context) error {
@@ -44,13 +45,12 @@ func importFromTar(c *cli.Context) error {
 	if err := getPayload(c.Context, opts); err != nil {
 		return fmt.Errorf("parsing payload: %w", err)
 	}
-	log.G(c.Context).WithField("payload", opts).Debug("payload")
+	log.G(c.Context).WithField("payload", opts).Debug("Parsed payload")
 
 	if err := winio.EnableProcessPrivileges(privs); err != nil {
 		return fmt.Errorf("enable process privileges: %w", err)
 	}
 	if _, err := ociwclayer.ImportLayerFromTar(c.Context, os.Stdin, opts.RootPath, opts.Parents); err != nil {
-		log.G(c.Context).WithError(err).Warn("errir")
 		return fmt.Errorf("wclayer import: %w", err)
 	}
 	// discard remaining data

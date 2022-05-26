@@ -47,7 +47,6 @@ func setupLogging() error {
 		return err
 	}
 	logrus.AddHook(hook)
-	logrus.StandardLogger().Hooks = nil
 
 	trace.ApplyConfig(trace.Config{DefaultSampler: oc.DefaultSampler})
 	trace.RegisterExporter(&oc.LogrusExporter{})

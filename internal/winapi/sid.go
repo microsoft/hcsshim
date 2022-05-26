@@ -26,7 +26,7 @@ func GetAppAuthoritySIDFromName(capability string) (*windows.SID, error) {
 		return nil, err
 	}
 	if len(sids) == 0 {
-		return nil, fmt.Errorf("derive capability returned no AppAuthority SIDs: %w", syscall.EINVAL)
+		return nil, fmt.Errorf("derive capability did not return AppAuthority SIDs: %w", syscall.EINVAL)
 	}
 	return sids[0], nil
 }
@@ -38,7 +38,7 @@ func GetGroupSIDFromName(capability string) (*windows.SID, error) {
 		return nil, err
 	}
 	if len(sids) == 0 {
-		return nil, fmt.Errorf("derive capability returned no AppAuthority SIDs: %w", syscall.EINVAL)
+		return nil, fmt.Errorf("derive capability did not return AppAuthority SIDs: %w", syscall.EINVAL)
 	}
 	return sids[0], nil
 }

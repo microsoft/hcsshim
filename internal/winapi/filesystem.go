@@ -2,7 +2,11 @@
 
 package winapi
 
-import "golang.org/x/sys/windows"
+import (
+	"os"
+
+	"golang.org/x/sys/windows"
+)
 
 // HANDLE CreateFileW(
 //   [in]           LPCWSTR               lpFileName,
@@ -125,12 +129,18 @@ type FILE_ID_INFO struct {
 	FileID             [16]byte
 }
 
+// CreatePipe is a more general version of os.Pipe()
+func CreatePipe(sa *windows.SecurityAttributes, size int) (*os.File, *os.File, error) {
+	var r, w windows.Handle
+	if err := windows.CreatePipe(&r, &w, sa, uint32(size)); err != nil {
+		return nil, nil, err
+	}
+	return os.NewFile(uintptr(r), "|0"), os.NewFile(uintptr(w), "|1"), nil
+}
+
 // DWORD GetFileAttributesW(
 //   [in] LPCWSTR lpFileName
 // );
-//
-// this is corner case in mkwinsyscall, where INVALID_FILE_ATTRIBUTES signals both an error and invalid file attributes
-// mkwinsyscall transforms errono==0 to EINVAL
 //
 //sys getFileAttributes(name string) (attr uint32, err error) [failretval==windows.INVALID_FILE_ATTRIBUTES] = GetFileAttributesW
 

@@ -12,8 +12,6 @@ import (
 	"unicode/utf16"
 	"unsafe"
 
-	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
 )
 
@@ -176,11 +174,6 @@ func (e *Exec) Start() error {
 			siEx.StdErr = windows.Handle(e.stdioPipesProcSide[2].Fd())
 		}
 	}
-	log.L.WithFields(logrus.Fields{
-		"in":  siEx.StdInput,
-		"out": siEx.StdOutput,
-		"err": siEx.StdErr,
-	}).Info("created handles")
 
 	if e.job != nil {
 		if err := e.job.UpdateProcThreadAttribute(e.attrList); err != nil {

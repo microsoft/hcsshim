@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"unsafe"
 
 	"github.com/urfave/cli/v2"
 	"golang.org/x/sys/windows"
@@ -19,7 +20,8 @@ var testCommand = &cli.Command{
 	Name:    "test",
 	Aliases: []string{"t"},
 	Usage:   "test command to check re-exec works and privileges are reduced",
-	Action:  actionReExecWrapper(test, withPrivileges(privs)),
+	Before:  createCommandBeforeFunc(withPrivileges(privs)),
+	Action:  test,
 }
 
 func test(c *cli.Context) error {
@@ -48,7 +50,6 @@ func test(c *cli.Context) error {
 	fmt.Println("\nIs Elevated?", winapi.IsElevated())
 	b, err := winapi.IsAppContainerToken(token)
 	fmt.Println("\nIs AC?", b, err)
-	fmt.Println("\nIs Restricted?", winapi.IsTokenRestricted(token))
 
 	fmt.Println("\nPrivileges:")
 	pv, err := winapi.GetTokenPrivileges(token)
@@ -85,6 +86,78 @@ func test(c *cli.Context) error {
 	// fmt.Printf("%v\n%v\n%v", gs, ss, err)
 
 	log.G(c.Context).Info("successfully re-exec'ed")
-
 	return nil
+}
+
+const filename = `C:\Users\hamzaelsaawy\Downloads\t\temp.txt`
+const dirname = `C:\Users\hamzaelsaawy\Downloads\t`
+const filename2 = `C:\Users\hamzaelsaawy\Downloads\temp.txt`
+
+func createTemp() (windows.Handle, error) {
+	if err := os.Remove(filename); err != nil {
+		fmt.Println("could not delete temp file", err)
+	}
+	u16, err := windows.UTF16PtrFromString(filename)
+	if err != nil {
+		return 0, err
+	}
+	sa := &windows.SecurityAttributes{
+		SecurityDescriptor: nil,
+		InheritHandle:      0,
+		Length:             uint32(unsafe.Sizeof(windows.SecurityAttributes{})),
+	}
+	h, err := windows.CreateFile(
+		u16,
+		windows.READ_CONTROL|windows.GENERIC_READ|windows.GENERIC_WRITE|windows.WRITE_DAC,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE,
+		sa,
+		windows.CREATE_ALWAYS,
+		windows.FILE_ATTRIBUTE_NORMAL,
+		0,
+	)
+	if err != nil {
+		return 0, err
+	}
+	f := os.NewFile(uintptr(h), "t")
+	fmt.Fprintf(f, "test test ?")
+	readSD(filename)
+	return h, nil
+}
+
+func openTemph() (windows.Handle, error) {
+	u16, err := windows.UTF16PtrFromString(filename)
+	if err != nil {
+		return 0, err
+	}
+	h, err := windows.CreateFile(
+		u16,
+		windows.GENERIC_READ,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE,
+		nil,
+		windows.OPEN_EXISTING,
+		windows.FILE_ATTRIBUTE_NORMAL,
+		0,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return h, nil
+}
+
+func readHSD(h windows.Handle, t windows.SE_OBJECT_TYPE) {
+	sd, err := winapi.GetHandleSD(h, t)
+	if err != nil {
+		fmt.Printf("could not get security description: %v\n", err)
+	} else {
+		fmt.Printf("security descriptor: %v\n", sd)
+	}
+}
+
+func readSD(s string) {
+	sd, err := winapi.GetFileSD(s)
+	if err != nil {
+		fmt.Printf("could not get %q security description: %v\n", s, err)
+	} else {
+		fmt.Printf("security descriptor: %v\n", sd)
+	}
 }

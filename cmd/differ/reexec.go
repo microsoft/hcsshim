@@ -7,27 +7,18 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"syscall"
 	"unsafe"
 
 	"github.com/sirupsen/logrus"
 	cli "github.com/urfave/cli/v2"
-	"golang.org/x/sys/execabs"
 	"golang.org/x/sys/windows"
 
 	"github.com/Microsoft/hcsshim/internal/exec"
 	"github.com/Microsoft/hcsshim/internal/log"
-	"github.com/Microsoft/hcsshim/internal/security"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 )
 
 // add privliges via restricted token?
-
-type reExec interface {
-	Start() error
-	Wait() error
-	Run() error
-}
 
 // reExecOpts are options to change how a subcommand is re-exec'ed
 type reExecConfig struct {
@@ -38,47 +29,60 @@ type reExecConfig struct {
 	env   []string
 }
 
-func (c *reExecConfig) cmd(ctx *cli.Context) (reExec, func(), error) {
-	h, err := createTemp()
-	if err != nil {
-		fmt.Println("could not create temp", err)
-	}
-	defer windows.Close(h)
-
+func (c *reExecConfig) cmd(ctx *cli.Context, sids []*windows.SID, defaultOpts ...exec.ExecOpts) (cmd *exec.Exec, cleanup func(), err error) {
+	var opts []exec.ExecOpts
 	if c.ac {
-		return c.cmdAppContainer(ctx)
+		opts, cleanup, err = c.cmdAppContainer(ctx, sids)
+	} else {
+		opts, cleanup, err = c.cmdToken(ctx, sids)
 	}
-	return c.cmdToken(ctx)
+	if cleanup == nil {
+		cleanup = func() {}
+	}
+	defer func() {
+		if err != nil {
+			cleanup()
+		}
+	}()
+	if err != nil {
+		return nil, cleanup, err
+	}
+
+	// add default StdIO and environment opts
+	opts = append(defaultOpts, opts...)
+	path, args := c.cmdLine()
+	cmd, err = exec.New(path, strings.Join(args, " "), opts...)
+	if err != nil {
+		return nil, cleanup, err
+	}
+
+	log.G(ctx.Context).WithFields(logrus.Fields{
+		"path": path,
+		"args": args,
+		"env":  c.env,
+	}).Info("Created re-exec command")
+	return cmd, cleanup, nil
 }
 
-func (c *reExecConfig) cmdAppContainer(ctx *cli.Context) (reExec, func(), error) {
-	log.G(ctx.Context).WithField("LPAC", c.lpac).Info("using app containers")
+func (c *reExecConfig) cmdAppContainer(ctx *cli.Context, acSIDs []*windows.SID) ([]exec.ExecOpts, func(), error) {
+	log.G(ctx.Context).WithField("LPAC", c.lpac).Info("Using AppContainers")
 
-	caps := make([]windows.SIDAndAttributes, 1, len(c.caps)+1)
+	caps := make([]windows.SIDAndAttributes, 0, len(c.caps)+len(acSIDs))
 	capAttribs := winapi.SE_GROUP_ENABLED_BY_DEFAULT | winapi.SE_GROUP_ENABLED
-
-	appCapSID, err := winapi.GetAppAuthoritySIDFromName(appCapabilityName)
-	if err != nil {
-		return nil, nil, err
+	for _, sid := range acSIDs {
+		caps = append(caps, windows.SIDAndAttributes{
+			Sid:        sid,
+			Attributes: capAttribs,
+		})
 	}
-	log.G(ctx.Context).WithField("sid", appCapSID.String()).Debug("created app container capability SID")
-	// appCapNTSID, err := winapi.GetGroupSIDFromName(appCapabilityName)
-	// if err != nil {
-	// 	return nil, nil, err
-	// }
-
-	caps[0] = windows.SIDAndAttributes{
-		Sid:        appCapSID,
-		Attributes: capAttribs,
-	}
-	log.G(ctx.Context).WithField("capabilities", c.caps).Debug("adding other app container capabilities")
+	log.G(ctx.Context).WithField("capabilities", c.caps).Debug("Adding AppContainer capabilities")
 	for _, c := range c.caps {
 		ss, err := winapi.GetAppAuthoritySIDFromName(c)
 		if err != nil {
 			log.G(ctx.Context).WithFields(logrus.Fields{
 				logrus.ErrorKey: err,
 				"capability":    c,
-			}).Warning("could not get capability SID")
+			}).Warning("Could not get capability SID")
 			continue
 		}
 
@@ -96,28 +100,9 @@ func (c *reExecConfig) cmdAppContainer(ctx *cli.Context) (reExec, func(), error)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create app container profile: %w", err)
 	}
-	fmt.Println("sid is:", sid.String())
-
-	// lsaH, err := winapi.LSAOpenPolicy(winapi.LSA_POLICY_READ | winapi.LSA_POLICY_WRITE)
-	// if err != nil {
-	// 	fmt.Println("could not open lsa h", err)
-	// }
-	// defer winapi.LSAClose(lsaH)
-
-	// fmt.Println("")
-	// for _, p := range c.privs {
-	// 	ps := []string{p}
-	// 	if err = winapi.LSAAddAccountRightsString(lsaH, sid, ps); err != nil {
-	// 		fmt.Printf("could not add privileges %q: %v\n", p, err)
-	// 	} else {
-	// 		fmt.Println("added priv", p)
-	// 	}
-	// }
-	// fmt.Println("")
-
-	err = security.GrantSIDFileAccess(filename, appCapSID, windows.GENERIC_ALL)
-	fmt.Println("update acls", err)
-	readSD(filename)
+	log.G(ctx.Context).WithFields(logrus.Fields{
+		"sid": sid.String(),
+	}).Debug("Created AppContainer SID")
 
 	attrs, err := windows.NewProcThreadAttributeList(10)
 	if err != nil {
@@ -186,156 +171,106 @@ func (c *reExecConfig) cmdAppContainer(ctx *cli.Context) (reExec, func(), error)
 		}
 	}
 
-	token := windows.GetCurrentProcessToken()
-
-	// token, err := restrictedToken(c.privs)
-	// if err != nil {
-	// 	return nil, nil, err
-	// }
-	pv, err := winapi.GetTokenPrivileges(token)
-	if err != nil {
-		return nil, nil, fmt.Errorf("get token privileges: %w", err)
-	}
-
-	for _, o := range pv.AllPrivileges() {
-		n, err := winapi.LookupPrivilegeName(o.Luid)
-		if err != nil {
-			fmt.Printf("failed to lookup %v\n", o.Luid)
-			continue
-		}
-		d, err := winapi.LookupPrivilegeDisplayName(n)
-		if err != nil {
-			fmt.Printf("failed to lookup name %q\n", n)
-			continue
-		}
-		fmt.Printf("rt -> %-32s %-48s [%d]\n", n+":", d, o.Attributes)
-	}
-
-	path, args := c.cmdLine()
-	// the command line is passed directly to create process, so (unlike "os/exec"), the path
-	// is not automatically appended as the first argument
-	args = append([]string{path}, args...)
 	opts := []exec.ExecOpts{
-		exec.UsingStdio(os.Stdin, os.Stdout, os.Stderr),
-		exec.WithEnv(c.env),
 		exec.WithProcessAttributes(attrs),
+	}
+	return opts, nil, nil
+}
+
+func (c *reExecConfig) cmdToken(ctx *cli.Context, sids []*windows.SID) (_ []exec.ExecOpts, cleanup func(), err error) {
+	pToken, err := winapi.OpenProcessToken(windows.CurrentProcess(),
+		windows.TOKEN_DUPLICATE|windows.TOKEN_ASSIGN_PRIMARY|windows.TOKEN_QUERY)
+	if err != nil {
+		return nil, nil, fmt.Errorf("open process token: %w", err)
+	}
+	defer pToken.Close()
+
+	deleteLUIDs, err := privilegesToDelete(pToken, c.privs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("get privileges to delete: %w", err)
+	}
+
+	restrictSIDs := make([]windows.SIDAndAttributes, 0, len(sids))
+	for _, sid := range sids {
+		restrictSIDs = append(restrictSIDs, windows.SIDAndAttributes{
+			Sid: sid,
+		})
+	}
+	// sidc, err := windows.CreateWellKnownSid(windows.WinLocalSid)
+	// if err != nil {
+	// 	return nil, nil, fmt.Errorf("create well know SID for creator group: %w", err)
+	// }
+	// fmt.Println("csid", sidc)
+	// restrictSIDs = append(restrictSIDs, windows.SIDAndAttributes{
+	// 	Sid: sidc,
+	// })
+	token, err := winapi.CreateRestrictedToken(
+		pToken,
+		winapi.TOKEN_WRITE_RESTRICTED,
+		nil, // SIDs to disable
+		deleteLUIDs,
+		// nil,
+		restrictSIDs,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create restricted token: %w", err)
+	}
+	cleanup = func() {
+		_ = token.Close()
+	}
+
+	opts := []exec.ExecOpts{
 		exec.WithToken(token),
 	}
-
-	cmd, err := exec.New(path, strings.Join(args, " "), opts...)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create hcsshim exec: %w", err)
-	}
-
-	log.G(ctx.Context).WithFields(logrus.Fields{
-		"path": path,
-		"args": args,
-		"env":  c.env,
-	}).Debug("re-execing command")
-	cleanup := func() {}
-
-	return cmd, cleanup, nil
+	return opts, cleanup, nil
 }
 
-const filename = `C:\Users\hamzaelsaawy\Downloads\temp.txt`
-const filename2 = `C:\Users\hamzaelsaawy\Downloads\t\temp.txt`
-const dirname = `C:\Users\hamzaelsaawy\Downloads\t`
+func (c *reExecConfig) pipeSecurityDescriptor(sids []*windows.SID, access windows.ACCESS_MASK) (*windows.SECURITY_DESCRIPTOR, error) {
+	// AppContainers can inherit the pipe handles propely, but the restricting SID in the restricted token
+	// must be explicitly added to the pipes
+	if c.ac {
+		return nil, nil
+	}
 
-func createTemp() (windows.Handle, error) {
-	if err := os.Remove(filename); err != nil {
-		fmt.Println("could not delete temp file", err)
-	}
-	u16, err := windows.UTF16PtrFromString(filename)
+	sd, err := windows.NewSecurityDescriptor()
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	sa := &windows.SecurityAttributes{
-		SecurityDescriptor: nil,
-		InheritHandle:      0,
-		Length:             uint32(unsafe.Sizeof(windows.SecurityAttributes{})),
-	}
-	h, err := windows.CreateFile(
-		u16,
-		windows.READ_CONTROL|windows.GENERIC_READ|windows.GENERIC_WRITE|windows.WRITE_DAC,
-		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE,
-		sa,
-		windows.CREATE_ALWAYS,
-		windows.FILE_ATTRIBUTE_NORMAL,
-		0,
-	)
+	sidc, err := windows.CreateWellKnownSid(windows.WinCreatorOwnerRightsSid)
 	if err != nil {
-		return 0, err
+		return nil, fmt.Errorf("create well know SID for creator group: %w", err)
 	}
-	f := os.NewFile(uintptr(h), "t")
-	fmt.Fprintf(f, "test test ?")
-	readSD(filename)
-	return h, nil
+
+	eas := make([]windows.EXPLICIT_ACCESS, 0, len(sids)+1)
+	// var dacl *windows.ACL
+	for _, sid := range append(sids, sidc) {
+		eas = append(eas, winapi.AllowAccessForSID(sid, access, windows.SUB_CONTAINERS_AND_OBJECTS_INHERIT))
+	}
+
+	dacl, err := windows.ACLFromEntries(eas, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create DACL from explicit accesses: %w", err)
+	}
+	err = sd.SetDACL(dacl, true, false)
+	return sd, err
 }
 
-func openTemph() (windows.Handle, error) {
-	u16, err := windows.UTF16PtrFromString(filename)
-	if err != nil {
-		return 0, err
+func (c *reExecConfig) capabilitySIDs() ([]*windows.SID, error) {
+	sids, acSIDs, err := winapi.DeriveCapabilitySIDsFromName(appCapabilityName)
+	if c.ac {
+		sids = acSIDs
 	}
-	h, err := windows.CreateFile(
-		u16,
-		windows.GENERIC_READ,
-		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE,
-		nil,
-		windows.OPEN_EXISTING,
-		windows.FILE_ATTRIBUTE_NORMAL,
-		0,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return h, nil
+	return sids, err
 }
 
-func readSD(s string) {
-	sd, err := security.GetFileSD(s)
-	if err != nil {
-		fmt.Printf("could not get %q security description: %v\n", s, err)
-	} else {
-		fmt.Printf("security descriptor: %v\n", sd)
-	}
-}
-
-func (c *reExecConfig) cmdToken(ctx *cli.Context) (reExec, func(), error) {
-	path, args := c.cmdLine()
-
-	log.G(ctx.Context).WithFields(logrus.Fields{
-		"path":       path,
-		"args":       args,
-		"env":        c.env,
-		"privileges": c.privs,
-	}).Debug("re-execing command")
-
-	token, err := restrictedToken(c.privs)
-	if err != nil {
-		return nil, nil, err
-	}
-	f := func() {
-		token.Close()
-	}
-
-	cmd := execabs.CommandContext(ctx.Context, path, args...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Env = c.env
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		HideWindow: true,
-		Token:      syscall.Token(token),
-	}
-
-	return cmd, f, nil
-}
-
-func (c *reExecConfig) cmdLine() (path string, args []string) {
-	path = os.Args[0]
-	args = append([]string{"-" + reExecFlagName}, os.Args[1:]...)
-	return
+// cmdLine adds the re-exec flag to the command line arguments
+func (c *reExecConfig) cmdLine() (string, []string) {
+	path := os.Args[0]
+	args := os.Args[1:]
+	// the command line is passed directly to create process, so (unlike "os/exec"), the path
+	// is not automatically appended as the first argument
+	args = append([]string{path, "-" + reExecFlagName}, args...)
+	return path, args
 }
 
 func (c *reExecConfig) updateEnvWithTracing(ctx context.Context) {

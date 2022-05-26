@@ -22,7 +22,7 @@ var convertCommand = &cli.Command{
 	Aliases: []string{"t2e4"},
 	Usage: fmt.Sprintf("Convert an LCOW %q into an ext4 formated filesystem, %q",
 		ocispec.MediaTypeImageLayer, mediatype.MediaTypeMicrosoftImageLayerExt4),
-	Action: actionReExecWrapper(convertTarToExt4),
+	Action: convertTarToExt4,
 }
 
 func convertTarToExt4(c *cli.Context) error {
@@ -30,7 +30,7 @@ func convertTarToExt4(c *cli.Context) error {
 	if err := getPayload(c.Context, opts); err != nil {
 		return fmt.Errorf("parsing payload: %w", err)
 	}
-	log.G(c.Context).WithField("payload", opts).Debug("payload")
+	log.G(c.Context).WithField("payload", opts).Debug("Parsed payload")
 
 	vhd, err := os.Create(opts.VHDPath)
 	if err != nil {
@@ -43,7 +43,7 @@ func convertTarToExt4(c *cli.Context) error {
 	if err = vhd.Sync(); err != nil {
 		return fmt.Errorf("vhd sync: %w", err)
 	}
-	log.G(c.Context).WithField("vhd", vhd.Name()).Debug("wrote and synched VHD")
+	log.G(c.Context).WithField("vhd", vhd.Name()).Debug("Wrote and synched VHD")
 
 	if err = security.GrantVmGroupAccess(vhd.Name()); err != nil {
 		return fmt.Errorf("GrantVmGroupAccess on layer vhd: %v: %w", vhd.Name(), err)
