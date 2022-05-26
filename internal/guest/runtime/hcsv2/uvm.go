@@ -193,13 +193,14 @@ func setupSandboxHugePageMountsPath(id string) error {
 func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VMHostedContainerSettingsV2) (_ *Container, err error) {
 	criType, isCRI := settings.OCISpecification.Annotations[annotations.KubernetesContainerType]
 	c := &Container{
-		id:        id,
-		vsock:     h.vsock,
-		spec:      settings.OCISpecification,
-		isSandbox: criType == "sandbox",
-		exitType:  prot.NtUnexpectedExit,
-		processes: make(map[uint32]*containerProcess),
-		status:    containerCreating,
+		id:             id,
+		vsock:          h.vsock,
+		spec:           settings.OCISpecification,
+		isSandbox:      criType == "sandbox",
+		exitType:       prot.NtUnexpectedExit,
+		processes:      make(map[uint32]*containerProcess),
+		status:         containerCreating,
+		scratchDirPath: settings.ScratchDirPath,
 	}
 
 	if err := h.AddContainer(id, c); err != nil {

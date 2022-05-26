@@ -75,9 +75,15 @@ type linuxHostedSystem struct {
 	SchemaVersion    *hcsschema.Version
 	OciBundlePath    string
 	OciSpecification *specs.Spec
+
+	// ScratchDirPath represents the path inside the UVM at which the container scratch
+	// directory is present.  Usually, this is the path at which the container scratch
+	// VHD is mounted inside the UVM. But in case of scratch sharing this is a
+	// directory under the UVM scratch directory.
+	ScratchDirPath string
 }
 
-func createLinuxContainerDocument(ctx context.Context, coi *createOptionsInternal, guestRoot string) (*linuxHostedSystem, error) {
+func createLinuxContainerDocument(ctx context.Context, coi *createOptionsInternal, guestRoot, scratchPath string) (*linuxHostedSystem, error) {
 	spec, err := createLCOWSpec(coi)
 	if err != nil {
 		return nil, err
@@ -88,5 +94,6 @@ func createLinuxContainerDocument(ctx context.Context, coi *createOptionsInterna
 		SchemaVersion:    schemaversion.SchemaV21(),
 		OciBundlePath:    guestRoot,
 		OciSpecification: spec,
+		ScratchDirPath:   scratchPath,
 	}, nil
 }

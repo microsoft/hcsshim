@@ -334,7 +334,7 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 			log.G(ctx).WithError(err).Debug("failed to allocateLinuxResources")
 			return nil, r, err
 		}
-		gcsDocument, err = createLinuxContainerDocument(ctx, coi, r.ContainerRootInUVM())
+		gcsDocument, err = createLinuxContainerDocument(ctx, coi, r.ContainerRootInUVM(), r.LcowScratchPath())
 		if err != nil {
 			log.G(ctx).WithError(err).Debug("failed createHCSContainerDocument")
 			return nil, r, err

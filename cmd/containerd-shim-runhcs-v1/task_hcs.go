@@ -625,6 +625,11 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, tim
 			// https://pkg.go.dev/sync#Map.Range
 			return true
 		})
+
+		// cleanup the container directories inside the UVM if required.
+		if err := ht.host.DeleteContainerState(ctx, ht.id); err != nil {
+			log.G(ctx).WithError(err).Errorf("failed to delete container state")
+		}
 	}
 
 	status := e.Status()

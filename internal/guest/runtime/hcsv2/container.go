@@ -5,6 +5,7 @@ package hcsv2
 
 import (
 	"context"
+	"os"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -60,6 +61,11 @@ type Container struct {
 
 	// Only access atomically through getStatus/setStatus.
 	status containerStatus
+
+	// scratchDirPath represents the path inside the UVM where the scratch directory
+	// of this container is located. Usually, this is either `/run/gcs/c/<containerID>` or
+	// `/run/gcs/c/<UVMID>/container_<containerID>` if scratch is shared with UVM scratch.
+	scratchDirPath string
 }
 
 func (c *Container) Start(ctx context.Context, conSettings stdio.ConnectionSettings) (int, error) {
@@ -191,7 +197,18 @@ func (c *Container) Delete(ctx context.Context) error {
 		}
 	}
 
-	return c.container.Delete()
+	var retErr error
+	if err := c.container.Delete(); err != nil {
+		retErr = err
+	}
+
+	if err := os.RemoveAll(c.scratchDirPath); err != nil {
+		if retErr == nil {
+			retErr = err
+		}
+	}
+
+	return retErr
 }
 
 func (c *Container) Update(ctx context.Context, resources interface{}) error {

@@ -66,7 +66,95 @@ func (layers *ImageLayers) Release(ctx context.Context, all bool) error {
 	return nil
 }
 
-// MountContainerLayers is a helper for clients to hide all the complexity of layer mounting
+// MountLCOWLayers is a helper for clients to hide all the complexity of layer mounting for LCOW
+// Layer folder are in order: base, [rolayer1..rolayern,] scratch
+// Returns the path at which the `rootfs` of the container can be accessed. Also, returns the path inside the
+// UVM at which container scratch directory is located. Usually, this path is the path at which the container
+// scratch VHD is mounted. However, in case of scratch sharing this is a directory under the UVM scratch.
+func MountLCOWLayers(ctx context.Context, containerID string, layerFolders []string, guestRoot, volumeMountPath string, vm *uvm.UtilityVM) (_, _ string, err error) {
+	if vm.OS() != "linux" {
+		return "", "", errors.New("MountLCOWLayers should only be called for LCOW")
+	}
+
+	// V2 UVM
+	log.G(ctx).WithField("os", vm.OS()).Debug("hcsshim::MountLCOWLayers V2 UVM")
+
+	var (
+		layersAdded       []string
+		lcowUvmLayerPaths []string
+	)
+	defer func() {
+		if err != nil {
+			for _, l := range layersAdded {
+				if err := removeLCOWLayer(ctx, vm, l); err != nil {
+					log.G(ctx).WithError(err).Warn("failed to remove lcow layer on cleanup")
+				}
+			}
+		}
+	}()
+
+	for _, layerPath := range layerFolders[:len(layerFolders)-1] {
+		log.G(ctx).WithField("layerPath", layerPath).Debug("mounting layer")
+		var (
+			layerPath = filepath.Join(layerPath, "layer.vhd")
+			uvmPath   string
+		)
+		uvmPath, err = addLCOWLayer(ctx, vm, layerPath)
+		if err != nil {
+			return "", "", fmt.Errorf("failed to add LCOW layer: %s", err)
+		}
+		layersAdded = append(layersAdded, layerPath)
+		lcowUvmLayerPaths = append(lcowUvmLayerPaths, uvmPath)
+	}
+
+	containerScratchPathInUVM := ospath.Join(vm.OS(), guestRoot)
+	hostPath, err := GetScratchVHDPath(layerFolders)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get scratch VHD path in layer folders: %s", err)
+	}
+	log.G(ctx).WithField("hostPath", hostPath).Debug("mounting scratch VHD")
+
+	var options []string
+	scsiMount, err := vm.AddSCSI(
+		ctx,
+		hostPath,
+		containerScratchPathInUVM,
+		false,
+		vm.ScratchEncryptionEnabled(),
+		options,
+		uvm.VMAccessTypeIndividual,
+	)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to add SCSI scratch VHD: %s", err)
+	}
+
+	containerScratchPathInUVM = scsiMount.UVMPath
+	// handles the case where we want to share a scratch disk for multiple containers instead
+	// of mounting a new one. Pass a unique value for `ScratchPath` to avoid container upper and
+	// work directories colliding in the UVM.
+	if scsiMount.RefCount() > 1 {
+		scratchFmt := fmt.Sprintf("container_%s", filepath.Base(containerScratchPathInUVM))
+		containerScratchPathInUVM = ospath.Join("linux", scsiMount.UVMPath, scratchFmt)
+	}
+
+	defer func() {
+		if err != nil {
+			if err := vm.RemoveSCSI(ctx, hostPath); err != nil {
+				log.G(ctx).WithError(err).Warn("failed to remove scratch on cleanup")
+			}
+		}
+	}()
+
+	rootfs := ospath.Join(vm.OS(), guestRoot, guestpath.RootfsPath)
+	err = vm.CombineLayersLCOW(ctx, containerID, lcowUvmLayerPaths, containerScratchPathInUVM, rootfs)
+	if err != nil {
+		return "", "", err
+	}
+	log.G(ctx).Debug("hcsshim::MountLCOWLayers Succeeded")
+	return rootfs, containerScratchPathInUVM, nil
+}
+
+// MountWCOWLayers is a helper for clients to hide all the complexity of layer mounting for WCOW.
 // Layer folder are in order: base, [rolayer1..rolayern,] scratch
 //
 // v1/v2: Argon WCOW: Returns the mount path on the host as a volume GUID.
@@ -76,10 +164,10 @@ func (layers *ImageLayers) Release(ctx context.Context, all bool) error {
 //                    of the layers are the VSMB locations where the read-only layers are mounted.
 // Job container:     Returns the mount path on the host as a volume guid, with the volume mounted on
 // 					  the host at `volumeMountPath`.
-//
-// TODO dcantah: Keep better track of the layers that are added, don't simply discard the SCSI, VSMB, etc. resource types gotten inside.
-func MountContainerLayers(ctx context.Context, containerID string, layerFolders []string, guestRoot string, volumeMountPath string, vm *uvm.UtilityVM) (_ string, err error) {
-	log.G(ctx).WithField("layerFolders", layerFolders).Debug("hcsshim::mountContainerLayers")
+func MountWCOWLayers(ctx context.Context, containerID string, layerFolders []string, guestRoot, volumeMountPath string, vm *uvm.UtilityVM) (_ string, err error) {
+	if vm.OS() != "windows" {
+		return "", errors.New("MountWCOWLayers should only be called for WCOW")
+	}
 
 	if vm == nil {
 		if len(layerFolders) < 2 {
@@ -161,25 +249,16 @@ func MountContainerLayers(ctx context.Context, containerID string, layerFolders 
 	}
 
 	// V2 UVM
-	log.G(ctx).WithField("os", vm.OS()).Debug("hcsshim::mountContainerLayers V2 UVM")
+	log.G(ctx).WithField("os", vm.OS()).Debug("hcsshim::MountWCOWLayers V2 UVM")
 
 	var (
-		layersAdded       []string
-		lcowUvmLayerPaths []string
+		layersAdded []string
 	)
 	defer func() {
 		if err != nil {
-			if vm.OS() == "windows" {
-				for _, l := range layersAdded {
-					if err := vm.RemoveVSMB(ctx, l, true); err != nil {
-						log.G(ctx).WithError(err).Warn("failed to remove wcow layer on cleanup")
-					}
-				}
-			} else {
-				for _, l := range layersAdded {
-					if err := removeLCOWLayer(ctx, vm, l); err != nil {
-						log.G(ctx).WithError(err).Warn("failed to remove lcow layer on cleanup")
-					}
+			for _, l := range layersAdded {
+				if err := vm.RemoveVSMB(ctx, l, true); err != nil {
+					log.G(ctx).WithError(err).Warn("failed to remove wcow layer on cleanup")
 				}
 			}
 		}
@@ -187,32 +266,19 @@ func MountContainerLayers(ctx context.Context, containerID string, layerFolders 
 
 	for _, layerPath := range layerFolders[:len(layerFolders)-1] {
 		log.G(ctx).WithField("layerPath", layerPath).Debug("mounting layer")
-		if vm.OS() == "windows" {
-			options := vm.DefaultVSMBOptions(true)
-			options.TakeBackupPrivilege = true
-			if vm.IsTemplate {
-				vm.SetSaveableVSMBOptions(options, options.ReadOnly)
-			}
-			if _, err := vm.AddVSMB(ctx, layerPath, options); err != nil {
-				return "", fmt.Errorf("failed to add VSMB layer: %s", err)
-			}
-			layersAdded = append(layersAdded, layerPath)
-		} else {
-			var (
-				layerPath = filepath.Join(layerPath, "layer.vhd")
-				uvmPath   string
-			)
-			uvmPath, err = addLCOWLayer(ctx, vm, layerPath)
-			if err != nil {
-				return "", fmt.Errorf("failed to add LCOW layer: %s", err)
-			}
-			layersAdded = append(layersAdded, layerPath)
-			lcowUvmLayerPaths = append(lcowUvmLayerPaths, uvmPath)
+		options := vm.DefaultVSMBOptions(true)
+		options.TakeBackupPrivilege = true
+		if vm.IsTemplate {
+			vm.SetSaveableVSMBOptions(options, options.ReadOnly)
 		}
+		if _, err := vm.AddVSMB(ctx, layerPath, options); err != nil {
+			return "", fmt.Errorf("failed to add VSMB layer: %s", err)
+		}
+		layersAdded = append(layersAdded, layerPath)
 	}
 
 	containerScratchPathInUVM := ospath.Join(vm.OS(), guestRoot)
-	hostPath, err := getScratchVHDPath(layerFolders)
+	hostPath, err := GetScratchVHDPath(layerFolders)
 	if err != nil {
 		return "", fmt.Errorf("failed to get scratch VHD path in layer folders: %s", err)
 	}
@@ -231,16 +297,7 @@ func MountContainerLayers(ctx context.Context, containerID string, layerFolders 
 	if err != nil {
 		return "", fmt.Errorf("failed to add SCSI scratch VHD: %s", err)
 	}
-
-	// This handles the case where we want to share a scratch disk for multiple containers instead
-	// of mounting a new one. Pass a unique value for `ScratchPath` to avoid container upper and
-	// work directories colliding in the UVM.
-	if scsiMount.RefCount() > 1 && vm.OS() == "linux" {
-		scratchFmt := fmt.Sprintf("container_%s", filepath.Base(containerScratchPathInUVM))
-		containerScratchPathInUVM = ospath.Join("linux", scsiMount.UVMPath, scratchFmt)
-	} else {
-		containerScratchPathInUVM = scsiMount.UVMPath
-	}
+	containerScratchPathInUVM = scsiMount.UVMPath
 
 	defer func() {
 		if err != nil {
@@ -250,26 +307,19 @@ func MountContainerLayers(ctx context.Context, containerID string, layerFolders 
 		}
 	}()
 
-	var rootfs string
-	if vm.OS() == "windows" {
-		// 	Load the filter at the C:\s<ID> location calculated above. We pass into this request each of the
-		// 	read-only layer folders.
-		var layers []hcsschema.Layer
-		layers, err = GetHCSLayers(ctx, vm, layersAdded)
-		if err != nil {
-			return "", err
-		}
-		err = vm.CombineLayersWCOW(ctx, layers, containerScratchPathInUVM)
-		rootfs = containerScratchPathInUVM
-	} else {
-		rootfs = ospath.Join(vm.OS(), guestRoot, guestpath.RootfsPath)
-		err = vm.CombineLayersLCOW(ctx, containerID, lcowUvmLayerPaths, containerScratchPathInUVM, rootfs)
-	}
+	// Load the filter at the C:\s<ID> location calculated above. We pass into this
+	// request each of the read-only layer folders.
+	var layers []hcsschema.Layer
+	layers, err = GetHCSLayers(ctx, vm, layersAdded)
 	if err != nil {
 		return "", err
 	}
-	log.G(ctx).Debug("hcsshim::mountContainerLayers Succeeded")
-	return rootfs, nil
+	err = vm.CombineLayersWCOW(ctx, layers, containerScratchPathInUVM)
+	if err != nil {
+		return "", err
+	}
+	log.G(ctx).Debug("hcsshim::MountWCOWLayers Succeeded")
+	return containerScratchPathInUVM, nil
 }
 
 func addLCOWLayer(ctx context.Context, vm *uvm.UtilityVM, layerPath string) (uvmPath string, err error) {
@@ -391,7 +441,7 @@ func UnmountContainerLayers(ctx context.Context, layerFolders []string, containe
 
 	// Unload the SCSI scratch path
 	if (op & UnmountOperationSCSI) == UnmountOperationSCSI {
-		hostScratchFile, err := getScratchVHDPath(layerFolders)
+		hostScratchFile, err := GetScratchVHDPath(layerFolders)
 		if err != nil {
 			return errors.Wrap(err, "failed to get scratch VHD path in layer folders")
 		}
@@ -464,7 +514,7 @@ func containerRootfsPath(vm *uvm.UtilityVM, rootPath string) string {
 	return ospath.Join(vm.OS(), rootPath, guestpath.RootfsPath)
 }
 
-func getScratchVHDPath(layerFolders []string) (string, error) {
+func GetScratchVHDPath(layerFolders []string) (string, error) {
 	hostPath := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
 	// For LCOW, we can reuse another container's scratch space (usually the sandbox container's).
 	//
