@@ -387,7 +387,7 @@ func TestWCOWArgonShim(t *testing.T) {
 
 	id := "argon"
 	// This is a cheat but stops us re-writing exactly the same code just for test
-	argonShimLocalMountPath, err := layerspkg.MountContainerLayers(context.Background(), id, append(imageLayers, argonShimScratchDir), "", "", nil)
+	argonShimLocalMountPath, err := layerspkg.MountWCOWLayers(context.Background(), id, append(imageLayers, argonShimScratchDir), "", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

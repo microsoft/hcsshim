@@ -627,8 +627,10 @@ func (ht *hcsTask) DeleteExec(ctx context.Context, eid string) (int, uint32, tim
 		})
 
 		// cleanup the container directories inside the UVM if required.
-		if err := ht.host.DeleteContainerState(ctx, ht.id); err != nil {
-			log.G(ctx).WithError(err).Errorf("failed to delete container state")
+		if ht.host != nil {
+			if err := ht.host.DeleteContainerState(ctx, ht.id); err != nil {
+				log.G(ctx).WithError(err).Errorf("failed to delete container state")
+			}
 		}
 	}
 

@@ -108,7 +108,7 @@ func MountLCOWLayers(ctx context.Context, containerID string, layerFolders []str
 	}
 
 	containerScratchPathInUVM := ospath.Join(vm.OS(), guestRoot)
-	hostPath, err := GetScratchVHDPath(layerFolders)
+	hostPath, err := getScratchVHDPath(layerFolders)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to get scratch VHD path in layer folders: %s", err)
 	}
@@ -278,7 +278,7 @@ func MountWCOWLayers(ctx context.Context, containerID string, layerFolders []str
 	}
 
 	containerScratchPathInUVM := ospath.Join(vm.OS(), guestRoot)
-	hostPath, err := GetScratchVHDPath(layerFolders)
+	hostPath, err := getScratchVHDPath(layerFolders)
 	if err != nil {
 		return "", fmt.Errorf("failed to get scratch VHD path in layer folders: %s", err)
 	}
@@ -441,7 +441,7 @@ func UnmountContainerLayers(ctx context.Context, layerFolders []string, containe
 
 	// Unload the SCSI scratch path
 	if (op & UnmountOperationSCSI) == UnmountOperationSCSI {
-		hostScratchFile, err := GetScratchVHDPath(layerFolders)
+		hostScratchFile, err := getScratchVHDPath(layerFolders)
 		if err != nil {
 			return errors.Wrap(err, "failed to get scratch VHD path in layer folders")
 		}
@@ -514,7 +514,7 @@ func containerRootfsPath(vm *uvm.UtilityVM, rootPath string) string {
 	return ospath.Join(vm.OS(), rootPath, guestpath.RootfsPath)
 }
 
-func GetScratchVHDPath(layerFolders []string) (string, error) {
+func getScratchVHDPath(layerFolders []string) (string, error) {
 	hostPath := filepath.Join(layerFolders[len(layerFolders)-1], "sandbox.vhdx")
 	// For LCOW, we can reuse another container's scratch space (usually the sandbox container's).
 	//

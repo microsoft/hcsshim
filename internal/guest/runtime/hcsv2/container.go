@@ -5,6 +5,7 @@ package hcsv2
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -203,7 +204,9 @@ func (c *Container) Delete(ctx context.Context) error {
 	}
 
 	if err := os.RemoveAll(c.scratchDirPath); err != nil {
-		if retErr == nil {
+		if retErr != nil {
+			retErr = fmt.Errorf("errors deleting container state, %s & %s", retErr, err)
+		} else {
 			retErr = err
 		}
 	}
