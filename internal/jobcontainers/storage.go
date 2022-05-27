@@ -43,7 +43,7 @@ func mountLayers(ctx context.Context, containerID string, s *specs.Spec, volumeM
 
 	if s.Root.Path == "" {
 		log.G(ctx).Debug("mounting job container storage")
-		containerRootPath, err := layers.MountContainerLayers(ctx, containerID, s.Windows.LayerFolders, "", volumeMountPath, nil)
+		containerRootPath, err := layers.MountWCOWLayers(ctx, containerID, s.Windows.LayerFolders, "", volumeMountPath, nil)
 		if err != nil {
 			return errors.Wrap(err, "failed to mount container storage")
 		}

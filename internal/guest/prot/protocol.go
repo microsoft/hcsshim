@@ -746,6 +746,11 @@ type VMHostedContainerSettingsV2 struct {
 	SchemaVersion    SchemaVersion
 	OCIBundlePath    string    `json:"OciBundlePath,omitempty"`
 	OCISpecification *oci.Spec `json:"OciSpecification,omitempty"`
+	// ScratchDirPath represents the path inside the UVM at which the container scratch
+	// directory is present.  Usually, this is the path at which the container scratch
+	// VHD is mounted inside the UVM. But in case of scratch sharing this is a
+	// directory under the UVM scratch directory.
+	ScratchDirPath string
 }
 
 // ProcessParameters represents any process which may be started in the utility
