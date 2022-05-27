@@ -197,7 +197,7 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 	if force, err := forceNoDirectMap(hostPath); err != nil {
 		return nil, err
 	} else if force {
-		log.G(ctx).WithField("path", hostPath).Info("Forcing NoDirectmap for VSMB mount")
+		log.G(ctx).WithField("hostPath", hostPath).Debug("Forcing NoDirectmap for VSMB mount")
 		options.NoDirectmap = true
 	}
 
@@ -230,9 +230,9 @@ func (uvm *UtilityVM) AddVSMB(ctx context.Context, hostPath string, options *hcs
 		log.G(ctx).WithFields(logrus.Fields{
 			"name":      share.name,
 			"path":      hostPath,
-			"options":   fmt.Sprintf("%+#v", options),
+			"options":   options,
 			"operation": requestType,
-		}).Info("Modifying VSMB share")
+		}).Debug("Modifying VSMB share")
 		modification := &hcsschema.ModifySettingRequest{
 			RequestType: requestType,
 			Settings: hcsschema.VirtualSmbShare{

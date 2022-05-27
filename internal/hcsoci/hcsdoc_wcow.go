@@ -19,6 +19,7 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
+	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/processorinfo"
 	"github.com/Microsoft/hcsshim/internal/uvm"
@@ -143,7 +144,12 @@ func ConvertCPULimits(ctx context.Context, cid string, spec *specs.Spec, maxCPUC
 // a container, both hosted and process isolated. It creates both v1 and v2
 // container objects, WCOW only. The containers storage should have been mounted already.
 func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInternal) (*schema1.ContainerConfig, *hcsschema.Container, error) {
-	log.G(ctx).Debug("hcsshim: CreateHCSContainerDocument")
+	ctx, etr := log.S(ctx, logrus.Fields{
+		logfields.Name: coi.actualID,
+		"owner":        coi.actualOwner,
+	})
+	etr.Trace("hcsshim: CreateHCSContainerDocument")
+
 	// TODO: Make this safe if exported so no null pointer dereferences.
 
 	if coi.Spec == nil {
@@ -227,12 +233,12 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		} else if newCPULimit > 10000 {
 			newCPULimit = 10000
 		}
-		log.G(ctx).WithFields(logrus.Fields{
+		etr.WithFields(logrus.Fields{
 			"hostCPUCount": hostCPUCount,
 			"uvmCPUCount":  uvmCPUCount,
 			"oldCPULimit":  cpuLimit,
 			"newCPULimit":  newCPULimit,
-		}).Info("rescaling CPU limit for UVM sandbox")
+		}).Debug("rescaling CPU limit for UVM sandbox")
 		cpuLimit = newCPULimit
 	}
 

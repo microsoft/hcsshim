@@ -702,7 +702,8 @@ func (ht *hcsTask) Wait() *task.StateResponse {
 func (ht *hcsTask) waitInitExit(destroyContainer bool) {
 	ctx, span := oc.StartSpan(context.Background(), "hcsTask::waitInitExit")
 	defer span.End()
-	span.AddAttributes(trace.StringAttribute("tid", ht.id))
+	span.AddAttributes(trace.StringAttribute("tid", ht.id),
+		trace.BoolAttribute("destroyContainer", destroyContainer))
 
 	// Wait for it to exit on its own
 	ht.init.Wait()

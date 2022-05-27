@@ -99,12 +99,7 @@ func (uvm *UtilityVM) SetupNetworkNamespace(ctx context.Context, nsid string) er
 
 // GetNamespaceEndpoints gets all endpoints in `netNS`
 func GetNamespaceEndpoints(ctx context.Context, netNS string) ([]*hns.HNSEndpoint, error) {
-	op := "uvm::GetNamespaceEndpoints"
-	l := log.G(ctx).WithField("netns-id", netNS)
-	l.Debug(op + " - Begin")
-	defer func() {
-		l.Debug(op + " - End")
-	}()
+	log.G(ctx).WithField("netns-id", netNS).Trace("uvm::GetNamespaceEndpoints")
 
 	ids, err := hns.GetNamespaceEndpoints(netNS)
 	if err != nil {

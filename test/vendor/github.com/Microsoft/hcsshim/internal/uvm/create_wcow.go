@@ -246,7 +246,7 @@ func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error
 	}
 
 	span.AddAttributes(trace.StringAttribute(logfields.UVMID, opts.ID))
-	log.G(ctx).WithField("options", fmt.Sprintf("%+v", opts)).Debug("uvm::CreateWCOW options")
+	log.G(ctx).WithField(logfields.Options, opts).Debug("uvm::CreateWCOW options")
 
 	uvm := &UtilityVM{
 		id:                      opts.ID,

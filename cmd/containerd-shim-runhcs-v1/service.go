@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/extendedtask"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/containerd/containerd/errdefs"
@@ -105,7 +106,7 @@ func (s *service) State(ctx context.Context, req *task.StateRequest) (resp *task
 			span.AddAttributes(
 				trace.StringAttribute("status", resp.Status.String()),
 				trace.Int64Attribute("exitStatus", int64(resp.ExitStatus)),
-				trace.StringAttribute("exitedAt", resp.ExitedAt.String()))
+				trace.StringAttribute("exitedAt", log.FormatTime(resp.ExitedAt)))
 		}
 		oc.SetSpanStatus(span, err)
 	}()
@@ -135,8 +136,7 @@ func (s *service) Create(ctx context.Context, req *task.CreateTaskRequest) (resp
 	span.AddAttributes(
 		trace.StringAttribute("tid", req.ID),
 		trace.StringAttribute("bundle", req.Bundle),
-		// trace.StringAttribute("rootfs", req.Rootfs), TODO: JTERRY75 -
-		// OpenCensus doesnt support slice like our logrus hook
+		trace.StringAttribute("rootfs", log.Format(ctx, req.Rootfs)),
 		trace.BoolAttribute("terminal", req.Terminal),
 		trace.StringAttribute("stdin", req.Stdin),
 		trace.StringAttribute("stdout", req.Stdout),
@@ -182,7 +182,7 @@ func (s *service) Delete(ctx context.Context, req *task.DeleteRequest) (resp *ta
 			span.AddAttributes(
 				trace.Int64Attribute("pid", int64(resp.Pid)),
 				trace.Int64Attribute("exitStatus", int64(resp.ExitStatus)),
-				trace.StringAttribute("exitedAt", resp.ExitedAt.String()))
+				trace.StringAttribute("exitedAt", log.FormatTime(resp.ExitedAt)))
 		}
 		oc.SetSpanStatus(span, err)
 	}()
@@ -399,7 +399,7 @@ func (s *service) Wait(ctx context.Context, req *task.WaitRequest) (resp *task.W
 		if resp != nil {
 			span.AddAttributes(
 				trace.Int64Attribute("exitStatus", int64(resp.ExitStatus)),
-				trace.StringAttribute("exitedAt", resp.ExitedAt.String()))
+				trace.StringAttribute("exitedAt", log.FormatTime(resp.ExitedAt)))
 		}
 		oc.SetSpanStatus(span, err)
 	}()

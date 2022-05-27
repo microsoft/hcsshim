@@ -150,16 +150,17 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 					break
 				}
 			}
-			l := log.G(ctx).WithField("mount", fmt.Sprintf("%+v", mount))
+
+			entry := log.G(ctx).WithField("mount", mount)
 			if mount.Type == "physical-disk" {
-				l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI physical disk for OCI mount")
+				entry.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI physical disk for OCI mount")
 				scsiMount, err := coi.HostingSystem.AddSCSIPhysicalDisk(ctx, mount.Source, uvmPath, readOnly, mount.Options)
 				if err != nil {
 					return errors.Wrapf(err, "adding SCSI physical disk mount %+v", mount)
 				}
 				r.Add(scsiMount)
 			} else if mount.Type == "virtual-disk" {
-				l.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI virtual disk for OCI mount")
+				entry.Debug("hcsshim::allocateWindowsResources Hot-adding SCSI virtual disk for OCI mount")
 				scsiMount, err := coi.HostingSystem.AddSCSI(
 					ctx,
 					mount.Source,
@@ -174,7 +175,7 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 				}
 				r.Add(scsiMount)
 			} else if mount.Type == "extensible-virtual-disk" {
-				l.Debug("hcsshim::allocateWindowsResource Hot-adding ExtensibleVirtualDisk")
+				entry.Debug("hcsshim::allocateWindowsResource Hot-adding ExtensibleVirtualDisk")
 				scsiMount, err := coi.HostingSystem.AddSCSIExtensibleVirtualDisk(ctx, mount.Source, uvmPath, readOnly)
 				if err != nil {
 					return errors.Wrapf(err, "adding SCSI EVD mount failed %+v", mount)
@@ -214,7 +215,7 @@ func setupMounts(ctx context.Context, coi *createOptionsInternal, r *resources.R
 					}
 					r.Add(pipe)
 				} else {
-					l.Debug("hcsshim::allocateWindowsResources Hot-adding VSMB share for OCI mount")
+					entry.Debug("hcsshim::allocateWindowsResources Hot-adding VSMB share for OCI mount")
 					options := coi.HostingSystem.DefaultVSMBOptions(readOnly)
 					share, err := coi.HostingSystem.AddVSMB(ctx, mount.Source, options)
 					if err != nil {
