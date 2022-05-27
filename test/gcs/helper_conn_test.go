@@ -20,14 +20,11 @@ import (
 )
 
 const (
-	_network     = "unix"
-	_sockPathFmt = "/tmp/gcs.%d"
-
-	_dialRetries = 4
-	_dialWait    = 50 * time.Millisecond
+	dialRetries = 4
+	dialWait    = 50 * time.Millisecond
 )
 
-// port numbers to assign to connections
+// port numbers to assign to connections.
 var (
 	_pipes      sync.Map
 	_portNumber uint32 = 1
@@ -37,13 +34,13 @@ type PipeTransport struct{}
 
 var _ transport.Transport = &PipeTransport{}
 
-func (t *PipeTransport) Dial(port uint32) (c transport.Connection, err error) {
-	for i := 0; i < _dialRetries; i++ {
+func (*PipeTransport) Dial(port uint32) (c transport.Connection, err error) {
+	for i := 0; i < dialRetries; i++ {
 		c, err = getFakeSocket(port)
 
-		switch {
-		case errors.Is(err, unix.ENOENT): // socket hasn't been created
-			time.Sleep(_dialWait)
+		if errors.Is(err, unix.ENOENT) {
+			// socket hasn't been created
+			time.Sleep(dialWait)
 			continue
 		}
 		break
@@ -61,7 +58,6 @@ type fakeIO struct {
 }
 
 func createStdIO(ctx context.Context, t testing.TB, con stdio.ConnectionSettings) *fakeIO {
-	// (stdin io.WriteCloser, stdout io.ReadCloser, stderr io.ReadCloser) {
 	f := &fakeIO{}
 	if con.StdIn != nil {
 		f.stdin = newFakeSocket(ctx, t, *con.StdIn, "stdin")
@@ -120,10 +116,9 @@ func (f *fakeIO) ReadAllErr(ctx context.Context, t testing.TB) string {
 }
 
 type fakeSocket struct {
-	id uint32
-	n  string
-	ch chan struct{} // closed when dialed (via getFakeSocket)
-	// m    sync.RWMutex
+	id   uint32
+	n    string
+	ch   chan struct{} // closed when dialed (via getFakeSocket)
 	r, w *os.File
 }
 
@@ -155,7 +150,6 @@ func newFakeSocket(_ context.Context, t testing.TB, id uint32, n string) *fakeSo
 }
 
 func getFakeSocket(id uint32) (*fakeSocket, error) {
-	// logrus.Debugf("getting fake socket %d", id)
 	f, ok := _pipes.Load(id)
 	if !ok {
 		return nil, unix.ENOENT
@@ -172,19 +166,16 @@ func getFakeSocket(id uint32) (*fakeSocket, error) {
 }
 
 func (s *fakeSocket) Read(b []byte) (int, error) {
-	// logrus.Debugf("reading from fake socket %d", s.id)
 	<-s.ch
 	return s.r.Read(b)
 }
 
 func (s *fakeSocket) Write(b []byte) (int, error) {
-	// logrus.Debugf("writing to fake socket %d", s.id)
 	<-s.ch
 	return s.w.Write(b)
 }
 
 func (s *fakeSocket) Close() (err error) {
-	// logrus.Debugf("closing fake socket %d", s.id)
 	if _, ok := _pipes.LoadAndDelete(s.id); ok {
 		return nil
 	}
@@ -205,7 +196,7 @@ func (s *fakeSocket) CloseWrite() error {
 	return s.w.Close()
 }
 
-func (s *fakeSocket) File() (*os.File, error) {
+func (*fakeSocket) File() (*os.File, error) {
 	return nil, errors.New("fakeSocket does not support File()")
 }
 
@@ -272,7 +263,6 @@ func TestFakeSocket(t *testing.T) {
 
 	// host
 	f := createStdIO(ctx, t, con)
-	// t.Logf("got std io %v %v %v", stdin, stdout, stderr)
 
 	var err error
 	go func() { // guest
@@ -286,7 +276,6 @@ func TestFakeSocket(t *testing.T) {
 			return
 		}
 		defer cin.Close()
-		// t.Logf("dialed conn %#+v", cin)
 
 		cout, err = tpt.Dial(*con.StdOut)
 		if err != nil {
@@ -295,7 +284,6 @@ func TestFakeSocket(t *testing.T) {
 			return
 		}
 		defer cout.Close()
-		// t.Logf("dialed conn %#+v", cout)
 
 		close(chs)
 		var b []byte
@@ -308,9 +296,7 @@ func TestFakeSocket(t *testing.T) {
 		t.Logf("guest read %s", b)
 
 		_, err = cout.Write(b)
-		cout.CloseWrite()
-
-		return
+		_ = cout.CloseWrite()
 	}()
 
 	<-chs // wait for guest to dial

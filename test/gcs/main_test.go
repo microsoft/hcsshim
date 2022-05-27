@@ -35,11 +35,9 @@ var allFeatures = []string{
 	featureStandalone,
 }
 
-// flags
 var (
-	flagSecurityPolicy string
-	flagFeatures       = testflag.NewFeatureFlag(allFeatures)
-	flagJoinGCSCgroup  = flag.Bool(
+	flagFeatures      = testflag.NewFeatureFlag(allFeatures)
+	flagJoinGCSCgroup = flag.Bool(
 		"join-gcs-cgroup",
 		false,
 		"If true, join the same cgroup as the gcs daemon, `/gcs`",
@@ -56,20 +54,13 @@ var (
 	)
 )
 
+var securityPolicy string
+
 func init() {
-	p := securitypolicy.NewOpenDoorPolicy()
-	pStr, err := p.EncodeToString()
-	if err != nil {
-		// really should not get here ...
+	var err error
+	if securityPolicy, err = securitypolicy.NewOpenDoorPolicy().EncodeToString(); err != nil {
 		log.Fatal("could not encode open door policy to string: %w", err)
 	}
-
-	flag.StringVar(
-		&flagSecurityPolicy,
-		"security-policy",
-		pStr,
-		"The base64-encoded security policy to use during testing",
-	)
 }
 
 func TestMain(m *testing.M) {
@@ -83,8 +74,7 @@ func TestMain(m *testing.M) {
 }
 
 func setup() (err error) {
-	os.MkdirAll(guestpath.LCOWRootPrefixInUVM, 0755)
-	// os.MkdirAll(sockDir, 0755)
+	_ = os.MkdirAll(guestpath.LCOWRootPrefixInUVM, 0755)
 
 	if vf := flag.Lookup("test.v"); vf != nil {
 		if vf.Value.String() == strconv.FormatBool(true) {
@@ -107,13 +97,13 @@ func setup() (err error) {
 	}
 
 	// initialize runtime
-	rt, err := _getRuntime()
+	rt, err := getRuntimeErr()
 	if err != nil {
 		return err
 	}
 
 	// check policy will be parsed properly
-	if _, err = _getHost(rt, getTransport()); err != nil {
+	if _, err = getHostErr(rt, getTransport()); err != nil {
 		return err
 	}
 
@@ -131,7 +121,7 @@ func getTestState(ctx context.Context, t testing.TB) (*hcsv2.Host, runtime.Runti
 }
 
 func getHost(_ context.Context, t testing.TB, rt runtime.Runtime) *hcsv2.Host {
-	h, err := _getHost(rt, getTransport())
+	h, err := getHostErr(rt, getTransport())
 	if err != nil {
 		t.Helper()
 		t.Fatalf("could not get host: %v", err)
@@ -140,9 +130,9 @@ func getHost(_ context.Context, t testing.TB, rt runtime.Runtime) *hcsv2.Host {
 	return h
 }
 
-func _getHost(rt runtime.Runtime, tp transport.Transport) (*hcsv2.Host, error) {
+func getHostErr(rt runtime.Runtime, tp transport.Transport) (*hcsv2.Host, error) {
 	h := hcsv2.NewHost(rt, tp)
-	if err := h.SetSecurityPolicy(flagSecurityPolicy); err != nil {
+	if err := h.SetConfidentialUVMOptions("", securityPolicy, ""); err != nil {
 		return nil, fmt.Errorf("could not set host security policy: %w", err)
 	}
 
@@ -150,7 +140,7 @@ func _getHost(rt runtime.Runtime, tp transport.Transport) (*hcsv2.Host, error) {
 }
 
 func getRuntime(_ context.Context, t testing.TB) runtime.Runtime {
-	rt, err := _getRuntime()
+	rt, err := getRuntimeErr()
 	if err != nil {
 		t.Helper()
 		t.Fatalf("could not get runtime: %v", err)
@@ -159,7 +149,7 @@ func getRuntime(_ context.Context, t testing.TB) runtime.Runtime {
 	return rt
 }
 
-func _getRuntime() (runtime.Runtime, error) {
+func getRuntimeErr() (runtime.Runtime, error) {
 	rt, err := runc.NewRuntime(guestpath.LCOWRootPrefixInUVM)
 	if err != nil {
 		return rt, fmt.Errorf("failed to initialize runc runtime: %w", err)

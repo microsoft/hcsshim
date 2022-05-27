@@ -32,7 +32,9 @@ import (
 
 const tailNull = "tail -f /dev/null"
 
-// will call unmountRootfs during cleanup
+// Creates an overlay mount, and then a container using that mount that runs until stopped.
+// The container is created on its own, and not associated with a sandbox pod, and is therefore not CRI compliant.
+// [unmountRootfs] is added to the test cleanup.
 func createStandaloneContainer(ctx context.Context, t testing.TB, host *hcsv2.Host, id string, extra ...ctrdoci.SpecOpts) *hcsv2.Container {
 	ctx = namespaces.WithNamespace(ctx, testoci.DefaultNamespace)
 	scratch, rootfs := mountRootfs(ctx, t, host, id)
@@ -50,7 +52,6 @@ func createStandaloneContainer(ctx context.Context, t testing.TB, host *hcsv2.Ho
 
 	t.Cleanup(func() {
 		unmountRootfs(ctx, t, scratch)
-		// hcsv2.RemoveNetworkNamespace(ctx, id)
 	})
 
 	return createContainer(ctx, t, host, id, r)
@@ -61,16 +62,6 @@ func createContainer(ctx context.Context, t testing.TB, host *hcsv2.Host, id str
 	if err != nil {
 		t.Helper()
 		t.Fatalf("could not create container %q: %v", id, err)
-	}
-
-	return c
-}
-
-func getContainer(_ context.Context, t testing.TB, host *hcsv2.Host, id string) *hcsv2.Container {
-	c, err := host.GetContainer(id)
-	if err != nil {
-		t.Helper()
-		t.Fatalf("could not get container %q: %v", id, err)
 	}
 
 	return c
@@ -90,7 +81,7 @@ func startContainer(ctx context.Context, t testing.TB, c *hcsv2.Container, conn 
 	return getProcess(ctx, t, c, uint32(pid))
 }
 
-// waitContainer waits on the container's init process, p
+// waitContainer waits on the container's init process, p.
 func waitContainer(ctx context.Context, t testing.TB, c *hcsv2.Container, p hcsv2.Process, forced bool) {
 	t.Helper()
 
@@ -196,6 +187,7 @@ func listContainerStates(_ context.Context, t testing.TB, rt runtime.Runtime) []
 	return css
 }
 
+// assertNumberContainers asserts that n containers are found, and then returns the container states.
 func assertNumberContainers(ctx context.Context, t testing.TB, rt runtime.Runtime, n int) {
 	fmt := "found %d running containers, wanted %d"
 	css := listContainerStates(ctx, t, rt)
@@ -227,7 +219,7 @@ func getContainerState(ctx context.Context, t testing.TB, rt runtime.Runtime, id
 
 	t.Helper()
 	t.Fatalf("could not find container %q", id)
-	return runtime.ContainerState{} // jus to make the linter happy
+	return runtime.ContainerState{} // just to make the linter happy
 }
 
 func assertContainerState(ctx context.Context, t testing.TB, rt runtime.Runtime, id, state string) {
@@ -283,8 +275,8 @@ func createNamespace(ctx context.Context, t testing.TB, nns string) {
 }
 
 func removeNamespace(ctx context.Context, t testing.TB, nns string) {
-	// if err := hcsv2.RemoveNetworkNamespace(ctx, nns); err != nil {
-	// 	t.Helper()
-	// 	t.Fatalf("could not remove namespace %q: %v", nns, err)
-	// }
+	if err := hcsv2.RemoveNetworkNamespace(ctx, nns); err != nil {
+		t.Helper()
+		t.Fatalf("could not remove namespace %q: %v", nns, err)
+	}
 }

@@ -39,8 +39,8 @@ func BenchmarkCRISanboxCreate(b *testing.B) {
 		// so kill container to end those and avoid future perf hits
 		killContainer(ctx, b, c)
 		cleanupContainer(ctx, b, host, c)
-		unmountRootfs(ctx, b, scratch)
 		removeNamespace(ctx, b, nns)
+		unmountRootfs(ctx, b, scratch)
 	}
 }
 
@@ -71,8 +71,8 @@ func BenchmarkCRISandboxStart(b *testing.B) {
 		killContainer(ctx, b, c)
 		waitContainer(ctx, b, c, p, true)
 		cleanupContainer(ctx, b, host, c)
-		unmountRootfs(ctx, b, scratch)
 		removeNamespace(ctx, b, nns)
+		unmountRootfs(ctx, b, scratch)
 	}
 }
 
@@ -149,7 +149,7 @@ func BenchmarkCRIWorkload(b *testing.B) {
 		b.StopTimer()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			id, r, cleanup := _workloadContainerRequest(ctx, b, host, sid, uint32(sandboxInit.Pid()), nns)
+			id, r, cleanup := workloadContainerRequest(ctx, b, host, sid, uint32(sandboxInit.Pid()), nns)
 
 			b.StartTimer()
 			c := createContainer(ctx, b, host, id, r)
@@ -170,7 +170,7 @@ func BenchmarkCRIWorkload(b *testing.B) {
 		b.StopTimer()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			id, r, cleanup := _workloadContainerRequest(ctx, b, host, sid, uint32(sandboxInit.Pid()), nns)
+			id, r, cleanup := workloadContainerRequest(ctx, b, host, sid, uint32(sandboxInit.Pid()), nns)
 			c := createContainer(ctx, b, host, id, r)
 
 			b.StartTimer()
@@ -188,7 +188,7 @@ func BenchmarkCRIWorkload(b *testing.B) {
 		b.StopTimer()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			id, r, cleanup := _workloadContainerRequest(ctx, b, host, sid, uint32(sandboxInit.Pid()), nns)
+			id, r, cleanup := workloadContainerRequest(ctx, b, host, sid, uint32(sandboxInit.Pid()), nns)
 			c := createContainer(ctx, b, host, id, r)
 			p := startContainer(ctx, b, c, stdio.ConnectionSettings{})
 
@@ -209,7 +209,14 @@ func BenchmarkCRIWorkload(b *testing.B) {
 	})
 }
 
-func _workloadContainerRequest(ctx context.Context, t testing.TB, host *hcsv2.Host, sid string, spid uint32, nns string) (string, *prot.VMHostedContainerSettingsV2, func()) {
+func workloadContainerRequest(
+	ctx context.Context,
+	t testing.TB,
+	host *hcsv2.Host,
+	sid string,
+	spid uint32,
+	nns string,
+) (string, *prot.VMHostedContainerSettingsV2, func()) {
 	id := sid + cri_util.GenerateID()
 	scratch, rootfs := mountRootfs(ctx, t, host, id)
 	spec := containerSpec(ctx, t,

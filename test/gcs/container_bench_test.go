@@ -59,7 +59,7 @@ func BenchmarkContainerStart(b *testing.B) {
 	b.StopTimer()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		id, r, cleanup := _standaloneContainerRequest(ctx, b, host)
+		id, r, cleanup := standaloneContainerRequest(ctx, b, host)
 
 		c := createContainer(ctx, b, host, id, r)
 
@@ -82,7 +82,7 @@ func BenchmarkContainerKill(b *testing.B) {
 	b.StopTimer()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		id, r, cleanup := _standaloneContainerRequest(ctx, b, host)
+		id, r, cleanup := standaloneContainerRequest(ctx, b, host)
 		c := createContainer(ctx, b, host, id, r)
 		p := startContainer(ctx, b, c, stdio.ConnectionSettings{})
 
@@ -102,7 +102,7 @@ func BenchmarkContainerKill(b *testing.B) {
 	}
 }
 
-// container create through till wait and exit
+// benchmark container create through wait until exit.
 func BenchmarkContainerCompleteExit(b *testing.B) {
 	requireFeatures(b, featureStandalone)
 	ctx := context.Background()
@@ -111,7 +111,7 @@ func BenchmarkContainerCompleteExit(b *testing.B) {
 	b.StopTimer()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		id, r, cleanup := _standaloneContainerRequest(ctx, b, host, oci.WithProcessArgs("/bin/sh", "-c", "true"))
+		id, r, cleanup := standaloneContainerRequest(ctx, b, host, oci.WithProcessArgs("/bin/sh", "-c", "true"))
 
 		b.StartTimer()
 		c := createContainer(ctx, b, host, id, r)
@@ -144,7 +144,7 @@ func BenchmarkContainerCompleteKill(b *testing.B) {
 	b.StopTimer()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		id, r, cleanup := _standaloneContainerRequest(ctx, b, host)
+		id, r, cleanup := standaloneContainerRequest(ctx, b, host)
 
 		b.StartTimer()
 		c := createContainer(ctx, b, host, id, r)
@@ -177,7 +177,6 @@ func BenchmarkContainerExec(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		ps := testoci.CreateLinuxSpec(ctx, b, id,
-			// oci.WithTTY,
 			oci.WithDefaultPathEnv,
 			oci.WithProcessArgs("/bin/sh", "-c", "true"),
 		).Process
@@ -199,7 +198,12 @@ func BenchmarkContainerExec(b *testing.B) {
 	cleanupContainer(ctx, b, host, c)
 }
 
-func _standaloneContainerRequest(ctx context.Context, t testing.TB, host *hcsv2.Host, extra ...oci.SpecOpts) (string, *prot.VMHostedContainerSettingsV2, func()) {
+func standaloneContainerRequest(
+	ctx context.Context,
+	t testing.TB,
+	host *hcsv2.Host,
+	extra ...oci.SpecOpts,
+) (string, *prot.VMHostedContainerSettingsV2, func()) {
 	ctx = namespaces.WithNamespace(ctx, testoci.DefaultNamespace)
 	id := t.Name() + cri_util.GenerateID()
 	scratch, rootfs := mountRootfs(ctx, t, host, id)

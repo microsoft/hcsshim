@@ -45,6 +45,7 @@ func TestContainerCreate(t *testing.T) {
 
 	assertNumberContainers(ctx, t, rtime, 1)
 	css := listContainerStates(ctx, t, rtime)
+	// guaranteed by assertNumberContainers that css will only have 1 element
 	cs := css[0]
 	if cs.ID != id {
 		t.Fatalf("got id %q, wanted %q", cs.ID, id)
@@ -76,10 +77,9 @@ func TestContainerDelete(t *testing.T) {
 
 	cleanupContainer(ctx, t, host, c)
 
-	// getContainer will Fatal
-	_, err := host.GetContainer(id)
+	_, err := host.GetCreatedContainer(id)
 	if hr, herr := gcserr.GetHresult(err); herr != nil || hr != gcserr.HrVmcomputeSystemNotFound {
-		t.Fatalf("GetContainer returned %v, wanted %v", err, gcserr.HrVmcomputeSystemNotFound)
+		t.Fatalf("GetCreatedContainer returned %v, wanted %v", err, gcserr.HrVmcomputeSystemNotFound)
 	}
 	assertNumberContainers(ctx, t, rtime, 0)
 }
@@ -140,7 +140,6 @@ func TestContainerIO(t *testing.T) {
 			})
 
 			c := createStandaloneContainer(ctx, t, host, id,
-				// oci.WithTTY,
 				oci.WithProcessArgs(tt.args...),
 			)
 			t.Cleanup(func() {
@@ -154,7 +153,7 @@ func TestContainerIO(t *testing.T) {
 
 			waitContainer(ctx, t, c, p, false)
 
-			g.Wait()
+			_ = g.Wait()
 			t.Logf("stdout: %q", outStr)
 			t.Logf("stderr: %q", errStr)
 
@@ -192,13 +191,11 @@ func TestContainerExec(t *testing.T) {
 	for _, tt := range ioTests {
 		t.Run(tt.name, func(t *testing.T) {
 			ps := testoci.CreateLinuxSpec(ctx, t, id,
-				// oci.WithTTY,
 				oci.WithDefaultPathEnv,
 				oci.WithProcessArgs(tt.args...),
 			).Process
 			con := newConnectionSettings(tt.in != "", true, true)
 			f := createStdIO(ctx, t, con)
-			// t.Logf("got channels %+v", f)
 
 			var outStr, errStr string
 			g := &errgroup.Group{}
@@ -226,7 +223,7 @@ func TestContainerExec(t *testing.T) {
 				t.Errorf("process exited with error code %d", i)
 			}
 
-			g.Wait()
+			_ = g.Wait()
 			t.Logf("stdout: %q", outStr)
 			t.Logf("stderr: %q", errStr)
 

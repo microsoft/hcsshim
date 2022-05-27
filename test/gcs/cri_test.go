@@ -14,6 +14,9 @@ import (
 // tests for operations on sandbox and workload (CRI) containers
 //
 
+// TestCRILifecycle tests the entire CRI container workflow: creating and starting a CRI sandbox
+// pod container, creating, starting, and stopping a workload container within that pod, asserting
+// that all operations were successful, and mounting (and unmounting) rootfs's as necessary.
 func TestCRILifecycle(t *testing.T) {
 	requireFeatures(t, featureCRI)
 

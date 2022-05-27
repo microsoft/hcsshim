@@ -1,4 +1,4 @@
-#ex:  .\scripts\Test-LCOW-UVM.ps1 -vb -Action Bench  -BootFilesPath C:\ContainerPlat\LinuxBootFiles\ -MountGCSTest -Count 2 -Benchtime '3s'
+#ex: .\scripts\Test-LCOW-UVM.ps1 -vb -Action Bench -BootFilesPath C:\ContainerPlat\LinuxBootFiles\ -MountGCSTest -Count 2 -Benchtime '3s'
 # benchstat via  `go install golang.org/x/perf/cmd/benchstat@latest`
 
 [CmdletBinding()]
@@ -35,24 +35,30 @@ param (
     $OutDirectory = '.\test\results',
 
     # uvm parameters
+
     [string]
     $BootFilesPath = 'C:\ContainerPlat\LinuxBootFiles',
+
+    [ValidateSet('vhd', 'initrd')]
+    [string]
+    $BootFSType = 'vhd',
 
     [switch]
     $DisableTimeSync,
 
-    [string]
-    $RootfsMount = '/run/rootfs',
+    # gcs test/container options
 
     [string]
-    $RootfsPath = (Join-Path $BootFilesPath 'rootfs.vhd'),
-    # $RootfsPath = "C:\ContainerPlatData\root\io.containerd.snapshotter.v1.windows-lcow\snapshots\2\layer.vhd",
+    $ContainerRootFSMount = '/run/rootfs',
+
+    [string]
+    $ContainerRootFSPath = (Join-Path $BootFilesPath 'rootfs.vhd'),
 
     [string]
     $GCSTestMount = '/run/bin',
 
     [string]
-    $GCSTestPath = '.\bin\test\gcstest',
+    $GCSTestPath = '.\bin\test\gcs.test',
 
     [switch]
     $MountGCSTest,
@@ -66,7 +72,7 @@ Import-Module ( Join-Path $PSScriptRoot Testing.psm1 ) -Force
 $CodePath = Resolve-Path $CodePath
 $OutDirectory = Resolve-Path $OutDirectory
 $BootFilesPath = Resolve-Path $BootFilesPath
-$RootfsPath = Resolve-Path $RootfsPath
+$ContainerRootFSPath = Resolve-Path $ContainerRootFSPath
 $GCSTestPath = Resolve-Path $GCSTestPath
 
 $shell = ( $Action -eq 'Shell' )
@@ -75,11 +81,11 @@ if ( $shell ) {
     $cmd = 'ash'
 } else {
     $date = Get-Date
-    $waitfiles = "$RootfsMount"
-    $gcspath = 'gcstest'
+    $waitfiles = "$ContainerRootFSMount"
+    $gcspath = 'gcs.test'
     if ( $MountGCSTest ) {
         $waitfiles += ",$GCSTestMount"
-        $gcspath = "$GCSTestMount/gcstest"
+        $gcspath = "$GCSTestMount/gcs.test"
     }
 
     $pre = "wait-paths -p $waitfiles -t 5 ; " + `
@@ -106,17 +112,16 @@ if ( $shell ) {
         -Feature $Feature `
         -Verbose:$Verbose
 
-    $testcmd += " `'-rootfs-path=$RootfsMount`' "
+    $testcmd += " `'-rootfs-path=$ContainerRootFSMount`' "
     $cmd = $pre + $testcmd
 }
 
-$boot = '.\bin\tools\uvmboot.exe -gcs lcow ' + `
+$boot = '.\bin\tool\uvmboot.exe -gcs lcow ' + `
     '-fwd-stdout -fwd-stderr -output-handling stdout ' + `
     "-boot-files-path $BootFilesPath " + `
-    '-root-fs-type vhd ' + `
+    "-root-fs-type $BootFSType " + `
     '-kernel-file vmlinux ' + `
-    "-security-policy=`"`" " + `
-    "-mount `"$RootfsPath,$RootfsMount`" "
+    "-mount-scsi `"$ContainerRootFSPath,$ContainerRootFSMount`" "
 
 if ( $MountGCSTest ) {
     $boot += "-share `"$GCSTestPath,$GCSTestMount`" "
