@@ -89,15 +89,6 @@ func (c *JobContainer) setupMounts(ctx context.Context, spec *specs.Spec) error 
 		if err := c.job.ApplyFileBinding(mount.Destination, mount.Source, false); err != nil {
 			return err
 		}
-
-		// For backwards compat with the way directory/file mounts are done on machines without the bind filter dll,
-		// also bind the mount under a relative path in the rootfs location. This ensures any apps that used to make
-		// use of the CONTAINER_SANDBOX_MOUNT_POINT env var can continue doing so, or they can just access the mount
-		// at mount.Destination, either or.
-		fullCtrPath := filepath.Join(c.rootfsLocation, stripDriveLetter(mount.Destination))
-		if err := c.job.ApplyFileBinding(fullCtrPath, mount.Source, false); err != nil {
-			return err
-		}
 	}
 	return nil
 }
