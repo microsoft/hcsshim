@@ -402,7 +402,8 @@ func UnmountContainerLayers(ctx context.Context, layerFolders []string, containe
 			return errors.New("need at least one layer for Unmount")
 		}
 
-		// Remove the mount point if there is one. This is the case for job containers.
+		// Remove the mount point if there is one. This is the fallback case for job containers
+		// if no bind mount support is available.
 		if volumeMountPath != "" {
 			if err := removeSandboxMountPoint(ctx, volumeMountPath); err != nil {
 				return err

@@ -17,7 +17,7 @@ func TestNamePipeDeny(t *testing.T) {
 			},
 		},
 	}
-	if err := setupMounts(s, "/test"); err == nil {
+	if err := fallbackMountSetup(s, "/test"); err == nil {
 		t.Fatal("expected named pipe mount validation to fail for job container")
 	}
 }

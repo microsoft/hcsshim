@@ -17,7 +17,9 @@ import (
 	"github.com/Microsoft/go-winio/vhd"
 	"github.com/Microsoft/hcsshim/hcn"
 	"github.com/Microsoft/hcsshim/internal/winapi"
+	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
+	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
@@ -715,5 +717,153 @@ func Test_DoubleQuoting_JobContainer_WCOW(t *testing.T) {
 	// e.g. `cmdline.exe ""quote test"" `
 	if string(execResponse.Stdout) != expected {
 		t.Fatalf("expected cmdline for exec to be %q but got %q", expected, string(execResponse.Stdout))
+	}
+}
+
+// Test that mounts show up at the expected destination if the host supports file binding.
+func Test_BindSupport_JobContainer_WCOW(t *testing.T) {
+	requireFeatures(t, featureWCOWProcess, featureHostProcess)
+	testutilities.RequiresBuild(t, osversion.V20H1)
+
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
+	client := newTestRuntimeClient(t)
+
+	podctx := context.Background()
+	sandboxRequest := getJobContainerPodRequestWCOW(t)
+
+	podID := runPodSandbox(t, client, podctx, sandboxRequest)
+	defer removePodSandbox(t, client, podctx, podID)
+	defer stopPodSandbox(t, client, podctx, podID)
+
+	// Create temp directory and populate with an empty file. We're going to use this
+	// as a mount for the container. The purpose is just to test that wherever the
+	// destination for the mount is set to is where the mount actually shows up if we
+	// have file binding support.
+	testDir := t.TempDir()
+	testFile := filepath.Join(testDir, "testfile.txt")
+	f, err := os.Create(testFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	ctrPath := `C:\jobcontainer-mount-test\`
+	mount := []*runtime.Mount{
+		{
+			HostPath:      testDir,
+			ContainerPath: ctrPath,
+		},
+	}
+
+	containerRequest := getJobContainerRequestWCOW(t, podID, sandboxRequest.Config, imageWindowsNanoserver, "", mount)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	containerID := createContainer(t, client, ctx, containerRequest)
+	defer removeContainer(t, client, ctx, containerID)
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID)
+
+	r := execSync(t, client, ctx, &runtime.ExecSyncRequest{
+		ContainerId: containerID,
+		Cmd:         []string{"cmd", "/c", `dir`, filepath.Join(ctrPath, "testfile.txt")},
+	})
+
+	exitCode := int(r.ExitCode)
+	errorMsg := string(r.Stderr)
+	if r.ExitCode != 0 || len(errorMsg) != 0 {
+		t.Fatalf("Failed execution inside container %s with error: %s, exitCode: %d", containerID, errorMsg, exitCode)
+	}
+}
+
+// Test that mounts are unique per container even if the same container path is used.
+func Test_BindSupport_MultipleContainers_JobContainer_WCOW(t *testing.T) {
+	requireFeatures(t, featureWCOWProcess, featureHostProcess)
+	testutilities.RequiresBuild(t, osversion.V20H1)
+
+	pullRequiredImages(t, []string{imageWindowsNanoserver})
+	client := newTestRuntimeClient(t)
+
+	// Create temp directories and populate with empty files. We're going to do the following:
+	//
+	// tempDir1 (with testfile1.txt) -> container1 at C:\jobcontainer-mount-test\
+	// tempDir2 (with testfile2.txt) -> container2 at C:\jobcontainer-mount-test\
+	//
+	// and then verify that we don't have a merged view of the mounts in both containers as they should be
+	// unique per silo.
+	testDir1 := t.TempDir()
+	f, err := os.Create(filepath.Join(testDir1, "testfile1.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	testDir2 := t.TempDir()
+	f, err = os.Create(filepath.Join(testDir2, "testfile2.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	ctrPath := `C:\jobcontainer-mount-test\`
+	ctrMount1 := []*runtime.Mount{
+		{
+			HostPath:      testDir1,
+			ContainerPath: ctrPath,
+		},
+	}
+	ctrMount2 := []*runtime.Mount{
+		{
+			HostPath:      testDir2,
+			ContainerPath: ctrPath,
+		},
+	}
+
+	podctx := context.Background()
+	sandboxRequest := getJobContainerPodRequestWCOW(t)
+	podID := runPodSandbox(t, client, podctx, sandboxRequest)
+	defer removePodSandbox(t, client, podctx, podID)
+	defer stopPodSandbox(t, client, podctx, podID)
+
+	container1Request := getJobContainerRequestWCOW(t, podID, sandboxRequest.Config, imageWindowsNanoserver, "", ctrMount1)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	container1ID := createContainer(t, client, ctx, container1Request)
+	defer removeContainer(t, client, ctx, container1ID)
+	startContainer(t, client, ctx, container1ID)
+	defer stopContainer(t, client, ctx, container1ID)
+
+	container2Request := getJobContainerRequestWCOW(t, podID, sandboxRequest.Config, imageWindowsNanoserver, "", ctrMount2)
+	container2Request.Config.Metadata.Name += "2"
+	container2ID := createContainer(t, client, ctx, container2Request)
+	defer removeContainer(t, client, ctx, container2ID)
+	startContainer(t, client, ctx, container2ID)
+	defer stopContainer(t, client, ctx, container2ID)
+
+	// Check that we can't see the contents of ctr1's mount.
+	unexpected := filepath.Join(ctrPath, "testfile1.txt")
+	r := execSync(t, client, ctx, &runtime.ExecSyncRequest{
+		ContainerId: container2ID,
+		Cmd:         []string{"cmd", "/c", `dir`, unexpected},
+	})
+
+	exitCode := int(r.ExitCode)
+	errorMsg := string(r.Stderr)
+	if exitCode == 0 || len(errorMsg) == 0 {
+		t.Fatalf("Expected %s to not be available in the container, instead got: %s", unexpected, string(r.Stdout))
+	}
+
+	// Now check that we *can* see the contents of ctr2's
+	expected := filepath.Join(ctrPath, "testfile2.txt")
+	r = execSync(t, client, ctx, &runtime.ExecSyncRequest{
+		ContainerId: container2ID,
+		Cmd:         []string{"cmd", "/c", `dir`, expected},
+	})
+
+	exitCode = int(r.ExitCode)
+	errorMsg = string(r.Stderr)
+	if exitCode != 0 || len(errorMsg) != 0 {
+		t.Fatalf("Expected %s to be available in the container, instead got: %s", expected, errorMsg)
 	}
 }
