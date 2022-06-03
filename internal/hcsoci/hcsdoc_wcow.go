@@ -434,6 +434,21 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		}
 	}
 
+	// Override WaitToKillServiceTimeout reg key to 30 minutes
+	v2Container.RegistryChanges = &hcsschema.RegistryChanges{
+		AddValues: []hcsschema.RegistryValue{
+			{
+				Key: &hcsschema.RegistryKey{
+					Hive: "System",
+					Name: "ControlSet001\\Control",
+				},
+				Name:        "WaitToKillServiceTimeout",
+				StringValue: "1800000",
+				Type_:       "String",
+			},
+		},
+	}
+
 	return v1, v2Container, nil
 }
 

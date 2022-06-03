@@ -290,7 +290,22 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 		}
 		var delivered bool
 		if supported && options != nil {
-			delivered, err = he.p.Process.Signal(ctx, options)
+			if he.isWCOW {
+				// We deliver the signal to the particular process in a separate background
+				// thread and return immediately to gracefully terminate containers. (Bug36689012)
+				// TODO: We can get rid of these changes on the fix to support graceful termination is
+				// made in windows.
+				go func() {
+					signalDelivered, deliveryErr := he.p.Process.Signal(ctx, options)
+					if !signalDelivered {
+						log.G(ctx).WithField("err", deliveryErr).Errorf("Error: NotFound; exec: '%s' in task: '%s' not found", he.id, he.tid)
+					}
+				}()
+				delivered = true
+				err = nil
+			} else {
+				delivered, err = he.p.Process.Signal(ctx, options)
+			}
 		} else {
 			// legacy path before signals support OR if WCOW with signals
 			// support needs to issue a terminate.
