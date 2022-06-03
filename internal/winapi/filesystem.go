@@ -2,6 +2,24 @@
 
 package winapi
 
+import (
+	"os"
+
+	"golang.org/x/sys/windows"
+)
+
+// HANDLE CreateFileW(
+//   [in]           LPCWSTR               lpFileName,
+//   [in]           DWORD                 dwDesiredAccess,
+//   [in]           DWORD                 dwShareMode,
+//   [in, optional] LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+//   [in]           DWORD                 dwCreationDisposition,
+//   [in]           DWORD                 dwFlagsAndAttributes,
+//   [in, optional] HANDLE                hTemplateFile
+// );
+//
+//sys CreateFile(name string, access uint32, mode uint32, sa *windows.SecurityAttributes, createmode uint32, attrs uint32, templatefile windows.Handle) (handle windows.Handle, err error) [failretval==windows.InvalidHandle] = CreateFileW
+
 //sys NtCreateFile(handle *uintptr, accessMask uint32, oa *ObjectAttributes, iosb *IOStatusBlock, allocationSize *uint64, fileAttributes uint32, shareAccess uint32, createDisposition uint32, createOptions uint32, eaBuffer *byte, eaLength uint32) (status uint32) = ntdll.NtCreateFile
 //sys NtSetInformationFile(handle uintptr, iosb *IOStatusBlock, information uintptr, length uint32, class uint32) (status uint32) = ntdll.NtSetInformationFile
 
@@ -109,4 +127,28 @@ type FileLinkInformation struct {
 type FILE_ID_INFO struct {
 	VolumeSerialNumber uint64
 	FileID             [16]byte
+}
+
+// CreatePipe is a more general version of os.Pipe()
+func CreatePipe(sa *windows.SecurityAttributes, size int) (*os.File, *os.File, error) {
+	var r, w windows.Handle
+	if err := windows.CreatePipe(&r, &w, sa, uint32(size)); err != nil {
+		return nil, nil, err
+	}
+	return os.NewFile(uintptr(r), "|0"), os.NewFile(uintptr(w), "|1"), nil
+}
+
+// DWORD GetFileAttributesW(
+//   [in] LPCWSTR lpFileName
+// );
+//
+//sys getFileAttributes(name string) (attr uint32, err error) [failretval==windows.INVALID_FILE_ATTRIBUTES] = GetFileAttributesW
+
+// IsDir checks if the file has the FILE_ATTRIBUTE_DIRECTORY flag set.
+func IsDir(file string) (bool, error) {
+	a, err := getFileAttributes(file)
+	if err != nil {
+		return false, err
+	}
+	return (a & windows.FILE_ATTRIBUTE_DIRECTORY) != 0, nil
 }
