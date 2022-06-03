@@ -3,10 +3,6 @@ on:
   - push
   - pull_request
 
-env:
-  GOFLAGS: -mod=vendor
-  GOPROXY: off
-
 jobs:
   protos:
     runs-on: 'windows-2019'
@@ -88,25 +84,6 @@ jobs:
           }
           exit $process.ExitCode
 
-  verify-test-vendor:
-    runs-on: 'windows-2019'
-    env:
-      GOPROXY: "https://proxy.golang.org,direct"
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v2
-        with:
-          go-version: '^1.17.0'
-      - name: Validate test modules
-        shell: powershell
-        run: |
-          $currentPath = (Get-Location).Path
-          $process = Start-Process powershell.exe -PassThru -Verb runAs -Wait -ArgumentList $currentPath/scripts/Verify-GoModules.ps1, $currentPath, "test"
-          if ($process.ExitCode -ne 0) {
-            Write-Error "Test package modules are not up to date. Please validate your go version >= this job's and run `go mod vendor` followed by `go mod tidy` in hcsshim/test directory."
-          }
-          exit $process.ExitCode
-
   test:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -119,17 +96,17 @@ jobs:
           go-version: '^1.17.0'
 
       - run: go test -gcflags=all=-d=checkptr -v ./... -tags admin
-      - run: go test -gcflags=all=-d=checkptr -v ./internal -tags admin
+      - run: go test -mod=mod -gcflags=all=-d=checkptr -v ./internal -tags admin
+        working-directory: test  
+      - run: go test -mod=mod -gcflags=all=-d=checkptr -c ./containerd-shim-runhcs-v1/ -tags functional
         working-directory: test
-      - run: go test -gcflags=all=-d=checkptr -c ./containerd-shim-runhcs-v1/ -tags functional
+      - run: go test -mod=mod -gcflags=all=-d=checkptr -c ./cri-containerd/ -tags functional
         working-directory: test
-      - run: go test -gcflags=all=-d=checkptr -c ./cri-containerd/ -tags functional
+      - run: go test -mod=mod -gcflags=all=-d=checkptr -c ./functional/ -tags functional
         working-directory: test
-      - run: go test -gcflags=all=-d=checkptr -c ./functional/ -tags functional
+      - run: go test -mod=mod -gcflags=all=-d=checkptr -c ./runhcs/ -tags functional
         working-directory: test
-      - run: go test -gcflags=all=-d=checkptr -c ./runhcs/ -tags functional
-        working-directory: test
-      - run: go build -o sample-logging-driver.exe ./cri-containerd/helpers/log.go
+      - run: go build -mod=mod -o sample-logging-driver.exe ./cri-containerd/helpers/log.go
         working-directory: test
 
       - uses: actions/upload-artifact@v2
