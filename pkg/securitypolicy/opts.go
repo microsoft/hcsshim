@@ -10,10 +10,10 @@ func WithEnvVarRules(envs []EnvRuleConfig) ContainerConfigOpt {
 	}
 }
 
-// WithExpectedMounts adds expected mounts to container policy config.
-func WithExpectedMounts(em []string) ContainerConfigOpt {
+// WithWaitMountPoints adds expected mounts to container policy config.
+func WithWaitMountPoints(em []string) ContainerConfigOpt {
 	return func(c *ContainerConfig) error {
-		c.ExpectedMounts = append(c.ExpectedMounts, em...)
+		c.WaitMountPoints = append(c.WaitMountPoints, em...)
 		return nil
 	}
 }

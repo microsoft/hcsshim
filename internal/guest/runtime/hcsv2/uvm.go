@@ -303,7 +303,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	}
 
 	// Sandbox mount paths need to be resolved in the spec before expected mounts policy can be enforced.
-	if err = h.securityPolicyEnforcer.EnforceExpectedMountsPolicy(id, settings.OCISpecification); err != nil {
+	if err = h.securityPolicyEnforcer.EnforceWaitMountPointsPolicy(id, settings.OCISpecification); err != nil {
 		return nil, errors.Wrapf(err, "container creation denied due to policy")
 	}
 

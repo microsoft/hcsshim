@@ -158,7 +158,7 @@ func PolicyContainersFromConfigs(containerConfigs []securitypolicy.ContainerConf
 			layerHashes,
 			envRules,
 			workingDir,
-			containerConfig.ExpectedMounts,
+			containerConfig.WaitMountPoints,
 			containerConfig.Mounts,
 			containerConfig.AllowElevated,
 		)

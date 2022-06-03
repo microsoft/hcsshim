@@ -21,7 +21,7 @@ be downloaded, turned into an ext4, and finally a dm-verity root hash calculated
 image_name = "rust:1.52.1"
 command = ["rustc", "--help"]
 working_dir = "/home/user"
-expected_mounts = ["/path/to/container/mount-1", "/path/to/container/mount-2"]
+wait_mount_points = ["/path/to/container/mount-1", "/path/to/container/mount-2"]
 
 [[container.env_rule]]
 strategy = "re2"
@@ -98,7 +98,7 @@ represented in JSON.
           }
         },
         "working_dir": "/home/user",
-        "expected_mounts": {
+        "wait_mount_points": {
           "length": 2,
           "elements": {
             "0": "/path/to/container/mount-1",
@@ -164,7 +164,7 @@ represented in JSON.
           }
         },
         "working_dir": "/",
-        "expected_mounts": {
+        "wait_mount_points": {
           "length": 0,
           "elements": {}
         },

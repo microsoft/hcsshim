@@ -43,7 +43,7 @@ func (MountMonitoringSecurityPolicyEnforcer) EnforceMountPolicy(_, _ string, _ *
 	return nil
 }
 
-func (MountMonitoringSecurityPolicyEnforcer) EnforceExpectedMountsPolicy(_ string, _ *oci.Spec) error {
+func (MountMonitoringSecurityPolicyEnforcer) EnforceWaitMountPointsPolicy(_ string, _ *oci.Spec) error {
 	return nil
 }
 

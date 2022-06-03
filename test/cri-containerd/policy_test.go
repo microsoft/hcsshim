@@ -150,9 +150,9 @@ func syncContainerConfigs(writePath, waitPath string) (writer, waiter *securityp
 	// create container #2 that waits for a path to appear
 	echoCmdArgs := []string{"ash", "-c", "while true; do echo hello2; sleep 1; done"}
 	waiter = &securitypolicy.ContainerConfig{
-		ImageName:      "alpine:latest",
-		Command:        echoCmdArgs,
-		ExpectedMounts: []string{waitPath},
+		ImageName:       "alpine:latest",
+		Command:         echoCmdArgs,
+		WaitMountPoints: []string{waitPath},
 		Mounts: []securitypolicy.MountConfig{
 			{
 				HostPath:      "sandbox://host/path",
