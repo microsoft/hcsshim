@@ -106,7 +106,7 @@ message Options {
 	// UTC.
 	bool no_inherit_host_timezone = 19;
 
-	// scrub_logs enables removing environment variables and other protentially sensitive information from logs
+	// scrub_logs enables removing environment variables and other potentially sensitive information from logs
 	bool scrub_logs = 20;
 }
 

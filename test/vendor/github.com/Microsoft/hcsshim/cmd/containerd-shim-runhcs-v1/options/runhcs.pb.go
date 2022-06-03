@@ -151,7 +151,7 @@ type Options struct {
 	// no_inherit_host_timezone specifies to skip inheriting the hosts time zone for WCOW UVMs and instead default to
 	// UTC.
 	NoInheritHostTimezone bool `protobuf:"varint,19,opt,name=no_inherit_host_timezone,json=noInheritHostTimezone,proto3" json:"no_inherit_host_timezone,omitempty"`
-	// scrub_logs enables removing environment variables and other protentially sensitive information from logs
+	// scrub_logs enables removing environment variables and other potentially sensitive information from logs
 	ScrubLogs            bool     `protobuf:"varint,20,opt,name=scrub_logs,json=scrubLogs,proto3" json:"scrub_logs,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
