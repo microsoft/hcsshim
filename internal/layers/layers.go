@@ -165,10 +165,6 @@ func MountLCOWLayers(ctx context.Context, containerID string, layerFolders []str
 // Job container:     Returns the mount path on the host as a volume guid, with the volume mounted on
 // 					  the host at `volumeMountPath`.
 func MountWCOWLayers(ctx context.Context, containerID string, layerFolders []string, guestRoot, volumeMountPath string, vm *uvm.UtilityVM) (_ string, err error) {
-	if vm.OS() != "windows" {
-		return "", errors.New("MountWCOWLayers should only be called for WCOW")
-	}
-
 	if vm == nil {
 		if len(layerFolders) < 2 {
 			return "", errors.New("need at least two layers - base and scratch")
@@ -246,6 +242,10 @@ func MountWCOWLayers(ctx context.Context, containerID string, layerFolders []str
 		}
 
 		return mountPath, nil
+	}
+
+	if vm.OS() != "windows" {
+		return "", errors.New("MountWCOWLayers should only be called for WCOW")
 	}
 
 	// V2 UVM
