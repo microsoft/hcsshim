@@ -490,10 +490,9 @@ func (job *JobObject) ApplyFileBinding(root, target string, merged bool) error {
 		flags |= winapi.BINDFLT_FLAG_MERGED_BIND_MAPPING
 	}
 
-	if err := winapi.BfSetupFilterEx(
-		flags,
+	if err := winapi.BfSetupFilter(
 		job.handle,
-		nil,
+		flags,
 		rootPtr,
 		targetPtr,
 		nil,
