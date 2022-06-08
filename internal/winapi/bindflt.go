@@ -7,14 +7,13 @@ const (
 )
 
 // HRESULT
-// BfSetupFilterEx(
-//     _In_ ULONG Flags,
+// BfSetupFilter(
 //     _In_opt_ HANDLE JobHandle,
-//     _In_opt_ PSID Sid,
+//     _In_ ULONG Flags,
 //     _In_ LPCWSTR VirtualizationRootPath,
 //     _In_ LPCWSTR VirtualizationTargetPath,
 //     _In_reads_opt_( VirtualizationExceptionPathCount ) LPCWSTR* VirtualizationExceptionPaths,
 //     _In_opt_ ULONG VirtualizationExceptionPathCount
 // );
 //
-//sys BfSetupFilterEx(flags uint32, jobHandle windows.Handle, sid *windows.SID, virtRootPath *uint16, virtTargetPath *uint16, virtExceptions **uint16, virtExceptionPathCount uint32) (hr error) = bindfltapi.BfSetupFilterEx?
+//sys BfSetupFilter(jobHandle windows.Handle, flags uint32, virtRootPath *uint16, virtTargetPath *uint16, virtExceptions **uint16, virtExceptionPathCount uint32) (hr error) = bindfltapi.BfSetupFilter?
