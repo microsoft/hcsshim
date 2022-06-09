@@ -46,8 +46,8 @@ jobs:
           git diff --exit-code
         env:
           GOPATH: '${{ github.workspace }}\go'
-          GOFLAGS:
-          GOPROXY:
+          GOFLAGS: ""
+          GOPROXY: ""
 
   lint:
     runs-on: 'windows-2019'
@@ -118,6 +118,138 @@ jobs:
             test/functional.test.exe
             test/runhcs.test.exe
             test/sample-logging-driver.exe
+
+  integration-tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2019, windows-2022]
+
+    steps:
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '1.18.3'
+          check-latest: true
+      - name: Set env
+        shell: bash
+        run: |
+          mkdir -p "${{ github.workspace }}/bin"
+
+          echo "GOPATH=${{ github.workspace }}" >> $GITHUB_ENV
+          echo "${{ github.workspace }}/bin" >> $GITHUB_PATH
+          echo "${{ github.workspace }}/src/github.com/containerd/containerd/bin" >> $GITHUB_PATH
+      - uses: actions/checkout@v2
+        with:
+          path: src/github.com/containerd/containerd
+          repository: 'containerd/containerd'
+
+      - uses: actions/checkout@v2
+        with:
+          path: src/github.com/Microsoft/hcsshim
+
+      - name: Build binaries
+        shell: bash
+        working-directory: src/github.com/containerd/containerd
+        run: |
+          set -o xtrace
+          mingw32-make.exe binaries
+          script/setup/install-cni-windows
+
+      - name: Build the shim
+        working-directory: src/github.com/Microsoft/hcsshim
+        shell: powershell
+        run: |
+          go build -mod vendor -o "${{ github.workspace }}/src/github.com/containerd/containerd/bin/containerd-shim-runhcs-v1.exe" .\cmd\containerd-shim-runhcs-v1
+
+      - name: Get crictl tool
+        shell: powershell
+        run: |
+          curl.exe -L "https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.24.2/crictl-v1.24.2-windows-amd64.tar.gz" -o c:\crictl.tar.gz
+          tar xf c:\crictl.tar.gz -C "${{ github.workspace }}/bin"
+
+      - name: Run containerd integration tests
+        shell: bash
+        working-directory: src/github.com/containerd/containerd
+        run: |
+          export EXTRA_TESTFLAGS="-timeout=20m"
+          make integration
+
+      - name: Run containerd CRI integration tests
+        shell: bash
+        working-directory: src/github.com/containerd/containerd
+        env:
+          TEST_IMAGE_LIST: ${{github.workspace}}/repolist.toml
+          BUSYBOX_TESTING_IMAGE_REF: "k8s.gcr.io/e2e-test-images/busybox:1.29-2"
+          RESOURCE_CONSUMER_TESTING_IMAGE_REF: "k8s.gcr.io/e2e-test-images/resource-consumer:1.10"
+          CGO_ENABLED: 1
+        run: |
+          cat > "${{ env.TEST_IMAGE_LIST }}" << EOF
+          busybox = "${{ env.BUSYBOX_TESTING_IMAGE_REF }}"
+          ResourceConsumer = "${{ env.RESOURCE_CONSUMER_TESTING_IMAGE_REF }}"
+          EOF
+
+          # In the stable version of hcsshim that is used in containerd, killing a task
+          # that has already exited or a task that has not yet been started, yields a
+          # ErrNotFound. The master version of hcsshim returns nil, which is in line with
+          # how the linux runtime behaves. See:
+          # https://github.com/containerd/containerd/blob/f4f41296c2b0ac7d60aae3dd9c219a7636b0a07e/integration/restart_test.go#L152-L160
+          #
+          # We skip this test here, until a new release of hcsshim is cut and the one in
+          # containerd is updated. When the shim is updated in containerd, this test will
+          # also need to be updated and the special case for windows, removed.
+          FOCUS="[^TestContainerdRestart$]" make cri-integration
+
+#      Enable these tests once the required JobContainer images are updated.
+# 
+#      - name: Install containerd service
+#        shell: powershell
+#        run: |
+#          mkdir C:\containerd
+#          Set-Content C:/containerd/containerd.toml @"
+#          version = 2
+#          [plugins]
+#              [plugins."io.containerd.grpc.v1.cri".containerd]
+#                default_runtime_name = "runhcs-wcow-process"
+#                disable_snapshot_annotations = false
+#                discard_unpacked_layers = false
+#                ignore_blockio_not_enabled_errors = false
+#                ignore_rdt_not_enabled_errors = false
+#                no_pivot = false
+#                snapshotter = "windows"
+#
+#                [plugins."io.containerd.grpc.v1.cri".containerd.runtimes]
+#
+#                [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runhcs-wcow-hypervisor]
+#                  runtime_type = "io.containerd.runhcs.v1"
+#                  [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runhcs-wcow-hypervisor.options]
+#                    Debug = true
+#                    DebugType = 2
+#                    SandboxPlatform = "windows/amd64"
+#                    SandboxIsolation = 1
+#
+#                  [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runhcs-wcow-process]
+#                    runtime_type = "io.containerd.runhcs.v1"
+#                    pod_annotations = ["microsoft.com/*", "io.microsoft.*" ]
+#                    container_annotations = ["microsoft.com/*", "io.microsoft.*" ]
+#
+#                    [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runhcs-wcow-process.options]
+#          "@
+#
+#          containerd.exe --register-service --log-level=debug --config C:/containerd/containerd.toml --service-name containerd --address //./pipe/containerd-containerd --state C:/ProgramData/containerd/state --root C:/ProgramData/containerd/root --log-file C:/containerd/containerd.log
+#          Set-Service containerd -StartupType Automatic
+#          Start-Service containerd
+#
+#      - name: Build test binary
+#        working-directory: src/github.com/Microsoft/hcsshim/test
+#        shell: powershell
+#        run: |
+#          go test -mod=mod -o "${{ github.workspace }}/bin/cri-containerd.test.exe" -gcflags=all=-d=checkptr -c ./cri-containerd/ -tags functional
+#
+#      - name: Run hcsshim integration tests
+#        shell: powershell
+#        run: |
+#          cri-containerd.test.exe -cri-endpoint="npipe://./pipe/containerd-containerd" -feature="WCOWProcess" -feature="HostProcess"
 
   build:
     runs-on: 'windows-2019'
