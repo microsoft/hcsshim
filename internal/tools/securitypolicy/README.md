@@ -21,6 +21,7 @@ be downloaded, turned into an ext4, and finally a dm-verity root hash calculated
 image_name = "rust:1.52.1"
 command = ["rustc", "--help"]
 working_dir = "/home/user"
+allow_elevated = true
 wait_mount_points = ["/path/to/container/mount-1", "/path/to/container/mount-2"]
 
 [[container.env_rule]]
@@ -116,7 +117,7 @@ represented in JSON.
                 "length": 3,
                 "elements": {
                   "0": "rbind",
-                  "1": "rprivate",
+                  "1": "rshared",
                   "2": "rw"
                 }
               }
@@ -129,13 +130,14 @@ represented in JSON.
                 "length": 3,
                 "elements": {
                   "0": "rbind",
-                  "1": "rprivate",
+                  "1": "rshared",
                   "2": "ro"
                 }
               }
             }
           }
-        }
+        },
+        "allow_elevated": true
       },
       "1": {
         "command": {
@@ -171,7 +173,8 @@ represented in JSON.
         "mounts": {
           "length": 0,
           "elements": {}
-        }
+        },
+        "allow_elevated": false
       }
     }
   }
