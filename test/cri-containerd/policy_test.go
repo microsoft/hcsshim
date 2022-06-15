@@ -845,7 +845,7 @@ func Test_CannotSet_AllowAll_And_Containers(t *testing.T) {
 	}
 }
 
-func Test_SecurityPolicy_Env_Set(t *testing.T) {
+func Test_SecurityPolicyEnv_Annotation(t *testing.T) {
 	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
@@ -871,46 +871,61 @@ func Test_SecurityPolicy_Env_Set(t *testing.T) {
 		policy string
 	}{
 		{
-			name:   "For_OpenDoorPolicy",
+			name:   "OpenDoorPolicy",
 			policy: openDoorPolicy,
 		},
 		{
-			name:   "For_StandardPolicy",
+			name:   "StandardPolicy",
 			policy: alpinePolicy,
 		},
 	} {
-		t.Run(config.name, func(t *testing.T) {
-			sandboxRequest := sandboxRequestWithPolicy(t, config.policy)
+		for _, setPolicyEnv := range []bool{true, false} {
+			testName := fmt.Sprintf("%s_SecurityPolicyEnvSet_%v", config.name, setPolicyEnv)
+			t.Run(testName, func(t *testing.T) {
+				sandboxRequest := sandboxRequestWithPolicy(t, config.policy)
 
-			podID := runPodSandbox(t, client, ctx, sandboxRequest)
-			defer removePodSandbox(t, client, ctx, podID)
-			defer stopPodSandbox(t, client, ctx, podID)
+				podID := runPodSandbox(t, client, ctx, sandboxRequest)
+				defer removePodSandbox(t, client, ctx, podID)
+				defer stopPodSandbox(t, client, ctx, podID)
 
-			containerRequest := getCreateContainerRequest(
-				podID,
-				"alpine-with-policy",
-				"alpine:latest",
-				alpineCmd,
-				sandboxRequest.Config,
-			)
-			// setup logfile to capture stdout
-			logPath := filepath.Join(t.TempDir(), "log.txt")
-			containerRequest.Config.LogPath = logPath
+				containerRequest := getCreateContainerRequest(
+					podID,
+					"alpine-with-policy",
+					"alpine:latest",
+					alpineCmd,
+					sandboxRequest.Config,
+				)
+				if setPolicyEnv {
+					containerRequest.Config.Annotations = map[string]string{
+						annotations.SecurityPolicyEnv: "true",
+					}
+				}
+				// setup logfile to capture stdout
+				logPath := filepath.Join(t.TempDir(), "log.txt")
+				containerRequest.Config.LogPath = logPath
 
-			containerID := createContainer(t, client, ctx, containerRequest)
-			startContainer(t, client, ctx, containerID)
-			defer removeContainer(t, client, ctx, containerID)
-			defer stopContainer(t, client, ctx, containerID)
+				containerID := createContainer(t, client, ctx, containerRequest)
+				startContainer(t, client, ctx, containerID)
+				defer removeContainer(t, client, ctx, containerID)
+				defer stopContainer(t, client, ctx, containerID)
 
-			content, err := os.ReadFile(logPath)
-			if err != nil {
-				t.Fatalf("error reading log file: %s", err)
-			}
-			// make sure that the expected environment variable was set
-			expectedEnv := fmt.Sprintf("SECURITY_POLICY=%s", config.policy)
-			if !strings.Contains(string(content), expectedEnv) {
-				t.Fatalf("SECURITY_POLICY env var wasn't set for init process:\n%s\n", string(content))
-			}
-		})
+				content, err := os.ReadFile(logPath)
+				if err != nil {
+					t.Fatalf("error reading log file: %s", err)
+				}
+				policyEnv := fmt.Sprintf("SECURITY_POLICY=%s", config.policy)
+				if setPolicyEnv {
+					// make sure that the expected environment variable was set
+					if !strings.Contains(string(content), policyEnv) {
+						t.Fatalf("SECURITY_POLICY env var should be set for init process:\n%s\n", string(content))
+					}
+				} else {
+					if strings.Contains(string(content), policyEnv) {
+						t.Fatalf("SECURITY_POLICY env var shouldn't be set for init process:\n%s\n",
+							string(content))
+					}
+				}
+			})
+		}
 	}
 }

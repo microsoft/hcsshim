@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -297,8 +298,10 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	// We append the variable after the security policy enforcing logic completes to bypass it; the
 	// security policy variable cannot be included in the security policy as its value is not available
 	// security policy construction time.
-	secPolicyEnv := fmt.Sprintf("SECURITY_POLICY=%s", h.securityPolicyEnforcer.EncodedSecurityPolicy())
-	settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, secPolicyEnv)
+	if val, ok := settings.OCISpecification.Annotations[annotations.SecurityPolicyEnv]; ok && strings.ToLower(val) == "true" {
+		secPolicyEnv := fmt.Sprintf("SECURITY_POLICY=%s", h.securityPolicyEnforcer.EncodedSecurityPolicy())
+		settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, secPolicyEnv)
+	}
 
 	// Sandbox mount paths need to be resolved in the spec before expected mounts policy can be enforced.
 	if err = h.securityPolicyEnforcer.EnforceWaitMountPointsPolicy(id, settings.OCISpecification); err != nil {
