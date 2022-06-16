@@ -110,7 +110,10 @@ func (c *JobContainer) processToken(ctx context.Context, userOrGroup string) (wi
 	}
 
 	if groupExists(userOrGroup) {
-		userName = c.id[:winapi.UserNameCharLimit]
+		userName := c.id
+		if len(userName) > winapi.UserNameCharLimit {
+			userName = userName[:winapi.UserNameCharLimit]
+		}
 		pswd, err := makeLocalAccount(ctx, userName, userOrGroup)
 		if err != nil {
 			return 0, fmt.Errorf("failed to create local account for container: %w", err)

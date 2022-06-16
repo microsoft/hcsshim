@@ -107,15 +107,18 @@ The delete command will be executed in the container's bundle as its cwd.
 		// be deleted, but if the shim crashed unexpectedly (panic, terminated etc.) then the account may still be around.
 		// The username will be the container ID so try and delete it here. The username character limit is 20, so we need to
 		// slice down the container ID a bit.
-		username := idFlag[:winapi.UserNameCharLimit]
+		userName := idFlag
+		if len(userName) > winapi.UserNameCharLimit {
+			userName = userName[:winapi.UserNameCharLimit]
+		}
 
 		// Always try and delete the user, if it doesn't exist we'll get a specific error code that we can use to
 		// not log any warnings.
 		if err := winapi.NetUserDel(
 			"",
-			username,
+			userName,
 		); err != nil && err != winapi.NERR_UserNotFound {
-			fmt.Fprintf(os.Stderr, "failed to delete user %q: %v", username, err)
+			fmt.Fprintf(os.Stderr, "failed to delete user %q: %v", userName, err)
 		}
 
 		if data, err := proto.Marshal(&task.DeleteResponse{
