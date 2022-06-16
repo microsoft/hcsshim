@@ -715,7 +715,7 @@ func (m *mountInternal) validate(mSpec oci.Mount) error {
 	if ok, _ := regexp.MatchString(m.Source, mSpec.Source); !ok {
 		return fmt.Errorf("mount source not allowed by policy: expected=%q, actual=%q", m.Source, mSpec.Source)
 	}
-	if m.Destination != mSpec.Destination && m.Destination != "" {
+	if ok, _ := regexp.MatchString(m.Destination, mSpec.Destination); !ok {
 		return fmt.Errorf("mount destination not allowed by policy: expected=%q, actual=%q", m.Destination, mSpec.Destination)
 	}
 	if !stringSlicesEqual(m.Options, mSpec.Options) {
