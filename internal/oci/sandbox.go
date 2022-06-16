@@ -58,6 +58,9 @@ func GetSandboxTypeAndID(specAnnotations map[string]string) (KubernetesContainer
 // RunPodSandbox request, so annotations that are meant to be available for use/checking for individual
 // containers need some way to know they were passed for the pod.
 func SandboxAnnotationsPassThrough(podAnnots map[string]string, containerAnnots map[string]string, vals ...string) {
+	if podAnnots == nil || containerAnnots == nil {
+		return
+	}
 	for _, val := range vals {
 		if v, ok := podAnnots[val]; ok {
 			containerAnnots[val] = v
