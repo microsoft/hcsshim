@@ -254,7 +254,8 @@ Example JSON document produced once the hcsschema.ComputeSytem returned by makeL
                          }
                      }
                 }
-            }
+            },
+            "Plan9": {}
         },
         "GuestState": {
             "GuestStateFilePath": "d:\\ken\\aug27\\gcsinitnew.vmgs",
@@ -324,6 +325,7 @@ func makeLCOWVMGSDoc(ctx context.Context, opts *OptionsLCOW, uvm *UtilityVM) (_ 
 						ServiceTable:                     make(map[string]hcsschema.HvSocketServiceConfig),
 					},
 				},
+				Plan9: &hcsschema.Plan9{},
 			},
 		},
 	}
