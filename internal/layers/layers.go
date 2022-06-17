@@ -128,7 +128,6 @@ func MountLCOWLayers(ctx context.Context, containerID string, layerFolders []str
 		return "", "", fmt.Errorf("failed to add SCSI scratch VHD: %s", err)
 	}
 
-	containerScratchPathInUVM = scsiMount.UVMPath
 	// handles the case where we want to share a scratch disk for multiple containers instead
 	// of mounting a new one. Pass a unique value for `ScratchPath` to avoid container upper and
 	// work directories colliding in the UVM.
