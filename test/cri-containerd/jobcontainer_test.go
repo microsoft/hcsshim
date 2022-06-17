@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -24,13 +25,15 @@ import (
 )
 
 func getJobContainerPodRequestWCOW(t *testing.T) *runtime.RunPodSandboxRequest {
-	return getRunPodSandboxRequest(
-		t,
-		wcowProcessRuntimeHandler,
-		WithSandboxAnnotations(map[string]string{
-			annotations.HostProcessContainer: "true",
-		}),
-	)
+	p := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler)
+	if p.Config.Windows == nil {
+		p.Config.Windows = &runtime.WindowsPodSandboxConfig{}
+	}
+	if p.Config.Windows.SecurityContext == nil {
+		p.Config.Windows.SecurityContext = &runtime.WindowsSandboxSecurityContext{}
+	}
+	p.Config.Windows.SecurityContext.HostProcess = true
+	return p
 }
 
 func getJobContainerRequestWCOW(t *testing.T, podID string, podConfig *runtime.PodSandboxConfig, image string, user string, mounts []*runtime.Mount) *runtime.CreateContainerRequest {
@@ -55,12 +58,12 @@ func getJobContainerRequestWCOW(t *testing.T, podID string, podConfig *runtime.P
 			},
 			Mounts: mounts,
 			Annotations: map[string]string{
-				annotations.HostProcessContainer:   "true",
 				annotations.HostProcessInheritUser: inheritUser,
 			},
 			Windows: &runtime.WindowsContainerConfig{
 				SecurityContext: &runtime.WindowsContainerSecurityContext{
 					RunAsUsername: user,
+					HostProcess:   true,
 				},
 			},
 		},
@@ -306,11 +309,17 @@ func Test_RunContainer_VHD_JobContainer_WCOW(t *testing.T) {
 		t.Fatalf("vhd not present at %q: %s", vhdPath, err)
 	}
 
-	if err := vhd.AttachVhd(vhdPath); err != nil {
+	vhdHandle, err := vhd.OpenVirtualDisk(vhdPath, vhd.VirtualDiskAccessNone, vhd.OpenVirtualDiskFlagNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.CloseHandle(vhdHandle)
+
+	if err := vhd.AttachVirtualDisk(syscall.Handle(vhdHandle), vhd.AttachVirtualDiskFlagNone, &vhd.AttachVirtualDiskParameters{Version: 1}); err != nil {
 		t.Fatalf("failed to attach vhd at %q: %s", vhdPath, err)
 	}
 
-	if err := vhd.DetachVhd(vhdPath); err != nil {
+	if err := vhd.DetachVirtualDisk(syscall.Handle(vhdHandle)); err != nil {
 		t.Fatalf("failed to detach vhd at %q: %s", vhdPath, err)
 	}
 }
@@ -409,6 +418,7 @@ func Test_RunContainer_HostVolumes_JobContainer_WCOW(t *testing.T) {
 
 func Test_RunContainer_JobContainer_VolumeMount(t *testing.T) {
 	client := newTestRuntimeClient(t)
+	testutilities.RequiresExactBuild(t, osversion.RS5)
 
 	dir := t.TempDir()
 
@@ -591,6 +601,7 @@ func Test_RunContainer_JobContainer_Environment(t *testing.T) {
 
 func Test_RunContainer_WorkingDirectory_JobContainer_WCOW(t *testing.T) {
 	client := newTestRuntimeClient(t)
+	testutilities.RequiresExactBuild(t, osversion.RS5)
 
 	type config struct {
 		name             string
@@ -661,10 +672,13 @@ func Test_RunContainer_WorkingDirectory_JobContainer_WCOW(t *testing.T) {
 					Command:    test.cmd,
 					WorkingDir: test.workDir,
 					Annotations: map[string]string{
-						annotations.HostProcessContainer:   "true",
 						annotations.HostProcessInheritUser: "true",
 					},
-					Windows: &runtime.WindowsContainerConfig{},
+					Windows: &runtime.WindowsContainerConfig{
+						SecurityContext: &runtime.WindowsContainerSecurityContext{
+							HostProcess: true,
+						},
+					},
 				},
 				PodSandboxId:  podID,
 				SandboxConfig: sandboxRequest.Config,
