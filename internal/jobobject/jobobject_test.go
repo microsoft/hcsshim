@@ -40,6 +40,31 @@ func TestJobCreateAndOpen(t *testing.T) {
 	defer jobOpen.Close()
 }
 
+func TestSiloCreateAndOpen(t *testing.T) {
+	var (
+		ctx     = context.Background()
+		options = &Options{
+			Name: "test",
+			Silo: true,
+		}
+	)
+	jobCreate, err := Create(ctx, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jobCreate.Close()
+
+	jobOpen, err := Open(ctx, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jobOpen.Close()
+
+	if !jobOpen.isSilo() {
+		t.Fatal("job is supposed to be a silo")
+	}
+}
+
 func createProcsAndAssign(num int, job *JobObject) (_ []*exec.Cmd, err error) {
 	var procs []*exec.Cmd
 
