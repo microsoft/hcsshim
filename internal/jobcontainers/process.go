@@ -73,6 +73,7 @@ func (p *JobProcess) Signal(ctx context.Context, options interface{}) (bool, err
 	p.procLock.Lock()
 	defer p.procLock.Unlock()
 
+	// If the process has already exited return success again.
 	if p.exited() {
 		return false, fmt.Errorf("signal not sent. process has already exited: %w", hcs.ErrProcessAlreadyStopped)
 	}
@@ -233,8 +234,9 @@ func (p *JobProcess) Kill(ctx context.Context) (bool, error) {
 	p.procLock.Lock()
 	defer p.procLock.Unlock()
 
+	// If the process has already exited return success again.
 	if p.exited() {
-		return false, errors.New("kill not sent. process already exited")
+		return true, nil
 	}
 
 	if err := p.cmd.Kill(); err != nil {
@@ -251,7 +253,7 @@ func (p *JobProcess) exited() bool {
 func signalProcess(pid uint32, signal int) error {
 	hProc, err := windows.OpenProcess(winapi.PROCESS_ALL_ACCESS, true, pid)
 	if err != nil {
-		return errors.Wrap(err, "failed to open process")
+		return fmt.Errorf("failed to open process: %w", err)
 	}
 	defer func() {
 		_ = windows.Close(hProc)
@@ -267,7 +269,7 @@ func signalProcess(pid uint32, signal int) error {
 	// Note: This is a hack which is not officially supported.
 	k32, err := windows.LoadLibrary("kernel32.dll")
 	if err != nil {
-		return errors.Wrap(err, "failed to load kernel32 library")
+		return fmt.Errorf("failed to load kernel32 library: %w", err)
 	}
 	defer func() {
 		_ = windows.FreeLibrary(k32)
@@ -275,12 +277,12 @@ func signalProcess(pid uint32, signal int) error {
 
 	proc, err := windows.GetProcAddress(k32, "CtrlRoutine")
 	if err != nil {
-		return errors.Wrap(err, "failed to load CtrlRoutine")
+		return fmt.Errorf("failed to load CtrlRoutine: %w", err)
 	}
 
 	threadHandle, err := winapi.CreateRemoteThread(hProc, nil, 0, proc, uintptr(signal), 0, nil)
 	if err != nil {
-		return errors.Wrapf(err, "failed to open remote thread in target process %d", pid)
+		return fmt.Errorf("failed to open remote thread in target process %d: %w", pid, err)
 	}
 	defer func() {
 		_ = windows.Close(threadHandle)

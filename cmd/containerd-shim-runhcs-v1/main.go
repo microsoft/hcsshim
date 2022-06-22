@@ -135,6 +135,7 @@ func main() {
 	app.Commands = []cli.Command{
 		startCommand,
 		deleteCommand,
+		hpcCommand,
 		serveCommand,
 	}
 	app.Before = func(context *cli.Context) error {

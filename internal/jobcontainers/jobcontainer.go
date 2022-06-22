@@ -4,6 +4,7 @@ package jobcontainers
 
 import (
 	"context"
+	"encoding/gob"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,6 +26,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/queue"
 	"github.com/Microsoft/hcsshim/internal/resources"
+	"github.com/Microsoft/hcsshim/internal/searchexe"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -44,14 +46,19 @@ const (
 	sandboxMountPointEnvVar = "CONTAINER_SANDBOX_MOUNT_POINT"
 )
 
-// Split arguments but ignore spaces in quotes.
-//
-// For example instead of:
-// "\"Hello good\" morning world" --> ["\"Hello", "good\"", "morning", "world"]
-// we get ["\"Hello good\"", "morning", "world"]
-func splitArgs(cmdLine string) []string {
-	r := regexp.MustCompile(`[^\s"]+|"([^"]*)"`)
-	return r.FindAllString(cmdLine, -1)
+// LaunchProcessOptions is a structure used to house the information needed to launch a
+// process in the containers silo. This will be encoded and decoded via gob to a file.
+type LaunchProcessOptions struct {
+	// So we can open the job object in the child process.
+	SiloName          string
+	Path              string
+	CommandLine       string
+	WorkingDirectory  string
+	Env               []string
+	Mounts            []specs.Mount
+	ContainerRootfs   string
+	Init              bool
+	In, Out, Err, Tty bool
 }
 
 type initProc struct {
@@ -235,31 +242,6 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		return nil, errors.New("unsupported process config passed in")
 	}
 
-	// Replace any occurences of the sandbox mount env variable in the commandline.
-	// For example: %CONTAINER_SANDBOX_MOUNTPOINT%\mybinary.exe -> C:\<rootfslocation>\mybinary.exe.
-	commandLine, _ := c.replaceWithMountPoint(conf.CommandLine)
-
-	// This is to workaround a rather unfortunate outcome with launching a process in a silo that
-	// has bound files.
-	//
-	// If a user requested to launch a program at C:\<rootfslocation>\mybinary.exe because they
-	// expect C:\<rootfslocation>\mybinary.exe to exist once the file bindings are done, this
-	// won't work. This is because the executable is searched for using the parent processes filesystem view
-	// and not the containers/silos that has access to these bound in files. Our Containerd shim is not
-	// running in the containers silo, and by virtue of this we won't be able to find the process being asked
-	// for as C:\<rootfslocation> is not viewable to processes outside of the silo. Deep down in the depths
-	// of CreateProcessW the culprit is a NtQueryAttributesFile call on the binary we're asking to run that
-	// fails as it doesn't have any context surrounding paths available to our silo.
-	//
-	// A way to get around this is to launch a process that will always exist (cmd) and is in our
-	// path, and then just invoke the program with the cmdline supplied. This works as the process
-	// (cmd in this case) after launch can now see C:\<rootfslocation> as it's in the silo. We could
-	// also add a new mode/flag for the shim where it's just a dummy process launcher, so we can invoke
-	// the shim instead of cmd and have more control over things.
-	if fileBindingSupport {
-		commandLine = "cmd /c " + commandLine
-	}
-
 	removeDriveLetter := func(name string) string {
 		// If just the letter and colon (C:) then replace with a single backslash. Else just trim the drive letter and
 		// leave the rest of the path.
@@ -300,20 +282,19 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		if conf.WorkingDirectory != "" {
 			workDir, _ = c.replaceWithMountPoint(conf.WorkingDirectory)
 		}
-	}
-
-	// Make sure the working directory exists.
-	if _, err := os.Stat(workDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(workDir, 0700); err != nil {
+		// Save the working directory for when we hand off the process details to the child that will actually launch the process.
+		// Then assign the working dir we'll use for the dummy process launcher to what the current working dir is. We'll pass the
+		// processes details via a file in the working directory.
+		conf.WorkingDirectory = workDir
+		workDir, err = os.Getwd()
+		if err != nil {
 			return nil, err
 		}
 	}
 
-	// Reassign commandline here in case it needed to be quoted. For example if "foo bar baz" was supplied, and
-	// "foo bar.exe" exists, then return: "\"foo bar\" baz"
-	absPath, commandLine, err := getApplicationName(commandLine, workDir, os.Getenv("PATH"))
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get application name from commandline %q", conf.CommandLine)
+	// Make sure the working directory exists.
+	if err := os.MkdirAll(workDir, 0700); err != nil {
+		return nil, err
 	}
 
 	// If we haven't grabbed a token yet this is the init process being launched. Skip grabbing another token afterwards if we've already
@@ -334,7 +315,7 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 
 	env, err := defaultEnvBlock(c.token)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get default environment block")
+		return nil, fmt.Errorf("failed to get default environment block: %w", err)
 	}
 
 	// Convert environment map to a slice of environment variables in the form [Key1=val1, key2=val2]
@@ -358,16 +339,6 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		}
 	}
 
-	// exec.Cmd internally does its own path resolution and as part of this checks some well known file extensions on the file given (e.g. if
-	// the user just provided /path/to/mybinary). CreateProcess is perfectly capable of launching an executable that doesn't have the .exe extension
-	// so this adds an empty string entry to the end of what extensions GO checks against so that a binary with no extension can be launched.
-	// The extensions are checked in order, so that if mybinary.exe and mybinary both existed in the same directory, mybinary.exe would be chosen.
-	// This is mostly to handle a common Kubernetes test image named agnhost that has the main entrypoint as a binary named agnhost with no extension.
-	// https://github.com/kubernetes/kubernetes/blob/d64e91878517b1208a0bce7e2b7944645ace8ede/test/images/agnhost/Dockerfile_windows
-	if err := os.Setenv("PATHEXT", ".COM;.EXE;.BAT;.CMD; "); err != nil {
-		return nil, errors.Wrap(err, "failed to set PATHEXT")
-	}
-
 	var cpty *conpty.Pty
 	if conf.EmulateConsole {
 		height := int16(25)
@@ -389,16 +360,60 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		}
 	}
 
-	cmd, err := exec.New(
-		absPath,
-		commandLine,
+	// Replace any occurences of the sandbox mount env variable in the commandline.
+	// For example: %CONTAINER_SANDBOX_MOUNTPOINT%\mybinary.exe -> C:\<rootfslocation>\mybinary.exe.
+	conf.CommandLine, _ = c.replaceWithMountPoint(conf.CommandLine)
+
+	cmdLine := conf.CommandLine
+	if fileBindingSupport {
+		// This is to workaround a rather unfortunate outcome with launching a process in a silo that
+		// has bound files.
+		//
+		// If a user requested to launch a program at C:\<rootfslocation>\mybinary.exe because they
+		// expect C:\<rootfslocation>\mybinary.exe to exist once the file bindings are done, this
+		// won't work. This is because the executable is searched for using the parent processes filesystem view
+		// and not the containers/silos that has access to these bound in files. Our Containerd shim is not
+		// running in the containers silo, and by virtue of this we won't be able to find the process being asked
+		// for as C:\<rootfslocation> is not viewable to processes outside of the silo. Deep down in the depths
+		// of CreateProcessW the culprit is a NtQueryAttributesFile call on the binary we're asking to run that
+		// fails as it doesn't have any context surrounding paths available to our silo.
+		//
+		// What we've done here is exposed a new option for our shim that makes it act as a dummy process launcher
+		// essentially. It will read the process options from a file we will write shortly after creating the process
+		// and simply join the silo, setup some backwards compatible bind mounts, and execute the supplied process.
+		exePath, err := os.Executable()
+		if err != nil {
+			return nil, err
+		}
+		// shim requires namespace, publish-binary, address and id to be filled in. They won't be used for this command however.
+		cmdLine = fmt.Sprintf("%s --namespace ns --publish-binary pb --address addr --id id hpc", exePath)
+	}
+
+	// Reassign commandline here in case it needed to be quoted. For example if "foo bar baz" was supplied, and
+	// "foo bar.exe" exists, then return: "\"foo bar\" baz"
+	appName, cmdLine, err := searchexe.GetApplicationName(cmdLine, workDir, os.Getenv("PATH")+c.rootfsLocation+";")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get application name from commandline %q: %w", cmdLine, err)
+	}
+
+	execOpts := []exec.ExecOpts{
 		exec.WithDir(workDir),
 		exec.WithEnv(env),
 		exec.WithToken(c.token),
-		exec.WithJobObject(c.job),
 		exec.WithConPty(cpty),
 		exec.WithProcessFlags(windows.CREATE_BREAKAWAY_FROM_JOB),
 		exec.WithStdio(conf.CreateStdOutPipe, conf.CreateStdErrPipe, conf.CreateStdInPipe),
+	}
+	// We'll open the silo and join from within the child. It seems there's a strange Access is Denied bug for binding files
+	// if you get a handle to the silo your process is currently joined to. Grabbing a handle to the silo, binding a file using
+	// the silo handle, and then joining the silo afterwards works fine however.
+	if !fileBindingSupport {
+		execOpts = append(execOpts, exec.WithJobObject(c.job))
+	}
+	cmd, err := exec.New(
+		appName,
+		cmdLine,
+		execOpts...,
 	)
 	if err != nil {
 		return nil, err
@@ -425,7 +440,34 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 	}()
 
 	if err = process.Start(); err != nil {
-		return nil, errors.Wrap(err, "failed to start host process")
+		return nil, fmt.Errorf("failed to start host process: %w", err)
+	}
+
+	// If we have bind support we'll launch the containers process in a process we actually control.
+	// To be able to get the data necessary to launch the process, we'll encode and decode the data
+	// via gob to a file that the child can read.
+	if fileBindingSupport {
+		hpcProcOpts, err := os.Create(filepath.Join(workDir, "hpcopts"))
+		if err != nil {
+			return nil, err
+		}
+		lpo := &LaunchProcessOptions{
+			SiloName:         c.job.Name(),
+			Path:             conf.ApplicationName,
+			CommandLine:      conf.CommandLine,
+			WorkingDirectory: conf.WorkingDirectory,
+			Env:              env,
+			Mounts:           c.spec.Mounts,
+			ContainerRootfs:  c.rootfsLocation,
+			Init:             c.init.proc == nil,
+			In:               conf.CreateStdInPipe,
+			Out:              conf.CreateStdOutPipe,
+			Err:              conf.CreateStdErrPipe,
+			Tty:              conf.EmulateConsole,
+		}
+		if err := gob.NewEncoder(hpcProcOpts).Encode(lpo); err != nil {
+			return nil, fmt.Errorf("failed to encode process options for child process: %w", err)
+		}
 	}
 
 	// Assign the first process made as the init process of the container.

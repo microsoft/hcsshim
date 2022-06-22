@@ -1,16 +1,25 @@
-//go:build windows
-
-package jobcontainers
+package searchexe
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/Microsoft/hcsshim/internal/winapi"
-	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
 )
+
+// Split arguments but ignore spaces in quotes.
+//
+// For example instead of:
+// "\"Hello good\" morning world" --> ["\"Hello", "good\"", "morning", "world"]
+// we get ["\"Hello good\"", "morning", "world"]
+func splitArgs(cmdLine string) []string {
+	r := regexp.MustCompile(`[^\s"]+|"([^"]*)"`)
+	return r.FindAllString(cmdLine, -1)
+}
 
 // This file emulates the path resolution logic that is used for launching regular
 // process and hypervisor isolated Windows containers.
@@ -68,7 +77,7 @@ import (
 //  Returned commandline: "C:\path\to\program"
 //
 // CreateProcess documentation: https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessa
-func getApplicationName(commandLine, workingDirectory, pathEnv string) (string, string, error) {
+func GetApplicationName(commandLine, workingDirectory, pathEnv string) (string, string, error) {
 	var (
 		searchPath string
 		result     string
@@ -217,13 +226,13 @@ func getSystemPaths() (string, error) {
 	var searchPath string
 	systemDir, err := windows.GetSystemDirectory()
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get system directory")
+		return "", fmt.Errorf("failed to get system directory: %w", err)
 	}
 	searchPath += systemDir + ";"
 
 	windowsDir, err := windows.GetWindowsDirectory()
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get Windows directory")
+		return "", fmt.Errorf("failed to get Windows directory: %w", err)
 	}
 
 	searchPath += windowsDir + "\\System;" + windowsDir + ";"

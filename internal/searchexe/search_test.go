@@ -1,6 +1,6 @@
 //go:build windows
 
-package jobcontainers
+package searchexe
 
 import (
 	"os"
@@ -45,7 +45,7 @@ type config struct {
 func runGetApplicationNameTests(t *testing.T, tests []*config) {
 	for _, cfg := range tests {
 		t.Run(cfg.name, func(t *testing.T) {
-			path, cmdLine, err := getApplicationName(cfg.commandLine, cfg.workDir, cfg.pathEnv)
+			path, cmdLine, err := GetApplicationName(cfg.commandLine, cfg.workDir, cfg.pathEnv)
 			if err != nil {
 				t.Fatal(err)
 			}

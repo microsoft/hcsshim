@@ -21,6 +21,8 @@ import (
 // the job, a queue to receive iocp notifications about the lifecycle
 // of the job and a mutex for synchronized handle access.
 type JobObject struct {
+	// Jobs name if this is a named job object
+	name   string
 	handle windows.Handle
 	// All accesses to this MUST be done atomically except in `Open` as the object
 	// is being created in the function. 1 signifies that this job is currently a silo.
@@ -126,6 +128,7 @@ func Create(ctx context.Context, options *Options) (_ *JobObject, err error) {
 
 	job := &JobObject{
 		handle: jobHandle,
+		name:   options.Name,
 	}
 
 	// If the IOCP we'll be using to receive messages for all jobs hasn't been
@@ -193,6 +196,7 @@ func Open(ctx context.Context, options *Options) (_ *JobObject, err error) {
 
 	job := &JobObject{
 		handle: jobHandle,
+		name:   options.Name,
 	}
 
 	if isJobSilo(jobHandle) {
@@ -242,6 +246,11 @@ func setupNotifications(ctx context.Context, job *JobObject) (*queue.MessageQueu
 		return nil, fmt.Errorf("failed to attach job to IO completion port: %w", err)
 	}
 	return mq, nil
+}
+
+// Name returns the jobs name if this is a named job object, else returns an empty string.
+func (job *JobObject) Name() string {
+	return job.name
 }
 
 // PollNotification will poll for a job object notification. This call should only be called once
