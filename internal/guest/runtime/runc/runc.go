@@ -13,12 +13,13 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/Microsoft/hcsshim/internal/guest/commonutils"
-	"github.com/Microsoft/hcsshim/internal/guest/runtime"
-	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
+
+	"github.com/Microsoft/hcsshim/internal/guest/commonutils"
+	"github.com/Microsoft/hcsshim/internal/guest/runtime"
+	"github.com/Microsoft/hcsshim/internal/guest/stdio"
 )
 
 const (
@@ -81,12 +82,10 @@ func (r *runcRuntime) CreateContainer(id string, bundlePath string, stdioSet *st
 // ListContainerStates returns ContainerState structs for all existing
 // containers, whether they're running or not.
 func (r *runcRuntime) ListContainerStates() ([]runtime.ContainerState, error) {
-	logPath := r.getGlobalLogPath()
-	args := []string{"list", "-f", "json"}
-	cmd := createRuncCommand(logPath, args...)
+	cmd := runcCommandLog("list", "-f", "json")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		runcErr := getRuncLogError(logPath)
+		runcErr := parseRuncError(string(out))
 		return nil, errors.Wrapf(runcErr, "runc list failed with %v: %s", err, string(out))
 	}
 	var states []runtime.ContainerState
@@ -99,12 +98,10 @@ func (r *runcRuntime) ListContainerStates() ([]runtime.ContainerState, error) {
 // getRunningPids gets the pids of all processes which runC recognizes as
 // running.
 func (r *runcRuntime) getRunningPids(id string) ([]int, error) {
-	logPath := r.getLogPath(id)
-	args := []string{"ps", "-f", "json", id}
-	cmd := createRuncCommand(logPath, args...)
+	cmd := runcCommand("ps", "-f", "json", id)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		runcErr := getRuncLogError(logPath)
+		runcErr := parseRuncError(string(out))
 		return nil, errors.Wrapf(runcErr, "runc ps failed with %v: %s", err, string(out))
 	}
 	var pids []int

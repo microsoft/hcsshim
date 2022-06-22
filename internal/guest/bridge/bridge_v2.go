@@ -518,11 +518,12 @@ func (b *Bridge) deleteContainerStateV2(r *Request) (_ RequestResponse, err erro
 	if err != nil {
 		return nil, err
 	}
+	// remove container state regardless of delete's success
+	defer b.hostState.RemoveContainer(request.ContainerID)
 
 	if err := c.Delete(ctx); err != nil {
 		return nil, err
 	}
 
-	b.hostState.RemoveContainer(request.ContainerID)
 	return &prot.MessageResponseBase{}, nil
 }

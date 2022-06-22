@@ -13,9 +13,10 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/Microsoft/hcsshim/internal/guest/runtime"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+
+	"github.com/Microsoft/hcsshim/internal/guest/runtime"
 )
 
 // readPidFile reads the integer pid stored in the given file.
@@ -26,7 +27,7 @@ func (r *runcRuntime) readPidFile(pidFile string) (pid int, err error) {
 	}
 	pid, err = strconv.Atoi(string(data))
 	if err != nil {
-		return -1, errors.Wrapf(err, "failed converting pid text \"%s\" to integer form", data)
+		return -1, errors.Wrapf(err, "failed converting pid text %q to integer form", data)
 	}
 	return pid, nil
 }
@@ -104,6 +105,9 @@ func (r *runcRuntime) processExists(pid int) bool {
 	return !os.IsNotExist(err)
 }
 
+// todo (helsaawy): create `type runcCmd struct` that wraps an exec.Command, runs it and parses error from
+// log file or std err (similar to containerd/libcni)
+
 type standardLogEntry struct {
 	Level   logrus.Level `json:"level"`
 	Message string       `json:"msg"`
@@ -111,31 +115,32 @@ type standardLogEntry struct {
 }
 
 func (l *standardLogEntry) asError() (err error) {
-	// TODO (helsaawy): match with errors from
-	// https://github.com/opencontainers/runc/blob/master/libcontainer/error.go
-	msg := l.Message
-
-	if strings.HasPrefix(msg, "container") && strings.HasSuffix(msg, "does not exist") {
-		// currently: "container <container id> does not exist"
-		err = runtime.ErrContainerDoesNotExist
-	} else if strings.Contains(msg, "container with id exists") ||
-		strings.Contains(msg, "container with given ID already exists") {
-		err = runtime.ErrContainerAlreadyExists
-	} else if strings.Contains(msg, "invalid id format") ||
-		strings.Contains(msg, "invalid container ID format") {
-		err = runtime.ErrInvalidContainerID
-	} else if strings.Contains(msg, "container") &&
-		strings.Contains(msg, "that is not stopped") {
-		err = runtime.ErrContainerNotStopped
-	} else {
-		err = errors.New(msg)
-	}
-
+	err = parseRuncError(l.Message)
 	if l.Err != nil {
 		err = errors.Wrapf(err, l.Err.Error())
 	}
-
 	return
+}
+
+func parseRuncError(s string) (err error) {
+	// TODO (helsaawy): match with errors from
+	// https://github.com/opencontainers/runc/blob/master/libcontainer/error.go
+	if strings.HasPrefix(s, "container") && strings.HasSuffix(s, "does not exist") {
+		// currently: "container <container id> does not exist"
+		err = runtime.ErrContainerDoesNotExist
+	} else if strings.Contains(s, "container with id exists") ||
+		strings.Contains(s, "container with given ID already exists") {
+		err = runtime.ErrContainerAlreadyExists
+	} else if strings.Contains(s, "invalid id format") ||
+		strings.Contains(s, "invalid container ID format") {
+		err = runtime.ErrInvalidContainerID
+	} else if strings.Contains(s, "container") &&
+		strings.Contains(s, "that is not stopped") {
+		err = runtime.ErrContainerNotStopped
+	} else {
+		err = errors.New(s)
+	}
+	return err
 }
 
 func getRuncLogError(logPath string) error {
@@ -159,7 +164,11 @@ func getRuncLogError(logPath string) error {
 	return lastErr
 }
 
-func createRuncCommand(logPath string, args ...string) *exec.Cmd {
+func runcCommandLog(logPath string, args ...string) *exec.Cmd {
 	args = append([]string{"--log", logPath, "--log-format", "json"}, args...)
+	return runcCommand(args...)
+}
+
+func runcCommand(args ...string) *exec.Cmd {
 	return exec.Command("runc", args...)
 }
