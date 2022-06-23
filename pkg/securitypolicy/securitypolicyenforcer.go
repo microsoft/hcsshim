@@ -129,24 +129,23 @@ type StandardSecurityPolicyEnforcer struct {
 	// map them back to a container definition from the user supplied
 	// SecurityPolicy
 	//
-	// Devices is a listing of targets seen when mounting a device
-	// stored in a "per-container basis". As the UVM goes through its process of
-	// bringing up containers, we have to piece together information about what
-	// is going on.
+	// Devices is a mapping between target and a corresponding root hash. Target
+	// is a path to a particular block device or its mount point inside UVM and
+	// root hash is the dm-verity root hash of that device. Mainly the stored
+	// devices represent read-only container layers, but this may change.
+	// As the UVM goes through its process of bringing up containers, we have to
+	// piece together information about what is going on.
 	//
 	// At the time that devices are being mounted, we do not know a container
 	// that they will be used for; only that there is a device with a given root
 	// hash that being mounted. We check to make sure that the root hash for the
 	// devices is a root hash that exists for 1 or more layers in any container
 	// in the supplied SecurityPolicy. Each "seen" layer is recorded in devices
-	// as it is mounted. So for example, if a root hash mount is found for the
-	// device being mounted and the first layer of the first container then we
-	// record the device target in Devices[0][0].
+	// as it is mounted.
 	//
-	// Later, when overlay filesystems  created, we verify that the ordered layers
-	// for said overlay filesystem match one of the device orderings in Devices.
-	// When a match is found, the index in Devices is the same index in
-	// SecurityPolicy.Containers. Overlay filesystem creation is the first time we
+	// Later, when overlay filesystems created, we look up the root hash chain
+	// for an incoming overlay and verify it against containers in the policy.
+	// Overlay filesystem creation is the first time we
 	// have a "container id" available to us. The container id identifies the
 	// container in question going forward. We record the mapping of Container
 	// index to container id so that when we have future operations like "run
@@ -180,7 +179,7 @@ type StandardSecurityPolicyEnforcer struct {
 	// - enforceCommandPolicy
 	// - enforceEnvironmentVariablePolicy
 	// - NewStandardSecurityPolicyEnforcer
-	Devices                      [][]string
+	Devices                      map[string]string
 	ContainerIndexToContainerIds map[int]map[string]struct{}
 	// Set of container IDs that we've allowed to start. Because Go doesn't have
 	// sets as a built-in data structure, we are using a map
@@ -200,21 +199,10 @@ func NewStandardSecurityPolicyEnforcer(
 	containers []*securityPolicyContainer,
 	encoded string,
 ) *StandardSecurityPolicyEnforcer {
-	// create new StandardSecurityPolicyEnforcer and add the expected containers
-	// to it
-	// fill out corresponding devices structure by creating a "same shaped"
-	// devices listing that corresponds to our container root hash lists
-	// the devices list will get filled out as layers are mounted
-	devices := make([][]string, len(containers))
-
-	for i, container := range containers {
-		devices[i] = make([]string, len(container.Layers))
-	}
-
 	return &StandardSecurityPolicyEnforcer{
 		encodedSecurityPolicy:        encoded,
 		Containers:                   containers,
-		Devices:                      devices,
+		Devices:                      map[string]string{},
 		ContainerIndexToContainerIds: map[int]map[string]struct{}{},
 		startedContainers:            map[string]struct{}{},
 		mutex:                        &sync.Mutex{},
@@ -399,35 +387,26 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceDeviceMountPolicy(target string
 		return errors.New("device is missing verity root hash")
 	}
 
-	found := false
-
-	for i, container := range pe.Containers {
-		for ii, layer := range container.Layers {
+	for _, container := range pe.Containers {
+		for _, layer := range container.Layers {
 			if deviceHash == layer {
-				pe.Devices[i][ii] = target
-				found = true
+				pe.Devices[target] = deviceHash
+				return nil
 			}
 		}
 	}
 
-	if !found {
-		return fmt.Errorf("roothash %s for mount %s doesn't match policy", deviceHash, target)
-	}
-
-	return nil
+	return fmt.Errorf("roothash %s for mount %s doesn't match policy", deviceHash, target)
 }
 
 func (pe *StandardSecurityPolicyEnforcer) EnforceDeviceUnmountPolicy(unmountTarget string) (err error) {
 	pe.mutex.Lock()
 	defer pe.mutex.Unlock()
 
-	for _, container := range pe.Devices {
-		for j, storedTarget := range container {
-			if unmountTarget == storedTarget {
-				container[j] = ""
-			}
-		}
+	if _, ok := pe.Devices[unmountTarget]; !ok {
+		return fmt.Errorf("device doesn't exist: %s", unmountTarget)
 	}
+	delete(pe.Devices, unmountTarget)
 
 	return nil
 }
@@ -444,28 +423,35 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID 
 		return errors.New("container has already been started")
 	}
 
-	// find maximum number of containers that could share this overlay
-	maxPossibleContainerIdsForOverlay := 0
-	for _, deviceList := range pe.Devices {
-		if equalForOverlay(layerPaths, deviceList) {
-			maxPossibleContainerIdsForOverlay++
+	var incomingOverlay []string
+	for _, layer := range layerPaths {
+		if hash, ok := pe.Devices[layer]; !ok {
+			return fmt.Errorf("overlay layer isn't mounted: %s", layer)
+		} else {
+			incomingOverlay = append(incomingOverlay, hash)
 		}
 	}
 
-	if maxPossibleContainerIdsForOverlay == 0 {
+	// check if any of the containers allow the incoming overlay.
+	var matchedContainers []int
+	for i, container := range pe.Containers {
+		if equalForOverlay(incomingOverlay, container.Layers) {
+			matchedContainers = append(matchedContainers, i)
+		}
+	}
+
+	if len(matchedContainers) == 0 {
 		errmsg := fmt.Sprintf("layerPaths '%v' doesn't match any valid layer path: '%v'", layerPaths, pe.Devices)
 		return errors.New(errmsg)
 	}
 
-	for i, deviceList := range pe.Devices {
-		if equalForOverlay(layerPaths, deviceList) {
-			existing := pe.ContainerIndexToContainerIds[i]
-			if len(existing) < maxPossibleContainerIdsForOverlay {
-				pe.expandMatchesForContainerIndex(i, containerID)
-			} else {
-				errmsg := fmt.Sprintf("layerPaths '%v' already used in maximum number of container overlays", layerPaths)
-				return errors.New(errmsg)
-			}
+	for _, i := range matchedContainers {
+		existing := pe.ContainerIndexToContainerIds[i]
+		if len(existing) < len(matchedContainers) {
+			pe.expandMatchesForContainerIndex(i, containerID)
+		} else {
+			errmsg := fmt.Sprintf("layerPaths '%v' already used in maximum number of container overlays", layerPaths)
+			return errors.New(errmsg)
 		}
 	}
 

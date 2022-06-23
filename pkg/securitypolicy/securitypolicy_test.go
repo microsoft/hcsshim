@@ -107,33 +107,6 @@ func Test_StandardSecurityPolicyEnforcer_From_Security_Policy_Conversion(t *test
 	}
 }
 
-// Do we correctly set up the data structures that are part of creating a new
-// StandardSecurityPolicyEnforcer
-func Test_StandardSecurityPolicyEnforcer_Devices_Initialization(t *testing.T) {
-	f := func(p *generatedContainers) bool {
-		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
-
-		// there should be a device entry for each container
-		if len(p.containers) != len(policy.Devices) {
-			return false
-		}
-
-		// in each device entry that corresponds to a container,
-		// the array should have space for all the root hashes
-		for i := 0; i < len(p.containers); i++ {
-			if len(p.containers[i].Layers) != len(policy.Devices[i]) {
-				return false
-			}
-		}
-
-		return true
-	}
-
-	if err := quick.Check(f, &quick.Config{MaxCount: 1000}); err != nil {
-		t.Errorf("Test_StandardSecurityPolicyEnforcer_Devices_Initialization failed: %v", err)
-	}
-}
-
 // Verify that StandardSecurityPolicyEnforcer.EnforceDeviceMountPolicy will
 // return an error when there's no matching root hash in the policy
 func Test_EnforceDeviceMountPolicy_No_Matches(t *testing.T) {
@@ -189,24 +162,8 @@ func Test_EnforceDeviceUmountPolicy_Removes_Device_Entries(t *testing.T) {
 			return false
 		}
 
-		// we set up an expected new data structure shape were
-		// the target has been removed, but everything else is
-		// the same
-		setupCorrectlyDone := false
-		expectedDevices := make([][]string, len(policy.Devices))
-		for i, container := range policy.Devices {
-			expectedDevices[i] = make([]string, len(container))
-			for j, storedTarget := range container {
-				if target == storedTarget {
-					setupCorrectlyDone = true
-				} else {
-					expectedDevices[i][j] = storedTarget
-				}
-			}
-		}
-		if !setupCorrectlyDone {
-			// somehow, setup failed. this should never happen without another test
-			// also failing
+		if v, ok := policy.Devices[target]; !ok || v != rootHash {
+			t.Errorf("root hash is missing or doesn't match: actual=%q expected=%q", v, rootHash)
 			return false
 		}
 
@@ -215,7 +172,7 @@ func Test_EnforceDeviceUmountPolicy_Removes_Device_Entries(t *testing.T) {
 			return false
 		}
 
-		return cmp.Equal(policy.Devices, expectedDevices)
+		return cmp.Equal(policy.Devices, map[string]string{})
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 1000}); err != nil {
