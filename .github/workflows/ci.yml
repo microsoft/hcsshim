@@ -153,6 +153,7 @@ jobs:
         working-directory: src/github.com/containerd/containerd
         run: |
           set -o xtrace
+          choco install mingw --version 10.2.0 --allow-downgrade
           mingw32-make.exe binaries
           script/setup/install-cni-windows
 
