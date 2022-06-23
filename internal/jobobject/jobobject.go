@@ -339,7 +339,7 @@ func (job *JobObject) Pids() ([]uint32, error) {
 	err := winapi.QueryInformationJobObject(
 		job.handle,
 		winapi.JobObjectBasicProcessIdList,
-		uintptr(unsafe.Pointer(&info)),
+		unsafe.Pointer(&info),
 		uint32(unsafe.Sizeof(info)),
 		nil,
 	)
@@ -365,7 +365,7 @@ func (job *JobObject) Pids() ([]uint32, error) {
 	if err = winapi.QueryInformationJobObject(
 		job.handle,
 		winapi.JobObjectBasicProcessIdList,
-		uintptr(unsafe.Pointer(&buf[0])),
+		unsafe.Pointer(&buf[0]),
 		uint32(len(buf)),
 		nil,
 	); err != nil {
@@ -393,7 +393,7 @@ func (job *JobObject) QueryMemoryStats() (*winapi.JOBOBJECT_MEMORY_USAGE_INFORMA
 	if err := winapi.QueryInformationJobObject(
 		job.handle,
 		winapi.JobObjectMemoryUsageInformation,
-		uintptr(unsafe.Pointer(&info)),
+		unsafe.Pointer(&info),
 		uint32(unsafe.Sizeof(info)),
 		nil,
 	); err != nil {
@@ -415,7 +415,7 @@ func (job *JobObject) QueryProcessorStats() (*winapi.JOBOBJECT_BASIC_ACCOUNTING_
 	if err := winapi.QueryInformationJobObject(
 		job.handle,
 		winapi.JobObjectBasicAccountingInformation,
-		uintptr(unsafe.Pointer(&info)),
+		unsafe.Pointer(&info),
 		uint32(unsafe.Sizeof(info)),
 		nil,
 	); err != nil {
@@ -441,7 +441,7 @@ func (job *JobObject) QueryStorageStats() (*winapi.JOBOBJECT_IO_ATTRIBUTION_INFO
 	if err := winapi.QueryInformationJobObject(
 		job.handle,
 		winapi.JobObjectIoAttribution,
-		uintptr(unsafe.Pointer(&info)),
+		unsafe.Pointer(&info),
 		uint32(unsafe.Sizeof(info)),
 		nil,
 	); err != nil {
@@ -487,7 +487,7 @@ func (job *JobObject) QueryPrivateWorkingSet() (uint64, error) {
 		status := winapi.NtQueryInformationProcess(
 			h,
 			winapi.ProcessVmCounters,
-			uintptr(unsafe.Pointer(&vmCounters)),
+			unsafe.Pointer(&vmCounters),
 			uint32(unsafe.Sizeof(vmCounters)),
 			nil,
 		)
