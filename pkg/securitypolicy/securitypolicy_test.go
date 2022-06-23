@@ -422,10 +422,10 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 		// create two additional containers that "share everything"
 		// except that they have different commands
 		testContainerOne := generateContainersContainer(testRand, 5)
-		testContainerTwo := testContainerOne
+		var testContainerTwo securityPolicyContainer = *testContainerOne
 		testContainerTwo.Command = generateCommand(testRand)
 		// add new containers to policy before creating enforcer
-		p.containers = append(p.containers, testContainerOne, testContainerTwo)
+		p.containers = append(p.containers, testContainerOne, &testContainerTwo)
 
 		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
 
@@ -452,7 +452,7 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 				testContainerOneID = containerID
 				indexForContainerOne = index
 			}
-			if cmp.Equal(container, testContainerTwo) {
+			if cmp.Equal(container, &testContainerTwo) {
 				testContainerTwoID = containerID
 				indexForContainerTwo = index
 			}
@@ -609,10 +609,10 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 		// create two additional containers that "share everything"
 		// except that they have different environment variables
 		testContainerOne := generateContainersContainer(r, 5)
-		testContainerTwo := testContainerOne
+		var testContainerTwo securityPolicyContainer = *testContainerOne
 		testContainerTwo.EnvRules = generateEnvironmentVariableRules(r)
 		// add new containers to policy before creating enforcer
-		p.containers = append(p.containers, testContainerOne, testContainerTwo)
+		p.containers = append(p.containers, testContainerOne, &testContainerTwo)
 
 		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
 
@@ -639,7 +639,7 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 				testContainerOneID = containerID
 				indexForContainerOne = index
 			}
-			if cmp.Equal(container, testContainerTwo) {
+			if cmp.Equal(container, &testContainerTwo) {
 				testContainerTwoID = containerID
 				indexForContainerTwo = index
 			}
