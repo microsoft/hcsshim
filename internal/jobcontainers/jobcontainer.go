@@ -731,7 +731,7 @@ func systemProcessInformation() ([]*winapi.SYSTEM_PROCESS_INFORMATION, error) {
 		systemProcInfo = (*winapi.SYSTEM_PROCESS_INFORMATION)(unsafe.Pointer(&b[0]))
 		status := winapi.NtQuerySystemInformation(
 			winapi.SystemProcessInformation,
-			uintptr(unsafe.Pointer(systemProcInfo)),
+			unsafe.Pointer(systemProcInfo),
 			size,
 			&size,
 		)
