@@ -50,3 +50,7 @@ func (MountMonitoringSecurityPolicyEnforcer) EnforceWaitMountPointsPolicy(_ stri
 func (MountMonitoringSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
 	return nil
 }
+
+func (MountMonitoringSecurityPolicyEnforcer) EncodedSecurityPolicy() string {
+	return ""
+}

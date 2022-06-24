@@ -267,6 +267,9 @@ const (
 	// GuestStateFile specifies the path of the vmgs file to use if required. Only applies in SNP mode.
 	GuestStateFile = "io.microsoft.virtualmachine.lcow.gueststatefile"
 
+	// SecurityPolicyEnv specifies if SECURITY_POLICY variable should be injected for a container.
+	SecurityPolicyEnv = "io.microsoft.virtualmachine.lcow.securitypolicy.env"
+
 	// DisableLCOWTimeSyncService is used to disable the chronyd time
 	// synchronization service inside the LCOW UVM.
 	DisableLCOWTimeSyncService = "io.microsoft.virtualmachine.lcow.timesync.disable"

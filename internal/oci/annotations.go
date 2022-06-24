@@ -57,14 +57,14 @@ func ProcessAnnotations(ctx context.Context, s *specs.Spec) (err error) {
 // if providing a gMSA credential should be disallowed. Returns the value found,
 // if parsable, otherwise returns false otherwise.
 func ParseAnnotationsDisableGMSA(ctx context.Context, s *specs.Spec) bool {
-	return parseAnnotationsBool(ctx, s.Annotations, annotations.WCOWDisableGMSA, false)
+	return ParseAnnotationsBool(ctx, s.Annotations, annotations.WCOWDisableGMSA, false)
 }
 
 // ParseAnnotationsSaveAsTemplate searches for the boolean value which specifies
 // if this create request should be considered as a template creation request. If value
 // is found the returns the actual value, returns false otherwise.
 func ParseAnnotationsSaveAsTemplate(ctx context.Context, s *specs.Spec) bool {
-	return parseAnnotationsBool(ctx, s.Annotations, annotations.SaveAsTemplate, false)
+	return ParseAnnotationsBool(ctx, s.Annotations, annotations.SaveAsTemplate, false)
 }
 
 // ParseAnnotationsTemplateID searches for the templateID in the create request. If the
@@ -75,9 +75,9 @@ func ParseAnnotationsTemplateID(ctx context.Context, s *specs.Spec) string {
 
 // general annotation parsing
 
-// parseAnnotationsBool searches `a` for `key` and if found verifies that the
+// ParseAnnotationsBool searches `a` for `key` and if found verifies that the
 // value is `true` or `false` in any case. If `key` is not found returns `def`.
-func parseAnnotationsBool(ctx context.Context, a map[string]string, key string, def bool) bool {
+func ParseAnnotationsBool(ctx context.Context, a map[string]string, key string, def bool) bool {
 	if v, ok := a[key]; ok {
 		switch strings.ToLower(v) {
 		case "true":
