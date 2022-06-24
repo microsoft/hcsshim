@@ -28,8 +28,9 @@ import (
 )
 
 const (
-	connectTimeout = time.Second * 10
-	testNamespace  = "cri-containerd-test"
+	connectTimeout    = time.Second * 10
+	testNamespace     = "cri-containerd-test"
+	containerdAddress = "tcp://127.0.0.1:2376"
 
 	wcowProcessRuntimeHandler         = "runhcs-wcow-process"
 	wcowHypervisorRuntimeHandler      = "runhcs-wcow-hypervisor"
