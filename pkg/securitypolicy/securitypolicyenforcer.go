@@ -81,7 +81,7 @@ type standardEnforcerOpt func(e *StandardSecurityPolicyEnforcer) error
 func WithPrivilegedMounts(mounts []oci.Mount) standardEnforcerOpt {
 	return func(e *StandardSecurityPolicyEnforcer) error {
 		for _, c := range e.Containers {
-			if c.allowElevated {
+			if c.AllowElevated {
 				for _, m := range mounts {
 					mi := mountInternal{
 						Source:      m.Source,
@@ -116,7 +116,7 @@ type securityPolicyContainer struct {
 	WaitMountPoints []string
 	// A list of constraints for determining if a given mount is allowed.
 	Mounts        []mountInternal
-	allowElevated bool
+	AllowElevated bool
 }
 
 type StandardSecurityPolicyEnforcer struct {
@@ -285,7 +285,7 @@ func (c Container) toInternal() (securityPolicyContainer, error) {
 		WorkingDir:      c.WorkingDir,
 		WaitMountPoints: waitMounts,
 		Mounts:          mounts,
-		allowElevated:   c.AllowElevated,
+		AllowElevated:   c.AllowElevated,
 	}, nil
 }
 
