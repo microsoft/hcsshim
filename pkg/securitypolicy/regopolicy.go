@@ -105,7 +105,7 @@ type RegoPolicy struct {
 func toOptions(values []string) Options {
 	elements := make(map[string]string)
 	for i, value := range values {
-		elements[string(i)] = value
+		elements[fmt.Sprint(i)] = value
 	}
 	return Options{
 		Length:   len(values),
@@ -116,7 +116,7 @@ func toOptions(values []string) Options {
 func (mounts *Mounts) Append(other []oci.Mount) {
 	start := mounts.Length + 1
 	for i, mount := range other {
-		mounts.Elements[string(i+start)] = Mount{
+		mounts.Elements[fmt.Sprint(i+start)] = Mount{
 			Source:      mount.Source,
 			Destination: mount.Destination,
 			Type:        mount.Type,
@@ -158,7 +158,10 @@ func writeCommand(builder *strings.Builder, command CommandArgs, indent string) 
 		return err
 	}
 
-	_, err = builder.WriteString(fmt.Sprintf("%scommand: %s,", array))
+	if _, err := builder.WriteString(fmt.Sprintf("%scommand: %s,", indent, array)); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -196,7 +199,10 @@ func writeLayers(builder *strings.Builder, layers Layers, indent string) error {
 		return err
 	}
 
-	_, err = builder.WriteString(fmt.Sprintf("%layers: %s,", array))
+	if _, err := builder.WriteString(fmt.Sprintf("%slayers: %s,", indent, array)); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -258,11 +264,11 @@ func writeContainer(builder *strings.Builder, container Container, indent string
 		return err
 	}
 
-	if _, err := builder.WriteString(fmt.Sprintf("%s\"allow_elevated\": %v,", container.AllowElevated)); err != nil {
+	if _, err := builder.WriteString(fmt.Sprintf("%s\"allow_elevated\": %v,", indent, container.AllowElevated)); err != nil {
 		return err
 	}
 
-	if _, err := builder.WriteString(fmt.Sprintf("%s\"working_dir\": %s", container.WorkingDir)); err != nil {
+	if _, err := builder.WriteString(fmt.Sprintf("%s\"working_dir\": %s", indent, container.WorkingDir)); err != nil {
 		return err
 	}
 
