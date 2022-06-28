@@ -6,6 +6,7 @@ package securitypolicy
 import (
 	"fmt"
 	"testing"
+	"testing/quick"
 
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
@@ -66,32 +67,39 @@ func newMountsFromInternal(mountsInternal []mountInternal) Mounts {
 	return mounts
 }
 
-func TestConvert(t *testing.T) {
-	gc := generateContainers(testRand, 4)
-	securityPolicy := SecurityPolicy{}
-	securityPolicy.AllowAll = false
-	securityPolicy.Containers.Length = len(gc.containers)
-	securityPolicy.Containers.Elements = make(map[string]Container)
-	for i, c := range gc.containers {
-		container := Container{
-			AllowElevated: c.allowElevated,
-			WorkingDir:    c.WorkingDir,
-			Command:       newCommandFromInternal(c.Command),
-			EnvRules:      newEnvRules(c.EnvRules),
-			Layers:        newLayersFromInternal(c.Layers),
-			Mounts:        newMountsFromInternal(c.Mounts),
+func Test_MarshalRego(t *testing.T) {
+	f := func(p *generatedContainers) bool {
+		securityPolicy := SecurityPolicy{}
+		securityPolicy.AllowAll = false
+		securityPolicy.Containers.Length = len(p.containers)
+		securityPolicy.Containers.Elements = make(map[string]Container)
+		for i, c := range p.containers {
+			container := Container{
+				AllowElevated: c.allowElevated,
+				WorkingDir:    c.WorkingDir,
+				Command:       newCommandFromInternal(c.Command),
+				EnvRules:      newEnvRulesFromInternal(c.EnvRules),
+				Layers:        newLayersFromInternal(c.Layers),
+				Mounts:        newMountsFromInternal(c.Mounts),
+			}
+			securityPolicy.Containers.Elements[fmt.Sprint(i)] = container
 		}
-		securityPolicy.Containers.Elements[fmt.Sprint(i)] = container
+
+		base64policy, err := securityPolicy.EncodeToString()
+
+		if err != nil {
+			t.Errorf("unable to encode policy to base64: %v", err)
+		}
+
+		_, err = NewRegoPolicyFromBase64Json(base64policy, []oci.Mount{}, []oci.Mount{})
+		if err != nil {
+			t.Errorf("unable to convert policy to rego: %v", err)
+		}
+
+		return !t.Failed()
 	}
 
-	base64policy, err := securityPolicy.EncodeToString()
-
-	if err != nil {
-		t.Fatalf("unable to encode policy to base64: %v", err)
-	}
-
-	_, err = NewRegoPolicyFromBase64Json(base64policy, []oci.Mount{}, []oci.Mount{})
-	if err != nil {
-		t.Fatalf("unable to convert policy to rego: %v", err)
+	if err := quick.Check(f, &quick.Config{MaxCount: 100}); err != nil {
+		t.Errorf("Test_MarshalRego failed: %v", err)
 	}
 }
