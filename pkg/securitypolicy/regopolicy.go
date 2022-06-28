@@ -1,18 +1,24 @@
 package securitypolicy
 
 import (
+	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
 
+	"github.com/open-policy-agent/opa/rego"
+	"github.com/open-policy-agent/opa/storage/inmem"
+	"github.com/open-policy-agent/opa/topdown"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-var PolicyCode string = `
+var MainCode string = `
 package main
 
 import future.keywords.every
@@ -97,9 +103,9 @@ create_container := true {
 var Indent string = "    "
 
 type RegoPolicy struct {
-	containersCode string
-	policyCode     string
-	data           map[string]interface{}
+	mainCode   string
+	policyCode string
+	data       map[string]interface{}
 }
 
 func toOptions(values []string) Options {
@@ -326,11 +332,133 @@ func NewRegoPolicyFromBase64Json(base64policy string, defaultMounts []oci.Mount,
 	}
 
 	policy := new(RegoPolicy)
-	policy.policyCode = PolicyCode
-	if policy.containersCode, err = securityPolicy.MarshalRego(); err != nil {
+	policy.mainCode = MainCode
+	if policy.policyCode, err = securityPolicy.MarshalRego(); err != nil {
 		return nil, fmt.Errorf("failed to convert json to rego: %w", err)
 	}
 
 	policy.data = make(map[string]interface{})
 	return policy, nil
+}
+
+func (policy RegoPolicy) Apply(input map[string]interface{}) (rego.ResultSet, error) {
+	store := inmem.NewFromObject(policy.data)
+
+	var buf bytes.Buffer
+	rule := input["name"].(string)
+	query := rego.New(
+		rego.Query(fmt.Sprintf("data.main.%s", rule)),
+		rego.Module("main", policy.mainCode),
+		rego.Module("policy", policy.policyCode),
+		rego.Input(input),
+		rego.Store(store),
+		rego.EnablePrintStatements(true),
+		rego.PrintHook(topdown.NewPrintHook(&buf)))
+
+	ctx := context.Background()
+	results, err := query.Eval(ctx)
+	if err != nil {
+		return results, err
+	}
+
+	output := buf.String()
+	if len(output) > 0 {
+		fmt.Println(output)
+	}
+
+	return results, nil
+}
+
+func (policy *RegoPolicy) EnforceDeviceMountPolicy(target string, deviceHash string) error {
+	input := map[string]interface{}{
+		"name":       "mount_device",
+		"target":     target,
+		"deviceHash": deviceHash,
+	}
+	result, err := policy.Apply(input)
+	if err != nil {
+		return err
+	}
+
+	if result.Allowed() {
+		if devices, found := policy.data["devices"]; found {
+			deviceMap := devices.(map[string]string)
+			if _, e := deviceMap[target]; e {
+				log.Fatalf("device %s already mounted", target)
+			}
+			deviceMap[target] = deviceHash
+		} else {
+			policy.data["devices"] = map[string]string{target: deviceHash}
+		}
+		return nil
+	} else {
+		// TODO: need to use rego error messages somehow
+		return errors.New("device mount not allowed by policy")
+	}
+}
+
+func (policy *RegoPolicy) EnforceOverlayMountPolicy(containerID string, layerPaths []string) error {
+	input := map[string]interface{}{
+		"name":        "mount_overlay",
+		"containerID": containerID,
+		"layerPaths":  layerPaths,
+	}
+	result, err := policy.Apply(input)
+	if err != nil {
+		return err
+	}
+
+	if result.Allowed() {
+		if containers, found := policy.data["containers"]; found {
+			containerMap := containers.(map[string]interface{})
+			if _, found := containerMap[containerID]; found {
+				log.Fatal("container already mounted")
+			} else {
+				containerMap[containerID] = map[string]interface{}{
+					"layerPaths": layerPaths,
+				}
+			}
+		} else {
+			policy.data["containers"] = map[string]interface{}{
+				containerID: map[string]interface{}{
+					"layerPaths": layerPaths,
+				},
+			}
+		}
+		return nil
+	} else {
+		// TODO: need to use rego error messages somehow
+		return errors.New("overlay mount not allowed by policy")
+	}
+}
+
+func (policy *RegoPolicy) EnforceCreateContainerPolicy(containerID string,
+	argList []string,
+	envList []string,
+	workingDir string,
+) error {
+	input := map[string]interface{}{
+		"name":        "create_container",
+		"containerID": containerID,
+		"argList":     argList,
+		"envList":     envList,
+		"workingDir":  workingDir,
+	}
+	result, err := policy.Apply(input)
+	if err != nil {
+		return err
+	}
+
+	if result.Allowed() {
+		if started, found := policy.data["started"]; found {
+			startedArray := started.([]string)
+			policy.data["started"] = append(startedArray, containerID)
+		} else {
+			policy.data["started"] = []string{containerID}
+		}
+		return nil
+	} else {
+		// TODO: need to use rego error messages somehow
+		return errors.New("container creation not allowed by policy")
+	}
 }
