@@ -310,7 +310,7 @@ func (p SecurityPolicy) MarshalRego() (string, error) {
 	return builder.String(), nil
 }
 
-func FromJson(base64policy string, defaultMounts []oci.Mount, privilegedMounts []oci.Mount) (*RegoPolicy, error) {
+func NewRegoPolicyFromBase64Json(base64policy string, defaultMounts []oci.Mount, privilegedMounts []oci.Mount) (*RegoPolicy, error) {
 	jsonPolicy, err := base64.StdEncoding.DecodeString(base64policy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode base64 security policy: %w", err)
