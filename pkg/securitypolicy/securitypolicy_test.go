@@ -378,7 +378,7 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
 		// create two additional containers that "share everything"
 		// except that they have different commands
-		testContainerOne := generateContainersContainer(testRand, 5)
+		testContainerOne := generateContainersContainer(testRand, 1, 5)
 		testContainerTwo := *testContainerOne
 		testContainerTwo.Command = generateCommand(testRand)
 		// add new containers to policy before creating enforcer
@@ -492,7 +492,7 @@ func Test_EnforceEnvironmentVariablePolicy_Matches(t *testing.T) {
 func Test_EnforceEnvironmentVariablePolicy_Re2Match(t *testing.T) {
 	p := generateContainers(testRand, 1)
 
-	container := generateContainersContainer(testRand, 1)
+	container := generateContainersContainer(testRand, 1, 1)
 	// add a rule to re2 match
 	re2MatchRule := EnvRuleConfig{
 		Strategy: EnvVarRuleRegex,
@@ -565,7 +565,7 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		// create two additional containers that "share everything"
 		// except that they have different environment variables
-		testContainerOne := generateContainersContainer(r, 5)
+		testContainerOne := generateContainersContainer(r, 1, 5)
 		testContainerTwo := *testContainerOne
 		testContainerTwo.EnvRules = generateEnvironmentVariableRules(r)
 		// add new containers to policy before creating enforcer
@@ -695,6 +695,72 @@ func Test_WorkingDirectoryPolicy_NoMatches(t *testing.T) {
 	}
 }
 
+// Consequent layers
+func Test_Overlay_Duplicate_Layers(t *testing.T) {
+	f := func(p *generatedContainers) bool {
+		c1 := generateContainersContainer(testRand, 5, 5)
+		numLayers := len(c1.Layers)
+		// make sure first container has two identical layers
+		c1.Layers[numLayers-3] = c1.Layers[numLayers-2]
+
+		policy := NewStandardSecurityPolicyEnforcer([]*securityPolicyContainer{c1}, ignoredEncodedPolicyString)
+
+		// generate mount targets
+		mountTargets := make([]string, numLayers)
+		for i := 0; i < numLayers; i++ {
+			mountTargets[i] = randString(testRand, maxGeneratedMountTargetLength)
+		}
+
+		// call into mount enforcement
+		for i := 0; i < numLayers; i++ {
+			if err := policy.EnforceDeviceMountPolicy(mountTargets[i], c1.Layers[i]); err != nil {
+				t.Errorf("failed to enforce device mount policy: %s", err)
+				return false
+			}
+		}
+
+		if len(policy.Devices) != numLayers {
+			t.Errorf("the number of mounted devices %v don't match the expectation: targets=%v layers=%v",
+				policy.Devices, mountTargets, c1.Layers)
+			return false
+		}
+
+		overlay := make([]string, numLayers)
+		for i := 0; i < numLayers; i++ {
+			overlay[i] = mountTargets[numLayers-i-1]
+		}
+		containerID := randString(testRand, 32)
+		if err := policy.EnforceOverlayMountPolicy(containerID, overlay); err != nil {
+			t.Errorf("failed to enforce overlay mount policy: %s", err)
+			return false
+		}
+
+		// validate the state of the ContainerIndexToContainerIds mapping
+		if containerIDs, ok := policy.ContainerIndexToContainerIds[0]; !ok {
+			t.Errorf("container index to containerIDs mapping was not set: %v", containerIDs)
+			return false
+		} else {
+			if _, ok := containerIDs[containerID]; !ok {
+				t.Errorf("containerID is missing from possible containerIDs set: %v", containerIDs)
+				return false
+			}
+		}
+
+		for _, mountTarget := range mountTargets {
+			if err := policy.EnforceDeviceUnmountPolicy(mountTarget); err != nil {
+				t.Errorf("failed to enforce unmount policy: %s", err)
+				return false
+			}
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 1}); err != nil {
+		t.Errorf("failed to run stuff: %s", err)
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //
@@ -801,7 +867,7 @@ func generateContainers(r *rand.Rand, upTo int32) *generatedContainers {
 
 	numContainers := (int)(atLeastOneAtMost(r, upTo))
 	for i := 0; i < numContainers; i++ {
-		containers = append(containers, generateContainersContainer(r, maxLayersInGeneratedContainer))
+		containers = append(containers, generateContainersContainer(r, 1, maxLayersInGeneratedContainer))
 	}
 
 	return &generatedContainers{
@@ -809,13 +875,13 @@ func generateContainers(r *rand.Rand, upTo int32) *generatedContainers {
 	}
 }
 
-func generateContainersContainer(r *rand.Rand, size int32) *securityPolicyContainer {
+func generateContainersContainer(r *rand.Rand, minNumberOfLayers, maxNumberOfLayers int32) *securityPolicyContainer {
 	c := securityPolicyContainer{}
 	c.Command = generateCommand(r)
 	c.EnvRules = generateEnvironmentVariableRules(r)
 	c.WorkingDir = randVariableString(r, maxGeneratedCommandLength)
-	layers := int(atLeastOneAtMost(r, size))
-	for i := 0; i < layers; i++ {
+	numLayers := int(atLeastNAtMostM(r, minNumberOfLayers, maxNumberOfLayers))
+	for i := 0; i < numLayers; i++ {
 		c.Layers = append(c.Layers, generateRootHash(r))
 	}
 
@@ -1029,21 +1095,27 @@ func randVariableString(r *rand.Rand, maxLen int32) string {
 	return randString(r, atLeastOneAtMost(r, maxLen))
 }
 
-func randString(r *rand.Rand, len int32) string {
-	var s strings.Builder
-	for i := 0; i < (int)(len); i++ {
-		s.WriteRune(0x00ff & r.Int31n(256))
+func randString(r *rand.Rand, length int32) string {
+	charset := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	sb := strings.Builder{}
+	sb.Grow(int(length))
+	for i := 0; i < (int)(length); i++ {
+		sb.WriteByte(charset[r.Intn(len(charset))])
 	}
 
-	return s.String()
+	return sb.String()
 }
 
 func randMinMax(r *rand.Rand, min int32, max int32) int32 {
 	return r.Int31n(max-min+1) + min
 }
 
+func atLeastNAtMostM(r *rand.Rand, min, max int32) int32 {
+	return randMinMax(r, min, max)
+}
+
 func atLeastOneAtMost(r *rand.Rand, most int32) int32 {
-	return randMinMax(r, 1, most)
+	return atLeastNAtMostM(r, 1, most)
 }
 
 func atMost(r *rand.Rand, most int32) int32 {

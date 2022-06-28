@@ -450,7 +450,7 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID 
 	}
 
 	if len(matchedContainers) == 0 {
-		errmsg := fmt.Sprintf("layerPaths '%v' doesn't match any valid layer path: '%v'", layerPaths, pe.Devices)
+		errmsg := fmt.Sprintf("layerPaths '%v' doesn't match any valid overlay", layerPaths)
 		return errors.New(errmsg)
 	}
 
