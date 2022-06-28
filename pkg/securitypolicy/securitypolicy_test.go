@@ -113,9 +113,8 @@ func Test_EnforceDeviceMountPolicy_No_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
 		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
 
-		r := rand.New(rand.NewSource(time.Now().UnixNano()))
-		target := generateMountTarget(r)
-		rootHash := generateInvalidRootHash(r)
+		target := generateMountTarget(testRand)
+		rootHash := generateInvalidRootHash(testRand)
 
 		err := policy.EnforceDeviceMountPolicy(target, rootHash)
 
@@ -134,9 +133,8 @@ func Test_EnforceDeviceMountPolicy_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
 		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
 
-		r := rand.New(rand.NewSource(time.Now().UnixNano()))
-		target := generateMountTarget(r)
-		rootHash := selectRootHashFromContainers(p, r)
+		target := generateMountTarget(testRand)
+		rootHash := selectRootHashFromContainers(p, testRand)
 
 		err := policy.EnforceDeviceMountPolicy(target, rootHash)
 
@@ -153,9 +151,8 @@ func Test_EnforceDeviceUmountPolicy_Removes_Device_Entries(t *testing.T) {
 	f := func(p *generatedContainers) bool {
 		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
 
-		r := rand.New(rand.NewSource(time.Now().UnixNano()))
-		target := generateMountTarget(r)
-		rootHash := selectRootHashFromContainers(p, r)
+		target := generateMountTarget(testRand)
+		rootHash := selectRootHashFromContainers(p, testRand)
 
 		err := policy.EnforceDeviceMountPolicy(target, rootHash)
 		if err != nil {
@@ -279,8 +276,6 @@ func Test_EnforceOverlayMountPolicy_Multiple_Instances_Same_Container(t *testing
 				t.Fatalf("failed with %d containers", containersToCreate)
 			}
 		}
-
-		t.Logf("ok for %d\n", containersToCreate)
 	}
 }
 
@@ -562,12 +557,11 @@ func Test_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 // the container in our policy" functionality works correctly.
 func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
-		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		// create two additional containers that "share everything"
 		// except that they have different environment variables
-		testContainerOne := generateContainersContainer(r, 1, 5)
+		testContainerOne := generateContainersContainer(testRand, 1, 5)
 		testContainerTwo := *testContainerOne
-		testContainerTwo.EnvRules = generateEnvironmentVariableRules(r)
+		testContainerTwo.EnvRules = generateEnvironmentVariableRules(testRand)
 		// add new containers to policy before creating enforcer
 		p.containers = append(p.containers, testContainerOne, &testContainerTwo)
 
@@ -580,9 +574,9 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 
 		// mount and overlay all our containers
 		for index, container := range p.containers {
-			containerID := generateContainerID(r)
+			containerID := generateContainerID(testRand)
 
-			layerPaths, err := createValidOverlayForContainer(policy, container, r)
+			layerPaths, err := createValidOverlayForContainer(policy, container, testRand)
 			if err != nil {
 				return false
 			}
@@ -625,7 +619,7 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 
 		// enforce command policy for containerOne
 		// this will narrow our list of possible ids down
-		envVars := buildEnvironmentVariablesFromContainerRules(testContainerOne, r)
+		envVars := buildEnvironmentVariablesFromContainerRules(testContainerOne, testRand)
 		err := policy.enforceEnvironmentVariablePolicy(testContainerOneID, envVars)
 		if err != nil {
 			return false
