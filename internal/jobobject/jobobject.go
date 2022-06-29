@@ -195,7 +195,7 @@ func Open(ctx context.Context, options *Options) (_ *JobObject, err error) {
 		handle: jobHandle,
 	}
 
-	if job.isOpenedJobSilo() {
+	if isJobSilo(jobHandle) {
 		job.silo = 1
 	}
 
@@ -507,9 +507,9 @@ func (job *JobObject) ApplyFileBinding(root, target string, merged bool) error {
 	return nil
 }
 
-// isOpenedJobSilo is a helper to determine if a job object that was opened is a silo. This should ONLY be called
+// isJobSilo is a helper to determine if a job object that was opened is a silo. This should ONLY be called
 // from `Open` and any callers in this package afterwards should use `job.isSilo()``
-func (job *JobObject) isOpenedJobSilo() bool {
+func isJobSilo(h windows.Handle) bool {
 	// None of the information from the structure that this info class expects will be used, this is just used as
 	// the call will fail if the job hasn't been upgraded to a silo so we can use this to tell when we open a job
 	// if it's a silo or not. Because none of the info matters simply define a dummy struct with the size that the call
@@ -519,7 +519,7 @@ func (job *JobObject) isOpenedJobSilo() bool {
 	}
 	var siloInfo isSiloObj
 	err := winapi.QueryInformationJobObject(
-		job.handle,
+		h,
 		winapi.JobObjectSiloBasicInformation,
 		unsafe.Pointer(&siloInfo),
 		uint32(unsafe.Sizeof(siloInfo)),
