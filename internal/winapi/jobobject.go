@@ -58,6 +58,7 @@ const (
 	JobObjectMemoryUsageInformation          uint32 = 28
 	JobObjectNotificationLimitInformation2   uint32 = 33
 	JobObjectCreateSilo                      uint32 = 35
+	JobObjectSiloBasicInformation            uint32 = 36
 	JobObjectIoAttribution                   uint32 = 42
 )
 
