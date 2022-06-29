@@ -91,30 +91,6 @@ reason["invalid env list"] {
 	not envList_matches
 }
 
-mountList_ok(container) {
-    every mount in input.mounts {
-        some constraint in container.mounts
-        mount.type == constraint.type
-        regex.match(constraint.source, mount.source)
-        mount.destination != ""
-        mount.destination == constraint.destination
-        every option in mount.options {
-            some constraintOption in constraint.options
-            option == constraintOption
-        }
-    }
-}
-
-default mountList_matches := false
-mountList_matches := true {
-	some container in data.policy.containers
-	mountList_ok(container)
-}
-
-reason["invalid mount list"] {
-	not mountList_matches
-}
-
 workingDirectory_ok(container) {
 	input.workingDir == container.working_dir
 }
@@ -129,15 +105,22 @@ reason["invalid working directory"] {
 	not workingDirectory_matches
 }
 
+default container_started := false
+container_started := true {
+	input.containerID in data.started
+}
+
+reason["container already started"] {
+	container_started
+}
+
 default create_container := false
 create_container := true {
-    not input.containerID in data.started
+    not container_started
     some container in data.policy.containers
     command_ok(container)
     envList_ok(container)
-    mountList_ok(container)
 	workingDirectory_ok(container)
-    input.allowElevated == container.allow_elevated
 }
 
 create_container := true {
@@ -419,7 +402,7 @@ func NewRegoPolicyFromSecurityPolicy(securityPolicy *SecurityPolicy, defaultMoun
 	return policy, nil
 }
 
-func (policy RegoPolicy) Apply(input map[string]interface{}) (rego.ResultSet, error) {
+func (policy RegoPolicy) Query(input map[string]interface{}) (rego.ResultSet, error) {
 	store := inmem.NewFromObject(policy.data)
 
 	var buf bytes.Buffer
@@ -458,7 +441,7 @@ func (policy *RegoPolicy) EnforceDeviceMountPolicy(target string, deviceHash str
 		"target":     target,
 		"deviceHash": deviceHash,
 	}
-	result, err := policy.Apply(input)
+	result, err := policy.Query(input)
 	if err != nil {
 		return err
 	}
@@ -488,7 +471,7 @@ func (policy *RegoPolicy) EnforceOverlayMountPolicy(containerID string, layerPat
 		"containerID": containerID,
 		"layerPaths":  layerPaths,
 	}
-	result, err := policy.Apply(input)
+	result, err := policy.Query(input)
 	if err != nil {
 		return err
 	}
@@ -531,7 +514,7 @@ func (policy *RegoPolicy) EnforceCreateContainerPolicy(containerID string,
 		"envList":     envList,
 		"workingDir":  workingDir,
 	}
-	result, err := policy.Apply(input)
+	result, err := policy.Query(input)
 	if err != nil {
 		return err
 	}
@@ -545,8 +528,17 @@ func (policy *RegoPolicy) EnforceCreateContainerPolicy(containerID string,
 		}
 		return nil
 	} else {
-		// TODO: need to use rego error messages somehow
-		return errors.New("container creation not allowed by policy")
+		input["name"] = "reason"
+		result, err := policy.Query(input)
+		if err != nil {
+			return err
+		}
+
+		reasons := []string{}
+		for _, reason := range result[0].Expressions[0].Value.([]interface{}) {
+			reasons = append(reasons, reason.(string))
+		}
+		return fmt.Errorf("container creation not allowed by policy. Reasons: [%s]", strings.Join(reasons, ","))
 	}
 }
 
