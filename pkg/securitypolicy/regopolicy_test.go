@@ -77,7 +77,7 @@ func securityPolicyFromInternal(p *generatedContainers) *SecurityPolicy {
 	securityPolicy.Containers.Elements = make(map[string]Container)
 	for i, c := range p.containers {
 		container := Container{
-			AllowElevated: c.allowElevated,
+			AllowElevated: c.AllowElevated,
 			WorkingDir:    c.WorkingDir,
 			Command:       newCommandFromInternal(c.Command),
 			EnvRules:      newEnvRulesFromInternal(c.EnvRules),
