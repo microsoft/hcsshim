@@ -931,6 +931,6 @@ func (ClosedDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error
 	return nil
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) EncodedSecurityPolicy() string {
-	return ""
+func (en ClosedDoorSecurityPolicyEnforcer) EncodedSecurityPolicy() string {
+	return en.encodedSecurityPolicy
 }

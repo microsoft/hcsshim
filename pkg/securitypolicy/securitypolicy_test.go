@@ -9,7 +9,6 @@ import (
 	"os"
 	"reflect"
 	"strconv"
-	"strings"
 	"testing"
 	"testing/quick"
 	"time"
@@ -1072,13 +1071,14 @@ func randVariableString(r *rand.Rand, maxLen int32) string {
 	return randString(r, atLeastOneAtMost(r, maxLen))
 }
 
-func randString(r *rand.Rand, len int32) string {
-	var s strings.Builder
-	for i := 0; i < (int)(len); i++ {
-		s.WriteRune(0x00ff & r.Int31n(256))
-	}
+func randString(r *rand.Rand, length int32) string {
+	var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 
-	return s.String()
+	s := make([]rune, length)
+	for i := range s {
+		s[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(s)
 }
 
 func randMinMax(r *rand.Rand, min int32, max int32) int32 {

@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/pkg/errors"
 
@@ -38,9 +38,10 @@ mount_device := true {
 default mount_overlay := false
 mount_overlay := true {
     some container in data.policy.containers
-    count(container.layers) == count(input.layerPaths)
+	length := count(container.layers)
+    count(input.layerPaths) == length
     every i, path in input.layerPaths {
-        container.layers[i] == data.devices[path]
+        container.layers[length - i - 1] == data.devices[path]
     }
 }
 
@@ -53,6 +54,16 @@ command_ok(container) {
     every i, arg in input.argList {
         container.command[i] == arg
     }
+}
+
+default command_matches := false
+command_matches := true {
+	some container in data.policy.containers
+	command_ok(container)
+}
+
+reason["invalid command"] {
+	not command_matches
 }
 
 env_ok(pattern, "string", value) {
@@ -70,6 +81,16 @@ envList_ok(container) {
     }
 }
 
+default envList_matches := false
+envList_matches := true {
+	some container in data.policy.containers
+	envList_ok(container)
+}
+
+reason["invalid env list"] {
+	not envList_matches
+}
+
 mountList_ok(container) {
     every mount in input.mounts {
         some constraint in container.mounts
@@ -84,6 +105,30 @@ mountList_ok(container) {
     }
 }
 
+default mountList_matches := false
+mountList_matches := true {
+	some container in data.policy.containers
+	mountList_ok(container)
+}
+
+reason["invalid mount list"] {
+	not mountList_matches
+}
+
+workingDirectory_ok(container) {
+	input.workingDir == container.working_dir
+}
+
+default workingDirectory_matches := false
+workingDirectory_matches := true {
+	some container in data.policy.containers
+	workingDirectory_ok(container)
+}
+
+reason["invalid working directory"] {
+	not workingDirectory_matches
+}
+
 default create_container := false
 create_container := true {
     not input.containerID in data.started
@@ -91,7 +136,7 @@ create_container := true {
     command_ok(container)
     envList_ok(container)
     mountList_ok(container)
-    input.workingDir == container.working_dir
+	workingDirectory_ok(container)
     input.allowElevated == container.allow_elevated
 }
 
@@ -103,9 +148,16 @@ create_container := true {
 var Indent string = "    "
 
 type RegoPolicy struct {
-	mainCode   string
+	// Rego which describes policy behavior (see above)
+	mainCode string
+	// Rego which describes policy objects (containers, etc.)
 	policyCode string
-	data       map[string]interface{}
+	// Mutex to prevent concurrent access to fields
+	mutex *sync.Mutex
+	// Rego data object, used to store policy state
+	data map[string]interface{}
+	// Base64 encoded (JSON) policy
+	base64policy string
 }
 
 func toOptions(values []string) Options {
@@ -147,12 +199,12 @@ func injectMounts(policy *SecurityPolicy, defaultMounts []oci.Mount, privilegedM
 
 func (array StringArrayMap) MarshalRego() (string, error) {
 	values := make([]string, array.Length)
-	for key, value := range array.Elements {
-		index, err := strconv.Atoi(key)
-		if err != nil {
-			return "", fmt.Errorf("string array map index %v not an int", key)
+	for i := 0; i < array.Length; i++ {
+		if value, found := array.Elements[fmt.Sprint(i)]; found {
+			values[i] = fmt.Sprintf("\"%s\"", value)
+		} else {
+			return "", fmt.Errorf("\"%d\" missing from elements", i)
 		}
-		values[index] = value
 	}
 
 	return fmt.Sprintf("[%s]", strings.Join(values, ",")), nil
@@ -164,7 +216,7 @@ func writeCommand(builder *strings.Builder, command CommandArgs, indent string) 
 		return err
 	}
 
-	if _, err := builder.WriteString(fmt.Sprintf("%scommand: %s,", indent, array)); err != nil {
+	if _, err := builder.WriteString(fmt.Sprintf("%s\"command\": %s,\n", indent, array)); err != nil {
 		return err
 	}
 
@@ -177,12 +229,12 @@ func (e EnvRuleConfig) MarshalRego() string {
 
 func (e EnvRules) MarshalRego() (string, error) {
 	values := make([]string, e.Length)
-	for key, value := range e.Elements {
-		index, err := strconv.Atoi(key)
-		if err != nil {
-			return "", fmt.Errorf("string array map index %v not an int", key)
+	for i := 0; i < e.Length; i++ {
+		if value, found := e.Elements[fmt.Sprint(i)]; found {
+			values[i] = value.MarshalRego()
+		} else {
+			return "", fmt.Errorf("\"%d\" missing from env rules elements", i)
 		}
-		values[index] = value.MarshalRego()
 	}
 
 	return fmt.Sprintf("[%s]", strings.Join(values, ",")), nil
@@ -195,7 +247,7 @@ func writeEnvRules(builder *strings.Builder, envRules EnvRules, indent string) e
 		return err
 	}
 
-	_, err = builder.WriteString(fmt.Sprintf("%s\"env_rules\": %s\n", indent, array))
+	_, err = builder.WriteString(fmt.Sprintf("%s\"env_rules\": %s,\n", indent, array))
 	return err
 }
 
@@ -205,7 +257,7 @@ func writeLayers(builder *strings.Builder, layers Layers, indent string) error {
 		return err
 	}
 
-	if _, err := builder.WriteString(fmt.Sprintf("%slayers: %s,", indent, array)); err != nil {
+	if _, err := builder.WriteString(fmt.Sprintf("%s\"layers\": %s,\n", indent, array)); err != nil {
 		return err
 	}
 
@@ -222,17 +274,16 @@ func (m Mount) MarshalRego() (string, error) {
 
 func (m Mounts) MarshalRego() (string, error) {
 	values := make([]string, m.Length)
-	for key, value := range m.Elements {
-		index, err := strconv.Atoi(key)
-		if err != nil {
-			return "", fmt.Errorf("string array map index %v not an int", key)
+	for i := 0; i < m.Length; i++ {
+		if value, found := m.Elements[fmt.Sprint(i)]; found {
+			if mount, err := value.MarshalRego(); err == nil {
+				values[i] = mount
+			} else {
+				return "", err
+			}
+		} else {
+			return "", fmt.Errorf("\"%d\" missing from mounts elements", i)
 		}
-		mount, err := value.MarshalRego()
-		if err != nil {
-			return "", err
-		}
-
-		values[index] = mount
 	}
 
 	return fmt.Sprintf("[%s]", strings.Join(values, ",")), nil
@@ -245,7 +296,7 @@ func writeMounts(builder *strings.Builder, mounts Mounts, indent string) error {
 		return err
 	}
 
-	_, err = builder.WriteString(fmt.Sprintf("%s\"env_rules\": %s\n", indent, array))
+	_, err = builder.WriteString(fmt.Sprintf("%s\"mounts\": %s,\n", indent, array))
 	return err
 }
 
@@ -270,15 +321,15 @@ func writeContainer(builder *strings.Builder, container Container, indent string
 		return err
 	}
 
-	if _, err := builder.WriteString(fmt.Sprintf("%s\"allow_elevated\": %v,", indent, container.AllowElevated)); err != nil {
+	if _, err := builder.WriteString(fmt.Sprintf("%s\"allow_elevated\": %v,\n", indent+Indent, container.AllowElevated)); err != nil {
 		return err
 	}
 
-	if _, err := builder.WriteString(fmt.Sprintf("%s\"working_dir\": %s", indent, container.WorkingDir)); err != nil {
+	if _, err := builder.WriteString(fmt.Sprintf("%s\"working_dir\": \"%s\"\n", indent+Indent, container.WorkingDir)); err != nil {
 		return err
 	}
 
-	if _, err := builder.WriteString(fmt.Sprintf("%s}\n", indent)); err != nil {
+	if _, err := builder.WriteString(fmt.Sprintf("%s}", indent)); err != nil {
 		return err
 	}
 
@@ -290,9 +341,24 @@ func addContainers(builder *strings.Builder, containers Containers) error {
 		return err
 	}
 
-	for _, container := range containers.Elements {
-		if err := writeContainer(builder, container, Indent); err != nil {
-			return err
+	for i := 0; i < containers.Length; i++ {
+		if container, found := containers.Elements[fmt.Sprint(i)]; found {
+			if err := writeContainer(builder, container, Indent); err != nil {
+				return err
+			}
+
+			var end string
+			if i < containers.Length-1 {
+				end = ",\n"
+			} else {
+				end = "\n"
+			}
+
+			if _, err := builder.WriteString(end); err != nil {
+				return err
+			}
+		} else {
+			return fmt.Errorf("\"%d\" missing from containers elements", i)
 		}
 	}
 
@@ -305,7 +371,7 @@ func addContainers(builder *strings.Builder, containers Containers) error {
 
 func (p SecurityPolicy) MarshalRego() (string, error) {
 	builder := new(strings.Builder)
-	if _, err := builder.WriteString(fmt.Sprintf("package policy\nallow_all := %v", p.AllowAll)); err != nil {
+	if _, err := builder.WriteString(fmt.Sprintf("package policy\nallow_all := %v\n", p.AllowAll)); err != nil {
 		return "", err
 	}
 
@@ -317,27 +383,39 @@ func (p SecurityPolicy) MarshalRego() (string, error) {
 }
 
 func NewRegoPolicyFromBase64Json(base64policy string, defaultMounts []oci.Mount, privilegedMounts []oci.Mount) (*RegoPolicy, error) {
-	jsonPolicy, err := base64.StdEncoding.DecodeString(base64policy)
-	if err != nil {
+	securityPolicy := new(SecurityPolicy)
+	if jsonPolicy, err := base64.StdEncoding.DecodeString(base64policy); err == nil {
+		if err2 := json.Unmarshal(jsonPolicy, securityPolicy); err2 != nil {
+			return nil, errors.Wrap(err2, "unable to unmarshal JSON policy")
+		}
+	} else {
 		return nil, fmt.Errorf("failed to decode base64 security policy: %w", err)
 	}
 
-	securityPolicy := new(SecurityPolicy)
-	if err := json.Unmarshal(jsonPolicy, securityPolicy); err != nil {
-		return nil, errors.Wrap(err, "unable to unmarshal JSON policy")
+	if policy, err := NewRegoPolicyFromSecurityPolicy(securityPolicy, defaultMounts, privilegedMounts); err == nil {
+		policy.base64policy = base64policy
+		return policy, nil
+	} else {
+		return nil, err
 	}
+}
 
+func NewRegoPolicyFromSecurityPolicy(securityPolicy *SecurityPolicy, defaultMounts []oci.Mount, privilegedMounts []oci.Mount) (*RegoPolicy, error) {
 	if err := injectMounts(securityPolicy, defaultMounts, privilegedMounts); err != nil {
 		return nil, err
 	}
 
 	policy := new(RegoPolicy)
 	policy.mainCode = MainCode
-	if policy.policyCode, err = securityPolicy.MarshalRego(); err != nil {
+	if code, err := securityPolicy.MarshalRego(); err == nil {
+		policy.policyCode = code
+	} else {
 		return nil, fmt.Errorf("failed to convert json to rego: %w", err)
 	}
 
 	policy.data = make(map[string]interface{})
+	policy.mutex = new(sync.Mutex)
+	policy.base64policy = ""
 	return policy, nil
 }
 
@@ -358,6 +436,8 @@ func (policy RegoPolicy) Apply(input map[string]interface{}) (rego.ResultSet, er
 	ctx := context.Background()
 	results, err := query.Eval(ctx)
 	if err != nil {
+		fmt.Println("Policy", policy.policyCode)
+		fmt.Println(err)
 		return results, err
 	}
 
@@ -370,6 +450,9 @@ func (policy RegoPolicy) Apply(input map[string]interface{}) (rego.ResultSet, er
 }
 
 func (policy *RegoPolicy) EnforceDeviceMountPolicy(target string, deviceHash string) error {
+	policy.mutex.Lock()
+	defer policy.mutex.Unlock()
+
 	input := map[string]interface{}{
 		"name":       "mount_device",
 		"target":     target,
@@ -392,12 +475,14 @@ func (policy *RegoPolicy) EnforceDeviceMountPolicy(target string, deviceHash str
 		}
 		return nil
 	} else {
-		// TODO: need to use rego error messages somehow
 		return errors.New("device mount not allowed by policy")
 	}
 }
 
 func (policy *RegoPolicy) EnforceOverlayMountPolicy(containerID string, layerPaths []string) error {
+	policy.mutex.Lock()
+	defer policy.mutex.Unlock()
+
 	input := map[string]interface{}{
 		"name":        "mount_overlay",
 		"containerID": containerID,
@@ -412,7 +497,7 @@ func (policy *RegoPolicy) EnforceOverlayMountPolicy(containerID string, layerPat
 		if containers, found := policy.data["containers"]; found {
 			containerMap := containers.(map[string]interface{})
 			if _, found := containerMap[containerID]; found {
-				log.Fatal("container already mounted")
+				return fmt.Errorf("container %s already mounted", containerID)
 			} else {
 				containerMap[containerID] = map[string]interface{}{
 					"layerPaths": layerPaths,
@@ -427,7 +512,6 @@ func (policy *RegoPolicy) EnforceOverlayMountPolicy(containerID string, layerPat
 		}
 		return nil
 	} else {
-		// TODO: need to use rego error messages somehow
 		return errors.New("overlay mount not allowed by policy")
 	}
 }
@@ -437,6 +521,9 @@ func (policy *RegoPolicy) EnforceCreateContainerPolicy(containerID string,
 	envList []string,
 	workingDir string,
 ) error {
+	policy.mutex.Lock()
+	defer policy.mutex.Unlock()
+
 	input := map[string]interface{}{
 		"name":        "create_container",
 		"containerID": containerID,
@@ -461,4 +548,28 @@ func (policy *RegoPolicy) EnforceCreateContainerPolicy(containerID string,
 		// TODO: need to use rego error messages somehow
 		return errors.New("container creation not allowed by policy")
 	}
+}
+
+func (policy *RegoPolicy) EnforceDeviceUnmountPolicy(unmountTarget string) error {
+	policy.mutex.Lock()
+	defer policy.mutex.Unlock()
+	devices := policy.data["devices"].(map[string]string)
+	delete(devices, unmountTarget)
+	return nil
+}
+
+func (policy *RegoPolicy) EnforceWaitMountPointsPolicy(containerID string, spec *oci.Spec) error {
+	return errors.New("not implemented)")
+}
+
+func (policy *RegoPolicy) EnforceMountPolicy(sandboxID, containerID string, spec *oci.Spec) error {
+	return errors.New("not implemented)")
+}
+
+func (policy *RegoPolicy) ExtendDefaultMounts([]oci.Mount) error {
+	return errors.New("not implemented)")
+}
+
+func (policy *RegoPolicy) EncodedSecurityPolicy() string {
+	return policy.base64policy
 }
