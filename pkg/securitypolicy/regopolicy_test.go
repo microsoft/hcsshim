@@ -160,13 +160,16 @@ func Test_Rego_EnforceDeviceMountPolicy_No_Matches(t *testing.T) {
 	}
 }
 
-type regoOverlayTestConfig struct {
+type regoTestConfig struct {
 	layers      []string
 	containerID string
+	envList     []string
+	argList     []string
+	workingDir  string
 	policy      *RegoPolicy
 }
 
-func setupRegoOverlayTest(gc *generatedContainers, valid bool) (tc *regoOverlayTestConfig, err error) {
+func setupRegoContainerTest(gc *generatedContainers, valid bool) (tc *regoTestConfig, err error) {
 	securityPolicy := securityPolicyFromInternal(gc)
 	policy, err := NewRegoPolicyFromSecurityPolicy(securityPolicy, []oci.Mount{}, []oci.Mount{})
 	if err != nil {
@@ -189,34 +192,10 @@ func setupRegoOverlayTest(gc *generatedContainers, valid bool) (tc *regoOverlayT
 		}
 	}
 
-	return &regoOverlayTestConfig{
-		layers:      layerPaths,
-		containerID: containerID,
-		policy:      policy,
-	}, nil
-}
-
-type regoContainerTestConfig struct {
-	envList     []string
-	argList     []string
-	workingDir  string
-	containerID string
-	policy      *RegoPolicy
-}
-
-func setupRegoContainerTest(gc *generatedContainers) (tc *regoContainerTestConfig, err error) {
-	securityPolicy := securityPolicyFromInternal(gc)
-	policy, err := NewRegoPolicyFromSecurityPolicy(securityPolicy, []oci.Mount{}, []oci.Mount{})
-	if err != nil {
-		return nil, err
-	}
-
-	containerID := generateContainerID(testRand)
-	c := selectContainerFromContainers(gc, testRand)
-
 	envList := buildEnvironmentVariablesFromContainerRules(c, testRand)
 
-	return &regoContainerTestConfig{
+	return &regoTestConfig{
+		layers:      layerPaths,
 		envList:     envList,
 		argList:     c.Command,
 		workingDir:  c.WorkingDir,
@@ -229,7 +208,7 @@ func setupRegoContainerTest(gc *generatedContainers) (tc *regoContainerTestConfi
 // return an error when there's no matching overlay targets.
 func Test_Rego_EnforceOverlayMountPolicy_No_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
-		tc, err := setupRegoOverlayTest(p, false)
+		tc, err := setupRegoContainerTest(p, false)
 		if err != nil {
 			t.Error(err)
 			return false
@@ -250,7 +229,7 @@ func Test_Rego_EnforceOverlayMountPolicy_No_Matches(t *testing.T) {
 // return an error when there's a valid overlay target.
 func Test_Rego_EnforceOverlayMountPolicy_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
-		tc, err := setupRegoOverlayTest(p, true)
+		tc, err := setupRegoContainerTest(p, true)
 		if err != nil {
 			t.Error(err)
 			return false
@@ -303,9 +282,14 @@ func Test_Rego_EnforceDeviceUmountPolicy_Removes_Device_Entries(t *testing.T) {
 
 func Test_Rego_EnforceCreateContainer(t *testing.T) {
 	f := func(p *generatedContainers) bool {
-		tc, err := setupRegoContainerTest(p)
+		tc, err := setupRegoContainerTest(p, true)
 		if err != nil {
 			t.Error(err)
+			return false
+		}
+
+		if err = tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers); err != nil {
+			t.Errorf("failed to enforce overlay mount policy: %s", err)
 			return false
 		}
 
@@ -322,9 +306,14 @@ func Test_Rego_EnforceCreateContainer(t *testing.T) {
 
 func Test_Rego_EnforceCommandPolicy_NoMatches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
-		tc, err := setupRegoContainerTest(p)
+		tc, err := setupRegoContainerTest(p, true)
 		if err != nil {
 			t.Error(err)
+			return false
+		}
+
+		if err = tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers); err != nil {
+			t.Errorf("failed to enforce overlay mount policy: %s", err)
 			return false
 		}
 
@@ -344,9 +333,14 @@ func Test_Rego_EnforceCommandPolicy_NoMatches(t *testing.T) {
 
 func Test_Rego_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
-		tc, err := setupRegoContainerTest(p)
+		tc, err := setupRegoContainerTest(p, true)
 		if err != nil {
 			t.Error(err)
+			return false
+		}
+
+		if err = tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers); err != nil {
+			t.Errorf("failed to enforce overlay mount policy: %s", err)
 			return false
 		}
 
@@ -367,10 +361,15 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 }
 
 func Test_Rego_WorkingDirectoryPolicy_NoMatches(t *testing.T) {
-	testFunc := func(gc *generatedContainers) bool {
-		tc, err := setupRegoContainerTest(gc)
+	testFunc := func(p *generatedContainers) bool {
+		tc, err := setupRegoContainerTest(p, true)
 		if err != nil {
 			t.Error(err)
+			return false
+		}
+
+		if err = tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers); err != nil {
+			t.Errorf("failed to enforce overlay mount policy: %s", err)
 			return false
 		}
 

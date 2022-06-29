@@ -12,6 +12,9 @@ import (
 
 	"github.com/pkg/errors"
 
+	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
+	"github.com/Microsoft/hcsshim/internal/guestpath"
+	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/topdown"
@@ -32,12 +35,11 @@ mount_device := true {
 }
 
 mount_device := true {
+	count(data.policy.containers) == 0
 	data.policy.allow_all
 }
 
-default mount_overlay := false
-mount_overlay := true {
-    some container in data.policy.containers
+layerPaths_ok(container) {
 	length := count(container.layers)
     count(input.layerPaths) == length
     every i, path in input.layerPaths {
@@ -45,7 +47,14 @@ mount_overlay := true {
     }
 }
 
+default mount_overlay := false
 mount_overlay := true {
+    some container in data.policy.containers
+	layerPaths_ok(container)
+}
+
+mount_overlay := true {
+	count(data.policy.containers) == 0
 	data.policy.allow_all
 }
 
@@ -118,13 +127,55 @@ default create_container := false
 create_container := true {
     not container_started
     some container in data.policy.containers
+	layerPaths_ok(container)
     command_ok(container)
     envList_ok(container)
 	workingDirectory_ok(container)
 }
 
 create_container := true {
+	count(data.policy.containers) == 0
 	data.policy.allow_all
+}
+
+mountSource_ok(constraint, source) {
+	startswith(constraint, sandboxPrefix)
+	newConstraint := replace(constraint, sandboxPrefix, input.sandboxDir)
+	regex.match(newConstraint, source)
+}
+
+mountSource_ok(constraint, source) {
+	startswith(constraint, hugePagesPrefix)
+	newConstraint := replace(constraint, hugePagesPrefix, input.hugePagesDir)
+	regex.match(newConstraint, source)
+}
+
+mount_ok(container, mount) {
+	some constraint in container.mounts
+	mount.type == constraint.type
+	mountSource_ok(constraint.source, mount.source)
+	mount.destination != ""
+	mount.destination == constraint.destination
+	every option in mount.options {
+		some constraintOption in constraint.options
+		option == constraintOption
+	}
+}
+
+mountList_ok(container) {
+    every mount in input.mounts {
+        mount_ok(container, mount)
+    }
+}
+
+default mount := false
+mount := true {
+    some container in data.policy.containers
+	layerPaths_ok(container)
+    command_ok(container)
+    envList_ok(container)
+	workingDirectory_ok(container)
+	mountList_ok(container)
 }
 `
 
@@ -141,6 +192,8 @@ type RegoPolicy struct {
 	data map[string]interface{}
 	// Base64 encoded (JSON) policy
 	base64policy string
+	// Pre-compiled policy
+	compiler *ast.Compiler
 }
 
 func toOptions(values []string) Options {
@@ -389,17 +442,31 @@ func NewRegoPolicyFromSecurityPolicy(securityPolicy *SecurityPolicy, defaultMoun
 	}
 
 	policy := new(RegoPolicy)
-	policy.mainCode = MainCode
+	mainCode := fmt.Sprintf("%s\nsandboxPrefix := \"%s\"\nhugePagesPrefix := \"%s\"\n",
+		MainCode,
+		guestpath.SandboxMountPrefix,
+		guestpath.HugePagesMountPrefix)
+	policy.mainCode = mainCode
 	if code, err := securityPolicy.MarshalRego(); err == nil {
 		policy.policyCode = code
 	} else {
 		return nil, fmt.Errorf("failed to convert json to rego: %w", err)
 	}
 
-	policy.data = make(map[string]interface{})
+	policy.data = map[string]interface{}{"containers": make(map[string]interface{})}
 	policy.mutex = new(sync.Mutex)
 	policy.base64policy = ""
-	return policy, nil
+
+	modules := map[string]string{
+		"main":   policy.mainCode,
+		"policy": policy.policyCode,
+	}
+	if compiler, err := ast.CompileModules(modules); err == nil {
+		policy.compiler = compiler
+		return policy, nil
+	} else {
+		return nil, err
+	}
 }
 
 func (policy RegoPolicy) Query(input map[string]interface{}) (rego.ResultSet, error) {
@@ -409,8 +476,7 @@ func (policy RegoPolicy) Query(input map[string]interface{}) (rego.ResultSet, er
 	rule := input["name"].(string)
 	query := rego.New(
 		rego.Query(fmt.Sprintf("data.main.%s", rule)),
-		rego.Module("main", policy.mainCode),
-		rego.Module("policy", policy.policyCode),
+		rego.Compiler(policy.compiler),
 		rego.Input(input),
 		rego.Store(store),
 		rego.EnablePrintStatements(true),
@@ -477,20 +543,13 @@ func (policy *RegoPolicy) EnforceOverlayMountPolicy(containerID string, layerPat
 	}
 
 	if result.Allowed() {
-		if containers, found := policy.data["containers"]; found {
-			containerMap := containers.(map[string]interface{})
-			if _, found := containerMap[containerID]; found {
-				return fmt.Errorf("container %s already mounted", containerID)
-			} else {
-				containerMap[containerID] = map[string]interface{}{
-					"layerPaths": layerPaths,
-				}
-			}
+		containerMap := policy.data["containers"].(map[string]interface{})
+		if _, found := containerMap[containerID]; found {
+			return fmt.Errorf("container %s already mounted", containerID)
 		} else {
-			policy.data["containers"] = map[string]interface{}{
-				containerID: map[string]interface{}{
-					"layerPaths": layerPaths,
-				},
+			containerMap[containerID] = map[string]interface{}{
+				"layerPaths": layerPaths,
+				"started":    false,
 			}
 		}
 		return nil
@@ -507,12 +566,25 @@ func (policy *RegoPolicy) EnforceCreateContainerPolicy(containerID string,
 	policy.mutex.Lock()
 	defer policy.mutex.Unlock()
 
+	containerMap := policy.data["containers"].(map[string]interface{})
+	var containerInfo map[string]interface{}
+	if value, found := containerMap[containerID]; found {
+		containerInfo = value.(map[string]interface{})
+	} else {
+		return errors.New("containerID not mounted")
+	}
+
+	if containerInfo["started"].(bool) {
+		return errors.New("container has already been started")
+	}
+
 	input := map[string]interface{}{
 		"name":        "create_container",
 		"containerID": containerID,
 		"argList":     argList,
 		"envList":     envList,
 		"workingDir":  workingDir,
+		"layerPaths":  containerInfo["layerPaths"],
 	}
 	result, err := policy.Query(input)
 	if err != nil {
@@ -520,12 +592,10 @@ func (policy *RegoPolicy) EnforceCreateContainerPolicy(containerID string,
 	}
 
 	if result.Allowed() {
-		if started, found := policy.data["started"]; found {
-			startedArray := started.([]string)
-			policy.data["started"] = append(startedArray, containerID)
-		} else {
-			policy.data["started"] = []string{containerID}
-		}
+		containerInfo["argList"] = argList
+		containerInfo["envList"] = envList
+		containerInfo["workingDir"] = workingDir
+		containerInfo["started"] = true
 		return nil
 	} else {
 		input["name"] = "reason"
@@ -555,7 +625,67 @@ func (policy *RegoPolicy) EnforceWaitMountPointsPolicy(containerID string, spec 
 }
 
 func (policy *RegoPolicy) EnforceMountPolicy(sandboxID, containerID string, spec *oci.Spec) error {
-	return errors.New("not implemented)")
+	policy.mutex.Lock()
+	defer policy.mutex.Unlock()
+
+	containerMap := policy.data["containers"].(map[string]interface{})
+	var containerInfo map[string]interface{}
+	if value, found := containerMap[containerID]; found {
+		containerInfo = value.(map[string]interface{})
+	} else {
+		return errors.New("containerID not mounted")
+	}
+
+	if !containerInfo["started"].(bool) {
+		return errors.New("container has not been started")
+	}
+
+	mountList := make([]map[string]interface{}, len(spec.Mounts))
+	for i, mount := range spec.Mounts {
+		mountList[i] = map[string]interface{}{
+			"destination": mount.Destination,
+			"options":     mount.Options,
+			"source":      mount.Source,
+			"type":        mount.Type,
+		}
+	}
+
+	sandboxDir := specInternal.SandboxMountsDir(sandboxID)
+	hugePagesDir := specInternal.HugePagesMountsDir(sandboxID)
+	input := map[string]interface{}{
+		"name":         "mount",
+		"containerID":  containerID,
+		"argList":      containerInfo["argList"],
+		"envList":      containerInfo["envList"],
+		"workingDir":   containerInfo["workingDir"],
+		"layerPaths":   containerInfo["layerPaths"],
+		"mounts":       mountList,
+		"sandboxDir":   sandboxDir,
+		"hugePagesDir": hugePagesDir,
+	}
+	result, err := policy.Query(input)
+	if err != nil {
+		return err
+	}
+
+	if result.Allowed() {
+		containerInfo["mounts"] = mountList
+		containerInfo["sandboxDir"] = sandboxDir
+		containerInfo["hugePagesDir"] = hugePagesDir
+		return nil
+	} else {
+		input["name"] = "reason"
+		result, err := policy.Query(input)
+		if err != nil {
+			return err
+		}
+
+		reasons := []string{}
+		for _, reason := range result[0].Expressions[0].Value.([]interface{}) {
+			reasons = append(reasons, reason.(string))
+		}
+		return fmt.Errorf("mount not allowed by policy. Reasons: [%s]", strings.Join(reasons, ","))
+	}
 }
 
 func (policy *RegoPolicy) ExtendDefaultMounts([]oci.Mount) error {
