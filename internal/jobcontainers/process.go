@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -73,7 +74,7 @@ func (p *JobProcess) Signal(ctx context.Context, options interface{}) (bool, err
 	defer p.procLock.Unlock()
 
 	if p.exited() {
-		return false, errors.New("signal not sent. process has already exited")
+		return false, fmt.Errorf("signal not sent. process has already exited: %w", hcs.ErrProcessAlreadyStopped)
 	}
 
 	// If options is nil it's assumed we got a sigterm
@@ -95,6 +96,10 @@ func (p *JobProcess) Signal(ctx context.Context, options interface{}) (bool, err
 	}
 
 	if err := signalProcess(uint32(p.cmd.Pid()), signal); err != nil {
+		if errors.Is(err, os.ErrPermission) || hcs.IsAlreadyStopped(err) {
+			// The process we are signaling has stopped. Return a proper error that signals this condition.
+			return false, fmt.Errorf("failed to send signal: %w", hcs.ErrProcessAlreadyStopped)
+		}
 		return false, errors.Wrap(err, "failed to send signal")
 	}
 	return true, nil

@@ -257,8 +257,8 @@ func makeProcessError(process *Process, op string, err error, events []ErrorEven
 // will currently return true when the error is ErrElementNotFound.
 func IsNotExist(err error) bool {
 	err = getInnerError(err)
-	return err == ErrComputeSystemDoesNotExist ||
-		err == ErrElementNotFound
+	return errors.Is(err, ErrComputeSystemDoesNotExist) ||
+		errors.Is(err, ErrElementNotFound)
 }
 
 // IsErrorInvalidHandle checks whether the error is the result of an operation carried
@@ -266,21 +266,21 @@ func IsNotExist(err error) bool {
 // stats on a container in the process of being stopped.
 func IsErrorInvalidHandle(err error) bool {
 	err = getInnerError(err)
-	return err == ErrInvalidHandle
+	return errors.Is(err, ErrInvalidHandle)
 }
 
 // IsAlreadyClosed checks if an error is caused by the Container or Process having been
 // already closed by a call to the Close() method.
 func IsAlreadyClosed(err error) bool {
 	err = getInnerError(err)
-	return err == ErrAlreadyClosed
+	return errors.Is(err, ErrAlreadyClosed)
 }
 
 // IsPending returns a boolean indicating whether the error is that
 // the requested operation is being completed in the background.
 func IsPending(err error) bool {
 	err = getInnerError(err)
-	return err == ErrVmcomputeOperationPending
+	return errors.Is(err, ErrVmcomputeOperationPending)
 }
 
 // IsTimeout returns a boolean indicating whether the error is caused by
@@ -290,7 +290,7 @@ func IsTimeout(err error) bool {
 		return true
 	}
 	err = getInnerError(err)
-	return err == ErrTimeout
+	return errors.Is(err, ErrTimeout)
 }
 
 // IsAlreadyStopped returns a boolean indicating whether the error is caused by
@@ -300,9 +300,9 @@ func IsTimeout(err error) bool {
 // will currently return true when the error is ErrElementNotFound.
 func IsAlreadyStopped(err error) bool {
 	err = getInnerError(err)
-	return err == ErrVmcomputeAlreadyStopped ||
-		err == ErrProcessAlreadyStopped ||
-		err == ErrElementNotFound
+	return errors.Is(err, ErrVmcomputeAlreadyStopped) ||
+		errors.Is(err, ErrProcessAlreadyStopped) ||
+		errors.Is(err, ErrElementNotFound)
 }
 
 // IsNotSupported returns a boolean indicating whether the error is caused by
@@ -313,24 +313,24 @@ func IsAlreadyStopped(err error) bool {
 func IsNotSupported(err error) bool {
 	err = getInnerError(err)
 	// If Platform doesn't recognize or support the request sent, below errors are seen
-	return err == ErrVmcomputeInvalidJSON ||
-		err == ErrInvalidData ||
-		err == ErrNotSupported ||
-		err == ErrVmcomputeUnknownMessage
+	return errors.Is(err, ErrVmcomputeInvalidJSON) ||
+		errors.Is(err, ErrInvalidData) ||
+		errors.Is(err, ErrNotSupported) ||
+		errors.Is(err, ErrVmcomputeUnknownMessage)
 }
 
 // IsOperationInvalidState returns true when err is caused by
 // `ErrVmcomputeOperationInvalidState`.
 func IsOperationInvalidState(err error) bool {
 	err = getInnerError(err)
-	return err == ErrVmcomputeOperationInvalidState
+	return errors.Is(err, ErrVmcomputeOperationInvalidState)
 }
 
 // IsAccessIsDenied returns true when err is caused by
 // `ErrVmcomputeOperationAccessIsDenied`.
 func IsAccessIsDenied(err error) bool {
 	err = getInnerError(err)
-	return err == ErrVmcomputeOperationAccessIsDenied
+	return errors.Is(err, ErrVmcomputeOperationAccessIsDenied)
 }
 
 func getInnerError(err error) error {

@@ -19,6 +19,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/cmd"
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
@@ -296,6 +297,11 @@ func (he *hcsExec) Kill(ctx context.Context, signal uint32) error {
 			delivered, err = he.p.Process.Kill(ctx)
 		}
 		if err != nil {
+			if hcs.IsAlreadyStopped(err) {
+				// Desired state is actual state. No use in erroring out just because we couldn't kill
+				// an already dead process.
+				return nil
+			}
 			return err
 		}
 		if !delivered {
