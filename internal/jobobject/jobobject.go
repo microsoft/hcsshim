@@ -253,7 +253,7 @@ func (job *JobObject) PollNotification() (interface{}, error) {
 	if job.mq == nil {
 		return nil, ErrNotRegistered
 	}
-	return job.mq.ReadOrWait()
+	return job.mq.Dequeue()
 }
 
 // UpdateProcThreadAttribute updates the passed in ProcThreadAttributeList to contain what is necessary to
