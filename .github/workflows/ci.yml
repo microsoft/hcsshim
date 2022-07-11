@@ -5,7 +5,6 @@ on:
 
 jobs:
   lint:
-    name: Lint
     runs-on: "windows-2019"
     steps:
       - uses: actions/checkout@v2
@@ -22,7 +21,6 @@ jobs:
           only-new-issues: true
 
   protos:
-    name: Protobuild
     runs-on: "windows-2019"
     steps:
       - uses: actions/setup-go@v2
@@ -68,7 +66,6 @@ jobs:
           GOPROXY: ""
 
   verify-main-vendor:
-    name: Vendor
     needs: [lint, protos]
     runs-on: "windows-2019"
     env:
@@ -89,7 +86,6 @@ jobs:
           exit $process.ExitCode
 
   test:
-    name: Windows Tests
     needs: verify-main-vendor
     runs-on: ${{ matrix.os }}
     strategy:
@@ -127,7 +123,6 @@ jobs:
             test/sample-logging-driver.exe
 
   integration-tests:
-    name: Integration Tests
     needs: verify-main-vendor
     runs-on: ${{ matrix.os }}
     strategy:
@@ -140,6 +135,7 @@ jobs:
         with:
           go-version: "1.18.3"
           check-latest: true
+
       - name: Set env
         shell: bash
         run: |
@@ -147,6 +143,7 @@ jobs:
           echo "GOPATH=${{ github.workspace }}" >> $GITHUB_ENV
           echo "${{ github.workspace }}/bin" >> $GITHUB_PATH
           echo "${{ github.workspace }}/src/github.com/containerd/containerd/bin" >> $GITHUB_PATH
+
       - uses: actions/checkout@v2
         with:
           path: src/github.com/containerd/containerd
@@ -164,22 +161,26 @@ jobs:
           choco install mingw --version 10.2.0 --allow-downgrade
           mingw32-make.exe binaries
           script/setup/install-cni-windows
+
       - name: Build the shim
         working-directory: src/github.com/Microsoft/hcsshim
         shell: powershell
         run: |
           go build -mod vendor -o "${{ github.workspace }}/src/github.com/containerd/containerd/bin/containerd-shim-runhcs-v1.exe" .\cmd\containerd-shim-runhcs-v1
+
       - name: Get crictl tool
         shell: powershell
         run: |
           curl.exe -L "https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.24.2/crictl-v1.24.2-windows-amd64.tar.gz" -o c:\crictl.tar.gz
           tar xf c:\crictl.tar.gz -C "${{ github.workspace }}/bin"
+
       - name: Run containerd integration tests
         shell: bash
         working-directory: src/github.com/containerd/containerd
         run: |
           export EXTRA_TESTFLAGS="-timeout=20m"
           make integration
+
       - name: Run containerd CRI integration tests
         shell: bash
         working-directory: src/github.com/containerd/containerd
@@ -256,7 +257,6 @@ jobs:
   #          cri-containerd.test.exe -cri-endpoint="npipe://./pipe/containerd-containerd" -feature="WCOWProcess" -feature="HostProcess"
 
   build:
-    name: Build Windows Binaries
     needs: [test, integration-tests]
     runs-on: "windows-2019"
     steps:
@@ -297,7 +297,6 @@ jobs:
             zapdir.exe
 
   build_gcs:
-    name: Test and Build Linux GCS
     needs: verify-main-vendor
     runs-on: ubuntu-latest
     steps:
