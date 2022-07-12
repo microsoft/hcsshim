@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -144,5 +145,37 @@ func TestMultipleReadersClose(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second * 20):
 		t.Fatalf("timeout exceeded waiting for reads to complete")
+	}
+}
+
+func TestDequeueBlock(t *testing.T) {
+	q := NewMessageQueue()
+	errChan := make(chan error)
+	testVal := 1
+
+	go func() {
+		// Intentionally dequeue right away with no elements so we know we actually block on
+		// no elements.
+		val, err := q.Dequeue()
+		if err != nil {
+			errChan <- err
+		}
+		if val != testVal {
+			errChan <- fmt.Errorf("expected %d, but got %d", testVal, val)
+		}
+		close(errChan)
+	}()
+
+	// Ensure dequeue has started
+	time.Sleep(time.Second * 3)
+	if err := q.Enqueue(testVal); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case err := <-errChan:
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 }

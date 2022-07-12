@@ -5,10 +5,7 @@ import (
 	"sync"
 )
 
-var (
-	ErrQueueClosed = errors.New("the queue is closed for reading and writing")
-	ErrQueueEmpty  = errors.New("the queue is empty")
-)
+var ErrQueueClosed = errors.New("the queue is closed for reading and writing")
 
 // MessageQueue represents a threadsafe message queue to be used to retrieve or
 // write messages to.
