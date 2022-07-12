@@ -93,7 +93,7 @@ func parseLogrus(vmid string) func(r io.Reader) {
 			if err != nil {
 				// Something went wrong. Read the rest of the data as a single
 				// string and log it at once -- it's probably a GCS panic stack.
-				if errors.Is(err, io.EOF) && !isDisconnectError(err) {
+				if !errors.Is(err, io.EOF) && !isDisconnectError(err) {
 					logrus.WithFields(logrus.Fields{
 						logfields.UVMID: vmid,
 						logrus.ErrorKey: err,

@@ -170,7 +170,7 @@ func (e *HcsError) Unwrap() error {
 // Deprecated: net.Error.Temporary is deprecated.
 func (e *HcsError) Temporary() bool {
 	err := e.netError()
-	return (err != nil) && err.Temporary() //nolint:staticcheck // Temporary() is deprecated
+	return (err != nil) && err.Temporary()
 }
 
 func (e *HcsError) Timeout() bool {
@@ -203,7 +203,8 @@ func (e *SystemError) Error() string {
 
 func makeSystemError(system *System, op string, err error, events []ErrorEvent) error {
 	// Don't double wrap errors
-	if e := (&SystemError{}); errors.As(err, &e) {
+	var e *SystemError
+	if errors.As(err, &e) {
 		return err
 	}
 
@@ -236,7 +237,8 @@ func (e *ProcessError) Error() string {
 
 func makeProcessError(process *Process, op string, err error, events []ErrorEvent) error {
 	// Don't double wrap errors
-	if e := (&ProcessError{}); errors.As(err, &e) {
+	var e *ProcessError
+	if errors.As(err, &e) {
 		return err
 	}
 	return &ProcessError{

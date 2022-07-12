@@ -38,14 +38,16 @@ func TestHcsErrorUnwrap(t *testing.T) {
 				t.Errorf("error '%v' did not unwrap to %v", nerr, err)
 			}
 
-			if err2 := (&MyError{}); !(errors.As(nerr, &err2) && err2.S == err.S) {
-				t.Errorf("error '%v' did not unwrap '%v' properly", errors.Unwrap(nerr), err2)
+			var e *MyError
+			if !(errors.As(nerr, &e) && e.S == err.S) {
+				t.Errorf("error '%v' did not unwrap '%v' properly", errors.Unwrap(nerr), e)
 			}
 
 			if nerr.Timeout() {
 				t.Errorf("expected .Timeout() on '%v' to be false", nerr)
 			}
 
+			//nolint:staticcheck // Temporary() is deprecated
 			if nerr.Temporary() {
 				t.Errorf("expected .Temporary() on '%v' to be false", nerr)
 			}
@@ -88,6 +90,7 @@ func TestHcsErrorUnwrapTimeout(t *testing.T) {
 				t.Errorf("expected .Timeout() on '%v' to be false", nerr)
 			}
 
+			//nolint:staticcheck // Temporary() is deprecated
 			if nerr.Temporary() {
 				t.Errorf("expected .Temporary() on '%v' to be false", nerr)
 			}
@@ -138,6 +141,7 @@ func TestHcsErrorUnwrapNet(t *testing.T) {
 				t.Errorf("expected .Timeout() on '%v' to be true", nerr)
 			}
 
+			//nolint:staticcheck // Temporary() is deprecated
 			if !nerr.Temporary() {
 				t.Errorf("expected .Temporary() on '%v' to be true", nerr)
 			}
