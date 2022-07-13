@@ -65,6 +65,46 @@ func TestSiloCreateAndOpen(t *testing.T) {
 	}
 }
 
+func TestJobStats(t *testing.T) {
+	var (
+		ctx     = context.Background()
+		options = &Options{
+			Name:             "test",
+			Silo:             true,
+			EnableIOTracking: true,
+		}
+	)
+	job, err := Create(ctx, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer job.Close()
+
+	_, err = createProcsAndAssign(1, job)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = job.QueryMemoryStats()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = job.QueryProcessorStats()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = job.QueryStorageStats()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := job.Terminate(1); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func createProcsAndAssign(num int, job *JobObject) (_ []*exec.Cmd, err error) {
 	var procs []*exec.Cmd
 
