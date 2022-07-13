@@ -235,7 +235,7 @@ func MountWCOWLayers(ctx context.Context, containerID string, layerFolders []str
 
 		// Mount the volume to a directory on the host if requested. This is the case for job containers.
 		if volumeMountPath != "" {
-			if err := mountSandboxVolume(ctx, volumeMountPath, mountPath); err != nil {
+			if err := MountSandboxVolume(ctx, volumeMountPath, mountPath); err != nil {
 				return "", err
 			}
 		}
@@ -404,7 +404,7 @@ func UnmountContainerLayers(ctx context.Context, layerFolders []string, containe
 		// Remove the mount point if there is one. This is the fallback case for job containers
 		// if no bind mount support is available.
 		if volumeMountPath != "" {
-			if err := removeSandboxMountPoint(ctx, volumeMountPath); err != nil {
+			if err := RemoveSandboxMountPoint(ctx, volumeMountPath); err != nil {
 				return err
 			}
 		}
@@ -530,7 +530,7 @@ func getScratchVHDPath(layerFolders []string) (string, error) {
 }
 
 // Mount the sandbox vhd to a user friendly path.
-func mountSandboxVolume(ctx context.Context, hostPath, volumeName string) (err error) {
+func MountSandboxVolume(ctx context.Context, hostPath, volumeName string) (err error) {
 	log.G(ctx).WithFields(logrus.Fields{
 		"hostpath":   hostPath,
 		"volumeName": volumeName,
@@ -560,7 +560,7 @@ func mountSandboxVolume(ctx context.Context, hostPath, volumeName string) (err e
 }
 
 // Remove volume mount point. And remove folder afterwards.
-func removeSandboxMountPoint(ctx context.Context, hostPath string) error {
+func RemoveSandboxMountPoint(ctx context.Context, hostPath string) error {
 	log.G(ctx).WithFields(logrus.Fields{
 		"hostpath": hostPath,
 	}).Debug("removing volume mount point for container")

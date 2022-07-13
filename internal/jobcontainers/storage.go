@@ -51,10 +51,11 @@ func (c *JobContainer) mountLayers(ctx context.Context, containerID string, s *s
 
 	if s.Root.Path == "" {
 		log.G(ctx).Debug("mounting job container storage")
-		s.Root.Path, err = layers.MountWCOWLayers(ctx, containerID, s.Windows.LayerFolders, "", volumeMountPath, nil)
+		rootPath, err := layers.MountWCOWLayers(ctx, containerID, s.Windows.LayerFolders, "", volumeMountPath, nil)
 		if err != nil {
 			return fmt.Errorf("failed to mount job container storage: %w", err)
 		}
+		s.Root.Path = rootPath + "\\"
 	}
 
 	return nil
