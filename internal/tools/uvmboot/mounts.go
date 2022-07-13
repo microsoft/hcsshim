@@ -65,6 +65,18 @@ func shareFilesLCOW(ctx context.Context, c *cli.Context, vm *uvm.UtilityVM) erro
 	return nil
 }
 
+func mountVPMem(ctx context.Context, c *cli.Context, vm *uvm.UtilityVM) error {
+	if !c.IsSet(vpmemMountsArgName) {
+		return nil
+	}
+	for _, p := range c.StringSlice(vpmemMountsArgName) {
+		if _, err := vm.AddVPMem(ctx, p); err != nil {
+			return fmt.Errorf("could not mount VPMem device: %w", err)
+		}
+	}
+	return nil
+}
+
 type mount struct {
 	host     string
 	guest    string
