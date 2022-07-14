@@ -50,6 +50,7 @@ func TestEnqueueDequeueClose(t *testing.T) {
 				// go around make sure we get ErrClosed()
 				q.Close()
 			}
+			continue
 		} else if err != ErrQueueClosed {
 			t.Fatalf("expected to receive ErrQueueClosed, instead got: %s", err)
 		}
@@ -177,5 +178,9 @@ func TestDequeueBlock(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+	case <-time.After(10 * time.Second):
+		// Closing the queue will finish the Dequeue go routine.
+		q.Close()
+		t.Fatal("timeout waiting for Dequeue go routine to complete")
 	}
 }
