@@ -30,7 +30,8 @@ const (
 	rootFSTypeArgName     = "root-fs-type"
 	vpMemMaxCountArgName  = "vpmem-max-count"
 	vpMemMaxSizeArgName   = "vpmem-max-size"
-	scsiMountsArgName     = "mount"
+	scsiMountsArgName     = "mount-scsi"
+	vpmemMountsArgName    = "mount-vpmem"
 	shareFilesArgName     = "share"
 	securityPolicyArgName = "security-policy"
 	securityHardwareFlag  = "security-hardware"
@@ -123,6 +124,10 @@ var lcowCommand = cli.Command{
 			Usage: "List of paths or files to plan9 share into the UVM. Use repeat instances to add multiple. " +
 				"Value is of the form `'host,guest[,w]' where 'host' is path to the VHD, " +
 				`'guest' is the mount path inside the UVM, and 'w' sets the shared files to writeable`,
+		},
+		cli.StringSliceFlag{
+			Name:  vpmemMountsArgName,
+			Usage: "List of VHDs to VPMem mount into the UVM. Use repeat instances to add multiple. ",
 		},
 	},
 	Action: func(c *cli.Context) error {
@@ -272,6 +277,10 @@ func runLCOW(ctx context.Context, options *uvm.OptionsLCOW, c *cli.Context) erro
 	}
 
 	if err := shareFiles(ctx, c, vm); err != nil {
+		return err
+	}
+
+	if err := mountVPMem(ctx, c, vm); err != nil {
 		return err
 	}
 
