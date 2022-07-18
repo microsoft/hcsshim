@@ -774,8 +774,7 @@ func (c *JobContainer) bindSetup(ctx context.Context, s *specs.Spec) (err error)
 	if err := c.job.PromoteToSilo(); err != nil {
 		return err
 	}
-	// Union the container layers. Luckily bindflt works fine with \\?\volume paths, so we don't need to
-	// mount the volume anywhere friendly (for example, somewhere under C:\) first.
+	// Union the container layers.
 	if err := c.mountLayers(ctx, c.id, s, ""); err != nil {
 		return fmt.Errorf("failed to mount container layers: %w", err)
 	}
@@ -783,7 +782,8 @@ func (c *JobContainer) bindSetup(ctx context.Context, s *specs.Spec) (err error)
 	if loc := customRootfsLocation(s.Annotations); loc != "" {
 		rootfsLocation = loc
 	}
-	if err := c.setupRootfsBinding(rootfsLocation, s.Root.Path+"\\"); err != nil {
+
+	if err := c.setupRootfsBinding(rootfsLocation, s.Root.Path); err != nil {
 		return err
 	}
 	c.rootfsLocation = rootfsLocation
