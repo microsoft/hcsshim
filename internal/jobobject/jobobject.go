@@ -442,8 +442,9 @@ func (job *JobObject) QueryProcessorStats() (*winapi.JOBOBJECT_BASIC_ACCOUNTING_
 	return &info, nil
 }
 
-// QueryStorageStats gets the storage (I/O) stats for the job object. job.SetIOTracking() must be
-// invoked or when the job was created `EnableIOTracking` must be set to true for this call to function.
+// QueryStorageStats gets the storage (I/O) stats for the job object. This call will error
+// if either `EnableIOTracking` wasn't set to true on creation of the job, or SetIOTracking()
+// hasn't been called since creation of the job.
 func (job *JobObject) QueryStorageStats() (*winapi.JOBOBJECT_IO_ATTRIBUTION_INFORMATION, error) {
 	job.handleLock.RLock()
 	defer job.handleLock.RUnlock()

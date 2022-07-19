@@ -105,6 +105,46 @@ func TestJobStats(t *testing.T) {
 	}
 }
 
+func TestIOTracking(t *testing.T) {
+	var (
+		ctx     = context.Background()
+		options = &Options{
+			Name: "test",
+			Silo: true,
+		}
+	)
+	job, err := Create(ctx, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer job.Close()
+
+	_, err = createProcsAndAssign(1, job)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = job.QueryStorageStats()
+	// Element not found is returned if IO tracking isn't enabled.
+	if err != nil && !errors.Is(err, windows.ERROR_NOT_FOUND) {
+		t.Fatal(err)
+	}
+
+	// Turn it on and now the call should function.
+	if err := job.SetIOTracking(); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = job.QueryStorageStats()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := job.Terminate(1); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func createProcsAndAssign(num int, job *JobObject) (_ []*exec.Cmd, err error) {
 	var procs []*exec.Cmd
 
