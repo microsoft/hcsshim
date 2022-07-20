@@ -97,6 +97,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 	p := pod{
 		events: events,
 		id:     req.ID,
+		spec:   s,
 	}
 
 	var parent *uvm.UtilityVM
@@ -280,6 +281,9 @@ type pod struct {
 	// It MUST be treated as read only in the lifetime of the pod.
 	jobContainer bool
 
+	// spec is the OCI runtime specification for the pod sandbox container.
+	spec *specs.Spec
+
 	workloadTasks sync.Map
 }
 
@@ -320,6 +324,15 @@ func (p *pod) CreateTask(ctx context.Context, req *task.CreateTaskRequest, s *sp
 		if !oci.IsJobContainer(s) {
 			return nil, errors.New("cannot create a normal process isolated container if the pod sandbox is a job container")
 		}
+		// Pass through some annotations from the pod spec that if specified will need to be made available
+		// to every container as well. Kubernetes only passes annotations to RunPodSandbox so there needs to be
+		// a way for individual containers to get access to these.
+		oci.SandboxAnnotationsPassThrough(
+			p.spec.Annotations,
+			s.Annotations,
+			annotations.HostProcessInheritUser,
+			annotations.HostProcessRootfsLocation,
+		)
 	}
 
 	ct, sid, err := oci.GetSandboxTypeAndID(s.Annotations)
