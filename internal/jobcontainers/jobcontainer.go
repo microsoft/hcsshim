@@ -108,8 +108,9 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *
 
 	// Create the job object all processes will run in.
 	options := &jobobject.Options{
-		Name:          fmt.Sprintf(jobContainerNameFmt, id),
-		Notifications: true,
+		Name:             fmt.Sprintf(jobContainerNameFmt, id),
+		Notifications:    true,
+		EnableIOTracking: true,
 	}
 	job, err := jobobject.Create(ctx, options)
 	if err != nil {
