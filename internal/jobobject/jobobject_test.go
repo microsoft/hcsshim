@@ -70,7 +70,6 @@ func TestJobStats(t *testing.T) {
 		ctx     = context.Background()
 		options = &Options{
 			Name:             "test",
-			Silo:             true,
 			EnableIOTracking: true,
 		}
 	)
@@ -110,7 +109,6 @@ func TestIOTracking(t *testing.T) {
 		ctx     = context.Background()
 		options = &Options{
 			Name: "test",
-			Silo: true,
 		}
 	)
 	job, err := Create(ctx, options)
