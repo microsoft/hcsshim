@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Microsoft/hcsshim/pkg/amdsevsnp"
 	"github.com/containerd/cgroups"
 	cgroupstats "github.com/containerd/cgroups/stats/v1"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
@@ -263,7 +264,11 @@ func main() {
 		Handler:  mux,
 		EnableV4: *v4,
 	}
-	h := hcsv2.NewHost(rtime, tport)
+	var snpSupported bool
+	if _, err := amdsevsnp.FetchRawSNPReport(nil); !os.IsNotExist(err) {
+		snpSupported = true
+	}
+	h := hcsv2.NewHost(rtime, tport, snpSupported)
 	b.AssignHandlers(mux, h)
 
 	var bridgeIn io.ReadCloser

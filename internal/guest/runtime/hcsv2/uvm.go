@@ -59,9 +59,10 @@ type Host struct {
 	policyMutex               sync.Mutex
 	securityPolicyEnforcer    securitypolicy.SecurityPolicyEnforcer
 	securityPolicyEnforcerSet bool
+	snpSupported              bool
 }
 
-func NewHost(rtime runtime.Runtime, vsock transport.Transport) *Host {
+func NewHost(rtime runtime.Runtime, vsock transport.Transport, snpSupported bool) *Host {
 	return &Host{
 		containers:                make(map[string]*Container),
 		externalProcesses:         make(map[int]*externalProcess),
@@ -69,6 +70,7 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport) *Host {
 		vsock:                     vsock,
 		securityPolicyEnforcerSet: false,
 		securityPolicyEnforcer:    &securitypolicy.ClosedDoorSecurityPolicyEnforcer{},
+		snpSupported:              snpSupported,
 	}
 }
 
