@@ -1,105 +1,60 @@
 package queue
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
 )
 
-func TestReadWrite(t *testing.T) {
+func TestEnqueueDequeue(t *testing.T) {
 	q := NewMessageQueue()
 
-	// Reading from an empty queue should return ErrQueueEmpty
-	if _, err := q.Read(); err != ErrQueueEmpty {
-		t.Fatal("expected to receive `ErrQueueEmpty` for reading from empty queue")
+	vals := []int{1, 2, 3, 4, 5}
+	for _, val := range vals {
+		// Enqueue vals to the queue and read later.
+		if err := q.Enqueue(val); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	// Write 1 to the queue and read this later.
-	if err := q.Write(1); err != nil {
-		t.Fatal(err)
-	}
+	for _, val := range vals {
+		// Dequeueing from an empty queue should block forever until a write occurs.
+		qVal, err := q.Dequeue()
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	// Read the value. Value will be dequeued.
-	if msg, err := q.Read(); err != nil || msg != 1 {
-		t.Fatal(err)
-	}
-
-	// We just read a value, now try and read again and verify that we get ErrQueueEmpty again.
-	if _, err := q.Read(); err != ErrQueueEmpty {
-		t.Fatal(err)
-	}
-
-	// Close the queue and verify that we get an error on write.
-	q.Close()
-	if err := q.Write(1); err != ErrQueueClosed {
-		t.Fatal(err)
+		if qVal != val {
+			t.Fatalf("expected %d, got: %d", val, qVal)
+		}
 	}
 }
 
-func TestReadOrWaitClose(t *testing.T) {
+func TestEnqueueDequeueClose(t *testing.T) {
 	q := NewMessageQueue()
 
+	vals := []int{1, 2, 3}
 	go func() {
-		_ = q.Write(1)
-		_ = q.Write(2)
-		_ = q.Write(3)
-		time.Sleep(time.Second * 5)
-		q.Close()
+		for _, val := range vals {
+			_ = q.Enqueue(val)
+		}
 	}()
-
-	time.Sleep(time.Second * 2)
 
 	read := 0
 	for {
-		if _, err := q.ReadOrWait(); err != nil {
-			if err == ErrQueueClosed && read == 3 {
-				break
+		if _, err := q.Dequeue(); err == nil {
+			read++
+			if read == len(vals) {
+				// Close after we've read all of our values, then on the next
+				// go around make sure we get ErrClosed()
+				q.Close()
 			}
-			t.Fatal(err)
+			continue
+		} else if err != ErrQueueClosed {
+			t.Fatalf("expected to receive ErrQueueClosed, instead got: %s", err)
 		}
-		read++
-	}
-}
-
-func TestReadOrWait(t *testing.T) {
-	q := NewMessageQueue()
-
-	go func() {
-		_ = q.Write(1)
-		_ = q.Write(2)
-		_ = q.Write(3)
-		time.Sleep(time.Second * 5)
-		_ = q.Write(4)
-	}()
-
-	// Small sleep so that we can give time to ensure a value is written to the queue so we
-	// can test both states ReadOrWait could be in. These states being there is already a value
-	// ready for consumption and all we have to do is just read it, or we wait to get signalled of
-	// an available value.
-	time.Sleep(time.Second * 1)
-	timeout := time.After(time.Second * 20)
-	done := make(chan struct{})
-	readErr := make(chan error)
-
-	go func() {
-		for {
-			if msg, err := q.ReadOrWait(); err != nil {
-				readErr <- err
-			} else {
-				if msg == 4 {
-					done <- struct{}{}
-					break
-				}
-			}
-		}
-	}()
-
-	select {
-	case <-timeout:
-		t.Fatal("timed out waiting for all queue values to be read")
-	case <-done:
-	case err := <-readErr:
-		t.Fatal(err)
+		break
 	}
 }
 
@@ -109,7 +64,7 @@ func TestMultipleReaders(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		for i := 0; i < 50; i++ {
-			if err := q.Write(1); err != nil {
+			if err := q.Enqueue(1); err != nil {
 				errChan <- err
 			}
 		}
@@ -121,7 +76,7 @@ func TestMultipleReaders(t *testing.T) {
 	// Reader 1
 	go func() {
 		for i := 0; i < 25; i++ {
-			if _, err := q.ReadOrWait(); err != nil {
+			if _, err := q.Dequeue(); err != nil {
 				errChan <- err
 			}
 		}
@@ -131,7 +86,7 @@ func TestMultipleReaders(t *testing.T) {
 	// Reader 2
 	go func() {
 		for i := 0; i < 25; i++ {
-			if _, err := q.ReadOrWait(); err != nil {
+			if _, err := q.Dequeue(); err != nil {
 				errChan <- err
 			}
 		}
@@ -143,13 +98,11 @@ func TestMultipleReaders(t *testing.T) {
 		done <- struct{}{}
 	}()
 
-	timeout := time.After(time.Second * 20)
-
 	select {
 	case err := <-errChan:
 		t.Fatalf("failed in read or write: %s", err)
 	case <-done:
-	case <-timeout:
+	case <-time.After(time.Second * 20):
 		t.Fatalf("timeout exceeded waiting for reads to complete")
 	}
 }
@@ -164,7 +117,7 @@ func TestMultipleReadersClose(t *testing.T) {
 
 	// Reader 1
 	go func() {
-		if _, err := q.ReadOrWait(); err != ErrQueueClosed {
+		if _, err := q.Dequeue(); err != ErrQueueClosed {
 			errChan <- err
 		}
 		wg.Done()
@@ -172,7 +125,7 @@ func TestMultipleReadersClose(t *testing.T) {
 
 	// Reader 2
 	go func() {
-		if _, err := q.ReadOrWait(); err != ErrQueueClosed {
+		if _, err := q.Dequeue(); err != ErrQueueClosed {
 			errChan <- err
 		}
 		wg.Done()
@@ -187,13 +140,47 @@ func TestMultipleReadersClose(t *testing.T) {
 	// Close the queue and this should signal both readers to return ErrQueueClosed.
 	q.Close()
 
-	timeout := time.After(time.Second * 20)
-
 	select {
 	case err := <-errChan:
 		t.Fatalf("failed in read or write: %s", err)
 	case <-done:
-	case <-timeout:
+	case <-time.After(time.Second * 20):
 		t.Fatalf("timeout exceeded waiting for reads to complete")
+	}
+}
+
+func TestDequeueBlock(t *testing.T) {
+	q := NewMessageQueue()
+	errChan := make(chan error)
+	testVal := 1
+
+	go func() {
+		// Intentionally dequeue right away with no elements so we know we actually block on
+		// no elements.
+		val, err := q.Dequeue()
+		if err != nil {
+			errChan <- err
+		}
+		if val != testVal {
+			errChan <- fmt.Errorf("expected %d, but got %d", testVal, val)
+		}
+		close(errChan)
+	}()
+
+	// Ensure dequeue has started
+	time.Sleep(time.Second * 3)
+	if err := q.Enqueue(testVal); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case err := <-errChan:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(10 * time.Second):
+		// Closing the queue will finish the Dequeue go routine.
+		q.Close()
+		t.Fatal("timeout waiting for Dequeue go routine to complete")
 	}
 }
