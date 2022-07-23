@@ -136,6 +136,7 @@ func main() {
 		startCommand,
 		deleteCommand,
 		serveCommand,
+		hpcCommand,
 	}
 	app.Before = func(context *cli.Context) error {
 		if namespaceFlag = context.GlobalString("namespace"); namespaceFlag == "" {

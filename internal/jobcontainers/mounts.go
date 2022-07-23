@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Microsoft/hcsshim/internal/layers"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -66,28 +65,6 @@ func fallbackMountSetup(spec *specs.Spec, sandboxVolumePath string) error {
 // mount.Source to mount.Destination as well as mounted from mount.Source to under the rootfs location
 // for backwards compat with systems that don't have the Bind Filter functionality available.
 func (c *JobContainer) setupMounts(ctx context.Context, spec *specs.Spec) error {
-	mountedDirPath, err := os.MkdirTemp("", "jobcontainer")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(mountedDirPath)
-	mountedDirPath += "\\"
-
-	// os.Mkdirall has troubles with volume paths on Windows it seems..
-	// For an example, it seems during the recursive portion when trying to
-	// figure out what parent directories to make, this is what gets spit out for
-	// three calls deep.
-	//
-	// First iteration: \\?\Volume{93df249b-ae90-4619-8e3c-28482c52729c}\blah
-	// Second: \\?\Volume{93df249b-ae90-4619-8e3c-28482c52729c}
-	// Third: \\?
-	//
-	// and then it will pass that to Mkdir and bail. So to avoid rolling our own
-	// mkdirall, just mount the volume somewhere and do the links and then dismount.
-	if err := layers.MountSandboxVolume(ctx, mountedDirPath, c.spec.Root.Path); err != nil {
-		return err
-	}
-
 	for _, mount := range spec.Mounts {
 		if mount.Destination == "" || mount.Source == "" {
 			return fmt.Errorf("invalid OCI spec - a mount must have both source and a destination: %+v", mount)
@@ -111,21 +88,7 @@ func (c *JobContainer) setupMounts(ctx context.Context, spec *specs.Spec) error 
 		if err := c.job.ApplyFileBinding(mount.Destination, mount.Source, false); err != nil {
 			return err
 		}
-
-		// For backwards compat with how mounts worked without the bind filter, additionally plop the directory/file
-		// to a relative path inside the containers rootfs.
-		fullCtrPath := filepath.Join(mountedDirPath, stripDriveLetter(mount.Destination))
-		// Make sure all of the dirs leading up to the full path exist.
-		strippedCtrPath := filepath.Dir(fullCtrPath)
-		if err := os.MkdirAll(strippedCtrPath, 0777); err != nil {
-			return fmt.Errorf("failed to make directory for job container mount: %w", err)
-		}
-
-		// Best effort; log if the backwards compatible symlink approach doesn't work.
-		if err := os.Symlink(mount.Source, fullCtrPath); err != nil {
-			log.G(ctx).WithError(err).Warnf("failed to setup symlink from %s to containers rootfs at %s", mount.Source, fullCtrPath)
-		}
 	}
 
-	return layers.RemoveSandboxMountPoint(ctx, mountedDirPath)
+	return nil
 }
