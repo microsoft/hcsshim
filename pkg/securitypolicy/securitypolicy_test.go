@@ -19,6 +19,7 @@ import (
 
 const (
 	// variables that influence generated test fixtures
+	minStringLength                           = 10
 	maxContainersInGeneratedPolicy            = 32
 	maxLayersInGeneratedContainer             = 32
 	maxGeneratedContainerID                   = 1000000
@@ -38,9 +39,16 @@ const (
 var testRand *rand.Rand
 
 func init() {
-	seed := rand.NewSource(time.Now().Unix())
-	testRand = rand.New(seed)
-	fmt.Fprintf(os.Stdout, "securitypolicy_test seed: %d\n", seed.Int63())
+	seed := time.Now().Unix()
+	if seedStr, ok := os.LookupEnv("SEED"); ok {
+		var err error
+		seed, err = strconv.ParseInt(seedStr, 10, 64)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to parse seed: %d\n", seed)
+		}
+	}
+	testRand = rand.New(rand.NewSource(seed))
+	fmt.Fprintf(os.Stdout, "securitypolicy_test seed: %d\n", seed)
 }
 
 // Validate that our conversion from the external SecurityPolicy representation
@@ -156,16 +164,21 @@ func Test_EnforceDeviceUmountPolicy_Removes_Device_Entries(t *testing.T) {
 
 		err := policy.EnforceDeviceMountPolicy(target, rootHash)
 		if err != nil {
+			t.Error(err)
+			t.Errorf("policy state: %+v\n", policy)
 			return false
 		}
 
 		if v, ok := policy.Devices[target]; !ok || v != rootHash {
 			t.Errorf("root hash is missing or doesn't match: actual=%q expected=%q", v, rootHash)
+			t.Errorf("policy state: %+v\n", policy)
 			return false
 		}
 
 		err = policy.EnforceDeviceUnmountPolicy(target)
 		if err != nil {
+			t.Error(err)
+			t.Errorf("policy state: %+v\n", policy)
 			return false
 		}
 
@@ -184,6 +197,7 @@ func Test_EnforceOverlayMountPolicy_No_Matches(t *testing.T) {
 		tc, err := setupContainerWithOverlay(p, false)
 		if err != nil {
 			t.Error(err)
+			t.Errorf("policy state: %+v\n", tc.policy)
 			return false
 		}
 
@@ -205,6 +219,7 @@ func Test_EnforceOverlayMountPolicy_Matches(t *testing.T) {
 		tc, err := setupContainerWithOverlay(p, true)
 		if err != nil {
 			t.Error(err)
+			t.Errorf("policy state: %+v\n", tc.policy)
 			return false
 		}
 
@@ -316,11 +331,13 @@ func Test_EnforceCommandPolicy_Matches(t *testing.T) {
 		tc, err := setupContainerWithOverlay(p, true)
 		if err != nil {
 			t.Error(err)
+			t.Errorf("policy state: %+v\n", tc.policy)
 			return false
 		}
 
 		if err := tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers); err != nil {
 			t.Errorf("failed to enforce overlay mount policy: %s", err)
+			t.Errorf("policy state: %+v\n", tc.policy)
 			return false
 		}
 
@@ -340,11 +357,13 @@ func Test_EnforceCommandPolicy_NoMatches(t *testing.T) {
 		tc, err := setupContainerWithOverlay(p, true)
 		if err != nil {
 			t.Error(err)
+			t.Errorf("policy state: %+v\n", tc.policy)
 			return false
 		}
 
 		if err := tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers); err != nil {
 			t.Errorf("failed to enforce overlay mount policy: %s", err)
+			t.Errorf("policy state: %+v\n", tc.policy)
 			return false
 		}
 
@@ -392,11 +411,13 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 
 			layerPaths, err := createValidOverlayForContainer(policy, container, testRand)
 			if err != nil {
+				t.Errorf("policy state: %+v\n", policy)
 				return false
 			}
 
 			err = policy.EnforceOverlayMountPolicy(containerID, layerPaths)
 			if err != nil {
+				t.Errorf("policy state: %+v\n", policy)
 				return false
 			}
 
@@ -413,20 +434,24 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 		// validate our expectations prior to enforcing command policy
 		containerOneMapping := policy.ContainerIndexToContainerIds[indexForContainerOne]
 		if len(containerOneMapping) != 2 {
+			t.Errorf("policy state: %+v\n", policy)
 			return false
 		}
 		for id := range containerOneMapping {
 			if (id != testContainerOneID) && (id != testContainerTwoID) {
+				t.Errorf("policy state: %+v\n", policy)
 				return false
 			}
 		}
 
 		containerTwoMapping := policy.ContainerIndexToContainerIds[indexForContainerTwo]
 		if len(containerTwoMapping) != 2 {
+			t.Errorf("policy state: %+v\n", policy)
 			return false
 		}
 		for id := range containerTwoMapping {
 			if (id != testContainerOneID) && (id != testContainerTwoID) {
+				t.Errorf("policy state: %+v\n", policy)
 				return false
 			}
 		}
@@ -435,6 +460,7 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 		// this will narrow our list of possible ids down
 		err := policy.enforceCommandPolicy(testContainerOneID, testContainerOne.Command)
 		if err != nil {
+			t.Errorf("policy state: %+v\n", policy)
 			return false
 		}
 
@@ -442,10 +468,12 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 		// command policy above that it correctly narrowed down containerTwo
 		updatedMapping := policy.ContainerIndexToContainerIds[indexForContainerTwo]
 		if len(updatedMapping) != 1 {
+			t.Errorf("policy state: %+v\n", policy)
 			return false
 		}
 		for id := range updatedMapping {
 			if id != testContainerTwoID {
+				t.Errorf("policy state: %+v\n", policy)
 				return false
 			}
 		}
@@ -465,10 +493,12 @@ func Test_EnforceEnvironmentVariablePolicy_Matches(t *testing.T) {
 		tc, err := setupContainerWithOverlay(p, true)
 		if err != nil {
 			t.Error(err)
+			t.Errorf("policy state: %+v\n", tc.policy)
 			return false
 		}
 		if err = tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers); err != nil {
 			t.Errorf("failed to enforce overlay mount policy: %s", err)
+			t.Errorf("policy state: %+v\n", tc.policy)
 			return false
 		}
 
@@ -524,10 +554,12 @@ func Test_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 		tc, err := setupContainerWithOverlay(p, true)
 		if err != nil {
 			t.Error(err)
+			t.Errorf("policy state: %+v\n", tc.policy)
 			return false
 		}
 		if err = tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers); err != nil {
 			t.Errorf("failed to enforce overlay mount policy: %s", err)
+			t.Errorf("policy state: %+v\n", tc.policy)
 			return false
 		}
 
@@ -578,11 +610,15 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 
 			layerPaths, err := createValidOverlayForContainer(policy, container, testRand)
 			if err != nil {
+				t.Error(err)
+				t.Errorf("policy state: %+v\n", policy)
 				return false
 			}
 
 			err = policy.EnforceOverlayMountPolicy(containerID, layerPaths)
 			if err != nil {
+				t.Error(err)
+				t.Errorf("policy state: %+v\n", policy)
 				return false
 			}
 
@@ -599,20 +635,24 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 		// validate our expectations prior to enforcing command policy
 		containerOneMapping := policy.ContainerIndexToContainerIds[indexForContainerOne]
 		if len(containerOneMapping) != 2 {
+			t.Errorf("policy state: %+v\n", policy)
 			return false
 		}
 		for id := range containerOneMapping {
 			if (id != testContainerOneID) && (id != testContainerTwoID) {
+				t.Errorf("policy state: %+v\n", policy)
 				return false
 			}
 		}
 
 		containerTwoMapping := policy.ContainerIndexToContainerIds[indexForContainerTwo]
 		if len(containerTwoMapping) != 2 {
+			t.Errorf("policy state: %+v\n", policy)
 			return false
 		}
 		for id := range containerTwoMapping {
 			if (id != testContainerOneID) && (id != testContainerTwoID) {
+				t.Errorf("policy state: %+v\n", policy)
 				return false
 			}
 		}
@@ -622,6 +662,8 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 		envVars := buildEnvironmentVariablesFromContainerRules(testContainerOne, testRand)
 		err := policy.enforceEnvironmentVariablePolicy(testContainerOneID, envVars)
 		if err != nil {
+			t.Error(err)
+			t.Errorf("policy state: %+v\n", policy)
 			return false
 		}
 
@@ -629,10 +671,12 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 		// command policy above that it correctly narrowed down containerTwo
 		updatedMapping := policy.ContainerIndexToContainerIds[indexForContainerTwo]
 		if len(updatedMapping) != 1 {
+			t.Errorf("policy state: %+v\n", policy)
 			return false
 		}
 		for id := range updatedMapping {
 			if id != testContainerTwoID {
+				t.Errorf("policy state: %+v\n", policy)
 				return false
 			}
 		}
@@ -652,11 +696,13 @@ func Test_WorkingDirectoryPolicy_Matches(t *testing.T) {
 		tc, err := setupContainerWithOverlay(gc, true)
 		if err != nil {
 			t.Error(err)
+			t.Errorf("policy state: %+v\n", tc.policy)
 			return false
 		}
 
 		if err := tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers); err != nil {
 			t.Errorf("failed to enforce overlay mount policy: %s", err)
+			t.Errorf("policy state: %+v\n", tc.policy)
 			return false
 		}
 
@@ -673,11 +719,13 @@ func Test_WorkingDirectoryPolicy_NoMatches(t *testing.T) {
 		tc, err := setupContainerWithOverlay(gc, true)
 		if err != nil {
 			t.Error(err)
+			t.Errorf("policy state: %+v\n", tc.policy)
 			return false
 		}
 
 		if err := tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers); err != nil {
 			t.Errorf("failed to enforce overlay mount policy: %s", err)
+			t.Errorf("policy state: %+v\n", tc.policy)
 			return false
 		}
 
@@ -709,6 +757,7 @@ func Test_Overlay_Duplicate_Layers(t *testing.T) {
 		for i := 0; i < numLayers; i++ {
 			if err := policy.EnforceDeviceMountPolicy(mountTargets[i], c1.Layers[i]); err != nil {
 				t.Errorf("failed to enforce device mount policy: %s", err)
+				t.Errorf("policy state: %+v\n", policy)
 				return false
 			}
 		}
@@ -716,6 +765,7 @@ func Test_Overlay_Duplicate_Layers(t *testing.T) {
 		if len(policy.Devices) != numLayers {
 			t.Errorf("the number of mounted devices %v don't match the expectation: targets=%v layers=%v",
 				policy.Devices, mountTargets, c1.Layers)
+			t.Errorf("policy state: %+v\n", policy)
 			return false
 		}
 
@@ -726,16 +776,19 @@ func Test_Overlay_Duplicate_Layers(t *testing.T) {
 		containerID := randString(testRand, 32)
 		if err := policy.EnforceOverlayMountPolicy(containerID, overlay); err != nil {
 			t.Errorf("failed to enforce overlay mount policy: %s", err)
+			t.Errorf("policy state: %+v\n", policy)
 			return false
 		}
 
 		// validate the state of the ContainerIndexToContainerIds mapping
 		if containerIDs, ok := policy.ContainerIndexToContainerIds[0]; !ok {
 			t.Errorf("container index to containerIDs mapping was not set: %v", containerIDs)
+			t.Errorf("policy state: %+v\n", policy)
 			return false
 		} else {
 			if _, ok := containerIDs[containerID]; !ok {
 				t.Errorf("containerID is missing from possible containerIDs set: %v", containerIDs)
+				t.Errorf("policy state: %+v\n", policy)
 				return false
 			}
 		}
@@ -743,6 +796,7 @@ func Test_Overlay_Duplicate_Layers(t *testing.T) {
 		for _, mountTarget := range mountTargets {
 			if err := policy.EnforceDeviceUnmountPolicy(mountTarget); err != nil {
 				t.Errorf("failed to enforce unmount policy: %s", err)
+				t.Errorf("policy state: %+v\n", policy)
 				return false
 			}
 		}
@@ -752,6 +806,19 @@ func Test_Overlay_Duplicate_Layers(t *testing.T) {
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 1}); err != nil {
 		t.Errorf("failed to run stuff: %s", err)
+	}
+}
+
+func Test_EnforceDeviceMountPolicy_DifferentTargetsWithTheSameHash(t *testing.T) {
+	c := generateContainersContainer(testRand, 2, 2)
+	policy := NewStandardSecurityPolicyEnforcer([]*securityPolicyContainer{c}, ignoredEncodedPolicyString)
+	mountTarget := randString(testRand, 10)
+	if err := policy.EnforceDeviceMountPolicy(mountTarget, c.Layers[0]); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	// Mounting the second layer at the same mount target should fail
+	if err := policy.EnforceDeviceMountPolicy(mountTarget, c.Layers[1]); err == nil {
+		t.Fatalf("expected conflicting device hashes error")
 	}
 }
 
@@ -1090,6 +1157,9 @@ func randVariableString(r *rand.Rand, maxLen int32) string {
 }
 
 func randString(r *rand.Rand, length int32) string {
+	if length < minStringLength {
+		length = minStringLength
+	}
 	charset := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	sb := strings.Builder{}
 	sb.Grow(int(length))
