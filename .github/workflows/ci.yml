@@ -85,7 +85,22 @@ jobs:
           }
           exit $process.ExitCode
 
-  test:
+  test-linux:
+    needs: verify-main-vendor
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install go
+        uses: actions/setup-go@v2
+        with:
+          go-version: "^1.17.0"
+
+      - name: Test security policy
+        run: go test -mod=mod -gcflags=all=-d=checkptr -v ./pkg/securitypolicy
+
+  test-windows:
     needs: verify-main-vendor
     runs-on: ${{ matrix.os }}
     strategy:
@@ -257,7 +272,7 @@ jobs:
   #          cri-containerd.test.exe -cri-endpoint="npipe://./pipe/containerd-containerd" -feature="WCOWProcess" -feature="HostProcess"
 
   build:
-    needs: [test, integration-tests]
+    needs: [test-windows, test-linux, integration-tests]
     runs-on: "windows-2019"
     steps:
       - uses: actions/checkout@v2
