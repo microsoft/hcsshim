@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Microsoft/hcsshim/pkg/amdsevsnp"
 	"github.com/containerd/cgroups"
 	cgroupstats "github.com/containerd/cgroups/stats/v1"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
@@ -180,6 +181,7 @@ func main() {
 	gcsMemLimitBytes := flag.Uint64("gcs-mem-limit-bytes", 50*1024*1024, "the maximum amount of memory the gcs can use")
 	disableTimeSync := flag.Bool("disable-time-sync", false, "If true do not run chronyd time synchronization service inside the UVM")
 	scrubLogs := flag.Bool("scrub-logs", false, "If true, scrub potentially sensitive information from logging")
+	snpSupport := flag.Bool("snp", false, "If true, gcs should assume it's running on SEV-SNP enabled linux")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "\nUsage of %s:\n", os.Args[0])
@@ -263,7 +265,14 @@ func main() {
 		Handler:  mux,
 		EnableV4: *v4,
 	}
-	h := hcsv2.NewHost(rtime, tport)
+
+	report, err := amdsevsnp.FetchRawSNPReport(nil)
+	if *snpSupport && report == nil {
+		logrus.WithError(err).Fatal("SNP support requested, but failed to fetch SNP report")
+	} else if !*snpSupport && report != nil {
+		logrus.WithError(err).Fatal("cannot run in non-SNP mode inside SNP enabled guest")
+	}
+	h := hcsv2.NewHost(rtime, tport, *snpSupport)
 	b.AssignHandlers(mux, h)
 
 	var bridgeIn io.ReadCloser
