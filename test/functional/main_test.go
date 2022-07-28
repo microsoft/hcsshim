@@ -1,5 +1,10 @@
 //go:build windows && functional
 
+// This package tests the internals of hcsshim, independent of the OCI interfaces it exposes
+// and the container runtime (or CRI API) that normally would be communicating with the shim.
+//
+// While these tests may overlap with CRI/containerd or shim tests, they exercise `internal/*`
+// code paths and primitives directly.
 package functional
 
 import (

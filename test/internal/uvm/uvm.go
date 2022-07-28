@@ -36,7 +36,7 @@ func Wait(ctx context.Context, t testing.TB, vm *uvm.UtilityVM) {
 
 		return err
 	}
-	timeout.WaitForError(ctx, t, vm.Wait, fe, fe)
+	timeout.WaitForError(ctx, t, vm.Wait, fe)
 }
 
 func Kill(ctx context.Context, t testing.TB, vm *uvm.UtilityVM) {
@@ -55,5 +55,5 @@ func Close(ctx context.Context, t testing.TB, vm *uvm.UtilityVM) {
 
 		return err
 	}
-	timeout.WaitForError(ctx, t, vm.Close, fe, fe)
+	timeout.WaitForError(ctx, t, vm.Close, fe)
 }

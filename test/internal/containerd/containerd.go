@@ -168,32 +168,20 @@ func PullImage(ctx context.Context, t testing.TB, client *containerd.Client, ref
 		return chainID.(string)
 	}
 
-	// r := GetResolver(ctx, t)
-	// ss := constants.SnapshotterFromPlatform(plat)
-
 	opts := []containerd.RemoteOpt{
-		// containerd.WithResolver(r),
-		containerd.WithPullSnapshotter(constants.SnapshotterFromPlatform(plat)),
 		containerd.WithSchema1Conversion,
 		containerd.WithPlatform(plat),
 		containerd.WithPullUnpack,
+	}
+
+	if s, err := constants.SnapshotterFromPlatform(plat); err == nil {
+		opts = append(opts, containerd.WithPullSnapshotter(s))
 	}
 
 	img, err := client.Pull(ctx, ref, opts...)
 	if err != nil {
 		t.Fatalf("could not pull image %q: %v", ref, err)
 	}
-
-	// img, err := client.Fetch(ctx, ref, opts...)
-	// if err != nil {
-	// 	t.Fatalf("could not fetch image %q: %v", ref, err)
-	// }
-	// t.Logf("fetched image %q", img.Name)
-
-	// i := containerd.NewImageWithPlatform(client, img, p)
-	// if err := i.Unpack(ctx, ss); err != nil {
-	// 	t.Fatalf("could not unpack image %q: %v", i.Name(), err)
-	// }
 
 	name := img.Name()
 	diffIDs, err := img.RootFS(ctx)

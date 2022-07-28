@@ -13,11 +13,11 @@ const ConnectTimeout = time.Second * 10
 type ErrorFunc func(error) error
 
 // WaitForError waits until f returns or the context is done.
-// The returned error will be passed to the error processing functions fe or fec, respectively.
-// If processed error is non-nil, it is passed to t.Fatal().
+// The returned error will be passed to the error processing functions fe, and (if non-nil),
+// then passed to to [testing.Fatal].
 //
-// Both error processing functions should expect nil errors.
-func WaitForError(ctx context.Context, t testing.TB, f func() error, fe, fec ErrorFunc) {
+// fe should expect nil errors.
+func WaitForError(ctx context.Context, t testing.TB, f func() error, fe ErrorFunc) {
 	var err error
 	ch := make(chan struct{})
 
@@ -30,7 +30,7 @@ func WaitForError(ctx context.Context, t testing.TB, f func() error, fe, fec Err
 	case <-ch:
 		fatalOnError(t, fe, err)
 	case <-ctx.Done():
-		fatalOnError(t, fec, ctx.Err())
+		fatalOnError(t, fe, ctx.Err())
 	}
 }
 

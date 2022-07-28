@@ -47,6 +47,7 @@ func FromMount(_ context.Context, t testing.TB, m mount.Mount) (layers []string)
 	return layers
 }
 
+// Deprecated: This relies on docker. Use [FromChainID] or [FromMount] instead.
 func LayerFolders(t testing.TB, imageName string) []string {
 	if _, ok := imageLayers[imageName]; !ok {
 		imageLayers[imageName] = getLayers(t, imageName)

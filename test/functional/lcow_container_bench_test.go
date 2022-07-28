@@ -30,8 +30,8 @@ func BenchmarkLCOW_Container(b *testing.B) {
 	require.Build(b, osversion.RS5)
 
 	ctx, _, client := newContainerdClient(context.Background(), b)
-	cid := containerd.PullImage(ctx, b, client, constants.ImageLinuxAlpineLatest, constants.PlatformLinux)
-	ls := layers.FromChainID(ctx, b, client, cid, constants.SnapshotterLinux)
+	chainID := containerd.PullImage(ctx, b, client, constants.ImageLinuxAlpineLatest, constants.PlatformLinux)
+	ls := layers.FromChainID(ctx, b, client, chainID, constants.SnapshotterLinux)
 
 	// Create a new uvm per benchmark in case any left over state lingers
 
@@ -225,5 +225,4 @@ func BenchmarkLCOW_Container(b *testing.B) {
 			cleanup()
 		}
 	})
-
 }

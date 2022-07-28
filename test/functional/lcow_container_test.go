@@ -27,8 +27,8 @@ func TestLCOW_ContainerLifecycle(t *testing.T) {
 	require.Build(t, osversion.RS5)
 
 	ctx, _, client := newContainerdClient(context.Background(), t)
-	cid := containerd.PullImage(ctx, t, client, constants.ImageLinuxAlpineLatest, constants.PlatformLinux)
-	ls := layers.FromChainID(ctx, t, client, cid, constants.SnapshotterLinux)
+	chainID := containerd.PullImage(ctx, t, client, constants.ImageLinuxAlpineLatest, constants.PlatformLinux)
+	ls := layers.FromChainID(ctx, t, client, chainID, constants.SnapshotterLinux)
 
 	opts := defaultLCOWOptions(t, t.Name())
 	vm := uvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
@@ -84,8 +84,8 @@ func TestLCOW_ContainerIO(t *testing.T) {
 	require.Build(t, osversion.RS5)
 
 	ctx, _, client := newContainerdClient(context.Background(), t)
-	cid := containerd.PullImage(ctx, t, client, constants.ImageLinuxAlpineLatest, constants.PlatformLinux)
-	ls := layers.FromChainID(ctx, t, client, cid, constants.SnapshotterLinux)
+	chainID := containerd.PullImage(ctx, t, client, constants.ImageLinuxAlpineLatest, constants.PlatformLinux)
+	ls := layers.FromChainID(ctx, t, client, chainID, constants.SnapshotterLinux)
 
 	opts := defaultLCOWOptions(t, t.Name())
 	cache := layers.CacheFile(ctx, t, "")
@@ -129,8 +129,8 @@ func TestLCOW_ContainerExec(t *testing.T) {
 	require.Build(t, osversion.RS5)
 
 	ctx, _, client := newContainerdClient(context.Background(), t)
-	cid := containerd.PullImage(ctx, t, client, constants.ImageLinuxAlpineLatest, constants.PlatformLinux)
-	ls := layers.FromChainID(ctx, t, client, cid, constants.SnapshotterLinux)
+	chainID := containerd.PullImage(ctx, t, client, constants.ImageLinuxAlpineLatest, constants.PlatformLinux)
+	ls := layers.FromChainID(ctx, t, client, chainID, constants.SnapshotterLinux)
 
 	opts := defaultLCOWOptions(t, t.Name())
 	vm := uvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
