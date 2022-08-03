@@ -236,31 +236,6 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		return nil, errors.New("unsupported process config passed in")
 	}
 
-	// Replace any occurences of the sandbox mount env variable in the commandline.
-	// For example: %CONTAINER_SANDBOX_MOUNTPOINT%\mybinary.exe -> C:\<rootfslocation>\mybinary.exe.
-	commandLine, _ := c.replaceWithMountPoint(conf.CommandLine)
-
-	// This is to workaround a rather unfortunate outcome with launching a process in a silo that
-	// has bound files.
-	//
-	// If a user requested to launch a program at C:\<rootfslocation>\mybinary.exe because they
-	// expect C:\<rootfslocation>\mybinary.exe to exist once the file bindings are done, this
-	// won't work. This is because the executable is searched for using the parent processes filesystem view
-	// and not the containers/silos that has access to these bound in files. Our Containerd shim is not
-	// running in the containers silo, and by virtue of this we won't be able to find the process being asked
-	// for as C:\<rootfslocation> is not viewable to processes outside of the silo. Deep down in the depths
-	// of CreateProcessW the culprit is a NtQueryAttributesFile call on the binary we're asking to run that
-	// fails as it doesn't have any context surrounding paths available to our silo.
-	//
-	// A way to get around this is to launch a process that will always exist (cmd) and is in our
-	// path, and then just invoke the program with the cmdline supplied. This works as the process
-	// (cmd in this case) after launch can now see C:\<rootfslocation> as it's in the silo. We could
-	// also add a new mode/flag for the shim where it's just a dummy process launcher, so we can invoke
-	// the shim instead of cmd and have more control over things.
-	if fileBindingSupport {
-		commandLine = "cmd /c " + commandLine
-	}
-
 	removeDriveLetter := func(name string) string {
 		// If just the letter and colon (C:) then replace with a single backslash. Else just trim the drive letter and
 		// leave the rest of the path.
@@ -273,33 +248,24 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 	}
 
 	workDir := c.rootfsLocation
-	// Only need to adjust the working directory in the case where bind support isn't available.
-	if !fileBindingSupport {
-		if conf.WorkingDirectory != "" {
-			var changed bool
-			// For now, we join the working directory requested with where the sandbox volume is located. It's expected that the default behavior
-			// would be to treat all paths as relative to the volume.
-			//
-			// For example:
-			// A working directory of C:\ would become C:\hpc\12345678\
-			// A working directory of C:\work\dir would become C:\hpc\12345678\work\dir
-			//
-			// The below calls replaceWithMountPoint to replace any occurrences of the environment variable that points to where the container image
-			// volume is mounted.
-			workDir, changed = c.replaceWithMountPoint(conf.WorkingDirectory)
-			// If the working directory was changed, that means the user supplied %CONTAINER_SANDBOX_MOUNT_POINT%\\my\dir or something similar.
-			// In that case there's nothing left to do, as we don't want to join it with the mount point again.. If it *wasn't* changed, then we
-			// need to join it with the mount point, as it's some normal path.
-			if !changed {
-				workDir = filepath.Join(c.rootfsLocation, removeDriveLetter(workDir))
-			}
-		}
-	} else {
-		// Just use the exact working directory the user asked for if we have file binding support.
-		// Still support replacing %CONTAINER_SANDBOX_MOUNT_POINT% in the string for backwards compat
-		// however.
-		if conf.WorkingDirectory != "" {
-			workDir, _ = c.replaceWithMountPoint(conf.WorkingDirectory)
+	if conf.WorkingDirectory != "" {
+		var changed bool
+		// The below calls replaceWithMountPoint to replace any occurrences of the environment variable that points to where the container image
+		// volume is mounted. This is useful on machines without bindflt as the volume is at a random location not known prior to launching the
+		// container, so %CONTAINER_SANDBOX_MOUNT_POINT% will place you at the root of the containers filesystem.
+		workDir, changed = c.replaceWithMountPoint(conf.WorkingDirectory)
+		// On non-bindflt machines we join the working directory requested with where the sandbox volume is located. It's expected that the
+		// default behavior would be to treat all paths as relative to the volume.
+		//
+		// For example:
+		// A working directory of C:\ would become C:\hpc\12345678\
+		// A working directory of C:\work\dir would become C:\hpc\12345678\work\dir
+		//
+		// If the working directory was changed, that means the user supplied %CONTAINER_SANDBOX_MOUNT_POINT%\\my\dir or something similar.
+		// In that case there's nothing left to do, as we don't want to join it with the mount point again.. If it *wasn't* changed, and there's
+		// no bindflt support then we need to join it with the mount point, as it's some normal path.
+		if !changed && !fileBindingSupport {
+			workDir = filepath.Join(c.rootfsLocation, removeDriveLetter(workDir))
 		}
 	}
 
@@ -308,13 +274,6 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		if err := os.MkdirAll(workDir, 0700); err != nil {
 			return nil, err
 		}
-	}
-
-	// Reassign commandline here in case it needed to be quoted. For example if "foo bar baz" was supplied, and
-	// "foo bar.exe" exists, then return: "\"foo bar\" baz"
-	absPath, commandLine, err := getApplicationName(commandLine, workDir, os.Getenv("PATH"))
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get application name from commandline %q", conf.CommandLine)
 	}
 
 	// If we haven't grabbed a token yet this is the init process being launched. Skip grabbing another token afterwards if we've already
@@ -347,16 +306,54 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 	env = append(env, envs...)
 	env = append(env, sandboxMountPointEnvVar+"="+c.rootfsLocation)
 
-	// Add the rootfs location to PATH so you can run things from the root of the image.
+	var path string
 	for idx, envVar := range env {
 		ev := strings.TrimSpace(envVar)
 		if strings.HasPrefix(strings.ToLower(ev), "path=") {
+			// Add the rootfs location to PATH so you can run things from the root of the image.
 			rootfsLoc := c.rootfsLocation
 			if rune(ev[len(ev)-1]) != ';' {
 				rootfsLoc = ";" + rootfsLoc
 			}
-			env[idx] = ev + rootfsLoc
+			// Additionally add in the default location of powershell and wmi cache. Powershell is a
+			// very common choice for this container type, and folks re-using a windows server image with
+			// the path unknowingly adjusted in the image might run into some headaches here.
+			extraPaths := `;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\Wbem`
+			path = ev + rootfsLoc + extraPaths
+			env[idx] = path
 		}
+	}
+
+	// Replace any occurences of the sandbox mount env variable in the commandline.
+	// For example: %CONTAINER_SANDBOX_MOUNTPOINT%\mybinary.exe -> C:\<rootfslocation>\mybinary.exe.
+	commandLine, _ := c.replaceWithMountPoint(conf.CommandLine)
+
+	// This is to workaround a rather unfortunate outcome with launching a process in a silo that
+	// has bound files.
+	//
+	// If a user requested to launch a program at C:\<rootfslocation>\mybinary.exe because they
+	// expect C:\<rootfslocation>\mybinary.exe to exist once the file bindings are done, this
+	// won't work. This is because the executable is searched for using the parent processes filesystem view
+	// and not the containers/silos that has access to these bound in files. Our Containerd shim is not
+	// running in the containers silo, and by virtue of this we won't be able to find the process being asked
+	// for as C:\<rootfslocation> is not viewable to processes outside of the silo. Deep down in the depths
+	// of CreateProcessW the culprit is a NtQueryAttributesFile call on the binary we're asking to run that
+	// fails as it doesn't have any context surrounding paths available to our silo.
+	//
+	// A way to get around this is to launch a process that will always exist (cmd) and is in our
+	// path, and then just invoke the program with the cmdline supplied. This works as the process
+	// (cmd in this case) after launch can now see C:\<rootfslocation> as it's in the silo. We could
+	// also add a new mode/flag for the shim where it's just a dummy process launcher, so we can invoke
+	// the shim instead of cmd and have more control over things.
+	if fileBindingSupport {
+		commandLine = "cmd /c " + commandLine
+	}
+
+	// Reassign commandline here in case it needed to be quoted. For example if "foo bar baz" was supplied, and
+	// "foo bar.exe" exists, then return: "\"foo bar\" baz"
+	absPath, commandLine, err := getApplicationName(commandLine, workDir, strings.Trim(path, "PATH="))
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get application name from commandline %q", conf.CommandLine)
 	}
 
 	// exec.Cmd internally does its own path resolution and as part of this checks some well known file extensions on the file given (e.g. if
