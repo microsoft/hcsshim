@@ -24,7 +24,7 @@ func TestUVMMemoryUpdateLCOW(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 
-	opts := defaultLCOWOptions(t, t.Name())
+	opts := defaultLCOWOptions(t)
 	opts.MemorySizeInMB = 1024 * 2
 	u := tuvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
 	defer u.Close()

@@ -24,6 +24,13 @@ func init() {
 	imageLayers = make(map[string][]string)
 }
 
+// FromImage returns thee layer paths of a given image, pulling it if necessary
+func FromImage(ctx context.Context, t testing.TB, client *containerd.Client, ref, platform, snapshotter string) []string {
+	chainID := testctrd.PullImage(ctx, t, client, ref, platform)
+	return FromChainID(ctx, t, client, chainID, snapshotter)
+}
+
+// FromChainID returns thee layer paths of a given image chain ID
 func FromChainID(ctx context.Context, t testing.TB, client *containerd.Client, chainID, snapshotter string) []string {
 	ms := testctrd.CreateViewSnapshot(ctx, t, client, snapshotter, chainID, chainID+"view")
 	if len(ms) != 1 {
@@ -33,6 +40,7 @@ func FromChainID(ctx context.Context, t testing.TB, client *containerd.Client, c
 	return FromMount(ctx, t, ms[0])
 }
 
+// FromMount returns the layer paths of a given mount
 func FromMount(_ context.Context, t testing.TB, m mount.Mount) (layers []string) {
 	for _, option := range m.Options {
 		if strings.HasPrefix(option, mount.ParentLayerPathsFlag) {

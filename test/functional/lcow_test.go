@@ -38,7 +38,7 @@ func TestLCOW_UVMCreateWait(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
-	vm := testuvm.CreateLCOW(ctx, t, defaultLCOWOptions(t, t.Name()))
+	vm := testuvm.CreateLCOW(ctx, t, defaultLCOWOptions(t))
 	testuvm.Close(ctx, t, vm)
 }
 
@@ -47,7 +47,7 @@ func TestLCOW_UVMCreateWait(t *testing.T) {
 func TestLCOW_UVMNoSCSINoVPMemInitrd(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	opts := defaultLCOWOptions(t, t.Name())
+	opts := defaultLCOWOptions(t)
 	opts.SCSIControllerCount = 0
 	opts.VPMemDeviceCount = 0
 	opts.PreferredRootFSType = uvm.PreferredRootFSTypeInitRd
@@ -62,7 +62,7 @@ func TestLCOW_UVMNoSCSINoVPMemInitrd(t *testing.T) {
 func TestLCOW_UVMNoSCSISingleVPMemVHD(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	opts := defaultLCOWOptions(t, t.Name())
+	opts := defaultLCOWOptions(t)
 	opts.SCSIControllerCount = 0
 	opts.VPMemDeviceCount = 1
 	opts.PreferredRootFSType = uvm.PreferredRootFSTypeVHD
@@ -139,7 +139,7 @@ func testLCOWTimeUVMStart(t *testing.T, kernelDirect bool, rfsType uvm.Preferred
 	requireFeatures(t, featureLCOW)
 
 	for i := 0; i < 3; i++ {
-		opts := defaultLCOWOptions(t, t.Name())
+		opts := defaultLCOWOptions(t)
 		opts.KernelDirect = kernelDirect
 		opts.VPMemDeviceCount = 32
 		opts.PreferredRootFSType = rfsType

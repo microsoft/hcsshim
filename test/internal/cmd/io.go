@@ -10,8 +10,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/cmd"
 )
 
-// todo: add buffered input
-
 type BufferedIO struct {
 	in       *bytes.Buffer
 	out, err bytes.Buffer

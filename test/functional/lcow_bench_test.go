@@ -22,7 +22,7 @@ func BenchmarkLCOW_UVM_Create(b *testing.B) {
 	b.StopTimer()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		opts := defaultLCOWOptions(b, b.Name())
+		opts := defaultLCOWOptions(b)
 
 		b.StartTimer()
 		vm := uvm.CreateLCOW(ctx, b, opts)
@@ -43,7 +43,7 @@ func BenchmarkLCOW_UVM_Start(b *testing.B) {
 	b.StopTimer()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		vm := uvm.CreateLCOW(ctx, b, defaultLCOWOptions(b, b.Name()))
+		vm := uvm.CreateLCOW(ctx, b, defaultLCOWOptions(b))
 
 		b.StartTimer()
 		if err := vm.Start(ctx); err != nil {
@@ -64,7 +64,7 @@ func BenchmarkLCOW_UVM_Kill(b *testing.B) {
 	b.StopTimer()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		vm := uvm.CreateLCOW(ctx, b, defaultLCOWOptions(b, b.Name()))
+		vm := uvm.CreateLCOW(ctx, b, defaultLCOWOptions(b))
 		cleanup := uvm.Start(ctx, b, vm)
 
 		b.StartTimer()
@@ -87,7 +87,7 @@ func BenchmarkLCOW_UVM_Close(b *testing.B) {
 	b.StopTimer()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		vm := uvm.CreateLCOW(ctx, b, defaultLCOWOptions(b, b.Name()))
+		vm := uvm.CreateLCOW(ctx, b, defaultLCOWOptions(b))
 		cleanup := uvm.Start(ctx, b, vm)
 
 		b.StartTimer()

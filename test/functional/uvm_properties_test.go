@@ -19,7 +19,7 @@ func TestPropertiesGuestConnection_LCOW(t *testing.T) {
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureLCOW)
 
-	uvm := tuvm.CreateAndStartLCOWFromOpts(context.Background(), t, defaultLCOWOptions(t, t.Name()))
+	uvm := tuvm.CreateAndStartLCOWFromOpts(context.Background(), t, defaultLCOWOptions(t))
 	defer uvm.Close()
 
 	p, gc := uvm.Capabilities()

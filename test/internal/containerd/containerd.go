@@ -163,7 +163,7 @@ func CreateViewSnapshot(ctx context.Context, t testing.TB, client *containerd.Cl
 // copied from https://github.com/containerd/containerd/blob/main/cmd/ctr/commands/images/pull.go
 
 // PullImage pulls the image for the specified platform and returns the chain ID
-func PullImage(ctx context.Context, t testing.TB, client *containerd.Client, ref string, plat string) string {
+func PullImage(ctx context.Context, t testing.TB, client *containerd.Client, ref, plat string) string {
 	if chainID, ok := images.Load(ref); ok {
 		return chainID.(string)
 	}

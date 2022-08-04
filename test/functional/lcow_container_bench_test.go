@@ -5,7 +5,6 @@ package functional
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	ctrdoci "github.com/containerd/containerd/oci"
@@ -18,7 +17,6 @@ import (
 	"github.com/Microsoft/hcsshim/test/internal/cmd"
 	"github.com/Microsoft/hcsshim/test/internal/constants"
 	"github.com/Microsoft/hcsshim/test/internal/container"
-	"github.com/Microsoft/hcsshim/test/internal/containerd"
 	"github.com/Microsoft/hcsshim/test/internal/layers"
 	"github.com/Microsoft/hcsshim/test/internal/oci"
 	"github.com/Microsoft/hcsshim/test/internal/require"
@@ -30,17 +28,15 @@ func BenchmarkLCOW_Container(b *testing.B) {
 	require.Build(b, osversion.RS5)
 
 	ctx, _, client := newContainerdClient(context.Background(), b)
-	chainID := containerd.PullImage(ctx, b, client, constants.ImageLinuxAlpineLatest, constants.PlatformLinux)
-	ls := layers.FromChainID(ctx, b, client, chainID, constants.SnapshotterLinux)
+	ls := layers.FromImage(ctx, b, client, constants.ImageLinuxAlpineLatest,
+		constants.PlatformLinux, constants.SnapshotterLinux)
 
 	// Create a new uvm per benchmark in case any left over state lingers
 
 	b.Run("Create", func(b *testing.B) {
-		vmID := strings.ReplaceAll(b.Name(), "/", "")
-		opts := defaultLCOWOptions(b, vmID)
-		cache := layers.CacheFile(ctx, b, "")
-		vm := uvm.CreateAndStartLCOWFromOpts(ctx, b, opts)
+		vm := uvm.CreateAndStartLCOWFromOpts(ctx, b, defaultLCOWOptions(b))
 		uvm.SetSecurityPolicy(ctx, b, vm, "")
+		cache := layers.CacheFile(ctx, b, "")
 
 		b.StopTimer()
 		b.ResetTimer()
@@ -86,11 +82,9 @@ func BenchmarkLCOW_Container(b *testing.B) {
 	})
 
 	b.Run("Start", func(b *testing.B) {
-		vmID := strings.ReplaceAll(b.Name(), "/", "")
-		opts := defaultLCOWOptions(b, vmID)
-		cache := layers.CacheFile(ctx, b, "")
-		vm := uvm.CreateAndStartLCOWFromOpts(ctx, b, opts)
+		vm := uvm.CreateAndStartLCOWFromOpts(ctx, b, defaultLCOWOptions(b))
 		uvm.SetSecurityPolicy(ctx, b, vm, "")
+		cache := layers.CacheFile(ctx, b, "")
 
 		b.StopTimer()
 		b.ResetTimer()
@@ -121,11 +115,9 @@ func BenchmarkLCOW_Container(b *testing.B) {
 	})
 
 	b.Run("InitExec", func(b *testing.B) {
-		vmID := strings.ReplaceAll(b.Name(), "/", "")
-		opts := defaultLCOWOptions(b, vmID)
-		cache := layers.CacheFile(ctx, b, "")
-		vm := uvm.CreateAndStartLCOWFromOpts(ctx, b, opts)
+		vm := uvm.CreateAndStartLCOWFromOpts(ctx, b, defaultLCOWOptions(b))
 		uvm.SetSecurityPolicy(ctx, b, vm, "")
+		cache := layers.CacheFile(ctx, b, "")
 
 		b.StopTimer()
 		b.ResetTimer()
@@ -157,11 +149,9 @@ func BenchmarkLCOW_Container(b *testing.B) {
 	})
 
 	b.Run("InitExecKill", func(b *testing.B) {
-		vmID := strings.ReplaceAll(b.Name(), "/", "")
-		opts := defaultLCOWOptions(b, vmID)
-		cache := layers.CacheFile(ctx, b, "")
-		vm := uvm.CreateAndStartLCOWFromOpts(ctx, b, opts)
+		vm := uvm.CreateAndStartLCOWFromOpts(ctx, b, defaultLCOWOptions(b))
 		uvm.SetSecurityPolicy(ctx, b, vm, "")
+		cache := layers.CacheFile(ctx, b, "")
 
 		b.StopTimer()
 		b.ResetTimer()
@@ -188,11 +178,9 @@ func BenchmarkLCOW_Container(b *testing.B) {
 	})
 
 	b.Run("ContainerKill", func(b *testing.B) {
-		vmID := strings.ReplaceAll(b.Name(), "/", "")
-		opts := defaultLCOWOptions(b, vmID)
-		cache := layers.CacheFile(ctx, b, "")
-		vm := uvm.CreateAndStartLCOWFromOpts(ctx, b, opts)
+		vm := uvm.CreateAndStartLCOWFromOpts(ctx, b, defaultLCOWOptions(b))
 		uvm.SetSecurityPolicy(ctx, b, vm, "")
+		cache := layers.CacheFile(ctx, b, "")
 
 		b.StopTimer()
 		b.ResetTimer()

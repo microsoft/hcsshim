@@ -33,7 +33,7 @@ func TestSCSIAddRemoveLCOW(t *testing.T) {
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureLCOW, featureSCSI)
 
-	u := tuvm.CreateAndStartLCOWFromOpts(context.Background(), t, defaultLCOWOptions(t, t.Name()))
+	u := tuvm.CreateAndStartLCOWFromOpts(context.Background(), t, defaultLCOWOptions(t))
 	defer u.Close()
 
 	testSCSIAddRemoveMultiple(t, u, `/run/gcs/c/0/scsi`, "linux", []string{})
@@ -227,7 +227,7 @@ func TestParallelScsiOps(t *testing.T) {
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureLCOW, featureSCSI)
 
-	u := tuvm.CreateAndStartLCOWFromOpts(context.Background(), t, defaultLCOWOptions(t, t.Name()))
+	u := tuvm.CreateAndStartLCOWFromOpts(context.Background(), t, defaultLCOWOptions(t))
 	defer u.Close()
 
 	// Create a sandbox to use

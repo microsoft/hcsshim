@@ -47,7 +47,7 @@ func runMemTests(t *testing.T, os string) {
 			wopts.EnableDeferredCommit = bt.enableDeferredCommit
 			runMemStartWCOWTest(t, wopts)
 		} else {
-			lopts := defaultLCOWOptions(t, t.Name())
+			lopts := defaultLCOWOptions(t)
 			lopts.MemorySizeInMB = 512
 			lopts.AllowOvercommit = bt.allowOvercommit
 			lopts.EnableDeferredCommit = bt.enableDeferredCommit

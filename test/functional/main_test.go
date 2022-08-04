@@ -13,6 +13,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"testing"
 	"time"
@@ -97,10 +98,6 @@ func init() {
 		pauseDurationOnCreateContainerFailure,
 		"The number of minutes to wait after a container creation failure to try again "+
 			"[%HCSSHIM_FUNCTIONAL_TESTS_PAUSE_ON_CREATECONTAINER_FAIL_IN_MINUTES%]")
-
-	// Try to stop any pre-existing compute processes
-	// cmd := exec.Command("powershell", `get-computeprocess | stop-computeprocess -force`)
-	// _ = cmd.Run()
 }
 
 func TestMain(m *testing.M) {
@@ -158,15 +155,21 @@ func newContainerdClient(ctx context.Context, t testing.TB) (context.Context, co
 	return getContainerdOptions().NewClient(ctx, t)
 }
 
-func defaultLCOWOptions(_ testing.TB, name string) *uvm.OptionsLCOW {
-	opts := uvm.NewDefaultOptionsLCOW(name, "")
+func defaultLCOWOptions(t testing.TB) *uvm.OptionsLCOW {
+	opts := uvm.NewDefaultOptionsLCOW(cleanName(t.Name()), "")
 	opts.BootFilesPath = *flagLinuxBootFilesPath
 
 	return opts
 }
 
-func defaultWCOWOptions(_ testing.TB, name string) *uvm.OptionsWCOW {
-	opts := uvm.NewDefaultOptionsWCOW(name, "")
+func defaultWCOWOptions(t testing.TB) *uvm.OptionsWCOW {
+	opts := uvm.NewDefaultOptionsWCOW(cleanName(t.Name()), "")
 
 	return opts
+}
+
+var _nameRegex = regexp.MustCompile(`[\\\/\s]`)
+
+func cleanName(n string) string {
+	return _nameRegex.ReplaceAllString(n, "")
 }
