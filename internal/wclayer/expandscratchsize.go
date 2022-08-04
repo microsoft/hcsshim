@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/Microsoft/hcsshim/internal/hcserror"
+	hcserror "github.com/Microsoft/hcsshim/internal/hcs/errors/legacy"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/osversion"
 	"go.opencensus.io/trace"

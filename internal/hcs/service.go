@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/Microsoft/hcsshim/internal/errdefs"
+	hcserrors "github.com/Microsoft/hcsshim/internal/hcs/errors"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/vmcompute"
 )
@@ -21,11 +23,11 @@ func GetServiceProperties(ctx context.Context, q hcsschema.PropertyQuery) (*hcss
 	propertiesJSON, resultJSON, err := vmcompute.HcsGetServiceProperties(ctx, string(queryb))
 	events := processHcsResult(ctx, resultJSON)
 	if err != nil {
-		return nil, &HcsError{Op: operation, Err: err, Events: events}
+		return nil, &hcserrors.HcsError{Op: operation, Err: err, Events: events}
 	}
 
 	if propertiesJSON == "" {
-		return nil, ErrUnexpectedValue
+		return nil, errdefs.ErrUnexpectedValue
 	}
 	properties := &hcsschema.ServiceProperties{}
 	if err := json.Unmarshal([]byte(propertiesJSON), properties); err != nil {
@@ -45,7 +47,7 @@ func ModifyServiceSettings(ctx context.Context, settings hcsschema.ModificationR
 	resultJSON, err := vmcompute.HcsModifyServiceSettings(ctx, string(settingsJSON))
 	events := processHcsResult(ctx, resultJSON)
 	if err != nil {
-		return &HcsError{Op: operation, Err: err, Events: events}
+		return &hcserrors.HcsError{Op: operation, Err: err, Events: events}
 	}
 	return nil
 }

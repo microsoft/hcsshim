@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/errdefs"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
@@ -81,7 +81,7 @@ func Test_Container_File_Share_Writable_WCOW(t *testing.T) {
 	}
 	// error is serialized over gRPC then embedded into "rpc error: code = %s desc = %s"
 	//  so error.Is() wont work
-	if err == nil || !strings.Contains(err.Error(), fmt.Errorf("adding writable shares is denied: %w", hcs.ErrOperationDenied).Error()) {
+	if err == nil || !strings.Contains(err.Error(), fmt.Errorf("adding writable shares is denied: %w", errdefs.ErrOperationDenied).Error()) {
 		t.Fatalf("StartContainer did not fail with writable fileshare: error is %v", err)
 	}
 
@@ -175,7 +175,7 @@ func Test_Container_File_Share_Writable_LCOW(t *testing.T) {
 	}
 	// error is serialized over gRPC then embedded into "rpc error: code = %s desc = %s"
 	//  so error.Is() wont work
-	if err == nil || !strings.Contains(err.Error(), fmt.Errorf("adding writable shares is denied: %w", hcs.ErrOperationDenied).Error()) {
+	if err == nil || !strings.Contains(err.Error(), fmt.Errorf("adding writable shares is denied: %w", errdefs.ErrOperationDenied).Error()) {
 		t.Fatalf("StartContainer did not fail with writable fileshare: error is %v", err)
 	}
 

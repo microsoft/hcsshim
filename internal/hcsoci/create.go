@@ -15,6 +15,7 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/clone"
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/errdefs"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -177,7 +178,7 @@ func validateContainerConfig(ctx context.Context, coi *createOptionsInternal) er
 	if coi.Spec.Windows != nil {
 		disableGMSA := oci.ParseAnnotationsDisableGMSA(ctx, coi.Spec)
 		if _, ok := coi.Spec.Windows.CredentialSpec.(string); ok && disableGMSA {
-			return fmt.Errorf("gMSA credentials are disabled: %w", hcs.ErrOperationDenied)
+			return fmt.Errorf("gMSA credentials are disabled: %w", errdefs.ErrOperationDenied)
 		}
 	}
 

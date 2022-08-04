@@ -15,7 +15,7 @@ import (
 	winio "github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	cmdpkg "github.com/Microsoft/hcsshim/internal/cmd"
-	"github.com/Microsoft/hcsshim/internal/hcs"
+	"github.com/Microsoft/hcsshim/internal/errdefs"
 	"github.com/Microsoft/hcsshim/internal/runhcs"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
@@ -217,7 +217,7 @@ var shimCommand = cli.Command{
 				case <-containerExitCh:
 					err = containerExitErr
 				case <-time.After(shutdownTimeout):
-					err = hcs.ErrTimeout
+					err = errdefs.ErrTimeout
 				}
 			}
 

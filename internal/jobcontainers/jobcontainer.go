@@ -16,8 +16,8 @@ import (
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/conpty"
 	"github.com/Microsoft/hcsshim/internal/cow"
+	"github.com/Microsoft/hcsshim/internal/errdefs"
 	"github.com/Microsoft/hcsshim/internal/exec"
-	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcs/schema1"
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/jobobject"
@@ -473,7 +473,7 @@ func (c *JobContainer) Close() error {
 	}
 
 	c.closedWaitOnce.Do(func() {
-		c.waitError = hcs.ErrAlreadyClosed
+		c.waitError = errdefs.ErrAlreadyClosed
 		close(c.waitBlock)
 	})
 	if closeErr {

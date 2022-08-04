@@ -16,6 +16,7 @@ import (
 	winio "github.com/Microsoft/go-winio"
 	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/cni"
+	"github.com/Microsoft/hcsshim/internal/errdefs"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/hcsoci"
 	"github.com/Microsoft/hcsshim/internal/logfields"
@@ -653,7 +654,7 @@ func getContainer(id string, notStopped bool) (*container, error) {
 	hc, err := hcs.OpenComputeSystem(context.Background(), c.ID)
 	if err == nil {
 		c.hc = hc
-	} else if !hcs.IsNotExist(err) {
+	} else if !errdefs.IsNotExist(err) {
 		return nil, err
 	} else if notStopped {
 		return nil, errContainerStopped

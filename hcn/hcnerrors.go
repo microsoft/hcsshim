@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/Microsoft/hcsshim/internal/hcs"
-	"github.com/Microsoft/hcsshim/internal/hcserror"
+	"github.com/Microsoft/hcsshim/internal/errdefs"
+	hcserror "github.com/Microsoft/hcsshim/internal/hcs/errors/legacy"
 	"github.com/Microsoft/hcsshim/internal/interop"
 	"github.com/sirupsen/logrus"
 )
@@ -158,7 +158,7 @@ func IsNotFoundError(err error) bool {
 	case RouteNotFoundError:
 		return true
 	case *hcserror.HcsError:
-		return pe.Err == hcs.ErrElementNotFound
+		return pe.Err == errdefs.ErrElementNotFound
 	}
 	return false
 }

@@ -1,14 +1,15 @@
 //go:build windows
 
-package hcserror
+package legacy
 
 import (
+	"errors"
 	"fmt"
-	"syscall"
+
+	"golang.org/x/sys/windows"
 )
 
-const ERROR_GEN_FAILURE = syscall.Errno(31)
-
+// Deprecated: outdated interface to HCS Errors
 type HcsError struct {
 	title string
 	rest  string
@@ -32,18 +33,18 @@ func (e *HcsError) Error() string {
 
 func New(err error, title, rest string) error {
 	// Pass through DLL errors directly since they do not originate from HCS.
-	if _, ok := err.(*syscall.DLLError); ok {
+	if t := (&windows.DLLError{}); errors.As(err, &t) {
 		return err
 	}
 	return &HcsError{title, rest, err}
 }
 
 func Win32FromError(err error) uint32 {
-	if herr, ok := err.(*HcsError); ok {
+	if herr := (&HcsError{}); errors.As(err, &herr) {
 		return Win32FromError(herr.Err)
 	}
-	if code, ok := err.(syscall.Errno); ok {
+	if code := (windows.Errno(0)); errors.As(err, &code) {
 		return uint32(code)
 	}
-	return uint32(ERROR_GEN_FAILURE)
+	return uint32(windows.ERROR_GEN_FAILURE)
 }

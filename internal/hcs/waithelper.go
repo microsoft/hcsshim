@@ -6,12 +6,21 @@ import (
 	"context"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/errdefs"
+	hcserrors "github.com/Microsoft/hcsshim/internal/hcs/errors"
 	"github.com/Microsoft/hcsshim/internal/log"
 )
 
-func processAsyncHcsResult(ctx context.Context, err error, resultJSON string, callbackNumber uintptr, expectedNotification hcsNotification, timeout *time.Duration) ([]ErrorEvent, error) {
+func processAsyncHcsResult(
+	ctx context.Context,
+	err error,
+	resultJSON string,
+	callbackNumber uintptr,
+	expectedNotification hcsNotification,
+	timeout *time.Duration,
+) ([]hcserrors.ErrorEvent, error) {
 	events := processHcsResult(ctx, resultJSON)
-	if IsPending(err) {
+	if errdefs.IsPending(err) {
 		return nil, waitForNotification(ctx, callbackNumber, expectedNotification, timeout)
 	}
 
@@ -23,7 +32,7 @@ func waitForNotification(ctx context.Context, callbackNumber uintptr, expectedNo
 	if _, ok := callbackMap[callbackNumber]; !ok {
 		callbackMapLock.RUnlock()
 		log.G(ctx).WithField("callbackNumber", callbackNumber).Error("failed to waitForNotification: callbackNumber does not exist in callbackMap")
-		return ErrHandleClose
+		return errdefs.ErrHandleClose
 	}
 	channels := callbackMap[callbackNumber].channels
 	callbackMapLock.RUnlock()
@@ -31,7 +40,7 @@ func waitForNotification(ctx context.Context, callbackNumber uintptr, expectedNo
 	expectedChannel := channels[expectedNotification]
 	if expectedChannel == nil {
 		log.G(ctx).WithField("type", expectedNotification).Error("unknown notification type in waitForNotification")
-		return ErrInvalidNotificationType
+		return errdefs.ErrInvalidNotificationType
 	}
 
 	var c <-chan time.Time
@@ -44,27 +53,27 @@ func waitForNotification(ctx context.Context, callbackNumber uintptr, expectedNo
 	select {
 	case err, ok := <-expectedChannel:
 		if !ok {
-			return ErrHandleClose
+			return errdefs.ErrHandleClose
 		}
 		return err
 	case err, ok := <-channels[hcsNotificationSystemExited]:
 		if !ok {
-			return ErrHandleClose
+			return errdefs.ErrHandleClose
 		}
 		// If the expected notification is hcsNotificationSystemExited which of the two selects
 		// chosen is random. Return the raw error if hcsNotificationSystemExited is expected
 		if channels[hcsNotificationSystemExited] == expectedChannel {
 			return err
 		}
-		return ErrUnexpectedContainerExit
+		return errdefs.ErrUnexpectedContainerExit
 	case _, ok := <-channels[hcsNotificationServiceDisconnect]:
 		if !ok {
-			return ErrHandleClose
+			return errdefs.ErrHandleClose
 		}
 		// hcsNotificationServiceDisconnect should never be an expected notification
 		// it does not need the same handling as hcsNotificationSystemExited
-		return ErrUnexpectedProcessAbort
+		return errdefs.ErrUnexpectedProcessAbort
 	case <-c:
-		return ErrTimeout
+		return errdefs.ErrTimeout
 	}
 }
