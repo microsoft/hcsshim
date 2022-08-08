@@ -380,6 +380,14 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceDeviceMountPolicy(target string
 	for _, container := range pe.Containers {
 		for _, layer := range container.Layers {
 			if deviceHash == layer {
+				if existingHash := pe.Devices[target]; existingHash != "" {
+					return fmt.Errorf(
+						"conflicting device hashes for target %s: old=%s, new=%s",
+						target,
+						existingHash,
+						deviceHash,
+					)
+				}
 				pe.Devices[target] = deviceHash
 				return nil
 			}

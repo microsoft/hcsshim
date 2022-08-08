@@ -19,6 +19,7 @@ import (
 
 const (
 	// variables that influence generated test fixtures
+	minStringLength                           = 10
 	maxContainersInGeneratedPolicy            = 32
 	maxLayersInGeneratedContainer             = 32
 	maxGeneratedContainerID                   = 1000000
@@ -38,9 +39,17 @@ const (
 var testRand *rand.Rand
 
 func init() {
-	seed := rand.NewSource(time.Now().Unix())
-	testRand = rand.New(seed)
-	fmt.Fprintf(os.Stdout, "securitypolicy_test seed: %d\n", seed.Int63())
+	seed := time.Now().Unix()
+	if seedStr, ok := os.LookupEnv("SEED"); ok {
+
+		if parsedSeed, err := strconv.ParseInt(seedStr, 10, 64); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to parse seed: %d\n", seed)
+		} else {
+			seed = parsedSeed
+		}
+	}
+	testRand = rand.New(rand.NewSource(seed))
+	fmt.Fprintf(os.Stdout, "securitypolicy_test seed: %d\n", seed)
 }
 
 // Validate that our conversion from the external SecurityPolicy representation
@@ -150,12 +159,16 @@ func Test_EnforceDeviceMountPolicy_Matches(t *testing.T) {
 func Test_EnforceDeviceUmountPolicy_Removes_Device_Entries(t *testing.T) {
 	f := func(p *generatedContainers) bool {
 		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		defer func() {
+			t.Logf("policy state: %+v\n", policy)
+		}()
 
 		target := generateMountTarget(testRand)
 		rootHash := selectRootHashFromContainers(p, testRand)
 
 		err := policy.EnforceDeviceMountPolicy(target, rootHash)
 		if err != nil {
+			t.Error(err)
 			return false
 		}
 
@@ -166,6 +179,7 @@ func Test_EnforceDeviceUmountPolicy_Removes_Device_Entries(t *testing.T) {
 
 		err = policy.EnforceDeviceUnmountPolicy(target)
 		if err != nil {
+			t.Error(err)
 			return false
 		}
 
@@ -182,6 +196,10 @@ func Test_EnforceDeviceUmountPolicy_Removes_Device_Entries(t *testing.T) {
 func Test_EnforceOverlayMountPolicy_No_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
 		tc, err := setupContainerWithOverlay(p, false)
+		defer func() {
+			t.Logf("policy state: %+v\n", tc.policy)
+		}()
+
 		if err != nil {
 			t.Error(err)
 			return false
@@ -203,6 +221,10 @@ func Test_EnforceOverlayMountPolicy_No_Matches(t *testing.T) {
 func Test_EnforceOverlayMountPolicy_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
 		tc, err := setupContainerWithOverlay(p, true)
+		defer func() {
+			t.Logf("policy state: %+v\n", tc.policy)
+		}()
+
 		if err != nil {
 			t.Error(err)
 			return false
@@ -232,7 +254,7 @@ func Test_EnforceOverlayMountPolicy_Overlay_Single_Container_Twice(t *testing.T)
 	}
 
 	if err := tc.policy.EnforceOverlayMountPolicy(tc.containerID, tc.layers); err == nil {
-		t.Fatalf("able to create overlay for the same container twice")
+		t.Fatal("able to create overlay for the same container twice")
 	}
 }
 
@@ -307,13 +329,17 @@ func Test_EnforceOverlayMountPolicy_Overlay_Single_Container_Twice_With_Differen
 
 	err = sp.EnforceOverlayMountPolicy(containerIDTwo, layerPaths)
 	if err == nil {
-		t.Fatalf("able to reuse an overlay across containers")
+		t.Fatal("able to reuse an overlay across containers")
 	}
 }
 
 func Test_EnforceCommandPolicy_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
 		tc, err := setupContainerWithOverlay(p, true)
+		defer func() {
+			t.Logf("policy state: %+v\n", tc.policy)
+		}()
+
 		if err != nil {
 			t.Error(err)
 			return false
@@ -338,6 +364,9 @@ func Test_EnforceCommandPolicy_Matches(t *testing.T) {
 func Test_EnforceCommandPolicy_NoMatches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
 		tc, err := setupContainerWithOverlay(p, true)
+		defer func() {
+			t.Logf("policy state: %+v\n", tc.policy)
+		}()
 		if err != nil {
 			t.Error(err)
 			return false
@@ -380,6 +409,9 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 		p.containers = append(p.containers, testContainerOne, &testContainerTwo)
 
 		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		defer func() {
+			t.Logf("policy state: %+v\n", policy)
+		}()
 
 		testContainerOneID := ""
 		testContainerTwoID := ""
@@ -463,6 +495,10 @@ func Test_EnforceCommandPolicy_NarrowingMatches(t *testing.T) {
 func Test_EnforceEnvironmentVariablePolicy_Matches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
 		tc, err := setupContainerWithOverlay(p, true)
+		defer func() {
+			t.Logf("policy state: %+v\n", tc.policy)
+		}()
+
 		if err != nil {
 			t.Error(err)
 			return false
@@ -522,6 +558,10 @@ func Test_EnforceEnvironmentVariablePolicy_Re2Match(t *testing.T) {
 func Test_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 	f := func(p *generatedContainers) bool {
 		tc, err := setupContainerWithOverlay(p, true)
+		defer func() {
+			t.Logf("policy state: %+v\n", tc.policy)
+		}()
+
 		if err != nil {
 			t.Error(err)
 			return false
@@ -566,6 +606,9 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 		p.containers = append(p.containers, testContainerOne, &testContainerTwo)
 
 		policy := NewStandardSecurityPolicyEnforcer(p.containers, ignoredEncodedPolicyString)
+		defer func() {
+			t.Logf("policy state: %+v\n", policy)
+		}()
 
 		testContainerOneID := ""
 		testContainerTwoID := ""
@@ -578,11 +621,13 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 
 			layerPaths, err := createValidOverlayForContainer(policy, container, testRand)
 			if err != nil {
+				t.Error(err)
 				return false
 			}
 
 			err = policy.EnforceOverlayMountPolicy(containerID, layerPaths)
 			if err != nil {
+				t.Error(err)
 				return false
 			}
 
@@ -622,6 +667,7 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 		envVars := buildEnvironmentVariablesFromContainerRules(testContainerOne, testRand)
 		err := policy.enforceEnvironmentVariablePolicy(testContainerOneID, envVars)
 		if err != nil {
+			t.Error(err)
 			return false
 		}
 
@@ -650,6 +696,10 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 func Test_WorkingDirectoryPolicy_Matches(t *testing.T) {
 	testFunc := func(gc *generatedContainers) bool {
 		tc, err := setupContainerWithOverlay(gc, true)
+		defer func() {
+			t.Logf("policy state: %+v\n", tc.policy)
+		}()
+
 		if err != nil {
 			t.Error(err)
 			return false
@@ -671,6 +721,10 @@ func Test_WorkingDirectoryPolicy_Matches(t *testing.T) {
 func Test_WorkingDirectoryPolicy_NoMatches(t *testing.T) {
 	testFunc := func(gc *generatedContainers) bool {
 		tc, err := setupContainerWithOverlay(gc, true)
+		defer func() {
+			t.Logf("policy state: %+v\n", tc.policy)
+		}()
+
 		if err != nil {
 			t.Error(err)
 			return false
@@ -698,6 +752,9 @@ func Test_Overlay_Duplicate_Layers(t *testing.T) {
 		c1.Layers[numLayers-3] = c1.Layers[numLayers-2]
 
 		policy := NewStandardSecurityPolicyEnforcer([]*securityPolicyContainer{c1}, ignoredEncodedPolicyString)
+		defer func() {
+			t.Logf("policy state: %+v\n", policy)
+		}()
 
 		// generate mount targets
 		mountTargets := make([]string, numLayers)
@@ -752,6 +809,19 @@ func Test_Overlay_Duplicate_Layers(t *testing.T) {
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 1}); err != nil {
 		t.Errorf("failed to run stuff: %s", err)
+	}
+}
+
+func Test_EnforceDeviceMountPolicy_DifferentTargetsWithTheSameHash(t *testing.T) {
+	c := generateContainersContainer(testRand, 2, 2)
+	policy := NewStandardSecurityPolicyEnforcer([]*securityPolicyContainer{c}, ignoredEncodedPolicyString)
+	mountTarget := randString(testRand, 10)
+	if err := policy.EnforceDeviceMountPolicy(mountTarget, c.Layers[0]); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	// Mounting the second layer at the same mount target should fail
+	if err := policy.EnforceDeviceMountPolicy(mountTarget, c.Layers[1]); err == nil {
+		t.Fatal("expected conflicting device hashes error")
 	}
 }
 
@@ -1090,6 +1160,9 @@ func randVariableString(r *rand.Rand, maxLen int32) string {
 }
 
 func randString(r *rand.Rand, length int32) string {
+	if length < minStringLength {
+		length = minStringLength
+	}
 	charset := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	sb := strings.Builder{}
 	sb.Grow(int(length))
