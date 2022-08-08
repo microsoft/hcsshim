@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 
@@ -131,40 +130,6 @@ func Test_RunSimpleAlpineContainer_WithPolicy_Allowed(t *testing.T) {
 	stopContainer(t, client, ctx, containerID)
 }
 
-func syncContainerConfigs(writePath, waitPath string) (writer, waiter *securitypolicy.ContainerConfig) {
-	writerCmdArgs := []string{
-		"ash",
-		"-c",
-		fmt.Sprintf(
-			"touch %s && while true; do echo hello1; sleep 1; done",
-			writePath,
-		)}
-	writer = &securitypolicy.ContainerConfig{
-		ImageName: "alpine:latest",
-		Command:   writerCmdArgs,
-		Mounts: []securitypolicy.MountConfig{
-			{
-				HostPath:      "sandbox://host/path",
-				ContainerPath: "/mnt/shared/container-A",
-			},
-		},
-	}
-	// create container #2 that waits for a path to appear
-	echoCmdArgs := []string{"ash", "-c", "while true; do echo hello2; sleep 1; done"}
-	waiter = &securitypolicy.ContainerConfig{
-		ImageName:       "alpine:latest",
-		Command:         echoCmdArgs,
-		WaitMountPoints: []string{waitPath},
-		Mounts: []securitypolicy.MountConfig{
-			{
-				HostPath:      "sandbox://host/path",
-				ContainerPath: "/mnt/shared/container-B",
-			},
-		},
-	}
-	return writer, waiter
-}
-
 func syncContainerRequests(
 	writer, waiter *securitypolicy.ContainerConfig,
 	podID string,
@@ -202,108 +167,6 @@ func syncContainerRequests(
 	)
 
 	return writerReq, waiterReq
-}
-
-func Test_RunContainers_WithSyncHooks_ValidWaitPath(t *testing.T) {
-	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
-
-	writerCfg, waiterCfg := syncContainerConfigs(
-		"/mnt/shared/container-A/sync-file", "/mnt/shared/container-B/sync-file",
-	)
-
-	containerConfigs := append(helpers.DefaultContainerConfigs(), *writerCfg, *waiterCfg)
-	policyString, err := securityPolicyFromContainers(containerConfigs)
-	if err != nil {
-		t.Fatalf("failed to generate security policy string: %s", err)
-	}
-	client := newTestRuntimeClient(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// create pod with security policy
-	podRequest := sandboxRequestWithPolicy(t, policyString)
-	podID := runPodSandbox(t, client, ctx, podRequest)
-	defer removePodSandbox(t, client, ctx, podID)
-	defer stopPodSandbox(t, client, ctx, podID)
-
-	writerReq, waiterReq := syncContainerRequests(writerCfg, waiterCfg, podID, podRequest.Config)
-
-	cidWriter := createContainer(t, client, ctx, writerReq)
-	cidWaiter := createContainer(t, client, ctx, waiterReq)
-
-	errChan := make(chan error)
-	go func() {
-		_, err := client.StartContainer(ctx, &runtime.StartContainerRequest{ContainerId: cidWaiter})
-		errChan <- err
-		defer removeContainer(t, client, ctx, cidWaiter)
-		defer stopContainer(t, client, ctx, cidWaiter)
-	}()
-
-	// give some time for the first go routine to kick in.
-	time.Sleep(time.Second)
-
-	go func() {
-		_, err := client.StartContainer(ctx, &runtime.StartContainerRequest{ContainerId: cidWriter})
-		errChan <- err
-		defer removeContainer(t, client, ctx, cidWriter)
-		defer stopContainer(t, client, ctx, cidWriter)
-	}()
-
-	for i := 0; i < 2; i++ {
-		if err := <-errChan; err != nil {
-			close(errChan)
-			t.Fatalf("failed to start container: %s", err)
-		}
-	}
-}
-
-func Test_RunContainers_WithSyncHooks_InvalidWaitPath(t *testing.T) {
-	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
-
-	writerCfg, waiterCfg := syncContainerConfigs(
-		"/mnt/shared/container-A/sync-file",
-		"/mnt/shared/container-B/sync-file-invalid", // NOTE: this is an invalid wait path
-	)
-
-	containerConfigs := append(helpers.DefaultContainerConfigs(), *writerCfg, *waiterCfg)
-	policyString, err := securityPolicyFromContainers(containerConfigs)
-	if err != nil {
-		t.Fatalf("failed to generate security policy string: %s", policyString)
-	}
-
-	client := newTestRuntimeClient(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// create pod with security policy
-	podRequest := sandboxRequestWithPolicy(t, policyString)
-	podID := runPodSandbox(t, client, ctx, podRequest)
-	defer removePodSandbox(t, client, ctx, podID)
-	defer stopPodSandbox(t, client, ctx, podID)
-
-	writerReq, waiterReq := syncContainerRequests(writerCfg, waiterCfg, podID, podRequest.Config)
-	cidWriter := createContainer(t, client, ctx, writerReq)
-	cidWaiter := createContainer(t, client, ctx, waiterReq)
-
-	startContainer(t, client, ctx, cidWriter)
-	defer removeContainer(t, client, ctx, cidWriter)
-	defer stopContainer(t, client, ctx, cidWriter)
-
-	_, err = client.StartContainer(
-		ctx, &runtime.StartContainerRequest{
-			ContainerId: cidWaiter,
-		},
-	)
-	expectedErrString := "timeout while waiting for path"
-	if err == nil {
-		defer removeContainer(t, client, ctx, cidWaiter)
-		defer stopContainer(t, client, ctx, cidWaiter)
-		t.Fatalf("should fail, succeeded instead")
-	} else {
-		if !strings.Contains(err.Error(), expectedErrString) {
-			t.Fatalf("expected error: %q, got: %q", expectedErrString, err)
-		}
-	}
 }
 
 func Test_RunContainer_ValidContainerConfigs_Allowed(t *testing.T) {

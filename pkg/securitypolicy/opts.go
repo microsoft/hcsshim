@@ -10,14 +10,6 @@ func WithEnvVarRules(envs []EnvRuleConfig) ContainerConfigOpt {
 	}
 }
 
-// WithWaitMountPoints adds expected mounts to container policy config.
-func WithWaitMountPoints(em []string) ContainerConfigOpt {
-	return func(c *ContainerConfig) error {
-		c.WaitMountPoints = append(c.WaitMountPoints, em...)
-		return nil
-	}
-}
-
 // WithWorkingDir sets working directory in container policy config.
 func WithWorkingDir(wd string) ContainerConfigOpt {
 	return func(c *ContainerConfig) error {
