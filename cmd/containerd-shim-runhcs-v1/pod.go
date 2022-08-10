@@ -18,7 +18,7 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/task"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -145,7 +145,7 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		}
 
 		if lopts != nil {
-			err := parent.SetSecurityPolicy(ctx, lopts.SecurityPolicy)
+			err := parent.SetSecurityPolicy(ctx, lopts.SecurityPolicyEnforcer, lopts.SecurityPolicy)
 			if err != nil {
 				return nil, errors.Wrap(err, "unable to set security policy")
 			}

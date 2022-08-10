@@ -16,7 +16,7 @@ import (
 //
 // This has to happen before we start mounting things or generally changing
 // the state of the UVM after is has been measured at startup
-func (uvm *UtilityVM) SetSecurityPolicy(ctx context.Context, policy string) error {
+func (uvm *UtilityVM) SetSecurityPolicy(ctx context.Context, enforcer, policy string) error {
 	if uvm.operatingSystem != "linux" {
 		return errNotSupported
 	}
@@ -35,16 +35,14 @@ func (uvm *UtilityVM) SetSecurityPolicy(ctx context.Context, policy string) erro
 
 	modification := &hcsschema.ModifySettingRequest{
 		RequestType: guestrequest.RequestTypeAdd,
-		Settings: securitypolicy.EncodedSecurityPolicy{
-			SecurityPolicy: policy,
-		},
 	}
 
 	modification.GuestRequest = guestrequest.ModificationRequest{
 		ResourceType: guestresource.ResourceTypeSecurityPolicy,
 		RequestType:  guestrequest.RequestTypeAdd,
-		Settings: securitypolicy.EncodedSecurityPolicy{
-			SecurityPolicy: policy,
+		Settings: guestresource.SecurityPolicyEnforcer{
+			EnforcerType:          enforcer,
+			EncodedSecurityPolicy: policy,
 		},
 	}
 

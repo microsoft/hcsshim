@@ -79,7 +79,7 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport) *Host {
 // so we first have to remove the base64 encoding that allows
 // the JSON based policy to be passed as a string. From there,
 // we decode the JSON and setup our security policy state
-func (h *Host) SetSecurityPolicy(base64Policy string) error {
+func (h *Host) SetSecurityPolicy(enforcerType, base64Policy string) error {
 	h.policyMutex.Lock()
 	defer h.policyMutex.Unlock()
 	if h.securityPolicyEnforcerSet {
@@ -92,9 +92,11 @@ func (h *Host) SetSecurityPolicy(base64Policy string) error {
 		return err
 	}
 
-	p, err := securitypolicy.NewSecurityPolicyEnforcer(
+	p, err := securitypolicy.CreateSecurityPolicyEnforcer(
+		enforcerType,
 		*securityPolicyState,
-		securitypolicy.WithPrivilegedMounts(policy.DefaultCRIPrivilegedMounts()),
+		policy.DefaultCRIMounts(),
+		policy.DefaultCRIPrivilegedMounts(),
 	)
 	if err != nil {
 		return err
@@ -106,10 +108,6 @@ func (h *Host) SetSecurityPolicy(base64Policy string) error {
 	}
 
 	if err := validateHostData(hostData[:]); err != nil {
-		return err
-	}
-
-	if err := p.ExtendDefaultMounts(policy.DefaultCRIMounts()); err != nil {
 		return err
 	}
 
@@ -380,12 +378,12 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		}
 		return c.modifyContainerConstraints(ctx, req.RequestType, req.Settings.(*guestresource.LCOWContainerConstraints))
 	case guestresource.ResourceTypeSecurityPolicy:
-		policy, ok := req.Settings.(*securitypolicy.EncodedSecurityPolicy)
+		r, ok := req.Settings.(*guestresource.SecurityPolicyEnforcer)
 		if !ok {
 			return errors.New("the request's settings are not of type EncodedSecurityPolicy")
 		}
 
-		return h.SetSecurityPolicy(policy.SecurityPolicy)
+		return h.SetSecurityPolicy(r.EnforcerType, r.EncodedSecurityPolicy)
 	default:
 		return errors.Errorf("the ResourceType \"%s\" is not supported for UVM", req.ResourceType)
 	}

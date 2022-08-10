@@ -103,6 +103,7 @@ type OptionsLCOW struct {
 	EnableScratchEncryption bool                // Whether the scratch should be encrypted
 	SecurityPolicy          string              // Optional security policy
 	SecurityPolicyEnabled   bool                // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
+	SecurityPolicyEnforcer  string              // Set which security policy enforcer to use (open door, standard or rego). This allows for better fallback mechanic.
 	UseGuestStateFile       bool                // Use a vmgs file that contains a kernel and initrd, required for SNP
 	GuestStateFile          string              // The vmgs file to load
 	DisableTimeSyncService  bool                // Disables the time synchronization service
@@ -152,6 +153,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		VPCIEnabled:             false,
 		EnableScratchEncryption: false,
 		SecurityPolicyEnabled:   false,
+		SecurityPolicyEnforcer:  "",
 		SecurityPolicy:          "",
 		GuestStateFile:          "",
 		DisableTimeSyncService:  false,
