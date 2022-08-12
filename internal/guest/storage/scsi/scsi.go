@@ -6,7 +6,6 @@ package scsi
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -61,7 +60,7 @@ func fetchActualControllerNumber(ctx context.Context, passedController uint8) (u
 	// `N` is the controller number.
 	// Full file path would be /sys/bus/vmbus/devices/<controller-guid>/host<N>.
 	controllerDirPath := path.Join(vmbusDevicesPath, guestrequest.ScsiControllerGuids[passedController])
-	entries, err := ioutil.ReadDir(controllerDirPath)
+	entries, err := os.ReadDir(controllerDirPath)
 	if err != nil {
 		return 0, err
 	}
@@ -297,9 +296,9 @@ func ControllerLunToName(ctx context.Context, controller, lun uint8) (_ string, 
 	// Devices matching the given SCSI code should each have a subdirectory
 	// under /sys/bus/scsi/devices/<scsiID>/block.
 	blockPath := filepath.Join(scsiDevicesPath, scsiID, "block")
-	var deviceNames []os.FileInfo
+	var deviceNames []os.DirEntry
 	for {
-		deviceNames, err = ioutil.ReadDir(blockPath)
+		deviceNames, err = os.ReadDir(blockPath)
 		if err != nil && !os.IsNotExist(err) {
 			return "", err
 		}

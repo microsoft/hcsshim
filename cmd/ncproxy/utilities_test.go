@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -54,7 +53,7 @@ func endpointExists(targetName string, endpoints []*ncproxygrpc.GetEndpointRespo
 }
 
 func createTestNetworkingStore() (store *ncproxystore.NetworkingStore, closer func(), err error) {
-	tempDir, err := ioutil.TempDir("", "")
+	tempDir, err := os.MkdirTemp("", "")
 	if err != nil {
 		return nil, nil, err
 	}

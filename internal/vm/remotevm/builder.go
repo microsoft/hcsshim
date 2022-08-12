@@ -5,7 +5,6 @@ package remotevm
 import (
 	"context"
 	"io"
-	"io/ioutil"
 	"net"
 	"os/exec"
 
@@ -64,7 +63,7 @@ func NewUVMBuilder(ctx context.Context, id, owner, binPath, addr string, guestOS
 		}
 
 		// Wait for stdout to close. This is our signal that the server is successfully up and running.
-		_, _ = io.Copy(ioutil.Discard, p)
+		_, _ = io.Copy(io.Discard, p)
 	}
 
 	conn, err := net.Dial("unix", addr)

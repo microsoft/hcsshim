@@ -5,7 +5,7 @@ package functional
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"os"
 	"testing"
 
@@ -89,21 +89,21 @@ func runBenchMemStartLcowTest(b *testing.B, allowOvercommit bool, enableDeferred
 
 func BenchmarkMemBackingTypeVirtualLCOW(b *testing.B) {
 	//testutilities.RequiresBuild(t, osversion.RS5)
-	logrus.SetOutput(ioutil.Discard)
+	logrus.SetOutput(io.Discard)
 
 	runBenchMemStartLcowTest(b, true, false)
 }
 
 func BenchmarkMemBackingTypeVirtualDeferredLCOW(b *testing.B) {
 	//testutilities.RequiresBuild(t, osversion.RS5)
-	logrus.SetOutput(ioutil.Discard)
+	logrus.SetOutput(io.Discard)
 
 	runBenchMemStartLcowTest(b, true, true)
 }
 
 func BenchmarkMemBackingTypePhyscialLCOW(b *testing.B) {
 	//testutilities.RequiresBuild(t, osversion.RS5)
-	logrus.SetOutput(ioutil.Discard)
+	logrus.SetOutput(io.Discard)
 
 	runBenchMemStartLcowTest(b, false, false)
 }

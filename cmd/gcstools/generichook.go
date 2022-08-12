@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"text/template"
@@ -51,7 +50,7 @@ func runGenericHook() error {
 }
 
 func logDebugFile(debugFilePath string) {
-	contents, err := ioutil.ReadFile(debugFilePath)
+	contents, err := os.ReadFile(debugFilePath)
 	if err != nil {
 		logrus.Errorf("failed to read debug file at %s: %v", debugFilePath, err)
 		return

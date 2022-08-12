@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 
 	"github.com/BurntSushi/toml"
@@ -27,7 +26,7 @@ func main() {
 	}
 
 	err := func() (err error) {
-		configData, err := ioutil.ReadFile(*configFile)
+		configData, err := os.ReadFile(*configFile)
 		if err != nil {
 			return err
 		}

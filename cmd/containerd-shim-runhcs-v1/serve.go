@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"strings"
@@ -157,7 +156,7 @@ var serveCommand = cli.Command{
 			panic("file log output mode is not supported")
 		case runhcsopts.Options_ETW:
 			logrus.SetFormatter(nopFormatter{})
-			logrus.SetOutput(ioutil.Discard)
+			logrus.SetOutput(io.Discard)
 		}
 
 		os.Stdin.Close()
@@ -274,7 +273,7 @@ func trapClosedConnErr(err error) error {
 // readOptions reads in bytes from the reader and converts it to a shim options
 // struct. If no data is available from the reader, returns (nil, nil).
 func readOptions(r io.Reader) (*runhcsopts.Options, error) {
-	d, err := ioutil.ReadAll(r)
+	d, err := io.ReadAll(r)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read input")
 	}

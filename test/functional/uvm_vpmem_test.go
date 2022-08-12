@@ -5,7 +5,6 @@ package functional
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -27,11 +26,10 @@ func TestVPMEM(t *testing.T) {
 	var iterations uint32 = uvm.MaxVPMEMCount
 
 	// Use layer.vhd from the alpine image as something to add
-	tempDir := testutilities.CreateTempDir(t)
+	tempDir := t.TempDir()
 	if err := copyfile.CopyFile(ctx, filepath.Join(alpineLayers[0], "layer.vhd"), filepath.Join(tempDir, "layer.vhd"), true); err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(tempDir)
 
 	for i := 0; i < int(iterations); i++ {
 		uvmPath, err := u.AddVPMem(ctx, filepath.Join(tempDir, "layer.vhd"))

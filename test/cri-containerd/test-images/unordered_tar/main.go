@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -18,7 +17,7 @@ import (
 )
 
 func createBlob(blobsDirPath string, blobContents io.Reader) (int64, digest.Digest, error) {
-	tempFile, err := ioutil.TempFile(blobsDirPath, "")
+	tempFile, err := os.CreateTemp(blobsDirPath, "")
 	if err != nil {
 		return 0, "", errors.Wrapf(err, "failed to create file")
 	}
@@ -126,7 +125,7 @@ func createImageFromLayerTars(layerTars []string) error {
 
 	// create a directory under which all image files are stored. This directory will be
 	// converted into the image tar at the end.
-	tempDirPath, err := ioutil.TempDir("", "imagecreator-imagedir")
+	tempDirPath, err := os.MkdirTemp("", "imagecreator-imagedir")
 	if err != nil {
 		return errors.Wrap(err, "failed to create temporary directory")
 	}
@@ -207,7 +206,7 @@ func createImageFromLayerTars(layerTars []string) error {
 }
 
 func main() {
-	tempDir, err := ioutil.TempDir("", "imagecreator-layerdir")
+	tempDir, err := os.MkdirTemp("", "imagecreator-layerdir")
 	if err != nil {
 		log.Fatalf("failed to create temp dir: %s\n", err)
 	}

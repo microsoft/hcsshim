@@ -14,7 +14,7 @@ import (
 
 const tempDir = "/tmp/dir/"
 
-func ioutilTempDirTest(dir string, pattern string) (string, error) {
+func osMkdirTempTest(dir string, pattern string) (string, error) {
 	return tempDir, nil
 }
 
@@ -27,7 +27,7 @@ func clearCryptTestDependencies() {
 	_generateKeyFile = nil
 	_getBlockDeviceSize = nil
 	_mkfsExt4Command = nil
-	_ioutilTempDir = ioutilTempDirTest
+	_osMkdirTemp = osMkdirTempTest
 	_osRemoveAll = nil
 }
 

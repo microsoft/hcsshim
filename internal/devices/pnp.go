@@ -6,7 +6,7 @@ package devices
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"strings"
 
@@ -79,7 +79,7 @@ func readCsPipeOutput(l net.Listener, errChan chan<- error, result *[]string) {
 		errChan <- errors.Wrapf(err, "failed to accept named pipe")
 		return
 	}
-	bytes, err := ioutil.ReadAll(c)
+	bytes, err := io.ReadAll(c)
 	if err != nil {
 		errChan <- err
 		return
@@ -108,7 +108,7 @@ func readAllPipeOutput(l net.Listener, errChan chan<- error, result *string) {
 		errChan <- errors.Wrapf(err, "failed to accept named pipe")
 		return
 	}
-	bytes, err := ioutil.ReadAll(c)
+	bytes, err := io.ReadAll(c)
 	if err != nil {
 		errChan <- err
 		return

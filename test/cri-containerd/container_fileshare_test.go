@@ -6,7 +6,7 @@ package cri_containerd
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -40,7 +40,7 @@ func Test_Container_File_Share_Writable_WCOW(t *testing.T) {
 		testContent   = "hello world"
 	)
 
-	if err := ioutil.WriteFile(
+	if err := os.WriteFile(
 		filepath.Join(tempDir, testFile),
 		[]byte(testContent),
 		0644); err != nil {
@@ -133,7 +133,7 @@ func Test_Container_File_Share_Writable_LCOW(t *testing.T) {
 		testContent   = "hello world"
 	)
 
-	if err := ioutil.WriteFile(
+	if err := os.WriteFile(
 		filepath.Join(tempDir, testFile),
 		[]byte(testContent),
 		0644,

@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 	"sync"
@@ -455,7 +454,7 @@ func newLoopbackConnection() *loopbackConnection {
 
 func Test_Bridge_ListenAndServe_UnknownMessageHandler_Success(t *testing.T) {
 	// Turn off logging so as not to spam output.
-	logrus.SetOutput(ioutil.Discard)
+	logrus.SetOutput(io.Discard)
 
 	lc := newLoopbackConnection()
 	defer lc.close()
@@ -509,7 +508,7 @@ func Test_Bridge_ListenAndServe_UnknownMessageHandler_Success(t *testing.T) {
 
 func Test_Bridge_ListenAndServe_CorrectHandler_Success(t *testing.T) {
 	// Turn off logging so as not to spam output.
-	logrus.SetOutput(ioutil.Discard)
+	logrus.SetOutput(io.Discard)
 
 	lc := newLoopbackConnection()
 	defer lc.close()
@@ -590,7 +589,7 @@ func Test_Bridge_ListenAndServe_CorrectHandler_Success(t *testing.T) {
 
 func Test_Bridge_ListenAndServe_HandlersAreAsync_Success(t *testing.T) {
 	// Turn off logging so as not to spam output.
-	logrus.SetOutput(ioutil.Discard)
+	logrus.SetOutput(io.Discard)
 
 	lc := newLoopbackConnection()
 	defer lc.close()

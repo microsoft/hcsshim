@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -72,7 +71,7 @@ var wcowCommand = cli.Command{
 					return err
 				}
 			}
-			tempDir, err := ioutil.TempDir("", "uvmboot")
+			tempDir, err := os.MkdirTemp("", "uvmboot")
 			if err != nil {
 				return err
 			}
@@ -137,7 +136,7 @@ func getLayers(imageName string) ([]string, error) {
 
 func getLayerChain(layerFolder string) ([]string, error) {
 	jPath := filepath.Join(layerFolder, "layerchain.json")
-	content, err := ioutil.ReadFile(jPath)
+	content, err := os.ReadFile(jPath)
 	if err != nil {
 		return nil, err
 	}

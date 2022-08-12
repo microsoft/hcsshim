@@ -3,7 +3,7 @@
 package gcs
 
 import (
-	"io/ioutil"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -22,7 +22,7 @@ func TestIoChannelClose(t *testing.T) {
 	defer ioc.Close()
 	ch := make(chan error, 1)
 	go func() {
-		_, err := ioutil.ReadAll(ioc)
+		_, err := io.ReadAll(ioc)
 		ch <- err
 	}()
 	time.Sleep(100 * time.Millisecond)
@@ -43,7 +43,7 @@ func TestIoChannelRead(t *testing.T) {
 	ch := make(chan error, 1)
 	go func() {
 		var err error
-		b, err = ioutil.ReadAll(ioc)
+		b, err = io.ReadAll(ioc)
 		ch <- err
 	}()
 	time.Sleep(100 * time.Millisecond)
@@ -84,7 +84,7 @@ func TestIoChannelWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer c.Close()
-	b, err := ioutil.ReadAll(c)
+	b, err := io.ReadAll(c)
 	if err != nil {
 		t.Fatal(err)
 	}

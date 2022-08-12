@@ -5,7 +5,6 @@ package cri_containerd
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,16 +31,11 @@ func generateCredSpec(path string) error {
 // Tries to generate a cred spec to use for gmsa test cases. Returns the cred
 // spec and an error if any.
 func gmsaSetup(t *testing.T) string {
-	csDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatalf("failed to create temp directory: %s", err)
-	}
-	defer os.RemoveAll(csDir)
-	csPath := filepath.Join(csDir, "credspec.json")
+	csPath := filepath.Join(t.TempDir(), "credspec.json")
 	if err := generateCredSpec(csPath); err != nil {
 		t.Fatal(err)
 	}
-	credSpec, err := ioutil.ReadFile(csPath)
+	credSpec, err := os.ReadFile(csPath)
 	if err != nil {
 		t.Fatalf("failed to read credential spec: %s", err)
 	}

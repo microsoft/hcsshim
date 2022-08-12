@@ -3,7 +3,7 @@
 package internal
 
 import (
-	"io/ioutil"
+	"io"
 	"testing"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
@@ -14,7 +14,7 @@ import (
 )
 
 func init() {
-	logrus.SetOutput(ioutil.Discard)
+	logrus.SetOutput(io.Discard)
 }
 
 func TestDetermineSchemaVersion(t *testing.T) {

@@ -5,7 +5,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -41,7 +40,7 @@ var configCommand = cli.Command{
 							return errors.Wrap(err, "failed to make path to config file")
 						}
 					}
-					if err := ioutil.WriteFile(
+					if err := os.WriteFile(
 						file,
 						[]byte(configData),
 						0700,
@@ -95,7 +94,7 @@ func loadConfig(path string) (*config, error) {
 // Reads config from path and returns config struct if path is valid and marshaling
 // succeeds
 func readConfig(path string) (*config, error) {
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read config file")
 	}

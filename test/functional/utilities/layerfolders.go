@@ -3,7 +3,6 @@ package testutilities
 import (
 	"bytes"
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -38,7 +37,7 @@ func getLayers(t *testing.T, imageName string) []string {
 
 func getLayerChain(t *testing.T, layerFolder string) []string {
 	jPath := filepath.Join(layerFolder, "layerchain.json")
-	content, err := ioutil.ReadFile(jPath)
+	content, err := os.ReadFile(jPath)
 	if os.IsNotExist(err) {
 		t.Fatalf("layerchain not found")
 	} else if err != nil {

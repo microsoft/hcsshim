@@ -6,7 +6,6 @@ package cri_containerd
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -423,7 +422,7 @@ func Test_RunContainer_JobContainer_VolumeMount(t *testing.T) {
 	dir := t.TempDir()
 
 	tmpfn := filepath.Join(dir, "tmpfile")
-	if err := ioutil.WriteFile(tmpfn, []byte("test"), 0777); err != nil {
+	if err := os.WriteFile(tmpfn, []byte("test"), 0777); err != nil {
 		t.Fatal(err)
 	}
 

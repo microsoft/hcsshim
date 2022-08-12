@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 
 	"github.com/Microsoft/hcsshim/ext4/tar2ext4"
@@ -54,7 +53,7 @@ func main() {
 		}
 
 		// Exhaust the tar stream.
-		_, _ = io.Copy(ioutil.Discard, in)
+		_, _ = io.Copy(io.Discard, in)
 		return nil
 	}()
 	if err != nil {

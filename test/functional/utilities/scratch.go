@@ -35,7 +35,7 @@ func CreateWCOWBlankRWLayer(t *testing.T, imageLayers []string) string {
 	//		t.Fatalf("failed to locate UVM folder from %+v: %s", imageLayers, err)
 	//	}
 
-	tempDir := CreateTempDir(t)
+	tempDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(context.Background(), tempDir, imageLayers); err != nil {
 		t.Fatalf("Failed CreateScratchLayer: %s", err)
 	}
@@ -48,9 +48,9 @@ func CreateWCOWBlankRWLayer(t *testing.T, imageLayers []string) string {
 func CreateLCOWBlankRWLayer(ctx context.Context, t *testing.T) string {
 	if lcowGlobalSVM == nil {
 		lcowGlobalSVM = CreateLCOWUVM(ctx, t, lcowGlobalSVMID)
-		lcowCacheScratchFile = filepath.Join(CreateTempDir(t), "sandbox.vhdx")
+		lcowCacheScratchFile = filepath.Join(t.TempDir(), "sandbox.vhdx")
 	}
-	tempDir := CreateTempDir(t)
+	tempDir := t.TempDir()
 
 	if err := lcow.CreateScratch(ctx, lcowGlobalSVM, filepath.Join(tempDir, "sandbox.vhdx"), lcow.DefaultScratchSizeGB, lcowCacheScratchFile); err != nil {
 		t.Fatalf("failed to create EXT4 scratch for LCOW test cases: %s", err)

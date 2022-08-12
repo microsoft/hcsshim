@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,7 +36,7 @@ The start command can either start a new shim or return an address to an existin
 	SkipArgReorder: true,
 	Action: func(context *cli.Context) (err error) {
 		// We cant write anything to stdout/stderr for this cmd.
-		logrus.SetOutput(ioutil.Discard)
+		logrus.SetOutput(io.Discard)
 
 		// On Windows there are two scenarios that will launch a shim.
 		//
