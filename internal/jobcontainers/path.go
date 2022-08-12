@@ -20,52 +20,59 @@ import (
 // Windows Server containers, as well as that used by CreateProcess (see notes for the lpApplicationName parameter).
 //
 // The logic follows this set of steps:
-// - Construct a list of searchable paths to find the application. This includes the standard Windows system paths
-// which are generally located at C:\Windows, C:\Windows\System32 and C:\Windows\System. If a working directory or path is specified
-// via the `workingDirectory` or `pathEnv` parameters then these will be appended to the paths to search from as well. The
-// searching logic is handled by the Windows API function `SearchPathW` which accepts a semicolon separated list of paths to search
-// in.
-// https://docs.microsoft.com/en-us/windows/win32/api/processenv/nf-processenv-searchpathw
 //
-// - If the commandline is quoted, simply grab whatever is in the quotes and search for this directly.
-// We don't try any other logic here, if the application can't be found from the quoted contents we return an error.
+//   - Construct a list of searchable paths to find the application. This includes the standard Windows system paths
+//     which are generally located at C:\Windows, C:\Windows\System32 and C:\Windows\System. If a working directory or path is specified
+//     via the `workingDirectory` or `pathEnv` parameters then these will be appended to the paths to search from as well. The
+//     searching logic is handled by the Windows API function `SearchPathW` which accepts a semicolon separated list of paths to search
+//     in.
+//     https://docs.microsoft.com/en-us/windows/win32/api/processenv/nf-processenv-searchpathw
 //
-// - If the commandline is not quoted, we iterate over each possible application name by splitting the arguments and iterating
-// over them one by one while appending the last search each time until we either find a match or don't and return
-// an error. If we don't find the application on the first try, this means that the application name has a space in it
-// and we must adjust the commandline to add quotes around the application name.
+//   - If the commandline is quoted, simply grab whatever is in the quotes and search for this directly.
+//     We don't try any other logic here, if the application can't be found from the quoted contents we return an error.
 //
-// - If the application is found, we return the fullpath to the executable and the adjusted commandline (if needed).
+//   - If the commandline is not quoted, we iterate over each possible application name by splitting the arguments and iterating
+//     over them one by one while appending the last search each time until we either find a match or don't and return
+//     an error. If we don't find the application on the first try, this means that the application name has a space in it
+//     and we must adjust the commandline to add quotes around the application name.
 //
-// Examples:
-// - Input: "C:\Program Files\sub dir\program name"
-//  Search order:
-//  - C:\Program.exe
-//  - C:\Program Files\sub.exe
-//  - C:\Program Files\sub dir\program.exe
-//  - C:\Program Files\sub dir\program name.exe
-//  Returned commandline: "\"C:\Program Files\sub dir\program name\""
+//   - If the application is found, we return the fullpath to the executable and the adjusted commandline (if needed).
 //
-// - Input: "\"program name\""
-//  Search order:
-//  - program name.exe
-//  Returned commandline: "\"program name\"
+//     Examples:
 //
-// - Input: "\"program name\" -flags -for -program"
-//  Search order:
-//  - program.exe
-//  - program name.exe
-//  Returned commandline: "\"program name\" -flags -for -program"
+//   - Input: "C:\Program Files\sub dir\program name"
+//     Search order:
+//     1. C:\Program.exe
+//     2. C:\Program Files\sub.exe
+//     3. C:\Program Files\sub dir\program.exe
+//     4. C:\Program Files\sub dir\program name.exe
 //
-// - Input: "\"C:\path\to\program name\""
-//  Search Order:
-//  - "C:\path\to\program name.exe"
-//  Returned commandline: "\"C:\path\to\program name""
+//     Returned commandline: "\"C:\Program Files\sub dir\program name\""
 //
-// - Input: "C:\path\to\program"
-//  Search Order:
-//  - "C:\path\to\program.exe"
-//  Returned commandline: "C:\path\to\program"
+//   - Input: "\"program name\""
+//     Search order:
+//     1. program name.exe
+//
+//     Returned commandline: "\"program name\"
+//
+//   - Input: "\"program name\" -flags -for -program"
+//     Search order:
+//     1. program.exe
+//     2. program name.exe
+//
+//     Returned commandline: "\"program name\" -flags -for -program"
+//
+//   - Input: "\"C:\path\to\program name\""
+//     Search Order:
+//     1. "C:\path\to\program name.exe"
+//
+//     Returned commandline: "\"C:\path\to\program name""
+//
+//   - Input: "C:\path\to\program"
+//     Search Order:
+//     1. "C:\path\to\program.exe"
+//
+//     Returned commandline: "C:\path\to\program"
 //
 // CreateProcess documentation: https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessa
 func getApplicationName(commandLine, workingDirectory, pathEnv string) (string, string, error) {

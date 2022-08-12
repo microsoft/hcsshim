@@ -231,7 +231,6 @@ func prepareConfigDoc(ctx context.Context, uvm *UtilityVM, opts *OptionsWCOW, uv
 //
 // WCOW Notes:
 //   - The scratch is always attached to SCSI 0:0
-//
 func CreateWCOW(ctx context.Context, opts *OptionsWCOW) (_ *UtilityVM, err error) {
 	ctx, span := oc.StartSpan(ctx, "uvm::CreateWCOW")
 	defer span.End()

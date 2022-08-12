@@ -100,9 +100,11 @@ func (uvm *UtilityVM) findVSMBShare(ctx context.Context, m map[string]*VSMBShare
 // function is intended to return a handle suitable for use with GetFileInformationByHandleEx.
 //
 // We are not able to use builtin Go functionality for opening a directory path:
-// - os.Open on a directory returns a os.File where Fd() is a search handle from FindFirstFile.
-// - syscall.Open does not provide a way to specify FILE_FLAG_BACKUP_SEMANTICS, which is needed to
-//   open a directory.
+//
+//   - os.Open on a directory returns a os.File where Fd() is a search handle from FindFirstFile.
+//   - syscall.Open does not provide a way to specify FILE_FLAG_BACKUP_SEMANTICS, which is needed to
+//     open a directory.
+//
 // We could use os.Open if the path is a file, but it's easier to just use the same code for both.
 // Therefore, we call windows.CreateFile directly.
 func openHostPath(path string) (windows.Handle, error) {

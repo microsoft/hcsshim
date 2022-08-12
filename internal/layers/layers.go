@@ -156,13 +156,14 @@ func MountLCOWLayers(ctx context.Context, containerID string, layerFolders []str
 // MountWCOWLayers is a helper for clients to hide all the complexity of layer mounting for WCOW.
 // Layer folder are in order: base, [rolayer1..rolayern,] scratch
 //
-// v1/v2: Argon WCOW: Returns the mount path on the host as a volume GUID.
-// v1:    Xenon WCOW: Done internally in HCS, so no point calling doing anything here.
-// v2:    Xenon WCOW: Returns a CombinedLayersV2 structure where ContainerRootPath is a folder
-//                    inside the utility VM which is a GUID mapping of the scratch folder. Each
-//                    of the layers are the VSMB locations where the read-only layers are mounted.
-// Job container:     Returns the mount path on the host as a volume guid, with the volume mounted on
-// 					  the host at `volumeMountPath`.
+//	v1/v2: Argon WCOW: Returns the mount path on the host as a volume GUID.
+//	v1:    Xenon WCOW: Done internally in HCS, so no point calling doing anything here.
+//	v2:    Xenon WCOW: Returns a CombinedLayersV2 structure where ContainerRootPath is a folder
+//	inside the utility VM which is a GUID mapping of the scratch folder. Each of the layers are
+//	the VSMB locations where the read-only layers are mounted.
+//
+//	Job container: Returns the mount path on the host as a volume guid, with the volume mounted on
+//	the host at `volumeMountPath`.
 func MountWCOWLayers(ctx context.Context, containerID string, layerFolders []string, guestRoot, volumeMountPath string, vm *uvm.UtilityVM) (_ string, err error) {
 	if vm == nil {
 		if len(layerFolders) < 2 {

@@ -47,8 +47,7 @@ type gcsLogEntry struct {
 }
 
 // FUTURE-jstarks: Change the GCS log format to include type information
-//
-//	(e.g. by using a different encoding such as protobuf).
+// (e.g. by using a different encoding such as protobuf).
 func (e *gcsLogEntry) UnmarshalJSON(b []byte) error {
 	// Default the log level to info.
 	e.Level = logrus.InfoLevel

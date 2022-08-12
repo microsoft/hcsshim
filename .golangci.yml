@@ -42,7 +42,7 @@ issues:
     - path: internal\\hcs\\schema2\\
       linters:
         - stylecheck
-      Text: "ST1003:"
+        - gofmt
 
     - path: internal\\wclayer\\
       linters:

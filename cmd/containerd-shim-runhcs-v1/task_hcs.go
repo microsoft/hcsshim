@@ -117,7 +117,7 @@ func newHcsStandaloneTask(ctx context.Context, events publisher, req *task.Creat
 }
 
 // createContainer is a generic call to return either a process/hypervisor isolated container, or a job container
-//  based on what is set in the OCI spec.
+// based on what is set in the OCI spec.
 func createContainer(ctx context.Context, id, owner, netNS string, s *specs.Spec, parent *uvm.UtilityVM, shimOpts *runhcsopts.Options) (cow.Container, *resources.Resources, error) {
 	var (
 		err       error

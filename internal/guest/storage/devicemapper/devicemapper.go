@@ -166,11 +166,11 @@ func (t *Target) sizeof() int {
 // LinearTarget constructs a device-mapper target that maps a portion of a block
 // device at the specified offset.
 //
-// Example linear target table:
-// 0 20971520 linear /dev/hda 384
-// |     |      |        |     |
-// start |   target   data_dev |
-//     size                 offset
+//	Example linear target table:
+//	0 20971520 linear /dev/hda 384
+//	|     |      |        |     |
+//	start |   target   data_dev |
+//	     size                 offset
 func LinearTarget(sectorStart, lengthBlocks int64, path string, deviceStart int64) Target {
 	return Target{
 		Type:           "linear",

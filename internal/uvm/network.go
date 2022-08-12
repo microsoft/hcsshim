@@ -507,7 +507,7 @@ func (uvm *UtilityVM) RemoveEndpointsFromNS(ctx context.Context, id string, endp
 	return nil
 }
 
-// RemoveEndpointFromNS removes ``endpoint` in the network
+// RemoveEndpointFromNS removes `endpoint` in the network
 // namespace matching `id`. If no endpoint matching `endpoint.Id` is found in
 // the network namespace this command returns `ErrNICNotFound`.
 //

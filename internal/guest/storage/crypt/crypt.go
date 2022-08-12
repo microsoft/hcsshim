@@ -108,15 +108,15 @@ func mkfsExt4Command(args []string) error {
 //
 // In order to mount a block device as an encrypted device:
 //
-//  1. Generate a random key. It doesn't matter which key it is, the aim is to
+//	1. Generate a random key. It doesn't matter which key it is, the aim is to
 //     protect the contents of the scratch disk from the host OS. It can be
 //     deleted after mounting the encrypted device.
 //
-//  2. The original block device has to be formatted with cryptsetup with the
+//	2. The original block device has to be formatted with cryptsetup with the
 //     generated key. This results in that block device becoming an encrypted
 //     block device that can't be mounted directly.
 //
-//  3. Open the block device with cryptsetup. It is needed to assign it a device
+//	3. Open the block device with cryptsetup. It is needed to assign it a device
 //     name. We are using names that follow `cryptDeviceTemplate`, where "%s" is
 //     a unique name generated from the path of the original block device. In
 //     this case, it's just the path of the block device with all
@@ -126,7 +126,7 @@ func mkfsExt4Command(args []string) error {
 //     /dev/mapper/`cryptDeviceTemplate`. This can be mounted directly, but it
 //     doesn't have any format yet.
 //
-// 4. Format the unencrypted block device as ext4:
+//	4. Format the unencrypted block device as ext4:
 //
 //	A normal invocation of luksFormat wipes the target device. This takes
 //	a really long time, which isn't acceptable in our use-case. Passing the

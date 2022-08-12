@@ -721,9 +721,9 @@ type SchemaVersion struct {
 
 // Cmp compares s and v and returns:
 //
-// -1 if s <  v
-//  0 if s == v
-//  1 if s >  v
+//	-1 if s <  v
+//	0 if s == v
+//	1 if s >  v
 func (s *SchemaVersion) Cmp(v SchemaVersion) int {
 	if s.Major == v.Major {
 		if s.Minor == v.Minor {

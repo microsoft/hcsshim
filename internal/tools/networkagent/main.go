@@ -435,7 +435,8 @@ func (s *service) ConfigureNetworking(ctx context.Context, req *nodenetsvc.Confi
 	return s.teardownHelper(ctx, req, containerNamespaceID)
 }
 
-// GetHostLocalIpAddress is defined in the nodenetworksvc proto while is owned by the azure vnetagent team
+// GetHostLocalIpAddress is defined in the nodenetworksvc proto which is owned by the azure vnetagent team
+//
 //nolint:stylecheck
 func (s *service) GetHostLocalIpAddress(ctx context.Context, req *nodenetsvc.GetHostLocalIpAddressRequest) (*nodenetsvc.GetHostLocalIpAddressResponse, error) {
 	return &nodenetsvc.GetHostLocalIpAddressResponse{IpAddr: ""}, nil
