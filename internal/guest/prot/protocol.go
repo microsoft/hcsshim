@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"strconv"
 
+	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
 	v1 "github.com/containerd/cgroups/stats/v1"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -583,6 +584,12 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 			return &request, errors.Wrap(err, "failed to unmarshal settings as LCOWConfidentialOptions")
 		}
 		msr.Settings = enforcer
+	case guestresource.ResourceTypePolicyFragment:
+		fragment := &ctrdtaskapi.PolicyFragment{}
+		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, fragment); err != nil {
+			return &request, errors.Wrap(err, "failed to unmarshal settings as PolicyFragment")
+		}
+		msr.Settings = fragment
 	default:
 		return &request, errors.Errorf("invalid ResourceType '%s'", msr.ResourceType)
 	}

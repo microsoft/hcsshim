@@ -14,6 +14,7 @@ import (
 
 const (
 	// These are constants for v2 schema modify guest requests.
+
 	// ResourceTypeMappedDirectory is the modify resource type for mapped
 	// directories
 	ResourceTypeMappedDirectory guestrequest.ResourceType = "MappedDirectory"
@@ -38,6 +39,8 @@ const (
 	// ResourceTypeSecurityPolicy is the modify resource type for updating the security
 	// policy
 	ResourceTypeSecurityPolicy guestrequest.ResourceType = "SecurityPolicy"
+	// ResourceTypePolicyFragment is the modify resource type for injecting policy fragments.
+	ResourceTypePolicyFragment guestrequest.ResourceType = "PolicyFragment"
 )
 
 // This class is used by a modify request to add or remove a combined layers
