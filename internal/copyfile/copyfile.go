@@ -6,15 +6,10 @@ import (
 	"context"
 	"fmt"
 	"syscall"
-	"unsafe"
 
 	"github.com/Microsoft/hcsshim/internal/oc"
+	"github.com/Microsoft/hcsshim/internal/winapi"
 	"go.opencensus.io/trace"
-)
-
-var (
-	modkernel32   = syscall.NewLazyDLL("kernel32.dll")
-	procCopyFileW = modkernel32.NewProc("CopyFileW")
 )
 
 // CopyFile is a utility for copying a file using CopyFileW win32 API for
@@ -28,7 +23,7 @@ func CopyFile(ctx context.Context, srcFile, destFile string, overwrite bool) (er
 		trace.StringAttribute("destFile", destFile),
 		trace.BoolAttribute("overwrite", overwrite))
 
-	var bFailIfExists uint32 = 1
+	var bFailIfExists int32 = 1
 	if overwrite {
 		bFailIfExists = 0
 	}
@@ -41,13 +36,7 @@ func CopyFile(ctx context.Context, srcFile, destFile string, overwrite bool) (er
 	if err != nil {
 		return err
 	}
-	r1, _, err := syscall.Syscall(
-		procCopyFileW.Addr(),
-		3,
-		uintptr(unsafe.Pointer(lpExistingFileName)),
-		uintptr(unsafe.Pointer(lpNewFileName)),
-		uintptr(bFailIfExists))
-	if r1 == 0 {
+	if err := winapi.CopyFileW(lpExistingFileName, lpNewFileName, bFailIfExists); err != nil {
 		return fmt.Errorf("failed CopyFileW Win32 call from '%s' to '%s': %s", srcFile, destFile, err)
 	}
 	return nil
