@@ -188,7 +188,7 @@ func Open(ctx context.Context, options *Options) (_ *JobObject, err error) {
 			return nil, winapi.RtlNtStatusToDosError(status)
 		}
 	} else {
-		jobHandle, err = winapi.OpenJobObject(winapi.JOB_OBJECT_ALL_ACCESS, false, unicodeJobName.Buffer)
+		jobHandle, err = winapi.OpenJobObject(winapi.JOB_OBJECT_ALL_ACCESS, 0, unicodeJobName.Buffer)
 		if err != nil {
 			return nil, err
 		}
@@ -519,7 +519,7 @@ func (job *JobObject) ApplyFileBinding(root, target string, merged bool) error {
 }
 
 // isJobSilo is a helper to determine if a job object that was opened is a silo. This should ONLY be called
-// from `Open` and any callers in this package afterwards should use `job.isSilo()``
+// from `Open` and any callers in this package afterwards should use `job.isSilo()`
 func isJobSilo(h windows.Handle) bool {
 	// None of the information from the structure that this info class expects will be used, this is just used as
 	// the call will fail if the job hasn't been upgraded to a silo so we can use this to tell when we open a job
