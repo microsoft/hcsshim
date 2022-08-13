@@ -1,0 +1,12 @@
+# This Dockerfile builds a container image with large layers (>1GB)
+# The idea is to make sure that a single container image can span multiple
+# VPMem devices when multi-mapping feature is enabled.
+FROM ubuntu:22.04
+
+RUN dd if=/dev/zero of=bigfile1 bs=4096 count=131072 && echo "padding1" >> bigfile1
+
+RUN dd if=/dev/zero of=bigfile2 bs=4096 count=131072 && echo "padding2" >> bigfile2
+
+RUN dd if=/dev/zero of=bigfile3 bs=4096 count=131072 && echo "padding3" >> bigfile3
+
+RUN dd if=/dev/zero of=bigfile4 bs=4096 count=131072 && echo "padding4" >> bigfile4
