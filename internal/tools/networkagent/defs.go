@@ -4,7 +4,7 @@ package main
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"os"
 
 	ncproxygrpc "github.com/Microsoft/hcsshim/pkg/ncproxy/ncproxygrpc/v1"
 	"github.com/pkg/errors"
@@ -46,7 +46,7 @@ type config struct {
 // Reads config from path and returns config struct if path is valid and marshaling
 // succeeds
 func readConfig(path string) (*config, error) {
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read config file")
 	}

@@ -7,7 +7,6 @@ import (
 	"context"
 	"crypto/rand"
 	"io"
-	"io/ioutil"
 	"os"
 	"regexp"
 
@@ -165,7 +164,7 @@ func generateKeyFile(path string, size int64) error {
 		return errors.Wrap(err, "failed to generate key array")
 	}
 
-	if err := ioutil.WriteFile(path, keyArray[:], 0644); err != nil {
+	if err := os.WriteFile(path, keyArray[:], 0644); err != nil {
 		return errors.Wrap(err, "failed to save key to file")
 	}
 

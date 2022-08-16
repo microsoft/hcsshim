@@ -22,8 +22,7 @@ func TestVSMB(t *testing.T) {
 	defer os.RemoveAll(uvmScratchDir)
 	defer uvm.Close()
 
-	dir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 	var iterations uint32 = 64
 	options := uvm.DefaultVSMBOptions(true)
 	options.TakeBackupPrivilege = true
@@ -52,8 +51,7 @@ func TestVSMB_Writable(t *testing.T) {
 	defer os.RemoveAll(uvmScratchDir)
 	defer vm.Close()
 
-	dir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 	options := vm.DefaultVSMBOptions(true)
 	options.TakeBackupPrivilege = true
 	options.ReadOnly = false

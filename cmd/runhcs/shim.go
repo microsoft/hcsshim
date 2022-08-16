@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"time"
@@ -85,7 +84,7 @@ var shimCommand = cli.Command{
 
 		if exec {
 			// Read the process spec from stdin.
-			specj, err := ioutil.ReadAll(os.Stdin)
+			specj, err := io.ReadAll(os.Stdin)
 			if err != nil {
 				return err
 			}
@@ -111,7 +110,7 @@ var shimCommand = cli.Command{
 			// successfully.
 			_, _ = errorOut.Write(runhcs.ShimSuccess)
 			errorOut.Close()
-			fatalWriter.Writer = ioutil.Discard
+			fatalWriter.Writer = io.Discard
 
 			// When this process exits, clear this process's pid in the registry.
 			defer func() {
@@ -203,7 +202,7 @@ var shimCommand = cli.Command{
 		// successfully.
 		_, _ = errorOut.Write(runhcs.ShimSuccess)
 		errorOut.Close()
-		fatalWriter.Writer = ioutil.Discard
+		fatalWriter.Writer = io.Discard
 
 		_ = cmd.Wait()
 		code := cmd.ExitState.ExitCode()

@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -27,8 +26,7 @@ func TestPlan9(t *testing.T) {
 	vm := testutilities.CreateLCOWUVM(context.Background(), t, t.Name())
 	defer vm.Close()
 
-	dir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 	var iterations uint32 = 64
 	var shares []*uvm.Plan9Share
 	for i := 0; i < int(iterations); i++ {
@@ -55,8 +53,7 @@ func TestPlan9_Writable(t *testing.T) {
 	vm := testutilities.CreateLCOWUVMFromOpts(context.Background(), t, opts)
 	defer vm.Close()
 
-	dir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	// mount as writable should fail
 	share, err := vm.AddPlan9(context.Background(), dir, fmt.Sprintf("/tmp/%s", filepath.Base(dir)), false, false, nil)

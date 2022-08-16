@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -152,7 +151,7 @@ func getWindowsImageNameByVersion(t *testing.T, bv int) string {
 }
 
 func readPidFile(path string) (int, error) {
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return -1, errors.Wrap(err, "failed to read pidfile")
 	}

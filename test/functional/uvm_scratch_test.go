@@ -17,8 +17,7 @@ import (
 
 func TestScratchCreateLCOW(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
-	tempDir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	firstUVM := testutilities.CreateLCOWUVM(context.Background(), t, "TestCreateLCOWScratch")
 	defer firstUVM.Close()

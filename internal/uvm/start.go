@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"syscall"
@@ -48,7 +47,7 @@ type gcsLogEntry struct {
 }
 
 // FUTURE-jstarks: Change the GCS log format to include type information
-//                 (e.g. by using a different encoding such as protobuf).
+// (e.g. by using a different encoding such as protobuf).
 func (e *gcsLogEntry) UnmarshalJSON(b []byte) error {
 	// Default the log level to info.
 	e.Level = logrus.InfoLevel
@@ -104,7 +103,7 @@ func parseLogrus(vmid string) func(r io.Reader) {
 						logrus.ErrorKey: err,
 					}).Error("gcs log read")
 				}
-				rest, _ := ioutil.ReadAll(io.MultiReader(j.Buffered(), r))
+				rest, _ := io.ReadAll(io.MultiReader(j.Buffered(), r))
 				rest = bytes.TrimSpace(rest)
 				if len(rest) != 0 {
 					logrus.WithFields(logrus.Fields{

@@ -5,7 +5,6 @@ package hcsv2
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,7 +64,7 @@ func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec
 	// Write the hostname
 	if !specInternal.MountPresent("/etc/hostname", spec.Mounts) {
 		standaloneHostnamePath := getStandaloneHostnamePath(id)
-		if err := ioutil.WriteFile(standaloneHostnamePath, []byte(hostname+"\n"), 0644); err != nil {
+		if err := os.WriteFile(standaloneHostnamePath, []byte(hostname+"\n"), 0644); err != nil {
 			return errors.Wrapf(err, "failed to write hostname to %q", standaloneHostnamePath)
 		}
 
@@ -85,7 +84,7 @@ func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec
 	if !specInternal.MountPresent("/etc/hosts", spec.Mounts) {
 		standaloneHostsContent := network.GenerateEtcHostsContent(ctx, hostname)
 		standaloneHostsPath := getStandaloneHostsPath(id)
-		if err := ioutil.WriteFile(standaloneHostsPath, []byte(standaloneHostsContent), 0644); err != nil {
+		if err := os.WriteFile(standaloneHostsPath, []byte(standaloneHostsContent), 0644); err != nil {
 			return errors.Wrapf(err, "failed to write standalone hosts to %q", standaloneHostsPath)
 		}
 
@@ -118,7 +117,7 @@ func setupStandaloneContainerSpec(ctx context.Context, id string, spec *oci.Spec
 			return errors.Wrap(err, "failed to generate standalone resolv.conf content")
 		}
 		standaloneResolvPath := getStandaloneResolvPath(id)
-		if err := ioutil.WriteFile(standaloneResolvPath, []byte(resolvContent), 0644); err != nil {
+		if err := os.WriteFile(standaloneResolvPath, []byte(resolvContent), 0644); err != nil {
 			return errors.Wrap(err, "failed to write standalone resolv.conf")
 		}
 

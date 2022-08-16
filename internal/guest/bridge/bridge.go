@@ -164,14 +164,14 @@ type bridgeResponse struct {
 //
 // It has two fundamentally different dispatch options:
 //
-// 1. Request/Response where using the `Handler` a request
-//    of a given type will be dispatched to the appropriate handler
-//    and an appropriate response will respond to exactly that request that
-//    caused the dispatch.
+//  1. Request/Response where using the `Handler` a request
+//     of a given type will be dispatched to the appropriate handler
+//     and an appropriate response will respond to exactly that request that
+//     caused the dispatch.
 //
-// 2. `PublishNotification` where a notification that was not initiated
-//    by a request from any client can be written to the bridge at any time
-//    in any order.
+//  2. `PublishNotification` where a notification that was not initiated
+//     by a request from any client can be written to the bridge at any time
+//     in any order.
 type Bridge struct {
 	// Handler to invoke when messages are received.
 	Handler Handler

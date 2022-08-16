@@ -8,9 +8,10 @@ import (
 // Transport is the interface defining a method of transporting data in a
 // connection-like way.
 // Examples of a Transport implementation could be:
-//   Hyper-V socket transport
-//   TCP/IP socket transport
-//   Mocked-out local transport
+//
+//	-Hyper-V socket transport
+//	-TCP/IP socket transport
+//	-Mocked-out local transport
 type Transport interface {
 	// Dial takes a port number and returns a connected connection.
 	Dial(port uint32) (Connection, error)

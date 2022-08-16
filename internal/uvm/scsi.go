@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/gob"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -657,7 +656,7 @@ func (sm *SCSIMount) Clone(ctx context.Context, vm *UtilityVM, cd *cloneData) er
 		// clone it in the scratch folder
 		dir = cd.scratchFolder
 		if sm.Controller != 0 || sm.LUN != 0 {
-			dir, err = ioutil.TempDir(cd.scratchFolder, fmt.Sprintf("clone-mount-%d-%d", sm.Controller, sm.LUN))
+			dir, err = os.MkdirTemp(cd.scratchFolder, fmt.Sprintf("clone-mount-%d-%d", sm.Controller, sm.LUN))
 			if err != nil {
 				return fmt.Errorf("error while creating directory for scsi mounts of clone vm: %s", err)
 			}

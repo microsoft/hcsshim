@@ -73,6 +73,7 @@ var (
 	procCM_Get_Device_ID_ListA                 = modcfgmgr32.NewProc("CM_Get_Device_ID_ListA")
 	procCM_Locate_DevNodeW                     = modcfgmgr32.NewProc("CM_Locate_DevNodeW")
 	procCM_Get_DevNode_PropertyW               = modcfgmgr32.NewProc("CM_Get_DevNode_PropertyW")
+	procCopyFileW                              = modkernel32.NewProc("CopyFileW")
 	procNtCreateFile                           = modntdll.NewProc("NtCreateFile")
 	procNtSetInformationFile                   = modntdll.NewProc("NtSetInformationFile")
 	procNtOpenDirectoryObject                  = modntdll.NewProc("NtOpenDirectoryObject")
@@ -352,6 +353,18 @@ func CMGetDevNodeProperty(dnDevInst uint32, propertyKey *DevPropKey, propertyTyp
 			r0 &= 0xffff
 		}
 		hr = syscall.Errno(r0)
+	}
+	return
+}
+
+func CopyFileW(existingFileName *uint16, newFileName *uint16, failIfExists int32) (err error) {
+	r1, _, e1 := syscall.Syscall(procCopyFileW.Addr(), 3, uintptr(unsafe.Pointer(existingFileName)), uintptr(unsafe.Pointer(newFileName)), uintptr(failIfExists))
+	if r1 == 0 {
+		if e1 != 0 {
+			err = errnoErr(e1)
+		} else {
+			err = syscall.EINVAL
+		}
 	}
 	return
 }

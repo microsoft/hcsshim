@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -118,23 +117,19 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	testutilities.RequiresBuild(t, osversion.RS5)
 	alpineLayers := testutilities.LayerFolders(t, "alpine")
 
-	cacheDir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(cacheDir)
+	cacheDir := t.TempDir()
 	cacheFile := filepath.Join(cacheDir, "cache.vhdx")
 
 	// This is what gets mounted into /tmp/scratch
-	uvmScratchDir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(uvmScratchDir)
+	uvmScratchDir := t.TempDir()
 	uvmScratchFile := filepath.Join(uvmScratchDir, "uvmscratch.vhdx")
 
 	// Scratch for the first container
-	c1ScratchDir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(c1ScratchDir)
+	c1ScratchDir := t.TempDir()
 	c1ScratchFile := filepath.Join(c1ScratchDir, "sandbox.vhdx")
 
 	// Scratch for the second container
-	c2ScratchDir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(c2ScratchDir)
+	c2ScratchDir := t.TempDir()
 	c2ScratchFile := filepath.Join(c2ScratchDir, "sandbox.vhdx")
 
 	lcowUVM := testutilities.CreateLCOWUVM(context.Background(), t, "uvm")

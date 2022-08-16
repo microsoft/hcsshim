@@ -5,7 +5,6 @@ package devicemapper
 
 import (
 	"flag"
-	"io/ioutil"
 	"os"
 	"syscall"
 	"testing"
@@ -162,7 +161,7 @@ func TestRemoveDeviceRetriesOnSyscallEBUSY(t *testing.T) {
 	retryDone := false
 	// Overrides openMapper to return temp file handle
 	openMapperWrapper = func() (*os.File, error) {
-		return ioutil.TempFile("", "")
+		return os.CreateTemp("", "")
 	}
 	removeDeviceWrapper = func(_ *os.File, _ string) error {
 		if !rmDeviceCalled {
@@ -200,7 +199,7 @@ func TestRemoveDeviceFailsOnNonSyscallEBUSY(t *testing.T) {
 	rmDeviceCalled := false
 	retryDone := false
 	openMapperWrapper = func() (*os.File, error) {
-		return ioutil.TempFile("", "")
+		return os.CreateTemp("", "")
 	}
 	removeDeviceWrapper = func(_ *os.File, _ string) error {
 		if !rmDeviceCalled {

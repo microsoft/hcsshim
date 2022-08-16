@@ -30,7 +30,6 @@ var empty = &google_protobuf1.Empty{}
 // callers responsibility to verify that `s.isSandbox == true` before calling
 // this method.
 //
-//
 // If `pod==nil` returns `errdefs.ErrFailedPrecondition`.
 func (s *service) getPod() (shimPod, error) {
 	raw := s.taskOrPod.Load()

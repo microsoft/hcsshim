@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -95,7 +94,7 @@ func getDeviceExtensions(annotations map[string]string) (*hcsschema.ContainerDef
 		DeviceExtension: []hcsschema.DeviceExtension{},
 	}
 	for _, extensionPath := range extensionPaths {
-		data, err := ioutil.ReadFile(extensionPath)
+		data, err := os.ReadFile(extensionPath)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to read extension file at %s", extensionPath)
 		}

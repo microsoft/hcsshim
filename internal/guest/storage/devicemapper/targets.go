@@ -43,11 +43,16 @@ func CreateZeroSectorLinearTarget(ctx context.Context, devPath, devName string, 
 // CreateVerityTarget creates a dm-verity target for a given device and returns created virtual block device path.
 //
 // Example verity target table:
-// 0 417792 verity 1 /dev/sdb /dev/sdc 4096 4096 52224 1 sha256 2aa4f7b7b6...f4952060e8 762307f4bc8...d2a6b7595d8..
-// |    |     |    |     |     |        |    |    |    |    |              |                        |
-// start|     |    |  data_dev |  data_block | #blocks | hash_alg      root_digest                salt
-//     size   |  version    hash_dev         |     hash_offset
-//          target                       hash_block
+//
+//	  0 417792 verity 1 /dev/sdb /dev/sdc 4096 4096 52224 1 sha256 2aa4f7b7b6...f4952060e8 762307f4bc8...d2a6b7595d8..
+//	  |   |      |    |     |        |    |     |     |   |    |              |                        |
+//	start |      |    | data_dev     |    |     | #blocks | hash_alg      root_digest                salt
+//	     size    |  version      hash_dev | hash_block_sz |
+//	           target              data_block_sz      hash_offset
+//
+// See [dm-verity] for more information
+//
+// [dm-verity]: https://www.kernel.org/doc/html/latest/admin-guide/device-mapper/verity.html#construction-parameters
 func CreateVerityTarget(ctx context.Context, devPath, devName string, verityInfo *guestresource.DeviceVerityInfo) (_ string, err error) {
 	_, span := oc.StartSpan(ctx, "devicemapper::CreateVerityTarget")
 	defer span.End()

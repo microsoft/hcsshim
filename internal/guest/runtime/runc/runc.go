@@ -5,7 +5,6 @@ package runc
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -116,7 +115,7 @@ func (r *runcRuntime) getRunningPids(id string) ([]int, error) {
 func (r *runcRuntime) getProcessCommand(pid int) ([]string, error) {
 	// Get the contents of the process's cmdline file. This file is formatted
 	// with a null character after every argument. e.g. "ping google.com "
-	data, err := ioutil.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "cmdline"))
+	data, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "cmdline"))
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to read cmdline file for process %d", pid)
 	}
@@ -162,7 +161,7 @@ func (r *runcRuntime) runCreateCommand(id string, bundlePath string, stdioSet *s
 		return nil, err
 	}
 	// Create a temporary random directory to store the process's files.
-	tempProcessDir, err := ioutil.TempDir(containerFilesDir, id)
+	tempProcessDir, err := os.MkdirTemp(containerFilesDir, id)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +201,7 @@ func (r *runcRuntime) runCreateCommand(id string, bundlePath string, stdioSet *s
 
 	// Write pid to initpid file for container.
 	containerDir := r.getContainerDir(id)
-	if err := ioutil.WriteFile(filepath.Join(containerDir, initPidFilename), []byte(strconv.Itoa(p.pid)), 0777); err != nil {
+	if err := os.WriteFile(filepath.Join(containerDir, initPidFilename), []byte(strconv.Itoa(p.pid)), 0777); err != nil {
 		return nil, err
 	}
 

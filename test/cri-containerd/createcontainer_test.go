@@ -6,7 +6,6 @@ package cri_containerd
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -849,7 +848,7 @@ func Test_CreateContainer_Mount_File_LCOW(t *testing.T) {
 
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
-	tempFile, err := ioutil.TempFile("", "test")
+	tempFile, err := os.CreateTemp("", "test")
 
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %s", err)
@@ -894,7 +893,7 @@ func Test_CreateContainer_Mount_ReadOnlyFile_LCOW(t *testing.T) {
 
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
-	tempFile, err := ioutil.TempFile("", "test")
+	tempFile, err := os.CreateTemp("", "test")
 
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %s", err)
@@ -1003,7 +1002,7 @@ func Test_CreateContainer_Mount_File_WCOW(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	tempFile, err := ioutil.TempFile("", "test")
+	tempFile, err := os.CreateTemp("", "test")
 
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %s", err)
@@ -1048,7 +1047,7 @@ func Test_CreateContainer_Mount_ReadOnlyFile_WCOW(t *testing.T) {
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
-	tempFile, err := ioutil.TempFile("", "test")
+	tempFile, err := os.CreateTemp("", "test")
 
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %s", err)

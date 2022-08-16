@@ -5,7 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -168,7 +168,7 @@ func run(clicontext *cli.Context) error {
 		if err := initPanicFile(panicLog); err != nil {
 			return err
 		}
-		logrus.SetOutput(ioutil.Discard)
+		logrus.SetOutput(io.Discard)
 		if err := launchService(serviceDone); err != nil {
 			return err
 		}

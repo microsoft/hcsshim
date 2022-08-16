@@ -5,7 +5,6 @@ package runc
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,7 +20,7 @@ import (
 
 // readPidFile reads the integer pid stored in the given file.
 func (r *runcRuntime) readPidFile(pidFile string) (pid int, err error) {
-	data, err := ioutil.ReadFile(pidFile)
+	data, err := os.ReadFile(pidFile)
 	if err != nil {
 		return -1, errors.Wrap(err, "failed reading from pid file")
 	}

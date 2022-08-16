@@ -5,7 +5,6 @@ package network
 
 import (
 	"context"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -171,38 +170,33 @@ ff02::2 ip6-allrouters
 	}
 }
 
-// create a test FileInfo so we can return back a value to ReadDir
-type testFileInfo struct {
+// create a test os.DirEntry so we can return back a value to ReadDir
+type testDirEntry struct {
 	FileName    string
 	IsDirectory bool
 }
 
-func (t *testFileInfo) Name() string {
+func (t *testDirEntry) Name() string {
 	return t.FileName
 }
-func (t *testFileInfo) Size() int64 {
-	return 0
-}
-func (t *testFileInfo) Mode() fs.FileMode {
+func (t *testDirEntry) Type() os.FileMode {
 	if t.IsDirectory {
-		return fs.ModeDir
+		return os.ModeDir
 	}
 	return 0
 }
-func (t *testFileInfo) ModTime() time.Time {
-	return time.Now()
-}
-func (t *testFileInfo) IsDir() bool {
+func (t *testDirEntry) IsDir() bool {
 	return t.IsDirectory
 }
-func (t *testFileInfo) Sys() interface{} {
-	return nil
+func (t *testDirEntry) Info() (os.FileInfo, error) {
+	return nil, nil
 }
 
-var _ = (os.FileInfo)(&testFileInfo{})
+var _ = (os.DirEntry)(&testDirEntry{})
 
 func Test_InstanceIDToName(t *testing.T) {
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
 	vmBusGUID := "1111-2222-3333-4444"
 	testIfName := "test-eth0"
@@ -216,12 +210,12 @@ func Test_InstanceIDToName(t *testing.T) {
 		return pattern, nil
 	}
 
-	ioutilReadDir = func(dirname string) ([]os.FileInfo, error) {
-		info := &testFileInfo{
+	ioReadDir = func(dirname string) ([]os.DirEntry, error) {
+		info := &testDirEntry{
 			FileName:    testIfName,
 			IsDirectory: false,
 		}
-		return []fs.FileInfo{info}, nil
+		return []os.DirEntry{info}, nil
 	}
 	actualIfName, err := InstanceIDToName(ctx, vmBusGUID, false)
 	if err != nil {
@@ -233,7 +227,8 @@ func Test_InstanceIDToName(t *testing.T) {
 }
 
 func Test_InstanceIDToName_VPCI(t *testing.T) {
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
 	vmBusGUID := "1111-2222-3333-4444"
 	testIfName := "test-eth0-vpci"
@@ -246,12 +241,12 @@ func Test_InstanceIDToName_VPCI(t *testing.T) {
 		return pattern, nil
 	}
 
-	ioutilReadDir = func(dirname string) ([]os.FileInfo, error) {
-		info := &testFileInfo{
+	ioReadDir = func(dirname string) ([]os.DirEntry, error) {
+		info := &testDirEntry{
 			FileName:    testIfName,
 			IsDirectory: false,
 		}
-		return []os.FileInfo{info}, nil
+		return []os.DirEntry{info}, nil
 	}
 	actualIfName, err := InstanceIDToName(ctx, vmBusGUID, true)
 	if err != nil {

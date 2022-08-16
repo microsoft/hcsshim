@@ -366,7 +366,7 @@ func (he *hcsExec) ForceExit(ctx context.Context, status int) {
 // To transition for a created state the following must be done:
 //
 // 1. Issue `he.processDoneCancel` to unblock the goroutine
-// `he.waitForContainerExit()``.
+// `he.waitForContainerExit()`.
 //
 // 2. Set `he.state`, `he.exitStatus` and `he.exitedAt` to the exited values.
 //

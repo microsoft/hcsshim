@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -135,7 +134,7 @@ func startTimeSyncService() error {
 	expectedClockName := "hyperv\n"
 	for _, ptpDirPath = range ptpDirList {
 		clockNameFilePath := filepath.Join(ptpClassDir.Name(), ptpDirPath, "clock_name")
-		buf, err := ioutil.ReadFile(clockNameFilePath)
+		buf, err := os.ReadFile(clockNameFilePath)
 		if err != nil && !os.IsNotExist(err) {
 			return errors.Wrapf(err, "failed to read clock name file at %s", clockNameFilePath)
 		}
@@ -155,7 +154,7 @@ func startTimeSyncService() error {
 	// chronyd config file take from: https://docs.microsoft.com/en-us/azure/virtual-machines/linux/time-sync
 	chronydConfigString := fmt.Sprintf("refclock PHC %s poll 3 dpoll -2 offset 0 stratum 2\nmakestep 0.1 -1\n", ptpDevPath)
 	chronydConfPath := "/tmp/chronyd.conf"
-	err = ioutil.WriteFile(chronydConfPath, []byte(chronydConfigString), 0644)
+	err = os.WriteFile(chronydConfPath, []byte(chronydConfigString), 0644)
 	if err != nil {
 		return errors.Wrapf(err, "failed to create chronyd conf file %s", chronydConfPath)
 	}
@@ -241,7 +240,7 @@ func main() {
 	// If no path is specified core dumps will just be placed in the working directory of wherever the process
 	// was invoked to a file named "core".
 	if *coreDumpLoc != "" {
-		if err := ioutil.WriteFile(
+		if err := os.WriteFile(
 			"/proc/sys/kernel/core_pattern",
 			[]byte(*coreDumpLoc),
 			0644,
@@ -292,7 +291,7 @@ func main() {
 	// Write 1 to memory.use_hierarchy on the root cgroup to enable hierarchy
 	// support. This needs to be set before we create any cgroups as the write
 	// will fail otherwise.
-	if err := ioutil.WriteFile("/sys/fs/cgroup/memory/memory.use_hierarchy", []byte("1"), 0644); err != nil {
+	if err := os.WriteFile("/sys/fs/cgroup/memory/memory.use_hierarchy", []byte("1"), 0644); err != nil {
 		logrus.WithError(err).Fatal("failed to enable hierarchy support for root cgroup")
 	}
 

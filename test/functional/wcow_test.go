@@ -342,8 +342,8 @@ const imageName = "busyboxw"
 // Creates two temp folders used for the mounts/mapped directories
 func createTestMounts(t *testing.T) (string, string) {
 	// Create two temp folders for mapped directories.
-	hostRWSharedDirectory := testutilities.CreateTempDir(t)
-	hostROSharedDirectory := testutilities.CreateTempDir(t)
+	hostRWSharedDirectory := t.TempDir()
+	hostROSharedDirectory := t.TempDir()
 	fRW, _ := os.OpenFile(filepath.Join(hostRWSharedDirectory, "readwrite"), os.O_RDWR|os.O_CREATE, 0755)
 	fRO, _ := os.OpenFile(filepath.Join(hostROSharedDirectory, "readonly"), os.O_RDWR|os.O_CREATE, 0755)
 	fRW.Close()
@@ -366,8 +366,7 @@ func TestWCOWArgonShim(t *testing.T) {
 	imageLayers := testutilities.LayerFolders(t, imageName)
 	argonShimMounted := false
 
-	argonShimScratchDir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(argonShimScratchDir)
+	argonShimScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(context.Background(), argonShimScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create argon scratch layer: %s", err)
 	}
@@ -431,8 +430,7 @@ func TestWCOWArgonShim(t *testing.T) {
 func TestWCOWXenonShim(t *testing.T) {
 	imageLayers := testutilities.LayerFolders(t, imageName)
 
-	xenonShimScratchDir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(xenonShimScratchDir)
+	xenonShimScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(context.Background(), xenonShimScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create xenon scratch layer: %s", err)
 	}
@@ -501,8 +499,7 @@ func generateWCOWOciTestSpec(t *testing.T, imageLayers []string, scratchPath, ho
 func TestWCOWArgonOciV1(t *testing.T) {
 	imageLayers := testutilities.LayerFolders(t, imageName)
 	argonOci1Mounted := false
-	argonOci1ScratchDir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(argonOci1ScratchDir)
+	argonOci1ScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(context.Background(), argonOci1ScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create argon scratch layer: %s", err)
 	}
@@ -550,8 +547,7 @@ func TestWCOWXenonOciV1(t *testing.T) {
 	imageLayers := testutilities.LayerFolders(t, imageName)
 	xenonOci1Mounted := false
 
-	xenonOci1ScratchDir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(xenonOci1ScratchDir)
+	xenonOci1ScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(context.Background(), xenonOci1ScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create xenon scratch layer: %s", err)
 	}
@@ -607,8 +603,7 @@ func TestWCOWArgonOciV2(t *testing.T) {
 	imageLayers := testutilities.LayerFolders(t, imageName)
 	argonOci2Mounted := false
 
-	argonOci2ScratchDir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(argonOci2ScratchDir)
+	argonOci2ScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(context.Background(), argonOci2ScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create argon scratch layer: %s", err)
 	}
@@ -659,8 +654,7 @@ func TestWCOWXenonOciV2(t *testing.T) {
 	xenonOci2Mounted := false
 	xenonOci2UVMCreated := false
 
-	xenonOci2ScratchDir := testutilities.CreateTempDir(t)
-	defer os.RemoveAll(xenonOci2ScratchDir)
+	xenonOci2ScratchDir := t.TempDir()
 	if err := wclayer.CreateScratchLayer(context.Background(), xenonOci2ScratchDir, imageLayers); err != nil {
 		t.Fatalf("failed to create xenon scratch layer: %s", err)
 	}
@@ -688,7 +682,7 @@ func TestWCOWXenonOciV2(t *testing.T) {
 
 	// Create the utility VM.
 	xenonOci2UVMId := "xenonOci2UVM"
-	xenonOci2UVMScratchDir := testutilities.CreateTempDir(t)
+	xenonOci2UVMScratchDir := t.TempDir()
 	if err := wcow.CreateUVMScratch(context.Background(), uvmImagePath, xenonOci2UVMScratchDir, xenonOci2UVMId); err != nil {
 		t.Fatalf("failed to create scratch: %s", err)
 	}

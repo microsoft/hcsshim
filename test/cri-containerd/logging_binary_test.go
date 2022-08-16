@@ -6,7 +6,6 @@ package cri_containerd
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -162,7 +161,7 @@ func createAndRunContainer(t *testing.T, client runtime.RuntimeServiceClient, ct
 }
 
 func assertFileContent(path string, content string) (bool, error) {
-	fileContent, err := ioutil.ReadFile(path)
+	fileContent, err := os.ReadFile(path)
 	if err != nil {
 		return false, err
 	}

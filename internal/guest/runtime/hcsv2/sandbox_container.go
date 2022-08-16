@@ -5,7 +5,6 @@ package hcsv2
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,14 +59,14 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 	}
 
 	sandboxHostnamePath := getSandboxHostnamePath(id)
-	if err := ioutil.WriteFile(sandboxHostnamePath, []byte(hostname+"\n"), 0644); err != nil {
+	if err := os.WriteFile(sandboxHostnamePath, []byte(hostname+"\n"), 0644); err != nil {
 		return errors.Wrapf(err, "failed to write hostname to %q", sandboxHostnamePath)
 	}
 
 	// Write the hosts
 	sandboxHostsContent := network.GenerateEtcHostsContent(ctx, hostname)
 	sandboxHostsPath := getSandboxHostsPath(id)
-	if err := ioutil.WriteFile(sandboxHostsPath, []byte(sandboxHostsContent), 0644); err != nil {
+	if err := os.WriteFile(sandboxHostsPath, []byte(sandboxHostsContent), 0644); err != nil {
 		return errors.Wrapf(err, "failed to write sandbox hosts to %q", sandboxHostsPath)
 	}
 
@@ -90,7 +89,7 @@ func setupSandboxContainerSpec(ctx context.Context, id string, spec *oci.Spec) (
 		return errors.Wrap(err, "failed to generate sandbox resolv.conf content")
 	}
 	sandboxResolvPath := getSandboxResolvPath(id)
-	if err := ioutil.WriteFile(sandboxResolvPath, []byte(resolvContent), 0644); err != nil {
+	if err := os.WriteFile(sandboxResolvPath, []byte(resolvContent), 0644); err != nil {
 		return errors.Wrap(err, "failed to write sandbox resolv.conf")
 	}
 

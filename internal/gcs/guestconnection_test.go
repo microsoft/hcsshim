@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"strings"
 	"testing"
@@ -233,7 +232,7 @@ func TestGcsCreateProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := ioutil.ReadAll(stdout)
+	b, err := io.ReadAll(stdout)
 	if err != nil {
 		t.Fatal(err)
 	}

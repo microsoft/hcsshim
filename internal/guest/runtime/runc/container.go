@@ -5,7 +5,6 @@ package runc
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -192,7 +191,7 @@ func (c *container) GetRunningProcesses() ([]runtime.ContainerProcessState, erro
 
 	// For each process state directory which corresponds to a running pid, set
 	// that the process was created by the Runtime.
-	processDirs, err := ioutil.ReadDir(filepath.Join(containerFilesDir, c.id))
+	processDirs, err := os.ReadDir(filepath.Join(containerFilesDir, c.id))
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to read the contents of container directory %s", filepath.Join(containerFilesDir, c.id))
 	}
@@ -239,7 +238,7 @@ func (c *container) GetAllProcesses() ([]runtime.ContainerProcessState, error) {
 		pidMap[pid] = &runtime.ContainerProcessState{Pid: pid, Command: command, CreatedByRuntime: false, IsZombie: false}
 	}
 
-	processDirs, err := ioutil.ReadDir(filepath.Join(containerFilesDir, c.id))
+	processDirs, err := os.ReadDir(filepath.Join(containerFilesDir, c.id))
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to read the contents of container directory %s", filepath.Join(containerFilesDir, c.id))
 	}
@@ -315,7 +314,7 @@ func (c *container) Wait() (int, error) {
 // runExecCommand sets up the arguments for calling runc exec.
 func (c *container) runExecCommand(processDef *oci.Process, stdioSet *stdio.ConnectionSet) (p runtime.Process, err error) {
 	// Create a temporary random directory to store the process's files.
-	tempProcessDir, err := ioutil.TempDir(containerFilesDir, c.id)
+	tempProcessDir, err := os.MkdirTemp(containerFilesDir, c.id)
 	if err != nil {
 		return nil, err
 	}

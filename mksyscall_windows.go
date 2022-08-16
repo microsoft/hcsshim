@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build ignore
 // +build ignore
 
 /*
@@ -14,29 +15,31 @@ to standard output.
 The prototypes are marked by lines beginning with "//sys" and read
 like func declarations if //sys is replaced by func, but:
 
-* The parameter lists must give a name for each argument. This
-  includes return parameters.
+  - The parameter lists must give a name for each argument. This
+    includes return parameters.
 
-* The parameter lists must give a type for each argument:
-  the (x, y, z int) shorthand is not allowed.
+  - The parameter lists must give a type for each argument:
+    the (x, y, z int) shorthand is not allowed.
 
 * If the return parameter is an error number, it must be named err.
 
-* If go func name needs to be different from it's winapi dll name,
-  the winapi name could be specified at the end, after "=" sign, like
-  //sys LoadLibrary(libname string) (handle uint32, err error) = LoadLibraryA
+  - If go func name needs to be different from it's winapi dll name,
+    the winapi name could be specified at the end, after "=" sign, like
+    //sys LoadLibrary(libname string) (handle uint32, err error) = LoadLibraryA
 
-* Each function that returns err needs to supply a condition, that
-  return value of winapi will be tested against to detect failure.
-  This would set err to windows "last-error", otherwise it will be nil.
-  The value can be provided at end of //sys declaration, like
-  //sys LoadLibrary(libname string) (handle uint32, err error) [failretval==-1] = LoadLibraryA
-  and is [failretval==0] by default.
+  - Each function that returns err needs to supply a condition, that
+    return value of winapi will be tested against to detect failure.
+    This would set err to windows "last-error", otherwise it will be nil.
+    The value can be provided at end of //sys declaration, like
+    //sys LoadLibrary(libname string) (handle uint32, err error) [failretval==-1] = LoadLibraryA
+    and is [failretval==0] by default.
 
 Usage:
+
 	mksyscall_windows [flags] [path ...]
 
 The flags are:
+
 	-output
 		Specify output file name (outputs to console if blank).
 	-trace
@@ -54,7 +57,6 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -842,7 +844,7 @@ func main() {
 	if *filename == "" {
 		_, err = os.Stdout.Write(data)
 	} else {
-		err = ioutil.WriteFile(*filename, data, 0644)
+		err = os.WriteFile(*filename, data, 0644)
 	}
 	if err != nil {
 		log.Fatal(err)

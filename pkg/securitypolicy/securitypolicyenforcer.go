@@ -798,10 +798,12 @@ func stringSlicesEqual(slice1, slice2 []string) bool {
 // Iterates through container mounts to identify the correct sandbox
 // mount where the wait path is nested under. The mount spec will
 // be something like:
-// {
-//    "source": "/run/gcs/c/<podID>/sandboxMounts/path/on/host",
-//    "destination": "/path/in/container"
-// }
+//
+//	{
+//	   "source": "/run/gcs/c/<podID>/sandboxMounts/path/on/host",
+//	   "destination": "/path/in/container"
+//	}
+//
 // The wait path will be "/path/in/container/wait/path". To find the corresponding
 // sandbox mount do a prefix match on wait path against all container mounts
 // Destination and resolve the full path inside UVM. For example above it becomes

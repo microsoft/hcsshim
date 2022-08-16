@@ -1,13 +1,13 @@
 package testutilities
 
 import (
-	"io/ioutil"
+	"os"
 	"testing"
 )
 
 // CreateTempDir creates a temporary directory
 func CreateTempDir(t *testing.T) string {
-	tempDir, err := ioutil.TempDir("", "test")
+	tempDir, err := os.MkdirTemp("", "test")
 	if err != nil {
 		t.Fatalf("failed to create temporary directory: %s", err)
 	}
