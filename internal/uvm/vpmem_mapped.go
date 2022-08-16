@@ -283,8 +283,18 @@ func (uvm *UtilityVM) addVPMemMappedDevice(ctx context.Context, hostPath string)
 	return uvmPath, nil
 }
 
-// removeVPMemMappedDevice removes a mapped container layer, if the layer is the last to be removed, removes
-// VPMem device instead
+// removeVPMemMappedDevice removes a mapped container layer. The VPMem device itself
+// is never removed after being added.
+//
+// The bug occurs when we try to clean up a mapped VHD at non-zero offset.
+// What happens is, the device-mapper target that corresponds to the mapped
+// layer VHD is unmounted and removed inside the guest, however removal on
+// the host through HCS API fails with "not found", because HCS API doesn't
+// allow removal of a VPMem if it doesn't have a mapped device at offset 0, this
+// results in the reference not being decreased and hcsshim "thinking" that the
+// layer is still present. Next time this layer is used by a different
+// container, it appears as if the layer is still mounted inside the guest as
+// well, which results in overlayfs mount failures.
 //
 // Lock MUST be held when calling this function
 func (uvm *UtilityVM) removeVPMemMappedDevice(ctx context.Context, hostPath string) error {
