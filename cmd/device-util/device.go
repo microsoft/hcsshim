@@ -45,13 +45,11 @@ var queryChildrenCommand = &cli.Command{
 
 		children, err := windevice.GetChildrenFromInstanceIDs(parents)
 		if err != nil {
-			return err
+			return fmt.Errorf("could not find children for parents %q: %w", parents, err)
 		}
 
-		property := idProperty
-		if ctx.IsSet(propertyFlag) {
-			property = ctx.String(propertyFlag)
-		}
+		// should be defined, since there is a default value
+		property := ctx.String(propertyFlag)
 		if property == locationProperty {
 			children, err = windevice.GetDeviceLocationPathsFromIDs(children)
 			if err != nil {

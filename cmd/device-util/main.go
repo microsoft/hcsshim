@@ -4,13 +4,11 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
-	cli "github.com/urfave/cli/v2"
-
 	"github.com/Microsoft/hcsshim/internal/winapi"
+	cli "github.com/urfave/cli/v2"
 )
 
 const desc = `A stand-alone tool that replicates a limited subset of sc.exe and other tools.
@@ -30,7 +28,8 @@ func main() {
 	}
 
 	if err := app.Run(os.Args); err != nil {
-		log.New(os.Stderr, "", 0).Fatal(err)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 }
 

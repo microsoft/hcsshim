@@ -5,45 +5,23 @@ package main
 import (
 	"errors"
 	"fmt"
-	"sync"
 	"unsafe"
 
 	cli "github.com/urfave/cli/v2"
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/svc/mgr"
 )
-
-var _scm scm
-
-//todo (helsaawy): create a LazyHandle type (similar to windows.LazyDll)
-
-// SC Manager
-type scm struct {
-	h    windows.Handle
-	once sync.Once
-}
-
-func (s *scm) handle() windows.Handle {
-	s.once.Do(func() {
-		var err error
-		s.h, err = windows.OpenSCManager(nil, nil, windows.SC_MANAGER_ALL_ACCESS)
-		if err != nil {
-			panic(fmt.Errorf("could not open SC Manager: %w", err))
-		}
-	})
-	return s.h
-}
 
 var serviceCommand = &cli.Command{
 	Name:    "service",
 	Aliases: []string{"svc"},
-	Usage:   "Manage Windows Services",
+	Usage:   "manage Windows services",
 	Before:  verifyElevated,
 	Subcommands: []*cli.Command{
-		//todo (helsaawy): add stop and delete service commands
 		{
 			Name:    "list",
 			Aliases: []string{"ls"},
-			Usage:   "List all services",
+			Usage:   "list Windows services",
 			Action: func(ctx *cli.Context) error {
 				return printServices(ctx, windows.SERVICE_TYPE_ALL, windows.SERVICE_STATE_ALL)
 			},
@@ -57,23 +35,29 @@ type svcInfo struct {
 }
 
 func printServices(_ *cli.Context, serviceType, serviceState uint32) error {
-	sis := make([]svcInfo, 0, 256) // preallocate
+	scm, err := mgr.Connect()
+	if err != nil {
+		return fmt.Errorf("could not create service manager: %w", err)
+	}
+
+	// scm.ListServices() does not allow specifying service type and state.
+	svcInfos := make([]svcInfo, 0, 256) // preallocate
 	// max size of svcInfo strings
 	var nameLen, dispLen int
-	nbytes := uint32(1024) // 1KiB
-	var rh uint32
+	var rh uint32      // resume handle
+	sz := uint32(1024) // 1KiB: initial buffer size
 	for {
 		var nSvcs uint32
-		b := make([]byte, nbytes)
+		b := make([]byte, sz)
 		b0 := &b[0]
 		err := windows.EnumServicesStatusEx(
-			_scm.handle(),
+			scm.Handle,
 			windows.SC_ENUM_PROCESS_INFO,
 			serviceType,
 			serviceState,
 			b0,
 			uint32(len(b)),
-			&nbytes,
+			&sz,
 			&nSvcs,
 			&rh,
 			nil, // groupName
@@ -82,6 +66,12 @@ func printServices(_ *cli.Context, serviceType, serviceState uint32) error {
 			return fmt.Errorf("could not enumerate services : %w", err)
 		}
 
+		// expand svcInfos to hold new objects
+		if n := len(svcInfos) + int(nSvcs); cap(svcInfos) <= n {
+			si := make([]svcInfo, len(svcInfos), n)
+			copy(si, svcInfos)
+			svcInfos = si
+		}
 		svcs := unsafe.Slice((*windows.ENUM_SERVICE_STATUS_PROCESS)(unsafe.Pointer(b0)), nSvcs)
 		for _, svc := range svcs {
 			si := svcInfo{
@@ -97,14 +87,14 @@ func printServices(_ *cli.Context, serviceType, serviceState uint32) error {
 			if len(si.display) > dispLen {
 				dispLen = len(si.display)
 			}
-			sis = append(sis, si)
+			svcInfos = append(svcInfos, si)
 		}
 
 		if err == nil {
 			break
 		}
 	}
-	for _, si := range sis {
+	for _, si := range svcInfos {
 		fmt.Printf("%-[1]*[2]s %-[3]*[4]s %-10s %s\n",
 			dispLen,
 			si.display,
