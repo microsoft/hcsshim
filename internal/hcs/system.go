@@ -316,6 +316,10 @@ func (computeSystem *System) Properties(ctx context.Context, types ...schema1.Pr
 
 	operation := "hcs::System::Properties"
 
+	if computeSystem.handle == 0 {
+		return nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+	}
+
 	queryBytes, err := json.Marshal(schema1.PropertyQuery{PropertyTypes: types})
 	if err != nil {
 		return nil, makeSystemError(computeSystem, operation, err, nil)
@@ -448,6 +452,10 @@ func (computeSystem *System) statisticsInProc(job *jobobject.JobObject) (*hcssch
 // hcsPropertiesV2Query is a helper to make a HcsGetComputeSystemProperties call using the V2 schema property types.
 func (computeSystem *System) hcsPropertiesV2Query(ctx context.Context, types []hcsschema.PropertyType) (*hcsschema.Properties, error) {
 	operation := "hcs::System::PropertiesV2"
+
+	if computeSystem.handle == 0 {
+		return nil, makeSystemError(computeSystem, operation, ErrAlreadyClosed, nil)
+	}
 
 	queryBytes, err := json.Marshal(hcsschema.PropertyQuery{PropertyTypes: types})
 	if err != nil {
