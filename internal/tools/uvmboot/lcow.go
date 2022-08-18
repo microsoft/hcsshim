@@ -268,7 +268,7 @@ func runLCOW(ctx context.Context, options *uvm.OptionsLCOW, c *cli.Context) erro
 		return err
 	}
 
-	if err := vm.SetSecurityPolicy(ctx, options.SecurityPolicy); err != nil {
+	if err := vm.SetSecurityPolicy(ctx, "", options.SecurityPolicy); err != nil {
 		return fmt.Errorf("could not set UVM security policy: %w", err)
 	}
 

@@ -327,11 +327,8 @@ func newMountOptions(opts []string) Options {
 // newOptionsFromConfig applies the same logic as CRI plugin to generate
 // mount options given readonly and propagation config.
 // TODO: (anmaxvl) update when support for other mount types is added,
-//
 // e.g., vhd:// or evd://
-//
 // TODO: (anmaxvl) Do we need to set/validate Linux rootfs propagation?
-//
 // In case we do, update securityPolicyContainer and Container structs
 // as well as mount enforcement logic.
 func newOptionsFromConfig(mCfg *MountConfig) []string {

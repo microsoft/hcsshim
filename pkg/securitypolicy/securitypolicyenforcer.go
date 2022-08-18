@@ -21,6 +21,23 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
+type createEnforcerFunc func(_ SecurityPolicyState, criMounts, criPrivilegedMounts []oci.Mount) (SecurityPolicyEnforcer, error)
+
+const (
+	allowAllEnforcer = "allow_all"
+	standardEnforcer = "standard"
+)
+
+var (
+	registeredEnforcers = map[string]createEnforcerFunc{}
+	defaultEnforcer     = standardEnforcer
+)
+
+func init() {
+	registeredEnforcers[allowAllEnforcer] = createAllowAllEnforcer
+	registeredEnforcers[standardEnforcer] = createStandardEnforcer
+}
+
 type SecurityPolicyEnforcer interface {
 	EnforceDeviceMountPolicy(target string, deviceHash string) (err error)
 	EnforceDeviceUnmountPolicy(unmountTarget string) (err error)
@@ -32,26 +49,64 @@ type SecurityPolicyEnforcer interface {
 	EncodedSecurityPolicy() string
 }
 
-func NewSecurityPolicyEnforcer(state SecurityPolicyState, eOpts ...standardEnforcerOpt) (SecurityPolicyEnforcer, error) {
-	if state.SecurityPolicy.AllowAll {
-		if state.SecurityPolicy.Containers.Length > 0 || len(state.SecurityPolicy.Containers.Elements) > 0 {
-			return nil, ErrInvalidAllowAllPolicy
+// createAllowAllEnforcer creates and returns OpenDoorSecurityPolicyEnforcer instance.
+// Both AllowAll and Containers cannot be set at the same time.
+func createAllowAllEnforcer(state SecurityPolicyState, _, _ []oci.Mount) (SecurityPolicyEnforcer, error) {
+	policyContainers := state.SecurityPolicy.Containers
+	if !state.AllowAll || policyContainers.Length > 0 || len(policyContainers.Elements) > 0 {
+		return nil, ErrInvalidAllowAllPolicy
+	}
+	return &OpenDoorSecurityPolicyEnforcer{
+		encodedSecurityPolicy: state.EncodedSecurityPolicy.SecurityPolicy,
+	}, nil
+}
+
+// createStandardEnforcer creates and returns StandardSecurityPolicyEnforcer instance.
+// Make sure that the input JSON policy can be converted to internal representation
+// and that `criMounts` and `criPrivilegedMounts` can be injected before successful return.
+func createStandardEnforcer(
+	state SecurityPolicyState,
+	criMounts,
+	criPrivilegedMounts []oci.Mount,
+) (SecurityPolicyEnforcer, error) {
+	containers, err := state.SecurityPolicy.Containers.toInternal()
+	if err != nil {
+		return nil, err
+	}
+
+	enforcer := NewStandardSecurityPolicyEnforcer(containers, state.EncodedSecurityPolicy.SecurityPolicy)
+
+	if err := enforcer.ExtendDefaultMounts(criMounts); err != nil {
+		return nil, err
+	}
+
+	addPrivilegedMountsWrapper := WithPrivilegedMounts(criPrivilegedMounts)
+	if err := addPrivilegedMountsWrapper(enforcer); err != nil {
+		return nil, err
+	}
+	return enforcer, nil
+}
+
+// CreateSecurityPolicyEnforcer returns an appropriate enforcer for input parameters.
+// When `enforcer` isn't return either an AllowAll or default enforcer.
+// Returns an error if the requested `enforcer` implementation isn't registered.
+func CreateSecurityPolicyEnforcer(
+	enforcer string,
+	state SecurityPolicyState,
+	criMounts,
+	criPrivilegedMounts []oci.Mount,
+) (SecurityPolicyEnforcer, error) {
+	if enforcer == "" {
+		if state.SecurityPolicy.AllowAll {
+			enforcer = allowAllEnforcer
+		} else {
+			enforcer = defaultEnforcer
 		}
-		return &OpenDoorSecurityPolicyEnforcer{
-			encodedSecurityPolicy: state.EncodedSecurityPolicy.SecurityPolicy,
-		}, nil
+	}
+	if createEnforcer, ok := registeredEnforcers[enforcer]; !ok {
+		return nil, fmt.Errorf("unknown enforcer: %q", enforcer)
 	} else {
-		containers, err := state.SecurityPolicy.Containers.toInternal()
-		if err != nil {
-			return nil, err
-		}
-		enforcer := NewStandardSecurityPolicyEnforcer(containers, state.EncodedSecurityPolicy.SecurityPolicy)
-		for _, o := range eOpts {
-			if err := o(enforcer); err != nil {
-				return nil, err
-			}
-		}
-		return enforcer, nil
+		return createEnforcer(state, criMounts, criPrivilegedMounts)
 	}
 }
 
