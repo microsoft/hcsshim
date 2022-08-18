@@ -4,21 +4,28 @@
 package securitypolicy
 
 import (
-	"context"
 	"errors"
 
-	"github.com/Microsoft/hcsshim/internal/log"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 const regoEnforcer = "rego"
 
 func init() {
-	registeredEnforcers[regoEnforcer] = CreateRegoEnforcer
+	registeredEnforcers[regoEnforcer] = createRegoEnforcer
+	// Overriding the value inside init guarantees that this assignment happens
+	// after the variable has been initialized in securitypolicy.go and there
+	// are no race conditions. When multiple init functions are defined in a
+	// single package, the order of their execution is determined by the
+	// filename.
 	defaultEnforcer = regoEnforcer
-	log.G(context.Background()).Debugf("registered enforcers: %+v", registeredEnforcers)
 }
 
+// RegoEnforcer is a stub implementation of a security policy, which will be
+// based on [Rego] policy language. The detailed implementation will be
+// introduced in the subsequent PRs and documentation updated accordingly.
+//
+// [Rego]: https://www.openpolicyagent.org/docs/latest/policy-language/
 type RegoEnforcer struct{}
 
 var (
@@ -26,7 +33,7 @@ var (
 	ErrNotImplemented                        = errors.New("not implemented")
 )
 
-func CreateRegoEnforcer(_ SecurityPolicyState, _, _ []oci.Mount) (SecurityPolicyEnforcer, error) {
+func createRegoEnforcer(_ SecurityPolicyState, _, _ []oci.Mount) (SecurityPolicyEnforcer, error) {
 	return &RegoEnforcer{}, nil
 }
 

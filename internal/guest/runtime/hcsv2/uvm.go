@@ -378,7 +378,7 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		}
 		return c.modifyContainerConstraints(ctx, req.RequestType, req.Settings.(*guestresource.LCOWContainerConstraints))
 	case guestresource.ResourceTypeSecurityPolicy:
-		r, ok := req.Settings.(*guestresource.SecurityPolicyEnforcer)
+		r, ok := req.Settings.(*guestresource.LCOWSecurityPolicyEnforcer)
 		if !ok {
 			return errors.New("the request's settings are not of type EncodedSecurityPolicy")
 		}

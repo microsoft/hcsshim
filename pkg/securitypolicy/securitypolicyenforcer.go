@@ -21,7 +21,7 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
-type CreateEnforcerFunc func(_ SecurityPolicyState, criMounts, criPrivilegedMounts []oci.Mount) (SecurityPolicyEnforcer, error)
+type createEnforcerFunc func(_ SecurityPolicyState, criMounts, criPrivilegedMounts []oci.Mount) (SecurityPolicyEnforcer, error)
 
 const (
 	allowAllEnforcer = "allow_all"
@@ -29,14 +29,13 @@ const (
 )
 
 var (
-	registeredEnforcers map[string]CreateEnforcerFunc
+	registeredEnforcers = map[string]createEnforcerFunc{}
 	defaultEnforcer     = standardEnforcer
 )
 
 func init() {
-	registeredEnforcers = make(map[string]CreateEnforcerFunc)
-	registeredEnforcers[allowAllEnforcer] = CreateAllowAllEnforcer
-	registeredEnforcers[standardEnforcer] = CreateStandardEnforcer
+	registeredEnforcers[allowAllEnforcer] = createAllowAllEnforcer
+	registeredEnforcers[standardEnforcer] = createStandardEnforcer
 }
 
 type SecurityPolicyEnforcer interface {
@@ -50,9 +49,9 @@ type SecurityPolicyEnforcer interface {
 	EncodedSecurityPolicy() string
 }
 
-// CreateAllowAllEnforcer creates and returns OpenDoorSecurityPolicyEnforcer instance.
+// createAllowAllEnforcer creates and returns OpenDoorSecurityPolicyEnforcer instance.
 // Both AllowAll and Containers cannot be set at the same time.
-func CreateAllowAllEnforcer(state SecurityPolicyState, _, _ []oci.Mount) (SecurityPolicyEnforcer, error) {
+func createAllowAllEnforcer(state SecurityPolicyState, _, _ []oci.Mount) (SecurityPolicyEnforcer, error) {
 	policyContainers := state.SecurityPolicy.Containers
 	if !state.AllowAll || policyContainers.Length > 0 || len(policyContainers.Elements) > 0 {
 		return nil, ErrInvalidAllowAllPolicy
@@ -62,10 +61,10 @@ func CreateAllowAllEnforcer(state SecurityPolicyState, _, _ []oci.Mount) (Securi
 	}, nil
 }
 
-// CreateStandardEnforcer creates and returns StandardSecurityPolicyEnforcer instance.
+// createStandardEnforcer creates and returns StandardSecurityPolicyEnforcer instance.
 // Make sure that the input JSON policy can be converted to internal representation
 // and that `criMounts` and `criPrivilegedMounts` can be injected before successful return.
-func CreateStandardEnforcer(
+func createStandardEnforcer(
 	state SecurityPolicyState,
 	criMounts,
 	criPrivilegedMounts []oci.Mount,

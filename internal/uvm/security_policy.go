@@ -40,7 +40,7 @@ func (uvm *UtilityVM) SetSecurityPolicy(ctx context.Context, enforcer, policy st
 	modification.GuestRequest = guestrequest.ModificationRequest{
 		ResourceType: guestresource.ResourceTypeSecurityPolicy,
 		RequestType:  guestrequest.RequestTypeAdd,
-		Settings: guestresource.SecurityPolicyEnforcer{
+		Settings: guestresource.LCOWSecurityPolicyEnforcer{
 			EnforcerType:          enforcer,
 			EncodedSecurityPolicy: policy,
 		},

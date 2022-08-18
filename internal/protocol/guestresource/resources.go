@@ -159,7 +159,7 @@ type SignalProcessOptionsWCOW struct {
 	Signal guestrequest.SignalValueWCOW `json:",omitempty"`
 }
 
-type SecurityPolicyEnforcer struct {
+type LCOWSecurityPolicyEnforcer struct {
 	EnforcerType          string `json:"EnforcerType,omitempty"`
 	EncodedSecurityPolicy string `json:"EncodedSecurityPolicy,omitempty"`
 }
