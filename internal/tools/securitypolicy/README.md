@@ -22,7 +22,6 @@ image_name = "rust:1.52.1"
 command = ["rustc", "--help"]
 working_dir = "/home/user"
 allow_elevated = true
-wait_mount_points = ["/path/to/container/mount-1", "/path/to/container/mount-2"]
 
 [[container.env_rule]]
 strategy = "re2"
@@ -99,13 +98,6 @@ represented in JSON.
           }
         },
         "working_dir": "/home/user",
-        "wait_mount_points": {
-          "length": 2,
-          "elements": {
-            "0": "/path/to/container/mount-1",
-            "1": "/path/to/container/mount-2"
-          }
-        },
         "mounts": {
           "length": 2,
           "elements": {
@@ -166,10 +158,6 @@ represented in JSON.
           }
         },
         "working_dir": "/",
-        "wait_mount_points": {
-          "length": 0,
-          "elements": {}
-        },
         "mounts": {
           "length": 0,
           "elements": {}

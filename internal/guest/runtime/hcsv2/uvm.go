@@ -301,11 +301,6 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, secPolicyEnv)
 	}
 
-	// Sandbox mount paths need to be resolved in the spec before expected mounts policy can be enforced.
-	if err = h.securityPolicyEnforcer.EnforceWaitMountPointsPolicy(id, settings.OCISpecification); err != nil {
-		return nil, errors.Wrapf(err, "container creation denied due to policy")
-	}
-
 	// Create the BundlePath
 	if err := os.MkdirAll(settings.OCIBundlePath, 0700); err != nil {
 		return nil, errors.Wrapf(err, "failed to create OCIBundlePath: '%s'", settings.OCIBundlePath)

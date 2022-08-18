@@ -43,10 +43,6 @@ func (MountMonitoringSecurityPolicyEnforcer) EnforceMountPolicy(_, _ string, _ *
 	return nil
 }
 
-func (MountMonitoringSecurityPolicyEnforcer) EnforceWaitMountPointsPolicy(_ string, _ *oci.Spec) error {
-	return nil
-}
-
 func (MountMonitoringSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
 	return nil
 }

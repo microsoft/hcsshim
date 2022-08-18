@@ -6,8 +6,6 @@ package securitypolicy
 import (
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -17,8 +15,6 @@ import (
 
 	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
-	"github.com/Microsoft/hcsshim/internal/hooks"
-	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
 
 type createEnforcerFunc func(_ SecurityPolicyState, criMounts, criPrivilegedMounts []oci.Mount) (SecurityPolicyEnforcer, error)
@@ -43,7 +39,6 @@ type SecurityPolicyEnforcer interface {
 	EnforceDeviceUnmountPolicy(unmountTarget string) (err error)
 	EnforceOverlayMountPolicy(containerID string, layerPaths []string) (err error)
 	EnforceCreateContainerPolicy(containerID string, argList []string, envList []string, workingDir string) (err error)
-	EnforceWaitMountPointsPolicy(containerID string, spec *oci.Spec) error
 	EnforceMountPolicy(sandboxID, containerID string, spec *oci.Spec) error
 	ExtendDefaultMounts([]oci.Mount) error
 	EncodedSecurityPolicy() string
@@ -166,9 +161,6 @@ type securityPolicyContainer struct {
 	// WorkingDir is a path to container's working directory, which all the processes
 	// will default to.
 	WorkingDir string
-	// Unordered list of mounts which are expected to be present when the container
-	// starts
-	WaitMountPoints []string
 	// A list of constraints for determining if a given mount is allowed.
 	Mounts        []mountInternal
 	AllowElevated bool
@@ -290,11 +282,6 @@ func (c Container) toInternal() (securityPolicyContainer, error) {
 		return securityPolicyContainer{}, err
 	}
 
-	waitMounts, err := c.WaitMountPoints.toInternal()
-	if err != nil {
-		return securityPolicyContainer{}, err
-	}
-
 	mounts, err := c.Mounts.toInternal()
 	if err != nil {
 		return securityPolicyContainer{}, err
@@ -305,10 +292,9 @@ func (c Container) toInternal() (securityPolicyContainer, error) {
 		Layers:   layers,
 		// No need to have toInternal(), because WorkingDir is a string both
 		// internally and in the policy.
-		WorkingDir:      c.WorkingDir,
-		WaitMountPoints: waitMounts,
-		Mounts:          mounts,
-		AllowElevated:   c.AllowElevated,
+		WorkingDir:    c.WorkingDir,
+		Mounts:        mounts,
+		AllowElevated: c.AllowElevated,
 	}, nil
 }
 
@@ -349,14 +335,6 @@ func (l Layers) toInternal() ([]string, error) {
 	}
 
 	return stringMapToStringArray(l.Elements)
-}
-
-func (wm WaitMountPoints) toInternal() ([]string, error) {
-	if wm.Length != len(wm.Elements) {
-		return nil, fmt.Errorf("expectedMounts numbers don't match in policy. expected: %d, actual: %d", wm.Length, len(wm.Elements))
-	}
-
-	return stringMapToStringArray(wm.Elements)
 }
 
 func (o Options) toInternal() ([]string, error) {
@@ -840,94 +818,6 @@ func stringSlicesEqual(slice1, slice2 []string) bool {
 	return true
 }
 
-// EnforceWaitMountPointsPolicy for StandardSecurityPolicyEnforcer injects a
-// hooks.CreateRuntime hook into container spec and the hook ensures that
-// the expected mounts appear prior container start. At the moment enforcement
-// is expected to take place inside LCOW UVM.
-//
-// Expected mount is provided as a path under a sandbox mount path inside
-// container, e.g., sandbox mount is at path "/path/in/container" and wait path
-// is "/path/in/container/wait/path", which corresponds to
-// "/run/gcs/c/<podID>/sandboxMounts/path/on/the/host/wait/path"
-//
-// Iterates through container mounts to identify the correct sandbox
-// mount where the wait path is nested under. The mount spec will
-// be something like:
-//
-//	{
-//	   "source": "/run/gcs/c/<podID>/sandboxMounts/path/on/host",
-//	   "destination": "/path/in/container"
-//	}
-//
-// The wait path will be "/path/in/container/wait/path". To find the corresponding
-// sandbox mount do a prefix match on wait path against all container mounts
-// Destination and resolve the full path inside UVM. For example above it becomes
-// "/run/gcs/c/<podID>/sandboxMounts/path/on/host/wait/path"
-func (pe *StandardSecurityPolicyEnforcer) EnforceWaitMountPointsPolicy(containerID string, spec *oci.Spec) error {
-	pe.mutex.Lock()
-	defer pe.mutex.Unlock()
-
-	if len(pe.Containers) < 1 {
-		return errors.New("policy doesn't allow mounting containers")
-	}
-
-	sandboxID := spec.Annotations[annotations.KubernetesSandboxID]
-	if sandboxID == "" {
-		return errors.New("no sandbox ID present in spec annotations")
-	}
-
-	var wMounts []string
-	pIndices := pe.possibleIndicesForID(containerID)
-	if len(pIndices) == 0 {
-		return errors.New("no valid container indices found")
-	}
-
-	// Unlike environment variable and command line enforcement, there isn't anything
-	// to validate here, since we're essentially just injecting hooks when necessary
-	// for all containers.
-	matchFound := false
-	for _, index := range pIndices {
-		if !matchFound {
-			matchFound = true
-			wMounts = pe.Containers[index].WaitMountPoints
-		} else {
-			pe.narrowMatchesForContainerIndex(index, containerID)
-		}
-	}
-
-	if len(wMounts) == 0 {
-		return nil
-	}
-
-	var wPaths []string
-	for _, mount := range wMounts {
-		var wp string
-		for _, m := range spec.Mounts {
-			// prefix matching to find correct sandbox mount
-			if strings.HasPrefix(mount, m.Destination) {
-				wp = filepath.Join(m.Source, strings.TrimPrefix(mount, m.Destination))
-				break
-			}
-		}
-		if wp == "" {
-			return fmt.Errorf("invalid mount path: %q", mount)
-		}
-		wPaths = append(wPaths, filepath.Clean(wp))
-	}
-
-	pathsArg := strings.Join(wPaths, ",")
-	waitPathsBinary := "/bin/wait-paths"
-	args := []string{
-		waitPathsBinary,
-		"--paths",
-		pathsArg,
-		"--timeout",
-		"60",
-	}
-	hook := hooks.NewOCIHook(waitPathsBinary, args, os.Environ())
-	return hooks.AddOCIHook(spec, hooks.CreateRuntime, hook)
-}
-
 func (pe *StandardSecurityPolicyEnforcer) EncodedSecurityPolicy() string {
 	return pe.encodedSecurityPolicy
 }
@@ -955,10 +845,6 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ string, _ [
 }
 
 func (OpenDoorSecurityPolicyEnforcer) EnforceMountPolicy(_, _ string, _ *oci.Spec) error {
-	return nil
-}
-
-func (OpenDoorSecurityPolicyEnforcer) EnforceWaitMountPointsPolicy(_ string, _ *oci.Spec) error {
 	return nil
 }
 
@@ -990,10 +876,6 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(_ string, _ []
 
 func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ string, _ []string, _ []string, _ string) error {
 	return errors.New("running commands is denied by policy")
-}
-
-func (ClosedDoorSecurityPolicyEnforcer) EnforceWaitMountPointsPolicy(_ string, _ *oci.Spec) error {
-	return errors.New("enforcing wait mount points is denied by policy")
 }
 
 func (ClosedDoorSecurityPolicyEnforcer) EnforceMountPolicy(_, _ string, _ *oci.Spec) error {
