@@ -546,6 +546,40 @@ func (h *Host) GetExternalProcess(pid int) (Process, error) {
 	return p, nil
 }
 
+func (h *Host) GetProperties(ctx context.Context, containerID string, query prot.PropertyQuery) (*prot.PropertiesV2, error) {
+	err := h.securityPolicyEnforcer.EnforceGetPropertiesPolicy()
+	if err != nil {
+		return nil, errors.Wrapf(err, "get properties denied due to policy")
+	}
+
+	c, err := h.GetCreatedContainer(containerID)
+	if err != nil {
+		return nil, err
+	}
+
+	properties := &prot.PropertiesV2{}
+	for _, requestedProperty := range query.PropertyTypes {
+		if requestedProperty == prot.PtProcessList {
+			pids, err := c.GetAllProcessPids(ctx)
+			if err != nil {
+				return nil, err
+			}
+			properties.ProcessList = make([]prot.ProcessDetails, len(pids))
+			for i, pid := range pids {
+				properties.ProcessList[i].ProcessID = uint32(pid)
+			}
+		} else if requestedProperty == prot.PtStatistics {
+			cgroupMetrics, err := c.GetStats(ctx)
+			if err != nil {
+				return nil, err
+			}
+			properties.Metrics = cgroupMetrics
+		}
+	}
+
+	return properties, nil
+}
+
 // RunExternalProcess runs a process in the utility VM.
 func (h *Host) runExternalProcess(
 	ctx context.Context,

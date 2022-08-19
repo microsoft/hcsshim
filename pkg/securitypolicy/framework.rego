@@ -342,6 +342,12 @@ exec_external := {"allowed": true} {
     workingDirectory_ok(process.working_dir)
 }
 
+default get_properties := {"allowed": false}
+
+get_properties := {"allowed": true} {
+    data.policy.allow_properties_access
+}
+
 # error messages
 
 errors["deviceHash not found"] {

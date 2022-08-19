@@ -1850,6 +1850,50 @@ func Test_Rego_Plan9UnmountPolicy_No_Matches(t *testing.T) {
 	}
 }
 
+func Test_Rego_GetPropertiesPolicy_On(t *testing.T) {
+	f := func(constraints *generatedConstraints) bool {
+		tc, err := setupGetPropertiesTest(constraints, true)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		err = tc.policy.EnforceGetPropertiesPolicy()
+		if err != nil {
+			t.Error("Policy enforcement unexpectedly was denied")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50}); err != nil {
+		t.Errorf("Test_Rego_GetPropertiesPolicy_On: %v", err)
+	}
+}
+
+func Test_Rego_GetPropertiesPolicy_Off(t *testing.T) {
+	f := func(constraints *generatedConstraints) bool {
+		tc, err := setupGetPropertiesTest(constraints, false)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		err = tc.policy.EnforceGetPropertiesPolicy()
+		if err == nil {
+			t.Error("Policy enforcement unexpectedly was allowed")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50}); err != nil {
+		t.Errorf("Test_Rego_GetPropertiesPolicy_Off: %v", err)
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //
@@ -1874,6 +1918,7 @@ func (constraints *generatedConstraints) toPolicy() *securityPolicyInternal {
 	securityPolicy := new(securityPolicyInternal)
 	securityPolicy.Containers = constraints.containers
 	securityPolicy.ExternalProcesses = constraints.externalProcesses
+	securityPolicy.AllowPropertiesAccess = constraints.allowGetProperties
 	return securityPolicy
 }
 
@@ -2191,6 +2236,29 @@ type regoPlan9MountTestConfig struct {
 	mounts          []oci.Mount
 	uvmPathForShare string
 	policy          *regoEnforcer
+}
+
+func setupGetPropertiesTest(gc *generatedConstraints, allowPropertiesAccess bool) (tc *regoGetPropertiesTestConfig, err error) {
+	gc.allowGetProperties = allowPropertiesAccess
+
+	securityPolicy := gc.toPolicy()
+	defaultMounts := generateMounts(testRand)
+	privilegedMounts := generateMounts(testRand)
+
+	policy, err := newRegoPolicy(securityPolicy.marshalRego(),
+		toOCIMounts(defaultMounts),
+		toOCIMounts(privilegedMounts))
+	if err != nil {
+		return nil, err
+	}
+
+	return &regoGetPropertiesTestConfig{
+		policy: policy,
+	}, nil
+}
+
+type regoGetPropertiesTestConfig struct {
+	policy *regoEnforcer
 }
 
 func mountImageForContainer(policy *regoEnforcer, container *securityPolicyContainer) (string, error) {

@@ -111,7 +111,7 @@ func createRegoEnforcer(base64EncodedPolicy string,
 			return createOpenDoorEnforcer(base64EncodedPolicy, defaultMounts, privilegedMounts)
 		}
 
-		code, err = marshalRego(securityPolicy.AllowAll, containers, []ExternalProcessConfig{})
+		code, err = marshalRego(securityPolicy.AllowAll, containers, []ExternalProcessConfig{}, true)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling the policy to Rego: %w", err)
 		}
@@ -666,4 +666,10 @@ func (policy *regoEnforcer) EnforcePlan9UnmountPolicy(target string) error {
 	}
 
 	return policy.enforce("plan9_unmount", input)
+}
+
+func (policy *regoEnforcer) EnforceGetPropertiesPolicy() error {
+	input := make(map[string]interface{})
+
+	return policy.enforce("get_properties", input)
 }

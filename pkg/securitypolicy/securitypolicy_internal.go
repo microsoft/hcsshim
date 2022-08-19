@@ -8,8 +8,9 @@ import (
 
 // Internal version of SecurityPolicy
 type securityPolicyInternal struct {
-	Containers        []*securityPolicyContainer
-	ExternalProcesses []*externalProcess
+	Containers            []*securityPolicyContainer
+	ExternalProcesses     []*externalProcess
+	AllowPropertiesAccess bool
 }
 
 // Internal version of Container
