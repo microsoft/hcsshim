@@ -297,6 +297,7 @@ func (p securityPolicyInternal) marshalRego() string {
 	builder := new(strings.Builder)
 	addContainers(builder, p.Containers)
 	addExternalProcesses(builder, p.ExternalProcesses)
+	writeLine(builder, `allow_properties_access := {"allowed": %v}`, p.AllowPropertiesAccess)
 	objects := builder.String()
 	return strings.Replace(policyRegoTemplate, "##OBJECTS##", objects, 1)
 }

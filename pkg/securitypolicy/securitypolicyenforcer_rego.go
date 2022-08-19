@@ -667,3 +667,9 @@ func (policy *regoEnforcer) EnforcePlan9UnmountPolicy(target string) error {
 
 	return policy.enforce("plan9_unmount", input)
 }
+
+func (policy *regoEnforcer) EnforceGetPropertiesPolicy() error {
+	input := make(map[string]interface{})
+
+	return policy.enforce("allow_properties_access", input)
+}
