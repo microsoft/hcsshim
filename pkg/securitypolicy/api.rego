@@ -15,4 +15,5 @@ enforcement_points := {
     "plan9_mount": {"introducedVersion": "0.6.0", "allowedByDefault": true},
     "plan9_unmount": {"introducedVersion": "0.6.0", "allowedByDefault": true},
     "get_properties": {"introducedVersion": "0.7.0", "allowedByDefault": true},
+    "dump_stacks": {"introducedVersion": "0.7.0", "allowedByDefault": true},
 }

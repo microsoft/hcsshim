@@ -13,7 +13,6 @@ import (
 	"go.opencensus.io/trace"
 	"golang.org/x/sys/unix"
 
-	"github.com/Microsoft/hcsshim/internal/debug"
 	"github.com/Microsoft/hcsshim/internal/guest/commonutils"
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
@@ -447,8 +446,10 @@ func (b *Bridge) dumpStacksV2(r *Request) (_ RequestResponse, err error) {
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
-	stacks := debug.DumpStacks()
-
+	stacks, err := b.hostState.GetStacks()
+	if err != nil {
+		return nil, err
+	}
 	return &prot.DumpStacksResponse{
 		GuestStacks: stacks,
 	}, nil

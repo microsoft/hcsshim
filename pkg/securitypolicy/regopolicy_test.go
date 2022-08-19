@@ -1894,6 +1894,50 @@ func Test_Rego_GetPropertiesPolicy_Off(t *testing.T) {
 	}
 }
 
+func Test_Rego_DumpStacksPolicy_On(t *testing.T) {
+	f := func(constraints *generatedConstraints) bool {
+		tc, err := setupDumpStacksTest(constraints, true)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		err = tc.policy.EnforceDumpStacksPolicy()
+		if err != nil {
+			t.Errorf("Policy enforcement unexpectedly was denied: %v", err)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50}); err != nil {
+		t.Errorf("Test_Rego_DumpStacksPolicy_On: %v", err)
+	}
+}
+
+func Test_Rego_DumpStacksPolicy_Off(t *testing.T) {
+	f := func(constraints *generatedConstraints) bool {
+		tc, err := setupDumpStacksTest(constraints, false)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		err = tc.policy.EnforceDumpStacksPolicy()
+		if err == nil {
+			t.Error("Policy enforcement unexpectedly was allowed")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 50}); err != nil {
+		t.Errorf("Test_Rego_DumpStacksPolicy_Off: %v", err)
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //
@@ -1919,6 +1963,7 @@ func (constraints *generatedConstraints) toPolicy() *securityPolicyInternal {
 	securityPolicy.Containers = constraints.containers
 	securityPolicy.ExternalProcesses = constraints.externalProcesses
 	securityPolicy.AllowPropertiesAccess = constraints.allowGetProperties
+	securityPolicy.AllowDumpStacks = constraints.allowDumpStacks
 	return securityPolicy
 }
 
@@ -2258,6 +2303,29 @@ func setupGetPropertiesTest(gc *generatedConstraints, allowPropertiesAccess bool
 }
 
 type regoGetPropertiesTestConfig struct {
+	policy *regoEnforcer
+}
+
+func setupDumpStacksTest(constraints *generatedConstraints, allowDumpStacks bool) (tc *regoGetPropertiesTestConfig, err error) {
+	constraints.allowDumpStacks = allowDumpStacks
+
+	securityPolicy := constraints.toPolicy()
+	defaultMounts := generateMounts(testRand)
+	privilegedMounts := generateMounts(testRand)
+
+	policy, err := newRegoPolicy(securityPolicy.marshalRego(),
+		toOCIMounts(defaultMounts),
+		toOCIMounts(privilegedMounts))
+	if err != nil {
+		return nil, err
+	}
+
+	return &regoGetPropertiesTestConfig{
+		policy: policy,
+	}, nil
+}
+
+type regoDumpStacksTestConfig struct {
 	policy *regoEnforcer
 }
 

@@ -53,6 +53,7 @@ type SecurityPolicyEnforcer interface {
 	EnforcePlan9MountPolicy(target string) (err error)
 	EnforcePlan9UnmountPolicy(target string) (err error)
 	EnforceGetPropertiesPolicy() error
+	EnforceDumpStacksPolicy() error
 }
 
 func newSecurityPolicyFromBase64JSON(base64EncodedPolicy string) (*SecurityPolicy, error) {
@@ -498,6 +499,12 @@ func (*StandardSecurityPolicyEnforcer) EnforceGetPropertiesPolicy() error {
 	return nil
 }
 
+// Stub. We are deprecating the standard enforcer. Newly added enforcement
+// points are simply allowed.
+func (*StandardSecurityPolicyEnforcer) EnforceDumpStacksPolicy() error {
+	return nil
+}
+
 func (pe *StandardSecurityPolicyEnforcer) enforceCommandPolicy(containerID string, argList []string) (err error) {
 	// Get a list of all the indexes into our security policy's list of
 	// containers that are possible matches for this containerID based
@@ -819,6 +826,10 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceGetPropertiesPolicy() error {
 	return nil
 }
 
+func (OpenDoorSecurityPolicyEnforcer) EnforceDumpStacksPolicy() error {
+	return nil
+}
+
 func (OpenDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
 	return nil
 }
@@ -879,6 +890,10 @@ func (*ClosedDoorSecurityPolicyEnforcer) EnforcePlan9UnmountPolicy(_ string) err
 
 func (ClosedDoorSecurityPolicyEnforcer) EnforceGetPropertiesPolicy() error {
 	return errors.New("getting container properties is denied by policy")
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) EnforceDumpStacksPolicy() error {
+	return errors.New("getting stack dumps is denied by policy")
 }
 
 func (ClosedDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {

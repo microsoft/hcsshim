@@ -348,6 +348,12 @@ get_properties := {"allowed": true} {
     data.policy.allow_properties_access
 }
 
+default dump_stacks := {"allowed": false}
+
+dump_stacks := {"allowed": true} {
+    data.policy.allow_dump_stacks
+}
+
 # error messages
 
 errors["deviceHash not found"] {
