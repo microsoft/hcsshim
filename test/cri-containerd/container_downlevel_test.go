@@ -7,13 +7,13 @@ import (
 	"testing"
 
 	"github.com/Microsoft/hcsshim/osversion"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/Microsoft/hcsshim/test/internal/require"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
 func Test_CreateContainer_DownLevel_WCOW_Hypervisor(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)
-	testutilities.RequiresBuild(t, osversion.V19H1)
+	require.Build(t, osversion.V19H1)
 
 	pullRequiredImages(t, []string{imageWindowsNanoserver17763})
 

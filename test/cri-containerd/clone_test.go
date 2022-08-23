@@ -14,7 +14,7 @@ import (
 
 	"github.com/Microsoft/hcsshim/osversion"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/Microsoft/hcsshim/test/internal/require"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
@@ -240,7 +240,7 @@ func cleanupContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx con
 // cloned container from that template.
 func Test_CloneContainer_WCOW(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)
-	testutilities.RequiresBuild(t, osversion.V20H2)
+	require.Build(t, osversion.V20H2)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -265,7 +265,7 @@ func Test_CloneContainer_WCOW(t *testing.T) {
 // A test for creating multiple clones(3 clones) from one template container.
 func Test_MultiplClonedContainers_WCOW(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)
-	testutilities.RequiresBuild(t, osversion.V20H2)
+	require.Build(t, osversion.V20H2)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -302,7 +302,7 @@ func Test_MultiplClonedContainers_WCOW(t *testing.T) {
 // container.
 func Test_NormalContainerInClonedPod_WCOW(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)
-	testutilities.RequiresBuild(t, osversion.V20H2)
+	require.Build(t, osversion.V20H2)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -342,7 +342,7 @@ func Test_NormalContainerInClonedPod_WCOW(t *testing.T) {
 // of those pods.
 func Test_CloneContainersWithClonedPodPool_WCOW(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)
-	testutilities.RequiresBuild(t, osversion.V20H2)
+	require.Build(t, osversion.V20H2)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -390,7 +390,7 @@ func Test_CloneContainersWithClonedPodPool_WCOW(t *testing.T) {
 
 func Test_ClonedContainerRunningAfterDeletingTemplate(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)
-	testutilities.RequiresBuild(t, osversion.V20H2)
+	require.Build(t, osversion.V20H2)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -424,7 +424,7 @@ func Test_ClonedContainerRunningAfterDeletingTemplate(t *testing.T) {
 // can be made from each of them simultaneously.
 func Test_MultipleTemplateAndClones_WCOW(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)
-	testutilities.RequiresBuild(t, osversion.V20H2)
+	require.Build(t, osversion.V20H2)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -467,7 +467,7 @@ func Test_MultipleTemplateAndClones_WCOW(t *testing.T) {
 // and verifies that the request correctly fails with an error.
 func Test_VerifyCloneAndTemplateConfig(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)
-	testutilities.RequiresBuild(t, osversion.V20H2)
+	require.Build(t, osversion.V20H2)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

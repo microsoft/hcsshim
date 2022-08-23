@@ -1,26 +1,32 @@
+//go:build windows && functional
+
 package functional
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+
+	"github.com/Microsoft/hcsshim/test/internal/require"
+	tuvm "github.com/Microsoft/hcsshim/test/internal/uvm"
 )
 
 func TestUVMMemoryUpdateLCOW(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
+	t.Skip("not yet updated")
+
+	require.Build(t, osversion.RS5)
+	requireFeatures(t, featureLCOW)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 
-	opts := uvm.NewDefaultOptionsLCOW(t.Name(), "")
+	opts := defaultLCOWOptions(t)
 	opts.MemorySizeInMB = 1024 * 2
-	u := testutilities.CreateLCOWUVMFromOpts(ctx, t, opts)
+	u := tuvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
 	defer u.Close()
 
 	newMemorySize := uint64(opts.MemorySizeInMB/2) * memory.MiB
@@ -38,7 +44,10 @@ func TestUVMMemoryUpdateLCOW(t *testing.T) {
 }
 
 func TestUVMMemoryUpdateWCOW(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
+	t.Skip("not yet updated")
+
+	require.Build(t, osversion.RS5)
+	requireFeatures(t, featureWCOW)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
@@ -46,8 +55,7 @@ func TestUVMMemoryUpdateWCOW(t *testing.T) {
 	opts := uvm.NewDefaultOptionsWCOW(t.Name(), "")
 	opts.MemorySizeInMB = 1024 * 2
 
-	u, _, uvmScratchDir := testutilities.CreateWCOWUVMFromOptsWithImage(ctx, t, opts, "mcr.microsoft.com/windows/nanoserver:1909")
-	defer os.RemoveAll(uvmScratchDir)
+	u, _, _ := tuvm.CreateWCOWUVMFromOptsWithImage(ctx, t, opts, "mcr.microsoft.com/windows/nanoserver:1909")
 	defer u.Close()
 
 	newMemoryInBytes := uint64(opts.MemorySizeInMB/2) * memory.MiB

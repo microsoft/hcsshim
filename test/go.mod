@@ -48,6 +48,7 @@ require (
 	github.com/moby/sys/mountinfo v0.4.1 // indirect
 	github.com/opencontainers/runc v1.0.3 // indirect
 	github.com/opencontainers/selinux v1.8.2 // indirect
+	github.com/pelletier/go-toml v1.8.1 // indirect
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect

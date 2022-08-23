@@ -1,21 +1,25 @@
-//go:build functional || uvmproperties
+//go:build windows && (functional || uvmproperties)
+// +build windows
 // +build functional uvmproperties
 
 package functional
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/Microsoft/hcsshim/osversion"
-	testutilities "github.com/Microsoft/hcsshim/test/functional/utilities"
+	"github.com/Microsoft/hcsshim/test/internal/require"
+	tuvm "github.com/Microsoft/hcsshim/test/internal/uvm"
 )
 
 func TestPropertiesGuestConnection_LCOW(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
+	t.Skip("not yet updated")
 
-	uvm := testutilities.CreateLCOWUVM(context.Background(), t, t.Name())
+	require.Build(t, osversion.RS5)
+	requireFeatures(t, featureLCOW)
+
+	uvm := tuvm.CreateAndStartLCOWFromOpts(context.Background(), t, defaultLCOWOptions(t))
 	defer uvm.Close()
 
 	p, gc := uvm.Capabilities()
@@ -27,9 +31,12 @@ func TestPropertiesGuestConnection_LCOW(t *testing.T) {
 }
 
 func TestPropertiesGuestConnection_WCOW(t *testing.T) {
-	testutilities.RequiresBuild(t, osversion.RS5)
-	uvm, _, uvmScratchDir := testutilities.CreateWCOWUVM(context.Background(), t, t.Name(), "microsoft/nanoserver")
-	defer os.RemoveAll(uvmScratchDir)
+	t.Skip("not yet updated")
+
+	require.Build(t, osversion.RS5)
+	requireFeatures(t, featureWCOW)
+
+	uvm, _, _ := tuvm.CreateWCOWUVM(context.Background(), t, t.Name(), "microsoft/nanoserver")
 	defer uvm.Close()
 
 	p, gc := uvm.Capabilities()
