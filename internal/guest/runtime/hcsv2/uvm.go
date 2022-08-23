@@ -375,9 +375,8 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 	case guestresource.ResourceTypeSecurityPolicy:
 		r, ok := req.Settings.(*guestresource.LCOWSecurityPolicyEnforcer)
 		if !ok {
-			return errors.New("the request's settings are not of type EncodedSecurityPolicy")
+			return errors.New("the request's settings are not of type LCOWSecurityPolicyEnforcer")
 		}
-
 		return h.SetSecurityPolicy(r.EnforcerType, r.EncodedSecurityPolicy)
 	default:
 		return errors.Errorf("the ResourceType \"%s\" is not supported for UVM", req.ResourceType)
