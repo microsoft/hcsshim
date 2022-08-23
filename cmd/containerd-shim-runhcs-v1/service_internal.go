@@ -372,6 +372,60 @@ func (s *service) diagShareInternal(ctx context.Context, req *shimdiag.ShareRequ
 	return &shimdiag.ShareResponse{}, nil
 }
 
+func (s *service) diagTasksInternal(ctx context.Context, req *shimdiag.TasksRequest) (*shimdiag.TasksResponse, error) {
+	raw := s.taskOrPod.Load()
+	if raw == nil {
+		return nil, errors.Wrapf(errdefs.ErrNotFound, "task with id: '%s' not found", s.tid)
+	}
+
+	resp := &shimdiag.TasksResponse{}
+	if s.isSandbox {
+		p, ok := raw.(shimPod)
+		if !ok {
+			return nil, errors.New("failed to convert task to pod")
+		}
+
+		tasks, err := p.GetTasks()
+		if err != nil {
+			return nil, err
+		}
+
+		for _, task := range tasks {
+			t := &shimdiag.Task{ID: task.ID()}
+			if req.Execs {
+				execs, err := task.GetExecs()
+				if err != nil {
+					return nil, err
+				}
+				for _, exec := range execs {
+					t.Execs = append(t.Execs, &shimdiag.Exec{ID: exec.ID(), State: string(exec.State())})
+				}
+			}
+			resp.Tasks = append(resp.Tasks, t)
+		}
+		return resp, nil
+	}
+
+	t, ok := raw.(shimTask)
+	if !ok {
+		return nil, errors.New("failed to convert task to 'shimTask'")
+	}
+
+	task := &shimdiag.Task{ID: t.ID()}
+	if req.Execs {
+		execs, err := t.GetExecs()
+		if err != nil {
+			return nil, err
+		}
+		for _, exec := range execs {
+			task.Execs = append(task.Execs, &shimdiag.Exec{ID: exec.ID(), State: string(exec.State())})
+		}
+	}
+
+	resp.Tasks = []*shimdiag.Task{task}
+	return resp, nil
+}
+
 func (s *service) resizePtyInternal(ctx context.Context, req *task.ResizePtyRequest) (*google_protobuf1.Empty, error) {
 	t, err := s.getTask(req.ID)
 	if err != nil {

@@ -39,6 +39,10 @@ type shimPod interface {
 	//
 	// If `tid` is not found, this pod MUST return `errdefs.ErrNotFound`.
 	GetTask(tid string) (shimTask, error)
+	// GetTasks returns every task in the pod.
+	//
+	// If a shim cannot be loaded, this will return an error.
+	GetTasks() ([]shimTask, error)
 	// KillTask sends `signal` to task that matches `tid`.
 	//
 	// If `tid` is not found, this pod MUST return `errdefs.ErrNotFound`.
@@ -384,6 +388,25 @@ func (p *pod) GetTask(tid string) (shimTask, error) {
 		return nil, errors.Wrapf(errdefs.ErrNotFound, "task with id: '%s' not found", tid)
 	}
 	return raw.(shimTask), nil
+}
+
+func (p *pod) GetTasks() (_ []shimTask, err error) {
+	tasks := []shimTask{p.sandboxTask}
+	p.workloadTasks.Range(func(key, value interface{}) bool {
+		wt, loaded := value.(shimTask)
+		if !loaded {
+			err = fmt.Errorf("failed to load tasks %s", key)
+			return false
+		}
+		tasks = append(tasks, wt)
+		// Iterate all. Returning false stops the iteration. See:
+		// https://pkg.go.dev/sync#Map.Range
+		return true
+	})
+	if err != nil {
+		return nil, err
+	}
+	return tasks, nil
 }
 
 func (p *pod) KillTask(ctx context.Context, tid, eid string, signal uint32, all bool) error {

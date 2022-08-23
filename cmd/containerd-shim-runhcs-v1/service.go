@@ -340,6 +340,22 @@ func (s *service) DiagShare(ctx context.Context, req *shimdiag.ShareRequest) (_ 
 	return r, errdefs.ToGRPC(e)
 }
 
+func (s *service) DiagTasks(ctx context.Context, req *shimdiag.TasksRequest) (_ *shimdiag.TasksResponse, err error) {
+	ctx, span := oc.StartSpan(ctx, "DiagTasks")
+	defer span.End()
+	defer func() { oc.SetSpanStatus(span, err) }()
+
+	span.AddAttributes(
+		trace.BoolAttribute("execs", req.Execs))
+
+	if s.isSandbox {
+		span.AddAttributes(trace.StringAttribute("pod-id", s.tid))
+	}
+
+	r, e := s.diagTasksInternal(ctx, req)
+	return r, errdefs.ToGRPC(e)
+}
+
 func (s *service) ResizePty(ctx context.Context, req *task.ResizePtyRequest) (_ *google_protobuf1.Empty, err error) {
 	ctx, span := oc.StartSpan(ctx, "ResizePty")
 	defer span.End()
