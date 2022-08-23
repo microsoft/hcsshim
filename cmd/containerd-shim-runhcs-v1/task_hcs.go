@@ -519,23 +519,20 @@ func (ht *hcsTask) GetExec(eid string) (shimExec, error) {
 	return raw.(shimExec), nil
 }
 
-func (ht *hcsTask) GetExecs() (_ []shimExec, err error) {
+func (ht *hcsTask) ListExecs() (_ []shimExec, err error) {
 	var execs []shimExec
 	ht.execs.Range(func(key, value interface{}) bool {
-		wt, loaded := value.(shimExec)
-		if !loaded {
+		wt, ok := value.(shimExec)
+		if !ok {
 			err = fmt.Errorf("failed to load exec %q", key)
 			return false
 		}
 		execs = append(execs, wt)
-		// Iterate all. Returning false stops the iteration. See:
-		// https://pkg.go.dev/sync#Map.Range
 		return true
 	})
 	if err != nil {
 		return nil, err
 	}
-
 	return execs, nil
 }
 

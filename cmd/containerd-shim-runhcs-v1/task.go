@@ -41,7 +41,7 @@ type shimTask interface {
 	// GetExecs returns all execs in the task.
 	//
 	// If an exec fails to load, this will return an error.
-	GetExecs() ([]shimExec, error)
+	ListExecs() ([]shimExec, error)
 	// KillExec sends `signal` to the exec that matches `eid`. If `all==true`
 	// `eid` MUST be empty and this task will send `signal` to all exec's in the
 	// task and lastly send `signal` to the init exec.

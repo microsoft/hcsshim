@@ -372,7 +372,19 @@ func (s *service) diagShareInternal(ctx context.Context, req *shimdiag.ShareRequ
 	return &shimdiag.ShareResponse{}, nil
 }
 
-func (s *service) diagTasksInternal(ctx context.Context, req *shimdiag.TasksRequest) (*shimdiag.TasksResponse, error) {
+func (s *service) diagListExecs(task shimTask) ([]*shimdiag.Exec, error) {
+	var sdExecs []*shimdiag.Exec
+	execs, err := task.ListExecs()
+	if err != nil {
+		return nil, err
+	}
+	for _, exec := range execs {
+		sdExecs = append(sdExecs, &shimdiag.Exec{ID: exec.ID(), State: string(exec.State())})
+	}
+	return sdExecs, nil
+}
+
+func (s *service) diagTasksInternal(ctx context.Context, req *shimdiag.TasksRequest) (_ *shimdiag.TasksResponse, err error) {
 	raw := s.taskOrPod.Load()
 	if raw == nil {
 		return nil, errors.Wrapf(errdefs.ErrNotFound, "task with id: '%s' not found", s.tid)
@@ -385,7 +397,7 @@ func (s *service) diagTasksInternal(ctx context.Context, req *shimdiag.TasksRequ
 			return nil, errors.New("failed to convert task to pod")
 		}
 
-		tasks, err := p.GetTasks()
+		tasks, err := p.ListTasks()
 		if err != nil {
 			return nil, err
 		}
@@ -393,12 +405,9 @@ func (s *service) diagTasksInternal(ctx context.Context, req *shimdiag.TasksRequ
 		for _, task := range tasks {
 			t := &shimdiag.Task{ID: task.ID()}
 			if req.Execs {
-				execs, err := task.GetExecs()
+				t.Execs, err = s.diagListExecs(task)
 				if err != nil {
 					return nil, err
-				}
-				for _, exec := range execs {
-					t.Execs = append(t.Execs, &shimdiag.Exec{ID: exec.ID(), State: string(exec.State())})
 				}
 			}
 			resp.Tasks = append(resp.Tasks, t)
@@ -413,12 +422,9 @@ func (s *service) diagTasksInternal(ctx context.Context, req *shimdiag.TasksRequ
 
 	task := &shimdiag.Task{ID: t.ID()}
 	if req.Execs {
-		execs, err := t.GetExecs()
+		task.Execs, err = s.diagListExecs(t)
 		if err != nil {
 			return nil, err
-		}
-		for _, exec := range execs {
-			task.Execs = append(task.Execs, &shimdiag.Exec{ID: exec.ID(), State: string(exec.State())})
 		}
 	}
 

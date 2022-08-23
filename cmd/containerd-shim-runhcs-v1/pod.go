@@ -42,7 +42,7 @@ type shimPod interface {
 	// GetTasks returns every task in the pod.
 	//
 	// If a shim cannot be loaded, this will return an error.
-	GetTasks() ([]shimTask, error)
+	ListTasks() ([]shimTask, error)
 	// KillTask sends `signal` to task that matches `tid`.
 	//
 	// If `tid` is not found, this pod MUST return `errdefs.ErrNotFound`.
@@ -390,7 +390,7 @@ func (p *pod) GetTask(tid string) (shimTask, error) {
 	return raw.(shimTask), nil
 }
 
-func (p *pod) GetTasks() (_ []shimTask, err error) {
+func (p *pod) ListTasks() (_ []shimTask, err error) {
 	tasks := []shimTask{p.sandboxTask}
 	p.workloadTasks.Range(func(key, value interface{}) bool {
 		wt, loaded := value.(shimTask)

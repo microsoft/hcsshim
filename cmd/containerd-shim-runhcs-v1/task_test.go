@@ -46,7 +46,7 @@ func (tst *testShimTask) GetExec(eid string) (shimExec, error) {
 	return nil, errdefs.ErrNotFound
 }
 
-func (tst *testShimTask) GetExecs() ([]shimExec, error) {
+func (tst *testShimTask) ListExecs() ([]shimExec, error) {
 	var execs []shimExec
 	for _, v := range tst.execs {
 		execs = append(execs, v)

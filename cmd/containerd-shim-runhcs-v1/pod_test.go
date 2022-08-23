@@ -39,17 +39,15 @@ func (tsp *testShimPod) GetTask(tid string) (shimTask, error) {
 	return nil, errdefs.ErrNotFound
 }
 
-func (tsp *testShimPod) GetTasks() (_ []shimTask, err error) {
-	tasks := []shimTask{}
+func (tsp *testShimPod) ListTasks() (_ []shimTask, err error) {
+	var tasks []shimTask
 	tsp.tasks.Range(func(key, value interface{}) bool {
-		wt, loaded := value.(shimTask)
-		if !loaded {
+		wt, ok := value.(shimTask)
+		if !ok {
 			err = fmt.Errorf("failed to load tasks %s", key)
 			return false
 		}
 		tasks = append(tasks, wt)
-		// Iterate all. Returning false stops the iteration. See:
-		// https://pkg.go.dev/sync#Map.Range
 		return true
 	})
 	if err != nil {

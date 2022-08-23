@@ -111,7 +111,7 @@ func (wpst *wcowPodSandboxTask) GetExec(eid string) (shimExec, error) {
 	return nil, errors.Wrapf(errdefs.ErrNotFound, "exec: '%s' in task: '%s' not found", eid, wpst.id)
 }
 
-func (wpst *wcowPodSandboxTask) GetExecs() ([]shimExec, error) {
+func (wpst *wcowPodSandboxTask) ListExecs() ([]shimExec, error) {
 	return []shimExec{wpst.init}, nil
 }
 
