@@ -788,7 +788,8 @@ func (ht *hcsTask) close(ctx context.Context) {
 						log.G(ctx).WithError(err).Error("failed to wait for container shutdown")
 					}
 				case <-t.C:
-					log.G(ctx).WithError(hcs.ErrTimeout).Error("failed to wait for container shutdown")
+					err = hcs.ErrTimeout
+					log.G(ctx).WithError(err).Error("failed to wait for container shutdown")
 				}
 			}
 
