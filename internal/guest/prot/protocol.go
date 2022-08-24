@@ -15,7 +15,6 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
-	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
 //////////// Code for the Message Header ////////////
@@ -579,11 +578,11 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 		}
 		msr.Settings = cc
 	case guestresource.ResourceTypeSecurityPolicy:
-		policy := &securitypolicy.EncodedSecurityPolicy{}
-		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, policy); err != nil {
-			return &request, errors.Wrap(err, "failed to unmarshal settings as EncodedSecurityPolicy")
+		enforcer := &guestresource.LCOWSecurityPolicyEnforcer{}
+		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, enforcer); err != nil {
+			return &request, errors.Wrap(err, "failed to unmarshal settings as LCOWSecurityPolicyEnforcer")
 		}
-		msr.Settings = policy
+		msr.Settings = enforcer
 	default:
 		return &request, errors.Errorf("invalid ResourceType '%s'", msr.ResourceType)
 	}
