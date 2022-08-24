@@ -29,6 +29,7 @@ var (
 	openMapperWrapper   = openMapper
 )
 
+//nolint:deadcode,varcheck,stylecheck // ST1003: ALL_CAPS
 const (
 	_DM_IOCTL      = 0xfd
 	_DM_IOCTL_SIZE = 312
@@ -37,10 +38,11 @@ const (
 	_DM_READONLY_FLAG       = 1 << 0
 	_DM_SUSPEND_FLAG        = 1 << 1
 	_DM_PERSISTENT_DEV_FLAG = 1 << 3
-
-	blockSize = 512
 )
 
+const blockSize = 512
+
+//nolint:deadcode,varcheck,stylecheck // ST1003: ALL_CAPS
 const (
 	_DM_VERSION = iota
 	_DM_REMOVE_ALL
@@ -97,7 +99,7 @@ type targetSpec struct {
 }
 
 // initIoctl initializes a device-mapper ioctl input struct with the given size
-// and device name
+// and device name.
 func initIoctl(d *dmIoctl, size int, name string) {
 	*d = dmIoctl{
 		Version:  [3]uint32{4, 0, 0},
@@ -119,7 +121,7 @@ func (err *dmError) Error() string {
 	return "device-mapper " + op + ": " + err.Err.Error()
 }
 
-// devMapperIoctl issues the specified device-mapper ioctl
+// devMapperIoctl issues the specified device-mapper ioctl.
 func devMapperIoctl(f *os.File, code int, data *dmIoctl) error {
 	if err := linux.Ioctl(f, code|_DM_IOCTL_BASE, unsafe.Pointer(data)); err != nil {
 		return &dmError{Op: code, Err: err}
@@ -128,7 +130,7 @@ func devMapperIoctl(f *os.File, code int, data *dmIoctl) error {
 }
 
 // openMapper opens the device-mapper control device and validates that it
-// supports the required version
+// supports the required version.
 func openMapper() (f *os.File, err error) {
 	f, err = os.OpenFile("/dev/mapper/control", os.O_RDWR, 0)
 	if err != nil {
@@ -181,7 +183,7 @@ func LinearTarget(sectorStart, lengthBlocks int64, path string, deviceStart int6
 }
 
 // zeroSectorLinearTarget creates a Target for devices with 0 sector start and length/device start
-// expected to be in bytes rather than blocks
+// expected to be in bytes rather than blocks.
 func zeroSectorLinearTarget(lengthBytes int64, path string, deviceStartBytes int64) Target {
 	lengthInBlocks := lengthBytes / blockSize
 	startInBlocks := deviceStartBytes / blockSize
@@ -209,7 +211,7 @@ func makeTableIoctl(name string, targets []Target) *dmIoctl {
 		spec.Next = uint32(sn)
 		copy(spec.Type[:], t.Type)
 		copy(b[off+int(unsafe.Sizeof(*spec)):], t.Params)
-		off += int(sn)
+		off += sn
 	}
 	return d
 }
@@ -232,7 +234,7 @@ func CreateDevice(name string, flags CreateFlags, targets []Target) (_ string, e
 	}
 	defer func() {
 		if err != nil {
-			removeDeviceWrapper(f, name)
+			_ = removeDeviceWrapper(f, name)
 		}
 	}()
 
@@ -278,7 +280,7 @@ func RemoveDevice(name string) (err error) {
 	// target has been unmounted.
 	for i := 0; i < 10; i++ {
 		if err = rm(); err != nil {
-			if e, ok := err.(*dmError); !ok || e.Err != syscall.EBUSY {
+			if e, ok := err.(*dmError); !ok || e.Err != syscall.EBUSY { //nolint:errorlint
 				break
 			}
 			time.Sleep(10 * time.Millisecond)
@@ -286,7 +288,7 @@ func RemoveDevice(name string) (err error) {
 		}
 		break
 	}
-	return
+	return err
 }
 
 func removeDevice(f *os.File, name string) error {

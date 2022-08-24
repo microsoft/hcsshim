@@ -18,7 +18,7 @@ import (
 
 const packetPayloadBytes = 65536
 
-// Test dependencies
+// Test dependencies.
 var (
 	osMkdirAll  = os.MkdirAll
 	osRemoveAll = os.RemoveAll
@@ -45,7 +45,7 @@ func Mount(ctx context.Context, vsock transport.Transport, target, share string,
 	}
 	defer func() {
 		if err != nil {
-			osRemoveAll(target)
+			_ = osRemoveAll(target)
 		}
 	}()
 	conn, err := vsock.Dial(port)

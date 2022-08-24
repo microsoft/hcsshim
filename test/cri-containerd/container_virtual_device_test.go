@@ -105,6 +105,8 @@ func findTestNvidiaGPULocationPath() (string, error) {
 }
 
 // findTestVirtualDeviceID returns the instance ID of the first generic pcip device on the host
+//
+//nolint:deadcode,unused // may be used in future tests
 func findTestVirtualDeviceID() (string, error) {
 	out, err := exec.Command(
 		"powershell",

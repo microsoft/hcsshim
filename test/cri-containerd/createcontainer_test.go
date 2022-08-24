@@ -1235,29 +1235,29 @@ func Test_Mount_ReadOnlyDirReuse_WCOW(t *testing.T) {
 
 	request.Config.Metadata.Name = request.Config.Metadata.Name + "-ro"
 	request.Config.Mounts[0].Readonly = true
-	c_ro := createContainer(t, client, ctx, request)
-	defer removeContainer(t, client, ctx, c_ro)
-	startContainer(t, client, ctx, c_ro)
-	defer stopContainer(t, client, ctx, c_ro)
+	cRO := createContainer(t, client, ctx, request)
+	defer removeContainer(t, client, ctx, cRO)
+	startContainer(t, client, ctx, cRO)
+	defer stopContainer(t, client, ctx, cRO)
 
 	request.Config.Metadata.Name = request.Config.Metadata.Name + "-rw"
 	request.Config.Mounts[0].Readonly = false
-	c_rw := createContainer(t, client, ctx, request)
-	defer removeContainer(t, client, ctx, c_rw)
-	startContainer(t, client, ctx, c_rw)
-	defer stopContainer(t, client, ctx, c_rw)
+	cRW := createContainer(t, client, ctx, request)
+	defer removeContainer(t, client, ctx, cRW)
+	startContainer(t, client, ctx, cRW)
+	defer stopContainer(t, client, ctx, cRW)
 
 	filePath := containerPath + `\tmp.txt`
 	execCommand := []string{"cmd", "/c", "echo foo", ">", filePath}
 
-	_, errorMsg, exitCode := execContainer(t, client, ctx, c_rw, execCommand)
+	_, errorMsg, exitCode := execContainer(t, client, ctx, cRW, execCommand)
 
 	// Writing a file to the rw container mount should succeed.
 	if exitCode != 0 || len(errorMsg) > 0 {
 		t.Fatalf("Failed to write file to rw container mount: %s, exitcode: %v\n", errorMsg, exitCode)
 	}
 
-	_, errorMsg, exitCode = execContainer(t, client, ctx, c_ro, execCommand)
+	_, errorMsg, exitCode = execContainer(t, client, ctx, cRO, execCommand)
 
 	// Writing a file to the ro container mount should fail.
 	if exitCode == 0 && len(errorMsg) == 0 {

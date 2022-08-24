@@ -13,8 +13,7 @@ import (
 type HcnNetworkMakerFunc func() (*HostComputeNetwork, error)
 
 func TestCreateDeleteNetworks(t *testing.T) {
-	var netMaker HcnNetworkMakerFunc
-	netMaker = HcnCreateTestNATNetwork
+	var netMaker HcnNetworkMakerFunc = HcnCreateTestNATNetwork
 	err := CreateDeleteNetworksHelper(t, netMaker)
 	if err != nil {
 		t.Fatal(err)
@@ -102,7 +101,7 @@ func testNetworkPolicy(t *testing.T, policiesToTest *PolicyNetworkRequest) {
 		t.Fatal(err)
 	}
 
-	network.AddPolicy(*policiesToTest)
+	_ = network.AddPolicy(*policiesToTest)
 
 	//Reload the network object from HNS.
 	network, err = GetNetworkByID(network.Id)
@@ -123,7 +122,7 @@ func testNetworkPolicy(t *testing.T, policiesToTest *PolicyNetworkRequest) {
 		}
 	}
 
-	network.RemovePolicy(*policiesToTest)
+	_ = network.RemovePolicy(*policiesToTest)
 
 	//Reload the network object from HNS.
 	network, err = GetNetworkByID(network.Id)

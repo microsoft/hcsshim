@@ -62,6 +62,7 @@ type regoEnforcer struct {
 
 var _ SecurityPolicyEnforcer = (*regoEnforcer)(nil)
 
+//nolint:unused
 func (sp SecurityPolicy) toInternal() (*securityPolicyInternal, error) {
 	policy := new(securityPolicyInternal)
 	var err error
@@ -72,7 +73,10 @@ func (sp SecurityPolicy) toInternal() (*securityPolicyInternal, error) {
 	return policy, nil
 }
 
-func createRegoEnforcer(base64EncodedPolicy string, defaultMounts []oci.Mount, privilegedMounts []oci.Mount) (SecurityPolicyEnforcer, error) {
+func createRegoEnforcer(base64EncodedPolicy string,
+	defaultMounts []oci.Mount,
+	privilegedMounts []oci.Mount,
+) (SecurityPolicyEnforcer, error) {
 	// base64 decode the incoming policy string
 	// It will either be (legacy) JSON or Rego.
 	rawPolicy, err := base64.StdEncoding.DecodeString(base64EncodedPolicy)
@@ -197,22 +201,22 @@ func (policy *regoEnforcer) EnforceDeviceMountPolicy(target string, deviceHash s
 	}
 
 	if !result.Allowed() {
-		input_json, err := json.Marshal(input)
+		inputJSON, err := json.Marshal(input)
 		if err != nil {
 			return fmt.Errorf("unable to marshal the Rego input data: %w", err)
 		}
 
-		return fmt.Errorf("device mount not allowed by policy.\ninput: %s", string(input_json))
+		return fmt.Errorf("device mount not allowed by policy.\ninput: %s", string(inputJSON))
 	}
 
 	deviceMap := policy.data["devices"].(map[string]string)
 	if _, ok := deviceMap[target]; ok {
-		input_json, err := json.Marshal(input)
+		inputJSON, err := json.Marshal(input)
 		if err != nil {
 			return fmt.Errorf("unable to marshal the Rego input data: %w", err)
 		}
 
-		return fmt.Errorf("device %s already mounted.\ninput: %s", target, string(input_json))
+		return fmt.Errorf("device %s already mounted.\ninput: %s", target, string(inputJSON))
 	}
 
 	deviceMap[target] = deviceHash
@@ -234,24 +238,24 @@ func (policy *regoEnforcer) EnforceOverlayMountPolicy(containerID string, layerP
 	}
 
 	if !result.Allowed() {
-		input_json, err := json.Marshal(input)
+		inputJSON, err := json.Marshal(input)
 		if err != nil {
 			return fmt.Errorf("unable to marshal the Rego input data: %w", err)
 		}
 
-		return fmt.Errorf("overlay mount not allowed by policy.\ninput: %s", string(input_json))
+		return fmt.Errorf("overlay mount not allowed by policy.\ninput: %s", string(inputJSON))
 	}
 
 	// we store the mapping of container ID -> layerPaths for later
 	// use in EnforceCreateContainerPolicy here.
 	containerMap := policy.data["containers"].(map[string]interface{})
 	if _, ok := containerMap[containerID]; ok {
-		input_json, err := json.Marshal(input)
+		inputJSON, err := json.Marshal(input)
 		if err != nil {
 			return fmt.Errorf("unable to marshal the Rego input data: %w", err)
 		}
 
-		return fmt.Errorf("container %s already mounted.\ninput: %s", containerID, string(input_json))
+		return fmt.Errorf("container %s already mounted.\ninput: %s", containerID, string(inputJSON))
 	}
 
 	containerMap[containerID] = map[string]interface{}{
@@ -320,7 +324,7 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 		containerInfo["workingDir"] = workingDir
 		return nil
 	} else {
-		input_json, err := json.Marshal(input)
+		inputJSON, err := json.Marshal(input)
 		if err != nil {
 			return fmt.Errorf("unable to marshal the Rego input data: %w", err)
 		}
@@ -336,7 +340,7 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 		for _, reason := range result[0].Expressions[0].Value.([]interface{}) {
 			reasons = append(reasons, reason.(string))
 		}
-		return fmt.Errorf("container creation not allowed by policy. Reasons: [%s].\nInput: %s", strings.Join(reasons, ","), string(input_json))
+		return fmt.Errorf("container creation not allowed by policy. Reasons: [%s].\nInput: %s", strings.Join(reasons, ","), string(inputJSON))
 	}
 }
 

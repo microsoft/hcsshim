@@ -133,9 +133,9 @@ func newProcess(c *Container, spec *oci.Process, process runtime.Process, pid ui
 // Kill sends 'signal' to the process.
 //
 // If the process has already exited returns `gcserr.HrErrNotFound` by contract.
-func (p *containerProcess) Kill(ctx context.Context, signal syscall.Signal) error {
+func (p *containerProcess) Kill(_ context.Context, signal syscall.Signal) error {
 	if err := syscall.Kill(int(p.pid), signal); err != nil {
-		if err == syscall.ESRCH {
+		if errors.Is(err, syscall.ESRCH) {
 			return gcserr.NewHresultError(gcserr.HrErrNotFound)
 		}
 		return err
@@ -153,7 +153,7 @@ func (p *containerProcess) Pid() int {
 }
 
 // ResizeConsole resizes the tty to `height`x`width` for the process.
-func (p *containerProcess) ResizeConsole(ctx context.Context, height, width uint16) error {
+func (p *containerProcess) ResizeConsole(_ context.Context, height, width uint16) error {
 	tty := p.process.Tty()
 	if tty == nil {
 		return fmt.Errorf("pid: %d, is not a tty and cannot be resized", p.pid)
@@ -192,25 +192,23 @@ func (p *containerProcess) Wait() (<-chan int, chan<- bool) {
 
 			// The caller got the exit code. Wait for them to tell us they have
 			// issued the write
-			select {
-			case <-doneChan:
-				p.writersSyncRoot.Lock()
-				// Decrement this waiter
-				log.G(ctx).Debug("wait completed, releasing wait count")
+			<-doneChan
+			p.writersSyncRoot.Lock()
+			// Decrement this waiter
+			log.G(ctx).Debug("wait completed, releasing wait count")
 
+			p.writersWg.Done()
+			if !p.writersCalled {
+				// We have at least 1 response for the exit code for this
+				// process. Decrement the release waiter that will free the
+				// process resources when the writersWg hits 0
+				log.G(ctx).Debug("first wait completed, releasing first wait count")
+
+				p.writersCalled = true
 				p.writersWg.Done()
-				if !p.writersCalled {
-					// We have at least 1 response for the exit code for this
-					// process. Decrement the release waiter that will free the
-					// process resources when the writersWg hits 0
-					log.G(ctx).Debug("first wait completed, releasing first wait count")
-
-					p.writersCalled = true
-					p.writersWg.Done()
-				}
-				p.writersSyncRoot.Unlock()
-				span.End()
 			}
+			p.writersSyncRoot.Unlock()
+			span.End()
 
 		case <-doneChan:
 			// In this case the caller timed out before the process exited. Just
@@ -241,7 +239,7 @@ func newExternalProcess(ctx context.Context, cmd *exec.Cmd, tty *stdio.TtyRelay,
 		tty.Start()
 	}
 	go func() {
-		cmd.Wait()
+		_ = cmd.Wait()
 		ep.exitCode = cmd.ProcessState.ExitCode()
 		log.G(ctx).WithFields(logrus.Fields{
 			"pid":      cmd.Process.Pid,
@@ -268,9 +266,9 @@ type externalProcess struct {
 
 var _ Process = &externalProcess{}
 
-func (ep *externalProcess) Kill(ctx context.Context, signal syscall.Signal) error {
-	if err := syscall.Kill(int(ep.cmd.Process.Pid), signal); err != nil {
-		if err == syscall.ESRCH {
+func (ep *externalProcess) Kill(_ context.Context, signal syscall.Signal) error {
+	if err := syscall.Kill(ep.cmd.Process.Pid, signal); err != nil {
+		if errors.Is(err, syscall.ESRCH) {
 			return gcserr.NewHresultError(gcserr.HrErrNotFound)
 		}
 		return err
@@ -282,7 +280,7 @@ func (ep *externalProcess) Pid() int {
 	return ep.cmd.Process.Pid
 }
 
-func (ep *externalProcess) ResizeConsole(ctx context.Context, height, width uint16) error {
+func (ep *externalProcess) ResizeConsole(_ context.Context, height, width uint16) error {
 	if ep.tty == nil {
 		return fmt.Errorf("pid: %d, is not a tty and cannot be resized", ep.cmd.Process.Pid)
 	}

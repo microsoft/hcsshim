@@ -313,7 +313,7 @@ func Test_RunContainer_VHD_JobContainer_WCOW(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer syscall.CloseHandle(vhdHandle)
+	defer syscall.CloseHandle(vhdHandle) //nolint:errcheck
 
 	if err := vhd.AttachVirtualDisk(syscall.Handle(vhdHandle), vhd.AttachVirtualDiskFlagNone, &vhd.AttachVirtualDiskParameters{Version: 1}); err != nil {
 		t.Fatalf("failed to attach vhd at %q: %s", vhdPath, err)
@@ -605,7 +605,7 @@ func Test_RunContainer_WorkingDirectory_JobContainer_WCOW(t *testing.T) {
 
 	type config struct {
 		name             string
-		containerName    string
+		containerName    string //nolint:unused // may be used in future tests
 		workDir          string
 		requiredFeatures []string
 		sandboxImage     string

@@ -24,7 +24,7 @@ type ConnectionSet struct {
 func (s *ConnectionSet) Close() error {
 	var err error
 	if s.In != nil {
-		if cerr := s.In.Close(); cerr != nil && err == nil {
+		if cerr := s.In.Close(); cerr != nil {
 			err = errors.Wrap(cerr, "failed Close on stdin")
 		}
 		s.In = nil
@@ -54,7 +54,7 @@ type FileSet struct {
 func (fs *FileSet) Close() error {
 	var err error
 	if fs.In != nil {
-		if cerr := fs.In.Close(); cerr != nil && err == nil {
+		if cerr := fs.In.Close(); cerr != nil {
 			err = errors.Wrap(cerr, "failed Close on stdin")
 		}
 		fs.In = nil
@@ -183,7 +183,7 @@ func copyAndCleanClose(c transport.Connection, r io.Reader, name string) {
 		if err == nil {
 			err = errors.New("unexpected data in socket")
 		}
-		if err != io.EOF {
+		if err != io.EOF { //nolint:errorlint
 			logrus.WithFields(logrus.Fields{
 				logrus.ErrorKey: err,
 				"file":          name,
@@ -248,7 +248,7 @@ func (pr *PipeRelay) Wait() {
 	// exit back to the client, and the client expects the process notification before
 	// it will close its side of stdin (which io.Copy is waiting on in the copying goroutine).
 	if pr.s != nil && pr.s.In != nil {
-		pr.s.In.CloseRead()
+		_ = pr.s.In.CloseRead()
 	}
 
 	pr.wg.Wait()
@@ -259,7 +259,7 @@ func (pr *PipeRelay) Wait() {
 }
 
 // CloseUnusedPipes gives the caller the ability to close any pipes that do not
-// have a cooresponding entry on the ConnectionSet. This is to be used in
+// have a corresponding entry on the ConnectionSet. This is to be used in
 // conjunction with NewPipeRelay where s is nil which wil open all pipes and
 // later calling ReplaceConnectionSet with the actual connections.
 func (pr *PipeRelay) CloseUnusedPipes() {
@@ -316,7 +316,7 @@ func (r *TtyRelay) ReplaceConnectionSet(s *ConnectionSet) {
 	r.s = s
 }
 
-// ResizeConsole sends the appropriate resize to a pTTY FD
+// ResizeConsole sends the appropriate resize to a pTTY FD.
 func (r *TtyRelay) ResizeConsole(height, width uint16) error {
 	r.m.Lock()
 	defer r.m.Unlock()
@@ -362,7 +362,7 @@ func (r *TtyRelay) Wait() {
 	// exit back to the client, and the client expects the process notification before
 	// it will close its side of stdin (which io.Copy is waiting on in the copying goroutine).
 	if r.s != nil && r.s.In != nil {
-		r.s.In.CloseRead()
+		_ = r.s.In.CloseRead()
 	}
 
 	// Wait for all users of stdioSet and master to finish before closing them.

@@ -91,7 +91,7 @@ func Test_Unmount_Valid_Flags(t *testing.T) {
 		return nil, nil
 	}
 	unixUnmount = func(target string, flags int) error {
-		if 0 != flags {
+		if flags != 0 {
 			t.Errorf("expected flags 0, got: %d", flags)
 			return errors.New("unexpected flags")
 		}

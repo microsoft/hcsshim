@@ -398,7 +398,7 @@ func TestSyncNamespaceGuest(t *testing.T) {
 	pnc := cni.NewPersistedNamespaceConfig(t.Name(), "test-container", newGUID(t))
 	err = pnc.Store()
 	if err != nil {
-		pnc.Remove()
+		_ = pnc.Remove()
 		t.Fatal(err)
 	}
 
@@ -438,7 +438,7 @@ func TestSyncNamespaceGuestDefault(t *testing.T) {
 	pnc := cni.NewPersistedNamespaceConfig(t.Name(), "test-container", newGUID(t))
 	err = pnc.Store()
 	if err != nil {
-		pnc.Remove()
+		_ = pnc.Remove()
 		t.Fatal(err)
 	}
 

@@ -1116,17 +1116,17 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_LCOW(t *testing.T) {
 	// create 2 containers with vhd mounts and verify both can mount vhd
 	for i := 1; i < 3; i++ {
 		containerName := t.Name() + "-Container-" + strconv.Itoa(i)
-		containerId := createContainerInSandbox(t, client, ctx, podID, containerName, imageLcowAlpine, command, annots, mounts, sbRequest.Config)
-		defer removeContainer(t, client, ctx, containerId)
+		containerID := createContainerInSandbox(t, client, ctx, podID, containerName, imageLcowAlpine, command, annots, mounts, sbRequest.Config)
+		defer removeContainer(t, client, ctx, containerID)
 
-		startContainer(t, client, ctx, containerId)
-		defer stopContainer(t, client, ctx, containerId)
+		startContainer(t, client, ctx, containerID)
+		defer stopContainer(t, client, ctx, containerID)
 
-		_, errorMsg, exitCode := execContainer(t, client, ctx, containerId, execCommand)
+		_, errorMsg, exitCode := execContainer(t, client, ctx, containerID, execCommand)
 
 		// For container 1 and 2 we should find the mounts
 		if exitCode != 0 {
-			t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerId)
+			t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerID)
 		}
 	}
 
@@ -1135,17 +1135,17 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_LCOW(t *testing.T) {
 	// at the same time containers in a pod that don't have any mounts
 	mounts = []*runtime.Mount{}
 	containerName := t.Name() + "-Container-3"
-	containerId := createContainerInSandbox(t, client, ctx, podID, containerName, imageLcowAlpine, command, annots, mounts, sbRequest.Config)
-	defer removeContainer(t, client, ctx, containerId)
+	containerID := createContainerInSandbox(t, client, ctx, podID, containerName, imageLcowAlpine, command, annots, mounts, sbRequest.Config)
+	defer removeContainer(t, client, ctx, containerID)
 
-	startContainer(t, client, ctx, containerId)
-	defer stopContainer(t, client, ctx, containerId)
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID)
 
-	output, errorMsg, exitCode := execContainer(t, client, ctx, containerId, execCommand)
+	output, errorMsg, exitCode := execContainer(t, client, ctx, containerID, execCommand)
 
 	// 3rd container should not have the mount and ls should fail
 	if exitCode == 0 {
-		t.Fatalf("Exec into container succeeded but we expected it to fail: %v and exit code: %s, %s", errorMsg, output, containerId)
+		t.Fatalf("Exec into container succeeded but we expected it to fail: %v and exit code: %s, %s", errorMsg, output, containerID)
 	}
 }
 
@@ -1205,26 +1205,26 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_RShared_LCOW(t *testing.T) {
 
 	containerName := t.Name() + "-Container-0"
 	cRequest.Config.Metadata.Name = containerName
-	containerId0 := createContainer(t, client, ctx, cRequest)
-	defer removeContainer(t, client, ctx, containerId0)
-	startContainer(t, client, ctx, containerId0)
-	defer stopContainer(t, client, ctx, containerId0)
+	containerID0 := createContainer(t, client, ctx, cRequest)
+	defer removeContainer(t, client, ctx, containerID0)
+	startContainer(t, client, ctx, containerID0)
+	defer stopContainer(t, client, ctx, containerID0)
 
 	containerName1 := t.Name() + "-Container-1"
 	cRequest.Config.Metadata.Name = containerName1
-	containerId1 := createContainer(t, client, ctx, cRequest)
-	defer removeContainer(t, client, ctx, containerId1)
-	startContainer(t, client, ctx, containerId1)
-	defer stopContainer(t, client, ctx, containerId1)
+	containerID1 := createContainer(t, client, ctx, cRequest)
+	defer removeContainer(t, client, ctx, containerID1)
+	startContainer(t, client, ctx, containerID1)
+	defer stopContainer(t, client, ctx, containerID1)
 
 	// create a test directory that will be the new mountpoint's source
 	createTestDirCmd := []string{
 		"mkdir",
 		"/tmp/testdir",
 	}
-	_, errorMsg, exitCode := execContainer(t, client, ctx, containerId0, createTestDirCmd)
+	_, errorMsg, exitCode := execContainer(t, client, ctx, containerID0, createTestDirCmd)
 	if exitCode != 0 {
-		t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerId0)
+		t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerID0)
 	}
 
 	// create a file in the test directory
@@ -1232,9 +1232,9 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_RShared_LCOW(t *testing.T) {
 		"touch",
 		"/tmp/testdir/test.txt",
 	}
-	_, errorMsg, exitCode = execContainer(t, client, ctx, containerId0, createTestDirContentCmd)
+	_, errorMsg, exitCode = execContainer(t, client, ctx, containerID0, createTestDirContentCmd)
 	if exitCode != 0 {
-		t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerId0)
+		t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerID0)
 	}
 
 	// create a test directory in the vhd that will be the new mountpoint's destination
@@ -1242,9 +1242,9 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_RShared_LCOW(t *testing.T) {
 		"mkdir",
 		fmt.Sprintf("%s/testdir", vhdContainerPath),
 	}
-	_, errorMsg, exitCode = execContainer(t, client, ctx, containerId0, createTestDirVhdCmd)
+	_, errorMsg, exitCode = execContainer(t, client, ctx, containerID0, createTestDirVhdCmd)
 	if exitCode != 0 {
-		t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerId0)
+		t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerID0)
 	}
 
 	// perform rshared mount of test directory into the vhd
@@ -1255,9 +1255,9 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_RShared_LCOW(t *testing.T) {
 		"/tmp/testdir",
 		fmt.Sprintf("%s/testdir", vhdContainerPath),
 	}
-	_, errorMsg, exitCode = execContainer(t, client, ctx, containerId0, mountTestDirToVhdCmd)
+	_, errorMsg, exitCode = execContainer(t, client, ctx, containerID0, mountTestDirToVhdCmd)
 	if exitCode != 0 {
-		t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerId0)
+		t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerID0)
 	}
 
 	// try to list the test file in the second container to verify it was propagated correctly
@@ -1265,9 +1265,9 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_RShared_LCOW(t *testing.T) {
 		"ls",
 		fmt.Sprintf("%s/testdir/test.txt", vhdContainerPath),
 	}
-	_, errorMsg, exitCode = execContainer(t, client, ctx, containerId1, verifyTestMountCommand)
+	_, errorMsg, exitCode = execContainer(t, client, ctx, containerID1, verifyTestMountCommand)
 	if exitCode != 0 {
-		t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerId1)
+		t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerID1)
 	}
 }
 
@@ -1327,18 +1327,20 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_WCOW(t *testing.T) {
 	// create 2 containers with vhd mounts and verify both can mount vhd
 	for i := 1; i < 3; i++ {
 		containerName := t.Name() + "-Container-" + strconv.Itoa(i)
-		containerId := createContainerInSandbox(t, client, ctx, podID, containerName, imageWindowsNanoserver, command, annots, mounts, sbRequest.Config)
-		defer removeContainer(t, client, ctx, containerId)
+		containerID := createContainerInSandbox(t, client,
+			ctx, podID, containerName, imageWindowsNanoserver,
+			command, annots, mounts, sbRequest.Config)
+		defer removeContainer(t, client, ctx, containerID)
 
-		startContainer(t, client, ctx, containerId)
-		defer stopContainer(t, client, ctx, containerId)
+		startContainer(t, client, ctx, containerID)
+		defer stopContainer(t, client, ctx, containerID)
 
-		_, errorMsg, exitCode := execContainer(t, client, ctx, containerId, execCommand)
+		_, errorMsg, exitCode := execContainer(t, client, ctx, containerID, execCommand)
 
 		// The dir command will return File Not Found error if the directory is empty.
 		// Don't fail the test if that happens. It is expected behaviour in this case.
 		if exitCode != 0 && !strings.Contains(errorMsg, "File Not Found") {
-			t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerId)
+			t.Fatalf("Exec into container failed with: %v and exit code: %d, %s", errorMsg, exitCode, containerID)
 		}
 	}
 
@@ -1347,17 +1349,19 @@ func Test_RunPodSandbox_MultipleContainersSameVhd_WCOW(t *testing.T) {
 	// at the same time containers in a pod that don't have any mounts
 	mounts = []*runtime.Mount{}
 	containerName := t.Name() + "-Container-3"
-	containerId := createContainerInSandbox(t, client, ctx, podID, containerName, imageWindowsNanoserver, command, annots, mounts, sbRequest.Config)
-	defer removeContainer(t, client, ctx, containerId)
+	containerID := createContainerInSandbox(t, client,
+		ctx, podID, containerName, imageWindowsNanoserver,
+		command, annots, mounts, sbRequest.Config)
+	defer removeContainer(t, client, ctx, containerID)
 
-	startContainer(t, client, ctx, containerId)
-	defer stopContainer(t, client, ctx, containerId)
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID)
 
-	output, errorMsg, exitCode := execContainer(t, client, ctx, containerId, execCommand)
+	output, errorMsg, exitCode := execContainer(t, client, ctx, containerID, execCommand)
 
 	// 3rd container should not have the mount and ls should fail
 	if exitCode != 0 && !strings.Contains(errorMsg, "File Not Found") {
-		t.Fatalf("Exec into container failed: %v and exit code: %s, %s", errorMsg, output, containerId)
+		t.Fatalf("Exec into container failed: %v and exit code: %s, %s", errorMsg, output, containerID)
 	}
 }
 
@@ -1437,13 +1441,6 @@ func Test_RunPodSandbox_ProcessDump_LCOW(t *testing.T) {
 		},
 		PodSandboxId:  podID,
 		SandboxConfig: sbRequest.Config,
-	}
-
-	mounts = []*runtime.Mount{
-		{
-			HostPath:      "sandbox:///coredump",
-			ContainerPath: "/coredumps",
-		},
 	}
 
 	container2ID := createContainer(t, client, ctx, c2Request)
@@ -1566,13 +1563,6 @@ func Test_RunPodSandbox_ProcessDump_WCOW_Hypervisor(t *testing.T) {
 		},
 		PodSandboxId:  podID,
 		SandboxConfig: sbRequest.Config,
-	}
-
-	mounts = []*runtime.Mount{
-		{
-			HostPath:      "sandbox:///processdump",
-			ContainerPath: "C:\\processdump",
-		},
 	}
 
 	container2ID := createContainer(t, client, ctx, c2Request)
@@ -1770,10 +1760,17 @@ func createSandboxContainerAndExecForCustomScratch(t *testing.T, annots map[stri
 	return createSandboxContainerAndExec(t, annots, nil, cmd)
 }
 
-func createContainerInSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, podId, containerName, imageName string, command []string,
-	annots map[string]string, mounts []*runtime.Mount, podConfig *runtime.PodSandboxConfig) string {
-
-	cRequest := getCreateContainerRequest(podId, containerName, imageName, command, podConfig)
+func createContainerInSandbox(
+	t *testing.T,
+	client runtime.RuntimeServiceClient,
+	ctx context.Context,
+	podID, containerName, imageName string,
+	command []string,
+	annots map[string]string,
+	mounts []*runtime.Mount,
+	podConfig *runtime.PodSandboxConfig,
+) string {
+	cRequest := getCreateContainerRequest(podID, containerName, imageName, command, podConfig)
 	cRequest.Config.Annotations = annots
 	cRequest.Config.Mounts = mounts
 
@@ -1782,9 +1779,15 @@ func createContainerInSandbox(t *testing.T, client runtime.RuntimeServiceClient,
 	return containerID
 }
 
-func execContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerId string, command []string) (string, string, int) {
+func execContainer(
+	t *testing.T,
+	client runtime.RuntimeServiceClient,
+	ctx context.Context,
+	containerID string,
+	command []string,
+) (string, string, int) {
 	execRequest := &runtime.ExecSyncRequest{
-		ContainerId: containerId,
+		ContainerId: containerID,
 		Cmd:         command,
 		Timeout:     20,
 	}

@@ -708,7 +708,7 @@ func Test_WorkingDirectoryPolicy_NoMatches(t *testing.T) {
 	}
 }
 
-// Consequent layers
+// Consequent layers.
 func Test_Overlay_Duplicate_Layers(t *testing.T) {
 	f := func(p *generatedContainers) bool {
 		c1 := generateContainersContainer(testRand, 5, 5)
@@ -818,26 +818,26 @@ func (*SecurityPolicy) Generate(r *rand.Rand, _ int) reflect.Value {
 
 		// command
 		numArgs := int(atLeastOneAtMost(r, maxGeneratedCommandArgs))
-		for i := 0; i < numArgs; i++ {
-			c.Command.Elements[strconv.Itoa(i)] = randVariableString(r, maxGeneratedCommandLength)
+		for j := 0; j < numArgs; j++ {
+			c.Command.Elements[strconv.Itoa(j)] = randVariableString(r, maxGeneratedCommandLength)
 		}
 		c.Command.Length = numArgs
 
 		// layers
 		numLayers := int(atLeastOneAtMost(r, maxLayersInGeneratedContainer))
-		for i := 0; i < numLayers; i++ {
-			c.Layers.Elements[strconv.Itoa(i)] = generateRootHash(r)
+		for j := 0; j < numLayers; j++ {
+			c.Layers.Elements[strconv.Itoa(j)] = generateRootHash(r)
 		}
 		c.Layers.Length = numLayers
 
 		// env variable rules
 		numEnvRules := int(atMost(r, maxGeneratedEnvironmentVariableRules))
-		for i := 0; i < numEnvRules; i++ {
+		for j := 0; j < numEnvRules; j++ {
 			rule := EnvRuleConfig{
 				Strategy: "string",
 				Rule:     randVariableString(r, maxGeneratedEnvironmentVariableRuleLength),
 			}
-			c.EnvRules.Elements[strconv.Itoa(i)] = rule
+			c.EnvRules.Elements[strconv.Itoa(j)] = rule
 		}
 		c.EnvRules.Length = numEnvRules
 
@@ -1038,19 +1038,19 @@ func generateMounts(r *rand.Rand) []mountInternal {
 			options[j] = randVariableString(r, maxGeneratedMountOptionLength)
 		}
 
-		source_prefix := ""
+		sourcePrefix := ""
 		// select a "source type". our default is "no special prefix" ie a
 		// "standard source".
-		prefix_type := randMinMax(r, 1, 3)
-		if prefix_type == 2 {
+		prefixType := randMinMax(r, 1, 3)
+		if prefixType == 2 {
 			// sandbox mount, gets special handling
-			source_prefix = guestpath.SandboxMountPrefix
-		} else if prefix_type == 3 {
+			sourcePrefix = guestpath.SandboxMountPrefix
+		} else if prefixType == 3 {
 			// huge page mount, gets special handling
-			source_prefix = guestpath.HugePagesMountPrefix
+			sourcePrefix = guestpath.HugePagesMountPrefix
 		}
 
-		source := source_prefix + randVariableString(r, maxGeneratedMountSourceLength)
+		source := sourcePrefix + randVariableString(r, maxGeneratedMountSourceLength)
 		destination := randVariableString(r, maxGeneratedMountDestinationLength)
 
 		mounts[i] = mountInternal{
@@ -1161,7 +1161,10 @@ func (gen *dataGenerator) uniqueSandboxID() string {
 	}
 }
 
-func (gen *dataGenerator) createValidOverlayForContainer(enforcer SecurityPolicyEnforcer, container *securityPolicyContainer) ([]string, error) {
+func (gen *dataGenerator) createValidOverlayForContainer(
+	enforcer SecurityPolicyEnforcer,
+	container *securityPolicyContainer,
+) ([]string, error) {
 	// storage for our mount paths
 	overlay := make([]string, len(container.Layers))
 

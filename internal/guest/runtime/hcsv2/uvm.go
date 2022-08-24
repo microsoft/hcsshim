@@ -131,7 +131,7 @@ func (h *Host) RemoveContainer(id string) {
 	// delete the network namespace for standalone and sandbox containers
 	criType, isCRI := c.spec.Annotations[annotations.KubernetesContainerType]
 	if !isCRI || criType == "sandbox" {
-		RemoveNetworkNamespace(context.Background(), id)
+		_ = RemoveNetworkNamespace(context.Background(), id)
 	}
 
 	delete(h.containers, id)
@@ -141,15 +141,15 @@ func (h *Host) GetCreatedContainer(id string) (*Container, error) {
 	h.containersMutex.Lock()
 	defer h.containersMutex.Unlock()
 
-	if c, ok := h.containers[id]; !ok {
+	c, ok := h.containers[id]
+	if !ok {
 		return nil, gcserr.NewHresultError(gcserr.HrVmcomputeSystemNotFound)
-	} else {
-		if c.getStatus() != containerCreated {
-			return nil, fmt.Errorf("container is not in state \"created\": %w",
-				gcserr.NewHresultError(gcserr.HrVmcomputeInvalidState))
-		}
-		return c, nil
 	}
+	if c.getStatus() != containerCreated {
+		return nil, fmt.Errorf("container is not in state \"created\": %w",
+			gcserr.NewHresultError(gcserr.HrVmcomputeInvalidState))
+	}
+	return c, nil
 }
 
 func (h *Host) AddContainer(id string, c *Container) error {
@@ -406,12 +406,16 @@ func (h *Host) ModifySettings(ctx context.Context, containerID string, req *gues
 
 // Shutdown terminates this UVM. This is a destructive call and will destroy all
 // state that has not been cleaned before calling this function.
-func (h *Host) Shutdown() {
-	syscall.Reboot(syscall.LINUX_REBOOT_CMD_POWER_OFF)
+func (*Host) Shutdown() {
+	_ = syscall.Reboot(syscall.LINUX_REBOOT_CMD_POWER_OFF)
 }
 
 // RunExternalProcess runs a process in the utility VM.
-func (h *Host) RunExternalProcess(ctx context.Context, params prot.ProcessParameters, conSettings stdio.ConnectionSettings) (_ int, err error) {
+func (h *Host) RunExternalProcess(
+	ctx context.Context,
+	params prot.ProcessParameters,
+	conSettings stdio.ConnectionSettings,
+) (_ int, err error) {
 	var stdioSet *stdio.ConnectionSet
 	stdioSet, err = stdio.Connect(h.vsock, conSettings)
 	if err != nil {
@@ -514,18 +518,26 @@ func newInvalidRequestTypeError(rt guestrequest.RequestType) error {
 	return errors.Errorf("the RequestType %q is not supported", rt)
 }
 
-func modifyMappedVirtualDisk(ctx context.Context, rt guestrequest.RequestType, mvd *guestresource.LCOWMappedVirtualDisk, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
+func modifyMappedVirtualDisk(
+	ctx context.Context,
+	rt guestrequest.RequestType,
+	mvd *guestresource.LCOWMappedVirtualDisk,
+	securityPolicy securitypolicy.SecurityPolicyEnforcer,
+) (err error) {
 	switch rt {
 	case guestrequest.RequestTypeAdd:
 		mountCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 		defer cancel()
 		if mvd.MountPath != "" {
-			return scsi.Mount(mountCtx, mvd.Controller, mvd.Lun, mvd.MountPath, mvd.ReadOnly, mvd.Encrypted, mvd.Options, mvd.VerityInfo, securityPolicy)
+			return scsi.Mount(mountCtx, mvd.Controller, mvd.Lun, mvd.MountPath,
+				mvd.ReadOnly, mvd.Encrypted, mvd.Options, mvd.VerityInfo, securityPolicy)
 		}
 		return nil
 	case guestrequest.RequestTypeRemove:
 		if mvd.MountPath != "" {
-			if err := scsi.Unmount(ctx, mvd.Controller, mvd.Lun, mvd.MountPath, mvd.Encrypted, mvd.VerityInfo, securityPolicy); err != nil {
+			if err := scsi.Unmount(ctx, mvd.Controller, mvd.Lun, mvd.MountPath,
+				mvd.Encrypted, mvd.VerityInfo, securityPolicy,
+			); err != nil {
 				return err
 			}
 		}
@@ -535,7 +547,12 @@ func modifyMappedVirtualDisk(ctx context.Context, rt guestrequest.RequestType, m
 	}
 }
 
-func modifyMappedDirectory(ctx context.Context, vsock transport.Transport, rt guestrequest.RequestType, md *guestresource.LCOWMappedDirectory) (err error) {
+func modifyMappedDirectory(
+	ctx context.Context,
+	vsock transport.Transport,
+	rt guestrequest.RequestType,
+	md *guestresource.LCOWMappedDirectory,
+) (err error) {
 	switch rt {
 	case guestrequest.RequestTypeAdd:
 		return plan9.Mount(ctx, vsock, md.MountPath, md.ShareName, uint32(md.Port), md.ReadOnly)
@@ -546,7 +563,11 @@ func modifyMappedDirectory(ctx context.Context, vsock transport.Transport, rt gu
 	}
 }
 
-func modifyMappedVPMemDevice(ctx context.Context, rt guestrequest.RequestType, vpd *guestresource.LCOWMappedVPMemDevice, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
+func modifyMappedVPMemDevice(ctx context.Context,
+	rt guestrequest.RequestType,
+	vpd *guestresource.LCOWMappedVPMemDevice,
+	securityPolicy securitypolicy.SecurityPolicyEnforcer,
+) (err error) {
 	switch rt {
 	case guestrequest.RequestTypeAdd:
 		return pmem.Mount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, vpd.VerityInfo, securityPolicy)
@@ -566,7 +587,12 @@ func modifyMappedVPCIDevice(ctx context.Context, rt guestrequest.RequestType, vp
 	}
 }
 
-func modifyCombinedLayers(ctx context.Context, rt guestrequest.RequestType, cl *guestresource.LCOWCombinedLayers, securityPolicy securitypolicy.SecurityPolicyEnforcer) (err error) {
+func modifyCombinedLayers(
+	ctx context.Context,
+	rt guestrequest.RequestType,
+	cl *guestresource.LCOWCombinedLayers,
+	securityPolicy securitypolicy.SecurityPolicyEnforcer,
+) (err error) {
 	switch rt {
 	case guestrequest.RequestTypeAdd:
 		layerPaths := make([]string, len(cl.Layers))
@@ -585,7 +611,8 @@ func modifyCombinedLayers(ctx context.Context, rt guestrequest.RequestType, cl *
 			workdirPath = filepath.Join(cl.ScratchPath, "work")
 		}
 
-		return overlay.MountLayer(ctx, layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, readonly, cl.ContainerID, securityPolicy)
+		return overlay.MountLayer(ctx, layerPaths, upperdirPath, workdirPath,
+			cl.ContainerRootPath, readonly, cl.ContainerID, securityPolicy)
 	case guestrequest.RequestTypeRemove:
 		return storage.UnmountPath(ctx, cl.ContainerRootPath, true)
 	default:

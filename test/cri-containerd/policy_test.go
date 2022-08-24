@@ -19,9 +19,7 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
-var (
-	validPolicyAlpineCommand = []string{"ash", "-c", "echo 'Hello'"}
-)
+var validPolicyAlpineCommand = []string{"ash", "-c", "echo 'Hello'"}
 
 type configSideEffect func(*runtime.CreateContainerRequest) error
 

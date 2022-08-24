@@ -24,6 +24,7 @@ func TestVPMEM(t *testing.T) {
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureLCOW, featureVPMEM)
 
+	//nolint:staticcheck // SA1019: TODO: replace `LayerFolders`
 	alpineLayers := layers.LayerFolders(t, "alpine")
 
 	ctx := context.Background()

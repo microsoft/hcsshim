@@ -425,7 +425,7 @@ func Test_Cleanup_Dm_Crypt_Error(t *testing.T) {
 func Test_Cleanup_Dm_Crypt_Success(t *testing.T) {
 	clearCryptTestDependencies()
 
-	// Test what happens when cryptsetup succeedes to close an encrypted device.
+	// Test what happens when cryptsetup succeeds to close an encrypted device.
 
 	_cryptsetupClose = func(deviceName string) error {
 		return nil

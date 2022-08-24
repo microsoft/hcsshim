@@ -71,6 +71,8 @@ const (
 )
 
 // Image definitions
+//
+//nolint:deadcode,unused,varcheck // may be used in future tests
 var (
 	imageWindowsNanoserver      = getWindowsNanoserverImage(osversion.Build())
 	imageWindowsServercore      = getWindowsServerCoreImage(osversion.Build())
@@ -183,6 +185,7 @@ func createGRPCConn(ctx context.Context) (*grpc.ClientConn, error) {
 	if err != nil {
 		return nil, err
 	}
+	//nolint:staticcheck //TODO: SA1019: grpc.WithInsecure is deprecated: use WithTransportCredentials and insecure.NewCredentials()
 	return grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithContextDialer(dialer))
 }
 

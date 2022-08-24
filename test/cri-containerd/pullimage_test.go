@@ -67,13 +67,13 @@ func Test_PullImageTimestamps(t *testing.T) {
 		testDirPath,
 	}
 
-	containerId := createContainerInSandbox(t, client, ctx, podID, t.Name()+"-Container", imageWindowsNanoserverTestImage, command, nil, nil, sandboxRequest.Config)
-	defer removeContainer(t, client, ctx, containerId)
+	containerID := createContainerInSandbox(t, client, ctx, podID, t.Name()+"-Container", imageWindowsNanoserverTestImage, command, nil, nil, sandboxRequest.Config)
+	defer removeContainer(t, client, ctx, containerID)
 
-	startContainer(t, client, ctx, containerId)
-	defer stopContainer(t, client, ctx, containerId)
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID)
 
-	output, errorMsg, exitCode := execContainer(t, client, ctx, containerId, execCommand)
+	output, errorMsg, exitCode := execContainer(t, client, ctx, containerID, execCommand)
 
 	if exitCode != 0 || len(errorMsg) > 0 {
 		t.Fatalf("Failed to exec inside container: %s, exitcode: %v\n",

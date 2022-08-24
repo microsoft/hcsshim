@@ -82,7 +82,7 @@ type JobContainer struct {
 	waitError        error
 }
 
-// Compile time checks for interface adherance.
+// Compile time checks for interface adherence.
 var (
 	_ cow.ProcessHost = &JobContainer{}
 	_ cow.Container   = &JobContainer{}
@@ -165,7 +165,7 @@ func Create(ctx context.Context, id string, s *specs.Spec) (_ cow.Container, _ *
 	// there being no way for us to have the path be unique in the face of multiple containers, or just
 	// the same file existing on the host. If two containers asked for two different paths to show up
 	// at C:\path\in\container, we can't symlink them both to that location. Another thing to note however
-	// is as a backwards compatability measure for machines that don't have file binding support
+	// is as a backwards compatibility measure for machines that don't have file binding support
 	// (ws2019 at the moment) we *also* bind the path under the containers rootfs location so checking
 	// for your mount in either the old or new location will work.
 	//
@@ -324,7 +324,7 @@ func (c *JobContainer) CreateProcess(ctx context.Context, config interface{}) (_
 		}
 	}
 
-	// Replace any occurences of the sandbox mount env variable in the commandline.
+	// Replace any occurrences of the sandbox mount env variable in the commandline.
 	// For example: %CONTAINER_SANDBOX_MOUNTPOINT%\mybinary.exe -> C:\<rootfslocation>\mybinary.exe.
 	commandLine, _ := c.replaceWithMountPoint(conf.CommandLine)
 

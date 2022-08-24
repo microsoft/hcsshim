@@ -157,7 +157,14 @@ func createPodAndContainer(ctx context.Context, t *testing.T, client runtime.Run
 // actually saved.
 // It is the callers responsibility to clean the stop and remove the cloned
 // containers and pods.
-func createTemplateContainer(ctx context.Context, t *testing.T, client runtime.RuntimeServiceClient, templateSandboxRequest *runtime.RunPodSandboxRequest, templateContainerRequest *runtime.CreateContainerRequest, templatePodID, templateContainerID *string) {
+func createTemplateContainer(
+	ctx context.Context,
+	t *testing.T,
+	client runtime.RuntimeServiceClient,
+	templateSandboxRequest *runtime.RunPodSandboxRequest,
+	templateContainerRequest *runtime.CreateContainerRequest,
+	templatePodID, templateContainerID *string,
+) {
 	createPodAndContainer(ctx, t, client, templateSandboxRequest, templateContainerRequest, templatePodID, templateContainerID)
 
 	// Send a context with deadline for waitForTemplateSave function
@@ -165,17 +172,22 @@ func createTemplateContainer(ctx context.Context, t *testing.T, client runtime.R
 	ctx, cancel := context.WithDeadline(ctx, d)
 	defer cancel()
 	waitForTemplateSave(ctx, t, *templatePodID)
-	return
 }
 
 // Creates a clone from the given template pod and container.
 // It is the callers responsibility to clean the stop and remove the cloned
 // containers and pods.
-func createClonedContainer(ctx context.Context, t *testing.T, client runtime.RuntimeServiceClient, templatePodID, templateContainerID string, cloneNumber int, clonedPodID, clonedContainerID *string) {
+func createClonedContainer(
+	ctx context.Context,
+	t *testing.T,
+	client runtime.RuntimeServiceClient,
+	templatePodID, templateContainerID string,
+	cloneNumber int,
+	clonedPodID, clonedContainerID *string,
+) {
 	cloneSandboxRequest := getClonedPodConfig(cloneNumber, templatePodID)
 	cloneContainerRequest := getClonedContainerConfig(cloneNumber, templateContainerID)
 	createPodAndContainer(ctx, t, client, cloneSandboxRequest, cloneContainerRequest, clonedPodID, clonedContainerID)
-	return
 }
 
 // Runs a command inside given container and verifies if the command executes successfully.
@@ -405,7 +417,7 @@ func Test_ClonedContainerRunningAfterDeletingTemplate(t *testing.T) {
 	verifyContainerExec(ctx, t, client, clonedContainerID)
 }
 
-// A test to verify that multiple templats can be created and clones
+// A test to verify that multiple templates can be created and clones
 // can be made from each of them simultaneously.
 func Test_MultipleTemplateAndClones_WCOW(t *testing.T) {
 	requireFeatures(t, featureWCOWHypervisor)

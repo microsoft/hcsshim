@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	fakeContainerId = "1"
+	fakeContainerID = "1"
 )
 
 type undo struct {
@@ -84,7 +84,7 @@ func Test_Mount_Success(t *testing.T) {
 		return nil
 	}
 
-	err := MountLayer(context.Background(), []string{"/layer1", "/layer2"}, "/upper", "/work", "/root", false, fakeContainerId, openDoorSecurityPolicyEnforcer())
+	err := MountLayer(context.Background(), []string{"/layer1", "/layer2"}, "/upper", "/work", "/root", false, fakeContainerID, openDoorSecurityPolicyEnforcer())
 	if err != nil {
 		t.Fatalf("expected no error got: %v", err)
 	}
@@ -128,7 +128,7 @@ func Test_Mount_Readonly_Success(t *testing.T) {
 		return nil
 	}
 
-	err := MountLayer(context.Background(), []string{"/layer1", "/layer2"}, "", "", "/root", false, fakeContainerId, openDoorSecurityPolicyEnforcer())
+	err := MountLayer(context.Background(), []string{"/layer1", "/layer2"}, "", "", "/root", false, fakeContainerID, openDoorSecurityPolicyEnforcer())
 	if err != nil {
 		t.Fatalf("expected no error got: %v", err)
 	}
@@ -179,7 +179,7 @@ func Test_Security_Policy_Enforcement(t *testing.T) {
 	}
 
 	enforcer := mountMonitoringSecurityPolicyEnforcer()
-	err := MountLayer(context.Background(), []string{"/layer1", "/layer2"}, "/upper", "/work", "/root", false, fakeContainerId, enforcer)
+	err := MountLayer(context.Background(), []string{"/layer1", "/layer2"}, "/upper", "/work", "/root", false, fakeContainerID, enforcer)
 	if err != nil {
 		t.Fatalf("expected no error got: %v", err)
 	}
