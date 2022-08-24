@@ -101,16 +101,12 @@ func (c *container) Delete() error {
 		runcErr := parseRuncError(string(out))
 		return errors.Wrapf(runcErr, "runc delete failed with %v: %s", err, string(out))
 	}
-	if err := c.r.cleanupContainer(c.id); err != nil {
-		return err
-	}
-
-	return nil
+	return c.r.cleanupContainer(c.id)
 }
 
 // Pause suspends all processes running in the container.
 func (c *container) Pause() error {
-	cmd := runcCommandLog("pause", c.id)
+	cmd := runcCommand("pause", c.id)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		runcErr := parseRuncError(string(out))
@@ -153,7 +149,7 @@ func (c *container) GetState() (*runtime.ContainerState, error) {
 // deleted are still considered to exist.
 func (c *container) Exists() (bool, error) {
 	// use global path because container may not exist
-	cmd := runcCommandLog("state", c.id)
+	cmd := runcCommand("state", c.id)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		runcErr := parseRuncError(string(out))
