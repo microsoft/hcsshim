@@ -178,21 +178,6 @@ func createClonedContainer(ctx context.Context, t *testing.T, client runtime.Run
 	return
 }
 
-func verifyTemplateContainerState(ctx context.Context, t *testing.T, client runtime.RuntimeServiceClient, templateContainerID string) {
-	// sometimes it takes a little longer for containerd to update status of the template container
-	// so check it in a loop.
-	tries := 3
-	var templateContainerState runtime.ContainerState
-	for i := 0; i < tries; i++ {
-		templateContainerState := getContainerStatus(t, client, ctx, templateContainerID)
-		if templateContainerState == runtime.ContainerState_CONTAINER_EXITED {
-			return
-		}
-		time.Sleep(1 * time.Second)
-	}
-	t.Fatalf("template container %s expected state EXITED actual: %s", templateContainerID, runtime.ContainerState_name[int32(templateContainerState)])
-}
-
 // Runs a command inside given container and verifies if the command executes successfully.
 func verifyContainerExec(ctx context.Context, t *testing.T, client runtime.RuntimeServiceClient, containerID string) {
 	execCommand := []string{
@@ -257,7 +242,7 @@ func Test_CloneContainer_WCOW(t *testing.T) {
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	createTemplateContainer(ctx, t, client, getTemplatePodConfig("templatepod"), getTemplateContainerConfig("templatecontainer"), &templatePodID, &templateContainerID)
-	verifyTemplateContainerState(ctx, t, client, templateContainerID)
+	requireContainerState(ctx, t, client, templateContainerID, runtime.ContainerState_CONTAINER_EXITED)
 	createClonedContainer(ctx, t, client, templatePodID, templateContainerID, 1, &clonedPodID, &clonedContainerID)
 	verifyContainerExec(ctx, t, client, clonedContainerID)
 }
@@ -286,7 +271,7 @@ func Test_MultiplClonedContainers_WCOW(t *testing.T) {
 
 	// create template pod & container
 	createTemplateContainer(ctx, t, client, getTemplatePodConfig("templatepod"), getTemplateContainerConfig("templatecontainer"), &templatePodID, &templateContainerID)
-	verifyTemplateContainerState(ctx, t, client, templateContainerID)
+	requireContainerState(ctx, t, client, templateContainerID, runtime.ContainerState_CONTAINER_EXITED)
 
 	// create multiple clones
 	for i := 0; i < nClones; i++ {
@@ -320,7 +305,7 @@ func Test_NormalContainerInClonedPod_WCOW(t *testing.T) {
 
 	// create template pod & container
 	createTemplateContainer(ctx, t, client, getTemplatePodConfig("templatepod"), getTemplateContainerConfig("templatecontainer"), &templatePodID, &templateContainerID)
-	verifyTemplateContainerState(ctx, t, client, templateContainerID)
+	requireContainerState(ctx, t, client, templateContainerID, runtime.ContainerState_CONTAINER_EXITED)
 
 	// create a cloned pod and a cloned container
 	cloneSandboxRequest := getClonedPodConfig(1, templatePodID)
@@ -363,7 +348,7 @@ func Test_CloneContainersWithClonedPodPool_WCOW(t *testing.T) {
 
 	// create template pod & container
 	createTemplateContainer(ctx, t, client, getTemplatePodConfig("templatepod"), getTemplateContainerConfig("templatecontainer"), &templatePodID, &templateContainerID)
-	verifyTemplateContainerState(ctx, t, client, templateContainerID)
+	requireContainerState(ctx, t, client, templateContainerID, runtime.ContainerState_CONTAINER_EXITED)
 
 	// create multiple pods
 	clonedSandboxRequests := []*runtime.RunPodSandboxRequest{}
@@ -407,7 +392,7 @@ func Test_ClonedContainerRunningAfterDeletingTemplate(t *testing.T) {
 	pullRequiredImages(t, []string{imageWindowsNanoserver})
 
 	createTemplateContainer(ctx, t, client, getTemplatePodConfig("templatepod"), getTemplateContainerConfig("templatecontainer"), &templatePodID, &templateContainerID)
-	verifyTemplateContainerState(ctx, t, client, templateContainerID)
+	requireContainerState(ctx, t, client, templateContainerID, runtime.ContainerState_CONTAINER_EXITED)
 
 	createClonedContainer(ctx, t, client, templatePodID, templateContainerID, 1, &clonedPodID, &clonedContainerID)
 
@@ -450,7 +435,7 @@ func Test_MultipleTemplateAndClones_WCOW(t *testing.T) {
 		go func(index int) {
 			defer wg.Done()
 			createTemplateContainer(ctx, t, client, getTemplatePodConfig(fmt.Sprintf("templatepod-%d", index)), getTemplateContainerConfig(fmt.Sprintf("templatecontainer-%d", index)), &templatePodIDs[index], &templateContainerIDs[index])
-			verifyTemplateContainerState(ctx, t, client, templateContainerIDs[index])
+			requireContainerState(ctx, t, client, templateContainerIDs[index], runtime.ContainerState_CONTAINER_EXITED)
 			createClonedContainer(ctx, t, client, templatePodIDs[index], templateContainerIDs[index], index, &clonedPodIDs[index], &clonedContainerIDs[index])
 		}(i)
 	}
@@ -485,7 +470,7 @@ func Test_VerifyCloneAndTemplateConfig(t *testing.T) {
 	templatePodConfig := getTemplatePodConfig("templatepod")
 
 	createTemplateContainer(ctx, t, client, templatePodConfig, getTemplateContainerConfig("templatecontainer"), &templatePodID, &templateContainerID)
-	verifyTemplateContainerState(ctx, t, client, templateContainerID)
+	requireContainerState(ctx, t, client, templateContainerID, runtime.ContainerState_CONTAINER_EXITED)
 
 	// change pod config to make sure the request fails
 	cloneSandboxRequest := getClonedPodConfig(0, templatePodID)

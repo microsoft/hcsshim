@@ -768,9 +768,13 @@ func Test_SecurityPolicyEnv_Annotation(t *testing.T) {
 				containerRequest.Config.LogPath = logPath
 
 				containerID := createContainer(t, client, ctx, containerRequest)
-				startContainer(t, client, ctx, containerID)
 				defer removeContainer(t, client, ctx, containerID)
-				defer stopContainer(t, client, ctx, containerID)
+
+				startContainer(t, client, ctx, containerID)
+				requireContainerState(ctx, t, client, containerID, runtime.ContainerState_CONTAINER_RUNNING)
+
+				stopContainer(t, client, ctx, containerID)
+				requireContainerState(ctx, t, client, containerID, runtime.ContainerState_CONTAINER_EXITED)
 
 				content, err := os.ReadFile(logPath)
 				if err != nil {
