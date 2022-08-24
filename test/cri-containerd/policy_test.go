@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 
@@ -772,6 +773,8 @@ func Test_SecurityPolicyEnv_Annotation(t *testing.T) {
 				defer removeContainer(t, client, ctx, containerID)
 				defer stopContainer(t, client, ctx, containerID)
 
+				// add a sleep for stdio to kick in
+				time.Sleep(time.Second)
 				content, err := os.ReadFile(logPath)
 				if err != nil {
 					t.Fatalf("error reading log file: %s", err)
