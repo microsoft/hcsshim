@@ -246,7 +246,7 @@ func createLCOWOptions(_ context.Context, c *cli.Context, id string) (*uvm.Optio
 	}
 	options.SecurityPolicy = openPolicy
 	if c.IsSet(securityPolicyArgName) {
-		options.SecurityPolicy = c.String(options.SecurityPolicy)
+		options.SecurityPolicy = c.String(securityPolicyArgName)
 	}
 	if c.IsSet(securityHardwareFlag) {
 		options.GuestStateFile = uvm.GuestStateFile

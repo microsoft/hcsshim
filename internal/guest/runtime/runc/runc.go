@@ -53,12 +53,11 @@ func (r *runcRuntime) initialize() error {
 	for _, p := range paths {
 		_, err := os.Stat(p)
 		if err != nil {
-			if os.IsNotExist(err) {
-				if err := os.MkdirAll(p, 0700); err != nil {
-					return errors.Wrapf(err, "failed making runC container files directory %s", p)
-				}
-			} else {
+			if !os.IsNotExist(err) {
 				return err
+			}
+			if err := os.MkdirAll(p, 0700); err != nil {
+				return errors.Wrapf(err, "failed making runC container files directory %s", p)
 			}
 		}
 	}
@@ -80,8 +79,8 @@ func (r *runcRuntime) CreateContainer(id string, bundlePath string, stdioSet *st
 
 // ListContainerStates returns ContainerState structs for all existing
 // containers, whether they're running or not.
-func (r *runcRuntime) ListContainerStates() ([]runtime.ContainerState, error) {
-	cmd := runcCommandLog("list", "-f", "json")
+func (*runcRuntime) ListContainerStates() ([]runtime.ContainerState, error) {
+	cmd := runcCommand("list", "-f", "json")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		runcErr := parseRuncError(string(out))
@@ -96,7 +95,7 @@ func (r *runcRuntime) ListContainerStates() ([]runtime.ContainerState, error) {
 
 // getRunningPids gets the pids of all processes which runC recognizes as
 // running.
-func (r *runcRuntime) getRunningPids(id string) ([]int, error) {
+func (*runcRuntime) getRunningPids(id string) ([]int, error) {
 	cmd := runcCommand("ps", "-f", "json", id)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -112,7 +111,7 @@ func (r *runcRuntime) getRunningPids(id string) ([]int, error) {
 
 // getProcessCommand gets the command line command and arguments for the process
 // with the given pid.
-func (r *runcRuntime) getProcessCommand(pid int) ([]string, error) {
+func (*runcRuntime) getProcessCommand(pid int) ([]string, error) {
 	// Get the contents of the process's cmdline file. This file is formatted
 	// with a null character after every argument. e.g. "ping google.com "
 	data, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "cmdline"))
@@ -126,7 +125,7 @@ func (r *runcRuntime) getProcessCommand(pid int) ([]string, error) {
 
 // pidMapToProcessStates is a helper function which converts a map from pid to
 // ContainerProcessState to a slice of ContainerProcessStates.
-func (r *runcRuntime) pidMapToProcessStates(pidMap map[int]*runtime.ContainerProcessState) []runtime.ContainerProcessState {
+func (*runcRuntime) pidMapToProcessStates(pidMap map[int]*runtime.ContainerProcessState) []runtime.ContainerProcessState {
 	processStates := make([]runtime.ContainerProcessState, len(pidMap))
 	i := 0
 	for _, processState := range pidMap {

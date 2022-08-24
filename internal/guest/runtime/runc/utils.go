@@ -57,7 +57,7 @@ func (r *runcRuntime) getProcessDir(id string, pid int) string {
 
 // getContainerDir returns the path to the state directory of the given
 // container.
-func (r *runcRuntime) getContainerDir(id string) string {
+func (*runcRuntime) getContainerDir(id string) string {
 	return filepath.Join(containerFilesDir, id)
 }
 
