@@ -236,8 +236,7 @@ func Test_RunContainer_ForksThenExits_ShowsAsExited_LCOW(t *testing.T) {
 	startContainer(t, client, ctx, containerID)
 	defer stopContainer(t, client, ctx, containerID)
 
-	// Give the container init time to exit.
-	time.Sleep(5 * time.Second)
+	requireContainerState(ctx, t, client, containerID, runtime.ContainerState_CONTAINER_EXITED)
 
 	// Validate that the container shows as exited. Once the container init
 	// dies, the forked background process should be killed off.
