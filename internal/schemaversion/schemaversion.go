@@ -40,7 +40,7 @@ func IsSupported(sv *hcsschema.Version) error {
 	}
 
 	if IsV25(sv) {
-		if osversion.Build() < 20348 { // pending solution to quuestion over version numbers re osversion.V21H2
+		if osversion.Build() < osversion.LTSC2022 { // pending solution to question over version numbers re osversion.V21H2
 			return fmt.Errorf("unsupported on this Windows build")
 		}
 		return nil
