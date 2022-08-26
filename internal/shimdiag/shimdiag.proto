@@ -3,11 +3,10 @@ syntax = "proto3";
 package containerd.runhcs.v1.diag;
 option go_package = "github.com/Microsoft/hcsshim/internal/shimdiag;shimdiag";
 
-import weak "gogoproto/gogo.proto";
-
 service ShimDiag {
     rpc DiagExecInHost(ExecProcessRequest) returns (ExecProcessResponse);
     rpc DiagStacks(StacksRequest) returns (StacksResponse);
+    rpc DiagTasks(TasksRequest) returns (TasksResponse);
     rpc DiagShare(ShareRequest) returns (ShareResponse);
     rpc DiagPid(PidRequest) returns (PidResponse);
 }
@@ -30,7 +29,7 @@ message StacksRequest {
 
 message StacksResponse {
     string stacks = 1;
-    string guest_stacks =2; 
+    string guest_stacks =2;
 }
 
 message ShareRequest {
@@ -48,3 +47,22 @@ message PidRequest{
 message PidResponse{
     int32 pid = 1;
 }
+
+message TasksRequest {
+    bool execs = 1;
+}
+
+message Task {
+    string id = 1;
+    repeated Exec execs = 2;
+}
+
+message Exec {
+    string id = 1;
+    string state = 2;
+}
+
+message TasksResponse {
+    repeated Task tasks = 1;
+}
+

@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -36,6 +37,23 @@ func (tsp *testShimPod) GetTask(tid string) (shimTask, error) {
 		return v.(shimTask), nil
 	}
 	return nil, errdefs.ErrNotFound
+}
+
+func (tsp *testShimPod) ListTasks() (_ []shimTask, err error) {
+	var tasks []shimTask
+	tsp.tasks.Range(func(key, value interface{}) bool {
+		wt, ok := value.(shimTask)
+		if !ok {
+			err = fmt.Errorf("failed to load tasks %s", key)
+			return false
+		}
+		tasks = append(tasks, wt)
+		return true
+	})
+	if err != nil {
+		return nil, err
+	}
+	return tasks, nil
 }
 
 func (tsp *testShimPod) KillTask(ctx context.Context, tid, eid string, signal uint32, all bool) error {

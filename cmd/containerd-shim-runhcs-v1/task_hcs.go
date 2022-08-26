@@ -519,6 +519,23 @@ func (ht *hcsTask) GetExec(eid string) (shimExec, error) {
 	return raw.(shimExec), nil
 }
 
+func (ht *hcsTask) ListExecs() (_ []shimExec, err error) {
+	var execs []shimExec
+	ht.execs.Range(func(key, value interface{}) bool {
+		wt, ok := value.(shimExec)
+		if !ok {
+			err = fmt.Errorf("failed to load exec %q", key)
+			return false
+		}
+		execs = append(execs, wt)
+		return true
+	})
+	if err != nil {
+		return nil, err
+	}
+	return execs, nil
+}
+
 func (ht *hcsTask) KillExec(ctx context.Context, eid string, signal uint32, all bool) error {
 	e, err := ht.GetExec(eid)
 	if err != nil {

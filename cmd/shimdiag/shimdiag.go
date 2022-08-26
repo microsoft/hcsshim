@@ -19,6 +19,7 @@ func main() {
 		listCommand,
 		execCommand,
 		stacksCommand,
+		tasksCommand,
 		shareCommand,
 	}
 	if err := app.Run(os.Args); err != nil {

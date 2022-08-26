@@ -372,6 +372,66 @@ func (s *service) diagShareInternal(ctx context.Context, req *shimdiag.ShareRequ
 	return &shimdiag.ShareResponse{}, nil
 }
 
+func (s *service) diagListExecs(task shimTask) ([]*shimdiag.Exec, error) {
+	var sdExecs []*shimdiag.Exec
+	execs, err := task.ListExecs()
+	if err != nil {
+		return nil, err
+	}
+	for _, exec := range execs {
+		sdExecs = append(sdExecs, &shimdiag.Exec{ID: exec.ID(), State: string(exec.State())})
+	}
+	return sdExecs, nil
+}
+
+func (s *service) diagTasksInternal(ctx context.Context, req *shimdiag.TasksRequest) (_ *shimdiag.TasksResponse, err error) {
+	raw := s.taskOrPod.Load()
+	if raw == nil {
+		return nil, errors.Wrapf(errdefs.ErrNotFound, "task with id: '%s' not found", s.tid)
+	}
+
+	resp := &shimdiag.TasksResponse{}
+	if s.isSandbox {
+		p, ok := raw.(shimPod)
+		if !ok {
+			return nil, errors.New("failed to convert task to pod")
+		}
+
+		tasks, err := p.ListTasks()
+		if err != nil {
+			return nil, err
+		}
+
+		for _, task := range tasks {
+			t := &shimdiag.Task{ID: task.ID()}
+			if req.Execs {
+				t.Execs, err = s.diagListExecs(task)
+				if err != nil {
+					return nil, err
+				}
+			}
+			resp.Tasks = append(resp.Tasks, t)
+		}
+		return resp, nil
+	}
+
+	t, ok := raw.(shimTask)
+	if !ok {
+		return nil, errors.New("failed to convert task to 'shimTask'")
+	}
+
+	task := &shimdiag.Task{ID: t.ID()}
+	if req.Execs {
+		task.Execs, err = s.diagListExecs(t)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	resp.Tasks = []*shimdiag.Task{task}
+	return resp, nil
+}
+
 func (s *service) resizePtyInternal(ctx context.Context, req *task.ResizePtyRequest) (*google_protobuf1.Empty, error) {
 	t, err := s.getTask(req.ID)
 	if err != nil {

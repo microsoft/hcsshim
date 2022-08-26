@@ -46,6 +46,14 @@ func (tst *testShimTask) GetExec(eid string) (shimExec, error) {
 	return nil, errdefs.ErrNotFound
 }
 
+func (tst *testShimTask) ListExecs() ([]shimExec, error) {
+	var execs []shimExec
+	for _, v := range tst.execs {
+		execs = append(execs, v)
+	}
+	return execs, nil
+}
+
 func (tst *testShimTask) KillExec(ctx context.Context, eid string, signal uint32, all bool) error {
 	e, err := tst.GetExec(eid)
 	if err != nil {
