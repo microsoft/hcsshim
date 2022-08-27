@@ -108,7 +108,14 @@ func (c *JobContainer) setupMounts(ctx context.Context, spec *specs.Spec) error 
 			}).Warn("job container mount destination exists and will be shadowed")
 		}
 
-		if err := c.job.ApplyFileBinding(mount.Destination, mount.Source, false); err != nil {
+		readOnly := false
+		for _, o := range mount.Options {
+			if strings.ToLower(o) == "ro" {
+				readOnly = true
+			}
+		}
+
+		if err := c.job.ApplyFileBinding(mount.Destination, mount.Source, readOnly); err != nil {
 			return err
 		}
 
