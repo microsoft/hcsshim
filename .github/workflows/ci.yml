@@ -327,6 +327,10 @@ jobs:
       - run: go build ./cmd/device-util
       - run: go build ./cmd/ncproxy
       - run: go build ./cmd/dmverity-vhd
+      - run: go build ./cmd/dmverity-vhd
+        env: 
+          GOOS: linux
+          GOARCH: amd64
       - run: go build ./internal/tools/grantvmgroupaccess
       - run: go build ./internal/tools/networkagent
       - run: go build ./internal/tools/securitypolicy
@@ -345,6 +349,7 @@ jobs:
             device-util.exe
             ncproxy.exe
             dmverity-vhd.exe
+            dmverity-vhd
             grantvmgroupaccess.exe
             networkagent.exe
             securitypolicy.exe
@@ -378,3 +383,5 @@ jobs:
 
       - name: Build
         run: make BASE=./base.tar.gz all
+            
+            

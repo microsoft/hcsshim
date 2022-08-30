@@ -79,7 +79,7 @@ func ping(ctx context.Context, reg name.Registry, t http.RoundTripper) (*pingRes
 		schemes = append(schemes, "http")
 	}
 
-	var errs []string
+	var errs []error
 	for _, scheme := range schemes {
 		url := fmt.Sprintf("%s://%s/v2/", scheme, reg.Name())
 		req, err := http.NewRequest(http.MethodGet, url, nil)
@@ -88,7 +88,7 @@ func ping(ctx context.Context, reg name.Registry, t http.RoundTripper) (*pingRes
 		}
 		resp, err := client.Do(req.WithContext(ctx))
 		if err != nil {
-			errs = append(errs, err.Error())
+			errs = append(errs, err)
 			// Potentially retry with http.
 			continue
 		}
@@ -108,8 +108,8 @@ func ping(ctx context.Context, reg name.Registry, t http.RoundTripper) (*pingRes
 			}, nil
 		case http.StatusUnauthorized:
 			if challenges := authchallenge.ResponseChallenges(resp); len(challenges) != 0 {
-				// If we hit more than one, I'm not even sure what to do.
-				wac := challenges[0]
+				// If we hit more than one, let's try to find one that we know how to handle.
+				wac := pickFromMultipleChallenges(challenges)
 				return &pingResp{
 					challenge:  challenge(wac.Scheme).Canonical(),
 					parameters: wac.Parameters,
@@ -125,5 +125,56 @@ func ping(ctx context.Context, reg name.Registry, t http.RoundTripper) (*pingRes
 			return nil, CheckError(resp, http.StatusOK, http.StatusUnauthorized)
 		}
 	}
-	return nil, errors.New(strings.Join(errs, "; "))
+	return nil, multierrs(errs)
+}
+
+func pickFromMultipleChallenges(challenges []authchallenge.Challenge) authchallenge.Challenge {
+	// It might happen there are multiple www-authenticate headers, e.g. `Negotiate` and `Basic`.
+	// Picking simply the first one could result eventually in `unrecognized challenge` error,
+	// that's why we're looping through the challenges in search for one that can be handled.
+	allowedSchemes := []string{"basic", "bearer"}
+
+	for _, wac := range challenges {
+		currentScheme := strings.ToLower(wac.Scheme)
+		for _, allowed := range allowedSchemes {
+			if allowed == currentScheme {
+				return wac
+			}
+		}
+	}
+
+	return challenges[0]
+}
+
+type multierrs []error
+
+func (m multierrs) Error() string {
+	var b strings.Builder
+	hasWritten := false
+	for _, err := range m {
+		if hasWritten {
+			b.WriteString("; ")
+		}
+		hasWritten = true
+		b.WriteString(err.Error())
+	}
+	return b.String()
+}
+
+func (m multierrs) As(target interface{}) bool {
+	for _, err := range m {
+		if errors.As(err, target) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m multierrs) Is(target error) bool {
+	for _, err := range m {
+		if errors.Is(err, target) {
+			return true
+		}
+	}
+	return false
 }

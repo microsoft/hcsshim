@@ -29,5 +29,5 @@ dmverity-vhd create -i alpine:3.12 -o alpine_3_12_layers
 
 Compute root hashes:
 ```bash
-dmverity-vhd roothash -i alpine:3.12
+dmverity-vhd --docker roothash -i alpine:3.12
 ```
