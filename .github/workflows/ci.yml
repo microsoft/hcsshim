@@ -98,8 +98,11 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Test security policy
+      - name: Test standard security policy
         run: go test -mod=mod -gcflags=all=-d=checkptr -v ./pkg/securitypolicy
+
+      - name: Test rego security policy
+        run: go test --tags=rego -mod=mod -gcflags=all=-d=checkptr -v ./pkg/securitypolicy
 
   test-windows:
     needs: verify-main-vendor
