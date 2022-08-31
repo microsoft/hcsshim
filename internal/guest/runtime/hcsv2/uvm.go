@@ -79,22 +79,16 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport) *Host {
 // so we first have to remove the base64 encoding that allows
 // the JSON based policy to be passed as a string. From there,
 // we decode the JSON and setup our security policy state
-func (h *Host) SetSecurityPolicy(enforcerType, base64Policy string) error {
+func (h *Host) SetSecurityPolicy(enforcerType, base64EncodedPolicy string) error {
 	h.policyMutex.Lock()
 	defer h.policyMutex.Unlock()
 	if h.securityPolicyEnforcerSet {
 		return errors.New("security policy has already been set")
 	}
 
-	// construct security policy state
-	securityPolicyState, err := securitypolicy.NewSecurityPolicyState(base64Policy)
-	if err != nil {
-		return err
-	}
-
 	p, err := securitypolicy.CreateSecurityPolicyEnforcer(
 		enforcerType,
-		*securityPolicyState,
+		base64EncodedPolicy,
 		policy.DefaultCRIMounts(),
 		policy.DefaultCRIPrivilegedMounts(),
 	)
@@ -102,7 +96,7 @@ func (h *Host) SetSecurityPolicy(enforcerType, base64Policy string) error {
 		return err
 	}
 
-	hostData, err := securitypolicy.NewSecurityPolicyDigest(base64Policy)
+	hostData, err := securitypolicy.NewSecurityPolicyDigest(base64EncodedPolicy)
 	if err != nil {
 		return err
 	}
