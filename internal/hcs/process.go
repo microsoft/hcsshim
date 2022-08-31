@@ -167,7 +167,30 @@ func (process *Process) Kill(ctx context.Context) (bool, error) {
 		return true, nil
 	}
 
-	resultJSON, err := vmcompute.HcsTerminateProcess(ctx, process.handle)
+	// HCS serializes the signals sent to the target pid on a per client basis.
+	// To avoid SIGKILL being serialized behind other signals, we open a new compute
+	// system handle to deliver the kill signal.
+	// If the calls to opening a new compute system handle fail, we forcefully
+	// terminate the container itself so that no container is left behind
+	hcsSystem, err := OpenComputeSystem(ctx, process.system.id)
+	if err != nil {
+		// log error and force termination of container
+		log.G(ctx).WithField("err", err).Error("OpenComputeSystem() call failed")
+		err = process.system.Terminate(ctx)
+		log.G(ctx).WithField("err", err).Error("Terminate() call failed")
+		process.system.Close()
+	}
+	defer hcsSystem.Close()
+
+	newProcessHandle, err := hcsSystem.OpenProcess(ctx, process.Pid())
+	if err != nil {
+		// error returning while trying to open handle to the process. This means the process
+		// with this pid no longer exists, so it is safe to return success here
+		return true, nil
+	}
+	defer newProcessHandle.Close()
+
+	resultJSON, err := vmcompute.HcsTerminateProcess(ctx, newProcessHandle.handle)
 	if err != nil {
 		// We still need to check these two cases, as processes may still be killed by an
 		// external actor (human operator, OOM, random script etc).
@@ -191,11 +214,12 @@ func (process *Process) Kill(ctx context.Context) (bool, error) {
 		}
 	}
 	events := processHcsResult(ctx, resultJSON)
-	delivered, err := process.processSignalResult(ctx, err)
+	delivered, err := newProcessHandle.processSignalResult(ctx, err)
 	if err != nil {
-		err = makeProcessError(process, operation, err, events)
+		err = makeProcessError(newProcessHandle, operation, err, events)
 	}
 
+	newProcessHandle.killSignalDelivered = delivered
 	process.killSignalDelivered = delivered
 	return delivered, err
 }

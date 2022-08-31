@@ -7,8 +7,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -410,6 +412,20 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 
 		// Setup WER registry keys for local process dump creation if specified.
 		// https://docs.microsoft.com/en-us/windows/win32/wer/collecting-user-mode-dumps
+
+		// Servercore images block on signaling and wait until the target process
+		// is terminated to return to its caller. By default, servercore waits for
+		// 5 seconds (default value of 'WaitToKillServiceTimeout') before sending
+		// a SIGKILL to terminate the process. This causes issues when graceful
+		// termination of containers is requested (Bug36689012).
+		// The regkey 'WaitToKillServiceTimeout' value is overriden here to help
+		// honor graceful termination of containers by waiting for the requested
+		// amount of time before stopping the container.
+		// More details on the implementation of this fix can be found in the Kill()
+		// funciton of exec_hcs.go
+
+		// 'WaitToKillServiceTimeout' reg key value is arbitrarily chosen and set to a
+		// value that is long enough that no one will want to wait longer
 		v2Container.RegistryChanges = &hcsschema.RegistryChanges{
 			AddValues: []hcsschema.RegistryValue{
 				{
@@ -430,23 +446,31 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 					DWordValue: dumpType,
 					Type_:      "DWord",
 				},
+				{
+					Key: &hcsschema.RegistryKey{
+						Hive: "System",
+						Name: "ControlSet001\\Control",
+					},
+					Name:        "WaitToKillServiceTimeout",
+					StringValue: strconv.Itoa(math.MaxInt32),
+					Type_:       "String",
+				},
 			},
 		}
-	}
-
-	// Override WaitToKillServiceTimeout reg key to 30 minutes
-	v2Container.RegistryChanges = &hcsschema.RegistryChanges{
-		AddValues: []hcsschema.RegistryValue{
-			{
-				Key: &hcsschema.RegistryKey{
-					Hive: "System",
-					Name: "ControlSet001\\Control",
+	} else {
+		v2Container.RegistryChanges = &hcsschema.RegistryChanges{
+			AddValues: []hcsschema.RegistryValue{
+				{
+					Key: &hcsschema.RegistryKey{
+						Hive: "System",
+						Name: "ControlSet001\\Control",
+					},
+					Name:        "WaitToKillServiceTimeout",
+					StringValue: strconv.Itoa(math.MaxInt32),
+					Type_:       "String",
 				},
-				Name:        "WaitToKillServiceTimeout",
-				StringValue: "1800000",
-				Type_:       "String",
 			},
-		},
+		}
 	}
 
 	return v1, v2Container, nil
