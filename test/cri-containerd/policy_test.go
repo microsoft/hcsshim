@@ -703,8 +703,8 @@ func Test_CannotSet_AllowAll_And_Containers(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected to fail")
 	}
-	if !strings.Contains(err.Error(), securitypolicy.ErrInvalidAllowAllPolicy.Error()) {
-		t.Fatalf("expected error %s, got %s", securitypolicy.ErrInvalidAllowAllPolicy, err)
+	if !strings.Contains(err.Error(), securitypolicy.ErrInvalidOpenDoorPolicy.Error()) {
+		t.Fatalf("expected error %s, got %s", securitypolicy.ErrInvalidOpenDoorPolicy, err)
 	}
 }
 

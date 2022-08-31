@@ -214,15 +214,12 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}
 	}()
 
-	err = h.securityPolicyEnforcer.EnforceCreateContainerPolicy(
-		id,
-		settings.OCISpecification.Process.Args,
-		settings.OCISpecification.Process.Env,
-		settings.OCISpecification.Process.Cwd,
-	)
-	if err != nil {
-		return nil, errors.Wrapf(err, "container creation denied due to policy")
-	}
+	// Normally we would be doing policy checking here at the start of our
+	// "policy gated function". However, we can't for create container as we
+	// need a properly correct sandboxID which might be changed by the code
+	// below that determines the sandboxID. This is a bit of future proofing
+	// as currently for our single use case, the sandboxID is the same as the
+	// container id
 
 	var namespaceID string
 	// for sandbox container sandboxID is same as container id
@@ -286,9 +283,18 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}()
 	}
 
-	if err := h.securityPolicyEnforcer.EnforceMountPolicy(sandboxID, id, settings.OCISpecification); err != nil {
-		return nil, err
+	err = h.securityPolicyEnforcer.EnforceCreateContainerPolicy(
+		sandboxID,
+		id,
+		settings.OCISpecification.Process.Args,
+		settings.OCISpecification.Process.Env,
+		settings.OCISpecification.Process.Cwd,
+		settings.OCISpecification.Mounts,
+	)
+	if err != nil {
+		return nil, errors.Wrapf(err, "container creation denied due to policy")
 	}
+
 	// Export security policy as one of the process's environment variables so that application and sidecar
 	// containers can have access to it. The security policy is required by containers which need to extract
 	// init-time claims found in the security policy.

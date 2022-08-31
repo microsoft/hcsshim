@@ -35,11 +35,7 @@ func (p *MountMonitoringSecurityPolicyEnforcer) EnforceOverlayMountPolicy(_ stri
 	return nil
 }
 
-func (MountMonitoringSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_ string, _ []string, _ []string, _ string) error {
-	return nil
-}
-
-func (MountMonitoringSecurityPolicyEnforcer) EnforceMountPolicy(_, _ string, _ *oci.Spec) error {
+func (MountMonitoringSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, _ []string, _ string, _ []oci.Mount) error {
 	return nil
 }
 
