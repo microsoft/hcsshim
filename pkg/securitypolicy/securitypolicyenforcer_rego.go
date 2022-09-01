@@ -7,10 +7,11 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
+	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -35,15 +36,11 @@ func init() {
 	// single package, the order of their execution is determined by the
 	// filename.
 	defaultEnforcer = regoEnforcerName
+	defaultMarshaller = regoMarshaller
 }
 
 //go:embed framework.rego
 var frameworkCode string
-
-//go:embed policy.rego
-var policyCode string
-
-var indentUsing string = "    "
 
 // regoEnforcer is a stub implementation of a security policy, which will be
 // based on [Rego] policy language. The detailed implementation will be
@@ -52,9 +49,7 @@ var indentUsing string = "    "
 // [Rego]: https://www.openpolicyagent.org/docs/latest/policy-language/
 type regoEnforcer struct {
 	// Rego which describes policy behavior (see above)
-	behavior string
-	// Rego which describes policy objects (containers, etc.)
-	objects string
+	code string
 	// Mutex to prevent concurrent access to fields
 	mutex sync.Mutex
 	// Rego data object, used to store policy state
@@ -67,11 +62,6 @@ type regoEnforcer struct {
 
 var _ SecurityPolicyEnforcer = (*regoEnforcer)(nil)
 
-type securityPolicyInternal struct {
-	AllowAll   bool
-	Containers []*securityPolicyContainer
-}
-
 func (sp SecurityPolicy) toInternal() (*securityPolicyInternal, error) {
 	policy := new(securityPolicyInternal)
 	var err error
@@ -79,170 +69,53 @@ func (sp SecurityPolicy) toInternal() (*securityPolicyInternal, error) {
 		return nil, err
 	}
 
-	policy.AllowAll = sp.AllowAll
-
 	return policy, nil
 }
 
-type stringArray []string
-
-func (array stringArray) marshalRego() string {
-	values := make([]string, len(array))
-	for i, value := range array {
-		values[i] = fmt.Sprintf("%q", value)
-	}
-
-	return fmt.Sprintf("[%s]", strings.Join(values, ","))
-}
-
-func writeCommand(builder *strings.Builder, command []string, indent string) error {
-	array := (stringArray(command)).marshalRego()
-	_, err := builder.WriteString(fmt.Sprintf("%s\"command\": %s,\n", indent, array))
-	return err
-}
-
-func (e EnvRuleConfig) marshalRego() string {
-	return fmt.Sprintf(`{"pattern": "%s", "strategy": "%s"}`, e.Rule, e.Strategy)
-}
-
-type envRuleArray []EnvRuleConfig
-
-func (array envRuleArray) marshalRego() string {
-	values := make([]string, len(array))
-	for i, env := range array {
-		values[i] = env.marshalRego()
-	}
-
-	return fmt.Sprintf("[%s]", strings.Join(values, ","))
-}
-
-func writeEnvRules(builder *strings.Builder, envRules []EnvRuleConfig, indent string) error {
-	_, err := builder.WriteString(fmt.Sprintf("%s\"env_rules\": %s,\n", indent, envRuleArray(envRules).marshalRego()))
-	return err
-}
-
-func writeLayers(builder *strings.Builder, layers []string, indent string) error {
-	array := (stringArray(layers)).marshalRego()
-	_, err := builder.WriteString(fmt.Sprintf("%s\"layers\": %s,\n", indent, array))
-	return err
-}
-
-func (m mountInternal) marshalRego() string {
-	options := stringArray(m.Options).marshalRego()
-	return fmt.Sprintf("{\"destination\": \"%s\", \"options\": %s, \"source\": \"%s\", \"type\": \"%s\"}", m.Destination, options, m.Source, m.Type)
-}
-
-func writeMounts(builder *strings.Builder, mounts []mountInternal, indent string) error {
-	values := make([]string, len(mounts))
-	for i, mount := range mounts {
-		values[i] = mount.marshalRego()
-	}
-
-	_, err := builder.WriteString(fmt.Sprintf("%s\"mounts\": [%s],\n", indent, strings.Join(values, ",")))
-	return err
-}
-
-func writeContainer(builder *strings.Builder, container *securityPolicyContainer, indent string) error {
-	if _, err := builder.WriteString(fmt.Sprintf("%s{\n", indent)); err != nil {
-		return err
-	}
-
-	if err := writeCommand(builder, container.Command, indent+indentUsing); err != nil {
-		return err
-	}
-
-	if err := writeEnvRules(builder, container.EnvRules, indent+indentUsing); err != nil {
-		return err
-	}
-
-	if err := writeLayers(builder, container.Layers, indent+indentUsing); err != nil {
-		return err
-	}
-
-	if err := writeMounts(builder, container.Mounts, indent+indentUsing); err != nil {
-		return err
-	}
-
-	if _, err := builder.WriteString(fmt.Sprintf("%s\"allow_elevated\": %v,\n", indent+indentUsing, container.AllowElevated)); err != nil {
-		return err
-	}
-
-	if _, err := builder.WriteString(fmt.Sprintf("%s\"working_dir\": \"%s\"\n", indent+indentUsing, container.WorkingDir)); err != nil {
-		return err
-	}
-
-	if _, err := builder.WriteString(fmt.Sprintf("%s}", indent)); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func addContainers(builder *strings.Builder, containers []*securityPolicyContainer) error {
-	if _, err := builder.WriteString("containers := [\n"); err != nil {
-		return err
-	}
-
-	for i, container := range containers {
-		if err := writeContainer(builder, container, indentUsing); err != nil {
-			return err
-		}
-
-		var end string
-		if i < len(containers)-1 {
-			end = ",\n"
-		} else {
-			end = "\n"
-		}
-
-		if _, err := builder.WriteString(end); err != nil {
-			return err
-		}
-	}
-
-	if _, err := builder.WriteString("]\n"); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (p securityPolicyInternal) marshalRego() (string, error) {
-	builder := new(strings.Builder)
-	if _, err := builder.WriteString(fmt.Sprintf("package policy\nallow_all := %v\n", p.AllowAll)); err != nil {
-		return "", err
-	}
-
-	if err := addContainers(builder, p.Containers); err != nil {
-		return "", err
-	}
-
-	return builder.String(), nil
-}
-
-func createRegoEnforcer(state SecurityPolicyState, defaultMounts []oci.Mount, privilegedMounts []oci.Mount) (SecurityPolicyEnforcer, error) {
-	policy, err := state.SecurityPolicy.toInternal()
+func createRegoEnforcer(base64EncodedPolicy string, defaultMounts []oci.Mount, privilegedMounts []oci.Mount) (SecurityPolicyEnforcer, error) {
+	// base64 decode the incoming policy string
+	// It will either be (legacy) JSON or Rego.
+	rawPolicy, err := base64.StdEncoding.DecodeString(base64EncodedPolicy)
 	if err != nil {
-		return nil, fmt.Errorf("error converting to internal format: %w", err)
+		return nil, fmt.Errorf("unable to decode policy from Base64 format: %w", err)
 	}
 
-	regoPolicy, err := newRegoPolicyFromInternal(policy, defaultMounts, privilegedMounts)
+	// Try to unmarshal the JSON
+	var code string
+	securityPolicy := new(SecurityPolicy)
+	err = json.Unmarshal(rawPolicy, securityPolicy)
+	if err == nil {
+		containers := make([]*Container, securityPolicy.Containers.Length)
+
+		for i := 0; i < securityPolicy.Containers.Length; i++ {
+			index := strconv.Itoa(i)
+			cConf, ok := securityPolicy.Containers.Elements[index]
+			if !ok {
+				return nil, fmt.Errorf("container constraint with index %q not found", index)
+			}
+			containers[i] = &cConf
+		}
+
+		code, err = marshalRego(securityPolicy.AllowAll, containers)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling the policy to Rego: %w", err)
+		}
+	} else {
+		// this is either a Rego policy or malformed JSON
+		code = string(rawPolicy)
+	}
+
+	regoPolicy, err := newRegoPolicy(code, defaultMounts, privilegedMounts)
 	if err != nil {
-		return nil, fmt.Errorf("error converting to Rego: %w", err)
+		return nil, fmt.Errorf("error creating Rego policy: %w", err)
 	}
-
-	regoPolicy.base64policy = state.EncodedSecurityPolicy.SecurityPolicy
+	regoPolicy.base64policy = base64EncodedPolicy
 	return regoPolicy, nil
 }
 
-func newRegoPolicyFromInternal(securityPolicy *securityPolicyInternal, defaultMounts []oci.Mount, privilegedMounts []oci.Mount) (*regoEnforcer, error) {
+func newRegoPolicy(code string, defaultMounts []oci.Mount, privilegedMounts []oci.Mount) (*regoEnforcer, error) {
 	policy := new(regoEnforcer)
-	policy.behavior = policyCode
-	var err error
-	policy.objects, err = securityPolicy.marshalRego()
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert json to rego: %w", err)
-	}
+	policy.code = code
 
 	defaultMountData := make([]interface{}, 0, len(defaultMounts))
 	privilegedMountData := make([]interface{}, 0, len(privilegedMounts))
@@ -258,8 +131,7 @@ func newRegoPolicyFromInternal(securityPolicy *securityPolicyInternal, defaultMo
 	policy.base64policy = ""
 
 	modules := map[string]string{
-		"behavior.rego":  policy.behavior,
-		"objects.rego":   policy.objects,
+		"policy.rego":    policy.code,
 		"framework.rego": frameworkCode,
 	}
 
@@ -295,14 +167,16 @@ func (policy *regoEnforcer) Query(input map[string]interface{}) (rego.ResultSet,
 	results, err := query.Eval(ctx)
 	if err != nil {
 		log.G(ctx).WithError(err).WithFields(logrus.Fields{
-			"Policy": policy.objects,
-		})
+			"Policy": policy.code,
+		}).Error("Rego policy execution error")
 		return results, err
 	}
 
 	output := buf.String()
 	if len(output) > 0 {
-		log.G(ctx).Debug(output)
+		log.G(ctx).WithFields(logrus.Fields{
+			"output": output,
+		}).Debug("Rego policy output")
 	}
 
 	return results, nil
@@ -325,7 +199,7 @@ func (policy *regoEnforcer) EnforceDeviceMountPolicy(target string, deviceHash s
 	if !result.Allowed() {
 		input_json, err := json.Marshal(input)
 		if err != nil {
-			return errors.New("unable to marshal the Rego input data")
+			return fmt.Errorf("unable to marshal the Rego input data: %w", err)
 		}
 
 		return fmt.Errorf("device mount not allowed by policy.\ninput: %s", string(input_json))
@@ -335,7 +209,7 @@ func (policy *regoEnforcer) EnforceDeviceMountPolicy(target string, deviceHash s
 	if _, ok := deviceMap[target]; ok {
 		input_json, err := json.Marshal(input)
 		if err != nil {
-			return errors.New("unable to marshal the Rego input data")
+			return fmt.Errorf("unable to marshal the Rego input data: %w", err)
 		}
 
 		return fmt.Errorf("device %s already mounted.\ninput: %s", target, string(input_json))
@@ -362,7 +236,7 @@ func (policy *regoEnforcer) EnforceOverlayMountPolicy(containerID string, layerP
 	if !result.Allowed() {
 		input_json, err := json.Marshal(input)
 		if err != nil {
-			return errors.New("unable to marshal the Rego input data")
+			return fmt.Errorf("unable to marshal the Rego input data: %w", err)
 		}
 
 		return fmt.Errorf("overlay mount not allowed by policy.\ninput: %s", string(input_json))
@@ -374,7 +248,7 @@ func (policy *regoEnforcer) EnforceOverlayMountPolicy(containerID string, layerP
 	if _, ok := containerMap[containerID]; ok {
 		input_json, err := json.Marshal(input)
 		if err != nil {
-			return errors.New("unable to marshal the Rego input data")
+			return fmt.Errorf("unable to marshal the Rego input data: %w", err)
 		}
 
 		return fmt.Errorf("container %s already mounted.\ninput: %s", containerID, string(input_json))
@@ -448,7 +322,7 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 	} else {
 		input_json, err := json.Marshal(input)
 		if err != nil {
-			return errors.New("unable to marshal the Rego input data")
+			return fmt.Errorf("unable to marshal the Rego input data: %w", err)
 		}
 
 		input["name"] = "reason"

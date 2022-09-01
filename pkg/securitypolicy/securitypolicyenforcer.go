@@ -4,7 +4,8 @@
 package securitypolicy
 
 import (
-	"errors"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -15,9 +16,10 @@ import (
 
 	specInternal "github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
+	"github.com/pkg/errors"
 )
 
-type createEnforcerFunc func(_ SecurityPolicyState, criMounts, criPrivilegedMounts []oci.Mount) (SecurityPolicyEnforcer, error)
+type createEnforcerFunc func(base64EncodedPolicy string, criMounts, criPrivilegedMounts []oci.Mount) (SecurityPolicyEnforcer, error)
 
 const (
 	openDoorEnforcer = "open_door"
@@ -43,32 +45,86 @@ type SecurityPolicyEnforcer interface {
 	EncodedSecurityPolicy() string
 }
 
+func newSecurityPolicyFromBase64JSON(base64EncodedPolicy string) (*SecurityPolicy, error) {
+	// base64 decode the incoming policy string
+	// its base64 encoded because it is coming from an annotation
+	// annotations are a map of string to string
+	// we want to store a complex json object so.... base64 it is
+	jsonPolicy, err := base64.StdEncoding.DecodeString(base64EncodedPolicy)
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to decode policy from Base64 format")
+	}
+
+	// json unmarshall the decoded to a SecurityPolicy
+	securityPolicy := new(SecurityPolicy)
+	err = json.Unmarshal(jsonPolicy, securityPolicy)
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to unmarshal JSON policy")
+	}
+
+	return securityPolicy, nil
+}
+
 // createAllowAllEnforcer creates and returns OpenDoorSecurityPolicyEnforcer instance.
 // Both AllowAll and Containers cannot be set at the same time.
-func createOpenDoorEnforcer(state SecurityPolicyState, _, _ []oci.Mount) (SecurityPolicyEnforcer, error) {
-	policyContainers := state.SecurityPolicy.Containers
-	if !state.AllowAll || policyContainers.Length > 0 || len(policyContainers.Elements) > 0 {
+func createOpenDoorEnforcer(base64EncodedPolicy string, _, _ []oci.Mount) (SecurityPolicyEnforcer, error) {
+	securityPolicy, err := newSecurityPolicyFromBase64JSON(base64EncodedPolicy)
+	if err != nil {
+		return nil, err
+	}
+
+	policyContainers := securityPolicy.Containers
+	if !securityPolicy.AllowAll || policyContainers.Length > 0 || len(policyContainers.Elements) > 0 {
 		return nil, ErrInvalidOpenDoorPolicy
 	}
 	return &OpenDoorSecurityPolicyEnforcer{
-		encodedSecurityPolicy: state.EncodedSecurityPolicy.SecurityPolicy,
+		encodedSecurityPolicy: base64EncodedPolicy,
 	}, nil
+}
+
+func (c Containers) toInternal() ([]*securityPolicyContainer, error) {
+	containerMapLength := len(c.Elements)
+	internal := make([]*securityPolicyContainer, containerMapLength)
+
+	for i := 0; i < containerMapLength; i++ {
+		index := strconv.Itoa(i)
+		cConf, ok := c.Elements[index]
+		if !ok {
+			return nil, fmt.Errorf("container constraint with index %q not found", index)
+		}
+		cInternal, err := cConf.toInternal()
+		if err != nil {
+			return nil, err
+		}
+		internal[i] = &cInternal
+	}
+
+	return internal, nil
 }
 
 // createStandardEnforcer creates and returns StandardSecurityPolicyEnforcer instance.
 // Make sure that the input JSON policy can be converted to internal representation
 // and that `criMounts` and `criPrivilegedMounts` can be injected before successful return.
 func createStandardEnforcer(
-	state SecurityPolicyState,
+	base64EncodedPolicy string,
 	criMounts,
 	criPrivilegedMounts []oci.Mount,
 ) (SecurityPolicyEnforcer, error) {
-	containers, err := state.SecurityPolicy.Containers.toInternal()
+	securityPolicy, err := newSecurityPolicyFromBase64JSON(base64EncodedPolicy)
 	if err != nil {
 		return nil, err
 	}
 
-	enforcer := NewStandardSecurityPolicyEnforcer(containers, state.EncodedSecurityPolicy.SecurityPolicy)
+	if securityPolicy.AllowAll {
+		return createOpenDoorEnforcer(base64EncodedPolicy, criMounts, criPrivilegedMounts)
+	}
+
+	containers, err := securityPolicy.Containers.toInternal()
+	if err != nil {
+		return nil, err
+	}
+
+	enforcer := NewStandardSecurityPolicyEnforcer(containers, base64EncodedPolicy)
 
 	if err := enforcer.ExtendDefaultMounts(criMounts); err != nil {
 		return nil, err
@@ -86,29 +142,18 @@ func createStandardEnforcer(
 // Returns an error if the requested `enforcer` implementation isn't registered.
 func CreateSecurityPolicyEnforcer(
 	enforcer string,
-	state SecurityPolicyState,
+	base64EncodedPolicy string,
 	criMounts,
 	criPrivilegedMounts []oci.Mount,
 ) (SecurityPolicyEnforcer, error) {
 	if enforcer == "" {
-		if state.SecurityPolicy.AllowAll {
-			enforcer = openDoorEnforcer
-		} else {
-			enforcer = defaultEnforcer
-		}
+		enforcer = defaultEnforcer
 	}
 	if createEnforcer, ok := registeredEnforcers[enforcer]; !ok {
 		return nil, fmt.Errorf("unknown enforcer: %q", enforcer)
 	} else {
-		return createEnforcer(state, criMounts, criPrivilegedMounts)
+		return createEnforcer(base64EncodedPolicy, criMounts, criPrivilegedMounts)
 	}
-}
-
-type mountInternal struct {
-	Source      string
-	Destination string
-	Type        string
-	Options     []string
 }
 
 // newMountConstraint creates an internal mount constraint object from given
@@ -144,25 +189,6 @@ func WithPrivilegedMounts(mounts []oci.Mount) standardEnforcerOpt {
 		}
 		return nil
 	}
-}
-
-// Internal version of Container
-type securityPolicyContainer struct {
-	// The command that we will allow the container to execute
-	Command []string
-	// The rules for determining if a given environment variable is allowed
-	EnvRules []EnvRuleConfig
-	// An ordered list of dm-verity root hashes for each layer that makes up
-	// "a container". Containers are constructed as an overlay file system. The
-	// order that the layers are overlayed is important and needs to be enforced
-	// as part of policy.
-	Layers []string
-	// WorkingDir is a path to container's working directory, which all the processes
-	// will default to.
-	WorkingDir string
-	// A list of constraints for determining if a given mount is allowed.
-	Mounts        []mountInternal
-	AllowElevated bool
 }
 
 // StandardSecurityPolicyEnforcer implements SecurityPolicyEnforcer interface
@@ -233,158 +259,6 @@ func NewStandardSecurityPolicyEnforcer(
 		startedContainers:            map[string]struct{}{},
 		mutex:                        &sync.Mutex{},
 	}
-}
-
-func (c Containers) toInternal() ([]*securityPolicyContainer, error) {
-	containerMapLength := len(c.Elements)
-	if c.Length != containerMapLength {
-		err := fmt.Errorf(
-			"container numbers don't match in policy. expected: %d, actual: %d",
-			c.Length,
-			containerMapLength,
-		)
-		return nil, err
-	}
-
-	internal := make([]*securityPolicyContainer, containerMapLength)
-
-	for i := 0; i < containerMapLength; i++ {
-		index := strconv.Itoa(i)
-		cConf, ok := c.Elements[index]
-		if !ok {
-			return nil, fmt.Errorf("container constraint with index %q not found", index)
-		}
-		cInternal, err := cConf.toInternal()
-		if err != nil {
-			return nil, err
-		}
-		// save off new container
-		internal[i] = &cInternal
-	}
-
-	return internal, nil
-}
-
-func (c Container) toInternal() (securityPolicyContainer, error) {
-	command, err := c.Command.toInternal()
-	if err != nil {
-		return securityPolicyContainer{}, err
-	}
-
-	envRules, err := c.EnvRules.toInternal()
-	if err != nil {
-		return securityPolicyContainer{}, err
-	}
-
-	layers, err := c.Layers.toInternal()
-	if err != nil {
-		return securityPolicyContainer{}, err
-	}
-
-	mounts, err := c.Mounts.toInternal()
-	if err != nil {
-		return securityPolicyContainer{}, err
-	}
-	return securityPolicyContainer{
-		Command:  command,
-		EnvRules: envRules,
-		Layers:   layers,
-		// No need to have toInternal(), because WorkingDir is a string both
-		// internally and in the policy.
-		WorkingDir:    c.WorkingDir,
-		Mounts:        mounts,
-		AllowElevated: c.AllowElevated,
-	}, nil
-}
-
-func (c CommandArgs) toInternal() ([]string, error) {
-	if c.Length != len(c.Elements) {
-		return nil, fmt.Errorf("command argument numbers don't match in policy. expected: %d, actual: %d", c.Length, len(c.Elements))
-	}
-
-	return stringMapToStringArray(c.Elements)
-}
-
-func (e EnvRules) toInternal() ([]EnvRuleConfig, error) {
-	envRulesMapLength := len(e.Elements)
-	if e.Length != envRulesMapLength {
-		return nil, fmt.Errorf("env rule numbers don't match in policy. expected: %d, actual: %d", e.Length, envRulesMapLength)
-	}
-
-	envRules := make([]EnvRuleConfig, envRulesMapLength)
-	for i := 0; i < envRulesMapLength; i++ {
-		eIndex := strconv.Itoa(i)
-		elem, ok := e.Elements[eIndex]
-		if !ok {
-			return nil, fmt.Errorf("env rule with index %q doesn't exist", eIndex)
-		}
-		rule := EnvRuleConfig{
-			Strategy: elem.Strategy,
-			Rule:     elem.Rule,
-		}
-		envRules[i] = rule
-	}
-
-	return envRules, nil
-}
-
-func (l Layers) toInternal() ([]string, error) {
-	if l.Length != len(l.Elements) {
-		return nil, fmt.Errorf("layer numbers don't match in policy. expected: %d, actual: %d", l.Length, len(l.Elements))
-	}
-
-	return stringMapToStringArray(l.Elements)
-}
-
-func (o Options) toInternal() ([]string, error) {
-	optLength := len(o.Elements)
-	if o.Length != optLength {
-		return nil, fmt.Errorf("mount option numbers don't match in policy. expected: %d, actual: %d", o.Length, optLength)
-	}
-	return stringMapToStringArray(o.Elements)
-}
-
-func (m Mounts) toInternal() ([]mountInternal, error) {
-	mountLength := len(m.Elements)
-	if m.Length != mountLength {
-		return nil, fmt.Errorf("mount constraint numbers don't match in policy. expected: %d, actual: %d", m.Length, mountLength)
-	}
-
-	mountConstraints := make([]mountInternal, mountLength)
-	for i := 0; i < mountLength; i++ {
-		mIndex := strconv.Itoa(i)
-		mount, ok := m.Elements[mIndex]
-		if !ok {
-			return nil, fmt.Errorf("mount constraint with index %q not found", mIndex)
-		}
-		opts, err := mount.Options.toInternal()
-		if err != nil {
-			return nil, err
-		}
-		mountConstraints[i] = mountInternal{
-			Source:      mount.Source,
-			Destination: mount.Destination,
-			Type:        mount.Type,
-			Options:     opts,
-		}
-	}
-	return mountConstraints, nil
-}
-
-func stringMapToStringArray(m map[string]string) ([]string, error) {
-	mapSize := len(m)
-	out := make([]string, mapSize)
-
-	for i := 0; i < mapSize; i++ {
-		index := strconv.Itoa(i)
-		value, ok := m[index]
-		if !ok {
-			return nil, fmt.Errorf("element with index %q not found", index)
-		}
-		out[i] = value
-	}
-
-	return out, nil
 }
 
 // EnforceDeviceMountPolicy for StandardSecurityPolicyEnforcer validates that

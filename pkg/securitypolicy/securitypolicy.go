@@ -95,53 +95,11 @@ func NewSecurityPolicyDigest(base64policy string) ([]byte, error) {
 	return digestBytes, nil
 }
 
-// SecurityPolicyState is a structure that holds user supplied policy to enforce
-// we keep both the encoded representation and the unmarshalled representation
-// because different components need to have access to either of these
-type SecurityPolicyState struct {
-	EncodedSecurityPolicy EncodedSecurityPolicy `json:"EncodedSecurityPolicy,omitempty"`
-	SecurityPolicy        `json:"SecurityPolicy,omitempty"`
-}
-
 // EncodedSecurityPolicy is a JSON representation of SecurityPolicy that has
 // been base64 encoded for storage in an annotation embedded within another
 // JSON configuration
 type EncodedSecurityPolicy struct {
 	SecurityPolicy string `json:"SecurityPolicy,omitempty"`
-}
-
-// NewSecurityPolicyState constructs SecurityPolicyState from base64Policy
-// string. It first decodes base64 policy and returns the security policy
-// struct and encoded security policy for given policy. The security policy
-// is transmitted as json in an annotation, so we first have to remove the
-// base64 encoding that allows the JSON based policy to be passed as a string.
-// From there, we decode the JSON and set up our security policy struct
-func NewSecurityPolicyState(base64Policy string) (*SecurityPolicyState, error) {
-	// construct an encoded security policy that holds the base64 representation
-	encodedSecurityPolicy := EncodedSecurityPolicy{
-		SecurityPolicy: base64Policy,
-	}
-
-	// base64 decode the incoming policy string
-	// its base64 encoded because it is coming from an annotation
-	// annotations are a map of string to string
-	// we want to store a complex json object so.... base64 it is
-	jsonPolicy, err := base64.StdEncoding.DecodeString(base64Policy)
-	if err != nil {
-		return nil, errors.Wrap(err, "unable to decode policy from Base64 format")
-	}
-
-	// json unmarshall the decoded to a SecurityPolicy
-	securityPolicy := SecurityPolicy{}
-	err = json.Unmarshal(jsonPolicy, &securityPolicy)
-	if err != nil {
-		return nil, errors.Wrap(err, "unable to unmarshal JSON policy")
-	}
-
-	return &SecurityPolicyState{
-		SecurityPolicy:        securityPolicy,
-		EncodedSecurityPolicy: encodedSecurityPolicy,
-	}, nil
 }
 
 type SecurityPolicy struct {
@@ -364,63 +322,4 @@ func newMountConstraints(mountConfigs []MountConfig) Mounts {
 	return Mounts{
 		Elements: mounts,
 	}
-}
-
-// Custom JSON marshalling to add `length` field that matches the number of
-// elements present in the `elements` field.
-
-func (c Containers) MarshalJSON() ([]byte, error) {
-	type Alias Containers
-	return json.Marshal(&struct {
-		Length int `json:"length"`
-		*Alias
-	}{
-		Length: len(c.Elements),
-		Alias:  (*Alias)(&c),
-	})
-}
-
-func (e EnvRules) MarshalJSON() ([]byte, error) {
-	type Alias EnvRules
-	return json.Marshal(&struct {
-		Length int `json:"length"`
-		*Alias
-	}{
-		Length: len(e.Elements),
-		Alias:  (*Alias)(&e),
-	})
-}
-
-func (s StringArrayMap) MarshalJSON() ([]byte, error) {
-	type Alias StringArrayMap
-	return json.Marshal(&struct {
-		Length int `json:"length"`
-		*Alias
-	}{
-		Length: len(s.Elements),
-		Alias:  (*Alias)(&s),
-	})
-}
-
-func (c CommandArgs) MarshalJSON() ([]byte, error) {
-	return json.Marshal(StringArrayMap(c))
-}
-
-func (l Layers) MarshalJSON() ([]byte, error) {
-	return json.Marshal(StringArrayMap(l))
-}
-
-func (o Options) MarshalJSON() ([]byte, error) {
-	return json.Marshal(StringArrayMap(o))
-}
-
-func (m Mounts) MarshalJSON() ([]byte, error) {
-	type Alias Mounts
-	return json.Marshal(&struct {
-		Length int `json:"length"`
-		*Alias
-	}{
-		Length: len(m.Elements),
-		Alias:  (*Alias)(&m),
-	})
 }

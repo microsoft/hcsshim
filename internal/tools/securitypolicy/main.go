@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -14,8 +13,9 @@ import (
 )
 
 var (
-	configFile = flag.String("c", "", "config")
-	outputJSON = flag.Bool("j", false, "json")
+	configFile = flag.String("c", "", "config path")
+	outputType = flag.String("t", "", "[rego|json]")
+	outputRaw  = flag.Bool("r", false, "whether to print the raw output")
 )
 
 func main() {
@@ -38,26 +38,22 @@ func main() {
 			return err
 		}
 
-		policy, err := func() (*securitypolicy.SecurityPolicy, error) {
-			if config.AllowAll {
-				return securitypolicy.NewOpenDoorPolicy(), nil
-			} else {
-				return createPolicyFromConfig(config)
-			}
-		}()
-
+		defaultContainers := helpers.DefaultContainerConfigs()
+		config.Containers = append(config.Containers, defaultContainers...)
+		policyContainers, err := helpers.PolicyContainersFromConfigs(config.Containers)
 		if err != nil {
 			return err
 		}
 
-		j, err := json.Marshal(policy)
+		policyCode, err := securitypolicy.MarshalPolicy(*outputType, config.AllowAll, policyContainers)
 		if err != nil {
 			return err
 		}
-		if *outputJSON {
-			fmt.Printf("%s\n", j)
+
+		if *outputRaw {
+			fmt.Printf("%s\n", policyCode)
 		}
-		b := base64.StdEncoding.EncodeToString(j)
+		b := base64.StdEncoding.EncodeToString([]byte(policyCode))
 		fmt.Printf("%s\n", b)
 
 		return nil
@@ -67,16 +63,4 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-}
-
-func createPolicyFromConfig(config *securitypolicy.PolicyConfig) (*securitypolicy.SecurityPolicy, error) {
-	// Add default containers to the policy config to get the root hash
-	// and any environment variable rules we might need
-	defaultContainers := helpers.DefaultContainerConfigs()
-	config.Containers = append(config.Containers, defaultContainers...)
-	policyContainers, err := helpers.PolicyContainersFromConfigs(config.Containers)
-	if err != nil {
-		return nil, err
-	}
-	return securitypolicy.NewSecurityPolicy(false, policyContainers), nil
 }
