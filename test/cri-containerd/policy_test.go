@@ -5,6 +5,7 @@ package cri_containerd
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,29 +25,28 @@ var (
 
 type configSideEffect func(*runtime.CreateContainerRequest) error
 
-func securityPolicyFromContainers(containers []securitypolicy.ContainerConfig) (string, error) {
+func securityPolicyFromContainers(policyType string, containers []securitypolicy.ContainerConfig) (string, error) {
 	pc, err := helpers.PolicyContainersFromConfigs(containers)
 	if err != nil {
 		return "", err
 	}
-	p := securitypolicy.NewSecurityPolicy(false, pc)
-	pString, err := p.EncodeToString()
+	policyString, err := securitypolicy.MarshalPolicy(policyType, false, pc)
 	if err != nil {
 		return "", err
 	}
-	return pString, nil
+	return base64.StdEncoding.EncodeToString([]byte(policyString)), nil
 }
 
-func sandboxSecurityPolicy(t *testing.T) string {
+func sandboxSecurityPolicy(t *testing.T, policyType string) string {
 	defaultContainers := helpers.DefaultContainerConfigs()
-	policyString, err := securityPolicyFromContainers(defaultContainers)
+	policyString, err := securityPolicyFromContainers(policyType, defaultContainers)
 	if err != nil {
 		t.Fatalf("failed to create security policy string: %s", err)
 	}
 	return policyString
 }
 
-func alpineSecurityPolicy(t *testing.T, opts ...securitypolicy.ContainerConfigOpt) string {
+func alpineSecurityPolicy(t *testing.T, policyType string, opts ...securitypolicy.ContainerConfigOpt) string {
 	defaultContainers := helpers.DefaultContainerConfigs()
 
 	alpineContainer := securitypolicy.ContainerConfig{
@@ -61,7 +61,7 @@ func alpineSecurityPolicy(t *testing.T, opts ...securitypolicy.ContainerConfigOp
 	}
 
 	containers := append(defaultContainers, alpineContainer)
-	policyString, err := securityPolicyFromContainers(containers)
+	policyString, err := securityPolicyFromContainers(policyType, containers)
 	if err != nil {
 		t.Fatalf("failed to create security policy string: %s", err)
 	}
@@ -82,94 +82,83 @@ func sandboxRequestWithPolicy(t *testing.T, policy string) *runtime.RunPodSandbo
 	)
 }
 
+type policyConfig struct {
+	enforcer string
+	input    string
+}
+
+var policyTestMatrix = []policyConfig{
+	{
+		enforcer: "rego",
+		input:    "rego",
+	},
+	{
+		enforcer: "rego",
+		input:    "json",
+	},
+	{
+		enforcer: "standard",
+		input:    "json",
+	},
+}
+
 func Test_RunPodSandbox_WithPolicy_Allowed(t *testing.T) {
 	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause})
-
-	sandboxPolicy := sandboxSecurityPolicy(t)
 
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sandboxRequest := sandboxRequestWithPolicy(t, sandboxPolicy)
+	for _, pc := range policyTestMatrix {
+		t.Run(t.Name()+fmt.Sprintf("_Enforcer_%s_Input_%s", pc.enforcer, pc.input), func(t *testing.T) {
+			sandboxPolicy := sandboxSecurityPolicy(t, pc.input)
+			sandboxRequest := sandboxRequestWithPolicy(t, sandboxPolicy)
+			sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = pc.enforcer
 
-	podID := runPodSandbox(t, client, ctx, sandboxRequest)
-	defer removePodSandbox(t, client, ctx, podID)
-	defer stopPodSandbox(t, client, ctx, podID)
+			podID := runPodSandbox(t, client, ctx, sandboxRequest)
+			defer removePodSandbox(t, client, ctx, podID)
+			defer stopPodSandbox(t, client, ctx, podID)
+		})
+	}
 }
 
 func Test_RunSimpleAlpineContainer_WithPolicy_Allowed(t *testing.T) {
 	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
-	alpinePolicy := alpineSecurityPolicy(t)
-
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
+	for _, pc := range policyTestMatrix {
+		t.Run(t.Name()+fmt.Sprintf("_Enforcer_%s_Input_%s", pc.enforcer, pc.input), func(t *testing.T) {
+			alpinePolicy := alpineSecurityPolicy(t, pc.input)
+			sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
+			sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = pc.enforcer
 
-	podID := runPodSandbox(t, client, ctx, sandboxRequest)
-	defer removePodSandbox(t, client, ctx, podID)
-	defer stopPodSandbox(t, client, ctx, podID)
+			podID := runPodSandbox(t, client, ctx, sandboxRequest)
+			defer removePodSandbox(t, client, ctx, podID)
+			defer stopPodSandbox(t, client, ctx, podID)
 
-	containerRequest := getCreateContainerRequest(
-		podID,
-		"alpine-with-policy",
-		"alpine:latest",
-		validPolicyAlpineCommand,
-		sandboxRequest.Config,
-	)
+			containerRequest := getCreateContainerRequest(
+				podID,
+				"alpine-with-policy",
+				"alpine:latest",
+				validPolicyAlpineCommand,
+				sandboxRequest.Config,
+			)
 
-	containerID := createContainer(t, client, ctx, containerRequest)
-	defer removeContainer(t, client, ctx, containerID)
+			containerID := createContainer(t, client, ctx, containerRequest)
+			defer removeContainer(t, client, ctx, containerID)
 
-	startContainer(t, client, ctx, containerID)
-	stopContainer(t, client, ctx, containerID)
+			startContainer(t, client, ctx, containerID)
+			stopContainer(t, client, ctx, containerID)
+		})
+	}
 }
 
-func syncContainerRequests(
-	writer, waiter *securitypolicy.ContainerConfig,
-	podID string,
-	podConfig *runtime.PodSandboxConfig,
-) (writerReq, waiterReq *runtime.CreateContainerRequest) {
-	writerReq = getCreateContainerRequest(
-		podID,
-		"alpine-writer",
-		"alpine:latest",
-		writer.Command,
-		podConfig,
-	)
-	writerReq.Config.Mounts = append(
-		writerReq.Config.Mounts, &runtime.Mount{
-			HostPath:      "sandbox://host/path",
-			ContainerPath: "/mnt/shared/container-A",
-			Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
-		},
-	)
-
-	waiterReq = getCreateContainerRequest(
-		podID,
-		"alpine-waiter",
-		"alpine:latest",
-		waiter.Command,
-		podConfig,
-	)
-	waiterReq.Config.Mounts = append(
-		waiterReq.Config.Mounts, &runtime.Mount{
-			// The HostPath must be the same as for the "writer" container
-			HostPath:      "sandbox://host/path",
-			ContainerPath: "/mnt/shared/container-B",
-			Propagation:   runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL,
-		},
-	)
-
-	return writerReq, waiterReq
-}
-
-func Test_RunContainer_ValidContainerConfigs_Allowed(t *testing.T) {
+func Test_RunContainer_WithPolicy_And_ValidConfigs(t *testing.T) {
 	type sideEffect func(*runtime.CreateContainerRequest)
 	type config struct {
 		name string
@@ -214,32 +203,36 @@ func Test_RunContainer_ValidContainerConfigs_Allowed(t *testing.T) {
 			},
 		},
 	} {
-		t.Run(testConfig.name, func(t *testing.T) {
-			alpinePolicy := alpineSecurityPolicy(t, testConfig.opts...)
-			sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
+		for _, pc := range policyTestMatrix {
+			t.Run(testConfig.name+fmt.Sprintf("_Enforcer_%s_Input_%s", pc.enforcer, pc.input), func(t *testing.T) {
+				alpinePolicy := alpineSecurityPolicy(t, pc.input, testConfig.opts...)
+				sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
+				sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = pc.enforcer
 
-			podID := runPodSandbox(t, client, ctx, sandboxRequest)
-			defer removePodSandbox(t, client, ctx, podID)
-			defer stopPodSandbox(t, client, ctx, podID)
+				podID := runPodSandbox(t, client, ctx, sandboxRequest)
+				defer removePodSandbox(t, client, ctx, podID)
+				defer stopPodSandbox(t, client, ctx, podID)
 
-			containerRequest := getCreateContainerRequest(
-				podID,
-				"alpine-with-policy",
-				"alpine:latest",
-				validPolicyAlpineCommand,
-				sandboxRequest.Config,
-			)
-			testConfig.sf(containerRequest)
+				containerRequest := getCreateContainerRequest(
+					podID,
+					"alpine-with-policy",
+					"alpine:latest",
+					validPolicyAlpineCommand,
+					sandboxRequest.Config,
+				)
+				testConfig.sf(containerRequest)
 
-			containerID := createContainer(t, client, ctx, containerRequest)
-			startContainer(t, client, ctx, containerID)
-			defer removeContainer(t, client, ctx, containerID)
-			defer stopContainer(t, client, ctx, containerID)
-		})
+				containerID := createContainer(t, client, ctx, containerRequest)
+				startContainer(t, client, ctx, containerID)
+				defer removeContainer(t, client, ctx, containerID)
+				defer stopContainer(t, client, ctx, containerID)
+			})
+		}
 	}
 }
 
-func Test_RunContainer_InvalidContainerConfigs_NotAllowed(t *testing.T) {
+// todo (maksiman): add coverage for rego enforcer
+func Test_RunContainer_WithPolicy_And_InvalidConfigs(t *testing.T) {
 	type config struct {
 		name          string
 		sf            configSideEffect
@@ -253,7 +246,6 @@ func Test_RunContainer_InvalidContainerConfigs_NotAllowed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	alpinePolicy := alpineSecurityPolicy(t)
 	for _, testConfig := range []config{
 		{
 			name: "InvalidWorkingDir",
@@ -286,7 +278,9 @@ func Test_RunContainer_InvalidContainerConfigs_NotAllowed(t *testing.T) {
 		},
 	} {
 		t.Run(testConfig.name, func(t *testing.T) {
+			alpinePolicy := alpineSecurityPolicy(t, "json")
 			sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
+			sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = "standard"
 
 			podID := runPodSandbox(t, client, ctx, sandboxRequest)
 			defer removePodSandbox(t, client, ctx, podID)
@@ -320,7 +314,7 @@ func Test_RunContainer_InvalidContainerConfigs_NotAllowed(t *testing.T) {
 	}
 }
 
-func Test_RunContainer_WithMountConstraints_Allowed(t *testing.T) {
+func Test_RunContainer_WithPolicy_And_MountConstraints_Allowed(t *testing.T) {
 	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
@@ -411,35 +405,39 @@ func Test_RunContainer_WithMountConstraints_Allowed(t *testing.T) {
 				)},
 		},
 	} {
-		t.Run(testConfig.name, func(t *testing.T) {
-			alpinePolicy := alpineSecurityPolicy(t, testConfig.opts...)
-			sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
+		for _, pc := range policyTestMatrix {
+			t.Run(testConfig.name+fmt.Sprintf("_Enforcer_%s_Input_%s", pc.enforcer, pc.input), func(t *testing.T) {
+				alpinePolicy := alpineSecurityPolicy(t, pc.input, testConfig.opts...)
+				sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
+				sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = pc.enforcer
 
-			podID := runPodSandbox(t, client, ctx, sandboxRequest)
-			defer removePodSandbox(t, client, ctx, podID)
-			defer stopPodSandbox(t, client, ctx, podID)
+				podID := runPodSandbox(t, client, ctx, sandboxRequest)
+				defer removePodSandbox(t, client, ctx, podID)
+				defer stopPodSandbox(t, client, ctx, podID)
 
-			containerRequest := getCreateContainerRequest(
-				podID,
-				"alpine-with-policy",
-				"alpine:latest",
-				validPolicyAlpineCommand,
-				sandboxRequest.Config,
-			)
+				containerRequest := getCreateContainerRequest(
+					podID,
+					"alpine-with-policy",
+					"alpine:latest",
+					validPolicyAlpineCommand,
+					sandboxRequest.Config,
+				)
 
-			if err := testConfig.sideEffect(containerRequest); err != nil {
-				t.Fatalf("failed to apply containerRequest side effect: %s", err)
-			}
+				if err := testConfig.sideEffect(containerRequest); err != nil {
+					t.Fatalf("failed to apply containerRequest side effect: %s", err)
+				}
 
-			containerID := createContainer(t, client, ctx, containerRequest)
-			startContainer(t, client, ctx, containerID)
-			defer removeContainer(t, client, ctx, containerID)
-			defer stopContainer(t, client, ctx, containerID)
-		})
+				containerID := createContainer(t, client, ctx, containerRequest)
+				startContainer(t, client, ctx, containerID)
+				defer removeContainer(t, client, ctx, containerID)
+				defer stopContainer(t, client, ctx, containerID)
+			})
+		}
 	}
 }
 
-func Test_RunContainer_WithMountConstraints_NotAllowed(t *testing.T) {
+// todo (maksiman): add coverage for rego enforcer
+func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) {
 	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
@@ -560,8 +558,9 @@ func Test_RunContainer_WithMountConstraints_NotAllowed(t *testing.T) {
 		},
 	} {
 		t.Run(testConfig.name, func(t *testing.T) {
-			alpinePolicy := alpineSecurityPolicy(t, testConfig.opts...)
+			alpinePolicy := alpineSecurityPolicy(t, "json", testConfig.opts...)
 			sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
+			sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = "standard"
 
 			podID := runPodSandbox(t, client, ctx, sandboxRequest)
 			defer removePodSandbox(t, client, ctx, podID)
@@ -595,7 +594,7 @@ func Test_RunContainer_WithMountConstraints_NotAllowed(t *testing.T) {
 	}
 }
 
-func Test_RunPrivilegedContainer_AllowElevated_Set(t *testing.T) {
+func Test_RunPrivilegedContainer_WithPolicy_And_AllowElevated_Set(t *testing.T) {
 	requireFeatures(t, featureLCOWIntegrity)
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
@@ -603,36 +602,44 @@ func Test_RunPrivilegedContainer_AllowElevated_Set(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	alpinePolicy := alpineSecurityPolicy(t, securitypolicy.WithAllowElevated(true))
-	sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
-	sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
-		SecurityContext: &runtime.LinuxSandboxSecurityContext{
-			Privileged: true,
-		},
-	}
-	podID := runPodSandbox(t, client, ctx, sandboxRequest)
-	defer removePodSandbox(t, client, ctx, podID)
-	defer stopPodSandbox(t, client, ctx, podID)
+	for _, pc := range policyTestMatrix {
+		t.Run(t.Name()+fmt.Sprintf("_Enforcer_%s_Input_%s", pc.enforcer, pc.input), func(t *testing.T) {
+			alpinePolicy := alpineSecurityPolicy(t, pc.input, securitypolicy.WithAllowElevated(true))
+			sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
+			sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
+				SecurityContext: &runtime.LinuxSandboxSecurityContext{
+					Privileged: true,
+				},
+			}
+			sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = pc.enforcer
 
-	contRequest := getCreateContainerRequest(
-		podID,
-		"alpine-privileged",
-		"alpine:latest",
-		validPolicyAlpineCommand,
-		sandboxRequest.Config,
-	)
-	contRequest.Config.Linux = &runtime.LinuxContainerConfig{
-		SecurityContext: &runtime.LinuxContainerSecurityContext{
-			Privileged: true,
-		},
+			podID := runPodSandbox(t, client, ctx, sandboxRequest)
+			defer removePodSandbox(t, client, ctx, podID)
+			defer stopPodSandbox(t, client, ctx, podID)
+
+			contRequest := getCreateContainerRequest(
+				podID,
+				"alpine-privileged",
+				"alpine:latest",
+				validPolicyAlpineCommand,
+				sandboxRequest.Config,
+			)
+			contRequest.Config.Linux = &runtime.LinuxContainerConfig{
+				SecurityContext: &runtime.LinuxContainerSecurityContext{
+					Privileged: true,
+				},
+			}
+			containerID := createContainer(t, client, ctx, contRequest)
+			defer removeContainer(t, client, ctx, containerID)
+			startContainer(t, client, ctx, containerID)
+			defer stopContainer(t, client, ctx, containerID)
+		})
 	}
-	containerID := createContainer(t, client, ctx, contRequest)
-	defer removeContainer(t, client, ctx, containerID)
-	startContainer(t, client, ctx, containerID)
-	defer stopContainer(t, client, ctx, containerID)
+
 }
 
-func Test_RunPrivilegedContainer_AllowElevated_NotSet(t *testing.T) {
+// todo (maksiman): add coverage for rego enforcer
+func Test_RunPrivilegedContainer_WithPolicy_And_AllowElevated_NotSet(t *testing.T) {
 	requireFeatures(t, featureLCOWIntegrity)
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
@@ -640,13 +647,15 @@ func Test_RunPrivilegedContainer_AllowElevated_NotSet(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	alpinePolicy := alpineSecurityPolicy(t)
+	alpinePolicy := alpineSecurityPolicy(t, "json")
 	sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
 	sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
 		SecurityContext: &runtime.LinuxSandboxSecurityContext{
 			Privileged: true,
 		},
 	}
+	sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = "standard"
+
 	podID := runPodSandbox(t, client, ctx, sandboxRequest)
 	defer removePodSandbox(t, client, ctx, podID)
 	defer stopPodSandbox(t, client, ctx, podID)
@@ -679,7 +688,8 @@ func Test_RunPrivilegedContainer_AllowElevated_NotSet(t *testing.T) {
 	}
 }
 
-func Test_CannotSet_AllowAll_And_Containers(t *testing.T) {
+// todo (maksiman): add coverage for rego enforcer
+func Test_RunContainer_WithPolicy_CannotSet_AllowAll_And_Containers(t *testing.T) {
 	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
@@ -708,7 +718,7 @@ func Test_CannotSet_AllowAll_And_Containers(t *testing.T) {
 	}
 }
 
-func Test_SecurityPolicyEnv_Annotation(t *testing.T) {
+func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Annotation(t *testing.T) {
 	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
 
@@ -717,17 +727,13 @@ func Test_SecurityPolicyEnv_Annotation(t *testing.T) {
 		t.Fatalf("failed to create open door policy string: %s", err)
 	}
 
-	// The command prints environment variables to stdout, which we can capture
-	// and validate later
-	alpineCmd := []string{"ash", "-c", "env"}
-	alpinePolicy := alpineSecurityPolicy(
-		t,
-		securitypolicy.WithCommand(alpineCmd),
-	)
-
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// The command prints environment variables to stdout, which we can capture
+	// and validate later
+	alpineCmd := []string{"ash", "-c", "env"}
 
 	for _, config := range []struct {
 		name   string
@@ -739,7 +745,11 @@ func Test_SecurityPolicyEnv_Annotation(t *testing.T) {
 		},
 		{
 			name:   "StandardPolicy",
-			policy: alpinePolicy,
+			policy: alpineSecurityPolicy(t, "json", securitypolicy.WithCommand(alpineCmd)),
+		},
+		{
+			name:   "RegoPolicy",
+			policy: alpineSecurityPolicy(t, "rego", securitypolicy.WithCommand(alpineCmd)),
 		},
 	} {
 		for _, setPolicyEnv := range []bool{true, false} {
