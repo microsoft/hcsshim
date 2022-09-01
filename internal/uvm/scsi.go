@@ -386,7 +386,7 @@ func (uvm *UtilityVM) AddSCSIExtensibleVirtualDisk(ctx context.Context, hostPath
 // so-on tracking what SCSI locations are available or used.
 //
 // Returns result from calling modify with the given scsi mount
-func (uvm *UtilityVM) addSCSIActual(ctx context.Context, addReq *addSCSIRequest) (sm *SCSIMount, err error) {
+func (uvm *UtilityVM) addSCSIActual(ctx context.Context, addReq *addSCSIRequest) (_ *SCSIMount, err error) {
 	sm, existed, err := uvm.allocateSCSIMount(
 		ctx,
 		addReq.readOnly,
@@ -421,10 +421,6 @@ func (uvm *UtilityVM) addSCSIActual(ctx context.Context, addReq *addSCSIRequest)
 		sm.waitErr = err
 		close(sm.waitCh)
 	}()
-
-	if uvm.scsiControllerCount == 0 {
-		return nil, ErrNoSCSIControllers
-	}
 
 	SCSIModification := &hcsschema.ModifySettingRequest{
 		RequestType: guestrequest.RequestTypeAdd,
