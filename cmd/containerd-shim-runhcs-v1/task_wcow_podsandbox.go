@@ -287,7 +287,7 @@ func (wpst *wcowPodSandboxTask) Update(ctx context.Context, req *task.UpdateTask
 		return err
 	}
 
-	return wpst.host.UpdateConstraints(ctx, resources, req.Annotations)
+	return wpst.host.Update(ctx, resources, req.Annotations)
 }
 
 func (wpst *wcowPodSandboxTask) Share(ctx context.Context, req *shimdiag.ShareRequest) error {

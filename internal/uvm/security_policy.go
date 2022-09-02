@@ -95,8 +95,8 @@ func (uvm *UtilityVM) SetConfidentialUVMOptions(ctx context.Context, opts ...Con
 	return nil
 }
 
-// InjectPolicyFragment does something.
-func (uvm *UtilityVM) InjectPolicyFragment(ctx context.Context, frag *ctrdtaskapi.PolicyFragment) error {
+// InjectPolicyFragment sends policy fragment to GCS.
+func (uvm *UtilityVM) InjectPolicyFragment(ctx context.Context, fragment *ctrdtaskapi.PolicyFragment) error {
 	if uvm.operatingSystem != "linux" {
 		return errNotSupported
 	}
@@ -105,7 +105,9 @@ func (uvm *UtilityVM) InjectPolicyFragment(ctx context.Context, frag *ctrdtaskap
 		GuestRequest: guestrequest.ModificationRequest{
 			ResourceType: guestresource.ResourceTypePolicyFragment,
 			RequestType:  guestrequest.RequestTypeAdd,
-			Settings:     frag,
+			Settings: guestresource.LCOWSecurityPolicyFragment{
+				Fragment: fragment.Fragment,
+			},
 		},
 	}
 	return uvm.modify(ctx, mod)

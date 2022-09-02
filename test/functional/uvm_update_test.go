@@ -1,5 +1,5 @@
-//go:build functional
-// +build functional
+//go:build windows && functional
+// +build windows,functional
 
 package functional
 
@@ -20,11 +20,6 @@ func Test_LCOW_Update_Resources(t *testing.T) {
 		valid    bool
 	}{
 		{
-			name:     "Valid_PolicyFragment",
-			resource: &ctrdtaskapi.PolicyFragment{},
-			valid:    true,
-		},
-		{
 			name:     "Valid_LinuxResources",
 			resource: &specs.LinuxResources{},
 			valid:    true,
@@ -32,6 +27,11 @@ func Test_LCOW_Update_Resources(t *testing.T) {
 		{
 			name:     "Valid_WindowsResources",
 			resource: &specs.WindowsResources{},
+			valid:    true,
+		},
+		{
+			name:     "Valid_PolicyFragment",
+			resource: &ctrdtaskapi.PolicyFragment{},
 			valid:    true,
 		},
 		{
@@ -60,7 +60,7 @@ func Test_LCOW_Update_Resources(t *testing.T) {
 					t.Log(err)
 				}
 			})
-			if err := vm.UpdateConstraints(ctx, config.resource, nil); err != nil {
+			if err := vm.Update(ctx, config.resource, nil); err != nil {
 				if config.valid {
 					t.Fatalf("failed to update LCOW UVM constraints: %s", err)
 				}

@@ -12,7 +12,7 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
-func (uvm *UtilityVM) UpdateConstraints(ctx context.Context, data interface{}, annots map[string]string) error {
+func (uvm *UtilityVM) Update(ctx context.Context, data interface{}, annots map[string]string) error {
 	var memoryLimitInBytes *uint64
 	var processorLimits *hcsschema.ProcessorLimits
 
@@ -47,7 +47,7 @@ func (uvm *UtilityVM) UpdateConstraints(ctx context.Context, data interface{}, a
 	case *ctrdtaskapi.PolicyFragment:
 		return uvm.InjectPolicyFragment(ctx, resources)
 	default:
-		return fmt.Errorf("invalid resource: %v", resources)
+		return fmt.Errorf("invalid resource: %+v", resources)
 	}
 
 	if memoryLimitInBytes != nil {
