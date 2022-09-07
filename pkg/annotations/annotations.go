@@ -274,6 +274,9 @@ const (
 	// SecurityPolicyEnv specifies if SECURITY_POLICY variable should be injected for a container.
 	SecurityPolicyEnv = "io.microsoft.virtualmachine.lcow.securitypolicy.env"
 
+	// SignedUVMReferenceFile specifies the filename of a signed UVM reference file to be passed to UVM.
+	SignedUVMReferenceFile = "io.microsoft.virtualmachine.lcow.signed-uvm-reference-file"
+
 	// DisableLCOWTimeSyncService is used to disable the chronyd time
 	// synchronization service inside the LCOW UVM.
 	DisableLCOWTimeSyncService = "io.microsoft.virtualmachine.lcow.timesync.disable"

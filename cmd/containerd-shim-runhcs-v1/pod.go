@@ -149,8 +149,12 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 		}
 
 		if lopts != nil {
-			err := parent.SetSecurityPolicy(ctx, lopts.SecurityPolicyEnforcer, lopts.SecurityPolicy)
-			if err != nil {
+			if err := parent.SetConfidentialUVMOptions(
+				ctx,
+				uvm.WithSecurityPolicyEnforcer(lopts.SecurityPolicyEnforcer),
+				uvm.WithSecurityPolicy(lopts.SecurityPolicy),
+				uvm.WithSignedUVMMeasurement(filepath.Join(lopts.BootFilesPath, lopts.SignedUVMMeasurementFile)),
+			); err != nil {
 				return nil, errors.Wrap(err, "unable to set security policy")
 			}
 		}

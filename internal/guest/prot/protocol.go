@@ -578,9 +578,9 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 		}
 		msr.Settings = cc
 	case guestresource.ResourceTypeSecurityPolicy:
-		enforcer := &guestresource.LCOWSecurityPolicyEnforcer{}
+		enforcer := &guestresource.LCOWConfidentialOptions{}
 		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, enforcer); err != nil {
-			return &request, errors.Wrap(err, "failed to unmarshal settings as LCOWSecurityPolicyEnforcer")
+			return &request, errors.Wrap(err, "failed to unmarshal settings as LCOWConfidentialOptions")
 		}
 		msr.Settings = enforcer
 	default:
