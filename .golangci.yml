@@ -5,7 +5,6 @@ run:
     - admin
     - functional
     - integration
-    - rego
   skip-dirs:
     # paths are relative to module root
     - cri-containerd/test-images

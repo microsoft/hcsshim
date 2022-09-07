@@ -1023,6 +1023,7 @@ func generateContainerID(r *rand.Rand) string {
 	return strconv.FormatInt(int64(id), 10)
 }
 
+//nolint:unused // uniqueSandboxID is used in rego tests
 func generateSandboxID(r *rand.Rand) string {
 	return randVariableString(r, maxGeneratedSandboxIDLength)
 }
@@ -1064,6 +1065,7 @@ func generateMounts(r *rand.Rand) []mountInternal {
 	return mounts
 }
 
+//nolint:deadcode,unused // used in rego tests
 func buildMountSpecFromMountArray(mounts []mountInternal, sandboxID string, r *rand.Rand) *oci.Spec {
 	mountSpec := new(oci.Spec)
 
@@ -1151,6 +1153,7 @@ func (gen *dataGenerator) uniqueContainerID() string {
 	}
 }
 
+//nolint:unused // uniqueSandboxID is used in rego tests
 func (gen *dataGenerator) uniqueSandboxID() string {
 	for {
 		t := generateSandboxID(gen.rng)
