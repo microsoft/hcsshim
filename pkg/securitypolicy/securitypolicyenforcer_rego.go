@@ -42,7 +42,10 @@ func init() {
 //go:embed framework.rego
 var frameworkCode string
 
-// regoEnforcer is a stub implementation of a security policy, which will be
+//go:embed api.rego
+var apiCode string
+
+// RegoEnforcer is a stub implementation of a security policy, which will be
 // based on [Rego] policy language. The detailed implementation will be
 // introduced in the subsequent PRs and documentation updated accordingly.
 //
@@ -136,6 +139,7 @@ func newRegoPolicy(code string, defaultMounts []oci.Mount, privilegedMounts []oc
 
 	modules := map[string]string{
 		"policy.rego":    policy.code,
+		"api.rego":       apiCode,
 		"framework.rego": frameworkCode,
 	}
 
@@ -155,13 +159,74 @@ func newRegoPolicy(code string, defaultMounts []oci.Mount, privilegedMounts []oc
 	return policy, nil
 }
 
-func (policy *regoEnforcer) Query(input map[string]interface{}) (rego.ResultSet, error) {
+func (policy *regoEnforcer) allowed(enforcementPoint string, input map[string]interface{}) (bool, error) {
+	results, err := policy.query(enforcementPoint, input)
+	if err != nil {
+		// Rego execution error
+		return false, err
+	}
+
+	if len(results) == 0 {
+		info, err := policy.queryEnforcementPoint(enforcementPoint)
+		if err != nil {
+			return false, err
+		}
+
+		if info.availableByPolicyVersion {
+			// policy should define this rule but it is missing
+			return false, fmt.Errorf("rule for %s is missing from policy", enforcementPoint)
+		} else {
+			// rule added after policy was authored
+			return info.allowedByDefault, nil
+		}
+	}
+
+	return results.Allowed(), nil
+}
+
+type enforcementPointInfo struct {
+	availableByPolicyVersion bool
+	allowedByDefault         bool
+}
+
+func (policy *regoEnforcer) queryEnforcementPoint(enforcementPoint string) (enforcementPointInfo, error) {
+	input := map[string]interface{}{"name": enforcementPoint}
+	input["rule"] = enforcementPoint
+	query := rego.New(
+		rego.Query("data.api.enforcement_point_info"),
+		rego.Input(input),
+		rego.Compiler(policy.compiledModules))
+
+	var info enforcementPointInfo
+
+	ctx := context.Background()
+	resultSet, err := query.Eval(ctx)
+	if err != nil {
+		return info, err
+	}
+
+	results := resultSet[0].Expressions[0].Value.(map[string]interface{})
+
+	if results["unknown"].(bool) {
+		return info, fmt.Errorf("enforcement point rule %s does not exist", enforcementPoint)
+	}
+
+	if results["invalid"].(bool) {
+		return info, fmt.Errorf("enforcement point rule %s is invalid", enforcementPoint)
+	}
+
+	info.availableByPolicyVersion = results["available"].(bool)
+	info.allowedByDefault = results["allowed"].(bool)
+	return info, nil
+}
+
+func (policy *regoEnforcer) query(enforcementPoint string, input map[string]interface{}) (rego.ResultSet, error) {
 	store := inmem.NewFromObject(policy.data)
 
+	input["name"] = enforcementPoint
 	var buf bytes.Buffer
-	rule := input["name"].(string)
 	query := rego.New(
-		rego.Query(fmt.Sprintf("data.policy.%s", rule)),
+		rego.Query(fmt.Sprintf("data.policy.%s", enforcementPoint)),
 		rego.Compiler(policy.compiledModules),
 		rego.Input(input),
 		rego.Store(store),
@@ -191,16 +256,15 @@ func (policy *regoEnforcer) EnforceDeviceMountPolicy(target string, deviceHash s
 	defer policy.mutex.Unlock()
 
 	input := map[string]interface{}{
-		"name":       "mount_device",
 		"target":     target,
 		"deviceHash": deviceHash,
 	}
-	result, err := policy.Query(input)
+	allowed, err := policy.allowed("mount_device", input)
 	if err != nil {
 		return err
 	}
 
-	if !result.Allowed() {
+	if !allowed {
 		inputJSON, err := json.Marshal(input)
 		if err != nil {
 			return fmt.Errorf("unable to marshal the Rego input data: %w", err)
@@ -228,16 +292,15 @@ func (policy *regoEnforcer) EnforceOverlayMountPolicy(containerID string, layerP
 	defer policy.mutex.Unlock()
 
 	input := map[string]interface{}{
-		"name":        "mount_overlay",
 		"containerID": containerID,
 		"layerPaths":  layerPaths,
 	}
-	result, err := policy.Query(input)
+	allowed, err := policy.allowed("mount_overlay", input)
 	if err != nil {
 		return err
 	}
 
-	if !result.Allowed() {
+	if !allowed {
 		inputJSON, err := json.Marshal(input)
 		if err != nil {
 			return fmt.Errorf("unable to marshal the Rego input data: %w", err)
@@ -297,7 +360,6 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 	}
 
 	input := map[string]interface{}{
-		"name":         "create_container",
 		"argList":      argList,
 		"envList":      envList,
 		"workingDir":   workingDir,
@@ -311,12 +373,12 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 		input[key] = value
 	}
 
-	result, err := policy.Query(input)
+	allowed, err := policy.allowed("create_container", input)
 	if err != nil {
 		return err
 	}
 
-	if result.Allowed() {
+	if allowed {
 		started := policy.data["started"].([]string)
 		policy.data["started"] = append(started, containerID)
 		containerInfo["argList"] = argList
@@ -329,9 +391,8 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 			return fmt.Errorf("unable to marshal the Rego input data: %w", err)
 		}
 
-		input["name"] = "reason"
 		input["rule"] = "create_container"
-		result, err := policy.Query(input)
+		result, err := policy.query("reason", input)
 		if err != nil {
 			return err
 		}

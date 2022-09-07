@@ -1,5 +1,7 @@
 package policy
 
+api_svn := "0.1.0"
+
 import future.keywords.every
 import future.keywords.in
 
