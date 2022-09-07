@@ -860,6 +860,98 @@ func Test_Rego_MountPolicy_MountPrivilegedWhenNotAllowed(t *testing.T) {
 	}
 }
 
+// Tests whether an error is raised if support information is requested for
+// an enforcement point which does not have stored version information.
+func Test_Rego_Version_Unregistered_Enforcement_Point(t *testing.T) {
+	gc := generateContainers(testRand, maxContainersInGeneratedPolicy)
+	securityPolicy := newSecurityPolicyInternal(gc.containers)
+	policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{})
+	if err != nil {
+		t.Errorf("unable to create a new Rego policy: %v", err)
+	}
+
+	enforcementPoint := testDataGenerator.uniqueEnforcementPoint()
+	_, err = policy.queryEnforcementPoint(enforcementPoint)
+
+	// we expect an error, not getting one means something is broken
+	if err == nil {
+		t.Error("an error was not thrown when asking whether an unregistered enforcement point was available")
+	}
+}
+
+// Tests whether an error is raised if support information is requested for
+// a version of an enforcement point which is of a later version than the
+// framework. This should not happen, but may occur during development if
+// version numbers have been entered incorrectly.
+func Test_Rego_Version_Future_Enforcement_Point(t *testing.T) {
+	gc := generateContainers(testRand, maxContainersInGeneratedPolicy)
+	securityPolicy := newSecurityPolicyInternal(gc.containers)
+	policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{})
+	if err != nil {
+		t.Errorf("unable to create a new Rego policy: %v", err)
+	}
+
+	_, err = policy.queryEnforcementPoint("__fixture_for_future_test__")
+
+	// we expect an error, not getting one means something is broken
+	if err == nil {
+		t.Errorf("an error was not thrown when asking whether an enforcement point from the future was available")
+	}
+}
+
+// Tests whether the enforcement point logic returns the default behavior
+// and "unsupported" when the enforcement point was added in a version of the
+// framework that was released after the policy was authored as indicated
+// by their respective version information.
+func Test_Rego_Version_Unavailable_Enforcement_Point(t *testing.T) {
+	code := "package policy\n\napi_svn := \"0.0.1\""
+	policy, err := newRegoPolicy(code, []oci.Mount{}, []oci.Mount{})
+	if err != nil {
+		t.Errorf("unable to create a new Rego policy: %v", err)
+	}
+
+	info, err := policy.queryEnforcementPoint("__fixture_for_allowed_test_true__")
+	// we do not expect an error, getting one means something is broken
+	if err != nil {
+		t.Errorf("unable to query whether enforcement point is available: %v", err)
+	}
+
+	if info.availableByPolicyVersion {
+		t.Error("unavailable enforcement incorrectly indicated as available")
+	}
+
+	if !info.allowedByDefault {
+		t.Error("default behavior was incorrect for unavailable enforcement point")
+	}
+}
+
+func Test_Rego_Enforcement_Point_Allowed(t *testing.T) {
+	code := "package policy\n\napi_svn := \"0.0.1\""
+	policy, err := newRegoPolicy(code, []oci.Mount{}, []oci.Mount{})
+	if err != nil {
+		t.Errorf("unable to create a new Rego policy: %v", err)
+	}
+
+	input := make(map[string]interface{})
+	allowed, err := policy.allowed("__fixture_for_allowed_test_false__", input)
+	if err != nil {
+		t.Errorf("asked whether an enforcement point was allowed and receieved an error: %v", err)
+	}
+
+	if allowed {
+		t.Error("result of allowed for an unavailable enforcement point was not the specified default (false)")
+	}
+
+	allowed, err = policy.allowed("__fixture_for_allowed_test_true__", input)
+	if err != nil {
+		t.Errorf("asked whether an enforcement point was allowed and receieved an error: %v", err)
+	}
+
+	if !allowed {
+		t.Error("result of allowed for an unavailable enforcement point was not the specified default (true)")
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //

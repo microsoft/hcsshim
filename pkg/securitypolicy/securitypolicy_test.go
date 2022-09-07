@@ -38,6 +38,7 @@ const (
 	maxGeneratedMountDestinationLength        = 32
 	maxGeneratedMountOptions                  = 5
 	maxGeneratedMountOptionLength             = 32
+	maxGeneratedEnforcementPointLength        = 64
 	// additional consts
 	// the standard enforcer tests don't do anything with the encoded policy
 	// string. this const exists to make that explicit
@@ -1028,6 +1029,11 @@ func generateSandboxID(r *rand.Rand) string {
 	return randVariableString(r, maxGeneratedSandboxIDLength)
 }
 
+func generateEnforcementPoint(r *rand.Rand) string {
+	first := randChar(r)
+	return first + randString(r, atMost(r, maxGeneratedEnforcementPointLength))
+}
+
 func generateMounts(r *rand.Rand) []mountInternal {
 	numberOfMounts := atLeastOneAtMost(r, maxGeneratedMounts)
 	mounts := make([]mountInternal, numberOfMounts)
@@ -1118,10 +1124,11 @@ func selectContainerFromContainers(containers *generatedContainers, r *rand.Rand
 }
 
 type dataGenerator struct {
-	rng          *rand.Rand
-	mountTargets map[string]struct{}
-	containerIDs map[string]struct{}
-	sandboxIDs   map[string]struct{}
+	rng               *rand.Rand
+	mountTargets      map[string]struct{}
+	containerIDs      map[string]struct{}
+	sandboxIDs        map[string]struct{}
+	enforcementPoints map[string]struct{}
 }
 
 func newDataGenerator(rng *rand.Rand) *dataGenerator {
@@ -1130,6 +1137,11 @@ func newDataGenerator(rng *rand.Rand) *dataGenerator {
 		mountTargets: map[string]struct{}{},
 		containerIDs: map[string]struct{}{},
 		sandboxIDs:   map[string]struct{}{},
+		enforcementPoints: map[string]struct{}{
+			"mount_device":     {},
+			"mount_overlay":    {},
+			"create_container": {},
+		},
 	}
 }
 
@@ -1164,10 +1176,17 @@ func (gen *dataGenerator) uniqueSandboxID() string {
 	}
 }
 
-func (gen *dataGenerator) createValidOverlayForContainer(
-	enforcer SecurityPolicyEnforcer,
-	container *securityPolicyContainer,
-) ([]string, error) {
+func (gen *dataGenerator) uniqueEnforcementPoint() string {
+	for {
+		t := generateEnforcementPoint(gen.rng)
+		if _, ok := gen.enforcementPoints[t]; !ok {
+			gen.enforcementPoints[t] = struct{}{}
+			return t
+		}
+	}
+}
+
+func (gen *dataGenerator) createValidOverlayForContainer(enforcer SecurityPolicyEnforcer, container *securityPolicyContainer) ([]string, error) {
 	// storage for our mount paths
 	overlay := make([]string, len(container.Layers))
 
@@ -1259,6 +1278,11 @@ func (gen *dataGenerator) invalidOverlayRandomJunk(enforcer SecurityPolicyEnforc
 
 func randVariableString(r *rand.Rand, maxLen int32) string {
 	return randString(r, atLeastOneAtMost(r, maxLen))
+}
+
+func randChar(r *rand.Rand) string {
+	charset := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	return string(charset[r.Intn(len(charset))])
 }
 
 func randString(r *rand.Rand, length int32) string {
