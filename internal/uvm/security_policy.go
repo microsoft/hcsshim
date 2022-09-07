@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
@@ -16,6 +17,7 @@ import (
 
 type ConfidentialUVMOpt func(ctx context.Context, r *guestresource.LCOWConfidentialOptions) error
 
+// WithSecurityPolicy sets the desired security policy for the resource.
 func WithSecurityPolicy(policy string) ConfidentialUVMOpt {
 	return func(ctx context.Context, r *guestresource.LCOWConfidentialOptions) error {
 		if policy == "" {
@@ -31,6 +33,7 @@ func WithSecurityPolicy(policy string) ConfidentialUVMOpt {
 	}
 }
 
+// WithSecurityPolicyEnforcer sets the desired enforcer type for the resource.
 func WithSecurityPolicyEnforcer(enforcer string) ConfidentialUVMOpt {
 	return func(ctx context.Context, r *guestresource.LCOWConfidentialOptions) error {
 		r.EnforcerType = enforcer
@@ -38,18 +41,19 @@ func WithSecurityPolicyEnforcer(enforcer string) ConfidentialUVMOpt {
 	}
 }
 
-func WithSignedUVMMeasurement(measurementPath string) ConfidentialUVMOpt {
+// WithUVMReferenceInfo reads UVM reference info file and base64 encodes the
+// content before setting it for the resource. This is no-op if the
+// `referenceName` is empty or the file doesn't exist.
+func WithUVMReferenceInfo(referenceRoot string, referenceName string) ConfidentialUVMOpt {
 	return func(ctx context.Context, r *guestresource.LCOWConfidentialOptions) error {
-		var encodedMeasurement string
-		content, err := os.ReadFile(measurementPath)
-		if err != nil {
-			if !os.IsNotExist(err) {
-				return err
-			}
-		} else {
-			encodedMeasurement = base64.StdEncoding.EncodeToString(content)
+		if referenceName == "" {
+			return nil
 		}
-		r.EncodedSignedMeasurement = encodedMeasurement
+		content, err := os.ReadFile(filepath.Join(referenceRoot, referenceName))
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		r.EncodedUVMReference = base64.StdEncoding.EncodeToString(content)
 		return nil
 	}
 }

@@ -271,11 +271,12 @@ const (
 	// GuestStateFile specifies the path of the vmgs file to use if required. Only applies in SNP mode.
 	GuestStateFile = "io.microsoft.virtualmachine.lcow.gueststatefile"
 
-	// SecurityPolicyEnv specifies if SECURITY_POLICY variable should be injected for a container.
+	// SecurityPolicyEnv specifies if SECURITY_POLICY and
+	// HCSSHIM_UVM_REFERENCE_INFO variables should be injected for a container.
 	SecurityPolicyEnv = "io.microsoft.virtualmachine.lcow.securitypolicy.env"
 
-	// SignedUVMReferenceFile specifies the filename of a signed UVM reference file to be passed to UVM.
-	SignedUVMReferenceFile = "io.microsoft.virtualmachine.lcow.signed-uvm-reference-file"
+	// UVMReferenceInfoFile specifies the filename of a signed UVM reference file to be passed to UVM.
+	UVMReferenceInfoFile = "io.microsoft.virtualmachine.lcow.uvm-reference-info-file"
 
 	// DisableLCOWTimeSyncService is used to disable the chronyd time
 	// synchronization service inside the LCOW UVM.

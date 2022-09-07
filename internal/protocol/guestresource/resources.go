@@ -160,7 +160,7 @@ type SignalProcessOptionsWCOW struct {
 }
 
 type LCOWConfidentialOptions struct {
-	EnforcerType             string `json:"EnforcerType,omitempty"`
-	EncodedSecurityPolicy    string `json:"EncodedSecurityPolicy,omitempty"`
-	EncodedSignedMeasurement string `json:"EncodedSignedMeasurement,omitempty"`
+	EnforcerType          string `json:"EnforcerType,omitempty"`
+	EncodedSecurityPolicy string `json:"EncodedSecurityPolicy,omitempty"`
+	EncodedUVMReference   string `json:"EncodedUVMReference,omitempty"`
 }
