@@ -16,7 +16,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/google/go-cmp/cmp"
-	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 const (
@@ -32,13 +31,11 @@ const (
 	maxGeneratedEnvironmentVariableRules      = 12
 	maxGeneratedMountTargetLength             = 256
 	rootHashLength                            = 64
-	maxGeneratedSandboxIDLength               = 32
 	maxGeneratedMounts                        = 4
 	maxGeneratedMountSourceLength             = 32
 	maxGeneratedMountDestinationLength        = 32
 	maxGeneratedMountOptions                  = 5
 	maxGeneratedMountOptionLength             = 32
-	maxGeneratedEnforcementPointLength        = 64
 	// additional consts
 	// the standard enforcer tests don't do anything with the encoded policy
 	// string. this const exists to make that explicit
@@ -1024,16 +1021,6 @@ func generateContainerID(r *rand.Rand) string {
 	return strconv.FormatInt(int64(id), 10)
 }
 
-//nolint:unused // uniqueSandboxID is used in rego tests
-func generateSandboxID(r *rand.Rand) string {
-	return randVariableString(r, maxGeneratedSandboxIDLength)
-}
-
-func generateEnforcementPoint(r *rand.Rand) string {
-	first := randChar(r)
-	return first + randString(r, atMost(r, maxGeneratedEnforcementPointLength))
-}
-
 func generateMounts(r *rand.Rand) []mountInternal {
 	numberOfMounts := atLeastOneAtMost(r, maxGeneratedMounts)
 	mounts := make([]mountInternal, numberOfMounts)
@@ -1069,53 +1056,6 @@ func generateMounts(r *rand.Rand) []mountInternal {
 	}
 
 	return mounts
-}
-
-//nolint:deadcode,unused // used in rego tests
-func buildMountSpecFromMountArray(mounts []mountInternal, sandboxID string, r *rand.Rand) *oci.Spec {
-	mountSpec := new(oci.Spec)
-
-	// Select some number of the valid, matching rules to be environment
-	// variable
-	numberOfMounts := int32(len(mounts))
-	numberOfMatches := randMinMax(r, 1, numberOfMounts)
-	usedIndexes := map[int]struct{}{}
-	for numberOfMatches > 0 {
-		anIndex := -1
-		if (numberOfMatches * 2) > numberOfMounts {
-			// if we have a lot of matches, randomly select
-			exists := true
-
-			for exists {
-				anIndex = int(randMinMax(r, 0, numberOfMounts-1))
-				_, exists = usedIndexes[anIndex]
-			}
-		} else {
-			// we have a "smaller set of rules. we'll just iterate and select from
-			// available
-			exists := true
-
-			for exists {
-				anIndex++
-				_, exists = usedIndexes[anIndex]
-			}
-		}
-
-		mount := mounts[anIndex]
-
-		source := substituteUVMPath(sandboxID, mount).Source
-		mountSpec.Mounts = append(mountSpec.Mounts, oci.Mount{
-			Source:      source,
-			Destination: mount.Destination,
-			Options:     mount.Options,
-			Type:        mount.Type,
-		})
-		usedIndexes[anIndex] = struct{}{}
-
-		numberOfMatches--
-	}
-
-	return mountSpec
 }
 
 func selectContainerFromContainers(containers *generatedContainers, r *rand.Rand) *securityPolicyContainer {
@@ -1160,27 +1100,6 @@ func (gen *dataGenerator) uniqueContainerID() string {
 		t := generateContainerID(gen.rng)
 		if _, ok := gen.containerIDs[t]; !ok {
 			gen.containerIDs[t] = struct{}{}
-			return t
-		}
-	}
-}
-
-//nolint:unused // uniqueSandboxID is used in rego tests
-func (gen *dataGenerator) uniqueSandboxID() string {
-	for {
-		t := generateSandboxID(gen.rng)
-		if _, ok := gen.sandboxIDs[t]; !ok {
-			gen.sandboxIDs[t] = struct{}{}
-			return t
-		}
-	}
-}
-
-func (gen *dataGenerator) uniqueEnforcementPoint() string {
-	for {
-		t := generateEnforcementPoint(gen.rng)
-		if _, ok := gen.enforcementPoints[t]; !ok {
-			gen.enforcementPoints[t] = struct{}{}
 			return t
 		}
 	}
@@ -1278,11 +1197,6 @@ func (gen *dataGenerator) invalidOverlayRandomJunk(enforcer SecurityPolicyEnforc
 
 func randVariableString(r *rand.Rand, maxLen int32) string {
 	return randString(r, atLeastOneAtMost(r, maxLen))
-}
-
-func randChar(r *rand.Rand) string {
-	charset := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	return string(charset[r.Intn(len(charset))])
 }
 
 func randString(r *rand.Rand, length int32) string {

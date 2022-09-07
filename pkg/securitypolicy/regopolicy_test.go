@@ -6,12 +6,19 @@ package securitypolicy
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"testing"
 	"testing/quick"
 
 	oci "github.com/opencontainers/runtime-spec/specs-go"
+)
+
+const (
+	// variables that influence generated rego-only test fixtures
+	maxGeneratedSandboxIDLength        = 32
+	maxGeneratedEnforcementPointLength = 64
 )
 
 // Validate we do our conversion from Json to rego correctly
@@ -1118,4 +1125,84 @@ func mountImageForContainer(policy *regoEnforcer, container *securityPolicyConta
 	}
 
 	return containerID, nil
+}
+
+func generateSandboxID(r *rand.Rand) string {
+	return randVariableString(r, maxGeneratedSandboxIDLength)
+}
+
+func generateEnforcementPoint(r *rand.Rand) string {
+	first := randChar(r)
+	return first + randString(r, atMost(r, maxGeneratedEnforcementPointLength))
+}
+
+func randChar(r *rand.Rand) string {
+	charset := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	return string(charset[r.Intn(len(charset))])
+}
+
+func (gen *dataGenerator) uniqueSandboxID() string {
+	for {
+		t := generateSandboxID(gen.rng)
+		if _, ok := gen.sandboxIDs[t]; !ok {
+			gen.sandboxIDs[t] = struct{}{}
+			return t
+		}
+	}
+}
+
+func (gen *dataGenerator) uniqueEnforcementPoint() string {
+	for {
+		t := generateEnforcementPoint(gen.rng)
+		if _, ok := gen.enforcementPoints[t]; !ok {
+			gen.enforcementPoints[t] = struct{}{}
+			return t
+		}
+	}
+}
+
+func buildMountSpecFromMountArray(mounts []mountInternal, sandboxID string, r *rand.Rand) *oci.Spec {
+	mountSpec := new(oci.Spec)
+
+	// Select some number of the valid, matching rules to be environment
+	// variable
+	numberOfMounts := int32(len(mounts))
+	numberOfMatches := randMinMax(r, 1, numberOfMounts)
+	usedIndexes := map[int]struct{}{}
+	for numberOfMatches > 0 {
+		anIndex := -1
+		if (numberOfMatches * 2) > numberOfMounts {
+			// if we have a lot of matches, randomly select
+			exists := true
+
+			for exists {
+				anIndex = int(randMinMax(r, 0, numberOfMounts-1))
+				_, exists = usedIndexes[anIndex]
+			}
+		} else {
+			// we have a "smaller set of rules. we'll just iterate and select from
+			// available
+			exists := true
+
+			for exists {
+				anIndex++
+				_, exists = usedIndexes[anIndex]
+			}
+		}
+
+		mount := mounts[anIndex]
+
+		source := substituteUVMPath(sandboxID, mount).Source
+		mountSpec.Mounts = append(mountSpec.Mounts, oci.Mount{
+			Source:      source,
+			Destination: mount.Destination,
+			Options:     mount.Options,
+			Type:        mount.Type,
+		})
+		usedIndexes[anIndex] = struct{}{}
+
+		numberOfMatches--
+	}
+
+	return mountSpec
 }
