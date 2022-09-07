@@ -19,6 +19,8 @@ import (
 const lcowGPUBootFilesPath = "C:\\ContainerPlat\\LinuxBootFiles\\nvidiagpu"
 
 // findTestDevices returns the first pcip device on the host
+//
+//nolint:unused // unused since tests are skipped
 func findTestVirtualDevice() (string, error) {
 	out, err := exec.Command(
 		"powershell",

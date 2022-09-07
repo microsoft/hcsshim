@@ -27,7 +27,7 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
-// Test dependencies
+// Test dependencies.
 var (
 	osMkdirAll  = os.MkdirAll
 	osRemoveAll = os.RemoveAll
@@ -35,9 +35,9 @@ var (
 
 	// controllerLunToName is stubbed to make testing `Mount` easier.
 	controllerLunToName = ControllerLunToName
-	// createVerityTarget is stubbed for unit testing `Mount`
+	// createVerityTarget is stubbed for unit testing `Mount`.
 	createVerityTarget = dm.CreateVerityTarget
-	// removeDevice is stubbed for unit testing `Mount`
+	// removeDevice is stubbed for unit testing `Mount`.
 	removeDevice = dm.RemoveDevice
 )
 
@@ -55,7 +55,7 @@ const (
 // inside the UVM. However, we can refer to the SCSI controllers with their GUIDs (that
 // are hardcoded) and then using that GUID find out the SCSI controller number inside the
 // guest. This function does exactly that.
-func fetchActualControllerNumber(ctx context.Context, passedController uint8) (uint8, error) {
+func fetchActualControllerNumber(_ context.Context, passedController uint8) (uint8, error) {
 	// find the controller number by looking for a file named host<N> (e.g host1, host3 etc.)
 	// `N` is the controller number.
 	// Full file path would be /sys/bus/vmbus/devices/<controller-guid>/host<N>.
@@ -144,7 +144,7 @@ func mount(
 	}
 	defer func() {
 		if err != nil {
-			osRemoveAll(target)
+			_ = osRemoveAll(target)
 		}
 	}()
 
@@ -169,7 +169,7 @@ func mount(
 			// The `source` found by controllerLunToName can take some time
 			// before its actually available under `/dev/sd*`. Retry while we
 			// wait for `source` to show up.
-			if err == unix.ENOENT {
+			if errors.Is(err, unix.ENOENT) {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()

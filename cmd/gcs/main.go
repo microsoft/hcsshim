@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/containerd/cgroups"
 	cgroupstats "github.com/containerd/cgroups/stats/v1"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
@@ -28,7 +29,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/cenkalti/backoff/v4"
 )
 
 func memoryLogFormat(metrics *cgroupstats.Metrics) logrus.Fields {
@@ -109,7 +109,6 @@ func runWithRestartMonitor(arg0 string, args ...string) {
 		// since backoffSettings.MaxElapsedTime is set to 0 we will never receive backoff.Stop.
 		time.Sleep(backOffTime)
 	}
-
 }
 
 // startTimeSyncService starts the `chronyd` deamon to keep the UVM time synchronized.  We
@@ -168,16 +167,32 @@ func startTimeSyncService() error {
 
 func main() {
 	startTime := time.Now()
-	logLevel := flag.String("loglevel", "debug", "Logging Level: debug, info, warning, error, fatal, panic.")
-	coreDumpLoc := flag.String("core-dump-location", "", "The location/format where process core dumps will be written to.")
-	kmsgLogLevel := flag.Uint("kmsgLogLevel", uint(kmsg.Warning), "Log all kmsg entries with a priority less than or equal to the supplied level.")
-	logFile := flag.String("logfile", "", "Logging Target: An optional file name/path. Omit for console output.")
+	logLevel := flag.String("loglevel",
+		"debug",
+		"Logging Level: debug, info, warning, error, fatal, panic.")
+	coreDumpLoc := flag.String("core-dump-location",
+		"",
+		"The location/format where process core dumps will be written to.")
+	kmsgLogLevel := flag.Uint("kmsgLogLevel",
+		uint(kmsg.Warning),
+		"Log all kmsg entries with a priority less than or equal to the supplied level.")
+	logFile := flag.String("logfile",
+		"",
+		"Logging Target: An optional file name/path. Omit for console output.")
 	logFormat := flag.String("log-format", "text", "Logging Format: text or json")
-	useInOutErr := flag.Bool("use-inouterr", false, "If true use stdin/stdout for bridge communication and stderr for logging")
+	useInOutErr := flag.Bool("use-inouterr",
+		false,
+		"If true use stdin/stdout for bridge communication and stderr for logging")
 	v4 := flag.Bool("v4", false, "enable the v4 protocol support and v2 schema")
-	rootMemReserveBytes := flag.Uint64("root-mem-reserve-bytes", 75*1024*1024, "the amount of memory reserved for the orchestration, the rest will be assigned to containers")
-	gcsMemLimitBytes := flag.Uint64("gcs-mem-limit-bytes", 50*1024*1024, "the maximum amount of memory the gcs can use")
-	disableTimeSync := flag.Bool("disable-time-sync", false, "If true do not run chronyd time synchronization service inside the UVM")
+	rootMemReserveBytes := flag.Uint64("root-mem-reserve-bytes",
+		75*1024*1024, // 75Mib
+		"the amount of memory reserved for the orchestration, the rest will be assigned to containers")
+	gcsMemLimitBytes := flag.Uint64("gcs-mem-limit-bytes",
+		50*1024*1024, // 50 MiB
+		"the maximum amount of memory the gcs can use")
+	disableTimeSync := flag.Bool("disable-time-sync",
+		false,
+		"If true do not run chronyd time synchronization service inside the UVM")
 	scrubLogs := flag.Bool("scrub-logs", false, "If true, scrub potentially sensitive information from logging")
 
 	flag.Usage = func() {
@@ -313,13 +328,13 @@ func main() {
 	if err != nil {
 		logrus.WithError(err).Fatal("failed to create containers cgroup")
 	}
-	defer containersControl.Delete()
+	defer containersControl.Delete() //nolint:errcheck
 
 	gcsControl, err := cgroups.New(cgroups.V1, cgroups.StaticPath("/gcs"), &oci.LinuxResources{})
 	if err != nil {
 		logrus.WithError(err).Fatal("failed to create gcs cgroup")
 	}
-	defer gcsControl.Delete()
+	defer gcsControl.Delete() //nolint:errcheck
 	if err := gcsControl.Add(cgroups.Process{Pid: os.Getpid()}); err != nil {
 		logrus.WithError(err).Fatal("failed add gcs pid to gcs cgroup")
 	}
@@ -354,5 +369,4 @@ func main() {
 			logrus.ErrorKey: err,
 		}).Fatal("failed to serve gcs service")
 	}
-
 }

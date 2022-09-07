@@ -126,6 +126,7 @@ func TestOpenRelative(t *testing.T) {
 	// Make sure it's not possible to escape with .. (NT doesn't support .. at the kernel level)
 	f, err = OpenRelative("..", root, syscall.GENERIC_READ, syscall.FILE_SHARE_READ, winapi.FILE_OPEN, 0)
 	if err == nil {
+		f.Close()
 		t.Fatal("escaped the directory")
 	}
 	t.Log(err)

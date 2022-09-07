@@ -15,7 +15,7 @@ import (
 // createConsoleSocket creates a unix socket in the given process directory and
 // returns its path and a listener to it. This socket can then be used to
 // receive the container's terminal master file descriptor.
-func (r *runcRuntime) createConsoleSocket(processDir string) (listener *net.UnixListener, socketPath string, err error) {
+func (*runcRuntime) createConsoleSocket(processDir string) (listener *net.UnixListener, socketPath string, err error) {
 	socketPath = filepath.Join(processDir, "master.sock")
 	addr, err := net.ResolveUnixAddr("unix", socketPath)
 	if err != nil {
@@ -31,7 +31,7 @@ func (r *runcRuntime) createConsoleSocket(processDir string) (listener *net.Unix
 // getMasterFromSocket blocks on the given listener's socket until a message is
 // sent, then parses the file descriptor representing the terminal master out
 // of the message and returns it as a file.
-func (r *runcRuntime) getMasterFromSocket(listener *net.UnixListener) (master *os.File, err error) {
+func (*runcRuntime) getMasterFromSocket(listener *net.UnixListener) (master *os.File, err error) {
 	// Accept the listener's connection.
 	conn, err := listener.Accept()
 	if err != nil {
@@ -93,7 +93,9 @@ func (r *runcRuntime) getMasterFromSocket(listener *net.UnixListener) (master *o
 }
 
 // pathExists returns true if the given path exists, false if not.
-func (r *runcRuntime) pathExists(pathToCheck string) (bool, error) {
+//
+//nolint:unused
+func (*runcRuntime) pathExists(pathToCheck string) (bool, error) {
 	_, err := os.Stat(pathToCheck)
 	if err != nil {
 		if os.IsNotExist(err) {

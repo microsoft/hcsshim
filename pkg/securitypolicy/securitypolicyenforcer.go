@@ -40,7 +40,8 @@ type SecurityPolicyEnforcer interface {
 	EnforceDeviceMountPolicy(target string, deviceHash string) (err error)
 	EnforceDeviceUnmountPolicy(unmountTarget string) (err error)
 	EnforceOverlayMountPolicy(containerID string, layerPaths []string) (err error)
-	EnforceCreateContainerPolicy(sandboxID string, containerID string, argList []string, envList []string, workingDir string, mounts []oci.Mount) (err error)
+	EnforceCreateContainerPolicy(sandboxID string, containerID string,
+		argList []string, envList []string, workingDir string, mounts []oci.Mount) (err error)
 	ExtendDefaultMounts([]oci.Mount) error
 	EncodedSecurityPolicy() string
 }
@@ -157,7 +158,7 @@ func CreateSecurityPolicyEnforcer(
 }
 
 // newMountConstraint creates an internal mount constraint object from given
-// source, destination, type and options
+// source, destination, type and options.
 func newMountConstraint(src, dst string, mType string, mOpts []string) mountInternal {
 	return mountInternal{
 		Source:      src,
@@ -370,12 +371,11 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID 
 
 	for _, i := range matchedContainers {
 		existing := pe.ContainerIndexToContainerIds[i]
-		if len(existing) < len(matchedContainers) {
-			pe.expandMatchesForContainerIndex(i, containerID)
-		} else {
+		if len(existing) >= len(matchedContainers) {
 			errmsg := fmt.Sprintf("layerPaths '%v' already used in maximum number of container overlays", layerPaths)
 			return errors.New(errmsg)
 		}
+		pe.expandMatchesForContainerIndex(i, containerID)
 	}
 
 	return nil
@@ -389,7 +389,7 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID 
 //
 // Devices and ContainerIndexToContainerIds are used to build up an
 // understanding of the containers running with a UVM as they come up and map
-// them back to a container definition from the user supplied SecurityPolicy
+// them back to a container definition from the user supplied SecurityPolicy.
 func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(
 	sandboxID string,
 	containerID string,
@@ -546,15 +546,14 @@ func equalForOverlay(a1 []string, a2 []string) bool {
 	// We've stored the layers from bottom to top they are in layerPaths as
 	// top to bottom (the order a string gets concatenated for the unix mount
 	// command). W do our check with that in mind.
-	if len(a1) == len(a2) {
-		topIndex := len(a2) - 1
-		for i, v := range a1 {
-			if v != a2[topIndex-i] {
-				return false
-			}
-		}
-	} else {
+	if len(a1) != len(a2) {
 		return false
+	}
+	topIndex := len(a2) - 1
+	for i, v := range a1 {
+		if v != a2[topIndex-i] {
+			return false
+		}
 	}
 	return true
 }
@@ -721,6 +720,7 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, 
 	return nil
 }
 
+//nolint:unused
 func (OpenDoorSecurityPolicyEnforcer) enforceMountPolicy(_, _ string, _ []oci.Mount) error {
 	return nil
 }
@@ -734,7 +734,7 @@ func (oe *OpenDoorSecurityPolicyEnforcer) EncodedSecurityPolicy() string {
 }
 
 type ClosedDoorSecurityPolicyEnforcer struct {
-	encodedSecurityPolicy string
+	encodedSecurityPolicy string //nolint:unused
 }
 
 var _ SecurityPolicyEnforcer = (*ClosedDoorSecurityPolicyEnforcer)(nil)
@@ -755,6 +755,7 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string
 	return errors.New("running commands is denied by policy")
 }
 
+//nolint:unused
 func (ClosedDoorSecurityPolicyEnforcer) enforceMountPolicy(_, _ string, _ []oci.Mount) error {
 	return errors.New("container mounts are denied by policy")
 }

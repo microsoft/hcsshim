@@ -368,13 +368,9 @@ func (b *Bridge) getPropertiesV2(r *Request) (_ RequestResponse, err error) {
 		}
 	}
 
-	propertyJSON := []byte("{}")
-	if properties != nil {
-		var err error
-		propertyJSON, err = json.Marshal(properties)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%+v\"", properties)
-		}
+	propertyJSON, err := json.Marshal(properties)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to unmarshal JSON in message \"%+v\"", properties)
 	}
 
 	return &prot.ContainerGetPropertiesResponse{

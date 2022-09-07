@@ -122,9 +122,10 @@ func InstanceIDToName(ctx context.Context, id string, vpciAssigned bool) (_ stri
 	vmBusID := strings.ToLower(id)
 	span.AddAttributes(trace.StringAttribute("adapterInstanceID", vmBusID))
 
-	netDevicePath := ""
+	var netDevicePath string
 	if vpciAssigned {
-		pciDevicePath, err := pciFindDeviceFullPath(ctx, vmBusID)
+		var pciDevicePath string
+		pciDevicePath, err = pciFindDeviceFullPath(ctx, vmBusID)
 		if err != nil {
 			return "", err
 		}

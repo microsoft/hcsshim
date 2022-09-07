@@ -16,6 +16,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/linux"
 )
 
+//nolint:deadcode,varcheck // enumerate all options
 const (
 	msgTypeInvalid = iota
 	msgCPUIDRequest
@@ -46,11 +47,11 @@ type guestRequest struct {
 	Error           uint32
 }
 
-// AMD SEV ioctl definitions
+// AMD SEV ioctl definitions.
 const (
-	// SEV-SNP IOCTL type
+	// SEV-SNP IOCTL type.
 	guestType = 'S'
-	// SEV-SNP IOCTL size, same as unsafe.Sizeof(SevSNPGuestRequest{})
+	// SEV-SNP IOCTL size, same as unsafe.Sizeof(SevSNPGuestRequest{}).
 	guestSize = 40
 	ioctlBase = linux.IocWRBase | guestType<<linux.IocTypeShift | guestSize<<linux.IocSizeShift
 
@@ -131,8 +132,9 @@ func (sr *report) report() Report {
 // https://www.amd.com/system/files/TechDocs/56860.pdf
 // MSG_REPORT_RSP Table 23.
 // NOTE: reportResponse.Report is a byte slice, to have the original
-//     response in bytes. The conversion to internal struct happens inside
-//     convertRawReport.
+// response in bytes. The conversion to internal struct happens inside
+// convertRawReport.
+//
 // NOTE: the additional 64 bytes are reserved, without them, the ioctl fails.
 type reportResponse struct {
 	Status     uint32

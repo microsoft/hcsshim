@@ -12,7 +12,8 @@ import (
 )
 
 func Test_WaitForFileMatchingPattern_Success(t *testing.T) {
-	ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 
 	testDir := t.TempDir()
 
@@ -36,7 +37,8 @@ func Test_WaitForFileMatchingPattern_Success(t *testing.T) {
 }
 
 func Test_WaitForFileMatchingPattern_Multiple_Matches(t *testing.T) {
-	ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 
 	testDir := t.TempDir()
 
@@ -57,7 +59,8 @@ func Test_WaitForFileMatchingPattern_Multiple_Matches(t *testing.T) {
 }
 
 func Test_WaitForFileMatchingPattern_No_Matches(t *testing.T) {
-	ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 
 	testDir := t.TempDir()
 

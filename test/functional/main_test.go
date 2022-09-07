@@ -32,7 +32,7 @@ import (
 	"github.com/Microsoft/hcsshim/test/internal/require"
 )
 
-// owner field for uVMs
+// owner field for uVMs.
 const hcsOwner = "hcsshim-functional-tests"
 
 const (
@@ -67,14 +67,12 @@ var (
 	debug                                 bool
 	pauseDurationOnCreateContainerFailure time.Duration
 
-	// flags
 	flagFeatures            = testflag.NewFeatureFlag(allFeatures)
-	flagContainerdAddress   = flag.String("ctr-address", "tcp://127.0.0.1:2376", "Address for containerd's GRPC server")
-	flagContainerdNamespace = flag.String("ctr-namespace", "k8s.io", "Containerd namespace")
-	flagCtrExePath          = flag.String("ctr-path", `C:\ContainerPlat\ctr.exe`, "Path to ctr.exe")
+	flagContainerdAddress   = flag.String("ctr-address", "tcp://127.0.0.1:2376", "`address` for containerd's GRPC server")
+	flagContainerdNamespace = flag.String("ctr-namespace", "k8s.io", "containerd `namespace`")
 	flagLinuxBootFilesPath  = flag.String("linux-bootfiles",
 		`C:\\ContainerPlat\\LinuxBootFiles`,
-		"Path to LCOW UVM boot files (rootfs.vhd, initrd.img, kernel, vmlinux)")
+		"`path` to LCOW UVM boot files (rootfs.vhd, initrd.img, kernel, and vmlinux)")
 )
 
 func init() {
@@ -85,7 +83,7 @@ func init() {
 	if _, ok := os.LookupEnv("HCSSHIM_FUNCTIONAL_TESTS_DEBUG"); ok {
 		debug = true
 	}
-	flag.BoolVar(&debug, "debug", debug, "Set logging level to debug [%HCSSHIM_FUNCTIONAL_TESTS_DEBUG%]")
+	flag.BoolVar(&debug, "debug", debug, "set logging level to debug [%HCSSHIM_FUNCTIONAL_TESTS_DEBUG%]")
 
 	// This allows for debugging a utility VM.
 	if s := os.Getenv("HCSSHIM_FUNCTIONAL_TESTS_PAUSE_ON_CREATECONTAINER_FAIL_IN_MINUTES"); s != "" {
@@ -96,7 +94,7 @@ func init() {
 	flag.DurationVar(&pauseDurationOnCreateContainerFailure,
 		"container-creation-failure-pause",
 		pauseDurationOnCreateContainerFailure,
-		"The number of minutes to wait after a container creation failure to try again "+
+		"the number of minutes to wait after a container creation failure to try again "+
 			"[%HCSSHIM_FUNCTIONAL_TESTS_PAUSE_ON_CREATECONTAINER_FAIL_IN_MINUTES%]")
 }
 
@@ -114,7 +112,8 @@ func TestMain(m *testing.M) {
 	e := m.Run()
 
 	// close any uVMs that escaped
-	cmdStr := ` foreach ($vm in Get-ComputeProcess -Owner '` + hcsOwner + `') { Write-Output "uVM $($vm.Id) was left running" ; Stop-ComputeProcess -Force -Id $vm.Id } `
+	cmdStr := ` foreach ($vm in Get-ComputeProcess -Owner '` + hcsOwner +
+		`') { Write-Output "uVM $($vm.Id) was left running" ; Stop-ComputeProcess -Force -Id $vm.Id } `
 	cmd := exec.Command("powershell", "-NoLogo", " -NonInteractive", "-Command", cmdStr)
 	o, err := cmd.CombinedOutput()
 	if err != nil {
@@ -162,6 +161,7 @@ func defaultLCOWOptions(t testing.TB) *uvm.OptionsLCOW {
 	return opts
 }
 
+//nolint:deadcode,unused // will be used when WCOW tests are updated
 func defaultWCOWOptions(t testing.TB) *uvm.OptionsWCOW {
 	opts := uvm.NewDefaultOptionsWCOW(cleanName(t.Name()), "")
 

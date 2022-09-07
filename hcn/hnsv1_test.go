@@ -90,7 +90,7 @@ func TestEndpointStatsAll(t *testing.T) {
 		Name: NatTestEndpointName,
 	}
 
-	Endpoint, err = network.CreateEndpoint(Endpoint)
+	_, err = network.CreateEndpoint(Endpoint)
 	if err != nil {
 		t.Fatal(err)
 	}

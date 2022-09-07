@@ -23,7 +23,7 @@ func validateHostData(hostData []byte) error {
 		return err
 	}
 
-	if bytes.Compare(hostData, report.HostData) != 0 {
+	if !bytes.Equal(hostData, report.HostData) {
 		return fmt.Errorf(
 			"security policy digest %q doesn't match HostData provided at launch %q",
 			hostData,

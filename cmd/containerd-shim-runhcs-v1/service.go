@@ -532,7 +532,7 @@ func (s *service) DiagPid(ctx context.Context, req *shimdiag.PidRequest) (*shimd
 }
 
 func (s *service) ComputeProcessorInfo(ctx context.Context, req *extendedtask.ComputeProcessorInfoRequest) (*extendedtask.ComputeProcessorInfoResponse, error) {
-	ctx, span := oc.StartSpan(ctx, "ComputeProcessorInfo") //nolint:ineffassign,staticcheck
+	ctx, span := oc.StartSpan(ctx, "ComputeProcessorInfo")
 	defer span.End()
 
 	span.AddAttributes(trace.StringAttribute("tid", s.tid))

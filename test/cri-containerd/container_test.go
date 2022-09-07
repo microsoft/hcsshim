@@ -739,14 +739,14 @@ func Test_CreateContainer_HugePageMount_LCOW(t *testing.T) {
 	request.PodSandboxId = podID
 	request.SandboxConfig = sandboxRequest.Config
 
-	containerId := createContainer(t, client, ctx, request)
-	defer removeContainer(t, client, ctx, containerId)
-	startContainer(t, client, ctx, containerId)
-	defer stopContainer(t, client, ctx, containerId)
+	containerID := createContainer(t, client, ctx, request)
+	defer removeContainer(t, client, ctx, containerID)
+	startContainer(t, client, ctx, containerID)
+	defer stopContainer(t, client, ctx, containerID)
 
 	execCommand := []string{"grep", "-i", "/mnt/hugepage2M", "/proc/mounts"}
 
-	output, errorMsg, exitCode := execContainer(t, client, ctx, containerId, execCommand)
+	output, errorMsg, exitCode := execContainer(t, client, ctx, containerID, execCommand)
 	if exitCode != 0 || len(errorMsg) > 0 {
 		t.Fatalf("failed to exec in hugepage container errorMsg: %s, exitcode: %v\n", errorMsg, exitCode)
 	}

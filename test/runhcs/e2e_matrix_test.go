@@ -177,7 +177,7 @@ func testWindows(t *testing.T, version int, isolated bool) {
 	}()
 	scratch := t.TempDir()
 	defer func() {
-		vhd.DetachVhd(filepath.Join(scratch, "sandbox.vhdx"))
+		_ = vhd.DetachVhd(filepath.Join(scratch, "sandbox.vhdx"))
 		os.RemoveAll(scratch)
 	}()
 
@@ -195,6 +195,7 @@ func testWindows(t *testing.T, version int, isolated bool) {
 
 	// Get the LayerFolders
 	imageName := getWindowsImageNameByVersion(t, version)
+	//nolint:staticcheck // SA1019: TODO: replace `LayerFolders`
 	layers := layers.LayerFolders(t, imageName)
 	for _, layer := range layers {
 		g.AddWindowsLayerFolders(layer)
@@ -242,7 +243,7 @@ func testWindows(t *testing.T, version int, isolated bool) {
 		return
 	}
 	defer func() {
-		rhcs.Delete(ctx, t.Name(), &runhcs.DeleteOpts{Force: true})
+		_ = rhcs.Delete(ctx, t.Name(), &runhcs.DeleteOpts{Force: true})
 	}()
 
 	// Find the shim/vmshim process and begin exit wait
@@ -265,7 +266,7 @@ func testWindows(t *testing.T, version int, isolated bool) {
 	}
 	defer func() {
 		if err != nil {
-			rhcs.Kill(ctx, t.Name(), "CtrlC")
+			_ = rhcs.Kill(ctx, t.Name(), "CtrlC")
 		}
 	}()
 
@@ -286,7 +287,7 @@ func testWindows(t *testing.T, version int, isolated bool) {
 	}
 
 	// Wait for the relay to exit
-	tio.Wait()
+	_ = tio.Wait()
 	outString := tio.outBuff.String()
 	if outString != "Hello World!\r\n" {
 		t.Errorf("stdout expected: 'Hello World!', got: '%v'", outString)

@@ -161,6 +161,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureLCOW, featureContainer)
 
+	//nolint:staticcheck // SA1019: TODO: replace `LayerFolders`
 	alpineLayers := layers.LayerFolders(t, "alpine")
 
 	cacheDir := t.TempDir()
@@ -235,12 +236,12 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	if err := c1hcsSystem.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	defer resources.ReleaseResources(context.Background(), c1Resources, lcowUVM, true)
+	defer resources.ReleaseResources(context.Background(), c1Resources, lcowUVM, true) //nolint:errcheck
 
 	if err := c2hcsSystem.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	defer resources.ReleaseResources(context.Background(), c2Resources, lcowUVM, true)
+	defer resources.ReleaseResources(context.Background(), c2Resources, lcowUVM, true) //nolint:errcheck
 
 	// Start the init process in each container and grab it's stdout comparing to expected
 	runInitProcess(t, c1hcsSystem, "hello lcow container one")
@@ -250,6 +251,8 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 
 // Helper to run the init process in an LCOW container; verify it exits with exit
 // code 0; verify stderr is empty; check output is as expected.
+//
+//nolint:unused // unused since tests are skipped
 func runInitProcess(t *testing.T, s cow.Container, expected string) {
 	var errB bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

@@ -101,13 +101,13 @@ func ParseMountOptions(options []string) (flagOpts uintptr, pgFlags []uintptr, d
 // Expected that the filepath exists before calling this function
 func MountRShared(path string) error {
 	if path == "" {
-		return errors.New("Path must not be empty to mount as rshared")
+		return errors.New("path must not be empty to mount as rshared")
 	}
 	if err := unixMount(path, path, "", syscall.MS_BIND, ""); err != nil {
-		return fmt.Errorf("Failed to create bind mount for %v: %v", path, err)
+		return fmt.Errorf("failed to create bind mount for %v: %v", path, err)
 	}
 	if err := unixMount(path, path, "", syscall.MS_SHARED|syscall.MS_REC, ""); err != nil {
-		return fmt.Errorf("Failed to make %v rshared: %v", path, err)
+		return fmt.Errorf("failed to make %v rshared: %v", path, err)
 	}
 	return nil
 }

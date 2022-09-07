@@ -229,12 +229,12 @@ func (process *Process) waitBackground() {
 			propertiesJSON, resultJSON, err = vmcompute.HcsGetProcessProperties(ctx, process.handle)
 			events := processHcsResult(ctx, resultJSON)
 			if err != nil {
-				err = makeProcessError(process, operation, err, events) //nolint:ineffassign
+				err = makeProcessError(process, operation, err, events)
 			} else {
 				properties := &processStatus{}
 				err = json.Unmarshal([]byte(propertiesJSON), properties)
 				if err != nil {
-					err = makeProcessError(process, operation, err, nil) //nolint:ineffassign
+					err = makeProcessError(process, operation, err, nil)
 				} else {
 					if properties.LastWaitResult != 0 {
 						log.G(ctx).WithField("wait-result", properties.LastWaitResult).Warning("non-zero last wait result")

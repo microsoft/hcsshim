@@ -55,7 +55,7 @@ func DoInNetNS(ns netns.NsHandle, run func() error) error {
 		return errors.Wrapf(err, "failed to set network namespace to %v", ns)
 	}
 	// Defer so we can re-enter the threads original netns on exit.
-	defer netns.Set(origNs)
+	defer netns.Set(origNs) //nolint:errcheck
 
 	return run()
 }
@@ -71,7 +71,9 @@ func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *prot.Net
 	}
 
 	if adapter.NatEnabled {
-		log.G(ctx).Debugf("Configure %s in %d with: %s/%d gw=%s", ifStr, nsPid, adapter.AllocatedIPAddress, adapter.HostIPPrefixLength, adapter.HostIPAddress)
+		log.G(ctx).Debugf("Configure %s in %d with: %s/%d gw=%s",
+			ifStr, nsPid, adapter.AllocatedIPAddress,
+			adapter.HostIPPrefixLength, adapter.HostIPAddress)
 	} else {
 		log.G(ctx).Debugf("Configure %s in %d with DHCP", ifStr, nsPid)
 	}
@@ -196,10 +198,10 @@ func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *prot.Net
 			if err != nil {
 				cos = string(co)
 			}
-			cmd.Process.Kill()
+			_ = cmd.Process.Kill()
 			log.G(ctx).Debugf("udhcpc timed out [%s]", cos)
 			return fmt.Errorf("udhcpc timed out. Failed to get DHCP address: %s", cos)
-		case err := <-done:
+		case <-done:
 			var cos string
 			co, err := cmd.CombinedOutput() // Something should be on stderr
 			if err != nil {

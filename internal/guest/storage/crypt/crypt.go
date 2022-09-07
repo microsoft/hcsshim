@@ -108,15 +108,15 @@ func mkfsExt4Command(args []string) error {
 //
 // In order to mount a block device as an encrypted device:
 //
-//	1. Generate a random key. It doesn't matter which key it is, the aim is to
+//  1. Generate a random key. It doesn't matter which key it is, the aim is to
 //     protect the contents of the scratch disk from the host OS. It can be
 //     deleted after mounting the encrypted device.
 //
-//	2. The original block device has to be formatted with cryptsetup with the
+//  2. The original block device has to be formatted with cryptsetup with the
 //     generated key. This results in that block device becoming an encrypted
 //     block device that can't be mounted directly.
 //
-//	3. Open the block device with cryptsetup. It is needed to assign it a device
+//  3. Open the block device with cryptsetup. It is needed to assign it a device
 //     name. We are using names that follow `cryptDeviceTemplate`, where "%s" is
 //     a unique name generated from the path of the original block device. In
 //     this case, it's just the path of the block device with all
@@ -126,43 +126,43 @@ func mkfsExt4Command(args []string) error {
 //     /dev/mapper/`cryptDeviceTemplate`. This can be mounted directly, but it
 //     doesn't have any format yet.
 //
-//	4. Format the unencrypted block device as ext4:
+//  4. Format the unencrypted block device as ext4:
 //
-//	A normal invocation of luksFormat wipes the target device. This takes
-//	a really long time, which isn't acceptable in our use-case. Passing the
-//	option --integrity-no-wipe prevents this from happening so that the
-//	command ends in an instant.
+//     A normal invocation of luksFormat wipes the target device. This takes
+//     a really long time, which isn't acceptable in our use-case. Passing the
+//     option --integrity-no-wipe prevents this from happening so that the
+//     command ends in an instant.
 //
-//	Because of using --integrity-no-wipe, the resulting device isn't wiped and
-//	all the integrity tags are incorrect. This means that any attempt to read
-//	from it will cause an I/O error, which programs aren't prepared to handle.
-//	For example, mkfs.ext4 tries to read blocks before writing to them, and
-//	there is no way around it. When it gets an I/O error, it just exits.
+//     Because of using --integrity-no-wipe, the resulting device isn't wiped and
+//     all the integrity tags are incorrect. This means that any attempt to read
+//     from it will cause an I/O error, which programs aren't prepared to handle.
+//     For example, mkfs.ext4 tries to read blocks before writing to them, and
+//     there is no way around it. When it gets an I/O error, it just exits.
 //
-//	The solution is to create a file with the same size as the resulting
-//	device, format it as ext4, then use dd to copy the format to the device
-//	(dd won't try to read anything).
+//     The solution is to create a file with the same size as the resulting
+//     device, format it as ext4, then use dd to copy the format to the device
+//     (dd won't try to read anything).
 //
-//	However, creating a file that is several GB in size isn't a good solution
-//	either because doing dd of the whole file would take as long as letting
-//	luksFormat wipe the disk.
+//     However, creating a file that is several GB in size isn't a good solution
+//     either because doing dd of the whole file would take as long as letting
+//     luksFormat wipe the disk.
 //
-//	The solution is to create a sparse file and format it. Then, it is
-//	possible to copy the format to the block device by doing a sparse copy
-//	(only copy the data parts of the file, not the holes). This makes
-//	formatting the device almost instantaneous.
+//     The solution is to create a sparse file and format it. Then, it is
+//     possible to copy the format to the block device by doing a sparse copy
+//     (only copy the data parts of the file, not the holes). This makes
+//     formatting the device almost instantaneous.
 //
-//	4.1. Get size of scratch disk.
+//     4.1. Get size of scratch disk.
 //
-//	4.2. Create sparse filesystem image with the same size as the scratch
-//	     device. It can be removed afterwards.
+//     4.2. Create sparse filesystem image with the same size as the scratch
+//     device. It can be removed afterwards.
 //
-//	4.3. Format it as ext4. This way the file is only as big as the few blocks
-//	     of the image that have the filesystem information, the ones modified
-//	     by mkfs.ext4.
+//     4.3. Format it as ext4. This way the file is only as big as the few blocks
+//     of the image that have the filesystem information, the ones modified
+//     by mkfs.ext4.
 //
-//	4.4. Do a sparse copy of the filesystem into the unencrypted block device.
-//	     This updates the integrity tags.
+//     4.4. Do a sparse copy of the filesystem into the unencrypted block device.
+//     This updates the integrity tags.
 func EncryptDevice(ctx context.Context, source string) (path string, err error) {
 
 	uniqueName, err := getUniqueName(source)

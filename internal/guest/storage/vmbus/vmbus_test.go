@@ -11,7 +11,8 @@ import (
 )
 
 func Test_WaitForVMBusDevicePath_Success(t *testing.T) {
-	ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 
 	vmBusGUID := "1111-2222-3333-4444"
 	pciDir := "pci1234:00"

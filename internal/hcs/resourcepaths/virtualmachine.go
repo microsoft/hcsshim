@@ -1,6 +1,5 @@
 package resourcepaths
 
-//nolint:deadcode,varcheck
 const (
 	GPUResourcePath                  string = "VirtualMachine/ComputeTopology/Gpu"
 	MemoryResourcePath               string = "VirtualMachine/ComputeTopology/Memory/SizeInMB"

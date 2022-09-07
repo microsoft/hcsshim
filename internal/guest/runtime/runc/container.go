@@ -296,7 +296,7 @@ func (c *container) Wait() (int, error) {
 			// finish "soon" after Wait() returns since HCS expects the stdio
 			// connections to close before container shutdown can complete.
 			entity.WithField(logfields.ProcessID, process.Pid).Debug("waiting on container exec process")
-			c.r.waitOnProcess(process.Pid)
+			_, _ = c.r.waitOnProcess(process.Pid)
 		}
 	}
 	exitCode, err := c.init.Wait()
@@ -334,7 +334,11 @@ func (c *container) runExecCommand(processDef *oci.Process, stdioSet *stdio.Conn
 // and ExecProcess. For V2 container creation stdioSet will be nil, in this case
 // it is expected that the caller starts the relay previous to calling Start on
 // the container.
-func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioSet *stdio.ConnectionSet, initialArgs ...string) (p *process, err error) {
+func (c *container) startProcess(
+	tempProcessDir string,
+	hasTerminal bool,
+	stdioSet *stdio.ConnectionSet, initialArgs ...string,
+) (p *process, err error) {
 	args := initialArgs
 
 	if err := setSubreaper(1); err != nil {
@@ -395,7 +399,7 @@ func (c *container) startProcess(tempProcessDir string, hasTerminal bool, stdioS
 		var master *os.File
 		master, err = c.r.getMasterFromSocket(sockListener)
 		if err != nil {
-			cmd.Process.Kill()
+			_ = cmd.Process.Kill()
 			return nil, errors.Wrapf(err, "failed to get pty master for process in container %s", c.id)
 		}
 		// Keep master open for the relay unless there is an error.

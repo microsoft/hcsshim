@@ -648,7 +648,7 @@ func Test_Rego_ExtendDefaultMounts(t *testing.T) {
 		}
 
 		defaultMounts := generateMounts(testRand)
-		tc.policy.ExtendDefaultMounts(toOCIMounts(defaultMounts))
+		_ = tc.policy.ExtendDefaultMounts(toOCIMounts(defaultMounts))
 
 		additionalMounts := buildMountSpecFromMountArray(defaultMounts, tc.sandboxID, testRand)
 		tc.mounts = append(tc.mounts, additionalMounts.Mounts...)

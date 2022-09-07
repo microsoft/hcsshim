@@ -261,12 +261,11 @@ func (b *Bridge) ListenAndServe(bridgeIn io.ReadCloser, bridgeOut io.WriteCloser
 				}
 
 				base := prot.MessageBase{}
-				if err := json.Unmarshal(message, &base); err != nil {
-					// TODO: JTERRY75 - This should fail the request but right
-					// now we still forward to the method and let them return
-					// this error. Unify the JSON part previous to invoking a
-					// request.
-				}
+				// TODO: JTERRY75 - This should fail the request but right
+				// now we still forward to the method and let them return
+				// this error. Unify the JSON part previous to invoking a
+				// request.
+				_ = json.Unmarshal(message, &base)
 
 				var ctx context.Context
 				var span *trace.Span

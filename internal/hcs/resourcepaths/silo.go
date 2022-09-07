@@ -1,6 +1,5 @@
 package resourcepaths
 
-//nolint:deadcode,varcheck
 const (
 	// silo container resources paths
 	SiloDeviceResourcePath          string = "Container/Devices/Generic"

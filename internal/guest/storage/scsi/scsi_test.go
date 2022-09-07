@@ -47,7 +47,7 @@ func Test_Mount_Mkdir_Fails_Error(t *testing.T) {
 		nil,
 		nil,
 		openDoorSecurityPolicyEnforcer(),
-	); err != expectedErr {
+	); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected err: %v, got: %v", expectedErr, err)
 	}
 }
@@ -235,7 +235,7 @@ func Test_Mount_Calls_RemoveAll_OnMountFailure(t *testing.T) {
 		nil,
 		nil,
 		openDoorSecurityPolicyEnforcer(),
-	); err != expectedErr {
+	); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected err: %v, got: %v", expectedErr, err)
 	}
 	if !removeAllCalled {
@@ -426,7 +426,7 @@ func Test_Mount_Valid_Data(t *testing.T) {
 		return "", nil
 	}
 	unixMount = func(source string, target string, fstype string, flags uintptr, data string) error {
-		if "" != data {
+		if data != "" {
 			t.Errorf("expected empty data, got: %s", data)
 			return errors.New("unexpected data")
 		}
@@ -627,6 +627,7 @@ func mountMonitoringSecurityPolicyEnforcer() *policy.MountMonitoringSecurityPoli
 }
 
 // dm-verity tests
+
 func Test_CreateVerityTarget_And_Mount_Called_With_Correct_Parameters(t *testing.T) {
 	clearTestDependencies()
 

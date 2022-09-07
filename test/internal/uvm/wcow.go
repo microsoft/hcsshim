@@ -12,7 +12,7 @@ import (
 )
 
 // CreateWCOWUVM creates a WCOW utility VM with all default options. Returns the
-// UtilityVM object; folder used as its scratch
+// UtilityVM object; folder used as its scratch.
 func CreateWCOWUVM(ctx context.Context, t testing.TB, id, image string) (*uvm.UtilityVM, []string, string) {
 	return CreateWCOWUVMFromOptsWithImage(ctx, t, uvm.NewDefaultOptionsWCOW(id, ""), image)
 }
@@ -25,28 +25,35 @@ func CreateWCOWUVMFromOpts(ctx context.Context, t testing.TB, opts *uvm.OptionsW
 		t.Fatalf("opts must bet set with LayerFolders")
 	}
 
-	uvm, err := uvm.CreateWCOW(ctx, opts)
+	vm, err := uvm.CreateWCOW(ctx, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := uvm.Start(ctx); err != nil {
-		uvm.Close()
+	if err := vm.Start(ctx); err != nil {
+		vm.Close()
 		t.Fatal(err)
 	}
 
-	return uvm
+	return vm
 }
 
 // CreateWCOWUVMFromOptsWithImage creates a WCOW utility VM with the passed opts
 // builds the LayerFolders based on `image`. Returns the UtilityVM object;
-// folder used as its scratch
-func CreateWCOWUVMFromOptsWithImage(ctx context.Context, t testing.TB, opts *uvm.OptionsWCOW, image string) (*uvm.UtilityVM, []string, string) {
+// folder used as its scratch.
+//
+//nolint:staticcheck // SA5011: staticcheck thinks `opts` may be nil, even though we fail if it is
+func CreateWCOWUVMFromOptsWithImage(
+	ctx context.Context,
+	t testing.TB,
+	opts *uvm.OptionsWCOW,
+	image string,
+) (*uvm.UtilityVM, []string, string) {
 	t.Helper()
-
 	if opts == nil {
 		t.Fatal("opts must be set")
 	}
 
+	//nolint:staticcheck // SA1019: TODO: switch from LayerFolders
 	uvmLayers := layers.LayerFolders(t, image)
 	scratchDir := t.TempDir()
 	opts.LayerFolders = append(opts.LayerFolders, uvmLayers...)

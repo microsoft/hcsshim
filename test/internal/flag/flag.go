@@ -13,8 +13,8 @@ const FeatureFlagName = "feature"
 func NewFeatureFlag(all []string) *StringSlice {
 	ff := NewStringSlice()
 	flag.Var(ff, FeatureFlagName,
-		"The sets of functionality to test; can be set multiple times, or separated with commas."+
-			"Supported features: "+strings.Join(all, ","),
+		"the sets of functionality to test; can be set multiple times, or separated with commas. "+
+			"Supported features: "+strings.Join(all, ", "),
 	)
 
 	return ff

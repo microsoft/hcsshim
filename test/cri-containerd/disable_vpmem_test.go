@@ -22,7 +22,7 @@ func uniqueRef() string {
 	t := time.Now()
 	var b [3]byte
 	// Ignore read failures, just decreases uniqueness
-	rand.Read(b[:])
+	_, _ = rand.Read(b[:])
 	return fmt.Sprintf("%d-%s", t.UnixNano(), base64.URLEncoding.EncodeToString(b[:]))
 }
 

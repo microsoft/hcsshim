@@ -90,6 +90,8 @@ func (r *runcRuntime) getLogPath(id string) string {
 }
 
 // getLogPath returns the path to the log file used by the runC wrapper.
+//
+//nolint:unused
 func (r *runcRuntime) getGlobalLogPath() string {
 	// runcLogBasePath should be created by r.initialize
 	return filepath.Join(r.runcLogBasePath, "global-runc.log")
@@ -99,7 +101,7 @@ func (r *runcRuntime) getGlobalLogPath() string {
 // not.
 // It should be noted that processes which have exited, but have not yet been
 // waited on (i.e. zombies) are still considered to exist by this function.
-func (r *runcRuntime) processExists(pid int) bool {
+func (*runcRuntime) processExists(pid int) bool {
 	_, err := os.Stat(filepath.Join("/proc", strconv.Itoa(pid)))
 	return !os.IsNotExist(err)
 }
