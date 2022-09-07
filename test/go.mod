@@ -1,6 +1,6 @@
 module github.com/Microsoft/hcsshim/test
 
-go 1.17
+go 1.18
 
 require (
 	github.com/Microsoft/go-winio v0.5.2
@@ -73,7 +73,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace (
-	github.com/Microsoft/hcsshim => ../
-	google.golang.org/genproto => google.golang.org/genproto v0.0.0-20200224152610-e50cd9704f63
-)
+replace github.com/Microsoft/hcsshim => ../

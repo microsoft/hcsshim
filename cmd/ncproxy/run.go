@@ -27,6 +27,7 @@ import (
 	"go.opencensus.io/plugin/ocgrpc"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type nodeNetSvcConn struct {
@@ -193,7 +194,8 @@ func run(clicontext *cli.Context) error {
 		log.G(ctx).Infof("Connecting to NodeNetworkService at address %s", conf.NodeNetSvcAddr)
 
 		dialCtx := ctx
-		opts := []grpc.DialOption{grpc.WithInsecure(), grpc.WithStatsHandler(&ocgrpc.ClientHandler{})}
+		opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithStatsHandler(&ocgrpc.ClientHandler{})}
 		if conf.Timeout > 0 {
 			var cancel context.CancelFunc
 			dialCtx, cancel = context.WithTimeout(ctx, time.Duration(conf.Timeout)*time.Second)
