@@ -86,8 +86,7 @@ jobs:
           GOFLAGS: ""
           GOPROXY: ""
 
-  verify-main-vendor:
-    needs: [lint, protos]
+  verify-vendor:
     runs-on: "windows-2019"
     env:
       GOPROXY: "https://proxy.golang.org,direct"
@@ -96,7 +95,7 @@ jobs:
       - uses: actions/setup-go@v3
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: Validate main modules
+      - name: Validate go.mod and vendoring
         shell: powershell
         run: |
           $currentPath = (Get-Location).Path
@@ -105,9 +104,26 @@ jobs:
             Write-Error "Main modules are not up to date. Please validate your go version >= this job's and run `go mod vendor` followed by `go mod tidy` in the repo root path."
           }
           exit $process.ExitCode
+      - name: Validate test/go.mod
+        shell: powershell
+        working-directory: test
+        run: |
+          Write-Output "::group::go mod tidy"
+          go mod tidy
+          Write-Output "::endgroup::"
+
+          git add --all --intent-to-add .
+          Write-Output "::group::git diff"
+          git diff --stat --exit-code
+          Write-Output "::endgroup::"
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error ::./test/go.mod is not up to date. Please run ``go mod tidy`` from within ``./test``"
+            exit $LASTEXITCODE
+          }
 
   test-linux:
-    needs: verify-main-vendor
+    needs: [lint, protos, verify-vendor]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -125,7 +141,7 @@ jobs:
         run: go test --tags=rego -mod=mod -gcflags=all=-d=checkptr -v ./pkg/securitypolicy
 
   test-windows:
-    needs: verify-main-vendor
+    needs: [lint, protos, verify-vendor]
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -162,7 +178,7 @@ jobs:
             test/sample-logging-driver.exe
 
   integration-tests:
-    needs: verify-main-vendor
+    needs: [lint, protos, verify-vendor]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -296,7 +312,7 @@ jobs:
   #          cri-containerd.test.exe -cri-endpoint="npipe://./pipe/containerd-containerd" -feature="WCOWProcess" -feature="HostProcess"
 
   build:
-    needs: [test-windows, test-linux, integration-tests]
+    needs: [test-windows, test-linux]
     runs-on: "windows-2019"
     steps:
       - uses: actions/checkout@v2
@@ -336,7 +352,7 @@ jobs:
             zapdir.exe
 
   build_gcs:
-    needs: [verify-main-vendor, test-linux]
+    needs: test-linux
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
