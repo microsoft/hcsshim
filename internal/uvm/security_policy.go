@@ -12,6 +12,7 @@ import (
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
@@ -92,4 +93,22 @@ func (uvm *UtilityVM) SetConfidentialUVMOptions(ctx context.Context, opts ...Con
 	}
 
 	return nil
+}
+
+// InjectPolicyFragment sends policy fragment to GCS.
+func (uvm *UtilityVM) InjectPolicyFragment(ctx context.Context, fragment *ctrdtaskapi.PolicyFragment) error {
+	if uvm.operatingSystem != "linux" {
+		return errNotSupported
+	}
+	mod := &hcsschema.ModifySettingRequest{
+		RequestType: guestrequest.RequestTypeUpdate,
+		GuestRequest: guestrequest.ModificationRequest{
+			ResourceType: guestresource.ResourceTypePolicyFragment,
+			RequestType:  guestrequest.RequestTypeAdd,
+			Settings: guestresource.LCOWSecurityPolicyFragment{
+				Fragment: fragment.Fragment,
+			},
+		},
+	}
+	return uvm.modify(ctx, mod)
 }

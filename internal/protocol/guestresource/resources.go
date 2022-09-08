@@ -14,6 +14,7 @@ import (
 
 const (
 	// These are constants for v2 schema modify guest requests.
+
 	// ResourceTypeMappedDirectory is the modify resource type for mapped
 	// directories
 	ResourceTypeMappedDirectory guestrequest.ResourceType = "MappedDirectory"
@@ -38,6 +39,8 @@ const (
 	// ResourceTypeSecurityPolicy is the modify resource type for updating the security
 	// policy
 	ResourceTypeSecurityPolicy guestrequest.ResourceType = "SecurityPolicy"
+	// ResourceTypePolicyFragment is the modify resource type for injecting policy fragments.
+	ResourceTypePolicyFragment guestrequest.ResourceType = "SecurityPolicyFragment"
 )
 
 // This class is used by a modify request to add or remove a combined layers
@@ -163,4 +166,8 @@ type LCOWConfidentialOptions struct {
 	EnforcerType          string `json:"EnforcerType,omitempty"`
 	EncodedSecurityPolicy string `json:"EncodedSecurityPolicy,omitempty"`
 	EncodedUVMReference   string `json:"EncodedUVMReference,omitempty"`
+}
+
+type LCOWSecurityPolicyFragment struct {
+	Fragment string `json:"Fragment,omitempty"`
 }

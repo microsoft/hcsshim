@@ -4,13 +4,15 @@ package uvm
 
 import (
 	"context"
+	"fmt"
 
 	hcsschema "github.com/Microsoft/hcsshim/internal/hcs/schema2"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
+	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
-func (uvm *UtilityVM) UpdateConstraints(ctx context.Context, data interface{}, annots map[string]string) error {
+func (uvm *UtilityVM) Update(ctx context.Context, data interface{}, annots map[string]string) error {
 	var memoryLimitInBytes *uint64
 	var processorLimits *hcsschema.ProcessorLimits
 
@@ -42,6 +44,10 @@ func (uvm *UtilityVM) UpdateConstraints(ctx context.Context, data interface{}, a
 				processorLimits.Weight = uint64(*resources.CPU.Shares)
 			}
 		}
+	case *ctrdtaskapi.PolicyFragment:
+		return uvm.InjectPolicyFragment(ctx, resources)
+	default:
+		return fmt.Errorf("invalid resource: %+v", resources)
 	}
 
 	if memoryLimitInBytes != nil {

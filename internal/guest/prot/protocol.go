@@ -583,6 +583,12 @@ func UnmarshalContainerModifySettings(b []byte) (*ContainerModifySettings, error
 			return &request, errors.Wrap(err, "failed to unmarshal settings as LCOWConfidentialOptions")
 		}
 		msr.Settings = enforcer
+	case guestresource.ResourceTypePolicyFragment:
+		fragment := &guestresource.LCOWSecurityPolicyFragment{}
+		if err := commonutils.UnmarshalJSONWithHresult(msrRawSettings, fragment); err != nil {
+			return &request, errors.Wrap(err, "failed to unmarshal settings as LCOWSecurityPolicyFragment")
+		}
+		msr.Settings = fragment
 	default:
 		return &request, errors.Errorf("invalid ResourceType '%s'", msr.ResourceType)
 	}

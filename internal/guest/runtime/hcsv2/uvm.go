@@ -29,6 +29,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guest/storage/pmem"
 	"github.com/Microsoft/hcsshim/internal/guest/storage/scsi"
 	"github.com/Microsoft/hcsshim/internal/guest/transport"
+	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oci"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
@@ -113,6 +114,15 @@ func (h *Host) SetConfidentialUVMOptions(enforcerType string, base64EncodedPolic
 	h.securityPolicyEnforcerSet = true
 	h.uvmReferenceInfo = base64UVMReference
 
+	return nil
+}
+
+// InjectFragment extends current security policy with additional constraints
+// from the incoming fragment.
+//
+// TODO (maksiman): add fragment validation and injection logic
+func (*Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWSecurityPolicyFragment) (err error) {
+	log.G(ctx).WithField("fragment", fragment).Debug("fragment received in guest")
 	return nil
 }
 
@@ -387,6 +397,12 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 			return errors.New("the request's settings are not of type LCOWConfidentialOptions")
 		}
 		return h.SetConfidentialUVMOptions(r.EnforcerType, r.EncodedSecurityPolicy, r.EncodedUVMReference)
+	case guestresource.ResourceTypePolicyFragment:
+		r, ok := req.Settings.(*guestresource.LCOWSecurityPolicyFragment)
+		if !ok {
+			return errors.New("the request settings are not of type LCOWSecurityPolicyFragment")
+		}
+		return h.InjectFragment(ctx, r)
 	default:
 		return errors.Errorf("the ResourceType \"%s\" is not supported for UVM", req.ResourceType)
 	}

@@ -12,9 +12,10 @@ import (
 	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
+	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/runtime/v2/task"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
 var (
@@ -109,6 +110,7 @@ func verifyTaskUpdateResourcesType(data interface{}) error {
 	switch data.(type) {
 	case *specs.WindowsResources:
 	case *specs.LinuxResources:
+	case *ctrdtaskapi.PolicyFragment:
 	default:
 		return errNotSupportedResourcesRequest
 	}

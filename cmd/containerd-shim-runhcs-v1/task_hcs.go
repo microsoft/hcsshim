@@ -15,7 +15,7 @@ import (
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/typeurl"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
@@ -983,7 +983,7 @@ func (ht *hcsTask) Update(ctx context.Context, req *task.UpdateTaskRequest) erro
 	}
 
 	if ht.ownsHost && ht.host != nil {
-		return ht.host.UpdateConstraints(ctx, resources, req.Annotations)
+		return ht.host.Update(ctx, resources, req.Annotations)
 	}
 
 	return ht.updateTaskContainerResources(ctx, resources, req.Annotations)
