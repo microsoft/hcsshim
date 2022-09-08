@@ -299,7 +299,7 @@ func CreateContainer(ctx context.Context, createOptions *CreateOptions) (_ cow.C
 		// install kernel drivers if necessary.
 		// do this before network setup in case any of the drivers requested are
 		// network drivers
-		driverClosers, err := installPodDrivers(ctx, coi.HostingSystem, coi.Spec.Annotations)
+		driverClosers, err := addSpecGuestDrivers(ctx, coi.HostingSystem, coi.Spec.Annotations)
 		if err != nil {
 			return nil, r, err
 		}

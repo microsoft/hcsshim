@@ -22,6 +22,9 @@ const (
 	// LCOWGlobalMountPrefixFmt is the path format in the LCOW UVM where global
 	// mounts are added
 	LCOWGlobalMountPrefixFmt = "/run/mounts/m%d"
+	// LCOWGlobalDriverPrefixFmt is the path format in the LCOW UVM where drivers
+	// are mounted as read/write
+	LCOWGlobalDriverPrefixFmt = "/run/drivers/%s"
 	// WCOWGlobalMountPrefixFmt is the path prefix format in the WCOW UVM where
 	// mounts are added
 	WCOWGlobalMountPrefixFmt = "C:\\mounts\\m%d"

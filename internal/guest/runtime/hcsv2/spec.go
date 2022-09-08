@@ -15,7 +15,6 @@ import (
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 
-	"github.com/Microsoft/hcsshim/internal/hooks"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
 )
@@ -237,12 +236,6 @@ func applyAnnotationsToSpec(ctx context.Context, spec *oci.Spec) error {
 	}
 
 	return nil
-}
-
-// Helper function to create an oci prestart hook to run ldconfig
-func addLDConfigHook(_ context.Context, spec *oci.Spec, args, env []string) error {
-	ldConfigHook := hooks.NewOCIHook("/sbin/ldconfig", args, env)
-	return hooks.AddOCIHook(spec, hooks.Prestart, ldConfigHook)
 }
 
 // devShmMountWithSize returns a /dev/shm device mount with size set to
