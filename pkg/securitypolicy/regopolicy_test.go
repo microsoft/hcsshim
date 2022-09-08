@@ -4,6 +4,7 @@
 package securitypolicy
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"testing/quick"
 
+	"github.com/open-policy-agent/opa/ast"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 )
 
@@ -874,7 +876,7 @@ func Test_Rego_Version_Unregistered_Enforcement_Point(t *testing.T) {
 	securityPolicy := newSecurityPolicyInternal(gc.containers)
 	policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{})
 	if err != nil {
-		t.Errorf("unable to create a new Rego policy: %v", err)
+		t.Fatalf("unable to create a new Rego policy: %v", err)
 	}
 
 	enforcementPoint := testDataGenerator.uniqueEnforcementPoint()
@@ -895,14 +897,24 @@ func Test_Rego_Version_Future_Enforcement_Point(t *testing.T) {
 	securityPolicy := newSecurityPolicyInternal(gc.containers)
 	policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{})
 	if err != nil {
-		t.Errorf("unable to create a new Rego policy: %v", err)
+		t.Fatalf("unable to create a new Rego policy: %v", err)
+	}
+
+	err = policy.injectTestAPI()
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	_, err = policy.queryEnforcementPoint("__fixture_for_future_test__")
 
 	// we expect an error, not getting one means something is broken
 	if err == nil {
-		t.Errorf("an error was not thrown when asking whether an enforcement point from the future was available")
+		t.Fatalf("an error was not thrown when asking whether an enforcement point from the future was available")
+	}
+
+	expected_error := "enforcement point rule __fixture_for_future_test__ is invalid"
+	if err.Error() != expected_error {
+		t.Errorf("error message when asking for a future enforcement point was incorrect.")
 	}
 }
 
@@ -914,13 +926,18 @@ func Test_Rego_Version_Unavailable_Enforcement_Point(t *testing.T) {
 	code := "package policy\n\napi_svn := \"0.0.1\""
 	policy, err := newRegoPolicy(code, []oci.Mount{}, []oci.Mount{})
 	if err != nil {
-		t.Errorf("unable to create a new Rego policy: %v", err)
+		t.Fatalf("unable to create a new Rego policy: %v", err)
+	}
+
+	err = policy.injectTestAPI()
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	info, err := policy.queryEnforcementPoint("__fixture_for_allowed_test_true__")
 	// we do not expect an error, getting one means something is broken
 	if err != nil {
-		t.Errorf("unable to query whether enforcement point is available: %v", err)
+		t.Fatalf("unable to query whether enforcement point is available: %v", err)
 	}
 
 	if info.availableByPolicyVersion {
@@ -939,10 +956,15 @@ func Test_Rego_Enforcement_Point_Allowed(t *testing.T) {
 		t.Errorf("unable to create a new Rego policy: %v", err)
 	}
 
+	err = policy.injectTestAPI()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	input := make(map[string]interface{})
 	allowed, err := policy.allowed("__fixture_for_allowed_test_false__", input)
 	if err != nil {
-		t.Errorf("asked whether an enforcement point was allowed and receieved an error: %v", err)
+		t.Fatalf("asked whether an enforcement point was allowed and receieved an error: %v", err)
 	}
 
 	if allowed {
@@ -1205,4 +1227,29 @@ func buildMountSpecFromMountArray(mounts []mountInternal, sandboxID string, r *r
 	}
 
 	return mountSpec
+}
+
+//go:embed api_test.rego
+var apiTestCode string
+
+func (p *regoEnforcer) injectTestAPI() error {
+	modules := map[string]string{
+		"policy.rego":    p.code,
+		"api.rego":       apiTestCode,
+		"framework.rego": frameworkCode,
+	}
+
+	// TODO temporary hack for debugging policies until GCS logging design
+	// and implementation is finalized. This option should be changed to
+	// "true" if debugging is desired.
+	options := ast.CompileOpts{
+		EnablePrintStatements: false,
+	}
+
+	if compiled, err := ast.CompileModulesWithOpt(modules, options); err == nil {
+		p.compiledModules = compiled
+		return nil
+	} else {
+		return fmt.Errorf("rego compilation failed: %w", err)
+	}
 }

@@ -193,7 +193,7 @@ func (policy *regoEnforcer) queryEnforcementPoint(enforcementPoint string) (enfo
 	input := map[string]interface{}{"name": enforcementPoint}
 	input["rule"] = enforcementPoint
 	query := rego.New(
-		rego.Query("data.api.enforcement_point_info"),
+		rego.Query("data.framework.enforcement_point_info"),
 		rego.Input(input),
 		rego.Compiler(policy.compiledModules))
 

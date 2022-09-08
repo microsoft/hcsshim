@@ -118,6 +118,20 @@ mountList_ok(container) {
     }
 }
 
+default enforcement_point_info := {"available": false, "allowed": false, "unknown": true, "invalid": false}
+
+enforcement_point_info := {"available": available, "allowed": allowed, "unknown": false, "invalid": false} {
+    enforcement_point := data.api.enforcement_points[input.name]
+    semver.compare(data.api.svn, enforcement_point.introducedVersion) >= 0
+    available := semver.compare(data.policy.api_svn, enforcement_point.introducedVersion) >= 0
+    allowed := enforcement_point.allowedByDefault
+}
+
+enforcement_point_info := {"available": false, "allowed": false, "unknown": false, "invalid": true} {
+    enforcement_point := data.api.enforcement_points[input.name]
+    semver.compare(data.api.svn, enforcement_point.introducedVersion) < 0
+}
+
 # error messages
 
 default container_started := false
