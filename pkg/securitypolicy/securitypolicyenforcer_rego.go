@@ -103,6 +103,10 @@ func createRegoEnforcer(base64EncodedPolicy string,
 			containers[i] = &cConf
 		}
 
+		if securityPolicy.AllowAll {
+			return createOpenDoorEnforcer(base64EncodedPolicy, defaultMounts, privilegedMounts)
+		}
+
 		code, err = marshalRego(securityPolicy.AllowAll, containers)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling the policy to Rego: %w", err)
