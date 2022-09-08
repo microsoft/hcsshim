@@ -173,7 +173,7 @@ func writeCommand(builder *strings.Builder, command []string, indent string) {
 }
 
 func (e EnvRuleConfig) marshalRego() string {
-	return fmt.Sprintf(`{"pattern": "%s", "strategy": "%s"}`, e.Rule, e.Strategy)
+	return fmt.Sprintf(`{"pattern": "%s", "strategy": "%s", "required": %v}`, e.Rule, e.Strategy, e.Required)
 }
 
 type envRuleArray []EnvRuleConfig
