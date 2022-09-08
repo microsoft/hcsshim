@@ -74,8 +74,13 @@ const (
 	// UncompressedKernelFile is the default file name for an uncompressed
 	// kernel used to boot LCOW with KernelDirect.
 	UncompressedKernelFile = "vmlinux"
-	// In the SNP case both the kernel (bzImage) and initrd are stored in a vmgs (VM Guest State) file
+	// GuestStateFile is the default file name for a vmgs (VM Guest State) file
+	// which combines kernel and initrd and is used to boot from in the SNP case.
 	GuestStateFile = "kernelinitrd.vmgs"
+	// UVMReferenceInfoFile is the default file name for a COSE_Sign1
+	// reference UVM info, which can be made available to workload containers
+	// and can be used for validation purposes.
+	UVMReferenceInfoFile = "reference_info.cose"
 )
 
 // OptionsLCOW are the set of options passed to CreateLCOW() to create a utility vm.
@@ -104,6 +109,7 @@ type OptionsLCOW struct {
 	SecurityPolicy          string              // Optional security policy
 	SecurityPolicyEnabled   bool                // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
 	SecurityPolicyEnforcer  string              // Set which security policy enforcer to use (open door, standard or rego). This allows for better fallback mechanic.
+	UVMReferenceInfoFile    string              // Filename under `BootFilesPath` for (potentially signed) UVM image reference information.
 	UseGuestStateFile       bool                // Use a vmgs file that contains a kernel and initrd, required for SNP
 	GuestStateFile          string              // The vmgs file to load
 	DisableTimeSyncService  bool                // Disables the time synchronization service
@@ -155,6 +161,7 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		SecurityPolicyEnabled:   false,
 		SecurityPolicyEnforcer:  "",
 		SecurityPolicy:          "",
+		UVMReferenceInfoFile:    UVMReferenceInfoFile,
 		GuestStateFile:          "",
 		DisableTimeSyncService:  false,
 	}

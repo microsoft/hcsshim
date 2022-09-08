@@ -59,6 +59,7 @@ type Host struct {
 	policyMutex               sync.Mutex
 	securityPolicyEnforcer    securitypolicy.SecurityPolicyEnforcer
 	securityPolicyEnforcerSet bool
+	uvmReferenceInfo          string
 }
 
 func NewHost(rtime runtime.Runtime, vsock transport.Transport) *Host {
@@ -72,14 +73,17 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport) *Host {
 	}
 }
 
-// SetSecurityPolicy takes a base64 encoded security policy
-// and sets up our internal data structures we use to store
-// said policy.
+// SetConfidentialUVMOptions takes a security policy enforcer type, base64
+// encoded security policy and base64 encoded UVM reference information to set
+// up our internal data structures we use to store said policy. The signed
+// UVM measurement can be presented to the workload containers via an
+// environment variable if client requests so.
+//
 // The security policy is transmitted as json in an annotation,
 // so we first have to remove the base64 encoding that allows
 // the JSON based policy to be passed as a string. From there,
 // we decode the JSON and setup our security policy state
-func (h *Host) SetSecurityPolicy(enforcerType, base64EncodedPolicy string) error {
+func (h *Host) SetConfidentialUVMOptions(enforcerType string, base64EncodedPolicy string, base64UVMReference string) error {
 	h.policyMutex.Lock()
 	defer h.policyMutex.Unlock()
 	if h.securityPolicyEnforcerSet {
@@ -107,6 +111,7 @@ func (h *Host) SetSecurityPolicy(enforcerType, base64EncodedPolicy string) error
 
 	h.securityPolicyEnforcer = p
 	h.securityPolicyEnforcerSet = true
+	h.uvmReferenceInfo = base64UVMReference
 
 	return nil
 }
@@ -289,16 +294,20 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		return nil, errors.Wrapf(err, "container creation denied due to policy")
 	}
 
-	// Export security policy as one of the process's environment variables so that application and sidecar
-	// containers can have access to it. The security policy is required by containers which need to extract
-	// init-time claims found in the security policy.
+	// Export security policy and signed UVM reference info as one of the
+	// process's environment variables so that application and sidecar
+	// containers can have access to it. The security policy is required
+	// by containers which need to extract init-time claims found in the
+	// security policy.
 	//
-	// We append the variable after the security policy enforcing logic completes to bypass it; the
-	// security policy variable cannot be included in the security policy as its value is not available
-	// security policy construction time.
+	// We append the variable after the security policy enforcing logic
+	// completes to bypass it; the security policy variable cannot be included
+	// in the security policy as its value is not available security policy
+	// construction time.
 	if oci.ParseAnnotationsBool(ctx, settings.OCISpecification.Annotations, annotations.SecurityPolicyEnv, false) {
 		secPolicyEnv := fmt.Sprintf("SECURITY_POLICY=%s", h.securityPolicyEnforcer.EncodedSecurityPolicy())
-		settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, secPolicyEnv)
+		uvmReferenceInfo := fmt.Sprintf("HCSSHIM_UVM_REFERENCE_INFO=%s", h.uvmReferenceInfo)
+		settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, secPolicyEnv, uvmReferenceInfo)
 	}
 
 	// Create the BundlePath
@@ -373,11 +382,11 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		}
 		return c.modifyContainerConstraints(ctx, req.RequestType, req.Settings.(*guestresource.LCOWContainerConstraints))
 	case guestresource.ResourceTypeSecurityPolicy:
-		r, ok := req.Settings.(*guestresource.LCOWSecurityPolicyEnforcer)
+		r, ok := req.Settings.(*guestresource.LCOWConfidentialOptions)
 		if !ok {
-			return errors.New("the request's settings are not of type LCOWSecurityPolicyEnforcer")
+			return errors.New("the request's settings are not of type LCOWConfidentialOptions")
 		}
-		return h.SetSecurityPolicy(r.EnforcerType, r.EncodedSecurityPolicy)
+		return h.SetConfidentialUVMOptions(r.EnforcerType, r.EncodedSecurityPolicy, r.EncodedUVMReference)
 	default:
 		return errors.Errorf("the ResourceType \"%s\" is not supported for UVM", req.ResourceType)
 	}

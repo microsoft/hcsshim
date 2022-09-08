@@ -731,7 +731,7 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Annotation(t *testing.T)
 
 	// The command prints environment variables to stdout, which we can capture
 	// and validate later
-	alpineCmd := []string{"ash", "-c", "env"}
+	alpineCmd := []string{"ash", "-c", "env && sleep 1"}
 
 	for _, config := range []struct {
 		name   string
@@ -781,7 +781,7 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Annotation(t *testing.T)
 				startContainer(t, client, ctx, containerID)
 				requireContainerState(ctx, t, client, containerID, runtime.ContainerState_CONTAINER_RUNNING)
 
-				stopContainer(t, client, ctx, containerID)
+				// no need to stop the container since it'll exit by itself
 				requireContainerState(ctx, t, client, containerID, runtime.ContainerState_CONTAINER_EXITED)
 
 				content, err := os.ReadFile(logPath)
@@ -789,14 +789,17 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Annotation(t *testing.T)
 					t.Fatalf("error reading log file: %s", err)
 				}
 				policyEnv := fmt.Sprintf("SECURITY_POLICY=%s", config.policy)
+				measurementEnv := "HCSSHIM_UVM_REFERENCE_INFO="
 				if setPolicyEnv {
 					// make sure that the expected environment variable was set
-					if !strings.Contains(string(content), policyEnv) {
-						t.Fatalf("SECURITY_POLICY env var should be set for init process:\n%s\n", string(content))
+					if !strings.Contains(string(content), policyEnv) || !strings.Contains(string(content), measurementEnv) {
+						t.Fatalf("SECURITY_POLICY and HCSSHIM_UVM_REFERENCE_INFO env vars should be set for init"+
+							" process:\n%s\n", string(content))
 					}
 				} else {
-					if strings.Contains(string(content), policyEnv) {
-						t.Fatalf("SECURITY_POLICY env var shouldn't be set for init process:\n%s\n",
+					if strings.Contains(string(content), policyEnv) || strings.Contains(string(content), measurementEnv) {
+						t.Fatalf("SECURITY_POLICY and HCSSHIM_UVM_REFERENCE_INFO env vars shouldn't be set for init"+
+							" process:\n%s\n",
 							string(content))
 					}
 				}
