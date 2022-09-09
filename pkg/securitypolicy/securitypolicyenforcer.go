@@ -720,11 +720,6 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, 
 	return nil
 }
 
-//nolint:unused
-func (OpenDoorSecurityPolicyEnforcer) enforceMountPolicy(_, _ string, _ []oci.Mount) error {
-	return nil
-}
-
 func (OpenDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
 	return nil
 }
@@ -753,11 +748,6 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceOverlayMountPolicy(_ string, _ []
 
 func (ClosedDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, _ []string, _ string, _ []oci.Mount) error {
 	return errors.New("running commands is denied by policy")
-}
-
-//nolint:unused
-func (ClosedDoorSecurityPolicyEnforcer) enforceMountPolicy(_, _ string, _ []oci.Mount) error {
-	return errors.New("container mounts are denied by policy")
 }
 
 func (ClosedDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
