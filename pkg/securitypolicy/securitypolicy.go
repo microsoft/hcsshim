@@ -39,6 +39,7 @@ type AuthConfig struct {
 type EnvRuleConfig struct {
 	Strategy EnvVarRule `json:"strategy" toml:"strategy"`
 	Rule     string     `json:"rule" toml:"rule"`
+	Required bool       `json:"required" toml:"required"`
 }
 
 // ContainerConfig contains toml or JSON config for container described

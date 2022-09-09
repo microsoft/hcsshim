@@ -981,6 +981,47 @@ func Test_Rego_Enforcement_Point_Allowed(t *testing.T) {
 	}
 }
 
+func Test_Rego_EnforceEnvironmentVariablePolicy_MissingRequired(t *testing.T) {
+	testFunc := func(gc *generatedContainers) bool {
+		container := selectContainerFromContainers(gc, testRand)
+		// add a rule to re2 match
+		requiredRule := EnvRuleConfig{
+			Strategy: "string",
+			Rule:     randVariableString(testRand, maxGeneratedEnvironmentVariableRuleLength),
+			Required: true,
+		}
+
+		container.EnvRules = append(container.EnvRules, requiredRule)
+
+		tc, err := setupRegoCreateContainerTest(gc, container, false)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		envList := make([]string, 0, len(container.EnvRules))
+		for _, env := range tc.envList {
+			if env != requiredRule.Rule {
+				envList = append(envList, env)
+			}
+		}
+
+		err = tc.policy.EnforceCreateContainerPolicy(tc.sandboxID, tc.containerID, tc.argList, envList, tc.workingDir, tc.mounts)
+
+		// not getting an error means something is broken
+		if err == nil {
+			t.Errorf("Expected container setup to fail.")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(testFunc, &quick.Config{MaxCount: 250}); err != nil {
+		t.Errorf("Test_Rego_EnforceEnvironmentVariablePolicy_MissingRequired: %v", err)
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //

@@ -834,6 +834,7 @@ func (*SecurityPolicy) Generate(r *rand.Rand, _ int) reflect.Value {
 			rule := EnvRuleConfig{
 				Strategy: "string",
 				Rule:     randVariableString(r, maxGeneratedEnvironmentVariableRuleLength),
+				Required: false,
 			}
 			c.EnvRules.Elements[strconv.Itoa(j)] = rule
 		}
