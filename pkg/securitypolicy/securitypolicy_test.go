@@ -119,7 +119,7 @@ func Test_StandardSecurityPolicyEnforcer_From_Security_Policy_Conversion(t *test
 		return !t.Failed()
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 1000}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 1000, Rand: testRand}); err != nil {
 		t.Errorf("Test_StandardSecurityPolicyEnforcer_From_Security_Policy_Conversion failed: %v", err)
 	}
 }
@@ -139,7 +139,7 @@ func Test_EnforceDeviceMountPolicy_No_Matches(t *testing.T) {
 		return err != nil
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 1000}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 1000, Rand: testRand}); err != nil {
 		t.Errorf("Test_EnforceDeviceMountPolicy_No_Matches failed: %v", err)
 	}
 }
@@ -159,7 +159,7 @@ func Test_EnforceDeviceMountPolicy_Matches(t *testing.T) {
 		return err == nil
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 1000}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 1000, Rand: testRand}); err != nil {
 		t.Errorf("Test_EnforceDeviceMountPolicy_No_Matches failed: %v", err)
 	}
 }
@@ -190,7 +190,7 @@ func Test_EnforceDeviceUmountPolicy_Removes_Device_Entries(t *testing.T) {
 		return cmp.Equal(policy.Devices, map[string]string{})
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 1000}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 1000, Rand: testRand}); err != nil {
 		t.Errorf("Test_EnforceDeviceUmountPolicy_Removes_Device_Entries failed: %v", err)
 	}
 }
@@ -211,7 +211,7 @@ func Test_EnforceOverlayMountPolicy_No_Matches(t *testing.T) {
 		return err != nil
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 1000}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 1000, Rand: testRand}); err != nil {
 		t.Errorf("Test_EnforceOverlayMountPolicy_No_Matches failed: %v", err)
 	}
 }
@@ -232,7 +232,7 @@ func Test_EnforceOverlayMountPolicy_Matches(t *testing.T) {
 		return err == nil
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 1000}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 1000, Rand: testRand}); err != nil {
 		t.Errorf("Test_EnforceOverlayMountPolicy_Matches: %v", err)
 	}
 }
@@ -340,7 +340,7 @@ func Test_EnforceCommandPolicy_Matches(t *testing.T) {
 		return err == nil
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 1000}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 1000, Rand: testRand}); err != nil {
 		t.Errorf("Test_EnforceCommandPolicy_Matches: %v", err)
 	}
 }
@@ -364,7 +364,7 @@ func Test_EnforceCommandPolicy_NoMatches(t *testing.T) {
 		return err != nil
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 1000}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 1000, Rand: testRand}); err != nil {
 		t.Errorf("Test_EnforceCommandPolicy_NoMatches: %v", err)
 	}
 }
@@ -490,7 +490,7 @@ func Test_EnforceEnvironmentVariablePolicy_Matches(t *testing.T) {
 		return err == nil
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 1000}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 1000, Rand: testRand}); err != nil {
 		t.Errorf("Test_EnforceEnvironmentVariablePolicy_Matches: %v", err)
 	}
 }
@@ -551,7 +551,7 @@ func Test_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 		return err != nil
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 1000}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 1000, Rand: testRand}); err != nil {
 		t.Errorf("Test_EnforceEnvironmentVariablePolicy_NotAllMatches: %v", err)
 	}
 }
@@ -679,7 +679,7 @@ func Test_WorkingDirectoryPolicy_Matches(t *testing.T) {
 		return tc.policy.enforceWorkingDirPolicy(tc.containerID, tc.container.WorkingDir) == nil
 	}
 
-	if err := quick.Check(testFunc, &quick.Config{MaxCount: 1000}); err != nil {
+	if err := quick.Check(testFunc, &quick.Config{MaxCount: 1000, Rand: testRand}); err != nil {
 		t.Errorf("Test_WorkingDirectoryPolicy_Matches: %v", err)
 	}
 }
@@ -701,7 +701,7 @@ func Test_WorkingDirectoryPolicy_NoMatches(t *testing.T) {
 		return tc.policy.enforceWorkingDirPolicy(tc.containerID, randString(testRand, 20)) != nil
 	}
 
-	if err := quick.Check(testFunc, &quick.Config{MaxCount: 1000}); err != nil {
+	if err := quick.Check(testFunc, &quick.Config{MaxCount: 1000, Rand: testRand}); err != nil {
 		t.Errorf("Test_WorkingDirectoryPolicy_NoMatches: %v", err)
 	}
 }
@@ -767,7 +767,7 @@ func Test_Overlay_Duplicate_Layers(t *testing.T) {
 		return true
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 1}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 1, Rand: testRand}); err != nil {
 		t.Errorf("failed to run stuff: %s", err)
 	}
 }
