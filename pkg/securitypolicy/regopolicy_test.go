@@ -38,7 +38,7 @@ func Test_MarshalRego(t *testing.T) {
 		return !t.Failed()
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 4}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 4, Rand: testRand}); err != nil {
 		t.Errorf("Test_MarshalRego failed: %v", err)
 	}
 }
@@ -62,7 +62,7 @@ func Test_Rego_EnforceDeviceMountPolicy_No_Matches(t *testing.T) {
 		return err != nil && strings.Contains(err.Error(), rootHash)
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_EnforceDeviceMountPolicy_No_Matches failed: %v", err)
 	}
 }
@@ -86,7 +86,7 @@ func Test_Rego_EnforceDeviceMountPolicy_Matches(t *testing.T) {
 		return err == nil
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_EnforceDeviceMountPolicy_Matches failed: %v", err)
 	}
 }
@@ -119,7 +119,7 @@ func Test_Rego_EnforceDeviceUmountPolicy_Removes_Device_Entries(t *testing.T) {
 		return !found
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_EnforceDeviceUmountPolicy_Removes_Device_Entries failed: %v", err)
 	}
 }
@@ -150,7 +150,7 @@ func Test_Rego_EnforceDeviceMountPolicy_Duplicate_Device_Target(t *testing.T) {
 		return true
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_EnforceDeviceMountPolicy_Duplicate_Device_Target failed: %v", err)
 	}
 }
@@ -178,7 +178,7 @@ func Test_Rego_EnforceOverlayMountPolicy_No_Matches(t *testing.T) {
 		return true
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_EnforceOverlayMountPolicy_No_Matches failed: %v", err)
 	}
 }
@@ -199,7 +199,7 @@ func Test_Rego_EnforceOverlayMountPolicy_Matches(t *testing.T) {
 		return err == nil
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_EnforceOverlayMountPolicy_Matches: %v", err)
 	}
 }
@@ -338,7 +338,7 @@ func Test_Rego_EnforceOverlayMountPolicy_Overlay_Single_Container_Twice(t *testi
 		return true
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_EnforceOverlayMountPolicy_Overlay_Single_Container_Twice: %v", err)
 	}
 }
@@ -443,7 +443,7 @@ func Test_Rego_EnforceCommandPolicy_NoMatches(t *testing.T) {
 		return strings.Contains(err.Error(), "invalid command")
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_EnforceCommandPolicy_NoMatches: %v", err)
 	}
 }
@@ -477,7 +477,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_Re2Match(t *testing.T) {
 		return true
 	}
 
-	if err := quick.Check(testFunc, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(testFunc, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_EnforceEnvironmentVariablePolicy_Re2Match: %v", err)
 	}
 }
@@ -506,7 +506,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_NotAllMatches(t *testing.T) {
 		return strings.Contains(err.Error(), envList[0])
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_EnforceEnvironmentVariablePolicy_NotAllMatches: %v", err)
 	}
 }
@@ -528,7 +528,7 @@ func Test_Rego_WorkingDirectoryPolicy_NoMatches(t *testing.T) {
 		return strings.Contains(err.Error(), "invalid working directory")
 	}
 
-	if err := quick.Check(testFunc, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(testFunc, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_WorkingDirectoryPolicy_NoMatches: %v", err)
 	}
 }
@@ -547,7 +547,7 @@ func Test_Rego_EnforceCreateContainer(t *testing.T) {
 		return err == nil
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_EnforceCreateContainer: %v", err)
 	}
 }
@@ -596,7 +596,7 @@ func Test_Rego_Enforce_CreateContainer_Start_All_Containers(t *testing.T) {
 
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 50}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_Enforce_CreateContainer_Start_All_Containers: %v", err)
 	}
 }
@@ -616,7 +616,7 @@ func Test_Rego_EnforceCreateContainer_Invalid_ContainerID(t *testing.T) {
 		return err != nil
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_EnforceCreateContainer_Invalid_ContainerID: %v", err)
 	}
 }
@@ -643,7 +643,7 @@ func Test_Rego_EnforceCreateContainer_Same_Container_Twice(t *testing.T) {
 		return true
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_EnforceCreateContainer_Same_Container_Twice: %v", err)
 	}
 }
@@ -672,7 +672,7 @@ func Test_Rego_ExtendDefaultMounts(t *testing.T) {
 		}
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_ExtendDefaultMounts: %v", err)
 	}
 }
@@ -700,7 +700,7 @@ func Test_Rego_MountPolicy_NoMatches(t *testing.T) {
 		return strings.Contains(err.Error(), "invalid mount list")
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_MountPolicy_NoMatches: %v", err)
 	}
 }
@@ -728,7 +728,7 @@ func Test_Rego_MountPolicy_NotAllOptionsFromConstraints(t *testing.T) {
 		return strings.Contains(err.Error(), "invalid mount list")
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_MountPolicy_NotAllOptionsFromConstraints: %v", err)
 	}
 }
@@ -754,7 +754,7 @@ func Test_Rego_MountPolicy_BadSource(t *testing.T) {
 		return strings.Contains(err.Error(), "invalid mount list")
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_MountPolicy_BadSource: %v", err)
 	}
 }
@@ -780,7 +780,7 @@ func Test_Rego_MountPolicy_BadDestination(t *testing.T) {
 		return strings.Contains(err.Error(), "invalid mount list")
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_MountPolicy_BadDestination: %v", err)
 	}
 }
@@ -806,7 +806,7 @@ func Test_Rego_MountPolicy_BadType(t *testing.T) {
 		return strings.Contains(err.Error(), "invalid mount list")
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_MountPolicy_BadType: %v", err)
 	}
 }
@@ -835,7 +835,7 @@ func Test_Rego_MountPolicy_BadOption(t *testing.T) {
 		return strings.Contains(err.Error(), "invalid mount list")
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_MountPolicy_BadOption: %v", err)
 	}
 }
@@ -864,7 +864,7 @@ func Test_Rego_MountPolicy_MountPrivilegedWhenNotAllowed(t *testing.T) {
 		return strings.Contains(err.Error(), "invalid mount list")
 	}
 
-	if err := quick.Check(f, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(f, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_MountPolicy_BadOption: %v", err)
 	}
 }
@@ -1017,7 +1017,7 @@ func Test_Rego_EnforceEnvironmentVariablePolicy_MissingRequired(t *testing.T) {
 		return true
 	}
 
-	if err := quick.Check(testFunc, &quick.Config{MaxCount: 250}); err != nil {
+	if err := quick.Check(testFunc, &quick.Config{MaxCount: 250, Rand: testRand}); err != nil {
 		t.Errorf("Test_Rego_EnforceEnvironmentVariablePolicy_MissingRequired: %v", err)
 	}
 }
