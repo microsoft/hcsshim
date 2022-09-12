@@ -1305,6 +1305,38 @@ func Test_Rego_ExecExternalProcessPolicy_WorkingDir_No_Match(t *testing.T) {
 	}
 }
 
+func Test_Rego_ShutdownContainerPolicy_Running_Container(t *testing.T) {
+	p := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+
+	tc, err := setupRegoRunningContainerTest(p)
+	if err != nil {
+		t.Fatalf("Unable to set up test: %v", err)
+	}
+
+	container := selectContainerFromRunningContainers(tc.runningContainers, testRand)
+
+	err = tc.policy.EnforceShutdownContainerPolicy(container.containerID)
+	if err != nil {
+		t.Fatal("Expected shutdown of running container to be allowed, it wasn't")
+	}
+}
+
+func Test_Rego_ShutdownContainerPolicy_Not_Running_Container(t *testing.T) {
+	p := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+
+	tc, err := setupRegoRunningContainerTest(p)
+	if err != nil {
+		t.Fatalf("Unable to set up test: %v", err)
+	}
+
+	notRunningContainerID := testDataGenerator.uniqueContainerID()
+
+	err = tc.policy.EnforceShutdownContainerPolicy(notRunningContainerID)
+	if err == nil {
+		t.Fatal("Expected shutdown of not running container to be denied, it wasn't")
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //

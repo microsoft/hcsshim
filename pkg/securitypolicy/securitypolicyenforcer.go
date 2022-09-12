@@ -46,6 +46,7 @@ type SecurityPolicyEnforcer interface {
 	EncodedSecurityPolicy() string
 	EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string) error
 	EnforceExecExternalProcessPolicy(argList []string, envList []string, workingDir string) error
+	EnforceShutdownContainerPolicy(containerID string) error
 }
 
 func newSecurityPolicyFromBase64JSON(base64EncodedPolicy string) (*SecurityPolicy, error) {
@@ -445,6 +446,12 @@ func (*StandardSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []stri
 	return nil
 }
 
+// Stub. We are deprecating the standard enforcer. Newly added enforcement
+// points are simply allowed.
+func (*StandardSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(_ string) error {
+	return nil
+}
+
 func (pe *StandardSecurityPolicyEnforcer) enforceCommandPolicy(containerID string, argList []string) (err error) {
 	// Get a list of all the indexes into our security policy's list of
 	// containers that are possible matches for this containerID based
@@ -742,6 +749,12 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []strin
 	return nil
 }
 
+// Stub. We are deprecating the standard enforcer. Newly added enforcement
+// points are simply allowed.
+func (*OpenDoorSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(_ string) error {
+	return nil
+}
+
 func (OpenDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
 	return nil
 }
@@ -778,6 +791,12 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _
 
 func (ClosedDoorSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []string, _ []string, _ string) error {
 	return errors.New("starting additional processes in uvm is denied by policy")
+}
+
+// Stub. We are deprecating the standard enforcer. Newly added enforcement
+// points are simply allowed.
+func (*ClosedDoorSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(_ string) error {
+	return nil
 }
 
 func (ClosedDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {

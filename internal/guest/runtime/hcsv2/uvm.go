@@ -37,6 +37,7 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/mattn/go-shellwords"
 	"github.com/pkg/errors"
+	"golang.org/x/sys/unix"
 )
 
 // UVMContainerID is the ContainerID that will be sent on any prot.MessageBase
@@ -433,6 +434,40 @@ func (h *Host) ModifySettings(ctx context.Context, containerID string, req *gues
 // state that has not been cleaned before calling this function.
 func (*Host) Shutdown() {
 	_ = syscall.Reboot(syscall.LINUX_REBOOT_CMD_POWER_OFF)
+}
+
+// Called to shutdown a container
+func (h *Host) ShutdownContainer(ctx context.Context, containerID string, graceful bool) error {
+	c, err := h.GetCreatedContainer(containerID)
+	if err != nil {
+		return err
+	}
+
+	err = h.securityPolicyEnforcer.EnforceShutdownContainerPolicy(containerID)
+	if err != nil {
+		return err
+	}
+
+	signal := unix.SIGTERM
+	if !graceful {
+		signal = unix.SIGKILL
+	}
+
+	return c.Kill(ctx, signal)
+}
+
+func (h *Host) SignalContainerProcess(ctx context.Context, containerID string, processID uint32, signal syscall.Signal) error {
+	c, err := h.GetCreatedContainer(containerID)
+	if err != nil {
+		return err
+	}
+
+	p, err := c.GetProcess(processID)
+	if err != nil {
+		return err
+	}
+
+	return p.Kill(ctx, signal)
 }
 
 func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.ProcessParameters, conSettings stdio.ConnectionSettings) (_ int, err error) {
