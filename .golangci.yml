@@ -12,7 +12,6 @@ run:
 linters:
   enable:
     - gofmt
-    - misspell
     - nolintlint
     - stylecheck
 
