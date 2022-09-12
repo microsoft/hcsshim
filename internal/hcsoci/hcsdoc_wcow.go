@@ -418,11 +418,11 @@ func createWindowsContainerDocument(ctx context.Context, coi *createOptionsInter
 		// 5 seconds (default value of 'WaitToKillServiceTimeout') before sending
 		// a SIGKILL to terminate the process. This causes issues when graceful
 		// termination of containers is requested (Bug36689012).
-		// The regkey 'WaitToKillServiceTimeout' value is overriden here to help
+		// The regkey 'WaitToKillServiceTimeout' value is overridden here to help
 		// honor graceful termination of containers by waiting for the requested
 		// amount of time before stopping the container.
 		// More details on the implementation of this fix can be found in the Kill()
-		// funciton of exec_hcs.go
+		// function of exec_hcs.go
 
 		// 'WaitToKillServiceTimeout' reg key value is arbitrarily chosen and set to a
 		// value that is long enough that no one will want to wait longer

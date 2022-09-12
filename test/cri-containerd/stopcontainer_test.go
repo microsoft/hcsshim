@@ -207,7 +207,6 @@ func Test_GracefulTermination(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			requireFeatures(t, tc.features...)
 			pullRequiredImages(t, []string{tc.image})
-			fmt.Printf("imagename %s", tc.image)
 			client := newTestRuntimeClient(t)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
