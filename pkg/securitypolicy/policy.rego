@@ -1,25 +1,15 @@
 package policy
 
-api_svn := "0.1.0"
+api_svn := "0.2.0"
 
 import future.keywords.every
 import future.keywords.in
 
 ##OBJECTS##
 
-default mount_device := false
-mount_device := true {
-    data.framework.mount_device
-}
-
-default mount_overlay := false
-mount_overlay := true {
-    data.framework.mount_overlay
-}
-
-default create_container := false
-create_container := true {
-    data.framework.create_container
-}
-
-reason := data.framework.reason
+mount_device := data.framework.mount_device
+unmount_device := data.framework.unmount_device
+mount_overlay := data.framework.mount_overlay
+create_container := data.framework.create_container
+exec_in_container := data.framework.exec_in_container
+reason := {"errors": data.framework.errors}

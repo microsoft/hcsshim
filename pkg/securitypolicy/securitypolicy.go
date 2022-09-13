@@ -45,13 +45,14 @@ type EnvRuleConfig struct {
 // ContainerConfig contains toml or JSON config for container described
 // in security policy.
 type ContainerConfig struct {
-	ImageName     string          `json:"image_name" toml:"image_name"`
-	Command       []string        `json:"command" toml:"command"`
-	Auth          AuthConfig      `json:"auth" toml:"auth"`
-	EnvRules      []EnvRuleConfig `json:"env_rules" toml:"env_rule"`
-	WorkingDir    string          `json:"working_dir" toml:"working_dir"`
-	Mounts        []MountConfig   `json:"mounts" toml:"mount"`
-	AllowElevated bool            `json:"allow_elevated" toml:"allow_elevated"`
+	ImageName     string              `json:"image_name" toml:"image_name"`
+	Command       []string            `json:"command" toml:"command"`
+	Auth          AuthConfig          `json:"auth" toml:"auth"`
+	EnvRules      []EnvRuleConfig     `json:"env_rules" toml:"env_rule"`
+	WorkingDir    string              `json:"working_dir" toml:"working_dir"`
+	Mounts        []MountConfig       `json:"mounts" toml:"mount"`
+	AllowElevated bool                `json:"allow_elevated" toml:"allow_elevated"`
+	ExecProcesses []ExecProcessConfig `json:"exec_processes" toml:"exec_process"`
 }
 
 // MountConfig contains toml or JSON config for mount security policy
@@ -60,6 +61,12 @@ type MountConfig struct {
 	HostPath      string `json:"host_path" toml:"host_path"`
 	ContainerPath string `json:"container_path" toml:"container_path"`
 	Readonly      bool   `json:"readonly" toml:"readonly"`
+}
+
+// ExecProcessConfig contains toml or JSON config for exec process security
+// policy constraint description
+type ExecProcessConfig struct {
+	Command []string `json:"command" toml:"command"`
 }
 
 // NewEnvVarRules creates slice of EnvRuleConfig's from environment variables
@@ -136,6 +143,7 @@ type Container struct {
 	WorkingDir    string      `json:"working_dir"`
 	Mounts        Mounts      `json:"mounts"`
 	AllowElevated bool        `json:"allow_elevated"`
+	ExecProcesses []ExecProcessConfig
 }
 
 // StringArrayMap wraps an array of strings as a string map.
@@ -175,6 +183,7 @@ func CreateContainerPolicy(
 	workingDir string,
 	mounts []MountConfig,
 	allowElevated bool,
+	execProcesses []ExecProcessConfig,
 ) (*Container, error) {
 	if err := validateEnvRules(envRules); err != nil {
 		return nil, err
@@ -189,6 +198,7 @@ func CreateContainerPolicy(
 		WorkingDir:    workingDir,
 		Mounts:        newMountConstraints(mounts),
 		AllowElevated: allowElevated,
+		ExecProcesses: execProcesses,
 	}, nil
 }
 

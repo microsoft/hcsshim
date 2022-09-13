@@ -195,18 +195,7 @@ func (b *Bridge) execProcessV2(r *Request) (_ RequestResponse, err error) {
 		conSettings.StdErr = &request.Settings.VsockStdioRelaySettings.StdErr
 	}
 
-	var pid int
-	var c *hcsv2.Container
-	if params.IsExternal || request.ContainerID == hcsv2.UVMContainerID {
-		pid, err = b.hostState.RunExternalProcess(ctx, params, conSettings)
-	} else if c, err = b.hostState.GetCreatedContainer(request.ContainerID); err == nil {
-		// We found a V2 container. Treat this as a V2 process.
-		if params.OCIProcess == nil {
-			pid, err = c.Start(ctx, conSettings)
-		} else {
-			pid, err = c.ExecProcess(ctx, params.OCIProcess, conSettings)
-		}
-	}
+	pid, err := b.hostState.ExecProcess(ctx, request.ContainerID, params, conSettings)
 
 	if err != nil {
 		return nil, err
