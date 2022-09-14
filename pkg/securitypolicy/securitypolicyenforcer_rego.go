@@ -319,7 +319,7 @@ sequence of rule results and the resulting metadata state:
     "matches": {
         "action": "add",
         "key": "container1",
-        "value": [0, 2, 5]
+        "value": [{<container>}, {<container>}, {<container>}]
     }
 }
 ```
@@ -387,6 +387,47 @@ sequence of rule results and the resulting metadata state:
 }
 ```
 */
+
+type metadataAction string
+
+const (
+	Add    metadataAction = "add"
+	Update metadataAction = "update"
+	Remove metadataAction = "remove"
+)
+
+type metadataOperation struct {
+	action metadataAction
+	key    string
+	value  interface{}
+}
+
+func newMetadataOperation(operation interface{}) (*metadataOperation, error) {
+	data, ok := operation.(map[string]interface{})
+	var metadataOp metadataOperation
+	if !ok {
+		return nil, errors.New("unable to load metadata object")
+	}
+	action, ok := data["action"].(string)
+	if !ok {
+		return nil, errors.New("unable to load metadata action")
+	}
+	metadataOp.action = metadataAction(action)
+	metadataOp.key, ok = data["key"].(string)
+	if !ok {
+		return nil, errors.New("unable to load metadata key")
+	}
+
+	if metadataOp.action != Remove {
+		metadataOp.value, ok = data["value"]
+		if !ok {
+			return nil, errors.New("unable to load metadata value")
+		}
+	}
+
+	return &metadataOp, nil
+}
+
 func (policy *regoEnforcer) updateMetadata(results map[string]interface{}) error {
 	policy.mutex.Lock()
 	defer policy.mutex.Unlock()
@@ -403,46 +444,31 @@ func (policy *regoEnforcer) updateMetadata(results map[string]interface{}) error
 			metadata[name] = make(map[string]interface{})
 		}
 
-		data, ok := value.(map[string]interface{})
-		if !ok {
-			return errors.New("unable to load metadata object")
-		}
-		action, ok := data["action"].(string)
-		if !ok {
-			return errors.New("unable to load metadata action")
-		}
-		key, ok := data["key"].(string)
-		if !ok {
-			return errors.New("unable to load metadata key")
+		op, err := newMetadataOperation(value)
+		if err != nil {
+			return err
 		}
 
-		switch action {
-		case "add":
-			_, ok := metadata[name][key]
+		switch op.action {
+		case Add:
+			_, ok := metadata[name][op.key]
 			if ok {
-				return fmt.Errorf("cannot add metadata value, key %s[%s] already exists", name, key)
+				return fmt.Errorf("cannot add metadata value, key %s[%s] already exists", name, op.key)
 			}
-			value, ok := data["value"]
-			if !ok {
-				return errors.New("unable to load metadata value")
-			}
-			metadata[name][key] = value
+
+			metadata[name][op.key] = op.value
 			break
 
-		case "update":
-			value, ok := data["value"]
-			if !ok {
-				return errors.New("unable to load metadata value")
-			}
-			metadata[name][key] = value
+		case Update:
+			metadata[name][op.key] = op.value
 			break
 
-		case "remove":
-			delete(metadata[name], key)
+		case Remove:
+			delete(metadata[name], op.key)
 			break
 
 		default:
-			return fmt.Errorf("unrecognized metadata action: %s", action)
+			return fmt.Errorf("unrecognized metadata action: %s", op.action)
 		}
 	}
 
