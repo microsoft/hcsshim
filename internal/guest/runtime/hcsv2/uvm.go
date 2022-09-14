@@ -439,6 +439,10 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 	var pid int
 	var c *Container
 	if params.IsExternal || containerID == UVMContainerID {
+		err = h.securityPolicyEnforcer.EnforceExecExternalProcessPolicy(params.OCIProcess.Args, params.OCIProcess.Env, params.OCIProcess.Cwd)
+		if err != nil {
+			return pid, errors.Wrapf(err, "exec in container denied due to policy")
+		}
 		pid, err = h.runExternalProcess(ctx, params, conSettings)
 	} else if c, err = h.GetCreatedContainer(containerID); err == nil {
 		// We found a V2 container. Treat this as a V2 process.

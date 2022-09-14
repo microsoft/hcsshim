@@ -107,7 +107,7 @@ func createRegoEnforcer(base64EncodedPolicy string,
 			return createOpenDoorEnforcer(base64EncodedPolicy, defaultMounts, privilegedMounts)
 		}
 
-		code, err = marshalRego(securityPolicy.AllowAll, containers)
+		code, err = marshalRego(securityPolicy.AllowAll, containers, []ExternalProcessConfig{})
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling the policy to Rego: %w", err)
 		}
@@ -604,4 +604,14 @@ func (policy *regoEnforcer) EnforceExecInContainerPolicy(containerID string, arg
 	}
 
 	return policy.enforce("exec_in_container", input)
+}
+
+func (policy *regoEnforcer) EnforceExecExternalProcessPolicy(argList []string, envList []string, workingDir string) error {
+	input := map[string]interface{}{
+		"argList":    argList,
+		"envList":    envList,
+		"workingDir": workingDir,
+	}
+
+	return policy.enforce("exec_external", input)
 }
