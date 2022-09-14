@@ -12,9 +12,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/Microsoft/hcsshim/internal/guest/storage/test/policy"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
-	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
 func clearTestDependencies() {
@@ -46,7 +44,6 @@ func Test_Mount_Mkdir_Fails_Error(t *testing.T) {
 		false,
 		nil,
 		nil,
-		openDoorSecurityPolicyEnforcer(),
 	); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected err: %v, got: %v", expectedErr, err)
 	}
@@ -83,7 +80,6 @@ func Test_Mount_Mkdir_ExpectedPath(t *testing.T) {
 		false,
 		nil,
 		nil,
-		openDoorSecurityPolicyEnforcer(),
 	); err != nil {
 		t.Fatalf("expected nil error got: %v", err)
 	}
@@ -120,7 +116,6 @@ func Test_Mount_Mkdir_ExpectedPerm(t *testing.T) {
 		false,
 		nil,
 		nil,
-		openDoorSecurityPolicyEnforcer(),
 	); err != nil {
 		t.Fatalf("expected nil error got: %v", err)
 	}
@@ -157,7 +152,6 @@ func Test_Mount_ControllerLunToName_Valid_Controller(t *testing.T) {
 		false,
 		nil,
 		nil,
-		openDoorSecurityPolicyEnforcer(),
 	); err != nil {
 		t.Fatalf("expected nil error got: %v", err)
 	}
@@ -194,7 +188,6 @@ func Test_Mount_ControllerLunToName_Valid_Lun(t *testing.T) {
 		false,
 		nil,
 		nil,
-		openDoorSecurityPolicyEnforcer(),
 	); err != nil {
 		t.Fatalf("expected nil error got: %v", err)
 	}
@@ -234,7 +227,6 @@ func Test_Mount_Calls_RemoveAll_OnMountFailure(t *testing.T) {
 		false,
 		nil,
 		nil,
-		openDoorSecurityPolicyEnforcer(),
 	); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected err: %v, got: %v", expectedErr, err)
 	}
@@ -263,7 +255,7 @@ func Test_Mount_Valid_Source(t *testing.T) {
 		}
 		return nil
 	}
-	err := mount(context.Background(), 0, 0, "/fake/path", false, false, nil, nil, openDoorSecurityPolicyEnforcer())
+	err := mount(context.Background(), 0, 0, "/fake/path", false, false, nil, nil)
 	if err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
@@ -299,7 +291,6 @@ func Test_Mount_Valid_Target(t *testing.T) {
 		false,
 		nil,
 		nil,
-		openDoorSecurityPolicyEnforcer(),
 	); err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
@@ -335,7 +326,6 @@ func Test_Mount_Valid_FSType(t *testing.T) {
 		false,
 		nil,
 		nil,
-		openDoorSecurityPolicyEnforcer(),
 	); err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
@@ -371,7 +361,6 @@ func Test_Mount_Valid_Flags(t *testing.T) {
 		false,
 		nil,
 		nil,
-		openDoorSecurityPolicyEnforcer(),
 	); err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
@@ -407,7 +396,6 @@ func Test_Mount_Readonly_Valid_Flags(t *testing.T) {
 		false,
 		nil,
 		nil,
-		openDoorSecurityPolicyEnforcer(),
 	); err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
@@ -442,7 +430,6 @@ func Test_Mount_Valid_Data(t *testing.T) {
 		false,
 		nil,
 		nil,
-		openDoorSecurityPolicyEnforcer(),
 	); err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
@@ -478,152 +465,9 @@ func Test_Mount_Readonly_Valid_Data(t *testing.T) {
 		false,
 		nil,
 		nil,
-		openDoorSecurityPolicyEnforcer(),
 	); err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
-}
-
-func Test_Read_Only_Security_Policy_Enforcement_Mount_Calls(t *testing.T) {
-	clearTestDependencies()
-
-	target := "/fake/path"
-	osMkdirAll = func(path string, perm os.FileMode) error {
-		if path != target {
-			t.Errorf("expected path: %v, got: %v", target, path)
-			return errors.New("unexpected path")
-		}
-		return nil
-	}
-
-	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
-		return "", nil
-	}
-
-	unixMount = func(source string, target string, fstype string, flags uintptr, data string) error {
-		// Fake the mount success
-		return nil
-	}
-
-	enforcer := mountMonitoringSecurityPolicyEnforcer()
-	err := mount(context.Background(), 0, 0, target, true, false, nil, nil, enforcer)
-	if err != nil {
-		t.Fatalf("expected nil err, got: %v", err)
-	}
-
-	expectedDeviceMounts := 1
-	if enforcer.DeviceMountCalls != expectedDeviceMounts {
-		t.Fatalf("expected %d attempt at pmem mount enforcement, got %d", expectedDeviceMounts, enforcer.DeviceMountCalls)
-	}
-
-	expectedDeviceUnmounts := 0
-	if enforcer.DeviceUnmountCalls != expectedDeviceUnmounts {
-		t.Fatalf("expected %d attempt at pmem mount enforcement, got %d", expectedDeviceUnmounts, enforcer.DeviceUnmountCalls)
-	}
-
-	expectedOverlay := 0
-	if enforcer.OverlayMountCalls != expectedOverlay {
-		t.Fatalf("expected %d attempts at overlay mount enforcement, got %d", expectedOverlay, enforcer.OverlayMountCalls)
-	}
-}
-
-func Test_Read_Write_Security_Policy_Enforcement_Mount_Calls(t *testing.T) {
-	clearTestDependencies()
-
-	target := "/fake/path"
-	osMkdirAll = func(path string, perm os.FileMode) error {
-		if path != target {
-			t.Errorf("expected path: %v, got: %v", target, path)
-			return errors.New("unexpected path")
-		}
-		return nil
-	}
-
-	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
-		return "", nil
-	}
-
-	unixMount = func(source string, target string, fstype string, flags uintptr, data string) error {
-		// Fake the mount success
-		return nil
-	}
-
-	enforcer := mountMonitoringSecurityPolicyEnforcer()
-	err := mount(context.Background(), 0, 0, target, false, false, nil, nil, enforcer)
-	if err != nil {
-		t.Fatalf("expected nil err, got: %v", err)
-	}
-
-	expectedDeviceMounts := 0
-	if enforcer.DeviceMountCalls != expectedDeviceMounts {
-		t.Fatalf("expected %d attempt at pmem mount enforcement, got %d", expectedDeviceMounts, enforcer.DeviceMountCalls)
-	}
-
-	expectedDeviceUnmounts := 0
-	if enforcer.DeviceUnmountCalls != expectedDeviceUnmounts {
-		t.Fatalf("expected %d attempt at pmem mount enforcement, got %d", expectedDeviceUnmounts, enforcer.DeviceUnmountCalls)
-	}
-
-	expectedOverlay := 0
-	if enforcer.OverlayMountCalls != expectedOverlay {
-		t.Fatalf("expected %d attempts at overlay mount enforcement, got %d", expectedOverlay, enforcer.OverlayMountCalls)
-	}
-}
-
-func Test_Security_Policy_Enforcement_Unmount_Calls(t *testing.T) {
-	clearTestDependencies()
-
-	target := "/fake/path"
-	osMkdirAll = func(path string, perm os.FileMode) error {
-		if path != target {
-			t.Errorf("expected path: %v, got: %v", target, path)
-			return errors.New("unexpected path")
-		}
-		return nil
-	}
-
-	controllerLunToName = func(ctx context.Context, controller, lun uint8) (string, error) {
-		return "", nil
-	}
-
-	unixMount = func(source string, target string, fstype string, flags uintptr, data string) error {
-		// Fake the mount success
-		return nil
-	}
-
-	enforcer := mountMonitoringSecurityPolicyEnforcer()
-	err := mount(context.Background(), 0, 0, target, true, false, nil, nil, enforcer)
-	if err != nil {
-		t.Fatalf("expected nil err, got: %v", err)
-	}
-
-	err = unmount(context.Background(), 0, 0, target, false, nil, enforcer)
-	if err != nil {
-		t.Fatalf("expected nil err, got: %v", err)
-	}
-
-	expectedDeviceMounts := 1
-	if enforcer.DeviceMountCalls != expectedDeviceMounts {
-		t.Fatalf("expected %d attempt at pmem mount enforcement, got %d", expectedDeviceMounts, enforcer.DeviceMountCalls)
-	}
-
-	expectedDeviceUnmounts := 1
-	if enforcer.DeviceUnmountCalls != expectedDeviceUnmounts {
-		t.Fatalf("expected %d attempt at pmem mount enforcement, got %d", expectedDeviceMounts, enforcer.DeviceUnmountCalls)
-	}
-
-	expectedOverlay := 0
-	if enforcer.OverlayMountCalls != expectedOverlay {
-		t.Fatalf("expected %d attempts at overlay mount enforcement, got %d", expectedOverlay, enforcer.OverlayMountCalls)
-	}
-}
-
-func openDoorSecurityPolicyEnforcer() securitypolicy.SecurityPolicyEnforcer {
-	return &securitypolicy.OpenDoorSecurityPolicyEnforcer{}
-}
-
-func mountMonitoringSecurityPolicyEnforcer() *policy.MountMonitoringSecurityPolicyEnforcer {
-	return &policy.MountMonitoringSecurityPolicyEnforcer{}
 }
 
 // dm-verity tests
@@ -678,7 +522,6 @@ func Test_CreateVerityTarget_And_Mount_Called_With_Correct_Parameters(t *testing
 		false,
 		nil,
 		vInfo,
-		openDoorSecurityPolicyEnforcer(),
 	); err != nil {
 		t.Fatalf("unexpected error during Mount: %s", err)
 	}
@@ -727,7 +570,6 @@ func Test_osMkdirAllFails_And_RemoveDevice_Called(t *testing.T) {
 		false,
 		nil,
 		verityInfo,
-		openDoorSecurityPolicyEnforcer(),
 	); err != expectedError {
 		t.Fatalf("expected Mount error %s, got %s", expectedError, err)
 	}
