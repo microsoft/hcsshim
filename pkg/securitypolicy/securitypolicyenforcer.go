@@ -49,6 +49,8 @@ type SecurityPolicyEnforcer interface {
 	EnforceExecExternalProcessPolicy(argList []string, envList []string, workingDir string) error
 	EnforceShutdownContainerPolicy(containerID string) error
 	EnforceSignalContainerProcessPolicy(containerID string, signal syscall.Signal, isInitProcess bool, startupArgList []string) error
+	EnforcePlan9MountPolicy(target string) (err error)
+	EnforcePlan9UnmountPolicy(target string) (err error)
 }
 
 func newSecurityPolicyFromBase64JSON(base64EncodedPolicy string) (*SecurityPolicy, error) {
@@ -470,6 +472,18 @@ func (*StandardSecurityPolicyEnforcer) EnforceSignalContainerProcessPolicy(_ str
 	return nil
 }
 
+// Stub. We are deprecating the standard enforcer. Newly added enforcement
+// points are simply allowed.
+func (*StandardSecurityPolicyEnforcer) EnforcePlan9MountPolicy(_ string) error {
+	return nil
+}
+
+// Stub. We are deprecating the standard enforcer. Newly added enforcement
+// points are simply allowed.
+func (*StandardSecurityPolicyEnforcer) EnforcePlan9UnmountPolicy(_ string) error {
+	return nil
+}
+
 func (pe *StandardSecurityPolicyEnforcer) enforceCommandPolicy(containerID string, argList []string) (err error) {
 	// Get a list of all the indexes into our security policy's list of
 	// containers that are possible matches for this containerID based
@@ -775,6 +789,14 @@ func (*OpenDoorSecurityPolicyEnforcer) EnforceSignalContainerProcessPolicy(_ str
 	return nil
 }
 
+func (*OpenDoorSecurityPolicyEnforcer) EnforcePlan9MountPolicy(_ string) error {
+	return nil
+}
+
+func (*OpenDoorSecurityPolicyEnforcer) EnforcePlan9UnmountPolicy(_ string) error {
+	return nil
+}
+
 func (OpenDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
 	return nil
 }
@@ -819,6 +841,14 @@ func (*ClosedDoorSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(_ string
 
 func (*ClosedDoorSecurityPolicyEnforcer) EnforceSignalContainerProcessPolicy(_ string, _ syscall.Signal, _ bool, _ []string) error {
 	return errors.New("signalling container processes is denied by policy")
+}
+
+func (*ClosedDoorSecurityPolicyEnforcer) EnforcePlan9MountPolicy(_ string) error {
+	return errors.New("mounting is denied by policy")
+}
+
+func (*ClosedDoorSecurityPolicyEnforcer) EnforcePlan9UnmountPolicy(_ string) error {
+	return errors.New("unmounting is denied by policy")
 }
 
 func (ClosedDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {

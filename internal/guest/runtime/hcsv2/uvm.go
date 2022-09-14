@@ -390,7 +390,7 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 	case guestresource.ResourceTypeMappedVirtualDisk:
 		return modifyMappedVirtualDisk(ctx, req.RequestType, req.Settings.(*guestresource.LCOWMappedVirtualDisk), h.securityPolicyEnforcer)
 	case guestresource.ResourceTypeMappedDirectory:
-		return modifyMappedDirectory(ctx, h.vsock, req.RequestType, req.Settings.(*guestresource.LCOWMappedDirectory))
+		return modifyMappedDirectory(ctx, h.vsock, req.RequestType, req.Settings.(*guestresource.LCOWMappedDirectory), h.securityPolicyEnforcer)
 	case guestresource.ResourceTypeVPMemDevice:
 		return modifyMappedVPMemDevice(ctx, req.RequestType, req.Settings.(*guestresource.LCOWMappedVPMemDevice), h.securityPolicyEnforcer)
 	case guestresource.ResourceTypeCombinedLayers:
@@ -695,11 +695,22 @@ func modifyMappedDirectory(
 	vsock transport.Transport,
 	rt guestrequest.RequestType,
 	md *guestresource.LCOWMappedDirectory,
+	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
 	switch rt {
 	case guestrequest.RequestTypeAdd:
+		err = securityPolicy.EnforcePlan9MountPolicy(md.MountPath)
+		if err != nil {
+			return errors.Wrapf(err, "mounting plan9 device at %s denied by policy", md.MountPath)
+		}
+
 		return plan9.Mount(ctx, vsock, md.MountPath, md.ShareName, uint32(md.Port), md.ReadOnly)
 	case guestrequest.RequestTypeRemove:
+		err = securityPolicy.EnforcePlan9UnmountPolicy(md.MountPath)
+		if err != nil {
+			return errors.Wrapf(err, "unmounting plan9 device at %s denied by policy", md.MountPath)
+		}
+
 		return storage.UnmountPath(ctx, md.MountPath, true)
 	default:
 		return newInvalidRequestTypeError(rt)
