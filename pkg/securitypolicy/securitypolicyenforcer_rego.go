@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"syscall"
 
 	"github.com/Microsoft/hcsshim/internal/guest/spec"
 	"github.com/Microsoft/hcsshim/internal/guestpath"
@@ -622,4 +623,15 @@ func (policy *regoEnforcer) EnforceShutdownContainerPolicy(containerID string) e
 	}
 
 	return policy.enforce("shutdown_container", input)
+}
+
+func (policy *regoEnforcer) EnforceSignalContainerProcessPolicy(containerID string, signal syscall.Signal, isInitProcess bool, startupArgList []string) error {
+	input := map[string]interface{}{
+		"containerID":   containerID,
+		"signal":        signal,
+		"isInitProcess": isInitProcess,
+		"argList":       startupArgList,
+	}
+
+	return policy.enforce("signal_container_process", input)
 }

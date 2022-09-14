@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"testing/quick"
 	"time"
@@ -39,6 +40,7 @@ const (
 	maxGeneratedMountOptionLength              = 32
 	maxGeneratedExecProcesses                  = 12
 	maxGeneratedWorkingDirLength               = 128
+	maxSignalNumber                            = 64
 	// additional consts
 	// the standard enforcer tests don't do anything with the encoded policy
 	// string. this const exists to make that explicit
@@ -927,6 +929,7 @@ func generateConstraintsContainer(r *rand.Rand, minNumberOfLayers, maxNumberOfLa
 		c.Layers = append(c.Layers, generateRootHash(r))
 	}
 	c.ExecProcesses = generateExecProcesses(r)
+	c.Signals = generateListOfSignals(r, 0, maxSignalNumber)
 
 	return &c
 }
@@ -942,6 +945,7 @@ func generateContainerInitProcess(r *rand.Rand) containerInitProcess {
 func generateContainerExecProcess(r *rand.Rand) containerExecProcess {
 	return containerExecProcess{
 		Command: generateCommand(r),
+		Signals: generateListOfSignals(r, 0, maxSignalNumber),
 	}
 }
 
@@ -1111,6 +1115,27 @@ func generateMounts(r *rand.Rand) []mountInternal {
 	}
 
 	return mounts
+}
+
+func generateListOfSignals(r *rand.Rand, atLeast int32, atMost int32) []syscall.Signal {
+	numSignals := int(atLeastNAtMostM(r, atLeast, atMost))
+	signalSet := make(map[syscall.Signal]struct{})
+
+	for i := 0; i < numSignals; i++ {
+		signal := generateSignal(r)
+		signalSet[signal] = struct{}{}
+	}
+
+	var signals []syscall.Signal
+	for k := range signalSet {
+		signals = append(signals, k)
+	}
+
+	return signals
+}
+
+func generateSignal(r *rand.Rand) syscall.Signal {
+	return syscall.Signal(atLeastOneAtMost(r, maxSignalNumber))
 }
 
 func selectContainerFromConstraints(constraints *generatedConstraints, r *rand.Rand) *securityPolicyContainer {

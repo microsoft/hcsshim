@@ -3,6 +3,7 @@ package securitypolicy
 import (
 	"fmt"
 	"strconv"
+	"syscall"
 )
 
 // Internal version of SecurityPolicy
@@ -31,10 +32,15 @@ type securityPolicyContainer struct {
 	// A list of lists of commands that can be used to execute additional
 	// processes within the container
 	ExecProcesses []containerExecProcess
+	// A list of signals that are allowed to be sent to the container's init
+	// process.
+	Signals []syscall.Signal
 }
 
 type containerExecProcess struct {
 	Command []string
+	// A list of signals that are allowed to be sent to this process
+	Signals []syscall.Signal
 }
 
 type externalProcess struct {
@@ -88,6 +94,7 @@ func (c Container) toInternal() (securityPolicyContainer, error) {
 		Mounts:        mounts,
 		AllowElevated: c.AllowElevated,
 		ExecProcesses: execProcesses,
+		Signals:       c.Signals,
 	}, nil
 }
 
