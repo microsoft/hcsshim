@@ -209,12 +209,26 @@ func writeMounts(builder *strings.Builder, mounts []mountInternal, indent string
 	writeLine(builder, `%s"mounts": [%s],`, indent, strings.Join(values, ","))
 }
 
+func (p containerExecProcess) marshalRego() string {
+	command := stringArray(p.Command).marshalRego()
+	return fmt.Sprintf(`{"command": %s}`, command)
+}
+
+func writeExecProcesses(builder *strings.Builder, execProcesses []containerExecProcess, indent string) {
+	values := make([]string, len(execProcesses))
+	for i, process := range execProcesses {
+		values[i] = process.marshalRego()
+	}
+	writeLine(builder, `%s"exec_processes": [%s],`, indent, strings.Join(values, ","))
+}
+
 func writeContainer(builder *strings.Builder, container *securityPolicyContainer, indent string, end string) {
 	writeLine(builder, "%s{", indent)
 	writeCommand(builder, container.Command, indent+indentUsing)
 	writeEnvRules(builder, container.EnvRules, indent+indentUsing)
 	writeLayers(builder, container.Layers, indent+indentUsing)
 	writeMounts(builder, container.Mounts, indent+indentUsing)
+	writeExecProcesses(builder, container.ExecProcesses, indent+indentUsing)
 	writeLine(builder, `%s"allow_elevated": %v,`, indent+indentUsing, container.AllowElevated)
 	writeLine(builder, `%s"working_dir": "%s"`, indent+indentUsing, container.WorkingDir)
 	writeLine(builder, "%s}%s", indent, end)

@@ -46,3 +46,7 @@ func (MountMonitoringSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) 
 func (MountMonitoringSecurityPolicyEnforcer) EncodedSecurityPolicy() string {
 	return ""
 }
+
+func (MountMonitoringSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, _ []string, _ string) error {
+	return nil
+}

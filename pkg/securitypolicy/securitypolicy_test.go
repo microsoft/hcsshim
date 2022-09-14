@@ -36,6 +36,8 @@ const (
 	maxGeneratedMountDestinationLength        = 32
 	maxGeneratedMountOptions                  = 5
 	maxGeneratedMountOptionLength             = 32
+	maxGeneratedExecProcesses                 = 12
+	maxGeneratedWorkingDirLength              = 128
 	// additional consts
 	// the standard enforcer tests don't do anything with the encoded policy
 	// string. this const exists to make that explicit
@@ -483,7 +485,7 @@ func Test_EnforceEnvironmentVariablePolicy_Matches(t *testing.T) {
 			return false
 		}
 
-		envVars := buildEnvironmentVariablesFromContainerRules(tc.container, testRand)
+		envVars := buildEnvironmentVariablesFromEnvRules(tc.container.EnvRules, testRand)
 		err = tc.policy.enforceEnvironmentVariablePolicy(tc.containerID, envVars)
 
 		// getting an error means something is broken
@@ -633,7 +635,7 @@ func Test_EnforceEnvironmentVariablePolicy_NarrowingMatches(t *testing.T) {
 
 		// enforce command policy for containerOne
 		// this will narrow our list of possible ids down
-		envVars := buildEnvironmentVariablesFromContainerRules(testContainerOne, testRand)
+		envVars := buildEnvironmentVariablesFromEnvRules(testContainerOne.EnvRules, testRand)
 		err := policy.enforceEnvironmentVariablePolicy(testContainerOneID, envVars)
 		if err != nil {
 			t.Error(err)
@@ -902,20 +904,40 @@ func generateContainers(r *rand.Rand, upTo int32) *generatedContainers {
 
 func generateContainersContainer(r *rand.Rand, minNumberOfLayers, maxNumberOfLayers int32) *securityPolicyContainer {
 	c := securityPolicyContainer{}
-	c.Command = generateCommand(r)
-	c.EnvRules = generateEnvironmentVariableRules(r)
-	c.WorkingDir = randVariableString(r, maxGeneratedCommandLength)
+	p := generateContainerInitProcess(r)
+	c.Command = p.Command
+	c.EnvRules = p.EnvRules
+	c.WorkingDir = p.WorkingDir
 	c.Mounts = generateMounts(r)
 	numLayers := int(atLeastNAtMostM(r, minNumberOfLayers, maxNumberOfLayers))
 	for i := 0; i < numLayers; i++ {
 		c.Layers = append(c.Layers, generateRootHash(r))
 	}
+	c.ExecProcesses = generateExecProcesses(r)
 
 	return &c
 }
 
+func generateContainerInitProcess(r *rand.Rand) containerInitProcess {
+	return containerInitProcess{
+		Command:    generateCommand(r),
+		EnvRules:   generateEnvironmentVariableRules(r),
+		WorkingDir: generateWorkingDir(r),
+	}
+}
+
+func generateContainerExecProcess(r *rand.Rand) containerExecProcess {
+	return containerExecProcess{
+		Command: generateCommand(r),
+	}
+}
+
 func generateRootHash(r *rand.Rand) string {
 	return randString(r, rootHashLength)
+}
+
+func generateWorkingDir(r *rand.Rand) string {
+	return randVariableString(r, maxGeneratedWorkingDirLength)
 }
 
 func generateCommand(r *rand.Rand) []string {
@@ -944,6 +966,17 @@ func generateEnvironmentVariableRules(r *rand.Rand) []EnvRuleConfig {
 	return rules
 }
 
+func generateExecProcesses(r *rand.Rand) []containerExecProcess {
+	var processes []containerExecProcess
+
+	numProcesses := atLeastOneAtMost(r, maxGeneratedExecProcesses)
+	for i := 0; i < int(numProcesses); i++ {
+		processes = append(processes, generateContainerExecProcess(r))
+	}
+
+	return processes
+}
+
 func generateEnvironmentVariables(r *rand.Rand) []string {
 	var envVars []string
 
@@ -960,12 +993,12 @@ func generateNeverMatchingEnvironmentVariable(r *rand.Rand) string {
 	return randString(r, maxGeneratedEnvironmentVariableRuleLength+1)
 }
 
-func buildEnvironmentVariablesFromContainerRules(c *securityPolicyContainer, r *rand.Rand) []string {
+func buildEnvironmentVariablesFromEnvRules(rules []EnvRuleConfig, r *rand.Rand) []string {
 	vars := make([]string, 0)
 
 	// Select some number of the valid, matching rules to be environment
 	// variable
-	numberOfRules := int32(len(c.EnvRules))
+	numberOfRules := int32(len(rules))
 	numberOfMatches := randMinMax(r, 1, numberOfRules)
 	usedIndexes := map[int]struct{}{}
 	for numberOfMatches > 0 {
@@ -989,7 +1022,7 @@ func buildEnvironmentVariablesFromContainerRules(c *securityPolicyContainer, r *
 			}
 		}
 
-		vars = append(vars, c.EnvRules[anIndex].Rule)
+		vars = append(vars, rules[anIndex].Rule)
 		usedIndexes[anIndex] = struct{}{}
 
 		numberOfMatches--
@@ -1079,9 +1112,11 @@ func newDataGenerator(rng *rand.Rand) *dataGenerator {
 		containerIDs: map[string]struct{}{},
 		sandboxIDs:   map[string]struct{}{},
 		enforcementPoints: map[string]struct{}{
-			"mount_device":     {},
-			"mount_overlay":    {},
-			"create_container": {},
+			"mount_device":      {},
+			"mount_overlay":     {},
+			"create_container":  {},
+			"unmount_device":    {},
+			"exec_in_container": {},
 		},
 	}
 }
@@ -1233,4 +1268,10 @@ func atMost(r *rand.Rand, most int32) int32 {
 // a type to hold a list of generated containers
 type generatedContainers struct {
 	containers []*securityPolicyContainer
+}
+
+type containerInitProcess struct {
+	Command    []string
+	EnvRules   []EnvRuleConfig
+	WorkingDir string
 }

@@ -27,6 +27,13 @@ type securityPolicyContainer struct {
 	// A list of constraints for determining if a given mount is allowed.
 	Mounts        []mountInternal
 	AllowElevated bool
+	// A list of lists of commands that can be used to execute additional
+	// processes within the container
+	ExecProcesses []containerExecProcess
+}
+
+type containerExecProcess struct {
+	Command []string
 }
 
 // Internal version of Mount
@@ -57,6 +64,13 @@ func (c Container) toInternal() (securityPolicyContainer, error) {
 	if err != nil {
 		return securityPolicyContainer{}, err
 	}
+
+	var execProcesses []containerExecProcess
+	for _, ep := range c.ExecProcesses {
+		cep := containerExecProcess(ep)
+		execProcesses = append(execProcesses, cep)
+	}
+
 	return securityPolicyContainer{
 		Command:  command,
 		EnvRules: envRules,
@@ -66,6 +80,7 @@ func (c Container) toInternal() (securityPolicyContainer, error) {
 		WorkingDir:    c.WorkingDir,
 		Mounts:        mounts,
 		AllowElevated: c.AllowElevated,
+		ExecProcesses: execProcesses,
 	}, nil
 }
 

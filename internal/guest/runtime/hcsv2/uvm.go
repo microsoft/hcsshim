@@ -435,8 +435,45 @@ func (*Host) Shutdown() {
 	_ = syscall.Reboot(syscall.LINUX_REBOOT_CMD_POWER_OFF)
 }
 
+func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.ProcessParameters, conSettings stdio.ConnectionSettings) (_ int, err error) {
+	var pid int
+	var c *Container
+	if params.IsExternal || containerID == UVMContainerID {
+		pid, err = h.runExternalProcess(ctx, params, conSettings)
+	} else if c, err = h.GetCreatedContainer(containerID); err == nil {
+		// We found a V2 container. Treat this as a V2 process.
+		if params.OCIProcess == nil {
+			// We've already done policy enforcement for creating a container so
+			// there's no policy enforcement to do for starting
+			pid, err = c.Start(ctx, conSettings)
+		} else {
+			// Windows uses a different field for command, there's no enforcement
+			// around this yet for Windows so this is Linux specific at the moment.
+			err = h.securityPolicyEnforcer.EnforceExecInContainerPolicy(containerID, params.OCIProcess.Args, params.OCIProcess.Env, params.OCIProcess.Cwd)
+			if err != nil {
+				return pid, errors.Wrapf(err, "exec in container denied due to policy")
+			}
+
+			pid, err = c.ExecProcess(ctx, params.OCIProcess, conSettings)
+		}
+	}
+
+	return pid, err
+}
+
+func (h *Host) GetExternalProcess(pid int) (Process, error) {
+	h.externalProcessesMutex.Lock()
+	defer h.externalProcessesMutex.Unlock()
+
+	p, ok := h.externalProcesses[pid]
+	if !ok {
+		return nil, gcserr.NewHresultError(gcserr.HrErrNotFound)
+	}
+	return p, nil
+}
+
 // RunExternalProcess runs a process in the utility VM.
-func (h *Host) RunExternalProcess(
+func (h *Host) runExternalProcess(
 	ctx context.Context,
 	params prot.ProcessParameters,
 	conSettings stdio.ConnectionSettings,
@@ -526,17 +563,6 @@ func (h *Host) RunExternalProcess(
 	h.externalProcesses[p.Pid()] = p
 	h.externalProcessesMutex.Unlock()
 	return p.Pid(), nil
-}
-
-func (h *Host) GetExternalProcess(pid int) (Process, error) {
-	h.externalProcessesMutex.Lock()
-	defer h.externalProcessesMutex.Unlock()
-
-	p, ok := h.externalProcesses[pid]
-	if !ok {
-		return nil, gcserr.NewHresultError(gcserr.HrErrNotFound)
-	}
-	return p, nil
 }
 
 func newInvalidRequestTypeError(rt guestrequest.RequestType) error {

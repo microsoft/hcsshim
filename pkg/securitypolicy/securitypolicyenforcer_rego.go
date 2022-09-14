@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/Microsoft/hcsshim/internal/guest/spec"
@@ -23,6 +22,7 @@ import (
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/topdown"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -131,9 +131,8 @@ func newRegoPolicy(code string, defaultMounts []oci.Mount, privilegedMounts []oc
 	defaultMountData := make([]interface{}, 0, len(defaultMounts))
 	privilegedMountData := make([]interface{}, 0, len(privilegedMounts))
 	policy.data = map[string]interface{}{
-		"started":          []string{},
-		"devices":          map[string]string{},
-		"containers":       map[string]interface{}{},
+		// for more information on metadata, see the `updateMetadata` method
+		"metadata":         map[string]map[string]interface{}{},
 		"defaultMounts":    appendMountData(defaultMountData, defaultMounts),
 		"privilegedMounts": appendMountData(privilegedMountData, privilegedMounts),
 		"sandboxPrefix":    guestpath.SandboxMountPrefix,
@@ -163,13 +162,7 @@ func newRegoPolicy(code string, defaultMounts []oci.Mount, privilegedMounts []oc
 	return policy, nil
 }
 
-func (policy *regoEnforcer) allowed(enforcementPoint string, input map[string]interface{}) (bool, error) {
-	results, err := policy.query(enforcementPoint, input)
-	if err != nil {
-		// Rego execution error
-		return false, err
-	}
-
+func (policy *regoEnforcer) allowed(enforcementPoint string, results map[string]interface{}) (bool, error) {
 	if len(results) == 0 {
 		info, err := policy.queryEnforcementPoint(enforcementPoint)
 		if err != nil {
@@ -185,7 +178,11 @@ func (policy *regoEnforcer) allowed(enforcementPoint string, input map[string]in
 		}
 	}
 
-	return results.Allowed(), nil
+	if allowed, ok := results["allowed"].(bool); ok {
+		return allowed, nil
+	} else {
+		return false, fmt.Errorf("unable to load 'allowed' from object returned by policy for %s", enforcementPoint)
+	}
 }
 
 type enforcementPointInfo struct {
@@ -224,7 +221,7 @@ func (policy *regoEnforcer) queryEnforcementPoint(enforcementPoint string) (enfo
 	return info, nil
 }
 
-func (policy *regoEnforcer) query(enforcementPoint string, input map[string]interface{}) (rego.ResultSet, error) {
+func (policy *regoEnforcer) query(enforcementPoint string, input map[string]interface{}) (map[string]interface{}, error) {
 	store := inmem.NewFromObject(policy.data)
 
 	input["name"] = enforcementPoint
@@ -237,12 +234,12 @@ func (policy *regoEnforcer) query(enforcementPoint string, input map[string]inte
 		rego.PrintHook(topdown.NewPrintHook(&buf)))
 
 	ctx := context.Background()
-	results, err := query.Eval(ctx)
+	resultSet, err := query.Eval(ctx)
 	if err != nil {
 		log.G(ctx).WithError(err).WithFields(logrus.Fields{
 			"Policy": policy.code,
 		}).Error("Rego policy execution error")
-		return results, err
+		return nil, err
 	}
 
 	output := buf.String()
@@ -252,84 +249,259 @@ func (policy *regoEnforcer) query(enforcementPoint string, input map[string]inte
 		}).Debug("Rego policy output")
 	}
 
+	if len(resultSet) == 0 {
+		return map[string]interface{}{}, nil
+	}
+
+	results, ok := resultSet[0].Expressions[0].Value.(map[string]interface{})
+	if !ok {
+		return nil, errors.New("unable to load results object from Rego query")
+	}
 	return results, nil
 }
 
-func (policy *regoEnforcer) EnforceDeviceMountPolicy(target string, deviceHash string) error {
+/**
+Each rule can optionally return a series of metadata commands in addition to
+`allowed` which will then be made available in the `data.metadata` namespace
+for use by the policy in future rule evaluations. A metadata command has the
+following format:
+
+``` json
+{
+    "<name>": {
+        "action": "<add|update|remove>",
+        "key": "<key>",
+        "value": "<optional value>"
+    }
+}
+```
+
+Metadata objects can be any Rego object, *i.e.* arbitrary JSON. Importantly,
+the Go code does not need to understand what they are or what they contain, just
+place them in the specified point in the hierarchy such that the policy can find
+them in later rule evaluations. To give a sense of how this works, here are a
+sequence of rule results and the resulting metadata state:
+
+**Initial State**
+``` json
+{
+    "metadata": {}
+}
+```
+
+**Result 1**
+``` json
+{
+    "allowed": true,
+    "devices": {
+        "action": "add",
+        "key": "/dev/layer0",
+        "value": "5c5d1ae1aff5e1f36d5300de46592efe4ccb7889e60a4b82bbaf003c2248f2a7"
+    }
+}
+```
+
+**State 1**
+``` json
+{
+    "metadata": {
+        "devices": {
+            "/dev/layer0": "5c5d1ae1aff5e1f36d5300de46592efe4ccb7889e60a4b82bbaf003c2248f2a7"
+        }
+    }
+}
+```
+
+**Result 2**
+``` json
+{
+    "allowed": true,
+    "matches": {
+        "action": "add",
+        "key": "container1",
+        "value": [0, 2, 5]
+    }
+}
+```
+
+**State 2**
+``` json
+{
+    "metadata": {
+        "devices": {
+            "/dev/layer0": "5c5d1ae1aff5e1f36d5300de46592efe4ccb7889e60a4b82bbaf003c2248f2a7"
+        },
+        "matches": {
+            "container1": [{<container>}, {<container>}, {<container>}]
+        }
+    }
+}
+```
+
+**Result 3**
+``` json
+{
+    "allowed": true,
+    "matches": {
+        "action": "update",
+        "key": "container1",
+        "value": [{<container>}]
+    }
+}
+```
+
+**State 3**
+``` json
+{
+    "metadata": {
+        "devices": {
+            "/dev/layer0": "5c5d1ae1aff5e1f36d5300de46592efe4ccb7889e60a4b82bbaf003c2248f2a7"
+        },
+        "matches": {
+            "container1": [{<container>}]
+        }
+    }
+}
+```
+
+**Result 4**
+``` json
+{
+    "allowed": true,
+    "devices": {
+        "action": "remove",
+        "key": "/dev/layer0"
+    }
+}
+```
+
+**State 4**
+``` json
+{
+    "metadata": {
+        "devices": {},
+        "matches": {
+            "container1": [{<container>}]
+        }
+    }
+}
+```
+*/
+func (policy *regoEnforcer) updateMetadata(results map[string]interface{}) error {
 	policy.mutex.Lock()
 	defer policy.mutex.Unlock()
 
+	// this is the top-level data namespace for metadata
+	metadata := policy.data["metadata"].(map[string]map[string]interface{})
+	for name, value := range results {
+		if name == "allowed" {
+			continue
+		}
+
+		if _, ok := metadata[name]; !ok {
+			// this adds the metadata object if it does not already exist
+			metadata[name] = make(map[string]interface{})
+		}
+
+		data, ok := value.(map[string]interface{})
+		if !ok {
+			return errors.New("unable to load metadata object")
+		}
+		action, ok := data["action"].(string)
+		if !ok {
+			return errors.New("unable to load metadata action")
+		}
+		key, ok := data["key"].(string)
+		if !ok {
+			return errors.New("unable to load metadata key")
+		}
+
+		switch action {
+		case "add":
+			_, ok := metadata[name][key]
+			if ok {
+				return fmt.Errorf("cannot add metadata value, key %s[%s] already exists", name, key)
+			}
+			value, ok := data["value"]
+			if !ok {
+				return errors.New("unable to load metadata value")
+			}
+			metadata[name][key] = value
+			break
+
+		case "update":
+			value, ok := data["value"]
+			if !ok {
+				return errors.New("unable to load metadata value")
+			}
+			metadata[name][key] = value
+			break
+
+		case "remove":
+			delete(metadata[name], key)
+			break
+
+		default:
+			return fmt.Errorf("unrecognized metadata action: %s", action)
+		}
+	}
+
+	return nil
+}
+
+func (policy *regoEnforcer) enforce(enforcementPoint string, input map[string]interface{}) error {
+	results, err := policy.query(enforcementPoint, input)
+	if err != nil {
+		return err
+	}
+
+	allowed, err := policy.allowed(enforcementPoint, results)
+	if err != nil {
+		return err
+	}
+
+	if allowed {
+		err = policy.updateMetadata(results)
+		if err != nil {
+			return fmt.Errorf("unable to update metadata: %w", err)
+		}
+		return nil
+	}
+
+	inputJSON, err := json.Marshal(input)
+	if err != nil {
+		return fmt.Errorf("unable to marshal the Rego input data: %w", err)
+	}
+
+	input["rule"] = enforcementPoint
+	results, err = policy.query("reason", input)
+	if err != nil {
+		return fmt.Errorf("%s not allowed by policy.\nInput: %s", enforcementPoint, string(inputJSON))
+	}
+
+	if errors, ok := results["errors"]; ok {
+		return fmt.Errorf("%s not allowed by policy. Errors: %v.\nInput: %s", enforcementPoint, errors, string(inputJSON))
+	} else {
+		return fmt.Errorf("%s not allowed by policy.\nInput: %s", enforcementPoint, string(inputJSON))
+	}
+}
+
+func (policy *regoEnforcer) EnforceDeviceMountPolicy(target string, deviceHash string) error {
 	input := map[string]interface{}{
 		"target":     target,
 		"deviceHash": deviceHash,
 	}
-	allowed, err := policy.allowed("mount_device", input)
-	if err != nil {
-		return err
-	}
 
-	if !allowed {
-		inputJSON, err := json.Marshal(input)
-		if err != nil {
-			return fmt.Errorf("unable to marshal the Rego input data: %w", err)
-		}
-
-		return fmt.Errorf("device mount not allowed by policy.\ninput: %s", string(inputJSON))
-	}
-
-	deviceMap := policy.data["devices"].(map[string]string)
-	if _, ok := deviceMap[target]; ok {
-		inputJSON, err := json.Marshal(input)
-		if err != nil {
-			return fmt.Errorf("unable to marshal the Rego input data: %w", err)
-		}
-
-		return fmt.Errorf("device %s already mounted.\ninput: %s", target, string(inputJSON))
-	}
-
-	deviceMap[target] = deviceHash
-	return nil
+	return policy.enforce("mount_device", input)
 }
 
 func (policy *regoEnforcer) EnforceOverlayMountPolicy(containerID string, layerPaths []string) error {
-	policy.mutex.Lock()
-	defer policy.mutex.Unlock()
-
 	input := map[string]interface{}{
 		"containerID": containerID,
 		"layerPaths":  layerPaths,
 	}
-	allowed, err := policy.allowed("mount_overlay", input)
-	if err != nil {
-		return err
-	}
 
-	if !allowed {
-		inputJSON, err := json.Marshal(input)
-		if err != nil {
-			return fmt.Errorf("unable to marshal the Rego input data: %w", err)
-		}
-
-		return fmt.Errorf("overlay mount not allowed by policy.\ninput: %s", string(inputJSON))
-	}
-
-	// we store the mapping of container ID -> layerPaths for later
-	// use in EnforceCreateContainerPolicy here.
-	containerMap := policy.data["containers"].(map[string]interface{})
-	if _, ok := containerMap[containerID]; ok {
-		inputJSON, err := json.Marshal(input)
-		if err != nil {
-			return fmt.Errorf("unable to marshal the Rego input data: %w", err)
-		}
-
-		return fmt.Errorf("container %s already mounted.\ninput: %s", containerID, string(inputJSON))
-	}
-
-	containerMap[containerID] = map[string]interface{}{
-		"containerID": containerID,
-		"layerPaths":  layerPaths,
-	}
-	return nil
+	return policy.enforce("mount_overlay", input)
 }
 
 // Rego does not have a way to determine the OS path separator
@@ -350,73 +522,25 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 	workingDir string,
 	mounts []oci.Mount,
 ) error {
-	policy.mutex.Lock()
-	defer policy.mutex.Unlock()
-
-	// first, we need to obtain the overlay filestytem information
-	// which was stored in EnforceOverlayMountPolicy
-	var containerInfo map[string]interface{}
-	containerMap := policy.data["containers"].(map[string]interface{})
-	if container, ok := containerMap[containerID]; ok {
-		containerInfo = container.(map[string]interface{})
-	} else {
-		return fmt.Errorf("container %s does not have a filesystem", containerID)
-	}
-
 	input := map[string]interface{}{
+		"containerID":  containerID,
 		"argList":      argList,
 		"envList":      envList,
 		"workingDir":   workingDir,
 		"sandboxDir":   sandboxMountsDir(sandboxID),
 		"hugePagesDir": hugePagesMountsDir(sandboxID),
-		"mounts":       mounts,
+		"mounts":       appendMountData([]interface{}{}, mounts),
 	}
 
-	// this adds the overlay layerPaths array to the input
-	for key, value := range containerInfo {
-		input[key] = value
-	}
-
-	allowed, err := policy.allowed("create_container", input)
-	if err != nil {
-		return err
-	}
-
-	if allowed {
-		started := policy.data["started"].([]string)
-		policy.data["started"] = append(started, containerID)
-		containerInfo["argList"] = argList
-		containerInfo["envList"] = envList
-		containerInfo["workingDir"] = workingDir
-		return nil
-	} else {
-		inputJSON, err := json.Marshal(input)
-		if err != nil {
-			return fmt.Errorf("unable to marshal the Rego input data: %w", err)
-		}
-
-		input["rule"] = "create_container"
-		result, err := policy.query("reason", input)
-		if err != nil {
-			return err
-		}
-
-		reasons := []string{}
-		for _, reason := range result[0].Expressions[0].Value.([]interface{}) {
-			reasons = append(reasons, reason.(string))
-		}
-		return fmt.Errorf("container creation not allowed by policy. Reasons: [%s].\nInput: %s", strings.Join(reasons, ","), string(inputJSON))
-	}
+	return policy.enforce("create_container", input)
 }
 
 func (policy *regoEnforcer) EnforceDeviceUnmountPolicy(unmountTarget string) error {
-	policy.mutex.Lock()
-	defer policy.mutex.Unlock()
+	input := map[string]interface{}{
+		"unmountTarget": unmountTarget,
+	}
 
-	devices := policy.data["devices"].(map[string]string)
-	delete(devices, unmountTarget)
-
-	return nil
+	return policy.enforce("unmount_device", input)
 }
 
 func appendMountData(mountData []interface{}, mounts []oci.Mount) []interface{} {
@@ -443,4 +567,15 @@ func (policy *regoEnforcer) ExtendDefaultMounts(mounts []oci.Mount) error {
 
 func (policy *regoEnforcer) EncodedSecurityPolicy() string {
 	return policy.base64policy
+}
+
+func (policy *regoEnforcer) EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string) error {
+	input := map[string]interface{}{
+		"containerID": containerID,
+		"argList":     argList,
+		"envList":     envList,
+		"workingDir":  workingDir,
+	}
+
+	return policy.enforce("exec_in_container", input)
 }
