@@ -788,17 +788,17 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Annotation(t *testing.T)
 				if err != nil {
 					t.Fatalf("error reading log file: %s", err)
 				}
-				policyEnv := fmt.Sprintf("SECURITY_POLICY=%s", config.policy)
-				measurementEnv := "HCSSHIM_UVM_REFERENCE_INFO="
+				policyEnv := fmt.Sprintf("UVM_SECURITY_POLICY=%s", config.policy)
+				measurementEnv := "UVM_REFERENCE_INFO="
 				if setPolicyEnv {
 					// make sure that the expected environment variable was set
 					if !strings.Contains(string(content), policyEnv) || !strings.Contains(string(content), measurementEnv) {
-						t.Fatalf("SECURITY_POLICY and HCSSHIM_UVM_REFERENCE_INFO env vars should be set for init"+
+						t.Fatalf("UVM_SECURITY_POLICY and UVM_REFERENCE_INFO env vars should be set for init"+
 							" process:\n%s\n", string(content))
 					}
 				} else {
 					if strings.Contains(string(content), policyEnv) || strings.Contains(string(content), measurementEnv) {
-						t.Fatalf("SECURITY_POLICY and HCSSHIM_UVM_REFERENCE_INFO env vars shouldn't be set for init"+
+						t.Fatalf("UVM_SECURITY_POLICY and UVM_REFERENCE_INFO env vars shouldn't be set for init"+
 							" process:\n%s\n",
 							string(content))
 					}
