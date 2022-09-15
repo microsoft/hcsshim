@@ -778,9 +778,17 @@ func modifyCombinedLayers(
 			workdirPath = filepath.Join(cl.ScratchPath, "work")
 		}
 
+		if err := securityPolicy.EnforceOverlayMountPolicy(cl.ContainerID, layerPaths, cl.ContainerRootPath); err != nil {
+			return errors.Wrap(err, "overlay creation denied by policy")
+		}
+
 		return overlay.MountLayer(ctx, layerPaths, upperdirPath, workdirPath,
-			cl.ContainerRootPath, readonly, cl.ContainerID, securityPolicy)
+			cl.ContainerRootPath, readonly, cl.ContainerID)
 	case guestrequest.RequestTypeRemove:
+		if err := securityPolicy.EnforceOverlayUnmountPolicy(cl.ContainerRootPath); err != nil {
+			return errors.Wrap(err, "overlay removal denied by policy")
+		}
+
 		return storage.UnmountPath(ctx, cl.ContainerRootPath, true)
 	default:
 		return newInvalidRequestTypeError(rt)

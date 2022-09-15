@@ -10,6 +10,7 @@ import future.keywords.in
 mount_device := data.framework.mount_device
 unmount_device := data.framework.unmount_device
 mount_overlay := data.framework.mount_overlay
+unmount_overlay := data.framework.unmount_overlay
 create_container := data.framework.create_container
 exec_in_container := data.framework.exec_in_container
 exec_external := data.framework.exec_external

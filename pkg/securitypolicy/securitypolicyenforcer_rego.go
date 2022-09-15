@@ -526,13 +526,22 @@ func (policy *regoEnforcer) EnforceDeviceMountPolicy(target string, deviceHash s
 	return policy.enforce("mount_device", input)
 }
 
-func (policy *regoEnforcer) EnforceOverlayMountPolicy(containerID string, layerPaths []string) error {
+func (policy *regoEnforcer) EnforceOverlayMountPolicy(containerID string, layerPaths []string, target string) error {
 	input := map[string]interface{}{
 		"containerID": containerID,
 		"layerPaths":  layerPaths,
+		"target":      target,
 	}
 
 	return policy.enforce("mount_overlay", input)
+}
+
+func (policy *regoEnforcer) EnforceOverlayUnmountPolicy(target string) error {
+	input := map[string]interface{}{
+		"unmountTarget": target,
+	}
+
+	return policy.enforce("unmount_overlay", input)
 }
 
 // Rego does not have a way to determine the OS path separator

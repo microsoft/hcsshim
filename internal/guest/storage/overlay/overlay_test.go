@@ -8,8 +8,6 @@ import (
 	"errors"
 	"os"
 	"testing"
-
-	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
 const (
@@ -83,7 +81,7 @@ func Test_Mount_Success(t *testing.T) {
 		return nil
 	}
 
-	err := MountLayer(context.Background(), []string{"/layer1", "/layer2"}, "/upper", "/work", "/root", false, fakeContainerID, openDoorSecurityPolicyEnforcer())
+	err := MountLayer(context.Background(), []string{"/layer1", "/layer2"}, "/upper", "/work", "/root", false, fakeContainerID)
 	if err != nil {
 		t.Fatalf("expected no error got: %v", err)
 	}
@@ -127,15 +125,11 @@ func Test_Mount_Readonly_Success(t *testing.T) {
 		return nil
 	}
 
-	err := MountLayer(context.Background(), []string{"/layer1", "/layer2"}, "", "", "/root", false, fakeContainerID, openDoorSecurityPolicyEnforcer())
+	err := MountLayer(context.Background(), []string{"/layer1", "/layer2"}, "", "", "/root", false, fakeContainerID)
 	if err != nil {
 		t.Fatalf("expected no error got: %v", err)
 	}
 	if !rootCreated {
 		t.Fatal("expected root to be created")
 	}
-}
-
-func openDoorSecurityPolicyEnforcer() securitypolicy.SecurityPolicyEnforcer {
-	return &securitypolicy.OpenDoorSecurityPolicyEnforcer{}
 }
