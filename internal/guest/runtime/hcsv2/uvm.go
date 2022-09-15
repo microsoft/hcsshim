@@ -315,8 +315,8 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	// in the security policy as its value is not available security policy
 	// construction time.
 	if oci.ParseAnnotationsBool(ctx, settings.OCISpecification.Annotations, annotations.SecurityPolicyEnv, false) {
-		secPolicyEnv := fmt.Sprintf("SECURITY_POLICY=%s", h.securityPolicyEnforcer.EncodedSecurityPolicy())
-		uvmReferenceInfo := fmt.Sprintf("HCSSHIM_UVM_REFERENCE_INFO=%s", h.uvmReferenceInfo)
+		secPolicyEnv := fmt.Sprintf("UVM_SECURITY_POLICY=%s", h.securityPolicyEnforcer.EncodedSecurityPolicy())
+		uvmReferenceInfo := fmt.Sprintf("UVM_REFERENCE_INFO=%s", h.uvmReferenceInfo)
 		settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, secPolicyEnv, uvmReferenceInfo)
 	}
 
