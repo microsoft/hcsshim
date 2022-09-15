@@ -9,7 +9,6 @@ import (
 
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	"github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/stats"
-	"github.com/Microsoft/hcsshim/internal/gcs"
 	"github.com/Microsoft/hcsshim/internal/hcs"
 	"github.com/Microsoft/hcsshim/internal/shimdiag"
 	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
@@ -123,7 +122,6 @@ func isStatsNotFound(err error) bool {
 	return errdefs.IsNotFound(err) ||
 		hcs.IsNotExist(err) ||
 		hcs.IsOperationInvalidState(err) ||
-		gcs.IsNotExist(err) ||
 		hcs.IsAccessIsDenied(err) ||
 		hcs.IsErrorInvalidHandle(err)
 }
