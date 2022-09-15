@@ -68,7 +68,7 @@ func runContainerLifetime(t *testing.T, client runtime.RuntimeServiceClient, ctx
 func Test_RotateLogs_LCOW(t *testing.T) {
 	requireFeatures(t, featureLCOW)
 
-	image := "alpine:latest"
+	image := imageLcowAlpine
 	dir := t.TempDir()
 	log := filepath.Join(dir, "log.txt")
 	logArchive := filepath.Join(dir, "log-archive.txt")
