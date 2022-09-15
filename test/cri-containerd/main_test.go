@@ -49,8 +49,8 @@ const (
 	testVMServiceBinary  = "C:\\Containerplat\\vmservice.exe"
 
 	lcowRuntimeHandler       = "runhcs-lcow"
-	imageLcowK8sPause        = "k8s.gcr.io/pause:3.1"
-	imageLcowAlpine          = "docker.io/library/alpine:latest"
+	imageLcowK8sPause        = "mcr.microsoft.com/oss/kubernetes/pause:3.1"
+	imageLcowAlpine          = "mcr.microsoft.com/mirror/docker/library/alpine:3.16"
 	imageLcowAlpineCoreDump  = "cplatpublic.azurecr.io/stackoverflow-alpine:latest"
 	imageLcowCosmos          = "cosmosarno/spark-master:2.4.1_2019-04-18_8e864ce"
 	imageLcowCustomUser      = "cplatpublic.azurecr.io/linux_custom_user:latest"

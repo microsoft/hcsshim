@@ -48,7 +48,7 @@ func alpineSecurityPolicy(t *testing.T, policyType string, opts ...securitypolic
 	defaultContainers := helpers.DefaultContainerConfigs()
 
 	alpineContainer := securitypolicy.ContainerConfig{
-		ImageName: "alpine:latest",
+		ImageName: imageLcowAlpine,
 		Command:   validPolicyAlpineCommand,
 	}
 
@@ -142,7 +142,7 @@ func Test_RunSimpleAlpineContainer_WithPolicy_Allowed(t *testing.T) {
 			containerRequest := getCreateContainerRequest(
 				podID,
 				"alpine-with-policy",
-				"alpine:latest",
+				imageLcowAlpine,
 				validPolicyAlpineCommand,
 				sandboxRequest.Config,
 			)
@@ -214,7 +214,7 @@ func Test_RunContainer_WithPolicy_And_ValidConfigs(t *testing.T) {
 				containerRequest := getCreateContainerRequest(
 					podID,
 					"alpine-with-policy",
-					"alpine:latest",
+					imageLcowAlpine,
 					validPolicyAlpineCommand,
 					sandboxRequest.Config,
 				)
@@ -287,7 +287,7 @@ func Test_RunContainer_WithPolicy_And_InvalidConfigs(t *testing.T) {
 			containerRequest := getCreateContainerRequest(
 				podID,
 				"alpine-with-policy",
-				"alpine:latest",
+				imageLcowAlpine,
 				validPolicyAlpineCommand,
 				sandboxRequest.Config,
 			)
@@ -416,7 +416,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_Allowed(t *testing.T) {
 				containerRequest := getCreateContainerRequest(
 					podID,
 					"alpine-with-policy",
-					"alpine:latest",
+					imageLcowAlpine,
 					validPolicyAlpineCommand,
 					sandboxRequest.Config,
 				)
@@ -567,7 +567,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) 
 			containerRequest := getCreateContainerRequest(
 				podID,
 				"alpine-with-policy",
-				"alpine:latest",
+				imageLcowAlpine,
 				validPolicyAlpineCommand,
 				sandboxRequest.Config,
 			)
@@ -618,7 +618,7 @@ func Test_RunPrivilegedContainer_WithPolicy_And_AllowElevated_Set(t *testing.T) 
 			contRequest := getCreateContainerRequest(
 				podID,
 				"alpine-privileged",
-				"alpine:latest",
+				imageLcowAlpine,
 				validPolicyAlpineCommand,
 				sandboxRequest.Config,
 			)
@@ -661,7 +661,7 @@ func Test_RunPrivilegedContainer_WithPolicy_And_AllowElevated_NotSet(t *testing.
 	contRequest := getCreateContainerRequest(
 		podID,
 		"alpine-privileged",
-		"alpine:latest",
+		imageLcowAlpine,
 		validPolicyAlpineCommand,
 		sandboxRequest.Config,
 	)
@@ -762,7 +762,7 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Annotation(t *testing.T)
 				containerRequest := getCreateContainerRequest(
 					podID,
 					"alpine-with-policy",
-					"alpine:latest",
+					imageLcowAlpine,
 					alpineCmd,
 					sandboxRequest.Config,
 				)
