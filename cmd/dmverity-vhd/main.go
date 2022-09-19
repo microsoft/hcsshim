@@ -8,6 +8,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/daemon"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -25,6 +26,7 @@ const (
 	imageFlag         = "image"
 	verboseFlag       = "verbose"
 	outputDirFlag     = "out-dir"
+	sourceFlag        = "docker"
 	hashDeviceVhdFlag = "hash-dev-vhd"
 	maxVHDSize        = dmverity.RecommendedVHDSizeGB
 )
@@ -56,6 +58,10 @@ func main() {
 			Name:  verboseFlag + ",v",
 			Usage: "Optional: verbose output",
 		},
+		cli.BoolFlag{
+			Name:  sourceFlag + ",d",
+			Usage: "Optional: use local docker daemon",
+		},
 	}
 
 	if err := app.Run(os.Args); err != nil {
@@ -71,22 +77,30 @@ func fetchImageLayers(ctx *cli.Context) (layers []v1.Layer, err error) {
 		return nil, errors.Wrapf(err, "failed to parse image reference: %s", image)
 	}
 
-	var remoteOpts []remote.Option
-	if ctx.IsSet(usernameFlag) && ctx.IsSet(passwordFlag) {
-		auth := authn.Basic{
-			Username: ctx.String(usernameFlag),
-			Password: ctx.String(passwordFlag),
-		}
-		authConf, err := auth.Authorization()
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to set remote")
-		}
-		log.Debug("using basic auth")
-		authOpt := remote.WithAuth(authn.FromConfig(*authConf))
-		remoteOpts = append(remoteOpts, authOpt)
-	}
+	local := ctx.GlobalBool(sourceFlag)
 
-	img, err := remote.Image(ref, remoteOpts...)
+	// by default, using remote as source
+	var img v1.Image
+	if local {
+		img, err = daemon.Image(ref)
+	} else {
+		var remoteOpts []remote.Option
+		if ctx.IsSet(usernameFlag) && ctx.IsSet(passwordFlag) {
+			auth := authn.Basic{
+				Username: ctx.String(usernameFlag),
+				Password: ctx.String(passwordFlag),
+			}
+			authConf, err := auth.Authorization()
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to set remote")
+			}
+			log.Debug("using basic auth")
+			authOpt := remote.WithAuth(authn.FromConfig(*authConf))
+			remoteOpts = append(remoteOpts, authOpt)
+		}
+
+		img, err = remote.Image(ref, remoteOpts...)
+	}
 	if err != nil {
 		return nil, errors.Wrapf(err, "unable to fetch image %q, make sure it exists", image)
 	}

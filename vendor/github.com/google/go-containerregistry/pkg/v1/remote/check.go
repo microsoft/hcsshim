@@ -20,13 +20,13 @@ import (
 func CheckPushPermission(ref name.Reference, kc authn.Keychain, t http.RoundTripper) error {
 	auth, err := kc.Resolve(ref.Context().Registry)
 	if err != nil {
-		return fmt.Errorf("resolving authorization for %v failed: %v", ref.Context().Registry, err)
+		return fmt.Errorf("resolving authorization for %v failed: %w", ref.Context().Registry, err)
 	}
 
 	scopes := []string{ref.Scope(transport.PushScope)}
-	tr, err := transport.New(ref.Context().Registry, auth, t, scopes)
+	tr, err := transport.NewWithContext(context.TODO(), ref.Context().Registry, auth, t, scopes)
 	if err != nil {
-		return fmt.Errorf("creating push check transport for %v failed: %v", ref.Context().Registry, err)
+		return fmt.Errorf("creating push check transport for %v failed: %w", ref.Context().Registry, err)
 	}
 	// TODO(jasonhall): Against GCR, just doing the token handshake is
 	// enough, but this doesn't extend to Dockerhub
@@ -39,7 +39,7 @@ func CheckPushPermission(ref name.Reference, kc authn.Keychain, t http.RoundTrip
 		client:  &http.Client{Transport: tr},
 		context: context.Background(),
 	}
-	loc, _, err := w.initiateUpload("", "")
+	loc, _, err := w.initiateUpload("", "", "")
 	if loc != "" {
 		// Since we're only initiating the upload to check whether we
 		// can, we should attempt to cancel it, in case initiating
