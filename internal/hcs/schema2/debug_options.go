@@ -10,7 +10,12 @@
 package hcsschema
 
 type DebugOptions struct {
-	BugcheckSavedStateFileName            string `json:"BugcheckSavedStateFileName,omitempty"`
+	// BugcheckSavedStateFileName is the path for the file in which the guest VM state will be saved when
+	// the guest crashes.
+	BugcheckSavedStateFileName string `json:"BugcheckSavedStateFileName,omitempty"`
+	// BugcheckNoCrashdumpSavedStateFileName is the path of the file in which the guest VM state will be
+	// saved when the guest crashes but the guest isn't able to generate the crash dump. This usually
+	// happens in early boot failures.
 	BugcheckNoCrashdumpSavedStateFileName string `json:"BugcheckNoCrashdumpSavedStateFileName,omitempty"`
 	TripleFaultSavedStateFileName         string `json:"TripleFaultSavedStateFileName,omitempty"`
 	FirmwareDumpFileName                  string `json:"FirmwareDumpFileName,omitempty"`
