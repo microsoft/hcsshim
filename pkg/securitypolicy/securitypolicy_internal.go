@@ -7,7 +7,8 @@ import (
 
 // Internal version of SecurityPolicy
 type securityPolicyInternal struct {
-	Containers []*securityPolicyContainer
+	Containers        []*securityPolicyContainer
+	ExternalProcesses []*externalProcess
 }
 
 // Internal version of Container
@@ -34,6 +35,12 @@ type securityPolicyContainer struct {
 
 type containerExecProcess struct {
 	Command []string
+}
+
+type externalProcess struct {
+	command    []string
+	envRules   []EnvRuleConfig
+	workingDir string
 }
 
 // Internal version of Mount
@@ -136,6 +143,18 @@ func (m Mounts) toInternal() ([]mountInternal, error) {
 		}
 	}
 	return mountConstraints, nil
+}
+
+func (p ExternalProcessConfig) toInternal() externalProcess {
+	return externalProcess{
+		command: p.Command,
+		envRules: []EnvRuleConfig{{
+			Strategy: "string",
+			Rule:     "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+			Required: true,
+		}},
+		workingDir: p.WorkingDir,
+	}
 }
 
 func stringMapToStringArray(m map[string]string) ([]string, error) {

@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-type marshalFunc func(allowAll bool, containers []*Container) (string, error)
+type marshalFunc func(allowAll bool, containers []*Container, externalProcesses []ExternalProcessConfig) (string, error)
 
 const (
 	jsonMarshaller = "json"
@@ -35,7 +35,7 @@ var policyRegoTemplate string
 //go:embed open_door.rego
 var openDoorRegoTemplate string
 
-func marshalJSON(allowAll bool, containers []*Container) (string, error) {
+func marshalJSON(allowAll bool, containers []*Container, _ []ExternalProcessConfig) (string, error) {
 	var policy *SecurityPolicy
 	if allowAll {
 		if len(containers) > 0 {
@@ -55,7 +55,7 @@ func marshalJSON(allowAll bool, containers []*Container) (string, error) {
 	return string(policyCode), nil
 }
 
-func marshalRego(allowAll bool, containers []*Container) (string, error) {
+func marshalRego(allowAll bool, containers []*Container, externalProcesses []ExternalProcessConfig) (string, error) {
 	if allowAll {
 		if len(containers) > 0 {
 			return "", ErrInvalidOpenDoorPolicy
@@ -74,10 +74,16 @@ func marshalRego(allowAll bool, containers []*Container) (string, error) {
 		policy.Containers[i] = &cInternal
 	}
 
+	policy.ExternalProcesses = make([]*externalProcess, len(externalProcesses))
+	for i, pConf := range externalProcesses {
+		pInternal := pConf.toInternal()
+		policy.ExternalProcesses[i] = &pInternal
+	}
+
 	return policy.marshalRego(), nil
 }
 
-func MarshalPolicy(marshaller string, allowAll bool, containers []*Container) (string, error) {
+func MarshalPolicy(marshaller string, allowAll bool, containers []*Container, externalProcesses []ExternalProcessConfig) (string, error) {
 	if marshaller == "" {
 		marshaller = defaultMarshaller
 	}
@@ -85,7 +91,7 @@ func MarshalPolicy(marshaller string, allowAll bool, containers []*Container) (s
 	if marshal, ok := registeredMarshallers[marshaller]; !ok {
 		return "", fmt.Errorf("unknown marshaller: %q", marshaller)
 	} else {
-		return marshal(allowAll, containers)
+		return marshal(allowAll, containers, externalProcesses)
 	}
 }
 
@@ -248,9 +254,30 @@ func addContainers(builder *strings.Builder, containers []*securityPolicyContain
 	writeLine(builder, "]")
 }
 
+func (p externalProcess) marshalRego() string {
+	command := stringArray(p.command).marshalRego()
+	envRules := envRuleArray(p.envRules).marshalRego()
+	return fmt.Sprintf(`{"command": %s, "env_rules": %s, "working_dir": "%s"}`, command, envRules, p.workingDir)
+}
+
+func addExternalProcesses(builder *strings.Builder, processes []*externalProcess) {
+	writeLine(builder, "external_processes := [")
+
+	for i, process := range processes {
+		end := ","
+		if i == len(processes)-1 {
+			end = ""
+		}
+		writeLine(builder, `%s%s%s`, indentUsing, process.marshalRego(), end)
+	}
+
+	writeLine(builder, "]")
+}
+
 func (p securityPolicyInternal) marshalRego() string {
 	builder := new(strings.Builder)
 	addContainers(builder, p.Containers)
+	addExternalProcesses(builder, p.ExternalProcesses)
 	objects := builder.String()
 	return strings.Replace(policyRegoTemplate, "##OBJECTS##", objects, 1)
 }

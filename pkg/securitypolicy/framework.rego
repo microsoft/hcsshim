@@ -7,13 +7,19 @@ device_mounted(target) {
     data.metadata.devices[target]
 }
 
+default deviceHash_ok := false
+
+deviceHash_ok {
+    some container in data.policy.containers
+    some layer in container.layers
+    input.deviceHash == layer
+}
+
 default mount_device := {"allowed": false}
 
 mount_device := {"devices": devices, "allowed": true} {
     not device_mounted(input.target)
-    some container in data.policy.containers
-    some layer in container.layers
-    input.deviceHash == layer
+    deviceHash_ok
     devices := {
         "action": "add",
         "key": input.target,
@@ -223,7 +229,31 @@ enforcement_point_info := {"available": false, "allowed": false, "unknown": fals
     semver.compare(data.api.svn, enforcement_point.introducedVersion) < 0
 }
 
+default exec_external := {"allowed": false}
+
+exec_external := {"allowed": true} {
+    some process in data.policy.external_processes
+    command_ok(process.command)
+    envList_ok(process.env_rules)
+    workingDirectory_ok(process.working_dir)
+}
+
 # error messages
+
+errors["deviceHash not found"] {
+    input.rule == "mount_device"
+    not deviceHash_ok
+}
+
+errors["device already mounted at path"] {
+    input.rule == "mount_device"
+    device_mounted(input.target)
+}
+
+errors["no device at path to unmount"] {
+    input.rule == "unmount_device"
+    not device_mounted(input.unmountTarget)
+}
 
 errors["container already started"] {
     input.rule == "create_container"
@@ -235,71 +265,95 @@ errors["container not started"] {
     not container_started
 }
 
+errors["overlay has already been mounted"] {
+    input.rule == "mount_overlay"
+    overlay_exists
+}
+
+default overlay_matches := false
+
+overlay_matches {
+    some container in data.policy.containers
+    layerPaths_ok(container.layers)
+}
+
+errors["no matching containers for overlay"] {
+    input.rule == "mount_overlay"
+    not overlay_matches
+}
+
 default command_matches := false
 
 command_matches {
     input.rule == "create_container"
     some container in data.metadata.matches[input.containerID]
-    data.framework.command_ok(container.command)
+    command_ok(container.command)
 }
 
 command_matches {
     input.rule == "exec_in_container"
     some container in data.metadata.matches[input.containerID]
     some process in container.exec_processes
-    data.framework.command_ok(process.command)
+    command_ok(process.command)
+}
+
+command_matches {
+    input.rule == "exec_external"
+    some process in data.policy.external_processes
+    command_ok(process.command)
 }
 
 errors["invalid command"] {
+    input.rule in ["create_container", "exec_in_container", "exec_external"]
     not command_matches
 }
 
 default envList_matches := false
 
 envList_matches {
-    input.rule == "create_container"
+    input.rule in ["create_container", "exec_in_container"]
     some container in data.metadata.matches[input.containerID]
-    data.framework.envList_ok(container.env_rules)
+    envList_ok(container.env_rules)
 }
 
 envList_matches {
-    input.rule == "exec_in_container"
-    some container in data.metadata.matches[input.containerID]
-    some process in container.exec_processes
-    data.framework.envList_ok(container.env_rules)
+    input.rule == "exec_external"
+    some process in data.policy.external_processes
+    envList_ok(process.env_rules)
 }
 
 errors["invalid env list"] {
+    input.rule in ["create_container", "exec_in_container", "exec_external"]
     not envList_matches
 }
 
 default workingDirectory_matches := false
 
 workingDirectory_matches {
-    input.rule == "create_container"
+    input.rule in ["create_container", "exec_in_container"]
     some container in data.metadata.matches[input.containerID]
-    data.framework.workingDirectory_ok(container.working_dir)
+    workingDirectory_ok(container.working_dir)
 }
 
 workingDirectory_matches {
-    input.rule == "exec_in_container"
-    some container in data.metadata.matches[input.containerID]
-    some process in container.exec_processes
-    data.framework.workingDirectory_ok(container.working_dir)
+    input.rule == "exec_external"
+    some process in data.external_processes
+    workingDirectory_ok(process.working_dir)
 }
 
 errors["invalid working directory"] {
+    input.rule in ["create_container", "exec_in_container", "exec_external"]
     not workingDirectory_matches
 }
 
 default mountList_matches := false
 
 mountList_matches {
-    input.rule == "create_container"
     some container in data.metadata.matches[input.containerID]
     data.framework.mountList_ok(container, container.allow_elevated)
 }
 
 errors["invalid mount list"] {
+    input.rule == "create_container"
     not mountList_matches
 }

@@ -50,3 +50,7 @@ func (MountMonitoringSecurityPolicyEnforcer) EncodedSecurityPolicy() string {
 func (MountMonitoringSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, _ []string, _ string) error {
 	return nil
 }
+
+func (MountMonitoringSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []string, _ []string, _ string) error {
+	return nil
+}
