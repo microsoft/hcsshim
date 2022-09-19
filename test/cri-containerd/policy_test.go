@@ -768,7 +768,7 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Annotation(t *testing.T)
 				)
 				if setPolicyEnv {
 					containerRequest.Config.Annotations = map[string]string{
-						annotations.SecurityPolicyEnv: "true",
+						annotations.UVMSecurityPolicyEnv: "true",
 					}
 				}
 				// setup logfile to capture stdout
