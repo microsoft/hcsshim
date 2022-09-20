@@ -6,6 +6,7 @@ package hcsv2
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -74,26 +75,25 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport) *Host {
 	}
 }
 
-// SetConfidentialUVMOptions takes a security policy enforcer type, base64
-// encoded security policy and base64 encoded UVM reference information to set
-// up our internal data structures we use to store said policy. The signed
-// UVM measurement can be presented to the workload containers via an
-// environment variable if client requests so.
-//
-// The security policy is transmitted as json in an annotation,
-// so we first have to remove the base64 encoding that allows
-// the JSON based policy to be passed as a string. From there,
-// we decode the JSON and setup our security policy state
-func (h *Host) SetConfidentialUVMOptions(enforcerType string, base64EncodedPolicy string, base64UVMReference string) error {
+// SetConfidentialUVMOptions takes guestresource.LCOWConfidentialOptions
+// to set up our internal data structures we use to store and enforce
+// security policy. The options can contain security policy enforcer type,
+// encoded security policy, signed UVM reference information and a UVM path
+// of the pause container image security policy fragment. The security policy
+// and uvm reference information can be further presented to workload
+// containers for validation and attestation purposes.
+func (h *Host) SetConfidentialUVMOptions(ctx context.Context, r *guestresource.LCOWConfidentialOptions) error {
 	h.policyMutex.Lock()
 	defer h.policyMutex.Unlock()
 	if h.securityPolicyEnforcerSet {
 		return errors.New("security policy has already been set")
 	}
 
+	// Initialize security policy enforcer for a given enforcer type and
+	// encoded security policy.
 	p, err := securitypolicy.CreateSecurityPolicyEnforcer(
-		enforcerType,
-		base64EncodedPolicy,
+		r.EnforcerType,
+		r.EncodedSecurityPolicy,
 		policy.DefaultCRIMounts(),
 		policy.DefaultCRIPrivilegedMounts(),
 	)
@@ -101,7 +101,7 @@ func (h *Host) SetConfidentialUVMOptions(enforcerType string, base64EncodedPolic
 		return err
 	}
 
-	hostData, err := securitypolicy.NewSecurityPolicyDigest(base64EncodedPolicy)
+	hostData, err := securitypolicy.NewSecurityPolicyDigest(r.EncodedSecurityPolicy)
 	if err != nil {
 		return err
 	}
@@ -112,7 +112,20 @@ func (h *Host) SetConfidentialUVMOptions(enforcerType string, base64EncodedPolic
 
 	h.securityPolicyEnforcer = p
 	h.securityPolicyEnforcerSet = true
-	h.uvmReferenceInfo = base64UVMReference
+	h.uvmReferenceInfo = r.EncodedUVMReference
+
+	if r.PauseContainerFragmentUVMPath != "" {
+		fragmentData, err := os.ReadFile(r.PauseContainerFragmentUVMPath)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+
+		encodedFragment := base64.StdEncoding.EncodeToString(fragmentData)
+		// TODO (maksiman): Replace with internal fragment injection calls, when they're implemented
+		if err := h.InjectFragment(ctx, &guestresource.LCOWSecurityPolicyFragment{Fragment: encodedFragment}); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
@@ -396,7 +409,7 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		if !ok {
 			return errors.New("the request's settings are not of type LCOWConfidentialOptions")
 		}
-		return h.SetConfidentialUVMOptions(r.EnforcerType, r.EncodedSecurityPolicy, r.EncodedUVMReference)
+		return h.SetConfidentialUVMOptions(ctx, r)
 	case guestresource.ResourceTypePolicyFragment:
 		r, ok := req.Settings.(*guestresource.LCOWSecurityPolicyFragment)
 		if !ok {

@@ -87,32 +87,33 @@ const (
 type OptionsLCOW struct {
 	*Options
 
-	BootFilesPath           string              // Folder in which kernel and root file system reside. Defaults to \Program Files\Linux Containers
-	KernelFile              string              // Filename under `BootFilesPath` for the kernel. Defaults to `kernel`
-	KernelDirect            bool                // Skip UEFI and boot directly to `kernel`
-	RootFSFile              string              // Filename under `BootFilesPath` for the UVMs root file system. Defaults to `InitrdFile`
-	KernelBootOptions       string              // Additional boot options for the kernel
-	EnableGraphicsConsole   bool                // If true, enable a graphics console for the utility VM
-	ConsolePipe             string              // The named pipe path to use for the serial console.  eg \\.\pipe\vmpipe
-	UseGuestConnection      bool                // Whether the HCS should connect to the UVM's GCS. Defaults to true
-	ExecCommandLine         string              // The command line to exec from init. Defaults to GCS
-	ForwardStdout           bool                // Whether stdout will be forwarded from the executed program. Defaults to false
-	ForwardStderr           bool                // Whether stderr will be forwarded from the executed program. Defaults to true
-	OutputHandler           OutputHandler       `json:"-"` // Controls how output received over HVSocket from the UVM is handled. Defaults to parsing output as logrus messages
-	VPMemDeviceCount        uint32              // Number of VPMem devices. Defaults to `DefaultVPMEMCount`. Limit at 128. If booting UVM from VHD, device 0 is taken.
-	VPMemSizeBytes          uint64              // Size of the VPMem devices. Defaults to `DefaultVPMemSizeBytes`.
-	VPMemNoMultiMapping     bool                // Disables LCOW layer multi mapping
-	PreferredRootFSType     PreferredRootFSType // If `KernelFile` is `InitrdFile` use `PreferredRootFSTypeInitRd`. If `KernelFile` is `VhdFile` use `PreferredRootFSTypeVHD`
-	EnableColdDiscardHint   bool                // Whether the HCS should use cold discard hints. Defaults to false
-	VPCIEnabled             bool                // Whether the kernel should enable pci
-	EnableScratchEncryption bool                // Whether the scratch should be encrypted
-	SecurityPolicy          string              // Optional security policy
-	SecurityPolicyEnabled   bool                // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
-	SecurityPolicyEnforcer  string              // Set which security policy enforcer to use (open door, standard or rego). This allows for better fallback mechanic.
-	UVMReferenceInfoFile    string              // Filename under `BootFilesPath` for (potentially signed) UVM image reference information.
-	UseGuestStateFile       bool                // Use a vmgs file that contains a kernel and initrd, required for SNP
-	GuestStateFile          string              // The vmgs file to load
-	DisableTimeSyncService  bool                // Disables the time synchronization service
+	BootFilesPath                 string              // Folder in which kernel and root file system reside. Defaults to \Program Files\Linux Containers
+	KernelFile                    string              // Filename under `BootFilesPath` for the kernel. Defaults to `kernel`
+	KernelDirect                  bool                // Skip UEFI and boot directly to `kernel`
+	RootFSFile                    string              // Filename under `BootFilesPath` for the UVMs root file system. Defaults to `InitrdFile`
+	KernelBootOptions             string              // Additional boot options for the kernel
+	EnableGraphicsConsole         bool                // If true, enable a graphics console for the utility VM
+	ConsolePipe                   string              // The named pipe path to use for the serial console.  eg \\.\pipe\vmpipe
+	UseGuestConnection            bool                // Whether the HCS should connect to the UVM's GCS. Defaults to true
+	ExecCommandLine               string              // The command line to exec from init. Defaults to GCS
+	ForwardStdout                 bool                // Whether stdout will be forwarded from the executed program. Defaults to false
+	ForwardStderr                 bool                // Whether stderr will be forwarded from the executed program. Defaults to true
+	OutputHandler                 OutputHandler       `json:"-"` // Controls how output received over HVSocket from the UVM is handled. Defaults to parsing output as logrus messages
+	VPMemDeviceCount              uint32              // Number of VPMem devices. Defaults to `DefaultVPMEMCount`. Limit at 128. If booting UVM from VHD, device 0 is taken.
+	VPMemSizeBytes                uint64              // Size of the VPMem devices. Defaults to `DefaultVPMemSizeBytes`.
+	VPMemNoMultiMapping           bool                // Disables LCOW layer multi mapping
+	PreferredRootFSType           PreferredRootFSType // If `KernelFile` is `InitrdFile` use `PreferredRootFSTypeInitRd`. If `KernelFile` is `VhdFile` use `PreferredRootFSTypeVHD`
+	EnableColdDiscardHint         bool                // Whether the HCS should use cold discard hints. Defaults to false
+	VPCIEnabled                   bool                // Whether the kernel should enable pci
+	EnableScratchEncryption       bool                // Whether the scratch should be encrypted
+	SecurityPolicy                string              // Optional security policy
+	SecurityPolicyEnabled         bool                // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
+	SecurityPolicyEnforcer        string              // Set which security policy enforcer to use (open door, standard or rego). This allows for better fallback mechanic.
+	UVMReferenceInfoFile          string              // Filename under `BootFilesPath` for (potentially signed) UVM image reference information.
+	PauseContainerFragmentUVMPath string              // Filepath inside UVM that contains pause container security policy fragment.
+	UseGuestStateFile             bool                // Use a vmgs file that contains a kernel and initrd, required for SNP
+	GuestStateFile                string              // The vmgs file to load
+	DisableTimeSyncService        bool                // Disables the time synchronization service
 }
 
 // defaultLCOWOSBootFilesPath returns the default path used to locate the LCOW
@@ -138,32 +139,33 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 	// Use KernelDirect boot by default on all builds that support it.
 	kernelDirectSupported := osversion.Build() >= 18286
 	opts := &OptionsLCOW{
-		Options:                 newDefaultOptions(id, owner),
-		BootFilesPath:           defaultLCOWOSBootFilesPath(),
-		KernelFile:              KernelFile,
-		KernelDirect:            kernelDirectSupported,
-		RootFSFile:              InitrdFile,
-		KernelBootOptions:       "",
-		EnableGraphicsConsole:   false,
-		ConsolePipe:             "",
-		UseGuestConnection:      true,
-		ExecCommandLine:         fmt.Sprintf("/bin/gcs -v4 -log-format json -loglevel %s", logrus.StandardLogger().Level.String()),
-		ForwardStdout:           false,
-		ForwardStderr:           true,
-		OutputHandler:           parseLogrus(id),
-		VPMemDeviceCount:        DefaultVPMEMCount,
-		VPMemSizeBytes:          DefaultVPMemSizeBytes,
-		VPMemNoMultiMapping:     osversion.Get().Build < osversion.V19H1,
-		PreferredRootFSType:     PreferredRootFSTypeInitRd,
-		EnableColdDiscardHint:   false,
-		VPCIEnabled:             false,
-		EnableScratchEncryption: false,
-		SecurityPolicyEnabled:   false,
-		SecurityPolicyEnforcer:  "",
-		SecurityPolicy:          "",
-		UVMReferenceInfoFile:    UVMReferenceInfoFile,
-		GuestStateFile:          "",
-		DisableTimeSyncService:  false,
+		Options:                       newDefaultOptions(id, owner),
+		BootFilesPath:                 defaultLCOWOSBootFilesPath(),
+		KernelFile:                    KernelFile,
+		KernelDirect:                  kernelDirectSupported,
+		RootFSFile:                    InitrdFile,
+		KernelBootOptions:             "",
+		EnableGraphicsConsole:         false,
+		ConsolePipe:                   "",
+		UseGuestConnection:            true,
+		ExecCommandLine:               fmt.Sprintf("/bin/gcs -v4 -log-format json -loglevel %s", logrus.StandardLogger().Level.String()),
+		ForwardStdout:                 false,
+		ForwardStderr:                 true,
+		OutputHandler:                 parseLogrus(id),
+		VPMemDeviceCount:              DefaultVPMEMCount,
+		VPMemSizeBytes:                DefaultVPMemSizeBytes,
+		VPMemNoMultiMapping:           osversion.Get().Build < osversion.V19H1,
+		PreferredRootFSType:           PreferredRootFSTypeInitRd,
+		EnableColdDiscardHint:         false,
+		VPCIEnabled:                   false,
+		EnableScratchEncryption:       false,
+		SecurityPolicyEnabled:         false,
+		SecurityPolicyEnforcer:        "",
+		SecurityPolicy:                "",
+		UVMReferenceInfoFile:          UVMReferenceInfoFile,
+		PauseContainerFragmentUVMPath: "",
+		GuestStateFile:                "",
+		DisableTimeSyncService:        false,
 	}
 
 	if _, err := os.Stat(filepath.Join(opts.BootFilesPath, VhdFile)); err == nil {

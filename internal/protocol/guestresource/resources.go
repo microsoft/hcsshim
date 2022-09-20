@@ -162,10 +162,13 @@ type SignalProcessOptionsWCOW struct {
 	Signal guestrequest.SignalValueWCOW `json:",omitempty"`
 }
 
+// LCOWConfidentialOptions is used to set various confidential container specific
+// options.
 type LCOWConfidentialOptions struct {
-	EnforcerType          string `json:"EnforcerType,omitempty"`
-	EncodedSecurityPolicy string `json:"EncodedSecurityPolicy,omitempty"`
-	EncodedUVMReference   string `json:"EncodedUVMReference,omitempty"`
+	EnforcerType                  string `json:"EnforcerType,omitempty"`
+	EncodedSecurityPolicy         string `json:"EncodedSecurityPolicy,omitempty"`
+	EncodedUVMReference           string `json:"EncodedUVMReference,omitempty"`
+	PauseContainerFragmentUVMPath string `json:"PauseContainerFragmentUVMPath,omitempty"`
 }
 
 type LCOWSecurityPolicyFragment struct {
