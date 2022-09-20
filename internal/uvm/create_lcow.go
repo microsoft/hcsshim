@@ -83,9 +83,20 @@ const (
 	UVMReferenceInfoFile = "reference_info.cose"
 )
 
+type ConfidentialOptions struct {
+	GuestStateFile            string // The vmgs file to load
+	UseGuestStateFile         bool   // Use a vmgs file that contains a kernel and initrd, required for SNP
+	SecurityPolicy            string // Optional security policy
+	SecurityPolicyEnabled     bool   // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
+	SecurityPolicyEnforcer    string // Set which security policy enforcer to use (open door, standard or rego). This allows for better fallback mechanic.
+	UVMReferenceInfoFile      string // Filename under `BootFilesPath` for (potentially signed) UVM image reference information.
+	PodStartupFragmentUVMPath string // Filepath inside UVM that contains pod startup security policy fragment.
+}
+
 // OptionsLCOW are the set of options passed to CreateLCOW() to create a utility vm.
 type OptionsLCOW struct {
 	*Options
+	*ConfidentialOptions
 
 	BootFilesPath           string              // Folder in which kernel and root file system reside. Defaults to \Program Files\Linux Containers
 	KernelFile              string              // Filename under `BootFilesPath` for the kernel. Defaults to `kernel`
@@ -106,12 +117,6 @@ type OptionsLCOW struct {
 	EnableColdDiscardHint   bool                // Whether the HCS should use cold discard hints. Defaults to false
 	VPCIEnabled             bool                // Whether the kernel should enable pci
 	EnableScratchEncryption bool                // Whether the scratch should be encrypted
-	SecurityPolicy          string              // Optional security policy
-	SecurityPolicyEnabled   bool                // Set when there is a security policy to apply on actual SNP hardware, use this rathen than checking the string length
-	SecurityPolicyEnforcer  string              // Set which security policy enforcer to use (open door, standard or rego). This allows for better fallback mechanic.
-	UVMReferenceInfoFile    string              // Filename under `BootFilesPath` for (potentially signed) UVM image reference information.
-	UseGuestStateFile       bool                // Use a vmgs file that contains a kernel and initrd, required for SNP
-	GuestStateFile          string              // The vmgs file to load
 	DisableTimeSyncService  bool                // Disables the time synchronization service
 }
 
@@ -158,12 +163,11 @@ func NewDefaultOptionsLCOW(id, owner string) *OptionsLCOW {
 		EnableColdDiscardHint:   false,
 		VPCIEnabled:             false,
 		EnableScratchEncryption: false,
-		SecurityPolicyEnabled:   false,
-		SecurityPolicyEnforcer:  "",
-		SecurityPolicy:          "",
-		UVMReferenceInfoFile:    UVMReferenceInfoFile,
-		GuestStateFile:          "",
 		DisableTimeSyncService:  false,
+		ConfidentialOptions: &ConfidentialOptions{
+			SecurityPolicyEnabled: false,
+			UVMReferenceInfoFile:  UVMReferenceInfoFile,
+		},
 	}
 
 	if _, err := os.Stat(filepath.Join(opts.BootFilesPath, VhdFile)); err == nil {

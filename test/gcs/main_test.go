@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+
 	"github.com/containerd/cgroups"
 	"github.com/sirupsen/logrus"
 
@@ -132,7 +134,10 @@ func getHost(_ context.Context, t testing.TB, rt runtime.Runtime) *hcsv2.Host {
 
 func getHostErr(rt runtime.Runtime, tp transport.Transport) (*hcsv2.Host, error) {
 	h := hcsv2.NewHost(rt, tp)
-	if err := h.SetConfidentialUVMOptions("", securityPolicy, ""); err != nil {
+	cOpts := &guestresource.LCOWConfidentialOptions{
+		EncodedSecurityPolicy: securityPolicy,
+	}
+	if err := h.SetConfidentialUVMOptions(context.Background(), cOpts); err != nil {
 		return nil, fmt.Errorf("could not set host security policy: %w", err)
 	}
 
