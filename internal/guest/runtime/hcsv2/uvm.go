@@ -314,7 +314,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	// completes to bypass it; the security policy variable cannot be included
 	// in the security policy as its value is not available security policy
 	// construction time.
-	if oci.ParseAnnotationsBool(ctx, settings.OCISpecification.Annotations, annotations.SecurityPolicyEnv, false) {
+	if oci.ParseAnnotationsBool(ctx, settings.OCISpecification.Annotations, annotations.UVMSecurityPolicyEnv, false) {
 		secPolicyEnv := fmt.Sprintf("UVM_SECURITY_POLICY=%s", h.securityPolicyEnforcer.EncodedSecurityPolicy())
 		uvmReferenceInfo := fmt.Sprintf("UVM_REFERENCE_INFO=%s", h.uvmReferenceInfo)
 		settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, secPolicyEnv, uvmReferenceInfo)
