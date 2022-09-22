@@ -54,3 +54,7 @@ func (MountMonitoringSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ stri
 func (MountMonitoringSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []string, _ []string, _ string) error {
 	return nil
 }
+
+func (MountMonitoringSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(_ string) error {
+	return nil
+}

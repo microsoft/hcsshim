@@ -615,3 +615,11 @@ func (policy *regoEnforcer) EnforceExecExternalProcessPolicy(argList []string, e
 
 	return policy.enforce("exec_external", input)
 }
+
+func (policy *regoEnforcer) EnforceShutdownContainerPolicy(containerID string) error {
+	input := map[string]interface{}{
+		"containerID": containerID,
+	}
+
+	return policy.enforce("shutdown_container", input)
+}

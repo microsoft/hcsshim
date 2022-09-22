@@ -215,6 +215,16 @@ exec_in_container := {"matches": matches, "allowed": true} {
     }
 }
 
+default shutdown_container := {"allowed": false}
+
+shutdown_container := {"started": remove, "matches": remove, "allowed": true} {
+    container_started
+    remove := {
+        "action": "remove",
+        "key": input.containerID,
+    }
+}
+
 default enforcement_point_info := {"available": false, "allowed": false, "unknown": true, "invalid": false}
 
 enforcement_point_info := {"available": available, "allowed": allowed, "unknown": false, "invalid": false} {
@@ -261,7 +271,7 @@ errors["container already started"] {
 }
 
 errors["container not started"] {
-    input.rule == "exec_in_container"
+    input.rule in ["exec_in_container", "shutdown_container"]
     not container_started
 }
 
