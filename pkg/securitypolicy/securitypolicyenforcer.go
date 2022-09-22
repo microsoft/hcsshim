@@ -375,7 +375,7 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceOverlayMountPolicy(containerID 
 	for _, i := range matchedContainers {
 		existing := pe.ContainerIndexToContainerIds[i]
 		if len(existing) >= len(matchedContainers) {
-			errmsg := fmt.Sprintf("layerPaths '%v' already used in maximum number of container overlays", layerPaths)
+			errmsg := fmt.Sprintf("layerPaths '%v' already used in maximum number of container overlays. This is likely because the security policy allows the container to be run only once.", layerPaths)
 			return errors.New(errmsg)
 		}
 		pe.expandMatchesForContainerIndex(i, containerID)
