@@ -4,6 +4,8 @@
 package policy
 
 import (
+	"syscall"
+
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
@@ -56,5 +58,9 @@ func (MountMonitoringSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ 
 }
 
 func (MountMonitoringSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(_ string) error {
+	return nil
+}
+
+func (MountMonitoringSecurityPolicyEnforcer) EnforceSignalContainerProcessPolicy(_ string, _ syscall.Signal, _ bool, _ []string) error {
 	return nil
 }

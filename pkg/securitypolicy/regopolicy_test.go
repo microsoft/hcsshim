@@ -10,11 +10,13 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"testing/quick"
 
 	"github.com/open-policy-agent/opa/ast"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -1337,6 +1339,327 @@ func Test_Rego_ShutdownContainerPolicy_Not_Running_Container(t *testing.T) {
 	}
 }
 
+func Test_Rego_SignalContainerProcessPolicy_InitProcess_Allowed(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		hasAllowedSignals := generateConstraintsContainer(testRand, 1, maxLayersInGeneratedContainer)
+		hasAllowedSignals.Signals = generateListOfSignals(testRand, 1, maxSignalNumber)
+		p.containers = append(p.containers, hasAllowedSignals)
+
+		tc, err := setupRegoRunningContainerTest(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		containerID, err := idForRunningContainer(hasAllowedSignals, tc.runningContainers)
+		if err != nil {
+			r, err := runContainer(tc.policy, hasAllowedSignals, tc.defaultMounts, tc.privilegedMounts)
+			if err != nil {
+				t.Errorf("Unable to setup test running container: %v", err)
+				return false
+			}
+			containerID = r.containerID
+		}
+
+		signal := selectSignalFromSignals(testRand, hasAllowedSignals.Signals)
+		err = tc.policy.EnforceSignalContainerProcessPolicy(containerID, signal, true, hasAllowedSignals.Command)
+
+		if err != nil {
+			t.Errorf("Signal init process unexpectedly failed: %v", err)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_SignalContainerProcessPolicy_InitProcess_Allowed: %v", err)
+	}
+}
+
+func Test_Rego_SignalContainerProcessPolicy_InitProcess_Not_Allowed(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		hasNoAllowedSignals := generateConstraintsContainer(testRand, 1, maxLayersInGeneratedContainer)
+		hasNoAllowedSignals.Signals = make([]syscall.Signal, 0)
+
+		p.containers = append(p.containers, hasNoAllowedSignals)
+
+		tc, err := setupRegoRunningContainerTest(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		containerID, err := idForRunningContainer(hasNoAllowedSignals, tc.runningContainers)
+		if err != nil {
+			r, err := runContainer(tc.policy, hasNoAllowedSignals, tc.defaultMounts, tc.privilegedMounts)
+			if err != nil {
+				t.Errorf("Unable to setup test running container: %v", err)
+				return false
+			}
+			containerID = r.containerID
+		}
+
+		signal := generateSignal(testRand)
+		err = tc.policy.EnforceSignalContainerProcessPolicy(containerID, signal, true, hasNoAllowedSignals.Command)
+
+		if err == nil {
+			t.Errorf("Signal init process unexpectedly passed: %v", err)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_SignalContainerProcessPolicy_InitProcess_Not_Allowed: %v", err)
+	}
+}
+
+func Test_Rego_SignalContainerProcessPolicy_InitProcess_Bad_ContainerID(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		hasAllowedSignals := generateConstraintsContainer(testRand, 1, maxLayersInGeneratedContainer)
+		hasAllowedSignals.Signals = generateListOfSignals(testRand, 1, maxSignalNumber)
+		p.containers = append(p.containers, hasAllowedSignals)
+
+		tc, err := setupRegoRunningContainerTest(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		_, err = idForRunningContainer(hasAllowedSignals, tc.runningContainers)
+		if err != nil {
+			_, err := runContainer(tc.policy, hasAllowedSignals, tc.defaultMounts, tc.privilegedMounts)
+			if err != nil {
+				t.Errorf("Unable to setup test running container: %v", err)
+				return false
+			}
+		}
+
+		signal := selectSignalFromSignals(testRand, hasAllowedSignals.Signals)
+		badContainerID := generateContainerID(testRand)
+		err = tc.policy.EnforceSignalContainerProcessPolicy(badContainerID, signal, true, hasAllowedSignals.Command)
+
+		if err == nil {
+			t.Errorf("Signal init process unexpectedly succeeded: %v", err)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_SignalContainerProcessPolicy_InitProcess_Bad_ContainerID: %v", err)
+	}
+}
+
+func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Allowed(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		containerUnderTest := generateConstraintsContainer(testRand, 1, maxLayersInGeneratedContainer)
+
+		ep := generateExecProcesses(testRand)
+		ep[0].Signals = generateListOfSignals(testRand, 1, 4)
+		containerUnderTest.ExecProcesses = ep
+		processUnderTest := ep[0]
+
+		p.containers = append(p.containers, containerUnderTest)
+
+		tc, err := setupRegoRunningContainerTest(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		containerID, err := idForRunningContainer(containerUnderTest, tc.runningContainers)
+		if err != nil {
+			r, err := runContainer(tc.policy, containerUnderTest, tc.defaultMounts, tc.privilegedMounts)
+			if err != nil {
+				t.Errorf("Unable to setup test running container: %v", err)
+				return false
+			}
+			containerID = r.containerID
+		}
+
+		envList := buildEnvironmentVariablesFromEnvRules(containerUnderTest.EnvRules, testRand)
+
+		err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir)
+		if err != nil {
+			t.Errorf("Unable to exec process for test: %v", err)
+			return false
+		}
+
+		signal := selectSignalFromSignals(testRand, processUnderTest.Signals)
+
+		err = tc.policy.EnforceSignalContainerProcessPolicy(containerID, signal, false, processUnderTest.Command)
+		if err != nil {
+			t.Errorf("Signal init process unexpectedly failed: %v", err)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_SignalContainerProcessPolicy_ExecProcess_Allowed: %v", err)
+	}
+}
+
+func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Not_Allowed(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		containerUnderTest := generateConstraintsContainer(testRand, 1, maxLayersInGeneratedContainer)
+
+		ep := generateExecProcesses(testRand)
+		ep[0].Signals = make([]syscall.Signal, 0)
+		containerUnderTest.ExecProcesses = ep
+		processUnderTest := ep[0]
+
+		p.containers = append(p.containers, containerUnderTest)
+
+		tc, err := setupRegoRunningContainerTest(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		containerID, err := idForRunningContainer(containerUnderTest, tc.runningContainers)
+		if err != nil {
+			r, err := runContainer(tc.policy, containerUnderTest, tc.defaultMounts, tc.privilegedMounts)
+			if err != nil {
+				t.Errorf("Unable to setup test running container: %v", err)
+				return false
+			}
+			containerID = r.containerID
+		}
+
+		envList := buildEnvironmentVariablesFromEnvRules(containerUnderTest.EnvRules, testRand)
+
+		err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir)
+		if err != nil {
+			t.Errorf("Unable to exec process for test: %v", err)
+			return false
+		}
+
+		signal := generateSignal(testRand)
+
+		err = tc.policy.EnforceSignalContainerProcessPolicy(containerID, signal, false, processUnderTest.Command)
+		if err == nil {
+			t.Errorf("Signal init process unexpectedly succeeded: %v", err)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_SignalContainerProcessPolicy_ExecProcess_Not_Allowed: %v", err)
+	}
+}
+
+func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Bad_Command(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		containerUnderTest := generateConstraintsContainer(testRand, 1, maxLayersInGeneratedContainer)
+
+		ep := generateExecProcesses(testRand)
+		ep[0].Signals = generateListOfSignals(testRand, 1, 4)
+		containerUnderTest.ExecProcesses = ep
+		processUnderTest := ep[0]
+
+		p.containers = append(p.containers, containerUnderTest)
+
+		tc, err := setupRegoRunningContainerTest(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		containerID, err := idForRunningContainer(containerUnderTest, tc.runningContainers)
+		if err != nil {
+			r, err := runContainer(tc.policy, containerUnderTest, tc.defaultMounts, tc.privilegedMounts)
+			if err != nil {
+				t.Errorf("Unable to setup test running container: %v", err)
+				return false
+			}
+			containerID = r.containerID
+		}
+
+		envList := buildEnvironmentVariablesFromEnvRules(containerUnderTest.EnvRules, testRand)
+
+		err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir)
+		if err != nil {
+			t.Errorf("Unable to exec process for test: %v", err)
+			return false
+		}
+
+		signal := selectSignalFromSignals(testRand, processUnderTest.Signals)
+		badCommand := generateCommand(testRand)
+
+		err = tc.policy.EnforceSignalContainerProcessPolicy(containerID, signal, false, badCommand)
+		if err == nil {
+			t.Errorf("Signal init process unexpectedly succeeded: %v", err)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_SignalContainerProcessPolicy_ExecProcess_Bad_Command: %v", err)
+	}
+}
+
+func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Bad_ContainerID(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		containerUnderTest := generateConstraintsContainer(testRand, 1, maxLayersInGeneratedContainer)
+
+		ep := generateExecProcesses(testRand)
+		ep[0].Signals = generateListOfSignals(testRand, 1, 4)
+		containerUnderTest.ExecProcesses = ep
+		processUnderTest := ep[0]
+
+		p.containers = append(p.containers, containerUnderTest)
+
+		tc, err := setupRegoRunningContainerTest(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		containerID, err := idForRunningContainer(containerUnderTest, tc.runningContainers)
+		if err != nil {
+			r, err := runContainer(tc.policy, containerUnderTest, tc.defaultMounts, tc.privilegedMounts)
+			if err != nil {
+				t.Errorf("Unable to setup test running container: %v", err)
+				return false
+			}
+			containerID = r.containerID
+		}
+
+		envList := buildEnvironmentVariablesFromEnvRules(containerUnderTest.EnvRules, testRand)
+
+		err = tc.policy.EnforceExecInContainerPolicy(containerID, processUnderTest.Command, envList, containerUnderTest.WorkingDir)
+		if err != nil {
+			t.Errorf("Unable to exec process for test: %v", err)
+			return false
+		}
+
+		signal := selectSignalFromSignals(testRand, processUnderTest.Signals)
+		badContainerID := generateContainerID(testRand)
+
+		err = tc.policy.EnforceSignalContainerProcessPolicy(badContainerID, signal, false, processUnderTest.Command)
+		if err == nil {
+			t.Errorf("Signal init process unexpectedly succeeded: %v", err)
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_SignalContainerProcessPolicy_ExecProcess_Bad_ContainerID: %v", err)
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //
@@ -1400,6 +1723,23 @@ func copyMounts(mounts []oci.Mount) []oci.Mount {
 	err = json.Unmarshal(bytes, &mountsCopy)
 	if err != nil {
 		panic(err)
+	}
+
+	return mountsCopy
+}
+
+func copyMountsInternal(mounts []mountInternal) []mountInternal {
+	var mountsCopy []mountInternal
+
+	for _, in := range mounts {
+		out := mountInternal{
+			Source:      in.Source,
+			Destination: in.Destination,
+			Type:        in.Type,
+			Options:     copyStrings(in.Options),
+		}
+
+		mountsCopy = append(mountsCopy, out)
 	}
 
 	return mountsCopy
@@ -1518,45 +1858,57 @@ func setupRegoRunningContainerTest(gc *generatedConstraints) (tc *regoRunningCon
 	}
 
 	var runningContainers []regoRunningContainer
-	numOfRunningContainers := atLeastOneAtMost(testRand, int32(len(gc.containers)))
-	for i := 0; i < int(numOfRunningContainers); i++ {
-		containerToStart := gc.containers[0]
-		containerID, err := mountImageForContainer(policy, containerToStart)
+	numOfRunningContainers := int(atLeastOneAtMost(testRand, int32(len(gc.containers))))
+	containersToRun := randChoices(testRand, numOfRunningContainers, len(gc.containers), true)
+	for _, i := range containersToRun {
+		containerToStart := gc.containers[i]
+		r, err := runContainer(policy, containerToStart, defaultMounts, privilegedMounts)
 		if err != nil {
 			return nil, err
 		}
-
-		envList := buildEnvironmentVariablesFromEnvRules(containerToStart.EnvRules, testRand)
-		sandboxID := generateSandboxID(testRand)
-
-		mounts := containerToStart.Mounts
-		mounts = append(mounts, defaultMounts...)
-		if containerToStart.AllowElevated {
-			mounts = append(mounts, privilegedMounts...)
-		}
-		mountSpec := buildMountSpecFromMountArray(mounts, sandboxID, testRand)
-
-		err = policy.EnforceCreateContainerPolicy(sandboxID, containerID, containerToStart.Command, envList, containerToStart.WorkingDir, mountSpec.Mounts)
-		if err != nil {
-			return nil, err
-		}
-
-		runningContainer := regoRunningContainer{
-			container:   containerToStart,
-			containerID: containerID,
-		}
-		runningContainers = append(runningContainers, runningContainer)
+		runningContainers = append(runningContainers, *r)
 	}
 
 	return &regoRunningContainerTestConfig{
 		runningContainers: runningContainers,
 		policy:            policy,
+		defaultMounts:     copyMountsInternal(defaultMounts),
+		privilegedMounts:  copyMountsInternal(privilegedMounts),
+	}, nil
+}
+
+func runContainer(enforcer *regoEnforcer, container *securityPolicyContainer, defaultMounts []mountInternal, privilegedMounts []mountInternal) (*regoRunningContainer, error) {
+	containerID, err := mountImageForContainer(enforcer, container)
+	if err != nil {
+		return nil, err
+	}
+
+	envList := buildEnvironmentVariablesFromEnvRules(container.EnvRules, testRand)
+	sandboxID := generateSandboxID(testRand)
+
+	mounts := container.Mounts
+	mounts = append(mounts, defaultMounts...)
+	if container.AllowElevated {
+		mounts = append(mounts, privilegedMounts...)
+	}
+	mountSpec := buildMountSpecFromMountArray(mounts, sandboxID, testRand)
+
+	err = enforcer.EnforceCreateContainerPolicy(sandboxID, containerID, container.Command, envList, container.WorkingDir, mountSpec.Mounts)
+	if err != nil {
+		return nil, err
+	}
+
+	return &regoRunningContainer{
+		container:   container,
+		containerID: containerID,
 	}, nil
 }
 
 type regoRunningContainerTestConfig struct {
 	runningContainers []regoRunningContainer
 	policy            *regoEnforcer
+	defaultMounts     []mountInternal
+	privilegedMounts  []mountInternal
 }
 
 type regoRunningContainer struct {
@@ -1715,4 +2067,37 @@ func selectContainerFromRunningContainers(containers []regoRunningContainer, r *
 func selectExecProcess(processes []containerExecProcess, r *rand.Rand) containerExecProcess {
 	numProcesses := len(processes)
 	return processes[r.Intn(numProcesses)]
+}
+
+func idForRunningContainer(container *securityPolicyContainer, running []regoRunningContainer) (string, error) {
+	for _, c := range running {
+		if c.container == container {
+			return c.containerID, nil
+		}
+	}
+
+	return "", errors.New("Container isn't running")
+}
+
+func selectSignalFromSignals(r *rand.Rand, signals []syscall.Signal) syscall.Signal {
+	numSignals := len(signals)
+	return signals[r.Intn(numSignals)]
+}
+
+func randChoices(r *rand.Rand, numChoices int, numItems int, replacement bool) []int {
+	if !replacement {
+		shuffle := r.Perm(numItems)
+		if numChoices > numItems {
+			return shuffle
+		}
+
+		return shuffle[:numChoices]
+	}
+
+	choices := make([]int, numChoices)
+	for i := 0; i < numChoices; i++ {
+		choices[i] = r.Intn(numItems)
+	}
+
+	return choices
 }

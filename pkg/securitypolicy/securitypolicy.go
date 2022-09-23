@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/pkg/errors"
@@ -60,6 +61,7 @@ type ContainerConfig struct {
 	Mounts        []MountConfig       `json:"mounts" toml:"mount"`
 	AllowElevated bool                `json:"allow_elevated" toml:"allow_elevated"`
 	ExecProcesses []ExecProcessConfig `json:"exec_processes" toml:"exec_process"`
+	Signals       []syscall.Signal    `json:"signals" toml:"signals"`
 }
 
 // MountConfig contains toml or JSON config for mount security policy
@@ -73,7 +75,8 @@ type MountConfig struct {
 // ExecProcessConfig contains toml or JSON config for exec process security
 // policy constraint description
 type ExecProcessConfig struct {
-	Command []string `json:"command" toml:"command"`
+	Command []string         `json:"command" toml:"command"`
+	Signals []syscall.Signal `json:"signals" toml:"signals"`
 }
 
 // NewEnvVarRules creates slice of EnvRuleConfig's from environment variables
@@ -151,6 +154,7 @@ type Container struct {
 	Mounts        Mounts      `json:"mounts"`
 	AllowElevated bool        `json:"allow_elevated"`
 	ExecProcesses []ExecProcessConfig
+	Signals       []syscall.Signal
 }
 
 // StringArrayMap wraps an array of strings as a string map.
@@ -191,6 +195,7 @@ func CreateContainerPolicy(
 	mounts []MountConfig,
 	allowElevated bool,
 	execProcesses []ExecProcessConfig,
+	signals []syscall.Signal,
 ) (*Container, error) {
 	if err := validateEnvRules(envRules); err != nil {
 		return nil, err
@@ -206,6 +211,7 @@ func CreateContainerPolicy(
 		Mounts:        newMountConstraints(mounts),
 		AllowElevated: allowElevated,
 		ExecProcesses: execProcesses,
+		Signals:       signals,
 	}, nil
 }
 

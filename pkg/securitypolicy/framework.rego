@@ -225,6 +225,45 @@ shutdown_container := {"started": remove, "matches": remove, "allowed": true} {
     }
 }
 
+default signal_container_process := {"allowed": false}
+
+signal_container_process := {"matches": matches, "allowed": true} {
+    container_started
+    input.isInitProcess
+    containers := [container |
+        some container in data.metadata.matches[input.containerID]
+        signal_ok(container.signals)
+    ]
+    count(containers) > 0
+    matches := {
+        "action": "update",
+        "key": input.containerID,
+        "value": containers
+    }
+}
+
+signal_container_process := {"matches": matches, "allowed": true} {
+    container_started
+    not input.isInitProcess
+    containers := [container |
+        some container in data.metadata.matches[input.containerID]
+        some process in container.exec_processes
+        command_ok(process.command)
+        signal_ok(process.signals)
+    ]
+    count(containers) > 0
+    matches := {
+        "action": "update",
+        "key": input.containerID,
+        "value": containers
+    }
+}
+
+signal_ok(signals) {
+    some signal in signals
+    input.signal == signal
+}
+
 default enforcement_point_info := {"available": false, "allowed": false, "unknown": true, "invalid": false}
 
 enforcement_point_info := {"available": available, "allowed": allowed, "unknown": false, "invalid": false} {
@@ -271,7 +310,7 @@ errors["container already started"] {
 }
 
 errors["container not started"] {
-    input.rule in ["exec_in_container", "shutdown_container"]
+    input.rule in ["exec_in_container", "shutdown_container", "signal_container_process"]
     not container_started
 }
 
@@ -366,4 +405,23 @@ mountList_matches {
 errors["invalid mount list"] {
     input.rule == "create_container"
     not mountList_matches
+}
+
+default signal_allowed := false
+
+signal_allowed {
+    some container in data.metadata.matches[input.containerID]
+    signal_ok(container.signals)
+}
+
+signal_allowed {
+    some container in data.metadata.matches[input.containerID]
+    some process in container.exec_processes
+    command_ok(process.command)
+    signal_ok(process.signals)
+}
+
+errors["target isn't allowed to receive the signal"] {
+    input.rule == "signal_container_process"
+    not signal_allowed
 }

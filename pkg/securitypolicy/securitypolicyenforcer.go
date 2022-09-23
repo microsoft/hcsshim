@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 
@@ -47,6 +48,7 @@ type SecurityPolicyEnforcer interface {
 	EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string) error
 	EnforceExecExternalProcessPolicy(argList []string, envList []string, workingDir string) error
 	EnforceShutdownContainerPolicy(containerID string) error
+	EnforceSignalContainerProcessPolicy(containerID string, signal syscall.Signal, isInitProcess bool, startupArgList []string) error
 }
 
 func newSecurityPolicyFromBase64JSON(base64EncodedPolicy string) (*SecurityPolicy, error) {
@@ -452,6 +454,12 @@ func (*StandardSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(_ string) 
 	return nil
 }
 
+// Stub. We are deprecating the standard enforcer. Newly added enforcement
+// points are simply allowed.
+func (*StandardSecurityPolicyEnforcer) EnforceSignalContainerProcessPolicy(_ string, _ syscall.Signal, _ bool, _ []string) error {
+	return nil
+}
+
 func (pe *StandardSecurityPolicyEnforcer) enforceCommandPolicy(containerID string, argList []string) (err error) {
 	// Get a list of all the indexes into our security policy's list of
 	// containers that are possible matches for this containerID based
@@ -749,9 +757,11 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []strin
 	return nil
 }
 
-// Stub. We are deprecating the standard enforcer. Newly added enforcement
-// points are simply allowed.
 func (*OpenDoorSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(_ string) error {
+	return nil
+}
+
+func (*OpenDoorSecurityPolicyEnforcer) EnforceSignalContainerProcessPolicy(_ string, _ syscall.Signal, _ bool, _ []string) error {
 	return nil
 }
 
@@ -793,10 +803,12 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []str
 	return errors.New("starting additional processes in uvm is denied by policy")
 }
 
-// Stub. We are deprecating the standard enforcer. Newly added enforcement
-// points are simply allowed.
 func (*ClosedDoorSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(_ string) error {
-	return nil
+	return errors.New("shutting down a container is denied by policy")
+}
+
+func (*ClosedDoorSecurityPolicyEnforcer) EnforceSignalContainerProcessPolicy(_ string, _ syscall.Signal, _ bool, _ []string) error {
+	return errors.New("signalling container processes is denied by policy")
 }
 
 func (ClosedDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {

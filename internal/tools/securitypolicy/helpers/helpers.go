@@ -161,6 +161,7 @@ func PolicyContainersFromConfigs(containerConfigs []securitypolicy.ContainerConf
 			containerConfig.Mounts,
 			containerConfig.AllowElevated,
 			containerConfig.ExecProcesses,
+			containerConfig.Signals,
 		)
 		if err != nil {
 			return nil, err

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"syscall"
 )
 
 type marshalFunc func(allowAll bool, containers []*Container, externalProcesses []ExternalProcessConfig) (string, error)
@@ -159,11 +160,21 @@ func (m Mounts) MarshalJSON() ([]byte, error) {
 var indentUsing string = "    "
 
 type stringArray []string
+type signalArray []syscall.Signal
 
 func (array stringArray) marshalRego() string {
 	values := make([]string, len(array))
 	for i, value := range array {
 		values[i] = fmt.Sprintf(`"%s"`, value)
+	}
+
+	return fmt.Sprintf("[%s]", strings.Join(values, ","))
+}
+
+func (array signalArray) marshalRego() string {
+	values := make([]string, len(array))
+	for i, value := range array {
+		values[i] = fmt.Sprintf("%d", value)
 	}
 
 	return fmt.Sprintf("[%s]", strings.Join(values, ","))
@@ -217,7 +228,9 @@ func writeMounts(builder *strings.Builder, mounts []mountInternal, indent string
 
 func (p containerExecProcess) marshalRego() string {
 	command := stringArray(p.Command).marshalRego()
-	return fmt.Sprintf(`{"command": %s}`, command)
+	signals := signalArray(p.Signals).marshalRego()
+
+	return fmt.Sprintf(`{"command": %s, "signals": %s}`, command, signals)
 }
 
 func writeExecProcesses(builder *strings.Builder, execProcesses []containerExecProcess, indent string) {
@@ -228,6 +241,11 @@ func writeExecProcesses(builder *strings.Builder, execProcesses []containerExecP
 	writeLine(builder, `%s"exec_processes": [%s],`, indent, strings.Join(values, ","))
 }
 
+func writeSignals(builder *strings.Builder, signals []syscall.Signal, indent string) {
+	array := (signalArray(signals)).marshalRego()
+	writeLine(builder, `%s"signals": %s,`, indent, array)
+}
+
 func writeContainer(builder *strings.Builder, container *securityPolicyContainer, indent string, end string) {
 	writeLine(builder, "%s{", indent)
 	writeCommand(builder, container.Command, indent+indentUsing)
@@ -235,6 +253,7 @@ func writeContainer(builder *strings.Builder, container *securityPolicyContainer
 	writeLayers(builder, container.Layers, indent+indentUsing)
 	writeMounts(builder, container.Mounts, indent+indentUsing)
 	writeExecProcesses(builder, container.ExecProcesses, indent+indentUsing)
+	writeSignals(builder, container.Signals, indent+indentUsing)
 	writeLine(builder, `%s"allow_elevated": %v,`, indent+indentUsing, container.AllowElevated)
 	writeLine(builder, `%s"working_dir": "%s"`, indent+indentUsing, container.WorkingDir)
 	writeLine(builder, "%s}%s", indent, end)
