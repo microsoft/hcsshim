@@ -492,7 +492,11 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 	var pid int
 	var c *Container
 	if params.IsExternal || containerID == UVMContainerID {
-		err = h.securityPolicyEnforcer.EnforceExecExternalProcessPolicy(params.OCIProcess.Args, params.OCIProcess.Env, params.OCIProcess.Cwd)
+		err = h.securityPolicyEnforcer.EnforceExecExternalProcessPolicy(
+			params.CommandArgs,
+			processParamEnvToOCIEnv(params.Environment),
+			params.WorkingDirectory,
+		)
 		if err != nil {
 			return pid, errors.Wrapf(err, "exec in container denied due to policy")
 		}
