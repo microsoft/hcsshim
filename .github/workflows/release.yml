@@ -1,7 +1,7 @@
 name: Build & Release
 on:
   push:
-    - tag: 'v*'
+    tag: 'v*'
 
 env:
   GO_VERSION: "1.18.x"
@@ -44,5 +44,4 @@ jobs:
           files: |
             dmverity-vhd.exe
             dmverity-vhd
-            
-            
+
