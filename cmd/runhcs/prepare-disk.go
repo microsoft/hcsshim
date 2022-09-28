@@ -57,7 +57,9 @@ var prepareDiskCommand = cli.Command{
 		if err := preparediskUVM.Start(ctx); err != nil {
 			return errors.Wrapf(err, "failed to start '%s'", opts.ID)
 		}
-
+		if err := preparediskUVM.SetConfidentialUVMOptions(ctx); err != nil {
+			return err
+		}
 		if err := lcow.FormatDisk(ctx, preparediskUVM, dest); err != nil {
 			return errors.Wrapf(err, "failed to format disk '%s' with ext4", opts.ID)
 		}

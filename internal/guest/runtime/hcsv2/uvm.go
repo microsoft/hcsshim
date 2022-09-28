@@ -498,7 +498,7 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 			params.WorkingDirectory,
 		)
 		if err != nil {
-			return pid, errors.Wrapf(err, "exec in container denied due to policy")
+			return pid, errors.Wrapf(err, "exec is denied due to policy")
 		}
 		pid, err = h.runExternalProcess(ctx, params, conSettings)
 	} else if c, err = h.GetCreatedContainer(containerID); err == nil {
