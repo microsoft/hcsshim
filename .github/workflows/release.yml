@@ -1,7 +1,8 @@
 name: Build & Release
 on:
   push:
-    tag: 'v*'
+    tags:
+      - 'v*'
 
 env:
   GO_VERSION: "1.18.x"
