@@ -11,7 +11,7 @@ import (
 	"os"
 	"syscall"
 
-	winio "github.com/Microsoft/go-winio"
+	"github.com/Microsoft/go-winio"
 	"github.com/Microsoft/hcsshim/internal/appargs"
 	"github.com/Microsoft/hcsshim/internal/logfields"
 	"github.com/Microsoft/hcsshim/internal/runhcs"
@@ -86,6 +86,9 @@ var vmshimCommand = cli.Command{
 		}
 		defer vm.Close()
 		if err = vm.Start(gcontext.Background()); err != nil {
+			return err
+		}
+		if err := vm.SetConfidentialUVMOptions(gcontext.Background()); err != nil {
 			return err
 		}
 

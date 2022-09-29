@@ -74,6 +74,13 @@ func newSecurityPolicyFromBase64JSON(base64EncodedPolicy string) (*SecurityPolic
 // createAllowAllEnforcer creates and returns OpenDoorSecurityPolicyEnforcer instance.
 // Both AllowAll and Containers cannot be set at the same time.
 func createOpenDoorEnforcer(base64EncodedPolicy string, _, _ []oci.Mount) (SecurityPolicyEnforcer, error) {
+	// This covers the case when an "open_door" enforcer was requested, but no
+	// actual security policy was passed. This can happen e.g. when a container
+	// scratch is created for the first time.
+	if base64EncodedPolicy == "" {
+		return &OpenDoorSecurityPolicyEnforcer{}, nil
+	}
+
 	securityPolicy, err := newSecurityPolicyFromBase64JSON(base64EncodedPolicy)
 	if err != nil {
 		return nil, err
@@ -154,6 +161,9 @@ func CreateSecurityPolicyEnforcer(
 ) (SecurityPolicyEnforcer, error) {
 	if enforcer == "" {
 		enforcer = defaultEnforcer
+		if base64EncodedPolicy == "" {
+			enforcer = openDoorEnforcer
+		}
 	}
 	if createEnforcer, ok := registeredEnforcers[enforcer]; !ok {
 		return nil, fmt.Errorf("unknown enforcer: %q", enforcer)

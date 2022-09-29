@@ -1066,6 +1066,10 @@ func createExt4VHD(ctx context.Context, t *testing.T, path string) {
 	uvm := testuvm.CreateAndStartLCOW(ctx, t, t.Name()+"-createExt4VHD")
 	defer uvm.Close()
 
+	if err := uvm.SetConfidentialUVMOptions(ctx); err != nil {
+		t.Fatal(err)
+	}
+
 	if err := lcow.CreateScratch(ctx, uvm, path, 2, ""); err != nil {
 		t.Fatal(err)
 	}
