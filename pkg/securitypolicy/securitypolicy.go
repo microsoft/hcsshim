@@ -147,14 +147,14 @@ type Containers struct {
 }
 
 type Container struct {
-	Command       CommandArgs `json:"command"`
-	EnvRules      EnvRules    `json:"env_rules"`
-	Layers        Layers      `json:"layers"`
-	WorkingDir    string      `json:"working_dir"`
-	Mounts        Mounts      `json:"mounts"`
-	AllowElevated bool        `json:"allow_elevated"`
-	ExecProcesses []ExecProcessConfig
-	Signals       []syscall.Signal
+	Command       CommandArgs         `json:"command"`
+	EnvRules      EnvRules            `json:"env_rules"`
+	Layers        Layers              `json:"layers"`
+	WorkingDir    string              `json:"working_dir"`
+	Mounts        Mounts              `json:"mounts"`
+	AllowElevated bool                `json:"allow_elevated"`
+	ExecProcesses []ExecProcessConfig `json:"-"`
+	Signals       []syscall.Signal    `json:"-"`
 }
 
 // StringArrayMap wraps an array of strings as a string map.
