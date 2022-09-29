@@ -17,7 +17,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
-	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
 // Test dependencies
@@ -76,7 +75,6 @@ func Mount(
 	target string,
 	mappingInfo *guestresource.LCOWVPMemMappingInfo,
 	verityInfo *guestresource.DeviceVerityInfo,
-	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
 	mCtx, span := oc.StartSpan(ctx, "pmem::Mount")
 	defer span.End()
@@ -87,15 +85,6 @@ func Mount(
 		trace.StringAttribute("target", target))
 
 	devicePath := fmt.Sprintf(pMemFmt, device)
-
-	var deviceHash string
-	if verityInfo != nil {
-		deviceHash = verityInfo.RootDigest
-	}
-	err = securityPolicy.EnforceDeviceMountPolicy(target, deviceHash)
-	if err != nil {
-		return errors.Wrapf(err, "won't mount pmem device %d onto %s", device, target)
-	}
 
 	// dm-linear target has to be created first. When verity info is also present, the linear target becomes the data
 	// device instead of the original VPMem.
@@ -137,7 +126,6 @@ func Unmount(
 	target string,
 	mappingInfo *guestresource.LCOWVPMemMappingInfo,
 	verityInfo *guestresource.DeviceVerityInfo,
-	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
 	_, span := oc.StartSpan(ctx, "pmem::Unmount")
 	defer span.End()
@@ -146,10 +134,6 @@ func Unmount(
 	span.AddAttributes(
 		trace.Int64Attribute("device", int64(devNumber)),
 		trace.StringAttribute("target", target))
-
-	if err := securityPolicy.EnforceDeviceUnmountPolicy(target); err != nil {
-		return errors.Wrapf(err, "unmounting pmem device from %s denied by policy", target)
-	}
 
 	if err := storage.UnmountPath(ctx, target, true); err != nil {
 		return errors.Wrapf(err, "failed to unmount target: %s", target)

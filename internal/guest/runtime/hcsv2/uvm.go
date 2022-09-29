@@ -654,12 +654,30 @@ func modifyMappedVirtualDisk(
 		mountCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 		defer cancel()
 		if mvd.MountPath != "" {
+			if mvd.ReadOnly {
+				// containers only have read-only layers so only enforce for them
+				var deviceHash string
+				if mvd.VerityInfo != nil {
+					deviceHash = mvd.VerityInfo.RootDigest
+				}
+
+				err = securityPolicy.EnforceDeviceMountPolicy(mvd.MountPath, deviceHash)
+				if err != nil {
+					return errors.Wrapf(err, "mounting scsi device controller %d lun %d onto %s denied by policy", mvd.Controller, mvd.Lun, mvd.MountPath)
+				}
+			}
+
 			return scsi.Mount(mountCtx, mvd.Controller, mvd.Lun, mvd.MountPath,
-				mvd.ReadOnly, mvd.Encrypted, mvd.Options, mvd.VerityInfo, securityPolicy)
+				mvd.ReadOnly, mvd.Encrypted, mvd.Options, mvd.VerityInfo)
 		}
 		return nil
 	case guestrequest.RequestTypeRemove:
 		if mvd.MountPath != "" {
+			err = securityPolicy.EnforceDeviceUnmountPolicy(mvd.MountPath)
+			if err != nil {
+				return errors.Wrapf(err, "unmounting scsi device at %s denied by policy", mvd.MountPath)
+			}
+
 			if err := scsi.Unmount(ctx, mvd.Controller, mvd.Lun, mvd.MountPath,
 				mvd.Encrypted, mvd.VerityInfo, securityPolicy,
 			); err != nil {
@@ -695,9 +713,22 @@ func modifyMappedVPMemDevice(ctx context.Context,
 ) (err error) {
 	switch rt {
 	case guestrequest.RequestTypeAdd:
-		return pmem.Mount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, vpd.VerityInfo, securityPolicy)
+		var deviceHash string
+		if vpd.VerityInfo != nil {
+			deviceHash = vpd.VerityInfo.RootDigest
+		}
+		err = securityPolicy.EnforceDeviceMountPolicy(vpd.MountPath, deviceHash)
+		if err != nil {
+			return errors.Wrapf(err, "mounting pmem device %d onto %s denied by policy", vpd.DeviceNumber, vpd.MountPath)
+		}
+
+		return pmem.Mount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, vpd.VerityInfo)
 	case guestrequest.RequestTypeRemove:
-		return pmem.Unmount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, vpd.VerityInfo, securityPolicy)
+		if err := securityPolicy.EnforceDeviceUnmountPolicy(vpd.MountPath); err != nil {
+			return errors.Wrapf(err, "unmounting pmem device from %s denied by policy", vpd.MountPath)
+		}
+
+		return pmem.Unmount(ctx, vpd.DeviceNumber, vpd.MountPath, vpd.MappingInfo, vpd.VerityInfo)
 	default:
 		return newInvalidRequestTypeError(rt)
 	}
