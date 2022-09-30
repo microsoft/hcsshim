@@ -2,38 +2,52 @@ package wclayer
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"syscall"
 
 	"github.com/Microsoft/hcsshim/internal/hcserror"
+	"github.com/Microsoft/hcsshim/internal/longpath"
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/safefile"
 	"github.com/Microsoft/hcsshim/internal/winapi"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
+	"golang.org/x/sys/windows"
 )
 
 var hiveNames = []string{"DEFAULT", "SAM", "SECURITY", "SOFTWARE", "SYSTEM"}
 
-// Ensure the given file exists as an ordinary file, and create a zero-length file if not.
-func ensureFile(path string, root *os.File) error {
-	stat, err := safefile.LstatRelative(path, root)
-	if err != nil && os.IsNotExist(err) {
-		newFile, err := safefile.OpenRelative(path, root, 0, syscall.FILE_SHARE_WRITE, winapi.FILE_CREATE, 0)
-		if err != nil {
-			return err
-		}
-		return newFile.Close()
+// Ensure the given file exists as an ordinary file, and create a minimal hive file if not.
+func ensureHive(path string, root *os.File) error {
+	_, err := safefile.LstatRelative(path, root)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("accessing %s: %w", path, err)
 	}
 
+	version := windows.RtlGetVersion()
+	if version == nil {
+		return fmt.Errorf("failed to get OS version")
+	}
+
+	fullPath, err := longpath.LongAbs(filepath.Join(root.Name(), path))
 	if err != nil {
-		return err
+		return fmt.Errorf("getting path: %w", err)
 	}
 
-	if !stat.Mode().IsRegular() {
-		fullPath := filepath.Join(root.Name(), path)
-		return errors.Errorf("%s has unexpected file mode %s", fullPath, stat.Mode().String())
+	var key syscall.Handle
+	if err := winapi.ORCreateHive(&key); err != nil {
+		return fmt.Errorf("creating hive: %w", err)
+	}
+
+	hivePath, err := syscall.UTF16PtrFromString(fullPath)
+	if err != nil {
+		return fmt.Errorf("getting path: %w", err)
+	}
+
+	if err := winapi.ORSaveHive(key, hivePath, version.MajorVersion, version.MinorVersion); err != nil {
+		return fmt.Errorf("saving hive: %w", err)
 	}
 
 	return nil
@@ -48,7 +62,7 @@ func ensureBaseLayer(root *os.File) (hasUtilityVM bool, err error) {
 
 	for _, hiveName := range hiveNames {
 		hivePath := filepath.Join(hiveSourcePath, hiveName)
-		if err = ensureFile(hivePath, root); err != nil {
+		if err = ensureHive(hivePath, root); err != nil {
 			return
 		}
 	}
