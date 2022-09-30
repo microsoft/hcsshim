@@ -274,6 +274,17 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 		uvm.protocol = properties.GuestConnectionInfo.ProtocolVersion
 	}
 
+	if uvm.confidentialUVMOptions != nil && uvm.OS() == "linux" {
+		if err := uvm.SetConfidentialUVMOptions(ctx,
+			WithSecurityPolicy(uvm.confidentialUVMOptions.SecurityPolicy),
+			WithSecurityPolicyEnforcer(uvm.confidentialUVMOptions.SecurityPolicyEnforcer),
+			WithUVMReferenceInfo(defaultLCOWOSBootFilesPath(), uvm.confidentialUVMOptions.UVMReferenceInfoFile),
+			WithPodStartupFragmentUVMPath(uvm.confidentialUVMOptions.PodStartupFragmentUVMPath),
+		); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

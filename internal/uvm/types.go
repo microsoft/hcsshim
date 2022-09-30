@@ -146,4 +146,7 @@ type UtilityVM struct {
 	// noInheritHostTimezone specifies whether to not inherit the hosts timezone for the UVM. UTC will be set as the default instead.
 	// This only applies for WCOW.
 	noInheritHostTimezone bool
+
+	// confidentialUVMOptions hold confidential UVM specific options
+	confidentialUVMOptions *ConfidentialOptions
 }

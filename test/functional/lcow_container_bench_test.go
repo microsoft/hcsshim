@@ -35,7 +35,6 @@ func BenchmarkLCOW_Container(b *testing.B) {
 
 	b.Run("Create", func(b *testing.B) {
 		vm := uvm.CreateAndStartLCOWFromOpts(ctx, b, defaultLCOWOptions(b))
-		uvm.SetSecurityPolicy(ctx, b, vm, "")
 		cache := layers.CacheFile(ctx, b, "")
 
 		b.StopTimer()
@@ -83,7 +82,6 @@ func BenchmarkLCOW_Container(b *testing.B) {
 
 	b.Run("Start", func(b *testing.B) {
 		vm := uvm.CreateAndStartLCOWFromOpts(ctx, b, defaultLCOWOptions(b))
-		uvm.SetSecurityPolicy(ctx, b, vm, "")
 		cache := layers.CacheFile(ctx, b, "")
 
 		b.StopTimer()
@@ -116,7 +114,6 @@ func BenchmarkLCOW_Container(b *testing.B) {
 
 	b.Run("InitExec", func(b *testing.B) {
 		vm := uvm.CreateAndStartLCOWFromOpts(ctx, b, defaultLCOWOptions(b))
-		uvm.SetSecurityPolicy(ctx, b, vm, "")
 		cache := layers.CacheFile(ctx, b, "")
 
 		b.StopTimer()
@@ -150,7 +147,6 @@ func BenchmarkLCOW_Container(b *testing.B) {
 
 	b.Run("InitExecKill", func(b *testing.B) {
 		vm := uvm.CreateAndStartLCOWFromOpts(ctx, b, defaultLCOWOptions(b))
-		uvm.SetSecurityPolicy(ctx, b, vm, "")
 		cache := layers.CacheFile(ctx, b, "")
 
 		b.StopTimer()
@@ -179,7 +175,6 @@ func BenchmarkLCOW_Container(b *testing.B) {
 
 	b.Run("ContainerKill", func(b *testing.B) {
 		vm := uvm.CreateAndStartLCOWFromOpts(ctx, b, defaultLCOWOptions(b))
-		uvm.SetSecurityPolicy(ctx, b, vm, "")
 		cache := layers.CacheFile(ctx, b, "")
 
 		b.StopTimer()

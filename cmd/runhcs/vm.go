@@ -88,9 +88,6 @@ var vmshimCommand = cli.Command{
 		if err = vm.Start(gcontext.Background()); err != nil {
 			return err
 		}
-		if err := vm.SetConfidentialUVMOptions(gcontext.Background()); err != nil {
-			return err
-		}
 
 		// Asynchronously wait for the VM to exit.
 		exitCh := make(chan error)

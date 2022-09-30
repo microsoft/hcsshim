@@ -38,10 +38,3 @@ func CreateLCOW(ctx context.Context, t testing.TB, opts *uvm.OptionsLCOW) *uvm.U
 
 	return vm
 }
-
-func SetSecurityPolicy(ctx context.Context, t testing.TB, vm *uvm.UtilityVM, policy string) {
-	if err := vm.SetConfidentialUVMOptions(ctx, uvm.WithSecurityPolicy(policy)); err != nil {
-		t.Helper()
-		t.Fatalf("could not set vm security policy to %q: %v", policy, err)
-	}
-}

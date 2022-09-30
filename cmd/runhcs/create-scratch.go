@@ -70,9 +70,6 @@ var createScratchCommand = cli.Command{
 		if err := convertUVM.Start(ctx); err != nil {
 			return errors.Wrapf(err, "failed to start '%s'", opts.ID)
 		}
-		if err := convertUVM.SetConfidentialUVMOptions(ctx); err != nil {
-			return err
-		}
 		if err := lcow.CreateScratch(ctx, convertUVM, dest, sizeGB, context.String("cache-path")); err != nil {
 			return errors.Wrapf(err, "failed to create ext4vhdx for '%s'", opts.ID)
 		}
