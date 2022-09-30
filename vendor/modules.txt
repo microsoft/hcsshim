@@ -19,6 +19,11 @@ github.com/OneOfOne/xxhash
 # github.com/agnivade/levenshtein v1.0.1
 ## explicit
 github.com/agnivade/levenshtein
+# github.com/akavel/rsrc v0.10.2
+## explicit; go 1.12
+github.com/akavel/rsrc/binutil
+github.com/akavel/rsrc/coff
+github.com/akavel/rsrc/ico
 # github.com/cenkalti/backoff/v4 v4.1.3
 ## explicit; go 1.13
 github.com/cenkalti/backoff/v4
@@ -188,6 +193,10 @@ github.com/google/go-containerregistry/pkg/v1/remote/transport
 github.com/google/go-containerregistry/pkg/v1/stream
 github.com/google/go-containerregistry/pkg/v1/tarball
 github.com/google/go-containerregistry/pkg/v1/types
+# github.com/josephspurrier/goversioninfo v1.4.0
+## explicit; go 1.12
+github.com/josephspurrier/goversioninfo
+github.com/josephspurrier/goversioninfo/cmd/goversioninfo
 # github.com/klauspost/compress v1.15.8
 ## explicit; go 1.16
 github.com/klauspost/compress

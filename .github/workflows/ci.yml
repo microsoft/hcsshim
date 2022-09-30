@@ -122,8 +122,36 @@ jobs:
             exit $LASTEXITCODE
           }
 
+  go-gen:
+    name: Go Generate
+    runs-on: "windows-2019"
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Validate go generate
+        shell: powershell
+        run: |
+          Write-Output "::group::go generate"
+          go generate -x .\...
+          Write-Output "::endgroup::"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error title=Go Generate::Error running go generate."
+            exit $LASTEXITCODE
+          }
+
+          git add --all --intent-to-add .
+          Write-Output "::group::git diff"
+          git diff --stat --exit-code
+          Write-Output "::endgroup::"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error ::Generated files are not up to date. Please run ``go generate .\...``."
+            exit $LASTEXITCODE
+          }
+
   test-linux:
-    needs: [lint, protos, verify-vendor]
+    needs: [lint, protos, verify-vendor, go-gen]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -141,7 +169,7 @@ jobs:
         run: go test --tags=rego -mod=mod -gcflags=all=-d=checkptr -v ./pkg/securitypolicy
 
   test-windows:
-    needs: [lint, protos, verify-vendor]
+    needs: [lint, protos, verify-vendor, go-gen]
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -178,7 +206,7 @@ jobs:
             test/sample-logging-driver.exe
 
   integration-tests:
-    needs: [lint, protos, verify-vendor]
+    needs: [lint, protos, verify-vendor, go-gen]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -328,7 +356,7 @@ jobs:
       - run: go build ./cmd/ncproxy
       - run: go build ./cmd/dmverity-vhd
       - run: go build ./cmd/dmverity-vhd
-        env: 
+        env:
           GOOS: linux
           GOARCH: amd64
       - run: go build ./internal/tools/grantvmgroupaccess
@@ -383,5 +411,3 @@ jobs:
 
       - name: Build
         run: make BASE=./base.tar.gz all
-            
-            
