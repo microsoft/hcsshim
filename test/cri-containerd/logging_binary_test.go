@@ -150,6 +150,7 @@ func Test_Run_Container_With_Binary_Logger(t *testing.T) {
 }
 
 func createAndRunContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, conReq *runtime.CreateContainerRequest) {
+	t.Helper()
 	containerID := createContainer(t, client, ctx, conReq)
 	defer removeContainer(t, client, ctx, containerID)
 

@@ -25,6 +25,7 @@ import (
 )
 
 func getJobContainerPodRequestWCOW(t *testing.T) *runtime.RunPodSandboxRequest {
+	t.Helper()
 	p := getRunPodSandboxRequest(t, wcowProcessRuntimeHandler)
 	if p.Config.Windows == nil {
 		p.Config.Windows = &runtime.WindowsPodSandboxConfig{}
@@ -37,6 +38,7 @@ func getJobContainerPodRequestWCOW(t *testing.T) *runtime.RunPodSandboxRequest {
 }
 
 func getJobContainerRequestWCOW(t *testing.T, podID string, podConfig *runtime.PodSandboxConfig, image string, user string, mounts []*runtime.Mount) *runtime.CreateContainerRequest {
+	t.Helper()
 	inheritUser := "true"
 	if user != "" {
 		inheritUser = "false"

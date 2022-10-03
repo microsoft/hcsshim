@@ -29,6 +29,7 @@ func createJobObjectsGetUtilArgs(ctx context.Context, cid, toolPath string, opti
 }
 
 func checkLCOWResourceLimit(t *testing.T, ctx context.Context, client runtime.RuntimeServiceClient, cid, path string, expected uint64) {
+	t.Helper()
 	cmd := []string{"cat", path}
 	containerExecReq := &runtime.ExecSyncRequest{
 		ContainerId: cid,
@@ -50,6 +51,7 @@ func checkLCOWResourceLimit(t *testing.T, ctx context.Context, client runtime.Ru
 }
 
 func checkWCOWResourceLimit(t *testing.T, ctx context.Context, runtimeHandler, shimName, cid, query string, expected uint64) {
+	t.Helper()
 	shim, err := shimdiag.GetShim(shimName)
 	if err != nil {
 		t.Fatalf("failed to find shim %v: %v", shimName, err)

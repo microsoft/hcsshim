@@ -10,6 +10,7 @@ import (
 )
 
 func setupNewVPMemScenario(ctx context.Context, t *testing.T, size uint64, hostPath, uvmPath string) (*vPMemInfoMulti, *mappedDeviceInfo) {
+	t.Helper()
 	pmem := newPackedVPMemDevice()
 	memReg, err := pmem.Allocate(size)
 	if err != nil {

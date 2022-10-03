@@ -31,6 +31,7 @@ func generateCredSpec(path string) error {
 // Tries to generate a cred spec to use for gmsa test cases. Returns the cred
 // spec and an error if any.
 func gmsaSetup(t *testing.T) string {
+	t.Helper()
 	csPath := filepath.Join(t.TempDir(), "credspec.json")
 	if err := generateCredSpec(csPath); err != nil {
 		t.Fatal(err)

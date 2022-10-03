@@ -13,25 +13,26 @@ import (
 
 // CreateWCOWUVM creates a WCOW utility VM with all default options. Returns the
 // UtilityVM object; folder used as its scratch.
-func CreateWCOWUVM(ctx context.Context, t testing.TB, id, image string) (*uvm.UtilityVM, []string, string) {
-	return CreateWCOWUVMFromOptsWithImage(ctx, t, uvm.NewDefaultOptionsWCOW(id, ""), image)
+func CreateWCOWUVM(ctx context.Context, tb testing.TB, id, image string) (*uvm.UtilityVM, []string, string) {
+	tb.Helper()
+	return CreateWCOWUVMFromOptsWithImage(ctx, tb, uvm.NewDefaultOptionsWCOW(id, ""), image)
 }
 
 // CreateWCOWUVMFromOpts creates a WCOW utility VM with the passed opts.
-func CreateWCOWUVMFromOpts(ctx context.Context, t testing.TB, opts *uvm.OptionsWCOW) *uvm.UtilityVM {
-	t.Helper()
+func CreateWCOWUVMFromOpts(ctx context.Context, tb testing.TB, opts *uvm.OptionsWCOW) *uvm.UtilityVM {
+	tb.Helper()
 
 	if opts == nil || len(opts.LayerFolders) < 2 {
-		t.Fatalf("opts must bet set with LayerFolders")
+		tb.Fatalf("opts must bet set with LayerFolders")
 	}
 
 	vm, err := uvm.CreateWCOW(ctx, opts)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 	if err := vm.Start(ctx); err != nil {
 		vm.Close()
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 
 	return vm
@@ -44,20 +45,20 @@ func CreateWCOWUVMFromOpts(ctx context.Context, t testing.TB, opts *uvm.OptionsW
 //nolint:staticcheck // SA5011: staticcheck thinks `opts` may be nil, even though we fail if it is
 func CreateWCOWUVMFromOptsWithImage(
 	ctx context.Context,
-	t testing.TB,
+	tb testing.TB,
 	opts *uvm.OptionsWCOW,
 	image string,
 ) (*uvm.UtilityVM, []string, string) {
-	t.Helper()
+	tb.Helper()
 	if opts == nil {
-		t.Fatal("opts must be set")
+		tb.Fatal("opts must be set")
 	}
 
 	//nolint:staticcheck // SA1019: TODO: switch from LayerFolders
-	uvmLayers := layers.LayerFolders(t, image)
-	scratchDir := t.TempDir()
+	uvmLayers := layers.LayerFolders(tb, image)
+	scratchDir := tb.TempDir()
 	opts.LayerFolders = append(opts.LayerFolders, uvmLayers...)
 	opts.LayerFolders = append(opts.LayerFolders, scratchDir)
 
-	return CreateWCOWUVMFromOpts(ctx, t, opts), uvmLayers, scratchDir
+	return CreateWCOWUVMFromOpts(ctx, tb, opts), uvmLayers, scratchDir
 }

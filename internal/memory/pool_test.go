@@ -6,6 +6,7 @@ import (
 
 // helper function to test and validate minimal allocation scenario
 func testAllocate(t *testing.T, ma *PoolAllocator, sz uint64) {
+	t.Helper()
 	_, err := ma.Allocate(sz)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)

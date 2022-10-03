@@ -58,6 +58,7 @@ type testIO struct {
 }
 
 func newTestIO(t *testing.T) *testIO {
+	t.Helper()
 	var err error
 	tio := &testIO{
 		outBuff: &bytes.Buffer{},
@@ -134,6 +135,7 @@ func (t *testIO) Wait() error {
 }
 
 func getWindowsImageNameByVersion(t *testing.T, bv int) string {
+	t.Helper()
 	switch bv {
 	case osversion.RS1:
 		return "mcr.microsoft.com/windows/nanoserver:sac2016"
@@ -164,6 +166,7 @@ func readPidFile(path string) (int, error) {
 }
 
 func testWindows(t *testing.T, version int, isolated bool) {
+	t.Helper()
 	var err error
 
 	// Make the bundle
@@ -300,14 +303,17 @@ func testWindows(t *testing.T, version int, isolated bool) {
 }
 
 func testWindowsPod(t *testing.T, version int, isolated bool) {
+	t.Helper()
 	t.Skip("not implemented")
 }
 
 func testLCOW(t *testing.T) {
+	t.Helper()
 	t.Skip("not implemented")
 }
 
 func testLCOWPod(t *testing.T) {
+	t.Helper()
 	t.Skip("not implemented")
 }
 

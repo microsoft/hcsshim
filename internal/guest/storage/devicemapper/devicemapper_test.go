@@ -29,6 +29,7 @@ func TestMain(m *testing.M) {
 }
 
 func validateDevice(t *testing.T, p string, sectors int64, writable bool) {
+	t.Helper()
 	dev, err := os.OpenFile(p, os.O_RDWR|os.O_SYNC, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -55,7 +56,6 @@ func validateDevice(t *testing.T, p string, sectors int64, writable bool) {
 	} else if !errors.Is(err, unix.EPERM) {
 		t.Fatalf("expected EPERM, got %s", err)
 	}
-
 }
 
 type device struct {

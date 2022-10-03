@@ -24,6 +24,7 @@ type TestConfig struct {
 
 // Utility function to test removal of a sandbox with no containers and no previous call to stop the pod
 func runPodSandboxTestWithoutPodStop(t *testing.T, request *runtime.RunPodSandboxRequest) {
+	t.Helper()
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -43,6 +44,7 @@ func runPodSandboxTestWithoutPodStop(t *testing.T, request *runtime.RunPodSandbo
 
 // Utility function to start sandbox with one container and make sure that sandbox is removed in the end
 func runPodWithContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, tc *TestConfig) (string, string) {
+	t.Helper()
 	request := getRunPodSandboxRequest(t, tc.runtimeHandler)
 	podID := runPodSandbox(t, client, ctx, request)
 	defer removePodSandbox(t, client, ctx, podID)
@@ -56,6 +58,7 @@ func runPodWithContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx 
 
 // Utility function to test removal of a sandbox with one container and no previous call to stop the pod or container
 func runContainerInSandboxTest(t *testing.T, tc *TestConfig) {
+	t.Helper()
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

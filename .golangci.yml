@@ -11,9 +11,19 @@ run:
 
 linters:
   enable:
-    - gofmt
-    - nolintlint
-    - stylecheck
+    # defaults:
+    # - errcheck
+    # - gosimple
+    # - govet
+    # - ineffassign
+    # - staticcheck
+    # - typecheck
+    # - unused
+
+    - gofmt # whether code was gofmt-ed
+    - nolintlint # ill-formed or insufficient nolint directives
+    - stylecheck # golint replacement
+    - thelper #  test helpers without t.Helper()
 
 linters-settings:
   stylecheck:

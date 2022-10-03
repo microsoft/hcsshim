@@ -33,7 +33,7 @@ func init() {
 // space. The VHD is created with VM group access
 // TODO: This is wrong. Need to search the folders.
 func CreateWCOWBlankRWLayer(t *testing.T, imageLayers []string) string {
-
+	t.Helper()
 	//	uvmFolder, err := LocateUVMFolder(imageLayers)
 	//	if err != nil {
 	//		t.Fatalf("failed to locate UVM folder from %+v: %s", imageLayers, err)
@@ -50,6 +50,7 @@ func CreateWCOWBlankRWLayer(t *testing.T, imageLayers []string) string {
 // format it ext4. This can then be used as a scratch space for a container, or
 // for a "service VM".
 func CreateLCOWBlankRWLayer(ctx context.Context, t *testing.T) string {
+	t.Helper()
 	if lcowGlobalSVM == nil {
 		lcowGlobalSVM = tuvm.CreateAndStartLCOW(ctx, t, lcowGlobalSVMID)
 		lcowCacheScratchFile = filepath.Join(t.TempDir(), "sandbox.vhdx")

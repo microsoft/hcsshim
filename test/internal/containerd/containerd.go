@@ -48,10 +48,10 @@ type ContainerdClientOptions struct {
 // cancel function will terminate those operations early.
 func (cco ContainerdClientOptions) NewClient(
 	ctx context.Context,
-	t testing.TB,
+	tb testing.TB,
 	opts ...containerd.ClientOpt,
 ) (context.Context, context.CancelFunc, *containerd.Client) {
-	t.Helper()
+	tb.Helper()
 
 	// regular `New` does not work on windows, need to use `WithConn`
 	cctx, ccancel := context.WithTimeout(ctx, timeout.ConnectTimeout)
@@ -59,7 +59,7 @@ func (cco ContainerdClientOptions) NewClient(
 
 	conn, err := createGRPCConn(cctx, cco.Address)
 	if err != nil {
-		t.Fatalf("failed to dial runtime client: %v", err)
+		tb.Fatalf("failed to dial runtime client: %v", err)
 	}
 
 	defOpts := []containerd.ClientOpt{
@@ -68,28 +68,28 @@ func (cco ContainerdClientOptions) NewClient(
 	opts = append(defOpts, opts...)
 	c, err := containerd.NewWithConn(conn, opts...)
 	if err != nil {
-		t.Fatalf("could not create new containerd client: %v", err)
+		tb.Fatalf("could not create new containerd client: %v", err)
 	}
-	t.Cleanup(func() {
+	tb.Cleanup(func() {
 		c.Close()
 	})
 
 	ctx = namespaces.WithNamespace(ctx, cco.Namespace)
 	ctx, cancel := context.WithCancel(ctx)
-	t.Cleanup(cancel)
+	tb.Cleanup(cancel)
 
 	return ctx, cancel, c
 }
 
-func GetPlatformComparer(t testing.TB, platform string) platforms.MatchComparer {
+func GetPlatformComparer(tb testing.TB, platform string) platforms.MatchComparer {
+	tb.Helper()
 	var p platforms.MatchComparer
 	if platform == "" {
 		p = platforms.All
 	} else {
 		pp, err := platforms.Parse(platform)
 		if err != nil {
-			t.Helper()
-			t.Fatalf("could not parse platform %q: %v", platform, err)
+			tb.Fatalf("could not parse platform %q: %v", platform, err)
 		}
 		p = platforms.Only(pp)
 	}
@@ -98,40 +98,40 @@ func GetPlatformComparer(t testing.TB, platform string) platforms.MatchComparer 
 }
 
 // GetImageChainID gets the chain id of an image. platform can be "".
-func GetImageChainID(ctx context.Context, t testing.TB, client *containerd.Client, image, platform string) string {
-	t.Helper()
+func GetImageChainID(ctx context.Context, tb testing.TB, client *containerd.Client, image, platform string) string {
+	tb.Helper()
 	is := client.ImageService()
 
 	i, err := is.Get(ctx, image)
 	if err != nil {
-		t.Fatalf("could not retrieve image %q: %v", image, err)
+		tb.Fatalf("could not retrieve image %q: %v", image, err)
 	}
 
-	p := GetPlatformComparer(t, platform)
+	p := GetPlatformComparer(tb, platform)
 
 	diffIDs, err := i.RootFS(ctx, client.ContentStore(), p)
 	if err != nil {
-		t.Fatalf("could not retrieve unpacked diff ids: %v", err)
+		tb.Fatalf("could not retrieve unpacked diff ids: %v", err)
 	}
 	chainID := identity.ChainID(diffIDs).String()
 
 	return chainID
 }
 
-func CreateActiveSnapshot(ctx context.Context, t testing.TB, client *containerd.Client, snapshotter, parent, key string, opts ...snapshots.Opt) []mount.Mount {
-	t.Helper()
+func CreateActiveSnapshot(ctx context.Context, tb testing.TB, client *containerd.Client, snapshotter, parent, key string, opts ...snapshots.Opt) []mount.Mount {
+	tb.Helper()
 
 	ss := client.SnapshotService(snapshotter)
 
 	ms, err := ss.Prepare(ctx, key, parent, opts...)
 	if err != nil {
-		t.Fatalf("could not make active snapshot %q from %q: %v", key, parent, err)
+		tb.Fatalf("could not make active snapshot %q from %q: %v", key, parent, err)
 	}
 
-	t.Cleanup(func() {
+	tb.Cleanup(func() {
 		if err := ss.Remove(ctx, key); err != nil && !errors.Is(err, errdefs.ErrNotFound) {
 			// remove is not idempotent, so do not Fail test
-			t.Logf("failed to remove active snapshot %q: %v", key, err)
+			tb.Logf("failed to remove active snapshot %q: %v", key, err)
 		}
 	})
 
@@ -140,20 +140,20 @@ func CreateActiveSnapshot(ctx context.Context, t testing.TB, client *containerd.
 
 // a view will not not create a new scratch layer/vhd, but instead return only the directory of the
 // committed snapshot `parent`
-func CreateViewSnapshot(ctx context.Context, t testing.TB, client *containerd.Client, snapshotter, parent, key string, opts ...snapshots.Opt) []mount.Mount {
-	t.Helper()
+func CreateViewSnapshot(ctx context.Context, tb testing.TB, client *containerd.Client, snapshotter, parent, key string, opts ...snapshots.Opt) []mount.Mount {
+	tb.Helper()
 
 	ss := client.SnapshotService(snapshotter)
 
 	ms, err := ss.View(ctx, key, parent, opts...)
 	if err != nil {
-		t.Fatalf("could not make active snapshot %q from %q: %v", key, parent, err)
+		tb.Fatalf("could not make active snapshot %q from %q: %v", key, parent, err)
 	}
 
-	t.Cleanup(func() {
+	tb.Cleanup(func() {
 		if err := ss.Remove(ctx, key); err != nil && !errors.Is(err, errdefs.ErrNotFound) {
 			// remove is not idempotent, so do not Fail test
-			t.Logf("failed to remove view snapshot %q: %v %T", key, err, err)
+			tb.Logf("failed to remove view snapshot %q: %v %T", key, err, err)
 		}
 	})
 
@@ -163,7 +163,9 @@ func CreateViewSnapshot(ctx context.Context, t testing.TB, client *containerd.Cl
 // copied from https://github.com/containerd/containerd/blob/main/cmd/ctr/commands/images/pull.go
 
 // PullImage pulls the image for the specified platform and returns the chain ID
-func PullImage(ctx context.Context, t testing.TB, client *containerd.Client, ref, plat string) string {
+func PullImage(ctx context.Context, tb testing.TB, client *containerd.Client, ref, plat string) string {
+	tb.Helper()
+
 	if chainID, ok := images.Load(ref); ok {
 		return chainID.(string)
 	}
@@ -180,23 +182,24 @@ func PullImage(ctx context.Context, t testing.TB, client *containerd.Client, ref
 
 	img, err := client.Pull(ctx, ref, opts...)
 	if err != nil {
-		t.Fatalf("could not pull image %q: %v", ref, err)
+		tb.Fatalf("could not pull image %q: %v", ref, err)
 	}
 
 	name := img.Name()
 	diffIDs, err := img.RootFS(ctx)
 	if err != nil {
-		t.Fatalf("could not fetch RootFS diff IDs for %q: %v", name, err)
+		tb.Fatalf("could not fetch RootFS diff IDs for %q: %v", name, err)
 	}
 
 	chainID := identity.ChainID(diffIDs).String()
 	images.Store(ref, chainID)
-	t.Logf("unpacked image %q with ID %q", name, chainID)
+	tb.Logf("unpacked image %q with ID %q", name, chainID)
 
 	return chainID
 }
 
-func GetResolver(ctx context.Context, _ testing.TB) remotes.Resolver {
+func GetResolver(ctx context.Context, tb testing.TB) remotes.Resolver {
+	tb.Helper()
 	options := docker.ResolverOptions{
 		Tracker: docker.NewInMemoryTracker(),
 	}

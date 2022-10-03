@@ -168,6 +168,7 @@ func Test_Bridge_Mux_Handler_NilRequest_Panic(t *testing.T) {
 }
 
 func verifyResponseIsDefaultHandler(t *testing.T, resp RequestResponse) {
+	t.Helper()
 	if resp == nil {
 		t.Fatal("The response is nil")
 	}

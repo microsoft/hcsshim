@@ -11,6 +11,7 @@ import (
 )
 
 func GetDefaultWindowsSpec(t *testing.T) *specs.Spec {
+	t.Helper()
 	content, err := os.ReadFile(`assets\defaultwindowsspec.json`)
 	if err != nil {
 		t.Fatalf("failed to read defaultwindowsspec.json: %s", err.Error())

@@ -13,6 +13,7 @@ import (
 )
 
 func setupTestHcsTask(t *testing.T) (*hcsTask, *testShimExec, *testShimExec) {
+	t.Helper()
 	initExec := newTestShimExec(t.Name(), t.Name(), int(rand.Int31()))
 	lt := &hcsTask{
 		events: newFakePublisher(),
@@ -127,6 +128,7 @@ func Test_hcsTask_KillExec_2ndExecID_All_Error(t *testing.T) {
 }
 
 func verifyDeleteFailureValues(t *testing.T, pid int, status uint32, at time.Time) {
+	t.Helper()
 	if pid != 0 {
 		t.Fatalf("pid expected '0' got: '%d'", pid)
 	}
@@ -139,6 +141,7 @@ func verifyDeleteFailureValues(t *testing.T, pid int, status uint32, at time.Tim
 }
 
 func verifyDeleteSuccessValues(t *testing.T, pid int, status uint32, at time.Time, e *testShimExec) {
+	t.Helper()
 	if pid != e.pid {
 		t.Fatalf("pid expected '%d' got: '%d'", e.pid, pid)
 	}

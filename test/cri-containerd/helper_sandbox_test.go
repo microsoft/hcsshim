@@ -38,6 +38,7 @@ func WithSandboxLabels(labels map[string]string) SandboxConfigOpt {
 }
 
 func runPodSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.RunPodSandboxRequest) string {
+	t.Helper()
 	response, err := client.RunPodSandbox(ctx, request)
 	if err != nil {
 		t.Fatalf("failed RunPodSandbox request with: %v", err)
@@ -46,6 +47,7 @@ func runPodSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx contex
 }
 
 func stopPodSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, podID string) {
+	t.Helper()
 	_, err := client.StopPodSandbox(ctx, &runtime.StopPodSandboxRequest{
 		PodSandboxId: podID,
 	})
@@ -55,6 +57,7 @@ func stopPodSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx conte
 }
 
 func removePodSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, podID string) {
+	t.Helper()
 	_, err := client.RemovePodSandbox(ctx, &runtime.RemovePodSandboxRequest{
 		PodSandboxId: podID,
 	})
@@ -64,6 +67,7 @@ func removePodSandbox(t *testing.T, client runtime.RuntimeServiceClient, ctx con
 }
 
 func getPodSandboxStatus(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, podID string) *runtime.PodSandboxStatus {
+	t.Helper()
 	status, err := client.PodSandboxStatus(ctx, &runtime.PodSandboxStatusRequest{
 		PodSandboxId: podID,
 	})
@@ -74,12 +78,14 @@ func getPodSandboxStatus(t *testing.T, client runtime.RuntimeServiceClient, ctx 
 }
 
 func assertPodSandboxState(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, podID string, state runtime.PodSandboxState) {
+	t.Helper()
 	if st := getPodSandboxStatus(t, client, ctx, podID).State; st != state {
 		t.Fatalf("got pod sandbox %q state %q; wanted %v", podID, st.String(), state.String())
 	}
 }
 
 func getTestSandboxConfig(t *testing.T, opts ...SandboxConfigOpt) *runtime.PodSandboxConfig {
+	t.Helper()
 	c := &runtime.PodSandboxConfig{
 		Metadata: &runtime.PodSandboxMetadata{
 			Name:      t.Name(),
@@ -101,6 +107,7 @@ func getTestSandboxConfig(t *testing.T, opts ...SandboxConfigOpt) *runtime.PodSa
 
 	for _, o := range opts {
 		if err := o(c); err != nil {
+			t.Helper()
 			t.Fatalf("failed to apply PodSandboxConfig option: %s", err)
 		}
 	}
@@ -108,6 +115,7 @@ func getTestSandboxConfig(t *testing.T, opts ...SandboxConfigOpt) *runtime.PodSa
 }
 
 func getRunPodSandboxRequest(t *testing.T, runtimeHandler string, sandboxOpts ...SandboxConfigOpt) *runtime.RunPodSandboxRequest {
+	t.Helper()
 	return &runtime.RunPodSandboxRequest{
 		Config:         getTestSandboxConfig(t, sandboxOpts...),
 		RuntimeHandler: runtimeHandler,

@@ -12,23 +12,24 @@ import (
 	"github.com/Microsoft/hcsshim/test/internal/timeout"
 )
 
-func Start(ctx context.Context, t testing.TB, vm *uvm.UtilityVM) func() {
+func Start(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM) func() {
+	tb.Helper()
 	err := vm.Start(ctx)
 	f := func() {
 		if err := vm.Close(); err != nil {
-			t.Logf("could not close vm %q: %v", vm.ID(), err)
+			tb.Logf("could not close vm %q: %v", vm.ID(), err)
 		}
 	}
 
 	if err != nil {
-		t.Helper()
-		t.Fatalf("could not start UVM: %v", err)
+		tb.Fatalf("could not start UVM: %v", err)
 	}
 
 	return f
 }
 
-func Wait(ctx context.Context, t testing.TB, vm *uvm.UtilityVM) {
+func Wait(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM) {
+	tb.Helper()
 	fe := func(err error) error {
 		if err != nil {
 			err = fmt.Errorf("could not wait for uvm %q: %w", vm.ID(), err)
@@ -36,17 +37,18 @@ func Wait(ctx context.Context, t testing.TB, vm *uvm.UtilityVM) {
 
 		return err
 	}
-	timeout.WaitForError(ctx, t, vm.Wait, fe)
+	timeout.WaitForError(ctx, tb, vm.Wait, fe)
 }
 
-func Kill(ctx context.Context, t testing.TB, vm *uvm.UtilityVM) {
+func Kill(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM) {
+	tb.Helper()
 	if err := vm.Terminate(ctx); err != nil {
-		t.Helper()
-		t.Fatalf("could not kill uvm %q: %v", vm.ID(), err)
+		tb.Fatalf("could not kill uvm %q: %v", vm.ID(), err)
 	}
 }
 
-func Close(ctx context.Context, t testing.TB, vm *uvm.UtilityVM) {
+func Close(ctx context.Context, tb testing.TB, vm *uvm.UtilityVM) {
+	tb.Helper()
 	// Terminate will error on context cancellation, but close does not accept contexts
 	fe := func(err error) error {
 		if err != nil {
@@ -55,5 +57,5 @@ func Close(ctx context.Context, t testing.TB, vm *uvm.UtilityVM) {
 
 		return err
 	}
-	timeout.WaitForError(ctx, t, vm.Close, fe)
+	timeout.WaitForError(ctx, tb, vm.Close, fe)
 }

@@ -16,6 +16,7 @@ import (
 )
 
 func verifyExpectedError(t *testing.T, resp interface{}, actual, expected error) {
+	t.Helper()
 	if actual == nil || errors.Cause(actual) != expected || !errors.Is(actual, expected) {
 		t.Fatalf("expected error: %v, got: %v", expected, actual)
 	}
@@ -33,6 +34,7 @@ func verifyExpectedError(t *testing.T, resp interface{}, actual, expected error)
 }
 
 func verifyExpectedStats(t *testing.T, isWCOW, ownsHost bool, s *stats.Statistics) {
+	t.Helper()
 	if isWCOW {
 		verifyExpectedWindowsContainerStatistics(t, s.GetWindows())
 	} else {
@@ -44,6 +46,7 @@ func verifyExpectedStats(t *testing.T, isWCOW, ownsHost bool, s *stats.Statistic
 }
 
 func verifyExpectedWindowsContainerStatistics(t *testing.T, w *stats.WindowsContainerStatistics) {
+	t.Helper()
 	if w == nil {
 		t.Fatal("expected non-nil WindowsContainerStatistics")
 	}
@@ -92,6 +95,7 @@ func verifyExpectedWindowsContainerStatistics(t *testing.T, w *stats.WindowsCont
 }
 
 func verifyExpectedCgroupMetrics(t *testing.T, v *v1.Metrics) {
+	t.Helper()
 	if v == nil {
 		t.Fatal("expected non-nil cgroups Metrics")
 	}
@@ -116,6 +120,7 @@ func verifyExpectedCgroupMetrics(t *testing.T, v *v1.Metrics) {
 }
 
 func verifyExpectedVirtualMachineStatistics(t *testing.T, v *stats.VirtualMachineStatistics) {
+	t.Helper()
 	if v == nil {
 		t.Fatal("expected non-nil VirtualMachineStatistics")
 	}

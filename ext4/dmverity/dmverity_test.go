@@ -13,6 +13,7 @@ import (
 )
 
 func tempFileWithContentLength(t *testing.T, length int) *os.File {
+	t.Helper()
 	tmpFile, err := os.CreateTemp("", "")
 	if err != nil {
 		t.Fatalf("failed to create temp file")

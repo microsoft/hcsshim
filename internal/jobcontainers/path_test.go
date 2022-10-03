@@ -10,6 +10,7 @@ import (
 )
 
 func assertStr(t *testing.T, a string, b string) {
+	t.Helper()
 	if !strings.EqualFold(a, b) {
 		t.Fatalf("expected %s, got %s", a, b)
 	}
@@ -43,6 +44,7 @@ type config struct {
 }
 
 func runGetApplicationNameTests(t *testing.T, tests []*config) {
+	t.Helper()
 	for _, cfg := range tests {
 		t.Run(cfg.name, func(t *testing.T) {
 			path, cmdLine, err := getApplicationName(cfg.commandLine, cfg.workDir, cfg.pathEnv)

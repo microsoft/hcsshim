@@ -89,6 +89,7 @@ func (tsp *testShimPod) DeleteTask(ctx context.Context, tid string) error {
 // Pod tests
 
 func setupTestPodWithFakes(t *testing.T) (*pod, *testShimTask) {
+	t.Helper()
 	st := &testShimTask{
 		id:    t.Name(),
 		exec:  newTestShimExec(t.Name(), t.Name(), 10),
@@ -105,6 +106,7 @@ func setupTestPodWithFakes(t *testing.T) (*pod, *testShimTask) {
 }
 
 func setupTestTaskInPod(t *testing.T, p *pod) *testShimTask {
+	t.Helper()
 	tid := strconv.Itoa(rand.Int())
 	wt := &testShimTask{
 		id:   tid,

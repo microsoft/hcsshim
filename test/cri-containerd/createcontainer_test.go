@@ -19,11 +19,13 @@ import (
 )
 
 func runCreateContainerTest(t *testing.T, runtimeHandler string, request *runtime.CreateContainerRequest) {
+	t.Helper()
 	sandboxRequest := getRunPodSandboxRequest(t, runtimeHandler)
 	runCreateContainerTestWithSandbox(t, sandboxRequest, request)
 }
 
 func runCreateContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.RunPodSandboxRequest, request *runtime.CreateContainerRequest) {
+	t.Helper()
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

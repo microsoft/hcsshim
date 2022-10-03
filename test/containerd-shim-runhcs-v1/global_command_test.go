@@ -13,6 +13,7 @@ import (
 )
 
 func runGlobalCommand(t *testing.T, args []string) (string, string, error) {
+	t.Helper()
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("failed os.Getwd() with: %v", err)
@@ -31,6 +32,7 @@ func runGlobalCommand(t *testing.T, args []string) (string, string, error) {
 }
 
 func verifyGlobalCommandSuccess(t *testing.T, expectedStdout, stdout, expectedStderr, stderr string, runerr error) {
+	t.Helper()
 	if runerr != nil {
 		t.Fatalf("expected no error got stdout: '%s', stderr: '%s', err: '%v'", stdout, stderr, runerr)
 	}
@@ -39,6 +41,7 @@ func verifyGlobalCommandSuccess(t *testing.T, expectedStdout, stdout, expectedSt
 }
 
 func verifyGlobalCommandFailure(t *testing.T, expectedStdout, stdout, expectedStderr, stderr string, runerr error) {
+	t.Helper()
 	if runerr == nil || runerr.Error() != "exit status 1" {
 		t.Fatalf("expected error: 'exit status 1', got: '%v'", runerr)
 	}
@@ -47,6 +50,7 @@ func verifyGlobalCommandFailure(t *testing.T, expectedStdout, stdout, expectedSt
 }
 
 func verifyGlobalCommandOut(t *testing.T, expectedStdout, stdout, expectedStderr, stderr string) {
+	t.Helper()
 	// stdout verify
 	if expectedStdout == "" && expectedStdout != stdout {
 		t.Fatalf("expected stdout empty got: %s", stdout)

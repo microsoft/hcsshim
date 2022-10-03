@@ -23,10 +23,12 @@ import (
 )
 
 func createStartCommand(t *testing.T) (*exec.Cmd, *bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
 	return createStartCommandWithID(t, t.Name())
 }
 
 func createStartCommandWithID(t *testing.T, id string) (*exec.Cmd, *bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
 	bundleDir := t.TempDir()
 	wd, err := os.Getwd()
 	if err != nil {
@@ -49,6 +51,7 @@ func createStartCommandWithID(t *testing.T, id string) (*exec.Cmd, *bytes.Buffer
 }
 
 func cleanupTestBundle(t *testing.T, dir string) {
+	t.Helper()
 	err := os.RemoveAll(dir)
 	if err != nil {
 		t.Errorf("failed removing test bundle with: %v", err)
@@ -56,6 +59,7 @@ func cleanupTestBundle(t *testing.T, dir string) {
 }
 
 func writeBundleConfig(t *testing.T, dir string, cfg *specs.Spec) {
+	t.Helper()
 	cf, err := os.Create(filepath.Join(dir, "config.json"))
 	if err != nil {
 		t.Fatalf("failed to create config.json with error: %v", err)
@@ -69,6 +73,7 @@ func writeBundleConfig(t *testing.T, dir string, cfg *specs.Spec) {
 }
 
 func verifyStartCommandSuccess(t *testing.T, expectedNamespace, expectedID string, cmd *exec.Cmd, stdout, stderr *bytes.Buffer) {
+	t.Helper()
 	err := cmd.Run()
 	if err != nil {
 		t.Fatalf("expected `start` command to succeed failed with: %v, stdout: %v, stderr: %v", err, stdout.String(), stderr.String())

@@ -18,6 +18,7 @@ import (
 )
 
 func execSync(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.ExecSyncRequest) *runtime.ExecSyncResponse {
+	t.Helper()
 	response, err := client.ExecSync(ctx, request)
 	if err != nil {
 		t.Fatalf("failed ExecSync request with: %v", err)
@@ -26,6 +27,7 @@ func execSync(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Con
 }
 
 func execRequest(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.ExecRequest) string {
+	t.Helper()
 	response, err := client.Exec(ctx, request)
 	if err != nil {
 		t.Fatalf("failed Exec request with: %v", err)
@@ -77,6 +79,7 @@ func execInHost(ctx context.Context, client shimdiag.ShimDiagService, args []str
 
 // shimDiagExecOutput is a small wrapper on top of execInHost, that returns the exec output
 func shimDiagExecOutput(ctx context.Context, t *testing.T, podID string, cmd []string) string {
+	t.Helper()
 	shimName := fmt.Sprintf("k8s.io-%s", podID)
 	shim, err := shimdiag.GetShim(shimName)
 	if err != nil {

@@ -13,6 +13,7 @@ import (
 )
 
 func verifyDeleteCommandSuccess(t *testing.T, stdout, stderr string, runerr error, begin, end time.Time) {
+	t.Helper()
 	if runerr != nil {
 		t.Fatalf("expected `delete` command success got err: %v", runerr)
 	}

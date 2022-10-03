@@ -362,5 +362,4 @@ func TestApplyTierAclPolicyOnEndpoint(t *testing.T) {
 	if len(foundEndpoint.Policies) == 0 {
 		t.Fatal("No Endpoint Policies found")
 	}
-
 }

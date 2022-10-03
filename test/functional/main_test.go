@@ -139,8 +139,9 @@ func CreateContainerTestWrapper(ctx context.Context, options *hcsoci.CreateOptio
 	return s, r, err
 }
 
-func requireFeatures(t testing.TB, features ...string) {
-	require.Features(t, flagFeatures.S, features...)
+func requireFeatures(tb testing.TB, features ...string) {
+	tb.Helper()
+	require.Features(tb, flagFeatures.S, features...)
 }
 
 func getContainerdOptions() testctrd.ContainerdClientOptions {
@@ -150,20 +151,23 @@ func getContainerdOptions() testctrd.ContainerdClientOptions {
 	}
 }
 
-func newContainerdClient(ctx context.Context, t testing.TB) (context.Context, context.CancelFunc, *containerd.Client) {
-	return getContainerdOptions().NewClient(ctx, t)
+func newContainerdClient(ctx context.Context, tb testing.TB) (context.Context, context.CancelFunc, *containerd.Client) {
+	tb.Helper()
+	return getContainerdOptions().NewClient(ctx, tb)
 }
 
-func defaultLCOWOptions(t testing.TB) *uvm.OptionsLCOW {
-	opts := uvm.NewDefaultOptionsLCOW(cleanName(t.Name()), "")
+func defaultLCOWOptions(tb testing.TB) *uvm.OptionsLCOW {
+	tb.Helper()
+	opts := uvm.NewDefaultOptionsLCOW(cleanName(tb.Name()), "")
 	opts.BootFilesPath = *flagLinuxBootFilesPath
 
 	return opts
 }
 
 //nolint:deadcode,unused // will be used when WCOW tests are updated
-func defaultWCOWOptions(t testing.TB) *uvm.OptionsWCOW {
-	opts := uvm.NewDefaultOptionsWCOW(cleanName(t.Name()), "")
+func defaultWCOWOptions(tb testing.TB) *uvm.OptionsWCOW {
+	tb.Helper()
+	opts := uvm.NewDefaultOptionsWCOW(cleanName(tb.Name()), "")
 
 	return opts
 }

@@ -57,22 +57,24 @@ type fakeIO struct {
 	stdin, stdout, stderr *fakeSocket
 }
 
-func createStdIO(ctx context.Context, t testing.TB, con stdio.ConnectionSettings) *fakeIO {
+func createStdIO(ctx context.Context, tb testing.TB, con stdio.ConnectionSettings) *fakeIO {
+	tb.Helper()
 	f := &fakeIO{}
 	if con.StdIn != nil {
-		f.stdin = newFakeSocket(ctx, t, *con.StdIn, "stdin")
+		f.stdin = newFakeSocket(ctx, tb, *con.StdIn, "stdin")
 	}
 	if con.StdOut != nil {
-		f.stdout = newFakeSocket(ctx, t, *con.StdOut, "stdout")
+		f.stdout = newFakeSocket(ctx, tb, *con.StdOut, "stdout")
 	}
 	if con.StdErr != nil {
-		f.stderr = newFakeSocket(ctx, t, *con.StdErr, "stderr")
+		f.stderr = newFakeSocket(ctx, tb, *con.StdErr, "stderr")
 	}
 
 	return f
 }
 
-func (f *fakeIO) WriteIn(_ context.Context, t testing.TB, s string) {
+func (f *fakeIO) WriteIn(_ context.Context, tb testing.TB, s string) {
+	tb.Helper()
 	if f.stdin == nil {
 		return
 	}
@@ -82,37 +84,36 @@ func (f *fakeIO) WriteIn(_ context.Context, t testing.TB, s string) {
 
 	nn, err := f.stdin.Write(b)
 	if err != nil {
-		t.Helper()
-		t.Errorf("write to std in: %v", err)
+		tb.Errorf("write to std in: %v", err)
 	}
 	if n != nn {
-		t.Helper()
-		t.Errorf("only wrote %d bytes, expected %d", nn, n)
+		tb.Errorf("only wrote %d bytes, expected %d", nn, n)
 	}
 }
 
-func (f *fakeIO) CloseIn(_ context.Context, t testing.TB) {
+func (f *fakeIO) CloseIn(_ context.Context, tb testing.TB) {
+	tb.Helper()
 	if f.stdin == nil {
 		return
 	}
 
 	if err := f.stdin.CloseWrite(); err != nil {
-		t.Helper()
-		t.Errorf("close write std in: %v", err)
+		tb.Errorf("close write std in: %v", err)
 	}
 
 	if err := f.stdin.Close(); err != nil {
-		t.Helper()
-		t.Errorf("close std in: %v", err)
+		tb.Errorf("close std in: %v", err)
 	}
 }
 
-func (f *fakeIO) ReadAllOut(ctx context.Context, t testing.TB) string {
-	return f.stdout.readAll(ctx, t)
+func (f *fakeIO) ReadAllOut(ctx context.Context, tb testing.TB) string {
+	tb.Helper()
+	return f.stdout.readAll(ctx, tb)
 }
 
-func (f *fakeIO) ReadAllErr(ctx context.Context, t testing.TB) string {
-	return f.stderr.readAll(ctx, t)
+func (f *fakeIO) ReadAllErr(ctx context.Context, tb testing.TB) string {
+	tb.Helper()
+	return f.stderr.readAll(ctx, tb)
 }
 
 type fakeSocket struct {
@@ -124,17 +125,17 @@ type fakeSocket struct {
 
 var _ transport.Connection = &fakeSocket{}
 
-func newFakeSocket(_ context.Context, t testing.TB, id uint32, n string) *fakeSocket {
-	t.Helper()
+func newFakeSocket(_ context.Context, tb testing.TB, id uint32, n string) *fakeSocket {
+	tb.Helper()
 
 	_, ok := _pipes.Load(id)
 	if ok {
-		t.Fatalf("socket %d already exits", id)
+		tb.Fatalf("socket %d already exits", id)
 	}
 
 	r, w, err := os.Pipe()
 	if err != nil {
-		t.Fatalf("could not create socket: %v", err)
+		tb.Fatalf("could not create socket: %v", err)
 	}
 
 	s := &fakeSocket{
@@ -200,11 +201,13 @@ func (*fakeSocket) File() (*os.File, error) {
 	return nil, errors.New("fakeSocket does not support File()")
 }
 
-func (s *fakeSocket) readAll(ctx context.Context, t testing.TB) string {
-	return string(s.readAllByte(ctx, t))
+func (s *fakeSocket) readAll(ctx context.Context, tb testing.TB) string {
+	tb.Helper()
+	return string(s.readAllByte(ctx, tb))
 }
 
-func (s *fakeSocket) readAllByte(ctx context.Context, t testing.TB) (b []byte) {
+func (s *fakeSocket) readAllByte(ctx context.Context, tb testing.TB) (b []byte) {
+	tb.Helper()
 	if s == nil {
 		return nil
 	}
@@ -219,12 +222,10 @@ func (s *fakeSocket) readAllByte(ctx context.Context, t testing.TB) (b []byte) {
 	select {
 	case <-ch:
 		if err != nil {
-			t.Helper()
-			t.Errorf("read all %s: %v", s.n, err)
+			tb.Errorf("read all %s: %v", s.n, err)
 		}
 	case <-ctx.Done():
-		t.Helper()
-		t.Errorf("read all %s context cancelled: %v", s.n, ctx.Err())
+		tb.Errorf("read all %s context cancelled: %v", s.n, ctx.Err())
 	}
 
 	return b

@@ -64,6 +64,7 @@ func (tf *testFile) Reader() io.Reader {
 }
 
 func createTestFile(t *testing.T, w *Writer, tf testFile) {
+	t.Helper()
 	var err error
 	if tf.File != nil {
 		tf.File.Size = int64(len(tf.Data))
@@ -136,6 +137,7 @@ func fileEqual(f1, f2 *File) bool {
 }
 
 func runTestsOnFiles(t *testing.T, testFiles []testFile, opts ...Option) {
+	t.Helper()
 	image := "testfs.img"
 	imagef, err := os.Create(image)
 	if err != nil {

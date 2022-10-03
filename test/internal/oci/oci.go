@@ -44,32 +44,34 @@ func DefaultLinuxSpecOpts(nns string, extra ...ctrdoci.SpecOpts) []ctrdoci.SpecO
 
 // DefaultLinuxSpec returns a default OCI spec for a Linux container.
 // See CreateSpecWithPlatform for more details.
-func DefaultLinuxSpec(ctx context.Context, t testing.TB, nns string) *specs.Spec {
-	return CreateLinuxSpec(ctx, t, t.Name(), DefaultLinuxSpecOpts(nns)...)
+func DefaultLinuxSpec(ctx context.Context, tb testing.TB, nns string) *specs.Spec {
+	tb.Helper()
+	return CreateLinuxSpec(ctx, tb, tb.Name(), DefaultLinuxSpecOpts(nns)...)
 }
 
 // CreateLinuxSpec returns the OCI spec for a Linux container.
 // See CreateSpecWithPlatform for more details.
-func CreateLinuxSpec(ctx context.Context, t testing.TB, id string, opts ...ctrdoci.SpecOpts) *specs.Spec {
-	return CreateSpecWithPlatform(ctx, t, constants.PlatformLinux, id, opts...)
+func CreateLinuxSpec(ctx context.Context, tb testing.TB, id string, opts ...ctrdoci.SpecOpts) *specs.Spec {
+	tb.Helper()
+	return CreateSpecWithPlatform(ctx, tb, constants.PlatformLinux, id, opts...)
 }
 
 // CreateWindowsSpec returns the OCI spec for a Windows container.
 // See CreateSpecWithPlatform for more details.
-func CreateWindowsSpec(ctx context.Context, t testing.TB, id string, opts ...ctrdoci.SpecOpts) *specs.Spec {
-	return CreateSpecWithPlatform(ctx, t, constants.PlatformWindows, id, opts...)
+func CreateWindowsSpec(ctx context.Context, tb testing.TB, id string, opts ...ctrdoci.SpecOpts) *specs.Spec {
+	tb.Helper()
+	return CreateSpecWithPlatform(ctx, tb, constants.PlatformWindows, id, opts...)
 }
 
 // CreateSpecWithPlatform returns the OCI spec for the specified platform.
 // The context must contain a containerd namespace (via "github.com/containerd/containerd/namespaces".WithNamespace)
-func CreateSpecWithPlatform(ctx context.Context, t testing.TB, plat, id string, opts ...ctrdoci.SpecOpts) *specs.Spec {
-	// ctx = namespaces.WithNamespace(ctx, ns)
+func CreateSpecWithPlatform(ctx context.Context, tb testing.TB, plat, id string, opts ...ctrdoci.SpecOpts) *specs.Spec {
+	tb.Helper()
 	container := &containers.Container{ID: id}
 
 	spec, err := ctrdoci.GenerateSpecWithPlatform(ctx, nil, plat, container, opts...)
 	if err != nil {
-		t.Helper()
-		t.Fatalf("failed to generate spec for container %q: %v", id, err)
+		tb.Fatalf("failed to generate spec for container %q: %v", id, err)
 	}
 
 	return spec

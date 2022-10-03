@@ -21,6 +21,7 @@ const (
 )
 
 func validateTargets(ctx context.Context, t *testing.T, deviceNumber int, podID string, expected int) {
+	t.Helper()
 	dmDiag := shimDiagExecOutput(ctx, t, podID, []string{"ls", "-l", "/dev/mapper"})
 	dmPattern := fmt.Sprintf("dm-linear-pmem%d", deviceNumber)
 	dmLines := filterStrings(strings.Split(dmDiag, "\n"), dmPattern)

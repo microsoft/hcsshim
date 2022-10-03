@@ -13,6 +13,7 @@ import (
 )
 
 func runexecContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.RunPodSandboxRequest, request *runtime.CreateContainerRequest, execReq *runtime.ExecSyncRequest) *runtime.ExecSyncResponse {
+	t.Helper()
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -35,6 +36,7 @@ func runexecContainerTestWithSandbox(t *testing.T, sandboxRequest *runtime.RunPo
 }
 
 func execContainerLCOW(t *testing.T, uid int64, cmd []string) *runtime.ExecSyncResponse {
+	t.Helper()
 	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowCosmos})
 
 	// run podsandbox request

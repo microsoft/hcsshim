@@ -30,6 +30,7 @@ import (
 )
 
 func runPodSandboxTest(t *testing.T, request *runtime.RunPodSandboxRequest) {
+	t.Helper()
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1055,6 +1056,7 @@ func Test_RunPodSandbox_CPUGroup(t *testing.T) {
 }
 
 func createExt4VHD(ctx context.Context, t *testing.T, path string) {
+	t.Helper()
 	// UVM related functions called below produce a lot debug logs. Set the logger
 	// output to Discard if verbose flag is not set. This way we can still capture
 	// these logs in a wpr session.
@@ -1754,6 +1756,7 @@ func Test_RunPodSandbox_Timezone_NoInherit_WCOW_Hypervisor(t *testing.T) {
 }
 
 func createSandboxContainerAndExecForCustomScratch(t *testing.T, annots map[string]string) (string, string, int) {
+	t.Helper()
 	cmd := []string{
 		"df",
 	}
@@ -1770,6 +1773,7 @@ func createContainerInSandbox(
 	mounts []*runtime.Mount,
 	podConfig *runtime.PodSandboxConfig,
 ) string {
+	t.Helper()
 	cRequest := getCreateContainerRequest(podID, containerName, imageName, command, podConfig)
 	cRequest.Config.Annotations = annots
 	cRequest.Config.Mounts = mounts
@@ -1786,6 +1790,7 @@ func execContainer(
 	containerID string,
 	command []string,
 ) (string, string, int) {
+	t.Helper()
 	execRequest := &runtime.ExecSyncRequest{
 		ContainerId: containerID,
 		Cmd:         command,
@@ -1801,6 +1806,7 @@ func execContainer(
 }
 
 func createSandboxContainerAndExec(t *testing.T, annots map[string]string, mounts []*runtime.Mount, execCommand []string) (output string, errorMsg string, exitCode int) {
+	t.Helper()
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

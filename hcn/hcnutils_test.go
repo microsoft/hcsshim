@@ -401,11 +401,9 @@ func HcnCreateTestL2BridgeNetwork() (*HostComputeNetwork, error) {
 	}
 
 	return network.Create()
-
 }
 
 func HcnCreateTierAcls() (*PolicyEndpointRequest, error) {
-
 	policy := make([]EndpointPolicy, 6)
 
 	tiers := make([]TierAclPolicySetting, 6)

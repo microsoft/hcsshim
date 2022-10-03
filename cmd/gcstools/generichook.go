@@ -73,7 +73,6 @@ func logDebugFile(debugFilePath string) {
 		i += 1
 		startBytes += chunkSize
 	}
-
 }
 
 func genericHookMain() {
