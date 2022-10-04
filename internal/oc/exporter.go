@@ -80,30 +80,7 @@ func (le *LogrusExporter) ExportSpan(s *trace.SpanData) {
 		}
 	}
 
-	// // if caller information wont be overridden, use that to store span name
-	// if entry.Logger == nil || !entry.Logger.ReportCaller {
-	// 	entry.Caller = &runtime.Frame{
-	// 		Function: s.Name,
-	// 	}
-	// }
-
 	entry.Data = data
 	entry.Time = s.StartTime
 	entry.Log(level, spanMessage)
-}
-
-// todo: after adding GetSpanName option to etwlogrus, switch from Name field in data
-// to overridding entry.Caller information (and ensuring `logger.ReportCaller == false`)
-
-// GetSpanName checks if the entry appears to be span entry exported by the `LogrusExporter`
-// and returns the span name.
-//
-// This is intended to be used with "github.com/Microsoft/go-winio/pkg/etwlogrus".WithGetName.
-func GetSpanName(e *logrus.Entry) string {
-	// prioritize span name entry caller
-	if s, ok := (e.Data[logfields.Name]).(string); ok && e.Message == spanMessage {
-		return s
-	}
-
-	return log.GetCallerName(e)
 }

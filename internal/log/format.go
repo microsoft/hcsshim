@@ -19,6 +19,15 @@ func FormatTime(t time.Time) string {
 	return t.Format(TimeFormat)
 }
 
+// DurationFormat formats a [time.Duration] log entry.
+//
+// A nil value signals an error with the formatting.
+type DurationFormat func(time.Duration) interface{}
+
+func DurationFormatString(d time.Duration) interface{}       { return d.String() }
+func DurationFormatSeconds(d time.Duration) interface{}      { return d.Seconds() }
+func DurationFormatMilliseconds(d time.Duration) interface{} { return d.Milliseconds() }
+
 // FormatIO formats net.Conn and other types that have an `Addr()` or `Name()`.
 //
 // See FormatEnabled for more information.
@@ -28,8 +37,8 @@ func FormatIO(ctx context.Context, v interface{}) string {
 
 	switch t := v.(type) {
 	case net.Conn:
-		m["local_address"] = formatAddr(t.LocalAddr())
-		m["remote_address"] = formatAddr(t.RemoteAddr())
+		m["localAddress"] = formatAddr(t.LocalAddr())
+		m["remoteAddress"] = formatAddr(t.RemoteAddr())
 	case interface{ Addr() net.Addr }:
 		m["address"] = formatAddr(t.Addr())
 	default:

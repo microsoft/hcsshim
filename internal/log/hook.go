@@ -13,27 +13,32 @@ import (
 
 const nullString = "null"
 
-// Hook serves to intercept and format `logrus.Entry`s before they are passed
-// to the ETW hook.
+// Hook intercepts and formats a [logrus.Entry] before it logged.
 //
-// The containerd shim discards the (formatted) logrus output, and outputs only via ETW.
-// The Linux GCS outputs logrus entries over stdout, which is consumed by the shim and
-// then re-output via the ETW hook.
+// The shim either outputs the logs through an ETW hook, discarding the (formatted) output
+// or logs output to a pipe for logging binaries to consume.
+// The Linux GCS outputs logrus entries over stdout, which is then consumed and re-output
+// by the shim.
 type Hook struct {
-	// EncodeAsJSON formats structs, maps, arrays, slices, and `bytes.Buffer` as JSON.
-	// Variables of `bytes.Buffer` will be converted to `[]byte`.
+	// EncodeAsJSON formats structs, maps, arrays, slices, and [bytes.Buffer] as JSON.
+	// Variables of [bytes.Buffer] will be converted to []byte.
 	//
 	// Default is true.
 	EncodeAsJSON bool
 
-	// FormatTime specifies the format for `time.Time` variables.
+	// FormatTime specifies the format for [time.Time] variables.
 	// An empty string disabled formatting.
 	//
-	// Default is `"github.com/containerd/containerd/log".RFC3339NanoFixed`.
+	// Default is [github.com/containerd/containerd/log.RFC3339NanoFixed].
 	TimeFormat string
 
-	// AddSpanContext adds `logfields.TraceID` and `logfields.SpanID` fields to
-	// the entry from the span context stored in `(*entry).Context`, if it exists.
+	// Duration format converts a [time.Duration] fields to an appropriate encoding.
+	//
+	// Default is [DurationFormatSeconds].
+	DurationFormat DurationFormat
+
+	// AddSpanContext adds [logfields.TraceID] and [logfields.SpanID] fields to
+	// the entry from the span context stored in [logrus.Entry.Context], if it exists.
 	AddSpanContext bool
 
 	// Whether to encode errors or keep them as is.
@@ -46,6 +51,7 @@ func NewHook() *Hook {
 	return &Hook{
 		EncodeAsJSON:   true,
 		TimeFormat:     log.RFC3339NanoFixed,
+		DurationFormat: DurationFormatSeconds,
 		AddSpanContext: true,
 	}
 }
@@ -62,15 +68,23 @@ func (h *Hook) Fire(e *logrus.Entry) (err error) {
 	return nil
 }
 
+// encode loops through all the fields in the [logrus.Entry] and encodes them according to
+// the settings in [Hook].
+// If [Hook.TimeFormat] is non-empty, it will be passed to [time.Time.Format] for
+// fields of type [time.Time].
+// If [Hook.EncodeAsJSON] is true, then fields that are numeric, boolean, strings, or
+// errors will be encoded via a [json.NewEncoder] in encode().
+//
+// If [Hook.TimeFormat] is empty and [Hook.EncodeAsJSON] is false, then this is a no-op.
 func (h *Hook) encode(e *logrus.Entry) {
 	d := e.Data
 
-	formatTime := len(h.TimeFormat) > 0
+	formatTime := h.TimeFormat != ""
 	if !(h.EncodeAsJSON || formatTime) {
 		return
 	}
 
-	// todo: replace these with constraints.Integer, constraints.Float, etc with go1.18
+	// todo: replace these with constraints.Integer, constraints.Float, etc in go1.18
 	for k, v := range d {
 		if !h.EncodeError {
 			if _, ok := v.(error); k == logrus.ErrorKey || ok {
@@ -78,12 +92,9 @@ func (h *Hook) encode(e *logrus.Entry) {
 			}
 		}
 
-		if formatTime {
-			switch vv := v.(type) {
-			case time.Time:
-				d[k] = vv.Format(h.TimeFormat)
-				continue
-			}
+		if t, ok := v.(time.Time); formatTime && ok {
+			d[k] = t.Format(h.TimeFormat)
+			continue
 		}
 
 		if !h.EncodeAsJSON {
@@ -99,7 +110,11 @@ func (h *Hook) encode(e *logrus.Entry) {
 			continue
 
 		case time.Duration:
-			d[k] = vv.String()
+			if h.DurationFormat != nil {
+				if i := h.DurationFormat(vv); i != nil {
+					d[k] = i
+				}
+			}
 			continue
 
 		// Rather than setting d[k] = vv.String(), JSON encode []byte value, since it
