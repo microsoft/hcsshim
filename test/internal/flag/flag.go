@@ -11,18 +11,15 @@ import (
 const FeatureFlagName = "feature"
 
 func NewFeatureFlag(all []string) *StringSlice {
-	ff := NewStringSlice()
-	flag.Var(ff, FeatureFlagName,
+	return NewStringSlice(FeatureFlagName,
 		"the sets of functionality to test; can be set multiple times, or separated with commas. "+
 			"Supported features: "+strings.Join(all, ", "),
 	)
-
-	return ff
 }
 
 // StringSlice is a type to be used with the standard library's flag.Var
 // function as a custom flag value, similar to "github.com/urfave/cli".StringSlice.
-// It takes either a comma-separated list of strings, or repeat invocations.
+// It takes either a comma-separated list of strings, or repeated invocations.
 type StringSlice struct {
 	S StringSet
 }
@@ -30,10 +27,12 @@ type StringSlice struct {
 var _ flag.Value = &StringSlice{}
 
 // NewStringSetFlag returns a new StringSetFlag with an empty set.
-func NewStringSlice() *StringSlice {
-	return &StringSlice{
+func NewStringSlice(name, usage string) *StringSlice {
+	ss := &StringSlice{
 		S: make(StringSet),
 	}
+	flag.Var(ss, name, usage)
+	return ss
 }
 
 // Strings returns a string slice of the flags provided to the flag

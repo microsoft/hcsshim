@@ -12,7 +12,6 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	kubeutil "github.com/containerd/containerd/integration/remote/util"
 	"github.com/containerd/containerd/mount"
-	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
@@ -43,21 +42,19 @@ type ContainerdClientOptions struct {
 	Namespace string
 }
 
-// NewClient returns a containerd client, a context with the namespace set, and the
-// context's cancel function. The context should be used for containerd operations, and
-// cancel function will terminate those operations early.
+// NewClient returns a containerd client connected using the specified address and namespace.
 func (cco ContainerdClientOptions) NewClient(
 	ctx context.Context,
 	tb testing.TB,
 	opts ...containerd.ClientOpt,
-) (context.Context, context.CancelFunc, *containerd.Client) {
+) *containerd.Client {
 	tb.Helper()
 
-	// regular `New` does not work on windows, need to use `WithConn`
-	cctx, ccancel := context.WithTimeout(ctx, timeout.ConnectTimeout)
-	defer ccancel()
+	ctx, cancel := context.WithTimeout(ctx, timeout.ConnectTimeout)
+	defer cancel()
 
-	conn, err := createGRPCConn(cctx, cco.Address)
+	// regular `New` does not work on windows, need to use `WithConn`
+	conn, err := createGRPCConn(ctx, cco.Address)
 	if err != nil {
 		tb.Fatalf("failed to dial runtime client: %v", err)
 	}
@@ -74,11 +71,7 @@ func (cco ContainerdClientOptions) NewClient(
 		c.Close()
 	})
 
-	ctx = namespaces.WithNamespace(ctx, cco.Namespace)
-	ctx, cancel := context.WithCancel(ctx)
-	tb.Cleanup(cancel)
-
-	return ctx, cancel, c
+	return c
 }
 
 func GetPlatformComparer(tb testing.TB, platform string) platforms.MatchComparer {

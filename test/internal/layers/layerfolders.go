@@ -67,6 +67,7 @@ func LayerFolders(tb testing.TB, imageName string) []string {
 	return imageLayers[imageName]
 }
 
+// Deprecated: This relies on docker. Use [FromChainID] or [FromMount] instead.
 func getLayers(tb testing.TB, imageName string) []string {
 	tb.Helper()
 	cmd := exec.Command("docker", "inspect", imageName, "-f", `"{{.GraphDriver.Data.dir}}"`)
@@ -80,6 +81,7 @@ func getLayers(tb testing.TB, imageName string) []string {
 	return append([]string{imagePath}, layers...)
 }
 
+// Deprecated: This relies on docker. Use [FromChainID] or [FromMount] instead.
 func getLayerChain(tb testing.TB, layerFolder string) []string {
 	tb.Helper()
 	jPath := filepath.Join(layerFolder, "layerchain.json")
