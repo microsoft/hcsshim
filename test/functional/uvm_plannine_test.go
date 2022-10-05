@@ -31,7 +31,6 @@ func TestPlan9(t *testing.T) {
 
 	vm := testuvm.CreateAndStartLCOWFromOpts(ctx, t, defaultLCOWOptions(t))
 	defer vm.Close()
-	testuvm.SetSecurityPolicy(ctx, t, vm, "")
 
 	dir := t.TempDir()
 	var iterations uint32 = 64
@@ -63,7 +62,6 @@ func TestPlan9_Writable(t *testing.T) {
 	opts.NoWritableFileShares = true
 	vm := testuvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
 	defer vm.Close()
-	testuvm.SetSecurityPolicy(ctx, t, vm, "")
 
 	dir := t.TempDir()
 

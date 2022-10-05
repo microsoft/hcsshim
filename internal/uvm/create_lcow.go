@@ -756,6 +756,7 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		vpmemMultiMapping:       !opts.VPMemNoMultiMapping,
 		encryptScratch:          opts.EnableScratchEncryption,
 		noWritableFileShares:    opts.NoWritableFileShares,
+		confidentialUVMOptions:  opts.ConfidentialOptions,
 	}
 
 	defer func() {

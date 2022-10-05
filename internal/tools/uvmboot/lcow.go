@@ -19,22 +19,23 @@ import (
 )
 
 const (
-	bootFilesPathArgName  = "boot-files-path"
-	consolePipeArgName    = "console-pipe"
-	kernelDirectArgName   = "kernel-direct"
-	kernelFileArgName     = "kernel-file"
-	forwardStdoutArgName  = "fwd-stdout"
-	forwardStderrArgName  = "fwd-stderr"
-	outputHandlingArgName = "output-handling"
-	kernelArgsArgName     = "kernel-args"
-	rootFSTypeArgName     = "root-fs-type"
-	vpMemMaxCountArgName  = "vpmem-max-count"
-	vpMemMaxSizeArgName   = "vpmem-max-size"
-	scsiMountsArgName     = "mount-scsi"
-	vpmemMountsArgName    = "mount-vpmem"
-	shareFilesArgName     = "share"
-	securityPolicyArgName = "security-policy"
-	securityHardwareFlag  = "security-hardware"
+	bootFilesPathArgName          = "boot-files-path"
+	consolePipeArgName            = "console-pipe"
+	kernelDirectArgName           = "kernel-direct"
+	kernelFileArgName             = "kernel-file"
+	forwardStdoutArgName          = "fwd-stdout"
+	forwardStderrArgName          = "fwd-stderr"
+	outputHandlingArgName         = "output-handling"
+	kernelArgsArgName             = "kernel-args"
+	rootFSTypeArgName             = "root-fs-type"
+	vpMemMaxCountArgName          = "vpmem-max-count"
+	vpMemMaxSizeArgName           = "vpmem-max-size"
+	scsiMountsArgName             = "mount-scsi"
+	vpmemMountsArgName            = "mount-vpmem"
+	shareFilesArgName             = "share"
+	securityPolicyArgName         = "security-policy"
+	securityHardwareFlag          = "security-hardware"
+	securityPolicyEnforcerArgName = "security-policy-enforcer"
 )
 
 var (
@@ -83,6 +84,11 @@ var lcowCommand = cli.Command{
 		cli.StringFlag{
 			Name:  securityPolicyArgName,
 			Usage: "Security policy to set on the UVM. Leave empty to use an open door policy",
+		},
+		cli.StringFlag{
+			Name: securityPolicyEnforcerArgName,
+			Usage: "Security policy enforcer to use for a given security policy. " +
+				"Leave empty to use the default enforcer",
 		},
 		cli.BoolFlag{
 			Name:  securityHardwareFlag,
@@ -248,6 +254,9 @@ func createLCOWOptions(_ context.Context, c *cli.Context, id string) (*uvm.Optio
 	if c.IsSet(securityPolicyArgName) {
 		options.SecurityPolicy = c.String(securityPolicyArgName)
 	}
+	if c.IsSet(securityPolicyEnforcerArgName) {
+		options.SecurityPolicyEnforcer = c.String(securityPolicyEnforcerArgName)
+	}
 	if c.IsSet(securityHardwareFlag) {
 		options.GuestStateFile = uvm.GuestStateFile
 		options.SecurityPolicyEnabled = true
@@ -266,10 +275,6 @@ func runLCOW(ctx context.Context, options *uvm.OptionsLCOW, c *cli.Context) erro
 
 	if err := vm.Start(ctx); err != nil {
 		return err
-	}
-
-	if err := vm.SetConfidentialUVMOptions(ctx, uvm.WithSecurityPolicy(options.SecurityPolicy)); err != nil {
-		return fmt.Errorf("could not set UVM security policy: %w", err)
 	}
 
 	if err := mountSCSI(ctx, c, vm); err != nil {

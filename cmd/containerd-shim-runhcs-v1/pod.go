@@ -148,17 +148,6 @@ func createPod(ctx context.Context, events publisher, req *task.CreateTaskReques
 			return nil, err
 		}
 
-		if lopts != nil {
-			if err := parent.SetConfidentialUVMOptions(
-				ctx,
-				uvm.WithSecurityPolicyEnforcer(lopts.SecurityPolicyEnforcer),
-				uvm.WithSecurityPolicy(lopts.SecurityPolicy),
-				uvm.WithUVMReferenceInfo(lopts.BootFilesPath, lopts.UVMReferenceInfoFile),
-				uvm.WithPodStartupFragmentUVMPath(lopts.PodStartupFragmentUVMPath),
-			); err != nil {
-				return nil, errors.Wrap(err, "unable to set security policy")
-			}
-		}
 	} else if oci.IsJobContainer(s) {
 		// If we're making a job container fake a task (i.e reuse the wcowPodSandbox logic)
 		p.sandboxTask = newWcowPodSandboxTask(ctx, events, req.ID, req.Bundle, parent, "")

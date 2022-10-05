@@ -31,7 +31,6 @@ func TestLCOW_ContainerLifecycle(t *testing.T) {
 
 	opts := defaultLCOWOptions(t)
 	vm := uvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
-	uvm.SetSecurityPolicy(ctx, t, vm, "")
 
 	scratch, _ := layers.ScratchSpace(ctx, t, vm, "", "", "")
 
@@ -89,7 +88,6 @@ func TestLCOW_ContainerIO(t *testing.T) {
 	opts := defaultLCOWOptions(t)
 	cache := layers.CacheFile(ctx, t, "")
 	vm := uvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
-	uvm.SetSecurityPolicy(ctx, t, vm, "")
 
 	for _, tt := range ioTests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -133,7 +131,6 @@ func TestLCOW_ContainerExec(t *testing.T) {
 
 	opts := defaultLCOWOptions(t)
 	vm := uvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
-	uvm.SetSecurityPolicy(ctx, t, vm, "")
 
 	id := strings.ReplaceAll(t.Name(), "/", "")
 	scratch, _ := layers.ScratchSpace(ctx, t, vm, "", "", "")
