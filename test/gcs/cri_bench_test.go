@@ -211,15 +211,16 @@ func BenchmarkCRIWorkload(b *testing.B) {
 
 func workloadContainerRequest(
 	ctx context.Context,
-	t testing.TB,
+	tb testing.TB,
 	host *hcsv2.Host,
 	sid string,
 	spid uint32,
 	nns string,
 ) (string, *prot.VMHostedContainerSettingsV2, func()) {
+	tb.Helper()
 	id := sid + cri_util.GenerateID()
-	scratch, rootfs := mountRootfs(ctx, t, host, id)
-	spec := containerSpec(ctx, t,
+	scratch, rootfs := mountRootfs(ctx, tb, host, id)
+	spec := containerSpec(ctx, tb,
 		sid,
 		spid,
 		"test-bench-container",
@@ -235,7 +236,7 @@ func workloadContainerRequest(
 		OCISpecification: spec,
 	}
 	f := func() {
-		unmountRootfs(ctx, t, scratch)
+		unmountRootfs(ctx, tb, scratch)
 	}
 
 	return id, r, f

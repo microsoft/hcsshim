@@ -19,6 +19,7 @@ func init() {
 }
 
 func TestDetermineSchemaVersion(t *testing.T) {
+	t.Helper()
 	osv := osversion.Get()
 
 	if osv.Build >= osversion.RS5 {
@@ -41,7 +42,6 @@ func TestDetermineSchemaVersion(t *testing.T) {
 		if err := schemaversion.IsSupported(schemaversion.SchemaV10()); err != nil {
 			t.Fatalf("v1 expected to be supported")
 		}
-
 	} else {
 		if sv := schemaversion.DetermineSchemaVersion(nil); !schemaversion.IsV10(sv) {
 			t.Fatalf("expected v1")

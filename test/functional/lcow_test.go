@@ -72,6 +72,7 @@ func TestLCOW_UVMNoSCSISingleVPMemVHD(t *testing.T) {
 }
 
 func testLCOWUVMNoSCSISingleVPMem(t *testing.T, opts *uvm.OptionsLCOW, expected ...string) {
+	t.Helper()
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureLCOW)
 	ctx := context.Background()
@@ -87,11 +88,13 @@ func testLCOWUVMNoSCSISingleVPMem(t *testing.T, opts *uvm.OptionsLCOW, expected 
 	out, err := io.Output()
 
 	if err != nil {
+		t.Helper()
 		t.Fatalf("uvm exec failed with: %s", err)
 	}
 
 	for _, s := range expected {
 		if !strings.Contains(out, s) {
+			t.Helper()
 			t.Fatalf("Expected dmesg output to have %q: %s", s, out)
 		}
 	}
@@ -136,6 +139,7 @@ func TestLCOW_UVMStart_KernelDirect_InitRd(t *testing.T) {
 }
 
 func testLCOWTimeUVMStart(t *testing.T, kernelDirect bool, rfsType uvm.PreferredRootFSType) {
+	t.Helper()
 	requireFeatures(t, featureLCOW)
 
 	for i := 0; i < 3; i++ {
@@ -246,7 +250,6 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 	// Start the init process in each container and grab it's stdout comparing to expected
 	runInitProcess(t, c1hcsSystem, "hello lcow container one")
 	runInitProcess(t, c2hcsSystem, "hello lcow container two")
-
 }
 
 // Helper to run the init process in an LCOW container; verify it exits with exit
@@ -254,6 +257,7 @@ func TestLCOWSimplePodScenario(t *testing.T) {
 //
 //nolint:unused // unused since tests are skipped
 func runInitProcess(t *testing.T, s cow.Container, expected string) {
+	t.Helper()
 	var errB bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

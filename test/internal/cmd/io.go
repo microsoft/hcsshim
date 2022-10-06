@@ -35,15 +35,15 @@ func (b *BufferedIO) Output() (_ string, err error) {
 	return o, err
 }
 
-func (b *BufferedIO) TestOutput(t testing.TB, out string, err error) {
-	t.Helper()
+func (b *BufferedIO) TestOutput(tb testing.TB, out string, err error) {
+	tb.Helper()
 
 	outGive, errGive := b.Output()
 	if !errors.Is(errGive, err) {
-		t.Fatalf("got stderr: %v; wanted: %v", errGive, err)
+		tb.Fatalf("got stderr: %v; wanted: %v", errGive, err)
 	}
 	if outGive != out {
-		t.Fatalf("got stdout %q; wanted %q", outGive, out)
+		tb.Fatalf("got stdout %q; wanted %q", outGive, out)
 	}
 }
 

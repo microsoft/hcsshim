@@ -14,6 +14,7 @@ import (
 )
 
 func createContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.CreateContainerRequest) string {
+	t.Helper()
 	response, err := client.CreateContainer(ctx, request)
 	if err != nil {
 		t.Fatalf("failed CreateContainer in sandbox: %s, with: %v", request.PodSandboxId, err)
@@ -22,6 +23,7 @@ func createContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx cont
 }
 
 func startContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) {
+	t.Helper()
 	_, err := client.StartContainer(ctx, &runtime.StartContainerRequest{
 		ContainerId: containerID,
 	})
@@ -31,10 +33,12 @@ func startContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx conte
 }
 
 func stopContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) {
+	t.Helper()
 	stopContainerWithTimeout(t, client, ctx, containerID, 0)
 }
 
 func stopContainerWithTimeout(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string, timeout int64) {
+	t.Helper()
 	_, err := client.StopContainer(ctx, &runtime.StopContainerRequest{
 		ContainerId: containerID,
 		Timeout:     timeout,
@@ -45,6 +49,7 @@ func stopContainerWithTimeout(t *testing.T, client runtime.RuntimeServiceClient,
 }
 
 func removeContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) {
+	t.Helper()
 	_, err := client.RemoveContainer(ctx, &runtime.RemoveContainerRequest{
 		ContainerId: containerID,
 	})
@@ -70,16 +75,19 @@ func getCreateContainerRequest(podID string, name string, image string, command 
 }
 
 func getContainerStatus(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) runtime.ContainerState {
+	t.Helper()
 	return getContainerStatusFull(t, client, ctx, containerID).State
 }
 
 func assertContainerState(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string, state runtime.ContainerState) {
+	t.Helper()
 	if st := getContainerStatus(t, client, ctx, containerID); st != state {
 		t.Fatalf("got container %q state %q; wanted %v", containerID, st.String(), state.String())
 	}
 }
 
 func getContainerStatusFull(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) *runtime.ContainerStatus {
+	t.Helper()
 	response, err := client.ContainerStatus(ctx, &runtime.ContainerStatusRequest{
 		ContainerId: containerID,
 	})
@@ -98,6 +106,7 @@ func requireContainerState(
 	containerID string,
 	expectedState runtime.ContainerState,
 ) {
+	t.Helper()
 	require.NoError(t, func() error {
 		start := time.Now()
 		var lastState runtime.ContainerState

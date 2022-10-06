@@ -41,49 +41,45 @@ func Create(ctx context.Context, _ testing.TB, c cow.ProcessHost, p *specs.Proce
 	return cc
 }
 
-func Start(_ context.Context, t testing.TB, c *cmd.Cmd) {
+func Start(_ context.Context, tb testing.TB, c *cmd.Cmd) {
+	tb.Helper()
 	if err := c.Start(); err != nil {
-		t.Helper()
-		t.Fatalf("failed to start %q: %v", desc(c), err)
+		tb.Fatalf("failed to start %q: %v", desc(c), err)
 	}
 }
 
-func Run(ctx context.Context, t testing.TB, c *cmd.Cmd) int {
-	Start(ctx, t, c)
-	e := Wait(ctx, t, c)
-
-	return e
+func Run(ctx context.Context, tb testing.TB, c *cmd.Cmd) int {
+	tb.Helper()
+	Start(ctx, tb, c)
+	return Wait(ctx, tb, c)
 }
 
-func Wait(_ context.Context, t testing.TB, c *cmd.Cmd) int {
+func Wait(_ context.Context, tb testing.TB, c *cmd.Cmd) int {
+	tb.Helper()
 	// todo, wait on context.Done
 	if err := c.Wait(); err != nil {
-		t.Helper()
-
 		ee := &cmd.ExitError{}
 		if errors.As(err, &ee) {
 			return ee.ExitCode()
 		}
-		t.Fatalf("failed to wait on %q: %v", desc(c), err)
+		tb.Fatalf("failed to wait on %q: %v", desc(c), err)
 	}
-
 	return 0
 }
 
-func WaitExitCode(ctx context.Context, t testing.TB, c *cmd.Cmd, e int) {
-	if ee := Wait(ctx, t, c); ee != e {
-		t.Helper()
-		t.Errorf("got exit code %d, wanted %d", ee, e)
+func WaitExitCode(ctx context.Context, tb testing.TB, c *cmd.Cmd, e int) {
+	tb.Helper()
+	if ee := Wait(ctx, tb, c); ee != e {
+		tb.Errorf("got exit code %d, wanted %d", ee, e)
 	}
 }
 
-func Kill(ctx context.Context, t testing.TB, c *cmd.Cmd) {
+func Kill(ctx context.Context, tb testing.TB, c *cmd.Cmd) {
+	tb.Helper()
 	ok, err := c.Process.Kill(ctx)
 	if !ok {
-		t.Helper()
-		t.Fatalf("could not deliver kill to %q", desc(c))
+		tb.Fatalf("could not deliver kill to %q", desc(c))
 	} else if err != nil {
-		t.Helper()
-		t.Fatalf("could not kill %q: %v", desc(c), err)
+		tb.Fatalf("could not kill %q: %v", desc(c), err)
 	}
 }

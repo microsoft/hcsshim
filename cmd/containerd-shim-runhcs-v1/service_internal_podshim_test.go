@@ -19,6 +19,7 @@ import (
 )
 
 func setupPodServiceWithFakes(t *testing.T) (*service, *testShimTask, *testShimTask, *testShimExec) {
+	t.Helper()
 	tid := strconv.Itoa(rand.Int())
 
 	s, err := NewService(WithTID(tid), WithIsSandbox(true))

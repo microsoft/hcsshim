@@ -183,6 +183,7 @@ import (
 //
 //nolint:unused // unused since tests are skipped
 func stopContainer(t *testing.T, c interface{}) {
+	t.Helper()
 	switch c := c.(type) {
 	case cow.Container:
 		if err := c.Shutdown(context.Background()); err == nil {
@@ -221,7 +222,7 @@ func runShimCommand(t *testing.T,
 	expectedExitCode int,
 	expectedOutput string,
 ) {
-
+	t.Helper()
 	if c == nil {
 		t.Fatalf("requested container to start is nil!")
 	}
@@ -234,7 +235,6 @@ func runShimCommand(t *testing.T,
 	})
 	if err != nil {
 		t.Fatalf("Failed Create Process: %s", err)
-
 	}
 	defer p.Close()
 	if err := p.Wait(); err != nil {
@@ -263,6 +263,7 @@ func runShimCommand(t *testing.T,
 
 //nolint:unused // unused since tests are skipped
 func runShimCommands(t *testing.T, c hcsshim.Container) {
+	t.Helper()
 	runShimCommand(t, c, `echo Hello`, `c:\`, 0, "Hello")
 
 	// Check that read-only doesn't allow deletion or creation
@@ -281,6 +282,7 @@ func runShimCommands(t *testing.T, c hcsshim.Container) {
 
 //nolint:unused // unused since tests are skipped
 func runHcsCommands(t *testing.T, c cow.Container) {
+	t.Helper()
 	runHcsCommand(t, c, `echo Hello`, `c:\`, 0, "Hello")
 
 	// Check that read-only doesn't allow deletion or creation
@@ -307,7 +309,7 @@ func runHcsCommand(t *testing.T,
 	workdir string,
 	expectedExitCode int,
 	expectedOutput string) {
-
+	t.Helper()
 	if c == nil {
 		t.Fatalf("requested container to start is nil!")
 	}
@@ -322,7 +324,6 @@ func runHcsCommand(t *testing.T,
 		})
 	if err != nil {
 		t.Fatalf("Failed Create Process: %s", err)
-
 	}
 	defer p.Close()
 	if err := p.Wait(); err != nil {
@@ -354,6 +355,7 @@ const imageName = "busyboxw"
 //
 //nolint:unused // unused since tests are skipped
 func createTestMounts(t *testing.T) (string, string) {
+	t.Helper()
 	// Create two temp folders for mapped directories.
 	hostRWSharedDirectory := t.TempDir()
 	hostROSharedDirectory := t.TempDir()
@@ -368,6 +370,7 @@ func createTestMounts(t *testing.T) (string, string) {
 //
 //nolint:unused // unused since tests are skipped
 func generateShimLayersStruct(t *testing.T, imageLayers []string) []hcsshim.Layer {
+	t.Helper()
 	var layers []hcsshim.Layer
 	for _, layerFolder := range imageLayers {
 		guid, _ := wclayer.NameToGuid(context.Background(), filepath.Base(layerFolder))
@@ -452,7 +455,6 @@ func TestWCOWArgonShim(t *testing.T) {
 		t.Fatal(err)
 	}
 	argonShimMounted = false
-
 }
 
 // Xenon through HCSShim interface (v1)
@@ -509,6 +511,7 @@ func TestWCOWXenonShim(t *testing.T) {
 
 //nolint:unused // unused since tests are skipped
 func generateWCOWOciTestSpec(t *testing.T, imageLayers []string, scratchPath, hostRWSharedDirectory, hostROSharedDirectory string) *specs.Spec {
+	t.Helper()
 	return &specs.Spec{
 		Windows: &specs.Windows{
 			LayerFolders: append(imageLayers, scratchPath),
@@ -682,7 +685,6 @@ func TestWCOWArgonOciV2(t *testing.T) {
 		t.Fatal(err)
 	}
 	argonOci2Mounted = false
-
 }
 
 // Xenon through HCSOCI interface (v2)
@@ -737,7 +739,6 @@ func TestWCOWXenonOciV2(t *testing.T) {
 	if err := xenonOci2UVM.Start(context.Background()); err != nil {
 		xenonOci2UVM.Close()
 		t.Fatalf("Failed start UVM: %s", err)
-
 	}
 
 	spec := generateWCOWOciTestSpec(t, imageLayers, xenonOci2ScratchDir, hostRWSharedDirectory, hostROSharedDirectory)

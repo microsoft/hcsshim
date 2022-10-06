@@ -19,18 +19,21 @@ import (
 
 //nolint:unused // unused since tests are skipped
 func runMemStartLCOWTest(t *testing.T, opts *uvm.OptionsLCOW) {
+	t.Helper()
 	u := tuvm.CreateAndStartLCOWFromOpts(context.Background(), t, opts)
 	u.Close()
 }
 
 //nolint:unused // unused since tests are skipped
 func runMemStartWCOWTest(t *testing.T, opts *uvm.OptionsWCOW) {
+	t.Helper()
 	u, _, _ := tuvm.CreateWCOWUVMFromOptsWithImage(context.Background(), t, opts, "microsoft/nanoserver")
 	u.Close()
 }
 
 //nolint:unused // unused since tests are skipped
 func runMemTests(t *testing.T, os string) {
+	t.Helper()
 	type testCase struct {
 		allowOvercommit      bool
 		enableDeferredCommit bool
@@ -77,6 +80,7 @@ func TestMemBackingTypeLCOW(t *testing.T) {
 
 //nolint:unused // unused since tests are skipped
 func runBenchMemStartTest(b *testing.B, opts *uvm.OptionsLCOW) {
+	b.Helper()
 	// Cant use testutilities here because its `testing.B` not `testing.T`
 	u, err := uvm.CreateLCOW(context.Background(), opts)
 	if err != nil {
@@ -90,6 +94,7 @@ func runBenchMemStartTest(b *testing.B, opts *uvm.OptionsLCOW) {
 
 //nolint:unused // unused since tests are skipped
 func runBenchMemStartLcowTest(b *testing.B, allowOvercommit bool, enableDeferredCommit bool) {
+	b.Helper()
 	for i := 0; i < b.N; i++ {
 		opts := uvm.NewDefaultOptionsLCOW(b.Name(), "")
 		opts.MemorySizeInMB = 512

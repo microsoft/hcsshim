@@ -34,6 +34,7 @@ func pipeConn() (*stitched, *stitched) {
 }
 
 func sendMessage(t *testing.T, w io.Writer, typ msgType, id int64, msg []byte) {
+	t.Helper()
 	var h [16]byte
 	binary.LittleEndian.PutUint32(h[:], uint32(typ))
 	binary.LittleEndian.PutUint32(h[4:], uint32(len(msg)+16))
@@ -51,6 +52,7 @@ func sendMessage(t *testing.T, w io.Writer, typ msgType, id int64, msg []byte) {
 }
 
 func reflector(t *testing.T, rw io.ReadWriteCloser, delay time.Duration) {
+	t.Helper()
 	defer rw.Close()
 	for {
 		id, typ, msg, err := readMessage(rw)
@@ -77,6 +79,7 @@ type testResp struct {
 }
 
 func startReflectedBridge(t *testing.T, delay time.Duration) *bridge {
+	t.Helper()
 	s, c := pipeConn()
 	b := newBridge(s, nil, logrus.NewEntry(logrus.StandardLogger()))
 	b.Start()
@@ -149,6 +152,7 @@ func TestBridgeRPCBridgeClosed(t *testing.T) {
 }
 
 func sendJSON(t *testing.T, w io.Writer, typ msgType, id int64, msg interface{}) error {
+	t.Helper()
 	msgb, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -158,6 +162,7 @@ func sendJSON(t *testing.T, w io.Writer, typ msgType, id int64, msg interface{})
 }
 
 func notifyThroughBridge(t *testing.T, typ msgType, msg interface{}, fn notifyFunc) error {
+	t.Helper()
 	s, c := pipeConn()
 	b := newBridge(s, fn, logrus.NewEntry(logrus.StandardLogger()))
 	b.Start()

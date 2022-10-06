@@ -15,6 +15,7 @@ import (
 )
 
 func runContainerAndQueryStats(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.CreateContainerRequest) {
+	t.Helper()
 	containerID := createContainer(t, client, ctx, request)
 	defer removeContainer(t, client, ctx, containerID)
 	startContainer(t, client, ctx, containerID)
@@ -34,6 +35,7 @@ func runContainerAndQueryStats(t *testing.T, client runtime.RuntimeServiceClient
 }
 
 func runContainerAndQueryListStats(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, request *runtime.CreateContainerRequest) {
+	t.Helper()
 	containerID := createContainer(t, client, ctx, request)
 	defer removeContainer(t, client, ctx, containerID)
 	startContainer(t, client, ctx, containerID)
@@ -58,6 +60,7 @@ func runContainerAndQueryListStats(t *testing.T, client runtime.RuntimeServiceCl
 }
 
 func verifyStatsContent(t *testing.T, stat *runtime.ContainerStats) {
+	t.Helper()
 	if stat == nil {
 		t.Fatal("expected stat to be non nil")
 	}
@@ -78,6 +81,7 @@ func verifyStatsContent(t *testing.T, stat *runtime.ContainerStats) {
 // Physically backed working set should be equal to the amount of memory we assigned
 // to the UVM.
 func verifyPhysicallyBackedWorkingSet(t *testing.T, num uint64, stat *runtime.ContainerStats) {
+	t.Helper()
 	if stat == nil {
 		t.Fatal("expected stat to be non nil")
 	}
@@ -253,7 +257,6 @@ func Test_ContainerStats_ContainerID(t *testing.T) {
 			runContainerAndQueryStats(t, client, ctx, request)
 		})
 	}
-
 }
 
 func Test_ContainerStats_List_ContainerID(t *testing.T) {

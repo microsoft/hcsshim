@@ -36,6 +36,7 @@ func TestCreateDeleteNetworks(t *testing.T) {
 }
 
 func CreateDeleteNetworksHelper(t *testing.T, networkFunction HcnNetworkMakerFunc) error {
+	t.Helper()
 	network, err := networkFunction()
 	if err != nil {
 		return err
@@ -96,6 +97,7 @@ func TestListNetwork(t *testing.T) {
 }
 
 func testNetworkPolicy(t *testing.T, policiesToTest *PolicyNetworkRequest) {
+	t.Helper()
 	network, err := CreateTestOverlayNetwork()
 	if err != nil {
 		t.Fatal(err)
@@ -150,7 +152,6 @@ func testNetworkPolicy(t *testing.T, policiesToTest *PolicyNetworkRequest) {
 }
 
 func TestAddRemoveRemoteSubnetRoutePolicy(t *testing.T) {
-
 	remoteSubnetRoutePolicy, err := HcnCreateTestRemoteSubnetRoute()
 	if err != nil {
 		t.Fatal(err)
@@ -160,7 +161,6 @@ func TestAddRemoveRemoteSubnetRoutePolicy(t *testing.T) {
 }
 
 func TestAddRemoveHostRoutePolicy(t *testing.T) {
-
 	hostRoutePolicy, err := HcnCreateTestHostRoute()
 	if err != nil {
 		t.Fatal(err)
@@ -170,18 +170,15 @@ func TestAddRemoveHostRoutePolicy(t *testing.T) {
 }
 
 func TestAddRemoveNetworACLPolicy(t *testing.T) {
-
 	networkACLPolicy, err := HcnCreateNetworkACLs()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	testNetworkPolicy(t, networkACLPolicy)
-
 }
 
 func TestNetworkFlags(t *testing.T) {
-
 	network, err := CreateTestOverlayNetwork()
 	if err != nil {
 		t.Fatal(err)

@@ -134,7 +134,6 @@ func verifyTestFile(t *testing.T, mountPath string, tf testFile) {
 			!timeEqual(st.Atim, tf.File.Atime) ||
 			!timeEqual(st.Mtim, tf.File.Mtime) ||
 			!timeEqual(st.Ctim, tf.File.Ctime) {
-
 			t.Errorf("%s: stat mismatch, expected: %#v got: %#v", tf.Path, tf.File, st)
 		}
 

@@ -200,26 +200,27 @@ func BenchmarkContainerExec(b *testing.B) {
 
 func standaloneContainerRequest(
 	ctx context.Context,
-	t testing.TB,
+	tb testing.TB,
 	host *hcsv2.Host,
 	extra ...oci.SpecOpts,
 ) (string, *prot.VMHostedContainerSettingsV2, func()) {
+	tb.Helper()
 	ctx = namespaces.WithNamespace(ctx, testoci.DefaultNamespace)
-	id := t.Name() + cri_util.GenerateID()
-	scratch, rootfs := mountRootfs(ctx, t, host, id)
+	id := tb.Name() + cri_util.GenerateID()
+	scratch, rootfs := mountRootfs(ctx, tb, host, id)
 
 	opts := testoci.DefaultLinuxSpecOpts(id,
 		oci.WithRootFSPath(rootfs),
 		oci.WithProcessArgs("/bin/sh", "-c", tailNull),
 	)
 	opts = append(opts, extra...)
-	s := testoci.CreateLinuxSpec(ctx, t, id, opts...)
+	s := testoci.CreateLinuxSpec(ctx, tb, id, opts...)
 	r := &prot.VMHostedContainerSettingsV2{
 		OCIBundlePath:    scratch,
 		OCISpecification: s,
 	}
 	f := func() {
-		unmountRootfs(ctx, t, scratch)
+		unmountRootfs(ctx, tb, scratch)
 	}
 
 	return id, r, f

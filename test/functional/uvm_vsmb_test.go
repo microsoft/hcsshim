@@ -81,5 +81,4 @@ func TestVSMB_Writable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddVSMB failed: %s", err)
 	}
-
 }

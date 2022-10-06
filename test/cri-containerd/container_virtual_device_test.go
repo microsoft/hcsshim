@@ -38,6 +38,7 @@ func makeGPUExecCommand(os string, containerID string) *runtime.ExecSyncRequest 
 // verifyGPUIsPresent is a helper function that runs a command in the container
 // to verify the existence of a GPU and fails the running test is none are found
 func verifyGPUIsPresentLCOW(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) {
+	t.Helper()
 	execReq := makeGPUExecCommand("linux", containerID)
 	response := execSync(t, client, ctx, execReq)
 	if len(response.Stderr) != 0 {
@@ -49,6 +50,7 @@ func verifyGPUIsPresentLCOW(t *testing.T, client runtime.RuntimeServiceClient, c
 }
 
 func isGPUPresentWCOW(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) bool {
+	t.Helper()
 	execReq := makeGPUExecCommand("windows", containerID)
 	response := execSync(t, client, ctx, execReq)
 	if len(response.Stderr) != 0 {
@@ -71,6 +73,7 @@ func isGPUPresentWCOW(t *testing.T, client runtime.RuntimeServiceClient, ctx con
 // to verify that there are no GPUs present in the container and fails the running test
 // if any are found
 func verifyGPUIsNotPresentLCOW(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) {
+	t.Helper()
 	execReq := makeGPUExecCommand("linux", containerID)
 	response := execSync(t, client, ctx, execReq)
 	if len(response.Stderr) == 0 {
@@ -132,6 +135,7 @@ var lcowPodGPUAnnotations = map[string]string{
 }
 
 func getGPUContainerRequestLCOW(t *testing.T, podID string, podConfig *runtime.PodSandboxConfig, device *runtime.Device) *runtime.CreateContainerRequest {
+	t.Helper()
 	return &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
 			Metadata: &runtime.ContainerMetadata{
@@ -157,6 +161,7 @@ func getGPUContainerRequestLCOW(t *testing.T, podID string, podConfig *runtime.P
 }
 
 func getGPUContainerRequestWCOW(t *testing.T, podID string, podConfig *runtime.PodSandboxConfig, device *runtime.Device) *runtime.CreateContainerRequest {
+	t.Helper()
 	return &runtime.CreateContainerRequest{
 		Config: &runtime.ContainerConfig{
 			Metadata: &runtime.ContainerMetadata{
@@ -274,7 +279,6 @@ func Test_RunContainer_VirtualDevice_GPU_Multiple_LCOW(t *testing.T) {
 	defer cancel()
 
 	for i := 0; i < numContainers; i++ {
-
 		name := t.Name() + "-Container-" + fmt.Sprintf("%d", i)
 		containerRequest.Config.Metadata.Name = name
 

@@ -20,26 +20,29 @@ import (
 
 func sandboxSpec(
 	ctx context.Context,
-	t testing.TB,
+	tb testing.TB,
 	name string,
 	id string,
 	nns string,
 	root string,
 	extra ...oci.SpecOpts,
 ) *oci.Spec {
+	tb.Helper()
 	ctx = namespaces.WithNamespace(ctx, testoci.CRINamespace)
-	opts := sandboxSpecOpts(ctx, t, name, id, nns, root)
+	opts := sandboxSpecOpts(ctx, tb, name, id, nns, root)
 	opts = append(opts, extra...)
 
-	return testoci.CreateLinuxSpec(ctx, t, id, opts...)
+	return testoci.CreateLinuxSpec(ctx, tb, id, opts...)
 }
 
-func sandboxSpecOpts(_ context.Context, t testing.TB,
+func sandboxSpecOpts(_ context.Context,
+	tb testing.TB,
 	name string,
 	id string,
 	nns string,
 	root string,
 ) []oci.SpecOpts {
+	tb.Helper()
 	img := testoci.LinuxSandboxImageConfig(*flagSandboxPause)
 	cfg := testoci.LinuxSandboxRuntimeConfig(name)
 
@@ -58,8 +61,7 @@ func sandboxSpecOpts(_ context.Context, t testing.TB,
 	}
 
 	if len(img.Entrypoint) == 0 && len(img.Cmd) == 0 {
-		t.Helper()
-		t.Fatalf("invalid empty entrypoint and cmd in image config %+v", img)
+		tb.Fatalf("invalid empty entrypoint and cmd in image config %+v", img)
 	}
 	opts = append(opts, oci.WithProcessArgs(append(img.Entrypoint, img.Cmd...)...))
 
@@ -76,7 +78,7 @@ func sandboxSpecOpts(_ context.Context, t testing.TB,
 
 func containerSpec(
 	ctx context.Context,
-	t testing.TB,
+	tb testing.TB,
 	sandboxID string,
 	sandboxPID uint32,
 	name string,
@@ -88,14 +90,15 @@ func containerSpec(
 	root string,
 	extra ...oci.SpecOpts,
 ) *oci.Spec {
+	tb.Helper()
 	ctx = namespaces.WithNamespace(ctx, testoci.CRINamespace)
-	opts := containerSpecOpts(ctx, t, sandboxID, sandboxPID, name, cmd, args, wd, nns, root)
+	opts := containerSpecOpts(ctx, tb, sandboxID, sandboxPID, name, cmd, args, wd, nns, root)
 	opts = append(opts, extra...)
 
-	return testoci.CreateLinuxSpec(ctx, t, id, opts...)
+	return testoci.CreateLinuxSpec(ctx, tb, id, opts...)
 }
 
-func containerSpecOpts(_ context.Context, _ testing.TB,
+func containerSpecOpts(_ context.Context, tb testing.TB,
 	sandboxID string,
 	sandboxPID uint32,
 	name string,
@@ -105,6 +108,7 @@ func containerSpecOpts(_ context.Context, _ testing.TB,
 	nns string,
 	root string,
 ) []oci.SpecOpts {
+	tb.Helper()
 	cfg := testoci.LinuxWorkloadRuntimeConfig(name, cmd, args, wd)
 	img := testoci.LinuxWorkloadImageConfig()
 

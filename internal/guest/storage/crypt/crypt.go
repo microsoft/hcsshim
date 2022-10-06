@@ -164,7 +164,6 @@ func mkfsExt4Command(args []string) error {
 //     4.4. Do a sparse copy of the filesystem into the unencrypted block device.
 //     This updates the integrity tags.
 func EncryptDevice(ctx context.Context, source string) (path string, err error) {
-
 	uniqueName, err := getUniqueName(source)
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to generate unique name: %s", source)

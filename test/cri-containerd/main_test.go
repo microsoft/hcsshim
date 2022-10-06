@@ -135,6 +135,7 @@ func TestMain(m *testing.M) {
 // was enabled, and skips the test if any are missing. If the flagFeatures set
 // is empty, the function returns (by default all features are enabled).
 func requireFeatures(t *testing.T, features ...string) {
+	t.Helper()
 	set := flagFeatures.ValueSet()
 	if len(set) == 0 {
 		return
@@ -150,6 +151,7 @@ func requireFeatures(t *testing.T, features ...string) {
 // binary.
 // Returns full binary path if it exists, otherwise, skips the test.
 func requireBinary(t *testing.T, binary string) string {
+	t.Helper()
 	executable, err := os.Executable()
 	if err != nil {
 		t.Skipf("error locating executable: %s", err)
@@ -190,6 +192,7 @@ func createGRPCConn(ctx context.Context) (*grpc.ClientConn, error) {
 }
 
 func newTestRuntimeClient(t *testing.T) runtime.RuntimeServiceClient {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
 	defer cancel()
 	conn, err := createGRPCConn(ctx)
@@ -200,6 +203,7 @@ func newTestRuntimeClient(t *testing.T) runtime.RuntimeServiceClient {
 }
 
 func newTestEventService(t *testing.T) containerd.EventService {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
 	defer cancel()
 	conn, err := createGRPCConn(ctx)
@@ -210,6 +214,7 @@ func newTestEventService(t *testing.T) containerd.EventService {
 }
 
 func newTestImageClient(t *testing.T) runtime.ImageServiceClient {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
 	defer cancel()
 	conn, err := createGRPCConn(ctx)
@@ -258,6 +263,7 @@ func convertEvent(e *types.Any) (string, interface{}, error) {
 }
 
 func pullRequiredImages(t *testing.T, images []string, opts ...SandboxConfigOpt) {
+	t.Helper()
 	opts = append(opts, WithSandboxLabels(map[string]string{
 		"sandbox-platform": "windows/amd64", // Not required for Windows but makes the test safer depending on defaults in the config.
 	}))
@@ -265,6 +271,7 @@ func pullRequiredImages(t *testing.T, images []string, opts ...SandboxConfigOpt)
 }
 
 func pullRequiredLCOWImages(t *testing.T, images []string, opts ...SandboxConfigOpt) {
+	t.Helper()
 	opts = append(opts, WithSandboxLabels(map[string]string{
 		"sandbox-platform": "linux/amd64",
 	}))
@@ -272,6 +279,7 @@ func pullRequiredLCOWImages(t *testing.T, images []string, opts ...SandboxConfig
 }
 
 func pullRequiredImagesWithOptions(t *testing.T, images []string, opts ...SandboxConfigOpt) {
+	t.Helper()
 	if len(images) < 1 {
 		return
 	}
@@ -301,6 +309,7 @@ func pullRequiredImagesWithOptions(t *testing.T, images []string, opts ...Sandbo
 }
 
 func removeImages(t *testing.T, images []string) {
+	t.Helper()
 	if len(images) < 1 {
 		return
 	}

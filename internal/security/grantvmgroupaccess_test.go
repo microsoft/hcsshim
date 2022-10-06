@@ -88,7 +88,6 @@ func TestGrantVmGroupAccessDefault(t *testing.T) {
 		f2Path,
 		[]string{`(I)(R)`},
 	)
-
 }
 
 func TestGrantVMGroupAccess_File_DesiredPermissions(t *testing.T) {
@@ -237,6 +236,7 @@ func TestGrantVMGroupAccess_Directory_Permissions(t *testing.T) {
 }
 
 func TestGrantVmGroupAccess_Invalid_AccessMask(t *testing.T) {
+	t.Helper()
 	for _, access := range []accessMask{
 		0,          // no bits set
 		1,          // invalid bit set
@@ -261,6 +261,7 @@ func TestGrantVmGroupAccess_Invalid_AccessMask(t *testing.T) {
 }
 
 func verifyVMAccountDACLs(t *testing.T, name string, permissions []string) {
+	t.Helper()
 	cmd := exec.Command("icacls", name)
 	outb, err := cmd.CombinedOutput()
 	if err != nil {

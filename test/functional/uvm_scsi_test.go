@@ -37,7 +37,6 @@ func TestSCSIAddRemoveLCOW(t *testing.T) {
 	defer u.Close()
 
 	testSCSIAddRemoveMultiple(t, u, `/run/gcs/c/0/scsi`, "linux", []string{})
-
 }
 
 // TestSCSIAddRemoveWCOW validates adding and removing SCSI disks
@@ -89,6 +88,7 @@ func testRemoveAllSCSI(u *uvm.UtilityVM, disks []string) error {
 //
 //nolint:unused // unused since tests are skipped
 func testSCSIAddRemoveSingle(t *testing.T, u *uvm.UtilityVM, pathPrefix string, operatingSystem string, wcowImageLayerFolders []string) {
+	t.Helper()
 	numDisks := 63 // Windows: 63 as the UVM scratch is at 0:0
 	if operatingSystem == "linux" {
 		numDisks++ //
@@ -140,6 +140,7 @@ func testSCSIAddRemoveSingle(t *testing.T, u *uvm.UtilityVM, pathPrefix string, 
 
 //nolint:unused // unused since tests are skipped
 func testSCSIAddRemoveMultiple(t *testing.T, u *uvm.UtilityVM, pathPrefix string, operatingSystem string, wcowImageLayerFolders []string) {
+	t.Helper()
 	numDisks := 63 // Windows: 63 as the UVM scratch is at 0:0
 	if operatingSystem == "linux" {
 		numDisks++ //

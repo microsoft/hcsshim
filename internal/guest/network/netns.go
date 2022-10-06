@@ -178,7 +178,6 @@ func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *prot.Net
 				if err := netlink.RouteAdd(&route); err != nil {
 					return errors.Wrapf(err, "netlink.RouteAdd(%#v) failed", route)
 				}
-
 			}
 		}
 	} else {

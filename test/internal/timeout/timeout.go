@@ -17,7 +17,8 @@ type ErrorFunc func(error) error
 // then passed to to [testing.Fatal].
 //
 // fe should expect nil errors.
-func WaitForError(ctx context.Context, t testing.TB, f func() error, fe ErrorFunc) {
+func WaitForError(ctx context.Context, tb testing.TB, f func() error, fe ErrorFunc) {
+	tb.Helper()
 	var err error
 	ch := make(chan struct{})
 
@@ -28,18 +29,18 @@ func WaitForError(ctx context.Context, t testing.TB, f func() error, fe ErrorFun
 
 	select {
 	case <-ch:
-		fatalOnError(t, fe, err)
+		fatalOnError(tb, fe, err)
 	case <-ctx.Done():
-		fatalOnError(t, fe, ctx.Err())
+		fatalOnError(tb, fe, ctx.Err())
 	}
 }
 
-func fatalOnError(t testing.TB, f func(error) error, err error) {
+func fatalOnError(tb testing.TB, f func(error) error, err error) {
+	tb.Helper()
 	if f != nil {
 		err = f(err)
 	}
 	if err != nil {
-		t.Helper()
-		t.Fatal(err.Error())
+		tb.Fatal(err.Error())
 	}
 }

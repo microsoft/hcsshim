@@ -36,6 +36,7 @@ func securityPolicyFromContainers(policyType string, containers []securitypolicy
 }
 
 func sandboxSecurityPolicy(t *testing.T, policyType string) string {
+	t.Helper()
 	defaultContainers := helpers.DefaultContainerConfigs()
 	policyString, err := securityPolicyFromContainers(policyType, defaultContainers)
 	if err != nil {
@@ -45,6 +46,7 @@ func sandboxSecurityPolicy(t *testing.T, policyType string) string {
 }
 
 func alpineSecurityPolicy(t *testing.T, policyType string, opts ...securitypolicy.ContainerConfigOpt) string {
+	t.Helper()
 	defaultContainers := helpers.DefaultContainerConfigs()
 
 	alpineContainer := securitypolicy.ContainerConfig{
@@ -67,6 +69,7 @@ func alpineSecurityPolicy(t *testing.T, policyType string, opts ...securitypolic
 }
 
 func sandboxRequestWithPolicy(t *testing.T, policy string) *runtime.RunPodSandboxRequest {
+	t.Helper()
 	return getRunPodSandboxRequest(
 		t,
 		lcowRuntimeHandler,
@@ -633,7 +636,6 @@ func Test_RunPrivilegedContainer_WithPolicy_And_AllowElevated_Set(t *testing.T) 
 			defer stopContainer(t, client, ctx, containerID)
 		})
 	}
-
 }
 
 // todo (maksiman): add coverage for rego enforcer

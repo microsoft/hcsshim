@@ -10,6 +10,7 @@ import (
 )
 
 func newGUID(t *testing.T) guid.GUID {
+	t.Helper()
 	g, err := guid.NewV4()
 	if err != nil {
 		t.Fatal(err)

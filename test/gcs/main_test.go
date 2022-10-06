@@ -116,17 +116,17 @@ func setup() (err error) {
 // host and runtime management
 //
 
-func getTestState(ctx context.Context, t testing.TB) (*hcsv2.Host, runtime.Runtime) {
-	rt := getRuntime(ctx, t)
-
-	return getHost(ctx, t, rt), rt
+func getTestState(ctx context.Context, tb testing.TB) (*hcsv2.Host, runtime.Runtime) {
+	tb.Helper()
+	rt := getRuntime(ctx, tb)
+	return getHost(ctx, tb, rt), rt
 }
 
-func getHost(_ context.Context, t testing.TB, rt runtime.Runtime) *hcsv2.Host {
+func getHost(_ context.Context, tb testing.TB, rt runtime.Runtime) *hcsv2.Host {
+	tb.Helper()
 	h, err := getHostErr(rt, getTransport())
 	if err != nil {
-		t.Helper()
-		t.Fatalf("could not get host: %v", err)
+		tb.Fatalf("could not get host: %v", err)
 	}
 
 	return h
@@ -144,11 +144,11 @@ func getHostErr(rt runtime.Runtime, tp transport.Transport) (*hcsv2.Host, error)
 	return h, nil
 }
 
-func getRuntime(_ context.Context, t testing.TB) runtime.Runtime {
+func getRuntime(_ context.Context, tb testing.TB) runtime.Runtime {
+	tb.Helper()
 	rt, err := getRuntimeErr()
 	if err != nil {
-		t.Helper()
-		t.Fatalf("could not get runtime: %v", err)
+		tb.Fatalf("could not get runtime: %v", err)
 	}
 
 	return rt
@@ -167,6 +167,7 @@ func getTransport() transport.Transport {
 	return &PipeTransport{}
 }
 
-func requireFeatures(t testing.TB, features ...string) {
-	require.Features(t, flagFeatures.S, features...)
+func requireFeatures(tb testing.TB, features ...string) {
+	tb.Helper()
+	require.Features(tb, flagFeatures.S, features...)
 }

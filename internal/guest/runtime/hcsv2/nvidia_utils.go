@@ -79,7 +79,6 @@ func addNvidiaDeviceHook(ctx context.Context, spec *oci.Spec) error {
 // gcstool's `install-drivers` binary.
 func getNvidiaDriversUsrLibPath() string {
 	return fmt.Sprintf("%s/content/usr/lib", guestpath.LCOWNvidiaMountPath)
-
 }
 
 // Helper function to find the usr/bin path for the installed nvidia tools.

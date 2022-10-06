@@ -53,7 +53,6 @@ var testDataGenerator *dataGenerator
 func init() {
 	seed := time.Now().Unix()
 	if seedStr, ok := os.LookupEnv("SEED"); ok {
-
 		if parsedSeed, err := strconv.ParseInt(seedStr, 10, 64); err != nil {
 			fmt.Fprintf(os.Stderr, "failed to parse seed: %d\n", seed)
 		} else {

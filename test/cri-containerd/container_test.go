@@ -23,6 +23,7 @@ import (
 )
 
 func runLogRotationContainer(t *testing.T, sandboxRequest *runtime.RunPodSandboxRequest, request *runtime.CreateContainerRequest, log string, logArchive string) {
+	t.Helper()
 	client := newTestRuntimeClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -60,6 +61,7 @@ func runLogRotationContainer(t *testing.T, sandboxRequest *runtime.RunPodSandbox
 }
 
 func runContainerLifetime(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID string) {
+	t.Helper()
 	defer removeContainer(t, client, ctx, containerID)
 	startContainer(t, client, ctx, containerID)
 	stopContainer(t, client, ctx, containerID)
@@ -522,6 +524,7 @@ func Test_RunContainer_ShareScratch_LCOW(t *testing.T) {
 }
 
 func findOverlaySize(t *testing.T, ctx context.Context, client runtime.RuntimeServiceClient, cid string) []string {
+	t.Helper()
 	cmd := []string{"df"}
 	containerExecReq := &runtime.ExecSyncRequest{
 		ContainerId: cid,

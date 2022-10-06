@@ -11,6 +11,7 @@ import (
 )
 
 func newTestPluginClient(t *testing.T) cri.CRIPluginServiceClient {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
 	defer cancel()
 	conn, err := createGRPCConn(ctx)
@@ -21,6 +22,7 @@ func newTestPluginClient(t *testing.T) cri.CRIPluginServiceClient {
 }
 
 func resetContainer(t *testing.T, client cri.CRIPluginServiceClient, ctx context.Context, containerID string) {
+	t.Helper()
 	_, err := client.ResetContainer(ctx, &cri.ResetContainerRequest{
 		ContainerId: containerID,
 	})
@@ -30,6 +32,7 @@ func resetContainer(t *testing.T, client cri.CRIPluginServiceClient, ctx context
 }
 
 func resetPodSandbox(t *testing.T, client cri.CRIPluginServiceClient, ctx context.Context, podID string) {
+	t.Helper()
 	_, err := client.ResetPodSandbox(ctx, &cri.ResetPodSandboxRequest{
 		PodSandboxId: podID,
 	})

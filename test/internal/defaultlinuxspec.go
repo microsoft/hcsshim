@@ -11,6 +11,7 @@ import (
 )
 
 func GetDefaultLinuxSpec(t *testing.T) *specs.Spec {
+	t.Helper()
 	content, err := os.ReadFile(`assets\defaultlinuxspec.json`)
 	if err != nil {
 		t.Fatalf("failed to read defaultlinuxspec.json: %s", err.Error())

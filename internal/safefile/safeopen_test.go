@@ -12,6 +12,7 @@ import (
 )
 
 func tempRoot(t *testing.T) (*os.File, error) {
+	t.Helper()
 	name := t.TempDir()
 	f, err := OpenRoot(name)
 	if err != nil {

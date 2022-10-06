@@ -117,6 +117,7 @@ func getClonedContainerConfig(uniqueID int, templateid string) *runtime.CreateCo
 }
 
 func waitForTemplateSave(ctx context.Context, t *testing.T, templatePodID string) {
+	t.Helper()
 	app := "hcsdiag"
 	arg0 := "list"
 	for {
@@ -138,6 +139,7 @@ func waitForTemplateSave(ctx context.Context, t *testing.T, templatePodID string
 }
 
 func createPodAndContainer(ctx context.Context, t *testing.T, client runtime.RuntimeServiceClient, sandboxRequest *runtime.RunPodSandboxRequest, containerRequest *runtime.CreateContainerRequest, podID, containerID *string) {
+	t.Helper()
 	// This is required in order to avoid leaking a pod and/or container in case somethings fails
 	// during container creation of startup. The podID (and containerID if container creation was
 	// successful) will be set to correct values so that the caller can correctly cleanup them even
@@ -165,6 +167,7 @@ func createTemplateContainer(
 	templateContainerRequest *runtime.CreateContainerRequest,
 	templatePodID, templateContainerID *string,
 ) {
+	t.Helper()
 	createPodAndContainer(ctx, t, client, templateSandboxRequest, templateContainerRequest, templatePodID, templateContainerID)
 
 	// Send a context with deadline for waitForTemplateSave function
@@ -185,6 +188,7 @@ func createClonedContainer(
 	cloneNumber int,
 	clonedPodID, clonedContainerID *string,
 ) {
+	t.Helper()
 	cloneSandboxRequest := getClonedPodConfig(cloneNumber, templatePodID)
 	cloneContainerRequest := getClonedContainerConfig(cloneNumber, templateContainerID)
 	createPodAndContainer(ctx, t, client, cloneSandboxRequest, cloneContainerRequest, clonedPodID, clonedContainerID)
@@ -192,6 +196,7 @@ func createClonedContainer(
 
 // Runs a command inside given container and verifies if the command executes successfully.
 func verifyContainerExec(ctx context.Context, t *testing.T, client runtime.RuntimeServiceClient, containerID string) {
+	t.Helper()
 	execCommand := []string{
 		"ping",
 		"127.0.0.1",
@@ -216,6 +221,7 @@ func verifyContainerExec(ctx context.Context, t *testing.T, client runtime.Runti
 }
 
 func cleanupPod(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, podID *string) {
+	t.Helper()
 	if *podID == "" {
 		// Do nothing for empty podID
 		return
@@ -225,6 +231,7 @@ func cleanupPod(t *testing.T, client runtime.RuntimeServiceClient, ctx context.C
 }
 
 func cleanupContainer(t *testing.T, client runtime.RuntimeServiceClient, ctx context.Context, containerID *string) {
+	t.Helper()
 	if *containerID == "" {
 		// Do nothing for empty containerID
 		return
