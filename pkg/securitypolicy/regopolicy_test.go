@@ -14,6 +14,7 @@ import (
 	"testing"
 	"testing/quick"
 
+	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/open-policy-agent/opa/ast"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -24,6 +25,9 @@ const (
 	maxGeneratedExternalProcesses      = 12
 	maxGeneratedSandboxIDLength        = 32
 	maxGeneratedEnforcementPointLength = 64
+	maxGeneratedPlan9Mounts            = 8
+	maxPlan9MountTargetLength          = 64
+	maxPlan9MountIndex                 = 16
 )
 
 // Validate we do our conversion from Json to rego correctly
@@ -1660,6 +1664,133 @@ func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Bad_ContainerID(t *testi
 	}
 }
 
+func Test_Rego_Plan9MountPolicy(t *testing.T) {
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+
+	tc, err := setupPlan9MountTest(gc)
+	if err != nil {
+		t.Fatalf("unable to setup test: %v", err)
+	}
+
+	err = tc.policy.EnforcePlan9MountPolicy(tc.uvmPathForShare)
+	if err != nil {
+		t.Fatalf("Policy enforcement unexpectedly was denied: %v", err)
+	}
+
+	err = tc.policy.EnforceCreateContainerPolicy(
+		tc.sandboxID,
+		tc.containerID,
+		tc.argList,
+		tc.envList,
+		tc.workingDir,
+		tc.mounts)
+
+	if err != nil {
+		t.Fatalf("Policy enforcement unexpectedly was denied: %v", err)
+	}
+}
+
+func Test_Rego_Plan9MountPolicy_No_Matches(t *testing.T) {
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+
+	tc, err := setupPlan9MountTest(gc)
+	if err != nil {
+		t.Fatalf("unable to setup test: %v", err)
+	}
+
+	mount := generateUVMPathForShare(testRand, tc.containerID)
+	for {
+		if mount != tc.uvmPathForShare {
+			break
+		}
+		mount = generateUVMPathForShare(testRand, tc.containerID)
+	}
+
+	err = tc.policy.EnforcePlan9MountPolicy(mount)
+	if err != nil {
+		t.Fatalf("Policy enforcement unexpectedly was denied: %v", err)
+	}
+
+	err = tc.policy.EnforceCreateContainerPolicy(
+		tc.sandboxID,
+		tc.containerID,
+		tc.argList,
+		tc.envList,
+		tc.workingDir,
+		tc.mounts)
+
+	if err == nil {
+		t.Fatal("Policy enforcement unexpectedly was allowed")
+	}
+}
+
+func Test_Rego_Plan9MountPolicy_Invalid(t *testing.T) {
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+
+	tc, err := setupPlan9MountTest(gc)
+	if err != nil {
+		t.Fatalf("unable to setup test: %v", err)
+	}
+
+	mount := randString(testRand, maxGeneratedMountSourceLength)
+	err = tc.policy.EnforcePlan9MountPolicy(mount)
+	if err == nil {
+		t.Fatal("Policy enforcement unexpectedly was allowed", err)
+	}
+}
+
+func Test_Rego_Plan9UnmountPolicy(t *testing.T) {
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+
+	tc, err := setupPlan9MountTest(gc)
+	if err != nil {
+		t.Fatalf("unable to setup test: %v", err)
+	}
+
+	err = tc.policy.EnforcePlan9MountPolicy(tc.uvmPathForShare)
+	if err != nil {
+		t.Fatalf("Couldn't mount as part of setup: %v", err)
+	}
+
+	err = tc.policy.EnforcePlan9UnmountPolicy(tc.uvmPathForShare)
+	if err != nil {
+		t.Fatalf("Policy enforcement unexpectedly was denied: %v", err)
+	}
+
+	err = tc.policy.EnforceCreateContainerPolicy(
+		tc.sandboxID,
+		tc.containerID,
+		tc.argList,
+		tc.envList,
+		tc.workingDir,
+		tc.mounts)
+
+	if err == nil {
+		t.Fatal("Policy enforcement unexpectedly was allowed")
+	}
+}
+
+func Test_Rego_Plan9UnmountPolicy_No_Matches(t *testing.T) {
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+
+	tc, err := setupPlan9MountTest(gc)
+	if err != nil {
+		t.Fatalf("unable to setup test: %v", err)
+	}
+
+	mount := generateUVMPathForShare(testRand, tc.containerID)
+	err = tc.policy.EnforcePlan9MountPolicy(mount)
+	if err != nil {
+		t.Fatalf("Couldn't mount as part of setup: %v", err)
+	}
+
+	badMount := randString(testRand, maxPlan9MountTargetLength)
+	err = tc.policy.EnforcePlan9UnmountPolicy(badMount)
+	if err == nil {
+		t.Fatalf("Policy enforcement unexpectedly was allowed")
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //
@@ -1937,6 +2068,72 @@ type regoExternalPolicyTestConfig struct {
 	policy *regoEnforcer
 }
 
+func setupPlan9MountTest(gc *generatedConstraints) (tc *regoPlan9MountTestConfig, err error) {
+	securityPolicy := gc.toPolicy()
+	defaultMounts := generateMounts(testRand)
+	privilegedMounts := generateMounts(testRand)
+
+	testContainer := selectContainerFromConstraints(gc, testRand)
+	mountIndex := atMost(testRand, int32(len(testContainer.Mounts)-1))
+	testMount := &testContainer.Mounts[mountIndex]
+	testMount.Source = plan9Prefix
+	testMount.Type = "secret"
+
+	policy, err := newRegoPolicy(securityPolicy.marshalRego(),
+		toOCIMounts(defaultMounts),
+		toOCIMounts(privilegedMounts))
+	if err != nil {
+		return nil, err
+	}
+
+	containerID, err := mountImageForContainer(policy, testContainer)
+	if err != nil {
+		return nil, err
+	}
+
+	uvmPathForShare := generateUVMPathForShare(testRand, containerID)
+
+	envList := buildEnvironmentVariablesFromEnvRules(testContainer.EnvRules, testRand)
+	sandboxID := testDataGenerator.uniqueSandboxID()
+
+	mounts := testContainer.Mounts
+	mounts = append(mounts, defaultMounts...)
+
+	if testContainer.AllowElevated {
+		mounts = append(mounts, privilegedMounts...)
+	}
+	mountSpec := buildMountSpecFromMountArray(mounts, sandboxID, testRand)
+	mountSpec.Mounts = append(mountSpec.Mounts, oci.Mount{
+		Source:      uvmPathForShare,
+		Destination: testMount.Destination,
+		Options:     testMount.Options,
+		Type:        testMount.Type,
+	})
+
+	// see NOTE_TESTCOPY
+	return &regoPlan9MountTestConfig{
+		envList:         copyStrings(envList),
+		argList:         copyStrings(testContainer.Command),
+		workingDir:      testContainer.WorkingDir,
+		containerID:     containerID,
+		sandboxID:       sandboxID,
+		mounts:          copyMounts(mountSpec.Mounts),
+		uvmPathForShare: uvmPathForShare,
+		policy:          policy,
+	}, nil
+}
+
+type regoPlan9MountTestConfig struct {
+	envList         []string
+	argList         []string
+	workingDir      string
+	containerID     string
+	sandboxID       string
+	mounts          []oci.Mount
+	uvmPathForShare string
+	policy          *regoEnforcer
+}
+
 func mountImageForContainer(policy *regoEnforcer, container *securityPolicyContainer) (string, error) {
 	containerID := testDataGenerator.uniqueContainerID()
 
@@ -2100,4 +2297,11 @@ func randChoices(r *rand.Rand, numChoices int, numItems int, replacement bool) [
 	}
 
 	return choices
+}
+
+func generateUVMPathForShare(r *rand.Rand, containerID string) string {
+	return fmt.Sprintf("%s/%s%s",
+		guestpath.LCOWRootPrefixInUVM,
+		containerID,
+		fmt.Sprintf(guestpath.LCOWMountPathPrefixFmt, atMost(r, maxPlan9MountIndex)))
 }

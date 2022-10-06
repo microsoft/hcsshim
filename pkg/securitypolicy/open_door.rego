@@ -1,6 +1,6 @@
 package policy
 
-api_svn := "0.5.0"
+api_svn := "0.6.0"
 
 mount_device := {"allowed": true}
 mount_overlay := {"allowed": true}
@@ -10,3 +10,5 @@ exec_in_container := {"allowed": true}
 exec_external := {"allowed": true}
 shutdown_container := {"allowed": true}
 signal_container_process := {"allowed": true}
+plan9_mount := {"allowed": true}
+plan9_unmount := {"allowed": true}
