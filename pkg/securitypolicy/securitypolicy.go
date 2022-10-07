@@ -2,6 +2,7 @@ package securitypolicy
 
 import (
 	"crypto/sha256"
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,12 @@ import (
 	"github.com/Microsoft/hcsshim/internal/guestpath"
 	"github.com/pkg/errors"
 )
+
+//go:embed framework.rego
+var FrameworkCode string
+
+//go:embed api.rego
+var APICode string
 
 var ErrInvalidOpenDoorPolicy = errors.New("allow_all cannot be set to 'true' when Containers are non-empty")
 

@@ -1,0 +1,224 @@
+[
+    {
+        "name": "load_fragment",
+        "input": {
+            "issuer": "did:web:contoso.github.io",
+            "feed": "contoso.azurecr.io/custom",
+            "namespace": "custom",
+            "local_path": "custom.rego"
+        }
+    },
+    {
+        "name": "mount_device",
+        "input": {
+            "target": "/mnt/layer0",
+            "deviceHash": "16b514057a06ad665f92c02863aca074fd5976c755d26bff16365299169e8415"
+        }
+    },
+    {
+        "name": "mount_overlay",
+        "input": {
+            "target": "/mnt/overlay0",
+            "containerID": "container0",
+            "layerPaths": [
+                "/mnt/layer0"
+            ]
+        }
+    },
+    {
+        "name": "create_container",
+        "input": {
+            "containerID": "container0",
+            "argList": [
+                "/pause"
+            ],
+            "envList": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "TERM=xterm"
+            ],
+            "mounts": [],
+            "workingDir": "/",
+            "sandboxDir": "/sandbox",
+            "hugePagesDir": "/hugepages"
+        }
+    },
+    {
+        "name": "mount_device",
+        "input": {
+            "target": "/mnt/layer1",
+            "deviceHash": "998fe7a12356e0de0f2ffb4134615b42c9510e281c0ecfc7628c121442544309"
+        }
+    },
+    {
+        "name": "mount_device",
+        "input": {
+            "target": "/mnt/layer2",
+            "deviceHash": "f65ec804a63b85f507ac11d187434ea135a18cdc16202551d8dff292f942fdf0"
+        }
+    },
+    {
+        "name": "mount_device",
+        "input": {
+            "target": "/mnt/layer3",
+            "deviceHash": "04c110e9406d2b57079f1eac4c9c5247747caa3bcaab6d83651de6e7da97cb40"
+        }
+    },
+    {
+        "name": "mount_device",
+        "input": {
+            "target": "/mnt/layer4",
+            "deviceHash": "e7fbe653352d546497c534c629269c4c04f1997f6892bd66c273f0c9753a4de3"
+        }
+    },
+    {
+        "name": "mount_device",
+        "input": {
+            "target": "/mnt/layer5",
+            "deviceHash": "b99a9ced77c45fc4dc96bac8ea1e4d9bc1d2a66696cc057d3f3cca79dc999702"
+        }
+    },
+    {
+        "name": "mount_device",
+        "input": {
+            "target": "/mnt/layer6",
+            "deviceHash": "3413e98a178646d4703ea70b9bff2d4410e606a22062046992cda8c8aedaa387"
+        }
+    },
+    {
+        "name": "mount_device",
+        "input": {
+            "target": "/mnt/layer7",
+            "deviceHash": "1e66649e162d99c4d675d8d8c3af90ece3799b33d24671bc83fe9ea5143daf2f"
+        }
+    },
+    {
+        "name": "mount_device",
+        "input": {
+            "target": "/mnt/layer8",
+            "deviceHash": "97112ba1d4a2c86c1c15a3e13f606e8fcc0fb1b49154743cadd1f065c42fee5a"
+        }
+    },
+    {
+        "name": "mount_device",
+        "input": {
+            "target": "/mnt/layer9",
+            "deviceHash": "37e9dcf799048b7d35ce53584e0984198e1bc3366c3bb5582fd97553d31beb4e"
+        }
+    },
+    {
+        "name": "mount_overlay",
+        "input": {
+            "target": "/mnt/overlay1",
+            "containerID": "container1",
+            "layerPaths": [
+                "/mnt/layer1",
+                "/mnt/layer2",
+                "/mnt/layer3",
+                "/mnt/layer4",
+                "/mnt/layer5",
+                "/mnt/layer6",
+                "/mnt/layer7",
+                "/mnt/layer8",
+                "/mnt/layer9"
+            ]
+        }
+    },
+    {
+        "name": "create_container",
+        "input": {
+            "containerID": "container1",
+            "argList": [
+                "python3",
+                "WebAttestationReport.py"
+            ],
+            "envList": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "PYTHONUNBUFFERED=1",
+                "TERM=xterm"
+            ],
+            "mounts": [],
+            "workingDir": "/demo-attestion",
+            "sandboxDir": "/sandbox",
+            "hugePagesDir": "/hugepages"
+        }
+    },
+    {
+        "name": "mount_device",
+        "input": {
+            "target": "/mnt/layer10",
+            "deviceHash": "606fd6baf5eb1a71fd286aea29672a06bfe55f0007ded92ee73142a37590ed19"
+        }
+    },
+    {
+        "name": "mount_device",
+        "input": {
+            "target": "/mnt/layer11",
+            "deviceHash": "97adfda6943f3af972b9bf4fa684f533f10c023d913d195048fef03f9c3c60fd"
+        }
+    },
+    {
+        "name": "mount_device",
+        "input": {
+            "target": "/mnt/layer12",
+            "deviceHash": "296e5baa5b9ded863ca0170e05cd9ecf4136f86c830a9da906184ab147415c7b"
+        }
+    },
+    {
+        "name": "mount_device",
+        "input": {
+            "target": "/mnt/layer13",
+            "deviceHash": "a6a6918c07c85e29e48d4a87c1194781251d5185f682c26f20d6ee4e955a239f"
+        }
+    },
+    {
+        "name": "mount_device",
+        "input": {
+            "target": "/mnt/layer14",
+            "deviceHash": "285cb680a55d09f548d4baa804a663764788619824565685b32b8097cbed3d26"
+        }
+    },
+    {
+        "name": "mount_overlay",
+        "input": {
+            "target": "/mnt/overlay2",
+            "containerID": "container2",
+            "layerPaths": [
+                "/mnt/layer10",
+                "/mnt/layer11",
+                "/mnt/layer12",
+                "/mnt/layer13",
+                "/mnt/layer14"
+            ]
+        }
+    },
+    {
+        "name": "create_container",
+        "input": {
+            "containerID": "container2",
+            "argList": [
+                "bash",
+                "/copy_resolv_conf.sh"
+            ],
+            "envList": [
+                "TERM=xterm",
+                "HOSTNAME=SandboxHost-637913201120076875",
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            ],
+            "mounts": [
+                {
+                    "destination": "/mount/resolvconf",
+                    "options": [
+                        "rbind",
+                        "rshared",
+                        "rw"
+                    ],
+                    "source": "/sandbox/tmp/atlas/resolvconf/mnt/container2",
+                    "type": "bind"
+                }
+            ],
+            "workingDir": "/",
+            "sandboxDir": "/sandbox",
+            "hugePagesDir": "/hugepages"
+        }
+    }
+]
