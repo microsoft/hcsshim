@@ -13,7 +13,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/Microsoft/hcsshim/internal/memory"
 	"github.com/Microsoft/hcsshim/internal/oc"
-	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
@@ -65,15 +64,11 @@ func MountLayer(
 	upperdirPath, workdirPath, rootfsPath string,
 	readonly bool,
 	containerID string,
-	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
 	_, span := oc.StartSpan(ctx, "overlay::MountLayer")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
 
-	if err := securityPolicy.EnforceOverlayMountPolicy(containerID, layerPaths); err != nil {
-		return err
-	}
 	return Mount(ctx, layerPaths, upperdirPath, workdirPath, rootfsPath, readonly)
 }
 

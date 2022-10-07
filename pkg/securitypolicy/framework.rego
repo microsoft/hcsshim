@@ -51,9 +51,13 @@ overlay_exists {
     data.metadata.matches[input.containerID]
 }
 
+overlay_mounted(target) {
+    data.metadata.overlayTargets[target]
+}
+
 default mount_overlay := {"allowed": false}
 
-mount_overlay := {"matches": matches, "allowed": true} {
+mount_overlay := {"matches": matches, "overlayTargets": overlay_targets, "allowed": true} {
     not overlay_exists
     containers := [container |
         some container in data.policy.containers
@@ -64,6 +68,21 @@ mount_overlay := {"matches": matches, "allowed": true} {
         "action": "add",
         "key": input.containerID,
         "value": containers
+    }
+    overlay_targets := {
+        "action": "add",
+        "key": input.target,
+        "value": true
+    }
+}
+
+default unmount_overlay := {"allowed": false}
+
+unmount_overlay := {"overlayTargets": overlay_targets, "allowed": true} {
+    overlay_mounted(input.unmountTarget)
+    overlay_targets := {
+        "action": "remove",
+        "key": input.unmountTarget
     }
 }
 
@@ -360,6 +379,11 @@ default overlay_matches := false
 overlay_matches {
     some container in data.policy.containers
     layerPaths_ok(container.layers)
+}
+
+errors["no overlay at path to unmount"] {
+    input.rule == "unmount_overlay"
+    not overlay_mounted(input.unmountTarget)
 }
 
 errors["no matching containers for overlay"] {

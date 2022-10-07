@@ -7,6 +7,7 @@ enforcement_points := {
     "mount_overlay": {"introducedVersion": "0.1.0", "allowedByDefault": false},
     "create_container": {"introducedVersion": "0.1.0", "allowedByDefault": false},
     "unmount_device": {"introducedVersion": "0.2.0", "allowedByDefault": true},
+    "unmount_overlay": {"introducedVersion": "0.6.0", "allowedByDefault": true},
     "exec_in_container": {"introducedVersion": "0.2.0", "allowedByDefault": true},
     "exec_external": {"introducedVersion": "0.3.0", "allowedByDefault": true},
     "shutdown_container": {"introducedVersion": "0.4.0", "allowedByDefault": true},
