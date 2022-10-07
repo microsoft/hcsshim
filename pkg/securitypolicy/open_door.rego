@@ -1,6 +1,6 @@
 package policy
 
-api_svn := "0.8.0"
+api_svn := "0.9.0"
 
 mount_device := {"allowed": true}
 mount_overlay := {"allowed": true}
@@ -16,3 +16,4 @@ plan9_unmount := {"allowed": true}
 get_properties := {"allowed": true}
 dump_stacks := {"allowed": true}
 runtime_logging := {"allowed": true}
+load_fragment := {"allowed": true}

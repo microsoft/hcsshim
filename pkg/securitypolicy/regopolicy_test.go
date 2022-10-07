@@ -15,6 +15,7 @@ import (
 	"testing/quick"
 
 	"github.com/Microsoft/hcsshim/internal/guestpath"
+	"github.com/blang/semver/v4"
 	"github.com/open-policy-agent/opa/ast"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -22,32 +23,139 @@ import (
 
 const (
 	// variables that influence generated rego-only test fixtures
-	maxGeneratedExternalProcesses      = 12
-	maxGeneratedSandboxIDLength        = 32
-	maxGeneratedEnforcementPointLength = 64
-	maxGeneratedPlan9Mounts            = 8
-	maxPlan9MountTargetLength          = 64
-	maxPlan9MountIndex                 = 16
+	maxDiffLength                              = 64
+	maxExternalProcessesInGeneratedConstraints = 16
+	maxFragmentsInGeneratedConstraints         = 4
+	maxGeneratedExternalProcesses              = 12
+	maxGeneratedSandboxIDLength                = 32
+	maxGeneratedEnforcementPointLength         = 64
+	maxGeneratedPlan9Mounts                    = 8
+	maxGeneratedFragmentFeedLength             = 256
+	maxGeneratedFragmentIssuerLength           = 16
+	maxPlan9MountTargetLength                  = 64
+	maxPlan9MountIndex                         = 16
 )
 
-// Validate we do our conversion from Json to rego correctly
-func Test_MarshalRego(t *testing.T) {
+func Test_MarshalRego_Policy(t *testing.T) {
 	f := func(p *generatedConstraints) bool {
+		p.externalProcesses = generateExternalProcesses(testRand)
+		p.fragments = generateFragments(testRand, 1)
+
 		securityPolicy := p.toPolicy()
 		defaultMounts := toOCIMounts(generateMounts(testRand))
 		privilegedMounts := toOCIMounts(generateMounts(testRand))
 
-		_, err := newRegoPolicy(securityPolicy.marshalRego(), defaultMounts, privilegedMounts)
+		expected := securityPolicy.marshalRego()
+
+		containers := make([]*Container, len(p.containers))
+		for i, container := range p.containers {
+			containers[i] = container.toContainer()
+		}
+
+		externalProcesses := make([]ExternalProcessConfig, len(p.externalProcesses))
+		for i, process := range p.externalProcesses {
+			externalProcesses[i] = process.toConfig()
+		}
+
+		fragments := make([]FragmentConfig, len(p.fragments))
+		for i, fragment := range p.fragments {
+			fragments[i] = fragment.toConfig()
+		}
+
+		actual, err := MarshalPolicy("rego", false, containers, externalProcesses, fragments, p.allowGetProperties, p.allowDumpStacks, p.allowRuntimeLogging)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		if actual != expected {
+			start := -1
+			end := -1
+			for i := 0; i < len(actual) && i < len(expected); i++ {
+				if actual[i] != expected[i] {
+					if start == -1 {
+						start = i
+					} else if i-start >= maxDiffLength {
+						end = i
+						break
+					}
+				} else if start != -1 {
+					end = i
+					break
+				}
+			}
+			t.Errorf("MarshalPolicy does not create the expected Rego policy [%d-%d]: %s != %s", start, end, actual[start:end], expected[start:end])
+			return false
+		}
+
+		_, err = newRegoPolicy(expected, defaultMounts, privilegedMounts)
 		if err != nil {
 			t.Errorf("unable to convert policy to rego: %v", err)
 			return false
 		}
 
-		return !t.Failed()
+		return true
 	}
 
 	if err := quick.Check(f, &quick.Config{MaxCount: 4, Rand: testRand}); err != nil {
-		t.Errorf("Test_MarshalRego failed: %v", err)
+		t.Errorf("Test_MarshalRego_Policy failed: %v", err)
+	}
+}
+
+func Test_MarshalRego_Fragment(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		p.externalProcesses = generateExternalProcesses(testRand)
+		p.fragments = generateFragments(testRand, 1)
+
+		fragment := p.toFragment()
+		expected := fragment.marshalRego()
+
+		containers := make([]*Container, len(p.containers))
+		for i, container := range p.containers {
+			containers[i] = container.toContainer()
+		}
+
+		externalProcesses := make([]ExternalProcessConfig, len(p.externalProcesses))
+		for i, process := range p.externalProcesses {
+			externalProcesses[i] = process.toConfig()
+		}
+
+		fragments := make([]FragmentConfig, len(p.fragments))
+		for i, fragment := range p.fragments {
+			fragments[i] = fragment.toConfig()
+		}
+
+		actual, err := MarshalFragment(p.namespace, p.svn, containers, externalProcesses, fragments)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		if actual != expected {
+			start := -1
+			end := -1
+			for i := 0; i < len(actual) && i < len(expected); i++ {
+				if actual[i] != expected[i] {
+					if start == -1 {
+						start = i
+					} else if i-start >= maxDiffLength {
+						end = i
+						break
+					}
+				} else if start != -1 {
+					end = i
+					break
+				}
+			}
+			t.Errorf("MarshalFragment does not create the expected Rego fragment [%d-%d]: %s != %s", start, end, actual[start:end], expected[start:end])
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 4, Rand: testRand}); err != nil {
+		t.Errorf("Test_MarshalRego_Fragment failed: %v", err)
 	}
 }
 
@@ -952,7 +1060,7 @@ func Test_Rego_MountPolicy_MountPrivilegedWhenNotAllowed(t *testing.T) {
 // Tests whether an error is raised if support information is requested for
 // an enforcement point which does not have stored version information.
 func Test_Rego_Version_Unregistered_Enforcement_Point(t *testing.T) {
-	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
 	securityPolicy := gc.toPolicy()
 	policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{})
 	if err != nil {
@@ -973,7 +1081,7 @@ func Test_Rego_Version_Unregistered_Enforcement_Point(t *testing.T) {
 // framework. This should not happen, but may occur during development if
 // version numbers have been entered incorrectly.
 func Test_Rego_Version_Future_Enforcement_Point(t *testing.T) {
-	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
 	securityPolicy := gc.toPolicy()
 	policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{})
 	if err != nil {
@@ -1371,7 +1479,7 @@ func Test_Rego_ExecExternalProcessPolicy_WorkingDir_No_Match(t *testing.T) {
 }
 
 func Test_Rego_ShutdownContainerPolicy_Running_Container(t *testing.T) {
-	p := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+	p := generateConstraints(testRand, maxContainersInGeneratedConstraints)
 
 	tc, err := setupRegoRunningContainerTest(p)
 	if err != nil {
@@ -1387,7 +1495,7 @@ func Test_Rego_ShutdownContainerPolicy_Running_Container(t *testing.T) {
 }
 
 func Test_Rego_ShutdownContainerPolicy_Not_Running_Container(t *testing.T) {
-	p := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+	p := generateConstraints(testRand, maxContainersInGeneratedConstraints)
 
 	tc, err := setupRegoRunningContainerTest(p)
 	if err != nil {
@@ -1724,7 +1832,7 @@ func Test_Rego_SignalContainerProcessPolicy_ExecProcess_Bad_ContainerID(t *testi
 }
 
 func Test_Rego_Plan9MountPolicy(t *testing.T) {
-	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
 
 	tc, err := setupPlan9MountTest(gc)
 	if err != nil {
@@ -1750,7 +1858,7 @@ func Test_Rego_Plan9MountPolicy(t *testing.T) {
 }
 
 func Test_Rego_Plan9MountPolicy_No_Matches(t *testing.T) {
-	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
 
 	tc, err := setupPlan9MountTest(gc)
 	if err != nil {
@@ -1784,7 +1892,7 @@ func Test_Rego_Plan9MountPolicy_No_Matches(t *testing.T) {
 }
 
 func Test_Rego_Plan9MountPolicy_Invalid(t *testing.T) {
-	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
 
 	tc, err := setupPlan9MountTest(gc)
 	if err != nil {
@@ -1799,7 +1907,7 @@ func Test_Rego_Plan9MountPolicy_Invalid(t *testing.T) {
 }
 
 func Test_Rego_Plan9UnmountPolicy(t *testing.T) {
-	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
 
 	tc, err := setupPlan9MountTest(gc)
 	if err != nil {
@@ -1830,7 +1938,7 @@ func Test_Rego_Plan9UnmountPolicy(t *testing.T) {
 }
 
 func Test_Rego_Plan9UnmountPolicy_No_Matches(t *testing.T) {
-	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
 
 	tc, err := setupPlan9MountTest(gc)
 	if err != nil {
@@ -1939,7 +2047,7 @@ func Test_Rego_DumpStacksPolicy_Off(t *testing.T) {
 }
 
 func Test_EnforceRuntimeLogging_Allowed(t *testing.T) {
-	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
 	gc.allowRuntimeLogging = true
 
 	tc, err := setupRegoPolicyOnlyTest(gc)
@@ -1954,7 +2062,7 @@ func Test_EnforceRuntimeLogging_Allowed(t *testing.T) {
 }
 
 func Test_EnforceRuntimeLogging_Not_Allowed(t *testing.T) {
-	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
 	gc.allowRuntimeLogging = false
 
 	tc, err := setupRegoPolicyOnlyTest(gc)
@@ -1968,6 +2076,532 @@ func Test_EnforceRuntimeLogging_Not_Allowed(t *testing.T) {
 	}
 }
 
+func Test_Rego_LoadFragment_Container(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTestConfigWithIncludes(p, []string{"containers"})
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+		container := tc.containers[0]
+
+		err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+		if err != nil {
+			t.Error("unable to load fragment: %w", err)
+			return false
+		}
+
+		containerID, err := mountImageForContainer(tc.policy, container.container)
+		if err != nil {
+			t.Error("unable to mount image for fragment container: %w", err)
+			return false
+		}
+
+		err = tc.policy.EnforceCreateContainerPolicy(
+			container.sandboxID,
+			containerID,
+			copyStrings(container.container.Command),
+			copyStrings(container.envList),
+			container.container.WorkingDir,
+			copyMounts(container.mounts))
+
+		if err != nil {
+			t.Error("unable to create container from fragment: %w", err)
+			return false
+		}
+
+		if _, ok := tc.policy.modules[moduleID(fragment.info.issuer, fragment.info.feed)]; ok {
+			t.Error("module not removed after load")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_Container: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_Fragment(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTestConfigWithIncludes(p, []string{"fragments"})
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+		subFragment := tc.subFragments[0]
+
+		err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+		if err != nil {
+			t.Error("unable to load fragment: %w", err)
+			return false
+		}
+
+		err = tc.policy.LoadFragment(subFragment.info.issuer, subFragment.info.feed, subFragment.code)
+		if err != nil {
+			t.Error("unable to load sub-fragment from fragment: %w", err)
+			return false
+		}
+
+		container := selectContainerFromConstraints(subFragment.constraints, testRand)
+		_, err = mountImageForContainer(tc.policy, container)
+		if err != nil {
+			t.Error("unable to mount image for sub-fragment container: %w", err)
+			return false
+		}
+
+		if _, ok := tc.policy.modules[moduleID(fragment.info.issuer, fragment.info.feed)]; ok {
+			t.Error("module not removed after load")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 15, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_Fragment: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_ExternalProcess(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTestConfigWithIncludes(p, []string{"external_processes"})
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+		process := tc.externalProcesses[0]
+
+		err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+		if err != nil {
+			t.Error("unable to load fragment: %w", err)
+			return false
+		}
+
+		envList := buildEnvironmentVariablesFromEnvRules(process.envRules, testRand)
+		err = tc.policy.EnforceExecExternalProcessPolicy(process.command, envList, process.workingDir)
+		if err != nil {
+			t.Error("unable to execute external process from fragment: %w", err)
+			return false
+		}
+
+		if _, ok := tc.policy.modules[moduleID(fragment.info.issuer, fragment.info.feed)]; ok {
+			t.Error("module not removed after load")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_ExternalProcess: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_BadIssuer(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupSimpleRegoFragmentTestConfig(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+		issuer := testDataGenerator.uniqueFragmentIssuer()
+		err = tc.policy.LoadFragment(issuer, fragment.info.feed, fragment.code)
+		if err == nil {
+			t.Error("expected to be unable to load fragment due to bad issuer")
+			return false
+		}
+
+		if !strings.Contains(err.Error(), "invalid fragment issuer") {
+			t.Error("expected error string to contain 'invalid fragment issuer'")
+			return false
+		}
+
+		if _, ok := tc.policy.modules[moduleID(issuer, fragment.info.feed)]; ok {
+			t.Error("module not removed upon failure")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_BadIssuer: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_BadFeed(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupSimpleRegoFragmentTestConfig(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+		feed := testDataGenerator.uniqueFragmentFeed()
+		err = tc.policy.LoadFragment(fragment.info.issuer, feed, fragment.code)
+		if err == nil {
+			t.Error("expected to be unable to load fragment due to bad feed")
+			return false
+		}
+
+		if !strings.Contains(err.Error(), "invalid fragment feed") {
+			t.Error("expected error string to contain 'invalid fragment feed'")
+			return false
+		}
+
+		if _, ok := tc.policy.modules[moduleID(fragment.info.issuer, feed)]; ok {
+			t.Error("module not removed upon failure")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_BadFeed: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_InvalidVersion(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentVersionErrorTestConfig(p)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+		err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+		if err == nil {
+			t.Error("expected to be unable to load fragment due to invalid version")
+			return false
+		}
+
+		if !strings.Contains(err.Error(), "fragment version is below the specified minimum") {
+			t.Error("expected error string to contain 'fragment version is below the specified minimum'")
+			return false
+		}
+
+		if _, ok := tc.policy.modules[moduleID(fragment.info.issuer, fragment.info.feed)]; ok {
+			t.Error("module not removed upon failure")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_InvalidVersion: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_SameIssuerTwoFeeds(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTwoFeedTestConfig(p, true, false)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		for _, fragment := range tc.fragments {
+			err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+			if err != nil {
+				t.Error("unable to load fragment: %w", err)
+				return false
+			}
+		}
+
+		for _, container := range tc.containers {
+			containerID, err := mountImageForContainer(tc.policy, container.container)
+			if err != nil {
+				t.Error("unable to mount image for fragment container: %w", err)
+				return false
+			}
+
+			err = tc.policy.EnforceCreateContainerPolicy(
+				container.sandboxID,
+				containerID,
+				copyStrings(container.container.Command),
+				copyStrings(container.envList),
+				container.container.WorkingDir,
+				copyMounts(container.mounts))
+
+			if err != nil {
+				t.Error("unable to create container from fragment: %w", err)
+				return false
+			}
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 15, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_SameIssuerTwoFeeds: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_TwoFeeds(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTwoFeedTestConfig(p, false, false)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		for _, fragment := range tc.fragments {
+			err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+			if err != nil {
+				t.Error("unable to load fragment: %w", err)
+				return false
+			}
+		}
+
+		for _, container := range tc.containers {
+			containerID, err := mountImageForContainer(tc.policy, container.container)
+			if err != nil {
+				t.Error("unable to mount image for fragment container: %w", err)
+				return false
+			}
+
+			err = tc.policy.EnforceCreateContainerPolicy(
+				container.sandboxID,
+				containerID,
+				copyStrings(container.container.Command),
+				copyStrings(container.envList),
+				container.container.WorkingDir,
+				copyMounts(container.mounts))
+
+			if err != nil {
+				t.Error("unable to create container from fragment: %w", err)
+				return false
+			}
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 15, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_TwoFeeds: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_SameFeedTwice(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTwoFeedTestConfig(p, true, true)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		err = tc.policy.LoadFragment(tc.fragments[0].info.issuer, tc.fragments[0].info.feed, tc.fragments[0].code)
+		if err != nil {
+			t.Error("unable to load fragment the first time: %w", err)
+			return false
+		}
+
+		err = tc.policy.LoadFragment(tc.fragments[1].info.issuer, tc.fragments[1].info.feed, tc.fragments[1].code)
+		if err != nil {
+			t.Error("expected to be able to load the same issuer/feed twice: %w", err)
+			return false
+		}
+
+		for _, container := range tc.containers {
+			containerID, err := mountImageForContainer(tc.policy, container.container)
+			if err != nil {
+				t.Error("unable to mount image for fragment container: %w", err)
+				return false
+			}
+
+			err = tc.policy.EnforceCreateContainerPolicy(
+				container.sandboxID,
+				containerID,
+				copyStrings(container.container.Command),
+				copyStrings(container.envList),
+				container.container.WorkingDir,
+				copyMounts(container.mounts))
+
+			if err != nil {
+				t.Error("unable to create container from fragment: %w", err)
+				return false
+			}
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 15, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_SameFragmentTwice: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_ExcludedContainer(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTestConfigWithExcludes(p, []string{"containers"})
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+		container := tc.containers[0]
+
+		err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+		if err != nil {
+			t.Error("unable to load fragment: %w", err)
+			return false
+		}
+
+		_, err = mountImageForContainer(tc.policy, container.container)
+		if err == nil {
+			t.Error("expected to be unable to mount image for fragment container")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 15, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_ExcludedContainer: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_ExcludedFragment(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTestConfigWithExcludes(p, []string{"fragments"})
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+		subFragment := tc.subFragments[0]
+
+		err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+		if err != nil {
+			t.Error("unable to load fragment: %w", err)
+			return false
+		}
+
+		err = tc.policy.LoadFragment(subFragment.info.issuer, subFragment.info.feed, subFragment.code)
+		if err == nil {
+			t.Error("expected to be unable to load a sub-fragment from a fragment")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 15, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_ExcludedFragment: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_ExcludedExternalProcess(t *testing.T) {
+	f := func(p *generatedConstraints) bool {
+		tc, err := setupRegoFragmentTestConfigWithExcludes(p, []string{"external_processes"})
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
+		fragment := tc.fragments[0]
+		process := tc.externalProcesses[0]
+
+		err = tc.policy.LoadFragment(fragment.info.issuer, fragment.info.feed, fragment.code)
+		if err != nil {
+			t.Error("unable to load fragment: %w", err)
+			return false
+		}
+
+		envList := buildEnvironmentVariablesFromEnvRules(process.envRules, testRand)
+		err = tc.policy.EnforceExecExternalProcessPolicy(process.command, envList, process.workingDir)
+		if err == nil {
+			t.Error("expected to be unable to execute external process from a fragment")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, &quick.Config{MaxCount: 25, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_LoadFragment_ExcludedExternalProcess: %v", err)
+	}
+}
+
+func Test_Rego_LoadFragment_FragmentNamespace(t *testing.T) {
+	deviceHash := generateRootHash(testRand)
+	key := randVariableString(testRand, 32)
+	value := randVariableString(testRand, 32)
+	fragmentCode := fmt.Sprintf(`package fragment
+
+svn := "1.0.0"
+
+layer := "%s"
+
+mount_device := {"allowed": allowed, "custom": custom} {
+	allowed := input.deviceHash == layer
+	custom := {
+        "action": "add",
+        "key": "%s",
+        "value": "%s"
+	}
+}`, deviceHash, key, value)
+
+	issuer := testDataGenerator.uniqueFragmentIssuer()
+	feed := testDataGenerator.uniqueFragmentFeed()
+	policyCode := fmt.Sprintf(`package policy
+
+default load_fragment := {"allowed": false}
+
+load_fragment := {"allowed": true, "add_module": true} {
+	input.issuer == "%s"
+	input.feed == "%s"
+	semver.compare(data[input.namespace].svn, "1.0.0") >= 0
+}
+
+mount_device := data.fragment.mount_device
+	`, issuer, feed)
+
+	policy, err := newRegoPolicy(policyCode, []oci.Mount{}, []oci.Mount{})
+	if err != nil {
+		t.Fatalf("unable to create Rego policy: %v", err)
+	}
+
+	err = policy.LoadFragment(issuer, feed, fragmentCode)
+	if err != nil {
+		t.Fatalf("unable to load fragment: %v", err)
+	}
+
+	err = policy.EnforceDeviceMountPolicy("/mnt/foo", deviceHash)
+	if err != nil {
+		t.Fatalf("unable to mount device: %v", err)
+	}
+
+	custom, err := policy.getMetadata("custom")
+	if err != nil {
+		t.Error("expected metadata stored by fragment is missing")
+	}
+
+	if test, ok := custom[key]; ok {
+		if test != value {
+			t.Error("incorrect metadata value stored by fragment")
+		}
+	} else {
+		t.Error("unable to located metadata key stored by fragment")
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //
@@ -1975,12 +2609,62 @@ func Test_EnforceRuntimeLogging_Not_Allowed(t *testing.T) {
 func generateExternalProcesses(r *rand.Rand) []*externalProcess {
 	var processes []*externalProcess
 
-	numProcesses := atLeastOneAtMost(r, maxGeneratedExternalProcesses)
+	numProcesses := atLeastOneAtMost(r, maxExternalProcessesInGeneratedConstraints)
 	for i := 0; i < int(numProcesses); i++ {
 		processes = append(processes, generateExternalProcess(r))
 	}
 
 	return processes
+}
+
+func generateExternalProcess(r *rand.Rand) *externalProcess {
+	return &externalProcess{
+		command: generateCommand(r),
+		envRules: []EnvRuleConfig{{
+			Strategy: "string",
+			Rule:     "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+			Required: true,
+		}},
+		workingDir: generateWorkingDir(r),
+	}
+}
+
+func randChoices(r *rand.Rand, numChoices int, numItems int) []int {
+	shuffle := r.Perm(numItems)
+	if numChoices > numItems {
+		return shuffle
+	}
+
+	return shuffle[:numChoices]
+}
+
+func randChoicesWithReplacement(r *rand.Rand, numChoices int, numItems int) []int {
+	choices := make([]int, numChoices)
+	for i := 0; i < numChoices; i++ {
+		choices[i] = r.Intn(numItems)
+	}
+
+	return choices
+}
+
+func randChooseStrings(r *rand.Rand, items []string, numChoices int) []string {
+	numItems := len(items)
+	choiceIndices := randChoices(r, numChoices, numItems)
+	choices := make([]string, numChoices)
+	for i, index := range choiceIndices {
+		choices[i] = items[index]
+	}
+	return choices
+}
+
+func randChooseStringsWithReplacement(r *rand.Rand, items []string, numChoices int) []string {
+	numItems := len(items)
+	choiceIndices := randChoicesWithReplacement(r, numChoices, numItems)
+	choices := make([]string, numChoices)
+	for i, index := range choiceIndices {
+		choices[i] = items[index]
+	}
+	return choices
 }
 
 func selectExternalProcessFromConstraints(constraints *generatedConstraints, r *rand.Rand) *externalProcess {
@@ -1989,13 +2673,24 @@ func selectExternalProcessFromConstraints(constraints *generatedConstraints, r *
 }
 
 func (constraints *generatedConstraints) toPolicy() *securityPolicyInternal {
-	securityPolicy := new(securityPolicyInternal)
-	securityPolicy.Containers = constraints.containers
-	securityPolicy.ExternalProcesses = constraints.externalProcesses
-	securityPolicy.AllowPropertiesAccess = constraints.allowGetProperties
-	securityPolicy.AllowDumpStacks = constraints.allowDumpStacks
-	securityPolicy.AllowRuntimeLogging = constraints.allowRuntimeLogging
-	return securityPolicy
+	return &securityPolicyInternal{
+		Containers:            constraints.containers,
+		ExternalProcesses:     constraints.externalProcesses,
+		Fragments:             constraints.fragments,
+		AllowPropertiesAccess: constraints.allowGetProperties,
+		AllowDumpStacks:       constraints.allowDumpStacks,
+		AllowRuntimeLogging:   constraints.allowRuntimeLogging,
+	}
+}
+
+func (constraints *generatedConstraints) toFragment() *securityPolicyFragment {
+	return &securityPolicyFragment{
+		Namespace:         constraints.namespace,
+		SVN:               constraints.svn,
+		Containers:        constraints.containers,
+		ExternalProcesses: constraints.externalProcesses,
+		Fragments:         constraints.fragments,
+	}
 }
 
 func toOCIMounts(mounts []mountInternal) []oci.Mount {
@@ -2170,7 +2865,7 @@ func setupRegoRunningContainerTest(gc *generatedConstraints) (tc *regoRunningCon
 
 	var runningContainers []regoRunningContainer
 	numOfRunningContainers := int(atLeastOneAtMost(testRand, int32(len(gc.containers))))
-	containersToRun := randChoices(testRand, numOfRunningContainers, len(gc.containers), true)
+	containersToRun := randChoicesWithReplacement(testRand, numOfRunningContainers, len(gc.containers))
 	for _, i := range containersToRun {
 		containerToStart := gc.containers[i]
 		r, err := runContainer(policy, containerToStart, defaultMounts, privilegedMounts)
@@ -2228,6 +2923,7 @@ type regoRunningContainer struct {
 }
 
 func setupExternalProcessTest(gc *generatedConstraints) (tc *regoExternalPolicyTestConfig, err error) {
+	gc.externalProcesses = generateExternalProcesses(testRand)
 	securityPolicy := gc.toPolicy()
 	defaultMounts := generateMounts(testRand)
 	privilegedMounts := generateMounts(testRand)
@@ -2394,6 +3090,193 @@ func setupRegoPolicyOnlyTest(gc *generatedConstraints) (tc *regoPolicyOnlyTestCo
 	}, nil
 }
 
+type regoFragmentTestConfig struct {
+	fragments         []*regoFragment
+	containers        []*regoFragmentContainer
+	externalProcesses []*externalProcess
+	subFragments      []*regoFragment
+	plan9Mounts       []string
+	mountSpec         []string
+	policy            *regoEnforcer
+}
+
+type regoFragmentContainer struct {
+	container *securityPolicyContainer
+	envList   []string
+	sandboxID string
+	mounts    []oci.Mount
+}
+
+func setupSimpleRegoFragmentTestConfig(gc *generatedConstraints) (*regoFragmentTestConfig, error) {
+	return setupRegoFragmentTestConfig(gc, 1, []string{"containers"}, []string{}, false, false, false)
+}
+
+func setupRegoFragmentTestConfigWithIncludes(gc *generatedConstraints, includes []string) (*regoFragmentTestConfig, error) {
+	return setupRegoFragmentTestConfig(gc, 1, includes, []string{}, false, false, false)
+}
+
+func setupRegoFragmentTestConfigWithExcludes(gc *generatedConstraints, excludes []string) (*regoFragmentTestConfig, error) {
+	return setupRegoFragmentTestConfig(gc, 1, []string{}, excludes, false, false, false)
+}
+
+func setupRegoFragmentVersionErrorTestConfig(gc *generatedConstraints) (*regoFragmentTestConfig, error) {
+	return setupRegoFragmentTestConfig(gc, 1, []string{"containers"}, []string{}, true, false, false)
+}
+
+func setupRegoFragmentTwoFeedTestConfig(gc *generatedConstraints, sameIssuer bool, sameFeed bool) (*regoFragmentTestConfig, error) {
+	return setupRegoFragmentTestConfig(gc, 2, []string{"containers"}, []string{}, false, sameIssuer, sameFeed)
+}
+
+func setupRegoFragmentTestConfig(gc *generatedConstraints, numFragments int, includes []string, excludes []string, versionError bool, sameIssuer bool, sameFeed bool) (tc *regoFragmentTestConfig, err error) {
+	gc.fragments = generateFragments(testRand, int32(numFragments))
+
+	if sameIssuer {
+		for _, fragment := range gc.fragments {
+			fragment.issuer = gc.fragments[0].issuer
+			if sameFeed {
+				fragment.feed = gc.fragments[0].feed
+			}
+		}
+	}
+
+	fragments := selectFragmentsFromConstraints(gc, numFragments, includes, excludes, versionError)
+
+	containers := make([]*regoFragmentContainer, numFragments)
+	subFragments := make([]*regoFragment, numFragments)
+	externalProcesses := make([]*externalProcess, numFragments)
+	plan9Mounts := make([]string, numFragments)
+	for i, fragment := range fragments {
+		container := fragment.selectContainer()
+
+		envList := buildEnvironmentVariablesFromEnvRules(container.EnvRules, testRand)
+		sandboxID := testDataGenerator.uniqueSandboxID()
+
+		mounts := container.Mounts
+		mountSpec := buildMountSpecFromMountArray(mounts, sandboxID, testRand)
+		containers[i] = &regoFragmentContainer{
+			container: container,
+			envList:   envList,
+			sandboxID: sandboxID,
+			mounts:    mountSpec.Mounts,
+		}
+
+		for _, include := range fragment.info.includes {
+			switch include {
+			case "fragments":
+				subFragments[i] = selectFragmentsFromConstraints(fragment.constraints, 1, []string{"containers"}, []string{}, false)[0]
+				break
+
+			case "external_processes":
+				externalProcesses[i] = selectExternalProcessFromConstraints(fragment.constraints, testRand)
+				break
+			}
+		}
+
+		// now that we've explicitly added the excluded items to the fragment
+		// we remove the include string so that the generated policy
+		// does not include them.
+		fragment.info.includes = removeStringsFromArray(fragment.info.includes, excludes)
+	}
+
+	if sameFeed {
+		includeSet := make(map[string]bool)
+		minSVN := semver.MustParse("9.9.9")
+		for _, fragment := range gc.fragments {
+			svn := semver.MustParse(fragment.minimumSVN)
+			if svn.LT(minSVN) {
+				minSVN = svn
+			}
+			for _, include := range fragment.includes {
+				includeSet[include] = true
+			}
+		}
+		frag := gc.fragments[0]
+		frag.minimumSVN = minSVN.String()
+		frag.includes = make([]string, 0, len(includeSet))
+		for include := range includeSet {
+			frag.includes = append(frag.includes, include)
+		}
+
+		gc.fragments = []*fragment{frag}
+
+	}
+
+	securityPolicy := gc.toPolicy()
+	defaultMounts := toOCIMounts(generateMounts(testRand))
+	privilegedMounts := toOCIMounts(generateMounts(testRand))
+	policy, err := newRegoPolicy(securityPolicy.marshalRego(), defaultMounts, privilegedMounts)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &regoFragmentTestConfig{
+		fragments:         fragments,
+		containers:        containers,
+		subFragments:      subFragments,
+		externalProcesses: externalProcesses,
+		plan9Mounts:       plan9Mounts,
+		policy:            policy,
+	}, nil
+}
+
+type regoFragment struct {
+	info        *fragment
+	constraints *generatedConstraints
+	code        string
+}
+
+func (f *regoFragment) selectContainer() *securityPolicyContainer {
+	return selectContainerFromConstraints(f.constraints, testRand)
+}
+
+func selectFragmentsFromConstraints(gc *generatedConstraints, numFragments int, includes []string, excludes []string, versionError bool) []*regoFragment {
+	choices := randChoices(testRand, numFragments, len(gc.fragments))
+	fragments := make([]*regoFragment, numFragments)
+	for i, choice := range choices {
+		config := gc.fragments[choice]
+		config.includes = addStringsToArray(config.includes, includes)
+		// since we want to test that the policy cannot include an excluded
+		// quantity, we must first ensure they are in the fragment
+		config.includes = addStringsToArray(config.includes, excludes)
+
+		constraints := generateConstraints(testRand, maxContainersInGeneratedConstraints)
+		for _, include := range config.includes {
+			switch include {
+			case "fragments":
+				constraints.fragments = generateFragments(testRand, 1)
+				for _, fragment := range constraints.fragments {
+					fragment.includes = addStringsToArray(fragment.includes, []string{"containers"})
+				}
+				break
+
+			case "external_processes":
+				constraints.externalProcesses = generateExternalProcesses(testRand)
+				break
+			}
+		}
+		code := constraints.toPolicy().marshalRego()
+
+		version := config.minimumSVN
+		if versionError {
+			sv := semver.MustParse(version)
+			sv.IncrementMajor()
+			config.minimumSVN = sv.String()
+		}
+
+		namespace := testDataGenerator.uniqueFragmentNamespace()
+		fragmentHeader := fmt.Sprintf("package %s\n\nsvn := \"%s\"\n", namespace, version)
+		code = strings.Replace(code, "package policy", fragmentHeader, 1)
+		fragments[i] = &regoFragment{
+			info:        config,
+			constraints: constraints,
+			code:        code,
+		}
+	}
+
+	return fragments
+}
+
 func generateSandboxID(r *rand.Rand) string {
 	return randVariableString(r, maxGeneratedSandboxIDLength)
 }
@@ -2403,29 +3286,12 @@ func generateEnforcementPoint(r *rand.Rand) string {
 	return first + randString(r, atMost(r, maxGeneratedEnforcementPointLength))
 }
 
-func randChar(r *rand.Rand) string {
-	charset := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	return string(charset[r.Intn(len(charset))])
-}
-
 func (gen *dataGenerator) uniqueSandboxID() string {
-	for {
-		t := generateSandboxID(gen.rng)
-		if _, ok := gen.sandboxIDs[t]; !ok {
-			gen.sandboxIDs[t] = struct{}{}
-			return t
-		}
-	}
+	return gen.uniqueString(gen.sandboxIDs, generateSandboxID)
 }
 
 func (gen *dataGenerator) uniqueEnforcementPoint() string {
-	for {
-		t := generateEnforcementPoint(gen.rng)
-		if _, ok := gen.enforcementPoints[t]; !ok {
-			gen.enforcementPoints[t] = struct{}{}
-			return t
-		}
-	}
+	return gen.uniqueString(gen.enforcementPoints, generateEnforcementPoint)
 }
 
 func buildMountSpecFromMountArray(mounts []mountInternal, sandboxID string, r *rand.Rand) *oci.Spec {
@@ -2524,27 +3390,162 @@ func selectSignalFromSignals(r *rand.Rand, signals []syscall.Signal) syscall.Sig
 	return signals[r.Intn(numSignals)]
 }
 
-func randChoices(r *rand.Rand, numChoices int, numItems int, replacement bool) []int {
-	if !replacement {
-		shuffle := r.Perm(numItems)
-		if numChoices > numItems {
-			return shuffle
-		}
-
-		return shuffle[:numChoices]
-	}
-
-	choices := make([]int, numChoices)
-	for i := 0; i < numChoices; i++ {
-		choices[i] = r.Intn(numItems)
-	}
-
-	return choices
-}
-
 func generateUVMPathForShare(r *rand.Rand, containerID string) string {
 	return fmt.Sprintf("%s/%s%s",
 		guestpath.LCOWRootPrefixInUVM,
 		containerID,
 		fmt.Sprintf(guestpath.LCOWMountPathPrefixFmt, atMost(r, maxPlan9MountIndex)))
+}
+
+func generateFragments(r *rand.Rand, minFragments int32) []*fragment {
+	numFragments := randMinMax(r, minFragments, maxFragmentsInGeneratedConstraints)
+
+	fragments := make([]*fragment, numFragments)
+	for i := 0; i < int(numFragments); i++ {
+		fragments[i] = generateFragment(r)
+	}
+
+	return fragments
+}
+
+func generateFragmentIssuer(r *rand.Rand) string {
+	return randString(r, maxGeneratedFragmentIssuerLength)
+}
+
+func generateFragmentFeed(r *rand.Rand) string {
+	return randString(r, maxGeneratedFragmentFeedLength)
+}
+
+func (gen *dataGenerator) uniqueFragmentNamespace() string {
+	return gen.uniqueString(gen.fragmentNamespaces, generateFragmentNamespace)
+}
+
+func (gen *dataGenerator) uniqueFragmentIssuer() string {
+	return gen.uniqueString(gen.fragmentIssuers, generateFragmentIssuer)
+}
+
+func (gen *dataGenerator) uniqueFragmentFeed() string {
+	return gen.uniqueString(gen.fragmentFeeds, generateFragmentFeed)
+}
+
+func generateFragment(r *rand.Rand) *fragment {
+	possibleIncludes := []string{"containers", "fragments", "external_processes"}
+	numChoices := int(atLeastOneAtMost(r, int32(len(possibleIncludes))))
+	includes := randChooseStrings(r, possibleIncludes, numChoices)
+	return &fragment{
+		issuer:     testDataGenerator.uniqueFragmentIssuer(),
+		feed:       testDataGenerator.uniqueFragmentFeed(),
+		minimumSVN: generateSVN(r),
+		includes:   includes,
+	}
+}
+
+func addStringsToArray(values []string, valuesToAdd []string) []string {
+	toAdd := []string{}
+	for _, valueToAdd := range valuesToAdd {
+		add := true
+		for _, value := range values {
+			if value == valueToAdd {
+				add = false
+				break
+			}
+		}
+		if add {
+			toAdd = append(toAdd, valueToAdd)
+		}
+	}
+
+	return append(values, toAdd...)
+}
+
+func removeStringsFromArray(values []string, valuesToRemove []string) []string {
+	remain := make([]string, 0, len(values))
+	for _, value := range values {
+		keep := true
+		for _, toRemove := range valuesToRemove {
+			if value == toRemove {
+				keep = false
+				break
+			}
+		}
+		if keep {
+			remain = append(remain, value)
+		}
+	}
+
+	return remain
+}
+
+func (c *securityPolicyContainer) toContainer() *Container {
+	execProcesses := make([]ExecProcessConfig, len(c.ExecProcesses))
+	for i, ep := range c.ExecProcesses {
+		execProcesses[i] = ExecProcessConfig(ep)
+	}
+
+	return &Container{
+		Command:       CommandArgs(stringArrayToStringMap(c.Command)),
+		EnvRules:      envRuleArrayToEnvRules(c.EnvRules),
+		Layers:        Layers(stringArrayToStringMap(c.Layers)),
+		WorkingDir:    c.WorkingDir,
+		Mounts:        mountArrayToMounts(c.Mounts),
+		AllowElevated: c.AllowElevated,
+		ExecProcesses: execProcesses,
+		Signals:       c.Signals,
+	}
+}
+
+func envRuleArrayToEnvRules(envRules []EnvRuleConfig) EnvRules {
+	elements := make(map[string]EnvRuleConfig)
+	for i, envRule := range envRules {
+		elements[strconv.Itoa(i)] = envRule
+	}
+	return EnvRules{
+		Elements: elements,
+		Length:   len(envRules),
+	}
+}
+
+func mountArrayToMounts(mounts []mountInternal) Mounts {
+	elements := make(map[string]Mount)
+	for i, mount := range mounts {
+		elements[strconv.Itoa(i)] = Mount{
+			Source:      mount.Source,
+			Destination: mount.Destination,
+			Type:        mount.Type,
+			Options:     Options(stringArrayToStringMap(mount.Options)),
+		}
+	}
+
+	return Mounts{
+		Elements: elements,
+		Length:   len(mounts),
+	}
+}
+
+func (p externalProcess) toConfig() ExternalProcessConfig {
+	return ExternalProcessConfig{
+		Command:    p.command,
+		WorkingDir: p.workingDir,
+	}
+}
+
+func (f fragment) toConfig() FragmentConfig {
+	return FragmentConfig{
+		Issuer:     f.issuer,
+		Feed:       f.feed,
+		MinimumSVN: f.minimumSVN,
+		Includes:   f.includes,
+	}
+}
+
+func stringArrayToStringMap(values []string) StringArrayMap {
+	elements := make(map[string]string)
+	for i, value := range values {
+		elements[strconv.Itoa(i)] = value
+	}
+
+	return StringArrayMap{
+		Elements: elements,
+		Length:   len(values),
+	}
 }

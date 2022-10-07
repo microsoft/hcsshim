@@ -9,8 +9,19 @@ device_mounted(target) {
 
 default deviceHash_ok := false
 
+# test if a device hash exists as a layer in a policy container
 deviceHash_ok {
     some container in data.policy.containers
+    some layer in container.layers
+    input.deviceHash == layer
+}
+
+# test if a device hash exists as a layer in a fragment container
+deviceHash_ok {
+    some issuer in data.metadata.issuers
+    some feed in issuer.feeds
+    some fragment in feed
+    some container in fragment.containers
     some layer in container.layers
     input.deviceHash == layer
 }
@@ -59,10 +70,21 @@ default mount_overlay := {"allowed": false}
 
 mount_overlay := {"matches": matches, "overlayTargets": overlay_targets, "allowed": true} {
     not overlay_exists
-    containers := [container |
+    # we need to assemble a list of all possible containers
+    # which match the overlay requested, including both
+    # containers in the policy and those included from fragments.
+    policy_containers := [container |
         some container in data.policy.containers
         layerPaths_ok(container.layers)
     ]
+    fragment_containers := [container |
+        some issuer in data.metadata.issuers
+        some feed in issuer.feeds
+        some fragment in feed
+        some container in fragment.containers
+        layerPaths_ok(container.layers)
+    ]
+    containers := array.concat(policy_containers, fragment_containers)
     count(containers) > 0
     matches := {
         "action": "add",
@@ -333,13 +355,27 @@ enforcement_point_info := {"available": false, "allowed": false, "unknown": fals
     semver.compare(data.api.svn, enforcement_point.introducedVersion) < 0
 }
 
-default exec_external := {"allowed": false}
-
-exec_external := {"allowed": true} {
-    some process in data.policy.external_processes
+external_process_ok(process) {
     command_ok(process.command)
     envList_ok(process.env_rules)
     workingDirectory_ok(process.working_dir)
+}
+
+default exec_external := {"allowed": false}
+
+# test if there is a matching external process in the policy
+exec_external := {"allowed": true} {
+    some process in data.policy.external_processes
+    external_process_ok(process)
+}
+
+# test if there is a matching external process in a fragment
+exec_external := {"allowed": true} {
+    some issuer in data.metadata.issuers
+    some feed in issuer.feeds
+    some fragment in feed
+    some process in fragment.external_processes
+    external_process_ok(process)
 }
 
 default get_properties := {"allowed": false}
@@ -358,6 +394,103 @@ default runtime_logging := {"allowed": false}
 
 runtime_logging := {"allowed": true} {
     data.policy.allow_runtime_logging
+}
+
+default fragment_containers := []
+fragment_containers := data[input.namespace].containers
+
+default fragment_fragments := []
+fragment_fragments := data[input.namespace].fragments
+
+default fragment_external_processes := []
+fragment_external_processes := data[input.namespace].external_processes
+
+extract_fragment_includes(includes) := fragment {
+    objects := {
+        "containers": fragment_containers,
+        "fragments": fragment_fragments,
+        "external_processes": fragment_external_processes
+    }
+
+    fragment := {
+        include: objects[include] | include := includes[_]
+    }
+}
+
+issuer_exists(iss) {
+    data.metadata.issuers[iss]
+}
+
+feed_exists(iss, feed) {
+    data.metadata.issuers[iss].feeds[feed]
+}
+
+update_issuer(includes) := issuer {
+    feed_exists(input.issuer, input.feed)
+    old_issuer := data.metadata.issuers[input.issuer]
+    old_fragments := old_issuer.feeds[input.feed]
+    new_issuer := {
+        "feeds": {
+            input.feed: array.concat([extract_fragment_includes(includes)], old_fragments)
+        }
+    }
+    issuer := object.union(old_issuer, new_issuer)
+}
+
+update_issuer(includes) := issuer {
+    not feed_exists(input.issuer, input.feed)
+    old_issuer := data.metadata.issuers[input.issuer]
+    new_issuer := {
+        "feeds": {
+            input.feed: [extract_fragment_includes(includes)]
+        }
+    }
+    issuer := object.union(old_issuer, new_issuer)
+}
+
+update_issuer(includes) := issuer {
+    not issuer_exists(input.issuer)
+    issuer := {
+        "feeds": {
+            input.feed: [extract_fragment_includes(includes)]
+        }
+    }
+}
+
+default load_fragment := {"allowed": false}
+
+fragment_ok(fragment) {
+    input.issuer == fragment.issuer
+    input.feed == fragment.feed
+    semver.compare(data[input.namespace].svn, fragment.minimum_svn) >= 0
+}
+
+
+# test if there is a matching fragment in the policy
+matching_fragment := fragment {
+    some fragment in data.policy.fragments
+    fragment_ok(fragment)
+}
+
+# test if there is a matching fragment in a fragment
+matching_fragment := subfragment {
+    some iss in data.metadata.issuers
+    some feed in iss.feeds
+    some fragment in feed
+    some subfragment in fragment.fragments
+    fragment_ok(subfragment)
+}
+
+load_fragment := {"issuers": issuers, "add_module": add_module, "allowed": true} {
+    fragment := matching_fragment
+    issuer := update_issuer(fragment.includes)
+    issuers := {
+        "action": "update",
+        "key": input.issuer,
+        "value": issuer
+    }
+
+    add_module := "namespace" in fragment.includes
 }
 
 # error messages
@@ -396,6 +529,14 @@ default overlay_matches := false
 
 overlay_matches {
     some container in data.policy.containers
+    layerPaths_ok(container.layers)
+}
+
+overlay_matches {
+    some issuer in data.metadata.issuers
+    some feed in issuer.feeds
+    some fragment in feed
+    some container in feed.containers
     layerPaths_ok(container.layers)
 }
 
@@ -512,4 +653,58 @@ errors["device already mounted at path"] {
 errors["no device at path to unmount"] {
     input.rule == "plan9_unmount"
     not plan9_mounted(input.unmountTarget)
+}
+
+default fragment_issuer_matches := false
+
+fragment_issuer_matches {
+    some fragment in data.policy.fragments
+    fragment.issuer == input.issuer
+}
+
+fragment_issuer_matches {
+    input.issuer in data.metadata.issuers
+}
+
+errors["invalid fragment issuer"] {
+    input.rule == "load_fragment"
+    not fragment_issuer_matches
+}
+
+default fragment_feed_matches := false
+
+fragment_feed_matches {
+    some fragment in data.policy.fragments
+    fragment.issuer == input.issuer
+    fragment.feed == input.feed
+}
+
+fragment_feed_matches {
+    input.feed in data.metadata.issuers[input.issuer]
+}
+
+errors["invalid fragment feed"] {
+    input.rule == "load_fragment"
+    fragment_issuer_matches
+    not fragment_feed_matches
+}
+
+default fragment_version_is_valid := false
+
+fragment_version_is_valid {
+    some fragment in data.policy.fragments
+    fragment.issuer == input.issuer
+    fragment.feed == input.feed
+    semver.compare(data[input.namespace].svn, fragment.minimum_svn) >= 0
+}
+
+fragment_version_is_valid {
+    some fragment in data.metadata.issuers[input.issuer][input.feed]
+    semver.compare(data[input.namespace].svn, fragment.minimum_svn) >= 0
+}
+
+errors["fragment version is below the specified minimum"] {
+    input.rule == "load_fragment"
+    fragment_feed_matches
+    not fragment_version_is_valid
 }
