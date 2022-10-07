@@ -52,6 +52,7 @@ type SecurityPolicyEnforcer interface {
 	EnforceSignalContainerProcessPolicy(containerID string, signal syscall.Signal, isInitProcess bool, startupArgList []string) error
 	EnforcePlan9MountPolicy(target string) (err error)
 	EnforcePlan9UnmountPolicy(target string) (err error)
+	LoadFragment(issuer string, feed string, code string) error
 }
 
 func newSecurityPolicyFromBase64JSON(base64EncodedPolicy string) (*SecurityPolicy, error) {
@@ -491,6 +492,12 @@ func (*StandardSecurityPolicyEnforcer) EnforceOverlayUnmountPolicy(string) error
 	return nil
 }
 
+// Stub. We are deprecating the standard enforcer. Newly added enforcement
+// points are simply allowed.
+func (*StandardSecurityPolicyEnforcer) LoadFragment(_ string, _ string, _ string) error {
+	return nil
+}
+
 func (pe *StandardSecurityPolicyEnforcer) enforceCommandPolicy(containerID string, argList []string) (err error) {
 	// Get a list of all the indexes into our security policy's list of
 	// containers that are possible matches for this containerID based
@@ -812,6 +819,10 @@ func (OpenDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
 	return nil
 }
 
+func (OpenDoorSecurityPolicyEnforcer) LoadFragment(_ string, _ string, _ string) error {
+	return nil
+}
+
 func (oe *OpenDoorSecurityPolicyEnforcer) EncodedSecurityPolicy() string {
 	return oe.encodedSecurityPolicy
 }
@@ -851,7 +862,11 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []str
 }
 
 func (*ClosedDoorSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(_ string) error {
-	return errors.New("shutting down a container is denied by policy")
+	return errors.New("shutting down containers is denied by policy")
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
+	return errors.New("extending default mounts is denied by policy")
 }
 
 func (*ClosedDoorSecurityPolicyEnforcer) EnforceSignalContainerProcessPolicy(_ string, _ syscall.Signal, _ bool, _ []string) error {
@@ -866,8 +881,8 @@ func (*ClosedDoorSecurityPolicyEnforcer) EnforcePlan9UnmountPolicy(_ string) err
 	return errors.New("unmounting is denied by policy")
 }
 
-func (ClosedDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
-	return nil
+func (ClosedDoorSecurityPolicyEnforcer) LoadFragment(_ string, _ string, _ string) error {
+	return errors.New("loading fragments is denied by policy")
 }
 
 func (ClosedDoorSecurityPolicyEnforcer) EncodedSecurityPolicy() string {

@@ -13,7 +13,11 @@ import (
 	"syscall"
 )
 
-type marshalFunc func(allowAll bool, containers []*Container, externalProcesses []ExternalProcessConfig) (string, error)
+type marshalFunc func(
+	allowAll bool,
+	containers []*Container,
+	externalProcesses []ExternalProcessConfig,
+	fragments []FragmentConfig) (string, error)
 
 const (
 	jsonMarshaller = "json"
@@ -36,7 +40,11 @@ var policyRegoTemplate string
 //go:embed open_door.rego
 var openDoorRegoTemplate string
 
-func marshalJSON(allowAll bool, containers []*Container, _ []ExternalProcessConfig) (string, error) {
+func marshalJSON(
+	allowAll bool,
+	containers []*Container,
+	_ []ExternalProcessConfig,
+	_ []FragmentConfig) (string, error) {
 	var policy *SecurityPolicy
 	if allowAll {
 		if len(containers) > 0 {
@@ -56,7 +64,11 @@ func marshalJSON(allowAll bool, containers []*Container, _ []ExternalProcessConf
 	return string(policyCode), nil
 }
 
-func marshalRego(allowAll bool, containers []*Container, externalProcesses []ExternalProcessConfig) (string, error) {
+func marshalRego(
+	allowAll bool,
+	containers []*Container,
+	externalProcesses []ExternalProcessConfig,
+	fragments []FragmentConfig) (string, error) {
 	if allowAll {
 		if len(containers) > 0 {
 			return "", ErrInvalidOpenDoorPolicy
@@ -65,26 +77,34 @@ func marshalRego(allowAll bool, containers []*Container, externalProcesses []Ext
 		return openDoorRegoTemplate, nil
 	}
 
-	var policy securityPolicyInternal
-	policy.Containers = make([]*securityPolicyContainer, len(containers))
-	for i, cConf := range containers {
-		cInternal, err := cConf.toInternal()
-		if err != nil {
-			return "", err
-		}
-		policy.Containers[i] = &cInternal
+	policy, err := newSecurityPolicyInternal(containers, externalProcesses, fragments)
+	if err != nil {
+		return "", err
 	}
 
-	policy.ExternalProcesses = make([]*externalProcess, len(externalProcesses))
-	for i, pConf := range externalProcesses {
-		pInternal := pConf.toInternal()
-		policy.ExternalProcesses[i] = &pInternal
-	}
-
-	return policy.marshalRego(), nil
+	return policy.marshalPolicy(), nil
 }
 
-func MarshalPolicy(marshaller string, allowAll bool, containers []*Container, externalProcesses []ExternalProcessConfig) (string, error) {
+func MarshalFragment(
+	namespace string,
+	svn string,
+	containers []*Container,
+	externalProcesses []ExternalProcessConfig,
+	fragments []FragmentConfig) (string, error) {
+	policy, err := newSecurityPolicyInternal(containers, externalProcesses, fragments)
+	if err != nil {
+		return "", err
+	}
+
+	return policy.marshalFragment(namespace, svn), nil
+}
+
+func MarshalPolicy(
+	marshaller string,
+	allowAll bool,
+	containers []*Container,
+	externalProcesses []ExternalProcessConfig,
+	fragments []FragmentConfig) (string, error) {
 	if marshaller == "" {
 		marshaller = defaultMarshaller
 	}
@@ -92,7 +112,7 @@ func MarshalPolicy(marshaller string, allowAll bool, containers []*Container, ex
 	if marshal, ok := registeredMarshallers[marshaller]; !ok {
 		return "", fmt.Errorf("unknown marshaller: %q", marshaller)
 	} else {
-		return marshal(allowAll, containers, externalProcesses)
+		return marshal(allowAll, containers, externalProcesses, fragments)
 	}
 }
 
@@ -246,7 +266,7 @@ func writeSignals(builder *strings.Builder, signals []syscall.Signal, indent str
 	writeLine(builder, `%s"signals": %s,`, indent, array)
 }
 
-func writeContainer(builder *strings.Builder, container *securityPolicyContainer, indent string, end string) {
+func writeContainer(builder *strings.Builder, container *securityPolicyContainer, indent string) {
 	writeLine(builder, "%s{", indent)
 	writeCommand(builder, container.Command, indent+indentUsing)
 	writeEnvRules(builder, container.EnvRules, indent+indentUsing)
@@ -256,20 +276,18 @@ func writeContainer(builder *strings.Builder, container *securityPolicyContainer
 	writeSignals(builder, container.Signals, indent+indentUsing)
 	writeLine(builder, `%s"allow_elevated": %v,`, indent+indentUsing, container.AllowElevated)
 	writeLine(builder, `%s"working_dir": "%s"`, indent+indentUsing, container.WorkingDir)
-	writeLine(builder, "%s}%s", indent, end)
+	writeLine(builder, "%s},", indent)
 }
 
 func addContainers(builder *strings.Builder, containers []*securityPolicyContainer) {
-	writeLine(builder, "containers := [")
-
-	for i, container := range containers {
-		end := ","
-		if i == len(containers)-1 {
-			end = ""
-		}
-		writeContainer(builder, container, indentUsing, end)
+	if len(containers) == 0 {
+		return
 	}
 
+	writeLine(builder, "containers := [")
+	for _, container := range containers {
+		writeContainer(builder, container, indentUsing)
+	}
 	writeLine(builder, "]")
 }
 
@@ -280,23 +298,53 @@ func (p externalProcess) marshalRego() string {
 }
 
 func addExternalProcesses(builder *strings.Builder, processes []*externalProcess) {
+	if len(processes) == 0 {
+		return
+	}
+
 	writeLine(builder, "external_processes := [")
 
-	for i, process := range processes {
-		end := ","
-		if i == len(processes)-1 {
-			end = ""
-		}
-		writeLine(builder, `%s%s%s`, indentUsing, process.marshalRego(), end)
+	for _, process := range processes {
+		writeLine(builder, `%s%s,`, indentUsing, process.marshalRego())
 	}
 
 	writeLine(builder, "]")
 }
 
-func (p securityPolicyInternal) marshalRego() string {
+func (f fragment) marshalRego() string {
+	includes := stringArray(f.includes).marshalRego()
+	return fmt.Sprintf(`{"issuer": "%s", "feed": "%s", "minimum_svn": "%s", "includes": %s}`,
+		f.issuer, f.feed, f.minimumSVN, includes)
+}
+
+func addFragments(builder *strings.Builder, fragments []*fragment) {
+	if len(fragments) == 0 {
+		return
+	}
+
+	writeLine(builder, "fragments := [")
+
+	for _, fragment := range fragments {
+		writeLine(builder, "%s%s,", indentUsing, fragment.marshalRego())
+	}
+
+	writeLine(builder, "]")
+}
+
+func (p securityPolicyInternal) marshalObjects() string {
 	builder := new(strings.Builder)
+	addFragments(builder, p.Fragments)
 	addContainers(builder, p.Containers)
 	addExternalProcesses(builder, p.ExternalProcesses)
-	objects := builder.String()
+	return builder.String()
+}
+
+func (p securityPolicyInternal) marshalPolicy() string {
+	objects := p.marshalObjects()
 	return strings.Replace(policyRegoTemplate, "##OBJECTS##", objects, 1)
+}
+
+func (p securityPolicyInternal) marshalFragment(namespace string, svn string) string {
+	objects := p.marshalObjects()
+	return fmt.Sprintf("package %s\n\nsvn := \"%s\"\n\n%s", namespace, svn, objects)
 }

@@ -13,9 +13,11 @@ import (
 )
 
 var (
-	configFile = flag.String("c", "", "config path")
-	outputType = flag.String("t", "", "[rego|json]")
-	outputRaw  = flag.Bool("r", false, "whether to print the raw output")
+	configFile        = flag.String("c", "", "config path")
+	outputType        = flag.String("t", "", "[rego|json|fragment]")
+	fragmentNamespace = flag.String("n", "", "fragment namespace")
+	fragmentSVN       = flag.String("v", "", "fragment svn")
+	outputRaw         = flag.Bool("r", false, "whether to print the raw output")
 )
 
 func main() {
@@ -45,7 +47,22 @@ func main() {
 			return err
 		}
 
-		policyCode, err := securitypolicy.MarshalPolicy(*outputType, config.AllowAll, policyContainers, config.ExternalProcesses)
+		var policyCode string
+		if *outputType == "fragment" {
+			policyCode, err = securitypolicy.MarshalFragment(
+				*fragmentNamespace,
+				*fragmentSVN,
+				policyContainers,
+				config.ExternalProcesses,
+				config.Fragments)
+		} else {
+			policyCode, err = securitypolicy.MarshalPolicy(
+				*outputType,
+				config.AllowAll,
+				policyContainers,
+				config.ExternalProcesses,
+				config.Fragments)
+		}
 		if err != nil {
 			return err
 		}
