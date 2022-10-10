@@ -245,7 +245,6 @@ func mountRootfs(ctx context.Context, tb testing.TB, host *hcsv2.Host, id string
 		filepath.Join(scratch, "work"),
 		rootfs,
 		false, // readonly
-		id,
 	); err != nil {
 		tb.Fatalf("could not mount overlay layers from %q: %v", *flagRootfsPath, err)
 	}

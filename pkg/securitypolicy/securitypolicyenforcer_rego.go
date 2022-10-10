@@ -156,7 +156,17 @@ func createRegoEnforcer(base64EncodedPolicy string,
 			return createOpenDoorEnforcer(base64EncodedPolicy, defaultMounts, privilegedMounts)
 		}
 
-		code, err = marshalRego(securityPolicy.AllowAll, containers, []ExternalProcessConfig{}, []FragmentConfig{}, true, true, true, false)
+		code, err = marshalRego(
+			securityPolicy.AllowAll,
+			containers,
+			[]ExternalProcessConfig{},
+			[]FragmentConfig{},
+			true,
+			true,
+			true,
+			false,
+			true,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling the policy to Rego: %w", err)
 		}
@@ -828,8 +838,8 @@ func (policy *regoEnforcer) EnforcePlan9MountPolicy(target string) error {
 }
 
 func (policy *regoEnforcer) EnforcePlan9UnmountPolicy(target string) error {
-	input := inputData{
-		"target": target,
+	input := map[string]interface{}{
+		"unmountTarget": target,
 	}
 
 	_, err := policy.enforce("plan9_unmount", input)
@@ -913,4 +923,27 @@ func (policy *regoEnforcer) LoadFragment(issuer string, feed string, rego string
 	}
 
 	return err
+}
+
+func (policy *regoEnforcer) EnforceScratchMountPolicy(scratchPath string, encrypted bool) error {
+	input := map[string]interface{}{
+		"target":    scratchPath,
+		"encrypted": encrypted,
+	}
+	_, err := policy.enforce("scratch_mount", input)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (policy *regoEnforcer) EnforceScratchUnmountPolicy(scratchPath string) error {
+	input := map[string]interface{}{
+		"unmountTarget": scratchPath,
+	}
+	_, err := policy.enforce("scratch_unmount", input)
+	if err != nil {
+		return err
+	}
+	return nil
 }

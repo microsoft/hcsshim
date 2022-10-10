@@ -23,7 +23,12 @@ var validPolicyAlpineCommand = []string{"ash", "-c", "echo 'Hello'"}
 
 type configSideEffect func(*runtime.CreateContainerRequest) error
 
-func securityPolicyFromContainers(policyType string, containers []securitypolicy.ContainerConfig, allowEnvironmentVariableDropping bool) (string, error) {
+func securityPolicyFromContainers(
+	policyType string,
+	unencryptedScratch bool,
+	containers []securitypolicy.ContainerConfig,
+	allowEnvironmentVariableDropping bool,
+) (string, error) {
 	pc, err := helpers.PolicyContainersFromConfigs(containers)
 	if err != nil {
 		return "", err
@@ -34,7 +39,9 @@ func securityPolicyFromContainers(policyType string, containers []securitypolicy
 		true,
 		true,
 		true,
-		allowEnvironmentVariableDropping)
+		allowEnvironmentVariableDropping,
+		unencryptedScratch,
+	)
 	if err != nil {
 		return "", err
 	}
@@ -44,7 +51,7 @@ func securityPolicyFromContainers(policyType string, containers []securitypolicy
 func sandboxSecurityPolicy(t *testing.T, policyType string, allowEnvironmentVariableDropping bool) string {
 	t.Helper()
 	defaultContainers := helpers.DefaultContainerConfigs()
-	policyString, err := securityPolicyFromContainers(policyType, defaultContainers, allowEnvironmentVariableDropping)
+	policyString, err := securityPolicyFromContainers(policyType, true, defaultContainers, allowEnvironmentVariableDropping)
 	if err != nil {
 		t.Fatalf("failed to create security policy string: %s", err)
 	}
@@ -67,7 +74,7 @@ func alpineSecurityPolicy(t *testing.T, policyType string, allowEnvironmentVaria
 	}
 
 	containers := append(defaultContainers, alpineContainer)
-	policyString, err := securityPolicyFromContainers(policyType, containers, allowEnvironmentVariableDropping)
+	policyString, err := securityPolicyFromContainers(policyType, true, containers, allowEnvironmentVariableDropping)
 	if err != nil {
 		t.Fatalf("failed to create security policy string: %s", err)
 	}

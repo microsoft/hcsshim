@@ -17,5 +17,7 @@ enforcement_points := {
     "get_properties": {"introducedVersion": "0.7.0", "allowedByDefault": true},
     "dump_stacks": {"introducedVersion": "0.7.0", "allowedByDefault": true},
     "runtime_logging": {"introducedVersion": "0.8.0", "allowedByDefault": true},
-    "load_fragment": {"introducedVersion": "0.9.0", "allowedByDefault": false}
+    "load_fragment": {"introducedVersion": "0.9.0", "allowedByDefault": false},
+    "scratch_mount": {"introducedVersion": "0.10.0", "allowedByDefault": true},
+    "scratch_unmount": {"introducedVersion": "0.10.0", "allowedByDefault": true},
 }

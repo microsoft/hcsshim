@@ -65,7 +65,9 @@ func main() {
 				config.AllowPropertiesAccess,
 				config.AllowDumpStacks,
 				config.AllowRuntimeLogging,
-				config.AllowEnvironmentVariableDropping)
+				config.AllowEnvironmentVariableDropping,
+				config.AllowUnencryptedScratch,
+			)
 		}
 		if err != nil {
 			return err

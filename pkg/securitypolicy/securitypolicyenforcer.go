@@ -58,6 +58,8 @@ type SecurityPolicyEnforcer interface {
 	EnforceDumpStacksPolicy() error
 	EnforceRuntimeLoggingPolicy() (err error)
 	LoadFragment(issuer string, feed string, code string) error
+	EnforceScratchMountPolicy(scratchPath string, encrypted bool) (err error)
+	EnforceScratchUnmountPolicy(scratchPath string) (err error)
 }
 
 type stringSet map[string]struct{}
@@ -532,6 +534,18 @@ func (*StandardSecurityPolicyEnforcer) LoadFragment(_ string, _ string, _ string
 	return nil
 }
 
+// Stub. We are deprecating the standard enforcer. Newly added enforcement
+// points are simply allowed.
+func (StandardSecurityPolicyEnforcer) EnforceScratchMountPolicy(string, bool) error {
+	return nil
+}
+
+// Stub. We are deprecating the standard enforcer. Newly added enforcement
+// points are simply allowed.
+func (StandardSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(string) error {
+	return nil
+}
+
 func (pe *StandardSecurityPolicyEnforcer) enforceCommandPolicy(containerID string, argList []string) (err error) {
 	// Get a list of all the indexes into our security policy's list of
 	// containers that are possible matches for this containerID based
@@ -873,6 +887,14 @@ func (oe *OpenDoorSecurityPolicyEnforcer) EncodedSecurityPolicy() string {
 	return oe.encodedSecurityPolicy
 }
 
+func (OpenDoorSecurityPolicyEnforcer) EnforceScratchMountPolicy(string, bool) error {
+	return nil
+}
+
+func (OpenDoorSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(string) error {
+	return nil
+}
+
 type ClosedDoorSecurityPolicyEnforcer struct {
 	encodedSecurityPolicy string //nolint:unused
 }
@@ -945,4 +967,12 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceRuntimeLoggingPolicy() error {
 
 func (ClosedDoorSecurityPolicyEnforcer) EncodedSecurityPolicy() string {
 	return ""
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) EnforceScratchMountPolicy(string, bool) error {
+	return errors.New("mounting scratch is denied by the policy")
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) EnforceScratchUnmountPolicy(string) error {
+	return errors.New("unmounting scratch is denied by the policy")
 }

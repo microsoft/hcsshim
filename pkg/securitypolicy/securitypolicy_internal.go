@@ -15,6 +15,7 @@ type securityPolicyInternal struct {
 	AllowDumpStacks                  bool
 	AllowRuntimeLogging              bool
 	AllowEnvironmentVariableDropping bool
+	AllowUnencryptedScratch          bool
 }
 
 type securityPolicyFragment struct {
@@ -65,7 +66,9 @@ func newSecurityPolicyInternal(
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
 	allowRuntimeLogging bool,
-	allowDropEnvironmentVariables bool) (*securityPolicyInternal, error) {
+	allowDropEnvironmentVariables bool,
+	allowUnencryptedScratch bool,
+) (*securityPolicyInternal, error) {
 	containersInternal, err := containersToInternal(containers)
 	if err != nil {
 		return nil, err
@@ -79,6 +82,7 @@ func newSecurityPolicyInternal(
 		AllowDumpStacks:                  allowDumpStacks,
 		AllowRuntimeLogging:              allowRuntimeLogging,
 		AllowEnvironmentVariableDropping: allowDropEnvironmentVariables,
+		AllowUnencryptedScratch:          allowUnencryptedScratch,
 	}, nil
 }
 

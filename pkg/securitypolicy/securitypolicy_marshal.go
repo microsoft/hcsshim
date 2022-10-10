@@ -21,7 +21,9 @@ type marshalFunc func(
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
 	allowRuntimeLogging bool,
-	allowEnvironmentVariableDropping bool) (string, error)
+	allowEnvironmentVariableDropping bool,
+	allowUnencryptedScratch bool,
+) (string, error)
 
 const (
 	jsonMarshaller = "json"
@@ -52,7 +54,9 @@ func marshalJSON(
 	_ bool,
 	_ bool,
 	_ bool,
-	_ bool) (string, error) {
+	_ bool,
+	_ bool,
+) (string, error) {
 	var policy *SecurityPolicy
 	if allowAll {
 		if len(containers) > 0 {
@@ -80,7 +84,9 @@ func marshalRego(
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
 	allowRuntimeLogging bool,
-	allowEnvironmentVariableDropping bool) (string, error) {
+	allowEnvironmentVariableDropping bool,
+	allowUnencryptedScratch bool,
+) (string, error) {
 	if allowAll {
 		if len(containers) > 0 {
 			return "", ErrInvalidOpenDoorPolicy
@@ -89,7 +95,16 @@ func marshalRego(
 		return openDoorRegoTemplate, nil
 	}
 
-	policy, err := newSecurityPolicyInternal(containers, externalProcesses, fragments, allowPropertiesAccess, allowDumpStacks, allowRuntimeLogging, allowEnvironmentVariableDropping)
+	policy, err := newSecurityPolicyInternal(
+		containers,
+		externalProcesses,
+		fragments,
+		allowPropertiesAccess,
+		allowDumpStacks,
+		allowRuntimeLogging,
+		allowEnvironmentVariableDropping,
+		allowUnencryptedScratch,
+	)
 	if err != nil {
 		return "", err
 	}
@@ -120,7 +135,9 @@ func MarshalPolicy(
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
 	allowRuntimeLogging bool,
-	allowEnvironmentVariableDropping bool) (string, error) {
+	allowEnvironmentVariableDropping bool,
+	allowUnencryptedScratch bool,
+) (string, error) {
 	if marshaller == "" {
 		marshaller = defaultMarshaller
 	}
@@ -128,7 +145,17 @@ func MarshalPolicy(
 	if marshal, ok := registeredMarshallers[marshaller]; !ok {
 		return "", fmt.Errorf("unknown marshaller: %q", marshaller)
 	} else {
-		return marshal(allowAll, containers, externalProcesses, fragments, allowPropertiesAccess, allowDumpStacks, allowRuntimeLogging, allowEnvironmentVariableDropping)
+		return marshal(
+			allowAll,
+			containers,
+			externalProcesses,
+			fragments,
+			allowPropertiesAccess,
+			allowDumpStacks,
+			allowRuntimeLogging,
+			allowEnvironmentVariableDropping,
+			allowUnencryptedScratch,
+		)
 	}
 }
 
@@ -356,6 +383,7 @@ func (p securityPolicyInternal) marshalRego() string {
 	writeLine(builder, `allow_dump_stacks := %v`, p.AllowDumpStacks)
 	writeLine(builder, `allow_runtime_logging := %v`, p.AllowRuntimeLogging)
 	writeLine(builder, "allow_environment_variable_dropping := %v", p.AllowEnvironmentVariableDropping)
+	writeLine(builder, "allow_unencrypted_scratch := %t", p.AllowUnencryptedScratch)
 	return strings.Replace(policyRegoTemplate, "##OBJECTS##", builder.String(), 1)
 }
 

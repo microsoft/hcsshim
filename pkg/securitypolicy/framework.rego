@@ -402,10 +402,10 @@ plan9_mount := {"p9mounts": p9mounts, "allowed": true} {
 default plan9_unmount := {"allowed": false}
 
 plan9_unmount := {"p9mounts": p9mounts, "allowed": true} {
-    plan9_mounted(input.target)
+    plan9_mounted(input.unmountTarget)
     p9mounts := {
         "action": "remove",
-        "key": input.target,
+        "key": input.unmountTarget,
     }
 }
 
@@ -541,6 +541,24 @@ update_issuer(includes) := issuer {
     }
 }
 
+default scratch_mount := {"allowed": false}
+
+scratch_mounted(target) {
+    data.metadata.scratch_mounts[target]
+}
+
+scratch_mount := {"scratch_mounts": scratch_mounts, "allowed": true} {
+    not scratch_mounted(input.target)
+    data.policy.allow_unencrypted_scratch
+    scratch_mounts := {
+        "action": "add",
+        "key": input.target,
+        "value": {
+            "encrypted": input.encrypted,
+        }
+    }
+}
+
 default load_fragment := {"allowed": false}
 
 fragment_ok(fragment) {
@@ -574,6 +592,29 @@ load_fragment := {"issuers": issuers, "add_module": add_module, "allowed": true}
     }
 
     add_module := "namespace" in fragment.includes
+}
+
+scratch_mount := {"scratch_mounts": scratch_mounts, "allowed": true} {
+    not scratch_mounted(input.target)
+    not data.policy.allow_unencrypted_scratch
+    input.encrypted
+    scratch_mounts := {
+        "action": "add",
+        "key": input.target,
+        "value": {
+            "encrypted": input.encrypted,
+        }
+    }
+}
+
+default scratch_unmount := {"allowed": false}
+
+scratch_unmount := {"scratch_mounts": scratch_mounts, "allowed": true} {
+    scratch_mounted(input.unmountTarget)
+    scratch_mounts := {
+        "action": "remove",
+        "key": input.unmountTarget
+    }
 }
 
 # error messages
@@ -795,4 +836,20 @@ errors["fragment version is below the specified minimum"] {
     input.rule == "load_fragment"
     fragment_feed_matches
     not fragment_version_is_valid
+}
+
+errors["scratch already mounted at path"] {
+    input.rule == "scratch_mount"
+    scratch_mounted(input.target)
+}
+
+errors["unencrypted scratch not allowed"] {
+    input.rule == "scratch_mount"
+    not data.policy.allow_unencrypted_scratch
+    not input.encrypted
+}
+
+errors["no scratch at path to unmount"] {
+    input.rule == "scratch_unmount"
+    not scratch_mounted(input.unmountTarget)
 }

@@ -63,7 +63,6 @@ func MountLayer(
 	layerPaths []string,
 	upperdirPath, workdirPath, rootfsPath string,
 	readonly bool,
-	containerID string,
 ) (err error) {
 	_, span := oc.StartSpan(ctx, "overlay::MountLayer")
 	defer span.End()

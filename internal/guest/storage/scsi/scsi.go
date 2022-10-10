@@ -24,7 +24,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
-	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
 // Test dependencies.
@@ -216,7 +215,6 @@ func unmount(
 	target string,
 	encrypted bool,
 	verityInfo *guestresource.DeviceVerityInfo,
-	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
 	ctx, span := oc.StartSpan(ctx, "scsi::Unmount")
 	defer span.End()
@@ -227,13 +225,9 @@ func unmount(
 		trace.Int64Attribute("lun", int64(lun)),
 		trace.StringAttribute("target", target))
 
-	if err = securityPolicy.EnforceDeviceUnmountPolicy(target); err != nil {
-		return errors.Wrapf(err, "unmounting scsi controller %d lun %d from  %s denied by policy", controller, lun, target)
-	}
-
 	// Unmount unencrypted device
 	if err := storage.UnmountPath(ctx, target, true); err != nil {
-		return errors.Wrapf(err, "unmount failed: "+target)
+		return errors.Wrapf(err, "unmount failed: %s", target)
 	}
 
 	if verityInfo != nil {
@@ -245,8 +239,12 @@ func unmount(
 	}
 
 	if encrypted {
-		if err := crypt.CleanupCryptDevice(target); err != nil {
-			return errors.Wrapf(err, "failed to cleanup dm-crypt state: "+target)
+		source, err := controllerLunToName(ctx, controller, lun)
+		if err != nil {
+			return err
+		}
+		if err := crypt.CleanupCryptDevice(source); err != nil {
+			return errors.Wrapf(err, "failed to cleanup dm-crypt source: %s", source)
 		}
 	}
 
@@ -262,13 +260,12 @@ func Unmount(
 	target string,
 	encrypted bool,
 	verityInfo *guestresource.DeviceVerityInfo,
-	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
 	cNum, err := fetchActualControllerNumber(ctx, controller)
 	if err != nil {
 		return err
 	}
-	return unmount(ctx, cNum, lun, target, encrypted, verityInfo, securityPolicy)
+	return unmount(ctx, cNum, lun, target, encrypted, verityInfo)
 }
 
 // ControllerLunToName finds the `/dev/sd*` path to the SCSI device on
