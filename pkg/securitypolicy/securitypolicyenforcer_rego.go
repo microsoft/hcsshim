@@ -552,13 +552,18 @@ func (policy *regoEnforcer) enforce(enforcementPoint string, input map[string]in
 		}
 	}
 
+	fmt.Printf("allowed is %v\n", allowed)
 	if allowed {
 		err = policy.updateMetadata(results)
 		if err != nil {
 			return fmt.Errorf("unable to update metadata: %w", err)
 		}
 	} else {
+		fmt.Printf("calling reason not allowed\n")
 		err = policy.getReasonNotAllowed(enforcementPoint, input)
+		if err == nil {
+			fmt.Printf("err is nil\n")
+		}
 	}
 
 	if removeModule {
@@ -566,6 +571,10 @@ func (policy *regoEnforcer) enforce(enforcementPoint string, input map[string]in
 		if compileError := policy.compile(); compileError != nil {
 			return fmt.Errorf("post rule error: %v, was unable to re-compile module: %v", err, compileError)
 		}
+	}
+
+	if err != nil {
+		fmt.Printf("err is not nil\n")
 	}
 
 	return err
@@ -783,4 +792,10 @@ func (policy *regoEnforcer) LoadFragment(issuer string, feed string, rego string
 	}
 
 	return policy.enforce("load_fragment", input)
+}
+
+func (policy *regoEnforcer) EnforceRuntimeLoggingPolicy() error {
+	input := map[string]interface{}{}
+
+	return policy.enforce("runtime_logging", input)
 }

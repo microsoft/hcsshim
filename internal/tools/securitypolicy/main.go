@@ -61,7 +61,8 @@ func main() {
 				config.AllowAll,
 				policyContainers,
 				config.ExternalProcesses,
-				config.Fragments)
+				config.Fragments,
+				config.RuntimeLoggingAllowed)
 		}
 		if err != nil {
 			return err

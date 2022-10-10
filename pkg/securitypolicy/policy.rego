@@ -1,6 +1,6 @@
 package policy
 
-api_svn := "0.7.0"
+api_svn := "0.8.0"
 
 import future.keywords.every
 import future.keywords.in
@@ -19,4 +19,6 @@ signal_container_process := data.framework.signal_container_process
 plan9_mount := data.framework.plan9_mount
 plan9_unmount := data.framework.plan9_unmount
 load_fragment := data.framework.load_fragment
+runtime_logging := data.framework.runtime_logging
+
 reason := {"errors": data.framework.errors}

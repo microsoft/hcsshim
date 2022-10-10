@@ -17,7 +17,8 @@ type marshalFunc func(
 	allowAll bool,
 	containers []*Container,
 	externalProcesses []ExternalProcessConfig,
-	fragments []FragmentConfig) (string, error)
+	fragments []FragmentConfig,
+	runtimeLoggingAllowed bool) (string, error)
 
 const (
 	jsonMarshaller = "json"
@@ -44,7 +45,8 @@ func marshalJSON(
 	allowAll bool,
 	containers []*Container,
 	_ []ExternalProcessConfig,
-	_ []FragmentConfig) (string, error) {
+	_ []FragmentConfig,
+	_ bool) (string, error) {
 	var policy *SecurityPolicy
 	if allowAll {
 		if len(containers) > 0 {
@@ -68,7 +70,8 @@ func marshalRego(
 	allowAll bool,
 	containers []*Container,
 	externalProcesses []ExternalProcessConfig,
-	fragments []FragmentConfig) (string, error) {
+	fragments []FragmentConfig,
+	runtimeLoggingAllowed bool) (string, error) {
 	if allowAll {
 		if len(containers) > 0 {
 			return "", ErrInvalidOpenDoorPolicy
@@ -77,7 +80,7 @@ func marshalRego(
 		return openDoorRegoTemplate, nil
 	}
 
-	policy, err := newSecurityPolicyInternal(containers, externalProcesses, fragments)
+	policy, err := newSecurityPolicyInternal(containers, externalProcesses, fragments, runtimeLoggingAllowed)
 	if err != nil {
 		return "", err
 	}
@@ -91,7 +94,8 @@ func MarshalFragment(
 	containers []*Container,
 	externalProcesses []ExternalProcessConfig,
 	fragments []FragmentConfig) (string, error) {
-	policy, err := newSecurityPolicyInternal(containers, externalProcesses, fragments)
+	// TODO STA: Matt what is the proper thing to do for "marshal fragment" here?
+	policy, err := newSecurityPolicyInternal(containers, externalProcesses, fragments, false)
 	if err != nil {
 		return "", err
 	}
@@ -104,7 +108,8 @@ func MarshalPolicy(
 	allowAll bool,
 	containers []*Container,
 	externalProcesses []ExternalProcessConfig,
-	fragments []FragmentConfig) (string, error) {
+	fragments []FragmentConfig,
+	runtimeLoggingAllowed bool) (string, error) {
 	if marshaller == "" {
 		marshaller = defaultMarshaller
 	}
@@ -112,7 +117,7 @@ func MarshalPolicy(
 	if marshal, ok := registeredMarshallers[marshaller]; !ok {
 		return "", fmt.Errorf("unknown marshaller: %q", marshaller)
 	} else {
-		return marshal(allowAll, containers, externalProcesses, fragments)
+		return marshal(allowAll, containers, externalProcesses, fragments, runtimeLoggingAllowed)
 	}
 }
 
@@ -336,6 +341,7 @@ func (p securityPolicyInternal) marshalObjects() string {
 	addFragments(builder, p.Fragments)
 	addContainers(builder, p.Containers)
 	addExternalProcesses(builder, p.ExternalProcesses)
+	writeLine(builder, "runtime_logging_allowed := %v", p.RuntimeLoggingAllowed)
 	return builder.String()
 }
 

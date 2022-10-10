@@ -459,6 +459,12 @@ load_fragment := {"issuers": issuers, "add_module": add_module, "allowed": true}
     add_module := "namespace" in fragment.includes
 }
 
+default runtime_logging := {"allowed": false}
+
+runtime_logging := {"allowed": true} {
+    data.policy.runtime_logging_allowed
+}
+
 # error messages
 
 errors["deviceHash not found"] {

@@ -899,9 +899,10 @@ func generateConstraints(r *rand.Rand, maxContainers int32) *generatedConstraint
 	}
 
 	return &generatedConstraints{
-		containers:        containers,
-		externalProcesses: make([]*externalProcess, 0),
-		fragments:         make([]*fragment, 0),
+		containers:            containers,
+		externalProcesses:     make([]*externalProcess, 0),
+		fragments:             make([]*fragment, 0),
+		runtimeLoggingAllowed: false,
 	}
 }
 
@@ -1290,9 +1291,10 @@ func atMost(r *rand.Rand, most int32) int32 {
 }
 
 type generatedConstraints struct {
-	containers        []*securityPolicyContainer
-	externalProcesses []*externalProcess
-	fragments         []*fragment
+	containers            []*securityPolicyContainer
+	externalProcesses     []*externalProcess
+	fragments             []*fragment
+	runtimeLoggingAllowed bool
 }
 
 type containerInitProcess struct {

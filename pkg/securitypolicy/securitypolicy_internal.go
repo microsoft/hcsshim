@@ -8,14 +8,16 @@ import (
 
 // Internal version of SecurityPolicy
 type securityPolicyInternal struct {
-	Containers        []*securityPolicyContainer
-	ExternalProcesses []*externalProcess
-	Fragments         []*fragment
+	Containers            []*securityPolicyContainer
+	ExternalProcesses     []*externalProcess
+	Fragments             []*fragment
+	RuntimeLoggingAllowed bool
 }
 
 func newSecurityPolicyInternal(containers []*Container,
 	externalProcesses []ExternalProcessConfig,
-	fragments []FragmentConfig) (*securityPolicyInternal, error) {
+	fragments []FragmentConfig,
+	runtimeLoggingAllowed bool) (*securityPolicyInternal, error) {
 	var policy securityPolicyInternal
 	policy.Containers = make([]*securityPolicyContainer, len(containers))
 	for i, cConf := range containers {
@@ -37,6 +39,8 @@ func newSecurityPolicyInternal(containers []*Container,
 		fInternal := fConf.toInternal()
 		policy.Fragments[i] = &fInternal
 	}
+
+	policy.RuntimeLoggingAllowed = runtimeLoggingAllowed
 
 	return &policy, nil
 }

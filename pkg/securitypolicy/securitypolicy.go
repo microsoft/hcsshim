@@ -25,10 +25,11 @@ const (
 
 // PolicyConfig contains toml or JSON config for security policy.
 type PolicyConfig struct {
-	AllowAll          bool                    `json:"allow_all" toml:"allow_all"`
-	Containers        []ContainerConfig       `json:"containers" toml:"container"`
-	ExternalProcesses []ExternalProcessConfig `json:"external_processes" toml:"external_process"`
-	Fragments         []FragmentConfig        `json:"fragments" toml:"fragment"`
+	AllowAll              bool                    `json:"allow_all" toml:"allow_all"`
+	Containers            []ContainerConfig       `json:"containers" toml:"container"`
+	ExternalProcesses     []ExternalProcessConfig `json:"external_processes" toml:"external_process"`
+	Fragments             []FragmentConfig        `json:"fragments" toml:"fragment"`
+	RuntimeLoggingAllowed bool                    `json:"runtime_logging_allowed" toml:"runtime_logging_allowed"`
 }
 
 // ExternalProcessConfig contains toml or JSON config for running external processes in the UVM.
