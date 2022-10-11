@@ -298,6 +298,10 @@ const (
 	// file share mounts, for hostile multi-tenant environments. See `AnnotationExpansions`
 	// for more information
 	DisableUnsafeOperations = "io.microsoft.disable-unsafe-operations"
+
+	// DumpDirectoryPath provides a path to the directory in which dumps for a UVM will be collected in
+	// case the UVM crashes.
+	DumpDirectoryPath = "io.microsoft.virtualmachine.dump-directory-path"
 )
 
 // AnnotationExpansions maps annotations that will be expanded into an array of

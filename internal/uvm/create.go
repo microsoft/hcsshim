@@ -99,6 +99,9 @@ type Options struct {
 
 	// The number of SCSI controllers. Defaults to 1 for WCOW and 4 for LCOW
 	SCSIControllerCount uint32
+
+	// DumpDirectoryPath is the path of the directory inside which all debug dumps etc are stored.
+	DumpDirectoryPath string
 }
 
 // compares the create opts used during template creation with the create opts
