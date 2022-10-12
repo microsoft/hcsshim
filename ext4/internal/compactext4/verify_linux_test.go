@@ -31,7 +31,10 @@ func expectedDevice(f *File) uint64 {
 }
 
 func llistxattr(path string, b []byte) (int, error) {
-	pathp := syscall.StringBytePtr(path)
+	pathp, err := syscall.BytePtrFromString(path)
+	if err != nil {
+		return 0, &os.PathError{Path: path, Op: "llistxattr", Err: err}
+	}
 	var p unsafe.Pointer
 	if len(b) > 0 {
 		p = unsafe.Pointer(&b[0])
@@ -44,8 +47,14 @@ func llistxattr(path string, b []byte) (int, error) {
 }
 
 func lgetxattr(path string, name string, b []byte) (int, error) {
-	pathp := syscall.StringBytePtr(path)
-	namep := syscall.StringBytePtr(name)
+	pathp, err := syscall.BytePtrFromString(path)
+	if err != nil {
+		return 0, &os.PathError{Path: path, Op: "llistxattr", Err: err}
+	}
+	namep, err := syscall.BytePtrFromString(name)
+	if err != nil {
+		return 0, &os.PathError{Path: path, Op: "llistxattr", Err: err}
+	}
 	var p unsafe.Pointer
 	if len(b) > 0 {
 		p = unsafe.Pointer(&b[0])
@@ -118,6 +127,7 @@ func streamEqual(r1, r2 io.Reader) (bool, error) {
 }
 
 func verifyTestFile(t *testing.T, mountPath string, tf testFile) {
+	t.Helper()
 	name := path.Join(mountPath, tf.Path)
 	fi, err := os.Lstat(name)
 	if err != nil {
@@ -213,6 +223,7 @@ func getCaps() (caps, error) {
 }
 
 func mountImage(t *testing.T, image string, mountPath string) bool {
+	t.Helper()
 	caps, err := getCaps()
 	if err != nil || caps.data[0].effective&(1<<uint(CAP_SYS_ADMIN)) == 0 {
 		t.Log("cannot mount to run verification tests without CAP_SYS_ADMIN")
@@ -233,6 +244,7 @@ func mountImage(t *testing.T, image string, mountPath string) bool {
 }
 
 func unmountImage(t *testing.T, mountPath string) {
+	t.Helper()
 	out, err := exec.Command("umount", mountPath).CombinedOutput()
 	t.Logf("%s", out)
 	if err != nil {
@@ -241,6 +253,7 @@ func unmountImage(t *testing.T, mountPath string) {
 }
 
 func fsck(t *testing.T, image string) {
+	t.Helper()
 	cmd := exec.Command("e2fsck", "-v", "-f", "-n", image)
 	out, err := cmd.CombinedOutput()
 	t.Logf("%s", out)
