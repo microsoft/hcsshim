@@ -911,8 +911,9 @@ func generateConstraints(r *rand.Rand, maxContainers int32, maxExternalProcesses
 	}
 
 	return &generatedConstraints{
-		containers:        containers,
-		externalProcesses: externalProcesses,
+		containers:         containers,
+		externalProcesses:  externalProcesses,
+		allowGetProperties: randBool(r),
 	}
 }
 
@@ -1294,6 +1295,10 @@ func randString(r *rand.Rand, length int32) string {
 	return sb.String()
 }
 
+func randBool(r *rand.Rand) bool {
+	return randMinMax(r, 0, 1) == 0
+}
+
 func randMinMax(r *rand.Rand, min int32, max int32) int32 {
 	return r.Int31n(max-min+1) + min
 }
@@ -1311,8 +1316,9 @@ func atMost(r *rand.Rand, most int32) int32 {
 }
 
 type generatedConstraints struct {
-	containers        []*securityPolicyContainer
-	externalProcesses []*externalProcess
+	containers         []*securityPolicyContainer
+	externalProcesses  []*externalProcess
+	allowGetProperties bool
 }
 
 type containerInitProcess struct {
