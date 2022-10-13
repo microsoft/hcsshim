@@ -279,7 +279,6 @@ func (uvm *UtilityVM) Start(ctx context.Context) (err error) {
 			WithSecurityPolicy(uvm.confidentialUVMOptions.SecurityPolicy),
 			WithSecurityPolicyEnforcer(uvm.confidentialUVMOptions.SecurityPolicyEnforcer),
 			WithUVMReferenceInfo(defaultLCOWOSBootFilesPath(), uvm.confidentialUVMOptions.UVMReferenceInfoFile),
-			WithPodStartupFragmentUVMPath(uvm.confidentialUVMOptions.PodStartupFragmentUVMPath),
 		); err != nil {
 			return err
 		}
