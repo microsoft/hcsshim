@@ -111,7 +111,7 @@ func createRegoEnforcer(base64EncodedPolicy string,
 			return createOpenDoorEnforcer(base64EncodedPolicy, defaultMounts, privilegedMounts)
 		}
 
-		code, err = marshalRego(securityPolicy.AllowAll, containers, []ExternalProcessConfig{}, true)
+		code, err = marshalRego(securityPolicy.AllowAll, containers, []ExternalProcessConfig{}, true, true)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling the policy to Rego: %w", err)
 		}
@@ -672,4 +672,10 @@ func (policy *regoEnforcer) EnforceGetPropertiesPolicy() error {
 	input := make(map[string]interface{})
 
 	return policy.enforce("get_properties", input)
+}
+
+func (policy *regoEnforcer) EnforceDumpStacksPolicy() error {
+	input := make(map[string]interface{})
+
+	return policy.enforce("dump_stacks", input)
 }

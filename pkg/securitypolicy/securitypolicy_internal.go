@@ -11,6 +11,7 @@ type securityPolicyInternal struct {
 	Containers            []*securityPolicyContainer
 	ExternalProcesses     []*externalProcess
 	AllowPropertiesAccess bool
+	AllowDumpStacks       bool
 }
 
 // Internal version of Container

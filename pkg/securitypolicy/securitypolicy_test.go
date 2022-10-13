@@ -914,6 +914,7 @@ func generateConstraints(r *rand.Rand, maxContainers int32, maxExternalProcesses
 		containers:         containers,
 		externalProcesses:  externalProcesses,
 		allowGetProperties: randBool(r),
+		allowDumpStacks:    randBool(r),
 	}
 }
 
@@ -1319,6 +1320,7 @@ type generatedConstraints struct {
 	containers         []*securityPolicyContainer
 	externalProcesses  []*externalProcess
 	allowGetProperties bool
+	allowDumpStacks    bool
 }
 
 type containerInitProcess struct {

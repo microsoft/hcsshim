@@ -45,7 +45,7 @@ func main() {
 			return err
 		}
 
-		policyCode, err := securitypolicy.MarshalPolicy(*outputType, config.AllowAll, policyContainers, config.ExternalProcesses, config.AllowPropertiesAccess)
+		policyCode, err := securitypolicy.MarshalPolicy(*outputType, config.AllowAll, policyContainers, config.ExternalProcesses, config.AllowPropertiesAccess, config.AllowDumpStacks)
 		if err != nil {
 			return err
 		}

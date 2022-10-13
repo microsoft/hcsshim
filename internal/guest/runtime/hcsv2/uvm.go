@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Microsoft/hcsshim/internal/debug"
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/policy"
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
@@ -578,6 +579,15 @@ func (h *Host) GetProperties(ctx context.Context, containerID string, query prot
 	}
 
 	return properties, nil
+}
+
+func (h *Host) GetStacks() (string, error) {
+	err := h.securityPolicyEnforcer.EnforceDumpStacksPolicy()
+	if err != nil {
+		return "", errors.Wrapf(err, "dump stacks denied due to policy")
+	}
+
+	return debug.DumpStacks(), nil
 }
 
 // RunExternalProcess runs a process in the utility VM.
