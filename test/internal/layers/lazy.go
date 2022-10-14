@@ -33,13 +33,15 @@ import (
 type LazyImageLayers struct {
 	Image    string
 	Platform string
-	TempPath string // TempPath is the path to create a temporary directory in. Default in [os.TempDir]
+	// TempPath is the path to create a temporary directory in.
+	// Defaults to [os.TempDir] if left empty.
+	TempPath string
 	once     sync.Once
 	layers   []string
 }
 
-// ImageLayers returns the image layer paths, from lowest to highest, for a particular image.
-func (x *LazyImageLayers) ImageLayers(ctx context.Context, tb testing.TB) []string {
+// Layers returns the image layer paths, from lowest to highest, for a particular image.
+func (x *LazyImageLayers) Layers(ctx context.Context, tb testing.TB) []string {
 	tb.Helper()
 	tb.Logf("pulling and unpacking %s image %q", x.Platform, x.Image)
 	// don't use tb.Error/Log inside Once.Do stack, since we cannot call tb.Helper before executing f()
@@ -71,21 +73,33 @@ func (x *LazyImageLayers) ImageLayers(ctx context.Context, tb testing.TB) []stri
 }
 
 // Close removes the downloaded image layers.
-func (x *LazyImageLayers) Close(ctx context.Context) {
+//
+// Does not take a [testing.TB] so it can be used in TestMain or init.
+func (x *LazyImageLayers) Close(ctx context.Context) (err error) {
+	//todo: create dedicated temp directory and defer cleanup/zapdir in main?
 	for _, dir := range x.layers {
-		d, err := filepath.Abs(dir)
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("count not get absolute path to %q", dir)
+		d, e := filepath.Abs(dir)
+		if e != nil {
+			log.G(ctx).WithError(e).Errorf("count not get absolute path to %q", dir)
 			continue
 		}
-		if _, err := os.Stat(d); err != nil {
-			log.G(ctx).WithError(err).Errorf("path %q is not valid", d)
+
+		if _, e := os.Stat(d); e != nil {
+			if !os.IsNotExist(e) {
+				log.G(ctx).WithError(e).Errorf("path %q is not valid", d)
+			}
 			continue
 		}
-		if err := wclayer.DestroyLayer(ctx, d); err != nil {
-			log.G(ctx).WithError(err).Errorf("could not destroy layer %q", d)
+
+		if e := wclayer.DestroyLayer(ctx, d); e != nil {
+			log.G(ctx).WithError(e).Errorf("could not destroy layer %q", d)
+			// keep the first error only, since that is likely the parent path thats causing issues
+			if err == nil {
+				err = e
+			}
 		}
 	}
+	return err
 }
 
 func (x *LazyImageLayers) linuxImage(ctx context.Context, dir string) error {

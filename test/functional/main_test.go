@@ -90,7 +90,7 @@ var (
 			"If empty, \""+alpineImagePaths.Image+"\" will be pulled and unpacked.")
 	//nolint:unused // will be used when WCOW tests are updated
 	flagWCOWLayerPaths = testflag.NewStringSlice("wcow-layer-paths",
-		"comma separated list of image layer `paths` to use as WCO as WCOW uVM and container rootfs. "+
+		"comma separated list of image layer `paths` to use as WCOW uVM and container rootfs. "+
 			"If empty, \""+nanoserverImagePaths.Image+"\" will be pulled and unpacked.")
 	flagLayerTempDir = flag.String("layer-temp-dir", "",
 		"`directory` to unpack image layers to, if not provided. Leave empty to use os.TempDir.")
@@ -130,6 +130,7 @@ func TestMain(m *testing.M) {
 	alpineImagePaths.TempPath = *flagLayerTempDir
 	nanoserverImagePaths.TempPath = *flagLayerTempDir
 	// delete downloaded layers
+	// just ignore errors: they are logged, and no other cleanup possible
 	defer alpineImagePaths.Close(context.Background())
 	defer nanoserverImagePaths.Close(context.Background())
 
@@ -192,7 +193,7 @@ func linuxImageLayers(ctx context.Context, tb testing.TB) []string {
 	if ss := flagLCOWLayerPaths.S.Strings(); len(ss) > 0 {
 		return ss
 	}
-	return alpineImagePaths.ImageLayers(ctx, tb)
+	return alpineImagePaths.Layers(ctx, tb)
 }
 
 // windowsImageLayers returns image layer paths appropriate for use as a uVM or container rootfs.
@@ -205,7 +206,9 @@ func windowsImageLayers(ctx context.Context, tb testing.TB) []string {
 	if ss := flagWCOWLayerPaths.S.Strings(); len(ss) > 0 {
 		return ss
 	}
-	return nanoserverImagePaths.ImageLayers(ctx, tb)
+	return nanoserverImagePaths.Layers(ctx, tb)
+}
+
 }
 
 // namespacedContext returns a [context.Context] with the provided namespace added via
