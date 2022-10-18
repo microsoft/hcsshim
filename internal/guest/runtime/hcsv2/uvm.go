@@ -773,7 +773,7 @@ func modifyMappedVirtualDisk(
 		if mvd.MountPath != "" {
 			if mvd.ReadOnly {
 				if err := securityPolicy.EnforceDeviceUnmountPolicy(mvd.MountPath); err != nil {
-					return errors.Wrapf(err, "unmounting scsi device at %s denied by policy", mvd.MountPath)
+					return fmt.Errorf("unmounting scsi device at %s denied by policy: %w", mvd.MountPath, err)
 				}
 			}
 

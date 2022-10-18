@@ -38,8 +38,8 @@ func (hm *hostMounts) AddRWDevice(mountPath string, sourcePath string, encrypted
 	defer hm.stateMutex.Unlock()
 
 	mountTarget := filepath.Clean(mountPath)
-	if _, ok := hm.readWriteMounts[mountTarget]; ok {
-		return fmt.Errorf("read-write mount already exists at %q", mountPath)
+	if source, ok := hm.readWriteMounts[mountTarget]; ok {
+		return fmt.Errorf("read-write with source %q and mount target %q already exists", source.sourcePath, mountPath)
 	}
 	hm.readWriteMounts[mountTarget] = &rwDevice{
 		mountPath:  mountTarget,
