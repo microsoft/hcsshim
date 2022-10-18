@@ -278,10 +278,6 @@ const (
 	// UVMReferenceInfoFile specifies the filename of a signed UVM reference file to be passed to UVM.
 	UVMReferenceInfoFile = "io.microsoft.virtualmachine.lcow.uvm-reference-info-file"
 
-	// PodStartupFragmentUVMPath specifies the file path within the UVM for an arbitrary pod startup fragment, e.g.
-	// pause container fragment. This assumes that the fragment is part of the LCOW UVM rootfs.
-	PodStartupFragmentUVMPath = "io.microsoft.virtualmachine.lcow.pod-startup-fragment-uvm-path"
-
 	// DisableLCOWTimeSyncService is used to disable the chronyd time
 	// synchronization service inside the LCOW UVM.
 	DisableLCOWTimeSyncService = "io.microsoft.virtualmachine.lcow.timesync.disable"

@@ -59,17 +59,6 @@ func WithUVMReferenceInfo(referenceRoot string, referenceName string) Confidenti
 	}
 }
 
-// WithPodStartupFragmentUVMPath sets the expected path of the pause image fragment inside UVM.
-func WithPodStartupFragmentUVMPath(uvmPath string) ConfidentialUVMOpt {
-	return func(ctx context.Context, r *guestresource.LCOWConfidentialOptions) error {
-		if uvmPath == "" {
-			return nil
-		}
-		r.PodStartupFragment = uvmPath
-		return nil
-	}
-}
-
 // SetConfidentialUVMOptions sends information required to run the UVM on
 // SNP hardware, e.g., security policy and enforcer type, signed UVM reference
 // information, etc.

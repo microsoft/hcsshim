@@ -6,7 +6,6 @@ package hcsv2
 import (
 	"bufio"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -80,9 +79,8 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport) *Host {
 // SetConfidentialUVMOptions takes guestresource.LCOWConfidentialOptions
 // to set up our internal data structures we use to store and enforce
 // security policy. The options can contain security policy enforcer type,
-// encoded security policy, signed UVM reference information and a UVM path
-// of an arbitrary pod startup security policy fragment. The security policy
-// and uvm reference information can be further presented to workload
+// encoded security policy and signed UVM reference information The security
+// policy and uvm reference information can be further presented to workload
 // containers for validation and attestation purposes.
 func (h *Host) SetConfidentialUVMOptions(ctx context.Context, r *guestresource.LCOWConfidentialOptions) error {
 	h.policyMutex.Lock()
@@ -115,19 +113,6 @@ func (h *Host) SetConfidentialUVMOptions(ctx context.Context, r *guestresource.L
 	h.securityPolicyEnforcer = p
 	h.securityPolicyEnforcerSet = true
 	h.uvmReferenceInfo = r.EncodedUVMReference
-
-	if r.PodStartupFragment != "" {
-		fragmentData, err := os.ReadFile(r.PodStartupFragment)
-		if err != nil {
-			return err
-		}
-
-		encodedFragment := base64.StdEncoding.EncodeToString(fragmentData)
-		// TODO (maksiman): Replace with internal fragment injection calls, when they're implemented
-		if err := h.InjectFragment(ctx, &guestresource.LCOWSecurityPolicyFragment{Fragment: encodedFragment}); err != nil {
-			return err
-		}
-	}
 
 	return nil
 }

@@ -280,7 +280,6 @@ func SpecToUVMCreateOpts(ctx context.Context, s *specs.Spec, id, owner string) (
 		lopts.SecurityPolicy = parseAnnotationsString(s.Annotations, annotations.SecurityPolicy, lopts.SecurityPolicy)
 		lopts.SecurityPolicyEnforcer = parseAnnotationsString(s.Annotations, annotations.SecurityPolicyEnforcer, lopts.SecurityPolicyEnforcer)
 		lopts.UVMReferenceInfoFile = parseAnnotationsString(s.Annotations, annotations.UVMReferenceInfoFile, lopts.UVMReferenceInfoFile)
-		lopts.PodStartupFragmentUVMPath = parseAnnotationsString(s.Annotations, annotations.PodStartupFragmentUVMPath, lopts.PodStartupFragmentUVMPath)
 		lopts.KernelBootOptions = parseAnnotationsString(s.Annotations, annotations.KernelBootOptions, lopts.KernelBootOptions)
 		lopts.DisableTimeSyncService = ParseAnnotationsBool(ctx, s.Annotations, annotations.DisableLCOWTimeSyncService, lopts.DisableTimeSyncService)
 		handleAnnotationPreferredRootFSType(ctx, s.Annotations, lopts)
