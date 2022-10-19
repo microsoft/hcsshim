@@ -133,7 +133,7 @@ func getHost(_ context.Context, tb testing.TB, rt runtime.Runtime) *hcsv2.Host {
 }
 
 func getHostErr(rt runtime.Runtime, tp transport.Transport) (*hcsv2.Host, error) {
-	h := hcsv2.NewHost(rt, tp)
+	h := hcsv2.NewHost(rt, tp, &securitypolicy.ClosedDoorSecurityPolicyEnforcer{}, os.Stdout)
 	cOpts := &guestresource.LCOWConfidentialOptions{
 		EncodedSecurityPolicy: securityPolicy,
 	}

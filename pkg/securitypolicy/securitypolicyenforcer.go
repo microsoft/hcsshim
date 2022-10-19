@@ -54,6 +54,7 @@ type SecurityPolicyEnforcer interface {
 	EnforcePlan9UnmountPolicy(target string) (err error)
 	EnforceGetPropertiesPolicy() error
 	EnforceDumpStacksPolicy() error
+	EnforceRuntimeLoggingPolicy() (err error)
 }
 
 func newSecurityPolicyFromBase64JSON(base64EncodedPolicy string) (*SecurityPolicy, error) {
@@ -505,6 +506,12 @@ func (*StandardSecurityPolicyEnforcer) EnforceDumpStacksPolicy() error {
 	return nil
 }
 
+// Stub. We are deprecating the standard enforcer. Newly added enforcement
+// points are simply allowed.
+func (*StandardSecurityPolicyEnforcer) EnforceRuntimeLoggingPolicy() error {
+	return nil
+}
+
 func (pe *StandardSecurityPolicyEnforcer) enforceCommandPolicy(containerID string, argList []string) (err error) {
 	// Get a list of all the indexes into our security policy's list of
 	// containers that are possible matches for this containerID based
@@ -834,6 +841,10 @@ func (OpenDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
 	return nil
 }
 
+func (OpenDoorSecurityPolicyEnforcer) EnforceRuntimeLoggingPolicy() error {
+	return nil
+}
+
 func (oe *OpenDoorSecurityPolicyEnforcer) EncodedSecurityPolicy() string {
 	return oe.encodedSecurityPolicy
 }
@@ -898,6 +909,10 @@ func (ClosedDoorSecurityPolicyEnforcer) EnforceDumpStacksPolicy() error {
 
 func (ClosedDoorSecurityPolicyEnforcer) ExtendDefaultMounts(_ []oci.Mount) error {
 	return nil
+}
+
+func (ClosedDoorSecurityPolicyEnforcer) EnforceRuntimeLoggingPolicy() error {
+	return errors.New("runtime logging is denied by policy")
 }
 
 func (ClosedDoorSecurityPolicyEnforcer) EncodedSecurityPolicy() string {

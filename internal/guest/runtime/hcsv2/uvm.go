@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path"
@@ -39,6 +40,7 @@ import (
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/mattn/go-shellwords"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )
 
@@ -64,16 +66,20 @@ type Host struct {
 	securityPolicyEnforcer    securitypolicy.SecurityPolicyEnforcer
 	securityPolicyEnforcerSet bool
 	uvmReferenceInfo          string
+
+	// logging target
+	logWriter io.Writer
 }
 
-func NewHost(rtime runtime.Runtime, vsock transport.Transport) *Host {
+func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io.Writer) *Host {
 	return &Host{
 		containers:                make(map[string]*Container),
 		externalProcesses:         make(map[int]*externalProcess),
 		rtime:                     rtime,
 		vsock:                     vsock,
 		securityPolicyEnforcerSet: false,
-		securityPolicyEnforcer:    &securitypolicy.ClosedDoorSecurityPolicyEnforcer{},
+		securityPolicyEnforcer:    initialEnforcer,
+		logWriter:                 logWriter,
 	}
 }
 
@@ -101,6 +107,18 @@ func (h *Host) SetConfidentialUVMOptions(ctx context.Context, r *guestresource.L
 	)
 	if err != nil {
 		return err
+	}
+
+	// This is one of two points at which we might change our logging.
+	// At this time, we now have a policy and can determine what the policy
+	// author put as policy around runtime logging.
+	// The other point is on startup where we take a flag to set the default
+	// policy enforcer to use before a policy arrives. After that flag is set,
+	// we use the enforcer in question to set up logging as well.
+	if err = p.EnforceRuntimeLoggingPolicy(); err == nil {
+		logrus.SetOutput(h.logWriter)
+	} else {
+		logrus.SetOutput(io.Discard)
 	}
 
 	hostData, err := securitypolicy.NewSecurityPolicyDigest(r.EncodedSecurityPolicy)

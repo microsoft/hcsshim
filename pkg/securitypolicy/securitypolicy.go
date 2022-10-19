@@ -30,6 +30,7 @@ type PolicyConfig struct {
 	ExternalProcesses     []ExternalProcessConfig `json:"external_processes" toml:"external_process"`
 	AllowPropertiesAccess bool                    `json:"allow_properties_access" toml:"allow_properties_access"`
 	AllowDumpStacks       bool                    `json:"allow_dump_stacks" toml:"allow_dump_stacks"`
+	AllowRuntimeLogging   bool                    `json:"allow_runtime_logging" toml:"allow_runtime_logging"`
 }
 
 // ExternalProcessConfig contains toml or JSON config for running external processes in the UVM.
