@@ -592,22 +592,30 @@ func (uvm *UtilityVM) addNIC(ctx context.Context, id string, endpoint *hns.HNSEn
 		}
 	} else {
 		// Verify this version of LCOW supports Network HotAdd
+		s := &guestresource.LCOWNetworkAdapter{
+			NamespaceID:     endpoint.Namespace.ID,
+			ID:              id,
+			MacAddress:      endpoint.MacAddress,
+			IPAddress:       endpoint.IPAddress.String(),
+			PrefixLength:    endpoint.PrefixLength,
+			GatewayAddress:  endpoint.GatewayAddress,
+			DNSSuffix:       endpoint.DNSSuffix,
+			DNSServerList:   endpoint.DNSServerList,
+			EnableLowMetric: endpoint.EnableLowMetric,
+			EncapOverhead:   endpoint.EncapOverhead,
+		}
+		if v6 := endpoint.IPv6Address.To16(); v6 != nil && !v6.IsUnspecified() {
+			// if the address is empty or invalid, endpoint.IPv6Address.String will be "<nil>"
+			// since we should be guranteed an IPv4, but not a v6, skip invalid v6 address
+			s.IPv6Address = v6.String()
+			s.IPv6PrefixLength = endpoint.IPv6PrefixLength
+			s.IPv6GatewayAddress = endpoint.GatewayAddressV6
+		}
 		if uvm.isNetworkNamespaceSupported() {
 			request.GuestRequest = guestrequest.ModificationRequest{
 				ResourceType: guestresource.ResourceTypeNetwork,
 				RequestType:  guestrequest.RequestTypeAdd,
-				Settings: &guestresource.LCOWNetworkAdapter{
-					NamespaceID:     endpoint.Namespace.ID,
-					ID:              id,
-					MacAddress:      endpoint.MacAddress,
-					IPAddress:       endpoint.IPAddress.String(),
-					PrefixLength:    endpoint.PrefixLength,
-					GatewayAddress:  endpoint.GatewayAddress,
-					DNSSuffix:       endpoint.DNSSuffix,
-					DNSServerList:   endpoint.DNSServerList,
-					EnableLowMetric: endpoint.EnableLowMetric,
-					EncapOverhead:   endpoint.EncapOverhead,
-				},
+				Settings:     s,
 			}
 		}
 	}
@@ -694,6 +702,15 @@ func (uvm *UtilityVM) AddNICInGuest(ctx context.Context, cfg *guestresource.LCOW
 
 	return uvm.modify(ctx, &request)
 }
+
+// request := hcsschema.ModifySettingRequest{
+// 		RequestType:  guestrequest.RequestTypeAdd,
+// 		ResourcePath: fmt.Sprintf(resourcepaths.NetworkResourceFormat, id),
+// 		Settings: hcsschema.NetworkAdapter{
+// 			EndpointId: endpoint.Id,
+// 			MacAddress: endpoint.MacAddress,
+// 		},
+// 	}
 
 // RemoveNICInGuest makes a request to remove a network interface inside the lcow guest.
 // This is primarily used for removing NICs in the guest that were VPCI assigned.

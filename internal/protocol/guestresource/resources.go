@@ -132,17 +132,20 @@ type LCOWMappedVPCIDevice struct {
 // LCOWNetworkAdapter represents a network interface and its associated
 // configuration in a namespace.
 type LCOWNetworkAdapter struct {
-	NamespaceID     string `json:",omitempty"`
-	ID              string `json:",omitempty"`
-	MacAddress      string `json:",omitempty"`
-	IPAddress       string `json:",omitempty"`
-	PrefixLength    uint8  `json:",omitempty"`
-	GatewayAddress  string `json:",omitempty"`
-	DNSSuffix       string `json:",omitempty"`
-	DNSServerList   string `json:",omitempty"`
-	EnableLowMetric bool   `json:",omitempty"`
-	EncapOverhead   uint16 `json:",omitempty"`
-	VPCIAssigned    bool   `json:",omitempty"`
+	NamespaceID        string `json:",omitempty"`
+	ID                 string `json:",omitempty"`
+	MacAddress         string `json:",omitempty"`
+	IPAddress          string `json:",omitempty"`
+	PrefixLength       uint8  `json:",omitempty"`
+	GatewayAddress     string `json:",omitempty"`
+	IPv6Address        string `json:",omitempty"`
+	IPv6PrefixLength   uint8  `json:",omitempty"`
+	IPv6GatewayAddress string `json:",omitempty"`
+	DNSSuffix          string `json:",omitempty"`
+	DNSServerList      string `json:",omitempty"`
+	EnableLowMetric    bool   `json:",omitempty"`
+	EncapOverhead      uint16 `json:",omitempty"`
+	VPCIAssigned       bool   `json:",omitempty"`
 }
 
 type LCOWContainerConstraints struct {

@@ -674,17 +674,20 @@ type ContainerGetPropertiesResponse struct {
 // NetworkAdapter represents a network interface and its associated
 // configuration.
 type NetworkAdapter struct {
-	AdapterInstanceID  string `json:"AdapterInstanceId"`
-	FirewallEnabled    bool
-	NatEnabled         bool
-	MacAddress         string `json:",omitempty"`
-	AllocatedIPAddress string `json:"AllocatedIpAddress,omitempty"`
-	HostIPAddress      string `json:"HostIpAddress,omitempty"`
-	HostIPPrefixLength uint8  `json:"HostIpPrefixLength,omitempty"`
-	HostDNSServerList  string `json:"HostDnsServerList,omitempty"`
-	HostDNSSuffix      string `json:"HostDnsSuffix,omitempty"`
-	EnableLowMetric    bool   `json:",omitempty"`
-	EncapOverhead      uint16 `json:",omitempty"`
+	AdapterInstanceID    string `json:"AdapterInstanceId"`
+	FirewallEnabled      bool
+	NatEnabled           bool
+	MacAddress           string `json:",omitempty"`
+	AllocatedIPAddress   string `json:"AllocatedIpAddress,omitempty"`
+	HostIPAddress        string `json:"HostIpAddress,omitempty"`
+	HostIPPrefixLength   uint8  `json:"HostIpPrefixLength,omitempty"`
+	AllocatedIPv6Address string `json:"AllocatedIpv6Address,omitempty"`
+	HostIPv6Address      string `json:"HostIpv6Address,omitempty"`
+	HostIPv6PrefixLength uint8  `json:"HostIpv6PrefixLength,omitempty"`
+	HostDNSServerList    string `json:"HostDnsServerList,omitempty"`
+	HostDNSSuffix        string `json:"HostDnsSuffix,omitempty"`
+	EnableLowMetric      bool   `json:",omitempty"`
+	EncapOverhead        uint16 `json:",omitempty"`
 }
 
 // MappedVirtualDisk represents a disk on the host which is mapped into a

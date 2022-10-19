@@ -253,12 +253,15 @@ func (nin *nicInNamespace) assignToPid(ctx context.Context, pid int) (err error)
 		trace.Int64Attribute("pid", int64(pid)))
 
 	v1Adapter := &prot.NetworkAdapter{
-		NatEnabled:         nin.adapter.IPAddress != "",
-		AllocatedIPAddress: nin.adapter.IPAddress,
-		HostIPAddress:      nin.adapter.GatewayAddress,
-		HostIPPrefixLength: nin.adapter.PrefixLength,
-		EnableLowMetric:    nin.adapter.EnableLowMetric,
-		EncapOverhead:      nin.adapter.EncapOverhead,
+		NatEnabled:           (nin.adapter.IPAddress != "") || (nin.adapter.IPv6Address != ""),
+		AllocatedIPAddress:   nin.adapter.IPAddress,
+		HostIPAddress:        nin.adapter.GatewayAddress,
+		HostIPPrefixLength:   nin.adapter.PrefixLength,
+		AllocatedIPv6Address: nin.adapter.IPv6Address,
+		HostIPv6Address:      nin.adapter.IPv6GatewayAddress,
+		HostIPv6PrefixLength: nin.adapter.IPv6PrefixLength,
+		EnableLowMetric:      nin.adapter.EnableLowMetric,
+		EncapOverhead:        nin.adapter.EncapOverhead,
 	}
 
 	if err := network.MoveInterfaceToNS(nin.ifname, pid); err != nil {
