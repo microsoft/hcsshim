@@ -1938,6 +1938,36 @@ func Test_Rego_DumpStacksPolicy_Off(t *testing.T) {
 	}
 }
 
+func Test_EnforceRuntimeLogging_Allowed(t *testing.T) {
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+	gc.allowRuntimeLogging = true
+
+	tc, err := setupRegoPolicyOnlyTest(gc)
+	if err != nil {
+		t.Fatalf("unable to setup test: %v", err)
+	}
+
+	err = tc.policy.EnforceRuntimeLoggingPolicy()
+	if err != nil {
+		t.Fatalf("Policy enforcement unexpectedly was denied: %v", err)
+	}
+}
+
+func Test_EnforceRuntimeLogging_Not_Allowed(t *testing.T) {
+	gc := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+	gc.allowRuntimeLogging = false
+
+	tc, err := setupRegoPolicyOnlyTest(gc)
+	if err != nil {
+		t.Fatalf("unable to setup test: %v", err)
+	}
+
+	err = tc.policy.EnforceRuntimeLoggingPolicy()
+	if err == nil {
+		t.Fatalf("Policy enforcement unexpectedly was allowed")
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //
@@ -1964,6 +1994,7 @@ func (constraints *generatedConstraints) toPolicy() *securityPolicyInternal {
 	securityPolicy.ExternalProcesses = constraints.externalProcesses
 	securityPolicy.AllowPropertiesAccess = constraints.allowGetProperties
 	securityPolicy.AllowDumpStacks = constraints.allowDumpStacks
+	securityPolicy.AllowRuntimeLogging = constraints.allowRuntimeLogging
 	return securityPolicy
 }
 
@@ -2344,6 +2375,23 @@ func mountImageForContainer(policy *regoEnforcer, container *securityPolicyConta
 	}
 
 	return containerID, nil
+}
+
+type regoPolicyOnlyTestConfig struct {
+	policy *regoEnforcer
+}
+
+func setupRegoPolicyOnlyTest(gc *generatedConstraints) (tc *regoPolicyOnlyTestConfig, err error) {
+	securityPolicy := gc.toPolicy()
+	policy, err := newRegoPolicy(securityPolicy.marshalRego(), []oci.Mount{}, []oci.Mount{})
+	if err != nil {
+		return nil, err
+	}
+
+	// see NOTE_TESTCOPY
+	return &regoPolicyOnlyTestConfig{
+		policy: policy,
+	}, nil
 }
 
 func generateSandboxID(r *rand.Rand) string {

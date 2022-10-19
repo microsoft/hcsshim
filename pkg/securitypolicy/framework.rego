@@ -354,6 +354,12 @@ dump_stacks := {"allowed": true} {
     data.policy.allow_dump_stacks
 }
 
+default runtime_logging := {"allowed": false}
+
+runtime_logging := {"allowed": true} {
+    data.policy.allow_runtime_logging
+}
+
 # error messages
 
 errors["deviceHash not found"] {
