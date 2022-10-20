@@ -54,6 +54,7 @@ type module struct {
 	feed      string
 	issuer    string
 	code      string
+	sideload  bool
 }
 
 // RegoEnforcer is a stub implementation of a security policy, which will be
@@ -541,31 +542,22 @@ func (policy *regoEnforcer) enforce(enforcementPoint string, input map[string]in
 		return err
 	}
 
-	removeModule := false
-	if enforcementPoint == "load_fragment" {
-		if addModule, ok := results["add_module"].(bool); ok {
-			if !addModule {
-				removeModule = true
-			}
-		} else {
-			removeModule = true
-		}
-	}
-
 	if allowed {
+		if enforcementPoint == "load_fragment" {
+			if addModule, ok := results["add_module"].(bool); ok {
+				if addModule {
+					id := moduleID(input["issuer"].(string), input["feed"].(string))
+					policy.modules[id].sideload = true
+				}
+			}
+		}
+
 		err = policy.updateMetadata(results)
 		if err != nil {
 			return fmt.Errorf("unable to update metadata: %w", err)
 		}
 	} else {
 		err = policy.getReasonNotAllowed(enforcementPoint, input)
-	}
-
-	if removeModule {
-		delete(policy.modules, moduleID(input["issuer"].(string), input["feed"].(string)))
-		if compileError := policy.compile(); compileError != nil {
-			return fmt.Errorf("post rule error: %v, was unable to re-compile module: %v", err, compileError)
-		}
 	}
 
 	return err
@@ -793,14 +785,15 @@ func (policy *regoEnforcer) LoadFragment(issuer string, feed string, rego string
 		return fmt.Errorf("unable to load fragment: %w", err)
 	}
 
-	fragment := module{
+	fragment := &module{
 		issuer:    issuer,
 		feed:      feed,
 		code:      rego,
 		namespace: namespace,
+		sideload:  false,
 	}
 
-	policy.modules[fragment.id()] = &fragment
+	policy.modules[fragment.id()] = fragment
 	policy.compiledModules = nil
 
 	input := map[string]interface{}{
@@ -809,5 +802,15 @@ func (policy *regoEnforcer) LoadFragment(issuer string, feed string, rego string
 		"namespace": namespace,
 	}
 
-	return policy.enforce("load_fragment", input)
+	err = policy.enforce("load_fragment", input)
+
+	if !fragment.sideload {
+		delete(policy.modules, fragment.id())
+	}
+
+	if compileError := policy.compile(); compileError != nil {
+		return fmt.Errorf("post rule error: %v, was unable to re-compile policy: %v", err, compileError)
+	}
+
+	return err
 }

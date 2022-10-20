@@ -11,18 +11,15 @@ default deviceHash_ok := false
 
 # test if a device hash exists as a layer in a policy container
 deviceHash_ok {
-    some container in data.policy.containers
-    some layer in container.layers
+    layer := data.policy.containers[_].layers[_]
     input.deviceHash == layer
 }
 
 # test if a device hash exists as a layer in a fragment container
 deviceHash_ok {
-    some issuer in data.metadata.issuers
-    some feed in issuer.feeds
+    feed := data.metadata.issuers[_].feeds[_]
     some fragment in feed
-    some container in fragment.containers
-    some layer in container.layers
+    layer := fragment.containers[_].layers[_]
     input.deviceHash == layer
 }
 
@@ -74,14 +71,13 @@ mount_overlay := {"matches": matches, "overlayTargets": overlay_targets, "allowe
     # which match the overlay requested, including both
     # containers in the policy and those included from fragments.
     policy_containers := [container |
-        some container in data.policy.containers
+        container := data.policy.containers[_]
         layerPaths_ok(container.layers)
     ]
     fragment_containers := [container |
-        some issuer in data.metadata.issuers
-        some feed in issuer.feeds
+        feed := data.metadata.issuers[_].feeds[_]
         some fragment in feed
-        some container in fragment.containers
+        container := fragment.containers[_]
         layerPaths_ok(container.layers)
     ]
     containers := array.concat(policy_containers, fragment_containers)
@@ -159,7 +155,7 @@ default create_container := {"allowed": false}
 create_container := {"matches": matches, "started": started, "allowed": true} {
     not container_started
     containers := [container |
-        some container in data.metadata.matches[input.containerID]
+        container := data.metadata.matches[input.containerID][_]
         command_ok(container.command)
         envList_ok(container.env_rules)
         workingDirectory_ok(container.working_dir)
@@ -249,7 +245,7 @@ default exec_in_container := {"allowed": false}
 exec_in_container := {"matches": matches, "allowed": true} {
     container_started
     containers := [container |
-        some container in data.metadata.matches[input.containerID]
+        container := data.metadata.matches[input.containerID][_]
         envList_ok(container.env_rules)
         workingDirectory_ok(container.working_dir)
         some process in container.exec_processes
@@ -279,7 +275,7 @@ signal_container_process := {"matches": matches, "allowed": true} {
     container_started
     input.isInitProcess
     containers := [container |
-        some container in data.metadata.matches[input.containerID]
+        container := data.metadata.matches[input.containerID][_]
         signal_ok(container.signals)
     ]
     count(containers) > 0
@@ -294,7 +290,7 @@ signal_container_process := {"matches": matches, "allowed": true} {
     container_started
     not input.isInitProcess
     containers := [container |
-        some container in data.metadata.matches[input.containerID]
+        container := data.metadata.matches[input.containerID][_]
         some process in container.exec_processes
         command_ok(process.command)
         signal_ok(process.signals)
@@ -371,8 +367,7 @@ exec_external := {"allowed": true} {
 
 # test if there is a matching external process in a fragment
 exec_external := {"allowed": true} {
-    some issuer in data.metadata.issuers
-    some feed in issuer.feeds
+    feed := data.metadata.issuers[_].feeds[_]
     some fragment in feed
     some process in fragment.external_processes
     external_process_ok(process)
@@ -474,8 +469,7 @@ matching_fragment := fragment {
 
 # test if there is a matching fragment in a fragment
 matching_fragment := subfragment {
-    some iss in data.metadata.issuers
-    some feed in iss.feeds
+    feed := data.metadata.issuers[_].feeds[_]
     some fragment in feed
     some subfragment in fragment.fragments
     fragment_ok(subfragment)
@@ -533,10 +527,9 @@ overlay_matches {
 }
 
 overlay_matches {
-    some issuer in data.metadata.issuers
-    some feed in issuer.feeds
+    feed := data.metadata.issuers[_].feeds[_]
     some fragment in feed
-    some container in feed.containers
+    some container in fragment.containers
     layerPaths_ok(container.layers)
 }
 
