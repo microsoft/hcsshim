@@ -140,12 +140,105 @@ func (h *Host) SetConfidentialUVMOptions(ctx context.Context, r *guestresource.L
 	return nil
 }
 
+
+type JsonPayload struct {
+	Issuer   string `json:"issuer,omitempty"`
+	Feed     string `json:"feed,omitempty"`
+	Fragment string `json:"fragment,omitempty"`
+}
+
+func checkDIDvsChain(did string, unpacked cosesign1.UnpackedCoseSign1) (bool, error) {
+	// Ken's cheap resolver, does the issuer match the leaf key base64?
+	if did != unpacked.Pubkey {
+		return false, fmt.Errorf("InjectFragment failed chain (leaf key) %s did not match issuer DID %s", unpacked.Pubkey, did)
+	}
+	// TODO - call the resolver
+	return true, nil
+}
+
 // InjectFragment extends current security policy with additional constraints
 // from the incoming fragment.
-//
-// TODO (maksiman): add fragment validation and injection logic
-func (*Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWSecurityPolicyFragment) (err error) {
-	log.G(ctx).WithField("fragment", fragment).Debug("fragment received in guest")
+
+func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWSecurityPolicyFragment) (err error) {
+	log.G(ctx).WithField("fragment", fmt.Sprintf("%+v", fragment)).Debug("GCS Host.InjectFragment")
+
+	raw, err := base64.StdEncoding.DecodeString(fragment.Fragment)
+	if err != nil {
+		return err
+	}
+	blob := []byte(fragment.Fragment)
+	_ = os.WriteFile("/tmp/fragment.blob", blob, 0644)
+
+	var unpacked cosesign1.UnpackedCoseSign1
+	unpacked, err = cosesign1.UnpackAndValidateCOSE1CertChain(raw, nil, false, true) // params raw []byte, optionaPubKeyPEM []byte, requireKNownAuthority bool, verbose bool
+
+	// Since EPRS cannot cope with iss/feed today (maybe next week) we MAY have a json payload with issuer and feed tags OR have them in the header
+
+	if err != nil {
+		return fmt.Errorf("InjectFragment failed COSE validation: %s", err.Error())
+	} else {
+		var payloadString = string(unpacked.Payload[:])
+		var issuer = unpacked.Issuer
+		var feed = unpacked.Feed
+		var pubkey = unpacked.Pubkey
+		var pubcert = unpacked.Pubcert
+		var payload = unpacked.Payload
+
+		log.G(ctx).Tracef("issuer:%s", issuer) // eg the DID:x509:blah....
+		log.G(ctx).Tracef("feed: %s", feed)
+		log.G(ctx).Tracef("cty: %s", unpacked.ContentType)
+		log.G(ctx).Tracef("pubkey: %s", pubkey)
+		log.G(ctx).Tracef("pubcert: %s", pubcert)
+		log.G(ctx).Tracef("payload:\n%s\n", payloadString)
+
+		// If the issuer and feed were not present in the COSE_Sign1 protected header assume the
+		// payload is a json document wrapping them along with the rego fragment.
+
+		if len(issuer) == 0 && len(feed) == 0 { // assume payload is json, unwrap that
+			var jsonPayload JsonPayload
+			var err = json.Unmarshal(payload, &jsonPayload)
+			if err != nil {
+				return fmt.Errorf("failed to decode json fragment wrapper: " + err.Error())
+			}
+			issuer = jsonPayload.Issuer
+			feed = jsonPayload.Feed
+			payloadString = jsonPayload.Fragment
+		} else if len(issuer) == 0 || len(feed) == 0 { // must both be present or neither present
+			return fmt.Errorf("either issuer and feed must both be provided or neither provided in the COSE_Sign1 protected header")
+		}
+
+		var didMatchesChain, err = checkDIDvsChain(issuer, unpacked)
+		if !didMatchesChain {
+			return err
+		}
+
+		codeBin, err := base64.StdEncoding.DecodeString(payloadString)
+		if err != nil {
+			log.G(ctx).Printf("failed to decode payload as base64: %s", payloadString)
+			return err
+		}
+		var code = string(codeBin[:])
+
+		// today we will use the public cert in place of the issuer (which ought to be a DID
+		// we can use to check the cert chain that signed this fragment was allowed by the user)
+		// If we were to allow the raw leaf cert like this we would need a framework change to
+		// take the cert in place of DID verification here so then it would be
+		//
+		// err = h.securityPolicyEnforcer.LoadFragment(pubcert, issuer, feed, code)
+		//
+		// There is a debate as to whether we should ignore the issuer in that case, probably not.
+
+		_ = pubkey
+
+		// now offer the payload fragment to the policy
+		err = h.securityPolicyEnforcer.LoadFragment(issuer, feed, code)
+		if err != nil {
+			return fmt.Errorf("InjectFragment failed policy load: %s", err.Error())
+		} else {
+			log.G(ctx).Printf("succeeded passing fragment into the enforcer.")
+		}
+
+	}
 	return nil
 }
 
@@ -341,10 +434,19 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	// completes to bypass it; the security policy variable cannot be included
 	// in the security policy as its value is not available security policy
 	// construction time.
-	if oci.ParseAnnotationsBool(ctx, settings.OCISpecification.Annotations, annotations.UVMSecurityPolicyEnv, false) {
-		secPolicyEnv := fmt.Sprintf("UVM_SECURITY_POLICY=%s", h.securityPolicyEnforcer.EncodedSecurityPolicy())
-		uvmReferenceInfo := fmt.Sprintf("UVM_REFERENCE_INFO=%s", h.uvmReferenceInfo)
-		settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, secPolicyEnv, uvmReferenceInfo)
+
+	// It may be an error to have a security policy but not expose it to the container as
+	// in that case it can never be checked as correct by a verifier.
+	if oci.ParseAnnotationsBool(ctx, settings.OCISpecification.Annotations, annotations.UVMSecurityPolicyEnv, true) {
+		var encodedPolicy = h.securityPolicyEnforcer.EncodedSecurityPolicy()
+		if len(encodedPolicy) > 0 {
+			secPolicyEnv := fmt.Sprintf("UVM_SECURITY_POLICY=%s", encodedPolicy)
+			settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, secPolicyEnv)
+		}
+		if len(h.uvmReferenceInfo) > 0 {
+			uvmReferenceInfo := fmt.Sprintf("UVM_REFERENCE_INFO=%s", h.uvmReferenceInfo)
+			settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, uvmReferenceInfo)
+		}
 	}
 
 	// Create the BundlePath
