@@ -42,6 +42,17 @@ func WithSecurityPolicyEnforcer(enforcer string) ConfidentialUVMOpt {
 	}
 }
 
+func base64EncodeContent(filePath string) (string, error) {
+	if filePath == "" {
+		return "", nil
+	}
+	content, err := os.ReadFile(filePath)
+	if err != nil && !os.IsNotExist(err) {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(content), nil
+}
+
 // WithUVMReferenceInfo reads UVM reference info file and base64 encodes the
 // content before setting it for the resource. This is no-op if the
 // `referenceName` is empty or the file doesn't exist.
@@ -50,11 +61,11 @@ func WithUVMReferenceInfo(referenceRoot string, referenceName string) Confidenti
 		if referenceName == "" {
 			return nil
 		}
-		content, err := os.ReadFile(filepath.Join(referenceRoot, referenceName))
-		if err != nil && !os.IsNotExist(err) {
+		encoded, err := base64EncodeContent(filepath.Join(referenceRoot, referenceName))
+		if err != nil {
 			return err
 		}
-		r.EncodedUVMReference = base64.StdEncoding.EncodeToString(content)
+		r.EncodedUVMReference = encoded
 		return nil
 	}
 }

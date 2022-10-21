@@ -343,8 +343,10 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	// construction time.
 	if oci.ParseAnnotationsBool(ctx, settings.OCISpecification.Annotations, annotations.UVMSecurityPolicyEnv, false) {
 		secPolicyEnv := fmt.Sprintf("UVM_SECURITY_POLICY=%s", h.securityPolicyEnforcer.EncodedSecurityPolicy())
-		uvmReferenceInfo := fmt.Sprintf("UVM_REFERENCE_INFO=%s", h.uvmReferenceInfo)
-		settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env, secPolicyEnv, uvmReferenceInfo)
+		uvmReferenceInfoEnv := fmt.Sprintf("UVM_REFERENCE_INFO=%s", h.uvmReferenceInfo)
+		amdCertEnv := fmt.Sprintf("UVM_HOST_AMD_CERTIFICATE=%s", settings.OCISpecification.Annotations[annotations.HostAMDCertificate])
+		settings.OCISpecification.Process.Env = append(settings.OCISpecification.Process.Env,
+			secPolicyEnv, uvmReferenceInfoEnv, amdCertEnv)
 	}
 
 	// Create the BundlePath

@@ -790,9 +790,11 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Annotation(t *testing.T)
 					alpineCmd,
 					sandboxRequest.Config,
 				)
+				certValue := "dummy-cert-value"
 				if setPolicyEnv {
 					containerRequest.Config.Annotations = map[string]string{
 						annotations.UVMSecurityPolicyEnv: "true",
+						annotations.HostAMDCertificate:   certValue,
 					}
 				}
 				// setup logfile to capture stdout
@@ -812,19 +814,23 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Annotation(t *testing.T)
 				if err != nil {
 					t.Fatalf("error reading log file: %s", err)
 				}
-				policyEnv := fmt.Sprintf("UVM_SECURITY_POLICY=%s", config.policy)
-				measurementEnv := "UVM_REFERENCE_INFO="
+				targetEnvs := []string{
+					fmt.Sprintf("UVM_SECURITY_POLICY=%s", config.policy),
+					"UVM_REFERENCE_INFO=",
+					fmt.Sprintf("UVM_HOST_AMD_CERTIFICATE=%s", certValue),
+				}
 				if setPolicyEnv {
 					// make sure that the expected environment variable was set
-					if !strings.Contains(string(content), policyEnv) || !strings.Contains(string(content), measurementEnv) {
-						t.Fatalf("UVM_SECURITY_POLICY and UVM_REFERENCE_INFO env vars should be set for init"+
-							" process:\n%s\n", string(content))
+					for _, env := range targetEnvs {
+						if !strings.Contains(string(content), env) {
+							t.Fatalf("missing init process environment variable: %s", env)
+						}
 					}
 				} else {
-					if strings.Contains(string(content), policyEnv) || strings.Contains(string(content), measurementEnv) {
-						t.Fatalf("UVM_SECURITY_POLICY and UVM_REFERENCE_INFO env vars shouldn't be set for init"+
-							" process:\n%s\n",
-							string(content))
+					for _, env := range targetEnvs {
+						if strings.Contains(string(content), env) {
+							t.Fatalf("environment variable should not be set for init process: %s", env)
+						}
 					}
 				}
 			})

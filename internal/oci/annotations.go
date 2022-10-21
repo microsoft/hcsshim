@@ -20,7 +20,7 @@ func ProcessAnnotations(ctx context.Context, s *specs.Spec) (err error) {
 	// Named `Process` and not `Expand` since this function may be expanded (pun intended) to
 	// deal with other annotation issues and validation.
 
-	// Rathen than give up part of the way through on error, this just emits a warning (similar
+	// Rather than give up part of the way through on error, this just emits a warning (similar
 	// to the `parseAnnotation*` functions) and continues through, so the spec is not left in a
 	// (partially) unusable form.
 	// If multiple different errors are to be raised, they should be combined or, if they
