@@ -57,11 +57,7 @@ func ParseEnvFromImage(img v1.Image) ([]string, error) {
 		return nil, err
 	}
 
-	// cri adds TERM=xterm for all workload containers. we add to all containers
-	// to prevent any possible error
-	envVars := append(imgConfig.Config.Env, "TERM=xterm")
-
-	return envVars, nil
+	return imgConfig.Config.Env, nil
 }
 
 // DefaultContainerConfigs returns a hardcoded slice of container configs, which should
@@ -141,7 +137,19 @@ func PolicyContainersFromConfigs(containerConfigs []securitypolicy.ContainerConf
 		if err != nil {
 			return nil, err
 		}
-		envRules := securitypolicy.NewEnvVarRules(envVars)
+
+		// we want all environment variables which we've extracted from the
+		// image to be required
+		envRules := securitypolicy.NewEnvVarRules(envVars, true)
+
+		// cri adds TERM=xterm for all workload containers. we add to all containers
+		// to prevent any possible error
+		envRules = append(envRules, securitypolicy.EnvRuleConfig{
+			Rule:     "TERM=xterm",
+			Strategy: securitypolicy.EnvVarRuleString,
+			Required: false,
+		})
+
 		envRules = append(envRules, containerConfig.EnvRules...)
 
 		workingDir, err := ParseWorkingDirFromImage(img)

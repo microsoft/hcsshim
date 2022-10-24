@@ -23,7 +23,7 @@ var validPolicyAlpineCommand = []string{"ash", "-c", "echo 'Hello'"}
 
 type configSideEffect func(*runtime.CreateContainerRequest) error
 
-func securityPolicyFromContainers(policyType string, containers []securitypolicy.ContainerConfig) (string, error) {
+func securityPolicyFromContainers(policyType string, containers []securitypolicy.ContainerConfig, allowEnvironmentVariableDropping bool) (string, error) {
 	pc, err := helpers.PolicyContainersFromConfigs(containers)
 	if err != nil {
 		return "", err
@@ -33,24 +33,25 @@ func securityPolicyFromContainers(policyType string, containers []securitypolicy
 		[]securitypolicy.FragmentConfig{},
 		true,
 		true,
-		true)
+		true,
+		allowEnvironmentVariableDropping)
 	if err != nil {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString([]byte(policyString)), nil
 }
 
-func sandboxSecurityPolicy(t *testing.T, policyType string) string {
+func sandboxSecurityPolicy(t *testing.T, policyType string, allowEnvironmentVariableDropping bool) string {
 	t.Helper()
 	defaultContainers := helpers.DefaultContainerConfigs()
-	policyString, err := securityPolicyFromContainers(policyType, defaultContainers)
+	policyString, err := securityPolicyFromContainers(policyType, defaultContainers, allowEnvironmentVariableDropping)
 	if err != nil {
 		t.Fatalf("failed to create security policy string: %s", err)
 	}
 	return policyString
 }
 
-func alpineSecurityPolicy(t *testing.T, policyType string, opts ...securitypolicy.ContainerConfigOpt) string {
+func alpineSecurityPolicy(t *testing.T, policyType string, allowEnvironmentVariableDropping bool, opts ...securitypolicy.ContainerConfigOpt) string {
 	t.Helper()
 	defaultContainers := helpers.DefaultContainerConfigs()
 
@@ -66,7 +67,7 @@ func alpineSecurityPolicy(t *testing.T, policyType string, opts ...securitypolic
 	}
 
 	containers := append(defaultContainers, alpineContainer)
-	policyString, err := securityPolicyFromContainers(policyType, containers)
+	policyString, err := securityPolicyFromContainers(policyType, containers, allowEnvironmentVariableDropping)
 	if err != nil {
 		t.Fatalf("failed to create security policy string: %s", err)
 	}
@@ -118,7 +119,7 @@ func Test_RunPodSandbox_WithPolicy_Allowed(t *testing.T) {
 
 	for _, pc := range policyTestMatrix {
 		t.Run(t.Name()+fmt.Sprintf("_Enforcer_%s_Input_%s", pc.enforcer, pc.input), func(t *testing.T) {
-			sandboxPolicy := sandboxSecurityPolicy(t, pc.input)
+			sandboxPolicy := sandboxSecurityPolicy(t, pc.input, false)
 			sandboxRequest := sandboxRequestWithPolicy(t, sandboxPolicy)
 			sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = pc.enforcer
 
@@ -139,7 +140,7 @@ func Test_RunSimpleAlpineContainer_WithPolicy_Allowed(t *testing.T) {
 
 	for _, pc := range policyTestMatrix {
 		t.Run(t.Name()+fmt.Sprintf("_Enforcer_%s_Input_%s", pc.enforcer, pc.input), func(t *testing.T) {
-			alpinePolicy := alpineSecurityPolicy(t, pc.input)
+			alpinePolicy := alpineSecurityPolicy(t, pc.input, false)
 			sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
 			sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = pc.enforcer
 
@@ -211,7 +212,7 @@ func Test_RunContainer_WithPolicy_And_ValidConfigs(t *testing.T) {
 	} {
 		for _, pc := range policyTestMatrix {
 			t.Run(testConfig.name+fmt.Sprintf("_Enforcer_%s_Input_%s", pc.enforcer, pc.input), func(t *testing.T) {
-				alpinePolicy := alpineSecurityPolicy(t, pc.input, testConfig.opts...)
+				alpinePolicy := alpineSecurityPolicy(t, pc.input, false, testConfig.opts...)
 				sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
 				sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = pc.enforcer
 
@@ -284,7 +285,7 @@ func Test_RunContainer_WithPolicy_And_InvalidConfigs(t *testing.T) {
 		},
 	} {
 		t.Run(testConfig.name, func(t *testing.T) {
-			alpinePolicy := alpineSecurityPolicy(t, "json")
+			alpinePolicy := alpineSecurityPolicy(t, "json", false)
 			sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
 			sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = "standard"
 
@@ -413,7 +414,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_Allowed(t *testing.T) {
 	} {
 		for _, pc := range policyTestMatrix {
 			t.Run(testConfig.name+fmt.Sprintf("_Enforcer_%s_Input_%s", pc.enforcer, pc.input), func(t *testing.T) {
-				alpinePolicy := alpineSecurityPolicy(t, pc.input, testConfig.opts...)
+				alpinePolicy := alpineSecurityPolicy(t, pc.input, false, testConfig.opts...)
 				sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
 				sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = pc.enforcer
 
@@ -564,7 +565,7 @@ func Test_RunContainer_WithPolicy_And_MountConstraints_NotAllowed(t *testing.T) 
 		},
 	} {
 		t.Run(testConfig.name, func(t *testing.T) {
-			alpinePolicy := alpineSecurityPolicy(t, "json", testConfig.opts...)
+			alpinePolicy := alpineSecurityPolicy(t, "json", false, testConfig.opts...)
 			sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
 			sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = "standard"
 
@@ -610,7 +611,7 @@ func Test_RunPrivilegedContainer_WithPolicy_And_AllowElevated_Set(t *testing.T) 
 
 	for _, pc := range policyTestMatrix {
 		t.Run(t.Name()+fmt.Sprintf("_Enforcer_%s_Input_%s", pc.enforcer, pc.input), func(t *testing.T) {
-			alpinePolicy := alpineSecurityPolicy(t, pc.input, securitypolicy.WithAllowElevated(true))
+			alpinePolicy := alpineSecurityPolicy(t, pc.input, false, securitypolicy.WithAllowElevated(true))
 			sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
 			sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
 				SecurityContext: &runtime.LinuxSandboxSecurityContext{
@@ -652,7 +653,7 @@ func Test_RunPrivilegedContainer_WithPolicy_And_AllowElevated_NotSet(t *testing.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	alpinePolicy := alpineSecurityPolicy(t, "json")
+	alpinePolicy := alpineSecurityPolicy(t, "json", false)
 	sandboxRequest := sandboxRequestWithPolicy(t, alpinePolicy)
 	sandboxRequest.Config.Linux = &runtime.LinuxPodSandboxConfig{
 		SecurityContext: &runtime.LinuxSandboxSecurityContext{
@@ -750,11 +751,11 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Annotation(t *testing.T)
 		},
 		{
 			name:   "StandardPolicy",
-			policy: alpineSecurityPolicy(t, "json", securitypolicy.WithCommand(alpineCmd)),
+			policy: alpineSecurityPolicy(t, "json", false, securitypolicy.WithCommand(alpineCmd)),
 		},
 		{
 			name:   "RegoPolicy",
-			policy: alpineSecurityPolicy(t, "rego", securitypolicy.WithCommand(alpineCmd)),
+			policy: alpineSecurityPolicy(t, "rego", false, securitypolicy.WithCommand(alpineCmd)),
 		},
 	} {
 		for _, setPolicyEnv := range []bool{true, false} {
@@ -812,5 +813,87 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Annotation(t *testing.T)
 				}
 			})
 		}
+	}
+}
+
+func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Dropping(t *testing.T) {
+	requireFeatures(t, featureLCOW, featureLCOWIntegrity)
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause, imageLcowAlpine})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// The command prints environment variables to stdout, which we can capture
+	// and validate later
+	alpineCmd := []string{"ash", "-c", "env && sleep 1"}
+
+	for _, config := range []struct {
+		name    string
+		policy  string
+		allowed bool
+	}{
+		{
+			name:    "Dropped",
+			policy:  alpineSecurityPolicy(t, "rego", true, securitypolicy.WithCommand(alpineCmd)),
+			allowed: false,
+		},
+		{
+			name:    "NotDropped",
+			policy:  alpineSecurityPolicy(t, "rego", false, securitypolicy.WithCommand(alpineCmd)),
+			allowed: false,
+		},
+	} {
+		t.Run(config.name, func(t *testing.T) {
+			sandboxRequest := sandboxRequestWithPolicy(t, config.policy)
+
+			podID := runPodSandbox(t, client, ctx, sandboxRequest)
+			defer removePodSandbox(t, client, ctx, podID)
+			defer stopPodSandbox(t, client, ctx, podID)
+
+			containerRequest := getCreateContainerRequest(
+				podID,
+				"alpine-with-policy",
+				imageLcowAlpine,
+				alpineCmd,
+				sandboxRequest.Config,
+			)
+
+			// setup logfile to capture stdout
+			logPath := filepath.Join(t.TempDir(), "log.txt")
+			containerRequest.Config.LogPath = logPath
+
+			badKV := &runtime.KeyValue{
+				Key: "INVALID_ENV", Value: "this/should/cause/an/error/",
+			}
+			containerRequest.Config.Envs = append(containerRequest.Config.Envs, badKV)
+
+			response, err := client.CreateContainer(ctx, containerRequest)
+			if err != nil {
+				if config.allowed {
+					t.Fatalf("failed CreateContainer in sandbox: %s, with: %v", containerRequest.PodSandboxId, err)
+				}
+				return
+			}
+
+			containerID := response.ContainerId
+			defer removeContainer(t, client, ctx, containerID)
+
+			startContainer(t, client, ctx, containerID)
+			requireContainerState(ctx, t, client, containerID, runtime.ContainerState_CONTAINER_RUNNING)
+
+			// no need to stop the container since it'll exit by itself
+			requireContainerState(ctx, t, client, containerID, runtime.ContainerState_CONTAINER_EXITED)
+
+			content, err := os.ReadFile(logPath)
+			if err != nil {
+				t.Fatalf("error reading log file: %s", err)
+			}
+
+			badEnv := fmt.Sprintf("%s=%s", badKV.Key, badKV.Value)
+			if strings.Contains(string(content), badEnv) {
+				t.Fatalf("INVALID_ENV env var shouldn't be set for init process:\n%s\n", string(content))
+			}
+		})
 	}
 }

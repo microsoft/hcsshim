@@ -27,9 +27,9 @@ const (
 	maxGeneratedContainerID                   = 1000000
 	maxGeneratedCommandLength                 = 128
 	maxGeneratedCommandArgs                   = 12
-	maxGeneratedEnvironmentVariables          = 24
+	maxGeneratedEnvironmentVariables          = 16
 	maxGeneratedEnvironmentVariableRuleLength = 64
-	maxGeneratedEnvironmentVariableRules      = 12
+	maxGeneratedEnvironmentVariableRules      = 8
 	maxGeneratedFragmentNamespaceLength       = 32
 	maxGeneratedMountTargetLength             = 256
 	maxGeneratedVersion                       = 10
@@ -39,7 +39,7 @@ const (
 	maxGeneratedMountDestinationLength        = 32
 	maxGeneratedMountOptions                  = 5
 	maxGeneratedMountOptionLength             = 32
-	maxGeneratedExecProcesses                 = 12
+	maxGeneratedExecProcesses                 = 4
 	maxGeneratedWorkingDirLength              = 128
 	maxSignalNumber                           = 64
 	// additional consts
@@ -901,14 +901,15 @@ func generateConstraints(r *rand.Rand, maxContainers int32) *generatedConstraint
 	}
 
 	return &generatedConstraints{
-		containers:          containers,
-		externalProcesses:   make([]*externalProcess, 0),
-		fragments:           make([]*fragment, 0),
-		allowGetProperties:  randBool(r),
-		allowDumpStacks:     randBool(r),
-		allowRuntimeLogging: false,
-		namespace:           generateFragmentNamespace(testRand),
-		svn:                 generateSVN(testRand),
+		containers:                       containers,
+		externalProcesses:                make([]*externalProcess, 0),
+		fragments:                        make([]*fragment, 0),
+		allowGetProperties:               randBool(r),
+		allowDumpStacks:                  randBool(r),
+		allowRuntimeLogging:              false,
+		allowEnvironmentVariableDropping: false,
+		namespace:                        generateFragmentNamespace(testRand),
+		svn:                              generateSVN(testRand),
 	}
 }
 
@@ -1317,14 +1318,15 @@ func atMost(r *rand.Rand, most int32) int32 {
 }
 
 type generatedConstraints struct {
-	containers          []*securityPolicyContainer
-	externalProcesses   []*externalProcess
-	fragments           []*fragment
-	allowGetProperties  bool
-	allowDumpStacks     bool
-	allowRuntimeLogging bool
-	namespace           string
-	svn                 string
+	containers                       []*securityPolicyContainer
+	externalProcesses                []*externalProcess
+	fragments                        []*fragment
+	allowGetProperties               bool
+	allowDumpStacks                  bool
+	allowRuntimeLogging              bool
+	allowEnvironmentVariableDropping bool
+	namespace                        string
+	svn                              string
 }
 
 type containerInitProcess struct {

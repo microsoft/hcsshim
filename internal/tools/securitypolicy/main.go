@@ -64,7 +64,8 @@ func main() {
 				config.Fragments,
 				config.AllowPropertiesAccess,
 				config.AllowDumpStacks,
-				config.AllowRuntimeLogging)
+				config.AllowRuntimeLogging,
+				config.AllowEnvironmentVariableDropping)
 		}
 		if err != nil {
 			return err

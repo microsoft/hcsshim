@@ -128,16 +128,65 @@ rule_ok(rule, env) {
     env_ok(rule.pattern, rule.strategy, env)
 }
 
-envList_ok(env_rules) {
-    every env in input.envList {
+envList_ok(env_rules, envList) {
+    every rule in env_rules {
+        some env in envList
+        rule_ok(rule, env)
+    }
+
+    every env in envList {
         some rule in env_rules
         env_ok(rule.pattern, rule.strategy, env)
     }
+}
 
-    every rule in env_rules {
+valid_envs_subset(env_rules) := envs {
+    envs := {env |
         some env in input.envList
-        rule_ok(rule, env)
+        some rule in env_rules
+        env_ok(rule.pattern, rule.strategy, env)
     }
+}
+
+valid_envs_for_all(items) := envs {
+    data.policy.allow_environment_variable_dropping
+
+    # for each item, find a subset of the environment rules
+    # that are valid
+    valid := [envs |
+        some item in items
+        envs := valid_envs_subset(item.env_rules)
+    ]
+    
+    # we want to select the most specific matches, which in this
+    # case consists of those matches which require dropping the
+    # fewest environment variables (i.e. the longest lists)
+    counts := [num_envs |
+        envs := valid[_]
+        num_envs := count(envs)
+    ]
+    max_count := max(counts)
+
+    largest_env_sets := {envs |
+        some i
+        counts[i] == max_count
+        envs := valid[i]
+    }
+
+    # if there is more than one set with the same size, we
+    # can only proceed if they are all the same, so we verify
+    # that the intersection is equal to the union. For a single
+    # set this is trivially true.
+    envs_i := intersection(largest_env_sets)
+    envs_u := union(largest_env_sets)
+    envs_i == envs_u
+    envs := envs_i
+}
+
+valid_envs_for_all(items) := envs {
+    not data.policy.allow_environment_variable_dropping
+    # no dropping allowed, so we just return the input
+    envs := input.envList
 }
 
 workingDirectory_ok(working_dir) {
@@ -152,15 +201,27 @@ container_started {
 
 default create_container := {"allowed": false}
 
-create_container := {"matches": matches, "started": started, "allowed": true} {
+create_container := {"matches": matches, "env_list": env_list, "started": started, "allowed": true} {
     not container_started
-    containers := [container |
+    # narrow the matches based upon command, working directory, and
+    # mount list
+    possible_containers := [container |
         container := data.metadata.matches[input.containerID][_]
-        command_ok(container.command)
-        envList_ok(container.env_rules)
         workingDirectory_ok(container.working_dir)
+        command_ok(container.command)
         mountList_ok(container.mounts, container.allow_elevated)
     ]
+
+    count(possible_containers) > 0
+
+    # check to see if the environment variables match, dropping
+    # them if allowed (and necessary)
+    env_list := valid_envs_for_all(possible_containers)
+    containers := [container |
+        container := possible_containers[_]
+        envList_ok(container.env_rules, env_list)
+    ]
+
     count(containers) > 0
     matches := {
         "action": "update",
@@ -242,16 +303,28 @@ mountList_ok(mounts, allow_elevated) {
 
 default exec_in_container := {"allowed": false}
 
-exec_in_container := {"matches": matches, "allowed": true} {
+exec_in_container := {"matches": matches, "env_list": env_list, "allowed": true} {
     container_started
-    containers := [container |
+    # narrow our matches based upon the process requested
+    possible_containers := [container |
         container := data.metadata.matches[input.containerID][_]
-        envList_ok(container.env_rules)
         workingDirectory_ok(container.working_dir)
         some process in container.exec_processes
         command_ok(process.command)
     ]
+
+    count(possible_containers) > 0
+
+    # check to see if the environment variables match, dropping
+    # them if allowed (and necessary)
+    env_list := valid_envs_for_all(possible_containers)
+    containers := [container |
+        container := possible_containers[_]
+        envList_ok(container.env_rules, env_list)
+    ]
+
     count(containers) > 0
+
     matches := {
         "action": "update",
         "key": input.containerID,
@@ -353,24 +426,40 @@ enforcement_point_info := {"available": false, "allowed": false, "unknown": fals
 
 external_process_ok(process) {
     command_ok(process.command)
-    envList_ok(process.env_rules)
+    envList_ok(process.env_rules, input.envList)
     workingDirectory_ok(process.working_dir)
 }
 
 default exec_external := {"allowed": false}
 
-# test if there is a matching external process in the policy
-exec_external := {"allowed": true} {
-    some process in data.policy.external_processes
-    external_process_ok(process)
-}
+exec_external := {"allowed": true, "env_list": env_list} {
+    # we need to assemble a list of all possible external processes which
+    # have a matching working directory and command
+    policy_processes := [process |
+        some process in data.policy.external_processes
+        workingDirectory_ok(process.working_dir)
+        command_ok(process.command)
+    ]
 
-# test if there is a matching external process in a fragment
-exec_external := {"allowed": true} {
-    feed := data.metadata.issuers[_].feeds[_]
-    some fragment in feed
-    some process in fragment.external_processes
-    external_process_ok(process)
+    fragment_processes := [process |
+        feed := data.metadata.issuers[_].feeds[_]
+        some fragment in feed
+        some process in fragment.external_processes
+        workingDirectory_ok(process.working_dir)
+        command_ok(process.command)
+    ]
+
+    possible_processes := array.concat(policy_processes, fragment_processes)
+
+    # check to see if the environment variables match, dropping
+    # them if allowed (and necessary)
+    env_list := valid_envs_for_all(possible_processes)
+    processes := [process |
+        process := possible_processes[_]
+        envList_ok(process.env_rules, env_list)
+    ]
+
+    count(processes) > 0
 }
 
 default get_properties := {"allowed": false}
@@ -569,23 +658,27 @@ errors["invalid command"] {
     not command_matches
 }
 
-default envList_matches := false
-
-envList_matches {
+env_matches(env) {
     input.rule in ["create_container", "exec_in_container"]
     some container in data.metadata.matches[input.containerID]
-    envList_ok(container.env_rules)
+    some rule in container.env_rules
+    env_ok(rule.pattern, rule.strategy, env)
 }
 
-envList_matches {
-    input.rule == "exec_external"
+env_matches(env) {
+    input.rule in ["exec_external"]
     some process in data.policy.external_processes
-    envList_ok(process.env_rules)
+    some rule in process.env_rules
+    env_ok(rule.pattern, rule.strategy, input.envList)
 }
 
-errors["invalid env list"] {
+errors[envError] {
     input.rule in ["create_container", "exec_in_container", "exec_external"]
-    not envList_matches
+    bad_envs := [env | 
+        env := input.envList[_]
+        not env_matches(env)]
+    count(bad_envs) > 0
+    envError := concat(" ", ["invalid env list:", concat(",", bad_envs)])    
 }
 
 default workingDirectory_matches := false
@@ -607,16 +700,18 @@ errors["invalid working directory"] {
     not workingDirectory_matches
 }
 
-default mountList_matches := false
-
-mountList_matches {
+mount_matches(mount) {
     some container in data.metadata.matches[input.containerID]
-    data.framework.mountList_ok(container, container.allow_elevated)
+    mount_ok(container.mounts, container.allow_elevated, mount)
 }
 
-errors["invalid mount list"] {
+errors[mountError] {
     input.rule == "create_container"
-    not mountList_matches
+    bad_mounts := [mount.destination | 
+        mount := input.mounts[_]
+        not mount_matches(mount)]
+    count(bad_mounts) > 0
+    mountError := concat(" ", ["invalid mount list:", concat(",", bad_mounts)])
 }
 
 default signal_allowed := false

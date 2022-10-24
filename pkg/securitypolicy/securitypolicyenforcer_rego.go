@@ -54,7 +54,6 @@ type module struct {
 	feed      string
 	issuer    string
 	code      string
-	sideload  bool
 }
 
 // RegoEnforcer is a stub implementation of a security policy, which will be
@@ -123,7 +122,7 @@ func createRegoEnforcer(base64EncodedPolicy string,
 			return createOpenDoorEnforcer(base64EncodedPolicy, defaultMounts, privilegedMounts)
 		}
 
-		code, err = marshalRego(securityPolicy.AllowAll, containers, []ExternalProcessConfig{}, []FragmentConfig{}, true, true, true)
+		code, err = marshalRego(securityPolicy.AllowAll, containers, []ExternalProcessConfig{}, []FragmentConfig{}, true, true, true, false)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling the policy to Rego: %w", err)
 		}
@@ -473,6 +472,7 @@ func newMetadataOperation(operation interface{}) (*metadataOperation, error) {
 var reservedResultKeys = map[string]struct{}{
 	"allowed":    {},
 	"add_module": {},
+	"env_list":   {},
 }
 
 func (policy *regoEnforcer) getMetadata(name string) (map[string]interface{}, error) {
@@ -531,36 +531,28 @@ func (policy *regoEnforcer) updateMetadata(results map[string]interface{}) error
 	return nil
 }
 
-func (policy *regoEnforcer) enforce(enforcementPoint string, input map[string]interface{}) error {
+func (policy *regoEnforcer) enforce(enforcementPoint string, input map[string]interface{}) (map[string]interface{}, error) {
 	results, err := policy.query(enforcementPoint, input)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	allowed, err := policy.allowed(enforcementPoint, results)
 	if err != nil {
-		return err
+		return results, err
 	}
 
 	if allowed {
-		if enforcementPoint == "load_fragment" {
-			if addModule, ok := results["add_module"].(bool); ok {
-				if addModule {
-					id := moduleID(input["issuer"].(string), input["feed"].(string))
-					policy.modules[id].sideload = true
-				}
-			}
-		}
-
 		err = policy.updateMetadata(results)
-		if err != nil {
-			return fmt.Errorf("unable to update metadata: %w", err)
-		}
 	} else {
 		err = policy.getReasonNotAllowed(enforcementPoint, input)
 	}
 
-	return err
+	if err != nil {
+		return nil, err
+	}
+
+	return results, nil
 }
 
 func errorString(errors interface{}) string {
@@ -597,7 +589,8 @@ func (policy *regoEnforcer) EnforceDeviceMountPolicy(target string, deviceHash s
 		"deviceHash": deviceHash,
 	}
 
-	return policy.enforce("mount_device", input)
+	_, err := policy.enforce("mount_device", input)
+	return err
 }
 
 func (policy *regoEnforcer) EnforceOverlayMountPolicy(containerID string, layerPaths []string, target string) error {
@@ -607,7 +600,8 @@ func (policy *regoEnforcer) EnforceOverlayMountPolicy(containerID string, layerP
 		"target":      target,
 	}
 
-	return policy.enforce("mount_overlay", input)
+	_, err := policy.enforce("mount_overlay", input)
+	return err
 }
 
 func (policy *regoEnforcer) EnforceOverlayUnmountPolicy(target string) error {
@@ -615,7 +609,8 @@ func (policy *regoEnforcer) EnforceOverlayUnmountPolicy(target string) error {
 		"unmountTarget": target,
 	}
 
-	return policy.enforce("unmount_overlay", input)
+	_, err := policy.enforce("unmount_overlay", input)
+	return err
 }
 
 // Rego does not have a way to determine the OS path separator
@@ -635,7 +630,7 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 	envList []string,
 	workingDir string,
 	mounts []oci.Mount,
-) error {
+) (toKeep EnvList, err error) {
 	input := map[string]interface{}{
 		"containerID":  containerID,
 		"argList":      argList,
@@ -646,7 +641,21 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 		"mounts":       appendMountData([]interface{}{}, mounts),
 	}
 
-	return policy.enforce("create_container", input)
+	results, err := policy.enforce("create_container", input)
+	if err != nil {
+		return nil, err
+	}
+
+	if value, ok := results["env_list"]; ok {
+		if envList, ok := value.([]interface{}); ok {
+			toKeep = make([]string, len(envList))
+			for i, env := range envList {
+				toKeep[i] = env.(string)
+			}
+		}
+	}
+
+	return toKeep, nil
 }
 
 func (policy *regoEnforcer) EnforceDeviceUnmountPolicy(unmountTarget string) error {
@@ -654,7 +663,8 @@ func (policy *regoEnforcer) EnforceDeviceUnmountPolicy(unmountTarget string) err
 		"unmountTarget": unmountTarget,
 	}
 
-	return policy.enforce("unmount_device", input)
+	_, err := policy.enforce("unmount_device", input)
+	return err
 }
 
 func appendMountData(mountData []interface{}, mounts []oci.Mount) []interface{} {
@@ -683,7 +693,7 @@ func (policy *regoEnforcer) EncodedSecurityPolicy() string {
 	return policy.base64policy
 }
 
-func (policy *regoEnforcer) EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string) error {
+func (policy *regoEnforcer) EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string) (toKeep EnvList, err error) {
 	input := map[string]interface{}{
 		"containerID": containerID,
 		"argList":     argList,
@@ -691,17 +701,39 @@ func (policy *regoEnforcer) EnforceExecInContainerPolicy(containerID string, arg
 		"workingDir":  workingDir,
 	}
 
-	return policy.enforce("exec_in_container", input)
+	results, err := policy.enforce("exec_in_container", input)
+
+	if value, ok := results["env_list"]; ok {
+		if envList, ok := value.([]interface{}); ok {
+			toKeep = make([]string, len(envList))
+			for i, env := range envList {
+				toKeep[i] = env.(string)
+			}
+		}
+	}
+
+	return toKeep, err
 }
 
-func (policy *regoEnforcer) EnforceExecExternalProcessPolicy(argList []string, envList []string, workingDir string) error {
+func (policy *regoEnforcer) EnforceExecExternalProcessPolicy(argList []string, envList []string, workingDir string) (toKeep EnvList, err error) {
 	input := map[string]interface{}{
 		"argList":    argList,
 		"envList":    envList,
 		"workingDir": workingDir,
 	}
 
-	return policy.enforce("exec_external", input)
+	results, err := policy.enforce("exec_external", input)
+
+	if value, ok := results["env_list"]; ok {
+		if envList, ok := value.([]interface{}); ok {
+			toKeep = make([]string, len(envList))
+			for i, env := range envList {
+				toKeep[i] = env.(string)
+			}
+		}
+	}
+
+	return toKeep, err
 }
 
 func (policy *regoEnforcer) EnforceShutdownContainerPolicy(containerID string) error {
@@ -709,7 +741,8 @@ func (policy *regoEnforcer) EnforceShutdownContainerPolicy(containerID string) e
 		"containerID": containerID,
 	}
 
-	return policy.enforce("shutdown_container", input)
+	_, err := policy.enforce("shutdown_container", input)
+	return err
 }
 
 func (policy *regoEnforcer) EnforceSignalContainerProcessPolicy(containerID string, signal syscall.Signal, isInitProcess bool, startupArgList []string) error {
@@ -720,7 +753,8 @@ func (policy *regoEnforcer) EnforceSignalContainerProcessPolicy(containerID stri
 		"argList":       startupArgList,
 	}
 
-	return policy.enforce("signal_container_process", input)
+	_, err := policy.enforce("signal_container_process", input)
+	return err
 }
 
 func (policy *regoEnforcer) EnforcePlan9MountPolicy(target string) error {
@@ -731,7 +765,8 @@ func (policy *regoEnforcer) EnforcePlan9MountPolicy(target string) error {
 		"target":          target,
 	}
 
-	return policy.enforce("plan9_mount", input)
+	_, err := policy.enforce("plan9_mount", input)
+	return err
 }
 
 func (policy *regoEnforcer) EnforcePlan9UnmountPolicy(target string) error {
@@ -739,25 +774,28 @@ func (policy *regoEnforcer) EnforcePlan9UnmountPolicy(target string) error {
 		"target": target,
 	}
 
-	return policy.enforce("plan9_unmount", input)
+	_, err := policy.enforce("plan9_unmount", input)
+	return err
 }
 
 func (policy *regoEnforcer) EnforceGetPropertiesPolicy() error {
 	input := make(map[string]interface{})
 
-	return policy.enforce("get_properties", input)
+	_, err := policy.enforce("get_properties", input)
+	return err
 }
 
 func (policy *regoEnforcer) EnforceDumpStacksPolicy() error {
 	input := make(map[string]interface{})
 
-	return policy.enforce("dump_stacks", input)
+	_, err := policy.enforce("dump_stacks", input)
+	return err
 }
 
 func (policy *regoEnforcer) EnforceRuntimeLoggingPolicy() error {
 	input := map[string]interface{}{}
-
-	return policy.enforce("runtime_logging", input)
+	_, err := policy.enforce("runtime_logging", input)
+	return err
 }
 
 func moduleID(issuer string, feed string) string {
@@ -790,7 +828,6 @@ func (policy *regoEnforcer) LoadFragment(issuer string, feed string, rego string
 		feed:      feed,
 		code:      rego,
 		namespace: namespace,
-		sideload:  false,
 	}
 
 	policy.modules[fragment.id()] = fragment
@@ -802,14 +839,17 @@ func (policy *regoEnforcer) LoadFragment(issuer string, feed string, rego string
 		"namespace": namespace,
 	}
 
-	err = policy.enforce("load_fragment", input)
+	results, err := policy.enforce("load_fragment", input)
 
-	if !fragment.sideload {
-		delete(policy.modules, fragment.id())
+	removeModule := true
+	if addModule, ok := results["add_module"].(bool); ok {
+		if addModule {
+			removeModule = false
+		}
 	}
 
-	if compileError := policy.compile(); compileError != nil {
-		return fmt.Errorf("post rule error: %v, was unable to re-compile policy: %v", err, compileError)
+	if removeModule {
+		delete(policy.modules, fragment.id())
 	}
 
 	return err
