@@ -10,9 +10,93 @@ import (
 type securityPolicyInternal struct {
 	Containers            []*securityPolicyContainer
 	ExternalProcesses     []*externalProcess
+	Fragments             []*fragment
 	AllowPropertiesAccess bool
 	AllowDumpStacks       bool
 	AllowRuntimeLogging   bool
+}
+
+type securityPolicyFragment struct {
+	Namespace         string
+	SVN               string
+	Containers        []*securityPolicyContainer
+	ExternalProcesses []*externalProcess
+	Fragments         []*fragment
+}
+
+func containersToInternal(containers []*Container) ([]*securityPolicyContainer, error) {
+	result := make([]*securityPolicyContainer, len(containers))
+	for i, cConf := range containers {
+		cInternal, err := cConf.toInternal()
+		if err != nil {
+			return nil, err
+		}
+		result[i] = &cInternal
+	}
+
+	return result, nil
+}
+
+func externalProcessToInternal(externalProcesses []ExternalProcessConfig) []*externalProcess {
+	result := make([]*externalProcess, len(externalProcesses))
+	for i, pConf := range externalProcesses {
+		pInternal := pConf.toInternal()
+		result[i] = &pInternal
+	}
+
+	return result
+}
+
+func fragmentsToInternal(fragments []FragmentConfig) []*fragment {
+	result := make([]*fragment, len(fragments))
+	for i, fConf := range fragments {
+		fInternal := fConf.toInternal()
+		result[i] = &fInternal
+	}
+
+	return result
+}
+
+func newSecurityPolicyInternal(
+	containers []*Container,
+	externalProcesses []ExternalProcessConfig,
+	fragments []FragmentConfig,
+	allowPropertiesAccess bool,
+	allowDumpStacks bool,
+	allowRuntimeLogging bool) (*securityPolicyInternal, error) {
+	containersInternal, err := containersToInternal(containers)
+	if err != nil {
+		return nil, err
+	}
+
+	return &securityPolicyInternal{
+		Containers:            containersInternal,
+		ExternalProcesses:     externalProcessToInternal(externalProcesses),
+		Fragments:             fragmentsToInternal(fragments),
+		AllowPropertiesAccess: allowPropertiesAccess,
+		AllowDumpStacks:       allowDumpStacks,
+		AllowRuntimeLogging:   allowRuntimeLogging,
+	}, nil
+}
+
+func newSecurityPolicyFragment(
+	namespace string,
+	svn string,
+	containers []*Container,
+	externalProcesses []ExternalProcessConfig,
+	fragments []FragmentConfig) (*securityPolicyFragment, error) {
+	containersInternal, err := containersToInternal(containers)
+	if err != nil {
+		return nil, err
+	}
+
+	return &securityPolicyFragment{
+		Namespace:         namespace,
+		SVN:               svn,
+		Containers:        containersInternal,
+		ExternalProcesses: externalProcessToInternal(externalProcesses),
+		Fragments:         fragmentsToInternal(fragments),
+	}, nil
 }
 
 // Internal version of Container
@@ -58,6 +142,13 @@ type mountInternal struct {
 	Destination string
 	Type        string
 	Options     []string
+}
+
+type fragment struct {
+	issuer     string
+	feed       string
+	minimumSVN string
+	includes   []string
 }
 
 func (c Container) toInternal() (securityPolicyContainer, error) {
@@ -164,6 +255,15 @@ func (p ExternalProcessConfig) toInternal() externalProcess {
 			Required: true,
 		}},
 		workingDir: p.WorkingDir,
+	}
+}
+
+func (f FragmentConfig) toInternal() fragment {
+	return fragment{
+		issuer:     f.Issuer,
+		feed:       f.Feed,
+		minimumSVN: f.MinimumSVN,
+		includes:   f.Includes,
 	}
 }
 

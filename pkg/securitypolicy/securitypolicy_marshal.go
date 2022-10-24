@@ -17,6 +17,7 @@ type marshalFunc func(
 	allowAll bool,
 	containers []*Container,
 	externalProcesses []ExternalProcessConfig,
+	fragments []FragmentConfig,
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
 	allowRuntimeLogging bool) (string, error)
@@ -46,6 +47,7 @@ func marshalJSON(
 	allowAll bool,
 	containers []*Container,
 	_ []ExternalProcessConfig,
+	_ []FragmentConfig,
 	_ bool,
 	_ bool,
 	_ bool) (string, error) {
@@ -72,6 +74,7 @@ func marshalRego(
 	allowAll bool,
 	containers []*Container,
 	externalProcesses []ExternalProcessConfig,
+	fragments []FragmentConfig,
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
 	allowRuntimeLogging bool) (string, error) {
@@ -83,27 +86,26 @@ func marshalRego(
 		return openDoorRegoTemplate, nil
 	}
 
-	var policy securityPolicyInternal
-	policy.Containers = make([]*securityPolicyContainer, len(containers))
-	for i, cConf := range containers {
-		cInternal, err := cConf.toInternal()
-		if err != nil {
-			return "", err
-		}
-		policy.Containers[i] = &cInternal
+	policy, err := newSecurityPolicyInternal(containers, externalProcesses, fragments, allowPropertiesAccess, allowDumpStacks, allowRuntimeLogging)
+	if err != nil {
+		return "", err
 	}
-
-	policy.ExternalProcesses = make([]*externalProcess, len(externalProcesses))
-	for i, pConf := range externalProcesses {
-		pInternal := pConf.toInternal()
-		policy.ExternalProcesses[i] = &pInternal
-	}
-
-	policy.AllowPropertiesAccess = allowPropertiesAccess
-	policy.AllowDumpStacks = allowDumpStacks
-	policy.AllowRuntimeLogging = allowRuntimeLogging
 
 	return policy.marshalRego(), nil
+}
+
+func MarshalFragment(
+	namespace string,
+	svn string,
+	containers []*Container,
+	externalProcesses []ExternalProcessConfig,
+	fragments []FragmentConfig) (string, error) {
+	fragment, err := newSecurityPolicyFragment(namespace, svn, containers, externalProcesses, fragments)
+	if err != nil {
+		return "", err
+	}
+
+	return fragment.marshalRego(), nil
 }
 
 func MarshalPolicy(
@@ -111,6 +113,7 @@ func MarshalPolicy(
 	allowAll bool,
 	containers []*Container,
 	externalProcesses []ExternalProcessConfig,
+	fragments []FragmentConfig,
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
 	allowRuntimeLogging bool) (string, error) {
@@ -121,7 +124,7 @@ func MarshalPolicy(
 	if marshal, ok := registeredMarshallers[marshaller]; !ok {
 		return "", fmt.Errorf("unknown marshaller: %q", marshaller)
 	} else {
-		return marshal(allowAll, containers, externalProcesses, allowPropertiesAccess, allowDumpStacks, allowRuntimeLogging)
+		return marshal(allowAll, containers, externalProcesses, fragments, allowPropertiesAccess, allowDumpStacks, allowRuntimeLogging)
 	}
 }
 
@@ -275,7 +278,7 @@ func writeSignals(builder *strings.Builder, signals []syscall.Signal, indent str
 	writeLine(builder, `%s"signals": %s,`, indent, array)
 }
 
-func writeContainer(builder *strings.Builder, container *securityPolicyContainer, indent string, end string) {
+func writeContainer(builder *strings.Builder, container *securityPolicyContainer, indent string) {
 	writeLine(builder, "%s{", indent)
 	writeCommand(builder, container.Command, indent+indentUsing)
 	writeEnvRules(builder, container.EnvRules, indent+indentUsing)
@@ -285,20 +288,18 @@ func writeContainer(builder *strings.Builder, container *securityPolicyContainer
 	writeSignals(builder, container.Signals, indent+indentUsing)
 	writeLine(builder, `%s"allow_elevated": %v,`, indent+indentUsing, container.AllowElevated)
 	writeLine(builder, `%s"working_dir": "%s"`, indent+indentUsing, container.WorkingDir)
-	writeLine(builder, "%s}%s", indent, end)
+	writeLine(builder, "%s},", indent)
 }
 
 func addContainers(builder *strings.Builder, containers []*securityPolicyContainer) {
-	writeLine(builder, "containers := [")
-
-	for i, container := range containers {
-		end := ","
-		if i == len(containers)-1 {
-			end = ""
-		}
-		writeContainer(builder, container, indentUsing, end)
+	if len(containers) == 0 {
+		return
 	}
 
+	writeLine(builder, "containers := [")
+	for _, container := range containers {
+		writeContainer(builder, container, indentUsing)
+	}
 	writeLine(builder, "]")
 }
 
@@ -309,14 +310,34 @@ func (p externalProcess) marshalRego() string {
 }
 
 func addExternalProcesses(builder *strings.Builder, processes []*externalProcess) {
+	if len(processes) == 0 {
+		return
+	}
+
 	writeLine(builder, "external_processes := [")
 
-	for i, process := range processes {
-		end := ","
-		if i == len(processes)-1 {
-			end = ""
-		}
-		writeLine(builder, `%s%s%s`, indentUsing, process.marshalRego(), end)
+	for _, process := range processes {
+		writeLine(builder, `%s%s,`, indentUsing, process.marshalRego())
+	}
+
+	writeLine(builder, "]")
+}
+
+func (f fragment) marshalRego() string {
+	includes := stringArray(f.includes).marshalRego()
+	return fmt.Sprintf(`{"issuer": "%s", "feed": "%s", "minimum_svn": "%s", "includes": %s}`,
+		f.issuer, f.feed, f.minimumSVN, includes)
+}
+
+func addFragments(builder *strings.Builder, fragments []*fragment) {
+	if len(fragments) == 0 {
+		return
+	}
+
+	writeLine(builder, "fragments := [")
+
+	for _, fragment := range fragments {
+		writeLine(builder, "%s%s,", indentUsing, fragment.marshalRego())
 	}
 
 	writeLine(builder, "]")
@@ -324,11 +345,19 @@ func addExternalProcesses(builder *strings.Builder, processes []*externalProcess
 
 func (p securityPolicyInternal) marshalRego() string {
 	builder := new(strings.Builder)
+	addFragments(builder, p.Fragments)
 	addContainers(builder, p.Containers)
 	addExternalProcesses(builder, p.ExternalProcesses)
 	writeLine(builder, `allow_properties_access := %v`, p.AllowPropertiesAccess)
 	writeLine(builder, `allow_dump_stacks := %v`, p.AllowDumpStacks)
 	writeLine(builder, `allow_runtime_logging := %v`, p.AllowRuntimeLogging)
-	objects := builder.String()
-	return strings.Replace(policyRegoTemplate, "##OBJECTS##", objects, 1)
+	return strings.Replace(policyRegoTemplate, "##OBJECTS##", builder.String(), 1)
+}
+
+func (p securityPolicyFragment) marshalRego() string {
+	builder := new(strings.Builder)
+	addFragments(builder, p.Fragments)
+	addContainers(builder, p.Containers)
+	addExternalProcesses(builder, p.ExternalProcesses)
+	return fmt.Sprintf("package %s\n\nsvn := \"%s\"\n\n%s", p.Namespace, p.SVN, builder.String())
 }
