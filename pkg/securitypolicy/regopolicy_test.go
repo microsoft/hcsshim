@@ -3076,6 +3076,52 @@ func Test_Rego_Scratch_Mount_Policy(t *testing.T) {
 	}
 }
 
+// We only test cases where scratch mount should succeed, so that we can test
+// the scratch unmount policy. The negative cases for scratch mount are covered
+// in Test_Rego_Scratch_Mount_Policy test.
+func Test_Rego_Scratch_Unmount_Policy(t *testing.T) {
+	for _, tc := range []struct {
+		unencryptedAllowed bool
+		encrypted          bool
+		failureExpected    bool
+	}{
+		{
+			unencryptedAllowed: true,
+			encrypted:          false,
+			failureExpected:    false,
+		},
+		{
+			unencryptedAllowed: true,
+			encrypted:          true,
+			failureExpected:    false,
+		},
+		{
+			unencryptedAllowed: false,
+			encrypted:          true,
+			failureExpected:    false,
+		},
+	} {
+		t.Run(fmt.Sprintf("UnencryptedAllowed_%t_And_Encrypted_%t", tc.unencryptedAllowed, tc.encrypted), func(t *testing.T) {
+			gc := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+			smConfig, err := setupRegoScratchMountTest(gc, tc.unencryptedAllowed)
+			if err != nil {
+				t.Fatalf("unable to setup test: %s", err)
+			}
+
+			scratchPath := generateMountTarget(testRand)
+			err = smConfig.policy.EnforceScratchMountPolicy(scratchPath, tc.encrypted)
+			if err != nil {
+				t.Fatalf("scratch_mount policy enforcement unexpectedly was denied: %s", err)
+			}
+
+			err = smConfig.policy.EnforceScratchUnmountPolicy(scratchPath)
+			if err != nil {
+				t.Fatalf("scratch_unmount policy enforcement unexpectedly was denied: %s", err)
+			}
+		})
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //
