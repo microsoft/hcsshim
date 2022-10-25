@@ -3150,9 +3150,10 @@ func generateExternalProcesses(r *rand.Rand) []*externalProcess {
 
 func generateExternalProcess(r *rand.Rand) *externalProcess {
 	return &externalProcess{
-		command:    generateCommand(r),
-		envRules:   generateEnvironmentVariableRules(r),
-		workingDir: generateWorkingDir(r),
+		command:          generateCommand(r),
+		envRules:         generateEnvironmentVariableRules(r),
+		workingDir:       generateWorkingDir(r),
+		AllowStdioAccess: randBool(r),
 	}
 }
 
@@ -4168,14 +4169,15 @@ func (c *securityPolicyContainer) toContainer() *Container {
 	}
 
 	return &Container{
-		Command:       CommandArgs(stringArrayToStringMap(c.Command)),
-		EnvRules:      envRuleArrayToEnvRules(c.EnvRules),
-		Layers:        Layers(stringArrayToStringMap(c.Layers)),
-		WorkingDir:    c.WorkingDir,
-		Mounts:        mountArrayToMounts(c.Mounts),
-		AllowElevated: c.AllowElevated,
-		ExecProcesses: execProcesses,
-		Signals:       c.Signals,
+		Command:          CommandArgs(stringArrayToStringMap(c.Command)),
+		EnvRules:         envRuleArrayToEnvRules(c.EnvRules),
+		Layers:           Layers(stringArrayToStringMap(c.Layers)),
+		WorkingDir:       c.WorkingDir,
+		Mounts:           mountArrayToMounts(c.Mounts),
+		AllowElevated:    c.AllowElevated,
+		ExecProcesses:    execProcesses,
+		Signals:          c.Signals,
+		AllowStdioAccess: c.AllowStdioAccess,
 	}
 }
 
@@ -4209,8 +4211,9 @@ func mountArrayToMounts(mounts []mountInternal) Mounts {
 
 func (p externalProcess) toConfig() ExternalProcessConfig {
 	return ExternalProcessConfig{
-		Command:    p.command,
-		WorkingDir: p.workingDir,
+		Command:          p.command,
+		WorkingDir:       p.workingDir,
+		AllowStdioAccess: p.AllowStdioAccess,
 	}
 }
 

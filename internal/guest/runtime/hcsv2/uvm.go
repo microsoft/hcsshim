@@ -558,6 +558,9 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 	var pid int
 	var c *Container
 	var envToKeep securitypolicy.EnvList
+
+	// TODO STA: process logging here
+
 	if params.IsExternal || containerID == UVMContainerID {
 		envToKeep, err = h.securityPolicyEnforcer.EnforceExecExternalProcessPolicy(
 			params.CommandArgs,

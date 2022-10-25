@@ -927,22 +927,25 @@ func generateConstraintsContainer(r *rand.Rand, minNumberOfLayers, maxNumberOfLa
 	}
 	c.ExecProcesses = generateExecProcesses(r)
 	c.Signals = generateListOfSignals(r, 0, maxSignalNumber)
+	c.AllowStdioAccess = randBool(r)
 
 	return &c
 }
 
 func generateContainerInitProcess(r *rand.Rand) containerInitProcess {
 	return containerInitProcess{
-		Command:    generateCommand(r),
-		EnvRules:   generateEnvironmentVariableRules(r),
-		WorkingDir: generateWorkingDir(r),
+		Command:          generateCommand(r),
+		EnvRules:         generateEnvironmentVariableRules(r),
+		WorkingDir:       generateWorkingDir(r),
+		AllowStdioAccess: randBool(r),
 	}
 }
 
 func generateContainerExecProcess(r *rand.Rand) containerExecProcess {
 	return containerExecProcess{
-		Command: generateCommand(r),
-		Signals: generateListOfSignals(r, 0, maxSignalNumber),
+		Command:          generateCommand(r),
+		Signals:          generateListOfSignals(r, 0, maxSignalNumber),
+		AllowStdioAccess: randBool(r),
 	}
 }
 
@@ -1332,7 +1335,8 @@ type generatedConstraints struct {
 }
 
 type containerInitProcess struct {
-	Command    []string
-	EnvRules   []EnvRuleConfig
-	WorkingDir string
+	Command          []string
+	EnvRules         []EnvRuleConfig
+	WorkingDir       string
+	AllowStdioAccess bool
 }
