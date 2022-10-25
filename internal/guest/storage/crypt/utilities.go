@@ -8,21 +8,10 @@ import (
 	"crypto/rand"
 	"io"
 	"os"
-	"regexp"
 
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/pkg/errors"
 )
-
-func getUniqueName(path string) (name string, err error) {
-	// Make a Regex to say we only want letters and numbers
-	reg, err := regexp.Compile("[^a-zA-Z0-9]+")
-	if err != nil {
-		return "", err
-	}
-	// Replace all non-alphanumeric characters by dashes
-	return reg.ReplaceAllString(path, "-"), nil
-}
 
 // getBlockDeviceSize returns the size of the specified block device.
 func getBlockDeviceSize(ctx context.Context, path string) (int64, error) {

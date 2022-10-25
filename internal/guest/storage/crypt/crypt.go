@@ -28,10 +28,6 @@ var (
 	_osRemoveAll               = os.RemoveAll
 )
 
-// String used to identify dm-crypt devices. The argument is a unique name based
-// on the original block device path.
-const cryptDeviceTemplate string = "dm-crypt-%s"
-
 // cryptsetupCommand runs cryptsetup with the provided arguments
 func cryptsetupCommand(args []string) error {
 	// --debug and -v are used to increase the information printed by
@@ -163,12 +159,7 @@ func mkfsExt4Command(args []string) error {
 //
 //     4.4. Do a sparse copy of the filesystem into the unencrypted block device.
 //     This updates the integrity tags.
-func EncryptDevice(ctx context.Context, source string) (path string, err error) {
-	uniqueName, err := getUniqueName(source)
-	if err != nil {
-		return "", errors.Wrapf(err, "failed to generate unique name: %s", source)
-	}
-
+func EncryptDevice(ctx context.Context, source string, dmCryptName string) (path string, err error) {
 	// Create temporary directory to store the keyfile and EXT4 image
 	tempDir, err := _osMkdirTemp("", "dm-crypt")
 	if err != nil {
@@ -186,18 +177,17 @@ func EncryptDevice(ctx context.Context, source string) (path string, err error) 
 	keyFilePath := filepath.Join(tempDir, "keyfile")
 
 	if err = _generateKeyFile(keyFilePath, 1024); err != nil {
-		return "", errors.Wrapf(err, "failed to generate keyfile: %s", keyFilePath)
+		return "", fmt.Errorf("failed to generate keyfile %q: %w", keyFilePath, err)
 	}
 
 	// 2. Format device
 	if err = _cryptsetupFormat(source, keyFilePath); err != nil {
-		return "", errors.Wrapf(err, "luksFormat failed: %s", source)
+		return "", fmt.Errorf("luksFormat failed: %s: %w", source, err)
 	}
 
 	// 3. Open device
-	deviceName := fmt.Sprintf(cryptDeviceTemplate, uniqueName)
-	if err := _cryptsetupOpen(source, deviceName, keyFilePath); err != nil {
-		return "", errors.Wrapf(err, "luksOpen failed: %s", source)
+	if err := _cryptsetupOpen(source, dmCryptName, keyFilePath); err != nil {
+		return "", fmt.Errorf("luksOpen failed: %s: %w", source, err)
 	}
 
 	defer func() {
@@ -208,12 +198,12 @@ func EncryptDevice(ctx context.Context, source string) (path string, err error) 
 		}
 	}()
 
-	deviceNamePath := "/dev/mapper/" + deviceName
+	deviceNamePath := "/dev/mapper/" + dmCryptName
 
 	// 4.1. Get actual size of the scratch device
 	deviceSize, err := _getBlockDeviceSize(ctx, deviceNamePath)
 	if err != nil {
-		return "", errors.Wrapf(err, "error getting size of: %s", deviceNamePath)
+		return "", fmt.Errorf("error getting size of: %s: %w", deviceNamePath, err)
 	}
 
 	if deviceSize == 0 {
@@ -224,33 +214,27 @@ func EncryptDevice(ctx context.Context, source string) (path string, err error) 
 	tempExt4File := filepath.Join(tempDir, "ext4.img")
 
 	if err = _createSparseEmptyFile(ctx, tempExt4File, deviceSize); err != nil {
-		return "", errors.Wrap(err, "failed to create sparse filesystem file")
+		return "", fmt.Errorf("failed to create sparse filesystem file: %w", err)
 	}
 
 	// 4.3. Format it as ext4
 	if err = _mkfsExt4Command([]string{tempExt4File}); err != nil {
-		return "", errors.Wrapf(err, "mkfs.ext4 failed to format: %s", tempExt4File)
+		return "", fmt.Errorf("mkfs.ext4 failed to format %s: %w", tempExt4File, err)
 	}
 
 	// 4.4. Sparse copy of the filesystem into the encrypted block device
 	if err = _copyEmptySparseFilesystem(tempExt4File, deviceNamePath); err != nil {
-		return "", errors.Wrap(err, "failed to do sparse copy")
+		return "", fmt.Errorf("failed to do sparse copy: %w", err)
 	}
 
 	return deviceNamePath, nil
 }
 
 // CleanupCryptDevice removes the dm-crypt device created by EncryptDevice
-func CleanupCryptDevice(source string) error {
-	uniqueName, err := getUniqueName(source)
-	if err != nil {
-		return errors.Wrapf(err, "failed to generate unique name: %s", source)
-	}
-
+func CleanupCryptDevice(dmCryptName string) error {
 	// Close dm-crypt device
-	deviceName := fmt.Sprintf(cryptDeviceTemplate, uniqueName)
-	if err := _cryptsetupClose(deviceName); err != nil {
-		return errors.Wrapf(err, "luksClose failed: %s", deviceName)
+	if err := _cryptsetupClose(dmCryptName); err != nil {
+		return fmt.Errorf("luksClose failed: %s: %w", dmCryptName, err)
 	}
 	return nil
 }

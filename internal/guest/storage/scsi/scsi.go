@@ -38,12 +38,19 @@ var (
 	createVerityTarget = dm.CreateVerityTarget
 	// removeDevice is stubbed for unit testing `Mount`.
 	removeDevice = dm.RemoveDevice
+	// encryptDevice is stubbed for unit testing `mount`
+	encryptDevice = crypt.EncryptDevice
+	// cleanupCryptDevice is stubbed for unit testing `mount`
+	cleanupCryptDevice = crypt.CleanupCryptDevice
+	// storageUnmountPath is stubbed for unit testing `unmount`
+	storageUnmountPath = storage.UnmountPath
 )
 
 const (
 	scsiDevicesPath  = "/sys/bus/scsi/devices"
 	vmbusDevicesPath = "/sys/bus/vmbus/devices"
 	verityDeviceFmt  = "dm-verity-scsi-contr%d-lun%d-%s"
+	cryptDeviceFmt   = "dm-crypt-scsi-contr%d-lun%d"
 )
 
 // fetchActualControllerNumber retrieves the actual controller number assigned to a SCSI controller
@@ -148,9 +155,10 @@ func mount(
 	}
 
 	if encrypted {
-		encryptedSource, err := crypt.EncryptDevice(spnCtx, source)
+		cryptDeviceName := fmt.Sprintf(cryptDeviceFmt, controller, lun)
+		encryptedSource, err := encryptDevice(spnCtx, source, cryptDeviceName)
 		if err != nil {
-			return errors.Wrapf(err, "failed to mount encrypted device: "+source)
+			return fmt.Errorf("failed to mount encrypted device %s: %w", source, err)
 		}
 		source = encryptedSource
 	}
@@ -205,9 +213,8 @@ func Mount(
 	return mount(ctx, cNum, lun, target, readonly, encrypted, options, verityInfo)
 }
 
-// unmount unmounts a SCSI device mounted at `target`.
-//
-// If `encrypted` is true, it removes all its associated dm-crypto state.
+// unmount SCSI device mounted at `target`. Cleanup associated dm-verity and
+// dm-crypt devices when necessary.
 func unmount(
 	ctx context.Context,
 	controller,
@@ -225,8 +232,8 @@ func unmount(
 		trace.Int64Attribute("lun", int64(lun)),
 		trace.StringAttribute("target", target))
 
-	// Unmount unencrypted device
-	if err := storage.UnmountPath(ctx, target, true); err != nil {
+	// unmount target
+	if err := storageUnmountPath(ctx, target, true); err != nil {
 		return errors.Wrapf(err, "unmount failed: %s", target)
 	}
 
@@ -239,12 +246,9 @@ func unmount(
 	}
 
 	if encrypted {
-		source, err := controllerLunToName(ctx, controller, lun)
-		if err != nil {
-			return err
-		}
-		if err := crypt.CleanupCryptDevice(source); err != nil {
-			return errors.Wrapf(err, "failed to cleanup dm-crypt source: %s", source)
+		dmCryptName := fmt.Sprintf(cryptDeviceFmt, controller, lun)
+		if err := cleanupCryptDevice(dmCryptName); err != nil {
+			return fmt.Errorf("failed to cleanup dm-crypt target %s: %w", dmCryptName, err)
 		}
 	}
 
