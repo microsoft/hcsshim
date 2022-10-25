@@ -10,22 +10,28 @@ import (
 	"testing"
 
 	"github.com/Microsoft/hcsshim/internal/uvm"
-
-	"github.com/Microsoft/hcsshim/test/internal/sync"
 )
 
-// since the tests can run from other directories, lookup other directories first.
-// return empty string to rely on the defaults set by [uvm.NewDefaultOptionsLCOW]
-var lcowOSBootFiles = sync.NewLazyString(func() (string, error) {
+var lcowOSBootFiles string
+
+func init() {
+	// since the tests can be run from directories outside of where containerd and the
+	// LinuxBootFiles are, search through potential locations for the boot files
+	// first start with where containerd is, since there may be a leftover C:\ContainerPlat
+	// directory from a prior install.
+	paths := make([]string, 0, 2)
 	if p, err := exec.LookPath("containerd.exe"); err != nil {
-		return filepath.Join(p, "LinuxBootFiles"), nil
+		paths = append(paths, p)
 	}
-	p := `C:\ContainerPlat\LinuxBootFiles`
-	if _, err := os.Stat(p); err == nil {
-		return p, nil
+	paths = append(paths, `C:\ContainerPlat`)
+	for _, p := range paths {
+		p = filepath.Join(p, "LinuxBootFiles")
+		if _, err := os.Stat(p); err == nil {
+			lcowOSBootFiles = p
+			break
+		}
 	}
-	return "", nil
-})
+}
 
 // DefaultLCOWOptions returns default options for a bootable LCOW uVM, but first checks
 // if `containerd.exe` is in the path, or C:\ContainerPlat\LinuxBootFiles exists, and
@@ -38,9 +44,9 @@ var lcowOSBootFiles = sync.NewLazyString(func() (string, error) {
 func DefaultLCOWOptions(tb testing.TB, id, owner string) *uvm.OptionsLCOW {
 	tb.Helper()
 	opts := uvm.NewDefaultOptionsLCOW(id, owner)
-	if p := lcowOSBootFiles.String(tb); p != "" {
-		tb.Logf("using LCOW bootfiles path: %s", p)
-		opts.BootFilesPath = p
+	if lcowOSBootFiles != "" {
+		tb.Logf("using LCOW bootfiles path: %s", lcowOSBootFiles)
+		opts.BootFilesPath = lcowOSBootFiles
 	}
 	return opts
 }
