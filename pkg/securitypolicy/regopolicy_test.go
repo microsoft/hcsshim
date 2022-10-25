@@ -73,7 +73,18 @@ func Test_MarshalRego_Policy(t *testing.T) {
 			fragments[i] = fragment.toConfig()
 		}
 
-		actual, err := MarshalPolicy("rego", false, containers, externalProcesses, fragments, p.allowGetProperties, p.allowDumpStacks, p.allowRuntimeLogging, p.allowEnvironmentVariableDropping)
+		actual, err := MarshalPolicy(
+			"rego",
+			false,
+			containers,
+			externalProcesses,
+			fragments,
+			p.allowGetProperties,
+			p.allowDumpStacks,
+			p.allowRuntimeLogging,
+			p.allowEnvironmentVariableDropping,
+			p.allowUnencryptedScratch,
+		)
 		if err != nil {
 			t.Error(err)
 			return false
@@ -3055,7 +3066,7 @@ func Test_Rego_Scratch_Mount_Policy(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("UnencryptedAllowed_%t_And_Encrypted_%t", tc.unencryptedAllowed, tc.encrypted), func(t *testing.T) {
-			gc := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+			gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
 			smConfig, err := setupRegoScratchMountTest(gc, tc.unencryptedAllowed)
 			if err != nil {
 				t.Fatalf("unable to setup test: %s", err)
@@ -3102,7 +3113,7 @@ func Test_Rego_Scratch_Unmount_Policy(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("UnencryptedAllowed_%t_And_Encrypted_%t", tc.unencryptedAllowed, tc.encrypted), func(t *testing.T) {
-			gc := generateConstraints(testRand, maxContainersInGeneratedConstraints, maxExternalProcessesInGeneratedConstraints)
+			gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
 			smConfig, err := setupRegoScratchMountTest(gc, tc.unencryptedAllowed)
 			if err != nil {
 				t.Fatalf("unable to setup test: %s", err)
@@ -3197,6 +3208,7 @@ func (constraints *generatedConstraints) toPolicy() *securityPolicyInternal {
 		AllowDumpStacks:                  constraints.allowDumpStacks,
 		AllowRuntimeLogging:              constraints.allowRuntimeLogging,
 		AllowEnvironmentVariableDropping: constraints.allowEnvironmentVariableDropping,
+		AllowUnencryptedScratch:          constraints.allowUnencryptedScratch,
 	}
 }
 

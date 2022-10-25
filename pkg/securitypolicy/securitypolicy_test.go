@@ -908,6 +908,7 @@ func generateConstraints(r *rand.Rand, maxContainers int32) *generatedConstraint
 		allowDumpStacks:                  randBool(r),
 		allowRuntimeLogging:              false,
 		allowEnvironmentVariableDropping: false,
+		allowUnencryptedScratch:          randBool(r),
 		namespace:                        generateFragmentNamespace(testRand),
 		svn:                              generateSVN(testRand),
 	}
@@ -1325,6 +1326,7 @@ type generatedConstraints struct {
 	allowDumpStacks                  bool
 	allowRuntimeLogging              bool
 	allowEnvironmentVariableDropping bool
+	allowUnencryptedScratch          bool
 	namespace                        string
 	svn                              string
 }
