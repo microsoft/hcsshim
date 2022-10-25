@@ -610,6 +610,11 @@ func (uvm *UtilityVM) addNIC(ctx context.Context, id string, endpoint *hns.HNSEn
 			s.IPv6Address = v6.String()
 			s.IPv6PrefixLength = endpoint.IPv6PrefixLength
 			s.IPv6GatewayAddress = endpoint.GatewayAddressV6
+			log.G(ctx).WithFields(logrus.Fields{
+				"ip":           s.IPAddress,
+				"prefixLength": s.IPv6PrefixLength,
+				"gateway":      s.IPv6GatewayAddress,
+			}).Debug("adding IPv6 settings")
 		}
 		if uvm.isNetworkNamespaceSupported() {
 			request.GuestRequest = guestrequest.ModificationRequest{
@@ -702,15 +707,6 @@ func (uvm *UtilityVM) AddNICInGuest(ctx context.Context, cfg *guestresource.LCOW
 
 	return uvm.modify(ctx, &request)
 }
-
-// request := hcsschema.ModifySettingRequest{
-// 		RequestType:  guestrequest.RequestTypeAdd,
-// 		ResourcePath: fmt.Sprintf(resourcepaths.NetworkResourceFormat, id),
-// 		Settings: hcsschema.NetworkAdapter{
-// 			EndpointId: endpoint.Id,
-// 			MacAddress: endpoint.MacAddress,
-// 		},
-// 	}
 
 // RemoveNICInGuest makes a request to remove a network interface inside the lcow guest.
 // This is primarily used for removing NICs in the guest that were VPCI assigned.

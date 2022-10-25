@@ -237,9 +237,10 @@ func assignIPToLink(ctx context.Context,
 		// unreachable error when adding this out-of-subnet gw route
 		entry.Debugf("gw is outside of the subnet: Configure %s in %d with: %s/%d gw=%s\n",
 			ifStr, nsPid, allocatedIP, prefixLen, gatewayIP)
+		ml := len(gw) * 8
 		addr2 := &net.IPNet{
-			IP:   net.ParseIP(gatewayIP),
-			Mask: net.CIDRMask(32, 32)} // This assumes/hardcodes IPv4
+			IP:   gw,
+			Mask: net.CIDRMask(ml, ml)}
 		ipAddr2 := &netlink.Addr{IPNet: addr2, Label: ""}
 		if err := netlink.AddrAdd(link, ipAddr2); err != nil {
 			return errors.Wrapf(err, "netlink.AddrAdd(%#v, %#v) failed", link, ipAddr2)
