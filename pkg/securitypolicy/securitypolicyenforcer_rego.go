@@ -91,6 +91,35 @@ func (sp SecurityPolicy) toInternal() (*securityPolicyInternal, error) {
 	return policy, nil
 }
 
+func toStringSet(items []string) stringSet {
+	s := make(stringSet)
+	for _, item := range items {
+		s.add(item)
+	}
+
+	return s
+}
+
+func (s stringSet) toArray() []string {
+	a := make([]string, 0, len(s))
+	for item := range s {
+		a = append(a, item)
+	}
+
+	return a
+}
+
+func (a stringSet) intersect(b stringSet) stringSet {
+	s := make(stringSet)
+	for item := range a {
+		if b.contains(item) {
+			s.add(item)
+		}
+	}
+
+	return s
+}
+
 func createRegoEnforcer(base64EncodedPolicy string,
 	defaultMounts []oci.Mount,
 	privilegedMounts []oci.Mount,
@@ -623,6 +652,29 @@ func hugePagesMountsDir(sandboxID string) string {
 	return fmt.Sprintf("%s%c", spec.HugePagesMountsDir(sandboxID), os.PathSeparator)
 }
 
+func getEnvsToKeep(envList []string, results map[string]interface{}) ([]string, error) {
+	if value, ok := results["env_list"]; ok {
+		if iArray, ok := value.([]interface{}); ok {
+			keepSet := make(stringSet)
+			for _, iEnv := range iArray {
+				if env, ok := iEnv.(string); ok {
+					keepSet.add(env)
+				} else {
+					return nil, fmt.Errorf("members of env_list from policy must be strings, received %T", iEnv)
+				}
+			}
+			keepSet = keepSet.intersect(toStringSet(envList))
+			return keepSet.toArray(), nil
+		} else {
+			return nil, fmt.Errorf("policy returned incorrect type for 'env_list', expected []interface{}, received %T", value)
+		}
+	}
+
+	// policy did not return an 'env_list'. This is interpreted
+	// as "proceed with provided env list".
+	return nil, nil
+}
+
 func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 	sandboxID string,
 	containerID string,
@@ -646,13 +698,9 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 		return nil, err
 	}
 
-	if value, ok := results["env_list"]; ok {
-		if envList, ok := value.([]interface{}); ok {
-			toKeep = make([]string, len(envList))
-			for i, env := range envList {
-				toKeep[i] = env.(string)
-			}
-		}
+	toKeep, err = getEnvsToKeep(envList, results)
+	if err != nil {
+		return nil, err
 	}
 
 	return toKeep, nil
@@ -702,17 +750,16 @@ func (policy *regoEnforcer) EnforceExecInContainerPolicy(containerID string, arg
 	}
 
 	results, err := policy.enforce("exec_in_container", input)
-
-	if value, ok := results["env_list"]; ok {
-		if envList, ok := value.([]interface{}); ok {
-			toKeep = make([]string, len(envList))
-			for i, env := range envList {
-				toKeep[i] = env.(string)
-			}
-		}
+	if err != nil {
+		return nil, err
 	}
 
-	return toKeep, err
+	toKeep, err = getEnvsToKeep(envList, results)
+	if err != nil {
+		return nil, err
+	}
+
+	return toKeep, nil
 }
 
 func (policy *regoEnforcer) EnforceExecExternalProcessPolicy(argList []string, envList []string, workingDir string) (toKeep EnvList, err error) {
@@ -723,17 +770,16 @@ func (policy *regoEnforcer) EnforceExecExternalProcessPolicy(argList []string, e
 	}
 
 	results, err := policy.enforce("exec_external", input)
-
-	if value, ok := results["env_list"]; ok {
-		if envList, ok := value.([]interface{}); ok {
-			toKeep = make([]string, len(envList))
-			for i, env := range envList {
-				toKeep[i] = env.(string)
-			}
-		}
+	if err != nil {
+		return nil, err
 	}
 
-	return toKeep, err
+	toKeep, err = getEnvsToKeep(envList, results)
+	if err != nil {
+		return nil, err
+	}
+
+	return toKeep, nil
 }
 
 func (policy *regoEnforcer) EnforceShutdownContainerPolicy(containerID string) error {
@@ -842,9 +888,11 @@ func (policy *regoEnforcer) LoadFragment(issuer string, feed string, rego string
 	results, err := policy.enforce("load_fragment", input)
 
 	removeModule := true
-	if addModule, ok := results["add_module"].(bool); ok {
-		if addModule {
-			removeModule = false
+	if err == nil {
+		if addModule, ok := results["add_module"].(bool); ok {
+			if addModule {
+				removeModule = false
+			}
 		}
 	}
 

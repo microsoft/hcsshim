@@ -1448,6 +1448,163 @@ func Test_Rego_ExecInContainerPolicy_DropEnvs(t *testing.T) {
 	}
 }
 
+func Test_Rego_MaliciousEnvList(t *testing.T) {
+	template := `package policy
+create_container := {
+	"allowed": true,
+	"env_list": ["%s"]
+}
+
+exec_in_container := {
+	"allowed": true,
+	"env_list": ["%s"]
+}
+
+exec_external := {
+	"allowed": true,
+	"env_list": ["%s"]
+}`
+
+	generateEnv := func(r *rand.Rand) string {
+		return randVariableString(r, maxGeneratedEnvironmentVariableRuleLength)
+	}
+
+	generateEnvs := func(envSet stringSet) []string {
+		numVars := atLeastOneAtMost(testRand, maxGeneratedEnvironmentVariableRules)
+		return envSet.randUniqueArray(testRand, generateEnv, numVars)
+	}
+
+	testFunc := func(gc *generatedConstraints) bool {
+		envSet := make(stringSet)
+		rego := fmt.Sprintf(
+			template,
+			strings.Join(generateEnvs(envSet), `","`),
+			strings.Join(generateEnvs(envSet), `","`),
+			strings.Join(generateEnvs(envSet), `","`))
+
+		policy, err := newRegoPolicy(rego, []oci.Mount{}, []oci.Mount{})
+		if err != nil {
+			t.Errorf("error creating policy: %v", err)
+			return false
+		}
+
+		envList := generateEnvs(envSet)
+		toKeep, err := policy.EnforceCreateContainerPolicy("", "", []string{}, envList, "", []oci.Mount{})
+		if len(toKeep) > 0 {
+			t.Error("invalid environment variables not filtered from list returned from create_container")
+			return false
+		}
+
+		envList = generateEnvs(envSet)
+		toKeep, err = policy.EnforceExecInContainerPolicy("", []string{}, envList, "")
+		if len(toKeep) > 0 {
+			t.Error("invalid environment variables not filtered from list returned from exec_in_container")
+			return false
+		}
+
+		envList = generateEnvs(envSet)
+		toKeep, err = policy.EnforceExecExternalProcessPolicy([]string{}, envList, "")
+		if len(toKeep) > 0 {
+			t.Error("invalid environment variables not filtered from list returned from exec_external")
+			return false
+		}
+
+		return true
+	}
+
+	if err := quick.Check(testFunc, &quick.Config{MaxCount: 50, Rand: testRand}); err != nil {
+		t.Errorf("Test_Rego_MaliciousEnvList: %v", err)
+	}
+}
+
+func Test_Rego_InvalidEnvList(t *testing.T) {
+	rego := `package policy
+	create_container := {
+		"allowed": true,
+		"env_list": {"an_object": 1}
+	}
+	
+	exec_in_container := {
+		"allowed": true,
+		"env_list": "string"
+	}
+	
+	exec_external := {
+		"allowed": true,
+		"env_list": true
+	}`
+
+	policy, err := newRegoPolicy(rego, []oci.Mount{}, []oci.Mount{})
+	if err != nil {
+		t.Fatalf("error creating policy: %v", err)
+	}
+
+	_, err = policy.EnforceCreateContainerPolicy("", "", []string{}, []string{}, "", []oci.Mount{})
+	if err == nil {
+		t.Errorf("expected call to create_container to fail")
+	} else if err.Error() != "policy returned incorrect type for 'env_list', expected []interface{}, received map[string]interface {}" {
+		t.Errorf("incorrected error message from call to create_container")
+	}
+
+	_, err = policy.EnforceExecInContainerPolicy("", []string{}, []string{}, "")
+	if err == nil {
+		t.Errorf("expected call to exec_in_container to fail")
+	} else if err.Error() != "policy returned incorrect type for 'env_list', expected []interface{}, received string" {
+		t.Errorf("incorrected error message from call to exec_in_container")
+	}
+
+	_, err = policy.EnforceExecExternalProcessPolicy([]string{}, []string{}, "")
+	if err == nil {
+		t.Errorf("expected call to exec_external to fail")
+	} else if err.Error() != "policy returned incorrect type for 'env_list', expected []interface{}, received bool" {
+		t.Errorf("incorrected error message from call to exec_external")
+	}
+}
+
+func Test_Rego_InvalidEnvList_Member(t *testing.T) {
+	rego := `package policy
+	create_container := {
+		"allowed": true,
+		"env_list": ["one", "two", 3]
+	}
+	
+	exec_in_container := {
+		"allowed": true,
+		"env_list": ["one", true, "three"]
+	}
+	
+	exec_external := {
+		"allowed": true,
+		"env_list": ["one", ["two"], "three"]
+	}`
+
+	policy, err := newRegoPolicy(rego, []oci.Mount{}, []oci.Mount{})
+	if err != nil {
+		t.Fatalf("error creating policy: %v", err)
+	}
+
+	_, err = policy.EnforceCreateContainerPolicy("", "", []string{}, []string{}, "", []oci.Mount{})
+	if err == nil {
+		t.Errorf("expected call to create_container to fail")
+	} else if err.Error() != "members of env_list from policy must be strings, received json.Number" {
+		t.Errorf("incorrected error message from call to create_container")
+	}
+
+	_, err = policy.EnforceExecInContainerPolicy("", []string{}, []string{}, "")
+	if err == nil {
+		t.Errorf("expected call to exec_in_container to fail")
+	} else if err.Error() != "members of env_list from policy must be strings, received bool" {
+		t.Errorf("incorrected error message from call to exec_in_container")
+	}
+
+	_, err = policy.EnforceExecExternalProcessPolicy([]string{}, []string{}, "")
+	if err == nil {
+		t.Errorf("expected call to exec_external to fail")
+	} else if err.Error() != "members of env_list from policy must be strings, received []interface {}" {
+		t.Errorf("incorrected error message from call to exec_external")
+	}
+}
+
 func Test_Rego_EnforceEnvironmentVariablePolicy_MissingRequired(t *testing.T) {
 	testFunc := func(gc *generatedConstraints) bool {
 		container := selectContainerFromConstraints(gc, testRand)
@@ -3504,7 +3661,7 @@ func setupRegoDropEnvsTest(disjoint bool) (*regoContainerTestConfig, error) {
 	numEnvRules := []int{int(randMinMax(testRand, 1, 4)),
 		int(randMinMax(testRand, 1, 4)),
 		int(randMinMax(testRand, 1, 4))}
-	envRuleLookup := make(map[string]struct{})
+	envRuleLookup := make(stringSet)
 	envRules := make([][]EnvRuleConfig, numContainers)
 
 	containers := make([]*securityPolicyContainer, numContainers)
@@ -3517,17 +3674,16 @@ func setupRegoDropEnvsTest(disjoint bool) (*regoContainerTestConfig, error) {
 		}
 		containers[i] = c
 
-		envRules[i] = make([]EnvRuleConfig, 0, numEnvRules[i])
-		for len(envRules[i]) < numEnvRules[i] {
-			rule := randVariableString(testRand, 10)
-			if _, ok := envRuleLookup[rule]; ok {
-				continue
-			}
-			envRuleLookup[rule] = struct{}{}
-			envRules[i] = append(envRules[i], EnvRuleConfig{
+		rules := envRuleLookup.randUniqueArray(testRand, func(r *rand.Rand) string {
+			return randVariableString(r, 10)
+		}, int32(numEnvRules[i]))
+
+		envRules[i] = make([]EnvRuleConfig, numEnvRules[i])
+		for j, rule := range rules {
+			envRules[i][j] = EnvRuleConfig{
 				Strategy: "string",
 				Rule:     rule,
-			})
+			}
 		}
 
 		envs[i] = buildEnvironmentVariablesFromEnvRules(envRules[i], testRand)
@@ -3666,11 +3822,11 @@ func generateEnforcementPoint(r *rand.Rand) string {
 }
 
 func (gen *dataGenerator) uniqueSandboxID() string {
-	return gen.uniqueString(gen.sandboxIDs, generateSandboxID)
+	return gen.sandboxIDs.randUnique(gen.rng, generateSandboxID)
 }
 
 func (gen *dataGenerator) uniqueEnforcementPoint() string {
-	return gen.uniqueString(gen.enforcementPoints, generateEnforcementPoint)
+	return gen.enforcementPoints.randUnique(gen.rng, generateEnforcementPoint)
 }
 
 func buildMountSpecFromMountArray(mounts []mountInternal, sandboxID string, r *rand.Rand) *oci.Spec {
@@ -3796,15 +3952,15 @@ func generateFragmentFeed(r *rand.Rand) string {
 }
 
 func (gen *dataGenerator) uniqueFragmentNamespace() string {
-	return gen.uniqueString(gen.fragmentNamespaces, generateFragmentNamespace)
+	return gen.fragmentNamespaces.randUnique(gen.rng, generateFragmentNamespace)
 }
 
 func (gen *dataGenerator) uniqueFragmentIssuer() string {
-	return gen.uniqueString(gen.fragmentIssuers, generateFragmentIssuer)
+	return gen.fragmentIssuers.randUnique(gen.rng, generateFragmentIssuer)
 }
 
 func (gen *dataGenerator) uniqueFragmentFeed() string {
-	return gen.uniqueString(gen.fragmentFeeds, generateFragmentFeed)
+	return gen.fragmentFeeds.randUnique(gen.rng, generateFragmentFeed)
 }
 
 func generateFragment(r *rand.Rand) *fragment {
@@ -3970,4 +4126,12 @@ func stringArrayToStringMap(values []string) StringArrayMap {
 		Elements: elements,
 		Length:   len(values),
 	}
+}
+
+func (s *stringSet) randUniqueArray(r *rand.Rand, generator func(*rand.Rand) string, numItems int32) []string {
+	items := make([]string, numItems)
+	for i := 0; i < int(numItems); i++ {
+		items[i] = s.randUnique(r, generator)
+	}
+	return items
 }

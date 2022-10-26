@@ -1144,44 +1144,44 @@ func selectContainerFromConstraints(constraints *generatedConstraints, r *rand.R
 
 type dataGenerator struct {
 	rng                *rand.Rand
-	mountTargets       map[string]struct{}
-	containerIDs       map[string]struct{}
-	sandboxIDs         map[string]struct{}
-	enforcementPoints  map[string]struct{}
-	fragmentIssuers    map[string]struct{}
-	fragmentFeeds      map[string]struct{}
-	fragmentNamespaces map[string]struct{}
+	mountTargets       stringSet
+	containerIDs       stringSet
+	sandboxIDs         stringSet
+	enforcementPoints  stringSet
+	fragmentIssuers    stringSet
+	fragmentFeeds      stringSet
+	fragmentNamespaces stringSet
 }
 
 func newDataGenerator(rng *rand.Rand) *dataGenerator {
 	return &dataGenerator{
 		rng:                rng,
-		mountTargets:       map[string]struct{}{},
-		containerIDs:       map[string]struct{}{},
-		sandboxIDs:         map[string]struct{}{},
-		enforcementPoints:  map[string]struct{}{},
-		fragmentIssuers:    map[string]struct{}{},
-		fragmentFeeds:      map[string]struct{}{},
-		fragmentNamespaces: map[string]struct{}{},
+		mountTargets:       make(stringSet),
+		containerIDs:       make(stringSet),
+		sandboxIDs:         make(stringSet),
+		enforcementPoints:  make(stringSet),
+		fragmentIssuers:    make(stringSet),
+		fragmentFeeds:      make(stringSet),
+		fragmentNamespaces: make(stringSet),
 	}
 }
 
-func (gen *dataGenerator) uniqueString(values map[string]struct{}, generator func(*rand.Rand) string) string {
+func (s *stringSet) randUnique(r *rand.Rand, generator func(*rand.Rand) string) string {
 	for {
-		s := generator(gen.rng)
-		if _, ok := values[s]; !ok {
-			values[s] = struct{}{}
-			return s
+		item := generator(r)
+		if !s.contains(item) {
+			s.add(item)
+			return item
 		}
 	}
 }
 
 func (gen *dataGenerator) uniqueMountTarget() string {
-	return gen.uniqueString(gen.mountTargets, generateMountTarget)
+	return gen.mountTargets.randUnique(gen.rng, generateMountTarget)
 }
 
 func (gen *dataGenerator) uniqueContainerID() string {
-	return gen.uniqueString(gen.containerIDs, generateContainerID)
+	return gen.containerIDs.randUnique(gen.rng, generateContainerID)
 }
 
 func (gen *dataGenerator) createValidOverlayForContainer(enforcer SecurityPolicyEnforcer, container *securityPolicyContainer) ([]string, error) {
