@@ -87,6 +87,7 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer s
 		securityPolicyEnforcer:    initialEnforcer,
 		logWriter:                 logWriter,
 		hostMounts:                newHostMounts(),
+		containerIDToStdioAccess:  make(map[string]bool),
 	}
 }
 
