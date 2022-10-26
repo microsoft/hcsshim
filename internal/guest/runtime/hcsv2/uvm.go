@@ -67,6 +67,9 @@ type Host struct {
 	securityPolicyEnforcerSet bool
 	uvmReferenceInfo          string
 
+	containerIDToStdioAccessMutex sync.Mutex
+	containerIDToStdioAccess      map[string]bool
+
 	// logging target
 	logWriter io.Writer
 	// hostMounts keeps the state of currently mounted devices and file systems,
@@ -315,7 +318,7 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 		}()
 	}
 
-	envToKeep, err := h.securityPolicyEnforcer.EnforceCreateContainerPolicy(
+	envToKeep, allowStdio, err := h.securityPolicyEnforcer.EnforceCreateContainerPolicy(
 		sandboxID,
 		id,
 		settings.OCISpecification.Process.Args,
@@ -326,6 +329,10 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	if err != nil {
 		return nil, errors.Wrapf(err, "container creation denied due to policy")
 	}
+
+	h.containerIDToStdioAccessMutex.Lock()
+	h.containerIDToStdioAccess[id] = allowStdio
+	h.containerIDToStdioAccessMutex.Unlock()
 
 	if envToKeep != nil {
 		settings.OCISpecification.Process.Env = []string(envToKeep)
@@ -558,11 +565,9 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 	var pid int
 	var c *Container
 	var envToKeep securitypolicy.EnvList
-
-	// TODO STA: process logging here
-
 	if params.IsExternal || containerID == UVMContainerID {
-		envToKeep, err = h.securityPolicyEnforcer.EnforceExecExternalProcessPolicy(
+		var allowStdioAccess bool
+		envToKeep, allowStdioAccess, err = h.securityPolicyEnforcer.EnforceExecExternalProcessPolicy(
 			params.CommandArgs,
 			processParamEnvToOCIEnv(params.Environment),
 			params.WorkingDirectory,
@@ -575,23 +580,46 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 			params.Environment = processOCIEnvToParam(envToKeep)
 		}
 
+		if !allowStdioAccess {
+			conSettings.StdIn = nil
+			conSettings.StdOut = nil
+			conSettings.StdErr = nil
+		}
+
 		pid, err = h.runExternalProcess(ctx, params, conSettings)
 	} else if c, err = h.GetCreatedContainer(containerID); err == nil {
 		// We found a V2 container. Treat this as a V2 process.
 		if params.OCIProcess == nil {
 			// We've already done policy enforcement for creating a container so
 			// there's no policy enforcement to do for starting
+			h.containerIDToStdioAccessMutex.Lock()
+			allowStdioAccess := h.containerIDToStdioAccess[c.id]
+			h.containerIDToStdioAccessMutex.Unlock()
+
+			if !allowStdioAccess {
+				conSettings.StdIn = nil
+				conSettings.StdOut = nil
+				conSettings.StdErr = nil
+			}
+
 			pid, err = c.Start(ctx, conSettings)
 		} else {
 			// Windows uses a different field for command, there's no enforcement
 			// around this yet for Windows so this is Linux specific at the moment.
-			envToKeep, err = h.securityPolicyEnforcer.EnforceExecInContainerPolicy(containerID, params.OCIProcess.Args, params.OCIProcess.Env, params.OCIProcess.Cwd)
+			var allowStdioAccess bool
+			envToKeep, allowStdioAccess, err = h.securityPolicyEnforcer.EnforceExecInContainerPolicy(containerID, params.OCIProcess.Args, params.OCIProcess.Env, params.OCIProcess.Cwd)
 			if err != nil {
 				return pid, errors.Wrapf(err, "exec in container denied due to policy")
 			}
 
 			if envToKeep != nil {
 				params.OCIProcess.Env = envToKeep
+			}
+
+			if !allowStdioAccess {
+				conSettings.StdIn = nil
+				conSettings.StdOut = nil
+				conSettings.StdErr = nil
 			}
 
 			pid, err = c.ExecProcess(ctx, params.OCIProcess, conSettings)
