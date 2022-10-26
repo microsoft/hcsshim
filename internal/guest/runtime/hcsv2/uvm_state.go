@@ -18,7 +18,7 @@ type rwDevice struct {
 }
 
 type hostMounts struct {
-	stateMutex sync.Mutex
+	stateMutex sync.RWMutex
 
 	// Holds information about read-write devices, which can be encrypted and
 	// contain overlay fs upper/work directory mounts.
@@ -76,8 +76,8 @@ func (hm *hostMounts) RemoveRWDevice(mountPath string, sourcePath string) error 
 // IsEncrypted checks if the given path is a sub-path of an encrypted read-write
 // device.
 func (hm *hostMounts) IsEncrypted(path string) bool {
-	hm.stateMutex.Lock()
-	defer hm.stateMutex.Unlock()
+	hm.stateMutex.RLock()
+	defer hm.stateMutex.RUnlock()
 
 	cleanPath := filepath.Clean(path)
 	for rwPath, rwDev := range hm.readWriteMounts {
