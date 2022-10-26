@@ -34,7 +34,16 @@ func securityPolicyFromContainers(
 		return "", err
 	}
 	policyString, err := securitypolicy.MarshalPolicy(policyType, false, pc,
-		[]securitypolicy.ExternalProcessConfig{},
+		[]securitypolicy.ExternalProcessConfig{
+			{
+				Command:    []string{"ls", "-l", "/dev/mapper"},
+				WorkingDir: "/",
+			},
+			{
+				Command:    []string{"bash"},
+				WorkingDir: "/",
+			},
+		},
 		[]securitypolicy.FragmentConfig{},
 		true,
 		true,
@@ -126,7 +135,7 @@ func Test_RunPodSandbox_WithPolicy_Allowed(t *testing.T) {
 
 	for _, pc := range policyTestMatrix {
 		t.Run(t.Name()+fmt.Sprintf("_Enforcer_%s_Input_%s", pc.enforcer, pc.input), func(t *testing.T) {
-			sandboxPolicy := sandboxSecurityPolicy(t, pc.input, false)
+			sandboxPolicy := sandboxSecurityPolicy(t, pc.input, false, true)
 			sandboxRequest := sandboxRequestWithPolicy(t, sandboxPolicy)
 			sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = pc.enforcer
 
@@ -915,5 +924,86 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Dropping(t *testing.T) {
 				t.Fatalf("INVALID_ENV env var shouldn't be set for init process:\n%s\n", string(content))
 			}
 		})
+	}
+}
+
+// The test covers positive test scenarios around scratch encryption:
+// - policy allows unencrypted scratch and scratch is encrypted
+// - policy allows unencrypted scratch and scratch is not encrypted
+// - policy doesn't allow unencrypted scratch and scratch is encrypted
+func Test_RunPodSandboxAllowed_WithPolicy_EncryptedScratchPolicy(t *testing.T) {
+	requireFeatures(t, featureLCOWIntegrity, featureLCOWCrypt)
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	for _, tc := range []struct {
+		allowUnencrypted  bool
+		encryptAnnotation bool
+	}{
+		{
+			true,
+			true,
+		},
+		{
+			true,
+			false,
+		}, {
+			false,
+			true,
+		},
+	} {
+		t.Run(fmt.Sprintf("AllowUnencrypted_%t_EncryptionEnabled_%t", tc.allowUnencrypted, tc.encryptAnnotation), func(t *testing.T) {
+			policy := sandboxSecurityPolicy(t, "rego", tc.allowUnencrypted)
+			sandboxRequest := sandboxRequestWithPolicy(t, policy)
+			// sandboxRequestWithPolicy sets security policy annotation, so we
+			// won't get a nil point deref here.
+			sandboxRequest.Config.Annotations[annotations.EncryptedScratchDisk] = fmt.Sprintf("%t", tc.encryptAnnotation)
+			podID := runPodSandbox(t, client, ctx, sandboxRequest)
+			defer removePodSandbox(t, client, ctx, podID)
+			defer stopPodSandbox(t, client, ctx, podID)
+
+			if tc.encryptAnnotation {
+				output := shimDiagExecOutput(ctx, t, podID, []string{"ls", "-l", "/dev/mapper"})
+				if !strings.Contains(output, "dm-crypt-scsi-contr") {
+					t.Log(output)
+					t.Fatal("expected to find dm-crypt target")
+				}
+			}
+		})
+	}
+}
+
+// The test covers negative scenario when policy doesn't allow unencrypted scratch
+// and scratch is not encrypted.
+func Test_RunPodSandboxNotAllowed_WithPolicy_EncryptedScratchPolicy(t *testing.T) {
+	requireFeatures(t, featureLCOWIntegrity, featureLCOWCrypt)
+	pullRequiredLCOWImages(t, []string{imageLcowK8sPause})
+
+	client := newTestRuntimeClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	policy := sandboxSecurityPolicy(t, "rego", false)
+	sandboxRequest := sandboxRequestWithPolicy(t, policy)
+
+	// we didn't pass encrypt scratch annotation and policy should reject pod creation
+	response, err := client.RunPodSandbox(ctx, sandboxRequest)
+	if err == nil {
+		_, err := client.StopPodSandbox(ctx, &runtime.StopPodSandboxRequest{PodSandboxId: response.PodSandboxId})
+		if err != nil {
+			t.Errorf("failed to stop sandbox: %s", err)
+		}
+		_, err = client.RemovePodSandbox(ctx, &runtime.RemovePodSandboxRequest{PodSandboxId: response.PodSandboxId})
+		if err != nil {
+			t.Errorf("failed to remove sandbox: %s", err)
+		}
+		t.Fatalf("expected to fail")
+	}
+	expectedError := "unencrypted scratch not allowed"
+	if !strings.Contains(err.Error(), expectedError) {
+		t.Fatalf("expected '%s' error, got '%s'", expectedError, err)
 	}
 }

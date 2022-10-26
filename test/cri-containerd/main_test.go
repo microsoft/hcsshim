@@ -105,6 +105,7 @@ const (
 	featureCRIUpdateContainer = "UpdateContainer"
 	featureTerminateOnRestart = "TerminateOnRestart"
 	featureLCOWIntegrity      = "LCOWIntegrity"
+	featureLCOWCrypt          = "LCOWCrypt"
 )
 
 var allFeatures = []string{
