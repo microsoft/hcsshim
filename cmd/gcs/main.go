@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	backoff "github.com/cenkalti/backoff/v4"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/containerd/cgroups"
 	cgroupstats "github.com/containerd/cgroups/stats/v1"
 	oci "github.com/opencontainers/runtime-spec/specs-go"
@@ -196,7 +196,7 @@ func main() {
 		"If true do not run chronyd time synchronization service inside the UVM")
 	scrubLogs := flag.Bool("scrub-logs", false, "If true, scrub potentially sensitive information from logging")
 	initialPolicyStance := flag.String("initial-policy-stance",
-		"deny",
+		"allow",
 		"Stance: allow, deny.")
 
 	flag.Usage = func() {
@@ -228,7 +228,8 @@ func main() {
 		}
 		logWriter = logFileHandle
 	} else {
-		logWriter = os.Stdout
+		// logrus uses os.Stderr. see logrus.New()
+		logWriter = os.Stderr
 	}
 
 	// set up our initial stance policy enforcer
