@@ -237,10 +237,10 @@ func Test_GracefulTermination(t *testing.T) {
 			stopContainerWithTimeout(t, client, ctx, containerID, 15)
 			assertContainerState(t, client, ctx, containerID, runtime.ContainerState_CONTAINER_EXITED)
 			// get time elapsed before and after container stop command was issued
-			stopTimeOfContainer := time.Since(startTimeOfContainer)
-
-			// Ensure that the container has stopped only after approx 15 seconds
-			if stopTimeOfContainer < 15 {
+			elapsedTime := time.Since(startTimeOfContainer)
+			// Ensure that the container has stopped after approx 15 seconds.
+			// We are giving it a buffer of +/- 1 second
+			if elapsedTime < 14*time.Second || elapsedTime > 16*time.Second {
 				t.Fatalf("Container did not shutdown gracefully \n")
 			}
 		})

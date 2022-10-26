@@ -167,7 +167,7 @@ func (process *Process) Kill(ctx context.Context) (bool, error) {
 		return true, nil
 	}
 
-	// HCS serializes the signals sent to the target pid on a per client basis.
+	// HCS serializes the signals sent to a target pid per compute system handle.
 	// To avoid SIGKILL being serialized behind other signals, we open a new compute
 	// system handle to deliver the kill signal.
 	// If the calls to opening a new compute system handle fail, we forcefully
@@ -177,16 +177,25 @@ func (process *Process) Kill(ctx context.Context) (bool, error) {
 		// log error and force termination of container
 		log.G(ctx).WithField("err", err).Error("OpenComputeSystem() call failed")
 		err = process.system.Terminate(ctx)
-		log.G(ctx).WithField("err", err).Error("Terminate() call failed")
+		// if the Terminate() call itself ever failed, log and return error
+		if err != nil {
+			log.G(ctx).WithField("err", err).Error("Terminate() call failed")
+			return false, err
+		}
 		process.system.Close()
+		return true, nil
 	}
 	defer hcsSystem.Close()
 
 	newProcessHandle, err := hcsSystem.OpenProcess(ctx, process.Pid())
 	if err != nil {
-		// error returning while trying to open handle to the process. This means the process
-		// with this pid no longer exists, so it is safe to return success here
-		return true, nil
+		// Return true only if the target process has either already
+		// exited, or does not exist.
+		if IsAlreadyStopped(err) {
+			return true, nil
+		} else {
+			return false, err
+		}
 	}
 	defer newProcessHandle.Close()
 
@@ -219,7 +228,6 @@ func (process *Process) Kill(ctx context.Context) (bool, error) {
 		err = makeProcessError(newProcessHandle, operation, err, events)
 	}
 
-	newProcessHandle.killSignalDelivered = delivered
 	process.killSignalDelivered = delivered
 	return delivered, err
 }
