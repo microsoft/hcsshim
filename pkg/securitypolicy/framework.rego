@@ -201,7 +201,11 @@ container_started {
 
 default create_container := {"allowed": false}
 
-create_container := {"matches": matches, "env_list": env_list, "started": started, "allowed": true} {
+create_container := {"matches": matches,
+                     "env_list": env_list,
+                     "allow_stdio_access": allow_stdio_access,
+                     "started": started,
+                     "allowed": true} {
     not container_started
     # narrow the matches based upon command, working directory, and
     # mount list
@@ -223,6 +227,12 @@ create_container := {"matches": matches, "env_list": env_list, "started": starte
     ]
 
     count(containers) > 0
+
+    allow_stdio_access := containers[0].allow_stdio_access
+    every c in containers {
+        c.allow_stdio_access == allow_stdio_access
+    }
+
     matches := {
         "action": "update",
         "key": input.containerID,
@@ -303,7 +313,10 @@ mountList_ok(mounts, allow_elevated) {
 
 default exec_in_container := {"allowed": false}
 
-exec_in_container := {"matches": matches, "env_list": env_list, "allowed": true} {
+exec_in_container := {"matches": matches,
+                      "env_list": env_list,
+                      "allow_stdio_access": allow_stdio_access,
+                      "allowed": true} {
     container_started
     # narrow our matches based upon the process requested
     possible_containers := [container |
@@ -324,6 +337,11 @@ exec_in_container := {"matches": matches, "env_list": env_list, "allowed": true}
     ]
 
     count(containers) > 0
+
+    allow_stdio_access := containers[0].allow_stdio_access
+    every c in containers {
+        c.allow_stdio_access == allow_stdio_access
+    }
 
     matches := {
         "action": "update",
@@ -432,7 +450,9 @@ external_process_ok(process) {
 
 default exec_external := {"allowed": false}
 
-exec_external := {"allowed": true, "env_list": env_list} {
+exec_external := {"allowed": true,
+                  "allow_stdio_access": allow_stdio_access,
+                  "env_list": env_list} {
     # we need to assemble a list of all possible external processes which
     # have a matching working directory and command
     policy_processes := [process |
@@ -460,6 +480,11 @@ exec_external := {"allowed": true, "env_list": env_list} {
     ]
 
     count(processes) > 0
+
+    allow_stdio_access := processes[0].allow_stdio_access
+    every p in processes {
+        p.allow_stdio_access == allow_stdio_access
+    }
 }
 
 default get_properties := {"allowed": false}
