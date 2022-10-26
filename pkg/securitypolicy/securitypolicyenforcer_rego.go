@@ -654,13 +654,13 @@ func hugePagesMountsDir(sandboxID string) string {
 
 func getEnvsToKeep(envList []string, results map[string]interface{}) ([]string, error) {
 	if value, ok := results["env_list"]; ok {
-		if iArray, ok := value.([]interface{}); ok {
+		if envsAsInterfaces, ok := value.([]interface{}); ok {
 			keepSet := make(stringSet)
-			for _, iEnv := range iArray {
-				if env, ok := iEnv.(string); ok {
+			for _, envAsInterface := range envsAsInterfaces {
+				if env, ok := envAsInterface.(string); ok {
 					keepSet.add(env)
 				} else {
-					return nil, fmt.Errorf("members of env_list from policy must be strings, received %T", iEnv)
+					return nil, fmt.Errorf("members of env_list from policy must be strings, received %T", envAsInterface)
 				}
 			}
 			keepSet = keepSet.intersect(toStringSet(envList))
@@ -672,7 +672,7 @@ func getEnvsToKeep(envList []string, results map[string]interface{}) ([]string, 
 
 	// policy did not return an 'env_list'. This is interpreted
 	// as "proceed with provided env list".
-	return nil, nil
+	return envList, nil
 }
 
 func (policy *regoEnforcer) EnforceCreateContainerPolicy(

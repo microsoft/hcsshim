@@ -463,19 +463,19 @@ func (pe *StandardSecurityPolicyEnforcer) EnforceCreateContainerPolicy(
 	// record that we've allowed this container to start
 	pe.startedContainers[containerID] = struct{}{}
 
-	return nil, nil
+	return envList, nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
-func (*StandardSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, _ []string, _ string) (EnvList, error) {
-	return nil, nil
+func (*StandardSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, envList []string, _ string) (EnvList, error) {
+	return envList, nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
 // points are simply allowed.
-func (*StandardSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []string, _ []string, _ string) (EnvList, error) {
-	return nil, nil
+func (*StandardSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []string, envList []string, _ string) (EnvList, error) {
+	return envList, nil
 }
 
 // Stub. We are deprecating the standard enforcer. Newly added enforcement
@@ -821,16 +821,16 @@ func (OpenDoorSecurityPolicyEnforcer) EnforceOverlayUnmountPolicy(string) error 
 	return nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, _ []string, _ string, _ []oci.Mount) (EnvList, error) {
-	return nil, nil
+func (OpenDoorSecurityPolicyEnforcer) EnforceCreateContainerPolicy(_, _ string, _ []string, envList []string, _ string, _ []oci.Mount) (EnvList, error) {
+	return envList, nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, _ []string, _ string) (EnvList, error) {
-	return nil, nil
+func (OpenDoorSecurityPolicyEnforcer) EnforceExecInContainerPolicy(_ string, _ []string, envList []string, _ string) (EnvList, error) {
+	return envList, nil
 }
 
-func (OpenDoorSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []string, _ []string, _ string) (EnvList, error) {
-	return nil, nil
+func (OpenDoorSecurityPolicyEnforcer) EnforceExecExternalProcessPolicy(_ []string, envList []string, _ string) (EnvList, error) {
+	return envList, nil
 }
 
 func (*OpenDoorSecurityPolicyEnforcer) EnforceShutdownContainerPolicy(_ string) error {
