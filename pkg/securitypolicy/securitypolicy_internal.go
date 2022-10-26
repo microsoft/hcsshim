@@ -280,14 +280,3 @@ func stringMapToStringArray(m map[string]string) ([]string, error) {
 
 	return out, nil
 }
-
-type stringSet map[string]struct{}
-
-func (s stringSet) add(item string) {
-	s[item] = struct{}{}
-}
-
-func (s stringSet) contains(item string) bool {
-	_, contains := s[item]
-	return contains
-}

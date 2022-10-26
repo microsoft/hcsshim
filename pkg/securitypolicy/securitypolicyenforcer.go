@@ -60,6 +60,17 @@ type SecurityPolicyEnforcer interface {
 	LoadFragment(issuer string, feed string, code string) error
 }
 
+type stringSet map[string]struct{}
+
+func (s stringSet) add(item string) {
+	s[item] = struct{}{}
+}
+
+func (s stringSet) contains(item string) bool {
+	_, contains := s[item]
+	return contains
+}
+
 func newSecurityPolicyFromBase64JSON(base64EncodedPolicy string) (*SecurityPolicy, error) {
 	// base64 decode the incoming policy string
 	// its base64 encoded because it is coming from an annotation
