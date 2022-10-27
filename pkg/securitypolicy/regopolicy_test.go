@@ -3133,6 +3133,176 @@ func Test_Rego_Scratch_Unmount_Policy(t *testing.T) {
 	}
 }
 
+func Test_Rego_StdioAccess_Allowed(t *testing.T) {
+	gc := generateConstraints(testRand, 1)
+	gc.containers[0].AllowStdioAccess = true
+	gc.containers[0].ExecProcesses[0].AllowStdioAccess = true
+	gc.externalProcesses = generateExternalProcesses(testRand)
+	gc.externalProcesses[0].AllowStdioAccess = true
+	tc, err := setupRegoCreateContainerTest(gc, gc.containers[0], false)
+	if err != nil {
+		t.Fatalf("error setting up test: %v", err)
+	}
+
+	_, allow_stdio_access, err := tc.policy.EnforceCreateContainerPolicy(
+		tc.sandboxID,
+		tc.containerID,
+		tc.argList,
+		tc.envList,
+		tc.workingDir,
+		tc.mounts)
+
+	if err != nil {
+		t.Errorf("create_container not allowed: %v", err)
+	}
+
+	if !allow_stdio_access {
+		t.Errorf("expected allow_stdio_access to be true")
+	}
+
+	_, allow_stdio_access, err = tc.policy.EnforceExecInContainerPolicy(
+		tc.containerID,
+		gc.containers[0].ExecProcesses[0].Command,
+		tc.envList,
+		tc.workingDir,
+	)
+
+	if err != nil {
+		t.Errorf("exec_in_container not allowed: %v", err)
+	}
+
+	if !allow_stdio_access {
+		t.Errorf("expected allow_stdio_access to be true")
+	}
+
+	envList := buildEnvironmentVariablesFromEnvRules(gc.externalProcesses[0].envRules, testRand)
+	_, allow_stdio_access, err = tc.policy.EnforceExecExternalProcessPolicy(
+		gc.externalProcesses[0].command,
+		envList,
+		gc.externalProcesses[0].workingDir,
+	)
+
+	if err != nil {
+		t.Errorf("exec_external not allowed: %v", err)
+	}
+
+	if !allow_stdio_access {
+		t.Errorf("expected allow_stdio_access to be true")
+	}
+}
+
+func Test_Rego_Container_StdioAccess_NotAllowed(t *testing.T) {
+	gc := generateConstraints(testRand, 1)
+	container0 := gc.containers[0]
+	container0.AllowStdioAccess = true
+	container1, err := container0.clone()
+	if err != nil {
+		t.Fatalf("unable to clone container: %v", err)
+	}
+
+	container1.AllowStdioAccess = false
+	gc.containers = append(gc.containers, container1)
+
+	container0.ExecProcesses = append(container0.ExecProcesses, container0.ExecProcesses[0].clone())
+	container0.ExecProcesses[0].AllowStdioAccess = true
+
+	gc.externalProcesses = generateExternalProcesses(testRand)
+	gc.externalProcesses = append(gc.externalProcesses, gc.externalProcesses[0].clone())
+	gc.externalProcesses[0].AllowStdioAccess = true
+
+	tc, err := setupRegoCreateContainerTest(gc, gc.containers[0], false)
+	if err != nil {
+		t.Fatalf("error setting up test: %v", err)
+	}
+
+	_, allow_stdio_access, err := tc.policy.EnforceCreateContainerPolicy(
+		tc.sandboxID,
+		tc.containerID,
+		tc.argList,
+		tc.envList,
+		tc.workingDir,
+		tc.mounts)
+
+	if err == nil {
+		t.Errorf("expected create_container to not be allowed")
+	}
+
+	if allow_stdio_access {
+		t.Errorf("expected allow_stdio_access to be false")
+	}
+}
+
+func Test_Rego_ExecInContainer_StdioAccess_NotAllowed(t *testing.T) {
+	gc := generateConstraints(testRand, 1)
+	container0 := gc.containers[0]
+	container1, err := container0.clone()
+	if err != nil {
+		t.Fatalf("unable to clone container: %v", err)
+	}
+
+	gc.containers = append(gc.containers, container1)
+
+	container0.ExecProcesses[0].AllowStdioAccess = !container0.ExecProcesses[0].AllowStdioAccess
+
+	policy, err := newRegoPolicy(gc.toPolicy().marshalRego(), []oci.Mount{}, []oci.Mount{})
+	if err != nil {
+		t.Fatalf("error marshaling policy: %v", err)
+	}
+
+	run0, err := runContainer(policy, container0, []mountInternal{}, []mountInternal{})
+	if err != nil {
+		t.Fatalf("error running container 0: %v", err)
+	}
+
+	_, err = runContainer(policy, container1, []mountInternal{}, []mountInternal{})
+	if err != nil {
+		t.Fatalf("error running container 1: %v", err)
+	}
+
+	_, allow_stdio_access, err := policy.EnforceExecInContainerPolicy(
+		run0.containerID,
+		run0.container.ExecProcesses[0].Command,
+		run0.envList,
+		run0.container.WorkingDir,
+	)
+
+	if err == nil {
+		t.Errorf("expected exec_in_container to not be allowed")
+	}
+
+	if allow_stdio_access {
+		t.Errorf("expected allow_stdio_access to be false")
+	}
+
+}
+
+func Test_Rego_ExecExternal_StdioAccess_NotAllowed(t *testing.T) {
+	gc := generateConstraints(testRand, 1)
+	gc.externalProcesses = generateExternalProcesses(testRand)
+	gc.externalProcesses = append(gc.externalProcesses, gc.externalProcesses[0].clone())
+	gc.externalProcesses[0].AllowStdioAccess = !gc.externalProcesses[0].AllowStdioAccess
+
+	policy, err := newRegoPolicy(gc.toPolicy().marshalRego(), []oci.Mount{}, []oci.Mount{})
+	if err != nil {
+		t.Fatalf("error marshaling policy: %v", err)
+	}
+
+	envList := buildEnvironmentVariablesFromEnvRules(gc.externalProcesses[0].envRules, testRand)
+	_, allow_stdio_access, err := policy.EnforceExecExternalProcessPolicy(
+		gc.externalProcesses[0].command,
+		envList,
+		gc.externalProcesses[0].workingDir,
+	)
+
+	if err == nil {
+		t.Errorf("expected exec_external to not be allowed")
+	}
+
+	if allow_stdio_access {
+		t.Errorf("expected allow_stdio_access to be false")
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //
@@ -3436,6 +3606,7 @@ func runContainer(enforcer *regoEnforcer, container *securityPolicyContainer, de
 
 	return &regoRunningContainer{
 		container:   container,
+		envList:     envList,
 		containerID: containerID,
 	}, nil
 }
@@ -3449,6 +3620,7 @@ type regoRunningContainerTestConfig struct {
 
 type regoRunningContainer struct {
 	container   *securityPolicyContainer
+	envList     []string
 	containerID string
 }
 
@@ -4156,9 +4328,18 @@ func (p externalProcess) clone() *externalProcess {
 	copy(envRules, p.envRules)
 
 	return &externalProcess{
-		command:    copyStrings(p.command),
-		envRules:   envRules,
-		workingDir: p.workingDir,
+		command:          copyStrings(p.command),
+		envRules:         envRules,
+		workingDir:       p.workingDir,
+		AllowStdioAccess: p.AllowStdioAccess,
+	}
+}
+
+func (p containerExecProcess) clone() containerExecProcess {
+	return containerExecProcess{
+		Command:          copyStrings(p.Command),
+		Signals:          p.Signals,
+		AllowStdioAccess: p.AllowStdioAccess,
 	}
 }
 

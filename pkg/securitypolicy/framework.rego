@@ -338,9 +338,15 @@ exec_in_container := {"matches": matches,
 
     count(containers) > 0
 
-    allow_stdio_access := containers[0].allow_stdio_access
-    every c in containers {
-        c.allow_stdio_access == allow_stdio_access
+    stdio_flags := [process.allow_stdio_access |
+        container := containers[_]
+        some process in container.exec_processes
+        command_ok(process.command)
+    ]
+    
+    allow_stdio_access := stdio_flags[0]
+    every flag in stdio_flags {
+        flag == allow_stdio_access
     }
 
     matches := {

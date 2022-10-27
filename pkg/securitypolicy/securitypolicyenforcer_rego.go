@@ -517,9 +517,10 @@ func newMetadataOperation(operation interface{}) (*metadataOperation, error) {
 }
 
 var reservedResultKeys = map[string]struct{}{
-	"allowed":    {},
-	"add_module": {},
-	"env_list":   {},
+	"allowed":            {},
+	"add_module":         {},
+	"env_list":           {},
+	"allow_stdio_access": {},
 }
 
 func (policy *regoEnforcer) getMetadata(name string) (metadataObject, error) {
