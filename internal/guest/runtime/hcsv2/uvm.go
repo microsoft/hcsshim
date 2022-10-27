@@ -905,9 +905,9 @@ func processParamEnvToOCIEnv(environment map[string]string) []string {
 
 // processOCIEnvToParam is the inverse of processParamEnvToOCIEnv
 func processOCIEnvToParam(envs []string) map[string]string {
-	paramEnv := make(map[string]string)
+	paramEnv := make(map[string]string, len(envs))
 	for _, env := range envs {
-		parts := strings.Split(env, "=")
+		parts := strings.SplitN(env, "=", 2)
 		paramEnv[parts[0]] = parts[1]
 	}
 
