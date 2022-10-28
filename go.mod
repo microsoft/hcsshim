@@ -7,7 +7,7 @@ require (
 	github.com/Microsoft/go-winio v0.6.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cenkalti/backoff/v4 v4.1.3
-	github.com/containerd/cgroups v1.0.3
+	github.com/containerd/cgroups v1.0.5-0.20221103113851-f0f76178df2b
 	github.com/containerd/console v1.0.3
 	github.com/containerd/containerd v1.6.6
 	github.com/containerd/go-runc v1.0.0
@@ -34,7 +34,10 @@ require (
 	google.golang.org/grpc v1.47.0
 )
 
-require github.com/josephspurrier/goversioninfo v1.4.0
+require (
+	github.com/josephspurrier/goversioninfo v1.4.0
+	google.golang.org/protobuf v1.28.0
+)
 
 require (
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
@@ -73,7 +76,6 @@ require (
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/tools v0.1.12 // indirect
 	google.golang.org/genproto v0.0.0-20220107163113-42d7afdf6368 // indirect
-	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 

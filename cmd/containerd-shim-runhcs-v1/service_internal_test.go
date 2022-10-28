@@ -103,7 +103,7 @@ func verifyExpectedCgroupMetrics(t *testing.T, v *v1.Metrics) {
 		t.Fatal("expected non-nil Metrics.CPU")
 	}
 	if v.CPU.Usage.Total != 100 {
-		t.Fatalf("Expected Metrics.CPU.Usage == 100, got: %d", v.CPU.Usage)
+		t.Fatalf("Expected Metrics.CPU.Usage == 100, got: %+v", v.CPU.Usage)
 	}
 	if v.Memory == nil {
 		t.Fatal("expected non-nil Metrics.Memory")
