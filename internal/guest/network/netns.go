@@ -9,11 +9,13 @@ import (
 	"net"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"time"
 
 	"github.com/Microsoft/hcsshim/internal/guest/prot"
 	"github.com/Microsoft/hcsshim/internal/log"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 )
@@ -66,29 +68,24 @@ func DoInNetNS(ns netns.NsHandle, run func() error) error {
 // This function MUST be used in tandem with `DoInNetNS` or some other means that ensures that the goroutine
 // executing this code stays on the same thread.
 func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *prot.NetworkAdapter) error {
+	ctx, entry := log.S(ctx, logrus.Fields{
+		"ifname": ifStr,
+		"pid":    nsPid,
+	})
 	if ifStr == "" || nsPid == -1 || adapter == nil {
 		return errors.New("All three arguments must be specified")
 	}
 
-	if adapter.NatEnabled {
-		log.G(ctx).Debugf("Configure %s in %d with: %s/%d gw=%s",
-			ifStr, nsPid, adapter.AllocatedIPAddress,
-			adapter.HostIPPrefixLength, adapter.HostIPAddress)
-	} else {
-		log.G(ctx).Debugf("Configure %s in %d with DHCP", ifStr, nsPid)
-	}
-
-	log.G(ctx).Debug("Obtaining current namespace")
+	entry.Trace("Obtaining current namespace")
 	ns, err := netns.Get()
 	if err != nil {
 		return errors.Wrap(err, "netns.Get() failed")
 	}
 	defer ns.Close()
-
-	log.G(ctx).Debugf("New network namespace from PID %d is %v", nsPid, ns)
+	entry.WithField("namespace", ns).Debug("New network namespace from PID")
 
 	// Re-Get a reference to the interface (it may be a different ID in the new namespace)
-	log.G(ctx).Debug("Getting reference to interface")
+	entry.Trace("Getting reference to interface")
 	link, err := netlink.LinkByName(ifStr)
 	if err != nil {
 		return errors.Wrapf(err, "netlink.LinkByName(%s) failed", ifStr)
@@ -96,9 +93,8 @@ func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *prot.Net
 
 	// User requested non-default MTU size
 	if adapter.EncapOverhead != 0 {
-		log.G(ctx).Debug("EncapOverhead non-zero, will set MTU")
 		mtu := link.Attrs().MTU - int(adapter.EncapOverhead)
-		log.G(ctx).Debugf("mtu %d", mtu)
+		entry.WithField("mtu", mtu).Debug("EncapOverhead non-zero, will set MTU")
 		if err = netlink.LinkSetMTU(link, mtu); err != nil {
 			return errors.Wrapf(err, "netlink.LinkSetMTU(%#v, %d) failed", link, mtu)
 		}
@@ -106,7 +102,9 @@ func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *prot.Net
 
 	// Configure the interface
 	if adapter.NatEnabled {
-		log.G(ctx).Debug("Nat enabled - configuring interface")
+		entry.Tracef("Configuring interface with NAT: %s/%d gw=%s",
+			adapter.AllocatedIPAddress,
+			adapter.HostIPPrefixLength, adapter.HostIPAddress)
 		metric := 1
 		if adapter.EnableLowMetric {
 			metric = 500
@@ -116,72 +114,22 @@ func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *prot.Net
 		if err := netlink.LinkSetUp(link); err != nil {
 			return errors.Wrapf(err, "netlink.LinkSetUp(%#v) failed", link)
 		}
-		// Set IP address
-		addr := &net.IPNet{
-			IP: net.ParseIP(adapter.AllocatedIPAddress),
-			// TODO(rn): This assumes/hardcodes IPv4
-			Mask: net.CIDRMask(int(adapter.HostIPPrefixLength), 32)}
-		ipAddr := &netlink.Addr{IPNet: addr, Label: ""}
-		if err := netlink.AddrAdd(link, ipAddr); err != nil {
-			return errors.Wrapf(err, "netlink.AddrAdd(%#v, %#v) failed", link, ipAddr)
+		if err := assignIPToLink(ctx, ifStr, nsPid, link,
+			adapter.AllocatedIPAddress, adapter.HostIPAddress, adapter.HostIPPrefixLength,
+			adapter.EnableLowMetric, metric,
+		); err != nil {
+			return err
 		}
-		// Set gateway
-		if adapter.HostIPAddress != "" {
-			gw := net.ParseIP(adapter.HostIPAddress)
-
-			if !addr.Contains(gw) {
-				// In the case that a gw is not part of the subnet we are setting gw for,
-				// a new addr containing this gw address need to be added into the link to avoid getting
-				// unreachable error when adding this out-of-subnet gw route
-				log.G(ctx).Debugf("gw is outside of the subnet: Configure %s in %d with: %s/%d gw=%s\n",
-					ifStr, nsPid, adapter.AllocatedIPAddress, adapter.HostIPPrefixLength, adapter.HostIPAddress)
-				addr2 := &net.IPNet{
-					IP:   net.ParseIP(adapter.HostIPAddress),
-					Mask: net.CIDRMask(32, 32)} // This assumes/hardcodes IPv4
-				ipAddr2 := &netlink.Addr{IPNet: addr2, Label: ""}
-				if err := netlink.AddrAdd(link, ipAddr2); err != nil {
-					return errors.Wrapf(err, "netlink.AddrAdd(%#v, %#v) failed", link, ipAddr2)
-				}
-			}
-
-			if !adapter.EnableLowMetric {
-				route := netlink.Route{
-					Scope:     netlink.SCOPE_UNIVERSE,
-					LinkIndex: link.Attrs().Index,
-					Gw:        gw,
-					Priority:  metric, // This is what ip route add does
-				}
-				if err := netlink.RouteAdd(&route); err != nil {
-					return errors.Wrapf(err, "netlink.RouteAdd(%#v) failed", route)
-				}
-			} else {
-				// add a route rule for the new interface so packets coming on this interface
-				// always go out the same interface
-				srcNet := &net.IPNet{IP: net.ParseIP(adapter.AllocatedIPAddress), Mask: net.CIDRMask(32, 32)}
-				rule := netlink.NewRule()
-				rule.Table = 101
-				rule.Src = srcNet
-				rule.Priority = 5
-
-				if err := netlink.RuleAdd(rule); err != nil {
-					return errors.Wrapf(err, "netlink.RuleAdd(%#v) failed", rule)
-				}
-
-				// add the default route in that interface specific table
-				route := netlink.Route{
-					Scope:     netlink.SCOPE_UNIVERSE,
-					LinkIndex: link.Attrs().Index,
-					Gw:        gw,
-					Table:     rule.Table,
-					Priority:  metric,
-				}
-				if err := netlink.RouteAdd(&route); err != nil {
-					return errors.Wrapf(err, "netlink.RouteAdd(%#v) failed", route)
-				}
-			}
+		if err := assignIPToLink(ctx, ifStr, nsPid, link,
+			adapter.AllocatedIPv6Address, adapter.HostIPv6Address, adapter.HostIPv6PrefixLength,
+			adapter.EnableLowMetric, metric,
+		); err != nil {
+			return err
 		}
 	} else {
-		log.G(ctx).Debug("Execing udhcpc with timeout...")
+		timeout := 30 * time.Second
+		entry.Trace("Configure with DHCP")
+		entry.WithField("timeout", timeout.String()).Debug("Execing udhcpc with timeout...")
 		cmd := exec.Command("udhcpc", "-q", "-i", ifStr, "-s", "/sbin/udhcpc_config.script")
 
 		done := make(chan error)
@@ -191,14 +139,14 @@ func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *prot.Net
 		defer close(done)
 
 		select {
-		case <-time.After(30 * time.Second):
+		case <-time.After(timeout):
 			var cos string
 			co, err := cmd.CombinedOutput() // In case it has written something
 			if err != nil {
 				cos = string(co)
 			}
 			_ = cmd.Process.Kill()
-			log.G(ctx).Debugf("udhcpc timed out [%s]", cos)
+			entry.WithField("timeout", timeout.String()).Warningf("udhcpc timed out [%s]", cos)
 			return fmt.Errorf("udhcpc timed out. Failed to get DHCP address: %s", cos)
 		case <-done:
 			var cos string
@@ -207,7 +155,7 @@ func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *prot.Net
 				cos = string(co)
 			}
 			if err != nil {
-				log.G(ctx).WithError(err).Debugf("udhcpc failed [%s]", cos)
+				entry.WithError(err).Debugf("udhcpc failed [%s]", cos)
 				return errors.Wrapf(err, "process failed (%s)", cos)
 			}
 		}
@@ -216,20 +164,118 @@ func NetNSConfig(ctx context.Context, ifStr string, nsPid int, adapter *prot.Net
 		if err != nil {
 			cos = string(co)
 		}
-		log.G(ctx).Debugf("udhcpc succeeded: %s", cos)
+		entry.Debugf("udhcpc succeeded: %s", cos)
 	}
 
 	// Add some debug logging
-	curNS, _ := netns.Get()
-	// Refresh link attributes/state
-	link, _ = netlink.LinkByIndex(link.Attrs().Index)
-	attr := link.Attrs()
-	addrs, _ := netlink.AddrList(link, 0)
+	if entry.Logger.GetLevel() >= logrus.DebugLevel {
+		curNS, _ := netns.Get()
+		// Refresh link attributes/state
+		link, _ = netlink.LinkByIndex(link.Attrs().Index)
+		attr := link.Attrs()
+		addrs, _ := netlink.AddrList(link, 0)
+		addrsStr := make([]string, 0, len(addrs))
+		for _, addr := range addrs {
+			addrsStr = append(addrsStr, fmt.Sprintf("%v", addr))
+		}
 
-	log.G(ctx).Debugf("%v: %s[idx=%d,type=%s] is %v", curNS, attr.Name, attr.Index, link.Type(), attr.OperState)
-	for _, addr := range addrs {
-		log.G(ctx).Debugf("  %v", addr)
+		entry.WithField("addresses", addrsStr).Debugf("%v: %s[idx=%d,type=%s] is %v",
+			curNS, attr.Name, attr.Index, link.Type(), attr.OperState)
 	}
 
+	return nil
+}
+
+func assignIPToLink(ctx context.Context,
+	ifStr string,
+	nsPid int,
+	link netlink.Link,
+	allocatedIP string,
+	gatewayIP string,
+	prefixLen uint8,
+	enableLowMetric bool,
+	metric int,
+) error {
+	entry := log.G(ctx)
+	entry.WithFields(logrus.Fields{
+		"link":      link.Attrs().Name,
+		"IP":        allocatedIP,
+		"prefixLen": prefixLen,
+		"gateway":   gatewayIP,
+		"metric":    metric,
+	}).Trace("assigning IP address")
+	if allocatedIP == "" {
+		return nil
+	}
+	// Set IP address
+	ip, addr, err := net.ParseCIDR(allocatedIP + "/" + strconv.FormatUint(uint64(prefixLen), 10))
+	if err != nil {
+		return errors.Wrapf(err, "parsing address %s/%d failed", allocatedIP, prefixLen)
+	}
+	// the IP address field in addr is masked, so replace it with the original ip address
+	addr.IP = ip
+	entry.WithFields(logrus.Fields{
+		"allocatedIP": ip,
+		"IP":          addr,
+	}).Debugf("parsed ip address %s/%d", allocatedIP, prefixLen)
+	ipAddr := &netlink.Addr{IPNet: addr, Label: ""}
+	if err := netlink.AddrAdd(link, ipAddr); err != nil {
+		return errors.Wrapf(err, "netlink.AddrAdd(%#v, %#v) failed", link, ipAddr)
+	}
+	if gatewayIP == "" {
+		return nil
+	}
+	// Set gateway
+	gw := net.ParseIP(gatewayIP)
+	if gw == nil {
+		return errors.Wrapf(err, "parsing gateway address %s failed", gatewayIP)
+	}
+
+	if !addr.Contains(gw) {
+		// In the case that a gw is not part of the subnet we are setting gw for,
+		// a new addr containing this gw address need to be added into the link to avoid getting
+		// unreachable error when adding this out-of-subnet gw route
+		entry.Debugf("gw is outside of the subnet: Configure %s in %d with: %s/%d gw=%s\n",
+			ifStr, nsPid, allocatedIP, prefixLen, gatewayIP)
+		ml := len(gw) * 8
+		addr2 := &net.IPNet{
+			IP:   gw,
+			Mask: net.CIDRMask(ml, ml)}
+		ipAddr2 := &netlink.Addr{IPNet: addr2, Label: ""}
+		if err := netlink.AddrAdd(link, ipAddr2); err != nil {
+			return errors.Wrapf(err, "netlink.AddrAdd(%#v, %#v) failed", link, ipAddr2)
+		}
+	}
+
+	var table int
+	if enableLowMetric {
+		// add a route rule for the new interface so packets coming on this interface
+		// always go out the same interface
+		_, ml := addr.Mask.Size()
+		srcNet := &net.IPNet{
+			IP:   net.ParseIP(allocatedIP),
+			Mask: net.CIDRMask(ml, ml),
+		}
+		rule := netlink.NewRule()
+		rule.Table = 101
+		rule.Src = srcNet
+		rule.Priority = 5
+
+		if err := netlink.RuleAdd(rule); err != nil {
+			return errors.Wrapf(err, "netlink.RuleAdd(%#v) failed", rule)
+		}
+		table = rule.Table
+	}
+	// add the default route in that interface specific table
+	route := netlink.Route{
+		Scope:     netlink.SCOPE_UNIVERSE,
+		LinkIndex: link.Attrs().Index,
+		Gw:        gw,
+		Table:     table,
+		Priority:  metric,
+	}
+	if err := netlink.RouteAdd(&route); err != nil {
+		return errors.Wrapf(err, "netlink.RouteAdd(%#v) failed", route)
+	}
 	return nil
 }
