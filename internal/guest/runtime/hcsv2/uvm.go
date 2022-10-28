@@ -144,7 +144,7 @@ func (h *Host) SetConfidentialUVMOptions(ctx context.Context, r *guestresource.L
 	return nil
 }
 
-type JsonPayload struct {
+type JSONPayload struct {
 	Issuer   string `json:"issuer,omitempty"`
 	Feed     string `json:"feed,omitempty"`
 	Fragment string `json:"fragment,omitempty"`
@@ -200,7 +200,7 @@ func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWS
 		// payload is a json document wrapping them along with the rego fragment.
 
 		if len(issuer) == 0 && len(feed) == 0 { // assume payload is json, unwrap that
-			var jsonPayload JsonPayload
+			var jsonPayload JSONPayload
 			var err = json.Unmarshal(payload, &jsonPayload)
 			if err != nil {
 				return fmt.Errorf("failed to decode json fragment wrapper: " + err.Error())
