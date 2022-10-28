@@ -54,7 +54,7 @@ func Test_UnpackAndValidateCannedFragment(t *testing.T) {
 	if err != nil {
 		t.Errorf("UnpackAndValidateCOSE1CertChain failed: %s", err.Error())
 	}
-	
+
 	var iss = unpacked.Issuer
 	var feed = unpacked.Feed
 	var pubkey = base64PublicKeyToPEM(unpacked.Pubkey)

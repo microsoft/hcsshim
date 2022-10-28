@@ -5,18 +5,26 @@ import (
 	"testing"
 )
 
-
 func check_failed(t *testing.T, err error) {
-	if (err == nil) { t.Errorf("error: should have failed") }
+	t.Helper()
+	if err == nil {
+		t.Errorf("error: should have failed")
+	}
 }
 
 func check_ok(t *testing.T, err error) {
-	if (err != nil) { t.Errorf("error: rejected valid DID: %s", err) }
+	t.Helper()
+	if err != nil {
+		t.Errorf("error: rejected valid DID: %s", err)
+	}
 }
 
 func load_certificate_chain(t *testing.T, path string) string {
+	t.Helper()
 	chain, err := os.ReadFile(path)
-	if err != nil { t.Errorf("error: can't read file"); }
+	if err != nil {
+		t.Errorf("error: can't read file")
+	}
 	return string(chain)
 }
 
