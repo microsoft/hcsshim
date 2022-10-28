@@ -18,6 +18,8 @@ import (
 	"syscall"
 	"time"
 
+	"encoding/base64"
+
 	"github.com/Microsoft/hcsshim/internal/debug"
 	"github.com/Microsoft/hcsshim/internal/guest/gcserr"
 	"github.com/Microsoft/hcsshim/internal/guest/policy"
@@ -37,6 +39,8 @@ import (
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
 	"github.com/Microsoft/hcsshim/pkg/annotations"
+	"github.com/Microsoft/hcsshim/pkg/cosesign1"
+	didx509resolver "github.com/Microsoft/hcsshim/pkg/did-x509-resolver"
 	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 	"github.com/mattn/go-shellwords"
 	"github.com/pkg/errors"
@@ -140,7 +144,6 @@ func (h *Host) SetConfidentialUVMOptions(ctx context.Context, r *guestresource.L
 	return nil
 }
 
-
 type JsonPayload struct {
 	Issuer   string `json:"issuer,omitempty"`
 	Feed     string `json:"feed,omitempty"`
@@ -153,7 +156,9 @@ func checkDIDvsChain(did string, unpacked cosesign1.UnpackedCoseSign1) (bool, er
 		return false, fmt.Errorf("InjectFragment failed chain (leaf key) %s did not match issuer DID %s", unpacked.Pubkey, did)
 	}
 	// TODO - call the resolver
-	return true, nil
+	didDoc, err := didx509resolver.Resolve(unpacked.Pubcert, did, true)
+	_ = didDoc
+	return true, err
 }
 
 // InjectFragment extends current security policy with additional constraints

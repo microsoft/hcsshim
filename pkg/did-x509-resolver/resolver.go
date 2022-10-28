@@ -1,4 +1,4 @@
-package did_x509_resolver
+package didx509resolver
 
 import (
 	"crypto/sha256"
@@ -17,9 +17,9 @@ import (
 	"github.com/lestrrat-go/jwx/jwk"
 )
 
-func verify_certificate_chain(chain []*x509.Certificate, trusted_roots []*x509.Certificate, ignore_time bool) ([][]*x509.Certificate, error) {
+func verifyCertificateChain(chain []*x509.Certificate, trustedRoots []*x509.Certificate, ignoreTime bool) ([][]*x509.Certificate, error) {
 	roots := x509.NewCertPool()
-	for _, cert := range trusted_roots {
+	for _, cert := range trustedRoots {
 		roots.AddCert(cert)
 	}
 
@@ -39,13 +39,13 @@ func verify_certificate_chain(chain []*x509.Certificate, trusted_roots []*x509.C
 	return chain[0].Verify(opts)
 }
 
-func check_fingerprint(chain []*x509.Certificate, ca_fingerprint_alg, ca_fingerprint string) error {
+func checkFingerprint(chain []*x509.Certificate, caFingerprintAlg, caFingerprint string) error {
 
-	expected_ca_fingerprints := make(map[string]struct{})
+	expectedCaFingerprints := make(map[string]struct{})
 	for _, cert := range chain[1:] {
 		var n struct{}
 		var hash []byte
-		switch ca_fingerprint_alg {
+		switch caFingerprintAlg {
 		case "sha256":
 			x := sha256.Sum256(cert.Raw)
 			hash = x[:]
@@ -58,30 +58,18 @@ func check_fingerprint(chain []*x509.Certificate, ca_fingerprint_alg, ca_fingerp
 		default:
 			return errors.New("unsupported hash algorithm")
 		}
-		hash_str := base64.RawURLEncoding.EncodeToString(hash)
-		expected_ca_fingerprints[hash_str] = n
+		hashStr := base64.RawURLEncoding.EncodeToString(hash)
+		expectedCaFingerprints[hashStr] = n
 	}
 
-	if _, found := expected_ca_fingerprints[ca_fingerprint]; !found {
+	if _, found := expectedCaFingerprints[caFingerprint]; !found {
 		return errors.New("unexpected certificate fingerprint")
 	}
 
 	return nil
 }
 
-func url_unescape(urls []string) ([]string, error) {
-	r := make([]string, 0)
-	for _, p := range urls {
-		d, err := url.QueryUnescape(p)
-		if err != nil {
-			return r, errors.New("URL unescape failed")
-		}
-		r = append(r, d)
-	}
-	return r, nil
-}
-
-func oid_from_string(s string) (asn1.ObjectIdentifier, error) {
+func oidFromString(s string) (asn1.ObjectIdentifier, error) {
 	tokens := strings.Split(s, ".")
 	var ints []int
 	for _, x := range tokens {
@@ -94,8 +82,8 @@ func oid_from_string(s string) (asn1.ObjectIdentifier, error) {
 	return asn1.ObjectIdentifier(ints), nil
 }
 
-func check_has_san(san_type string, value string, cert *x509.Certificate) error {
-	switch san_type {
+func checkHasSan(sanType string, value string, cert *x509.Certificate) error {
+	switch sanType {
 	case "dns":
 		for _, name := range cert.DNSNames {
 			if name == value {
@@ -121,7 +109,7 @@ func check_has_san(san_type string, value string, cert *x509.Certificate) error 
 			}
 		}
 	default:
-		return fmt.Errorf("unknown SAN type: %s", san_type)
+		return fmt.Errorf("unknown SAN type: %s", sanType)
 	}
 	return fmt.Errorf("SAN not found: %s", value)
 }
@@ -172,14 +160,14 @@ func oidFromExtKeyUsage(eku x509.ExtKeyUsage) (oid asn1.ObjectIdentifier, ok boo
 	return
 }
 
-func verify_did(chain []*x509.Certificate, did string) error {
-	var top_tokens []string = strings.Split(did, "::")
+func verifyDid(chain []*x509.Certificate, did string) error {
+	var topTokens = strings.Split(did, "::")
 
-	if len(top_tokens) <= 1 {
+	if len(topTokens) <= 1 {
 		return errors.New("invalid DID string")
 	}
 
-	var pretokens []string = strings.Split(top_tokens[0], ":")
+	var pretokens = strings.Split(topTokens[0], ":")
 
 	if len(pretokens) < 3 || pretokens[0] != "did" || pretokens[1] != "x509" {
 		return errors.New("unsupported method/prefix")
@@ -189,16 +177,16 @@ func verify_did(chain []*x509.Certificate, did string) error {
 		return errors.New("unsupported did:x509 version")
 	}
 
-	ca_fingerprint_alg := pretokens[3]
-	ca_fingerprint := pretokens[4]
+	caFingerprintAlg := pretokens[3]
+	caFingerprint := pretokens[4]
 
-	policies := top_tokens[1:]
+	policies := topTokens[1:]
 
 	if len(chain) < 2 {
 		return errors.New("certificate chain too short")
 	}
 
-	err := check_fingerprint(chain, ca_fingerprint_alg, ca_fingerprint)
+	err := checkFingerprint(chain, caFingerprintAlg, caFingerprint)
 	if err != nil {
 		return err
 	}
@@ -210,8 +198,8 @@ func verify_did(chain []*x509.Certificate, did string) error {
 			return errors.New("invalid policy")
 		}
 
-		policy_name, args := parts[0], parts[1:]
-		switch policy_name {
+		policyName, args := parts[0], parts[1:]
+		switch policyName {
 		case "subject":
 			if len(args) == 0 || len(args)%2 != 0 {
 				return errors.New("key-value pairs required")
@@ -221,56 +209,56 @@ func verify_did(chain []*x509.Certificate, did string) error {
 				return errors.New("at least one key-value pair is required")
 			}
 
-			var seen_fields []string
+			var seenFields []string
 			for i := 0; i < len(args); i += 2 {
 				k := args[i]
 				v, err := url.QueryUnescape(args[i+1])
 
 				if err != nil {
-					return fmt.Errorf("url_unescape failed: %s", err)
+					return fmt.Errorf("urlUnescape failed: %s", err)
 				}
 
-				for _, sk := range seen_fields {
+				for _, sk := range seenFields {
 					if sk == k {
 						return fmt.Errorf("duplicate field '%s'", k)
 					}
 				}
-				seen_fields = append(seen_fields, k)
+				seenFields = append(seenFields, k)
 
 				leaf := chain[0]
-				var field_values []string
+				var fieldValues []string
 				switch k {
 				case "C":
-					field_values = leaf.Subject.Country
+					fieldValues = leaf.Subject.Country
 				case "O":
-					field_values = leaf.Subject.Organization
+					fieldValues = leaf.Subject.Organization
 				case "OU":
-					field_values = leaf.Subject.OrganizationalUnit
+					fieldValues = leaf.Subject.OrganizationalUnit
 				case "L":
-					field_values = leaf.Subject.Locality
+					fieldValues = leaf.Subject.Locality
 				case "S":
-					field_values = leaf.Subject.Province
+					fieldValues = leaf.Subject.Province
 				case "STREET":
-					field_values = leaf.Subject.StreetAddress
+					fieldValues = leaf.Subject.StreetAddress
 				case "POSTALCODE":
-					field_values = leaf.Subject.PostalCode
+					fieldValues = leaf.Subject.PostalCode
 				case "SERIALNUMBER":
-					field_values = []string{leaf.Subject.SerialNumber}
+					fieldValues = []string{leaf.Subject.SerialNumber}
 				case "CN":
-					field_values = []string{leaf.Subject.CommonName}
+					fieldValues = []string{leaf.Subject.CommonName}
 				default:
 					for _, aav := range leaf.Subject.Names {
 						if aav.Type.String() == k {
-							field_values = []string{aav.Value.(string)}
+							fieldValues = []string{aav.Value.(string)}
 							break
 						}
 					}
-					if len(field_values) == 0 {
+					if len(fieldValues) == 0 {
 						return fmt.Errorf("unsupported subject key: %s", k)
 					}
 				}
 				found := false
-				for _, fv := range field_values {
+				for _, fv := range fieldValues {
 					if strings.Contains(fv, v) {
 						found = true
 						break
@@ -284,12 +272,12 @@ func verify_did(chain []*x509.Certificate, did string) error {
 			if len(args) != 2 {
 				return fmt.Errorf("exactly one SAN type and value required")
 			}
-			san_type := args[0]
-			san_value, err := url.QueryUnescape(args[1])
+			sanType := args[0]
+			sanValue, err := url.QueryUnescape(args[1])
 			if err != nil {
 				return fmt.Errorf("url.QueryUnescape failed: %s", err)
 			}
-			err = check_has_san(san_type, san_value, chain[0])
+			err = checkHasSan(sanType, sanValue, chain[0])
 			if err != nil {
 				return err
 			}
@@ -298,67 +286,67 @@ func verify_did(chain []*x509.Certificate, did string) error {
 				return errors.New("exactly one EKU required")
 			}
 
-			eku_oid, err := oid_from_string(args[0])
+			ekuOid, err := oidFromString(args[0])
 			if err != nil {
-				return fmt.Errorf("oid_from_string failed: %s", err)
+				return fmt.Errorf("oidFromString failed: %s", err)
 			}
 
 			if len(chain[0].UnknownExtKeyUsage) == 0 {
 				return errors.New("no EKU extension in certificate")
 			}
 
-			found_eku := false
-			for _, cert_eku := range chain[0].ExtKeyUsage {
-				cert_eku_oid, ok := oidFromExtKeyUsage(cert_eku)
-				if ok && cert_eku_oid.Equal(eku_oid) {
-					found_eku = true
+			foundEku := false
+			for _, certEku := range chain[0].ExtKeyUsage {
+				certEkuOid, ok := oidFromExtKeyUsage(certEku)
+				if ok && certEkuOid.Equal(ekuOid) {
+					foundEku = true
 					break
 				}
 			}
-			for _, cert_eku_oid := range chain[0].UnknownExtKeyUsage {
-				if cert_eku_oid.Equal(eku_oid) {
-					found_eku = true
+			for _, certEkuOid := range chain[0].UnknownExtKeyUsage {
+				if certEkuOid.Equal(ekuOid) {
+					foundEku = true
 					break
 				}
 			}
 
-			if !found_eku {
-				return fmt.Errorf("EKU not found: %s", eku_oid)
+			if !foundEku {
+				return fmt.Errorf("EKU not found: %s", ekuOid)
 			}
 		case "fulcio-issuer":
 			if len(args) != 1 {
 				return errors.New("excessive arguments to fulcio-issuer")
 			}
-			decoded_arg, err := url.QueryUnescape(args[0])
+			decodedArg, err := url.QueryUnescape(args[0])
 			if err != nil {
-				return fmt.Errorf("url_unescape failed: %s", err)
+				return fmt.Errorf("urlUnescape failed: %s", err)
 			}
-			fulcio_issuer := "https://" + decoded_arg
-			fulcio_issuer_oid, err := oid_from_string("1.3.6.1.4.1.57264.1.1")
+			fulcioIssuer := "https://" + decodedArg
+			fulcioIssuerOid, err := oidFromString("1.3.6.1.4.1.57264.1.1")
 			if err != nil {
-				return fmt.Errorf("oid_from_string failed: %s", err)
+				return fmt.Errorf("oidFromString failed: %s", err)
 			}
 			found := false
 			for _, ext := range chain[0].Extensions {
-				if ext.Id.Equal(fulcio_issuer_oid) {
-					if string(ext.Value) == fulcio_issuer {
+				if ext.Id.Equal(fulcioIssuerOid) {
+					if string(ext.Value) == fulcioIssuer {
 						found = true
 						break
 					}
 				}
 			}
 			if !found {
-				return fmt.Errorf("invalid fulcio-issuer: %s", fulcio_issuer)
+				return fmt.Errorf("invalid fulcio-issuer: %s", fulcioIssuer)
 			}
 		default:
-			return fmt.Errorf("unsupported did:x509 policy name '%s'", policy_name)
+			return fmt.Errorf("unsupported did:x509 policy name '%s'", policyName)
 		}
 	}
 
 	return nil
 }
 
-func create_did_document(did string, chain []*x509.Certificate) (string, error) {
+func createDidDocument(did string, chain []*x509.Certificate) (string, error) {
 	format := `
 {
 	"@context": "https://www.w3.org/ns/did/v1",
@@ -373,19 +361,19 @@ func create_did_document(did string, chain []*x509.Certificate) (string, error) 
 	%s
 }`
 
-	include_assertion_method := chain[0].KeyUsage == 0 || (chain[0].KeyUsage&x509.KeyUsageDigitalSignature) != 0
-	include_key_agreement := chain[0].KeyUsage == 0 || (chain[0].KeyUsage&x509.KeyUsageKeyAgreement) != 0
+	includeAssertionMethod := chain[0].KeyUsage == 0 || (chain[0].KeyUsage&x509.KeyUsageDigitalSignature) != 0
+	includeKeyAgreement := chain[0].KeyUsage == 0 || (chain[0].KeyUsage&x509.KeyUsageKeyAgreement) != 0
 
-	if !include_assertion_method && !include_key_agreement {
+	if !includeAssertionMethod && !includeKeyAgreement {
 		return "", errors.New("leaf certificate key usage must include digital signature or key agreement")
 	}
 
 	am := ""
 	ka := ""
-	if include_assertion_method {
+	if includeAssertionMethod {
 		am = fmt.Sprintf(",\"assertionMethod\": \"%s#key-1\"", did)
 	}
-	if include_key_agreement {
+	if includeKeyAgreement {
 		ka = fmt.Sprintf(",\"keyAgreement\": \"%s#key-1\"", did)
 	}
 
@@ -401,10 +389,10 @@ func create_did_document(did string, chain []*x509.Certificate) (string, error) 
 	return doc, nil
 }
 
-func parse_pem_chain(chain_pem string) ([]*x509.Certificate, error) {
-	var chain []*x509.Certificate = []*x509.Certificate{}
+func parsePemChain(chainPem string) ([]*x509.Certificate, error) {
+	var chain = []*x509.Certificate{}
 
-	bs := []byte(chain_pem)
+	bs := []byte(chainPem)
 	for block, rest := pem.Decode(bs); block != nil; block, rest = pem.Decode(rest) {
 		if block.Type == "CERTIFICATE" {
 			cert, err := x509.ParseCertificate(block.Bytes)
@@ -418,8 +406,8 @@ func parse_pem_chain(chain_pem string) ([]*x509.Certificate, error) {
 	return chain, nil
 }
 
-func resolve(chain_pem string, did string, ignore_time bool) (string, error) {
-	chain, err := parse_pem_chain(chain_pem)
+func Resolve(chainPem string, did string, ignoreTime bool) (string, error) {
+	chain, err := parsePemChain(chainPem)
 
 	if err != nil {
 		return "", err
@@ -432,20 +420,20 @@ func resolve(chain_pem string, did string, ignore_time bool) (string, error) {
 	// The last certificate in the chain is assumed to be the trusted root.
 	roots := []*x509.Certificate{chain[len(chain)-1]}
 
-	chains, err := verify_certificate_chain(chain, roots, ignore_time)
+	chains, err := verifyCertificateChain(chain, roots, ignoreTime)
 
 	if err != nil {
 		return "", fmt.Errorf("certificate chain verification failed: %s", err)
 	}
 
 	for _, chain := range chains {
-		err = verify_did(chain, did)
+		err = verifyDid(chain, did)
 		if err != nil {
 			return "", fmt.Errorf("DID verification failed: %s", err)
 		}
 	}
 
-	doc, err := create_did_document(did, chain)
+	doc, err := createDidDocument(did, chain)
 
 	if err != nil {
 		return "", fmt.Errorf("DID document creation failed: %s", err)
