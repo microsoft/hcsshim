@@ -508,7 +508,7 @@ func (s *service) statsInternal(ctx context.Context, req *task.StatsRequest) (*t
 	if err != nil {
 		return nil, err
 	}
-	any, err := typeurl.MarshalAny(stats)
+	any, err := marshalAny(stats)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to marshal Statistics for task: %s", req.ID)
 	}

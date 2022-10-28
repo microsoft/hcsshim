@@ -705,7 +705,7 @@ func Test_PodShim_statsInternal_InitTaskID_Success(t *testing.T) {
 			if resp == nil || resp.Stats == nil {
 				t.Fatal("should have returned valid stats response")
 			}
-			statsI, err := typeurl.UnmarshalAny(resp.Stats)
+			statsI, err := unmarshalAny(resp.Stats)
 			if err != nil {
 				t.Fatalf("should not have failed to unmarshal StatsResponse got: %v", err)
 			}
@@ -730,7 +730,7 @@ func Test_PodShim_statsInternal_2ndTaskID_Success(t *testing.T) {
 			if resp == nil || resp.Stats == nil {
 				t.Fatal("should have returned valid stats response")
 			}
-			statsI, err := typeurl.UnmarshalAny(resp.Stats)
+			statsI, err := unmarshalAny(resp.Stats)
 			if err != nil {
 				t.Fatalf("should not have failed to unmarshal StatsResponse got: %v", err)
 			}
