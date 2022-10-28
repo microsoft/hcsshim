@@ -86,7 +86,7 @@ single line base64 standard encoded raw DER certificate
 */
 
 func x509ToPEM(cert *x509.Certificate) string {
-	
+
 	base64Cert := x509ToBase64(cert)
 	return base64CertToPEM(base64Cert)
 }
