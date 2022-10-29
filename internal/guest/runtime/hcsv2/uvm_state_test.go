@@ -46,28 +46,16 @@ func Test_Cannot_RemoveRWDevice_Wrong_Source(t *testing.T) {
 	}
 }
 
-func Test_Cannot_Remove_With_Active_Overlays(t *testing.T) {
-	hm := newHostMounts()
-	mountPath := "/run/gcs/c/abc"
-	sourcePath := "/dev/sda"
-	hm.readWriteMounts[mountPath] = &rwDevice{
-		mountPath:  mountPath,
-		sourcePath: sourcePath,
-		encrypted:  true,
-		overlays: map[string]struct{}{
-			mountPath + "/nested": {},
-		},
-	}
-	if err := hm.RemoveRWDevice(mountPath, sourcePath); err == nil {
-		t.Fatalf("expected error removing RW device with active overlays")
-	}
-}
-
 func Test_HostMounts_IsEncrypted(t *testing.T) {
 	hm := newHostMounts()
-	mountPath := "/run/gcs/c/abcd"
-	sourcePath := "/dev/sda"
-	if err := hm.AddRWDevice(mountPath, sourcePath, true); err != nil {
+	encryptedPath := "/run/gcs/c/encrypted"
+	encryptedSource := "/dev/sda"
+	if err := hm.AddRWDevice(encryptedPath, encryptedSource, true); err != nil {
+		t.Fatalf("unexpected error adding RW device: %s", err)
+	}
+	nestedUnencrypted := "/run/gcs/c/encrypted/unencrypted"
+	unencryptedSource := "/dev/sdb"
+	if err := hm.AddRWDevice(nestedUnencrypted, unencryptedSource, false); err != nil {
 		t.Fatalf("unexpected error adding RW device: %s", err)
 	}
 
@@ -78,22 +66,32 @@ func Test_HostMounts_IsEncrypted(t *testing.T) {
 	}{
 		{
 			name:     "ValidSubPath1",
-			testPath: "/run/gcs/c/abcd/nested",
+			testPath: "/run/gcs/c/encrypted/nested",
 			expected: true,
 		},
 		{
 			name:     "ValidSubPath2",
-			testPath: "/run/gcs/c/abcd/../abcd/nested",
+			testPath: "/run/gcs/c/encrypted/../encrypted/nested",
 			expected: true,
 		},
 		{
-			name:     "NotSubPath2",
+			name:     "NotSubPath1",
 			testPath: "/run/gcs/c/abcdef",
 			expected: false,
 		},
 		{
 			name:     "NotSubPath2",
+			testPath: "/run/gcs/c",
+			expected: false,
+		},
+		{
+			name:     "NotSubPath3",
 			testPath: "/run/gcs/c/../abcd",
+			expected: false,
+		},
+		{
+			name:     "NestedUnencrypted",
+			testPath: "/run/gcs/c/encrypted/unencrypted/foo",
 			expected: false,
 		},
 	} {

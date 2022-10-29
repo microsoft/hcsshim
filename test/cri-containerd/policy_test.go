@@ -135,7 +135,7 @@ func Test_RunPodSandbox_WithPolicy_Allowed(t *testing.T) {
 
 	for _, pc := range policyTestMatrix {
 		t.Run(t.Name()+fmt.Sprintf("_Enforcer_%s_Input_%s", pc.enforcer, pc.input), func(t *testing.T) {
-			sandboxPolicy := sandboxSecurityPolicy(t, pc.input, false, true)
+			sandboxPolicy := sandboxSecurityPolicy(t, pc.input, false)
 			sandboxRequest := sandboxRequestWithPolicy(t, sandboxPolicy)
 			sandboxRequest.Config.Annotations[annotations.SecurityPolicyEnforcer] = pc.enforcer
 

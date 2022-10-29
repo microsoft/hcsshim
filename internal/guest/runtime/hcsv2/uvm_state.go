@@ -14,11 +14,10 @@ type rwDevice struct {
 	mountPath  string
 	sourcePath string
 	encrypted  bool
-	overlays   map[string]struct{}
 }
 
 type hostMounts struct {
-	stateMutex sync.RWMutex
+	stateMutex sync.Mutex
 
 	// Holds information about read-write devices, which can be encrypted and
 	// contain overlay fs upper/work directory mounts.
@@ -45,13 +44,12 @@ func (hm *hostMounts) AddRWDevice(mountPath string, sourcePath string, encrypted
 		mountPath:  mountTarget,
 		sourcePath: sourcePath,
 		encrypted:  encrypted,
-		overlays:   map[string]struct{}{},
 	}
 	return nil
 }
 
 // RemoveRWDevice removes the read-write device metadata for device mounted at
-// `mountPath`. Returns an error if the device currently has active overlays.
+// `mountPath`.
 func (hm *hostMounts) RemoveRWDevice(mountPath string, sourcePath string) error {
 	hm.stateMutex.Lock()
 	defer hm.stateMutex.Unlock()
@@ -65,9 +63,6 @@ func (hm *hostMounts) RemoveRWDevice(mountPath string, sourcePath string) error 
 	if device.sourcePath != sourcePath {
 		return fmt.Errorf("wrong sourcePath %s", sourcePath)
 	}
-	if len(device.overlays) > 0 {
-		return fmt.Errorf("cannot remove read-write target with active overlays")
-	}
 
 	delete(hm.readWriteMounts, unmountTarget)
 	return nil
@@ -76,9 +71,11 @@ func (hm *hostMounts) RemoveRWDevice(mountPath string, sourcePath string) error 
 // IsEncrypted checks if the given path is a sub-path of an encrypted read-write
 // device.
 func (hm *hostMounts) IsEncrypted(path string) bool {
-	hm.stateMutex.RLock()
-	defer hm.stateMutex.RUnlock()
+	hm.stateMutex.Lock()
+	defer hm.stateMutex.Unlock()
 
+	parentPath := ""
+	encrypted := false
 	cleanPath := filepath.Clean(path)
 	for rwPath, rwDev := range hm.readWriteMounts {
 		relPath, err := filepath.Rel(rwPath, cleanPath)
@@ -88,9 +85,10 @@ func (hm *hostMounts) IsEncrypted(path string) bool {
 		if err != nil || strings.HasPrefix(relPath, "..") {
 			continue
 		}
-		if rwDev.encrypted {
-			return true
+		if len(rwDev.mountPath) > len(parentPath) {
+			parentPath = rwDev.mountPath
+			encrypted = rwDev.encrypted
 		}
 	}
-	return false
+	return encrypted
 }
