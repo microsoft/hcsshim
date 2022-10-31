@@ -5,6 +5,7 @@ package runhcs
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -36,7 +37,9 @@ func getCommandPath() string {
 	pathi := runhcsPath.Load()
 	if pathi == nil {
 		path, err := exec.LookPath(command)
-		if err != nil {
+		// In golang 1.19+, if the path returned by LookPath is relative to the
+		// current path, exec.ErrDot is also returned. See https://pkg.go.dev/os/exec#LookPath.
+		if err != nil && !errors.Is(err, exec.ErrDot) {
 			// LookPath only finds current directory matches based on the
 			// callers current directory but the caller is not likely in the
 			// same directory as the containerd executables. Instead match the
