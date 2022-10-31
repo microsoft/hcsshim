@@ -20,6 +20,16 @@ const (
 	HeaderLabelFeed   int64 = 259
 )
 
+func pem2der(chainPem []byte) []byte {
+	block, rest := pem.Decode(chainPem)
+	var r []byte = block.Bytes
+	for rest != nil && len(rest) != 0 {
+		r = append(r, block.Bytes...)
+		block, rest = pem.Decode(rest)
+	}
+	return r
+}
+
 func CreateCoseSign1(payloadBlob []byte, issuer string, feed string, contentType string, chainPem []byte, keyPem []byte, saltType string, algo cose.Algorithm, verbose bool) ([]byte, error) {
 	var err error
 
@@ -32,38 +42,39 @@ func CreateCoseSign1(payloadBlob []byte, issuer string, feed string, contentType
 	_ = remaining
 	var keyBytes = keyDer.Bytes
 
-	signingKey, err = x509.ParsePKCS8PrivateKey(keyBytes)
+	signingKey, err = x509.ParseECPrivateKey(keyBytes)
 	if err == nil {
 		if verbose {
-			log.Printf("parsed as PKCS8 private key %q\n", signingKey)
+			log.Printf("parsed EC signing (private) key %q\n", signingKey)
 		}
 	} else {
-		signingKey, err = x509.ParsePKCS1PrivateKey(keyBytes)
+		signingKey, err = x509.ParsePKCS8PrivateKey(keyBytes)
 		if err == nil {
 			if verbose {
-				log.Printf("parsed as PKCS1 private key %q\n", signingKey)
+				log.Printf("parsed PKCS8 signing (private) key %q\n", signingKey)
 			}
 		} else {
-			if verbose {
-				log.Print("Error = " + err.Error())
+			signingKey, err = x509.ParsePKCS1PrivateKey(keyBytes)
+			if err == nil {
+				if verbose {
+					log.Printf("parsed PKCS1 signing (private) key %q\n", signingKey)
+				}
+			} else {
+				if verbose {
+					log.Print("Error = " + err.Error())
+				}
+				return result, err
 			}
-			return result, err
 		}
 	}
 
-	var chainDer *pem.Block
-	chainDer, remaining = pem.Decode(chainPem)
-	_ = remaining
-	var chainBytes = chainDer.Bytes
-	var chainKey any
-
-	var chainCert *x509.Certificate
-	chainCert, err = x509.ParseCertificate(chainBytes)
+	var chainCerts []*x509.Certificate
+	chainDER := pem2der(chainPem)
+	chainCerts, err = x509.ParseCertificates(chainDER)
 	if err == nil {
 		if verbose {
-			log.Printf("parsed as cert %v\n", *chainCert)
+			log.Printf("parsed cert chain for leaf: %v\n", *chainCerts[0])
 		}
-		chainKey = chainCert.PublicKey
 	} else {
 		if verbose {
 			log.Print("cert parsing failed - " + err.Error())
@@ -71,7 +82,6 @@ func CreateCoseSign1(payloadBlob []byte, issuer string, feed string, contentType
 		return result, err
 	}
 
-	_ = chainKey
 	_ = remaining
 
 	var saltReader io.Reader
@@ -100,7 +110,7 @@ func CreateCoseSign1(payloadBlob []byte, issuer string, feed string, contentType
 		Protected: cose.ProtectedHeader{
 			cose.HeaderLabelAlgorithm:   algo,
 			cose.HeaderLabelContentType: contentType,
-			cose.HeaderLabelX5Chain:     chainBytes,
+			cose.HeaderLabelX5Chain:     chainPem,
 		},
 	}
 

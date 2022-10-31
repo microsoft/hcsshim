@@ -150,7 +150,6 @@ func checkDIDvsChain(did string, unpacked cosesign1.UnpackedCoseSign1) (bool, er
 	if did != unpacked.Pubkey {
 		return false, fmt.Errorf("InjectFragment failed chain (leaf key) %s did not match issuer DID %s", unpacked.Pubkey, did)
 	}
-	// TODO - call the resolver
 	didDoc, err := didx509resolver.Resolve(unpacked.Pubcert, did, true)
 	_ = didDoc
 	return true, err
