@@ -5,7 +5,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"log"
-	"reflect"
 
 	"github.com/veraison/go-cose"
 )
@@ -20,17 +19,7 @@ type UnpackedCoseSign1 struct {
 	CertChain   []*x509.Certificate
 }
 
-/*
-	Create a pem of the form:
-
------BEGIN CERTIFICATE-----
-single line base64 standard encoded raw DER certificate
------END CERTIFICATE-----
-
-	Note that there are no extra line breaks added and that a string compare will need to accomodate that.
-*/
-
-func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, requireKNownAuthority bool, verbose bool) (UnpackedCoseSign1, error) {
+func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, optionalRootCAPEM []byte, requireKNownAuthority bool, verbose bool) (UnpackedCoseSign1, error) {
 	var msg cose.Sign1Message
 	err := msg.UnmarshalCBOR(raw)
 	if err != nil {
@@ -44,8 +33,8 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, requir
 		log.Printf("algo %d aka %s", algo.(cose.Algorithm), algo.(cose.Algorithm))
 	}
 
-	x5RawChain, x5RawChainPresent := protected[cose.HeaderLabelX5Chain] // The spec says this is ordered - leaf, intermediates, root. X5Bag is unordered and woould need sorting
-	if !x5RawChainPresent {
+	chainPEM, chainPresent := protected[cose.HeaderLabelX5Chain] // The spec says this is ordered - leaf, intermediates, root. X5Bag is unordered and woould need sorting
+	if !chainPresent {
 		return UnpackedCoseSign1{}, fmt.Errorf("x5Chain missing")
 	}
 
@@ -63,36 +52,18 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, requir
 
 	// The HeaderLabelX5Chain entry in the cose header may be a blob (single cert) or an array of blobs (a chain) see https://datatracker.ietf.org/doc/draft-ietf-cose-x509/08/
 
-	var x5RawChainArray []interface{}
-	var theType = reflect.TypeOf(x5RawChain)
-	if theType == reflect.TypeOf(x5RawChainArray) {
-		x5RawChainArray = x5RawChain.([]interface{}) // if it is an array already use it directly
-	} else {
-		x5RawChainArray = append(x5RawChainArray, x5RawChain) // if it is just a single cert then append it to the empty array
-	}
-
-	var x5Array []*x509.Certificate
-
-	// extract x509.Certificates from the blobs in the COSE_Sign1 header
-	for which, der := range x5RawChainArray {
-		var raw = der.([]byte)
-		var x509cert, err = x509.ParseCertificate(raw)
-		if err != nil {
-			if verbose {
-				log.Print("Parse certificate failed: " + err.Error())
-			}
-			return UnpackedCoseSign1{}, err
-		}
+	chainDER := pem2der(chainPEM.([]byte))
+	chain, err := x509.ParseCertificates(chainDER)
+	if err != nil {
 		if verbose {
-			desc := fmt.Sprintf("chain %d", which)
-			logCert(desc, x509cert)
+			log.Print("Parse certificate failed: " + err.Error())
 		}
-		x5Array = append(x5Array, x509cert)
+		return UnpackedCoseSign1{}, err
 	}
 
-	chainLen := len(x5Array)
 
-	// A reasonable chain will have 2-5 elements
+	// A reasonable chain will have 2-100 elements
+	chainLen := len(chain)
 	if chainLen > 100 || chainLen < 1 {
 		return UnpackedCoseSign1{}, fmt.Errorf("unreasonable number of certs (%d) in COSE_Sign1 document", chainLen)
 	}
@@ -104,11 +75,12 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, requir
 	var leafCert *x509.Certificate // x509 leaf cert
 	var rootCert *x509.Certificate // x509 root cert
 
-	for which, cert := range x5Array {
+	for which, cert := range chain {
 		if which == 0 {
 			leafCert = cert
 		} else if which == chainLen-1 {
 			// is this the root cert? (NOTE may be absent as per https://microsoft.sharepoint.com/teams/prss/Codesign/SitePages/COSESignOperationsReference.aspx TBC)
+			// cwinter: I think intermediates may be absent, but the root should always be present.
 			rootCert = cert
 			rootCerts.AddCert(rootCert)
 		} else {
@@ -129,6 +101,10 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, requir
 
 	_, err = leafCert.Verify(opts)
 
+	if err != nil {
+		return UnpackedCoseSign1{}, fmt.Errorf("certificate chain verification failed")
+	}
+
 	var leafCertBase64 = x509ToBase64(leafCert) // blob of the leaf x509 cert reformatted into pem (base64) style as per the fragment policy rules expect
 	var leafPubKey = leafCert.PublicKey
 	var leafPubKeyBase64 = keyToBase64(leafPubKey)
@@ -140,12 +116,12 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, requir
 		Pubkey:      leafPubKeyBase64,
 		ContentType: msg.Headers.Protected[cose.HeaderLabelContentType].(string),
 		Payload:     msg.Payload,
-		CertChain:   x5Array,
+		CertChain:   chain,
 	}
 
 	if err != nil {
 		if verbose {
-			log.Print("leafCert.Verity failed: " + err.Error())
+			log.Print("leafCert.Verify failed: " + err.Error())
 		}
 		// self signed gives "x509: certificate signed by unknown authority"
 		if requireKNownAuthority {

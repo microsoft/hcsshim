@@ -10,16 +10,21 @@ import (
 	"github.com/veraison/go-cose"
 )
 
-func checkCoseSign1(inputFilename string, optionalPubKeyFilename string, requireKnownAuthority bool, verbose bool) (cosesign1.UnpackedCoseSign1, error) {
+func checkCoseSign1(inputFilename string, optionalPubKeyFilename string, rootCAFile string, requireKnownAuthority bool, verbose bool) (cosesign1.UnpackedCoseSign1, error) {
 	coseBlob := cosesign1.ReadBlob(inputFilename)
 	var optionalPubKeyPEM []byte
 	if optionalPubKeyFilename != "" {
 		optionalPubKeyPEM = cosesign1.ReadBlob(optionalPubKeyFilename)
 	}
 
+	var optionalRootCAPEM []byte
+	if rootCAFile != "" {
+		optionalRootCAPEM = cosesign1.ReadBlob(rootCAFile)
+	}
+
 	var unpacked cosesign1.UnpackedCoseSign1
 	var err error
-	unpacked, err = cosesign1.UnpackAndValidateCOSE1CertChain(coseBlob, optionalPubKeyPEM, requireKnownAuthority, verbose)
+	unpacked, err = cosesign1.UnpackAndValidateCOSE1CertChain(coseBlob, optionalPubKeyPEM, optionalRootCAPEM, requireKnownAuthority, verbose)
 	if err != nil {
 		log.Print("checkCoseSign1 failed - " + err.Error())
 	} else {
@@ -52,6 +57,7 @@ func main() {
 	var contentType string
 	var chainFilename string
 	var keyFilename string
+	var rootCAFile string
 	var outputFilename string
 	var outputCertFilename string
 	var outputKeyFilename string
@@ -67,7 +73,7 @@ func main() {
 
 	createCmd.StringVar(&payloadFilename, "claims", "fragment.rego", "filename of payload")
 	createCmd.StringVar(&contentType, "content-type", "application/unknown+json", "content type, eg appliation/json")
-	createCmd.StringVar(&chainFilename, "cert", "pubcert.pem", "key or cert file to use (pem)")
+	createCmd.StringVar(&chainFilename, "chain", "chain.pem", "key or cert file to use (pem)")
 	createCmd.StringVar(&keyFilename, "key", "key.pem", "key to sign with (private key of the leaf of the chain)")
 	createCmd.StringVar(&outputFilename, "out", "out.cose", "output file")
 	createCmd.StringVar(&saltType, "salt", "rand", "rand or zero")
@@ -80,12 +86,14 @@ func main() {
 
 	checkCmd.StringVar(&inputFilename, "in", "input.cose", "input file")
 	checkCmd.StringVar(&keyFilename, "pub", "", "input public key (PEM)")
+	checkCmd.StringVar(&rootCAFile, "root", "", "(trusted) root CA certificate filename (PEM)")
 	checkCmd.BoolVar(&requireKNownAuthority, "requireKNownAuthority", false, "false => allow chain validation to fail")
 	checkCmd.BoolVar(&verbose, "verbose", false, "verbose output")
 
 	printCmd := flag.NewFlagSet("print", flag.ExitOnError)
 
 	printCmd.StringVar(&inputFilename, "in", "input.cose", "input file")
+	printCmd.StringVar(&rootCAFile, "root", "", "(trusted) root CA certificate filename (PEM)")
 
 	leafCmd := flag.NewFlagSet("leaf", flag.ExitOnError)
 
@@ -123,7 +131,7 @@ func main() {
 		case "check":
 			err := checkCmd.Parse(os.Args[2:])
 			if err == nil {
-				_, err := checkCoseSign1(inputFilename, keyFilename, requireKNownAuthority, verbose)
+				_, err := checkCoseSign1(inputFilename, keyFilename, rootCAFile, requireKNownAuthority, verbose)
 				if err != nil {
 					log.Print("failed check: " + err.Error())
 				}
@@ -134,7 +142,7 @@ func main() {
 		case "print":
 			err := printCmd.Parse(os.Args[2:])
 			if err == nil {
-				_, err := checkCoseSign1(inputFilename, "", false, true)
+				_, err := checkCoseSign1(inputFilename, "", rootCAFile, false, true)
 				if err != nil {
 					log.Print("failed print: " + err.Error())
 				}
@@ -145,7 +153,7 @@ func main() {
 		case "leaf":
 			err := leafCmd.Parse(os.Args[2:])
 			if err == nil {
-				unpacked, err := checkCoseSign1(inputFilename, "", false, verbose)
+				unpacked, err := checkCoseSign1(inputFilename, "", rootCAFile, false, verbose)
 				if err == nil {
 					err = cosesign1.WriteString(outputKeyFilename, unpacked.Pubkey)
 					if err != nil {
