@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -112,14 +113,15 @@ func TestMain(m *testing.M) {
 	e := m.Run()
 
 	// close any uVMs that escaped
-	cmdStr := ` foreach ($vm in Get-ComputeProcess -Owner '` + hcsOwner +
-		`') { Write-Output "uVM $($vm.Id) was left running" ; Stop-ComputeProcess -Force -Id $vm.Id } `
-	cmd := exec.Command("powershell", "-NoLogo", " -NonInteractive", "-Command", cmdStr)
+	cmdStr := `foreach ($vm in Get-ComputeProcess -Owner '` + hcsOwner + `') ` +
+		`{ Write-Output $vm.Id ; Stop-ComputeProcess -Force -Id $vm.Id }`
+	cmd := exec.Command("powershell.exe", "-NoLogo", " -NonInteractive", "-Command", cmdStr)
 	o, err := cmd.CombinedOutput()
+	s := string(o)
 	if err != nil {
-		logrus.Warningf("could not call %q to clean up remaining uVMs: %v", cmdStr, err)
+		logrus.Warningf("failed to cleanup remaining uVMs with command %q: %s: %v", cmdStr, s, err)
 	} else if len(o) > 0 {
-		logrus.Warningf(string(o))
+		logrus.Warningf("cleaned up left over uVMs: %s", strings.Split(s, "\r\n"))
 	}
 
 	os.Exit(e)
