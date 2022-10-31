@@ -20,7 +20,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v2
         with:
-          version: v1.42.1 # Has fixes for stylecheck configuration https://github.com/golangci/golangci-lint/pull/2017/files
+          version: v1.48
           args: --timeout=5m -v
           skip-go-installation: true
           only-new-issues: true
