@@ -7,10 +7,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
-	"github.com/Microsoft/hcsshim/internal/uvm"
-	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
 	"github.com/opencontainers/runtime-spec/specs-go"
+
+	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
+	"github.com/Microsoft/hcsshim/pkg/ctrdtaskapi"
+
+	"github.com/Microsoft/hcsshim/test/internal/uvm"
 )
 
 func Test_LCOW_Update_Resources(t *testing.T) {
@@ -47,19 +49,9 @@ func Test_LCOW_Update_Resources(t *testing.T) {
 	} {
 		t.Run(config.name, func(t *testing.T) {
 			ctx := context.Background()
-			opts := uvm.NewDefaultOptionsLCOW(t.Name(), t.Name())
-			vm, err := uvm.CreateLCOW(ctx, opts)
-			if err != nil {
-				t.Fatalf("failed to create LCOW UVM: %s", err)
-			}
-			if err := vm.Start(ctx); err != nil {
-				t.Fatalf("failed to start LCOW UVM: %s", err)
-			}
-			t.Cleanup(func() {
-				if err := vm.Close(); err != nil {
-					t.Log(err)
-				}
-			})
+			vm := uvm.CreateLCOW(ctx, t, defaultLCOWOptions(t))
+			cleanup := uvm.Start(ctx, t, vm)
+			defer cleanup()
 			if err := vm.Update(ctx, config.resource, nil); err != nil {
 				if config.valid {
 					t.Fatalf("failed to update LCOW UVM constraints: %s", err)

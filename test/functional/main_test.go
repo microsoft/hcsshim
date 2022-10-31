@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,6 +31,7 @@ import (
 	testctrd "github.com/Microsoft/hcsshim/test/internal/containerd"
 	testflag "github.com/Microsoft/hcsshim/test/internal/flag"
 	"github.com/Microsoft/hcsshim/test/internal/require"
+	testuvm "github.com/Microsoft/hcsshim/test/internal/uvm"
 )
 
 // owner field for uVMs.
@@ -70,9 +72,8 @@ var (
 	flagFeatures            = testflag.NewFeatureFlag(allFeatures)
 	flagContainerdAddress   = flag.String("ctr-address", "tcp://127.0.0.1:2376", "`address` for containerd's GRPC server")
 	flagContainerdNamespace = flag.String("ctr-namespace", "k8s.io", "containerd `namespace`")
-	flagLinuxBootFilesPath  = flag.String("linux-bootfiles",
-		`C:\\ContainerPlat\\LinuxBootFiles`,
-		"`path` to LCOW UVM boot files (rootfs.vhd, initrd.img, kernel, and vmlinux)")
+	flagLinuxBootFilesPath  = flag.String("linux-bootfiles", "",
+		"override default `path` for LCOW uVM boot files (rootfs.vhd, initrd.img, kernel, and vmlinux)")
 )
 
 func init() {
@@ -102,7 +103,7 @@ func TestMain(m *testing.M) {
 	flag.Parse()
 
 	lvl := logrus.WarnLevel
-	if vf := flag.Lookup("test.v"); debug || (vf != nil && vf.Value.String() == strconv.FormatBool(true)) {
+	if debug {
 		lvl = logrus.DebugLevel
 	}
 	logrus.SetLevel(lvl)
@@ -112,14 +113,15 @@ func TestMain(m *testing.M) {
 	e := m.Run()
 
 	// close any uVMs that escaped
-	cmdStr := ` foreach ($vm in Get-ComputeProcess -Owner '` + hcsOwner +
-		`') { Write-Output "uVM $($vm.Id) was left running" ; Stop-ComputeProcess -Force -Id $vm.Id } `
-	cmd := exec.Command("powershell", "-NoLogo", " -NonInteractive", "-Command", cmdStr)
+	cmdStr := `foreach ($vm in Get-ComputeProcess -Owner '` + hcsOwner + `') ` +
+		`{ Write-Output $vm.Id ; Stop-ComputeProcess -Force -Id $vm.Id }`
+	cmd := exec.Command("powershell.exe", "-NoLogo", " -NonInteractive", "-Command", cmdStr)
 	o, err := cmd.CombinedOutput()
+	s := string(o)
 	if err != nil {
-		logrus.Warningf("could not call %q to clean up remaining uVMs: %v", cmdStr, err)
+		logrus.Warningf("failed to cleanup remaining uVMs with command %q: %s: %v", cmdStr, s, err)
 	} else if len(o) > 0 {
-		logrus.Warningf(string(o))
+		logrus.Warningf("cleaned up left over uVMs: %s", strings.Split(s, "\r\n"))
 	}
 
 	os.Exit(e)
@@ -158,17 +160,17 @@ func newContainerdClient(ctx context.Context, tb testing.TB) (context.Context, c
 
 func defaultLCOWOptions(tb testing.TB) *uvm.OptionsLCOW {
 	tb.Helper()
-	opts := uvm.NewDefaultOptionsLCOW(cleanName(tb.Name()), "")
-	opts.BootFilesPath = *flagLinuxBootFilesPath
-
+	opts := testuvm.DefaultLCOWOptions(tb, cleanName(tb.Name()), hcsOwner)
+	if p := *flagLinuxBootFilesPath; p != "" {
+		opts.BootFilesPath = p
+	}
 	return opts
 }
 
 //nolint:deadcode,unused // will be used when WCOW tests are updated
 func defaultWCOWOptions(tb testing.TB) *uvm.OptionsWCOW {
 	tb.Helper()
-	opts := uvm.NewDefaultOptionsWCOW(cleanName(tb.Name()), "")
-
+	opts := uvm.NewDefaultOptionsWCOW(cleanName(tb.Name()), hcsOwner)
 	return opts
 }
 
