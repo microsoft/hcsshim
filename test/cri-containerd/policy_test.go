@@ -836,7 +836,7 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Dropping(t *testing.T) {
 		{
 			name:    "Dropped",
 			policy:  alpineSecurityPolicy(t, "rego", true, securitypolicy.WithCommand(alpineCmd)),
-			allowed: false,
+			allowed: true,
 		},
 		{
 			name:    "NotDropped",
@@ -870,16 +870,29 @@ func Test_RunContainer_WithPolicy_And_SecurityPolicyEnv_Dropping(t *testing.T) {
 
 			response, err := client.CreateContainer(ctx, containerRequest)
 			if err != nil {
-				if config.allowed {
-					t.Fatalf("failed CreateContainer in sandbox: %s, with: %v", containerRequest.PodSandboxId, err)
-				}
-				return
+				t.Fatalf("error creating container: %v", err)
 			}
 
 			containerID := response.ContainerId
 			defer removeContainer(t, client, ctx, containerID)
 
-			startContainer(t, client, ctx, containerID)
+			_, err = client.StartContainer(
+				ctx, &runtime.StartContainerRequest{
+					ContainerId: containerID,
+				},
+			)
+
+			if config.allowed {
+				if err != nil {
+					t.Fatalf("failed EnforceCreateContainer in sandbox: %s, with: %v", containerRequest.PodSandboxId, err)
+				}
+			} else {
+				if err == nil {
+					t.Fatalf("expected EnforceCreateContainer to be denied")
+				}
+				return
+			}
+
 			requireContainerState(ctx, t, client, containerID, runtime.ContainerState_CONTAINER_RUNNING)
 
 			// no need to stop the container since it'll exit by itself
