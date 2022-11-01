@@ -598,8 +598,6 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 			allowStdioAccess := h.containerIDToStdioAccess[c.id]
 			h.containerIDToStdioAccessMutex.Unlock()
 
-			allowStdioAccess = false
-
 			if !allowStdioAccess {
 				conSettings.StdIn = nil
 				conSettings.StdOut = nil
