@@ -595,7 +595,7 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 			// We've already done policy enforcement for creating a container so
 			// there's no policy enforcement to do for starting
 			h.containerIDToStdioAccessMutex.Lock()
-			allowStdioAccess := h.containerIDToStdioAccess[c.id]
+			allowStdioAccess := h.containerIDToStdioAccess[containerID]
 			h.containerIDToStdioAccessMutex.Unlock()
 
 			if !allowStdioAccess {
