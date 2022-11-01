@@ -54,7 +54,6 @@ type module struct {
 	feed      string
 	issuer    string
 	code      string
-	sideload  bool
 }
 
 // RegoEnforcer is a stub implementation of a security policy, which will be
@@ -92,6 +91,40 @@ func (sp SecurityPolicy) toInternal() (*securityPolicyInternal, error) {
 	return policy, nil
 }
 
+func toStringSet(items []string) stringSet {
+	s := make(stringSet)
+	for _, item := range items {
+		s.add(item)
+	}
+
+	return s
+}
+
+func (s stringSet) toArray() []string {
+	a := make([]string, 0, len(s))
+	for item := range s {
+		a = append(a, item)
+	}
+
+	return a
+}
+
+func (a stringSet) intersect(b stringSet) stringSet {
+	s := make(stringSet)
+	for item := range a {
+		if b.contains(item) {
+			s.add(item)
+		}
+	}
+
+	return s
+}
+
+type policyResults map[string]interface{}
+type metadataObject map[string]interface{}
+type metadataStore map[string]metadataObject
+type inputData map[string]interface{}
+
 func createRegoEnforcer(base64EncodedPolicy string,
 	defaultMounts []oci.Mount,
 	privilegedMounts []oci.Mount,
@@ -123,7 +156,7 @@ func createRegoEnforcer(base64EncodedPolicy string,
 			return createOpenDoorEnforcer(base64EncodedPolicy, defaultMounts, privilegedMounts)
 		}
 
-		code, err = marshalRego(securityPolicy.AllowAll, containers, []ExternalProcessConfig{}, []FragmentConfig{}, true, true, true)
+		code, err = marshalRego(securityPolicy.AllowAll, containers, []ExternalProcessConfig{}, []FragmentConfig{}, true, true, true, false)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling the policy to Rego: %w", err)
 		}
@@ -148,7 +181,7 @@ func newRegoPolicy(code string, defaultMounts []oci.Mount, privilegedMounts []oc
 	privilegedMountData := make([]interface{}, 0, len(privilegedMounts))
 	policy.data = map[string]interface{}{
 		// for more information on metadata, see the `updateMetadata` method
-		"metadata":         map[string]map[string]interface{}{},
+		"metadata":         make(metadataStore),
 		"defaultMounts":    appendMountData(defaultMountData, defaultMounts),
 		"privilegedMounts": appendMountData(privilegedMountData, privilegedMounts),
 		"sandboxPrefix":    guestpath.SandboxMountPrefix,
@@ -196,7 +229,7 @@ func (policy *regoEnforcer) compile() error {
 	}
 }
 
-func (policy *regoEnforcer) allowed(enforcementPoint string, results map[string]interface{}) (bool, error) {
+func (policy *regoEnforcer) allowed(enforcementPoint string, results policyResults) (bool, error) {
 	if len(results) == 0 {
 		info, err := policy.queryEnforcementPoint(enforcementPoint)
 		if err != nil {
@@ -224,38 +257,40 @@ type enforcementPointInfo struct {
 	allowedByDefault         bool
 }
 
-func (policy *regoEnforcer) queryEnforcementPoint(enforcementPoint string) (enforcementPointInfo, error) {
-	input := map[string]interface{}{"name": enforcementPoint}
+func (policy *regoEnforcer) queryEnforcementPoint(enforcementPoint string) (*enforcementPointInfo, error) {
+	input := inputData{"name": enforcementPoint}
 	input["rule"] = enforcementPoint
 	query := rego.New(
 		rego.Query("data.framework.enforcement_point_info"),
 		rego.Input(input),
 		rego.Compiler(policy.compiledModules))
 
-	var info enforcementPointInfo
-
 	ctx := context.Background()
 	resultSet, err := query.Eval(ctx)
 	if err != nil {
-		return info, err
+		return nil, err
 	}
 
-	results := resultSet[0].Expressions[0].Value.(map[string]interface{})
+	results, ok := resultSet[0].Expressions[0].Value.(map[string]interface{})
+	if !ok {
+		return nil, errors.New("unable to load results object from Rego query")
+	}
 
 	if results["unknown"].(bool) {
-		return info, fmt.Errorf("enforcement point rule %s does not exist", enforcementPoint)
+		return nil, fmt.Errorf("enforcement point rule %s does not exist", enforcementPoint)
 	}
 
 	if results["invalid"].(bool) {
-		return info, fmt.Errorf("enforcement point rule %s is invalid", enforcementPoint)
+		return nil, fmt.Errorf("enforcement point rule %s is invalid", enforcementPoint)
 	}
 
-	info.availableByPolicyVersion = results["available"].(bool)
-	info.allowedByDefault = results["allowed"].(bool)
-	return info, nil
+	return &enforcementPointInfo{
+		availableByPolicyVersion: results["available"].(bool),
+		allowedByDefault:         results["allowed"].(bool),
+	}, nil
 }
 
-func (policy *regoEnforcer) query(enforcementPoint string, input map[string]interface{}) (map[string]interface{}, error) {
+func (policy *regoEnforcer) query(enforcementPoint string, input inputData) (policyResults, error) {
 	store := inmem.NewFromObject(policy.data)
 
 	input["name"] = enforcementPoint
@@ -292,14 +327,14 @@ func (policy *regoEnforcer) query(enforcementPoint string, input map[string]inte
 	}
 
 	if len(resultSet) == 0 {
-		return map[string]interface{}{}, nil
+		return make(policyResults), nil
 	}
 
 	results, ok := resultSet[0].Expressions[0].Value.(map[string]interface{})
 	if !ok {
 		return nil, errors.New("unable to load results object from Rego query")
 	}
-	return results, nil
+	return policyResults(results), nil
 }
 
 /**
@@ -446,7 +481,6 @@ type metadataOperation struct {
 
 func newMetadataOperation(operation interface{}) (*metadataOperation, error) {
 	data, ok := operation.(map[string]interface{})
-	var metadataOp metadataOperation
 	if !ok {
 		return nil, errors.New("unable to load metadata object")
 	}
@@ -454,6 +488,8 @@ func newMetadataOperation(operation interface{}) (*metadataOperation, error) {
 	if !ok {
 		return nil, errors.New("unable to load metadata action")
 	}
+
+	var metadataOp metadataOperation
 	metadataOp.action = metadataAction(action)
 	metadataOp.key, ok = data["key"].(string)
 	if !ok {
@@ -473,10 +509,11 @@ func newMetadataOperation(operation interface{}) (*metadataOperation, error) {
 var reservedResultKeys = map[string]struct{}{
 	"allowed":    {},
 	"add_module": {},
+	"env_list":   {},
 }
 
-func (policy *regoEnforcer) getMetadata(name string) (map[string]interface{}, error) {
-	metadata := policy.data["metadata"].(map[string]map[string]interface{})
+func (policy *regoEnforcer) getMetadata(name string) (metadataObject, error) {
+	metadata := policy.data["metadata"].(metadataStore)
 	if store, ok := metadata[name]; ok {
 		return store, nil
 	}
@@ -484,12 +521,12 @@ func (policy *regoEnforcer) getMetadata(name string) (map[string]interface{}, er
 	return nil, fmt.Errorf("unable to retrieve metadata store for %s", name)
 }
 
-func (policy *regoEnforcer) updateMetadata(results map[string]interface{}) error {
+func (policy *regoEnforcer) updateMetadata(results policyResults) error {
 	policy.mutex.Lock()
 	defer policy.mutex.Unlock()
 
 	// this is the top-level data namespace for metadata
-	metadata := policy.data["metadata"].(map[string]map[string]interface{})
+	metadata := policy.data["metadata"].(metadataStore)
 	for name, value := range results {
 		if _, ok := reservedResultKeys[name]; ok {
 			continue
@@ -497,7 +534,7 @@ func (policy *regoEnforcer) updateMetadata(results map[string]interface{}) error
 
 		if _, ok := metadata[name]; !ok {
 			// this adds the metadata object if it does not already exist
-			metadata[name] = make(map[string]interface{})
+			metadata[name] = make(metadataObject)
 		}
 
 		op, err := newMetadataOperation(value)
@@ -531,36 +568,28 @@ func (policy *regoEnforcer) updateMetadata(results map[string]interface{}) error
 	return nil
 }
 
-func (policy *regoEnforcer) enforce(enforcementPoint string, input map[string]interface{}) error {
+func (policy *regoEnforcer) enforce(enforcementPoint string, input inputData) (policyResults, error) {
 	results, err := policy.query(enforcementPoint, input)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	allowed, err := policy.allowed(enforcementPoint, results)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if allowed {
-		if enforcementPoint == "load_fragment" {
-			if addModule, ok := results["add_module"].(bool); ok {
-				if addModule {
-					id := moduleID(input["issuer"].(string), input["feed"].(string))
-					policy.modules[id].sideload = true
-				}
-			}
-		}
-
 		err = policy.updateMetadata(results)
-		if err != nil {
-			return fmt.Errorf("unable to update metadata: %w", err)
-		}
 	} else {
 		err = policy.getReasonNotAllowed(enforcementPoint, input)
 	}
 
-	return err
+	if err != nil {
+		return nil, err
+	}
+
+	return results, nil
 }
 
 func errorString(errors interface{}) string {
@@ -572,7 +601,7 @@ func errorString(errors interface{}) string {
 	return strings.Join(output, ",")
 }
 
-func (policy *regoEnforcer) getReasonNotAllowed(enforcementPoint string, input map[string]interface{}) error {
+func (policy *regoEnforcer) getReasonNotAllowed(enforcementPoint string, input inputData) error {
 	inputJSON, err := json.Marshal(input)
 	if err != nil {
 		return fmt.Errorf("unable to marshal the Rego input data: %w", err)
@@ -592,30 +621,33 @@ func (policy *regoEnforcer) getReasonNotAllowed(enforcementPoint string, input m
 }
 
 func (policy *regoEnforcer) EnforceDeviceMountPolicy(target string, deviceHash string) error {
-	input := map[string]interface{}{
+	input := inputData{
 		"target":     target,
 		"deviceHash": deviceHash,
 	}
 
-	return policy.enforce("mount_device", input)
+	_, err := policy.enforce("mount_device", input)
+	return err
 }
 
 func (policy *regoEnforcer) EnforceOverlayMountPolicy(containerID string, layerPaths []string, target string) error {
-	input := map[string]interface{}{
+	input := inputData{
 		"containerID": containerID,
 		"layerPaths":  layerPaths,
 		"target":      target,
 	}
 
-	return policy.enforce("mount_overlay", input)
+	_, err := policy.enforce("mount_overlay", input)
+	return err
 }
 
 func (policy *regoEnforcer) EnforceOverlayUnmountPolicy(target string) error {
-	input := map[string]interface{}{
+	input := inputData{
 		"unmountTarget": target,
 	}
 
-	return policy.enforce("unmount_overlay", input)
+	_, err := policy.enforce("unmount_overlay", input)
+	return err
 }
 
 // Rego does not have a way to determine the OS path separator
@@ -628,6 +660,33 @@ func hugePagesMountsDir(sandboxID string) string {
 	return fmt.Sprintf("%s%c", spec.HugePagesMountsDir(sandboxID), os.PathSeparator)
 }
 
+func getEnvsToKeep(envList []string, results policyResults) ([]string, error) {
+	value, ok := results["env_list"]
+	if !ok {
+		// policy did not return an 'env_list'. This is interpreted
+		// as "proceed with provided env list".
+		return envList, nil
+	}
+
+	envsAsInterfaces, ok := value.([]interface{})
+
+	if !ok {
+		return nil, fmt.Errorf("policy returned incorrect type for 'env_list', expected []interface{}, received %T", value)
+	}
+
+	keepSet := make(stringSet)
+	for _, envAsInterface := range envsAsInterfaces {
+		if env, ok := envAsInterface.(string); ok {
+			keepSet.add(env)
+		} else {
+			return nil, fmt.Errorf("members of env_list from policy must be strings, received %T", envAsInterface)
+		}
+	}
+
+	keepSet = keepSet.intersect(toStringSet(envList))
+	return keepSet.toArray(), nil
+}
+
 func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 	sandboxID string,
 	containerID string,
@@ -635,8 +694,8 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 	envList []string,
 	workingDir string,
 	mounts []oci.Mount,
-) error {
-	input := map[string]interface{}{
+) (toKeep EnvList, err error) {
+	input := inputData{
 		"containerID":  containerID,
 		"argList":      argList,
 		"envList":      envList,
@@ -646,20 +705,31 @@ func (policy *regoEnforcer) EnforceCreateContainerPolicy(
 		"mounts":       appendMountData([]interface{}{}, mounts),
 	}
 
-	return policy.enforce("create_container", input)
+	results, err := policy.enforce("create_container", input)
+	if err != nil {
+		return nil, err
+	}
+
+	toKeep, err = getEnvsToKeep(envList, results)
+	if err != nil {
+		return nil, err
+	}
+
+	return toKeep, nil
 }
 
 func (policy *regoEnforcer) EnforceDeviceUnmountPolicy(unmountTarget string) error {
-	input := map[string]interface{}{
+	input := inputData{
 		"unmountTarget": unmountTarget,
 	}
 
-	return policy.enforce("unmount_device", input)
+	_, err := policy.enforce("unmount_device", input)
+	return err
 }
 
 func appendMountData(mountData []interface{}, mounts []oci.Mount) []interface{} {
 	for _, mount := range mounts {
-		mountData = append(mountData, map[string]interface{}{
+		mountData = append(mountData, inputData{
 			"destination": mount.Destination,
 			"source":      mount.Source,
 			"options":     mount.Options,
@@ -683,81 +753,107 @@ func (policy *regoEnforcer) EncodedSecurityPolicy() string {
 	return policy.base64policy
 }
 
-func (policy *regoEnforcer) EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string) error {
-	input := map[string]interface{}{
+func (policy *regoEnforcer) EnforceExecInContainerPolicy(containerID string, argList []string, envList []string, workingDir string) (toKeep EnvList, err error) {
+	input := inputData{
 		"containerID": containerID,
 		"argList":     argList,
 		"envList":     envList,
 		"workingDir":  workingDir,
 	}
 
-	return policy.enforce("exec_in_container", input)
+	results, err := policy.enforce("exec_in_container", input)
+	if err != nil {
+		return nil, err
+	}
+
+	toKeep, err = getEnvsToKeep(envList, results)
+	if err != nil {
+		return nil, err
+	}
+
+	return toKeep, nil
 }
 
-func (policy *regoEnforcer) EnforceExecExternalProcessPolicy(argList []string, envList []string, workingDir string) error {
-	input := map[string]interface{}{
+func (policy *regoEnforcer) EnforceExecExternalProcessPolicy(argList []string, envList []string, workingDir string) (toKeep EnvList, err error) {
+	input := inputData{
 		"argList":    argList,
 		"envList":    envList,
 		"workingDir": workingDir,
 	}
 
-	return policy.enforce("exec_external", input)
+	results, err := policy.enforce("exec_external", input)
+	if err != nil {
+		return nil, err
+	}
+
+	toKeep, err = getEnvsToKeep(envList, results)
+	if err != nil {
+		return nil, err
+	}
+
+	return toKeep, nil
 }
 
 func (policy *regoEnforcer) EnforceShutdownContainerPolicy(containerID string) error {
-	input := map[string]interface{}{
+	input := inputData{
 		"containerID": containerID,
 	}
 
-	return policy.enforce("shutdown_container", input)
+	_, err := policy.enforce("shutdown_container", input)
+	return err
 }
 
 func (policy *regoEnforcer) EnforceSignalContainerProcessPolicy(containerID string, signal syscall.Signal, isInitProcess bool, startupArgList []string) error {
-	input := map[string]interface{}{
+	input := inputData{
 		"containerID":   containerID,
 		"signal":        signal,
 		"isInitProcess": isInitProcess,
 		"argList":       startupArgList,
 	}
 
-	return policy.enforce("signal_container_process", input)
+	_, err := policy.enforce("signal_container_process", input)
+	return err
 }
 
 func (policy *regoEnforcer) EnforcePlan9MountPolicy(target string) error {
 	mountPathPrefix := strings.Replace(guestpath.LCOWMountPathPrefixFmt, "%d", "[0-9]+", 1)
-	input := map[string]interface{}{
+	input := inputData{
 		"rootPrefix":      guestpath.LCOWRootPrefixInUVM,
 		"mountPathPrefix": mountPathPrefix,
 		"target":          target,
 	}
 
-	return policy.enforce("plan9_mount", input)
+	_, err := policy.enforce("plan9_mount", input)
+	return err
 }
 
 func (policy *regoEnforcer) EnforcePlan9UnmountPolicy(target string) error {
-	input := map[string]interface{}{
+	input := inputData{
 		"target": target,
 	}
 
-	return policy.enforce("plan9_unmount", input)
+	_, err := policy.enforce("plan9_unmount", input)
+	return err
 }
 
 func (policy *regoEnforcer) EnforceGetPropertiesPolicy() error {
-	input := make(map[string]interface{})
+	input := make(inputData)
 
-	return policy.enforce("get_properties", input)
+	_, err := policy.enforce("get_properties", input)
+	return err
 }
 
 func (policy *regoEnforcer) EnforceDumpStacksPolicy() error {
-	input := make(map[string]interface{})
+	input := make(inputData)
 
-	return policy.enforce("dump_stacks", input)
+	_, err := policy.enforce("dump_stacks", input)
+	return err
 }
 
 func (policy *regoEnforcer) EnforceRuntimeLoggingPolicy() error {
-	input := map[string]interface{}{}
-
-	return policy.enforce("runtime_logging", input)
+	input := make(inputData)
+	_, err := policy.enforce("runtime_logging", input)
+	return err
 }
 
 func moduleID(issuer string, feed string) string {
@@ -790,26 +886,30 @@ func (policy *regoEnforcer) LoadFragment(issuer string, feed string, rego string
 		feed:      feed,
 		code:      rego,
 		namespace: namespace,
-		sideload:  false,
 	}
 
 	policy.modules[fragment.id()] = fragment
 	policy.compiledModules = nil
 
-	input := map[string]interface{}{
+	input := inputData{
 		"issuer":    issuer,
 		"feed":      feed,
 		"namespace": namespace,
 	}
 
-	err = policy.enforce("load_fragment", input)
+	results, err := policy.enforce("load_fragment", input)
 
-	if !fragment.sideload {
-		delete(policy.modules, fragment.id())
+	removeModule := true
+	if err == nil {
+		if addModule, ok := results["add_module"].(bool); ok {
+			if addModule {
+				removeModule = false
+			}
+		}
 	}
 
-	if compileError := policy.compile(); compileError != nil {
-		return fmt.Errorf("post rule error: %v, was unable to re-compile policy: %v", err, compileError)
+	if removeModule {
+		delete(policy.modules, fragment.id())
 	}
 
 	return err

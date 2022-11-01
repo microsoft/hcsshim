@@ -8,12 +8,13 @@ import (
 
 // Internal version of SecurityPolicy
 type securityPolicyInternal struct {
-	Containers            []*securityPolicyContainer
-	ExternalProcesses     []*externalProcess
-	Fragments             []*fragment
-	AllowPropertiesAccess bool
-	AllowDumpStacks       bool
-	AllowRuntimeLogging   bool
+	Containers                       []*securityPolicyContainer
+	ExternalProcesses                []*externalProcess
+	Fragments                        []*fragment
+	AllowPropertiesAccess            bool
+	AllowDumpStacks                  bool
+	AllowRuntimeLogging              bool
+	AllowEnvironmentVariableDropping bool
 }
 
 type securityPolicyFragment struct {
@@ -31,7 +32,7 @@ func containersToInternal(containers []*Container) ([]*securityPolicyContainer, 
 		if err != nil {
 			return nil, err
 		}
-		result[i] = &cInternal
+		result[i] = cInternal
 	}
 
 	return result, nil
@@ -63,19 +64,21 @@ func newSecurityPolicyInternal(
 	fragments []FragmentConfig,
 	allowPropertiesAccess bool,
 	allowDumpStacks bool,
-	allowRuntimeLogging bool) (*securityPolicyInternal, error) {
+	allowRuntimeLogging bool,
+	allowDropEnvironmentVariables bool) (*securityPolicyInternal, error) {
 	containersInternal, err := containersToInternal(containers)
 	if err != nil {
 		return nil, err
 	}
 
 	return &securityPolicyInternal{
-		Containers:            containersInternal,
-		ExternalProcesses:     externalProcessToInternal(externalProcesses),
-		Fragments:             fragmentsToInternal(fragments),
-		AllowPropertiesAccess: allowPropertiesAccess,
-		AllowDumpStacks:       allowDumpStacks,
-		AllowRuntimeLogging:   allowRuntimeLogging,
+		Containers:                       containersInternal,
+		ExternalProcesses:                externalProcessToInternal(externalProcesses),
+		Fragments:                        fragmentsToInternal(fragments),
+		AllowPropertiesAccess:            allowPropertiesAccess,
+		AllowDumpStacks:                  allowDumpStacks,
+		AllowRuntimeLogging:              allowRuntimeLogging,
+		AllowEnvironmentVariableDropping: allowDropEnvironmentVariables,
 	}, nil
 }
 
@@ -102,32 +105,32 @@ func newSecurityPolicyFragment(
 // Internal version of Container
 type securityPolicyContainer struct {
 	// The command that we will allow the container to execute
-	Command []string
+	Command []string `json:"command"`
 	// The rules for determining if a given environment variable is allowed
-	EnvRules []EnvRuleConfig
+	EnvRules []EnvRuleConfig `json:"env_rules"`
 	// An ordered list of dm-verity root hashes for each layer that makes up
 	// "a container". Containers are constructed as an overlay file system. The
 	// order that the layers are overlayed is important and needs to be enforced
 	// as part of policy.
-	Layers []string
+	Layers []string `json:"layers"`
 	// WorkingDir is a path to container's working directory, which all the processes
 	// will default to.
-	WorkingDir string
+	WorkingDir string `json:"working_dir"`
 	// A list of constraints for determining if a given mount is allowed.
-	Mounts        []mountInternal
-	AllowElevated bool
+	Mounts        []mountInternal `json:"mounts"`
+	AllowElevated bool            `json:"allow_elevated"`
 	// A list of lists of commands that can be used to execute additional
 	// processes within the container
-	ExecProcesses []containerExecProcess
+	ExecProcesses []containerExecProcess `json:"exec_processes"`
 	// A list of signals that are allowed to be sent to the container's init
 	// process.
-	Signals []syscall.Signal
+	Signals []syscall.Signal `json:"signals"`
 }
 
 type containerExecProcess struct {
-	Command []string
+	Command []string `json:"command"`
 	// A list of signals that are allowed to be sent to this process
-	Signals []syscall.Signal
+	Signals []syscall.Signal `json:"signals"`
 }
 
 type externalProcess struct {
@@ -138,10 +141,10 @@ type externalProcess struct {
 
 // Internal version of Mount
 type mountInternal struct {
-	Source      string
-	Destination string
-	Type        string
-	Options     []string
+	Source      string   `json:"source"`
+	Destination string   `json:"destination"`
+	Type        string   `json:"type"`
+	Options     []string `json:"options"`
 }
 
 type fragment struct {
@@ -151,34 +154,33 @@ type fragment struct {
 	includes   []string
 }
 
-func (c Container) toInternal() (securityPolicyContainer, error) {
+func (c *Container) toInternal() (*securityPolicyContainer, error) {
 	command, err := c.Command.toInternal()
 	if err != nil {
-		return securityPolicyContainer{}, err
+		return nil, err
 	}
 
 	envRules, err := c.EnvRules.toInternal()
 	if err != nil {
-		return securityPolicyContainer{}, err
+		return nil, err
 	}
 
 	layers, err := c.Layers.toInternal()
 	if err != nil {
-		return securityPolicyContainer{}, err
+		return nil, err
 	}
 
 	mounts, err := c.Mounts.toInternal()
 	if err != nil {
-		return securityPolicyContainer{}, err
+		return nil, err
 	}
 
-	var execProcesses []containerExecProcess
-	for _, ep := range c.ExecProcesses {
-		cep := containerExecProcess(ep)
-		execProcesses = append(execProcesses, cep)
+	execProcesses := make([]containerExecProcess, len(c.ExecProcesses))
+	for i, ep := range c.ExecProcesses {
+		execProcesses[i] = containerExecProcess(ep)
 	}
 
-	return securityPolicyContainer{
+	return &securityPolicyContainer{
 		Command:  command,
 		EnvRules: envRules,
 		Layers:   layers,
@@ -205,11 +207,7 @@ func (e EnvRules) toInternal() ([]EnvRuleConfig, error) {
 		if !ok {
 			return nil, fmt.Errorf("env rule with index %q doesn't exist", eIndex)
 		}
-		rule := EnvRuleConfig{
-			Strategy: elem.Strategy,
-			Rule:     elem.Rule,
-		}
-		envRules[i] = rule
+		envRules[i] = elem
 	}
 
 	return envRules, nil
