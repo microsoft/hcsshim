@@ -39,17 +39,17 @@ import (
 const hcsOwner = "hcsshim-functional-tests"
 
 var (
-	alpineImagePaths = layers.LazyImageLayers{
+	alpineImagePaths = &layers.LazyImageLayers{
 		Image:    constants.ImageLinuxAlpineLatest,
 		Platform: constants.PlatformLinux,
 	}
 	//TODO: pick appropriate image based on OS build
-	nanoserverImagePaths = layers.LazyImageLayers{
+	nanoserverImagePaths = &layers.LazyImageLayers{
 		Image:    constants.ImageWindowsNanoserverLTSC2022,
 		Platform: constants.PlatformWindows,
 	}
 	// wcow tests originally used busyboxw; cannot find image on docker or mcr
-	servercoreImagePaths = layers.LazyImageLayers{
+	servercoreImagePaths = &layers.LazyImageLayers{
 		Image:    constants.ImageWindowsServercoreLTSC2022,
 		Platform: constants.PlatformWindows,
 	}
@@ -132,14 +132,10 @@ func TestMain(m *testing.M) {
 	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 	logrus.Infof("using features %q", flagFeatures.S.Strings())
 
-	alpineImagePaths.TempPath = *flagLayerTempDir
-	nanoserverImagePaths.TempPath = *flagLayerTempDir
-	servercoreImagePaths.TempPath = *flagLayerTempDir
-	// delete downloaded layers
-	// just ignore errors: they are logged, and no other cleanup possible
-	defer alpineImagePaths.Close(context.Background())
-	defer nanoserverImagePaths.Close(context.Background())
-	defer servercoreImagePaths.Close(context.Background())
+	images := []*layers.LazyImageLayers{alpineImagePaths, nanoserverImagePaths, servercoreImagePaths}
+	for _, l := range images {
+		l.TempPath = *flagLayerTempDir
+	}
 
 	e := m.Run()
 
@@ -153,6 +149,12 @@ func TestMain(m *testing.M) {
 		logrus.Warningf("failed to cleanup remaining uVMs with command %q: %s: %v", cmdStr, s, err)
 	} else if len(o) > 0 {
 		logrus.Warningf("cleaned up left over uVMs: %s", strings.Split(s, "\r\n"))
+	}
+
+	// delete downloaded layers; cant use defer, since os.exit does not run them
+	for _, l := range images {
+		// just ignore errors: they are logged, and no other cleanup possible
+		_ = l.Close(context.Background())
 	}
 
 	os.Exit(e)

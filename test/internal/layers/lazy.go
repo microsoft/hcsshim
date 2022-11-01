@@ -16,7 +16,6 @@ import (
 	"github.com/Microsoft/go-winio"
 	"github.com/google/go-containerregistry/pkg/crane"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/Microsoft/hcsshim/ext4/tar2ext4"
 	"github.com/Microsoft/hcsshim/internal/log"
@@ -36,34 +35,38 @@ type LazyImageLayers struct {
 	// TempPath is the path to create a temporary directory in.
 	// Defaults to [os.TempDir] if left empty.
 	TempPath string
-	once     sync.Once
-	layers   []string
+	// dedicated directory, under [TempPath], to store layers in
+	dir    string
+	once   sync.Once
+	layers []string
+}
+
+// Close removes the downloaded image layers.
+//
+// Does not take a [testing.TB] so it can be used in TestMain or init.
+func (x *LazyImageLayers) Close(ctx context.Context) error {
+	if x.dir == "" {
+		return nil
+	}
+
+	if _, err := os.Stat(x.dir); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("path %q is not valid: %w", x.dir, err)
+	}
+	// DestroyLayer will remove the entire directory and all its contents, regardless of if
+	// its a Windows container layer or not.
+	if err := wclayer.DestroyLayer(ctx, x.dir); err != nil {
+		return fmt.Errorf("could not destroy layer directory %q: %w", x.dir, err)
+	}
+	return nil
 }
 
 // Layers returns the image layer paths, from lowest to highest, for a particular image.
 func (x *LazyImageLayers) Layers(ctx context.Context, tb testing.TB) []string {
+	// basically combo of containerd fetch and unpack (snapshotter + differ)
 	tb.Helper()
-	tb.Logf("pulling and unpacking %s image %q", x.Platform, x.Image)
-	// don't use tb.Error/Log inside Once.Do stack, since we cannot call tb.Helper before executing f()
-	// within Once.Do and that will therefore show the wrong stack/location
 	var err error
 	x.once.Do(func() {
-		var dir string
-		// tb.TempDir is deleted at the end of a test, but we want the image for future test runs
-		dir, err = os.MkdirTemp(x.TempPath, util.CleanName(x.Image))
-		if err != nil {
-			err = fmt.Errorf("failed to create temp directory: %w", err)
-			return
-		}
-
-		switch x.Platform {
-		case constants.PlatformLinux:
-			err = x.linuxImage(ctx, dir)
-		case constants.PlatformWindows:
-			err = x.windowsImage(ctx, dir)
-		default:
-			err = fmt.Errorf("unsupported platform %q", x.Platform)
-		}
+		err = x.extractLayers(ctx)
 	})
 	if err != nil {
 		x.Close(ctx)
@@ -72,106 +75,93 @@ func (x *LazyImageLayers) Layers(ctx context.Context, tb testing.TB) []string {
 	return x.layers
 }
 
-// Close removes the downloaded image layers.
-//
-// Does not take a [testing.TB] so it can be used in TestMain or init.
-func (x *LazyImageLayers) Close(ctx context.Context) (err error) {
-	//todo: create dedicated temp directory and defer cleanup/zapdir in main?
-	for _, dir := range x.layers {
-		d, e := filepath.Abs(dir)
-		if e != nil {
-			log.G(ctx).WithError(e).Errorf("count not get absolute path to %q", dir)
-			continue
-		}
+// don't use tb.Error/Log inside Once.Do stack, since we cannot call tb.Helper before executing f()
+// within Once.Do and that will therefore show the wrong stack/location
+func (x *LazyImageLayers) extractLayers(ctx context.Context) (err error) {
+	log.G(ctx).Infof("pulling and unpacking %s image %q", x.Platform, x.Image)
 
-		if _, e := os.Stat(d); e != nil {
-			if !os.IsNotExist(e) {
-				log.G(ctx).WithError(e).Errorf("path %q is not valid", d)
-			}
-			continue
+	if x.TempPath == "" {
+		dir := os.TempDir()
+		x.dir, err = os.MkdirTemp(dir, util.CleanName(x.Image))
+		if err != nil {
+			return fmt.Errorf("failed to create temp directory: %w", err)
 		}
-
-		if e := wclayer.DestroyLayer(ctx, d); e != nil {
-			log.G(ctx).WithError(e).Errorf("could not destroy layer %q", d)
-			// keep the first error only, since that is likely the parent path thats causing issues
-			if err == nil {
-				err = e
-			}
+	} else {
+		x.dir, err = filepath.Abs(x.TempPath)
+		if err != nil {
+			return fmt.Errorf("failed to make %q absolute path: %w", x.TempPath, err)
 		}
 	}
-	return err
-}
 
-func (x *LazyImageLayers) linuxImage(ctx context.Context, dir string) error {
+	var extract func(context.Context, io.ReadCloser, string, []string) error
+	switch x.Platform {
+	case constants.PlatformLinux:
+		extract = linuxImage
+	case constants.PlatformWindows:
+		if err = winio.EnableProcessPrivileges([]string{winio.SeBackupPrivilege, winio.SeRestorePrivilege}); err != nil {
+			return err
+		}
+		extract = windowsImage
+	default:
+		return fmt.Errorf("unsupported platform %q", x.Platform)
+	}
+
 	img, err := crane.Pull(x.Image, crane.WithPlatform(&v1.Platform{OS: x.Platform, Architecture: runtime.GOARCH}))
 	if err != nil {
-		return fmt.Errorf("failed to pull %q: %w", x.Image, err)
-	}
-
-	f, err := os.Create(filepath.Join(dir, "layer.vhd"))
-	if err != nil {
-		return fmt.Errorf("failed to create layer vhd: %w", err)
-	}
-	defer f.Close()
-	// update x.layers so x.close() does the right thing if this function fails
-	x.layers = []string{dir}
-
-	r, w := io.Pipe()
-	eg := errgroup.Group{}
-	eg.Go(func() error {
-		defer w.Close()
-		if err := crane.Export(img, w); err != nil {
-			return fmt.Errorf("export image %q: %w", x.Image, err)
-		}
-		return nil
-	})
-
-	eg.Go(func() error {
-		defer r.Close()
-		if err := tar2ext4.Convert(r, f, tar2ext4.AppendVhdFooter, tar2ext4.ConvertWhiteout); err != nil {
-			return fmt.Errorf("convert image %q to vhd %q: %w", x.Image, f.Name(), err)
-		}
-		if err := f.Sync(); err != nil {
-			return fmt.Errorf("sync vhd %q to disk: %w", f.Name(), err)
-		}
-		f.Close()
-		if err = security.GrantVmGroupAccess(f.Name()); err != nil {
-			return fmt.Errorf("grant vm group access to %s: %w", f.Name(), err)
-		}
-		return nil
-	})
-
-	return eg.Wait()
-}
-
-func (x *LazyImageLayers) windowsImage(ctx context.Context, dir string) error {
-	img, err := crane.Pull(x.Image, crane.WithPlatform(&v1.Platform{OS: x.Platform, Architecture: runtime.GOARCH}))
-	if err != nil {
-		return fmt.Errorf("failed to pull %q: %w", x.Image, err)
+		return fmt.Errorf("failed to pull image %q: %w", x.Image, err)
 	}
 
 	layers, err := img.Layers()
 	if err != nil {
 		return fmt.Errorf("failed to get image %q layers: %w", x.Image, err)
 	}
-	if err := winio.EnableProcessPrivileges([]string{winio.SeBackupPrivilege, winio.SeRestorePrivilege}); err != nil {
-		return fmt.Errorf("could not set process privileges: %w", err)
-	}
 
 	for i, l := range layers {
-		d := filepath.Join(dir, strconv.FormatInt(int64(i), 10))
+		d := filepath.Join(x.dir, strconv.FormatInt(int64(i), 10))
 		if err := os.Mkdir(d, 0755); err != nil {
 			return err
 		}
 		rc, err := l.Uncompressed()
 		if err != nil {
-			return fmt.Errorf("failed to load uncompressed layer: %w", err)
+			return fmt.Errorf("failed to load uncompressed layer for image %s: %w", x.Image, err)
 		}
-		if _, err := ociwclayer.ImportLayerFromTar(ctx, rc, d, x.layers); err != nil {
-			return fmt.Errorf("failed to import wc layer %d: %w", i, err)
+		defer rc.Close()
+		if err := extract(ctx, rc, d, x.layers); err != nil {
+			return fmt.Errorf("failed to extract layer %d for image %s: %w", i, x.Image, err)
 		}
-
 		x.layers = append(x.layers, d)
 	}
+
+	return nil
+}
+
+func linuxImage(ctx context.Context, rc io.ReadCloser, dir string, _ []string) error {
+	f, err := os.Create(filepath.Join(dir, "layer.vhd"))
+	if err != nil {
+		return fmt.Errorf("create layer vhd: %w", err)
+	}
+	// in case we fail before granting access; double close on file will no-op
+	defer f.Close()
+
+	if err := tar2ext4.Convert(rc, f, tar2ext4.AppendVhdFooter, tar2ext4.ConvertWhiteout); err != nil {
+		return fmt.Errorf("convert to vhd %s: %w", f.Name(), err)
+	}
+	if err := f.Sync(); err != nil {
+		return fmt.Errorf("sync vhd %s to disk: %w", f.Name(), err)
+	}
+	f.Close()
+
+	if err = security.GrantVmGroupAccess(f.Name()); err != nil {
+		return fmt.Errorf("grant vm group access to %s: %w", f.Name(), err)
+	}
+
+	return nil
+}
+
+func windowsImage(ctx context.Context, rc io.ReadCloser, dir string, parents []string) error {
+	if _, err := ociwclayer.ImportLayerFromTar(ctx, rc, dir, parents); err != nil {
+		return fmt.Errorf("import wc layer %s: %w", dir, err)
+	}
+
 	return nil
 }
