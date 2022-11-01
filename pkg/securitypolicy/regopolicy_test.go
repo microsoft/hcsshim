@@ -3191,7 +3191,32 @@ func Test_Rego_StdioAccess_Allowed(t *testing.T) {
 	}
 }
 
-func Test_Rego_Container_StdioAccess_NotAllowed(t *testing.T) {
+func Test_Rego_EnforeCreateContainerPolicy_StdioAccess_NotAllowed(t *testing.T) {
+	gc := generateConstraints(testRand, 1)
+	gc.containers[0].AllowStdioAccess = false
+	tc, err := setupRegoCreateContainerTest(gc, gc.containers[0], false)
+	if err != nil {
+		t.Fatalf("error setting up test: %v", err)
+	}
+
+	_, allow_stdio_access, err := tc.policy.EnforceCreateContainerPolicy(
+		tc.sandboxID,
+		tc.containerID,
+		tc.argList,
+		tc.envList,
+		tc.workingDir,
+		tc.mounts)
+
+	if err != nil {
+		t.Errorf("create_container not allowed: %v", err)
+	}
+
+	if allow_stdio_access {
+		t.Errorf("expected allow_stdio_access to be false")
+	}
+}
+
+func Test_Rego_Container_StdioAccess_NotDecidable(t *testing.T) {
 	gc := generateConstraints(testRand, 1)
 	container0 := gc.containers[0]
 	container0.AllowStdioAccess = true
