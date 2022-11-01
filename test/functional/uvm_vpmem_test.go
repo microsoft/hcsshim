@@ -12,7 +12,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/copyfile"
 	"github.com/Microsoft/hcsshim/internal/uvm"
 	"github.com/Microsoft/hcsshim/osversion"
-	"github.com/Microsoft/hcsshim/test/internal/layers"
 	"github.com/Microsoft/hcsshim/test/internal/require"
 	tuvm "github.com/Microsoft/hcsshim/test/internal/uvm"
 )
@@ -24,10 +23,8 @@ func TestVPMEM(t *testing.T) {
 	require.Build(t, osversion.RS5)
 	requireFeatures(t, featureLCOW, featureVPMEM)
 
-	//nolint:staticcheck // SA1019: TODO: replace `LayerFolders`
-	alpineLayers := layers.LayerFolders(t, "alpine")
-
 	ctx := context.Background()
+	layers := linuxImageLayers(ctx, t)
 	u := tuvm.CreateAndStartLCOW(ctx, t, t.Name())
 	defer u.Close()
 
@@ -35,7 +32,7 @@ func TestVPMEM(t *testing.T) {
 
 	// Use layer.vhd from the alpine image as something to add
 	tempDir := t.TempDir()
-	if err := copyfile.CopyFile(ctx, filepath.Join(alpineLayers[0], "layer.vhd"), filepath.Join(tempDir, "layer.vhd"), true); err != nil {
+	if err := copyfile.CopyFile(ctx, filepath.Join(layers[0], "layer.vhd"), filepath.Join(tempDir, "layer.vhd"), true); err != nil {
 		t.Fatal(err)
 	}
 

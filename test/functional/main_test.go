@@ -48,6 +48,11 @@ var (
 		Image:    constants.ImageWindowsNanoserverLTSC2022,
 		Platform: constants.PlatformWindows,
 	}
+	// wcow tests originally used busyboxw; cannot find image on docker or mcr
+	servercoreImagePaths = layers.LazyImageLayers{
+		Image:    constants.ImageWindowsServercoreLTSC2022,
+		Platform: constants.PlatformWindows,
+	}
 )
 
 const (
@@ -129,10 +134,12 @@ func TestMain(m *testing.M) {
 
 	alpineImagePaths.TempPath = *flagLayerTempDir
 	nanoserverImagePaths.TempPath = *flagLayerTempDir
+	servercoreImagePaths.TempPath = *flagLayerTempDir
 	// delete downloaded layers
 	// just ignore errors: they are logged, and no other cleanup possible
 	defer alpineImagePaths.Close(context.Background())
 	defer nanoserverImagePaths.Close(context.Background())
+	defer servercoreImagePaths.Close(context.Background())
 
 	e := m.Run()
 
@@ -209,6 +216,14 @@ func windowsImageLayers(ctx context.Context, tb testing.TB) []string {
 	return nanoserverImagePaths.Layers(ctx, tb)
 }
 
+// windowsServercoreImageLayers returns image layer paths for Windows servercore.
+//
+// See [windowsImageLayers] for more.
+//
+//nolint:unused // will be used when WCOW tests are updated
+func windowsServercoreImageLayers(ctx context.Context, tb testing.TB) []string {
+	tb.Helper()
+	return servercoreImagePaths.Layers(ctx, tb)
 }
 
 // namespacedContext returns a [context.Context] with the provided namespace added via

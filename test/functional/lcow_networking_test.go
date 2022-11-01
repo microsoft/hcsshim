@@ -4,7 +4,6 @@
 package functional
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -15,7 +14,6 @@ import (
 	"github.com/Microsoft/hcsshim/osversion"
 
 	"github.com/Microsoft/hcsshim/test/internal/cmd"
-	"github.com/Microsoft/hcsshim/test/internal/constants"
 	"github.com/Microsoft/hcsshim/test/internal/container"
 	"github.com/Microsoft/hcsshim/test/internal/layers"
 	"github.com/Microsoft/hcsshim/test/internal/oci"
@@ -123,10 +121,8 @@ func TestLCOW_IPv6_Assignment(t *testing.T) {
 		t.Fatalf("network attachment: %v", err)
 	}
 
-	ctx, _, client := newContainerdClient(context.Background(), t)
-	ls := layers.FromImage(ctx, t, client, constants.ImageLinuxAlpineLatest,
-		constants.PlatformLinux, constants.SnapshotterLinux)
-
+	ctx := namespacedContext()
+	ls := linuxImageLayers(ctx, t)
 	opts := defaultLCOWOptions(t)
 	vm := uvm.CreateAndStartLCOWFromOpts(ctx, t, opts)
 
