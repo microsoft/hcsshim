@@ -562,6 +562,7 @@ func (h *Host) SignalContainerProcess(ctx context.Context, containerID string, p
 	return p.Kill(ctx, signal)
 }
 
+//nolint:ineffassign,staticcheck
 func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.ProcessParameters, conSettings stdio.ConnectionSettings) (_ int, err error) {
 	var pid int
 	var c *Container
@@ -594,10 +595,10 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 			// We've already done policy enforcement for creating a container so
 			// there's no policy enforcement to do for starting
 			h.containerIDToStdioAccessMutex.Lock()
-			//allowStdioAccess := h.containerIDToStdioAccess[c.id]
+			allowStdioAccess := h.containerIDToStdioAccess[c.id]
 			h.containerIDToStdioAccessMutex.Unlock()
 
-			allowStdioAccess := false
+			allowStdioAccess = false
 
 			if !allowStdioAccess {
 				conSettings.StdIn = nil
