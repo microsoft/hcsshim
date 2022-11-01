@@ -139,19 +139,26 @@ func (h *Host) SetConfidentialUVMOptions(ctx context.Context, r *guestresource.L
 	return nil
 }
 
-type JSONPayload struct {
+// Short term we cannot store the issuer and feed in the COSE Sign1 protected header, so wrap the payload in some json
+// and put those values in there. Fix is due very soon.
+
+type PayloadWrapper struct {
 	Issuer   string `json:"issuer,omitempty"`
 	Feed     string `json:"feed,omitempty"`
 	Fragment string `json:"fragment,omitempty"`
 }
 
 func checkDIDvsChain(did string, unpacked cosesign1.UnpackedCoseSign1) (bool, error) {
+	// Try the DID first
+	didDoc, err := didx509resolver.Resolve(unpacked.Pubcert, did, true)
+	_ = didDoc
+	if err == nil {
+		return true, err
+	}
 	// Ken's cheap resolver, does the issuer match the leaf key base64?
 	if did != unpacked.Pubkey {
 		return false, fmt.Errorf("InjectFragment failed chain (leaf key) %s did not match issuer DID %s", unpacked.Pubkey, did)
 	}
-	didDoc, err := didx509resolver.Resolve(unpacked.Pubcert, did, true)
-	_ = didDoc
 	return true, err
 }
 
@@ -169,7 +176,7 @@ func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWS
 	_ = os.WriteFile("/tmp/fragment.blob", blob, 0644)
 
 	var unpacked cosesign1.UnpackedCoseSign1
-	unpacked, err = cosesign1.UnpackAndValidateCOSE1CertChain(raw, nil, false, true) // params raw []byte, optionaPubKeyPEM []byte, requireKNownAuthority bool, verbose bool
+	unpacked, err = cosesign1.UnpackAndValidateCOSE1CertChain(raw, nil, nil, false, true) // params raw []byte, optionaPubKeyPEM []byte, requireKNownAuthority bool, verbose bool
 
 	// Since EPRS cannot cope with iss/feed today (maybe next week) we MAY have a json payload with issuer and feed tags OR have them in the header
 
@@ -194,20 +201,21 @@ func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWS
 		// payload is a json document wrapping them along with the rego fragment.
 
 		if len(issuer) == 0 && len(feed) == 0 { // assume payload is json, unwrap that
-			var jsonPayload JSONPayload
-			var err = json.Unmarshal(payload, &jsonPayload)
+			var payloadWrapper PayloadWrapper
+			var err = json.Unmarshal(payload, &payloadWrapper)
 			if err != nil {
 				return fmt.Errorf("failed to decode json fragment wrapper: " + err.Error())
 			}
-			issuer = jsonPayload.Issuer
-			feed = jsonPayload.Feed
-			payloadString = jsonPayload.Fragment
+			issuer = payloadWrapper.Issuer
+			feed = payloadWrapper.Feed
+			payloadString = payloadWrapper.Fragment
 		} else if len(issuer) == 0 || len(feed) == 0 { // must both be present or neither present
 			return fmt.Errorf("either issuer and feed must both be provided or neither provided in the COSE_Sign1 protected header")
 		}
 
 		var didMatchesChain, err = checkDIDvsChain(issuer, unpacked)
 		if !didMatchesChain {
+			log.G(ctx).Printf("did did not match chain for issuer %s and feed %s - err %s", issuer, feed, err.Error())
 			return err
 		}
 
