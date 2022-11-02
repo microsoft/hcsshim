@@ -562,7 +562,6 @@ func (h *Host) SignalContainerProcess(ctx context.Context, containerID string, p
 	return p.Kill(ctx, signal)
 }
 
-//nolint:ineffassign,staticcheck
 func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.ProcessParameters, conSettings stdio.ConnectionSettings) (_ int, err error) {
 	var pid int
 	var c *Container

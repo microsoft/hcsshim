@@ -1500,21 +1500,21 @@ exec_external := {
 		}
 
 		envList := generateEnvs(envSet)
-		toKeep, err := policy.EnforceCreateContainerPolicy("", "", []string{}, envList, "", []oci.Mount{})
+		toKeep, _, err := policy.EnforceCreateContainerPolicy("", "", []string{}, envList, "", []oci.Mount{})
 		if len(toKeep) > 0 {
 			t.Error("invalid environment variables not filtered from list returned from create_container")
 			return false
 		}
 
 		envList = generateEnvs(envSet)
-		toKeep, err = policy.EnforceExecInContainerPolicy("", []string{}, envList, "")
+		toKeep, _, err = policy.EnforceExecInContainerPolicy("", []string{}, envList, "")
 		if len(toKeep) > 0 {
 			t.Error("invalid environment variables not filtered from list returned from exec_in_container")
 			return false
 		}
 
 		envList = generateEnvs(envSet)
-		toKeep, err = policy.EnforceExecExternalProcessPolicy([]string{}, envList, "")
+		toKeep, _, err = policy.EnforceExecExternalProcessPolicy([]string{}, envList, "")
 		if len(toKeep) > 0 {
 			t.Error("invalid environment variables not filtered from list returned from exec_external")
 			return false
@@ -1550,21 +1550,21 @@ func Test_Rego_InvalidEnvList(t *testing.T) {
 		t.Fatalf("error creating policy: %v", err)
 	}
 
-	_, err = policy.EnforceCreateContainerPolicy("", "", []string{}, []string{}, "", []oci.Mount{})
+	_, _, err = policy.EnforceCreateContainerPolicy("", "", []string{}, []string{}, "", []oci.Mount{})
 	if err == nil {
 		t.Errorf("expected call to create_container to fail")
 	} else if err.Error() != "policy returned incorrect type for 'env_list', expected []interface{}, received map[string]interface {}" {
 		t.Errorf("incorrected error message from call to create_container")
 	}
 
-	_, err = policy.EnforceExecInContainerPolicy("", []string{}, []string{}, "")
+	_, _, err = policy.EnforceExecInContainerPolicy("", []string{}, []string{}, "")
 	if err == nil {
 		t.Errorf("expected call to exec_in_container to fail")
 	} else if err.Error() != "policy returned incorrect type for 'env_list', expected []interface{}, received string" {
 		t.Errorf("incorrected error message from call to exec_in_container")
 	}
 
-	_, err = policy.EnforceExecExternalProcessPolicy([]string{}, []string{}, "")
+	_, _, err = policy.EnforceExecExternalProcessPolicy([]string{}, []string{}, "")
 	if err == nil {
 		t.Errorf("expected call to exec_external to fail")
 	} else if err.Error() != "policy returned incorrect type for 'env_list', expected []interface{}, received bool" {
@@ -1594,21 +1594,21 @@ func Test_Rego_InvalidEnvList_Member(t *testing.T) {
 		t.Fatalf("error creating policy: %v", err)
 	}
 
-	_, err = policy.EnforceCreateContainerPolicy("", "", []string{}, []string{}, "", []oci.Mount{})
+	_, _, err = policy.EnforceCreateContainerPolicy("", "", []string{}, []string{}, "", []oci.Mount{})
 	if err == nil {
 		t.Errorf("expected call to create_container to fail")
 	} else if err.Error() != "members of env_list from policy must be strings, received json.Number" {
 		t.Errorf("incorrected error message from call to create_container")
 	}
 
-	_, err = policy.EnforceExecInContainerPolicy("", []string{}, []string{}, "")
+	_, _, err = policy.EnforceExecInContainerPolicy("", []string{}, []string{}, "")
 	if err == nil {
 		t.Errorf("expected call to exec_in_container to fail")
 	} else if err.Error() != "members of env_list from policy must be strings, received bool" {
 		t.Errorf("incorrected error message from call to exec_in_container")
 	}
 
-	_, err = policy.EnforceExecExternalProcessPolicy([]string{}, []string{}, "")
+	_, _, err = policy.EnforceExecExternalProcessPolicy([]string{}, []string{}, "")
 	if err == nil {
 		t.Errorf("expected call to exec_external to fail")
 	} else if err.Error() != "members of env_list from policy must be strings, received []interface {}" {
