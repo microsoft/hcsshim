@@ -402,9 +402,17 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 	switch req.ResourceType {
 	case guestresource.ResourceTypeMappedVirtualDisk:
 		mvd := req.Settings.(*guestresource.LCOWMappedVirtualDisk)
+		// find the actual controller number on the bus and update the incoming request.
+		cNum, err := scsi.ActualControllerNumber(ctx, mvd.Controller)
+		if err != nil {
+			return err
+		}
+		mvd.Controller = cNum
 		// first we try to update the internal state for read-write attachments.
 		if !mvd.ReadOnly {
-			source, err := scsi.ControllerLunToName(ctx, mvd.Controller, mvd.Lun)
+			localCtx, cancel := context.WithTimeout(ctx, time.Second*5)
+			defer cancel()
+			source, err := scsi.ControllerLunToName(localCtx, mvd.Controller, mvd.Lun)
 			if err != nil {
 				return err
 			}
