@@ -544,7 +544,7 @@ func (h *Host) ExecProcess(ctx context.Context, containerID string, params prot.
 			}
 
 			if envToKeep != nil {
-				params.OCIProcess.Args = envToKeep
+				params.OCIProcess.Env = envToKeep
 			}
 
 			pid, err = c.ExecProcess(ctx, params.OCIProcess, conSettings)
