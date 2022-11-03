@@ -94,6 +94,11 @@ func Test_HostMounts_IsEncrypted(t *testing.T) {
 			testPath: "/run/gcs/c/encrypted/unencrypted/foo",
 			expected: false,
 		},
+		{
+			name:     "SamePathEncrypted",
+			testPath: "/run/gcs/c/encrypted",
+			expected: true,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			encrypted := hm.IsEncrypted(tc.testPath)
