@@ -27,6 +27,9 @@ infra.rego.cose: infra.rego.base64 chain.pem leaf.private.pem sign1util
 print: infra.rego.cose sign1util
 	./sign1util print -in $<
 
+didx509: chain.pem sign1util
+	@./sign1util did:x509 -chain chain.pem -i 1 -policy "subject:CN:Test Root CA (DO NOT TRUST)"
+
 oras: infra.rego.cose
 	oras push ${REGISTRY}/${INFRA_REPO}:latest \
 	--artifact-type application/unknown+rego \
@@ -48,5 +51,3 @@ infra.rego.base64: infra.rego
 clean:
 	$(MAKE) -f Makefile.certs $@
 	rm -f infra.rego.base64 infra.rego.cose sign1util
-
-
