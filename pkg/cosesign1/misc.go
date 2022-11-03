@@ -85,11 +85,11 @@ single line base64 standard encoded raw DER certificate
 	Note that there are no extra line breaks added and that a string compare will need to accomodate that.
 */
 
-func x509ToPEM(cert *x509.Certificate) string {
+// func x509ToPEM(cert *x509.Certificate) string {
 
-	base64Cert := x509ToBase64(cert)
-	return base64CertToPEM(base64Cert)
-}
+// 	base64Cert := x509ToBase64(cert)
+// 	return base64CertToPEM(base64Cert)
+// }
 
 func base64CertToPEM(base64Cert string) string {
 
@@ -101,11 +101,11 @@ func base64CertToPEM(base64Cert string) string {
 	return pemData
 }
 
-func keyToPEM(key any) string {
+// func keyToPEM(key any) string {
 
-	base64Key := keyToBase64(key)
-	return base64PublicKeyToPEM(base64Key)
-}
+// 	base64Key := keyToBase64(key)
+// 	return base64PublicKeyToPEM(base64Key)
+// }
 
 func base64PublicKeyToPEM(base64Key string) string {
 
@@ -117,20 +117,20 @@ func base64PublicKeyToPEM(base64Key string) string {
 	return pemData
 }
 
-func logCert(name string, x509cert *x509.Certificate) {
-	log.Printf("%s:\n", name)
-	log.Printf("  Issuer = %s\n", x509cert.Issuer.String())
-	log.Printf("  Subject = %s\n", x509cert.Subject.String())
-	log.Printf("  AuthorityKeyId = %q\n", x509cert.AuthorityKeyId)
-	log.Printf("  SubjectKeyId = %q\n", x509cert.SubjectKeyId)
+// func logCert(name string, x509cert *x509.Certificate) {
+// 	log.Printf("%s:\n", name)
+// 	log.Printf("  Issuer = %s\n", x509cert.Issuer.String())
+// 	log.Printf("  Subject = %s\n", x509cert.Subject.String())
+// 	log.Printf("  AuthorityKeyId = %q\n", x509cert.AuthorityKeyId)
+// 	log.Printf("  SubjectKeyId = %q\n", x509cert.SubjectKeyId)
 
-	var pem = x509ToPEM(x509cert) // blob of the leaf x509 cert reformatted into pem (base64) style as per the fragment policy rules expect
-	var pubKey = x509cert.PublicKey
-	var pubKeyPem = keyToPEM(pubKey)
+// 	var pem = x509ToPEM(x509cert) // blob of the leaf x509 cert reformatted into pem (base64) style as per the fragment policy rules expect
+// 	var pubKey = x509cert.PublicKey
+// 	var pubKeyPem = keyToPEM(pubKey)
 
-	log.Printf("  Cert PEM = \n%s\n", pem)
-	log.Printf("  Public Key PEM = \n%s\n", pubKeyPem)
-}
+// 	log.Printf("  Cert PEM = \n%s\n", pem)
+// 	log.Printf("  Public Key PEM = \n%s\n", pubKeyPem)
+// }
 
 func StringToAlgorithm(algoType string) (cose.Algorithm, error) {
 	var algo cose.Algorithm

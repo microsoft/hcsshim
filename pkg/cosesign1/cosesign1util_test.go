@@ -2,52 +2,44 @@ package cosesign1
 
 import (
 	"bytes"
-	_ "embed"
+	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/veraison/go-cose"
 )
 
-/*
-	The inputs here are generated via the Makefile,
-	thus if you update the fragment's rego (infra.rego)
-	then you can build a matching code file etc by
-	make infra.rego.cose
-*/
+func readFileBytes(filename string) []byte {
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		println("Error reading '" + filename + "': " + string(err.Error()))
+	}
+	if len(content) == 0 {
+		println("Warning: empty file '" + filename + "'")
+	}
+	return content
+}
 
-//go:embed infra.rego.base64
+func readFileString(filename string) string {
+	return string(readFileBytes(filename))
+}
+
 var FragmentRego string
-
-//go:embed infra.rego.cose
 var FragmentCose []byte
-
-//go:embed infra.rego.cose
-var FragmentCose2 []byte
-
-// This is a self signed key which is only used for testing, it is not a risk.
-// It enables a check against the key and signature blobs
-
-//go:embed leaf.private.pem
 var LeafPrivatePem string
-
-//go:embed leaf.cert.pem
-var LeafCertPEM string // the expected leaf cert
-
-//go:embed leaf.public.pem
+var LeafCertPEM string
 var LeafPubkeyPEM string
+var CertChainPEM string
 
-//go:embed chain.pem
-var CertChainPEM string // the whole cert chain to embed
+func comparePEMs(pk1pem string, pk2pem string) bool {
+	pk1der := pem2der([]byte(pk1pem))
+	pk2der := pem2der([]byte(pk2pem))
+	return bytes.Equal(pk1der, pk2der)
+}
 
 /*
 	Decode a COSE_Sign1 document and check that we get the expected payload, issuer, keys, certs etc.
 */
-
-func comparePEMs(pk1_pem string, pk2_pem string) bool {
-	pk1_der := pem2der([]byte(pk1_pem));
-	pk2_der := pem2der([]byte(pk2_pem));
-	return bytes.Compare(pk1_der, pk2_der) == 0;
-}
 
 func Test_UnpackAndValidateCannedFragment(t *testing.T) {
 	var unpacked UnpackedCoseSign1
@@ -63,7 +55,6 @@ func Test_UnpackAndValidateCannedFragment(t *testing.T) {
 	var pubcert = base64CertToPEM(unpacked.Pubcert)
 	var payload = string(unpacked.Payload[:])
 	var cty = unpacked.ContentType
-
 
 	if !comparePEMs(pubkey, LeafPubkeyPEM) {
 		t.Error("pubkey did not match")
@@ -86,6 +77,12 @@ func Test_UnpackAndValidateCannedFragment(t *testing.T) {
 }
 
 func Test_UnpackAndValidateCannedFragmentCorrupted(t *testing.T) {
+	FragmentCose2 := make([]byte, len(FragmentCose))
+
+	for i := range FragmentCose2 {
+		FragmentCose2[i] = FragmentCose[i]
+	}
+
 	var offset = len(FragmentCose2) / 2
 	FragmentCose2[offset] = FragmentCose[offset] + 1 // corrupt the cose document (use the uncorrupted one as source in case we loop back to a good value)
 	var _, err = UnpackAndValidateCOSE1CertChain(FragmentCose2, nil, nil, false, false)
@@ -115,4 +112,31 @@ func Test_CreateCoseSign1Fragment(t *testing.T) {
 			t.Errorf("created fragment byte offset %d does not match expected", which)
 		}
 	}
+}
+
+func Test_OldCose(t *testing.T) {
+	filename := "old.1.cose"
+	cose := readFileBytes(filename)
+	_, err := UnpackAndValidateCOSE1CertChain(cose, nil, nil, false, false)
+	if err != nil {
+		t.Errorf("validation of %s failed", filename)
+	}
+}
+
+func TestMain(m *testing.M) {
+	println("Generating files...")
+
+	err := exec.Command("make", "chain.pem", "infra.rego.cose").Run()
+	if err != nil {
+		os.Exit(1)
+	}
+
+	FragmentRego = readFileString("infra.rego.base64")
+	FragmentCose = readFileBytes("infra.rego.cose")
+	LeafPrivatePem = readFileString("leaf.private.pem")
+	LeafCertPEM = readFileString("leaf.cert.pem")
+	LeafPubkeyPEM = readFileString("leaf.public.pem")
+	CertChainPEM = readFileString("chain.pem")
+
+	os.Exit(m.Run())
 }

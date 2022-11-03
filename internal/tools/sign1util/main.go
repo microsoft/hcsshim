@@ -68,6 +68,9 @@ func main() {
 	var algo string
 	var feed string
 	var issuer string
+	var didPolicy string
+	var didFingerprintIndex int
+	var didFingerprintAlgorithm string
 
 	createCmd := flag.NewFlagSet("create", flag.ExitOnError)
 
@@ -101,6 +104,14 @@ func main() {
 	leafCmd.StringVar(&outputKeyFilename, "keyout", "leafkey.pem", "leaf key output file")
 	leafCmd.StringVar(&outputCertFilename, "certout", "leafcert.pem", "leaf cert output file")
 	leafCmd.BoolVar(&verbose, "verbose", false, "verbose output")
+
+	didX509Cmd := flag.NewFlagSet("did:x509", flag.ExitOnError)
+
+	didX509Cmd.StringVar(&didFingerprintAlgorithm, "fingerprint-algorithm", "sha256", "hash algorithm for certificate fingerprints")
+	didX509Cmd.StringVar(&chainFilename, "chain", "chain.pem", "certificate chain to use (pem)")
+	didX509Cmd.IntVar(&didFingerprintIndex, "i", 0, "index of the certificate fingerprint in the chain")
+	didX509Cmd.StringVar(&didPolicy, "policy", "", "did:509 policy")
+	didX509Cmd.BoolVar(&verbose, "verbose", false, "verbose output")
 
 	if len(os.Args) > 1 {
 		action := os.Args[1]
@@ -171,11 +182,24 @@ func main() {
 				log.Print("args parse failed: " + err.Error())
 			}
 
+		case "did:x509":
+			err := didX509Cmd.Parse(os.Args[2:])
+			if err == nil {
+				r, err := cosesign1.MakeDidX509(didFingerprintAlgorithm, didFingerprintIndex, chainFilename, didPolicy, verbose)
+				if err != nil {
+					log.Print("error: " + err.Error())
+				} else {
+					print(r + "\n")
+				}
+			} else {
+				log.Print("args parse failed: " + err.Error())
+			}
+
 		default:
-			os.Stderr.WriteString("Usage: sign1util [create|check|print|leafkey] -h\n")
+			os.Stderr.WriteString("Usage: sign1util [create|check|print|leafkey|did:x509] -h\n")
 		}
 
 	} else {
-		os.Stderr.WriteString("Usage: sign1util [create|check|print|leafkey] -h\n")
+		os.Stderr.WriteString("Usage: sign1util [create|check|print|leafkey|did:x509] -h\n")
 	}
 }

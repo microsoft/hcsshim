@@ -22,9 +22,14 @@ const (
 
 func pem2der(chainPem []byte) []byte {
 	block, rest := pem.Decode(chainPem)
-	var r []byte = block.Bytes
-	for rest != nil && len(rest) != 0 {
-		r = append(r, block.Bytes...)
+	var r = []byte{}
+	if block.Bytes != nil {
+		r = block.Bytes
+	}
+	for len(rest) != 0 {
+		if block.Bytes != nil {
+			r = append(r, block.Bytes...)
+		}
 		block, rest = pem.Decode(rest)
 	}
 	return r
