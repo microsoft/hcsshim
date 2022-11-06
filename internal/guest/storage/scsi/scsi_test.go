@@ -10,9 +10,8 @@ import (
 	"os"
 	"testing"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
+	"golang.org/x/sys/unix"
 )
 
 func clearTestDependencies() {
@@ -21,6 +20,9 @@ func clearTestDependencies() {
 	unixMount = nil
 	controllerLunToName = nil
 	createVerityTarget = nil
+	encryptDevice = nil
+	cleanupCryptDevice = nil
+	storageUnmountPath = nil
 }
 
 func Test_Mount_Mkdir_Fails_Error(t *testing.T) {
@@ -35,7 +37,7 @@ func Test_Mount_Mkdir_Fails_Error(t *testing.T) {
 		return "", nil
 	}
 
-	if err := mount(
+	if err := Mount(
 		context.Background(),
 		0,
 		0,
@@ -71,7 +73,7 @@ func Test_Mount_Mkdir_ExpectedPath(t *testing.T) {
 		return nil
 	}
 
-	if err := mount(
+	if err := Mount(
 		context.Background(),
 		0,
 		0,
@@ -107,7 +109,7 @@ func Test_Mount_Mkdir_ExpectedPerm(t *testing.T) {
 		return nil
 	}
 
-	if err := mount(
+	if err := Mount(
 		context.Background(),
 		0,
 		0,
@@ -143,7 +145,7 @@ func Test_Mount_ControllerLunToName_Valid_Controller(t *testing.T) {
 		return nil
 	}
 
-	if err := mount(
+	if err := Mount(
 		context.Background(),
 		expectedController,
 		0,
@@ -179,7 +181,7 @@ func Test_Mount_ControllerLunToName_Valid_Lun(t *testing.T) {
 		return nil
 	}
 
-	if err := mount(
+	if err := Mount(
 		context.Background(),
 		0,
 		expectedLun,
@@ -218,7 +220,7 @@ func Test_Mount_Calls_RemoveAll_OnMountFailure(t *testing.T) {
 		return expectedErr
 	}
 
-	if err := mount(
+	if err := Mount(
 		context.Background(),
 		0,
 		0,
@@ -255,7 +257,7 @@ func Test_Mount_Valid_Source(t *testing.T) {
 		}
 		return nil
 	}
-	err := mount(context.Background(), 0, 0, "/fake/path", false, false, nil, nil)
+	err := Mount(context.Background(), 0, 0, "/fake/path", false, false, nil, nil)
 	if err != nil {
 		t.Fatalf("expected nil err, got: %v", err)
 	}
@@ -282,7 +284,7 @@ func Test_Mount_Valid_Target(t *testing.T) {
 		return nil
 	}
 
-	if err := mount(
+	if err := Mount(
 		context.Background(),
 		0,
 		0,
@@ -317,7 +319,7 @@ func Test_Mount_Valid_FSType(t *testing.T) {
 		return nil
 	}
 
-	if err := mount(
+	if err := Mount(
 		context.Background(),
 		0,
 		0,
@@ -352,7 +354,7 @@ func Test_Mount_Valid_Flags(t *testing.T) {
 		return nil
 	}
 
-	if err := mount(
+	if err := Mount(
 		context.Background(),
 		0,
 		0,
@@ -387,7 +389,7 @@ func Test_Mount_Readonly_Valid_Flags(t *testing.T) {
 		return nil
 	}
 
-	if err := mount(
+	if err := Mount(
 		context.Background(),
 		0,
 		0,
@@ -421,7 +423,7 @@ func Test_Mount_Valid_Data(t *testing.T) {
 		return nil
 	}
 
-	if err := mount(
+	if err := Mount(
 		context.Background(),
 		0,
 		0,
@@ -456,7 +458,7 @@ func Test_Mount_Readonly_Valid_Data(t *testing.T) {
 		return nil
 	}
 
-	if err := mount(
+	if err := Mount(
 		context.Background(),
 		0,
 		0,
@@ -513,7 +515,7 @@ func Test_CreateVerityTarget_And_Mount_Called_With_Correct_Parameters(t *testing
 		return nil
 	}
 
-	if err := mount(
+	if err := Mount(
 		context.Background(),
 		0,
 		0,
@@ -561,7 +563,7 @@ func Test_osMkdirAllFails_And_RemoveDevice_Called(t *testing.T) {
 		return nil
 	}
 
-	if err := mount(
+	if err := Mount(
 		context.Background(),
 		0,
 		0,
@@ -575,5 +577,110 @@ func Test_osMkdirAllFails_And_RemoveDevice_Called(t *testing.T) {
 	}
 	if !removeDeviceCalled {
 		t.Fatal("expected removeDevice to be called")
+	}
+}
+
+func Test_Mount_EncryptDevice_Called(t *testing.T) {
+	clearTestDependencies()
+
+	osMkdirAll = func(string, os.FileMode) error {
+		return nil
+	}
+	controllerLunToName = func(context.Context, uint8, uint8) (string, error) {
+		return "", nil
+	}
+	unixMount = func(string, string, string, uintptr, string) error {
+		return nil
+	}
+	encryptDeviceCalled := false
+	encryptDevice = func(_ context.Context, source string, devName string) (string, error) {
+		expectedCryptTarget := fmt.Sprintf(cryptDeviceFmt, 0, 0)
+		if devName != expectedCryptTarget {
+			t.Fatalf("expected crypt device %q got %q", expectedCryptTarget, devName)
+		}
+		encryptDeviceCalled = true
+		return "", nil
+	}
+	if err := Mount(
+		context.Background(),
+		0,
+		0,
+		"/fake/path",
+		false,
+		true,
+		nil,
+		nil,
+	); err != nil {
+		t.Fatalf("expected nil error, got: %s", err)
+	}
+	if !encryptDeviceCalled {
+		t.Fatal("expected encryptDevice to be called")
+	}
+}
+
+func Test_Mount_RemoveAllCalled_When_EncryptDevice_Fails(t *testing.T) {
+	clearTestDependencies()
+
+	osMkdirAll = func(string, os.FileMode) error {
+		return nil
+	}
+	controllerLunToName = func(context.Context, uint8, uint8) (string, error) {
+		return "", nil
+	}
+	unixMount = func(string, string, string, uintptr, string) error {
+		return nil
+	}
+	encryptDeviceError := errors.New("encrypt device error")
+	encryptDevice = func(context.Context, string, string) (string, error) {
+		return "", encryptDeviceError
+	}
+	removeAllCalled := false
+	osRemoveAll = func(string) error {
+		removeAllCalled = true
+		return nil
+	}
+
+	err := Mount(
+		context.Background(),
+		0,
+		0,
+		"/fake/path",
+		false,
+		true,
+		nil,
+		nil,
+	)
+	if err == nil {
+		t.Fatalf("expected to fail")
+	}
+	if errors.Unwrap(err) != encryptDeviceError {
+		t.Fatalf("expected error %q, got %q", encryptDeviceError, err)
+	}
+	if !removeAllCalled {
+		t.Fatal("osRemoveAll was not called")
+	}
+}
+
+func Test_Unmount_CleanupCryptDevice_Called(t *testing.T) {
+	clearTestDependencies()
+
+	storageUnmountPath = func(context.Context, string, bool) error {
+		return nil
+	}
+	cleanupCryptDeviceCalled := false
+	cleanupCryptDevice = func(devName string) error {
+		expectedDevName := fmt.Sprintf(cryptDeviceFmt, 0, 0)
+		if devName != expectedDevName {
+			t.Fatalf("expected crypt target %q, got %q", expectedDevName, devName)
+		}
+		cleanupCryptDeviceCalled = true
+		return nil
+	}
+
+	if err := Unmount(context.Background(), 0, 0, "/fake/path", true, nil); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	if !cleanupCryptDeviceCalled {
+		t.Fatal("cleanupCryptDevice not called")
 	}
 }

@@ -73,7 +73,18 @@ func Test_MarshalRego_Policy(t *testing.T) {
 			fragments[i] = fragment.toConfig()
 		}
 
-		actual, err := MarshalPolicy("rego", false, containers, externalProcesses, fragments, p.allowGetProperties, p.allowDumpStacks, p.allowRuntimeLogging, p.allowEnvironmentVariableDropping)
+		actual, err := MarshalPolicy(
+			"rego",
+			false,
+			containers,
+			externalProcesses,
+			fragments,
+			p.allowGetProperties,
+			p.allowDumpStacks,
+			p.allowRuntimeLogging,
+			p.allowEnvironmentVariableDropping,
+			p.allowUnencryptedScratch,
+		)
 		if err != nil {
 			t.Error(err)
 			return false
@@ -3027,6 +3038,101 @@ mount_device := data.fragment.mount_device
 	}
 }
 
+func Test_Rego_Scratch_Mount_Policy(t *testing.T) {
+	for _, tc := range []struct {
+		unencryptedAllowed bool
+		encrypted          bool
+		failureExpected    bool
+	}{
+		{
+			unencryptedAllowed: false,
+			encrypted:          false,
+			failureExpected:    true,
+		},
+		{
+			unencryptedAllowed: false,
+			encrypted:          true,
+			failureExpected:    false,
+		},
+		{
+			unencryptedAllowed: true,
+			encrypted:          false,
+			failureExpected:    false,
+		},
+		{
+			unencryptedAllowed: true,
+			encrypted:          true,
+			failureExpected:    false,
+		},
+	} {
+		t.Run(fmt.Sprintf("UnencryptedAllowed_%t_And_Encrypted_%t", tc.unencryptedAllowed, tc.encrypted), func(t *testing.T) {
+			gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
+			smConfig, err := setupRegoScratchMountTest(gc, tc.unencryptedAllowed)
+			if err != nil {
+				t.Fatalf("unable to setup test: %s", err)
+			}
+
+			scratchPath := generateMountTarget(testRand)
+			err = smConfig.policy.EnforceScratchMountPolicy(scratchPath, tc.encrypted)
+			if tc.failureExpected {
+				if err == nil {
+					t.Fatal("policy enforcement should've been denied")
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("policy enforcement unexpectedly was denied: %s", err)
+				}
+			}
+		})
+	}
+}
+
+// We only test cases where scratch mount should succeed, so that we can test
+// the scratch unmount policy. The negative cases for scratch mount are covered
+// in Test_Rego_Scratch_Mount_Policy test.
+func Test_Rego_Scratch_Unmount_Policy(t *testing.T) {
+	for _, tc := range []struct {
+		unencryptedAllowed bool
+		encrypted          bool
+		failureExpected    bool
+	}{
+		{
+			unencryptedAllowed: true,
+			encrypted:          false,
+			failureExpected:    false,
+		},
+		{
+			unencryptedAllowed: true,
+			encrypted:          true,
+			failureExpected:    false,
+		},
+		{
+			unencryptedAllowed: false,
+			encrypted:          true,
+			failureExpected:    false,
+		},
+	} {
+		t.Run(fmt.Sprintf("UnencryptedAllowed_%t_And_Encrypted_%t", tc.unencryptedAllowed, tc.encrypted), func(t *testing.T) {
+			gc := generateConstraints(testRand, maxContainersInGeneratedConstraints)
+			smConfig, err := setupRegoScratchMountTest(gc, tc.unencryptedAllowed)
+			if err != nil {
+				t.Fatalf("unable to setup test: %s", err)
+			}
+
+			scratchPath := generateMountTarget(testRand)
+			err = smConfig.policy.EnforceScratchMountPolicy(scratchPath, tc.encrypted)
+			if err != nil {
+				t.Fatalf("scratch_mount policy enforcement unexpectedly was denied: %s", err)
+			}
+
+			err = smConfig.policy.EnforceScratchUnmountPolicy(scratchPath)
+			if err != nil {
+				t.Fatalf("scratch_unmount policy enforcement unexpectedly was denied: %s", err)
+			}
+		})
+	}
+}
+
 //
 // Setup and "fixtures" follow...
 //
@@ -3102,6 +3208,7 @@ func (constraints *generatedConstraints) toPolicy() *securityPolicyInternal {
 		AllowDumpStacks:                  constraints.allowDumpStacks,
 		AllowRuntimeLogging:              constraints.allowRuntimeLogging,
 		AllowEnvironmentVariableDropping: constraints.allowEnvironmentVariableDropping,
+		AllowUnencryptedScratch:          constraints.allowUnencryptedScratch,
 	}
 }
 
@@ -3878,9 +3985,9 @@ func buildMountSpecFromMountArray(mounts []mountInternal, sandboxID string, r *r
 //go:embed api_test.rego
 var apiTestCode string
 
-func (p *regoEnforcer) injectTestAPI() error {
+func (policy *regoEnforcer) injectTestAPI() error {
 	modules := map[string]string{
-		"policy.rego":    p.code,
+		"policy.rego":    policy.code,
 		"api.rego":       apiTestCode,
 		"framework.rego": frameworkCode,
 	}
@@ -3893,7 +4000,7 @@ func (p *regoEnforcer) injectTestAPI() error {
 	}
 
 	if compiled, err := ast.CompileModulesWithOpt(modules, options); err == nil {
-		p.compiledModules = compiled
+		policy.compiledModules = compiled
 		return nil
 	} else {
 		return fmt.Errorf("rego compilation failed: %w", err)
@@ -4134,4 +4241,26 @@ func (s *stringSet) randUniqueArray(r *rand.Rand, generator func(*rand.Rand) str
 		items[i] = s.randUnique(r, generator)
 	}
 	return items
+}
+
+type regoScratchMountPolicyTestConfig struct {
+	policy *regoEnforcer
+}
+
+func setupRegoScratchMountTest(
+	gc *generatedConstraints,
+	unencryptedScratch bool,
+) (tc *regoScratchMountPolicyTestConfig, err error) {
+	securityPolicy := gc.toPolicy()
+	securityPolicy.AllowUnencryptedScratch = unencryptedScratch
+
+	defaultMounts := generateMounts(testRand)
+	privilegedMounts := generateMounts(testRand)
+	policy, err := newRegoPolicy(securityPolicy.marshalRego(), toOCIMounts(defaultMounts), toOCIMounts(privilegedMounts))
+	if err != nil {
+		return nil, err
+	}
+	return &regoScratchMountPolicyTestConfig{
+		policy: policy,
+	}, nil
 }

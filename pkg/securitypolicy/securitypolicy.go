@@ -33,6 +33,9 @@ type PolicyConfig struct {
 	AllowDumpStacks                  bool                    `json:"allow_dump_stacks" toml:"allow_dump_stacks"`
 	AllowRuntimeLogging              bool                    `json:"allow_runtime_logging" toml:"allow_runtime_logging"`
 	AllowEnvironmentVariableDropping bool                    `json:"allow_environment_variable_dropping" toml:"allow_environment_variable_dropping"`
+	// AllowUnencryptedScratch is a global policy configuration that allows
+	// all containers within a pod to be run without scratch encryption.
+	AllowUnencryptedScratch bool `json:"allow_unencrypted_scratch" toml:"allow_unencrypted_scratch"`
 }
 
 // ExternalProcessConfig contains toml or JSON config for running external processes in the UVM.

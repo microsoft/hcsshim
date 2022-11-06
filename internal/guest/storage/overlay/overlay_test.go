@@ -10,10 +10,6 @@ import (
 	"testing"
 )
 
-const (
-	fakeContainerID = "1"
-)
-
 type undo struct {
 	osMkdirAll  func(string, os.FileMode) error
 	osRemoveAll func(string) error
@@ -81,7 +77,7 @@ func Test_Mount_Success(t *testing.T) {
 		return nil
 	}
 
-	err := MountLayer(context.Background(), []string{"/layer1", "/layer2"}, "/upper", "/work", "/root", false, fakeContainerID)
+	err := MountLayer(context.Background(), []string{"/layer1", "/layer2"}, "/upper", "/work", "/root", false)
 	if err != nil {
 		t.Fatalf("expected no error got: %v", err)
 	}
@@ -125,7 +121,7 @@ func Test_Mount_Readonly_Success(t *testing.T) {
 		return nil
 	}
 
-	err := MountLayer(context.Background(), []string{"/layer1", "/layer2"}, "", "", "/root", false, fakeContainerID)
+	err := MountLayer(context.Background(), []string{"/layer1", "/layer2"}, "", "", "/root", false)
 	if err != nil {
 		t.Fatalf("expected no error got: %v", err)
 	}

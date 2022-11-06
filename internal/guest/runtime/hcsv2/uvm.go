@@ -69,6 +69,9 @@ type Host struct {
 
 	// logging target
 	logWriter io.Writer
+	// hostMounts keeps the state of currently mounted devices and file systems,
+	// which is used for GCS hardening.
+	hostMounts *hostMounts
 }
 
 func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer securitypolicy.SecurityPolicyEnforcer, logWriter io.Writer) *Host {
@@ -80,6 +83,7 @@ func NewHost(rtime runtime.Runtime, vsock transport.Transport, initialEnforcer s
 		securityPolicyEnforcerSet: false,
 		securityPolicyEnforcer:    initialEnforcer,
 		logWriter:                 logWriter,
+		hostMounts:                newHostMounts(),
 	}
 }
 
@@ -394,16 +398,56 @@ func (h *Host) CreateContainer(ctx context.Context, id string, settings *prot.VM
 	return c, nil
 }
 
-func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *guestrequest.ModificationRequest) error {
+func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *guestrequest.ModificationRequest) (err error) {
 	switch req.ResourceType {
 	case guestresource.ResourceTypeMappedVirtualDisk:
-		return modifyMappedVirtualDisk(ctx, req.RequestType, req.Settings.(*guestresource.LCOWMappedVirtualDisk), h.securityPolicyEnforcer)
+		mvd := req.Settings.(*guestresource.LCOWMappedVirtualDisk)
+		// find the actual controller number on the bus and update the incoming request.
+		cNum, err := scsi.ActualControllerNumber(ctx, mvd.Controller)
+		if err != nil {
+			return err
+		}
+		mvd.Controller = cNum
+		// first we try to update the internal state for read-write attachments.
+		if !mvd.ReadOnly {
+			localCtx, cancel := context.WithTimeout(ctx, time.Second*5)
+			defer cancel()
+			source, err := scsi.ControllerLunToName(localCtx, mvd.Controller, mvd.Lun)
+			if err != nil {
+				return err
+			}
+			if req.RequestType == guestrequest.RequestTypeAdd {
+				if err := h.hostMounts.AddRWDevice(mvd.MountPath, source, mvd.Encrypted); err != nil {
+					return err
+				}
+				defer func() {
+					if err != nil {
+						_ = h.hostMounts.RemoveRWDevice(mvd.MountPath, source)
+					}
+				}()
+			} else if req.RequestType == guestrequest.RequestTypeRemove {
+				if err := h.hostMounts.RemoveRWDevice(mvd.MountPath, source); err != nil {
+					return err
+				}
+				defer func() {
+					if err != nil {
+						_ = h.hostMounts.AddRWDevice(mvd.MountPath, source, mvd.Encrypted)
+					}
+				}()
+			}
+		}
+		return modifyMappedVirtualDisk(ctx, req.RequestType, mvd, h.securityPolicyEnforcer)
 	case guestresource.ResourceTypeMappedDirectory:
 		return modifyMappedDirectory(ctx, h.vsock, req.RequestType, req.Settings.(*guestresource.LCOWMappedDirectory), h.securityPolicyEnforcer)
 	case guestresource.ResourceTypeVPMemDevice:
 		return modifyMappedVPMemDevice(ctx, req.RequestType, req.Settings.(*guestresource.LCOWMappedVPMemDevice), h.securityPolicyEnforcer)
 	case guestresource.ResourceTypeCombinedLayers:
-		return modifyCombinedLayers(ctx, req.RequestType, req.Settings.(*guestresource.LCOWCombinedLayers), h.securityPolicyEnforcer)
+		cl := req.Settings.(*guestresource.LCOWCombinedLayers)
+		// when cl.ScratchPath == "", we mount overlay as read-only, in which case
+		// we don't really care about scratch encryption, since the host already
+		// knows about the layers and the overlayfs.
+		encryptedScratch := cl.ScratchPath != "" && h.hostMounts.IsEncrypted(cl.ScratchPath)
+		return modifyCombinedLayers(ctx, req.RequestType, req.Settings.(*guestresource.LCOWCombinedLayers), encryptedScratch, h.securityPolicyEnforcer)
 	case guestresource.ResourceTypeNetwork:
 		return modifyNetwork(ctx, req.RequestType, req.Settings.(*guestresource.LCOWNetworkAdapter))
 	case guestresource.ResourceTypeVPCIDevice:
@@ -427,7 +471,7 @@ func (h *Host) modifyHostSettings(ctx context.Context, containerID string, req *
 		}
 		return h.InjectFragment(ctx, r)
 	default:
-		return errors.Errorf("the ResourceType \"%s\" is not supported for UVM", req.ResourceType)
+		return errors.Errorf("the ResourceType %q is not supported for UVM", req.ResourceType)
 	}
 }
 
@@ -735,14 +779,13 @@ func modifyMappedVirtualDisk(
 		return nil
 	case guestrequest.RequestTypeRemove:
 		if mvd.MountPath != "" {
-			err = securityPolicy.EnforceDeviceUnmountPolicy(mvd.MountPath)
-			if err != nil {
-				return errors.Wrapf(err, "unmounting scsi device at %s denied by policy", mvd.MountPath)
+			if mvd.ReadOnly {
+				if err := securityPolicy.EnforceDeviceUnmountPolicy(mvd.MountPath); err != nil {
+					return fmt.Errorf("unmounting scsi device at %s denied by policy: %w", mvd.MountPath, err)
+				}
 			}
 
-			if err := scsi.Unmount(ctx, mvd.Controller, mvd.Lun, mvd.MountPath,
-				mvd.Encrypted, mvd.VerityInfo, securityPolicy,
-			); err != nil {
+			if err := scsi.Unmount(ctx, mvd.Controller, mvd.Lun, mvd.MountPath, mvd.Encrypted, mvd.VerityInfo); err != nil {
 				return err
 			}
 		}
@@ -820,6 +863,7 @@ func modifyCombinedLayers(
 	ctx context.Context,
 	rt guestrequest.RequestType,
 	cl *guestresource.LCOWCombinedLayers,
+	scratchEncrypted bool,
 	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
 	switch rt {
@@ -838,14 +882,17 @@ func modifyCombinedLayers(
 		} else {
 			upperdirPath = filepath.Join(cl.ScratchPath, "upper")
 			workdirPath = filepath.Join(cl.ScratchPath, "work")
+
+			if err := securityPolicy.EnforceScratchMountPolicy(cl.ScratchPath, scratchEncrypted); err != nil {
+				return fmt.Errorf("scratch mounting denied by policy: %w", err)
+			}
 		}
 
 		if err := securityPolicy.EnforceOverlayMountPolicy(cl.ContainerID, layerPaths, cl.ContainerRootPath); err != nil {
-			return errors.Wrap(err, "overlay creation denied by policy")
+			return fmt.Errorf("overlay creation denied by policy: %w", err)
 		}
 
-		return overlay.MountLayer(ctx, layerPaths, upperdirPath, workdirPath,
-			cl.ContainerRootPath, readonly, cl.ContainerID)
+		return overlay.MountLayer(ctx, layerPaths, upperdirPath, workdirPath, cl.ContainerRootPath, readonly)
 	case guestrequest.RequestTypeRemove:
 		if err := securityPolicy.EnforceOverlayUnmountPolicy(cl.ContainerRootPath); err != nil {
 			return errors.Wrap(err, "overlay removal denied by policy")

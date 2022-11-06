@@ -24,7 +24,6 @@ import (
 	"github.com/Microsoft/hcsshim/internal/oc"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
 	"github.com/Microsoft/hcsshim/internal/protocol/guestresource"
-	"github.com/Microsoft/hcsshim/pkg/securitypolicy"
 )
 
 // Test dependencies.
@@ -39,15 +38,22 @@ var (
 	createVerityTarget = dm.CreateVerityTarget
 	// removeDevice is stubbed for unit testing `Mount`.
 	removeDevice = dm.RemoveDevice
+	// encryptDevice is stubbed for unit testing `mount`
+	encryptDevice = crypt.EncryptDevice
+	// cleanupCryptDevice is stubbed for unit testing `mount`
+	cleanupCryptDevice = crypt.CleanupCryptDevice
+	// storageUnmountPath is stubbed for unit testing `unmount`
+	storageUnmountPath = storage.UnmountPath
 )
 
 const (
 	scsiDevicesPath  = "/sys/bus/scsi/devices"
 	vmbusDevicesPath = "/sys/bus/vmbus/devices"
 	verityDeviceFmt  = "dm-verity-scsi-contr%d-lun%d-%s"
+	cryptDeviceFmt   = "dm-crypt-scsi-contr%d-lun%d"
 )
 
-// fetchActualControllerNumber retrieves the actual controller number assigned to a SCSI controller
+// ActualControllerNumber retrieves the actual controller number assigned to a SCSI controller
 // with number `passedController`.
 // When HCS creates the UVM it adds 4 SCSI controllers to the UVM but the 1st SCSI
 // controller according to HCS can actually show up as 2nd, 3rd or 4th controller inside
@@ -55,7 +61,7 @@ const (
 // inside the UVM. However, we can refer to the SCSI controllers with their GUIDs (that
 // are hardcoded) and then using that GUID find out the SCSI controller number inside the
 // guest. This function does exactly that.
-func fetchActualControllerNumber(_ context.Context, passedController uint8) (uint8, error) {
+func ActualControllerNumber(_ context.Context, passedController uint8) (uint8, error) {
 	// find the controller number by looking for a file named host<N> (e.g host1, host3 etc.)
 	// `N` is the controller number.
 	// Full file path would be /sys/bus/vmbus/devices/<controller-guid>/host<N>.
@@ -80,7 +86,7 @@ func fetchActualControllerNumber(_ context.Context, passedController uint8) (uin
 	return 0, fmt.Errorf("host<N> directory not found inside %s", controllerDirPath)
 }
 
-// mount creates a mount from the SCSI device on `controller` index `lun` to
+// Mount creates a mount from the SCSI device on `controller` index `lun` to
 // `target`
 //
 // `target` will be created. On mount failure the created `target` will be
@@ -88,7 +94,7 @@ func fetchActualControllerNumber(_ context.Context, passedController uint8) (uin
 //
 // If `encrypted` is set to true, the SCSI device will be encrypted using
 // dm-crypt.
-func mount(
+func Mount(
 	ctx context.Context,
 	controller,
 	lun uint8,
@@ -149,9 +155,10 @@ func mount(
 	}
 
 	if encrypted {
-		encryptedSource, err := crypt.EncryptDevice(spnCtx, source)
+		cryptDeviceName := fmt.Sprintf(cryptDeviceFmt, controller, lun)
+		encryptedSource, err := encryptDevice(spnCtx, source, cryptDeviceName)
 		if err != nil {
-			return errors.Wrapf(err, "failed to mount encrypted device: "+source)
+			return fmt.Errorf("failed to mount encrypted device %s: %w", source, err)
 		}
 		source = encryptedSource
 	}
@@ -188,35 +195,15 @@ func mount(
 	return nil
 }
 
-// Mount is just a wrapper over actual mount call. This wrapper finds out the controller
-// number from the controller GUID string and calls mount.
-func Mount(
-	ctx context.Context,
-	controller,
-	lun uint8,
-	target string,
-	readonly bool,
-	encrypted bool,
-	options []string,
-	verityInfo *guestresource.DeviceVerityInfo) (err error) {
-	cNum, err := fetchActualControllerNumber(ctx, controller)
-	if err != nil {
-		return err
-	}
-	return mount(ctx, cNum, lun, target, readonly, encrypted, options, verityInfo)
-}
-
-// unmount unmounts a SCSI device mounted at `target`.
-//
-// If `encrypted` is true, it removes all its associated dm-crypto state.
-func unmount(
+// Unmount SCSI device mounted at `target`. Cleanup associated dm-verity and
+// dm-crypt devices when necessary.
+func Unmount(
 	ctx context.Context,
 	controller,
 	lun uint8,
 	target string,
 	encrypted bool,
 	verityInfo *guestresource.DeviceVerityInfo,
-	securityPolicy securitypolicy.SecurityPolicyEnforcer,
 ) (err error) {
 	ctx, span := oc.StartSpan(ctx, "scsi::Unmount")
 	defer span.End()
@@ -227,13 +214,9 @@ func unmount(
 		trace.Int64Attribute("lun", int64(lun)),
 		trace.StringAttribute("target", target))
 
-	if err = securityPolicy.EnforceDeviceUnmountPolicy(target); err != nil {
-		return errors.Wrapf(err, "unmounting scsi controller %d lun %d from  %s denied by policy", controller, lun, target)
-	}
-
-	// Unmount unencrypted device
-	if err := storage.UnmountPath(ctx, target, true); err != nil {
-		return errors.Wrapf(err, "unmount failed: "+target)
+	// unmount target
+	if err := storageUnmountPath(ctx, target, true); err != nil {
+		return errors.Wrapf(err, "unmount failed: %s", target)
 	}
 
 	if verityInfo != nil {
@@ -245,30 +228,13 @@ func unmount(
 	}
 
 	if encrypted {
-		if err := crypt.CleanupCryptDevice(target); err != nil {
-			return errors.Wrapf(err, "failed to cleanup dm-crypt state: "+target)
+		dmCryptName := fmt.Sprintf(cryptDeviceFmt, controller, lun)
+		if err := cleanupCryptDevice(dmCryptName); err != nil {
+			return fmt.Errorf("failed to cleanup dm-crypt target %s: %w", dmCryptName, err)
 		}
 	}
 
 	return nil
-}
-
-// Unmount is just a wrapper over actual unmount call. This wrapper finds out the controller
-// number from the controller GUID string and calls mount.
-func Unmount(
-	ctx context.Context,
-	controller,
-	lun uint8,
-	target string,
-	encrypted bool,
-	verityInfo *guestresource.DeviceVerityInfo,
-	securityPolicy securitypolicy.SecurityPolicyEnforcer,
-) (err error) {
-	cNum, err := fetchActualControllerNumber(ctx, controller)
-	if err != nil {
-		return err
-	}
-	return unmount(ctx, cNum, lun, target, encrypted, verityInfo, securityPolicy)
 }
 
 // ControllerLunToName finds the `/dev/sd*` path to the SCSI device on
@@ -313,11 +279,11 @@ func ControllerLunToName(ctx context.Context, controller, lun uint8) (_ string, 
 	return devicePath, nil
 }
 
-// unplugDevice finds the SCSI device on `controller` index `lun` and issues a
+// UnplugDevice finds the SCSI device on `controller` index `lun` and issues a
 // guest initiated unplug.
 //
 // If the device is not attached returns no error.
-func unplugDevice(ctx context.Context, controller, lun uint8) (err error) {
+func UnplugDevice(ctx context.Context, controller, lun uint8) (err error) {
 	_, span := oc.StartSpan(ctx, "scsi::UnplugDevice")
 	defer span.End()
 	defer func() { oc.SetSpanStatus(span, err) }()
@@ -340,14 +306,4 @@ func unplugDevice(ctx context.Context, controller, lun uint8) (err error) {
 		return err
 	}
 	return nil
-}
-
-// UnplugDevice is just a wrapper over actual unplugDevice call. This wrapper finds out the controller
-// number from the controller GUID string and calls unplugDevice.
-func UnplugDevice(ctx context.Context, controller, lun uint8) (err error) {
-	cNum, err := fetchActualControllerNumber(ctx, controller)
-	if err != nil {
-		return err
-	}
-	return unplugDevice(ctx, cNum, lun)
 }
