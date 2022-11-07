@@ -8,6 +8,8 @@
 # TAG, eg 2.15, latest, is the version number of an image
 # IMAGE which is $REGISTRY/${REPO}:$TAG is a particular image, which is sort of a version of a container.
 
+SIGN1UTIL := /mnt/c/ContainerPlat/sign1util.exe
+
 all: infra.rego
 
 
@@ -29,6 +31,13 @@ print: infra.rego.cose sign1util
 
 didx509: chain.pem sign1util
 	@./sign1util did:x509 -chain chain.pem -i 1 -policy "subject:CN:Test Root CA (DO NOT TRUST)"
+
+did-check: chain.pem sign1util
+	./sign1util check -chain chain.pem -in infra.rego.cose -did "did:x509:0:sha256:-gJkOt-6VRhM2RRtj9XyoDBC4LZVd7EJQ5UbJMus4Uk::subject:CN:Test Root CA (DO NOT TRUST)"
+
+did-fail: chain.pem sign1util
+	./sign1util check -chain chain.pem -in infra.rego.cose -did "did:x509:0:sha256:-gJkOt-6VRhM2RRtj9XyoDBC4LZVd7EJQ5UbJMus4Uk::subject:CN:TestRoot CA (DO NOT TRUST)"
+
 
 oras: infra.rego.cose
 	oras push ${REGISTRY}/${INFRA_REPO}:latest \

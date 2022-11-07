@@ -7,10 +7,11 @@ import (
 	"log"
 
 	"github.com/Microsoft/hcsshim/pkg/cosesign1"
+	didx509resolver "github.com/Microsoft/hcsshim/pkg/did-x509-resolver"
 	"github.com/veraison/go-cose"
 )
 
-func checkCoseSign1(inputFilename string, optionalPubKeyFilename string, rootCAFile string, requireKnownAuthority bool, verbose bool) (cosesign1.UnpackedCoseSign1, error) {
+func checkCoseSign1(inputFilename string, optionalPubKeyFilename string, rootCAFile string, chainFilename string, didString string, requireKnownAuthority bool, verbose bool) (cosesign1.UnpackedCoseSign1, error) {
 	coseBlob := cosesign1.ReadBlob(inputFilename)
 	var optionalPubKeyPEM []byte
 	if optionalPubKeyFilename != "" {
@@ -20,6 +21,13 @@ func checkCoseSign1(inputFilename string, optionalPubKeyFilename string, rootCAF
 	var optionalRootCAPEM []byte
 	if rootCAFile != "" {
 		optionalRootCAPEM = cosesign1.ReadBlob(rootCAFile)
+	}
+
+	var chainPEM []byte
+	var chainPEMString string
+	if chainFilename != "" {
+		chainPEM = cosesign1.ReadBlob(chainFilename)
+		chainPEMString = string(chainPEM[:])
 	}
 
 	var unpacked cosesign1.UnpackedCoseSign1
@@ -37,6 +45,18 @@ func checkCoseSign1(inputFilename string, optionalPubKeyFilename string, rootCAF
 			log.Printf("pubcert: %s", unpacked.Pubcert)
 			log.Printf("payload:\n%s\n", string(unpacked.Payload[:]))
 		}
+		if len(didString) > 0 {
+			if len(chainPEMString) == 0 {
+				chainPEMString = unpacked.Pubcert
+			}
+			didDoc, err := didx509resolver.Resolve(chainPEMString, didString, true)
+			if err == nil {
+				log.Printf("DID resolvers passed:\n%s\n", didDoc)
+			} else {
+				log.Printf("DID resolvers failed: err: %s doc:\n%s\n", err.Error(), didDoc)
+			}
+		}
+
 	}
 	return unpacked, err
 }
@@ -69,6 +89,7 @@ func main() {
 	var feed string
 	var issuer string
 	var didPolicy string
+	var didString string
 	var didFingerprintIndex int
 	var didFingerprintAlgorithm string
 
@@ -90,6 +111,8 @@ func main() {
 	checkCmd.StringVar(&inputFilename, "in", "input.cose", "input file")
 	checkCmd.StringVar(&keyFilename, "pub", "", "input public key (PEM)")
 	checkCmd.StringVar(&rootCAFile, "root", "", "(trusted) root CA certificate filename (PEM)")
+	checkCmd.StringVar(&chainFilename, "chain", "chain.pem", "key or cert file to use (pem)")
+	checkCmd.StringVar(&didString, "did", "", "DID x509 string to resolve against cert chain")
 	checkCmd.BoolVar(&requireKNownAuthority, "requireKNownAuthority", false, "false => allow chain validation to fail")
 	checkCmd.BoolVar(&verbose, "verbose", false, "verbose output")
 
@@ -142,7 +165,7 @@ func main() {
 		case "check":
 			err := checkCmd.Parse(os.Args[2:])
 			if err == nil {
-				_, err := checkCoseSign1(inputFilename, keyFilename, rootCAFile, requireKNownAuthority, verbose)
+				_, err := checkCoseSign1(inputFilename, keyFilename, rootCAFile, chainFilename, didString, requireKNownAuthority, verbose)
 				if err != nil {
 					log.Print("failed check: " + err.Error())
 				}
@@ -153,7 +176,7 @@ func main() {
 		case "print":
 			err := printCmd.Parse(os.Args[2:])
 			if err == nil {
-				_, err := checkCoseSign1(inputFilename, "", rootCAFile, false, true)
+				_, err := checkCoseSign1(inputFilename, "", rootCAFile, chainFilename, didString, false, true)
 				if err != nil {
 					log.Print("failed print: " + err.Error())
 				}
@@ -164,7 +187,7 @@ func main() {
 		case "leaf":
 			err := leafCmd.Parse(os.Args[2:])
 			if err == nil {
-				unpacked, err := checkCoseSign1(inputFilename, "", rootCAFile, false, verbose)
+				unpacked, err := checkCoseSign1(inputFilename, "", rootCAFile, chainFilename, didString, false, verbose)
 				if err == nil {
 					err = cosesign1.WriteString(outputKeyFilename, unpacked.Pubkey)
 					if err != nil {
