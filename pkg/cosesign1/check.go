@@ -15,6 +15,7 @@ type UnpackedCoseSign1 struct {
 	ContentType string
 	Pubkey      string
 	Pubcert     string
+	ChainPem	string
 	Payload     []byte
 	CertChain   []*x509.Certificate
 }
@@ -37,7 +38,7 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, option
 	if !chainPresent {
 		return UnpackedCoseSign1{}, fmt.Errorf("x5Chain missing")
 	}
-
+	
 	var issuer string
 	val, valPresent := protected[HeaderLabelIssuer]
 	if valPresent {
@@ -52,7 +53,8 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, option
 
 	// The HeaderLabelX5Chain entry in the cose header may be a blob (single cert) or an array of blobs (a chain) see https://datatracker.ietf.org/doc/draft-ietf-cose-x509/08/
 
-	chainDER := pem2der(chainPEM.([]byte))
+	chainPemBytes := chainPEM.([]byte)
+	chainDER := pem2der(chainPemBytes)
 	chain, err := x509.ParseCertificates(chainDER)
 	if err != nil {
 		if verbose {
@@ -113,6 +115,7 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, option
 		Feed:        feed,
 		Issuer:      issuer,
 		Pubkey:      leafPubKeyBase64,
+		ChainPem: 	 string(chainPemBytes[:]),
 		ContentType: msg.Headers.Protected[cose.HeaderLabelContentType].(string),
 		Payload:     msg.Payload,
 		CertChain:   chain,

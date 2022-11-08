@@ -32,11 +32,20 @@ print: infra.rego.cose sign1util
 didx509: chain.pem sign1util
 	./sign1util did:x509 -chain chain.pem -i 1 -policy "subject:CN:Test Leaf (DO NOT TRUST)" -verbose
 
-did-check: chain.pem sign1util
-	./sign1util check -chain chain.pem -in infra.rego.cose -did "did:x509:0:sha256:-gJkOt-6VRhM2RRtj9XyoDBC4LZVd7EJQ5UbJMus4Uk::subject:CN:Test Root CA (DO NOT TRUST)"
+did-check: chain.pem infra.rego.cose sign1util
+	./sign1util check -chain chain.pem -in infra.rego.cose -did did:x509:0:sha256:I5ni_nuWegx4NiLaeGabiz36bDUhDDiHEFl8HXMA_4o::subject:CN:Test+Leaf+%28DO+NOT+TRUST%29
 
-did-fail: chain.pem sign1util
-	./sign1util check -chain chain.pem -in infra.rego.cose -did "did:x509:0:sha256:-gJkOt-6VRhM2RRtj9XyoDBC4LZVd7EJQ5UbJMus4Uk::subject:CN:TestRoot CA (DO NOT TRUST)"
+did-check2: infra.rego.cose sign1util
+	./sign1util check -in infra.rego.cose -did did:x509:0:sha256:I5ni_nuWegx4NiLaeGabiz36bDUhDDiHEFl8HXMA_4o::subject:CN:Test+Leaf+%28DO+NOT+TRUST%29
+
+
+did-fail-fingerprint: chain.pem sign1util
+	./sign1util check -chain chain.pem -in infra.rego.cose -did did:x509:0:sha256:XXXi_nuWegx4NiLaeGabiz36bDUhDDiHEFl8HXMA_4o::subject:CN:Test+Leaf+%28DO+NOT+TRUST%29
+
+did-fail-subject: chain.pem sign1util
+	./sign1util check -chain chain.pem -in infra.rego.cose -did did:x509:0:sha256:I5ni_nuWegx4NiLaeGabiz36bDUhDDiHEFl8HXMA_4o::subject:CN:Test+XXXX+%28DO+NOT+TRUST%29
+
+did-fail: did-fail-subject did-fail-fingerprint
 
 
 oras: infra.rego.cose

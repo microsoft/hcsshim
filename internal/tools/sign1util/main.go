@@ -47,7 +47,7 @@ func checkCoseSign1(inputFilename string, optionalPubKeyFilename string, rootCAF
 		}
 		if len(didString) > 0 {
 			if len(chainPEMString) == 0 {
-				chainPEMString = unpacked.Pubcert
+				chainPEMString = unpacked.ChainPem
 			}
 			didDoc, err := didx509resolver.Resolve(chainPEMString, didString, true)
 			if err == nil {
