@@ -155,16 +155,13 @@ type PayloadWrapper struct {
 
 func checkDIDvsChain(did string, unpacked cosesign1.UnpackedCoseSign1) (bool, error) {
 	// Try the DID first
-	didDoc, err := didx509resolver.Resolve(unpacked.Pubcert, did, true)
+	didDoc, err := didx509resolver.Resolve(unpacked.ChainPem, did, true)
 	_ = didDoc
 	if err == nil {
 		return true, err
 	}
-	// Ken's cheap resolver, does the issuer match the leaf key base64?
-	if did != unpacked.Pubkey {
-		return false, fmt.Errorf("InjectFragment failed chain (leaf key) %s did not match issuer DID %s", unpacked.Pubkey, did)
-	}
-	return true, err
+
+	return false, err
 }
 
 // InjectFragment extends current security policy with additional constraints
@@ -192,6 +189,7 @@ func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWS
 		var issuer = unpacked.Issuer
 		var feed = unpacked.Feed
 		var pubkey = unpacked.Pubkey
+		var chainPem = unpacked.ChainPem
 		var pubcert = unpacked.Pubcert
 		var payload = unpacked.Payload
 
@@ -199,6 +197,7 @@ func (h *Host) InjectFragment(ctx context.Context, fragment *guestresource.LCOWS
 		log.G(ctx).Tracef("feed: %s", feed)
 		log.G(ctx).Tracef("cty: %s", unpacked.ContentType)
 		log.G(ctx).Tracef("pubkey: %s", pubkey)
+		log.G(ctx).Tracef("chainPem: %s", chainPem)
 		log.G(ctx).Tracef("pubcert: %s", pubcert)
 		log.G(ctx).Tracef("payload:\n%s\n", payloadString)
 
