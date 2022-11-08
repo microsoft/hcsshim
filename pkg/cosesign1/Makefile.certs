@@ -7,13 +7,13 @@ all: chain.pem
 	openssl ec -in $< -pubout -out $@
 
 root.cert.pem: root.private.pem
-	openssl req -new -key $< -out $@.tmp.csr -subj "/CN=Test Root CA (DO NOT TRUST)" -addext basicConstraints=CA:TRUE
-	openssl x509 -req -days 365 -in $@.tmp.csr -signkey $< -out $@ -CAcreateserial
+	openssl req -new -key $< -out $@.tmp.csr -subj "/CN=Test Root CA (DO NOT TRUST)" -addext 'basicConstraints=critical,CA:TRUE' -addext 'keyUsage=digitalSignature,keyCertSign' 
+	openssl x509 -req -days 365 -in $@.tmp.csr -signkey $< -out $@ -CAcreateserial -extfile cert.extensions.cfg
 	rm -rf $@.tmp.csr
 
 intermediate.cert.pem: intermediate.private.pem | root.private.pem
-	openssl req -new -key $< -out $@.tmp.csr -subj "/CN=Test Intermediate CA (DO NOT TRUST)" -addext basicConstraints=CA:TRUE
-	openssl x509 -req -days 365 -in $@.tmp.csr -CA ${subst private,cert,$|} -CAkey $| -out $@ -CAcreateserial
+	openssl req -new -key $< -out $@.tmp.csr -subj "/CN=Test Intermediate CA (DO NOT TRUST)" -addext 'basicConstraints=critical,CA:TRUE' -addext 'keyUsage=digitalSignature,keyCertSign' 
+	openssl x509 -req -days 365 -in $@.tmp.csr -CA ${subst private,cert,$|} -CAkey $| -out $@ -CAcreateserial -extfile cert.extensions.cfg
 	rm $@.tmp.csr
 
 leaf.cert.pem: leaf.private.pem | intermediate.private.pem
