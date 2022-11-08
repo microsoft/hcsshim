@@ -55,6 +55,8 @@ var (
 	LoadBalancerPortMappingFlagsUseMux LoadBalancerPortMappingFlags = 4
 	// LoadBalancerPortMappingFlagsPreserveDIP delivers packets with destination IP as the VIP.
 	LoadBalancerPortMappingFlagsPreserveDIP LoadBalancerPortMappingFlags = 8
+	// LoadBalancerPortMappingFlagsVipExternalIP enables VipExternalIP.
+	LoadBalancerPortMappingFlagsVipExternalIP LoadBalancerPortMappingFlags = 16
 )
 
 // LoadBalancerDistribution specifies how the loadbalancer distributes traffic.
