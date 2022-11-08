@@ -1821,18 +1821,17 @@ func Test_Rego_ExecExternalProcessPolicy_DropEnvs(t *testing.T) {
 }
 
 func Test_Rego_ExecExternalProcessPolicy_DropEnvs_Multiple(t *testing.T) {
+	envRules := setupEnvRuleSets(3)
+
 	gc := generateConstraints(testRand, 1)
 	gc.allowEnvironmentVariableDropping = true
 	process0 := generateExternalProcess(testRand)
-	envRules0 := process0.envRules
 
 	process1 := process0.clone()
-	envRules1 := generateEnvironmentVariableRules(testRand)
-	process1.envRules = append(envRules0, envRules1...)
+	process1.envRules = append(envRules[0], envRules[1]...)
 
 	process2 := process0.clone()
-	envRules2 := generateEnvironmentVariableRules(testRand)
-	process2.envRules = append(process1.envRules, envRules2...)
+	process2.envRules = append(process1.envRules, envRules[2]...)
 
 	gc.externalProcesses = []*externalProcess{process0, process1, process2}
 	securityPolicy := gc.toPolicy()
@@ -1846,9 +1845,9 @@ func Test_Rego_ExecExternalProcessPolicy_DropEnvs_Multiple(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	envs0 := buildEnvironmentVariablesFromEnvRules(envRules0, testRand)
-	envs1 := buildEnvironmentVariablesFromEnvRules(envRules1, testRand)
-	envs2 := buildEnvironmentVariablesFromEnvRules(envRules2, testRand)
+	envs0 := buildEnvironmentVariablesFromEnvRules(envRules[0], testRand)
+	envs1 := buildEnvironmentVariablesFromEnvRules(envRules[1], testRand)
+	envs2 := buildEnvironmentVariablesFromEnvRules(envRules[2], testRand)
 	envList := append(envs0, envs1...)
 	envList = append(envList, envs2...)
 
@@ -1865,18 +1864,18 @@ func Test_Rego_ExecExternalProcessPolicy_DropEnvs_Multiple(t *testing.T) {
 }
 
 func Test_Rego_ExecExternalProcessPolicy_DropEnvs_Multiple_NoMatch(t *testing.T) {
+	envRules := setupEnvRuleSets(3)
+
 	gc := generateConstraints(testRand, 1)
 	gc.allowEnvironmentVariableDropping = true
+
 	process0 := generateExternalProcess(testRand)
-	envRules0 := process0.envRules
 
 	process1 := process0.clone()
-	envRules1 := generateEnvironmentVariableRules(testRand)
-	process1.envRules = append(envRules0, envRules1...)
+	process1.envRules = append(envRules[0], envRules[1]...)
 
 	process2 := process0.clone()
-	envRules2 := generateEnvironmentVariableRules(testRand)
-	process2.envRules = append(envRules0, envRules2...)
+	process2.envRules = append(envRules[0], envRules[2]...)
 
 	gc.externalProcesses = []*externalProcess{process0, process1, process2}
 	securityPolicy := gc.toPolicy()
@@ -1890,9 +1889,9 @@ func Test_Rego_ExecExternalProcessPolicy_DropEnvs_Multiple_NoMatch(t *testing.T)
 		t.Fatal(err)
 	}
 
-	envs0 := buildEnvironmentVariablesFromEnvRules(envRules0, testRand)
-	envs1 := buildEnvironmentVariablesFromEnvRules(envRules1, testRand)
-	envs2 := buildEnvironmentVariablesFromEnvRules(envRules2, testRand)
+	envs0 := buildEnvironmentVariablesFromEnvRules(envRules[0], testRand)
+	envs1 := buildEnvironmentVariablesFromEnvRules(envRules[1], testRand)
+	envs2 := buildEnvironmentVariablesFromEnvRules(envRules[2], testRand)
 	var extraLen int
 	if len(envs1) > len(envs2) {
 		extraLen = len(envs2)
@@ -3958,27 +3957,14 @@ type regoDropEnvsTestConfig struct {
 	policy      *regoEnforcer
 }
 
-func setupRegoDropEnvsTest(disjoint bool) (*regoContainerTestConfig, error) {
-	gc := generateConstraints(testRand, 1)
-	gc.allowEnvironmentVariableDropping = true
-
-	const numContainers int = 3
+func setupEnvRuleSets(count int) [][]EnvRuleConfig {
 	numEnvRules := []int{int(randMinMax(testRand, 1, 4)),
 		int(randMinMax(testRand, 1, 4)),
 		int(randMinMax(testRand, 1, 4))}
 	envRuleLookup := make(stringSet)
-	envRules := make([][]EnvRuleConfig, numContainers)
+	envRules := make([][]EnvRuleConfig, count)
 
-	containers := make([]*securityPolicyContainer, numContainers)
-	envs := make([][]string, numContainers)
-
-	for i := 0; i < numContainers; i++ {
-		c, err := gc.containers[0].clone()
-		if err != nil {
-			return nil, err
-		}
-		containers[i] = c
-
+	for i := 0; i < count; i++ {
 		rules := envRuleLookup.randUniqueArray(testRand, func(r *rand.Rand) string {
 			return randVariableString(r, 10)
 		}, int32(numEnvRules[i]))
@@ -3990,7 +3976,26 @@ func setupRegoDropEnvsTest(disjoint bool) (*regoContainerTestConfig, error) {
 				Rule:     rule,
 			}
 		}
+	}
 
+	return envRules
+}
+
+func setupRegoDropEnvsTest(disjoint bool) (*regoContainerTestConfig, error) {
+	gc := generateConstraints(testRand, 1)
+	gc.allowEnvironmentVariableDropping = true
+
+	const numContainers int = 3
+	envRules := setupEnvRuleSets(numContainers)
+	containers := make([]*securityPolicyContainer, numContainers)
+	envs := make([][]string, numContainers)
+
+	for i := 0; i < numContainers; i++ {
+		c, err := gc.containers[0].clone()
+		if err != nil {
+			return nil, err
+		}
+		containers[i] = c
 		envs[i] = buildEnvironmentVariablesFromEnvRules(envRules[i], testRand)
 		if i == 0 {
 			c.EnvRules = envRules[i]
