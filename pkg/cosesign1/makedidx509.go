@@ -6,7 +6,11 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"log"
 	"net/url"
+	"strings"
+
+	didx509resolver "github.com/Microsoft/hcsshim/pkg/did-x509-resolver"
 )
 
 func parsePemChain(chainPem string) ([]*x509.Certificate, error) {
@@ -50,15 +54,39 @@ func MakeDidX509(fingerprintAlgorithm string, fingerprintIndex int, chainFilenam
 	var hash = sha256.Sum256(signerCert.Raw)
 	fingerprint := base64.RawURLEncoding.EncodeToString(hash[:])
 
-	r := "did:x509:0:" + fingerprintAlgorithm + ":" + fingerprint + "::" + url.QueryEscape(didPolicy)
+	policyTokens := strings.Split(didPolicy, ":")
 
-	// _, err = didx509resolver.Resolve(chainPEM, r, true)
+	if len(policyTokens) == 0 {
+		return "", fmt.Errorf("invalid policy")
+	}
 
-	// if err != nil {
-	// 	return "", err
-	// } else if verbose {
-	// 	log.Println("did:x509 resolved correctly")
-	// }
+	for i := 0; i < len(policyTokens); i++ {
+		policyName := policyTokens[i]
+		switch policyName {
+		case "subject":
+			{
+				i += 2
+				if i >= len(policyTokens) {
+					return "", fmt.Errorf("invalid '%s' policy", policyName)
+				}
+				policyTokens[i] = url.QueryEscape(policyTokens[i])
+			}
+		default:
+			{
+			}
+		}
+
+	}
+
+	r := "did:x509:0:" + fingerprintAlgorithm + ":" + fingerprint + "::" + strings.Join(policyTokens, ":")
+
+	_, err = didx509resolver.Resolve(chainPEM, r, true)
+
+	if err != nil {
+		return "", err
+	} else if verbose {
+		log.Println("did:x509 resolved correctly")
+	}
 
 	return r, nil
 }

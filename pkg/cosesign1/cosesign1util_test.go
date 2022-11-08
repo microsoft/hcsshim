@@ -123,6 +123,14 @@ func Test_OldCose(t *testing.T) {
 	}
 }
 
+func Test_DidX509(t *testing.T) {
+	didx509, err := MakeDidX509("sha256", 1, "chain.pem", "subject:CN:Test Leaf (DO NOT TRUST)", true)
+	if err != nil {
+		t.Errorf("did:x509 creation failed: %s", err)
+	}
+	print(didx509)
+}
+
 func TestMain(m *testing.M) {
 	println("Generating files...")
 
