@@ -23,11 +23,19 @@ generator.
 ## Example usage
 
 Create VHDs:
+
 ```bash
 dmverity-vhd create -i alpine:3.12 -o alpine_3_12_layers
 ```
 
 Compute root hashes:
+
 ```bash
 dmverity-vhd --docker roothash -i alpine:3.12
+```
+
+Compute root hashes with tarball:
+
+```bash
+dmverity-vhd --tarball /path/to/tarball.tar roothash -i alpine:3.12
 ```
