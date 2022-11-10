@@ -27,7 +27,12 @@ infra.rego.cose: infra.rego.base64 chain.pem leaf.private.pem sign1util
 	./sign1util check -in $@
 
 print: infra.rego.cose sign1util
-	./sign1util print -in $<
+	./sign1util chain -in $< > tmp.chain.pem
+	./sign1util did:x509 -chain tmp.chain.pem --policy cn
+
+show: sign1util
+	./sign1util chain -in esrp.test.cose > tmp.chain.pem
+	./sign1util did:x509 -chain tmp.chain.pem --policy cn
 
 didx509: chain.pem sign1util
 	./sign1util did:x509 -chain chain.pem -i 1 -policy "subject:CN:Test Leaf (DO NOT TRUST)" -verbose

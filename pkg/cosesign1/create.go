@@ -12,14 +12,6 @@ import (
 	"github.com/veraison/go-cose"
 )
 
-// Header indices to match SCITT
-// see https://ietf-scitt.github.io/draft-birkholz-scitt-architecture/draft-birkholz-scitt-architecture.html#name-envelope-and-claim-format
-
-const (
-	HeaderLabelIssuer int64 = 258
-	HeaderLabelFeed   int64 = 259
-)
-
 func pem2der(chainPem []byte) []byte {
 	block, rest := pem.Decode(chainPem)
 	var r = []byte{}
@@ -76,6 +68,12 @@ func CreateCoseSign1(payloadBlob []byte, issuer string, feed string, contentType
 	var chainCerts []*x509.Certificate
 	chainDER := pem2der(chainPem)
 	chainCerts, err = x509.ParseCertificates(chainDER)
+	var chainDERArray [][]byte
+	for cert := range(chainCerts) {
+		chainDERArray = append(chainDERArray, chainCerts[cert].Raw)
+	}
+
+
 	if err == nil {
 		if verbose {
 			log.Printf("parsed cert chain for leaf: %v\n", *chainCerts[0])
@@ -111,22 +109,24 @@ func CreateCoseSign1(payloadBlob []byte, issuer string, feed string, contentType
 		}
 	}
 
+	// See https://www.iana.org/assignments/cose/cose.xhtml#:~:text=COSE%20Header%20Parameters%20%20%20%20Name%20,algorithm%20to%20use%20%2019%20more%20rows
+
 	var headers = cose.Headers{
 		Protected: cose.ProtectedHeader{
 			cose.HeaderLabelAlgorithm:   algo,
 			cose.HeaderLabelContentType: contentType,
-			cose.HeaderLabelX5Chain:     chainPem,
+			cose.HeaderLabelX5Chain:     chainDERArray,
 		},
 	}
 
 	// see https://ietf-scitt.github.io/draft-birkholz-scitt-architecture/draft-birkholz-scitt-architecture.html#name-envelope-and-claim-format
-	// PRSS will be using string keys for these soon. Meanwhile I'll wrap it all in a json document
+	// Use of strings here to match PRSS COSE Sign1 service
 
 	if len(issuer) > 0 {
-		headers.Protected[HeaderLabelIssuer] = issuer
+		headers.Protected["iss"] = issuer
 	}
 	if len(feed) > 0 {
-		headers.Protected[HeaderLabelFeed] = feed
+		headers.Protected["feed"] = feed
 	}
 
 	result, err = cose.Sign1(saltReader, signer, headers, payloadBlob, nil)
