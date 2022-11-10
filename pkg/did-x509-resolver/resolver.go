@@ -211,7 +211,7 @@ func verifyDid(chain []*x509.Certificate, did string) error {
 
 			var seenFields []string
 			for i := 0; i < len(args); i += 2 {
-				k := args[i]
+				k := strings.ToUpper(args[i])
 				v, err := url.QueryUnescape(args[i+1])
 
 				if err != nil {

@@ -38,7 +38,7 @@ func checkCoseSign1(inputFilename string, optionalPubKeyFilename string, rootCAF
 	} else {
 		log.Print("checkCoseSign1 passed:")
 		if verbose {
-			log.Printf("iss:\n%s\n", unpacked.Issuer) // eg the DID:x509:blah....
+			log.Printf("iss: %s", unpacked.Issuer)
 			log.Printf("feed: %s", unpacked.Feed)
 			log.Printf("cty: %s", unpacked.ContentType)
 			log.Printf("pubkey: %s", unpacked.Pubkey)
@@ -132,9 +132,12 @@ func main() {
 
 	didX509Cmd.StringVar(&didFingerprintAlgorithm, "fingerprint-algorithm", "sha256", "hash algorithm for certificate fingerprints")
 	didX509Cmd.StringVar(&chainFilename, "chain", "chain.pem", "certificate chain to use (pem)")
-	didX509Cmd.IntVar(&didFingerprintIndex, "i", 0, "index of the certificate fingerprint in the chain")
-	didX509Cmd.StringVar(&didPolicy, "policy", "", "did:509 policy")
+	didX509Cmd.IntVar(&didFingerprintIndex, "i", 1, "index of the certificate fingerprint in the chain")
+	didX509Cmd.StringVar(&didPolicy, "policy", "subject", "did:509 policy (cn/eku/custom)")
 	didX509Cmd.BoolVar(&verbose, "verbose", false, "verbose output")
+
+	chainCmd := flag.NewFlagSet("chain", flag.ExitOnError)
+	chainCmd.StringVar(&inputFilename, "in", "input.cose", "input file")
 
 	if len(os.Args) > 1 {
 		action := os.Args[1]
@@ -216,6 +219,15 @@ func main() {
 				}
 			} else {
 				log.Print("args parse failed: " + err.Error())
+			}
+
+		case "chain":
+			err := chainCmd.Parse(os.Args[2:])
+			if err == nil {
+				err := cosesign1.PrintChain(inputFilename)
+				if err != nil {
+					log.Print("error: " + err.Error())
+				}
 			}
 
 		default:
