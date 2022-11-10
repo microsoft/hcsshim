@@ -85,11 +85,11 @@ single line base64 standard encoded raw DER certificate
 	Note that there are no extra line breaks added and that a string compare will need to accomodate that.
 */
 
-// func x509ToPEM(cert *x509.Certificate) string {
+func x509ToPEM(cert *x509.Certificate) string {
 
-// 	base64Cert := x509ToBase64(cert)
-// 	return base64CertToPEM(base64Cert)
-// }
+	base64Cert := x509ToBase64(cert)
+	return base64CertToPEM(base64Cert)
+}
 
 func base64CertToPEM(base64Cert string) string {
 

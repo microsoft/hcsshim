@@ -15,7 +15,7 @@ type UnpackedCoseSign1 struct {
 	ContentType string
 	Pubkey      string
 	Pubcert     string
-	ChainPem	string
+	ChainPem    string
 	Payload     []byte
 	CertChain   []*x509.Certificate
 }
@@ -34,33 +34,36 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, option
 		log.Printf("algo %d aka %s", algo.(cose.Algorithm), algo.(cose.Algorithm))
 	}
 
-	chainPEM, chainPresent := protected[cose.HeaderLabelX5Chain] // The spec says this is ordered - leaf, intermediates, root. X5Bag is unordered and woould need sorting
+	chainDER, chainPresent := protected[cose.HeaderLabelX5Chain] // The spec says this is ordered - leaf, intermediates, root. X5Bag is unordered and woould need sorting
 	if !chainPresent {
 		return UnpackedCoseSign1{}, fmt.Errorf("x5Chain missing")
 	}
-	
+
 	var issuer string
-	val, valPresent := protected[HeaderLabelIssuer]
+	val, valPresent := protected["iss" /* HeaderLabelIssuer */]
 	if valPresent {
 		issuer = val.(string)
 	}
 
 	var feed string
-	val, valPresent = protected[HeaderLabelFeed]
+	val, valPresent = protected["feed" /* HeaderLabelFeed */]
 	if valPresent {
 		feed = val.(string)
 	}
 
 	// The HeaderLabelX5Chain entry in the cose header may be a blob (single cert) or an array of blobs (a chain) see https://datatracker.ietf.org/doc/draft-ietf-cose-x509/08/
 
-	chainPemBytes := chainPEM.([]byte)
-	chainDER := pem2der(chainPemBytes)
-	chain, err := x509.ParseCertificates(chainDER)
-	if err != nil {
-		if verbose {
-			log.Print("Parse certificate failed: " + err.Error())
+	var chain []*x509.Certificate
+	chainIA := chainDER.([]interface{})
+	for i := range chainIA {
+		cert, err := x509.ParseCertificate(chainIA[i].([]byte))
+		chain = append(chain, cert)
+		if err != nil {
+			if verbose {
+				log.Print("Parse certificate failed: " + err.Error())
+			}
+			return UnpackedCoseSign1{}, err
 		}
-		return UnpackedCoseSign1{}, err
 	}
 
 	// A reasonable chain will have 2-100 elements
@@ -76,16 +79,28 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, option
 	var leafCert *x509.Certificate // x509 leaf cert
 	var rootCert *x509.Certificate // x509 root cert
 
+	if verbose {
+		log.Print("Certificate chain:")
+	}
 	for which, cert := range chain {
 		if which == 0 {
 			leafCert = cert
+			if verbose {
+				log.Println(x509ToPEM(cert))
+			}
 		} else if which == chainLen-1 {
 			// is this the root cert? (NOTE may be absent as per https://microsoft.sharepoint.com/teams/prss/Codesign/SitePages/COSESignOperationsReference.aspx TBC)
 			// cwinter: I think intermediates may be absent, but the root should always be present.
 			rootCert = cert
 			rootCerts.AddCert(rootCert)
+			if verbose {
+				log.Println(x509ToPEM(cert))
+			}
 		} else {
 			intermediateCerts.AddCert(cert)
+			if verbose {
+				log.Println(x509ToPEM(cert))
+			}
 		}
 	}
 
@@ -110,12 +125,17 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, option
 	var leafPubKey = leafCert.PublicKey
 	var leafPubKeyBase64 = keyToBase64(leafPubKey)
 
+	var chainPEM string
+	for i := range chain {
+		chainPEM += x509ToPEM(chain[i])
+	}
+
 	var results = UnpackedCoseSign1{
 		Pubcert:     leafCertBase64,
 		Feed:        feed,
 		Issuer:      issuer,
 		Pubkey:      leafPubKeyBase64,
-		ChainPem: 	 string(chainPemBytes[:]),
+		ChainPem:    chainPEM,
 		ContentType: msg.Headers.Protected[cose.HeaderLabelContentType].(string),
 		Payload:     msg.Payload,
 		CertChain:   chain,
@@ -177,4 +197,31 @@ func UnpackAndValidateCOSE1CertChain(raw []byte, optionaPubKeyPEM []byte, option
 	}
 
 	return results, err
+}
+
+func PrintChain(inputFilename string) error {
+	raw := ReadBlob(inputFilename)
+	var msg cose.Sign1Message
+	err := msg.UnmarshalCBOR(raw)
+	if err != nil {
+		return err
+	}
+
+	protected := msg.Headers.Protected
+
+	chainDER, chainPresent := protected[cose.HeaderLabelX5Chain] // The spec says this is ordered - leaf, intermediates, root. X5Bag is unordered and woould need sorting
+	if !chainPresent {
+		return fmt.Errorf("x5Chain missing")
+	}
+
+	chainIA := chainDER.([]interface{})
+	for i := range chainIA {
+		cert, err := x509.ParseCertificate(chainIA[i].([]byte))
+		if err != nil {
+			return err
+		}
+		fmt.Println(x509ToPEM(cert))
+	}
+
+	return nil
 }
