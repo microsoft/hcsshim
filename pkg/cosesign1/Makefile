@@ -1,23 +1,18 @@
-# some naming info to explain the confusion...
-# pointers to the registry etc so as to simplify typing and scripts
 #
-# we have images, repositories and repositories.
+# This makefile let's us excercise the libray via the sign1util tool and shows various examples of
+# creating and checking COSE Sign1 documents as well as getting DID:x509 documents out of them
+# Note that today the PEM files that match are not checked in as the credential checker will trigger.
+# I may fix that with some head/tail magic./ Meanwhile you need to build fresh certs with make -f Makefile.certs
+# and these checks below (for infra.rego.cose, not the EPRS one) will fail.
 #
-# ACR_NAME is the registry, eg parmawesteuroperegistry, which is a place many containers can live
-# REPO, eg payload, infra, kens_container, is the name the repository
-# TAG, eg 2.15, latest, is the version number of an image
-# IMAGE which is $REGISTRY/${REPO}:$TAG is a particular image, which is sort of a version of a container.
-
-SIGN1UTIL := /mnt/c/ContainerPlat/sign1util.exe
-
-all: infra.rego
-
 
 cose: infra.rego.cose
 
-# from Maksim:
+# from Maksim, these media types have to match containerd. The also need to change and the security policy one ought to be x-ms-ccepolicy-frag
 #     fragment atrifact type = application/unknown+rego
 #     fragment media type = application/microsoft.security.policy+rego
+
+# Use a local linux build of the tool. Usually this is an exe in /mnt/c/ContainerPlat aka c:\ContainerPlat
 
 sign1util: ../../internal/tools/sign1util/main.go *.go
 	go build ../../internal/tools/sign1util
@@ -32,41 +27,46 @@ print: infra.rego.cose sign1util
 
 show: sign1util
 	./sign1util chain -in esrp.test.cose > tmp.chain.pem
-	./sign1util did:x509 -chain tmp.chain.pem --policy cn
+	./sign1util did:x509 -chain tmp.chain.pem -policy cn
+
 
 didx509: chain.pem sign1util
 	./sign1util did:x509 -chain chain.pem -i 1 -policy "subject:CN:Test Leaf (DO NOT TRUST)" -verbose
 
+# for this to pass the did:x509 fingerprint (RgpNsHOK5hPlCAfTtiGY_BcDhFRxQbJnhlxNDhxps6U here) needs to be the one output from make print
 did-check: chain.pem infra.rego.cose sign1util
-	./sign1util check -chain chain.pem -in infra.rego.cose -did did:x509:0:sha256:I5ni_nuWegx4NiLaeGabiz36bDUhDDiHEFl8HXMA_4o::subject:CN:Test+Leaf+%28DO+NOT+TRUST%29
+	./sign1util check -in infra.rego.cose -did did:x509:0:sha256:RgpNsHOK5hPlCAfTtiGY_BcDhFRxQbJnhlxNDhxps6U::subject:CN:Test%20Leaf%20%28DO%20NOT%20TRUST%29
 
-did-check2: infra.rego.cose sign1util
-	./sign1util check -in infra.rego.cose -did did:x509:0:sha256:I5ni_nuWegx4NiLaeGabiz36bDUhDDiHEFl8HXMA_4o::subject:CN:Test+Leaf+%28DO+NOT+TRUST%29
+# Ought to work but does not yet. For normal workflow start from the chain.pem, here we'd take the chain from inside the cose sign1 doc, eg to manually config it is
+# as otherwise expectd
 
+todo: sign1util infra.rego.cose
+	./sign1util did:x509 -in infra.rego.cose -policy cn
 
 did-fail-fingerprint: chain.pem sign1util
 	./sign1util check -chain chain.pem -in infra.rego.cose -did did:x509:0:sha256:XXXi_nuWegx4NiLaeGabiz36bDUhDDiHEFl8HXMA_4o::subject:CN:Test+Leaf+%28DO+NOT+TRUST%29
 
 did-fail-subject: chain.pem sign1util
-	./sign1util check -chain chain.pem -in infra.rego.cose -did did:x509:0:sha256:I5ni_nuWegx4NiLaeGabiz36bDUhDDiHEFl8HXMA_4o::subject:CN:Test+XXXX+%28DO+NOT+TRUST%29
+	./sign1util check -chain chain.pem -in infra.rego.cose -did did:x509:0:sha256:RgpNsHOK5hPlCAfTtiGY_BcDhFRxQbJnhlxNDhxps6U::subject:CN:Test+XXXX+%28DO+NOT+TRUST%29
 
 did-fail: did-fail-subject did-fail-fingerprint
 
 
-oras: infra.rego.cose
-	oras push ${REGISTRY}/${INFRA_REPO}:latest \
-	--artifact-type application/unknown+rego \
-	--manifest-config /dev/null:application/vnd.unknown.config.v1+json \
-	--subject ${INFRA_IMAGE} \
-	./infra.rego.cose:application/microsoft.security.policy+rego
+# beyond the scope of this repo
+#infra.rego.base64: infra-fragment.toml
+#	/mnt/c/ContainerPlat/securitypolicy.exe -c infra-fragment.toml -n infra -v 1.0.0 -t fragment > infra.rego.base64
+
+# this would push the COSE Sign1 fragment given the appropriate env variables
+#oras: infra.rego.cose
+#	oras push ${REGISTRY}/${INFRA_REPO}:latest \
+#	--artifact-type application/unknown+rego \
+#	--manifest-config /dev/null:application/vnd.unknown.config.v1+json \
+#	--subject ${INFRA_IMAGE} \
+#	./infra.rego.cose:application/microsoft.security.policy+rego
 
 %.pem:
 	 $(MAKE) -f Makefile.certs chain.pem
 
-# from Matthew - /securitypolicy -c fragment.toml -n parmafragment        -v 1.0.0 -r                      -t fragment
-#                                   input            namespace (in the rego) SVN   output rego to stdout   type is a fragment
-#infra.rego.base64: infra-fragment.toml
-#	/mnt/c/ContainerPlat/securitypolicy.exe -c infra-fragment.toml -n infra -v 1.0.0 -t fragment > infra.rego.base64
 
 infra.rego.base64: infra.rego
 	base64 infra.rego > infra.rego.base64
