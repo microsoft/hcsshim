@@ -19,10 +19,10 @@ func pem2der(chainPem []byte) []byte {
 		r = block.Bytes
 	}
 	for len(rest) != 0 {
+		block, rest = pem.Decode(rest)
 		if block.Bytes != nil {
 			r = append(r, block.Bytes...)
 		}
-		block, rest = pem.Decode(rest)
 	}
 	return r
 }
@@ -84,8 +84,6 @@ func CreateCoseSign1(payloadBlob []byte, issuer string, feed string, contentType
 		}
 		return result, err
 	}
-
-	_ = remaining
 
 	var saltReader io.Reader
 	if saltType == "rand" {
