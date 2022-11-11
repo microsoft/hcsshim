@@ -786,15 +786,12 @@ func CreateLCOW(ctx context.Context, opts *OptionsLCOW) (_ *UtilityVM, err error
 		return nil, err
 	}
 
-	err = uvm.create(ctx, doc)
-
-	log.G(ctx).Tracef("create_lcow::CreateLCOW uvm.create result uvm: %v err %v", uvm, err)
-
-	if err != nil {
-		return nil, fmt.Errorf("error while creating the compute system: %s", err)
+	if err = uvm.create(ctx, doc); err != nil {
+		return nil, fmt.Errorf("error while creating the compute system: %w", err)
 	}
+	log.G(ctx).WithField("uvm", uvm).Trace("create_lcow::CreateLCOW uvm.create result")
 
-	// Cerate a socket to inject entropy during boot.
+	// Create a socket to inject entropy during boot.
 	uvm.entropyListener, err = uvm.listenVsock(entropyVsockPort)
 	if err != nil {
 		return nil, err
